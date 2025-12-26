@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Outputs
+artifacts/
+
+# Secrets
+.env
+*.env
+oanda.cfg
+*.cfg
+
+# OS
+.DS_Store
+Thumbs.db
