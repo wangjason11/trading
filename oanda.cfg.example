@@ -1,0 +1,4 @@
+[oanda]
+account_id = YOUR_ACCOUNT_ID_HERE
+access_token = YOUR_ACCESS_TOKEN_HERE
+account_type = practice

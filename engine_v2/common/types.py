@@ -15,7 +15,6 @@ COL_C = "c"
 COL_V = "volume"
 
 REQUIRED_CANDLE_COLS = (COL_TIME, COL_O, COL_H, COL_L, COL_C)
-OPTIONAL_CANDLE_COLS = (COL_V,)
 
 Direction = Literal[-1, 0, 1]  # -1 bearish, 1 bullish, 0 neutral/unknown
 
