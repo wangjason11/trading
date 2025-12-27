@@ -126,6 +126,12 @@ def export_chart_plotly(
         height=800,
     )
 
+    fig.update_xaxes(
+        rangebreaks=[
+            dict(bounds=["sat", "mon"])  # hide weekend gaps
+        ]
+    )
+
     html_path = out_dir / f"{basename}.html"
     png_path = out_dir / f"{basename}.png"
 
