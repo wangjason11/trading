@@ -20,6 +20,7 @@ def export_chart_plotly(
     df: pd.DataFrame,
     *,
     title: str,
+    structure_levels: Optional[list] = None,
     out_dir: str | Path = "artifacts/charts",
     basename: str = "chart",
     max_points: Optional[int] = None,
@@ -117,19 +118,27 @@ def export_chart_plotly(
                 )
             )
 
-    # Structure levels overlays (if you pass them via df columns later, skip)
-    # For now, we’ll infer from columns if present.
-    if "structure_levels" in dfx.attrs:
-        levels = dfx.attrs["structure_levels"]
-        for lv in levels:
-            label = f"{lv.kind} {'UP' if lv.direction==1 else 'DN'}"
-            for i, lv in enumerate(levels):
-                label = None if (i % 10 != 0) else f"{lv.kind} {'UP' if lv.direction==1 else 'DN'}"
-                fig.add_hline(
-                    y=lv.price,
-                    annotation_text=label,
-                    annotation_position="top left",
-                )
+
+    # Structure levels overlays
+    levels = structure_levels or []
+    if levels:
+        x0 = dfx[COL_TIME].iloc[0]
+        x1 = dfx[COL_TIME].iloc[-1]
+
+        xs = []
+        ys = []
+        for lv in levels[-200:]:  # cap for performance
+            xs += [x0, x1, None]
+            ys += [lv.price, lv.price, None]
+
+        fig.add_trace(
+            go.Scattergl(
+                x=xs,
+                y=ys,
+                mode="lines",
+                name="BOS/CTS",
+            )
+        )
 
 
     fig.update_layout(

@@ -27,10 +27,12 @@ def main() -> None:
 
     # Export chart artifacts
     basename = f"{CONFIG.pair}_{CONFIG.timeframe}_{CONFIG.start.date()}_{CONFIG.end.date()}"
+    print("DEBUG structure_levels:", len(res.structure))
     paths = export_chart_plotly(
         res.df,
-        title=f"{CONFIG.pair} {CONFIG.timeframe} ({CONFIG.start.date()} → {CONFIG.end.date()})",
+        title=f"...",
         basename=basename,
+        structure_levels=res.structure,
     )
     print(f"Chart HTML: {paths.html_path}")
     print(f"Chart PNG : {paths.png_path}")
