@@ -16,6 +16,8 @@ def main() -> None:
 
     res = run_pipeline(df)
 
+    res.df.attrs["structure_levels"] = res.structure
+
     print("=== Replay Summary ===")
     print(f"pair={CONFIG.pair} tf={CONFIG.timeframe}")
     print(f"candles={len(res.df)}")

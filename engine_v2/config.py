@@ -20,5 +20,5 @@ CONFIG = ReplayConfig(
     timeframe="M15",
     # Use UTC for deterministic replay.
     start=datetime(2025, 12, 1, 0, 0, 0, tzinfo=timezone.utc),
-    end=datetime(2025, 12, 31, 23, 59, 59, tzinfo=timezone.utc),
+    end=datetime(2025, 12, 15, 23, 59, 59, tzinfo=timezone.utc),
 )

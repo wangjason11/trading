@@ -22,9 +22,17 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
     _validate_input(df)
 
     # --- LEGACY HOOK (edit this block only) -----------------------
+    from engine_v2.structure.structure_v1 import compute_structure_levels
+
+    swings, levels = compute_structure_levels(df, left=6, right=6)
+
     df2 = df.copy()
-    levels = []
-    notes = "Structure engine is stubbed in Week 1 Day 4 (levels empty)."
+    # store swing markers for charting/debugging (optional)
+    df2["swing"] = 0
+    for sp in swings:
+        df2.loc[sp.idx, "swing"] = 1 if sp.kind == "H" else -1
+
+    notes = f"Structure v1: fractal swings left=2 right=2, levels={len(levels)}"
     # --------------------------------------------------------------
 
     _validate_output(df2)

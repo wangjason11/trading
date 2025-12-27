@@ -117,6 +117,21 @@ def export_chart_plotly(
                 )
             )
 
+    # Structure levels overlays (if you pass them via df columns later, skip)
+    # For now, we’ll infer from columns if present.
+    if "structure_levels" in dfx.attrs:
+        levels = dfx.attrs["structure_levels"]
+        for lv in levels:
+            label = f"{lv.kind} {'UP' if lv.direction==1 else 'DN'}"
+            for i, lv in enumerate(levels):
+                label = None if (i % 10 != 0) else f"{lv.kind} {'UP' if lv.direction==1 else 'DN'}"
+                fig.add_hline(
+                    y=lv.price,
+                    annotation_text=label,
+                    annotation_position="top left",
+                )
+
+
     fig.update_layout(
         title=title,
         xaxis_title="Time (UTC)",
