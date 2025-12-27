@@ -125,20 +125,34 @@ def export_chart_plotly(
         x0 = dfx[COL_TIME].iloc[0]
         x1 = dfx[COL_TIME].iloc[-1]
 
-        xs = []
-        ys = []
-        for lv in levels[-200:]:  # cap for performance
-            xs += [x0, x1, None]
-            ys += [lv.price, lv.price, None]
+        # xs = []
+        # ys = []
+        # for lv in levels[-200:]:  # cap for performance
+        #     xs += [x0, x1, None]
+        #     ys += [lv.price, lv.price, None]
 
-        fig.add_trace(
-            go.Scattergl(
-                x=xs,
-                y=ys,
-                mode="lines",
-                name="BOS/CTS",
+        # fig.add_trace(
+        #     go.Scatter(
+        #         x=xs,
+        #         y=ys,
+        #         mode="lines",
+        #         name="BOS/CTS",
+        #         line=dict(width=1),
+        #     )
+        # )
+
+        for lv in levels[-200:]:  # cap for performance
+            fig.add_shape(
+                type="line",
+                x0=x0,
+                x1=x1,
+                y0=float(lv.price),
+                y1=float(lv.price),
+                xref="x",
+                yref="y",
+                line=dict(width=1, dash="dot"),
+                layer="above",
             )
-        )
 
 
     fig.update_layout(
@@ -158,6 +172,9 @@ def export_chart_plotly(
 
     html_path = out_dir / f"{basename}.html"
     png_path = out_dir / f"{basename}.png"
+
+    print("DEBUG traces:", len(fig.data))
+    print("DEBUG shapes:", len(fig.layout.shapes) if fig.layout.shapes else 0)
 
     fig.write_html(str(html_path), include_plotlyjs="cdn")
     # PNG export requires kaleido
