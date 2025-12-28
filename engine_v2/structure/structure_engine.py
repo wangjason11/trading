@@ -32,7 +32,7 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
     for sp in swings:
         df2.loc[sp.idx, "swing"] = 1 if sp.kind == "H" else -1
 
-    notes = f"Structure v1: fractal swings left=2 right=2, levels={len(levels)}"
+    notes = f"Structure v1: fractal swings left=6 right=6, levels={len(levels)}"
     # --------------------------------------------------------------
 
     _validate_output(df2)

@@ -16,6 +16,18 @@ def main() -> None:
 
     res = run_pipeline(df)
 
+    from engine_v2.debug.export_structure import export_levels, export_swings
+    from engine_v2.structure.structure_v1 import compute_structure_levels
+
+    # Use the same parameters you settled on for the "good range"
+    swings, levels = compute_structure_levels(res.df, left=6, right=6)
+
+    export_swings(swings, "artifacts/debug/swings.csv")
+    export_levels(levels, "artifacts/debug/structure_levels.csv")
+
+    print("Exported:", "artifacts/debug/swings.csv", "artifacts/debug/structure_levels.csv")
+
+
     res.df.attrs["structure_levels"] = res.structure
 
     print("=== Replay Summary ===")
