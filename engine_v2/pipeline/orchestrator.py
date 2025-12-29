@@ -9,6 +9,7 @@ from engine_v2.common.types import PatternEvent, StructureLevel, REQUIRED_CANDLE
 from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.patterns.pattern_engine import detect_patterns
 from engine_v2.structure.structure_engine import compute_structure
+from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
 
 @dataclass
@@ -38,6 +39,9 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
             "structure": s_res.notes,
         }
     }
+
+    kl_zones = derive_kl_zones_v1(s_res.df, s_res.levels)
+    meta["kl_zones"] = kl_zones
 
     return PipelineResult(
         df=s_res.df,

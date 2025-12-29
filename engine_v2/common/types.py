@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Sequence, TypedDict
+from typing import Any, Dict, List, Literal, Sequence, TypedDict, Optional
 
 # ---------------------------
 # Canonical column names
@@ -92,3 +92,16 @@ class ChartRect(TypedDict, total=False):
     high: float
     text: str
     meta: Dict[str, Any]
+
+@dataclass(frozen=True)
+class KLZone:
+    start_time: "pd.Timestamp"
+    end_time: Optional["pd.Timestamp"]  # None = extends to end of chart
+    side: str  # "buy" or "sell"
+    top: float
+    bottom: float
+    source_kind: str  # "BOS" or "CTS"
+    source_time: "pd.Timestamp"
+    source_price: float
+    strength: float = 0.0
+    meta: dict[str, Any] = None

@@ -29,6 +29,7 @@ def main() -> None:
 
 
     res.df.attrs["structure_levels"] = res.structure
+    res.df.attrs["kl_zones"] = res.meta.get("kl_zones", [])
 
     print("=== Replay Summary ===")
     print(f"pair={CONFIG.pair} tf={CONFIG.timeframe}")
@@ -48,6 +49,10 @@ def main() -> None:
     )
     print(f"Chart HTML: {paths.html_path}")
     print(f"Chart PNG : {paths.png_path}")
+
+
+    from engine_v2.debug.export_zones import export_kl_zones
+    export_kl_zones(res.meta.get("kl_zones", []), "artifacts/debug/kl_zones.csv")
 
 
 if __name__ == "__main__":

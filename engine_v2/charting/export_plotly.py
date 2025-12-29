@@ -155,6 +155,20 @@ def export_chart_plotly(
             )
 
 
+    zones = df.attrs.get("kl_zones", [])
+    for z in zones[-50:]:  # cap for chart performance
+        # plotly wants y0<y1
+        y0 = min(z.bottom, z.top)
+        y1 = max(z.bottom, z.top)
+        fig.add_hrect(
+            y0=y0,
+            y1=y1,
+            fillcolor="green" if z.side == "buy" else "red",
+            opacity=0.12,
+            line_width=0,
+        )
+
+
     fig.update_layout(
         title=title,
         xaxis_title="Time (UTC)",
