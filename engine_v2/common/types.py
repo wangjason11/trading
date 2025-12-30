@@ -42,10 +42,10 @@ class StructureLevel:
 
 @dataclass(frozen=True)
 class Zone:
-    """A zone (KL or OB) used for context and/or entries."""
+    """A zone (KL or POI) used for context and/or entries."""
 
     id: str
-    zone_type: Literal["KL", "OB"]
+    zone_type: Literal["KL", "POI"]
     timeframe: str
     formed_at: Any
     low: float
@@ -104,4 +104,4 @@ class KLZone:
     source_time: "pd.Timestamp"
     source_price: float
     strength: float = 0.0
-    meta: dict[str, Any] = None
+    meta: Dict[str, Any] = field(default_factory=dict)

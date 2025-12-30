@@ -39,7 +39,7 @@ All of the following must be visually inspectable:
 - Candle classifications
 - Pattern markers
 - BOS / CTS levels
-- Zones (KL and OB/POI)
+- Zones (KL and POI)
 - Entries, stops, take profits
 - Executed trades
 
