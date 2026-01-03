@@ -5,6 +5,7 @@ from engine_v2.features.candle_params import CandleParams
 from engine_v2.features.candles_v2 import (
     compute_candle_metrics,
     classify_candles,
+    compute_candle_features,
 )
 
 def _df(rows):
@@ -105,3 +106,99 @@ def test_zero_length_candle_safe(params):
     assert out.loc[0, "body_pct"] == pytest.approx(0.0)
     # Should classify as pinbar because body_pct <= 0.5
     assert out.loc[0, "candle_type"] == "pinbar"
+
+def test_big_flags_use_prior_marus_only(params):
+    """
+    prior max is computed from previous MARU candles only.
+    Create history where the largest candle is NORMAL, but maru history is smaller.
+    Ensure big_normal compares to maru max, not overall max.
+    """
+    # idx0 maru len=10 (body 7)
+    # idx1 normal len=100 (body 60) - huge but NOT maru
+    # idx2 normal len=8 (body 4) -> big_normal ratio uses prior maru max=10, so 8/10=0.8 >= 0.5 => True
+    df = _df([
+        {"time":"t0","o":0.0,"h":10.0,"l":0.0,"c":7.0},     # maru: len=10 body=7 => 0.7
+        {"time":"t1","o":0.0,"h":100.0,"l":0.0,"c":60.0},   # normal: len=100 body=60 => 0.6
+        {"time":"t2","o":0.0,"h":8.0,"l":0.0,"c":4.1},      # normal: len=8 body=4 => 0.5 pinbar? (boundary)
+    ])
+    out = compute_candle_features(df, params, anchor_shifts=(0,))
+    assert out.loc[0, "candle_type"] == "maru"
+    assert out.loc[1, "candle_type"] == "normal"  # not maru since 0.6 < 0.7
+    # prior maru max before idx2 is 10, so ratio=8/10=0.8 => big_normal should be True (ctype normal allowed)
+    assert float(out.loc[2, "prior_maru_max_len_as0"]) == pytest.approx(10.0)
+    assert bool(out.loc[2, "is_big_normal_as0"]) is True
+
+
+def test_big_maru_threshold_boundary(params):
+    """
+    If ratio == big_maru_threshold, should be True.
+    """
+    p = CandleParams(**{**params.__dict__, "big_maru_threshold": 0.7, "lookback": 1})
+
+    df = _df([
+        {"time":"t0","o":0.0,"h":10.0,"l":0.0,"c":7.0},  # maru len=10
+        {"time":"t1","o":0.0,"h":7.0,"l":0.0,"c":4.9},   # maru? len=7 body=4.9 => 0.7 => maru
+    ])
+    out = compute_candle_features(df, p, anchor_shifts=(0,))
+    assert out.loc[1, "candle_type"] == "maru"
+    # prior maru max len=10, current len=7 => ratio=0.7 => boundary True
+    assert bool(out.loc[1, "is_big_maru_as0"]) is True
+
+
+def test_anchor_shift_changes_reference_set(params):
+    """
+    Demonstrate that anchor_shift=1 excludes the immediately previous maru (i-1)
+    by making i-1 a huge maru. Then:
+      - as0 should see that huge maru and prior max is huge => not big
+      - as1 should *exclude* it, see older smaller maru => becomes big
+    """
+    p = CandleParams(**{**params.__dict__, "lookback": 1, "big_normal_threshold": 0.5})
+
+    # idx0 maru len=10
+    # idx1 maru len=100 (huge)
+    # idx2 normal len=40
+    # For idx2:
+    #   as0 prior maru max before idx2 = 100 => 40/100=0.4 => NOT big_normal
+    #   as1 prior maru max before idx2-1 (cutoff idx1) = 10 => 40/10=4.0 => big_normal
+    df = _df([
+        {"time":"t0","o":0.0,"h":10.0,"l":0.0,"c":7.0},      # maru
+        {"time":"t1","o":0.0,"h":100.0,"l":0.0,"c":70.0},    # maru
+        {"time":"t2","o":0.0,"h":40.0,"l":0.0,"c":25.0},     # normal (0.5 pinbar boundary? but type doesn't matter for big_normal if normal)
+    ])
+    out = compute_candle_features(df, p, anchor_shifts=(0, 1))
+    assert out.loc[2, "candle_type"] in ("normal", "pinbar", "maru")
+
+    assert float(out.loc[2, "prior_maru_max_len_as0"]) == pytest.approx(100.0)
+    assert bool(out.loc[2, "is_big_normal_as0"]) is False
+
+    assert float(out.loc[2, "prior_maru_max_len_as1"]) == pytest.approx(10.0)
+    assert bool(out.loc[2, "is_big_normal_as1"]) is True
+
+
+def test_anchor_shift_2_for_third_candle_in_pattern(params):
+    """
+    anchor_shift=2 should reference marus strictly before (i-2).
+    This matches the requirement for evaluating candle idx+2 relative to pattern start idx.
+    """
+    p = CandleParams(**{**params.__dict__, "lookback": 1, "big_normal_threshold": 0.5})
+
+    # idx0 maru len=10
+    # idx1 maru len=50
+    # idx2 normal len=20
+    # For idx2:
+    #   as2 cutoff = idx0 (since i-2=0) => prior marus before idx0 = none => max=0
+    #   as1 cutoff = idx1 => prior max=10
+    #   as0 cutoff = idx2 => prior max=50
+    df = _df([
+        {"time":"t0","o":0.0,"h":10.0,"l":0.0,"c":7.0},     # maru len 10
+        {"time":"t1","o":0.0,"h":50.0,"l":0.0,"c":35.0},    # maru len 50
+        {"time":"t2","o":0.0,"h":20.0,"l":0.0,"c":10.0},    # normal
+    ])
+    out = compute_candle_features(df, p, anchor_shifts=(0, 1, 2))
+
+    assert float(out.loc[2, "prior_maru_max_len_as0"]) == pytest.approx(50.0)
+    assert float(out.loc[2, "prior_maru_max_len_as1"]) == pytest.approx(10.0)
+    assert float(out.loc[2, "prior_maru_max_len_as2"]) == pytest.approx(0.0)
+
+    # big flags should be False when prior max is 0
+    assert bool(out.loc[2, "is_big_normal_as2"]) is False

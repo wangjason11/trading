@@ -164,7 +164,7 @@ def classify_big_flags(
             if prior_max <= EPS:
                 continue
 
-            ratio = lengths[i] / (prior_max + EPS)
+            ratio = lengths[i] / prior_max
 
             if ctype[i] == "maru" and ratio >= params.big_maru_threshold:
                 out.loc[i, f"is_big_maru_as{s}"] = True
