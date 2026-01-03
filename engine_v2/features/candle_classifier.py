@@ -24,14 +24,26 @@ def apply_candle_classification(df: pd.DataFrame) -> CandleClassifierResult:
 
     # --- LEGACY HOOK (edit this block only) -----------------------
     #
-    from engine_v2.legacy_2025_port.candles_port import compute_candle_features
+    from engine_v2.features.candle_params import CandleParams
+    from engine_v2.features.candles_v2 import compute_candle_features
 
-    df2 = compute_candle_features(df)
-    notes = "Candle features computed via legacy_2025_port.candles_port"
+    params = CandleParams(
+        maru=0.7,
+        pinbar=0.5,
+        pinbar_distance=0.5,
+        big_maru_threshold=0.7,
+        big_normal_threshold=0.5,
+        lookback=5,
+        special_maru=0.5,
+        special_maru_distance=0.1,
+    )
+
+    df = compute_candle_features(df, params, anchor_shifts=(0,1,2))
+    notes = "Candle features computed via features.candles_v2"
     # --------------------------------------------------------------
 
-    _validate_output(df2)
-    return CandleClassifierResult(df=df2, notes=notes)
+    _validate_output(df)
+    return CandleClassifierResult(df=df, notes=notes)
 
 
 def _validate_input(df: pd.DataFrame) -> None:
