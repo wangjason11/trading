@@ -42,7 +42,12 @@ def compute_candle_metrics(df: pd.DataFrame) -> pd.DataFrame:
     out["direction"] = direction  # type: ignore[assignment]
     out["mid_price"] = (h + l) / 2.0
 
-    out["body_pct"] = np.where(candle_len > EPS, body_len / (candle_len + EPS), 0.0)
+    out["body_pct"] = np.divide(
+        body_len,
+        candle_len,
+        out=np.zeros_like(body_len, dtype=float),
+        where=candle_len > EPS,
+    )
 
     return out
 
