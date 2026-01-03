@@ -59,3 +59,9 @@ def _validate_output(df: pd.DataFrame) -> None:
     missing = [c for c in REQUIRED_CANDLE_COLS if c not in df.columns]
     if missing:
         raise ValueError(f"[candle_classifier] Output df missing required columns: {missing}")
+    
+
+    required_out = ["candle_type", "pinbar_dir", "body_pct", "candle_len"]
+    missing = [c for c in required_out if c not in df.columns]
+    if missing:
+        raise ValueError(f"[candle_classifier] Missing derived columns: {missing}")
