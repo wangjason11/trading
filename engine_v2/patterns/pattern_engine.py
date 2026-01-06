@@ -70,7 +70,6 @@ def detect_patterns(df: pd.DataFrame, *, break_threshold: Optional[float] = None
                 df2.at[row_i, "pat_confirm_idx"] = (
                     ev.confirmation_idx if ev.confirmation_idx is not None else -1
                 )
-                df2["pat_all"] += "|" + ev.name
 
                 # only record events that actually produced a marker
                 events.append(ev)

@@ -23,6 +23,9 @@ STYLE = {
     "pattern.star.up": {"marker": {"size": 9}},
     "pattern.star.down": {"marker": {"size": 9}},
 
+    "structure_pattern.up": {"marker": {"size": 9}},
+    "structure_pattern.down": {"marker": {"size": 9}},
+
     # structure
     "structure.level": {"line": {"width": 1, "dash": "dot"}},
 }

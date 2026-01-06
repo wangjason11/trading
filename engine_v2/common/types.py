@@ -53,7 +53,7 @@ class PatternEvent:
     break_threshold_used: Optional[float] = None
 
     meta: Dict[str, Any] = field(default_factory=dict)
-
+    debug: Optional[Dict[str, Any]] = None
 
 @dataclass(frozen=True)
 class StructureLevel:

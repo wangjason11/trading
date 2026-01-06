@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Optional, Tuple, List
 
 from engine_v2.common.types import PatternEvent, PatternStatus
@@ -68,8 +69,8 @@ class BreakoutPatterns:
             threshold=event.confirmation_threshold,
         )
         if ok and conf_idx is not None:
-            return PatternEvent(
-                **{**event.__dict__},
+            return replace(
+                event,
                 status=PatternStatus.CONFIRMED,
                 confirmation_idx=conf_idx,
             )
