@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 
 from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME
 from engine_v2.charting.style_registry import STYLE
+from engine_v2.common.types import PatternStatus
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -193,55 +194,59 @@ def export_chart_plotly(
     # -------------------------------------------------
     # Week 4 Structure-pattern markers (dots only)
     # -------------------------------------------------
-    # pattern_engine adds:
-    #   pat (name), pat_dir (+1/-1), pat_status (SUCCESS/CONFIRMED)
     if "pat" in dfx.columns and "pat_dir" in dfx.columns and "pat_status" in dfx.columns:
-        # Only plot patterns that are enabled in cfg["patterns"]
         enabled_names = {k for k, v in pat_cfg.items() if v is True}
 
-        # Only statuses we care about (Week 4)
-        sub = dfx[(dfx["pat"] != "") & (dfx["pat"].isin(enabled_names)) & (dfx["pat_status"].isin(["SUCCESS", "CONFIRMED"]))]
+        sub = dfx[
+            (dfx["pat"] != "")
+            & (dfx["pat"].isin(enabled_names))
+            & (dfx["pat_status"].isin([PatternStatus.SUCCESS.value, PatternStatus.CONFIRMED.value]))
+        ]
 
         if not sub.empty:
-            # Add helpful hover text
-            hover = (
-                "pat=%{customdata[0]}<br>"
-                "dir=%{customdata[1]}<br>"
-                "status=%{customdata[2]}<br>"
-                "start=%{customdata[3]} end=%{customdata[4]} conf=%{customdata[5]}"
-            )
-            customdata = list(
-                zip(
-                    sub["pat"].astype(str),
-                    sub["pat_dir"].astype(int),
-                    sub["pat_status"].astype(str),
-                    sub.get("pat_start_idx", pd.Series([-1] * len(sub), index=sub.index)).astype(int),
-                    sub.get("pat_end_idx", pd.Series([-1] * len(sub), index=sub.index)).astype(int),
-                    sub.get("pat_confirm_idx", pd.Series([-1] * len(sub), index=sub.index)).astype(int),
-                )
-            )
+            for status in [PatternStatus.SUCCESS.value, PatternStatus.CONFIRMED.value]:
+                up = sub[(sub["pat_status"] == status) & (sub["pat_dir"] == 1)]
+                dn = sub[(sub["pat_status"] == status) & (sub["pat_dir"] == -1)]
 
-            # Split by direction and status so we can style and label cleanly (still markers only)
-            for status in ["SUCCESS", "CONFIRMED"]:
-                for direction, anchor_col, style_key in [
-                    (1, COL_L, "structure_pattern.up"),
-                    (-1, COL_H, "structure_pattern.down"),
-                ]:
-                    chunk = sub[(sub["pat_status"] == status) & (sub["pat_dir"] == direction)]
-                    if chunk.empty:
-                        continue
-
+                if not up.empty:
                     fig.add_trace(
                         go.Scatter(
-                            x=chunk[COL_TIME],
-                            y=chunk[anchor_col],
+                            x=up[COL_TIME],
+                            y=up[COL_L],
                             mode="markers",
-                            name=f"struct:{status}:{'+1' if direction == 1 else '-1'}",
-                            hovertemplate=hover,
-                            customdata=[
-                                cd for cd, keep in zip(customdata, sub.index.isin(chunk.index)) if keep
-                            ],
-                            **_style(style_key),
+                            name=f"struct:{status}:+1",
+                            customdata=up[
+                                ["pat", "pat_dir", "pat_status", "pat_start_idx", "pat_end_idx", "pat_confirm_idx"]
+                            ].values,
+                            hovertemplate=(
+                                "pat=%{customdata[0]}<br>"
+                                "dir=%{customdata[1]}<br>"
+                                "status=%{customdata[2]}<br>"
+                                "start=%{customdata[3]} end=%{customdata[4]} conf=%{customdata[5]}"
+                                "<extra></extra>"
+                            ),
+                            **_style("structure_pattern.up"),
+                        )
+                    )
+
+                if not dn.empty:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=dn[COL_TIME],
+                            y=dn[COL_H],
+                            mode="markers",
+                            name=f"struct:{status}:-1",
+                            customdata=dn[
+                                ["pat", "pat_dir", "pat_status", "pat_start_idx", "pat_end_idx", "pat_confirm_idx"]
+                            ].values,
+                            hovertemplate=(
+                                "pat=%{customdata[0]}<br>"
+                                "dir=%{customdata[1]}<br>"
+                                "status=%{customdata[2]}<br>"
+                                "start=%{customdata[3]} end=%{customdata[4]} conf=%{customdata[5]}"
+                                "<extra></extra>"
+                            ),
+                            **_style("structure_pattern.down"),
                         )
                     )
 
