@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List, Literal, Sequence, TypedDict, Optional
 
 # ---------------------------
@@ -19,13 +20,38 @@ REQUIRED_CANDLE_COLS = (COL_TIME, COL_O, COL_H, COL_L, COL_C)
 Direction = Literal[-1, 0, 1]  # -1 bearish, 1 bullish, 0 neutral/unknown
 
 
+class PatternStatus(str, Enum):
+    NONE = "NONE"
+    SUCCESS = "SUCCESS"
+    FAIL_NEEDS_CONFIRM = "FAIL_NEEDS_CONFIRM"
+    CONFIRMED = "CONFIRMED"
+
+
 @dataclass(frozen=True)
 class PatternEvent:
-    """Discrete multi-candle pattern occurrence."""
+    """
+    Discrete multi-candle pattern occurrence.
 
-    time: Any  # typically pd.Timestamp; keep Any to avoid pandas hard dependency here
-    name: str
-    direction: Direction
+    Backward-compatible:
+      - time/meta still allowed
+    Structure-pattern compatible (Week 4):
+      - start_idx/end_idx/status/confirmation fields added
+    """
+    # Optional timestamp (keep for charting / later usage)
+    time: Any | None = None
+
+    name: str = ""
+    direction: Direction = 0
+
+    # Week 4 structure-pattern fields
+    start_idx: Optional[int] = None
+    end_idx: Optional[int] = None
+    status: PatternStatus = PatternStatus.NONE
+
+    confirmation_threshold: Optional[float] = None
+    confirmation_idx: Optional[int] = None
+    break_threshold_used: Optional[float] = None
+
     meta: Dict[str, Any] = field(default_factory=dict)
 
 

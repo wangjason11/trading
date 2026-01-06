@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Tuple, List
 
-from .types import PatternEvent, PatternStatus
+from engine_v2.common.types import PatternEvent, PatternStatus
 
 
 class BreakoutPatterns:
@@ -12,6 +12,13 @@ class BreakoutPatterns:
 
     Direction is always +1 / -1.
     Confirmation is represented as the SAME pattern name with status=CONFIRMED.
+
+    NOTE: This class expects candles_v2 feature columns:
+      - body_len, candle_len
+      - is_big_normal_as0 (big_normal)
+      - is_big_normal_as2 (big_normal2)
+      - is_big_maru_as0 (big_maru)
+      - direction, candle_type, o/h/l/c
     """
 
     def __init__(self, df):
@@ -22,7 +29,7 @@ class BreakoutPatterns:
         if threshold is None:
             return True
         multiplier = 1 + percent if direction == 1 else 1 - percent
-        return candle.body_length >= threshold * multiplier
+        return candle.body_len >= threshold * multiplier
 
     def check_break(self, candle, threshold: Optional[float], direction: int) -> bool:
         if threshold is None:
@@ -85,17 +92,17 @@ class BreakoutPatterns:
             c0.candle_type in ["normal", "maru"]
             and c1.candle_type == "pinbar"
             and c2.candle_type == "maru"
-            and c0.big_normal == 1
-            and c2.big_normal_2 == 1
+            and int(c0.is_big_normal_as0) == 1
+            and int(c2.is_big_normal_as2) == 1
             and (c2.c > max(c0.h, c1.h) if direction == 1 else c2.c < min(c0.l, c1.l))
         )
         cond2 = (
             c0.candle_type == "maru"
             and c1.candle_type == "maru"
             and c2.candle_type == "maru"
-            and c0.big_normal == 1
-            and c1.big_normal_2 == 1
-            and c2.big_normal_2 == 1
+            and int(c0.is_big_normal_as0) == 1
+            and int(c1.is_big_normal_as2) == 1
+            and int(c2.is_big_normal_as2) == 1
             and (c2.c > max(c0.h, c1.h) if direction == 1 else c2.c < min(c0.l, c1.l))
         )
 
@@ -128,11 +135,11 @@ class BreakoutPatterns:
         if not self.check_break(c0, break_threshold, direction):
             return None
 
-        c0_valid = c0.candle_type == "maru" and c0.big_normal == 1
+        c0_valid = c0.candle_type == "maru" and int(c0.is_big_normal_as0) == 1
         c1_valid = (
             c1.candle_type == "maru"
             and (c1.c > c0.c if direction == 1 else c1.c < c0.c)
-            and c1.candle_length >= 0.7 * c0.candle_length
+            and c1.candle_len >= 0.7 * c0.candle_len
         )
 
         if c0_valid and c1_valid:
@@ -186,14 +193,15 @@ class BreakoutPatterns:
 
         c0_pass = (
             c0.candle_type == "maru"
-            and c0.big_maru == 1
+            and int(c0.is_big_maru_as0) == 1
             and self.body_check(c0, break_threshold, break_percent, direction)
         )
-        c1_len_check = c1.candle_length < small_body_size * c0.candle_length
+
+        c1_len_check = c1.candle_len < small_body_size * c0.candle_len
         if direction == 1:
-            c1_pos_check = c1.l > (c0.l + small_body_tail * c0.candle_length)
+            c1_pos_check = c1.l > (c0.l + small_body_tail * c0.candle_len)
         else:
-            c1_pos_check = c1.h < (c0.l + small_body_tail * c0.candle_length)
+            c1_pos_check = c1.h < (c0.l + small_body_tail * c0.candle_len)
         c1_pass = c1_len_check and c1_pos_check
 
         if c0_pass and c1_pass:
@@ -244,7 +252,7 @@ class BreakoutPatterns:
 
         c0_pass = (
             c0.candle_type == "maru"
-            and c0.big_maru == 1
+            and int(c0.is_big_maru_as0) == 1
             and self.body_check(c0, break_threshold, break_percent, direction)
         )
         c1_pass = c1.direction == (-direction) and c1.candle_type in ["normal", "pinbar", "maru"]
