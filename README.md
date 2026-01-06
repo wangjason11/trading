@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Multi-Timeframe Forex Trading System
 
 This repository contains a research-first, event-driven, multi-timeframe forex trading system.
@@ -62,3 +63,6 @@ Forex_Algo/
 │   └── logs/
 │
 └── ideas/                       # Optional deeper experiment notes
+=======
+# trading
+>>>>>>> f318e9d013647d88a9028ba4b5c5b297b634f449
