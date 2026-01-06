@@ -5,6 +5,16 @@ from engine_v2.data.provider_oanda import get_history
 from engine_v2.pipeline.orchestrator import run_pipeline
 from engine_v2.charting.export_plotly import export_chart_plotly
 
+chart_cfg = {
+    # Week 4 “pattern work mode” defaults:
+    "candle_types": {"pinbar": True, "maru": True},   # start with these
+    "patterns": {"engulfing": False, "star": False},    # start with these
+
+    # keep these off for now (declutter)
+    "structure": {"levels": False, "swings": False},
+    "zones": {"KL": False, "OB": False},
+}
+
 
 def main() -> None:
     df = get_history(
@@ -41,12 +51,15 @@ def main() -> None:
     # Export chart artifacts
     basename = f"{CONFIG.pair}_{CONFIG.timeframe}_{CONFIG.start.date()}_{CONFIG.end.date()}"
     print("DEBUG structure_levels:", len(res.structure))
+
     paths = export_chart_plotly(
         res.df,
         title=f"...",
         basename=basename,
         structure_levels=res.structure,
+        cfg=chart_cfg,   # 👈 ADD THIS
     )
+
     print(f"Chart HTML: {paths.html_path}")
     print(f"Chart PNG : {paths.png_path}")
 
