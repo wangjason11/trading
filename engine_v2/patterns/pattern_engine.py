@@ -100,6 +100,7 @@ def _validate_structure_pattern_inputs(df: pd.DataFrame) -> None:
         "body_len",
         "candle_len",
         "is_big_normal_as0",
+        "is_big_normal_as1",
         "is_big_normal_as2",
         "is_big_maru_as0",
     ]

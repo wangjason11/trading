@@ -5,7 +5,6 @@ from typing import Optional, Tuple, List
 
 from engine_v2.common.types import PatternEvent, PatternStatus
 
-
 class BreakoutPatterns:
     """
     Structure-only candle patterns used for breakout/pullback logic.
@@ -99,11 +98,12 @@ class BreakoutPatterns:
             and (c2.c > max(c0.h, c1.h) if direction == 1 else c2.c < min(c0.l, c1.l))
         )
 
-        close_to_high = abs(c1.c - c0.h) <= 0.0010 if direction == 1 else abs(c1.c - c0.l) <= 0.0010
+        close_to_high = abs(c1.c - c0.h) <= 0.00010 if direction == 1 else abs(c1.c - c0.l) <= 0.00010
         cond2_valid = (
             c0.candle_type == "pinbar"
             and close_to_high
             and c2.candle_type == "maru"
+            and int(c0.is_big_normal_as0) == 1
             and int(c2.is_big_normal_as2) == 1
             and (c2.c > max(c0.h, c1.h) if direction == 1 else c2.c < min(c0.l, c1.l))
         )
@@ -212,9 +212,11 @@ class BreakoutPatterns:
         )
 
         if direction == 1:
-            c1_pos_check = c1.l > (c0.l + small_body_tail * c0.candle_len)
+            # c1_pos_check = c1.l > (c0.l + small_body_tail * c0.candle_len)
+            c1_pos_check = c1.l > c0.mid_price
         else:
-            c1_pos_check = c1.h < (c0.l + small_body_tail * c0.candle_len)
+            # c1_pos_check = c1.h < (c0.l + small_body_tail * c0.candle_len)
+            c1_pos_check = c1.h < c0.mid_price
         cond2_valid = c1_pos_check
 
         if cond1_valid and cond2_valid:
