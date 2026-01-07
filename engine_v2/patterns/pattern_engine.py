@@ -6,8 +6,9 @@ from typing import List, Optional
 import pandas as pd
 
 from engine_v2.common.types import REQUIRED_CANDLE_COLS
-from engine_v2.patterns.structure_patterns import BreakoutPatterns
 from engine_v2.common.types import PatternEvent, PatternStatus
+from engine_v2.patterns.structure_patterns import BreakoutPatterns
+from engine_v2.patterns.range_label import apply_is_range_labels, RangeLabelConfig
 
 @dataclass
 class PatternEngineResult:
@@ -52,6 +53,8 @@ def detect_patterns(df: pd.DataFrame, *, break_threshold: Optional[float] = None
     for idx in range(n):
         for direction in (1, -1):
             ev = bp.detect_first_success(idx, direction, break_threshold)
+            # if idx == 100 and direction == 1:
+                # print("[DEBUG detect_first_success idx=100]", ev)
             if ev is None:
                 continue
 
@@ -74,8 +77,17 @@ def detect_patterns(df: pd.DataFrame, *, break_threshold: Optional[float] = None
                 # only record events that actually produced a marker
                 events.append(ev)
 
+    # -------------------------------------------------
+    # Day 3: is_range candle labeling (event-confirmed)
+    # -------------------------------------------------
+    df2 = apply_is_range_labels(df2, RangeLabelConfig())
+
     _validate_output(df2)
-    return PatternEngineResult(df=df2, events=events, notes=f"structure pattern events={len(events)}")
+    return PatternEngineResult(
+        df=df2,
+        events=events,
+        notes=f"structure pattern events={len(events)}",
+    )
 
 
 # -------------------------------------------------------------------
@@ -103,6 +115,8 @@ def _validate_structure_pattern_inputs(df: pd.DataFrame) -> None:
         "is_big_normal_as1",
         "is_big_normal_as2",
         "is_big_maru_as0",
+        "mid_price",
+        "body_pct",
     ]
     missing = [c for c in required if c not in df.columns]
     if missing:

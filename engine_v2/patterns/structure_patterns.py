@@ -133,7 +133,13 @@ class BreakoutPatterns:
             debug={"variant": "cond1_valid" if cond1_valid else "cond2_valid" if cond2_valid else "cond3_valid"},
         )
 
-    def double_maru(self, idx: int, direction: int, break_threshold: Optional[float] = None) -> Optional[PatternEvent]:
+    def double_maru(
+        self,
+        idx: int,
+        direction: int,
+        break_threshold: Optional[float] = None,
+        do_confirm: bool = True,
+    ) -> Optional[PatternEvent]:
         if idx + 1 >= len(self.df):
             return None
 
@@ -178,7 +184,7 @@ class BreakoutPatterns:
                 break_threshold_used=break_threshold,
                 debug={"cond1_valid": cond1_valid, "cond2_valid": cond2_valid},
             )
-            return self._confirm_if_needed(ev)
+            return self._confirm_if_needed(ev) if do_confirm else ev
 
         return None
 
@@ -189,6 +195,7 @@ class BreakoutPatterns:
         break_threshold: Optional[float] = None,
         break_percent: float = 0.3,
         small_body_tail: float = 0.5,
+        do_confirm: bool = True,
     ) -> Optional[PatternEvent]:
         if idx + 1 >= len(self.df):
             return None
@@ -196,6 +203,23 @@ class BreakoutPatterns:
         df = self.df
         c0 = df.iloc[idx]
         c1 = df.iloc[idx + 1]
+
+        # if idx == 100 and direction == 1:
+        #     print(
+        #         "[DEBUG PRECHECK idx=100 one_maru_continuous +1]",
+        #         "time0=", getattr(c0, "time", None),
+        #         "c0_type=", c0.candle_type,
+        #         "c0_dir=", c0.direction,
+        #         "c0_body_pct=", getattr(c0, "body_pct", None),
+        #         "c0_is_big_maru_as0=", int(getattr(c0, "is_big_maru_as0", 0)),
+        #         "c0_mid=", getattr(c0, "mid_price", None),
+        #         "c1_dir=", c1.direction,
+        #         "c1_low=", c1.l,
+        #         "check_break=", self.check_break(c0, break_threshold, direction),
+        #         "body_check=", self.body_check(c0, break_threshold, break_percent, direction),
+        #         "cond2=", (c1.l > getattr(c0, "mid_price", float("nan"))),
+        #         "confirm_thr=", self.confirmation_threshold(idx, direction),
+        #     )
 
         if not c0.candle_type == "maru":
             return None
@@ -241,7 +265,7 @@ class BreakoutPatterns:
                 break_threshold_used=break_threshold,
                 debug={"cond1_valid": cond1_valid, "cond2_valid": cond2_valid},
             )
-            return self._confirm_if_needed(ev)
+            return self._confirm_if_needed(ev) if do_confirm else ev
 
         return None
 
@@ -253,6 +277,7 @@ class BreakoutPatterns:
         break_percent: float = 0.3,
         small_body_tail: float = 0.5,
         small_body_size: float = 0.35,
+        do_confirm: bool = True,
     ) -> Optional[PatternEvent]:
         if idx + 1 >= len(self.df):
             return None
@@ -305,9 +330,10 @@ class BreakoutPatterns:
                 break_threshold_used=break_threshold,
                 debug={"cond1_valid": cond1_valid, "cond2_valid": cond2_valid},
             )
-            return self._confirm_if_needed(ev)
+            return self._confirm_if_needed(ev) if do_confirm else ev
 
         return None
+
 
     def detect_first_success(
         self,
@@ -315,15 +341,36 @@ class BreakoutPatterns:
         direction: int,
         break_threshold: Optional[float] = None,
     ) -> Optional[PatternEvent]:
-        candidates: List[Optional[PatternEvent]] = [
-            self.continuous(idx, direction, break_threshold),
-            self.double_maru(idx, direction, break_threshold),
-            self.one_maru_continuous(idx, direction, break_threshold),
-            self.one_maru_opposite(idx, direction, break_threshold),
-        ]
-        for ev in candidates:
+
+        # Pass A: compute 2-candle candidates once (NO confirmation)
+        dm  = self.double_maru(idx, direction, break_threshold, do_confirm=False)
+        omc = self.one_maru_continuous(idx, direction, break_threshold, do_confirm=False)
+        omo = self.one_maru_opposite(idx, direction, break_threshold, do_confirm=False)
+
+        # Pass A1: immediate SUCCESS from 2-candle patterns (priority order)
+        for ev in (dm, omc, omo):
+            if ev is not None and ev.status == PatternStatus.SUCCESS:
+                return ev
+
+        # Pass A2: 3-candle pattern (only after no 2-candle SUCCESS)
+        cont = self.continuous(idx, direction, break_threshold)
+        if cont is not None and cont.status == PatternStatus.SUCCESS:
+            return cont
+
+        # Pass B: confirmations (only if nothing succeeded)
+        confirmed = []
+        for ev in (dm, omc, omo):
             if ev is None:
                 continue
-            if ev.status in (PatternStatus.SUCCESS, PatternStatus.CONFIRMED):
-                return ev
+            if ev.status != PatternStatus.FAIL_NEEDS_CONFIRM:
+                continue
+
+            ev2 = self._confirm_if_needed(ev)
+            if ev2.status == PatternStatus.CONFIRMED and ev2.confirmation_idx is not None:
+                confirmed.append(ev2)
+
+        if confirmed:
+            confirmed.sort(key=lambda e: e.confirmation_idx)
+            return confirmed[0]
+
         return None

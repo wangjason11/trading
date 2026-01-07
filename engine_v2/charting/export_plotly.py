@@ -108,6 +108,9 @@ def export_chart_plotly(
 
     fig = go.Figure()
 
+    # Offset to keep markers away from candle wicks
+    wick_offset = (dfx[COL_H] - dfx[COL_L]) * 0.15
+
     # Candles
     candle_idx = dfx.index.to_numpy()
 
@@ -115,6 +118,7 @@ def export_chart_plotly(
         candle_idx,
         dfx["mid_price"].astype(float),
         dfx["body_pct"].astype(float),
+        dfx["candle_type"].astype(str),
     ))
 
     fig.add_trace(
@@ -134,6 +138,7 @@ def export_chart_plotly(
                 "H=%{high}<br>"
                 "L=%{low}<br>"
                 "C=%{close}<br>"
+                "candle_type=%{customdata[3]}<br>"
                 "body_pct=%{customdata[2]:.2%}<br>"
                 "mid_price=%{customdata[1]:.5f}"
                 "<extra></extra>"
@@ -212,7 +217,7 @@ def export_chart_plotly(
 
 
     # -------------------------------------------------
-    # Week 4 Structure-pattern markers (dots only)
+    # Week 4 Structure-pattern markers (triangles)
     # -------------------------------------------------
     if "pat" in dfx.columns and "pat_dir" in dfx.columns and "pat_status" in dfx.columns:
         enabled_names = {k for k, v in pat_cfg.items() if v is True}
@@ -228,11 +233,12 @@ def export_chart_plotly(
                 up = sub[(sub["pat_status"] == status) & (sub["pat_dir"] == 1)]
                 dn = sub[(sub["pat_status"] == status) & (sub["pat_dir"] == -1)]
 
+                # +1 => above high
                 if not up.empty:
                     fig.add_trace(
                         go.Scatter(
                             x=up[COL_TIME],
-                            y=up[COL_L],
+                            y=up[COL_H] + wick_offset.loc[up.index],
                             mode="markers",
                             name=f"struct:{status}:+1",
                             customdata=up[
@@ -245,15 +251,16 @@ def export_chart_plotly(
                                 "start=%{customdata[3]} end=%{customdata[4]} conf=%{customdata[5]}"
                                 "<extra></extra>"
                             ),
-                            **_style("structure_pattern.up"),
+                            **_style("structure.success.up" if status == PatternStatus.SUCCESS.value else "structure.confirmed.up"),
                         )
                     )
 
+                # -1 => below low
                 if not dn.empty:
                     fig.add_trace(
                         go.Scatter(
                             x=dn[COL_TIME],
-                            y=dn[COL_H],
+                            y=dn[COL_L] - wick_offset.loc[dn.index],
                             mode="markers",
                             name=f"struct:{status}:-1",
                             customdata=dn[
@@ -266,9 +273,51 @@ def export_chart_plotly(
                                 "start=%{customdata[3]} end=%{customdata[4]} conf=%{customdata[5]}"
                                 "<extra></extra>"
                             ),
-                            **_style("structure_pattern.down"),
+                            **_style("structure.success.down" if status == PatternStatus.SUCCESS.value else "structure.confirmed.down"),
                         )
                     )
+
+    # -------------------------------------------------
+    # Week 4 Day 3: Range markers (orange dots, mid-candle)
+    # -------------------------------------------------
+    if "is_range" in dfx.columns and dfx["is_range"].any():
+        range_candles = dfx[dfx["is_range"] == 1].copy()
+
+        # place in middle of the candle (mid_price if present, otherwise (H+L)/2)
+        if "mid_price" in dfx.columns:
+            y_mid = range_candles["mid_price"]
+        else:
+            y_mid = (range_candles[COL_H] + range_candles[COL_L]) / 2.0
+
+        # optional debug fields if present
+        for col in ["is_range_confirm_idx", "is_range_lag"]:
+            if col not in range_candles.columns:
+                range_candles[col] = -1
+
+        fig.add_trace(
+            go.Scatter(
+                x=range_candles[COL_TIME],
+                y=y_mid,
+                mode="markers",
+                name="range:candle",
+                customdata=list(zip(
+                    range_candles.index.to_numpy(),
+                    range_candles["is_range_confirm_idx"].astype(int),
+                    range_candles["is_range_lag"].astype(int),
+                    range_candles[COL_L].astype(float),
+                    range_candles[COL_H].astype(float),
+                )),
+                hovertemplate=(
+                    "idx=%{customdata[0]}<br>"
+                    "confirm_idx=%{customdata[1]}<br>"
+                    "lag=%{customdata[2]}<br>"
+                    "low=%{customdata[3]}<br>"
+                    "high=%{customdata[4]}"
+                    "<extra></extra>"
+                ),
+                **_style("range.candle"),
+            )
+        )
 
 
     # Structure levels overlays
