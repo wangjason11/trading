@@ -19,6 +19,6 @@ CONFIG = ReplayConfig(
     pair="NZD_USD",
     timeframe="M15",
     # Use UTC for deterministic replay.
-    start=datetime(2025, 12, 1, 0, 0, 0, tzinfo=timezone.utc),
-    end=datetime(2025, 12, 5, 23, 59, 59, tzinfo=timezone.utc),
+    start=datetime(2025, 11, 25, 0, 0, 0, tzinfo=timezone.utc),
+    end=datetime(2025, 12, 2, 23, 59, 59, tzinfo=timezone.utc),
 )

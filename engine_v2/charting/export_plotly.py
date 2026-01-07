@@ -109,6 +109,14 @@ def export_chart_plotly(
     fig = go.Figure()
 
     # Candles
+    candle_idx = dfx.index.to_numpy()
+
+    customdata = list(zip(
+        candle_idx,
+        dfx["mid_price"].astype(float),
+        dfx["body_pct"].astype(float),
+    ))
+
     fig.add_trace(
         go.Candlestick(
             x=dfx[COL_TIME],
@@ -118,6 +126,18 @@ def export_chart_plotly(
             close=dfx[COL_C],
             name="OHLC",
             showlegend=False,
+            customdata=customdata,
+            hovertemplate=(
+                "idx=%{customdata[0]}<br>"
+                "time=%{x}<br>"
+                "O=%{open}<br>"
+                "H=%{high}<br>"
+                "L=%{low}<br>"
+                "C=%{close}<br>"
+                "body_pct=%{customdata[2]:.2%}<br>"
+                "mid_price=%{customdata[1]:.5f}"
+                "<extra></extra>"
+            ),
         )
     )
 

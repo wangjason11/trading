@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class CandleParams:
-    maru: float = 0.7
-    pinbar: float = 0.5
+    maru: float = 0.65
+    pinbar: float = 0.4
     pinbar_distance: float = 0.5
 
     big_maru_threshold: float = 0.7

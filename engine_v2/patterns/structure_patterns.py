@@ -86,10 +86,11 @@ class BreakoutPatterns:
 
         if not all(c.direction == direction for c in [c0, c1, c2]):
             return None
+
         if not self.check_break(c0, break_threshold, direction):
             return None
 
-        cond1 = (
+        cond1_valid = (
             c0.candle_type in ["normal", "maru"]
             and c1.candle_type == "pinbar"
             and c2.candle_type == "maru"
@@ -97,17 +98,27 @@ class BreakoutPatterns:
             and int(c2.is_big_normal_as2) == 1
             and (c2.c > max(c0.h, c1.h) if direction == 1 else c2.c < min(c0.l, c1.l))
         )
-        cond2 = (
-            c0.candle_type == "maru"
-            and c1.candle_type == "maru"
+
+        close_to_high = abs(c1.c - c0.h) <= 0.0010 if direction == 1 else abs(c1.c - c0.l) <= 0.0010
+        cond2_valid = (
+            c0.candle_type == "pinbar"
+            and close_to_high
             and c2.candle_type == "maru"
-            and int(c0.is_big_normal_as0) == 1
-            and int(c1.is_big_normal_as2) == 1
             and int(c2.is_big_normal_as2) == 1
             and (c2.c > max(c0.h, c1.h) if direction == 1 else c2.c < min(c0.l, c1.l))
         )
 
-        if not (cond1 or cond2):
+        cond3_valid = (
+            c0.candle_type == "normal"
+            and c1.candle_type == "normal"
+            and c2.candle_type == "maru"
+            and int(c0.is_big_normal_as0) == 1
+            and int(c1.is_big_normal_as1) == 1
+            and int(c2.is_big_normal_as2) == 1
+            and (c2.c > max(c0.h, c1.h) if direction == 1 else c2.c < min(c0.l, c1.l))
+        )
+
+        if not (cond1_valid or cond2_valid or cond3_valid):
             return None
 
         return PatternEvent(
@@ -119,7 +130,7 @@ class BreakoutPatterns:
             confirmation_threshold=None,
             confirmation_idx=None,
             break_threshold_used=break_threshold,
-            debug={"variant": "cond1" if cond1 else "cond2"},
+            debug={"variant": "cond1_valid" if cond1_valid else "cond2_valid" if cond2_valid else "cond3_valid"},
         )
 
     def double_maru(self, idx: int, direction: int, break_threshold: Optional[float] = None) -> Optional[PatternEvent]:
@@ -130,20 +141,22 @@ class BreakoutPatterns:
         c0 = df.iloc[idx]
         c1 = df.iloc[idx + 1]
 
+        if not (c0.candle_type == "maru" and c1.candle_type == "maru"):
+            return None
+
         if not (c0.direction == direction and c1.direction == direction):
             return None
 
         if not self.check_break(c0, break_threshold, direction):
             return None
 
-        c0_valid = c0.candle_type == "maru" and int(c0.is_big_normal_as0) == 1
-        c1_valid = (
-            c1.candle_type == "maru"
-            and (c1.c > c0.c if direction == 1 else c1.c < c0.c)
+        cond1_valid = int(c0.is_big_normal_as0) == 1
+        cond2_valid = (
+            (c1.c > c0.c if direction == 1 else c1.c < c0.c)
             and c1.candle_len >= 0.7 * c0.candle_len
         )
 
-        if c0_valid and c1_valid:
+        if cond1_valid and cond2_valid:
             return PatternEvent(
                 name="double_maru",
                 direction=direction,
@@ -154,7 +167,7 @@ class BreakoutPatterns:
                 break_threshold_used=break_threshold,
             )
 
-        if c0_valid ^ c1_valid:
+        if cond1_valid ^ cond2_valid:
             ev = PatternEvent(
                 name="double_maru",
                 direction=direction,
@@ -163,7 +176,7 @@ class BreakoutPatterns:
                 status=PatternStatus.FAIL_NEEDS_CONFIRM,
                 confirmation_threshold=self.confirmation_threshold(idx, direction),
                 break_threshold_used=break_threshold,
-                debug={"c0_valid": c0_valid, "c1_valid": c1_valid},
+                debug={"cond1_valid": cond1_valid, "cond2_valid": cond2_valid},
             )
             return self._confirm_if_needed(ev)
 
@@ -184,28 +197,27 @@ class BreakoutPatterns:
         c0 = df.iloc[idx]
         c1 = df.iloc[idx + 1]
 
+        if not c0.candle_type == "maru":
+            return None
+
         if not (c0.direction == direction and c1.direction == direction):
             return None
 
         if not self.check_break(c0, break_threshold, direction):
             return None
 
-        small_body_size = 0.6
-
-        c0_pass = (
-            c0.candle_type == "maru"
-            and int(c0.is_big_maru_as0) == 1
+        cond1_valid = (
+            int(c0.is_big_maru_as0) == 1
             and self.body_check(c0, break_threshold, break_percent, direction)
         )
 
-        c1_len_check = c1.candle_len < small_body_size * c0.candle_len
         if direction == 1:
             c1_pos_check = c1.l > (c0.l + small_body_tail * c0.candle_len)
         else:
             c1_pos_check = c1.h < (c0.l + small_body_tail * c0.candle_len)
-        c1_pass = c1_len_check and c1_pos_check
+        cond2_valid = c1_pos_check
 
-        if c0_pass and c1_pass:
+        if cond1_valid and cond2_valid:
             return PatternEvent(
                 name="one_maru_continuous",
                 direction=direction,
@@ -216,7 +228,7 @@ class BreakoutPatterns:
                 break_threshold_used=break_threshold,
             )
 
-        if c0_pass ^ c1_pass:
+        if cond1_valid ^ cond2_valid:
             ev = PatternEvent(
                 name="one_maru_continuous",
                 direction=direction,
@@ -225,7 +237,7 @@ class BreakoutPatterns:
                 status=PatternStatus.FAIL_NEEDS_CONFIRM,
                 confirmation_threshold=self.confirmation_threshold(idx, direction),
                 break_threshold_used=break_threshold,
-                debug={"c0_pass": c0_pass, "c1_pass": c1_pass},
+                debug={"cond1_valid": cond1_valid, "cond2_valid": cond2_valid},
             )
             return self._confirm_if_needed(ev)
 
@@ -237,6 +249,8 @@ class BreakoutPatterns:
         direction: int,
         break_threshold: Optional[float] = None,
         break_percent: float = 0.3,
+        small_body_tail: float = 0.5,
+        small_body_size: float = 0.35,
     ) -> Optional[PatternEvent]:
         if idx + 1 >= len(self.df):
             return None
@@ -245,20 +259,29 @@ class BreakoutPatterns:
         c0 = df.iloc[idx]
         c1 = df.iloc[idx + 1]
 
-        if c0.direction != direction:
+        if not c0.candle_type == "maru":
+            return None
+
+        if not (c0.direction == direction and c1.direction != direction):
             return None
 
         if not self.check_break(c0, break_threshold, direction):
             return None
 
-        c0_pass = (
-            c0.candle_type == "maru"
-            and int(c0.is_big_maru_as0) == 1
+        c1_len_check = c1.candle_len < small_body_size * c0.candle_len
+        cond1_valid = (
+            int(c0.is_big_maru_as0) == 1
+            and c1_len_check
             and self.body_check(c0, break_threshold, break_percent, direction)
         )
-        c1_pass = c1.direction == (-direction) and c1.candle_type in ["normal", "pinbar", "maru"]
 
-        if c0_pass and c1_pass:
+        if direction == 1:
+            c1_pos_check = c1.l > (c0.l + small_body_tail * c0.candle_len)
+        else:
+            c1_pos_check = c1.h < (c0.l + small_body_tail * c0.candle_len)
+        cond2_valid = c1_pos_check
+
+        if cond1_valid and cond2_valid:
             return PatternEvent(
                 name="one_maru_opposite",
                 direction=direction,
@@ -269,7 +292,7 @@ class BreakoutPatterns:
                 break_threshold_used=break_threshold,
             )
 
-        if c0_pass ^ c1_pass:
+        if cond1_valid ^ cond2_valid:
             ev = PatternEvent(
                 name="one_maru_opposite",
                 direction=direction,
@@ -278,7 +301,7 @@ class BreakoutPatterns:
                 status=PatternStatus.FAIL_NEEDS_CONFIRM,
                 confirmation_threshold=self.confirmation_threshold(idx, direction),
                 break_threshold_used=break_threshold,
-                debug={"c0_pass": c0_pass, "c1_pass": c1_pass},
+                debug={"cond1_valid": cond1_valid, "cond2_valid": cond2_valid},
             )
             return self._confirm_if_needed(ev)
 
