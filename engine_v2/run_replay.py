@@ -7,8 +7,8 @@ from engine_v2.charting.export_plotly import export_chart_plotly
 
 chart_cfg = {
     # Week 4 “pattern work mode” defaults:
-    "candle_types": {"pinbar": True, "maru": True},   # start with these
-    "patterns": {"engulfing": False, "star": False},    # start with these
+    "candle_types": {"pinbar": False, "maru": False},  
+    "patterns": {"engulfing": False, "star": False, "continuous": True, "double_maru": True, "one_maru_continuous": True, "one_maru_opposite": True},
 
     # keep these off for now (declutter)
     "structure": {"levels": False, "swings": False},
@@ -25,6 +25,9 @@ def main() -> None:
     )
 
     res = run_pipeline(df)
+
+    print(res.df["is_range"].value_counts())
+    print(res.df[res.df["is_range"] == 1][["is_range_confirm_idx", "is_range_lag"]].head())
 
     from engine_v2.debug.export_structure import export_levels, export_swings
     from engine_v2.structure.structure_v1 import compute_structure_levels

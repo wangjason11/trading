@@ -9,13 +9,15 @@ import tpqoa
 from datetime import datetime, timedelta
 from multiprocessing import Pool, cpu_count
 from itertools import product
-from candles import Candle
-from candles import CandlePatterns
 
 
 import pandas as pd
 import numpy as np
 from scipy.signal import argrelextrema
+
+from engine_v2.patterns.structure_patterns import BreakoutPatterns
+from engine_v2.patterns.types import PatternStatus
+
 
 
 class IdentifyStart():
@@ -348,36 +350,47 @@ class MarketStructure():
 
                 
 
+    # def check_pattern(self, idx, direction, break_threshold=None):
+    #     direction, status = CandlePatterns.continuous(idx, direction, break_threshold)
+    #     if status == "success":
+    #         self.success_pattern_processing(idx+2, direction)
+    #         return True
+    #     status, confirmation_threshold = CandlePatterns.double_maru(idx, direction, break_threshold)
+    #     if status == "success":
+    #         self.success_pattern_processing(idx+1, direction)
+    #         return True
+    #     elif status == "fail":
+    #         status, future_idx = CandlePatterns.price_confirmation(idx+1, direction, confirmation_threshold)
+    #         if status == True:
+    #             self.success_pattern_processing(future_idx, direction)
+    #             return True
+    #     status, confirmation_threshold = CandlePatterns.one_maru_continuous(idx, direction, break_threshold)
+    #     if status == "success":
+    #         self.success_pattern_processing(idx+1, direction)
+    #         return True
+    #     elif status == "fail":
+    #         status, future_idx = CandlePatterns.price_confirmation(idx+1, direction, confirmation_threshold)
+    #         if status == True:
+    #             self.success_pattern_processing(future_idx, direction)
+    #             return True
+    #     status, confirmation_threshold = CandlePatterns.one_maru_opposite(idx, direction, break_threshold)
+    #     if status == "success":
+    #         self.success_pattern_processing(idx+1, direction)
+    #         return True
+    #     elif status == "fail":
+    #         status, future_idx = CandlePatterns.price_confirmation(idx+1, direction, confirmation_threshold)
+    #         if status == True:
+    #             self.success_pattern_processing(future_idx, direction)
+    #             return True
+    #     return False
+
     def check_pattern(self, idx, direction, break_threshold=None):
-        direction, status = CandlePatterns.continuous(idx, direction, break_threshold)
-        if status == "success":
-            self.success_pattern_processing(idx+2, direction)
-            return True
-        status, confirmation_threshold = CandlePatterns.double_maru(idx, direction, break_threshold)
-        if status == "success":
-            self.success_pattern_processing(idx+1, direction)
-            return True
-        elif status == "fail":
-            status, future_idx = CandlePatterns.price_confirmation(idx+1, direction, confirmation_threshold)
-            if status == True:
-                self.success_pattern_processing(future_idx, direction)
-                return True
-        status, confirmation_threshold = CandlePatterns.one_maru_continuous(idx, direction, break_threshold)
-        if status == "success":
-            self.success_pattern_processing(idx+1, direction)
-            return True
-        elif status == "fail":
-            status, future_idx = CandlePatterns.price_confirmation(idx+1, direction, confirmation_threshold)
-            if status == True:
-                self.success_pattern_processing(future_idx, direction)
-                return True
-        status, confirmation_threshold = CandlePatterns.one_maru_opposite(idx, direction, break_threshold)
-        if status == "success":
-            self.success_pattern_processing(idx+1, direction)
-            return True
-        elif status == "fail":
-            status, future_idx = CandlePatterns.price_confirmation(idx+1, direction, confirmation_threshold)
-            if status == True:
-                self.success_pattern_processing(future_idx, direction)
-                return True
-        return False
+        bp = BreakoutPatterns(self.df)
+        ev = bp.detect_first_success(idx, direction, break_threshold)
+
+        if ev is None:
+            return False
+
+        apply_idx = ev.confirmation_idx if ev.status == PatternStatus.CONFIRMED else ev.end_idx
+        self.success_pattern_processing(apply_idx, direction)
+        return True

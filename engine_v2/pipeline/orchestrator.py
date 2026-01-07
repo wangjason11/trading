@@ -30,6 +30,11 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
 
     c_res = apply_candle_classification(df)
     p_res = detect_patterns(c_res.df)
+
+    # ✅ Week 4 debug: confirm structure-pattern markers exist
+    print("[patterns]", p_res.notes)
+    print(p_res.df["pat"].value_counts().head())
+
     s_res = compute_structure(p_res.df)
 
     meta = {

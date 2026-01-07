@@ -27,16 +27,17 @@ def apply_candle_classification(df: pd.DataFrame) -> CandleClassifierResult:
     from engine_v2.features.candle_params import CandleParams
     from engine_v2.features.candles_v2 import compute_candle_features
 
-    params = CandleParams(
-        maru=0.7,
-        pinbar=0.5,
-        pinbar_distance=0.5,
-        big_maru_threshold=0.7,
-        big_normal_threshold=0.5,
-        lookback=5,
-        special_maru=0.5,
-        special_maru_distance=0.1,
-    )
+    # params = CandleParams(
+    #     maru=0.7,
+    #     pinbar=0.5,
+    #     pinbar_distance=0.5,
+    #     big_maru_threshold=0.7,
+    #     big_normal_threshold=0.5,
+    #     lookback=5,
+    #     special_maru=0.5,
+    #     special_maru_distance=0.1,
+    # )
+    params = CandleParams()
 
     df = compute_candle_features(df, params, anchor_shifts=(0,1,2))
     notes = "Candle features computed via features.candles_v2"
