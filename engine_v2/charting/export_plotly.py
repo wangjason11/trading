@@ -78,7 +78,6 @@ def export_chart_plotly(
             "double_maru": False,
             "one_maru_continuous": False,
             "one_maru_opposite": False,
-            "break_confirm": False,
         },
         "structure": {
             "levels": False,  # placeholder/noisy -> OFF by default
