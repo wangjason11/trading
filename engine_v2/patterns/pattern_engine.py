@@ -77,6 +77,81 @@ def detect_patterns(df: pd.DataFrame, *, break_threshold: Optional[float] = None
                 # only record events that actually produced a marker
                 events.append(ev)
 
+
+    # -------------------------------------------------
+    # Week 4 Add-on: break_continue (1-candle continuation)
+    # -------------------------------------------------
+    eps = 0.0001
+
+    for i in range(1, n):
+        # Don't overwrite an existing marker
+        cur_row = df2.index[i]
+        if df2.at[cur_row, "pat"] != "":
+            continue
+
+        prev_row = df2.index[i - 1]
+
+        prev_pat = str(df2.at[prev_row, "pat"])
+        prev_status = str(df2.at[prev_row, "pat_status"])
+        prev_dir = int(df2.at[prev_row, "pat_dir"])
+
+        # Previous candle must have been a structure-pattern marker and match direction.
+        # Only disallowed: one_maru_opposite SUCCESS (CONFIRMED is OK per your rule).
+        if prev_pat == "":
+            continue
+        if prev_status not in (PatternStatus.SUCCESS.value, PatternStatus.CONFIRMED.value):
+            continue
+        if prev_pat == "one_maru_opposite" and prev_status == PatternStatus.SUCCESS.value:
+            continue
+
+        direction = prev_dir
+        if direction not in (1, -1):
+            continue
+
+        # Current candle conditions
+        cur_type = str(df2.at[cur_row, "candle_type"])
+        cur_dir = int(df2.at[cur_row, "direction"])
+        if cur_type not in ("normal", "maru"):
+            continue
+        if cur_dir != direction:
+            continue
+
+        prev_high = float(df2.at[prev_row, "h"])
+        prev_low = float(df2.at[prev_row, "l"])
+        cur_close = float(df2.at[cur_row, "c"])
+
+        # Continuation close condition (mirror for bearish)
+        if direction == 1:
+            if cur_close < (prev_high - eps):
+                continue
+        else:
+            if cur_close > (prev_low + eps):
+                continue
+
+        # Mark df columns
+        df2.at[cur_row, "pat"] = "break_continue"
+        df2.at[cur_row, "pat_dir"] = direction
+        df2.at[cur_row, "pat_status"] = PatternStatus.SUCCESS.value
+        df2.at[cur_row, "pat_start_idx"] = i - 1
+        df2.at[cur_row, "pat_end_idx"] = i
+        df2.at[cur_row, "pat_confirm_idx"] = -1
+
+        # Add event (only if marker placed)
+        events.append(
+            PatternEvent(
+                name="break_continue",
+                direction=direction,
+                start_idx=i - 1,
+                end_idx=i,
+                status=PatternStatus.SUCCESS,
+                confirmation_threshold=None,
+                confirmation_idx=None,
+                break_threshold_used=None,
+                meta={"prev_pat": prev_pat, "prev_status": prev_status},
+            )
+        )
+
+
     # -------------------------------------------------
     # Day 3: is_range candle labeling (event-confirmed)
     # -------------------------------------------------
