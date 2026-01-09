@@ -22,17 +22,17 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
     _validate_input(df)
 
     # --- LEGACY HOOK (edit this block only) -----------------------
-    from engine_v2.structure.structure_v1 import compute_structure_levels
+    from engine_v2.structure.market_structure import MarketStructure
 
-    swings, levels = compute_structure_levels(df, left=6, right=6)
+    # For now, we pass struct_direction from upstream later (Week 5: IdentifyStart will compute it).
+    # Temporary: assume struct_direction=1 for your current replay window (uptrend).
+    struct_direction = 1
 
-    df2 = df.copy()
-    # store swing markers for charting/debugging (optional)
-    df2["swing"] = 0
-    for sp in swings:
-        df2.loc[sp.idx, "swing"] = 1 if sp.kind == "H" else -1
+    ms = MarketStructure(df, struct_direction=struct_direction)
+    df2, ms_events, levels = ms.run()
 
-    notes = f"Structure v1: fractal swings left=6 right=6, levels={len(levels)}"
+    notes = f"MarketStructure v1: struct_direction={struct_direction}, events={len(ms_events)}, levels={len(levels)}"
+
     # --------------------------------------------------------------
 
     _validate_output(df2)
