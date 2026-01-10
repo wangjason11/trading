@@ -176,6 +176,7 @@ class MarketStructure:
 
         # 2) Finalize pending range candidate at decision point (confirm OR fail); 
         # if confirmed, activate range using only candle j hi/lo, then rewind+replay.
+        # When evaluation ends by confirm or fail (non-disqualified), rewind+replay from j+1. Disqualification cancels the evaluation and does not rewind.
         self._finalize_range_candidate_if_due(i)
 
         # 3) Write df debug columns for this candle
@@ -344,8 +345,10 @@ class MarketStructure:
         It either:
             * CONFIRMS at candle c (first close within candidate candle [low_i, high_i])
             * FAILS at decision candle d=i+max_k if no such close occurs
-        - Regardless of confirm or fail, when the evaluation ends we will rewind+replay from j+1
+        - If the evaluation ends by CONFIRM or FAIL (non-disqualified), we rewind+replay from j+1
         (handled in _finalize_range_candidate_if_due).
+        - If the candidate is DISQUALIFIED by a breakout/pullback pattern appearing in the future,
+        the evaluation is canceled immediately and NO rewind+replay occurs.
         - State must be != NONE (no ranges before first breakout).
         - Do NOT start range evaluation if a range is already active.
         """
@@ -355,8 +358,8 @@ class MarketStructure:
             return
         if st.range_active:
             return
-        if st.range_candidate_start_idx is not None and not st.range_candidate_disqualified:
-            # already waiting on a candidate; don't replace it
+        if st.range_candidate_start_idx is not None:
+            # already waiting on a candidate; never replace it (disqualification does NOT create a new candidate)
             return
 
         # Disqualify if this candle participates in any pattern (apply or original-window non-last)
@@ -382,12 +385,9 @@ class MarketStructure:
         if st.range_candidate_start_idx is None or st.range_candidate_decision_idx is None:
             return
         if st.range_candidate_disqualified:
-            # Even if disqualified, the evaluation ended at decision point; we still rewind+replay.
-            if i == st.range_candidate_decision_idx:
-                j = int(st.range_candidate_start_idx)
-                d = int(st.range_candidate_decision_idx)
-                self._clear_pending_range_candidate()
-                self._rewind_replay(j=j, d=d)
+            # Disqualification takes priority: do NOT rewind+replay.
+            # Candidate is invalidated and we continue normal processing from the apply candle.
+            self._clear_pending_range_candidate()
             return
 
         d = int(st.range_candidate_decision_idx)
@@ -399,29 +399,34 @@ class MarketStructure:
         # If confirmed, activate range using ONLY candle j hi/lo
         if st.range_candidate_will_confirm and st.range_candidate_confirm_idx is not None:
             c = int(st.range_candidate_confirm_idx)
-            self._activate_range_at_confirm(i=i, j=j, c=c)
+            activated = self._activate_range_at_confirm(i=i, j=j, c=c)
+
+            # ❗ If activation failed due to disqualification, DO NOT rewind
+            if not activated:
+                return
         else:
-            # fail: no active range; state remains whatever it already is (usually BREAKOUT)
+            # fail (non-disqualified): no active range
             self._clear_pending_range_candidate()
 
-        # ALWAYS rewind + replay from j+1 after range evaluation ends (confirm or fail)
+        # ✅ Rewind only happens after NON-disqualified completion
         self._rewind_replay(j=j, d=d)
 
 
-    def _activate_range_at_confirm(self, i: int, j: int, c: int) -> None:
+    def _activate_range_at_confirm(self, i: int, j: int, c: int) -> bool:
         st = self.state
 
         # Disqualify if the starter candle later became pattern apply candle
         if j in self._pattern_owned_apply_idxs:
             st.range_candidate_disqualified = True
             self._clear_pending_range_candidate()
-            return
+            return False
+
         
         # NEW: disqualify if the starter candle participated in the original portion of any pattern
         if j in self._range_disqualify_idxs:
             st.range_candidate_disqualified = True
             self._clear_pending_range_candidate()
-            return
+            return False
 
         hi = float(self.df.iloc[j]["h"])
         lo = float(self.df.iloc[j]["l"])
@@ -442,6 +447,7 @@ class MarketStructure:
         )
         self._set_state(MarketState.RANGE, i, meta={"reason": "range_confirmed", "effective_idx": j})
         self._clear_pending_range_candidate()
+        return True
 
     def _update_active_range(self, i: int) -> None:
         """
@@ -518,7 +524,7 @@ class MarketStructure:
 
         cts_price = float(st.cts.price)
         
-        # Use extremes from the ORIGINAL pattern window (exclude confirmation candle)
+        # Use extremes from the ORIGINAL pattern window; exclude confirmation candle (but include full original pattern window).
         L = self._pattern_len(pullback_ev)
         end = int(pullback_ev.end_idx)
         start = max(0, end - (L - 1))
@@ -606,8 +612,12 @@ class MarketStructure:
     def _rewind_replay(self, j: int, d: int) -> None:
         """
         Week 5 rule:
-        After RANGE evaluation ends (confirm OR fail), ALWAYS rewind+replay from candle j+1
-        through the decision candle d (inclusive).
+        After RANGE evaluation ends by CONFIRM or FAIL (non-disqualified),
+        rewind+replay from candle j+1 through the decision candle d (inclusive).
+
+        If the range candidate is DISQUALIFIED (i.e., a breakout or pullback pattern
+        appears during the evaluation window), the evaluation is canceled immediately
+        and NO rewind+replay occurs.
 
         This is the "go back in time but quickly processable" behavior:
         we re-process candles that were previously processed without the now-known outcome
@@ -704,6 +714,13 @@ class MarketStructure:
             return ev.confirmation_idx
         return ev.end_idx
 
+    # NOTE:
+    # _consume_pattern_apply should ONLY record ownership/disqualification facts.
+    # It must NOT clear pending range candidates.
+    # Clearing pending range candidates is handled exclusively by:
+    #   - _step_without_active_range / _step_with_active_range (on real pattern paths)
+    #   - _finalize_range_candidate_if_due
+    #   - _activate_range_at_confirm
     def _consume_pattern_apply(self, ev: PatternEvent) -> None:
         """
         Record that the apply candle is owned by a breakout/pullback pattern,
@@ -722,6 +739,7 @@ class MarketStructure:
             and int(st.range_candidate_start_idx) == int(apply_idx)
         ):
             st.range_candidate_disqualified = True
+
 
         # NEW: disqualify any candle that participated in the ORIGINAL pattern window
         # (excluding the last candle of the original pattern).
