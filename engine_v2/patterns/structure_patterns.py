@@ -374,3 +374,60 @@ class BreakoutPatterns:
             return confirmed[0]
 
         return None
+
+
+    def detect_best_for_anchor(
+        self,
+        idx: int,
+        direction: int,
+        break_threshold: Optional[float] = None,
+    ) -> Optional[PatternEvent]:
+        """
+        New Week 5 behavior:
+          Priority:
+            1) continuous (SUCCESS only)
+            2) one_maru_opposite (SUCCESS)
+            3) one_maru_continuous (SUCCESS)
+            4) double_maru (SUCCESS)
+            5) confirmations (for 2-candle patterns), in the same priority order
+        Notes:
+          - Price confirmation is only for 2-candle patterns.
+          - Confirmation lookahead max is 4 candles AFTER end_idx, so latest confirmation is idx+5.
+          - continuous has precedence even though it needs idx+2.
+        """
+
+        # 1) Highest priority: continuous
+        cont = self.continuous(idx, direction, break_threshold)
+        if cont is not None and cont.status == PatternStatus.SUCCESS:
+            return cont
+
+        # 2) Compute 2-candle candidates without confirmation
+        omo = self.one_maru_opposite(idx, direction, break_threshold, do_confirm=False)
+        omc = self.one_maru_continuous(idx, direction, break_threshold, do_confirm=False)
+        dm  = self.double_maru(idx, direction, break_threshold, do_confirm=False)
+
+        # 3) Immediate SUCCESS (priority order)
+        for ev in (omo, omc, dm):
+            if ev is not None and ev.status == PatternStatus.SUCCESS:
+                return ev
+
+        # 4) Confirmations LAST (priority order)
+        confirmed: List[PatternEvent] = []
+        for ev in (omo, omc, dm):
+            if ev is None:
+                continue
+            if ev.status != PatternStatus.FAIL_NEEDS_CONFIRM:
+                continue
+            ev2 = self._confirm_if_needed(ev)
+            if ev2.status == PatternStatus.CONFIRMED and ev2.confirmation_idx is not None:
+                confirmed.append(ev2)
+
+        if not confirmed:
+            return None
+
+        # If multiple confirmations exist, pick the earliest confirmation candle;
+        # if tie, preserve priority by ordering in the same (omo, omc, dm) sequence.
+        # We'll implement stable selection by sorting on confirmation_idx only
+        # because list order already encodes priority.
+        confirmed.sort(key=lambda e: e.confirmation_idx)
+        return confirmed[0]

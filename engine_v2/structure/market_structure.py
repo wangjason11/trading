@@ -54,6 +54,7 @@ class MarketStructureState:
     bos_confirmed: Optional[Point] = None
     bos_threshold: Optional[float] = None  # used for reversal checks when implemented
     bos_event: str = ""  # one-candle event marker written by _write_df_row
+    trend_leg_id: int = 0
 
     # Range (active)
     range_active: bool = False
@@ -136,10 +137,13 @@ class MarketStructure:
         No skipping. Uses pending confirmation for patterns + internal range evaluation window (min/max lookahead) with rewind+replay.
         """
         n = len(self.df)
-        for i in range(n):
-            self._step(i)
+        i = 0
+        while i < n:
+            # Stop on reversal
             if self.state.state == MarketState.REVERSAL:
                 break
+
+            i = self._step_anchor(i)
 
         levels = self._events_to_structure_levels()
         return self.df, self.events, levels
@@ -179,8 +183,95 @@ class MarketStructure:
         # When evaluation ends by confirm or fail (non-disqualified), rewind+replay from j+1. Disqualification cancels the evaluation and does not rewind.
         self._finalize_range_candidate_if_due(i)
 
+        # 2.5) Reversal check (Part 2 v1):
+        # If BOS threshold is broken in the opposite direction by eps, declare reversal.
+        self._maybe_trigger_reversal(i)
+
         # 3) Write df debug columns for this candle
         self._write_df_row(i)
+
+
+    def _step_anchor(self, i: int) -> int:
+        n = len(self.df)
+        D = min(i + self.range_max_k, n - 1)  # range_max_k is 5 by default
+
+        st = self.state
+
+        # If state NONE: we may still allow breakout patterns, but we don't allow ranges
+        allow_range = (st.state != MarketState.NONE)
+
+        # Determine applicable thresholds (if range active)
+        breakout_th = None
+        pullback_th = None
+        if st.range_active:
+            breakout_th = self._range_breakout_threshold()
+            pullback_th = self._range_pullback_threshold()
+
+        # 1) Evaluate patterns starting at i (offline computation), but only "act" at apply candle
+        winner = self._best_bopb_pattern_at_anchor(
+            i=i,
+            breakout_th=breakout_th,
+            pullback_th=pullback_th,
+            D=D,
+        )
+        if winner is not None:
+            ev, apply_idx, kind = winner  # kind in {"breakout","pullback"}
+
+            # "live-like": we act as if apply candle just closed
+            self._apply_pattern_at_apply_idx(ev, apply_idx, kind)
+
+            # reversal check at apply_idx (optional, but consistent)
+            self._maybe_trigger_reversal(apply_idx)
+
+            # Next evaluation candle is apply_idx + 1
+            return apply_idx + 1
+
+        # 2) No valid pattern by D:
+        # range outcome will also be knowable by D (if allow_range), so do r+r once.
+        if allow_range:
+            self._finalize_range_candidate_offline(i, D)
+
+            # rewind+replay from i+1 .. D to reconstruct sequentially
+            self._rewind_replay(j=i, d=D)
+
+        # Next anchor always i+1 (the next candle after the candidate)
+        return i + 1
+
+
+    def _best_bopb_pattern_at_anchor(
+        self,
+        *,
+        i: int,
+        breakout_th: Optional[float],
+        pullback_th: Optional[float],
+        D: int,
+    ) -> Optional[Tuple[PatternEvent, int, Literal["breakout", "pullback"]]]:
+        st = self.state
+
+        # If state NONE: only breakout direction checks (no pullback)
+        candidates = []
+
+        # Breakout
+        ev_b = self._bp.detect_best_for_anchor(i, self.struct_direction, breakout_th)
+        if ev_b is not None:
+            apply_b = self._apply_idx(ev_b)
+            if apply_b is not None and apply_b <= D:
+                candidates.append((ev_b, apply_b, "breakout"))
+
+        # Pullback (only after first breakout/CTS regime)
+        if st.state != MarketState.NONE:
+            ev_p = self._bp.detect_best_for_anchor(i, -self.struct_direction, pullback_th)
+            if ev_p is not None:
+                apply_p = self._apply_idx(ev_p)
+                if apply_p is not None and apply_p <= D:
+                    candidates.append((ev_p, apply_p, "pullback"))
+
+        if not candidates:
+            return None
+
+        # Choose earliest apply time; tie-breaker: breakout wins over pullback
+        candidates.sort(key=lambda x: (x[1], 0 if x[2] == "breakout" else 1))
+        return candidates[0]
 
     # ----------------------------
     # State transitions - no active range
@@ -202,6 +293,17 @@ class MarketStructure:
             apply_idx = self._apply_idx(breakout_ev)
             if apply_idx is None:
                 return
+
+            # Part 2: BOS confirmation
+            # If we were in pullback regime (CTS already confirmed), then this breakout confirms BOS.
+            if st.cts_phase == "CONFIRMED" and st.bos_candidate is not None:
+                bos_price = self._select_bos_price_on_breakout()
+                self._emit_bos_confirmed(apply_idx, bos_price, meta={"via": breakout_ev.name})
+                # reset pullback tracking for next cycle
+                st.bos_candidate = None
+                st.false_break_active = False
+                st.reentered_pullback_after_false_break = False
+                st.trend_leg_id += 1
 
             cts_price = self._cts_price_at(apply_idx)
 
@@ -278,6 +380,15 @@ class MarketStructure:
             apply_idx = self._apply_idx(breakout_ev)
             if apply_idx is None:
                 return
+
+            # Part 2: BOS confirmation
+            if st.cts_phase == "CONFIRMED" and st.bos_candidate is not None:
+                bos_price = self._select_bos_price_on_breakout()
+                self._emit_bos_confirmed(apply_idx, bos_price, meta={"via": breakout_ev.name, "break_threshold": breakout_th})
+                st.bos_candidate = None
+                st.false_break_active = False
+                st.reentered_pullback_after_false_break = False
+                st.trend_leg_id += 1
 
             # Range reset on breakout in starting direction
             self._deactivate_range(i, meta={"reason": "range_breakout", "pat": breakout_ev.name})
@@ -448,6 +559,48 @@ class MarketStructure:
         self._set_state(MarketState.RANGE, i, meta={"reason": "range_confirmed", "effective_idx": j})
         self._clear_pending_range_candidate()
         return True
+
+    def _finalize_range_candidate_offline(self, i: int, D: int) -> None:
+        st = self.state
+
+        # If we already have an active range, this anchor-range-candidate logic probably shouldn't run.
+        # In your simplified model, range-active mode is handled by per-candle expansion instead.
+        if st.range_active:
+            # Expand range through D? (optional) Usually handled by replay anyway.
+            return
+
+        lo_i = float(self.df.iloc[i]["l"])
+        hi_i = float(self.df.iloc[i]["h"])
+
+        start = i + self.range_min_k
+        end = D
+
+        confirm_idx = None
+        for t in range(start, end + 1):
+            c_t = float(self.df.iloc[t]["c"])
+            if lo_i <= c_t <= hi_i:
+                confirm_idx = t
+                break
+
+        if confirm_idx is not None:
+            # Activate range anchored at i, decision at confirm_idx
+            st.range_active = True
+            st.range_start_idx = i
+            st.range_hi = hi_i
+            st.range_lo = lo_i
+
+            self.events.append(
+                StructureEvent(
+                    idx=confirm_idx,
+                    category="RANGE",
+                    type="RANGE_STARTED",
+                    meta={"start_idx": i, "confirm_idx": confirm_idx, "hi": hi_i, "lo": lo_i},
+                )
+            )
+            self._set_state(MarketState.RANGE, confirm_idx, meta={"reason": "range_confirmed", "effective_idx": i})
+        else:
+            # Range failure: no state change, no activation
+            pass
 
     def _update_active_range(self, i: int) -> None:
         """
@@ -713,6 +866,52 @@ class MarketStructure:
         if ev.status == PatternStatus.CONFIRMED:
             return ev.confirmation_idx
         return ev.end_idx
+    
+    def _apply_pattern_at_apply_idx(self, ev: PatternEvent, apply_idx: int, kind: str) -> None:
+        st = self.state
+
+        # Record pattern ownership/disqualification if you keep it (you said you want to drop most of it)
+        # You can keep ONLY apply-candle ownership if desired.
+        self._consume_pattern_apply(ev)
+
+        if kind == "breakout":
+            # If BOS confirmation should occur here (Part 2)
+            if st.cts_phase == "CONFIRMED" and st.bos_candidate is not None:
+                bos_price = self._select_bos_price_on_breakout()
+                self._emit_bos_confirmed(apply_idx, bos_price, meta={"via": ev.name})
+
+                st.bos_candidate = None
+                st.false_break_active = False
+                st.reentered_pullback_after_false_break = False
+                st.trend_leg_id += 1
+
+            # Breakout breaks range (if active)
+            if st.range_active:
+                self._deactivate_range(apply_idx, meta={"reason": "range_breakout", "pat": ev.name})
+
+            cts_price = self._cts_price_at(apply_idx)
+            if st.state == MarketState.BREAKOUT:
+                self._emit_cts_updated(apply_idx, cts_price, meta={"via": ev.name})
+            else:
+                self._emit_cts_established(apply_idx, cts_price, meta={"via": ev.name})
+
+            st.cts = Point(idx=apply_idx, price=cts_price)
+            st.cts_phase = "EST_OR_UPD"
+            st.last_breakout_pat_apply_idx = apply_idx
+            self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
+            return
+
+        # pullback
+        if kind == "pullback":
+            # Ensure range exists or expand it based on pullback pattern
+            self._ensure_range_on_pullback(apply_idx, ev)  # note: pass apply_idx (time) not anchor i
+
+            self._emit_cts_confirmed_once(apply_idx, meta={"via": ev.name})
+            st.cts_phase = "CONFIRMED"
+            st.bos_candidate = self._init_bos_candidate(apply_idx)
+
+            self._set_state(MarketState.PULLBACK, apply_idx, meta={"reason": "pullback_pattern", "pat": ev.name})
+            return
 
     # NOTE:
     # _consume_pattern_apply should ONLY record ownership/disqualification facts.
@@ -832,6 +1031,32 @@ class MarketStructure:
         if self.struct_direction == 1:
             return float(self.df.iloc[-1]["l"])
         return float(self.df.iloc[-1]["h"])
+    
+    def _maybe_trigger_reversal(self, i: int) -> None:
+        """
+        Part 2 v1 reversal rule:
+        - Once a BOS threshold exists, if price breaks it in the opposite direction by eps,
+          mark REVERSAL and stop the run loop.
+        """
+        st = self.state
+        if st.bos_threshold is None:
+            return
+
+        bos = float(st.bos_threshold)
+        c = float(self.df.iloc[i]["c"])
+        h = float(self.df.iloc[i]["h"])
+        l = float(self.df.iloc[i]["l"])
+
+        # Conservative check uses close; you can switch to wick-based later if desired.
+        if self.struct_direction == 1:
+            # Uptrend: reversal if close breaks below BOS by eps
+            if c < bos - self.eps:
+                self._set_state(MarketState.REVERSAL, i, meta={"reason": "bos_threshold_broken", "bos": bos})
+        else:
+            # Downtrend: reversal if close breaks above BOS by eps
+            if c > bos + self.eps:
+                self._set_state(MarketState.REVERSAL, i, meta={"reason": "bos_threshold_broken", "bos": bos})
+
 
     # ----------------------------
     # Pullback-side expansion decision

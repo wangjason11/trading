@@ -41,6 +41,7 @@ def export_chart_plotly(
     basename: str = "chart",
     max_points: Optional[int] = None,
     cfg: Optional[dict] = None,
+    idx_range: Optional[tuple[int, int]] = None,
 ) -> ChartExportPaths:
     """
     Export an interactive HTML + PNG candlestick chart with basic overlays.
@@ -79,6 +80,12 @@ def export_chart_plotly(
             "one_maru_continuous": False,
             "one_maru_opposite": False,
         },
+        "struct_state": {
+            "labels": True,
+        },
+        "range_visual": {
+            "rectangles": True,
+        },
         "structure": {
             "levels": False,  # placeholder/noisy -> OFF by default
             "labels": False,  # text labels are very noisy; OFF by default
@@ -93,6 +100,8 @@ def export_chart_plotly(
     cfg = _deep_merge(CHART_DEFAULTS, cfg or {})
     candle_cfg = cfg.get("candle_types", {}) or {} 
     pat_cfg = cfg.get("patterns", {}) or {}
+    state_cfg = cfg.get("struct_state", {}) or {}
+    range_vis_cfg = cfg.get("range_visual", {}) or {}
     struct_cfg = cfg.get("structure", {}) or {}
     zone_cfg = cfg.get("zones", {}) or {}
 
@@ -100,6 +109,17 @@ def export_chart_plotly(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     dfx = df.copy()
+
+    # Optional index-range slicing (for zoomed debug exports)
+    if idx_range is not None:
+        i0, i1 = idx_range
+        if i0 > i1:
+            i0, i1 = i1, i0
+        # clamp to available index range
+        i0 = max(int(i0), int(dfx.index.min()))
+        i1 = min(int(i1), int(dfx.index.max()))
+        dfx = dfx.loc[i0:i1].copy()
+
     if max_points is not None and len(dfx) > max_points:
         dfx = dfx.iloc[-max_points:].copy()
 
@@ -119,6 +139,7 @@ def export_chart_plotly(
         dfx["mid_price"].astype(float),
         dfx["body_pct"].astype(float),
         dfx["candle_type"].astype(str),
+        dfx["body_len"].astype(float),
     ))
 
     fig.add_trace(
@@ -140,6 +161,7 @@ def export_chart_plotly(
                 "C=%{close}<br>"
                 "candle_type=%{customdata[3]}<br>"
                 "body_pct=%{customdata[2]:.2%}<br>"
+                "body_len=%{customdata[4]:.5f}<br>"
                 "mid_price=%{customdata[1]:.5f}"
                 "<extra></extra>"
             ),
@@ -318,6 +340,233 @@ def export_chart_plotly(
                 **_style("range.candle"),
             )
         )
+
+    # -------------------------------------------------
+    # Week 5 Phase 1A: Market state change labels (bo/pb/pbr/rev)
+    # -------------------------------------------------
+    if state_cfg.get("labels", False) and "market_state" in dfx.columns:
+        # map to short labels
+        label_map = {
+            "breakout": "bo",
+            "pullback": "pb",
+            "pullback_range": "pbr",
+            "reversal": "rev",
+        }
+
+        ms = dfx["market_state"].astype(str)
+        prev = ms.shift(1).fillna("")
+        changed = (ms != prev) & ms.isin(list(label_map.keys()))
+        sub = dfx[changed].copy()
+
+        if not sub.empty:
+            # choose y position: breakout above high, pullback/pbr below low, reversal based on candle dir fallback
+            # (uses wick_offset already computed)
+            def _label_y(row):
+                st = str(row["market_state"])
+                if st == "breakout":
+                    return float(row[COL_H]) + float(wick_offset.loc[row.name])
+                if st in ("pullback", "pullback_range"):
+                    return float(row[COL_L]) - float(wick_offset.loc[row.name])
+                # reversal: if we have pat_dir use that, else candle direction
+                dir_hint = None
+                if "pat_dir" in dfx.columns:
+                    try:
+                        dir_hint = int(row.get("pat_dir", 0))
+                    except Exception:
+                        dir_hint = 0
+                if not dir_hint and "direction" in dfx.columns:
+                    try:
+                        dir_hint = int(row.get("direction", 0))
+                    except Exception:
+                        dir_hint = 0
+                return (float(row[COL_H]) + float(wick_offset.loc[row.name])) if dir_hint >= 0 else (float(row[COL_L]) - float(wick_offset.loc[row.name]))
+
+            y = sub.apply(_label_y, axis=1)
+            text = sub["market_state"].map(label_map).tolist()
+
+            fig.add_trace(
+                go.Scatter(
+                    x=sub[COL_TIME],
+                    y=y,
+                    mode="text",
+                    text=text,
+                    name="state labels",
+                    textposition="middle center",
+                    showlegend=False,
+                    hovertemplate=(
+                        "idx=%{customdata[0]}<br>"
+                        "state=%{customdata[1]}<extra></extra>"
+                    ),
+                    customdata=list(zip(sub.index.to_numpy(), sub["market_state"].astype(str))),
+                )
+            )
+
+    # -------------------------------------------------
+    # Week 5 Phase 1B: Active range rectangles (segmented on expansion)
+    # -------------------------------------------------
+    if range_vis_cfg.get("rectangles", False) and all(c in dfx.columns for c in ["range_active", "range_hi", "range_lo", "range_start_idx"]):
+        # We'll create rectangle segments whenever bounds change while range_active==1.
+        # Each segment starts at:
+        #   - first segment: max(range_start_idx, first visible idx)
+        #   - subsequent segments: the candle idx where expansion occurred
+        # Each segment ends at the next segment start, or at the breakout/reversal candle that ends range.
+
+        # helper: index label -> time, but only if label exists in dfx
+        time_by_idx = {int(i): t for i, t in zip(dfx.index.to_numpy(), dfx[COL_TIME])}
+
+        in_range = False
+        seg_start_idx = None
+        cur_hi = None
+        cur_lo = None
+
+        # cap shapes to avoid runaway if needed
+        shapes_added = 0
+        MAX_SHAPES = 500
+
+        idx_list = list(map(int, dfx.index.to_numpy()))
+        for pos, idx in enumerate(idx_list):
+            ra = int(dfx.iloc[pos]["range_active"]) if "range_active" in dfx.columns else 0
+            st = str(dfx.iloc[pos]["market_state"]) if "market_state" in dfx.columns else ""
+
+            # treat reversal as a hard end (even if range_active doesn't flip yet due to early stop)
+            is_end_state = (st == "reversal")
+
+            if not in_range:
+                if ra == 1:
+                    # start new range block
+                    in_range = True
+                    rs = int(dfx.iloc[pos]["range_start_idx"])
+                    seg_start_idx = rs if rs in time_by_idx else idx  # clamp to visible window
+                    cur_hi = float(dfx.iloc[pos]["range_hi"])
+                    cur_lo = float(dfx.iloc[pos]["range_lo"])
+                continue
+
+            # in_range == True
+            # detect expansion
+            hi = float(dfx.iloc[pos]["range_hi"])
+            lo = float(dfx.iloc[pos]["range_lo"])
+            expanded = (hi != cur_hi) or (lo != cur_lo)
+
+            # detect end: range_active flips off OR reversal state
+            ended = (ra == 0) or is_end_state
+
+            if expanded or ended:
+                # close previous segment at current candle idx time
+                x0 = time_by_idx.get(int(seg_start_idx), None)
+                x1 = time_by_idx.get(int(idx), None)
+
+                if x0 is not None and x1 is not None and shapes_added < MAX_SHAPES:
+                    y0 = min(cur_lo, cur_hi)
+                    y1 = max(cur_lo, cur_hi)
+                    fig.add_shape(
+                        type="rect",
+                        xref="x",
+                        yref="y",
+                        x0=x0,
+                        x1=x1,
+                        y0=y0,
+                        y1=y1,
+                        fillcolor="yellow",
+                        opacity=0.2,
+                        line_width=0,
+                        layer="below",
+                    )
+                    shapes_added += 1
+
+                # start next segment if still active
+                if ended:
+                    in_range = False
+                    seg_start_idx = None
+                    cur_hi = None
+                    cur_lo = None
+                else:
+                    seg_start_idx = idx
+                    cur_hi = hi
+                    cur_lo = lo
+
+        # If range continued through the end of the visible window, close it to last candle
+        if in_range and seg_start_idx is not None and shapes_added < MAX_SHAPES:
+            last_idx = idx_list[-1]
+            x0 = time_by_idx.get(int(seg_start_idx), None)
+            x1 = time_by_idx.get(int(last_idx), None)
+            if x0 is not None and x1 is not None:
+                y0 = min(cur_lo, cur_hi)
+                y1 = max(cur_lo, cur_hi)
+                fig.add_shape(
+                    type="rect",
+                    xref="x",
+                    yref="y",
+                    x0=x0,
+                    x1=x1,
+                    y0=y0,
+                    y1=y1,
+                    fillcolor="yellow",
+                    opacity=0.2,
+                    line_width=0,
+                    layer="below",
+                )
+
+    # -------------------------------------------------
+    # Range hover lines (top/bottom only)
+    # Shapes (rectangles) don't support hover, so we add
+    # thin line traces that carry hover data.
+    # -------------------------------------------------
+    if range_vis_cfg.get("rectangles", False) and all(c in dfx.columns for c in ["range_active", "range_hi", "range_lo", "range_start_idx"]):
+        active = dfx["range_active"].astype(int) == 1
+        sub = dfx[active].copy()
+
+        if not sub.empty:
+            # Top line (range_hi)
+            fig.add_trace(
+                go.Scatter(
+                    x=sub[COL_TIME],
+                    y=sub["range_hi"].astype(float),
+                    mode="lines",
+                    name="range:top",
+                    showlegend=False,
+                    line=dict(width=2, color="rgba(0,0,0,0)"),
+                    line_shape="hv",
+                    hovertemplate=(
+                        "idx=%{customdata[0]}<br>"
+                        "range_start_idx=%{customdata[1]}<br>"
+                        "range_hi=%{customdata[2]:.5f}<br>"
+                        "range_lo=%{customdata[3]:.5f}"
+                        "<extra></extra>"
+                    ),
+                    customdata=list(zip(
+                        sub.index.to_numpy(),
+                        sub["range_start_idx"].astype(int),
+                        sub["range_hi"].astype(float),
+                        sub["range_lo"].astype(float),
+                    )),
+                )
+            )
+
+            # Bottom line (range_lo)
+            fig.add_trace(
+                go.Scatter(
+                    x=sub[COL_TIME],
+                    y=sub["range_lo"].astype(float),
+                    mode="lines",
+                    name="range:bottom",
+                    showlegend=False,
+                    line=dict(width=2, color="rgba(0,0,0,0)"),
+                    line_shape="hv",
+                    hovertemplate=(
+                        "idx=%{customdata[0]}<br>"
+                        "range_start_idx=%{customdata[1]}<br>"
+                        "range_hi=%{customdata[2]:.5f}<br>"
+                        "range_lo=%{customdata[3]:.5f}"
+                        "<extra></extra>"
+                    ),
+                    customdata=list(zip(
+                        sub.index.to_numpy(),
+                        sub["range_start_idx"].astype(int),
+                        sub["range_hi"].astype(float),
+                        sub["range_lo"].astype(float),
+                    )),
+                )
+            )
 
 
     # Structure levels overlays

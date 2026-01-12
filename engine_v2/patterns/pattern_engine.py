@@ -52,7 +52,8 @@ def detect_patterns(df: pd.DataFrame, *, break_threshold: Optional[float] = None
     n = len(df2)
     for idx in range(n):
         for direction in (1, -1):
-            ev = bp.detect_first_success(idx, direction, break_threshold)
+            # ev = bp.detect_first_success(idx, direction, break_threshold)
+            ev = bp.detect_best_for_anchor(idx, direction, break_threshold)
             # if idx == 100 and direction == 1:
                 # print("[DEBUG detect_first_success idx=100]", ev)
             if ev is None:
