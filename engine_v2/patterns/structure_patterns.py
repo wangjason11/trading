@@ -25,11 +25,42 @@ class BreakoutPatterns:
         self.df = df
 
     # ---------- helpers ----------
-    def body_check(self, candle, threshold: Optional[float], percent: float = 0.5, direction: int = 1) -> bool:
+    # def body_check(self, candle, threshold: Optional[float], percent: float = 0.3, direction: int = 1) -> bool:
+    #     if threshold is None:
+    #         return True
+    #     multiplier = 1 + percent if direction == 1 else 1 - percent
+    #     return candle.body_len >= threshold * multiplier
+    
+    def body_check(self, candle, threshold: float, break_percent: float, direction: int) -> bool:
+        """
+        True iff at least `break_percent` of the candle's REAL BODY lies beyond `threshold`.
+        - direction=+1: fraction of body above threshold
+        - direction=-1: fraction of body below threshold
+        """
         if threshold is None:
             return True
-        multiplier = 1 + percent if direction == 1 else 1 - percent
-        return candle.body_len >= threshold * multiplier
+
+        o = float(candle.o)
+        c = float(candle.c)
+
+        body_low = min(o, c)
+        body_high = max(o, c)
+        body_len = body_high - body_low
+
+        # Avoid division by zero (doji)
+        if body_len <= 0:
+            return False
+
+        if direction == 1:
+            # Body segment above threshold
+            above = max(0.0, body_high - max(threshold, body_low))
+            frac = above / body_len
+            return frac >= break_percent
+        else:
+            # Body segment below threshold
+            below = max(0.0, min(threshold, body_high) - body_low)
+            frac = below / body_len
+            return frac >= break_percent
 
     def check_break(self, candle, threshold: Optional[float], direction: int) -> bool:
         if threshold is None:

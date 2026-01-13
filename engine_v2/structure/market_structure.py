@@ -61,13 +61,7 @@ class MarketStructureState:
     range_hi: Optional[float] = None
     range_lo: Optional[float] = None
     range_start_idx: Optional[int] = None
-
-    # Pending range candidate (range evaluation)
-    range_candidate_start_idx: Optional[int] = None      # j
-    range_candidate_decision_idx: Optional[int] = None   # d = confirm idx if confirmed else fail idx (j+max_k)
-    range_candidate_confirm_idx: Optional[int] = None    # c if confirmed else None
-    range_candidate_will_confirm: bool = False
-    range_candidate_disqualified: bool = False
+    range_confirm_idx: Optional[int] = None
 
     # Breakout bookkeeping
     last_breakout_pat_apply_idx: Optional[int] = None  # j
@@ -109,21 +103,11 @@ class MarketStructure:
         self.state = MarketStructureState(struct_direction=struct_direction)
         self.events: List[StructureEvent] = []
 
-
-        # If a candle is in here, it can never be a range starter.
-        # Apply candle indices (end or confirmation candle) for any pattern event.
-        self._pattern_owned_apply_idxs: Set[int] = set()
-
-        # Original pattern non-last candles (e.g. for continuous: start and middle; for 2-candle: first candle).
-        self._range_disqualify_idxs: Set[int] = set()
-
         # Pattern detector (uses df feature columns)
         self._bp = BreakoutPatterns(self.df)
 
         self.range_min_k = int(range_min_k)
         self.range_max_k = int(range_max_k)
-
-        self._in_replay = False
 
         self._ensure_output_cols()
 
@@ -150,46 +134,36 @@ class MarketStructure:
 
     # ----------------------------
     # Per-candle step
-    # ----------------------------
+    def _replay_step_no_patterns(self, i: int, *, freeze_range: bool = False) -> None:
+        """Advance deterministic range/state fields without running pattern detection.
 
-    def _step(self, i: int) -> None:
+        IMPORTANT: When we're back-filling candles *before* a known pattern apply candle,
+        we must NOT expand the active range bounds, otherwise the range can "absorb"
+        breakout/pullback window candles and the pattern will no longer qualify.
+
+        freeze_range=True means:
+          - do not call _update_active_range(i)
+          - do not transition RANGE->PULLBACK/PULLBACK_RANGE based on candle-by-candle expansion
+          - just persist current state (typically RANGE) and write the row
+        """
         st = self.state
-        st.prev_state = st.state
+        if not freeze_range:
+            # If an active range exists, evolve it candle-by-candle (unless frozen).
+            if st.range_active:
+                self._update_active_range(i)
 
-        # Ensure when state is pullback or pullback_range there is always an active range
-        if st.state in (MarketState.PULLBACK, MarketState.PULLBACK_RANGE) and not st.range_active:
-            raise RuntimeError(
-                f"Invariant violated at i={i}: state={st.state.value} but range_active=False"
-            )
-        
-        # Invariant: RANGE state is only valid when a range is active.
-        # If we ever observe state == RANGE while range_active == False,
-        # this indicates a state-transition or replay-ordering bug and must fail fast.
-        if st.state == MarketState.RANGE and not st.range_active:
-            raise RuntimeError(
-                "Invalid market state: state=RANGE but range_active=False. "
-                "RANGE state must only exist while an active range is present. "
-                "This indicates a state-transition or replay ordering bug."
-            )
+                if st.state in (MarketState.PULLBACK, MarketState.PULLBACK_RANGE):
+                    if self._expanded_pullback_side(i):
+                        if st.false_break_active:
+                            st.reentered_pullback_after_false_break = True
+                        st.bos_candidate = self._update_bos_candidate(i, st.bos_candidate)
+                        self._set_state(MarketState.PULLBACK, i, meta={"reason": "replay_expand_pullback_side"})
+                    else:
+                        self._set_state(MarketState.PULLBACK_RANGE, i, meta={"reason": "replay_no_expand_pullback_side"})
 
-        # 1) Main state machine
-        if st.range_active:
-            self._step_with_active_range(i)
-        else:
-            self._step_without_active_range(i)
-
-        # 2) Finalize pending range candidate at decision point (confirm OR fail); 
-        # if confirmed, activate range using only candle j hi/lo, then rewind+replay.
-        # When evaluation ends by confirm or fail (non-disqualified), rewind+replay from j+1. Disqualification cancels the evaluation and does not rewind.
-        self._finalize_range_candidate_if_due(i)
-
-        # 2.5) Reversal check (Part 2 v1):
-        # If BOS threshold is broken in the opposite direction by eps, declare reversal.
-        self._maybe_trigger_reversal(i)
-
-        # 3) Write df debug columns for this candle
         self._write_df_row(i)
 
+    # ----------------------------
 
     def _step_anchor(self, i: int) -> int:
         n = len(self.df)
@@ -214,29 +188,47 @@ class MarketStructure:
             pullback_th=pullback_th,
             D=D,
         )
+
         if winner is not None:
             ev, apply_idx, kind = winner  # kind in {"breakout","pullback"}
+
+            # Back-fill candles from anchor up to (but not including) apply candle.
+            # Back-fill candles before the apply candle WITHOUT expanding range bounds.
+            # (Prevents the active range from absorbing the breakout/pullback window.)
+            for k in range(i, apply_idx):
+                self._replay_step_no_patterns(k, freeze_range=True)
 
             # "live-like": we act as if apply candle just closed
             self._apply_pattern_at_apply_idx(ev, apply_idx, kind)
 
-            # reversal check at apply_idx (optional, but consistent)
-            self._maybe_trigger_reversal(apply_idx)
+            # reversal check at apply_idx
+            # self._maybe_trigger_reversal(apply_idx)
 
-            # Next evaluation candle is apply_idx + 1
+            # Always write the apply candle row (post-apply)
+            self._replay_step_no_patterns(apply_idx)
+
+            # IMPORTANT: do NOT attempt to "finalize" a new range anchored at the apply candle.
+            # After a breakout, the next range candidate (if any) must begin at a later candle
+            # (e.g. your example: breakout at 53, next range starts at 57), so we simply
+            # continue sequentially from the next candle.
             return apply_idx + 1
 
         # 2) No valid pattern by D:
-        # range outcome will also be knowable by D (if allow_range), so do r+r once.
-        if allow_range:
-            self._finalize_range_candidate_offline(i, D)
+        if allow_range and not st.range_active:
+            range_confirmed, confirm_idx = self._is_range_candle_given_confirm(i)
 
-            # rewind+replay from i+1 .. D to reconstruct sequentially
-            self._rewind_replay(j=i, d=D)
+            if range_confirmed:
+                min_d = D if confirm_idx is None else min(confirm_idx, D)
+                for k in range(i, min_d):
+                    self._replay_step_no_patterns(k, freeze_range=True)
+
+                self._finalize_range_candidate_offline(i)
+
+        # Re-write the i candle row after finalize
+        self._replay_step_no_patterns(i)
 
         # Next anchor always i+1 (the next candle after the candidate)
         return i + 1
-
 
     def _best_bopb_pattern_at_anchor(
         self,
@@ -253,6 +245,19 @@ class MarketStructure:
 
         # Breakout
         ev_b = self._bp.detect_best_for_anchor(i, self.struct_direction, breakout_th)
+
+        # if i in (52, 53):
+        #     omo = self._bp.one_maru_opposite(i, self.struct_direction, breakout_th, do_confirm=False)
+        #     omc = self._bp.one_maru_continuous(i, self.struct_direction, breakout_th, do_confirm=False)
+        #     dm  = self._bp.double_maru(i, self.struct_direction, breakout_th, do_confirm=False)
+        #     print(f"[DBG] i={i} breakout_th={breakout_th} "
+        #         f"OMO={None if omo is None else omo.status} "
+        #         f"OMC={None if omc is None else omc.status} "
+        #         f"DM={None if dm is None else dm.status}")
+        #     if omc is not None:
+        #         print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
+        #         print(f"[DBG] candle53 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
+
         if ev_b is not None:
             apply_b = self._apply_idx(ev_b)
             if apply_b is not None and apply_b <= D:
@@ -273,334 +278,58 @@ class MarketStructure:
         candidates.sort(key=lambda x: (x[1], 0 if x[2] == "breakout" else 1))
         return candidates[0]
 
-    # ----------------------------
-    # State transitions - no active range
-    # ----------------------------
-
-    def _step_without_active_range(self, i: int) -> None:
-        st = self.state
-
-        # ------------------------------------------------------------
-        # ORDERING RULE: patterns always first, range only if no pattern
-        # ------------------------------------------------------------
-
-        # 1) Always check breakout patterns
-        breakout_ev = self._check_pattern(i, direction=self.struct_direction, break_threshold=None)
-        if breakout_ev is not None:
-            self._clear_pending_range_candidate()
-
-            self._consume_pattern_apply(breakout_ev)
-            apply_idx = self._apply_idx(breakout_ev)
-            if apply_idx is None:
-                return
-
-            # Part 2: BOS confirmation
-            # If we were in pullback regime (CTS already confirmed), then this breakout confirms BOS.
-            if st.cts_phase == "CONFIRMED" and st.bos_candidate is not None:
-                bos_price = self._select_bos_price_on_breakout()
-                self._emit_bos_confirmed(apply_idx, bos_price, meta={"via": breakout_ev.name})
-                # reset pullback tracking for next cycle
-                st.bos_candidate = None
-                st.false_break_active = False
-                st.reentered_pullback_after_false_break = False
-                st.trend_leg_id += 1
-
-            cts_price = self._cts_price_at(apply_idx)
-
-            # CTS established vs updated:
-            # - updated only if we were already in BREAKOUT
-            # - otherwise established
-            if st.state == MarketState.BREAKOUT:
-                self._emit_cts_updated(apply_idx, cts_price, meta={"via": breakout_ev.name})
-            else:
-                self._emit_cts_established(apply_idx, cts_price, meta={"via": breakout_ev.name})
-
-            st.cts = Point(idx=apply_idx, price=cts_price)
-            st.cts_phase = "EST_OR_UPD"
-            st.last_breakout_pat_apply_idx = apply_idx
-
-            self._set_state(MarketState.BREAKOUT, i, meta={"reason": "breakout_pattern", "pat": breakout_ev.name})
-            return
-
-        # 2) If state is not NONE, PULLBACK, or PULLBACK_RANGE, we also check pullback patterns
-        if st.state not in (MarketState.NONE, MarketState.PULLBACK, MarketState.PULLBACK_RANGE):
-            pullback_ev = self._check_pattern(i, direction=-self.struct_direction, break_threshold=None)
-            if pullback_ev is not None:
-                self._clear_pending_range_candidate()
-
-                self._consume_pattern_apply(pullback_ev)
-
-                # NEW: pullback should create/expand range; never resets range
-                self._ensure_range_on_pullback(i, pullback_ev)
-
-                self._emit_cts_confirmed_once(i, meta={"via": pullback_ev.name})
-                st.cts_phase = "CONFIRMED"
-                st.bos_candidate = self._init_bos_candidate(i)
-
-                self._set_state(MarketState.PULLBACK, i, meta={"reason": "pullback_pattern", "pat": pullback_ev.name})
-                return
-
-        # 3) No patterns at i -> consider range (fallback)
-        if st.state == MarketState.NONE:
-            # still pre-first-breakout: no ranges created
-            return
-
-        # If no pattern fired, we may start (or keep) a pending range candidate anchored at i.
-        # Pending-ness is tracked via range_candidate_* fields (not a separate state).
-        self._maybe_set_range_candidate_here(i)
-
-        # if st.range_candidate_start_idx is not None and not st.range_active and not st.range_candidate_disqualified:
-        #     self._set_state(st.state, i, meta={"reason": "no_pattern"})
-        # else:
-        #     # Keep current state (BREAKOUT or PULLBACK/PULLBACK_RANGE) if no candidate
-        #     self._set_state(st.state, i, meta={"reason": "no_pattern_no_range"})
-
-
-    # ----------------------------
-    # State transitions - active range
-    # ----------------------------
-
-    def _step_with_active_range(self, i: int) -> None:
-        st = self.state
-
-        # Thresholds depend on starting direction
-        breakout_th = self._range_breakout_threshold()
-        pullback_th = self._range_pullback_threshold()
-
-        # ------------------------------------------------------------
-        # ORDERING RULE: patterns first, range update only if no pattern
-        # ------------------------------------------------------------
-
-        # 1) Breakout attempt (break range in starting direction) -> resets range
-        breakout_ev = self._check_pattern(i, direction=self.struct_direction, break_threshold=breakout_th)
-        if breakout_ev is not None:
-            self._clear_pending_range_candidate()
-
-            self._consume_pattern_apply(breakout_ev)
-            apply_idx = self._apply_idx(breakout_ev)
-            if apply_idx is None:
-                return
-
-            # Part 2: BOS confirmation
-            if st.cts_phase == "CONFIRMED" and st.bos_candidate is not None:
-                bos_price = self._select_bos_price_on_breakout()
-                self._emit_bos_confirmed(apply_idx, bos_price, meta={"via": breakout_ev.name, "break_threshold": breakout_th})
-                st.bos_candidate = None
-                st.false_break_active = False
-                st.reentered_pullback_after_false_break = False
-                st.trend_leg_id += 1
-
-            # Range reset on breakout in starting direction
-            self._deactivate_range(i, meta={"reason": "range_breakout", "pat": breakout_ev.name})
-
-            cts_price = self._cts_price_at(apply_idx)
-            self._emit_cts_established(apply_idx, cts_price, meta={"via": breakout_ev.name, "break_threshold": breakout_th})
-
-            st.cts = Point(idx=apply_idx, price=cts_price)
-            st.cts_phase = "EST_OR_UPD"
-            st.last_breakout_pat_apply_idx = apply_idx
-
-            self._set_state(MarketState.BREAKOUT, i, meta={"reason": "range_breakout"})
-            return
-
-        # 2) Pullback attempt (break range opposite direction) -> does NOT reset range
-        if st.state not in (MarketState.NONE, MarketState.PULLBACK, MarketState.PULLBACK_RANGE):
-            pullback_ev = self._check_pattern(i, direction=-self.struct_direction, break_threshold=pullback_th)
-            if pullback_ev is not None:
-                self._clear_pending_range_candidate()
-
-                self._consume_pattern_apply(pullback_ev)
-                self._emit_cts_confirmed_once(i, meta={"via": pullback_ev.name, "break_threshold": pullback_th})
-                st.cts_phase = "CONFIRMED"
-                st.bos_candidate = self._init_bos_candidate(i)
-
-                self._set_state(MarketState.PULLBACK, i, meta={"reason": "range_pullback", "pat": pullback_ev.name})
-                return
-
-        # 3) No pattern -> now update/expand range bounds
-        self._update_active_range(i)
-
-        # 4) Maintain pullback / pullback_range behavior if we are in pullback regime
-        if st.state in (MarketState.PULLBACK, MarketState.PULLBACK_RANGE):
-            if self._expanded_pullback_side(i):
-                if st.false_break_active:
-                    st.reentered_pullback_after_false_break = True
-                st.bos_candidate = self._update_bos_candidate(i, st.bos_candidate)
-                self._set_state(MarketState.PULLBACK, i, meta={"reason": "expand_pullback_side"})
-            else:
-                self._set_state(MarketState.PULLBACK_RANGE, i, meta={"reason": "no_expand_pullback_side"})
-            return
-
-        # Otherwise remain in range
-        self._set_state(MarketState.RANGE, i, meta={"reason": "range_persist"})
-
 
     # ----------------------------
     # Range candidate creation & activation
     # ----------------------------
 
-    def _clear_pending_range_candidate(self) -> None:
-        st = self.state
-        st.range_candidate_start_idx = None
-        st.range_candidate_decision_idx = None
-        st.range_candidate_confirm_idx = None
-        st.range_candidate_will_confirm = False
-        st.range_candidate_disqualified = False
-
-    def _maybe_set_range_candidate_here(self, i: int) -> None:
+    def _is_range_candle_given_confirm(self, i: int | None) -> bool:
         """
-        Week 5 RANGE evaluation (updated):
+        Range candle test for the *candidate start candle i*,
+        using the same rule everywhere.
 
-        - Only consider range AFTER we checked patterns at i and found none.
-        - A "range candidate" starts an evaluation window of [i+min_k .. i+max_k].
-        It either:
-            * CONFIRMS at candle c (first close within candidate candle [low_i, high_i])
-            * FAILS at decision candle d=i+max_k if no such close occurs
-        - If the evaluation ends by CONFIRM or FAIL (non-disqualified), we rewind+replay from j+1
-        (handled in _finalize_range_candidate_if_due).
-        - If the candidate is DISQUALIFIED by a breakout/pullback pattern appearing in the future,
-        the evaluation is canceled immediately and NO rewind+replay occurs.
-        - State must be != NONE (no ranges before first breakout).
-        - Do NOT start range evaluation if a range is already active.
+        Must have confirm_idx plus base range label from range_label.py, and then:
+          (pinbar and direction == struct_direction) OR (direction != struct_direction)
         """
-        st = self.state
+        base = int(self.df.iloc[i].get("is_range", 0)) == 1
+        if not base:
+            return (False, None)
 
-        if st.state == MarketState.NONE:
-            return
-        if st.range_active:
-            return
-        if st.range_candidate_start_idx is not None:
-            # already waiting on a candidate; never replace it (disqualification does NOT create a new candidate)
-            return
+        confirm_idx = int(self.df.iloc[i].get("is_range_confirm_idx", 0)) > -1
+        if not confirm_idx:
+            return (False, None)
 
-        # Disqualify if this candle participates in any pattern (apply or original-window non-last)
-        if i in self._pattern_owned_apply_idxs:
-            return
-        if i in self._range_disqualify_idxs:
-            return
+        candle_i = str(self.df.iloc[i].get("candle_type", ""))
+        dir_i = int(self.df.iloc[i].get("direction", 0))
 
-        # Start RANGE evaluation window (confirm or fail)
-        d, c, will_confirm = self._range_decision_for_candidate(i)
+        return (((candle_i == "pinbar" and dir_i == self.struct_direction) or (dir_i != self.struct_direction)), confirm_idx)
 
-        st.range_candidate_start_idx = int(i)               # j
-        st.range_candidate_decision_idx = int(d)            # d
-        st.range_candidate_confirm_idx = int(c) if c is not None else None  # c or None
-        st.range_candidate_will_confirm = bool(will_confirm)
-        st.range_candidate_disqualified = False
-
-
-    def _finalize_range_candidate_if_due(self, i: int) -> None:
-        if getattr(self, "_in_replay", False):
-            return
-        st = self.state
-        if st.range_candidate_start_idx is None or st.range_candidate_decision_idx is None:
-            return
-        if st.range_candidate_disqualified:
-            # Disqualification takes priority: do NOT rewind+replay.
-            # Candidate is invalidated and we continue normal processing from the apply candle.
-            self._clear_pending_range_candidate()
-            return
-
-        d = int(st.range_candidate_decision_idx)
-        if i != d:
-            return
-
-        j = int(st.range_candidate_start_idx)
-
-        # If confirmed, activate range using ONLY candle j hi/lo
-        if st.range_candidate_will_confirm and st.range_candidate_confirm_idx is not None:
-            c = int(st.range_candidate_confirm_idx)
-            activated = self._activate_range_at_confirm(i=i, j=j, c=c)
-
-            # ❗ If activation failed due to disqualification, DO NOT rewind
-            if not activated:
-                return
-        else:
-            # fail (non-disqualified): no active range
-            self._clear_pending_range_candidate()
-
-        # ✅ Rewind only happens after NON-disqualified completion
-        self._rewind_replay(j=j, d=d)
-
-
-    def _activate_range_at_confirm(self, i: int, j: int, c: int) -> bool:
-        st = self.state
-
-        # Disqualify if the starter candle later became pattern apply candle
-        if j in self._pattern_owned_apply_idxs:
-            st.range_candidate_disqualified = True
-            self._clear_pending_range_candidate()
-            return False
-
-        
-        # NEW: disqualify if the starter candle participated in the original portion of any pattern
-        if j in self._range_disqualify_idxs:
-            st.range_candidate_disqualified = True
-            self._clear_pending_range_candidate()
-            return False
-
-        hi = float(self.df.iloc[j]["h"])
-        lo = float(self.df.iloc[j]["l"])
-
-        st.range_active = True
-        st.range_start_idx = j
-        st.range_hi = hi
-        st.range_lo = lo
-
-        self.events.append(
-            StructureEvent(
-                idx=i,
-                category="RANGE",
-                type="RANGE_STARTED",
-                price=None,
-                meta={"start_idx": j, "confirm_idx": c, "hi": hi, "lo": lo},
-            )
-        )
-        self._set_state(MarketState.RANGE, i, meta={"reason": "range_confirmed", "effective_idx": j})
-        self._clear_pending_range_candidate()
-        return True
-
-    def _finalize_range_candidate_offline(self, i: int, D: int) -> None:
+    def _finalize_range_candidate_offline(self, i: int) -> None:
         st = self.state
 
         # If we already have an active range, this anchor-range-candidate logic probably shouldn't run.
         # In your simplified model, range-active mode is handled by per-candle expansion instead.
-        if st.range_active:
-            # Expand range through D? (optional) Usually handled by replay anyway.
-            return
 
         lo_i = float(self.df.iloc[i]["l"])
         hi_i = float(self.df.iloc[i]["h"])
+        confirm_idx = int(self.df.iloc[i]["is_range_confirm_idx"])
 
-        start = i + self.range_min_k
-        end = D
+        # Activate range anchored at i, decision at confirm_idx
+        st.range_active = True
+        st.range_start_idx = i
+        st.range_confirm_idx = confirm_idx
+        st.range_hi = hi_i
+        st.range_lo = lo_i
 
-        confirm_idx = None
-        for t in range(start, end + 1):
-            c_t = float(self.df.iloc[t]["c"])
-            if lo_i <= c_t <= hi_i:
-                confirm_idx = t
-                break
-
-        if confirm_idx is not None:
-            # Activate range anchored at i, decision at confirm_idx
-            st.range_active = True
-            st.range_start_idx = i
-            st.range_hi = hi_i
-            st.range_lo = lo_i
-
-            self.events.append(
-                StructureEvent(
-                    idx=confirm_idx,
-                    category="RANGE",
-                    type="RANGE_STARTED",
-                    meta={"start_idx": i, "confirm_idx": confirm_idx, "hi": hi_i, "lo": lo_i},
-                )
+        self.events.append(
+            StructureEvent(
+                idx=confirm_idx,
+                category="RANGE",
+                type="RANGE_STARTED",
+                meta={"start_idx": i, "confirm_idx": confirm_idx, "hi": hi_i, "lo": lo_i},
             )
-            self._set_state(MarketState.RANGE, confirm_idx, meta={"reason": "range_confirmed", "effective_idx": i})
-        else:
-            # Range failure: no state change, no activation
-            pass
+        )
+        self._set_state(MarketState.RANGE, confirm_idx, meta={"reason": "range_confirmed", "effective_idx": i})
 
     def _update_active_range(self, i: int) -> None:
         """
@@ -652,9 +381,7 @@ class MarketStructure:
         st.range_hi = None
         st.range_lo = None
         st.range_start_idx = None
-
-        # clear pending range candidate too
-        self._clear_pending_range_candidate()
+        st.range_confirm_idx = None
 
     def _ensure_range_on_pullback(self, i: int, pullback_ev: PatternEvent) -> None:
         """
@@ -691,6 +418,7 @@ class MarketStructure:
             # Create range anchored to CTS and pullback low/high
             st.range_active = True
             st.range_start_idx = st.cts.idx  # range starts from the CTS that is now confirmed by pullback
+            st.range_confirm_idx = apply_idx
 
             if self.struct_direction == 1:
                 st.range_hi = cts_price
@@ -737,98 +465,6 @@ class MarketStructure:
                 )
             )
 
-    def _range_decision_for_candidate(self, j: int) -> Tuple[int, Optional[int], bool]:
-        """
-        Returns (decision_idx d, confirm_idx c_or_None, will_confirm).
-        Confirm rule: exists t in [j+min_k .. j+max_k] s.t. close[t] in [low[j], high[j]].
-        If none, decision_idx = min(j+max_k, n-1) and will_confirm=False.
-        """
-        n = len(self.df)
-        lo_j = float(self.df.iloc[j]["l"])
-        hi_j = float(self.df.iloc[j]["h"])
-
-        start = j + self.range_min_k
-        end = min(j + self.range_max_k, n - 1)
-
-        for t in range(start, end + 1):
-            c_t = float(self.df.iloc[t]["c"])
-            if lo_j <= c_t <= hi_j:
-                return t, t, True
-
-        return end, None, False
-
-    def _drop_events_in_idx_range(self, a: int, b: int) -> None:
-        """Remove previously-emitted events with idx in [a..b]."""
-        self.events = [e for e in self.events if not (a <= int(e.idx) <= b)]
-
-
-    def _rewind_replay(self, j: int, d: int) -> None:
-        """
-        Week 5 rule:
-        After RANGE evaluation ends by CONFIRM or FAIL (non-disqualified),
-        rewind+replay from candle j+1 through the decision candle d (inclusive).
-
-        If the range candidate is DISQUALIFIED (i.e., a breakout or pullback pattern
-        appears during the evaluation window), the evaluation is canceled immediately
-        and NO rewind+replay occurs.
-
-        This is the "go back in time but quickly processable" behavior:
-        we re-process candles that were previously processed without the now-known outcome
-        of the range evaluation.
-        """
-        if d <= j:
-            return
-
-        # Remove events that were emitted for the segment we will replay.
-        # We'll re-emit correct events during replay.
-        self._drop_events_in_idx_range(j + 1, d)
-
-        # Re-run the state machine for candles j+1..d.
-        # Important: during this replay, we should NOT finalize range candidates again
-        # at the same indices to avoid recursion / duplicated rewinds.
-        # We'll guard using a flag.
-
-        prev = self._in_replay
-        self._in_replay = True
-        try:
-            for k in range(j + 1, d + 1):
-                # Replay the step logic, but skip finalize to prevent nested rewinds.
-                self._step_replay(k)
-        finally:
-            self._in_replay = prev
-
-    def _step_replay(self, i: int) -> None:
-        """
-        Replay version of _step:
-        - runs the same step_with/without_range logic and writes df row
-        - DOES NOT call _finalize_range_candidate_if_due (prevents recursive rewinds)
-        """
-        st = self.state
-        st.prev_state = st.state
-
-        # Ensure when state is pullback or pullback_range there is always an active range
-        if st.state in (MarketState.PULLBACK, MarketState.PULLBACK_RANGE) and not st.range_active:
-            raise RuntimeError(
-                f"Invariant violated at i={i}: state={st.state.value} but range_active=False"
-            )
-        
-        # Invariant: RANGE state is only valid when a range is active.
-        # If we ever observe state == RANGE while range_active == False,
-        # this indicates a state-transition or replay-ordering bug and must fail fast.
-        if st.state == MarketState.RANGE and not st.range_active:
-            raise RuntimeError(
-                "Invalid market state: state=RANGE but range_active=False. "
-                "RANGE state must only exist while an active range is present. "
-                "This indicates a state-transition or replay ordering bug."
-            )
-
-        if st.range_active:
-            self._step_with_active_range(i)
-        else:
-            self._step_without_active_range(i)
-
-        self._write_df_row(i)
-
 
     # ----------------------------
     # Pattern helpers
@@ -844,23 +480,6 @@ class MarketStructure:
         # Use ev.name because that's what you're already logging (meta={"via": ev.name})
         return 3 if ev.name == "continuous" else 2
 
-    def _original_pattern_non_last_idxs(self, ev: PatternEvent) -> List[int]:
-        """
-        Returns indices of candles in the original pattern EXCLUDING the last candle.
-        - Uses ev.end_idx as the last candle of the original pattern.
-        - Does NOT include confirmation candle even if ev.status == CONFIRMED.
-        """
-        L = self._pattern_len(ev)
-        end = int(ev.end_idx)
-        start = end - (L - 1)
-        # exclude the last original candle (end)
-        return [k for k in range(start, end) if k >= 0]
-
-
-    def _check_pattern(self, i: int, direction: int, break_threshold: Optional[float]) -> Optional[PatternEvent]:
-        # Sequential use: call Week 4 detector dynamically with threshold
-        ev = self._bp.detect_first_success(i, direction, break_threshold)
-        return ev
 
     def _apply_idx(self, ev: PatternEvent) -> Optional[int]:
         if ev.status == PatternStatus.CONFIRMED:
@@ -872,7 +491,9 @@ class MarketStructure:
 
         # Record pattern ownership/disqualification if you keep it (you said you want to drop most of it)
         # You can keep ONLY apply-candle ownership if desired.
-        self._consume_pattern_apply(ev)
+        apply_idx = self._apply_idx(ev)
+        if apply_idx is None:
+            return
 
         if kind == "breakout":
             # If BOS confirmation should occur here (Part 2)
@@ -899,6 +520,7 @@ class MarketStructure:
             st.cts_phase = "EST_OR_UPD"
             st.last_breakout_pat_apply_idx = apply_idx
             self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
+            self._post_apply_range_check(apply_idx)
             return
 
         # pullback
@@ -913,41 +535,20 @@ class MarketStructure:
             self._set_state(MarketState.PULLBACK, apply_idx, meta={"reason": "pullback_pattern", "pat": ev.name})
             return
 
-    # NOTE:
-    # _consume_pattern_apply should ONLY record ownership/disqualification facts.
-    # It must NOT clear pending range candidates.
-    # Clearing pending range candidates is handled exclusively by:
-    #   - _step_without_active_range / _step_with_active_range (on real pattern paths)
-    #   - _finalize_range_candidate_if_due
-    #   - _activate_range_at_confirm
-    def _consume_pattern_apply(self, ev: PatternEvent) -> None:
-        """
-        Record that the apply candle is owned by a breakout/pullback pattern,
-        disqualifying it from being a range starter later.
-        """
-        apply_idx = self._apply_idx(ev)
-        if apply_idx is None:
-            return
-        self._pattern_owned_apply_idxs.add(int(apply_idx))
+    def _post_apply_range_check(self, i: int) -> None:
+        n = len(self.df)
+        D = min(i + self.range_max_k, n - 1)  # range_max_k is 5 by default
 
-        # If we are currently evaluating a range candidate and it later becomes
-        # the apply candle of a pattern, retroactively disqualify it.
         st = self.state
-        if (
-            st.range_candidate_start_idx is not None
-            and int(st.range_candidate_start_idx) == int(apply_idx)
-        ):
-            st.range_candidate_disqualified = True
 
+        range_confirmed, confirm_idx = self._is_range_candle_given_confirm(i)
 
-        # NEW: disqualify any candle that participated in the ORIGINAL pattern window
-        # (excluding the last candle of the original pattern).
-        for k in self._original_pattern_non_last_idxs(ev):
-            self._range_disqualify_idxs.add(int(k))
+        if range_confirmed:
+            min_d = D if confirm_idx is None else min(confirm_idx, D)
+            for k in range(i, min_d):
+                self._replay_step_no_patterns(k, freeze_range=True)
 
-        # Retroactively disqualify pending range candidate if it matches
-        if st.range_candidate_start_idx is not None and int(st.range_candidate_start_idx) in self._range_disqualify_idxs:
-            st.range_candidate_disqualified = True
+            self._finalize_range_candidate_offline(i)
 
 
     # ----------------------------
@@ -1123,7 +724,7 @@ class MarketStructure:
         if "market_state" not in out.columns:
             out["market_state"] = ""
         # range
-        for c in ("range_active", "range_hi", "range_lo", "range_start_idx"):
+        for c in ("range_active", "range_hi", "range_lo", "range_start_idx", "range_confirm_idx"):
             if c not in out.columns:
                 out[c] = 0 if c == "range_active" else -1
         # thresholds (derived, but nice for debugging)
@@ -1134,25 +735,6 @@ class MarketStructure:
         for c in ("cts_idx", "cts_price", "cts_event", "bos_idx", "bos_price", "bos_event"):
             if c not in out.columns:
                 out[c] = -1 if c.endswith("_idx") else ("" if c.endswith("_event") else float("nan"))
-
-        # range candidate
-        idx_cols = (
-            "range_candidate_start_idx",
-            "range_candidate_decision_idx",
-            "range_candidate_confirm_idx",
-        )
-        bool_cols = (
-            "range_candidate_will_confirm",
-            "range_candidate_disqualified",
-        )
-
-        for c in idx_cols:
-            if c not in out.columns:
-                out[c] = -1
-
-        for c in bool_cols:
-            if c not in out.columns:
-                out[c] = 0
 
         # last breakout pat idx
         if "last_breakout_pat_apply_idx" not in out.columns:
@@ -1167,6 +749,7 @@ class MarketStructure:
         self.df.at[row, "range_hi"] = float(st.range_hi) if st.range_hi is not None else float("nan")
         self.df.at[row, "range_lo"] = float(st.range_lo) if st.range_lo is not None else float("nan")
         self.df.at[row, "range_start_idx"] = int(st.range_start_idx) if st.range_start_idx is not None else -1
+        self.df.at[row, "range_confirm_idx"] = int(st.range_confirm_idx) if st.range_confirm_idx is not None else -1
 
         if st.range_active and st.range_hi is not None and st.range_lo is not None:
             self.df.at[row, "breakout_th"] = self._range_breakout_threshold()
@@ -1182,22 +765,6 @@ class MarketStructure:
         self.df.at[row, "bos_idx"] = int(st.bos_confirmed.idx) if st.bos_confirmed is not None else -1
         self.df.at[row, "bos_price"] = float(st.bos_confirmed.price) if st.bos_confirmed is not None else float("nan")
         self.df.at[row, "bos_event"] = st.bos_event
-
-        self.df.at[row, "range_candidate_start_idx"] = (
-            int(st.range_candidate_start_idx) if st.range_candidate_start_idx is not None else -1
-        )
-
-        self.df.at[row, "range_candidate_decision_idx"] = (
-            int(st.range_candidate_decision_idx) if st.range_candidate_decision_idx is not None else -1
-        )
-
-        self.df.at[row, "range_candidate_confirm_idx"] = (
-            int(st.range_candidate_confirm_idx) if st.range_candidate_confirm_idx is not None else -1
-        )
-
-        self.df.at[row, "range_candidate_will_confirm"] = int(bool(st.range_candidate_will_confirm))
-
-        self.df.at[row, "range_candidate_disqualified"] = int(bool(st.range_candidate_disqualified))
 
         self.df.at[row, "last_breakout_pat_apply_idx"] = (
             int(st.last_breakout_pat_apply_idx) if st.last_breakout_pat_apply_idx is not None else -1
@@ -1246,4 +813,3 @@ class MarketStructure:
                 )
 
         return levels
-

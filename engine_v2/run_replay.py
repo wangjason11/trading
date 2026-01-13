@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional, Tuple
 from engine_v2.config import CONFIG
 from engine_v2.data.provider_oanda import get_history
@@ -76,6 +77,10 @@ def make_basename(*, pair: str, timeframe: str, start, end, struct_direction: in
         f"_sd{struct_direction}_eps{_fmt_float(eps)}_rk{range_min_k}-{range_max_k}"
     )
 
+def export_csv(df, path: str):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path, index=False)
+
 
 def main() -> None:
     df = get_history(
@@ -84,6 +89,12 @@ def main() -> None:
         start=CONFIG.start,
         end=CONFIG.end,
     )
+
+    raw_path = (
+        f"artifacts/debug/"
+        f"{CONFIG.pair}_{CONFIG.timeframe}_{CONFIG.start.date()}_{CONFIG.end.date()}_raw.csv"
+    )
+    export_csv(df.copy(), raw_path)
 
     res = run_pipeline(df)
 
@@ -101,7 +112,6 @@ def main() -> None:
 
     print("Exported:", "artifacts/debug/swings.csv", "artifacts/debug/structure_levels.csv")
 
-
     res.df.attrs["structure_levels"] = res.structure
     res.df.attrs["kl_zones"] = res.meta.get("kl_zones", [])
 
@@ -111,6 +121,15 @@ def main() -> None:
     print(f"pattern_events={len(res.patterns)}")
     print(f"structure_levels={len(res.structure)}")
     print("notes:", res.meta.get("notes", {}))
+
+    final_path = (
+        f"artifacts/debug/"
+        f"{CONFIG.pair}_{CONFIG.timeframe}_{CONFIG.start.date()}_{CONFIG.end.date()}_final.csv"
+    )
+    export_csv(res.df, final_path)
+
+    print(f"Raw data: {raw_path}")
+    print(f"Full pipeline data: {final_path}")
 
     # Export chart artifacts
     # basename = f"{CONFIG.pair}_{CONFIG.timeframe}_{CONFIG.start.date()}_{CONFIG.end.date()}"
