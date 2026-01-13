@@ -326,6 +326,10 @@ class BreakoutPatterns:
         if not self.check_break(c0, break_threshold, direction):
             return None
 
+        # 2 ways for valid pattern:
+        # 1) main: c0 big maru & break & c1 small body + c1 low higher than c0 mid price
+        # 2) alt: c0 big maru & break & c1 is pinbar & beyond break threshold (only used when there is break threshold)
+        # only the main method will be eligible for confirmation
         c1_len_check = c1.candle_len < small_body_size * c0.candle_len
         cond1_valid = (
             int(c0.is_big_maru_as0) == 1
@@ -333,13 +337,22 @@ class BreakoutPatterns:
             and self.body_check(c0, break_threshold, break_percent, direction)
         )
 
+        cond1_valid_alt = (
+            int(c0.is_big_maru_as0) == 1
+            and self.body_check(c0, break_threshold, break_percent, direction)
+        )
+
         if direction == 1:
             c1_pos_check = c1.l > (c0.l + small_body_tail * c0.candle_len)
+            c1_tail_check = False if break_threshold is None else c1.l > break_threshold
         else:
             c1_pos_check = c1.h < (c0.l + small_body_tail * c0.candle_len)
-        cond2_valid = c1_pos_check
+            c1_tail_check = False if break_threshold is None else c1.h < break_threshold
 
-        if cond1_valid and cond2_valid:
+        cond2_valid = c1_pos_check
+        cond2_valid_alt = c1_tail_check and c1.candle_type == "pinbar"
+
+        if (cond1_valid and cond2_valid) or (cond1_valid_alt and cond2_valid_alt):
             return PatternEvent(
                 name="one_maru_opposite",
                 direction=direction,

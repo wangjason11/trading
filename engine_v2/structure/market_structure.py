@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Literal, Optional, Set, Tuple
 
 import pandas as pd
 
-from engine_v2.common.types import PatternEvent, PatternStatus, StructureLevel, COL_TIME
+from engine_v2.common.types import PatternEvent, PatternStatus, StructureLevel, COL_TIME, COL_O, COL_C
 from engine_v2.patterns.structure_patterns import BreakoutPatterns
 
 
@@ -65,6 +65,7 @@ class MarketStructureState:
 
     # Breakout bookkeeping
     last_breakout_pat_apply_idx: Optional[int] = None  # j
+    last_pullback_pat_apply_idx: Optional[int] = None
 
     # False-break bookkeeping
     false_break_active: bool = False
@@ -150,16 +151,23 @@ class MarketStructure:
         if not freeze_range:
             # If an active range exists, evolve it candle-by-candle (unless frozen).
             if st.range_active:
+                prev_hi = st.range_hi
+                prev_lo = st.range_lo
+                
                 self._update_active_range(i)
 
                 if st.state in (MarketState.PULLBACK, MarketState.PULLBACK_RANGE):
-                    if self._expanded_pullback_side(i):
-                        if st.false_break_active:
-                            st.reentered_pullback_after_false_break = True
-                        st.bos_candidate = self._update_bos_candidate(i, st.bos_candidate)
-                        self._set_state(MarketState.PULLBACK, i, meta={"reason": "replay_expand_pullback_side"})
+                    # Do not auto-downgrade on the same candle that *applied* the pullback pattern.
+                    if st.last_pullback_pat_apply_idx is not None and i == st.last_pullback_pat_apply_idx:
+                        self._set_state(MarketState.PULLBACK, i, meta={"reason": "pullback_apply_candle"})
                     else:
-                        self._set_state(MarketState.PULLBACK_RANGE, i, meta={"reason": "replay_no_expand_pullback_side"})
+                        if self._expanded_pullback_side(i, prev_hi=prev_hi, prev_lo=prev_lo):
+                            if st.false_break_active:
+                                st.reentered_pullback_after_false_break = True
+                            st.bos_candidate = self._update_bos_candidate(i, st.bos_candidate)
+                            self._set_state(MarketState.PULLBACK, i, meta={"reason": "replay_expand_pullback_side"})
+                        else:
+                            self._set_state(MarketState.PULLBACK_RANGE, i, meta={"reason": "replay_no_expand_pullback_side"})
 
         self._write_df_row(i)
 
@@ -246,17 +254,18 @@ class MarketStructure:
         # Breakout
         ev_b = self._bp.detect_best_for_anchor(i, self.struct_direction, breakout_th)
 
-        # if i in (52, 53):
-        #     omo = self._bp.one_maru_opposite(i, self.struct_direction, breakout_th, do_confirm=False)
-        #     omc = self._bp.one_maru_continuous(i, self.struct_direction, breakout_th, do_confirm=False)
-        #     dm  = self._bp.double_maru(i, self.struct_direction, breakout_th, do_confirm=False)
-        #     print(f"[DBG] i={i} breakout_th={breakout_th} "
-        #         f"OMO={None if omo is None else omo.status} "
-        #         f"OMC={None if omc is None else omc.status} "
-        #         f"DM={None if dm is None else dm.status}")
-        #     if omc is not None:
-        #         print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
-        #         print(f"[DBG] candle53 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
+        # Breakout Pattern Debugging Print
+        if i in (303, 304):
+            omo = self._bp.one_maru_opposite(i, self.struct_direction, breakout_th, do_confirm=False)
+            omc = self._bp.one_maru_continuous(i, self.struct_direction, breakout_th, do_confirm=False)
+            dm  = self._bp.double_maru(i, self.struct_direction, breakout_th, do_confirm=False)
+            print(f"[DBG] i={i} breakout_th={breakout_th} "
+                f"OMO={None if omo is None else omo.status} "
+                f"OMC={None if omc is None else omc.status} "
+                f"DM={None if dm is None else dm.status}")
+            if omc is not None:
+                print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
+                print(f"[DBG] candle+1 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
 
         if ev_b is not None:
             apply_b = self._apply_idx(ev_b)
@@ -266,6 +275,20 @@ class MarketStructure:
         # Pullback (only after first breakout/CTS regime)
         if st.state != MarketState.NONE:
             ev_p = self._bp.detect_best_for_anchor(i, -self.struct_direction, pullback_th)
+
+            # Pullback Pattern Debugging Print
+            # if i in (169, 170):
+            #     omo = self._bp.one_maru_opposite(i, -self.struct_direction, pullback_th, do_confirm=False)
+            #     omc = self._bp.one_maru_continuous(i, -self.struct_direction, pullback_th, do_confirm=False)
+            #     dm  = self._bp.double_maru(i, -self.struct_direction, pullback_th, do_confirm=False)
+            #     print(f"[DBG] i={i} pullback_th={pullback_th} "
+            #         f"OMO={None if omo is None else omo.status} "
+            #         f"OMC={None if omc is None else omc.status} "
+            #         f"DM={None if dm is None else dm.status}")
+            #     if omc is not None:
+            #         print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
+            #         print(f"[DBG] candle+1 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
+
             if ev_p is not None:
                 apply_p = self._apply_idx(ev_p)
                 if apply_p is not None and apply_p <= D:
@@ -314,6 +337,14 @@ class MarketStructure:
         hi_i = float(self.df.iloc[i]["h"])
         confirm_idx = int(self.df.iloc[i]["is_range_confirm_idx"])
 
+        # NEW: seed range bound using prior CTS extreme (if exists)
+        if st.cts is not None:
+            cts_price = float(st.cts.price)
+            if self.struct_direction == 1:
+                hi_i = max(hi_i, cts_price)   # ensure range_hi reaches prior CTS high
+            else:
+                lo_i = min(lo_i, cts_price)   # ensure range_lo reaches prior CTS low
+
         # Activate range anchored at i, decision at confirm_idx
         st.range_active = True
         st.range_start_idx = i
@@ -326,7 +357,14 @@ class MarketStructure:
                 idx=confirm_idx,
                 category="RANGE",
                 type="RANGE_STARTED",
-                meta={"start_idx": i, "confirm_idx": confirm_idx, "hi": hi_i, "lo": lo_i},
+                meta={
+                    "start_idx": i,
+                    "confirm_idx": confirm_idx,
+                    "hi": hi_i,
+                    "lo": lo_i,
+                    "cts_idx": None if st.cts is None else st.cts.idx,
+                    "cts_price": None if st.cts is None else float(st.cts.price),
+                },
             )
         )
         self._set_state(MarketState.RANGE, confirm_idx, meta={"reason": "range_confirmed", "effective_idx": i})
@@ -510,11 +548,21 @@ class MarketStructure:
             if st.range_active:
                 self._deactivate_range(apply_idx, meta={"reason": "range_breakout", "pat": ev.name})
 
-            cts_price = self._cts_price_at(apply_idx)
-            if st.state == MarketState.BREAKOUT:
-                self._emit_cts_updated(apply_idx, cts_price, meta={"via": ev.name})
+            # cts_price = self._cts_price_at(apply_idx)
+            # if st.state == MarketState.BREAKOUT:
+            #     self._emit_cts_updated(apply_idx, cts_price, meta={"via": ev.name})
+            # else:
+            #     self._emit_cts_established(apply_idx, cts_price, meta={"via": ev.name})
+
+            cts_idx, cts_price = self._cts_from_breakout_event(ev)
+
+            # emit CTS event using cts_idx/cts_price
+            if st.cts is not None:
+                self._emit_cts_updated(cts_idx, cts_price, meta={"via": ev.name})
             else:
-                self._emit_cts_established(apply_idx, cts_price, meta={"via": ev.name})
+                self._emit_cts_established(cts_idx, cts_price, meta={"via": ev.name})
+
+            st.cts = Point(idx=cts_idx, price=cts_price)
 
             st.cts = Point(idx=apply_idx, price=cts_price)
             st.cts_phase = "EST_OR_UPD"
@@ -532,6 +580,7 @@ class MarketStructure:
             st.cts_phase = "CONFIRMED"
             st.bos_candidate = self._init_bos_candidate(apply_idx)
 
+            st.last_pullback_pat_apply_idx = apply_idx
             self._set_state(MarketState.PULLBACK, apply_idx, meta={"reason": "pullback_pattern", "pat": ev.name})
             return
 
@@ -554,6 +603,31 @@ class MarketStructure:
     # ----------------------------
     # CTS/BOS helpers & emits
     # ----------------------------
+
+    def _cts_from_breakout_event(self, ev: PatternEvent) -> tuple[int, float]:
+        """
+        CTS for breakout = extreme of the breakout pattern candle span [start_idx..end_idx].
+        Returns (cts_idx, cts_price).
+        """
+        s = int(ev.start_idx)
+        e = int(ev.end_idx)
+        if e < s:
+            s, e = e, s
+
+        if self.struct_direction == 1:
+            # bullish structure -> CTS is max high in pattern span
+            highs = self.df.iloc[s : e + 1]["h"].astype(float).values
+            k = int(highs.argmax())
+            cts_idx = s + k
+            cts_price = float(highs[k])
+            return cts_idx, cts_price
+        else:
+            # bearish structure -> CTS is min low in pattern span
+            lows = self.df.iloc[s : e + 1]["l"].astype(float).values
+            k = int(lows.argmin())
+            cts_idx = s + k
+            cts_price = float(lows[k])
+            return cts_idx, cts_price
 
     def _cts_price_at(self, idx: int) -> float:
         if self.struct_direction == 1:
@@ -663,20 +737,29 @@ class MarketStructure:
     # Pullback-side expansion decision
     # ----------------------------
 
-    def _expanded_pullback_side(self, i: int) -> bool:
+    def _expanded_pullback_side(
+        self,
+        i: int,
+        prev_hi: float | None = None,
+        prev_lo: float | None = None,
+    ) -> bool:
         st = self.state
+
+        # If no active range, use bos_candidate progression as proxy (unchanged)
         if not st.range_active or st.range_hi is None or st.range_lo is None:
-            # without a range, use bos_candidate progression as proxy
             if st.bos_candidate is None:
                 return True
             if self.struct_direction == 1:
                 return float(self.df.iloc[i]["l"]) < float(st.bos_candidate)
             return float(self.df.iloc[i]["h"]) > float(st.bos_candidate)
 
-        # With active range:
+        # ✅ Use previous bounds if provided, otherwise fall back to current
+        hi = st.range_hi if prev_hi is None else prev_hi
+        lo = st.range_lo if prev_lo is None else prev_lo
+
         if self.struct_direction == 1:
-            return float(self.df.iloc[i]["l"]) < float(st.range_lo)
-        return float(self.df.iloc[i]["h"]) > float(st.range_hi)
+            return float(self.df.iloc[i]["l"]) < float(lo)
+        return float(self.df.iloc[i]["h"]) > float(hi)
 
     # ----------------------------
     # Range threshold helpers
@@ -743,6 +826,7 @@ class MarketStructure:
     def _write_df_row(self, i: int) -> None:
         st = self.state
         row = self.df.index[i]
+        prev_row = self.df.index[i-1]
 
         self.df.at[row, "market_state"] = st.state.value
         self.df.at[row, "range_active"] = int(st.range_active)
@@ -769,6 +853,30 @@ class MarketStructure:
         self.df.at[row, "last_breakout_pat_apply_idx"] = (
             int(st.last_breakout_pat_apply_idx) if st.last_breakout_pat_apply_idx is not None else -1
         )
+
+        # Debug: range body-break fraction on this candle (close-breaks only)
+        # If candle CLOSE breaks above range_hi / below range_lo, compute the fraction of the
+        # candle's real body that lies beyond the breached threshold.
+        frac = float("nan")
+        if self.df.at[prev_row, "range_hi"] is not None and self.df.at[prev_row, "range_lo"] is not None:
+            o = float(self.df.at[row, COL_O])
+            c = float(self.df.at[row, COL_C])
+            body_low = min(o, c)
+            body_high = max(o, c)
+            body_len = body_high - body_low
+
+            if body_len > 0:
+                # Close-break above / below range
+                if c > float(self.df.at[prev_row, "range_hi"]):
+                    th = float(self.df.at[prev_row, "range_hi"])
+                    above = max(0.0, body_high - max(th, body_low))
+                    frac = above / body_len
+                elif c < float(self.df.at[prev_row, "range_lo"]):
+                    th = float(self.df.at[prev_row, "range_lo"])
+                    below = max(0.0, min(th, body_high) - body_low)
+                    frac = below / body_len
+
+        self.df.at[row, "range_break_frac"] = frac
 
         # Clear one-candle event fields so they don't smear across rows
         st.cts_event = ""

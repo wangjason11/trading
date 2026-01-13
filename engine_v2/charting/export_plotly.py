@@ -134,12 +134,20 @@ def export_chart_plotly(
     # Candles
     candle_idx = dfx.index.to_numpy()
 
+    range_break_frac = (
+        dfx["range_break_frac"].astype(float)
+        if "range_break_frac" in dfx.columns
+        else pd.Series([float("nan")] * len(dfx), index=dfx.index)
+    )
+
     customdata = list(zip(
         candle_idx,
         dfx["mid_price"].astype(float),
         dfx["body_pct"].astype(float),
         dfx["candle_type"].astype(str),
         dfx["body_len"].astype(float),
+        dfx["candle_len"].astype(float),
+        range_break_frac,
     ))
 
     fig.add_trace(
@@ -160,9 +168,11 @@ def export_chart_plotly(
                 "L=%{low}<br>"
                 "C=%{close}<br>"
                 "candle_type=%{customdata[3]}<br>"
-                "body_pct=%{customdata[2]:.2%}<br>"
                 "body_len=%{customdata[4]:.5f}<br>"
-                "mid_price=%{customdata[1]:.5f}"
+                "candle_len=%{customdata[5]:.5f}<br>"
+                "body_pct=%{customdata[2]:.2%}<br>"
+                "mid_price=%{customdata[1]:.5f}<br>"
+                "range_break_frac=%{customdata[6]:.2%}"
                 "<extra></extra>"
             ),
         )
