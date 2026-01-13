@@ -255,17 +255,17 @@ class MarketStructure:
         ev_b = self._bp.detect_best_for_anchor(i, self.struct_direction, breakout_th)
 
         # Breakout Pattern Debugging Print
-        if i in (303, 304):
-            omo = self._bp.one_maru_opposite(i, self.struct_direction, breakout_th, do_confirm=False)
-            omc = self._bp.one_maru_continuous(i, self.struct_direction, breakout_th, do_confirm=False)
-            dm  = self._bp.double_maru(i, self.struct_direction, breakout_th, do_confirm=False)
-            print(f"[DBG] i={i} breakout_th={breakout_th} "
-                f"OMO={None if omo is None else omo.status} "
-                f"OMC={None if omc is None else omc.status} "
-                f"DM={None if dm is None else dm.status}")
-            if omc is not None:
-                print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
-                print(f"[DBG] candle+1 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
+        # if i in (303, 304):
+        #     omo = self._bp.one_maru_opposite(i, self.struct_direction, breakout_th, do_confirm=False)
+        #     omc = self._bp.one_maru_continuous(i, self.struct_direction, breakout_th, do_confirm=False)
+        #     dm  = self._bp.double_maru(i, self.struct_direction, breakout_th, do_confirm=False)
+        #     print(f"[DBG] i={i} breakout_th={breakout_th} "
+        #         f"OMO={None if omo is None else omo.status} "
+        #         f"OMC={None if omc is None else omc.status} "
+        #         f"DM={None if dm is None else dm.status}")
+        #     if omc is not None:
+        #         print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
+        #         print(f"[DBG] candle+1 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
 
         if ev_b is not None:
             apply_b = self._apply_idx(ev_b)

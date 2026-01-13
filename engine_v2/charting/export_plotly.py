@@ -525,6 +525,33 @@ def export_chart_plotly(
         active = dfx["range_active"].astype(int) == 1
         sub = dfx[active].copy()
 
+        # --- NEW: compute the candle idx/time where range bounds were last updated ---
+        # We treat an "update" as: while range_active==1, range_hi or range_lo changes from the prior active candle.
+        # Then we forward-fill so every candle can say "range_lo was last set at idx=X".
+
+        # Ensure we have time handy
+        sub["_t"] = sub[COL_TIME]
+
+        # Detect changes vs previous active candle (within the filtered sub)
+        prev_hi = sub["range_hi"].shift(1)
+        prev_lo = sub["range_lo"].shift(1)
+
+        changed = (sub["range_hi"] != prev_hi) | (sub["range_lo"] != prev_lo)
+
+        # Also mark the first visible active candle as an update (so it has a seed)
+        if len(sub) > 0:
+            changed.iloc[0] = True
+
+        sub["range_last_update_idx"] = sub.index.where(changed).astype("float")
+        sub["range_last_update_time"] = sub["_t"].where(changed)
+
+        # Forward-fill update info across the active segment
+        sub["range_last_update_idx"] = sub["range_last_update_idx"].ffill().astype(int)
+        sub["range_last_update_time"] = sub["range_last_update_time"].ffill()
+
+        # Clean helper col
+        sub.drop(columns=["_t"], inplace=True)
+
         if not sub.empty:
             # Top line (range_hi)
             fig.add_trace(
@@ -540,7 +567,9 @@ def export_chart_plotly(
                         "idx=%{customdata[0]}<br>"
                         "range_start_idx=%{customdata[1]}<br>"
                         "range_hi=%{customdata[2]:.5f}<br>"
-                        "range_lo=%{customdata[3]:.5f}"
+                        "range_lo=%{customdata[3]:.5f}<br>"
+                        "last_update_idx=%{customdata[4]}<br>"
+                        "last_update_time=%{customdata[5]}"
                         "<extra></extra>"
                     ),
                     customdata=list(zip(
@@ -548,6 +577,8 @@ def export_chart_plotly(
                         sub["range_start_idx"].astype(int),
                         sub["range_hi"].astype(float),
                         sub["range_lo"].astype(float),
+                        sub["range_last_update_idx"].astype(int),
+                        sub["range_last_update_time"].astype(str),
                     )),
                 )
             )
@@ -566,7 +597,9 @@ def export_chart_plotly(
                         "idx=%{customdata[0]}<br>"
                         "range_start_idx=%{customdata[1]}<br>"
                         "range_hi=%{customdata[2]:.5f}<br>"
-                        "range_lo=%{customdata[3]:.5f}"
+                        "range_lo=%{customdata[3]:.5f}<br>"
+                        "last_update_idx=%{customdata[4]}<br>"
+                        "last_update_time=%{customdata[5]}"
                         "<extra></extra>"
                     ),
                     customdata=list(zip(
@@ -574,6 +607,8 @@ def export_chart_plotly(
                         sub["range_start_idx"].astype(int),
                         sub["range_hi"].astype(float),
                         sub["range_lo"].astype(float),
+                        sub["range_last_update_idx"].astype(int),
+                        sub["range_last_update_time"].astype(str),
                     )),
                 )
             )
@@ -626,11 +661,62 @@ def export_chart_plotly(
         height=800,
     )
 
-    fig.update_xaxes(
-        rangebreaks=[
-            dict(bounds=["sat", "mon"])  # hide weekend gaps
-        ]
-    )
+    # fig.update_xaxes(
+    #     rangebreaks=[
+    #         dict(bounds=["sat", "mon"])  # hide weekend gaps
+    #     ]
+    # )
+
+    # times = pd.to_datetime(dfx[COL_TIME])
+
+    # # Python weekday: Mon=0 ... Sun=6
+    # wd = times.dt.dayofweek
+    # hr = times.dt.hour
+
+    # # Break window (UTC):
+    # # - Friday (4) >= 17:00
+    # # - All Saturday (5)
+    # # - Sunday (6) < 22:00
+    # is_break = ((wd == 4) & (hr >= 22)) | (wd == 5) | ((wd == 6) & (hr < 21))
+
+    # break_times = times[is_break]
+
+    # fig.update_xaxes(
+    #     rangebreaks=[
+    #         dict(values=break_times.tolist())
+    #     ]
+    # )
+
+    # --- Dynamic gap removal (compress all no-candle periods) ---
+    t = pd.to_datetime(dfx[COL_TIME]).sort_values().reset_index(drop=True)
+
+    # infer expected candle spacing robustly
+    dt = t.diff()
+    expected = dt[dt.notna()].median()
+    if pd.isna(expected) or expected <= pd.Timedelta(0):
+        expected = pd.Timedelta(minutes=15)
+
+    gap_mask = dt > (expected * 1.5)
+
+    missing = []
+    t_values = t.to_list()
+    for i in range(1, len(t_values)):
+        if bool(gap_mask.iloc[i]):
+            start = t_values[i - 1] + expected
+            end   = t_values[i] - expected
+            if start <= end:
+                missing.extend(pd.date_range(start, end, freq=expected).to_pydatetime())
+
+    # paranoia guard: never remove real candle timestamps
+    present = set(t_values)
+    missing = [x for x in missing if x not in present]
+
+    if missing:
+        fig.update_xaxes(
+            rangebreaks=[
+                dict(values=missing, dvalue=int(expected / pd.Timedelta(milliseconds=1)))
+            ]
+        )
 
     html_path = out_dir / f"{basename}.html"
     png_path = out_dir / f"{basename}.png"
