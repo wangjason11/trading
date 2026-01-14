@@ -50,11 +50,14 @@ class MarketStructureState:
     cts_confirmed_for_idx: Optional[int] = None  # prevent duplicate CTS_CONFIRMED emits for same CTS
     cts_event: str = ""  # one-candle event marker written by _write_df_row
 
+    # NEW (Part 2): CTS cycles + thresholds
+    cts_cycle_id: int = 0  # increments only when we ESTABLISH a NEW CTS cycle
+    cts_threshold: Optional[float] = None  # mirrors active range bound after CTS confirmation (debug)
+
     # BOS lifecycle
     bos_confirmed: Optional[Point] = None
     bos_threshold: Optional[float] = None  # used for reversal checks when implemented
     bos_event: str = ""  # one-candle event marker written by _write_df_row
-    trend_leg_id: int = 0
 
     # Range (active)
     range_active: bool = False
@@ -66,15 +69,6 @@ class MarketStructureState:
     # Breakout bookkeeping
     last_breakout_pat_apply_idx: Optional[int] = None  # j
     last_pullback_pat_apply_idx: Optional[int] = None
-
-    # False-break bookkeeping
-    false_break_active: bool = False
-    bos_floor_pre_false_break: Optional[float] = None
-    bos_floor_post_false_break: Optional[float] = None
-    reentered_pullback_after_false_break: bool = False
-
-    # BOS candidate tracking during pullback
-    bos_candidate: Optional[float] = None  # min(low) if struct_direction=+1, max(high) if struct_direction=-1
 
 
 # ---------------------------------------------------------------------
@@ -162,12 +156,13 @@ class MarketStructure:
                         self._set_state(MarketState.PULLBACK, i, meta={"reason": "pullback_apply_candle"})
                     else:
                         if self._expanded_pullback_side(i, prev_hi=prev_hi, prev_lo=prev_lo):
-                            if st.false_break_active:
-                                st.reentered_pullback_after_false_break = True
-                            st.bos_candidate = self._update_bos_candidate(i, st.bos_candidate)
                             self._set_state(MarketState.PULLBACK, i, meta={"reason": "replay_expand_pullback_side"})
                         else:
                             self._set_state(MarketState.PULLBACK_RANGE, i, meta={"reason": "replay_no_expand_pullback_side"})
+
+        # Option B: even when backfilling (freeze_range=True), CTS can update pre-confirm
+        # based on raw new extremes in struct_direction.
+        self._maybe_update_cts_pre_confirm(i, via="replay_raw")
 
         self._write_df_row(i)
 
@@ -255,17 +250,17 @@ class MarketStructure:
         ev_b = self._bp.detect_best_for_anchor(i, self.struct_direction, breakout_th)
 
         # Breakout Pattern Debugging Print
-        if i in (387, 388):
-            omo = self._bp.one_maru_opposite(i, self.struct_direction, breakout_th, do_confirm=False)
-            omc = self._bp.one_maru_continuous(i, self.struct_direction, breakout_th, do_confirm=False)
-            dm  = self._bp.double_maru(i, self.struct_direction, breakout_th, do_confirm=False)
-            print(f"[DBG] i={i} breakout_th={breakout_th} "
-                f"OMO={None if omo is None else omo.status} "
-                f"OMC={None if omc is None else omc.status} "
-                f"DM={None if dm is None else dm.status}")
-            if omc is not None:
-                print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
-                print(f"[DBG] candle+1 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
+        # if i in (387, 388):
+        #     omo = self._bp.one_maru_opposite(i, self.struct_direction, breakout_th, do_confirm=False)
+        #     omc = self._bp.one_maru_continuous(i, self.struct_direction, breakout_th, do_confirm=False)
+        #     dm  = self._bp.double_maru(i, self.struct_direction, breakout_th, do_confirm=False)
+        #     print(f"[DBG] i={i} breakout_th={breakout_th} "
+        #         f"OMO={None if omo is None else omo.status} "
+        #         f"OMC={None if omc is None else omc.status} "
+        #         f"DM={None if dm is None else dm.status}")
+        #     if omc is not None:
+        #         print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
+        #         print(f"[DBG] candle+1 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
 
         if ev_b is not None:
             apply_b = self._apply_idx(ev_b)
@@ -309,26 +304,30 @@ class MarketStructure:
     # Range candidate creation & activation
     # ----------------------------
 
-    def _is_range_candle_given_confirm(self, i: int | None) -> bool:
+    def _is_range_candle_given_confirm(self, i: int | None) -> tuple[bool, int | None]:
         """
         Range candle test for the *candidate start candle i*,
         using the same rule everywhere.
 
         Must have confirm_idx plus base range label from range_label.py, and then:
-          (pinbar and direction == struct_direction) OR (direction != struct_direction)
+        (pinbar and direction == struct_direction) OR (direction != struct_direction)
         """
+        if i is None:
+            return (False, None)
+
         base = int(self.df.iloc[i].get("is_range", 0)) == 1
         if not base:
             return (False, None)
 
-        confirm_idx = int(self.df.iloc[i].get("is_range_confirm_idx", 0)) > -1
-        if not confirm_idx:
+        confirm_idx = int(self.df.iloc[i].get("is_range_confirm_idx", -1))
+        if confirm_idx < 0:
             return (False, None)
 
         candle_i = str(self.df.iloc[i].get("candle_type", ""))
         dir_i = int(self.df.iloc[i].get("direction", 0))
 
-        return (((candle_i == "pinbar" and dir_i == self.struct_direction) or (dir_i != self.struct_direction)), confirm_idx)
+        qualifies = (candle_i == "pinbar" and dir_i == self.struct_direction) or (dir_i != self.struct_direction)
+        return (qualifies, confirm_idx)
 
     def _finalize_range_candidate_offline(self, i: int) -> None:
         st = self.state
@@ -400,11 +399,14 @@ class MarketStructure:
             )
 
             # CTS_UPDATED can happen while in range per your rule (only if in EST_OR_UPD track)
-            if st.cts is not None and st.cts_phase == "EST_OR_UPD":
-                cts_ext = self._cts_price_at(i)
-                if self._is_new_cts_extreme(cts_ext):
-                    self._emit_cts_updated(i, cts_ext, meta={"via": "range_expand"})
-                    st.cts = Point(idx=i, price=cts_ext)
+            # if st.cts is not None and st.cts_phase == "EST_OR_UPD":
+            #     cts_ext = self._cts_price_at(i)
+            #     if self._is_new_cts_extreme(cts_ext):
+            #         self._emit_cts_updated(i, cts_ext, meta={"via": "range_expand"})
+            #         st.cts = Point(idx=i, price=cts_ext)
+            
+        # keep thresholds aligned whenever range is active
+        self._sync_thresholds_from_range()
 
     def _deactivate_range(self, i: int, meta: Optional[dict] = None) -> None:
         st = self.state
@@ -485,6 +487,7 @@ class MarketStructure:
                     },
                 )
             )
+            self._sync_thresholds_from_range()
             return
 
         # Range exists: expand if needed (do NOT reset)
@@ -505,6 +508,7 @@ class MarketStructure:
                     meta={"reason": "pullback_expand", "hi": hi1, "lo": lo1, "pat": pullback_ev.name},
                 )
             )
+            self._sync_thresholds_from_range()
 
 
     # ----------------------------
@@ -536,43 +540,114 @@ class MarketStructure:
         if apply_idx is None:
             return
 
+        # if kind == "breakout":
+        #     # BOS confirmation (Part 2, Option B):
+        #     # Confirm BOS on the first breakout after CTS has been CONFIRMED (i.e., after a pullback pattern applied).
+        #     # BOS price is the pullback extreme between pullback apply and this breakout apply.
+        #     if st.cts_phase == "CONFIRMED" and st.last_pullback_pat_apply_idx is not None:
+        #         bos_price = self._select_bos_price_on_breakout(apply_idx)
+        #         self._emit_bos_confirmed(apply_idx, bos_price, meta={"via": ev.name, "pb_start": st.last_pullback_pat_apply_idx})
+
+        #         # reset pullback-cycle bookkeeping
+        #         st.bos_candidate = None
+        #         st.false_break_active = False
+        #         st.reentered_pullback_after_false_break = False
+        #         st.trend_leg_id += 1
+        #         st.last_pullback_pat_apply_idx = None
+
+
+        #     # Breakout breaks range (if active)
+        #     if st.range_active:
+        #         self._deactivate_range(apply_idx, meta={"reason": "range_breakout", "pat": ev.name})
+
+        #     # cts_price = self._cts_price_at(apply_idx)
+        #     # if st.state == MarketState.BREAKOUT:
+        #     #     self._emit_cts_updated(apply_idx, cts_price, meta={"via": ev.name})
+        #     # else:
+        #     #     self._emit_cts_established(apply_idx, cts_price, meta={"via": ev.name})
+
+        #     cts_idx, cts_price = self._cts_from_breakout_event(ev)
+
+        #     # emit CTS event using cts_idx/cts_price
+        #     if st.cts is not None:
+        #         self._emit_cts_updated(cts_idx, cts_price, meta={"via": ev.name})
+        #     else:
+        #         self._emit_cts_established(cts_idx, cts_price, meta={"via": ev.name})
+
+        #     st.cts = Point(idx=cts_idx, price=cts_price)
+        #     st.cts_phase = "EST_OR_UPD"
+        #     st.last_breakout_pat_apply_idx = apply_idx
+        #     self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
+        #     self._post_apply_range_check(apply_idx)
+        #     return
+
         if kind == "breakout":
-            # If BOS confirmation should occur here (Part 2)
-            if st.cts_phase == "CONFIRMED" and st.bos_candidate is not None:
-                bos_price = self._select_bos_price_on_breakout()
-                self._emit_bos_confirmed(apply_idx, bos_price, meta={"via": ev.name})
-
-                st.bos_candidate = None
-                st.false_break_active = False
-                st.reentered_pullback_after_false_break = False
-                st.trend_leg_id += 1
-
             # Breakout breaks range (if active)
             if st.range_active:
                 self._deactivate_range(apply_idx, meta={"reason": "range_breakout", "pat": ev.name})
 
-            # cts_price = self._cts_price_at(apply_idx)
-            # if st.state == MarketState.BREAKOUT:
-            #     self._emit_cts_updated(apply_idx, cts_price, meta={"via": ev.name})
-            # else:
-            #     self._emit_cts_established(apply_idx, cts_price, meta={"via": ev.name})
-
+            # CTS from breakout window extreme (already correct helper)
             cts_idx, cts_price = self._cts_from_breakout_event(ev)
 
-            # emit CTS event using cts_idx/cts_price
-            if st.cts is not None:
-                self._emit_cts_updated(cts_idx, cts_price, meta={"via": ev.name})
-            else:
+            # Establishing a NEW CTS cycle only if:
+            #   - CTS is None (first ever), OR
+            #   - previous CTS is CONFIRMED (i.e., we've seen at least one pullback since last CTS cycle start)
+            establishing_new_cycle = (st.cts is None) or (st.cts_phase == "CONFIRMED")
+
+            if establishing_new_cycle:
+                # advance CTS cycle id for the new CTS
+                st.cts_cycle_id += 1
                 self._emit_cts_established(cts_idx, cts_price, meta={"via": ev.name})
 
-            st.cts = Point(idx=cts_idx, price=cts_price)
+                # Create + confirm BOS simultaneously with CTS establishment
+                if st.cts_cycle_id == 1:
+                    # bos_price = self._initial_bos_before_first_cts(cts_idx)
+                    # self._emit_bos_confirmed(apply_idx, bos_price, meta={"source": "initial_prior_extreme"})
+                    bos_idx, bos_price = self._initial_bos_before_first_cts(cts_idx)
+                    self._emit_bos_confirmed(
+                        bos_idx,
+                        bos_price,
+                        meta={
+                            "source": "initial_prior_extreme",
+                            "confirmed_at": apply_idx,
+                            "pb_start": self.state.last_pullback_pat_apply_idx,
+                        },
+                    )
+                else:
+                    # BOS from pullback extreme (window-based)
+                    # Uses existing helper _select_bos_price_on_breakout which references last_pullback_pat_apply_idx
+                    # bos_price = self._select_bos_price_on_breakout(apply_idx)
+                    # self._emit_bos_confirmed(apply_idx, bos_price, meta={"source": "pullback_extreme", "pb_start": st.last_pullback_pat_apply_idx})
+                    bos_idx, bos_price = self._select_bos_on_breakout(apply_idx)
+                    self._emit_bos_confirmed(
+                        bos_idx,
+                        bos_price,
+                        meta={
+                            "source": "pullback_extreme",
+                            "confirmed_at": apply_idx,
+                            "pb_start": self.state.last_pullback_pat_apply_idx,
+                        },
+                    )
 
-            st.cts = Point(idx=apply_idx, price=cts_price)
+                # New cycle => reset CTS confirmation guard & threshold
+                st.cts_confirmed_for_idx = None
+                st.cts_threshold = None
+
+                # After consuming the pullback to create BOS for the new cycle, clear pullback anchor
+                st.last_pullback_pat_apply_idx = None
+            else:
+                # Not allowed to create a new CTS cycle yet => this breakout just updates CTS (pre-confirm)
+                self._emit_cts_updated(cts_idx, cts_price, meta={"via": ev.name})
+
+            # Update current CTS point (always)
+            st.cts = Point(idx=cts_idx, price=cts_price)
             st.cts_phase = "EST_OR_UPD"
             st.last_breakout_pat_apply_idx = apply_idx
+
             self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
             self._post_apply_range_check(apply_idx)
             return
+
 
         # pullback
         if kind == "pullback":
@@ -581,10 +656,16 @@ class MarketStructure:
 
             self._emit_cts_confirmed_once(apply_idx, meta={"via": ev.name})
             st.cts_phase = "CONFIRMED"
-            st.bos_candidate = self._init_bos_candidate(apply_idx)
+
+            # initialize thresholds to the confirmed CTS/BOS values at confirmation time
+            if st.cts is not None:
+                st.cts_threshold = float(st.cts.price)
+            if st.bos_confirmed is not None:
+                st.bos_threshold = float(st.bos_confirmed.price)
 
             st.last_pullback_pat_apply_idx = apply_idx
             self._set_state(MarketState.PULLBACK, apply_idx, meta={"reason": "pullback_pattern", "pat": ev.name})
+            self._sync_thresholds_from_range()
             return
 
     def _post_apply_range_check(self, i: int) -> None:
@@ -644,16 +725,122 @@ class MarketStructure:
         if self.struct_direction == 1:
             return new_price > float(st.cts.price)
         return new_price < float(st.cts.price)
+    
+    def _maybe_update_cts_pre_confirm(self, i: int, *, via: str = "raw") -> None:
+        """
+        Option B: Before the current CTS is confirmed (cts_phase != CONFIRMED),
+        update CTS whenever price makes a new extreme in struct_direction,
+        regardless of whether a breakout pattern fired.
+        """
+        st = self.state
+        if st.cts is None:
+            return
+        if st.cts_phase == "CONFIRMED":
+            return
+
+        if self.struct_direction == 1:
+            new_price = float(self.df.iloc[i]["h"])
+            if new_price > float(st.cts.price) + self.eps:
+                self._emit_cts_updated(i, new_price, meta={"via": via})
+                st.cts = Point(idx=i, price=new_price)
+        else:
+            new_price = float(self.df.iloc[i]["l"])
+            if new_price < float(st.cts.price) - self.eps:
+                self._emit_cts_updated(i, new_price, meta={"via": via})
+                st.cts = Point(idx=i, price=new_price)
+
+    # def _initial_bos_before_first_cts(self, cts_idx: int) -> float:
+    #     """
+    #     Cycle 1 BOS: extreme prior to the first CTS.
+    #       - Uptrend: min low in [0 .. cts_idx-1]
+    #       - Downtrend: max high in [0 .. cts_idx-1]
+    #     """
+    #     if cts_idx <= 0:
+    #         return float(self.df.iloc[0]["l"]) if self.struct_direction == 1 else float(self.df.iloc[0]["h"])
+
+    #     if self.struct_direction == 1:
+    #         return float(self.df.iloc[0:cts_idx]["l"].astype(float).min())
+    #     return float(self.df.iloc[0:cts_idx]["h"].astype(float).max())
+
+    def _initial_bos_before_first_cts(self, cts_idx: int) -> tuple[int, float]:
+        """
+        Cycle 1 BOS: extreme prior to the first CTS.
+        - Uptrend: min low in [0 .. cts_idx-1]
+        - Downtrend: max high in [0 .. cts_idx-1]
+        Returns (bos_idx, bos_price) where bos_idx is a *positional* index.
+        """
+        if cts_idx <= 0:
+            bos_idx = 0
+            bos_price = float(self.df.iloc[0]["l"]) if self.struct_direction == 1 else float(self.df.iloc[0]["h"])
+            return bos_idx, bos_price
+
+        window = self.df.iloc[0:cts_idx]
+
+        if self.struct_direction == 1:
+            series = window["l"].astype(float)
+            rel = int(series.values.argmin())   # position within window
+            bos_idx = rel                       # window starts at 0 => absolute position == rel
+            bos_price = float(series.values[rel])
+            return bos_idx, bos_price
+
+        else:
+            series = window["h"].astype(float)
+            rel = int(series.values.argmax())   # position within window
+            bos_idx = rel
+            bos_price = float(series.values[rel])
+            return bos_idx, bos_price
+
+    def _sync_thresholds_from_range(self) -> None:
+        """
+        Threshold behavior (your spec):
+          - cts_threshold mirrors the range breakout bound (range_hi for uptrend, range_lo for downtrend).
+          - bos_threshold expands using the *more extreme* of (current bos_threshold, pullback-side range bound).
+            * Uptrend: BOS is a low -> more extreme means lower -> compare against range_lo
+            * Downtrend: BOS is a high -> more extreme means higher -> compare against range_hi
+        """
+        st = self.state
+        if not st.range_active or st.range_hi is None or st.range_lo is None:
+            return
+
+        # mirror CTS threshold to range breakout bound
+        st.cts_threshold = float(st.range_hi) if self.struct_direction == 1 else float(st.range_lo)
+
+        # expand BOS threshold using pullback-side bound
+        if st.bos_threshold is None:
+            return
+        if self.struct_direction == 1:
+            st.bos_threshold = min(float(st.bos_threshold), float(st.range_lo))
+        else:
+            st.bos_threshold = max(float(st.bos_threshold), float(st.range_hi))
+
+
+    # def _emit_cts_established(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
+    #     self.events.append(
+    #         StructureEvent(idx=idx, category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=meta or {})
+    #     )
+    #     self.state.cts_event = "CTS_ESTABLISHED"  # written to df row via _write_df_row
 
     def _emit_cts_established(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
+        meta2 = dict(meta or {})
+        # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
+        meta2["cycle_id"] = int(self.state.cts_cycle_id)
         self.events.append(
-            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=meta or {})
+            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=meta2)
         )
-        self.state.cts_event = "CTS_ESTABLISHED"  # written to df row via _write_df_row
+        self.state.cts_event = "CTS_ESTABLISHED"
+
+    # def _emit_cts_updated(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
+    #     self.events.append(
+    #         StructureEvent(idx=idx, category="STRUCTURE", type="CTS_UPDATED", price=price, meta=meta or {})
+    #     )
+    #     self.state.cts_event = "CTS_UPDATED"
 
     def _emit_cts_updated(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
+        meta2 = dict(meta or {})
+        # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
+        meta2["cycle_id"] = int(self.state.cts_cycle_id)
         self.events.append(
-            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_UPDATED", price=price, meta=meta or {})
+            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_UPDATED", price=price, meta=meta2)
         )
         self.state.cts_event = "CTS_UPDATED"
 
@@ -663,53 +850,101 @@ class MarketStructure:
         cts_anchor = st.cts.idx if st.cts is not None else None
         if cts_anchor is not None and st.cts_confirmed_for_idx == cts_anchor:
             return
+        meta2 = dict(meta or {})
+        # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
+        meta2["cycle_id"] = int(self.state.cts_cycle_id)
         self.events.append(
-            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_CONFIRMED", price=None, meta=meta or {})
+            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_CONFIRMED", price=None, meta=meta2)
         )
         st.cts_confirmed_for_idx = cts_anchor
         st.cts_event = "CTS_CONFIRMED"
 
+    # def _emit_bos_confirmed(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
+    #     self.events.append(
+    #         StructureEvent(idx=idx, category="STRUCTURE", type="BOS_CONFIRMED", price=price, meta=meta or {})
+    #     )
+    #     self.state.bos_event = "BOS_CONFIRMED"
+    #     self.state.bos_confirmed = Point(idx=idx, price=float(price))
+    #     self.state.bos_threshold = float(price)
+
     def _emit_bos_confirmed(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
+        meta2 = dict(meta or {})
+        # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
+        meta2["cycle_id"] = int(self.state.cts_cycle_id)
         self.events.append(
-            StructureEvent(idx=idx, category="STRUCTURE", type="BOS_CONFIRMED", price=price, meta=meta or {})
+            StructureEvent(idx=idx, category="STRUCTURE", type="BOS_CONFIRMED", price=price, meta=meta2)
         )
         self.state.bos_event = "BOS_CONFIRMED"
         self.state.bos_confirmed = Point(idx=idx, price=float(price))
         self.state.bos_threshold = float(price)
 
-    def _init_bos_candidate(self, i: int) -> float:
-        # start tracking from current candle forward (cheap v1)
-        if self.struct_direction == 1:
-            return float(self.df.iloc[i]["l"])
-        return float(self.df.iloc[i]["h"])
+    # def _select_bos_price_on_breakout(self, breakout_apply_idx: int) -> float:
+    #     """
+    #     Part 2 (Option B): BOS price is computed at confirmation time as the pullback extreme
+    #     between the pullback apply candle and the breakout apply candle.
 
-    def _update_bos_candidate(self, i: int, cur: Optional[float]) -> float:
-        if self.struct_direction == 1:
-            val = float(self.df.iloc[i]["l"])
-            return val if cur is None else min(float(cur), val)
-        val = float(self.df.iloc[i]["h"])
-        return val if cur is None else max(float(cur), val)
+    #     - struct_direction == +1: BOS price = min(low) over [pb_start .. breakout_apply_idx]
+    #     - struct_direction == -1: BOS price = max(high) over [pb_start .. breakout_apply_idx]
 
-    def _select_bos_price_on_breakout(self) -> float:
+    #     Fallbacks (should be rare):
+    #     - Else fall back to range pullback bound if range is active
+    #     - Else fall back to current candle extreme
+    #     """
+    #     st = self.state
+
+    #     pb_start = st.last_pullback_pat_apply_idx
+    #     if pb_start is not None:
+    #         s = int(pb_start)
+    #         e = int(breakout_apply_idx)
+    #         if e < s:
+    #             s, e = e, s
+
+    #         if self.struct_direction == 1:
+    #             return float(self.df.iloc[s : e + 1]["l"].astype(float).min())
+    #         else:
+    #             return float(self.df.iloc[s : e + 1]["h"].astype(float).max())
+
+    #     # fallback 1: range pullback side
+    #     if st.range_active and st.range_lo is not None and st.range_hi is not None:
+    #         return float(st.range_lo) if self.struct_direction == 1 else float(st.range_hi)
+
+    #     # fallback 2: current candle extreme
+    #     if self.struct_direction == 1:
+    #         return float(self.df.iloc[breakout_apply_idx]["l"])
+    #     return float(self.df.iloc[breakout_apply_idx]["h"])
+
+    def _select_bos_on_breakout(self, breakout_apply_idx: int) -> tuple[int, float]:
         """
-        Implements your false-break BOS selection nuance (v1 subset).
-
-        For now (since we haven't implemented CTS_FALSE_BREAK_UPDATED fully yet),
-        we use the current tracked bos_candidate, else fallback to active range pullback bound.
+        Cycle k>1 BOS: pullback extreme between last pullback apply idx and this breakout apply idx.
+        Returns (bos_idx, bos_price).
         """
         st = self.state
-        if st.bos_candidate is not None:
-            return float(st.bos_candidate)
-        # fallback: use range pullback side
-        if st.range_active and st.range_lo is not None and st.range_hi is not None:
-            if self.struct_direction == 1:
-                return float(st.range_lo)
-            return float(st.range_hi)
-        # ultimate fallback: current candle extreme
+        pb_start = st.last_pullback_pat_apply_idx
+
+        # If we somehow don't have a pullback anchor, fall back to cycle-1 rule
+        if pb_start is None:
+            return self._initial_bos_before_first_cts(breakout_apply_idx)
+
+        s = int(pb_start)
+        e = int(breakout_apply_idx)
+        if e < s:
+            s, e = e, s
+
+        window = self.df.iloc[s : e + 1]
         if self.struct_direction == 1:
-            return float(self.df.iloc[-1]["l"])
-        return float(self.df.iloc[-1]["h"])
-    
+            series = window["l"].astype(float)
+            # bos idx in positional coordinates
+            rel = int(series.values.argmin())
+            bos_idx = s + rel
+            bos_price = float(series.min())
+            return bos_idx, bos_price
+        else:
+            series = window["h"].astype(float)
+            rel = int(series.values.argmax())
+            bos_idx = s + rel
+            bos_price = float(series.max())
+            return bos_idx, bos_price
+
     def _maybe_trigger_reversal(self, i: int) -> None:
         """
         Part 2 v1 reversal rule:
@@ -748,13 +983,8 @@ class MarketStructure:
     ) -> bool:
         st = self.state
 
-        # If no active range, use bos_candidate progression as proxy (unchanged)
         if not st.range_active or st.range_hi is None or st.range_lo is None:
-            if st.bos_candidate is None:
-                return True
-            if self.struct_direction == 1:
-                return float(self.df.iloc[i]["l"]) < float(st.bos_candidate)
-            return float(self.df.iloc[i]["h"]) > float(st.bos_candidate)
+            return False
 
         # ✅ Use previous bounds if provided, otherwise fall back to current
         hi = st.range_hi if prev_hi is None else prev_hi
@@ -814,13 +1044,18 @@ class MarketStructure:
             if c not in out.columns:
                 out[c] = 0 if c == "range_active" else -1
         # thresholds (derived, but nice for debugging)
-        for c in ("breakout_th", "pullback_th"):
+        for c in ("breakout_th", "pullback_th", "range_break_frac"):
             if c not in out.columns:
                 out[c] = float("nan")
         # CTS/BOS columns
         for c in ("cts_idx", "cts_price", "cts_event", "bos_idx", "bos_price", "bos_event"):
             if c not in out.columns:
                 out[c] = -1 if c.endswith("_idx") else ("" if c.endswith("_event") else float("nan"))
+        # Part 2 extras
+        for c in ("cts_cycle_id", "cts_threshold", "bos_threshold"):
+            if c not in out.columns:
+                out[c] = float("nan") if c.endswith("_threshold") else 0
+
 
         # last breakout pat idx
         if "last_breakout_pat_apply_idx" not in out.columns:
@@ -829,7 +1064,7 @@ class MarketStructure:
     def _write_df_row(self, i: int) -> None:
         st = self.state
         row = self.df.index[i]
-        prev_row = self.df.index[i-1]
+        prev_row = self.df.index[i - 1] if i > 0 else row
 
         self.df.at[row, "market_state"] = st.state.value
         self.df.at[row, "range_active"] = int(st.range_active)
@@ -848,6 +1083,9 @@ class MarketStructure:
         self.df.at[row, "cts_idx"] = int(st.cts.idx) if st.cts is not None else -1
         self.df.at[row, "cts_price"] = float(st.cts.price) if st.cts is not None else float("nan")
         self.df.at[row, "cts_event"] = st.cts_event
+        self.df.at[row, "cts_cycle_id"] = int(st.cts_cycle_id)
+        self.df.at[row, "cts_threshold"] = float(st.cts_threshold) if st.cts_threshold is not None else float("nan")
+        self.df.at[row, "bos_threshold"] = float(st.bos_threshold) if st.bos_threshold is not None else float("nan")
 
         self.df.at[row, "bos_idx"] = int(st.bos_confirmed.idx) if st.bos_confirmed is not None else -1
         self.df.at[row, "bos_price"] = float(st.bos_confirmed.price) if st.bos_confirmed is not None else float("nan")
