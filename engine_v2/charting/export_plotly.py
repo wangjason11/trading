@@ -352,15 +352,46 @@ def export_chart_plotly(
         )
 
     # -------------------------------------------------
-    # Week 5 Phase 1A: Market state change labels (bo/pb/pbr/rev)
+    # Week 5 Phase 1A: Breakout apply labels ("bo") from last_breakout_pat_apply_idx
+    # -------------------------------------------------
+    if state_cfg.get("labels", False) and "last_breakout_pat_apply_idx" in dfx.columns:
+        s = pd.to_numeric(dfx["last_breakout_pat_apply_idx"], errors="coerce")
+
+        # apply candle = index equals last_breakout_pat_apply_idx
+        mask = s.notna() & (s.astype(int) == dfx.index.to_numpy())
+        bo = dfx[mask].copy()
+
+        if not bo.empty:
+            # Same vertical logic as breakout used to have
+            y_bo = bo[COL_H].astype(float) + wick_offset.loc[bo.index].astype(float) * 2.0
+
+            fig.add_trace(
+                go.Scatter(
+                    x=bo[COL_TIME],
+                    y=y_bo,
+                    mode="text",
+                    text=["bo"] * len(bo),
+                    name="bo apply",
+                    textposition="middle center",
+                    showlegend=False,
+                    hovertemplate=(
+                        "idx=%{customdata[0]}<br>"
+                        "event=breakout_apply<extra></extra>"
+                    ),
+                    customdata=list(zip(bo.index.to_numpy(),)),
+                )
+            )
+
+    # -------------------------------------------------
+    # Week 5 Phase 1A: Market state change labels (bo/pb/pr/rv)
     # -------------------------------------------------
     if state_cfg.get("labels", False) and "market_state" in dfx.columns:
         # map to short labels
         label_map = {
-            "breakout": "bo",
+            # "breakout": "bo",
             "pullback": "pb",
-            "pullback_range": "pbr",
-            "reversal": "rev",
+            "pullback_range": "pr",
+            "reversal": "rv",
         }
 
         ms = dfx["market_state"].astype(str)
@@ -369,14 +400,34 @@ def export_chart_plotly(
         sub = dfx[changed].copy()
 
         if not sub.empty:
-            # choose y position: breakout above high, pullback/pbr below low, reversal based on candle dir fallback
+            # choose y position: breakout above high, pullback/pr below low, reversal based on candle dir fallback
             # (uses wick_offset already computed)
+
+            # def _label_y(row):
+            #     st = str(row["market_state"])
+            #     if st == "breakout":
+            #         return float(row[COL_H]) + float(wick_offset.loc[row.name])
+            #     if st in ("pullback", "pullback_range"):
+            #         return float(row[COL_L]) - float(wick_offset.loc[row.name])
+            #     # reversal: if we have pat_dir use that, else candle direction
+            #     dir_hint = None
+            #     if "pat_dir" in dfx.columns:
+            #         try:
+            #             dir_hint = int(row.get("pat_dir", 0))
+            #         except Exception:
+            #             dir_hint = 0
+            #     if not dir_hint and "direction" in dfx.columns:
+            #         try:
+            #             dir_hint = int(row.get("direction", 0))
+            #         except Exception:
+            #             dir_hint = 0
+            #     return (float(row[COL_H]) + float(wick_offset.loc[row.name])) if dir_hint >= 0 else (float(row[COL_L]) - float(wick_offset.loc[row.name]))
+
             def _label_y(row):
                 st = str(row["market_state"])
-                if st == "breakout":
-                    return float(row[COL_H]) + float(wick_offset.loc[row.name])
                 if st in ("pullback", "pullback_range"):
-                    return float(row[COL_L]) - float(wick_offset.loc[row.name])
+                    return float(row[COL_L]) - float(wick_offset.loc[row.name]) * 2.0
+
                 # reversal: if we have pat_dir use that, else candle direction
                 dir_hint = None
                 if "pat_dir" in dfx.columns:
@@ -389,7 +440,8 @@ def export_chart_plotly(
                         dir_hint = int(row.get("direction", 0))
                     except Exception:
                         dir_hint = 0
-                return (float(row[COL_H]) + float(wick_offset.loc[row.name])) if dir_hint >= 0 else (float(row[COL_L]) - float(wick_offset.loc[row.name]))
+
+                return (float(row[COL_H]) + float(wick_offset.loc[row.name])) * 2.0 if dir_hint >= 0 else (float(row[COL_L]) - float(wick_offset.loc[row.name])) * 2.0
 
             y = sub.apply(_label_y, axis=1)
             text = sub["market_state"].map(label_map).tolist()
@@ -477,7 +529,7 @@ def export_chart_plotly(
                         y0=y0,
                         y1=y1,
                         fillcolor="yellow",
-                        opacity=0.2,
+                        opacity=0.3,
                         line_width=0,
                         layer="below",
                     )
@@ -511,7 +563,7 @@ def export_chart_plotly(
                     y0=y0,
                     y1=y1,
                     fillcolor="yellow",
-                    opacity=0.2,
+                    opacity=0.3,
                     line_width=0,
                     layer="below",
                 )
@@ -696,7 +748,7 @@ def export_chart_plotly(
     if pd.isna(expected) or expected <= pd.Timedelta(0):
         expected = pd.Timedelta(minutes=15)
 
-    gap_mask = dt > (expected * 1.5)
+    gap_mask = dt > (expected *2.0)
 
     missing = []
     t_values = t.to_list()
