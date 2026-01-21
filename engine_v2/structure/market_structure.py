@@ -70,6 +70,24 @@ class MarketStructureState:
     last_breakout_pat_apply_idx: Optional[int] = None  # j
     last_pullback_pat_apply_idx: Optional[int] = None
 
+    # -------------------------------------------------
+    # Week 5 Part 3A: BOS barrier semantics + reversal watch
+    #
+    # Reversal watch starts ONLY when a candle CLOSE breaks bos_threshold.
+    # While active:
+    #   - bos_threshold MUST NOT update
+    #   - reversal candidates use reversal_bos_th_frozen (the barrier snapshot)
+    # If no valid reversal pattern appears within watch window:
+    #   - bos_threshold updates to the most extreme wick seen during watch
+    #   - watch clears
+    # -------------------------------------------------
+     
+    reversal_watch_active: bool = False
+    reversal_watch_start_idx: Optional[int] = None
+    reversal_bos_th_frozen: Optional[float] = None
+    reversal_watch_expires_idx: Optional[int] = None
+    reversal_watch_extreme: Optional[float] = None
+
 
 # ---------------------------------------------------------------------
 # Engine
@@ -164,7 +182,127 @@ class MarketStructure:
         # based on raw new extremes in struct_direction.
         self._maybe_update_cts_pre_confirm(i, via="replay_raw")
 
+        # -------------------------------------------------
+        # Week 5 Part 3A: BOS barrier semantics
+        # -------------------------------------------------
+        # NOTE:
+        # - "cross" = wick crosses barrier
+        # - "break" = close breaks barrier
+        # - probe (wick cross, no close break) updates bos_threshold
+        # - close break starts reversal watch and freezes barrier
+        self._bos_barrier_step(i)
+        self._maybe_expire_reversal_watch(i)
+
         self._write_df_row(i)
+
+    # ----------------------------
+    # Week 5 Part 3A: BOS barrier + reversal watch helpers
+    # ----------------------------
+
+    def _bos_barrier_step(self, i: int) -> None:
+        """
+        BOS barrier semantics for candle i.
+        Uptrend (struct_direction=+1):
+          - If close breaks below bos_th => start reversal watch (freeze bos at pre-candle value)
+          - Else if wick crosses below bos_th but close does NOT => bos_th := candle low
+        Downtrend symmetric:
+          - If close breaks above bos_th => start reversal watch
+          - Else if wick crosses above bos_th but close does NOT => bos_th := candle high
+        """
+        st = self.state
+        if st.bos_threshold is None:
+            return
+
+        # While reversal watch is active, bos_th must not update.
+        if st.reversal_watch_active:
+            self._track_reversal_watch_extreme(i)
+            return
+
+        bos = float(st.bos_threshold)
+        h = float(self.df.iloc[i]["h"])
+        l = float(self.df.iloc[i]["l"])
+        c = float(self.df.iloc[i]["c"])
+
+        if self.struct_direction == 1:
+            # Close-break => start watch; do NOT update bos_th on this candle
+            if c < bos:
+                self._start_reversal_watch(i, bos_frozen=bos)
+                return
+
+            # Wick-cross probe (no close-break) => update barrier to wick extreme
+            if l < bos and c >= bos:
+                st.bos_threshold = float(l)
+                return
+        else:
+            if c > bos:
+                self._start_reversal_watch(i, bos_frozen=bos)
+                return
+
+            if h > bos and c <= bos:
+                st.bos_threshold = float(h)
+                return
+
+
+    def _start_reversal_watch(self, i: int, *, bos_frozen: float) -> None:
+        st = self.state
+        if st.reversal_watch_active:
+            self._track_reversal_watch_extreme(i)
+            return
+
+        st.reversal_watch_active = True
+        st.reversal_watch_start_idx = int(i)
+        st.reversal_bos_th_frozen = float(bos_frozen)
+        st.reversal_watch_expires_idx = min(int(i) + int(self.range_max_k), len(self.df) - 1)
+
+        # seed extreme tracking using wick on the watch-start candle
+        st.reversal_watch_extreme = (
+            float(self.df.iloc[i]["l"]) if self.struct_direction == 1 else float(self.df.iloc[i]["h"])
+        )
+
+
+    def _track_reversal_watch_extreme(self, i: int) -> None:
+        st = self.state
+        if not st.reversal_watch_active:
+            return
+        if st.reversal_watch_extreme is None:
+            st.reversal_watch_extreme = (
+                float(self.df.iloc[i]["l"]) if self.struct_direction == 1 else float(self.df.iloc[i]["h"])
+            )
+            return
+
+        if self.struct_direction == 1:
+            st.reversal_watch_extreme = min(float(st.reversal_watch_extreme), float(self.df.iloc[i]["l"]))
+        else:
+            st.reversal_watch_extreme = max(float(st.reversal_watch_extreme), float(self.df.iloc[i]["h"]))
+
+
+    def _clear_reversal_watch(self) -> None:
+        st = self.state
+        st.reversal_watch_active = False
+        st.reversal_watch_start_idx = None
+        st.reversal_bos_th_frozen = None
+        st.reversal_watch_expires_idx = None
+        st.reversal_watch_extreme = None
+
+
+    def _maybe_expire_reversal_watch(self, i: int) -> None:
+        """
+        If reversal watch is active but no valid reversal pattern appears within the watch window,
+        then this was a "false break" by your definition: update bos_threshold to the most extreme wick
+        seen during watch, then clear the watch.
+        """
+        st = self.state
+        if not st.reversal_watch_active:
+            return
+        if st.reversal_watch_expires_idx is None:
+            return
+        if int(i) < int(st.reversal_watch_expires_idx):
+            return
+
+        # Expire: update bos barrier to extreme wick seen during watch
+        if st.reversal_watch_extreme is not None:
+            st.bos_threshold = float(st.reversal_watch_extreme)
+        self._clear_reversal_watch()
 
     # ----------------------------
 
@@ -193,7 +331,7 @@ class MarketStructure:
         )
 
         if winner is not None:
-            ev, apply_idx, kind = winner  # kind in {"breakout","pullback"}
+            ev, apply_idx, kind = winner  # kind in {"breakout","pullback", "reversal"}
 
             # Back-fill candles from anchor up to (but not including) apply candle.
             # Back-fill candles before the apply candle WITHOUT expanding range bounds.
@@ -292,11 +430,21 @@ class MarketStructure:
                 if apply_p is not None and apply_p <= D:
                     candidates.append((ev_p, apply_p, "pullback"))
 
+        # Reversal (ONLY when reversal watch is active; uses frozen BOS barrier)
+        if st.reversal_watch_active and st.reversal_bos_th_frozen is not None and st.state != MarketState.NONE:
+            ev_r = self._bp.detect_best_for_anchor(i, -self.struct_direction, float(st.reversal_bos_th_frozen))
+            if ev_r is not None:
+                apply_r = self._apply_idx(ev_r)
+                if apply_r is not None and apply_r <= D:
+                    candidates.append((ev_r, apply_r, "reversal"))
+
         if not candidates:
             return None
 
         # Choose earliest apply time; tie-breaker: breakout wins over pullback
-        candidates.sort(key=lambda x: (x[1], 0 if x[2] == "breakout" else 1))
+        # candidates.sort(key=lambda x: (x[1], 0 if x[2] == "breakout" else 1))
+        priority = {"reversal": 0, "breakout": 1, "pullback": 2}
+        candidates.sort(key=lambda x: (x[1], priority.get(x[2], 9)))
         return candidates[0]
 
 
@@ -538,6 +686,20 @@ class MarketStructure:
         # You can keep ONLY apply-candle ownership if desired.
         apply_idx = self._apply_idx(ev)
         if apply_idx is None:
+            return
+        
+        # Reversal is terminal
+        if kind == "reversal":
+            self._set_state(
+                MarketState.REVERSAL,
+                apply_idx,
+                meta={
+                    "reason": "reversal_pattern",
+                    "pat": ev.name,
+                    "bos_frozen": None if st.reversal_bos_th_frozen is None else float(st.reversal_bos_th_frozen),
+                },
+            )
+            self._clear_reversal_watch()
             return
 
         # if kind == "breakout":

@@ -129,7 +129,7 @@ class BreakoutPatterns:
             and (c2.c > max(c0.h, c1.h) if direction == 1 else c2.c < min(c0.l, c1.l))
         )
 
-        close_to_high = abs(c1.c - c0.h) <= 0.00010 if direction == 1 else abs(c1.c - c0.l) <= 0.00010
+        close_to_high = abs(c1.c - c0.h) <= 0.00015 if direction == 1 else abs(c1.c - c0.l) <= 0.00015
         cond2_valid = (
             c0.candle_type == "pinbar"
             and close_to_high
