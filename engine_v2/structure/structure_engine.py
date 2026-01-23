@@ -29,6 +29,7 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
     struct_direction = 1
 
     ms = MarketStructure(df, struct_direction=struct_direction)
+    ms.debug = True  # temp: enable reversal debug prints
     df2, ms_events, levels = ms.run()
 
     notes = f"MarketStructure v1: struct_direction={struct_direction}, events={len(ms_events)}, levels={len(levels)}"

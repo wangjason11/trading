@@ -78,15 +78,23 @@ class MarketStructureState:
     #   - bos_threshold MUST NOT update
     #   - reversal candidates use reversal_bos_th_frozen (the barrier snapshot)
     # If no valid reversal pattern appears within watch window:
-    #   - bos_threshold updates to the most extreme wick seen during watch
+    #   - bos_threshold updates to the ANCHOR candle wick (close-break candle)
     #   - watch clears
+    #   - execution rewinds to (anchor_idx + 1) to reprocess subsequent candles normally
     # -------------------------------------------------
      
     reversal_watch_active: bool = False
     reversal_watch_start_idx: Optional[int] = None
     reversal_bos_th_frozen: Optional[float] = None
     reversal_watch_expires_idx: Optional[int] = None
-    reversal_watch_extreme: Optional[float] = None
+
+    # Pending reversal (scheduled on BOS close-break anchor candle)
+    pending_reversal_ev: Optional[PatternEvent] = None
+    pending_reversal_anchor_idx: Optional[int] = None
+    pending_reversal_apply_idx: Optional[int] = None
+
+    jump_to_idx: Optional[int] = None   # next anchor override
+    jump_seed_state: Optional[dict] = None
 
 
 # ---------------------------------------------------------------------
@@ -106,12 +114,13 @@ class MarketStructure:
       - A candle also cannot become a range starter if it participated in the original pattern window excluding the last candle (e.g., continuous: start+middle; 2-candle patterns: first candle).
     """
 
-    def __init__(self, df: pd.DataFrame, struct_direction: int, *, eps: float = 0.0001, range_min_k: int = 2, range_max_k: int = 5):
+    def __init__(self,df: pd.DataFrame, struct_direction: int, *, eps: float = 0.0001, range_min_k: int = 2, range_max_k: int = 5, debug_invariants: bool = True):
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
         self.df = df.copy()
         self.struct_direction = struct_direction
         self.eps = float(eps)
+        self.debug_invariants = bool(debug_invariants)
 
         self.state = MarketStructureState(struct_direction=struct_direction)
         self.events: List[StructureEvent] = []
@@ -136,14 +145,105 @@ class MarketStructure:
         n = len(self.df)
         i = 0
         while i < n:
-            # Stop on reversal
             if self.state.state == MarketState.REVERSAL:
                 break
 
-            i = self._step_anchor(i)
+            next_i = self._step_anchor(i)
+            self._dbg(f"[POST_STEP] i={i} next_i={next_i} jump_to={self.state.jump_to_idx}")
+
+            # If reversal-watch expiry requested a rewind, honor it
+            if self.state.jump_to_idx is not None:
+                jump_to = int(self.state.jump_to_idx)
+                seed = self.state.jump_seed_state  # capture before rewind resets state
+
+                self._dbg(f"[REWIND] from={i} step_next={next_i} jump_to={jump_to}")
+
+                # Rebuild state up to jump_to - 1, then restore the post-expire seed snapshot
+                self._rewind_to(jump_to, seed=seed)
+
+                # clear jump request + seed after using
+                self.state.jump_to_idx = None
+                self.state.jump_seed_state = None
+
+                i = jump_to
+                continue
+
+            i = next_i
 
         levels = self._events_to_structure_levels()
+
+        # --- Terminal reversal stamping ---
+        # If a reversal was reached and we exited early, later rows were never updated.
+        # Stamp market_state forward so invariants and charts are consistent.
+        if "market_state" in self.df.columns:
+            rev_mask = self.df["market_state"].astype(str) == "reversal"
+            if rev_mask.any():
+                first_rev_idx = int(rev_mask.idxmax())
+                self.df.loc[first_rev_idx:, "market_state"] = "reversal"
+
+        if self.debug_invariants:
+            self._check_invariants_df()
+
         return self.df, self.events, levels
+
+    
+    def _rewind_to(self, jump_to: int, *, seed: Optional[dict] = None) -> None:
+        """
+        Rebuild state/events by replaying from the start up to (jump_to - 1),
+        then restore a provided seed snapshot (used for reversal-watch false-break rewinds).
+        """
+        jump_to = int(jump_to)
+        n = len(self.df)
+        if jump_to <= 0:
+            self.state = MarketStructureState(struct_direction=self.struct_direction)
+            self.events = []
+            return
+        if jump_to >= n:
+            jump_to = n - 1
+
+        # Reset state + events (df price/features stay; output cols will be overwritten as we replay)
+        self.state = MarketStructureState(struct_direction=self.struct_direction)
+        self.events = []
+
+        # Replay forward up to jump_to-1.
+        # IMPORTANT: ignore any jump_to_idx requests that occur during this rebuild.
+        self._in_rewind = True
+        try:
+            i = 0
+            while i < jump_to:
+                nxt = self._step_anchor(i)
+
+                # During rebuild, ignore any jump requests
+                if self.state.jump_to_idx is not None:
+                    self.state.jump_to_idx = None
+                if self.state.jump_seed_state is not None:
+                    self.state.jump_seed_state = None
+
+                i = nxt
+        finally:
+            self._in_rewind = False
+
+        # Restore seed snapshot (post-expire BOS/CTS/range state)
+        if seed is not None:
+            self.state.state = seed.get("market_state", self.state.state)
+            self.state.bos_threshold = seed.get("bos_threshold", self.state.bos_threshold)
+            self.state.cts_threshold = seed.get("cts_threshold", self.state.cts_threshold)
+
+            self.state.range_active = seed.get("range_active", self.state.range_active)
+            self.state.range_hi = seed.get("range_hi", self.state.range_hi)
+            self.state.range_lo = seed.get("range_lo", self.state.range_lo)
+            self.state.range_start_idx = seed.get("range_start_idx", self.state.range_start_idx)
+            self.state.range_confirm_idx = seed.get("range_confirm_idx", self.state.range_confirm_idx)
+
+        # CRITICAL: the replay-to-(jump_to-1) may have started a reversal watch (e.g. at 105)
+        # which must NOT remain active when resuming after an expiry-based rewind.
+        self._clear_pending_reversal()
+        self._clear_reversal_watch()
+
+        # Also ensure no jump is still requested from the rebuild itself
+        self.state.jump_to_idx = None
+        self.state.jump_seed_state = None
+
 
     # ----------------------------
     # Per-candle step
@@ -193,11 +293,24 @@ class MarketStructure:
         self._bos_barrier_step(i)
         self._maybe_expire_reversal_watch(i)
 
+        # NEW: if reversal applies on this candle, it's terminal
+        if self._maybe_apply_pending_reversal(i):
+            # write row after terminal apply state updates
+            self._write_df_row(i)
+            return
+
         self._write_df_row(i)
 
     # ----------------------------
     # Week 5 Part 3A: BOS barrier + reversal watch helpers
     # ----------------------------
+
+    def _close_breaks_bos(self, i: int, bos: float) -> bool:
+        c = float(self.df.iloc[i]["c"])
+        if self.struct_direction == 1:
+            return c < bos
+        else:
+            return c > bos
 
     def _bos_barrier_step(self, i: int) -> None:
         """
@@ -215,7 +328,6 @@ class MarketStructure:
 
         # While reversal watch is active, bos_th must not update.
         if st.reversal_watch_active:
-            self._track_reversal_watch_extreme(i)
             return
 
         bos = float(st.bos_threshold)
@@ -227,6 +339,12 @@ class MarketStructure:
             # Close-break => start watch; do NOT update bos_th on this candle
             if c < bos:
                 self._start_reversal_watch(i, bos_frozen=bos)
+
+                # NEW: schedule reversal detection on THIS candle as anchor
+                self._schedule_reversal_from_anchor(i, bos_frozen=bos)
+                self._dbg(
+                    f"[BOS_CLOSE_BREAK] i={i} close={c:.5f} bos_prev={bos:.5f} dir={self.struct_direction}"
+                )
                 return
 
             # Wick-cross probe (no close-break) => update barrier to wick extreme
@@ -236,6 +354,12 @@ class MarketStructure:
         else:
             if c > bos:
                 self._start_reversal_watch(i, bos_frozen=bos)
+
+                # NEW: schedule reversal detection on THIS candle as anchor
+                self._schedule_reversal_from_anchor(i, bos_frozen=bos)
+                self._dbg(
+                    f"[BOS_CLOSE_BREAK] i={i} close={c:.5f} bos_prev={bos:.5f} dir={self.struct_direction}"
+                )
                 return
 
             if h > bos and c <= bos:
@@ -246,34 +370,12 @@ class MarketStructure:
     def _start_reversal_watch(self, i: int, *, bos_frozen: float) -> None:
         st = self.state
         if st.reversal_watch_active:
-            self._track_reversal_watch_extreme(i)
             return
 
         st.reversal_watch_active = True
         st.reversal_watch_start_idx = int(i)
         st.reversal_bos_th_frozen = float(bos_frozen)
         st.reversal_watch_expires_idx = min(int(i) + int(self.range_max_k), len(self.df) - 1)
-
-        # seed extreme tracking using wick on the watch-start candle
-        st.reversal_watch_extreme = (
-            float(self.df.iloc[i]["l"]) if self.struct_direction == 1 else float(self.df.iloc[i]["h"])
-        )
-
-
-    def _track_reversal_watch_extreme(self, i: int) -> None:
-        st = self.state
-        if not st.reversal_watch_active:
-            return
-        if st.reversal_watch_extreme is None:
-            st.reversal_watch_extreme = (
-                float(self.df.iloc[i]["l"]) if self.struct_direction == 1 else float(self.df.iloc[i]["h"])
-            )
-            return
-
-        if self.struct_direction == 1:
-            st.reversal_watch_extreme = min(float(st.reversal_watch_extreme), float(self.df.iloc[i]["l"]))
-        else:
-            st.reversal_watch_extreme = max(float(st.reversal_watch_extreme), float(self.df.iloc[i]["h"]))
 
 
     def _clear_reversal_watch(self) -> None:
@@ -282,14 +384,13 @@ class MarketStructure:
         st.reversal_watch_start_idx = None
         st.reversal_bos_th_frozen = None
         st.reversal_watch_expires_idx = None
-        st.reversal_watch_extreme = None
-
 
     def _maybe_expire_reversal_watch(self, i: int) -> None:
         """
         If reversal watch is active but no valid reversal pattern appears within the watch window,
-        then this was a "false break" by your definition: update bos_threshold to the most extreme wick
-        seen during watch, then clear the watch.
+        then this was a "false break" by your definition: update bos_threshold the anchor candle wick, then clear the watch.
+
+        After expiry, we "rewind" execution to (anchor_idx + 1) so the next anchor starts there.
         """
         st = self.state
         if not st.reversal_watch_active:
@@ -299,10 +400,110 @@ class MarketStructure:
         if int(i) < int(st.reversal_watch_expires_idx):
             return
 
-        # Expire: update bos barrier to extreme wick seen during watch
-        if st.reversal_watch_extreme is not None:
-            st.bos_threshold = float(st.reversal_watch_extreme)
+        # Expire: failed reversal => bos_threshold expands to ANCHOR candle wick
+        anchor = st.reversal_watch_start_idx
+        if anchor is None:
+            # defensive: shouldn't happen, but don't crash
+            self._clear_pending_reversal()
+            self._clear_reversal_watch()
+            return
+
+        anchor = int(anchor)
+        if self.struct_direction == 1:
+            st.bos_threshold = float(self.df.iloc[anchor]["l"])
+        else:
+            st.bos_threshold = float(self.df.iloc[anchor]["h"])
+
+        # Rewind to anchor + 1 (do NOT jump to extremes)
+        jump_to = min(anchor + 1, len(self.df) - 1)
+        st.jump_to_idx = jump_to
+
+        # Seed snapshot: this is the state we want to be true when we resume at jump_to
+        # (because this BOS update is based on the full watch window lookahead).
+        st.jump_seed_state = {
+            "market_state": st.state,
+            "bos_threshold": st.bos_threshold,
+            "cts_threshold": st.cts_threshold,
+            "range_active": st.range_active,
+            "range_hi": st.range_hi,
+            "range_lo": st.range_lo,
+            "range_start_idx": st.range_start_idx,
+            "range_confirm_idx": st.range_confirm_idx,
+        }
+
+        self._dbg(
+            f"[RV_EXPIRE] i={i} expired_idx={st.reversal_watch_expires_idx} "
+            f"anchor={anchor} new_bos={st.bos_threshold} jump_to={jump_to} "
+            f"clearing_pending={st.pending_reversal_apply_idx is not None}"
+        )
+
+        # Pending reversal is no longer valid after watch expiry
+        self._clear_pending_reversal()
         self._clear_reversal_watch()
+
+    def _clear_pending_reversal(self) -> None:
+        st = self.state
+        st.pending_reversal_ev = None
+        st.pending_reversal_anchor_idx = None
+        st.pending_reversal_apply_idx = None
+
+    def _schedule_reversal_from_anchor(self, anchor_idx: int, *, bos_frozen: float) -> None:
+        """
+        Called ONLY when a candle CLOSE-breaks the previously established bos_threshold.
+        Schedules a reversal PatternEvent (if any) and its apply index.
+        """
+        st = self.state
+
+        # Do not schedule reversals in NONE regime
+        if st.state == MarketState.NONE:
+            return
+
+        ev_r = self._bp.detect_best_for_anchor(anchor_idx, -self.struct_direction, float(bos_frozen))
+        if ev_r is None:
+            return
+
+        apply_r = self._apply_idx(ev_r)
+        if apply_r is None:
+            return
+
+        # Only consider applies within the watch window (if defined)
+        if st.reversal_watch_expires_idx is not None and int(apply_r) > int(st.reversal_watch_expires_idx):
+            return
+
+        # Keep earliest scheduled reversal apply
+        if st.pending_reversal_apply_idx is None or int(apply_r) < int(st.pending_reversal_apply_idx):
+            st.pending_reversal_ev = ev_r
+            st.pending_reversal_anchor_idx = int(anchor_idx)
+            st.pending_reversal_apply_idx = int(apply_r)
+
+            pat = getattr(ev_r, "pat", None) or getattr(ev_r, "pattern", None) or "?"
+            self._dbg(
+                f"[RV_SCHEDULE] anchor={st.pending_reversal_anchor_idx} "
+                f"apply={st.pending_reversal_apply_idx} pat={pat} "
+                f"bos_frozen={bos_frozen:.5f} expires={st.reversal_watch_expires_idx}"
+            )
+
+    def _maybe_apply_pending_reversal(self, i: int) -> bool:
+        """
+        If a pending reversal is scheduled to apply on candle i, apply it (terminal).
+        Returns True if reversal was applied.
+        """
+        st = self.state
+        if st.pending_reversal_ev is None or st.pending_reversal_apply_idx is None:
+            return False
+        if int(i) != int(st.pending_reversal_apply_idx):
+            return False
+
+        pat = getattr(st.pending_reversal_ev, "pat", None) or getattr(st.pending_reversal_ev, "pattern", None) or "?"
+        self._dbg(
+            f"[RV_APPLY] i={i} anchor={st.pending_reversal_anchor_idx} "
+            f"apply={st.pending_reversal_apply_idx} pat={pat}"
+        )
+
+        # Terminal apply
+        self._apply_pattern_at_apply_idx(st.pending_reversal_ev, i, "reversal")
+        self._clear_pending_reversal()
+        return True
 
     # ----------------------------
 
@@ -352,7 +553,10 @@ class MarketStructure:
             # After a breakout, the next range candidate (if any) must begin at a later candle
             # (e.g. your example: breakout at 53, next range starts at 57), so we simply
             # continue sequentially from the next candle.
-            return apply_idx + 1
+            next_i = apply_idx + 1
+            if self.state.jump_to_idx is not None:
+                next_i = int(self.state.jump_to_idx)
+            return next_i
 
         # 2) No valid pattern by D:
         if allow_range and not st.range_active:
@@ -369,7 +573,10 @@ class MarketStructure:
         self._replay_step_no_patterns(i)
 
         # Next anchor always i+1 (the next candle after the candidate)
-        return i + 1
+        next_i = i + 1
+        if self.state.jump_to_idx is not None:
+            next_i = int(self.state.jump_to_idx)
+        return next_i
 
     def _best_bopb_pattern_at_anchor(
         self,
@@ -413,26 +620,38 @@ class MarketStructure:
             ev_p = self._bp.detect_best_for_anchor(i, -self.struct_direction, pullback_th)
 
             # Pullback Pattern Debugging Print
-            # if i in (169, 170):
-            #     omo = self._bp.one_maru_opposite(i, -self.struct_direction, pullback_th, do_confirm=False)
-            #     omc = self._bp.one_maru_continuous(i, -self.struct_direction, pullback_th, do_confirm=False)
-            #     dm  = self._bp.double_maru(i, -self.struct_direction, pullback_th, do_confirm=False)
-            #     print(f"[DBG] i={i} pullback_th={pullback_th} "
-            #         f"OMO={None if omo is None else omo.status} "
-            #         f"OMC={None if omc is None else omc.status} "
-            #         f"DM={None if dm is None else dm.status}")
-            #     if omc is not None:
-            #         print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
-            #         print(f"[DBG] candle+1 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
+            if i in (102, 103):
+                omo = self._bp.one_maru_opposite(i, -self.struct_direction, pullback_th, do_confirm=False)
+                omc = self._bp.one_maru_continuous(i, -self.struct_direction, pullback_th, do_confirm=False)
+                dm  = self._bp.double_maru(i, -self.struct_direction, pullback_th, do_confirm=False)
+                print(f"[DBG] i={i} pullback_th={pullback_th} "
+                    f"OMO={None if omo is None else omo.status} "
+                    f"OMC={None if omc is None else omc.status} "
+                    f"DM={None if dm is None else dm.status}")
+                if omc is not None:
+                    print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
+                    print(f"[DBG] candle+1 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
 
             if ev_p is not None:
                 apply_p = self._apply_idx(ev_p)
                 if apply_p is not None and apply_p <= D:
                     candidates.append((ev_p, apply_p, "pullback"))
 
-        # Reversal (ONLY when reversal watch is active; uses frozen BOS barrier)
+        # Reversal:
+        # - Primary mode: if reversal_watch_active, use frozen BOS barrier.
+        # - NEW: also allow reversal detection on the SAME candle that CLOSE-breaks the current bos_threshold
+        #        (even though the watch gets activated later in _bos_barrier_step during replay).
+        bos_frozen_for_anchor = None
+
         if st.reversal_watch_active and st.reversal_bos_th_frozen is not None and st.state != MarketState.NONE:
-            ev_r = self._bp.detect_best_for_anchor(i, -self.struct_direction, float(st.reversal_bos_th_frozen))
+            bos_frozen_for_anchor = float(st.reversal_bos_th_frozen)
+        elif (st.state != MarketState.NONE) and (st.bos_threshold is not None) and (not st.reversal_watch_active):
+            bos_cur = float(st.bos_threshold)
+            if self._close_breaks_bos(i, bos_cur):
+                bos_frozen_for_anchor = bos_cur  # snapshot pre-candle barrier (what watch will freeze)
+
+        if bos_frozen_for_anchor is not None:
+            ev_r = self._bp.detect_best_for_anchor(i, -self.struct_direction, bos_frozen_for_anchor)
             if ev_r is not None:
                 apply_r = self._apply_idx(ev_r)
                 if apply_r is not None and apply_r <= D:
@@ -956,9 +1175,10 @@ class MarketStructure:
         """
         Threshold behavior (your spec):
           - cts_threshold mirrors the range breakout bound (range_hi for uptrend, range_lo for downtrend).
-          - bos_threshold expands using the *more extreme* of (current bos_threshold, pullback-side range bound).
-            * Uptrend: BOS is a low -> more extreme means lower -> compare against range_lo
-            * Downtrend: BOS is a high -> more extreme means higher -> compare against range_hi
+        Part 3A update:
+        - DO NOT update bos_threshold here.
+          bos_threshold is a barrier managed by _bos_barrier_step() (probe vs close-break)
+          and by _maybe_expire_reversal_watch() (false-break resolution).
         """
         st = self.state
         if not st.range_active or st.range_hi is None or st.range_lo is None:
@@ -966,14 +1186,6 @@ class MarketStructure:
 
         # mirror CTS threshold to range breakout bound
         st.cts_threshold = float(st.range_hi) if self.struct_direction == 1 else float(st.range_lo)
-
-        # expand BOS threshold using pullback-side bound
-        if st.bos_threshold is None:
-            return
-        if self.struct_direction == 1:
-            st.bos_threshold = min(float(st.bos_threshold), float(st.range_lo))
-        else:
-            st.bos_threshold = max(float(st.bos_threshold), float(st.range_hi))
 
 
     # def _emit_cts_established(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
@@ -1217,11 +1429,25 @@ class MarketStructure:
         for c in ("cts_cycle_id", "cts_threshold", "bos_threshold"):
             if c not in out.columns:
                 out[c] = float("nan") if c.endswith("_threshold") else 0
-
-
+        # Part 3 (C): trend progression / cycle stage debug
+        for c in ("cycle_stage", "cts_phase_debug"):
+            if c not in out.columns:
+                out[c] = ""
+        # Part 3 (B/D): reversal watch debug columns (for chart + invariants)
+        for c in ("reversal_watch_active", "reversal_bos_th_frozen"):
+            if c not in out.columns:
+                if c == "reversal_watch_active":
+                    out[c] = 0
+                else:
+                    out[c] = float("nan")
+        # pending reversal columns
+        for c in ("pending_reversal_anchor_idx", "pending_reversal_apply_idx"):
+            if c not in out.columns:
+                out[c] = -1
         # last breakout pat idx
         if "last_breakout_pat_apply_idx" not in out.columns:
             out["last_breakout_pat_apply_idx"] = -1
+
 
     def _write_df_row(self, i: int) -> None:
         st = self.state
@@ -1248,6 +1474,32 @@ class MarketStructure:
         self.df.at[row, "cts_cycle_id"] = int(st.cts_cycle_id)
         self.df.at[row, "cts_threshold"] = float(st.cts_threshold) if st.cts_threshold is not None else float("nan")
         self.df.at[row, "bos_threshold"] = float(st.bos_threshold) if st.bos_threshold is not None else float("nan")
+
+        # Part 3 (B/D): reversal watch debug (for chart + invariants)
+        self.df.at[row, "reversal_watch_active"] = int(st.reversal_watch_active)
+        self.df.at[row, "reversal_bos_th_frozen"] = (
+            float(st.reversal_bos_th_frozen) if st.reversal_bos_th_frozen is not None else float("nan")
+        )
+
+        self.df.at[row, "pending_reversal_anchor_idx"] = (
+            int(st.pending_reversal_anchor_idx) if st.pending_reversal_anchor_idx is not None else -1
+        )
+        self.df.at[row, "pending_reversal_apply_idx"] = (
+            int(st.pending_reversal_apply_idx) if st.pending_reversal_apply_idx is not None else -1
+        )
+
+
+        # ----------------------------
+        # Part 3 (C): trend progression / cycle stage
+        # ----------------------------
+        self.df.at[row, "cts_phase_debug"] = str(st.cts_phase)
+
+        if st.cts is None:
+            self.df.at[row, "cycle_stage"] = "NONE"
+        else:
+            # If CTS is confirmed, we're in the "wait for next breakout" portion of the cycle.
+            # Otherwise, we're still in the "wait for pullback confirmation" portion.
+            self.df.at[row, "cycle_stage"] = "SEEK_BREAKOUT" if st.cts_phase == "CONFIRMED" else "SEEK_PULLBACK"
 
         self.df.at[row, "bos_idx"] = int(st.bos_confirmed.idx) if st.bos_confirmed is not None else -1
         self.df.at[row, "bos_price"] = float(st.bos_confirmed.price) if st.bos_confirmed is not None else float("nan")
@@ -1284,6 +1536,99 @@ class MarketStructure:
         # Clear one-candle event fields so they don't smear across rows
         st.cts_event = ""
         st.bos_event = ""
+
+    # ----------------------------
+    # Week 5 (B): Invariant checks (df-level, low-noise)
+    # ----------------------------
+
+    def _check_invariants_df(self) -> None:
+        df = self.df
+
+        def _isnan(x) -> bool:
+            try:
+                return pd.isna(x)
+            except Exception:
+                return x != x
+
+        # 1) Range bounds consistency when active
+        if all(c in df.columns for c in ("range_active", "range_lo", "range_hi")):
+            active = df["range_active"].astype(bool)
+            lo = df["range_lo"].astype(float)
+            hi = df["range_hi"].astype(float)
+
+            bad = active & (lo > hi)
+            if bad.any():
+                i = int(bad.idxmax())
+                raise AssertionError(f"[INV] range_lo > range_hi at idx={i}: lo={lo.loc[i]} hi={hi.loc[i]}")
+
+        # 2) CTS confirmed rows must be coherent
+        if all(c in df.columns for c in ("cts_event", "cts_phase_debug", "cycle_stage", "cts_idx", "cts_price")):
+            conf = df["cts_event"].astype(str) == "CTS_CONFIRMED"
+            if conf.any():
+                bad_phase = conf & (df["cts_phase_debug"].astype(str) != "CONFIRMED")
+                if bad_phase.any():
+                    i = int(bad_phase.idxmax())
+                    raise AssertionError(f"[INV] CTS_CONFIRMED but cts_phase_debug!=CONFIRMED at idx={i}")
+
+                bad_stage = conf & (df["cycle_stage"].astype(str) != "SEEK_BREAKOUT")
+                if bad_stage.any():
+                    i = int(bad_stage.idxmax())
+                    raise AssertionError(f"[INV] CTS_CONFIRMED but cycle_stage!=SEEK_BREAKOUT at idx={i}")
+
+                bad_idx = conf & (df["cts_idx"].astype(int) < 0)
+                if bad_idx.any():
+                    i = int(bad_idx.idxmax())
+                    raise AssertionError(f"[INV] CTS_CONFIRMED but cts_idx<0 at idx={i}")
+
+                bad_price = conf & df["cts_price"].apply(_isnan)
+                if bad_price.any():
+                    i = int(bad_price.idxmax())
+                    raise AssertionError(f"[INV] CTS_CONFIRMED but cts_price is NaN at idx={i}")
+
+        # 3) BOS confirmed rows must be coherent
+        if all(c in df.columns for c in ("bos_event", "bos_idx", "bos_price")):
+            conf = df["bos_event"].astype(str) == "BOS_CONFIRMED"
+            if conf.any():
+                bad_idx = conf & (df["bos_idx"].astype(int) < 0)
+                if bad_idx.any():
+                    i = int(bad_idx.idxmax())
+                    raise AssertionError(f"[INV] BOS_CONFIRMED but bos_idx<0 at idx={i}")
+
+                bad_price = conf & df["bos_price"].apply(_isnan)
+                if bad_price.any():
+                    i = int(bad_price.idxmax())
+                    raise AssertionError(f"[INV] BOS_CONFIRMED but bos_price is NaN at idx={i}")
+
+        # 4) Reversal watch: frozen must exist; bos_threshold must not change while active
+        if all(c in df.columns for c in ("reversal_watch_active", "reversal_bos_th_frozen", "bos_threshold")):
+            active = df["reversal_watch_active"].astype(bool)
+
+            if active.any():
+                bad_frozen = active & df["reversal_bos_th_frozen"].apply(_isnan)
+                if bad_frozen.any():
+                    i = int(bad_frozen.idxmax())
+                    raise AssertionError(f"[INV] reversal_watch_active but reversal_bos_th_frozen is NaN at idx={i}")
+
+                bos = df["bos_threshold"].astype(float)
+                bos_prev = bos.shift(1)
+                prev_active = active.shift(1).fillna(False).astype(bool)
+                active_b = active.astype(bool)
+                changed = active_b & prev_active & (bos != bos_prev)
+                if changed.any():
+                    i = int(changed.idxmax())
+                    raise AssertionError(
+                        f"[INV] bos_threshold changed during reversal watch at idx={i}: prev={bos_prev.loc[i]} now={bos.loc[i]}"
+                    )
+
+        # 5) Terminal reversal: once reversal appears, all later states must be reversal
+        if "market_state" in df.columns:
+            rev = df["market_state"].astype(str) == "reversal"
+            if rev.any():
+                first = int(rev.idxmax())
+                later_nonrev = df.loc[first:, "market_state"].astype(str) != "reversal"
+                if later_nonrev.any():
+                    i = int(later_nonrev.idxmax())
+                    raise AssertionError(f"[INV] market_state left reversal after idx={first}, non-reversal at idx={i}")
 
     # ----------------------------
     # Convert events -> StructureLevel (for downstream consumers like KL zones)
@@ -1324,3 +1669,11 @@ class MarketStructure:
                 )
 
         return levels
+
+    # ----------------------------
+    # Debug
+    # ----------------------------
+    def _dbg(self, msg: str) -> None:
+        # Print only when debug is enabled AND we're not inside a rewind rebuild
+        if bool(getattr(self, "debug", False)) and not bool(getattr(self, "_in_rewind", False)):
+            print(msg)

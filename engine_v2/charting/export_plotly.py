@@ -140,6 +140,20 @@ def export_chart_plotly(
         else pd.Series([float("nan")] * len(dfx), index=dfx.index)
     )
 
+    def _col_or_default(name, default):
+        return dfx[name] if name in dfx.columns else pd.Series([default] * len(dfx), index=dfx.index)
+
+    cycle_stage = _col_or_default("cycle_stage", "")
+    cts_phase_debug = _col_or_default("cts_phase_debug", "")
+    cts_cycle_id = _col_or_default("cts_cycle_id", 0).astype(int)
+
+    bos_th = _col_or_default("bos_threshold", float("nan")).astype(float)
+    cts_th = _col_or_default("cts_threshold", float("nan")).astype(float)
+
+    rv_watch = _col_or_default("reversal_watch_active", 0)
+    rv_bos_frozen = _col_or_default("reversal_bos_th_frozen", float("nan")).astype(float)
+    rv_extreme = _col_or_default("reversal_watch_extreme", float("nan")).astype(float)
+
     customdata = list(zip(
         candle_idx,
         dfx["mid_price"].astype(float),
@@ -148,7 +162,16 @@ def export_chart_plotly(
         dfx["body_len"].astype(float),
         dfx["candle_len"].astype(float),
         range_break_frac,
+        cts_cycle_id,
+        cts_phase_debug.astype(str),
+        cycle_stage.astype(str),
+        cts_th,
+        bos_th,
+        rv_watch,
+        rv_bos_frozen,
+        rv_extreme,
     ))
+
 
     fig.add_trace(
         go.Candlestick(
@@ -172,7 +195,15 @@ def export_chart_plotly(
                 "candle_len=%{customdata[5]:.5f}<br>"
                 "body_pct=%{customdata[2]:.2%}<br>"
                 "mid_price=%{customdata[1]:.5f}<br>"
-                "range_break_frac=%{customdata[6]:.2%}"
+                "range_break_frac=%{customdata[6]:.2%}<br>"
+                "cts_cycle_id=%{customdata[7]}<br>"
+                "cts_phase=%{customdata[8]}<br>"
+                "cycle_stage=%{customdata[9]}<br>"
+                "cts_th=%{customdata[10]:.5f}<br>"
+                "bos_th=%{customdata[11]:.5f}<br>"
+                "rv_watch=%{customdata[12]}<br>"
+                "rv_bos_frozen=%{customdata[13]:.5f}<br>"
+                "rv_extreme=%{customdata[14]:.5f}"
                 "<extra></extra>"
             ),
         )
@@ -441,7 +472,14 @@ def export_chart_plotly(
                     except Exception:
                         dir_hint = 0
 
-                return (float(row[COL_H]) + float(wick_offset.loc[row.name])) * 2.0 if dir_hint >= 0 else (float(row[COL_L]) - float(wick_offset.loc[row.name])) * 2.0
+                # old (bad): multiplies price by 2, blows up y-axis
+                # return (float(row[COL_H]) + float(wick_offset.loc[row.name])) * 2.0 if dir_hint >= 0 else (float(row[COL_L]) - float(wick_offset.loc[row.name])) * 2.0
+
+                # new (good): keep price scale, just offset
+                if dir_hint >= 0:
+                    return float(row[COL_H]) + float(wick_offset.loc[row.name]) * 3.0
+                else:
+                    return float(row[COL_L]) - float(wick_offset.loc[row.name]) * 3.0
 
             y = sub.apply(_label_y, axis=1)
             text = sub["market_state"].map(label_map).tolist()
@@ -666,27 +704,146 @@ def export_chart_plotly(
             )
 
 
-    # Structure levels overlays
-    levels = structure_levels or []
-    if struct_cfg.get("levels", False) and levels:
-        x0 = dfx[COL_TIME].iloc[0]
-        x1 = dfx[COL_TIME].iloc[-1]
+    # -------------------------------------------------
+    # Week 5: Structure overlays (confirmed BOS/CTS swing line)
+    # -------------------------------------------------
+    # Replace old "structure_levels horizontal lines" with:
+    # - dots at each CONFIRMED CTS and CONFIRMED BOS
+    # - straight lines connecting them in time order
+    # - final line from last confirmed point to last candle close
+    if struct_cfg.get("levels", False) and all(
+        c in dfx.columns for c in ["cts_event", "cts_idx", "cts_price", "bos_event", "bos_idx", "bos_price"]
+    ):
+        time_by_idx = {int(ii): tt for ii, tt in zip(dfx.index.to_numpy(), dfx[COL_TIME])}
 
-        xs, ys = [], []
-        for lv in levels[-200:]:
-            xs += [x0, x1, None]
-            y = float(lv.price)
-            ys += [y, y, None]
+        points = []  # (point_idx, time, price, kind)
+        # CTS confirmed => point is the CTS point (cts_idx/cts_price), not the confirmation candle time
+        cts_conf = dfx[dfx["cts_event"].astype(str) == "CTS_CONFIRMED"]
+        for _, r in cts_conf.iterrows():
+            p_idx = int(r["cts_idx"])
+            if p_idx in time_by_idx:
+                points.append((p_idx, time_by_idx[p_idx], float(r["cts_price"]), "CTS"))
 
-        fig.add_trace(
-            go.Scatter(
-                x=xs,
-                y=ys,
-                mode="lines",
-                name="BOS/CTS",
-                line=_style("structure.level").get("line", dict(width=1, dash="dot")),
+        # BOS confirmed => point is bos_idx/bos_price
+        bos_conf = dfx[dfx["bos_event"].astype(str) == "BOS_CONFIRMED"]
+        for _, r in bos_conf.iterrows():
+            p_idx = int(r["bos_idx"])
+            if p_idx in time_by_idx:
+                points.append((p_idx, time_by_idx[p_idx], float(r["bos_price"]), "BOS"))
+
+        # sort by point index (time order)
+        points.sort(key=lambda x: x[0])
+
+        if len(points) >= 1:
+            # Separate marker sets (optional styling distinction)
+            pts_cts = [p for p in points if p[3] == "CTS"]
+            pts_bos = [p for p in points if p[3] == "BOS"]
+
+            # Line: connect ALL points in order, plus final segment to last candle close
+            x_line = [p[1] for p in points] + [dfx[COL_TIME].iloc[-1]]
+            y_line = [p[2] for p in points] + [float(dfx[COL_C].iloc[-1])]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=x_line,
+                    y=y_line,
+                    mode="lines",
+                    name="Structure (CTS/BOS)",
+                    hoverinfo="skip",
+                    line_shape="linear",
+                    **_style("structure.swing_line"),   # <--- ADD HERE (polyline)
+                )
             )
-        )
+
+            # Markers: confirmed CTS points
+            if pts_cts:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[p[1] for p in pts_cts],
+                        y=[p[2] for p in pts_cts],
+                        mode="markers",
+                        name="CTS (confirmed)",
+                        customdata=[[p[0], p[3]] for p in pts_cts],
+                        hovertemplate="idx=%{customdata[0]}<br>kind=%{customdata[1]}<extra></extra>",
+                        **_style("structure.cts"),        # <--- ADD HERE (CTS dots)
+                    )
+                )
+
+            # Markers: confirmed BOS points
+            if pts_bos:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[p[1] for p in pts_bos],
+                        y=[p[2] for p in pts_bos],
+                        mode="markers",
+                        name="BOS (confirmed)",
+                        customdata=[[p[0], p[3]] for p in pts_bos],
+                        hovertemplate="idx=%{customdata[0]}<br>kind=%{customdata[1]}<extra></extra>",
+                        **_style("structure.bos"),        # <--- ADD HERE (BOS dots)
+                    )
+                )
+
+    # -------------------------------------------------
+    # Reversal watch overlay (frozen BOS barrier)
+    # -------------------------------------------------
+    if all(c in dfx.columns for c in ["reversal_watch_active", "reversal_bos_th_frozen"]):
+        watch_active = dfx["reversal_watch_active"].astype(bool)
+        prev_active = watch_active.shift(1, fill_value=False)
+        watch_y = dfx["reversal_bos_th_frozen"].where(watch_active, float("nan"))
+
+        # -------------------------------------------------
+        # Reversal candidate labels (rc)
+        # Label EVERY candle that closes beyond bos_threshold
+        # -------------------------------------------------
+        # Detect the bos threshold column name
+        bos_col = None
+        for c in ("bos_threshold", "bos_th"):
+            if c in dfx.columns:
+                bos_col = c
+                break
+
+        if bos_col is not None:
+            bos = dfx[bos_col].astype(float)
+            close = dfx[COL_C].astype(float)
+
+            # If struct_direction is available in function scope, use it.
+            # Otherwise fall back to +1 (your current runs are sd1).
+            sd = int(struct_direction) if "struct_direction" in locals() else 1
+
+            if sd == 1:
+                rc_mask = bos.notna() & (close <= bos)
+            else:
+                rc_mask = bos.notna() & (close >= bos)
+
+            rc = dfx[rc_mask].copy()
+            if not rc.empty:
+                # Put label slightly above/below candle so it doesn't collide with triangles
+                # (use wick_offset if you already computed it)
+                y = (rc[COL_L].astype(float) - wick_offset.loc[rc.index]) if sd == 1 else (rc[COL_H].astype(float) + wick_offset.loc[rc.index])
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=rc[COL_TIME],
+                        y=rc[COL_C].astype(float),   # X on the candidate candle
+                        mode="markers",
+                        name="reversal candidate",
+                        showlegend=True,
+                        hovertemplate=(
+                            "idx=%{customdata[0]}<br>"
+                            "event=reversal_candidate<br>"
+                            f"{bos_col}=%{{customdata[1]:.5f}}<br>"
+                            "close=%{customdata[2]:.5f}"
+                            "<extra></extra>"
+                        ),
+                        customdata=list(zip(
+                            rc.index.to_numpy(),
+                            rc[bos_col].astype(float),
+                            rc[COL_C].astype(float),
+                        )),
+                        **_style("structure.reversal_watch_start"),  # purple X (old formatting)
+                    )
+                )
+
 
     # Zones overlays
     zones = dfx.attrs.get("kl_zones", [])

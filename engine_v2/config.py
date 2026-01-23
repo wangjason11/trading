@@ -17,8 +17,38 @@ class ReplayConfig:
 # ---------------------------
 CONFIG = ReplayConfig(
     pair="NZD_USD",
-    timeframe="M15",
+    timeframe="H1",
     # Use UTC for deterministic replay.
-    start=datetime(2025, 11, 25, 12, 0, 0, tzinfo=timezone.utc),
-    end=datetime(2025, 12, 3, 23, 59, 59, tzinfo=timezone.utc),
+    start=datetime(2025, 12, 19, 0, 0, 0, tzinfo=timezone.utc),
+    end=datetime(2025, 12, 29, 23, 59, 59, tzinfo=timezone.utc),
+
+    # pair="NZD_USD",
+    # timeframe="M15",
+    # # Use UTC for deterministic replay.
+    # start=datetime(2025, 11, 25, 0, 0, 0, tzinfo=timezone.utc),
+    # end=datetime(2025, 12, 03, 23, 59, 59, tzinfo=timezone.utc),
+
+    # pair="NZD_USD",
+    # timeframe="H1",
+    # # Use UTC for deterministic replay.
+    # start=datetime(2025, 12, 19, 0, 0, 0, tzinfo=timezone.utc),
+    # end=datetime(2025, 12, 29, 23, 59, 59, tzinfo=timezone.utc),
+
+    # pair="NZD_USD",
+    # timeframe="H1",
+    # # Use UTC for deterministic replay.
+    # start=datetime(2025, 12, 19, 0, 0, 0, tzinfo=timezone.utc),
+    # end=datetime(2025, 12, 29, 23, 59, 59, tzinfo=timezone.utc),
+
+    # pair="NZD_USD",
+    # timeframe="H1",
+    # # Use UTC for deterministic replay.
+    # start=datetime(2025, 12, 19, 0, 0, 0, tzinfo=timezone.utc),
+    # end=datetime(2025, 12, 29, 23, 59, 59, tzinfo=timezone.utc),
+
+    # pair="NZD_USD",
+    # timeframe="H1",
+    # # Use UTC for deterministic replay.
+    # start=datetime(2025, 12, 19, 0, 0, 0, tzinfo=timezone.utc),
+    # end=datetime(2025, 12, 29, 23, 59, 59, tzinfo=timezone.utc),
 )

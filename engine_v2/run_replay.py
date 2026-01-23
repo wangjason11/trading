@@ -16,7 +16,7 @@ chart_cfg = {
     "range_visual": {"rectangles": True},
 
     # keep these off for now (declutter)
-    "structure": {"levels": False, "swings": False},
+    "structure": {"levels": True, "swings": False},
     "zones": {"KL": False, "OB": False},
 }
 

@@ -42,9 +42,25 @@ STYLE = {
 
     # Week 4 range candle markers
     "range.candle": {
-        "marker": {"size": 6, "symbol": "circle", "opacity": 0.9, "color": "orange"}
+        "marker": {"size": 3, "symbol": "circle", "opacity": 0.9, "color": "orange"}
     },
 
-    # structure
-    "structure.level": {"line": {"width": 1, "dash": "dot"}},
+    # Week 5: confirmed structure swing line + points
+    "structure.swing_line": {
+        "line": {"width": 2, "color": "black"},
+    },
+    "structure.cts": {
+        "marker": {"size": 3, "symbol": "circle", "opacity": 0.95, "color": "black"},
+    },
+    "structure.bos": {
+        "marker": {"size": 3, "symbol": "circle", "opacity": 0.95, "color": "black"},
+    },
+
+    # Week 5: reversal watch visuals
+    "structure.reversal_watch_line": {
+        "line": {"width": 2, "dash": "dot", "color": "purple"},
+    },
+    "structure.reversal_watch_start": {
+        "marker": {"size": 8, "symbol": "x", "opacity": 0.95, "color": "purple"},
+    },
 }
