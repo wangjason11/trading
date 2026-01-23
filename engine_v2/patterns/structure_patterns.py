@@ -105,64 +105,201 @@ class BreakoutPatterns:
                 confirmation_idx=conf_idx,
             )
         return event
+    
+    def _price_confirmation_1step(self, anchor_end_idx: int, direction: int, threshold: float) -> Tuple[bool, Optional[int]]:
+        """
+        Continuous-only confirmation:
+        - Look ahead exactly 1 candle (k = anchor_end_idx + 1)
+        - Candle must be normal/maru
+        - Candle direction must match `direction`
+        - Close must break beyond `threshold` in the direction
+        """
+        k = int(anchor_end_idx) + 1
+        if k >= len(self.df):
+            return False, None
+
+        fwd = self.df.iloc[k]
+        if int(fwd.direction) != int(direction):
+            return False, None
+        if str(fwd.candle_type) not in ["normal", "maru"]:
+            return False, None
+
+        c = float(fwd.c)
+        if direction == 1 and c >= float(threshold):
+            return True, k
+        if direction == -1 and c <= float(threshold):
+            return True, k
+        return False, None
+
 
     # ---------- patterns ----------
-    def continuous(self, idx: int, direction: int, break_threshold: Optional[float] = None) -> Optional[PatternEvent]:
+    def continuous(
+        self,
+        idx: int,
+        direction: int,
+        break_threshold: Optional[float] = None,
+        do_confirm: bool = True,
+    ) -> Optional[PatternEvent]:
         if idx + 2 >= len(self.df):
             return None
 
         df = self.df
         c0, c1, c2 = df.iloc[idx], df.iloc[idx + 1], df.iloc[idx + 2]
 
-        if not all(c.direction == direction for c in [c0, c1, c2]):
+        if not all(int(c.direction) == int(direction) for c in [c0, c1, c2]):
             return None
 
+        # Keep: only require the first candle to respect break_threshold
         if not self.check_break(c0, break_threshold, direction):
             return None
 
-        cond1_valid = (
+        # --- your "3 valid pattern shapes" (keep as the gate) ---
+        valid_pattern1 = (
             c0.candle_type in ["normal", "maru"]
             and c1.candle_type == "pinbar"
             and c2.candle_type == "maru"
-            and int(c0.is_big_normal_as0) == 1
-            and int(c2.is_big_normal_as2) == 1
-            and (c2.c > max(c0.h, c1.h) if direction == 1 else c2.c < min(c0.l, c1.l))
         )
 
-        close_to_high = abs(c1.c - c0.h) <= 0.00015 if direction == 1 else abs(c1.c - c0.l) <= 0.00015
-        cond2_valid = (
+        valid_pattern2 = (
             c0.candle_type == "pinbar"
-            and close_to_high
             and c2.candle_type == "maru"
-            and int(c0.is_big_normal_as0) == 1
-            and int(c2.is_big_normal_as2) == 1
-            and (c2.c > max(c0.h, c1.h) if direction == 1 else c2.c < min(c0.l, c1.l))
         )
 
-        cond3_valid = (
+        valid_pattern3 = (
             c0.candle_type == "normal"
             and c1.candle_type == "normal"
             and c2.candle_type == "maru"
-            and int(c0.is_big_normal_as0) == 1
-            and int(c1.is_big_normal_as1) == 1
-            and int(c2.is_big_normal_as2) == 1
-            and (c2.c > max(c0.h, c1.h) if direction == 1 else c2.c < min(c0.l, c1.l))
         )
 
-        if not (cond1_valid or cond2_valid or cond3_valid):
+        if not (valid_pattern1 or valid_pattern2 or valid_pattern3):
             return None
 
-        return PatternEvent(
-            name="continuous",
-            direction=direction,
-            start_idx=idx,
-            end_idx=idx + 2,
-            status=PatternStatus.SUCCESS,
-            confirmation_threshold=None,
-            confirmation_idx=None,
-            break_threshold_used=break_threshold,
-            debug={"variant": "cond1_valid" if cond1_valid else "cond2_valid" if cond2_valid else "cond3_valid"},
+        # --- compute the 3-candle extreme reached by the pattern ---
+        extreme = max(float(c0.h), float(c1.h), float(c2.h)) if direction == 1 else min(float(c0.l), float(c1.l), float(c2.l))
+
+        # ------------------------------------------------------------
+        # Variant 1 subconditions (3 conditions)
+        # ------------------------------------------------------------
+        v1_c0 = (c0.candle_type in ["normal", "maru"]) and (int(getattr(c0, "is_big_normal_as0", 0)) == 1)
+        v1_c1 = (c1.candle_type == "pinbar")
+        v1_c2 = (
+            (c2.candle_type == "maru")
+            and (int(getattr(c2, "is_big_normal_as2", 0)) == 1)
+            and (float(c2.c) > max(float(c0.h), float(c1.h)) if direction == 1 else float(c2.c) < min(float(c0.l), float(c1.l)))
         )
+
+        v1_sum = int(bool(v1_c0)) + int(bool(v1_c1)) + int(bool(v1_c2))
+        v1_success = (v1_sum == 3)
+        v1_need_confirm = (v1_sum == 2)
+
+        # ------------------------------------------------------------
+        # Variant 2 subconditions (3 conditions)
+        # ------------------------------------------------------------
+        close_to_ext = (
+            abs(float(c1.c) - float(c0.h)) <= 0.00015
+            if direction == 1
+            else abs(float(c1.c) - float(c0.l)) <= 0.00015
+        )
+        v2_c0 = (c0.candle_type == "pinbar") and (int(getattr(c0, "is_big_normal_as0", 0)) == 1)
+        v2_c1 = bool(close_to_ext)
+        v2_c2 = (
+            (c2.candle_type == "maru")
+            and (int(getattr(c2, "is_big_normal_as2", 0)) == 1)
+            and (float(c2.c) > max(float(c0.h), float(c1.h)) if direction == 1 else float(c2.c) < min(float(c0.l), float(c1.l)))
+        )
+
+        v2_sum = int(bool(v2_c0)) + int(bool(v2_c1)) + int(bool(v2_c2))
+        v2_success = (v2_sum == 3)
+        v2_need_confirm = (v2_sum == 2)
+
+        # ------------------------------------------------------------
+        # Variant 3 subconditions (3 conditions)
+        # NOTE: you reference is_big_normal_as1 in your file; keep it.
+        # ------------------------------------------------------------
+        v3_c0 = (c0.candle_type == "normal") and (int(getattr(c0, "is_big_normal_as0", 0)) == 1)
+        v3_c1 = (c1.candle_type == "normal") and (int(getattr(c1, "is_big_normal_as1", 0)) == 1)
+        v3_c2 = (
+            (c2.candle_type == "maru")
+            and (int(getattr(c2, "is_big_normal_as2", 0)) == 1)
+            and (float(c2.c) > max(float(c0.h), float(c1.h)) if direction == 1 else float(c2.c) < min(float(c0.l), float(c1.l)))
+        )
+
+        v3_sum = int(bool(v3_c0)) + int(bool(v3_c1)) + int(bool(v3_c2))
+        v3_success = (v3_sum == 3)
+        v3_need_confirm = (v3_sum == 2)
+
+        # --- Choose which variant we are firing (stable priority) ---
+        # If multiple could match (rare), we keep your existing implied ordering.
+        variant = None
+        if v1_success or v1_need_confirm:
+            variant = "pattern1"
+            success = v1_success
+            need_confirm = v1_need_confirm
+            conds = {"c0": v1_c0, "c1": v1_c1, "c2": v1_c2}
+        elif v2_success or v2_need_confirm:
+            variant = "pattern2"
+            success = v2_success
+            need_confirm = v2_need_confirm
+            conds = {"c0": v2_c0, "c1": v2_c1, "c2": v2_c2}
+        elif v3_success or v3_need_confirm:
+            variant = "pattern3"
+            success = v3_success
+            need_confirm = v3_need_confirm
+            conds = {"c0": v3_c0, "c1": v3_c1, "c2": v3_c2}
+        else:
+            return None
+
+        # --- SUCCESS (no confirm needed) ---
+        if success:
+            return PatternEvent(
+                name="continuous",
+                direction=direction,
+                start_idx=idx,
+                end_idx=idx + 2,
+                status=PatternStatus.SUCCESS,
+                confirmation_threshold=None,
+                confirmation_idx=None,
+                break_threshold_used=break_threshold,
+                debug={
+                    "variant": variant,
+                    "conds": {k: bool(v) for k, v in conds.items()},
+                    "extreme": float(extreme),
+                },
+            )
+
+        # --- FAIL_NEEDS_CONFIRM (exactly 2/3 conditions true) ---
+        if need_confirm:
+            ev = PatternEvent(
+                name="continuous",
+                direction=direction,
+                start_idx=idx,
+                end_idx=idx + 2,
+                status=PatternStatus.FAIL_NEEDS_CONFIRM,
+                confirmation_threshold=float(extreme),
+                confirmation_idx=None,
+                break_threshold_used=break_threshold,
+                debug={
+                    "variant": variant,
+                    "conds": {k: bool(v) for k, v in conds.items()},
+                    "extreme": float(extreme),
+                },
+            )
+
+            if not do_confirm:
+                return ev
+
+            ok, conf_idx = self._price_confirmation_1step(
+                anchor_end_idx=ev.end_idx,
+                direction=ev.direction,
+                threshold=float(ev.confirmation_threshold),
+            )
+            if ok and conf_idx is not None:
+                return replace(ev, status=PatternStatus.CONFIRMED, confirmation_idx=int(conf_idx))
+
+            return ev
+
+        return None
+
 
     def double_maru(
         self,
@@ -397,12 +534,24 @@ class BreakoutPatterns:
                 return ev
 
         # Pass A2: 3-candle pattern (only after no 2-candle SUCCESS)
-        cont = self.continuous(idx, direction, break_threshold)
+        cont = self.continuous(idx, direction, break_threshold, do_confirm=False)
         if cont is not None and cont.status == PatternStatus.SUCCESS:
             return cont
 
         # Pass B: confirmations (only if nothing succeeded)
         confirmed = []
+
+        # NEW: continuous confirm (1-step)
+        if cont is not None and cont.status == PatternStatus.FAIL_NEEDS_CONFIRM:
+            ok, conf_idx = self._price_confirmation_1step(
+                anchor_end_idx=cont.end_idx,
+                direction=cont.direction,
+                threshold=float(cont.confirmation_threshold),
+            )
+            if ok and conf_idx is not None:
+                confirmed.append(replace(cont, status=PatternStatus.CONFIRMED, confirmation_idx=int(conf_idx)))
+
+        # existing 2-candle confirmations...
         for ev in (dm, omc, omo):
             if ev is None:
                 continue
@@ -433,15 +582,14 @@ class BreakoutPatterns:
             2) one_maru_opposite (SUCCESS)
             3) one_maru_continuous (SUCCESS)
             4) double_maru (SUCCESS)
-            5) confirmations (for 2-candle patterns), in the same priority order
+            5) confirmations (for 2-candle and 3-candle patterns), in the same priority order
         Notes:
-          - Price confirmation is only for 2-candle patterns.
           - Confirmation lookahead max is 4 candles AFTER end_idx, so latest confirmation is idx+5.
           - continuous has precedence even though it needs idx+2.
         """
 
         # 1) Highest priority: continuous
-        cont = self.continuous(idx, direction, break_threshold)
+        cont = self.continuous(idx, direction, break_threshold, do_confirm=False)
         if cont is not None and cont.status == PatternStatus.SUCCESS:
             return cont
 
@@ -457,6 +605,18 @@ class BreakoutPatterns:
 
         # 4) Confirmations LAST (priority order)
         confirmed: List[PatternEvent] = []
+
+        # NEW: continuous confirmation (priority first in confirm stage)
+        if cont is not None and cont.status == PatternStatus.FAIL_NEEDS_CONFIRM and cont.confirmation_threshold is not None:
+            ok, conf_idx = self._price_confirmation_1step(
+                anchor_end_idx=cont.end_idx,
+                direction=cont.direction,
+                threshold=float(cont.confirmation_threshold),
+            )
+            if ok and conf_idx is not None:
+                confirmed.append(replace(cont, status=PatternStatus.CONFIRMED, confirmation_idx=int(conf_idx)))
+
+        # existing 2-candle confirmations...
         for ev in (omo, omc, dm):
             if ev is None:
                 continue
