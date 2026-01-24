@@ -123,10 +123,10 @@ class ChartRect(TypedDict, total=False):
 class KLZone:
     start_time: "pd.Timestamp"
     end_time: Optional["pd.Timestamp"]  # None = extends to end of chart
-    side: str  # "buy" or "sell"
+    side: Literal["buy", "sell"]
     top: float
     bottom: float
-    source_kind: str  # "BOS" or "CTS"
+    source_kind: Literal["BOS", "CTS"]
     source_time: "pd.Timestamp"
     source_price: float
     strength: float = 0.0
