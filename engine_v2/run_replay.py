@@ -17,7 +17,7 @@ chart_cfg = {
 
     # keep these off for now (declutter)
     "structure": {"levels": True, "swings": False},
-    "zones": {"KL": False, "OB": False},
+    "zones": {"KL": True, "OB": False},
 }
 
 

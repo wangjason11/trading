@@ -256,6 +256,29 @@ def zone_thresholds(
 # Public API: derive zones from structure events
 # -------------------------
 
+"""
+Zone Semantics (canonical)
+
+Identifiers
+- structure_id: market structure unit id (directional regime). Starts at 0. Increments on reversal.
+- cts_cycle_id: internal CTS/BOS cycle id within a structure. Starts at 0.
+
+StructureEvent indexing
+- ev.idx: the *level index* (where the BOS/CTS level is anchored; often an earlier extreme).
+- ev.meta["confirmed_at"]: the candle index where that level was confirmed (breakout/pullback timing).
+
+Zone indexing
+- meta["base_idx"]: anchor candle of the zone base pattern (where rectangle begins).
+- meta["source_event_idx"]: the StructureEvent level index used to derive the zone (ev.idx).
+- meta["confirmed_idx"]: the candle index where the zone becomes confirmed for charting:
+    - BOS-derived zones: confirmed_idx = ev.meta["confirmed_at"] (breakout candle)
+    - CTS-derived zones: confirmed_idx = ev.idx (pullback candle)
+
+Chart rules
+- Show zones for the most recent structure_id.
+- Within that structure, the most recent buy and sell zones have higher opacity (active=True).
+"""
+
 def derive_kl_zones_v1(
     df: pd.DataFrame,
     events: List[StructureEvent],
@@ -280,6 +303,29 @@ def derive_kl_zones_v1(
 
     sd = int(struct_direction)
 
+    # Debugging
+    print("[kl_zones][events] BOS_CONFIRMED:", [
+        (int(ev.idx), ev.meta.get("structure_id"), ev.meta.get("cycle_id"), ev.meta.get("bos_prev"))
+        for ev in events if ev.type == "BOS_CONFIRMED"
+    ])
+    print("[kl_zones][events] CTS_ESTABLISHED:", [
+        (int(ev.idx), ev.meta.get("structure_id"), ev.meta.get("cycle_id"))
+        for ev in events if ev.type == "CTS_ESTABLISHED"
+    ])
+    print("[kl_zones][events] CTS_CONFIRMED:", [
+        (int(ev.idx), ev.meta.get("structure_id"), ev.meta.get("cycle_id"))
+        for ev in events if ev.type == "CTS_CONFIRMED"
+    ])
+
+    print("[kl_zones][events] BOS_CONFIRMED:", [
+        (int(ev.idx),
+        (ev.meta or {}).get("confirmed_at"),
+        (ev.meta or {}).get("structure_id"),
+        (ev.meta or {}).get("cycle_id"),
+        (ev.meta or {}).get("source"))
+        for ev in events if ev.type == "BOS_CONFIRMED"
+    ])
+
     # convenience
     def _time(i: int):
         return pd.to_datetime(dfx.loc[i, "time"], utc=True)
@@ -291,11 +337,24 @@ def derive_kl_zones_v1(
         if ev.type not in ("BOS_CONFIRMED", "CTS_CONFIRMED"):
             continue
 
-        confirmed_idx = int(ev.idx)
+        # Event idx is the BOS/CTS LEVEL index; confirmed_at is the candle that CONFIRMED it.
+        source_event_idx = int(ev.idx)
+        confirmed_idx = int((ev.meta or {}).get("confirmed_at", source_event_idx))
         bos = (ev.type == "BOS_CONFIRMED")
 
-        base_idx, pat = resolve_base_idx_and_pattern(dfx, confirmed_idx, sd, bos=bos)
+        # ✅ base-resolution anchor differs by event type
+        if bos:
+            base_source_idx = source_event_idx
+        else:
+            base_source_idx = int((ev.meta or {}).get("cts_anchor_idx", source_event_idx))
+
+        base_idx, pat = resolve_base_idx_and_pattern(dfx, base_source_idx, sd, bos=bos)
         outer, inner = zone_thresholds(dfx, base_idx, sd, pat, bos=bos)
+
+        # Resolve structure_id (authoritative = event meta, fallback = df)
+        sid = int((ev.meta or {}).get("structure_id", -1))
+        if sid < 0 and "structure_id" in dfx.columns:
+            sid = int(dfx.loc[confirmed_idx, "structure_id"])
 
         # Side mapping (locked)
         if sd == 1:
@@ -317,28 +376,76 @@ def derive_kl_zones_v1(
             source_price=float(ev.price) if ev.price is not None else float("nan"),
             strength=0.0,
             meta={
+                "structure_id": sid,
                 "cycle_id": _cycle_id(confirmed_idx),
-                "confirmed_idx": confirmed_idx,
+
+                # Zone confirmation semantics
+                "confirmed_idx": confirmed_idx,          # breakout / pullback candle
+                "source_event_idx": source_event_idx,    # BOS/CTS level candle
+
+                # Zone base
+                "base_source_idx": base_source_idx,
                 "base_idx": base_idx,
                 "base_pattern": pat,
                 "outer": float(outer),
                 "inner": float(inner),
-                "active": True,  # updated below
+
+                "active": True,
             },
         )
 
         # Enforce 1 active per side: deactivate previous active of same side
+        deactivate_time = _time(confirmed_idx)  # zone becomes inactive when the NEW zone confirms
+
         if side == "buy":
             if active_buy_idx is not None:
                 prev = zones[active_buy_idx]
-                zones[active_buy_idx] = replace(prev, meta={**prev.meta, "active": False})
+                zones[active_buy_idx] = replace(
+                    prev,
+                    end_time=deactivate_time,
+                    meta={**prev.meta, "active": False},
+                )
             active_buy_idx = len(zones)
         else:
             if active_sell_idx is not None:
                 prev = zones[active_sell_idx]
-                zones[active_sell_idx] = replace(prev, meta={**prev.meta, "active": False})
+                zones[active_sell_idx] = replace(
+                    prev,
+                    end_time=deactivate_time,
+                    meta={**prev.meta, "active": False},
+                )
             active_sell_idx = len(zones)
 
         zones.append(z)
+
+    # --- Terminal structure end: if reversal occurs, end any still-active zones at the reversal candle ---
+    # if "market_state" in dfx.columns and "structure_id" in dfx.columns:
+    #     # Find first reversal candle for each structure_id present in the dataframe
+    #     rev_mask = (dfx["market_state"].astype(str) == "reversal")
+    #     if rev_mask.any():
+    #         # We only care about ending zones for the structure(s) that actually reversed in this df
+    #         # Compute first reversal idx per structure_id
+    #         rev_df = dfx.loc[rev_mask, ["structure_id"]].copy()
+    #         rev_df["idx"] = rev_df.index.astype(int)
+    #         first_rev_by_sid = rev_df.groupby("structure_id")["idx"].min().to_dict()
+
+    #         # Force-close any zones still active in those structures
+    #         for zi, z in enumerate(zones):
+    #             sid = (z.meta or {}).get("structure_id", None)
+    #             if sid is None:
+    #                 continue
+    #             if sid not in first_rev_by_sid:
+    #                 continue
+    #             if z.end_time is not None:
+    #                 continue
+
+    #             rev_idx = int(first_rev_by_sid[sid])
+    #             rev_time = _time(rev_idx)
+
+    #             zones[zi] = replace(
+    #                 z,
+    #                 end_time=rev_time,
+    #                 meta={**z.meta, "active": False, "ended_reason": "reversal", "ended_idx": rev_idx},
+    #             )
 
     return zones

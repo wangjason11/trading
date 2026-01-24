@@ -40,7 +40,9 @@ class StructureEvent:
 
 @dataclass
 class MarketStructureState:
+    # Structure unit id (increments on reversal)
     struct_direction: int # structure direction or starting_direction
+    structure_id: int = 0
     state: MarketState = MarketState.NONE
     prev_state: MarketState = MarketState.NONE
 
@@ -122,7 +124,7 @@ class MarketStructure:
         self.eps = float(eps)
         self.debug_invariants = bool(debug_invariants)
 
-        self.state = MarketStructureState(struct_direction=struct_direction)
+        self.state = MarketStructureState(struct_direction=struct_direction, structure_id=0)
         self.events: List[StructureEvent] = []
 
         # Pattern detector (uses df feature columns)
@@ -1198,6 +1200,8 @@ class MarketStructure:
         meta2 = dict(meta or {})
         # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
+        meta2["structure_id"] = int(self.state.structure_id)
+        meta2["struct_direction"] = int(self.state.struct_direction)
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=meta2)
         )
@@ -1213,6 +1217,8 @@ class MarketStructure:
         meta2 = dict(meta or {})
         # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
+        meta2["structure_id"] = int(self.state.structure_id)
+        meta2["struct_direction"] = int(self.state.struct_direction)
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_UPDATED", price=price, meta=meta2)
         )
@@ -1220,13 +1226,19 @@ class MarketStructure:
 
     def _emit_cts_confirmed_once(self, idx: int, meta: Optional[dict] = None) -> None:
         st = self.state
-        # confirm only once per CTS anchor idx
         cts_anchor = st.cts.idx if st.cts is not None else None
         if cts_anchor is not None and st.cts_confirmed_for_idx == cts_anchor:
             return
+
         meta2 = dict(meta or {})
-        # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
+        meta2["structure_id"] = int(self.state.structure_id)
+        meta2["struct_direction"] = int(self.state.struct_direction)
+
+        # ✅ add these
+        meta2["confirmed_at"] = int(idx)                 # pullback candle (confirmation candle)
+        meta2["cts_anchor_idx"] = int(cts_anchor) if cts_anchor is not None else None  # CTS being confirmed
+
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_CONFIRMED", price=None, meta=meta2)
         )
@@ -1245,6 +1257,8 @@ class MarketStructure:
         meta2 = dict(meta or {})
         # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
+        meta2["structure_id"] = int(self.state.structure_id)
+        meta2["struct_direction"] = int(self.state.struct_direction)
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="BOS_CONFIRMED", price=price, meta=meta2)
         )
@@ -1444,6 +1458,13 @@ class MarketStructure:
         for c in ("pending_reversal_anchor_idx", "pending_reversal_apply_idx"):
             if c not in out.columns:
                 out[c] = -1
+        # structure
+        for c in ("structure_id", "struct_direction"):
+            if c not in out.columns:
+                if c == "structure_id":
+                    out[c] = -1
+                else:
+                    out[c] = 0
         # last breakout pat idx
         if "last_breakout_pat_apply_idx" not in out.columns:
             out["last_breakout_pat_apply_idx"] = -1
@@ -1536,6 +1557,11 @@ class MarketStructure:
         # Clear one-candle event fields so they don't smear across rows
         st.cts_event = ""
         st.bos_event = ""
+    
+        # Structure ID + direction
+        self.df.at[row, "structure_id"] = int(st.structure_id)
+        self.df.at[row, "struct_direction"] = int(st.struct_direction)
+
 
     # ----------------------------
     # Week 5 (B): Invariant checks (df-level, low-noise)

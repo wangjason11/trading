@@ -45,6 +45,14 @@ STYLE = {
         "marker": {"size": 3, "symbol": "circle", "opacity": 0.9, "color": "orange"}
     },
 
+    # Week 5: range rectangles (shape styling)
+    "range.rect": {
+        "fillcolor": "yellow",
+        "opacity": 0.20,
+        "line_width": 0,
+        "layer": "below",
+    },
+
     # Week 5: confirmed structure swing line + points
     "structure.swing_line": {
         "line": {"width": 2, "color": "black"},
@@ -62,5 +70,55 @@ STYLE = {
     },
     "structure.reversal_watch_start": {
         "marker": {"size": 8, "symbol": "x", "opacity": 0.95, "color": "purple"},
+    },
+
+    # -----------------------------
+    # Week 6: KL Zones (rectangles)
+    # -----------------------------
+    "zone.kl.buy": {
+        "rgb": "0, 180, 0",
+        "fill_opacity_active": 0.35,
+        "fill_opacity_inactive": 0.15,
+        "confirm_line_width": 2,
+        "confirm_opacity_active": 0.70,
+        "confirm_opacity_inactive": 0.30,
+    },
+    "zone.kl.sell": {
+        "rgb": "220, 0, 0",
+        "fill_opacity_active": 0.35,
+        "fill_opacity_inactive": 0.15,
+        "confirm_line_width": 2,
+        "confirm_opacity_active": 0.70,
+        "confirm_opacity_inactive": 0.30,
+    },
+
+    # Transparent hover “hitbox” lines (shapes don't hover)
+    "zone.kl.hover_line": {
+        "line": {"width": 6, "color": "rgba(0,0,0,0)"},
+        "showlegend": False,
+    },
+
+    # -----------------------------
+    # Global chart layout defaults
+    # -----------------------------
+    "chart.layout": {
+        # white (or set to "rgba(0,0,0,0)" for transparent)
+        "paper_bgcolor": "white",
+        "plot_bgcolor": "white",
+    },
+
+    "chart.axis": {
+        # grid
+        "showgrid": True,
+        "gridcolor": "rgba(0,0,0,0.12)",
+        "griddash": "dot",
+        "gridwidth": 1,
+        "zeroline": False,
+
+        # axis box / border
+        "showline": True,
+        "linecolor": "rgba(0,0,0,0.4)",   # solid dark grey
+        "linewidth": 1,
+        "mirror": True,                  # draw full rectangle (top/right included)
     },
 }

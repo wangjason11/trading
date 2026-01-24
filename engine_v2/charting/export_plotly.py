@@ -12,6 +12,14 @@ from engine_v2.charting.style_registry import STYLE
 from engine_v2.common.types import PatternStatus
 
 
+def _rgba_from_rgb(rgb: str, opacity: float) -> str:
+    return f"rgba({rgb}, {opacity})"
+
+def _zone_style(side: str) -> dict:
+    # side is "buy" or "sell"
+    key = f"zone.kl.{side}"
+    return STYLE.get(key, {})
+
 def _deep_merge(base: dict, override: dict) -> dict:
     out = dict(base)
     for k, v in (override or {}).items():
@@ -523,6 +531,8 @@ def export_chart_plotly(
         shapes_added = 0
         MAX_SHAPES = 500
 
+        range_rect_style = _style("range.rect")
+
         idx_list = list(map(int, dfx.index.to_numpy()))
         for pos, idx in enumerate(idx_list):
             ra = int(dfx.iloc[pos]["range_active"]) if "range_active" in dfx.columns else 0
@@ -566,10 +576,7 @@ def export_chart_plotly(
                         x1=x1,
                         y0=y0,
                         y1=y1,
-                        fillcolor="yellow",
-                        opacity=0.3,
-                        line_width=0,
-                        layer="below",
+                        **range_rect_style,
                     )
                     shapes_added += 1
 
@@ -600,10 +607,7 @@ def export_chart_plotly(
                     x1=x1,
                     y0=y0,
                     y1=y1,
-                    fillcolor="yellow",
-                    opacity=0.3,
-                    line_width=0,
-                    layer="below",
+                    **range_rect_style,
                 )
 
     # -------------------------------------------------
@@ -845,19 +849,210 @@ def export_chart_plotly(
                 )
 
 
-    # Zones overlays
+    # -------------------------------------------------
+    # Week 6: KL Zones overlays (rectangles + confirm line + hover)
+    # -------------------------------------------------
     zones = dfx.attrs.get("kl_zones", [])
-    if zone_cfg.get("KL", False):
-        for z in zones[-50:]:  # cap for chart performance
-            # plotly wants y0<y1
-            y0 = min(z.bottom, z.top)
-            y1 = max(z.bottom, z.top)
-            fig.add_hrect(
+    if zone_cfg.get("KL", False) and zones:
+        # Determine "structure to plot" FROM ZONES:
+        # Always show all zones from the most recent structure_id.
+        by_struct = {}
+        for z in zones:
+            sid = int(z.meta.get("structure_id", 0))
+            side = str(z.side)
+            by_struct.setdefault(sid, set()).add(side)
+
+        current_structure_id = max(by_struct.keys()) if by_struct else 0
+        zones_cur = [z for z in zones if int(z.meta.get("structure_id", 0)) == int(current_structure_id)]
+
+        print("[chart][kl] zone structures sides:", {k: sorted(list(v)) for k, v in sorted(by_struct.items())})
+        print("[chart][kl] selected_structure_id:", current_structure_id)
+        print("[chart][kl] zones_cur:", [
+            (z.side,
+             z.meta.get("base_idx"),
+             z.meta.get("confirmed_idx"),
+             z.meta.get("cycle_id"),
+             z.meta.get("structure_id"),
+             z.meta.get("active"))
+            for z in zones_cur
+        ])
+
+        # Visible window bounds
+        t_last = dfx[COL_TIME].iloc[-1]
+
+        # Deterministic draw order:
+        # 1) inactive first (underneath), active last (on top)
+        # 2) older start_time first, newer last
+        def _zone_sort_key(z):
+            active = bool(z.meta.get("active", False))
+            st = pd.to_datetime(z.start_time, utc=True)
+            # active False -> 0 (draw earlier), active True -> 1 (draw later/on top)
+            return (1 if active else 0, st)
+
+        zones_cur = sorted(zones_cur, key=_zone_sort_key)
+
+        # cap AFTER sorting so we keep most recent ordering behavior stable
+        if len(zones_cur) > 50:
+            zones_cur = zones_cur[-50:]
+
+        # helper for rgba fill
+        def _fill_rgba(side: str, opacity: float) -> str:
+            # green/red with opacity
+            if side == "buy":
+                return f"rgba(0, 180, 0, {opacity})"
+            return f"rgba(220, 0, 0, {opacity})"
+
+        def _line_rgba(side: str, opacity: float) -> str:
+            if side == "buy":
+                return f"rgba(0, 180, 0, {opacity})"
+            return f"rgba(220, 0, 0, {opacity})"
+
+        # Build hover lines (shapes themselves don't hover)
+        # We'll add top/bottom transparent hv lines per zone.
+        for z in zones_cur:
+            side = str(z.side)
+            active = bool(z.meta.get("active", False))
+
+            stz = _zone_style(side)
+
+            fill_op = float(stz.get("fill_opacity_active" if active else "fill_opacity_inactive", 0.18 if active else 0.08))
+            line_op = float(stz.get("confirm_opacity_active" if active else "confirm_opacity_inactive", 0.9 if active else 0.45))
+            rgb = str(stz.get("rgb", "0,180,0" if side == "buy" else "220,0,0"))
+            confirm_w = int(stz.get("confirm_line_width", 2))
+
+            fillcolor = _rgba_from_rgb(rgb, fill_op)
+            linecolor = _rgba_from_rgb(rgb, line_op)
+
+            x0 = pd.to_datetime(z.start_time, utc=True)
+            x1 = pd.to_datetime(z.end_time, utc=True) if z.end_time is not None else pd.to_datetime(t_last, utc=True)
+
+            # Guard: if end before start (shouldn't happen, but safe)
+            if x1 <= x0:
+                x1 = x0
+
+            y0 = float(min(z.bottom, z.top))
+            y1 = float(max(z.bottom, z.top))
+
+            # Rectangle
+            fig.add_shape(
+                type="rect",
+                xref="x",
+                yref="y",
+                x0=x0,
+                x1=x1,
                 y0=y0,
                 y1=y1,
-                fillcolor="green" if z.side == "buy" else "red",
-                opacity=0.12,
-                line_width=0,
+                fillcolor=fillcolor,
+                line=dict(width=0),
+                layer="below",
+            )
+
+            # Confirmed vertical line (same color family as zone)
+            conf_idx = int(z.meta.get("confirmed_idx", -1))
+            conf_time = None
+            if conf_idx in dfx.index:
+                conf_time = pd.to_datetime(dfx.loc[conf_idx, COL_TIME], utc=True)
+
+            if conf_time is not None:
+                # Clamp line within the rectangle window
+                if conf_time < x0:
+                    conf_time = x0
+                if conf_time > x1:
+                    conf_time = x1
+
+                fig.add_shape(
+                    type="line",
+                    xref="x",
+                    yref="y",
+                    x0=conf_time,
+                    x1=conf_time,
+                    y0=y0,
+                    y1=y1,
+                    line=dict(color=linecolor, width=confirm_w),
+                    layer="below",
+                )
+
+            # Hover metadata
+            base_pattern = str(z.meta.get("base_pattern", ""))
+            base_idx = int(z.meta.get("base_idx", -1))
+            cycle_id = int(z.meta.get("cycle_id", 0))
+
+            hover_st = STYLE.get("zone.kl.hover_line", {})
+            hover_line = hover_st.get("line", {"width": 6, "color": "rgba(0,0,0,0)"})
+            hover_showlegend = bool(hover_st.get("showlegend", False))
+            structure_id = int(z.meta.get("structure_id", -1))
+            struct_direction = int(z.meta.get("struct_direction", 0))
+
+            # Transparent top hover line
+            fig.add_trace(
+                go.Scatter(
+                    x=[x0, x1],
+                    y=[y1, y1],
+                    mode="lines",
+                    name="KL zone" if active else "KL zone (inactive)",
+                    showlegend=hover_showlegend,
+                    line=hover_line,
+                    hovertemplate=(
+                        "KL Zone<br>"
+                        "side=%{customdata[0]}<br>"
+                        "structure_id=%{customdata[1]}<br>"
+                        "struct_direction=%{customdata[2]}<br>"
+                        "base_pattern=%{customdata[3]}<br>"
+                        "base_idx=%{customdata[4]}<br>"
+                        "confirmed_idx=%{customdata[5]}<br>"
+                        "cycle_id=%{customdata[6]}<br>"
+                        "top=%{customdata[7]:.5f}<br>"
+                        "bottom=%{customdata[8]:.5f}"
+                        "<extra></extra>"
+                    ),
+                    customdata=[[
+                        side,
+                        structure_id,
+                        struct_direction,
+                        base_pattern,
+                        base_idx,
+                        conf_idx,
+                        cycle_id,
+                        y1,
+                        y0,
+                    ]] * 2,
+                )
+            )
+
+            # Transparent bottom hover line
+            fig.add_trace(
+                go.Scatter(
+                    x=[x0, x1],
+                    y=[y0, y0],
+                    mode="lines",
+                    name="KL zone" if active else "KL zone (inactive)",
+                    showlegend=hover_showlegend,
+                    line=hover_line,
+                    hovertemplate=(
+                        "KL Zone<br>"
+                        "side=%{customdata[0]}<br>"
+                        "structure_id=%{customdata[1]}<br>"
+                        "struct_direction=%{customdata[2]}<br>"
+                        "base_pattern=%{customdata[3]}<br>"
+                        "base_idx=%{customdata[4]}<br>"
+                        "confirmed_idx=%{customdata[5]}<br>"
+                        "cycle_id=%{customdata[6]}<br>"
+                        "top=%{customdata[7]:.5f}<br>"
+                        "bottom=%{customdata[8]:.5f}"
+                        "<extra></extra>"
+                    ),
+                    customdata=[[
+                        side,
+                        structure_id,
+                        struct_direction,
+                        base_pattern,
+                        base_idx,
+                        conf_idx,
+                        cycle_id,
+                        y1,
+                        y0,
+                    ]] * 2,
+                )
             )
 
 
@@ -869,6 +1064,11 @@ def export_chart_plotly(
         legend_title="Overlays",
         height=800,
     )
+
+    # --- Global chart styling (background + grid) ---
+    fig.update_layout(**_style("chart.layout"))
+    fig.update_xaxes(**_style("chart.axis"))
+    fig.update_yaxes(**_style("chart.axis"))
 
     # fig.update_xaxes(
     #     rangebreaks=[
