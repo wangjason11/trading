@@ -166,11 +166,17 @@ def classify_big_flags(
 
             ratio = lengths[i] / prior_max
 
-            if ctype[i] == "maru" and round(ratio, 2) >= params.big_maru_threshold:
+            # if ctype[i] == "maru" and round(ratio, 2) >= params.big_maru_threshold:
+            
+            # big_maru alternatively can apply to every candle
+            if round(ratio, 2) >= params.big_maru_threshold:
                 out.loc[i, f"is_big_maru_as{s}"] = True
 
             # big_normal applies to maru or normal (as you described)
-            if ctype[i] in ("maru", "normal") and round(ratio, 2) >= params.big_normal_threshold:
+            # if ctype[i] in ("maru", "normal") and round(ratio, 2) >= params.big_normal_threshold:
+            
+            # big_normal alternatively can apply to every candle
+            if round(ratio, 2) >= params.big_normal_threshold:
                 out.loc[i, f"is_big_normal_as{s}"] = True
 
     return out
