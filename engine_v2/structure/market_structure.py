@@ -116,15 +116,18 @@ class MarketStructure:
       - A candle also cannot become a range starter if it participated in the original pattern window excluding the last candle (e.g., continuous: start+middle; 2-candle patterns: first candle).
     """
 
-    def __init__(self,df: pd.DataFrame, struct_direction: int, *, eps: float = 0.0001, range_min_k: int = 2, range_max_k: int = 5, debug_invariants: bool = True):
+    def __init__(self,df: pd.DataFrame, struct_direction: int, *, eps: float = 0.0001, range_min_k: int = 2, range_max_k: int = 5, debug_invariants: bool = True, start_idx: int = 0, structure_id: int = 0):
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
         self.df = df.copy()
         self.struct_direction = struct_direction
+        self.start_idx = int(start_idx)
         self.eps = float(eps)
         self.debug_invariants = bool(debug_invariants)
 
         self.state = MarketStructureState(struct_direction=struct_direction, structure_id=0)
+        self.state.struct_direction = int(struct_direction)
+        self.state.structure_id = int(structure_id)
         self.events: List[StructureEvent] = []
 
         # Pattern detector (uses df feature columns)
@@ -145,7 +148,13 @@ class MarketStructure:
         No skipping. Uses pending confirmation for patterns + internal range evaluation window (min/max lookahead) with rewind+replay.
         """
         n = len(self.df)
-        i = 0
+        # i = 0
+        i = int(self.start_idx)
+        if i < 0:
+            i = 0
+        if i >= n:
+            return self.df, self.events, self.levels
+
         while i < n:
             if self.state.state == MarketState.REVERSAL:
                 break
@@ -1036,7 +1045,18 @@ class MarketStructure:
             if establishing_new_cycle:
                 # advance CTS cycle id for the new CTS
                 st.cts_cycle_id += 1
-                self._emit_cts_established(cts_idx, cts_price, meta={"via": ev.name})
+                # self._emit_cts_established(cts_idx, cts_price, meta={"via": ev.name})
+                self._emit_cts_established(
+                    cts_idx,
+                    cts_price,
+                    meta={
+                        "via": ev.name,
+                        # NEW: required for Scenario 2 Exception #2
+                        "anchor_idx": int(ev.start_idx) if ev.start_idx is not None else int(apply_idx),
+                        "pattern_name": str(ev.name),
+                        "confirmed_at": int(apply_idx),  # apply candle that established CTS
+                    },
+                )
 
                 # Create + confirm BOS simultaneously with CTS establishment
                 if st.cts_cycle_id == 1:
@@ -1179,12 +1199,12 @@ class MarketStructure:
 
         if self.struct_direction == 1:
             new_price = float(self.df.iloc[i]["h"])
-            if new_price > float(st.cts.price) + self.eps:
+            if new_price > float(st.cts.price):
                 self._emit_cts_updated(i, new_price, meta={"via": via})
                 st.cts = Point(idx=i, price=new_price)
         else:
             new_price = float(self.df.iloc[i]["l"])
-            if new_price < float(st.cts.price) - self.eps:
+            if new_price < float(st.cts.price):
                 self._emit_cts_updated(i, new_price, meta={"via": via})
                 st.cts = Point(idx=i, price=new_price)
 

@@ -89,6 +89,7 @@ def main() -> None:
         start=CONFIG.start,
         end=CONFIG.end,
     )
+    df.attrs["pair"] = CONFIG.pair
 
     raw_path = (
         f"artifacts/debug/"
@@ -135,7 +136,12 @@ def main() -> None:
     # basename = f"{CONFIG.pair}_{CONFIG.timeframe}_{CONFIG.start.date()}_{CONFIG.end.date()}"
 
     # Keep in sync with structure_engine MarketStructure(...) args for now
-    struct_direction = 1
+    # struct_direction = 1
+
+    sd_series = res.df["struct_direction"].astype(int)
+    sd_last = int(sd_series[sd_series != 0].iloc[-1]) if (sd_series != 0).any() else 0
+    struct_direction = sd_last
+
     eps = 0.0001
     range_min_k = 2
     range_max_k = 5

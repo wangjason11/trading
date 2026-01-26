@@ -474,6 +474,7 @@ def derive_kl_zones_v1(
     active_sell_idx: Optional[int] = None
 
     sd = int(struct_direction)
+    sid = -1  # NEW: current event's structure_id (refreshed per event from ev.meta)
 
     # Debugging
     print("[kl_zones][events] BOS_CONFIRMED:", [
@@ -509,7 +510,12 @@ def derive_kl_zones_v1(
         if ev.type not in ("BOS_CONFIRMED", "CTS_CONFIRMED", "CTS_THRESHOLD_UPDATED", "BOS_THRESHOLD_UPDATED"):
             continue
 
+        # NEW: make sd/sid event-accurate for ALL event types (zones can span multiple structures now)
+        sd = int((ev.meta or {}).get("struct_direction", sd))
+        sid = int((ev.meta or {}).get("structure_id", sid))
+
         if ev.type in ("CTS_THRESHOLD_UPDATED", "BOS_THRESHOLD_UPDATED"):
+            # NOTE: sd/sid already refreshed above; you can keep these lines or delete them.
             sd = int((ev.meta or {}).get("struct_direction", struct_direction))
             sid = int((ev.meta or {}).get("structure_id", -1))
             price = float(ev.price)
