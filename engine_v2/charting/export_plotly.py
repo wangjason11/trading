@@ -911,7 +911,7 @@ def export_chart_plotly(
         # We'll add top/bottom transparent hv lines per zone.
         for z in zones_cur:
             side = str(z.side)
-            active = bool(z.meta.get("active", False))
+            active = bool((z.meta or {}).get("active", False)) and (z.end_time is None)
 
             stz = _zone_style(side)
 
@@ -923,137 +923,180 @@ def export_chart_plotly(
             fillcolor = _rgba_from_rgb(rgb, fill_op)
             linecolor = _rgba_from_rgb(rgb, line_op)
 
-            x0 = pd.to_datetime(z.start_time, utc=True)
-            x1 = pd.to_datetime(z.end_time, utc=True) if z.end_time is not None else pd.to_datetime(t_last, utc=True)
+            x_zone0 = pd.to_datetime(z.start_time, utc=True)
+            x_zone1 = pd.to_datetime(z.end_time, utc=True) if z.end_time is not None else pd.to_datetime(t_last, utc=True)
 
             # Guard: if end before start (shouldn't happen, but safe)
-            if x1 <= x0:
-                x1 = x0
+            if x_zone1 <= x_zone0:
+                x_zone1 = x_zone0
 
-            y0 = float(min(z.bottom, z.top))
-            y1 = float(max(z.bottom, z.top))
-
-            # Rectangle
-            fig.add_shape(
-                type="rect",
-                xref="x",
-                yref="y",
-                x0=x0,
-                x1=x1,
-                y0=y0,
-                y1=y1,
-                fillcolor=fillcolor,
-                line=dict(width=0),
-                layer="below",
-            )
-
-            # Confirmed vertical line (same color family as zone)
+            # Confirm time (used for placing the vertical line in the correct segment)
             conf_idx = int(z.meta.get("confirmed_idx", -1))
             conf_time = None
             if conf_idx in dfx.index:
                 conf_time = pd.to_datetime(dfx.loc[conf_idx, COL_TIME], utc=True)
 
-            if conf_time is not None:
-                # Clamp line within the rectangle window
-                if conf_time < x0:
-                    conf_time = x0
-                if conf_time > x1:
-                    conf_time = x1
-
-                fig.add_shape(
-                    type="line",
-                    xref="x",
-                    yref="y",
-                    x0=conf_time,
-                    x1=conf_time,
-                    y0=y0,
-                    y1=y1,
-                    line=dict(color=linecolor, width=confirm_w),
-                    layer="below",
-                )
-
-            # Hover metadata
-            base_pattern = str(z.meta.get("base_pattern", ""))
-            base_idx = int(z.meta.get("base_idx", -1))
-            cycle_id = int(z.meta.get("cycle_id", 0))
-
+            # Hover styling (keep existing behavior)
             hover_st = STYLE.get("zone.kl.hover_line", {})
             hover_line = hover_st.get("line", {"width": 6, "color": "rgba(0,0,0,0)"})
             hover_showlegend = bool(hover_st.get("showlegend", False))
+
+            # Hover metadata (keep existing fields)
+            base_pattern = str(z.meta.get("base_pattern", ""))
+            base_idx = int(z.meta.get("base_idx", -1))
+            cycle_id = int(z.meta.get("cycle_id", 0))
             structure_id = int(z.meta.get("structure_id", -1))
             struct_direction = int(z.meta.get("struct_direction", 0))
 
-            # Transparent top hover line
-            fig.add_trace(
-                go.Scatter(
-                    x=[x0, x1],
-                    y=[y1, y1],
-                    mode="lines",
-                    name="KL zone" if active else "KL zone (inactive)",
-                    showlegend=hover_showlegend,
-                    line=hover_line,
-                    hovertemplate=(
-                        "KL Zone<br>"
-                        "side=%{customdata[0]}<br>"
-                        "structure_id=%{customdata[1]}<br>"
-                        "struct_direction=%{customdata[2]}<br>"
-                        "base_pattern=%{customdata[3]}<br>"
-                        "base_idx=%{customdata[4]}<br>"
-                        "confirmed_idx=%{customdata[5]}<br>"
-                        "cycle_id=%{customdata[6]}<br>"
-                        "top=%{customdata[7]:.5f}<br>"
-                        "bottom=%{customdata[8]:.5f}"
-                        "<extra></extra>"
-                    ),
-                    customdata=[[
-                        side,
-                        structure_id,
-                        struct_direction,
-                        base_pattern,
-                        base_idx,
-                        conf_idx,
-                        cycle_id,
-                        y1,
-                        y0,
-                    ]] * 2,
-                )
-            )
+            # ------------------------------------------------------------------
+            # NEW: draw "stepwise" zone rectangles using meta["bounds_steps"]
+            # Each step begins at start_idx and applies forward until next step.
+            # ------------------------------------------------------------------
+            steps = list((z.meta or {}).get("bounds_steps", []))
 
-            # Transparent bottom hover line
-            fig.add_trace(
-                go.Scatter(
-                    x=[x0, x1],
-                    y=[y0, y0],
-                    mode="lines",
-                    name="KL zone" if active else "KL zone (inactive)",
-                    showlegend=hover_showlegend,
-                    line=hover_line,
-                    hovertemplate=(
-                        "KL Zone<br>"
-                        "side=%{customdata[0]}<br>"
-                        "structure_id=%{customdata[1]}<br>"
-                        "struct_direction=%{customdata[2]}<br>"
-                        "base_pattern=%{customdata[3]}<br>"
-                        "base_idx=%{customdata[4]}<br>"
-                        "confirmed_idx=%{customdata[5]}<br>"
-                        "cycle_id=%{customdata[6]}<br>"
-                        "top=%{customdata[7]:.5f}<br>"
-                        "bottom=%{customdata[8]:.5f}"
-                        "<extra></extra>"
-                    ),
-                    customdata=[[
-                        side,
-                        structure_id,
-                        struct_direction,
-                        base_pattern,
-                        base_idx,
-                        conf_idx,
-                        cycle_id,
-                        y1,
-                        y0,
-                    ]] * 2,
+            # Fallback: no steps -> behave like old code (single segment)
+            if not steps:
+                steps = [{
+                    "start_idx": base_idx,
+                    "top": float(max(z.top, z.bottom)),
+                    "bottom": float(min(z.top, z.bottom)),
+                    "event": "FALLBACK",
+                }]
+
+            # Sort steps by start_idx
+            steps = sorted(steps, key=lambda s: int(s.get("start_idx", -1)))
+
+            def _idx_to_time(ii: int):
+                if ii in dfx.index:
+                    return pd.to_datetime(dfx.loc[ii, COL_TIME], utc=True)
+                return None
+
+            # For each segment, compute x0/x1 bounds
+            for k, s in enumerate(steps):
+                seg_start_idx = int(s.get("start_idx", -1))
+                seg_x0 = _idx_to_time(seg_start_idx)
+                if seg_x0 is None:
+                    continue
+
+                # clamp to the zone's actual window
+                if seg_x0 < x_zone0:
+                    seg_x0 = x_zone0
+
+                # segment end = next step start time, else zone end
+                if k + 1 < len(steps):
+                    next_idx = int(steps[k + 1].get("start_idx", -1))
+                    nxt = _idx_to_time(next_idx) or x_zone1
+                    # end *just before* the next segment start to avoid overlap
+                    seg_x1 = nxt - pd.Timedelta(microseconds=1)
+                else:
+                    seg_x1 = x_zone1
+
+                if seg_x1 <= seg_x0:
+                    seg_x1 = seg_x0
+
+                seg_top = float(s.get("top", z.top))
+                seg_bot = float(s.get("bottom", z.bottom))
+                y0 = float(min(seg_bot, seg_top))
+                y1 = float(max(seg_bot, seg_top))
+
+                # Rectangle segment (uses same fillcolor/linecolor computed above)
+                fig.add_shape(
+                    type="rect",
+                    xref="x",
+                    yref="y",
+                    x0=seg_x0,
+                    x1=seg_x1,
+                    y0=y0,
+                    y1=y1,
+                    fillcolor=fillcolor,
+                    line=dict(width=0),
+                    layer="below",
                 )
-            )
+
+                # Confirm line should appear only in the segment that contains conf_time
+                if conf_time is not None and (seg_x0 <= conf_time <= seg_x1):
+                    fig.add_shape(
+                        type="line",
+                        xref="x",
+                        yref="y",
+                        x0=conf_time,
+                        x1=conf_time,
+                        y0=y0,
+                        y1=y1,
+                        line=dict(color=linecolor, width=confirm_w),
+                        layer="below",
+                    )
+
+                # Hover lines for this segment (shapes don't hover)
+                fig.add_trace(
+                    go.Scatter(
+                        x=[seg_x0, seg_x1],
+                        y=[y1, y1],
+                        mode="lines",
+                        name="KL zone" if active else "KL zone (inactive)",
+                        showlegend=hover_showlegend,
+                        line=hover_line,
+                        hovertemplate=(
+                            "KL Zone<br>"
+                            "side=%{customdata[0]}<br>"
+                            "structure_id=%{customdata[1]}<br>"
+                            "struct_direction=%{customdata[2]}<br>"
+                            "base_pattern=%{customdata[3]}<br>"
+                            "base_idx=%{customdata[4]}<br>"
+                            "confirmed_idx=%{customdata[5]}<br>"
+                            "cycle_id=%{customdata[6]}<br>"
+                            "top=%{customdata[7]:.5f}<br>"
+                            "bottom=%{customdata[8]:.5f}"
+                            "<extra></extra>"
+                        ),
+                        customdata=[[
+                            side,
+                            structure_id,
+                            struct_direction,
+                            base_pattern,
+                            base_idx,
+                            conf_idx,
+                            cycle_id,
+                            y1,
+                            y0,
+                        ]] * 2,
+                    )
+                )
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=[seg_x0, seg_x1],
+                        y=[y0, y0],
+                        mode="lines",
+                        name="KL zone" if active else "KL zone (inactive)",
+                        showlegend=hover_showlegend,
+                        line=hover_line,
+                        hovertemplate=(
+                            "KL Zone<br>"
+                            "side=%{customdata[0]}<br>"
+                            "structure_id=%{customdata[1]}<br>"
+                            "struct_direction=%{customdata[2]}<br>"
+                            "base_pattern=%{customdata[3]}<br>"
+                            "base_idx=%{customdata[4]}<br>"
+                            "confirmed_idx=%{customdata[5]}<br>"
+                            "cycle_id=%{customdata[6]}<br>"
+                            "top=%{customdata[7]:.5f}<br>"
+                            "bottom=%{customdata[8]:.5f}"
+                            "<extra></extra>"
+                        ),
+                        customdata=[[
+                            side,
+                            structure_id,
+                            struct_direction,
+                            base_pattern,
+                            base_idx,
+                            conf_idx,
+                            cycle_id,
+                            y1,
+                            y0,
+                        ]] * 2,
+                    )
+                )
 
 
     fig.update_layout(

@@ -506,7 +506,77 @@ def derive_kl_zones_v1(
         return int(dfx.loc[i, "cts_cycle_id"]) if "cts_cycle_id" in dfx.columns else 0
 
     for ev in events:
-        if ev.type not in ("BOS_CONFIRMED", "CTS_CONFIRMED"):
+        if ev.type not in ("BOS_CONFIRMED", "CTS_CONFIRMED", "CTS_THRESHOLD_UPDATED", "BOS_THRESHOLD_UPDATED"):
+            continue
+
+        if ev.type in ("CTS_THRESHOLD_UPDATED", "BOS_THRESHOLD_UPDATED"):
+            sd = int((ev.meta or {}).get("struct_direction", struct_direction))
+            sid = int((ev.meta or {}).get("structure_id", -1))
+            price = float(ev.price)
+
+            # NEW: do not apply expansions on/after reversal candle
+            try:
+                if "market_state" in dfx.columns:
+                    ms = str(dfx.loc[int(ev.idx), "market_state"]).lower()
+                    if ms == "reversal":
+                        continue
+            except Exception:
+                pass
+
+            # map event -> which side’s active zone expands
+            if ev.type == "CTS_THRESHOLD_UPDATED":
+                # CTS-side zone mapping should mirror your CTS_CONFIRMED mapping
+                side = "sell" if sd == 1 else "buy"
+                zi = active_sell_idx if side == "sell" else active_buy_idx
+            else:
+                # BOS-side zone mapping should mirror your BOS_CONFIRMED mapping
+                side = "buy" if sd == 1 else "sell"
+                zi = active_buy_idx if side == "buy" else active_sell_idx
+
+            if zi is None:
+                continue
+
+            z0 = zones[zi]
+
+            # guard: only expand zones belonging to same structure_id
+            if int((z0.meta or {}).get("structure_id", -999)) != sid:
+                continue
+
+            top = float(z0.top)
+            bot = float(z0.bottom)
+
+            # expand only in the more extreme direction:
+            # buy zones expand DOWN (bottom decreases)
+            # sell zones expand UP (top increases)
+            if side == "buy":
+                bot2, top2 = min(bot, price), top
+            else:
+                bot2, top2 = bot, max(top, price)
+
+            if top2 != top or bot2 != bot:
+                steps = list((z0.meta or {}).get("bounds_steps", []))
+                steps.append({
+                    "start_idx": int(ev.idx),       # expansion happens HERE
+                    "top": float(top2),
+                    "bottom": float(bot2),
+                    "event": str(ev.type),
+                    "price": float(price),
+                })
+
+                zones[zi] = replace(
+                    z0,
+                    top=float(top2),
+                    bottom=float(bot2),
+                    meta={
+                        **(z0.meta or {}),
+                        "bounds_steps": steps,
+                        "expanded": True,
+                        "expanded_last_idx": int(ev.idx),
+                        "expanded_last_price": float(price),
+                        "expanded_last_event": str(ev.type),
+                    },
+                )
+
             continue
 
         # Event idx is the BOS/CTS LEVEL index; confirmed_at is the candle that CONFIRMED it.
@@ -562,6 +632,15 @@ def derive_kl_zones_v1(
                 "outer": float(outer),
                 "inner": float(inner),
 
+                "bounds_steps": [
+                    {
+                        "start_idx": int(base_idx),   # segment begins at base anchor candle
+                        "top": float(top),
+                        "bottom": float(bottom),
+                        "event": "INIT",
+                    }
+                ],
+
                 "active": True,
             },
         )
@@ -591,33 +670,26 @@ def derive_kl_zones_v1(
         zones.append(z)
 
     # --- Terminal structure end: if reversal occurs, end any still-active zones at the reversal candle ---
-    # if "market_state" in dfx.columns and "structure_id" in dfx.columns:
-    #     # Find first reversal candle for each structure_id present in the dataframe
-    #     rev_mask = (dfx["market_state"].astype(str) == "reversal")
-    #     if rev_mask.any():
-    #         # We only care about ending zones for the structure(s) that actually reversed in this df
-    #         # Compute first reversal idx per structure_id
-    #         rev_df = dfx.loc[rev_mask, ["structure_id"]].copy()
-    #         rev_df["idx"] = rev_df.index.astype(int)
-    #         first_rev_by_sid = rev_df.groupby("structure_id")["idx"].min().to_dict()
+    if "market_state" in dfx.columns and "structure_id" in dfx.columns:
+        rev_mask = (dfx["market_state"].astype(str).str.lower() == "reversal")
+        if rev_mask.any():
+            rev_df = dfx.loc[rev_mask, ["structure_id"]].copy()
+            rev_df["idx"] = rev_df.index.astype(int)
+            first_rev_by_sid = rev_df.groupby("structure_id")["idx"].min().to_dict()
 
-    #         # Force-close any zones still active in those structures
-    #         for zi, z in enumerate(zones):
-    #             sid = (z.meta or {}).get("structure_id", None)
-    #             if sid is None:
-    #                 continue
-    #             if sid not in first_rev_by_sid:
-    #                 continue
-    #             if z.end_time is not None:
-    #                 continue
+            for zi, z in enumerate(zones):
+                sid = (z.meta or {}).get("structure_id", None)
+                if sid is None or sid not in first_rev_by_sid:
+                    continue
+                if z.end_time is not None:
+                    continue
 
-    #             rev_idx = int(first_rev_by_sid[sid])
-    #             rev_time = _time(rev_idx)
+                rev_idx = int(first_rev_by_sid[sid])
+                zones[zi] = replace(
+                    z,
+                    end_time=_time(rev_idx),
+                    meta={**(z.meta or {}), "active": False},
+                )
 
-    #             zones[zi] = replace(
-    #                 z,
-    #                 end_time=rev_time,
-    #                 meta={**z.meta, "active": False, "ended_reason": "reversal", "ended_idx": rev_idx},
-    #             )
 
     return zones

@@ -318,11 +318,13 @@ class MarketStructure:
         """
         BOS barrier semantics for candle i.
         Uptrend (struct_direction=+1):
-          - If close breaks below bos_th => start reversal watch (freeze bos at pre-candle value)
-          - Else if wick crosses below bos_th but close does NOT => bos_th := candle low
+        - If close breaks below bos_th => start reversal watch (freeze bos at pre-candle value)
+            - If anchor fails immediately (no pending reversal), treat as false-break:
+            bos_th := candle low, emit BOS_THRESHOLD_UPDATED, clear watch.
+        - Else if wick crosses below bos_th but close does NOT => bos_th := candle low, emit BOS_THRESHOLD_UPDATED
         Downtrend symmetric:
-          - If close breaks above bos_th => start reversal watch
-          - Else if wick crosses above bos_th but close does NOT => bos_th := candle high
+        - If close breaks above bos_th => start reversal watch...
+        - Else if wick crosses above bos_th but close does NOT => bos_th := candle high, emit BOS_THRESHOLD_UPDATED
         """
         st = self.state
         if st.bos_threshold is None:
@@ -338,34 +340,72 @@ class MarketStructure:
         c = float(self.df.iloc[i]["c"])
 
         if self.struct_direction == 1:
-            # Close-break => start watch; do NOT update bos_th on this candle
+            # ---- close-break -> start watch (and maybe immediate false-break resolve)
             if c < bos:
                 self._start_reversal_watch(i, bos_frozen=bos)
-
-                # NEW: schedule reversal detection on THIS candle as anchor
                 self._schedule_reversal_from_anchor(i, bos_frozen=bos)
-                self._dbg(
-                    f"[BOS_CLOSE_BREAK] i={i} close={c:.5f} bos_prev={bos:.5f} dir={self.struct_direction}"
-                )
+
+                # if this anchor produced no pending reversal -> false break resolution
+                if self.state.pending_reversal_apply_idx is None:
+                    prev = float(st.bos_threshold)
+                    new_thr = float(l)
+                    if new_thr < prev:
+                        st.bos_threshold = new_thr
+                        self._emit_bos_threshold_updated(
+                            i,
+                            float(new_thr),
+                            meta={"prev": float(prev), "reason": "rv_anchor_failed"},
+                        )
+                    self._clear_reversal_watch()
+
+                self._dbg(f"[BOS_CLOSE_BREAK] i={i} close={c:.5f} bos_prev={bos:.5f} dir={self.struct_direction}")
                 return
 
-            # Wick-cross probe (no close-break) => update barrier to wick extreme
+            # ---- wick-cross probe (no close-break) -> update barrier to wick extreme
             if l < bos and c >= bos:
-                st.bos_threshold = float(l)
+                prev = float(st.bos_threshold)
+                new_thr = float(l)
+                if new_thr < prev:
+                    st.bos_threshold = new_thr
+                    self._emit_bos_threshold_updated(
+                        i,
+                        float(new_thr),
+                        meta={"prev": float(prev), "reason": "probe_no_break"},
+                    )
                 return
+
         else:
+            # ---- close-break (downtrend is ABOVE bos_th)
             if c > bos:
                 self._start_reversal_watch(i, bos_frozen=bos)
-
-                # NEW: schedule reversal detection on THIS candle as anchor
                 self._schedule_reversal_from_anchor(i, bos_frozen=bos)
-                self._dbg(
-                    f"[BOS_CLOSE_BREAK] i={i} close={c:.5f} bos_prev={bos:.5f} dir={self.struct_direction}"
-                )
+
+                if self.state.pending_reversal_apply_idx is None:
+                    prev = float(st.bos_threshold)
+                    new_thr = float(h)
+                    if new_thr > prev:
+                        st.bos_threshold = new_thr
+                        self._emit_bos_threshold_updated(
+                            i,
+                            float(new_thr),
+                            meta={"prev": float(prev), "reason": "rv_anchor_failed"},
+                        )
+                    self._clear_reversal_watch()
+
+                self._dbg(f"[BOS_CLOSE_BREAK] i={i} close={c:.5f} bos_prev={bos:.5f} dir={self.struct_direction}")
                 return
 
+            # ---- wick-cross probe (no close-break)
             if h > bos and c <= bos:
-                st.bos_threshold = float(h)
+                prev = float(st.bos_threshold)
+                new_thr = float(h)
+                if new_thr > prev:
+                    st.bos_threshold = new_thr
+                    self._emit_bos_threshold_updated(
+                        i,
+                        float(new_thr),
+                        meta={"prev": float(prev), "reason": "probe_no_break"},
+                    )
                 return
 
 
@@ -412,9 +452,25 @@ class MarketStructure:
 
         anchor = int(anchor)
         if self.struct_direction == 1:
-            st.bos_threshold = float(self.df.iloc[anchor]["l"])
+            # st.bos_threshold = float(self.df.iloc[anchor]["l"])
+            prev = st.bos_threshold
+            new_thr = float(self.df.iloc[anchor]["l"])
+            st.bos_threshold = new_thr
+            self._emit_bos_threshold_updated(
+                i,
+                float(new_thr),
+                meta={"prev": None if prev is None else float(prev), "reason": "probe_no_break"},
+            )
         else:
-            st.bos_threshold = float(self.df.iloc[anchor]["h"])
+            # st.bos_threshold = float(self.df.iloc[anchor]["h"])
+            prev = st.bos_threshold
+            new_thr = float(self.df.iloc[anchor]["h"])
+            st.bos_threshold = new_thr
+            self._emit_bos_threshold_updated(
+                i,
+                float(new_thr),
+                meta={"prev": None if prev is None else float(prev), "reason": "probe_no_break"},
+            )
 
         # Rewind to anchor + 1 (do NOT jump to extremes)
         jump_to = min(anchor + 1, len(self.df) - 1)
@@ -775,7 +831,7 @@ class MarketStructure:
             #         st.cts = Point(idx=i, price=cts_ext)
             
         # keep thresholds aligned whenever range is active
-        self._sync_thresholds_from_range()
+        self._sync_thresholds_from_range(i)
 
     def _deactivate_range(self, i: int, meta: Optional[dict] = None) -> None:
         st = self.state
@@ -856,7 +912,7 @@ class MarketStructure:
                     },
                 )
             )
-            self._sync_thresholds_from_range()
+            self._sync_thresholds_from_range(i)
             return
 
         # Range exists: expand if needed (do NOT reset)
@@ -877,7 +933,7 @@ class MarketStructure:
                     meta={"reason": "pullback_expand", "hi": hi1, "lo": lo1, "pat": pullback_ev.name},
                 )
             )
-            self._sync_thresholds_from_range()
+            self._sync_thresholds_from_range(i)
 
 
     # ----------------------------
@@ -1048,7 +1104,7 @@ class MarketStructure:
 
             st.last_pullback_pat_apply_idx = apply_idx
             self._set_state(MarketState.PULLBACK, apply_idx, meta={"reason": "pullback_pattern", "pat": ev.name})
-            self._sync_thresholds_from_range()
+            self._sync_thresholds_from_range(apply_idx)
             return
 
     def _post_apply_range_check(self, i: int) -> None:
@@ -1173,22 +1229,30 @@ class MarketStructure:
             bos_price = float(series.values[rel])
             return bos_idx, bos_price
 
-    def _sync_thresholds_from_range(self) -> None:
+    def _sync_thresholds_from_range(self, i: int) -> None:
         """
         Threshold behavior (your spec):
-          - cts_threshold mirrors the range breakout bound (range_hi for uptrend, range_lo for downtrend).
+        - cts_threshold mirrors the range breakout bound (range_hi for uptrend, range_lo for downtrend).
         Part 3A update:
         - DO NOT update bos_threshold here.
-          bos_threshold is a barrier managed by _bos_barrier_step() (probe vs close-break)
-          and by _maybe_expire_reversal_watch() (false-break resolution).
+        - NOTE: This sync is not a probe/no-break threshold update, so it does NOT emit threshold-update events.
         """
         st = self.state
         if not st.range_active or st.range_hi is None or st.range_lo is None:
             return
 
-        # mirror CTS threshold to range breakout bound
-        st.cts_threshold = float(st.range_hi) if self.struct_direction == 1 else float(st.range_lo)
+        # st.cts_threshold = float(st.range_hi) if self.struct_direction == 1 else float(st.range_lo)
+        new_thr = float(st.range_hi) if self.struct_direction == 1 else float(st.range_lo)
+        prev = st.cts_threshold
+        if prev is not None and prev != new_thr:
+            st.cts_threshold = new_thr
 
+            # This is the ONLY source of CTS threshold change -> emit for zone expansion
+            self._emit_cts_threshold_updated(
+                i,
+                new_thr,
+                meta={"prev": None if prev is None else float(prev), "reason": "range_sync"},
+            )
 
     # def _emit_cts_established(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
     #     self.events.append(
@@ -1265,6 +1329,24 @@ class MarketStructure:
         self.state.bos_event = "BOS_CONFIRMED"
         self.state.bos_confirmed = Point(idx=idx, price=float(price))
         self.state.bos_threshold = float(price)
+
+    def _emit_cts_threshold_updated(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
+        meta2 = dict(meta or {})
+        meta2["cycle_id"] = int(self.state.cts_cycle_id)
+        meta2["structure_id"] = int(self.state.structure_id)
+        meta2["struct_direction"] = int(self.state.struct_direction)
+        self.events.append(
+            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_THRESHOLD_UPDATED", price=float(price), meta=meta2)
+        )
+
+    def _emit_bos_threshold_updated(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
+        meta2 = dict(meta or {})
+        meta2["cycle_id"] = int(self.state.cts_cycle_id)
+        meta2["structure_id"] = int(self.state.structure_id)
+        meta2["struct_direction"] = int(self.state.struct_direction)
+        self.events.append(
+            StructureEvent(idx=idx, category="STRUCTURE", type="BOS_THRESHOLD_UPDATED", price=float(price), meta=meta2)
+        )
 
     # def _select_bos_price_on_breakout(self, breakout_apply_idx: int) -> float:
     #     """
