@@ -1136,11 +1136,21 @@ class MarketStructure:
         range_confirmed, confirm_idx = self._is_range_candle_given_confirm(i)
 
         if range_confirmed:
+            # Preserve one-candle event markers across the back-fill loop.
+            # These get cleared by _write_df_row, but we need them to be written
+            # to the apply candle row by _step_anchor after this function returns.
+            saved_bos_event = st.bos_event
+            saved_cts_event = st.cts_event
+
             min_d = D if confirm_idx is None else min(confirm_idx, D)
             for k in range(i, min_d):
                 self._replay_step_no_patterns(k, freeze_range=True)
 
             self._finalize_range_candidate_offline(i)
+
+            # Restore event markers for the final write in _step_anchor
+            st.bos_event = saved_bos_event
+            st.cts_event = saved_cts_event
 
 
     # ----------------------------
