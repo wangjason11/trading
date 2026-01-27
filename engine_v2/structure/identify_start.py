@@ -15,14 +15,26 @@ class StartDecision:
     meta: dict
 
 
-def _require_min_history(start_idx: int, *, min_history: int) -> int:
+# def _require_min_history(start_idx: int, *, min_history: int) -> int:
+#     """
+#     Ensure there are at least `min_history` candles available BEFORE start_idx.
+#     If not, push start_idx forward to min_history.
+#     """
+#     if start_idx < min_history:
+#         return min_history
+#     return start_idx
+
+def _enforce_min_history(start_idx: int, *, min_history: int) -> tuple[int, bool]:
     """
-    Ensure there are at least `min_history` candles available BEFORE start_idx.
-    If not, push start_idx forward to min_history.
+    Require at least `min_history` candles BEFORE the chosen start_idx.
+    Returns: (effective_start_idx, too_early)
+
+    NOTE: We intentionally DO NOT silently "fix" the underlying data sufficiency issue.
+    Callers can detect `too_early=True` via StartDecision.meta and decide to fetch more history.
     """
     if start_idx < min_history:
-        return min_history
-    return start_idx
+        return int(min_history), True
+    return int(start_idx), False
 
 
 def identify_start_scenario_1(
@@ -91,7 +103,9 @@ def identify_start_scenario_1(
         struct_direction = -1
         shape = "descending" if current_is_lo else "v"
 
-    start_idx = _require_min_history(start_idx, min_history=min_history)
+    # start_idx = _require_min_history(start_idx, min_history=min_history)
+    raw_start_idx = int(start_idx)
+    start_idx, too_early = _enforce_min_history(start_idx, min_history=min_history)
 
     return StartDecision(
         start_idx=start_idx,
@@ -107,6 +121,9 @@ def identify_start_scenario_1(
             "lo_price": float(lo_price),
             "current_is_hi": bool(current_is_hi),
             "current_is_lo": bool(current_is_lo),
+            "raw_start_idx": int(raw_start_idx),
+            "min_history": int(min_history),
+            "too_early": bool(too_early),
         },
     )
 
@@ -177,7 +194,9 @@ def identify_start_scenario_2_after_reversal(
                     start_idx = best_idx
                     reason = "scenario_2:exception1_lower_low_after_last_cts"
 
-    start_idx = _require_min_history(start_idx, min_history=min_history)
+    # start_idx = _require_min_history(start_idx, min_history=min_history)
+    raw_start_idx = int(start_idx)
+    start_idx, too_early = _enforce_min_history(start_idx, min_history=min_history)
 
     return StartDecision(
         start_idx=start_idx,
@@ -189,5 +208,8 @@ def identify_start_scenario_2_after_reversal(
             "prev_struct_direction": int(prev_struct_direction),
             "last_cts_confirmed_idx": int(cts_idx),
             "last_cts_confirmed_price": float(cts_price),
+            "raw_start_idx": int(raw_start_idx),
+            "min_history": int(min_history),
+            "too_early": bool(too_early),
         },
     )

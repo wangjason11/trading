@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import timedelta
 from typing import Optional, Tuple
 from engine_v2.config import CONFIG
 from engine_v2.data.provider_oanda import get_history
 from engine_v2.pipeline.orchestrator import run_pipeline
 from engine_v2.charting.export_plotly import export_chart_plotly
+from engine_v2.structure.identify_start import identify_start_scenario_1
 
 chart_cfg = {
     # Week 4 “pattern work mode” defaults:
@@ -81,19 +83,96 @@ def export_csv(df, path: str):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False)
 
+def _timeframe_to_timedelta(tf: str) -> timedelta:
+    tf = str(tf).upper().strip()
+    if tf.startswith("S"):
+        return timedelta(seconds=int(tf[1:]))
+    if tf.startswith("M"):
+        return timedelta(minutes=int(tf[1:]))
+    if tf.startswith("H"):
+        return timedelta(hours=int(tf[1:]))
+    if tf in ("D", "DAILY"):
+        return timedelta(days=1)
+    raise ValueError(f"Unsupported timeframe for auto-extend: {tf}")
+
+
+def _floor_to_day_start(ts):
+    return ts.replace(hour=0, minute=0, second=0, microsecond=0)
+
+def fetch_history_with_auto_extend(
+    *,
+    pair: str,
+    timeframe: str,
+    start,
+    end,
+    lookback_days: int = 183,
+    min_history: int = 50,
+    max_extend_iters: int = 8,
+    extend_days: int = 4,
+):
+    """
+    Week 6 Part 3A requirement:
+    If identify_start_scenario_1 indicates the chosen extreme is 'too early',
+    extend the dataset earlier and retry until it passes (or guard trips).
+    """
+    cur_start = _floor_to_day_start(start)
+    last_decision = None
+    for k in range(int(max_extend_iters)):
+        df = get_history(pair=pair, timeframe=timeframe, start=cur_start, end=end)
+
+        input_idx = int(df.index.max())
+        decision = identify_start_scenario_1(
+            df, input_idx=input_idx, lookback_days=lookback_days, min_history=min_history
+        )
+        last_decision = decision
+
+        if not decision.meta.get("too_early", False):
+            return df, cur_start, decision
+
+        raw_start_idx = int(decision.meta.get("raw_start_idx", decision.start_idx))
+
+        prev_start = cur_start
+        cur_start = _floor_to_day_start(cur_start - timedelta(days=int(extend_days)))
+
+        print(
+            f"[auto_extend] iter={k+1} too_early raw_start_idx={raw_start_idx} "
+            f"min_history={min_history} => extending start by {extend_days} days "
+            f"{prev_start} -> {cur_start}"
+        )
+
+    print("[auto_extend] WARNING: hit max_extend_iters; proceeding with last fetched dataset.")
+    df = get_history(pair=pair, timeframe=timeframe, start=cur_start, end=end)
+
+    input_idx = int(df.index.max())
+    last_decision = identify_start_scenario_1(
+        df, input_idx=input_idx, lookback_days=lookback_days, min_history=min_history
+    )
+    return df, cur_start, last_decision
+
 
 def main() -> None:
-    df = get_history(
+    # df = get_history(
+    #     pair=CONFIG.pair,
+    #     timeframe=CONFIG.timeframe,
+    #     start=CONFIG.start,
+    #     end=CONFIG.end,
+    # )
+
+    df, effective_start, start_decision = fetch_history_with_auto_extend(
         pair=CONFIG.pair,
         timeframe=CONFIG.timeframe,
-        start=CONFIG.start,
+        start=_floor_to_day_start(CONFIG.start),
         end=CONFIG.end,
+        lookback_days=183,
+        min_history=50,
+        extend_days=4,
+        max_extend_iters=8,
     )
     df.attrs["pair"] = CONFIG.pair
 
     raw_path = (
         f"artifacts/debug/"
-        f"{CONFIG.pair}_{CONFIG.timeframe}_{CONFIG.start.date()}_{CONFIG.end.date()}_raw.csv"
+        f"{CONFIG.pair}_{CONFIG.timeframe}_{effective_start.date()}_{CONFIG.end.date()}_raw.csv"
     )
     export_csv(df.copy(), raw_path)
 
@@ -107,9 +186,6 @@ def main() -> None:
 
     # Use the same parameters you settled on for the "good range"
     swings, levels = compute_structure_levels(res.df, left=6, right=6)
-
-    export_swings(swings, "artifacts/debug/swings.csv")
-    export_levels(levels, "artifacts/debug/structure_levels.csv")
 
     print("Exported:", "artifacts/debug/swings.csv", "artifacts/debug/structure_levels.csv")
 
@@ -125,7 +201,7 @@ def main() -> None:
 
     final_path = (
         f"artifacts/debug/"
-        f"{CONFIG.pair}_{CONFIG.timeframe}_{CONFIG.start.date()}_{CONFIG.end.date()}_final.csv"
+        f"{CONFIG.pair}_{CONFIG.timeframe}_{effective_start.date()}_{CONFIG.end.date()}_final.csv"
     )
     export_csv(res.df, final_path)
 
@@ -149,7 +225,7 @@ def main() -> None:
     basename = make_basename(
         pair=CONFIG.pair,
         timeframe=CONFIG.timeframe,
-        start=CONFIG.start,
+        start=effective_start,
         end=CONFIG.end,
         struct_direction=struct_direction,
         eps=eps,
@@ -158,6 +234,9 @@ def main() -> None:
     )
     
     print("DEBUG structure_levels:", len(res.structure))
+
+    export_swings(swings, f"artifacts/debug/{basename}_swings.csv")
+    export_levels(levels, f"artifacts/debug/{basename}_structure_levels.csv")
 
     # ---------------------------
     # Chart export
@@ -177,7 +256,7 @@ def main() -> None:
 
 
     from engine_v2.debug.export_zones import export_kl_zones
-    export_kl_zones(res.meta.get("kl_zones", []), "artifacts/debug/kl_zones.csv")
+    export_kl_zones(res.meta.get("kl_zones", []), f"artifacts/debug/{basename}_kl_zones.csv")
 
 
 if __name__ == "__main__":
