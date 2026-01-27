@@ -720,20 +720,35 @@ def export_chart_plotly(
     ):
         time_by_idx = {int(ii): tt for ii, tt in zip(dfx.index.to_numpy(), dfx[COL_TIME])}
 
-        points = []  # (point_idx, time, price, kind)
+        # Helper to safely get int values with fallback
+        def _safe_int(val, default=-1):
+            try:
+                if pd.isna(val):
+                    return default
+                return int(val)
+            except (ValueError, TypeError):
+                return default
+
+        points = []  # (point_idx, time, price, kind, structure_id, cts_cycle_id, struct_direction)
         # CTS confirmed => point is the CTS point (cts_idx/cts_price), not the confirmation candle time
         cts_conf = dfx[dfx["cts_event"].astype(str) == "CTS_CONFIRMED"]
         for _, r in cts_conf.iterrows():
             p_idx = int(r["cts_idx"])
             if p_idx in time_by_idx:
-                points.append((p_idx, time_by_idx[p_idx], float(r["cts_price"]), "CTS"))
+                sid = _safe_int(r.get("structure_id"))
+                cycle = _safe_int(r.get("cts_cycle_id"))
+                sd = _safe_int(r.get("struct_direction"))
+                points.append((p_idx, time_by_idx[p_idx], float(r["cts_price"]), "CTS", sid, cycle, sd))
 
         # BOS confirmed => point is bos_idx/bos_price
         bos_conf = dfx[dfx["bos_event"].astype(str) == "BOS_CONFIRMED"]
         for _, r in bos_conf.iterrows():
             p_idx = int(r["bos_idx"])
             if p_idx in time_by_idx:
-                points.append((p_idx, time_by_idx[p_idx], float(r["bos_price"]), "BOS"))
+                sid = _safe_int(r.get("structure_id"))
+                cycle = _safe_int(r.get("cts_cycle_id"))
+                sd = _safe_int(r.get("struct_direction"))
+                points.append((p_idx, time_by_idx[p_idx], float(r["bos_price"]), "BOS", sid, cycle, sd))
 
         # sort by point index (time order)
         points.sort(key=lambda x: x[0])
@@ -767,8 +782,15 @@ def export_chart_plotly(
                         y=[p[2] for p in pts_cts],
                         mode="markers",
                         name="CTS (confirmed)",
-                        customdata=[[p[0], p[3]] for p in pts_cts],
-                        hovertemplate="idx=%{customdata[0]}<br>kind=%{customdata[1]}<extra></extra>",
+                        customdata=[[p[0], p[3], p[4], p[5], p[6]] for p in pts_cts],
+                        hovertemplate=(
+                            "idx=%{customdata[0]}<br>"
+                            "kind=%{customdata[1]}<br>"
+                            "sid=%{customdata[2]}<br>"
+                            "cts_cycle_id=%{customdata[3]}<br>"
+                            "struct_direction=%{customdata[4]}"
+                            "<extra></extra>"
+                        ),
                         **_style("structure.cts"),        # <--- ADD HERE (CTS dots)
                     )
                 )
@@ -781,8 +803,15 @@ def export_chart_plotly(
                         y=[p[2] for p in pts_bos],
                         mode="markers",
                         name="BOS (confirmed)",
-                        customdata=[[p[0], p[3]] for p in pts_bos],
-                        hovertemplate="idx=%{customdata[0]}<br>kind=%{customdata[1]}<extra></extra>",
+                        customdata=[[p[0], p[3], p[4], p[5], p[6]] for p in pts_bos],
+                        hovertemplate=(
+                            "idx=%{customdata[0]}<br>"
+                            "kind=%{customdata[1]}<br>"
+                            "sid=%{customdata[2]}<br>"
+                            "cts_cycle_id=%{customdata[3]}<br>"
+                            "struct_direction=%{customdata[4]}"
+                            "<extra></extra>"
+                        ),
                         **_style("structure.bos"),        # <--- ADD HERE (BOS dots)
                     )
                 )
@@ -1028,14 +1057,33 @@ def export_chart_plotly(
                     )
 
                 # Hover lines for this segment (shapes don't hover)
+                # Use multiple points (one per candle) so hover works across entire horizontal edge
+                seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= seg_x0) & (dfx[COL_TIME] <= seg_x1)]
+                if len(seg_times) == 0:
+                    seg_times = pd.Series([seg_x0, seg_x1])
+
+                hover_customdata = [[
+                    side,
+                    structure_id,
+                    struct_direction,
+                    base_pattern,
+                    base_idx,
+                    conf_idx,
+                    cycle_id,
+                    y1,
+                    y0,
+                ]] * len(seg_times)
+
+                # Top hover line
                 fig.add_trace(
                     go.Scatter(
-                        x=[seg_x0, seg_x1],
-                        y=[y1, y1],
+                        x=seg_times,
+                        y=[y1] * len(seg_times),
                         mode="lines",
                         name="KL zone" if active else "KL zone (inactive)",
                         showlegend=hover_showlegend,
                         line=hover_line,
+                        line_shape="hv",
                         hovertemplate=(
                             "KL Zone<br>"
                             "side=%{customdata[0]}<br>"
@@ -1049,28 +1097,20 @@ def export_chart_plotly(
                             "bottom=%{customdata[8]:.5f}"
                             "<extra></extra>"
                         ),
-                        customdata=[[
-                            side,
-                            structure_id,
-                            struct_direction,
-                            base_pattern,
-                            base_idx,
-                            conf_idx,
-                            cycle_id,
-                            y1,
-                            y0,
-                        ]] * 2,
+                        customdata=hover_customdata,
                     )
                 )
 
+                # Bottom hover line
                 fig.add_trace(
                     go.Scatter(
-                        x=[seg_x0, seg_x1],
-                        y=[y0, y0],
+                        x=seg_times,
+                        y=[y0] * len(seg_times),
                         mode="lines",
                         name="KL zone" if active else "KL zone (inactive)",
                         showlegend=hover_showlegend,
                         line=hover_line,
+                        line_shape="hv",
                         hovertemplate=(
                             "KL Zone<br>"
                             "side=%{customdata[0]}<br>"
@@ -1084,17 +1124,7 @@ def export_chart_plotly(
                             "bottom=%{customdata[8]:.5f}"
                             "<extra></extra>"
                         ),
-                        customdata=[[
-                            side,
-                            structure_id,
-                            struct_direction,
-                            base_pattern,
-                            base_idx,
-                            conf_idx,
-                            cycle_id,
-                            y1,
-                            y0,
-                        ]] * 2,
+                        customdata=hover_customdata,
                     )
                 )
 

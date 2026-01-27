@@ -53,7 +53,7 @@ class MarketStructureState:
     cts_event: str = ""  # one-candle event marker written by _write_df_row
 
     # NEW (Part 2): CTS cycles + thresholds
-    cts_cycle_id: int = 0  # increments only when we ESTABLISH a NEW CTS cycle
+    cts_cycle_id: int = -1  # increments to 0 on first CTS cycle (0-indexed)
     cts_threshold: Optional[float] = None  # mirrors active range bound after CTS confirmation (debug)
 
     # BOS lifecycle
@@ -1059,7 +1059,7 @@ class MarketStructure:
                 )
 
                 # Create + confirm BOS simultaneously with CTS establishment
-                if st.cts_cycle_id == 1:
+                if st.cts_cycle_id == 0:
                     # bos_price = self._initial_bos_before_first_cts(cts_idx)
                     # self._emit_bos_confirmed(apply_idx, bos_price, meta={"source": "initial_prior_extreme"})
                     bos_idx, bos_price = self._initial_bos_before_first_cts(cts_idx)
