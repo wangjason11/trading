@@ -883,19 +883,23 @@ def export_chart_plotly(
     # -------------------------------------------------
     zones = dfx.attrs.get("kl_zones", [])
     if zone_cfg.get("KL", False) and zones:
-        # Determine "structure to plot" FROM ZONES:
-        # Always show all zones from the most recent structure_id.
+        # Determine "structures to plot" FROM ZONES:
+        # Show zones from the N most recent structure_ids (default: 1)
         by_struct = {}
         for z in zones:
             sid = int(z.meta.get("structure_id", 0))
             side = str(z.side)
             by_struct.setdefault(sid, set()).add(side)
 
-        current_structure_id = max(by_struct.keys()) if by_struct else 0
-        zones_cur = [z for z in zones if int(z.meta.get("structure_id", 0)) == int(current_structure_id)]
+        # Get the N most recent structure_ids
+        num_structures = int(zone_cfg.get("num_structures", 1))
+        all_sids = sorted(by_struct.keys(), reverse=True)  # descending order (most recent first)
+        selected_sids = set(all_sids[:num_structures])
+
+        zones_cur = [z for z in zones if int(z.meta.get("structure_id", 0)) in selected_sids]
 
         print("[chart][kl] zone structures sides:", {k: sorted(list(v)) for k, v in sorted(by_struct.items())})
-        print("[chart][kl] selected_structure_id:", current_structure_id)
+        print("[chart][kl] selected_structure_ids:", sorted(selected_sids))
         print("[chart][kl] zones_cur:", [
             (z.side,
              z.meta.get("base_idx"),

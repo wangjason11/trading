@@ -47,8 +47,8 @@ STYLE = {
 
     # Week 5: range rectangles (shape styling)
     "range.rect": {
-        "fillcolor": "yellow",
-        "opacity": 0.20,
+        "fillcolor": "gray",
+        "opacity": 0.08,
         "line_width": 0,
         "layer": "below",
     },

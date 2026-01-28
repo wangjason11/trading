@@ -19,7 +19,7 @@ chart_cfg = {
 
     # keep these off for now (declutter)
     "structure": {"levels": True, "swings": False},
-    "zones": {"KL": True, "OB": False},
+    "zones": {"KL": True, "OB": False, "num_structures": 3},  # num_structures: how many recent structure_ids to show zones for
 }
 
 
