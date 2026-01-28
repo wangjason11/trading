@@ -828,31 +828,45 @@ def export_chart_plotly(
         # Reversal candidate labels (rc)
         # Label EVERY candle that closes beyond bos_threshold
         # -------------------------------------------------
-        # Detect the bos threshold column name
-        bos_col = None
-        for c in ("bos_threshold", "bos_th"):
-            if c in dfx.columns:
-                bos_col = c
-                break
+        # Reversal candidate markers: use REVERSAL_WATCH_START events from structure analysis
+        # (events survive rewinds, unlike dataframe columns)
+        # REVERSAL_WATCH_START marks all close-breaks; REVERSAL_CANDIDATE indicates a valid pattern
+        # -------------------------------------------------
+        structure_events = dfx.attrs.get("structure_events", [])
+        reversal_watch_starts = [
+            ev for ev in structure_events
+            if getattr(ev, "type", None) == "REVERSAL_WATCH_START"
+        ]
+        reversal_candidates = [
+            ev for ev in structure_events
+            if getattr(ev, "type", None) == "REVERSAL_CANDIDATE"
+        ]
+        # Map anchor_idx to REVERSAL_CANDIDATE event (if pattern found)
+        rc_by_anchor = {int(ev.meta.get("anchor_idx", ev.idx)): ev for ev in reversal_candidates}
 
-        if bos_col is not None:
-            bos = dfx[bos_col].astype(float)
-            close = dfx[COL_C].astype(float)
+        if reversal_watch_starts:
+            # Get unique anchor indices from watch start events
+            anchor_indices = sorted(set(
+                int(ev.meta.get("anchor_idx", ev.idx))
+                for ev in reversal_watch_starts
+                if ev.meta.get("anchor_idx", ev.idx) in dfx.index
+            ))
 
-            # If struct_direction is available in function scope, use it.
-            # Otherwise fall back to +1 (your current runs are sd1).
-            sd = int(struct_direction) if "struct_direction" in locals() else 1
+            if anchor_indices:
+                rc = dfx.loc[anchor_indices].copy()
 
-            if sd == 1:
-                rc_mask = bos.notna() & (close <= bos)
-            else:
-                rc_mask = bos.notna() & (close >= bos)
-
-            rc = dfx[rc_mask].copy()
-            if not rc.empty:
-                # Put label slightly above/below candle so it doesn't collide with triangles
-                # (use wick_offset if you already computed it)
-                y = (rc[COL_L].astype(float) - wick_offset.loc[rc.index]) if sd == 1 else (rc[COL_H].astype(float) + wick_offset.loc[rc.index])
+                # Build customdata from events for richer hover info
+                ev_by_anchor = {int(ev.meta.get("anchor_idx", ev.idx)): ev for ev in reversal_watch_starts}
+                customdata = []
+                for idx in anchor_indices:
+                    ev = ev_by_anchor.get(idx)
+                    bos_frozen = float(ev.meta.get("bos_frozen", 0)) if ev else 0
+                    sid = int(ev.meta.get("structure_id", 0)) if ev else 0
+                    sd = int(ev.meta.get("struct_direction", 0)) if ev else 0
+                    # Check if this anchor also has a REVERSAL_CANDIDATE (valid pattern found)
+                    rc_ev = rc_by_anchor.get(idx)
+                    pattern = str(rc_ev.meta.get("pattern", "none")) if rc_ev else "none"
+                    customdata.append((idx, bos_frozen, float(dfx.loc[idx, COL_C]), pattern, sid, sd))
 
                 fig.add_trace(
                     go.Scatter(
@@ -864,16 +878,15 @@ def export_chart_plotly(
                         hovertemplate=(
                             "idx=%{customdata[0]}<br>"
                             "event=reversal_candidate<br>"
-                            f"{bos_col}=%{{customdata[1]:.5f}}<br>"
-                            "close=%{customdata[2]:.5f}"
+                            "bos_frozen=%{customdata[1]:.5f}<br>"
+                            "close=%{customdata[2]:.5f}<br>"
+                            "pattern=%{customdata[3]}<br>"
+                            "sid=%{customdata[4]}<br>"
+                            "struct_direction=%{customdata[5]}"
                             "<extra></extra>"
                         ),
-                        customdata=list(zip(
-                            rc.index.to_numpy(),
-                            rc[bos_col].astype(float),
-                            rc[COL_C].astype(float),
-                        )),
-                        **_style("structure.reversal_watch_start"),  # purple X (old formatting)
+                        customdata=customdata,
+                        **_style("structure.reversal_watch_start"),  # purple X
                     )
                 )
 

@@ -339,6 +339,10 @@ class MarketStructure:
         if st.bos_threshold is None:
             return
 
+        # Don't process BOS barrier in REVERSAL state (terminal - structure is over)
+        if st.state == MarketState.REVERSAL:
+            return
+
         # While reversal watch is active, bos_th must not update.
         if st.reversal_watch_active:
             return
@@ -427,6 +431,24 @@ class MarketStructure:
         st.reversal_watch_start_idx = int(i)
         st.reversal_bos_th_frozen = float(bos_frozen)
         st.reversal_watch_expires_idx = min(int(i) + int(self.range_max_k), len(self.df) - 1)
+
+        # Emit REVERSAL_WATCH_START event for all close-breaks (survives rewinds)
+        # This captures the moment reversal watch begins, even if no pattern is found
+        self.events.append(
+            StructureEvent(
+                idx=int(i),
+                category="STRUCTURE",
+                type="REVERSAL_WATCH_START",
+                price=float(bos_frozen),
+                meta={
+                    "anchor_idx": int(i),
+                    "bos_frozen": float(bos_frozen),
+                    "expires_idx": int(st.reversal_watch_expires_idx),
+                    "structure_id": int(st.structure_id),
+                    "struct_direction": int(self.struct_direction),
+                },
+            )
+        )
 
 
     def _clear_reversal_watch(self) -> None:
@@ -548,6 +570,25 @@ class MarketStructure:
                 f"[RV_SCHEDULE] anchor={st.pending_reversal_anchor_idx} "
                 f"apply={st.pending_reversal_apply_idx} pat={pat} "
                 f"bos_frozen={bos_frozen:.5f} expires={st.reversal_watch_expires_idx}"
+            )
+
+            # Emit REVERSAL_CANDIDATE event for charting (survives rewinds)
+            self.events.append(
+                StructureEvent(
+                    idx=int(anchor_idx),
+                    category="STRUCTURE",
+                    type="REVERSAL_CANDIDATE",
+                    price=float(bos_frozen),
+                    meta={
+                        "anchor_idx": int(anchor_idx),
+                        "apply_idx": int(apply_r),
+                        "pattern": pat,
+                        "bos_frozen": float(bos_frozen),
+                        "expires_idx": int(st.reversal_watch_expires_idx) if st.reversal_watch_expires_idx is not None else None,
+                        "structure_id": int(st.structure_id),
+                        "struct_direction": int(self.struct_direction),
+                    },
+                )
             )
 
     def _maybe_apply_pending_reversal(self, i: int) -> bool:

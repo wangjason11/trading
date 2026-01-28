@@ -80,8 +80,9 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
 
     meta["kl_zones"] = kl_zones
 
-    # For chart overlay (export_plotly reads df.attrs["kl_zones"])
+    # For chart overlay (export_plotly reads df.attrs["kl_zones"] and df.attrs["structure_events"])
     s_res.df.attrs["kl_zones"] = kl_zones
+    s_res.df.attrs["structure_events"] = s_res.events
 
     return PipelineResult(
         df=s_res.df,
