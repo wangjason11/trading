@@ -625,6 +625,7 @@ def derive_kl_zones_v1(
             strength=0.0,
             meta={
                 "structure_id": sid,
+                "struct_direction": sd,
                 "cycle_id": _cycle_id(confirmed_idx),
 
                 # Zone confirmation semantics
