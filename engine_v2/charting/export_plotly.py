@@ -687,17 +687,10 @@ def export_chart_plotly(
             else:
                 opacity_mult = 0.5
 
-            # Apply opacity to fill color
+            # Apply opacity multiplier
             style_copy = dict(range_rect_style)
-            if "fillcolor" in style_copy:
-                fc = style_copy["fillcolor"]
-                # Parse rgba and scale alpha
-                if fc.startswith("rgba("):
-                    parts = fc[5:-1].split(",")
-                    if len(parts) == 4:
-                        r, g, b = parts[0].strip(), parts[1].strip(), parts[2].strip()
-                        a = float(parts[3].strip())
-                        style_copy["fillcolor"] = f"rgba({r},{g},{b},{a * opacity_mult})"
+            base_opacity = float(style_copy.get("opacity", 0.15))
+            style_copy["opacity"] = base_opacity * opacity_mult
 
             fig.add_shape(
                 type="rect",
@@ -965,10 +958,7 @@ def export_chart_plotly(
             all_sids.add(int(ev.meta.get("structure_id", 0)))
         most_recent_sid = max(all_sids) if all_sids else 0
 
-        # Time offset for left/right positioning
-        time_delta = pd.Timedelta(hours=0.3)
-
-        # Build points from events: (idx, time, price, kind, sid, cycle_id, sd, opacity)
+        # Build points from events: (idx, time, price, kind, sid, cycle_id, sd, opacity, has_overlap)
         points = []
 
         # Group events by idx for overlap detection
@@ -993,12 +983,12 @@ def export_chart_plotly(
         for idx in bos_by_idx:
             bos_by_idx[idx].sort(key=lambda e: int(e.meta.get("structure_id", 0)))
 
-        # Build CTS points with overlap handling
+        # Build CTS points - no time offset, track overlap for hover positioning
         # CTS_CONFIRMED has ev.price=None; look up cts_price from DataFrame at confirmation candle (ev.idx)
         pts_cts = []
         for idx, evs in sorted(cts_by_idx.items()):
             has_overlap = len(evs) > 1
-            for i, ev in enumerate(evs):
+            for ev in evs:
                 sid = int(ev.meta.get("structure_id", 0))
                 cycle = int(ev.meta.get("cycle_id", 0))
                 sd = int(ev.meta.get("struct_direction", 0))
@@ -1012,35 +1002,25 @@ def export_chart_plotly(
                     price = 0.0
 
                 opacity = 1.0 if sid == most_recent_sid else 0.5
+                x_time = time_by_idx[idx]
 
-                base_time = time_by_idx[idx]
-                if has_overlap:
-                    x_time = base_time - time_delta if i == 0 else base_time + time_delta
-                else:
-                    x_time = base_time
-
-                pts_cts.append((idx, x_time, price, "CTS", sid, cycle, sd, opacity))
+                pts_cts.append((idx, x_time, price, "CTS", sid, cycle, sd, opacity, has_overlap))
                 points.append((idx, time_by_idx[idx], price, "CTS", sid, cycle, sd))
 
-        # Build BOS points with overlap handling
+        # Build BOS points - no time offset, track overlap for hover positioning
         # BOS_CONFIRMED has ev.price set correctly
         pts_bos = []
         for idx, evs in sorted(bos_by_idx.items()):
             has_overlap = len(evs) > 1
-            for i, ev in enumerate(evs):
+            for ev in evs:
                 sid = int(ev.meta.get("structure_id", 0))
                 cycle = int(ev.meta.get("cycle_id", 0))
                 sd = int(ev.meta.get("struct_direction", 0))
                 price = float(ev.price) if ev.price is not None else 0.0
                 opacity = 1.0 if sid == most_recent_sid else 0.5
+                x_time = time_by_idx[idx]
 
-                base_time = time_by_idx[idx]
-                if has_overlap:
-                    x_time = base_time - time_delta if i == 0 else base_time + time_delta
-                else:
-                    x_time = base_time
-
-                pts_bos.append((idx, x_time, price, "BOS", sid, cycle, sd, opacity))
+                pts_bos.append((idx, x_time, price, "BOS", sid, cycle, sd, opacity, has_overlap))
                 points.append((idx, time_by_idx[idx], price, "BOS", sid, cycle, sd))
 
         # sort by point index (time order)
@@ -1075,15 +1055,15 @@ def export_chart_plotly(
                     x_line.append(end_time)
                     y_line.append(end_price)
 
-                # Opacity: faded for prior structures
-                opacity = 1.0 if sid == most_recent_sid else 0.5
+                # Opacity: base from style, multiplier for prior structures
                 line_style = _style("structure.swing_line").copy()
+                base_opacity = float(line_style.get("opacity", 0.9))
+                opacity_mult = 1.0 if sid == most_recent_sid else 0.5
                 if "line" in line_style:
                     line_style["line"] = dict(line_style["line"])
-                    # Adjust opacity via color if needed
                 else:
                     line_style["line"] = {}
-                line_style["opacity"] = opacity
+                line_style["opacity"] = base_opacity * opacity_mult
 
                 fig.add_trace(
                     go.Scatter(
@@ -1099,17 +1079,23 @@ def export_chart_plotly(
                 )
 
             # Markers: confirmed CTS points (with opacity per structure)
-            # pts_cts format: (idx, x_time, price, "CTS", sid, cycle, sd, opacity)
+            # pts_cts format: (idx, x_time, price, "CTS", sid, cycle, sd, opacity, has_overlap)
             if pts_cts:
-                # Group by opacity for separate traces
-                cts_full = [p for p in pts_cts if p[7] == 1.0]
-                cts_faded = [p for p in pts_cts if p[7] < 1.0]
+                # Group by: (opacity, has_overlap, sid for overlap points)
+                # Non-overlap points: group by opacity only
+                # Overlap points: separate trace per sid with mirrored hover labels
+                cts_full_no_overlap = [p for p in pts_cts if p[7] == 1.0 and not p[8]]
+                cts_faded_no_overlap = [p for p in pts_cts if p[7] < 1.0 and not p[8]]
+                cts_overlap_by_sid = defaultdict(list)
+                for p in pts_cts:
+                    if p[8]:  # has_overlap
+                        cts_overlap_by_sid[p[4]].append(p)  # group by sid
 
-                for pts, op_label in [(cts_full, ""), (cts_faded, " (prior)")]:
+                # Non-overlap traces (normal hover)
+                for pts, op_label in [(cts_full_no_overlap, ""), (cts_faded_no_overlap, " (prior)")]:
                     if pts:
                         style = _style("structure.cts").copy()
                         if op_label:
-                            # Apply 50% opacity
                             if "marker" in style:
                                 style["marker"] = dict(style["marker"])
                                 style["marker"]["opacity"] = 0.5
@@ -1133,13 +1119,54 @@ def export_chart_plotly(
                             )
                         )
 
-            # Markers: confirmed BOS points (with opacity per structure)
-            # pts_bos format: (idx, x_time, price, "BOS", sid, cycle, sd, opacity)
-            if pts_bos:
-                bos_full = [p for p in pts_bos if p[7] == 1.0]
-                bos_faded = [p for p in pts_bos if p[7] < 1.0]
+                # Overlap traces: separate per sid with mirrored hover labels
+                for sid in sorted(cts_overlap_by_sid.keys()):
+                    pts = cts_overlap_by_sid[sid]
+                    if pts:
+                        style = _style("structure.cts").copy()
+                        opacity = pts[0][7]  # all points for this sid have same opacity
+                        if opacity < 1.0:
+                            if "marker" in style:
+                                style["marker"] = dict(style["marker"])
+                                style["marker"]["opacity"] = 0.5
+                        # Hover label: sid 0 (prior) on left, higher sid on right
+                        xanchor = "right" if sid < most_recent_sid else "left"
+                        op_label = " (prior)" if sid < most_recent_sid else ""
+                        fig.add_trace(
+                            go.Scatter(
+                                x=[p[1] for p in pts],
+                                y=[p[2] for p in pts],
+                                mode="markers",
+                                name=f"CTS (confirmed){op_label} [overlap]",
+                                customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
+                                hovertemplate=(
+                                    "idx=%{customdata[0]}<br>"
+                                    "kind=%{customdata[1]}<br>"
+                                    "price=%{customdata[2]:.5f}<br>"
+                                    "sid=%{customdata[3]}<br>"
+                                    "cycle_id=%{customdata[4]}<br>"
+                                    "struct_direction=%{customdata[5]}"
+                                    "<extra></extra>"
+                                ),
+                                hoverlabel=dict(xanchor=xanchor),
+                                showlegend=False,
+                                **style,
+                            )
+                        )
 
-                for pts, op_label in [(bos_full, ""), (bos_faded, " (prior)")]:
+            # Markers: confirmed BOS points (with opacity per structure)
+            # pts_bos format: (idx, x_time, price, "BOS", sid, cycle, sd, opacity, has_overlap)
+            if pts_bos:
+                # Group by: (opacity, has_overlap, sid for overlap points)
+                bos_full_no_overlap = [p for p in pts_bos if p[7] == 1.0 and not p[8]]
+                bos_faded_no_overlap = [p for p in pts_bos if p[7] < 1.0 and not p[8]]
+                bos_overlap_by_sid = defaultdict(list)
+                for p in pts_bos:
+                    if p[8]:  # has_overlap
+                        bos_overlap_by_sid[p[4]].append(p)  # group by sid
+
+                # Non-overlap traces (normal hover)
+                for pts, op_label in [(bos_full_no_overlap, ""), (bos_faded_no_overlap, " (prior)")]:
                     if pts:
                         style = _style("structure.bos").copy()
                         if op_label:
@@ -1162,6 +1189,41 @@ def export_chart_plotly(
                                     "struct_direction=%{customdata[5]}"
                                     "<extra></extra>"
                                 ),
+                                **style,
+                            )
+                        )
+
+                # Overlap traces: separate per sid with mirrored hover labels
+                for sid in sorted(bos_overlap_by_sid.keys()):
+                    pts = bos_overlap_by_sid[sid]
+                    if pts:
+                        style = _style("structure.bos").copy()
+                        opacity = pts[0][7]
+                        if opacity < 1.0:
+                            if "marker" in style:
+                                style["marker"] = dict(style["marker"])
+                                style["marker"]["opacity"] = 0.5
+                        # Hover label: sid 0 (prior) on left, higher sid on right
+                        xanchor = "right" if sid < most_recent_sid else "left"
+                        op_label = " (prior)" if sid < most_recent_sid else ""
+                        fig.add_trace(
+                            go.Scatter(
+                                x=[p[1] for p in pts],
+                                y=[p[2] for p in pts],
+                                mode="markers",
+                                name=f"BOS (confirmed){op_label} [overlap]",
+                                customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
+                                hovertemplate=(
+                                    "idx=%{customdata[0]}<br>"
+                                    "kind=%{customdata[1]}<br>"
+                                    "price=%{customdata[2]:.5f}<br>"
+                                    "sid=%{customdata[3]}<br>"
+                                    "cycle_id=%{customdata[4]}<br>"
+                                    "struct_direction=%{customdata[5]}"
+                                    "<extra></extra>"
+                                ),
+                                hoverlabel=dict(xanchor=xanchor),
+                                showlegend=False,
                                 **style,
                             )
                         )
@@ -1343,7 +1405,7 @@ def export_chart_plotly(
             elif zone_sid == most_recent_sid:
                 opacity_mult = 0.5
             else:
-                opacity_mult = 0.25
+                opacity_mult = 0.2
 
             base_fill_op = float(stz.get("fill_opacity_active", 0.18))
             base_line_op = float(stz.get("confirm_opacity_active", 0.9))

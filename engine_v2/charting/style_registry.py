@@ -48,7 +48,7 @@ STYLE = {
     # Week 5: range rectangles (shape styling)
     "range.rect": {
         "fillcolor": "gray",
-        "opacity": 0.08,
+        "opacity": 0.1,
         "line_width": 0,
         "layer": "below",
     },
@@ -56,6 +56,7 @@ STYLE = {
     # Week 5: confirmed structure swing line + points
     "structure.swing_line": {
         "line": {"width": 2, "color": "black"},
+        "opacity": 0.9,
     },
     "structure.cts": {
         "marker": {"size": 3, "symbol": "circle", "opacity": 0.95, "color": "black"},
@@ -77,18 +78,18 @@ STYLE = {
     # -----------------------------
     "zone.kl.buy": {
         "rgb": "0, 180, 0",
-        "fill_opacity_active": 0.35,
+        "fill_opacity_active": 0.4,
         "fill_opacity_inactive": 0.15,
         "confirm_line_width": 2,
-        "confirm_opacity_active": 0.70,
+        "confirm_opacity_active": 0.9,
         "confirm_opacity_inactive": 0.30,
     },
     "zone.kl.sell": {
         "rgb": "220, 0, 0",
-        "fill_opacity_active": 0.35,
+        "fill_opacity_active": 0.4,
         "fill_opacity_inactive": 0.15,
         "confirm_line_width": 2,
-        "confirm_opacity_active": 0.70,
+        "confirm_opacity_active": 0.9,
         "confirm_opacity_inactive": 0.30,
     },
 
