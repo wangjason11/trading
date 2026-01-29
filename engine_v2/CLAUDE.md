@@ -16,10 +16,11 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 
 | Completed | In Progress |
 |-----------|-------------|
-| KL Zones v1 (creation, expansion, charting) | Identify Start (start candle selection) |
+| KL Zones v1 (creation, expansion, charting) | |
 | Market Structure (CTS/BOS/Range/Reversal) | |
 | Structure Patterns (breakout patterns) | |
 | Candle Classification | |
+| Identify Start (Exception 1 & 2 probe logic) | |
 
 **Note:** Original syllabus had Zones in Week 7, but we pulled it forward to Week 6. Indicators (original Week 6) deferred to later.
 
@@ -158,3 +159,37 @@ When something looks wrong:
 - Don't optimize before logic is visually validated
 - Don't break existing event contracts
 - Don't skip chart verification
+
+---
+
+## Lessons Learned (Known Gotchas)
+
+### Multi-Structure Start Detection (Exception 1 & 2)
+
+**Problem:** After sid N reversal, determining the correct start_idx for sid N+1.
+
+**Flow:**
+1. **Exception 1** (in `identify_start.py`): Check if any candle after last confirmed CTS but before reversal has higher high (uptrend) or lower low (downtrend). If so, start from that extreme.
+2. **Exception 2** (probe in `structure_engine.py`): If Exception 1 not triggered, run a "probe" (dry run) of MarketStructure from original candidate to reversal_confirmed. If pullback confirmed AND price reached near CTS zone outer bound (within 15 pips of inner), start from that candle instead.
+
+**Key insight:** Probe runs on a **copy** of df with `end_idx` parameter. If Exception 2 triggers, discard probe data entirely. If not, keep probe data and continue.
+
+### `_initial_bos_before_first_cts` Must Respect `start_idx`
+
+**Bug:** When MarketStructure starts from non-zero `start_idx`, the window for finding the initial BOS extreme was `self.df.iloc[0:cts_idx]` — looking back to index 0 instead of `start_idx`.
+
+**Symptom:** First BOS for sid 1 appeared at wrong index (e.g., 652 instead of 689).
+
+**Fix:** Change to `self.df.iloc[self.start_idx:cts_idx]` and offset the result: `bos_idx = self.start_idx + rel`.
+
+### Isolation Principle for Multi-Structure Debugging
+
+**Rule:** When fixing issues in sid N+1, **never modify data for sid N** (events, df columns, zones) prior to reversal.
+
+**Why:** sid 0 events are already committed to `all_events`. Changing BOS/CTS event structure (e.g., switching from anchor idx to apply_idx) affects ALL structures, not just the one being debugged.
+
+### Event Metadata Should Include structure_id and struct_direction
+
+**Why:** Downstream consumers (charting, zone derivation) need to know which structure an event belongs to. Without this metadata, filtering by structure_id requires fragile df lookups.
+
+**Events that need this:** STATE_CHANGED, RANGE_CONFIRMED, RANGE_UPDATED, RANGE_RESET, RANGE_BREAK_CONFIRMED.
