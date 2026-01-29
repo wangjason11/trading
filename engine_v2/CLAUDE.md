@@ -164,6 +164,22 @@ When something looks wrong:
 
 ## Lessons Learned (Known Gotchas)
 
+### Debugging Philosophy: Understand Before Fixing
+
+**Principle:** It's not about simply making a fix to get the right answers/values. It's more important to understand **why** it was wrong in the first place so we implement the right fix and get the right answers the correct way.
+
+**Why this matters:**
+- A "lucky fix" that happens to produce correct output may mask deeper issues
+- Without understanding the root cause, similar bugs will reappear elsewhere
+- The fix itself might be wrong even if the output looks correct (e.g., fixing sid 1 by accidentally modifying sid 0)
+- Future development builds on current understanding — wrong mental models compound
+
+**Approach:**
+1. Before changing code, articulate *why* the current behavior is wrong
+2. Trace the logic to find the exact point where expected != actual
+3. Verify the fix addresses the root cause, not just the symptom
+4. Confirm the fix doesn't have unintended side effects on other parts
+
 ### Multi-Structure Start Detection (Exception 1 & 2)
 
 **Problem:** After sid N reversal, determining the correct start_idx for sid N+1.
