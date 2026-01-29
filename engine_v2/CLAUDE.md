@@ -209,3 +209,42 @@ When something looks wrong:
 **Why:** Downstream consumers (charting, zone derivation) need to know which structure an event belongs to. Without this metadata, filtering by structure_id requires fragile df lookups.
 
 **Events that need this:** STATE_CHANGED, RANGE_CONFIRMED, RANGE_UPDATED, RANGE_RESET, RANGE_BREAK_CONFIRMED.
+
+### DataFrame Columns Get Overwritten by Subsequent Structures
+
+**Problem:** When processing sid N+1, columns like `market_state`, `structure_id`, etc. are overwritten. After sid 1 runs, querying `df[df["market_state"] == "reversal"]` for sid 0 returns **empty** because those rows now have sid 1's values.
+
+**Symptom:** Range rectangles or zones for sid 0 extend past reversal because the code couldn't find the reversal point.
+
+**Solution:** Use **events** instead of df columns for cross-structure queries. Events are appended (not overwritten) and preserve metadata like `structure_id`. Example:
+```python
+# BAD: df columns overwritten
+rev_mask = df["market_state"] == "reversal"  # Empty for sid 0!
+
+# GOOD: events preserved
+rev_events = [ev for ev in events if ev.type == "STATE_CHANGED" and ev.meta.get("to") == "reversal"]
+rev_by_sid = {ev.meta["structure_id"]: ev.idx for ev in rev_events}
+```
+
+### Range Event Sort Order for Charting
+
+**Problem:** Range events must be sorted carefully for correct rendering:
+1. RANGE_STARTED has `confirm_idx` (when event fires) but also `start_idx` (logical start)
+2. RANGE_UPDATED events may occur between `start_idx` and `confirm_idx`
+3. RANGE_RESET at idx N may coincide with RANGE_STARTED with `start_idx=N`
+
+**Solution:** Custom sort key with correct priorities:
+```python
+# Priority: RANGE_RESET=0, RANGE_STARTED=1, RANGE_UPDATED=2
+# RANGE_RESET must come BEFORE RANGE_STARTED at same idx (close old before open new)
+# RANGE_STARTED sorts by start_idx (not confirm_idx) to process before RANGE_UPDATED in its window
+
+def sort_key(e):
+    if e.type == "RANGE_STARTED":
+        return (e.meta.get("start_idx", e.idx), 1)  # Use start_idx
+    if e.type == "RANGE_RESET":
+        return (e.idx, 0)  # Highest priority
+    return (e.idx, 2)  # RANGE_UPDATED
+```
+
+**Why this matters:** Without correct sort order, a new range may be immediately closed by a RANGE_RESET that should have closed the *previous* range.
