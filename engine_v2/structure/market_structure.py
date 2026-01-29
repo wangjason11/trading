@@ -116,12 +116,13 @@ class MarketStructure:
       - A candle also cannot become a range starter if it participated in the original pattern window excluding the last candle (e.g., continuous: start+middle; 2-candle patterns: first candle).
     """
 
-    def __init__(self,df: pd.DataFrame, struct_direction: int, *, eps: float = 0.0001, range_min_k: int = 2, range_max_k: int = 5, debug_invariants: bool = True, start_idx: int = 0, structure_id: int = 0):
+    def __init__(self,df: pd.DataFrame, struct_direction: int, *, eps: float = 0.0001, range_min_k: int = 2, range_max_k: int = 5, debug_invariants: bool = True, start_idx: int = 0, structure_id: int = 0, end_idx: int | None = None):
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
         self.df = df.copy()
         self.struct_direction = struct_direction
         self.start_idx = int(start_idx)
+        self.end_idx = int(end_idx) if end_idx is not None else None  # optional stopping point (inclusive)
         self.eps = float(eps)
         self.debug_invariants = bool(debug_invariants)
 
@@ -146,6 +147,8 @@ class MarketStructure:
         """
         Sequentially labels market_state, CTS/BOS/range fields, and emits StructureEvents.
         No skipping. Uses pending confirmation for patterns + internal range evaluation window (min/max lookahead) with rewind+replay.
+
+        If end_idx is set, processing stops after that idx (inclusive).
         """
         n = len(self.df)
         # i = 0
@@ -155,7 +158,12 @@ class MarketStructure:
         if i >= n:
             return self.df, self.events, self.levels
 
-        while i < n:
+        # Determine effective end index (inclusive)
+        effective_end = n - 1
+        if self.end_idx is not None and self.end_idx < effective_end:
+            effective_end = self.end_idx
+
+        while i <= effective_end:
             if self.state.state == MarketState.REVERSAL:
                 break
 
@@ -841,6 +849,8 @@ class MarketStructure:
                     "lo": lo_i,
                     "cts_idx": None if st.cts is None else st.cts.idx,
                     "cts_price": None if st.cts is None else float(st.cts.price),
+                    "structure_id": int(st.structure_id),
+                    "struct_direction": int(self.struct_direction),
                 },
             )
         )
@@ -869,7 +879,12 @@ class MarketStructure:
                     idx=i,
                     category="RANGE",
                     type="RANGE_UPDATED",
-                    meta={"hi": hi1, "lo": lo1},
+                    meta={
+                        "hi": hi1,
+                        "lo": lo1,
+                        "structure_id": int(st.structure_id),
+                        "struct_direction": int(self.struct_direction),
+                    },
                 )
             )
 
@@ -887,12 +902,15 @@ class MarketStructure:
         st = self.state
         if not st.range_active:
             return
+        m = dict(meta or {})
+        m["structure_id"] = int(st.structure_id)
+        m["struct_direction"] = int(self.struct_direction)
         self.events.append(
             StructureEvent(
                 idx=i,
                 category="RANGE",
                 type="RANGE_RESET",
-                meta=meta or {},
+                meta=m,
             )
         )
         st.range_active = False
@@ -959,6 +977,8 @@ class MarketStructure:
                         "hi": float(st.range_hi),
                         "lo": float(st.range_lo),
                         "pat": pullback_ev.name,
+                        "structure_id": int(st.structure_id),
+                        "struct_direction": int(self.struct_direction),
                     },
                 )
             )
@@ -980,7 +1000,14 @@ class MarketStructure:
                     idx=i,
                     category="RANGE",
                     type="RANGE_UPDATED",
-                    meta={"reason": "pullback_expand", "hi": hi1, "lo": lo1, "pat": pullback_ev.name},
+                    meta={
+                        "reason": "pullback_expand",
+                        "hi": hi1,
+                        "lo": lo1,
+                        "pat": pullback_ev.name,
+                        "structure_id": int(st.structure_id),
+                        "struct_direction": int(self.struct_direction),
+                    },
                 )
             )
             self._sync_thresholds_from_range(i)
@@ -1275,28 +1302,30 @@ class MarketStructure:
     def _initial_bos_before_first_cts(self, cts_idx: int) -> tuple[int, float]:
         """
         Cycle 1 BOS: extreme prior to the first CTS.
-        - Uptrend: min low in [0 .. cts_idx-1]
-        - Downtrend: max high in [0 .. cts_idx-1]
+        - Uptrend: min low in [start_idx .. cts_idx-1]
+        - Downtrend: max high in [start_idx .. cts_idx-1]
         Returns (bos_idx, bos_price) where bos_idx is a *positional* index.
         """
-        if cts_idx <= 0:
-            bos_idx = 0
-            bos_price = float(self.df.iloc[0]["l"]) if self.struct_direction == 1 else float(self.df.iloc[0]["h"])
+        start = self.start_idx
+
+        if cts_idx <= start:
+            bos_idx = start
+            bos_price = float(self.df.iloc[start]["l"]) if self.struct_direction == 1 else float(self.df.iloc[start]["h"])
             return bos_idx, bos_price
 
-        window = self.df.iloc[0:cts_idx]
+        window = self.df.iloc[start:cts_idx]
 
         if self.struct_direction == 1:
             series = window["l"].astype(float)
             rel = int(series.values.argmin())   # position within window
-            bos_idx = rel                       # window starts at 0 => absolute position == rel
+            bos_idx = start + rel               # offset by start_idx
             bos_price = float(series.values[rel])
             return bos_idx, bos_price
 
         else:
             series = window["h"].astype(float)
             rel = int(series.values.argmax())   # position within window
-            bos_idx = rel
+            bos_idx = start + rel               # offset by start_idx
             bos_price = float(series.values[rel])
             return bos_idx, bos_price
 
@@ -1569,7 +1598,13 @@ class MarketStructure:
                     idx=i,
                     category="STATE",
                     type="STATE_CHANGED",
-                    meta={"from": st.state.value, "to": new_state.value, **m},
+                    meta={
+                        "from": st.state.value,
+                        "to": new_state.value,
+                        "structure_id": int(st.structure_id),
+                        "struct_direction": int(self.struct_direction),
+                        **m,
+                    },
                 )
             )
         st.state = new_state

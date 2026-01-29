@@ -422,238 +422,399 @@ def export_chart_plotly(
             )
 
     # -------------------------------------------------
-    # Week 5 Phase 1A: Market state change labels (bo/pb/pr/rv)
+    # Week 5 Phase 1A: Market state change labels (pb/pr/rv)
+    # Use STATE_CHANGED events (survives structure overwrites)
+    # Position by struct_direction: +1 -> below candle, -1 -> above candle
     # -------------------------------------------------
-    if state_cfg.get("labels", False) and "market_state" in dfx.columns:
-        # map to short labels
+    if state_cfg.get("labels", False):
         label_map = {
-            # "breakout": "bo",
             "pullback": "pb",
             "pullback_range": "pr",
             "reversal": "rv",
         }
 
-        ms = dfx["market_state"].astype(str)
-        prev = ms.shift(1).fillna("")
-        changed = (ms != prev) & ms.isin(list(label_map.keys()))
-        sub = dfx[changed].copy()
+        # Get STATE_CHANGED events
+        structure_events = dfx.attrs.get("structure_events", [])
+        state_events = [
+            ev for ev in structure_events
+            if getattr(ev, "type", None) == "STATE_CHANGED"
+            and ev.meta.get("to") in label_map
+            and ev.idx in dfx.index
+        ]
 
-        if not sub.empty:
-            # choose y position: breakout above high, pullback/pr below low, reversal based on candle dir fallback
-            # (uses wick_offset already computed)
+        if state_events:
+            # Build lists for plotting
+            x_vals = []
+            y_vals = []
+            text_vals = []
+            customdata = []
 
-            # def _label_y(row):
-            #     st = str(row["market_state"])
-            #     if st == "breakout":
-            #         return float(row[COL_H]) + float(wick_offset.loc[row.name])
-            #     if st in ("pullback", "pullback_range"):
-            #         return float(row[COL_L]) - float(wick_offset.loc[row.name])
-            #     # reversal: if we have pat_dir use that, else candle direction
-            #     dir_hint = None
-            #     if "pat_dir" in dfx.columns:
-            #         try:
-            #             dir_hint = int(row.get("pat_dir", 0))
-            #         except Exception:
-            #             dir_hint = 0
-            #     if not dir_hint and "direction" in dfx.columns:
-            #         try:
-            #             dir_hint = int(row.get("direction", 0))
-            #         except Exception:
-            #             dir_hint = 0
-            #     return (float(row[COL_H]) + float(wick_offset.loc[row.name])) if dir_hint >= 0 else (float(row[COL_L]) - float(wick_offset.loc[row.name]))
+            for ev in state_events:
+                idx = ev.idx
+                to_state = ev.meta.get("to", "")
+                sd = int(ev.meta.get("struct_direction", 1))
+                sid = int(ev.meta.get("structure_id", 0))
 
-            def _label_y(row):
-                st = str(row["market_state"])
-                if st in ("pullback", "pullback_range"):
-                    return float(row[COL_L]) - float(wick_offset.loc[row.name]) * 2.0
+                # Get candle data
+                row = dfx.loc[idx]
+                wo = float(wick_offset.loc[idx]) if idx in wick_offset.index else 0.0
 
-                # reversal: if we have pat_dir use that, else candle direction
-                dir_hint = None
-                if "pat_dir" in dfx.columns:
-                    try:
-                        dir_hint = int(row.get("pat_dir", 0))
-                    except Exception:
-                        dir_hint = 0
-                if not dir_hint and "direction" in dfx.columns:
-                    try:
-                        dir_hint = int(row.get("direction", 0))
-                    except Exception:
-                        dir_hint = 0
-
-                # old (bad): multiplies price by 2, blows up y-axis
-                # return (float(row[COL_H]) + float(wick_offset.loc[row.name])) * 2.0 if dir_hint >= 0 else (float(row[COL_L]) - float(wick_offset.loc[row.name])) * 2.0
-
-                # new (good): keep price scale, just offset
-                if dir_hint >= 0:
-                    return float(row[COL_H]) + float(wick_offset.loc[row.name]) * 3.0
+                # Position by struct_direction:
+                # +1 (bullish): pb/pr/rv are counter-trend moves DOWN, so label BELOW candle
+                # -1 (bearish): pb/pr/rv are counter-trend moves UP, so label ABOVE candle
+                if sd == 1:
+                    y = float(row[COL_L]) - wo * 2.0
                 else:
-                    return float(row[COL_L]) - float(wick_offset.loc[row.name]) * 3.0
+                    y = float(row[COL_H]) + wo * 2.0
 
-            y = sub.apply(_label_y, axis=1)
-            text = sub["market_state"].map(label_map).tolist()
+                x_vals.append(row[COL_TIME])
+                y_vals.append(y)
+                text_vals.append(label_map.get(to_state, to_state))
+                customdata.append((idx, to_state, sid, sd))
 
             fig.add_trace(
                 go.Scatter(
-                    x=sub[COL_TIME],
-                    y=y,
+                    x=x_vals,
+                    y=y_vals,
                     mode="text",
-                    text=text,
+                    text=text_vals,
                     name="state labels",
                     textposition="middle center",
                     showlegend=False,
                     hovertemplate=(
                         "idx=%{customdata[0]}<br>"
-                        "state=%{customdata[1]}<extra></extra>"
+                        "state=%{customdata[1]}<br>"
+                        "sid=%{customdata[2]}<br>"
+                        "struct_direction=%{customdata[3]}"
+                        "<extra></extra>"
                     ),
-                    customdata=list(zip(sub.index.to_numpy(), sub["market_state"].astype(str))),
+                    customdata=customdata,
                 )
             )
 
     # -------------------------------------------------
-    # Week 5 Phase 1B: Active range rectangles (segmented on expansion)
+    # Week 5 Phase 1B: Active range rectangles (event-based, multi-structure support)
     # -------------------------------------------------
-    if range_vis_cfg.get("rectangles", False) and all(c in dfx.columns for c in ["range_active", "range_hi", "range_lo", "range_start_idx"]):
-        # We'll create rectangle segments whenever bounds change while range_active==1.
-        # Each segment starts at:
-        #   - first segment: max(range_start_idx, first visible idx)
-        #   - subsequent segments: the candle idx where expansion occurred
-        # Each segment ends at the next segment start, or at the breakout/reversal candle that ends range.
-
-        # helper: index label -> time, but only if label exists in dfx
+    # Uses RANGE_STARTED, RANGE_UPDATED, RANGE_RESET events to build segments per structure_id.
+    # Allows overlapping rectangles from multiple structures with opacity differentiation.
+    if range_vis_cfg.get("rectangles", False):
         time_by_idx = {int(i): t for i, t in zip(dfx.index.to_numpy(), dfx[COL_TIME])}
+        idx_set = set(map(int, dfx.index.to_numpy()))
+        last_visible_idx = max(idx_set) if idx_set else 0
 
-        in_range = False
-        seg_start_idx = None
-        cur_hi = None
-        cur_lo = None
+        structure_events = dfx.attrs.get("structure_events", [])
 
-        # cap shapes to avoid runaway if needed
+        # Filter range events
+        range_started = [ev for ev in structure_events if getattr(ev, "type", None) == "RANGE_STARTED"]
+        range_updated = [ev for ev in structure_events if getattr(ev, "type", None) == "RANGE_UPDATED"]
+        range_reset = [ev for ev in structure_events if getattr(ev, "type", None) == "RANGE_RESET"]
+
+        # Find most recent structure_id for opacity
+        all_sids = set()
+        for ev in range_started + range_updated + range_reset:
+            sid = ev.meta.get("structure_id")
+            if sid is not None:
+                all_sids.add(int(sid))
+        most_recent_sid = max(all_sids) if all_sids else 0
+
+        # Collect all range events, sort by (idx, type priority)
+        # Priority: RANGE_STARTED=0, RANGE_UPDATED=1, RANGE_RESET=2
+        type_priority = {"RANGE_STARTED": 0, "RANGE_UPDATED": 1, "RANGE_RESET": 2}
+        all_range_events = []
+        for ev in range_started + range_updated + range_reset:
+            all_range_events.append(ev)
+        all_range_events.sort(key=lambda e: (e.idx, type_priority.get(e.type, 99)))
+
+        # Build segments per structure_id
+        # Segment: (start_idx, end_idx, hi, lo, structure_id, struct_direction)
+        range_segments = []
+
+        # Track open ranges per structure_id
+        # open_ranges[sid] = {"start_idx": int, "hi": float, "lo": float, "struct_direction": int}
+        open_ranges = {}
+
+        for ev in all_range_events:
+            sid = int(ev.meta.get("structure_id", 0))
+            sd = int(ev.meta.get("struct_direction", 1))
+            idx = int(ev.idx)
+
+            if ev.type == "RANGE_STARTED":
+                # Close any existing open range for this sid first
+                if sid in open_ranges:
+                    seg = open_ranges[sid]
+                    range_segments.append((
+                        seg["start_idx"], idx, seg["hi"], seg["lo"], sid, seg["struct_direction"]
+                    ))
+                # Start new range
+                open_ranges[sid] = {
+                    "start_idx": ev.meta.get("start_idx", idx),
+                    "hi": float(ev.meta.get("hi", 0)),
+                    "lo": float(ev.meta.get("lo", 0)),
+                    "struct_direction": sd,
+                }
+
+            elif ev.type == "RANGE_UPDATED":
+                if sid in open_ranges:
+                    seg = open_ranges[sid]
+                    # Close current segment at this idx
+                    range_segments.append((
+                        seg["start_idx"], idx, seg["hi"], seg["lo"], sid, seg["struct_direction"]
+                    ))
+                    # Start new segment with updated bounds
+                    open_ranges[sid] = {
+                        "start_idx": idx,
+                        "hi": float(ev.meta.get("hi", seg["hi"])),
+                        "lo": float(ev.meta.get("lo", seg["lo"])),
+                        "struct_direction": sd,
+                    }
+
+            elif ev.type == "RANGE_RESET":
+                if sid in open_ranges:
+                    seg = open_ranges[sid]
+                    # Close segment at this idx
+                    range_segments.append((
+                        seg["start_idx"], idx, seg["hi"], seg["lo"], sid, seg["struct_direction"]
+                    ))
+                    del open_ranges[sid]
+
+        # Close any ranges still open at end of visible window
+        for sid, seg in open_ranges.items():
+            range_segments.append((
+                seg["start_idx"], last_visible_idx, seg["hi"], seg["lo"], sid, seg["struct_direction"]
+            ))
+
+        # Get base style
+        range_rect_style = _style("range.rect")
+
+        # Render segments
         shapes_added = 0
         MAX_SHAPES = 500
 
-        range_rect_style = _style("range.rect")
+        for start_idx, end_idx, hi, lo, sid, sd in range_segments:
+            if shapes_added >= MAX_SHAPES:
+                break
 
-        idx_list = list(map(int, dfx.index.to_numpy()))
-        for pos, idx in enumerate(idx_list):
-            ra = int(dfx.iloc[pos]["range_active"]) if "range_active" in dfx.columns else 0
-            st = str(dfx.iloc[pos]["market_state"]) if "market_state" in dfx.columns else ""
+            x0 = time_by_idx.get(int(start_idx))
+            x1 = time_by_idx.get(int(end_idx))
 
-            # treat reversal as a hard end (even if range_active doesn't flip yet due to early stop)
-            is_end_state = (st == "reversal")
+            if x0 is None or x1 is None:
+                # Clamp to visible window
+                if int(start_idx) < min(idx_set):
+                    x0 = time_by_idx.get(min(idx_set))
+                if int(end_idx) > max(idx_set):
+                    x1 = time_by_idx.get(max(idx_set))
+                if x0 is None or x1 is None:
+                    continue
 
-            if not in_range:
-                if ra == 1:
-                    # start new range block
-                    in_range = True
-                    rs = int(dfx.iloc[pos]["range_start_idx"])
-                    seg_start_idx = rs if rs in time_by_idx else idx  # clamp to visible window
-                    cur_hi = float(dfx.iloc[pos]["range_hi"])
-                    cur_lo = float(dfx.iloc[pos]["range_lo"])
+            y0 = min(lo, hi)
+            y1 = max(lo, hi)
+
+            # Opacity: most recent structure_id = full, prior = 50%
+            if sid == most_recent_sid:
+                opacity_mult = 1.0
+            else:
+                opacity_mult = 0.5
+
+            # Apply opacity to fill color
+            style_copy = dict(range_rect_style)
+            if "fillcolor" in style_copy:
+                fc = style_copy["fillcolor"]
+                # Parse rgba and scale alpha
+                if fc.startswith("rgba("):
+                    parts = fc[5:-1].split(",")
+                    if len(parts) == 4:
+                        r, g, b = parts[0].strip(), parts[1].strip(), parts[2].strip()
+                        a = float(parts[3].strip())
+                        style_copy["fillcolor"] = f"rgba({r},{g},{b},{a * opacity_mult})"
+
+            fig.add_shape(
+                type="rect",
+                xref="x",
+                yref="y",
+                x0=x0,
+                x1=x1,
+                y0=y0,
+                y1=y1,
+                **style_copy,
+            )
+            shapes_added += 1
+
+    # -------------------------------------------------
+    # Range hover lines (event-based, multi-structure support)
+    # Shapes (rectangles) don't support hover, so we add
+    # thin line traces that carry hover data per structure_id.
+    # -------------------------------------------------
+    if range_vis_cfg.get("rectangles", False):
+        structure_events = dfx.attrs.get("structure_events", [])
+        time_by_idx = {int(i): t for i, t in zip(dfx.index.to_numpy(), dfx[COL_TIME])}
+        idx_set = set(map(int, dfx.index.to_numpy()))
+        last_visible_idx = max(idx_set) if idx_set else 0
+
+        # Build range spans per structure_id: list of (start_idx, end_idx, hi_values, lo_values, sid, sd)
+        # where hi_values and lo_values are lists of (idx, value) for step changes
+        range_started = [ev for ev in structure_events if getattr(ev, "type", None) == "RANGE_STARTED"]
+        range_updated = [ev for ev in structure_events if getattr(ev, "type", None) == "RANGE_UPDATED"]
+        range_reset = [ev for ev in structure_events if getattr(ev, "type", None) == "RANGE_RESET"]
+
+        # Find most recent structure_id
+        all_sids = set()
+        for ev in range_started + range_updated + range_reset:
+            sid = ev.meta.get("structure_id")
+            if sid is not None:
+                all_sids.add(int(sid))
+        most_recent_sid = max(all_sids) if all_sids else 0
+
+        type_priority = {"RANGE_STARTED": 0, "RANGE_UPDATED": 1, "RANGE_RESET": 2}
+        all_range_events = range_started + range_updated + range_reset
+        all_range_events.sort(key=lambda e: (e.idx, type_priority.get(e.type, 99)))
+
+        # Build hover data per structure_id
+        # hover_data[sid] = {"points": [(idx, time, hi, lo, last_update_idx)...]}
+        hover_data = {}
+        open_ranges = {}
+
+        for ev in all_range_events:
+            sid = int(ev.meta.get("structure_id", 0))
+            sd = int(ev.meta.get("struct_direction", 1))
+            idx = int(ev.idx)
+
+            if ev.type == "RANGE_STARTED":
+                start_idx = ev.meta.get("start_idx", idx)
+                hi = float(ev.meta.get("hi", 0))
+                lo = float(ev.meta.get("lo", 0))
+                open_ranges[sid] = {
+                    "start_idx": start_idx,
+                    "hi": hi,
+                    "lo": lo,
+                    "last_update_idx": start_idx,
+                    "struct_direction": sd,
+                }
+                if sid not in hover_data:
+                    hover_data[sid] = {"points_hi": [], "points_lo": [], "struct_direction": sd}
+
+            elif ev.type == "RANGE_UPDATED":
+                if sid in open_ranges:
+                    open_ranges[sid]["hi"] = float(ev.meta.get("hi", open_ranges[sid]["hi"]))
+                    open_ranges[sid]["lo"] = float(ev.meta.get("lo", open_ranges[sid]["lo"]))
+                    open_ranges[sid]["last_update_idx"] = idx
+
+            elif ev.type == "RANGE_RESET":
+                if sid in open_ranges:
+                    del open_ranges[sid]
+
+        # Generate hover line points by iterating through visible candles
+        # For each active range at each candle, add a point
+        open_ranges = {}  # Reset for second pass
+
+        for ev in all_range_events:
+            sid = int(ev.meta.get("structure_id", 0))
+            sd = int(ev.meta.get("struct_direction", 1))
+            idx = int(ev.idx)
+
+            if ev.type == "RANGE_STARTED":
+                start_idx = ev.meta.get("start_idx", idx)
+                hi = float(ev.meta.get("hi", 0))
+                lo = float(ev.meta.get("lo", 0))
+                open_ranges[sid] = {
+                    "start_idx": start_idx,
+                    "end_idx": None,
+                    "hi": hi,
+                    "lo": lo,
+                    "last_update_idx": start_idx,
+                    "struct_direction": sd,
+                }
+                if sid not in hover_data:
+                    hover_data[sid] = {"points_hi": [], "points_lo": [], "struct_direction": sd}
+
+            elif ev.type == "RANGE_UPDATED":
+                if sid in open_ranges:
+                    open_ranges[sid]["hi"] = float(ev.meta.get("hi", open_ranges[sid]["hi"]))
+                    open_ranges[sid]["lo"] = float(ev.meta.get("lo", open_ranges[sid]["lo"]))
+                    open_ranges[sid]["last_update_idx"] = idx
+
+            elif ev.type == "RANGE_RESET":
+                if sid in open_ranges:
+                    open_ranges[sid]["end_idx"] = idx
+                    # Finalize this range
+                    del open_ranges[sid]
+
+        # For simplicity, build hover lines per structure_id by iterating through
+        # visible candles and checking which ranges are active at each candle
+        # Reset and rebuild properly
+        open_ranges = {}
+        range_by_candle = {}  # {idx: {sid: {hi, lo, start_idx, last_update_idx, sd}}}
+
+        for ev in all_range_events:
+            sid = int(ev.meta.get("structure_id", 0))
+            sd = int(ev.meta.get("struct_direction", 1))
+            idx = int(ev.idx)
+
+            if ev.type == "RANGE_STARTED":
+                start_idx = int(ev.meta.get("start_idx", idx))
+                open_ranges[sid] = {
+                    "start_idx": start_idx,
+                    "hi": float(ev.meta.get("hi", 0)),
+                    "lo": float(ev.meta.get("lo", 0)),
+                    "last_update_idx": start_idx,
+                    "struct_direction": sd,
+                }
+            elif ev.type == "RANGE_UPDATED":
+                if sid in open_ranges:
+                    open_ranges[sid]["hi"] = float(ev.meta.get("hi", open_ranges[sid]["hi"]))
+                    open_ranges[sid]["lo"] = float(ev.meta.get("lo", open_ranges[sid]["lo"]))
+                    open_ranges[sid]["last_update_idx"] = idx
+            elif ev.type == "RANGE_RESET":
+                if sid in open_ranges:
+                    del open_ranges[sid]
+
+            # Snapshot active ranges at this idx
+            if idx in idx_set:
+                range_by_candle[idx] = {s: dict(r) for s, r in open_ranges.items()}
+
+        # Also handle final state for candles after last event
+        for idx in sorted(idx_set):
+            if idx not in range_by_candle:
+                # Use last known state
+                prev_idxs = [i for i in range_by_candle.keys() if i < idx]
+                if prev_idxs:
+                    range_by_candle[idx] = range_by_candle[max(prev_idxs)]
+                else:
+                    range_by_candle[idx] = {}
+
+        # Build hover traces per structure_id
+        for sid in all_sids:
+            times_hi = []
+            vals_hi = []
+            customdata_hi = []
+            times_lo = []
+            vals_lo = []
+            customdata_lo = []
+
+            for idx in sorted(idx_set):
+                if idx in range_by_candle and sid in range_by_candle[idx]:
+                    rng = range_by_candle[idx][sid]
+                    t = time_by_idx.get(idx)
+                    if t is not None:
+                        times_hi.append(t)
+                        vals_hi.append(rng["hi"])
+                        customdata_hi.append((idx, rng["start_idx"], rng["hi"], rng["lo"], rng["last_update_idx"], sid))
+                        times_lo.append(t)
+                        vals_lo.append(rng["lo"])
+                        customdata_lo.append((idx, rng["start_idx"], rng["hi"], rng["lo"], rng["last_update_idx"], sid))
+
+            if not times_hi:
                 continue
 
-            # in_range == True
-            # detect expansion
-            hi = float(dfx.iloc[pos]["range_hi"])
-            lo = float(dfx.iloc[pos]["range_lo"])
-            expanded = (hi != cur_hi) or (lo != cur_lo)
+            # Opacity for hover lines
+            opacity_mult = 1.0 if sid == most_recent_sid else 0.5
 
-            # detect end: range_active flips off OR reversal state
-            ended = (ra == 0) or is_end_state
-
-            if expanded or ended:
-                # close previous segment at current candle idx time
-                x0 = time_by_idx.get(int(seg_start_idx), None)
-                x1 = time_by_idx.get(int(idx), None)
-
-                if x0 is not None and x1 is not None and shapes_added < MAX_SHAPES:
-                    y0 = min(cur_lo, cur_hi)
-                    y1 = max(cur_lo, cur_hi)
-                    fig.add_shape(
-                        type="rect",
-                        xref="x",
-                        yref="y",
-                        x0=x0,
-                        x1=x1,
-                        y0=y0,
-                        y1=y1,
-                        **range_rect_style,
-                    )
-                    shapes_added += 1
-
-                # start next segment if still active
-                if ended:
-                    in_range = False
-                    seg_start_idx = None
-                    cur_hi = None
-                    cur_lo = None
-                else:
-                    seg_start_idx = idx
-                    cur_hi = hi
-                    cur_lo = lo
-
-        # If range continued through the end of the visible window, close it to last candle
-        if in_range and seg_start_idx is not None and shapes_added < MAX_SHAPES:
-            last_idx = idx_list[-1]
-            x0 = time_by_idx.get(int(seg_start_idx), None)
-            x1 = time_by_idx.get(int(last_idx), None)
-            if x0 is not None and x1 is not None:
-                y0 = min(cur_lo, cur_hi)
-                y1 = max(cur_lo, cur_hi)
-                fig.add_shape(
-                    type="rect",
-                    xref="x",
-                    yref="y",
-                    x0=x0,
-                    x1=x1,
-                    y0=y0,
-                    y1=y1,
-                    **range_rect_style,
-                )
-
-    # -------------------------------------------------
-    # Range hover lines (top/bottom only)
-    # Shapes (rectangles) don't support hover, so we add
-    # thin line traces that carry hover data.
-    # -------------------------------------------------
-    if range_vis_cfg.get("rectangles", False) and all(c in dfx.columns for c in ["range_active", "range_hi", "range_lo", "range_start_idx"]):
-        active = dfx["range_active"].astype(int) == 1
-        sub = dfx[active].copy()
-
-        # --- NEW: compute the candle idx/time where range bounds were last updated ---
-        # We treat an "update" as: while range_active==1, range_hi or range_lo changes from the prior active candle.
-        # Then we forward-fill so every candle can say "range_lo was last set at idx=X".
-
-        # Ensure we have time handy
-        sub["_t"] = sub[COL_TIME]
-
-        # Detect changes vs previous active candle (within the filtered sub)
-        prev_hi = sub["range_hi"].shift(1)
-        prev_lo = sub["range_lo"].shift(1)
-
-        changed = (sub["range_hi"] != prev_hi) | (sub["range_lo"] != prev_lo)
-
-        # Also mark the first visible active candle as an update (so it has a seed)
-        if len(sub) > 0:
-            changed.iloc[0] = True
-
-        sub["range_last_update_idx"] = sub.index.where(changed).astype("float")
-        sub["range_last_update_time"] = sub["_t"].where(changed)
-
-        # Forward-fill update info across the active segment
-        sub["range_last_update_idx"] = sub["range_last_update_idx"].ffill().astype(int)
-        sub["range_last_update_time"] = sub["range_last_update_time"].ffill()
-
-        # Clean helper col
-        sub.drop(columns=["_t"], inplace=True)
-
-        if not sub.empty:
             # Top line (range_hi)
             fig.add_trace(
                 go.Scatter(
-                    x=sub[COL_TIME],
-                    y=sub["range_hi"].astype(float),
+                    x=times_hi,
+                    y=vals_hi,
                     mode="lines",
-                    name="range:top",
+                    name=f"range:top:sid{sid}",
                     showlegend=False,
                     line=dict(width=2, color="rgba(0,0,0,0)"),
                     line_shape="hv",
@@ -663,27 +824,20 @@ def export_chart_plotly(
                         "range_hi=%{customdata[2]:.5f}<br>"
                         "range_lo=%{customdata[3]:.5f}<br>"
                         "last_update_idx=%{customdata[4]}<br>"
-                        "last_update_time=%{customdata[5]}"
+                        "structure_id=%{customdata[5]}"
                         "<extra></extra>"
                     ),
-                    customdata=list(zip(
-                        sub.index.to_numpy(),
-                        sub["range_start_idx"].astype(int),
-                        sub["range_hi"].astype(float),
-                        sub["range_lo"].astype(float),
-                        sub["range_last_update_idx"].astype(int),
-                        sub["range_last_update_time"].astype(str),
-                    )),
+                    customdata=customdata_hi,
                 )
             )
 
             # Bottom line (range_lo)
             fig.add_trace(
                 go.Scatter(
-                    x=sub[COL_TIME],
-                    y=sub["range_lo"].astype(float),
+                    x=times_lo,
+                    y=vals_lo,
                     mode="lines",
-                    name="range:bottom",
+                    name=f"range:bottom:sid{sid}",
                     showlegend=False,
                     line=dict(width=2, color="rgba(0,0,0,0)"),
                     line_shape="hv",
@@ -693,17 +847,10 @@ def export_chart_plotly(
                         "range_hi=%{customdata[2]:.5f}<br>"
                         "range_lo=%{customdata[3]:.5f}<br>"
                         "last_update_idx=%{customdata[4]}<br>"
-                        "last_update_time=%{customdata[5]}"
+                        "structure_id=%{customdata[5]}"
                         "<extra></extra>"
                     ),
-                    customdata=list(zip(
-                        sub.index.to_numpy(),
-                        sub["range_start_idx"].astype(int),
-                        sub["range_hi"].astype(float),
-                        sub["range_lo"].astype(float),
-                        sub["range_last_update_idx"].astype(int),
-                        sub["range_last_update_time"].astype(str),
-                    )),
+                    customdata=customdata_lo,
                 )
             )
 
@@ -715,49 +862,103 @@ def export_chart_plotly(
     # - dots at each CONFIRMED CTS and CONFIRMED BOS
     # - straight lines connecting them in time order
     # - final line from last confirmed point to last candle close
-    if struct_cfg.get("levels", False) and all(
-        c in dfx.columns for c in ["cts_event", "cts_idx", "cts_price", "bos_event", "bos_idx", "bos_price"]
-    ):
+    # Use events (survives structure overwrites) instead of df columns
+    if struct_cfg.get("levels", False):
         time_by_idx = {int(ii): tt for ii, tt in zip(dfx.index.to_numpy(), dfx[COL_TIME])}
+        structure_events = dfx.attrs.get("structure_events", [])
 
-        # Helper to safely get int values with fallback
-        def _safe_int(val, default=-1):
-            try:
-                if pd.isna(val):
-                    return default
-                return int(val)
-            except (ValueError, TypeError):
-                return default
+        # Get CTS_CONFIRMED and BOS_CONFIRMED events
+        cts_events = [ev for ev in structure_events if getattr(ev, "type", None) == "CTS_CONFIRMED"]
+        bos_events = [ev for ev in structure_events if getattr(ev, "type", None) == "BOS_CONFIRMED"]
 
-        points = []  # (point_idx, time, price, kind, structure_id, cts_cycle_id, struct_direction)
-        # CTS confirmed => point is the CTS point (cts_idx/cts_price), not the confirmation candle time
-        cts_conf = dfx[dfx["cts_event"].astype(str) == "CTS_CONFIRMED"]
-        for _, r in cts_conf.iterrows():
-            p_idx = int(r["cts_idx"])
+        # Find most recent structure_id for opacity
+        all_sids = set()
+        for ev in cts_events + bos_events:
+            all_sids.add(int(ev.meta.get("structure_id", 0)))
+        most_recent_sid = max(all_sids) if all_sids else 0
+
+        # Time offset for left/right positioning
+        time_delta = pd.Timedelta(hours=0.3)
+
+        # Build points from events: (idx, time, price, kind, sid, cycle_id, sd, opacity)
+        points = []
+
+        # Group events by idx for overlap detection
+        from collections import defaultdict
+        cts_by_idx = defaultdict(list)
+        bos_by_idx = defaultdict(list)
+
+        for ev in cts_events:
+            # CTS confirmed: use cts_anchor_idx if available, else event idx
+            p_idx = int(ev.meta.get("cts_anchor_idx", ev.idx))
             if p_idx in time_by_idx:
-                sid = _safe_int(r.get("structure_id"))
-                cycle = _safe_int(r.get("cts_cycle_id"))
-                sd = _safe_int(r.get("struct_direction"))
-                points.append((p_idx, time_by_idx[p_idx], float(r["cts_price"]), "CTS", sid, cycle, sd))
+                cts_by_idx[p_idx].append(ev)
 
-        # BOS confirmed => point is bos_idx/bos_price
-        bos_conf = dfx[dfx["bos_event"].astype(str) == "BOS_CONFIRMED"]
-        for _, r in bos_conf.iterrows():
-            p_idx = int(r["bos_idx"])
+        for ev in bos_events:
+            p_idx = ev.idx
             if p_idx in time_by_idx:
-                sid = _safe_int(r.get("structure_id"))
-                cycle = _safe_int(r.get("cts_cycle_id"))
-                sd = _safe_int(r.get("struct_direction"))
-                points.append((p_idx, time_by_idx[p_idx], float(r["bos_price"]), "BOS", sid, cycle, sd))
+                bos_by_idx[p_idx].append(ev)
+
+        # Sort events at each idx by structure_id
+        for idx in cts_by_idx:
+            cts_by_idx[idx].sort(key=lambda e: int(e.meta.get("structure_id", 0)))
+        for idx in bos_by_idx:
+            bos_by_idx[idx].sort(key=lambda e: int(e.meta.get("structure_id", 0)))
+
+        # Build CTS points with overlap handling
+        # CTS_CONFIRMED has ev.price=None; look up cts_price from DataFrame at confirmation candle (ev.idx)
+        pts_cts = []
+        for idx, evs in sorted(cts_by_idx.items()):
+            has_overlap = len(evs) > 1
+            for i, ev in enumerate(evs):
+                sid = int(ev.meta.get("structure_id", 0))
+                cycle = int(ev.meta.get("cycle_id", 0))
+                sd = int(ev.meta.get("struct_direction", 0))
+
+                # CTS price: look up from DataFrame at confirmation candle (ev.idx has cts_price set)
+                if ev.price is not None:
+                    price = float(ev.price)
+                elif ev.idx in dfx.index and "cts_price" in dfx.columns:
+                    price = float(dfx.loc[ev.idx, "cts_price"])
+                else:
+                    price = 0.0
+
+                opacity = 1.0 if sid == most_recent_sid else 0.5
+
+                base_time = time_by_idx[idx]
+                if has_overlap:
+                    x_time = base_time - time_delta if i == 0 else base_time + time_delta
+                else:
+                    x_time = base_time
+
+                pts_cts.append((idx, x_time, price, "CTS", sid, cycle, sd, opacity))
+                points.append((idx, time_by_idx[idx], price, "CTS", sid, cycle, sd))
+
+        # Build BOS points with overlap handling
+        # BOS_CONFIRMED has ev.price set correctly
+        pts_bos = []
+        for idx, evs in sorted(bos_by_idx.items()):
+            has_overlap = len(evs) > 1
+            for i, ev in enumerate(evs):
+                sid = int(ev.meta.get("structure_id", 0))
+                cycle = int(ev.meta.get("cycle_id", 0))
+                sd = int(ev.meta.get("struct_direction", 0))
+                price = float(ev.price) if ev.price is not None else 0.0
+                opacity = 1.0 if sid == most_recent_sid else 0.5
+
+                base_time = time_by_idx[idx]
+                if has_overlap:
+                    x_time = base_time - time_delta if i == 0 else base_time + time_delta
+                else:
+                    x_time = base_time
+
+                pts_bos.append((idx, x_time, price, "BOS", sid, cycle, sd, opacity))
+                points.append((idx, time_by_idx[idx], price, "BOS", sid, cycle, sd))
 
         # sort by point index (time order)
         points.sort(key=lambda x: x[0])
 
         if len(points) >= 1:
-            # Separate marker sets (optional styling distinction)
-            pts_cts = [p for p in points if p[3] == "CTS"]
-            pts_bos = [p for p in points if p[3] == "BOS"]
-
             # Line: connect ALL points in order, plus final segment to last candle close
             x_line = [p[1] for p in points] + [dfx[COL_TIME].iloc[-1]]
             y_line = [p[2] for p in points] + [float(dfx[COL_C].iloc[-1])]
@@ -770,51 +971,77 @@ def export_chart_plotly(
                     name="Structure (CTS/BOS)",
                     hoverinfo="skip",
                     line_shape="linear",
-                    **_style("structure.swing_line"),   # <--- ADD HERE (polyline)
+                    **_style("structure.swing_line"),
                 )
             )
 
-            # Markers: confirmed CTS points
+            # Markers: confirmed CTS points (with opacity per structure)
+            # pts_cts format: (idx, x_time, price, "CTS", sid, cycle, sd, opacity)
             if pts_cts:
-                fig.add_trace(
-                    go.Scatter(
-                        x=[p[1] for p in pts_cts],
-                        y=[p[2] for p in pts_cts],
-                        mode="markers",
-                        name="CTS (confirmed)",
-                        customdata=[[p[0], p[3], p[4], p[5], p[6]] for p in pts_cts],
-                        hovertemplate=(
-                            "idx=%{customdata[0]}<br>"
-                            "kind=%{customdata[1]}<br>"
-                            "sid=%{customdata[2]}<br>"
-                            "cts_cycle_id=%{customdata[3]}<br>"
-                            "struct_direction=%{customdata[4]}"
-                            "<extra></extra>"
-                        ),
-                        **_style("structure.cts"),        # <--- ADD HERE (CTS dots)
-                    )
-                )
+                # Group by opacity for separate traces
+                cts_full = [p for p in pts_cts if p[7] == 1.0]
+                cts_faded = [p for p in pts_cts if p[7] < 1.0]
 
-            # Markers: confirmed BOS points
+                for pts, op_label in [(cts_full, ""), (cts_faded, " (prior)")]:
+                    if pts:
+                        style = _style("structure.cts").copy()
+                        if op_label:
+                            # Apply 50% opacity
+                            if "marker" in style:
+                                style["marker"] = dict(style["marker"])
+                                style["marker"]["opacity"] = 0.5
+                        fig.add_trace(
+                            go.Scatter(
+                                x=[p[1] for p in pts],
+                                y=[p[2] for p in pts],
+                                mode="markers",
+                                name=f"CTS (confirmed){op_label}",
+                                customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
+                                hovertemplate=(
+                                    "idx=%{customdata[0]}<br>"
+                                    "kind=%{customdata[1]}<br>"
+                                    "price=%{customdata[2]:.5f}<br>"
+                                    "sid=%{customdata[3]}<br>"
+                                    "cycle_id=%{customdata[4]}<br>"
+                                    "struct_direction=%{customdata[5]}"
+                                    "<extra></extra>"
+                                ),
+                                **style,
+                            )
+                        )
+
+            # Markers: confirmed BOS points (with opacity per structure)
+            # pts_bos format: (idx, x_time, price, "BOS", sid, cycle, sd, opacity)
             if pts_bos:
-                fig.add_trace(
-                    go.Scatter(
-                        x=[p[1] for p in pts_bos],
-                        y=[p[2] for p in pts_bos],
-                        mode="markers",
-                        name="BOS (confirmed)",
-                        customdata=[[p[0], p[3], p[4], p[5], p[6]] for p in pts_bos],
-                        hovertemplate=(
-                            "idx=%{customdata[0]}<br>"
-                            "kind=%{customdata[1]}<br>"
-                            "sid=%{customdata[2]}<br>"
-                            "cts_cycle_id=%{customdata[3]}<br>"
-                            "struct_direction=%{customdata[4]}"
-                            "<extra></extra>"
-                        ),
-                        **_style("structure.bos"),        # <--- ADD HERE (BOS dots)
-                    )
-                )
+                bos_full = [p for p in pts_bos if p[7] == 1.0]
+                bos_faded = [p for p in pts_bos if p[7] < 1.0]
+
+                for pts, op_label in [(bos_full, ""), (bos_faded, " (prior)")]:
+                    if pts:
+                        style = _style("structure.bos").copy()
+                        if op_label:
+                            if "marker" in style:
+                                style["marker"] = dict(style["marker"])
+                                style["marker"]["opacity"] = 0.5
+                        fig.add_trace(
+                            go.Scatter(
+                                x=[p[1] for p in pts],
+                                y=[p[2] for p in pts],
+                                mode="markers",
+                                name=f"BOS (confirmed){op_label}",
+                                customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
+                                hovertemplate=(
+                                    "idx=%{customdata[0]}<br>"
+                                    "kind=%{customdata[1]}<br>"
+                                    "price=%{customdata[2]:.5f}<br>"
+                                    "sid=%{customdata[3]}<br>"
+                                    "cycle_id=%{customdata[4]}<br>"
+                                    "struct_direction=%{customdata[5]}"
+                                    "<extra></extra>"
+                                ),
+                                **style,
+                            )
+                        )
 
     # -------------------------------------------------
     # Reversal watch overlay (frozen BOS barrier)
@@ -845,33 +1072,57 @@ def export_chart_plotly(
         rc_by_anchor = {int(ev.meta.get("anchor_idx", ev.idx)): ev for ev in reversal_candidates}
 
         if reversal_watch_starts:
-            # Get unique anchor indices from watch start events
-            anchor_indices = sorted(set(
-                int(ev.meta.get("anchor_idx", ev.idx))
-                for ev in reversal_watch_starts
-                if ev.meta.get("anchor_idx", ev.idx) in dfx.index
-            ))
+            # Group events by idx to detect overlaps (multiple structures at same candle)
+            from collections import defaultdict
+            events_by_idx = defaultdict(list)
+            for ev in reversal_watch_starts:
+                idx = int(ev.meta.get("anchor_idx", ev.idx))
+                if idx in dfx.index:
+                    events_by_idx[idx].append(ev)
 
-            if anchor_indices:
-                rc = dfx.loc[anchor_indices].copy()
+            # Sort events at each idx by structure_id for consistent left/right ordering
+            for idx in events_by_idx:
+                events_by_idx[idx].sort(key=lambda e: int(e.meta.get("structure_id", 0)))
 
-                # Build customdata from events for richer hover info
-                ev_by_anchor = {int(ev.meta.get("anchor_idx", ev.idx)): ev for ev in reversal_watch_starts}
-                customdata = []
-                for idx in anchor_indices:
-                    ev = ev_by_anchor.get(idx)
-                    bos_frozen = float(ev.meta.get("bos_frozen", 0)) if ev else 0
-                    sid = int(ev.meta.get("structure_id", 0)) if ev else 0
-                    sd = int(ev.meta.get("struct_direction", 0)) if ev else 0
-                    # Check if this anchor also has a REVERSAL_CANDIDATE (valid pattern found)
+            # Build plot data with left/right offset for overlaps
+            x_vals = []
+            y_vals = []
+            customdata = []
+
+            # Time offset for left/right positioning (fraction of candle width)
+            time_delta = pd.Timedelta(hours=0.3)  # Small offset for H1 timeframe
+
+            for idx, evs in sorted(events_by_idx.items()):
+                row = dfx.loc[idx]
+                base_time = pd.to_datetime(row[COL_TIME])
+                base_y = float(row[COL_C])
+                has_overlap = len(evs) > 1
+
+                for i, ev in enumerate(evs):
+                    bos_frozen = float(ev.meta.get("bos_frozen", 0))
+                    sid = int(ev.meta.get("structure_id", 0))
+                    sd = int(ev.meta.get("struct_direction", 0))
                     rc_ev = rc_by_anchor.get(idx)
                     pattern = str(rc_ev.meta.get("pattern", "none")) if rc_ev else "none"
-                    customdata.append((idx, bos_frozen, float(dfx.loc[idx, COL_C]), pattern, sid, sd))
 
+                    # Offset: first sid -> left, second sid -> right; no overlap -> center
+                    if has_overlap:
+                        if i == 0:
+                            x_time = base_time - time_delta  # left
+                        else:
+                            x_time = base_time + time_delta  # right
+                    else:
+                        x_time = base_time  # center
+
+                    x_vals.append(x_time)
+                    y_vals.append(base_y)
+                    customdata.append((idx, bos_frozen, base_y, pattern, sid, sd))
+
+            if x_vals:
                 fig.add_trace(
                     go.Scatter(
-                        x=rc[COL_TIME],
-                        y=rc[COL_C].astype(float),   # X on the candidate candle
+                        x=x_vals,
+                        y=y_vals,
                         mode="markers",
                         name="reversal candidate",
                         showlegend=True,
@@ -908,6 +1159,7 @@ def export_chart_plotly(
         num_structures = int(zone_cfg.get("num_structures", 1))
         all_sids = sorted(by_struct.keys(), reverse=True)  # descending order (most recent first)
         selected_sids = set(all_sids[:num_structures])
+        most_recent_sid = all_sids[0] if all_sids else 0  # Track most recent for opacity tiers
 
         zones_cur = [z for z in zones if int(z.meta.get("structure_id", 0)) in selected_sids]
 
@@ -958,11 +1210,22 @@ def export_chart_plotly(
         for z in zones_cur:
             side = str(z.side)
             active = bool((z.meta or {}).get("active", False)) and (z.end_time is None)
+            zone_sid = int(z.meta.get("structure_id", 0))
 
             stz = _zone_style(side)
 
-            fill_op = float(stz.get("fill_opacity_active" if active else "fill_opacity_inactive", 0.18 if active else 0.08))
-            line_op = float(stz.get("confirm_opacity_active" if active else "confirm_opacity_inactive", 0.9 if active else 0.45))
+            # 3-tier opacity: active=100%, non-active+recent_sid=50%, non-active+prior_sid=25%
+            if active:
+                opacity_mult = 1.0
+            elif zone_sid == most_recent_sid:
+                opacity_mult = 0.5
+            else:
+                opacity_mult = 0.25
+
+            base_fill_op = float(stz.get("fill_opacity_active", 0.18))
+            base_line_op = float(stz.get("confirm_opacity_active", 0.9))
+            fill_op = base_fill_op * opacity_mult
+            line_op = base_line_op * opacity_mult
             rgb = str(stz.get("rgb", "0,180,0" if side == "buy" else "220,0,0"))
             confirm_w = int(stz.get("confirm_line_width", 2))
 
