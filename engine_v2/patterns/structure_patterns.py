@@ -330,8 +330,8 @@ class BreakoutPatterns:
             and c1.candle_len >= 0.7 * c0.candle_len
         )
 
-        cond1_alt_valid = int(c0.is_big_maru_as0) == 1
-        cond2_alt_valid = (
+        cond1_valid_alt = int(c0.is_big_maru_as0) == 1
+        cond2_valid_alt = (
             (c1.c > c0.c if direction == 1 else c1.c < c0.c)
             and c1.candle_len >= c0.candle_len
             and int(c1.is_big_maru_as1) == 1
@@ -363,7 +363,7 @@ class BreakoutPatterns:
                 return self._confirm_if_needed(ev) if do_confirm else ev
         
         if c1.candle_type == "normal":
-            if cond1_alt_valid and cond2_alt_valid:
+            if cond1_valid_alt and cond2_valid_alt:
                 return PatternEvent(
                     name="double_maru",
                     direction=direction,
@@ -374,7 +374,7 @@ class BreakoutPatterns:
                     break_threshold_used=break_threshold,
                 )
 
-            if (not cond1_alt_valid) and cond2_alt_valid:
+            if (not cond1_valid_alt) and cond2_valid_alt:
                 ev = PatternEvent(
                     name="double_maru",
                     direction=direction,
@@ -383,7 +383,7 @@ class BreakoutPatterns:
                     status=PatternStatus.FAIL_NEEDS_CONFIRM,
                     confirmation_threshold=self.confirmation_threshold(idx, direction),
                     break_threshold_used=break_threshold,
-                    debug={"cond1_alt_valid": cond1_alt_valid, "cond2_alt_valid": cond2_alt_valid},
+                    debug={"cond1_valid_alt": cond1_valid_alt, "cond2_valid_alt": cond2_valid_alt},
                 )
                 return self._confirm_if_needed(ev) if do_confirm else ev
 
@@ -436,15 +436,23 @@ class BreakoutPatterns:
             and self.body_check(c0, break_threshold, break_percent, direction)
         )
 
+        cond1_valid_alt = int(c0.is_big_maru_as0) == 1
+
         if direction == 1:
             # c1_pos_check = c1.l > (c0.l + small_body_tail * c0.candle_len)
             c1_pos_check = c1.l > c0.mid_price
+            c1_tail_check = False if break_threshold is None else c1.l > break_threshold
+            c1_close_check = c1.c > c0.h # extra close check for long side
         else:
             # c1_pos_check = c1.h < (c0.l + small_body_tail * c0.candle_len)
             c1_pos_check = c1.h < c0.mid_price
-        cond2_valid = c1_pos_check
+            c1_tail_check = False if break_threshold is None else c1.h < break_threshold
+            c1_close_check = c1.c < c0.l # extra close check for short side
 
-        if cond1_valid and cond2_valid:
+        cond2_valid = c1_pos_check
+        cond2_valid_alt = c1_tail_check and c1_close_check and c1.candle_type in ["normal", "maru"] and int(c1.is_big_normal_as1) == 1
+
+        if (cond1_valid and cond2_valid) or (cond1_valid_alt and cond2_valid_alt):
             return PatternEvent(
                 name="one_maru_continuous",
                 direction=direction,
