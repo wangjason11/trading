@@ -93,10 +93,63 @@ STYLE = {
         "confirm_opacity_inactive": 0.30,
     },
 
-    # Transparent hover “hitbox” lines (shapes don't hover)
+    # Transparent hover "hitbox" lines (shapes don't hover)
     "zone.kl.hover_line": {
         "line": {"width": 6, "color": "rgba(0,0,0,0)"},
         "showlegend": False,
+    },
+
+    # -----------------------------
+    # Week 7: POI Zones (rectangles)
+    # -----------------------------
+    "zone.poi.buy": {
+        "rgb": "0, 100, 180",
+        "fill_opacity_active": 0.35,
+        "fill_opacity_inactive": 0.12,
+        "confirm_line_width": 2,
+        "confirm_opacity_active": 0.85,
+        "confirm_opacity_inactive": 0.25,
+    },
+    "zone.poi.sell": {
+        "rgb": "180, 100, 0",
+        "fill_opacity_active": 0.35,
+        "fill_opacity_inactive": 0.12,
+        "confirm_line_width": 2,
+        "confirm_opacity_active": 0.85,
+        "confirm_opacity_inactive": 0.25,
+    },
+    "zone.poi.hover_line": {
+        "line": {"width": 6, "color": "rgba(0,0,0,0)"},
+        "showlegend": False,
+    },
+
+    # -----------------------------
+    # Week 7: Fibonacci levels
+    # -----------------------------
+    "fib.line": {
+        "line": {"width": 1, "dash": "dash", "color": "rgba(128, 128, 128, 0.6)"},
+    },
+    "fib.label": {
+        "font": {"size": 9, "color": "gray"},
+    },
+
+    # -----------------------------
+    # Week 7: Imbalance candle highlighting
+    # -----------------------------
+    "imbalance.bullish": {
+        # Lime Green at 80% opacity - used for entire candle (body + wicks)
+        "rgba": "rgba(50, 205, 50, 0.8)",
+    },
+    "imbalance.bearish": {
+        # Gold at 80% opacity - used for entire candle (body + wicks)
+        "rgba": "rgba(255, 215, 0, 0.8)",
+    },
+
+    # -----------------------------
+    # Hover lines (invisible lines for hover on shapes)
+    # -----------------------------
+    "hover_line.range": {
+        "line": {"width": 2, "color": "rgba(0,0,0,0)"},
     },
 
     # -----------------------------

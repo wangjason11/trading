@@ -13,6 +13,10 @@ from engine_v2.structure.structure_engine import compute_structure
 # NEW: KL base features computed BEFORE structure
 from engine_v2.zones.kl_zones_v1 import compute_base_features, derive_kl_zones_v1
 
+# Week 7: POI zones
+from engine_v2.zones.poi_zones import derive_poi_zones, POIConfig
+from engine_v2.patterns.imbalance import compute_imbalance
+
 
 @dataclass
 class PipelineResult:
@@ -48,11 +52,16 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
     print("[patterns]", p_res.notes)
     print(p_res.df["pat"].value_counts().head())
 
-    # 3) KL base features (must occur BEFORE structure)
-    # Default length_threshold locked to 0.7 (per Week 6 spec)
-    df_with_base = compute_base_features(p_res.df, length_threshold=0.7)
+    # 3) Imbalance patterns (Week 7) - computed as columns, before base features
+    df_with_imbalance = compute_imbalance(p_res.df)
+    imbalance_count = int(df_with_imbalance["is_imbalance"].sum())
+    print(f"[imbalance] total={imbalance_count}")
 
-    # 4) Market structure (must return events + struct_direction)
+    # 5) KL base features (must occur BEFORE structure)
+    # Default length_threshold locked to 0.7 (per Week 6 spec)
+    df_with_base = compute_base_features(df_with_imbalance, length_threshold=0.7)
+
+    # 6) Market structure (must return events + struct_direction)
     s_res = compute_structure(df_with_base)
 
     meta = {
@@ -63,7 +72,7 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
         }
     }
 
-    # 5) KL zones consume structure events (not levels)
+    # 7) KL zones consume structure events (not levels)
     kl_zones = derive_kl_zones_v1(
         s_res.df,
         s_res.events,
@@ -80,8 +89,26 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
 
     meta["kl_zones"] = kl_zones
 
-    # For chart overlay (export_plotly reads df.attrs["kl_zones"] and df.attrs["structure_events"])
+    # 8) POI zones (Week 7) - consume structure events + imbalance columns
+    poi_config = POIConfig(
+        fib_levels=[50.0, 61.8, 70.5, 78.6],  # Default; will be configurable
+        ic_fib_min=62.0,
+        ic_fib_max=79.0,
+        require_imbalance=False,  # Start with False until imbalance spec finalized
+        min_imbalance_gap=0.0,
+    )
+    poi_zones = derive_poi_zones(
+        s_res.df,
+        s_res.events,
+        config=poi_config,
+    )
+    print("[poi_zones] total=", len(poi_zones))
+    meta["poi_zones"] = poi_zones
+
+    # For chart overlay (export_plotly reads df.attrs)
+    # Note: imbalance is now in columns (is_imbalance, imbalance_gap_size), not attrs
     s_res.df.attrs["kl_zones"] = kl_zones
+    s_res.df.attrs["poi_zones"] = poi_zones
     s_res.df.attrs["structure_events"] = s_res.events
 
     return PipelineResult(

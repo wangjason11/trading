@@ -126,17 +126,25 @@ def export_chart_plotly(
         "zones": {
             "KL": False,
             "OB": False,
+            "POI": False,  # Week 7: POI zones (Fib + IC)
+        },
+        "fib": {
+            "lines": False,  # Week 7: Fibonacci level lines
+        },
+        "imbalance": {
+            "highlight": True,  # Week 7: Highlight imbalance candles with different colors
         },
     }
 
 
     cfg = _deep_merge(CHART_DEFAULTS, cfg or {})
-    candle_cfg = cfg.get("candle_types", {}) or {} 
+    candle_cfg = cfg.get("candle_types", {}) or {}
     pat_cfg = cfg.get("patterns", {}) or {}
     state_cfg = cfg.get("struct_state", {}) or {}
     range_vis_cfg = cfg.get("range_visual", {}) or {}
     struct_cfg = cfg.get("structure", {}) or {}
     zone_cfg = cfg.get("zones", {}) or {}
+    imbalance_cfg = cfg.get("imbalance", {}) or {}
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -206,41 +214,115 @@ def export_chart_plotly(
     ))
 
 
-    fig.add_trace(
-        go.Candlestick(
-            x=dfx[COL_TIME],
-            open=dfx[COL_O],
-            high=dfx[COL_H],
-            low=dfx[COL_L],
-            close=dfx[COL_C],
-            name="OHLC",
-            showlegend=False,
-            customdata=customdata,
-            hovertemplate=(
-                "idx=%{customdata[0]}<br>"
-                "time=%{x}<br>"
-                "O=%{open}<br>"
-                "H=%{high}<br>"
-                "L=%{low}<br>"
-                "C=%{close}<br>"
-                "candle_type=%{customdata[3]}<br>"
-                "body_len=%{customdata[4]:.5f}<br>"
-                "candle_len=%{customdata[5]:.5f}<br>"
-                "body_pct=%{customdata[2]:.2%}<br>"
-                "mid_price=%{customdata[1]:.5f}<br>"
-                "range_break_frac=%{customdata[6]:.2%}<br>"
-                "cts_cycle_id=%{customdata[7]}<br>"
-                "cts_phase=%{customdata[8]}<br>"
-                "cycle_stage=%{customdata[9]}<br>"
-                "cts_th=%{customdata[10]:.5f}<br>"
-                "bos_th=%{customdata[11]:.5f}<br>"
-                "rv_watch=%{customdata[12]}<br>"
-                "rv_bos_frozen=%{customdata[13]:.5f}<br>"
-                "rv_extreme=%{customdata[14]:.5f}"
-                "<extra></extra>"
-            ),
-        )
+    # Standard hover template for all candlesticks
+    candle_hover = (
+        "idx=%{customdata[0]}<br>"
+        "time=%{x}<br>"
+        "O=%{open}<br>"
+        "H=%{high}<br>"
+        "L=%{low}<br>"
+        "C=%{close}<br>"
+        "candle_type=%{customdata[3]}<br>"
+        "body_len=%{customdata[4]:.5f}<br>"
+        "candle_len=%{customdata[5]:.5f}<br>"
+        "body_pct=%{customdata[2]:.2%}<br>"
+        "mid_price=%{customdata[1]:.5f}<br>"
+        "range_break_frac=%{customdata[6]:.2%}<br>"
+        "cts_cycle_id=%{customdata[7]}<br>"
+        "cts_phase=%{customdata[8]}<br>"
+        "cycle_stage=%{customdata[9]}<br>"
+        "cts_th=%{customdata[10]:.5f}<br>"
+        "bos_th=%{customdata[11]:.5f}<br>"
+        "rv_watch=%{customdata[12]}<br>"
+        "rv_bos_frozen=%{customdata[13]:.5f}<br>"
+        "rv_extreme=%{customdata[14]:.5f}"
+        "<extra></extra>"
     )
+
+    # Check if imbalance highlighting is enabled
+    imbalance_highlight = imbalance_cfg.get("highlight", False) and "is_imbalance" in dfx.columns
+
+    if imbalance_highlight:
+        is_imb = dfx["is_imbalance"] == 1
+        direction = dfx["direction"]
+
+        # Regular candles (no imbalance) - draw with default colors
+        regular_mask = ~is_imb
+        if regular_mask.any():
+            regular_df = dfx[regular_mask]
+            regular_customdata = [customdata[i] for i in range(len(dfx)) if regular_mask.iloc[i]]
+            fig.add_trace(
+                go.Candlestick(
+                    x=regular_df[COL_TIME],
+                    open=regular_df[COL_O],
+                    high=regular_df[COL_H],
+                    low=regular_df[COL_L],
+                    close=regular_df[COL_C],
+                    name="OHLC",
+                    showlegend=False,
+                    customdata=regular_customdata,
+                    hovertemplate=candle_hover,
+                )
+            )
+
+        # Bullish imbalance candles (body + wicks)
+        bull_imb_mask = is_imb & (direction == 1)
+        if bull_imb_mask.any():
+            bull_imb_df = dfx[bull_imb_mask]
+            bull_imb_customdata = [customdata[i] for i in range(len(dfx)) if bull_imb_mask.iloc[i]]
+            bull_color = _style("imbalance.bullish").get("rgba", "rgba(50, 205, 50, 0.8)")
+            fig.add_trace(
+                go.Candlestick(
+                    x=bull_imb_df[COL_TIME],
+                    open=bull_imb_df[COL_O],
+                    high=bull_imb_df[COL_H],
+                    low=bull_imb_df[COL_L],
+                    close=bull_imb_df[COL_C],
+                    name="imbalance:bullish",
+                    showlegend=False,
+                    increasing=dict(line=dict(color=bull_color), fillcolor=bull_color),
+                    decreasing=dict(line=dict(color=bull_color), fillcolor=bull_color),
+                    customdata=bull_imb_customdata,
+                    hovertemplate="<b>BULLISH IMBALANCE</b><br>" + candle_hover,
+                )
+            )
+
+        # Bearish imbalance candles (body + wicks)
+        bear_imb_mask = is_imb & (direction == -1)
+        if bear_imb_mask.any():
+            bear_imb_df = dfx[bear_imb_mask]
+            bear_imb_customdata = [customdata[i] for i in range(len(dfx)) if bear_imb_mask.iloc[i]]
+            bear_color = _style("imbalance.bearish").get("rgba", "rgba(255, 215, 0, 0.8)")
+            fig.add_trace(
+                go.Candlestick(
+                    x=bear_imb_df[COL_TIME],
+                    open=bear_imb_df[COL_O],
+                    high=bear_imb_df[COL_H],
+                    low=bear_imb_df[COL_L],
+                    close=bear_imb_df[COL_C],
+                    name="imbalance:bearish",
+                    showlegend=False,
+                    increasing=dict(line=dict(color=bear_color), fillcolor=bear_color),
+                    decreasing=dict(line=dict(color=bear_color), fillcolor=bear_color),
+                    customdata=bear_imb_customdata,
+                    hovertemplate="<b>BEARISH IMBALANCE</b><br>" + candle_hover,
+                )
+            )
+    else:
+        # Single candlestick trace (original behavior when imbalance highlight is off)
+        fig.add_trace(
+            go.Candlestick(
+                x=dfx[COL_TIME],
+                open=dfx[COL_O],
+                high=dfx[COL_H],
+                low=dfx[COL_L],
+                close=dfx[COL_C],
+                name="OHLC",
+                showlegend=False,
+                customdata=customdata,
+                hovertemplate=candle_hover,
+            )
+        )
 
     # Candle types
     if "candle_type" in dfx.columns:
@@ -890,6 +972,7 @@ def export_chart_plotly(
             opacity_mult = 1.0 if sid == most_recent_sid else 0.5
 
             # Top line (range_hi)
+            range_hover_line = _style("hover_line.range").get("line", {"width": 2, "color": "rgba(0,0,0,0)"})
             fig.add_trace(
                 go.Scatter(
                     x=times_hi,
@@ -897,7 +980,7 @@ def export_chart_plotly(
                     mode="lines",
                     name=f"range:top:sid{sid}",
                     showlegend=False,
-                    line=dict(width=2, color="rgba(0,0,0,0)"),
+                    line=range_hover_line,
                     line_shape="hv",
                     hovertemplate=(
                         "idx=%{customdata[0]}<br>"
@@ -920,7 +1003,7 @@ def export_chart_plotly(
                     mode="lines",
                     name=f"range:bottom:sid{sid}",
                     showlegend=False,
-                    line=dict(width=2, color="rgba(0,0,0,0)"),
+                    line=range_hover_line,
                     line_shape="hv",
                     hovertemplate=(
                         "idx=%{customdata[0]}<br>"
@@ -1378,18 +1461,6 @@ def export_chart_plotly(
         if len(zones_cur) > 50:
             zones_cur = zones_cur[-50:]
 
-        # helper for rgba fill
-        def _fill_rgba(side: str, opacity: float) -> str:
-            # green/red with opacity
-            if side == "buy":
-                return f"rgba(0, 180, 0, {opacity})"
-            return f"rgba(220, 0, 0, {opacity})"
-
-        def _line_rgba(side: str, opacity: float) -> str:
-            if side == "buy":
-                return f"rgba(0, 180, 0, {opacity})"
-            return f"rgba(220, 0, 0, {opacity})"
-
         # Build hover lines (shapes themselves don't hover)
         # We'll add top/bottom transparent hv lines per zone.
         for z in zones_cur:
@@ -1593,6 +1664,141 @@ def export_chart_plotly(
                     )
                 )
 
+    # -------------------------------------------------
+    # Week 7: POI Zones overlays (rectangles + Fib lines)
+    # -------------------------------------------------
+    poi_zones = dfx.attrs.get("poi_zones", [])
+    fib_cfg = cfg.get("fib", {}) or {}
+
+    if zone_cfg.get("POI", False) and poi_zones:
+        t_last = dfx[COL_TIME].iloc[-1]
+
+        def _poi_zone_style(side: str) -> dict:
+            key = f"zone.poi.{side}"
+            return STYLE.get(key, {})
+
+        for z in poi_zones[:50]:  # Cap at 50 zones
+            side = str(z.side)
+            stz = _poi_zone_style(side)
+
+            # All POI zones active for now (lifecycle TBD)
+            active = True
+            opacity_mult = 1.0 if active else 0.5
+
+            base_fill_op = float(stz.get("fill_opacity_active", 0.35))
+            rgb = str(stz.get("rgb", "0,100,180" if side == "buy" else "180,100,0"))
+            fill_op = base_fill_op * opacity_mult
+            fillcolor = _rgba_from_rgb(rgb, fill_op)
+
+            x_zone0 = pd.to_datetime(z.start_time, utc=True)
+            x_zone1 = pd.to_datetime(z.end_time, utc=True) if z.end_time else pd.to_datetime(t_last, utc=True)
+
+            y0 = float(min(z.top, z.bottom))
+            y1 = float(max(z.top, z.bottom))
+
+            # Draw POI zone rectangle
+            fig.add_shape(
+                type="rect",
+                xref="x",
+                yref="y",
+                x0=x_zone0,
+                x1=x_zone1,
+                y0=y0,
+                y1=y1,
+                fillcolor=fillcolor,
+                line=dict(width=0),
+                layer="below",
+            )
+
+            # Hover lines for POI zone
+            seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= x_zone0) & (dfx[COL_TIME] <= x_zone1)]
+            if len(seg_times) == 0:
+                seg_times = pd.Series([x_zone0, x_zone1])
+
+            poi_customdata = [[
+                side,
+                z.meta.get("structure_id", -1),
+                z.meta.get("struct_direction", 0),
+                z.ic_idx,
+                y1,
+                y0,
+            ]] * len(seg_times)
+
+            # Hover line style from registry
+            poi_hover_st = STYLE.get("zone.poi.hover_line", {})
+            poi_hover_line = poi_hover_st.get("line", {"width": 6, "color": "rgba(0,0,0,0)"})
+
+            # Top hover line
+            fig.add_trace(
+                go.Scatter(
+                    x=seg_times,
+                    y=[y1] * len(seg_times),
+                    mode="lines",
+                    name="POI zone",
+                    showlegend=False,
+                    line=poi_hover_line,
+                    line_shape="hv",
+                    hovertemplate=(
+                        "POI Zone<br>"
+                        "side=%{customdata[0]}<br>"
+                        "structure_id=%{customdata[1]}<br>"
+                        "struct_direction=%{customdata[2]}<br>"
+                        "ic_idx=%{customdata[3]}<br>"
+                        "top=%{customdata[4]:.5f}<br>"
+                        "bottom=%{customdata[5]:.5f}"
+                        "<extra></extra>"
+                    ),
+                    customdata=poi_customdata,
+                )
+            )
+
+            # Bottom hover line
+            fig.add_trace(
+                go.Scatter(
+                    x=seg_times,
+                    y=[y0] * len(seg_times),
+                    mode="lines",
+                    name="POI zone",
+                    showlegend=False,
+                    line=poi_hover_line,
+                    line_shape="hv",
+                    hovertemplate=(
+                        "POI Zone<br>"
+                        "side=%{customdata[0]}<br>"
+                        "structure_id=%{customdata[1]}<br>"
+                        "struct_direction=%{customdata[2]}<br>"
+                        "ic_idx=%{customdata[3]}<br>"
+                        "top=%{customdata[4]:.5f}<br>"
+                        "bottom=%{customdata[5]:.5f}"
+                        "<extra></extra>"
+                    ),
+                    customdata=poi_customdata,
+                )
+            )
+
+            # Draw Fib lines if enabled
+            if fib_cfg.get("lines", False) and z.fib is not None:
+                fib = z.fib
+                fib_style = _style("fib.line")
+                fib_line = fib_style.get("line", {"width": 1, "dash": "dash", "color": "rgba(128,128,128,0.6)"})
+
+                # Draw line from anchor to anchor
+                if fib.anchor_high_idx in dfx.index and fib.anchor_low_idx in dfx.index:
+                    x_fib_start = pd.to_datetime(dfx.loc[min(fib.anchor_high_idx, fib.anchor_low_idx), COL_TIME], utc=True)
+                    x_fib_end = pd.to_datetime(t_last, utc=True)
+
+                    for level in fib.levels:
+                        fig.add_shape(
+                            type="line",
+                            xref="x",
+                            yref="y",
+                            x0=x_fib_start,
+                            x1=x_fib_end,
+                            y0=level.price,
+                            y1=level.price,
+                            line=fib_line,
+                            layer="below",
+                        )
 
     fig.update_layout(
         title=title,
