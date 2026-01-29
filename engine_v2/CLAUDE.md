@@ -12,17 +12,20 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 
 ## Current Status
 
-**Week 6 of 10-week syllabus**
+**Week 6 complete — Ready for Week 7**
 
-| Completed | In Progress |
+| Completed (Week 6) | In Progress |
 |-----------|-------------|
 | KL Zones v1 (creation, expansion, charting) | |
 | Market Structure (CTS/BOS/Range/Reversal) | |
 | Structure Patterns (breakout patterns) | |
 | Candle Classification | |
 | Identify Start (Exception 1 & 2 probe logic) | |
+| Multi-structure support (sid 0 → sid 1 transitions) | |
 
 **Note:** Original syllabus had Zones in Week 7, but we pulled it forward to Week 6. Indicators (original Week 6) deferred to later.
+
+**Note:** On any given week, we may deviate slightly from the original 10-week plan. We may also return to prior week topics for additional debugging and checking how they interact with new elements we are building. This ensures we don't make mistakes that are harder to correct later.
 
 ---
 
