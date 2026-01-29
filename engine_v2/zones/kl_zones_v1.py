@@ -11,6 +11,31 @@ from engine_v2.common.types import KLZone
 from engine_v2.structure.market_structure import StructureEvent
 
 
+def _get_reversal_confirmed_by_sid_from_events(events: list) -> dict:
+    """
+    Get reversal confirmed idx per structure_id from STATE_CHANGED events.
+    Returns dict: {structure_id: last_reversal_idx}
+
+    This is more reliable than df columns because market_state gets overwritten
+    by subsequent structures, but events are preserved.
+    """
+    rev_by_sid = {}
+    for ev in events:
+        if getattr(ev, "type", None) != "STATE_CHANGED":
+            continue
+        if ev.meta.get("to") != "reversal":
+            continue
+        sid = ev.meta.get("structure_id")
+        if sid is None:
+            continue
+        sid = int(sid)
+        idx = int(ev.idx)
+        # Keep the MAX idx for each structure_id (reversal confirmed = last reversal candle)
+        if sid not in rev_by_sid or idx > rev_by_sid[sid]:
+            rev_by_sid[sid] = idx
+    return rev_by_sid
+
+
 # -------------------------
 # Base features (ported)
 # -------------------------
@@ -677,26 +702,23 @@ def derive_kl_zones_v1(
         zones.append(z)
 
     # --- Terminal structure end: if reversal occurs, end any still-active zones at the reversal candle ---
-    if "market_state" in dfx.columns and "structure_id" in dfx.columns:
-        rev_mask = (dfx["market_state"].astype(str).str.lower() == "reversal")
-        if rev_mask.any():
-            rev_df = dfx.loc[rev_mask, ["structure_id"]].copy()
-            rev_df["idx"] = rev_df.index.astype(int)
-            first_rev_by_sid = rev_df.groupby("structure_id")["idx"].min().to_dict()
+    # End zones at reversal confirmed (last reversal candle for each structure_id)
+    # Use events instead of df columns (df columns get overwritten by subsequent structures)
+    rev_confirmed_by_sid = _get_reversal_confirmed_by_sid_from_events(events)
 
-            for zi, z in enumerate(zones):
-                sid = (z.meta or {}).get("structure_id", None)
-                if sid is None or sid not in first_rev_by_sid:
-                    continue
-                if z.end_time is not None:
-                    continue
+    for zi, z in enumerate(zones):
+        sid = (z.meta or {}).get("structure_id", None)
+        if sid is None or sid not in rev_confirmed_by_sid:
+            continue
+        if z.end_time is not None:
+            continue
 
-                rev_idx = int(first_rev_by_sid[sid])
-                zones[zi] = replace(
-                    z,
-                    end_time=_time(rev_idx),
-                    meta={**(z.meta or {}), "active": False},
-                )
+        rev_idx = int(rev_confirmed_by_sid[sid])
+        zones[zi] = replace(
+            z,
+            end_time=_time(rev_idx),
+            meta={**(z.meta or {}), "active": False},
+        )
 
 
     return zones

@@ -15,6 +15,31 @@ from engine_v2.common.types import PatternStatus
 def _rgba_from_rgb(rgb: str, opacity: float) -> str:
     return f"rgba({rgb}, {opacity})"
 
+
+def _get_reversal_confirmed_by_sid(structure_events: list) -> dict:
+    """
+    Get reversal confirmed idx per structure_id from STATE_CHANGED events.
+    Returns dict: {structure_id: last_reversal_idx}
+
+    This is more reliable than df columns because market_state gets overwritten
+    by subsequent structures, but events are preserved.
+    """
+    rev_by_sid = {}
+    for ev in structure_events:
+        if getattr(ev, "type", None) != "STATE_CHANGED":
+            continue
+        if ev.meta.get("to") != "reversal":
+            continue
+        sid = ev.meta.get("structure_id")
+        if sid is None:
+            continue
+        sid = int(sid)
+        idx = int(ev.idx)
+        # Keep the MAX idx for each structure_id (reversal confirmed = last reversal candle)
+        if sid not in rev_by_sid or idx > rev_by_sid[sid]:
+            rev_by_sid[sid] = idx
+    return rev_by_sid
+
 def _zone_style(side: str) -> dict:
     # side is "buy" or "sell"
     key = f"zone.kl.{side}"
@@ -577,10 +602,16 @@ def export_chart_plotly(
                     ))
                     del open_ranges[sid]
 
-        # Close any ranges still open at end of visible window
+        # Close any ranges still open - at reversal confirmed if exists, else end of window
+        # Use events to find reversal confirmed idx per structure_id
+        # (df columns get overwritten by subsequent structures, events are preserved)
+        rev_confirmed_by_sid = _get_reversal_confirmed_by_sid(structure_events)
+
         for sid, seg in open_ranges.items():
+            # Use reversal confirmed idx if exists, else end of visible window
+            end_idx = rev_confirmed_by_sid.get(sid, last_visible_idx)
             range_segments.append((
-                seg["start_idx"], last_visible_idx, seg["hi"], seg["lo"], sid, seg["struct_direction"]
+                seg["start_idx"], end_idx, seg["hi"], seg["lo"], sid, seg["struct_direction"]
             ))
 
         # Get base style
@@ -667,6 +698,10 @@ def export_chart_plotly(
         type_priority = {"RANGE_STARTED": 0, "RANGE_UPDATED": 1, "RANGE_RESET": 2}
         all_range_events = range_started + range_updated + range_reset
         all_range_events.sort(key=lambda e: (e.idx, type_priority.get(e.type, 99)))
+
+        # Build reversal confirmed idx per structure_id (ranges end at reversal)
+        # Use events instead of df columns (df columns get overwritten by subsequent structures)
+        rev_confirmed_by_sid_hover = _get_reversal_confirmed_by_sid(structure_events)
 
         # Build hover data per structure_id
         # hover_data[sid] = {"points": [(idx, time, hi, lo, last_update_idx)...]}
@@ -790,7 +825,13 @@ def export_chart_plotly(
             vals_lo = []
             customdata_lo = []
 
+            # Get reversal confirmed idx for this structure_id (ranges end there)
+            rev_end_idx = rev_confirmed_by_sid_hover.get(sid, last_visible_idx + 1)
+
             for idx in sorted(idx_set):
+                # Skip candles after reversal confirmed for this structure
+                if idx > rev_end_idx:
+                    continue
                 if idx in range_by_candle and sid in range_by_candle[idx]:
                     rng = range_by_candle[idx][sid]
                     t = time_by_idx.get(idx)
@@ -958,22 +999,57 @@ def export_chart_plotly(
         # sort by point index (time order)
         points.sort(key=lambda x: x[0])
 
-        if len(points) >= 1:
-            # Line: connect ALL points in order, plus final segment to last candle close
-            x_line = [p[1] for p in points] + [dfx[COL_TIME].iloc[-1]]
-            y_line = [p[2] for p in points] + [float(dfx[COL_C].iloc[-1])]
+        # Build reversal confirmed idx per structure_id (lines end at reversal)
+        # Use events instead of df columns (df columns get overwritten by subsequent structures)
+        rev_confirmed_by_sid_lines = _get_reversal_confirmed_by_sid(structure_events)
 
-            fig.add_trace(
-                go.Scatter(
-                    x=x_line,
-                    y=y_line,
-                    mode="lines",
-                    name="Structure (CTS/BOS)",
-                    hoverinfo="skip",
-                    line_shape="linear",
-                    **_style("structure.swing_line"),
+        if len(points) >= 1:
+            # Group points by structure_id - don't connect across structures
+            from collections import defaultdict
+            points_by_sid = defaultdict(list)
+            for p in points:
+                sid = p[4]  # structure_id is at index 4
+                points_by_sid[sid].append(p)
+
+            # Draw separate line for each structure_id
+            for sid in sorted(points_by_sid.keys()):
+                sid_points = points_by_sid[sid]
+                sid_points.sort(key=lambda x: x[0])  # sort by idx
+
+                # Build line points from confirmed BOS/CTS points
+                x_line = [p[1] for p in sid_points]
+                y_line = [p[2] for p in sid_points]
+
+                # Only extend line to last candle for the most recent structure
+                # Prior structures end at their last confirmed BOS/CTS point (no extension to reversal)
+                if sid == most_recent_sid:
+                    end_time = dfx[COL_TIME].iloc[-1]
+                    end_price = float(dfx[COL_C].iloc[-1])
+                    x_line.append(end_time)
+                    y_line.append(end_price)
+
+                # Opacity: faded for prior structures
+                opacity = 1.0 if sid == most_recent_sid else 0.5
+                line_style = _style("structure.swing_line").copy()
+                if "line" in line_style:
+                    line_style["line"] = dict(line_style["line"])
+                    # Adjust opacity via color if needed
+                else:
+                    line_style["line"] = {}
+                line_style["opacity"] = opacity
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_line,
+                        y=y_line,
+                        mode="lines",
+                        name=f"Structure (CTS/BOS) sid={sid}",
+                        hoverinfo="skip",
+                        line_shape="linear",
+                        showlegend=(sid == most_recent_sid),  # Only show legend for most recent
+                        **line_style,
+                    )
                 )
-            )
 
             # Markers: confirmed CTS points (with opacity per structure)
             # pts_cts format: (idx, x_time, price, "CTS", sid, cycle, sd, opacity)
