@@ -416,33 +416,62 @@ def export_chart_plotly(
         )
 
     # -------------------------------------------------
-    # Week 5 Phase 1A: Breakout apply labels ("bo") from last_breakout_pat_apply_idx
+    # Week 5 Phase 1A: Breakout apply labels ("bo") from STATE_CHANGED events
+    # Use STATE_CHANGED events (survives structure overwrites)
+    # Position by struct_direction: +1 -> above candle, -1 -> below candle
+    # (opposite of pb/pr/rv which are counter-trend; bo is with-trend)
     # -------------------------------------------------
-    if state_cfg.get("labels", False) and "last_breakout_pat_apply_idx" in dfx.columns:
-        s = pd.to_numeric(dfx["last_breakout_pat_apply_idx"], errors="coerce")
+    if state_cfg.get("labels", False):
+        structure_events = dfx.attrs.get("structure_events", [])
+        bo_events = [
+            ev for ev in structure_events
+            if getattr(ev, "type", None) == "STATE_CHANGED"
+            and ev.meta.get("to") == "breakout"
+            and ev.idx in dfx.index
+        ]
 
-        # apply candle = index equals last_breakout_pat_apply_idx
-        mask = s.notna() & (s.astype(int) == dfx.index.to_numpy())
-        bo = dfx[mask].copy()
+        if bo_events:
+            x_vals = []
+            y_vals = []
+            customdata = []
 
-        if not bo.empty:
-            # Same vertical logic as breakout used to have
-            y_bo = bo[COL_H].astype(float) + wick_offset.loc[bo.index].astype(float) * 2.0
+            for ev in bo_events:
+                idx = ev.idx
+                sd = int(ev.meta.get("struct_direction", 1))
+                sid = int(ev.meta.get("structure_id", 0))
+
+                row = dfx.loc[idx]
+                wo = float(wick_offset.loc[idx]) if idx in wick_offset.index else 0.0
+
+                # Position by struct_direction (opposite of pb/pr/rv):
+                # +1 (bullish): bo is with-trend move UP, so label ABOVE candle
+                # -1 (bearish): bo is with-trend move DOWN, so label BELOW candle
+                if sd == 1:
+                    y = float(row[COL_H]) + wo * 2.0
+                else:
+                    y = float(row[COL_L]) - wo * 2.0
+
+                x_vals.append(row[COL_TIME])
+                y_vals.append(y)
+                customdata.append((idx, "breakout", sid, sd))
 
             fig.add_trace(
                 go.Scatter(
-                    x=bo[COL_TIME],
-                    y=y_bo,
+                    x=x_vals,
+                    y=y_vals,
                     mode="text",
-                    text=["bo"] * len(bo),
+                    text=["bo"] * len(bo_events),
                     name="bo apply",
                     textposition="middle center",
                     showlegend=False,
                     hovertemplate=(
                         "idx=%{customdata[0]}<br>"
-                        "event=breakout_apply<extra></extra>"
+                        "state=%{customdata[1]}<br>"
+                        "sid=%{customdata[2]}<br>"
+                        "struct_direction=%{customdata[3]}"
+                        "<extra></extra>"
                     ),
-                    customdata=list(zip(bo.index.to_numpy(),)),
+                    customdata=customdata,
                 )
             )
 
