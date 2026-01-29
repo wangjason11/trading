@@ -572,12 +572,24 @@ def export_chart_plotly(
         most_recent_sid = max(all_sids) if all_sids else 0
 
         # Collect all range events, sort by (idx, type priority)
-        # Priority: RANGE_STARTED=0, RANGE_UPDATED=1, RANGE_RESET=2
-        type_priority = {"RANGE_STARTED": 0, "RANGE_UPDATED": 1, "RANGE_RESET": 2}
+        # Priority: RANGE_RESET=0, RANGE_STARTED=1, RANGE_UPDATED=2
+        # RANGE_RESET must come before RANGE_STARTED at same idx so closing previous range
+        # happens before opening new range (e.g., RANGE_RESET at 748, RANGE_STARTED with start_idx=748)
+        # For RANGE_STARTED, use start_idx (from meta) for sorting so it's processed
+        # before any RANGE_UPDATED events that fall within its [start_idx, confirm_idx] window
+        type_priority = {"RANGE_RESET": 0, "RANGE_STARTED": 1, "RANGE_UPDATED": 2}
         all_range_events = []
         for ev in range_started + range_updated + range_reset:
             all_range_events.append(ev)
-        all_range_events.sort(key=lambda e: (e.idx, type_priority.get(e.type, 99)))
+
+        def _range_event_sort_key(e):
+            if e.type == "RANGE_STARTED":
+                # Use start_idx so RANGE_STARTED is processed before RANGE_UPDATED
+                # events that occur between start_idx and confirm_idx
+                return (e.meta.get("start_idx", e.idx), type_priority.get(e.type, 99))
+            return (e.idx, type_priority.get(e.type, 99))
+
+        all_range_events.sort(key=_range_event_sort_key)
 
         # Build segments per structure_id
         # Segment: (start_idx, end_idx, hi, lo, structure_id, struct_direction)
@@ -724,9 +736,15 @@ def export_chart_plotly(
                 all_sids.add(int(sid))
         most_recent_sid = max(all_sids) if all_sids else 0
 
-        type_priority = {"RANGE_STARTED": 0, "RANGE_UPDATED": 1, "RANGE_RESET": 2}
+        type_priority = {"RANGE_RESET": 0, "RANGE_STARTED": 1, "RANGE_UPDATED": 2}
         all_range_events = range_started + range_updated + range_reset
-        all_range_events.sort(key=lambda e: (e.idx, type_priority.get(e.type, 99)))
+
+        def _range_event_sort_key_hover(e):
+            if e.type == "RANGE_STARTED":
+                return (e.meta.get("start_idx", e.idx), type_priority.get(e.type, 99))
+            return (e.idx, type_priority.get(e.type, 99))
+
+        all_range_events.sort(key=_range_event_sort_key_hover)
 
         # Build reversal confirmed idx per structure_id (ranges end at reversal)
         # Use events instead of df columns (df columns get overwritten by subsequent structures)
