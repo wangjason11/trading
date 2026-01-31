@@ -126,8 +126,21 @@ STYLE = {
     # -----------------------------
     # Week 7: Fibonacci levels
     # -----------------------------
-    "fib.line": {
-        "line": {"width": 1, "dash": "dash", "color": "rgba(128, 128, 128, 0.6)"},
+    # Dotted lines at 0% and 100% anchors
+    "fib.anchor_line.active": {
+        "line": {"width": 1.5, "dash": "dot", "color": "rgba(0, 0, 139, 0.8)"},  # dark blue
+    },
+    "fib.anchor_line.historical": {
+        "line": {"width": 1.5, "dash": "dot", "color": "rgba(0, 0, 139, 0.4)"},  # dark blue, faded
+    },
+    # Rectangle between 61.8% and 80%
+    "fib.zone_rect.active": {
+        "line": {"width": 1.5, "dash": "dot", "color": "rgba(0, 0, 139, 0.8)"},  # dark blue border
+        "fillcolor": "rgba(0, 0, 139, 0.0)",  # transparent fill
+    },
+    "fib.zone_rect.historical": {
+        "line": {"width": 1.5, "dash": "dot", "color": "rgba(0, 0, 139, 0.4)"},  # dark blue border, faded
+        "fillcolor": "rgba(0, 0, 139, 0.0)",  # transparent fill
     },
     "fib.label": {
         "font": {"size": 9, "color": "gray"},

@@ -12,13 +12,13 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 
 ## Current Status
 
-**Week 6 complete — Ready for Week 7**
+**Week 7 Part 1 — POI Zones (In Progress)**
 
-| Completed (Week 6) | In Progress |
+| Completed (Week 6) | In Progress (Week 7) |
 |-----------|-------------|
-| KL Zones v1 (creation, expansion, charting) | |
-| Market Structure (CTS/BOS/Range/Reversal) | |
-| Structure Patterns (breakout patterns) | |
+| KL Zones v1 (creation, expansion, charting) | POI Zones (Fib + IC) |
+| Market Structure (CTS/BOS/Range/Reversal) | Imbalance Pattern |
+| Structure Patterns (breakout patterns) | Fibonacci Levels |
 | Candle Classification | |
 | Identify Start (Exception 1 & 2 probe logic) | |
 | Multi-structure support (sid 0 → sid 1 transitions) | |
@@ -84,6 +84,7 @@ candle features → structure patterns → base features → market structure �
 |------|---------------|
 | `MARKET_STRUCTURE_SPEC.md` | CTS/BOS/Range/Reversal semantics |
 | `KL_ZONES_SPEC.md` | Zone construction, thresholds, expansion |
+| `zones/POI_ZONES_SPEC.md` | POI zones (Fib + IC) specification |
 | `CHARTING_SPEC.md` | Chart overlay rules, style registry |
 | `ARCHITECTURE.md` | System design, event contracts |
 | `PROJECT_PRINCIPLES.md` | Non-negotiable guardrails |

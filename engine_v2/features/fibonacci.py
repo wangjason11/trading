@@ -11,7 +11,7 @@ import pandas as pd
 
 
 # Default Fib levels (can be overridden)
-DEFAULT_FIB_LEVELS = [50.0, 61.8, 70.5, 78.6]
+DEFAULT_FIB_LEVELS = [30.0, 50.0, 61.8, 80.0]
 
 
 @dataclass(frozen=True)

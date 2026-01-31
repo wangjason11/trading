@@ -129,7 +129,7 @@ def export_chart_plotly(
             "POI": False,  # Week 7: POI zones (Fib + IC)
         },
         "fib": {
-            "lines": False,  # Week 7: Fibonacci level lines
+            "lines": True,  # Week 7: Fibonacci level lines (from FibTracker)
         },
         "imbalance": {
             "highlight": True,  # Week 7: Highlight imbalance candles with different colors
@@ -1799,6 +1799,156 @@ def export_chart_plotly(
                             line=fib_line,
                             layer="below",
                         )
+
+    # -------------------------------------------------
+    # Week 7: Fib Lines from FibTracker (separate from POI zones)
+    # -------------------------------------------------
+    fib_states = dfx.attrs.get("fib_states", [])
+
+    if fib_cfg.get("lines", True) and fib_states:
+        # Get styles for active vs historical
+        anchor_line_active = _style("fib.anchor_line.active").get("line", {"width": 1, "dash": "dot", "color": "rgba(0,0,139,0.8)"})
+        anchor_line_historical = _style("fib.anchor_line.historical").get("line", {"width": 1, "dash": "dot", "color": "rgba(0,0,139,0.4)"})
+        zone_rect_active = _style("fib.zone_rect.active")
+        zone_rect_historical = _style("fib.zone_rect.historical")
+
+        for fib_st in fib_states:
+            if fib_st.fib is None:
+                continue
+
+            fib = fib_st.fib
+            is_active = fib_st.active and not fib_st.locked
+            anchor_line = anchor_line_active if is_active else anchor_line_historical
+            zone_style = zone_rect_active if is_active else zone_rect_historical
+
+            # Get time range: from BOS idx to CTS idx
+            bos_idx = fib_st.bos_idx
+            cts_idx = fib_st.cts_idx
+
+            if bos_idx not in dfx.index or cts_idx not in dfx.index:
+                continue
+
+            x_start = pd.to_datetime(dfx.loc[min(bos_idx, cts_idx), COL_TIME], utc=True)
+            x_end = pd.to_datetime(dfx.loc[max(bos_idx, cts_idx), COL_TIME], utc=True)
+
+            # Get prices at key levels
+            price_0 = fib.price_at_pct(0.0)      # BOS anchor
+            price_100 = fib.price_at_pct(100.0)  # CTS anchor
+            price_618 = fib.price_at_pct(61.8)
+            price_80 = fib.price_at_pct(80.0)
+
+            # Draw dotted line at 0% (BOS anchor)
+            fig.add_shape(
+                type="line",
+                xref="x",
+                yref="y",
+                x0=x_start,
+                x1=x_end,
+                y0=price_0,
+                y1=price_0,
+                line=anchor_line,
+                layer="below",
+            )
+
+            # Draw dotted line at 100% (CTS anchor)
+            fig.add_shape(
+                type="line",
+                xref="x",
+                yref="y",
+                x0=x_start,
+                x1=x_end,
+                y0=price_100,
+                y1=price_100,
+                line=anchor_line,
+                layer="below",
+            )
+
+            # Draw vertical dotted line at start (from 0% to 100%)
+            fig.add_shape(
+                type="line",
+                xref="x",
+                yref="y",
+                x0=x_start,
+                x1=x_start,
+                y0=price_0,
+                y1=price_100,
+                line=anchor_line,
+                layer="below",
+            )
+
+            # Draw vertical dotted line at end (from 0% to 100%)
+            fig.add_shape(
+                type="line",
+                xref="x",
+                yref="y",
+                x0=x_end,
+                x1=x_end,
+                y0=price_0,
+                y1=price_100,
+                line=anchor_line,
+                layer="below",
+            )
+
+            # Draw dotted rectangle between 61.8% and 80%
+            zone_line = zone_style.get("line", {"width": 1, "dash": "dot", "color": "rgba(0,0,139,0.6)"})
+            zone_fill = zone_style.get("fillcolor", "rgba(0,0,139,0.0)")
+            fig.add_shape(
+                type="rect",
+                xref="x",
+                yref="y",
+                x0=x_start,
+                x1=x_end,
+                y0=price_618,
+                y1=price_80,
+                line=zone_line,
+                fillcolor=zone_fill,
+                layer="below",
+            )
+
+            # Add hover trace (invisible line at midpoint of 61.8-80 zone for hover data)
+            hover_y = (price_618 + price_80) / 2
+            hover_times = [x_start, x_end]
+            hover_vals = [hover_y, hover_y]
+
+            hover_customdata = [
+                [
+                    fib_st.structure_id,
+                    fib_st.cycle_id,
+                    fib_st.bos_idx,
+                    f"{fib_st.bos_price:.5f}",
+                    fib_st.cts_idx,
+                    f"{fib_st.cts_price:.5f}",
+                    f"{price_618:.5f}",
+                    f"{price_80:.5f}",
+                    "active" if is_active else "locked" if fib_st.locked else "inactive",
+                ]
+                for _ in hover_times
+            ]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=hover_times,
+                    y=hover_vals,
+                    mode="lines",
+                    name=f"fib:sid{fib_st.structure_id}:c{fib_st.cycle_id}",
+                    showlegend=False,
+                    line=dict(width=6, color="rgba(0,0,0,0)"),  # Invisible hover hitbox
+                    hovertemplate=(
+                        "<b>Fib Zone</b><br>"
+                        "sid=%{customdata[0]}<br>"
+                        "cycle=%{customdata[1]}<br>"
+                        "BOS: idx=%{customdata[2]} price=%{customdata[3]}<br>"
+                        "CTS: idx=%{customdata[4]} price=%{customdata[5]}<br>"
+                        "61.8%%=%{customdata[6]}<br>"
+                        "80%%=%{customdata[7]}<br>"
+                        "status=%{customdata[8]}"
+                        "<extra></extra>"
+                    ),
+                    customdata=hover_customdata,
+                )
+            )
+
+        print(f"[chart][fib] rendered {len(fib_states)} fib states")
 
     fig.update_layout(
         title=title,

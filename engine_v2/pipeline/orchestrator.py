@@ -17,6 +17,9 @@ from engine_v2.zones.kl_zones_v1 import compute_base_features, derive_kl_zones_v
 from engine_v2.zones.poi_zones import derive_poi_zones, POIConfig
 from engine_v2.patterns.imbalance import compute_imbalance
 
+# Week 7: Fib tracking
+from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig
+
 
 @dataclass
 class PipelineResult:
@@ -89,9 +92,49 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
 
     meta["kl_zones"] = kl_zones
 
-    # 8) POI zones (Week 7) - consume structure events + imbalance columns
+    # 8) Fib tracking (Week 7) - process events to track Fib levels
+    fib_tracker = FibTracker(FibTrackerConfig(
+        fib_levels=[30.0, 50.0, 61.8, 80.0],
+        fill_threshold=0.70,
+    ))
+
+    # Process events to track Fib activations
+    # Need to pair BOS_CONFIRMED with subsequent CTS_ESTABLISHED
+    bos_by_cycle = {}  # {(sid, cycle_id): (bos_idx, bos_price)}
+
+    # Sort events by idx to ensure BOS_CONFIRMED comes before CTS_ESTABLISHED
+    sorted_events = sorted(s_res.events, key=lambda e: (e.idx, e.type))
+
+    for ev in sorted_events:
+        sid = ev.meta.get("structure_id", 0)
+        cycle_id = ev.meta.get("cycle_id", 0)
+        key = (sid, cycle_id)
+
+        if ev.type == "BOS_CONFIRMED":
+            # Store BOS info for this cycle
+            bos_by_cycle[key] = (ev.idx, ev.price)
+
+        elif ev.type == "CTS_ESTABLISHED":
+            # Try to activate Fib using stored BOS info
+            if key in bos_by_cycle:
+                bos_idx, bos_price = bos_by_cycle[key]
+                fib_tracker.on_cts_established(ev, s_res.df, bos_idx, bos_price)
+
+        elif ev.type == "CTS_UPDATED":
+            # Update CTS anchor if Fib is active for this cycle
+            fib_tracker.on_cts_updated(ev, s_res.df)
+
+        elif ev.type == "CTS_CONFIRMED":
+            # Lock the Fib
+            fib_tracker.on_cts_confirmed(ev)
+
+    fib_states = fib_tracker.get_fibs_for_charting()
+    print(f"[fib_tracker] total fibs={len(fib_states)}, active={sum(1 for f in fib_states if f.active)}")
+    meta["fib_states"] = fib_states
+
+    # 9) POI zones (Week 7) - consume structure events + imbalance columns
     poi_config = POIConfig(
-        fib_levels=[50.0, 61.8, 70.5, 78.6],  # Default; will be configurable
+        fib_levels=[30.0, 50.0, 61.8, 80.0],
         ic_fib_min=62.0,
         ic_fib_max=79.0,
         require_imbalance=False,  # Start with False until imbalance spec finalized
@@ -110,6 +153,7 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
     s_res.df.attrs["kl_zones"] = kl_zones
     s_res.df.attrs["poi_zones"] = poi_zones
     s_res.df.attrs["structure_events"] = s_res.events
+    s_res.df.attrs["fib_states"] = fib_states
 
     return PipelineResult(
         df=s_res.df,
