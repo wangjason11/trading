@@ -106,6 +106,34 @@ Chart defaults define toggles for:
 
 ---
 
+## Style Registry Pattern
+
+**IMPORTANT:** All chart styling parameters must be defined in `style_registry.py`, not hardcoded in `export_plotly.py`.
+
+This includes:
+- Colors, line widths, dash patterns
+- Marker sizes, symbols, opacity
+- Fill colors, border styles
+- Opacity tier multipliers (active vs historical visibility)
+
+**Pattern:**
+1. Define style in `style_registry.py` under `STYLE` dict
+2. Reference via `_style("key.subkey")` in `export_plotly.py`
+3. Always provide sensible defaults in `.get()` calls
+
+**Example:**
+```python
+# style_registry.py
+"my_line": {
+    "line": {"width": 2, "color": "black"},
+}
+
+# export_plotly.py
+line=_style("my_line").get("line", {"width": 2, "color": "black"}),
+```
+
+---
+
 ## Debug ergonomics
 
 - Always prefer adding new information via:

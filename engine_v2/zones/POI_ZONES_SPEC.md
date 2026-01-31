@@ -84,28 +84,47 @@ Fib LOCKED (anchor 2 stops updating)
 - **Deactivation/Reactivation:** Fib can toggle active state based on imbalance conditions at each CTS update
 - **Obsolescence:** When new cycle forms, previous cycle's Fib becomes obsolete
 
-### Cross-Cycle Exception (Post-Reversal)
+### Scenario Logic (Post-Reversal, sid 1+)
 
-For structure N+1 (immediately after reversal), a cross-cycle Fib may replace cycle 1's normal Fib.
+For structures after a reversal, Fib activation follows a 3-scenario system:
 
-**All 4 conditions must be met:**
-1. **cond1:** Cycle 0 has unfilled imbalance in `[BOS_0, CTS_0]`
-2. **cond2:** Cycle 1 has unfilled imbalance in `[BOS_1, CTS_1]`
-3. **cond3:** Cycle 1's BOS doesn't fill cycle 0's imbalances
-4. **cond4:** Cycle 0's locked CTS idx < reversal_confirmed_idx
+#### Scenario 1: Normal Cycle 0 Fib
+**Condition:** CTS_0 idx >= reversal_confirmed_idx
 
-**If conditions met:**
-- Create cross-cycle Fib: **BOS_0 → CTS_1**
-- This **REPLACES** cycle 1's normal Fib (stored as cycle 1)
-- Normal cycle 1 Fib is tracked as fallback
+**Behavior:**
+- Cycle 0 gets normal Fib (if unfilled imbalance)
+- Cycle 1 gets normal Fib (if unfilled imbalance)
+- Skip Scenario 2/3 checks
 
-**Fallback behavior:**
-- When cross-cycle Fib deactivates → normal cycle 1 Fib takes over (if active)
-- When cross-cycle Fib reactivates → it takes back control
+**Revert Condition (checked at CTS_1 ESTABLISHED):**
+- If BOS_1 price touches/crosses into prev structure's last BOS zone → revert to FALSE
+- Deactivate cycle 0 Fib, proceed with Scenario 2/3
+- "Touch" means: BOS_1 >= zone outer (for buy zone) or BOS_1 <= zone outer (for sell zone)
 
-**Scope:**
-- Only applies to cycle 0 & cycle 1 immediately after reversal
-- Cycle 2+ always use their own BOS/CTS only
+#### Scenario 2: Cross-Cycle Fib
+**Condition:** Scenario 1 is FALSE AND all 3 conditions met:
+1. cond1: Cycle 1 has unfilled imbalance
+2. cond2: Cycle 0 has unfilled imbalance
+3. cond3: BOS_1 doesn't fill cycle 0's imbalances
+
+**Behavior:**
+- No cycle 0 Fib
+- Cycle 1 gets cross-cycle Fib: BOS_0 → CTS_1
+- Normal Fib stored as fallback
+
+#### Scenario 3: Normal Cycle 1 Fib
+**Condition:** Scenario 1 is FALSE AND Scenario 2 conditions not met
+
+**Behavior:**
+- No cycle 0 Fib
+- Cycle 1 gets normal Fib (if unfilled imbalance)
+
+### Prev BOS Line (Visualization Helper)
+
+After each reversal, a black horizontal line shows the Scenario 1 revert threshold:
+- **Start idx:** Last BOS idx of previous structure
+- **End idx:** Earliest CTS event at or after reversal_confirmed_idx
+- **Price:** Last BOS price of previous structure
 
 ### Unfilled vs Filled Imbalance
 

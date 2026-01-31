@@ -59,6 +59,13 @@ def _style(key: str) -> dict:
     return STYLE.get(key, {})
 
 
+def _opacity_tier(tier: str) -> float:
+    """Get opacity multiplier for visibility tier."""
+    tiers = _style("opacity_tiers")
+    defaults = {"active": 1.0, "recent_inactive": 0.5, "prior_inactive": 0.2}
+    return float(tiers.get(tier, defaults.get(tier, 1.0)))
+
+
 @dataclass(frozen=True)
 class ChartExportPaths:
     html_path: Path
@@ -765,9 +772,9 @@ def export_chart_plotly(
 
             # Opacity: most recent structure_id = full, prior = 50%
             if sid == most_recent_sid:
-                opacity_mult = 1.0
+                opacity_mult = _opacity_tier("active")
             else:
-                opacity_mult = 0.5
+                opacity_mult = _opacity_tier("recent_inactive")
 
             # Apply opacity multiplier
             style_copy = dict(range_rect_style)
@@ -1141,7 +1148,7 @@ def export_chart_plotly(
                 # Opacity: base from style, multiplier for prior structures
                 line_style = _style("structure.swing_line").copy()
                 base_opacity = float(line_style.get("opacity", 0.9))
-                opacity_mult = 1.0 if sid == most_recent_sid else 0.5
+                opacity_mult = _opacity_tier("active") if sid == most_recent_sid else _opacity_tier("recent_inactive")
                 if "line" in line_style:
                     line_style["line"] = dict(line_style["line"])
                 else:
@@ -1181,7 +1188,7 @@ def export_chart_plotly(
                         if op_label:
                             if "marker" in style:
                                 style["marker"] = dict(style["marker"])
-                                style["marker"]["opacity"] = 0.5
+                                style["marker"]["opacity"] = _opacity_tier("recent_inactive")
                         fig.add_trace(
                             go.Scatter(
                                 x=[p[1] for p in pts],
@@ -1211,7 +1218,7 @@ def export_chart_plotly(
                         if opacity < 1.0:
                             if "marker" in style:
                                 style["marker"] = dict(style["marker"])
-                                style["marker"]["opacity"] = 0.5
+                                style["marker"]["opacity"] = _opacity_tier("recent_inactive")
                         # Hover label: sid 0 (prior) on left, higher sid on right
                         xanchor = "right" if sid < most_recent_sid else "left"
                         op_label = " (prior)" if sid < most_recent_sid else ""
@@ -1255,7 +1262,7 @@ def export_chart_plotly(
                         if op_label:
                             if "marker" in style:
                                 style["marker"] = dict(style["marker"])
-                                style["marker"]["opacity"] = 0.5
+                                style["marker"]["opacity"] = _opacity_tier("recent_inactive")
                         fig.add_trace(
                             go.Scatter(
                                 x=[p[1] for p in pts],
@@ -1285,7 +1292,7 @@ def export_chart_plotly(
                         if opacity < 1.0:
                             if "marker" in style:
                                 style["marker"] = dict(style["marker"])
-                                style["marker"]["opacity"] = 0.5
+                                style["marker"]["opacity"] = _opacity_tier("recent_inactive")
                         # Hover label: sid 0 (prior) on left, higher sid on right
                         xanchor = "right" if sid < most_recent_sid else "left"
                         op_label = " (prior)" if sid < most_recent_sid else ""
@@ -1470,13 +1477,13 @@ def export_chart_plotly(
 
             stz = _zone_style(side)
 
-            # 3-tier opacity: active=100%, non-active+recent_sid=50%, non-active+prior_sid=25%
+            # 3-tier opacity: active=100%, non-active+recent_sid=50%, non-active+prior_sid=20%
             if active:
-                opacity_mult = 1.0
+                opacity_mult = _opacity_tier("active")
             elif zone_sid == most_recent_sid:
-                opacity_mult = 0.5
+                opacity_mult = _opacity_tier("recent_inactive")
             else:
-                opacity_mult = 0.2
+                opacity_mult = _opacity_tier("prior_inactive")
 
             base_fill_op = float(stz.get("fill_opacity_active", 0.18))
             base_line_op = float(stz.get("confirm_opacity_active", 0.9))
@@ -1949,6 +1956,42 @@ def export_chart_plotly(
             )
 
         print(f"[chart][fib] rendered {len(fib_states)} fib states")
+
+    # -------------------------------------------------
+    # Week 7: Prev BOS Lines (black horizontal lines after reversal)
+    # -------------------------------------------------
+    prev_bos_lines = dfx.attrs.get("prev_bos_lines", [])
+
+    for line_info in prev_bos_lines:
+        start_idx = line_info["start_idx"]
+        end_idx = line_info["end_idx"]
+        price = line_info["price"]
+
+        # Convert indices to times
+        if start_idx in dfx.index and end_idx in dfx.index:
+            start_time = dfx.loc[start_idx, COL_TIME]
+            end_time = dfx.loc[end_idx, COL_TIME]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[start_time, end_time],
+                    y=[price, price],
+                    mode="lines",
+                    line=_style("prev_bos_line").get("line", {"width": 2, "color": "black"}),
+                    name=f"Prev BOS (sid={line_info['prev_structure_id']})",
+                    showlegend=True,
+                    hovertemplate=(
+                        f"Prev BOS Line<br>"
+                        f"Price: {price:.5f}<br>"
+                        f"From idx: {start_idx}<br>"
+                        f"To idx: {end_idx}<br>"
+                        f"<extra></extra>"
+                    ),
+                )
+            )
+
+    if prev_bos_lines:
+        print(f"[chart][prev_bos] rendered {len(prev_bos_lines)} prev BOS lines")
 
     fig.update_layout(
         title=title,

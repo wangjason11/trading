@@ -119,3 +119,21 @@ self._fibs: Dict[tuple, FibState] = {}  # {(structure_id, cycle_id): state}
 ```
 
 **Why this matters:** For charting, we need each cycle's final locked state to draw Fib lines correctly. With single-key storage, only the most recent cycle's state is available.
+
+---
+
+## Scenario 1 Revert: Zone Touch Direction
+
+**Problem:** When checking if BOS_1 "touches" the prev BOS zone, the comparison direction depends on zone type.
+
+**Gotcha:** For a buy zone (bullish prev structure), the outer threshold is the BOTTOM. "Touching" the zone means price is AT OR ABOVE the outer (crossing into the zone from below).
+
+**Correct logic:**
+```python
+if prev_sd == 1:  # Buy zone - outer is bottom, zone sits ABOVE
+    return bos1_price >= prev_bos_outer  # Touch = at or above
+else:  # Sell zone - outer is top, zone sits BELOW
+    return bos1_price <= prev_bos_outer  # Touch = at or below
+```
+
+**Symptom if wrong:** Scenario 1 doesn't revert when it should (or vice versa).

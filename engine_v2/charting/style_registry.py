@@ -1,3 +1,16 @@
+"""
+Style Registry for Chart Rendering.
+
+IMPORTANT: ALL chart styling and formatting parameters should be defined here,
+not hardcoded in export_plotly.py. This includes:
+- Colors, line widths, opacity values
+- Marker sizes and symbols
+- Fill colors and border styles
+- Opacity tier multipliers
+
+When adding new chart elements, always add their styles here first,
+then reference them via _style() in export_plotly.py.
+"""
 from __future__ import annotations
 
 STYLE = {
@@ -187,5 +200,21 @@ STYLE = {
         "linecolor": "rgba(0,0,0,0.4)",   # solid dark grey
         "linewidth": 1,
         "mirror": True,                  # draw full rectangle (top/right included)
+    },
+
+    # -----------------------------
+    # Week 7: Prev BOS Line (after reversal)
+    # -----------------------------
+    "prev_bos_line": {
+        "line": {"width": 2, "color": "black"},
+    },
+
+    # -----------------------------
+    # Global: Opacity tiers for multi-structure visibility
+    # -----------------------------
+    "opacity_tiers": {
+        "active": 1.0,           # Active elements (current cycle, not locked)
+        "recent_inactive": 0.5,  # Inactive elements from most recent structure
+        "prior_inactive": 0.2,   # Inactive elements from prior structures
     },
 }
