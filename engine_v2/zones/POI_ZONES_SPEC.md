@@ -46,9 +46,9 @@ FIB_LEVELS = [30, 50, 61.8, 80]  # percentages
 ```
 
 ### Anchor Points
-- From **BOS to CTS** (or vice versa)
-- Can be same cycle OR different cycles (but **same structure_id**)
-- **Only draw Fib if imbalance exists between the anchor points**
+- **Anchor 1 (BOS):** idx & price of confirmed BOS — **LOCKED** once established
+- **Anchor 2 (CTS):** idx & price of CTS — **UPDATES** as CTS moves to new extreme
+- **Only draw Fib if unfilled imbalance exists between the anchor points**
 
 ### Calculation
 For bullish swing (retracement from high):
@@ -60,6 +60,59 @@ For bearish swing (retracement from low):
 ```python
 fib_price = anchor_low + (anchor_high - anchor_low) * (level_pct / 100)
 ```
+
+### FibTracker Lifecycle
+
+```
+CTS_ESTABLISHED (cycle 1+)
+    ↓
+Check: unfilled imbalance between BOS and CTS?
+    ↓ (yes)
+Fib ACTIVATED: BOS idx/price → CTS idx/price
+    ↓
+On CTS_UPDATED:
+  - Anchor 2 (CTS) UPDATES to new extreme
+  - Re-check imbalance condition → can DEACTIVATE or REACTIVATE
+    ↓
+CTS_CONFIRMED
+    ↓
+Fib LOCKED (anchor 2 stops updating)
+```
+
+**Key behaviors:**
+- **Cycle 0 never has its own Fib** — only stored for cross-cycle check
+- **Deactivation/Reactivation:** Fib can toggle active state based on imbalance conditions at each CTS update
+- **Obsolescence:** When new cycle forms, previous cycle's Fib becomes obsolete
+
+### Cross-Cycle Exception (Post-Reversal)
+
+For structure N+1 (immediately after reversal), a cross-cycle Fib may replace cycle 1's normal Fib.
+
+**All 4 conditions must be met:**
+1. **cond1:** Cycle 0 has unfilled imbalance in `[BOS_0, CTS_0]`
+2. **cond2:** Cycle 1 has unfilled imbalance in `[BOS_1, CTS_1]`
+3. **cond3:** Cycle 1's BOS doesn't fill cycle 0's imbalances
+4. **cond4:** Cycle 0's locked CTS idx < reversal_confirmed_idx
+
+**If conditions met:**
+- Create cross-cycle Fib: **BOS_0 → CTS_1**
+- This **REPLACES** cycle 1's normal Fib (stored as cycle 1)
+- Normal cycle 1 Fib is tracked as fallback
+
+**Fallback behavior:**
+- When cross-cycle Fib deactivates → normal cycle 1 Fib takes over (if active)
+- When cross-cycle Fib reactivates → it takes back control
+
+**Scope:**
+- Only applies to cycle 0 & cycle 1 immediately after reversal
+- Cycle 2+ always use their own BOS/CTS only
+
+### Unfilled vs Filled Imbalance
+
+- **FVG gap** = distance between candle 1 wick and candle 3 wick
+- Check candles from **imbalance_idx+1 to check_to_idx**
+- **Unfilled:** Price retraced **<70%** of FVG gap
+- **Filled:** Price retraced **≥70%** of FVG gap
 
 ---
 
@@ -192,10 +245,11 @@ Charting renders zones + Fib lines + imbalance highlighting
 
 | File | Purpose |
 |------|---------|
-| `patterns/imbalance.py` | Imbalance (FVG) pattern detection |
+| `patterns/imbalance.py` | Imbalance (FVG) pattern detection + fill checking |
 | `features/fibonacci.py` | Fib level calculation |
+| `zones/fib_tracker.py` | FibTracker lifecycle (activation/update/lock) |
 | `zones/poi_zones.py` | POI zone derivation (3 variants) |
-| `charting/export_plotly.py` | Rendering |
+| `charting/export_plotly.py` | Rendering (Fib lines + zones) |
 | `charting/style_registry.py` | Visual styles |
 
 ---
@@ -205,8 +259,12 @@ Charting renders zones + Fib lines + imbalance highlighting
 | Component | Status |
 |-----------|--------|
 | Imbalance pattern (columns) | Done |
+| Imbalance fill checking | Done |
 | Imbalance candle highlighting | Done |
 | Fibonacci dataclass | Done |
+| FibTracker (activation/update/lock) | Done |
+| Cross-cycle Fib exception | Done |
+| Fib charting (0%/100% lines + 61.8-80% rect) | Done |
 | POI zones skeleton | Done |
 | 3-variant IC overlap logic | Pending |
 | Event-driven lifecycle | Pending |

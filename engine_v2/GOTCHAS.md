@@ -100,3 +100,22 @@ def sort_key(e):
 ```
 
 **Why this matters:** Without correct sort order, a new range may be immediately closed by a RANGE_RESET that should have closed the *previous* range.
+
+---
+
+## Fib State Storage: Key by (structure_id, cycle_id) Not Just structure_id
+
+**Problem:** When tracking Fib states per cycle, keying by `structure_id` alone causes old cycle states to be overwritten when a new cycle starts.
+
+**Symptom:** Fib lines for earlier cycles don't extend to their correct final CTS because the state was replaced by the next cycle's state.
+
+**Solution:** Use a tuple key `(structure_id, cycle_id)` for the `_fibs` dictionary:
+```python
+# BAD: Old cycle state lost when new cycle starts
+self._active_fibs: Dict[int, FibState] = {}  # {structure_id: state}
+
+# GOOD: Each cycle's state preserved
+self._fibs: Dict[tuple, FibState] = {}  # {(structure_id, cycle_id): state}
+```
+
+**Why this matters:** For charting, we need each cycle's final locked state to draw Fib lines correctly. With single-key storage, only the most recent cycle's state is available.
