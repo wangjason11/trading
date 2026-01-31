@@ -102,6 +102,18 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
     # Need to pair BOS_CONFIRMED with subsequent CTS_ESTABLISHED
     bos_by_cycle = {}  # {(sid, cycle_id): (bos_idx, bos_price)}
 
+    # Find reversal_confirmed_idx per structure (from REVERSAL_CANDIDATE apply_idx)
+    # This is the idx where the reversal from previous structure was confirmed
+    reversal_confirmed_by_sid = {}  # {sid: apply_idx}
+    for ev in s_res.events:
+        if ev.type == "REVERSAL_CANDIDATE":
+            prev_sid = ev.meta.get("structure_id", 0)
+            apply_idx = ev.meta.get("apply_idx")
+            if apply_idx is not None:
+                # The reversal from structure N creates structure N+1
+                # Store the apply_idx for the NEW structure (prev_sid + 1)
+                reversal_confirmed_by_sid[prev_sid + 1] = apply_idx
+
     # Sort events by idx to ensure BOS_CONFIRMED comes before CTS_ESTABLISHED
     sorted_events = sorted(s_res.events, key=lambda e: (e.idx, e.type))
 
@@ -118,7 +130,9 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
             # Try to activate Fib using stored BOS info
             if key in bos_by_cycle:
                 bos_idx, bos_price = bos_by_cycle[key]
-                fib_tracker.on_cts_established(ev, s_res.df, bos_idx, bos_price)
+                # Pass reversal_confirmed_idx for cross-cycle check (only relevant for cycle 1)
+                reversal_idx = reversal_confirmed_by_sid.get(sid) if cycle_id == 1 else None
+                fib_tracker.on_cts_established(ev, s_res.df, bos_idx, bos_price, reversal_idx)
 
         elif ev.type == "CTS_UPDATED":
             # Update CTS anchor if Fib is active for this cycle
