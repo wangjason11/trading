@@ -38,12 +38,31 @@ If ranges or zones don’t expand:
 
 ---
 
+## Pre-Commit Comparison (REQUIRED)
+
+**Before every commit and merge, run `/compare`** to ensure changes don't unintentionally alter prior logic.
+
+The `/compare` command:
+1. Runs replay on the previous commit
+2. Runs replay on current code
+3. Compares key metrics (structure events, zones, candle patterns, Fib states)
+4. Reports what stayed the same vs what changed
+5. Flags unexpected changes for investigation
+
+**Why this matters:**
+- Catches regression bugs early
+- Detects unintended side effects
+- Ensures each iteration maintains consistency with prior work
+
+---
+
 ## Branching + PR discipline (hard rules)
 
 - One branch per week from `main` (e.g., `week6-kl-zones`).
 - Optional short-lived day/topic branches.
-- Merge to `main` only when the week’s Definition of Done is met.
-- Keep a replay “golden dataset” output to regression-test chart behavior.
+- Merge to `main` only when the week's Definition of Done is met.
+- Keep a replay "golden dataset" output to regression-test chart behavior.
+- **Run `/compare` before each commit and merge.**
 
 ---
 

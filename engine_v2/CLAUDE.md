@@ -132,7 +132,10 @@ See `GOTCHAS.md` for detailed debugging lessons.
 2. Make changes
 3. Run pytest (if tests exist)
 4. Run run_replay.py → compare to baseline
-5. Commit when behavior matches expectations
+5. Run /compare → verify no unintended changes to prior logic
+6. Commit when behavior matches expectations
 ```
+
+**IMPORTANT:** Run `/compare` before every commit and merge to catch regressions and unintended side effects.
 
 **Branching:** One branch per week (e.g., `week6-kl-zones`). Merge to `main` when Definition of Done is met.
