@@ -12,16 +12,16 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 
 ## Current Status
 
-**Week 7 Part 1 — POI Zones (In Progress)**
+**Week 7 Part 2 — Volume Patterns & Indicators (Upcoming)**
 
-| Completed (Week 6) | In Progress (Week 7) |
+| Completed (Week 7 Part 1) | Upcoming (Week 7 Part 2) |
 |-----------|-------------|
-| KL Zones v1 (creation, expansion, charting) | POI Zones (Fib + IC) |
-| Market Structure (CTS/BOS/Range/Reversal) | Imbalance Pattern |
-| Structure Patterns (breakout patterns) | Fibonacci Levels |
-| Candle Classification | |
-| Identify Start (Exception 1 & 2 probe logic) | |
-| Multi-structure support (sid 0 → sid 1 transitions) | |
+| POI Zones (Fib + IC identification) | Volume Patterns |
+| Imbalance Pattern (FVG detection + fill checking) | Indicators |
+| Fibonacci Levels (FibTracker lifecycle) | |
+| IC Candidate/Variant selection (V30/V60/V90) | |
+| POI Zone lifecycle (active/inactive/end_time) | |
+| POI Zone charting (gold fill, dark brown confirm line) | |
 
 **Note:** Original syllabus had Zones in Week 7, but we pulled it forward to Week 6. Indicators (original Week 6) deferred to later.
 
@@ -57,7 +57,10 @@ engine_v2/
 │   ├── structure_engine.py          # Wrapper for orchestrator
 │   ├── identify_start.py            # Start candle selection
 │   └── structure_v1.py              # Swing/level computation
-├── zones/kl_zones_v1.py             # Zone derivation from events
+├── zones/kl_zones_v1.py             # KL Zone derivation from events
+├── zones/poi_zones.py               # POI Zone derivation (Fib + IC)
+├── zones/fib_tracker.py             # Fibonacci lifecycle management
+├── patterns/imbalance.py            # Imbalance (FVG) pattern detection
 ├── patterns/structure_patterns.py   # Breakout pattern detection
 ├── features/candles_v2.py           # Candle classification
 ├── charting/
@@ -71,7 +74,7 @@ engine_v2/
 ## Pipeline Ordering (LOCKED)
 
 ```
-candle features → structure patterns → base features → market structure → KL zones → charting
+candle features → structure patterns → base features → market structure → KL zones → POI zones → charting
 ```
 
 **Critical:** Base features MUST run BEFORE structure. See `LANDMINES.md` for details.

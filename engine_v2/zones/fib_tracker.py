@@ -4,6 +4,11 @@ Fibonacci level tracking for POI Zones.
 
 Fib levels are drawn from BOS to CTS within each market structure cycle.
 This module handles activation, updates, and lifecycle management.
+
+Scenario Logic (sid 1+ only):
+- Scenario 1: CTS_0 idx >= reversal_confirmed_idx → cycle 0 Fib unlocked
+- Scenario 2: Cross-cycle Fib (BOS_0 → CTS_1) when all conditions met
+- Scenario 3: Normal cycle 1 Fib when cross-cycle conditions fail
 """
 from __future__ import annotations
 
@@ -70,6 +75,12 @@ class FibTracker:
     3. All imbalances filled → Fib deactivates
     4. CTS_CONFIRMED → Fib locked (stops updating)
 
+    Scenario Logic (sid 1+ only):
+    - Scenario 1 checked at each CTS_0 ESTABLISHED/UPDATED
+    - If CTS_0 idx >= rv_idx → Scenario 1 TRUE (permanent), cycle 0 Fib unlocked
+    - If still FALSE at CTS_0 CONFIRMED → Scenario 1 FALSE (permanent)
+    - Scenario 2/3 determined at CTS_1 ESTABLISHED (only when Scenario 1 is FALSE)
+
     Only 1 active Fib per structure at a time (new cycle obsoletes previous).
     """
 
@@ -84,9 +95,14 @@ class FibTracker:
         # {structure_id: cycle_id}
         self._current_cycle: Dict[int, int] = {}
 
-        # Track cross-cycle Fib eligibility (post-reversal)
+        # Track cross-cycle Fib eligibility (post-reversal, sid 1+ only)
         # {structure_id: {"cycle0": {...}, "normal_cycle1": FibState, "cross_cycle": FibState}}
         self._cross_cycle_data: Dict[int, Dict] = {}
+
+        # Track Scenario 1 resolution per structure (sid 1+ only)
+        # {structure_id: True/False/None}
+        # None = undetermined, True = CTS_0 >= rv_idx, False = resolved at CTS_0 CONFIRMED
+        self._scenario1: Dict[int, Optional[bool]] = {}
 
     def on_cts_established(
         self,
@@ -95,6 +111,8 @@ class FibTracker:
         bos_idx: int,
         bos_price: float,
         reversal_confirmed_idx: Optional[int] = None,
+        prev_bos_outer: Optional[float] = None,
+        prev_sd: Optional[int] = None,
     ) -> Optional[FibState]:
         """
         Handle CTS_ESTABLISHED event - potentially activate a new Fib.
@@ -111,7 +129,13 @@ class FibTracker:
             Price of the confirmed BOS
         reversal_confirmed_idx : int, optional
             Index where the reversal from previous structure was confirmed.
-            Only needed for cycle 1 cross-cycle check.
+            Required for sid 1+ Scenario 1/2/3 logic.
+        prev_bos_outer : float, optional
+            The max expanded outer threshold of sid N-1's last BOS zone.
+            Used for Scenario 1 revert check at CTS_1 ESTABLISHED.
+        prev_sd : int, optional
+            Direction of previous structure (+1 bullish, -1 bearish).
+            Used for Scenario 1 revert check at CTS_1 ESTABLISHED.
 
         Returns
         -------
@@ -136,85 +160,102 @@ class FibTracker:
         end_idx = max(bos_idx, cts_idx)
         has_unfilled = has_unfilled_imbalance(df, start_idx, end_idx, cts_idx, self.config.fill_threshold)
 
-        # --- Cycle 0: Store data for potential cross-cycle Fib, but don't activate ---
-        if cycle_id == 0:
-            if sid not in self._cross_cycle_data:
-                self._cross_cycle_data[sid] = {}
+        # ============================================================
+        # BRANCH: sid = 0 (no prior reversal) vs sid = 1+ (post-reversal)
+        # ============================================================
+        if sid == 0:
+            return self._handle_sid0_cts_established(
+                sid, cycle_id, sd, bos_idx, bos_price, cts_idx, cts_price, has_unfilled, df
+            )
+        else:
+            return self._handle_sid1plus_cts_established(
+                sid, cycle_id, sd, bos_idx, bos_price, cts_idx, cts_price,
+                has_unfilled, df, reversal_confirmed_idx, prev_bos_outer, prev_sd
+            )
 
-            self._cross_cycle_data[sid]["cycle0"] = {
-                "bos_idx": bos_idx,
-                "bos_price": bos_price,
-                "cts_idx": cts_idx,
-                "cts_price": cts_price,
-                "struct_direction": sd,
-                "has_unfilled": has_unfilled,
-                "locked": False,
-            }
-            print(f"[fib] sid={sid} cycle=0 STORED for cross-cycle check: BOS idx={bos_idx} -> CTS idx={cts_idx}, has_unfilled={has_unfilled}")
+    def _handle_sid0_cts_established(
+        self,
+        sid: int,
+        cycle_id: int,
+        sd: int,
+        bos_idx: int,
+        bos_price: float,
+        cts_idx: int,
+        cts_price: float,
+        has_unfilled: bool,
+        df: pd.DataFrame,
+    ) -> Optional[FibState]:
+        """
+        Handle CTS_ESTABLISHED for sid=0 (no prior reversal).
+
+        Simple flow:
+        - Cycle 0: No Fib
+        - Cycle 1+: Normal Fib (if unfilled imbalance)
+        - No cross-cycle logic
+        """
+        if cycle_id == 0:
+            # sid=0, cycle=0: No Fib - just store data for reference
+            print(f"[fib] sid=0 cycle=0 NO FIB (simple flow): BOS idx={bos_idx} -> CTS idx={cts_idx}")
             return None
 
-        # --- Cycle 1: Check cross-cycle exception first ---
-        if cycle_id == 1 and sid in self._cross_cycle_data and "cycle0" in self._cross_cycle_data[sid]:
-            c0 = self._cross_cycle_data[sid]["cycle0"]
+        # sid=0, cycle 1+: Normal Fib activation
+        if not has_unfilled:
+            print(f"[fib] sid=0 cycle={cycle_id} NOT activated (simple flow): no unfilled imbalance")
+            return None
 
-            # Check all 4 conditions for cross-cycle Fib
-            cond1 = c0.get("has_unfilled", False)  # Cycle 0 has unfilled imbalance
-            cond2 = has_unfilled  # Cycle 1 has unfilled imbalance
+        print(f"[fib] sid=0 cycle={cycle_id} ACTIVATED (simple flow)")
+        return self._activate_fib(
+            sid=sid,
+            cycle_id=cycle_id,
+            sd=sd,
+            bos_idx=bos_idx,
+            bos_price=bos_price,
+            cts_idx=cts_idx,
+            cts_price=cts_price,
+            meta={"activated_at": cts_idx, "flow": "simple"},
+        )
 
-            # Cond 3: Cycle 1's BOS doesn't fill cycle 0's imbalances
-            c0_start = min(c0["bos_idx"], c0["cts_idx"])
-            c0_end = max(c0["bos_idx"], c0["cts_idx"])
-            # Check if any of cycle 0's imbalances remain unfilled after cycle 1's BOS
-            cond3 = has_unfilled_imbalance(df, c0_start, c0_end, bos_idx, self.config.fill_threshold)
+    def _handle_sid1plus_cts_established(
+        self,
+        sid: int,
+        cycle_id: int,
+        sd: int,
+        bos_idx: int,
+        bos_price: float,
+        cts_idx: int,
+        cts_price: float,
+        has_unfilled: bool,
+        df: pd.DataFrame,
+        reversal_confirmed_idx: Optional[int],
+        prev_bos_outer: Optional[float] = None,
+        prev_sd: Optional[int] = None,
+    ) -> Optional[FibState]:
+        """
+        Handle CTS_ESTABLISHED for sid=1+ (post-reversal).
 
-            # Cond 4: Cycle 0's locked CTS idx < reversal_confirmed_idx
-            c0_cts_idx = c0["cts_idx"]
-            cond4 = reversal_confirmed_idx is not None and c0_cts_idx < reversal_confirmed_idx
+        Scenario logic:
+        - Cycle 0: Check Scenario 1 (CTS_0 idx >= rv_idx)
+          - If TRUE → cycle 0 Fib unlocked (can activate if unfilled imbalance)
+          - If undetermined → store data, no Fib yet
+        - Cycle 1: If Scenario 1 is TRUE, check revert condition; if FALSE check Scenario 2/3
+        - Cycle 2+: Normal Fib
+        """
+        # --- Cycle 0: Scenario 1 check ---
+        if cycle_id == 0:
+            return self._handle_cycle0_scenario1(
+                sid, sd, bos_idx, bos_price, cts_idx, cts_price,
+                has_unfilled, reversal_confirmed_idx
+            )
 
-            print(f"[fib] sid={sid} cycle=1 cross-cycle check: cond1={cond1} cond2={cond2} cond3={cond3} cond4={cond4} (c0_cts={c0_cts_idx} < rv_idx={reversal_confirmed_idx})")
+        # --- Cycle 1: Depends on Scenario 1 resolution ---
+        if cycle_id == 1:
+            return self._handle_cycle1_scenarios(
+                sid, sd, bos_idx, bos_price, cts_idx, cts_price,
+                has_unfilled, df, reversal_confirmed_idx,
+                prev_bos_outer, prev_sd
+            )
 
-            if cond1 and cond2 and cond3 and cond4:
-                # Cross-cycle conditions met - create both cross-cycle and normal Fibs
-                # Normal cycle 1 Fib (for fallback when cross-cycle deactivates)
-                if has_unfilled:
-                    normal_fib = FibState(
-                        structure_id=sid,
-                        cycle_id=1,
-                        struct_direction=sd,
-                        bos_idx=bos_idx,
-                        bos_price=bos_price,
-                        cts_idx=cts_idx,
-                        cts_price=cts_price,
-                        active=True,
-                        locked=False,
-                        fib=self._create_fib_retracement(sd, bos_idx, bos_price, cts_idx, cts_price, sid, 1),
-                        meta={"activated_at": cts_idx},
-                        cts_history=((cts_idx, cts_price),),
-                    )
-                    self._cross_cycle_data[sid]["normal_cycle1"] = normal_fib
-                    print(f"[fib] sid={sid} cycle=1 NORMAL computed (fallback): BOS idx={bos_idx} -> CTS idx={cts_idx}")
-
-                # Create cross-cycle Fib: BOS_0 -> CTS_1 (stored as cycle 1)
-                print(f"[fib] sid={sid} CROSS-CYCLE FIB: BOS_0 idx={c0['bos_idx']} -> CTS_1 idx={cts_idx}")
-                cross_fib = self._activate_fib(
-                    sid=sid,
-                    cycle_id=1,  # Cross-cycle replaces cycle 1
-                    sd=sd,
-                    bos_idx=c0["bos_idx"],
-                    bos_price=c0["bos_price"],
-                    cts_idx=cts_idx,
-                    cts_price=cts_price,
-                    meta={
-                        "cross_cycle": True,
-                        "activated_at": cts_idx,
-                        # Store cycle 1's BOS for deactivation/reactivation checks
-                        "cycle1_bos_idx": bos_idx,
-                    },
-                )
-                self._cross_cycle_data[sid]["cross_cycle"] = cross_fib
-                return cross_fib
-
-        # --- Normal activation for cycle 1+ (no cross-cycle) ---
+        # --- Cycle 2+: Normal Fib ---
         if not has_unfilled:
             print(f"[fib] sid={sid} cycle={cycle_id} NOT activated: no unfilled imbalance")
             return None
@@ -229,6 +270,210 @@ class FibTracker:
             cts_price=cts_price,
             meta={"activated_at": cts_idx},
         )
+
+    def _handle_cycle0_scenario1(
+        self,
+        sid: int,
+        sd: int,
+        bos_idx: int,
+        bos_price: float,
+        cts_idx: int,
+        cts_price: float,
+        has_unfilled: bool,
+        reversal_confirmed_idx: Optional[int],
+    ) -> Optional[FibState]:
+        """
+        Handle cycle 0 CTS_ESTABLISHED for sid 1+ - check Scenario 1.
+
+        Scenario 1: CTS_0 idx >= reversal_confirmed_idx
+        - If TRUE → cycle 0 Fib unlocked (permanent)
+        - If FALSE/undetermined → store data for cross-cycle check
+        """
+        # Initialize cross-cycle data storage
+        if sid not in self._cross_cycle_data:
+            self._cross_cycle_data[sid] = {}
+
+        # Store cycle 0 data
+        self._cross_cycle_data[sid]["cycle0"] = {
+            "bos_idx": bos_idx,
+            "bos_price": bos_price,
+            "cts_idx": cts_idx,
+            "cts_price": cts_price,
+            "struct_direction": sd,
+            "has_unfilled": has_unfilled,
+            "locked": False,
+        }
+
+        # Check Scenario 1: CTS_0 idx >= rv_idx
+        if reversal_confirmed_idx is not None and cts_idx >= reversal_confirmed_idx:
+            # Scenario 1 TRUE (permanent) - cycle 0 Fib unlocked
+            self._scenario1[sid] = True
+            print(f"[fib] sid={sid} cycle=0 Scenario 1 TRUE at idx={cts_idx} (CTS >= rv_idx={reversal_confirmed_idx})")
+
+            if has_unfilled:
+                return self._activate_fib(
+                    sid=sid,
+                    cycle_id=0,
+                    sd=sd,
+                    bos_idx=bos_idx,
+                    bos_price=bos_price,
+                    cts_idx=cts_idx,
+                    cts_price=cts_price,
+                    meta={"activated_at": cts_idx, "scenario1": True},
+                )
+            else:
+                print(f"[fib] sid={sid} cycle=0 NOT activated: Scenario 1 TRUE but no unfilled imbalance")
+                return None
+        else:
+            # Scenario 1 undetermined - store data, no Fib yet
+            if sid not in self._scenario1:
+                self._scenario1[sid] = None  # Undetermined
+            print(f"[fib] sid={sid} cycle=0 STORED for cross-cycle check: BOS idx={bos_idx} -> CTS idx={cts_idx}, has_unfilled={has_unfilled} (Scenario 1 undetermined)")
+            return None
+
+    def _handle_cycle1_scenarios(
+        self,
+        sid: int,
+        sd: int,
+        bos_idx: int,
+        bos_price: float,
+        cts_idx: int,
+        cts_price: float,
+        has_unfilled: bool,
+        df: pd.DataFrame,
+        reversal_confirmed_idx: Optional[int],
+        prev_bos_outer: Optional[float] = None,
+        prev_sd: Optional[int] = None,
+    ) -> Optional[FibState]:
+        """
+        Handle cycle 1 CTS_ESTABLISHED for sid 1+.
+
+        If Scenario 1 is TRUE → check revert condition first
+          - If BOS_1 touches prev BOS zone outer → revert to FALSE, deactivate cycle 0 Fib
+          - If no touch → stays TRUE, normal cycle 1 Fib
+        If Scenario 1 is FALSE → check Scenario 2/3
+        """
+        scenario1 = self._scenario1.get(sid)
+
+        # NEW: If Scenario 1 was TRUE, check revert condition
+        if scenario1 is True and prev_bos_outer is not None and prev_sd is not None:
+            if self._should_revert_scenario1(bos_price, prev_bos_outer, prev_sd):
+                # Revert Scenario 1 to FALSE
+                self._scenario1[sid] = False
+                # Deactivate cycle 0 Fib if it exists
+                self._deactivate_cycle0_fib(sid)
+                scenario1 = False
+                print(f"[fib] sid={sid} Scenario 1 REVERTED to FALSE (BOS_1={bos_price:.5f} touched prev BOS zone outer={prev_bos_outer:.5f})")
+            else:
+                print(f"[fib] sid={sid} Scenario 1 stays TRUE (BOS_1={bos_price:.5f} did NOT touch prev BOS zone outer={prev_bos_outer:.5f})")
+
+        # Scenario 1 TRUE: Normal cycle 1 Fib
+        if scenario1 is True:
+            if not has_unfilled:
+                print(f"[fib] sid={sid} cycle=1 NOT activated (Scenario 1): no unfilled imbalance")
+                return None
+
+            print(f"[fib] sid={sid} cycle=1 ACTIVATED (Scenario 1 TRUE, normal flow)")
+            return self._activate_fib(
+                sid=sid,
+                cycle_id=1,
+                sd=sd,
+                bos_idx=bos_idx,
+                bos_price=bos_price,
+                cts_idx=cts_idx,
+                cts_price=cts_price,
+                meta={"activated_at": cts_idx, "scenario1": True},
+            )
+
+        # Scenario 1 FALSE: Check Scenario 2/3
+        # (scenario1 is False or None - if None, it was resolved FALSE at CTS_0 CONFIRMED)
+        if sid not in self._cross_cycle_data or "cycle0" not in self._cross_cycle_data[sid]:
+            # No cycle 0 data - fallback to normal
+            if not has_unfilled:
+                print(f"[fib] sid={sid} cycle=1 NOT activated: no cycle 0 data, no unfilled imbalance")
+                return None
+
+            return self._activate_fib(
+                sid=sid,
+                cycle_id=1,
+                sd=sd,
+                bos_idx=bos_idx,
+                bos_price=bos_price,
+                cts_idx=cts_idx,
+                cts_price=cts_price,
+                meta={"activated_at": cts_idx},
+            )
+
+        c0 = self._cross_cycle_data[sid]["cycle0"]
+
+        # Check Scenario 2 conditions
+        cond1 = has_unfilled  # Cycle 1 has unfilled imbalance
+        cond2 = c0.get("has_unfilled", False)  # Cycle 0 has unfilled imbalance
+
+        # Cond 3: BOS_1 doesn't fill cycle 0's imbalances
+        c0_start = min(c0["bos_idx"], c0["cts_idx"])
+        c0_end = max(c0["bos_idx"], c0["cts_idx"])
+        cond3 = has_unfilled_imbalance(df, c0_start, c0_end, bos_idx, self.config.fill_threshold)
+
+        print(f"[fib] sid={sid} cycle=1 Scenario 2 check: cond1={cond1} cond2={cond2} cond3={cond3}")
+
+        if cond1 and cond2 and cond3:
+            # Scenario 2: Cross-cycle Fib
+            print(f"[fib] sid={sid} cycle=1 Scenario 2: CROSS-CYCLE ACTIVATED: BOS_0 idx={c0['bos_idx']} -> CTS_1 idx={cts_idx}")
+
+            # Create normal cycle 1 Fib for fallback
+            normal_fib = FibState(
+                structure_id=sid,
+                cycle_id=1,
+                struct_direction=sd,
+                bos_idx=bos_idx,
+                bos_price=bos_price,
+                cts_idx=cts_idx,
+                cts_price=cts_price,
+                active=True,
+                locked=False,
+                fib=self._create_fib_retracement(sd, bos_idx, bos_price, cts_idx, cts_price, sid, 1),
+                meta={"activated_at": cts_idx, "scenario": 2, "role": "fallback"},
+                cts_history=((cts_idx, cts_price),),
+            )
+            self._cross_cycle_data[sid]["normal_cycle1"] = normal_fib
+            print(f"[fib] sid={sid} cycle=1 NORMAL computed (fallback): BOS idx={bos_idx} -> CTS idx={cts_idx}")
+
+            # Create cross-cycle Fib: BOS_0 -> CTS_1
+            cross_fib = self._activate_fib(
+                sid=sid,
+                cycle_id=1,
+                sd=sd,
+                bos_idx=c0["bos_idx"],
+                bos_price=c0["bos_price"],
+                cts_idx=cts_idx,
+                cts_price=cts_price,
+                meta={
+                    "cross_cycle": True,
+                    "scenario": 2,
+                    "activated_at": cts_idx,
+                    "cycle1_bos_idx": bos_idx,
+                },
+            )
+            self._cross_cycle_data[sid]["cross_cycle"] = cross_fib
+            return cross_fib
+        elif cond1:
+            # Scenario 3: Normal cycle 1 Fib (cross-cycle conditions not met)
+            print(f"[fib] sid={sid} cycle=1 Scenario 3: NORMAL ACTIVATED: BOS idx={bos_idx} -> CTS idx={cts_idx}")
+            return self._activate_fib(
+                sid=sid,
+                cycle_id=1,
+                sd=sd,
+                bos_idx=bos_idx,
+                bos_price=bos_price,
+                cts_idx=cts_idx,
+                cts_price=cts_price,
+                meta={"activated_at": cts_idx, "scenario": 3},
+            )
+        else:
+            # No unfilled imbalance in cycle 1
+            print(f"[fib] sid={sid} cycle=1 NOT activated: no unfilled imbalance in cycle 1")
+            return None
 
     def _create_fib_retracement(
         self,
@@ -331,6 +576,7 @@ class FibTracker:
         self,
         event: StructureEvent,
         df: pd.DataFrame,
+        reversal_confirmed_idx: Optional[int] = None,
     ) -> Optional[FibState]:
         """
         Handle CTS_UPDATED event - update CTS anchor if Fib is active.
@@ -341,6 +587,8 @@ class FibTracker:
             The CTS_UPDATED event
         df : DataFrame
             OHLC data
+        reversal_confirmed_idx : int, optional
+            Index where the reversal was confirmed. Required for sid 1+ Scenario 1 check.
 
         Returns
         -------
@@ -349,11 +597,94 @@ class FibTracker:
         """
         sid = int(event.meta.get("structure_id", 0))
         cycle_id = int(event.meta.get("cycle_id", 0))
+        sd = int(event.meta.get("struct_direction", 0))
         cts_idx = int(event.idx)
         cts_price = float(event.price) if event.price else 0.0
 
-        # Update cycle 0 data in _cross_cycle_data if applicable (before cross-cycle Fib is created)
-        if cycle_id == 0 and sid in self._cross_cycle_data and "cycle0" in self._cross_cycle_data[sid]:
+        # Get CTS price from df if not in event
+        if cts_price == 0.0 and cts_idx in df.index:
+            if sd == 1:
+                cts_price = float(df.loc[cts_idx, "h"])
+            else:
+                cts_price = float(df.loc[cts_idx, "l"])
+
+        # ============================================================
+        # BRANCH: sid = 0 vs sid = 1+
+        # ============================================================
+        if sid == 0:
+            return self._handle_sid0_cts_updated(sid, cycle_id, cts_idx, cts_price, df)
+        else:
+            return self._handle_sid1plus_cts_updated(
+                sid, cycle_id, sd, cts_idx, cts_price, df, reversal_confirmed_idx
+            )
+
+    def _handle_sid0_cts_updated(
+        self,
+        sid: int,
+        cycle_id: int,
+        cts_idx: int,
+        cts_price: float,
+        df: pd.DataFrame,
+    ) -> Optional[FibState]:
+        """Handle CTS_UPDATED for sid=0 (simple flow)."""
+        if cycle_id == 0:
+            # sid=0, cycle=0: No Fib
+            return None
+
+        # sid=0, cycle 1+: Update normal Fib if exists
+        key = (sid, cycle_id)
+        if key not in self._fibs:
+            return None
+
+        return self._update_fib_cts(key, cts_idx, cts_price, df)
+
+    def _handle_sid1plus_cts_updated(
+        self,
+        sid: int,
+        cycle_id: int,
+        sd: int,
+        cts_idx: int,
+        cts_price: float,
+        df: pd.DataFrame,
+        reversal_confirmed_idx: Optional[int],
+    ) -> Optional[FibState]:
+        """Handle CTS_UPDATED for sid=1+ (post-reversal)."""
+        # --- Cycle 0: Scenario 1 re-check ---
+        if cycle_id == 0:
+            return self._handle_cycle0_cts_updated(
+                sid, sd, cts_idx, cts_price, df, reversal_confirmed_idx
+            )
+
+        # --- Cycle 1: Update cross-cycle or normal Fib ---
+        if cycle_id == 1 and sid in self._cross_cycle_data and "cross_cycle" in self._cross_cycle_data[sid]:
+            return self._update_cycle1_fibs(sid, cts_idx, cts_price, df)
+
+        # --- Cycle 1+ normal Fib update ---
+        key = (sid, cycle_id)
+        if key not in self._fibs:
+            return None
+
+        return self._update_fib_cts(key, cts_idx, cts_price, df)
+
+    def _handle_cycle0_cts_updated(
+        self,
+        sid: int,
+        sd: int,
+        cts_idx: int,
+        cts_price: float,
+        df: pd.DataFrame,
+        reversal_confirmed_idx: Optional[int],
+    ) -> Optional[FibState]:
+        """
+        Handle cycle 0 CTS_UPDATED for sid 1+ - re-check Scenario 1.
+
+        If Scenario 1 is already TRUE, update the cycle 0 Fib.
+        If Scenario 1 is still undetermined, check again.
+        """
+        scenario1 = self._scenario1.get(sid)
+
+        # Update stored cycle 0 data
+        if sid in self._cross_cycle_data and "cycle0" in self._cross_cycle_data[sid]:
             c0 = self._cross_cycle_data[sid]["cycle0"]
             if not c0.get("locked", False) and cts_idx > c0["cts_idx"]:
                 c0["cts_idx"] = cts_idx
@@ -362,20 +693,50 @@ class FibTracker:
                 start_idx = min(c0["bos_idx"], cts_idx)
                 end_idx = max(c0["bos_idx"], cts_idx)
                 c0["has_unfilled"] = has_unfilled_imbalance(df, start_idx, end_idx, cts_idx, self.config.fill_threshold)
+
+        # If Scenario 1 is already TRUE, update the Fib
+        if scenario1 is True:
+            key = (sid, 0)
+            if key in self._fibs:
+                return self._update_fib_cts(key, cts_idx, cts_price, df)
+            # No Fib but Scenario 1 is TRUE - check if we can activate now
+            c0 = self._cross_cycle_data.get(sid, {}).get("cycle0", {})
+            if c0.get("has_unfilled", False):
+                print(f"[fib] sid={sid} cycle=0 ACTIVATED on update (Scenario 1 TRUE, unfilled imbalance found)")
+                return self._activate_fib(
+                    sid=sid,
+                    cycle_id=0,
+                    sd=sd,
+                    bos_idx=c0["bos_idx"],
+                    bos_price=c0["bos_price"],
+                    cts_idx=cts_idx,
+                    cts_price=cts_price,
+                    meta={"activated_at": cts_idx, "scenario1": True, "activated_on": "update"},
+                )
             return None
 
-        # For cycle 1 updates, check if there's a cross-cycle Fib (now stored as cycle 1)
-        key = (sid, cycle_id)
+        # Scenario 1 undetermined - check again
+        if reversal_confirmed_idx is not None and cts_idx >= reversal_confirmed_idx:
+            # Scenario 1 becomes TRUE
+            self._scenario1[sid] = True
+            print(f"[fib] sid={sid} cycle=0 Scenario 1 TRUE at idx={cts_idx} (CTS >= rv_idx={reversal_confirmed_idx}) on update")
 
-        # Check if we have cross-cycle data for this structure
-        if cycle_id == 1 and sid in self._cross_cycle_data and "cross_cycle" in self._cross_cycle_data[sid]:
-            # We have a cross-cycle Fib - update it and also update normal_cycle1
-            return self._update_cycle1_fibs(sid, cts_idx, cts_price, df)
+            c0 = self._cross_cycle_data.get(sid, {}).get("cycle0", {})
+            if c0.get("has_unfilled", False):
+                return self._activate_fib(
+                    sid=sid,
+                    cycle_id=0,
+                    sd=sd,
+                    bos_idx=c0["bos_idx"],
+                    bos_price=c0["bos_price"],
+                    cts_idx=cts_idx,
+                    cts_price=cts_price,
+                    meta={"activated_at": cts_idx, "scenario1": True, "activated_on": "update"},
+                )
+            else:
+                print(f"[fib] sid={sid} cycle=0 NOT activated: Scenario 1 TRUE but no unfilled imbalance")
 
-        if key not in self._fibs:
-            return None
-
-        return self._update_fib_cts(key, cts_idx, cts_price, df)
+        return None
 
     def _update_fib_cts(
         self,
@@ -596,6 +957,8 @@ class FibTracker:
         """
         Handle CTS_CONFIRMED event - lock the Fib.
 
+        For sid 1+ cycle 0: Also resolves Scenario 1 as FALSE if still undetermined.
+
         Parameters
         ----------
         event : StructureEvent
@@ -609,12 +972,50 @@ class FibTracker:
         sid = int(event.meta.get("structure_id", 0))
         cycle_id = int(event.meta.get("cycle_id", 0))
 
-        # Lock cycle 0 data in _cross_cycle_data if applicable
-        if cycle_id == 0 and sid in self._cross_cycle_data and "cycle0" in self._cross_cycle_data[sid]:
-            c0 = self._cross_cycle_data[sid]["cycle0"]
-            c0["locked"] = True
-            print(f"[fib] sid={sid} cycle=0 LOCKED in cross-cycle data: CTS idx={c0['cts_idx']}")
+        # ============================================================
+        # BRANCH: sid = 0 vs sid = 1+
+        # ============================================================
+        if sid == 0:
+            return self._handle_sid0_cts_confirmed(sid, cycle_id, event)
+        else:
+            return self._handle_sid1plus_cts_confirmed(sid, cycle_id, event)
+
+    def _handle_sid0_cts_confirmed(
+        self,
+        sid: int,
+        cycle_id: int,
+        event: StructureEvent,
+    ) -> Optional[FibState]:
+        """Handle CTS_CONFIRMED for sid=0 (simple flow)."""
+        if cycle_id == 0:
+            # sid=0, cycle=0: No Fib to lock
+            print(f"[fib] sid=0 cycle=0 CONFIRMED (no Fib, simple flow)")
             return None
+
+        # sid=0, cycle 1+: Lock normal Fib
+        key = (sid, cycle_id)
+        if key not in self._fibs:
+            return None
+
+        state = self._fibs[key]
+        if state.locked:
+            return state
+
+        locked_state = replace(state, locked=True, meta={**state.meta, "locked_at": event.idx})
+        self._fibs[key] = locked_state
+        print(f"[fib] sid=0 cycle={cycle_id} LOCKED (simple flow): CTS idx={state.cts_idx}")
+        return locked_state
+
+    def _handle_sid1plus_cts_confirmed(
+        self,
+        sid: int,
+        cycle_id: int,
+        event: StructureEvent,
+    ) -> Optional[FibState]:
+        """Handle CTS_CONFIRMED for sid=1+ (post-reversal)."""
+        # --- Cycle 0: Resolve Scenario 1 and lock ---
+        if cycle_id == 0:
+            return self._handle_cycle0_cts_confirmed(sid, event)
 
         key = (sid, cycle_id)
 
@@ -654,6 +1055,78 @@ class FibTracker:
 
         return locked_state
 
+    def _handle_cycle0_cts_confirmed(
+        self,
+        sid: int,
+        event: StructureEvent,
+    ) -> Optional[FibState]:
+        """
+        Handle cycle 0 CTS_CONFIRMED for sid 1+.
+
+        Resolves Scenario 1 as FALSE if still undetermined.
+        Locks cycle 0 data and any cycle 0 Fib.
+        """
+        # Resolve Scenario 1 if still undetermined
+        scenario1 = self._scenario1.get(sid)
+        if scenario1 is None:
+            # Scenario 1 never became TRUE → resolve as FALSE (permanent)
+            self._scenario1[sid] = False
+            c0_cts = self._cross_cycle_data.get(sid, {}).get("cycle0", {}).get("cts_idx", "?")
+            print(f"[fib] sid={sid} cycle=0 Scenario 1 FALSE (resolved at CONFIRMED): CTS idx={c0_cts} never reached rv_idx")
+
+        # Lock cycle 0 data in _cross_cycle_data
+        if sid in self._cross_cycle_data and "cycle0" in self._cross_cycle_data[sid]:
+            c0 = self._cross_cycle_data[sid]["cycle0"]
+            c0["locked"] = True
+            print(f"[fib] sid={sid} cycle=0 LOCKED in cross-cycle data: CTS idx={c0['cts_idx']}")
+
+        # Lock cycle 0 Fib if it exists (Scenario 1 was TRUE)
+        key = (sid, 0)
+        if key in self._fibs:
+            state = self._fibs[key]
+            if not state.locked:
+                locked_state = replace(state, locked=True, meta={**state.meta, "locked_at": event.idx})
+                self._fibs[key] = locked_state
+                print(f"[fib] sid={sid} cycle=0 Fib LOCKED: CTS idx={state.cts_idx}")
+                return locked_state
+            return state
+
+        return None
+
+    def _should_revert_scenario1(
+        self,
+        bos1_price: float,
+        prev_bos_outer: float,
+        prev_sd: int,
+    ) -> bool:
+        """
+        Check if BOS_1 level price touches/crosses into the prev structure's last BOS zone.
+
+        "Touch" means price reaches the outer edge OR goes beyond it into the zone.
+
+        For bullish prev structure (sd=1): BOS zone is buy, outer is bottom, zone is ABOVE outer
+          → BOS_1 touches if bos1_price >= outer (price at or above outer edge)
+        For bearish prev structure (sd=-1): BOS zone is sell, outer is top, zone is BELOW outer
+          → BOS_1 touches if bos1_price <= outer (price at or below outer edge)
+        """
+        if prev_sd == 1:  # Prev was bullish, buy zone sits above outer (bottom)
+            return bos1_price >= prev_bos_outer
+        else:  # Prev was bearish, sell zone sits below outer (top)
+            return bos1_price <= prev_bos_outer
+
+    def _deactivate_cycle0_fib(self, sid: int) -> None:
+        """Deactivate cycle 0 Fib when Scenario 1 reverts to FALSE."""
+        key = (sid, 0)
+        if key in self._fibs:
+            state = self._fibs[key]
+            if state.active:
+                self._fibs[key] = replace(
+                    state,
+                    active=False,
+                    meta={**state.meta, "deactivated_by": "scenario1_revert"}
+                )
+                print(f"[fib] sid={sid} cycle=0 DEACTIVATED (Scenario 1 reverted)")
+
     def get_active_fib(self, structure_id: int) -> Optional[FibState]:
         """Get the current active Fib for a structure."""
         cycle_id = self._current_cycle.get(structure_id)
@@ -673,6 +1146,10 @@ class FibTracker:
         """
         Get Fibs for charting - current state per (structure_id, cycle_id).
 
-        Returns all FibStates from _fibs (always up-to-date).
+        Excludes fibs that were invalidated (e.g., deactivated due to Scenario 1 revert).
+        These fibs should not be shown on the chart at all.
         """
-        return list(self._fibs.values())
+        return [
+            fib for fib in self._fibs.values()
+            if fib.meta.get("deactivated_by") != "scenario1_revert"
+        ]

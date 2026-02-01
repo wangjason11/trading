@@ -137,3 +137,56 @@ else:  # Sell zone - outer is top, zone sits BELOW
 ```
 
 **Symptom if wrong:** Scenario 1 doesn't revert when it should (or vice versa).
+
+---
+
+## FibState: Check Both `active` AND `locked` for IC Detection
+
+**Problem:** When finding IC candidates for POI zones, a Fib that has been "locked" (CTS confirmed) is still valid for IC detection, but the code only checked `fib_state.active`.
+
+**Gotcha:** A locked Fib means CTS was confirmed — the bounds are finalized but the Fib is still valid for zone creation. Once locked, `active=False` but the Fib should still produce POI zones.
+
+**Wrong:**
+```python
+if not fib_state.active:
+    return []  # Misses locked Fibs!
+```
+
+**Correct:**
+```python
+if not (fib_state.active or fib_state.locked):
+    return []  # Valid if active OR locked
+```
+
+**Symptom if wrong:** POI zones missing for cycles where CTS was confirmed before the current candle.
+
+---
+
+## POI Zone End Time and Status Must Be Calculated
+
+**Problem:** POI zone `end_time` and `status` must be derived from events, not left as defaults.
+
+**End Time Priority (must implement all):**
+1. **Reversal:** All zones for the structure end at `reversal_confirmed_idx`
+2. **New CTS:** Cycle N zones end when CTS_N+1 is established
+3. **No event:** Zone extends to chart end (`end_time = None`)
+
+**Status Logic:**
+- If `end_idx is not None`, status MUST be `"inactive"` (zone has ended)
+- Only zones with `end_idx = None` AND current cycle AND active Fib can be `"active"`
+
+**Wrong:**
+```python
+# Status ignores end_idx
+status = "active" if is_current and fib_state.active else "inactive"
+```
+
+**Correct:**
+```python
+if end_idx is not None:
+    status = "inactive"  # Zone has ended
+else:
+    status = "active" if is_current and fib_state.active else "inactive"
+```
+
+**Symptom if wrong:** Zones extend to chart end instead of stopping at reversal/next CTS, or zones show as "active" with full opacity when they should be faded.

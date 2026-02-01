@@ -500,6 +500,10 @@ def derive_kl_zones_v1(
 
     sd = int(struct_direction)
     sid = -1  # NEW: current event's structure_id (refreshed per event from ev.meta)
+    current_sid: Optional[int] = None  # Track current structure for reversal detection
+
+    # Pre-compute reversal confirmed indices per structure_id (for deactivating zones on reversal)
+    rev_confirmed_by_sid = _get_reversal_confirmed_by_sid_from_events(events)
 
     # Debugging
     print("[kl_zones][events] BOS_CONFIRMED:", [
@@ -629,6 +633,25 @@ def derive_kl_zones_v1(
         if sid < 0 and "structure_id" in dfx.columns:
             sid = int(dfx.loc[confirmed_idx, "structure_id"])
 
+        # --- Structure change detection: deactivate ALL zones from previous structure at reversal ---
+        if current_sid is not None and sid != current_sid and current_sid in rev_confirmed_by_sid:
+            rev_idx = int(rev_confirmed_by_sid[current_sid])
+            rev_time = _time(rev_idx)
+            # Deactivate all zones from the previous structure
+            for zi, zold in enumerate(zones):
+                old_sid = (zold.meta or {}).get("structure_id", None)
+                if old_sid == current_sid and zold.end_time is None:
+                    zones[zi] = replace(
+                        zold,
+                        end_time=rev_time,
+                        meta={**(zold.meta or {}), "active": False, "deactivated_by": "reversal"},
+                    )
+            # Reset active trackers for the new structure
+            active_buy_idx = None
+            active_sell_idx = None
+
+        current_sid = sid
+
         # Side mapping (locked)
         if sd == 1:
             side = "buy" if bos else "sell"
@@ -677,35 +700,36 @@ def derive_kl_zones_v1(
             },
         )
 
-        # Enforce 1 active per side: deactivate previous active of same side
+        # Enforce 1 active per side (within same structure): deactivate previous active of same side
         deactivate_time = _time(confirmed_idx)  # zone becomes inactive when the NEW zone confirms
 
         if side == "buy":
             if active_buy_idx is not None:
                 prev = zones[active_buy_idx]
-                zones[active_buy_idx] = replace(
-                    prev,
-                    end_time=deactivate_time,
-                    meta={**prev.meta, "active": False},
-                )
+                # Only deactivate if same structure (cross-structure handled above)
+                if (prev.meta or {}).get("structure_id") == sid:
+                    zones[active_buy_idx] = replace(
+                        prev,
+                        end_time=deactivate_time,
+                        meta={**prev.meta, "active": False},
+                    )
             active_buy_idx = len(zones)
         else:
             if active_sell_idx is not None:
                 prev = zones[active_sell_idx]
-                zones[active_sell_idx] = replace(
-                    prev,
-                    end_time=deactivate_time,
-                    meta={**prev.meta, "active": False},
-                )
+                # Only deactivate if same structure (cross-structure handled above)
+                if (prev.meta or {}).get("structure_id") == sid:
+                    zones[active_sell_idx] = replace(
+                        prev,
+                        end_time=deactivate_time,
+                        meta={**prev.meta, "active": False},
+                    )
             active_sell_idx = len(zones)
 
         zones.append(z)
 
     # --- Terminal structure end: if reversal occurs, end any still-active zones at the reversal candle ---
-    # End zones at reversal confirmed (last reversal candle for each structure_id)
-    # Use events instead of df columns (df columns get overwritten by subsequent structures)
-    rev_confirmed_by_sid = _get_reversal_confirmed_by_sid_from_events(events)
-
+    # (This handles zones from the LAST structure if no new structure zones were created after reversal)
     for zi, z in enumerate(zones):
         sid = (z.meta or {}).get("structure_id", None)
         if sid is None or sid not in rev_confirmed_by_sid:
@@ -717,7 +741,7 @@ def derive_kl_zones_v1(
         zones[zi] = replace(
             z,
             end_time=_time(rev_idx),
-            meta={**(z.meta or {}), "active": False},
+            meta={**(z.meta or {}), "active": False, "deactivated_by": "reversal"},
         )
 
 

@@ -80,7 +80,8 @@ Fib LOCKED (anchor 2 stops updating)
 ```
 
 **Key behaviors:**
-- **Cycle 0 never has its own Fib** — only stored for cross-cycle check
+- **For sid=0:** Cycle 0 never has its own Fib — only stored for cross-cycle check
+- **For sid 1+:** See Scenario Logic below (cycle 0 may have Fib in Scenario 1)
 - **Deactivation/Reactivation:** Fib can toggle active state based on imbalance conditions at each CTS update
 - **Obsolescence:** When new cycle forms, previous cycle's Fib becomes obsolete
 
@@ -137,20 +138,61 @@ After each reversal, a black horizontal line shows the Scenario 1 revert thresho
 
 ## 3. Institutional Candle (IC) Identification
 
-### Common Rules (All 3 Variants)
-1. IC candle must be **prior to** price breaking BOS or CTS
-2. There must be **imbalance after** the IC candle (between IC and the break)
-3. IC candle must overlap with **61.8% - 80%** Fib zone
+IC identification is a two-step process:
+1. **IC Candidates** — Candles that meet base + scenario conditions
+2. **IC Variants** — From candidates, select by overlap threshold (V30/V60/V90)
 
-### 3 Variants
+No IC candidates → No IC variants → No POI zones.
 
-| Variant | IC Overlap Requirement | Description |
-|---------|------------------------|-------------|
-| **POI-v1** | At least **40%** of full candle in Fib zone | Most permissive |
-| **POI-v2** | At least **70%** of full candle in Fib zone | Moderate |
-| **POI-v3** | **100%** of full candle in Fib zone | Strictest |
+### 3.1 IC Candidate Base Conditions (ALL required)
 
-### Overlap Calculation
+1. **Within Fib bounds (inclusive):** `BOS_idx <= candle_idx <= CTS_idx`
+2. **Opposite direction of struct_direction:** `candle.direction == -struct_direction`
+3. **Unfilled imbalance after:** At least 1 unfilled imbalance (matching sd) in range `(candidate_idx, CTS_idx]`
+
+If Fib is deactivated, there are no bounds → no candidates.
+
+### 3.2 IC Candidate Scenario Conditions
+
+Additional conditions based on which Fib scenario applies:
+
+**Scenario 1: cycle 0 normal fib, cycle 1+ normal fib**
+
+| Cycle | Idx Constraint | Price Constraint |
+|-------|----------------|------------------|
+| 0 | `idx < reversal_confirmed_idx` | Entire candle below (sd=+1) or above (sd=-1) prev structure's last BOS price |
+| 1+ | `idx < CTS_N_established_idx` | Entire candle below (sd=+1) or above (sd=-1) CTS_N-1 price |
+
+**Scenario 2: no cycle 0 fib, cycle 1 cross-cycle fib, cycle 2+ normal fib**
+
+| Cycle | Sub-condition | Idx Constraint | Price Constraint |
+|-------|---------------|----------------|------------------|
+| 1 (cross) | CTS_0 < reversal_idx | `idx < CTS_1_established_idx` | Entire candle below/above CTS_0 price |
+| 1 (cross) | CTS_0 >= reversal_idx | `idx < reversal_confirmed_idx` | Entire candle below/above prev structure's last BOS price |
+| 2+ | — | `idx < CTS_N_established_idx` | Entire candle below/above CTS_N-1 price |
+
+**Scenario 3: no cycle 0 fib, cycle 1+ normal fib**
+
+| Cycle | Idx Constraint | Price Constraint |
+|-------|----------------|------------------|
+| 1+ | `idx < CTS_N_established_idx` | Entire candle below (sd=+1) or above (sd=-1) CTS_N-1 price |
+
+**Price Constraint Definition:**
+- sd=+1 (bullish): Entire candle (HIGH) must be BELOW reference price
+- sd=-1 (bearish): Entire candle (LOW) must be ABOVE reference price
+
+### 3.3 IC Variants
+
+From IC candidates, find the **most recent candle** meeting each overlap threshold:
+
+| Variant | Min Overlap | Description |
+|---------|-------------|-------------|
+| **V30** | 30% | Most lenient |
+| **V60** | 60% | Middle |
+| **V90** | 90% | Most stringent |
+
+**Overlap Calculation:** What % of candle falls within 61.8%-80% Fib zone.
+
 ```python
 def calculate_candle_overlap_pct(candle_high, candle_low, fib_zone_top, fib_zone_bottom):
     candle_range = candle_high - candle_low
@@ -164,47 +206,48 @@ def calculate_candle_overlap_pct(candle_high, candle_low, fib_zone_top, fib_zone
     return overlap / candle_range
 ```
 
-### IC Selection Logic
-- Search **backward** from the most recent:
-  - CTS_ESTABLISHED, or
-  - BOS_CONFIRMED, or
-  - bos_threshold/cts_threshold update
-- Find the **most recent candle** meeting the variant's overlap requirement
+**Selection:** For each variant, scan candidates from most recent (highest idx) and pick first that meets threshold.
+
+**Storage:** Group by unique IC candle, store qualifying versions as metadata.
+- Example: IC at idx 150 with 95% overlap → `versions: ["V30", "V60", "V90"]`
+- Example: IC at idx 150 (40%), IC at idx 140 (95%) → Two ICs, idx 150 has `["V30"]`, idx 140 has `["V60", "V90"]`
 
 ---
 
 ## 4. POI Zone Construction
 
 ### Zone Boundaries
-- **Top:** IC high
-- **Bottom:** IC low
+- **Top:** IC candle high
+- **Bottom:** IC candle low
+- **One zone per unique IC** (not per variant)
+
+### Zone Data Fields
+- `side`: "buy" if sd=+1, "sell" if sd=-1
+- `structure_id`, `struct_direction`, `cycle_id`
+- `ic_idx`: Index of the IC candle (rectangle start)
+- `confirmed_idx`: First activation idx (always > ic_idx, vertical line here)
+- `top`, `bottom`: IC high/low
+- `versions`: List of qualifying variants ["V30", "V60", "V90"]
+- `status`: "active" | "inactive" | "disappeared"
+- `end_time`: When zone ends (None = extends to chart end)
+
+### Zone States
+
+| Status | Meaning | Charting |
+|--------|---------|----------|
+| `active` | Zone currently valid | Rendered fully |
+| `inactive` | Valid but superseded by newer zone | Rendered faded |
+| `disappeared` | IC no longer qualifies | NOT rendered (kept in list for history) |
+
+### Zone End Time (Priority Order)
+1. **Reversal:** `end_time = reversal_confirmed_idx` (all zones end immediately)
+2. **New CTS:** Cycle N zones end when CTS_N+1 established
+3. **No event:** Zone remains active (`end_time = None`)
 
 ### Lifecycle
-
-```
-CTS_ESTABLISHED
-    ↓
-Create pending POI zones (all 3 variants)
-    ↓
-Re-evaluate on each candle (IC may change)
-    ↓
-CTS_CONFIRMED
-    ↓
-Finalize zones (stop updating)
-```
-
-| Stage | Description |
-|-------|-------------|
-| **Pending** | Zone created after CTS_ESTABLISHED, can still update |
-| **Finalized** | Zone stops updating after CTS_CONFIRMED |
-| **Active** | Zone ready for trade consideration |
-| **Mitigated** | Price touches zone but doesn't break through |
-| **Broken** | Price closes beyond zone boundary |
-
-### Activation Condition
-Zone activates when:
-- BOS or CTS confirmed, AND
-- Imbalance exists between anchor points
+- Zone activates first time IC is found (`confirmed_idx` recorded)
+- Zone can disappear if IC no longer qualifies on subsequent candles
+- Zone re-appears if IC qualifies again (but `confirmed_idx` stays as first activation)
 
 ---
 
@@ -220,16 +263,31 @@ cfg = {
 ```
 
 ### Visual Elements
-1. **POI Zone Rectangles** — All 3 variants shown simultaneously with same formatting
-2. **Fibonacci Lines** — Horizontal lines at 30, 50, 61.8, 80 levels
-3. **Imbalance Candle Highlighting** — Entire candle (body + wicks) colored distinctly:
+1. **POI Zone Rectangle** — Yellow fill
+   - Starts at `ic_idx` (the IC candle)
+   - Ends at `end_time` (or chart end if None)
+   - Horizontal lines at top/bottom bounds
+2. **Confirm Line** — Darker vertical line at `confirmed_idx`
+3. **Fibonacci Lines** — Dotted lines at 0%/100% anchors, rectangle at 61.8-80%
+4. **Imbalance Candle Highlighting** — Entire candle (body + wicks) colored distinctly:
    - Bullish imbalance: Lime Green `rgba(50, 205, 50, 0.8)`
-   - Bearish imbalance: Gold `rgba(255, 215, 0, 0.8)`
+   - Bearish imbalance: Amber Yellow `rgba(235, 190, 0, 0.8)`
+
+### Zone Rendering Rules
+- `active` zones: Full opacity
+- `inactive` zones: Faded opacity
+- `disappeared` zones: NOT rendered
+
+### Hover Data
+- Side, structure_id, cycle_id
+- IC_idx, confirmed_idx
+- Versions (V30, V60, V90)
+- Top/bottom bounds
 
 ### Style Keys (style_registry.py)
 ```python
-"zone.poi.buy"         # Buy-side POI zone fill
-"zone.poi.sell"        # Sell-side POI zone fill
+"zone.poi.buy"         # Buy-side POI zone fill (Yellow)
+"zone.poi.sell"        # Sell-side POI zone fill (Yellow)
 "zone.poi.hover_line"  # Invisible hover hitbox
 "fib.line"             # Fibonacci level lines
 "imbalance.bullish"    # Bullish imbalance candle rgba
@@ -241,19 +299,15 @@ cfg = {
 ## Data Flow
 
 ```
-BOS/CTS events (with same sid)
+Fib active for cycle
     ↓
-Check: imbalance exists between anchors?
-    ↓ (yes)
-Calculate Fib levels (30, 50, 61.8, 80)
+Find IC candidates (base + scenario conditions)
     ↓
-CTS_ESTABLISHED triggers IC search
+Select IC variants (30%/60%/90% overlap with 61.8-80% Fib zone)
     ↓
-Search backward for IC in 61.8-80% zone
+Create POI zones (one per unique IC, bounds = IC high/low)
     ↓
-Create POI Zones (v1, v2, v3 based on overlap %)
-    ↓
-Re-evaluate on each candle until CTS_CONFIRMED
+Track lifecycle (active → inactive → disappeared)
     ↓
 Charting renders zones + Fib lines + imbalance highlighting
 ```
@@ -284,9 +338,10 @@ Charting renders zones + Fib lines + imbalance highlighting
 | FibTracker (activation/update/lock) | Done |
 | Cross-cycle Fib exception | Done |
 | Fib charting (0%/100% lines + 61.8-80% rect) | Done |
-| POI zones skeleton | Done |
-| 3-variant IC overlap logic | Pending |
-| Event-driven lifecycle | Pending |
-| IC backward search | Pending |
+| IC candidate identification | Done |
+| IC variant selection (V30/V60/V90) | Done |
+| POI zone creation | Done |
+| POI zone lifecycle management | Done |
+| POI zone charting (yellow rectangles) | Done |
 
-**Next:** Implement 3-variant IC identification with proper overlap calculation.
+**Status:** Complete. Ready for Week 7 Part 2 (Volume Patterns & Indicators).

@@ -1672,7 +1672,8 @@ def export_chart_plotly(
                 )
 
     # -------------------------------------------------
-    # Week 7: POI Zones overlays (rectangles + Fib lines)
+    # Week 7: POI Zones overlays (rectangles + confirm line)
+    # Yellow zones with vertical confirm line at confirmed_idx
     # -------------------------------------------------
     poi_zones = dfx.attrs.get("poi_zones", [])
     fib_cfg = cfg.get("fib", {}) or {}
@@ -1684,24 +1685,49 @@ def export_chart_plotly(
             key = f"zone.poi.{side}"
             return STYLE.get(key, {})
 
-        for z in poi_zones[:50]:  # Cap at 50 zones
+        # Filter out disappeared zones
+        visible_zones = [z for z in poi_zones if z.meta.get("status") != "disappeared"]
+
+        # Find most recent structure_id for opacity tiers
+        all_poi_sids = set(int(z.meta.get("structure_id", 0)) for z in visible_zones)
+        most_recent_poi_sid = max(all_poi_sids) if all_poi_sids else 0
+
+        for z in visible_zones[:50]:  # Cap at 50 zones
             side = str(z.side)
             stz = _poi_zone_style(side)
+            zone_status = z.meta.get("status", "active")
+            zone_sid = int(z.meta.get("structure_id", 0))
 
-            # All POI zones active for now (lifecycle TBD)
-            active = True
-            opacity_mult = 1.0 if active else 0.5
+            # 3-tier opacity based on status
+            if zone_status == "active":
+                opacity_mult = _opacity_tier("active")
+            elif zone_sid == most_recent_poi_sid:
+                opacity_mult = _opacity_tier("recent_inactive")
+            else:
+                opacity_mult = _opacity_tier("prior_inactive")
 
             base_fill_op = float(stz.get("fill_opacity_active", 0.35))
-            rgb = str(stz.get("rgb", "0,100,180" if side == "buy" else "180,100,0"))
+            base_line_op = float(stz.get("confirm_opacity_active", 0.85))
+            rgb = str(stz.get("rgb", "255, 255, 0"))  # Yellow default
+            confirm_rgb = str(stz.get("confirm_line_rgb", "139, 69, 19"))  # Brown default
+            confirm_w = int(stz.get("confirm_line_width", 2))
+
             fill_op = base_fill_op * opacity_mult
+            line_op = base_line_op * opacity_mult
             fillcolor = _rgba_from_rgb(rgb, fill_op)
+            linecolor = _rgba_from_rgb(confirm_rgb, line_op)
 
             x_zone0 = pd.to_datetime(z.start_time, utc=True)
             x_zone1 = pd.to_datetime(z.end_time, utc=True) if z.end_time else pd.to_datetime(t_last, utc=True)
 
             y0 = float(min(z.top, z.bottom))
             y1 = float(max(z.top, z.bottom))
+
+            # Get confirmed_idx for vertical line
+            conf_idx = int(z.meta.get("confirmed_idx", z.ic_idx))
+            conf_time = None
+            if conf_idx in dfx.index:
+                conf_time = pd.to_datetime(dfx.loc[conf_idx, COL_TIME], utc=True)
 
             # Draw POI zone rectangle
             fig.add_shape(
@@ -1717,23 +1743,48 @@ def export_chart_plotly(
                 layer="below",
             )
 
+            # Draw vertical confirm line at confirmed_idx
+            if conf_time is not None:
+                fig.add_shape(
+                    type="line",
+                    xref="x",
+                    yref="y",
+                    x0=conf_time,
+                    x1=conf_time,
+                    y0=y0,
+                    y1=y1,
+                    line=dict(color=linecolor, width=confirm_w),
+                    layer="below",
+                )
+
             # Hover lines for POI zone
             seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= x_zone0) & (dfx[COL_TIME] <= x_zone1)]
             if len(seg_times) == 0:
                 seg_times = pd.Series([x_zone0, x_zone1])
+
+            # Get versions list as string
+            versions = z.meta.get("versions", [])
+            versions_str = ", ".join(versions) if versions else "none"
+            cycle_id = z.meta.get("cycle_id", 0)
 
             poi_customdata = [[
                 side,
                 z.meta.get("structure_id", -1),
                 z.meta.get("struct_direction", 0),
                 z.ic_idx,
+                conf_idx,
+                cycle_id,
+                versions_str,
                 y1,
                 y0,
+                zone_status,
             ]] * len(seg_times)
 
             # Hover line style from registry
             poi_hover_st = STYLE.get("zone.poi.hover_line", {})
             poi_hover_line = poi_hover_st.get("line", {"width": 6, "color": "rgba(0,0,0,0)"})
+
+            zone_name = "POI zone" if zone_status == "active" else "POI zone (inactive)"
 
             # Top hover line
             fig.add_trace(
@@ -1741,18 +1792,22 @@ def export_chart_plotly(
                     x=seg_times,
                     y=[y1] * len(seg_times),
                     mode="lines",
-                    name="POI zone",
+                    name=zone_name,
                     showlegend=False,
                     line=poi_hover_line,
                     line_shape="hv",
                     hovertemplate=(
-                        "POI Zone<br>"
+                        "<b>POI Zone</b><br>"
                         "side=%{customdata[0]}<br>"
                         "structure_id=%{customdata[1]}<br>"
                         "struct_direction=%{customdata[2]}<br>"
                         "ic_idx=%{customdata[3]}<br>"
-                        "top=%{customdata[4]:.5f}<br>"
-                        "bottom=%{customdata[5]:.5f}"
+                        "confirmed_idx=%{customdata[4]}<br>"
+                        "cycle_id=%{customdata[5]}<br>"
+                        "versions=%{customdata[6]}<br>"
+                        "top=%{customdata[7]:.5f}<br>"
+                        "bottom=%{customdata[8]:.5f}<br>"
+                        "status=%{customdata[9]}"
                         "<extra></extra>"
                     ),
                     customdata=poi_customdata,
@@ -1765,47 +1820,30 @@ def export_chart_plotly(
                     x=seg_times,
                     y=[y0] * len(seg_times),
                     mode="lines",
-                    name="POI zone",
+                    name=zone_name,
                     showlegend=False,
                     line=poi_hover_line,
                     line_shape="hv",
                     hovertemplate=(
-                        "POI Zone<br>"
+                        "<b>POI Zone</b><br>"
                         "side=%{customdata[0]}<br>"
                         "structure_id=%{customdata[1]}<br>"
                         "struct_direction=%{customdata[2]}<br>"
                         "ic_idx=%{customdata[3]}<br>"
-                        "top=%{customdata[4]:.5f}<br>"
-                        "bottom=%{customdata[5]:.5f}"
+                        "confirmed_idx=%{customdata[4]}<br>"
+                        "cycle_id=%{customdata[5]}<br>"
+                        "versions=%{customdata[6]}<br>"
+                        "top=%{customdata[7]:.5f}<br>"
+                        "bottom=%{customdata[8]:.5f}<br>"
+                        "status=%{customdata[9]}"
                         "<extra></extra>"
                     ),
                     customdata=poi_customdata,
                 )
             )
 
-            # Draw Fib lines if enabled
-            if fib_cfg.get("lines", False) and z.fib is not None:
-                fib = z.fib
-                fib_style = _style("fib.line")
-                fib_line = fib_style.get("line", {"width": 1, "dash": "dash", "color": "rgba(128,128,128,0.6)"})
-
-                # Draw line from anchor to anchor
-                if fib.anchor_high_idx in dfx.index and fib.anchor_low_idx in dfx.index:
-                    x_fib_start = pd.to_datetime(dfx.loc[min(fib.anchor_high_idx, fib.anchor_low_idx), COL_TIME], utc=True)
-                    x_fib_end = pd.to_datetime(t_last, utc=True)
-
-                    for level in fib.levels:
-                        fig.add_shape(
-                            type="line",
-                            xref="x",
-                            yref="y",
-                            x0=x_fib_start,
-                            x1=x_fib_end,
-                            y0=level.price,
-                            y1=level.price,
-                            line=fib_line,
-                            layer="below",
-                        )
+        if visible_zones:
+            print(f"[chart][poi] rendered {len(visible_zones[:50])} POI zones")
 
     # -------------------------------------------------
     # Week 7: Fib Lines from FibTracker (separate from POI zones)

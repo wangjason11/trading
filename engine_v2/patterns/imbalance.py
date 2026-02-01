@@ -287,3 +287,59 @@ def get_unfilled_imbalances(
             unfilled.append(imb_idx)
 
     return unfilled
+
+
+def has_unfilled_imbalance_in_direction(
+    df: pd.DataFrame,
+    start_idx: int,
+    end_idx: int,
+    direction: int,
+    fill_threshold: float = 0.70,
+) -> bool:
+    """
+    Check if at least one unfilled imbalance in a specific direction exists in the range.
+
+    This is used for IC candidate validation - the IC requires an unfilled imbalance
+    in the struct_direction AFTER the IC candle.
+
+    Parameters
+    ----------
+    df : DataFrame
+        Must have 'is_imbalance' column computed
+    start_idx : int
+        Start of imbalance search range (inclusive)
+    end_idx : int
+        End of imbalance search range (inclusive)
+    direction : int
+        +1 for bullish imbalance, -1 for bearish imbalance
+    fill_threshold : float
+        Percentage threshold for fill (default 0.70 = 70%)
+
+    Returns
+    -------
+    bool
+        True if at least one unfilled imbalance in the specified direction exists
+    """
+    if "is_imbalance" not in df.columns:
+        return False
+
+    # Find all imbalance indices in range
+    mask = (df.index >= start_idx) & (df.index <= end_idx) & (df["is_imbalance"] == 1)
+    imbalance_indices = df.index[mask].tolist()
+
+    if not imbalance_indices:
+        return False
+
+    # Check each imbalance - return True if ANY is unfilled AND matches direction
+    for imb_idx in imbalance_indices:
+        # Get the imbalance direction
+        gap_bottom, gap_top, imb_direction = get_imbalance_gap_bounds(df, imb_idx)
+
+        if imb_direction != direction:
+            continue  # Wrong direction
+
+        # Check if this imbalance is unfilled
+        if not is_imbalance_filled(df, imb_idx, end_idx, fill_threshold):
+            return True
+
+    return False  # No unfilled imbalances in the specified direction

@@ -117,6 +117,53 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
     # Sort events by idx to ensure BOS_CONFIRMED comes before CTS_ESTABLISHED
     sorted_events = sorted(s_res.events, key=lambda e: (e.idx, e.type))
 
+    # Track previous structure's direction (for Scenario 1 revert check)
+    prev_sd_by_sid = {}  # {sid: prev_sd}
+    for ev in s_res.events:
+        if ev.type == "REVERSAL_CANDIDATE":
+            prev_sid = ev.meta.get("structure_id", 0)
+            prev_sd = ev.meta.get("struct_direction", 0)
+            # The reversal from structure N creates structure N+1
+            # Store the direction for the NEW structure (prev_sid + 1)
+            prev_sd_by_sid[prev_sid + 1] = prev_sd
+
+    def _get_prev_bos_outer(sid: int) -> tuple:
+        """Get max expanded outer threshold of prev structure's last BOS zone.
+
+        Returns (prev_bos_outer, prev_sd) or (None, None) if not available.
+        """
+        prev_sid = sid - 1
+        if prev_sid < 0:
+            return None, None
+
+        # Find last BOS zone from prev structure
+        prev_bos_zones = [
+            z for z in kl_zones
+            if z.meta.get("structure_id") == prev_sid and z.source_kind == "BOS"
+        ]
+        if not prev_bos_zones:
+            return None, None
+
+        # Take the last one (highest cycle_id)
+        last_bos_zone = max(prev_bos_zones, key=lambda z: z.meta.get("cycle_id", 0))
+
+        # Get prev_sd from zone side: buy zone = bullish (sd=1), sell zone = bearish (sd=-1)
+        prev_sd = 1 if last_bos_zone.side == "buy" else -1
+
+        # Get max expanded outer threshold
+        bounds_steps = last_bos_zone.meta.get("bounds_steps", [])
+        if not bounds_steps:
+            return last_bos_zone.meta.get("outer"), prev_sd
+
+        # For buy zone (bullish, outer is bottom): find min bottom (most expanded outward)
+        # For sell zone (bearish, outer is top): find max top (most expanded outward)
+        if prev_sd == 1:  # Buy zone - outer is bottom
+            max_expanded_outer = min(step["bottom"] for step in bounds_steps)
+        else:  # Sell zone - outer is top
+            max_expanded_outer = max(step["top"] for step in bounds_steps)
+
+        return max_expanded_outer, prev_sd
+
     for ev in sorted_events:
         sid = ev.meta.get("structure_id", 0)
         cycle_id = ev.meta.get("cycle_id", 0)
@@ -130,13 +177,23 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
             # Try to activate Fib using stored BOS info
             if key in bos_by_cycle:
                 bos_idx, bos_price = bos_by_cycle[key]
-                # Pass reversal_confirmed_idx for cross-cycle check (only relevant for cycle 1)
-                reversal_idx = reversal_confirmed_by_sid.get(sid) if cycle_id == 1 else None
-                fib_tracker.on_cts_established(ev, s_res.df, bos_idx, bos_price, reversal_idx)
+                # Pass reversal_confirmed_idx for Scenario 1/2/3 logic (sid 1+ only)
+                reversal_idx = reversal_confirmed_by_sid.get(sid)
+
+                # For cycle 1, get prev BOS zone outer for Scenario 1 revert check
+                prev_bos_outer, prev_sd = None, None
+                if sid >= 1 and cycle_id == 1:
+                    prev_bos_outer, prev_sd = _get_prev_bos_outer(sid)
+
+                fib_tracker.on_cts_established(
+                    ev, s_res.df, bos_idx, bos_price, reversal_idx,
+                    prev_bos_outer, prev_sd
+                )
 
         elif ev.type == "CTS_UPDATED":
             # Update CTS anchor if Fib is active for this cycle
-            fib_tracker.on_cts_updated(ev, s_res.df)
+            reversal_idx = reversal_confirmed_by_sid.get(sid)
+            fib_tracker.on_cts_updated(ev, s_res.df, reversal_idx)
 
         elif ev.type == "CTS_CONFIRMED":
             # Lock the Fib
@@ -146,21 +203,68 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
     print(f"[fib_tracker] total fibs={len(fib_states)}, active={sum(1 for f in fib_states if f.active)}")
     meta["fib_states"] = fib_states
 
-    # 9) POI zones (Week 7) - consume structure events + imbalance columns
+    # 9) Prev BOS lines - horizontal lines showing last BOS price of N-1 structure after reversal
+    # These help visualize the Scenario 1 revert check threshold
+    prev_bos_lines = []
+
+    # Find last BOS_CONFIRMED per structure
+    last_bos_by_sid = {}  # {sid: (idx, price)}
+    for ev in sorted_events:
+        if ev.type == "BOS_CONFIRMED":
+            sid = ev.meta.get("structure_id", 0)
+            # Always update - we want the LAST BOS for each structure
+            last_bos_by_sid[sid] = (ev.idx, ev.price)
+
+    # For each structure N >= 1 (post-reversal), compute the prev BOS line
+    for sid, rv_idx in reversal_confirmed_by_sid.items():
+        prev_sid = sid - 1
+        if prev_sid not in last_bos_by_sid:
+            continue
+
+        start_idx, price = last_bos_by_sid[prev_sid]
+
+        # Find earliest CTS_ESTABLISHED or CTS_UPDATED for structure N at or after rv_idx
+        end_idx = None
+        for ev in sorted_events:
+            ev_sid = ev.meta.get("structure_id", 0)
+            if ev_sid != sid:
+                continue
+            if ev.type not in ("CTS_ESTABLISHED", "CTS_UPDATED"):
+                continue
+            if ev.idx >= rv_idx:
+                end_idx = ev.idx
+                break  # First one found (events are sorted by idx)
+
+        if end_idx is not None:
+            prev_bos_lines.append({
+                "start_idx": start_idx,
+                "end_idx": end_idx,
+                "price": price,
+                "structure_id": sid,  # The NEW structure (post-reversal)
+                "prev_structure_id": prev_sid,
+            })
+            print(f"[prev_bos_line] sid={sid}: start_idx={start_idx} end_idx={end_idx} price={price:.5f}")
+
+    meta["prev_bos_lines"] = prev_bos_lines
+
+    # 10) POI zones (Week 7) - consume Fib states + IC identification
     poi_config = POIConfig(
-        fib_levels=[30.0, 50.0, 61.8, 80.0],
-        ic_fib_min=62.0,
-        ic_fib_max=79.0,
-        require_imbalance=False,  # Start with False until imbalance spec finalized
-        min_imbalance_gap=0.0,
+        ic_fib_min=61.8,
+        ic_fib_max=80.0,
+        v30_threshold=0.30,
+        v60_threshold=0.60,
+        v90_threshold=0.90,
+        fill_threshold=0.70,
     )
     poi_zones = derive_poi_zones(
         s_res.df,
         s_res.events,
+        fib_tracker=fib_tracker,
         config=poi_config,
     )
     print("[poi_zones] total=", len(poi_zones))
     meta["poi_zones"] = poi_zones
+    meta["fib_tracker"] = fib_tracker
 
     # For chart overlay (export_plotly reads df.attrs)
     # Note: imbalance is now in columns (is_imbalance, imbalance_gap_size), not attrs
@@ -168,6 +272,7 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
     s_res.df.attrs["poi_zones"] = poi_zones
     s_res.df.attrs["structure_events"] = s_res.events
     s_res.df.attrs["fib_states"] = fib_states
+    s_res.df.attrs["prev_bos_lines"] = prev_bos_lines
 
     return PipelineResult(
         df=s_res.df,

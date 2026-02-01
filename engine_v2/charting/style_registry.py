@@ -113,22 +113,24 @@ STYLE = {
     },
 
     # -----------------------------
-    # Week 7: POI Zones (rectangles)
+    # Week 7: POI Zones (rectangles) - Yellow for both buy/sell
     # -----------------------------
     "zone.poi.buy": {
-        "rgb": "0, 100, 180",
-        "fill_opacity_active": 0.35,
+        "rgb": "255, 215, 0",  # Gold
+        "fill_opacity_active": 0.9,
         "fill_opacity_inactive": 0.12,
+        "confirm_line_rgb": "101, 67, 33",  # Dark Brown
         "confirm_line_width": 2,
-        "confirm_opacity_active": 0.85,
+        "confirm_opacity_active": 0.9,
         "confirm_opacity_inactive": 0.25,
     },
     "zone.poi.sell": {
-        "rgb": "180, 100, 0",
-        "fill_opacity_active": 0.35,
+        "rgb": "255, 215, 0",  # Gold (same for both sides)
+        "fill_opacity_active": 0.9,
         "fill_opacity_inactive": 0.12,
+        "confirm_line_rgb": "101, 67, 33",  # Dark Brown
         "confirm_line_width": 2,
-        "confirm_opacity_active": 0.85,
+        "confirm_opacity_active": 0.9,
         "confirm_opacity_inactive": 0.25,
     },
     "zone.poi.hover_line": {
@@ -167,8 +169,8 @@ STYLE = {
         "rgba": "rgba(50, 205, 50, 0.8)",
     },
     "imbalance.bearish": {
-        # Gold at 80% opacity - used for entire candle (body + wicks)
-        "rgba": "rgba(255, 215, 0, 0.8)",
+        # Amber Yellow at 80% opacity - used for entire candle (body + wicks)
+        "rgba": "rgba(235, 190, 0, 0.8)",
     },
 
     # -----------------------------

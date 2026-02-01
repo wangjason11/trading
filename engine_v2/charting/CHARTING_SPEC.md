@@ -77,7 +77,7 @@ To change any visual element:
 ### 6) Imbalance candle highlighting (Week 7)
 - Candles with FVG imbalance get distinct colors
 - Bullish imbalance: Lime Green `rgba(50, 205, 50, 0.8)`
-- Bearish imbalance: Gold `rgba(255, 215, 0, 0.8)`
+- Bearish imbalance: Amber Yellow `rgba(235, 190, 0, 0.8)`
 - Entire candle (body + wicks) colored (Plotly limitation)
 - Style keys: `imbalance.bullish`, `imbalance.bearish`
 
