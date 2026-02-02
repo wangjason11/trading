@@ -12,9 +12,9 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 
 ## Current Status
 
-**Week 7 Part 2 — Volume Patterns & Indicators (Upcoming)**
+**Week 7 Part 2 — Volume Patterns & Indicators (Current)**
 
-| Completed (Week 7 Part 1) | Upcoming (Week 7 Part 2) |
+| Week 7 Part 1 (Complete) | Week 7 Part 2 (Current) |
 |-----------|-------------|
 | POI Zones (Fib + IC identification) | Volume Patterns |
 | Imbalance Pattern (FVG detection + fill checking) | Indicators |
@@ -22,6 +22,8 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 | IC Candidate/Variant selection (V30/V60/V90) | |
 | POI Zone lifecycle (active/inactive/end_time) | |
 | POI Zone charting (gold fill, dark brown confirm line) | |
+| Candle classification fixes (special_maru direction + precedence) | |
+| Pattern3 fix (allow maru or normal for c0) | |
 
 **Note:** Original syllabus had Zones in Week 7, but we pulled it forward to Week 6. Indicators (original Week 6) deferred to later.
 
@@ -40,8 +42,12 @@ pytest
 
 # Output location
 artifacts/debug/*.csv    # Raw and final dataframes
-artifacts/debug/*.html   # Interactive Plotly charts
+artifacts/charts/*.html  # Interactive Plotly charts
 ```
+
+**Slash Commands:**
+- `/commit-save [message]` — Commit, run replay, save outputs to timestamped folder
+- `/compare` — Compare current replay against last `/commit-save` to detect regressions
 
 ---
 
@@ -115,13 +121,16 @@ Full details in `PROJECT_PRINCIPLES.md`. Key points:
 
 When something looks wrong:
 
-1. **Pipeline ordering** — base features before structure?
-2. **structure_id filtering** — chart shows most recent structure_id only
-3. **Timing indices** — check apply_idx, confirmed_at, confirmed_idx
-4. **Thresholds** — zone expansion only from threshold-update events
-5. **Config** — correct pair/timeframe/dates in config.py?
+1. **Trace the full flow first** — Never debug isolated functions. One change cascades through:
+   `candle classification → patterns → state machine → CTS/BOS → zones → charting`
+2. **Understand before fixing** — Find *why* it's wrong, not just *what* to change
+3. **Pipeline ordering** — base features before structure?
+4. **structure_id filtering** — chart shows most recent structure_id only
+5. **Timing indices** — check apply_idx, confirmed_at, confirmed_idx
+6. **Thresholds** — zone expansion only from threshold-update events
+7. **Config** — correct pair/timeframe/dates in config.py?
 
-See `GOTCHAS.md` for detailed debugging lessons.
+See `GOTCHAS.md` for detailed debugging lessons (including cascading effect examples).
 
 ---
 
