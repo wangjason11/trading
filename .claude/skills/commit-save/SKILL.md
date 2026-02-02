@@ -39,25 +39,32 @@ FOLDER_NAME="${TIMESTAMP}_${COMMIT_HASH}"
 mkdir -p artifacts/commits/${FOLDER_NAME}
 ```
 
-### 4. Run Replay
+### 4. Run Replay (with timestamp marker)
 
-Run replay normally - outputs go to standard locations:
+Create a timestamp marker BEFORE running replay, then run replay:
 
 ```bash
+# Create marker file to track "before replay" time
+touch artifacts/commits/${FOLDER_NAME}/.before_replay_marker
+
+# Run replay - outputs go to standard locations
 python -m engine_v2.run_replay
 ```
 
-### 5. Copy Outputs to Commit Folder
+### 5. Copy ONLY New Outputs to Commit Folder
 
-Copy all relevant outputs to the new folder:
+Copy only files that were created/modified AFTER the marker (i.e., during this replay run):
 
 ```bash
-# Copy debug CSVs
-cp artifacts/debug/*.csv artifacts/commits/${FOLDER_NAME}/
+# Copy only NEW debug CSVs (modified after marker)
+find artifacts/debug -maxdepth 1 -name "*.csv" -newer artifacts/commits/${FOLDER_NAME}/.before_replay_marker -exec cp {} artifacts/commits/${FOLDER_NAME}/ \;
 
-# Copy charts
-cp artifacts/charts/*.html artifacts/commits/${FOLDER_NAME}/
-cp artifacts/charts/*.png artifacts/commits/${FOLDER_NAME}/ 2>/dev/null || true
+# Copy only NEW charts (modified after marker)
+find artifacts/charts -maxdepth 1 -name "*.html" -newer artifacts/commits/${FOLDER_NAME}/.before_replay_marker -exec cp {} artifacts/commits/${FOLDER_NAME}/ \;
+find artifacts/charts -maxdepth 1 -name "*.png" -newer artifacts/commits/${FOLDER_NAME}/.before_replay_marker -exec cp {} artifacts/commits/${FOLDER_NAME}/ \; 2>/dev/null || true
+
+# Remove the marker file (no longer needed)
+rm artifacts/commits/${FOLDER_NAME}/.before_replay_marker
 
 # Save commit metadata
 echo "commit_hash=${COMMIT_HASH}" > artifacts/commits/${FOLDER_NAME}/metadata.txt
@@ -112,14 +119,18 @@ artifacts/
     ├── LATEST                           # Contains name of most recent folder
     ├── 20260202_143000_abc1234/
     │   ├── metadata.txt                 # Commit hash, timestamp, message
-    │   ├── NZD_USD_H1_..._raw.csv
+    │   ├── NZD_USD_H1_..._raw.csv       # Only files from THIS run
     │   ├── NZD_USD_H1_..._final.csv
-    │   ├── swings.csv
-    │   ├── structure_levels.csv
-    │   └── NZD_USD_H1_..._sd-1_....html
+    │   ├── NZD_USD_H1_..._kl_zones.csv
+    │   ├── NZD_USD_H1_..._structure_levels.csv
+    │   ├── NZD_USD_H1_..._swings.csv
+    │   ├── NZD_USD_H1_....html
+    │   └── NZD_USD_H1_....png
     └── 20260203_091500_def5678/
         └── ...
 ```
+
+**Note:** Only files created/modified during the replay run are saved (not historical files from previous runs).
 
 ## Why This Matters
 
