@@ -4,6 +4,32 @@
 
 ---
 
+## Debugging Philosophy: Trace the Full Flow
+
+**Principle:** When debugging why output differs from expectations or previous iterations, always review the full codebase and trace through the run_replay logic to understand how each step impacts the next. Never look at individual fragments or functions in isolation.
+
+**Why this matters:**
+- One small change can have **cascading effects** that completely change structures and events downstream
+- A candle classification change → different patterns → different state transitions → different CTS/BOS timing → different zone boundaries
+- Looking at just a function's behavior without understanding how it's called and what uses its output will be misleading
+
+**Example (Week 7 debugging):**
+- `is_special_maru` fix changed idx=707 from `normal` to `maru`
+- This broke the `continuous` Pattern3 (normal + normal + maru) at 707-709
+- Without Pattern3, reversal watch at idx=707 failed
+- Reversal moved from idx=710 to idx=748 (38 candles later!)
+- This shifted all of sid=1's timing, moving BOS from idx=728 to idx=826
+- Root cause was only found by tracing: candle classification → pattern detection → state machine → reversal trigger → structure creation
+
+**Approach:**
+1. Run replay and capture the full event stream
+2. Compare events between "before" and "after" states
+3. Find the FIRST divergence point (not the symptom, the root cause)
+4. Trace backward: what feeds into that divergence?
+5. Trace forward: how does that divergence cascade?
+
+---
+
 ## Debugging Philosophy: Understand Before Fixing
 
 **Principle:** It's not about simply making a fix to get the right answers/values. It's more important to understand **why** it was wrong in the first place so we implement the right fix and get the right answers the correct way.

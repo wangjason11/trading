@@ -70,10 +70,11 @@ def classify_candles(df: pd.DataFrame, params: CandleParams) -> pd.DataFrame:
     upper = out["upper_wick"].astype(float)
     lower = out["lower_wick"].astype(float)
     length = out["candle_len"].astype(float)
+    direction = out["direction"].astype(int)
 
     # Primary classification (mutually exclusive)
     is_maru = round(body_pct, 2) >= params.maru
-    is_pinbar = round(body_pct, 2) <= params.pinbar
+    is_pinbar = round(body_pct, 2) < params.pinbar
 
     # If both true (possible if maru <= pinbar), maru wins
     out.loc[is_pinbar, "candle_type"] = "pinbar"
@@ -83,19 +84,23 @@ def classify_candles(df: pd.DataFrame, params: CandleParams) -> pd.DataFrame:
     # Use pinbar_distance as fraction of candle_len.
     dist = params.pinbar_distance * length
     # up pinbar: lower_wick large, upper_wick small (body near top)
-    is_up_pin = (out["candle_type"] == "pinbar") & (upper <= round(dist, 2)) & (lower >= dist)
+    is_up_pin = (out["candle_type"] == "pinbar") & (upper < dist) & (lower > dist)
     # down pinbar: upper_wick large, lower_wick small (body near bottom)
-    is_dn_pin = (out["candle_type"] == "pinbar") & (lower <= round(dist, 2)) & (upper >= dist)
+    is_dn_pin = (out["candle_type"] == "pinbar") & (lower < dist) & (upper > dist)
 
     out.loc[is_up_pin, "pinbar_dir"] = 1
     out.loc[is_dn_pin, "pinbar_dir"] = -1
 
     # Special maru flag (independent): looser body_pct threshold + body location constraint
-    # This is NOT the primary candle_type; it’s an extra feature for patterns.
+    # This is NOT the primary candle_type, but meeting this condition means the candle becomes maru.
+    # Bullish (dir=+1): small upper wick (body near top)
+    # Bearish (dir=-1): small lower wick (body near bottom)
     is_special_maru = (round(body_pct, 2) >= params.special_maru) & (
-        (round(upper, 2) <= params.special_maru_distance * length) | (round(lower, 2) <= params.special_maru_distance * length)
+        ((upper <= params.special_maru_distance * length) & (direction == 1)) |
+        ((lower <= params.special_maru_distance * length) & (direction == -1))
     )
     out.loc[is_special_maru, "is_special_maru"] = True
+    out.loc[is_special_maru, "candle_type"] = "maru"
 
     return out
 
@@ -164,19 +169,19 @@ def classify_big_flags(
             if prior_max <= EPS:
                 continue
 
-            ratio = lengths[i] / prior_max
+            ratio = round(lengths[i] / prior_max, 2)
 
-            # if ctype[i] == "maru" and round(ratio, 2) >= params.big_maru_threshold:
+            # if ctype[i] == "maru" and ratio >= params.big_maru_threshold:
             
             # big_maru alternatively can apply to every candle
-            if round(ratio, 2) >= params.big_maru_threshold:
+            if ratio >= params.big_maru_threshold:
                 out.loc[i, f"is_big_maru_as{s}"] = True
 
             # big_normal applies to maru or normal (as you described)
-            # if ctype[i] in ("maru", "normal") and round(ratio, 2) >= params.big_normal_threshold:
+            # if ctype[i] in ("maru", "normal") and ratio >= params.big_normal_threshold:
             
             # big_normal alternatively can apply to every candle
-            if round(ratio, 2) >= params.big_normal_threshold:
+            if ratio >= params.big_normal_threshold:
                 out.loc[i, f"is_big_normal_as{s}"] = True
 
     return out

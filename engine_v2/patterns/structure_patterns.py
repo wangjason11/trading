@@ -166,7 +166,7 @@ class BreakoutPatterns:
         )
 
         valid_pattern3 = (
-            c0.candle_type == "normal"
+            c0.candle_type in ["normal", "maru"]
             and c1.candle_type == "normal"
             and c2.candle_type == "maru"
         )

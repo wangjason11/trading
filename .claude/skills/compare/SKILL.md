@@ -1,96 +1,231 @@
 ---
 name: compare
-description: Compare replay output between current code and previous commit to detect unintended changes.
+description: Compare current replay output against previous /commit-save to detect unintended changes.
 user-invocable: true
 allowed-tools: Bash, Read, Glob, Grep, Write
 argument-hint:
 ---
 
-# Compare Replay Output Against Previous Commit
+# Compare Replay Output Against Previous Commit-Save
 
-Compare the current code's replay output against the previous commit to ensure changes don't unintentionally alter prior logic.
+Compare the current code's replay output against the most recent `/commit-save` output to ensure changes don't unintentionally alter prior logic.
 
 ## Instructions
 
-1. **Save current state:**
-   - Note the current commit hash
-   - Stash any uncommitted changes if present
+### 1. Find Previous Commit-Save Output
 
-2. **Run replay on previous commit:**
-   - Checkout the previous commit: `git checkout HEAD~1`
-   - Run replay: `python -m engine_v2.run_replay`
-   - Save key metrics to a temp file (use scratchpad directory)
-   - Capture: structure events, zone counts, candle patterns, Fib states, etc.
+```bash
+# Read the LATEST pointer
+PREV_FOLDER=$(cat artifacts/commits/LATEST)
+PREV_PATH="artifacts/commits/${PREV_FOLDER}"
 
-3. **Run replay on current code:**
-   - Checkout back to original branch/commit: `git checkout -`
-   - Pop any stashed changes if applicable
-   - Run replay: `python -m engine_v2.run_replay`
-   - Save key metrics to a temp file
+# Verify it exists
+if [ ! -d "${PREV_PATH}" ]; then
+    echo "ERROR: No previous commit-save found. Run /commit-save first."
+    exit 1
+fi
+```
 
-4. **Compare and summarize:**
-   - Load both result sets
-   - Identify what stayed the same vs what changed
-   - Focus on:
-     - **Candle patterns**: pinbar, maru, engulfing, star counts
-     - **Structure events**: CTS/BOS counts, state transitions
-     - **Zones**: KL zone count, POI zone count, bounds
-     - **Fib states**: activation/lock counts
-     - **Imbalance**: count of imbalance candles
-   - Flag any unexpected changes (changes in areas not touched by recent work)
+### 2. Run Replay on Current Code
 
-5. **Report findings:**
-   - Summarize what's consistent (good)
-   - Highlight what changed and whether it's expected
-   - If unexpected changes found, recommend investigation before commit
+```bash
+python -m engine_v2.run_replay
+```
 
-## Key Metrics to Capture
+### 3. Load and Compare Data
+
+Use Python to load both datasets and perform detailed comparison:
 
 ```python
-# From df and events, capture:
-metrics = {
-    "total_candles": len(df),
-    "structure_events": len([e for e in events if e.type in ["CTS_CONFIRMED", "BOS_CONFIRMED"]]),
-    "state_changes": len([e for e in events if e.type == "STATE_CHANGED"]),
-    "kl_zones": len(df.attrs.get("kl_zones", [])),
-    "poi_zones": len(df.attrs.get("poi_zones", [])),
-    "imbalance_candles": df["is_imbalance"].sum() if "is_imbalance" in df.columns else 0,
-    "pinbar_count": (df["candle_type"] == "pinbar").sum(),
-    "maru_count": (df["candle_type"] == "maru").sum(),
-    "fib_states": len(fib_tracker.get_fibs_for_charting()) if fib_tracker else 0,
-}
+import pandas as pd
+
+# Load previous
+prev_final = pd.read_csv(f"{prev_path}/NZD_USD_H1_..._final.csv")
+
+# Load current
+curr_final = pd.read_csv("artifacts/debug/NZD_USD_H1_..._final.csv")
+
+# Compare
 ```
 
-## Output Format
+### 4. Comparison Categories
+
+#### A) Row-Level Changes (Same Index, Different Values)
+
+For each key column, identify rows where values differ:
+
+| Column Category | Columns to Compare |
+|-----------------|-------------------|
+| **Candle Classification** | `candle_type`, `is_special_maru`, `pinbar_dir`, `direction`, `body_pct` |
+| **Pattern Detection** | `pat` (pattern name at each row) |
+| **Market Structure** | `market_state`, `structure_id`, `is_cts`, `is_bos` |
+| **Zones** | `in_kl_zone`, `in_poi_zone` (if present) |
+| **Imbalance** | `is_imbalance`, `imbalance_fill_pct` (if present) |
+
+Output format:
+```
+ROW-LEVEL CHANGES:
+
+candle_type (5 rows changed):
+  idx  | before  | after
+  707  | normal  | maru
+  716  | normal  | maru
+  ...
+
+market_state (12 rows changed):
+  idx  | before       | after
+  710  | breakout     | pullback
+  711  | range        | pullback_range
+  ...
+```
+
+#### B) Event-Level Shifts (Events Moved to Different Indices)
+
+Compare structural events between iterations:
+
+| Event Type | What to Track |
+|------------|---------------|
+| **BOS_CONFIRMED** | `(idx, structure_id, cycle_id)` |
+| **CTS_CONFIRMED** | `(idx, structure_id, cycle_id)` |
+| **CTS_ESTABLISHED** | `(idx, structure_id, cycle_id)` |
+| **STATE_CHANGED to reversal** | `(idx, structure_id)` |
+
+Detect:
+- **Removed events**: In previous but not current
+- **Added events**: In current but not previous
+- **Shifted events**: Same `(structure_id, cycle_id)` but different `idx`
+
+Output format:
+```
+EVENT-LEVEL SHIFTS:
+
+BOS_CONFIRMED:
+  SHIFTED: sid=1 cycle=1 moved from idx=728 to idx=826 (+98 candles)
+
+REVERSAL:
+  SHIFTED: sid=0 moved from idx=710 to idx=748 (+38 candles)
+
+CTS_CONFIRMED:
+  UNCHANGED: All 5 events match
+```
+
+#### C) Aggregate Metrics
+
+Compare high-level counts:
 
 ```
-=== COMPARE: Previous Commit vs Current ===
+AGGREGATE METRICS:
 
-Previous: <commit_hash> (<commit_message>)
-Current:  <commit_hash> (<commit_message>)
+                        Previous  Current  Change
+Total candles           1058      1058     -
+Maru candles            78        85       +7
+Pinbar candles          120       115      -5
+Structure events        290       295      +5
+KL zones                10        10       -
+POI zones               4         3        -1
+Fib states              3         3        -
+Imbalance candles       218       218      -
+```
 
-UNCHANGED (as expected):
-- Total candles: 500
-- Pinbar count: 45
-- Maru count: 32
-- ...
+#### D) Zone Boundary Changes
 
-CHANGED:
-- POI zones: 2 → 3 (expected: new POI zone logic)
-- Fib states: 4 → 5 (expected: cross-cycle Fib added)
+For KL zones and POI zones, compare:
+- Zone count per structure/cycle
+- Zone boundaries (start_idx, end_idx, top, bottom)
+- Zone status (active/inactive)
+
+```
+ZONE CHANGES:
+
+KL Zones:
+  sid=1 cycle=1 BOS zone: SHIFTED from idx=728 to idx=826
+
+POI Zones:
+  sid=1 cycle=1: CHANGED ic_idx from 832 to 732
+```
+
+### 5. Summary and Recommendation
+
+```
+=== COMPARE SUMMARY ===
+
+Previous commit-save: 20260202_143000_abc1234
+Current code: <uncommitted changes> OR <current commit>
+
+UNCHANGED:
+- Total candles: 1058
+- Imbalance count: 218
+- KL zone structure: Matches
+
+CHANGED (with analysis):
+- candle_type: 7 rows changed (special_maru direction fix applied)
+- Reversal: Shifted from idx=748 to idx=710 (EXPECTED: continuous pattern fix)
+- BOS sid=1 cycle=1: Shifted from idx=826 to idx=728 (EXPECTED: downstream of reversal fix)
 
 UNEXPECTED CHANGES:
-- [None found] OR
-- KL zones: 5 → 4 (INVESTIGATE: KL logic not touched)
+- [None found]
 
-Recommendation: [Safe to commit] OR [Investigate before commit]
+RECOMMENDATION: ✅ Safe to commit
 ```
+
+OR if unexpected changes:
+
+```
+UNEXPECTED CHANGES:
+- POI zones decreased from 4 to 2 (POI logic not touched in this iteration)
+
+RECOMMENDATION: ⚠️ Investigate before commit
+  - Check poi_zones.py for unintended changes
+  - Verify Fib state handling
+```
+
+### 6. Cascading Change Detection
+
+When a change is detected, trace its downstream effects:
+
+```
+CASCADE ANALYSIS:
+
+Root cause: candle_type changed at idx=707 (normal → maru)
+  ↓
+Effect 1: continuous pattern at 707-709 no longer matches Pattern3
+  ↓
+Effect 2: Reversal watch at idx=707 fails (no valid pattern)
+  ↓
+Effect 3: Reversal shifts from idx=710 to idx=748
+  ↓
+Effect 4: sid=1 starts later, all cycle timing shifts
+  ↓
+Effect 5: BOS for sid=1 cycle=1 moves from idx=728 to idx=826
+
+All changes are causally linked to the root change.
+```
+
+## Key Files to Compare
+
+| Current Location | Previous Location |
+|------------------|-------------------|
+| `artifacts/debug/*_final.csv` | `artifacts/commits/<folder>/*_final.csv` |
+| `artifacts/debug/*_raw.csv` | `artifacts/commits/<folder>/*_raw.csv` |
+| `artifacts/debug/structure_levels.csv` | `artifacts/commits/<folder>/structure_levels.csv` |
+| `artifacts/debug/swings.csv` | `artifacts/commits/<folder>/swings.csv` |
 
 ## Why This Matters
 
 This comparison catches:
-- Regression bugs (prior logic broken by new changes)
-- Unintended side effects (changing one thing affects another)
-- Missing test coverage (changes that slip through)
+- **Regression bugs**: Prior logic broken by new changes
+- **Cascading effects**: One small change affecting downstream structures
+- **Shifted events**: BOS/CTS/reversal moving to different indices
+- **Missing coverage**: Changes in areas not touched by recent work
 
-Run `/compare` before every commit and merge to maintain code integrity.
+**Run `/compare` before every commit** to maintain code integrity and catch issues early.
+
+## Workflow
+
+```
+1. /commit-save          # Checkpoint current working state
+2. Make changes          # Implement new feature/fix
+3. /compare              # Verify changes are as expected
+4. If unexpected → investigate
+5. If expected → /commit-save  # Create new checkpoint
+```
