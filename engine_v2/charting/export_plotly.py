@@ -202,6 +202,11 @@ def export_chart_plotly(
     rv_bos_frozen = _col_or_default("reversal_bos_th_frozen", float("nan")).astype(float)
     rv_extreme = _col_or_default("reversal_watch_extreme", float("nan")).astype(float)
 
+    # Big flags for hover data
+    is_big_normal_as0 = _col_or_default("is_big_normal_as0", False)
+    is_big_maru_as0 = _col_or_default("is_big_maru_as0", False)
+    big_ratio_as0 = _col_or_default("big_ratio_as0", 0.0).astype(float)
+
     customdata = list(zip(
         candle_idx,
         dfx["mid_price"].astype(float),
@@ -218,6 +223,9 @@ def export_chart_plotly(
         rv_watch,
         rv_bos_frozen,
         rv_extreme,
+        is_big_normal_as0,
+        is_big_maru_as0,
+        big_ratio_as0,
     ))
 
 
@@ -234,6 +242,7 @@ def export_chart_plotly(
         "candle_len=%{customdata[5]:.5f}<br>"
         "body_pct=%{customdata[2]:.2%}<br>"
         "mid_price=%{customdata[1]:.5f}<br>"
+        "big_normal=%{customdata[15]}  big_maru=%{customdata[16]}  big_ratio=%{customdata[17]:.2f}<br>"
         "range_break_frac=%{customdata[6]:.2%}<br>"
         "cts_cycle_id=%{customdata[7]}<br>"
         "cts_phase=%{customdata[8]}<br>"

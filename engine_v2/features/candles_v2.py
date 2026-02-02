@@ -57,6 +57,7 @@ def classify_candles(df: pd.DataFrame, params: CandleParams) -> pd.DataFrame:
     Produces:
       - candle_type: maru|pinbar|normal
       - pinbar_dir: +1 (up) / -1 (down) / 0 (none)
+      - normal_dir: +1 (up) / -1 (down) / 0 (none) - computed after is_special_maru reclassification
       - is_special_maru: bool (independent flag; can be used by patterns later)
     """
     out = df.copy()
@@ -64,6 +65,7 @@ def classify_candles(df: pd.DataFrame, params: CandleParams) -> pd.DataFrame:
     # Default
     out["candle_type"] = "normal"
     out["pinbar_dir"] = 0
+    out["normal_dir"] = 0
     out["is_special_maru"] = False
 
     body_pct = out["body_pct"].astype(float)
@@ -101,6 +103,30 @@ def classify_candles(df: pd.DataFrame, params: CandleParams) -> pd.DataFrame:
     )
     out.loc[is_special_maru, "is_special_maru"] = True
     out.loc[is_special_maru, "candle_type"] = "maru"
+
+    # Normal direction: based on where the body midpoint sits within the candle range
+    # Computed AFTER is_special_maru reclassification so only true normals get a direction
+    # Normalize body midpoint to [0, 1] where 0 = low, 1 = high
+    o = out[COL_O].astype(float)
+    c = out[COL_C].astype(float)
+    h = out[COL_H].astype(float)
+    l = out[COL_L].astype(float)
+    body_mid = (o + c) / 2.0
+    # Normalized position: 0 = at low, 1 = at high
+    body_mid_normalized = np.divide(
+        body_mid - l,
+        h - l,
+        out=np.full(len(out), 0.5, dtype=float),  # default to 0.5 for doji (h == l)
+        where=(h - l) > EPS,
+    )
+    x = params.normal_distance
+    # up normal: body midpoint in top x portion (normalized > 1 - x)
+    is_up_normal = (out["candle_type"] == "normal") & (body_mid_normalized > (1 - x))
+    # down normal: body midpoint in bottom x portion (normalized < x)
+    is_dn_normal = (out["candle_type"] == "normal") & (body_mid_normalized < x)
+
+    out.loc[is_up_normal, "normal_dir"] = 1
+    out.loc[is_dn_normal, "normal_dir"] = -1
 
     return out
 
@@ -157,6 +183,7 @@ def classify_big_flags(
         out[f"is_big_maru_as{s}"] = False
         out[f"is_big_normal_as{s}"] = False
         out[f"prior_maru_max_len_as{s}"] = 0.0
+        out[f"big_ratio_as{s}"] = 0.0
 
     lengths = out["candle_len"].astype(float).values
     ctype = out["candle_type"].values
@@ -170,6 +197,7 @@ def classify_big_flags(
                 continue
 
             ratio = round(lengths[i] / prior_max, 2)
+            out.loc[i, f"big_ratio_as{s}"] = ratio
 
             # if ctype[i] == "maru" and ratio >= params.big_maru_threshold:
             
