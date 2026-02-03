@@ -5,8 +5,9 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Outputs
-artifacts/
+# Outputs (except commits folder for /compare)
+artifacts/*
+!artifacts/commits/
 
 # Secrets
 .env
