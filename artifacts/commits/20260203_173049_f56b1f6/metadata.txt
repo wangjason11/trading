@@ -1,0 +1,3 @@
+commit_hash=f56b1f6
+timestamp=20260203_173049
+commit_message=Refactor base pattern identification to structure-aware on-demand
