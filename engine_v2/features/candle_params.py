@@ -7,7 +7,7 @@ class CandleParams:
     maru: float = 0.65
     pinbar: float = 0.4
     pinbar_distance: float = 0.5
-    normal_distance: float = 0.5
+    normal_distance: float = 0.4
 
     big_maru_threshold: float = 0.65
     big_normal_threshold: float = 0.5
