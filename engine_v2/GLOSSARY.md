@@ -23,7 +23,9 @@
 | Term | Definition |
 |------|------------|
 | **base_pattern** | Candle pattern at zone anchor (pinbar, star, long-tail, etc.) |
+| **base inside bar** | Pattern where anchor candle has ≥2 neighboring candles entirely within its range |
 | **base_idx** | Index of the zone anchor candle |
+| **anchor_idx** | Index of the BOS/CTS candle used for pattern identification |
 | **bounds_steps** | History of zone boundary changes (INIT → expansions) |
 | **outer threshold** | Zone boundary price (before top/bottom conversion) |
 | **inner threshold** | Zone boundary price closer to current price |

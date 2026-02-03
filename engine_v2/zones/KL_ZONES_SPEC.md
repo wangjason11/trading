@@ -34,21 +34,45 @@ This is copied from the canonical spec block in the module:
 
 ## Pipeline placement
 
-KL zones are computed after structure, but **base features are computed before structure**:
-- candle features → patterns → base features → structure → zones【fileciteturn2file1】
+KL zones are computed after structure, with **base patterns identified on-demand** during zone creation:
+- candle features → patterns → imbalance → structure → zones (base patterns identified here)【fileciteturn2file1】
 
 ---
 
-## Base features
+## Base Pattern Identification (Structure-Aware)
 
-`compute_base_features(df, length_threshold=0.7)` ports a legacy base-pattern classification and produces:
-- `base_pattern` (categorical: "no base", "no base 1st big", "no base 2nd big", star variants, long-tail variants, etc.)
-- base OHLC-derived helper columns:
-  - `base_low`, `base_high`
-  - `base_min_close_open`, `base_max_close_open`
-  - `mid_price` etc.
+Base patterns are now identified **on-demand** when a BOS/CTS event is received, using the anchor_idx and struct_direction context. Pattern identification is performed by `identify_base_pattern()`.
 
-It includes the corrected “no base 1st big” vs “no base 2nd big” length-threshold condition.【fileciteturn2file10】
+### Pattern Check Order
+1. **Inside bar pattern** (new): Check if anchor candle has ≥2 candles within its range (5 left + 5 right)
+2. **2-candle patterns**: "no base", "no base 1st big", "no base 2nd big", "no base long tails up/down"
+3. **1-candle patterns**: "no base big tail up", "no base big tail down" (pinbar)
+4. **3-candle patterns**: "no base star", "no base star 1st big", "no base star 2nd big"
+5. **Default**: "base" (fallback)
+
+### 2-Candle Positioning Logic
+| Event | Condition | idx1 (1st candle) | idx2 (2nd candle) |
+|-------|-----------|-------------------|-------------------|
+| BOS | BOS dir == struct_dir | anchor - 1 | anchor |
+| BOS | BOS dir != struct_dir | anchor | anchor + 1 |
+| CTS | CTS dir == struct_dir | anchor | anchor + 1 |
+| CTS | CTS dir != struct_dir | anchor - 1 | anchor |
+
+### 3-Candle (Star) Pre-conditions
+- BOS: candle 3 direction must equal struct_direction
+- CTS: candle 1 direction must equal struct_direction
+
+### base_idx by Pattern Type
+| Pattern Type | base_idx |
+|--------------|----------|
+| Inside bar | anchor |
+| 1-candle (pinbar) | anchor |
+| 2-candle | idx1 (1st candle of pattern) |
+| 3-candle (star) | anchor - 1 |
+| "base" (catchall) | anchor |
+
+### Feature Computation
+Base window features (`base_low`, `base_high`, etc.) are computed on-the-fly via `compute_base_window_features()` based on pattern type and base_idx.【fileciteturn2file10】
 
 ---
 
@@ -59,10 +83,10 @@ It includes the corrected “no base 1st big” vs “no base 2nd big” length-
   1) Determine `source_event_idx = ev.idx`
   2) Determine `confirmed_idx`:
      - `confirmed_idx = ev.meta["confirmed_at"]` when present else source_event_idx
-  3) Determine base source:
-     - BOS: base_source_idx = source_event_idx
-     - CTS: base_source_idx = ev.meta["cts_anchor_idx"] (fallback to source_event_idx)
-  4) Resolve (base_idx, base_pattern) via `resolve_base_idx_and_pattern(...)`
+  3) Determine anchor_idx:
+     - BOS: anchor_idx = source_event_idx
+     - CTS: anchor_idx = ev.meta["cts_anchor_idx"] (fallback to source_event_idx)
+  4) Identify (base_pattern, base_idx) via `identify_base_pattern(df, anchor_idx, struct_direction, bos=...)`
   5) Compute thresholds via `zone_thresholds(...)`
   6) Map side based on struct_direction + event type
   7) Produce `KLZone` with meta, including bounds_steps list initialized with INIT segment【fileciteturn2file6】

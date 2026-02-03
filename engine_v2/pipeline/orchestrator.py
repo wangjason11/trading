@@ -10,8 +10,7 @@ from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.patterns.pattern_engine import detect_patterns
 from engine_v2.structure.structure_engine import compute_structure
 
-# NEW: KL base features computed BEFORE structure
-from engine_v2.zones.kl_zones_v1 import compute_base_features, derive_kl_zones_v1
+from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
 # Week 7: POI zones
 from engine_v2.zones.poi_zones import derive_poi_zones, POIConfig
@@ -36,9 +35,9 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
       input df
         -> candle classification (candles_v2 features)
         -> pattern engine
-        -> KL base feature enrichment (base_pattern/base bounds features)
+        -> imbalance patterns
         -> market structure (df + structure_events)
-        -> KL zones derived from structure confirmation events
+        -> KL zones derived from structure confirmation events (base patterns identified on-demand)
         -> attach df.attrs["kl_zones"] for charting
 
     Zones remain event-driven and do not add rewinds/waits.
@@ -55,17 +54,13 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
     print("[patterns]", p_res.notes)
     print(p_res.df["pat"].value_counts().head())
 
-    # 3) Imbalance patterns (Week 7) - computed as columns, before base features
+    # 3) Imbalance patterns (Week 7) - computed as columns
     df_with_imbalance = compute_imbalance(p_res.df)
     imbalance_count = int(df_with_imbalance["is_imbalance"].sum())
     print(f"[imbalance] total={imbalance_count}")
 
-    # 5) KL base features (must occur BEFORE structure)
-    # Default length_threshold locked to 0.7 (per Week 6 spec)
-    df_with_base = compute_base_features(df_with_imbalance, length_threshold=0.7)
-
-    # 6) Market structure (must return events + struct_direction)
-    s_res = compute_structure(df_with_base)
+    # 4) Market structure (must return events + struct_direction)
+    s_res = compute_structure(df_with_imbalance)
 
     meta = {
         "notes": {
@@ -75,7 +70,7 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
         }
     }
 
-    # 7) KL zones consume structure events (not levels)
+    # 5) KL zones consume structure events (not levels)
     kl_zones = derive_kl_zones_v1(
         s_res.df,
         s_res.events,
@@ -92,7 +87,7 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
 
     meta["kl_zones"] = kl_zones
 
-    # 8) Fib tracking (Week 7) - process events to track Fib levels
+    # 6) Fib tracking (Week 7) - process events to track Fib levels
     fib_tracker = FibTracker(FibTrackerConfig(
         fib_levels=[30.0, 50.0, 61.8, 80.0],
         fill_threshold=0.70,
@@ -203,7 +198,7 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
     print(f"[fib_tracker] total fibs={len(fib_states)}, active={sum(1 for f in fib_states if f.active)}")
     meta["fib_states"] = fib_states
 
-    # 9) Prev BOS lines - horizontal lines showing last BOS price of N-1 structure after reversal
+    # 7) Prev BOS lines - horizontal lines showing last BOS price of N-1 structure after reversal
     # These help visualize the Scenario 1 revert check threshold
     prev_bos_lines = []
 
@@ -247,7 +242,7 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
 
     meta["prev_bos_lines"] = prev_bos_lines
 
-    # 10) POI zones (Week 7) - consume Fib states + IC identification
+    # 8) POI zones (Week 7) - consume Fib states + IC identification
     poi_config = POIConfig(
         ic_fib_min=61.8,
         ic_fib_max=80.0,

@@ -37,251 +37,342 @@ def _get_reversal_confirmed_by_sid_from_events(events: list) -> dict:
 
 
 # -------------------------
-# Base features (ported)
+# Pattern Identification Functions (structure-aware)
 # -------------------------
 
-def compute_base_features(df: pd.DataFrame, *, length_threshold: float = 0.7) -> pd.DataFrame:
-    """
-    Port of legacy BasePatterns.base_patterns with corrected pandas mechanics.
-    Keeps branching logic identical, including the corrected typo for 'no base 1st big'.
-
-    Requires df columns:
-      - is_big_normal_as0, is_big_normal_as1
-      - direction
-      - candle_type
-      - pinbar_dir
-      - candle_len
-      - o/h/l/c
-    """
-    dfx = df.copy()
-
-    # --- column exists check ---
-    # big-normal flags
-    if "is_big_normal_as0" not in dfx.columns:
-        raise KeyError("KL zones: missing is_big_normal_as0 flag")
-
-    if "is_big_normal_as1" not in dfx.columns:
-        raise KeyError("KL zones: missing is_big_normal_as1 flag")
-
-    # candle length
-    if "candle_len" not in dfx.columns:
-        raise KeyError("KL zones: missing candle length (expected candle_len)")
-
-    # -------------------------
-    # 2 Candle Pattern Base Patterns
-    # -------------------------
-    big0 = dfx["is_big_normal_as0"].astype(int)
-    big1 = dfx["is_big_normal_as1"].shift(-1).fillna(0).astype(int)
-    dir_flip = dfx["direction"] != dfx["direction"].shift(-1)
-
-    gate = (big0 == 1) & (big1 == 1) & dir_flip
-
-    cur_is_maru_or_normal = dfx["candle_type"].isin(["maru", "normal"])
-    next_is_maru_or_normal = dfx["candle_type"].shift(-1).isin(["maru", "normal"])
-
-    # Pinbar mapping: up/down pinbar = candle_type=="pinbar" and pinbar_dir==±1
-    cur_up_pinbar = (dfx["candle_type"] == "pinbar") & (dfx["pinbar_dir"] == 1)
-    cur_dn_pinbar = (dfx["candle_type"] == "pinbar") & (dfx["pinbar_dir"] == -1)
-    next_up_pinbar = (dfx["candle_type"].shift(-1) == "pinbar") & (dfx["pinbar_dir"].shift(-1) == 1)
-    next_dn_pinbar = (dfx["candle_type"].shift(-1) == "pinbar") & (dfx["pinbar_dir"].shift(-1) == -1)
-
-    clen = dfx["candle_len"].astype(float)
-    next_clen = clen.shift(-1)
-
-    # Corrected typo from you:
-    #   prev_clen < length_threshold * clen  => "no base 2nd big"
-    #   prev_clen * length_threshold > clen  => "no base 1st big"
-    nb2 = clen < (length_threshold * next_clen)
-    nb1 = (clen * length_threshold) > next_clen
-
-    base_pattern = np.where(
-        gate,
-        np.where(
-            cur_is_maru_or_normal & next_is_maru_or_normal,
-            np.where(nb2, "no base 2nd big", np.where(nb1, "no base 1st big", "no base")),
-            np.where(
-                cur_up_pinbar & next_up_pinbar,
-                "no base long tails up",
-                np.where(cur_dn_pinbar & next_dn_pinbar, "no base long tails down", "base"),
-            ),
-        ),
-        "base",
-    )
-
-    dfx["base_pattern"] = base_pattern
-
-    # Always compute 2-candle window features (base_idx uses base_idx & base_idx+1 regardless of pattern)
-    dfx["base_low"] = np.where(dfx["base_pattern"] != "base", np.minimum(dfx["l"], dfx["l"].shift(-1)), float("nan"))
-    dfx["base_high"] = np.where(dfx["base_pattern"] != "base", np.maximum(dfx["h"], dfx["h"].shift(-1)), float("nan"))
-
-    c0 = dfx["c"].astype(float)
-    c1 = dfx["c"].shift(-1).astype(float)
-    o0 = dfx["o"].astype(float)
-    o1 = dfx["o"].shift(-1).astype(float)
-
-    min_co = np.minimum(np.minimum(c0, c1), np.minimum(o0, o1))
-    max_co = np.maximum(np.maximum(c0, c1), np.maximum(o0, o1))
-
-    dfx["base_min_close_open"] = np.where(dfx["base_pattern"] != "base", min_co, float("nan"))
-    dfx["base_max_close_open"] = np.where(dfx["base_pattern"] != "base", max_co, float("nan"))
-
-    # -------------------------
-    # Single Large Pinbar Base Pattern
-    # -------------------------
-    big_up_pinbar = (dfx["candle_type"] == "pinbar") & (dfx["pinbar_dir"] == 1) & (dfx["is_big_maru_as0"] == 1)
-    big_down_pinbar = (dfx["candle_type"] == "pinbar") & (dfx["pinbar_dir"] == -1) & (dfx["is_big_maru_as0"] == 1)
-
-    base_pattern = np.where(
-        dfx["base_pattern"] == "base",
-        np.where(big_up_pinbar,
-            "no base big tail up",
-            np.where(big_down_pinbar, "no base big tail down", "base")
-        ),
-        dfx["base_pattern"],
-    )
-
-    dfx["base_pattern"] = base_pattern
-
-    is_big_pinbar = dfx["base_pattern"].isin(["no base big tail up", "no base big tail down"])
-    dfx.loc[is_big_pinbar, "base_low"]  = dfx.loc[is_big_pinbar, "l"].astype(float)
-    dfx.loc[is_big_pinbar, "base_high"] = dfx.loc[is_big_pinbar, "h"].astype(float)
-
-    # For pinbar, these are “inner candidates” used by threshold logic; keeping them as candle body bounds is reasonable
-    pin_o = dfx["o"].astype(float)
-    pin_c = dfx["c"].astype(float)
-    dfx.loc[is_big_pinbar, "base_min_close_open"] = np.minimum(pin_o, pin_c)[is_big_pinbar]
-    dfx.loc[is_big_pinbar, "base_max_close_open"] = np.maximum(pin_o, pin_c)[is_big_pinbar]
-
-    # -------------------------
-    # Star Base Pattern
-    # -------------------------
-    opposite_dir = dfx["direction"] != dfx["direction"].shift(-2)
-    star0 = dfx["candle_type"].isin(["maru", "normal"]) & (dfx["is_big_normal_as0"] == 1)
-    star1 = dfx["candle_type"].shift(-1).isin(["pinbar"])
-    star2 = dfx["candle_type"].shift(-2).isin(["maru", "normal"]) & (dfx["is_big_normal_as2"].shift(-2).fillna(0) == 1)
-
-    star_gate = opposite_dir & star0 & star1 & star2
-
-    clen_star = dfx["candle_len"].astype(float)
-    end_clen = clen.shift(-2)
-    star_2big = clen_star < (length_threshold * end_clen)
-    star_1big = (clen_star * length_threshold) > end_clen
-
-    base_pattern = np.where(
-        dfx["base_pattern"] == "base",
-        np.where(star_gate,
-            np.where(star_2big,
-                "no base star 2nd big", 
-                np.where(star_1big, "no base star 1st big", "no base star")
-            ),
-            "base"
-        ),
-        dfx["base_pattern"],
-    )
-
-    dfx["base_pattern"] = base_pattern
-
-    # After you finalize dfx["base_pattern"] for star patterns...
-    # Always compute star window features (base_idx uses base_idx & base_idx+2)
-    is_star = dfx["base_pattern"].astype(str).str.startswith("no base star")
-
-    # 3-candle window features ONLY for star patterns
-    star_low  = np.minimum(dfx["l"].astype(float), dfx["l"].shift(-1).astype(float), dfx["l"].shift(-2).astype(float))
-    star_high = np.maximum(dfx["h"].astype(float), dfx["h"].shift(-1).astype(float), dfx["h"].shift(-2).astype(float))
-
-    dfx["base_low"]  = np.where(is_star, star_low,  dfx["base_low"])
-    dfx["base_high"] = np.where(is_star, star_high, dfx["base_high"])
-
-    c0 = dfx["c"].astype(float)
-    c2 = dfx["c"].shift(-2).astype(float)
-    o0 = dfx["o"].astype(float)
-    o2 = dfx["o"].shift(-2).astype(float)
-
-    star_min_co = np.minimum(np.minimum(c0, c2), np.minimum(o0, o2))
-    star_max_co = np.maximum(np.maximum(c0, c2), np.maximum(o0, o2))
-
-    dfx["base_min_close_open"] = np.where(is_star, star_min_co, dfx["base_min_close_open"])
-    dfx["base_max_close_open"] = np.where(is_star, star_max_co, dfx["base_max_close_open"])
-
-    dfx["base_low"] = np.where(dfx["base_pattern"] == "base", dfx["l"], dfx["base_low"])
-    dfx["base_high"] = np.where(dfx["base_pattern"] == "base", dfx["h"], dfx["base_high"])
-
-    return dfx
-
-
-# -------------------------
-# Base index resolver (ported)
-# -------------------------
-
-def resolve_base_idx_and_pattern(
+def identify_inside_bar_pattern(
     df: pd.DataFrame,
-    base_source_idx: int,
-    struct_direction: int,
+    anchor_idx: int,
+) -> tuple[str, int] | None:
+    """
+    Check if anchor candle qualifies as "base inside bar" pattern.
+
+    Looks at up to 5 candles left and 5 candles right of anchor.
+    If at least 2 candles have their entire range (low to high) within
+    the anchor candle's low-high range, returns the pattern.
+
+    Parameters
+    ----------
+    df : DataFrame
+        OHLC data
+    anchor_idx : int
+        Index of the BOS/CTS candle
+
+    Returns
+    -------
+    tuple or None
+        ("base inside bar", anchor_idx) if pattern matches, None otherwise
+    """
+    if anchor_idx not in df.index:
+        return None
+
+    anchor_low = float(df.loc[anchor_idx, "l"])
+    anchor_high = float(df.loc[anchor_idx, "h"])
+
+    # Check up to 5 candles left and 5 candles right
+    left_start = max(0, anchor_idx - 5)
+    right_end = min(len(df) - 1, anchor_idx + 5)
+
+    inside_count = 0
+
+    for idx in range(left_start, right_end + 1):
+        if idx == anchor_idx:
+            continue
+        if idx not in df.index:
+            continue
+
+        candle_low = float(df.loc[idx, "l"])
+        candle_high = float(df.loc[idx, "h"])
+
+        # Check if entire candle is within anchor's range
+        if candle_low >= anchor_low and candle_high <= anchor_high:
+            inside_count += 1
+
+        if inside_count >= 2:
+            return ("base inside bar", anchor_idx)
+
+    return None
+
+
+def identify_2candle_pattern(
+    df: pd.DataFrame,
+    idx1: int,
+    idx2: int,
     *,
-    bos: bool,
-) -> tuple[int, str]:
+    length_threshold: float = 0.7,
+) -> tuple[str, int] | None:
     """
-    Port of legacy check_base_pattern for 2 candle patterns
+    Check 2-candle base patterns.
 
-    bos=True (BOS-confirmed event):
-      if struct_direction == direction[idx] => (idx-1) else idx
+    Patterns: no base, no base 1st big, no base 2nd big,
+              no base long tails up, no base long tails down
 
-    bos=False (CTS-confirmed event):
-      if struct_direction == direction[idx] => idx else (idx-1)
+    Parameters
+    ----------
+    df : DataFrame
+        OHLC data with candle classification columns
+    idx1 : int
+        Index of the 1st candle in the pattern
+    idx2 : int
+        Index of the 2nd candle in the pattern
+    length_threshold : float
+        Threshold for determining 1st big vs 2nd big (default 0.7)
 
-    Adds additional 1 large pinbar pattern & star patterns (3 candles)
-
-    Clamp so base_idx+2 is valid for 3-candle window usage.
+    Returns
+    -------
+    tuple or None
+        (pattern_name, idx1) if pattern matches, None otherwise
     """
+    if idx1 not in df.index or idx2 not in df.index:
+        return None
 
-    i = int(base_source_idx)
-    sd = int(struct_direction)
-    conf_dir = int(df.loc[i, "direction"])
-    candle_type = df.loc[i, "candle_type"]
-    base_pattern = df.loc[i, "base_pattern"]
-    prev_base_pattern = df.loc[i-1, "base_pattern"]
-    prev_base_pattern_dir = int(df.loc[i-1, "direction"])
+    # Gate conditions
+    big0 = int(df.loc[idx1, "is_big_normal_as0"]) == 1
+    big1 = int(df.loc[idx2, "is_big_normal_as1"]) == 1
+    dir1 = int(df.loc[idx1, "direction"])
+    dir2 = int(df.loc[idx2, "direction"])
+    dir_flip = dir1 != dir2
 
-    base_idx = i  # default
+    if not (big0 and big1 and dir_flip):
+        return None
 
-    # Check for single large pinbar
-    if base_pattern in ["no base big tail up", "no base big tail down"]:
-        if bos and struct_direction == 1 and base_pattern == "no base big tail up":
-            base_idx = i
-        elif bos and struct_direction == -1 and base_pattern == "no base big tail down":
-            base_idx = i
-        elif not bos and struct_direction == 1 and base_pattern == "no base big tail down":
-            base_idx = i
-        elif not bos and struct_direction == -1 and base_pattern == "no base big tail up":
-            base_idx = i
+    # Check candle types
+    ctype1 = str(df.loc[idx1, "candle_type"])
+    ctype2 = str(df.loc[idx2, "candle_type"])
 
-    # Check for star pattern
-    elif prev_base_pattern in ["no base star 2nd big", "no base star 1st big", "no base star"]:
-        if bos and prev_base_pattern_dir != sd:
-            base_idx = i - 1
-        elif not bos and prev_base_pattern_dir == sd:
-            base_idx = i - 1
+    is_maru_or_normal_1 = ctype1 in ("maru", "normal")
+    is_maru_or_normal_2 = ctype2 in ("maru", "normal")
 
-    # Check for remaining 2-candle patterns
-    elif bos:
-        if sd == conf_dir and prev_base_pattern != "base":
-            base_idx = i - 1
-        elif sd != conf_dir and base_pattern != "base":
-            base_idx = i
-        # base_idx = (i - 1) if (sd == conf_dir) else i
-    elif not bos:
-        if sd == conf_dir and base_pattern != "base":
-            base_idx = i
-        elif sd != conf_dir and prev_base_pattern != "base":
-            base_idx = i - 1
-        # base_idx = i if (sd == conf_dir) else (i - 1)
-    # else:
-    #     base_idx = i
+    pdir1 = int(df.loc[idx1, "pinbar_dir"])
+    pdir2 = int(df.loc[idx2, "pinbar_dir"])
 
-    # Ensure base_idx allows base_idx+2 access
-    base_idx = max(0, min(base_idx, len(df) - 3))
-    zone_pattern = str(df.loc[base_idx, "base_pattern"])
-    return base_idx, zone_pattern
+    is_up_pinbar_1 = ctype1 == "pinbar" and pdir1 == 1
+    is_dn_pinbar_1 = ctype1 == "pinbar" and pdir1 == -1
+    is_up_pinbar_2 = ctype2 == "pinbar" and pdir2 == 1
+    is_dn_pinbar_2 = ctype2 == "pinbar" and pdir2 == -1
+
+    clen1 = float(df.loc[idx1, "candle_len"])
+    clen2 = float(df.loc[idx2, "candle_len"])
+
+    # Determine pattern
+    if is_maru_or_normal_1 and is_maru_or_normal_2:
+        # Check size comparison
+        if clen1 < length_threshold * clen2:
+            return ("no base 2nd big", idx1)
+        elif clen1 * length_threshold > clen2:
+            return ("no base 1st big", idx1)
+        else:
+            return ("no base", idx1)
+    elif is_up_pinbar_1 and is_up_pinbar_2:
+        return ("no base long tails up", idx1)
+    elif is_dn_pinbar_1 and is_dn_pinbar_2:
+        return ("no base long tails down", idx1)
+
+    return None
+
+
+def identify_1candle_pattern(
+    df: pd.DataFrame,
+    anchor_idx: int,
+) -> tuple[str, int] | None:
+    """
+    Check 1-candle (pinbar) base patterns.
+
+    Patterns: no base big tail up, no base big tail down
+
+    Parameters
+    ----------
+    df : DataFrame
+        OHLC data with candle classification columns
+    anchor_idx : int
+        Index of the BOS/CTS candle
+
+    Returns
+    -------
+    tuple or None
+        (pattern_name, anchor_idx) if pattern matches, None otherwise
+    """
+    if anchor_idx not in df.index:
+        return None
+
+    ctype = str(df.loc[anchor_idx, "candle_type"])
+    pdir = int(df.loc[anchor_idx, "pinbar_dir"])
+    is_big = int(df.loc[anchor_idx, "is_big_maru_as0"]) == 1
+
+    if ctype != "pinbar" or not is_big:
+        return None
+
+    if pdir == 1:
+        return ("no base big tail up", anchor_idx)
+    elif pdir == -1:
+        return ("no base big tail down", anchor_idx)
+
+    return None
+
+
+def identify_3candle_pattern(
+    df: pd.DataFrame,
+    idx1: int,
+    idx2: int,
+    idx3: int,
+    *,
+    length_threshold: float = 0.7,
+) -> tuple[str, int] | None:
+    """
+    Check 3-candle (star) base patterns.
+
+    Patterns: no base star, no base star 1st big, no base star 2nd big
+
+    Star pattern: maru/normal + pinbar + maru/normal with opposite direction
+    between candle 1 and candle 3.
+
+    Parameters
+    ----------
+    df : DataFrame
+        OHLC data with candle classification columns
+    idx1 : int
+        Index of the 1st candle (before anchor)
+    idx2 : int
+        Index of the 2nd candle (anchor/middle)
+    idx3 : int
+        Index of the 3rd candle (after anchor)
+    length_threshold : float
+        Threshold for determining 1st big vs 2nd big (default 0.7)
+
+    Returns
+    -------
+    tuple or None
+        (pattern_name, idx1) if pattern matches, None otherwise
+    """
+    if idx1 not in df.index or idx2 not in df.index or idx3 not in df.index:
+        return None
+
+    # Star conditions
+    dir1 = int(df.loc[idx1, "direction"])
+    dir3 = int(df.loc[idx3, "direction"])
+    opposite_dir = dir1 != dir3
+
+    ctype1 = str(df.loc[idx1, "candle_type"])
+    ctype2 = str(df.loc[idx2, "candle_type"])
+    ctype3 = str(df.loc[idx3, "candle_type"])
+
+    star0 = ctype1 in ("maru", "normal") and int(df.loc[idx1, "is_big_normal_as0"]) == 1
+    star1 = ctype2 == "pinbar"
+    star2 = ctype3 in ("maru", "normal") and int(df.loc[idx3, "is_big_normal_as2"]) == 1
+
+    if not (opposite_dir and star0 and star1 and star2):
+        return None
+
+    clen1 = float(df.loc[idx1, "candle_len"])
+    clen3 = float(df.loc[idx3, "candle_len"])
+
+    # Determine pattern variant
+    if clen1 < length_threshold * clen3:
+        return ("no base star 2nd big", idx1)
+    elif clen1 * length_threshold > clen3:
+        return ("no base star 1st big", idx1)
+    else:
+        return ("no base star", idx1)
+
+
+# -------------------------
+# Base Window Features (computed on-the-fly)
+# -------------------------
+
+def compute_base_window_features(
+    df: pd.DataFrame,
+    base_idx: int,
+    pattern_name: str,
+) -> dict:
+    """
+    Compute base window features on-the-fly based on pattern type and base_idx.
+
+    Parameters
+    ----------
+    df : DataFrame
+        OHLC data
+    base_idx : int
+        Index of the first candle in the pattern window
+    pattern_name : str
+        The identified pattern name
+
+    Returns
+    -------
+    dict
+        Contains: base_low, base_high, base_min_close_open, base_max_close_open
+        Some values may be NaN for patterns that use find_base_threshold instead.
+    """
+    # Determine window size based on pattern
+    if pattern_name in ("base", "base inside bar"):
+        # 1-candle window, uses find_base_threshold for inner
+        base_low = float(df.loc[base_idx, "l"])
+        base_high = float(df.loc[base_idx, "h"])
+        return {
+            "base_low": base_low,
+            "base_high": base_high,
+            "base_min_close_open": float("nan"),
+            "base_max_close_open": float("nan"),
+        }
+
+    elif pattern_name in ("no base big tail up", "no base big tail down"):
+        # 1-candle pinbar pattern
+        base_low = float(df.loc[base_idx, "l"])
+        base_high = float(df.loc[base_idx, "h"])
+        o = float(df.loc[base_idx, "o"])
+        c = float(df.loc[base_idx, "c"])
+        return {
+            "base_low": base_low,
+            "base_high": base_high,
+            "base_min_close_open": min(o, c),
+            "base_max_close_open": max(o, c),
+        }
+
+    elif pattern_name.startswith("no base star"):
+        # 3-candle star pattern: base_idx, base_idx+1, base_idx+2
+        idx1, idx2, idx3 = base_idx, base_idx + 1, base_idx + 2
+
+        l1 = float(df.loc[idx1, "l"])
+        l2 = float(df.loc[idx2, "l"])
+        l3 = float(df.loc[idx3, "l"])
+        h1 = float(df.loc[idx1, "h"])
+        h2 = float(df.loc[idx2, "h"])
+        h3 = float(df.loc[idx3, "h"])
+
+        # For star patterns, min/max close_open uses candles 1 and 3 only (not middle pinbar)
+        o1 = float(df.loc[idx1, "o"])
+        c1 = float(df.loc[idx1, "c"])
+        o3 = float(df.loc[idx3, "o"])
+        c3 = float(df.loc[idx3, "c"])
+
+        return {
+            "base_low": min(l1, l2, l3),
+            "base_high": max(h1, h2, h3),
+            "base_min_close_open": min(o1, c1, o3, c3),
+            "base_max_close_open": max(o1, c1, o3, c3),
+        }
+
+    else:
+        # 2-candle patterns (no base, no base 1st big, no base 2nd big, long tails)
+        idx1, idx2 = base_idx, base_idx + 1
+
+        l1 = float(df.loc[idx1, "l"])
+        l2 = float(df.loc[idx2, "l"])
+        h1 = float(df.loc[idx1, "h"])
+        h2 = float(df.loc[idx2, "h"])
+
+        o1 = float(df.loc[idx1, "o"])
+        c1 = float(df.loc[idx1, "c"])
+        o2 = float(df.loc[idx2, "o"])
+        c2 = float(df.loc[idx2, "c"])
+
+        return {
+            "base_low": min(l1, l2),
+            "base_high": max(h1, h2),
+            "base_min_close_open": min(o1, c1, o2, c2),
+            "base_max_close_open": max(o1, c1, o2, c2),
+        }
+
+
 
 # -------------------------
 # find_base_threshold (ported intent, fixed)
@@ -377,7 +468,7 @@ def find_pinbar_threshold(
 
 
 # -------------------------
-# zone_thresholds (ported mapping)
+# zone_thresholds (updated to compute features on-the-fly)
 # -------------------------
 
 def zone_thresholds(
@@ -391,11 +482,17 @@ def zone_thresholds(
     """
     Returns (outer, inner) bounds (your legacy meaning).
     We'll convert to (top/bottom) for charting when creating KLZone.
+
+    Now computes base window features on-the-fly instead of reading from df columns.
     """
     sd = int(struct_direction)
 
-    base_low = float(df.loc[base_idx, "base_low"])
-    base_high = float(df.loc[base_idx, "base_high"])
+    # Compute base window features on-the-fly
+    features = compute_base_window_features(df, base_idx, zone_pattern)
+    base_low = features["base_low"]
+    base_high = features["base_high"]
+    base_min_close_open = features["base_min_close_open"]
+    base_max_close_open = features["base_max_close_open"]
 
     if zone_pattern in ("no base big tail up", "no base big tail down"):
         inner = find_pinbar_threshold(df, base_idx, bos=bos, struct_direction=struct_direction)
@@ -403,6 +500,7 @@ def zone_thresholds(
             return (base_low, inner) if sd == 1 else (base_high, inner)
         else:
             return (base_high, inner) if sd == 1 else (base_low, inner)
+
     if zone_pattern in ["no base 2nd big", "no base star 2nd big"]:
         inner = float(df.loc[base_idx + 1, "mid_price"])
         if bos:
@@ -411,7 +509,12 @@ def zone_thresholds(
             return (base_high, inner) if sd == 1 else (base_low, inner)
 
     if zone_pattern in ["no base 1st big", "no base star 1st big"]:
-        inner = float(df.loc[base_idx + 2, "c"])
+        # For 2-candle "1st big", inner is close of 2nd candle (base_idx + 1)
+        # For 3-candle star "1st big", inner is close of 3rd candle (base_idx + 2)
+        if zone_pattern == "no base star 1st big":
+            inner = float(df.loc[base_idx + 2, "c"])
+        else:
+            inner = float(df.loc[base_idx + 1, "c"])
         if bos:
             return (base_low, inner) if sd == 1 else (base_high, inner)
         else:
@@ -427,26 +530,129 @@ def zone_thresholds(
     # Pinbar long-tail patterns
     if zone_pattern == "no base long tails up":
         # inner uses base_min_close_open
-        inner = float(df.loc[base_idx, "base_min_close_open"])
+        inner = base_min_close_open
         if bos:
             # legacy condition was "up pinbar and direction==+1" in bos branch
-            return (base_low, inner) if sd == 1 else (base_high, float(df.loc[base_idx, "base_max_close_open"]))
+            return (base_low, inner) if sd == 1 else (base_high, base_max_close_open)
         else:
             # legacy condition was "up pinbar and direction==-1" in non-bos branch
-            return (base_low, inner) if sd == -1 else (base_high, float(df.loc[base_idx, "base_max_close_open"]))
+            return (base_low, inner) if sd == -1 else (base_high, base_max_close_open)
 
     if zone_pattern == "no base long tails down":
-        inner = float(df.loc[base_idx, "base_max_close_open"])
+        inner = base_max_close_open
         if bos:
-            return (base_high, inner) if sd == -1 else (base_low, float(df.loc[base_idx, "base_min_close_open"]))
+            return (base_high, inner) if sd == -1 else (base_low, base_min_close_open)
         else:
-            return (base_high, inner) if sd == 1 else (base_low, float(df.loc[base_idx, "base_min_close_open"]))
+            return (base_high, inner) if sd == 1 else (base_low, base_min_close_open)
 
+    # Default fallback: "base", "base inside bar", or unknown patterns
     thr = float(find_base_threshold(df, base_idx, sd, bos=bos))
     if bos:
         return (base_low, thr) if sd == 1 else (base_high, thr)
     else:
         return (base_high, thr) if sd == 1 else (base_low, thr)
+
+
+# -------------------------
+# Pattern Identification Orchestration
+# -------------------------
+
+def identify_base_pattern(
+    df: pd.DataFrame,
+    anchor_idx: int,
+    struct_direction: int,
+    *,
+    bos: bool,
+    length_threshold: float = 0.7,
+) -> tuple[str, int]:
+    """
+    Orchestrate pattern identification for a BOS/CTS event.
+
+    Order of checks:
+    1. Inside bar pattern (new)
+    2. 2-candle patterns
+    3. 1-candle (pinbar) patterns
+    4. 3-candle (star) patterns
+    5. Default to "base"
+
+    Parameters
+    ----------
+    df : DataFrame
+        OHLC data with candle classification columns
+    anchor_idx : int
+        Index of the BOS/CTS candle
+    struct_direction : int
+        Structure direction (+1 bullish, -1 bearish)
+    bos : bool
+        True if BOS event, False if CTS event
+    length_threshold : float
+        Threshold for 1st big vs 2nd big patterns
+
+    Returns
+    -------
+    tuple
+        (pattern_name, base_idx)
+    """
+    sd = int(struct_direction)
+
+    # 1. Check inside bar pattern first
+    result = identify_inside_bar_pattern(df, anchor_idx)
+    if result is not None:
+        return result
+
+    # 2. Compute indices for 2-candle patterns based on BOS/CTS and direction
+    anchor_dir = int(df.loc[anchor_idx, "direction"])
+
+    if bos:
+        if anchor_dir == sd:
+            # BOS candle is 2nd, candle before is 1st
+            idx1, idx2 = anchor_idx - 1, anchor_idx
+        else:
+            # BOS candle is 1st, candle after is 2nd
+            idx1, idx2 = anchor_idx, anchor_idx + 1
+    else:  # CTS
+        if anchor_dir == sd:
+            # CTS candle is 1st, candle after is 2nd
+            idx1, idx2 = anchor_idx, anchor_idx + 1
+        else:
+            # CTS candle is 2nd, candle before is 1st
+            idx1, idx2 = anchor_idx - 1, anchor_idx
+
+    # Check 2-candle patterns
+    result = identify_2candle_pattern(df, idx1, idx2, length_threshold=length_threshold)
+    if result is not None:
+        return result
+
+    # 3. Check 1-candle (pinbar) pattern
+    result = identify_1candle_pattern(df, anchor_idx)
+    if result is not None:
+        return result
+
+    # 4. Check 3-candle (star) pattern with pre-conditions
+    # Candle positions: idx1 = anchor-1, idx2 = anchor, idx3 = anchor+1
+    star_idx1 = anchor_idx - 1
+    star_idx2 = anchor_idx
+    star_idx3 = anchor_idx + 1
+
+    # Pre-conditions
+    can_check_star = False
+    if star_idx1 in df.index and star_idx3 in df.index:
+        if bos:
+            # For BOS: candle 3 direction must == struct_direction
+            star_dir3 = int(df.loc[star_idx3, "direction"])
+            can_check_star = (star_dir3 == sd)
+        else:
+            # For CTS: candle 1 direction must == struct_direction
+            star_dir1 = int(df.loc[star_idx1, "direction"])
+            can_check_star = (star_dir1 == sd)
+
+    if can_check_star:
+        result = identify_3candle_pattern(df, star_idx1, star_idx2, star_idx3, length_threshold=length_threshold)
+        if result is not None:
+            return result
+
+    # 5. Default to "base"
+    return ("base", anchor_idx)
 
 
 # -------------------------
@@ -485,14 +691,12 @@ def derive_kl_zones_v1(
 ) -> List[KLZone]:
     """
     Event-driven KL Zones v1:
-    - Precompute base features
-    - On CTS_CONFIRMED / BOS_CONFIRMED, build a zone using legacy base pattern + thresholds logic
+    - On CTS_CONFIRMED / BOS_CONFIRMED, identify base pattern (structure-aware)
+    - Build zone using identified pattern + thresholds logic
     - Maintain 1 active buy + 1 active sell (most recent)
     - Stamp cycle_id from df["cts_cycle_id"] if present
     """
     dfx = df
-    if "base_pattern" not in dfx.columns:
-        dfx = compute_base_features(dfx, length_threshold=length_threshold)
 
     zones: List[KLZone] = []
     active_buy_idx: Optional[int] = None
@@ -619,13 +823,14 @@ def derive_kl_zones_v1(
         confirmed_idx = int((ev.meta or {}).get("confirmed_at", source_event_idx))
         bos = (ev.type == "BOS_CONFIRMED")
 
-        # ✅ base-resolution anchor differs by event type
+        # Anchor for pattern identification differs by event type
         if bos:
-            base_source_idx = source_event_idx
+            anchor_idx = source_event_idx
         else:
-            base_source_idx = int((ev.meta or {}).get("cts_anchor_idx", source_event_idx))
+            anchor_idx = int((ev.meta or {}).get("cts_anchor_idx", source_event_idx))
 
-        base_idx, pat = resolve_base_idx_and_pattern(dfx, base_source_idx, sd, bos=bos)
+        # Identify base pattern (structure-aware)
+        pat, base_idx = identify_base_pattern(dfx, anchor_idx, sd, bos=bos, length_threshold=length_threshold)
         outer, inner = zone_thresholds(dfx, base_idx, sd, pat, bos=bos)
 
         # Resolve structure_id (authoritative = event meta, fallback = df)
@@ -681,7 +886,7 @@ def derive_kl_zones_v1(
                 "source_event_idx": source_event_idx,    # BOS/CTS level candle
 
                 # Zone base
-                "base_source_idx": base_source_idx,
+                "anchor_idx": anchor_idx,
                 "base_idx": base_idx,
                 "base_pattern": pat,
                 "outer": float(outer),
