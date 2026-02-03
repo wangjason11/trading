@@ -26,7 +26,7 @@ Let's update our documentation & memory where appropriate so we are more knowled
    - `engine_v2/charting/CHARTING_SPEC.md` - Chart overlay rules, style registry
    - `engine_v2/ARCHITECTURE.md` - System design, event contracts
    - `engine_v2/PROJECT_PRINCIPLES.md` - Non-negotiable guardrails
-   - `engine_v2/charting/WORKFLOWS.md` - Development and debugging workflows
+   - `engine_v2/WORKFLOWS.md` - Development and debugging workflows
 
 3. **Check for duplications, contradictions, and outdated info:**
    - Read the target documentation file(s)

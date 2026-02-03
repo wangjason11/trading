@@ -27,7 +27,7 @@ engine_v2/structure/MARKET_STRUCTURE_SPEC.md # CTS/BOS/Range/Reversal semantics
 engine_v2/zones/KL_ZONES_SPEC.md             # Zone construction and behavior
 engine_v2/zones/POI_ZONES_SPEC.md            # POI/Fib zone specification
 engine_v2/charting/CHARTING_SPEC.md          # Chart overlay rules
-engine_v2/charting/WORKFLOWS.md              # Development workflows
+engine_v2/WORKFLOWS.md                       # Development workflows
 ```
 
 ### 2. Review Codebase Structure
