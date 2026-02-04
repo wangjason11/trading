@@ -12,20 +12,20 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 
 ## Current Status
 
-**Week 7 Part 2 — Volume Patterns & Indicators (Current)**
+**Week 7 Complete — Ready for Week 8**
 
-| Week 7 Part 1 (Complete) | Week 7 Part 2 (Current) |
+| Week 7 Part 1 (Complete) | Week 7 Part 2 (Complete) |
 |-----------|-------------|
-| POI Zones (Fib + IC identification) | Volume Patterns |
-| Imbalance Pattern (FVG detection + fill checking) | Indicators |
-| Fibonacci Levels (FibTracker lifecycle) | |
-| IC Candidate/Variant selection (V30/V60/V90) | |
+| POI Zones (Fib + IC identification) | Volume features (vol_dir, vol_ema20, vol_spike_ratio, is_vol_spike) |
+| Imbalance Pattern (FVG detection + fill checking) | Volume charting (bars overlay, EMA line, spike markers) |
+| Fibonacci Levels (FibTracker lifecycle) | Dynamic y-axis auto-scaling on zoom |
+| IC Candidate/Variant selection (V30/V60/V90) | Unified chart border (price + volume) |
 | POI Zone lifecycle (active/inactive/end_time) | |
 | POI Zone charting (gold fill, dark brown confirm line) | |
 | Candle classification fixes (special_maru direction + precedence) | |
 | Pattern3 fix (allow maru or normal for c0) | |
 
-**Note:** Original syllabus had Zones in Week 7, but we pulled it forward to Week 6. Indicators (original Week 6) deferred to later.
+**Note:** Original syllabus had Zones in Week 7, but we pulled it forward to Week 6. Volume indicators added in Week 7 Part 2.
 
 **Note:** On any given week, we may deviate slightly from the original 10-week plan. We may also return to prior week topics for additional debugging and checking how they interact with new elements we are building.
 

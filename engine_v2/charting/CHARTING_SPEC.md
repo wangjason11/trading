@@ -32,6 +32,7 @@ All visual formatting (colors, opacities, line widths, marker sizes) lives in `s
 | POI Zones | `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line` | POI zone fills |
 | Fibonacci | `fib.line`, `fib.label` | Fib retracement lines |
 | Imbalance | `imbalance.bullish`, `imbalance.bearish` | Imbalance candle colors |
+| Volume | `volume.bar.up/down/neutral`, `volume.ema_line`, `volume.spike_marker` | Volume bars, EMA, spike markers |
 | Hover lines | `hover_line.range` | Invisible hitbox lines |
 | Chart layout | `chart.layout`, `chart.axis` | Background, grid, axis styling |
 
@@ -90,6 +91,16 @@ To change any visual element:
 - Horizontal dashed lines at Fib retracement levels
 - Style keys: `fib.line`, `fib.label`
 
+### 9) Volume overlay (Week 7)
+- Volume bars at bottom 15% of chart (overlay approach, not subplot)
+- Bars colored by `vol_dir`: green (+1), red (-1), gray (0)
+- Volume EMA(20) blue line
+- Orange diamond markers on candles with volume spikes (`is_vol_spike`)
+- Dynamic y-axis auto-scaling on zoom (JavaScript callback)
+- Unified border around price + volume as single chart
+- Hover data: idx, time, volume/EMA values
+- Style keys: `volume.bar.up`, `volume.bar.down`, `volume.bar.neutral`, `volume.ema_line`, `volume.spike_marker`
+
 ---
 
 ## Config toggles
@@ -103,6 +114,8 @@ Chart defaults define toggles for:
 - `zones`: KL, OB, POI
 - `fib`: lines
 - `imbalance`: highlight
+- `volume`: bars, ema_line, spike_marker
+- `range_candle_marker`: False (disabled to avoid overlap with volume spike markers)
 
 ---
 
