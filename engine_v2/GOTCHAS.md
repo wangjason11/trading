@@ -216,3 +216,34 @@ else:
 ```
 
 **Symptom if wrong:** Zones extend to chart end instead of stopping at reversal/next CTS, or zones show as "active" with full opacity when they should be faded.
+
+---
+
+## Star Pattern Window: Centered on Anchor, Not Forward-Looking
+
+**Problem:** The old `compute_base_features` used a **forward-looking** window for star patterns, which was incorrect.
+
+**Old (wrong) logic:**
+```python
+# Forward-looking: anchor is FIRST candle of 3-candle window
+star0 = row[anchor]        # maru/normal
+star1 = row[anchor + 1]    # pinbar (middle)
+star2 = row[anchor + 2]    # maru/normal
+```
+
+**Correct logic:**
+```python
+# Centered: anchor is MIDDLE candle (must be pinbar)
+idx1 = anchor - 1    # maru/normal
+idx2 = anchor        # pinbar (the BOS/CTS candle)
+idx3 = anchor + 1    # maru/normal
+```
+
+**Why forward-looking was wrong:**
+- The star pattern should center on the BOS/CTS anchor candle
+- In a star pattern, the anchor (confirmation candle) IS the pinbar
+- Forward-looking incorrectly made the anchor the first maru/normal
+
+**Symptom:** Zones incorrectly identified as "no base star 2nd big" when the anchor wasn't actually part of a valid star pattern. Example: anchor=710 (normal) was matched with 711 (pinbar) + 712 (normal), but the correct check should be 709 + 710 + 711 which fails because 710 isn't a pinbar.
+
+**Resolution:** Base patterns are now identified on-demand with structure-aware context, using centered windows for star patterns.

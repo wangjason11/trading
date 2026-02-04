@@ -219,4 +219,33 @@ STYLE = {
         "recent_inactive": 0.5,  # Inactive elements from most recent structure
         "prior_inactive": 0.2,   # Inactive elements from prior structures
     },
+
+    # -----------------------------
+    # Week 7: Volume Features
+    # -----------------------------
+    # Volume bars (colored by vol_dir: up=green, down=red, neutral=gray)
+    "volume.bar.up": {
+        "color": "rgba(0, 180, 0, 0.7)",  # Green for vol_dir = 1
+    },
+    "volume.bar.down": {
+        "color": "rgba(220, 0, 0, 0.7)",  # Red for vol_dir = -1
+    },
+    "volume.bar.neutral": {
+        "color": "rgba(128, 128, 128, 0.7)",  # Gray for vol_dir = 0
+    },
+
+    # Volume EMA(20) line
+    "volume.ema_line": {
+        "line": {"width": 1.5, "color": "rgba(0, 100, 255, 0.8)"},  # Blue
+    },
+
+    # Volume spike marker (on candle chart)
+    "volume.spike_marker": {
+        "marker": {
+            "size": 8,
+            "symbol": "diamond",
+            "color": "orange",
+            "opacity": 0.9,
+        },
+    },
 }

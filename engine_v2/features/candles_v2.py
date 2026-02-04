@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME, Direction
+from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME, COL_V, Direction
 from engine_v2.features.candle_params import CandleParams
 
 
@@ -215,6 +215,57 @@ def classify_big_flags(
     return out
 
 
+def compute_volume_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Adds volume-based features:
+      - vol_dir: +1 if close > prev_close, -1 if close < prev_close, 0 otherwise
+        (Note: different from candle 'direction' which compares open vs close of same candle)
+      - vol_ema20: EMA(volume, 20)
+      - vol_spike_ratio: round(volume / vol_ema20, 2)
+      - is_vol_spike: True if vol_spike_ratio >= 1.2
+    """
+    out = df.copy()
+
+    # Check if volume column exists
+    if COL_V not in out.columns:
+        # Volume not available - add placeholder columns
+        out["vol_dir"] = 0
+        out["vol_ema20"] = float("nan")
+        out["vol_spike_ratio"] = float("nan")
+        out["is_vol_spike"] = False
+        return out
+
+    c = out[COL_C].astype(float)
+    volume = out[COL_V].astype(float)
+
+    # Volume direction: compare current close to previous close
+    prev_close = c.shift(1)
+    out["vol_dir"] = np.where(
+        c > prev_close, 1,
+        np.where(c < prev_close, -1, 0)
+    ).astype(int)
+
+    # Volume EMA(20)
+    out["vol_ema20"] = volume.ewm(span=20, adjust=False).mean()
+
+    # Volume spike ratio: round(volume / vol_ema20, 2)
+    vol_ema = out["vol_ema20"].astype(float)
+    out["vol_spike_ratio"] = np.round(
+        np.divide(
+            volume,
+            vol_ema,
+            out=np.zeros_like(volume, dtype=float),
+            where=vol_ema > EPS,
+        ),
+        2
+    )
+
+    # Volume spike indicator: ratio >= 1.2
+    out["is_vol_spike"] = out["vol_spike_ratio"] >= 1.2
+
+    return out
+
+
 def compute_candle_features(
     df: pd.DataFrame,
     params: CandleParams,
@@ -222,9 +273,10 @@ def compute_candle_features(
     anchor_shifts: tuple[int, ...] = (0, 1, 2),
 ) -> pd.DataFrame:
     """
-    Convenience: metrics -> primary classification -> big flags.
+    Convenience: metrics -> primary classification -> big flags -> volume features.
     """
     out = compute_candle_metrics(df)
     out = classify_candles(out, params)
     out = classify_big_flags(out, params, anchor_shifts=anchor_shifts)
+    out = compute_volume_features(out)
     return out

@@ -6,8 +6,9 @@ from typing import Optional
 
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME
+from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME, COL_V
 from engine_v2.charting.style_registry import STYLE
 from engine_v2.common.types import PatternStatus
 
@@ -141,6 +142,12 @@ def export_chart_plotly(
         "imbalance": {
             "highlight": True,  # Week 7: Highlight imbalance candles with different colors
         },
+        "volume": {
+            "bars": True,       # Week 7: Volume bars in subplot
+            "ema_line": True,   # Week 7: Volume EMA(20) line
+            "spike_marker": True,  # Week 7: Orange diamond on candles with volume spike
+        },
+        "range_candle_marker": False,  # Week 4: Range candle markers (orange dots) - off to avoid overlap with volume spike
     }
 
 
@@ -152,6 +159,8 @@ def export_chart_plotly(
     struct_cfg = cfg.get("structure", {}) or {}
     zone_cfg = cfg.get("zones", {}) or {}
     imbalance_cfg = cfg.get("imbalance", {}) or {}
+    volume_cfg = cfg.get("volume", {}) or {}
+    range_candle_marker_enabled = cfg.get("range_candle_marker", False)
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -174,6 +183,8 @@ def export_chart_plotly(
     # Ensure datetime
     dfx[COL_TIME] = pd.to_datetime(dfx[COL_TIME], utc=True)
 
+    # Check if volume is enabled (overlay approach - volume bars at bottom of main chart)
+    volume_enabled = volume_cfg.get("bars", False) and COL_V in dfx.columns
     fig = go.Figure()
 
     # Offset to keep markers away from candle wicks
@@ -207,6 +218,9 @@ def export_chart_plotly(
     is_big_maru_as0 = _col_or_default("is_big_maru_as0", False)
     big_ratio_as0 = _col_or_default("big_ratio_as0", 0.0).astype(float)
 
+    # Volume spike ratio for hover
+    vol_spike_ratio = _col_or_default("vol_spike_ratio", float("nan")).astype(float)
+
     customdata = list(zip(
         candle_idx,
         dfx["mid_price"].astype(float),
@@ -226,13 +240,15 @@ def export_chart_plotly(
         is_big_normal_as0,
         is_big_maru_as0,
         big_ratio_as0,
+        vol_spike_ratio,  # index 18
+        dfx[COL_TIME].astype(str),  # index 19
     ))
 
 
     # Standard hover template for all candlesticks
     candle_hover = (
         "idx=%{customdata[0]}<br>"
-        "time=%{x}<br>"
+        "time=%{customdata[19]}<br>"
         "O=%{open}<br>"
         "H=%{high}<br>"
         "L=%{low}<br>"
@@ -251,7 +267,8 @@ def export_chart_plotly(
         "bos_th=%{customdata[11]:.5f}<br>"
         "rv_watch=%{customdata[12]}<br>"
         "rv_bos_frozen=%{customdata[13]:.5f}<br>"
-        "rv_extreme=%{customdata[14]:.5f}"
+        "rv_extreme=%{customdata[14]:.5f}<br>"
+        "vol_spike_ratio=%{customdata[18]:.2f}"
         "<extra></extra>"
     )
 
@@ -473,8 +490,9 @@ def export_chart_plotly(
 
     # -------------------------------------------------
     # Week 4 Day 3: Range markers (orange dots, mid-candle)
+    # Disabled by default to avoid overlap with volume spike markers
     # -------------------------------------------------
-    if "is_range" in dfx.columns and dfx["is_range"].any():
+    if range_candle_marker_enabled and "is_range" in dfx.columns and dfx["is_range"].any():
         range_candles = dfx[dfx["is_range"] == 1].copy()
 
         # place in middle of the candle (mid_price if present, otherwise (H+L)/2)
@@ -2040,14 +2058,137 @@ def export_chart_plotly(
     if prev_bos_lines:
         print(f"[chart][prev_bos] rendered {len(prev_bos_lines)} prev BOS lines")
 
+    # -------------------------------------------------
+    # Week 7: Volume Spike Markers (orange diamond on candles)
+    # -------------------------------------------------
+    if volume_cfg.get("spike_marker", False) and "is_vol_spike" in dfx.columns:
+        spike_candles = dfx[dfx["is_vol_spike"] == True].copy()
+        if len(spike_candles) > 0:
+            # Place marker at mid-price of the candle
+            if "mid_price" in spike_candles.columns:
+                spike_y = spike_candles["mid_price"]
+            else:
+                spike_y = (spike_candles[COL_H] + spike_candles[COL_L]) / 2.0
+
+            spike_style = _style("volume.spike_marker").get("marker", {})
+            fig.add_trace(go.Scatter(
+                x=spike_candles[COL_TIME],
+                y=spike_y,
+                mode="markers",
+                name="volume:spike",
+                marker=spike_style,
+                hoverinfo="skip",  # No hover for spike markers
+            ))
+            print(f"[chart][volume] rendered {len(spike_candles)} volume spike markers")
+
+    # -------------------------------------------------
+    # Week 7: Volume Overlay (bars + EMA line on secondary y-axis)
+    # -------------------------------------------------
+    if volume_enabled:
+        volume = dfx[COL_V].astype(float)
+        vol_dir = _col_or_default("vol_dir", 0).astype(int)
+        vol_ema20 = _col_or_default("vol_ema20", float("nan")).astype(float)
+
+        # Volume bars - colored by vol_dir
+        up_style = _style("volume.bar.up")
+        down_style = _style("volume.bar.down")
+        neutral_style = _style("volume.bar.neutral")
+
+        # Create color array based on vol_dir
+        colors = []
+        for v_dir in vol_dir:
+            if v_dir == 1:
+                colors.append(up_style.get("color", "rgba(0, 180, 0, 0.7)"))
+            elif v_dir == -1:
+                colors.append(down_style.get("color", "rgba(220, 0, 0, 0.7)"))
+            else:
+                colors.append(neutral_style.get("color", "rgba(128, 128, 128, 0.7)"))
+
+        # Add volume bars on secondary y-axis (overlay approach)
+        fig.add_trace(
+            go.Bar(
+                x=dfx[COL_TIME],
+                y=volume,
+                name="Volume",
+                marker_color=colors,
+                showlegend=False,
+                yaxis="y2",
+                customdata=list(zip(dfx.index, dfx[COL_TIME].astype(str))),
+                hovertemplate="idx=%{customdata[0]}<br>time=%{customdata[1]}<br>Volume: %{y:,.0f}<extra></extra>",
+            )
+        )
+
+        # Add EMA line if enabled (also on secondary y-axis)
+        if volume_cfg.get("ema_line", False):
+            ema_style = _style("volume.ema_line").get("line", {"width": 1.5, "color": "rgba(0, 100, 255, 0.8)"})
+            fig.add_trace(
+                go.Scatter(
+                    x=dfx[COL_TIME],
+                    y=vol_ema20,
+                    mode="lines",
+                    name="Vol EMA(20)",
+                    line=ema_style,
+                    showlegend=False,
+                    yaxis="y2",
+                    customdata=list(zip(dfx.index, dfx[COL_TIME].astype(str))),
+                    hovertemplate="idx=%{customdata[0]}<br>time=%{customdata[1]}<br>EMA(20): %{y:,.0f}<extra></extra>",
+                )
+            )
+
+        print(f"[chart][volume] rendered volume bars and EMA line")
+
+    # -------------------------------------------------
+    # Layout configuration
+    # -------------------------------------------------
+    layout_height = 800
+
     fig.update_layout(
         title=title,
-        xaxis_title="Time (UTC)",
+        xaxis_title="Time (UTC)" if not volume_enabled else None,  # Set below volume when enabled
         yaxis_title="Price",
         xaxis_rangeslider_visible=False,
         legend_title="Overlays",
-        height=800,
+        height=layout_height,
     )
+
+    # Volume overlay y-axis configuration (secondary y-axis at bottom)
+    if volume_enabled:
+        # Price axis in top 80%, volume axis in bottom 20% (no gap - unified chart look)
+        fig.update_layout(
+            xaxis=dict(
+                anchor="y2",  # Anchor x-axis to volume (bottom)
+                side="bottom",
+                title_text="Time (UTC)",
+                showline=False,  # Hide default x-axis line (we'll draw our own border)
+            ),
+            yaxis=dict(
+                domain=[0.15, 1.0],  # Price chart in top 85%
+                showline=False,  # Hide default lines (we'll draw unified border)
+            ),
+            yaxis2=dict(
+                domain=[0, 0.15],  # Volume in bottom 15% (connected to price)
+                showgrid=False,
+                zeroline=False,
+                showticklabels=True,
+                side="right",  # Volume labels on right side
+                tickformat=",",  # Comma separator for thousands
+                showline=False,  # Hide default lines
+            ),
+        )
+        # Draw unified border around the entire chart (price + volume as one)
+        border_color = "rgba(0,0,0,0.4)"
+        # Top border
+        fig.add_shape(type="line", xref="paper", yref="paper",
+                      x0=0, x1=1, y0=1, y1=1, line=dict(color=border_color, width=1))
+        # Bottom border
+        fig.add_shape(type="line", xref="paper", yref="paper",
+                      x0=0, x1=1, y0=0, y1=0, line=dict(color=border_color, width=1))
+        # Left border
+        fig.add_shape(type="line", xref="paper", yref="paper",
+                      x0=0, x1=0, y0=0, y1=1, line=dict(color=border_color, width=1))
+        # Right border
+        fig.add_shape(type="line", xref="paper", yref="paper",
+                      x0=1, x1=1, y0=0, y1=1, line=dict(color=border_color, width=1))
 
     # --- Global chart styling (background + grid) ---
     fig.update_layout(**_style("chart.layout"))
@@ -2118,6 +2259,73 @@ def export_chart_plotly(
     print("DEBUG shapes:", len(fig.layout.shapes) if fig.layout.shapes else 0)
 
     fig.write_html(str(html_path), include_plotlyjs="cdn")
+
+    # Inject JavaScript for dynamic volume y-axis rescaling on zoom
+    if volume_enabled:
+        volume_autoscale_js = """
+<script>
+// Volume y-axis auto-rescale on zoom
+(function initVolumeAutoscale() {
+    var gd = document.querySelector('.plotly-graph-div');
+
+    // If plot not ready yet, retry (use _fullData which has decoded values)
+    if (!gd || !gd._fullData) {
+        setTimeout(initVolumeAutoscale, 200);
+        return;
+    }
+
+    // Find volume trace (Bar trace on y2) - use _fullData for actual values
+    var volumeTraceIdx = -1;
+    for (var i = 0; i < gd._fullData.length; i++) {
+        if (gd._fullData[i].type === 'bar' && gd._fullData[i].yaxis === 'y2') {
+            volumeTraceIdx = i;
+            break;
+        }
+    }
+    if (volumeTraceIdx === -1) return;
+
+    // _fullData has decoded numeric arrays
+    var volumeX = gd._fullData[volumeTraceIdx].x;
+    var volumeY = gd._fullData[volumeTraceIdx].y;
+
+    function rescaleVolumeY() {
+        var xRange = gd.layout.xaxis.range;
+        if (!xRange) return;
+
+        var x0 = new Date(xRange[0]).getTime();
+        var x1 = new Date(xRange[1]).getTime();
+
+        // Find max volume in visible range
+        var maxVol = 0;
+        for (var i = 0; i < volumeX.length; i++) {
+            var t = new Date(volumeX[i]).getTime();
+            if (t >= x0 && t <= x1) {
+                if (volumeY[i] > maxVol) maxVol = volumeY[i];
+            }
+        }
+
+        if (maxVol > 0) {
+            Plotly.relayout(gd, {'yaxis2.range': [0, maxVol * 1.1]});
+        }
+    }
+
+    gd.on('plotly_relayout', function(eventData) {
+        // Trigger on any x-axis change (zoom, pan, autoscale)
+        if (eventData['xaxis.range[0]'] !== undefined ||
+            eventData['xaxis.range'] !== undefined ||
+            eventData['xaxis.autorange'] !== undefined) {
+            setTimeout(rescaleVolumeY, 100);
+        }
+    });
+
+    // Initial rescale
+    rescaleVolumeY();
+})();
+</script>
+"""
+        # Append JavaScript to HTML file
+        with open(html_path, 'a') as f:
+            f.write(volume_autoscale_js)
     # PNG export requires kaleido
     fig.write_image(str(png_path), scale=2)
 
