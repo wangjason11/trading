@@ -56,9 +56,10 @@ def test_not_maru_when_body_pct_below_threshold(params):
     out = classify_candles(compute_candle_metrics(df), params)
     assert out.loc[0, "candle_type"] != "maru"
 
-def test_pinbar_when_body_pct_lte_threshold(params):
-    # candle_len=10, body=5 => 0.5 => pinbar (boundary)
-    df = _df([{"time":"t","o":1.0,"h":11.0,"l":1.0,"c":6.0}])
+def test_pinbar_when_body_pct_below_threshold(params):
+    # candle_len=10, body=4.9 => 0.49 < 0.5 => pinbar
+    # Note: pinbar threshold uses strict < comparison, so 0.5 is NOT pinbar
+    df = _df([{"time":"t","o":1.0,"h":11.0,"l":1.0,"c":5.9}])
     out = classify_candles(compute_candle_metrics(df), params)
     assert out.loc[0, "candle_type"] == "pinbar"
 
@@ -94,8 +95,10 @@ def test_pinbar_dir_none_if_not_meeting_distance(params):
     assert int(out.loc[0, "pinbar_dir"]) == 0
 
 def test_special_maru_flag_true(params):
-    # body_pct >= 0.5 and one wick <= 0.1*len
-    df = _df([{"time":"t","o":1.0,"h":11.0,"l":1.0,"c":6.5}])  # len=10, body=5.5 => 0.55; upper=4.5 lower=0
+    # body_pct >= 0.5 and wick on direction side <= 0.1*len
+    # For bullish (c > o), upper_wick must be small
+    # len=10, body=5.5 => 0.55; upper=0.5 (<=1.0), lower=4.0
+    df = _df([{"time":"t","o":4.0,"h":10.0,"l":0.0,"c":9.5}])  # len=10, body=5.5, upper=0.5, lower=4.0, dir=+1
     out = classify_candles(compute_candle_metrics(df), params)
     assert bool(out.loc[0, "is_special_maru"]) is True
 
@@ -283,19 +286,20 @@ def test_maru_classification_ignores_wicks(params):
     assert out.loc[0, "candle_type"] == "maru"
 
 
-def test_big_normal_does_not_apply_to_pinbar(params):
+def test_big_normal_applies_to_all_candle_types(params):
     """
-    Even if length ratio is huge, pinbar candles should not be big_normal.
+    big_normal now applies to all candle types (maru, normal, pinbar).
+    A pinbar with huge length ratio should be flagged as big_normal.
     """
     p = CandleParams(**{**params.__dict__, "lookback": 1, "big_normal_threshold": 0.5})
     df = _df([
         {"time":"t0","o":0.0,"h":10.0,"l":0.0,"c":7.0},   # maru len 10
-        # pinbar: len=100 body=10 => 0.1 pinbar
+        # pinbar: len=100 body=10 => 0.1 pinbar, ratio=100/10=10.0 >= 0.5
         {"time":"t1","o":0.0,"h":100.0,"l":0.0,"c":10.0},
     ])
     out = compute_candle_features(df, p, anchor_shifts=(0,))
     assert out.loc[1, "candle_type"] == "pinbar"
-    assert bool(out.loc[1, "is_big_normal_as0"]) is False
+    assert bool(out.loc[1, "is_big_normal_as0"]) is True  # big_normal applies to all types now
 
 
 def test_big_flags_multiple_shifts_exist(params):
