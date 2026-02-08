@@ -120,22 +120,22 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
                 ms_probe.debug = True
                 df_probe, probe_events, probe_levels = ms_probe.run()
 
-                # Check for pullback confirmed in probe (CTS_CONFIRMED event)
+                # Check for CTS established in probe (CTS_ESTABLISHED event)
                 probe_cts_events = [
                     ev for ev in probe_events
-                    if ev.type == "CTS_CONFIRMED"
+                    if ev.type == "CTS_ESTABLISHED"
                     and ev.meta.get("structure_id") == next_structure_id
                     and ev.idx <= reversal_confirmed_idx
                 ]
 
                 if probe_cts_events:
-                    # Get pullback confirmed idx from the first CTS_CONFIRMED in probe
-                    pullback_confirmed_idx = int(probe_cts_events[0].idx)
+                    # Get CTS established idx from the first CTS_ESTABLISHED in probe
+                    cts_established_idx = int(probe_cts_events[0].idx)
 
                     # Evaluate Exception 2: find candle closest to outer bound
                     exception_2_idx = _find_closest_candle_to_outer(
                         df_probe,
-                        pullback_confirmed_idx,
+                        cts_established_idx,
                         reversal_confirmed_idx,
                         outer,
                         inner,
