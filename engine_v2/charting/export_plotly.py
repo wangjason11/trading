@@ -135,6 +135,7 @@ def export_chart_plotly(
             "KL": False,
             "OB": False,
             "POI": False,  # Week 7: POI zones (Fib + IC)
+            "wave_candles": True,  # Week 8: Wave candle vertical lines
         },
         "fib": {
             "lines": True,  # Week 7: Fibonacci level lines (from FibTracker)
@@ -1697,6 +1698,92 @@ def export_chart_plotly(
                         customdata=hover_customdata,
                     )
                 )
+
+    # -------------------------------------------------
+    # Week 8: Wave Candle vertical lines
+    # Full-height lines at wave candle positions, colored by candle direction
+    # Opacity follows parent KL zone's 3-tier multiplier
+    # -------------------------------------------------
+    wave_candles = dfx.attrs.get("wave_candles", [])
+    if zone_cfg.get("wave_candles", True) and wave_candles and zones:
+        # Build zone lookup: (sid, cycle_id, source_kind) -> zone
+        zone_lookup = {}
+        for z in zones:
+            zk = (
+                int(z.meta.get("structure_id", 0)),
+                int(z.meta.get("cycle_id", 0)),
+                str(z.source_kind),
+            )
+            zone_lookup[zk] = z
+
+        # Reuse selected_sids / most_recent_sid from KL zones section if available
+        # (they are defined in the KL block above when zone_cfg["KL"] is True)
+        # If KL was off, compute them fresh from wave_candle structure_ids
+        if not zone_cfg.get("KL", False):
+            wc_sids = sorted(set(wc.structure_id for wc in wave_candles), reverse=True)
+            num_structures = int(zone_cfg.get("num_structures", 1))
+            selected_sids = set(wc_sids[:num_structures])
+            most_recent_sid = wc_sids[0] if wc_sids else 0
+
+        wc_rendered = 0
+        for wc in wave_candles:
+            if wc.structure_id not in selected_sids:
+                continue
+
+            # Look up parent zone for opacity tier
+            zk = (wc.structure_id, wc.cycle_id, wc.source_kind)
+            parent_zone = zone_lookup.get(zk)
+
+            if parent_zone is not None:
+                z_active = bool(parent_zone.meta.get("active", False)) and (parent_zone.end_time is None)
+                zone_sid = int(parent_zone.meta.get("structure_id", 0))
+            else:
+                z_active = False
+                zone_sid = wc.structure_id
+
+            # 3-tier opacity multiplier (same logic as KL zones)
+            if z_active:
+                opacity_mult = _opacity_tier("active")
+            elif zone_sid == most_recent_sid:
+                opacity_mult = _opacity_tier("recent_inactive")
+            else:
+                opacity_mult = _opacity_tier("prior_inactive")
+
+            # Render each non-None wave candle idx
+            for idx in (wc.last_wave_candle_idx, wc.first_wave_candle_idx):
+                if idx is None or idx not in dfx.index:
+                    continue
+
+                candle_dir = int(dfx.loc[idx, "direction"])
+                if candle_dir == 0:
+                    continue
+
+                # Pick style based on candle direction
+                style_key = "wave_candle.bullish" if candle_dir == 1 else "wave_candle.bearish"
+                wc_style = _style(style_key)
+                line_info = wc_style.get("line", {})
+                color_rgb = line_info.get("color_rgb", "128, 128, 128")
+                base_opacity = float(wc_style.get("opacity", 0.8))
+                line_width = int(line_info.get("width", 1))
+
+                final_color = f"rgba({color_rgb}, {base_opacity * opacity_mult})"
+                wc_time = pd.to_datetime(dfx.loc[idx, COL_TIME], utc=True)
+
+                fig.add_shape(
+                    type="line",
+                    xref="x",
+                    yref="paper",
+                    x0=wc_time,
+                    x1=wc_time,
+                    y0=0,
+                    y1=1,
+                    line=dict(color=final_color, width=line_width),
+                    layer="below",
+                )
+                wc_rendered += 1
+
+        if wc_rendered:
+            print(f"[chart][wave_candles] rendered {wc_rendered} vertical lines")
 
     # -------------------------------------------------
     # Week 7: POI Zones overlays (rectangles + confirm line)

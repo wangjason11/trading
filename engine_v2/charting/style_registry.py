@@ -242,10 +242,22 @@ STYLE = {
     # Volume spike marker (on candle chart)
     "volume.spike_marker": {
         "marker": {
-            "size": 8,
+            "size": 4,
             "symbol": "diamond",
             "color": "orange",
             "opacity": 0.9,
         },
+    },
+
+    # -----------------------------
+    # Week 8: Wave candle vertical lines
+    # -----------------------------
+    "wave_candle.bullish": {
+        "line": {"width": 1, "color_rgb": "0, 180, 0"},
+        "opacity": 0.8,
+    },
+    "wave_candle.bearish": {
+        "line": {"width": 1, "color_rgb": "220, 0, 0"},
+        "opacity": 0.8,
     },
 }

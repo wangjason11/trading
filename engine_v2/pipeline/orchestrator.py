@@ -16,6 +16,9 @@ from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 from engine_v2.zones.poi_zones import derive_poi_zones, POIConfig
 from engine_v2.patterns.imbalance import compute_imbalance
 
+# Week 8: Wave candle identification
+from engine_v2.zones.wave_candles import identify_wave_candles, WaveCandleResult
+
 # Week 7: Fib tracking
 from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig
 
@@ -86,6 +89,34 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
         print("[kl_zones] active sell:", sum(1 for z in kl_zones if z.side=="sell" and z.meta.get("active")))
 
     meta["kl_zones"] = kl_zones
+
+    # 5b) Wave candle identification (Week 8) - find wave boundary candles per zone
+    wave_candle_results: List[WaveCandleResult] = []
+    for zone in kl_zones:
+        z_sid = zone.meta.get("structure_id")
+        z_cycle = zone.meta.get("cycle_id")
+        z_sd = zone.meta.get("struct_direction", s_res.struct_direction)
+        z_anchor = zone.meta.get("anchor_idx")
+
+        if z_sid is None or z_cycle is None or z_anchor is None:
+            continue
+
+        result = identify_wave_candles(
+            anchor_idx=z_anchor,
+            anchor_type=zone.source_kind,
+            zone=zone,
+            events=s_res.events,
+            structure_id=z_sid,
+            struct_direction=z_sd,
+            df=s_res.df,
+        )
+        if result is not None:
+            wave_candle_results.append(result)
+
+    meta["wave_candles"] = wave_candle_results
+    wc_with_last = sum(1 for wc in wave_candle_results if wc.last_wave_candle_idx is not None)
+    wc_with_first = sum(1 for wc in wave_candle_results if wc.first_wave_candle_idx is not None)
+    print(f"[wave_candles] total={len(wave_candle_results)}, with_last={wc_with_last}, with_first={wc_with_first}")
 
     # 6) Fib tracking (Week 7) - process events to track Fib levels
     fib_tracker = FibTracker(FibTrackerConfig(
@@ -264,6 +295,7 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
     # For chart overlay (export_plotly reads df.attrs)
     # Note: imbalance is now in columns (is_imbalance, imbalance_gap_size), not attrs
     s_res.df.attrs["kl_zones"] = kl_zones
+    s_res.df.attrs["wave_candles"] = wave_candle_results
     s_res.df.attrs["poi_zones"] = poi_zones
     s_res.df.attrs["structure_events"] = s_res.events
     s_res.df.attrs["fib_states"] = fib_states
