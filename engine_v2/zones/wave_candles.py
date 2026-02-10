@@ -38,10 +38,13 @@ class WaveCandleResult:
 # ---------------------------------------------------------------------------
 
 def _is_qualified(df: pd.DataFrame, idx: int, required_dir: int) -> bool:
-    """Candle direction == required_dir."""
+    """Candle direction == required_dir AND vol_dir in (required_dir, 0)."""
     if idx not in df.index:
         return False
-    return int(df.loc[idx, "direction"]) == required_dir
+    if int(df.loc[idx, "direction"]) != required_dir:
+        return False
+    vol_dir = int(df.loc[idx, "vol_dir"]) if "vol_dir" in df.columns else 0
+    return vol_dir == required_dir or vol_dir == 0
 
 
 def _touches_zone(df: pd.DataFrame, idx: int, zone: KLZone) -> bool:
@@ -319,7 +322,7 @@ def _bos_bib_last_pullback(
     if pb_state_idx is None:
         # Cycle 0: no prior pullback/CTS, cap at 5 candles back
         # Cycle 1+: wider 10-candle guard
-        lookback = 10 if cycle_id == 0 else 20
+        lookback = 15 if cycle_id == 0 else 50
         pb_state_idx = max(0, anchor_idx - lookback)
 
     best_idx = None

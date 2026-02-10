@@ -252,15 +252,15 @@ class TestEventHelpers:
 # ---------------------------------------------------------------------------
 
 class TestBOSCycle0:
-    def test_bib_backward_fallback_uses_10_candle_lookback(self):
-        """BOS cycle 0 + BIB: backward fallback looks back 10 candles (not event-based)."""
+    def test_bib_backward_fallback_uses_15_candle_lookback(self):
+        """BOS cycle 0 + BIB: backward fallback looks back 15 candles (not event-based)."""
         rows = []
         for i in range(20):
             rows.append({
                 "direction": 1, "c": 1.05, "l": 1.03, "h": 1.1,
                 "candle_type": "normal", "is_big_normal_as0": 0,
             })
-        # Bearish candle at idx=5 (anchor-5) close to outer — within 10-candle lookback
+        # Bearish candle at idx=5 (anchor-5) close to outer — within 15-candle lookback
         rows[5] = {
             "direction": -1, "c": 0.91, "l": 0.88, "h": 1.0,
             "candle_type": "normal", "is_big_normal_as0": 0,
@@ -285,26 +285,26 @@ class TestBOSCycle0:
         assert result.last_wave_candle_idx == 5
         assert result.first_wave_candle_idx == 12
 
-    def test_bib_candle_beyond_10_not_found(self):
-        """BOS cycle 0 + BIB: candle at anchor-11 is outside 10-candle lookback."""
+    def test_bib_candle_beyond_15_not_found(self):
+        """BOS cycle 0 + BIB: candle at anchor-16 is outside 15-candle lookback."""
         rows = []
-        for i in range(25):
+        for i in range(30):
             rows.append({
                 "direction": 1, "c": 1.05, "l": 1.03, "h": 1.1,
                 "candle_type": "normal", "is_big_normal_as0": 0,
             })
-        # Bearish candle at idx=4 (anchor-11) — outside 10-candle lookback from anchor=15
+        # Bearish candle at idx=4 (anchor-16) — outside 15-candle lookback from anchor=20
         rows[4] = {
             "direction": -1, "c": 0.91, "l": 0.88, "h": 1.0,
             "candle_type": "normal", "is_big_normal_as0": 0,
         }
         df = _make_df(rows)
         zone = _make_zone("buy", top=1.0, bottom=0.9, source_kind="BOS", meta={
-            "cycle_id": 0, "anchor_idx": 15, "base_pattern": "base inside bar",
+            "cycle_id": 0, "anchor_idx": 20, "base_pattern": "base inside bar",
             "outer": 0.9,
         })
         result = identify_wave_candles(
-            anchor_idx=15, anchor_type="BOS", zone=zone, events=[],
+            anchor_idx=20, anchor_type="BOS", zone=zone, events=[],
             structure_id=0, struct_direction=1, df=df,
         )
         assert result is not None

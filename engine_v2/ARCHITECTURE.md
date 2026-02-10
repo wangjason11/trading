@@ -1,4 +1,4 @@
-# Architecture & System Design (through Week 6)
+# Architecture & System Design (through Week 8)
 
 This doc explains the “shape” of the system so a new engineer can extend it without breaking project invariants.
 
@@ -88,6 +88,11 @@ Ordering is intentionally locked for Week 6: base features must be computed **be
 Charting reads from:
 - dataframe columns
 - `df.attrs["kl_zones"]`
+- `df.attrs["wave_candles"]`
+- `df.attrs["poi_zones"]`
+- `df.attrs["fib_states"]`
+- `df.attrs["prev_bos_lines"]`
+- `df.attrs["structure_events"]`
 It should not mutate algorithm state.
 
 ---

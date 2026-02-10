@@ -1,4 +1,4 @@
-# Charting Spec (Plotly) — through Week 7
+# Charting Spec (Plotly) — through Week 8
 
 Primary file: `export_plotly.py`
 Styles: `style_registry.py`
@@ -33,6 +33,7 @@ All visual formatting (colors, opacities, line widths, marker sizes) lives in `s
 | Fibonacci | `fib.line`, `fib.label` | Fib retracement lines |
 | Imbalance | `imbalance.bullish`, `imbalance.bearish` | Imbalance candle colors |
 | Volume | `volume.bar.up/down/neutral`, `volume.ema_line`, `volume.spike_marker` | Volume bars, EMA, spike markers |
+| Wave candles | `wave_candle.bullish`, `wave_candle.bearish` | Wave candle vertical lines |
 | Hover lines | `hover_line.range` | Invisible hitbox lines |
 | Chart layout | `chart.layout`, `chart.axis` | Background, grid, axis styling |
 
@@ -101,6 +102,16 @@ To change any visual element:
 - Hover data: idx, time, volume/EMA values
 - Style keys: `volume.bar.up`, `volume.bar.down`, `volume.bar.neutral`, `volume.ema_line`, `volume.spike_marker`
 
+### 10) Wave candle vertical lines (Week 8)
+- Reads `df.attrs["wave_candles"]` (list of `WaveCandleResult`)
+- Full-height vertical lines at last pullback and first breakout candle positions
+- Green for bullish candle direction, red for bearish; neutral (dir=0) skipped
+- Uses `color_rgb` in style so opacity can be composed with tier multiplier
+- Opacity follows parent KL zone's 3-tier multiplier (active/recent_inactive/prior_inactive)
+- Drawn with `yref="paper"` (y0=0, y1=1) so lines span full chart height
+- Filtered to `selected_sids` (same filter as KL zones)
+- Style keys: `wave_candle.bullish`, `wave_candle.bearish`
+
 ---
 
 ## Config toggles
@@ -111,7 +122,7 @@ Chart defaults define toggles for:
 - `struct_state`: labels (bo/pb/pr/rv)
 - `range_visual`: rectangles
 - `structure`: levels, labels
-- `zones`: KL, OB, POI
+- `zones`: KL, OB, POI, wave_candles
 - `fib`: lines
 - `imbalance`: highlight
 - `volume`: bars, ema_line, spike_marker

@@ -61,6 +61,19 @@
 
 ---
 
+## Wave Candle Terms
+
+| Term | Definition |
+|------|------------|
+| **wave candle** | Candle at the boundary between two waves (ending wave → starting wave) at a KL zone |
+| **last wave candle** | Final candle of the ending wave (last pullback for BOS, last breakout for CTS) |
+| **first wave candle** | Initial candle of the starting wave (first breakout for BOS, first pullback for CTS) |
+| **qualified candle** | Candle with correct direction AND vol_dir matching (vol_dir == candle dir or vol_dir == 0) |
+| **compound first-wave** | First wave candle condition: (big_normal & (maru OR normal)) OR (big_maru & pinbar & pinbar_dir == wave_dir) |
+| **BIB (base inside bar)** | Zone base pattern requiring special forward/backward search logic for wave candles |
+
+---
+
 ## Pattern Terms
 
 | Term | Definition |
