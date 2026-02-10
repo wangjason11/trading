@@ -181,13 +181,7 @@ def main() -> None:
     print(res.df["is_range"].value_counts())
     print(res.df[res.df["is_range"] == 1][["is_range_confirm_idx", "is_range_lag"]].head())
 
-    from engine_v2.debug.export_structure import export_levels, export_swings
-    from engine_v2.structure.structure_v1 import compute_structure_levels
-
-    # Use the same parameters you settled on for the "good range"
-    swings, levels = compute_structure_levels(res.df, left=6, right=6)
-
-    print("Exported:", "artifacts/debug/swings.csv", "artifacts/debug/structure_levels.csv")
+    from engine_v2.debug.export_structure import export_levels
 
     res.df.attrs["structure_levels"] = res.structure
     res.df.attrs["kl_zones"] = res.meta.get("kl_zones", [])
@@ -235,8 +229,7 @@ def main() -> None:
     
     print("DEBUG structure_levels:", len(res.structure))
 
-    export_swings(swings, f"artifacts/debug/{basename}_swings.csv")
-    export_levels(levels, f"artifacts/debug/{basename}_structure_levels.csv")
+    export_levels(res.structure, f"artifacts/debug/{basename}_structure_levels.csv")
 
     # ---------------------------
     # Chart export

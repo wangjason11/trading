@@ -58,8 +58,7 @@ engine_v2/
 ├── structure/
 │   ├── market_structure.py          # CTS/BOS state machine (core)
 │   ├── structure_engine.py          # Wrapper for orchestrator
-│   ├── identify_start.py            # Start candle selection
-│   └── structure_v1.py              # Swing/level computation
+│   └── identify_start.py            # Start candle selection
 ├── zones/kl_zones_v1.py             # KL Zone derivation from events
 ├── zones/poi_zones.py               # POI Zone derivation (Fib + IC)
 ├── zones/fib_tracker.py             # Fibonacci lifecycle management

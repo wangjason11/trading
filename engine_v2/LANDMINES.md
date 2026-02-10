@@ -22,7 +22,7 @@ candle features → structure patterns → base features → market structure �
 
 **MUST:** Base features MUST run BEFORE market structure so zone resolution is stable.
 
-**Why:** Market structure depends on swing detection from base features. If base features run after structure, the structure module will operate on stale or missing swing data, leading to incorrect BOS/CTS detection.
+**Why:** Market structure depends on candle classification and pattern detection from base features. If base features run after structure, the structure module will operate on stale or missing feature data, leading to incorrect BOS/CTS detection.
 
 **Enforcement:** Pipeline ordering is defined in `pipeline/orchestrator.py` and marked as LOCKED.
 

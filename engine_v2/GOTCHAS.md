@@ -219,6 +219,18 @@ else:
 
 ---
 
+## Legacy vs Pipeline Data Divergence
+
+**Problem:** `structure_v1.py` (fractal swing detector) was a legacy module that computed structure levels independently from the pipeline's CTS/BOS state machine. The debug CSV exports used legacy data while charting used pipeline data, making CSV-to-chart comparisons unreliable.
+
+**Symptom:** Structure levels in the CSV didn't match what the chart showed — different indices, different prices, different zone boundaries.
+
+**Resolution:** Removed `structure_v1.py` entirely. Debug CSVs now export from `res.structure` (pipeline data), ensuring CSV and chart always agree.
+
+**Lesson:** When two code paths compute the same concept (e.g., "structure levels") from different sources, they WILL diverge over time. Consolidate to a single source of truth early.
+
+---
+
 ## Star Pattern Window: Centered on Anchor, Not Forward-Looking
 
 **Problem:** The old `compute_base_features` used a **forward-looking** window for star patterns, which was incorrect.

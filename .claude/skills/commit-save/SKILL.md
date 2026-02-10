@@ -123,7 +123,6 @@ artifacts/
     │   ├── NZD_USD_H1_..._final.csv
     │   ├── NZD_USD_H1_..._kl_zones.csv
     │   ├── NZD_USD_H1_..._structure_levels.csv
-    │   ├── NZD_USD_H1_..._swings.csv
     │   ├── NZD_USD_H1_....html
     │   └── NZD_USD_H1_....png
     └── 20260203_091500_def5678/

@@ -207,8 +207,7 @@ All changes are causally linked to the root change.
 |------------------|-------------------|
 | `artifacts/debug/*_final.csv` | `artifacts/commits/<folder>/*_final.csv` |
 | `artifacts/debug/*_raw.csv` | `artifacts/commits/<folder>/*_raw.csv` |
-| `artifacts/debug/structure_levels.csv` | `artifacts/commits/<folder>/structure_levels.csv` |
-| `artifacts/debug/swings.csv` | `artifacts/commits/<folder>/swings.csv` |
+| `artifacts/debug/*_structure_levels.csv` | `artifacts/commits/<folder>/*_structure_levels.csv` |
 
 ## Why This Matters
 

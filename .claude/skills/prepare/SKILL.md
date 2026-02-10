@@ -32,50 +32,55 @@ engine_v2/WORKFLOWS.md                       # Development workflows
 
 ### 2. Review Codebase Structure
 
-Get an overview of all modules and their purposes:
+Get an overview of all modules and their purposes. **Always verify against actual files** — use Glob to confirm what exists:
 
 ```
 engine_v2/
-├── config.py              # Configuration constants
-├── run_replay.py          # Main entry point - orchestrates the pipeline
+├── config.py                        # Pair/timeframe/date config
+├── run_replay.py                    # Entry point - run this first
 ├── common/
-│   ├── types.py           # Core data types (SwingPoint, StructureLevel, etc.)
-│   └── utils.py           # Shared utilities
+│   └── types.py                     # Core data types (StructureLevel, KLZone, etc.)
 ├── data/
-│   └── fetcher.py         # OANDA data fetching
+│   └── fetcher.py                   # OANDA data fetching
 ├── pipeline/
-│   ├── step_*.py          # Pipeline processing steps
-│   └── candle_classifier.py
+│   └── orchestrator.py              # Pipeline ordering (LOCKED)
+├── features/
+│   └── candles_v2.py                # Candle classification
 ├── structure/
-│   ├── swing_detector.py  # Swing high/low detection
-│   ├── structure_builder.py # CTS/BOS detection
-│   └── bos_projection.py  # BOS target projections
+│   ├── market_structure.py          # CTS/BOS state machine (core)
+│   ├── structure_engine.py          # Multi-structure wrapper
+│   └── identify_start.py            # Start candle selection
 ├── zones/
-│   ├── kl_zone_builder.py # Key level zone construction
-│   └── poi_zone_builder.py # POI zone construction
+│   ├── kl_zones_v1.py               # KL Zone derivation from events
+│   ├── wave_candles.py              # Wave candle identification
+│   ├── fib_tracker.py               # Fibonacci lifecycle management
+│   └── poi_zones.py                 # POI Zone derivation (Fib + IC)
 ├── patterns/
-│   └── structure_patterns.py # Candle pattern detection
+│   ├── structure_patterns.py        # Breakout pattern detection
+│   └── imbalance.py                 # Imbalance (FVG) pattern detection
 ├── charting/
-│   ├── chart_builder.py   # Main chart construction
-│   ├── style_registry.py  # Visual styling
-│   └── overlays/          # Individual overlay modules
+│   ├── export_plotly.py             # Chart generation
+│   └── style_registry.py           # Visual styling
+├── debug/
+│   └── export_structure.py          # CSV export utilities
 └── tests/
-    └── test_smoke.py      # Smoke tests
+    ├── test_smoke.py                # Smoke tests
+    └── test_wave_candles.py         # Wave candle tests
 ```
 
 ### 3. Trace run_replay.py Pipeline
 
-**Read and understand each step in sequence:**
+**Read and understand the pipeline ordering in `orchestrator.py`:**
 
-1. **run_replay.py** - Entry point, orchestrates the full pipeline
-2. **data/fetcher.py** - Fetches OHLCV data from OANDA
-3. **pipeline/step_raw.py** - Raw candle processing
-4. **structure/swing_detector.py** - Detects swing highs/lows
-5. **structure/structure_builder.py** - Builds CTS/BOS events
-6. **structure/bos_projection.py** - Projects BOS targets
-7. **zones/kl_zone_builder.py** - Constructs key level zones
-8. **zones/poi_zone_builder.py** - Constructs POI zones with Fib levels
-9. **charting/chart_builder.py** - Builds the final visualization
+1. **features/candles_v2.py** - Candle classification (pinbar, maru, star, etc.)
+2. **patterns/structure_patterns.py** - Structure pattern detection
+3. **patterns/imbalance.py** - Imbalance (FVG) detection
+4. **structure/market_structure.py** - CTS/BOS state machine (via structure_engine.py)
+5. **zones/kl_zones_v1.py** - KL zone derivation from structure events
+6. **zones/wave_candles.py** - Wave candle identification per KL zone
+7. **zones/fib_tracker.py** - Fibonacci lifecycle management
+8. **zones/poi_zones.py** - POI zone derivation (Fib + IC)
+9. **charting/export_plotly.py** - Chart generation with all overlays
 
 **For each module, understand:**
 - What data/events it receives as input
@@ -88,15 +93,15 @@ engine_v2/
 Trace how data transforms through the pipeline:
 
 ```
-Raw OHLCV → Swings → Structure Events (CTS/BOS) → Zones → Chart
-                ↓
-         SwingPoint[]
-                ↓
-         StructureLevel[] (with bos_type, cts_confirmed, etc.)
-                ↓
-         KLZone[] + POIZone[]
-                ↓
-         Interactive HTML chart with overlays
+Raw OHLCV → Candle Features → Patterns → Market Structure (CTS/BOS state machine)
+                                                ↓
+                                         StructureEvent[]
+                                                ↓
+                                    KLZone[] + WaveCandleResult[]
+                                                ↓
+                                    FibTracker → POIZone[]
+                                                ↓
+                                    Interactive HTML chart with overlays
 ```
 
 ### 5. Report Readiness
