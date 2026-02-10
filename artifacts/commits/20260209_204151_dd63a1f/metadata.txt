@@ -1,0 +1,3 @@
+commit_hash=dd63a1f
+timestamp=20260209_204151
+commit_message=Add wave candle identification + chart vertical lines
