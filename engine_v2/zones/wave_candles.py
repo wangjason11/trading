@@ -319,7 +319,7 @@ def _bos_bib_last_pullback(
     if pb_state_idx is None:
         # Cycle 0: no prior pullback/CTS, cap at 5 candles back
         # Cycle 1+: wider 10-candle guard
-        lookback = 5 if cycle_id == 0 else 20
+        lookback = 10 if cycle_id == 0 else 20
         pb_state_idx = max(0, anchor_idx - lookback)
 
     best_idx = None
