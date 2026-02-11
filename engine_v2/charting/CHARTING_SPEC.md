@@ -47,10 +47,14 @@ To change any visual element:
 
 ## Overlays (current)
 
-### 1) Structure swing line (confirmed CTS/BOS)
+### 1) Structure swing line (confirmed CTS/BOS + extras)
 - Dots at confirmed CTS and confirmed BOS points
-- Straight lines connecting points
-- Final segment to last candle close
+- Straight lines connecting points per structure_id
+- Final segment to last candle close (most recent sid only)
+- **Extra: Unconfirmed CTS after final confirmed BOS** — if a sid's last confirmed level is BOS and a CTS_ESTABLISHED or CTS_UPDATED event follows, the latest such CTS is drawn as a dot and connected with a line. If this is the active sid, the line extends to the last candle close.
+- **Extra: Pullback dot after final confirmed CTS** — for non-active sids where the last confirmed level is CTS, the most recent pullback event (before the next sid's first BOS) is drawn as a dot at the candle's extreme price (low for uptrend pb, high for downtrend pb). A line connects the last confirmed CTS to this dot.
+- **Extra: Cross-structure pb→BOS line** — from the pullback dot to the first BOS_CONFIRMED of the next sid. This line and the pb dot belong to the prior sid (same opacity/styling).
+- Opacity: active sid = 1.0, prior sids = 0.5
 - Style keys: `structure.swing_line`, `structure.cts`, `structure.bos`
 
 ### 2) Range rectangles

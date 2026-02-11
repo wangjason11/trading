@@ -740,7 +740,7 @@ def derive_kl_zones_v1(
         return int(dfx.loc[i, "cts_cycle_id"]) if "cts_cycle_id" in dfx.columns else 0
 
     for ev in events:
-        if ev.type not in ("BOS_CONFIRMED", "CTS_CONFIRMED", "CTS_THRESHOLD_UPDATED", "BOS_THRESHOLD_UPDATED"):
+        if ev.type not in ("BOS_CONFIRMED", "CTS_CONFIRMED", "CTS_THRESHOLD_UPDATED", "BOS_THRESHOLD_UPDATED", "CTS_ESTABLISHED"):
             continue
 
         # NEW: make sd/sid event-accurate for ALL event types (zones can span multiple structures now)
@@ -816,6 +816,26 @@ def derive_kl_zones_v1(
                     },
                 )
 
+            continue
+
+        # CTS_ESTABLISHED: end the active CTS zone early (before next CTS_CONFIRMED)
+        if ev.type == "CTS_ESTABLISHED":
+            cts_side = "sell" if sd == 1 else "buy"
+            zi = active_sell_idx if cts_side == "sell" else active_buy_idx
+            if zi is not None:
+                z0 = zones[zi]
+                if (int((z0.meta or {}).get("structure_id", -999)) == sid
+                        and z0.source_kind == "CTS"):
+                    zones[zi] = replace(
+                        z0,
+                        end_time=_time(int(ev.idx)),
+                        meta={**(z0.meta or {}), "active": False,
+                              "deactivated_by": "cts_established"},
+                    )
+                    if cts_side == "sell":
+                        active_sell_idx = None
+                    else:
+                        active_buy_idx = None
             continue
 
         # Event idx is the BOS/CTS LEVEL index; confirmed_at is the candle that CONFIRMED it.

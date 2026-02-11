@@ -273,3 +273,31 @@ idx3 = anchor + 1    # maru/normal
 **Symptom:** Zones incorrectly identified as "no base star 2nd big" when the anchor wasn't actually part of a valid star pattern. Example: anchor=710 (normal) was matched with 711 (pinbar) + 712 (normal), but the correct check should be 709 + 710 + 711 which fails because 710 isn't a pinbar.
 
 **Resolution:** Base patterns are now identified on-demand with structure-aware context, using centered windows for star patterns.
+
+---
+
+## df Event Columns Can Miss Events Within a Single Structure
+
+**Problem:** The `cts_event` and `bos_event` df columns are one-shot markers that get cleared by `_write_df_row` on the next step. If another operation (e.g., range detection) runs on the same candle after the event is emitted, the marker can be overwritten before the final df snapshot.
+
+**Example:** idx=903 had a `CTS_UPDATED` event (visible in structure_events and structure_levels CSV) but the df column showed `nan` because range processing cleared it.
+
+**This is distinct from the cross-structure overwrite hazard** — that's about sid N+1 overwriting sid N's rows. This is about events being lost *within* the same structure.
+
+**Rule:** Always use the events list (or `_structure_events.csv`) for event comparisons, never df columns like `cts_event`/`bos_event`. The df columns are useful as quick visual indicators but are not authoritative.
+
+---
+
+## `_cts_from_breakout_event`: Include Confirmation Candle in Extreme Search
+
+**Problem:** `_cts_from_breakout_event` determines the CTS price by finding the extreme (max high for bullish, min low for bearish) across the pattern's candle span. Originally it only searched `[start_idx..end_idx]` (the pattern candles), but CONFIRMED patterns have an additional confirmation candle beyond `end_idx`.
+
+**Symptom:** CTS price didn't reflect the full price range of the confirmed pattern. For a 3-candle continuous pattern confirmed at `end_idx + 2`, the confirming candle's extreme was ignored.
+
+**Fix:** Extend the search span to include `confirmation_idx` when present:
+```python
+if ev.confirmation_idx is not None:
+    e = max(e, int(ev.confirmation_idx))
+```
+
+**Rule:** For SUCCESS patterns (no confirmation needed), the span is `[start_idx..end_idx]`. For CONFIRMED patterns, the span is `[start_idx..confirmation_idx]`.

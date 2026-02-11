@@ -1227,11 +1227,16 @@ class MarketStructure:
 
     def _cts_from_breakout_event(self, ev: PatternEvent) -> tuple[int, float]:
         """
-        CTS for breakout = extreme of the breakout pattern candle span [start_idx..end_idx].
+        CTS for breakout = extreme of the full confirmed pattern span.
+        For SUCCESS patterns: [start_idx..end_idx] (pattern candles only).
+        For CONFIRMED patterns: [start_idx..confirmation_idx] (includes confirming candle).
         Returns (cts_idx, cts_price).
         """
         s = int(ev.start_idx)
         e = int(ev.end_idx)
+        # Extend span to include confirmation candle when pattern needed confirmation
+        if ev.confirmation_idx is not None:
+            e = max(e, int(ev.confirmation_idx))
         if e < s:
             s, e = e, s
 

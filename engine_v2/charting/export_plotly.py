@@ -1141,6 +1141,86 @@ def export_chart_plotly(
                 pts_bos.append((idx, x_time, price, "BOS", sid, cycle, sd, opacity, has_overlap))
                 points.append((idx, time_by_idx[idx], price, "BOS", sid, cycle, sd))
 
+        # --- Extra points: unconfirmed CTS after final BOS, pullback after final CTS ---
+        cts_unconf_events = [ev for ev in structure_events
+                             if getattr(ev, "type", None) in ("CTS_ESTABLISHED", "CTS_UPDATED")]
+        pb_state_events = [ev for ev in structure_events
+                           if getattr(ev, "type", None) == "STATE_CHANGED"
+                           and ev.meta.get("to") == "pullback"]
+
+        extra_cts_markers = []   # unconfirmed CTS dots (same tuple format as pts_cts)
+        extra_pb_markers = []    # pullback dots (same tuple format)
+        pb_to_next_bos_lines = []  # cross-structure lines: (sid, pb_time, pb_price, bos_time, bos_price)
+
+        for sid in sorted(all_sids):
+            sid_confirmed = sorted(
+                [p for p in points if p[4] == sid],
+                key=lambda x: x[0],
+            )
+            if not sid_confirmed:
+                continue
+
+            last_confirmed = sid_confirmed[-1]
+            last_kind = last_confirmed[3]   # "CTS" or "BOS"
+            last_idx = last_confirmed[0]
+            sd_for_sid = last_confirmed[6]
+            opacity = 1.0 if sid == most_recent_sid else 0.5
+
+            # Change 1: Unconfirmed CTS after final confirmed BOS
+            if last_kind == "BOS":
+                cts_after = [ev for ev in cts_unconf_events
+                             if int(ev.meta.get("structure_id", -1)) == sid
+                             and int(ev.idx) > last_idx]
+                if cts_after:
+                    latest_cts = max(cts_after, key=lambda e: int(e.idx))
+                    cts_idx = int(latest_cts.idx)
+                    if cts_idx in time_by_idx:
+                        cts_price = float(latest_cts.price) if latest_cts.price is not None else 0.0
+                        cts_time = time_by_idx[cts_idx]
+                        cycle = int(latest_cts.meta.get("cycle_id", 0))
+                        cts_kind_label = latest_cts.type.replace("CTS_", "").lower()
+                        points.append((cts_idx, cts_time, cts_price, "CTS", sid, cycle, sd_for_sid))
+                        extra_cts_markers.append((cts_idx, cts_time, cts_price,
+                                                  f"CTS ({cts_kind_label})", sid, cycle,
+                                                  sd_for_sid, opacity, False))
+
+            # Change 2: Pullback dot after final confirmed CTS (non-active sids only)
+            elif last_kind == "CTS" and sid != most_recent_sid:
+                # Find first BOS of next sid (upper bound for pb search)
+                next_sid = sid + 1
+                next_bos = sorted(
+                    [ev for ev in bos_events
+                     if int(ev.meta.get("structure_id", -1)) == next_sid],
+                    key=lambda e: int(e.idx),
+                )
+                next_bos_idx = int(next_bos[0].idx) if next_bos else None
+
+                # Only search for pb events between last CTS and next sid's first BOS
+                pb_after = [ev for ev in pb_state_events
+                            if int(ev.meta.get("structure_id", -1)) == sid
+                            and int(ev.idx) > last_idx
+                            and (next_bos_idx is None or int(ev.idx) < next_bos_idx)]
+                if pb_after:
+                    latest_pb = max(pb_after, key=lambda e: int(e.idx))
+                    pb_idx = int(latest_pb.idx)
+                    if pb_idx in time_by_idx:
+                        # Extreme: uptrend pullback goes down → low; downtrend → high
+                        if sd_for_sid == 1:
+                            pb_price = float(dfx.loc[pb_idx, COL_L])
+                        else:
+                            pb_price = float(dfx.loc[pb_idx, COL_H])
+                        pb_time = time_by_idx[pb_idx]
+                        points.append((pb_idx, pb_time, pb_price, "PB", sid, 0, sd_for_sid))
+                        extra_pb_markers.append((pb_idx, pb_time, pb_price, "PB", sid, 0,
+                                                 sd_for_sid, opacity, False))
+                        if next_bos:
+                            first_bos = next_bos[0]
+                            bos_idx = int(first_bos.idx)
+                            if bos_idx in time_by_idx:
+                                bos_price = float(first_bos.price) if first_bos.price is not None else 0.0
+                                bos_time = time_by_idx[bos_idx]
+                                pb_to_next_bos_lines.append((sid, pb_time, pb_price, bos_time, bos_price))
+
         # sort by point index (time order)
         points.sort(key=lambda x: x[0])
 
@@ -1192,6 +1272,31 @@ def export_chart_plotly(
                         hoverinfo="skip",
                         line_shape="linear",
                         showlegend=(sid == most_recent_sid),  # Only show legend for most recent
+                        **line_style,
+                    )
+                )
+
+            # Cross-structure lines: pullback dot → first BOS of next sid
+            # These lines belong to the PRIOR sid (same styling/opacity)
+            for _pb_sid, pb_t, pb_p, bos_t, bos_p in pb_to_next_bos_lines:
+                line_style = _style("structure.swing_line").copy()
+                base_opacity = float(line_style.get("opacity", 0.9))
+                opacity_mult = _opacity_tier("active") if _pb_sid == most_recent_sid else _opacity_tier("recent_inactive")
+                if "line" in line_style:
+                    line_style["line"] = dict(line_style["line"])
+                else:
+                    line_style["line"] = {}
+                line_style["opacity"] = base_opacity * opacity_mult
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=[pb_t, bos_t],
+                        y=[pb_p, bos_p],
+                        mode="lines",
+                        name=f"PB→BOS sid={_pb_sid}→{_pb_sid + 1}",
+                        hoverinfo="skip",
+                        line_shape="linear",
+                        showlegend=False,
                         **line_style,
                     )
                 )
@@ -1345,6 +1450,72 @@ def export_chart_plotly(
                                 **style,
                             )
                         )
+
+        # Markers: extra unconfirmed CTS dots (after final confirmed BOS)
+        if extra_cts_markers:
+            for pts_group, op_label in [
+                ([p for p in extra_cts_markers if p[7] == 1.0], ""),
+                ([p for p in extra_cts_markers if p[7] < 1.0], " (prior)"),
+            ]:
+                if pts_group:
+                    style = _style("structure.cts").copy()
+                    if op_label:
+                        if "marker" in style:
+                            style["marker"] = dict(style["marker"])
+                            style["marker"]["opacity"] = _opacity_tier("recent_inactive")
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[p[1] for p in pts_group],
+                            y=[p[2] for p in pts_group],
+                            mode="markers",
+                            name=f"CTS (unconfirmed){op_label}",
+                            customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts_group],
+                            hovertemplate=(
+                                "idx=%{customdata[0]}<br>"
+                                "kind=%{customdata[1]}<br>"
+                                "price=%{customdata[2]:.5f}<br>"
+                                "sid=%{customdata[3]}<br>"
+                                "cycle_id=%{customdata[4]}<br>"
+                                "struct_direction=%{customdata[5]}"
+                                "<extra></extra>"
+                            ),
+                            showlegend=False,
+                            **style,
+                        )
+                    )
+
+        # Markers: pullback dots (after final confirmed CTS, non-active sids)
+        if extra_pb_markers:
+            for pts_group, op_label in [
+                ([p for p in extra_pb_markers if p[7] == 1.0], ""),
+                ([p for p in extra_pb_markers if p[7] < 1.0], " (prior)"),
+            ]:
+                if pts_group:
+                    style = _style("structure.bos").copy()
+                    if op_label:
+                        if "marker" in style:
+                            style["marker"] = dict(style["marker"])
+                            style["marker"]["opacity"] = _opacity_tier("recent_inactive")
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[p[1] for p in pts_group],
+                            y=[p[2] for p in pts_group],
+                            mode="markers",
+                            name=f"PB (furthest){op_label}",
+                            customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts_group],
+                            hovertemplate=(
+                                "idx=%{customdata[0]}<br>"
+                                "kind=%{customdata[1]}<br>"
+                                "price=%{customdata[2]:.5f}<br>"
+                                "sid=%{customdata[3]}<br>"
+                                "cycle_id=%{customdata[4]}<br>"
+                                "struct_direction=%{customdata[5]}"
+                                "<extra></extra>"
+                            ),
+                            showlegend=False,
+                            **style,
+                        )
+                    )
 
     # -------------------------------------------------
     # Reversal watch overlay (frozen BOS barrier)

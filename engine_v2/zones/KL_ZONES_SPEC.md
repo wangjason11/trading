@@ -139,5 +139,11 @@ When later threshold update events imply bounds extension:
 The engine maintains:
 - 1 active buy + 1 active sell zone per structure_id (the most recent of each)
 - Older zones become inactive but still visualized under active zones.
-Charting uses opacity to convey active vs inactive.【fileciteturn2file0】
+- Charting uses opacity to convey active vs inactive.
+
+### CTS zone early ending
+
+CTS zones end at `CTS_ESTABLISHED` (not at the next `CTS_CONFIRMED`). When a new CTS is established, the previous CTS zone's `end_time` is set to the CTS_ESTABLISHED candle's time, and its `active` flag is set to `False` with `deactivated_by = "cts_established"`.
+
+This means there can be periods with **no active CTS zone** — between CTS_ESTABLISHED (old zone ends) and CTS_CONFIRMED (new zone created). BOS zones are unaffected; they still end when replaced by a new BOS zone of the same side.【fileciteturn2file0】
 

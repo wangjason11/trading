@@ -251,6 +251,12 @@ def main() -> None:
     from engine_v2.debug.export_zones import export_kl_zones
     export_kl_zones(res.meta.get("kl_zones", []), f"artifacts/debug/{basename}_kl_zones.csv")
 
+    from engine_v2.debug.export_events import export_structure_events
+    export_structure_events(
+        res.df.attrs.get("structure_events", []),
+        f"artifacts/debug/{basename}_structure_events.csv",
+    )
+
 
 if __name__ == "__main__":
     main()

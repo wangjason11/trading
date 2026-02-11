@@ -109,26 +109,28 @@ class BreakoutPatterns:
     def _price_confirmation_1step(self, anchor_end_idx: int, direction: int, threshold: float) -> Tuple[bool, Optional[int]]:
         """
         Continuous-only confirmation:
-        - Look ahead exactly 1 candle (k = anchor_end_idx + 1)
+        - Look ahead up to 3 candles from anchor_end_idx
         - Candle must be normal/maru
         - Candle direction must match `direction`
         - Close must break beyond `threshold` in the direction
+        - Returns the first qualifying candle found
         """
-        k = int(anchor_end_idx) + 1
-        if k >= len(self.df):
-            return False, None
+        for offset in range(1, 4):
+            k = int(anchor_end_idx) + offset
+            if k >= len(self.df):
+                return False, None
 
-        fwd = self.df.iloc[k]
-        if int(fwd.direction) != int(direction):
-            return False, None
-        if str(fwd.candle_type) not in ["normal", "maru"]:
-            return False, None
+            fwd = self.df.iloc[k]
+            if int(fwd.direction) != int(direction):
+                continue
+            if str(fwd.candle_type) not in ["normal", "maru"]:
+                continue
 
-        c = float(fwd.c)
-        if direction == 1 and c >= float(threshold):
-            return True, k
-        if direction == -1 and c <= float(threshold):
-            return True, k
+            c = float(fwd.c)
+            if direction == 1 and c >= float(threshold):
+                return True, k
+            if direction == -1 and c <= float(threshold):
+                return True, k
         return False, None
 
 
