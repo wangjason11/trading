@@ -23,6 +23,19 @@ class StructureEngineResult:
     notes: str = ""
 
 
+@dataclass
+class Scenario3Result:
+    df: pd.DataFrame
+    levels: List[StructureLevel]
+    events: List[StructureEvent]
+    struct_direction: int
+    start_idx: int                    # Final validated start (or current best if pending)
+    original_bos0_bounds: Optional[Tuple[float, float, str]]
+    probe_iterations: int             # How many probes were run in Phase 1
+    status: str                       # "finalized" or "pending"
+    notes: str = ""
+
+
 def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
     """
     Adapter boundary: df(with patterns/features) -> MarketStructure outputs:
@@ -191,6 +204,252 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
     )
 
 
+def compute_structure_scenario_3(
+    df: pd.DataFrame,
+    start_idx: int,
+    struct_direction: int,
+    *,
+    pip_tolerance_pips: int = 15,
+    max_probe_iterations: int = 10,
+) -> Scenario3Result:
+    """
+    Scenario 3: Arbitrary start with iterative BOS_0 probe.
+
+    Phase 1 — Iterative probing to validate/refine start_idx via BOS_0 zone
+    proximity checking.  Phase 2 — Multi-structure continuation from the
+    finalized probe (same logic as compute_structure lines 69-176).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with candle features/patterns already applied.
+    start_idx : int
+        Arbitrary start index to probe from.
+    struct_direction : int
+        +1 for uptrend, -1 for downtrend.
+    pip_tolerance_pips : int
+        Pip tolerance for zone proximity checking (default 15).
+    max_probe_iterations : int
+        Maximum number of probe restarts before giving up (default 10).
+
+    Returns
+    -------
+    Scenario3Result
+        Contains df, levels, events, status ("finalized" or "pending"),
+        original_bos0_bounds, probe_iterations, and notes.
+    """
+    _validate_input(df)
+
+    # ===== Phase 1: Iterative BOS_0 Probing =====
+    original_bos0_bounds: Optional[Tuple[float, float, str]] = None
+    current_start = start_idx
+    pip_size = _pip_size_from_pair(df)
+    tolerance = pip_tolerance_pips * pip_size
+    status = "pending"
+
+    # Keep references to the last probe's outputs
+    df_probe = df.copy()
+    probe_events: List[StructureEvent] = []
+    probe_levels: List[StructureLevel] = []
+    iteration = 0
+
+    for iteration in range(max_probe_iterations):
+        df_probe = df.copy()
+        ms = MarketStructure(df_probe, struct_direction,
+                             start_idx=current_start, structure_id=0)
+        ms.debug = True
+        df_probe, probe_events, probe_levels = ms.run()
+
+        # Find CTS_ESTABLISHED events for structure_id=0
+        cts_est = sorted(
+            [ev for ev in probe_events
+             if ev.type == "CTS_ESTABLISHED"
+             and ev.meta.get("structure_id") == 0],
+            key=lambda e: e.idx,
+        )
+
+        # First time: extract original BOS_0 zone bounds
+        if original_bos0_bounds is None and len(cts_est) >= 1:
+            original_bos0_bounds = _get_bos0_zone_bounds(
+                df_probe, probe_events, sid=0, sd=struct_direction)
+
+        # --- Condition 3: Reversal before 2nd CTS_EST → finalized ---
+        rev_mask = ((df_probe["market_state"].astype(str).str.lower() == "reversal")
+                    & (df_probe["structure_id"].astype(int) == 0))
+        has_reversal = rev_mask.any()
+
+        if has_reversal and len(cts_est) < 2:
+            status = "finalized"
+            break
+
+        # --- Condition 4: Data ends before 2nd CTS_EST → pending ---
+        if len(cts_est) < 2 or original_bos0_bounds is None:
+            status = "pending"
+            break
+
+        # --- Conditions 1 & 2: Evaluate exception ---
+        outer, inner, zone_side = original_bos0_bounds
+        exc_idx = _find_closest_candle_to_outer(
+            df_probe, cts_est[0].idx, cts_est[1].idx,
+            outer, inner, tolerance, zone_side)
+
+        if exc_idx is None:
+            # Condition 1: No exception → finalized
+            status = "finalized"
+            break
+
+        # Condition 2: Exception triggered → restart from exc_idx
+        print(f"[scenario3] BOS_0 probe exception triggered: "
+              f"iteration={iteration}, new_start={exc_idx}")
+        current_start = exc_idx
+        # loop continues with fresh probe...
+
+    # Record the validated start for the result
+    phase1_start = current_start
+
+    # ===== Phase 2: Multi-Structure Continuation (only if finalized) =====
+    if status == "finalized":
+        df2 = df_probe
+        all_events = list(probe_events)
+        all_levels = list(probe_levels)
+        structure_id = 0
+        sd = struct_direction
+
+        max_structures_guard = 20
+        for _loop_iter in range(max_structures_guard):
+            rev_mask = ((df2["market_state"].astype(str).str.lower() == "reversal")
+                        & (df2["structure_id"].astype(int) == structure_id))
+            if not rev_mask.any():
+                break
+
+            reversal_start_idx = int(df2.loc[rev_mask].index.min())
+            reversal_confirmed_idx = int(df2.loc[rev_mask].index.max())
+
+            # Scenario 2 for next structure
+            d_next = identify_start_scenario_2_after_reversal(
+                df2,
+                reversal_idx=reversal_start_idx,
+                prev_structure_id=structure_id,
+                prev_struct_direction=sd,
+                min_history=50,
+            )
+
+            next_start_idx = int(d_next.start_idx)
+            next_sd = int(d_next.struct_direction)
+            next_sid = structure_id + 1
+
+            if next_start_idx == current_start and next_sid == structure_id:
+                break
+
+            # Exception 2 probe (same logic as compute_structure)
+            exception_1_triggered = "exception1" in d_next.reason
+
+            if not exception_1_triggered:
+                zone_bounds = _get_last_cts_zone_bounds(
+                    df2, all_events, structure_id, sd)
+
+                if zone_bounds is not None:
+                    zb_outer, zb_inner, zb_side = zone_bounds
+                    pip_tol = pip_tolerance_pips * _pip_size_from_pair(df2)
+
+                    df_exc2_probe = df2.copy()
+                    ms_exc2 = MarketStructure(
+                        df_exc2_probe,
+                        struct_direction=next_sd,
+                        start_idx=next_start_idx,
+                        structure_id=next_sid,
+                        end_idx=reversal_confirmed_idx,
+                    )
+                    ms_exc2.debug = True
+                    df_exc2_probe, exc2_events, exc2_levels = ms_exc2.run()
+
+                    exc2_cts = [
+                        ev for ev in exc2_events
+                        if ev.type == "CTS_ESTABLISHED"
+                        and ev.meta.get("structure_id") == next_sid
+                        and ev.idx <= reversal_confirmed_idx
+                    ]
+
+                    if exc2_cts:
+                        cts_est_idx = int(exc2_cts[0].idx)
+                        exc2_idx = _find_closest_candle_to_outer(
+                            df_exc2_probe, cts_est_idx,
+                            reversal_confirmed_idx,
+                            zb_outer, zb_inner, pip_tol, zb_side)
+
+                        if exc2_idx is not None:
+                            print(f"[scenario3] Exception 2 triggered: "
+                                  f"start_idx={exc2_idx}")
+                            current_start = exc2_idx
+                            structure_id = next_sid
+                            sd = next_sd
+                            continue
+
+                    # No Exception 2 — keep probe data
+                    df2 = df_exc2_probe
+                    all_events.extend(exc2_events)
+                    all_levels.extend(exc2_levels)
+
+                    if reversal_confirmed_idx + 1 > df2.index.max():
+                        break
+
+                    current_start = reversal_confirmed_idx + 1
+                    sd = next_sd
+                    structure_id = next_sid
+                    continue
+
+            # Default path (Exception 1 triggered OR no zone bounds)
+            ms_next = MarketStructure(df2, next_sd,
+                                      start_idx=next_start_idx,
+                                      structure_id=next_sid)
+            ms_next.debug = True
+            df2, ms_events, ms_levels = ms_next.run()
+            all_events.extend(ms_events)
+            all_levels.extend(ms_levels)
+            structure_id = next_sid
+            sd = next_sd
+            current_start = next_start_idx
+
+        notes = (
+            f"Scenario3: start={phase1_start} sd={struct_direction} "
+            f"probe_iterations={iteration + 1} "
+            f"structures={structure_id + 1} events={len(all_events)} "
+            f"levels={len(all_levels)} status=finalized"
+        )
+
+        return Scenario3Result(
+            df=df2,
+            levels=all_levels,
+            events=all_events,
+            struct_direction=struct_direction,
+            start_idx=phase1_start,
+            original_bos0_bounds=original_bos0_bounds,
+            probe_iterations=iteration + 1,
+            status="finalized",
+            notes=notes,
+        )
+
+    # Pending — return probe data as-is (accessible but not finalized)
+    notes = (
+        f"Scenario3: start={phase1_start} sd={struct_direction} "
+        f"probe_iterations={iteration + 1} "
+        f"events={len(probe_events)} levels={len(probe_levels)} "
+        f"status=pending"
+    )
+
+    return Scenario3Result(
+        df=df_probe,
+        levels=list(probe_levels),
+        events=list(probe_events),
+        struct_direction=struct_direction,
+        start_idx=current_start,
+        original_bos0_bounds=original_bos0_bounds,
+        probe_iterations=iteration + 1,
+        status="pending",
+        notes=notes,
+    )
+
+
 def _validate_input(df: pd.DataFrame) -> None:
     missing = [c for c in REQUIRED_CANDLE_COLS if c not in df.columns]
     if missing:
@@ -246,6 +505,30 @@ def _get_last_cts_zone_bounds(
         return (float(last.top), float(last.bottom), "sell")
     else:
         return (float(last.bottom), float(last.top), "buy")
+
+
+def _get_bos0_zone_bounds(
+    df: pd.DataFrame,
+    events: List[StructureEvent],
+    sid: int,
+    sd: int,
+) -> Optional[Tuple[float, float, str]]:
+    """
+    Get (outer, inner, zone_side) of BOS_0 zone for given structure_id.
+    BOS_0 exists after 1st CTS_ESTABLISHED.
+    """
+    zones = derive_kl_zones_v1(df, events, struct_direction=sd)
+    bos0 = [z for z in zones
+            if z.source_kind == "BOS"
+            and z.meta.get("structure_id") == sid
+            and z.meta.get("cycle_id") == 0]
+    if not bos0:
+        return None
+    zone = bos0[0]
+    if zone.side == "sell":
+        return (float(zone.top), float(zone.bottom), "sell")
+    else:
+        return (float(zone.bottom), float(zone.top), "buy")
 
 
 def _find_closest_candle_to_outer(
