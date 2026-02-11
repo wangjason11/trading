@@ -54,9 +54,23 @@
 
 **Flow:**
 1. **Exception 1** (in `identify_start.py`): Check if any candle after last confirmed CTS but before reversal has higher high (uptrend) or lower low (downtrend). If so, start from that extreme.
-2. **Exception 2** (probe in `structure_engine.py`): If Exception 1 not triggered, run a "probe" (dry run) of MarketStructure from original candidate to reversal_confirmed. If CTS established AND price reached near CTS zone outer bound (within 15 pips of inner), start from that candle instead.
+2. **Exception 2** (iterative probe in `structure_engine.py`): If Exception 1 not triggered, run a bounded "probe" (dry run) of MarketStructure from original candidate to reversal_confirmed. If CTS established AND price reached near CTS zone outer bound (within 15 pips of inner), discard the probe and re-probe from the exception candle. Iterate until no exception triggers or max 10 iterations.
 
-**Key insight:** Probe runs on a **copy** of df with `end_idx` parameter. If Exception 2 triggers, discard probe data entirely. If not, keep probe data and continue.
+**Key insight:** Probes run on a **copy** of df with `end_idx` parameter.
+- **No exception ever triggered:** Keep the first probe's data (events + levels + df), continue from `reversal_confirmed_idx + 1`.
+- **Any exception triggered:** Discard ALL probes. Use the settled `exc2_candidate` as `start_idx` in the outer loop, which runs a full unbounded MarketStructure from there.
+
+---
+
+## Bounded Probe + Same structure_id in Outer Loop = Fresh Run
+
+**Problem:** Exception 2 probes run with `end_idx=reversal_confirmed_idx`. After the probe, the outer `compute_structure` loop continues with the same `structure_id`. If you "keep" a bounded probe's data and then `continue` the outer loop, the outer loop runs a **new** `MarketStructure` for the same sid from `reversal_confirmed_idx + 1` — this is a fresh run that doesn't know about the probe's CTS/BOS.
+
+**When this is correct:** When no exception triggered, the probe is the authoritative data for the portion up to `reversal_confirmed`, and the outer loop's fresh run from `reversal_confirmed + 1` independently continues the structure.
+
+**When this is wrong:** When an exception triggered and you re-probed, keeping the re-probe (bounded) and continuing the outer loop means sid N+1 effectively starts fresh from `reversal_confirmed + 1`, losing the re-probe's context. The correct behavior is to **discard** all probes and let the outer loop run a full unbounded structure from the settled start.
+
+**Rule:** If any exception triggered during iterative probing, never keep the probe. Always discard and pass the settled candidate to the outer loop.
 
 ---
 

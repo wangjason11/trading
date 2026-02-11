@@ -109,3 +109,16 @@ Common sources of off-by-one bugs:
 | `range(start, end)` | Same — `end` is exclusive |
 | `df.loc[start:end]` | `end` is **inclusive** — different from iloc! |
 | Using confirm_idx vs start_idx | RANGE_STARTED has both — use start_idx for sort order, confirm_idx for timing |
+
+---
+
+## Wrapping Logic in Loops: Preserve Post-Loop Behavior
+
+**Rule:** When wrapping existing single-shot logic in an iteration loop, the behavior AFTER the loop must remain identical to the original code paths. The loop only changes what happens WITHIN iterations.
+
+**Example:** Exception 2 probe was single-shot: exception → discard + outer loop; no exception → keep probe. When adding iterative re-probing, the post-loop paths must still map to the same two outcomes. Don't introduce new paths (like "keep the re-probe") that didn't exist before.
+
+**Checklist when adding iteration to existing logic:**
+1. Identify ALL exit paths in the original code (e.g., "exception triggered" vs "no exception")
+2. Map each iteration outcome to the SAME original exit path
+3. The iteration only refines WHICH value is used, not WHAT happens with it
