@@ -121,27 +121,35 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
                 pip_size = _pip_size_from_pair(df2)
                 pip_tolerance = 15 * pip_size
 
-                # Run probe (on COPY of df, separate events list)
-                df_probe = df2.copy()
-                ms_probe = MarketStructure(
-                    df_probe,
-                    struct_direction=next_struct_direction,
-                    start_idx=original_candidate_idx,
-                    structure_id=next_structure_id,
-                    end_idx=reversal_confirmed_idx,  # Stop at reversal confirmed (inclusive)
-                )
-                ms_probe.debug = True
-                df_probe, probe_events, probe_levels = ms_probe.run()
+                # Iterative Exception 2 probing (re-probe when exception triggers)
+                exc2_candidate = original_candidate_idx
+                max_exc2_iterations = 10
+                exc2_triggered = False
 
-                # Check for CTS established in probe (CTS_ESTABLISHED event)
-                probe_cts_events = [
-                    ev for ev in probe_events
-                    if ev.type == "CTS_ESTABLISHED"
-                    and ev.meta.get("structure_id") == next_structure_id
-                    and ev.idx <= reversal_confirmed_idx
-                ]
+                for _exc2_iter in range(max_exc2_iterations):
+                    # Run probe (on COPY of df, separate events list)
+                    df_probe = df2.copy()
+                    ms_probe = MarketStructure(
+                        df_probe,
+                        struct_direction=next_struct_direction,
+                        start_idx=exc2_candidate,
+                        structure_id=next_structure_id,
+                        end_idx=reversal_confirmed_idx,  # Stop at reversal confirmed (inclusive)
+                    )
+                    ms_probe.debug = True
+                    df_probe, probe_events, probe_levels = ms_probe.run()
 
-                if probe_cts_events:
+                    # Check for CTS established in probe (CTS_ESTABLISHED event)
+                    probe_cts_events = [
+                        ev for ev in probe_events
+                        if ev.type == "CTS_ESTABLISHED"
+                        and ev.meta.get("structure_id") == next_structure_id
+                        and ev.idx <= reversal_confirmed_idx
+                    ]
+
+                    if not probe_cts_events:
+                        break
+
                     # Get CTS established idx from the first CTS_ESTABLISHED in probe
                     cts_established_idx = int(probe_cts_events[0].idx)
 
@@ -156,17 +164,24 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
                         zone_side,
                     )
 
-                    if exception_2_idx is not None:
-                        # Exception 2 triggered - discard probe, start fresh from this idx
-                        print(f"[structure_engine] Exception 2 triggered: start_idx={exception_2_idx}")
-                        next_start_idx = exception_2_idx
-                        # Continue to next loop iteration with the new start_idx
-                        start_idx = next_start_idx
-                        struct_direction = next_struct_direction
-                        structure_id = next_structure_id
-                        continue
+                    if exception_2_idx is None:
+                        break
 
-                # No Exception 2 - keep probe data
+                    # Exception 2 triggered — discard probe, re-probe from new idx
+                    print(f"[structure_engine] Exception 2 triggered: "
+                          f"iteration={_exc2_iter}, start_idx={exception_2_idx}")
+                    exc2_triggered = True
+                    exc2_candidate = exception_2_idx
+
+                if exc2_triggered:
+                    # At least one exception triggered — discard all probes,
+                    # use settled candidate as start in the outer loop
+                    start_idx = exc2_candidate
+                    struct_direction = next_struct_direction
+                    structure_id = next_structure_id
+                    continue
+
+                # No exception ever triggered — keep the first probe's data
                 df2 = df_probe
                 all_events.extend(probe_events)
                 all_levels.extend(probe_levels)
@@ -352,40 +367,56 @@ def compute_structure_scenario_3(
                     zb_outer, zb_inner, zb_side = zone_bounds
                     pip_tol = pip_tolerance_pips * _pip_size_from_pair(df2)
 
-                    df_exc2_probe = df2.copy()
-                    ms_exc2 = MarketStructure(
-                        df_exc2_probe,
-                        struct_direction=next_sd,
-                        start_idx=next_start_idx,
-                        structure_id=next_sid,
-                        end_idx=reversal_confirmed_idx,
-                    )
-                    ms_exc2.debug = True
-                    df_exc2_probe, exc2_events, exc2_levels = ms_exc2.run()
+                    # Iterative Exception 2 probing
+                    exc2_candidate = next_start_idx
+                    max_exc2_iterations = 10
+                    exc2_triggered = False
 
-                    exc2_cts = [
-                        ev for ev in exc2_events
-                        if ev.type == "CTS_ESTABLISHED"
-                        and ev.meta.get("structure_id") == next_sid
-                        and ev.idx <= reversal_confirmed_idx
-                    ]
+                    for _exc2_iter in range(max_exc2_iterations):
+                        df_exc2_probe = df2.copy()
+                        ms_exc2 = MarketStructure(
+                            df_exc2_probe,
+                            struct_direction=next_sd,
+                            start_idx=exc2_candidate,
+                            structure_id=next_sid,
+                            end_idx=reversal_confirmed_idx,
+                        )
+                        ms_exc2.debug = True
+                        df_exc2_probe, exc2_events, exc2_levels = ms_exc2.run()
 
-                    if exc2_cts:
+                        exc2_cts = [
+                            ev for ev in exc2_events
+                            if ev.type == "CTS_ESTABLISHED"
+                            and ev.meta.get("structure_id") == next_sid
+                            and ev.idx <= reversal_confirmed_idx
+                        ]
+
+                        if not exc2_cts:
+                            break
+
                         cts_est_idx = int(exc2_cts[0].idx)
                         exc2_idx = _find_closest_candle_to_outer(
                             df_exc2_probe, cts_est_idx,
                             reversal_confirmed_idx,
                             zb_outer, zb_inner, pip_tol, zb_side)
 
-                        if exc2_idx is not None:
-                            print(f"[scenario3] Exception 2 triggered: "
-                                  f"start_idx={exc2_idx}")
-                            current_start = exc2_idx
-                            structure_id = next_sid
-                            sd = next_sd
-                            continue
+                        if exc2_idx is None:
+                            break
 
-                    # No Exception 2 — keep probe data
+                        print(f"[scenario3] Exception 2 triggered: "
+                              f"iteration={_exc2_iter}, start_idx={exc2_idx}")
+                        exc2_triggered = True
+                        exc2_candidate = exc2_idx
+
+                    if exc2_triggered:
+                        # At least one exception triggered — discard all probes,
+                        # use settled candidate as start in the outer loop
+                        current_start = exc2_candidate
+                        structure_id = next_sid
+                        sd = next_sd
+                        continue
+
+                    # No exception ever triggered — keep the first probe's data
                     df2 = df_exc2_probe
                     all_events.extend(exc2_events)
                     all_levels.extend(exc2_levels)
