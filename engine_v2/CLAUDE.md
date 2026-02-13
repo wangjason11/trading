@@ -62,6 +62,8 @@ engine_v2/
 ├── zones/kl_zones_v1.py             # KL Zone derivation from events
 ├── zones/poi_zones.py               # POI Zone derivation (Fib + IC)
 ├── zones/fib_tracker.py             # Fibonacci lifecycle management
+├── zones/wave_candles.py            # Wave candle identification
+├── zones/wvmi.py                    # Wave Volume Momentum Indicator
 ├── patterns/imbalance.py            # Imbalance (FVG) pattern detection
 ├── patterns/structure_patterns.py   # Breakout pattern detection
 ├── features/candles_v2.py           # Candle classification
@@ -90,6 +92,8 @@ candle features → structure patterns → base features → market structure �
 | `MARKET_STRUCTURE_SPEC.md` | CTS/BOS/Range/Reversal semantics |
 | `KL_ZONES_SPEC.md` | Zone construction, thresholds, expansion |
 | `zones/POI_ZONES_SPEC.md` | POI zones (Fib + IC) specification |
+| `zones/WAVE_CANDLES_SPEC.md` | Wave candle identification algorithm |
+| `zones/WVMI_SPEC.md` | Wave Volume Momentum Indicator lifecycle + formulas |
 | `CHARTING_SPEC.md` | Chart overlay rules, style registry |
 | `ARCHITECTURE.md` | System design, event contracts |
 | `PROJECT_PRINCIPLES.md` | Non-negotiable guardrails |

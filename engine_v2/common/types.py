@@ -131,3 +131,45 @@ class KLZone:
     source_price: float
     strength: float = 0.0
     meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class WVMIRecord:
+    """Wave Volume Momentum Indicator for a BOS zone."""
+    # Attribution to main structure's BOS zone
+    bos_structure_id: int
+    bos_cycle_id: int
+    zone_side: Literal["buy", "sell"]
+    source: Literal["main", "scenario3"]
+
+    # Wave candle indices
+    fb_idx: Optional[int] = None      # First Breakout (from BOS_n)
+    lb_idx: Optional[int] = None      # Last Breakout (from CTS_n)
+    fp_idx: Optional[int] = None      # First Pullback (from CTS_n)
+    lp_idx: Optional[int] = None      # Last Pullback (temporary or locked)
+
+    # Raw volumes
+    fb_volume: Optional[float] = None
+    lb_volume: Optional[float] = None
+    fp_volume: Optional[float] = None
+    lp_volume: Optional[float] = None
+
+    # Weights (last candles only)
+    lb_weight: float = 1.0
+    lp_weight: float = 1.0
+
+    # Computed ratios
+    breakout_momentum: Optional[float] = None
+    pullback_momentum: Optional[float] = None
+
+    # Direction-agnostic labels
+    buy_momentum: Optional[float] = None
+    sell_momentum: Optional[float] = None
+
+    # Lifecycle
+    status: Literal["created", "updated", "locked"] = "created"
+    lp_locked: bool = False
+    locked_by_cycle_id: Optional[int] = None
+
+    # Metadata
+    meta: Dict[str, Any] = field(default_factory=dict)

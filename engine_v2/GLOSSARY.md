@@ -74,6 +74,34 @@
 
 ---
 
+## WVMI Terms
+
+| Term | Definition |
+|------|------------|
+| **WVMI** | Wave Volume Momentum Indicator — measures BOS zone strength via volume ratios of wave candle pairs |
+| **breakout momentum** | `(LB_vol * LB_weight) / FB_vol` — locked at CTS_n confirmation |
+| **pullback momentum** | `(LP_vol * LP_weight) / FP_vol` — shifts until BOS_n+1 locks it |
+| **last wave weight** | Weight (0.5/0.7/1.0) applied to LB/LP volume based on candle type and size |
+| **temporary LP** | Last Pullback candle that shifts to qualified candle closest to outer bound; finalizes on BOS_n+1 |
+| **buy_momentum / sell_momentum** | Direction-labeled wrappers: buy zone → buy=breakout, sell=pullback; sell zone → reversed |
+| **vol_dir** | Volume direction column: +1 (buying pressure), -1 (selling pressure), 0 (neutral/no signal) |
+
+---
+
+## Scenario 3 Terms
+
+| Term | Definition |
+|------|------------|
+| **Scenario 3** | Arbitrary-start structure analysis with iterative BOS_0 probe validation |
+| **BOS_0 zone** | First BOS zone from the initial CTS_ESTABLISHED event; used for exception evaluation |
+| **Phase 1** | Iterative probing: validate start_idx by checking if price reaches BOS_0 zone inner bound |
+| **Phase 2** | Multi-structure continuation from finalized Phase 1 (same logic as `compute_structure`) |
+| **finalized** | Scenario 3 status: probe validated, full structure analysis complete |
+| **pending** | Scenario 3 status: insufficient data (< 2 CTS_ESTABLISHED), accessible but unfinalized |
+| **pip_tolerance** | Distance threshold (default 15 pips) for exception evaluation near zone inner bound |
+
+---
+
 ## Pattern Terms
 
 | Term | Definition |

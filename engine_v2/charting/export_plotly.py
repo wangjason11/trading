@@ -1896,6 +1896,19 @@ def export_chart_plotly(
             selected_sids = set(wc_sids[:num_structures])
             most_recent_sid = wc_sids[0] if wc_sids else 0
 
+        # Build WVMI lookup: idx -> (WVMIRecord, role)
+        wvmi_records = dfx.attrs.get("wvmi", [])
+        wvmi_by_idx: dict = {}
+        for _rec in wvmi_records:
+            for _idx_val, _role in [(_rec.fb_idx, "FB"), (_rec.lb_idx, "LB"),
+                                    (_rec.fp_idx, "FP"), (_rec.lp_idx, "LP")]:
+                if _idx_val is not None:
+                    wvmi_by_idx[_idx_val] = (_rec, _role)
+
+        # Price axis range for invisible hover traces
+        wc_y_min = float(dfx["l"].min())
+        wc_y_max = float(dfx["h"].max())
+
         wc_rendered = 0
         for wc in wave_candles:
             if wc.structure_id not in selected_sids:
@@ -1951,6 +1964,63 @@ def export_chart_plotly(
                     line=dict(color=final_color, width=line_width),
                     layer="below",
                 )
+
+                # --- Invisible hover overlay for this wave candle line ---
+                vol = float(dfx.loc[idx, "volume"])
+                bos_sid = wc.structure_id
+                bos_cycle = wc.cycle_id
+
+                wvmi_entry = wvmi_by_idx.get(idx)
+                if wvmi_entry:
+                    rec, role = wvmi_entry
+                    if role == "LB":
+                        weighted_vol = vol * rec.lb_weight
+                    elif role == "LP":
+                        weighted_vol = vol * rec.lp_weight
+                    else:
+                        weighted_vol = vol  # FB, FP: weight = 1.0
+                else:
+                    role = None
+                    weighted_vol = vol
+
+                hover_lines = [
+                    "<b>Wave Candle</b>",
+                    f"idx={idx}",
+                    f"BOS zone: sid={bos_sid} cycle={bos_cycle}",
+                    f"Volume: {vol:.0f}",
+                    f"Weighted vol: {weighted_vol:.0f}",
+                ]
+
+                if wvmi_entry and role in ("LB", "LP"):
+                    rec, role = wvmi_entry
+                    hover_lines.append("---")
+                    mom_label = "Buy" if candle_dir == 1 else "Sell"
+
+                    if role == "LB":
+                        mom_val = rec.breakout_momentum
+                        mom_str = f"{mom_val:.4f}" if mom_val is not None else "N/A"
+                        fb_wt = f"{rec.fb_volume:.0f}" if rec.fb_volume is not None else "N/A"
+                        lb_wt = f"{weighted_vol:.0f}"
+                        hover_lines.append(f"{mom_label} momentum: {mom_str}")
+                        hover_lines.append(f"FB wt vol: {fb_wt}")
+                        hover_lines.append(f"LB wt vol: {lb_wt}")
+                    else:  # LP
+                        mom_val = rec.pullback_momentum
+                        mom_str = f"{mom_val:.4f}" if mom_val is not None else "N/A"
+                        fp_wt = f"{rec.fp_volume:.0f}" if rec.fp_volume is not None else "N/A"
+                        lp_wt = f"{weighted_vol:.0f}"
+                        hover_lines.append(f"{mom_label} momentum: {mom_str}")
+                        hover_lines.append(f"FP wt vol: {fp_wt}")
+                        hover_lines.append(f"LP wt vol: {lp_wt}")
+
+                fig.add_trace(go.Scatter(
+                    x=[wc_time, wc_time],
+                    y=[wc_y_min, wc_y_max],
+                    mode="lines",
+                    showlegend=False,
+                    line=dict(width=8, color="rgba(0,0,0,0)"),
+                    hovertemplate="<br>".join(hover_lines) + "<extra></extra>",
+                ))
                 wc_rendered += 1
 
         if wc_rendered:

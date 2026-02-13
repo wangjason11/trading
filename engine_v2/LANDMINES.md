@@ -112,6 +112,22 @@ Common sources of off-by-one bugs:
 
 ---
 
+## WVMI Constraints
+
+1. **Zero FB/FP volume blocks WVMI creation** — division by zero guard. Ensure candle features (volume) are computed before WVMI runs.
+2. **Temp LP only locks on BOS_n+1** — do not assume `lp_locked=True` until BOS of the next cycle confirms. Until then, LP and pullback_momentum can shift every candle.
+3. **buy_momentum/sell_momentum are direction-mapped** — for buy zones: buy=breakout, sell=pullback. For sell zones: reversed. Always check `zone_side` when interpreting.
+
+---
+
+## Scenario 3 Constraints
+
+1. **original_bos0_bounds captured at iteration 0 only** — subsequent probe iterations reuse the first BOS_0 zone for exception evaluation. Do not re-derive bounds mid-loop.
+2. **Phase 2 only runs if status == "finalized"** — pending results contain Phase 1 probe data only (no multi-structure continuation).
+3. **Exception evaluation checks inner bound, not outer** — proximity is measured as "candle high/low within tolerance of zone inner bound" (the bound closer to current price).
+
+---
+
 ## Wrapping Logic in Loops: Preserve Post-Loop Behavior
 
 **Rule:** When wrapping existing single-shot logic in an iteration loop, the behavior AFTER the loop must remain identical to the original code paths. The loop only changes what happens WITHIN iterations.

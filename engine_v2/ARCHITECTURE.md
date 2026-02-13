@@ -84,6 +84,20 @@ Produced by `derive_kl_zones_v1` from structure events (not structure levels).�
 
 Ordering is intentionally locked for Week 6: base features must be computed **before** structure so zone resolution is stable.【fileciteturn2file1】
 
+### Wave Candles (`zones/wave_candles.py`)
+Identifies boundary candles between consecutive waves at each KL zone. For each zone, produces a `WaveCandleResult` with `last_wave_candle_idx` (end of prior wave) and `first_wave_candle_idx` (start of new wave). BIB zones use an event-driven multi-step search; non-BIB zones use a ±5 candle window. Results stored in `df.attrs["wave_candles"]`. See `WAVE_CANDLES_SPEC.md`.
+
+### WVMI (`zones/wvmi.py`)
+Measures BOS zone strength via volume ratios of wave candle pairs. Lifecycle mirrors FibTracker:
+1. **Created** at CTS_n confirmation — breakout momentum locked from FB/LB volumes
+2. **Updated** each candle — temporary LP shifts to closest qualified candle near outer bound
+3. **Locked** at BOS_n+1 confirmation — LP finalizes, pullback momentum locked
+
+Results stored in `df.attrs["wvmi"]` (list of `WVMIRecord`). See `WVMI_SPEC.md`.
+
+### Scenario 3 (`structure/structure_engine.py`)
+Arbitrary-start structure analysis with iterative BOS_0 probe. Phase 1 validates/refines `start_idx` by checking if price reaches the BOS_0 zone inner bound (within 15 pip tolerance). Phase 2 continues multi-structure analysis from the finalized probe using the same logic as `compute_structure`. Returns `Scenario3Result` with status "finalized" or "pending".
+
 ### Charting
 Charting reads from:
 - dataframe columns
@@ -91,6 +105,7 @@ Charting reads from:
 - `df.attrs["wave_candles"]`
 - `df.attrs["poi_zones"]`
 - `df.attrs["fib_states"]`
+- `df.attrs["wvmi"]`
 - `df.attrs["prev_bos_lines"]`
 - `df.attrs["structure_events"]`
 It should not mutate algorithm state.

@@ -288,6 +288,39 @@ idx3 = anchor + 1    # maru/normal
 
 ---
 
+## WVMI Weight Defaults to 0.7, Not 1.0
+
+**Problem:** `_compute_last_wave_weight` returns 1.0 only for specific candle type + size combinations. The default is 0.7 (not 1.0).
+
+**Weight tiers:**
+- **1.0** — `is_big_normal_as0 AND (maru OR normal)`, or `is_big_maru_as0 AND pinbar AND pinbar_dir != wave_dir`
+- **0.5** — `round(body_pct * 100) <= 10` (doji-like)
+- **0.7** — everything else (default)
+
+**Gotcha:** If you see momentum values that seem "too low", check the weight tier. A large-volume candle with weight 0.7 produces lower momentum than expected.
+
+---
+
+## Wave Candle Lookback Window Differs by Cycle
+
+**Problem:** BOS BIB backward fallback uses different lookback windows depending on cycle:
+- **cycle 0:** 15 candles (early structure, less price history)
+- **cycle 1+:** 50 candles (more history available, pullback can be further back)
+
+**Gotcha:** If a wave candle appears "too far back" from the anchor, it's likely cycle 1+ using the 50-candle window. If it's "missing" in cycle 0, the 15-candle window may be too narrow.
+
+---
+
+## Wave Candle Selection: Closest to Outer, Not Closest in Time
+
+**Problem:** Wave candles are selected by "close distance to outer bound", not by time proximity to the anchor.
+
+**Why this matters:** Two qualified candles near the anchor — one at idx-3 (close far from outer) and one at idx-8 (close near outer) — the algorithm picks idx-8 because its close is closer to the zone's outer threshold.
+
+**Gotcha:** When debugging "wrong" wave candle selection, check the outer bound distance, not the anchor proximity.
+
+---
+
 ## `_cts_from_breakout_event`: Include Confirmation Candle in Extreme Search
 
 **Problem:** `_cts_from_breakout_event` determines the CTS price by finding the extreme (max high for bullish, min low for bearish) across the pattern's candle span. Originally it only searched `[start_idx..end_idx]` (the pattern candles), but CONFIRMED patterns have an additional confirmation candle beyond `end_idx`.

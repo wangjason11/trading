@@ -114,6 +114,10 @@ To change any visual element:
 - Opacity follows parent KL zone's 3-tier multiplier (active/recent_inactive/prior_inactive)
 - Drawn with `yref="paper"` (y0=0, y1=1) so lines span full chart height
 - Filtered to `selected_sids` (same filter as KL zones)
+- **Hover overlay:** Invisible `go.Scatter` trace (8px wide, `rgba(0,0,0,0)`) at each line position
+  - All candles: idx, BOS zone attribution (sid + cycle), raw volume, weighted volume
+  - LB/LP only (bottom section): momentum value (Buy/Sell by candle direction), paired weighted volumes
+  - WVMI lookup built from `df.attrs["wvmi"]` mapping each idx to `(WVMIRecord, role)` where role is FB/LB/FP/LP
 - Style keys: `wave_candle.bullish`, `wave_candle.bearish`
 
 ---

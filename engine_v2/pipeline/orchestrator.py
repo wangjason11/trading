@@ -19,6 +19,9 @@ from engine_v2.patterns.imbalance import compute_imbalance
 # Week 8: Wave candle identification
 from engine_v2.zones.wave_candles import identify_wave_candles, WaveCandleResult
 
+# Week 8: WVMI
+from engine_v2.zones.wvmi import WVMITracker
+
 # Week 7: Fib tracking
 from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig
 
@@ -118,15 +121,8 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
     wc_with_first = sum(1 for wc in wave_candle_results if wc.first_wave_candle_idx is not None)
     print(f"[wave_candles] total={len(wave_candle_results)}, with_last={wc_with_last}, with_first={wc_with_first}")
 
-    # 6) Fib tracking (Week 7) - process events to track Fib levels
-    fib_tracker = FibTracker(FibTrackerConfig(
-        fib_levels=[30.0, 50.0, 61.8, 80.0],
-        fill_threshold=0.70,
-    ))
-
-    # Process events to track Fib activations
-    # Need to pair BOS_CONFIRMED with subsequent CTS_ESTABLISHED
-    bos_by_cycle = {}  # {(sid, cycle_id): (bos_idx, bos_price)}
+    # Sort events by idx (used by WVMI, Fib tracking, prev BOS lines)
+    sorted_events = sorted(s_res.events, key=lambda e: (e.idx, e.type))
 
     # Find reversal_confirmed_idx per structure (from REVERSAL_CANDIDATE apply_idx)
     # This is the idx where the reversal from previous structure was confirmed
@@ -140,8 +136,32 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
                 # Store the apply_idx for the NEW structure (prev_sid + 1)
                 reversal_confirmed_by_sid[prev_sid + 1] = apply_idx
 
-    # Sort events by idx to ensure BOS_CONFIRMED comes before CTS_ESTABLISHED
-    sorted_events = sorted(s_res.events, key=lambda e: (e.idx, e.type))
+    # 5c) WVMI (Week 8 Part 2) - volume momentum per BOS zone
+    wvmi_tracker = WVMITracker()
+
+    for ev in sorted_events:
+        if ev.type == "CTS_CONFIRMED":
+            wvmi_tracker.on_cts_confirmed(ev, s_res.df, wave_candle_results, kl_zones)
+
+    for ev in sorted_events:
+        if ev.type == "BOS_CONFIRMED":
+            wvmi_tracker.on_bos_confirmed(ev, s_res.df, wave_candle_results)
+
+    wvmi_tracker.update_temporary_lp(s_res.df, kl_zones)
+
+    wvmi_records = wvmi_tracker.get_records()
+    meta["wvmi"] = wvmi_records
+    print(f"[wvmi] total={len(wvmi_records)}, locked={sum(1 for r in wvmi_records if r.lp_locked)}")
+
+    # 6) Fib tracking (Week 7) - process events to track Fib levels
+    fib_tracker = FibTracker(FibTrackerConfig(
+        fib_levels=[30.0, 50.0, 61.8, 80.0],
+        fill_threshold=0.70,
+    ))
+
+    # Process events to track Fib activations
+    # Need to pair BOS_CONFIRMED with subsequent CTS_ESTABLISHED
+    bos_by_cycle = {}  # {(sid, cycle_id): (bos_idx, bos_price)}
 
     # Track previous structure's direction (for Scenario 1 revert check)
     prev_sd_by_sid = {}  # {sid: prev_sd}
@@ -296,6 +316,7 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
     # Note: imbalance is now in columns (is_imbalance, imbalance_gap_size), not attrs
     s_res.df.attrs["kl_zones"] = kl_zones
     s_res.df.attrs["wave_candles"] = wave_candle_results
+    s_res.df.attrs["wvmi"] = wvmi_records
     s_res.df.attrs["poi_zones"] = poi_zones
     s_res.df.attrs["structure_events"] = s_res.events
     s_res.df.attrs["fib_states"] = fib_states
