@@ -133,10 +133,12 @@ def _assign_direction_labels(
     Buy zone: buy_momentum = breakout, sell_momentum = pullback
     Sell zone: buy_momentum = pullback, sell_momentum = breakout
     """
+    def _r(v: Optional[float]) -> Optional[float]:
+        return round(v, 2) if v is not None else None
     if zone_side == "buy":
-        return breakout, pullback
+        return _r(breakout), _r(pullback)
     else:
-        return pullback, breakout
+        return _r(pullback), _r(breakout)
 
 
 # ---------------------------------------------------------------------------
