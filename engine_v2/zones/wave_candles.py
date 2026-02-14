@@ -410,7 +410,7 @@ def _cts_wave_candles(
     if base_pattern == "base inside bar":
         last_bo_idx = _cts_bib_last_breakout(cts_anchor_idx, zone, events, sid, cycle_id, bo_dir, df)
     else:
-        last_bo_idx = _cts_non_bib_last_breakout(cts_anchor_idx, zone, bo_dir, df)
+        last_bo_idx = _cts_non_bib_last_breakout(cts_anchor_idx, zone, bo_dir, df, events, sid, cycle_id)
 
     # --- First pullback candle ---
     first_pb_idx = None
@@ -538,26 +538,34 @@ def _cts_non_bib_last_breakout(
     zone: KLZone,
     bo_dir: int,
     df: pd.DataFrame,
+    events: List[StructureEvent],
+    sid: int,
+    cycle_id: int,
 ) -> Optional[int]:
     """
-    CTS + non-BIB: window [cts_anchor_idx-5, cts_anchor_idx+5].
-    Qualified candle touching zone, closest to outer.
+    CTS + non-BIB: window [pattern_anchor, cts_anchor_idx+5].
+    First qualified candle that closes within the CTS zone.
+    Start is the anchor_idx of the breakout pattern that formed CTS_ESTABLISHED.
     """
+    cts_est = _find_cts_established(events, sid, cycle_id)
+    pattern_anchor = None
+    if cts_est is not None:
+        pattern_anchor = cts_est.meta.get("anchor_idx")
+        if pattern_anchor is not None:
+            pattern_anchor = int(pattern_anchor)
+
     start = max(0, cts_anchor_idx - 5)
+    if pattern_anchor is not None and pattern_anchor > start:
+        start = pattern_anchor
     end = min(len(df) - 1, cts_anchor_idx + 5)
 
-    best_idx = None
-    best_dist = float("inf")
     for i in range(start, end + 1):
         if i not in df.index:
             continue
         if not _is_qualified(df, i, bo_dir):
             continue
-        if not _touches_zone(df, i, zone):
+        if not _closes_within_zone(df, i, zone):
             continue
-        d = _close_distance_to_outer(df, i, zone)
-        if d < best_dist:
-            best_dist = d
-            best_idx = i
+        return i
 
-    return best_idx
+    return None
