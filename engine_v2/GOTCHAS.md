@@ -288,6 +288,21 @@ idx3 = anchor + 1    # maru/normal
 
 ---
 
+## Plotly Hover on Vertical Lines Requires Multiple Data Points
+
+**Problem:** `go.Scatter` with `mode="lines"` only triggers hover near actual data points, not at intermediate positions along the line segment. A vertical line with only 2 points (top and bottom) only hovers when the cursor is at the very top or bottom.
+
+**Fix:** Spread multiple evenly-spaced y-values (e.g., 12 points) along the vertical line so hover targets exist throughout its height:
+```python
+_n_pts = 12
+_y_pts = [y_min + i * (y_max - y_min) / (_n_pts - 1) for i in range(_n_pts)]
+fig.add_trace(go.Scatter(x=[time] * _n_pts, y=_y_pts, mode="lines", ...))
+```
+
+**This does NOT affect horizontal lines** — horizontal hover traces work fine with 2 endpoints because the cursor naturally moves along the x-axis.
+
+---
+
 ## WVMI Weight Defaults to 0.7, Not 1.0
 
 **Problem:** `_compute_last_wave_weight` returns 1.0 only for specific candle type + size combinations. The default is 0.7 (not 1.0).
