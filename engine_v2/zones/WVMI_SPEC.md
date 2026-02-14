@@ -74,6 +74,8 @@ Applied to **last candles only** (LB and LP). First candles (FB, FP) always use 
 
 **Rationale:** For a buy zone, breakout momentum reflects buying strength. For a sell zone, the pullback wave is in the buy direction, so it maps to buy_momentum.
 
+**Rounding:** `buy_momentum` and `sell_momentum` are rounded to 2 decimal places for display/logging.
+
 ---
 
 ## Formulas

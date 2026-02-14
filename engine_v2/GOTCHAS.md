@@ -326,13 +326,13 @@ fig.add_trace(go.Scatter(x=[time] * _n_pts, y=_y_pts, mode="lines", ...))
 
 ---
 
-## Wave Candle Selection: Closest to Outer, Not Closest in Time
+## Wave Candle Selection: BOS vs CTS Use Different Metrics
 
-**Problem:** Wave candles are selected by "close distance to outer bound", not by time proximity to the anchor.
+**BOS zones** (both BIB and non-BIB) select last pullback by **closest to outer bound** — the candle whose close is nearest the zone's outer threshold wins, regardless of time order.
 
-**Why this matters:** Two qualified candles near the anchor — one at idx-3 (close far from outer) and one at idx-8 (close near outer) — the algorithm picks idx-8 because its close is closer to the zone's outer threshold.
+**CTS zones** select last breakout by **first qualified candle closing within the zone** — temporal order wins. The search window starts at the breakout pattern's `anchor_idx` (or `cts_anchor_idx - 5` if earlier).
 
-**Gotcha:** When debugging "wrong" wave candle selection, check the outer bound distance, not the anchor proximity.
+**Gotcha:** When debugging wave candle selection, check which zone type it is first. BOS uses distance metric, CTS uses first-match.
 
 ---
 

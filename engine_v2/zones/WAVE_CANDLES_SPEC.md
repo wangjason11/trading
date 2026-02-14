@@ -99,7 +99,11 @@ For each event:
 
 ### Last Breakout (Non-BIB path)
 
-Same as BOS non-BIB: window `[cts_anchor_idx-5, cts_anchor_idx+5]`, qualified + touches zone + closest to outer.
+Window: `[max(cts_anchor_idx-5, pattern_anchor_idx), cts_anchor_idx+5]`
+- `pattern_anchor_idx` = `anchor_idx` from CTS_ESTABLISHED event meta (the first candle of the breakout pattern)
+- If pattern anchor is after `cts_anchor_idx - 5`, the window shrinks (candles before the pattern are excluded)
+- Selection: first qualified candle that **closes within** the CTS zone (not closest to outer)
+- **Rationale:** For CTS zones, the first candle entering the zone represents the initial breakout moment. Unlike BOS zones which use closest-to-outer, CTS prioritizes temporal order.
 
 ### First Pullback
 
