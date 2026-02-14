@@ -2013,9 +2013,13 @@ def export_chart_plotly(
                         hover_lines.append(f"FP wt vol: {fp_wt}")
                         hover_lines.append(f"LP wt vol: {lp_wt}")
 
+                # Spread points along vertical line for hover detection
+                # (Plotly only detects hover near data points, not along line segments)
+                _n_pts = 12
+                _y_pts = [wc_y_min + i * (wc_y_max - wc_y_min) / (_n_pts - 1) for i in range(_n_pts)]
                 fig.add_trace(go.Scatter(
-                    x=[wc_time, wc_time],
-                    y=[wc_y_min, wc_y_max],
+                    x=[wc_time] * _n_pts,
+                    y=_y_pts,
                     mode="lines",
                     showlegend=False,
                     line=dict(width=8, color="rgba(0,0,0,0)"),
