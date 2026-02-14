@@ -487,6 +487,16 @@ def _cts_bib_last_breakout(
 
         # (a) Direct check on event candle
         if _is_qualified(df, ev_idx, bo_dir) and _wick_enters_zone(df, ev_idx, zone) and _closes_within_zone(df, ev_idx, zone):
+            # For CTS_ESTABLISHED with pattern info, scan from anchor_idx forward
+            # to find the first pattern candle that closes within the zone
+            anchor = ev.meta.get("anchor_idx")
+            if anchor is not None and ev.type == "CTS_ESTABLISHED":
+                anchor = int(anchor)
+                for j in range(anchor, ev_idx):
+                    if j not in df.index:
+                        continue
+                    if _is_qualified(df, j, bo_dir) and _closes_within_zone(df, j, zone):
+                        return j
             return ev_idx
 
         # (b) Scan between current ev and next event

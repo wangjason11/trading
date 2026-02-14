@@ -336,6 +336,38 @@ fig.add_trace(go.Scatter(x=[time] * _n_pts, y=_y_pts, mode="lines", ...))
 
 ---
 
+## CTS BIB Last Breakout: Pattern Scan-Back for CTS_ESTABLISHED
+
+**Problem:** In `_cts_bib_last_breakout`, when the CTS_ESTABLISHED event candle is a direct match (qualified + wick enters zone + closes within zone), the algorithm returned it immediately. But the event candle is the *last* candle of the pattern — earlier candles in the pattern may also close within the zone and better represent the initial breakout moment.
+
+**Example:** CTS_ESTABLISHED at idx=636 with `anchor_idx=634` (pattern=one_maru_continuous spans 634-636). idx=635 is a qualified maru that also closes within the zone, but the old code returned 636 without checking.
+
+**Fix:** When CTS_ESTABLISHED event candle matches AND has `anchor_idx` in meta, scan from `anchor_idx` forward to `ev_idx` (exclusive). Return the first qualified candle closing within the zone. If none found, fall back to the event candle.
+
+```python
+anchor = ev.meta.get("anchor_idx")
+if anchor is not None and ev.type == "CTS_ESTABLISHED":
+    anchor = int(anchor)
+    for j in range(anchor, ev_idx):
+        if _is_qualified(df, j, bo_dir) and _closes_within_zone(df, j, zone):
+            return j
+return ev_idx
+```
+
+**Why only CTS_ESTABLISHED:** CTS_UPDATED events don't have pattern info — they're threshold shifts, not pattern-based events.
+
+---
+
+## Auto-Extend Index Shift: `fetch_history_with_auto_extend` vs `get_history`
+
+**Problem:** `run_replay.py` uses `fetch_history_with_auto_extend` which extends the start date backward (e.g., Dec 1 → Nov 15) to ensure enough candle history for features. Using plain `get_history(CONFIG.pair, CONFIG.timeframe, CONFIG.start, CONFIG.end)` directly produces different indices for the same candle.
+
+**Symptom:** When debugging wave candle selection in a standalone script, all indices were shifted ~240 candles compared to the replay output.
+
+**Rule:** Always use `fetch_history_with_auto_extend` (or replay output data) when investigating candle indices. Never load data with `get_history` directly unless you account for the index offset.
+
+---
+
 ## `_cts_from_breakout_event`: Include Confirmation Candle in Extreme Search
 
 **Problem:** `_cts_from_breakout_event` determines the CTS price by finding the extreme (max high for bullish, min low for bearish) across the pattern's candle span. Originally it only searched `[start_idx..end_idx]` (the pattern candles), but CONFIRMED patterns have an additional confirmation candle beyond `end_idx`.

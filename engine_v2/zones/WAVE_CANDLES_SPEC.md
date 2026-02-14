@@ -83,7 +83,10 @@ Three-step event walk:
 
 **Step 1 — Event walk:** Iterate CTS_ESTABLISHED + CTS_UPDATED events in order.
 For each event:
-- (a) Direct check: event candle is qualified AND wick enters zone AND closes within zone → done
+- (a) Direct check: event candle is qualified AND wick enters zone AND closes within zone
+  - **Pattern scan-back (CTS_ESTABLISHED only):** If the event candle matches AND has `anchor_idx` in meta, scan from `anchor_idx` to `ev_idx` (exclusive) for the first qualified candle closing within the zone. If found, return that earlier candle instead of the event candle.
+  - **Rationale:** The event candle is the last candle of the pattern. The *first* pattern candle entering the zone better represents the initial breakout moment.
+  - If no earlier pattern candle qualifies, return the event candle itself.
 - (b) Gap scan: scan between current event idx and next event idx for qualified candle closing within zone
 
 **Step 2 — Fallback before anchor:** `[cts_anchor_idx - 10, cts_anchor_idx)`
