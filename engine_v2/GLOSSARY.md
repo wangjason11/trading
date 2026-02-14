@@ -98,7 +98,7 @@
 | **Phase 2** | Multi-structure continuation from finalized Phase 1 (same logic as `compute_structure`) |
 | **finalized** | Scenario 3 status: probe validated, full structure analysis complete |
 | **pending** | Scenario 3 status: insufficient data (< 2 CTS_ESTABLISHED), accessible but unfinalized |
-| **pip_tolerance** | Distance threshold (default 15 pips) for exception evaluation near zone inner bound |
+| **pip_tolerance** | Distance threshold (default 10 pips) for exception evaluation near zone inner bound |
 
 ---
 

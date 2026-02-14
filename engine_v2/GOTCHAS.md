@@ -54,7 +54,7 @@
 
 **Flow:**
 1. **Exception 1** (in `identify_start.py`): Check if any candle after last confirmed CTS but before reversal has higher high (uptrend) or lower low (downtrend). If so, start from that extreme.
-2. **Exception 2** (iterative probe in `structure_engine.py`): If Exception 1 not triggered, run a bounded "probe" (dry run) of MarketStructure from original candidate to reversal_confirmed. If CTS established AND price reached near CTS zone outer bound (within 15 pips of inner), discard the probe and re-probe from the exception candle. Iterate until no exception triggers or max 10 iterations.
+2. **Exception 2** (iterative probe in `structure_engine.py`): If Exception 1 not triggered, run a bounded "probe" (dry run) of MarketStructure from original candidate to reversal_confirmed. If CTS established AND price reached near CTS zone outer bound (within 10 pips of inner), discard the probe and re-probe from the exception candle. Iterate until no exception triggers or max 10 iterations.
 
 **Key insight:** Probes run on a **copy** of df with `end_idx` parameter.
 - **No exception ever triggered:** Keep the first probe's data (events + levels + df), continue from `reversal_confirmed_idx + 1`.

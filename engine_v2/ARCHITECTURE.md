@@ -96,7 +96,7 @@ Measures BOS zone strength via volume ratios of wave candle pairs. Lifecycle mir
 Results stored in `df.attrs["wvmi"]` (list of `WVMIRecord`). See `WVMI_SPEC.md`.
 
 ### Scenario 3 (`structure/structure_engine.py`)
-Arbitrary-start structure analysis with iterative BOS_0 probe. Phase 1 validates/refines `start_idx` by checking if price reaches the BOS_0 zone inner bound (within 15 pip tolerance). Phase 2 continues multi-structure analysis from the finalized probe using the same logic as `compute_structure`. Returns `Scenario3Result` with status "finalized" or "pending".
+Arbitrary-start structure analysis with iterative BOS_0 probe. Phase 1 validates/refines `start_idx` by checking if price reaches the BOS_0 zone inner bound (within 10 pip tolerance). Phase 2 continues multi-structure analysis from the finalized probe using the same logic as `compute_structure`. Returns `Scenario3Result` with status "finalized" or "pending".
 
 ### Charting
 Charting reads from:

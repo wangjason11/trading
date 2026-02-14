@@ -119,7 +119,7 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
             if zone_bounds is not None:
                 outer, inner, zone_side = zone_bounds
                 pip_size = _pip_size_from_pair(df2)
-                pip_tolerance = 15 * pip_size
+                pip_tolerance = 10 * pip_size
 
                 # Iterative Exception 2 probing (re-probe when exception triggers)
                 exc2_candidate = original_candidate_idx
@@ -224,7 +224,7 @@ def compute_structure_scenario_3(
     start_idx: int,
     struct_direction: int,
     *,
-    pip_tolerance_pips: int = 15,
+    pip_tolerance_pips: int = 10,
     max_probe_iterations: int = 10,
 ) -> Scenario3Result:
     """
