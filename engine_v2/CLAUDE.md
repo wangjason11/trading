@@ -78,10 +78,10 @@ engine_v2/
 ## Pipeline Ordering (LOCKED)
 
 ```
-candle features → structure patterns → base features → market structure → KL zones → POI zones → charting
+candle features → structure patterns → imbalance → market structure → KL zones → wave candles → Fib tracking → POI zones → WVMI → charting
 ```
 
-**Critical:** Base features MUST run BEFORE structure. See `LANDMINES.md` for details.
+**Critical:** Base features MUST run BEFORE structure. WVMI MUST run AFTER POI zones (depends on POI zone inner bounds for activation gate). See `LANDMINES.md` for details.
 
 ---
 

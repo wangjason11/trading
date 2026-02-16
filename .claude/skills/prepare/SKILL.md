@@ -80,7 +80,8 @@ engine_v2/
 6. **zones/wave_candles.py** - Wave candle identification per KL zone
 7. **zones/fib_tracker.py** - Fibonacci lifecycle management
 8. **zones/poi_zones.py** - POI zone derivation (Fib + IC)
-9. **charting/export_plotly.py** - Chart generation with all overlays
+9. **zones/wvmi.py** - WVMI (after POI zones — needs POI inner bounds for activation gate)
+10. **charting/export_plotly.py** - Chart generation with all overlays
 
 **For each module, understand:**
 - What data/events it receives as input

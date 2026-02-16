@@ -20,7 +20,8 @@ from engine_v2.patterns.imbalance import compute_imbalance
 from engine_v2.zones.wave_candles import identify_wave_candles, WaveCandleResult
 
 # Week 8: WVMI
-from engine_v2.zones.wvmi import WVMITracker
+from engine_v2.zones.wvmi import WVMITracker, check_proximity_activation
+from engine_v2.structure.structure_engine import _pip_size_from_pair
 
 # Week 7: Fib tracking
 from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig
@@ -135,23 +136,6 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
                 # The reversal from structure N creates structure N+1
                 # Store the apply_idx for the NEW structure (prev_sid + 1)
                 reversal_confirmed_by_sid[prev_sid + 1] = apply_idx
-
-    # 5c) WVMI (Week 8 Part 2) - volume momentum per BOS zone
-    wvmi_tracker = WVMITracker()
-
-    for ev in sorted_events:
-        if ev.type == "CTS_CONFIRMED":
-            wvmi_tracker.on_cts_confirmed(ev, s_res.df, wave_candle_results, kl_zones)
-
-    for ev in sorted_events:
-        if ev.type == "BOS_CONFIRMED":
-            wvmi_tracker.on_bos_confirmed(ev, s_res.df, wave_candle_results)
-
-    wvmi_tracker.update_temporary_lp(s_res.df, kl_zones)
-
-    wvmi_records = wvmi_tracker.get_records()
-    meta["wvmi"] = wvmi_records
-    print(f"[wvmi] total={len(wvmi_records)}, locked={sum(1 for r in wvmi_records if r.lp_locked)}")
 
     # 6) Fib tracking (Week 7) - process events to track Fib levels
     fib_tracker = FibTracker(FibTrackerConfig(
@@ -311,6 +295,38 @@ def run_pipeline(df: pd.DataFrame) -> PipelineResult:
     print("[poi_zones] total=", len(poi_zones))
     meta["poi_zones"] = poi_zones
     meta["fib_tracker"] = fib_tracker
+
+    # 9) WVMI (after POI zones — needs POI zone inner bounds for proximity gate)
+    wvmi_tracker = WVMITracker()
+
+    pip_size = _pip_size_from_pair(s_res.df)
+    activated_cycles = check_proximity_activation(
+        df=s_res.df,
+        sorted_events=sorted_events,
+        kl_zones=kl_zones,
+        poi_zones=poi_zones,
+        pip_size=pip_size,
+        proximity_pips=20,
+    )
+
+    for ev in sorted_events:
+        if ev.type == "CTS_CONFIRMED":
+            sid = ev.meta.get("structure_id", 0)
+            cycle_id = ev.meta.get("cycle_id", 0)
+            if (sid, cycle_id) in activated_cycles:
+                rec = wvmi_tracker.on_cts_confirmed(ev, s_res.df, wave_candle_results, kl_zones)
+                if rec is not None:
+                    rec.meta.update(activated_cycles[(sid, cycle_id)])
+
+    for ev in sorted_events:
+        if ev.type == "BOS_CONFIRMED":
+            wvmi_tracker.on_bos_confirmed(ev, s_res.df, wave_candle_results)
+
+    wvmi_tracker.update_temporary_lp(s_res.df, kl_zones)
+
+    wvmi_records = wvmi_tracker.get_records()
+    meta["wvmi"] = wvmi_records
+    print(f"[wvmi] total={len(wvmi_records)}, locked={sum(1 for r in wvmi_records if r.lp_locked)}")
 
     # For chart overlay (export_plotly reads df.attrs)
     # Note: imbalance is now in columns (is_imbalance, imbalance_gap_size), not attrs

@@ -88,8 +88,9 @@ Ordering is intentionally locked for Week 6: base features must be computed **be
 Identifies boundary candles between consecutive waves at each KL zone. For each zone, produces a `WaveCandleResult` with `last_wave_candle_idx` (end of prior wave) and `first_wave_candle_idx` (start of new wave). BIB zones use an event-driven multi-step search; non-BIB zones use a ±5 candle window. Results stored in `df.attrs["wave_candles"]`. See `WAVE_CANDLES_SPEC.md`.
 
 ### WVMI (`zones/wvmi.py`)
-Measures BOS zone strength via volume ratios of wave candle pairs. Lifecycle mirrors FibTracker:
-1. **Created** at CTS_n confirmation — breakout momentum locked from FB/LB volumes
+Measures BOS zone strength via volume ratios of wave candle pairs. Runs **after POI zones** because it depends on POI zone inner bounds for its activation gate. Lifecycle:
+0. **Activated** — `check_proximity_activation()` scans candles from CTS_CONFIRMED+1 to zone deactivation (next BOS or reversal). Only cycles where price approaches within 20 pips of the closest active zone inner bound (KL or POI) proceed.
+1. **Created** at CTS_n confirmation (only if activated) — breakout momentum locked from FB/LB volumes
 2. **Updated** each candle — temporary LP shifts to closest qualified candle near outer bound
 3. **Locked** at BOS_n+1 confirmation — LP finalizes, pullback momentum locked
 

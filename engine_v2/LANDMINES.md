@@ -17,12 +17,13 @@
 ## Pipeline Ordering Constraint
 
 ```
-candle features → structure patterns → base features → market structure → KL zones → charting
+candle features → structure patterns → imbalance → market structure → KL zones → wave candles → Fib tracking → POI zones → WVMI → charting
 ```
 
 **MUST:** Base features MUST run BEFORE market structure so zone resolution is stable.
+**MUST:** WVMI MUST run AFTER POI zones — it depends on POI zone inner bounds for its proximity activation gate.
 
-**Why:** Market structure depends on candle classification and pattern detection from base features. If base features run after structure, the structure module will operate on stale or missing feature data, leading to incorrect BOS/CTS detection.
+**Why:** Market structure depends on candle classification and pattern detection from base features. WVMI's activation gate checks whether price retraces within 20 pips of zone inner bounds (both KL and POI), so POI zones must exist first.
 
 **Enforcement:** Pipeline ordering is defined in `pipeline/orchestrator.py` and marked as LOCKED.
 
@@ -117,6 +118,7 @@ Common sources of off-by-one bugs:
 1. **Zero FB/FP volume blocks WVMI creation** — division by zero guard. Ensure candle features (volume) are computed before WVMI runs.
 2. **Temp LP only locks on BOS_n+1** — do not assume `lp_locked=True` until BOS of the next cycle confirms. Until then, LP and pullback_momentum can shift every candle.
 3. **buy_momentum/sell_momentum are direction-mapped** — for buy zones: buy=breakout, sell=pullback. For sell zones: reversed. Always check `zone_side` when interpreting.
+4. **Proximity activation gate is mandatory** — WVMI records are only created for cycles where price actually retraces within 20 pips of the closest active zone inner bound. Scan window: `[CTS_CONFIRMED + 1, next_BOS_CONFIRMED - 1]` or `[CTS_CONFIRMED + 1, REVERSAL apply_idx - 1]`. Uses only active zones at each candle.
 
 ---
 

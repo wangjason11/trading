@@ -358,6 +358,32 @@ return ev_idx
 
 ---
 
+## WVMI Activation: Scan Must Start at CTS_CONFIRMED, Not CTS_ESTABLISHED
+
+**Problem:** The WVMI proximity activation gate scans for candles near zone inner bounds to decide whether to create WVMI records. If the scan starts at `CTS_ESTABLISHED + 1`, it triggers immediately because CTS_ESTABLISHED happens during the pullback — price is naturally near the zone at that point.
+
+**Example:** sid=0 cycle=0 had CTS_ESTABLISHED at idx=115 with zone inner=0.55910. The next candle (idx=116) had low=0.56014, only 10.4 pips from the zone — trivially activated because the pullback hadn't completed yet.
+
+**Fix:** Start the scan at `CTS_CONFIRMED + 1`. By CTS_CONFIRMED, the pullback phase is over and any future proximity represents a genuine retrace.
+
+**Lesson:** When designing proximity/activation checks relative to structure events, carefully consider what phase of the cycle the event occurs in. CTS_ESTABLISHED ≠ CTS_CONFIRMED in terms of where price is relative to zones.
+
+---
+
+## WVMI Activation: Scan Window Must Be Bounded by Zone Activity
+
+**Problem:** The WVMI activation scan must stop when the cycle's zones become inactive. Without a scan end boundary, the scan can continue past the cycle boundary and find proximity matches that belong to a different cycle.
+
+**Example:** sid=0 cycle=1 had CTS_CONFIRMED at idx=640 and BOS_CONFIRMED for cycle=2 also at idx=640. The scan window was empty [641, 639] — correctly skipped. Without the boundary, the scan would have continued to idx=710 and found a match that belonged to structure 1.
+
+**Key boundaries:**
+- Next BOS_CONFIRMED for `(sid, cycle_id + 1)` → current cycle zones become inactive
+- REVERSAL_CANDIDATE `apply_idx` for sid → structure ends
+
+**Also:** Within the scan window, only use active POI zones at each candle (check `confirmed_idx <= candle <= end_idx`). If no POI zones are active yet, fall back to BOS KL zone inner only.
+
+---
+
 ## Auto-Extend Index Shift: `fetch_history_with_auto_extend` vs `get_history`
 
 **Problem:** `run_replay.py` uses `fetch_history_with_auto_extend` which extends the start date backward (e.g., Dec 1 → Nov 15) to ensure enough candle history for features. Using plain `get_history(CONFIG.pair, CONFIG.timeframe, CONFIG.start, CONFIG.end)` directly produces different indices for the same candle.

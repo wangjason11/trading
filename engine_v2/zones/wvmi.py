@@ -13,6 +13,7 @@ import pandas as pd
 
 from engine_v2.common.types import KLZone, WVMIRecord
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.zones.poi_zones import POIZone
 from engine_v2.zones.wave_candles import WaveCandleResult
 
 
@@ -139,6 +140,143 @@ def _assign_direction_labels(
         return _r(breakout), _r(pullback)
     else:
         return _r(pullback), _r(breakout)
+
+
+# ---------------------------------------------------------------------------
+# Price proximity activation gate
+# ---------------------------------------------------------------------------
+
+def check_proximity_activation(
+    df: pd.DataFrame,
+    sorted_events: List[StructureEvent],
+    kl_zones: List[KLZone],
+    poi_zones: List[POIZone],
+    pip_size: float,
+    proximity_pips: int = 20,
+) -> Dict[tuple, dict]:
+    """
+    Determine which (sid, cycle_id) pairs have been activated by price
+    approaching within *proximity_pips* of the closest zone inner bound.
+
+    Scan starts after CTS_CONFIRMED (not CTS_ESTABLISHED) and ends when
+    zones become inactive — i.e. when the next BOS_CONFIRMED for the same
+    sid occurs (new cycle starts) or a REVERSAL_CANDIDATE ends the structure.
+
+    At each candle, only active zones contribute to the trigger level:
+    - BOS KL zone inner (active throughout the scan window)
+    - POI zones whose confirmed_idx <= candle <= end_idx (or end_idx is None)
+
+    Returns dict keyed by (sid, cycle_id) with activation metadata:
+        activation_idx  — first candle index that triggered activation
+        trigger_inner   — the inner price used as trigger level
+        proximity_pips  — configured pip threshold
+    """
+    threshold = proximity_pips * pip_size
+
+    # 1. Build lookup: (sid, cycle_id) → CTS_CONFIRMED event
+    cts_conf_by_key: Dict[tuple, StructureEvent] = {}
+    for ev in sorted_events:
+        if ev.type == "CTS_CONFIRMED":
+            key = (ev.meta.get("structure_id", 0), ev.meta.get("cycle_id", 0))
+            cts_conf_by_key[key] = ev
+
+    # 2. Build lookup: (sid, cycle_id) → BOS_CONFIRMED idx
+    bos_conf_idx_by_key: Dict[tuple, int] = {}
+    for ev in sorted_events:
+        if ev.type == "BOS_CONFIRMED":
+            key = (ev.meta.get("structure_id", 0), ev.meta.get("cycle_id", 0))
+            bos_conf_idx_by_key[key] = ev.idx
+
+    # 3. Build lookup: sid → REVERSAL_CANDIDATE apply_idx
+    reversal_idx_by_sid: Dict[int, int] = {}
+    for ev in sorted_events:
+        if ev.type == "REVERSAL_CANDIDATE":
+            sid = ev.meta.get("structure_id", 0)
+            apply_idx = ev.meta.get("apply_idx")
+            if apply_idx is not None:
+                reversal_idx_by_sid[sid] = apply_idx
+
+    activated: Dict[tuple, dict] = {}
+
+    for key, cts_ev in cts_conf_by_key.items():
+        sid, cycle_id = key
+
+        # Find BOS KL zone for this (sid, cycle_id)
+        bos_zone = _find_bos_zone(kl_zones, sid, cycle_id)
+        if bos_zone is None:
+            continue
+        bos_inner = bos_zone.meta.get("inner")
+        zone_side = bos_zone.side
+        if zone_side not in ("buy", "sell"):
+            continue
+
+        # Collect POI zones for this (sid, cycle_id)
+        cycle_poi_zones = [
+            pz for pz in poi_zones
+            if pz.meta.get("structure_id") == sid and pz.meta.get("cycle_id") == cycle_id
+        ]
+
+        # Determine scan window end: zones become inactive at next BOS or reversal
+        scan_end = len(df) - 1
+        next_bos_idx = bos_conf_idx_by_key.get((sid, cycle_id + 1))
+        if next_bos_idx is not None:
+            scan_end = min(scan_end, next_bos_idx - 1)
+        reversal_idx = reversal_idx_by_sid.get(sid)
+        if reversal_idx is not None:
+            scan_end = min(scan_end, reversal_idx - 1)
+
+        scan_start = cts_ev.idx + 1
+
+        if scan_start > scan_end:
+            continue
+
+        for i in range(scan_start, scan_end + 1):
+            if i not in df.index:
+                continue
+
+            # Build trigger level from active zones at this candle
+            all_inners: List[float] = []
+
+            # BOS KL zone inner (active throughout scan window)
+            if bos_inner is not None:
+                all_inners.append(float(bos_inner))
+
+            # POI zones: only include if active at this candle
+            for pz in cycle_poi_zones:
+                confirmed_idx = pz.meta.get("confirmed_idx")
+                end_idx = pz.meta.get("end_idx")
+                if confirmed_idx is not None and i >= confirmed_idx:
+                    if end_idx is None or i <= end_idx:
+                        if zone_side == "buy":
+                            all_inners.append(pz.top)
+                        else:
+                            all_inners.append(pz.bottom)
+
+            if not all_inners:
+                continue
+
+            if zone_side == "buy":
+                trigger_inner = max(all_inners)
+                candle_low = float(df.loc[i, "l"])
+                if candle_low <= trigger_inner + threshold:
+                    activated[key] = {
+                        "activation_idx": i,
+                        "trigger_inner": trigger_inner,
+                        "proximity_pips": proximity_pips,
+                    }
+                    break
+            else:  # sell
+                trigger_inner = min(all_inners)
+                candle_high = float(df.loc[i, "h"])
+                if candle_high >= trigger_inner - threshold:
+                    activated[key] = {
+                        "activation_idx": i,
+                        "trigger_inner": trigger_inner,
+                        "proximity_pips": proximity_pips,
+                    }
+                    break
+
+    return activated
 
 
 # ---------------------------------------------------------------------------

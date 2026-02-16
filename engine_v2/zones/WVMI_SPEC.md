@@ -11,11 +11,65 @@ Wave Volume Momentum Indicator (WVMI) measures BOS zone strength by tracking vol
 
 ---
 
+## Price Proximity Activation
+
+WVMI records are only created for cycles where price actually approaches the zone. This prevents eagerly computing momentum for zones that price never retraces to.
+
+### Scan Window
+
+For each `(sid, cycle_id)` with a `CTS_CONFIRMED` event:
+
+- **Start:** `CTS_CONFIRMED idx + 1` — avoids trivial activation during the pullback that formed the CTS
+- **End:** earliest of:
+  - `BOS_CONFIRMED idx - 1` for `(sid, cycle_id + 1)` — next cycle's BOS deactivates current zones
+  - `REVERSAL_CANDIDATE apply_idx - 1` for sid — structure ends
+  - End of data
+
+If the scan window is empty (start > end), the cycle is skipped.
+
+### Trigger Zone Selection
+
+At each candle in the scan window, the trigger level is built from **active** zones only:
+
+1. BOS KL zone `inner` bound (active throughout the scan window)
+2. POI zones for `(sid, cycle_id)` where `confirmed_idx <= candle_idx` and (`end_idx` is None or `end_idx >= candle_idx`)
+3. Inner bounds: `top` for buy zones, `bottom` for sell zones
+4. **Trigger inner:** highest inner for buy zones (closest to CTS above), lowest inner for sell zones (closest to CTS below)
+
+### Proximity Check
+
+- **Buy zone:** activated when `candle_low <= trigger_inner + 20 * pip_size`
+- **Sell zone:** activated when `candle_high >= trigger_inner - 20 * pip_size`
+- Activation stops at the first qualifying candle
+
+### Edge Cases
+
+| Case | Behavior |
+|------|----------|
+| No active POI zones at candle | Only BOS KL zone inner bound used as trigger |
+| No BOS KL zone | No activation possible → no WVMI |
+| BOS zone has no `inner` AND no active POI zones | Candle skipped; later candles may have active POI zones |
+| CTS_CONFIRMED but empty scan window | Skipped (next BOS at same idx or earlier) |
+| CTS_CONFIRMED but price never approaches | Not activated → no WVMI |
+
+### Activation Metadata
+
+When activated, the `WVMIRecord.meta` dict is populated with:
+- `activation_idx` — first candle that triggered activation
+- `trigger_inner` — the inner price used as trigger level
+- `proximity_pips` — configured pip threshold (default 20)
+
+---
+
 ## Lifecycle (mirrors FibTracker)
+
+### 0. Activated — Price Approaches Zone
+
+`check_proximity_activation()` determines which `(sid, cycle_id)` pairs are eligible for WVMI creation. Only activated cycles proceed to step 1.
 
 ### 1. Created — CTS_n Confirmed
 
-Triggered by `on_cts_confirmed()`. Derives 4 wave candle indices from BOS_n and CTS_n:
+Triggered by `on_cts_confirmed()` **only if the cycle was activated**. Derives 4 wave candle indices from BOS_n and CTS_n:
 
 | Role | Source | Wave Candle Field |
 |------|--------|-------------------|
@@ -128,11 +182,15 @@ pullback_momentum = (LP_volume * LP_weight) / FP_volume
 
 ## Pipeline Integration
 
+WVMI runs **after POI zones** (needs POI zone inner bounds for proximity gate):
+
 ```
-wave_candles → WVMITracker:
-  1. for CTS_CONFIRMED events → on_cts_confirmed()    [create]
-  2. for BOS_CONFIRMED events → on_bos_confirmed()    [lock]
-  3. update_temporary_lp()                             [shift]
+wave_candles → Fib tracking → POI zones → WVMI:
+  0. check_proximity_activation()                      [gate]
+  1. for CTS_CONFIRMED events (activated only) →
+       on_cts_confirmed() + meta update                [create]
+  2. for BOS_CONFIRMED events → on_bos_confirmed()     [lock]
+  3. update_temporary_lp()                              [shift]
   → df.attrs["wvmi"] = wvmi_tracker.get_records()
 ```
 
