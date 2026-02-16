@@ -53,8 +53,8 @@
 **Problem:** After sid N reversal, determining the correct start_idx for sid N+1.
 
 **Flow:**
-1. **Exception 1** (in `identify_start.py`): Check if any candle after last confirmed CTS but before reversal has higher high (uptrend) or lower low (downtrend). If so, start from that extreme.
-2. **Exception 2** (iterative probe in `structure_engine.py`): If Exception 1 not triggered, run a bounded "probe" (dry run) of MarketStructure from original candidate to reversal_confirmed. If CTS established AND price reached near CTS zone outer bound (within 10 pips of inner), discard the probe and re-probe from the exception candle. Iterate until no exception triggers or max 10 iterations.
+1. **Exception 1** (in `identify_start.py`): Check if any candle after last confirmed CTS but before reversal has higher high (uptrend) or lower low (downtrend). If so, override start_idx to that extreme.
+2. **Exception 2** (iterative probe in `structure_engine.py`): Always runs regardless of Exception 1. Starts from Exception 1's override start_idx if it triggered, or from base last CTS idx if it didn't. Runs a bounded "probe" (dry run) of MarketStructure from candidate to reversal_confirmed. If CTS established AND price reached near CTS zone outer bound (within 10 pips of inner), discard the probe and re-probe from the exception candle. Iterate until no exception triggers or max 10 iterations.
 
 **Key insight:** Probes run on a **copy** of df with `end_idx` parameter.
 - **No exception ever triggered:** Keep the first probe's data (events + levels + df), continue from `reversal_confirmed_idx + 1`.

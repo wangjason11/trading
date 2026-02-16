@@ -52,7 +52,8 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
 
     Exception handling after reversal:
       - Exception 1: If higher high/lower low exists after last CTS but before reversal, start there
-      - Exception 2 (probe): If Exception 1 not triggered, run probe to reversal_confirmed.
+      - Exception 2 (probe): Always runs regardless of Exception 1. Starts from Exception 1's
+        override if triggered, or base last CTS idx otherwise. Runs probe to reversal_confirmed.
         If pullback confirmed and price reached near CTS zone, start from that candle.
     """
     _validate_input(df)
