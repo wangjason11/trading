@@ -54,7 +54,13 @@ engine_v2/
 │   ├── kl_zones_v1.py               # KL Zone derivation from events
 │   ├── wave_candles.py              # Wave candle identification
 │   ├── fib_tracker.py               # Fibonacci lifecycle management
-│   └── poi_zones.py                 # POI Zone derivation (Fib + IC)
+│   ├── poi_zones.py                 # POI Zone derivation (Fib + IC)
+│   └── wvmi.py                      # Wave Volume Momentum Indicator
+├── multitf/
+│   ├── types.py                     # MultiTFTrigger, LowerTFResult
+│   ├── data_bridge.py               # Fetch/prepare lower-TF data
+│   ├── uc1_trigger.py               # UC1 trigger detection
+│   └── lower_tf_pipeline.py         # Lower-TF pipeline runner
 ├── patterns/
 │   ├── structure_patterns.py        # Breakout pattern detection
 │   └── imbalance.py                 # Imbalance (FVG) pattern detection
@@ -81,7 +87,8 @@ engine_v2/
 7. **zones/fib_tracker.py** - Fibonacci lifecycle management
 8. **zones/poi_zones.py** - POI zone derivation (Fib + IC)
 9. **zones/wvmi.py** - WVMI (after POI zones — needs POI inner bounds for activation gate)
-10. **charting/export_plotly.py** - Chart generation with all overlays
+10. **multitf/** - Multi-TF analysis (UC1: 15M reverse from H1 CTS + WVMI activation)
+11. **charting/export_plotly.py** - Chart generation with all overlays
 
 **For each module, understand:**
 - What data/events it receives as input

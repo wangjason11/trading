@@ -66,6 +66,10 @@ Produced by MarketStructure:
   - `RANGE_STARTED`, `RANGE_UPDATED`, `RANGE_RESET`
   - threshold events such as `CTS_THRESHOLD_UPDATED` (used for zones)
 
+**`ev.idx` convention — IMPORTANT:**
+- Most events: `ev.idx` = confirmation/apply candle (when the event is known)
+- **BOS_CONFIRMED exception:** `ev.idx` = BOS extreme candle (the level location), NOT when it was confirmed. Use `ev.meta["confirmed_at"]` for timing boundaries (scan windows, lifecycle ends).
+
 The engine maintains a stable downstream interface by converting structure events into StructureLevels (CTS/BOS list).【fileciteturn1file14】
 
 #### KLZone
@@ -97,7 +101,21 @@ Measures BOS zone strength via volume ratios of wave candle pairs. Runs **after 
 Results stored in `df.attrs["wvmi"]` (list of `WVMIRecord`). See `WVMI_SPEC.md`.
 
 ### Scenario 3 (`structure/structure_engine.py`)
-Arbitrary-start structure analysis with iterative BOS_0 probe. Phase 1 validates/refines `start_idx` by checking if price reaches the BOS_0 zone inner bound (within 10 pip tolerance). Phase 2 continues multi-structure analysis from the finalized probe using the same logic as `compute_structure`. Returns `Scenario3Result` with status "finalized" or "pending".
+Arbitrary-start structure analysis with iterative BOS_0 probe. Phase 1 validates/refines `start_idx` by checking if price reaches the BOS_0 zone inner bound (within configurable pip tolerance: H1=10, M15=3, M5=1). Phase 2 continues multi-structure analysis from the finalized probe using the same logic as `compute_structure`. Returns `Scenario3Result` with status "finalized" or "pending".
+
+### Multi-TF Analysis (`multitf/`)
+Subordinate lower-TF structures triggered by higher-TF events. Foundation supports UC1 (15M reverse structure from H1 CTS).
+
+**UC1 flow:** H1 `CTS_CONFIRMED` + WVMI activation → detect trigger (`uc1_trigger.py`) → fetch/prepare M15 data (`data_bridge.py`) → run Scenario 3 + downstream pipeline on M15 slice (`lower_tf_pipeline.py`).
+
+**Key design decisions:**
+- M15 structure uses opposite direction to H1 (`lower_sd = -1 * h1_sd`)
+- Start mapped from H1 CTS extreme candle (not confirmation candle) to M15 extreme match
+- M15 slice includes 50-candle lookback buffer for neighbor-dependent calculations
+- KL zones are BOS-only (`source_kinds=["BOS"]`), Fib uses imbalance-gated mode (`fib_mode="m15_reverse"`)
+- Lifecycle bounded by parent H1 cycle (ends at next BOS or reversal)
+- All events/zones carry attribution: `timeframe`, `use_case`, `parent_tf`, `parent_sid`, `parent_cycle_id`
+- Chart renders M15 zones as dashed rectangles with lower opacity
 
 ### Charting
 Charting reads from:

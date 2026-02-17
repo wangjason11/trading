@@ -84,8 +84,9 @@ class FibTracker:
     Only 1 active Fib per structure at a time (new cycle obsoletes previous).
     """
 
-    def __init__(self, config: Optional[FibTrackerConfig] = None):
+    def __init__(self, config: Optional[FibTrackerConfig] = None, fib_mode: str = "h1"):
         self.config = config or FibTrackerConfig()
+        self.fib_mode = fib_mode  # "h1" (default) or "m15_reverse"
 
         # Current Fib state per (structure_id, cycle_id) - always up-to-date
         # {(structure_id, cycle_id): FibState}
@@ -103,6 +104,10 @@ class FibTracker:
         # {structure_id: True/False/None}
         # None = undetermined, True = CTS_0 >= rv_idx, False = resolved at CTS_0 CONFIRMED
         self._scenario1: Dict[int, Optional[bool]] = {}
+
+        # M15 reverse mode: track active cross-cycle Fib per structure
+        # When a cross-cycle Fib starts, subsequent cycles don't get their own Fibs
+        self._m15_active_cross_cycle: Dict[int, bool] = {}
 
     def on_cts_established(
         self,
@@ -161,8 +166,13 @@ class FibTracker:
         has_unfilled = has_unfilled_imbalance(df, start_idx, end_idx, cts_idx, self.config.fill_threshold)
 
         # ============================================================
-        # BRANCH: sid = 0 (no prior reversal) vs sid = 1+ (post-reversal)
+        # BRANCH: fib_mode determines logic
         # ============================================================
+        if self.fib_mode == "m15_reverse":
+            return self._handle_m15_reverse_cts_established(
+                sid, cycle_id, sd, bos_idx, bos_price, cts_idx, cts_price, has_unfilled, df
+            )
+
         if sid == 0:
             return self._handle_sid0_cts_established(
                 sid, cycle_id, sd, bos_idx, bos_price, cts_idx, cts_price, has_unfilled, df
@@ -172,6 +182,55 @@ class FibTracker:
                 sid, cycle_id, sd, bos_idx, bos_price, cts_idx, cts_price,
                 has_unfilled, df, reversal_confirmed_idx, prev_bos_outer, prev_sd
             )
+
+    def _handle_m15_reverse_cts_established(
+        self,
+        sid: int,
+        cycle_id: int,
+        sd: int,
+        bos_idx: int,
+        bos_price: float,
+        cts_idx: int,
+        cts_price: float,
+        has_unfilled: bool,
+        df: pd.DataFrame,
+    ) -> Optional[FibState]:
+        """
+        Handle CTS_ESTABLISHED for M15 reverse structure (imbalance-gated cross-cycle).
+
+        Rules:
+        1. Walk cycles sequentially
+        2. If active cross-cycle Fib exists from a prior cycle, skip this cycle
+        3. No unfilled imbalance -> NO Fib for this cycle
+        4. Has unfilled imbalance -> cross-cycle Fib from this cycle's BOS
+        """
+        # If a cross-cycle Fib is already active for this structure, skip
+        if self._m15_active_cross_cycle.get(sid, False):
+            print(f"[fib] m15_reverse sid={sid} cycle={cycle_id} SKIPPED: cross-cycle Fib already active")
+            return None
+
+        if not has_unfilled:
+            print(f"[fib] m15_reverse sid={sid} cycle={cycle_id} NO FIB: no unfilled imbalance")
+            return None
+
+        # Has unfilled imbalance -> activate cross-cycle Fib
+        print(f"[fib] m15_reverse sid={sid} cycle={cycle_id} CROSS-CYCLE ACTIVATED")
+        self._m15_active_cross_cycle[sid] = True
+
+        return self._activate_fib(
+            sid=sid,
+            cycle_id=cycle_id,
+            sd=sd,
+            bos_idx=bos_idx,
+            bos_price=bos_price,
+            cts_idx=cts_idx,
+            cts_price=cts_price,
+            meta={
+                "activated_at": cts_idx,
+                "cross_cycle": True,
+                "fib_mode": "m15_reverse",
+            },
+        )
 
     def _handle_sid0_cts_established(
         self,

@@ -394,6 +394,84 @@ return ev_idx
 
 ---
 
+## CTS_CONFIRMED `ev.idx` Is the Confirmation Candle, Not the CTS Extreme
+
+**Problem:** `CTS_CONFIRMED` events have `ev.idx` set to the **confirmation candle** (where the pullback confirmed the CTS level), not the CTS extreme candle (where the high/low was set). The extreme candle index is in `ev.meta["cts_anchor_idx"]`.
+
+**Example:** H1 CTS extreme at idx=652, pullback confirmed at idx=683. `CTS_CONFIRMED` event has `ev.idx=683` and `ev.meta["cts_anchor_idx"]=652`.
+
+**Symptom:** When mapping CTS to lower TFs (UC1 trigger), using `ev.idx` started the M15 structure 31 candles too late.
+
+**Fix:** Always use `ev.meta.get("cts_anchor_idx", ev.idx)` when you need the CTS extreme candle.
+
+**Related fields:**
+- `ev.idx` = confirmation candle (where pullback confirmed)
+- `ev.meta["confirmed_at"]` = same as `ev.idx` (confirmation candle)
+- `ev.meta["cts_anchor_idx"]` = CTS extreme candle (where high/low was set)
+
+---
+
+## BOS_CONFIRMED `ev.idx` Is the BOS Extreme, Not the Confirmation Candle
+
+**Problem:** Unlike every other event type, `BOS_CONFIRMED` has `ev.idx` set to the **BOS extreme candle** (where the BOS level price was set), not the confirmation candle. The confirmation candle index is in `ev.meta["confirmed_at"]`.
+
+**Convention mismatch:**
+| Event | `ev.idx` means |
+|-------|---------------|
+| CTS_ESTABLISHED | confirmation candle |
+| CTS_CONFIRMED | confirmation candle |
+| REVERSAL_CANDIDATE | anchor candle (with `apply_idx` in meta) |
+| **BOS_CONFIRMED** | **BOS extreme candle** (exception!) |
+
+**Symptom:** Using `ev.idx` for timing boundaries (scan windows, lifecycle ends) cuts the window short — the BOS isn't actually known until `confirmed_at`, which can be many candles later.
+
+**Bugs caused by this:**
+- UC1 lifecycle boundary ended at BOS extreme instead of confirmation → M15 structure too short to finalize
+- WVMI scan window ended at BOS extreme → missed valid proximity activations
+
+**Fix:** Always use `int(ev.meta.get("confirmed_at", ev.idx))` when you need the candle where BOS was actually confirmed.
+
+**Related fields:**
+- `ev.idx` = BOS extreme candle (where the BOS price level was set)
+- `ev.price` = BOS price level
+- `ev.meta["confirmed_at"]` = confirmation candle (when the breakout was detected)
+- `ev.meta["pb_start"]` = pullback start index
+
+---
+
+## Exception Check Must Exclude CTS_ESTABLISHED Candle
+
+**Problem:** The Scenario 3 BOS_0 probe exception and Exception 2 probe both check whether price returns near the zone after a pullback. The check window was `[CTS_EST.idx, CTS_EST_next.idx]`, which **includes** the CTS_ESTABLISHED candle itself.
+
+**Why this is wrong:** CTS_ESTABLISHED is the pullback confirmation candle — for a bearish structure (sd=-1), CTS marks a HIGH, so the CTS_ESTABLISHED candle's high is naturally near the BOS zone. Including it in the exception check causes false restarts.
+
+**Example:** M15 probe iteration 0 had CTS_EST at idx=53 with high=0.58486, only 4.8 pips from BOS_0 outer=0.58534. This trivially triggered the exception because the pullback confirmation candle was inherently close to the zone.
+
+**Fix:** Start the check from `CTS_EST.idx + 1`:
+```python
+# Before (wrong):
+exc_idx = _find_closest_candle_to_outer(df, cts_est[0].idx, cts_est[1].idx, ...)
+
+# After (correct):
+exc_idx = _find_closest_candle_to_outer(df, cts_est[0].idx + 1, cts_est[1].idx, ...)
+```
+
+**Applies to:** Scenario 3 Phase 1 probe, Exception 2 in `compute_structure`, and Exception 2 in Scenario 3 Phase 2.
+
+**Lesson:** Same principle as "WVMI scan must start at CTS_CONFIRMED" — the pullback candle itself should never be used to evaluate post-pullback conditions.
+
+---
+
+## MarketStructure Re-Detects Patterns Internally
+
+**Problem:** `MarketStructure` creates its own `BreakoutPatterns(self.df)` instance and calls `detect_best_for_anchor()` at each candle during processing. It does NOT use pre-computed `pat_dir`/`pat_status` columns from the pattern detection pipeline step.
+
+**Why this matters:** When debugging pattern detection issues in structure processing, don't look at `df["pat_dir"]` columns — those were computed by the pipeline's pattern detection step and are NOT used by `MarketStructure`. Instead trace through `BreakoutPatterns.detect_best_for_anchor()`.
+
+**Implication:** Pattern detection in the pipeline (step 2) serves zone base-pattern identification and debugging. Structure detection (step 4) has its own independent pattern detection.
+
+---
+
 ## `_cts_from_breakout_event`: Include Confirmation Candle in Extreme Search
 
 **Problem:** `_cts_from_breakout_event` determines the CTS price by finding the extreme (max high for bullish, min low for bearish) across the pattern's candle span. Originally it only searched `[start_idx..end_idx]` (the pattern candles), but CONFIRMED patterns have an additional confirmation candle beyond `end_idx`.

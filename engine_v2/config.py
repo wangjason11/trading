@@ -10,6 +10,7 @@ class ReplayConfig:
     timeframe: str
     start: datetime
     end: datetime
+    lower_timeframes: tuple = ()  # e.g. ("M15",) to enable UC1
 
 
 # ---------------------------
@@ -33,6 +34,7 @@ CONFIG = ReplayConfig(
     # Use UTC for deterministic replay.
     start=datetime(2025, 12, 1, 0, 0, 0, tzinfo=timezone.utc),
     end=datetime(2026, 1, 20, 0, 0, 0, tzinfo=timezone.utc),
+    lower_timeframes=("M15",),  # Enable UC1 multi-TF
 
     # pair="NZD_USD",
     # timeframe="H1",

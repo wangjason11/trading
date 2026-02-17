@@ -19,9 +19,9 @@ WVMI records are only created for cycles where price actually approaches the zon
 
 For each `(sid, cycle_id)` with a `CTS_CONFIRMED` event:
 
-- **Start:** `CTS_CONFIRMED idx + 1` — avoids trivial activation during the pullback that formed the CTS
+- **Start:** `CTS_CONFIRMED confirmed_at + 1` — avoids trivial activation during the pullback that formed the CTS (uses `ev.meta["confirmed_at"]`, not `ev.idx`)
 - **End:** earliest of:
-  - `BOS_CONFIRMED idx - 1` for `(sid, cycle_id + 1)` — next cycle's BOS deactivates current zones
+  - `BOS_CONFIRMED confirmed_at - 1` for `(sid, cycle_id + 1)` — next cycle's BOS confirmation deactivates current zones (uses `ev.meta["confirmed_at"]`, not `ev.idx` which is the BOS extreme)
   - `REVERSAL_CANDIDATE apply_idx - 1` for sid — structure ends
   - End of data
 

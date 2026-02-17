@@ -180,12 +180,14 @@ def check_proximity_activation(
             key = (ev.meta.get("structure_id", 0), ev.meta.get("cycle_id", 0))
             cts_conf_by_key[key] = ev
 
-    # 2. Build lookup: (sid, cycle_id) → BOS_CONFIRMED idx
+    # 2. Build lookup: (sid, cycle_id) → BOS_CONFIRMED confirmed_at idx
+    #    Use confirmed_at (confirmation candle), not ev.idx (BOS extreme),
+    #    because the cycle isn't over until the BOS is actually confirmed.
     bos_conf_idx_by_key: Dict[tuple, int] = {}
     for ev in sorted_events:
         if ev.type == "BOS_CONFIRMED":
             key = (ev.meta.get("structure_id", 0), ev.meta.get("cycle_id", 0))
-            bos_conf_idx_by_key[key] = ev.idx
+            bos_conf_idx_by_key[key] = int(ev.meta.get("confirmed_at", ev.idx))
 
     # 3. Build lookup: sid → REVERSAL_CANDIDATE apply_idx
     reversal_idx_by_sid: Dict[int, int] = {}
@@ -225,7 +227,7 @@ def check_proximity_activation(
         if reversal_idx is not None:
             scan_end = min(scan_end, reversal_idx - 1)
 
-        scan_start = cts_ev.idx + 1
+        scan_start = int(cts_ev.meta.get("confirmed_at", cts_ev.idx)) + 1
 
         if scan_start > scan_end:
             continue

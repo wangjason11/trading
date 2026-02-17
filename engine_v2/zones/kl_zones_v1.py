@@ -688,6 +688,7 @@ def derive_kl_zones_v1(
     *,
     struct_direction: int,
     length_threshold: float = 0.7,
+    source_kinds: Optional[List[str]] = None,
 ) -> List[KLZone]:
     """
     Event-driven KL Zones v1:
@@ -742,6 +743,15 @@ def derive_kl_zones_v1(
     for ev in events:
         if ev.type not in ("BOS_CONFIRMED", "CTS_CONFIRMED", "CTS_THRESHOLD_UPDATED", "BOS_THRESHOLD_UPDATED", "CTS_ESTABLISHED"):
             continue
+
+        # source_kinds filter: skip events not matching allowed kinds
+        if source_kinds is not None:
+            if ev.type == "BOS_CONFIRMED" and "BOS" not in source_kinds:
+                continue
+            if ev.type in ("CTS_CONFIRMED", "CTS_ESTABLISHED", "CTS_THRESHOLD_UPDATED") and "CTS" not in source_kinds:
+                continue
+            if ev.type == "BOS_THRESHOLD_UPDATED" and "BOS" not in source_kinds:
+                continue
 
         # NEW: make sd/sid event-accurate for ALL event types (zones can span multiple structures now)
         sd = int((ev.meta or {}).get("struct_direction", sd))

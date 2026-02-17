@@ -250,6 +250,28 @@ STYLE = {
     },
 
     # -----------------------------
+    # Week 8: M15 KL Zones (dashed, lower opacity)
+    # -----------------------------
+    "zone.m15.kl.buy": {
+        "rgb": "0, 200, 0",
+        "fill_opacity_active": 0.15,
+        "fill_opacity_inactive": 0.06,
+        "confirm_line_width": 1.5,
+        "confirm_opacity_active": 0.6,
+        "confirm_opacity_inactive": 0.2,
+        "line_dash": "dash",
+    },
+    "zone.m15.kl.sell": {
+        "rgb": "200, 0, 0",
+        "fill_opacity_active": 0.15,
+        "fill_opacity_inactive": 0.06,
+        "confirm_line_width": 1.5,
+        "confirm_opacity_active": 0.6,
+        "confirm_opacity_inactive": 0.2,
+        "line_dash": "dash",
+    },
+
+    # -----------------------------
     # Week 8: Wave candle vertical lines
     # -----------------------------
     "wave_candle.bullish": {

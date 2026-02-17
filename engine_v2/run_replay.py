@@ -176,7 +176,7 @@ def main() -> None:
     )
     export_csv(df.copy(), raw_path)
 
-    res = run_pipeline(df)
+    res = run_pipeline(df, lower_timeframes=CONFIG.lower_timeframes)
 
     print(res.df["is_range"].value_counts())
     print(res.df[res.df["is_range"] == 1][["is_range_confirm_idx", "is_range_lag"]].head())

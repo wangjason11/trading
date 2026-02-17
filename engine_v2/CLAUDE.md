@@ -16,9 +16,9 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 
 | Part | Focus | Status |
 |------|-------|--------|
-| Part 1 | Scenario 3 for start candle identification | Pending |
-| Part 2 | Volume momentum indicator | Pending |
-| Part 3 | Multi-timeframe analysis (subordinate structures + overlay) | Pending |
+| Part 1 | Scenario 3 for start candle identification | Done |
+| Part 2 | Volume momentum indicator (WVMI + proximity gate) | Done |
+| Part 3 | Multi-timeframe analysis (subordinate structures + overlay) | Done |
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).
 

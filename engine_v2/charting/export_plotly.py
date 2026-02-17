@@ -2031,6 +2031,62 @@ def export_chart_plotly(
             print(f"[chart][wave_candles] rendered {wc_rendered} vertical lines")
 
     # -------------------------------------------------
+    # Week 8: M15 KL Zone overlays (from multi-TF analysis)
+    # Dashed rectangles, lower opacity, mapped back to H1 x-axis
+    # -------------------------------------------------
+    lower_tf_results = dfx.attrs.get("lower_tf_results", [])
+    if lower_tf_results and zone_cfg.get("KL", False):
+        h1_times = pd.to_datetime(dfx[COL_TIME], utc=True)
+        t_last_h1 = h1_times.iloc[-1]
+        m15_zones_rendered = 0
+
+        for lt_result in lower_tf_results:
+            m15_df = lt_result.df
+            if m15_df.empty:
+                continue
+            m15_times = pd.to_datetime(m15_df["time"], utc=True)
+
+            for zone in lt_result.kl_zones:
+                side = zone.side
+                m15_style = STYLE.get(f"zone.m15.kl.{side}", {})
+                if not m15_style:
+                    continue
+
+                rgb = m15_style.get("rgb", "128, 128, 128")
+                is_active = zone.meta.get("active", False)
+                fill_op = m15_style.get("fill_opacity_active" if is_active else "fill_opacity_inactive", 0.1)
+                line_dash = m15_style.get("line_dash", "dash")
+                line_width = m15_style.get("confirm_line_width", 1.5)
+                line_op = m15_style.get("confirm_opacity_active" if is_active else "confirm_opacity_inactive", 0.3)
+
+                # Map M15 zone times to H1 x-coordinates
+                # Zone start_time is already a timestamp - find nearest H1 candle
+                zone_start = pd.to_datetime(zone.start_time, utc=True)
+                zone_end = pd.to_datetime(zone.end_time, utc=True) if zone.end_time is not None else t_last_h1
+
+                # Clamp to visible H1 range
+                if zone_end < h1_times.iloc[0] or zone_start > t_last_h1:
+                    continue
+
+                fig.add_shape(
+                    type="rect",
+                    xref="x", yref="y",
+                    x0=zone_start, x1=zone_end,
+                    y0=zone.bottom, y1=zone.top,
+                    fillcolor=f"rgba({rgb}, {fill_op})",
+                    line=dict(
+                        width=line_width,
+                        dash=line_dash,
+                        color=f"rgba({rgb}, {line_op})",
+                    ),
+                    layer="below",
+                )
+                m15_zones_rendered += 1
+
+        if m15_zones_rendered:
+            print(f"[chart][m15_zones] rendered {m15_zones_rendered} M15 KL zones")
+
+    # -------------------------------------------------
     # Week 7: POI Zones overlays (rectangles + confirm line)
     # Yellow zones with vertical confirm line at confirmed_idx
     # -------------------------------------------------

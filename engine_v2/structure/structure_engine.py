@@ -152,9 +152,11 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
                 cts_established_idx = int(probe_cts_events[0].idx)
 
                 # Evaluate Exception 2: find candle closest to outer bound
+                # Start from CTS_EST + 1: the CTS_ESTABLISHED candle itself is
+                # the pullback confirmation, naturally near the zone.
                 exception_2_idx = _find_closest_candle_to_outer(
                     df_probe,
-                    cts_established_idx,
+                    cts_established_idx + 1,
                     reversal_confirmed_idx,
                     outer,
                     inner,
@@ -241,7 +243,7 @@ def compute_structure_scenario_3(
     struct_direction : int
         +1 for uptrend, -1 for downtrend.
     pip_tolerance_pips : int
-        Pip tolerance for zone proximity checking (default 15).
+        Pip tolerance for zone proximity checking (default 10; use 5 for M15, 3 for M5).
     max_probe_iterations : int
         Maximum number of probe restarts before giving up (default 10).
 
@@ -301,9 +303,12 @@ def compute_structure_scenario_3(
             break
 
         # --- Conditions 1 & 2: Evaluate exception ---
+        # Start from CTS_EST[0] + 1: the CTS_ESTABLISHED candle itself is the
+        # pullback confirmation, so its price is naturally near the zone.
+        # We only care if price returns to the zone AFTER the pullback.
         outer, inner, zone_side = original_bos0_bounds
         exc_idx = _find_closest_candle_to_outer(
-            df_probe, cts_est[0].idx, cts_est[1].idx,
+            df_probe, cts_est[0].idx + 1, cts_est[1].idx,
             outer, inner, tolerance, zone_side)
 
         if exc_idx is None:
@@ -392,8 +397,9 @@ def compute_structure_scenario_3(
                         break
 
                     cts_est_idx = int(exc2_cts[0].idx)
+                    # Start from CTS_EST + 1: exclude the pullback candle itself
                     exc2_idx = _find_closest_candle_to_outer(
-                        df_exc2_probe, cts_est_idx,
+                        df_exc2_probe, cts_est_idx + 1,
                         reversal_confirmed_idx,
                         zb_outer, zb_inner, pip_tol, zb_side)
 
