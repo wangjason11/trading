@@ -101,16 +101,24 @@ Measures BOS zone strength via volume ratios of wave candle pairs. Runs **after 
 Results stored in `df.attrs["wvmi"]` (list of `WVMIRecord`). See `WVMI_SPEC.md`.
 
 ### Scenario 3 (`structure/structure_engine.py`)
-Arbitrary-start structure analysis with iterative BOS_0 probe. Phase 1 validates/refines `start_idx` by checking if price reaches the BOS_0 zone inner bound (within configurable pip tolerance: H1=10, M15=3, M5=1). Phase 2 continues multi-structure analysis from the finalized probe using the same logic as `compute_structure`. Returns `Scenario3Result` with status "finalized" or "pending".
+Arbitrary-start structure analysis with iterative BOS_0 probe. Phase 1 validates/refines `start_idx` by checking if price reaches the BOS_0 zone inner bound (within configurable pip tolerance: H1=10, M15=3, M5=1). Phase 2 continues multi-structure analysis from the finalized probe using the same logic as `compute_structure`. Returns `Scenario3Result` with status always "finalized" (probe accepts current start when bound is reached).
+
+Parameters: `end_idx` bounds the probe window (passed to MarketStructure); `run_continuation=False` skips Phase 2 for probe-only use (e.g. H1 reverse probe that only needs the validated `start_idx`).
+
+### Structure From Start (`structure/structure_engine.py`)
+`compute_structure_from_start()` runs multi-structure analysis from a known start without Scenario 1 identification or Scenario 3 probes. Same Exception 1/2 handling on reversals as `compute_structure()`. Used for lower-TF structures where the start has been pre-validated by a higher-TF probe.
 
 ### Multi-TF Analysis (`multitf/`)
 Subordinate lower-TF structures triggered by higher-TF events. Foundation supports UC1 (15M reverse structure from H1 CTS).
 
-**UC1 flow:** H1 `CTS_CONFIRMED` + WVMI activation → detect trigger (`uc1_trigger.py`) → fetch/prepare M15 data (`data_bridge.py`) → run Scenario 3 + downstream pipeline on M15 slice (`lower_tf_pipeline.py`).
+**UC1 flow:** H1 `CTS_CONFIRMED` + WVMI activation → detect trigger (`uc1_trigger.py`) → fetch/prepare M15 data (`data_bridge.py`) → H1 reverse probe → map to M15 → plain structure + downstream pipeline (`lower_tf_pipeline.py`).
+
+**H1 reverse probe:** Runs `compute_structure_scenario_3()` on H1 data with `end_idx=activation_idx` and `run_continuation=False` to find a validated start candle for M15. Probe window is [cts_idx, activation_idx]. The H1 probe results (events, levels) are discarded — only `start_idx` is used.
 
 **Key design decisions:**
 - M15 structure uses opposite direction to H1 (`lower_sd = -1 * h1_sd`)
-- Start mapped from H1 CTS extreme candle (not confirmation candle) to M15 extreme match
+- H1 reverse probe validates start; validated H1 candle mapped to M15 extreme match
+- M15 runs `compute_structure_from_start()` (no probes) — start is pre-validated by H1 probe
 - M15 slice includes 50-candle lookback buffer for neighbor-dependent calculations
 - KL zones are BOS-only (`source_kinds=["BOS"]`), Fib uses imbalance-gated mode (`fib_mode="m15_reverse"`)
 - Lifecycle bounded by parent H1 cycle (ends at next BOS or reversal)

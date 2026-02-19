@@ -2365,34 +2365,36 @@ def export_chart_plotly(
                 layer="below",
             )
 
-            # Add hover trace (invisible line at midpoint of 61.8-80 zone for hover data)
+            # Add hover traces (one point per candle across the fib zone width)
+            # Plotly only detects hover near data points, not along line segments,
+            # so we need points at every candle for consistent hover detection.
             hover_y = (price_618 + price_80) / 2
-            hover_times = [x_start, x_end]
-            hover_vals = [hover_y, hover_y]
+            seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= x_start) & (dfx[COL_TIME] <= x_end)]
+            if len(seg_times) == 0:
+                seg_times = pd.Series([x_start, x_end])
 
-            hover_customdata = [
-                [
-                    fib_st.structure_id,
-                    fib_st.cycle_id,
-                    fib_st.bos_idx,
-                    f"{fib_st.bos_price:.5f}",
-                    fib_st.cts_idx,
-                    f"{fib_st.cts_price:.5f}",
-                    f"{price_618:.5f}",
-                    f"{price_80:.5f}",
-                    "active" if is_active else "locked" if fib_st.locked else "inactive",
-                ]
-                for _ in hover_times
+            hover_row = [
+                fib_st.structure_id,
+                fib_st.cycle_id,
+                fib_st.bos_idx,
+                f"{fib_st.bos_price:.5f}",
+                fib_st.cts_idx,
+                f"{fib_st.cts_price:.5f}",
+                f"{price_618:.5f}",
+                f"{price_80:.5f}",
+                "active" if is_active else "locked" if fib_st.locked else "inactive",
             ]
+            hover_customdata = [hover_row] * len(seg_times)
 
             fig.add_trace(
                 go.Scatter(
-                    x=hover_times,
-                    y=hover_vals,
+                    x=seg_times,
+                    y=[hover_y] * len(seg_times),
                     mode="lines",
                     name=f"fib:sid{fib_st.structure_id}:c{fib_st.cycle_id}",
                     showlegend=False,
                     line=dict(width=6, color="rgba(0,0,0,0)"),  # Invisible hover hitbox
+                    line_shape="hv",
                     hovertemplate=(
                         "<b>Fib Zone</b><br>"
                         "sid=%{customdata[0]}<br>"

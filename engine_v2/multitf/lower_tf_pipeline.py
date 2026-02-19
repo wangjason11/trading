@@ -1,7 +1,7 @@
 """Lower-TF pipeline runner for multi-TF analysis.
 
-Runs Scenario 3 structure + downstream pipeline on a slice of lower-TF data,
-then injects attribution metadata into all results.
+Runs H1 reverse probe to find validated start, then plain MarketStructure
+on M15 data + downstream pipeline. Injects attribution metadata.
 """
 from __future__ import annotations
 
@@ -13,7 +13,10 @@ import pandas as pd
 
 from engine_v2.multitf.types import MultiTFTrigger, LowerTFResult
 from engine_v2.multitf.data_bridge import map_candle_to_lower_tf
-from engine_v2.structure.structure_engine import compute_structure_scenario_3
+from engine_v2.structure.structure_engine import (
+    compute_structure_scenario_3,
+    compute_structure_from_start,
+)
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 
 # Scenario 3 BOS_0 probe pip tolerance by timeframe.
@@ -67,6 +70,50 @@ def _find_m15_lifecycle_end(
     return int(candidates.index[-1])
 
 
+def _run_h1_reverse_probe(
+    trigger: MultiTFTrigger,
+    h1_df: pd.DataFrame,
+) -> Optional[int]:
+    """Run H1 reverse Scenario 3 probe to find validated start for M15.
+
+    Probe window: [cts_idx, activation_idx] on the H1 df.
+    Direction: trigger.lower_sd (opposite of H1 sd).
+    Tolerance: 10 pips (H1).
+
+    Returns: H1 index of validated start, or None on failure.
+    """
+    cts_idx = trigger.meta.get("cts_idx")
+    activation_idx = trigger.meta.get("activation_idx")
+
+    if cts_idx is None or activation_idx is None:
+        print(f"[lower_tf] WARNING: Missing cts_idx or activation_idx in trigger meta "
+              f"for sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}")
+        return None
+
+    cts_idx = int(cts_idx)
+    activation_idx = int(activation_idx)
+
+    try:
+        s3_result = compute_structure_scenario_3(
+            h1_df,
+            start_idx=cts_idx,
+            struct_direction=trigger.lower_sd,
+            pip_tolerance_pips=10,
+            end_idx=activation_idx,
+            run_continuation=False,
+        )
+    except (ValueError, IndexError) as exc:
+        print(f"[lower_tf] WARNING: H1 reverse probe failed for "
+              f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}: {exc}")
+        return None
+
+    print(f"[lower_tf] H1 reverse probe: sid={trigger.parent_sid} "
+          f"cycle={trigger.parent_cycle_id} -> start_idx={s3_result.start_idx} "
+          f"status={s3_result.status} iterations={s3_result.probe_iterations}")
+
+    return s3_result.start_idx
+
+
 def run_lower_tf_pipeline(
     trigger: MultiTFTrigger,
     m15_df_prepared: pd.DataFrame,
@@ -74,28 +121,42 @@ def run_lower_tf_pipeline(
 ) -> Optional[LowerTFResult]:
     """Run the lower-TF pipeline for a single trigger.
 
-    1. Map H1 CTS candle to M15 start index
-    2. Determine M15 slice boundaries (start to lifecycle end)
-    3. Run Scenario 3 on the M15 slice
+    1. H1 reverse probe -> validated H1 start idx
+    2. Map validated H1 start -> M15 start idx
+    3. Run compute_structure_from_start() on M15 slice (no probes)
     4. Run downstream pipeline (KL zones BOS-only, Fib m15_reverse, POI, WVMI)
-    5. Inject attribution metadata
+    5. Inject attribution metadata + lifecycle capping
 
     Returns LowerTFResult or None if mapping fails.
     """
-    # 1. Map H1 CTS to M15 start
+    # 1. H1 reverse probe to find validated start
+    validated_h1_idx = _run_h1_reverse_probe(trigger, h1_df)
+    if validated_h1_idx is None:
+        return None
+
+    # 2. Map validated H1 start to M15
+    h1_start_time = pd.to_datetime(h1_df.loc[validated_h1_idx, "time"], utc=True)
+    # mapping_sd = parent_sd: for bearish reverse (lower_sd=-1), start is a high -> match highest high (sd=+1)
+    # for bullish reverse (lower_sd=+1), start is a low -> match lowest low (sd=-1)
+    mapping_sd = trigger.parent_sd
+    if mapping_sd == 1:
+        h1_start_price = float(h1_df.loc[validated_h1_idx, "h"])
+    else:
+        h1_start_price = float(h1_df.loc[validated_h1_idx, "l"])
+
     m15_start_idx = map_candle_to_lower_tf(
-        trigger.start_time,
-        trigger.start_price,
-        trigger.parent_sd,  # Use parent sd to find extreme (CTS marks high for sd=+1)
+        h1_start_time,
+        h1_start_price,
+        mapping_sd,
         m15_df_prepared,
     )
 
     if m15_start_idx is None:
-        print(f"[lower_tf] WARNING: Could not map H1 CTS to M15 for "
+        print(f"[lower_tf] WARNING: Could not map validated H1 start to M15 for "
               f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}")
         return None
 
-    # 2. Determine M15 slice end
+    # 3. Determine M15 slice end
     m15_end_idx = _find_m15_lifecycle_end(trigger, m15_df_prepared, h1_df)
     if m15_end_idx is None:
         m15_end_idx = int(m15_df_prepared.index[-1])
@@ -104,9 +165,7 @@ def run_lower_tf_pipeline(
         print(f"[lower_tf] WARNING: M15 slice too short: start={m15_start_idx} end={m15_end_idx}")
         return None
 
-    # 3. Create isolated M15 slice with lookback buffer
-    # Include at least 50 candles before the start for neighbor-dependent
-    # calculations (find_base_threshold ±5, wave candle lookback, etc.)
+    # 4. Create isolated M15 slice with lookback buffer
     lookback = 50
     slice_begin = max(0, m15_start_idx - lookback)
     trigger_df = m15_df_prepared.iloc[slice_begin:m15_end_idx + 1].copy()
@@ -122,31 +181,29 @@ def run_lower_tf_pipeline(
     print(f"[lower_tf] M15 slice: {len(trigger_df)} candles, "
           f"sd={trigger.lower_sd}, start_in_slice={start_in_slice}")
 
-    # 4. Run Scenario 3 structure
-    pip_tol = _PIP_TOLERANCE_BY_TF.get(trigger.lower_tf, 10)
+    # 5. Run plain structure from validated start (no probes)
     try:
-        s3_result = compute_structure_scenario_3(
+        m15_result = compute_structure_from_start(
             trigger_df,
             start_idx=start_in_slice,
             struct_direction=trigger.lower_sd,
-            pip_tolerance_pips=pip_tol,
         )
     except (ValueError, IndexError) as exc:
-        print(f"[lower_tf] WARNING: Scenario 3 failed for "
+        print(f"[lower_tf] WARNING: M15 structure failed for "
               f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}: {exc}")
         return None
 
-    # 5. Run downstream pipeline with M15-specific settings
+    # 6. Run downstream pipeline with M15-specific settings
     downstream = _run_downstream_pipeline(
-        s3_result.df,
-        s3_result.events,
-        s3_result.struct_direction,
+        m15_result.df,
+        m15_result.events,
+        m15_result.struct_direction,
         source_kinds=["BOS"],       # BOS-only KL zones for M15
         fib_mode="m15_reverse",     # Imbalance-gated cross-cycle Fib
         log_prefix=f"M15_sid{trigger.parent_sid}_c{trigger.parent_cycle_id}",
     )
 
-    # 6. Inject attribution into events
+    # 7. Inject attribution into events
     attribution = {
         "timeframe": trigger.lower_tf,
         "use_case": trigger.use_case,
@@ -155,17 +212,14 @@ def run_lower_tf_pipeline(
         "parent_cycle_id": trigger.parent_cycle_id,
     }
 
-    for ev in s3_result.events:
+    for ev in m15_result.events:
         ev.meta.update(attribution)
 
     for zone in downstream["kl_zones"]:
         zone.meta.update(attribution)
 
-    # 7. Cap open-ended zones/POIs to the lifecycle boundary.
-    #    The M15 structure ends when the parent H1 cycle ends — any zone
-    #    still active at that point should not extend beyond it.
-    last_time = pd.to_datetime(s3_result.df["time"].iloc[-1], utc=True)
-    last_idx = int(s3_result.df.index[-1])
+    # 8. Cap open-ended zones/POIs to the lifecycle boundary
+    last_time = pd.to_datetime(m15_result.df["time"].iloc[-1], utc=True)
     capped_zones = []
     for zone in downstream["kl_zones"]:
         if zone.end_time is None:
@@ -190,19 +244,19 @@ def run_lower_tf_pipeline(
 
     result = LowerTFResult(
         trigger=trigger,
-        df=s3_result.df,
-        events=s3_result.events,
+        df=m15_result.df,
+        events=m15_result.events,
         kl_zones=capped_zones,
         wave_candles=downstream["wave_candles"],
         fib_states=downstream["fib_states"],
         poi_zones=capped_pois,
         wvmi_records=downstream["wvmi_records"],
-        status=s3_result.status,
+        status="finalized",
         meta={
             "m15_start_idx": m15_start_idx,
             "m15_end_idx": m15_end_idx,
             "m15_candle_count": len(trigger_df),
-            "structure_status": s3_result.status,
+            "validated_h1_start": validated_h1_idx,
             **attribution,
         },
     )

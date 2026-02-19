@@ -179,24 +179,31 @@ if zone.end_time is None:
 ## Scenario 3 Constraints
 
 1. **original_bos0_bounds captured at iteration 0 only** — subsequent probe iterations reuse the first BOS_0 zone for exception evaluation. Do not re-derive bounds mid-loop.
-2. **Phase 2 only runs if status == "finalized"** — pending results contain Phase 1 probe data only (no multi-structure continuation).
+2. **Phase 2 only runs if status == "finalized" AND `run_continuation=True`** — when `run_continuation=False`, Phase 2 is skipped entirely (probe-only mode). The result contains only Phase 1 probe data.
 3. **Exception evaluation checks inner bound, not outer** — proximity is measured as "candle high/low within tolerance of zone inner bound" (the bound closer to current price).
 4. **Exception check window starts from CTS_EST + 1** — the CTS_ESTABLISHED candle itself is the pullback confirmation, naturally near the zone. Exclude it from the exception check (see GOTCHAS.md).
+5. **Condition 4 always finalizes** — when the probe window ends (explicit `end_idx` or end of df) before finding 2 CTS_EST events, the current start is accepted as "finalized". There is no "pending" status from Condition 4.
 
 ---
 
-## Lower-TF Scenario 3 May Fail — Handle Gracefully
+## Lower-TF Pipeline Steps May Fail — Handle Gracefully
 
-**Rule:** `compute_structure_scenario_3()` can raise `ValueError` or `IndexError` if the M15 structure reverses before finding a CTS_CONFIRMED. The lower-TF pipeline must catch these and return `None` (skip that trigger), not crash.
+**Rule:** Both the H1 reverse probe (`compute_structure_scenario_3()`) and the M15 plain structure (`compute_structure_from_start()`) can raise `ValueError` or `IndexError`. The lower-TF pipeline must catch these at each step and return `None` (skip that trigger), not crash.
 
-**Why it happens:** Some WVMI-activated cycles produce triggers where the M15 data has too few candles or the structure reverses too quickly (e.g., cycle=0 in a short-lived structure). The `identify_start` function raises `ValueError` when it can't find CTS_CONFIRMED before a reversal.
+**Why it happens:** Some WVMI-activated cycles produce triggers where the structure reverses too quickly (e.g., cycle=0 in a short-lived structure). The `identify_start` function raises `ValueError` when it can't find CTS_CONFIRMED before a reversal.
 
-**Implementation:** In `lower_tf_pipeline.py`, wrap `compute_structure_scenario_3()` in a try/except:
+**Implementation:** In `lower_tf_pipeline.py`, wrap both the H1 probe and M15 structure in try/except:
 ```python
+# H1 reverse probe
 try:
-    s3_result = compute_structure_scenario_3(...)
+    s3_result = compute_structure_scenario_3(h1_df, ..., run_continuation=False)
 except (ValueError, IndexError) as exc:
-    print(f"[lower_tf] WARNING: Scenario 3 failed for ...: {exc}")
+    return None
+
+# M15 plain structure
+try:
+    m15_result = compute_structure_from_start(trigger_df, ...)
+except (ValueError, IndexError) as exc:
     return None
 ```
 

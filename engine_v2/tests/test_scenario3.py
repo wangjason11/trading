@@ -194,29 +194,29 @@ class TestScenario3BasicContract:
 
 
 # ---------------------------------------------------------------------------
-# Tests: Condition 4 — short data → pending
+# Tests: Condition 4 — short data → finalized (bound reached)
 # ---------------------------------------------------------------------------
 
-class TestScenario3Condition4Pending:
-    def test_short_data_returns_pending(self):
-        """When data is too short for 2 CTS_EST, status should be pending."""
+class TestScenario3Condition4Finalized:
+    def test_short_data_returns_finalized(self):
+        """When data is too short for 2 CTS_EST, status should be finalized
+        (probe accepts current start when bound is reached)."""
         ohlc = _make_short_data(n=10)
         df = _prepare_df(ohlc)
         result = compute_structure_scenario_3(df, start_idx=0, struct_direction=1)
-        assert result.status == "pending"
-        # Data is still accessible even when pending
+        assert result.status == "finalized"
+        # Data is still accessible
         assert result.df is not None
         assert len(result.df) == len(df)
 
-    def test_pending_probe_data_accessible(self):
-        """Pending result still has events/levels from the probe."""
+    def test_finalized_probe_data_accessible(self):
+        """Finalized result has events/levels from the probe."""
         ohlc = _make_short_data(n=15)
         df = _prepare_df(ohlc)
         result = compute_structure_scenario_3(df, start_idx=0, struct_direction=1)
-        if result.status == "pending":
-            # Probe data is accessible (may be empty if no events generated)
-            assert isinstance(result.events, list)
-            assert isinstance(result.levels, list)
+        # Probe data is accessible (may be empty if no events generated)
+        assert isinstance(result.events, list)
+        assert isinstance(result.levels, list)
 
 
 # ---------------------------------------------------------------------------

@@ -226,6 +226,8 @@ def compute_structure_scenario_3(
     *,
     pip_tolerance_pips: int = 10,
     max_probe_iterations: int = 10,
+    end_idx: Optional[int] = None,
+    run_continuation: bool = True,
 ) -> Scenario3Result:
     """
     Scenario 3: Arbitrary start with iterative BOS_0 probe.
@@ -246,6 +248,13 @@ def compute_structure_scenario_3(
         Pip tolerance for zone proximity checking (default 10; use 5 for M15, 3 for M5).
     max_probe_iterations : int
         Maximum number of probe restarts before giving up (default 10).
+    end_idx : int, optional
+        Bound the probe window — passed through to MarketStructure.
+        When the bound is reached without 2 CTS_EST events, the current
+        start is accepted as finalized.
+    run_continuation : bool
+        Whether to run Phase 2 (multi-structure continuation) after probe
+        finalization. Set False for probe-only use (e.g. H1 reverse probe).
 
     Returns
     -------
@@ -271,7 +280,8 @@ def compute_structure_scenario_3(
     for iteration in range(max_probe_iterations):
         df_probe = df.copy()
         ms = MarketStructure(df_probe, struct_direction,
-                             start_idx=current_start, structure_id=0)
+                             start_idx=current_start, structure_id=0,
+                             end_idx=end_idx)
         ms.debug = True
         df_probe, probe_events, probe_levels = ms.run()
 
@@ -297,9 +307,9 @@ def compute_structure_scenario_3(
             status = "finalized"
             break
 
-        # --- Condition 4: Data ends before 2nd CTS_EST → pending ---
+        # --- Condition 4: Data/bound ends before 2nd CTS_EST → finalized ---
         if len(cts_est) < 2 or original_bos0_bounds is None:
-            status = "pending"
+            status = "finalized"
             break
 
         # --- Conditions 1 & 2: Evaluate exception ---
@@ -325,8 +335,8 @@ def compute_structure_scenario_3(
     # Record the validated start for the result
     phase1_start = current_start
 
-    # ===== Phase 2: Multi-Structure Continuation (only if finalized) =====
-    if status == "finalized":
+    # ===== Phase 2: Multi-Structure Continuation (only if finalized + requested) =====
+    if status == "finalized" and run_continuation:
         df2 = df_probe
         all_events = list(probe_events)
         all_levels = list(probe_levels)
@@ -463,12 +473,12 @@ def compute_structure_scenario_3(
             notes=notes,
         )
 
-    # Pending — return probe data as-is (accessible but not finalized)
+    # Return probe data as-is (Phase 2 skipped or probe exhausted iterations)
     notes = (
         f"Scenario3: start={phase1_start} sd={struct_direction} "
         f"probe_iterations={iteration + 1} "
         f"events={len(probe_events)} levels={len(probe_levels)} "
-        f"status=pending"
+        f"status={status}"
     )
 
     return Scenario3Result(
@@ -479,7 +489,155 @@ def compute_structure_scenario_3(
         start_idx=current_start,
         original_bos0_bounds=original_bos0_bounds,
         probe_iterations=iteration + 1,
-        status="pending",
+        status=status,
+        notes=notes,
+    )
+
+
+def compute_structure_from_start(
+    df: pd.DataFrame,
+    start_idx: int,
+    struct_direction: int,
+) -> StructureEngineResult:
+    """Run multi-structure analysis from a known start (no Scenario 1 / no probes).
+
+    Used for lower-TF structures where the start has already been validated
+    by a higher-TF probe.
+
+    Flow:
+      1. Run MarketStructure for structure_id=0 from start_idx
+      2. On reversal -> Scenario 2 (Exception 1/2) -> next structure
+      3. Repeat until no more reversals or end of data
+    """
+    _validate_input(df)
+
+    df2 = df
+    all_events: List[StructureEvent] = []
+    all_levels: List[StructureLevel] = []
+
+    cur_start = start_idx
+    sd = struct_direction
+    structure_id = 0
+
+    max_structures_guard = 20
+    for _loop_iter in range(max_structures_guard):
+        ms = MarketStructure(df2, struct_direction=sd, start_idx=cur_start, structure_id=structure_id)
+        ms.debug = True
+        df2, ms_events, levels = ms.run()
+
+        all_events.extend(ms_events)
+        all_levels.extend(levels)
+
+        # Find reversal for this structure_id
+        rev_mask = (df2["market_state"].astype(str).str.lower() == "reversal") & (df2["structure_id"].astype(int) == structure_id)
+        if not rev_mask.any():
+            break
+
+        reversal_start_idx = int(df2.loc[rev_mask].index.min())
+        reversal_confirmed_idx = int(df2.loc[rev_mask].index.max())
+
+        # Scenario 2 for next structure
+        d_next = identify_start_scenario_2_after_reversal(
+            df2,
+            reversal_idx=reversal_start_idx,
+            prev_structure_id=structure_id,
+            prev_struct_direction=sd,
+            min_history=50,
+        )
+
+        next_start_idx = int(d_next.start_idx)
+        next_sd = int(d_next.struct_direction)
+        next_sid = structure_id + 1
+
+        if next_start_idx == cur_start and next_sid == structure_id:
+            break
+
+        # Exception 2 probe (same logic as compute_structure)
+        zone_bounds = _get_last_cts_zone_bounds(df2, all_events, structure_id, sd)
+
+        if zone_bounds is not None:
+            outer, inner, zone_side = zone_bounds
+            pip_size = _pip_size_from_pair(df2)
+            pip_tolerance = 10 * pip_size
+
+            exc2_candidate = next_start_idx
+            max_exc2_iterations = 10
+            exc2_triggered = False
+
+            for _exc2_iter in range(max_exc2_iterations):
+                df_probe = df2.copy()
+                ms_probe = MarketStructure(
+                    df_probe,
+                    struct_direction=next_sd,
+                    start_idx=exc2_candidate,
+                    structure_id=next_sid,
+                    end_idx=reversal_confirmed_idx,
+                )
+                ms_probe.debug = True
+                df_probe, probe_events, probe_levels = ms_probe.run()
+
+                probe_cts_events = [
+                    ev for ev in probe_events
+                    if ev.type == "CTS_ESTABLISHED"
+                    and ev.meta.get("structure_id") == next_sid
+                    and ev.idx <= reversal_confirmed_idx
+                ]
+
+                if not probe_cts_events:
+                    break
+
+                cts_established_idx = int(probe_cts_events[0].idx)
+                exception_2_idx = _find_closest_candle_to_outer(
+                    df_probe, cts_established_idx + 1,
+                    reversal_confirmed_idx,
+                    outer, inner, pip_tolerance, zone_side,
+                )
+
+                if exception_2_idx is None:
+                    break
+
+                print(f"[structure_from_start] Exception 2 triggered: "
+                      f"iteration={_exc2_iter}, start_idx={exception_2_idx}")
+                exc2_triggered = True
+                exc2_candidate = exception_2_idx
+
+            if exc2_triggered:
+                cur_start = exc2_candidate
+                sd = next_sd
+                structure_id = next_sid
+                continue
+
+            # No exception — keep probe data
+            df2 = df_probe
+            all_events.extend(probe_events)
+            all_levels.extend(probe_levels)
+
+            if reversal_confirmed_idx + 1 > df2.index.max():
+                break
+
+            cur_start = reversal_confirmed_idx + 1
+            sd = next_sd
+            structure_id = next_sid
+            continue
+
+        # Default path (no zone bounds found)
+        cur_start = next_start_idx
+        sd = next_sd
+        structure_id = next_sid
+
+    notes = (
+        f"StructureFromStart: start={start_idx} sd={struct_direction} "
+        f"structures={structure_id + 1} events={len(all_events)} "
+        f"levels={len(all_levels)}"
+    )
+
+    _validate_output(df2)
+
+    return StructureEngineResult(
+        df=df2,
+        levels=all_levels,
+        events=all_events,
+        struct_direction=struct_direction,
         notes=notes,
     )
 
