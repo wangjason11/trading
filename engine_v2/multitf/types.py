@@ -39,5 +39,6 @@ class LowerTFResult:
     fib_states: List[FibState]
     poi_zones: list
     wvmi_records: List[WVMIRecord]
+    prev_bos_lines: list              # Previous BOS lines from downstream pipeline
     status: str                       # "finalized" or "pending"
     meta: Dict[str, Any] = field(default_factory=dict)

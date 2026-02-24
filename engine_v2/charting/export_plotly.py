@@ -203,17 +203,6 @@ def export_chart_plotly(
     def _col_or_default(name, default):
         return dfx[name] if name in dfx.columns else pd.Series([default] * len(dfx), index=dfx.index)
 
-    cycle_stage = _col_or_default("cycle_stage", "")
-    cts_phase_debug = _col_or_default("cts_phase_debug", "")
-    cts_cycle_id = _col_or_default("cts_cycle_id", 0).astype(int)
-
-    bos_th = _col_or_default("bos_threshold", float("nan")).astype(float)
-    cts_th = _col_or_default("cts_threshold", float("nan")).astype(float)
-
-    rv_watch = _col_or_default("reversal_watch_active", 0)
-    rv_bos_frozen = _col_or_default("reversal_bos_th_frozen", float("nan")).astype(float)
-    rv_extreme = _col_or_default("reversal_watch_extreme", float("nan")).astype(float)
-
     # Big flags for hover data
     is_big_normal_as0 = _col_or_default("is_big_normal_as0", False)
     is_big_maru_as0 = _col_or_default("is_big_maru_as0", False)
@@ -223,33 +212,26 @@ def export_chart_plotly(
     vol_spike_ratio = _col_or_default("vol_spike_ratio", float("nan")).astype(float)
 
     customdata = list(zip(
-        candle_idx,
-        dfx["mid_price"].astype(float),
-        dfx["body_pct"].astype(float),
-        dfx["candle_type"].astype(str),
-        dfx["body_len"].astype(float),
-        dfx["candle_len"].astype(float),
-        range_break_frac,
-        cts_cycle_id,
-        cts_phase_debug.astype(str),
-        cycle_stage.astype(str),
-        cts_th,
-        bos_th,
-        rv_watch,
-        rv_bos_frozen,
-        rv_extreme,
-        is_big_normal_as0,
-        is_big_maru_as0,
-        big_ratio_as0,
-        vol_spike_ratio,  # index 18
-        dfx[COL_TIME].astype(str),  # index 19
+        candle_idx,                       # 0
+        dfx["mid_price"].astype(float),   # 1
+        dfx["body_pct"].astype(float),    # 2
+        dfx["candle_type"].astype(str),   # 3
+        dfx["body_len"].astype(float),    # 4
+        dfx["candle_len"].astype(float),  # 5
+        range_break_frac,                 # 6
+        is_big_normal_as0,                # 7
+        is_big_maru_as0,                  # 8
+        big_ratio_as0,                    # 9
+        vol_spike_ratio,                  # 10
+        dfx[COL_TIME].astype(str),        # 11
     ))
 
 
     # Standard hover template for all candlesticks
     candle_hover = (
+        "TF=1H<br>"
         "idx=%{customdata[0]}<br>"
-        "time=%{customdata[19]}<br>"
+        "time=%{customdata[11]}<br>"
         "O=%{open}<br>"
         "H=%{high}<br>"
         "L=%{low}<br>"
@@ -259,17 +241,9 @@ def export_chart_plotly(
         "candle_len=%{customdata[5]:.5f}<br>"
         "body_pct=%{customdata[2]:.2%}<br>"
         "mid_price=%{customdata[1]:.5f}<br>"
-        "big_normal=%{customdata[15]}  big_maru=%{customdata[16]}  big_ratio=%{customdata[17]:.2f}<br>"
+        "big_normal=%{customdata[7]}  big_maru=%{customdata[8]}  big_ratio=%{customdata[9]:.2f}<br>"
         "range_break_frac=%{customdata[6]:.2%}<br>"
-        "cts_cycle_id=%{customdata[7]}<br>"
-        "cts_phase=%{customdata[8]}<br>"
-        "cycle_stage=%{customdata[9]}<br>"
-        "cts_th=%{customdata[10]:.5f}<br>"
-        "bos_th=%{customdata[11]:.5f}<br>"
-        "rv_watch=%{customdata[12]}<br>"
-        "rv_bos_frozen=%{customdata[13]:.5f}<br>"
-        "rv_extreme=%{customdata[14]:.5f}<br>"
-        "vol_spike_ratio=%{customdata[18]:.2f}"
+        "vol_spike_ratio=%{customdata[10]:.2f}"
         "<extra></extra>"
     )
 
@@ -582,6 +556,7 @@ def export_chart_plotly(
                     textposition="middle center",
                     showlegend=False,
                     hovertemplate=(
+                        "TF=1H<br>"
                         "idx=%{customdata[0]}<br>"
                         "state=%{customdata[1]}<br>"
                         "sid=%{customdata[2]}<br>"
@@ -653,6 +628,7 @@ def export_chart_plotly(
                     textposition="middle center",
                     showlegend=False,
                     hovertemplate=(
+                        "TF=1H<br>"
                         "idx=%{customdata[0]}<br>"
                         "state=%{customdata[1]}<br>"
                         "sid=%{customdata[2]}<br>"
@@ -1018,6 +994,7 @@ def export_chart_plotly(
                     line=range_hover_line,
                     line_shape="hv",
                     hovertemplate=(
+                        "TF=1H<br>"
                         "idx=%{customdata[0]}<br>"
                         "range_start_idx=%{customdata[1]}<br>"
                         "range_hi=%{customdata[2]:.5f}<br>"
@@ -1041,6 +1018,7 @@ def export_chart_plotly(
                     line=range_hover_line,
                     line_shape="hv",
                     hovertemplate=(
+                        "TF=1H<br>"
                         "idx=%{customdata[0]}<br>"
                         "range_start_idx=%{customdata[1]}<br>"
                         "range_hi=%{customdata[2]:.5f}<br>"
@@ -1330,6 +1308,7 @@ def export_chart_plotly(
                                 name=f"CTS (confirmed){op_label}",
                                 customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
                                 hovertemplate=(
+                                    "TF=1H<br>"
                                     "idx=%{customdata[0]}<br>"
                                     "kind=%{customdata[1]}<br>"
                                     "price=%{customdata[2]:.5f}<br>"
@@ -1363,6 +1342,7 @@ def export_chart_plotly(
                                 name=f"CTS (confirmed){op_label} [overlap]",
                                 customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
                                 hovertemplate=(
+                                    "TF=1H<br>"
                                     "idx=%{customdata[0]}<br>"
                                     "kind=%{customdata[1]}<br>"
                                     "price=%{customdata[2]:.5f}<br>"
@@ -1404,6 +1384,7 @@ def export_chart_plotly(
                                 name=f"BOS (confirmed){op_label}",
                                 customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
                                 hovertemplate=(
+                                    "TF=1H<br>"
                                     "idx=%{customdata[0]}<br>"
                                     "kind=%{customdata[1]}<br>"
                                     "price=%{customdata[2]:.5f}<br>"
@@ -1437,6 +1418,7 @@ def export_chart_plotly(
                                 name=f"BOS (confirmed){op_label} [overlap]",
                                 customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
                                 hovertemplate=(
+                                    "TF=1H<br>"
                                     "idx=%{customdata[0]}<br>"
                                     "kind=%{customdata[1]}<br>"
                                     "price=%{customdata[2]:.5f}<br>"
@@ -1601,6 +1583,7 @@ def export_chart_plotly(
                         name="reversal candidate",
                         showlegend=True,
                         hovertemplate=(
+                            "TF=1H<br>"
                             "idx=%{customdata[0]}<br>"
                             "event=reversal_candidate<br>"
                             "bos_frozen=%{customdata[1]:.5f}<br>"
@@ -1827,6 +1810,7 @@ def export_chart_plotly(
                         line=hover_line,
                         line_shape="hv",
                         hovertemplate=(
+                            "TF=1H<br>"
                             "KL Zone<br>"
                             "side=%{customdata[0]}<br>"
                             "structure_id=%{customdata[1]}<br>"
@@ -1854,6 +1838,7 @@ def export_chart_plotly(
                         line=hover_line,
                         line_shape="hv",
                         hovertemplate=(
+                            "TF=1H<br>"
                             "KL Zone<br>"
                             "side=%{customdata[0]}<br>"
                             "structure_id=%{customdata[1]}<br>"
@@ -1984,6 +1969,7 @@ def export_chart_plotly(
                     weighted_vol = vol
 
                 hover_lines = [
+                    "TF=1H",
                     "<b>Wave Candle</b>",
                     f"idx={idx}",
                     f"BOS zone: sid={bos_sid} cycle={bos_cycle}",
@@ -2212,6 +2198,7 @@ def export_chart_plotly(
                     line=poi_hover_line,
                     line_shape="hv",
                     hovertemplate=(
+                        "TF=1H<br>"
                         "<b>POI Zone</b><br>"
                         "side=%{customdata[0]}<br>"
                         "structure_id=%{customdata[1]}<br>"
@@ -2240,6 +2227,7 @@ def export_chart_plotly(
                     line=poi_hover_line,
                     line_shape="hv",
                     hovertemplate=(
+                        "TF=1H<br>"
                         "<b>POI Zone</b><br>"
                         "side=%{customdata[0]}<br>"
                         "structure_id=%{customdata[1]}<br>"
@@ -2396,6 +2384,7 @@ def export_chart_plotly(
                     line=dict(width=6, color="rgba(0,0,0,0)"),  # Invisible hover hitbox
                     line_shape="hv",
                     hovertemplate=(
+                        "TF=1H<br>"
                         "<b>Fib Zone</b><br>"
                         "sid=%{customdata[0]}<br>"
                         "cycle=%{customdata[1]}<br>"
@@ -2436,6 +2425,7 @@ def export_chart_plotly(
                     name=f"Prev BOS (sid={line_info['prev_structure_id']})",
                     showlegend=True,
                     hovertemplate=(
+                        f"TF=1H<br>"
                         f"Prev BOS Line<br>"
                         f"Price: {price:.5f}<br>"
                         f"From idx: {start_idx}<br>"

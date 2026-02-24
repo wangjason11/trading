@@ -414,6 +414,7 @@ def _run_multi_tf(
         return []
 
     m15_df_prepared = prepare_lower_tf_data(m15_df_raw)
+    meta["m15_df_prepared"] = m15_df_prepared
     print(f"[multi_tf] M15 data prepared: {len(m15_df_prepared)} candles")
 
     lower_tf_results = []

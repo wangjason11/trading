@@ -282,4 +282,74 @@ STYLE = {
         "line": {"width": 1, "color_rgb": "220, 0, 0"},
         "opacity": 0.8,
     },
+
+    # -----------------------------
+    # Week 8: H1 overlay styles for M15 chart
+    # Transparent fills, dashed borders using fill RGB as border color
+    # -----------------------------
+    "zone.h1_overlay.kl.buy": {
+        "rgb": "0, 180, 0",
+        "fill_opacity_active": 0.0,       # Transparent fill
+        "fill_opacity_inactive": 0.0,
+        "border_opacity_active": 0.9,     # Dashed border uses fill RGB
+        "border_opacity_inactive": 0.30,
+        "border_line_width": 2,
+        "confirm_line_width": 2,
+        "confirm_opacity_active": 0.9,
+        "confirm_opacity_inactive": 0.30,
+        "line_dash": "dash",
+    },
+    "zone.h1_overlay.kl.sell": {
+        "rgb": "220, 0, 0",
+        "fill_opacity_active": 0.0,
+        "fill_opacity_inactive": 0.0,
+        "border_opacity_active": 0.9,
+        "border_opacity_inactive": 0.30,
+        "border_line_width": 2,
+        "confirm_line_width": 2,
+        "confirm_opacity_active": 0.9,
+        "confirm_opacity_inactive": 0.30,
+        "line_dash": "dash",
+    },
+    "zone.h1_overlay.poi.buy": {
+        "rgb": "255, 215, 0",
+        "fill_opacity_active": 0.0,
+        "fill_opacity_inactive": 0.0,
+        "border_opacity_active": 0.9,
+        "border_opacity_inactive": 0.25,
+        "border_line_width": 2,
+        "confirm_line_rgb": "101, 67, 33",
+        "confirm_line_width": 2,
+        "confirm_opacity_active": 0.9,
+        "confirm_opacity_inactive": 0.25,
+        "line_dash": "dash",
+    },
+    "zone.h1_overlay.poi.sell": {
+        "rgb": "255, 215, 0",
+        "fill_opacity_active": 0.0,
+        "fill_opacity_inactive": 0.0,
+        "border_opacity_active": 0.9,
+        "border_opacity_inactive": 0.25,
+        "border_line_width": 2,
+        "confirm_line_rgb": "101, 67, 33",
+        "confirm_line_width": 2,
+        "confirm_opacity_active": 0.9,
+        "confirm_opacity_inactive": 0.25,
+        "line_dash": "dash",
+    },
+    "structure.h1_overlay.swing_line": {
+        "line": {"width": 2, "color": "black", "dash": "dash"},
+        "opacity": 0.9,
+    },
+    "wave_candle.h1_overlay.bullish": {
+        "line": {"width": 1, "color_rgb": "0, 180, 0", "dash": "dash"},
+        "opacity": 0.8,
+    },
+    "wave_candle.h1_overlay.bearish": {
+        "line": {"width": 1, "color_rgb": "220, 0, 0", "dash": "dash"},
+        "opacity": 0.8,
+    },
+    "prev_bos_line.h1_overlay": {
+        "line": {"width": 2, "color": "black", "dash": "dash"},
+    },
 }

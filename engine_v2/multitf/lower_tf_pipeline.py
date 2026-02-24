@@ -251,12 +251,14 @@ def run_lower_tf_pipeline(
         fib_states=downstream["fib_states"],
         poi_zones=capped_pois,
         wvmi_records=downstream["wvmi_records"],
+        prev_bos_lines=downstream["prev_bos_lines"],
         status="finalized",
         meta={
             "m15_start_idx": m15_start_idx,
             "m15_end_idx": m15_end_idx,
             "m15_candle_count": len(trigger_df),
             "validated_h1_start": validated_h1_idx,
+            "slice_begin": slice_begin,
             **attribution,
         },
     )

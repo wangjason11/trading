@@ -247,6 +247,21 @@ def main() -> None:
         zoom=ZOOM,
     )
 
+    # M15 chart export (if multi-TF was run)
+    m15_df_prepared = res.meta.get("m15_df_prepared")
+    lower_tf_results = res.meta.get("lower_tf_results", [])
+    if m15_df_prepared is not None and len(m15_df_prepared) > 0:
+        from engine_v2.charting.export_m15_chart import export_m15_chart_plotly
+        m15_paths = export_m15_chart_plotly(
+            m15_df_prepared,
+            res.df,
+            lower_tf_results,
+            title=f"{CONFIG.pair} M15 (H1 overlay)",
+            basename=f"{basename}_M15",
+            cfg=chart_cfg,
+        )
+        print(f"Chart M15 HTML: {m15_paths.html_path}")
+        print(f"Chart M15 PNG : {m15_paths.png_path}")
 
     from engine_v2.debug.export_zones import export_kl_zones
     export_kl_zones(res.meta.get("kl_zones", []), f"artifacts/debug/{basename}_kl_zones.csv")
