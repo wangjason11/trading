@@ -558,17 +558,7 @@ def export_m15_chart_plotly(
                     x_line.append(end_time)
                     y_line.append(end_price)
 
-                line_style = _style("structure.swing_line").copy()
-                base_opacity = float(line_style.get("opacity", 0.9))
-                op_mult = _m15_opacity_tier_for_events(
-                    p_sid, p_cycle, m15_most_recent_psid, m15_recent_cycles,
-                    is_active_trigger and sid == most_recent_lt_sid,
-                )
-                if "line" in line_style:
-                    line_style["line"] = dict(line_style["line"])
-                else:
-                    line_style["line"] = {}
-                line_style["opacity"] = base_opacity * op_mult
+                line_style = _style("structure.m15.swing_line").copy()
 
                 fig.add_trace(go.Scatter(
                     x=x_line, y=y_line, mode="lines",
@@ -579,16 +569,7 @@ def export_m15_chart_plotly(
 
             # Cross-structure PB→BOS lines
             for _pb_sid, pb_t, pb_p, bos_t, bos_p in pb_to_bos_lines:
-                line_style = _style("structure.swing_line").copy()
-                base_opacity = float(line_style.get("opacity", 0.9))
-                op_mult = _m15_opacity_tier_for_events(
-                    p_sid, p_cycle, m15_most_recent_psid, m15_recent_cycles, False,
-                )
-                if "line" in line_style:
-                    line_style["line"] = dict(line_style["line"])
-                else:
-                    line_style["line"] = {}
-                line_style["opacity"] = base_opacity * op_mult
+                line_style = _style("structure.m15.swing_line").copy()
                 fig.add_trace(go.Scatter(
                     x=[pb_t, bos_t], y=[pb_p, bos_p], mode="lines",
                     name=f"M15 PB→BOS h1s{p_sid}c{p_cycle}",
@@ -687,7 +668,9 @@ def export_m15_chart_plotly(
 
                     fig.add_shape(type="rect", xref="x", yref="y",
                                   x0=seg_x0, x1=seg_x1, y0=sy0, y1=sy1,
-                                  fillcolor=fillcolor, line=dict(width=0), layer="below")
+                                  fillcolor=fillcolor,
+                                  line=dict(width=0.5, color="black"),
+                                  layer="below")
 
                     if conf_time is not None and seg_x0 <= conf_time <= seg_x1:
                         fig.add_shape(type="line", xref="x", yref="y",
@@ -773,15 +756,19 @@ def export_m15_chart_plotly(
                     color_rgb = line_info.get("color_rgb", "128,128,128")
                     base_opacity = float(wc_style.get("opacity", 0.8))
                     line_width = int(line_info.get("width", 1))
+                    dash = line_info.get("dash")
 
                     final_color = f"rgba({color_rgb}, {base_opacity * op_mult})"
                     wc_time = _lt_time(idx)
                     if wc_time is None:
                         continue
 
+                    line_props = dict(color=final_color, width=line_width)
+                    if dash:
+                        line_props["dash"] = dash
                     fig.add_shape(type="line", xref="x", yref="paper",
                                   x0=wc_time, x1=wc_time, y0=0, y1=1,
-                                  line=dict(color=final_color, width=line_width), layer="below")
+                                  line=line_props, layer="below")
 
                     # WVMI hover
                     vol = float(lt_df.iloc[idx]["volume"])
@@ -872,7 +859,9 @@ def export_m15_chart_plotly(
 
                 fig.add_shape(type="rect", xref="x", yref="y",
                               x0=x0, x1=x1, y0=y0, y1=y1,
-                              fillcolor=fillcolor, line=dict(width=0), layer="below")
+                              fillcolor=fillcolor,
+                              line=dict(width=0.5, color="black"),
+                              layer="below")
 
                 if conf_time is not None:
                     fig.add_shape(type="line", xref="x", yref="y",
@@ -926,12 +915,12 @@ def export_m15_chart_plotly(
                 op_mult = _m15_opacity_tier_for_events(
                     p_sid, p_cycle, m15_most_recent_psid, m15_recent_cycles, False,
                 )
-                line_s = _style("prev_bos_line").get("line", {"width": 2, "color": "black"})
+                line_s = _style("prev_bos_line.m15").get("line", {"width": 2, "color": "royalblue"})
                 line_s = dict(line_s)
-                # Apply opacity
                 fig.add_trace(go.Scatter(
                     x=[t0, t1], y=[price, price], mode="lines", line=line_s,
                     name=f"M15 Prev BOS h1s{p_sid}c{p_cycle}", showlegend=False,
+                    hoverlabel=dict(bgcolor="royalblue", font_color="white"),
                     hovertemplate=(
                         f"TF=15M<br>"
                         f"Prev BOS Line<br>"
@@ -1026,7 +1015,7 @@ def _render_m15_dots(
     most_recent_lt_sid, m15_to_h1,
 ):
     """Render M15 structure dots with TF=15M hover."""
-    style_key = "structure.cts" if "CTS" in kind_label else "structure.bos"
+    style_key = "structure.m15.cts" if "CTS" in kind_label else "structure.m15.bos"
     style = _style(style_key).copy()
 
     cd = []
@@ -1053,6 +1042,7 @@ def _render_m15_dots(
         name=f"M15 {kind_label} h1s{p_sid}c{p_cycle}",
         showlegend=False,
         customdata=cd,
+        hoverlabel=dict(bgcolor="royalblue", font_color="white"),
         hovertemplate=(
             "TF=15M<br>"
             "idx=%{customdata[0]}<br>"
@@ -1264,13 +1254,6 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                     y_line.append(end_price)
 
             line_style = _style("structure.h1_overlay.swing_line").copy()
-            base_opacity = float(line_style.get("opacity", 0.9))
-            op_mult = _opacity_tier("active") if sid == most_recent_h1_sid else _opacity_tier("recent_inactive")
-            if "line" in line_style:
-                line_style["line"] = dict(line_style["line"])
-            else:
-                line_style["line"] = {}
-            line_style["opacity"] = base_opacity * op_mult
 
             fig.add_trace(go.Scatter(
                 x=x_line, y=y_line, mode="lines",
@@ -1278,16 +1261,9 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 line_shape="linear", showlegend=False, **line_style,
             ))
 
-        # Cross-structure PB→BOS lines (dashed)
+        # Cross-structure PB→BOS lines
         for _pb_sid, pb_t, pb_p, bos_t, bos_p in pb_to_bos_lines:
             line_style = _style("structure.h1_overlay.swing_line").copy()
-            base_opacity = float(line_style.get("opacity", 0.9))
-            op_mult = _opacity_tier("active") if _pb_sid == most_recent_h1_sid else _opacity_tier("recent_inactive")
-            if "line" in line_style:
-                line_style["line"] = dict(line_style["line"])
-            else:
-                line_style["line"] = {}
-            line_style["opacity"] = base_opacity * op_mult
             fig.add_trace(go.Scatter(
                 x=[pb_t, bos_t], y=[pb_p, bos_p], mode="lines",
                 name=f"H1 PB→BOS sid={_pb_sid}", hoverinfo="skip",
@@ -1316,7 +1292,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 **style,
             ))
 
-    # --- H1 KL zones (transparent, dashed border) ---
+    # --- H1 KL zones (color fill) ---
     h1_kl_zones = h1_df.attrs.get("kl_zones", [])
     if zone_cfg.get("KL", False) and h1_kl_zones:
         by_struct = {}
@@ -1346,14 +1322,12 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 op_mult = _opacity_tier("prior_inactive")
 
             rgb = str(stz.get("rgb", "0,180,0" if side == "buy" else "220,0,0"))
-            fill_op = 0.0  # Always transparent fill for H1 overlay
-            border_op = float(stz.get("border_opacity_active", 0.9)) * op_mult
+            base_fill_op = float(stz.get("fill_opacity_active", 0.4))
+            fill_op = base_fill_op * op_mult
             confirm_op = float(stz.get("confirm_opacity_active", 0.9)) * op_mult
-            border_w = int(stz.get("border_line_width", 2))
             confirm_w = int(stz.get("confirm_line_width", 2))
-            line_dash = stz.get("line_dash", "dash")
 
-            border_color = _rgba_from_rgb(rgb, border_op)
+            fillcolor = _rgba_from_rgb(rgb, fill_op)
             confirm_color = _rgba_from_rgb(rgb, confirm_op)
 
             x0 = _h1_to_m15_time(pd.to_datetime(z.start_time, utc=True))
@@ -1388,14 +1362,11 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 sy0 = min(seg_bot, seg_top)
                 sy1 = max(seg_bot, seg_top)
 
-                # Rectangle with transparent fill and dashed border
                 fig.add_shape(type="rect", xref="x", yref="y",
                               x0=seg_x0, x1=seg_x1, y0=sy0, y1=sy1,
-                              fillcolor=f"rgba({rgb}, 0.0)",
-                              line=dict(width=border_w, dash=line_dash, color=border_color),
+                              fillcolor=fillcolor, line=dict(width=0),
                               layer="below")
 
-                # Confirm line (solid, not dashed)
                 if conf_time is not None and seg_x0 <= conf_time <= seg_x1:
                     fig.add_shape(type="line", xref="x", yref="y",
                                   x0=conf_time, x1=conf_time, y0=sy0, y1=sy1,
@@ -1492,16 +1463,19 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 color_rgb = line_info.get("color_rgb", "128,128,128")
                 base_opacity = float(wc_style.get("opacity", 0.8))
                 line_width = int(line_info.get("width", 1))
-                dash = line_info.get("dash", "dash")
+                dash = line_info.get("dash")
 
                 final_color = f"rgba({color_rgb}, {base_opacity * op_mult})"
                 wc_time = _h1_idx_to_m15_time(idx)
                 if wc_time is None:
                     continue
 
+                line_props = dict(color=final_color, width=line_width)
+                if dash:
+                    line_props["dash"] = dash
                 fig.add_shape(type="line", xref="x", yref="paper",
                               x0=wc_time, x1=wc_time, y0=0, y1=1,
-                              line=dict(color=final_color, width=line_width, dash=dash),
+                              line=line_props,
                               layer="below")
 
                 # WVMI hover
@@ -1551,7 +1525,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                     hovertemplate="<br>".join(hover_lines) + "<extra></extra>",
                 ))
 
-    # --- H1 POI zones (transparent, dashed border) ---
+    # --- H1 POI zones (color fill) ---
     h1_poi_zones = h1_df.attrs.get("poi_zones", [])
     if zone_cfg.get("POI", False) and h1_poi_zones:
         all_poi_sids = set(int(z.meta.get("structure_id", 0)) for z in h1_poi_zones)
@@ -1574,14 +1548,13 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 op_mult = _opacity_tier("prior_inactive")
 
             rgb = str(stz.get("rgb", "255, 215, 0"))
-            border_op = float(stz.get("border_opacity_active", 0.9)) * op_mult
+            base_fill_op = float(stz.get("fill_opacity_active", 0.9))
+            fill_op = base_fill_op * op_mult
             confirm_rgb = str(stz.get("confirm_line_rgb", "101, 67, 33"))
             confirm_op = float(stz.get("confirm_opacity_active", 0.9)) * op_mult
-            border_w = int(stz.get("border_line_width", 2))
             confirm_w = int(stz.get("confirm_line_width", 2))
-            line_dash = stz.get("line_dash", "dash")
 
-            border_color = _rgba_from_rgb(rgb, border_op)
+            fillcolor = _rgba_from_rgb(rgb, fill_op)
             confirm_color = _rgba_from_rgb(confirm_rgb, confirm_op)
 
             x0 = _h1_to_m15_time(pd.to_datetime(poi.start_time, utc=True))
@@ -1595,8 +1568,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
 
             fig.add_shape(type="rect", xref="x", yref="y",
                           x0=x0, x1=x1, y0=y0, y1=y1,
-                          fillcolor=f"rgba({rgb}, 0.0)",
-                          line=dict(width=border_w, dash=line_dash, color=border_color),
+                          fillcolor=fillcolor, line=dict(width=0),
                           layer="below")
 
             if conf_time is not None:
