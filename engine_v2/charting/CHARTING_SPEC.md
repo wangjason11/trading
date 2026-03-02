@@ -34,6 +34,9 @@ All visual formatting (colors, opacities, line widths, marker sizes) lives in `s
 | Imbalance | `imbalance.bullish`, `imbalance.bearish` | Imbalance candle colors |
 | Volume | `volume.bar.up/down/neutral`, `volume.ema_line`, `volume.spike_marker` | Volume bars, EMA, spike markers |
 | Wave candles | `wave_candle.bullish`, `wave_candle.bearish` | Wave candle vertical lines |
+| M15 structure | `structure.m15.swing_line`, `structure.m15.cts/bos` | M15 chart blue elements |
+| M15 zones | `zone.m15.kl.buy/sell` | M15 zones on H1 chart (dashed) |
+| H1 overlay | `zone.h1_overlay.kl.*`, `zone.h1_overlay.poi.*` | H1 zones on M15 chart |
 | Hover lines | `hover_line.range` | Invisible hitbox lines |
 | Chart layout | `chart.layout`, `chart.axis` | Background, grid, axis styling |
 
@@ -119,6 +122,49 @@ To change any visual element:
   - LB/LP only (bottom section): momentum value (Buy/Sell by candle direction), paired weighted volumes
   - WVMI lookup built from `df.attrs["wvmi"]` mapping each idx to `(WVMIRecord, role)` where role is FB/LB/FP/LP
 - Style keys: `wave_candle.bullish`, `wave_candle.bearish`
+
+### 11) M15 KL Zones on H1 chart (Week 8)
+- Reads `lower_tf_results` from pipeline meta
+- Dashed rectangles with lower opacity than H1 zones
+- Style keys: `zone.m15.kl.buy`, `zone.m15.kl.sell`
+
+---
+
+## M15 Dedicated Chart (`export_m15_chart.py`)
+
+A separate chart file renders M15 candles with both M15 structure and H1 overlay elements. This is NOT the same as the H1 chart — it has its own rendering logic.
+
+### Architecture
+- **Entry:** `export_m15_chart_plotly(m15_df, h1_df, lower_tf_results, ...)`
+- **M15 candles** as the base OHLC
+- **M15 structure** (swing lines, CTS/BOS dots, prev BOS lines) in **royalblue**
+- **H1 overlay** (swing lines, CTS/BOS dots, prev BOS lines) in **black**
+- All connector lines are **solid** (no dash) for both M15 and H1
+
+### Color Differentiation Convention
+| Element | M15 | H1 |
+|---------|-----|-----|
+| Swing lines / dots | Royalblue | Black |
+| Prev BOS lines | Royalblue | Black |
+| Hover background | Royalblue | Default |
+| Wave candle (WVMI) lines | Dashed | Solid |
+| KL/POI zones | Thin black border (0.5px) | Color fill (no border) |
+
+### Style Keys (M15-specific)
+| Key | Purpose |
+|-----|---------|
+| `structure.m15.swing_line` | M15 swing connector line (royalblue) |
+| `structure.m15.cts` / `.bos` | M15 CTS/BOS dots (royalblue) |
+| `prev_bos_line.m15` | M15 prev BOS line (royalblue) |
+| `structure.h1_overlay.swing_line` | H1 swing line on M15 chart (black, width 1) |
+| `prev_bos_line.h1_overlay` | H1 prev BOS line on M15 chart (black, width 1) |
+| `zone.h1_overlay.kl.*` | H1 KL zones on M15 chart (color fill) |
+| `zone.h1_overlay.poi.*` | H1 POI zones on M15 chart (color fill) |
+| `wave_candle.h1_overlay.*` | H1 wave candle lines on M15 chart (solid) |
+
+### Opacity
+- All swing/connector lines use **flat opacity** from the style (no per-sid multiplier)
+- Zone opacity follows same 3-tier system as H1 chart
 
 ---
 

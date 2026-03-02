@@ -65,7 +65,8 @@ engine_v2/
 │   ├── structure_patterns.py        # Breakout pattern detection
 │   └── imbalance.py                 # Imbalance (FVG) pattern detection
 ├── charting/
-│   ├── export_plotly.py             # Chart generation
+│   ├── export_plotly.py             # H1 chart generation
+│   ├── export_m15_chart.py          # M15 dedicated chart (H1 overlay)
 │   └── style_registry.py           # Visual styling
 ├── debug/
 │   └── export_structure.py          # CSV export utilities

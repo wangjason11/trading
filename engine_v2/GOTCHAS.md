@@ -472,6 +472,27 @@ exc_idx = _find_closest_candle_to_outer(df, cts_est[0].idx + 1, cts_est[1].idx, 
 
 ---
 
+## Style Registry `.get()` Defaults: Never Default to an Active Value
+
+**Problem:** When retrieving optional style properties (like `"dash"`) from the style registry, using `line_info.get("dash", "dash")` causes the property to always apply — even when the style intentionally omits it to mean "no dash" (solid line).
+
+**Example:** H1 wave candle lines should be solid after removing `"dash": "dash"` from the style. But the rendering code had:
+```python
+dash = line_info.get("dash", "dash")  # Default "dash" means always dashed!
+```
+
+**Fix:** Default to `None` (or a falsy value) and conditionally apply:
+```python
+dash = line_info.get("dash")  # None when absent
+line_props = dict(color=final_color, width=line_width)
+if dash:
+    line_props["dash"] = dash
+```
+
+**Rule:** When a style property's absence means "don't apply this property", always default to `None`/falsy — never to an active value. This applies to `dash`, `symbol`, `fillpattern`, etc.
+
+---
+
 ## `_cts_from_breakout_event`: Include Confirmation Candle in Extreme Search
 
 **Problem:** `_cts_from_breakout_event` determines the CTS price by finding the extreme (max high for bullish, min low for bearish) across the pattern's candle span. Originally it only searched `[start_idx..end_idx]` (the pattern candles), but CONFIRMED patterns have an additional confirmation candle beyond `end_idx`.
