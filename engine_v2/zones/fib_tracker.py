@@ -105,9 +105,8 @@ class FibTracker:
         # None = undetermined, True = CTS_0 >= rv_idx, False = resolved at CTS_0 CONFIRMED
         self._scenario1: Dict[int, Optional[bool]] = {}
 
-        # M15 reverse mode: track active cross-cycle Fib per structure
-        # When a cross-cycle Fib starts, subsequent cycles don't get their own Fibs
-        self._m15_active_cross_cycle: Dict[int, bool] = {}
+        # (removed _m15_active_cross_cycle — new cycle obsoletes previous,
+        #  same as H1 mode, handled by _activate_fib / _current_cycle)
 
     def on_cts_established(
         self,
@@ -196,26 +195,18 @@ class FibTracker:
         df: pd.DataFrame,
     ) -> Optional[FibState]:
         """
-        Handle CTS_ESTABLISHED for M15 reverse structure (imbalance-gated cross-cycle).
+        Handle CTS_ESTABLISHED for M15 reverse structure (imbalance-gated).
 
         Rules:
         1. Walk cycles sequentially
-        2. If active cross-cycle Fib exists from a prior cycle, skip this cycle
-        3. No unfilled imbalance -> NO Fib for this cycle
-        4. Has unfilled imbalance -> cross-cycle Fib from this cycle's BOS
+        2. No unfilled imbalance -> NO Fib for this cycle
+        3. Has unfilled imbalance -> activate Fib (new cycle obsoletes previous)
         """
-        # If a cross-cycle Fib is already active for this structure, skip
-        if self._m15_active_cross_cycle.get(sid, False):
-            print(f"[fib] m15_reverse sid={sid} cycle={cycle_id} SKIPPED: cross-cycle Fib already active")
-            return None
-
         if not has_unfilled:
             print(f"[fib] m15_reverse sid={sid} cycle={cycle_id} NO FIB: no unfilled imbalance")
             return None
 
-        # Has unfilled imbalance -> activate cross-cycle Fib
-        print(f"[fib] m15_reverse sid={sid} cycle={cycle_id} CROSS-CYCLE ACTIVATED")
-        self._m15_active_cross_cycle[sid] = True
+        print(f"[fib] m15_reverse sid={sid} cycle={cycle_id} ACTIVATED")
 
         return self._activate_fib(
             sid=sid,
@@ -227,7 +218,6 @@ class FibTracker:
             cts_price=cts_price,
             meta={
                 "activated_at": cts_idx,
-                "cross_cycle": True,
                 "fib_mode": "m15_reverse",
             },
         )
