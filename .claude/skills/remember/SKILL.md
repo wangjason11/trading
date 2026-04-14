@@ -45,7 +45,39 @@ Let's update our documentation, memory, and skills where appropriate so we are m
 
 5. **Add/update/remove the learning** in the appropriate section(s)
 
-6. **Review and update skills if applicable:**
+6. **Update session memory (`MEMORY.md`) if applicable:**
+   
+   Session memory lives at: `C:\Users\wangj\.claude\projects\C--Users-wangj-OneDrive-Documents-codingproj-Project-Retire-forex-engine-v2\memory\`
+   
+   `MEMORY.md` is loaded into every new conversation — it's how we resume efficiently across sessions. Update it when the learning involves **session-level context that isn't derivable from code or project docs:**
+   
+   **When to update MEMORY.md:**
+   - Week/part status changes (started, done, blocked)
+   - New architectural decisions and their rationale (the "why" behind choices)
+   - Completed features (add to the completed list)
+   - New key files added to the project
+   - Setup or workflow changes
+   - Non-obvious constraints discovered during debugging
+   - Multi-TF or cross-module integration points
+   
+   **When NOT to update MEMORY.md (already covered by project docs):**
+   - Detailed spec behavior (belongs in SPEC.md files)
+   - Debugging recipes or code patterns (belongs in GOTCHAS.md)
+   - Critical constraints with code examples (belongs in LANDMINES.md)
+   - Terminology definitions (belongs in GLOSSARY.md)
+   
+   **How to update:**
+   - Read the current `MEMORY.md` first
+   - Update existing sections in-place (don't append duplicates)
+   - If a section grows too long, condense older entries
+   - For new standalone memory files, follow the auto-memory two-step process:
+     1. Write the memory file with frontmatter (name, description, type)
+     2. Add a one-line pointer in `MEMORY.md`
+   - Keep `MEMORY.md` under 200 lines (after that, content gets truncated in context)
+   
+   **Guiding principle:** A new session reading only `MEMORY.md` should know: what week/part we're on, what's done, what's in progress, and any non-obvious context needed to continue.
+
+7. **Review and update skills if applicable:**
    - Read each skill file in `.claude/skills/*/SKILL.md`
    - Based on the session's learnings and discussions, check if any skill's instructions can be improved, clarified, or extended
    - Examples of skill improvements:
@@ -56,7 +88,7 @@ Let's update our documentation, memory, and skills where appropriate so we are m
    - Only update skills when there's a clear improvement — don't change skills for unrelated learnings
    - If unsure whether a skill change is warranted, ASK the user first
 
-7. **Confirm** what was added/updated/removed and where (or explain why nothing was changed if already covered)
+8. **Confirm** what was added/updated/removed and where (or explain why nothing was changed if already covered)
 
 ## Common Patterns
 
@@ -68,6 +100,9 @@ Let's update our documentation, memory, and skills where appropriate so we are m
 | "Feature X works by doing Y" | Relevant SPEC.md |
 | "The pattern for X is Y" | ARCHITECTURE.md or relevant SPEC.md |
 | "Skill X should also do Y" | `.claude/skills/X/SKILL.md` |
+| "We finished X" / "Week N Part M done" | `MEMORY.md` (status update) |
+| "We decided to do X because Y" | `MEMORY.md` (architectural decision) |
+| "New module X added for Y" | `MEMORY.md` (key files update) |
 
 ## Available Skills
 
