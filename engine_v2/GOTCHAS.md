@@ -493,6 +493,27 @@ if dash:
 
 ---
 
+## Imbalance Instances Must Be Re-Computed After Slicing
+
+**Problem:** `df.attrs["imbalances"]` stores `ImbalanceInstance` objects with
+`start_idx`/`end_idx` referring to the original df's index space. After
+`df.iloc[...].copy().reset_index(drop=True)` (used in the M15 lower-TF
+pipeline), the df has new 0..N indices, but the attrs list still holds the
+old indices — silently wrong.
+
+**Symptom:** Fib activation and POI IC validation would silently use
+instances with indices pointing at the wrong candles (or out of bounds).
+
+**Fix:** In `multitf/lower_tf_pipeline.py`, re-run `compute_imbalance` on the
+sliced `trigger_df` after `reset_index`. The `is_imbalance` column itself
+copies correctly; only the attrs list is stale.
+
+**Rule:** Any time you slice + reset_index a df that had `compute_imbalance`
+run on it, call `compute_imbalance` again. The detection is a local pass so
+it produces correct instances relative to the new index space.
+
+---
+
 ## `_cts_from_breakout_event`: Include Confirmation Candle in Extreme Search
 
 **Problem:** `_cts_from_breakout_event` determines the CTS price by finding the extreme (max high for bullish, min low for bearish) across the pattern's candle span. Originally it only searched `[start_idx..end_idx]` (the pattern candles), but CONFIRMED patterns have an additional confirmation candle beyond `end_idx`.

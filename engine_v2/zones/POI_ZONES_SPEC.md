@@ -17,24 +17,56 @@ POI Zones are derived from:
 
 ## 1. Imbalance Candle Pattern
 
-### Core Definition
-Standard FVG (Fair Value Gap) — 3-candle pattern where a gap exists between candle 1's wick and candle 3's wick.
+### Two concepts
 
-### Detection Logic
-- **Bullish imbalance:** `candle_1.high < candle_3.low`
-- **Bearish imbalance:** `candle_1.low > candle_3.high`
-- Direction determined by candle 2's direction
-- **No alterations** from standard FVG logic
+- **Imbalance candle** — a c2 (middle) candle whose neighbors form an FVG
+  *and* whose own direction matches the gap direction. Flagged per-candle via
+  the `is_imbalance` dataframe column. Charting consumes this.
+- **Imbalance instance** — one imbalance candle or a run of consecutive
+  same-direction imbalance candles merged into a single entity with merged
+  gap bounds. Stored as `ImbalanceInstance` objects in
+  `df.attrs["imbalances"]`. Fib/POI logic consumes this.
+
+A single-candle instance has `start_idx == end_idx`.
+
+### Detection Logic (per-candle)
+- **Bullish imbalance candle:** `c1.high < c3.low` AND `c2.direction == +1`
+- **Bearish imbalance candle:** `c1.low > c3.high` AND `c2.direction == -1`
+- The c2-direction requirement prevents counter-direction candles from being
+  flagged (e.g., a gap with a bearish c2 is not a bullish imbalance).
+
+### Merging Rule
+Consecutive imbalance candles with the **same direction** are merged into a
+single `ImbalanceInstance`. A direction break or a non-imbalance candle ends
+the run.
+
+### Merged Gap Bounds
+- **Bullish:** `gap_bottom = df[start_idx-1].h` (first c1.high),
+  `gap_top = df[end_idx+1].l` (last c3.low)
+- **Bearish:** `gap_bottom = df[end_idx+1].h` (last c3.high),
+  `gap_top = df[start_idx-1].l` (first c1.low)
 
 ### Implementation
-- Stored as **columns** (not events): `is_imbalance`, `imbalance_gap_size`
-- Middle candle (candle 2) gets the flag
-- Computed in pipeline before base features
+- DF column `is_imbalance` (0/1) — every imbalance candle gets the flag
+- `df.attrs["imbalances"]` — list of `ImbalanceInstance` with merged bounds
+- Computed once in pipeline before market structure (`compute_imbalance`)
+- Lower-TF (M15) pipelines re-run `compute_imbalance` after slicing because
+  `df.attrs["imbalances"]` indices don't survive `reset_index(drop=True)`
 
 ### Role in POI Zones
-- Imbalance must exist **between the Fib anchor points** for POI zone to be created
-- Imbalance must be **after the IC candle** (between IC and the break)
-- Use `has_imbalance_in_range(df, start_idx, end_idx)` to check
+- Imbalance instance must exist **overlapping the Fib anchor points** for POI
+  zone creation (via `has_unfilled_imbalance` / `has_unfilled_imbalance_in_direction`)
+- Imbalance must be **after the IC candle** (between IC and the break) —
+  POI IC validation uses the direction-filtered variant so only
+  structure-direction imbalances qualify
+
+### Fill Check (per instance)
+- **Bullish:** `fill_level = gap_top - gap_size * 0.70` (70% retrace). Filled
+  when any candle's low ≤ fill_level in range `(end_idx, check_to_idx]`.
+- **Bearish:** `fill_level = gap_bottom + gap_size * 0.70`. Filled when any
+  candle's high ≥ fill_level in the same range.
+- Scan starts at `end_idx + 1` — the instance's own candles (including the
+  last c3 that defines the gap) are excluded.
 
 ---
 

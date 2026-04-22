@@ -272,6 +272,12 @@ def main() -> None:
         f"artifacts/debug/{basename}_structure_events.csv",
     )
 
+    from engine_v2.debug.export_imbalances import export_imbalance_instances
+    export_imbalance_instances(
+        res.df.attrs.get("imbalances", []),
+        f"artifacts/debug/{basename}_imbalance_instances.csv",
+    )
+
 
 if __name__ == "__main__":
     main()

@@ -313,20 +313,26 @@ def run_pipeline(
     print("[patterns]", p_res.notes)
     print(p_res.df["pat"].value_counts().head())
 
-    # 3) Imbalance patterns (Week 7) - computed as columns
+    # 3) Imbalance patterns (Week 7) - columns + instances in df.attrs
     df_with_imbalance = compute_imbalance(p_res.df)
-    imbalance_count = int(df_with_imbalance["is_imbalance"].sum())
-    print(f"[imbalance] total={imbalance_count}")
+    imbalance_candles = int(df_with_imbalance["is_imbalance"].sum())
+    imbalance_instances = len(df_with_imbalance.attrs.get("imbalances", []))
+    print(f"[imbalance] candles={imbalance_candles} instances={imbalance_instances}")
 
     # 4) Market structure (must return events + struct_direction)
     s_res = compute_structure(df_with_imbalance)
+
+    # Propagate imbalance instances through the structure df (so downstream
+    # consumers reading s_res.df.attrs see them)
+    s_res.df.attrs["imbalances"] = df_with_imbalance.attrs.get("imbalances", [])
 
     meta: Dict[str, Any] = {
         "notes": {
             "candles": c_res.notes,
             "patterns": p_res.notes,
             "structure": s_res.notes,
-        }
+        },
+        "imbalances": df_with_imbalance.attrs.get("imbalances", []),
     }
 
     # 5-9) Downstream pipeline (KL zones -> wave candles -> Fib -> POI -> WVMI)

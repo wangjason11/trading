@@ -17,6 +17,7 @@ from engine_v2.structure.structure_engine import (
     compute_structure_scenario_3,
     compute_structure_from_start,
 )
+from engine_v2.patterns.imbalance import compute_imbalance
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 
 # Scenario 3 BOS_0 probe pip tolerance by timeframe.
@@ -171,6 +172,11 @@ def run_lower_tf_pipeline(
     trigger_df = m15_df_prepared.iloc[slice_begin:m15_end_idx + 1].copy()
     trigger_df = trigger_df.reset_index(drop=True)
 
+    # Re-compute imbalance on the sliced df: is_imbalance column survives the
+    # copy but df.attrs["imbalances"] holds indices from the original M15 df,
+    # which no longer match after reset_index.
+    trigger_df = compute_imbalance(trigger_df)
+
     # Start idx in the sliced df is offset by the actual lookback
     start_in_slice = m15_start_idx - slice_begin
 
@@ -192,6 +198,9 @@ def run_lower_tf_pipeline(
         print(f"[lower_tf] WARNING: M15 structure failed for "
               f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}: {exc}")
         return None
+
+    # Propagate imbalance instances onto the structure-engine output df
+    m15_result.df.attrs["imbalances"] = trigger_df.attrs.get("imbalances", [])
 
     # 6. Run downstream pipeline with M15-specific settings
     downstream = _run_downstream_pipeline(

@@ -114,6 +114,18 @@
 
 ---
 
+## Imbalance Terms
+
+| Term | Definition |
+|------|------------|
+| **imbalance candle** | A c2 (middle) candle whose neighbors form an FVG and whose direction matches the gap direction. Flagged per-candle via `is_imbalance`. |
+| **imbalance instance** | One imbalance candle, or a run of consecutive same-direction imbalance candles, merged with combined gap bounds. Stored in `df.attrs["imbalances"]`. |
+| **FVG** | Fair Value Gap — 3-candle gap pattern where c1 and c3 wicks don't overlap |
+| **gap_top / gap_bottom** | Merged bounds of an imbalance instance (first c1.high to last c3.low for bullish; reversed for bearish) |
+| **fill check** | An instance is "filled" when price retraces ≥70% into its merged gap within `(end_idx, check_to_idx]` |
+
+---
+
 ## Pipeline Terms
 
 | Term | Definition |

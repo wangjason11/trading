@@ -120,6 +120,61 @@ class ChartRect(TypedDict, total=False):
     meta: Dict[str, Any]
 
 @dataclass(frozen=True)
+class ImbalanceInstance:
+    """One merged FVG instance: either a single imbalance candle or a run
+    of consecutive same-direction imbalance candles.
+
+    start_idx / end_idx refer to the c2 (middle) candles at the ends of the run.
+    gap_top / gap_bottom are the merged bounds:
+      bullish: gap_bottom = df[start_idx-1].h (first c1), gap_top = df[end_idx+1].l (last c3)
+      bearish: gap_bottom = df[end_idx+1].h (last c3),    gap_top = df[start_idx-1].l (first c1)
+    """
+    start_idx: int
+    end_idx: int
+    direction: Direction  # +1 bullish, -1 bearish
+    gap_top: float
+    gap_bottom: float
+    gap_size: float
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+    def overlaps(self, start_idx: int, end_idx: int) -> bool:
+        """True if this instance intersects the inclusive [start_idx, end_idx] range."""
+        return self.start_idx <= end_idx and self.end_idx >= start_idx
+
+    def is_filled(
+        self,
+        df: "pd.DataFrame",
+        check_to_idx: int,
+        fill_threshold: float = 0.70,
+    ) -> bool:
+        """Check if the merged gap is filled by candles in (end_idx, check_to_idx].
+
+        Bullish: filled when any candle.low <= gap_top - gap_size*threshold
+        Bearish: filled when any candle.high >= gap_bottom + gap_size*threshold
+        Empty scan range (end_idx >= check_to_idx): returns False (unfilled).
+        """
+        if self.gap_size <= 0:
+            return True  # invalid gap -> treat as filled (safe default)
+
+        if self.direction == 1:
+            fill_level = self.gap_top - self.gap_size * fill_threshold
+            for idx in range(self.end_idx + 1, check_to_idx + 1):
+                if idx not in df.index:
+                    continue
+                if float(df.loc[idx, "l"]) <= fill_level:
+                    return True
+        elif self.direction == -1:
+            fill_level = self.gap_bottom + self.gap_size * fill_threshold
+            for idx in range(self.end_idx + 1, check_to_idx + 1):
+                if idx not in df.index:
+                    continue
+                if float(df.loc[idx, "h"]) >= fill_level:
+                    return True
+
+        return False
+
+
+@dataclass(frozen=True)
 class KLZone:
     start_time: "pd.Timestamp"
     end_time: Optional["pd.Timestamp"]  # None = extends to end of chart
