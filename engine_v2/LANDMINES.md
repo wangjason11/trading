@@ -148,17 +148,34 @@ start_in_slice = start_idx - slice_begin  # Offset from slice start
 
 ---
 
-## Lower-TF Zones and POIs Must Be Capped at Lifecycle End
+## Lower-TF Zones, POIs, and Fibs Must Be Capped at Lifecycle End
 
-**Rule:** After running the downstream pipeline for a lower-TF structure, any zone or POI with `end_time=None` must be capped to the last candle of the M15 slice with `deactivated_by: "lifecycle_end"`.
+**Rule:** After running the downstream pipeline for a lower-TF structure,
+cap every open-ended artifact to the M15 slice's last candle with
+`deactivated_by: "lifecycle_end"`:
+- **Zones:** any with `end_time=None`
+- **POIs:** any with `end_time=None`
+- **Fibs:** any with `active=True AND locked=False` (still-unlocked fibs
+  that never saw CTS_n+1 CONFIRMED before the parent cycle ended, including
+  pre-established cross fibs that never had a CTS_n+1 ESTABLISHED)
 
-**Why:** The M15 structure's lifecycle is bounded by the parent H1 cycle (ends at next BOS or reversal). Without capping, zones with `end_time=None` render as extending indefinitely on the H1 chart — past the lifecycle boundary.
+**Why:** The M15 structure's lifecycle is bounded by the parent H1 cycle
+(ends at next BOS or reversal). Without capping, these artifacts render as
+extending indefinitely on the chart — past the lifecycle boundary.
 
-**Implementation:** In `lower_tf_pipeline.py`, after the downstream pipeline, use `dataclasses.replace()` to cap open zones:
+**Implementation:** In `lower_tf_pipeline.py`, after the downstream pipeline,
+use `dataclasses.replace()` to cap each artifact kind:
+
 ```python
+# Zones / POIs: cap by end_time
 if zone.end_time is None:
     zone = replace(zone, end_time=last_time,
                    meta={**zone.meta, "active": False, "deactivated_by": "lifecycle_end"})
+
+# Fibs: cap by active flag
+if fib.active and not fib.locked:
+    fib = replace(fib, active=False,
+                  meta={**fib.meta, "deactivated_by": "lifecycle_end", "deactivated_at": last_idx})
 ```
 
 ---
@@ -206,6 +223,34 @@ try:
 except (ValueError, IndexError) as exc:
     return None
 ```
+
+---
+
+## Event Sort Order Is a Dispatch Invariant
+
+**Rule:** `sorted_events` in `_run_downstream_pipeline` is sorted by
+`(e.idx, e.type)`. The alphabetical tie-break on event type is **relied upon
+by handlers** — do not change the sort key without auditing downstream
+dispatch logic.
+
+**Specific dependency (Mode C):** At a candle where both
+`CTS_ESTABLISHED` (cycle n+1) AND `CTS_THRESHOLD_UPDATED` (cycle n) fire,
+the alphabetical order processes `CTS_ESTABLISHED` FIRST (C_E < C_T). The
+M15 reverse phase gate depends on this:
+1. CTS_ESTABLISHED flips `_m15_phase[(sid, n+1)]` from `pre_established` to
+   `established`
+2. Subsequent CTS_THRESHOLD_UPDATED sees phase != `pre_established` and
+   becomes a no-op — as intended (cycle n+1 is now in established mode)
+
+If the sort were `(e.idx, -len(e.type))` or similar, `CTS_THRESHOLD_UPDATED`
+would run first with phase still `pre_established`, triggering an extra
+cross-fib check at an anchor that's about to be superseded. Silent
+correctness drift, hard to notice in a chart.
+
+**Rule of thumb:** When two events at the same idx have complementary
+state-machine effects, ensure the state-flipping event sorts first. The
+current alphabetical ordering happens to give us this for free; don't
+regress it.
 
 ---
 

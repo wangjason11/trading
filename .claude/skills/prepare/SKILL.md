@@ -10,6 +10,27 @@ argument-hint:
 
 Build comprehensive understanding of the codebase before receiving new feature specifications. This ensures you have full context of the architecture, data flow, and how each component impacts the next.
 
+## When most context is already loaded (targeted refresh)
+
+If much of the codebase has already been read earlier in this session (e.g.,
+immediately after an implementation task and `/remember`, or after a prior
+`/prepare`), a full re-read from scratch is unnecessary and wasteful of
+context budget. In that case:
+
+1. **Confirm which docs/files were read earlier in the conversation** and
+   assume they're still fresh unless git indicates changes.
+2. **Focus the refresh on the area relevant to the upcoming feature** —
+   re-read the specific module(s) and spec(s) the new work will touch, plus
+   any neighbors that might be affected.
+3. **Skip unchanged broad-scope docs** (e.g., ARCHITECTURE.md, PROJECT_PRINCIPLES.md)
+   unless the feature explicitly intersects them.
+4. **Still run the readiness report** in Section 5 — but note in the report
+   which pieces came from earlier-in-session context vs fresh reads.
+
+The full workflow below is the cold-start protocol. Use it when starting a
+fresh session, when it's been many turns since docs were touched, or when
+the upcoming feature crosses many modules.
+
 ## Instructions
 
 ### 1. Review Memory and Documentation

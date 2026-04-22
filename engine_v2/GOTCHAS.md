@@ -493,6 +493,45 @@ if dash:
 
 ---
 
+## CTS_THRESHOLD_UPDATED Event Timing Guarantees
+
+`CTS_THRESHOLD_UPDATED` has specific emission rules that aren't obvious from
+event name alone. These guarantees matter whenever you want to hook into the
+event (e.g., the M15 reverse cross-fib pre-established phase).
+
+**Emission source:** Only emitted by `_sync_thresholds_from_range` in
+`market_structure.py`. Nowhere else.
+
+**Preconditions for emission:**
+1. `range_active == True`
+2. `range_hi` (sd=+1) or `range_lo` (sd=-1) CHANGED from its previous value
+   (monotonic in the structure direction)
+3. `prev is not None` (initial range creation doesn't emit; first threshold
+   update after range_start does)
+
+**Cycle_id on the event:** Event carries `meta["cycle_id"] = cts_cycle_id`
+AT EMISSION TIME. `cts_cycle_id` only increments at the NEXT CTS_ESTABLISHED
+(via the "establishing_new_cycle" branch). So:
+- Between CTS_n CONFIRMED and CTS_n+1 ESTABLISHED: events carry `cycle_id = n`
+- After CTS_n+1 ESTABLISHED: events would carry `cycle_id = n+1` — but
+  range deactivates at the breakout that establishes CTS_n+1, so in
+  practice no more threshold-updated events fire for cycle n at that point
+
+**Lifetime window:** CTS_n CONFIRMED (creates range) → next BOS_n+1
+CONFIRMED (deactivates range) OR reversal OR end-of-data. Within that
+window, events fire whenever price makes a new running extreme past
+range_hi/range_lo.
+
+**Unification of "price touches CTS_n" with "threshold updates":**
+After CTS_n CONFIRMED, `range_hi = cts_n_price` (sd=+1) or
+`range_lo = cts_n_price` (sd=-1). The first wick past CTS_n expands the
+range bound and emits the first `CTS_THRESHOLD_UPDATED` event. This is
+why Mode C's "first cross-fib check when price touches CTS_n" reduces to
+listening for the first CTS_THRESHOLD_UPDATED for cycle n — no separate
+touch detector needed.
+
+---
+
 ## Merged Imbalance Instances Carry Hindsight Bias in Backtest
 
 **Problem:** `ImbalanceInstance.gap_top` / `gap_bottom` depend on `df[end_idx+1]`
