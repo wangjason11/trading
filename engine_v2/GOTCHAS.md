@@ -493,6 +493,30 @@ if dash:
 
 ---
 
+## Merged Imbalance Instances Carry Hindsight Bias in Backtest
+
+**Problem:** `ImbalanceInstance.gap_top` / `gap_bottom` depend on `df[end_idx+1]`
+(the last c3 of the run). Detection is one-pass over the full df, so a merged
+run like idx 118-125 is known in full from the start of a backtest. A Fib
+activation query at `check_to=CTS_idx=120` sees the complete instance with
+bounds computed from `df[126].low` (bullish) — data that wouldn't exist yet
+in a true live-timing simulation.
+
+**Why we accept it:** The pre-existing `compute_imbalance` already had 1-candle
+hindsight (flag at idx 120 requires df[121]). Merging extends the window
+from 1 candle to the length of the run. The fill check is still time-bounded
+by `check_to_idx`, so the practical impact on Fib/POI activation is small:
+the scan `(end_idx, check_to_idx]` is empty when `end_idx >= check_to_idx`,
+resulting in "unfilled" — which matches the expected behavior at that point
+in time.
+
+**When to revisit:** When moving to a live pipeline, detection must run
+incrementally per candle and instances must grow via explicit
+`IMBALANCE_EXTENDED` events (or equivalent in-place updates) so queries only
+see what was known at query time.
+
+---
+
 ## Imbalance Instances Must Be Re-Computed After Slicing
 
 **Problem:** `df.attrs["imbalances"]` stores `ImbalanceInstance` objects with

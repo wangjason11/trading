@@ -10,93 +10,118 @@ argument-hint: [commit message]
 
 Commit the current changes, run replay, and save the outputs to a timestamped folder in `artifacts/commits/` for later comparison with `/compare`.
 
+## Environment note (IMPORTANT)
+
+Each `Bash` tool call is an **isolated shell invocation** — shell variables
+do not persist between calls. Do NOT rely on `$COMMIT_HASH` / `$FOLDER_NAME`
+being defined in later steps. Either:
+- **Re-derive the value in each step** from `git` / filesystem state (preferred — robust)
+- **Combine dependent steps into a single Bash call** so variables stay in scope
+
+The instructions below are written to be re-derived per step.
+
 ## Instructions
 
 ### 1. Commit Current Changes
 
-If `$ARGUMENTS` is provided, use it as the commit message. Otherwise, follow the standard commit flow (check status, draft message, commit).
+If `$ARGUMENTS` is provided, use it as the commit message. Otherwise, follow
+the standard commit flow (check status, draft message, commit).
 
 ```bash
-# Stage and commit
-git add -A
+# Inspect and draft; then stage and commit. Prefer listing changed files
+# explicitly over `git add -A` so untracked scratch files aren't included.
+git add <explicit files>
 git commit -m "<commit_message>
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-### 2. Get Commit Info
+After committing, the source commit hash is `HEAD` until you make more
+commits. Re-derive it when needed as `git rev-parse --short HEAD`.
+
+### 2. Create Output Folder
+
+Build the folder name from the current HEAD and a fresh timestamp, then
+create the folder and a marker file in one call so the variables stay
+in-scope:
 
 ```bash
-# Get short hash and timestamp
-COMMIT_HASH=$(git rev-parse --short HEAD)
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-FOLDER_NAME="${TIMESTAMP}_${COMMIT_HASH}"
+COMMIT_HASH=$(git rev-parse --short HEAD) \
+TIMESTAMP=$(date +%Y%m%d_%H%M%S); \
+FOLDER_NAME="${TIMESTAMP}_${COMMIT_HASH}"; \
+mkdir -p "artifacts/commits/${FOLDER_NAME}" && \
+touch "artifacts/commits/${FOLDER_NAME}/.before_replay_marker" && \
+echo "FOLDER_NAME=${FOLDER_NAME}"
 ```
 
-### 3. Create Output Folder
+The folder name is now visible on disk — subsequent steps re-derive it by
+finding the newest directory in `artifacts/commits/`:
 
 ```bash
-mkdir -p artifacts/commits/${FOLDER_NAME}
+FOLDER_NAME=$(ls -t artifacts/commits/ | grep -v '^LATEST$' | head -1)
 ```
 
-### 4. Run Replay (with timestamp marker)
-
-Create a timestamp marker BEFORE running replay, then run replay:
+### 3. Run Replay
 
 ```bash
-# Create marker file to track "before replay" time
-touch artifacts/commits/${FOLDER_NAME}/.before_replay_marker
-
-# Run replay - outputs go to standard locations
+# Run replay - outputs go to standard locations (artifacts/debug, artifacts/charts)
 python -m engine_v2.run_replay
 ```
 
-### 5. Copy ONLY New Outputs to Commit Folder
+### 4. Copy ONLY New Outputs to Commit Folder
 
-Copy only files that were created/modified AFTER the marker (i.e., during this replay run):
+Find the newest commit folder and copy files newer than its marker:
 
 ```bash
-# Copy only NEW debug CSVs (modified after marker)
-find artifacts/debug -maxdepth 1 -name "*.csv" -newer artifacts/commits/${FOLDER_NAME}/.before_replay_marker -exec cp {} artifacts/commits/${FOLDER_NAME}/ \;
-
-# Copy only NEW charts (modified after marker)
-find artifacts/charts -maxdepth 1 -name "*.html" -newer artifacts/commits/${FOLDER_NAME}/.before_replay_marker -exec cp {} artifacts/commits/${FOLDER_NAME}/ \;
-find artifacts/charts -maxdepth 1 -name "*.png" -newer artifacts/commits/${FOLDER_NAME}/.before_replay_marker -exec cp {} artifacts/commits/${FOLDER_NAME}/ \; 2>/dev/null || true
-
-# Remove the marker file (no longer needed)
-rm artifacts/commits/${FOLDER_NAME}/.before_replay_marker
-
-# Save commit metadata
-echo "commit_hash=${COMMIT_HASH}" > artifacts/commits/${FOLDER_NAME}/metadata.txt
-echo "timestamp=${TIMESTAMP}" >> artifacts/commits/${FOLDER_NAME}/metadata.txt
-echo "commit_message=<message>" >> artifacts/commits/${FOLDER_NAME}/metadata.txt
+FOLDER_NAME=$(ls -t artifacts/commits/ | grep -v '^LATEST$' | head -1); \
+MARKER="artifacts/commits/${FOLDER_NAME}/.before_replay_marker"; \
+find artifacts/debug  -maxdepth 1 -name "*.csv"  -newer "$MARKER" -exec cp {} "artifacts/commits/${FOLDER_NAME}/" \; ; \
+find artifacts/charts -maxdepth 1 -name "*.html" -newer "$MARKER" -exec cp {} "artifacts/commits/${FOLDER_NAME}/" \; ; \
+find artifacts/charts -maxdepth 1 -name "*.png"  -newer "$MARKER" -exec cp {} "artifacts/commits/${FOLDER_NAME}/" \; 2>/dev/null || true; \
+rm "$MARKER"; \
+ls "artifacts/commits/${FOLDER_NAME}/"
 ```
 
-### 6. Update LATEST Pointer
-
-Create/update the LATEST file to point to this folder:
+### 5. Write Metadata + Update LATEST
 
 ```bash
+FOLDER_NAME=$(ls -t artifacts/commits/ | grep -v '^LATEST$' | head -1); \
+COMMIT_HASH=$(echo "$FOLDER_NAME" | awk -F_ '{print $NF}'); \
+TIMESTAMP=$(echo "$FOLDER_NAME" | awk -F_ '{print $1"_"$2}'); \
+printf "commit_hash=%s\ntimestamp=%s\ncommit_message=<message>\n" \
+  "$COMMIT_HASH" "$TIMESTAMP" \
+  > "artifacts/commits/${FOLDER_NAME}/metadata.txt"; \
 echo "${FOLDER_NAME}" > artifacts/commits/LATEST
 ```
 
-### 7. Commit the Saved Outputs
+The folder name is `YYYYMMDD_HHMMSS_<hash>` — the commit hash is the last
+underscore-delimited segment, the timestamp is the first two.
+
+### 6. Commit the Saved Outputs
+
+Always re-derive `COMMIT_HASH` here — if you used a stale variable from an
+earlier step, or `HEAD~N`, you may reference the wrong commit. At this
+point HEAD is still the source commit (we haven't committed the outputs
+yet), so `git rev-parse --short HEAD` gives the correct hash.
 
 ```bash
-git add artifacts/commits/${FOLDER_NAME}/ artifacts/commits/LATEST
+FOLDER_NAME=$(ls -t artifacts/commits/ | grep -v '^LATEST$' | head -1); \
+COMMIT_HASH=$(git rev-parse --short HEAD); \
+git add "artifacts/commits/${FOLDER_NAME}/" artifacts/commits/LATEST && \
 git commit -m "Save replay outputs for commit ${COMMIT_HASH}
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-### 8. Report Success
+### 7. Report Success
 
 Output a summary:
 
 ```
 === COMMIT-SAVE COMPLETE ===
 
-Commit: <hash> - <message>
+Source commit: <hash> - <message>
+Save-outputs commit: <hash>
 Outputs saved to: artifacts/commits/<folder_name>/
 
 Contents:

@@ -60,6 +60,18 @@ the run.
   POI IC validation uses the direction-filtered variant so only
   structure-direction imbalances qualify
 
+### Why Fib activation uses the direction-agnostic check
+`has_unfilled_imbalance` (no direction filter) is used for Fib activation at
+CTS_ESTABLISHED, while POI IC validation uses
+`has_unfilled_imbalance_in_direction` (filtered). This is intentional:
+a Fib is drawn from BOS → CTS anchors, so its span is **always in the
+structure direction by construction** — a counter-direction imbalance inside
+the span is geometrically unusual, and if one does appear we still want the
+Fib to activate because the BOS→CTS swing itself is directional. POI IC
+validation is stricter because it asks a different question ("did institutional
+activity produce a directional push after this candle?"), which requires a
+same-direction imbalance by definition.
+
 ### Fill Check (per instance)
 - **Bullish:** `fill_level = gap_top - gap_size * 0.70` (70% retrace). Filled
   when any candle's low ≤ fill_level in range `(end_idx, check_to_idx]`.
