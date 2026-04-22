@@ -251,13 +251,27 @@ def run_lower_tf_pipeline(
             )
         capped_pois.append(poi)
 
+    # Cap still-active-unlocked fibs (cross or single that never saw
+    # CTS_n+1 CONFIRMED before the M15 cycle ended)
+    last_idx = int(m15_result.df.index[-1])
+    capped_fibs = []
+    for fib in downstream["fib_states"]:
+        if fib.active and not fib.locked:
+            fib = replace(
+                fib,
+                active=False,
+                meta={**fib.meta, "deactivated_by": "lifecycle_end",
+                      "deactivated_at": last_idx},
+            )
+        capped_fibs.append(fib)
+
     result = LowerTFResult(
         trigger=trigger,
         df=m15_result.df,
         events=m15_result.events,
         kl_zones=capped_zones,
         wave_candles=downstream["wave_candles"],
-        fib_states=downstream["fib_states"],
+        fib_states=capped_fibs,
         poi_zones=capped_pois,
         wvmi_records=downstream["wvmi_records"],
         prev_bos_lines=downstream["prev_bos_lines"],

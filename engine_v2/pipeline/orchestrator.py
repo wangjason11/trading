@@ -184,6 +184,11 @@ def _run_downstream_pipeline(
         elif ev.type == "CTS_CONFIRMED":
             fib_tracker.on_cts_confirmed(ev)
 
+        elif ev.type == "CTS_THRESHOLD_UPDATED":
+            # Used by m15_reverse mode to trigger pre-established cross-fib
+            # checks. No-op in h1 mode.
+            fib_tracker.on_cts_threshold_updated(ev, df)
+
     fib_states = fib_tracker.get_fibs_for_charting()
     print(f"{pfx}[fib_tracker] total fibs={len(fib_states)}, active={sum(1 for f in fib_states if f.active)}")
 

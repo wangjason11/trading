@@ -164,6 +164,59 @@ For structures after a reversal, Fib activation follows a 3-scenario system:
 - No cycle 0 Fib
 - Cycle 1 gets normal Fib (if unfilled imbalance)
 
+### M15 Reverse Mode (`fib_mode="m15_reverse"`)
+
+Lower-TF M15 structures use a different Fib model that generalizes the
+cross-cycle concept to **any** cycle (not just cycle 1) AND allows cross
+fibs to form **before** a cycle's CTS is established.
+
+#### Phase state per (sid, cycle_id)
+- `pre_established` — cycle's CTS not yet established. Only cross fib checks
+  run (single fib requires CTS).
+- `established` — CTS_n ESTABLISHED fired. Cross-first-then-single dispatch.
+- `confirmed` — CTS_n CONFIRMED fired. Fib locked. Phase for cycle n+1 flips
+  to pre_established.
+
+Cycle 0 has no pre_established phase (there's no CTS_-1 to trigger it).
+
+#### Cross-fib condition (generalized)
+
+For target cycle n+1, walk backward from cycle n to 0, skipping cycles in
+the `_dead_cycles` cache (permanently-filled cycles). For each live cycle
+k, check whether its own swing `[BOS_k, CTS_k]` still has unfilled
+imbalance with fill-check extended to the current candle (Interpretation B).
+
+The earliest contiguous cycle `x` (where all cycles `x..n` are live) becomes
+the cross fib's BOS anchor. If no prior cycle qualifies, cross fails and —
+in established phase — single fib is activated as fallback.
+
+#### Anchor by phase
+- **pre_established** (cycle n+1): anchor = running extreme past CTS_n;
+  own imbalance range = `[prospective_BOS_n+1, current_candle]` where
+  `prospective_BOS_n+1` is the deepest pullback since CTS_n CONFIRMED
+- **established** (cycle n+1): anchor = CTS_n+1; own range = `[BOS_n+1, CTS_n+1]`
+
+#### Triggers
+- pre_established: `CTS_THRESHOLD_UPDATED` events for cycle n drive re-checks
+  (natural trigger — fires on every new running extreme past CTS_n)
+- established: `CTS_UPDATED` events for cycle n+1
+
+#### State transitions (cross fib)
+- Extension (same earliest cycle `x`, new anchor): replace in place, same version
+- Shrink (`x` moves forward because a cycle went dead): deactivate old version
+  with `deactivated_by="cross_shortened"`, create new with `version+1`
+- Cross fails (earliest_x == target_cycle): deactivate with
+  `deactivated_by="cross_failed"`, fall back to single (established only)
+- Own imbalance filled: deactivate cross with `deactivated_by="own_imb_filled"`
+- Lifecycle end (parent H1 cycle ended): still-active unlocked fibs get
+  `deactivated_by="lifecycle_end"`
+- CTS_n+1 CONFIRMED: lock active fib (`locked=True`)
+
+#### Storage — versioned keys
+Cross fibs live in `_fibs` under key `(sid, cycle_id, "cross", version)`
+alongside single fibs at `(sid, cycle_id)`. Old versions are preserved as
+inactive snapshots so the chart can render them with faded styling.
+
 ### Prev BOS Line (Visualization Helper)
 
 After each reversal, a black horizontal line shows the Scenario 1 revert threshold:
