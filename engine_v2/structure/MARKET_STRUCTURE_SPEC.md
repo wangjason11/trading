@@ -91,12 +91,28 @@ When a range is active:
 
 ---
 
-## Dual CTS confirmation paths (Stage 1: BOS-only)
+## Dual CTS confirmation paths
 
 After `CTS_ESTABLISHED`, the engine watches for both:
 1. **A valid pullback pattern** (existing path)
-2. **First sd zone proximity hit** (new path — Stage 1 uses BOS inner only;
-   Stage 2 will add POI inners per spec)
+2. **First sd zone proximity hit** (new path — uses BOS inner + active POI inners)
+
+The proximity check picks the closest-to-current-price sd inner across
+BOS and POIs. POI inners are refreshed at `CTS_ESTABLISHED` (new cycle)
+and at each `CTS_UPDATED` (CTS extended → Fib bounds expand → IC
+candidates may shift). The snapshot is per-cycle in
+`MarketStructureState.poi_inners_for_cycle`.
+
+**Snapshot vs per-candle — deliberate approximation:** The proximity
+check uses a per-cycle POI snapshot, NOT a full per-candle activity check.
+Refresh points are CTS_ESTABLISHED and CTS_UPDATED only — between those,
+POI inners stay fixed. Trade-off: a POI whose IC qualification changes
+between two CTS_UPDATED events (e.g., an imbalance fill mid-cycle that
+disqualifies an IC candidate) is not reflected immediately by the
+snapshot. In practice the deviation is small — POIs typically materialize
+at CTS_ESTABLISHED time and don't shift much during the cycle. The
+performance cost of full per-candle recomputation (Fib + IC scan + variant
+selection) is substantial. The major refactor may revisit this.
 
 Whichever fires first confirms the CTS at that candle's idx:
 - `CTS_CONFIRMED.meta["confirmation_method"] = "pullback"` if pullback won

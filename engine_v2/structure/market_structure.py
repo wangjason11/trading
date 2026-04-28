@@ -88,6 +88,9 @@ class MarketStructureState:
     # BOS inner price (computed once when BOS_CONFIRMED fires for the new cycle)
     # — used by the per-candle proximity check.
     bos_inner_for_cycle: Optional[float] = None
+    # POI inner snapshot for the current cycle — refreshed at CTS_ESTABLISHED
+    # and each CTS_UPDATED. Stays empty until first refresh.
+    poi_inners_for_cycle: List[float] = field(default_factory=list)
 
     # -------------------------------------------------
     # Week 5 Part 3A: BOS barrier semantics + reversal watch
@@ -1228,6 +1231,11 @@ class MarketStructure:
             st.cts_phase = "EST_OR_UPD"
             st.last_breakout_pat_apply_idx = apply_idx
 
+            # Refresh POI inner snapshot for the cycle (Stage 2). New cycle:
+            # uses fresh BOS_n + CTS_n. Continuation breakout (CTS_UPDATED):
+            # same BOS, extended CTS — POIs may shift as Fib bounds expand.
+            self._refresh_poi_inners_for_cycle()
+
             self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
             self._post_apply_range_check(apply_idx)
             return
@@ -1543,8 +1551,8 @@ class MarketStructure:
     # ----------------------------
 
     def _check_proximity_at_candle(self, i: int) -> Optional[Tuple[float, str]]:
-        """Check if candle i wicks within proximity threshold of the cycle's
-        sd-direction inner. Stage 1: BOS inner only. Returns (trigger_inner,
+        """Check if candle i wicks within proximity threshold of the closest
+        sd-direction inner (BOS or active POI). Returns (trigger_inner,
         zone_kind) on hit; None otherwise."""
         st = self.state
         if st.bos_inner_for_cycle is None:
@@ -1556,6 +1564,27 @@ class MarketStructure:
             struct_direction=self.struct_direction,
             bos_inner=st.bos_inner_for_cycle,
             threshold=self._proximity_threshold,
+            poi_inners=list(st.poi_inners_for_cycle) if st.poi_inners_for_cycle else None,
+        )
+
+    def _refresh_poi_inners_for_cycle(self) -> None:
+        """Recompute the cycle's POI inner snapshot using current BOS_n + CTS_n.
+        Called at CTS_ESTABLISHED (new cycle) and each CTS_UPDATED (CTS
+        extended). Stage 2 — adds POI awareness to the proximity check."""
+        st = self.state
+        if st.cts is None or st.bos_confirmed is None:
+            st.poi_inners_for_cycle = []
+            return
+        from engine_v2.structure.proximity_helpers import compute_poi_inners_for_cycle
+        st.poi_inners_for_cycle = compute_poi_inners_for_cycle(
+            self.df,
+            bos_idx=int(st.bos_confirmed.idx),
+            bos_price=float(st.bos_confirmed.price),
+            cts_idx=int(st.cts.idx),
+            cts_price=float(st.cts.price),
+            struct_direction=int(self.struct_direction),
+            structure_id=int(st.structure_id),
+            cycle_id=int(st.cts_cycle_id),
         )
 
     def _fire_cts_confirmation_via_proximity(
