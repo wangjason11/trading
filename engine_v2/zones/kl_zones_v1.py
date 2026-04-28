@@ -896,6 +896,14 @@ def derive_kl_zones_v1(
         top = float(max(outer, inner))
         bottom = float(min(outer, inner))
 
+        # CTS-zone-specific: capture confirmation_method from the event
+        # ("pullback" or "sd_zone_proximity"). Will be upgraded to "pullback"
+        # by a subsequent CTS_RECONFIRMED event for the same (sid, cycle_id)
+        # — handled below outside the zone-creation switch.
+        cts_confirmation_method = None
+        if not bos:
+            cts_confirmation_method = (ev.meta or {}).get("confirmation_method", "pullback")
+
         z = KLZone(
             start_time=_time(base_idx),
             end_time=None,
@@ -921,6 +929,10 @@ def derive_kl_zones_v1(
                 "base_pattern": pat,
                 "outer": float(outer),
                 "inner": float(inner),
+
+                # CTS-only: how this CTS was confirmed. May be upgraded later
+                # to "pullback" by a CTS_RECONFIRMED event for the same cycle.
+                **({"confirmation_method": cts_confirmation_method} if not bos else {}),
 
                 "bounds_steps": [
                     {
@@ -979,5 +991,37 @@ def derive_kl_zones_v1(
             meta={**(z.meta or {}), "active": False, "deactivated_by": "reversal"},
         )
 
+    # ------------------------------------------------------------------
+    # Post-pass: process CTS_RECONFIRMED events. When CTS was first
+    # confirmed via sd zone proximity AND a valid pullback fired later,
+    # upgrade the CTS zone's confirmation_method to "pullback" and record
+    # pb_reconfirm_idx. The original CTS_CONFIRMED event stays immutable.
+    # ------------------------------------------------------------------
+    for ev in events:
+        if ev.type != "CTS_RECONFIRMED":
+            continue
+        ev_sid = (ev.meta or {}).get("structure_id")
+        ev_cycle = (ev.meta or {}).get("cycle_id")
+        if ev_sid is None or ev_cycle is None:
+            continue
+
+        for zi, z in enumerate(zones):
+            if z.source_kind != "CTS":
+                continue
+            zmeta = z.meta or {}
+            if zmeta.get("structure_id") != ev_sid:
+                continue
+            if zmeta.get("cycle_id") != ev_cycle:
+                continue
+            # Found the CTS zone for this (sid, cycle). Upgrade it.
+            zones[zi] = replace(
+                z,
+                meta={
+                    **zmeta,
+                    "confirmation_method": "pullback",
+                    "pb_reconfirm_idx": int(ev.idx),
+                },
+            )
+            break
 
     return zones

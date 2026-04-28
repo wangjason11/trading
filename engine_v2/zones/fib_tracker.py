@@ -1673,8 +1673,8 @@ class FibTracker:
         # Obsolete all prior-cycle fibs (single + cross versions)
         self._obsolete_prev_cycle_all_fibs(sid, target_cycle)
 
-        print(f"[fib] m15_reverse sid={sid} CROSS ({earliest_x}→{target_cycle}) "
-              f"v{version} ACTIVATED: bos_x_idx={bos_x_idx} → anchor_idx={anchor_idx}")
+        print(f"[fib] m15_reverse sid={sid} CROSS ({earliest_x}->{target_cycle}) "
+              f"v{version} ACTIVATED: bos_x_idx={bos_x_idx} -> anchor_idx={anchor_idx}")
 
     def _m15_extend_cross_anchor(
         self,

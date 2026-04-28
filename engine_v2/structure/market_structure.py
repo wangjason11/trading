@@ -72,6 +72,23 @@ class MarketStructureState:
     last_breakout_pat_apply_idx: Optional[int] = None  # j
     last_pullback_pat_apply_idx: Optional[int] = None
 
+    # Zone-proximity-based CTS confirmation (per-cycle state)
+    # confirmation_method indicates HOW the current cycle's CTS got confirmed.
+    # "pullback" = via pullback pattern (existing behavior).
+    # "sd_zone_proximity" = via first sd zone proximity trigger.
+    # None = not yet confirmed.
+    cts_confirmed_method: Optional[Literal["pullback", "sd_zone_proximity"]] = None
+    # Whether a valid pullback pattern fired for the current cycle.
+    pullback_fired_for_cycle: bool = False
+    # Idx where proximity confirmed CTS for the current cycle (None if not).
+    proximity_confirmed_idx: Optional[int] = None
+    # Idx where CTS was confirmed (proximity or pullback, whichever first).
+    # Used to bound BOS_n+1 max-retracement search.
+    cts_confirmed_idx: Optional[int] = None
+    # BOS inner price (computed once when BOS_CONFIRMED fires for the new cycle)
+    # — used by the per-candle proximity check.
+    bos_inner_for_cycle: Optional[float] = None
+
     # -------------------------------------------------
     # Week 5 Part 3A: BOS barrier semantics + reversal watch
     #
@@ -116,7 +133,7 @@ class MarketStructure:
       - A candle also cannot become a range starter if it participated in the original pattern window excluding the last candle (e.g., continuous: start+middle; 2-candle patterns: first candle).
     """
 
-    def __init__(self,df: pd.DataFrame, struct_direction: int, *, eps: float = 0.0001, range_min_k: int = 2, range_max_k: int = 5, debug_invariants: bool = True, start_idx: int = 0, structure_id: int = 0, end_idx: int | None = None):
+    def __init__(self,df: pd.DataFrame, struct_direction: int, *, eps: float = 0.0001, range_min_k: int = 2, range_max_k: int = 5, debug_invariants: bool = True, start_idx: int = 0, structure_id: int = 0, end_idx: int | None = None, timeframe: str = "H1", proximity_pips: Optional[int] = None, pip_size: float = 0.0001):
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
         self.df = df.copy()
@@ -136,6 +153,17 @@ class MarketStructure:
 
         self.range_min_k = int(range_min_k)
         self.range_max_k = int(range_max_k)
+
+        # Zone-proximity-based CTS confirmation config
+        # If proximity_pips is None, look up default from timeframe table.
+        from engine_v2.zones.zone_proximity import DEFAULT_PROXIMITY_PIPS
+        self.timeframe = str(timeframe)
+        self.proximity_pips = (
+            int(proximity_pips) if proximity_pips is not None
+            else int(DEFAULT_PROXIMITY_PIPS.get(self.timeframe, 20))
+        )
+        self.pip_size = float(pip_size)
+        self._proximity_threshold = self.proximity_pips * self.pip_size
 
         self._ensure_output_cols()
 
@@ -674,7 +702,23 @@ class MarketStructure:
                 next_i = int(self.state.jump_to_idx)
             return next_i
 
-        # 2) No valid pattern by D:
+        # 2a) Zone proximity check (Stage 1: BOS-only)
+        # If the cycle is post-CTS_ESTABLISHED but not yet confirmed,
+        # check sd zone proximity at this candle. First sd proximity hit
+        # (when no pullback has fired yet) confirms CTS via proximity.
+        if (
+            st.cts_phase == "EST_OR_UPD"
+            and st.bos_inner_for_cycle is not None
+            and st.cts is not None
+            and i > st.cts.idx
+        ):
+            proximity_hit = self._check_proximity_at_candle(i)
+            if proximity_hit is not None:
+                trigger_inner, zone_kind = proximity_hit
+                self._fire_cts_confirmation_via_proximity(i, trigger_inner, zone_kind)
+                # State now CONFIRMED via proximity; continue with normal flow
+
+        # 2b) No valid pattern by D:
         if allow_range and not st.range_active:
             range_confirmed, confirm_idx = self._is_range_candle_given_confirm(i)
 
@@ -1160,6 +1204,19 @@ class MarketStructure:
                 st.cts_confirmed_for_idx = None
                 st.cts_threshold = None
 
+                # New cycle => reset proximity-based confirmation state
+                st.cts_confirmed_method = None
+                st.pullback_fired_for_cycle = False
+                st.proximity_confirmed_idx = None
+                st.cts_confirmed_idx = None
+                # Compute BOS inner for the new cycle's proximity check
+                from engine_v2.structure.proximity_helpers import compute_bos_inner_from_event
+                st.bos_inner_for_cycle = compute_bos_inner_from_event(
+                    self.df,
+                    bos_idx=int(bos_idx),
+                    struct_direction=int(self.struct_direction),
+                )
+
                 # After consuming the pullback to create BOS for the new cycle, clear pullback anchor
                 st.last_pullback_pat_apply_idx = None
             else:
@@ -1178,17 +1235,32 @@ class MarketStructure:
 
         # pullback
         if kind == "pullback":
-            # Ensure range exists or expand it based on pullback pattern
+            # Mark that a pullback fired for this cycle (used for BOS_n+1 derivation)
+            st.pullback_fired_for_cycle = True
+
+            # Ensure range exists or expand it based on pullback pattern.
+            # If proximity already created the range, this expands it.
             self._ensure_range_on_pullback(apply_idx, ev)  # note: pass apply_idx (time) not anchor i
 
-            self._emit_cts_confirmed_once(apply_idx, meta={"via": ev.name})
-            st.cts_phase = "CONFIRMED"
+            if st.cts_confirmed_method == "sd_zone_proximity":
+                # CTS already confirmed via proximity. Emit CTS_RECONFIRMED to
+                # log the pullback as the "stronger" reaffirmation. Do not
+                # re-emit CTS_CONFIRMED. Phase stays CONFIRMED.
+                self._emit_cts_reconfirmed(apply_idx, meta={"via": ev.name})
+            else:
+                # Standard pullback-based confirmation (existing behavior)
+                self._emit_cts_confirmed_once(
+                    apply_idx,
+                    meta={"via": ev.name},
+                    confirmation_method="pullback",
+                )
+                st.cts_phase = "CONFIRMED"
 
-            # initialize thresholds to the confirmed CTS/BOS values at confirmation time
-            if st.cts is not None:
-                st.cts_threshold = float(st.cts.price)
-            if st.bos_confirmed is not None:
-                st.bos_threshold = float(st.bos_confirmed.price)
+                # initialize thresholds to the confirmed CTS/BOS values at confirmation time
+                if st.cts is not None:
+                    st.cts_threshold = float(st.cts.price)
+                if st.bos_confirmed is not None:
+                    st.bos_threshold = float(st.bos_confirmed.price)
 
             st.last_pullback_pat_apply_idx = apply_idx
             self._set_state(MarketState.PULLBACK, apply_idx, meta={"reason": "pullback_pattern", "pat": ev.name})
@@ -1393,7 +1465,12 @@ class MarketStructure:
         )
         self.state.cts_event = "CTS_UPDATED"
 
-    def _emit_cts_confirmed_once(self, idx: int, meta: Optional[dict] = None) -> None:
+    def _emit_cts_confirmed_once(
+        self,
+        idx: int,
+        meta: Optional[dict] = None,
+        confirmation_method: str = "pullback",
+    ) -> None:
         st = self.state
         cts_anchor = st.cts.idx if st.cts is not None else None
         if cts_anchor is not None and st.cts_confirmed_for_idx == cts_anchor:
@@ -1407,12 +1484,38 @@ class MarketStructure:
         # ✅ add these
         meta2["confirmed_at"] = int(idx)                 # pullback candle (confirmation candle)
         meta2["cts_anchor_idx"] = int(cts_anchor) if cts_anchor is not None else None  # CTS being confirmed
+        # confirmation_method: "pullback" (existing path) or "sd_zone_proximity" (new path)
+        meta2["confirmation_method"] = str(confirmation_method)
 
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_CONFIRMED", price=None, meta=meta2)
         )
         st.cts_confirmed_for_idx = cts_anchor
+        st.cts_confirmed_method = confirmation_method
+        st.cts_confirmed_idx = int(idx)
         st.cts_event = "CTS_CONFIRMED"
+
+    def _emit_cts_reconfirmed(self, idx: int, meta: Optional[dict] = None) -> None:
+        """Emit CTS_RECONFIRMED — fires when a valid pullback pattern fires
+        AFTER CTS was already confirmed via sd zone proximity. Does not change
+        the original CTS_CONFIRMED's idx or method; CTS zone metadata can use
+        this event to upgrade its confirmation_method to "pullback" and record
+        pb_reconfirm_idx.
+        """
+        st = self.state
+        cts_anchor = st.cts.idx if st.cts is not None else None
+
+        meta2 = dict(meta or {})
+        meta2["cycle_id"] = int(self.state.cts_cycle_id)
+        meta2["structure_id"] = int(self.state.structure_id)
+        meta2["struct_direction"] = int(self.state.struct_direction)
+        meta2["confirmed_at"] = int(idx)
+        meta2["cts_anchor_idx"] = int(cts_anchor) if cts_anchor is not None else None
+        meta2["confirmation_method"] = "pullback"  # the upgrade method
+
+        self.events.append(
+            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_RECONFIRMED", price=None, meta=meta2)
+        )
 
     # def _emit_bos_confirmed(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
     #     self.events.append(
@@ -1434,6 +1537,98 @@ class MarketStructure:
         self.state.bos_event = "BOS_CONFIRMED"
         self.state.bos_confirmed = Point(idx=idx, price=float(price))
         self.state.bos_threshold = float(price)
+
+    # ----------------------------
+    # Zone proximity (Stage 1: BOS-only)
+    # ----------------------------
+
+    def _check_proximity_at_candle(self, i: int) -> Optional[Tuple[float, str]]:
+        """Check if candle i wicks within proximity threshold of the cycle's
+        sd-direction inner. Stage 1: BOS inner only. Returns (trigger_inner,
+        zone_kind) on hit; None otherwise."""
+        st = self.state
+        if st.bos_inner_for_cycle is None:
+            return None
+        from engine_v2.structure.proximity_helpers import check_sd_proximity_at_candle
+        return check_sd_proximity_at_candle(
+            self.df,
+            candle_idx=i,
+            struct_direction=self.struct_direction,
+            bos_inner=st.bos_inner_for_cycle,
+            threshold=self._proximity_threshold,
+        )
+
+    def _fire_cts_confirmation_via_proximity(
+        self,
+        candle_idx: int,
+        trigger_inner: float,
+        zone_kind: str,
+    ) -> None:
+        """Fire CTS_CONFIRMED via sd zone proximity. Mirrors the state
+        transitions of pullback-based confirmation, including range creation
+        with range_lo (sd=+1) / range_hi (sd=-1) seeded by the proximity
+        candle's wick (Option B)."""
+        st = self.state
+        if st.cts_phase == "CONFIRMED":
+            return  # already confirmed
+        if st.cts is None:
+            return  # no CTS to confirm
+
+        # Emit event with method label
+        self._emit_cts_confirmed_once(
+            candle_idx,
+            meta={
+                "via": "sd_zone_proximity",
+                "trigger_inner": float(trigger_inner),
+                "zone_kind": str(zone_kind),
+                "proximity_pips": int(self.proximity_pips),
+            },
+            confirmation_method="sd_zone_proximity",
+        )
+        st.cts_phase = "CONFIRMED"
+        st.proximity_confirmed_idx = int(candle_idx)
+
+        # Create range (Option B: range_lo = proximity candle's low for sd=+1)
+        # Mirror the logic in _ensure_range_on_pullback's "create" branch.
+        cts_price = float(st.cts.price)
+        if not st.range_active:
+            st.range_active = True
+            st.range_start_idx = int(st.cts.idx)
+            st.range_confirm_idx = int(candle_idx)
+            if self.struct_direction == 1:
+                st.range_hi = cts_price
+                st.range_lo = float(self.df.loc[candle_idx, "l"])
+            else:
+                st.range_lo = cts_price
+                st.range_hi = float(self.df.loc[candle_idx, "h"])
+            self.events.append(
+                StructureEvent(
+                    idx=int(candle_idx),
+                    category="RANGE",
+                    type="RANGE_STARTED",
+                    price=None,
+                    meta={
+                        "reason": "proximity_created_range",
+                        "cts_idx": int(st.cts.idx),
+                        "cts_price": cts_price,
+                        "proximity_apply_idx": int(candle_idx),
+                        "hi": float(st.range_hi),
+                        "lo": float(st.range_lo),
+                        "structure_id": int(st.structure_id),
+                        "struct_direction": int(self.struct_direction),
+                    },
+                )
+            )
+
+        # Initialize thresholds (mirrors pullback path)
+        st.cts_threshold = cts_price
+        if st.bos_confirmed is not None:
+            st.bos_threshold = float(st.bos_confirmed.price)
+
+        # Note: state.state stays in BREAKOUT (not transitioned to PULLBACK
+        # since no pullback pattern fired). This preserves the engine's
+        # internal pattern dispatch — both pullback and breakout patterns
+        # remain eligible for subsequent candles.
 
     def _emit_cts_threshold_updated(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
         meta2 = dict(meta or {})
@@ -1490,17 +1685,31 @@ class MarketStructure:
 
     def _select_bos_on_breakout(self, breakout_apply_idx: int) -> tuple[int, float]:
         """
-        Cycle k>1 BOS: pullback extreme between last pullback apply idx and this breakout apply idx.
+        Cycle k>1 BOS: select the BOS extreme from the cycle's retracement window.
+
+        Window selection:
+        - If a pullback fired for the just-completed cycle: use
+          [last_pullback_pat_apply_idx, breakout_apply_idx] (existing behavior).
+        - Else if cycle was confirmed via sd zone proximity: use
+          [cts_confirmed_idx, breakout_apply_idx] (max retracement across the
+          full proximity-to-breakout window).
+
         Returns (bos_idx, bos_price).
         """
         st = self.state
-        pb_start = st.last_pullback_pat_apply_idx
 
-        # If we somehow don't have a pullback anchor, fall back to cycle-1 rule
-        if pb_start is None:
+        # Determine search window start
+        if st.pullback_fired_for_cycle and st.last_pullback_pat_apply_idx is not None:
+            window_start = st.last_pullback_pat_apply_idx
+        elif st.cts_confirmed_idx is not None:
+            # Proximity-only confirmation — search from confirmed candle onward
+            window_start = st.cts_confirmed_idx
+        else:
+            # Neither pullback nor proximity confirmed (shouldn't happen if
+            # we got here, but safe fallback)
             return self._initial_bos_before_first_cts(breakout_apply_idx)
 
-        s = int(pb_start)
+        s = int(window_start)
         e = int(breakout_apply_idx)
         if e < s:
             s, e = e, s

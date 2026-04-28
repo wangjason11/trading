@@ -36,7 +36,7 @@ class Scenario3Result:
     notes: str = ""
 
 
-def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
+def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEngineResult:
     """
     Adapter boundary: df(with patterns/features) -> MarketStructure outputs:
       - df2 (with structure columns)
@@ -58,6 +58,8 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
     """
     _validate_input(df)
 
+    pip_size = _pip_size_from_pair(df)
+
     # --- Scenario 1 (initial start identification) ---
     input_idx = int(df.index.max())
     d0 = identify_start_scenario_1(df, input_idx=input_idx, lookback_days=183, min_history=50)
@@ -73,7 +75,7 @@ def compute_structure(df: pd.DataFrame) -> StructureEngineResult:
     # Run multiple structure segments until no more reversals (or we hit end)
     max_structures_guard = 20  # safety guard against infinite loops
     for loop_iter in range(max_structures_guard):
-        ms = MarketStructure(df2, struct_direction=struct_direction, start_idx=start_idx, structure_id=structure_id)
+        ms = MarketStructure(df2, struct_direction=struct_direction, start_idx=start_idx, structure_id=structure_id, timeframe=timeframe, pip_size=pip_size)
         ms.debug = True
         df2, ms_events, levels = ms.run()
 
@@ -521,6 +523,8 @@ def compute_structure_from_start(
     df: pd.DataFrame,
     start_idx: int,
     struct_direction: int,
+    *,
+    timeframe: str = "H1",
 ) -> StructureEngineResult:
     """Run multi-structure analysis from a known start (no Scenario 1 / no probes).
 
@@ -541,10 +545,11 @@ def compute_structure_from_start(
     cur_start = start_idx
     sd = struct_direction
     structure_id = 0
+    pip_size = _pip_size_from_pair(df2)
 
     max_structures_guard = 20
     for _loop_iter in range(max_structures_guard):
-        ms = MarketStructure(df2, struct_direction=sd, start_idx=cur_start, structure_id=structure_id)
+        ms = MarketStructure(df2, struct_direction=sd, start_idx=cur_start, structure_id=structure_id, timeframe=timeframe, pip_size=pip_size)
         ms.debug = True
         df2, ms_events, levels = ms.run()
 

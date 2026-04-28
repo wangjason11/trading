@@ -203,6 +203,7 @@ def run_lower_tf_pipeline(
             trigger_df,
             start_idx=start_in_slice,
             struct_direction=trigger.lower_sd,
+            timeframe=trigger.lower_tf,  # "M15" for proximity threshold lookup
         )
     except (ValueError, IndexError) as exc:
         print(f"[lower_tf] WARNING: M15 structure failed for "
