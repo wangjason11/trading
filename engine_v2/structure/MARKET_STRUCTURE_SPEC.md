@@ -130,5 +130,125 @@ MarketStructure includes df-level invariant checks (low-noise):
 - range_lo must not exceed range_hi while active
 - CTS_CONFIRMED coherence with phase/stage
 - BOS_CONFIRMED coherence
-- reversal is terminal (cannot leave reversal once entered)【fileciteturn1file11】
+- reversal is terminal (cannot leave reversal once entered)【fileciteturn1file11】
+
+---
+
+## Compute_structure variants (orchestration layer)
+
+`MarketStructure` is the underlying state-machine engine. Three orchestration
+functions wrap it for different start-identification strategies:
+
+| Function | Initial start source | Phase 1 BOS_0 probe | Multi-structure continuation | Use case |
+|---|---|---|---|---|
+| `compute_structure` | Scenario 1 (auto-identify via `identify_start_scenario_1`) | — | ✓ | H1 main pipeline (orchestrator) |
+| `compute_structure_from_start` | Caller-provided | — | ✓ | UC1 M15 (start pre-validated by H1 reverse probe) |
+| `compute_structure_scenario_3` | Caller-provided + Phase 1 refinement | ✓ | ✓ if `run_continuation=True` (gated) | UC1 H1 reverse probe (`run_continuation=False`); tests |
+
+All three share the same per-reversal continuation logic (Scenario 2 →
+Exception 1 → Exception 2 probes). They differ only in **how the very first
+start_idx is determined**.
+
+### Starting-point rigor hierarchy
+
+```
+Lowest:  Caller picks start, no validation
+         → compute_structure_from_start
+Medium:  Auto-identify via Scenario 1 (lookback search)
+         → compute_structure
+Highest: Caller picks candidate + iterative probe validates/refines
+         → compute_structure_scenario_3 (Phase 1)
+```
+
+---
+
+## Probes
+
+Two distinct probe mechanics exist in the structure layer. They share
+common patterns (run on `df.copy()`, iterative with max cap, scan window
+starts at `CTS_EST + 1`) but answer different questions.
+
+### Probe type 1 — Exception 2 probe
+
+**Question:** "Is the next-structure start (chosen by Exception 1) actually
+a structural start, or just a pullback candle?"
+
+**Where used:** Per reversal in all three `compute_structure*` variants
+(main pipeline, M15 pipeline, Scenario 3 Phase 2).
+
+**Bounds:** `[exc2_candidate, reversal_confirmed_idx]` — bounded probe.
+
+**Mechanics:** Run MarketStructure from candidate up to reversal. If a
+CTS_EST fires in the probe AND any candle between `CTS_EST + 1` and
+`reversal_confirmed_idx` reaches the prior CTS zone (within 10 pip
+tolerance), exception triggers. New candidate = the reach-back candle
+(strictly **later** than the previous candidate). Iterate up to 10 times.
+
+**Outcomes:**
+- **Exception triggered (any iter):** discard ALL probes, use settled
+  candidate as start_idx, run **unbounded** MarketStructure from there in
+  the outer loop.
+- **No exception ever:** keep first probe's data (events, levels, df),
+  continue outer loop from `reversal_confirmed_idx + 1`. Sid N+1 ends up
+  split across two MarketStructure invocations — the bounded probe
+  (pre-reversal portion) and the post-reversal continuation.
+
+No status field — outcome encoded as boolean `exc2_triggered`.
+
+### Probe type 2 — Scenario 3 BOS_0 probe (Phase 1 of `compute_structure_scenario_3`)
+
+**Question:** "Is the arbitrary candidate start a true cycle-0 point, or
+is it part of an older still-extending structure?"
+
+**Where used:** `compute_structure_scenario_3` Phase 1. Currently invoked
+in production only by `_run_h1_reverse_probe` (UC1 multi-TF) with
+`run_continuation=False`.
+
+**Bounds:** `[start_idx, end_idx]` — `end_idx` optional.
+
+**Mechanics:** Run MarketStructure from candidate. After 2 CTS_EST fire
+in the probe, check if any candle between `cts_est[0].idx + 1` and
+`cts_est[1].idx` reaches the BOS_0 zone inner bound (within
+`pip_tolerance_pips`). If so, restart from that reach-back candle (later
+than current). `original_bos0_bounds` captured at iteration 0 only and
+preserved across iterations.
+
+**Status field — four conditions:**
+
+| Condition | Trigger | Status |
+|---|---|---|
+| 1 | 2 CTS_EST + no exception | finalized |
+| 2 | Exception triggered | (loop continues — no status) |
+| 3 | Reversal in probe before 2nd CTS_EST | finalized |
+| 4a | `end_idx is not None` AND probe reached it without 2 CTS_EST | finalized |
+| 4b | `end_idx is None` AND probe ran out of df data | **pending** |
+| (max iter) | 10 iterations all triggered exception | pending |
+
+**Pending semantics:** Caller may re-invoke with same or advanced
+`start_idx` once more data arrives. `_run_h1_reverse_probe` returns
+`None` on pending so M15 isn't built for that trigger. Pending path is
+dormant in current UC1 backtest (always passes `end_idx=activation_idx`).
+
+### Phase 1 vs Phase 2 (Scenario 3 only)
+
+- **Phase 1** = the BOS_0 probe loop above. Validates `start_idx`.
+  Returns `Scenario3Result` with status, validated start, probe data.
+- **Phase 2** = multi-structure continuation from the validated start —
+  identical mechanics to `compute_structure`'s post-reversal handling
+  (Exception 2 probe per reversal). Gated by `status == "finalized" AND
+  run_continuation=True`.
+
+**Currently unused in production:** Phase 2 is exercised only by
+`tests/test_scenario3.py`. All production callers of
+`compute_structure_scenario_3` pass `run_continuation=False` (only
+`_run_h1_reverse_probe` calls it, probe-only). Worth knowing if a future
+feature needs multi-structure continuation from an arbitrary validated
+start — the path exists.
+
+### Common probe patterns
+
+- **Always on `df.copy()`** — no mutation of outer state until result accepted
+- **Max iterations cap** (10) — prevents infinite loops
+- **`CTS_EST + 1` scan window start** — excludes the pullback-confirmation candle (naturally near the zone, would cause false exceptions)
+- **Pip tolerance scales with timeframe** — H1=10, M15=3, M5=1 (Scenario 3); Exception 2 always 10 pips on H1 main, scaled in `compute_structure_scenario_3` Phase 2 via `pip_tolerance_pips`【fileciteturn1file11】
 

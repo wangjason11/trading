@@ -236,6 +236,12 @@ def compute_structure_scenario_3(
     proximity checking.  Phase 2 — Multi-structure continuation from the
     finalized probe (same logic as compute_structure lines 69-176).
 
+    Note: Phase 2 is currently exercised only by tests. All production
+    callers (only ``_run_h1_reverse_probe`` today) pass
+    ``run_continuation=False`` for probe-only mode. The Phase 2 path
+    remains available for future features that need multi-structure
+    continuation from an arbitrary validated start.
+
     Parameters
     ----------
     df : pd.DataFrame
@@ -251,7 +257,10 @@ def compute_structure_scenario_3(
     end_idx : int, optional
         Bound the probe window — passed through to MarketStructure.
         When the bound is reached without 2 CTS_EST events, the current
-        start is accepted as finalized.
+        start is accepted as finalized (Condition 4a).
+        When end_idx is None and the probe runs out of available df data
+        without 2 CTS_EST events, status is "pending" (Condition 4b) — the
+        caller may re-run the probe later when more data arrives.
     run_continuation : bool
         Whether to run Phase 2 (multi-structure continuation) after probe
         finalization. Set False for probe-only use (e.g. H1 reverse probe).
@@ -260,7 +269,11 @@ def compute_structure_scenario_3(
     -------
     Scenario3Result
         Contains df, levels, events, status ("finalized" or "pending"),
-        original_bos0_bounds, probe_iterations, and notes.
+        original_bos0_bounds, probe_iterations, and notes. Status is
+        "pending" when end_idx is None and the probe could not reach a
+        terminal break condition with the available data; the caller can
+        invoke the probe again with the same or advanced start_idx after
+        more data becomes available.
     """
     _validate_input(df)
 
@@ -307,9 +320,19 @@ def compute_structure_scenario_3(
             status = "finalized"
             break
 
-        # --- Condition 4: Data/bound ends before 2nd CTS_EST → finalized ---
+        # --- Condition 4: Data/bound ends before 2nd CTS_EST ---
+        # Split:
+        #   4a) end_idx is defined → caller's bound was reached → finalized
+        #       (in live use, the caller knows this is a real terminal point —
+        #        e.g., the WVMI activation candle has been determined)
+        #   4b) end_idx is None → probe ran past all available df data without
+        #       reaching a defined boundary → pending (in live use, more
+        #       candles may arrive and define the boundary later)
         if len(cts_est) < 2 or original_bos0_bounds is None:
-            status = "finalized"
+            if end_idx is not None:
+                status = "finalized"
+            else:
+                status = "pending"
             break
 
         # --- Conditions 1 & 2: Evaluate exception ---

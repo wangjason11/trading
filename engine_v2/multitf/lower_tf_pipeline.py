@@ -112,6 +112,16 @@ def _run_h1_reverse_probe(
           f"cycle={trigger.parent_cycle_id} -> start_idx={s3_result.start_idx} "
           f"status={s3_result.status} iterations={s3_result.probe_iterations}")
 
+    # Pending status means the probe could not reach a terminal condition with
+    # the available data. In live use, more candles may arrive that resolve the
+    # probe — but for now we skip M15 for this trigger. (In current UC1 backtest
+    # end_idx=activation_idx is always defined, so this path is dormant.)
+    if s3_result.status == "pending":
+        print(f"[lower_tf] PENDING: H1 reverse probe did not finalize for "
+              f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}; "
+              f"skipping M15 build")
+        return None
+
     return s3_result.start_idx
 
 

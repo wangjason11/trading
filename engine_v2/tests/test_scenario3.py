@@ -194,29 +194,49 @@ class TestScenario3BasicContract:
 
 
 # ---------------------------------------------------------------------------
-# Tests: Condition 4 — short data → finalized (bound reached)
+# Tests: Condition 4 — split into 4a (end_idx reached → finalized) and
+#        4b (end of data with end_idx=None → pending)
 # ---------------------------------------------------------------------------
 
-class TestScenario3Condition4Finalized:
-    def test_short_data_returns_finalized(self):
-        """When data is too short for 2 CTS_EST, status should be finalized
-        (probe accepts current start when bound is reached)."""
+class TestScenario3Condition4:
+    def test_short_data_no_end_idx_returns_pending(self):
+        """Condition 4b: end_idx=None, probe runs out of data without 2
+        CTS_EST → pending (caller may re-run later when more data arrives)."""
         ohlc = _make_short_data(n=10)
         df = _prepare_df(ohlc)
         result = compute_structure_scenario_3(df, start_idx=0, struct_direction=1)
-        assert result.status == "finalized"
+        assert result.status == "pending"
         # Data is still accessible
         assert result.df is not None
         assert len(result.df) == len(df)
 
-    def test_finalized_probe_data_accessible(self):
-        """Finalized result has events/levels from the probe."""
+    def test_short_data_with_end_idx_returns_finalized(self):
+        """Condition 4a: end_idx defined, probe reaches it without 2 CTS_EST
+        → finalized (caller's bound is treated as a real terminal point)."""
+        ohlc = _make_short_data(n=15)
+        df = _prepare_df(ohlc)
+        result = compute_structure_scenario_3(
+            df, start_idx=0, struct_direction=1, end_idx=10)
+        assert result.status == "finalized"
+
+    def test_pending_probe_data_accessible(self):
+        """Pending result still has events/levels from the probe."""
         ohlc = _make_short_data(n=15)
         df = _prepare_df(ohlc)
         result = compute_structure_scenario_3(df, start_idx=0, struct_direction=1)
-        # Probe data is accessible (may be empty if no events generated)
+        # Pending: probe data is still accessible
         assert isinstance(result.events, list)
         assert isinstance(result.levels, list)
+        assert result.status == "pending"
+
+    def test_pending_probe_records_current_start(self):
+        """Pending result still carries the current best start_idx for the
+        caller to re-pass on the next call."""
+        ohlc = _make_short_data(n=10)
+        df = _prepare_df(ohlc)
+        result = compute_structure_scenario_3(df, start_idx=3, struct_direction=1)
+        assert result.start_idx == 3  # unchanged because no exception triggered
+        assert result.status == "pending"
 
 
 # ---------------------------------------------------------------------------

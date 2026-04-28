@@ -34,6 +34,24 @@ The MarketStructure engine is explicitly sequential and uses internal rewind/rep
   - Market structure update per new candle
   - Zones updated by structure events (no additional rewinds/waits)
 
+#### Stateless function + caller-managed state pattern (live-mode prep)
+
+When adding components that may run repeatedly as new candles arrive,
+prefer **stateless functions with explicit pending/finalized status** over
+stateful tracker classes that internalize iteration state. Callers manage
+the small amount of state they need (e.g., the current best `start_idx`)
+externally and re-invoke the function per new candle.
+
+**Example (already in place):** `compute_structure_scenario_3` Phase 1 —
+Condition 4 splits on `end_idx`:
+- `end_idx` defined → `finalized` (caller's bound is a real terminal)
+- `end_idx is None` → `pending` (more candles may resolve later)
+
+A live caller re-invokes the probe with the same or advanced `start_idx`
+each new candle, and uses status to decide whether to start downstream
+work. No tracker class needed. New similar features should follow this
+pattern unless there's a strong reason to encapsulate state in a class.
+
 ---
 
 ## Data model contracts
