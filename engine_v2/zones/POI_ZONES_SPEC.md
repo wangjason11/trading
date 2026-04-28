@@ -313,6 +313,25 @@ def calculate_candle_overlap_pct(candle_high, candle_low, fib_zone_top, fib_zone
 
 ## 4. POI Zone Construction
 
+### POIs are always sd-direction (invariant)
+
+A POI zone is always in the **structure direction** by construction:
+- Fib levels span `BOS → CTS` within a cycle, so the 61.8%–80% retrace zone
+  sits entirely within that span
+- IC candidates must be opposite-direction candles (`candle_dir == -sd`)
+  located inside that span, with an sd-direction unfilled imbalance after them
+- The resulting POI zone's `side` mirrors the structure direction:
+  `"buy"` if `sd == +1`, `"sell"` if `sd == -1`
+
+**Consequence:** there are no opp_sd POIs anywhere in the system. The zone
+proximity logic relies on this invariant — opp_sd zone proximity triggers
+only consider the CTS KL zone (the single opposite-direction zone per
+cycle); no POIs participate.
+
+If you ever introduce a feature that produces an opposite-direction POI,
+you'll need to revisit `check_zone_proximity` and any code that currently
+assumes "POI ⟹ sd direction."
+
 ### Zone Boundaries
 - **Top:** IC candle high
 - **Bottom:** IC candle low

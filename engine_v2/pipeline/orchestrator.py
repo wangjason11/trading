@@ -20,7 +20,8 @@ from engine_v2.patterns.imbalance import compute_imbalance
 from engine_v2.zones.wave_candles import identify_wave_candles, WaveCandleResult
 
 # Week 8: WVMI
-from engine_v2.zones.wvmi import WVMITracker, check_proximity_activation
+from engine_v2.zones.wvmi import WVMITracker
+from engine_v2.zones.zone_proximity import check_zone_proximity
 from engine_v2.structure.structure_engine import _pip_size_from_pair
 
 # Week 7: Fib tracking
@@ -44,13 +45,15 @@ def _run_downstream_pipeline(
     fib_mode: str = "h1",
     length_threshold: float = 0.7,
     log_prefix: str = "",
+    timeframe: str = "H1",
 ) -> Dict[str, Any]:
     """Run downstream pipeline (KL zones -> wave candles -> Fib -> POI -> WVMI).
 
     Extracted from run_pipeline so both H1 and lower-TF pipelines can reuse.
 
     Returns dict with keys: kl_zones, wave_candles, fib_states, fib_tracker,
-    poi_zones, wvmi, wvmi_records, prev_bos_lines, sorted_events
+    poi_zones, wvmi, wvmi_records, prev_bos_lines, sorted_events,
+    zone_proximity_triggers
     """
     pfx = f"[{log_prefix}]" if log_prefix else ""
 
@@ -249,23 +252,38 @@ def _run_downstream_pipeline(
     wvmi_tracker = WVMITracker()
 
     pip_size = _pip_size_from_pair(df)
-    activated_cycles = check_proximity_activation(
+
+    # Zone proximity triggers — alternating sd/opp_sd per cycle.
+    # The full triggers list is exposed via df.attrs["zone_proximity_triggers"]
+    # for downstream/charting consumers. WVMI gate uses only the first sd
+    # trigger per cycle (backward-compat, until WVMI is rewired off the gate).
+    zone_proximity_triggers = check_zone_proximity(
         df=df,
         sorted_events=sorted_events,
         kl_zones=kl_zones,
         poi_zones=poi_zones,
         pip_size=pip_size,
-        proximity_pips=20,
+        timeframe=timeframe,
     )
+
+    proximity_candles: Dict[tuple, dict] = {}
+    for key, trigs in zone_proximity_triggers.items():
+        if trigs and trigs[0].direction == "sd":
+            first_sd = trigs[0]
+            proximity_candles[key] = {
+                "proximity_trigger_idx": first_sd.idx,
+                "trigger_inner": first_sd.trigger_inner,
+                "proximity_pips": first_sd.proximity_pips,
+            }
 
     for ev in sorted_events:
         if ev.type == "CTS_CONFIRMED":
             sid = ev.meta.get("structure_id", 0)
             cycle_id = ev.meta.get("cycle_id", 0)
-            if (sid, cycle_id) in activated_cycles:
+            if (sid, cycle_id) in proximity_candles:
                 rec = wvmi_tracker.on_cts_confirmed(ev, df, wave_candle_results, kl_zones)
                 if rec is not None:
-                    rec.meta.update(activated_cycles[(sid, cycle_id)])
+                    rec.meta.update(proximity_candles[(sid, cycle_id)])
 
     for ev in sorted_events:
         if ev.type == "BOS_CONFIRMED":
@@ -285,6 +303,7 @@ def _run_downstream_pipeline(
         "wvmi_records": wvmi_records,
         "prev_bos_lines": prev_bos_lines,
         "sorted_events": sorted_events,
+        "zone_proximity_triggers": zone_proximity_triggers,
     }
 
 
@@ -354,6 +373,7 @@ def run_pipeline(
     wvmi_records = downstream["wvmi_records"]
     prev_bos_lines = downstream["prev_bos_lines"]
     sorted_events = downstream["sorted_events"]
+    zone_proximity_triggers = downstream["zone_proximity_triggers"]
 
     meta["kl_zones"] = kl_zones
     meta["wave_candles"] = wave_candle_results
@@ -362,12 +382,14 @@ def run_pipeline(
     meta["fib_tracker"] = downstream["fib_tracker"]
     meta["wvmi"] = wvmi_records
     meta["prev_bos_lines"] = prev_bos_lines
+    meta["zone_proximity_triggers"] = zone_proximity_triggers
 
     # For chart overlay (export_plotly reads df.attrs)
     s_res.df.attrs["kl_zones"] = kl_zones
     s_res.df.attrs["wave_candles"] = wave_candle_results
     s_res.df.attrs["wvmi"] = wvmi_records
     s_res.df.attrs["poi_zones"] = poi_zones
+    s_res.df.attrs["zone_proximity_triggers"] = zone_proximity_triggers
     s_res.df.attrs["structure_events"] = s_res.events
     s_res.df.attrs["fib_states"] = fib_states
     s_res.df.attrs["prev_bos_lines"] = prev_bos_lines

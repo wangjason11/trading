@@ -11,61 +11,37 @@ Wave Volume Momentum Indicator (WVMI) measures BOS zone strength by tracking vol
 
 ---
 
-## Price Proximity Activation
+## Zone Proximity Trigger (gate for WVMI creation today)
 
-WVMI records are only created for cycles where price actually approaches the zone. This prevents eagerly computing momentum for zones that price never retraces to.
+WVMI records are only created for cycles where price actually approaches a
+zone. The proximity-trigger gate is now produced by the more general
+`check_zone_proximity()` in `zones/zone_proximity.py` — see
+[POI_ZONES_SPEC](POI_ZONES_SPEC.md) and `zone_proximity.py` for the full
+spec including alternating sd/opp_sd triggers per cycle.
 
-### Scan Window
+For the WVMI gate specifically, the orchestrator extracts only the
+**first sd-direction trigger** per cycle (preserving the pre-refactor
+behavior). When that exists, the corresponding `WVMIRecord` is created
+and its meta is populated with:
 
-For each `(sid, cycle_id)` with a `CTS_CONFIRMED` event:
+- `proximity_trigger_idx` — first sd trigger candle index
+- `trigger_inner` — the inner price used as the trigger level
+- `proximity_pips` — threshold in pips (default 20 for H1, 10 for M15,
+  5 for M5; configurable per call)
 
-- **Start:** `CTS_CONFIRMED confirmed_at + 1` — avoids trivial activation during the pullback that formed the CTS (uses `ev.meta["confirmed_at"]`, not `ev.idx`)
-- **End:** earliest of:
-  - `BOS_CONFIRMED confirmed_at - 1` for `(sid, cycle_id + 1)` — next cycle's BOS confirmation deactivates current zones (uses `ev.meta["confirmed_at"]`, not `ev.idx` which is the BOS extreme)
-  - `REVERSAL_CANDIDATE apply_idx - 1` for sid — structure ends
-  - End of data
-
-If the scan window is empty (start > end), the cycle is skipped.
-
-### Trigger Zone Selection
-
-At each candle in the scan window, the trigger level is built from **active** zones only:
-
-1. BOS KL zone `inner` bound (active throughout the scan window)
-2. POI zones for `(sid, cycle_id)` where `confirmed_idx <= candle_idx` and (`end_idx` is None or `end_idx >= candle_idx`)
-3. Inner bounds: `top` for buy zones, `bottom` for sell zones
-4. **Trigger inner:** highest inner for buy zones (closest to CTS above), lowest inner for sell zones (closest to CTS below)
-
-### Proximity Check
-
-- **Buy zone:** activated when `candle_low <= trigger_inner + 20 * pip_size`
-- **Sell zone:** activated when `candle_high >= trigger_inner - 20 * pip_size`
-- Activation stops at the first qualifying candle
-
-### Edge Cases
-
-| Case | Behavior |
-|------|----------|
-| No active POI zones at candle | Only BOS KL zone inner bound used as trigger |
-| No BOS KL zone | No activation possible → no WVMI |
-| BOS zone has no `inner` AND no active POI zones | Candle skipped; later candles may have active POI zones |
-| CTS_CONFIRMED but empty scan window | Skipped (next BOS at same idx or earlier) |
-| CTS_CONFIRMED but price never approaches | Not activated → no WVMI |
-
-### Activation Metadata
-
-When activated, the `WVMIRecord.meta` dict is populated with:
-- `activation_idx` — first candle that triggered activation
-- `trigger_inner` — the inner price used as trigger level
-- `proximity_pips` — configured pip threshold (default 20)
+Cycles without an sd trigger get no WVMI record (current backward-compat
+behavior). This will change when WVMI is rewired off the gate in a
+later refactor.
 
 ---
 
 ## Lifecycle (mirrors FibTracker)
 
-### 0. Activated — Price Approaches Zone
+### 0. Gate — Price Approaches Zone
 
-`check_proximity_activation()` determines which `(sid, cycle_id)` pairs are eligible for WVMI creation. Only activated cycles proceed to step 1.
+`check_zone_proximity()` (in `zones/zone_proximity.py`) determines which
+`(sid, cycle_id)` pairs have an sd-direction proximity trigger. Only those
+cycles proceed to step 1.
 
 ### 1. Created — CTS_n Confirmed
 
@@ -186,7 +162,7 @@ WVMI runs **after POI zones** (needs POI zone inner bounds for proximity gate):
 
 ```
 wave_candles → Fib tracking → POI zones → WVMI:
-  0. check_proximity_activation()                      [gate]
+  0. check_zone_proximity() → first sd trigger          [gate]
   1. for CTS_CONFIRMED events (activated only) →
        on_cts_confirmed() + meta update                [create]
   2. for BOS_CONFIRMED events → on_bos_confirmed()     [lock]

@@ -21,9 +21,9 @@ candle features → structure patterns → imbalance → market structure → KL
 ```
 
 **MUST:** Base features MUST run BEFORE market structure so zone resolution is stable.
-**MUST:** WVMI MUST run AFTER POI zones — it depends on POI zone inner bounds for its proximity activation gate.
+**MUST:** WVMI MUST run AFTER POI zones — its gate (the first sd zone-proximity trigger from `check_zone_proximity`) depends on POI zone inner bounds.
 
-**Why:** Market structure depends on candle classification and pattern detection from base features. WVMI's activation gate checks whether price retraces within 20 pips of zone inner bounds (both KL and POI), so POI zones must exist first.
+**Why:** Market structure depends on candle classification and pattern detection from base features. The zone-proximity check examines both KL and POI zone inner bounds to find sd-direction triggers, so POI zones must exist first.
 
 **Enforcement:** Pipeline ordering is defined in `pipeline/orchestrator.py` and marked as LOCKED.
 
@@ -118,7 +118,7 @@ Common sources of off-by-one bugs:
 1. **Zero FB/FP volume blocks WVMI creation** — division by zero guard. Ensure candle features (volume) are computed before WVMI runs.
 2. **Temp LP only locks on BOS_n+1** — do not assume `lp_locked=True` until BOS of the next cycle confirms. Until then, LP and pullback_momentum can shift every candle.
 3. **buy_momentum/sell_momentum are direction-mapped** — for buy zones: buy=breakout, sell=pullback. For sell zones: reversed. Always check `zone_side` when interpreting.
-4. **Proximity activation gate is mandatory** — WVMI records are only created for cycles where price actually retraces within 20 pips of the closest active zone inner bound. Scan window: `[CTS_CONFIRMED confirmed_at + 1, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at + 1, REVERSAL apply_idx - 1]`. Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS.md "BOS_CONFIRMED ev.idx" entry). Uses only active zones at each candle.
+4. **Zone proximity gate is mandatory (today)** — WVMI records are only created for cycles where the **first sd-direction zone-proximity trigger** fires (via `check_zone_proximity` in `zones/zone_proximity.py`). Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, REVERSAL apply_idx - 1]` (note: scan starts AT the CTS confirmation candle, not +1). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Uses only active POI zones at each candle (BOS KL zone is throughout-active). The orchestrator extracts the first sd trigger per cycle as the WVMI gate (`proximity_trigger_idx` in WVMIRecord.meta). Future refactor will rewire WVMI off this gate.
 
 ---
 
@@ -200,10 +200,10 @@ if fib.active and not fib.locked:
 3. **Exception evaluation checks inner bound, not outer** — proximity is measured as "candle high/low within tolerance of zone inner bound" (the bound closer to current price).
 4. **Exception check window starts from CTS_EST + 1** — the CTS_ESTABLISHED candle itself is the pullback confirmation, naturally near the zone. Exclude it from the exception check (see GOTCHAS.md).
 5. **Condition 4 split — `end_idx` is the discriminator:**
-   - **4a) `end_idx is not None`** AND probe reached it without 2 CTS_EST → **finalized**. The caller-defined boundary is treated as a real terminal point (e.g., the H1 WVMI activation candle is known and definitive).
+   - **4a) `end_idx is not None`** AND probe reached it without 2 CTS_EST → **finalized**. The caller-defined boundary is treated as a real terminal point (e.g., the first sd zone-proximity trigger candle is known and definitive).
    - **4b) `end_idx is None`** AND probe ran past available `df` data without 2 CTS_EST → **pending**. More candles may arrive later that resolve the probe; the caller can re-invoke with the same or advanced `start_idx`.
    - The probe never returns `pending` when an explicit `end_idx` was provided — the bound itself counts as a terminal break.
-   - In current UC1 backtest, `end_idx = activation_idx` is always set, so the pending path is dormant. Path becomes live for callers that pass `end_idx=None` (live mode where the future activation candle isn't known yet).
+   - In current UC1 backtest, `end_idx = proximity_trigger_idx` is always set, so the pending path is dormant. Path becomes live for callers that pass `end_idx=None` (live mode where the future trigger candle isn't known yet).
    - Callers should treat `pending` as "skip downstream work for now" (e.g., `_run_h1_reverse_probe` returns `None` on pending so M15 isn't built).
 
 ---

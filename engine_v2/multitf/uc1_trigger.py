@@ -114,7 +114,7 @@ def detect_uc1_triggers(
             lifecycle_end_idx=lifecycle_end_idx,
             meta={
                 "cts_idx": cts_idx,
-                "activation_idx": rec.meta.get("activation_idx"),
+                "proximity_trigger_idx": rec.meta.get("proximity_trigger_idx"),
             },
         )
         triggers.append(trigger)

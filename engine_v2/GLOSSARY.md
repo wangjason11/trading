@@ -134,3 +134,16 @@
 | **feature** | Computed column added to dataframe (e.g., swing detection) |
 | **base features** | Foundation features required by market structure |
 | **charting** | Final pipeline stage that generates visualizations |
+
+---
+
+## Zone Proximity Terms
+
+| Term | Definition |
+|------|------------|
+| **zone proximity trigger** | A candle where price wicks within `proximity_pips` of a zone's inner bound. Computed by `check_zone_proximity` in `zones/zone_proximity.py`. |
+| **sd zone** | A zone in the structure direction. For sd=+1: buy-side zones (BOS KL + POI). For sd=-1: sell-side (BOS KL + POI). POI zones are always sd by Fib construction (Fib spans BOS→CTS). |
+| **opp_sd zone** | A zone opposite to the structure direction. For sd=+1: sell-side (CTS KL only). For sd=-1: buy-side (CTS KL only). There are no opp_sd POIs. |
+| **proximity_trigger_idx** | The candle index of the first sd zone proximity trigger per cycle. Stored in WVMIRecord.meta and MultiTFTrigger.meta. |
+| **V / lambda movement** | Alternating retracement pattern within a structure cycle: price moves toward sd zone, bounces, moves toward opp_sd zone, bounces back, etc. The zone-proximity state machine captures each leg. |
+| **proximity_pips** | The pip threshold for zone proximity detection. Defaults: H1=20, M15=10, M5=5. Caller-overridable per call. |

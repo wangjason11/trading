@@ -227,7 +227,7 @@ preserved across iterations.
 **Pending semantics:** Caller may re-invoke with same or advanced
 `start_idx` once more data arrives. `_run_h1_reverse_probe` returns
 `None` on pending so M15 isn't built for that trigger. Pending path is
-dormant in current UC1 backtest (always passes `end_idx=activation_idx`).
+dormant in current UC1 backtest (always passes `end_idx=proximity_trigger_idx`).
 
 ### Phase 1 vs Phase 2 (Scenario 3 only)
 

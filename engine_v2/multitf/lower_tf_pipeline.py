@@ -77,22 +77,22 @@ def _run_h1_reverse_probe(
 ) -> Optional[int]:
     """Run H1 reverse Scenario 3 probe to find validated start for M15.
 
-    Probe window: [cts_idx, activation_idx] on the H1 df.
+    Probe window: [cts_idx, proximity_trigger_idx] on the H1 df.
     Direction: trigger.lower_sd (opposite of H1 sd).
     Tolerance: 10 pips (H1).
 
     Returns: H1 index of validated start, or None on failure.
     """
     cts_idx = trigger.meta.get("cts_idx")
-    activation_idx = trigger.meta.get("activation_idx")
+    proximity_trigger_idx = trigger.meta.get("proximity_trigger_idx")
 
-    if cts_idx is None or activation_idx is None:
-        print(f"[lower_tf] WARNING: Missing cts_idx or activation_idx in trigger meta "
+    if cts_idx is None or proximity_trigger_idx is None:
+        print(f"[lower_tf] WARNING: Missing cts_idx or proximity_trigger_idx in trigger meta "
               f"for sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}")
         return None
 
     cts_idx = int(cts_idx)
-    activation_idx = int(activation_idx)
+    proximity_trigger_idx = int(proximity_trigger_idx)
 
     try:
         s3_result = compute_structure_scenario_3(
@@ -100,7 +100,7 @@ def _run_h1_reverse_probe(
             start_idx=cts_idx,
             struct_direction=trigger.lower_sd,
             pip_tolerance_pips=10,
-            end_idx=activation_idx,
+            end_idx=proximity_trigger_idx,
             run_continuation=False,
         )
     except (ValueError, IndexError) as exc:
@@ -115,7 +115,7 @@ def _run_h1_reverse_probe(
     # Pending status means the probe could not reach a terminal condition with
     # the available data. In live use, more candles may arrive that resolve the
     # probe — but for now we skip M15 for this trigger. (In current UC1 backtest
-    # end_idx=activation_idx is always defined, so this path is dormant.)
+    # end_idx=proximity_trigger_idx is always defined, so this path is dormant.)
     if s3_result.status == "pending":
         print(f"[lower_tf] PENDING: H1 reverse probe did not finalize for "
               f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}; "
@@ -220,6 +220,7 @@ def run_lower_tf_pipeline(
         source_kinds=["BOS"],       # BOS-only KL zones for M15
         fib_mode="m15_reverse",     # Imbalance-gated cross-cycle Fib
         log_prefix=f"M15_sid{trigger.parent_sid}_c{trigger.parent_cycle_id}",
+        timeframe=trigger.lower_tf, # "M15" — drives proximity_pips lookup
     )
 
     # 7. Inject attribution into events

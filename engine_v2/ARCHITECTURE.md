@@ -111,7 +111,7 @@ Identifies boundary candles between consecutive waves at each KL zone. For each 
 
 ### WVMI (`zones/wvmi.py`)
 Measures BOS zone strength via volume ratios of wave candle pairs. Runs **after POI zones** because it depends on POI zone inner bounds for its activation gate. Lifecycle:
-0. **Activated** — `check_proximity_activation()` scans candles from CTS_CONFIRMED+1 to zone deactivation (next BOS or reversal). Only cycles where price approaches within 20 pips of the closest active zone inner bound (KL or POI) proceed.
+0. **Gated by first sd zone-proximity trigger** — `check_zone_proximity()` (in `zones/zone_proximity.py`) scans candles from CTS_CONFIRMED to zone deactivation (next BOS or reversal). It produces a list of alternating sd / opp_sd trigger candles per cycle. The orchestrator uses only the first sd trigger as the WVMI gate (preserves pre-refactor behavior). Threshold defaults: H1 = 20 pips, M15 = 10 pips, M5 = 5 pips (caller-overridable).
 1. **Created** at CTS_n confirmation (only if activated) — breakout momentum locked from FB/LB volumes
 2. **Updated** each candle — temporary LP shifts to closest qualified candle near outer bound
 3. **Locked** at BOS_n+1 confirmation — LP finalizes, pullback momentum locked
@@ -131,7 +131,7 @@ Subordinate lower-TF structures triggered by higher-TF events. Foundation suppor
 
 **UC1 flow:** H1 `CTS_CONFIRMED` + WVMI activation → detect trigger (`uc1_trigger.py`) → fetch/prepare M15 data (`data_bridge.py`) → H1 reverse probe → map to M15 → plain structure + downstream pipeline (`lower_tf_pipeline.py`).
 
-**H1 reverse probe:** Runs `compute_structure_scenario_3()` on H1 data with `end_idx=activation_idx` and `run_continuation=False` to find a validated start candle for M15. Probe window is [cts_idx, activation_idx]. The H1 probe results (events, levels) are discarded — only `start_idx` is used.
+**H1 reverse probe:** Runs `compute_structure_scenario_3()` on H1 data with `end_idx=proximity_trigger_idx` and `run_continuation=False` to find a validated start candle for M15. Probe window is [cts_idx, proximity_trigger_idx]. The H1 probe results (events, levels) are discarded — only `start_idx` is used.
 
 **Key design decisions:**
 - M15 structure uses opposite direction to H1 (`lower_sd = -1 * h1_sd`)

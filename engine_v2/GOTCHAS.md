@@ -358,21 +358,32 @@ return ev_idx
 
 ---
 
-## WVMI Activation: Scan Must Start at CTS_CONFIRMED, Not CTS_ESTABLISHED
+## Zone Proximity Trigger: Scan Starts AT CTS_CONFIRMED Candle
 
-**Problem:** The WVMI proximity activation gate scans for candles near zone inner bounds to decide whether to create WVMI records. If the scan starts at `CTS_ESTABLISHED + 1`, it triggers immediately because CTS_ESTABLISHED happens during the pullback — price is naturally near the zone at that point.
+**Rule:** `check_zone_proximity` scans starting at the CTS_CONFIRMED candle
+itself (`ev.meta["confirmed_at"]`, NOT `+ 1`). The CTS_CONFIRMED candle is
+the candle that confirmed the CTS via pullback pattern — past the pullback
+extreme — so it's a valid first candle to evaluate proximity. The first
+sd-direction proximity match captures the post-pullback retracement (or,
+in some cases, may fire on the confirmation candle itself).
 
-**Example:** sid=0 cycle=0 had CTS_ESTABLISHED at idx=115 with zone inner=0.55910. The next candle (idx=116) had low=0.56014, only 10.4 pips from the zone — trivially activated because the pullback hadn't completed yet.
+**Earlier mistake to avoid:** scanning from `CTS_ESTABLISHED + 1` was
+incorrect because CTS_ESTABLISHED happens at the CTS extreme — between
+that candle and CTS_CONFIRMED, the entire pullback unfolds. Any proximity
+match during that window is the pullback itself, not a post-pullback
+retracement (this was the original `check_proximity_activation` design
+intent, kept under the new naming).
 
-**Fix:** Start the scan at `CTS_CONFIRMED + 1`. By CTS_CONFIRMED, the pullback phase is over and any future proximity represents a genuine retrace.
-
-**Lesson:** When designing proximity/activation checks relative to structure events, carefully consider what phase of the cycle the event occurs in. CTS_ESTABLISHED ≠ CTS_CONFIRMED in terms of where price is relative to zones.
+**Lesson:** When designing proximity/trigger checks relative to structure
+events, carefully consider what phase of the cycle the event occurs in.
+CTS_ESTABLISHED ≠ CTS_CONFIRMED in terms of where price is relative to
+zones.
 
 ---
 
-## WVMI Activation: Scan Window Must Be Bounded by Zone Activity
+## Zone Proximity Trigger: Scan Window Must Be Bounded by Zone Activity
 
-**Problem:** The WVMI activation scan must stop when the cycle's zones become inactive. Without a scan end boundary, the scan can continue past the cycle boundary and find proximity matches that belong to a different cycle.
+**Problem:** The proximity scan must stop when the cycle's zones become inactive. Without a scan end boundary, the scan can continue past the cycle boundary and find proximity matches that belong to a different cycle.
 
 **Example:** sid=0 cycle=1 had CTS_CONFIRMED at idx=640 and BOS_CONFIRMED for cycle=2 also at idx=640. The scan window was empty [641, 639] — correctly skipped. Without the boundary, the scan would have continued to idx=710 and found a match that belonged to structure 1.
 
@@ -380,7 +391,7 @@ return ev_idx
 - Next BOS_CONFIRMED for `(sid, cycle_id + 1)` → current cycle zones become inactive
 - REVERSAL_CANDIDATE `apply_idx` for sid → structure ends
 
-**Also:** Within the scan window, only use active POI zones at each candle (check `confirmed_idx <= candle <= end_idx`). If no POI zones are active yet, fall back to BOS KL zone inner only.
+**Also:** Within the scan window, only use active POI zones at each candle (check `confirmed_idx <= candle <= end_idx`). The BOS KL zone is throughout-active. The CTS KL zone (used for opp_sd triggers) is also throughout-active within this window — `CTS_(n+1)_ESTABLISHED`, which deactivates CTS_n zone, fires AT or AFTER `next_BOS.confirmed_at`, so within `[CTS_n_conf, next_BOS.confirmed_at - 1]` the CTS_n zone is still alive.
 
 ---
 
