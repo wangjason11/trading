@@ -30,11 +30,17 @@ MarketStructure maintains an internal state object (MarketStructureState) with:
 
 ### CTS
 A continuation level established within the current structure direction.
-- It is confirmed by pullback logic (a valid pullback pattern).
+- It is confirmed by EITHER a pullback pattern OR sd zone proximity
+  (whichever fires first — see "Dual CTS confirmation paths" below).
 - CTS emits:
   - `CTS_ESTABLISHED` when a new CTS cycle begins (level anchored at an extreme).
-  - `CTS_CONFIRMED` when the pullback pattern confirms CTS timing.
+  - `CTS_CONFIRMED` when CTS is confirmed by the first of pullback / proximity.
+    `meta["confirmation_method"]` ∈ {`"pullback"`, `"sd_zone_proximity"`}.
   - `CTS_UPDATED` when the CTS extreme is extended within the appropriate stage (rules depend on cycle stage).
+  - `CTS_RECONFIRMED` (new) when a valid pullback pattern fires AFTER CTS was
+    already confirmed via proximity. The original CTS_CONFIRMED stays at the
+    proximity idx; the CTS zone meta is upgraded to `confirmation_method = "pullback"`
+    with `pb_reconfirm_idx` recorded.
 
 ### BOS
 A break level; confirmed by breakout logic.
@@ -82,6 +88,57 @@ When a range is active:
   - sd=+1: cts_threshold = range_hi
   - sd=-1: cts_threshold = range_lo
 - This sync is a first-class event source for zones (CTS threshold updates) and is emitted when cts_threshold changes due to range sync.【fileciteturn2file14】
+
+---
+
+## Dual CTS confirmation paths (Stage 1: BOS-only)
+
+After `CTS_ESTABLISHED`, the engine watches for both:
+1. **A valid pullback pattern** (existing path)
+2. **First sd zone proximity hit** (new path — Stage 1 uses BOS inner only;
+   Stage 2 will add POI inners per spec)
+
+Whichever fires first confirms the CTS at that candle's idx:
+- `CTS_CONFIRMED.meta["confirmation_method"] = "pullback"` if pullback won
+  (or pullback fired at the same candle as the proximity wick)
+- `CTS_CONFIRMED.meta["confirmation_method"] = "sd_zone_proximity"` if proximity won
+
+If proximity confirmed first AND a valid pullback later fires, the engine
+emits `CTS_RECONFIRMED` at the pullback idx. The original `CTS_CONFIRMED`
+event is not modified (append-only contract). KL zone derivation post-pass
+upgrades the CTS zone's `confirmation_method` to `"pullback"` and records
+`pb_reconfirm_idx`.
+
+### Range under proximity-only confirmation (Option B)
+
+When CTS is confirmed via proximity (no pullback pattern fired yet), the
+engine creates a range with bounds seeded by the proximity candle's wick:
+- sd=+1: `range_hi = cts.price`, `range_lo = candle.low at proximity_idx`
+- sd=-1: `range_lo = cts.price`, `range_hi = candle.high at proximity_idx`
+
+This preserves all downstream behavior (CTS_THRESHOLD_UPDATED via range
+sync, breakout detection via range thresholds) for proximity-confirmed
+cycles. A subsequent pullback pattern (CTS_RECONFIRMED case) expands the
+range as usual via `_ensure_range_on_pullback`.
+
+### BOS_n+1 derivation rule
+
+When transitioning to cycle n+1 via breakout pattern:
+- **If cycle n had a pullback** (existing behavior):
+  BOS_n+1 = pullback's deepest extreme in `[last_pullback_pat_apply_idx, breakout_apply_idx]`
+- **If cycle n was proximity-only** (no pullback fired):
+  BOS_n+1 = max retracement in `[cts_n_confirmed_idx, breakout_apply_idx]`
+
+The implementation is in `_select_bos_on_breakout` and switches based on
+`pullback_fired_for_cycle` state.
+
+### Trigger threshold per timeframe
+
+`MarketStructure.__init__` accepts `timeframe` and `proximity_pips`
+parameters. If `proximity_pips` is None, looks up
+`zones/zone_proximity.py::DEFAULT_PROXIMITY_PIPS` by timeframe:
+H1=20, M15=10, M5=5. Pip size derived from `df.attrs["pair"]`
+(0.01 for JPY pairs, 0.0001 otherwise).
 
 ---
 

@@ -259,6 +259,28 @@ regress it.
 
 ---
 
+## Backward Dependency: structure/ → zones/ (transitional)
+
+**Rule:** `engine_v2/structure/proximity_helpers.py` imports from
+`engine_v2/zones/kl_zones_v1.py`. This inverts the typical dependency
+direction (zones depend on structure events).
+
+**Why:** The dual CTS confirmation logic in `MarketStructure` requires
+deriving BOS zone inner inline at runtime (to check sd zone proximity
+during the cycle's pre-confirmation phase). The existing zone-derivation
+logic is the single source of truth; reusing it via import keeps behavior
+consistent.
+
+**Implications:**
+- Don't try to "fix" this by moving code or breaking the import — it would
+  duplicate logic and risk drift.
+- The upcoming major refactor is expected to restructure the module
+  boundary. Until then, this is the documented intentional compromise.
+- If you add more cross-module imports from structure/ to zones/, prefer
+  importing only the specific helper functions, not the whole module.
+
+---
+
 ## Wrapping Logic in Loops: Preserve Post-Loop Behavior
 
 **Rule:** When wrapping existing single-shot logic in an iteration loop, the behavior AFTER the loop must remain identical to the original code paths. The loop only changes what happens WITHIN iterations.

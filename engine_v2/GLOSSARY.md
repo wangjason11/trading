@@ -147,3 +147,14 @@
 | **proximity_trigger_idx** | The candle index of the first sd zone proximity trigger per cycle. Stored in WVMIRecord.meta and MultiTFTrigger.meta. |
 | **V / lambda movement** | Alternating retracement pattern within a structure cycle: price moves toward sd zone, bounces, moves toward opp_sd zone, bounces back, etc. The zone-proximity state machine captures each leg. |
 | **proximity_pips** | The pip threshold for zone proximity detection. Defaults: H1=20, M15=10, M5=5. Caller-overridable per call. |
+
+---
+
+## CTS Confirmation Terms
+
+| Term | Definition |
+|------|------------|
+| **confirmation_method** | How a CTS got confirmed — either `"pullback"` (valid pullback pattern fired) or `"sd_zone_proximity"` (price wick reached within proximity threshold of the BOS inner before any pullback). Stored on `CTS_CONFIRMED.meta` and propagated to the CTS KL zone. |
+| **CTS_RECONFIRMED** | Event emitted at the pullback idx when CTS was originally confirmed via sd zone proximity AND a valid pullback later fires. The original `CTS_CONFIRMED` event stays at the proximity idx (append-only). The CTS zone meta gets upgraded to `"pullback"` with `pb_reconfirm_idx` recorded. |
+| **pb_reconfirm_idx** | Idx of the pullback that re-affirmed a proximity-confirmed CTS. Logged on the CTS KL zone meta. Only present when `confirmation_method` was originally `"sd_zone_proximity"` and a pullback fired afterward. |
+| **proximity-confirmed CTS** | Shorthand for a CTS whose `confirmation_method == "sd_zone_proximity"`. Such cycles can complete WITHOUT a valid pullback pattern firing (the cycle still progresses to next BOS via breakout pattern; BOS_n+1 = max retracement in `[cts_confirmed_idx, breakout_idx]`). |

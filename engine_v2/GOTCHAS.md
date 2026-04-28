@@ -543,6 +543,36 @@ touch detector needed.
 
 ---
 
+## Avoid Unicode Glyphs in Print Statements (Windows cp1252)
+
+**Problem:** Windows' default stdout encoding is cp1252. Characters outside
+that range — even common ones like `→` (U+2192), `←`, `≥`, `≤` — crash the
+program with `UnicodeEncodeError: 'charmap' codec can't encode character
+'→'`. The crash is path-dependent: it only happens when execution
+reaches the print statement, so a code path that's rarely exercised may
+hide the issue for a long time.
+
+**Symptom:** Replay or test crashes mid-run with a charmap error;
+traceback points at a `print(f"... {arrow} ...")` line.
+
+**Fix:** Use ASCII alternatives in `print()` statements:
+- `→` / `->` (or `=>`)
+- `≥` / `>=`
+- `≤` / `<=`
+- `±` / `+/-`
+
+Comments and docstrings can keep the unicode (they're not printed via
+stdout). Same for log/CSV output if encoded as UTF-8.
+
+**Recently caught:**
+- `fib_tracker.py` cross-fib activation print used `→`. Crashed when
+  proximity-confirmed CTS triggered the cross-fib path that hadn't fired
+  in earlier replays.
+- Pattern: defensive `print()` formatting should use ASCII unless the
+  caller has explicitly configured a UTF-8 stdout.
+
+---
+
 ## Merged Imbalance Instances Carry Hindsight Bias in Backtest
 
 **Problem:** `ImbalanceInstance.gap_top` / `gap_bottom` depend on `df[end_idx+1]`
