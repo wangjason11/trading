@@ -19,6 +19,7 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 | Part 1 | Scenario 3 for start candle identification | Done |
 | Part 2 | Volume momentum indicator (WVMI + proximity gate) | Done |
 | Part 3 | Multi-timeframe analysis (subordinate structures + overlay) | Done |
+| Part 4 | Pipeline / strategy / multi-TF refactor | Not started |
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).
 
@@ -56,17 +57,20 @@ engine_v2/
 ├── config.py                        # Pair/timeframe/date config
 ├── pipeline/orchestrator.py         # Pipeline ordering (LOCKED)
 ├── structure/
-│   ├── market_structure.py          # CTS/BOS state machine (core)
+│   ├── market_structure.py          # CTS/BOS state machine (core; dual CTS confirmation paths)
 │   ├── structure_engine.py          # Wrapper for orchestrator
-│   └── identify_start.py            # Start candle selection
+│   ├── identify_start.py            # Start candle selection
+│   └── proximity_helpers.py         # Inline BOS/POI derivation for MarketStructure
 ├── zones/kl_zones_v1.py             # KL Zone derivation from events
 ├── zones/poi_zones.py               # POI Zone derivation (Fib + IC)
 ├── zones/fib_tracker.py             # Fibonacci lifecycle management
 ├── zones/wave_candles.py            # Wave candle identification
 ├── zones/wvmi.py                    # Wave Volume Momentum Indicator
+├── zones/zone_proximity.py          # Zone proximity triggers (alternating sd/opp_sd)
 ├── patterns/imbalance.py            # Imbalance (FVG) pattern detection
 ├── patterns/structure_patterns.py   # Breakout pattern detection
 ├── features/candles_v2.py           # Candle classification
+├── multitf/                         # Multi-TF analysis (UC1: 15M reverse from H1 CTS)
 ├── charting/
 │   ├── export_plotly.py             # Chart generation
 │   └── style_registry.py            # Visual styling
