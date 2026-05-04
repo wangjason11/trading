@@ -212,7 +212,7 @@ must replace events in the list, not mutate event objects.
 
 ## Behavioral checkpoints (replay outputs)
 
-Last clean replay outputs: `artifacts/commits/20260428_182602_b5b76be/`
+Last clean replay outputs: `artifacts/commits/20260504_130926_c1cfd00/`
 - 6 H1 WVMI records, 6 UC1 triggers, 5 successful UC1 results
 - M15 chart traces: 334
 - Use `/compare` against this snapshot during refactor to detect regressions
