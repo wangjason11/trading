@@ -64,6 +64,34 @@ class SidRecord:
 
 
 @dataclass(frozen=True)
+class SubsequentConfluenceTrigger:
+    """`subsequent_confluence` (var 3) trigger — fires on parent CTS-prox
+    after a parent sd-prox.
+
+    Per spec §4.3.4:
+      Trigger:    parent CTS-zone proximity AND prior trigger was sd-zone
+      Idx input:  parent-TF candle in `[prior_sd_idx, this_cts_prox_idx]`
+                  with extreme toward parent BOS (lowest low for bullish
+                  parent, highest high for bearish)
+      Probe end:  this CTS-prox trigger candle
+      Probe sd:   +parent_sd (confluence)
+
+    Reference-zone resolution (§4.3.4 step 1-5) is documented but not
+    consumed by the probe — the probe derives its own BOS_0 internally
+    from the data. The `meta` carries the prior_sd_idx for diagnostics.
+    """
+    parent_tf: str
+    parent_sid: int
+    parent_cycle_id: int               # parent cycle this trigger fires within
+    parent_sd: int
+    input_idx: int                     # parent-TF window extreme toward BOS
+    end_idx: int                       # the CTS-prox trigger candle
+    trigger_event_idx: int             # same as end_idx (CTS-prox candle)
+    lifecycle_end_idx: Optional[int] = None
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class FirstConfluenceTrigger:
     """`first_confluence` (var 1) trigger — fires on parent BOS_CONFIRMED.
 

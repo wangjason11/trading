@@ -17,6 +17,9 @@ from engine_v2.multitf.sid_records import (
 from engine_v2.multitf.first_confluence_trigger import (
     detect_first_confluence_triggers,
 )
+from engine_v2.multitf.subsequent_confluence_trigger import (
+    detect_subsequent_confluence_triggers,
+)
 
 from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
@@ -443,6 +446,25 @@ def run_pipeline(
         f"pending={fc_pending}"
     )
 
+    # Part 4 Step 3d: subsequent_confluence (var 3) trigger detection.
+    # Walks parent zone_proximity_triggers for opp_sd-after-sd patterns
+    # within each parent cycle. Reference-zone resolution (§4.3.4) is
+    # descriptive only — the probe derives its own BOS_0 internally.
+    subsequent_confluence_triggers = detect_subsequent_confluence_triggers(
+        sorted_events,
+        zone_proximity_triggers,
+        s_res.df,
+        parent_tf="H1",
+    )
+    s_res.df.attrs["subsequent_confluence_triggers"] = (
+        subsequent_confluence_triggers
+    )
+    meta["subsequent_confluence_triggers"] = subsequent_confluence_triggers
+    print(
+        f"[subsequent_confluence_trigger] "
+        f"detected={len(subsequent_confluence_triggers)}"
+    )
+
     # 10) Multi-TF analysis (if configured)
     lower_tf_results = []
     confluence_results: List[Any] = []
@@ -457,12 +479,16 @@ def run_pipeline(
             registry,
         )
 
-        # Part 4 Step 3b: first_confluence subs (var 1).
+        # Part 4 Step 3b/3d: confluence subs (var 1 + var 3).
         # Built independently of first_counter — gets its own M15 entity df.
+        # Var 1 sids land first; var 3 sids appended afterward (the spec's
+        # in-place overwrite semantics from §6.1 are deferred to a later
+        # substep — see subsequent_confluence_pipeline.py docstring).
         confluence_results = _run_first_confluence_multi_tf(
             s_res.df,
             first_confluence_triggers,
             registry,
+            subsequent_confluence_triggers=subsequent_confluence_triggers,
         )
 
     meta["lower_tf_results"] = lower_tf_results
@@ -481,31 +507,56 @@ def _run_first_confluence_multi_tf(
     h1_df: pd.DataFrame,
     triggers: list,
     registry: StructureRegistry,
+    subsequent_confluence_triggers: Optional[list] = None,
 ) -> list:
-    """Build `first_confluence` subs and register the M15.confluence entity.
+    """Build confluence subs (var 1 + var 3) and register M15.confluence.
 
-    Per spec §4.3.2 / §14: pending triggers (parent CTS not yet confirmed)
-    are skipped — no sub is built until end_idx resolves.
+    Per spec §4.3.2 / §14: pending var 1 triggers are skipped — no sub is
+    built until end_idx resolves.
+
+    Var 3 results are appended to the same M15.confluence entity df after
+    var 1. Per spec §6.1 var 3 should overwrite the previous open
+    confluence sid in place; deferred to a later substep (see
+    `subsequent_confluence_pipeline.py` docstring).
     """
     from engine_v2.multitf.first_confluence_pipeline import (
         run_first_confluence_pipeline,
+    )
+    from engine_v2.multitf.subsequent_confluence_pipeline import (
+        run_subsequent_confluence_pipeline,
     )
     from engine_v2.multitf.data_bridge import (
         fetch_lower_tf_data,
         prepare_lower_tf_data,
     )
 
-    if not triggers:
+    var1_finalized = [t for t in (triggers or []) if t.status == "finalized"]
+    var3_all = list(subsequent_confluence_triggers or [])
+
+    # Spec §6.1 says each var 3 sid overwrites the previous open
+    # confluence sub sid in place. The full overwrite-in-place semantics
+    # (carrying old sids' events/zones with `deactivated_by` meta) is
+    # deferred to a later substep. As an approximation that matches the
+    # spec's effective behavior — only the most recent var 3 sub sid is
+    # alive at any time — we build ONLY the last var 3 trigger per
+    # `(parent_sid, parent_cycle_id)`. The other triggers are detected
+    # and exposed via `df.attrs["subsequent_confluence_triggers"]` for
+    # inspection but not turned into sub builds in 3d.
+    var3_last_per_cycle: Dict[tuple, Any] = {}
+    for t in var3_all:
+        var3_last_per_cycle[(t.parent_sid, t.parent_cycle_id)] = t
+    var3_triggers = list(var3_last_per_cycle.values())
+
+    if not var1_finalized and not var3_triggers:
+        if triggers:
+            print(f"[multi_tf:confluence] all {len(triggers)} var 1 triggers "
+                  f"pending and no var 3 triggers — no subs built")
         return []
 
-    finalized = [t for t in triggers if t.status == "finalized"]
-    if not finalized:
-        print(f"[multi_tf:confluence] all {len(triggers)} triggers pending — "
-              f"no subs built")
-        return []
-
-    print(f"[multi_tf:confluence] finalized triggers: "
-          f"{len(finalized)}/{len(triggers)}")
+    print(f"[multi_tf:confluence] var 1 finalized: "
+          f"{len(var1_finalized)}/{len(triggers or [])}, "
+          f"var 3 capped to last-per-cycle: "
+          f"{len(var3_triggers)}/{len(var3_all)}")
 
     pair = h1_df.attrs.get("pair", "NZD_USD")
     h1_start = pd.to_datetime(h1_df["time"].iloc[0], utc=True)
@@ -520,14 +571,23 @@ def _run_first_confluence_multi_tf(
     m15_df.attrs["pair"] = pair
 
     results = []
-    for trigger in finalized:
-        print(f"[multi_tf:confluence] sid={trigger.parent_sid} "
+    for trigger in var1_finalized:
+        print(f"[multi_tf:confluence] var1 sid={trigger.parent_sid} "
               f"cycle={trigger.parent_cycle_id} parent_sd={trigger.parent_sd}")
         result = run_first_confluence_pipeline(trigger, m15_df, h1_df)
         if result is not None:
             results.append(result)
 
-    print(f"[multi_tf:confluence] results: {len(results)}")
+    for trigger in var3_triggers:
+        print(f"[multi_tf:confluence] var3 sid={trigger.parent_sid} "
+              f"cycle={trigger.parent_cycle_id} parent_sd={trigger.parent_sd} "
+              f"input_idx={trigger.input_idx} end_idx={trigger.end_idx}")
+        result = run_subsequent_confluence_pipeline(trigger, m15_df, h1_df)
+        if result is not None:
+            results.append(result)
+
+    print(f"[multi_tf:confluence] results: {len(results)} "
+          f"(var1+var3 combined)")
 
     if results:
         path_id = "H1.main >> M15.confluence"
