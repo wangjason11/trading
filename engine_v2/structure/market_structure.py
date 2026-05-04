@@ -1495,8 +1495,14 @@ class MarketStructure:
         # confirmation_method: "pullback" (existing path) or "sd_zone_proximity" (new path)
         meta2["confirmation_method"] = str(confirmation_method)
 
+        # Carry the CTS extreme price on the event so chart consumers don't have
+        # to fall back to the df's cts_price column (which is NaN at the CTS-
+        # established candle's own row when confirmed_at > anchor_idx — see the
+        # sd_zone_proximity path that can fire 1–2 candles after CTS_ESTABLISHED).
+        cts_price_val = float(st.cts.price) if st.cts is not None else None
+
         self.events.append(
-            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_CONFIRMED", price=None, meta=meta2)
+            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_CONFIRMED", price=cts_price_val, meta=meta2)
         )
         st.cts_confirmed_for_idx = cts_anchor
         st.cts_confirmed_method = confirmation_method
@@ -1521,8 +1527,10 @@ class MarketStructure:
         meta2["cts_anchor_idx"] = int(cts_anchor) if cts_anchor is not None else None
         meta2["confirmation_method"] = "pullback"  # the upgrade method
 
+        cts_price_val = float(st.cts.price) if st.cts is not None else None
+
         self.events.append(
-            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_RECONFIRMED", price=None, meta=meta2)
+            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_RECONFIRMED", price=cts_price_val, meta=meta2)
         )
 
     # def _emit_bos_confirmed(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
