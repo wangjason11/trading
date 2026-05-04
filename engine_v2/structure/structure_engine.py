@@ -12,6 +12,12 @@ from engine_v2.structure.identify_start import (
     identify_start_scenario_2_after_reversal,
 )
 from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
+from engine_v2.zones.zone_proximity import DEFAULT_PROBE_RESET_PIPS
+
+
+def _probe_reset_pips(timeframe: str) -> int:
+    """Look up the probe reset threshold (in pips) for a timeframe."""
+    return DEFAULT_PROBE_RESET_PIPS.get(timeframe, DEFAULT_PROBE_RESET_PIPS["H1"])
 
 
 @dataclass
@@ -119,7 +125,7 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
         if zone_bounds is not None:
             outer, inner, zone_side = zone_bounds
             pip_size = _pip_size_from_pair(df2)
-            pip_tolerance = 10 * pip_size
+            pip_tolerance = _probe_reset_pips(timeframe) * pip_size
 
             # Iterative Exception 2 probing (re-probe when exception triggers)
             exc2_candidate = next_start_idx
@@ -226,10 +232,11 @@ def compute_structure_scenario_3(
     start_idx: int,
     struct_direction: int,
     *,
-    pip_tolerance_pips: int = 10,
+    pip_tolerance_pips: Optional[int] = None,
     max_probe_iterations: int = 10,
     end_idx: Optional[int] = None,
     run_continuation: bool = True,
+    timeframe: str = "H1",
 ) -> Scenario3Result:
     """
     Scenario 3: Arbitrary start with iterative BOS_0 probe.
@@ -252,8 +259,9 @@ def compute_structure_scenario_3(
         Arbitrary start index to probe from.
     struct_direction : int
         +1 for uptrend, -1 for downtrend.
-    pip_tolerance_pips : int
-        Pip tolerance for zone proximity checking (default 10; use 5 for M15, 3 for M5).
+    pip_tolerance_pips : int, optional
+        Pip tolerance for zone proximity checking. If None (default), looked
+        up from DEFAULT_PROBE_RESET_PIPS by ``timeframe`` (H1=10, M15=5, M5=3).
     max_probe_iterations : int
         Maximum number of probe restarts before giving up (default 10).
     end_idx : int, optional
@@ -278,6 +286,9 @@ def compute_structure_scenario_3(
         more data becomes available.
     """
     _validate_input(df)
+
+    if pip_tolerance_pips is None:
+        pip_tolerance_pips = _probe_reset_pips(timeframe)
 
     # ===== Phase 1: Iterative BOS_0 Probing =====
     original_bos0_bounds: Optional[Tuple[float, float, str]] = None
@@ -580,7 +591,12 @@ def compute_structure_from_start(
         if next_start_idx == cur_start and next_sid == structure_id:
             break
 
-        # Exception 2 probe (same logic as compute_structure)
+        # Exception 2 probe (same logic as compute_structure).
+        # NOTE: pip tolerance left hardcoded at 10 here for Part 4 Step 1
+        # parity. Spec §4.4 only explicitly listed compute_structure and
+        # compute_structure_scenario_3 for the TF-keyed table; this path
+        # currently runs on M15 (lower-TF) where the previous 10-pip value
+        # was used. Revisit when M5 / other TFs start invoking this.
         zone_bounds = _get_last_cts_zone_bounds(df2, all_events, structure_id, sd)
 
         if zone_bounds is not None:

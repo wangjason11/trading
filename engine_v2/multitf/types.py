@@ -19,7 +19,7 @@ class MultiTFTrigger:
     parent_sid: int                   # structure_id in parent
     parent_cycle_id: int              # cycle_id in parent
     parent_sd: int                    # struct_direction in parent
-    use_case: str                     # "uc1_reverse"
+    use_case: str                     # "first_counter" (formerly "uc1_reverse")
     lower_tf: str                     # "M15"
     lower_sd: int                     # struct_direction for lower TF (opposite for UC1)
     start_time: pd.Timestamp          # H1 CTS candle time -> mapped to M15

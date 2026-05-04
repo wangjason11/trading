@@ -106,7 +106,7 @@ def detect_uc1_triggers(
             parent_sid=sid,
             parent_cycle_id=cycle_id,
             parent_sd=h1_sd,
-            use_case="uc1_reverse",
+            use_case="first_counter",
             lower_tf="M15",
             lower_sd=-1 * h1_sd,  # Opposite direction
             start_time=start_time,

@@ -213,8 +213,9 @@ must replace events in the list, not mutate event objects.
 ## Behavioral checkpoints (replay outputs)
 
 Last clean replay outputs: `artifacts/commits/20260504_130926_c1cfd00/`
-- 6 H1 WVMI records, 6 UC1 triggers, 5 successful UC1 results
-- M15 chart traces: 334
+- 5 H1 WVMI records (3 locked), 5 first_counter triggers, 5 first_counter results
+- M15 chart traces: 334, shapes: 256
+- H1 chart traces: 149
 - Use `/compare` against this snapshot during refactor to detect regressions
 
 ---

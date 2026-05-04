@@ -9,6 +9,7 @@ from engine_v2.common.types import PatternEvent, StructureLevel, REQUIRED_CANDLE
 from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.patterns.pattern_engine import detect_patterns
 from engine_v2.structure.structure_engine import compute_structure
+from engine_v2.multitf.registry import StructureRegistry
 
 from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
@@ -394,6 +395,17 @@ def run_pipeline(
     s_res.df.attrs["fib_states"] = fib_states
     s_res.df.attrs["prev_bos_lines"] = prev_bos_lines
 
+    # Part 4 Step 1: stand up the registry alongside today's monolithic df.
+    # Charts still read from df.attrs; Step 2 will switch the chart consumer.
+    registry = StructureRegistry()
+    registry.register(
+        "H1.main",
+        df=s_res.df,
+        timeframe="H1",
+        role="main",
+    )
+    meta["registry"] = registry
+
     # 10) Multi-TF analysis (if configured)
     lower_tf_results = []
     if lower_timeframes and "M15" in lower_timeframes:
@@ -404,6 +416,7 @@ def run_pipeline(
             kl_zones,
             poi_zones,
             meta,
+            registry,
         )
 
     meta["lower_tf_results"] = lower_tf_results
@@ -424,14 +437,15 @@ def _run_multi_tf(
     kl_zones: list,
     poi_zones: list,
     meta: Dict[str, Any],
+    registry: StructureRegistry,
 ) -> list:
-    """Run multi-TF analysis (UC1: 15M reverse structure)."""
+    """Run multi-TF analysis (first_counter: M15 reverse subordinate of H1)."""
     from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
     from engine_v2.multitf.data_bridge import fetch_lower_tf_data, prepare_lower_tf_data
     from engine_v2.multitf.lower_tf_pipeline import run_lower_tf_pipeline
 
     triggers = detect_uc1_triggers(sorted_events, h1_df, wvmi_records, kl_zones)
-    print(f"[multi_tf] UC1 triggers detected: {len(triggers)}")
+    print(f"[multi_tf] first_counter triggers detected: {len(triggers)}")
 
     if not triggers:
         return []
@@ -447,17 +461,34 @@ def _run_multi_tf(
         return []
 
     m15_df_prepared = prepare_lower_tf_data(m15_df_raw)
+    m15_df_prepared.attrs["pair"] = pair
     meta["m15_df_prepared"] = m15_df_prepared
     print(f"[multi_tf] M15 data prepared: {len(m15_df_prepared)} candles")
 
     lower_tf_results = []
     for trigger in triggers:
-        print(f"[multi_tf] Running UC1 for sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}")
+        print(f"[multi_tf] Running first_counter for "
+              f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}")
         result = run_lower_tf_pipeline(trigger, m15_df_prepared, h1_df)
         if result is not None:
             lower_tf_results.append(result)
 
-    print(f"[multi_tf] UC1 results: {len(lower_tf_results)}")
+    print(f"[multi_tf] first_counter results: {len(lower_tf_results)}")
+
+    # Part 4 Step 1: register the H1.main >> M15.counter entity.
+    # Per §6.2 there is one entity df per (TF, role, parent_path) for the
+    # whole session; per-trigger results live on this entity for now.
+    if lower_tf_results:
+        path_id = "H1.main >> M15.counter"
+        m15_df_prepared.attrs["lower_tf_results"] = lower_tf_results
+        registry.register(
+            path_id,
+            df=m15_df_prepared,
+            timeframe="M15",
+            role="subordinate",
+            starting_alignment="counter",
+        )
+
     return lower_tf_results
 
 

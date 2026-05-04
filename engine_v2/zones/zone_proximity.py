@@ -35,6 +35,23 @@ DEFAULT_PROXIMITY_PIPS: Dict[str, int] = {
     "M5": 5,
 }
 
+# Probe reset threshold in pips — used by the BOS_0 / Exception 2 reach-back
+# probe to decide whether price has returned to the prior zone. Per Part 4
+# spec §4.4, must be strictly less than DEFAULT_PROXIMITY_PIPS on the same
+# TF so probe-reset and proximity-trigger semantics never overlap.
+DEFAULT_PROBE_RESET_PIPS: Dict[str, int] = {
+    "H1": 10,
+    "M15": 5,
+    "M5": 3,
+}
+
+for _tf in DEFAULT_PROBE_RESET_PIPS:
+    assert DEFAULT_PROXIMITY_PIPS[_tf] > DEFAULT_PROBE_RESET_PIPS[_tf], (
+        f"{_tf}: probe reset {DEFAULT_PROBE_RESET_PIPS[_tf]} pips must be "
+        f"strictly less than proximity trigger {DEFAULT_PROXIMITY_PIPS[_tf]} pips"
+    )
+del _tf
+
 
 @dataclass(frozen=True)
 class ZoneProximityTrigger:

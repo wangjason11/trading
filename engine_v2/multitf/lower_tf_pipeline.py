@@ -1,7 +1,8 @@
 """Lower-TF pipeline runner for multi-TF analysis.
 
-Runs H1 reverse probe to find validated start, then plain MarketStructure
-on M15 data + downstream pipeline. Injects attribution metadata.
+Runs the subordinate (parent-TF reverse) probe to find a validated start,
+then plain MarketStructure on the lower-TF data + downstream pipeline.
+Injects attribution metadata.
 """
 from __future__ import annotations
 
@@ -19,14 +20,6 @@ from engine_v2.structure.structure_engine import (
 )
 from engine_v2.patterns.imbalance import compute_imbalance
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
-
-# Scenario 3 BOS_0 probe pip tolerance by timeframe.
-# Lower TFs need tighter tolerance because price movements are smaller.
-_PIP_TOLERANCE_BY_TF = {
-    "H1": 10,
-    "M15": 3,
-    "M5": 1,
-}
 
 
 def _find_m15_lifecycle_end(
@@ -71,17 +64,18 @@ def _find_m15_lifecycle_end(
     return int(candidates.index[-1])
 
 
-def _run_h1_reverse_probe(
+def _run_subordinate_probe(
     trigger: MultiTFTrigger,
-    h1_df: pd.DataFrame,
+    parent_df: pd.DataFrame,
 ) -> Optional[int]:
-    """Run H1 reverse Scenario 3 probe to find validated start for M15.
+    """Run the parent-TF reverse Scenario 3 probe to find a validated start.
 
-    Probe window: [cts_idx, proximity_trigger_idx] on the H1 df.
-    Direction: trigger.lower_sd (opposite of H1 sd).
-    Tolerance: 10 pips (H1).
+    Probe window: [cts_idx, proximity_trigger_idx] on the parent df.
+    Direction: trigger.lower_sd (opposite of parent sd for first_counter).
+    Tolerance: looked up from DEFAULT_PROBE_RESET_PIPS by trigger.parent_tf
+    (H1=10, M15=5, M5=3).
 
-    Returns: H1 index of validated start, or None on failure.
+    Returns: parent-TF index of validated start, or None on failure.
     """
     cts_idx = trigger.meta.get("cts_idx")
     proximity_trigger_idx = trigger.meta.get("proximity_trigger_idx")
@@ -96,30 +90,31 @@ def _run_h1_reverse_probe(
 
     try:
         s3_result = compute_structure_scenario_3(
-            h1_df,
+            parent_df,
             start_idx=cts_idx,
             struct_direction=trigger.lower_sd,
-            pip_tolerance_pips=10,
             end_idx=proximity_trigger_idx,
             run_continuation=False,
+            timeframe=trigger.parent_tf,
         )
     except (ValueError, IndexError) as exc:
-        print(f"[lower_tf] WARNING: H1 reverse probe failed for "
+        print(f"[lower_tf] WARNING: subordinate probe failed for "
               f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}: {exc}")
         return None
 
-    print(f"[lower_tf] H1 reverse probe: sid={trigger.parent_sid} "
-          f"cycle={trigger.parent_cycle_id} -> start_idx={s3_result.start_idx} "
-          f"status={s3_result.status} iterations={s3_result.probe_iterations}")
+    print(f"[lower_tf] subordinate probe ({trigger.parent_tf} reverse): "
+          f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id} "
+          f"-> start_idx={s3_result.start_idx} status={s3_result.status} "
+          f"iterations={s3_result.probe_iterations}")
 
     # Pending status means the probe could not reach a terminal condition with
     # the available data. In live use, more candles may arrive that resolve the
-    # probe — but for now we skip M15 for this trigger. (In current UC1 backtest
+    # probe — but for now we skip M15 for this trigger. (In current backtest
     # end_idx=proximity_trigger_idx is always defined, so this path is dormant.)
     if s3_result.status == "pending":
-        print(f"[lower_tf] PENDING: H1 reverse probe did not finalize for "
+        print(f"[lower_tf] PENDING: subordinate probe did not finalize for "
               f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}; "
-              f"skipping M15 build")
+              f"skipping lower-TF build")
         return None
 
     return s3_result.start_idx
@@ -132,16 +127,16 @@ def run_lower_tf_pipeline(
 ) -> Optional[LowerTFResult]:
     """Run the lower-TF pipeline for a single trigger.
 
-    1. H1 reverse probe -> validated H1 start idx
-    2. Map validated H1 start -> M15 start idx
+    1. Subordinate (parent-TF reverse) probe -> validated parent start idx
+    2. Map validated parent start -> M15 start idx
     3. Run compute_structure_from_start() on M15 slice (no probes)
     4. Run downstream pipeline (KL zones BOS-only, Fib m15_reverse, POI, WVMI)
     5. Inject attribution metadata + lifecycle capping
 
     Returns LowerTFResult or None if mapping fails.
     """
-    # 1. H1 reverse probe to find validated start
-    validated_h1_idx = _run_h1_reverse_probe(trigger, h1_df)
+    # 1. Subordinate probe (parent-TF reverse) to find validated start
+    validated_h1_idx = _run_subordinate_probe(trigger, h1_df)
     if validated_h1_idx is None:
         return None
 
