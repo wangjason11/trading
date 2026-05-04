@@ -1,14 +1,18 @@
 ---
 name: commit-save
-description: Commit changes and save replay outputs to a timestamped folder for later comparison.
+description: Capture session learnings, commit changes, and save replay outputs to a timestamped folder for later comparison.
 user-invocable: true
-allowed-tools: Bash, Read, Write, Glob
+allowed-tools: Bash, Read, Write, Glob, Skill
 argument-hint: [commit message]
 ---
 
-# Commit and Save Replay Outputs
+# Capture Learnings, Commit, and Save Replay Outputs
 
-Commit the current changes, run replay, and save the outputs to a timestamped folder in `artifacts/commits/` for later comparison with `/compare`.
+`/commit-save` runs at natural checkpoints in the work — when a logical unit of work is done. Those are also the right moments to persist learnings, so this skill bundles `/remember` into the flow:
+
+1. Capture learnings via `/remember` (project docs, LANDMINES, memory) — runs FIRST so any doc edits land in the same source commit
+2. Commit current changes
+3. Run the replay and save outputs to a timestamped folder in `artifacts/commits/` for later `/compare`
 
 ## Environment note (IMPORTANT)
 
@@ -22,10 +26,35 @@ The instructions below are written to be re-derived per step.
 
 ## Instructions
 
-### 1. Commit Current Changes
+### 1. Capture Session Learnings via `/remember`
+
+Invoke the `remember` skill via the `Skill` tool **before staging anything**:
+
+```
+Skill(skill="remember")
+```
+
+This lets `/remember` propose candidate learnings (gotchas, landmines,
+spec clarifications, memory updates), surface them to the user for
+confirmation if non-obvious, and edit the appropriate files. Any files
+it touches become part of the working tree and will be picked up by the
+source commit in Step 2.
+
+If `/remember` reports nothing worth saving, continue. Don't force a
+learning that isn't there.
+
+If the session was purely mechanical (e.g., a one-line rename or a
+revert) and there's clearly nothing to remember, you may skip this step
+— but err on the side of running it. The cost is one prompt; the
+benefit is durable knowledge for future sessions.
+
+### 2. Commit Current Changes
 
 If `$ARGUMENTS` is provided, use it as the commit message. Otherwise, follow
 the standard commit flow (check status, draft message, commit).
+
+**Include any files `/remember` edited** in this commit (LANDMINES.md,
+GOTCHAS.md, etc.). They are part of the same logical unit of work.
 
 ```bash
 # Inspect and draft; then stage and commit. Prefer listing changed files
@@ -39,7 +68,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 After committing, the source commit hash is `HEAD` until you make more
 commits. Re-derive it when needed as `git rev-parse --short HEAD`.
 
-### 2. Create Output Folder
+### 3. Create Output Folder
 
 Build the folder name from the current HEAD and a fresh timestamp, then
 create the folder and a marker file in one call so the variables stay
@@ -61,14 +90,14 @@ finding the newest directory in `artifacts/commits/`:
 FOLDER_NAME=$(ls -t artifacts/commits/ | grep -v '^LATEST$' | head -1)
 ```
 
-### 3. Run Replay
+### 4. Run Replay
 
 ```bash
 # Run replay - outputs go to standard locations (artifacts/debug, artifacts/charts)
 python -m engine_v2.run_replay
 ```
 
-### 4. Copy ONLY New Outputs to Commit Folder
+### 5. Copy ONLY New Outputs to Commit Folder
 
 Find the newest commit folder and copy files newer than its marker:
 
@@ -82,7 +111,7 @@ rm "$MARKER"; \
 ls "artifacts/commits/${FOLDER_NAME}/"
 ```
 
-### 5. Write Metadata + Update LATEST
+### 6. Write Metadata + Update LATEST
 
 ```bash
 FOLDER_NAME=$(ls -t artifacts/commits/ | grep -v '^LATEST$' | head -1); \
@@ -97,7 +126,7 @@ echo "${FOLDER_NAME}" > artifacts/commits/LATEST
 The folder name is `YYYYMMDD_HHMMSS_<hash>` — the commit hash is the last
 underscore-delimited segment, the timestamp is the first two.
 
-### 6. Commit the Saved Outputs
+### 7. Commit the Saved Outputs
 
 Always re-derive `COMMIT_HASH` here — if you used a stale variable from an
 earlier step, or `HEAD~N`, you may reference the wrong commit. At this
@@ -113,13 +142,14 @@ git commit -m "Save replay outputs for commit ${COMMIT_HASH}
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-### 7. Report Success
+### 8. Report Success
 
 Output a summary:
 
 ```
 === COMMIT-SAVE COMPLETE ===
 
+Learnings captured: <one-line summary from /remember, or "none">
 Source commit: <hash> - <message>
 Save-outputs commit: <hash>
 Outputs saved to: artifacts/commits/<folder_name>/
