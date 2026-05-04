@@ -385,7 +385,10 @@ def run_pipeline(
     meta["prev_bos_lines"] = prev_bos_lines
     meta["zone_proximity_triggers"] = zone_proximity_triggers
 
-    # For chart overlay (export_plotly reads df.attrs)
+    # DEPRECATED (Part 4 transitional): direct df.attrs writes. Step 2
+    # routes charts through StructureRegistry; these writes are kept so
+    # code paths still reaching into df.attrs (debug exporters, ad-hoc
+    # inspection) keep working. Removed in migration plan Step 5.
     s_res.df.attrs["kl_zones"] = kl_zones
     s_res.df.attrs["wave_candles"] = wave_candle_results
     s_res.df.attrs["wvmi"] = wvmi_records
@@ -395,8 +398,8 @@ def run_pipeline(
     s_res.df.attrs["fib_states"] = fib_states
     s_res.df.attrs["prev_bos_lines"] = prev_bos_lines
 
-    # Part 4 Step 1: stand up the registry alongside today's monolithic df.
-    # Charts still read from df.attrs; Step 2 will switch the chart consumer.
+    # Stand up the StructureRegistry. Same df reference as today's
+    # monolithic flow, but charts now resolve their data through this.
     registry = StructureRegistry()
     registry.register(
         "H1.main",

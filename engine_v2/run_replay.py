@@ -25,7 +25,8 @@ chart_cfg = {
 
 def export_charts_with_optional_zoom(
     *,
-    df,
+    registry,
+    path_id: str,
     structure_levels,
     chart_cfg,
     title_prefix: str,
@@ -35,11 +36,14 @@ def export_charts_with_optional_zoom(
     """
     Always exports a full chart.
     Optionally exports a zoomed chart if `zoom=(i0, i1)` is provided.
+
+    Part 4 Step 2: chart sourced from the StructureRegistry by ``path_id``.
     """
 
     # --- Full chart ---
     paths_full = export_chart_plotly(
-        df,
+        registry=registry,
+        path_id=path_id,
         title=f"{title_prefix} (full)",
         basename=basename,
         structure_levels=structure_levels,
@@ -55,7 +59,8 @@ def export_charts_with_optional_zoom(
         zoom_basename = f"{basename}_zoom_{i0}-{i1}"
 
         paths_zoom = export_chart_plotly(
-            df,
+            registry=registry,
+            path_id=path_id,
             title=f"{title_prefix} (zoom {i0}–{i1})",
             basename=zoom_basename,
             structure_levels=structure_levels,
@@ -177,6 +182,7 @@ def main() -> None:
     export_csv(df.copy(), raw_path)
 
     res = run_pipeline(df, lower_timeframes=CONFIG.lower_timeframes)
+    registry = res.meta["registry"]
 
     print(res.df["is_range"].value_counts())
     print(res.df[res.df["is_range"] == 1][["is_range_confirm_idx", "is_range_lag"]].head())
@@ -239,7 +245,8 @@ def main() -> None:
     ZOOM = None              # e.g. None or (300, 520)
 
     export_charts_with_optional_zoom(
-        df=res.df,
+        registry=registry,
+        path_id="H1.main",
         structure_levels=res.structure,
         chart_cfg=chart_cfg,
         title_prefix=TITLE_PREFIX,
@@ -247,15 +254,13 @@ def main() -> None:
         zoom=ZOOM,
     )
 
-    # M15 chart export (if multi-TF was run)
-    m15_df_prepared = res.meta.get("m15_df_prepared")
-    lower_tf_results = res.meta.get("lower_tf_results", [])
-    if m15_df_prepared is not None and len(m15_df_prepared) > 0:
+    # M15 chart export (if the multi-TF entity was registered)
+    m15_path_id = "H1.main >> M15.counter"
+    if registry.get(m15_path_id) is not None:
         from engine_v2.charting.export_m15_chart import export_m15_chart_plotly
         m15_paths = export_m15_chart_plotly(
-            m15_df_prepared,
-            res.df,
-            lower_tf_results,
+            registry=registry,
+            path_id=m15_path_id,
             title=f"{CONFIG.pair} M15 (H1 overlay)",
             basename=f"{basename}_M15",
             cfg=chart_cfg,

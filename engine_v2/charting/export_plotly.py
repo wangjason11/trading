@@ -11,6 +11,7 @@ from plotly.subplots import make_subplots
 from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME, COL_V
 from engine_v2.charting.style_registry import STYLE
 from engine_v2.common.types import PatternStatus
+from engine_v2.multitf.registry import StructureRegistry
 
 
 def _rgba_from_rgb(rgb: str, opacity: float) -> str:
@@ -74,7 +75,7 @@ class ChartExportPaths:
 
 
 def export_chart_plotly(
-    df: pd.DataFrame,
+    df: Optional[pd.DataFrame] = None,
     *,
     title: str,
     structure_levels: Optional[list] = None,
@@ -83,6 +84,8 @@ def export_chart_plotly(
     max_points: Optional[int] = None,
     cfg: Optional[dict] = None,
     idx_range: Optional[tuple[int, int]] = None,
+    registry: Optional[StructureRegistry] = None,
+    path_id: Optional[str] = None,
 ) -> ChartExportPaths:
     """
     Export an interactive HTML + PNG candlestick chart with basic overlays.
@@ -151,6 +154,19 @@ def export_chart_plotly(
         "range_candle_marker": False,  # Week 4: Range candle markers (orange dots) - off to avoid overlap with volume spike
     }
 
+
+    # Part 4 Step 2: registry is the canonical chart source. When provided,
+    # resolve the entity by path_id and read from entity.df. Old df.attrs
+    # path stays as a fallback until Step 5 removes the orchestrator's
+    # transitional df.attrs writes.
+    if registry is not None and path_id is not None:
+        entity = registry.get(path_id)
+        if entity is None:
+            raise ValueError(f"StructureRegistry has no entity '{path_id}'")
+        df = entity.df
+    if df is None:
+        raise TypeError("export_chart_plotly requires either df or "
+                        "(registry + path_id)")
 
     cfg = _deep_merge(CHART_DEFAULTS, cfg or {})
     candle_cfg = cfg.get("candle_types", {}) or {}

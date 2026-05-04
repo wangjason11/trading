@@ -24,6 +24,7 @@ from engine_v2.charting.export_plotly import (
     _get_reversal_confirmed_by_sid,
     ChartExportPaths,
 )
+from engine_v2.multitf.registry import StructureRegistry
 
 
 # ---------------------------------------------------------------------------
@@ -161,9 +162,9 @@ def _compute_m15_tier_context(lower_tf_results: list) -> tuple:
 # ---------------------------------------------------------------------------
 
 def export_m15_chart_plotly(
-    m15_df: pd.DataFrame,
-    h1_df: pd.DataFrame,
-    lower_tf_results: list,
+    m15_df: Optional[pd.DataFrame] = None,
+    h1_df: Optional[pd.DataFrame] = None,
+    lower_tf_results: Optional[list] = None,
     *,
     title: str,
     out_dir: str | Path = "artifacts/charts",
@@ -171,8 +172,36 @@ def export_m15_chart_plotly(
     max_points: Optional[int] = None,
     idx_range: Optional[tuple[int, int]] = None,
     cfg: Optional[dict] = None,
+    registry: Optional[StructureRegistry] = None,
+    path_id: Optional[str] = None,
 ) -> ChartExportPaths:
-    """Export an interactive M15 chart with H1 overlay elements."""
+    """Export an interactive M15 chart with H1 overlay elements.
+
+    Part 4 Step 2: when ``registry`` + ``path_id`` are supplied, the chart
+    resolves its M15 entity (and its parent for the overlay) via the
+    registry. Per spec §16.3 each chart overlays only its immediate
+    parent. The positional ``m15_df`` / ``h1_df`` / ``lower_tf_results``
+    fallback is kept for parity until Step 5.
+    """
+
+    if registry is not None and path_id is not None:
+        m15_entity = registry.get(path_id)
+        if m15_entity is None:
+            raise ValueError(f"StructureRegistry has no entity '{path_id}'")
+        parent_entity = registry.parent_of(path_id)
+        if parent_entity is None:
+            raise ValueError(
+                f"M15 chart entity '{path_id}' has no parent in registry")
+        m15_df = m15_entity.df
+        h1_df = parent_entity.df
+        lower_tf_results = m15_df.attrs.get("lower_tf_results", [])
+
+    if m15_df is None or h1_df is None:
+        raise TypeError("export_m15_chart_plotly requires either "
+                        "(m15_df + h1_df + lower_tf_results) or "
+                        "(registry + path_id)")
+    if lower_tf_results is None:
+        lower_tf_results = []
 
     cfg = _deep_merge(M15_CHART_DEFAULTS, cfg or {})
     pat_cfg = cfg.get("patterns", {}) or {}
