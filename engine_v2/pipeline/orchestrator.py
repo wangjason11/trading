@@ -10,6 +10,13 @@ from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.patterns.pattern_engine import detect_patterns
 from engine_v2.structure.structure_engine import compute_structure
 from engine_v2.multitf.registry import StructureRegistry
+from engine_v2.multitf.sid_records import (
+    build_sid_records_for_main,
+    build_sid_records_for_subordinate,
+)
+from engine_v2.multitf.first_confluence_trigger import (
+    detect_first_confluence_triggers,
+)
 
 from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
@@ -409,6 +416,25 @@ def run_pipeline(
     )
     meta["registry"] = registry
 
+    # Part 4 Step 3a: per-sid records + first_confluence (var 1) trigger
+    # detection. Dormant in 3a — no consumer reads these yet. 3b–3d will
+    # build the confluence sub from these triggers and reuse the records
+    # for cross-entity lookups.
+    main_sids = build_sid_records_for_main(s_res.events)
+    s_res.df.attrs["sids"] = main_sids
+    print(f"[sid_records] H1.main sids={len(main_sids)}")
+
+    first_confluence_triggers = detect_first_confluence_triggers(
+        sorted_events, parent_tf="H1",
+    )
+    s_res.df.attrs["first_confluence_triggers"] = first_confluence_triggers
+    meta["first_confluence_triggers"] = first_confluence_triggers
+    fc_pending = sum(1 for t in first_confluence_triggers if t.status == "pending")
+    print(
+        f"[first_confluence_trigger] detected={len(first_confluence_triggers)} "
+        f"pending={fc_pending}"
+    )
+
     # 10) Multi-TF analysis (if configured)
     lower_tf_results = []
     if lower_timeframes and "M15" in lower_timeframes:
@@ -484,6 +510,13 @@ def _run_multi_tf(
     if lower_tf_results:
         path_id = "H1.main >> M15.counter"
         m15_df_prepared.attrs["lower_tf_results"] = lower_tf_results
+
+        # Part 4 Step 3a: per-sid records on the subordinate entity df.
+        # One record per parent cycle that produced a result. Dormant.
+        sub_sids = build_sid_records_for_subordinate(lower_tf_results)
+        m15_df_prepared.attrs["sids"] = sub_sids
+        print(f"[sid_records] {path_id} sids={len(sub_sids)}")
+
         registry.register(
             path_id,
             df=m15_df_prepared,
