@@ -281,6 +281,35 @@ consistent.
 
 ---
 
+## Chart Entry Points: Use Registry, Not Positional df (Part 4 transitional)
+
+**Rule:** `export_chart_plotly()` and `export_m15_chart_plotly()` accept
+**both** a positional df fallback (`df=...` / `m15_df=...` / `h1_df=...` /
+`lower_tf_results=...`) and a registry path (`registry=..., path_id=...`).
+**The positional fallback is transitional** — kept so existing tests and
+ad-hoc inspection scripts keep working. Migration plan Step 5 removes it.
+
+**Don't add new callers that pass positional df.** Use the registry path:
+
+```python
+export_chart_plotly(registry=registry, path_id="H1.main", title=..., ...)
+export_m15_chart_plotly(
+    registry=registry,
+    path_id="H1.main >> M15.counter",  # M15 chart resolves its own
+                                        # parent overlay via parent_of()
+    title=..., ...,
+)
+```
+
+**Why:** the M15 chart resolves its overlay via
+`registry.parent_of(path_id)` per spec §16.3 ("each chart overlays only
+its immediate parent, never grandparents"). New callers that hand-pass
+`m15_df` + `h1_df` separately bypass that lookup, and once Step 5 deletes
+the orchestrator's deprecated `df.attrs` writes the positional path will
+silently produce empty zone overlays.
+
+---
+
 ## Wrapping Logic in Loops: Preserve Post-Loop Behavior
 
 **Rule:** When wrapping existing single-shot logic in an iteration loop, the behavior AFTER the loop must remain identical to the original code paths. The loop only changes what happens WITHIN iterations.
