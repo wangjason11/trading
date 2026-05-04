@@ -191,11 +191,17 @@ class KLZone:
 @dataclass
 class WVMIRecord:
     """Wave Volume Momentum Indicator for a BOS zone."""
-    # Attribution to main structure's BOS zone
+    # Attribution to entity (Part 4 §8.7) and that entity's BOS zone
     bos_structure_id: int
     bos_cycle_id: int
     zone_side: Literal["buy", "sell"]
-    source: Literal["main", "scenario3"]
+    # Deprecated post Part 4 Step 5 — kept for back-compat. Always "main"
+    # today (the only legacy code path that wrote "scenario3" was removed
+    # in Step 3c). The authoritative entity identifier is `structure_path_id`.
+    source: Literal["main", "scenario3"] = "main"
+    # Entity path identifier (e.g., "H1.main", "H1.main >> M15.confluence").
+    # None on records created by code paths that haven't been migrated yet.
+    structure_path_id: Optional[str] = None
 
     # Wave candle indices
     fb_idx: Optional[int] = None      # First Breakout (from BOS_n)

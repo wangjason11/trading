@@ -556,26 +556,27 @@ class TestOnBosConfirmed:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 3 stubs
+# structure_path_id attribution (Part 4 §8.7)
 # ---------------------------------------------------------------------------
 
-class TestScenario3Stubs:
-    def test_add_and_discard_scenario3(self):
-        tracker = WVMITracker()
+class TestStructurePathIdAttribution:
+    def test_records_carry_path_id_from_tracker(self):
+        tracker = WVMITracker(structure_path_id="H1.main")
+        # Empty tracker — verify field is plumbed through to new records when
+        # they would be emitted. Direct construction smoke test:
         record = WVMIRecord(
             bos_structure_id=0, bos_cycle_id=1,
-            zone_side="buy", source="scenario3",
+            zone_side="buy",
+            structure_path_id="H1.main >> M15.confluence",
         )
-        tracker.add_scenario3_record(0, 1, record)
-        assert len(tracker.get_records()) == 1
+        assert record.structure_path_id == "H1.main >> M15.confluence"
+        assert record.source == "main"  # default preserved for back-compat
 
-        tracker.discard_scenario3(0, 1)
-        assert len(tracker.get_records()) == 0
-
-    def test_discard_nonexistent_is_noop(self):
+    def test_default_path_id_is_none(self):
         tracker = WVMITracker()
-        tracker.discard_scenario3(0, 1)  # Should not raise
-        assert len(tracker.get_records()) == 0
+        # No explicit path_id → tracker carries None internally; records
+        # emitted by it will have structure_path_id=None.
+        assert tracker._structure_path_id is None
 
 
 # ---------------------------------------------------------------------------

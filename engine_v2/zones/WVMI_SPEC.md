@@ -147,12 +147,17 @@ pullback_momentum = (LP_volume * LP_weight) / FP_volume
 
 ---
 
-## Scenario 3 Integration
+## Entity Attribution (Part 4 §8.7)
 
-- `add_scenario3_record()`: stores WVMI from Scenario 3 probe with `source="scenario3"`
-- `discard_scenario3()`: removes record when probe is discarded
-- Key: `(sid, cycle_id, "scenario3")` — separate from main WVMI `(sid, cycle_id, "main")`
-- On `on_bos_confirmed()`, both "main" and "scenario3" records are checked for locking
+- `WVMITracker.__init__(structure_path_id=...)` stamps every record with the
+  owning entity's path (e.g., `"H1.main"`, `"H1.main >> M15.confluence"`).
+- `WVMIRecord._records` is keyed by `(sid, cycle_id)` — one tracker per
+  entity, so source-based disambiguation isn't needed.
+- `WVMIRecord.source` (`Literal["main", "scenario3"]`) is retained as a
+  back-compat field; always `"main"` today and slated for removal in
+  Part 4 migration plan §13.5.
+- `add_scenario3_record` / `discard_scenario3` were removed in Part 4
+  Step 3c — they were dead code (production never invoked them).
 
 ---
 
@@ -176,10 +181,11 @@ wave_candles → Fib tracking → POI zones → WVMI:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `bos_structure_id` | int | Structure ID of the BOS zone |
-| `bos_cycle_id` | int | Cycle ID of the BOS zone |
+| `bos_structure_id` | int | Structure ID of the BOS zone (entity-local) |
+| `bos_cycle_id` | int | Cycle ID of the BOS zone (entity-local) |
 | `zone_side` | "buy"/"sell" | BOS zone side |
-| `source` | "main"/"scenario3" | Origin of the record |
+| `source` | "main"/"scenario3" | Deprecated — always "main" since Part 4 Step 3c. Removed in §13.5. |
+| `structure_path_id` | Optional[str] | Owning entity's path (e.g., `"H1.main"`). New in Part 4 Step 3c. |
 | `fb_idx`, `lb_idx`, `fp_idx`, `lp_idx` | Optional[int] | Wave candle indices |
 | `fb_volume`, `lb_volume`, `fp_volume`, `lp_volume` | Optional[float] | Raw volumes |
 | `lb_weight`, `lp_weight` | float | Last candle weights (default 1.0) |

@@ -162,10 +162,14 @@ class WVMITracker:
     1. Created at CTS_n confirmation — breakout locked, pullback starts shifting
     2. Updated as candles arrive — temporary LP may shift to closer qualified candle
     3. Locked at BOS_n+1 confirmation — LP finalizes from BOS_n+1 wave candles
+
+    One tracker per entity (Part 4 §9). `structure_path_id` is stamped on
+    every record this tracker emits.
     """
 
-    def __init__(self):
-        self._records: Dict[tuple, WVMIRecord] = {}  # key: (sid, cycle_id, source)
+    def __init__(self, structure_path_id: Optional[str] = None):
+        self._records: Dict[tuple, WVMIRecord] = {}  # key: (sid, cycle_id)
+        self._structure_path_id = structure_path_id
 
     def on_cts_confirmed(
         self,
@@ -251,6 +255,7 @@ class WVMITracker:
             bos_cycle_id=cycle_id,
             zone_side=zone_side,
             source="main",
+            structure_path_id=self._structure_path_id,
             fb_idx=fb_idx,
             lb_idx=lb_idx,
             fp_idx=fp_idx,
@@ -269,7 +274,7 @@ class WVMITracker:
             lp_locked=False,
         )
 
-        key = (sid, cycle_id, "main")
+        key = (sid, cycle_id)
         self._records[key] = record
         print(f"[wvmi] CREATED sid={sid} cycle={cycle_id}: bo_mom={breakout_momentum:.4f} pb_mom={pullback_momentum if pullback_momentum is not None else 'N/A'} lp_idx={lp_idx}")
         return record
@@ -283,7 +288,7 @@ class WVMITracker:
             if rec.fp_idx is None:
                 continue
 
-            sid, cycle_id, source = key
+            sid, cycle_id = key
             bos_zone = _find_bos_zone(kl_zones, sid, cycle_id)
             if bos_zone is None:
                 continue
@@ -340,53 +345,42 @@ class WVMITracker:
             return []
 
         locked = []
-        for source in ("main", "scenario3"):
-            key = (sid, prev_cycle_id, source)
-            rec = self._records.get(key)
-            if rec is None or rec.lp_locked:
-                continue
+        key = (sid, prev_cycle_id)
+        rec = self._records.get(key)
+        if rec is None or rec.lp_locked:
+            return locked
 
-            # Determine pullback wave direction
-            pb_wave_dir = -1 if rec.zone_side == "buy" else 1
+        # Determine pullback wave direction
+        pb_wave_dir = -1 if rec.zone_side == "buy" else 1
 
-            # Try to get LP from BOS_n+1 wave candle (last_wave_candle_idx)
-            bos_wc = _find_wave_candle(wave_candles, sid, bos_cycle_id, "BOS")
-            if bos_wc is not None and bos_wc.last_wave_candle_idx is not None:
-                lp_idx = bos_wc.last_wave_candle_idx
-                rec.lp_idx = lp_idx
-                if lp_idx in df.index:
-                    rec.lp_volume = float(df.loc[lp_idx, "volume"])
-                    rec.lp_weight = _compute_last_wave_weight(df, lp_idx, pb_wave_dir)
-                    if rec.fp_volume and rec.fp_volume > 0:
-                        rec.pullback_momentum = (rec.lp_volume * rec.lp_weight) / rec.fp_volume
-                    else:
-                        rec.pullback_momentum = None
+        # Try to get LP from BOS_n+1 wave candle (last_wave_candle_idx)
+        bos_wc = _find_wave_candle(wave_candles, sid, bos_cycle_id, "BOS")
+        if bos_wc is not None and bos_wc.last_wave_candle_idx is not None:
+            lp_idx = bos_wc.last_wave_candle_idx
+            rec.lp_idx = lp_idx
+            if lp_idx in df.index:
+                rec.lp_volume = float(df.loc[lp_idx, "volume"])
+                rec.lp_weight = _compute_last_wave_weight(df, lp_idx, pb_wave_dir)
+                if rec.fp_volume and rec.fp_volume > 0:
+                    rec.pullback_momentum = (rec.lp_volume * rec.lp_weight) / rec.fp_volume
                 else:
-                    rec.lp_volume = None
-                    rec.lp_weight = 1.0
                     rec.pullback_momentum = None
-            # else: lock with existing temp LP as final
+            else:
+                rec.lp_volume = None
+                rec.lp_weight = 1.0
+                rec.pullback_momentum = None
+        # else: lock with existing temp LP as final
 
-            rec.buy_momentum, rec.sell_momentum = _assign_direction_labels(
-                rec.zone_side, rec.breakout_momentum, rec.pullback_momentum
-            )
-            rec.lp_locked = True
-            rec.status = "locked"
-            rec.locked_by_cycle_id = bos_cycle_id
-            locked.append(rec)
-            print(f"[wvmi] LOCKED sid={sid} cycle={prev_cycle_id}: pb_mom={rec.pullback_momentum if rec.pullback_momentum is not None else 'N/A'} lp_idx={rec.lp_idx} (by BOS cycle={bos_cycle_id})")
+        rec.buy_momentum, rec.sell_momentum = _assign_direction_labels(
+            rec.zone_side, rec.breakout_momentum, rec.pullback_momentum
+        )
+        rec.lp_locked = True
+        rec.status = "locked"
+        rec.locked_by_cycle_id = bos_cycle_id
+        locked.append(rec)
+        print(f"[wvmi] LOCKED sid={sid} cycle={prev_cycle_id}: pb_mom={rec.pullback_momentum if rec.pullback_momentum is not None else 'N/A'} lp_idx={rec.lp_idx} (by BOS cycle={bos_cycle_id})")
 
         return locked
-
-    def add_scenario3_record(self, bos_structure_id: int, bos_cycle_id: int, record: WVMIRecord):
-        """Add WVMI from Scenario 3 probe, attributed to main BOS zone."""
-        key = (bos_structure_id, bos_cycle_id, "scenario3")
-        self._records[key] = record
-
-    def discard_scenario3(self, bos_structure_id: int, bos_cycle_id: int):
-        """Remove scenario3 WVMI when probe is discarded."""
-        key = (bos_structure_id, bos_cycle_id, "scenario3")
-        self._records.pop(key, None)
 
     def get_records(self) -> List[WVMIRecord]:
         """Return all WVMI records."""

@@ -212,6 +212,15 @@ def run_lower_tf_pipeline(
     m15_result.df.attrs["imbalances"] = trigger_df.attrs.get("imbalances", [])
 
     # 6. Run downstream pipeline with M15-specific settings
+    # structure_path_id derived from the trigger's use_case so WVMI records
+    # carry the correct entity attribution (Part 4 §8.7).
+    if trigger.use_case == "first_counter":
+        sub_path_id = "H1.main >> M15.counter"
+    elif trigger.use_case == "first_confluence":
+        sub_path_id = "H1.main >> M15.confluence"
+    else:
+        sub_path_id = f"H1.main >> M15.{trigger.use_case}"
+
     downstream = _run_downstream_pipeline(
         m15_result.df,
         m15_result.events,
@@ -220,6 +229,7 @@ def run_lower_tf_pipeline(
         fib_mode="m15_reverse",     # Imbalance-gated cross-cycle Fib
         log_prefix=f"M15_sid{trigger.parent_sid}_c{trigger.parent_cycle_id}",
         timeframe=trigger.lower_tf, # "M15" — drives proximity_pips lookup
+        structure_path_id=sub_path_id,
     )
 
     # 7. Inject attribution into events

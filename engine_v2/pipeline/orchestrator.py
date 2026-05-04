@@ -54,6 +54,7 @@ def _run_downstream_pipeline(
     length_threshold: float = 0.7,
     log_prefix: str = "",
     timeframe: str = "H1",
+    structure_path_id: str = "H1.main",
 ) -> Dict[str, Any]:
     """Run downstream pipeline (KL zones -> wave candles -> Fib -> POI -> WVMI).
 
@@ -257,14 +258,15 @@ def _run_downstream_pipeline(
     print(f"{pfx}[poi_zones] total=", len(poi_zones))
 
     # 9) WVMI
-    wvmi_tracker = WVMITracker()
+    wvmi_tracker = WVMITracker(structure_path_id=structure_path_id)
 
     pip_size = _pip_size_from_pair(df)
 
     # Zone proximity triggers — alternating sd/opp_sd per cycle.
     # The full triggers list is exposed via df.attrs["zone_proximity_triggers"]
     # for downstream/charting consumers. WVMI gate uses only the first sd
-    # trigger per cycle (backward-compat, until WVMI is rewired off the gate).
+    # trigger per cycle (backward-compat, until WVMI is rewired off the gate
+    # in a later step — Part 4 §8.3 will drive sub WVMI from parent events).
     zone_proximity_triggers = check_zone_proximity(
         df=df,
         sorted_events=sorted_events,
@@ -279,6 +281,12 @@ def _run_downstream_pipeline(
         if trigs and trigs[0].direction == "sd":
             first_sd = trigs[0]
             proximity_candles[key] = {
+                # Part 4 §8.7 schema: attribution to the trigger event.
+                "triggered_by_event_idx": first_sd.idx,
+                "triggered_by_event_type": "ZONE_PROXIMITY_TRIGGER",
+                "structure_path_id": structure_path_id,
+                # Back-compat (uc1_trigger.py still reads this; cleaned up
+                # in migration plan Step 5):
                 "proximity_trigger_idx": first_sd.idx,
                 "trigger_inner": first_sd.trigger_inner,
                 "proximity_pips": first_sd.proximity_pips,
