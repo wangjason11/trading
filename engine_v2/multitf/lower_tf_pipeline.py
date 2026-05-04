@@ -68,41 +68,41 @@ def _run_subordinate_probe(
     trigger: MultiTFTrigger,
     parent_df: pd.DataFrame,
 ) -> Optional[int]:
-    """Run the parent-TF reverse Scenario 3 probe to find a validated start.
+    """Run the parent-TF Scenario 3 probe to find a validated start.
 
-    Probe window: [cts_idx, proximity_trigger_idx] on the parent df.
-    Direction: trigger.lower_sd (opposite of parent sd for first_counter).
-    Tolerance: looked up from DEFAULT_PROBE_RESET_PIPS by trigger.parent_tf
-    (H1=10, M15=5, M5=3).
+    Generic across `subordinate` variations — params come from
+    `trigger.meta["probe_input_idx"]` / `["probe_end_idx"]`. Direction is
+    `trigger.lower_sd`. Tolerance comes from `DEFAULT_PROBE_RESET_PIPS`
+    by `trigger.parent_tf` (H1=10, M15=5, M5=3).
 
-    Returns: parent-TF index of validated start, or None on failure.
+    Returns parent-TF index of validated start, or None on failure.
     """
-    cts_idx = trigger.meta.get("cts_idx")
-    proximity_trigger_idx = trigger.meta.get("proximity_trigger_idx")
+    input_idx = trigger.meta.get("probe_input_idx")
+    end_idx = trigger.meta.get("probe_end_idx")
 
-    if cts_idx is None or proximity_trigger_idx is None:
-        print(f"[lower_tf] WARNING: Missing cts_idx or proximity_trigger_idx in trigger meta "
+    if input_idx is None or end_idx is None:
+        print(f"[lower_tf] WARNING: Missing probe_input_idx/probe_end_idx in trigger meta "
               f"for sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}")
         return None
 
-    cts_idx = int(cts_idx)
-    proximity_trigger_idx = int(proximity_trigger_idx)
+    input_idx = int(input_idx)
+    end_idx = int(end_idx)
 
     try:
         s3_result = compute_structure_scenario_3(
             parent_df,
-            start_idx=cts_idx,
+            start_idx=input_idx,
             struct_direction=trigger.lower_sd,
-            end_idx=proximity_trigger_idx,
+            end_idx=end_idx,
             run_continuation=False,
             timeframe=trigger.parent_tf,
         )
     except (ValueError, IndexError) as exc:
         print(f"[lower_tf] WARNING: subordinate probe failed for "
-              f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}: {exc}")
+              f"{trigger.use_case} sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}: {exc}")
         return None
 
-    print(f"[lower_tf] subordinate probe ({trigger.parent_tf} reverse): "
+    print(f"[lower_tf] subordinate probe ({trigger.use_case} on {trigger.parent_tf}): "
           f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id} "
           f"-> start_idx={s3_result.start_idx} status={s3_result.status} "
           f"iterations={s3_result.probe_iterations}")
@@ -142,9 +142,12 @@ def run_lower_tf_pipeline(
 
     # 2. Map validated H1 start to M15
     h1_start_time = pd.to_datetime(h1_df.loc[validated_h1_idx, "time"], utc=True)
-    # mapping_sd = parent_sd: for bearish reverse (lower_sd=-1), start is a high -> match highest high (sd=+1)
-    # for bullish reverse (lower_sd=+1), start is a low -> match lowest low (sd=-1)
-    mapping_sd = trigger.parent_sd
+    # Spec §4.3.1 unified rule: mapping_sd = -sub_sd.
+    # - first_counter: lower_sd = -parent_sd → mapping_sd = +parent_sd (highest
+    #   high in bullish parent, lowest low in bearish — the parent's CTS extreme).
+    # - first_confluence: lower_sd = +parent_sd → mapping_sd = -parent_sd
+    #   (the BOS extreme in the parent).
+    mapping_sd = -trigger.lower_sd
     if mapping_sd == 1:
         h1_start_price = float(h1_df.loc[validated_h1_idx, "h"])
     else:

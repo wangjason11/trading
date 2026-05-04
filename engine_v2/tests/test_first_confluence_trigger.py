@@ -44,8 +44,48 @@ def test_single_bos_with_matching_cts_finalized():
     assert t.input_idx == 20             # BOS extreme
     assert t.trigger_event_idx == 22     # confirmed_at
     assert t.end_idx == 40               # CTS_CONFIRMED idx
+    assert t.lifecycle_end_idx is None   # no next BOS, no reversal
     assert t.status == "finalized"
     assert t.meta["cts_confirmation_method"] == "pullback"
+
+
+def test_lifecycle_end_uses_next_cycle_bos_confirmed_at():
+    events = [
+        _ev(20, "BOS_CONFIRMED", sid=0, cycle=1, sd=1, confirmed_at=22),
+        _ev(40, "CTS_CONFIRMED", sid=0, cycle=1, sd=1),
+        # BOS for next cycle: ev.idx = extreme (60), confirmed_at = 65
+        _ev(60, "BOS_CONFIRMED", sid=0, cycle=2, sd=1, confirmed_at=65),
+        _ev(80, "CTS_CONFIRMED", sid=0, cycle=2, sd=1),
+    ]
+    triggers = detect_first_confluence_triggers(events)
+    assert len(triggers) == 2
+    # First trigger ends at next BOS confirmed_at (65), not the extreme idx (60)
+    assert triggers[0].lifecycle_end_idx == 65
+    # Second trigger has no successor — None
+    assert triggers[1].lifecycle_end_idx is None
+
+
+def test_lifecycle_end_uses_reversal_when_no_next_bos():
+    events = [
+        _ev(20, "BOS_CONFIRMED",      sid=0, cycle=1, sd=1, confirmed_at=22),
+        _ev(40, "CTS_CONFIRMED",      sid=0, cycle=1, sd=1),
+        _ev(70, "REVERSAL_CANDIDATE", sid=0, cycle=1, sd=1, apply_idx=72),
+    ]
+    triggers = detect_first_confluence_triggers(events)
+    assert len(triggers) == 1
+    assert triggers[0].lifecycle_end_idx == 72
+
+
+def test_lifecycle_end_takes_min_of_next_bos_and_reversal():
+    events = [
+        _ev(20, "BOS_CONFIRMED",      sid=0, cycle=1, sd=1, confirmed_at=22),
+        _ev(40, "CTS_CONFIRMED",      sid=0, cycle=1, sd=1),
+        _ev(60, "BOS_CONFIRMED",      sid=0, cycle=2, sd=1, confirmed_at=85),
+        _ev(70, "REVERSAL_CANDIDATE", sid=0, cycle=2, sd=1, apply_idx=72),
+    ]
+    triggers = detect_first_confluence_triggers(events)
+    assert triggers[0].lifecycle_end_idx == 72  # reversal first
+    assert triggers[1].lifecycle_end_idx == 72
 
 
 def test_bos_without_cts_is_pending():

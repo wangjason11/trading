@@ -34,9 +34,17 @@ def detect_first_confluence_triggers(
     open at end-of-data), the trigger is emitted with `end_idx=None` and
     `status="pending"` per spec §14.
 
+    `lifecycle_end_idx` is computed as the next BOS_CONFIRMED for
+    `(sid, cycle_id+1)` (using `meta["confirmed_at"]` per the BOS_CONFIRMED
+    convention) or the REVERSAL_CANDIDATE.apply_idx for the same sid,
+    whichever fires first. Mirrors first_counter's logic in `uc1_trigger.py`.
+
     Returns triggers sorted by `trigger_event_idx`.
     """
     cts_conf_by_key: Dict[Tuple[int, int], StructureEvent] = {}
+    bos_conf_idx_by_key: Dict[Tuple[int, int], int] = {}
+    reversal_idx_by_sid: Dict[int, int] = {}
+
     for ev in sorted_events:
         if ev.type == "CTS_CONFIRMED":
             key = (
@@ -44,6 +52,18 @@ def detect_first_confluence_triggers(
                 int(ev.meta.get("cycle_id", 0)),
             )
             cts_conf_by_key.setdefault(key, ev)
+        elif ev.type == "BOS_CONFIRMED":
+            key = (
+                int(ev.meta.get("structure_id", 0)),
+                int(ev.meta.get("cycle_id", 0)),
+            )
+            # BOS_CONFIRMED.ev.idx = extreme; meta["confirmed_at"] = timing
+            bos_conf_idx_by_key[key] = int(ev.meta.get("confirmed_at", ev.idx))
+        elif ev.type == "REVERSAL_CANDIDATE":
+            sid = int(ev.meta.get("structure_id", 0))
+            apply_idx = ev.meta.get("apply_idx")
+            if apply_idx is not None:
+                reversal_idx_by_sid[sid] = int(apply_idx)
 
     triggers: List[FirstConfluenceTrigger] = []
 
@@ -57,7 +77,6 @@ def detect_first_confluence_triggers(
         if parent_sd == 0:
             continue
 
-        # BOS_CONFIRMED.ev.idx = BOS extreme; meta["confirmed_at"] = trigger candle
         input_idx = int(ev.idx)
         trigger_event_idx = int(ev.meta.get("confirmed_at", ev.idx))
 
@@ -69,6 +88,17 @@ def detect_first_confluence_triggers(
             end_idx = None
             status = "pending"
 
+        next_bos = bos_conf_idx_by_key.get((sid, cycle_id + 1))
+        rev = reversal_idx_by_sid.get(sid)
+        if next_bos is not None and rev is not None:
+            lifecycle_end_idx = min(next_bos, rev)
+        elif next_bos is not None:
+            lifecycle_end_idx = next_bos
+        elif rev is not None:
+            lifecycle_end_idx = rev
+        else:
+            lifecycle_end_idx = None
+
         triggers.append(FirstConfluenceTrigger(
             parent_tf=parent_tf,
             parent_sid=sid,
@@ -77,6 +107,7 @@ def detect_first_confluence_triggers(
             input_idx=input_idx,
             end_idx=end_idx,
             trigger_event_idx=trigger_event_idx,
+            lifecycle_end_idx=lifecycle_end_idx,
             status=status,
             meta={
                 "bos_price": ev.price,

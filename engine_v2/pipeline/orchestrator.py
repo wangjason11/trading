@@ -437,6 +437,7 @@ def run_pipeline(
 
     # 10) Multi-TF analysis (if configured)
     lower_tf_results = []
+    confluence_results: List[Any] = []
     if lower_timeframes and "M15" in lower_timeframes:
         lower_tf_results = _run_multi_tf(
             s_res.df,
@@ -448,7 +449,16 @@ def run_pipeline(
             registry,
         )
 
+        # Part 4 Step 3b: first_confluence subs (var 1).
+        # Built independently of first_counter — gets its own M15 entity df.
+        confluence_results = _run_first_confluence_multi_tf(
+            s_res.df,
+            first_confluence_triggers,
+            registry,
+        )
+
     meta["lower_tf_results"] = lower_tf_results
+    meta["first_confluence_results"] = confluence_results
     s_res.df.attrs["lower_tf_results"] = lower_tf_results
 
     return PipelineResult(
@@ -457,6 +467,75 @@ def run_pipeline(
         structure=s_res.levels,
         meta=meta,
     )
+
+
+def _run_first_confluence_multi_tf(
+    h1_df: pd.DataFrame,
+    triggers: list,
+    registry: StructureRegistry,
+) -> list:
+    """Build `first_confluence` subs and register the M15.confluence entity.
+
+    Per spec §4.3.2 / §14: pending triggers (parent CTS not yet confirmed)
+    are skipped — no sub is built until end_idx resolves.
+    """
+    from engine_v2.multitf.first_confluence_pipeline import (
+        run_first_confluence_pipeline,
+    )
+    from engine_v2.multitf.data_bridge import (
+        fetch_lower_tf_data,
+        prepare_lower_tf_data,
+    )
+
+    if not triggers:
+        return []
+
+    finalized = [t for t in triggers if t.status == "finalized"]
+    if not finalized:
+        print(f"[multi_tf:confluence] all {len(triggers)} triggers pending — "
+              f"no subs built")
+        return []
+
+    print(f"[multi_tf:confluence] finalized triggers: "
+          f"{len(finalized)}/{len(triggers)}")
+
+    pair = h1_df.attrs.get("pair", "NZD_USD")
+    h1_start = pd.to_datetime(h1_df["time"].iloc[0], utc=True)
+    h1_end = pd.to_datetime(h1_df["time"].iloc[-1], utc=True)
+
+    m15_raw = fetch_lower_tf_data(pair, "M15", h1_start, h1_end)
+    if m15_raw is None or m15_raw.empty:
+        print("[multi_tf:confluence] WARNING: No M15 data available")
+        return []
+
+    m15_df = prepare_lower_tf_data(m15_raw)
+    m15_df.attrs["pair"] = pair
+
+    results = []
+    for trigger in finalized:
+        print(f"[multi_tf:confluence] sid={trigger.parent_sid} "
+              f"cycle={trigger.parent_cycle_id} parent_sd={trigger.parent_sd}")
+        result = run_first_confluence_pipeline(trigger, m15_df, h1_df)
+        if result is not None:
+            results.append(result)
+
+    print(f"[multi_tf:confluence] results: {len(results)}")
+
+    if results:
+        path_id = "H1.main >> M15.confluence"
+        m15_df.attrs["lower_tf_results"] = results
+        sub_sids = build_sid_records_for_subordinate(results)
+        m15_df.attrs["sids"] = sub_sids
+        print(f"[sid_records] {path_id} sids={len(sub_sids)}")
+        registry.register(
+            path_id,
+            df=m15_df,
+            timeframe="M15",
+            role="subordinate",
+            starting_alignment="confluence",
+        )
+
+    return results
 
 
 def _run_multi_tf(

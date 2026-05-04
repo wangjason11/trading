@@ -73,7 +73,9 @@ class FirstConfluenceTrigger:
     fires; per spec §14 / §16.6 a pending sub is hidden entirely until
     end_idx resolves.
 
-    Detection only — 3a does not consume these triggers.
+    `lifecycle_end_idx` bounds the sub's lifetime — it ends at the next
+    parent BOS for cycle_id+1 (the cycle this trigger belongs to ends
+    when the next cycle's BOS confirms) or at the parent's reversal.
     """
     parent_tf: str
     parent_sid: int
@@ -82,5 +84,6 @@ class FirstConfluenceTrigger:
     input_idx: int                     # BOS extreme idx (== BOS_CONFIRMED.ev.idx)
     end_idx: Optional[int]             # CTS_CONFIRMED idx in same cycle; None = pending
     trigger_event_idx: int             # BOS_CONFIRMED.confirmed_at (candle when trigger fires)
+    lifecycle_end_idx: Optional[int] = None  # next BOS (cycle+1) or reversal idx; None = parent cycle still open
     status: str = "finalized"          # "finalized" once end_idx is known, else "pending"
     meta: Dict[str, Any] = field(default_factory=dict)

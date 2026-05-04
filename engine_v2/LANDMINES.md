@@ -310,6 +310,37 @@ silently produce empty zone overlays.
 
 ---
 
+## Subordinate `mapping_sd` Must Use `-trigger.lower_sd`
+
+**Rule:** In `multitf/lower_tf_pipeline.run_lower_tf_pipeline`, the
+mapping step that picks the lower-TF candle within the validated parent
+candle MUST use `mapping_sd = -trigger.lower_sd` (spec §4.3.1 unified
+rule).
+
+**Why this is a landmine:** for `first_counter`, `lower_sd = -parent_sd`,
+so `-lower_sd == parent_sd` — meaning earlier code (`mapping_sd =
+trigger.parent_sd`) produced the correct result. The two expressions are
+mathematically equivalent for counter and the test suite passes either
+way.
+
+But for `first_confluence` (3b+), `lower_sd = +parent_sd`, so the two
+expressions diverge:
+- `-lower_sd = -parent_sd` ✓ correct (BOS extreme: lowest low in bullish
+  parent, highest high in bearish)
+- `parent_sd` ✗ wrong (would map to the parent CTS extreme, which is the
+  wrong direction for a confluence sub)
+
+A future "simplification" back to `trigger.parent_sd` silently corrupts
+every confluence (and any future variation where `lower_sd != -parent_sd`)
+without breaking any existing test. Always keep the unified `-lower_sd`
+form.
+
+**Generalization to deeper nesting:** the same principle holds for
+descendants beyond depth 1. Always express the mapping in terms of the
+sub being built, never in terms of the parent.
+
+---
+
 ## Wrapping Logic in Loops: Preserve Post-Loop Behavior
 
 **Rule:** When wrapping existing single-shot logic in an iteration loop, the behavior AFTER the loop must remain identical to the original code paths. The loop only changes what happens WITHIN iterations.
