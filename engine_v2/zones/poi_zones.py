@@ -463,3 +463,89 @@ def derive_poi_zones(
               f"ic_idx={z.ic_idx} end_idx={z.meta.get('end_idx')} status={z.meta.get('status')}")
 
     return zones
+
+
+# ---------------------------------------------------------------------------
+# Single-cycle POI primitives — used by MarketStructure's dual CTS proximity
+# check (Stage 2). Wired from `structure/structure_engine.py` as the
+# `poi_inners_resolver` callable passed to MarketStructure.__init__ (Part 4
+# §13.5.b). Defined here so structure/ never imports zones/.
+# ---------------------------------------------------------------------------
+
+def compute_poi_inners_for_cycle(
+    df: pd.DataFrame,
+    bos_idx: int,
+    bos_price: float,
+    cts_idx: int,
+    cts_price: float,
+    struct_direction: int,
+    structure_id: int = 0,
+    cycle_id: int = 0,
+    fill_threshold: float = 0.70,
+) -> List[float]:
+    """Derive POI zone inner prices for the cycle's current Fib state.
+
+    Constructs a FibState inline from BOS_n + CTS_n, runs IC candidate scan
+    + variant selection, returns inner prices (top of IC for buy zones,
+    bottom for sell). POIs are always sd-direction by Fib construction.
+    Returns [] gracefully on any error so the proximity check falls back to
+    BOS-only without crashing.
+    """
+    from engine_v2.features.fibonacci import (
+        DEFAULT_FIB_LEVELS,
+        create_fib_retracement,
+    )
+
+    if cts_idx <= bos_idx:
+        return []
+
+    try:
+        sd = int(struct_direction)
+        if sd == 1:
+            anchor_high, anchor_high_idx = float(cts_price), int(cts_idx)
+            anchor_low, anchor_low_idx = float(bos_price), int(bos_idx)
+        else:
+            anchor_high, anchor_high_idx = float(bos_price), int(bos_idx)
+            anchor_low, anchor_low_idx = float(cts_price), int(cts_idx)
+
+        fib = create_fib_retracement(
+            anchor_high=anchor_high,
+            anchor_low=anchor_low,
+            direction=sd,
+            levels=DEFAULT_FIB_LEVELS,
+            anchor_high_idx=anchor_high_idx,
+            anchor_low_idx=anchor_low_idx,
+            meta={"structure_id": structure_id, "cycle_id": cycle_id},
+        )
+        fib_state = FibState(
+            structure_id=structure_id,
+            cycle_id=cycle_id,
+            struct_direction=sd,
+            bos_idx=int(bos_idx),
+            bos_price=float(bos_price),
+            cts_idx=int(cts_idx),
+            cts_price=float(cts_price),
+            active=True,
+            locked=False,
+            fib=fib,
+        )
+
+        config = POIConfig(fill_threshold=fill_threshold)
+        candidates = find_ic_candidates(df, fib_state, config)
+        if not candidates:
+            return []
+        ic_variants = select_ic_variants(candidates, df, fib_state, config)
+        if not ic_variants:
+            return []
+
+        inners: List[float] = []
+        for ic_idx in ic_variants.keys():
+            if ic_idx not in df.index:
+                continue
+            if sd == 1:
+                inners.append(float(df.loc[ic_idx, "h"]))  # buy POI inner = IC top
+            else:
+                inners.append(float(df.loc[ic_idx, "l"]))  # sell POI inner = IC bottom
+        return inners
+    except Exception:
+        return []

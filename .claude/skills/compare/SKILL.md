@@ -208,6 +208,32 @@ All changes are causally linked to the root change.
 | `artifacts/debug/*_final.csv` | `artifacts/commits/<folder>/*_final.csv` |
 | `artifacts/debug/*_raw.csv` | `artifacts/commits/<folder>/*_raw.csv` |
 | `artifacts/debug/*_structure_levels.csv` | `artifacts/commits/<folder>/*_structure_levels.csv` |
+| `artifacts/debug/*_kl_zones.csv` | `artifacts/commits/<folder>/*_kl_zones.csv` |
+| `artifacts/debug/*_structure_events.csv` | `artifacts/commits/<folder>/*_structure_events.csv` |
+| `artifacts/debug/*_imbalance_instances.csv` | `artifacts/commits/<folder>/*_imbalance_instances.csv` |
+
+## Chart Count Parity (Required — M15 entities have NO CSV equivalent)
+
+CSV outputs cover only the **H1.main** entity. **M15.counter** and
+**M15.confluence** entities (Part 4 multi-TF subs) currently have no CSV
+exports — drift in them shows up ONLY in the chart's trace/shape counts.
+
+After the replay run, verify the three trace/shape counts in the stdout
+match the baseline run's counts exactly. Per the latest run the standard
+counts are:
+
+- `H1` chart: traces=149, shapes=325
+- `M15.counter` chart: traces=471, shapes=372
+- `M15.confluence` chart: traces=697, shapes=549
+
+These print as `DEBUG traces:` / `DEBUG shapes:` (H1) and `[m15_chart] traces:
+N, shapes: M` (each M15 entity) at the end of `python -m engine_v2.run_replay`.
+
+**A run that has all six CSVs byte-identical but with shifted M15 chart
+counts is NOT parity-clean** — the H1.main entity is unchanged, but a
+sub entity has diverged and CSV md5 will silently fail to detect it.
+Compare chart counts every time. (Once Part 4 §12 lands per-entity CSV
+exports, this carve-out goes away.)
 
 ## Why This Matters
 

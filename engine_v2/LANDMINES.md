@@ -259,25 +259,38 @@ regress it.
 
 ---
 
-## Backward Dependency: structure/ → zones/ (transitional)
+## MarketStructure Must Not Import From zones/
 
-**Rule:** `engine_v2/structure/proximity_helpers.py` imports from
-`engine_v2/zones/kl_zones_v1.py`. This inverts the typical dependency
-direction (zones depend on structure events).
+**Rule:** `engine_v2/structure/market_structure.py` has zero imports from
+`engine_v2/zones/`. Zone-derivation primitives needed by the dual CTS
+proximity check are consumed via the resolver protocol passed to
+`MarketStructure.__init__`:
 
-**Why:** The dual CTS confirmation logic in `MarketStructure` requires
-deriving BOS zone inner inline at runtime (to check sd zone proximity
-during the cycle's pre-confirmation phase). The existing zone-derivation
-logic is the single source of truth; reusing it via import keeps behavior
-consistent.
+- `bos_inner_resolver: Callable[[pd.DataFrame, int, int], Optional[float]]`
+- `poi_inners_resolver: Callable[[pd.DataFrame, int, float, int, float, int, int, int], List[float]]`
+
+The orchestrator (`structure/structure_engine.py`) wires these resolvers
+from the relocated derivation primitives in `zones/kl_zones_v1.py`
+(`compute_bos_inner_from_event`) and `zones/poi_zones.py`
+(`compute_poi_inners_for_cycle`). The `_make_market_structure` helper in
+`structure_engine.py` is the only place the wiring lives.
+
+**Why:** Zone derivation logically depends on structure events (zones are
+DERIVED from events). A direct `structure/` → `zones/` import would invert
+the dependency graph. Per Part 4 §13.5.b, that inversion was eliminated by
+relocating the inline-derivation primitives to their natural home in
+`zones/` and consuming them in MarketStructure via dependency injection.
 
 **Implications:**
-- Don't try to "fix" this by moving code or breaking the import — it would
-  duplicate logic and risk drift.
-- The upcoming major refactor is expected to restructure the module
-  boundary. Until then, this is the documented intentional compromise.
-- If you add more cross-module imports from structure/ to zones/, prefer
-  importing only the specific helper functions, not the whole module.
+- Don't add imports from `zones/` inside `market_structure.py`. If new
+  zone-derivation logic is needed, expose it as a callable resolver and
+  wire it from `structure_engine.py`.
+- `_check_sd_proximity_at_candle` (the pure proximity check) lives as a
+  module-level private helper inside `market_structure.py` — it has no
+  zones/ deps, just inner prices and a threshold.
+- `structure_engine.py` is allowed to import from `zones/` — it's the
+  orchestrator layer that sees both modules. The inversion ban applies
+  only to `market_structure.py` (where the state-machine logic lives).
 
 ---
 

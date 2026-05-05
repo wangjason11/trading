@@ -918,15 +918,86 @@ between every step:
 4. **Add subsequent counter (var 4).** Counter sub now has multiple sids
    per parent cycle. WVMI rewired for counter sub.
 5. **Remove old monolithic df.attrs and clean up transitional shims.**
-   - Delete `add_scenario3_record` / `discard_scenario3` /
-     "first sd-prox gate" code path.
-   - Absorb `structure/proximity_helpers.py` into the registry pattern.
-     Today's inline parent BOS/POI inner derivation inside MarketStructure
-     becomes a standard cross-entity lookup
-     (`registry.parent_of(self).df.attrs[...]`). The transitional
-     backward dependency from `structure/` → `zones/` is then gone.
-   - Drop `WVMIRecord.source = "main" | "scenario3"` keying — replaced by
+   Implementation split into substeps a–e (running plan in
+   `memory/project_part4_progress.md`). Substep summaries:
+
+   - **§13.5.a (mechanical field cleanups, landed):** the
+     `add_scenario3_record` / `discard_scenario3` / "first sd-prox gate"
+     code paths were already removed in 3c; in §13.5.a we drop the
+     back-compat `proximity_trigger_idx` write in `proximity_candles`,
+     replaced by `triggered_by_event_idx` (§8.7 schema), and remove the
+     `WVMIRecord.source = "main" | "scenario3"` field — replaced by
      `structure_path_id` on every record.
+
+   - **§13.5.b (resolve `structure/` → `zones/` import inversion via
+     dependency injection):** today's `structure/proximity_helpers.py`
+     derives BOS / POI zone inners inline during MarketStructure's
+     per-candle dual CTS check. Zones can't be derived earlier in the
+     pipeline (they depend on structure events), and copying the
+     derivation logic into structure/ is forbidden by LANDMINES (drift
+     risk). The cleanup is therefore **resolver injection**, not
+     reordering or duplication.
+
+     Concrete cleanup:
+     - Delete `structure/proximity_helpers.py`. Relocate its three
+       functions:
+       - `compute_bos_inner_from_event` → `zones/kl_zones_v1.py` (its
+         natural home alongside `identify_base_pattern` /
+         `zone_thresholds`)
+       - `compute_poi_inners_for_cycle` → `zones/poi_zones.py` (natural
+         home alongside Fib + IC scan primitives)
+       - `check_sd_proximity_at_candle` → private helper inside
+         `structure/market_structure.py` (it has no `zones/` deps — just
+         inner prices and a threshold)
+     - `MarketStructure.__init__` accepts two callable resolvers:
+       - `bos_inner_resolver: Callable[[int, int], Optional[float]]` —
+         `(bos_idx, struct_direction) → inner_price`
+       - `poi_inners_resolver: Callable[[int, float, int, float, int,
+         int, int], List[float]]` — `(bos_idx, bos_price, cts_idx,
+         cts_price, sd, sid, cycle_id) → list of POI inner prices`
+     - The orchestrator (`compute_structure` in `structure_engine.py`)
+       constructs MarketStructure with closures that bind to the
+       relocated `zones/` functions. This is the only place the resolver
+       wiring lives.
+     - After §13.5.b, `structure/market_structure.py` has zero imports
+       from `zones/`. The structure→zones inversion is gone.
+     - LANDMINES "Backward Dependency: structure/ → zones/
+       (transitional)" entry replaced with: "MarketStructure must not
+       import from `zones/` directly; consume zone derivations via the
+       resolver protocol passed at construction."
+
+   - **§13.5.c (in-place overwrite infrastructure, §6.1 / §6.2):**
+     entity-df mutation when a new sid overwrites an older one in
+     `[starting_idx, current_candle]`; old sid's zones / POIs / fibs /
+     WVMI tagged `deactivated_by="overwritten_by_sid_{n+1}"` with
+     bounds capped at the overwrite boundary; old sid's open WVMI
+     locked with same reason. Sub-build composition shifts from "list
+     of independent `LowerTFResult`s appended" to "shared mutable
+     entity df mutated in sequence as triggers fire." Open design
+     choice TBD before implementation: whether the orchestrator
+     MUTATES the existing entity df by re-running
+     `compute_structure_from_start` over the overlap window, or
+     produces fresh results that get post-merged into the entity df.
+
+   - **§13.5.d (remove var 3 + var 4 last-per-cycle carve-outs):** drop
+     `var3_last_per_cycle` filter in `_run_first_confluence_multi_tf`
+     and `var4_last_per_cycle` filter in `_run_multi_tf`. Build all
+     detected triggers; rely on §13.5.c overwrite-in-place semantics to
+     deactivate older sids. Paired removal — neither carve-out can be
+     removed without the other (per LANDMINES).
+
+   - **§13.5.e (remove transitional `df.attrs` writes + chart positional
+     fallback):** delete the DEPRECATED block in
+     `pipeline/orchestrator.py:run_pipeline` that writes
+     `s_res.df.attrs[...]` after the registry is set up; delete the
+     positional-df fallback in chart entry points
+     (`export_chart_plotly` / `export_m15_chart_plotly`) that exists
+     for ad-hoc inspection scripts. After §13.5.e, the registry is the
+     only routing mechanism for chart data; per-row CSV parity may
+     genuinely shift (the registry has been a routing veneer over the
+     same df object until this step). Acceptance criterion: visual
+     chart parity + event-count match (Step 1 baseline standard), not
+     byte-identical CSVs.
 6. **Recursive depth.** 5M subs under 15M subs. Validate event routing
    handles nested recursion cleanly.
 7. **Delete `PRE_REFACTOR_INVARIANTS.md`.** Refactor complete; merge spec

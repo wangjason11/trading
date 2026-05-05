@@ -11,13 +11,58 @@ from engine_v2.structure.identify_start import (
     identify_start_scenario_1,
     identify_start_scenario_2_after_reversal,
 )
-from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
-from engine_v2.zones.zone_proximity import DEFAULT_PROBE_RESET_PIPS
+from engine_v2.zones.kl_zones_v1 import (
+    compute_bos_inner_from_event,
+    derive_kl_zones_v1,
+)
+from engine_v2.zones.poi_zones import compute_poi_inners_for_cycle
+from engine_v2.zones.zone_proximity import (
+    DEFAULT_PROBE_RESET_PIPS,
+    DEFAULT_PROXIMITY_PIPS,
+)
 
 
 def _probe_reset_pips(timeframe: str) -> int:
     """Look up the probe reset threshold (in pips) for a timeframe."""
     return DEFAULT_PROBE_RESET_PIPS.get(timeframe, DEFAULT_PROBE_RESET_PIPS["H1"])
+
+
+def _proximity_pips(timeframe: str) -> int:
+    """Look up the zone-proximity threshold (in pips) for a timeframe."""
+    return DEFAULT_PROXIMITY_PIPS.get(timeframe, DEFAULT_PROXIMITY_PIPS["H1"])
+
+
+def _make_market_structure(
+    df: pd.DataFrame,
+    struct_direction: int,
+    *,
+    timeframe: str = "H1",
+    **kwargs,
+) -> MarketStructure:
+    """Construct MarketStructure with proximity resolvers + TF-defaulted
+    proximity_pips wired in. Per Part 4 §13.5.b, MarketStructure does not
+    import from zones/; resolvers are passed at construction so the
+    structure→zones import inversion stays gone.
+
+    Parity carve-out (matches Step 1 baseline): probe-only call sites
+    (Exception 2 probes, Scenario 3 Phase 1/2 probes) historically
+    constructed MarketStructure without `timeframe`, falling back to the
+    H1 default of 20 proximity_pips regardless of the outer caller's TF.
+    Those sites still call this helper without `timeframe`, preserving
+    the H1=20 default. Spec §4.4 explicitly listed only the probe-RESET
+    threshold for TF-aware lookup; proximity_pips for probes is a
+    deferred cleanup. See the comment in `compute_structure_from_start`
+    near pip_tolerance for the same carve-out applied to probe reset.
+    """
+    kwargs.setdefault("proximity_pips", _proximity_pips(timeframe))
+    kwargs.setdefault("bos_inner_resolver", compute_bos_inner_from_event)
+    kwargs.setdefault("poi_inners_resolver", compute_poi_inners_for_cycle)
+    return MarketStructure(
+        df,
+        struct_direction=struct_direction,
+        timeframe=timeframe,
+        **kwargs,
+    )
 
 
 @dataclass
@@ -81,7 +126,7 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
     # Run multiple structure segments until no more reversals (or we hit end)
     max_structures_guard = 20  # safety guard against infinite loops
     for loop_iter in range(max_structures_guard):
-        ms = MarketStructure(df2, struct_direction=struct_direction, start_idx=start_idx, structure_id=structure_id, timeframe=timeframe, pip_size=pip_size)
+        ms = _make_market_structure(df2, struct_direction=struct_direction, start_idx=start_idx, structure_id=structure_id, timeframe=timeframe, pip_size=pip_size)
         ms.debug = True
         df2, ms_events, levels = ms.run()
 
@@ -133,9 +178,11 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
             exc2_triggered = False
 
             for _exc2_iter in range(max_exc2_iterations):
-                # Run probe (on COPY of df, separate events list)
+                # Run probe (on COPY of df, separate events list).
+                # No timeframe passed → H1=20 proximity_pips fallback (Step 1
+                # parity carve-out, see _make_market_structure docstring).
                 df_probe = df2.copy()
-                ms_probe = MarketStructure(
+                ms_probe = _make_market_structure(
                     df_probe,
                     struct_direction=next_struct_direction,
                     start_idx=exc2_candidate,
@@ -304,10 +351,12 @@ def compute_structure_scenario_3(
     iteration = 0
 
     for iteration in range(max_probe_iterations):
+        # No timeframe passed → H1=20 proximity_pips fallback (Step 1 parity
+        # carve-out, see _make_market_structure docstring).
         df_probe = df.copy()
-        ms = MarketStructure(df_probe, struct_direction,
-                             start_idx=current_start, structure_id=0,
-                             end_idx=end_idx)
+        ms = _make_market_structure(df_probe, struct_direction,
+                                    start_idx=current_start, structure_id=0,
+                                    end_idx=end_idx)
         ms.debug = True
         df_probe, probe_events, probe_levels = ms.run()
 
@@ -421,8 +470,10 @@ def compute_structure_scenario_3(
                 exc2_triggered = False
 
                 for _exc2_iter in range(max_exc2_iterations):
+                    # No timeframe → H1=20 proximity_pips fallback (Step 1
+                    # parity carve-out, see _make_market_structure docstring).
                     df_exc2_probe = df2.copy()
-                    ms_exc2 = MarketStructure(
+                    ms_exc2 = _make_market_structure(
                         df_exc2_probe,
                         struct_direction=next_sd,
                         start_idx=exc2_candidate,
@@ -478,10 +529,12 @@ def compute_structure_scenario_3(
                 structure_id = next_sid
                 continue
 
-            # Default path (no zone bounds found)
-            ms_next = MarketStructure(df2, next_sd,
-                                      start_idx=next_start_idx,
-                                      structure_id=next_sid)
+            # Default path (no zone bounds found). No timeframe → H1=20
+            # proximity_pips fallback (Step 1 parity carve-out — this path
+            # was probe-only previously, defaults preserved).
+            ms_next = _make_market_structure(df2, next_sd,
+                                             start_idx=next_start_idx,
+                                             structure_id=next_sid)
             ms_next.debug = True
             df2, ms_events, ms_levels = ms_next.run()
             all_events.extend(ms_events)
@@ -560,7 +613,7 @@ def compute_structure_from_start(
 
     max_structures_guard = 20
     for _loop_iter in range(max_structures_guard):
-        ms = MarketStructure(df2, struct_direction=sd, start_idx=cur_start, structure_id=structure_id, timeframe=timeframe, pip_size=pip_size)
+        ms = _make_market_structure(df2, struct_direction=sd, start_idx=cur_start, structure_id=structure_id, timeframe=timeframe, pip_size=pip_size)
         ms.debug = True
         df2, ms_events, levels = ms.run()
 
@@ -609,8 +662,10 @@ def compute_structure_from_start(
             exc2_triggered = False
 
             for _exc2_iter in range(max_exc2_iterations):
+                # No timeframe → H1=20 proximity_pips fallback (Step 1
+                # parity carve-out, see _make_market_structure docstring).
                 df_probe = df2.copy()
-                ms_probe = MarketStructure(
+                ms_probe = _make_market_structure(
                     df_probe,
                     struct_direction=next_sd,
                     start_idx=exc2_candidate,

@@ -2,12 +2,70 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
 
 import pandas as pd
 
 from engine_v2.common.types import PatternEvent, PatternStatus, StructureLevel, COL_TIME, COL_O, COL_C
 from engine_v2.patterns.structure_patterns import BreakoutPatterns
+
+
+# Resolver protocol for the dual CTS proximity check (Part 4 §13.5.b).
+# MarketStructure does not import from zones/ — instead it consumes these
+# callables, wired by the orchestrator (`structure/structure_engine.py`)
+# from the relocated derivation primitives in `zones/kl_zones_v1.py` /
+# `zones/poi_zones.py`.
+BosInnerResolver = Callable[[pd.DataFrame, int, int], Optional[float]]
+# (df, bos_idx, struct_direction) -> inner_price | None
+
+PoiInnersResolver = Callable[
+    [pd.DataFrame, int, float, int, float, int, int, int],
+    List[float],
+]
+# (df, bos_idx, bos_price, cts_idx, cts_price, sd, sid, cycle_id) -> [inner prices]
+
+
+# Default fallback proximity threshold for direct/test callers that don't
+# pass `proximity_pips`. Real callers go through `structure/structure_engine.py`
+# wrappers which look up the TF-keyed value from `DEFAULT_PROXIMITY_PIPS`.
+_FALLBACK_PROXIMITY_PIPS = 20  # matches H1 default
+
+
+def _check_sd_proximity_at_candle(
+    df: pd.DataFrame,
+    candle_idx: int,
+    struct_direction: int,
+    bos_inner: float,
+    threshold: float,
+    poi_inners: Optional[List[float]] = None,
+) -> Optional[Tuple[float, str]]:
+    """Check if a candle wick comes within `threshold` of the closest
+    sd-direction inner bound (BOS or POI). Returns (trigger_inner, zone_kind)
+    on hit; None otherwise.
+
+    Pure function — no zone-derivation deps. Moved into structure/ from the
+    deleted `proximity_helpers.py` in Part 4 §13.5.b.
+    """
+    if candle_idx not in df.index:
+        return None
+
+    inners: List[Tuple[float, str]] = [(float(bos_inner), "BOS")]
+    if poi_inners:
+        for v in poi_inners:
+            inners.append((float(v), "POI"))
+
+    if struct_direction == 1:
+        chosen_inner, zone_kind = max(inners, key=lambda t: t[0])
+        candle_low = float(df.loc[candle_idx, "l"])
+        if candle_low <= chosen_inner + threshold:
+            return (chosen_inner, zone_kind)
+    else:
+        chosen_inner, zone_kind = min(inners, key=lambda t: t[0])
+        candle_high = float(df.loc[candle_idx, "h"])
+        if candle_high >= chosen_inner - threshold:
+            return (chosen_inner, zone_kind)
+
+    return None
 
 
 # ---------------------------------------------------------------------
@@ -136,7 +194,24 @@ class MarketStructure:
       - A candle also cannot become a range starter if it participated in the original pattern window excluding the last candle (e.g., continuous: start+middle; 2-candle patterns: first candle).
     """
 
-    def __init__(self,df: pd.DataFrame, struct_direction: int, *, eps: float = 0.0001, range_min_k: int = 2, range_max_k: int = 5, debug_invariants: bool = True, start_idx: int = 0, structure_id: int = 0, end_idx: int | None = None, timeframe: str = "H1", proximity_pips: Optional[int] = None, pip_size: float = 0.0001):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        struct_direction: int,
+        *,
+        eps: float = 0.0001,
+        range_min_k: int = 2,
+        range_max_k: int = 5,
+        debug_invariants: bool = True,
+        start_idx: int = 0,
+        structure_id: int = 0,
+        end_idx: int | None = None,
+        timeframe: str = "H1",
+        proximity_pips: Optional[int] = None,
+        pip_size: float = 0.0001,
+        bos_inner_resolver: Optional[BosInnerResolver] = None,
+        poi_inners_resolver: Optional[PoiInnersResolver] = None,
+    ):
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
         self.df = df.copy()
@@ -157,16 +232,20 @@ class MarketStructure:
         self.range_min_k = int(range_min_k)
         self.range_max_k = int(range_max_k)
 
-        # Zone-proximity-based CTS confirmation config
-        # If proximity_pips is None, look up default from timeframe table.
-        from engine_v2.zones.zone_proximity import DEFAULT_PROXIMITY_PIPS
+        # Zone-proximity-based CTS confirmation config. The TF→pips lookup
+        # lives in `structure/structure_engine.py` (the orchestrator); when
+        # a direct/test caller doesn't pass proximity_pips, we fall back to
+        # the H1 default to keep the code path safe.
         self.timeframe = str(timeframe)
-        self.proximity_pips = (
-            int(proximity_pips) if proximity_pips is not None
-            else int(DEFAULT_PROXIMITY_PIPS.get(self.timeframe, 20))
-        )
+        self.proximity_pips = int(proximity_pips) if proximity_pips is not None else _FALLBACK_PROXIMITY_PIPS
         self.pip_size = float(pip_size)
         self._proximity_threshold = self.proximity_pips * self.pip_size
+
+        # Dual CTS resolver protocol (Part 4 §13.5.b). When unset, the
+        # proximity check returns None — the dual CTS path is effectively
+        # disabled. All real callers wire resolvers via structure_engine.py.
+        self._bos_inner_resolver = bos_inner_resolver
+        self._poi_inners_resolver = poi_inners_resolver
 
         self._ensure_output_cols()
 
@@ -1212,13 +1291,16 @@ class MarketStructure:
                 st.pullback_fired_for_cycle = False
                 st.proximity_confirmed_idx = None
                 st.cts_confirmed_idx = None
-                # Compute BOS inner for the new cycle's proximity check
-                from engine_v2.structure.proximity_helpers import compute_bos_inner_from_event
-                st.bos_inner_for_cycle = compute_bos_inner_from_event(
-                    self.df,
-                    bos_idx=int(bos_idx),
-                    struct_direction=int(self.struct_direction),
-                )
+                # Compute BOS inner for the new cycle's proximity check via
+                # the resolver wired by structure_engine.py (Part 4 §13.5.b).
+                if self._bos_inner_resolver is not None:
+                    st.bos_inner_for_cycle = self._bos_inner_resolver(
+                        self.df,
+                        int(bos_idx),
+                        int(self.struct_direction),
+                    )
+                else:
+                    st.bos_inner_for_cycle = None
 
                 # After consuming the pullback to create BOS for the new cycle, clear pullback anchor
                 st.last_pullback_pat_apply_idx = None
@@ -1565,8 +1647,7 @@ class MarketStructure:
         st = self.state
         if st.bos_inner_for_cycle is None:
             return None
-        from engine_v2.structure.proximity_helpers import check_sd_proximity_at_candle
-        return check_sd_proximity_at_candle(
+        return _check_sd_proximity_at_candle(
             self.df,
             candle_idx=i,
             struct_direction=self.struct_direction,
@@ -1578,21 +1659,21 @@ class MarketStructure:
     def _refresh_poi_inners_for_cycle(self) -> None:
         """Recompute the cycle's POI inner snapshot using current BOS_n + CTS_n.
         Called at CTS_ESTABLISHED (new cycle) and each CTS_UPDATED (CTS
-        extended). Stage 2 — adds POI awareness to the proximity check."""
+        extended). Stage 2 — adds POI awareness to the proximity check.
+        Uses the resolver wired by structure_engine.py (Part 4 §13.5.b)."""
         st = self.state
-        if st.cts is None or st.bos_confirmed is None:
+        if st.cts is None or st.bos_confirmed is None or self._poi_inners_resolver is None:
             st.poi_inners_for_cycle = []
             return
-        from engine_v2.structure.proximity_helpers import compute_poi_inners_for_cycle
-        st.poi_inners_for_cycle = compute_poi_inners_for_cycle(
+        st.poi_inners_for_cycle = self._poi_inners_resolver(
             self.df,
-            bos_idx=int(st.bos_confirmed.idx),
-            bos_price=float(st.bos_confirmed.price),
-            cts_idx=int(st.cts.idx),
-            cts_price=float(st.cts.price),
-            struct_direction=int(self.struct_direction),
-            structure_id=int(st.structure_id),
-            cycle_id=int(st.cts_cycle_id),
+            int(st.bos_confirmed.idx),
+            float(st.bos_confirmed.price),
+            int(st.cts.idx),
+            float(st.cts.price),
+            int(self.struct_direction),
+            int(st.structure_id),
+            int(st.cts_cycle_id),
         )
 
     def _fire_cts_confirmation_via_proximity(

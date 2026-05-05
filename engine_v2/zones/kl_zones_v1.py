@@ -1025,3 +1025,53 @@ def derive_kl_zones_v1(
             break
 
     return zones
+
+
+# ---------------------------------------------------------------------------
+# Single-zone primitives — used by MarketStructure's dual CTS proximity check.
+#
+# Wired from `structure/structure_engine.py` as the `bos_inner_resolver` /
+# `poi_inners_resolver` callables passed to MarketStructure.__init__ (Part 4
+# §13.5.b). Defined here (rather than inside structure/) so the structure→zones
+# import inversion stays gone — structure/ never imports zones/.
+# ---------------------------------------------------------------------------
+
+def compute_bos_inner_from_event(
+    df: pd.DataFrame,
+    bos_idx: int,
+    struct_direction: int,
+    length_threshold: float = 0.7,
+) -> Optional[float]:
+    """Derive a single BOS zone's inner price for proximity checking.
+
+    Mirrors the per-zone derivation inside `derive_kl_zones_v1` (identify
+    base pattern → resolve threshold → return inner). Returns None if the
+    base pattern can't be identified, so the caller's proximity check
+    naturally falls back to no-trigger.
+    """
+    if bos_idx not in df.index:
+        return None
+
+    try:
+        zone_pattern, base_idx = identify_base_pattern(
+            df,
+            anchor_idx=int(bos_idx),
+            struct_direction=int(struct_direction),
+            bos=True,
+            length_threshold=length_threshold,
+        )
+        if base_idx is None or base_idx not in df.index:
+            return None
+
+        _outer, inner = zone_thresholds(
+            df,
+            base_idx=int(base_idx),
+            struct_direction=int(struct_direction),
+            zone_pattern=zone_pattern,
+            bos=True,
+        )
+        if inner is None:
+            return None
+        return float(inner)
+    except Exception:
+        return None

@@ -19,7 +19,7 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 | Part 1 | Scenario 3 for start candle identification | Done |
 | Part 2 | Volume momentum indicator (WVMI + proximity gate) | Done |
 | Part 3 | Multi-timeframe analysis (subordinate structures + overlay) | Done |
-| Part 4 | Pipeline / strategy / multi-TF refactor | In progress (through §13.5.a) — see `PART4_REFACTOR_SPEC.md` |
+| Part 4 | Pipeline / strategy / multi-TF refactor | In progress (through §13.5.b) — see `PART4_REFACTOR_SPEC.md` |
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).
 
@@ -58,9 +58,8 @@ engine_v2/
 ├── pipeline/orchestrator.py         # Pipeline ordering (LOCKED)
 ├── structure/
 │   ├── market_structure.py          # CTS/BOS state machine (core; dual CTS confirmation paths)
-│   ├── structure_engine.py          # Wrapper for orchestrator
-│   ├── identify_start.py            # Start candle selection
-│   └── proximity_helpers.py         # Inline BOS/POI derivation for MarketStructure
+│   ├── structure_engine.py          # Wrapper for orchestrator; wires zone-derivation resolvers
+│   └── identify_start.py            # Start candle selection
 ├── zones/kl_zones_v1.py             # KL Zone derivation from events
 ├── zones/poi_zones.py               # POI Zone derivation (Fib + IC)
 ├── zones/fib_tracker.py             # Fibonacci lifecycle management
