@@ -498,6 +498,119 @@ which df's index space `X` lives in and document it inline.
 
 ---
 
+## Slice Copies Inherit Mirrored Structure Cols — Drop Before Passing to MS
+
+**Rule:** In `multitf/entity_df_mutation.apply_trigger_to_entity_df`, the
+slice-copy passed to `compute_structure_from_start` MUST drop every
+column listed in `_STRUCTURE_COLS` AND `_MS_AUX_STRUCTURE_COLS` before
+the call. The drop is REQUIRED, not optional.
+
+**Why this is a landmine:**
+`mirror_lower_tf_result_to_entity_df` (the c.i mirror, retained for
+production in c.ii) initializes any new structure column on entity_df
+with `entity_df[col] = pd.NA`, then writes actual values only inside the
+prior sid's slice range. After the first mirror, `entity_df` has
+`market_state` / `structure_id` / `range_hi` / etc. with `pd.NA` for all
+rows outside that prior range.
+
+For the next trigger's apply, `trigger_df = entity_df.iloc[a:b].copy() →
+reset_index(drop=True) → compute_imbalance(...)` carries those NA
+values into the slice. MS's `_ensure_output_cols` only initializes
+columns that don't exist; it leaves the inherited NA values alone.
+
+When MS's `_write_df_row` reaches its debug `range_break_frac`
+calculation (line ~2057), it does:
+
+```python
+if self.df.at[prev_row, "range_hi"] is not None and ...:
+    ...
+    if c > float(self.df.at[prev_row, "range_hi"]):  # ← crashes
+```
+
+`pd.NA is not None` returns **True**, so the guard passes; then
+`float(pd.NA)` raises `TypeError: float() argument must be a string or a
+real number, not 'NAType'`.
+
+**Mechanism applies to ALL structure cols, not just `range_hi`** —
+`identify_start_scenario_2_after_reversal` reads `cts_event` /
+`structure_id` / `cts_idx` from the same df; the outer loop's `rev_mask`
+reads `market_state`. NA in any of these mis-routes scenario_2 or
+silently picks up prior sids' rows.
+
+**Fix (codified in `apply_trigger_to_entity_df`):**
+
+```python
+trigger_df = entity_df.iloc[slice_begin:m15_end_idx + 1].copy()
+trigger_df = trigger_df.reset_index(drop=True)
+trigger_df = compute_imbalance(trigger_df)
+cols_to_drop = [
+    c for c in (_STRUCTURE_COLS + _MS_AUX_STRUCTURE_COLS)
+    if c in trigger_df.columns
+]
+if cols_to_drop:
+    trigger_df = trigger_df.drop(columns=cols_to_drop, errors="ignore")
+```
+
+`_ensure_output_cols` then recreates the cols with proper int/float
+defaults (`-1` for int idx cols, `float("nan")` for thresholds, `""` for
+string event cols). MS reads prev_row consistently.
+
+**Why mirror uses `pd.NA` in the first place:** `pandas` doesn't have a
+single sentinel that's safe across object/float/int dtypes. `pd.NA` is
+type-flexible. The proper fix is to revisit mirror's initialization to
+match `_ensure_output_cols` defaults per col, but that's deferred — the
+drop on the slice copy is the cheaper safeguard.
+
+---
+
+## MarketStructure Deep-Couples to Its Working DataFrame
+
+**Rule:** Do NOT pass an entity df with prior sids' state directly to
+`compute_structure_from_start`. MS owns its working df and assumes:
+
+1. `_rewind_to(jump_to)` replays `from i = 0`, not from `start_idx`.
+   On a slice with `reset_index`, idx 0 is the lookback boundary —
+   harmless. On an entity df, idx 0 is the very first candle ever —
+   MS would replay hundreds-to-thousands of unrelated candles, fire
+   spurious patterns, and contaminate `self.df` cols.
+
+2. `BreakoutPatterns(self.df)` precomputes / scans the full df. On a
+   slice it sees only relevant candles. On an entity df it sees every
+   candle since session start, including ones with no structural
+   relationship to the new sid.
+
+3. Outer loop's `rev_mask` (in `compute_structure_from_start`) is
+   `(market_state=="reversal") & (structure_id==current_sid)` against
+   the entire df. With prior sids' writes preserved (per §6.1), the
+   mask matches prior sids' reversal rows — sending Scenario 2 to the
+   wrong reversal_idx.
+
+4. `identify_start_scenario_2_after_reversal` looks up CTS_CONFIRMED for
+   prev_structure_id by scanning df cols across `df.index <
+   reversal_idx`. With prior sids' data in those rows, it locks onto
+   the wrong CTS or — worse — finds NA there and crashes (see the
+   sibling landmine "Slice Copies Inherit Mirrored Structure Cols").
+
+5. `_write_df_row` does `float(self.df.at[prev_row, "range_hi"])` on a
+   debug-only path. Defaults are int (`-1`) on a fresh slice; on an
+   entity df with mirrored cols, the value can be `pd.NA` (object
+   dtype) and crashes.
+
+**Implication:** the c.ii spec text described running
+`compute_structure_from_start(entity_df, start_idx,
+end_idx=lifecycle)` directly on the entity df. That direction is real,
+but it requires an MS refactor to (a) rewind from `start_idx`, (b) bound
+BreakoutPatterns to a window, (c) restrict scenario_2's mask to the new
+sid's range, (d) handle pd.NA in debug paths. None of those landed in
+c.ii; the slice + lookback + reset_index + per-trigger compute_imbalance
+machinery stays. Slice-elimination is a deferred optimization, not
+something achievable by changing the call site alone.
+
+**Rule of thumb:** if you're tempted to "just pass the entity df to MS,"
+list every place MS reads from `self.df` — there are at least five.
+
+---
+
 ## Cascade Keys Off `entity_sid`, NOT `structure_id`
 
 **Rule:** `_tag_old_sid_on_overwrite` in `multitf/entity_df_mutation.py`

@@ -553,6 +553,112 @@ def run_pipeline(
     )
 
 
+def _confluence_wvmi_for_facade(
+    facade,
+    *,
+    main_first_sd_by_cycle: Dict[tuple, int],
+    var4_all_sorted: list,
+    sub_path_id: str,
+):
+    """Compute parent-driven sub WVMI for one confluence facade per §8.3.
+
+    Var 1 sid: gate on main's first sd-prox in same parent cycle.
+    Var 3 sid: gate on first var 4 trigger AFTER this var 3 in same
+    parent cycle (skip if none — see LANDMINES "Skip when no later
+    gate exists is intentional").
+
+    Returns the records list (already attached to facade.wvmi_records by
+    caller) for activation/count reporting.
+    """
+    from engine_v2.multitf.sub_wvmi import (
+        ParentTrigger,
+        compute_parent_driven_sub_wvmi,
+    )
+
+    key = (facade.trigger.parent_sid, facade.trigger.parent_cycle_id)
+    if facade.trigger.use_case == "first_confluence":
+        sd_idx = main_first_sd_by_cycle.get(key)
+        if sd_idx is None:
+            return []
+        return compute_parent_driven_sub_wvmi(
+            facade,
+            sub_path_id=sub_path_id,
+            parent_trigger=ParentTrigger(
+                idx=sd_idx,
+                event_type="ZONE_PROXIMITY_TRIGGER",
+                parent_path_id="H1.main",
+            ),
+        )
+    if facade.trigger.use_case == "subsequent_confluence":
+        after_idx = int(facade.trigger.meta.get("trigger_event_idx", -1))
+        for v4 in var4_all_sorted:
+            if (v4.parent_sid == facade.trigger.parent_sid
+                    and v4.parent_cycle_id == facade.trigger.parent_cycle_id
+                    and int(v4.trigger_event_idx) > after_idx):
+                return compute_parent_driven_sub_wvmi(
+                    facade,
+                    sub_path_id=sub_path_id,
+                    parent_trigger=ParentTrigger(
+                        idx=int(v4.trigger_event_idx),
+                        event_type="SUBSEQUENT_COUNTER_TRIGGER",
+                        parent_path_id="H1.main",
+                    ),
+                )
+        return []
+    return []
+
+
+def _counter_wvmi_for_facade(
+    facade,
+    *,
+    v3_first_idx_by_cycle: Dict[tuple, int],
+    var3_all_sorted: list,
+    sub_path_id: str,
+):
+    """Compute parent-driven sub WVMI for one counter facade per §8.4.
+
+    Var 2 sid: gate on first var 3 trigger in same parent cycle.
+    Var 4 sid: gate on first var 3 trigger AFTER this var 4 in same
+    parent cycle (skip if none).
+    """
+    from engine_v2.multitf.sub_wvmi import (
+        ParentTrigger,
+        compute_parent_driven_sub_wvmi,
+    )
+
+    if facade.trigger.use_case == "first_counter":
+        key = (facade.trigger.parent_sid, facade.trigger.parent_cycle_id)
+        v3_idx = v3_first_idx_by_cycle.get(key)
+        if v3_idx is None:
+            return []
+        return compute_parent_driven_sub_wvmi(
+            facade,
+            sub_path_id=sub_path_id,
+            parent_trigger=ParentTrigger(
+                idx=v3_idx,
+                event_type="SUBSEQUENT_CONFLUENCE_TRIGGER",
+                parent_path_id="H1.main",
+            ),
+        )
+    if facade.trigger.use_case == "subsequent_counter":
+        after_idx = int(facade.trigger.meta.get("trigger_event_idx", -1))
+        for v3 in var3_all_sorted:
+            if (v3.parent_sid == facade.trigger.parent_sid
+                    and v3.parent_cycle_id == facade.trigger.parent_cycle_id
+                    and int(v3.trigger_event_idx) > after_idx):
+                return compute_parent_driven_sub_wvmi(
+                    facade,
+                    sub_path_id=sub_path_id,
+                    parent_trigger=ParentTrigger(
+                        idx=int(v3.trigger_event_idx),
+                        event_type="SUBSEQUENT_CONFLUENCE_TRIGGER",
+                        parent_path_id="H1.main",
+                    ),
+                )
+        return []
+    return []
+
+
 def _run_first_confluence_multi_tf(
     h1_df: pd.DataFrame,
     triggers: list,
@@ -563,55 +669,48 @@ def _run_first_confluence_multi_tf(
 ) -> list:
     """Build confluence subs (var 1 + var 3) and register M15.confluence.
 
-    Per spec §4.3.2 / §14: pending var 1 triggers are skipped — no sub is
-    built until end_idx resolves.
+    Per spec §4.3.2 / §14: pending var 1 triggers are skipped.
 
-    Var 3 results are appended to the same M15.confluence entity df after
-    var 1. Per spec §6.1 var 3 should overwrite the previous open
-    confluence sid in place; deferred to a later substep (see
-    `subsequent_confluence_pipeline.py` docstring).
-
-    `main_zone_proximity_triggers` is the H1.main entity's
-    `zone_proximity_triggers` dict. Used by 3d.iii for parent-driven
-    confluence sub WVMI: var 1 sids get WVMI gated by main's first
-    sd-prox per cycle (§8.3).
+    §13.5.c.ii — entity-direct compute. All triggers (var 1 + var 3) are
+    sorted by `trigger_event_idx` and applied sequentially via
+    `apply_trigger_to_entity_df`. Each apply cascades the previous sid
+    on the same entity (§6.1 in-place overwrite for same-parent-cycle
+    consecutive sids; §6.2 cross-parent-cycle overwrite of last sid by
+    next cycle's first). The slice-shape `LowerTFResult` returned is a
+    facade for chart compatibility; truth lives on
+    `m15_df.attrs[...]` with entity-absolute idx and `entity_sid`
+    attribution. The facade representation goes away in c.iii.
 
     `subsequent_counter_triggers` is the FULL detected var 4 trigger list
-    (not the last-per-cycle build set). Used by 3d.v path 2 to gate var 3
-    sub WVMI: each var 3 sid is activated by the first var 4 trigger
-    after it in the same parent cycle (§8.3 "re-triggered each time
-    subsequent_counter fires"). When no later var 4 exists in the cycle
-    the sweep is skipped (records stay empty) — same outcome a proper
-    §6.1 implementation would produce in cycles where the gate genuinely
-    doesn't exist.
+    (not last-per-cycle), used by §8.3 path 2 to gate var 3 sub WVMI.
+    The carve-out below filters down to last-per-cycle for BUILD only,
+    while keeping the full list available for WVMI gate lookup.
     """
     from engine_v2.multitf.first_confluence_pipeline import (
-        run_first_confluence_pipeline,
+        to_multi_tf_trigger as first_confluence_to_mt,
     )
     from engine_v2.multitf.subsequent_confluence_pipeline import (
-        run_subsequent_confluence_pipeline,
+        to_multi_tf_trigger as subsequent_confluence_to_mt,
     )
     from engine_v2.multitf.data_bridge import (
         fetch_lower_tf_data,
         prepare_lower_tf_data,
     )
-    from engine_v2.multitf.sub_wvmi import (
-        ParentTrigger,
-        compute_parent_driven_sub_wvmi,
+    from engine_v2.multitf.entity_df_mutation import (
+        apply_trigger_to_entity_df,
+        persist_facade_wvmi_to_entity_df,
     )
 
     var1_finalized = [t for t in (triggers or []) if t.status == "finalized"]
     var3_all = list(subsequent_confluence_triggers or [])
 
     # Spec §6.1 says each var 3 sid overwrites the previous open
-    # confluence sub sid in place. The full overwrite-in-place semantics
-    # (carrying old sids' events/zones with `deactivated_by` meta) is
-    # deferred to a later substep. As an approximation that matches the
-    # spec's effective behavior — only the most recent var 3 sub sid is
-    # alive at any time — we build ONLY the last var 3 trigger per
-    # `(parent_sid, parent_cycle_id)`. The other triggers are detected
-    # and exposed via `df.attrs["subsequent_confluence_triggers"]` for
-    # inspection but not turned into sub builds in 3d.
+    # confluence sub sid in place. With c.ii's in-place overwrite, only
+    # the LAST var 3 per parent cycle is "alive" at the end (earlier var
+    # 3 sids would be cascade-tagged, then immediately re-cascaded by the
+    # next). Building only the last var 3 per `(parent_sid, parent_cycle_id)`
+    # is a remaining carve-out from §13.5.d — paired with the var 4
+    # carve-out in `_run_multi_tf`. Both removed together in §13.5.d.
     var3_last_per_cycle: Dict[tuple, Any] = {}
     for t in var3_all:
         var3_last_per_cycle[(t.parent_sid, t.parent_cycle_id)] = t
@@ -640,103 +739,81 @@ def _run_first_confluence_multi_tf(
     m15_df = prepare_lower_tf_data(m15_raw)
     m15_df.attrs["pair"] = pair
 
-    results = []
-    for trigger in var1_finalized:
-        print(f"[multi_tf:confluence] var1 sid={trigger.parent_sid} "
-              f"cycle={trigger.parent_cycle_id} parent_sd={trigger.parent_sd}")
-        result = run_first_confluence_pipeline(trigger, m15_df, h1_df)
-        if result is not None:
-            results.append(result)
-
-    for trigger in var3_triggers:
-        print(f"[multi_tf:confluence] var3 sid={trigger.parent_sid} "
-              f"cycle={trigger.parent_cycle_id} parent_sd={trigger.parent_sd} "
-              f"input_idx={trigger.input_idx} end_idx={trigger.end_idx}")
-        result = run_subsequent_confluence_pipeline(trigger, m15_df, h1_df)
-        if result is not None:
-            results.append(result)
-
-    print(f"[multi_tf:confluence] results: {len(results)} "
-          f"(var1+var3 combined)")
-
-    # Part 4 Step 3d.iii / 3d.v: parent-driven confluence sub WVMI per §8.3.
-    # Var 1 sids (3d.iii): WVMI activated by main's first sd-prox in the
-    # same parent cycle (== the candle that today gates main WVMI).
-    # Var 3 sids (3d.v path 2): WVMI gated by the first var 4 trigger after
-    # the var 3 in the same parent cycle. Skipped when no later var 4
-    # exists — same outcome a proper §6.1 implementation would produce in
-    # cycles where the gate genuinely doesn't exist (see helper docstring).
-    #
-    # Path 1 (var 1 re-sweep on each var 4 fire, §8.3 "re-triggered each
-    # time subsequent_counter fires") is deferred. In batch mode
-    # `compute_parent_driven_sub_wvmi` is deterministic given the sub's
-    # events, so re-sweeps produce identical records — observably a no-op
-    # except for meta attribution rotation. Live mode will exercise this
-    # event-by-event.
     sub_path_id = "H1.main >> M15.confluence"
+
+    # Build a unified, time-sorted job list — (trigger_event_idx, MultiTFTrigger).
+    apply_jobs: list = []
+    for v1 in var1_finalized:
+        apply_jobs.append((int(v1.trigger_event_idx),
+                           first_confluence_to_mt(v1, h1_df)))
+    for v3 in var3_triggers:
+        apply_jobs.append((int(v3.trigger_event_idx),
+                           subsequent_confluence_to_mt(v3, h1_df)))
+    apply_jobs.sort(key=lambda x: x[0])
+
+    # WVMI gating lookups (precomputed once)
     main_zpt = main_zone_proximity_triggers or {}
     main_first_sd_by_cycle: Dict[tuple, int] = {}
     for key, trig_list in main_zpt.items():
         if trig_list and trig_list[0].direction == "sd":
             main_first_sd_by_cycle[key] = int(trig_list[0].idx)
-
-    # Sorted ascending by trigger_event_idx already (per detector), but
-    # don't rely on caller — sort defensively for the lookup below.
     var4_all_sorted = sorted(
         list(subsequent_counter_triggers or []),
         key=lambda t: t.trigger_event_idx,
     )
 
+    # Apply each trigger sequentially. prior_sid_id threads forward so
+    # each new sid cascades the most-recent prior sid on this entity.
+    results: list = []
+    next_sid = 0
+    last_built_sid: Optional[int] = None
     var1_activated = 0
     var1_records = 0
     var3_activated = 0
     var3_records = 0
-    for result in results:
-        key = (result.trigger.parent_sid, result.trigger.parent_cycle_id)
-        if result.trigger.use_case == "first_confluence":
-            sd_idx = main_first_sd_by_cycle.get(key)
-            if sd_idx is None:
-                result.wvmi_records = []
-                continue
-            records = compute_parent_driven_sub_wvmi(
-                result,
-                sub_path_id=sub_path_id,
-                parent_trigger=ParentTrigger(
-                    idx=sd_idx,
-                    event_type="ZONE_PROXIMITY_TRIGGER",
-                    parent_path_id="H1.main",
-                ),
-            )
-            result.wvmi_records = records
-            var1_activated += 1
-            var1_records += len(records)
-        elif result.trigger.use_case == "subsequent_confluence":
-            after_idx = int(result.trigger.meta.get("trigger_event_idx", -1))
-            v4_idx = None
-            for v4 in var4_all_sorted:
-                if (v4.parent_sid == result.trigger.parent_sid
-                        and v4.parent_cycle_id == result.trigger.parent_cycle_id
-                        and int(v4.trigger_event_idx) > after_idx):
-                    v4_idx = int(v4.trigger_event_idx)
-                    break
-            if v4_idx is None:
-                result.wvmi_records = []
-                continue
-            records = compute_parent_driven_sub_wvmi(
-                result,
-                sub_path_id=sub_path_id,
-                parent_trigger=ParentTrigger(
-                    idx=v4_idx,
-                    event_type="SUBSEQUENT_COUNTER_TRIGGER",
-                    parent_path_id="H1.main",
-                ),
-            )
-            result.wvmi_records = records
-            var3_activated += 1
-            var3_records += len(records)
-        else:
-            result.wvmi_records = []
+    for tei, multi_tf in apply_jobs:
+        print(f"[multi_tf:confluence] {multi_tf.use_case} "
+              f"parent_sid={multi_tf.parent_sid} "
+              f"parent_cycle={multi_tf.parent_cycle_id} "
+              f"trigger_event_idx={tei}")
+        facade = apply_trigger_to_entity_df(
+            m15_df, multi_tf, h1_df,
+            new_sid_id=next_sid,
+            structure_path_id=sub_path_id,
+            prior_sid_id=last_built_sid,
+        )
+        if facade is None:
+            continue
 
+        # Compute WVMI for this facade NOW (before cascading), so any
+        # subsequent sid's cascade locks the just-persisted records.
+        wvmi_records = _confluence_wvmi_for_facade(
+            facade,
+            main_first_sd_by_cycle=main_first_sd_by_cycle,
+            var4_all_sorted=var4_all_sorted,
+            sub_path_id=sub_path_id,
+        )
+        facade.wvmi_records = wvmi_records
+        persist_facade_wvmi_to_entity_df(
+            m15_df, facade,
+            new_sid_id=next_sid,
+            structure_path_id=sub_path_id,
+        )
+        if facade.trigger.use_case == "first_confluence":
+            if wvmi_records:
+                var1_activated += 1
+                var1_records += len(wvmi_records)
+        elif facade.trigger.use_case == "subsequent_confluence":
+            if wvmi_records:
+                var3_activated += 1
+                var3_records += len(wvmi_records)
+
+        results.append(facade)
+        last_built_sid = next_sid
+        next_sid += 1
+
+    print(f"[multi_tf:confluence] results: {len(results)} "
+          f"(var1+var3 combined)")
     print(f"[multi_tf:confluence_wvmi] activated var1 cycles="
           f"{var1_activated} total records={var1_records}; "
           f"var3 cycles={var3_activated} total records={var3_records}")
@@ -769,34 +846,31 @@ def _run_multi_tf(
 ) -> list:
     """Run multi-TF analysis for the M15.counter entity (var 2 + var 4).
 
-    Builds first_counter (var 2) results from H1 WVMI records, then
-    appends subsequent_counter (var 4) results from the var 4 trigger
-    list. Per spec §6.2, both variations live in the same
-    `H1.main >> M15.counter` entity df.
+    §13.5.c.ii — entity-direct compute. All triggers (var 2 + var 4) are
+    sorted by `trigger_event_idx` and applied sequentially via
+    `apply_trigger_to_entity_df`. Each apply cascades the previous sid
+    on the same entity. The `LowerTFResult` returned is a slice-shape
+    facade for chart compat; truth lives on `m15_df_prepared.attrs[...]`
+    with entity-absolute idx and `entity_sid` attribution. Facade goes
+    away in c.iii.
 
-    **Var 4 last-per-cycle carve-out (3d.iv, MUST REMOVE LATER):**
-    spec §6.1 says each new var 4 sid overwrites the previous open
-    counter sub sid in place. Without §6.1 mutation infrastructure we
-    approximate by building only the LAST var 4 trigger per
-    `(parent_sid, parent_cycle_id)` — keeping at most one var 4 sid
-    alive per parent cycle. Pairs with the var 3 last-per-cycle carve-out
-    in `_run_first_confluence_multi_tf`; both must be removed together
-    when §6.1 in-place overwrite lands. Full var 4 trigger list still
-    exposed via `df.attrs["subsequent_counter_triggers"]`.
+    **Var 4 last-per-cycle carve-out (3d.iv, MUST REMOVE in §13.5.d):**
+    paired with var 3 carve-out in `_run_first_confluence_multi_tf`.
     """
     from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
     from engine_v2.multitf.data_bridge import fetch_lower_tf_data, prepare_lower_tf_data
-    from engine_v2.multitf.lower_tf_pipeline import run_lower_tf_pipeline
     from engine_v2.multitf.subsequent_counter_pipeline import (
-        run_subsequent_counter_pipeline,
+        to_multi_tf_trigger as subsequent_counter_to_mt,
     )
-    from engine_v2.multitf.sub_wvmi import (
-        ParentTrigger,
-        compute_parent_driven_sub_wvmi,
+    from engine_v2.multitf.entity_df_mutation import (
+        apply_trigger_to_entity_df,
+        persist_facade_wvmi_to_entity_df,
     )
 
-    triggers = detect_uc1_triggers(sorted_events, h1_df, wvmi_records, kl_zones)
-    print(f"[multi_tf] first_counter triggers detected: {len(triggers)}")
+    var2_triggers = detect_uc1_triggers(
+        sorted_events, h1_df, wvmi_records, kl_zones,
+    )
+    print(f"[multi_tf] first_counter triggers detected: {len(var2_triggers)}")
 
     var4_all = list(subsequent_counter_triggers or [])
     var4_last_per_cycle: Dict[tuple, Any] = {}
@@ -808,10 +882,10 @@ def _run_multi_tf(
         f"{len(var4_triggers)}/{len(var4_all)}"
     )
 
-    if not triggers and not var4_triggers:
+    if not var2_triggers and not var4_triggers:
         return []
 
-    # Fetch M15 data covering the full H1 date range (once per replay)
+    # Fetch M15 entity data once
     pair = h1_df.attrs.get("pair", "NZD_USD")
     h1_start = pd.to_datetime(h1_df["time"].iloc[0], utc=True)
     h1_end = pd.to_datetime(h1_df["time"].iloc[-1], utc=True)
@@ -826,130 +900,99 @@ def _run_multi_tf(
     meta["m15_df_prepared"] = m15_df_prepared
     print(f"[multi_tf] M15 data prepared: {len(m15_df_prepared)} candles")
 
-    lower_tf_results = []
-    for trigger in triggers:
-        print(f"[multi_tf] Running first_counter for "
-              f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}")
-        result = run_lower_tf_pipeline(trigger, m15_df_prepared, h1_df)
-        if result is not None:
-            lower_tf_results.append(result)
-
-    print(f"[multi_tf] first_counter results: {len(lower_tf_results)}")
-
-    # Var 4 sub builds — append to the same M15.counter entity. WVMI is
-    # populated by path 3 below.
-    for trigger in var4_triggers:
-        print(
-            f"[multi_tf] Running subsequent_counter for "
-            f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id} "
-            f"input_idx={trigger.input_idx} end_idx={trigger.end_idx}"
-        )
-        result = run_subsequent_counter_pipeline(
-            trigger, m15_df_prepared, h1_df,
-        )
-        if result is not None:
-            lower_tf_results.append(result)
-
-    print(
-        f"[multi_tf] counter results combined "
-        f"(first+last-per-cycle var 4): {len(lower_tf_results)}"
-    )
-
-    # Part 4 Step 3d.iii / 3d.v: parent-driven counter sub WVMI per §8.4.
-    # Var 2 sids (3d.iii): WVMI activated by the first var 3 trigger in
-    # the same parent cycle. (In batch mode every var 3 fire produces
-    # identical records given the sub's events; using FIRST is a heuristic
-    # — see 3d.iii notes.)
-    # Var 4 sids (3d.v path 3): WVMI gated by the first var 3 trigger
-    # AFTER the var 4 in the same parent cycle. Skipped when no later
-    # var 3 exists.
     sub_path_id = "H1.main >> M15.counter"
+
+    # Build a unified, time-sorted job list of (trigger_event_idx, MultiTFTrigger).
+    # var 2 trigger_event_idx is the first sd-prox idx (== probe_end_idx
+    # in MultiTFTrigger.meta, set by detect_uc1_triggers from
+    # WVMIRecord.meta["triggered_by_event_idx"] per §8.7).
+    apply_jobs: list = []
+    for v2 in var2_triggers:
+        tei = v2.meta.get("probe_end_idx")
+        if tei is None:
+            continue
+        apply_jobs.append((int(tei), v2))
+    for v4 in var4_triggers:
+        apply_jobs.append((int(v4.trigger_event_idx),
+                           subsequent_counter_to_mt(v4, h1_df)))
+    apply_jobs.sort(key=lambda x: x[0])
+
+    # WVMI gating lookups
     var3_triggers = meta.get("subsequent_confluence_triggers", [])
     v3_first_idx_by_cycle: Dict[tuple, int] = {}
     for t in var3_triggers:
         key = (t.parent_sid, t.parent_cycle_id)
         if key not in v3_first_idx_by_cycle:
             v3_first_idx_by_cycle[key] = int(t.trigger_event_idx)
-
     var3_all_sorted = sorted(
         list(var3_triggers or []),
         key=lambda t: t.trigger_event_idx,
     )
 
+    # Sequential apply. prior_sid_id threads forward.
+    lower_tf_results: list = []
+    next_sid = 0
+    last_built_sid: Optional[int] = None
     var2_activated = 0
     var2_records = 0
     var4_activated = 0
     var4_records = 0
-    for result in lower_tf_results:
-        if result.trigger.use_case == "first_counter":
-            key = (result.trigger.parent_sid, result.trigger.parent_cycle_id)
-            v3_idx = v3_first_idx_by_cycle.get(key)
-            if v3_idx is None:
-                result.wvmi_records = []
-                continue
-            records = compute_parent_driven_sub_wvmi(
-                result,
-                sub_path_id=sub_path_id,
-                parent_trigger=ParentTrigger(
-                    idx=v3_idx,
-                    event_type="SUBSEQUENT_CONFLUENCE_TRIGGER",
-                    parent_path_id="H1.main",
-                ),
-            )
-            result.wvmi_records = records
-            var2_activated += 1
-            var2_records += len(records)
-        elif result.trigger.use_case == "subsequent_counter":
-            after_idx = int(result.trigger.meta.get("trigger_event_idx", -1))
-            v3_idx = None
-            for v3 in var3_all_sorted:
-                if (v3.parent_sid == result.trigger.parent_sid
-                        and v3.parent_cycle_id == result.trigger.parent_cycle_id
-                        and int(v3.trigger_event_idx) > after_idx):
-                    v3_idx = int(v3.trigger_event_idx)
-                    break
-            if v3_idx is None:
-                result.wvmi_records = []
-                continue
-            records = compute_parent_driven_sub_wvmi(
-                result,
-                sub_path_id=sub_path_id,
-                parent_trigger=ParentTrigger(
-                    idx=v3_idx,
-                    event_type="SUBSEQUENT_CONFLUENCE_TRIGGER",
-                    parent_path_id="H1.main",
-                ),
-            )
-            result.wvmi_records = records
-            var4_activated += 1
-            var4_records += len(records)
-        else:
-            result.wvmi_records = []
+    for tei, multi_tf in apply_jobs:
+        print(f"[multi_tf] {multi_tf.use_case} "
+              f"parent_sid={multi_tf.parent_sid} "
+              f"parent_cycle={multi_tf.parent_cycle_id} "
+              f"trigger_event_idx={tei}")
+        facade = apply_trigger_to_entity_df(
+            m15_df_prepared, multi_tf, h1_df,
+            new_sid_id=next_sid,
+            structure_path_id=sub_path_id,
+            prior_sid_id=last_built_sid,
+        )
+        if facade is None:
+            continue
+
+        wvmi_records_for_sid = _counter_wvmi_for_facade(
+            facade,
+            v3_first_idx_by_cycle=v3_first_idx_by_cycle,
+            var3_all_sorted=var3_all_sorted,
+            sub_path_id=sub_path_id,
+        )
+        facade.wvmi_records = wvmi_records_for_sid
+        persist_facade_wvmi_to_entity_df(
+            m15_df_prepared, facade,
+            new_sid_id=next_sid,
+            structure_path_id=sub_path_id,
+        )
+        if facade.trigger.use_case == "first_counter":
+            if wvmi_records_for_sid:
+                var2_activated += 1
+                var2_records += len(wvmi_records_for_sid)
+        elif facade.trigger.use_case == "subsequent_counter":
+            if wvmi_records_for_sid:
+                var4_activated += 1
+                var4_records += len(wvmi_records_for_sid)
+
+        lower_tf_results.append(facade)
+        last_built_sid = next_sid
+        next_sid += 1
 
     var2_total = sum(
-        1 for r in lower_tf_results
-        if r.trigger.use_case == "first_counter"
+        1 for r in lower_tf_results if r.trigger.use_case == "first_counter"
     )
     var4_total = sum(
-        1 for r in lower_tf_results
-        if r.trigger.use_case == "subsequent_counter"
+        1 for r in lower_tf_results if r.trigger.use_case == "subsequent_counter"
     )
+    print(f"[multi_tf] counter results combined: {len(lower_tf_results)} "
+          f"(var2={var2_total} var4={var4_total})")
     print(f"[multi_tf:counter_wvmi] activated var2 cycles={var2_activated}/"
           f"{var2_total} total records={var2_records}; "
           f"var4 cycles={var4_activated}/{var4_total} total records={var4_records}")
 
-    # Part 4 Step 1: register the H1.main >> M15.counter entity.
-    # Per §6.2 there is one entity df per (TF, role, parent_path) for the
-    # whole session; per-trigger results live on this entity for now.
     if lower_tf_results:
         m15_df_prepared.attrs["lower_tf_results"] = lower_tf_results
-
-        # Part 4 Step 3a: per-sid records on the subordinate entity df.
-        # One record per parent cycle that produced a result. Dormant.
         sub_sids = build_sid_records_for_subordinate(lower_tf_results)
         m15_df_prepared.attrs["sids"] = sub_sids
         print(f"[sid_records] {sub_path_id} sids={len(sub_sids)}")
-
         registry.register(
             sub_path_id,
             df=m15_df_prepared,
@@ -957,45 +1000,6 @@ def _run_multi_tf(
             role="subordinate",
             starting_alignment="counter",
         )
-
-        # Part 4 §13.5.c.i pilot: mirror ONE var 4 trigger's data into
-        # entity_df.attrs to validate the §6.1 / §7 persistence model
-        # before c.ii commits to entity-direct compute. Pilot:
-        # `subsequent_counter` at (parent_sid=0, parent_cycle_id=3) — the
-        # non-degenerate var 4 last-per-cycle build. Other triggers stay
-        # on the old `run_lower_tf_pipeline → LowerTFResult` path; chart
-        # consumer reads `lower_tf_results` unchanged.
-        from engine_v2.multitf.entity_df_mutation import (
-            mirror_lower_tf_result_to_entity_df,
-        )
-        pilot = next(
-            (
-                r for r in lower_tf_results
-                if r.trigger.use_case == "subsequent_counter"
-                and r.trigger.parent_sid == 0
-                and r.trigger.parent_cycle_id == 3
-            ),
-            None,
-        )
-        if pilot is not None:
-            mirror_lower_tf_result_to_entity_df(
-                m15_df_prepared,
-                pilot,
-                new_sid_id=0,  # pilot is the only sid mirrored to entity_df.attrs in c.i
-                structure_path_id=sub_path_id,
-                prior_sid_id=None,  # no prior sid in entity_df.attrs; cascade no-op
-            )
-            print(
-                f"[c.i pilot] mirrored var 4 sid=0 cycle=3 -> entity_df.attrs: "
-                f"events={len(m15_df_prepared.attrs.get('events', []))} "
-                f"kl_zones={len(m15_df_prepared.attrs.get('kl_zones', []))} "
-                f"poi_zones={len(m15_df_prepared.attrs.get('poi_zones', []))} "
-                f"fib_states={len(m15_df_prepared.attrs.get('fib_states', []))} "
-                f"wave_candles={len(m15_df_prepared.attrs.get('wave_candles', []))} "
-                f"wvmi={len(m15_df_prepared.attrs.get('wvmi', []))}"
-            )
-        else:
-            print("[c.i pilot] WARNING: var 4 (sid=0, cycle=3) trigger not built; mirror skipped")
 
     return lower_tf_results
 

@@ -1,4 +1,4 @@
-"""`subsequent_confluence` (var 3) sub pipeline.
+"""`subsequent_confluence` (var 3) typed-trigger → MultiTFTrigger translator.
 
 Per spec §4.3.4 / §4.3.7:
   Probe sd:        +parent_sd (confluence)
@@ -9,34 +9,23 @@ Mapping (§4.3.1, unified rule `mapping_sd = -sub_sd`): for confluence
 sub `lower_sd = +parent_sd`, so `mapping_sd = -parent_sd` — same as
 first_confluence.
 
-This module thinly wraps `run_lower_tf_pipeline` by translating the
-`SubsequentConfluenceTrigger` into a generic `MultiTFTrigger`.
-
-**Carve-out (3d, intentional):** spec §6.1 says a new var 3 sid should
-overwrite the previous open confluence sub sid's df rows in place, with
-the previous sid's events/zones marked `deactivated_by="overwritten_by_sid_N+1"`.
-Implementing in-place overwrite touches entity df mutation infrastructure
-that doesn't exist yet. For 3d we instead build var 3 results as
-independent `LowerTFResult` entries appended to the M15.confluence
-entity. Practical effect: M15.confluence has var 1 sids 0..N plus var 3
-sids N+1..M, none overwriting each other. Overwrite semantics get a
-later substep.
+§13.5.c.ii: `run_subsequent_confluence_pipeline` deleted with
+`run_lower_tf_pipeline`. The orchestrator now translates and applies via
+`apply_trigger_to_entity_df`. Spec §6.1 in-place overwrite semantics now
+fire for real (cascade tags previous sid on new build); the
+`var3_last_per_cycle` carve-out remains until §13.5.d.
 """
 from __future__ import annotations
 
-from typing import Optional
-
 import pandas as pd
 
-from engine_v2.multitf.lower_tf_pipeline import run_lower_tf_pipeline
 from engine_v2.multitf.types import (
-    LowerTFResult,
     MultiTFTrigger,
     SubsequentConfluenceTrigger,
 )
 
 
-def _to_multi_tf_trigger(
+def to_multi_tf_trigger(
     trig: SubsequentConfluenceTrigger,
     parent_df: pd.DataFrame,
 ) -> MultiTFTrigger:
@@ -70,15 +59,3 @@ def _to_multi_tf_trigger(
     )
 
 
-def run_subsequent_confluence_pipeline(
-    trigger: SubsequentConfluenceTrigger,
-    m15_df_prepared: pd.DataFrame,
-    h1_df: pd.DataFrame,
-) -> Optional[LowerTFResult]:
-    """Build a `subsequent_confluence` sub from one var 3 trigger.
-
-    Returns None if any probe / structure step fails (caught upstream by
-    `run_lower_tf_pipeline`).
-    """
-    multi_tf = _to_multi_tf_trigger(trigger, h1_df)
-    return run_lower_tf_pipeline(multi_tf, m15_df_prepared, h1_df)

@@ -1,4 +1,4 @@
-"""`first_confluence` (var 1) sub pipeline.
+"""`first_confluence` (var 1) typed-trigger → MultiTFTrigger translator.
 
 Per spec §4.3.2:
   Probe sd:        +parent_sd  (confluence — same direction as parent)
@@ -10,29 +10,21 @@ sub `lower_sd = +parent_sd`, so `mapping_sd = -parent_sd` — the M15
 candle within the H1 BOS hour with the lowest low (bullish parent) or
 highest high (bearish parent).
 
-This module thinly wraps `run_lower_tf_pipeline` by translating the
-`FirstConfluenceTrigger` into a generic `MultiTFTrigger`. The probe and
-M15 build re-use the existing machinery.
-
-Pending triggers (parent CTS not yet confirmed) are skipped per spec
-§4.3.2 / §14: "no first_confluence sub is built until parent
-CTS_CONFIRMED resolves end_idx."
+§13.5.c.ii: the wrapper `run_first_confluence_pipeline` was deleted with
+`run_lower_tf_pipeline`. The orchestrator now translates each typed
+trigger via `to_multi_tf_trigger` and feeds the resulting
+`MultiTFTrigger` to `apply_trigger_to_entity_df`. Pending-skip semantics
+for §4.3.2 / §14 moved to the orchestrator (it filters
+`status=="finalized"` before sorting + applying).
 """
 from __future__ import annotations
 
-from typing import Optional
-
 import pandas as pd
 
-from engine_v2.multitf.lower_tf_pipeline import run_lower_tf_pipeline
-from engine_v2.multitf.types import (
-    FirstConfluenceTrigger,
-    LowerTFResult,
-    MultiTFTrigger,
-)
+from engine_v2.multitf.types import FirstConfluenceTrigger, MultiTFTrigger
 
 
-def _to_multi_tf_trigger(
+def to_multi_tf_trigger(
     trig: FirstConfluenceTrigger,
     parent_df: pd.DataFrame,
 ) -> MultiTFTrigger:
@@ -64,20 +56,3 @@ def _to_multi_tf_trigger(
     )
 
 
-def run_first_confluence_pipeline(
-    trigger: FirstConfluenceTrigger,
-    m15_df_prepared: pd.DataFrame,
-    h1_df: pd.DataFrame,
-) -> Optional[LowerTFResult]:
-    """Build a `first_confluence` sub for one parent BOS_CONFIRMED.
-
-    Returns None if the trigger is pending or any probe / structure step
-    fails (caught upstream by `run_lower_tf_pipeline`).
-    """
-    if trigger.status != "finalized" or trigger.end_idx is None:
-        print(f"[first_confluence] SKIP pending: "
-              f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}")
-        return None
-
-    multi_tf = _to_multi_tf_trigger(trigger, h1_df)
-    return run_lower_tf_pipeline(multi_tf, m15_df_prepared, h1_df)

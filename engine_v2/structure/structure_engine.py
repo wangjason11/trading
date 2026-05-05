@@ -589,6 +589,7 @@ def compute_structure_from_start(
     struct_direction: int,
     *,
     timeframe: str = "H1",
+    end_idx: Optional[int] = None,
 ) -> StructureEngineResult:
     """Run multi-structure analysis from a known start (no Scenario 1 / no probes).
 
@@ -596,9 +597,17 @@ def compute_structure_from_start(
     by a higher-TF probe.
 
     Flow:
-      1. Run MarketStructure for structure_id=0 from start_idx
+      1. Run MarketStructure for structure_id=0 from start_idx (capped at
+         end_idx if provided)
       2. On reversal -> Scenario 2 (Exception 1/2) -> next structure
-      3. Repeat until no more reversals or end of data
+      3. Repeat until no more reversals, end_idx reached, or end of data
+
+    `end_idx` (Part 4 §13.5.c.ii): inclusive upper bound on the run. When
+    set, every MS construction in this function passes it through, so the
+    new sid only writes structure cols / emits events within
+    `[start_idx, end_idx]`. Outer loop also exits early if the running
+    cursor passes `end_idx`. Used by the entity-direct compute path
+    (`apply_trigger_to_entity_df`) to bound a sub's lifecycle.
     """
     _validate_input(df)
 
@@ -613,7 +622,10 @@ def compute_structure_from_start(
 
     max_structures_guard = 20
     for _loop_iter in range(max_structures_guard):
-        ms = _make_market_structure(df2, struct_direction=sd, start_idx=cur_start, structure_id=structure_id, timeframe=timeframe, pip_size=pip_size)
+        # Stop if we've already passed the lifecycle bound.
+        if end_idx is not None and cur_start > end_idx:
+            break
+        ms = _make_market_structure(df2, struct_direction=sd, start_idx=cur_start, structure_id=structure_id, timeframe=timeframe, pip_size=pip_size, end_idx=end_idx)
         ms.debug = True
         df2, ms_events, levels = ms.run()
 

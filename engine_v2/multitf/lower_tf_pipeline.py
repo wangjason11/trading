@@ -1,25 +1,19 @@
-"""Lower-TF pipeline runner for multi-TF analysis.
+"""Lower-TF helpers used by the entity-direct compute path.
 
-Runs the subordinate (parent-TF reverse) probe to find a validated start,
-then plain MarketStructure on the lower-TF data + downstream pipeline.
-Injects attribution metadata.
+§13.5.c.ii deleted the slice-based `run_lower_tf_pipeline`; what
+remains here is the parent-TF subordinate probe and the parent →
+lower-TF lifecycle-end translator. Both are pure helpers consumed by
+`multitf/entity_df_mutation.apply_trigger_to_entity_df`.
 """
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import timedelta
 from typing import Optional
 
 import pandas as pd
 
-from engine_v2.multitf.types import MultiTFTrigger, LowerTFResult
-from engine_v2.multitf.data_bridge import map_candle_to_lower_tf
-from engine_v2.structure.structure_engine import (
-    compute_structure_scenario_3,
-    compute_structure_from_start,
-)
-from engine_v2.patterns.imbalance import compute_imbalance
-from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
+from engine_v2.multitf.types import MultiTFTrigger
+from engine_v2.structure.structure_engine import compute_structure_scenario_3
 
 
 def _find_m15_lifecycle_end(
@@ -119,201 +113,3 @@ def _run_subordinate_probe(
         return None
 
     return s3_result.start_idx
-
-
-def run_lower_tf_pipeline(
-    trigger: MultiTFTrigger,
-    m15_df_prepared: pd.DataFrame,
-    h1_df: pd.DataFrame,
-) -> Optional[LowerTFResult]:
-    """Run the lower-TF pipeline for a single trigger.
-
-    1. Subordinate (parent-TF reverse) probe -> validated parent start idx
-    2. Map validated parent start -> M15 start idx
-    3. Run compute_structure_from_start() on M15 slice (no probes)
-    4. Run downstream pipeline (KL zones BOS-only, Fib m15_reverse, POI, WVMI)
-    5. Inject attribution metadata + lifecycle capping
-
-    Returns LowerTFResult or None if mapping fails.
-    """
-    # 1. Subordinate probe (parent-TF reverse) to find validated start
-    validated_h1_idx = _run_subordinate_probe(trigger, h1_df)
-    if validated_h1_idx is None:
-        return None
-
-    # 2. Map validated H1 start to M15
-    h1_start_time = pd.to_datetime(h1_df.loc[validated_h1_idx, "time"], utc=True)
-    # Spec §4.3.1 unified rule: mapping_sd = -sub_sd.
-    # - first_counter: lower_sd = -parent_sd → mapping_sd = +parent_sd (highest
-    #   high in bullish parent, lowest low in bearish — the parent's CTS extreme).
-    # - first_confluence: lower_sd = +parent_sd → mapping_sd = -parent_sd
-    #   (the BOS extreme in the parent).
-    mapping_sd = -trigger.lower_sd
-    if mapping_sd == 1:
-        h1_start_price = float(h1_df.loc[validated_h1_idx, "h"])
-    else:
-        h1_start_price = float(h1_df.loc[validated_h1_idx, "l"])
-
-    m15_start_idx = map_candle_to_lower_tf(
-        h1_start_time,
-        h1_start_price,
-        mapping_sd,
-        m15_df_prepared,
-    )
-
-    if m15_start_idx is None:
-        print(f"[lower_tf] WARNING: Could not map validated H1 start to M15 for "
-              f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}")
-        return None
-
-    # 3. Determine M15 slice end
-    m15_end_idx = _find_m15_lifecycle_end(trigger, m15_df_prepared, h1_df)
-    if m15_end_idx is None:
-        m15_end_idx = int(m15_df_prepared.index[-1])
-
-    if m15_start_idx >= m15_end_idx:
-        print(f"[lower_tf] WARNING: M15 slice too short: start={m15_start_idx} end={m15_end_idx}")
-        return None
-
-    # 4. Create isolated M15 slice with lookback buffer
-    lookback = 50
-    slice_begin = max(0, m15_start_idx - lookback)
-    trigger_df = m15_df_prepared.iloc[slice_begin:m15_end_idx + 1].copy()
-    trigger_df = trigger_df.reset_index(drop=True)
-
-    # Re-compute imbalance on the sliced df: is_imbalance column survives the
-    # copy but df.attrs["imbalances"] holds indices from the original M15 df,
-    # which no longer match after reset_index.
-    trigger_df = compute_imbalance(trigger_df)
-
-    # Start idx in the sliced df is offset by the actual lookback
-    start_in_slice = m15_start_idx - slice_begin
-
-    if len(trigger_df) - start_in_slice < 5:
-        print(f"[lower_tf] WARNING: M15 slice too small ({len(trigger_df) - start_in_slice} candles after start)")
-        return None
-
-    print(f"[lower_tf] M15 slice: {len(trigger_df)} candles, "
-          f"sd={trigger.lower_sd}, start_in_slice={start_in_slice}")
-
-    # 5. Run plain structure from validated start (no probes)
-    try:
-        m15_result = compute_structure_from_start(
-            trigger_df,
-            start_idx=start_in_slice,
-            struct_direction=trigger.lower_sd,
-            timeframe=trigger.lower_tf,  # "M15" for proximity threshold lookup
-        )
-    except (ValueError, IndexError) as exc:
-        print(f"[lower_tf] WARNING: M15 structure failed for "
-              f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}: {exc}")
-        return None
-
-    # Propagate imbalance instances onto the structure-engine output df
-    m15_result.df.attrs["imbalances"] = trigger_df.attrs.get("imbalances", [])
-
-    # 6. Run downstream pipeline with M15-specific settings
-    # structure_path_id derived from the trigger's use_case so WVMI records
-    # carry the correct entity attribution (Part 4 §8.7).
-    # Spec §9.1: structure_path_id is the (TF, role, parent_path) identity
-    # — purely structural, no use_case suffix. var 1/var 3 share the
-    # confluence entity; var 2/var 4 share the counter entity.
-    if trigger.use_case in ("first_counter", "subsequent_counter"):
-        sub_path_id = "H1.main >> M15.counter"
-    elif trigger.use_case in ("first_confluence", "subsequent_confluence"):
-        sub_path_id = "H1.main >> M15.confluence"
-    else:
-        sub_path_id = f"H1.main >> M15.{trigger.use_case}"
-
-    downstream = _run_downstream_pipeline(
-        m15_result.df,
-        m15_result.events,
-        m15_result.struct_direction,
-        source_kinds=["BOS"],       # BOS-only KL zones for M15
-        fib_mode="m15_reverse",     # Imbalance-gated cross-cycle Fib
-        log_prefix=f"M15_sid{trigger.parent_sid}_c{trigger.parent_cycle_id}",
-        timeframe=trigger.lower_tf, # "M15" — drives proximity_pips lookup
-        structure_path_id=sub_path_id,
-        skip_wvmi=True,             # Part 4 §8.3 / §8.4: sub WVMI is
-                                    # parent-event-driven; computed by the
-                                    # orchestrator via multitf/sub_wvmi.py.
-    )
-
-    # 7. Inject attribution into events
-    attribution = {
-        "timeframe": trigger.lower_tf,
-        "use_case": trigger.use_case,
-        "parent_tf": trigger.parent_tf,
-        "parent_sid": trigger.parent_sid,
-        "parent_cycle_id": trigger.parent_cycle_id,
-    }
-
-    for ev in m15_result.events:
-        ev.meta.update(attribution)
-
-    for zone in downstream["kl_zones"]:
-        zone.meta.update(attribution)
-
-    # 8. Cap open-ended zones/POIs to the lifecycle boundary
-    last_time = pd.to_datetime(m15_result.df["time"].iloc[-1], utc=True)
-    capped_zones = []
-    for zone in downstream["kl_zones"]:
-        if zone.end_time is None:
-            zone = replace(
-                zone,
-                end_time=last_time,
-                meta={**zone.meta, "active": False,
-                      "deactivated_by": "lifecycle_end"},
-            )
-        capped_zones.append(zone)
-
-    capped_pois = []
-    for poi in downstream["poi_zones"]:
-        if poi.end_time is None:
-            poi = replace(
-                poi,
-                end_time=last_time,
-                meta={**poi.meta, "active": False,
-                      "deactivated_by": "lifecycle_end"},
-            )
-        capped_pois.append(poi)
-
-    # Cap still-active-unlocked fibs (cross or single that never saw
-    # CTS_n+1 CONFIRMED before the M15 cycle ended)
-    last_idx = int(m15_result.df.index[-1])
-    capped_fibs = []
-    for fib in downstream["fib_states"]:
-        if fib.active and not fib.locked:
-            fib = replace(
-                fib,
-                active=False,
-                meta={**fib.meta, "deactivated_by": "lifecycle_end",
-                      "deactivated_at": last_idx},
-            )
-        capped_fibs.append(fib)
-
-    result = LowerTFResult(
-        trigger=trigger,
-        df=m15_result.df,
-        events=m15_result.events,
-        kl_zones=capped_zones,
-        wave_candles=downstream["wave_candles"],
-        fib_states=capped_fibs,
-        poi_zones=capped_pois,
-        wvmi_records=downstream["wvmi_records"],
-        prev_bos_lines=downstream["prev_bos_lines"],
-        status="finalized",
-        meta={
-            "m15_start_idx": m15_start_idx,
-            "m15_end_idx": m15_end_idx,
-            "m15_candle_count": len(trigger_df),
-            "validated_h1_start": validated_h1_idx,
-            "slice_begin": slice_begin,
-            **attribution,
-        },
-    )
-
-    print(f"[lower_tf] UC1 result: status={result.status}, "
-          f"kl_zones={len(result.kl_zones)}, events={len(result.events)}")
-
-    return result

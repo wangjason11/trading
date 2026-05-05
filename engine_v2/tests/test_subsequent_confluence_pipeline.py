@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from engine_v2.multitf.subsequent_confluence_pipeline import _to_multi_tf_trigger
+from engine_v2.multitf.subsequent_confluence_pipeline import to_multi_tf_trigger
 from engine_v2.multitf.types import SubsequentConfluenceTrigger
 
 
@@ -21,7 +21,7 @@ def _h1_df() -> pd.DataFrame:
     return df
 
 
-def test_to_multi_tf_trigger_bullish_parent_uses_low():
+def testto_multi_tf_trigger_bullish_parent_uses_low():
     h1 = _h1_df()
     trig = SubsequentConfluenceTrigger(
         parent_tf="H1", parent_sid=0, parent_cycle_id=1, parent_sd=1,
@@ -29,7 +29,7 @@ def test_to_multi_tf_trigger_bullish_parent_uses_low():
         lifecycle_end_idx=200,
         meta={"prior_sd_trigger_idx": 30, "sequence_index_in_cycle": 1},
     )
-    out = _to_multi_tf_trigger(trig, h1)
+    out = to_multi_tf_trigger(trig, h1)
     assert out.use_case == "subsequent_confluence"
     assert out.lower_sd == 1                    # confluence with bullish parent
     assert out.lower_tf == "M15"
@@ -41,14 +41,14 @@ def test_to_multi_tf_trigger_bullish_parent_uses_low():
     assert out.meta["prior_sd_trigger_idx"] == 30
 
 
-def test_to_multi_tf_trigger_bearish_parent_uses_high():
+def testto_multi_tf_trigger_bearish_parent_uses_high():
     h1 = _h1_df()
     trig = SubsequentConfluenceTrigger(
         parent_tf="H1", parent_sid=1, parent_cycle_id=2, parent_sd=-1,
         input_idx=42, end_idx=55, trigger_event_idx=55,
         lifecycle_end_idx=None,
     )
-    out = _to_multi_tf_trigger(trig, h1)
+    out = to_multi_tf_trigger(trig, h1)
     assert out.lower_sd == -1
     assert out.start_price == 0.6080            # bearish → highest high
     assert out.lifecycle_end_idx is None
