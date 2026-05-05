@@ -214,9 +214,12 @@ def run_lower_tf_pipeline(
     # 6. Run downstream pipeline with M15-specific settings
     # structure_path_id derived from the trigger's use_case so WVMI records
     # carry the correct entity attribution (Part 4 §8.7).
-    if trigger.use_case == "first_counter":
+    # Spec §9.1: structure_path_id is the (TF, role, parent_path) identity
+    # — purely structural, no use_case suffix. var 1/var 3 share the
+    # confluence entity; var 2/var 4 share the counter entity.
+    if trigger.use_case in ("first_counter", "subsequent_counter"):
         sub_path_id = "H1.main >> M15.counter"
-    elif trigger.use_case == "first_confluence":
+    elif trigger.use_case in ("first_confluence", "subsequent_confluence"):
         sub_path_id = "H1.main >> M15.confluence"
     else:
         sub_path_id = f"H1.main >> M15.{trigger.use_case}"

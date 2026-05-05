@@ -19,7 +19,7 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 | Part 1 | Scenario 3 for start candle identification | Done |
 | Part 2 | Volume momentum indicator (WVMI + proximity gate) | Done |
 | Part 3 | Multi-timeframe analysis (subordinate structures + overlay) | Done |
-| Part 4 | Pipeline / strategy / multi-TF refactor | Not started |
+| Part 4 | Pipeline / strategy / multi-TF refactor | In progress (through 3d.iv) — see `PART4_REFACTOR_SPEC.md` |
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).
 

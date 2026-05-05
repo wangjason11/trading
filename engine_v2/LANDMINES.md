@@ -388,12 +388,48 @@ events per spec §8.3 / §8.4:
 |---|---|---|
 | `H1.main >> M15.counter` (first_counter sids) | First var 3 trigger in same parent cycle | §8.4 |
 | `H1.main >> M15.confluence` (var 1 sids) | Main first sd-prox in same parent cycle | §8.3 |
-| Var 3 confluence sids | Var 4 trigger — not built yet | §8.3 (deferred to §13.4) |
+| Var 3 confluence sids | Var 4 trigger — deferred to 3d.v | §8.3 |
+| `H1.main >> M15.counter` (var 4-born sids) | Next var 3 — deferred to 3d.v; var 4 sids carry empty wvmi_records today | §8.4 |
+| `H1.main >> M15.confluence` (var 1+var 3 sids) | Re-sweep on var 4 — deferred to 3d.v | §8.3 |
 
 **Trap:** "Why does the sub also do its own zone proximity scan? Let me unify
 those" — re-enabling entity-local sub WVMI inside `_run_downstream_pipeline`
 would double-gate against the parent-event gate or silently revert to
 entity-local gating. Don't.
+
+---
+
+## Var 3 + Var 4 Last-Per-Cycle Carve-Outs Are a Pair
+
+**Rule:** Two last-per-cycle filters approximate spec §6.1's in-place
+overwrite semantics until that mutation infrastructure lands. They MUST
+be removed together.
+
+| Filter | Where | Filters |
+|---|---|---|
+| `var3_last_per_cycle` | `_run_first_confluence_multi_tf` (orchestrator) | subsequent_confluence triggers |
+| `var4_last_per_cycle` | `_run_multi_tf` (orchestrator) | subsequent_counter triggers |
+
+**Why a pair:** spec §6.1 says each new var 3 sid overwrites the previous
+open confluence sub sid; each new var 4 sid overwrites the previous open
+counter sub sid. With overwrite-in-place not implemented, building every
+var 3 / var 4 trigger would create N independent sids per parent cycle
+(none deactivating any other) plus take ~15 min per replay because
+many triggers are degenerate (input_idx == end_idx within 1-2 candles).
+The carve-outs build only the LAST var 3 and LAST var 4 per
+`(parent_sid, parent_cycle_id)` — at most one alive of each per parent
+cycle, matching §6.1's effective "only most recent is alive" semantics.
+
+**Symmetry:** removing one without the other leaves a half-finished
+overwrite story. Either both stand or both fall.
+
+**Detected-but-not-built triggers** are still exposed for inspection via:
+- `df.attrs["subsequent_confluence_triggers"]`
+- `df.attrs["subsequent_counter_triggers"]`
+
+When §6.1 in-place overwrite lands: drop both filters, build all
+triggers, let the overwrite path mark older sids `deactivated_by` as it
+goes.
 
 ---
 

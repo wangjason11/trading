@@ -92,6 +92,44 @@ class SubsequentConfluenceTrigger:
 
 
 @dataclass(frozen=True)
+class SubsequentCounterTrigger:
+    """`subsequent_counter` (var 4) trigger — fires on parent sd-prox that
+    forms a Λ (bullish parent) / V (bearish parent) with the prior CTS-prox
+    and the sd-prox before that.
+
+    Per spec §4.3.5:
+      Trigger:    parent sd-zone proximity AND prior trigger was CTS-zone
+                  proximity AND the proximity trigger before that was
+                  sd-zone (sequence sd → CTS → sd in the cycle's
+                  alternating list)
+      Idx input:  parent-TF candle in `[prior_sd_idx, this_sd_prox_idx]`
+                  with extreme toward parent CTS (highest high for
+                  bullish parent / lowest low for bearish — Λ apex / V
+                  trough)
+      Probe end:  this sd-prox trigger candle
+      Probe sd:   -parent_sd (counter — opposite direction to parent)
+      Reference:  active parent CTS zone (descriptive; probe derives its
+                  own BOS_0 internally)
+
+    By the alternation invariant in `zones/zone_proximity.py`, every sd
+    trigger past the first one (index ≥ 2 in the cycle's list) satisfies
+    the [sd, opp_sd, sd] window — its immediate predecessor is opp_sd
+    (== CTS-prox, var 3) and the one before that is sd (var 2 or an
+    earlier var 4). `meta` carries `prior_sd_trigger_idx` and
+    `prior_cts_prox_idx` for diagnostics.
+    """
+    parent_tf: str
+    parent_sid: int
+    parent_cycle_id: int
+    parent_sd: int
+    input_idx: int                     # parent-TF window extreme toward CTS
+    end_idx: int                       # the sd-prox trigger candle
+    trigger_event_idx: int             # same as end_idx (sd-prox candle)
+    lifecycle_end_idx: Optional[int] = None
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class FirstConfluenceTrigger:
     """`first_confluence` (var 1) trigger — fires on parent BOS_CONFIRMED.
 

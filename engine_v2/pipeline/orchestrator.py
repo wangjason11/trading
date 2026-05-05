@@ -20,6 +20,9 @@ from engine_v2.multitf.first_confluence_trigger import (
 from engine_v2.multitf.subsequent_confluence_trigger import (
     detect_subsequent_confluence_triggers,
 )
+from engine_v2.multitf.subsequent_counter_trigger import (
+    detect_subsequent_counter_triggers,
+)
 
 from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
@@ -492,6 +495,26 @@ def run_pipeline(
         f"detected={len(subsequent_confluence_triggers)}"
     )
 
+    # Part 4 Step 3d.iv: subsequent_counter (var 4) trigger detection.
+    # Walks parent zone_proximity_triggers for sd-after-CTS-after-sd
+    # (Λ/V geometry: sd → CTS → sd within a cycle's alternating list).
+    # Reference-zone (active parent CTS zone) is descriptive only — the
+    # probe derives its own BOS_0 internally.
+    subsequent_counter_triggers = detect_subsequent_counter_triggers(
+        sorted_events,
+        zone_proximity_triggers,
+        s_res.df,
+        parent_tf="H1",
+    )
+    s_res.df.attrs["subsequent_counter_triggers"] = (
+        subsequent_counter_triggers
+    )
+    meta["subsequent_counter_triggers"] = subsequent_counter_triggers
+    print(
+        f"[subsequent_counter_trigger] "
+        f"detected={len(subsequent_counter_triggers)}"
+    )
+
     # 10) Multi-TF analysis (if configured)
     lower_tf_results = []
     confluence_results: List[Any] = []
@@ -504,6 +527,7 @@ def run_pipeline(
             poi_zones,
             meta,
             registry,
+            subsequent_counter_triggers=subsequent_counter_triggers,
         )
 
         # Part 4 Step 3b/3d: confluence subs (var 1 + var 3).
@@ -691,11 +715,31 @@ def _run_multi_tf(
     poi_zones: list,
     meta: Dict[str, Any],
     registry: StructureRegistry,
+    subsequent_counter_triggers: Optional[list] = None,
 ) -> list:
-    """Run multi-TF analysis (first_counter: M15 reverse subordinate of H1)."""
+    """Run multi-TF analysis for the M15.counter entity (var 2 + var 4).
+
+    Builds first_counter (var 2) results from H1 WVMI records, then
+    appends subsequent_counter (var 4) results from the var 4 trigger
+    list. Per spec §6.2, both variations live in the same
+    `H1.main >> M15.counter` entity df.
+
+    **Var 4 last-per-cycle carve-out (3d.iv, MUST REMOVE LATER):**
+    spec §6.1 says each new var 4 sid overwrites the previous open
+    counter sub sid in place. Without §6.1 mutation infrastructure we
+    approximate by building only the LAST var 4 trigger per
+    `(parent_sid, parent_cycle_id)` — keeping at most one var 4 sid
+    alive per parent cycle. Pairs with the var 3 last-per-cycle carve-out
+    in `_run_first_confluence_multi_tf`; both must be removed together
+    when §6.1 in-place overwrite lands. Full var 4 trigger list still
+    exposed via `df.attrs["subsequent_counter_triggers"]`.
+    """
     from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
     from engine_v2.multitf.data_bridge import fetch_lower_tf_data, prepare_lower_tf_data
     from engine_v2.multitf.lower_tf_pipeline import run_lower_tf_pipeline
+    from engine_v2.multitf.subsequent_counter_pipeline import (
+        run_subsequent_counter_pipeline,
+    )
     from engine_v2.multitf.sub_wvmi import (
         ParentTrigger,
         compute_parent_driven_sub_wvmi,
@@ -704,7 +748,17 @@ def _run_multi_tf(
     triggers = detect_uc1_triggers(sorted_events, h1_df, wvmi_records, kl_zones)
     print(f"[multi_tf] first_counter triggers detected: {len(triggers)}")
 
-    if not triggers:
+    var4_all = list(subsequent_counter_triggers or [])
+    var4_last_per_cycle: Dict[tuple, Any] = {}
+    for t in var4_all:
+        var4_last_per_cycle[(t.parent_sid, t.parent_cycle_id)] = t
+    var4_triggers = list(var4_last_per_cycle.values())
+    print(
+        f"[multi_tf] subsequent_counter triggers capped to last-per-cycle: "
+        f"{len(var4_triggers)}/{len(var4_all)}"
+    )
+
+    if not triggers and not var4_triggers:
         return []
 
     # Fetch M15 data covering the full H1 date range (once per replay)
@@ -732,6 +786,27 @@ def _run_multi_tf(
 
     print(f"[multi_tf] first_counter results: {len(lower_tf_results)}")
 
+    # Var 4 sub builds — append to the same M15.counter entity. WVMI for
+    # var 4-born counter sids (gated by next var 3 in same parent cycle)
+    # is wired in 3d.v.
+    for trigger in var4_triggers:
+        print(
+            f"[multi_tf] Running subsequent_counter for "
+            f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id} "
+            f"input_idx={trigger.input_idx} end_idx={trigger.end_idx}"
+        )
+        result = run_subsequent_counter_pipeline(
+            trigger, m15_df_prepared, h1_df,
+        )
+        if result is not None:
+            result.wvmi_records = []
+            lower_tf_results.append(result)
+
+    print(
+        f"[multi_tf] counter results combined "
+        f"(first+last-per-cycle var 4): {len(lower_tf_results)}"
+    )
+
     # Part 4 Step 3d.iii: parent-driven counter sub WVMI per §8.4.
     # Counter sub WVMI is activated by var 3 (subsequent_confluence) firing
     # in the same parent cycle. With the var 4 / sub-internal-reversal paths
@@ -750,6 +825,13 @@ def _run_multi_tf(
     activated_count = 0
     total_records = 0
     for result in lower_tf_results:
+        # 3d.iv: only var 2 (first_counter) sids get WVMI from the
+        # 3d.iii pattern (gated by first var 3 in same parent cycle).
+        # Var 4 (subsequent_counter) sids are gated by the NEXT var 3
+        # AFTER the var 4, not the cycle's first var 3 — wired in 3d.v.
+        if result.trigger.use_case != "first_counter":
+            result.wvmi_records = []
+            continue
         key = (result.trigger.parent_sid, result.trigger.parent_cycle_id)
         v3_idx = v3_first_idx_by_cycle.get(key)
         if v3_idx is None:
@@ -768,8 +850,12 @@ def _run_multi_tf(
         activated_count += 1
         total_records += len(records)
 
-    print(f"[multi_tf:counter_wvmi] activated cycles={activated_count}/"
-          f"{len(lower_tf_results)} total records={total_records}")
+    var2_total = sum(
+        1 for r in lower_tf_results
+        if r.trigger.use_case == "first_counter"
+    )
+    print(f"[multi_tf:counter_wvmi] activated var2 cycles={activated_count}/"
+          f"{var2_total} total records={total_records}")
 
     # Part 4 Step 1: register the H1.main >> M15.counter entity.
     # Per §6.2 there is one entity df per (TF, role, parent_path) for the
