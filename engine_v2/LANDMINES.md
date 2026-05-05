@@ -388,14 +388,22 @@ events per spec §8.3 / §8.4:
 |---|---|---|
 | `H1.main >> M15.counter` (first_counter sids) | First var 3 trigger in same parent cycle | §8.4 |
 | `H1.main >> M15.confluence` (var 1 sids) | Main first sd-prox in same parent cycle | §8.3 |
-| Var 3 confluence sids | Var 4 trigger — deferred to 3d.v | §8.3 |
-| `H1.main >> M15.counter` (var 4-born sids) | Next var 3 — deferred to 3d.v; var 4 sids carry empty wvmi_records today | §8.4 |
-| `H1.main >> M15.confluence` (var 1+var 3 sids) | Re-sweep on var 4 — deferred to 3d.v | §8.3 |
+| `H1.main >> M15.confluence` (var 3 sids) | First var 4 trigger AFTER the var 3 in same parent cycle (else skip) | §8.3 |
+| `H1.main >> M15.counter` (var 4-born sids) | First var 3 trigger AFTER the var 4 in same parent cycle (else skip) | §8.4 |
+| Var 1 re-sweep on each var 4 fire | Deferred (option B) — batch is observably a no-op since records are deterministic given sub events; live mode will exercise this | §8.3 |
 
 **Trap:** "Why does the sub also do its own zone proximity scan? Let me unify
 those" — re-enabling entity-local sub WVMI inside `_run_downstream_pipeline`
 would double-gate against the parent-event gate or silently revert to
 entity-local gating. Don't.
+
+**"Skip when no later gate exists" is intentional, not a bug.** Var 3 / var 4
+sub sids that have no qualifying parent event AFTER them in the cycle get
+empty `wvmi_records=[]`. Don't fall back to "the cycle's first var X" or
+"some other sid's gate" — that breaks §8.7's one-trigger-per-record
+attribution and silently invents activation events that didn't fire.
+Empty here is the same outcome a proper §6.1 implementation would produce
+in cycles where the gate genuinely doesn't exist.
 
 ---
 
