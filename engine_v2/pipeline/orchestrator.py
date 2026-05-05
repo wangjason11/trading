@@ -958,6 +958,45 @@ def _run_multi_tf(
             starting_alignment="counter",
         )
 
+        # Part 4 §13.5.c.i pilot: mirror ONE var 4 trigger's data into
+        # entity_df.attrs to validate the §6.1 / §7 persistence model
+        # before c.ii commits to entity-direct compute. Pilot:
+        # `subsequent_counter` at (parent_sid=0, parent_cycle_id=3) — the
+        # non-degenerate var 4 last-per-cycle build. Other triggers stay
+        # on the old `run_lower_tf_pipeline → LowerTFResult` path; chart
+        # consumer reads `lower_tf_results` unchanged.
+        from engine_v2.multitf.entity_df_mutation import (
+            mirror_lower_tf_result_to_entity_df,
+        )
+        pilot = next(
+            (
+                r for r in lower_tf_results
+                if r.trigger.use_case == "subsequent_counter"
+                and r.trigger.parent_sid == 0
+                and r.trigger.parent_cycle_id == 3
+            ),
+            None,
+        )
+        if pilot is not None:
+            mirror_lower_tf_result_to_entity_df(
+                m15_df_prepared,
+                pilot,
+                new_sid_id=0,  # pilot is the only sid mirrored to entity_df.attrs in c.i
+                structure_path_id=sub_path_id,
+                prior_sid_id=None,  # no prior sid in entity_df.attrs; cascade no-op
+            )
+            print(
+                f"[c.i pilot] mirrored var 4 sid=0 cycle=3 -> entity_df.attrs: "
+                f"events={len(m15_df_prepared.attrs.get('events', []))} "
+                f"kl_zones={len(m15_df_prepared.attrs.get('kl_zones', []))} "
+                f"poi_zones={len(m15_df_prepared.attrs.get('poi_zones', []))} "
+                f"fib_states={len(m15_df_prepared.attrs.get('fib_states', []))} "
+                f"wave_candles={len(m15_df_prepared.attrs.get('wave_candles', []))} "
+                f"wvmi={len(m15_df_prepared.attrs.get('wvmi', []))}"
+            )
+        else:
+            print("[c.i pilot] WARNING: var 4 (sid=0, cycle=3) trigger not built; mirror skipped")
+
     return lower_tf_results
 
 

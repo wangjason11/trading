@@ -971,13 +971,142 @@ between every step:
      `[starting_idx, current_candle]`; old sid's zones / POIs / fibs /
      WVMI tagged `deactivated_by="overwritten_by_sid_{n+1}"` with
      bounds capped at the overwrite boundary; old sid's open WVMI
-     locked with same reason. Sub-build composition shifts from "list
-     of independent `LowerTFResult`s appended" to "shared mutable
-     entity df mutated in sequence as triggers fire." Open design
-     choice TBD before implementation: whether the orchestrator
-     MUTATES the existing entity df by re-running
-     `compute_structure_from_start` over the overlap window, or
-     produces fresh results that get post-merged into the entity df.
+     locked with same reason.
+
+     **Mechanism (decided 2026-05-05): mutate the entity df in place.**
+     Each trigger goes through a new entry point
+     `apply_trigger_to_entity_df(entity_df, trigger, parent_df,
+     new_sid_id)` which:
+
+     1. Runs the parent-TF probe (unchanged from today —
+        `compute_structure_scenario_3` on `parent_df`).
+     2. Maps validated parent idx to entity-df ABSOLUTE idx (no
+        slicing, no `reset_index` — the entity df has full lookback
+        by construction).
+     3. Calls `_tag_old_sid_on_overwrite(entity_df, prior_sid_id,
+        new_sid_id, boundary_idx)` which iterates
+        `entity_df.attrs["kl_zones"] / ["poi_zones"] / ["fib_states"]`
+        and sets `meta["deactivated_by"] = "overwritten_by_sid_{N}"`
+        on every prior-sid snapshot, capping `end_time` at the
+        overwrite boundary for any still-open snapshots; iterates
+        `entity_df.attrs["wvmi"]` and sets `lp_locked=True` +
+        `meta["lp_locked_by"] = "overwritten_by_sid_{N}"` on any
+        prior-sid record where `lp_locked` was False.
+     4. Calls `compute_structure_from_start(entity_df,
+        start_idx=mapped_M15_idx, struct_direction=trigger.lower_sd,
+        timeframe=trigger.lower_tf)` — this overwrites df columns
+        (`structure_id`, `cycle_id`, `cts_phase`, `range_lo/hi`, etc.)
+        from `start_idx` forward and emits new events. The events get
+        `sid=new_sid_id` attribution and append to
+        `entity_df.attrs["events"]`.
+     5. Runs the downstream pipeline (`_run_downstream_pipeline` with
+        `source_kinds=["BOS"]`, `fib_mode="m15_reverse"`,
+        `skip_wvmi=True`) on the new sid's events, appending the
+        resulting kl_zones / poi_zones / fib_states / wave_candles to
+        `entity_df.attrs[...]` keyed by `sid + cycle_id` meta.
+     6. Computes parent-driven sub WVMI for the new sid via
+        `compute_parent_driven_sub_wvmi` — adapted to consume an
+        entity-df + sid filter rather than a `LowerTFResult` (or
+        wrapped via the §13.5.c.i facade helper).
+
+     The alternative considered (build fresh `LowerTFResult` per
+     trigger, post-merge into the entity df) was rejected: it
+     requires translating every event / zone / POI / fib idx from
+     slice-local to entity-absolute coordinates at merge time,
+     retains today's slicing + 50-candle lookback + `reset_index` +
+     per-trigger `compute_imbalance` machinery as workarounds, and is
+     awkward in live mode where each new candle's pending result
+     would need merging on arrival. Mutation in place lines up with
+     §7's "df columns are current truth" model and with the
+     live-mode shape described in §14.
+
+     Substep split (in order):
+
+     - **§13.5.c.i — mirror infrastructure + production pilot (one
+       trigger).** Land `multitf/entity_df_mutation.py` with:
+
+         * `mirror_lower_tf_result_to_entity_df(entity_df, result,
+           new_sid_id, prior_sid_id=None)` — takes a freshly-built
+           `LowerTFResult` (slice-shape, slice-local idx) and
+           translates its events / kl_zones / poi_zones / fib_states /
+           wave_candles to entity-absolute idx, appending them to
+           `entity_df.attrs["events"] / ["kl_zones"] / ["poi_zones"] /
+           ["fib_states"] / ["wave_candles"]` with `entity_sid =
+           new_sid_id` attribution. Also mirrors structure columns
+           (`structure_id`, `cycle_id`, `cts_phase`, `range_lo/hi`,
+           `market_state`) from `result.df` back to
+           `entity_df.iloc[slice_begin:slice_end+1, ...]`.
+
+         * `_tag_old_sid_on_overwrite(entity_df, prior_sid_id,
+           new_sid_id, boundary_idx)` — the cascade helper. Iterates
+           `entity_df.attrs[...]` and tags prior-sid snapshots with
+           `deactivated_by="overwritten_by_sid_{N}"`, caps bounds,
+           locks open WVMI records. No-op when `prior_sid_id` is None.
+
+       Wire ONE pilot trigger through the new path — recommended
+       pilot: var 4 at `(parent_sid=0, parent_cycle_id=3)`
+       (non-degenerate window `input_idx=703 / end_idx=705`). The
+       pilot still calls `run_lower_tf_pipeline` to build the
+       slice-shape `LowerTFResult` (chart compatibility preserved —
+       no facade needed in c.i), THEN calls
+       `mirror_lower_tf_result_to_entity_df` to populate
+       `entity_df.attrs[...]`. The original `LowerTFResult` is
+       appended to `lower_tf_results` exactly as before so the chart
+       renders identically. All other triggers keep the old path
+       (no mirror call).
+
+       Cascade does NOT fire in c.i production (pilot is the only
+       trigger writing to `entity_df.attrs`; no prior sid to
+       overwrite). Cascade is exercised by a unit test on a synthetic
+       entity df fixture with two sids of fabricated state.
+
+       **Why this scope (not entity-direct compute):** running
+       `compute_structure_from_start` directly on the entity df with
+       `end_idx` capping is the right end state, but it requires
+       (a) modifying `compute_structure_from_start` to accept
+       `end_idx`, (b) translating events/zones the OTHER direction
+       for chart compatibility, and (c) verifying that downstream
+       derivations behave the same on the entity df as they do on a
+       slice. Each of those is a real risk; bundling them with the
+       mirror semantics in one substep makes parity debugging
+       harder. c.i validates the persistence model end-to-end
+       (entity_df.attrs holds the pilot's data with correct
+       attribution + cascade-ready shape) using minimal-risk
+       infrastructure; c.ii commits to entity-direct compute.
+
+     - **§13.5.c.ii — entity-direct compute + thread through full
+       var 1 + var 2 + var 3 + var 4 sets on both entities.** Add
+       `end_idx` parameter to `compute_structure_from_start`. Replace
+       `run_lower_tf_pipeline + mirror` with a single
+       `apply_trigger_to_entity_df` that runs
+       `compute_structure_from_start(entity_df, start_idx,
+       end_idx=lifecycle_end_idx)` directly on the entity df —
+       eliminating the slice + 50-candle lookback + `reset_index` +
+       per-trigger `compute_imbalance` machinery. Sort all triggers
+       per entity by `trigger_event_idx` and apply sequentially.
+       Real cascade fires in production (var 4 over var 2 in same
+       parent cycle, var 3 over var 1, cross-cycle overwrites from
+       §6.2). Build `LowerTFResult` facades with entity→slice idx
+       translation for chart compatibility. Carve-outs still in
+       place. `run_lower_tf_pipeline` deleted at end of c.ii.
+
+     - **§13.5.c.iii — chart consumer migrates to entity-df reading.**
+       `export_m15_chart_plotly` reads
+       `entity_df.attrs["events"] / ["kl_zones"] / ["wvmi"] / ...`
+       directly grouped by sid. Implements §16.5 "most recent sid per
+       candle" filter (sid-tied elements show most recent only;
+       persisting events show all with opacity attenuation keyed on
+       `deactivated_by`). Facade helper deleted.
+
+     **Sid numbering convention (clarifies §6.1 below):** sids are
+     **entity-wide** monotonically increasing integers, NOT
+     per-parent-cycle. Each new trigger increments the entity's sid
+     counter regardless of whether it opens a fresh parent cycle or
+     overwrites an open sid in the current parent cycle. `parent_sid`
+     and `parent_cycle_id` live in each `SidRecord`'s meta. Today's
+     `build_sid_records_for_subordinate` already enumerates
+     entity-wide; this is documentation of the existing convention,
+     not a behavior change.
 
    - **§13.5.d (remove var 3 + var 4 last-per-cycle carve-outs):** drop
      `var3_last_per_cycle` filter in `_run_first_confluence_multi_tf`

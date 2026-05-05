@@ -464,3 +464,60 @@ goes.
 1. Identify ALL exit paths in the original code (e.g., "exception triggered" vs "no exception")
 2. Map each iteration outcome to the SAME original exit path
 3. The iteration only refines WHICH value is used, not WHAT happens with it
+
+---
+
+## WVMI Records Carry Mixed-Coordinate Meta
+
+**Rule:** `WVMIRecord` instances persisted on `entity_df.attrs["wvmi"]` mix
+two coordinate systems and you MUST distinguish them when translating
+indices:
+
+| Field | Coordinate space |
+|---|---|
+| `fb_idx`, `lb_idx`, `fp_idx`, `lp_idx` (direct attrs) | Entity-df coords (sub-entity, e.g. M15) |
+| `meta["triggered_by_event_idx"]` | **Parent-df coords** (e.g. H1 for an M15 sub) |
+| `meta["lp_locked_at"]` (if present) | Entity-df coords |
+| `bos_structure_id`, `bos_cycle_id` | Identity ints; coordinate-free |
+
+**Why:** sub WVMI is parent-event-driven (spec §8.3 / §8.4 — see the
+"Sub WVMI is Parent-Event-Driven" landmine above). The trigger event
+(main first sd-prox, var 3, var 4) lives on the parent entity. The
+record's wave-candle indices live on the sub entity. Both fields are
+ints called "_idx", but they index different dataframes.
+
+**Concrete trap (Part 4 §13.5.c.ii / §13.6):** any translation pass
+that shifts WVMI indices when remapping a record between coordinate
+spaces must skip `triggered_by_event_idx`. `mirror_lower_tf_result_to_entity_df`
+documents this with an inline note; deeper-nesting future code that
+re-maps records (e.g., when an M5 sub's parent is an M15 sub, not
+H1.main) needs the same discipline.
+
+**Rule of thumb:** before adding `meta["X_idx"]` to a record, decide
+which df's index space `X` lives in and document it inline.
+
+---
+
+## Cascade Keys Off `entity_sid`, NOT `structure_id`
+
+**Rule:** `_tag_old_sid_on_overwrite` in `multitf/entity_df_mutation.py`
+matches prior-sid snapshots by `meta["entity_sid"] == prior_sid_id`.
+NOT by `structure_id`. The two are different concepts:
+
+| Concept | Meaning |
+|---|---|
+| `structure_id` (in event/zone meta) | The internal `MarketStructure` run id within one sub-build. Increments on internal reversals (sids 0, 1, 2, ... within one sub). Set by `MarketStructure.__init__(structure_id=0)`. |
+| `entity_sid` (in event/zone meta) | The entity-wide monotonic sub id, assigned by the orchestrator at trigger time. Per spec §13.5.c sid numbering convention: sids are entity-wide, not per-parent-cycle. |
+
+Multiple `entity_sid` values can share the same `structure_id` (every
+sub-build starts MarketStructure with `structure_id=0`). Multiple
+`structure_id` values can share the same `entity_sid` (a sub that
+reverses internally produces sids 0 → 1 within MarketStructure but
+both belong to the same entity_sid).
+
+**Concrete trap:** "let me clean this up — `entity_sid` is just a
+synonym for `structure_id`, right?" No. Cascading on `structure_id`
+would mis-tag every sub's internal sid 0 as "the prior sid being
+overwritten" the moment a new entity_sid lands.
+
+**See also:** spec §13.5.c sid numbering convention block.
