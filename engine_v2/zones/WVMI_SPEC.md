@@ -22,12 +22,12 @@ WVMI records are gated by `check_zone_proximity()` in
 `zones/zone_proximity.py` (alternating sd/opp_sd triggers per cycle — see
 [POI_ZONES_SPEC](POI_ZONES_SPEC.md)). The orchestrator extracts only the
 **first sd-direction trigger** per cycle as the gate. When that exists,
-the cycle's `CTS_CONFIRMED` produces a `WVMIRecord` whose meta carries:
+the cycle's `CTS_CONFIRMED` produces a `WVMIRecord` whose meta carries
+the §8.7 attribution schema:
 
-- `proximity_trigger_idx` — first sd trigger candle index (back-compat;
-  slated for removal in Part 4 §13.5)
-- `triggered_by_event_idx` — same value (§8.7 schema)
+- `triggered_by_event_idx` — first sd trigger candle index
 - `triggered_by_event_type = "ZONE_PROXIMITY_TRIGGER"`
+- `structure_path_id`
 - `trigger_inner`, `proximity_pips`
 
 Cycles without an sd trigger get no main WVMI record.
@@ -171,9 +171,6 @@ pullback_momentum = (LP_volume * LP_weight) / FP_volume
   owning entity's path (e.g., `"H1.main"`, `"H1.main >> M15.confluence"`).
 - `WVMIRecord._records` is keyed by `(sid, cycle_id)` — one tracker per
   entity, so source-based disambiguation isn't needed.
-- `WVMIRecord.source` (`Literal["main", "scenario3"]`) is retained as a
-  back-compat field; always `"main"` today and slated for removal in
-  Part 4 migration plan §13.5.
 - `add_scenario3_record` / `discard_scenario3` were removed in Part 4
   Step 3c — they were dead code (production never invoked them).
 
@@ -213,8 +210,7 @@ for each sub LowerTFResult:
 | `bos_structure_id` | int | Structure ID of the BOS zone (entity-local) |
 | `bos_cycle_id` | int | Cycle ID of the BOS zone (entity-local) |
 | `zone_side` | "buy"/"sell" | BOS zone side |
-| `source` | "main"/"scenario3" | Deprecated — always "main" since Part 4 Step 3c. Removed in §13.5. |
-| `structure_path_id` | Optional[str] | Owning entity's path (e.g., `"H1.main"`). New in Part 4 Step 3c. |
+| `structure_path_id` | Optional[str] | Owning entity's path (e.g., `"H1.main"`). |
 | `fb_idx`, `lb_idx`, `fp_idx`, `lp_idx` | Optional[int] | Wave candle indices |
 | `fb_volume`, `lb_volume`, `fp_volume`, `lp_volume` | Optional[float] | Raw volumes |
 | `lb_weight`, `lp_weight` | float | Last candle weights (default 1.0) |

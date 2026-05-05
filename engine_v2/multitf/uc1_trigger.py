@@ -114,13 +114,11 @@ def detect_uc1_triggers(
             lifecycle_end_idx=lifecycle_end_idx,
             meta={
                 "cts_idx": cts_idx,
-                "proximity_trigger_idx": rec.meta.get("proximity_trigger_idx"),
                 # Generic probe params consumed by _run_subordinate_probe.
-                # For first_counter the probe walks `[cts_idx, proximity_trigger_idx]`
-                # in lower_sd direction. Aliased to keep first_counter callers
-                # that still read cts_idx/proximity_trigger_idx working.
+                # For first_counter the probe walks `[cts_idx,
+                # triggered_by_event_idx]` in lower_sd direction.
                 "probe_input_idx": cts_idx,
-                "probe_end_idx": rec.meta.get("proximity_trigger_idx"),
+                "probe_end_idx": rec.meta.get("triggered_by_event_idx"),
             },
         )
         triggers.append(trigger)

@@ -110,7 +110,8 @@ def _run_subordinate_probe(
     # Pending status means the probe could not reach a terminal condition with
     # the available data. In live use, more candles may arrive that resolve the
     # probe — but for now we skip M15 for this trigger. (In current backtest
-    # end_idx=proximity_trigger_idx is always defined, so this path is dormant.)
+    # probe_end_idx — the first sd zone-proximity trigger candle — is always
+    # defined, so this path is dormant.)
     if s3_result.status == "pending":
         print(f"[lower_tf] PENDING: subordinate probe did not finalize for "
               f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}; "

@@ -254,7 +254,6 @@ class WVMITracker:
             bos_structure_id=sid,
             bos_cycle_id=cycle_id,
             zone_side=zone_side,
-            source="main",
             structure_path_id=self._structure_path_id,
             fb_idx=fb_idx,
             lb_idx=lb_idx,

@@ -316,9 +316,6 @@ def _run_downstream_pipeline(
                     "triggered_by_event_idx": first_sd.idx,
                     "triggered_by_event_type": "ZONE_PROXIMITY_TRIGGER",
                     "structure_path_id": structure_path_id,
-                    # Back-compat (uc1_trigger.py still reads this; cleaned
-                    # up in migration plan Step 5):
-                    "proximity_trigger_idx": first_sd.idx,
                     "trigger_inner": first_sd.trigger_inner,
                     "proximity_pips": first_sd.proximity_pips,
                 }

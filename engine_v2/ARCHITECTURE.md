@@ -131,7 +131,7 @@ Subordinate lower-TF structures triggered by higher-TF events. Foundation suppor
 
 **UC1 flow:** H1 `CTS_CONFIRMED` + WVMI activation → detect trigger (`uc1_trigger.py`) → fetch/prepare M15 data (`data_bridge.py`) → H1 reverse probe → map to M15 → plain structure + downstream pipeline (`lower_tf_pipeline.py`).
 
-**H1 reverse probe:** Runs `compute_structure_scenario_3()` on H1 data with `end_idx=proximity_trigger_idx` and `run_continuation=False` to find a validated start candle for M15. Probe window is [cts_idx, proximity_trigger_idx]. The H1 probe results (events, levels) are discarded — only `start_idx` is used.
+**H1 reverse probe:** Runs `compute_structure_scenario_3()` on H1 data with `end_idx` set to the first sd zone-proximity trigger candle (`triggered_by_event_idx` from the cycle's WVMI record meta) and `run_continuation=False` to find a validated start candle for M15. Probe window is [cts_idx, triggered_by_event_idx]. The H1 probe results (events, levels) are discarded — only `start_idx` is used.
 
 **Key design decisions:**
 - M15 structure uses opposite direction to H1 (`lower_sd = -1 * h1_sd`)

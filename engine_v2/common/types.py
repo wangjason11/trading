@@ -195,10 +195,6 @@ class WVMIRecord:
     bos_structure_id: int
     bos_cycle_id: int
     zone_side: Literal["buy", "sell"]
-    # Deprecated post Part 4 Step 5 — kept for back-compat. Always "main"
-    # today (the only legacy code path that wrote "scenario3" was removed
-    # in Step 3c). The authoritative entity identifier is `structure_path_id`.
-    source: Literal["main", "scenario3"] = "main"
     # Entity path identifier (e.g., "H1.main", "H1.main >> M15.confluence").
     # None on records created by code paths that haven't been migrated yet.
     structure_path_id: Optional[str] = None

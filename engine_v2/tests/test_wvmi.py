@@ -273,7 +273,6 @@ class TestOnCtsConfirmed:
         assert rec.bos_structure_id == 0
         assert rec.bos_cycle_id == 1
         assert rec.zone_side == "buy"
-        assert rec.source == "main"
         assert rec.fb_idx == 3
         assert rec.lb_idx == 8
         assert rec.fp_idx == 10
@@ -570,7 +569,6 @@ class TestStructurePathIdAttribution:
             structure_path_id="H1.main >> M15.confluence",
         )
         assert record.structure_path_id == "H1.main >> M15.confluence"
-        assert record.source == "main"  # default preserved for back-compat
 
     def test_default_path_id_is_none(self):
         tracker = WVMITracker()
