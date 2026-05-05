@@ -230,6 +230,9 @@ def run_lower_tf_pipeline(
         log_prefix=f"M15_sid{trigger.parent_sid}_c{trigger.parent_cycle_id}",
         timeframe=trigger.lower_tf, # "M15" — drives proximity_pips lookup
         structure_path_id=sub_path_id,
+        skip_wvmi=True,             # Part 4 §8.3 / §8.4: sub WVMI is
+                                    # parent-event-driven; computed by the
+                                    # orchestrator via multitf/sub_wvmi.py.
     )
 
     # 7. Inject attribution into events

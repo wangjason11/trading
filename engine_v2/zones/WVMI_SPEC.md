@@ -11,37 +11,55 @@ Wave Volume Momentum Indicator (WVMI) measures BOS zone strength by tracking vol
 
 ---
 
-## Zone Proximity Trigger (gate for WVMI creation today)
+## WVMI Gating
 
-WVMI records are only created for cycles where price actually approaches a
-zone. The proximity-trigger gate is now produced by the more general
-`check_zone_proximity()` in `zones/zone_proximity.py` — see
-[POI_ZONES_SPEC](POI_ZONES_SPEC.md) and `zone_proximity.py` for the full
-spec including alternating sd/opp_sd triggers per cycle.
+Gating differs by entity. **Main**: entity-local zone proximity. **Sub**:
+parent-event-driven (Part 4 §8.3 / §8.4).
 
-For the WVMI gate specifically, the orchestrator extracts only the
-**first sd-direction trigger** per cycle (preserving the pre-refactor
-behavior). When that exists, the corresponding `WVMIRecord` is created
-and its meta is populated with:
+### Main entity (`H1.main`)
 
-- `proximity_trigger_idx` — first sd trigger candle index
-- `trigger_inner` — the inner price used as the trigger level
-- `proximity_pips` — threshold in pips (default 20 for H1, 10 for M15,
-  5 for M5; configurable per call)
+WVMI records are gated by `check_zone_proximity()` in
+`zones/zone_proximity.py` (alternating sd/opp_sd triggers per cycle — see
+[POI_ZONES_SPEC](POI_ZONES_SPEC.md)). The orchestrator extracts only the
+**first sd-direction trigger** per cycle as the gate. When that exists,
+the cycle's `CTS_CONFIRMED` produces a `WVMIRecord` whose meta carries:
 
-Cycles without an sd trigger get no WVMI record (current backward-compat
-behavior). This will change when WVMI is rewired off the gate in a
-later refactor.
+- `proximity_trigger_idx` — first sd trigger candle index (back-compat;
+  slated for removal in Part 4 §13.5)
+- `triggered_by_event_idx` — same value (§8.7 schema)
+- `triggered_by_event_type = "ZONE_PROXIMITY_TRIGGER"`
+- `trigger_inner`, `proximity_pips`
+
+Cycles without an sd trigger get no main WVMI record.
+
+### Sub entities (`H1.main >> M15.counter`, `H1.main >> M15.confluence`)
+
+Sub WVMI is **parent-event-driven**. `_run_downstream_pipeline` runs with
+`skip_wvmi=True` for subs (the entity-local gate is bypassed); the
+orchestrator then calls
+`multitf/sub_wvmi.compute_parent_driven_sub_wvmi()` per sub
+`LowerTFResult`, gated by parent events:
+
+| Sub entity (sid kind) | Activation trigger | Per spec |
+|---|---|---|
+| `H1.main >> M15.counter` (first_counter sids) | First var 3 trigger in same parent cycle | §8.4 |
+| `H1.main >> M15.confluence` (var 1 sids) | Main first sd-prox in same parent cycle | §8.3 |
+| Var 3 confluence sids | Var 4 (subsequent_counter) — deferred to §13.4 | §8.3 |
+| Var 4 counter sids | Not yet built (§13.4) | §8.4 |
+
+Records produced this way share the same `WVMITracker.on_cts_confirmed`
+/ `on_bos_confirmed` / `update_temporary_lp` lifecycle as main, plus
+§8.7 attribution merged into `record.meta`:
+`triggered_by_event_idx`, `triggered_by_event_type`, `parent_path_id`.
 
 ---
 
 ## Lifecycle (mirrors FibTracker)
 
-### 0. Gate — Price Approaches Zone
+### 0. Gate — see "WVMI Gating" above
 
-`check_zone_proximity()` (in `zones/zone_proximity.py`) determines which
-`(sid, cycle_id)` pairs have an sd-direction proximity trigger. Only those
-cycles proceed to step 1.
+Different per entity. Only gated cycles (sub: gated sids) proceed to
+step 1.
 
 ### 1. Created — CTS_n Confirmed
 
@@ -163,16 +181,27 @@ pullback_momentum = (LP_volume * LP_weight) / FP_volume
 
 ## Pipeline Integration
 
-WVMI runs **after POI zones** (needs POI zone inner bounds for proximity gate):
+WVMI runs **after POI zones** (the main-entity gate needs POI inner bounds):
 
 ```
+# Main (H1.main) — entity-local gate
 wave_candles → Fib tracking → POI zones → WVMI:
   0. check_zone_proximity() → first sd trigger          [gate]
-  1. for CTS_CONFIRMED events (activated only) →
+  1. for CTS_CONFIRMED events (gated only) →
        on_cts_confirmed() + meta update                [create]
   2. for BOS_CONFIRMED events → on_bos_confirmed()     [lock]
   3. update_temporary_lp()                              [shift]
   → df.attrs["wvmi"] = wvmi_tracker.get_records()
+```
+
+```
+# Sub (M15.counter / M15.confluence) — parent-event gate
+# `_run_downstream_pipeline(..., skip_wvmi=True)` short-circuits the gate above.
+# Orchestrator computes sub WVMI after sub LowerTFResult is built:
+for each sub LowerTFResult:
+    if parent trigger fired in this result's parent cycle:
+        compute_parent_driven_sub_wvmi(result, sub_path_id, parent_trigger)
+        → result.wvmi_records = [...]
 ```
 
 ---

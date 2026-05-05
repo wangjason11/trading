@@ -341,6 +341,62 @@ sub being built, never in terms of the parent.
 
 ---
 
+## Sub WVMI is Parent-Event-Driven; `source_kinds` is a Return-Only Filter
+
+Two related load-bearing invariants in `pipeline/orchestrator._run_downstream_pipeline`,
+both established in Part 4 Step 3d.iii. They look like "cleanups that shouldn't
+change behavior" — they aren't.
+
+**Rule 1 — `source_kinds` filters the returned list, NOT the derive call.**
+
+```python
+# RIGHT: derive everything, filter return
+all_kl_zones = derive_kl_zones_v1(df, events, ..., source_kinds=None)
+kl_zones = ([z for z in all_kl_zones if z.source_kind in source_kinds]
+            if source_kinds else all_kl_zones)
+# wave-candle loop iterates over `all_kl_zones`
+```
+
+```python
+# WRONG (silent regression):
+kl_zones = derive_kl_zones_v1(df, events, ..., source_kinds=source_kinds)
+# wave-candle loop only sees BOS zones for subs → no CTS wave candles → 0 sub WVMI records
+```
+
+**Why:** `WVMITracker.on_cts_confirmed` requires BOTH a BOS wave candle and a
+CTS wave candle for the same `(sid, cycle_id)`. CTS wave candles are derived
+PER ZONE — if there are no CTS zones in the iteration set, `_find_wave_candle(...,
+"CTS")` returns None and every sub WVMI sweep produces 0 records. This was a
+latent bug from Week 8 Part 3 (sub WVMI silently empty) — fixed in 3d.iii.
+
+**Rule 2 — Sub `_run_downstream_pipeline` calls pass `skip_wvmi=True`.**
+
+```python
+downstream = _run_downstream_pipeline(
+    m15_result.df, m15_result.events, m15_result.struct_direction,
+    source_kinds=["BOS"], fib_mode="m15_reverse",
+    structure_path_id=sub_path_id,
+    skip_wvmi=True,   # mandatory for subs
+)
+```
+
+Sub WVMI is computed AFTER the `LowerTFResult` is built, by the orchestrator
+calling `multitf/sub_wvmi.compute_parent_driven_sub_wvmi()`. The gate is parent
+events per spec §8.3 / §8.4:
+
+| Sub entity | Activated by | Spec |
+|---|---|---|
+| `H1.main >> M15.counter` (first_counter sids) | First var 3 trigger in same parent cycle | §8.4 |
+| `H1.main >> M15.confluence` (var 1 sids) | Main first sd-prox in same parent cycle | §8.3 |
+| Var 3 confluence sids | Var 4 trigger — not built yet | §8.3 (deferred to §13.4) |
+
+**Trap:** "Why does the sub also do its own zone proximity scan? Let me unify
+those" — re-enabling entity-local sub WVMI inside `_run_downstream_pipeline`
+would double-gate against the parent-event gate or silently revert to
+entity-local gating. Don't.
+
+---
+
 ## Wrapping Logic in Loops: Preserve Post-Loop Behavior
 
 **Rule:** When wrapping existing single-shot logic in an iteration loop, the behavior AFTER the loop must remain identical to the original code paths. The loop only changes what happens WITHIN iterations.

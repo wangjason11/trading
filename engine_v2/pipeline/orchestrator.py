@@ -58,6 +58,7 @@ def _run_downstream_pipeline(
     log_prefix: str = "",
     timeframe: str = "H1",
     structure_path_id: str = "H1.main",
+    skip_wvmi: bool = False,
 ) -> Dict[str, Any]:
     """Run downstream pipeline (KL zones -> wave candles -> Fib -> POI -> WVMI).
 
@@ -66,17 +67,34 @@ def _run_downstream_pipeline(
     Returns dict with keys: kl_zones, wave_candles, fib_states, fib_tracker,
     poi_zones, wvmi, wvmi_records, prev_bos_lines, sorted_events,
     zone_proximity_triggers
+
+    `skip_wvmi=True` disables the entity-local zone-proximity gate and the
+    WVMI sweep entirely. Used by sub entities (Part 4 §8.3 / §8.4): sub WVMI
+    is parent-event-driven and computed by the orchestrator after the sub's
+    LowerTFResult is built — see `multitf/sub_wvmi.py`.
     """
     pfx = f"[{log_prefix}]" if log_prefix else ""
 
-    # 5) KL zones consume structure events (not levels)
-    kl_zones = derive_kl_zones_v1(
+    # 5) KL zones consume structure events (not levels).
+    #
+    # The wave-candles + WVMI computation needs BOTH BOS and CTS zones
+    # (CTS wave candles come from the CTS zone — see WVMITracker.on_cts_confirmed).
+    # So derive the full set internally; the caller's `source_kinds` filter only
+    # narrows what gets RETURNED (and charted). For the H1 main caller
+    # `source_kinds=None` ⇒ filter is a no-op. For sub callers
+    # `source_kinds=["BOS"]` ⇒ chart sees BOS-only zones, but wave-candles
+    # internally still see both kinds (Part 4 §8.3 / §8.4 requirement).
+    all_kl_zones = derive_kl_zones_v1(
         df,
         events,
         struct_direction=struct_direction,
         length_threshold=length_threshold,
-        source_kinds=source_kinds,
+        source_kinds=None,
     )
+    if source_kinds is None:
+        kl_zones = all_kl_zones
+    else:
+        kl_zones = [z for z in all_kl_zones if z.source_kind in source_kinds]
 
     print(f"{pfx}[kl_zones] total=", len(kl_zones))
     if kl_zones:
@@ -85,9 +103,11 @@ def _run_downstream_pipeline(
         print(f"{pfx}[kl_zones] active buy:", sum(1 for z in kl_zones if z.side=="buy" and z.meta.get("active")))
         print(f"{pfx}[kl_zones] active sell:", sum(1 for z in kl_zones if z.side=="sell" and z.meta.get("active")))
 
-    # 5b) Wave candle identification
+    # 5b) Wave candle identification — use the full zone set so we produce
+    # both BOS and CTS wave candles even when the caller filters via
+    # `source_kinds`.
     wave_candle_results: List[WaveCandleResult] = []
-    for zone in kl_zones:
+    for zone in all_kl_zones:
         z_sid = zone.meta.get("structure_id")
         z_cycle = zone.meta.get("cycle_id")
         z_sd = zone.meta.get("struct_direction", struct_direction)
@@ -260,58 +280,65 @@ def _run_downstream_pipeline(
     )
     print(f"{pfx}[poi_zones] total=", len(poi_zones))
 
-    # 9) WVMI
-    wvmi_tracker = WVMITracker(structure_path_id=structure_path_id)
+    # 9) WVMI — entity-local proximity-gated. Skipped for sub entities
+    # (Part 4 §8.3 / §8.4: sub WVMI is parent-event-driven, computed by
+    # the orchestrator from `multitf/sub_wvmi.py` after the sub is built).
+    wvmi_records: list = []
+    zone_proximity_triggers: Dict[tuple, list] = {}
 
-    pip_size = _pip_size_from_pair(df)
+    if not skip_wvmi:
+        wvmi_tracker = WVMITracker(structure_path_id=structure_path_id)
 
-    # Zone proximity triggers — alternating sd/opp_sd per cycle.
-    # The full triggers list is exposed via df.attrs["zone_proximity_triggers"]
-    # for downstream/charting consumers. WVMI gate uses only the first sd
-    # trigger per cycle (backward-compat, until WVMI is rewired off the gate
-    # in a later step — Part 4 §8.3 will drive sub WVMI from parent events).
-    zone_proximity_triggers = check_zone_proximity(
-        df=df,
-        sorted_events=sorted_events,
-        kl_zones=kl_zones,
-        poi_zones=poi_zones,
-        pip_size=pip_size,
-        timeframe=timeframe,
-    )
+        pip_size = _pip_size_from_pair(df)
 
-    proximity_candles: Dict[tuple, dict] = {}
-    for key, trigs in zone_proximity_triggers.items():
-        if trigs and trigs[0].direction == "sd":
-            first_sd = trigs[0]
-            proximity_candles[key] = {
-                # Part 4 §8.7 schema: attribution to the trigger event.
-                "triggered_by_event_idx": first_sd.idx,
-                "triggered_by_event_type": "ZONE_PROXIMITY_TRIGGER",
-                "structure_path_id": structure_path_id,
-                # Back-compat (uc1_trigger.py still reads this; cleaned up
-                # in migration plan Step 5):
-                "proximity_trigger_idx": first_sd.idx,
-                "trigger_inner": first_sd.trigger_inner,
-                "proximity_pips": first_sd.proximity_pips,
-            }
+        # Zone proximity triggers — alternating sd/opp_sd per cycle.
+        # WVMI gate uses only the first sd trigger per cycle (backward-compat
+        # for main entity until §13.5 cleanup; sub gating moved to parent
+        # events in 3d.iii).
+        zone_proximity_triggers = check_zone_proximity(
+            df=df,
+            sorted_events=sorted_events,
+            kl_zones=kl_zones,
+            poi_zones=poi_zones,
+            pip_size=pip_size,
+            timeframe=timeframe,
+        )
 
-    for ev in sorted_events:
-        if ev.type == "CTS_CONFIRMED":
-            sid = ev.meta.get("structure_id", 0)
-            cycle_id = ev.meta.get("cycle_id", 0)
-            if (sid, cycle_id) in proximity_candles:
-                rec = wvmi_tracker.on_cts_confirmed(ev, df, wave_candle_results, kl_zones)
-                if rec is not None:
-                    rec.meta.update(proximity_candles[(sid, cycle_id)])
+        proximity_candles: Dict[tuple, dict] = {}
+        for key, trigs in zone_proximity_triggers.items():
+            if trigs and trigs[0].direction == "sd":
+                first_sd = trigs[0]
+                proximity_candles[key] = {
+                    # Part 4 §8.7 schema: attribution to the trigger event.
+                    "triggered_by_event_idx": first_sd.idx,
+                    "triggered_by_event_type": "ZONE_PROXIMITY_TRIGGER",
+                    "structure_path_id": structure_path_id,
+                    # Back-compat (uc1_trigger.py still reads this; cleaned
+                    # up in migration plan Step 5):
+                    "proximity_trigger_idx": first_sd.idx,
+                    "trigger_inner": first_sd.trigger_inner,
+                    "proximity_pips": first_sd.proximity_pips,
+                }
 
-    for ev in sorted_events:
-        if ev.type == "BOS_CONFIRMED":
-            wvmi_tracker.on_bos_confirmed(ev, df, wave_candle_results)
+        for ev in sorted_events:
+            if ev.type == "CTS_CONFIRMED":
+                sid = ev.meta.get("structure_id", 0)
+                cycle_id = ev.meta.get("cycle_id", 0)
+                if (sid, cycle_id) in proximity_candles:
+                    rec = wvmi_tracker.on_cts_confirmed(ev, df, wave_candle_results, kl_zones)
+                    if rec is not None:
+                        rec.meta.update(proximity_candles[(sid, cycle_id)])
 
-    wvmi_tracker.update_temporary_lp(df, kl_zones)
+        for ev in sorted_events:
+            if ev.type == "BOS_CONFIRMED":
+                wvmi_tracker.on_bos_confirmed(ev, df, wave_candle_results)
 
-    wvmi_records = wvmi_tracker.get_records()
-    print(f"{pfx}[wvmi] total={len(wvmi_records)}, locked={sum(1 for r in wvmi_records if r.lp_locked)}")
+        wvmi_tracker.update_temporary_lp(df, kl_zones)
+
+        wvmi_records = wvmi_tracker.get_records()
+        print(f"{pfx}[wvmi] total={len(wvmi_records)}, locked={sum(1 for r in wvmi_records if r.lp_locked)}")
+    else:
+        print(f"{pfx}[wvmi] skipped (parent-event-driven for sub entities)")
 
     return {
         "kl_zones": kl_zones,
@@ -489,6 +516,7 @@ def run_pipeline(
             first_confluence_triggers,
             registry,
             subsequent_confluence_triggers=subsequent_confluence_triggers,
+            main_zone_proximity_triggers=zone_proximity_triggers,
         )
 
     meta["lower_tf_results"] = lower_tf_results
@@ -508,6 +536,7 @@ def _run_first_confluence_multi_tf(
     triggers: list,
     registry: StructureRegistry,
     subsequent_confluence_triggers: Optional[list] = None,
+    main_zone_proximity_triggers: Optional[Dict[tuple, list]] = None,
 ) -> list:
     """Build confluence subs (var 1 + var 3) and register M15.confluence.
 
@@ -518,6 +547,12 @@ def _run_first_confluence_multi_tf(
     var 1. Per spec §6.1 var 3 should overwrite the previous open
     confluence sid in place; deferred to a later substep (see
     `subsequent_confluence_pipeline.py` docstring).
+
+    `main_zone_proximity_triggers` is the H1.main entity's
+    `zone_proximity_triggers` dict. Used by 3d.iii for parent-driven
+    confluence sub WVMI: var 1 sids get WVMI gated by main's first
+    sd-prox per cycle (§8.3). Var 3 sids would get WVMI from var 4
+    (deferred to §13.4).
     """
     from engine_v2.multitf.first_confluence_pipeline import (
         run_first_confluence_pipeline,
@@ -528,6 +563,10 @@ def _run_first_confluence_multi_tf(
     from engine_v2.multitf.data_bridge import (
         fetch_lower_tf_data,
         prepare_lower_tf_data,
+    )
+    from engine_v2.multitf.sub_wvmi import (
+        ParentTrigger,
+        compute_parent_driven_sub_wvmi,
     )
 
     var1_finalized = [t for t in (triggers or []) if t.status == "finalized"]
@@ -589,14 +628,52 @@ def _run_first_confluence_multi_tf(
     print(f"[multi_tf:confluence] results: {len(results)} "
           f"(var1+var3 combined)")
 
+    # Part 4 Step 3d.iii: parent-driven confluence sub WVMI per §8.3.
+    # Var 1 sids: WVMI activated by main's first sd-prox in the same parent
+    # cycle (== the candle that today gates main WVMI). Var 3 sids: no WVMI
+    # in 3d.iii — that's gated by var 4 (subsequent_counter), deferred to
+    # migration plan §13.4.
+    sub_path_id = "H1.main >> M15.confluence"
+    main_zpt = main_zone_proximity_triggers or {}
+    main_first_sd_by_cycle: Dict[tuple, int] = {}
+    for key, trig_list in main_zpt.items():
+        if trig_list and trig_list[0].direction == "sd":
+            main_first_sd_by_cycle[key] = int(trig_list[0].idx)
+
+    activated_count = 0
+    total_records = 0
+    for result in results:
+        if result.trigger.use_case != "first_confluence":
+            result.wvmi_records = []
+            continue
+        key = (result.trigger.parent_sid, result.trigger.parent_cycle_id)
+        sd_idx = main_first_sd_by_cycle.get(key)
+        if sd_idx is None:
+            result.wvmi_records = []
+            continue
+        records = compute_parent_driven_sub_wvmi(
+            result,
+            sub_path_id=sub_path_id,
+            parent_trigger=ParentTrigger(
+                idx=sd_idx,
+                event_type="ZONE_PROXIMITY_TRIGGER",
+                parent_path_id="H1.main",
+            ),
+        )
+        result.wvmi_records = records
+        activated_count += 1
+        total_records += len(records)
+
+    print(f"[multi_tf:confluence_wvmi] activated var1 cycles="
+          f"{activated_count} total records={total_records}")
+
     if results:
-        path_id = "H1.main >> M15.confluence"
         m15_df.attrs["lower_tf_results"] = results
         sub_sids = build_sid_records_for_subordinate(results)
         m15_df.attrs["sids"] = sub_sids
-        print(f"[sid_records] {path_id} sids={len(sub_sids)}")
+        print(f"[sid_records] {sub_path_id} sids={len(sub_sids)}")
         registry.register(
-            path_id,
+            sub_path_id,
             df=m15_df,
             timeframe="M15",
             role="subordinate",
@@ -619,6 +696,10 @@ def _run_multi_tf(
     from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
     from engine_v2.multitf.data_bridge import fetch_lower_tf_data, prepare_lower_tf_data
     from engine_v2.multitf.lower_tf_pipeline import run_lower_tf_pipeline
+    from engine_v2.multitf.sub_wvmi import (
+        ParentTrigger,
+        compute_parent_driven_sub_wvmi,
+    )
 
     triggers = detect_uc1_triggers(sorted_events, h1_df, wvmi_records, kl_zones)
     print(f"[multi_tf] first_counter triggers detected: {len(triggers)}")
@@ -651,21 +732,59 @@ def _run_multi_tf(
 
     print(f"[multi_tf] first_counter results: {len(lower_tf_results)}")
 
+    # Part 4 Step 3d.iii: parent-driven counter sub WVMI per §8.4.
+    # Counter sub WVMI is activated by var 3 (subsequent_confluence) firing
+    # in the same parent cycle. With the var 4 / sub-internal-reversal paths
+    # not built yet, every var 3 fire targets the same first_counter sid;
+    # in batch mode we sweep once per result using the FIRST var 3 idx as
+    # the trigger event. Cycles whose parent cycle had no var 3 fire get
+    # no counter sub WVMI.
+    sub_path_id = "H1.main >> M15.counter"
+    var3_triggers = meta.get("subsequent_confluence_triggers", [])
+    v3_first_idx_by_cycle: Dict[tuple, int] = {}
+    for t in var3_triggers:
+        key = (t.parent_sid, t.parent_cycle_id)
+        if key not in v3_first_idx_by_cycle:
+            v3_first_idx_by_cycle[key] = int(t.trigger_event_idx)
+
+    activated_count = 0
+    total_records = 0
+    for result in lower_tf_results:
+        key = (result.trigger.parent_sid, result.trigger.parent_cycle_id)
+        v3_idx = v3_first_idx_by_cycle.get(key)
+        if v3_idx is None:
+            result.wvmi_records = []
+            continue
+        records = compute_parent_driven_sub_wvmi(
+            result,
+            sub_path_id=sub_path_id,
+            parent_trigger=ParentTrigger(
+                idx=v3_idx,
+                event_type="SUBSEQUENT_CONFLUENCE_TRIGGER",
+                parent_path_id="H1.main",
+            ),
+        )
+        result.wvmi_records = records
+        activated_count += 1
+        total_records += len(records)
+
+    print(f"[multi_tf:counter_wvmi] activated cycles={activated_count}/"
+          f"{len(lower_tf_results)} total records={total_records}")
+
     # Part 4 Step 1: register the H1.main >> M15.counter entity.
     # Per §6.2 there is one entity df per (TF, role, parent_path) for the
     # whole session; per-trigger results live on this entity for now.
     if lower_tf_results:
-        path_id = "H1.main >> M15.counter"
         m15_df_prepared.attrs["lower_tf_results"] = lower_tf_results
 
         # Part 4 Step 3a: per-sid records on the subordinate entity df.
         # One record per parent cycle that produced a result. Dormant.
         sub_sids = build_sid_records_for_subordinate(lower_tf_results)
         m15_df_prepared.attrs["sids"] = sub_sids
-        print(f"[sid_records] {path_id} sids={len(sub_sids)}")
+        print(f"[sid_records] {sub_path_id} sids={len(sub_sids)}")
 
         registry.register(
-            path_id,
+            sub_path_id,
             df=m15_df_prepared,
             timeframe="M15",
             role="subordinate",
