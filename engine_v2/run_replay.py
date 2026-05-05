@@ -254,19 +254,28 @@ def main() -> None:
         zoom=ZOOM,
     )
 
-    # M15 chart export (if the multi-TF entity was registered)
-    m15_path_id = "H1.main >> M15.counter"
-    if registry.get(m15_path_id) is not None:
+    # M15 chart exports (one per registered M15 sub entity).
+    # Part 4 §16.1 / §16.2: each entity gets its own chart, candles in own
+    # TF, immediate parent overlaid. Both M15.counter and M15.confluence
+    # share the same H1.main parent overlay; only the per-entity sub data
+    # (events, zones, wave candles, sub WVMI) differs.
+    m15_sub_path_ids = ["H1.main >> M15.counter", "H1.main >> M15.confluence"]
+    for sub_path_id in m15_sub_path_ids:
+        if registry.get(sub_path_id) is None:
+            continue
         from engine_v2.charting.export_m15_chart import export_m15_chart_plotly
+        # Filename suffix: last path segment, dots → underscores.
+        # E.g. "H1.main >> M15.counter" → "M15_counter".
+        leaf_label = sub_path_id.split(" >> ")[-1].replace(".", "_")
         m15_paths = export_m15_chart_plotly(
             registry=registry,
-            path_id=m15_path_id,
-            title=f"{CONFIG.pair} M15 (H1 overlay)",
-            basename=f"{basename}_M15",
+            path_id=sub_path_id,
+            title=f"{CONFIG.pair} {sub_path_id}",
+            basename=f"{basename}_{leaf_label}",
             cfg=chart_cfg,
         )
-        print(f"Chart M15 HTML: {m15_paths.html_path}")
-        print(f"Chart M15 PNG : {m15_paths.png_path}")
+        print(f"Chart {leaf_label} HTML: {m15_paths.html_path}")
+        print(f"Chart {leaf_label} PNG : {m15_paths.png_path}")
 
     from engine_v2.debug.export_zones import export_kl_zones
     export_kl_zones(res.meta.get("kl_zones", []), f"artifacts/debug/{basename}_kl_zones.csv")
