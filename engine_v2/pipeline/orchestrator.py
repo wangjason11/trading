@@ -543,7 +543,10 @@ def run_pipeline(
 
     meta["lower_tf_results"] = lower_tf_results
     meta["first_confluence_results"] = confluence_results
-    s_res.df.attrs["lower_tf_results"] = lower_tf_results
+    # §13.5.c.iii: chart consumers (M15 chart + H1 chart's M15 overlay)
+    # now read sub data directly from the registered M15 entities'
+    # `df.attrs[...]`. The legacy `s_res.df.attrs["lower_tf_results"]`
+    # facade-list write has been removed.
 
     return PipelineResult(
         df=s_res.df,
@@ -819,7 +822,10 @@ def _run_first_confluence_multi_tf(
           f"var3 cycles={var3_activated} total records={var3_records}")
 
     if results:
-        m15_df.attrs["lower_tf_results"] = results
+        # §13.5.c.iii: chart consumes m15_df.attrs[...] (events, kl_zones,
+        # poi_zones, fib_states, wave_candles, wvmi, prev_bos_lines)
+        # populated by `apply_trigger_to_entity_df` per trigger. The
+        # facade-list `m15_df.attrs["lower_tf_results"]` write is gone.
         sub_sids = build_sid_records_for_subordinate(results)
         m15_df.attrs["sids"] = sub_sids
         print(f"[sid_records] {sub_path_id} sids={len(sub_sids)}")
@@ -989,7 +995,11 @@ def _run_multi_tf(
           f"var4 cycles={var4_activated}/{var4_total} total records={var4_records}")
 
     if lower_tf_results:
-        m15_df_prepared.attrs["lower_tf_results"] = lower_tf_results
+        # §13.5.c.iii: chart consumes m15_df_prepared.attrs[...] (events,
+        # kl_zones, poi_zones, fib_states, wave_candles, wvmi,
+        # prev_bos_lines) populated by `apply_trigger_to_entity_df` per
+        # trigger. The facade-list
+        # `m15_df_prepared.attrs["lower_tf_results"]` write is gone.
         sub_sids = build_sid_records_for_subordinate(lower_tf_results)
         m15_df_prepared.attrs["sids"] = sub_sids
         print(f"[sid_records] {sub_path_id} sids={len(sub_sids)}")

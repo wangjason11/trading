@@ -1090,13 +1090,40 @@ between every step:
        translation for chart compatibility. Carve-outs still in
        place. `run_lower_tf_pipeline` deleted at end of c.ii.
 
-     - **§13.5.c.iii — chart consumer migrates to entity-df reading.**
-       `export_m15_chart_plotly` reads
-       `entity_df.attrs["events"] / ["kl_zones"] / ["wvmi"] / ...`
-       directly grouped by sid. Implements §16.5 "most recent sid per
-       candle" filter (sid-tied elements show most recent only;
-       persisting events show all with opacity attenuation keyed on
-       `deactivated_by`). Facade helper deleted.
+     - **§13.5.c.iii — chart consumer migrates to entity-df reading
+       (LANDED).** `export_m15_chart_plotly` reads
+       `m15_df.attrs["events" / "kl_zones" / "poi_zones" / "fib_states"
+       / "wave_candles" / "wvmi" / "prev_bos_lines"]` directly,
+       iterating `m15_df.attrs["sids"]` SidRecords and grouping the
+       attrs lists by `meta["entity_sid"]`. Two new helpers
+       (`_compute_m15_tier_context_from_sids`, `_compute_owner_by_idx`)
+       drive the §16.5 most-recent-sid filter — sid-tied elements
+       (CTS/BOS dots, swing lines, PB markers, wave-candle lines,
+       prev_bos lines) check `owner_by_idx[rendered_candle_idx] ==
+       this_entity_sid` per render site, and the swing-line extension
+       at the most-recent internal sid stops at the last candle still
+       owned by this entity_sid (walking back from
+       `sid_rec.end_event_idx`). Persisting events (KL/POI zones)
+       opacity-attenuate by `meta["deactivated_by"]`:
+       `overwritten_by_sid_{N}` → `prior_inactive` tier;
+       `lifecycle_end` falls back to today's parent-sid/cycle tiering.
+       The H1 chart's M15-zone overlay (`export_chart_plotly`) was
+       migrated in the same substep — it now reads zones from
+       `registry.get(f"{path_id} >> M15.counter").df.attrs["kl_zones"]`
+       instead of `dfx.attrs["lower_tf_results"]`. Orchestrator's
+       three `lower_tf_results` attr writes (M15.counter,
+       M15.confluence, and the deprecated H1) are removed; the local
+       `lower_tf_results` list inside `_run_multi_tf` /
+       `_run_first_confluence_multi_tf` stays — it still feeds
+       `build_sid_records_for_subordinate` and the parent-driven
+       sub-WVMI helpers. Dead facade builders
+       (`_build_facade_lower_tf_result`, `_FACADE_LOOKBACK`,
+       `_shift_zone` / `_shift_event` / `_shift_poi` / `_shift_fib` /
+       `_shift_wave_candle`) deleted from `multitf/entity_df_mutation.py`.
+       `mirror_lower_tf_result_to_entity_df` extended to translate +
+       persist `prev_bos_lines` (entity-absolute idx,
+       entity_sid-attributed) so the M15 chart can read them from
+       `m15_df.attrs["prev_bos_lines"]`.
 
      **Sid numbering convention (clarifies §6.1 below):** sids are
      **entity-wide** monotonically increasing integers, NOT

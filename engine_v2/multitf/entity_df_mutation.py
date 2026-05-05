@@ -1,33 +1,39 @@
 """Entity-df mutation primitives for Part 4 §13.5.c (Option A — mutate
 in place).
 
-c.ii scope (this module's second version):
+c.iii scope (current):
 
-  - `apply_trigger_to_entity_df` — entity-direct compute. Runs the
-    parent-TF probe, maps the validated parent idx to entity-absolute
-    lower-TF idx, cascades the prior sid (no-op if first), then calls
-    `compute_structure_from_start(entity_df, start, end_idx=lifecycle)`
-    directly on the entity df. Mirrors the new sid's structure cols
-    back into entity_df at `[m15_start_idx, m15_end_idx]`, runs the
-    downstream pipeline on the new sid's events, applies lifecycle cap,
-    persists artifacts to `entity_df.attrs[...]` with entity-absolute
-    idx and `entity_sid` attribution. Returns a slice-shape
-    `LowerTFResult` facade for chart compatibility (consumers still
-    iterate `lower_tf_results`; the facade goes away in c.iii).
+  - `apply_trigger_to_entity_df` — runs the parent-TF probe, maps the
+    validated parent idx to entity-absolute lower-TF idx, builds a
+    slice + lookback for MS compute, then calls
+    `compute_structure_from_start` on the slice, runs the downstream
+    pipeline, applies lifecycle cap, mirrors all artifacts back to
+    `entity_df.attrs[...]` with entity-absolute idx and `entity_sid`
+    attribution. Returns the slice-shape `LowerTFResult` so the
+    orchestrator can compute parent-driven sub WVMI on it before
+    persisting via `persist_facade_wvmi_to_entity_df`.
 
-  - `mirror_lower_tf_result_to_entity_df` (c.i, retained for the unit
-    tests) — translates a slice-shape `LowerTFResult` into entity-absolute
-    snapshots. Production no longer calls it.
+  - `mirror_lower_tf_result_to_entity_df` — translates the slice-shape
+    `LowerTFResult` into entity-absolute snapshots and appends them to
+    `entity_df.attrs["events" / "kl_zones" / "poi_zones" /
+    "fib_states" / "wave_candles" / "wvmi" / "prev_bos_lines"]`.
 
-  - `_tag_old_sid_on_overwrite` — cascade helper, used by both paths.
+  - `_tag_old_sid_on_overwrite` — cascade helper invoked from
+    `mirror_lower_tf_result_to_entity_df` when `prior_sid_id` is set.
+
+The c.ii-era facade builders (`_build_facade_lower_tf_result` +
+`_shift_*` helpers) were removed in c.iii — the chart consumer reads
+`entity_df.attrs[...]` directly and no longer needs a slice-shape
+LowerTFResult-style projection of the new sid.
 
 Persistence model (spec §7):
 - df columns are "current truth" — overwritten in place by new sid.
 - `entity_df.attrs["events"]` is append-only. New sid's events
   append; old sid's events stay with their original attribution.
 - `entity_df.attrs["kl_zones" / "poi_zones" / "fib_states" /
-  "wave_candles" / "wvmi"]` keep all sids' entries; old-sid entries
-  carry `deactivated_by="overwritten_by_sid_{N}"` after a cascade.
+  "wave_candles" / "wvmi" / "prev_bos_lines"]` keep all sids' entries;
+  old-sid entries carry `deactivated_by="overwritten_by_sid_{N}"` after
+  a cascade.
 
 Cascade rules (spec §6.1, codified by `_tag_old_sid_on_overwrite`):
 - KL / POI zones with `meta["entity_sid"] == prior_sid_id` get
@@ -350,135 +356,23 @@ def mirror_lower_tf_result_to_entity_df(
         new_wvmis.append(nw)
     _attrs_setdefault_list(entity_df, "wvmi").extend(new_wvmis)
 
-
-# ---------------------------------------------------------------------
-# §13.5.c.ii: entity-direct compute
-# ---------------------------------------------------------------------
-
-# Lookback included in the slice-shape facade (matches today's
-# run_lower_tf_pipeline behavior so the chart sees the same window). The
-# entity-direct compute itself doesn't need lookback — the entity df has
-# full history by construction.
-_FACADE_LOOKBACK = 50
-
-
-def _shift_zone(zone, offset: int):
-    """Return a new zone with meta idx fields shifted by `offset`."""
-    new_meta = _shift_meta_indices(zone.meta, _ZONE_META_IDX_KEYS, offset)
-    if "bounds_steps" in new_meta:
-        steps = []
-        for step in new_meta["bounds_steps"]:
-            new_step = dict(step)
-            if isinstance(new_step.get("idx"), int):
-                new_step["idx"] = new_step["idx"] + offset
-            steps.append(new_step)
-        new_meta["bounds_steps"] = steps
-    return replace(zone, meta=new_meta)
-
-
-def _shift_event(ev, offset: int):
-    """Return a deep copy of `ev` with idx + idx-bearing meta fields shifted."""
-    new_ev = deepcopy(ev)
-    new_ev.idx = ev.idx + offset
-    new_ev.meta = _shift_meta_indices(new_ev.meta, _EVENT_META_IDX_KEYS, offset)
-    return new_ev
-
-
-def _shift_poi(poi, offset: int):
-    new_meta = _shift_meta_indices(poi.meta, _ZONE_META_IDX_KEYS, offset)
-    return replace(poi, ic_idx=poi.ic_idx + offset, meta=new_meta)
-
-
-def _shift_fib(fib, offset: int):
-    new_meta = _shift_meta_indices(fib.meta, ("deactivated_at",), offset)
-    return replace(
-        fib,
-        bos_idx=fib.bos_idx + offset,
-        cts_idx=fib.cts_idx + offset,
-        meta=new_meta,
-    )
-
-
-def _shift_wave_candle(wc, offset: int):
-    new_meta = dict(wc.meta)
-    return replace(
-        wc,
-        last_wave_candle_idx=(
-            wc.last_wave_candle_idx + offset
-            if wc.last_wave_candle_idx is not None else None
-        ),
-        first_wave_candle_idx=(
-            wc.first_wave_candle_idx + offset
-            if wc.first_wave_candle_idx is not None else None
-        ),
-        meta=new_meta,
-    )
-
-
-def _build_facade_lower_tf_result(
-    entity_df: pd.DataFrame,
-    trigger: MultiTFTrigger,
-    *,
-    new_sid_id: int,
-    structure_path_id: str,
-    m15_start_idx: int,
-    m15_end_idx: int,
-    new_events: list,                # entity-absolute idx
-    new_kl_zones: list,              # entity-absolute idx
-    new_poi_zones: list,             # entity-absolute idx
-    new_fib_states: list,            # entity-absolute idx
-    new_wave_candles: list,          # entity-absolute idx
-    validated_parent_idx: int,
-) -> LowerTFResult:
-    """Build a slice-shape `LowerTFResult` from entity-direct artifacts.
-
-    The chart consumer (until c.iii) iterates `lower_tf_results` and
-    expects each result's df to be slice-shape with slice-local 0-based
-    idx, plus events / zones / POIs / fibs / wave-candles all in
-    slice-local coords. Build that representation here, inverse of
-    `mirror_lower_tf_result_to_entity_df`.
-    """
-    slice_begin = max(0, m15_start_idx - _FACADE_LOOKBACK)
-    slice_df = entity_df.iloc[slice_begin:m15_end_idx + 1].copy()
-    # Carry imbalances onto the slice df so the chart renders them.
-    slice_df.attrs["imbalances"] = entity_df.attrs.get("imbalances", [])
-    slice_df = slice_df.reset_index(drop=True)
-
-    offset = -slice_begin
-
-    facade_events = [_shift_event(ev, offset) for ev in new_events]
-    facade_kls = [_shift_zone(z, offset) for z in new_kl_zones]
-    facade_pois = [_shift_poi(p, offset) for p in new_poi_zones]
-    facade_fibs = [_shift_fib(f, offset) for f in new_fib_states]
-    facade_wcs = [_shift_wave_candle(wc, offset) for wc in new_wave_candles]
-
-    return LowerTFResult(
-        trigger=trigger,
-        df=slice_df,
-        events=facade_events,
-        kl_zones=facade_kls,
-        wave_candles=facade_wcs,
-        fib_states=facade_fibs,
-        poi_zones=facade_pois,
-        wvmi_records=[],          # populated later by orchestrator
-        prev_bos_lines=[],        # facade does not regenerate; chart
-                                  # consumer reads from result directly
-        status="finalized",
-        meta={
-            "m15_start_idx": m15_start_idx,
-            "m15_end_idx": m15_end_idx,
-            "m15_candle_count": len(slice_df),
-            "validated_h1_start": validated_parent_idx,
-            "slice_begin": slice_begin,
-            "entity_sid": new_sid_id,
-            "structure_path_id": structure_path_id,
-            "use_case": trigger.use_case,
-            "parent_tf": trigger.parent_tf,
-            "parent_sid": trigger.parent_sid,
-            "parent_cycle_id": trigger.parent_cycle_id,
-            "timeframe": trigger.lower_tf,
-        },
-    )
+    # 9. Prev BOS lines — list of dicts with slice-local start_idx /
+    # end_idx. Translate both, embed entity_sid + parent attribution
+    # under "meta" so the chart can group by entity_sid (§13.5.c.iii).
+    new_prev_bos = []
+    for ln in result.prev_bos_lines:
+        if not isinstance(ln, dict):
+            new_prev_bos.append(ln)
+            continue
+        new_ln = dict(ln)
+        if isinstance(new_ln.get("start_idx"), int):
+            new_ln["start_idx"] = new_ln["start_idx"] + slice_begin
+        if isinstance(new_ln.get("end_idx"), int):
+            new_ln["end_idx"] = new_ln["end_idx"] + slice_begin
+        new_ln["meta"] = dict(new_ln.get("meta") or {})
+        new_ln["meta"].update(attribution)
+        new_prev_bos.append(new_ln)
+    _attrs_setdefault_list(entity_df, "prev_bos_lines").extend(new_prev_bos)
 
 
 def persist_facade_wvmi_to_entity_df(
