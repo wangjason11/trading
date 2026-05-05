@@ -1,0 +1,3 @@
+commit_hash=498886f
+timestamp=20260505_005119
+commit_message=Part 4 §13.5.a: drop WVMIRecord.source + proximity_trigger_idx
