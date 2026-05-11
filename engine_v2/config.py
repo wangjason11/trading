@@ -34,7 +34,12 @@ CONFIG = ReplayConfig(
     # Use UTC for deterministic replay.
     start=datetime(2025, 12, 1, 0, 0, 0, tzinfo=timezone.utc),
     end=datetime(2026, 1, 20, 0, 0, 0, tzinfo=timezone.utc),
-    lower_timeframes=("M15",),  # Enable UC1 multi-TF
+    # Main-structure debugging mode (2026-05-11): lower TFs disabled to
+    # cut replay runtime while we verify the H1 main pipeline (extra BOS
+    # at 157 / 705 + zone-proximity-trigger marker work). Restore to
+    # ("M15",) once main structure is verified correct and we resume
+    # subordinate-trigger debugging / Part 4 §13.5.d.
+    lower_timeframes=(),
 
     # pair="NZD_USD",
     # timeframe="H1",
