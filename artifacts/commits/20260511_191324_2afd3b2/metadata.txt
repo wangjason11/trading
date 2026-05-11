@@ -1,0 +1,3 @@
+commit_hash=2afd3b2
+timestamp=20260511_191324
+commit_message=Revert candle-direction filter on proximity triggers
