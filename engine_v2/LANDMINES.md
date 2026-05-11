@@ -113,6 +113,60 @@ Common sources of off-by-one bugs:
 
 ---
 
+## Cycle-0 CTS Cannot Be Confirmed via Zone Proximity
+
+**Rule:** The dual CTS proximity-confirmation path in
+`MarketStructure._apply_pattern_at_apply_idx` (the per-candle check
+guarded at the run loop in `_run_step`) is **disabled on cycle 0** by
+the `st.cts_cycle_id > 0` gate. Cycle 0 must rely on pullback
+confirmation. Don't remove this gate.
+
+**Why this is a landmine:** `BOS_0` is `"initial_prior_extreme"` — the
+swing extreme that existed before the structure began. Its distance
+from `CTS_0` is uncontrolled and routinely small (12–25 pips observed
+on NZD_USD H1). When `BOS_0`–`CTS_0` gap < ~2× `proximity_pips`, the
+sd-inner proximity buffer overlaps the `CTS_0` price level itself. The
+first candle after `CTS_ESTABLISHED` then trivially fires the trigger
+even though price hasn't meaningfully retraced.
+
+**Concrete cases that motivated the gate (NZD_USD H1, threshold 20p
+at the time — since lowered to 9p in `DEFAULT_PROXIMITY_PIPS`):**
+- sid=0 cyc=0: POI inner 0.56004 sat 12.2 pips below CTS=0.56126;
+  threshold 20p → buffer extended 7.8p *above* CTS. Trigger fired at
+  idx 116 (the next candle). Cascade: spurious cycle-1 transition,
+  spurious `BOS_CONFIRMED @ idx 157`.
+- sid=1 cyc=0: POI inner 0.58320 sat 12.5 pips above CTS=0.58195;
+  buffer extended 7.5p below CTS. Trigger fired at idx 704. Cascade:
+  spurious `BOS_CONFIRMED @ idx 705`.
+
+**Why the gate stays even with the lowered 9p threshold:** the new
+threshold reduces but does not eliminate the overlap pathology. A POI
+inner within 9p of CTS still triggers the same failure mode; only the
+SIZE of the geometric overlap shrinks. Cycle 0's BOS-CTS gap remains
+unconstrained by definition, so the gate is the principled fix
+regardless of threshold magnitude.
+
+The same geometric overlap drives `subsequent_confluence` / `subsequent_counter`
+over-firing in narrow-gap cycles (see `project_part4_blocker_135d.md` /
+the Lever A draft). The MarketStructure gate handles cycle 0
+specifically; cycles k>0 keep proximity confirmation enabled because
+`BOS_k` is the pullback extreme from cycle k-1 and the gap is
+structurally guaranteed.
+
+**Why we don't apply a generic |inner − cts_price| > threshold gate:**
+cycles k>0 don't need it (BOS-CTS gap is structurally meaningful) and a
+generic gate would silently drop legitimate proximity confirmations on
+borderline-but-valid POI placements. Cycle-0 is the only place the
+guarantee is absent.
+
+**If you must change the gate:** the spurious-cascade signature is two
+events at the breakout idx — a `BOS_CONFIRMED` with `source: "pullback_extreme"`
+and `pb_start: None` (meaning no pullback fired, the BOS came from the
+proximity-only `[cts_confirmed_idx, breakout_apply_idx]` window). Grep
+the structure_events.csv for that combination to catch regressions.
+
+---
+
 ## WVMI Constraints
 
 1. **Zero FB/FP volume blocks WVMI creation** — division by zero guard. Ensure candle features (volume) are computed before WVMI runs.

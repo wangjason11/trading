@@ -111,7 +111,7 @@ Identifies boundary candles between consecutive waves at each KL zone. For each 
 
 ### WVMI (`zones/wvmi.py`)
 Measures BOS zone strength via volume ratios of wave candle pairs. Runs **after POI zones** because it depends on POI zone inner bounds for its activation gate. Lifecycle:
-0. **Gated by first sd zone-proximity trigger** — `check_zone_proximity()` (in `zones/zone_proximity.py`) scans candles from CTS_CONFIRMED to zone deactivation (next BOS or reversal). It produces a list of alternating sd / opp_sd trigger candles per cycle. The orchestrator uses only the first sd trigger as the WVMI gate (preserves pre-refactor behavior). Threshold defaults: H1 = 20 pips, M15 = 10 pips, M5 = 5 pips (caller-overridable).
+0. **Gated by first sd zone-proximity trigger** — `check_zone_proximity()` (in `zones/zone_proximity.py`) scans candles from CTS_CONFIRMED to zone deactivation (next BOS or reversal). It produces a list of alternating sd / opp_sd trigger candles per cycle. The orchestrator uses only the first sd trigger as the WVMI gate (preserves pre-refactor behavior). Threshold defaults: H1 = 9 pips, M15 = 6 pips, M5 = 3 pips (caller-overridable).
 1. **Created** at CTS_n confirmation (only if activated) — breakout momentum locked from FB/LB volumes
 2. **Updated** each candle — temporary LP shifts to closest qualified candle near outer bound
 3. **Locked** at BOS_n+1 confirmation — LP finalizes, pullback momentum locked

@@ -146,7 +146,7 @@
 | **opp_sd zone** | A zone opposite to the structure direction. For sd=+1: sell-side (CTS KL only). For sd=-1: buy-side (CTS KL only). There are no opp_sd POIs. |
 | **triggered_by_event_idx** | The candle index of the first sd zone proximity trigger per cycle (Part 4 §8.7 attribution schema). Stored in WVMIRecord.meta. The corresponding MultiTFTrigger.meta uses `probe_end_idx`. |
 | **V / lambda movement** | Alternating retracement pattern within a structure cycle: price moves toward sd zone, bounces, moves toward opp_sd zone, bounces back, etc. The zone-proximity state machine captures each leg. |
-| **proximity_pips** | The pip threshold for zone proximity detection. Defaults: H1=20, M15=10, M5=5. Caller-overridable per call. |
+| **proximity_pips** | The pip threshold for zone proximity detection. Defaults: H1=9, M15=6, M5=3. Caller-overridable per call. |
 
 ---
 

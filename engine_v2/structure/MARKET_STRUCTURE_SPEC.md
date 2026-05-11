@@ -94,14 +94,52 @@ When a range is active:
 ## Dual CTS confirmation paths
 
 After `CTS_ESTABLISHED`, the engine watches for both:
-1. **A valid pullback pattern** (existing path)
-2. **First sd zone proximity hit** (new path — uses BOS inner + active POI inners)
+1. **A valid pullback pattern** (existing path, all cycles)
+2. **First sd zone proximity hit** (new path — uses BOS inner + active POI inners; **cycle k>0 only — see cycle-0 carve-out below**)
+
+### Cycle-0 carve-out (proximity disabled)
+
+The proximity confirmation path is **skipped on cycle 0** of every
+structure_id. Cycle 0's `BOS_0` is the swing extreme that existed
+*before* the structure began (`source: "initial_prior_extreme"`), so the
+`BOS_0`–`CTS_0` gap is unconstrained — it can be arbitrarily small.
+When that gap is smaller than ~2× `proximity_pips`, the sd-inner
+proximity buffer overlaps the `CTS_0` price level and the very first
+candle after `CTS_ESTABLISHED` trivially fires the trigger, producing a
+premature `CTS_CONFIRMED` and a spurious cycle-1 `BOS_CONFIRMED` at the
+narrow proximity-only retracement window. Cycles k>0 don't have this
+pathology because `BOS_k` is the pullback extreme from cycle k-1, which
+guarantees a structurally meaningful gap.
+
+Cycle 0 therefore relies on **pullback confirmation only**. If no
+pullback pattern fires before a same-direction breakout, the breakout
+calls `_emit_cts_updated` (extending cycle 0's CTS to the new extreme),
+not `_emit_cts_established` — keeping the same cycle alive rather than
+spawning a phantom cycle 1.
 
 The proximity check picks the closest-to-current-price sd inner across
 BOS and POIs. POI inners are refreshed at `CTS_ESTABLISHED` (new cycle)
 and at each `CTS_UPDATED` (CTS extended → Fib bounds expand → IC
 candidates may shift). The snapshot is per-cycle in
-`MarketStructureState.poi_inners_for_cycle`.
+`MarketStructureState.poi_inners_for_cycle`. Both refreshes still run
+on cycle 0 (cheap; downstream code reads `bos_inner_for_cycle` /
+`poi_inners_for_cycle` for other purposes), but the per-candle check
+is gated off.
+
+### Candle-direction filter
+
+The trigger candle's body direction must OPPOSE the sd-zone side. For
+`sd=+1` (sd zone = buy, below price) the trigger candle must be BEARISH
+(`direction == -1`); for `sd=-1` (sd zone = sell, above price) the
+trigger candle must be BULLISH (`direction == +1`). Doji
+(`direction == 0`) and same-side candles are filtered out.
+
+This captures real probes INTO the zone and rejects wick-only touches
+that close opposite the approach direction (e.g., a bullish pinbar at a
+buy zone — the wick probes but the body rejects). The same filter is
+applied in `zones/zone_proximity.py::check_zone_proximity` for both `sd`
+and `opp_sd` triggers (required candle direction = -sd for sd, +sd for
+opp_sd).
 
 **Snapshot vs per-candle — deliberate approximation:** The proximity
 check uses a per-cycle POI snapshot, NOT a full per-candle activity check.

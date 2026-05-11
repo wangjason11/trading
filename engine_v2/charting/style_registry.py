@@ -86,6 +86,14 @@ STYLE = {
         "marker": {"size": 8, "symbol": "x", "opacity": 0.95, "color": "purple"},
     },
 
+    # Zone-proximity-trigger marker (alternating sd/opp_sd trigger candles
+    # per cycle from `meta["zone_proximity_triggers"]`). Black x, positioned
+    # above red candles / below green candles based on candle direction.
+    "zone_proximity.trigger": {
+        "marker": {"size": 7, "symbol": "x", "opacity": 0.85, "color": "black"},
+        "offset_mult": 2.5,  # multiple of wick_offset to clear other markers
+    },
+
     # -----------------------------
     # Week 6: KL Zones (rectangles)
     # -----------------------------

@@ -30,9 +30,9 @@ from engine_v2.zones.poi_zones import POIZone
 # Proximity threshold in pips. Caller may override per-call. Same values
 # are used regardless of pair (pip_size handles pair scaling separately).
 DEFAULT_PROXIMITY_PIPS: Dict[str, int] = {
-    "H1": 20,
-    "M15": 10,
-    "M5": 5,
+    "H1": 9,
+    "M15": 6,
+    "M5": 3,
 }
 
 # Probe reset threshold in pips — used by the BOS_0 / Exception 2 reach-back
@@ -40,9 +40,9 @@ DEFAULT_PROXIMITY_PIPS: Dict[str, int] = {
 # spec §4.4, must be strictly less than DEFAULT_PROXIMITY_PIPS on the same
 # TF so probe-reset and proximity-trigger semantics never overlap.
 DEFAULT_PROBE_RESET_PIPS: Dict[str, int] = {
-    "H1": 10,
-    "M15": 5,
-    "M5": 3,
+    "H1": 3,
+    "M15": 2,
+    "M5": 1,
 }
 
 for _tf in DEFAULT_PROBE_RESET_PIPS:
@@ -204,11 +204,27 @@ def check_zone_proximity(
         triggers: List[ZoneProximityTrigger] = []
         expected_dir: Literal["sd", "opp_sd"] = "sd"
 
+        # Candle-direction filter. A trigger must be a candle moving INTO
+        # the target zone — its body direction must oppose the zone's side:
+        #   sd zone (side = sd):     required candle direction = -sd
+        #   opp_sd zone (side = -sd): required candle direction = +sd
+        # Doji (direction == 0) and same-side candles are filtered out;
+        # this rejects wick-only touches that close opposite the approach
+        # (e.g., bullish pinbars at a buy zone — wick probes but body
+        # rejects).
+        has_dir = "direction" in df.columns
+        required_dir_sd = -int(sd)
+        required_dir_opp_sd = int(sd)
+
         for i in range(scan_start, scan_end + 1):
             if i not in df.index:
                 continue
 
             if expected_dir == "sd":
+                # Candle-direction filter for sd trigger
+                if has_dir and int(df.loc[i, "direction"]) != required_dir_sd:
+                    continue
+
                 # Build sd-direction inners: BOS (always active) + active POIs
                 sd_inners: List[Tuple[float, str]] = [
                     (float(bos_inner), "BOS")
@@ -256,6 +272,11 @@ def check_zone_proximity(
                     # No opp_sd zone available; nothing more can trigger
                     # for this cycle. Break to avoid wasted scanning.
                     break
+
+                # Candle-direction filter for opp_sd trigger
+                if has_dir and int(df.loc[i, "direction"]) != required_dir_opp_sd:
+                    continue
+
                 trigger_inner = float(cts_inner)
                 if sd == 1:
                     # CTS zone is sell-side, sits below outer top.

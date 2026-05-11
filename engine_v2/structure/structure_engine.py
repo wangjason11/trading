@@ -47,9 +47,10 @@ def _make_market_structure(
     Parity carve-out (matches Step 1 baseline): probe-only call sites
     (Exception 2 probes, Scenario 3 Phase 1/2 probes) historically
     constructed MarketStructure without `timeframe`, falling back to the
-    H1 default of 20 proximity_pips regardless of the outer caller's TF.
-    Those sites still call this helper without `timeframe`, preserving
-    the H1=20 default. Spec §4.4 explicitly listed only the probe-RESET
+    H1 default of `DEFAULT_PROXIMITY_PIPS["H1"]` proximity_pips regardless
+    of the outer caller's TF. Those sites still call this helper without
+    `timeframe`, preserving the H1 default. Spec §4.4 explicitly listed
+    only the probe-RESET
     threshold for TF-aware lookup; proximity_pips for probes is a
     deferred cleanup. See the comment in `compute_structure_from_start`
     near pip_tolerance for the same carve-out applied to probe reset.
@@ -179,7 +180,7 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
 
             for _exc2_iter in range(max_exc2_iterations):
                 # Run probe (on COPY of df, separate events list).
-                # No timeframe passed → H1=20 proximity_pips fallback (Step 1
+                # No timeframe passed → H1 proximity_pips fallback (Step 1
                 # parity carve-out, see _make_market_structure docstring).
                 df_probe = df2.copy()
                 ms_probe = _make_market_structure(
@@ -351,7 +352,7 @@ def compute_structure_scenario_3(
     iteration = 0
 
     for iteration in range(max_probe_iterations):
-        # No timeframe passed → H1=20 proximity_pips fallback (Step 1 parity
+        # No timeframe passed → H1 proximity_pips fallback (Step 1 parity
         # carve-out, see _make_market_structure docstring).
         df_probe = df.copy()
         ms = _make_market_structure(df_probe, struct_direction,
@@ -470,7 +471,7 @@ def compute_structure_scenario_3(
                 exc2_triggered = False
 
                 for _exc2_iter in range(max_exc2_iterations):
-                    # No timeframe → H1=20 proximity_pips fallback (Step 1
+                    # No timeframe → H1 proximity_pips fallback (Step 1
                     # parity carve-out, see _make_market_structure docstring).
                     df_exc2_probe = df2.copy()
                     ms_exc2 = _make_market_structure(
@@ -674,7 +675,7 @@ def compute_structure_from_start(
             exc2_triggered = False
 
             for _exc2_iter in range(max_exc2_iterations):
-                # No timeframe → H1=20 proximity_pips fallback (Step 1
+                # No timeframe → H1 proximity_pips fallback (Step 1
                 # parity carve-out, see _make_market_structure docstring).
                 df_probe = df2.copy()
                 ms_probe = _make_market_structure(

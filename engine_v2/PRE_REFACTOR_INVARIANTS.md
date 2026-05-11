@@ -125,7 +125,7 @@ must replace events in the list, not mutate event objects.
 - sd zones = BOS KL + POI; opp_sd zone = CTS KL only
 - First trigger must be sd; alternation enforced by state machine
 - Scan starts AT CTS_CONFIRMED candle (not +1)
-- Default thresholds: H1=20, M15=10, M5=5 pips; caller-overridable
+- Default thresholds: H1=9, M15=6, M5=3 pips; caller-overridable
 - Single sd trigger per cycle from this function gates WVMI record creation
   (backward compat — proximity_trigger_idx in WVMIRecord.meta)
 - `MarketStructure` ALSO does its own internal proximity check (different

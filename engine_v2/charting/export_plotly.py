@@ -2034,6 +2034,154 @@ def export_chart_plotly(
             print(f"[chart][wave_candles] rendered {wc_rendered} vertical lines")
 
     # -------------------------------------------------
+    # Zone-proximity-trigger markers
+    # Alternating sd/opp_sd trigger candles per cycle from
+    # `dfx.attrs["zone_proximity_triggers"]` (built by check_zone_proximity).
+    # Visual debug aid for var3/var4 detector validation.
+    # -------------------------------------------------
+    zone_proximity_triggers = dfx.attrs.get("zone_proximity_triggers", {})
+    if zone_proximity_triggers:
+        zpt_style = _style("zone_proximity.trigger")
+        zpt_marker = zpt_style.get("marker", {"size": 7, "symbol": "x", "color": "black"})
+        offset_mult = float(zpt_style.get("offset_mult", 2.5))
+
+        # struct_direction lookup by (sid, cycle_id) from CTS_CONFIRMED events
+        # (trigger struct itself doesn't carry sd; CTS_CONFIRMED.meta does).
+        structure_events = dfx.attrs.get("structure_events", [])
+        sd_by_cycle: dict = {}
+        for ev in structure_events:
+            if getattr(ev, "type", None) != "CTS_CONFIRMED":
+                continue
+            sid = ev.meta.get("structure_id")
+            cyc = ev.meta.get("cycle_id")
+            sd = ev.meta.get("struct_direction")
+            if sid is not None and cyc is not None and sd is not None:
+                sd_by_cycle[(int(sid), int(cyc))] = int(sd)
+
+        # KL zone confirmed_idx lookup by (sid, cycle_id, source_kind)
+        kl_conf_idx_by_key: dict = {}
+        for z in dfx.attrs.get("kl_zones", []):
+            sid = z.meta.get("structure_id")
+            cyc = z.meta.get("cycle_id")
+            sk = z.source_kind
+            cidx = z.meta.get("confirmed_idx")
+            if sid is not None and cyc is not None and sk is not None and cidx is not None:
+                kl_conf_idx_by_key[(int(sid), int(cyc), str(sk))] = int(cidx)
+
+        # POI zone lookup by (sid, cycle_id) — list, may need inner-price match
+        # since multiple POIs can exist per cycle (V30/V60/V90 variants).
+        poi_zones_by_cycle: dict = {}
+        for pz in dfx.attrs.get("poi_zones", []):
+            sid = pz.meta.get("structure_id")
+            cyc = pz.meta.get("cycle_id")
+            if sid is None or cyc is None:
+                continue
+            poi_zones_by_cycle.setdefault((int(sid), int(cyc)), []).append(pz)
+
+        def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int) -> int:
+            """Find POI zone matching the trigger_inner price; return its confirmed_idx."""
+            cands = poi_zones_by_cycle.get((sid, cyc), [])
+            best = None
+            best_diff = float("inf")
+            for pz in cands:
+                pz_inner = float(pz.top) if sd == 1 else float(pz.bottom)
+                diff = abs(pz_inner - inner)
+                if diff < best_diff:
+                    best_diff = diff
+                    best = pz
+            if best is None:
+                return -1
+            cidx = best.meta.get("confirmed_idx")
+            return int(cidx) if cidx is not None else -1
+
+        x_vals, y_vals, customdata = [], [], []
+        for key, trig_list in zone_proximity_triggers.items():
+            sid_c, cyc_c = key
+            sd = sd_by_cycle.get((int(sid_c), int(cyc_c)), 0)
+            for trig in trig_list:
+                idx = int(trig.idx)
+                if idx not in dfx.index:
+                    continue
+                row = dfx.loc[idx]
+                wo = float(wick_offset.loc[idx]) if idx in wick_offset.index else 0.0
+                o, c = float(row[COL_O]), float(row[COL_C])
+                # Red candle (bearish, close < open) -> marker ABOVE
+                # Green candle (bullish, close > open) -> marker BELOW
+                # Neutral (close == open) -> ABOVE by convention
+                if c < o:
+                    y = float(row[COL_H]) + wo * offset_mult
+                else:
+                    y = float(row[COL_L]) - wo * offset_mult
+
+                # type label: "sd:<zone_kind>" or "opp_sd:CTS"
+                type_label = f"{trig.direction}:{trig.zone_kind}"
+
+                # Actual wick-to-inner distance in pips that fired the trigger.
+                # Approach direction depends on (sd, trigger.direction):
+                #   approach from ABOVE -> wick = candle.low (sd-in-up, opp_sd-in-down)
+                #   approach from BELOW -> wick = candle.high (sd-in-down, opp_sd-in-up)
+                # Signed: positive = wick stopped short of inner (still outside
+                # zone); negative = wick crossed inner into the zone.
+                approach_from_above = (
+                    (sd == 1 and trig.direction == "sd")
+                    or (sd == -1 and trig.direction == "opp_sd")
+                )
+                if approach_from_above:
+                    gap = float(row[COL_L]) - float(trig.trigger_inner)
+                else:
+                    gap = float(trig.trigger_inner) - float(row[COL_H])
+                dist_pips = round(gap / float(trig.pip_size), 1)
+
+                # Triggered zone's confirmed idx
+                if trig.zone_kind == "POI":
+                    z_conf = _poi_confirmed_idx(
+                        int(trig.structure_id), int(trig.cycle_id),
+                        float(trig.trigger_inner), int(sd) if sd else 1,
+                    )
+                else:
+                    z_conf = kl_conf_idx_by_key.get(
+                        (int(trig.structure_id), int(trig.cycle_id), str(trig.zone_kind)),
+                        -1,
+                    )
+
+                x_vals.append(row[COL_TIME])
+                y_vals.append(y)
+                customdata.append((
+                    str(trig.timeframe),
+                    idx,
+                    int(trig.structure_id),
+                    int(sd),
+                    int(trig.cycle_id),
+                    type_label,
+                    dist_pips,
+                    str(trig.zone_kind),
+                    int(z_conf),
+                ))
+
+        if x_vals:
+            fig.add_trace(go.Scatter(
+                x=x_vals,
+                y=y_vals,
+                mode="markers",
+                name="zone_proximity:trigger",
+                marker=zpt_marker,
+                customdata=customdata,
+                hovertemplate=(
+                    "TF=%{customdata[0]}<br>"
+                    "idx=%{customdata[1]}<br>"
+                    "sid=%{customdata[2]}<br>"
+                    "struct_direction=%{customdata[3]}<br>"
+                    "cycle_id=%{customdata[4]}<br>"
+                    "type=%{customdata[5]}<br>"
+                    "distance_pips=%{customdata[6]}<br>"
+                    "zone_kind=%{customdata[7]}<br>"
+                    "zone_confirmed_idx=%{customdata[8]}"
+                    "<extra></extra>"
+                ),
+            ))
+            print(f"[chart][zone_proximity] rendered {len(x_vals)} trigger markers")
+
+    # -------------------------------------------------
     # Week 8: M15 KL Zone overlays (from multi-TF analysis)
     # Dashed rectangles, lower opacity, mapped back to H1 x-axis.
     #

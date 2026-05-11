@@ -28,7 +28,10 @@ PoiInnersResolver = Callable[
 # Default fallback proximity threshold for direct/test callers that don't
 # pass `proximity_pips`. Real callers go through `structure/structure_engine.py`
 # wrappers which look up the TF-keyed value from `DEFAULT_PROXIMITY_PIPS`.
-_FALLBACK_PROXIMITY_PIPS = 20  # matches H1 default
+# Kept in sync with `zones/zone_proximity.py::DEFAULT_PROXIMITY_PIPS["H1"]`
+# manually (a direct import would create a cycle — zone_proximity imports
+# StructureEvent from this module).
+_FALLBACK_PROXIMITY_PIPS = 9  # matches H1 default
 
 
 def _check_sd_proximity_at_candle(
@@ -43,11 +46,25 @@ def _check_sd_proximity_at_candle(
     sd-direction inner bound (BOS or POI). Returns (trigger_inner, zone_kind)
     on hit; None otherwise.
 
+    Direction filter: the candle's body direction must be OPPOSITE the
+    sd-zone's side. For sd=+1 (sd zone = buy) the trigger candle must be
+    BEARISH (`direction == -1`); for sd=-1 (sd zone = sell) it must be
+    BULLISH (`direction == +1`). Doji candles (`direction == 0`) and
+    same-side candles are filtered out — captures real probes INTO the
+    zone, rejects wick-only touches that close opposite the approach
+    direction (e.g., bullish pinbars at a buy zone).
+
     Pure function — no zone-derivation deps. Moved into structure/ from the
     deleted `proximity_helpers.py` in Part 4 §13.5.b.
     """
     if candle_idx not in df.index:
         return None
+
+    # Candle-direction filter: must oppose sd-zone side.
+    if "direction" in df.columns:
+        candle_dir = int(df.loc[candle_idx, "direction"])
+        if candle_dir != -int(struct_direction):
+            return None
 
     inners: List[Tuple[float, str]] = [(float(bos_inner), "BOS")]
     if poi_inners:
@@ -788,8 +805,20 @@ class MarketStructure:
         # If the cycle is post-CTS_ESTABLISHED but not yet confirmed,
         # check sd zone proximity at this candle. First sd proximity hit
         # (when no pullback has fired yet) confirms CTS via proximity.
+        #
+        # Cycle 0 carve-out: BOS_0 is the swing extreme that existed before
+        # the structure began ("initial_prior_extreme"), so the BOS_0-CTS_0
+        # gap is unconstrained and can be arbitrarily small. When the gap
+        # is smaller than ~2x proximity_threshold, the sd-inner proximity
+        # buffer overlaps the CTS price level and the very next candle
+        # after CTS_ESTABLISHED trivially fires the trigger — producing a
+        # premature CTS_CONFIRMED and a spurious cycle-1 BOS. Cycles k>0
+        # don't have this pathology because BOS_k is the pullback extreme
+        # from cycle k-1, which guarantees a structurally meaningful gap.
+        # Cycle 0 must rely on pullback confirmation only.
         if (
             st.cts_phase == "EST_OR_UPD"
+            and st.cts_cycle_id > 0
             and st.bos_inner_for_cycle is not None
             and st.cts is not None
             and i > st.cts.idx
