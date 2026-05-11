@@ -126,21 +126,6 @@ on cycle 0 (cheap; downstream code reads `bos_inner_for_cycle` /
 `poi_inners_for_cycle` for other purposes), but the per-candle check
 is gated off.
 
-### Candle-direction filter
-
-The trigger candle's body direction must OPPOSE the sd-zone side. For
-`sd=+1` (sd zone = buy, below price) the trigger candle must be BEARISH
-(`direction == -1`); for `sd=-1` (sd zone = sell, above price) the
-trigger candle must be BULLISH (`direction == +1`). Doji
-(`direction == 0`) and same-side candles are filtered out.
-
-This captures real probes INTO the zone and rejects wick-only touches
-that close opposite the approach direction (e.g., a bullish pinbar at a
-buy zone — the wick probes but the body rejects). The same filter is
-applied in `zones/zone_proximity.py::check_zone_proximity` for both `sd`
-and `opp_sd` triggers (required candle direction = -sd for sd, +sd for
-opp_sd).
-
 **Snapshot vs per-candle — deliberate approximation:** The proximity
 check uses a per-cycle POI snapshot, NOT a full per-candle activity check.
 Refresh points are CTS_ESTABLISHED and CTS_UPDATED only — between those,

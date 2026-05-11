@@ -46,25 +46,11 @@ def _check_sd_proximity_at_candle(
     sd-direction inner bound (BOS or POI). Returns (trigger_inner, zone_kind)
     on hit; None otherwise.
 
-    Direction filter: the candle's body direction must be OPPOSITE the
-    sd-zone's side. For sd=+1 (sd zone = buy) the trigger candle must be
-    BEARISH (`direction == -1`); for sd=-1 (sd zone = sell) it must be
-    BULLISH (`direction == +1`). Doji candles (`direction == 0`) and
-    same-side candles are filtered out — captures real probes INTO the
-    zone, rejects wick-only touches that close opposite the approach
-    direction (e.g., bullish pinbars at a buy zone).
-
     Pure function — no zone-derivation deps. Moved into structure/ from the
     deleted `proximity_helpers.py` in Part 4 §13.5.b.
     """
     if candle_idx not in df.index:
         return None
-
-    # Candle-direction filter: must oppose sd-zone side.
-    if "direction" in df.columns:
-        candle_dir = int(df.loc[candle_idx, "direction"])
-        if candle_dir != -int(struct_direction):
-            return None
 
     inners: List[Tuple[float, str]] = [(float(bos_inner), "BOS")]
     if poi_inners:

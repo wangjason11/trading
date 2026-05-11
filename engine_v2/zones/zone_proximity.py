@@ -204,27 +204,11 @@ def check_zone_proximity(
         triggers: List[ZoneProximityTrigger] = []
         expected_dir: Literal["sd", "opp_sd"] = "sd"
 
-        # Candle-direction filter. A trigger must be a candle moving INTO
-        # the target zone — its body direction must oppose the zone's side:
-        #   sd zone (side = sd):     required candle direction = -sd
-        #   opp_sd zone (side = -sd): required candle direction = +sd
-        # Doji (direction == 0) and same-side candles are filtered out;
-        # this rejects wick-only touches that close opposite the approach
-        # (e.g., bullish pinbars at a buy zone — wick probes but body
-        # rejects).
-        has_dir = "direction" in df.columns
-        required_dir_sd = -int(sd)
-        required_dir_opp_sd = int(sd)
-
         for i in range(scan_start, scan_end + 1):
             if i not in df.index:
                 continue
 
             if expected_dir == "sd":
-                # Candle-direction filter for sd trigger
-                if has_dir and int(df.loc[i, "direction"]) != required_dir_sd:
-                    continue
-
                 # Build sd-direction inners: BOS (always active) + active POIs
                 sd_inners: List[Tuple[float, str]] = [
                     (float(bos_inner), "BOS")
@@ -272,11 +256,6 @@ def check_zone_proximity(
                     # No opp_sd zone available; nothing more can trigger
                     # for this cycle. Break to avoid wasted scanning.
                     break
-
-                # Candle-direction filter for opp_sd trigger
-                if has_dir and int(df.loc[i, "direction"]) != required_dir_opp_sd:
-                    continue
-
                 trigger_inner = float(cts_inner)
                 if sd == 1:
                     # CTS zone is sell-side, sits below outer top.
