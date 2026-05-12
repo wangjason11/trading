@@ -95,7 +95,56 @@ When a range is active:
 
 After `CTS_ESTABLISHED`, the engine watches for both:
 1. **A valid pullback pattern** (existing path, all cycles)
-2. **First sd zone proximity hit** (new path — uses BOS inner + active POI inners; **cycle k>0 only — see cycle-0 carve-out below**)
+2. **First sd zone proximity hit** (uses BOS inner + active POI inners) — gated by **both**:
+   - **Rule 1 (narrow-gap gate):** `|cts_price − bos_threshold| ≥ min_gap_threshold` (per-TF table)
+   - **Cycle-0 carve-out:** `cts_cycle_id > 0` (BOS_0's "initial_prior_extreme" status makes it semantically suspect regardless of gap magnitude)
+
+   Both gates must pass for sd-proximity to be eligible to confirm CTS. See "Rule 1: narrow-gap gate" and "Cycle-0 carve-out" sections below for the rationale of each.
+
+### Rule 1: narrow-gap gate
+
+The dual-CTS sd-proximity confirmation path requires `|cts_price −
+bos_threshold| ≥ min_gap_threshold` at the candidate candle. The
+per-TF threshold (`zones/zone_proximity.py::DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS`)
+is:
+
+| Timeframe | min_gap_pips |
+|---|---|
+| H1 | 50 |
+| M15 | 30 |
+| M5 | 15 |
+
+**Why:** when the BOS-to-CTS gap is small (< 50 pips on H1), the sd
+proximity buffer can overlap the CTS price level itself or fire on
+trivially-small retracements — producing spurious confirmations and a
+cascade of premature cycle transitions. The 50-pip floor ensures the
+V/λ retracement pattern has room to develop before proximity can
+substitute for pullback as a confirmation signal.
+
+**Monotonicity:** the gap is monotonically non-decreasing within a
+cycle (BOS extends in struct direction via probe; CTS extends via range
+sync — both widen the gap). So a cycle can cross the threshold at most
+once (narrow → wide), never the reverse. Once wide, the gate opens for
+the rest of the cycle.
+
+**Evaluation point:** uses `st.cts.price` (current CTS extreme) and
+`st.bos_threshold` (the running BOS level). No self-rescue concern in
+the in-MarketStructure check: sd-direction wicks of the candidate
+candle wick AWAY from CTS, so they can't extend `cts_threshold` this
+candle (extensions happen on struct-dir wicks, the opposite
+direction).
+
+**Implication for CTS_RECONFIRMED:** since proximity can't confirm CTS
+in narrow cycles, the only way a narrow cycle's CTS gets confirmed is
+via pullback (or, in the mid-cycle-crossing case, via proximity AFTER
+the gap widens). The `CTS_RECONFIRMED` event — which fires when
+proximity confirmed first AND pullback later fires — therefore only
+ever appears in wide cycles or after a mid-cycle crossing where
+proximity confirmed post-crossing before pullback.
+
+**Range-under-proximity-only path narrows scope similarly:** the
+"Option B" range seeding (see below) only fires when proximity confirms
+CTS, which after Rule 1 is restricted to wide cycles / post-crossing.
 
 ### Cycle-0 carve-out (proximity disabled)
 
@@ -173,11 +222,22 @@ The implementation is in `_select_bos_on_breakout` and switches based on
 
 ### Trigger threshold per timeframe
 
-`MarketStructure.__init__` accepts `timeframe` and `proximity_pips`
-parameters. If `proximity_pips` is None, looks up
-`zones/zone_proximity.py::DEFAULT_PROXIMITY_PIPS` by timeframe:
-H1=20, M15=10, M5=5. Pip size derived from `df.attrs["pair"]`
-(0.01 for JPY pairs, 0.0001 otherwise).
+`MarketStructure.__init__` accepts `timeframe`, `proximity_pips`, and
+`min_gap_pips` parameters. Both pip parameters fall back to per-TF
+table lookups in `zones/zone_proximity.py` when None:
+
+| Parameter | Source | H1 | M15 | M5 |
+|---|---|---|---|---|
+| `proximity_pips` | `DEFAULT_PROXIMITY_PIPS` | 9 | 6 | 3 |
+| `min_gap_pips` (Rule 1) | `DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS` | 50 | 30 | 15 |
+
+Pip size derived from `df.attrs["pair"]` (0.01 for JPY pairs, 0.0001
+otherwise). The orchestrator wires both lookups via
+`structure/structure_engine.py::_make_market_structure`.
+
+The `min_gap_pips` value also feeds Rules 2 & 3 in the post-facto
+`zones/zone_proximity.py::check_zone_proximity` scan — see that
+module's docstring for narrow-cycle scan semantics.
 
 ---
 

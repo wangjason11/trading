@@ -17,6 +17,7 @@ from engine_v2.zones.kl_zones_v1 import (
 )
 from engine_v2.zones.poi_zones import compute_poi_inners_for_cycle
 from engine_v2.zones.zone_proximity import (
+    DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS,
     DEFAULT_PROBE_RESET_PIPS,
     DEFAULT_PROXIMITY_PIPS,
 )
@@ -34,6 +35,18 @@ def _probe_reset_pips(timeframe: str) -> float:
 def _proximity_pips(timeframe: str) -> int:
     """Look up the zone-proximity threshold (in pips) for a timeframe."""
     return DEFAULT_PROXIMITY_PIPS.get(timeframe, DEFAULT_PROXIMITY_PIPS["H1"])
+
+
+def _min_gap_pips(timeframe: str) -> int:
+    """Look up the narrow-cycle gap threshold (in pips) for a timeframe.
+
+    Used by the dual CTS proximity confirmation Rule 1 gate
+    (`MarketStructure._apply_pattern_at_apply_idx`) and by Rules 2/3 in
+    the post-facto scan (`zones/zone_proximity.check_zone_proximity`).
+    """
+    return DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS.get(
+        timeframe, DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS["H1"]
+    )
 
 
 def _make_market_structure(
@@ -60,6 +73,7 @@ def _make_market_structure(
     near pip_tolerance for the same carve-out applied to probe reset.
     """
     kwargs.setdefault("proximity_pips", _proximity_pips(timeframe))
+    kwargs.setdefault("min_gap_pips", _min_gap_pips(timeframe))
     kwargs.setdefault("bos_inner_resolver", compute_bos_inner_from_event)
     kwargs.setdefault("poi_inners_resolver", compute_poi_inners_for_cycle)
     return MarketStructure(

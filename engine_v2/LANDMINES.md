@@ -113,24 +113,35 @@ Common sources of off-by-one bugs:
 
 ---
 
-## Cycle-0 CTS Cannot Be Confirmed via Zone Proximity
+## Dual CTS Proximity Confirmation — Cycle-0 + Rule 1 Are BOTH Required
 
-**Rule:** The dual CTS proximity-confirmation path in
-`MarketStructure._apply_pattern_at_apply_idx` (the per-candle check
-guarded at the run loop in `_run_step`) is **disabled on cycle 0** by
-the `st.cts_cycle_id > 0` gate. Cycle 0 must rely on pullback
-confirmation. Don't remove this gate.
+**Rule:** Two independent gates guard the dual CTS proximity-confirmation
+path in `MarketStructure._apply_pattern_at_apply_idx`. Both must pass for
+sd-proximity to be eligible to confirm CTS:
 
-**Why this is a landmine:** `BOS_0` is `"initial_prior_extreme"` — the
-swing extreme that existed before the structure began. Its distance
-from `CTS_0` is uncontrolled and routinely small (12–25 pips observed
-on NZD_USD H1). When `BOS_0`–`CTS_0` gap < ~2× `proximity_pips`, the
-sd-inner proximity buffer overlaps the `CTS_0` price level itself. The
-first candle after `CTS_ESTABLISHED` then trivially fires the trigger
-even though price hasn't meaningfully retraced.
+1. **Cycle-0 carve-out:** `st.cts_cycle_id > 0` — proximity disabled on
+   cycle 0 of every structure_id.
+2. **Rule 1 (narrow-gap gate):** `|cts_price − bos_threshold| ≥
+   min_gap_threshold` (per-TF `DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS`:
+   H1=50, M15=30, M5=15 pips).
 
-**Concrete cases that motivated the gate (NZD_USD H1, threshold 20p
-at the time — since lowered to 9p in `DEFAULT_PROXIMITY_PIPS`):**
+Don't remove either independently. The "both apply" decision (Q3 in the
+2026-05-12 spec session) was deliberate: Rule 1 covers the geometric
+pathology generically; the cycle-0 carve-out covers the additional
+semantic concern that BOS_0 = `initial_prior_extreme` is a weaker
+structural anchor than BOS_k (k>0) = prior cycle's pullback extreme,
+even when its gap happens to be wide.
+
+**The historical pathology that motivated cycle-0 carve-out:** `BOS_0`
+is the swing extreme that existed before the structure began. Its
+distance from `CTS_0` is uncontrolled and routinely small (12–25 pips
+observed on NZD_USD H1). When `BOS_0`–`CTS_0` gap < ~2× `proximity_pips`,
+the sd-inner proximity buffer overlaps the `CTS_0` price level itself.
+The first candle after `CTS_ESTABLISHED` then trivially fires the
+trigger even though price hasn't meaningfully retraced.
+
+**Concrete cases (NZD_USD H1, threshold 20p at the time — since
+lowered to 9p in `DEFAULT_PROXIMITY_PIPS`):**
 - sid=0 cyc=0: POI inner 0.56004 sat 12.2 pips below CTS=0.56126;
   threshold 20p → buffer extended 7.8p *above* CTS. Trigger fired at
   idx 116 (the next candle). Cascade: spurious cycle-1 transition,
@@ -139,31 +150,109 @@ at the time — since lowered to 9p in `DEFAULT_PROXIMITY_PIPS`):**
   buffer extended 7.5p below CTS. Trigger fired at idx 704. Cascade:
   spurious `BOS_CONFIRMED @ idx 705`.
 
-**Why the gate stays even with the lowered 9p threshold:** the new
-threshold reduces but does not eliminate the overlap pathology. A POI
-inner within 9p of CTS still triggers the same failure mode; only the
-SIZE of the geometric overlap shrinks. Cycle 0's BOS-CTS gap remains
-unconstrained by definition, so the gate is the principled fix
-regardless of threshold magnitude.
+These cases are now blocked by BOTH gates simultaneously: the
+geometric narrow-gap by Rule 1 (12.2p < 50p threshold), the structural
+weakness by the cycle-0 carve-out.
 
-The same geometric overlap drives `subsequent_confluence` / `subsequent_counter`
-over-firing in narrow-gap cycles (see `project_part4_blocker_135d.md` /
-the Lever A draft). The MarketStructure gate handles cycle 0
-specifically; cycles k>0 keep proximity confirmation enabled because
-`BOS_k` is the pullback extreme from cycle k-1 and the gap is
-structurally guaranteed.
+**Why both, not just one:** Rule 1 alone leaves the rare "cycle 0 with
+wide gap" case (gap ≥ 50p) where sd-proximity would be allowed despite
+BOS_0's semantic suspectness. The cycle-0 carve-out alone leaves the
+analogous narrow-gap pathology for cycles k>0 (where BOS_k-CTS_k can
+also be narrow, just less commonly than cycle 0) unaddressed —
+historically this surfaced as `subsequent_confluence` /
+`subsequent_counter` over-firing in narrow-gap cycles (the parked
+§13.5.d Lever A draft was attacking that same problem from a different
+angle and is now largely subsumed by Rules 1-3).
 
-**Why we don't apply a generic |inner − cts_price| > threshold gate:**
-cycles k>0 don't need it (BOS-CTS gap is structurally meaningful) and a
-generic gate would silently drop legitimate proximity confirmations on
-borderline-but-valid POI placements. Cycle-0 is the only place the
-guarantee is absent.
+**Retraction of prior reasoning:** an earlier version of this entry
+argued "we don't apply a generic `|inner − cts_price| > threshold` gate"
+because cycles k>0 supposedly didn't need it. That claim was wrong —
+narrow-gap cycles k>0 had been silently mis-firing proximity
+confirmations all along (cycle 0 was just the loudest case). Rule 1 is
+exactly the generic gate that prior reasoning argued against. The
+present design includes it.
 
-**If you must change the gate:** the spurious-cascade signature is two
-events at the breakout idx — a `BOS_CONFIRMED` with `source: "pullback_extreme"`
-and `pb_start: None` (meaning no pullback fired, the BOS came from the
-proximity-only `[cts_confirmed_idx, breakout_apply_idx]` window). Grep
-the structure_events.csv for that combination to catch regressions.
+**If you must change either gate:** the spurious-cascade signature is
+two events at the breakout idx — a `BOS_CONFIRMED` with
+`source: "pullback_extreme"` and `pb_start: None` (meaning no pullback
+fired, the BOS came from the proximity-only
+`[cts_confirmed_idx, breakout_apply_idx]` window). Grep the
+structure_events.csv for that combination to catch regressions.
+
+---
+
+## Narrow-Cycle Rules 1+2+3 Are a Triple
+
+**Rule:** The three narrow-cycle rules are interlocking. Removing any
+one undoes the others' intent. They were designed together and must be
+modified together if reconsidered.
+
+| Rule | Where | What it does |
+|---|---|---|
+| 1 | `structure/market_structure.py::_apply_pattern_at_apply_idx` (the `cycle_gap_ok` guard) | sd-proximity cannot confirm CTS while gap < `min_gap_threshold` |
+| 2 | `zones/zone_proximity.py::check_zone_proximity` (the `cycle_has_pullback_cts` check) | In narrow mode, scan triggers only fire on/after pullback-confirmed CTS |
+| 3 | Same file, the `narrow_sd_fired` / `narrow_opp_fired` caps | In narrow mode, at most 1 sd + 1 opp_sd trigger per cycle |
+
+**Why they're a triple:**
+
+- Rule 1 → without it, sd-proximity confirms CTS spuriously in narrow
+  cycles, kicking off premature cycle transitions (the original
+  cycle-0 pathology generalized to all cycles).
+- Rule 2 → without it, in mid-cycle-crossing scenarios (narrow then
+  wide), narrow-mode triggers might fire BEFORE pullback CTS_confirmed
+  exists — but Rule 1 guarantees no CTS_CONFIRMED yet, so the scan
+  window doesn't even start. Rule 2 just makes the "no scan without
+  pullback CTS in narrow mode" invariant explicit and robust against
+  future changes to scan-window semantics.
+- Rule 3 → without it, narrow cycles produce unbounded V/λ trigger
+  cascades on borderline-overlapping geometry, defeating the purpose
+  of restricting narrow-mode triggers in the first place.
+
+**Monotonicity invariant they rely on:** the gap
+`|cts_threshold − bos_threshold|` is monotonically non-decreasing
+within a cycle (BOS extends in struct direction via probe; CTS extends
+via range sync — both widen the gap). A cycle can transition narrow →
+wide exactly once, never the reverse. So the post-facto scan can
+evaluate the gap per-candle and apply Rule 3's caps only while narrow;
+once crossed, alternation continues unrestricted (Q1 = A in the spec
+session).
+
+**Self-rescue prevention (Q7):** the post-facto scan evaluates gap at
+start-of-candle (events with `idx < current_candle` applied), not at
+end-of-candle, so an opp_sd-direction candle's own wick can't extend
+`cts_threshold` enough via a same-idx `CTS_THRESHOLD_UPDATED` event to
+lift itself out of narrow mode and qualify. The
+in-MarketStructure Rule 1 check doesn't have this issue (sd-proximity
+candles wick in the opposite direction and can't extend
+`cts_threshold` on themselves), so it reads `st.cts.price` and
+`st.bos_threshold` directly.
+
+**Gap source MUST be events, NOT df columns:** the per-cycle gap is
+reconstructed from `BOS_CONFIRMED` + `CTS_CONFIRMED` + their respective
+`*_THRESHOLD_UPDATED` events filtered by `(structure_id, cycle_id)`.
+DO NOT read `df["cts_threshold"]` / `df["bos_threshold"]` for this —
+those columns are overwritten by the next structure when it begins
+processing (see "DataFrame Column Overwrite Hazard" landmine). A
+cycle's scan window can extend up to `reversal_apply_idx - 1`, which
+crosses the boundary into the next structure's rows — by that point
+the df cols are NaN or carry the next sid's state. Events are
+append-only and tagged with their owning `(sid, cycle_id)`, so they
+survive the boundary. Helpers:
+`zones/zone_proximity.py::_build_cycle_threshold_timeline` +
+`_apply_threshold_event`.
+
+**The "no-pullback narrow cycle" outcome is intended, not a bug:** when
+a cycle is narrow AND pullback never fires, the cycle gets no
+proximity triggers AND no CTS_CONFIRMED event. WVMI silent. var3/var4
+silent. Cycle proceeds to next BOS via breakout pattern only. This
+mirrors today's cycle-0 silent behavior in narrow geometry.
+
+**The "Lever A draft is now redundant":** the parked §13.5.d Lever A
+(`MIN_LAMBDA_SPAN=5`) was attacking var3/var4 over-firing in
+narrow-gap cycles by capping λ-span. Rule 3's "max 1 sd + 1 opp_sd"
+directly caps the trigger count in narrow cycles, which is the same
+effective restriction. Don't unpark Lever A without re-evaluating
+against the post-Rules-1-2-3 baseline.
 
 ---
 

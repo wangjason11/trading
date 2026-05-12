@@ -631,3 +631,81 @@ if ev.confirmation_idx is not None:
 ```
 
 **Rule:** For SUCCESS patterns (no confirmation needed), the span is `[start_idx..end_idx]`. For CONFIRMED patterns, the span is `[start_idx..confirmation_idx]`.
+
+---
+
+## Narrow-Cycle Gap: Event-Based, Start-of-Candle, Cycle-Scoped
+
+Rules 2/3 in `zones/zone_proximity.py::check_zone_proximity` classify
+each candidate trigger candle as narrow-mode or wide-mode based on
+`|cts_threshold − bos_threshold|`. Two distinct hazards apply here, and
+the current implementation addresses both.
+
+**Hazard 1 — Self-rescue:** an opp_sd candle (wicks toward CTS zone in
+struct direction) can extend `cts_threshold` via a same-idx
+`CTS_THRESHOLD_UPDATED`. If the gap is evaluated using post-extension
+state, the candle's own wick could lift the cycle from narrow → wide
+and make itself eligible by its own action.
+
+**Hazard 2 — DataFrame column overwrite:** when a cycle's scan window
+extends past a reversal into the next structure's rows (e.g.,
+sid=0 cycle=2's scan extends up to `reversal_apply_idx - 1`, but sid=1
+starts processing at `reversal_apply_idx` itself), `df["cts_threshold"]`
+and `df["bos_threshold"]` get nulled out / overwritten by sid=1. df
+columns are NOT safe for cross-structure reads (see LANDMINES
+"DataFrame Column Overwrite Hazard").
+
+**Fix:** Compute gap from events, not df columns, applying events with
+`idx < current_candle` (start-of-candle):
+
+- `_build_cycle_threshold_timeline(sorted_events, sid, cycle_id)`
+  returns the `BOS_CONFIRMED + CTS_CONFIRMED + *_THRESHOLD_UPDATED`
+  events for this `(sid, cycle_id)`, sorted by `(idx, type)`.
+- A pointer walks the timeline as the per-candle scan advances. At each
+  candle `i`, events with `idx < i` are applied to running cts/bos
+  thresholds; events at `idx == i` are NOT (start-of-candle).
+- For `i == scan_start` (the `CTS_CONFIRMED` candle), an initial pass
+  applies all events at `idx ≤ scan_start` — including
+  `CTS_CONFIRMED` itself and any same-idx `BOS_THRESHOLD_UPDATED`
+  events — so the cycle starts with a defined gap.
+
+**The in-MarketStructure Rule 1 check does NOT need either fix:**
+sd-proximity-confirmation candles wick AWAY from CTS (sd=+1: wick
+DOWN, while `cts_threshold = range_hi` extends only on UP wicks).
+And the check reads `st.cts.price` / `st.bos_threshold` from the
+in-memory state object, which is per-MarketStructure-run and isn't
+overwritten by the next sid.
+
+**Worked example (narrow cycle with mid-cycle crossing, sd=+1, H1):**
+- Events: `BOS_CONFIRMED price=1.1970` at idx 80; `CTS_CONFIRMED
+  price=1.2000` at idx 100 (= scan_start); `CTS_THRESHOLD_UPDATED
+  price=1.2050 prev=1.2000` at idx 115.
+- At idx 100: initial pass applies BOS_CONFIRMED + CTS_CONFIRMED. Gap
+  = 30p (< 50p H1 → narrow).
+- idx 105 opp_sd attempt: gap = 30p (narrow). Trigger fires, consumes
+  Rule 3 opp_sd cap.
+- idx 110: narrow, opp_sd cap consumed → skip.
+- idx 115 sd attempt: gap still 30p (CTS_THRESHOLD_UPDATED at 115 NOT
+  yet applied — start-of-candle). But Rule 3 sd cap not yet consumed
+  → sd fires.
+- idx 116 onward: gap = 50p (CTS_THRESHOLD_UPDATED at 115 now applied)
+  → wide → caps lifted. Alternation continues unrestricted.
+
+**Rule:** Whenever a candle's own action can mutate the state used for
+gating, evaluate the gate using state from BEFORE the candle's action.
+And whenever a cycle-scoped query can cross into a later structure's
+rows, query events (which carry `(sid, cycle_id)` in meta), not df
+columns.
+
+**Verification workflow lesson:** the column-overwrite bug above survived
+a `/compare` pass that compared aggregate event counts and row-level
+diffs. The /compare diff DID flag the relevant cycle (30-row
+`market_state` shift, `CTS_RECONFIRMED -1`) but the surface read of
+"yep, that's the expected Rule 1 effect" missed that the affected
+cycle was ALSO producing 13 proximity triggers when Rule 3 should have
+capped it at 2. After implementing per-cycle proximity rules, ALWAYS
+also drill into per-cycle outcomes — run `engine_v2.debug.zone_proximity_diag`
+and check the per-cycle `alt_list` counts against expectations. Aggregate
+event counts can hide cycle-specific bypass bugs (Rule 3 capping correctly
+in one narrow cycle but bypassed in another wouldn't change global
+BOS/CTS counts at all).

@@ -235,6 +235,34 @@ sub entity has diverged and CSV md5 will silently fail to detect it.
 Compare chart counts every time. (Once Part 4 §12 lands per-entity CSV
 exports, this carve-out goes away.)
 
+## Per-Cycle Proximity Trigger Counts (Required when proximity logic changed)
+
+CSV-level + event-level comparison can MASK cycle-specific bypass bugs.
+A per-cycle rule (e.g., narrow-cycle Rules 1/2/3) can fire correctly in
+one cycle and silently bypass in another while keeping aggregate event
+counts unchanged — `subsequent_confluence` / `subsequent_counter` counts
+shift slightly, but the relevant `BOS_CONFIRMED` / `CTS_CONFIRMED`
+counts stay identical.
+
+After any change to:
+- `zones/zone_proximity.py` (Rules 2/3 scan logic, alternation, caps)
+- `structure/market_structure.py` per-candle proximity-confirmation gate (Rule 1)
+- Per-TF threshold tables (`DEFAULT_PROXIMITY_PIPS`, `DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS`)
+
+ALSO run the proximity diag tool and check per-cycle trigger counts:
+
+```bash
+python -m engine_v2.debug.zone_proximity_diag
+```
+
+Output ends with `=== Per-cycle counts ===` showing `sid=N cycle=M ...
+alt_list=X var3=Y var4=Z BOS-CTS gap=Wp` per cycle. Compare each cycle's
+`alt_list` count against expectations:
+- Narrow cycle (gap < min_gap_pips): MUST be ≤ 2 (Rule 3 cap: ≤1 sd + ≤1 opp_sd).
+- Wide cycle: unbounded; depends on V/Λ pattern length.
+
+If a narrow cycle shows `alt_list > 2`, Rule 3 is being bypassed — investigate before commit. A specific concrete failure mode that has happened: df-col-based gap source went NaN when scan window crossed a reversal into the next sid's rows, causing Rule 3 to silently default-mode bypass for the cycle-tail (see LANDMINES "Narrow-Cycle Rules 1+2+3 Are a Triple").
+
 ## Why This Matters
 
 This comparison catches:

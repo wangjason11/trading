@@ -33,6 +33,12 @@ PoiInnersResolver = Callable[
 # StructureEvent from this module).
 _FALLBACK_PROXIMITY_PIPS = 9  # matches H1 default
 
+# Default fallback narrow-cycle gap threshold for the dual CTS proximity
+# confirmation gate (Rule 1). Below this, sd-proximity cannot confirm CTS.
+# Same import-cycle reason as above — kept in sync manually with
+# `zones/zone_proximity.py::DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS["H1"]`.
+_FALLBACK_MIN_GAP_PIPS = 50  # matches H1 default
+
 
 def _check_sd_proximity_at_candle(
     df: pd.DataFrame,
@@ -211,6 +217,7 @@ class MarketStructure:
         end_idx: int | None = None,
         timeframe: str = "H1",
         proximity_pips: Optional[int] = None,
+        min_gap_pips: Optional[int] = None,
         pip_size: float = 0.0001,
         bos_inner_resolver: Optional[BosInnerResolver] = None,
         poi_inners_resolver: Optional[PoiInnersResolver] = None,
@@ -241,8 +248,10 @@ class MarketStructure:
         # the H1 default to keep the code path safe.
         self.timeframe = str(timeframe)
         self.proximity_pips = int(proximity_pips) if proximity_pips is not None else _FALLBACK_PROXIMITY_PIPS
+        self.min_gap_pips = int(min_gap_pips) if min_gap_pips is not None else _FALLBACK_MIN_GAP_PIPS
         self.pip_size = float(pip_size)
         self._proximity_threshold = self.proximity_pips * self.pip_size
+        self._min_gap_threshold = self.min_gap_pips * self.pip_size
 
         # Dual CTS resolver protocol (Part 4 §13.5.b). When unset, the
         # proximity check returns None — the dual CTS path is effectively
@@ -787,24 +796,35 @@ class MarketStructure:
                 next_i = int(self.state.jump_to_idx)
             return next_i
 
-        # 2a) Zone proximity check (Stage 1: BOS-only)
-        # If the cycle is post-CTS_ESTABLISHED but not yet confirmed,
-        # check sd zone proximity at this candle. First sd proximity hit
-        # (when no pullback has fired yet) confirms CTS via proximity.
+        # 2a) Zone proximity check (Stage 1: BOS-only) — gated by Rule 1
+        # plus the cycle-0 carve-out (both apply; see LANDMINES.md).
         #
-        # Cycle 0 carve-out: BOS_0 is the swing extreme that existed before
-        # the structure began ("initial_prior_extreme"), so the BOS_0-CTS_0
-        # gap is unconstrained and can be arbitrarily small. When the gap
-        # is smaller than ~2x proximity_threshold, the sd-inner proximity
-        # buffer overlaps the CTS price level and the very next candle
-        # after CTS_ESTABLISHED trivially fires the trigger — producing a
-        # premature CTS_CONFIRMED and a spurious cycle-1 BOS. Cycles k>0
-        # don't have this pathology because BOS_k is the pullback extreme
-        # from cycle k-1, which guarantees a structurally meaningful gap.
-        # Cycle 0 must rely on pullback confirmation only.
+        # Cycle 0 carve-out: BOS_0 is "initial_prior_extreme" (the swing
+        # extreme that existed before the structure began), so even when
+        # the BOS_0-CTS_0 gap happens to be wide its semantic standing as
+        # a structural reference is weaker than a normal BOS_k (which is
+        # the prior cycle's pullback extreme). Per Q3 = "both rules
+        # apply", cycle 0 stays gated off regardless of gap magnitude.
+        #
+        # Rule 1 (narrow-cycle gate): sd-proximity cannot confirm CTS
+        # when |cts_price − bos_threshold| < min_gap_threshold. The gap
+        # is monotonically non-decreasing within a cycle (BOS extends in
+        # struct direction via probe; CTS extends via range sync — both
+        # widen, never shrink), so once a cycle crosses min_gap the gate
+        # opens for the rest of the cycle (Q1 = A). Reads st.cts.price
+        # (the current CTS extreme) and st.bos_threshold directly — no
+        # df lookup needed; sd-direction wicks of candle i can't extend
+        # cts_threshold this candle (extensions happen in struct-dir
+        # wicks, the opposite direction). No self-rescue concern here.
+        cycle_gap_ok = (
+            st.cts is not None
+            and st.bos_threshold is not None
+            and abs(float(st.cts.price) - float(st.bos_threshold)) >= self._min_gap_threshold
+        )
         if (
             st.cts_phase == "EST_OR_UPD"
             and st.cts_cycle_id > 0
+            and cycle_gap_ok
             and st.bos_inner_for_cycle is not None
             and st.cts is not None
             and i > st.cts.idx

@@ -147,6 +147,10 @@
 | **triggered_by_event_idx** | The candle index of the first sd zone proximity trigger per cycle (Part 4 §8.7 attribution schema). Stored in WVMIRecord.meta. The corresponding MultiTFTrigger.meta uses `probe_end_idx`. |
 | **V / lambda movement** | Alternating retracement pattern within a structure cycle: price moves toward sd zone, bounces, moves toward opp_sd zone, bounces back, etc. The zone-proximity state machine captures each leg. |
 | **proximity_pips** | The pip threshold for zone proximity detection. Defaults: H1=9, M15=6, M5=3. Caller-overridable per call. |
+| **narrow-gap cycle** | A cycle where `|cts_threshold − bos_threshold|` is below the per-TF `min_gap_pips` threshold (H1=50, M15=30, M5=15). In narrow cycles: sd-proximity cannot confirm CTS (Rule 1); proximity scan only fires after pullback CTS_confirmed (Rule 2); ≤1 sd + ≤1 opp_sd trigger total (Rule 3). |
+| **wide-gap cycle** | A cycle where the gap is ≥ `min_gap_pips`. Default proximity behavior applies (sd can confirm CTS, unlimited alternation). |
+| **mid-cycle crossing** | The transition narrow → wide that can happen at most once per cycle (gap is monotonically non-decreasing). After crossing, narrow-mode caps lift and alternation continues seamlessly from the cap state at the crossing candle. |
+| **min_gap_pips** | The per-TF narrow-cycle threshold (H1=50, M15=30, M5=15) in `DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS`. Invariant: `min_gap_pips[tf] > proximity_pips[tf]`. |
 
 ---
 

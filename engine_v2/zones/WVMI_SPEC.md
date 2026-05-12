@@ -32,6 +32,26 @@ the §8.7 attribution schema:
 
 Cycles without an sd trigger get no main WVMI record.
 
+#### Narrow-cycle implications (Rule 1/2/3)
+
+Per `zones/zone_proximity.py`'s narrow-gap rules:
+
+- **Narrow cycle (gap < `min_gap_pips`) without pullback CTS_confirmed:**
+  no proximity triggers (Rule 2) → no WVMI record. Mirrors the silent
+  no-WVMI behavior of cycle 0 today.
+- **Narrow cycle with pullback CTS_confirmed:** triggers can fire from
+  the pullback idx forward, capped at ≤1 sd + ≤1 opp_sd (Rule 3). The
+  first sd trigger, if it occurs, gates a WVMI record whose
+  `triggered_by_event_idx` is the post-pullback sd wick idx (NOT the
+  pullback idx).
+- **Mid-cycle crossing (narrow → wide):** the cap lifts at the
+  crossing; alternation continues unchanged. WVMI record references
+  the first sd trigger regardless of which mode it fired in.
+
+Attribution remains consistent: `triggered_by_event_idx` always points
+at the first sd-direction trigger candle, never at the pullback
+confirmation candle.
+
 ### Sub entities (`H1.main >> M15.counter`, `H1.main >> M15.confluence`)
 
 Sub WVMI is **parent-event-driven**. `_run_downstream_pipeline` runs with
