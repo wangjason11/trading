@@ -348,5 +348,5 @@ start — the path exists.
 - **Always on `df.copy()`** — no mutation of outer state until result accepted
 - **Max iterations cap** (10) — prevents infinite loops
 - **`CTS_EST + 1` scan window start** — excludes the pullback-confirmation candle (naturally near the zone, would cause false exceptions)
-- **Pip tolerance scales with timeframe** — H1=10, M15=3, M5=1 (Scenario 3); Exception 2 always 10 pips on H1 main, scaled in `compute_structure_scenario_3` Phase 2 via `pip_tolerance_pips`【fileciteturn1file11】
+- **Pip tolerance scales with timeframe** — values from `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS` (H1=3, M15=2.5, M5=2; type is `float` because M15 is fractional). Used by `compute_structure_scenario_3` Phase 1 probe AND by Exception 2 probes (both inside `compute_structure` and `compute_structure_scenario_3` Phase 2). Invariant: `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` per TF (asserted at module load).【fileciteturn1file11】
 

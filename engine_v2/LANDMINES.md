@@ -236,14 +236,14 @@ if fib.active and not fib.locked:
 
 ## Scenario 3 Pip Tolerance Scales with Timeframe
 
-**Rule:** The BOS_0 probe exception pip tolerance must be appropriate for the timeframe:
-- **H1:** 10 pips (default)
-- **M15:** 3 pips
-- **M5:** 1 pip (future)
+**Rule:** The BOS_0 probe exception pip tolerance must be appropriate for the timeframe. Canonical values live in `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS`:
+- **H1:** 3 pips
+- **M15:** 2.5 pips
+- **M5:** 2 pips
 
-**Why:** A 10-pip tolerance on M15 is too aggressive — it triggers false restarts because M15 price movements are smaller. The tolerance controls how close a candle must get to the BOS_0 zone outer bound to trigger a probe restart.
+**Why:** A wide tolerance on smaller timeframes triggers false restarts because lower-TF price movements are smaller. The tolerance controls how close a candle must get to the BOS_0 zone outer bound to trigger a probe restart. The invariant `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` is asserted module-level in `zone_proximity.py` so probe-reset and proximity-trigger semantics never overlap.
 
-**Implementation:** Pass `pip_tolerance_pips` to `compute_structure_scenario_3()`. Lower-TF pipeline uses 3 for M15.
+**Implementation:** `compute_structure_scenario_3()` accepts an optional `pip_tolerance_pips: float` override; when None, it looks up the value from `DEFAULT_PROBE_RESET_PIPS` via the caller's `timeframe`. Type is `float` (not `int`) since the M15 default is fractional (2.5).
 
 ---
 

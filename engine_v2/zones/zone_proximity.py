@@ -39,10 +39,10 @@ DEFAULT_PROXIMITY_PIPS: Dict[str, int] = {
 # probe to decide whether price has returned to the prior zone. Per Part 4
 # spec §4.4, must be strictly less than DEFAULT_PROXIMITY_PIPS on the same
 # TF so probe-reset and proximity-trigger semantics never overlap.
-DEFAULT_PROBE_RESET_PIPS: Dict[str, int] = {
+DEFAULT_PROBE_RESET_PIPS: Dict[str, float] = {
     "H1": 3,
-    "M15": 2,
-    "M5": 1,
+    "M15": 2.5,
+    "M5": 2,
 }
 
 for _tf in DEFAULT_PROBE_RESET_PIPS:

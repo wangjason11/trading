@@ -22,8 +22,12 @@ from engine_v2.zones.zone_proximity import (
 )
 
 
-def _probe_reset_pips(timeframe: str) -> int:
-    """Look up the probe reset threshold (in pips) for a timeframe."""
+def _probe_reset_pips(timeframe: str) -> float:
+    """Look up the probe reset threshold (in pips) for a timeframe.
+
+    Returns float because the per-TF table allows fractional pips
+    (e.g. M15 = 2.5) so it can sit cleanly between adjacent thresholds.
+    """
     return DEFAULT_PROBE_RESET_PIPS.get(timeframe, DEFAULT_PROBE_RESET_PIPS["H1"])
 
 
@@ -280,7 +284,7 @@ def compute_structure_scenario_3(
     start_idx: int,
     struct_direction: int,
     *,
-    pip_tolerance_pips: Optional[int] = None,
+    pip_tolerance_pips: Optional[float] = None,
     max_probe_iterations: int = 10,
     end_idx: Optional[int] = None,
     run_continuation: bool = True,
@@ -307,9 +311,9 @@ def compute_structure_scenario_3(
         Arbitrary start index to probe from.
     struct_direction : int
         +1 for uptrend, -1 for downtrend.
-    pip_tolerance_pips : int, optional
+    pip_tolerance_pips : float, optional
         Pip tolerance for zone proximity checking. If None (default), looked
-        up from DEFAULT_PROBE_RESET_PIPS by ``timeframe`` (H1=10, M15=5, M5=3).
+        up from DEFAULT_PROBE_RESET_PIPS by ``timeframe`` (H1=3, M15=2.5, M5=2).
     max_probe_iterations : int
         Maximum number of probe restarts before giving up (default 10).
     end_idx : int, optional
