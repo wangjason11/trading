@@ -357,6 +357,49 @@ if fib.active and not fib.locked:
 
 ---
 
+## Probe `end_idx` Is the Supreme Bound
+
+**Rule:** When `end_idx` is passed to a probe (`compute_structure_scenario_3`
+Phase 1, Exception 2 loops in `compute_structure` / Scenario 3 Phase 2, or any
+future similar probe), it is a HARD bound on the probe window. All inner
+logic — termination conditions, exception-check windows, fallback paths —
+must respect `end_idx` as the upper limit. Inner rules like "stop after 2
+CTS_EST" can terminate the probe early but must NOT bypass or narrow logic
+that operates within `end_idx`.
+
+**Why:** `end_idx` is a caller-defined terminal that represents a known
+real-world boundary (a WVMI activation candle, a reversal_confirmed idx,
+a sub-structure lifecycle end). The probe's purpose is to validate the
+start position GIVEN that bound. Bypassing the exception check because
+"only 1 CTS_EST was found inside" silently skips validation in the very
+window the caller cares about.
+
+**Concrete case (Scenario 3 Phase 1, fixed 2026-05-13):** the exception
+check window was hardcoded as `[cts_est[0].idx + 1, cts_est[1].idx]`. When
+the probe window `[start_idx, end_idx]` contained only ONE `CTS_ESTABLISHED`
+event, the code short-circuited Condition 4 to "finalized" without running
+the exception check. For var1 sid=0 cycle=0 (probe `[96, 439]` on NZD_USD
+H1), only one CTS fired (at idx 115); three candles in `[116, 439]` came
+within the 3-pip tolerance of BOS_0 inner (idx 152, 157, 158) but were
+never evaluated. Fix: when `end_idx` is defined, the exception check window
+is `[cts_est[0].idx + 1, end_idx]` regardless of whether `cts_est[1]`
+exists. Fallback to `cts_est[1].idx` only when `end_idx is None` (live
+mode without an explicit terminal).
+
+**Already-aligned locations:** Exception 2 in `compute_structure` (line
+~231) and in `compute_structure_scenario_3` Phase 2 (line ~517) already
+implement this principle — they use `reversal_confirmed_idx` (which IS
+what's passed as `end_idx` to the inner MS probe) as the upper bound and
+never narrow to a hypothetical `cts_est[1].idx`. Use those as the reference
+pattern when adding new probes.
+
+**If you add another probe with `end_idx`:** treat `end_idx` as the SOLE
+upper bound for any candle-iteration inside the probe. Inner termination
+events (reversal, 2 CTS_EST, etc.) can break the iteration early but must
+not silently shrink the check window away from `end_idx`.
+
+---
+
 ## Scenario 3 Pip Tolerance Scales with Timeframe
 
 **Rule:** The BOS_0 probe exception pip tolerance must be appropriate for the timeframe. Canonical values live in `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS`:

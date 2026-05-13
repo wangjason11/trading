@@ -97,8 +97,9 @@
 | **Phase 1** | Iterative probing: validate start_idx by checking if price reaches BOS_0 zone inner bound |
 | **Phase 2** | Multi-structure continuation from finalized Phase 1 (same logic as `compute_structure`) |
 | **finalized** | Scenario 3 status: probe validated, full structure analysis complete |
-| **pending** | Scenario 3 status: insufficient data (< 2 CTS_ESTABLISHED), accessible but unfinalized |
-| **pip_tolerance** | Distance threshold (default 10 pips) for exception evaluation near zone inner bound |
+| **pending** | Scenario 3 status: insufficient data (no CTS_EST captured, or 1 CTS_EST + no `end_idx` to bound the exception check) |
+| **pip_tolerance** | Distance threshold for exception evaluation near zone inner bound (per-TF defaults in `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS`: H1=3, M15=2.5, M5=2) |
+| **subordinate probe** | `compute_structure_scenario_3` invocation via `multitf/lower_tf_pipeline.py::_run_subordinate_probe`. Validates a lower-TF sub structure's start by running a bounded Phase-1 probe on the parent TF. Direction is `trigger.lower_sd` — same as parent (`+parent_sd`) for confluence variants (var 1 / var 3), opposite (`-parent_sd`) for counter variants (var 2 / var 4). The legacy name "H1 reverse probe" applies only to counter direction; the function itself is direction-agnostic. |
 
 ---
 

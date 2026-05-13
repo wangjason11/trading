@@ -298,8 +298,8 @@ functions wrap it for different start-identification strategies:
 | Function | Initial start source | Phase 1 BOS_0 probe | Multi-structure continuation | Use case |
 |---|---|---|---|---|
 | `compute_structure` | Scenario 1 (auto-identify via `identify_start_scenario_1`) | — | ✓ | H1 main pipeline (orchestrator) |
-| `compute_structure_from_start` | Caller-provided | — | ✓ | UC1 M15 (start pre-validated by H1 reverse probe) |
-| `compute_structure_scenario_3` | Caller-provided + Phase 1 refinement | ✓ | ✓ if `run_continuation=True` (gated) | UC1 H1 reverse probe (`run_continuation=False`); tests |
+| `compute_structure_from_start` | Caller-provided | — | ✓ | All sub-TF entities (start pre-validated by the subordinate probe) |
+| `compute_structure_scenario_3` | Caller-provided + Phase 1 refinement | ✓ | ✓ if `run_continuation=True` (gated) | Subordinate probe across all multi-TF variants (counter and confluence; `run_continuation=False`); tests |
 
 All three share the same per-reversal continuation logic (Scenario 2 →
 Exception 1 → Exception 2 probes). They differ only in **how the very first
@@ -356,36 +356,47 @@ No status field — outcome encoded as boolean `exc2_triggered`.
 **Question:** "Is the arbitrary candidate start a true cycle-0 point, or
 is it part of an older still-extending structure?"
 
-**Where used:** `compute_structure_scenario_3` Phase 1. Currently invoked
-in production only by `_run_h1_reverse_probe` (UC1 multi-TF) with
-`run_continuation=False`.
+**Where used:** `compute_structure_scenario_3` Phase 1. In production
+invoked by `_run_subordinate_probe` (all multi-TF use cases — first/
+subsequent counter and confluence) with `run_continuation=False`.
 
 **Bounds:** `[start_idx, end_idx]` — `end_idx` optional.
 
-**Mechanics:** Run MarketStructure from candidate. After 2 CTS_EST fire
-in the probe, check if any candle between `cts_est[0].idx + 1` and
-`cts_est[1].idx` reaches the BOS_0 zone inner bound (within
-`pip_tolerance_pips`). If so, restart from that reach-back candle (later
-than current). `original_bos0_bounds` captured at iteration 0 only and
-preserved across iterations.
+**Mechanics:** Run MarketStructure from candidate. After ≥1 `CTS_EST`
+fires AND the check window can be bounded (via `end_idx` or
+`cts_est[1].idx`), check if any candle in
+`[cts_est[0].idx + 1, exc_upper]` reaches the BOS_0 zone inner bound
+(within `pip_tolerance_pips`). If so, restart from that reach-back
+candle (later than current). `original_bos0_bounds` captured at iteration
+0 only and preserved across iterations.
 
-**Status field — four conditions:**
+**Exception check window:**
+- Lower bound: `cts_est[0].idx + 1` (excludes pullback-confirmation candle)
+- Upper bound (`exc_upper`):
+  - `end_idx` when defined (supersedes `cts_est[1]` per LANDMINES "Probe
+    `end_idx` Is the Supreme Bound" — `end_idx` is a caller-defined hard
+    bound; inner rules like "2 CTS_EST" don't narrow it)
+  - else `cts_est[1].idx` when ≥2 CTS_EST exist (live-mode fallback)
+  - else no upper bound → pending
+
+**Status field — conditions:**
 
 | Condition | Trigger | Status |
 |---|---|---|
-| 1 | 2 CTS_EST + no exception | finalized |
-| 2 | Exception triggered | (loop continues — no status) |
+| 1 | ≥1 CTS_EST + no exception found in `[cts_est[0]+1, exc_upper]` | finalized |
+| 2 | Exception triggered (within bounded check window) | (loop continues — no status) |
 | 3 | Reversal in probe before 2nd CTS_EST | finalized |
-| 4a | `end_idx is not None` AND probe reached it without 2 CTS_EST | finalized |
-| 4b | `end_idx is None` AND probe ran out of df data | **pending** |
+| 4a | No CTS_EST in probe (or no BOS_0 bounds) AND `end_idx is not None` | finalized |
+| 4b | No CTS_EST in probe (or no BOS_0 bounds) AND `end_idx is None` | **pending** |
+| 4c | 1 CTS_EST + `end_idx is None` (no way to bound check) | **pending** |
 | (max iter) | 10 iterations all triggered exception | pending |
 
 **Pending semantics:** Caller may re-invoke with same or advanced
-`start_idx` once more data arrives. `_run_h1_reverse_probe` returns
-`None` on pending so M15 isn't built for that trigger. Pending path is
-dormant in current UC1 backtest (always passes `end_idx` = the first sd
-zone-proximity trigger candle, sourced from WVMI meta's
-`triggered_by_event_idx`).
+`start_idx` once more data arrives. `_run_subordinate_probe` returns
+`None` on pending so the sub isn't built for that trigger. Pending path
+is dormant in current backtest (all triggers pass `end_idx` definitively
+— CTS_CONFIRMED idx for first_confluence, first sd zone-proximity
+trigger candle for first_counter, etc.).
 
 ### Phase 1 vs Phase 2 (Scenario 3 only)
 
@@ -399,7 +410,7 @@ zone-proximity trigger candle, sourced from WVMI meta's
 **Currently unused in production:** Phase 2 is exercised only by
 `tests/test_scenario3.py`. All production callers of
 `compute_structure_scenario_3` pass `run_continuation=False` (only
-`_run_h1_reverse_probe` calls it, probe-only). Worth knowing if a future
+`_run_subordinate_probe` calls it, probe-only). Worth knowing if a future
 feature needs multi-structure continuation from an arbitrary validated
 start — the path exists.
 

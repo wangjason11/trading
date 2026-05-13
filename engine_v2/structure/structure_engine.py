@@ -401,15 +401,13 @@ def compute_structure_scenario_3(
             status = "finalized"
             break
 
-        # --- Condition 4: Data/bound ends before 2nd CTS_EST ---
-        # Split:
-        #   4a) end_idx is defined → caller's bound was reached → finalized
-        #       (in live use, the caller knows this is a real terminal point —
-        #        e.g., the WVMI activation candle has been determined)
-        #   4b) end_idx is None → probe ran past all available df data without
-        #       reaching a defined boundary → pending (in live use, more
-        #       candles may arrive and define the boundary later)
-        if len(cts_est) < 2 or original_bos0_bounds is None:
+        # --- Condition 4: Insufficient data for exception check ---
+        # We need at least 1 CTS_EST (to anchor the check window's lower bound
+        # at cts_est[0].idx + 1) AND a captured BOS_0 zone (to define the
+        # proximity target). Without these, no exception check is possible:
+        #   - end_idx defined → finalize at caller's bound
+        #   - end_idx None → pending (more candles may resolve later)
+        if not cts_est or original_bos0_bounds is None:
             if end_idx is not None:
                 status = "finalized"
             else:
@@ -417,12 +415,28 @@ def compute_structure_scenario_3(
             break
 
         # --- Conditions 1 & 2: Evaluate exception ---
-        # Start from CTS_EST[0] + 1: the CTS_ESTABLISHED candle itself is the
-        # pullback confirmation, so its price is naturally near the zone.
-        # We only care if price returns to the zone AFTER the pullback.
+        # Window: [cts_est[0].idx + 1, exc_upper]
+        #   Lower bound excludes the CTS_ESTABLISHED candle itself — that
+        #   candle is the pullback confirmation, naturally near the zone.
+        #   We only care if price returns to the zone AFTER the pullback.
+        #
+        #   Upper bound respects end_idx-supersedes principle (see
+        #   MARKET_STRUCTURE_SPEC.md): end_idx is a caller-defined hard
+        #   bound on the probe; inner rules like "2 CTS_EST seen" don't
+        #   narrow the check window. Fall back to cts_est[1].idx only when
+        #   end_idx is None (live-mode probes without an explicit terminal).
+        if end_idx is not None:
+            exc_upper = end_idx
+        elif len(cts_est) >= 2:
+            exc_upper = cts_est[1].idx
+        else:
+            # Live mode, only 1 CTS, no end_idx → can't bound the check.
+            status = "pending"
+            break
+
         outer, inner, zone_side = original_bos0_bounds
         exc_idx = _find_closest_candle_to_outer(
-            df_probe, cts_est[0].idx + 1, cts_est[1].idx,
+            df_probe, cts_est[0].idx + 1, exc_upper,
             outer, inner, tolerance, zone_side)
 
         if exc_idx is None:
