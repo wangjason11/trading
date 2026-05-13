@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
 import pandas as pd
 
 from engine_v2.common.types import PatternEvent, PatternStatus, StructureLevel, COL_TIME, COL_O, COL_C
+from engine_v2.patterns.imbalance import has_unfilled_imbalance
 from engine_v2.patterns.structure_patterns import BreakoutPatterns
 
 
@@ -19,10 +20,25 @@ BosInnerResolver = Callable[[pd.DataFrame, int, int], Optional[float]]
 # (df, bos_idx, struct_direction) -> inner_price | None
 
 PoiInnersResolver = Callable[
-    [pd.DataFrame, int, float, int, float, int, int, int],
+    [pd.DataFrame, int, float, int, float, int, int, int, float, Optional[Dict[str, Any]]],
     List[float],
 ]
-# (df, bos_idx, bos_price, cts_idx, cts_price, sd, sid, cycle_id) -> [inner prices]
+# (df, bos_idx, bos_price, cts_idx, cts_price, sd, sid, cycle_id,
+#  fill_threshold, c0_data) -> [inner prices]
+#
+# `fill_threshold` matches the POIConfig default (0.70). Passed explicitly
+# so MarketStructure controls the value its has_unfilled checks (in
+# `_update_cycle0_data` and in the shared
+# `zones/fib_tracker.select_fib_anchor_for_cycle` utility) agree with the
+# resolver's downstream IC search.
+#
+# `c0_data` is the sid's cycle-0 snapshot tracked on MarketStructureState
+# (bos_idx/price, cts_idx/price, has_unfilled, scenario1, locked). Used by
+# `zones/poi_zones.compute_poi_inners_for_cycle` to drive the shared
+# `zones/fib_tracker.select_fib_anchor_for_cycle` Scenario 2 decision so
+# the in-flight POI snapshot agrees with FibTracker's downstream anchor
+# selection. None when MS has not yet captured cycle-0 data
+# (cts_cycle_id == -1 / cycle 0 itself / sid 0).
 
 
 # Default fallback proximity threshold for direct/test callers that don't
@@ -159,6 +175,18 @@ class MarketStructureState:
     # and each CTS_UPDATED. Stays empty until first refresh.
     poi_inners_for_cycle: List[float] = field(default_factory=list)
 
+    # Cycle-0 snapshot tracked for the shared
+    # `zones.fib_tracker.select_fib_anchor_for_cycle` Scenario 2 decision.
+    # Populated at cycle-0 CTS_ESTABLISHED, refreshed on each CTS_UPDATED
+    # for cycle 0 (raw + pattern paths), locked at cycle-0 CTS_CONFIRMED so
+    # any later raw-extreme CTS_UPDATEDs don't mutate it. Stays None for
+    # cycle 1+ refreshes when sid never produced a cycle 0 (e.g. partial
+    # runs / sid 0 itself doesn't need it). Schema: see
+    # `_update_cycle0_data`. MS does not track Scenario 1; the resolver
+    # treats `scenario1=None` as "evaluate Scenario 2/3" — see the utility's
+    # docstring for the approximation contract.
+    cycle0_data: Optional[Dict[str, Any]] = None
+
     # -------------------------------------------------
     # Week 5 Part 3A: BOS barrier semantics + reversal watch
     #
@@ -221,6 +249,7 @@ class MarketStructure:
         pip_size: float = 0.0001,
         bos_inner_resolver: Optional[BosInnerResolver] = None,
         poi_inners_resolver: Optional[PoiInnersResolver] = None,
+        fill_threshold: float = 0.70,
     ):
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
@@ -258,6 +287,12 @@ class MarketStructure:
         # disabled. All real callers wire resolvers via structure_engine.py.
         self._bos_inner_resolver = bos_inner_resolver
         self._poi_inners_resolver = poi_inners_resolver
+
+        # Imbalance fill threshold used by the cycle-0 snapshot's
+        # `has_unfilled` computation. Kept in sync with POIConfig default
+        # so MS-side has_unfilled matches FibTracker's view of the same
+        # imbalance instances.
+        self._fill_threshold = float(fill_threshold)
 
         self._ensure_output_cols()
 
@@ -422,6 +457,11 @@ class MarketStructure:
         # Option B: even when backfilling (freeze_range=True), CTS can update pre-confirm
         # based on raw new extremes in struct_direction.
         self._maybe_update_cts_pre_confirm(i, via="replay_raw")
+
+        # Per-candle CTS confirmation via sd zone proximity. Runs on every
+        # candle (anchor, back-fill, apply, fallthrough) — see LANDMINES
+        # "Dual CTS Proximity Confirmation" for the load-bearing gates.
+        self._maybe_confirm_cts_via_proximity(i)
 
         # -------------------------------------------------
         # Week 5 Part 3A: BOS barrier semantics
@@ -795,45 +835,6 @@ class MarketStructure:
             if self.state.jump_to_idx is not None:
                 next_i = int(self.state.jump_to_idx)
             return next_i
-
-        # 2a) Zone proximity check (Stage 1: BOS-only) — gated by Rule 1
-        # plus the cycle-0 carve-out (both apply; see LANDMINES.md).
-        #
-        # Cycle 0 carve-out: BOS_0 is "initial_prior_extreme" (the swing
-        # extreme that existed before the structure began), so even when
-        # the BOS_0-CTS_0 gap happens to be wide its semantic standing as
-        # a structural reference is weaker than a normal BOS_k (which is
-        # the prior cycle's pullback extreme). Per Q3 = "both rules
-        # apply", cycle 0 stays gated off regardless of gap magnitude.
-        #
-        # Rule 1 (narrow-cycle gate): sd-proximity cannot confirm CTS
-        # when |cts_price − bos_threshold| < min_gap_threshold. The gap
-        # is monotonically non-decreasing within a cycle (BOS extends in
-        # struct direction via probe; CTS extends via range sync — both
-        # widen, never shrink), so once a cycle crosses min_gap the gate
-        # opens for the rest of the cycle (Q1 = A). Reads st.cts.price
-        # (the current CTS extreme) and st.bos_threshold directly — no
-        # df lookup needed; sd-direction wicks of candle i can't extend
-        # cts_threshold this candle (extensions happen in struct-dir
-        # wicks, the opposite direction). No self-rescue concern here.
-        cycle_gap_ok = (
-            st.cts is not None
-            and st.bos_threshold is not None
-            and abs(float(st.cts.price) - float(st.bos_threshold)) >= self._min_gap_threshold
-        )
-        if (
-            st.cts_phase == "EST_OR_UPD"
-            and st.cts_cycle_id > 0
-            and cycle_gap_ok
-            and st.bos_inner_for_cycle is not None
-            and st.cts is not None
-            and i > st.cts.idx
-        ):
-            proximity_hit = self._check_proximity_at_candle(i)
-            if proximity_hit is not None:
-                trigger_inner, zone_kind = proximity_hit
-                self._fire_cts_confirmation_via_proximity(i, trigger_inner, zone_kind)
-                # State now CONFIRMED via proximity; continue with normal flow
 
         # 2b) No valid pattern by D:
         if allow_range and not st.range_active:
@@ -1482,11 +1483,13 @@ class MarketStructure:
             if new_price > float(st.cts.price):
                 self._emit_cts_updated(i, new_price, meta={"via": via})
                 st.cts = Point(idx=i, price=new_price)
+                self._refresh_poi_inners_for_cycle()
         else:
             new_price = float(self.df.iloc[i]["l"])
             if new_price < float(st.cts.price):
                 self._emit_cts_updated(i, new_price, meta={"via": via})
                 st.cts = Point(idx=i, price=new_price)
+                self._refresh_poi_inners_for_cycle()
 
     # def _initial_bos_before_first_cts(self, cts_idx: int) -> float:
     #     """
@@ -1626,6 +1629,14 @@ class MarketStructure:
         st.cts_confirmed_idx = int(idx)
         st.cts_event = "CTS_CONFIRMED"
 
+        # Lock the cycle-0 snapshot once CTS_0 is confirmed. Subsequent
+        # raw-extreme CTS_UPDATEDs (which can keep firing between CTS_0
+        # CONFIRMED and BOS_1 CONFIRMED while range is still active) must
+        # not mutate `cycle0_data`. Mirrors FibTracker's
+        # `_handle_cycle0_cts_confirmed`'s `c0["locked"] = True`.
+        if int(st.cts_cycle_id) == 0:
+            self._lock_cycle0_data()
+
     def _emit_cts_reconfirmed(self, idx: int, meta: Optional[dict] = None) -> None:
         """Emit CTS_RECONFIRMED — fires when a valid pullback pattern fires
         AFTER CTS was already confirmed via sd zone proximity. Does not change
@@ -1691,6 +1702,35 @@ class MarketStructure:
             poi_inners=list(st.poi_inners_for_cycle) if st.poi_inners_for_cycle else None,
         )
 
+    def _maybe_confirm_cts_via_proximity(self, i: int) -> None:
+        """Per-candle CTS confirmation via sd zone proximity.
+
+        Called from `_replay_step_no_patterns`, so it runs on every candle
+        (anchor, back-fill, apply, fallthrough). Two gates are load-bearing —
+        see LANDMINES "Dual CTS Proximity Confirmation" (cycle-0 carve-out +
+        Rule 1 narrow-gap gate).
+        """
+        st = self.state
+        if st.cts is None or st.bos_threshold is None:
+            return
+        cycle_gap_ok = (
+            abs(float(st.cts.price) - float(st.bos_threshold))
+            >= self._min_gap_threshold
+        )
+        if not (
+            st.cts_phase == "EST_OR_UPD"
+            and st.cts_cycle_id > 0
+            and cycle_gap_ok
+            and st.bos_inner_for_cycle is not None
+            and i > st.cts.idx
+        ):
+            return
+        hit = self._check_proximity_at_candle(i)
+        if hit is None:
+            return
+        trigger_inner, zone_kind = hit
+        self._fire_cts_confirmation_via_proximity(i, trigger_inner, zone_kind)
+
     def _refresh_poi_inners_for_cycle(self) -> None:
         """Recompute the cycle's POI inner snapshot using current BOS_n + CTS_n.
         Called at CTS_ESTABLISHED (new cycle) and each CTS_UPDATED (CTS
@@ -1700,6 +1740,11 @@ class MarketStructure:
         if st.cts is None or st.bos_confirmed is None or self._poi_inners_resolver is None:
             st.poi_inners_for_cycle = []
             return
+        # While we're on cycle 0, keep the cycle-0 snapshot in sync with
+        # the current BOS_0/CTS_0 + imbalance fill state. The snapshot is
+        # consumed when cycle 1+ POIs refresh.
+        if st.cts_cycle_id == 0:
+            self._update_cycle0_data()
         st.poi_inners_for_cycle = self._poi_inners_resolver(
             self.df,
             int(st.bos_confirmed.idx),
@@ -1709,7 +1754,61 @@ class MarketStructure:
             int(self.struct_direction),
             int(st.structure_id),
             int(st.cts_cycle_id),
+            float(self._fill_threshold),
+            st.cycle0_data,
         )
+
+
+    def _update_cycle0_data(self) -> None:
+        """Refresh the cycle-0 snapshot from current state. Skips when
+        cycle 0 has been locked (CTS_0 CONFIRMED already fired) or when
+        BOS_0 / CTS_0 aren't both available.
+
+        Snapshot schema (consumed by
+        :func:`zones.fib_tracker.select_fib_anchor_for_cycle`):
+
+        - ``bos_idx`` / ``bos_price`` — BOS_0 anchor (immutable once captured)
+        - ``cts_idx`` / ``cts_price`` — latest cycle-0 CTS extreme
+        - ``has_unfilled`` — at least one imbalance in [BOS_0, CTS_0]
+          remains unfilled as of ``cts_idx``
+        - ``scenario1`` — always ``None`` (MS does not track Scenario 1;
+          see ``select_fib_anchor_for_cycle`` docstring for the contract)
+        - ``locked`` — flipped True by ``_lock_cycle0_data`` at CTS_0
+          CONFIRMED
+        """
+        st = self.state
+        if st.cts_cycle_id != 0 or st.cts is None or st.bos_confirmed is None:
+            return
+        existing = st.cycle0_data
+        if existing is not None and existing.get("locked"):
+            return
+        bos_idx = int(st.bos_confirmed.idx)
+        bos_price = float(st.bos_confirmed.price)
+        cts_idx = int(st.cts.idx)
+        cts_price = float(st.cts.price)
+        c0_lo = min(bos_idx, cts_idx)
+        c0_hi = max(bos_idx, cts_idx)
+        has_unfilled = has_unfilled_imbalance(
+            self.df, c0_lo, c0_hi, cts_idx, self._fill_threshold
+        )
+        st.cycle0_data = {
+            "bos_idx": bos_idx,
+            "bos_price": bos_price,
+            "cts_idx": cts_idx,
+            "cts_price": cts_price,
+            "has_unfilled": has_unfilled,
+            "scenario1": None,
+            "locked": False,
+        }
+
+    def _lock_cycle0_data(self) -> None:
+        """Flip the cycle-0 snapshot to locked. Called by
+        ``_emit_cts_confirmed_once`` when CTS_0 CONFIRMED fires; further
+        raw-extreme CTS_UPDATEDs (which can still arrive between CTS_0
+        CONFIRMED and BOS_1 CONFIRMED) no longer mutate ``cycle0_data``,
+        matching FibTracker's behaviour."""
+        if self.state.cycle0_data is not None:
+            self.state.cycle0_data["locked"] = True
 
     def _fire_cts_confirmation_via_proximity(
         self,

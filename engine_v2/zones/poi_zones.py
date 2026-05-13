@@ -24,7 +24,7 @@ import pandas as pd
 from engine_v2.features.fibonacci import FibRetracement
 from engine_v2.patterns.imbalance import has_unfilled_imbalance_in_direction
 from engine_v2.structure.market_structure import StructureEvent
-from engine_v2.zones.fib_tracker import FibTracker, FibState
+from engine_v2.zones.fib_tracker import FibTracker, FibState, select_fib_anchor_for_cycle
 
 
 @dataclass(frozen=True)
@@ -482,14 +482,27 @@ def compute_poi_inners_for_cycle(
     structure_id: int = 0,
     cycle_id: int = 0,
     fill_threshold: float = 0.70,
+    c0_data: Optional[Dict[str, Any]] = None,
 ) -> List[float]:
     """Derive POI zone inner prices for the cycle's current Fib state.
 
-    Constructs a FibState inline from BOS_n + CTS_n, runs IC candidate scan
-    + variant selection, returns inner prices (top of IC for buy zones,
-    bottom for sell). POIs are always sd-direction by Fib construction.
-    Returns [] gracefully on any error so the proximity check falls back to
-    BOS-only without crashing.
+    Picks anchors via the shared
+    :func:`zones.fib_tracker.select_fib_anchor_for_cycle` decision utility
+    so this in-flight resolver agrees with FibTracker's downstream
+    Scenario 2 cross-cycle decision. Constructs the FibState from the
+    chosen anchors, runs IC candidate scan + variant selection, returns
+    inner prices (top of IC for buy zones, bottom for sell). POIs are
+    always sd-direction by Fib construction. Returns [] gracefully on any
+    error so the proximity check falls back to BOS-only without crashing.
+
+    Parameters
+    ----------
+    c0_data : optional dict
+        Cycle-0 snapshot for the structure_id. When provided and the
+        utility selects Scenario 2 (cross-cycle), the Fib anchors flip
+        to ``(BOS_0, CTS_1)`` instead of ``(BOS_1, CTS_1)``. When None,
+        the utility falls back to intra-cycle anchors regardless of
+        cycle_id, matching the pre-Scenario-2-aware behaviour.
     """
     from engine_v2.features.fibonacci import (
         DEFAULT_FIB_LEVELS,
@@ -501,12 +514,29 @@ def compute_poi_inners_for_cycle(
 
     try:
         sd = int(struct_direction)
+
+        anchor_bos_idx, anchor_bos_price, anchor_cts_idx, anchor_cts_price, _label = (
+            select_fib_anchor_for_cycle(
+                df,
+                int(structure_id),
+                int(cycle_id),
+                int(bos_idx),
+                float(bos_price),
+                int(cts_idx),
+                float(cts_price),
+                c0_data,
+                float(fill_threshold),
+            )
+        )
+        if anchor_cts_idx <= anchor_bos_idx:
+            return []
+
         if sd == 1:
-            anchor_high, anchor_high_idx = float(cts_price), int(cts_idx)
-            anchor_low, anchor_low_idx = float(bos_price), int(bos_idx)
+            anchor_high, anchor_high_idx = anchor_cts_price, anchor_cts_idx
+            anchor_low, anchor_low_idx = anchor_bos_price, anchor_bos_idx
         else:
-            anchor_high, anchor_high_idx = float(bos_price), int(bos_idx)
-            anchor_low, anchor_low_idx = float(cts_price), int(cts_idx)
+            anchor_high, anchor_high_idx = anchor_bos_price, anchor_bos_idx
+            anchor_low, anchor_low_idx = anchor_cts_price, anchor_cts_idx
 
         fib = create_fib_retracement(
             anchor_high=anchor_high,
@@ -521,10 +551,10 @@ def compute_poi_inners_for_cycle(
             structure_id=structure_id,
             cycle_id=cycle_id,
             struct_direction=sd,
-            bos_idx=int(bos_idx),
-            bos_price=float(bos_price),
-            cts_idx=int(cts_idx),
-            cts_price=float(cts_price),
+            bos_idx=int(anchor_bos_idx),
+            bos_price=float(anchor_bos_price),
+            cts_idx=int(anchor_cts_idx),
+            cts_price=float(anchor_cts_price),
             active=True,
             locked=False,
             fib=fib,

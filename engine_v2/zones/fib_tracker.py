@@ -65,6 +65,78 @@ class FibTrackerConfig:
     fill_threshold: float = 0.70  # 70% = filled
 
 
+def select_fib_anchor_for_cycle(
+    df: pd.DataFrame,
+    sid: int,
+    cycle_id: int,
+    bos_idx: int,
+    bos_price: float,
+    cts_idx: int,
+    cts_price: float,
+    c0_data: Optional[Dict[str, Any]],
+    fill_threshold: float = 0.70,
+) -> tuple:
+    """Pick the Fib anchor for a cycle. Pure function — no FibTracker state.
+
+    Returns ``(anchor_bos_idx, anchor_bos_price, anchor_cts_idx,
+    anchor_cts_price, scenario_label)``. Cross-cycle returns are signalled
+    by an anchor_bos_idx that differs from the input bos_idx.
+
+    Decision tree (mirrors FibTracker._handle_cycle1_scenarios for cycle 1):
+
+    - ``sid == 0`` or ``cycle_id != 1`` or ``c0_data is None`` →
+      intra-cycle, label ``"intra"``.
+    - ``c0_data["scenario1"] is True`` → intra-cycle (cycle 1 stays normal),
+      label ``"scenario_1"``.
+    - Otherwise evaluate Scenario 2 conditions over the imbalance set:
+
+        cond1 — cycle 1 has unfilled imbalance in [BOS_1, CTS_1] as of cts_idx
+        cond2 — cycle 0 has unfilled imbalance (cached on ``c0_data``)
+        cond3 — BOS_1 has not filled cycle 0's imbalances
+
+      All three true → cross-cycle, label ``"scenario_2_cross"`` (anchor
+      becomes BOS_0 → CTS_1). Else → intra-cycle, label ``"scenario_3"``.
+
+    Approximation (intentional): Scenario 1 REVERT — FibTracker reverts
+    Scenario 1 from TRUE to FALSE if BOS_1 touches the prev structure's BOS
+    zone outer, then evaluates Scenario 2/3. This utility cannot detect
+    that itself because ``prev_bos_outer`` / ``prev_sd`` aren't inputs. A
+    caller that tracks the revert state should flip ``c0_data["scenario1"]``
+    from True to False/None BEFORE invoking this function and let the
+    Scenario 2/3 path take over. MarketStructure's in-flight POI snapshot
+    intentionally leaves ``scenario1`` as None (it doesn't track Scenario 1
+    at all), so the utility always falls into the Scenario 2/3 evaluation
+    path for cycle 1 — matching FibTracker's behavior whenever Scenario 1
+    is False (the common case).
+    """
+    if sid < 1 or cycle_id != 1 or c0_data is None:
+        return (int(bos_idx), float(bos_price), int(cts_idx), float(cts_price), "intra")
+
+    if c0_data.get("scenario1") is True:
+        return (int(bos_idx), float(bos_price), int(cts_idx), float(cts_price), "scenario_1")
+
+    c1_lo = int(min(bos_idx, cts_idx))
+    c1_hi = int(max(bos_idx, cts_idx))
+    cond1 = has_unfilled_imbalance(df, c1_lo, c1_hi, int(cts_idx), fill_threshold)
+    cond2 = bool(c0_data.get("has_unfilled", False))
+
+    c0_bos_idx = int(c0_data["bos_idx"])
+    c0_cts_idx = int(c0_data["cts_idx"])
+    c0_lo = min(c0_bos_idx, c0_cts_idx)
+    c0_hi = max(c0_bos_idx, c0_cts_idx)
+    cond3 = has_unfilled_imbalance(df, c0_lo, c0_hi, int(bos_idx), fill_threshold)
+
+    if cond1 and cond2 and cond3:
+        return (
+            c0_bos_idx,
+            float(c0_data["bos_price"]),
+            int(cts_idx),
+            float(cts_price),
+            "scenario_2_cross",
+        )
+    return (int(bos_idx), float(bos_price), int(cts_idx), float(cts_price), "scenario_3")
+
+
 class FibTracker:
     """
     Tracks Fibonacci levels across market structure cycles.
@@ -509,22 +581,39 @@ class FibTracker:
 
         c0 = self._cross_cycle_data[sid]["cycle0"]
 
-        # Check Scenario 2 conditions
-        cond1 = has_unfilled  # Cycle 1 has unfilled imbalance
-        cond2 = c0.get("has_unfilled", False)  # Cycle 0 has unfilled imbalance
+        # Route cross vs intra anchor selection through the shared utility so
+        # MarketStructure's in-flight POI resolver and this downstream layer
+        # agree on Scenario 2 (see select_fib_anchor_for_cycle for the
+        # decision contract). `scenario1` here is the post-revert value
+        # (Scenario 1 TRUE was handled above); pass it explicitly so the
+        # utility doesn't have to re-derive Scenario 1 from inputs.
+        c0_for_utility = dict(c0)
+        c0_for_utility["scenario1"] = scenario1
 
-        # Cond 3: BOS_1 doesn't fill cycle 0's imbalances
-        c0_start = min(c0["bos_idx"], c0["cts_idx"])
-        c0_end = max(c0["bos_idx"], c0["cts_idx"])
-        cond3 = has_unfilled_imbalance(df, c0_start, c0_end, bos_idx, self.config.fill_threshold)
+        anchor_bos_idx, anchor_bos_price, anchor_cts_idx, anchor_cts_price, label = (
+            select_fib_anchor_for_cycle(
+                df,
+                sid,
+                1,
+                bos_idx,
+                bos_price,
+                cts_idx,
+                cts_price,
+                c0_for_utility,
+                self.config.fill_threshold,
+            )
+        )
+        print(f"[fib] sid={sid} cycle=1 anchor decision: label={label} "
+              f"(has_unfilled={has_unfilled})")
 
-        print(f"[fib] sid={sid} cycle=1 Scenario 2 check: cond1={cond1} cond2={cond2} cond3={cond3}")
-
-        if cond1 and cond2 and cond3:
+        if label == "scenario_2_cross":
             # Scenario 2: Cross-cycle Fib
-            print(f"[fib] sid={sid} cycle=1 Scenario 2: CROSS-CYCLE ACTIVATED: BOS_0 idx={c0['bos_idx']} -> CTS_1 idx={cts_idx}")
+            print(f"[fib] sid={sid} cycle=1 Scenario 2: CROSS-CYCLE ACTIVATED: "
+                  f"BOS_0 idx={anchor_bos_idx} -> CTS_1 idx={anchor_cts_idx}")
 
-            # Create normal cycle 1 Fib for fallback
+            # Create normal cycle 1 Fib for fallback (FibTracker tracks
+            # this separately for its own bookkeeping; not the utility's
+            # responsibility)
             normal_fib = FibState(
                 structure_id=sid,
                 cycle_id=1,
@@ -540,17 +629,18 @@ class FibTracker:
                 cts_history=((cts_idx, cts_price),),
             )
             self._cross_cycle_data[sid]["normal_cycle1"] = normal_fib
-            print(f"[fib] sid={sid} cycle=1 NORMAL computed (fallback): BOS idx={bos_idx} -> CTS idx={cts_idx}")
+            print(f"[fib] sid={sid} cycle=1 NORMAL computed (fallback): "
+                  f"BOS idx={bos_idx} -> CTS idx={cts_idx}")
 
-            # Create cross-cycle Fib: BOS_0 -> CTS_1
+            # Activate the cross-cycle Fib using utility-chosen anchors
             cross_fib = self._activate_fib(
                 sid=sid,
                 cycle_id=1,
                 sd=sd,
-                bos_idx=c0["bos_idx"],
-                bos_price=c0["bos_price"],
-                cts_idx=cts_idx,
-                cts_price=cts_price,
+                bos_idx=anchor_bos_idx,
+                bos_price=anchor_bos_price,
+                cts_idx=anchor_cts_idx,
+                cts_price=anchor_cts_price,
                 meta={
                     "cross_cycle": True,
                     "scenario": 2,
@@ -560,23 +650,25 @@ class FibTracker:
             )
             self._cross_cycle_data[sid]["cross_cycle"] = cross_fib
             return cross_fib
-        elif cond1:
-            # Scenario 3: Normal cycle 1 Fib (cross-cycle conditions not met)
-            print(f"[fib] sid={sid} cycle=1 Scenario 3: NORMAL ACTIVATED: BOS idx={bos_idx} -> CTS idx={cts_idx}")
+
+        if has_unfilled:
+            # Scenario 3: Normal cycle 1 Fib (utility selected intra anchors)
+            print(f"[fib] sid={sid} cycle=1 Scenario 3: NORMAL ACTIVATED: "
+                  f"BOS idx={anchor_bos_idx} -> CTS idx={anchor_cts_idx}")
             return self._activate_fib(
                 sid=sid,
                 cycle_id=1,
                 sd=sd,
-                bos_idx=bos_idx,
-                bos_price=bos_price,
-                cts_idx=cts_idx,
-                cts_price=cts_price,
+                bos_idx=anchor_bos_idx,
+                bos_price=anchor_bos_price,
+                cts_idx=anchor_cts_idx,
+                cts_price=anchor_cts_price,
                 meta={"activated_at": cts_idx, "scenario": 3},
             )
-        else:
-            # No unfilled imbalance in cycle 1
-            print(f"[fib] sid={sid} cycle=1 NOT activated: no unfilled imbalance in cycle 1")
-            return None
+
+        # No unfilled imbalance in cycle 1
+        print(f"[fib] sid={sid} cycle=1 NOT activated: no unfilled imbalance in cycle 1")
+        return None
 
     def _create_fib_retracement(
         self,

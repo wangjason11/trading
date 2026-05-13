@@ -179,6 +179,40 @@ fired, the BOS came from the proximity-only
 `[cts_confirmed_idx, breakout_apply_idx]` window). Grep the
 structure_events.csv for that combination to catch regressions.
 
+**Scenario 2 anchor agreement (closed 2026-05-13):**
+MarketStructure's in-flight POI snapshot
+(`zones/poi_zones.py::compute_poi_inners_for_cycle`) and FibTracker's
+downstream POI derivation both pick Fib anchors via the shared pure
+utility `zones/fib_tracker.py::select_fib_anchor_for_cycle`. The utility
+embeds the Scenario 2 cross-cycle cond1/cond2/cond3 check, so for
+`sid >= 1, cycle_id == 1` cases both layers agree on whether to anchor at
+`(BOS_0, CTS_1)` (Scenario 2) or `(BOS_n, CTS_n)` (Scenario 3 / intra).
+MS tracks the cycle-0 snapshot (`MarketStructureState.cycle0_data`)
+populated at cycle-0 CTS_ESTABLISHED, refreshed on each CTS_UPDATED, and
+locked at CTS_0 CONFIRMED — threaded into the resolver via the
+`PoiInnersResolver` protocol's `c0_data` slot.
+
+**Documented approximation:** MS does NOT track Scenario 1 (TRUE / revert
+to FALSE on BOS_1 touching prev BOS zone outer). It passes
+`scenario1=None` in c0_data, which routes the utility into the Scenario
+2/3 evaluation path. FibTracker passes the post-revert `scenario1` value
+through. When Scenario 1 is TRUE in FibTracker's view (rare — requires
+CTS_0 idx >= reversal_confirmed_idx) AND Scenario 2 cond1/cond2/cond3 all
+match (also rare), MS would pick cross-cycle anchors where FibTracker
+picks intra. To plug that gap, thread the parent reversal_confirmed_idx
+and prev BOS outer/sd through `structure_engine._make_market_structure`,
+mirror the Scenario 1 resolution + revert logic on MarketStructureState,
+and set `c0_data["scenario1"]` accordingly before each resolver call.
+
+**Concrete signature of regression (keep for future debugging):** a
+CTS_CONFIRMED dot whose `confirmation_method == "sd_zone_proximity"` BUT
+the candle is visually nowhere near any rendered POI zone for that cycle
+— suspect either the resolver has gone out of sync with FibTracker's
+anchor selection, or `c0_data` isn't being threaded correctly through
+`_refresh_poi_inners_for_cycle`. Trace by instrumenting
+`_check_proximity_at_candle` to log the active `poi_inners_for_cycle` and
+compare against `df.attrs["poi_zones"]`.
+
 ---
 
 ## Narrow-Cycle Rules 1+2+3 Are a Triple

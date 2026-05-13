@@ -709,3 +709,129 @@ and check the per-cycle `alt_list` counts against expectations. Aggregate
 event counts can hide cycle-specific bypass bugs (Rule 3 capping correctly
 in one narrow cycle but bypassed in another wouldn't change global
 BOS/CTS counts at all).
+
+---
+
+## Proximity Check Was Pattern-Gated, Now Per-Candle
+
+**Problem:** Stage 1 + Stage 2 spec said "per-candle proximity check after
+CTS_ESTABLISHED" — but the implementation lived inside `_step_anchor`'s
+no-winner branch (historical lines ~824-836), meaning it only ran on anchor
+candles where no breakout/pullback/reversal pattern fired.
+
+**Why this miss matters:** A multi-candle pattern with `anchor=A,
+apply_idx=A+2` causes the main loop in `run()` to jump from anchor `A`
+directly to `A+3` (via `_step_anchor` returning `next_i = apply_idx + 1`).
+Candles `A+1` (back-fill via `_replay_step_no_patterns(freeze_range=True)`)
+and `A+2` (apply via `_apply_pattern_at_apply_idx` then
+`_replay_step_no_patterns`) are never visited as anchors — so the
+per-anchor proximity check was structurally blind to them.
+
+**Concrete miss (2026-05-13, sid=1 cycle=1, NZD_USD H1):** candle 809
+surged 173 pips up to wick into the in-flight POI proximity band, but it
+was a back-fill candle of a `one_maru_continuous` pullback pattern
+(`apply_idx=810`). Under per-anchor-without-winner, the proximity check
+never saw it; CTS confirmed at 810 via pullback. Under per-candle (Fix B),
+it fires at 809 (modulo the Scenario 2 mismatch — see related notes).
+
+**Fix shape (Fix B, landed 2026-05-13):**
+1. Extracted proximity check into `_maybe_confirm_cts_via_proximity(i)` method
+   on `MarketStructure`.
+2. Called at top of `_replay_step_no_patterns(i)` after
+   `_maybe_update_cts_pre_confirm` (so any CTS update at the current candle
+   is reflected first; the `i > st.cts.idx` guard naturally excludes the
+   candle that just updated CTS).
+3. Inline block in `_step_anchor`'s no-winner branch deleted.
+4. Now runs on every candle (anchor, back-fill, apply, fallthrough).
+
+**Order matters within `_replay_step_no_patterns`:** place the proximity
+hook AFTER `_maybe_update_cts_pre_confirm` but BEFORE `_bos_barrier_step` /
+`_write_df_row`. If proximity confirms CTS, the range gets created via
+`_fire_cts_confirmation_via_proximity` (Option B: range seeded by
+proximity candle's wick), and subsequent steps see the correct state.
+
+**Related issue surfaced by per-candle:** Fix B exposed a pre-existing
+divergence between MarketStructure's in-flight POI snapshot and the
+downstream FibTracker-derived POI zones (Scenario 2 cross-cycle). See
+`memory/project_proximity_scenario2_fix.md` for the resolution plan.
+
+---
+
+## POI Inner Snapshot Was Stale on Raw-Extreme CTS_UPDATED
+
+**Problem:** `_refresh_poi_inners_for_cycle()` was called only from
+`_apply_pattern_at_apply_idx` (around line 1354 in `market_structure.py`),
+which handles CTS_UPDATED events emitted via the breakout-pattern path.
+But CTS can also UPDATE via the raw-extreme path in
+`_maybe_update_cts_pre_confirm` (called per candle from
+`_replay_step_no_patterns` with `via="replay_raw"`). That path did NOT
+refresh the snapshot.
+
+**Symptom (2026-05-13, sid=1 cycle=2, NZD_USD H1):** CTS_ESTABLISHED at
+idx 902 (price=0.57228) snapshotted POI inners as `[0.57813]` (POI #2
+only). Then raw-extreme CTS_UPDATEDs at idx 903 (price 0.57159) and 905
+(price 0.57112) extended CTS but did NOT refresh — snapshot stayed
+`[0.57813]`. The proximity check thereafter saw only POI #2; it should
+have included POI #1 (inner=0.57720) which
+`compute_poi_inners_for_cycle(cts=905/0.57112)` correctly returns. Result:
+proximity didn't fire at candle 926 (the visually obvious trigger, wicked
+into POI #1's band) — fired later at 935 against POI #2 instead, with a
+much shallower retracement.
+
+**Fix shape (Fix A, landed 2026-05-13):** add
+`self._refresh_poi_inners_for_cycle()` after each `st.cts = Point(...)`
+assignment in both branches of `_maybe_update_cts_pre_confirm`.
+
+**Diagnostic technique used:** monkey-patch `_refresh_poi_inners_for_cycle`
+to log invocations and the returned `st.poi_inners_for_cycle`. Also
+monkey-patch `_check_proximity_at_candle` to trace per-candle invocations
+and what `poi_inners` it received. Both invaluable when the divergence is
+between "what got computed by the resolver" vs "what the proximity gate
+saw at this candle".
+
+**Lesson:** Whenever multiple code paths can emit the same conceptual event
+(here, CTS_UPDATED), audit ALL paths for required side effects (here, POI
+snapshot refresh). Memory's claim "POI snapshot refreshed at CTS_ESTABLISHED
++ each CTS_UPDATED" was accurate AS SPEC but the implementation missed the
+raw-extreme path — exactly the kind of spec/code drift covered by
+`memory/feedback_spec_writing_precision.md`.
+
+**Closure (2026-05-13):** Fix A is no longer the full story. The 935 → 926
+shift also required the Scenario-2 anchor agreement fix (in-flight POI in
+MarketStructure now picks anchors via the shared
+`zones/fib_tracker.py::select_fib_anchor_for_cycle` utility used by
+FibTracker downstream). Without that, MS's in-flight resolver could
+silently disagree with FibTracker on which POI inners exist for a cycle
+— a separate hazard from the stale-snapshot one this entry describes.
+See LANDMINES "Scenario 2 anchor agreement" for the closing rule.
+
+---
+
+## Pitfall: Positional resolver args drift when the protocol grows
+
+**Problem:** The `PoiInnersResolver` protocol in `market_structure.py`
+grew from 8 → 10 positional args when c0_data + fill_threshold were
+threaded in. The first wiring pass passed 9 positional args, with
+`st.cycle0_data` (a dict) landing in the 9th slot — which
+`compute_poi_inners_for_cycle` still treats as `fill_threshold`. The
+inner `float(fill_threshold)` call raised `TypeError: float() argument
+must be a string or a real number, not 'dict'`; the function's
+try/except swallowed it and returned `[]`. The proximity check then saw
+empty POI inners and fired against BOS inner only — a silent regression
+that *looked* like the resolver had simply failed to find ICs.
+
+**Diagnostic:** `_refresh_poi_inners_for_cycle` debug print logged
+`inners=[]` while a direct test call to `compute_poi_inners_for_cycle`
+with the same arguments returned the expected POI inner list. The split
+between "works direct, returns [] in-replay" is the tell that an
+exception is being swallowed inside the resolver. Temporarily replacing
+`except Exception: return []` with `except Exception as _exc:
+traceback.print_exc(); return []` surfaced the underlying TypeError on
+the first replay.
+
+**Rule:** When you grow a `Callable[..., ...]` protocol with more
+positional args, audit every CALL SITE — type hints don't enforce arity
+at runtime, and a positional/keyword mix-up will silently truncate to the
+wrong parameter binding inside try/except. If the protocol has a
+swallowing try/except for safety, plan to temporarily widen it during
+the rollout so latent type errors surface.
