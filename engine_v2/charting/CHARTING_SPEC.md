@@ -123,10 +123,46 @@ To change any visual element:
   - WVMI lookup built from `df.attrs["wvmi"]` mapping each idx to `(WVMIRecord, role)` where role is FB/LB/FP/LP
 - Style keys: `wave_candle.bullish`, `wave_candle.bearish`
 
-### 11) M15 KL Zones on H1 chart (Week 8)
-- Reads `lower_tf_results` from pipeline meta
-- Dashed rectangles with lower opacity than H1 zones
+### 11) Subordinate overlays on parent charts (Week 8 / Part 4)
+
+The H1 chart can overlay zones from subordinate sub-entities (M15.counter,
+M15.confluence, future deeper-nested subs). These are visual aides — the
+sub structures still compute regardless of whether they render.
+
+**Config-gated, default off.** Per-sub-entity, per-element-kind toggles
+live under `zones.subordinate_overlays` in `chart_cfg`:
+
+```python
+"zones": {
+    "KL": True, ...,
+    "subordinate_overlays": {
+        # Missing keys default to off — H1 chart stays clean by default.
+        "M15.counter":    {"KL": True},   # opt-in example
+        # "M15.confluence": {"KL": True},
+    },
+}
+```
+
+The master `zones.KL` switch still gates ALL KL rendering (H1-native + any
+subordinate overlay). Subordinate flags layer on top — both must be true
+to render. Same pattern will extend to `POI`, `fib`, etc. as new sub
+element kinds come online (counter/confluence variants are still being
+built in Part 4; new overlay kinds will be additive).
+
+**Currently rendered (when enabled):**
+- M15.counter KL zones — reads `dfx.attrs["lower_tf_results"]`, dashed
+  rectangles with lower opacity, mapped to H1 x-axis
 - Style keys: `zone.m15.kl.buy`, `zone.m15.kl.sell`
+
+**Not yet rendered on H1 (future work):** M15 POIs, M15 fibs, M15.confluence
+zones, deeper-nested sub elements. Adding any of these means: (a) new
+config key under `subordinate_overlays`, (b) a new rendering block in
+`export_plotly.py` gated on that key, (c) style keys in `style_registry.py`.
+
+**Distinct from parent overlays on sub charts.** The M15 chart overlays
+H1 elements onto M15 (`zone.h1_overlay.*` keys) — that's a separate
+mechanism with its own rendering logic in `export_m15_chart.py`. Don't
+conflate the two directions.
 
 ---
 

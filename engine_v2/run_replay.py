@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from datetime import timedelta
 from typing import Optional, Tuple
@@ -19,7 +20,14 @@ chart_cfg = {
 
     # keep these off for now (declutter)
     "structure": {"levels": True, "swings": False},
-    "zones": {"KL": True, "OB": False, "POI": True, "num_structures": 3},  # num_structures: how many recent structure_ids to show zones for
+    "zones": {
+        "KL": True, "OB": False, "POI": True,
+        "num_structures": 3,  # how many recent structure_ids to show zones for
+        # Per-sub-entity overlay toggles for the H1 chart (default: all off).
+        # Add an entry to enable, e.g. {"M15.counter": {"KL": True}}.
+        # See CHARTING_SPEC.md "Subordinate overlays on parent charts".
+        "subordinate_overlays": {},
+    },
 }
 
 
@@ -163,6 +171,9 @@ def main() -> None:
     #     end=CONFIG.end,
     # )
 
+    _t_wallclock_start = time.perf_counter()
+
+    _t0 = time.perf_counter()
     df, effective_start, start_decision = fetch_history_with_auto_extend(
         pair=CONFIG.pair,
         timeframe=CONFIG.timeframe,
@@ -173,6 +184,7 @@ def main() -> None:
         extend_days=4,
         max_extend_iters=8,
     )
+    _t_data_fetch = time.perf_counter() - _t0
     df.attrs["pair"] = CONFIG.pair
 
     raw_path = (
@@ -183,6 +195,7 @@ def main() -> None:
 
     res = run_pipeline(df, lower_timeframes=CONFIG.lower_timeframes)
     registry = res.meta["registry"]
+    timing: dict = dict(res.meta.get("timing", {}))
 
     print(res.df["is_range"].value_counts())
     print(res.df[res.df["is_range"] == 1][["is_range_confirm_idx", "is_range_lag"]].head())
@@ -244,6 +257,7 @@ def main() -> None:
     TITLE_PREFIX = f"{CONFIG.pair} {CONFIG.timeframe}"
     ZOOM = None              # e.g. None or (300, 520)
 
+    _t0 = time.perf_counter()
     export_charts_with_optional_zoom(
         registry=registry,
         path_id="H1.main",
@@ -253,6 +267,7 @@ def main() -> None:
         basename=basename,
         zoom=ZOOM,
     )
+    timing["chart_h1"] = time.perf_counter() - _t0
 
     # M15 chart exports (one per registered M15 sub entity).
     # Part 4 §16.1 / §16.2: each entity gets its own chart, candles in own
@@ -267,6 +282,7 @@ def main() -> None:
         # Filename suffix: last path segment, dots → underscores.
         # E.g. "H1.main >> M15.counter" → "M15_counter".
         leaf_label = sub_path_id.split(" >> ")[-1].replace(".", "_")
+        _t0 = time.perf_counter()
         m15_paths = export_m15_chart_plotly(
             registry=registry,
             path_id=sub_path_id,
@@ -274,6 +290,7 @@ def main() -> None:
             basename=f"{basename}_{leaf_label}",
             cfg=chart_cfg,
         )
+        timing[f"chart_{leaf_label.lower()}"] = time.perf_counter() - _t0
         print(f"Chart {leaf_label} HTML: {m15_paths.html_path}")
         print(f"Chart {leaf_label} PNG : {m15_paths.png_path}")
 
@@ -291,6 +308,24 @@ def main() -> None:
         res.df.attrs.get("imbalances", []),
         f"artifacts/debug/{basename}_imbalance_instances.csv",
     )
+
+    # ---------------------------
+    # Timing summary
+    # ---------------------------
+    _t_wallclock_total = time.perf_counter() - _t_wallclock_start
+    # Prepend data fetch in stage order; preserve insertion order from pipeline
+    timing_ordered = {"data_fetch": _t_data_fetch, **timing}
+    _tracked_sum = sum(timing_ordered.values())
+    _untracked = _t_wallclock_total - _tracked_sum
+
+    print()
+    print("=== Replay Timing ===")
+    for stage, secs in timing_ordered.items():
+        print(f"{stage:<32s} {secs:>8.2f}s")
+    print(f"{'-' * 32}")
+    print(f"{'tracked subtotal':<32s} {_tracked_sum:>8.2f}s")
+    print(f"{'untracked overhead':<32s} {_untracked:>8.2f}s")
+    print(f"{'total (wall clock)':<32s} {_t_wallclock_total:>8.2f}s")
 
 
 if __name__ == "__main__":

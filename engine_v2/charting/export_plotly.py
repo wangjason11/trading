@@ -2181,15 +2181,38 @@ def export_chart_plotly(
             ))
             print(f"[chart][zone_proximity] rendered {len(x_vals)} trigger markers")
 
-    # -------------------------------------------------
-    # Week 8: M15 KL Zone overlays (from multi-TF analysis)
-    # Dashed rectangles, lower opacity, mapped back to H1 x-axis.
+    # Subordinate-structure overlays (e.g., M15 zones rendered on the H1 chart)
+    #
+    # Gated by `zones.subordinate_overlays`, a nested dict keyed by sub-entity
+    # path ID and element kind:
+    #     zones.subordinate_overlays = {
+    #         "M15.counter":    {"KL": False, ...},
+    #         "M15.confluence": {"KL": False, ...},
+    #     }
+    # Missing keys default to off. Default chart_cfg ships with no overrides
+    # so the H1 chart stays focused on H1-native elements; users opt-in per
+    # sub entity when they want to see its overlays.
     #
     # Part 4 §13.5.c.iii: read M15 zones directly from each registered
-    # M15 sub-entity's attrs (entity-absolute idx), instead of from the
-    # `dfx.attrs["lower_tf_results"]` facade list (gone after c.iii).
+    # M15 sub-entity's `df.attrs[...]` (entity-absolute idx), via the
+    # registry. The legacy `dfx.attrs["lower_tf_results"]` facade path
+    # is gone.
+    #
+    # NOTE: subordinate structures (counter / confluence variants) are still
+    # being built in Part 4 — new element kinds may appear here as those
+    # variants mature. The dict structure is open-ended so adding a new sub
+    # entity or element kind is purely additive.
     # -------------------------------------------------
-    if registry is not None and path_id is not None and zone_cfg.get("KL", False):
+    sub_overlays = zone_cfg.get("subordinate_overlays", {}) or {}
+    m15_counter_kl_overlay = (
+        sub_overlays.get("M15.counter", {}).get("KL", False)
+    )
+    if (
+        registry is not None
+        and path_id is not None
+        and zone_cfg.get("KL", False)
+        and m15_counter_kl_overlay
+    ):
         h1_times = pd.to_datetime(dfx[COL_TIME], utc=True)
         t_last_h1 = h1_times.iloc[-1]
         m15_zones_rendered = 0

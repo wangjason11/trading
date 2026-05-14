@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 
@@ -372,25 +373,34 @@ def run_pipeline(
     Zones remain event-driven and do not add rewinds/waits.
     """
     _validate_input(df)
+    timing: Dict[str, float] = {}
 
     # 1) Candle features
+    _t0 = time.perf_counter()
     c_res = apply_candle_classification(df)
+    timing["candle_features"] = time.perf_counter() - _t0
 
     # 2) Pattern engine (structure patterns used by market structure)
+    _t0 = time.perf_counter()
     p_res = detect_patterns(c_res.df)
+    timing["patterns"] = time.perf_counter() - _t0
 
     # ✅ Debug: confirm structure-pattern markers exist
     print("[patterns]", p_res.notes)
     print(p_res.df["pat"].value_counts().head())
 
     # 3) Imbalance patterns (Week 7) - columns + instances in df.attrs
+    _t0 = time.perf_counter()
     df_with_imbalance = compute_imbalance(p_res.df)
+    timing["imbalance"] = time.perf_counter() - _t0
     imbalance_candles = int(df_with_imbalance["is_imbalance"].sum())
     imbalance_instances = len(df_with_imbalance.attrs.get("imbalances", []))
     print(f"[imbalance] candles={imbalance_candles} instances={imbalance_instances}")
 
     # 4) Market structure (must return events + struct_direction)
+    _t0 = time.perf_counter()
     s_res = compute_structure(df_with_imbalance)
+    timing["market_structure"] = time.perf_counter() - _t0
 
     # Propagate imbalance instances through the structure df (so downstream
     # consumers reading s_res.df.attrs see them)
@@ -406,11 +416,13 @@ def run_pipeline(
     }
 
     # 5-9) Downstream pipeline (KL zones -> wave candles -> Fib -> POI -> WVMI)
+    _t0 = time.perf_counter()
     downstream = _run_downstream_pipeline(
         s_res.df,
         s_res.events,
         s_res.struct_direction,
     )
+    timing["downstream"] = time.perf_counter() - _t0
 
     kl_zones = downstream["kl_zones"]
     wave_candle_results = downstream["wave_candles"]
@@ -458,6 +470,7 @@ def run_pipeline(
     # detection. Dormant in 3a — no consumer reads these yet. 3b–3d will
     # build the confluence sub from these triggers and reuse the records
     # for cross-entity lookups.
+    _t0 = time.perf_counter()
     main_sids = build_sid_records_for_main(s_res.events)
     s_res.df.attrs["sids"] = main_sids
     print(f"[sid_records] H1.main sids={len(main_sids)}")
@@ -511,11 +524,13 @@ def run_pipeline(
         f"[subsequent_counter_trigger] "
         f"detected={len(subsequent_counter_triggers)}"
     )
+    timing["trigger_detectors"] = time.perf_counter() - _t0
 
     # 10) Multi-TF analysis (if configured)
     lower_tf_results = []
     confluence_results: List[Any] = []
     if lower_timeframes and "M15" in lower_timeframes:
+        _t0 = time.perf_counter()
         lower_tf_results = _run_multi_tf(
             s_res.df,
             sorted_events,
@@ -526,12 +541,14 @@ def run_pipeline(
             registry,
             subsequent_counter_triggers=subsequent_counter_triggers,
         )
+        timing["multi_tf_counter"] = time.perf_counter() - _t0
 
         # Part 4 Step 3b/3d: confluence subs (var 1 + var 3).
         # Built independently of first_counter — gets its own M15 entity df.
         # Var 1 sids land first; var 3 sids appended afterward (the spec's
         # in-place overwrite semantics from §6.1 are deferred to a later
         # substep — see subsequent_confluence_pipeline.py docstring).
+        _t0 = time.perf_counter()
         confluence_results = _run_first_confluence_multi_tf(
             s_res.df,
             first_confluence_triggers,
@@ -540,6 +557,7 @@ def run_pipeline(
             subsequent_counter_triggers=subsequent_counter_triggers,
             main_zone_proximity_triggers=zone_proximity_triggers,
         )
+        timing["multi_tf_confluence"] = time.perf_counter() - _t0
 
     meta["lower_tf_results"] = lower_tf_results
     meta["first_confluence_results"] = confluence_results
@@ -547,6 +565,7 @@ def run_pipeline(
     # now read sub data directly from the registered M15 entities'
     # `df.attrs[...]`. The legacy `s_res.df.attrs["lower_tf_results"]`
     # facade-list write has been removed.
+    meta["timing"] = timing
 
     return PipelineResult(
         df=s_res.df,
