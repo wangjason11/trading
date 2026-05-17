@@ -445,7 +445,7 @@ def apply_trigger_to_entity_df(
     4. Build the slice with 50-candle lookback, `reset_index(drop=True)`,
        re-`compute_imbalance` (slice-local idx).
     5. Run `compute_structure_from_start` on the slice (no probes).
-    6. Run downstream pipeline (KL zones BOS-only, Fib m15_reverse,
+    6. Run downstream pipeline (KL zones BOS-only, Fib cross_cycle,
        POI; sub WVMI deferred to orchestrator per §8.3 / §8.4).
     7. Lifecycle-cap still-open zones / POIs / fibs.
     8. Cascade prior sid's snapshots on `entity_df.attrs[...]` if
@@ -572,7 +572,7 @@ def apply_trigger_to_entity_df(
         m15_result.events,
         m15_result.struct_direction,
         source_kinds=["BOS"],
-        fib_mode="m15_reverse",
+        fib_mode="cross_cycle",
         log_prefix=f"M15_sid{new_sid_id}_{trigger.use_case}",
         timeframe=trigger.lower_tf,
         structure_path_id=sub_path_id,

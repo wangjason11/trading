@@ -138,7 +138,7 @@ Subordinate lower-TF structures triggered by higher-TF events. Foundation suppor
 - H1 reverse probe validates start; validated H1 candle mapped to M15 extreme match
 - M15 runs `compute_structure_from_start()` (no probes) — start is pre-validated by H1 probe
 - M15 slice includes 50-candle lookback buffer for neighbor-dependent calculations
-- KL zones are BOS-only (`source_kinds=["BOS"]`), Fib uses imbalance-gated mode (`fib_mode="m15_reverse"`)
+- KL zones are BOS-only (`source_kinds=["BOS"]`), Fib uses imbalance-gated cross-cycle mode (`fib_mode="cross_cycle"`)
 - Lifecycle bounded by parent H1 cycle (ends at next BOS or reversal)
 - All events/zones carry attribution: `timeframe`, `use_case`, `parent_tf`, `parent_sid`, `parent_cycle_id`
 - Chart renders M15 zones as dashed rectangles with lower opacity

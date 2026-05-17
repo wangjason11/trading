@@ -158,11 +158,16 @@ class FibTracker:
 
     def __init__(self, config: Optional[FibTrackerConfig] = None, fib_mode: str = "h1"):
         self.config = config or FibTrackerConfig()
-        self.fib_mode = fib_mode  # "h1" (default) or "m15_reverse"
+        self.fib_mode = fib_mode  # "h1" (default) or "cross_cycle"
+        # "cross_cycle" enables generalized cross-cycle fibs + pre_established
+        # phase support. Used by all subordinate-structure pipelines (counter
+        # and confluence, M15 today, deeper TFs in the future). The legacy
+        # name was "m15_reverse" before subordinate structures generalized
+        # beyond counter/reverse direction.
 
         # Fib states per key. Two key shapes coexist in this dict:
         #   - (sid, cycle_id)                          → single fib
-        #   - (sid, cycle_id, "cross", version)        → cross fib (m15_reverse only)
+        #   - (sid, cycle_id, "cross", version)        → cross fib (cross_cycle only)
         # `_fibs.values()` yields all fibs for charting iteration.
         self._fibs: Dict[tuple, FibState] = {}
 
@@ -269,14 +274,14 @@ class FibTracker:
         end_idx = max(bos_idx, cts_idx)
         has_unfilled = has_unfilled_imbalance(df, start_idx, end_idx, cts_idx, self.config.fill_threshold)
 
-        # Populate BOS lookup (used by cross-fib walk-backward in m15_reverse)
+        # Populate BOS lookup (used by cross-fib walk-backward in cross_cycle)
         self._bos_by_cycle[(sid, cycle_id)] = (bos_idx, bos_price)
 
         # ============================================================
         # BRANCH: fib_mode determines logic
         # ============================================================
-        if self.fib_mode == "m15_reverse":
-            return self._handle_m15_reverse_cts_established(
+        if self.fib_mode == "cross_cycle":
+            return self._handle_cross_cycle_cts_established(
                 sid, cycle_id, sd, bos_idx, bos_price, cts_idx, cts_price, has_unfilled, df
             )
 
@@ -290,7 +295,7 @@ class FibTracker:
                 has_unfilled, df, reversal_confirmed_idx, prev_bos_outer, prev_sd
             )
 
-    def _handle_m15_reverse_cts_established(
+    def _handle_cross_cycle_cts_established(
         self,
         sid: int,
         cycle_id: int,
@@ -314,9 +319,9 @@ class FibTracker:
         if cycle_id == 0:
             # Cycle 0: no cross possible. Simple single-fib activation.
             if not has_unfilled:
-                print(f"[fib] m15_reverse sid={sid} cycle=0 NO FIB: no unfilled imbalance")
+                print(f"[fib] cross_cycle sid={sid} cycle=0 NO FIB: no unfilled imbalance")
                 return None
-            print(f"[fib] m15_reverse sid={sid} cycle=0 ACTIVATED (single, no cross)")
+            print(f"[fib] cross_cycle sid={sid} cycle=0 ACTIVATED (single, no cross)")
             return self._activate_fib(
                 sid=sid,
                 cycle_id=0,
@@ -325,12 +330,12 @@ class FibTracker:
                 bos_price=bos_price,
                 cts_idx=cts_idx,
                 cts_price=cts_price,
-                meta={"activated_at": cts_idx, "fib_mode": "m15_reverse"},
+                meta={"activated_at": cts_idx, "fib_mode": "cross_cycle"},
             )
 
         # Cycle ≥1: run cross-fib check with CTS_n as anchor
         # own_imb_start = BOS_n (just-confirmed BOS for this cycle)
-        print(f"[fib] m15_reverse sid={sid} cycle={cycle_id} CTS_ESTABLISHED: "
+        print(f"[fib] cross_cycle sid={sid} cycle={cycle_id} CTS_ESTABLISHED: "
               f"running cross check (anchor=CTS_n)")
         self._m15_cross_check(
             sid=sid,
@@ -804,10 +809,10 @@ class FibTracker:
                 cts_price = float(df.loc[cts_idx, "l"])
 
         # ============================================================
-        # BRANCH: fib_mode → m15_reverse / sid=0 / sid≥1
+        # BRANCH: fib_mode → cross_cycle / sid=0 / sid≥1
         # ============================================================
-        if self.fib_mode == "m15_reverse":
-            return self._handle_m15_reverse_cts_updated(sid, cycle_id, sd, cts_idx, cts_price, df)
+        if self.fib_mode == "cross_cycle":
+            return self._handle_cross_cycle_cts_updated(sid, cycle_id, sd, cts_idx, cts_price, df)
 
         if sid == 0:
             return self._handle_sid0_cts_updated(sid, cycle_id, cts_idx, cts_price, df)
@@ -816,7 +821,7 @@ class FibTracker:
                 sid, cycle_id, sd, cts_idx, cts_price, df, reversal_confirmed_idx
             )
 
-    def _handle_m15_reverse_cts_updated(
+    def _handle_cross_cycle_cts_updated(
         self,
         sid: int,
         cycle_id: int,
@@ -825,7 +830,7 @@ class FibTracker:
         cts_price: float,
         df: pd.DataFrame,
     ) -> Optional[FibState]:
-        """Handle CTS_UPDATED for m15_reverse. Re-run cross check with the
+        """Handle CTS_UPDATED for cross_cycle. Re-run cross check with the
         extended CTS anchor. Cycle 0 uses simple single-fib update."""
         if cycle_id == 0:
             # Cycle 0: no cross logic. Update single fib via shared helper.
@@ -838,7 +843,7 @@ class FibTracker:
         phase = self._m15_phase.get((sid, cycle_id))
         if phase != "established":
             # Shouldn't happen — CTS_UPDATED implies ESTABLISHED has already fired
-            print(f"[fib][m15_reverse][warn] CTS_UPDATED for sid={sid} cycle={cycle_id} "
+            print(f"[fib][cross_cycle][warn] CTS_UPDATED for sid={sid} cycle={cycle_id} "
                   f"in unexpected phase={phase}")
             return None
 
@@ -1225,23 +1230,23 @@ class FibTracker:
         self._cts_confirmed_idx[(sid, cycle_id)] = int(event.idx)
 
         # ============================================================
-        # BRANCH: fib_mode → m15_reverse / sid=0 / sid≥1
+        # BRANCH: fib_mode → cross_cycle / sid=0 / sid≥1
         # ============================================================
-        if self.fib_mode == "m15_reverse":
-            return self._handle_m15_reverse_cts_confirmed(sid, cycle_id, event)
+        if self.fib_mode == "cross_cycle":
+            return self._handle_cross_cycle_cts_confirmed(sid, cycle_id, event)
 
         if sid == 0:
             return self._handle_sid0_cts_confirmed(sid, cycle_id, event)
         else:
             return self._handle_sid1plus_cts_confirmed(sid, cycle_id, event)
 
-    def _handle_m15_reverse_cts_confirmed(
+    def _handle_cross_cycle_cts_confirmed(
         self,
         sid: int,
         cycle_id: int,
         event: StructureEvent,
     ) -> Optional[FibState]:
-        """Handle CTS_CONFIRMED for m15_reverse: lock active fib (cross or
+        """Handle CTS_CONFIRMED for cross_cycle: lock active fib (cross or
         single), flip phase to 'confirmed', set up pre_established for n+1."""
         # Lock active cross fib if present
         latest = self._get_latest_cross(sid, cycle_id)
@@ -1253,7 +1258,7 @@ class FibTracker:
             )
             self._fibs[key] = locked
             v = state.meta.get("version", 0)
-            print(f"[fib] m15_reverse sid={sid} cycle={cycle_id} CROSS v{v} LOCKED")
+            print(f"[fib] cross_cycle sid={sid} cycle={cycle_id} CROSS v{v} LOCKED")
 
         # Lock active single fib if present
         single_key = (sid, cycle_id)
@@ -1265,7 +1270,7 @@ class FibTracker:
                     meta={**state.meta, "locked_at": event.idx},
                 )
                 self._fibs[single_key] = locked
-                print(f"[fib] m15_reverse sid={sid} cycle={cycle_id} SINGLE LOCKED")
+                print(f"[fib] cross_cycle sid={sid} cycle={cycle_id} SINGLE LOCKED")
 
         # Phase transitions
         self._m15_phase[(sid, cycle_id)] = "confirmed"
@@ -1526,7 +1531,7 @@ class FibTracker:
         event: StructureEvent,
         df: pd.DataFrame,
     ) -> None:
-        """Dispatch CTS_THRESHOLD_UPDATED for m15_reverse mode.
+        """Dispatch CTS_THRESHOLD_UPDATED for cross_cycle mode.
 
         Triggers a cross-fib check for the target cycle (= event.cycle_id + 1)
         ONLY when that target is in pre-established phase. In all other cases
@@ -1535,7 +1540,7 @@ class FibTracker:
         The anchor is the running extreme past CTS_n; own_imb_start is the
         prospective BOS_{n+1} (the deepest pullback since CTS_n CONFIRMED).
         """
-        if self.fib_mode != "m15_reverse":
+        if self.fib_mode != "cross_cycle":
             return
 
         sid = int(event.meta.get("structure_id", 0))
@@ -1593,7 +1598,7 @@ class FibTracker:
         anchor_price: float,
         own_imb_start: int,
     ) -> None:
-        """Central cross-fib check routine for m15_reverse mode.
+        """Central cross-fib check routine for cross_cycle mode.
 
         1. Check target cycle's own imbalance (range [own_imb_start, current_candle]).
            If none: deactivate any active cross; no fallback in pre-established.
@@ -1698,7 +1703,7 @@ class FibTracker:
             )
         else:
             # earliest_x < active_x — shouldn't happen (dead cycles monotonic)
-            print(f"[fib][m15_reverse][warn] unexpected earliest_x={earliest_x} "
+            print(f"[fib][cross_cycle][warn] unexpected earliest_x={earliest_x} "
                   f"< active_x={active_x} for sid={sid} cycle={target_cycle}")
 
     def _m15_create_cross(
@@ -1750,7 +1755,7 @@ class FibTracker:
             locked=False,
             fib=fib,
             meta={
-                "fib_mode": "m15_reverse",
+                "fib_mode": "cross_cycle",
                 "cross_cycle": True,
                 "cross_start_cycle": earliest_x,
                 "version": version,
@@ -1765,7 +1770,7 @@ class FibTracker:
         # Obsolete all prior-cycle fibs (single + cross versions)
         self._obsolete_prev_cycle_all_fibs(sid, target_cycle)
 
-        print(f"[fib] m15_reverse sid={sid} CROSS ({earliest_x}->{target_cycle}) "
+        print(f"[fib] cross_cycle sid={sid} CROSS ({earliest_x}->{target_cycle}) "
               f"v{version} ACTIVATED: bos_x_idx={bos_x_idx} -> anchor_idx={anchor_idx}")
 
     def _m15_extend_cross_anchor(
@@ -1809,7 +1814,7 @@ class FibTracker:
             cts_history=new_history,
         )
         v = state.meta.get("version", 0)
-        print(f"[fib] m15_reverse sid={state.structure_id} CROSS v{v} EXTENDED: "
+        print(f"[fib] cross_cycle sid={state.structure_id} CROSS v{v} EXTENDED: "
               f"cts idx={new_anchor_idx}")
 
     def _deactivate_cross(self, key: tuple, current_candle: int, reason: str) -> None:
@@ -1827,7 +1832,7 @@ class FibTracker:
             },
         )
         v = state.meta.get("version", 0)
-        print(f"[fib] m15_reverse sid={state.structure_id} cycle={state.cycle_id} "
+        print(f"[fib] cross_cycle sid={state.structure_id} cycle={state.cycle_id} "
               f"CROSS v{v} DEACTIVATED: {reason}")
 
     def _deactivate_active_cross(
@@ -1869,7 +1874,7 @@ class FibTracker:
                 cts_idx=anchor_idx,
                 cts_price=anchor_price,
                 meta={
-                    "fib_mode": "m15_reverse",
+                    "fib_mode": "cross_cycle",
                     "via": "cross_failed",
                     "activated_at": current_candle,
                 },

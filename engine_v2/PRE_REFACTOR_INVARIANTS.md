@@ -104,8 +104,10 @@ must replace events in the list, not mutate event objects.
 - IC variants V30/V60/V90 stored on each POI
 
 **FibTracker:**
-- Three modes: `"h1"` (Scenario 1/2/3), `"m15_reverse"` (cross-fib state machine),
-  and the M15 reverse phase model (pre_established / established / confirmed)
+- Two modes: `"h1"` (Scenario 1/2/3) and `"cross_cycle"` (cross-fib state
+  machine + phase model with pre_established / established / confirmed).
+  `cross_cycle` was previously named `m15_reverse`; renamed when subordinate
+  structures generalized beyond M15 + counter direction.
 - Cross fibs stored under `_fibs[(sid, cycle_id, "cross", version)]`; old
   versions kept as inactive snapshots for chart history
 - `_dead_cycles` cache tracks permanently-filled cycles (Interpretation B)
@@ -147,7 +149,7 @@ must replace events in the list, not mutate event objects.
 - M15 lower-TF pipeline runs `compute_structure_from_start` from a validated
   start (H1 reverse Scenario 3 probe → mapped to M15)
 - KL zones BOS-only on M15 (`source_kinds=["BOS"]`)
-- Fib mode `"m15_reverse"` on M15
+- Fib mode `"cross_cycle"` on M15 subs
 - Lifecycle bounded by parent H1 cycle (`lifecycle_end_idx`)
 - Open-ended zones / POIs / fibs capped at lifecycle end with `deactivated_by="lifecycle_end"`
 - M15 events / zones carry attribution: `timeframe`, `use_case`, `parent_tf`, `parent_sid`, `parent_cycle_id`

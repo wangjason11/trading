@@ -1,4 +1,8 @@
-"""Unit tests for M15 reverse cross-fib logic in FibTracker."""
+"""Unit tests for the `cross_cycle` fib mode in FibTracker.
+
+This mode (formerly `m15_reverse`) supports generalized cross-cycle fibs +
+the `pre_established` phase. Used by all subordinate-structure pipelines.
+"""
 from __future__ import annotations
 
 import pandas as pd
@@ -43,7 +47,7 @@ def _ev(ev_type: str, idx: int, price: float, sid: int, cycle_id: int, sd: int,
 
 
 def _make_tracker() -> FibTracker:
-    return FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode="m15_reverse")
+    return FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode="cross_cycle")
 
 
 # ---------- Cycle 0 behaves as simple single (no cross) ----------

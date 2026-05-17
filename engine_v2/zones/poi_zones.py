@@ -22,7 +22,7 @@ from typing import List, Optional, Dict, Any, Literal
 import pandas as pd
 
 from engine_v2.features.fibonacci import FibRetracement
-from engine_v2.patterns.imbalance import has_unfilled_imbalance_in_direction
+from engine_v2.patterns.imbalance import has_unfilled_imbalance
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.fib_tracker import FibTracker, FibState, select_fib_anchor_for_cycle
 
@@ -212,11 +212,17 @@ def find_ic_candidates(
             continue
 
         # Condition 3: Unfilled imbalance (in sd direction) AFTER candidate
-        # Check range (candidate_idx + 1, CTS_idx] for unfilled imbalance in sd direction
-        has_unfilled_after = has_unfilled_imbalance_in_direction(
+        # Check range (candidate_idx + 1, CTS_idx] for unfilled imbalance in sd direction.
+        # IC validation is strict: the same-direction filter (direction=sd) is the
+        # whole point — an IC's role is to anchor a same-direction continuation, so
+        # a counter-direction imbalance in the tail wouldn't justify it. (Fib
+        # activation, by contrast, calls this same primitive without `direction` to
+        # stay permissive — see fib_tracker.py call sites.)
+        has_unfilled_after = has_unfilled_imbalance(
             df,
-            start_idx=idx + 1,  # strictly after
-            end_idx=cts_idx,    # inclusive
+            start_idx=idx + 1,        # strictly after
+            end_idx=cts_idx,          # inclusive
+            check_to_idx=cts_idx,     # evaluate fill as of fib's current CTS upper bound
             direction=sd,
             fill_threshold=config.fill_threshold,
         )

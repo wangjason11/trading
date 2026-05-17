@@ -458,10 +458,10 @@ except (ValueError, IndexError) as exc:
 by handlers** — do not change the sort key without auditing downstream
 dispatch logic.
 
-**Specific dependency (Mode C):** At a candle where both
-`CTS_ESTABLISHED` (cycle n+1) AND `CTS_THRESHOLD_UPDATED` (cycle n) fire,
-the alphabetical order processes `CTS_ESTABLISHED` FIRST (C_E < C_T). The
-M15 reverse phase gate depends on this:
+**Specific dependency (`cross_cycle` mode, formerly Mode C / `m15_reverse`):**
+At a candle where both `CTS_ESTABLISHED` (cycle n+1) AND
+`CTS_THRESHOLD_UPDATED` (cycle n) fire, the alphabetical order processes
+`CTS_ESTABLISHED` FIRST (C_E < C_T). The `cross_cycle` phase gate depends on this:
 1. CTS_ESTABLISHED flips `_m15_phase[(sid, n+1)]` from `pre_established` to
    `established`
 2. Subsequent CTS_THRESHOLD_UPDATED sees phase != `pre_established` and
@@ -618,7 +618,7 @@ latent bug from Week 8 Part 3 (sub WVMI silently empty) — fixed in 3d.iii.
 ```python
 downstream = _run_downstream_pipeline(
     m15_result.df, m15_result.events, m15_result.struct_direction,
-    source_kinds=["BOS"], fib_mode="m15_reverse",
+    source_kinds=["BOS"], fib_mode="cross_cycle",
     structure_path_id=sub_path_id,
     skip_wvmi=True,   # mandatory for subs
 )

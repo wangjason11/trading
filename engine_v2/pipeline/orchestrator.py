@@ -224,7 +224,7 @@ def _run_downstream_pipeline(
             fib_tracker.on_cts_confirmed(ev)
 
         elif ev.type == "CTS_THRESHOLD_UPDATED":
-            # Used by m15_reverse mode to trigger pre-established cross-fib
+            # Used by cross_cycle mode to trigger pre-established cross-fib
             # checks. No-op in h1 mode.
             fib_tracker.on_cts_threshold_updated(ev, df)
 

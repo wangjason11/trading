@@ -55,22 +55,29 @@ the run.
 
 ### Role in POI Zones
 - Imbalance instance must exist **overlapping the Fib anchor points** for POI
-  zone creation (via `has_unfilled_imbalance` / `has_unfilled_imbalance_in_direction`)
+  zone creation (via `has_unfilled_imbalance`)
 - Imbalance must be **after the IC candle** (between IC and the break) —
-  POI IC validation uses the direction-filtered variant so only
-  structure-direction imbalances qualify
+  POI IC validation passes `direction=sd` so only structure-direction
+  imbalances qualify
 
-### Why Fib activation uses the direction-agnostic check
-`has_unfilled_imbalance` (no direction filter) is used for Fib activation at
-CTS_ESTABLISHED, while POI IC validation uses
-`has_unfilled_imbalance_in_direction` (filtered). This is intentional:
-a Fib is drawn from BOS → CTS anchors, so its span is **always in the
-structure direction by construction** — a counter-direction imbalance inside
-the span is geometrically unusual, and if one does appear we still want the
-Fib to activate because the BOS→CTS swing itself is directional. POI IC
-validation is stricter because it asks a different question ("did institutional
-activity produce a directional push after this candle?"), which requires a
-same-direction imbalance by definition.
+### Why Fib activation is permissive and POI IC validation is strict
+The single `has_unfilled_imbalance` primitive takes an optional `direction`
+filter. Fib activation calls it **without `direction`** (any direction
+qualifies); POI IC validation calls it **with `direction=sd`** (strict
+same-direction). This is intentional: a Fib is drawn from BOS → CTS anchors,
+so its span is **always in the structure direction by construction** — a
+counter-direction imbalance inside the span is geometrically unusual, and if
+one does appear we still want the Fib to activate because the BOS→CTS swing
+itself is directional. POI IC validation is stricter because it asks a
+different question ("did institutional activity produce a directional push
+after this candle?"), which requires a same-direction imbalance by definition.
+
+The other axis the primitive exposes — `check_to_idx` — is the more
+load-bearing distinction across call sites: fib lifecycle and scenario
+checks pass varying "as-of" idx (the fib's current `cts_idx`, a fixed
+reference event idx, or the current candle in live evaluation), while POI
+IC validation always passes `check_to_idx = end_idx = cts_idx` because the
+question is asked once at the cycle's current state.
 
 ### Fill Check (per instance)
 - **Bullish:** `fill_level = gap_top - gap_size * 0.70` (70% retrace). Filled
@@ -164,11 +171,16 @@ For structures after a reversal, Fib activation follows a 3-scenario system:
 - No cycle 0 Fib
 - Cycle 1 gets normal Fib (if unfilled imbalance)
 
-### M15 Reverse Mode (`fib_mode="m15_reverse"`)
+### Cross-Cycle Mode (`fib_mode="cross_cycle"`)
 
-Lower-TF M15 structures use a different Fib model that generalizes the
+> Formerly named `m15_reverse`. Renamed when subordinate structures grew
+> beyond M15 + counter direction to include confluence variants (same
+> direction as parent) and potentially deeper TFs.
+
+Subordinate-structure pipelines use a Fib model that generalizes the
 cross-cycle concept to **any** cycle (not just cycle 1) AND allows cross
-fibs to form **before** a cycle's CTS is established.
+fibs to form **before** a cycle's CTS is established. Used by both counter
+and confluence subordinate variants regardless of direction.
 
 #### Phase state per (sid, cycle_id)
 - `pre_established` — cycle's CTS not yet established. Only cross fib checks

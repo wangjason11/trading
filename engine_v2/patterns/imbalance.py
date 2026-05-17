@@ -21,7 +21,7 @@ Merged gap bounds:
 """
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 import pandas as pd
 
@@ -129,36 +129,39 @@ def has_unfilled_imbalance(
     end_idx: int,
     check_to_idx: int,
     fill_threshold: float = 0.70,
+    *,
+    direction: Optional[int] = None,
 ) -> bool:
-    """True if at least one imbalance instance overlapping [start_idx, end_idx]
-    is unfilled as of `check_to_idx`."""
+    """True if at least one imbalance instance overlapping `[start_idx, end_idx]`
+    is unfilled as of `check_to_idx`.
+
+    Parameters
+    ----------
+    start_idx, end_idx
+        Inclusive window in which the instance must overlap.
+    check_to_idx
+        The "as-of" candle for the fill scan — `inst.is_filled` checks candles
+        in `(inst.end_idx, check_to_idx]` for a ≥70% retrace into the merged gap.
+        Callers pick this based on the question being asked: fib activation uses
+        the fib's current `cts_idx`; per-candle / live evaluation uses the
+        current candle; scenario condition checks use the relevant reference
+        event idx (e.g., BOS_1 idx to ask "did BOS_1 fill cycle 0's imbalances?").
+    direction
+        Optional struct-direction filter. ``None`` (default) accepts any
+        direction — used for fib activation and most cycle-/scenario-level
+        questions (the fib's BOS→CTS span is structurally directional, so the
+        check is permissive). Set to ``±1`` for IC candidate validation, which
+        is strict about same-direction follow-through.
+    fill_threshold
+        Retracement fraction (default 0.70) at which an instance is considered
+        filled.
+    """
     for inst in df.attrs.get("imbalances", []):
+        if direction is not None and inst.direction != direction:
+            continue
         if not inst.overlaps(start_idx, end_idx):
             continue
         if not inst.is_filled(df, check_to_idx, fill_threshold):
-            return True
-    return False
-
-
-def has_unfilled_imbalance_in_direction(
-    df: pd.DataFrame,
-    start_idx: int,
-    end_idx: int,
-    direction: int,
-    fill_threshold: float = 0.70,
-) -> bool:
-    """True if at least one same-direction imbalance instance overlapping
-    [start_idx, end_idx] is unfilled as of `end_idx`.
-
-    Used by POI IC candidate validation (unfilled imbalance in struct direction
-    must exist AFTER the IC candidate).
-    """
-    for inst in df.attrs.get("imbalances", []):
-        if inst.direction != direction:
-            continue
-        if not inst.overlaps(start_idx, end_idx):
-            continue
-        if not inst.is_filled(df, end_idx, fill_threshold):
             return True
     return False
 

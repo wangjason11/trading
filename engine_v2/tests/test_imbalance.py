@@ -8,7 +8,6 @@ from engine_v2.patterns.imbalance import (
     compute_imbalance,
     has_imbalance_in_range,
     has_unfilled_imbalance,
-    has_unfilled_imbalance_in_direction,
     get_unfilled_imbalances,
 )
 
@@ -237,9 +236,10 @@ def test_aggregation_helpers():
     # Instance unfilled -> has_unfilled True
     assert has_unfilled_imbalance(out, 1, 2, check_to_idx=4) is True
 
-    # Wrong direction filter
-    assert has_unfilled_imbalance_in_direction(out, 1, 2, direction=-1) is False
-    assert has_unfilled_imbalance_in_direction(out, 1, 2, direction=1) is True
+    # Direction filter: wrong direction returns False, correct returns True.
+    # check_to_idx == end_idx mirrors the IC-validation call shape.
+    assert has_unfilled_imbalance(out, 1, 2, check_to_idx=2, direction=-1) is False
+    assert has_unfilled_imbalance(out, 1, 2, check_to_idx=2, direction=1) is True
 
     unfilled = get_unfilled_imbalances(out, 1, 4, check_to_idx=4)
     assert len(unfilled) == 1
