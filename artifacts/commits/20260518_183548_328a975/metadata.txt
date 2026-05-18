@@ -1,0 +1,3 @@
+commit_hash=328a975
+timestamp=20260518_183548
+commit_message=Fix M15 sub KL zone bounds_steps mirror translation
