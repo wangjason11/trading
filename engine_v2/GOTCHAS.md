@@ -874,3 +874,77 @@ at runtime, and a positional/keyword mix-up will silently truncate to the
 wrong parameter binding inside try/except. If the protocol has a
 swallowing try/except for safety, plan to temporarily widen it during
 the rollout so latent type errors surface.
+
+---
+
+## Pandas `.loc` Has ~35× Overhead vs Numpy Positional in Tight Inner Loops
+
+**Problem:** Inner loops that read OHLC values per candle (e.g.,
+precomputing each imbalance instance's `fill_idx`, scanning for a level
+crossing, walking a multi-candle range to find an extreme) commonly reach
+for `df.loc[idx, "l"]` or `series.loc[idx]`. Each `.loc` lookup pays ~5–30µs
+of Python overhead (label resolution + slow path). Scaled up to ~200K
+iterations per call across many instances, this can silently turn a
+millisecond-class operation into a second-class one.
+
+**Microbench (3000-candle df, 60 inner scans, 10 reps):**
+
+| Approach | Time/call |
+|---|---|
+| `df["l"].loc[idx]` per element | 0.70 ms |
+| `np.where(arr <= level)` vectorized | 0.16 ms |
+| `arr[idx]` positional per element | 0.02 ms |
+
+Numpy positional is ~35× faster than pandas `.loc`. Vectorized `np.where`
+is ~4× faster than `.loc` but has setup overhead that loses to positional
+loops when scan lengths are short.
+
+**Pattern that triggers it:** `for inst in N_instances: for idx in
+range(start, end): if df.loc[idx, "l"] <= level: ...`. Worst when both
+loops are wide.
+
+**Fix pattern:**
+
+```python
+# Once, outside both loops:
+l_arr = df["l"].to_numpy(dtype=float, copy=False)
+df_idx_arr = df.index.to_numpy()
+if df_idx_arr.dtype.kind in "iu" and len(df) > 0 \
+        and df_idx_arr[0] == 0 and df_idx_arr[-1] == len(df) - 1:
+    # Contiguous RangeIndex (the post-`reset_index` case) — pos == idx
+    idx_to_pos = None
+else:
+    idx_to_pos = {int(v): i for i, v in enumerate(df_idx_arr)}
+
+def pos(idx):
+    if idx_to_pos is None:
+        return idx if 0 <= idx < len(df) else -1
+    return idx_to_pos.get(idx, -1)
+
+# Hot loop: vectorized + positional
+start_pos = pos(scan_start)
+if start_pos >= 0:
+    slice_l = l_arr[start_pos:]
+    hits = np.where(slice_l <= fill_level)[0]
+    if hits.size:
+        hit_idx = int(df_idx_arr[start_pos + int(hits[0])]) \
+                  if idx_to_pos is not None else start_pos + int(hits[0])
+```
+
+**When to bother:** only when the inner loop is genuinely hot. `.loc` is
+fine for one-shot reads in setup/diagnostic code. Profile before
+optimizing — the per-POI activation history sweep in `zones/poi_zones.py`
+landed numpy-based even though measured overhead was ~70ms total across
+14 calls; the rewrite was defensive against larger datasets, not a fix
+for an observed bottleneck.
+
+**Subtleties:**
+- `to_numpy(copy=False)` returns a view when possible; cheap.
+- For non-RangeIndex (sparse / non-zero-based), build the
+  `idx_to_pos` dict once. `np.searchsorted` works too if df.index is sorted.
+- Don't forget to translate the positional hit back to df idx for callers
+  that store it (`int(df_idx_arr[hit_pos])`). On RangeIndex they're equal,
+  but elsewhere they aren't.
+
+**Concrete example:** `engine_v2/zones/poi_zones.py::_compute_fill_idx_cache`
+(landed 2026-05-18).
