@@ -287,7 +287,7 @@ def mirror_lower_tf_result_to_entity_df(
         new_events.append(new_ev)
     _attrs_setdefault_list(entity_df, "events").extend(new_events)
 
-    # 4. KL zones — idx only in meta (and bounds_steps[*]["idx"])
+    # 4. KL zones — idx only in meta (and bounds_steps[*]["start_idx"])
     new_kl = []
     for z in result.kl_zones:
         new_meta = _shift_meta_indices(z.meta, _ZONE_META_IDX_KEYS, slice_begin)
@@ -295,8 +295,8 @@ def mirror_lower_tf_result_to_entity_df(
             steps = []
             for step in new_meta["bounds_steps"]:
                 new_step = dict(step)
-                if isinstance(new_step.get("idx"), int):
-                    new_step["idx"] = new_step["idx"] + slice_begin
+                if isinstance(new_step.get("start_idx"), int):
+                    new_step["start_idx"] = new_step["start_idx"] + slice_begin
                 steps.append(new_step)
             new_meta["bounds_steps"] = steps
         new_meta.update(attribution)

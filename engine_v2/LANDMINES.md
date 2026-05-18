@@ -907,3 +907,55 @@ would mis-tag every sub's internal sid 0 as "the prior sid being
 overwritten" the moment a new entity_sid lands.
 
 **See also:** spec §13.5.c sid numbering convention block.
+
+---
+
+## Mirror Translation of Nested-Dict Idx Fields Hardcodes Key Names
+
+**Rule:** `mirror_lower_tf_result_to_entity_df` in
+`multitf/entity_df_mutation.py` shifts slice-local idx → entity-absolute
+by adding `slice_begin`. Top-level meta keys are driven by the tuple
+constants `_EVENT_META_IDX_KEYS` / `_ZONE_META_IDX_KEYS` (single source
+of truth). **Nested-dict idx fields, however, are translated by
+per-record special-case loops that hardcode the key name string** — and
+each loop must match exactly one producer-side key.
+
+Current nested-dict idx fields and their hardcoded loop keys:
+
+| Producer site | Nested dict | Key in producer | Mirror loop key |
+|---|---|---|---|
+| `zones/kl_zones_v1.py` (INIT + expansion) | `meta["bounds_steps"][k]` | `"start_idx"` | `"start_idx"` |
+| `zones/poi_zones.py` `_compute_poi_activation_history` | `meta["activation_history"][k]` | `"idx"` | `"idx"` |
+
+**Hazard:** if the producer renames its key (or adds a new idx-bearing
+key in a nested dict), and the mirror loop isn't updated, the special
+case silently no-ops. Slice-local values get persisted as if they were
+entity-absolute. The chart consumer reads them via `_lt_time(idx)` which
+expects entity-absolute coords (`charting/export_m15_chart.py:594-598`),
+and rectangles/dots land at completely wrong x-positions — but at
+internally consistent ones, so no exception fires.
+
+**Diagnostic signature:** sub chart element x-coords are offset from the
+expected position by exactly `slice_begin` for the owning `entity_sid`.
+The rendered idx via `_lt_time` lands at `actual_idx - slice_begin`
+(slice-local read as entity-absolute). The zone's hover *correctly*
+shows the entity-absolute `base_idx` (because top-level meta IS shifted
+by the tuple-driven path) — only the nested-dict positions are wrong.
+
+**Concrete case (2026-05-18, fixed):** mirror loop iterated
+`for step in new_meta["bounds_steps"]: if isinstance(new_step.get("idx"),
+int): new_step["idx"] = ... + slice_begin`. Producer emits `"start_idx"`,
+so the key check never matched. KL zone segments on M15.confluence
+rendered with the leftmost expansion step at the correct base_idx (via
+the `seg_x0 < x0` clamp at `export_m15_chart.py:845`), but subsequent
+expansion-step rects landed at `entity_idx - slice_begin` instead of
+`entity_idx`. For entity_sid=0 with `slice_begin=580`: zone base_idx=1761
+with one expansion at entity 1898 rendered the second rect at M15 row
+1318 (= 1898 − 580). Fixed by changing the loop's key check to
+`"start_idx"`.
+
+**Rule of thumb:** whenever adding or renaming a nested-dict idx field
+in zones/POIs/fibs/etc., grep `entity_df_mutation.py` for the old key
+name AND audit the per-record block of the touched type. The
+top-level tuple constants do NOT cover nested dicts — those need their
+own update.
