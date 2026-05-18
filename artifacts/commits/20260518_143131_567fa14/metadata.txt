@@ -1,0 +1,4 @@
+commit_hash=567fa14
+timestamp=20260518_143131
+commit_message=GOTCHAS: Fib retracement zone math is direction-aware
+session_context=Item 3 paused mid-investigation. Capture: full POI lifecycle table (entity-absolute), why we're paused, items 4 + 5 followups, and the rename/refactor that preceded it.
