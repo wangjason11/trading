@@ -807,6 +807,45 @@ See LANDMINES "Scenario 2 anchor agreement" for the closing rule.
 
 ---
 
+## Fib Retracement Zone Math Is Direction-Aware
+
+**Problem:** Computing a Fibonacci retracement level requires the
+direction-aware formula. The bullish formula and the bearish formula
+give DIFFERENT prices for the same `pct`, and using the bullish formula
+for both directions silently places the zone on the wrong side of the
+swing.
+
+**The math** (matches `features/fibonacci.py::calculate_fib_price`):
+
+```python
+range_size = anchor_high - anchor_low
+retracement = range_size * (pct / 100.0)
+if direction == 1:   # bullish (price moved up, retracement DOWN from high)
+    fib_level = anchor_high - retracement
+else:                # bearish (price moved down, retracement UP from low)
+    fib_level = anchor_low + retracement
+```
+
+**Anchor convention** (matches `FibTracker._create_fib_retracement`):
+- For `sd == +1` (bullish): `anchor_high = cts_price`, `anchor_low = bos_price`
+- For `sd == -1` (bearish): `anchor_high = bos_price`, `anchor_low = cts_price`
+
+**Concrete bug (2026-05-18, `_compute_poi_activation_history`):**
+the helper computed the 61.8/80% zone bounds using only the bullish
+formula `anchor_high - range * pct` for both directions. For sd=-1, this
+placed the zone BELOW the swing low instead of inside the swing — every
+bearish-cycle POI failed condition 5 (variant overlap) at every candle,
+never activated, came out with `status=ended, current=[]`. Fixed by
+threading direction into the level math. 7 POIs went from "never
+activated" to fully-populated activation histories.
+
+**Rule:** any caller that computes a Fib level outside `FibRetracement`
+(e.g., bare math without constructing the dataclass) MUST handle direction.
+Prefer constructing a `FibRetracement` and calling `price_at_pct` if the
+overhead is acceptable.
+
+---
+
 ## Pitfall: Positional resolver args drift when the protocol grows
 
 **Problem:** The `PoiInnersResolver` protocol in `market_structure.py`
