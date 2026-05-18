@@ -1122,6 +1122,10 @@ def export_m15_chart_plotly(
     _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1,
                        state_cfg, struct_cfg, zone_cfg)
 
+    # Parent (H1) zone-proximity triggers, anchored at the matching M15
+    # sub-candle. Parent-event overlay, so no §16.5 owner filter applies.
+    _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset)
+
     # ===================================================================
     # Phase D: Layout + Output
     # ===================================================================
@@ -1821,6 +1825,192 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                     f"<extra></extra>"
                 ),
             ))
+
+
+# ---------------------------------------------------------------------------
+# Phase C+: H1 zone-proximity triggers, anchored at the matching M15 candle
+# ---------------------------------------------------------------------------
+
+def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
+    """Render H1 zone_proximity_triggers on the M15 chart.
+
+    Each H1 trigger fires at an H1 candle whose wick reached within
+    threshold of a zone inner. The trigger gets anchored on the M15
+    sub-candle whose extreme matches that H1 wick:
+      - approach_from_above (wick is the candle low) -> M15 with min low
+      - approach_from_below (wick is the candle high) -> M15 with max high
+
+    Marker style is shared with the H1 chart via `zone_proximity.trigger`.
+    The hover panel reports both M15 and H1 idx so the trigger is
+    diagnosable from the M15 view alone.
+    """
+    zone_proximity_triggers = h1_df.attrs.get("zone_proximity_triggers", {})
+    if not zone_proximity_triggers:
+        return
+
+    zpt_style = _style("zone_proximity.trigger")
+    zpt_marker = zpt_style.get("marker", {"size": 7, "symbol": "x", "color": "black"})
+    offset_mult = float(zpt_style.get("offset_mult", 2.5))
+
+    h1_times = pd.to_datetime(h1_df[COL_TIME], utc=True)
+
+    # struct_direction lookup by (sid, cycle_id) from H1 CTS_CONFIRMED events.
+    structure_events = h1_df.attrs.get("structure_events", [])
+    sd_by_cycle: dict = {}
+    for ev in structure_events:
+        if getattr(ev, "type", None) != "CTS_CONFIRMED":
+            continue
+        sid = ev.meta.get("structure_id")
+        cyc = ev.meta.get("cycle_id")
+        sd = ev.meta.get("struct_direction")
+        if sid is not None and cyc is not None and sd is not None:
+            sd_by_cycle[(int(sid), int(cyc))] = int(sd)
+
+    # H1 KL zone confirmed_idx lookup for hover.
+    kl_conf_idx_by_key: dict = {}
+    for z in h1_df.attrs.get("kl_zones", []):
+        sid = z.meta.get("structure_id")
+        cyc = z.meta.get("cycle_id")
+        sk = z.source_kind
+        cidx = z.meta.get("confirmed_idx")
+        if sid is not None and cyc is not None and sk is not None and cidx is not None:
+            kl_conf_idx_by_key[(int(sid), int(cyc), str(sk))] = int(cidx)
+
+    poi_zones_by_cycle: dict = {}
+    for pz in h1_df.attrs.get("poi_zones", []):
+        sid = pz.meta.get("structure_id")
+        cyc = pz.meta.get("cycle_id")
+        if sid is None or cyc is None:
+            continue
+        poi_zones_by_cycle.setdefault((int(sid), int(cyc)), []).append(pz)
+
+    def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int) -> int:
+        cands = poi_zones_by_cycle.get((sid, cyc), [])
+        best = None
+        best_diff = float("inf")
+        for pz in cands:
+            pz_inner = float(pz.top) if sd == 1 else float(pz.bottom)
+            diff = abs(pz_inner - inner)
+            if diff < best_diff:
+                best_diff = diff
+                best = pz
+        if best is None:
+            return -1
+        cidx = best.meta.get("confirmed_idx")
+        return int(cidx) if cidx is not None else -1
+
+    m15_times = pd.to_datetime(dfx[COL_TIME], utc=True)
+
+    def _find_m15_by_extreme(h1_time: pd.Timestamp, approach_from_above: bool):
+        """Return the M15 dfx idx whose wick extreme matches the H1 trigger.
+
+        approach_from_above=True -> trigger wick is the H1 candle low,
+        so pick the M15 candle with the lowest low (tie -> last).
+        approach_from_above=False -> trigger wick is the H1 candle high,
+        so pick the M15 candle with the highest high (tie -> last).
+        Returns None if no M15 candles fall inside [h1_time, h1_time+1h).
+        """
+        h1_end = h1_time + timedelta(hours=1)
+        mask = (m15_times >= h1_time) & (m15_times < h1_end)
+        candidates = dfx[mask]
+        if candidates.empty:
+            return None
+        if approach_from_above:
+            best_val = candidates[COL_L].min()
+            matches = candidates[candidates[COL_L] == best_val]
+        else:
+            best_val = candidates[COL_H].max()
+            matches = candidates[candidates[COL_H] == best_val]
+        return int(matches.index[-1])
+
+    x_vals, y_vals, customdata = [], [], []
+    skipped_no_m15 = 0
+    for (sid_c, cyc_c), trig_list in zone_proximity_triggers.items():
+        sd = sd_by_cycle.get((int(sid_c), int(cyc_c)), 0)
+        for trig in trig_list:
+            h1_idx = int(trig.idx)
+            if h1_idx not in h1_df.index:
+                continue
+            h1_time = pd.to_datetime(h1_df.loc[h1_idx, COL_TIME], utc=True)
+            h1_row = h1_df.loc[h1_idx]
+
+            approach_from_above = (
+                (sd == 1 and trig.direction == "sd")
+                or (sd == -1 and trig.direction == "opp_sd")
+            )
+
+            m15_idx = _find_m15_by_extreme(h1_time, approach_from_above)
+            if m15_idx is None or m15_idx not in dfx.index:
+                skipped_no_m15 += 1
+                continue
+
+            m15_row = dfx.loc[m15_idx]
+            wo = float(wick_offset.loc[m15_idx]) if m15_idx in wick_offset.index else 0.0
+            o, c = float(m15_row[COL_O]), float(m15_row[COL_C])
+            if c < o:
+                y = float(m15_row[COL_H]) + wo * offset_mult
+            else:
+                y = float(m15_row[COL_L]) - wo * offset_mult
+
+            type_label = f"{trig.direction}:{trig.zone_kind}"
+
+            if approach_from_above:
+                gap = float(h1_row[COL_L]) - float(trig.trigger_inner)
+            else:
+                gap = float(trig.trigger_inner) - float(h1_row[COL_H])
+            dist_pips = round(gap / float(trig.pip_size), 1)
+
+            if trig.zone_kind == "POI":
+                z_conf = _poi_confirmed_idx(
+                    int(trig.structure_id), int(trig.cycle_id),
+                    float(trig.trigger_inner), int(sd) if sd else 1,
+                )
+            else:
+                z_conf = kl_conf_idx_by_key.get(
+                    (int(trig.structure_id), int(trig.cycle_id), str(trig.zone_kind)),
+                    -1,
+                )
+
+            x_vals.append(m15_row[COL_TIME])
+            y_vals.append(y)
+            customdata.append((
+                int(m15_idx),
+                h1_idx,
+                int(trig.structure_id),
+                int(sd),
+                int(trig.cycle_id),
+                type_label,
+                dist_pips,
+                str(trig.zone_kind),
+                int(z_conf),
+            ))
+
+    if x_vals:
+        fig.add_trace(go.Scatter(
+            x=x_vals,
+            y=y_vals,
+            mode="markers",
+            name="zone_proximity:trigger",
+            marker=zpt_marker,
+            customdata=customdata,
+            hoverlabel=dict(bgcolor="black", font_color="white"),
+            hovertemplate=(
+                "TF=1H>>15M<br>"
+                "idx_15M=%{customdata[0]}<br>"
+                "idx_1H=%{customdata[1]}<br>"
+                "parent_sid=%{customdata[2]}<br>"
+                "parent struct_direction=%{customdata[3]}<br>"
+                "parent_cycle_id=%{customdata[4]}<br>"
+                "type=%{customdata[5]}<br>"
+                "distance_pips=%{customdata[6]}<br>"
+                "zone_kind=%{customdata[7]}<br>"
+                "zone_confirmed_idx=%{customdata[8]}"
+                "<extra></extra>"
+            ),
+        ))
+        print(f"[m15_chart][zone_proximity] rendered {len(x_vals)} trigger markers"
+              + (f" (skipped {skipped_no_m15} with no M15 candle in window)"
+                 if skipped_no_m15 else ""))
 
 
 # ---------------------------------------------------------------------------
