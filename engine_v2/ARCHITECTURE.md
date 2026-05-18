@@ -95,6 +95,73 @@ Produced by `derive_kl_zones_v1` from structure events (not structure levels).�
 
 ---
 
+## Lifecycle state convention (active / inactive / ended)
+
+A long-lived object (POI zone, Fib, KL zone, structure cycle) has **two
+orthogonal axes of state** that must be kept distinct in its representation:
+
+| Axis | Nature | Reversible? | Determined by |
+|---|---|---|---|
+| **active / inactive** | Condition-state — "are all my required conditions true right now?" | **Yes** — flips back and forth as conditions change | A defined set of activation conditions evaluated at any candle `t` |
+| **ended (terminal)** | Time-based irrelevance | **No** — once ended, stays ended | A defined set of end conditions (next cycle, reversal, lifecycle_end, etc.) |
+
+Once ended, "active" is undefined / always False. Before ended, the object
+flips between active and inactive based on its activation conditions.
+
+Recommended representation for any new lifecycle object:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `end_idx` | `Optional[int]` | Terminal idx if known; `None` if not yet ended |
+| `end_reason` | `Optional[str]` | Why it ended (`"next_cycle"`, `"reversal"`, `"lifecycle_end"`, `"obsolete:<reason>"`, ...) |
+| `activation_history` | `list[{idx, active, reason}]` | All activate/deactivate flips within `[first_active, end_idx)`, driven by the object's activation conditions |
+| `status` (derived) | `"active"` \| `"inactive"` \| `"ended"` | Computed from `end_idx` + `activation_history` at any candle `t` |
+
+Derivation at candle `t`:
+```python
+if end_idx is not None and t >= end_idx:
+    status = "ended"
+elif current_state_per_activation_history(t) is True:
+    status = "active"
+else:
+    status = "inactive"
+```
+
+**Currently following this convention:** `POIZone` (fully — `end_idx` +
+`end_reason` + `activation_history` + 3-state `status` + per-POI activation
+conditions decoupled from FibState). POI activation conditions
+(per-candle, in `zones/poi_zones.py::_compute_poi_activation_history`):
+  1. `cts_at(t) >= ic_idx` — IC lies within the fib's bounds at t
+     (the fib's `cts_idx` only grows via `CTS_UPDATED`).
+  2. `ic_idx <= t` — IC candle exists.
+  3. `has_unfilled_imbalance(df, ic_idx + 1, t, check_to_idx=t,
+     direction=sd)` — sd-direction imbalance still unfilled in
+     `(ic_idx, t]` as of `t`.
+  5. Variant ≥ V30 — IC candle overlaps the 61.8-80% fib zone
+     (computed from `bos_price` and the time-varying `cts_price_at(t)`)
+     by at least 30%. Variants can downgrade (V90 → V60 → V30) or
+     vanish entirely as `cts_price` extends and the zone slides.
+Scenario conditions (#4: per-scenario idx/price constraints) are gated
+at IC identification and not re-checked per candle (once the
+constraining event fires, the comparison is fixed).
+
+**Not yet following:** `FibState` (the `active` flag does double duty —
+condition-state for imbalance check AND terminal flag for `new_cycle` /
+`scenario1_revert` / `cross_failed` / `lifecycle_end`). `KLZone` similar
+(`meta["active"]` + `meta["deactivated_by"]` mix the two concepts). Future
+passes should split these along the same axes when those modules are
+touched substantially.
+
+**Why decouple:** mixing "condition-state" and "terminal-state" into one
+field (today's `active=False`) loses information. A consumer can't tell
+whether a fib's `active=False` means "imbalances temporarily filled, could
+come back" vs "this cycle is permanently done." Different consumers care
+about different distinctions — charting wants to know "currently-tradeable
+vs historical"; debug tooling wants to know "why did this go inactive?".
+The 3-state status carries enough to answer both without overloading.
+
+---
+
 ## Module boundaries
 
 ### Pipeline / Orchestration

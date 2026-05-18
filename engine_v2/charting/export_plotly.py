@@ -2318,10 +2318,13 @@ def export_chart_plotly(
             y0 = float(min(z.top, z.bottom))
             y1 = float(max(z.top, z.bottom))
 
-            # Get confirmed_idx for vertical line
-            conf_idx = int(z.meta.get("confirmed_idx", z.ic_idx))
+            # Get confirmed_idx for vertical line. Under the lifecycle convention
+            # `confirmed_idx` can be None when the POI never activated within its
+            # lifetime — in that case skip the confirm line entirely.
+            _conf_raw = z.meta.get("confirmed_idx")
+            conf_idx = int(_conf_raw) if _conf_raw is not None else None
             conf_time = None
-            if conf_idx in dfx.index:
+            if conf_idx is not None and conf_idx in dfx.index:
                 conf_time = pd.to_datetime(dfx.loc[conf_idx, COL_TIME], utc=True)
 
             # Draw POI zone rectangle

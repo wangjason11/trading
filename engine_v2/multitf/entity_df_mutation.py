@@ -116,6 +116,7 @@ _EVENT_META_IDX_KEYS = (
 _ZONE_META_IDX_KEYS = (
     "anchor_idx",
     "confirmed_idx",
+    "cts_established_idx",
     "start_idx",
     "end_idx",
     "base_idx",
@@ -302,10 +303,17 @@ def mirror_lower_tf_result_to_entity_df(
         new_kl.append(replace(z, meta=new_meta))
     _attrs_setdefault_list(entity_df, "kl_zones").extend(new_kl)
 
-    # 5. POI zones — direct ic_idx + meta
+    # 5. POI zones — direct ic_idx + meta + activation_history list
     new_poi = []
     for z in result.poi_zones:
         new_meta = _shift_meta_indices(z.meta, _ZONE_META_IDX_KEYS, slice_begin)
+        # Shift each idx inside activation_history (list of {idx, active, reason}).
+        ah = new_meta.get("activation_history")
+        if ah:
+            new_meta["activation_history"] = [
+                {**ev, "idx": int(ev["idx"]) + slice_begin}
+                for ev in ah
+            ]
         new_meta.update(attribution)
         new_poi.append(replace(z, ic_idx=z.ic_idx + slice_begin, meta=new_meta))
     _attrs_setdefault_list(entity_df, "poi_zones").extend(new_poi)

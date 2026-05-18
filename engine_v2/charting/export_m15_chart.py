@@ -131,15 +131,27 @@ def _m15_opacity_tier_for_zone(
 
     §13.5.c.iii: snapshots cascaded by §6.1 carry
     `meta["deactivated_by"]="overwritten_by_sid_{N}"` and are pinned to
-    `prior_inactive`. `lifecycle_end`-tagged snapshots and snapshots from
-    older parent cycles fall back to today's parent-sid/cycle tiering.
+    `prior_inactive`. Otherwise tiering follows the lifecycle state
+    convention (ARCHITECTURE.md):
+      - `status == "active"`  -> active tier (currently meets conditions)
+      - `status` ∈ {"inactive", "ended"} -> recent_inactive if parent_sid/cycle
+        is recent, else prior_inactive.
+
+    Falls back to the legacy `meta["active"]` boolean if no `status` field
+    is present (KL zones still use the boolean — POI zones use the
+    3-state convention).
     """
     deact = zone.meta.get("deactivated_by")
     if isinstance(deact, str) and deact.startswith("overwritten_by_sid_"):
         return _opacity_tier("prior_inactive")
-    active = bool(zone.meta.get("active", False)) and (zone.end_time is None)
-    if active:
+    status = zone.meta.get("status")
+    if status == "active":
         return _opacity_tier("active")
+    if status is None:
+        # Legacy path: KLZone uses meta["active"] (boolean), not status.
+        active = bool(zone.meta.get("active", False)) and (zone.end_time is None)
+        if active:
+            return _opacity_tier("active")
     parent_sid = zone.meta.get("parent_sid")
     parent_cycle = zone.meta.get("parent_cycle_id")
     if parent_sid == most_recent_parent_sid and parent_cycle in recent_cycle_ids:
@@ -1034,9 +1046,12 @@ def export_m15_chart_plotly(
                 y0 = float(min(poi.top, poi.bottom))
                 y1 = float(max(poi.top, poi.bottom))
 
-                conf_idx = int(poi.meta.get("confirmed_idx", poi.ic_idx))
+                # `confirmed_idx` can be None when the POI never activated within
+                # its lifetime (per lifecycle convention) — skip the confirm line.
+                _conf_raw = poi.meta.get("confirmed_idx")
+                conf_idx = int(_conf_raw) if _conf_raw is not None else None
                 conf_time = None
-                if 0 <= conf_idx < len(lt_df):
+                if conf_idx is not None and 0 <= conf_idx < len(lt_df):
                     conf_time = pd.to_datetime(lt_df.iloc[conf_idx][COL_TIME], utc=True)
 
                 fig.add_shape(type="rect", xref="x", yref="y",
@@ -1899,6 +1914,7 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
         cidx = best.meta.get("confirmed_idx")
         return int(cidx) if cidx is not None else -1
 
+    # M15 times (already datetime in dfx; build once for binary lookup).
     m15_times = pd.to_datetime(dfx[COL_TIME], utc=True)
 
     def _find_m15_by_extreme(h1_time: pd.Timestamp, approach_from_above: bool):
@@ -1954,6 +1970,7 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
 
             type_label = f"{trig.direction}:{trig.zone_kind}"
 
+            # Distance from H1 trigger wick to zone inner (parent-TF metric).
             if approach_from_above:
                 gap = float(h1_row[COL_L]) - float(trig.trigger_inner)
             else:

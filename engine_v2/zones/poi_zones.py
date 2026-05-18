@@ -398,40 +398,37 @@ def derive_poi_zones(
         if not ic_variants:
             continue
 
-        # Get confirmed_idx from CTS_ESTABLISHED event
+        # CTS_ESTABLISHED idx for the cycle (needed for activation condition 1).
         cts_event = cts_established_by_key.get(key)
-        confirmed_idx = int(cts_event.idx) if cts_event else fib_state.cts_idx
+        cts_established_idx = (
+            int(cts_event.idx) if cts_event else int(fib_state.cts_idx)
+        )
 
-        # Determine zone end_time (priority order)
-        # 1. Reversal: all zones for this structure end at reversal_confirmed_idx
-        # 2. New CTS: cycle N zones end when CTS_N+1 is established
-        # 3. No event: zone extends to chart end (end_time = None)
+        # Determine end_idx + end_reason (terminal state — irreversible).
+        # Priority:
+        #   1. Reversal (highest)
+        #   2. Next cycle CTS_ESTABLISHED
+        #   3. None → zone extends to chart end
+        end_idx: Optional[int] = None
+        end_reason: Optional[str] = None
         end_time = None
-        end_idx = None
 
-        # Check for reversal first (highest priority)
         if sid in reversal_idx_by_sid:
             end_idx = reversal_idx_by_sid[sid]
+            end_reason = "reversal"
             end_time = _time(end_idx)
 
-        # Check for next cycle CTS (only if no reversal, or if next CTS comes before reversal)
         next_cycle_key = (sid, cycle_id + 1)
         if next_cycle_key in cts_established_by_key:
             next_cts_idx = int(cts_established_by_key[next_cycle_key].idx)
-            # Use next CTS if no reversal, or if next CTS comes before reversal
             if end_idx is None or next_cts_idx < end_idx:
                 end_idx = next_cts_idx
+                end_reason = "next_cycle"
                 end_time = _time(end_idx)
 
-        # Determine zone status
-        # Active only if: no end_idx (zone hasn't ended) AND is current cycle AND fib is active
-        # If zone has an end_idx, it has ended and should be "inactive"
-        if end_idx is not None:
-            status = "inactive"
-        else:
-            current_cycle = fib_tracker._current_cycle.get(sid)
-            is_current = (current_cycle == cycle_id)
-            status = "active" if is_current and fib_state.active else "inactive"
+        # Last candle for the activation scan window.
+        last_candle = int(df.index.max())
+        scan_end = min(end_idx - 1, last_candle) if end_idx is not None else last_candle
 
         # Create a zone for each unique IC
         for ic_idx, versions in ic_variants.items():
@@ -441,6 +438,78 @@ def derive_poi_zones(
 
             ic_high = float(df.loc[ic_idx, "h"])
             ic_low = float(df.loc[ic_idx, "l"])
+
+            # Per-POI activation lifecycle. POI is "active" at candle t iff
+            # ALL these condition-state requirements hold simultaneously (the
+            # IC's identification conditions, re-evaluated dynamically against
+            # the fib's time-varying state):
+            #   1. fib's `cts_at(t)` has extended to >= ic_idx — i.e., IC lies
+            #      within the fib's bounds at t. The fib's cts only grows, so
+            #      becomes monotonic once reached.
+            #   2. ic_idx <= t  (the IC candle exists in data — implied by t
+            #      starting at first_active = max(cts_established_idx, ic_idx)).
+            #   3. `has_unfilled_imbalance(df, ic_idx+1, t, check_to_idx=t,
+            #      direction=sd)` — POI-specific sd-direction imbalance check
+            #      decoupled from Fib's `active` flag.
+            #   5. Variant qualification: at the fib's bounds [bos_price,
+            #      cts_price_at(t)], the IC candle's overlap with the 61.8-80%
+            #      Fib zone meets at least the V30 (30%) threshold. Variants
+            #      can downgrade (V90 → V60 → V30) or vanish entirely as the
+            #      fib extends.
+            # (Condition 4 — scenario idx/price constraints — is gated at IC
+            # identification and not re-checked per candle: once the
+            # constraining event has fired, the comparison is fixed.)
+            # End-state (`end_idx`) takes precedence: once ended, `status` is
+            # "ended" regardless of activation conditions.
+            cts_events_for_fib = [
+                ev for ev in structure_events
+                if ev.meta.get("structure_id") == sid
+                and ev.meta.get("cycle_id") == cycle_id
+                and ev.type in ("CTS_ESTABLISHED", "CTS_UPDATED")
+            ]
+            variant_thresholds = {
+                "V30": config.v30_threshold,
+                "V60": config.v60_threshold,
+                "V90": config.v90_threshold,
+            }
+            activation_history = _compute_poi_activation_history(
+                df=df,
+                ic_idx=int(ic_idx),
+                cts_established_idx=cts_established_idx,
+                sd=int(sd),
+                scan_end=scan_end,
+                fill_threshold=config.fill_threshold,
+                bos_price=float(fib_state.bos_price),
+                cts_events=cts_events_for_fib,
+                fib_min_pct=config.ic_fib_min,
+                fib_max_pct=config.ic_fib_max,
+                variant_thresholds=variant_thresholds,
+            )
+
+            # confirmed_idx = idx of the most recent ACTIVATE event (if any).
+            # current_versions = variants recorded at that activate event (or
+            # empty if POI is currently deactivated). With per-candle variant
+            # re-check, the active variant tier can downgrade (V90 -> V60 ->
+            # V30) or vanish as the fib's `cts_price` shifts.
+            confirmed_idx: Optional[int] = None
+            current_versions: List[str] = []
+            currently_active = False
+            for ev in activation_history:
+                if ev["active"]:
+                    confirmed_idx = ev["idx"]
+                    current_versions = list(ev.get("versions", []))
+                    currently_active = True
+                else:
+                    current_versions = []
+                    currently_active = False
+
+            # Derived 3-state status at end of data (or end_idx if reached).
+            if end_idx is not None and end_idx <= last_candle:
+                status = "ended"
+            elif currently_active:
+                status = "active"
+            else:
+                status = "inactive"
 
             zone = POIZone(
                 start_time=ic_time,
@@ -454,21 +523,194 @@ def derive_poi_zones(
                     "struct_direction": sd,
                     "cycle_id": cycle_id,
                     "confirmed_idx": confirmed_idx,
-                    "end_idx": end_idx,  # None if extends to chart end
+                    "end_idx": end_idx,
+                    "end_reason": end_reason,
+                    # `versions` = peak variants ever achieved (snapshot from
+                    # `select_ic_variants` using final fib state). For the
+                    # live state at end of scan, see `current_versions`.
                     "versions": versions,
+                    "current_versions": current_versions,
                     "status": status,
+                    "activation_history": activation_history,
                     "bos_idx": fib_state.bos_idx,
                     "cts_idx": fib_state.cts_idx,
+                    "cts_established_idx": cts_established_idx,
                 },
             )
             zones.append(zone)
 
     print(f"[poi_zones] total candidates checked across all fibs, zones created={len(zones)}")
     for z in zones:
+        ah = z.meta.get("activation_history", [])
+        flips_summary = ",".join(f"{e['idx']}:{'A' if e['active'] else 'D'}" for e in ah) or "—"
+        # Per-POI most-recent deact + first-react-after-deact (filtered to
+        # POI lifecycle, i.e., events in activation_history).
+        deact_idx = None
+        react_after = None
+        for e in ah:
+            if not e["active"]:
+                deact_idx = e["idx"]
+                react_after = None
+            elif deact_idx is not None and react_after is None:
+                react_after = e["idx"]
+        peak = z.meta.get("versions", [])
+        cur = z.meta.get("current_versions", [])
         print(f"[poi_zones] sid={z.meta.get('structure_id')} cycle={z.meta.get('cycle_id')} "
-              f"ic_idx={z.ic_idx} end_idx={z.meta.get('end_idx')} status={z.meta.get('status')}")
+              f"bos_idx={z.meta.get('bos_idx')} cts_est={z.meta.get('cts_established_idx')} "
+              f"confirmed={z.meta.get('confirmed_idx')} ic={z.ic_idx} cts={z.meta.get('cts_idx')} "
+              f"deact={deact_idx} react_after={react_after} end={z.meta.get('end_idx')} "
+              f"end_reason={z.meta.get('end_reason')} status={z.meta.get('status')} "
+              f"dir={z.meta.get('struct_direction')} peak={peak} cur={cur} hist=[{flips_summary}]")
 
     return zones
+
+
+def _compute_poi_activation_history(
+    df: pd.DataFrame,
+    *,
+    ic_idx: int,
+    cts_established_idx: int,
+    sd: int,
+    scan_end: int,
+    fill_threshold: float,
+    bos_price: float,
+    cts_events: List[StructureEvent],
+    fib_min_pct: float,
+    fib_max_pct: float,
+    variant_thresholds: Dict[str, float],
+) -> List[Dict[str, Any]]:
+    """Walk candles `[first_active, scan_end]` and produce the POI's
+    activation history.
+
+    POI is "active" at candle `t` iff all condition-state requirements hold
+    simultaneously (decoupled from FibState.active):
+
+      Condition 1 — `cts_at(t) >= ic_idx`. The fib's `cts_idx` only grows
+                    via CTS_UPDATED events, so once met, monotonic.
+      Condition 2 — `ic_idx <= t` (implicit: scan starts at first_active
+                    = max(cts_established_idx, ic_idx)).
+      Condition 3 — `has_unfilled_imbalance(df, ic_idx + 1, t, check_to_idx=t,
+                    direction=sd)`. Flips as imbalances form / fill.
+      Condition 5 — Variant qualification: the IC candle overlaps the
+                    61.8-80% Fib zone (computed from `bos_price` and the
+                    time-varying `cts_price_at(t)`) by at least V30 (the
+                    most lenient threshold). Variants downgrade/vanish as
+                    `cts_price` shifts and the zone slides.
+
+    `cts_events` is the list of CTS_ESTABLISHED + CTS_UPDATED events
+    filtered to the fib's `(sid, cycle_id)`, in idx-ascending order. At
+    each candle `t` we apply all events with `idx <= t` to derive
+    `(cts_idx_at_t, cts_price_at_t)`.
+
+    Each activate event in the returned history records the variant tier
+    set at that moment (e.g., `["V30", "V60"]`) — future charting can
+    surface downgrades as visual cues. Deactivate events record which
+    condition(s) flipped.
+
+    Returns `[{"idx", "active", "reason", "versions"?}, ...]`. Empty list
+    means POI never activated in the window.
+    """
+    first_active = max(cts_established_idx, ic_idx)
+    if first_active > scan_end or ic_idx not in df.index:
+        return []
+
+    ic_high = float(df.loc[ic_idx, "h"])
+    ic_low = float(df.loc[ic_idx, "l"])
+
+    sorted_cts_events = sorted(cts_events, key=lambda e: int(e.idx))
+
+    history: List[Dict[str, Any]] = []
+    was_active = False
+    event_ptr = 0
+    cts_idx_at_t = -1
+    cts_price_at_t = 0.0
+
+    for t in range(first_active, scan_end + 1):
+        if t not in df.index:
+            continue
+
+        # Apply all CTS events with idx <= t (CTS_ESTABLISHED fires first,
+        # then CTS_UPDATEDs extend cts_idx / cts_price).
+        while (event_ptr < len(sorted_cts_events)
+               and int(sorted_cts_events[event_ptr].idx) <= t):
+            ev = sorted_cts_events[event_ptr]
+            cts_idx_at_t = int(ev.idx)
+            try:
+                cts_price_at_t = float(ev.price)
+            except (TypeError, ValueError):
+                pass
+            event_ptr += 1
+
+        # Condition 1: IC within fib bounds at time t.
+        cond1 = cts_idx_at_t >= ic_idx
+
+        # Condition 3: sd-direction unfilled imbalance in (ic_idx, t] as of t.
+        cond3 = has_unfilled_imbalance(
+            df,
+            start_idx=ic_idx + 1,
+            end_idx=t,
+            check_to_idx=t,
+            direction=sd,
+            fill_threshold=fill_threshold,
+        )
+
+        # Condition 5: variant overlap with the time-varying 61.8-80% zone.
+        # Retracement math is direction-aware (matches
+        # `features.fibonacci.calculate_fib_price`):
+        #   sd=+1 (bullish):  price moved up, retracement pulls back from
+        #                     high → fib_level = anchor_high - range * pct
+        #   sd=-1 (bearish):  price moved down, retracement pulls back from
+        #                     low  → fib_level = anchor_low  + range * pct
+        current_versions: List[str] = []
+        if cond1 and cts_price_at_t > 0:
+            if sd == 1:
+                anchor_high = cts_price_at_t
+                anchor_low = bos_price
+            else:
+                anchor_high = bos_price
+                anchor_low = cts_price_at_t
+            range_size = anchor_high - anchor_low
+            if range_size > 0:
+                if sd == 1:
+                    fib_level_min = anchor_high - range_size * (fib_min_pct / 100.0)
+                    fib_level_max = anchor_high - range_size * (fib_max_pct / 100.0)
+                else:
+                    fib_level_min = anchor_low + range_size * (fib_min_pct / 100.0)
+                    fib_level_max = anchor_low + range_size * (fib_max_pct / 100.0)
+                overlap = calculate_candle_overlap_pct(
+                    ic_high, ic_low, fib_level_min, fib_level_max,
+                )
+                current_versions = sorted(
+                    v for v, th in variant_thresholds.items() if overlap >= th
+                )
+        cond5 = len(current_versions) > 0
+
+        is_active = cond1 and cond3 and cond5
+
+        if is_active and not was_active:
+            history.append({
+                "idx": t,
+                "active": True,
+                "reason": "initial" if not history else "conditions_re-met",
+                "versions": current_versions,
+            })
+            was_active = True
+        elif not is_active and was_active:
+            reasons = []
+            if not cond1:
+                reasons.append("ic_out_of_fib_bounds")
+            if not cond3:
+                reasons.append("imbalance_filled")
+            if not cond5:
+                reasons.append("variant_below_v30")
+            history.append({
+                "idx": t,
+                "active": False,
+                "reason": "+".join(reasons) if reasons else "unknown",
+            })
+            was_active = False
+
+    return history
 
 
 # ---------------------------------------------------------------------------
