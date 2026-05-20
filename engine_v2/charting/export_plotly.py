@@ -10,6 +10,11 @@ from plotly.subplots import make_subplots
 
 from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME, COL_V
 from engine_v2.charting.style_registry import STYLE
+from engine_v2.charting._zone_render import (
+    build_stepped_outline_xy,
+    compute_kl_active_stretches,
+    compute_poi_active_stretches,
+)
 from engine_v2.common.types import PatternStatus
 from engine_v2.multitf.registry import StructureRegistry
 
@@ -1720,21 +1725,27 @@ def export_chart_plotly(
             struct_direction = int(z.meta.get("struct_direction", 0))
 
             # ------------------------------------------------------------------
-            # NEW: draw "stepwise" zone rectangles using meta["bounds_steps"]
-            # Each step begins at start_idx and applies forward until next step.
+            # Item 5 (2026-05-20): outline + active-stretch fill rendering.
+            # KL zone:
+            #   - One stepped-polygon outline tracing all bounds_steps' outer
+            #     contour (colored by side, opacity = confirm × tier).
+            #   - Filled rects ONLY on the active stretch
+            #     [confirmed_idx, render_end_idx]; intersected with each
+            #     bounds_step so each step's y-bounds apply within its x-range.
+            #   - Single vertical confirm line at confirmed_idx (KL has no
+            #     reactivation today).
+            #   - Hover transparent lines per step (preserved from prior impl).
             # ------------------------------------------------------------------
             steps = list((z.meta or {}).get("bounds_steps", []))
-
-            # Fallback: no steps -> behave like old code (single segment)
+            fallback_top = float(max(z.top, z.bottom))
+            fallback_bot = float(min(z.top, z.bottom))
             if not steps:
                 steps = [{
                     "start_idx": base_idx,
-                    "top": float(max(z.top, z.bottom)),
-                    "bottom": float(min(z.top, z.bottom)),
+                    "top": fallback_top,
+                    "bottom": fallback_bot,
                     "event": "FALLBACK",
                 }]
-
-            # Sort steps by start_idx
             steps = sorted(steps, key=lambda s: int(s.get("start_idx", -1)))
 
             def _idx_to_time(ii: int):
@@ -1742,26 +1753,32 @@ def export_chart_plotly(
                     return pd.to_datetime(dfx.loc[ii, COL_TIME], utc=True)
                 return None
 
-            # For each segment, compute x0/x1 bounds
+            # render_end_idx = last df idx within zone's lifetime
+            if z.end_time is None:
+                render_end_idx = int(dfx.index[-1])
+            else:
+                end_mask = dfx[COL_TIME] <= pd.to_datetime(z.end_time, utc=True)
+                render_end_idx = int(dfx.index[end_mask][-1]) if end_mask.any() else int(dfx.index[0])
+
+            active_stretches = compute_kl_active_stretches(z, render_end_idx)
+
+            # Per-step iteration: render fills (only where active) + hover lines.
             for k, s in enumerate(steps):
                 seg_start_idx = int(s.get("start_idx", -1))
                 seg_x0 = _idx_to_time(seg_start_idx)
                 if seg_x0 is None:
                     continue
-
-                # clamp to the zone's actual window
                 if seg_x0 < x_zone0:
                     seg_x0 = x_zone0
 
-                # segment end = next step start time, else zone end
                 if k + 1 < len(steps):
                     next_idx = int(steps[k + 1].get("start_idx", -1))
                     nxt = _idx_to_time(next_idx) or x_zone1
-                    # end *just before* the next segment start to avoid overlap
                     seg_x1 = nxt - pd.Timedelta(microseconds=1)
+                    step_end_idx = next_idx - 1
                 else:
                     seg_x1 = x_zone1
-
+                    step_end_idx = render_end_idx
                 if seg_x1 <= seg_x0:
                     seg_x1 = seg_x0
 
@@ -1770,107 +1787,105 @@ def export_chart_plotly(
                 y0 = float(min(seg_bot, seg_top))
                 y1 = float(max(seg_bot, seg_top))
 
-                # Rectangle segment (uses same fillcolor/linecolor computed above)
-                fig.add_shape(
-                    type="rect",
-                    xref="x",
-                    yref="y",
-                    x0=seg_x0,
-                    x1=seg_x1,
-                    y0=y0,
-                    y1=y1,
-                    fillcolor=fillcolor,
-                    line=dict(width=0),
-                    layer="below",
-                )
-
-                # Confirm line should appear only in the segment that contains conf_time
-                if conf_time is not None and (seg_x0 <= conf_time <= seg_x1):
+                # Active-stretch fill intersected with this step.
+                for stretch_start, stretch_end in active_stretches:
+                    isect_start = max(seg_start_idx, stretch_start)
+                    isect_end = min(step_end_idx, stretch_end)
+                    if isect_start > isect_end:
+                        continue
+                    fill_x0 = _idx_to_time(isect_start) or seg_x0
+                    if fill_x0 < seg_x0:
+                        fill_x0 = seg_x0
+                    if isect_end >= step_end_idx:
+                        fill_x1 = seg_x1
+                    else:
+                        end_time = _idx_to_time(isect_end)
+                        fill_x1 = end_time if end_time is not None else seg_x1
+                    if fill_x1 <= fill_x0:
+                        continue
                     fig.add_shape(
-                        type="line",
-                        xref="x",
-                        yref="y",
-                        x0=conf_time,
-                        x1=conf_time,
-                        y0=y0,
-                        y1=y1,
-                        line=dict(color=linecolor, width=confirm_w),
+                        type="rect", xref="x", yref="y",
+                        x0=fill_x0, x1=fill_x1, y0=y0, y1=y1,
+                        fillcolor=fillcolor,
+                        line=dict(width=0),
                         layer="below",
                     )
 
-                # Hover lines for this segment (shapes don't hover)
-                # Use multiple points (one per candle) so hover works across entire horizontal edge
+                # Hover lines per step (preserved)
                 seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= seg_x0) & (dfx[COL_TIME] <= seg_x1)]
                 if len(seg_times) == 0:
                     seg_times = pd.Series([seg_x0, seg_x1])
 
                 hover_customdata = [[
-                    side,
-                    structure_id,
-                    struct_direction,
-                    base_pattern,
-                    base_idx,
-                    conf_idx,
-                    cycle_id,
-                    y1,
-                    y0,
+                    side, structure_id, struct_direction, base_pattern,
+                    base_idx, conf_idx, cycle_id, y1, y0,
                 ]] * len(seg_times)
 
-                # Top hover line
-                fig.add_trace(
-                    go.Scatter(
-                        x=seg_times,
-                        y=[y1] * len(seg_times),
-                        mode="lines",
-                        name="KL zone" if active else "KL zone (inactive)",
-                        showlegend=hover_showlegend,
-                        line=hover_line,
-                        line_shape="hv",
-                        hovertemplate=(
-                            "TF=1H<br>"
-                            "KL Zone<br>"
-                            "side=%{customdata[0]}<br>"
-                            "structure_id=%{customdata[1]}<br>"
-                            "struct_direction=%{customdata[2]}<br>"
-                            "base_pattern=%{customdata[3]}<br>"
-                            "base_idx=%{customdata[4]}<br>"
-                            "confirmed_idx=%{customdata[5]}<br>"
-                            "cycle_id=%{customdata[6]}<br>"
-                            "top=%{customdata[7]:.5f}<br>"
-                            "bottom=%{customdata[8]:.5f}"
-                            "<extra></extra>"
-                        ),
-                        customdata=hover_customdata,
+                for y_edge in (y1, y0):
+                    fig.add_trace(
+                        go.Scatter(
+                            x=seg_times, y=[y_edge] * len(seg_times),
+                            mode="lines",
+                            name="KL zone" if active else "KL zone (inactive)",
+                            showlegend=hover_showlegend,
+                            line=hover_line, line_shape="hv",
+                            hovertemplate=(
+                                "TF=1H<br>"
+                                "KL Zone<br>"
+                                "side=%{customdata[0]}<br>"
+                                "structure_id=%{customdata[1]}<br>"
+                                "struct_direction=%{customdata[2]}<br>"
+                                "base_pattern=%{customdata[3]}<br>"
+                                "base_idx=%{customdata[4]}<br>"
+                                "confirmed_idx=%{customdata[5]}<br>"
+                                "cycle_id=%{customdata[6]}<br>"
+                                "top=%{customdata[7]:.5f}<br>"
+                                "bottom=%{customdata[8]:.5f}"
+                                "<extra></extra>"
+                            ),
+                            customdata=hover_customdata,
+                        )
                     )
-                )
 
-                # Bottom hover line
-                fig.add_trace(
-                    go.Scatter(
-                        x=seg_times,
-                        y=[y0] * len(seg_times),
-                        mode="lines",
-                        name="KL zone" if active else "KL zone (inactive)",
-                        showlegend=hover_showlegend,
-                        line=hover_line,
-                        line_shape="hv",
-                        hovertemplate=(
-                            "TF=1H<br>"
-                            "KL Zone<br>"
-                            "side=%{customdata[0]}<br>"
-                            "structure_id=%{customdata[1]}<br>"
-                            "struct_direction=%{customdata[2]}<br>"
-                            "base_pattern=%{customdata[3]}<br>"
-                            "base_idx=%{customdata[4]}<br>"
-                            "confirmed_idx=%{customdata[5]}<br>"
-                            "cycle_id=%{customdata[6]}<br>"
-                            "top=%{customdata[7]:.5f}<br>"
-                            "bottom=%{customdata[8]:.5f}"
-                            "<extra></extra>"
-                        ),
-                        customdata=hover_customdata,
-                    )
+            # Stepped polygon outline (tracing the outer contour of all steps).
+            outline_xs, outline_ys = build_stepped_outline_xy(
+                steps, _idx_to_time, x_zone0, x_zone1,
+                fallback_top=fallback_top, fallback_bottom=fallback_bot,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=outline_xs, y=outline_ys, mode="lines",
+                    line=dict(color=linecolor, width=confirm_w),
+                    fill=None, hoverinfo="skip", showlegend=False,
+                    name=f"KL outline sid={structure_id} c{cycle_id}",
                 )
+            )
+
+            # Single confirm line at confirmed_idx; position via the step that
+            # contains conf_time for the correct y-bounds.
+            if conf_time is not None and x_zone0 <= conf_time <= x_zone1:
+                for k, s in enumerate(steps):
+                    seg_x0 = _idx_to_time(int(s.get("start_idx", -1)))
+                    if seg_x0 is None:
+                        continue
+                    if seg_x0 < x_zone0:
+                        seg_x0 = x_zone0
+                    if k + 1 < len(steps):
+                        nxt = _idx_to_time(int(steps[k + 1].get("start_idx", -1))) or x_zone1
+                        seg_x1 = nxt - pd.Timedelta(microseconds=1)
+                    else:
+                        seg_x1 = x_zone1
+                    if seg_x0 <= conf_time <= seg_x1:
+                        seg_top = float(s.get("top", z.top))
+                        seg_bot = float(s.get("bottom", z.bottom))
+                        fig.add_shape(
+                            type="line", xref="x", yref="y",
+                            x0=conf_time, x1=conf_time,
+                            y0=min(seg_bot, seg_top), y1=max(seg_bot, seg_top),
+                            line=dict(color=linecolor, width=confirm_w),
+                            layer="below",
+                        )
+                        break
 
     # -------------------------------------------------
     # Week 8: Wave Candle vertical lines
@@ -2327,30 +2342,75 @@ def export_chart_plotly(
             if conf_idx is not None and conf_idx in dfx.index:
                 conf_time = pd.to_datetime(dfx.loc[conf_idx, COL_TIME], utc=True)
 
-            # Draw POI zone rectangle
+            # ------------------------------------------------------------------
+            # Item 5 (2026-05-20): outline + active-stretch fill rendering.
+            # POI zone:
+            #   - One outline rect (no fill) spanning full [start_time, end_time],
+            #     colored by confirm-line styling, opacity = base × tier.
+            #   - N filled rects (no border) — one per active stretch from
+            #     activation_history.
+            #   - N vertical confirm lines — one per "A" event in activation_history.
+            # ------------------------------------------------------------------
+            # render_end_idx = last df idx within zone's lifetime.
+            if z.end_time is None:
+                _poi_render_end_idx = int(dfx.index[-1])
+            else:
+                _end_mask = dfx[COL_TIME] <= pd.to_datetime(z.end_time, utc=True)
+                _poi_render_end_idx = int(dfx.index[_end_mask][-1]) if _end_mask.any() else int(dfx.index[0])
+
+            def _poi_idx_to_time(ii: int):
+                if ii in dfx.index:
+                    return pd.to_datetime(dfx.loc[ii, COL_TIME], utc=True)
+                return None
+
+            poi_stretches = compute_poi_active_stretches(z, _poi_render_end_idx)
+
+            # Active-stretch fills (no border, color = zone fill).
+            for stretch_start, stretch_end in poi_stretches:
+                sx0 = _poi_idx_to_time(stretch_start)
+                sx1 = _poi_idx_to_time(stretch_end)
+                if sx0 is None or sx1 is None:
+                    continue
+                if sx0 < x_zone0:
+                    sx0 = x_zone0
+                if sx1 > x_zone1:
+                    sx1 = x_zone1
+                if sx1 <= sx0:
+                    continue
+                fig.add_shape(
+                    type="rect", xref="x", yref="y",
+                    x0=sx0, x1=sx1, y0=y0, y1=y1,
+                    fillcolor=fillcolor,
+                    line=dict(width=0),
+                    layer="below",
+                )
+
+            # Outline rect (no fill, brown border matching confirm line).
             fig.add_shape(
-                type="rect",
-                xref="x",
-                yref="y",
-                x0=x_zone0,
-                x1=x_zone1,
-                y0=y0,
-                y1=y1,
-                fillcolor=fillcolor,
-                line=dict(width=0),
+                type="rect", xref="x", yref="y",
+                x0=x_zone0, x1=x_zone1, y0=y0, y1=y1,
+                fillcolor="rgba(0,0,0,0)",
+                line=dict(color=linecolor, width=confirm_w),
                 layer="below",
             )
 
-            # Draw vertical confirm line at confirmed_idx
-            if conf_time is not None:
+            # Vertical confirm lines — one per "A" event in activation_history.
+            # Fallback: if no history but `confirmed_idx` is set, draw a single
+            # line (covers zones derived before activation_history existed).
+            activation_history = z.meta.get("activation_history", []) or []
+            confirm_idxs = [
+                int(ev["idx"]) for ev in activation_history
+                if ev.get("active") and int(ev["idx"]) <= _poi_render_end_idx
+            ]
+            if not confirm_idxs and conf_idx is not None:
+                confirm_idxs = [conf_idx]
+            for c_idx in confirm_idxs:
+                c_time = _poi_idx_to_time(c_idx)
+                if c_time is None or not (x_zone0 <= c_time <= x_zone1):
+                    continue
                 fig.add_shape(
-                    type="line",
-                    xref="x",
-                    yref="y",
-                    x0=conf_time,
-                    x1=conf_time,
-                    y0=y0,
-                    y1=y1,
+                    type="line", xref="x", yref="y",
+                    x0=c_time, x1=c_time, y0=y0, y1=y1,
                     line=dict(color=linecolor, width=confirm_w),
                     layer="below",
                 )
@@ -2691,7 +2751,7 @@ def export_chart_plotly(
                 showlegend=False,
                 yaxis="y2",
                 customdata=list(zip(dfx.index, dfx[COL_TIME].astype(str))),
-                hovertemplate="idx=%{customdata[0]}<br>time=%{customdata[1]}<br>Volume: %{y:,.0f}<extra></extra>",
+                hovertemplate="TF=1H<br>idx=%{customdata[0]}<br>time=%{customdata[1]}<br>Volume: %{y:,.0f}<extra></extra>",
             )
         )
 
@@ -2708,7 +2768,7 @@ def export_chart_plotly(
                     showlegend=False,
                     yaxis="y2",
                     customdata=list(zip(dfx.index, dfx[COL_TIME].astype(str))),
-                    hovertemplate="idx=%{customdata[0]}<br>time=%{customdata[1]}<br>EMA(20): %{y:,.0f}<extra></extra>",
+                    hovertemplate="TF=1H<br>idx=%{customdata[0]}<br>time=%{customdata[1]}<br>EMA(20): %{y:,.0f}<extra></extra>",
                 )
             )
 

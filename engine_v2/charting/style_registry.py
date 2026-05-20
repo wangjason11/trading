@@ -220,12 +220,24 @@ STYLE = {
     },
 
     # -----------------------------
-    # Global: Opacity tiers for multi-structure visibility
+    # Global: Opacity tiers for multi-structure visibility (MAIN CHART ONLY)
     # -----------------------------
+    # Used by the main H1 chart's 3-tier cascade rendering. Sub charts use
+    # the per-TF tier system below.
     "opacity_tiers": {
         "active": 1.0,           # Active elements (current cycle, not locked)
         "recent_inactive": 0.5,  # Inactive elements from most recent structure
         "prior_inactive": 0.2,   # Inactive elements from prior structures
+    },
+
+    # Sub-chart per-TF tier multipliers (zones only). Replaces the
+    # active/recent/prior 3-tier on sub charts: zones are dimmed by which TF
+    # they originate from, not by their lifecycle state. Composition is
+    # `final_opacity = base_style_opacity_active × per_tf_tier`.
+    "opacity_tiers.subordinate_chart": {
+        "main_tf":         0.2,  # Main-TF zones overlaid on a sub chart (e.g. H1 on M15)
+        "sub_tf":          0.5,  # Primary sub-TF zones (M15 native)
+        "sub_tf_smallest": 1.0,  # Reserved — only used if 3+ TFs ever rendered on one chart
     },
 
     # -----------------------------

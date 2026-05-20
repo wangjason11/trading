@@ -28,6 +28,12 @@ import plotly.graph_objects as go
 
 from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME, COL_V, PatternStatus
 from engine_v2.charting.style_registry import STYLE
+from engine_v2.charting._zone_render import (
+    build_stepped_outline_xy,
+    compute_kl_active_stretches,
+    compute_poi_active_stretches,
+    select_subordinate_tf_tier,
+)
 from engine_v2.charting.export_plotly import (
     _rgba_from_rgb,
     _zone_style,
@@ -124,39 +130,23 @@ def _build_m15_to_h1_map(
 
 def _m15_opacity_tier_for_zone(
     zone,
-    most_recent_parent_sid: int,
-    recent_cycle_ids: set,
+    primary_sub_tf: str = "M15",
 ) -> float:
-    """Compute 3-tier opacity for an M15 zone.
+    """Per-TF tier multiplier for an M15-chart zone (Item 5, 2026-05-20).
 
-    §13.5.c.iii: snapshots cascaded by §6.1 carry
-    `meta["deactivated_by"]="overwritten_by_sid_{N}"` and are pinned to
-    `prior_inactive`. Otherwise tiering follows the lifecycle state
-    convention (ARCHITECTURE.md):
-      - `status == "active"`  -> active tier (currently meets conditions)
-      - `status` ∈ {"inactive", "ended"} -> recent_inactive if parent_sid/cycle
-        is recent, else prior_inactive.
+    Replaces the prior active/recent_inactive/prior_inactive 3-tier system
+    with a per-TF tier (Spec 2): zones from the chart's primary sub-TF (M15)
+    get the `sub_tf` multiplier (0.5), main-TF overlays (H1) get `main_tf`
+    (0.2). Cascade-tagged zones (`deactivated_by="overwritten_by_sid_N"`)
+    still render — their end_time is already capped by cascade tagging, so
+    their visible extent is naturally truncated to the boundary, but their
+    fill/outline use the same sub_tf tier as non-cascaded sub zones.
 
-    Falls back to the legacy `meta["active"]` boolean if no `status` field
-    is present (KL zones still use the boolean — POI zones use the
-    3-state convention).
+    Zone's TF comes from `meta["timeframe"]`; defaults to `primary_sub_tf`
+    when missing (the M15-native rendering path always emits M15 zones).
     """
-    deact = zone.meta.get("deactivated_by")
-    if isinstance(deact, str) and deact.startswith("overwritten_by_sid_"):
-        return _opacity_tier("prior_inactive")
-    status = zone.meta.get("status")
-    if status == "active":
-        return _opacity_tier("active")
-    if status is None:
-        # Legacy path: KLZone uses meta["active"] (boolean), not status.
-        active = bool(zone.meta.get("active", False)) and (zone.end_time is None)
-        if active:
-            return _opacity_tier("active")
-    parent_sid = zone.meta.get("parent_sid")
-    parent_cycle = zone.meta.get("parent_cycle_id")
-    if parent_sid == most_recent_parent_sid and parent_cycle in recent_cycle_ids:
-        return _opacity_tier("recent_inactive")
-    return _opacity_tier("prior_inactive")
+    zone_tf = zone.meta.get("timeframe", primary_sub_tf)
+    return select_subordinate_tf_tier(zone_tf, primary_sub_tf=primary_sub_tf)
 
 
 def _m15_opacity_tier_for_events(
@@ -547,10 +537,12 @@ def export_m15_chart_plotly(
             else:
                 colors.append(_style("volume.bar.neutral").get("color", "rgba(128,128,128,0.7)"))
 
+        vol_customdata = list(zip(dfx.index, dfx[COL_TIME].astype(str)))
         fig.add_trace(go.Bar(
             x=dfx[COL_TIME], y=volume, name="Volume",
             marker_color=colors, showlegend=False, yaxis="y2",
-            hovertemplate="TF=15M<br>Volume: %{y:,.0f}<extra></extra>",
+            customdata=vol_customdata,
+            hovertemplate="TF=15M<br>idx=%{customdata[0]}<br>time=%{customdata[1]}<br>Volume: %{y:,.0f}<extra></extra>",
         ))
 
         if volume_cfg.get("ema_line", False):
@@ -559,7 +551,8 @@ def export_m15_chart_plotly(
                 x=dfx[COL_TIME], y=vol_ema20,
                 mode="lines", name="Vol EMA(20)", line=ema_style,
                 showlegend=False, yaxis="y2",
-                hovertemplate="TF=15M<br>EMA(20): %{y:,.0f}<extra></extra>",
+                customdata=vol_customdata,
+                hovertemplate="TF=15M<br>idx=%{customdata[0]}<br>time=%{customdata[1]}<br>EMA(20): %{y:,.0f}<extra></extra>",
             ))
 
     # ===================================================================
@@ -807,9 +800,9 @@ def export_m15_chart_plotly(
             for zone in sid_kls:
                 side = str(zone.side)
                 stz = _zone_style(side)
-                op_mult = _m15_opacity_tier_for_zone(zone, m15_most_recent_psid, m15_recent_cycles)
+                op_mult = _m15_opacity_tier_for_zone(zone)
 
-                base_fill_op = float(stz.get("fill_opacity_active", 0.18))
+                base_fill_op = float(stz.get("fill_opacity_active", 0.4))
                 base_line_op = float(stz.get("confirm_opacity_active", 0.9))
                 fill_op = base_fill_op * op_mult
                 line_op = base_line_op * op_mult
@@ -817,7 +810,11 @@ def export_m15_chart_plotly(
                 confirm_w = int(stz.get("confirm_line_width", 2))
 
                 fillcolor = _rgba_from_rgb(rgb, fill_op)
-                linecolor = _rgba_from_rgb(rgb, line_op)
+                confirm_color = _rgba_from_rgb(rgb, line_op)
+                # Sub-native outline keeps the thin black 0.5px styling, opacity
+                # tracks the line opacity for tier-consistent dimming.
+                sub_outline_color = f"rgba(0, 0, 0, {line_op})"
+                sub_outline_w = 0.5
 
                 x0 = pd.to_datetime(zone.start_time, utc=True)
                 x1 = pd.to_datetime(zone.end_time, utc=True) if zone.end_time else t_last_m15
@@ -827,9 +824,9 @@ def export_m15_chart_plotly(
 
                 conf_idx = int(zone.meta.get("confirmed_idx", -1))
                 conf_time = None
-                # conf_idx is slice-relative — convert to time from lt_df
-                if 0 <= conf_idx < len(lt_df):
-                    conf_time = pd.to_datetime(lt_df.iloc[conf_idx][COL_TIME], utc=True)
+                # conf_idx is entity-absolute under §13.5.c.iii
+                if conf_idx in lt_df.index:
+                    conf_time = pd.to_datetime(lt_df.loc[conf_idx, COL_TIME], utc=True)
 
                 steps = list((zone.meta or {}).get("bounds_steps", []))
                 if not steps:
@@ -837,6 +834,19 @@ def export_m15_chart_plotly(
                               "top": y1, "bottom": y0, "event": "FALLBACK"}]
                 steps = sorted(steps, key=lambda s: int(s.get("start_idx", -1)))
 
+                # render_end_idx for active-stretch computation.
+                if zone.end_time is None:
+                    render_end_idx = int(lt_df.index[-1])
+                else:
+                    _em = lt_df[COL_TIME] <= pd.to_datetime(zone.end_time, utc=True)
+                    render_end_idx = int(lt_df.index[_em][-1]) if _em.any() else int(lt_df.index[0])
+
+                active_stretches = compute_kl_active_stretches(zone, render_end_idx)
+
+                structure_id = int(zone.meta.get("structure_id", -1))
+                cycle_id = int(zone.meta.get("cycle_id", 0))
+
+                # Per-step iteration: fills (only where active) + hover lines.
                 for k, s in enumerate(steps):
                     seg_start_slice = int(s.get("start_idx", -1))
                     seg_x0 = _lt_time(seg_start_slice)
@@ -846,34 +856,47 @@ def export_m15_chart_plotly(
                         seg_x0 = x0
 
                     if k + 1 < len(steps):
-                        nxt = _lt_time(int(steps[k + 1].get("start_idx", -1))) or x1
+                        next_step_idx = int(steps[k + 1].get("start_idx", -1))
+                        nxt = _lt_time(next_step_idx) or x1
                         seg_x1 = nxt - pd.Timedelta(microseconds=1)
+                        step_end_idx = next_step_idx - 1
                     else:
                         seg_x1 = x1
+                        step_end_idx = render_end_idx
 
                     seg_top = float(s.get("top", y1))
                     seg_bot = float(s.get("bottom", y0))
                     sy0 = min(seg_bot, seg_top)
                     sy1 = max(seg_bot, seg_top)
 
-                    fig.add_shape(type="rect", xref="x", yref="y",
-                                  x0=seg_x0, x1=seg_x1, y0=sy0, y1=sy1,
-                                  fillcolor=fillcolor,
-                                  line=dict(width=0.5, color="black"),
-                                  layer="below")
+                    for stretch_start, stretch_end in active_stretches:
+                        isect_start = max(seg_start_slice, stretch_start)
+                        isect_end = min(step_end_idx, stretch_end)
+                        if isect_start > isect_end:
+                            continue
+                        fill_x0 = _lt_time(isect_start) or seg_x0
+                        if fill_x0 < seg_x0:
+                            fill_x0 = seg_x0
+                        if isect_end >= step_end_idx:
+                            fill_x1 = seg_x1
+                        else:
+                            end_time = _lt_time(isect_end)
+                            fill_x1 = end_time if end_time is not None else seg_x1
+                        if fill_x1 <= fill_x0:
+                            continue
+                        fig.add_shape(
+                            type="rect", xref="x", yref="y",
+                            x0=fill_x0, x1=fill_x1, y0=sy0, y1=sy1,
+                            fillcolor=fillcolor,
+                            line=dict(width=0),
+                            layer="below",
+                        )
 
-                    if conf_time is not None and seg_x0 <= conf_time <= seg_x1:
-                        fig.add_shape(type="line", xref="x", yref="y",
-                                      x0=conf_time, x1=conf_time, y0=sy0, y1=sy1,
-                                      line=dict(color=linecolor, width=confirm_w), layer="below")
-
-                    # Hover
+                    # Hover lines per step (preserved)
                     seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= seg_x0) & (dfx[COL_TIME] <= seg_x1)]
                     if len(seg_times) == 0:
                         seg_times = pd.Series([seg_x0, seg_x1])
 
-                    structure_id = int(zone.meta.get("structure_id", -1))
-                    cycle_id = int(zone.meta.get("cycle_id", 0))
                     hover_cd = [[
                         side, structure_id,
                         int(zone.meta.get("struct_direction", 0)),
@@ -906,6 +929,43 @@ def export_m15_chart_plotly(
                             customdata=hover_cd,
                         ))
 
+                # Stepped polygon outline (single trace for whole zone).
+                outline_xs, outline_ys = build_stepped_outline_xy(
+                    steps, _lt_time, x0, x1,
+                    fallback_top=y1, fallback_bottom=y0,
+                )
+                fig.add_trace(go.Scatter(
+                    x=outline_xs, y=outline_ys, mode="lines",
+                    line=dict(color=sub_outline_color, width=sub_outline_w),
+                    fill=None, hoverinfo="skip", showlegend=False,
+                    name=f"M15 KL outline sid={structure_id} c{cycle_id}",
+                ))
+
+                # Single confirm line at confirmed_idx (KL has no reactivation).
+                if conf_time is not None and x0 <= conf_time <= x1:
+                    for k, s in enumerate(steps):
+                        seg_x0 = _lt_time(int(s.get("start_idx", -1)))
+                        if seg_x0 is None:
+                            continue
+                        if seg_x0 < x0:
+                            seg_x0 = x0
+                        if k + 1 < len(steps):
+                            nxt = _lt_time(int(steps[k + 1].get("start_idx", -1))) or x1
+                            seg_x1 = nxt - pd.Timedelta(microseconds=1)
+                        else:
+                            seg_x1 = x1
+                        if seg_x0 <= conf_time <= seg_x1:
+                            seg_top = float(s.get("top", y1))
+                            seg_bot = float(s.get("bottom", y0))
+                            fig.add_shape(
+                                type="line", xref="x", yref="y",
+                                x0=conf_time, x1=conf_time,
+                                y0=min(seg_bot, seg_top), y1=max(seg_bot, seg_top),
+                                line=dict(color=confirm_color, width=confirm_w),
+                                layer="below",
+                            )
+                            break
+
         # --- Wave candle verticals + WVMI hover ---
         if zone_cfg.get("wave_candles", True) and sid_waves:
             wvmi_by_idx = {}
@@ -927,7 +987,9 @@ def export_m15_chart_plotly(
                 zk = (wc.structure_id, wc.cycle_id, wc.source_kind)
                 parent_zone = zone_lookup_lt.get(zk)
                 if parent_zone is not None:
-                    op_mult = _m15_opacity_tier_for_zone(parent_zone, m15_most_recent_psid, m15_recent_cycles)
+                    # Wave candles inherit their parent zone's tier (per-TF
+                    # under Item 5 — was 3-tier before).
+                    op_mult = _m15_opacity_tier_for_zone(parent_zone)
                 else:
                     op_mult = _m15_opacity_tier_for_events(
                         p_sid, p_cycle, m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
@@ -1027,18 +1089,21 @@ def export_m15_chart_plotly(
                 stz = STYLE.get(f"zone.poi.{side}", {})
                 zone_status = poi.meta.get("status", "active")
 
-                op_mult = _m15_opacity_tier_for_zone(poi, m15_most_recent_psid, m15_recent_cycles)
+                op_mult = _m15_opacity_tier_for_zone(poi)
 
-                base_fill_op = float(stz.get("fill_opacity_active", 0.35))
-                base_line_op = float(stz.get("confirm_opacity_active", 0.85))
+                base_fill_op = float(stz.get("fill_opacity_active", 0.9))
+                base_line_op = float(stz.get("confirm_opacity_active", 0.9))
                 rgb = str(stz.get("rgb", "255, 215, 0"))
-                confirm_rgb = str(stz.get("confirm_line_rgb", "139, 69, 19"))
+                confirm_rgb = str(stz.get("confirm_line_rgb", "101, 67, 33"))
                 confirm_w = int(stz.get("confirm_line_width", 2))
 
                 fill_op = base_fill_op * op_mult
                 line_op = base_line_op * op_mult
                 fillcolor = _rgba_from_rgb(rgb, fill_op)
-                linecolor = _rgba_from_rgb(confirm_rgb, line_op)
+                confirm_color = _rgba_from_rgb(confirm_rgb, line_op)
+                # Sub-native outline keeps thin black 0.5px (tier-faded).
+                sub_outline_color = f"rgba(0, 0, 0, {line_op})"
+                sub_outline_w = 0.5
 
                 x0 = pd.to_datetime(poi.start_time, utc=True)
                 x1 = pd.to_datetime(poi.end_time, utc=True) if poi.end_time else t_last_m15
@@ -1047,23 +1112,74 @@ def export_m15_chart_plotly(
                 y1 = float(max(poi.top, poi.bottom))
 
                 # `confirmed_idx` can be None when the POI never activated within
-                # its lifetime (per lifecycle convention) — skip the confirm line.
+                # its lifetime (per lifecycle convention).
                 _conf_raw = poi.meta.get("confirmed_idx")
                 conf_idx = int(_conf_raw) if _conf_raw is not None else None
-                conf_time = None
-                if conf_idx is not None and 0 <= conf_idx < len(lt_df):
-                    conf_time = pd.to_datetime(lt_df.iloc[conf_idx][COL_TIME], utc=True)
 
-                fig.add_shape(type="rect", xref="x", yref="y",
-                              x0=x0, x1=x1, y0=y0, y1=y1,
-                              fillcolor=fillcolor,
-                              line=dict(width=0.5, color="black"),
-                              layer="below")
+                # render_end_idx for active-stretch computation.
+                if poi.end_time is None:
+                    render_end_idx = int(lt_df.index[-1])
+                else:
+                    _em = lt_df[COL_TIME] <= pd.to_datetime(poi.end_time, utc=True)
+                    render_end_idx = int(lt_df.index[_em][-1]) if _em.any() else int(lt_df.index[0])
 
-                if conf_time is not None:
-                    fig.add_shape(type="line", xref="x", yref="y",
-                                  x0=conf_time, x1=conf_time, y0=y0, y1=y1,
-                                  line=dict(color=linecolor, width=confirm_w), layer="below")
+                poi_stretches = compute_poi_active_stretches(poi, render_end_idx)
+
+                # Active-stretch fills.
+                for stretch_start, stretch_end in poi_stretches:
+                    if stretch_start not in lt_df.index or stretch_end not in lt_df.index:
+                        # Fall back to nearest available idx within range.
+                        s_clip = max(int(lt_df.index[0]), min(stretch_start, int(lt_df.index[-1])))
+                        e_clip = max(int(lt_df.index[0]), min(stretch_end, int(lt_df.index[-1])))
+                        if s_clip not in lt_df.index or e_clip not in lt_df.index:
+                            continue
+                        stretch_start, stretch_end = s_clip, e_clip
+                    sx0 = pd.to_datetime(lt_df.loc[stretch_start, COL_TIME], utc=True)
+                    sx1 = pd.to_datetime(lt_df.loc[stretch_end, COL_TIME], utc=True)
+                    if sx0 < x0:
+                        sx0 = x0
+                    if sx1 > x1:
+                        sx1 = x1
+                    if sx1 <= sx0:
+                        continue
+                    fig.add_shape(
+                        type="rect", xref="x", yref="y",
+                        x0=sx0, x1=sx1, y0=y0, y1=y1,
+                        fillcolor=fillcolor,
+                        line=dict(width=0),
+                        layer="below",
+                    )
+
+                # Outline rect (no fill).
+                fig.add_shape(
+                    type="rect", xref="x", yref="y",
+                    x0=x0, x1=x1, y0=y0, y1=y1,
+                    fillcolor="rgba(0,0,0,0)",
+                    line=dict(color=sub_outline_color, width=sub_outline_w),
+                    layer="below",
+                )
+
+                # N vertical confirm lines — one per "A" event in activation_history
+                # (falls back to single line at confirmed_idx for legacy zones).
+                activation_history = poi.meta.get("activation_history", []) or []
+                confirm_idxs = [
+                    int(ev["idx"]) for ev in activation_history
+                    if ev.get("active") and int(ev["idx"]) <= render_end_idx
+                ]
+                if not confirm_idxs and conf_idx is not None:
+                    confirm_idxs = [conf_idx]
+                for c_idx in confirm_idxs:
+                    if c_idx not in lt_df.index:
+                        continue
+                    c_time = pd.to_datetime(lt_df.loc[c_idx, COL_TIME], utc=True)
+                    if not (x0 <= c_time <= x1):
+                        continue
+                    fig.add_shape(
+                        type="line", xref="x", yref="y",
+                        x0=c_time, x1=c_time, y0=y0, y1=y1,
+                        line=dict(color=confirm_color, width=confirm_w),
+                        layer="below",
+                    )
 
                 seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= x0) & (dfx[COL_TIME] <= x1)]
                 if len(seg_times) == 0:
@@ -1510,26 +1626,24 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
         selected_kl_sids = set(all_kl_sids[:num_structures])
         most_recent_kl_sid = all_kl_sids[0] if all_kl_sids else 0
 
+        # Per-TF tier for H1 zones on M15 chart = main_tf (0.2).
+        h1_overlay_tier = select_subordinate_tf_tier("H1", primary_sub_tf="M15")
+
         for z in h1_kl_zones:
             zone_sid = int(z.meta.get("structure_id", 0))
             if zone_sid not in selected_kl_sids:
                 continue
 
             side = str(z.side)
-            stz = STYLE.get(f"zone.h1_overlay.kl.{side}", {})
-            active = bool(z.meta.get("active", False)) and (z.end_time is None)
-
-            if active:
-                op_mult = _opacity_tier("active")
-            elif zone_sid == most_recent_kl_sid:
-                op_mult = _opacity_tier("recent_inactive")
-            else:
-                op_mult = _opacity_tier("prior_inactive")
+            # Read unified base values from zone.kl.* (Item 5: legacy
+            # zone.h1_overlay.kl.* bases supersede per-TF tier multiplication).
+            stz = STYLE.get(f"zone.kl.{side}", {})
 
             rgb = str(stz.get("rgb", "0,180,0" if side == "buy" else "220,0,0"))
             base_fill_op = float(stz.get("fill_opacity_active", 0.4))
-            fill_op = base_fill_op * op_mult
-            confirm_op = float(stz.get("confirm_opacity_active", 0.9)) * op_mult
+            base_line_op = float(stz.get("confirm_opacity_active", 0.9))
+            fill_op = base_fill_op * h1_overlay_tier
+            confirm_op = base_line_op * h1_overlay_tier
             confirm_w = int(stz.get("confirm_line_width", 2))
 
             fillcolor = _rgba_from_rgb(rgb, fill_op)
@@ -1542,42 +1656,71 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             conf_time = _h1_idx_to_m15_time(conf_idx) if conf_idx >= 0 else None
 
             steps = list((z.meta or {}).get("bounds_steps", []))
+            fallback_top = float(max(z.top, z.bottom))
+            fallback_bot = float(min(z.top, z.bottom))
             if not steps:
                 steps = [{"start_idx": int(z.meta.get("base_idx", 0)),
-                          "top": float(max(z.top, z.bottom)),
-                          "bottom": float(min(z.top, z.bottom)),
+                          "top": fallback_top,
+                          "bottom": fallback_bot,
                           "event": "FALLBACK"}]
             steps = sorted(steps, key=lambda s: int(s.get("start_idx", -1)))
 
+            # render_end_idx in H1 idx space.
+            if z.end_time is None:
+                render_end_idx = int(h1_df.index[-1])
+            else:
+                _em = h1_times <= pd.to_datetime(z.end_time, utc=True)
+                render_end_idx = int(h1_df.index[_em][-1]) if _em.any() else int(h1_df.index[0])
+
+            active_stretches = compute_kl_active_stretches(z, render_end_idx)
+
+            # Per-step iteration: fills (only active stretch) + hover lines.
             for k, s in enumerate(steps):
-                seg_x0 = _h1_idx_to_m15_time(int(s.get("start_idx", -1)))
+                seg_start_h1 = int(s.get("start_idx", -1))
+                seg_x0 = _h1_idx_to_m15_time(seg_start_h1)
                 if seg_x0 is None:
                     continue
                 if seg_x0 < x0:
                     seg_x0 = x0
 
                 if k + 1 < len(steps):
-                    nxt = _h1_idx_to_m15_time(int(steps[k + 1].get("start_idx", -1))) or x1
+                    next_h1 = int(steps[k + 1].get("start_idx", -1))
+                    nxt = _h1_idx_to_m15_time(next_h1) or x1
                     seg_x1 = nxt - pd.Timedelta(microseconds=1)
+                    step_end_h1 = next_h1 - 1
                 else:
                     seg_x1 = x1
+                    step_end_h1 = render_end_idx
 
                 seg_top = float(s.get("top", z.top))
                 seg_bot = float(s.get("bottom", z.bottom))
                 sy0 = min(seg_bot, seg_top)
                 sy1 = max(seg_bot, seg_top)
 
-                fig.add_shape(type="rect", xref="x", yref="y",
-                              x0=seg_x0, x1=seg_x1, y0=sy0, y1=sy1,
-                              fillcolor=fillcolor, line=dict(width=0),
-                              layer="below")
+                for stretch_start, stretch_end in active_stretches:
+                    isect_start = max(seg_start_h1, stretch_start)
+                    isect_end = min(step_end_h1, stretch_end)
+                    if isect_start > isect_end:
+                        continue
+                    fill_x0 = _h1_idx_to_m15_time(isect_start) or seg_x0
+                    if fill_x0 < seg_x0:
+                        fill_x0 = seg_x0
+                    if isect_end >= step_end_h1:
+                        fill_x1 = seg_x1
+                    else:
+                        end_time = _h1_idx_to_m15_time(isect_end)
+                        fill_x1 = end_time if end_time is not None else seg_x1
+                    if fill_x1 <= fill_x0:
+                        continue
+                    fig.add_shape(
+                        type="rect", xref="x", yref="y",
+                        x0=fill_x0, x1=fill_x1, y0=sy0, y1=sy1,
+                        fillcolor=fillcolor,
+                        line=dict(width=0),
+                        layer="below",
+                    )
 
-                if conf_time is not None and seg_x0 <= conf_time <= seg_x1:
-                    fig.add_shape(type="line", xref="x", yref="y",
-                                  x0=conf_time, x1=conf_time, y0=sy0, y1=sy1,
-                                  line=dict(color=confirm_color, width=confirm_w), layer="below")
-
-                # Hover
+                # Hover lines per step (preserved)
                 seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= seg_x0) & (dfx[COL_TIME] <= seg_x1)]
                 if len(seg_times) == 0:
                     seg_times = pd.Series([seg_x0, seg_x1])
@@ -1613,6 +1756,43 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                         ),
                         customdata=hover_cd,
                     ))
+
+            # Stepped polygon outline (main-TF overlay: confirm color, width 2).
+            outline_xs, outline_ys = build_stepped_outline_xy(
+                steps, _h1_idx_to_m15_time, x0, x1,
+                fallback_top=fallback_top, fallback_bottom=fallback_bot,
+            )
+            fig.add_trace(go.Scatter(
+                x=outline_xs, y=outline_ys, mode="lines",
+                line=dict(color=confirm_color, width=confirm_w),
+                fill=None, hoverinfo="skip", showlegend=False,
+                name=f"H1 KL outline (overlay) sid={zone_sid}",
+            ))
+
+            # Single confirm line at confirmed_idx — position in step containing it.
+            if conf_time is not None and x0 <= conf_time <= x1:
+                for k, s in enumerate(steps):
+                    seg_x0 = _h1_idx_to_m15_time(int(s.get("start_idx", -1)))
+                    if seg_x0 is None:
+                        continue
+                    if seg_x0 < x0:
+                        seg_x0 = x0
+                    if k + 1 < len(steps):
+                        nxt = _h1_idx_to_m15_time(int(steps[k + 1].get("start_idx", -1))) or x1
+                        seg_x1 = nxt - pd.Timedelta(microseconds=1)
+                    else:
+                        seg_x1 = x1
+                    if seg_x0 <= conf_time <= seg_x1:
+                        seg_top = float(s.get("top", z.top))
+                        seg_bot = float(s.get("bottom", z.bottom))
+                        fig.add_shape(
+                            type="line", xref="x", yref="y",
+                            x0=conf_time, x1=conf_time,
+                            y0=min(seg_bot, seg_top), y1=max(seg_bot, seg_top),
+                            line=dict(color=confirm_color, width=confirm_w),
+                            layer="below",
+                        )
+                        break
 
     # --- H1 Wave candle verticals (dashed) ---
     h1_wave_candles = h1_df.attrs.get("wave_candles", [])
@@ -1736,27 +1916,24 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
         all_poi_sids = set(int(z.meta.get("structure_id", 0)) for z in h1_poi_zones)
         most_recent_poi_sid = max(all_poi_sids) if all_poi_sids else 0
 
+        # Per-TF tier for H1 POI on M15 chart = main_tf (0.2).
+        h1_overlay_tier_poi = select_subordinate_tf_tier("H1", primary_sub_tf="M15")
+
         for poi in h1_poi_zones:
             if poi.meta.get("status") == "disappeared":
                 continue
 
             side = str(poi.side)
-            stz = STYLE.get(f"zone.h1_overlay.poi.{side}", {})
+            # Read unified base values from zone.poi.* (Item 5).
+            stz = STYLE.get(f"zone.poi.{side}", {})
             zone_status = poi.meta.get("status", "active")
             zone_sid = int(poi.meta.get("structure_id", 0))
 
-            if zone_status == "active":
-                op_mult = _opacity_tier("active")
-            elif zone_sid == most_recent_poi_sid:
-                op_mult = _opacity_tier("recent_inactive")
-            else:
-                op_mult = _opacity_tier("prior_inactive")
-
             rgb = str(stz.get("rgb", "255, 215, 0"))
             base_fill_op = float(stz.get("fill_opacity_active", 0.9))
-            fill_op = base_fill_op * op_mult
+            fill_op = base_fill_op * h1_overlay_tier_poi
             confirm_rgb = str(stz.get("confirm_line_rgb", "101, 67, 33"))
-            confirm_op = float(stz.get("confirm_opacity_active", 0.9)) * op_mult
+            confirm_op = float(stz.get("confirm_opacity_active", 0.9)) * h1_overlay_tier_poi
             confirm_w = int(stz.get("confirm_line_width", 2))
 
             fillcolor = _rgba_from_rgb(rgb, fill_op)
@@ -1768,18 +1945,65 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             y0 = float(min(poi.top, poi.bottom))
             y1 = float(max(poi.top, poi.bottom))
 
-            conf_idx = int(poi.meta.get("confirmed_idx", poi.ic_idx))
-            conf_time = _h1_idx_to_m15_time(conf_idx) if conf_idx >= 0 else None
+            _conf_raw = poi.meta.get("confirmed_idx")
+            conf_idx = int(_conf_raw) if _conf_raw is not None else None
 
-            fig.add_shape(type="rect", xref="x", yref="y",
-                          x0=x0, x1=x1, y0=y0, y1=y1,
-                          fillcolor=fillcolor, line=dict(width=0),
-                          layer="below")
+            # render_end_idx in H1 idx space.
+            if poi.end_time is None:
+                render_end_idx_h1 = int(h1_df.index[-1])
+            else:
+                _em = h1_times <= pd.to_datetime(poi.end_time, utc=True)
+                render_end_idx_h1 = int(h1_df.index[_em][-1]) if _em.any() else int(h1_df.index[0])
 
-            if conf_time is not None:
-                fig.add_shape(type="line", xref="x", yref="y",
-                              x0=conf_time, x1=conf_time, y0=y0, y1=y1,
-                              line=dict(color=confirm_color, width=confirm_w), layer="below")
+            poi_stretches = compute_poi_active_stretches(poi, render_end_idx_h1)
+
+            # Active-stretch fills.
+            for stretch_start, stretch_end in poi_stretches:
+                sx0 = _h1_idx_to_m15_time(stretch_start)
+                sx1 = _h1_idx_to_m15_time(stretch_end)
+                if sx0 is None or sx1 is None:
+                    continue
+                if sx0 < x0:
+                    sx0 = x0
+                if sx1 > x1:
+                    sx1 = x1
+                if sx1 <= sx0:
+                    continue
+                fig.add_shape(
+                    type="rect", xref="x", yref="y",
+                    x0=sx0, x1=sx1, y0=y0, y1=y1,
+                    fillcolor=fillcolor,
+                    line=dict(width=0),
+                    layer="below",
+                )
+
+            # Outline rect (no fill, main-TF overlay: brown border width 2).
+            fig.add_shape(
+                type="rect", xref="x", yref="y",
+                x0=x0, x1=x1, y0=y0, y1=y1,
+                fillcolor="rgba(0,0,0,0)",
+                line=dict(color=confirm_color, width=confirm_w),
+                layer="below",
+            )
+
+            # N vertical confirm lines from activation_history (fallback: confirmed_idx).
+            activation_history = poi.meta.get("activation_history", []) or []
+            confirm_idxs_h1 = [
+                int(ev["idx"]) for ev in activation_history
+                if ev.get("active") and int(ev["idx"]) <= render_end_idx_h1
+            ]
+            if not confirm_idxs_h1 and conf_idx is not None:
+                confirm_idxs_h1 = [conf_idx]
+            for c_idx in confirm_idxs_h1:
+                c_time = _h1_idx_to_m15_time(c_idx)
+                if c_time is None or not (x0 <= c_time <= x1):
+                    continue
+                fig.add_shape(
+                    type="line", xref="x", yref="y",
+                    x0=c_time, x1=c_time, y0=y0, y1=y1,
+                    line=dict(color=confirm_color, width=confirm_w),
+                    layer="below",
+                )
 
             seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= x0) & (dfx[COL_TIME] <= x1)]
             if len(seg_times) == 0:
