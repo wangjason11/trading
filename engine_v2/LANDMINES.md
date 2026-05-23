@@ -959,3 +959,45 @@ in zones/POIs/fibs/etc., grep `entity_df_mutation.py` for the old key
 name AND audit the per-record block of the touched type. The
 top-level tuple constants do NOT cover nested dicts — those need their
 own update.
+
+---
+
+## Fib + Scenario Imbalance Checks Are sd-Direction Strict
+
+**Rule:** Every `has_unfilled_imbalance` call inside Fib activation,
+Scenario 2 cond1/cond2/cond3, the cross-cycle dead-cycle walks, AND
+MarketStructure's cycle-0 snapshot passes `direction=sd`. The only
+permissive (no direction filter) call remaining in the codebase is
+`get_unfilled_imbalances` in FibTracker's locking path (deferred —
+doesn't affect behavior).
+
+**Why this is a landmine:** the pre-2026-05-23 design was permissive,
+with a documented rationale in POI_ZONES_SPEC §1 arguing that the
+BOS→CTS span is structurally directional. A contributor reading old
+commit messages, the old spec, or expecting "Fib activation is
+permissive by convention" might "simplify" by removing the
+`direction=sd` kwarg from these calls. That silently widens the input
+set to include counter-direction imbalances which CANNOT produce POIs
+(POIs are sd-direction by construction — POI_ZONES_SPEC §4).
+
+**Consequence of accidental reversal:** Fib activation rate increases
+slightly; Scenario 2 cond1/cond2/cond3 results may shift, causing
+cross-cycle anchor selection to differ between MarketStructure's
+in-flight resolver and FibTracker — re-introduces the Scenario 2
+anchor agreement divergence closed 2026-05-13. Subtle; no test
+failure unless someone has written a direction-mismatch test.
+
+**Sites involved (15 total):**
+- `zones/fib_tracker.py:120, 127, 275, 943, 1056, 1062, 1065, 1073,
+  1132, 1137, 1139, 1158, 1620, 1650`
+- `structure/market_structure.py:1791`
+
+Plus `select_fib_anchor_for_cycle` takes `struct_direction` as a
+parameter; the two callers (`compute_poi_inners_for_cycle` and
+FibTracker's internal use) must pass it. Default value of 0 falls
+back to permissive — kept for backward compat but no production caller
+should hit it.
+
+**See also:** `engine_v2/IMBALANCE_FILL_SEMANTICS.md` for the
+canonical call-site matrix and `POI_ZONES_SPEC.md §1` for the
+rationale.

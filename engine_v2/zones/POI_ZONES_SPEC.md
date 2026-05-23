@@ -60,17 +60,22 @@ the run.
   POI IC validation passes `direction=sd` so only structure-direction
   imbalances qualify
 
-### Why Fib activation is permissive and POI IC validation is strict
-The single `has_unfilled_imbalance` primitive takes an optional `direction`
-filter. Fib activation calls it **without `direction`** (any direction
-qualifies); POI IC validation calls it **with `direction=sd`** (strict
-same-direction). This is intentional: a Fib is drawn from BOS → CTS anchors,
-so its span is **always in the structure direction by construction** — a
-counter-direction imbalance inside the span is geometrically unusual, and if
-one does appear we still want the Fib to activate because the BOS→CTS swing
-itself is directional. POI IC validation is stricter because it asks a
-different question ("did institutional activity produce a directional push
-after this candle?"), which requires a same-direction imbalance by definition.
+### All Fib + scenario + POI imbalance checks are sd-direction strict
+Every consumer of `has_unfilled_imbalance` — Fib activation, Scenario 2
+cond1/cond2/cond3, MarketStructure's in-flight cycle-0 snapshot, the cross-
+cycle dead-cycle walks, AND POI IC validation — passes `direction=sd`. The
+rationale is uniform: **Fibs only ever produce sd-direction POIs by
+construction** (POIs are sd-direction — see §4 "POIs are always sd-direction"),
+so a counter-direction imbalance inside a structural span cannot influence
+any downstream POI and shouldn't drive the Fib's lifecycle either.
+
+The pre-2026-05-23 design left Fib activation permissive on the grounds that
+the BOS→CTS span is structurally directional. That reasoning still holds —
+counter-direction imbalances in the span are geometrically unusual — but the
+extra permissiveness was disconnecting cause (any-direction unfilled imbalance)
+from effect (sd-direction POIs). The strict filter aligns the question
+("should this Fib be drawn?") with what it actually affects downstream
+("the sd-direction POI set").
 
 The other axis the primitive exposes — `check_to_idx` — is the more
 load-bearing distinction across call sites: fib lifecycle and scenario
@@ -79,13 +84,25 @@ reference event idx, or the current candle in live evaluation), while POI
 IC validation always passes `check_to_idx = end_idx = cts_idx` because the
 question is asked once at the cycle's current state.
 
-### Fill Check (per instance)
-- **Bullish:** `fill_level = gap_top - gap_size * 0.70` (70% retrace). Filled
-  when any candle's low ≤ fill_level in range `(end_idx, check_to_idx]`.
-- **Bearish:** `fill_level = gap_bottom + gap_size * 0.70`. Filled when any
-  candle's high ≥ fill_level in the same range.
-- Scan starts at `end_idx + 1` — the instance's own candles (including the
-  last c3 that defines the gap) are excluded.
+### Fill Check (per instance) — two-stroke state machine
+
+Filled iff BOTH strokes fire by `check_to_idx`:
+
+- **Stroke 1 — armed (70% retrace).** First candle in `(end_idx, check_to_idx]`:
+  - Bullish: `low <= gap_top - gap_size * 0.70`
+  - Bearish: `high >= gap_bottom + gap_size * 0.70`
+- **Stroke 2 — confirmed (close past gap outer).** First candle at idx
+  `>= armed_idx`:
+  - Bullish: `close >= gap_top`
+  - Bearish: `close <= gap_bottom`
+
+Both strokes latch monotonically (stroke 1 then stroke 2; neither un-latches).
+Scan starts at `end_idx + 1` — the instance's own candles (including the
+last c3 that defines the gap) are excluded.
+
+See `engine_v2/IMBALANCE_FILL_SEMANTICS.md` for the canonical reference —
+state machine details, edge cases, consumer call-site matrix, and the
+rationale for the two-stroke definition.
 
 ---
 
@@ -240,8 +257,16 @@ After each reversal, a black horizontal line shows the Scenario 1 revert thresho
 
 - **FVG gap** = distance between candle 1 wick and candle 3 wick
 - Check candles from **imbalance_idx+1 to check_to_idx**
-- **Unfilled:** Price retraced **<70%** of FVG gap
-- **Filled:** Price retraced **≥70%** of FVG gap
+- **Filled** requires TWO strokes within the scan range (see §1
+  "Fill Check" and `IMBALANCE_FILL_SEMANTICS.md` for the canonical
+  definition):
+  - Stroke 1: price retraces ≥ 70% into the gap (low past 70% for
+    bullish, high past 70% for bearish) → instance is **armed**
+  - Stroke 2: at a later candle (or the same one), close passes the
+    gap outer in the imbalance's direction (≥ gap_top bullish,
+    ≤ gap_bottom bearish) → instance is **confirmed-filled**
+- **Unfilled:** stroke 1 hasn't fired yet, OR stroke 1 fired but stroke 2
+  hasn't yet — both cases keep the instance "in play"
 
 ---
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any, Literal, Tuple
 
 import numpy as np
 import pandas as pd
@@ -590,6 +590,28 @@ def derive_poi_zones(
                   f"end_reason={z.meta.get('end_reason')} status={z.meta.get('status')} "
                   f"dir={z.meta.get('struct_direction')} peak={peak} cur={cur} hist=[{flips_summary}]")
 
+            # Per-relevant-imbalance armed/confirmed dump. Same filter shape
+            # as the activation sweep so the printed set matches what drove
+            # the history. armed_idx + confirmed_fill_idx come straight from
+            # the cache (which stashed them on inst.meta during the sweep).
+            z_sd = z.meta.get("struct_direction")
+            z_ic_idx = z.ic_idx
+            z_end_idx = z.meta.get("end_idx")
+            z_scan_end = (z_end_idx - 1) if z_end_idx is not None else None
+            z_relevant = [
+                inst for inst in imbalances
+                if inst.direction == z_sd
+                and inst.gap_size > 0
+                and inst.end_idx > z_ic_idx
+                and (z_scan_end is None or inst.start_idx <= z_scan_end)
+            ]
+            for k, inst in enumerate(z_relevant):
+                print(f"[poi_zones]   imb#{k} start={inst.start_idx} end={inst.end_idx} "
+                      f"dir={inst.direction:+d} gap_top={inst.gap_top:.5f} "
+                      f"gap_bottom={inst.gap_bottom:.5f} "
+                      f"armed={inst.meta.get('armed_idx')} "
+                      f"confirmed={inst.meta.get('confirmed_fill_idx')}")
+
     return zones
 
 
@@ -597,20 +619,33 @@ def _compute_fill_idx_cache(
     df: pd.DataFrame,
     imbalances: List[ImbalanceInstance],
     fill_threshold: float,
-) -> Dict[int, Optional[int]]:
-    """Precompute each imbalance instance's `fill_idx` — the FIRST candle
-    after `inst.end_idx` where a ≥ `fill_threshold` retrace into the merged
-    gap occurs. ``None`` means the instance never fills within the available
-    data.
+) -> Dict[int, Tuple[Optional[int], Optional[int]]]:
+    """Precompute each imbalance instance's `(armed_idx, confirmed_fill_idx)`
+    pair for the two-stroke fill state machine.
 
-    Mirrors :meth:`ImbalanceInstance.is_filled` exactly so any caller that
-    consulted the live method gets identical results from the cache. Used by
-    the POI activation sweep so per-POI scans don't repeat the (end_idx, t]
-    walk for every candidate t.
+    ``armed_idx`` — first candle in ``(end_idx, end-of-df]`` reaching the
+    stroke-1 retrace level (``>= fill_threshold`` into the gap).
+    ``confirmed_fill_idx`` — first candle at idx ``>= armed_idx`` where the
+    close passes the gap outer in the instance's direction (stroke 2).
+    Either or both can be ``None`` (never armed / armed but never confirmed).
+    Both can be equal (same-candle stroke 1+2 — rare but legal).
 
-    Key: ``id(inst)``. Stable across the call's lifetime; not persisted.
+    Mirrors :meth:`ImbalanceInstance.is_filled` exactly: a caller that asked
+    ``is_filled(check_to_idx=t)`` would get the same boolean as
+    ``confirmed_fill_idx is not None and confirmed_fill_idx <= t``. Used by
+    the POI activation sweep so per-POI scans don't repeat the
+    ``(end_idx, t]`` walk for every candidate t.
+
+    Side effect: stashes both indices on ``inst.meta`` (``armed_idx`` and
+    ``confirmed_fill_idx`` keys) so debug exporters can read them without
+    rebuilding the cache. The instance dataclass is frozen but its ``meta``
+    dict is mutable.
+
+    Key: ``id(inst)`` → ``(armed_idx, confirmed_fill_idx)``. Both are
+    entity-absolute idx (or ``None``). Stable across the call's lifetime;
+    not persisted.
     """
-    cache: Dict[int, Optional[int]] = {}
+    cache: Dict[int, Tuple[Optional[int], Optional[int]]] = {}
     if not imbalances or len(df) == 0:
         return cache
 
@@ -621,10 +656,16 @@ def _compute_fill_idx_cache(
     # explicitly so this stays correct for any df.index — sliced sub-entity
     # frames that have non-contiguous indices route through the dict lookup.
     n = len(df)
-    if "h" not in df.columns or "l" not in df.columns:
-        return {id(inst): None for inst in imbalances}
+    required_cols = ("h", "l", "c")
+    if any(col not in df.columns for col in required_cols):
+        empty = (None, None)
+        for inst in imbalances:
+            inst.meta["armed_idx"] = None
+            inst.meta["confirmed_fill_idx"] = None
+        return {id(inst): empty for inst in imbalances}
     h_arr = df["h"].to_numpy(dtype=float, copy=False)
     l_arr = df["l"].to_numpy(dtype=float, copy=False)
+    c_arr = df["c"].to_numpy(dtype=float, copy=False)
     df_idx_arr = df.index.to_numpy()
     if df_idx_arr.dtype.kind in "iu" and n > 0 and df_idx_arr[0] == 0 and df_idx_arr[-1] == n - 1:
         # Contiguous RangeIndex: pos == idx.
@@ -637,38 +678,61 @@ def _compute_fill_idx_cache(
             return idx if 0 <= idx < n else -1
         return idx_to_pos.get(idx, -1)
 
+    def _idx_from_pos(pos: int) -> int:
+        return int(df_idx_arr[pos]) if idx_to_pos is not None else pos
+
     for inst in imbalances:
         # Degenerate gap → treat as already filled (is_filled returns True
-        # unconditionally). Represent as None and exclude from the relevant
-        # set in the sweep.
+        # unconditionally). Represent as (None, None) and exclude from the
+        # relevant set in the sweep.
         if inst.gap_size <= 0:
-            cache[id(inst)] = None
+            cache[id(inst)] = (None, None)
+            inst.meta["armed_idx"] = None
+            inst.meta["confirmed_fill_idx"] = None
             continue
 
         start_pos = _pos(inst.end_idx + 1)
         if start_pos < 0:
             # End of instance is at or past the last candle — no candles
             # available to retrace into.
-            cache[id(inst)] = None
+            cache[id(inst)] = (None, None)
+            inst.meta["armed_idx"] = None
+            inst.meta["confirmed_fill_idx"] = None
             continue
 
-        fill_idx: Optional[int] = None
+        armed_idx: Optional[int] = None
+        confirmed_fill_idx: Optional[int] = None
         if inst.direction == 1:
-            fill_level = inst.gap_top - inst.gap_size * fill_threshold
+            stroke1_level = inst.gap_top - inst.gap_size * fill_threshold
+            stroke2_level = inst.gap_top
             slice_l = l_arr[start_pos:]
-            hits = np.where(slice_l <= fill_level)[0]
-            if hits.size:
-                hit_pos = start_pos + int(hits[0])
-                fill_idx = int(df_idx_arr[hit_pos]) if idx_to_pos is not None else hit_pos
+            stroke1_hits = np.where(slice_l <= stroke1_level)[0]
+            if stroke1_hits.size:
+                armed_pos = start_pos + int(stroke1_hits[0])
+                armed_idx = _idx_from_pos(armed_pos)
+                # Stroke 2 scan starts AT armed_pos (same-candle fill is legal).
+                slice_c = c_arr[armed_pos:]
+                stroke2_hits = np.where(slice_c >= stroke2_level)[0]
+                if stroke2_hits.size:
+                    confirmed_pos = armed_pos + int(stroke2_hits[0])
+                    confirmed_fill_idx = _idx_from_pos(confirmed_pos)
         elif inst.direction == -1:
-            fill_level = inst.gap_bottom + inst.gap_size * fill_threshold
+            stroke1_level = inst.gap_bottom + inst.gap_size * fill_threshold
+            stroke2_level = inst.gap_bottom
             slice_h = h_arr[start_pos:]
-            hits = np.where(slice_h >= fill_level)[0]
-            if hits.size:
-                hit_pos = start_pos + int(hits[0])
-                fill_idx = int(df_idx_arr[hit_pos]) if idx_to_pos is not None else hit_pos
+            stroke1_hits = np.where(slice_h >= stroke1_level)[0]
+            if stroke1_hits.size:
+                armed_pos = start_pos + int(stroke1_hits[0])
+                armed_idx = _idx_from_pos(armed_pos)
+                slice_c = c_arr[armed_pos:]
+                stroke2_hits = np.where(slice_c <= stroke2_level)[0]
+                if stroke2_hits.size:
+                    confirmed_pos = armed_pos + int(stroke2_hits[0])
+                    confirmed_fill_idx = _idx_from_pos(confirmed_pos)
 
-        cache[id(inst)] = fill_idx
+        cache[id(inst)] = (armed_idx, confirmed_fill_idx)
+        inst.meta["armed_idx"] = armed_idx
+        inst.meta["confirmed_fill_idx"] = confirmed_fill_idx
 
     return cache
 
@@ -687,7 +751,7 @@ def _compute_poi_activation_history(
     fib_max_pct: float,
     variant_thresholds: Dict[str, float],
     imbalances: List[ImbalanceInstance],
-    fill_idx_cache: Dict[int, Optional[int]],
+    fill_idx_cache: Dict[int, Tuple[Optional[int], Optional[int]]],
 ) -> List[Dict[str, Any]]:
     """Produce the POI's activation history via an event-driven sweep.
 
@@ -698,21 +762,28 @@ def _compute_poi_activation_history(
                     via CTS_UPDATED events, so once met, monotonic.
       Condition 2 — `ic_idx <= t` (implicit: scan starts at first_active
                     = max(cts_established_idx, ic_idx)).
-      Condition 3 — sd-direction unfilled imbalance overlaps `(ic_idx, t]`
-                    with fill checked as-of `t`. Flips as imbalances form
-                    / fill.
+      Condition 3 — sd-direction imbalance overlaps `(ic_idx, t]` that is
+                    not yet committed-filled (two-stroke: stroke 1 = 70%
+                    retrace, stroke 2 = close past gap outer). Flips as
+                    imbalances form / commit-fill.
       Condition 5 — Variant qualification: the IC candle overlaps the
                     61.8-80% Fib zone (computed from `bos_price` and the
                     time-varying `cts_price_at(t)`) by at least V30.
 
     Why event-driven: state can change only at three kinds of idx —
     imbalance "enter unfilled set" (`inst.start_idx`), imbalance "leave
-    unfilled set" (cached `fill_idx`), and CTS event idx (cts_price /
-    cts_idx update → cond5 may flip). Between these idx state is constant,
-    so the per-candle loop over `[first_active, scan_end]` is wasted work.
-    Transitions are enumerated, sorted, and swept once; the unfilled-count
-    is maintained by +1/−1 at enter/leave events, and current_versions is
-    recomputed only at CTS transitions.
+    unfilled set" (cached `confirmed_fill_idx` — the stroke-2 candle),
+    and CTS event idx (cts_price / cts_idx update → cond5 may flip).
+    Between these idx state is constant, so the per-candle loop over
+    `[first_active, scan_end]` is wasted work. Transitions are enumerated,
+    sorted, and swept once; the unfilled-count is maintained by +1/−1 at
+    enter/leave events, and current_versions is recomputed only at CTS
+    transitions.
+
+    `fill_idx_cache` entries are `(armed_idx, confirmed_fill_idx)` tuples;
+    the sweep uses ``confirmed_fill_idx`` exclusively for the leave event.
+    ``armed_idx`` is informational (stashed on `inst.meta` by the cache
+    builder for debug exporters).
 
     Returns `[{"idx", "active", "reason", "versions"?}, ...]`. Empty list
     means POI never activated in the window.
@@ -794,12 +865,14 @@ def _compute_poi_activation_history(
         enter_idx = max(inst.start_idx, first_active)
         if enter_idx > scan_end:
             continue
-        fill_idx_cached = fill_idx_cache.get(id(inst))
-        # Instance contributes "unfilled" on [inst.start_idx, fill_idx - 1]
-        # (or forever if it never fills). Clip to scan window.
-        if fill_idx_cached is not None and fill_idx_cached <= enter_idx:
-            continue  # already filled by the time it would enter
-        leave_idx = fill_idx_cached if (fill_idx_cached is not None and fill_idx_cached <= scan_end) else None
+        _armed_cached, confirmed_cached = fill_idx_cache.get(id(inst), (None, None))
+        # Instance contributes "unfilled" on [inst.start_idx, confirmed_fill_idx - 1]
+        # (or forever if stroke 2 never confirms). Clip to scan window.
+        # ``armed_idx`` alone doesn't drive transitions — the imbalance only
+        # leaves the unfilled set when stroke 2 latches (cf. is_filled).
+        if confirmed_cached is not None and confirmed_cached <= enter_idx:
+            continue  # already committed-filled by the time it would enter
+        leave_idx = confirmed_cached if (confirmed_cached is not None and confirmed_cached <= scan_end) else None
         transitions.append((enter_idx, PRIO_IMB, "enter", None))
         if leave_idx is not None:
             transitions.append((leave_idx, PRIO_IMB, "leave", None))
@@ -931,6 +1004,7 @@ def compute_poi_inners_for_cycle(
                 float(cts_price),
                 c0_data,
                 float(fill_threshold),
+                struct_direction=sd,
             )
         )
         if anchor_cts_idx <= anchor_bos_idx:

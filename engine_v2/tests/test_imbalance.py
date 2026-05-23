@@ -142,37 +142,122 @@ def test_bullish_then_bearish_adjacent_are_separate():
     assert insts[1].direction == -1
 
 
-# ---------- is_filled ----------
+# ---------- is_filled — two-stroke state machine ----------
+# Gap geometry for the bullish setup used throughout:
+#   gap_bottom = df[0].h = 1.00, gap_top = df[2].l = 1.10, gap_size = 0.10
+#   stroke 1 level (70% retrace): 1.10 - 0.10*0.70 = 1.03 (low must be <= 1.03)
+#   stroke 2 level: 1.10 (close must be >= 1.10)
 
-def test_is_filled_bullish_below_threshold():
-    # gap_bottom=1.00, gap_top=1.10, size=0.10, threshold=0.70
-    # fill_level = 1.10 - 0.10*0.70 = 1.03
-    # A candle with low=1.02 (<=1.03) fills it.
+
+def test_is_filled_no_stroke1_unfilled_bullish():
+    """Neither stroke fires (low stays above 1.03) → unfilled."""
     df = _make_df([
         (0.95, 1.00, 0.90, 0.95),   # 0
         (1.02, 1.08, 1.01, 1.07),   # 1: imbalance
         (1.10, 1.15, 1.10, 1.14),   # 2: c3
-        (1.08, 1.09, 1.02, 1.06),   # 3: fills (low=1.02 <= 1.03)
-    ])
-    out = compute_imbalance(df)
-    inst = out.attrs["imbalances"][0]
-    assert inst.is_filled(out, check_to_idx=3) is True
-
-
-def test_is_filled_bullish_above_threshold():
-    df = _make_df([
-        (0.95, 1.00, 0.90, 0.95),   # 0
-        (1.02, 1.08, 1.01, 1.07),   # 1: imbalance
-        (1.10, 1.15, 1.10, 1.14),   # 2: c3
-        (1.08, 1.12, 1.05, 1.11),   # 3: low=1.05 > 1.03 -> not filled
+        (1.08, 1.12, 1.05, 1.11),   # 3: low=1.05 > 1.03 → no stroke 1
     ])
     out = compute_imbalance(df)
     inst = out.attrs["imbalances"][0]
     assert inst.is_filled(out, check_to_idx=3) is False
 
 
+def test_is_filled_stroke1_only_unfilled_bullish():
+    """Stroke 1 fires but no stroke 2 → still unfilled (was filled under
+    the pre-2026-05 70%-only definition; the two-stroke change is the
+    whole point of the rewrite)."""
+    df = _make_df([
+        (0.95, 1.00, 0.90, 0.95),   # 0
+        (1.02, 1.08, 1.01, 1.07),   # 1: imbalance
+        (1.10, 1.15, 1.10, 1.14),   # 2: c3
+        (1.08, 1.09, 1.02, 1.06),   # 3: low=1.02 ✓ stroke 1; close=1.06 < 1.10 → no stroke 2
+    ])
+    out = compute_imbalance(df)
+    inst = out.attrs["imbalances"][0]
+    assert inst.is_filled(out, check_to_idx=3) is False
+
+
+def test_is_filled_stroke1_then_stroke2_filled_bullish():
+    """Stroke 1 latches, stroke 2 fires on a later candle → filled."""
+    df = _make_df([
+        (0.95, 1.00, 0.90, 0.95),   # 0
+        (1.02, 1.08, 1.01, 1.07),   # 1: imbalance
+        (1.10, 1.15, 1.10, 1.14),   # 2: c3
+        (1.08, 1.09, 1.02, 1.06),   # 3: stroke 1 armed (low=1.02)
+        (1.07, 1.12, 1.04, 1.11),   # 4: stroke 2 confirmed (close=1.11 >= 1.10)
+    ])
+    out = compute_imbalance(df)
+    inst = out.attrs["imbalances"][0]
+    # At idx 3, only stroke 1 — still unfilled.
+    assert inst.is_filled(out, check_to_idx=3) is False
+    # At idx 4, stroke 2 fires — filled.
+    assert inst.is_filled(out, check_to_idx=4) is True
+
+
+def test_is_filled_stroke1_and_stroke2_same_candle_bullish():
+    """Same candle satisfies both strokes → filled at that idx."""
+    df = _make_df([
+        (0.95, 1.00, 0.90, 0.95),   # 0
+        (1.02, 1.08, 1.01, 1.07),   # 1: imbalance
+        (1.10, 1.15, 1.10, 1.14),   # 2: c3
+        (1.05, 1.13, 1.02, 1.12),   # 3: low=1.02 (stroke 1) AND close=1.12 (stroke 2)
+    ])
+    out = compute_imbalance(df)
+    inst = out.attrs["imbalances"][0]
+    assert inst.is_filled(out, check_to_idx=3) is True
+
+
+def test_is_filled_stroke2_before_stroke1_unfilled_bullish():
+    """A candle that closes past the gap outer BEFORE any 70% retrace
+    must not count — stroke 2 only latches at idx >= armed_idx."""
+    df = _make_df([
+        (0.95, 1.00, 0.90, 0.95),   # 0
+        (1.02, 1.08, 1.01, 1.07),   # 1: imbalance
+        (1.10, 1.15, 1.10, 1.14),   # 2: c3
+        (1.12, 1.15, 1.11, 1.14),   # 3: close=1.14 >= 1.10 BUT low=1.11 > 1.03 (no stroke 1)
+        (1.14, 1.18, 1.13, 1.17),   # 4: same — no stroke 1 ever
+    ])
+    out = compute_imbalance(df)
+    inst = out.attrs["imbalances"][0]
+    assert inst.is_filled(out, check_to_idx=4) is False
+
+
+def test_is_filled_stroke1_only_unfilled_bearish():
+    """Bearish variant: stroke 1 (high reaches 70%) without stroke 2
+    (close below gap_bottom) → unfilled."""
+    # Geometry: gap_bottom = df[2].h = 1.10, gap_top = df[0].l = 1.18,
+    #           gap_size = 0.08. Stroke 1: high >= 1.10 + 0.08*0.70 = 1.156.
+    #           Stroke 2: close <= 1.10.
+    df = _make_df([
+        (1.20, 1.25, 1.18, 1.22),   # 0: c1
+        (1.10, 1.12, 1.05, 1.07),   # 1: c2 bearish imbalance
+        (1.04, 1.10, 1.02, 1.05),   # 2: c3
+        (1.06, 1.16, 1.05, 1.13),   # 3: high=1.16 ✓ stroke 1; close=1.13 > 1.10 → no stroke 2
+    ])
+    out = compute_imbalance(df)
+    inst = out.attrs["imbalances"][0]
+    assert inst.direction == -1
+    assert inst.is_filled(out, check_to_idx=3) is False
+
+
+def test_is_filled_stroke1_then_stroke2_filled_bearish():
+    """Bearish variant: stroke 1, then stroke 2 on a later candle → filled."""
+    df = _make_df([
+        (1.20, 1.25, 1.18, 1.22),   # 0: c1
+        (1.10, 1.12, 1.05, 1.07),   # 1: c2 bearish imbalance
+        (1.04, 1.10, 1.02, 1.05),   # 2: c3
+        (1.06, 1.16, 1.05, 1.13),   # 3: stroke 1 armed (high=1.16)
+        (1.12, 1.14, 1.05, 1.07),   # 4: stroke 2 confirmed (close=1.07 <= 1.10)
+    ])
+    out = compute_imbalance(df)
+    inst = out.attrs["imbalances"][0]
+    assert inst.direction == -1
+    assert inst.is_filled(out, check_to_idx=3) is False
+    assert inst.is_filled(out, check_to_idx=4) is True
+
+
 def test_is_filled_empty_scan_range():
-    # check_to_idx <= end_idx -> empty scan -> not filled
+    """check_to_idx <= end_idx → empty scan → unfilled (default)."""
     df = _make_df([
         (0.95, 1.00, 0.90, 0.95),
         (1.02, 1.08, 1.01, 1.07),
@@ -181,6 +266,20 @@ def test_is_filled_empty_scan_range():
     out = compute_imbalance(df)
     inst = out.attrs["imbalances"][0]
     assert inst.is_filled(out, check_to_idx=1) is False  # scan range [2, 1] empty
+
+
+def test_is_filled_degenerate_gap_returns_true():
+    """gap_size <= 0 short-circuits to True (safe default — invalid gap)."""
+    df = _make_df([
+        (1.00, 1.05, 0.95, 1.02),
+        (1.02, 1.06, 1.00, 1.03),
+        (1.03, 1.07, 1.01, 1.04),
+    ])
+    inst = ImbalanceInstance(
+        start_idx=1, end_idx=1, direction=1,
+        gap_top=1.0, gap_bottom=1.0, gap_size=0.0,
+    )
+    assert inst.is_filled(df, check_to_idx=2) is True
 
 
 # ---------- overlaps ----------

@@ -47,6 +47,7 @@ engine_v2/LANDMINES.md                       # Critical constraints
 engine_v2/structure/MARKET_STRUCTURE_SPEC.md # CTS/BOS/Range/Reversal semantics
 engine_v2/zones/KL_ZONES_SPEC.md             # Zone construction and behavior
 engine_v2/zones/POI_ZONES_SPEC.md            # POI/Fib zone specification
+engine_v2/IMBALANCE_FILL_SEMANTICS.md        # Canonical imbalance fill predicate (two-stroke state machine)
 engine_v2/charting/CHARTING_SPEC.md          # Chart overlay rules
 engine_v2/WORKFLOWS.md                       # Development workflows
 ```

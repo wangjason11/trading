@@ -75,6 +75,7 @@ def select_fib_anchor_for_cycle(
     cts_price: float,
     c0_data: Optional[Dict[str, Any]],
     fill_threshold: float = 0.70,
+    struct_direction: int = 0,
 ) -> tuple:
     """Pick the Fib anchor for a cycle. Pure function — no FibTracker state.
 
@@ -90,12 +91,22 @@ def select_fib_anchor_for_cycle(
       label ``"scenario_1"``.
     - Otherwise evaluate Scenario 2 conditions over the imbalance set:
 
-        cond1 — cycle 1 has unfilled imbalance in [BOS_1, CTS_1] as of cts_idx
-        cond2 — cycle 0 has unfilled imbalance (cached on ``c0_data``)
-        cond3 — BOS_1 has not filled cycle 0's imbalances
+        cond1 — cycle 1 has unfilled sd-direction imbalance in [BOS_1, CTS_1]
+                as of cts_idx
+        cond2 — cycle 0 has unfilled sd-direction imbalance (cached on
+                ``c0_data``; caller computed with the same direction filter)
+        cond3 — BOS_1 has not filled cycle 0's sd-direction imbalances
 
       All three true → cross-cycle, label ``"scenario_2_cross"`` (anchor
       becomes BOS_0 → CTS_1). Else → intra-cycle, label ``"scenario_3"``.
+
+    ``struct_direction`` is the sd of the structure being evaluated (+1 / -1).
+    Threads into cond1 / cond3 as the imbalance direction filter — counter-
+    direction imbalances never become POIs, so they shouldn't influence the
+    Scenario 2 decision. cond2 inherits this filter through whatever upstream
+    computed ``c0_data["has_unfilled"]``. ``struct_direction == 0`` (the
+    default) preserves legacy permissive behaviour if a caller hasn't
+    migrated yet.
 
     Approximation (intentional): Scenario 1 REVERT — FibTracker reverts
     Scenario 1 from TRUE to FALSE if BOS_1 touches the prev structure's BOS
@@ -115,16 +126,21 @@ def select_fib_anchor_for_cycle(
     if c0_data.get("scenario1") is True:
         return (int(bos_idx), float(bos_price), int(cts_idx), float(cts_price), "scenario_1")
 
+    sd_filter = int(struct_direction) if struct_direction in (1, -1) else None
     c1_lo = int(min(bos_idx, cts_idx))
     c1_hi = int(max(bos_idx, cts_idx))
-    cond1 = has_unfilled_imbalance(df, c1_lo, c1_hi, int(cts_idx), fill_threshold)
+    cond1 = has_unfilled_imbalance(
+        df, c1_lo, c1_hi, int(cts_idx), fill_threshold, direction=sd_filter,
+    )
     cond2 = bool(c0_data.get("has_unfilled", False))
 
     c0_bos_idx = int(c0_data["bos_idx"])
     c0_cts_idx = int(c0_data["cts_idx"])
     c0_lo = min(c0_bos_idx, c0_cts_idx)
     c0_hi = max(c0_bos_idx, c0_cts_idx)
-    cond3 = has_unfilled_imbalance(df, c0_lo, c0_hi, int(bos_idx), fill_threshold)
+    cond3 = has_unfilled_imbalance(
+        df, c0_lo, c0_hi, int(bos_idx), fill_threshold, direction=sd_filter,
+    )
 
     if cond1 and cond2 and cond3:
         return (
@@ -269,10 +285,15 @@ class FibTracker:
             else:
                 cts_price = float(df.loc[cts_idx, "l"])
 
-        # Check for unfilled imbalance between BOS and CTS
+        # Check for unfilled imbalance between BOS and CTS. sd-direction
+        # filter: Fibs only ever produce sd-direction POIs, so counter-
+        # direction imbalances in the BOS->CTS swing don't justify activation.
         start_idx = min(bos_idx, cts_idx)
         end_idx = max(bos_idx, cts_idx)
-        has_unfilled = has_unfilled_imbalance(df, start_idx, end_idx, cts_idx, self.config.fill_threshold)
+        has_unfilled = has_unfilled_imbalance(
+            df, start_idx, end_idx, cts_idx, self.config.fill_threshold,
+            direction=sd,
+        )
 
         # Populate BOS lookup (used by cross-fib walk-backward in cross_cycle)
         self._bos_by_cycle[(sid, cycle_id)] = (bos_idx, bos_price)
@@ -606,6 +627,7 @@ class FibTracker:
                 cts_price,
                 c0_for_utility,
                 self.config.fill_threshold,
+                struct_direction=sd,
             )
         )
         print(f"[fib] sid={sid} cycle=1 anchor decision: label={label} "
@@ -937,10 +959,15 @@ class FibTracker:
             if not c0.get("locked", False) and cts_idx > c0["cts_idx"]:
                 c0["cts_idx"] = cts_idx
                 c0["cts_price"] = cts_price
-                # Re-check unfilled imbalance
+                # Re-check unfilled imbalance. sd-direction filter mirrors
+                # the activation-time filter at on_cts_established so the
+                # cycle-0 snapshot stays direction-consistent across updates.
                 start_idx = min(c0["bos_idx"], cts_idx)
                 end_idx = max(c0["bos_idx"], cts_idx)
-                c0["has_unfilled"] = has_unfilled_imbalance(df, start_idx, end_idx, cts_idx, self.config.fill_threshold)
+                c0["has_unfilled"] = has_unfilled_imbalance(
+                    df, start_idx, end_idx, cts_idx, self.config.fill_threshold,
+                    direction=sd,
+                )
 
         # If Scenario 1 is already TRUE, update the Fib
         if scenario1 is True:
@@ -1046,31 +1073,45 @@ class FibTracker:
 
         # Check unfilled imbalance condition - can reactivate or deactivate
         if is_cross_cycle:
-            # Cross-cycle Fib: check BOTH cycles' imbalance conditions
+            # Cross-cycle Fib: check BOTH cycles' imbalance conditions.
+            # sd-direction filter throughout (counter-direction imbalances
+            # never produce POIs, so they don't influence cross-cycle eligibility).
             # Condition 1: Cycle 0 has unfilled imbalance (in cycle 0's locked range)
             c0 = self._cross_cycle_data.get(sid, {}).get("cycle0", {})
             c0_bos_idx = c0.get("bos_idx", new_state.bos_idx)
             c0_cts_idx = c0.get("cts_idx", new_state.bos_idx)  # Locked CTS_0
             c0_start = min(c0_bos_idx, c0_cts_idx)
             c0_end = max(c0_bos_idx, c0_cts_idx)
-            cond1 = has_unfilled_imbalance(df, c0_start, c0_end, c0_cts_idx, self.config.fill_threshold)
+            cond1 = has_unfilled_imbalance(
+                df, c0_start, c0_end, c0_cts_idx, self.config.fill_threshold,
+                direction=sd,
+            )
 
             # Condition 2: Cycle 1 has unfilled imbalance (BOS_1 to current CTS_1)
             cycle1_bos_idx = new_state.meta.get("cycle1_bos_idx", cts_idx)
             c1_start = min(cycle1_bos_idx, cts_idx)
             c1_end = max(cycle1_bos_idx, cts_idx)
-            cond2 = has_unfilled_imbalance(df, c1_start, c1_end, cts_idx, self.config.fill_threshold)
+            cond2 = has_unfilled_imbalance(
+                df, c1_start, c1_end, cts_idx, self.config.fill_threshold,
+                direction=sd,
+            )
 
             # Condition 3: Cycle 1's BOS doesn't fill cycle 0's imbalances (static check)
-            cond3 = has_unfilled_imbalance(df, c0_start, c0_end, cycle1_bos_idx, self.config.fill_threshold)
+            cond3 = has_unfilled_imbalance(
+                df, c0_start, c0_end, cycle1_bos_idx, self.config.fill_threshold,
+                direction=sd,
+            )
 
             has_unfilled = cond1 and cond2 and cond3
             print(f"[fib] sid={sid} cross-cycle check: cond1={cond1} cond2={cond2} cond3={cond3}")
         else:
-            # Normal Fib: check its own range
+            # Normal Fib: check its own range. sd-direction filter.
             start_idx = min(new_state.bos_idx, new_state.cts_idx)
             end_idx = max(new_state.bos_idx, new_state.cts_idx)
-            has_unfilled = has_unfilled_imbalance(df, start_idx, end_idx, cts_idx, self.config.fill_threshold)
+            has_unfilled = has_unfilled_imbalance(
+                df, start_idx, end_idx, cts_idx, self.config.fill_threshold,
+                direction=sd,
+            )
 
         if has_unfilled and not new_state.active:
             # Reactivate - unfilled imbalances now exist in expanded range
@@ -1123,20 +1164,29 @@ class FibTracker:
 
         print(f"[fib] sid={sid} cross-cycle UPDATED: CTS idx={cts_idx} price={cts_price:.5f}")
 
-        # --- Check cross-cycle conditions ---
+        # --- Check cross-cycle conditions --- sd-direction filter throughout.
         c0 = cross_data.get("cycle0", {})
         c0_bos_idx = c0.get("bos_idx", new_cross_fib.bos_idx)
         c0_cts_idx = c0.get("cts_idx", new_cross_fib.bos_idx)
         c0_start = min(c0_bos_idx, c0_cts_idx)
         c0_end = max(c0_bos_idx, c0_cts_idx)
-        cond1 = has_unfilled_imbalance(df, c0_start, c0_end, c0_cts_idx, self.config.fill_threshold)
+        cond1 = has_unfilled_imbalance(
+            df, c0_start, c0_end, c0_cts_idx, self.config.fill_threshold,
+            direction=sd,
+        )
 
         cycle1_bos_idx = new_cross_fib.meta.get("cycle1_bos_idx", cts_idx)
         c1_start = min(cycle1_bos_idx, cts_idx)
         c1_end = max(cycle1_bos_idx, cts_idx)
-        cond2 = has_unfilled_imbalance(df, c1_start, c1_end, cts_idx, self.config.fill_threshold)
+        cond2 = has_unfilled_imbalance(
+            df, c1_start, c1_end, cts_idx, self.config.fill_threshold,
+            direction=sd,
+        )
 
-        cond3 = has_unfilled_imbalance(df, c0_start, c0_end, cycle1_bos_idx, self.config.fill_threshold)
+        cond3 = has_unfilled_imbalance(
+            df, c0_start, c0_end, cycle1_bos_idx, self.config.fill_threshold,
+            direction=sd,
+        )
 
         cross_active = cond1 and cond2 and cond3
         print(f"[fib] sid={sid} cross-cycle check: cond1={cond1} cond2={cond2} cond3={cond3}")
@@ -1151,11 +1201,14 @@ class FibTracker:
 
         cross_data["cross_cycle"] = new_cross_fib
 
-        # --- Check normal_cycle1 conditions ---
+        # --- Check normal_cycle1 conditions --- sd-direction filter.
         if new_normal_fib:
             normal_start = min(new_normal_fib.bos_idx, cts_idx)
             normal_end = max(new_normal_fib.bos_idx, cts_idx)
-            normal_has_unfilled = has_unfilled_imbalance(df, normal_start, normal_end, cts_idx, self.config.fill_threshold)
+            normal_has_unfilled = has_unfilled_imbalance(
+                df, normal_start, normal_end, cts_idx, self.config.fill_threshold,
+                direction=sd,
+            )
 
             if normal_has_unfilled and not new_normal_fib.active:
                 new_normal_fib = replace(new_normal_fib, active=True, meta={**new_normal_fib.meta, "reactivated_at": cts_idx})
@@ -1616,13 +1669,15 @@ class FibTracker:
         """
         phase = self._m15_phase.get((sid, target_cycle))
 
-        # Step 1: target cycle's own imbalance
+        # Step 1: target cycle's own imbalance. sd-direction filter — only
+        # imbalances that could ever produce sd POIs count.
         own_has = has_unfilled_imbalance(
             df,
             min(own_imb_start, current_candle),
             max(own_imb_start, current_candle),
             current_candle,
             self.config.fill_threshold,
+            direction=sd,
         )
 
         if not own_has:
@@ -1653,6 +1708,7 @@ class FibTracker:
                 range_end,
                 current_candle,
                 self.config.fill_threshold,
+                direction=sd,
             )
             if not has_unf:
                 self._dead_cycles[sid].add(k)

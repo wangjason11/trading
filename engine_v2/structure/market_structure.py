@@ -1788,8 +1788,13 @@ class MarketStructure:
         cts_price = float(st.cts.price)
         c0_lo = min(bos_idx, cts_idx)
         c0_hi = max(bos_idx, cts_idx)
+        # sd-direction filter mirrors FibTracker's cycle-0 snapshot (and the
+        # filter applied to Scenario 2 cond1/cond3 in select_fib_anchor_for_cycle).
+        # Counter-direction imbalances in [BOS_0, CTS_0] never become POIs, so
+        # they shouldn't influence the in-flight Scenario 2 decision either.
         has_unfilled = has_unfilled_imbalance(
-            self.df, c0_lo, c0_hi, cts_idx, self._fill_threshold
+            self.df, c0_lo, c0_hi, cts_idx, self._fill_threshold,
+            direction=int(st.struct_direction),
         )
         st.cycle0_data = {
             "bos_idx": bos_idx,

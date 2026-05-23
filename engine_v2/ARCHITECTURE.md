@@ -135,8 +135,11 @@ conditions decoupled from FibState). POI activation conditions
      (the fib's `cts_idx` only grows via `CTS_UPDATED`).
   2. `ic_idx <= t` — IC candle exists.
   3. `has_unfilled_imbalance(df, ic_idx + 1, t, check_to_idx=t,
-     direction=sd)` — sd-direction imbalance still unfilled in
-     `(ic_idx, t]` as of `t`.
+     direction=sd)` — sd-direction imbalance overlaps `(ic_idx, t]`
+     that is not yet *committed-filled* per the two-stroke state machine
+     (stroke 1 = 70% retrace; stroke 2 = close past gap outer in
+     instance direction). See `IMBALANCE_FILL_SEMANTICS.md` for the full
+     predicate definition. Flips as imbalances form / commit-fill.
   5. Variant ≥ V30 — IC candle overlaps the 61.8-80% fib zone
      (computed from `bos_price` and the time-varying `cts_price_at(t)`)
      by at least 30%. Variants can downgrade (V90 → V60 → V30) or

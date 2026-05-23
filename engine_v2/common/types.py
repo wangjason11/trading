@@ -147,28 +147,50 @@ class ImbalanceInstance:
         check_to_idx: int,
         fill_threshold: float = 0.70,
     ) -> bool:
-        """Check if the merged gap is filled by candles in (end_idx, check_to_idx].
+        """Check if the merged gap is committed-filled by candles in
+        (end_idx, check_to_idx].
 
-        Bullish: filled when any candle.low <= gap_top - gap_size*threshold
-        Bearish: filled when any candle.high >= gap_bottom + gap_size*threshold
+        Two-stroke state machine:
+          Stroke 1 (armed): first candle retracing >= fill_threshold into the gap.
+            Bullish: candle.low  <= gap_top    - gap_size * fill_threshold
+            Bearish: candle.high >= gap_bottom + gap_size * fill_threshold
+          Stroke 2 (confirmed): first candle at idx >= armed_idx where the close
+          passes the gap outer in the imbalance's direction.
+            Bullish: candle.close >= gap_top
+            Bearish: candle.close <= gap_bottom
+
+        Filled iff both strokes occur within (end_idx, check_to_idx]. Both can
+        fire on the same candle (rare). Each stroke latches on first occurrence;
+        the state machine is monotonic (0 -> armed -> filled, no regression).
+
+        Degenerate gap (gap_size <= 0): returns True (safe default — treat
+          invalid gap as filled).
         Empty scan range (end_idx >= check_to_idx): returns False (unfilled).
         """
         if self.gap_size <= 0:
             return True  # invalid gap -> treat as filled (safe default)
 
         if self.direction == 1:
-            fill_level = self.gap_top - self.gap_size * fill_threshold
+            stroke1_level = self.gap_top - self.gap_size * fill_threshold
+            stroke2_level = self.gap_top
+            armed = False
             for idx in range(self.end_idx + 1, check_to_idx + 1):
                 if idx not in df.index:
                     continue
-                if float(df.loc[idx, "l"]) <= fill_level:
+                if not armed and float(df.loc[idx, "l"]) <= stroke1_level:
+                    armed = True
+                if armed and float(df.loc[idx, "c"]) >= stroke2_level:
                     return True
         elif self.direction == -1:
-            fill_level = self.gap_bottom + self.gap_size * fill_threshold
+            stroke1_level = self.gap_bottom + self.gap_size * fill_threshold
+            stroke2_level = self.gap_bottom
+            armed = False
             for idx in range(self.end_idx + 1, check_to_idx + 1):
                 if idx not in df.index:
                     continue
-                if float(df.loc[idx, "h"]) >= fill_level:
+                if not armed and float(df.loc[idx, "h"]) >= stroke1_level:
+                    armed = True
+                if armed and float(df.loc[idx, "c"]) <= stroke2_level:
                     return True
 
         return False
