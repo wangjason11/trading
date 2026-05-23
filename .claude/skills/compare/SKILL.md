@@ -10,18 +10,50 @@ argument-hint:
 
 Compare the current code's replay output against the most recent `/commit-save` output to ensure changes don't unintentionally alter prior logic.
 
+## Baseline resolution (branch-aware, since 2026-05-23)
+
+Saves are stored under `artifacts/commits/<branch>/<timestamp>_<hash>/`
+and tracked by per-branch `LATEST_<branch>` pointers. Legacy flat saves
+(`artifacts/commits/<ts>_<hash>/` with the global `LATEST` file) are
+still supported as a fallback.
+
+Resolve the previous save folder by:
+1. Read `artifacts/commits/LATEST_<current-branch>` → look up
+   `artifacts/commits/<current-branch>/<folder>/` (new layout)
+2. If missing, fall back to `artifacts/commits/LATEST` →
+   `artifacts/commits/<folder>/` (legacy flat layout)
+3. If both missing, error: no baseline to compare against
+
+The `artifacts-trunk` branch carries the union of ALL saves cherry-picked
+from every branch. If you need to compare against a save from a different
+branch, either checkout `artifacts-trunk` or use
+`git show artifacts-trunk:artifacts/commits/<branch>/<folder>/<file>` to
+read the historical contents.
+
 ## Instructions
 
 ### 1. Find Previous Commit-Save Output
 
 ```bash
-# Read the LATEST pointer
-PREV_FOLDER=$(cat artifacts/commits/LATEST)
-PREV_PATH="artifacts/commits/${PREV_FOLDER}"
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+PER_BRANCH_LATEST="artifacts/commits/LATEST_${CURRENT_BRANCH}"
+LEGACY_LATEST="artifacts/commits/LATEST"
 
-# Verify it exists
-if [ ! -d "${PREV_PATH}" ]; then
+if [ -f "${PER_BRANCH_LATEST}" ]; then
+    PREV_FOLDER=$(cat "${PER_BRANCH_LATEST}")
+    PREV_PATH="artifacts/commits/${CURRENT_BRANCH}/${PREV_FOLDER}"
+    echo "Baseline: per-branch (${CURRENT_BRANCH}) -> ${PREV_FOLDER}"
+elif [ -f "${LEGACY_LATEST}" ]; then
+    PREV_FOLDER=$(cat "${LEGACY_LATEST}")
+    PREV_PATH="artifacts/commits/${PREV_FOLDER}"
+    echo "Baseline: legacy flat layout -> ${PREV_FOLDER}"
+else
     echo "ERROR: No previous commit-save found. Run /commit-save first."
+    exit 1
+fi
+
+if [ ! -d "${PREV_PATH}" ]; then
+    echo "ERROR: Baseline pointer references missing folder: ${PREV_PATH}"
     exit 1
 fi
 ```
@@ -149,7 +181,8 @@ POI Zones:
 ```
 === COMPARE SUMMARY ===
 
-Previous commit-save: 20260202_143000_abc1234
+Baseline: <per-branch | legacy> -> <folder> (commit <hash>)
+Current branch: <branch>
 Current code: <uncommitted changes> OR <current commit>
 
 UNCHANGED:
@@ -165,7 +198,7 @@ CHANGED (with analysis):
 UNEXPECTED CHANGES:
 - [None found]
 
-RECOMMENDATION: ✅ Safe to commit
+RECOMMENDATION: Safe to commit
 ```
 
 OR if unexpected changes:
@@ -174,7 +207,7 @@ OR if unexpected changes:
 UNEXPECTED CHANGES:
 - POI zones decreased from 4 to 2 (POI logic not touched in this iteration)
 
-RECOMMENDATION: ⚠️ Investigate before commit
+RECOMMENDATION: Investigate before commit
   - Check poi_zones.py for unintended changes
   - Verify Fib state handling
 ```
@@ -186,16 +219,16 @@ When a change is detected, trace its downstream effects:
 ```
 CASCADE ANALYSIS:
 
-Root cause: candle_type changed at idx=707 (normal → maru)
-  ↓
+Root cause: candle_type changed at idx=707 (normal -> maru)
+  v
 Effect 1: continuous pattern at 707-709 no longer matches Pattern3
-  ↓
+  v
 Effect 2: Reversal watch at idx=707 fails (no valid pattern)
-  ↓
+  v
 Effect 3: Reversal shifts from idx=710 to idx=748
-  ↓
+  v
 Effect 4: sid=1 starts later, all cycle timing shifts
-  ↓
+  v
 Effect 5: BOS for sid=1 cycle=1 moves from idx=728 to idx=826
 
 All changes are causally linked to the root change.
@@ -205,12 +238,16 @@ All changes are causally linked to the root change.
 
 | Current Location | Previous Location |
 |------------------|-------------------|
-| `artifacts/debug/*_final.csv` | `artifacts/commits/<folder>/*_final.csv` |
-| `artifacts/debug/*_raw.csv` | `artifacts/commits/<folder>/*_raw.csv` |
-| `artifacts/debug/*_structure_levels.csv` | `artifacts/commits/<folder>/*_structure_levels.csv` |
-| `artifacts/debug/*_kl_zones.csv` | `artifacts/commits/<folder>/*_kl_zones.csv` |
-| `artifacts/debug/*_structure_events.csv` | `artifacts/commits/<folder>/*_structure_events.csv` |
-| `artifacts/debug/*_imbalance_instances.csv` | `artifacts/commits/<folder>/*_imbalance_instances.csv` |
+| `artifacts/debug/*_final.csv` | `${PREV_PATH}/*_final.csv` |
+| `artifacts/debug/*_raw.csv` | `${PREV_PATH}/*_raw.csv` |
+| `artifacts/debug/*_structure_levels.csv` | `${PREV_PATH}/*_structure_levels.csv` |
+| `artifacts/debug/*_kl_zones.csv` | `${PREV_PATH}/*_kl_zones.csv` |
+| `artifacts/debug/*_structure_events.csv` | `${PREV_PATH}/*_structure_events.csv` |
+| `artifacts/debug/*_imbalance_instances.csv` | `${PREV_PATH}/*_imbalance_instances.csv` |
+
+`${PREV_PATH}` is whichever location step 1 resolved to:
+`artifacts/commits/<branch>/<folder>/` for the new layout or
+`artifacts/commits/<folder>/` for the legacy flat layout.
 
 ## Chart Count Parity (Required — M15 entities have NO CSV equivalent)
 
@@ -258,10 +295,34 @@ python -m engine_v2.debug.zone_proximity_diag
 Output ends with `=== Per-cycle counts ===` showing `sid=N cycle=M ...
 alt_list=X var3=Y var4=Z BOS-CTS gap=Wp` per cycle. Compare each cycle's
 `alt_list` count against expectations:
-- Narrow cycle (gap < min_gap_pips): MUST be ≤ 2 (Rule 3 cap: ≤1 sd + ≤1 opp_sd).
-- Wide cycle: unbounded; depends on V/Λ pattern length.
+- Narrow cycle (gap < min_gap_pips): MUST be <= 2 (Rule 3 cap: <=1 sd + <=1 opp_sd).
+- Wide cycle: unbounded; depends on V/Lambda pattern length.
 
 If a narrow cycle shows `alt_list > 2`, Rule 3 is being bypassed — investigate before commit. A specific concrete failure mode that has happened: df-col-based gap source went NaN when scan window crossed a reversal into the next sid's rows, causing Rule 3 to silently default-mode bypass for the cycle-tail (see LANDMINES "Narrow-Cycle Rules 1+2+3 Are a Triple").
+
+## Cross-Branch Compare (advanced)
+
+To compare against a save made on a different branch — e.g., currently
+on `week8-volmom-multitf` but wanting to compare against a
+`sub-debug-c2-baseline` save — the per-branch LATEST_<other-branch>
+file is the entry point:
+
+```bash
+OTHER_BRANCH="sub-debug-c2-baseline"
+OTHER_LATEST="artifacts/commits/LATEST_${OTHER_BRANCH}"
+if [ -f "${OTHER_LATEST}" ]; then
+    OTHER_FOLDER=$(cat "${OTHER_LATEST}")
+    OTHER_PATH="artifacts/commits/${OTHER_BRANCH}/${OTHER_FOLDER}"
+fi
+```
+
+If `${OTHER_PATH}` isn't present in the current branch's working tree
+(because that save was committed only on a different branch and never
+cherry-picked back), you can either:
+- Read individual files via `git show artifacts-trunk:${OTHER_PATH}/<file>`
+- Or `git checkout artifacts-trunk -- ${OTHER_PATH}/` to materialize them
+  locally (then `git restore --staged` afterward to keep them out of any
+  pending commit)
 
 ## Why This Matters
 
@@ -279,6 +340,6 @@ This comparison catches:
 1. /commit-save          # Checkpoint current working state
 2. Make changes          # Implement new feature/fix
 3. /compare              # Verify changes are as expected
-4. If unexpected → investigate
-5. If expected → /commit-save  # Create new checkpoint
+4. If unexpected -> investigate
+5. If expected -> /commit-save  # Create new checkpoint
 ```
