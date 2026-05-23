@@ -1,0 +1,4 @@
+commit_hash=32c457d
+timestamp=20260513_164413
+commit_message=Scenario 3 Phase 1: respect end_idx as supreme bound in exception check
+branch=sub-debug-c2-baseline

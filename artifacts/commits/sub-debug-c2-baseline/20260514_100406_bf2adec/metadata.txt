@@ -1,0 +1,4 @@
+commit_hash=bf2adec
+timestamp=20260514_100406
+commit_message=Chart gate for subordinate overlays + per-stage replay timing
+branch=sub-debug-c2-baseline
