@@ -1,0 +1,4 @@
+commit_hash=2c2723e
+timestamp=20260525_171129
+branch=week8-volmom-multitf
+commit_message=Sub-structure lifecycle redesign Phase 1: bounded single-structure MS primitive

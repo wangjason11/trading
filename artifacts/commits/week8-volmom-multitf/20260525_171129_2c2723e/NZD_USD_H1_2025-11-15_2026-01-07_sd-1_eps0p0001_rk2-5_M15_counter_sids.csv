@@ -1,0 +1,3 @@
+sid,starting_sd,creation_event_idx,end_event_idx,end_reason,parent_sid,parent_cycle_id,meta
+0,-1,2609,2843,lifecycle_end,0,2,"{'use_case': 'first_counter', 'validated_parent_start': 652, 'slice_begin': 2559, 'trigger_event_idx': 683}"
+1,1,3230,3363,lifecycle_end,1,1,"{'use_case': 'first_counter', 'validated_parent_start': 807, 'slice_begin': 3180, 'trigger_event_idx': 820}"
