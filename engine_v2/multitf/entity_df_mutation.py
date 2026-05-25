@@ -174,7 +174,16 @@ def _tag_old_sid_on_overwrite(
     new_kl: list = []
     for z in entity_df.attrs.get("kl_zones", []):
         if z.meta.get("entity_sid") == prior_sid_id:
-            new_meta = {**z.meta, "deactivated_by": deactivated_tag, "active": False}
+            new_meta = {
+                **z.meta,
+                "deactivated_by": deactivated_tag,
+                "active": False,
+                # Debug: record the cascade boundary idx so consumers can
+                # detect backward-rectangle artifacts (boundary < zone's
+                # start) without time-to-idx mapping.
+                "cascade_boundary_idx": int(boundary_idx),
+                "cascade_overwriter_sid": int(new_sid_id),
+            }
             new_end = z.end_time
             if z.end_time is None or z.end_time > boundary_time:
                 new_end = boundary_time
@@ -186,7 +195,13 @@ def _tag_old_sid_on_overwrite(
     new_poi: list = []
     for z in entity_df.attrs.get("poi_zones", []):
         if z.meta.get("entity_sid") == prior_sid_id:
-            new_meta = {**z.meta, "deactivated_by": deactivated_tag, "active": False}
+            new_meta = {
+                **z.meta,
+                "deactivated_by": deactivated_tag,
+                "active": False,
+                "cascade_boundary_idx": int(boundary_idx),
+                "cascade_overwriter_sid": int(new_sid_id),
+            }
             new_end = z.end_time
             if z.end_time is None or z.end_time > boundary_time:
                 new_end = boundary_time

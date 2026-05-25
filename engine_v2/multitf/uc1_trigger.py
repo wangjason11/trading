@@ -119,6 +119,8 @@ def detect_uc1_triggers(
                 # triggered_by_event_idx]` in lower_sd direction.
                 "probe_input_idx": cts_idx,
                 "probe_end_idx": rec.meta.get("triggered_by_event_idx"),
+                # Parent-TF candle where this trigger fires (sd zone-prox).
+                "trigger_event_idx": rec.meta.get("triggered_by_event_idx"),
             },
         )
         triggers.append(trigger)

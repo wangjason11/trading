@@ -653,6 +653,14 @@ in cycles where the gate genuinely doesn't exist.
 
 ## Var 3 + Var 4 Last-Per-Cycle Carve-Outs Are a Pair
 
+> **⚠ Subsumed — sub-structure lifecycle redesign (2026-05-25).** The
+> redesign's merge-and-bound build creates a sequential sid per
+> `subsequent_*` trigger (bounded by the next), so these carve-outs vanish
+> as a side effect — there's nothing to "remove" once it lands, and
+> deactivation no longer goes through cascade/overwrite. Don't unpark the
+> old §13.5.d removal as a standalone step. See
+> `memory/project_sub_structure_lifecycle_redesign.md`.
+
 **Rule:** Two last-per-cycle filters approximate spec §6.1's in-place
 overwrite semantics until that mutation infrastructure lands. They MUST
 be removed together.
@@ -731,6 +739,12 @@ which df's index space `X` lives in and document it inline.
 
 ## Slice Copies Inherit Mirrored Structure Cols — Drop Before Passing to MS
 
+> **⚠ Slated for removal — sub-structure lifecycle redesign (2026-05-25).**
+> The slice + mirror + per-trigger `compute_imbalance` machinery this entry
+> guards is replaced by the merge-and-bound build. Retained as current-code
+> reference until the redesign lands. See
+> `memory/project_sub_structure_lifecycle_redesign.md`.
+
 **Rule:** In `multitf/entity_df_mutation.apply_trigger_to_entity_df`, the
 slice-copy passed to `compute_structure_from_start` MUST drop every
 column listed in `_STRUCTURE_COLS` AND `_MS_AUX_STRUCTURE_COLS` before
@@ -795,6 +809,14 @@ drop on the slice copy is the cheaper safeguard.
 ---
 
 ## MarketStructure Deep-Couples to Its Working DataFrame
+
+> **⚠ Relevant but reframed — sub-structure lifecycle redesign (2026-05-25).**
+> The redesign still must NOT pass a multi-sid entity df to MS — but its
+> bounded single-structure run (per sid, stops at first reversal) changes
+> how MS is invoked. The five `self.df` coupling points listed below remain
+> the reasons MS can't take an entity df wholesale; the redesign addresses
+> them via bounded per-sid runs, not the slice/mirror path. See
+> `memory/project_sub_structure_lifecycle_redesign.md`.
 
 **Rule:** Do NOT pass an entity df with prior sids' state directly to
 `compute_structure_from_start`. MS owns its working df and assumes:
@@ -886,6 +908,13 @@ rendered idx.
 
 ## Cascade Keys Off `entity_sid`, NOT `structure_id`
 
+> **⚠ Slated for removal — sub-structure lifecycle redesign (2026-05-25).**
+> The whole cascade (`_tag_old_sid_on_overwrite`) and the entity-wide
+> `entity_sid` are being replaced by a merge-and-bound sequential sid build
+> with per-parent-cycle `(parent_sid, parent_cycle_id, sid)` identity. Don't
+> fix this in isolation. Retained as current-code reference until the
+> redesign lands. See `memory/project_sub_structure_lifecycle_redesign.md`.
+
 **Rule:** `_tag_old_sid_on_overwrite` in `multitf/entity_df_mutation.py`
 matches prior-sid snapshots by `meta["entity_sid"] == prior_sid_id`.
 NOT by `structure_id`. The two are different concepts:
@@ -911,6 +940,13 @@ overwritten" the moment a new entity_sid lands.
 ---
 
 ## Mirror Translation of Nested-Dict Idx Fields Hardcodes Key Names
+
+> **⚠ Slated for removal — sub-structure lifecycle redesign (2026-05-25).**
+> The slice-local→entity-absolute mirror translation (and its hardcoded
+> nested-dict idx-key handling) goes away with the merge-and-bound build,
+> which builds directly in entity coords. Retained as current-code
+> reference until the redesign lands. See
+> `memory/project_sub_structure_lifecycle_redesign.md`.
 
 **Rule:** `mirror_lower_tf_result_to_entity_df` in
 `multitf/entity_df_mutation.py` shifts slice-local idx → entity-absolute

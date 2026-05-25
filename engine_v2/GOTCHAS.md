@@ -948,3 +948,65 @@ for an observed bottleneck.
 
 **Concrete example:** `engine_v2/zones/poi_zones.py::_compute_fill_idx_cache`
 (landed 2026-05-18).
+
+---
+
+## Sub Lifecycle Cap Is Needed Even When the Parent Cycle Has Ended
+
+**Why it exists:** when a subordinate is built, its MarketStructure runs on
+a slice bounded by the parent cycle's lifecycle end (or end-of-data if the
+parent cycle is still open). The sub's *most-recent* zone is almost always
+**open** at the slice end — not because the parent cycle is still active,
+but because the slice **truncates the sub's ongoing structure** and nothing
+within the slice fired to close that last zone. The lifecycle cap
+(`multitf/entity_df_mutation.py`, `deactivated_by="lifecycle_end"`) closes
+these dangling open zones/POIs/fibs at the slice's last candle.
+
+**The trap:** assuming the cap only matters when the parent cycle hasn't
+ended (so "the sub zone can stay open like a main zone"). Wrong — the cap is
+load-bearing precisely in the **common, closed-parent** case. KL zones only
+close via sub-internal events (CTS_ESTABLISHED early-end, same-side
+replacement, sub reversal) — all of which are the **sub's own** MarketStructure
+events. The parent cycle ending is an H1-level event that bounds the slice
+but emits no M15 structure event, so it never closes the dangling zone via
+those mechanisms. Without the cap, that zone keeps `end_time=None` and the
+chart renders it to the far-right edge (`x1 = t_last_m15`), across regions
+the sub never analyzed — zones are NOT clipped by the `owner_by_idx`/§16.5
+filter (that only governs dots/lines).
+
+**Contrast with main:** a main open zone at end-of-data genuinely *is*
+active at the chart's right edge (`end_time=None` is correct there) — main
+runs over all data, has no parent boundary. So the cap is **sub-only**.
+
+**Note (2026-05-25 redesign):** under the sub-structure lifecycle redesign,
+this cap survives as the "structure ends when parent next cycle/sid starts"
+end condition in the unified lifecycle model. See
+`memory/project_sub_structure_lifecycle_redesign.md`.
+
+---
+
+## Diagnosing Backward / Degenerate Sub Zones (`end_time <= start_time`)
+
+**Signature:** a sub KL zone (or POI) whose `end_time` is *before* (backward)
+or *equal to* (degenerate, zero-width) its `start_time`. On the chart it
+renders as a rectangle running the "wrong way" (e.g. left edge after the
+right edge) or as nothing, and "never activates" (the fill is empty because
+the active stretch is empty).
+
+**Root cause (current code):** the cascade (`_tag_old_sid_on_overwrite`)
+caps a superseded sid's `end_time` to the *overwriter sid's structure-start
+idx* (`m15_start_idx`), without checking that the zone's own start is
+already at/after that boundary. When a later sub's slice begins before a
+prior sub's late-formed zone, the cap lands before the zone's start. (This
+whole class of bug is removed by the sub-structure lifecycle redesign, which
+bounds each sid's run so the phantom late zone is never produced — see
+`memory/project_sub_structure_lifecycle_redesign.md`.)
+
+**Diagnostic tool:** `engine_v2/debug/analyze_cascade_backward.py` — run
+after a replay; it scans the per-sub KL-zone debug CSVs for
+`end_time <= start_time` and tabulates parent_sid / parent_cycle_id /
+entity_sid / overwriter sid / boundary idx / base_idx / confirmed_idx. It
+also prints the M15.confluence sids inventory. Depends on the per-sub
+`*_kl_zones.csv` + `*_sids.csv` debug exports in `run_replay.py`. Use it to
+confirm the redesign drives the count to 0 once it lands. (Note: its strict
+`<` filter misses the `==` degenerate case — check both when verifying.)

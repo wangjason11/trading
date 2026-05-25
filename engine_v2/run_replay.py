@@ -294,6 +294,37 @@ def main() -> None:
         print(f"Chart {leaf_label} HTML: {m15_paths.html_path}")
         print(f"Chart {leaf_label} PNG : {m15_paths.png_path}")
 
+        # Debug: export per-sub KL zones (entity-absolute indices after
+        # mirror) so we can inspect sub-native zones without parsing the
+        # chart HTML.
+        from engine_v2.debug.export_zones import export_kl_zones
+        sub_entry = registry.get(sub_path_id)
+        if sub_entry is not None:
+            sub_zones = sub_entry.df.attrs.get("kl_zones", []) or []
+            export_kl_zones(
+                sub_zones,
+                f"artifacts/debug/{basename}_{leaf_label}_kl_zones.csv",
+            )
+
+            # Debug: export per-sub SidRecords so we can see each sid's
+            # boundary (creation_event_idx) and trigger info.
+            sub_sids = sub_entry.df.attrs.get("sids", []) or []
+            if sub_sids:
+                import pandas as _pd
+                _pd.DataFrame([{
+                    "sid": s.sid,
+                    "starting_sd": s.starting_sd,
+                    "creation_event_idx": s.creation_event_idx,
+                    "end_event_idx": s.end_event_idx,
+                    "end_reason": s.end_reason,
+                    "parent_sid": s.parent_sid,
+                    "parent_cycle_id": s.parent_cycle_id,
+                    "meta": s.meta,
+                } for s in sub_sids]).to_csv(
+                    f"artifacts/debug/{basename}_{leaf_label}_sids.csv",
+                    index=False,
+                )
+
     from engine_v2.debug.export_zones import export_kl_zones
     export_kl_zones(res.meta.get("kl_zones", []), f"artifacts/debug/{basename}_kl_zones.csv")
 

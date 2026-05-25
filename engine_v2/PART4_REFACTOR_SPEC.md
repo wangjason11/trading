@@ -3,6 +3,15 @@
 > **Status:** Specs complete; entering build phase. All sections (1–16)
 > locked across sessions 2026-04-29 / 04-30 / 05-01 / 05-04.
 >
+> **⚠ REVISED 2026-05-25 — subordinate lifecycle model.** §2, §5, §6, §7
+> were rewritten to replace the entity-wide-`entity_sid` + cascade-overwrite
+> model with **per-parent-cycle sid identity `(parent_sid, parent_cycle_id,
+> sid)` + a merge-and-bound sequential build + a unified KL/POI lifecycle
+> (pass-through ends)**. The §13.5.c/d migration substeps describe the OLD
+> (cascade) mechanism and are superseded — see the banners there. Full
+> rationale + phased implementation plan:
+> `memory/project_sub_structure_lifecycle_redesign.md`.
+>
 > **Working document.** Will be split / renamed / merged into canonical spec
 > files (`MARKET_STRUCTURE_SPEC.md`, new `MULTI_TF_SPEC.md`, etc.) once the
 > refactor lands and behavior is stable.
@@ -76,6 +85,34 @@ Useful derived comparisons:
 `starting_alignment` ↔ `starting_sd` mapping:
 - `confluence` → `starting_sd = parent.current_sd`
 - `counter` → `starting_sd = -parent.current_sd`
+
+**`sid` is per-parent-cycle (REVISED 2026-05-25).** Within a subordinate
+entity, `sid` resets to 0 at the start of each `(parent_sid,
+parent_cycle_id)` and increments on each new structure. A true sub
+structure is uniquely identified by `(parent_sid, parent_cycle_id, sid)`;
+there are never two of the same `sid` within one `(parent_sid,
+parent_cycle_id)`. This **replaces** the earlier entity-wide monotonic
+`entity_sid` convention (documented in §13.5.c, now superseded). Each sid
+records `started_by` ∈ {`first_confluence`, `subsequent_confluence`,
+`first_counter`, `subsequent_counter`, `reversal`} and `start_trigger_idx`,
+so "which trigger spawned this sid" is tracked without a separate
+trigger-counter field. (`main` keeps `sid` incrementing on reversal only,
+as today.)
+
+**Two distinct "start" idxs (REVISED 2026-05-25).** A structure (and
+likewise a cycle) has both:
+- **`starting_idx`** — the structural anchor: the BOS-equivalent candle the
+  structure is computed from. May lie in the past relative to when the
+  structure becomes active.
+- **lifecycle start** (first *active* idx) — the candle where the
+  structure/cycle becomes active (its trigger / handoff). Before this idx
+  the prior structure/cycle is still active.
+
+These mirror main structure: a cycle's `starting_idx` is the prior BOS
+candle, but the cycle becomes active at its CTS-established trigger. For a
+`subsequent_*` sub sid, `starting_idx` is the probe-validated anchor while
+the lifecycle start is the (later) trigger idx. The active window is
+`[lifecycle_start, end_idx)`; `starting_idx` is only the geometric anchor.
 
 **Identity is a path, not a flat tuple.** A structure like
 `5M.confluence` under `15M.counter` under `H1.main` carries its full
@@ -456,12 +493,21 @@ For `main` (highest TF), continue using `compute_structure`:
 - On reversal: `reversal` scenario (today's `identify_start_scenario_2_after_reversal` + Exception 1/2).
 - Loops until end of data.
 
-For `subordinate` (any role/alignment, any TF), use
-`compute_structure_from_start`:
+For `subordinate` (any role/alignment, any TF), each **sid** is built by a
+**bounded single-structure run** of `compute_structure_from_start`
+(REVISED 2026-05-25):
 
-- Start is pre-validated by the upstream variation probe — no internal
-  Scenario 1 logic.
-- On internal reversal: same `reversal` scenario flow as main.
+- Start is pre-validated by the upstream variation probe (for
+  `subsequent_*` sids) or by `identify_start` (for `reversal` sids) — no
+  internal Scenario 1 logic.
+- The run is **bounded** to `[starting_idx, end_idx]` where `end_idx =
+  min(next subsequent-variation trigger, parent-cycle-end)`, and it
+  **stops at its own first reversal** if one occurs inside that window. A
+  sub sid is therefore a SINGLE directional structure — it never rolls
+  past a reversal (the reversal is the boundary to the next sid). This is
+  the change that eliminates the "phantom" structure/zones a sub
+  previously produced by running past where the next trigger should have
+  taken over.
 
 The legacy `compute_structure_scenario_3` ad-hoc path is **removed**. Its
 only purpose (creating WVMI when parent was in range) is now subsumed by
@@ -474,67 +520,149 @@ per-subordinate WVMI — see §8.
 | `main` | reversal only |
 | `subordinate` | reversal **OR** subsequent variation (var 3 / var 4) |
 
-Each sid is a conceptually independent compute_structure_from_start run
-within an entity. Sids do not share live state — only the entity's df,
-events list, and zone collections (which they overwrite or append to).
+Sids within a `(parent_sid, parent_cycle_id)` form one **sequential,
+non-overlapping chain** (merge-and-bound — see §6.1). Each sid's bounded
+run ends exactly where the next sid begins; sids never overlap and never
+overwrite one another. They share only the entity's df, the append-only
+events list, and the zone/POI/fib/WVMI collections (append-only, keyed by
+`sid` + `cycle_id`).
 
 ---
 
-## 6. Subordinate Cadence and Overwrite Rules
+### Unified lifecycle & start/end model (Locked — REVISED 2026-05-25)
+
+Applies to **both** main and subordinate. Starts are the primitives; ends
+are **pass-throughs** of the next start's idx. Zones compute no end of
+their own — they inherit their owning cycle's resolved end.
+
+```
+Zones end when:              its cycle ends
+Cycles end when:             1. next cycle starts
+                             2. next structure (sid) starts
+Structures end when:         1. next structure starts
+                             2. (sub only) parent next cycle / sid starts
+Next cycle starts when:      new CTS established
+Next structure starts when:  1. reversal triggers
+                             2. (sub only) subsequent use_case triggers
+```
+
+- **`end_idx` = the idx of the start event that supersedes.** When a start
+  fires at idx X, X becomes the `end_idx` of whatever it ends.
+- **Propagation closes the open child.** Whenever a *structure* ends (for
+  ANY reason in the Structures-end list — including the sub-only
+  parent-next-cycle case), its currently-open *cycle* ends at the same idx,
+  and that cycle's *zones* end with it. This is how the last cycle of a
+  structure that ends via parent-cycle-end still closes cleanly even though
+  no "next cycle / next structure starts" event fired inside the entity.
+- **Main vs sub.** Main uses the rows without the "(sub only)" qualifiers
+  (cycle ends on next cycle / next structure; structure ends on reversal).
+  Subordinate adds: `subsequent_*` triggers as a `next structure starts`
+  cause, and parent-next-cycle as a `structure ends` cause.
+- **Active window vs anchor.** `end_idx` + lifecycle-start (§2) define the
+  active window `[lifecycle_start, end_idx)`. A zone rectangle may be
+  *drawn* from its `starting_idx` / base / IC candle (possibly before it is
+  active), but its **fill** is gated to the active window — existing chart
+  non-fill logic already handles this, so charting needs no change.
+- **Unifies KL and POI.** POI already resolves `end_idx` + `end_reason` by
+  the reversal / next_cycle priority. KL migrates to the same model (today
+  KL uses scattered `end_time`-only mechanisms — CTS_ESTABLISHED early-end,
+  same-side replacement, reversal/lifecycle caps). Post-migration both read
+  their cycle's resolved end instead of computing their own.
+
+---
+
+## 6. Subordinate Cadence and Lifecycle Rules
 
 (§4.3.6 covers the within-parent-cycle cadence diagram. This section
-specifies overwrite semantics.)
+specifies how those triggers compose into the sequential sid chain and how
+lifecycles bound it. **REVISED 2026-05-25** — the prior "overwrite
+semantics" framing, including the cascade, is removed.)
 
-### 6.1 Within parent cycle, same-type overwrite
+### 6.1 Within parent cycle — sequential sids (merge-and-bound), no overwrite (REVISED 2026-05-25)
 
-When a subsequent variation fires (var 3 → confluence, var 4 → counter),
-or when the sub itself reverses, a new sub sid begins at the new
-`starting_idx`. In the same entity df:
+Within one `(entity, parent_sid, parent_cycle_id)`, sids are built as a
+single **sequential, non-overlapping chain** — NOT as independent
+overlapping runs reconciled by an overwrite cascade (the prior design,
+removed).
 
-- df columns on candles `[starting_idx, current_candle]` are **overwritten
-  in place** by the new sid's compute_structure_from_start run.
-- Old sid's events stay in `df.attrs["events"]` (append-only) — never
-  removed; their attribution (sid + cycle) preserves history.
-- Old sid's zones / POIs / fibs / WVMI persist in their respective
-  `df.attrs[...]` lists with `deactivated_by="overwritten_by_sid_{n+1}"`
-  meta and bounds capped at the overwrite boundary.
-- Old sid's still-open WVMI (in-progress current cycle) locked with
-  `locked_by="overwritten_by_sid_{n+1}"` at the boundary.
+Build:
+1. Collect this entity+parent-cycle's trigger idxs in time order
+   (`first_confluence` / `first_counter`, then the `subsequent_*` triggers
+   per the §4.3.6 cadence).
+2. **sid=0** starts at the first-variation validated start
+   (`first_confluence` for the confluence entity, `first_counter` for the
+   counter entity). **sid=0 is always a first-variation; a `subsequent_*`
+   can never be sid=0.** If the first variation never yields a valid sub
+   for this parent cycle, the entity has no sequence here and the cycle's
+   `subsequent_*` triggers do not build (no sid=0 to follow).
+3. Run sid=0's bounded single-structure (§5) to the first of {its own
+   reversal, the next `subsequent_*` trigger, parent-cycle-end}.
+4. That boundary starts **sid+1**:
+   - boundary = `subsequent_*` trigger → sid+1 starts at the trigger's
+     probe-validated start, with the use_case's direction (same-direction
+     consecutive sids ARE allowed for subs — the boundary is the trigger,
+     not a reversal).
+   - boundary = reversal → sid+1 via `identify_start` (`reversal`
+     scenario), flipped direction (exactly like main).
+5. Repeat to parent-cycle-end.
 
-### 6.2 Across parent cycles — same df, in-place overwrite
+**No overwrite, no bounds-capping, no cascade.** Each sid's run ends
+exactly where the next begins, so there is no overlap to reconcile. "Only
+the most recent sub of a type is alive" falls out for free: a new sid (or
+new cycle) ends the prior one at the start idx via the §5 lifecycle model.
+Old sids' events / zones / POIs / fibs / WVMI persist append-only with
+`(parent_sid, parent_cycle_id, sid)` + `cycle_id` attribution; their ends
+are the resolved lifecycle ends, not a cascade-imposed cap.
+
+**Degenerate / short-lived triggers still create sids** — valid while
+active (live-trading semantics). No min-span skip.
+
+**Handoff idx.** A `subsequent_*` sid's lifecycle start is its *trigger*
+idx (when the new sub comes into existence); its `starting_idx` is the
+earlier probe-validated anchor. The prior sid stays active until the
+trigger idx (its `end_idx` = the trigger idx). See §2 (starting_idx vs
+lifecycle-start).
+
+### 6.2 Across parent cycles — one df, lifecycle-bounded (REVISED 2026-05-25)
 
 There is **one entity df per (TF, role, parent_path)** for the entire
-session. All parent cycles' subs of the same type live in this single df.
-`parent_cycle_id` is meta on each sid / event / zone, not part of entity
-identity.
+session; all parent cycles' subs of the same type live in it, with
+`(parent_sid, parent_cycle_id, sid)` identity (`sid` resets per parent
+cycle). `parent_cycle_id` is meta, not part of entity identity.
 
-When parent cycle K ends and parent cycle K+1 begins:
+When parent cycle K ends (next parent BOS or parent reversal), §6.5
+lifecycle propagation ends all of cycle-K's sub sids / cycles / zones at
+the parent-cycle-end idx with `deactivated_by="lifecycle_end"`. Parent
+cycle K+1's subs start fresh at sid=0. There is **no cross-parent-cycle
+overwrite** — the prior design's in-place overwrite of overlapping
+territory is removed; the K and K+1 sequences are bounded by the
+parent-cycle boundary, not reconciled by capping. (The new K+1
+`first_confluence`'s `starting_idx` may physically anchor inside cycle K's
+territory — that is the structural anchor only; its lifecycle start is its
+trigger idx, after cycle K has ended.)
 
-- The new parent cycle's `first_confluence` starts at the parent BOS
-  extreme candle (which physically lives inside parent cycle K's
-  territory, since `BOS_CONFIRMED.ev.idx` = extreme, not confirmation).
-- Where it overlaps with parent cycle K's last same-type sub data, the
-  §6.1 in-place overwrite rule applies:
-  - df cols overwritten in place by the new sid
-  - old sid's events / zones / POIs / fibs / WVMI persist with
-    `deactivated_by="overwritten_by_sid_{n+1}"` and bounds capped at the
-    overwrite boundary
-  - old sid's still-open WVMI locked with the same `locked_by` reason
-- Consumers query by `parent_cycle_id` meta when they need to scope to a
-  specific parent cycle.
+Consumers query by `(parent_sid, parent_cycle_id)` meta to scope to a
+specific parent cycle.
 
-### 6.3 Sub reversal mid-cycle — does not perturb parent cadence
+### 6.3 Sub reversal mid-cycle — IS the sid boundary, does not perturb parent cadence (REVISED 2026-05-25)
 
-When a sub reverses internally:
+A sub reversal is the boundary between `sid` and `sid+1` — NOT an internal
+multi-structure roll within one run:
 
-- The sub gets a new sid via `reversal` scenario applied to the sub's own
-  TF, data, and zones. `starting_alignment` and `starting_sd` remain
-  fixed (sticky) for the entity.
-- Parent's variation cadence is unaffected — parent's proximity state
-  machine and event emissions continue as if nothing happened.
+- The bounded run for the current sid **stops at its first reversal**
+  (§5). `sid+1` is then built via the `reversal` scenario on the sub's own
+  TF / data / zones (`identify_start`, flipped direction).
+  `starting_alignment` / `starting_sd` (entity-level) remain sticky.
+- The reversal **competes with the next `subsequent_*` trigger** to be the
+  boundary; whichever idx is earlier starts `sid+1` (§6.1 step 4). If the
+  reversal wins, the would-be `subsequent_*` trigger that comes later still
+  starts a further sid (it is detected from parent events, independent of
+  the sub's internal reversal).
+- Parent's variation cadence is unaffected — the parent's proximity state
+  machine and event emissions continue regardless.
 - WVMI sweep "starting from most recent same-type sub sid's start" uses
-  whichever event birthed the *current* sid (reversal-induced or
-  subsequent-trigger-induced), not strictly "most recent var 3/4 output."
+  whichever event birthed the *current* sid (`reversal`- or
+  `subsequent_*`-induced), per each sid's `started_by`.
 
 ### 6.4 Parent reversal — bootstrap rule for new parent cycle
 
@@ -566,12 +694,16 @@ transitively:
 Persistence rules apply *within* an entity's df. Each entity's df is
 isolated from every other entity's df.
 
-| Data type | Storage | Overwrite policy |
+(REVISED 2026-05-25 — sids are sequential & non-overlapping per §6.1, so
+there is no per-candle overwrite *between sids* and no bounds-capping
+cascade. Each candle is written once by its owning sid.)
+
+| Data type | Storage | Policy |
 |---|---|---|
-| df columns (`structure_id`, `cycle_id`, `cts_phase`, `range_lo/hi`, etc.) | per-candle | Overwritten in place by new sid; only current owner's view per candle |
-| Structure events (`StructureEvent` list) | `df.attrs["events"]` (append-only) | **Persist forever** with sid + cycle attribution; never deleted or mutated |
-| Zones (KL, POI), Fibs, Wave candles, Imbalances | `df.attrs[...]` keyed by sid + cycle_id | Persist; old sid entries marked `deactivated_by="…"` and bounds capped |
-| WVMI records | `df.attrs["wvmi"]` keyed by sid + cycle_id | Persist as snapshots; old sid in-progress locked at boundary |
+| df columns (`structure_id`, `cycle_id`, `cts_phase`, `range_lo/hi`, etc.) | per-candle | Written once per candle by the owning sid; sids don't overlap, so no cross-sid overwrite. (A sid's own bounded run still writes its own candles.) |
+| Structure events (`StructureEvent` list) | `df.attrs["events"]` (append-only) | **Persist forever** with `(parent_sid, parent_cycle_id, sid)` + cycle attribution; never deleted or mutated |
+| Zones (KL, POI), Fibs, Wave candles, Imbalances | `df.attrs[...]` keyed by sid + cycle_id | Persist; `end_idx` resolved via the §5 lifecycle model (next cycle / next structure / parent-cycle-end). No `overwritten_by` tagging, no bounds-capping. |
+| WVMI records | `df.attrs["wvmi"]` keyed by sid + cycle_id | Persist as snapshots; locked at the owning sid/cycle's lifecycle end |
 | Zone proximity triggers | `df.attrs["zone_proximity_triggers"]` | Persist — drive children via the event bus |
 
 **Rationale:**
@@ -967,6 +1099,19 @@ between every step:
        resolver protocol passed at construction."
 
    - **§13.5.c (in-place overwrite infrastructure, §6.1 / §6.2):**
+
+     > **⚠ SUPERSEDED 2026-05-25.** This substep implements the
+     > cascade-overwrite model (entity-wide `entity_sid` +
+     > `_tag_old_sid_on_overwrite`). The revised §6 replaces it with a
+     > merge-and-bound sequential sid build (no overwrite, per-parent-cycle
+     > sid). The c.i/c.ii/c.iii substeps below already LANDED in code and
+     > remain in the repo, but the model they implement is being replaced;
+     > the new implementation follows the phased plan in
+     > `memory/project_sub_structure_lifecycle_redesign.md` (which removes
+     > `_tag_old_sid_on_overwrite`, the per-trigger `entity_sid`, and the
+     > slice/mirror machinery). The prose below is retained for historical
+     > context on what currently exists in the code.
+
      entity-df mutation when a new sid overwrites an older one in
      `[starting_idx, current_candle]`; old sid's zones / POIs / fibs /
      WVMI tagged `deactivated_by="overwritten_by_sid_{n+1}"` with
@@ -1142,6 +1287,15 @@ between every step:
      deactivate older sids. Paired removal — neither carve-out can be
      removed without the other (per LANDMINES).
 
+     > **⚠ SUBSUMED 2026-05-25.** The revised §6.1 merge-and-bound build
+     > already builds every `subsequent_*` trigger as a sequential sid
+     > (bounded by the next), so the last-per-cycle carve-outs disappear
+     > as a side effect — there is nothing left to "remove" once the new
+     > build lands, and the deactivation no longer relies on §13.5.c
+     > overwrite semantics (there is no overwrite). Fold this into the
+     > merge-and-bound implementation phase rather than treating it as a
+     > separate step. See `memory/project_sub_structure_lifecycle_redesign.md`.
+
    - **§13.5.e (remove transitional `df.attrs` writes + chart positional
      fallback):** delete the DEPRECATED block in
      `pipeline/orchestrator.py:run_pipeline` that writes
@@ -1274,13 +1428,23 @@ of them at once. Default: ON.
 No additional toggles in v1. Sid-tied display (see §16.5) and pending-sub
 display (§16.6) are governed by hardcoded rules, not user toggles.
 
-### 16.5 Persistence and overwrite display rules
+### 16.5 Persistence and display rules
+
+> **REVISED 2026-05-25 — terminology only, rules unchanged.** Under the
+> revised §6 model sids are sequential & non-overlapping, so there is no
+> "overwrite"; "older sid hidden / overwritten" becomes "older sid
+> lifecycle-ended." The display rules below still hold as written. Two
+> confirmed points (this redesign session): (a) sid-tied **structure**
+> elements keep the existing `owner_by_idx` / §16.5 behavior and render at
+> their structural anchors (`starting_idx`); (b) **zone** rectangles draw
+> from their base/IC anchor but fill only over the active window — no
+> charting change needed for zones.
 
 | Element class | Display rule |
 |---|---|
 | Constants — candle patterns, OHLC, candle types | Always shown; never affected by sid changes |
-| Sid-tied — CTS dots, BOS markers, range bounds, market_state regions | **Most recent sid only** per candle. Older sids' data exists in df with `deactivated_by` meta but hidden by default |
-| Persisting events — KL zones, POI zones, imbalances | All rendered. Deactivated / overwritten ones use the existing opacity attenuation logic (older = more transparent) |
+| Sid-tied — CTS dots, BOS markers, range bounds, market_state regions | **Most recent sid only** per candle (via `owner_by_idx`). Older sids' data persists in df with lifecycle end meta but is hidden by default |
+| Persisting events — KL zones, POI zones, imbalances | All rendered. Inactive / lifecycle-ended ones use the existing opacity attenuation logic (older = more transparent); fills gated to the active window |
 | WVMI | Locked records show final values via hover; in-progress records re-render whenever `update_temporary_lp` shifts the temp LP |
 
 ### 16.6 Pending subordinate display

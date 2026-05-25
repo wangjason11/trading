@@ -99,6 +99,13 @@ def build_sid_records_for_subordinate(
                 "use_case": trigger.use_case,
                 "validated_parent_start": result.meta.get("validated_h1_start"),
                 "slice_begin": result.meta.get("slice_begin"),
+                # Parent-TF candle idx where the trigger event fired
+                # (BOS_CONFIRMED.confirmed_at for var1, sd-prox candle for
+                # var3/var4, etc). Stored on the trigger object.
+                "trigger_event_idx": getattr(
+                    trigger, "trigger_event_idx",
+                    trigger.meta.get("trigger_event_idx"),
+                ),
             },
         ))
     return out
