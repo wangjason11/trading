@@ -949,39 +949,6 @@ rendered idx.
 
 ---
 
-## Cascade Keys Off `entity_sid`, NOT `structure_id`
-
-> **⚠ Slated for removal — sub-structure lifecycle redesign (2026-05-25).**
-> The whole cascade (`_tag_old_sid_on_overwrite`) and the entity-wide
-> `entity_sid` are being replaced by a merge-and-bound sequential sid build
-> with per-parent-cycle `(parent_sid, parent_cycle_id, sid)` identity. Don't
-> fix this in isolation. Retained as current-code reference until the
-> redesign lands. See `memory/project_sub_structure_lifecycle_redesign.md`.
-
-**Rule:** `_tag_old_sid_on_overwrite` in `multitf/entity_df_mutation.py`
-matches prior-sid snapshots by `meta["entity_sid"] == prior_sid_id`.
-NOT by `structure_id`. The two are different concepts:
-
-| Concept | Meaning |
-|---|---|
-| `structure_id` (in event/zone meta) | The internal `MarketStructure` run id within one sub-build. Increments on internal reversals (sids 0, 1, 2, ... within one sub). Set by `MarketStructure.__init__(structure_id=0)`. |
-| `entity_sid` (in event/zone meta) | The entity-wide monotonic sub id, assigned by the orchestrator at trigger time. Per spec §13.5.c sid numbering convention: sids are entity-wide, not per-parent-cycle. |
-
-Multiple `entity_sid` values can share the same `structure_id` (every
-sub-build starts MarketStructure with `structure_id=0`). Multiple
-`structure_id` values can share the same `entity_sid` (a sub that
-reverses internally produces sids 0 → 1 within MarketStructure but
-both belong to the same entity_sid).
-
-**Concrete trap:** "let me clean this up — `entity_sid` is just a
-synonym for `structure_id`, right?" No. Cascading on `structure_id`
-would mis-tag every sub's internal sid 0 as "the prior sid being
-overwritten" the moment a new entity_sid lands.
-
-**See also:** spec §13.5.c sid numbering convention block.
-
----
-
 ## Mirror Translation of Nested-Dict Idx Fields Hardcodes Key Names
 
 > **⚠ Slated for removal — sub-structure lifecycle redesign (2026-05-25).**

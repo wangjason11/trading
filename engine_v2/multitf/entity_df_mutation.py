@@ -26,16 +26,12 @@ per-parent-cycle sequential sid chain (spec §6.1):
     identity (`(parent_sid, parent_cycle_id, sid)` + `started_by` +
     `start_trigger_idx`) alongside `entity_sid`.
 
-  - `_tag_old_sid_on_overwrite` — the OLD cascade helper. **No longer fired**
-    by the new build (sids don't overlap, so the driver passes
-    `prior_sid_id=None`). Kept in the module for Phase 4 deletion; still
-    unit-tested directly.
-
-Persistence model (spec §7, REVISED): sids are sequential & non-overlapping,
-so each candle is written once by its owning sid — no cross-sid overwrite, no
-bounds-capping cascade. Zone/POI/fib/WVMI snapshots persist append-only keyed
-by sid + cycle_id; open ones cap at their sid's resolved end (`reversal` or
-`lifecycle_end`).
+Persistence model (spec §7): sids are sequential & non-overlapping, so each
+candle is written once by its owning sid — no cross-sid overwrite. Zone/POI/
+fib/WVMI snapshots persist append-only keyed by sid + cycle_id; open ones cap
+at their sid's resolved end (`reversal` or `lifecycle_end`). (The old
+cascade-overwrite model + `_tag_old_sid_on_overwrite` helper were deleted in
+redesign Phase 4 — sids no longer overlap, so nothing to cascade.)
 
 NOTE: the slice + lookback + `reset_index` machinery (and the mirror's
 slice-local → entity-absolute translation) is retained — direct entity-df MS
@@ -158,102 +154,12 @@ def _shift_meta_indices(meta: dict, keys, offset: int) -> dict:
     return out
 
 
-def _tag_old_sid_on_overwrite(
-    entity_df: pd.DataFrame,
-    prior_sid_id: int,
-    new_sid_id: int,
-    boundary_idx: int,
-) -> None:
-    """Tag prior-sid snapshots on `entity_df.attrs[...]` per spec §6.1.
-
-    Cascade contents:
-      - KL zones / POI zones with prior sid → `meta["deactivated_by"]`,
-        `meta["active"] = False`, end_time capped at `boundary_time` if
-        still open.
-      - Fib states → `meta["deactivated_by"]`, `meta["deactivated_at"]`
-        = `boundary_idx`; still-active-unlocked fibs flip
-        `active=False`.
-      - WVMI records still `lp_locked=False` → `lp_locked=True`,
-        `meta["lp_locked_by"]`.
-
-    No-op for snapshot lists not present on `entity_df.attrs`.
-
-    For c.i pilot in production this is called with `prior_sid_id=None`
-    (a no-op via the caller-side guard), so the only exercise is the
-    unit test in `tests/test_entity_df_mutation.py`. Once c.ii lands and
-    multiple sids accumulate per entity, this is the production cascade
-    path.
-    """
-    boundary_time = pd.to_datetime(entity_df.loc[boundary_idx, "time"], utc=True)
-    deactivated_tag = f"overwritten_by_sid_{new_sid_id}"
-
-    # KL zones
-    new_kl: list = []
-    for z in entity_df.attrs.get("kl_zones", []):
-        if z.meta.get("entity_sid") == prior_sid_id:
-            new_meta = {
-                **z.meta,
-                "deactivated_by": deactivated_tag,
-                "active": False,
-                # Debug: record the cascade boundary idx so consumers can
-                # detect backward-rectangle artifacts (boundary < zone's
-                # start) without time-to-idx mapping.
-                "cascade_boundary_idx": int(boundary_idx),
-                "cascade_overwriter_sid": int(new_sid_id),
-            }
-            new_end = z.end_time
-            if z.end_time is None or z.end_time > boundary_time:
-                new_end = boundary_time
-            z = replace(z, end_time=new_end, meta=new_meta)
-        new_kl.append(z)
-    entity_df.attrs["kl_zones"] = new_kl
-
-    # POI zones
-    new_poi: list = []
-    for z in entity_df.attrs.get("poi_zones", []):
-        if z.meta.get("entity_sid") == prior_sid_id:
-            new_meta = {
-                **z.meta,
-                "deactivated_by": deactivated_tag,
-                "active": False,
-                "cascade_boundary_idx": int(boundary_idx),
-                "cascade_overwriter_sid": int(new_sid_id),
-            }
-            new_end = z.end_time
-            if z.end_time is None or z.end_time > boundary_time:
-                new_end = boundary_time
-            z = replace(z, end_time=new_end, meta=new_meta)
-        new_poi.append(z)
-    entity_df.attrs["poi_zones"] = new_poi
-
-    # Fib states
-    new_fibs: list = []
-    for fib in entity_df.attrs.get("fib_states", []):
-        if fib.meta.get("entity_sid") == prior_sid_id:
-            new_meta = {
-                **fib.meta,
-                "deactivated_by": deactivated_tag,
-                "deactivated_at": boundary_idx,
-            }
-            new_active = fib.active and fib.locked
-            fib = replace(fib, active=new_active, meta=new_meta)
-        new_fibs.append(fib)
-    entity_df.attrs["fib_states"] = new_fibs
-
-    # WVMI records (mutable dataclass — mutate in place)
-    for w in entity_df.attrs.get("wvmi", []):
-        if w.meta.get("entity_sid") == prior_sid_id and not w.lp_locked:
-            w.lp_locked = True
-            w.meta["lp_locked_by"] = deactivated_tag
-
-
 def mirror_lower_tf_result_to_entity_df(
     entity_df: pd.DataFrame,
     result: LowerTFResult,
     *,
     new_sid_id: int,
     structure_path_id: str,
-    prior_sid_id: Optional[int] = None,
 ) -> None:
     """Mirror a slice-shape `LowerTFResult` into `entity_df.attrs[...]`.
 
@@ -266,19 +172,8 @@ def mirror_lower_tf_result_to_entity_df(
     Also mirrors the structure columns from `result.df` back to
     `entity_df.iloc[slice_begin:slice_begin+len(result.df)]` so the
     entity df reflects the per-candle "current truth" view of this sid.
-
-    Cascade (§6.1) runs first if `prior_sid_id` is set — tags prior-sid
-    snapshots already present on `entity_df.attrs` with `deactivated_by`
-    and locks open WVMI.
     """
     slice_begin = int(result.meta.get("slice_begin", 0))
-
-    # 1. Cascade — no-op if prior_sid_id is None
-    if prior_sid_id is not None:
-        boundary_idx = int(result.meta.get("m15_start_idx", slice_begin))
-        _tag_old_sid_on_overwrite(
-            entity_df, prior_sid_id, new_sid_id, boundary_idx,
-        )
 
     attribution = {
         "entity_sid": new_sid_id,
@@ -607,7 +502,7 @@ def build_one_sid(
     5. Lifecycle-cap open/late zones/POIs/fibs at the sid's effective end
        (its reversal if any, else the bound).
     6. Mirror into ``entity_df.attrs`` with the canonical identity
-       (``prior_sid_id=None`` — sids no longer overlap, so no cascade).
+       (sids are sequential & non-overlapping, so there is no cascade).
 
     Returns a ``SidBuildOutcome`` or None on a degenerate window / structure
     failure.
@@ -787,16 +682,14 @@ def build_one_sid(
         },
     )
 
-    # Mirror into entity_df.attrs with entity-absolute idx. prior_sid_id=None:
-    # sids are sequential & non-overlapping (§6.1), so there is no cascade —
-    # _tag_old_sid_on_overwrite stays in the module for Phase 4 deletion but
-    # never fires from the new build path.
+    # Mirror into entity_df.attrs with entity-absolute idx. Sids are
+    # sequential & non-overlapping (§6.1), so each candle is written once by
+    # its owning sid — no cross-sid cascade.
     mirror_lower_tf_result_to_entity_df(
         entity_df,
         result,
         new_sid_id=entity_sid,
         structure_path_id=sub_path_id,
-        prior_sid_id=None,
     )
 
     print(

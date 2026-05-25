@@ -993,20 +993,21 @@ renders as a rectangle running the "wrong way" (e.g. left edge after the
 right edge) or as nothing, and "never activates" (the fill is empty because
 the active stretch is empty).
 
-**Root cause (current code):** the cascade (`_tag_old_sid_on_overwrite`)
-caps a superseded sid's `end_time` to the *overwriter sid's structure-start
-idx* (`m15_start_idx`), without checking that the zone's own start is
-already at/after that boundary. When a later sub's slice begins before a
-prior sub's late-formed zone, the cap lands before the zone's start. (This
-whole class of bug is removed by the sub-structure lifecycle redesign, which
-bounds each sid's run so the phantom late zone is never produced — see
-`memory/project_sub_structure_lifecycle_redesign.md`.)
+**Historical root cause (RESOLVED — cascade removed in redesign Phase 4,
+2026-05-25):** the old cascade (`_tag_old_sid_on_overwrite`) capped a
+superseded sid's `end_time` to the *overwriter sid's structure-start idx*
+(`m15_start_idx`), without checking that the zone's own start was already
+at/after that boundary. When a later sub's slice began before a prior sub's
+late-formed zone, the cap landed before the zone's start. The sub-structure
+lifecycle redesign (merge-and-bound, Phase 2) removed this whole class of bug
+by bounding each sid's run so the phantom late zone is never produced; Phase 4
+then deleted the cascade helper outright. See
+`memory/project_sub_structure_lifecycle_redesign.md`.
 
-**Diagnostic tool:** `engine_v2/debug/analyze_cascade_backward.py` — run
-after a replay; it scans the per-sub KL-zone debug CSVs for
-`end_time <= start_time` and tabulates parent_sid / parent_cycle_id /
-entity_sid / overwriter sid / boundary idx / base_idx / confirmed_idx. It
-also prints the M15.confluence sids inventory. Depends on the per-sub
-`*_kl_zones.csv` + `*_sids.csv` debug exports in `run_replay.py`. Use it to
-confirm the redesign drives the count to 0 once it lands. (Note: its strict
-`<` filter misses the `==` degenerate case — check both when verifying.)
+**If a backward/degenerate sub zone resurfaces:** the cascade is gone, so a
+new instance would point to a different mechanism (e.g. a zone-end cap landing
+before its start, or a bad slice→entity translation). The per-sub
+`*_kl_zones.csv` + `*_sids.csv` debug exports in `run_replay.py` are still
+emitted — inspect them directly for `end_time <= start_time` (check both the
+`<` backward and `==` degenerate cases). The purpose-built
+`analyze_cascade_backward.py` tool was deleted with the cascade.

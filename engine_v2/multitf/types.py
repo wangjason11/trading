@@ -57,7 +57,7 @@ class SidRecord:
     starting_sd: int                  # +1 / -1
     creation_event_idx: Optional[int] # candle idx where this sid begins
     end_event_idx: Optional[int]      # candle idx where this sid ends (None = still active)
-    end_reason: Optional[str]         # "reversal" | "lifecycle_end" | "overwritten_by_sid_..." | None
+    end_reason: Optional[str]         # "reversal" | "lifecycle_end" | None
     parent_sid: Optional[int] = None         # None for main
     parent_cycle_id: Optional[int] = None    # None for main
     meta: Dict[str, Any] = field(default_factory=dict)
