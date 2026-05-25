@@ -82,23 +82,35 @@ def build_sid_records_for_subordinate(
     `m15_start_idx` / `m15_end_idx`.
     """
     out: List[SidRecord] = []
-    for sid, result in enumerate(lower_tf_results):
+    for entity_sid, result in enumerate(lower_tf_results):
         trigger = result.trigger
         creation = result.meta.get("m15_start_idx")
         end = result.meta.get("m15_end_idx")
+        # Phase 2 (§2 / §6.1, 2026-05-25): canonical per-parent-cycle identity
+        # lives on result.meta. `SidRecord.sid` stays the entity-wide
+        # enumeration rank (== entity_sid, the chart's display key); the
+        # per-cycle `sid` + `started_by` + `start_trigger_idx` are recorded in
+        # meta. end_reason is now the sid's resolved end cause.
+        end_reason = result.meta.get(
+            "end_reason", "lifecycle_end" if end is not None else None,
+        )
 
         out.append(SidRecord(
-            sid=sid,
+            sid=entity_sid,
             starting_sd=int(trigger.lower_sd),
             creation_event_idx=int(creation) if creation is not None else None,
             end_event_idx=int(end) if end is not None else None,
-            end_reason="lifecycle_end" if end is not None else None,
+            end_reason=end_reason,
             parent_sid=int(trigger.parent_sid),
             parent_cycle_id=int(trigger.parent_cycle_id),
             meta={
                 "use_case": trigger.use_case,
                 "validated_parent_start": result.meta.get("validated_h1_start"),
                 "slice_begin": result.meta.get("slice_begin"),
+                # Canonical identity: per-parent-cycle sid + what spawned it.
+                "sid_in_cycle": result.meta.get("sid"),
+                "started_by": result.meta.get("started_by"),
+                "start_trigger_idx": result.meta.get("start_trigger_idx"),
                 # Parent-TF candle idx where the trigger event fired
                 # (BOS_CONFIRMED.confirmed_at for var1, sd-prox candle for
                 # var3/var4, etc). Stored on the trigger object.

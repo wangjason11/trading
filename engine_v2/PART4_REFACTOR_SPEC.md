@@ -1100,17 +1100,18 @@ between every step:
 
    - **§13.5.c (in-place overwrite infrastructure, §6.1 / §6.2):**
 
-     > **⚠ SUPERSEDED 2026-05-25.** This substep implements the
-     > cascade-overwrite model (entity-wide `entity_sid` +
-     > `_tag_old_sid_on_overwrite`). The revised §6 replaces it with a
-     > merge-and-bound sequential sid build (no overwrite, per-parent-cycle
-     > sid). The c.i/c.ii/c.iii substeps below already LANDED in code and
-     > remain in the repo, but the model they implement is being replaced;
-     > the new implementation follows the phased plan in
-     > `memory/project_sub_structure_lifecycle_redesign.md` (which removes
-     > `_tag_old_sid_on_overwrite`, the per-trigger `entity_sid`, and the
-     > slice/mirror machinery). The prose below is retained for historical
-     > context on what currently exists in the code.
+     > **⚠ SUPERSEDED 2026-05-25 — REPLACED IN CODE by redesign Phase 2.**
+     > This substep implemented the cascade-overwrite model (entity-wide
+     > `entity_sid` + `_tag_old_sid_on_overwrite` + per-trigger
+     > `apply_trigger_to_entity_df`). Redesign Phase 2 (DONE 2026-05-25)
+     > replaced it with the merge-and-bound sequential sid build
+     > (`build_parent_cycle_chain` + `build_one_sid`; no overwrite,
+     > per-parent-cycle sid). `apply_trigger_to_entity_df` is **removed**;
+     > the cascade (`_tag_old_sid_on_overwrite` + `cascade_*` fields) is
+     > **dead** (never fires — `prior_sid_id=None` always) and slated for
+     > deletion in redesign Phase 4. The c.i/c.ii/c.iii prose below is
+     > retained for HISTORICAL context only — it no longer describes the
+     > code. See `memory/project_sub_structure_lifecycle_redesign.md`.
 
      entity-df mutation when a new sid overwrites an older one in
      `[starting_idx, current_candle]`; old sid's zones / POIs / fibs /
