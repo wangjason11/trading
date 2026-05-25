@@ -864,6 +864,49 @@ list every place MS reads from `self.df` — there are at least five.
 
 ---
 
+## `MarketStructure.run()` Crashes When `start_idx >= n` (latent)
+
+**Rule:** Never call `MarketStructure.run()` (or any wrapper:
+`compute_structure_from_start`, `compute_bounded_structure`,
+`compute_structure_scenario_3`) with a `start_idx` at or past the end of
+its working df. The `i >= n` early-return at `market_structure.py:316` is
+broken.
+
+**The bug:**
+
+```python
+def run(self):
+    n = len(self.df)
+    i = int(self.start_idx)
+    if i < 0:
+        i = 0
+    if i >= n:
+        return self.df, self.events, self.levels   # ← self.levels never assigned
+```
+
+`self.levels` does not exist — `levels` is only ever a *local* var
+(`levels = self._events_to_structure_levels()`) on the normal path. So the
+`start_idx >= n` branch raises `AttributeError: 'MarketStructure' object has
+no attribute 'levels'` instead of returning an empty result.
+
+**How it surfaces (runtime-confirmed 2026-05-25):** a short synthetic
+fixture where `compute_structure_from_start` reversed early, then ran its
+post-reversal Exception-2 probe from a start idx that landed past
+end-of-data → crash inside the probe's `ms_probe.run()`. On the real
+NZD_USD replay this is dormant because reversals occur mid-data with room
+for the next structure.
+
+**Forward-looking trap for Phase 2 (merge-and-bound sub build):** Phase 2
+computes successor sid start idxs (next `subsequent_*` trigger / reversal
+handoff). A handoff idx that lands at/after the entity df's last row will
+hit this. Guard the start (`if start_idx >= n: return empty`) or fix
+line 316 to return the local levels (`self._events_to_structure_levels()`
+or `[]`) when stitching sids. `compute_bounded_structure` does not
+re-derive starts, so it's only exposed if a caller passes an
+out-of-bounds `start_idx`.
+
+---
+
 ## M15 Chart Sid-Tied Filter Uses `owner_by_idx` Per Rendered Candle
 
 **Rule:** §13.5.c.iii implements spec §16.5's "most recent sid only per

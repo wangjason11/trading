@@ -94,6 +94,26 @@ class StructureEngineResult:
 
 
 @dataclass
+class BoundedStructureResult:
+    """Result of a bounded SINGLE-structure run (Part 4 §5, REVISED 2026-05-25).
+
+    Unlike StructureEngineResult (multi-structure), this represents exactly
+    one directional structure (structure_id=0). `reversal_idx` is the
+    boundary to the next sub sid — the candle where the run hit its first
+    internal reversal — or None if no reversal occurred inside
+    `[start_idx, end_idx]` (bounded out by end_idx, or no reversal at all).
+    """
+    df: pd.DataFrame
+    levels: List[StructureLevel]
+    events: List[StructureEvent]
+    struct_direction: int
+    start_idx: int
+    end_idx: Optional[int]
+    reversal_idx: Optional[int]   # reversal pattern apply idx; None if no reversal in bounds
+    notes: str = ""
+
+
+@dataclass
 class Scenario3Result:
     df: pd.DataFrame
     levels: List[StructureLevel]
@@ -782,6 +802,99 @@ def compute_structure_from_start(
         levels=all_levels,
         events=all_events,
         struct_direction=struct_direction,
+        notes=notes,
+    )
+
+
+def compute_bounded_structure(
+    df: pd.DataFrame,
+    start_idx: int,
+    struct_direction: int,
+    *,
+    timeframe: str = "H1",
+    end_idx: Optional[int] = None,
+) -> BoundedStructureResult:
+    """Run a bounded SINGLE directional structure and stop at its first reversal.
+
+    Part 4 §5 (REVISED 2026-05-25) — the bounded single-structure primitive.
+    Each subordinate sid is a SINGLE directional structure whose first
+    reversal is the boundary to the next sid. This runs exactly one
+    MarketStructure (structure_id=0) over ``[start_idx, end_idx]`` and reports
+    where it reversed.
+
+    Unlike ``compute_structure_from_start``, this does NOT roll past the
+    reversal into further structure_ids, and does NOT run Scenario 2 /
+    Exception 2 probing — those are the multi-structure concerns this
+    primitive deliberately omits. The stop-at-first-reversal behaviour is
+    already intrinsic to ``MarketStructure.run()`` (its loop breaks on
+    ``MarketState.REVERSAL``); this wrapper just wires the proximity/zone
+    resolvers (via ``_make_market_structure``) and extracts the reversal idx.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with candle features/patterns already applied.
+    start_idx : int
+        Structural anchor to run from (already validated by the upstream
+        probe / identify_start — no internal Scenario 1).
+    struct_direction : int
+        +1 or -1. The single structure's direction for its whole run.
+    timeframe : str
+        TF for proximity-pips lookup (H1/M15/M5).
+    end_idx : int, optional
+        Inclusive upper bound on the run (parent-cycle-end or next subsequent
+        trigger). The run never writes/emits past it.
+
+    Returns
+    -------
+    BoundedStructureResult
+        ``reversal_idx`` = the first reversal-marked candle (the reversal
+        pattern's apply idx), or None if no reversal occurred within
+        ``[start_idx, end_idx]``.
+    """
+    _validate_input(df)
+
+    df2 = df  # MarketStructure copies internally; caller's df is untouched.
+    pip_size = _pip_size_from_pair(df2)
+
+    ms = _make_market_structure(
+        df2,
+        struct_direction=struct_direction,
+        start_idx=start_idx,
+        structure_id=0,
+        timeframe=timeframe,
+        pip_size=pip_size,
+        end_idx=end_idx,
+    )
+    ms.debug = True
+    df2, events, levels = ms.run()
+
+    # Reversal detection: same predicate compute_structure_from_start uses.
+    # A single run only ever writes structure_id=0; the structure_id==0
+    # filter also excludes any rows the terminal stamping marked "reversal"
+    # past end_idx (those were never written, so keep structure_id=-1).
+    rev_mask = (
+        (df2["market_state"].astype(str).str.lower() == "reversal")
+        & (df2["structure_id"].astype(int) == 0)
+    )
+    reversal_idx = int(df2.loc[rev_mask].index.min()) if rev_mask.any() else None
+
+    _validate_output(df2)
+
+    notes = (
+        f"BoundedStructure: start={start_idx} sd={struct_direction} "
+        f"end_idx={end_idx} reversal_idx={reversal_idx} "
+        f"events={len(events)} levels={len(levels)}"
+    )
+
+    return BoundedStructureResult(
+        df=df2,
+        levels=levels,
+        events=events,
+        struct_direction=struct_direction,
+        start_idx=start_idx,
+        end_idx=end_idx,
+        reversal_idx=reversal_idx,
         notes=notes,
     )
 

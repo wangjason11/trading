@@ -29,15 +29,25 @@ CONFIG = ReplayConfig(
     # start=datetime(2025, 12, 19, 0, 0, 0, tzinfo=timezone.utc),
     # end=datetime(2025, 12, 29, 23, 59, 59, tzinfo=timezone.utc),
 
+    # Prior window — POI two-stroke first sign-off (commit 6069ade, replay
+    # outputs in b81184b). Sub-debug session 2026-05-14 originally
+    # shortened from full 2026-01-20 to cut replay runtime.
+    # pair="NZD_USD",
+    # timeframe="H1",
+    # start=datetime(2025, 12, 1, 0, 0, 0, tzinfo=timezone.utc),
+    # end=datetime(2025, 12, 27, 0, 0, 0, tzinfo=timezone.utc),
+    # lower_timeframes=("M15",),
+
     pair="NZD_USD",
     timeframe="H1",
     # Use UTC for deterministic replay.
     start=datetime(2025, 12, 1, 0, 0, 0, tzinfo=timezone.utc),
-    # Sub-debug session 2026-05-14: temporary shortened window
-    # (end 2025-12-27 vs. normal 2026-01-20) to cut replay runtime
-    # while debugging subordinate-structure issues. Restore to
-    # 2026-01-20 once sub debug for this window is signed off.
-    end=datetime(2025, 12, 27, 0, 0, 0, tzinfo=timezone.utc),
+    # POI two-stroke incremental validation (2026-05-23 onward): step end
+    # forward in stages from 2025-12-27 (signed off in 6069ade / b81184b)
+    # toward the full 2026-01-20 window. Current step: 2026-01-07 (~11 days
+    # past prior sign-off, includes the New Year low-liquidity stretch +
+    # first two trading days of 2026).
+    end=datetime(2026, 1, 7, 0, 0, 0, tzinfo=timezone.utc),
     lower_timeframes=("M15",),
 
     # pair="NZD_USD",
