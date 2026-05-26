@@ -127,9 +127,17 @@ else:
     status = "inactive"
 ```
 
-**Currently following this convention:** `POIZone` (fully — `end_idx` +
-`end_reason` + `activation_history` + 3-state `status` + per-POI activation
-conditions decoupled from FibState). POI activation conditions
+**Currently following this convention:** `POIZone` and `KLZone` (both store
+`end_idx` + `end_reason` + `activation_history` + derived 3-state `status` in
+`meta`). `KLZone` joined the convention in the Phase 3 unified-lifecycle pass
+(2026-05-25): it computes no end of its own and inherits its owning cycle's
+resolved end (reversal / next-cycle CTS-established / parent-cycle-end for
+subs) — see `zones/KL_ZONES_SPEC.md` "Lifecycle". KL has no reversible
+condition-state, so its `activation_history` is the single interval
+`[{idx: confirmed_idx, active: True, reason: "confirmed"}]` and `status` is
+`"active"` until `end_idx`, then `"ended"`.
+
+POI activation conditions
 (per-candle, in `zones/poi_zones.py::_compute_poi_activation_history`):
   1. `cts_at(t) >= ic_idx` — IC lies within the fib's bounds at t
      (the fib's `cts_idx` only grows via `CTS_UPDATED`).
@@ -148,12 +156,37 @@ Scenario conditions (#4: per-scenario idx/price constraints) are gated
 at IC identification and not re-checked per candle (once the
 constraining event fires, the comparison is fixed).
 
+**Activation floor (both POI and KL).** A zone's first-active is clamped to
+its owning cycle's lifecycle-start: `first_active = max(<zone-specific
+confirm idx>, cycle_lifecycle_start)`, where `cycle_lifecycle_start =
+max(CTS_n ESTABLISHED idx, structure lifecycle-start[, parent sid
+lifecycle-start])`. This prevents a zone from activating before its
+structure is alive — e.g. a post-reversal cycle-0 zone whose
+`CTS_ESTABLISHED` precedes the reversal confirmation. See
+`PART4_REFACTOR_SPEC.md §5` (starting_idx vs lifecycle-start + the clamp).
+
 **Not yet following:** `FibState` (the `active` flag does double duty —
 condition-state for imbalance check AND terminal flag for `new_cycle` /
-`scenario1_revert` / `cross_failed` / `lifecycle_end`). `KLZone` similar
-(`meta["active"]` + `meta["deactivated_by"]` mix the two concepts). Future
-passes should split these along the same axes when those modules are
-touched substantially.
+`scenario1_revert` / `cross_failed` / `lifecycle_end`). The convention
+*applies in principle* — FibState genuinely has both axes (imbalance-fill is
+reversible condition-state; the four `deactivated_by` reasons are terminal) —
+but the migration is **deliberately deferred** to its own session: it spans
+~500 lines across `fib_tracker.py`, POI lifecycle, and chart/debug consumers,
+and the cross-fib versioning (`cross_shortened` / `cross_failed` spawning new
+`version`s) complicates the `activation_history` model. Folding it into the
+Phase 3 KL pass would broaden the regression surface and make `/compare`
+illegible. Tracked in `memory/project_lifecycle_convention_klzone_fibstate.md`.
+
+**Deliberately NOT lifecycle objects:** structure events
+(`df.attrs["structure_events"]`) and candle / structure patterns. These are
+**immutable, append-only historical facts** (`PART4_REFACTOR_SPEC.md §7`) —
+"what the algorithm believed at the time." They are never mutated and carry
+no `active`/`ended` state. Their only time-varying property is **currency**
+("which sid/cycle owns candle *t* for display"), and that is a *query-time
+derivation* (`owner_by_idx` / the §16.5 most-recent-sid chart filter), not
+state stored on the event. This is a settled decision, not a deferral: giving
+an immutable fact a mutable lifecycle would contradict the append-only event
+contract.
 
 **Why decouple:** mixing "condition-state" and "terminal-state" into one
 field (today's `active=False`) loses information. A consumer can't tell

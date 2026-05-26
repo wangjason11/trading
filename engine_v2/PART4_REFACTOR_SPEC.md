@@ -529,45 +529,126 @@ events list, and the zone/POI/fib/WVMI collections (append-only, keyed by
 
 ---
 
-### Unified lifecycle & start/end model (Locked — REVISED 2026-05-25)
+### Unified lifecycle & start/end model (Locked — REVISED 2026-05-26)
 
 Applies to **both** main and subordinate. Starts are the primitives; ends
 are **pass-throughs** of the next start's idx. Zones compute no end of
-their own — they inherit their owning cycle's resolved end.
+their own — they inherit their owning cycle's resolved end. A *structure*
+is identified by `sid` on main and by `(parent_sid, parent_cycle_id, sid)`
+on a sub.
 
 ```
 Zones end when:              its cycle ends
-Cycles end when:             1. next cycle starts
-                             2. next structure (sid) starts
+
+Cycles end when:             1. next cycle of the SAME structure starts
+                             2. its structure ends
+
 Structures end when:         1. next structure starts
-                             2. (sub only) parent next cycle / sid starts
-Next cycle starts when:      new CTS established
+                                  main: sid+1
+                                  sub:  (parent_sid, parent_cycle_id, sid+1)   [parent_* unchanged]
+                             2. (sub only) same parent's next cycle starts
+                             3. (sub only) parent structure ends
+
+ANY new cycle starts when:   new CTS established
+                             — CLAMP: a cycle's lifecycle-start may not precede
+                               its structure's lifecycle-start (main & sub); for
+                               a sub it also may not precede the parent sid's
+                               lifecycle-start. If the CTS-established idx is
+                               earlier, the cycle's true lifecycle-start is the
+                               LATEST of those floors.
+
 Next structure starts when:  1. reversal triggers
                              2. (sub only) subsequent use_case triggers
+                             — CLAMP (sub only): a new sub structure's
+                               lifecycle-start may not precede the parent sid's
+                               lifecycle-start. If earlier, it snaps to the
+                               parent sid's lifecycle-start.
+
+Zones start when:            the first time they become active (first confirmed),
+                             clamped to their cycle's lifecycle-start (see below).
 ```
 
 - **`end_idx` = the idx of the start event that supersedes.** When a start
-  fires at idx X, X becomes the `end_idx` of whatever it ends.
+  fires at idx X, X becomes the `end_idx` of whatever it ends. Ends use the
+  *clamped* next-start idx (matters only for subs/collapse — see below).
 - **Propagation closes the open child.** Whenever a *structure* ends (for
   ANY reason in the Structures-end list — including the sub-only
-  parent-next-cycle case), its currently-open *cycle* ends at the same idx,
-  and that cycle's *zones* end with it. This is how the last cycle of a
-  structure that ends via parent-cycle-end still closes cleanly even though
-  no "next cycle / next structure starts" event fired inside the entity.
-- **Main vs sub.** Main uses the rows without the "(sub only)" qualifiers
-  (cycle ends on next cycle / next structure; structure ends on reversal).
-  Subordinate adds: `subsequent_*` triggers as a `next structure starts`
-  cause, and parent-next-cycle as a `structure ends` cause.
-- **Active window vs anchor.** `end_idx` + lifecycle-start (§2) define the
-  active window `[lifecycle_start, end_idx)`. A zone rectangle may be
-  *drawn* from its `starting_idx` / base / IC candle (possibly before it is
-  active), but its **fill** is gated to the active window — existing chart
-  non-fill logic already handles this, so charting needs no change.
-- **Unifies KL and POI.** POI already resolves `end_idx` + `end_reason` by
-  the reversal / next_cycle priority. KL migrates to the same model (today
-  KL uses scattered `end_time`-only mechanisms — CTS_ESTABLISHED early-end,
-  same-side replacement, reversal/lifecycle caps). Post-migration both read
-  their cycle's resolved end instead of computing their own.
+  parent-next-cycle / parent-structure-end cases), its currently-open
+  *cycle* ends at the same idx, and that cycle's *zones* end with it. This is
+  how the last cycle of a structure that ends via parent-cycle-end still
+  closes cleanly even though no "next cycle / next structure starts" event
+  fired inside the entity.
+- **"Any new cycle" vs "next structure."** *Every* cycle start — whether the
+  next cycle on the same sid, cycle 0 of a reversed sid, or cycle 0 of a new
+  sub sid — is triggered by a new CTS established, so the cycle-start rule
+  and its clamp are universal. "Next structure" is deliberately narrower
+  (the `sid+1` successor with parent identity fixed); the parent-driven sub
+  endings are separate structure-end causes.
+
+##### starting_idx vs lifecycle-start, and the clamp (REVISED 2026-05-26)
+
+Each structure and each cycle has two distinct idxs (the §2 split,
+generalized):
+
+- **`starting_idx`** — the structural anchor: the retroactive
+  BOS-equivalent candle the probe / `identify_start` selected. May sit
+  *historically* before the entity is even alive.
+- **lifecycle-start** — the first idx at which it is *active*:
+  - **main structure:** sid 0 → its `starting_idx`; sid N≥1 → the reversal
+    confirmation idx of sid N−1 (`STATE_CHANGED to=='reversal'`).
+  - **sub structure:** its trigger idx (`start_trigger_idx`, §6.1), clamped
+    `≥ parent sid lifecycle-start`.
+  - **cycle (any):** `max(CTS_established_idx, owning-structure
+    lifecycle-start)`. The structure's lifecycle-start already embeds the
+    parent floor for subs, so the parent floor enters once (at the structure
+    level) and cycles inherit it transitively.
+
+Why the clamp is needed: a reversal's confirmation candle is when the new
+sid's lifecycle begins, but the probe can place the new sid's `starting_idx`
+historically, so its cycle-0 `CTS_ESTABLISHED` can fall *before* the
+reversal confirmation. That cycle cannot have started before its structure
+did. (Concrete instance in the 2025-12 NZD_USD run: sid 1 cycle 0
+`CTS_ESTABLISHED` at idx 703, sid 0 reversal at idx 710 → cycle 0's
+lifecycle-start clamps to 710.) The same floor applies down the hierarchy so
+sub cycles/structures never start before their parent.
+
+- **Collapse is allowed.** If a clamped lifecycle-start lands at or past the
+  owning cycle's/structure's end, that cycle/zone simply never has an active
+  window (it stays in the list as history, `status` never `active`). For
+  subs whose anchor sits well behind the parent start, several early cycles
+  can collapse this way.
+- **Anchor unchanged; only the active window moves.** A zone rectangle is
+  still *drawn* from its `starting_idx` / base / IC candle; the clamp only
+  raises its **first-active / `confirmed_idx` / `status`** to the cycle
+  lifecycle-start. Structure events, df columns, patterns, and the structural
+  `starting_idx` are immutable facts — the clamp never rewrites them (so
+  `structure_events` stays byte-identical; any shift there is a red flag).
+
+- **Unifies KL and POI (Phase 3, 2026-05-26).** POI already resolved
+  `end_idx` + `end_reason` by the reversal / next_cycle priority and gated
+  activation at `max(cts_established_idx, ic_idx)`. KL now uses the same
+  end-resolution (its prior scattered `end_time` mechanisms — CTS_ESTABLISHED
+  early-end, same-side replacement, reversal/lifecycle caps — are removed)
+  and adopts the active/inactive/ended convention
+  (`end_idx`/`end_reason`/`activation_history`/`status` in `meta`). Both
+  zone kinds also floor first-active at the cycle lifecycle-start per the
+  clamp. **End-side change:** both BOS and CTS zones of cycle *n* now end at
+  the next cycle's `CTS_ESTABLISHED` `ev.idx` (the CTS extreme — the idx POI
+  uses). The CTS-zone end is unchanged (already this idx). The BOS-zone end
+  moves from the old next-BOS-`confirmed_at` (breakout) to that extreme idx —
+  identical when the breakout candle *is* the extreme, else ≤1 candle earlier.
+  Empirically the H1 main is byte-identical (breakout == extreme for all
+  sampled cycles); the M15 subs (BOS-only zones) show one 1-candle BOS-end
+  shift each. **Start-side change:** post-reversal cycle-0 zones (and sub
+  analogues) shift their active-start forward to the clamped lifecycle-start.
+  See `zones/KL_ZONES_SPEC.md` "Lifecycle" and `ARCHITECTURE.md`.
+- **Scope of the unification.** The pass-through lifecycle model governs
+  **zones and cycles** (KL + POI). It deliberately does **not** apply to
+  structure events or patterns — those are immutable append-only facts whose
+  only time-varying property is currency (`owner_by_idx` / §16.5), not
+  lifecycle state. `FibState` *should* eventually adopt the convention (it has
+  both axes) but its migration is deferred to its own session. Both decisions
+  are written up in `ARCHITECTURE.md` "Lifecycle state convention".
 
 ---
 

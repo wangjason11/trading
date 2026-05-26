@@ -402,6 +402,27 @@ assumes "POI ⟹ sd direction."
 - Zone can disappear if IC no longer qualifies on subsequent candles
 - Zone re-appears if IC qualifies again (but `confirmed_idx` stays as first activation)
 
+### Activation floor — cycle lifecycle-start clamp (REVISED 2026-05-26)
+
+POI activation is gated to start no earlier than the owning cycle's
+lifecycle-start. The activation scan begins at:
+
+```
+first_active = max(cts_established_idx, ic_idx, cycle_lifecycle_start)
+```
+
+where `cycle_lifecycle_start = max(CTS_n ESTABLISHED idx, structure
+lifecycle-start[, parent sid lifecycle-start])` per the unified model
+(`PART4_REFACTOR_SPEC.md §5`). Before this change the floor was just
+`max(cts_established_idx, ic_idx)`; the added term clamps **post-reversal
+cycle-0 POIs** (and sub analogues) whose `CTS_ESTABLISHED` precedes the
+structure's lifecycle-start (e.g. probe placed the anchor historically).
+Any activate/deactivate flips before `first_active` are discarded; if the
+POI would have been active earlier, its first active snaps to
+`first_active`. If `first_active >= end_idx` the POI never activates
+(`activation_history = []`, `status` never `"active"`), kept in the list as
+history.
+
 ---
 
 ## 5. Charting

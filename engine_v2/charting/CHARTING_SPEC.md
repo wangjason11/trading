@@ -205,7 +205,7 @@ Implementation: shared helpers in `engine_v2/charting/_zone_render.py`:
 ### Main H1 chart — existing 3-tier cascade (unchanged tier logic)
 
 **Tier selection:**
-- KL: `meta["active"]==True AND end_time is None` → `active`; else if `structure_id == most_recent_sid` → `recent_inactive`; else `prior_inactive`.
+- KL: `meta["status"]=="active"` → `active`; else if `structure_id == most_recent_sid` → `recent_inactive`; else `prior_inactive`. (Phase 3, 2026-05-26: KL adopted the active/inactive/ended convention — the old `meta["active"] AND end_time is None` test is gone.)
 - POI: `meta["status"]=="active"` → `active`; else if `structure_id == most_recent_poi_sid` → `recent_inactive`; else `prior_inactive`.
 
 **Tier multipliers** (`STYLE["opacity_tiers"]`): `active=1.0`, `recent_inactive=0.5`, `prior_inactive=0.2`.

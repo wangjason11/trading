@@ -223,7 +223,8 @@ def mirror_lower_tf_result_to_entity_df(
         new_events.append(new_ev)
     _attrs_setdefault_list(entity_df, "events").extend(new_events)
 
-    # 4. KL zones — idx only in meta (and bounds_steps[*]["start_idx"])
+    # 4. KL zones — idx only in meta (bounds_steps[*]["start_idx"] +
+    #    activation_history[*]["idx"] under the Phase 3 convention)
     new_kl = []
     for z in result.kl_zones:
         new_meta = _shift_meta_indices(z.meta, _ZONE_META_IDX_KEYS, slice_begin)
@@ -235,6 +236,12 @@ def mirror_lower_tf_result_to_entity_df(
                     new_step["start_idx"] = new_step["start_idx"] + slice_begin
                 steps.append(new_step)
             new_meta["bounds_steps"] = steps
+        ah = new_meta.get("activation_history")
+        if ah:
+            new_meta["activation_history"] = [
+                {**ev, "idx": int(ev["idx"]) + slice_begin}
+                for ev in ah
+            ]
         new_meta.update(attribution)
         new_kl.append(replace(z, meta=new_meta))
     _attrs_setdefault_list(entity_df, "kl_zones").extend(new_kl)
@@ -622,14 +629,21 @@ def build_one_sid(
     for zone in downstream["kl_zones"]:
         zone.meta.update(attribution)
 
+    # KL cap = the structure-end → open-cycle-end → zone-end pass-through for
+    # subs (Phase 3 convention). Open/late KL zones inherit the sub's effective
+    # end (reversal or parent lifecycle_end). cap_idx_local is slice-local; the
+    # mirror translates end_idx to entity-absolute alongside confirmed_idx.
     capped_zones = []
     for zone in downstream["kl_zones"]:
         if zone.end_time is None or zone.end_time > cap_time:
+            ah = zone.meta.get("activation_history") or []
             zone = _replace(
                 zone,
                 end_time=cap_time,
-                meta={**zone.meta, "active": False,
-                      "deactivated_by": end_reason},
+                meta={**zone.meta,
+                      "end_idx": cap_idx_local,
+                      "end_reason": end_reason,
+                      "status": "ended" if ah else "inactive"},
             )
         capped_zones.append(zone)
 

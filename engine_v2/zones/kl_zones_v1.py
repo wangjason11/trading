@@ -828,7 +828,11 @@ def derive_kl_zones_v1(
 
             continue
 
-        # CTS_ESTABLISHED: end the active CTS zone early (before next CTS_CONFIRMED)
+        # CTS_ESTABLISHED: release the active CTS-zone tracker so the prior
+        # cycle's CTS zone is no longer the expansion target. Phase 3: the
+        # zone's end_time is owned by the cycle-end post-pass (no end-write
+        # here — the old "cts_established" early-end is subsumed by the
+        # cycle inheriting next-cycle CTS-established as its end).
         if ev.type == "CTS_ESTABLISHED":
             cts_side = "sell" if sd == 1 else "buy"
             zi = active_sell_idx if cts_side == "sell" else active_buy_idx
@@ -836,12 +840,6 @@ def derive_kl_zones_v1(
                 z0 = zones[zi]
                 if (int((z0.meta or {}).get("structure_id", -999)) == sid
                         and z0.source_kind == "CTS"):
-                    zones[zi] = replace(
-                        z0,
-                        end_time=_time(int(ev.idx)),
-                        meta={**(z0.meta or {}), "active": False,
-                              "deactivated_by": "cts_established"},
-                    )
                     if cts_side == "sell":
                         active_sell_idx = None
                     else:
@@ -868,20 +866,11 @@ def derive_kl_zones_v1(
         if sid < 0 and "structure_id" in dfx.columns:
             sid = int(dfx.loc[confirmed_idx, "structure_id"])
 
-        # --- Structure change detection: deactivate ALL zones from previous structure at reversal ---
+        # --- Structure change detection: release trackers when a new structure
+        # begins after a reversal. Phase 3: per-zone reversal end-writes removed
+        # — the cycle-end post-pass caps prior-structure zones at the reversal
+        # idx via end_reason="reversal".
         if current_sid is not None and sid != current_sid and current_sid in rev_confirmed_by_sid:
-            rev_idx = int(rev_confirmed_by_sid[current_sid])
-            rev_time = _time(rev_idx)
-            # Deactivate all zones from the previous structure
-            for zi, zold in enumerate(zones):
-                old_sid = (zold.meta or {}).get("structure_id", None)
-                if old_sid == current_sid and zold.end_time is None:
-                    zones[zi] = replace(
-                        zold,
-                        end_time=rev_time,
-                        meta={**(zold.meta or {}), "active": False, "deactivated_by": "reversal"},
-                    )
-            # Reset active trackers for the new structure
             active_buy_idx = None
             active_sell_idx = None
 
@@ -942,54 +931,18 @@ def derive_kl_zones_v1(
                         "event": "INIT",
                     }
                 ],
-
-                "active": True,
             },
         )
 
-        # Enforce 1 active per side (within same structure): deactivate previous active of same side
-        deactivate_time = _time(confirmed_idx)  # zone becomes inactive when the NEW zone confirms
-
+        # Track the most-recent zone per side (the expansion target for
+        # *_THRESHOLD_UPDATED). Phase 3: the prior same-side zone's end_time is
+        # owned by the cycle-end post-pass (no end-write on replacement).
         if side == "buy":
-            if active_buy_idx is not None:
-                prev = zones[active_buy_idx]
-                # Only deactivate if same structure (cross-structure handled above)
-                if (prev.meta or {}).get("structure_id") == sid:
-                    zones[active_buy_idx] = replace(
-                        prev,
-                        end_time=deactivate_time,
-                        meta={**prev.meta, "active": False},
-                    )
             active_buy_idx = len(zones)
         else:
-            if active_sell_idx is not None:
-                prev = zones[active_sell_idx]
-                # Only deactivate if same structure (cross-structure handled above)
-                if (prev.meta or {}).get("structure_id") == sid:
-                    zones[active_sell_idx] = replace(
-                        prev,
-                        end_time=deactivate_time,
-                        meta={**prev.meta, "active": False},
-                    )
             active_sell_idx = len(zones)
 
         zones.append(z)
-
-    # --- Terminal structure end: if reversal occurs, end any still-active zones at the reversal candle ---
-    # (This handles zones from the LAST structure if no new structure zones were created after reversal)
-    for zi, z in enumerate(zones):
-        sid = (z.meta or {}).get("structure_id", None)
-        if sid is None or sid not in rev_confirmed_by_sid:
-            continue
-        if z.end_time is not None:
-            continue
-
-        rev_idx = int(rev_confirmed_by_sid[sid])
-        zones[zi] = replace(
-            z,
-            end_time=_time(rev_idx),
-            meta={**(z.meta or {}), "active": False, "deactivated_by": "reversal"},
-        )
 
     # ------------------------------------------------------------------
     # Post-pass: process CTS_RECONFIRMED events. When CTS was first
@@ -1023,6 +976,81 @@ def derive_kl_zones_v1(
                 },
             )
             break
+
+    # ------------------------------------------------------------------
+    # Phase 3 (2026-05-26): unified lifecycle. Each zone inherits its owning
+    # cycle's resolved end and adopts the active/inactive/ended convention,
+    # replacing the prior scattered end mechanisms (CTS_ESTABLISHED early-end,
+    # same-side replacement, reversal/terminal caps). End resolution mirrors
+    # POI (zones/poi_zones.py): first of {reversal, next-cycle CTS-established}.
+    # See KL_ZONES_SPEC.md "Lifecycle".
+    #
+    # NOTE (Commit 1): confirmed_idx is left UNCLAMPED here — the
+    # lifecycle-start clamp (cycle/structure floors) lands in Commit 2.
+    # ------------------------------------------------------------------
+    last_candle = int(dfx.index.max())
+
+    # CTS_ESTABLISHED idx per (sid, cycle) — the next-cycle boundary source.
+    cts_est_by_key: dict = {}
+    for ev in events:
+        if ev.type != "CTS_ESTABLISHED":
+            continue
+        esid = (ev.meta or {}).get("structure_id")
+        ecyc = (ev.meta or {}).get("cycle_id")
+        if esid is None or ecyc is None:
+            continue
+        cts_est_by_key[(int(esid), int(ecyc))] = int(ev.idx)
+
+    for zi, z in enumerate(zones):
+        zmeta = z.meta or {}
+        zsid = zmeta.get("structure_id")
+        zcyc = zmeta.get("cycle_id")
+        confirmed_idx = int(zmeta.get("confirmed_idx"))
+
+        # end_idx/end_reason: first of {reversal, next-cycle CTS-established}.
+        end_idx = None
+        end_reason = None
+        if zsid is not None and int(zsid) in rev_confirmed_by_sid:
+            end_idx = int(rev_confirmed_by_sid[int(zsid)])
+            end_reason = "reversal"
+        if zsid is not None and zcyc is not None:
+            next_key = (int(zsid), int(zcyc) + 1)
+            if next_key in cts_est_by_key:
+                next_cts = cts_est_by_key[next_key]
+                if end_idx is None or next_cts < end_idx:
+                    end_idx = next_cts
+                    end_reason = "next_cycle"
+
+        end_time = _time(end_idx) if end_idx is not None else None
+
+        # KL has a single active interval from confirmed_idx (no condition-state
+        # flips). Collapsed (never active) if it would start at/after end_idx.
+        if end_idx is not None and confirmed_idx >= end_idx:
+            activation_history = []
+        else:
+            activation_history = [
+                {"idx": confirmed_idx, "active": True, "reason": "confirmed"}
+            ]
+
+        # Derived 3-state status at end-of-data (mirrors POI).
+        if end_idx is not None and end_idx <= last_candle:
+            status = "ended"
+        elif activation_history:
+            status = "active"
+        else:
+            status = "inactive"
+
+        new_meta = {
+            k: v for k, v in zmeta.items()
+            if k not in ("active", "deactivated_by")
+        }
+        new_meta.update({
+            "end_idx": end_idx,
+            "end_reason": end_reason,
+            "activation_history": activation_history,
+            "status": status,
+        })
+        zones[zi] = replace(z, end_time=end_time, meta=new_meta)
 
     return zones
 

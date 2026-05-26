@@ -104,8 +104,8 @@ def _run_downstream_pipeline(
     if kl_zones:
         from collections import Counter
         print(f"{pfx}[kl_zones] base_pattern counts:", Counter([z.meta.get("base_pattern") for z in kl_zones]).most_common(10))
-        print(f"{pfx}[kl_zones] active buy:", sum(1 for z in kl_zones if z.side=="buy" and z.meta.get("active")))
-        print(f"{pfx}[kl_zones] active sell:", sum(1 for z in kl_zones if z.side=="sell" and z.meta.get("active")))
+        print(f"{pfx}[kl_zones] active buy:", sum(1 for z in kl_zones if z.side=="buy" and z.meta.get("status")=="active"))
+        print(f"{pfx}[kl_zones] active sell:", sum(1 for z in kl_zones if z.side=="sell" and z.meta.get("status")=="active"))
 
     # 5b) Wave candle identification — use the full zone set so we produce
     # both BOS and CTS wave candles even when the caller filters via

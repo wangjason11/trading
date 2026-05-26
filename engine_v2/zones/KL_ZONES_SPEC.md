@@ -134,16 +134,129 @@ When later threshold update events imply bounds extension:
 
 ---
 
-## Active / inactive zones
+## Lifecycle: zones inherit their cycle's end (Unified model — REVISED 2026-05-26, Phase 3)
 
-The engine maintains:
-- 1 active buy + 1 active sell zone per structure_id (the most recent of each)
-- Older zones become inactive but still visualized under active zones.
-- Charting uses opacity to convey active vs inactive.
+> **This section supersedes the prior "Active / inactive zones" + "CTS zone
+> early ending" behavior.** Before Phase 3, KL zones computed their own end
+> via three scattered mechanisms (CTS_ESTABLISHED early-end, same-side
+> replacement, reversal/lifecycle caps). Those are removed. A KL zone now
+> computes **no end of its own** — it inherits the resolved end of the cycle
+> that owns it, exactly as POI zones already do
+> (`zones/poi_zones.py`). This is the KL half of the pass-through lifecycle
+> model in `PART4_REFACTOR_SPEC.md §5` and the active/inactive/ended
+> convention in `ARCHITECTURE.md`.
 
-### CTS zone early ending
+### Cycle ownership
 
-CTS zones end at `CTS_ESTABLISHED` (not at the next `CTS_CONFIRMED`). When a new CTS is established, the previous CTS zone's `end_time` is set to the CTS_ESTABLISHED candle's time, and its `active` flag is set to `False` with `deactivated_by = "cts_established"`.
+Every KL zone belongs to a `(structure_id, cycle_id)`, read from
+`meta["structure_id"]` and `meta["cycle_id"]` (= `cts_cycle_id` at the
+zone's `confirmed_idx`). Within one structure, cycle *n* owns exactly two
+zones: the **BOS_n** zone (buy if `sd=+1`, sell if `sd=-1`) and the
+**CTS_n** zone (the opposite side).
+
+### End resolution (pure inheritance — identical to POI)
+
+A cycle ends at the first of:
+1. **reversal** of its structure, or
+2. **next cycle starts** — the `(structure_id, cycle_id+1)` `CTS_ESTABLISHED` idx.
+
+```python
+end_idx = None; end_reason = None
+if sid has a reversal:                end_idx, end_reason = reversal_idx[sid], "reversal"
+if (sid, cycle_id+1) CTS_ESTABLISHED exists and < end_idx (or end_idx is None):
+                                      end_idx, end_reason = next_cts_est_idx, "next_cycle"
+# else: end_idx = None  → zone extends to end of data
+```
+
+Both the BOS_n and CTS_n zone of cycle *n* inherit this **same** `end_idx` /
+`end_reason`. `end_time = df.time[end_idx]` (or `None`). For subordinate
+(lower-TF) structures the owning structure also ends at parent-cycle-end;
+that propagation is applied as a cap with `end_reason="lifecycle_end"` in
+`multitf/entity_df_mutation.py::build_one_sid` (the structure-end →
+open-cycle-end → zone-end pass-through for subs).
+
+### End-side change: BOS ends align to the cycle boundary (CTS-established extreme)
+
+The cycle boundary is the next cycle's `CTS_ESTABLISHED` **`ev.idx`** — the
+CTS *extreme* candle (the same idx POI uses: `cts_established_by_key[next].idx`).
+Both the BOS_n and CTS_n zone of cycle *n* now end there.
+
+| Zone | Old end | New end (cycle-end) | Change |
+|------|---------|---------------------|--------|
+| **CTS_n** | next CTS established `ev.idx` (early-end) | next CTS established `ev.idx` | **none** — already this idx |
+| **BOS_n** | next BOS's `confirmed_at` (breakout, same-side replace) | next CTS established `ev.idx` (extreme) | **≤1 candle earlier** — see below |
+| reversal-capped | reversal idx | reversal idx | label only (`end_reason` replaces `deactivated_by`) |
+| last / open zone | `None` / reversal | `None` / reversal | none |
+
+The BOS shift size depends on whether the breakout candle is itself the CTS
+extreme: a breakout emits `BOS_{n+1} CONFIRMED` (`confirmed_at` = breakout
+`apply_idx`) and `CTS_{n+1} ESTABLISHED` (`ev.idx` = the breakout-window
+extreme) together. When the breakout candle *is* the extreme they coincide
+(`confirmed_at == ev.idx`) and the BOS end is unchanged; otherwise `ev.idx`
+is 1 candle earlier. **Empirically:** all 10 H1 zones in baseline `e0b70dd`
+had `confirmed_at == ev.idx`, so H1 `end_time` is byte-identical; on the M15
+subs (BOS-only zones) exactly one BOS zone per sub shifts 1 candle earlier
+(e.g. counter cyc1: 09:15→09:00). This is the intended unification — BOS
+ends now match where CTS/POI of the same cycle end, removing the old
+1-candle inconsistency between a cycle's BOS and CTS zone ends.
+
+Aside from that ≤1-candle BOS alignment, the end side is a *representation*
+change (`active`→`status`, `deactivated_by`→`end_reason`, +`end_idx`). (See
+the start-side clamp below for the other behavioral change.)
+
+### Lifecycle-start clamp (start-side behavior change — REVISED 2026-05-26)
+
+A KL zone's first-active is clamped to its cycle's lifecycle-start
+(`PART4_REFACTOR_SPEC.md §5`): `first_active = max(confirmed_idx,
+cycle_lifecycle_start)`, where `cycle_lifecycle_start = max(CTS_n
+ESTABLISHED idx, structure lifecycle-start[, parent sid lifecycle-start])`.
+
+- The CTS_n zone's `confirmed_idx` (its pullback candle) is always after the
+  cycle start, so it is rarely clamped.
+- The BOS_n zone's `confirmed_idx` (the breakout) equals the cycle's
+  CTS-established for *normal* cycles, but for **post-reversal cycle 0** the
+  probe can place the structure's anchor historically so cycle-0
+  CTS-established precedes the reversal confirmation. Then the BOS (and CTS)
+  zone's first-active snaps forward to the structure lifecycle-start. (Live
+  instance: sid 1 cycle 0 zones at idx 703 → clamp to the sid-0 reversal at
+  710.)
+- The zone **rectangle is still drawn from `base_idx`** (historical anchor);
+  only first-active / `confirmed_idx` / `status` move. If the clamped
+  first-active lands at/after `end_idx`, the zone never becomes active
+  (`status` never `"active"`; kept in the list as history).
+
+### State convention fields (in `meta`, mirroring POI)
+
+KLZone follows the active/inactive/ended convention
+(`ARCHITECTURE.md`). The fields live in `meta` (KLZone is a frozen
+dataclass; POI stores the same set in `meta`):
+
+| Field | Meaning |
+|-------|---------|
+| `end_idx` | Terminal idx if the cycle ended, else `None` |
+| `end_reason` | `"reversal"` \| `"next_cycle"` \| `"lifecycle_end"` (subs) \| `None` |
+| `activation_history` | KL has no condition-state flips, so it is the single interval `[{"idx": clamped_first_active, "active": True, "reason": "confirmed"}]`, or `[]` if the clamped first-active is at/after `end_idx` (collapsed — never active) |
+| `status` (derived) | `"active"` (clamped-confirmed, not ended) \| `"ended"` (`t >= end_idx`) \| `"inactive"` (before clamped first-active, or collapsed) |
+
+`status` is derived once at end-of-data (like POI). The retired
+`meta["active"]` boolean and `meta["deactivated_by"]` string are gone —
+consumers read `meta["status"]`. `confirmed_idx` in meta is the **clamped**
+first-active idx (`max(raw confirmed_idx, cycle lifecycle-start)`).
+
+### Charting (rectangle extent unchanged; confirm marker may move)
+
+The chart still shows the most-recent buy + sell zone of the most-recent
+structure at full opacity, and tiering keys on `meta["status"]=="active"`
+instead of the old `meta["active"] AND end_time is None`. Rectangle extents
+are unchanged (`base_idx` → `end_time`, both timing-invariant). The only
+visible shift is for **post-reversal cycle-0 zones**, whose confirm marker /
+active-start moves forward to the clamped lifecycle-start.
+
+### Prior model (historical, pre-Phase-3)
+
+For reference, the removed behavior was:
+
+CTS zones ended at `CTS_ESTABLISHED` (not at the next `CTS_CONFIRMED`). When a new CTS is established, the previous CTS zone's `end_time` is set to the CTS_ESTABLISHED candle's time, and its `active` flag is set to `False` with `deactivated_by = "cts_established"`.
 
 This means there can be periods with **no active CTS zone** — between CTS_ESTABLISHED (old zone ends) and CTS_CONFIRMED (new zone created). BOS zones are unaffected; they still end when replaced by a new BOS zone of the same side.【fileciteturn2file0】
 

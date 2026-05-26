@@ -1822,7 +1822,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             parent_zone = h1_zone_lookup.get(zk)
 
             if parent_zone is not None:
-                z_active = bool(parent_zone.meta.get("active", False)) and (parent_zone.end_time is None)
+                z_active = (parent_zone.meta or {}).get("status") == "active"
                 zone_sid = int(parent_zone.meta.get("structure_id", 0))
             else:
                 z_active = False

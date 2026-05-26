@@ -1650,7 +1650,7 @@ def export_chart_plotly(
              z.meta.get("confirmed_idx"),
              z.meta.get("cycle_id"),
              z.meta.get("structure_id"),
-             z.meta.get("active"))
+             z.meta.get("status"))
             for z in zones_cur
         ])
 
@@ -1661,7 +1661,7 @@ def export_chart_plotly(
         # 1) inactive first (underneath), active last (on top)
         # 2) older start_time first, newer last
         def _zone_sort_key(z):
-            active = bool(z.meta.get("active", False))
+            active = (z.meta or {}).get("status") == "active"
             st = pd.to_datetime(z.start_time, utc=True)
             # active False -> 0 (draw earlier), active True -> 1 (draw later/on top)
             return (1 if active else 0, st)
@@ -1676,7 +1676,7 @@ def export_chart_plotly(
         # We'll add top/bottom transparent hv lines per zone.
         for z in zones_cur:
             side = str(z.side)
-            active = bool((z.meta or {}).get("active", False)) and (z.end_time is None)
+            active = (z.meta or {}).get("status") == "active"
             zone_sid = int(z.meta.get("structure_id", 0))
 
             stz = _zone_style(side)
@@ -1936,7 +1936,7 @@ def export_chart_plotly(
             parent_zone = zone_lookup.get(zk)
 
             if parent_zone is not None:
-                z_active = bool(parent_zone.meta.get("active", False)) and (parent_zone.end_time is None)
+                z_active = (parent_zone.meta or {}).get("status") == "active"
                 zone_sid = int(parent_zone.meta.get("structure_id", 0))
             else:
                 z_active = False
@@ -2249,7 +2249,7 @@ def export_chart_plotly(
                 continue
 
             rgb = m15_style.get("rgb", "128, 128, 128")
-            is_active = zone.meta.get("active", False)
+            is_active = zone.meta.get("status") == "active"
             fill_op = m15_style.get("fill_opacity_active" if is_active else "fill_opacity_inactive", 0.1)
             line_dash = m15_style.get("line_dash", "dash")
             line_width = m15_style.get("confirm_line_width", 1.5)
