@@ -1,0 +1,4 @@
+commit_hash=e352ef8
+timestamp=20260526_080638
+branch=week8-volmom-multitf
+commit_message=Phase 3 Commit 2: lifecycle-start clamp
