@@ -1,0 +1,6 @@
+sid,starting_sd,creation_event_idx,end_event_idx,end_reason,parent_sid,parent_cycle_id,meta
+0,-1,2609,2843,lifecycle_end,0,2,"{'use_case': 'first_counter', 'validated_parent_start': 652, 'slice_begin': 2559, 'sid_in_cycle': 0, 'started_by': 'first_counter', 'start_trigger_idx': 2609, 'trigger_event_idx': 683}"
+1,1,3230,3589,reversal,1,1,"{'use_case': 'first_counter', 'validated_parent_start': 807, 'slice_begin': 3180, 'sid_in_cycle': 0, 'started_by': 'first_counter', 'start_trigger_idx': 3230, 'trigger_event_idx': 820}"
+2,-1,3304,3611,lifecycle_end,1,1,"{'use_case': 'reversal', 'validated_parent_start': None, 'slice_begin': 3254, 'sid_in_cycle': 1, 'started_by': 'reversal', 'start_trigger_idx': 3589, 'trigger_event_idx': 820}"
+3,1,3621,4071,lifecycle_end,1,2,"{'use_case': 'first_counter', 'validated_parent_start': 905, 'slice_begin': 3571, 'sid_in_cycle': 0, 'started_by': 'first_counter', 'start_trigger_idx': 3621, 'trigger_event_idx': 926}"
+4,1,4027,4227,lifecycle_end,1,2,"{'use_case': 'subsequent_counter', 'validated_parent_start': 1006, 'slice_begin': 3977, 'sid_in_cycle': 1, 'started_by': 'subsequent_counter', 'start_trigger_idx': 4071, 'trigger_event_idx': 1017}"

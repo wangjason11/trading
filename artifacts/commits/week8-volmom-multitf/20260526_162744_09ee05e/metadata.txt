@@ -1,0 +1,4 @@
+commit_hash=09ee05e
+timestamp=20260526_162744
+branch=week8-volmom-multitf
+commit_message=Fix POI confirmed_idx collapse: per-candle activation gate restores sid1 cyc2 proximity candles 926/954
