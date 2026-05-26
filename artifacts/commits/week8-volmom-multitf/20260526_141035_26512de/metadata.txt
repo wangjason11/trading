@@ -1,0 +1,4 @@
+commit_hash=26512de
+timestamp=20260526_141035
+branch=week8-volmom-multitf
+commit_message=Phase 5: trigger-centric sub-WVMI gating + per-entity wvmi CSV export (full window 2026-01-20)
