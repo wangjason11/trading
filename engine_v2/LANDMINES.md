@@ -516,11 +516,13 @@ relocating the inline-derivation primitives to their natural home in
 
 ## Chart Entry Points: Use Registry, Not Positional df
 
-**Rule:** `export_m15_chart_plotly()` is **registry-only** — it requires
-`registry=..., path_id=...` (§13.5.e: the positional `m15_df` / `h1_df`
-fallback was removed). `export_chart_plotly()` (the H1 chart) still accepts
-**both** a positional `df=...` fallback and the registry path; its fallback
-removal is the remaining half of §13.5.e (not yet done).
+**Rule:** both chart entry points are **registry-only** — the chart
+positional-fallback portion of §13.5.e is DONE. `export_chart_plotly()` (H1)
+and `export_m15_chart_plotly()` (M15) each require `registry=..., path_id=...`;
+the legacy positional `df=...` / `m15_df=...` / `h1_df=...` fallbacks were
+removed. (The *other* §13.5.e item — deleting the orchestrator's deprecated
+`s_res.df.attrs[...]` writes — is NOT done: the H1 chart still reads its
+overlays from `dfx.attrs[...]`, so those writes remain load-bearing.)
 
 **Don't add new callers that pass positional df.** Use the registry path:
 

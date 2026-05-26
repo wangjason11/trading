@@ -1372,9 +1372,12 @@ between every step:
        >    (redesign Phase 4); zone opacity is now a per-TF tier
        >    (`_m15_opacity_tier_for_zone`), not a `overwritten_by_sid_{N}`
        >    /`prior_inactive` lookup.
-       > 3. **§13.5.e (M15 half) DONE.** `export_m15_chart_plotly` is
-       >    registry-only (positional `m15_df`/`h1_df` fallback removed).
-       >    `export_chart_plotly`'s fallback removal is still pending.
+       > 3. **§13.5.e chart-fallback portion DONE (both charts).**
+       >    `export_m15_chart_plotly` and `export_chart_plotly` are both
+       >    registry-only — the positional `m15_df`/`h1_df`/`df` fallbacks
+       >    were removed. The OTHER §13.5.e item (delete the orchestrator's
+       >    deprecated `s_res.df.attrs[...]` writes) is NOT done — the H1
+       >    chart still reads overlays from `dfx.attrs[...]`.
 
      **Sid numbering convention (clarifies §6.1 below):** sids are
      **entity-wide** monotonically increasing integers, NOT

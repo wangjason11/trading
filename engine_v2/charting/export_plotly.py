@@ -81,20 +81,23 @@ class ChartExportPaths:
 
 
 def export_chart_plotly(
-    df: Optional[pd.DataFrame] = None,
     *,
     title: str,
+    registry: StructureRegistry,
+    path_id: str,
     structure_levels: Optional[list] = None,
     out_dir: str | Path = "artifacts/charts",
     basename: str = "chart",
     max_points: Optional[int] = None,
     cfg: Optional[dict] = None,
     idx_range: Optional[tuple[int, int]] = None,
-    registry: Optional[StructureRegistry] = None,
-    path_id: Optional[str] = None,
 ) -> ChartExportPaths:
     """
     Export an interactive HTML + PNG candlestick chart with basic overlays.
+
+    Registry-only (Part 4 §13.5.e): resolve the entity (and its M15-zone
+    overlay) via ``registry`` + ``path_id``. The legacy positional ``df``
+    fallback was removed.
 
     Expected columns (minimum):
       - time, o, h, l, c
@@ -161,18 +164,12 @@ def export_chart_plotly(
     }
 
 
-    # Part 4 Step 2: registry is the canonical chart source. When provided,
-    # resolve the entity by path_id and read from entity.df. Old df.attrs
-    # path stays as a fallback until Step 5 removes the orchestrator's
-    # transitional df.attrs writes.
-    if registry is not None and path_id is not None:
-        entity = registry.get(path_id)
-        if entity is None:
-            raise ValueError(f"StructureRegistry has no entity '{path_id}'")
-        df = entity.df
-    if df is None:
-        raise TypeError("export_chart_plotly requires either df or "
-                        "(registry + path_id)")
+    # Part 4 §13.5.e: registry is the canonical (and only) chart source.
+    # Resolve the entity by path_id and read from entity.df.
+    entity = registry.get(path_id)
+    if entity is None:
+        raise ValueError(f"StructureRegistry has no entity '{path_id}'")
+    df = entity.df
 
     cfg = _deep_merge(CHART_DEFAULTS, cfg or {})
     candle_cfg = cfg.get("candle_types", {}) or {}
@@ -2225,12 +2222,7 @@ def export_chart_plotly(
     m15_counter_kl_overlay = (
         sub_overlays.get("M15.counter", {}).get("KL", False)
     )
-    if (
-        registry is not None
-        and path_id is not None
-        and zone_cfg.get("KL", False)
-        and m15_counter_kl_overlay
-    ):
+    if zone_cfg.get("KL", False) and m15_counter_kl_overlay:
         h1_times = pd.to_datetime(dfx[COL_TIME], utc=True)
         t_last_h1 = h1_times.iloc[-1]
         m15_zones_rendered = 0
