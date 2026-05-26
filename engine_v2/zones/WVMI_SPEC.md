@@ -54,23 +54,41 @@ confirmation candle.
 
 ### Sub entities (`H1.main >> M15.counter`, `H1.main >> M15.confluence`)
 
-Sub WVMI is **parent-event-driven**. `_run_downstream_pipeline` runs with
-`skip_wvmi=True` for subs (the entity-local gate is bypassed); the
-orchestrator then calls
-`multitf/sub_wvmi.compute_parent_driven_sub_wvmi()` per sub
-`LowerTFResult`, gated by parent events:
+Sub WVMI is **parent-event-driven and trigger-centric** (§8.3 / §8.4 / §8.5).
+`_run_downstream_pipeline` runs with `skip_wvmi=True` for subs (the
+entity-local proximity gate is bypassed). After a parent cycle's sub sid chain
+is built (`build_parent_cycle_chain`), the orchestrator runs a per-cycle pass
+(`_assign_trigger_centric_sub_wvmi`):
 
-| Sub entity (sid kind) | Activation trigger | Per spec |
-|---|---|---|
-| `H1.main >> M15.counter` (first_counter sids) | First var 3 trigger in same parent cycle | §8.4 |
-| `H1.main >> M15.confluence` (var 1 sids) | Main first sd-prox in same parent cycle | §8.3 |
-| Var 3 confluence sids | Var 4 (subsequent_counter) — deferred to §13.4 | §8.3 |
-| Var 4 counter sids | Not yet built (§13.4) | §8.4 |
+1. Build the cycle's **parent trigger stream** (parent-df idxs):
+   - **confluence** (`_confluence_trigger_stream`): main's first sd-prox after
+     CTS **plus each var 4** (`subsequent_counter`) in the cycle — the
+     sd-prox-class events.
+   - **counter** (`_counter_trigger_stream`): **each var 3**
+     (`subsequent_confluence`) in the cycle — the CTS-prox-class events.
+2. For each trigger (time-ordered), map its parent idx to M15 and find the sub
+   sid whose **active window `[start_trigger_idx, m15_end_idx]`** (lifecycle-start
+   → effective end) contains it. Sweep that sid once via
+   `compute_parent_driven_sub_wvmi`, stamping the trigger.
 
-Records produced this way share the same `WVMITracker.on_cts_confirmed`
-/ `on_bos_confirmed` / `update_temporary_lp` lifecycle as main, plus
-§8.7 attribution merged into `record.meta`:
-`triggered_by_event_idx`, `triggered_by_event_type`, `parent_path_id`.
+**There is no `use_case` special-casing.** A sid — bootstrap (var1/var2),
+subsequent (var3/var4), or **reversal-born** — gets WVMI **iff a parent trigger
+of the entity's class lands inside its active window**; a sid no trigger lands
+on gets none. This is the correct reading of §8.3's "whichever sid is active —
+created by var1, var3, or sub internal reversal": a reversal sid is covered when
+a *later* parent trigger falls in its window, **not** by self-triggering on the
+reversal (a sub reversal is neither an sd-prox nor a CTS-prox parent event). See
+GOTCHAS "Sub WVMI is Trigger-Centric, Not Sid-Centric".
+
+A sid touched by multiple triggers is swept once (continuous tracker — the sweep
+already covers all the sid's cycles); the earliest (initiating) trigger wins
+attribution. Re-trigger semantics (a var 4 landing on an already-swept confluence
+sid) are deferred to the forthcoming WVMI lifecycle spec.
+
+Records share main's `WVMITracker.on_cts_confirmed` / `on_bos_confirmed` /
+`update_temporary_lp` lifecycle, plus §8.7 attribution merged into
+`record.meta`: `triggered_by_event_idx` (**parent-df coords — never
+translated**), `triggered_by_event_type`, `parent_path_id`.
 
 ---
 

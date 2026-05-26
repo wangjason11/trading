@@ -325,8 +325,20 @@ def main() -> None:
                     index=False,
                 )
 
+            # Debug: export per-sub WVMI records (parent-event-driven,
+            # trigger-centric — see WVMI_SPEC "Sub entities"). Not in any other
+            # CSV, so this is the only inspectable surface besides chart hover.
+            from engine_v2.debug.export_wvmi import export_wvmi
+            export_wvmi(
+                sub_entry.df.attrs.get("wvmi", []) or [],
+                f"artifacts/debug/{basename}_{leaf_label}_wvmi.csv",
+            )
+
     from engine_v2.debug.export_zones import export_kl_zones
     export_kl_zones(res.meta.get("kl_zones", []), f"artifacts/debug/{basename}_kl_zones.csv")
+
+    from engine_v2.debug.export_wvmi import export_wvmi
+    export_wvmi(res.meta.get("wvmi", []) or [], f"artifacts/debug/{basename}_wvmi.csv")
 
     from engine_v2.debug.export_events import export_structure_events
     export_structure_events(

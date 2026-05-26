@@ -44,7 +44,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import timedelta
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -698,6 +698,10 @@ def build_one_sid(
             "slice_begin": slice_begin,
             # Canonical identity (§2 / §6.1 REVISED 2026-05-25).
             "sid": sid,
+            # entity_sid is the entity-wide display rank (chart key); exposed
+            # on meta so the trigger-centric sub-WVMI pass can find the active
+            # sid for a parent trigger and persist its records.
+            "entity_sid": entity_sid,
             "started_by": started_by,
             "start_trigger_idx": start_trigger_idx,
             "end_reason": end_reason,
@@ -740,7 +744,6 @@ def build_parent_cycle_chain(
     subsequents: List[MultiTFTrigger],
     sub_path_id: str,
     first_entity_sid: int,
-    wvmi_hook: Optional[Callable[[LowerTFResult, int], None]] = None,
 ) -> Tuple[List[LowerTFResult], int]:
     """Build one parent cycle's subordinate sid chain (Part 4 §6.1 merge-and-bound).
 
@@ -761,9 +764,10 @@ def build_parent_cycle_chain(
 
     ``subsequents`` must be this cycle's ``subsequent_*`` triggers
     (already converted to ``MultiTFTrigger``); order doesn't matter (resolved
-    + sorted by M15 boundary here). ``wvmi_hook(result, entity_sid)`` — if
-    given — is invoked per built sid (the orchestrator computes parent-driven
-    sub WVMI there; it self-skips ``use_case="reversal"``).
+    + sorted by M15 boundary here). Sub WVMI is NOT computed here — the
+    orchestrator runs a per-cycle trigger-centric pass over the returned
+    ``results`` (``_assign_trigger_centric_sub_wvmi``), gating each sid by
+    whether a parent trigger lands in its active window.
 
     Returns ``(results, next_entity_sid)``.
     """
@@ -841,8 +845,6 @@ def build_parent_cycle_chain(
             break
 
         results.append(outcome.result)
-        if wvmi_hook is not None:
-            wvmi_hook(outcome.result, entity_sid)
         entity_sid += 1
         sid += 1
 

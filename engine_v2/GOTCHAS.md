@@ -1011,3 +1011,38 @@ before its start, or a bad slice→entity translation). The per-sub
 emitted — inspect them directly for `end_time <= start_time` (check both the
 `<` backward and `==` degenerate cases). The purpose-built
 `analyze_cascade_backward.py` tool was deleted with the cascade.
+
+---
+
+## Sub WVMI is Trigger-Centric, Not Sid-Centric
+
+**Rule:** A sub sid (M15.confluence / M15.counter) earns a WVMI record **iff a
+parent trigger of its entity's class lands inside its active window**
+`[start_trigger_idx, m15_end_idx]` — NOT based on how the sid was born. There is
+no `use_case` branch; `_assign_trigger_centric_sub_wvmi` (orchestrator) iterates
+the parent trigger stream (confluence = main-first-sd-prox + each var 4; counter
+= each var 3) and sweeps whichever sid is active at each trigger.
+
+**Why this is the correct model:** sub WVMI exists to read the sub's momentum at
+the moment the *parent* signals confluence/counter (§8.3–8.5). A reversal-born
+sid is therefore covered only when a *later* parent trigger falls in its window —
+exactly mirroring how the **main** entity behaves (a main reversal doesn't
+self-create a WVMI record; the new sid waits for its next proximity gate). A sub
+reversal is neither an sd-prox nor a CTS-prox parent event, so it is **not** a
+trigger.
+
+**The latent bug this replaced (pre-2026-05-26):** the old per-sid dispatch
+(`_confluence_wvmi_for_facade` / `_counter_wvmi_for_facade`) switched on
+`trigger.use_case` and **hard-skipped `use_case="reversal"`** (`return []`). On
+data where no parent trigger ever lands inside a reversal sid's window this gives
+the right answer *by accident*; the day a var 4 (confluence) or a later var 3
+(counter) fires while a reversal sid is active, the per-sid code wrongly produces
+nothing. The trigger-centric pass gates by window, so it is correct in that case
+with **no change to current output** (NZD_USD 2025-12→2026-01 has no var 4 and no
+trigger landing on a reversal sid, so WVMI counts are unchanged).
+
+**Do NOT** "restore" the old pre-Phase-2 behavior where a reversal continuation
+inherited the chain-root's trigger. That coverage was an *over-sweep artifact* of
+the old model merging pre/post-reversal structure into one swept sid; the
+redesign made the reversal a sid boundary, which correctly makes the reversal sid
+independently gated.

@@ -38,16 +38,26 @@ CONFIG = ReplayConfig(
     # end=datetime(2025, 12, 27, 0, 0, 0, tzinfo=timezone.utc),
     # lower_timeframes=("M15",),
 
+    # POI two-stroke incremental validation (2026-05-23 onward): stepped end
+    # forward in stages from 2025-12-27 (signed off in 6069ade / b81184b)
+    # toward the full 2026-01-20 window. Step 2026-01-07 (~11 days past prior
+    # sign-off, incl. New Year low-liquidity stretch) was signed off on the
+    # shorter window; restored to full below for Phase 5 sub-WVMI.
+    # pair="NZD_USD",
+    # timeframe="H1",
+    # start=datetime(2025, 12, 1, 0, 0, 0, tzinfo=timezone.utc),
+    # end=datetime(2026, 1, 7, 0, 0, 0, tzinfo=timezone.utc),
+    # lower_timeframes=("M15",),
+
+    # Full original window restored 2026-05-26 (Phase 5 sub-WVMI). The build
+    # was validated through 2026-01-07 on the shorter window; expanded back to
+    # the full 2026-01-20 end to surface var4 (subsequent_counter) triggers for
+    # trigger-centric vs sid-centric validation.
     pair="NZD_USD",
     timeframe="H1",
     # Use UTC for deterministic replay.
     start=datetime(2025, 12, 1, 0, 0, 0, tzinfo=timezone.utc),
-    # POI two-stroke incremental validation (2026-05-23 onward): step end
-    # forward in stages from 2025-12-27 (signed off in 6069ade / b81184b)
-    # toward the full 2026-01-20 window. Current step: 2026-01-07 (~11 days
-    # past prior sign-off, includes the New Year low-liquidity stretch +
-    # first two trading days of 2026).
-    end=datetime(2026, 1, 7, 0, 0, 0, tzinfo=timezone.utc),
+    end=datetime(2026, 1, 20, 0, 0, 0, tzinfo=timezone.utc),
     lower_timeframes=("M15",),
 
     # pair="NZD_USD",
