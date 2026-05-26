@@ -3,7 +3,9 @@
 Per spec §4.3.2:
   Probe sd:        +parent_sd  (confluence — same direction as parent)
   Probe input_idx: parent BOS extreme idx (= BOS_CONFIRMED.ev.idx)
-  Probe end_idx:   parent CTS_CONFIRMED idx in the same parent cycle
+  Probe end_idx:   the confirmed CTS's extreme idx (`cts_anchor_idx`) in the
+                   same parent cycle (resolved once parent CTS_CONFIRMED fires —
+                   not the confirmation candle)
 
 Mapping (§4.3.1, unified rule `mapping_sd = -sub_sd`): for confluence
 sub `lower_sd = +parent_sd`, so `mapping_sd = -parent_sd` — the M15

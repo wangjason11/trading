@@ -257,7 +257,7 @@ cycle (sid=0 of the confluence entity).
 |---|---|
 | **Trigger** | Most recent parent BOS confirmed (== CTS established for the new cycle, by definition same candle) |
 | **Idx input** | Idx of the newly confirmed BOS |
-| **Probe end_idx** | Idx where parent CTS_CONFIRMED occurs in the same parent cycle |
+| **Probe end_idx** | The confirmed CTS's **extreme idx** (`cts_anchor_idx` on the `CTS_CONFIRMED` event) in the same parent cycle — *not* the confirmation candle (`CTS_CONFIRMED.idx == confirmed_at`, which is later). NULL until parent `CTS_CONFIRMED` fires. |
 | **Probe reference zone** | Newly confirmed active parent BOS zone |
 | **Output** | `starting_idx` for first confluence sub (sid=0) |
 
@@ -265,7 +265,12 @@ cycle (sid=0 of the confluence entity).
 initially be NULL. We **wait** — no first_confluence sub is built until
 parent CTS_CONFIRMED resolves end_idx (consistent with today's
 "pending" handling, but the result is "do not produce" rather than
-"produce tentatively").
+"produce tentatively"). When it resolves, `end_idx` is set to the confirmed
+CTS's **extreme** idx (`cts_anchor_idx`), which is *earlier* than the
+confirmation candle: the confirmation candle gates only *when* the value
+becomes known; the CTS extreme is the value that bounds the probe. Using the
+confirmation candle would over-extend the probe window past the CTS, shifting
+the confluence sub's validated start.
 
 **Cycle ends before parent CTS_CONFIRMED:** in theory impossible — a
 reversal requires a pullback pattern that breaks the parent BOS, which
@@ -405,7 +410,7 @@ at the next parent BOS_confirmed.
 
 | Variation | Trigger | Input idx | End idx | Reference zone | Probe sd |
 |---|---|---|---|---|---|
-| `first_confluence` | Parent BOS_confirmed | Parent BOS extreme | Parent CTS_confirmed (NULL until set) | Active parent BOS zone | `+parent_sd` |
+| `first_confluence` | Parent BOS_confirmed | Parent BOS extreme | Parent CTS **extreme** (`cts_anchor_idx`; NULL until parent CTS_confirmed fires) | Active parent BOS zone | `+parent_sd` |
 | `first_counter` | 1st parent sd-proximity post-CTS | Parent CTS idx | This trigger candle | Active parent CTS zone | `-parent_sd` |
 | `subsequent_confluence` | Parent CTS-proximity after sd-prox | Parent-TF window extreme toward BOS | This trigger candle | Counter-sub zone at lower-TF extreme (with fallback) | `+parent_sd` |
 | `subsequent_counter` | Parent sd-prox forming Λ / V | Parent-TF Λ apex / V trough at CTS zone | This trigger candle | Active parent CTS zone | `-parent_sd` |

@@ -411,9 +411,9 @@ zones.
 
 **Example:** H1 CTS extreme at idx=652, pullback confirmed at idx=683. `CTS_CONFIRMED` event has `ev.idx=683` and `ev.meta["cts_anchor_idx"]=652`.
 
-**Symptom:** When mapping CTS to lower TFs (UC1 trigger), using `ev.idx` started the M15 structure 31 candles too late.
+**Symptom:** Two known bites. (1) Mapping CTS to lower TFs (UC1 trigger): using `ev.idx` started the M15 structure 31 candles too late. (2) `first_confluence` (var 1) probe `end_idx`: the spec said "parent CTS_CONFIRMED idx", which was read as `ev.idx` (the confirmation candle) — over-extending the probe window past the CTS and shifting the confluence sub's validated start. Fixed 2026-05-26 to use `cts_anchor_idx` (`first_confluence_trigger.py`); spec §4.3.2 disambiguated to "CTS extreme idx".
 
-**Fix:** Always use `ev.meta.get("cts_anchor_idx", ev.idx)` when you need the CTS extreme candle.
+**Fix:** Use `ev.meta["cts_anchor_idx"]` when you need the CTS extreme candle. Nuance on the fallback: `ev.meta.get("cts_anchor_idx", ev.idx)` is fine for a *best-effort display* read, but for a **load-bearing** value (e.g. a probe bound) do NOT fall back to `ev.idx` — a silent fallback re-introduces the exact confirmation-candle bug. `cts_anchor_idx` is an invariant whenever `CTS_CONFIRMED` fired, so a strict `[...]` access is correct and fails loud if the invariant ever breaks.
 
 **Related fields:**
 - `ev.idx` = confirmation candle (where pullback confirmed)
