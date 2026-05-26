@@ -29,7 +29,7 @@ def test_main_single_sid_no_reversal():
     out = build_sid_records_for_main(events)
     assert len(out) == 1
     rec = out[0]
-    assert rec.sid == 0
+    assert rec.sub_sid == 0
     assert rec.starting_sd == 1
     assert rec.creation_event_idx == 10
     assert rec.end_event_idx is None
@@ -47,7 +47,7 @@ def test_main_multiple_sids_with_reversal():
         _ev(45, "BOS_CONFIRMED", sid=1, sd=-1, confirmed_at=45),
     ]
     out = build_sid_records_for_main(events)
-    assert [r.sid for r in out] == [0, 1]
+    assert [r.sub_sid for r in out] == [0, 1]
 
     sid0 = out[0]
     assert sid0.starting_sd == 1
@@ -70,7 +70,7 @@ def test_main_skips_events_without_structure_id():
     ]
     out = build_sid_records_for_main(events)
     assert len(out) == 1
-    assert out[0].sid == 0
+    assert out[0].sub_sid == 0
     assert out[0].creation_event_idx == 5
 
 
@@ -90,7 +90,7 @@ def _trigger(parent_sid: int, parent_cycle: int, lower_sd: int) -> MultiTFTrigge
 
 
 def _ltf_result(parent_sid: int, parent_cycle: int, lower_sd: int,
-                m15_start: int, m15_end: int) -> LowerTFResult:
+                m15_start: int, m15_end: int, sub_sid: int = 0) -> LowerTFResult:
     trig = _trigger(parent_sid, parent_cycle, lower_sd)
     return LowerTFResult(
         trigger=trig,
@@ -109,20 +109,23 @@ def _ltf_result(parent_sid: int, parent_cycle: int, lower_sd: int,
             "validated_h1_start": 100,
             "slice_begin": m15_start - 50,
             "use_case": trig.use_case,
+            "sub_sid": sub_sid,
         },
     )
 
 
 def test_subordinate_records_one_per_result():
+    # Three different parent cycles → each is sub_sid 0 in its own cycle;
+    # the identity tuple (parent_sid, parent_cycle_id, sub_sid) disambiguates.
     results = [
-        _ltf_result(parent_sid=0, parent_cycle=1, lower_sd=-1, m15_start=200, m15_end=400),
-        _ltf_result(parent_sid=0, parent_cycle=2, lower_sd=-1, m15_start=500, m15_end=700),
-        _ltf_result(parent_sid=1, parent_cycle=0, lower_sd=1, m15_start=900, m15_end=1100),
+        _ltf_result(parent_sid=0, parent_cycle=1, lower_sd=-1, m15_start=200, m15_end=400, sub_sid=0),
+        _ltf_result(parent_sid=0, parent_cycle=2, lower_sd=-1, m15_start=500, m15_end=700, sub_sid=0),
+        _ltf_result(parent_sid=1, parent_cycle=0, lower_sd=1, m15_start=900, m15_end=1100, sub_sid=0),
     ]
     out = build_sid_records_for_subordinate(results)
-    assert [r.sid for r in out] == [0, 1, 2]
-    assert [r.parent_sid for r in out] == [0, 0, 1]
-    assert [r.parent_cycle_id for r in out] == [1, 2, 0]
+    assert [(r.parent_sid, r.parent_cycle_id, r.sub_sid) for r in out] == [
+        (0, 1, 0), (0, 2, 0), (1, 0, 0),
+    ]
     assert [r.starting_sd for r in out] == [-1, -1, 1]
     assert [r.creation_event_idx for r in out] == [200, 500, 900]
     assert [r.end_event_idx for r in out] == [400, 700, 1100]
@@ -142,7 +145,7 @@ def test_subordinate_handles_missing_meta_indices():
         wvmi_records=[],
         prev_bos_lines=[],
         status="finalized",
-        meta={},
+        meta={"sub_sid": 0},
     )
     out = build_sid_records_for_subordinate([result])
     assert len(out) == 1

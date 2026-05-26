@@ -3,18 +3,17 @@
 Renders the full M15 dataset as the base candle layer, with all M15 structures
 overlaid. Part 4 §13.5.c.iii: data sourced from `m15_df.attrs["events"] /
 ["kl_zones"] / ["poi_zones"] / ["fib_states"] / ["wave_candles"] / ["wvmi"]`
-grouped by `entity_sid`, with the `m15_df.attrs["sids"]` SidRecord list as
-the per-sid manifest. Per spec §16.5:
+grouped by each snapshot's identity tuple `(parent_sid, parent_cycle_id,
+sub_sid)`, with the `m15_df.attrs["sids"]` SidRecord list as the per-sid
+manifest. Per spec §16.5:
 
   - Sid-tied elements (CTS/BOS dots, swing lines, PB markers, prev_bos lines,
-    WVMI hover anchors): only render at candles where the entity_sid is the
-    current owner. Older sids' events are present in attrs but hidden where a
-    later sid has overwritten the candle.
-  - Persisting events (KL zones, POI zones, fibs): render all snapshots,
-    opacity attenuation keyed on `meta["deactivated_by"]`
-    (`"overwritten_by_sid_{N}"` → prior_inactive; `"lifecycle_end"` →
-    recent_inactive; otherwise active or recent_inactive based on parent
-    cycle membership).
+    WVMI hover anchors): only render at candles owned by the rendering sid
+    (`owner_by_idx`). Merge-and-bound sids are sequential & non-overlapping
+    (§6.1), so each candle has exactly one owner.
+  - Persisting events (KL zones, POI zones, fibs): render all snapshots;
+    opacity is a per-TF tier (`_m15_opacity_tier_for_zone`: sub-TF zones get
+    the sub multiplier, H1 overlays the main multiplier).
 """
 from __future__ import annotations
 
@@ -138,10 +137,9 @@ def _m15_opacity_tier_for_zone(
     Replaces the prior active/recent_inactive/prior_inactive 3-tier system
     with a per-TF tier (Spec 2): zones from the chart's primary sub-TF (M15)
     get the `sub_tf` multiplier (0.5), main-TF overlays (H1) get `main_tf`
-    (0.2). Cascade-tagged zones (`deactivated_by="overwritten_by_sid_N"`)
-    still render — their end_time is already capped by cascade tagging, so
-    their visible extent is naturally truncated to the boundary, but their
-    fill/outline use the same sub_tf tier as non-cascaded sub zones.
+    (0.2). A zone's end_time is capped at its sid's resolved end by
+    `build_one_sid` (reversal | lifecycle_end), so its visible extent is
+    already truncated to that boundary regardless of tier.
 
     Zone's TF comes from `meta["timeframe"]`; defaults to `primary_sub_tf`
     when missing (the M15-native rendering path always emits M15 zones).
@@ -190,24 +188,55 @@ def _compute_m15_tier_context_from_sids(
     return (most_recent, recent_cycle_ids)
 
 
-def _compute_owner_by_idx(sid_records: Iterable[SidRecord]) -> dict:
-    """Per-candle most-recent-owner map for §16.5 sid-tied display rule.
+def _sub_identity(meta: dict) -> Optional[tuple]:
+    """Identity tuple `(parent_sid, parent_cycle_id, sub_sid)` from a snapshot
+    meta dict, or None if the snapshot carries no `sub_sid` attribution.
 
-    Walks SidRecords in entity_sid asc; later sids overwrite earlier in
-    their `[creation_event_idx, end_event_idx]` range. The result tells
-    each rendering pass which entity_sid currently owns each candle —
-    sid-tied elements (CTS/BOS dots, swing lines, PB markers, prev_bos
-    lines) only render at candles their owning sid still owns.
+    The tuple — not `sub_sid` alone — is the sub's unique identity; the chart
+    groups every attrs list by it.
+    """
+    ss = meta.get("sub_sid")
+    if ss is None:
+        return None
+    ps = meta.get("parent_sid")
+    pc = meta.get("parent_cycle_id")
+    return (
+        int(ps) if ps is not None else None,
+        int(pc) if pc is not None else None,
+        int(ss),
+    )
+
+
+def _sid_record_identity(rec: SidRecord) -> tuple:
+    """Identity tuple for a SidRecord — matches `_sub_identity` keys."""
+    return (
+        int(rec.parent_sid) if rec.parent_sid is not None else None,
+        int(rec.parent_cycle_id) if rec.parent_cycle_id is not None else None,
+        int(rec.sub_sid),
+    )
+
+
+def _compute_owner_by_idx(sid_records: Iterable[SidRecord]) -> dict:
+    """Per-candle owner map for §16.5 sid-tied display rule.
+
+    Walks SidRecords in identity-tuple order; later sids overwrite earlier in
+    their `[creation_event_idx, end_event_idx]` range (with merge-and-bound
+    sids being sequential & non-overlapping, ranges don't actually overlap).
+    The result tells each rendering pass which sid — by identity tuple
+    `(parent_sid, parent_cycle_id, sub_sid)` — owns each candle; sid-tied
+    elements (CTS/BOS dots, swing lines, PB markers, prev_bos lines) only
+    render at candles their owning sid owns.
 
     SidRecords with `creation_event_idx is None` or `end_event_idx is None`
     are skipped (they can't bound a range).
     """
     owner: dict = {}
-    for rec in sorted(sid_records, key=lambda s: s.sid):
+    for rec in sorted(sid_records, key=_sid_record_identity):
         if rec.creation_event_idx is None or rec.end_event_idx is None:
             continue
+        ident = _sid_record_identity(rec)
         for i in range(rec.creation_event_idx, rec.end_event_idx + 1):
-            owner[i] = rec.sid
+            owner[i] = ident
     return owner
 
 
@@ -216,47 +245,39 @@ def _compute_owner_by_idx(sid_records: Iterable[SidRecord]) -> dict:
 # ---------------------------------------------------------------------------
 
 def export_m15_chart_plotly(
-    m15_df: Optional[pd.DataFrame] = None,
-    h1_df: Optional[pd.DataFrame] = None,
     *,
     title: str,
+    registry: StructureRegistry,
+    path_id: str,
     out_dir: str | Path = "artifacts/charts",
     basename: str = "chart_m15",
     max_points: Optional[int] = None,
     idx_range: Optional[tuple[int, int]] = None,
     cfg: Optional[dict] = None,
-    registry: Optional[StructureRegistry] = None,
-    path_id: Optional[str] = None,
 ) -> ChartExportPaths:
     """Export an interactive M15 chart with H1 overlay elements.
 
     Part 4 §13.5.c.iii: data is read directly from
     `m15_df.attrs["events" / "kl_zones" / "poi_zones" / "fib_states" /
-    "wave_candles" / "wvmi"]` and grouped by `entity_sid` per the
-    `m15_df.attrs["sids"]` SidRecord manifest. The previous
-    `lower_tf_results` facade list is no longer consumed.
+    "wave_candles" / "wvmi"]` and grouped by each snapshot's identity tuple
+    `(parent_sid, parent_cycle_id, sub_sid)` per the `m15_df.attrs["sids"]`
+    SidRecord manifest.
 
-    When ``registry`` + ``path_id`` are supplied (the canonical path), the
-    chart resolves its M15 entity (and its parent for the overlay) via the
-    registry. Per spec §16.3 each chart overlays only its immediate
-    parent. The positional ``m15_df`` / ``h1_df`` fallback remains for
-    ad-hoc inspection scripts; it is removed in §13.5.e.
+    The chart resolves its M15 entity (and its parent for the overlay) via
+    ``registry`` + ``path_id`` (§13.5.e: the legacy positional
+    ``m15_df`` / ``h1_df`` fallback was removed — this is now the only entry).
+    Per spec §16.3 each chart overlays only its immediate parent.
     """
 
-    if registry is not None and path_id is not None:
-        m15_entity = registry.get(path_id)
-        if m15_entity is None:
-            raise ValueError(f"StructureRegistry has no entity '{path_id}'")
-        parent_entity = registry.parent_of(path_id)
-        if parent_entity is None:
-            raise ValueError(
-                f"M15 chart entity '{path_id}' has no parent in registry")
-        m15_df = m15_entity.df
-        h1_df = parent_entity.df
-
-    if m15_df is None or h1_df is None:
-        raise TypeError("export_m15_chart_plotly requires either "
-                        "(m15_df + h1_df) or (registry + path_id)")
+    m15_entity = registry.get(path_id)
+    if m15_entity is None:
+        raise ValueError(f"StructureRegistry has no entity '{path_id}'")
+    parent_entity = registry.parent_of(path_id)
+    if parent_entity is None:
+        raise ValueError(
+            f"M15 chart entity '{path_id}' has no parent in registry")
+    m15_df = m15_entity.df
+    h1_df = parent_entity.df
 
     cfg = _deep_merge(M15_CHART_DEFAULTS, cfg or {})
     pat_cfg = cfg.get("patterns", {}) or {}
@@ -292,8 +313,9 @@ def export_m15_chart_plotly(
     m15_to_h1 = _build_m15_to_h1_map(h1_df, m15_times)
 
     # M15 entity-wide attrs reads (§13.5.c.iii). Each list is the union
-    # across all sids; we group by `meta["entity_sid"]` per SidRecord
-    # below for per-sid rendering.
+    # across all sids; we group by the identity tuple
+    # `(parent_sid, parent_cycle_id, sub_sid)` per SidRecord below for
+    # per-sid rendering.
     sid_records: list = list(m15_df.attrs.get("sids", []))
     all_events: list = list(m15_df.attrs.get("events", []))
     all_kl_zones: list = list(m15_df.attrs.get("kl_zones", []))
@@ -303,9 +325,9 @@ def export_m15_chart_plotly(
     all_wvmi_records: list = list(m15_df.attrs.get("wvmi", []))
     all_prev_bos_lines: list = list(m15_df.attrs.get("prev_bos_lines", []))
 
-    # Group by entity_sid. Snapshots without entity_sid attribution are
-    # ignored — they belong to no sub-build (defensive; mirror always
-    # stamps entity_sid, but allows partial entity dfs in tests).
+    # Group by identity tuple. Snapshots without a sub_sid attribution are
+    # ignored — they belong to no sub-build (defensive; the mirror always
+    # stamps the tuple, but partial entity dfs in tests may not).
     events_by_sid: dict = defaultdict(list)
     kls_by_sid: dict = defaultdict(list)
     pois_by_sid: dict = defaultdict(list)
@@ -314,35 +336,35 @@ def export_m15_chart_plotly(
     wvmis_by_sid: dict = defaultdict(list)
     prev_bos_by_sid: dict = defaultdict(list)
     for ev in all_events:
-        eid = ev.meta.get("entity_sid")
-        if eid is not None:
-            events_by_sid[int(eid)].append(ev)
+        ident = _sub_identity(ev.meta)
+        if ident is not None:
+            events_by_sid[ident].append(ev)
     for z in all_kl_zones:
-        eid = z.meta.get("entity_sid")
-        if eid is not None:
-            kls_by_sid[int(eid)].append(z)
+        ident = _sub_identity(z.meta)
+        if ident is not None:
+            kls_by_sid[ident].append(z)
     for p in all_poi_zones:
-        eid = p.meta.get("entity_sid")
-        if eid is not None:
-            pois_by_sid[int(eid)].append(p)
+        ident = _sub_identity(p.meta)
+        if ident is not None:
+            pois_by_sid[ident].append(p)
     for f in all_fib_states:
-        eid = f.meta.get("entity_sid")
-        if eid is not None:
-            fibs_by_sid[int(eid)].append(f)
+        ident = _sub_identity(f.meta)
+        if ident is not None:
+            fibs_by_sid[ident].append(f)
     for w in all_wave_candles:
-        eid = w.meta.get("entity_sid")
-        if eid is not None:
-            waves_by_sid[int(eid)].append(w)
+        ident = _sub_identity(w.meta)
+        if ident is not None:
+            waves_by_sid[ident].append(w)
     for r in all_wvmi_records:
-        eid = r.meta.get("entity_sid")
-        if eid is not None:
-            wvmis_by_sid[int(eid)].append(r)
+        ident = _sub_identity(r.meta)
+        if ident is not None:
+            wvmis_by_sid[ident].append(r)
     for ln in all_prev_bos_lines:
-        eid = (ln.get("meta") or {}).get("entity_sid") if isinstance(ln, dict) else None
-        if eid is not None:
-            prev_bos_by_sid[int(eid)].append(ln)
+        ident = _sub_identity(ln.get("meta") or {}) if isinstance(ln, dict) else None
+        if ident is not None:
+            prev_bos_by_sid[ident].append(ln)
 
-    # §16.5 sid-tied filter: most-recent owner per candle.
+    # §16.5 sid-tied filter: owner (identity tuple) per candle.
     owner_by_idx = _compute_owner_by_idx(sid_records)
 
     # M15 opacity tier context (parent_sid + recent cycles). Same semantics
@@ -557,7 +579,7 @@ def export_m15_chart_plotly(
             ))
 
     # ===================================================================
-    # Phase B: M15 structure elements (per entity_sid view of m15_df.attrs)
+    # Phase B: M15 structure elements (per identity-tuple view of m15_df.attrs)
     # ===================================================================
     time_by_idx_m15 = {int(i): t for i, t in zip(dfx.index.to_numpy(), dfx[COL_TIME])}
     idx_set_m15 = set(map(int, dfx.index.to_numpy()))
@@ -568,7 +590,7 @@ def export_m15_chart_plotly(
         if m15_df.empty:
             continue
 
-        eid = sid_rec.sid
+        eid = _sid_record_identity(sid_rec)
         sid_events = events_by_sid.get(eid, [])
         sid_kls = kls_by_sid.get(eid, [])
         sid_pois = pois_by_sid.get(eid, [])
@@ -595,10 +617,9 @@ def export_m15_chart_plotly(
             """Identity — idx is entity-absolute already."""
             return idx
 
-        # §16.5 sid-tied filter: the rendered candle must still be owned
-        # by this entity_sid. Older sids whose ranges were overwritten by
-        # a later sid (cascade per §6.1) get hidden at the overwritten
-        # candles.
+        # §16.5 sid-tied filter: the rendered candle must be owned by this
+        # sid's identity tuple. (Merge-and-bound sids are non-overlapping,
+        # so a candle outside this sid's range is owned by another sid.)
         def _owned_here(idx: int) -> bool:
             return owner_by_idx.get(int(idx), eid) == eid
 
@@ -721,13 +742,12 @@ def export_m15_chart_plotly(
                                     pb_to_bos_lines.append((sid, t, pb_price, fb_t, fb_price))
 
             # Draw swing lines per sid. Extend the most-recent internal-sid
-            # line to this entity_sid's lifecycle end (or the last candle
-            # still owned by this entity_sid, whichever comes first).
+            # line to this sid's lifecycle end (or the last candle it still
+            # owns, whichever comes first).
             extend_to_idx = sid_rec.end_event_idx if sid_rec.end_event_idx is not None else (len(lt_df) - 1)
-            # Stop extension at the boundary where a later entity_sid
-            # cascades over this one (§6.1). owner_by_idx already encodes
-            # the cascade; walk back from extend_to_idx to the last idx
-            # owned by this sid.
+            # Stop extension at the boundary where the next sid takes over
+            # (§6.1). owner_by_idx encodes ownership; walk back from
+            # extend_to_idx to the last idx owned by this sid.
             while extend_to_idx > 0 and not _owned_here(extend_to_idx):
                 extend_to_idx -= 1
             for sid in sorted(points_by_sid.keys()):
@@ -1000,7 +1020,7 @@ def export_m15_chart_plotly(
                     if idx is None or idx >= len(lt_df):
                         continue
                     # §16.5 sid-tied filter: hide wave-candle line at any
-                    # candle no longer owned by this entity_sid (cascade).
+                    # candle not owned by this sid (a later sid owns it).
                     if not _owned_here(idx):
                         continue
                     candle_dir = int(lt_df.iloc[idx]["direction"])

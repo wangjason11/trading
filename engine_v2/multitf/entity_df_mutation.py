@@ -9,9 +9,9 @@ per-parent-cycle sequential sid chain (spec §6.1):
     cycle's `subsequent_*` triggers, then stitch a sequential, NON-overlapping
     chain of bounded single-structure sids. Each sid runs to the first of
     {its own reversal, the next subsequent trigger, parent-cycle-end}; that
-    boundary starts sid+1 (subsequent → probe start; reversal → identify_start
-    flipped). `sid` resets per parent cycle; `entity_sid` is the entity-wide
-    running rank.
+    boundary starts sub_sid+1 (subsequent → probe start; reversal →
+    identify_start flipped). `sub_sid` resets per parent cycle; the sub's
+    identity is the tuple `(parent_sid, parent_cycle_id, sub_sid)`.
 
   - `build_one_sid` — builds ONE bounded sid: slice + 50-lookback +
     `reset_index` + re-`compute_imbalance`, `compute_bounded_structure`
@@ -23,8 +23,8 @@ per-parent-cycle sequential sid chain (spec §6.1):
     `LowerTFResult` into entity-absolute snapshots and appends them to
     `entity_df.attrs["events" / "kl_zones" / "poi_zones" / "fib_states" /
     "wave_candles" / "wvmi" / "prev_bos_lines"]`, stamping the canonical
-    identity (`(parent_sid, parent_cycle_id, sid)` + `started_by` +
-    `start_trigger_idx`) alongside `entity_sid`.
+    identity tuple (`(parent_sid, parent_cycle_id, sub_sid)` + `started_by` +
+    `start_trigger_idx`) onto each snapshot's meta.
 
 Persistence model (spec §7): sids are sequential & non-overlapping, so each
 candle is written once by its owning sid — no cross-sid overwrite. Zone/POI/
@@ -35,9 +35,7 @@ redesign Phase 4 — sids no longer overlap, so nothing to cascade.)
 
 NOTE: the slice + lookback + `reset_index` machinery (and the mirror's
 slice-local → entity-absolute translation) is retained — direct entity-df MS
-compute needs an MS refactor that is deferred (Phase 4 / later). The
-`entity_sid` → tuple-identity chart migration is also a deferred follow-up;
-`entity_sid` remains the chart's display key for now.
+compute needs an MS refactor that is deferred (Phase 4 / later).
 """
 from __future__ import annotations
 
@@ -158,16 +156,15 @@ def mirror_lower_tf_result_to_entity_df(
     entity_df: pd.DataFrame,
     result: LowerTFResult,
     *,
-    new_sid_id: int,
     structure_path_id: str,
 ) -> None:
     """Mirror a slice-shape `LowerTFResult` into `entity_df.attrs[...]`.
 
     Translates every event / zone / POI / fib / wave-candle / WVMI idx
     field from slice-local (the result is built on a sliced + reset_index
-    df) to entity-absolute (slice_begin + offset). Adds an `entity_sid`
-    attribution alongside existing `parent_sid` / `parent_cycle_id`
-    attribution.
+    df) to entity-absolute (slice_begin + offset). Stamps the canonical
+    identity tuple `(parent_sid, parent_cycle_id, sub_sid)` onto every
+    snapshot's meta (as separate fields).
 
     Also mirrors the structure columns from `result.df` back to
     `entity_df.iloc[slice_begin:slice_begin+len(result.df)]` so the
@@ -176,20 +173,19 @@ def mirror_lower_tf_result_to_entity_df(
     slice_begin = int(result.meta.get("slice_begin", 0))
 
     attribution = {
-        "entity_sid": new_sid_id,
         "structure_path_id": structure_path_id,
         "use_case": result.trigger.use_case,
         "parent_sid": result.trigger.parent_sid,
         "parent_cycle_id": result.trigger.parent_cycle_id,
         "timeframe": result.trigger.lower_tf,
     }
-    # Phase 2 (§2 / §6.1 REVISED 2026-05-25): canonical per-parent-cycle
-    # identity. `sid` resets per parent cycle; `entity_sid` above is now an
-    # entity-wide time-order rank (chart display key), no longer the
-    # identity. `started_by` ∈ {first_confluence, subsequent_confluence,
+    # Canonical per-parent-cycle identity (§2 / §6.1): the sub is uniquely
+    # identified by the tuple `(parent_sid, parent_cycle_id, sub_sid)`.
+    # `sub_sid` resets per parent cycle; alone it is meaningless — the tuple
+    # is the identity. `started_by` ∈ {first_confluence, subsequent_confluence,
     # first_counter, subsequent_counter, reversal}. These travel on
     # result.meta from build_one_sid; absent on legacy/test results.
-    for _k in ("sid", "started_by", "start_trigger_idx"):
+    for _k in ("sub_sid", "started_by", "start_trigger_idx"):
         if _k in result.meta:
             attribution[_k] = result.meta[_k]
 
@@ -308,8 +304,9 @@ def mirror_lower_tf_result_to_entity_df(
     _attrs_setdefault_list(entity_df, "wvmi").extend(new_wvmis)
 
     # 9. Prev BOS lines — list of dicts with slice-local start_idx /
-    # end_idx. Translate both, embed entity_sid + parent attribution
-    # under "meta" so the chart can group by entity_sid (§13.5.c.iii).
+    # end_idx. Translate both, embed the identity-tuple attribution
+    # under "meta" so the chart can group by (parent_sid, parent_cycle_id,
+    # sub_sid) (§13.5.c.iii).
     new_prev_bos = []
     for ln in result.prev_bos_lines:
         if not isinstance(ln, dict):
@@ -330,23 +327,23 @@ def persist_facade_wvmi_to_entity_df(
     entity_df: pd.DataFrame,
     facade: LowerTFResult,
     *,
-    new_sid_id: int,
     structure_path_id: str,
 ) -> None:
     """Translate slice-local WVMI records on a facade to entity-absolute
     idx and append to `entity_df.attrs["wvmi"]`.
 
     Sub WVMI is parent-event-driven (§8.3 / §8.4), computed by the
-    orchestrator AFTER `apply_trigger_to_entity_df` returns the facade.
-    The orchestrator then calls this helper to keep the entity-df
-    persistence model in sync.
+    orchestrator's trigger-centric pass AFTER the sid chain is built. The
+    orchestrator then calls this helper to keep the entity-df persistence
+    model in sync.
 
-    `triggered_by_event_idx` in record meta is parent-df coords (LANDMINE
-    "WVMI Records Carry Mixed-Coordinate Meta") — do NOT translate.
+    Stamps the identity tuple `(parent_sid, parent_cycle_id, sub_sid)` onto
+    each record's meta. `triggered_by_event_idx` in record meta is parent-df
+    coords (LANDMINE "WVMI Records Carry Mixed-Coordinate Meta") — do NOT
+    translate.
     """
     slice_begin = int(facade.meta.get("slice_begin", 0))
     attribution = {
-        "entity_sid": new_sid_id,
         "structure_path_id": structure_path_id,
         "use_case": facade.trigger.use_case,
         "parent_sid": facade.trigger.parent_sid,
@@ -354,7 +351,7 @@ def persist_facade_wvmi_to_entity_df(
         "timeframe": facade.trigger.lower_tf,
         "parent_tf": facade.trigger.parent_tf,
     }
-    for _k in ("sid", "started_by", "start_trigger_idx"):
+    for _k in ("sub_sid", "started_by", "start_trigger_idx"):
         if _k in facade.meta:
             attribution[_k] = facade.meta[_k]
     new_records = []
@@ -484,8 +481,7 @@ def build_one_sid(
     sub_path_id: str,
     timeframe: str,
     trigger: MultiTFTrigger,
-    entity_sid: int,
-    sid: int,
+    sub_sid: int,
     started_by: str,
     start_trigger_idx: int,
     validated_parent_idx: Optional[int] = None,
@@ -529,7 +525,7 @@ def build_one_sid(
     if start_m15_abs >= n or start_m15_abs >= end_m15_abs:
         print(
             f"[entity_compute] WARNING: degenerate window for {started_by} "
-            f"sid={trigger.parent_sid}.{trigger.parent_cycle_id}.{sid}: "
+            f"sid=({trigger.parent_sid},{trigger.parent_cycle_id},{sub_sid}): "
             f"start={start_m15_abs} end={end_m15_abs} n={n}"
         )
         return None
@@ -552,8 +548,8 @@ def build_one_sid(
         print(
             f"[entity_compute] WARNING: M15 slice too small "
             f"({len(trigger_df) - start_in_slice} candles after start) "
-            f"for {started_by} sid={trigger.parent_sid}."
-            f"{trigger.parent_cycle_id}.{sid}"
+            f"for {started_by} sid=({trigger.parent_sid},"
+            f"{trigger.parent_cycle_id},{sub_sid})"
         )
         return None
 
@@ -568,8 +564,8 @@ def build_one_sid(
     except (ValueError, IndexError) as exc:
         print(
             f"[entity_compute] WARNING: bounded structure failed for "
-            f"{started_by} sid={trigger.parent_sid}."
-            f"{trigger.parent_cycle_id}.{sid}: {exc}"
+            f"{started_by} sid=({trigger.parent_sid},"
+            f"{trigger.parent_cycle_id},{sub_sid}): {exc}"
         )
         return None
 
@@ -589,7 +585,10 @@ def build_one_sid(
         bounded.struct_direction,
         source_kinds=["BOS"],
         fib_mode="cross_cycle",
-        log_prefix=f"M15_sid{entity_sid}_{started_by}",
+        log_prefix=(
+            f"M15_{trigger.parent_sid}.{trigger.parent_cycle_id}."
+            f"{sub_sid}_{started_by}"
+        ),
         timeframe=timeframe,
         structure_path_id=sub_path_id,
         skip_wvmi=True,
@@ -696,12 +695,10 @@ def build_one_sid(
             "m15_candle_count": len(trigger_df),
             "validated_h1_start": validated_parent_idx,
             "slice_begin": slice_begin,
-            # Canonical identity (§2 / §6.1 REVISED 2026-05-25).
-            "sid": sid,
-            # entity_sid is the entity-wide display rank (chart key); exposed
-            # on meta so the trigger-centric sub-WVMI pass can find the active
-            # sid for a parent trigger and persist its records.
-            "entity_sid": entity_sid,
+            # Canonical identity (§2 / §6.1): the tuple
+            # (parent_sid, parent_cycle_id, sub_sid) — parent_* travel in
+            # `attribution`. sub_sid resets per parent cycle.
+            "sub_sid": sub_sid,
             "started_by": started_by,
             "start_trigger_idx": start_trigger_idx,
             "end_reason": end_reason,
@@ -715,13 +712,12 @@ def build_one_sid(
     mirror_lower_tf_result_to_entity_df(
         entity_df,
         result,
-        new_sid_id=entity_sid,
         structure_path_id=sub_path_id,
     )
 
     print(
-        f"[entity_compute] {started_by} entity_sid={entity_sid} "
-        f"id=({trigger.parent_sid},{trigger.parent_cycle_id},{sid}) "
+        f"[entity_compute] {started_by} "
+        f"id=({trigger.parent_sid},{trigger.parent_cycle_id},{sub_sid}) "
         f"start={start_m15_abs} end={effective_end_abs} bound={end_m15_abs} "
         f"reversed={reversal_idx_abs is not None} "
         f"events={len(bounded.events)} kl={len(capped_zones)} "
@@ -743,24 +739,23 @@ def build_parent_cycle_chain(
     bootstrap: MultiTFTrigger,
     subsequents: List[MultiTFTrigger],
     sub_path_id: str,
-    first_entity_sid: int,
-) -> Tuple[List[LowerTFResult], int]:
+) -> List[LowerTFResult]:
     """Build one parent cycle's subordinate sid chain (Part 4 §6.1 merge-and-bound).
 
     Per ``(entity, parent_sid, parent_cycle_id)``:
 
-    - **sid=0** starts at the bootstrap's probe-validated start (``first_*``
+    - **sub_sid=0** starts at the bootstrap's probe-validated start (``first_*``
       variation). If that probe is pending / mapping fails → no chain (no
-      sid=0 ⇒ subsequents don't build either).
+      sub_sid=0 ⇒ subsequents don't build either).
     - Each sid runs a bounded single structure (``build_one_sid``) to the
       first of {its own reversal, the next subsequent trigger, parent-cycle
       end}.
-    - That boundary starts sid+1: a subsequent trigger → its probe-validated
-      start + use_case direction; a reversal → ``identify_start`` (reversal
-      scenario, flipped direction).
-    - ``sid`` is per-cycle (resets to 0 here); ``entity_sid`` is the
-      entity-wide running rank threaded in via ``first_entity_sid`` and
-      returned advanced for the next cycle.
+    - That boundary starts sub_sid+1: a subsequent trigger → its
+      probe-validated start + use_case direction; a reversal →
+      ``identify_start`` (reversal scenario, flipped direction).
+    - ``sub_sid`` is the per-cycle counter (resets to 0 each parent cycle);
+      the sub's full identity is the tuple ``(parent_sid, parent_cycle_id,
+      sub_sid)``.
 
     ``subsequents`` must be this cycle's ``subsequent_*`` triggers
     (already converted to ``MultiTFTrigger``); order doesn't matter (resolved
@@ -769,7 +764,7 @@ def build_parent_cycle_chain(
     ``results`` (``_assign_trigger_centric_sub_wvmi``), gating each sid by
     whether a parent trigger lands in its active window.
 
-    Returns ``(results, next_entity_sid)``.
+    Returns the cycle's ``results`` (sids in build order).
     """
     results: List[LowerTFResult] = []
 
@@ -783,7 +778,7 @@ def build_parent_cycle_chain(
             f"sid={bootstrap.parent_sid} cycle={bootstrap.parent_cycle_id} "
             f"(probe pending / mapping failed) — cycle skipped"
         )
-        return results, first_entity_sid
+        return results
 
     # Parent-cycle end (entity-absolute).
     from engine_v2.multitf.lower_tf_pipeline import _find_m15_lifecycle_end
@@ -812,8 +807,7 @@ def build_parent_cycle_chain(
     resolved_subs.sort(key=lambda x: x["boundary"])
     pending = list(resolved_subs)
 
-    entity_sid = first_entity_sid
-    sid = 0
+    sub_sid = 0
     cur_start = m15_start_0
     cur_sd = int(bootstrap.lower_sd)
     cur_trigger = bootstrap
@@ -835,7 +829,7 @@ def build_parent_cycle_chain(
             entity_df,
             start_m15_abs=cur_start, sd=cur_sd, end_m15_abs=bound,
             sub_path_id=sub_path_id, timeframe=cur_trigger.lower_tf,
-            trigger=cur_trigger, entity_sid=entity_sid, sid=sid,
+            trigger=cur_trigger, sub_sid=sub_sid,
             started_by=cur_started_by, start_trigger_idx=cur_start_trig,
             validated_parent_idx=cur_valid,
         )
@@ -845,8 +839,7 @@ def build_parent_cycle_chain(
             break
 
         results.append(outcome.result)
-        entity_sid += 1
-        sid += 1
+        sub_sid += 1
 
         # Decide the next sid. Reversal (earlier than the next subsequent by
         # construction) wins if its handoff start is usable; else fall to the
@@ -877,4 +870,4 @@ def build_parent_cycle_chain(
 
         break
 
-    return results, entity_sid
+    return results

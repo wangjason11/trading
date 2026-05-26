@@ -266,7 +266,7 @@ These tables are derived from `style_registry.py` + the rendering code in `expor
 A separate chart file renders M15 candles with both M15 structure and H1 overlay elements. This is NOT the same as the H1 chart — it has its own rendering logic.
 
 ### Architecture
-- **Entry:** `export_m15_chart_plotly(m15_df, h1_df, lower_tf_results, ...)`
+- **Entry:** `export_m15_chart_plotly(registry=..., path_id=..., title=..., ...)` — registry-only (§13.5.e); resolves its M15 entity + parent overlay from the registry. Reads sub data from `m15_df.attrs[...]` grouped by the identity tuple `(parent_sid, parent_cycle_id, sub_sid)`
 - **M15 candles** as the base OHLC
 - **M15 structure** (swing lines, CTS/BOS dots, prev BOS lines) in **royalblue**
 - **H1 overlay** (swing lines, CTS/BOS dots, prev BOS lines) in **black**

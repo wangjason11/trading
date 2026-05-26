@@ -3,7 +3,7 @@ name: commit-save
 description: Capture session learnings, commit changes, and save replay outputs to a timestamped folder for later comparison.
 user-invocable: true
 allowed-tools: Bash, Read, Write, Glob, Skill
-argument-hint: [commit message]
+argument-hint: [commit message] [--reuse-replay]
 ---
 
 # Capture Learnings, Commit, and Save Replay Outputs
@@ -14,6 +14,28 @@ argument-hint: [commit message]
 2. Commit current changes
 3. Run the replay and save outputs to a branch-namespaced timestamped folder in `artifacts/commits/<branch>/` for later `/compare`
 4. Cherry-pick the save commit onto `artifacts-trunk` so artifacts remain visible across branch checkouts
+
+## Replay modes: run (default) vs reuse
+
+Step 4 (the replay) is the slow part (~15 min on the full M15 window). Two modes:
+
+- **Run mode (default — plain `/commit-save`):** run a fresh replay in Step 4,
+  then copy its just-written outputs via the `.before_replay_marker`.
+- **Reuse mode (`/commit-save --reuse-replay`, or when the user says "with most
+  recent replay" / "use the recent replay" / "don't re-run the replay"):** SKIP
+  Step 4 and instead copy the outputs already sitting in `artifacts/debug` +
+  `artifacts/charts` from the session's most recent replay (Step 5 **reuse
+  variant**). This avoids a redundant second replay when one was already run
+  earlier this session.
+
+  **Guard — only valid when the on-disk outputs reflect the exact code being
+  committed.** Reuse mode is correct ONLY if a replay was already run earlier
+  in this session AND no code changed since (a re-run would reproduce identical
+  output). If any source changed after the last replay — or you're unsure — use
+  run mode. Reusing stale outputs silently saves the wrong data.
+
+When `--reuse-replay` (or the natural-language equivalent) is present, strip it
+from `$ARGUMENTS` before using the remainder as the commit message.
 
 ## Folder layout (since 2026-05-23)
 
@@ -124,17 +146,20 @@ FOLDER_NAME=$(ls -t "artifacts/commits/${CURRENT_BRANCH}/" | head -1)
 FOLDER_PATH="artifacts/commits/${CURRENT_BRANCH}/${FOLDER_NAME}"
 ```
 
-### 4. Run Replay
+### 4. Run Replay  *(run mode only — SKIP this step in reuse mode)*
 
 ```bash
 # Run replay - outputs go to standard locations (artifacts/debug, artifacts/charts)
 python -m engine_v2.run_replay
 ```
 
-### 5. Copy ONLY New Outputs to Commit Folder
+**After the replay finishes, display the `=== Replay Timing ===` block** from
+the run output to the user (see "Always surface replay timing" below). This is
+required for every replay, not just this skill.
 
-Find the newest commit folder for the current branch and copy files
-newer than its marker:
+### 5. Copy Outputs to Commit Folder
+
+**Run mode** — copy files newer than the marker created in Step 3:
 
 ```bash
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD); \
@@ -147,6 +172,35 @@ find artifacts/charts -maxdepth 1 -name "*.png"  -newer "$MARKER" -exec cp {} "$
 rm "$MARKER"; \
 ls "${FOLDER_PATH}/"
 ```
+
+**Reuse mode** — no replay was run, so there's no marker. Use the most recent
+replay's `*_raw.csv` as the **run-start reference**: `raw.csv` is the FIRST
+file a replay writes (before the ~13-min pipeline), so "raw + every same-prefix
+output newer than raw" captures the whole current run while excluding stale
+same-prefix files from earlier dates (e.g. a superseded `_M15.html` or a months
+-old `_swings.csv`). `PREFIX` (the config window `NZD_USD_H1_<start>_<end>`) is
+a prefix of every output filename, so a different window is also excluded:
+
+```bash
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD); \
+FOLDER_NAME=$(ls -t "artifacts/commits/${CURRENT_BRANCH}/" | head -1); \
+FOLDER_PATH="artifacts/commits/${CURRENT_BRANCH}/${FOLDER_NAME}"; \
+RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
+PREFIX=$(basename "$RAW" _raw.csv); \
+echo "Reuse: prefix=${PREFIX}  run-start ref=${RAW}"; \
+cp "$RAW" "${FOLDER_PATH}/"; \
+find artifacts/debug  -maxdepth 1 -name "${PREFIX}*.csv"  -newer "$RAW" -exec cp {} "${FOLDER_PATH}/" \; ; \
+find artifacts/charts -maxdepth 1 -name "${PREFIX}*.html" -newer "$RAW" -exec cp {} "${FOLDER_PATH}/" \; ; \
+find artifacts/charts -maxdepth 1 -name "${PREFIX}*.png"  -newer "$RAW" -exec cp {} "${FOLDER_PATH}/" \; ; \
+rm -f "${FOLDER_PATH}/.before_replay_marker"; \
+ls "${FOLDER_PATH}/"
+```
+
+**Reuse guard:** this assumes no other same-prefix outputs were written *after*
+the replay this session (e.g. a diag tool run post-replay producing a
+same-prefix CSV newer than `raw.csv`). If that happened, use run mode or remove
+the stray files first. The dry-run `ls` at the end lets you eyeball the set
+before the metadata/commit steps.
 
 ### 6. Write Metadata + Update Per-Branch LATEST Pointer
 
@@ -241,6 +295,15 @@ Next steps:
 - Make your changes
 - Run /compare before next commit to check for regressions
 ```
+
+## Always surface replay timing (every replay, every mode)
+
+`run_replay.py` prints a `=== Replay Timing ===` block (per-stage seconds +
+wall-clock total) at the end of its stdout. **Whenever a replay is run — in
+this skill's run mode, in `/compare`, or ad-hoc — display that timing block to
+the user verbatim** so they can track per-iteration cost over time and adjust.
+Show the actual per-stage numbers and the total; don't collapse it to a single
+sentence. (In reuse mode no replay runs, so there's no new timing to show.)
 
 ## Why This Matters
 

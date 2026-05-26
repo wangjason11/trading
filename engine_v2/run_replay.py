@@ -312,13 +312,13 @@ def main() -> None:
             if sub_sids:
                 import pandas as _pd
                 _pd.DataFrame([{
-                    "sid": s.sid,
+                    "parent_sid": s.parent_sid,
+                    "parent_cycle_id": s.parent_cycle_id,
+                    "sub_sid": s.sub_sid,
                     "starting_sd": s.starting_sd,
                     "creation_event_idx": s.creation_event_idx,
                     "end_event_idx": s.end_event_idx,
                     "end_reason": s.end_reason,
-                    "parent_sid": s.parent_sid,
-                    "parent_cycle_id": s.parent_cycle_id,
                     "meta": s.meta,
                 } for s in sub_sids]).to_csv(
                     f"artifacts/debug/{basename}_{leaf_label}_sids.csv",

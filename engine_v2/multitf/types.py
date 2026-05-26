@@ -51,9 +51,16 @@ class SidRecord:
     Spec §9.2: per-sid attribution lives in the df, not on EntityState. One
     record per `structure_id` (main) or per parent_cycle (subordinate).
 
+    `sub_sid` is the entity-local structure counter: for `main` it equals
+    the MarketStructure `structure_id`; for a subordinate it is the
+    per-parent-cycle counter (resets to 0 each parent cycle). The record's
+    full identity is the tuple `(parent_sid, parent_cycle_id, sub_sid)` —
+    `parent_*` are None for main, so a main sid reduces to its `sub_sid`.
+    `sub_sid` alone is not a unique identifier for subs.
+
     Indices use the entity df's own coordinate space.
     """
-    sid: int
+    sub_sid: int
     starting_sd: int                  # +1 / -1
     creation_event_idx: Optional[int] # candle idx where this sid begins
     end_event_idx: Optional[int]      # candle idx where this sid ends (None = still active)

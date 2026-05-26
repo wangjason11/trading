@@ -1,14 +1,10 @@
 """Per-sid record building for entity dfs.
 
 Spec §9.2: each entity df carries `df.attrs["sids"]` — one `SidRecord` per
-sid in that entity. For `main`, sids increment on reversal. For
-`subordinate`, today each lower-TF trigger result is its own sid (sid 0
-within that sub instance); §6.2 will eventually merge them under one
-entity df with parent_cycle_id meta.
-
-3a wires the records into df.attrs but doesn't consume them yet — Steps
-3b–3d will read them when building confluence subs and routing the
-event bus.
+sid in that entity. For `main`, `sub_sid` == `structure_id` (increments on
+reversal). For `subordinate`, `sub_sid` is the per-parent-cycle counter
+(resets to 0 each parent cycle); the sub's full identity is the tuple
+`(parent_sid, parent_cycle_id, sub_sid)`.
 """
 from __future__ import annotations
 
@@ -55,8 +51,10 @@ def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
     out: List[SidRecord] = []
     for sid in sorted(sids.keys()):
         rec = sids[sid]
+        # Main entity: sub_sid == structure_id (no parent), so the identity
+        # tuple (None, None, sub_sid) reduces to the structure_id.
         out.append(SidRecord(
-            sid=sid,
+            sub_sid=sid,
             starting_sd=rec["starting_sd"],
             creation_event_idx=rec["creation_event_idx"],
             end_event_idx=rec["end_event_idx"],
@@ -70,11 +68,12 @@ def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
 def build_sid_records_for_subordinate(
     lower_tf_results: List[LowerTFResult],
 ) -> List[SidRecord]:
-    """Derive per-sid records for a subordinate entity from its trigger results.
+    """Derive per-sid records for a subordinate entity from its sid results.
 
-    Each `LowerTFResult` corresponds to one parent cycle's run of the
-    subordinate. We assign the entity-level sid by enumeration order
-    (§6.2: one entity df, sids accumulate across parent cycles).
+    Each `LowerTFResult` is one bounded sub sid (§6.1 merge-and-bound). Its
+    identity tuple `(parent_sid, parent_cycle_id, sub_sid)` is read from the
+    trigger + `result.meta["sub_sid"]`. Results arrive in build order
+    (lexicographic by tuple), preserved here.
 
     Indices are recorded in the entity df's coordinate space — for the
     M15.counter entity that's `m15_df_prepared` indices, which the
@@ -82,21 +81,22 @@ def build_sid_records_for_subordinate(
     `m15_start_idx` / `m15_end_idx`.
     """
     out: List[SidRecord] = []
-    for entity_sid, result in enumerate(lower_tf_results):
+    # Results are in build order (lexicographic by identity tuple); preserve
+    # that order so the chart renders sids in a stable sequence.
+    for result in lower_tf_results:
         trigger = result.trigger
         creation = result.meta.get("m15_start_idx")
         end = result.meta.get("m15_end_idx")
-        # Phase 2 (§2 / §6.1, 2026-05-25): canonical per-parent-cycle identity
-        # lives on result.meta. `SidRecord.sid` stays the entity-wide
-        # enumeration rank (== entity_sid, the chart's display key); the
-        # per-cycle `sid` + `started_by` + `start_trigger_idx` are recorded in
-        # meta. end_reason is now the sid's resolved end cause.
+        # Canonical per-parent-cycle identity (§2 / §6.1): the sub is the
+        # tuple (parent_sid, parent_cycle_id, sub_sid). `SidRecord.sub_sid`
+        # is the per-cycle counter (was `meta["sid"]` on the result).
+        # end_reason is the sid's resolved end cause.
         end_reason = result.meta.get(
             "end_reason", "lifecycle_end" if end is not None else None,
         )
 
         out.append(SidRecord(
-            sid=entity_sid,
+            sub_sid=int(result.meta["sub_sid"]),
             starting_sd=int(trigger.lower_sd),
             creation_event_idx=int(creation) if creation is not None else None,
             end_event_idx=int(end) if end is not None else None,
@@ -107,8 +107,6 @@ def build_sid_records_for_subordinate(
                 "use_case": trigger.use_case,
                 "validated_parent_start": result.meta.get("validated_h1_start"),
                 "slice_begin": result.meta.get("slice_begin"),
-                # Canonical identity: per-parent-cycle sid + what spawned it.
-                "sid_in_cycle": result.meta.get("sid"),
                 "started_by": result.meta.get("started_by"),
                 "start_trigger_idx": result.meta.get("start_trigger_idx"),
                 # Parent-TF candle idx where the trigger event fired

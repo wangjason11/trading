@@ -141,7 +141,7 @@ class TestBuildOneSid:
             df,
             start_m15_abs=0, sd=1, end_m15_abs=int(df.index[-1]),
             sub_path_id=_PATH, timeframe="M15", trigger=trig,
-            entity_sid=0, sid=0, started_by="first_confluence",
+            sub_sid=0, started_by="first_confluence",
             start_trigger_idx=0,
         )
         assert out is not None
@@ -153,8 +153,7 @@ class TestBuildOneSid:
         events = df.attrs.get("events", [])
         assert events, "expected mirrored events"
         ev = events[0]
-        assert ev.meta["entity_sid"] == 0
-        assert ev.meta["sid"] == 0
+        assert ev.meta["sub_sid"] == 0
         assert ev.meta["started_by"] == "first_confluence"
         assert ev.meta["start_trigger_idx"] == 0
         assert ev.meta["parent_sid"] == 0
@@ -167,7 +166,7 @@ class TestBuildOneSid:
             df,
             start_m15_abs=0, sd=1, end_m15_abs=int(df.index[-1]),
             sub_path_id=_PATH, timeframe="M15", trigger=trig,
-            entity_sid=0, sid=0, started_by="first_confluence",
+            sub_sid=0, started_by="first_confluence",
             start_trigger_idx=0,
         )
         assert out is not None
@@ -189,7 +188,7 @@ class TestBuildOneSid:
             df,
             start_m15_abs=n, sd=1, end_m15_abs=n + 5,
             sub_path_id=_PATH, timeframe="M15", trigger=_mt(),
-            entity_sid=0, sid=0, started_by="reversal", start_trigger_idx=n,
+            sub_sid=0, started_by="reversal", start_trigger_idx=n,
         )
         assert out is None
 
@@ -199,7 +198,7 @@ class TestBuildOneSid:
             df,
             start_m15_abs=30, sd=1, end_m15_abs=30,   # start >= end
             sub_path_id=_PATH, timeframe="M15", trigger=_mt(),
-            entity_sid=0, sid=0, started_by="first_confluence",
+            sub_sid=0, started_by="first_confluence",
             start_trigger_idx=30,
         )
         assert out is None
@@ -210,14 +209,14 @@ class TestBuildOneSid:
         out0 = build_one_sid(
             df, start_m15_abs=0, sd=1, end_m15_abs=39,
             sub_path_id=_PATH, timeframe="M15", trigger=_mt(),
-            entity_sid=0, sid=0, started_by="first_confluence",
+            sub_sid=0, started_by="first_confluence",
             start_trigger_idx=0,
         )
         out1 = build_one_sid(
             df, start_m15_abs=40, sd=1, end_m15_abs=79,
             sub_path_id=_PATH, timeframe="M15",
             trigger=_mt(use_case="subsequent_confluence"),
-            entity_sid=1, sid=1, started_by="subsequent_confluence",
+            sub_sid=1, started_by="subsequent_confluence",
             start_trigger_idx=40,
         )
         assert out0 is not None and out1 is not None
@@ -232,9 +231,9 @@ class TestBuildOneSid:
                     f"merge-and-bound build must never fire the cascade"
                 )
 
-        # Both sids' events present, distinct entity_sids.
-        eids = {ev.meta.get("entity_sid") for ev in df.attrs.get("events", [])}
-        assert {0, 1} <= eids
+        # Both sids' events present, distinct sub_sids (same parent cycle).
+        sub_sids = {ev.meta.get("sub_sid") for ev in df.attrs.get("events", [])}
+        assert {0, 1} <= sub_sids
 
 
 # ---------------------------------------------------------------------------
@@ -252,8 +251,9 @@ def _dummy_df(n: int) -> pd.DataFrame:
 def _install_stubs(monkeypatch, *, cycle_end, reversals=None):
     """Patch probe+map, lifecycle-end, and build_one_sid for the driver.
 
-    `reversals` maps a per-cycle `sid` -> (reversal_idx_abs, next_start_abs,
-    next_sd); absent sids produce no reversal. Returns `calls` (list of dicts).
+    `reversals` maps a per-cycle `sub_sid` -> (reversal_idx_abs,
+    next_start_abs, next_sd); absent sids produce no reversal. Returns `calls`
+    (list of dicts).
     """
     reversals = reversals or {}
     calls: list[dict] = []
@@ -268,18 +268,18 @@ def _install_stubs(monkeypatch, *, cycle_end, reversals=None):
         return cycle_end
 
     def fake_build_one_sid(entity_df, *, start_m15_abs, sd, end_m15_abs,
-                           sub_path_id, timeframe, trigger, entity_sid, sid,
+                           sub_path_id, timeframe, trigger, sub_sid,
                            started_by, start_trigger_idx,
                            validated_parent_idx=None):
         calls.append({
             "start": start_m15_abs, "sd": sd, "end": end_m15_abs,
-            "entity_sid": entity_sid, "sid": sid, "started_by": started_by,
+            "sub_sid": sub_sid, "started_by": started_by,
             "start_trigger_idx": start_trigger_idx,
         })
-        rev = reversals.get(sid, (None, None, None))
+        rev = reversals.get(sub_sid, (None, None, None))
         result = SimpleNamespace(
             trigger=trigger,
-            meta={"sid": sid, "entity_sid": entity_sid},
+            meta={"sub_sid": sub_sid},
             wvmi_records=[],
         )
         return SidBuildOutcome(
@@ -301,14 +301,13 @@ class TestBuildParentCycleChain:
     def test_bootstrap_only(self, monkeypatch):
         calls = _install_stubs(monkeypatch, cycle_end=80)
         boot = _mt(m15_start=10)
-        results, next_sid = build_parent_cycle_chain(
+        results = build_parent_cycle_chain(
             _dummy_df(100), _dummy_df(100),
             bootstrap=boot, subsequents=[], sub_path_id=_PATH,
-            first_entity_sid=0,
         )
-        assert len(results) == 1 and next_sid == 1
+        assert len(results) == 1
         assert len(calls) == 1
-        assert calls[0]["sid"] == 0 and calls[0]["entity_sid"] == 0
+        assert calls[0]["sub_sid"] == 0
         assert calls[0]["started_by"] == "first_confluence"
         assert calls[0]["end"] == 80          # bounded by cycle end (no sub)
 
@@ -317,31 +316,29 @@ class TestBuildParentCycleChain:
         boot = _mt(m15_start=10)
         sub = _mt(use_case="subsequent_confluence", trigger_event_idx=45,
                   m15_start=40)
-        results, next_sid = build_parent_cycle_chain(
+        results = build_parent_cycle_chain(
             _dummy_df(100), _dummy_df(100),
             bootstrap=boot, subsequents=[sub], sub_path_id=_PATH,
-            first_entity_sid=0,
         )
-        assert next_sid == 2 and len(calls) == 2
-        # sid 0 bounded AT the subsequent boundary.
-        assert calls[0]["sid"] == 0 and calls[0]["end"] == 45
-        # sid 1 = subsequent-born, starts at probe start, per-cycle sid 1.
-        assert calls[1]["sid"] == 1 and calls[1]["entity_sid"] == 1
+        assert len(calls) == 2
+        # sub_sid 0 bounded AT the subsequent boundary.
+        assert calls[0]["sub_sid"] == 0 and calls[0]["end"] == 45
+        # sub_sid 1 = subsequent-born, starts at probe start.
+        assert calls[1]["sub_sid"] == 1
         assert calls[1]["started_by"] == "subsequent_confluence"
         assert calls[1]["start"] == 40 and calls[1]["end"] == 80
 
     def test_reversal_born_sid(self, monkeypatch):
         calls = _install_stubs(
             monkeypatch, cycle_end=80,
-            reversals={0: (40, 45, -1)},   # sid 0 reverses at 40 → start 45, sd -1
+            reversals={0: (40, 45, -1)},   # sub_sid 0 reverses at 40 → start 45, sd -1
         )
         boot = _mt(m15_start=10, lower_sd=1)
-        results, next_sid = build_parent_cycle_chain(
+        results = build_parent_cycle_chain(
             _dummy_df(100), _dummy_df(100),
             bootstrap=boot, subsequents=[], sub_path_id=_PATH,
-            first_entity_sid=0,
         )
-        assert next_sid == 2 and len(calls) == 2
+        assert len(calls) == 2
         assert calls[1]["started_by"] == "reversal"
         assert calls[1]["start"] == 45 and calls[1]["sd"] == -1
         assert calls[1]["start_trigger_idx"] == 40
@@ -349,21 +346,20 @@ class TestBuildParentCycleChain:
     def test_reversal_then_subsequent_both_build(self, monkeypatch):
         calls = _install_stubs(
             monkeypatch, cycle_end=80,
-            reversals={0: (30, 35, -1)},   # sid 0 reverses before the sub
+            reversals={0: (30, 35, -1)},   # sub_sid 0 reverses before the sub
         )
         boot = _mt(m15_start=10, lower_sd=1)
         sub = _mt(use_case="subsequent_confluence", trigger_event_idx=65,
                   m15_start=60)
-        results, next_sid = build_parent_cycle_chain(
+        results = build_parent_cycle_chain(
             _dummy_df(100), _dummy_df(100),
             bootstrap=boot, subsequents=[sub], sub_path_id=_PATH,
-            first_entity_sid=0,
         )
-        assert next_sid == 3 and len(calls) == 3
+        assert len(calls) == 3
         assert [c["started_by"] for c in calls] == [
             "first_confluence", "reversal", "subsequent_confluence",
         ]
-        assert [c["sid"] for c in calls] == [0, 1, 2]
+        assert [c["sub_sid"] for c in calls] == [0, 1, 2]
         # reversal-born sid is bounded by the still-pending subsequent.
         assert calls[1]["start"] == 35 and calls[1]["end"] == 65
         assert calls[2]["start"] == 60 and calls[2]["end"] == 80
@@ -374,40 +370,38 @@ class TestBuildParentCycleChain:
             monkeypatch, cycle_end=49,
             reversals={0: (45, 55, -1)},   # next_start 55 >= len(entity_df) 50
         )
-        results, next_sid = build_parent_cycle_chain(
+        results = build_parent_cycle_chain(
             _dummy_df(50), _dummy_df(50),
             bootstrap=_mt(m15_start=10), subsequents=[], sub_path_id=_PATH,
-            first_entity_sid=0,
         )
-        assert len(calls) == 1 and next_sid == 1   # no crash, no extra sid
+        assert len(calls) == 1   # no crash, no extra sid
 
-    def test_two_cycles_sid_resets_entity_sid_monotonic(self, monkeypatch):
-        calls = _install_stubs(monkeypatch, cycle_end=40)
-        # cycle A
-        rA, nextA = build_parent_cycle_chain(
+    def test_two_cycles_sub_sid_resets(self, monkeypatch):
+        # sub_sid resets to 0 each parent cycle; the identity tuple differs
+        # only by parent_cycle_id across the two cycles.
+        _install_stubs(monkeypatch, cycle_end=40)
+        rA = build_parent_cycle_chain(
             _dummy_df(100), _dummy_df(100),
             bootstrap=_mt(parent_cycle_id=0, m15_start=10), subsequents=[],
-            sub_path_id=_PATH, first_entity_sid=0,
+            sub_path_id=_PATH,
         )
-        # cycle B threads the entity-wide rank forward
         _install_stubs(monkeypatch, cycle_end=90)  # reset calls list for clarity
-        rB, nextB = build_parent_cycle_chain(
+        rB = build_parent_cycle_chain(
             _dummy_df(100), _dummy_df(100),
             bootstrap=_mt(parent_cycle_id=1, m15_start=50), subsequents=[],
-            sub_path_id=_PATH, first_entity_sid=nextA,
+            sub_path_id=_PATH,
         )
-        assert nextA == 1 and nextB == 2
-        assert rA[0].meta["sid"] == 0 and rA[0].meta["entity_sid"] == 0
-        assert rB[0].meta["sid"] == 0 and rB[0].meta["entity_sid"] == 1
+        assert rA[0].meta["sub_sid"] == 0 and rA[0].trigger.parent_cycle_id == 0
+        assert rB[0].meta["sub_sid"] == 0 and rB[0].trigger.parent_cycle_id == 1
 
     def test_pending_bootstrap_no_chain(self, monkeypatch):
         calls = _install_stubs(monkeypatch, cycle_end=80)
         boot = _mt(m15_start=None)   # fake_resolve returns (None, 0) → pending
-        results, next_sid = build_parent_cycle_chain(
+        results = build_parent_cycle_chain(
             _dummy_df(100), _dummy_df(100),
             bootstrap=boot, subsequents=[_mt(use_case="subsequent_confluence",
                                              trigger_event_idx=45, m15_start=40)],
-            sub_path_id=_PATH, first_entity_sid=0,
+            sub_path_id=_PATH,
         )
-        assert results == [] and next_sid == 0
+        assert results == []
         assert len(calls) == 0

@@ -678,8 +678,14 @@ def _assign_trigger_centric_sub_wvmi(
                 best_start = start
         if active is None:
             continue
-        esid = active.meta.get("entity_sid")
-        if esid in swept:
+        # Identity tuple (parent_sid, parent_cycle_id, sub_sid) — sweep each
+        # sid at most once.
+        identity = (
+            active.meta.get("parent_sid"),
+            active.meta.get("parent_cycle_id"),
+            active.meta.get("sub_sid"),
+        )
+        if identity in swept:
             continue
         recs = compute_parent_driven_sub_wvmi(
             active,
@@ -692,9 +698,9 @@ def _assign_trigger_centric_sub_wvmi(
         )
         active.wvmi_records = recs
         persist_facade_wvmi_to_entity_df(
-            m15_df, active, new_sid_id=esid, structure_path_id=sub_path_id,
+            m15_df, active, structure_path_id=sub_path_id,
         )
-        swept.add(esid)
+        swept.add(identity)
         if recs:
             counts["acted"] += 1
             counts["records"] += len(recs)
@@ -807,16 +813,15 @@ def _run_first_confluence_multi_tf(
     )
 
     results: list = []
-    next_entity_sid = 0
     for key in cycle_keys:
         bootstrap = bootstrap_by_cycle[key]
         subs = subs_by_cycle.get(key, [])
         print(f"[multi_tf:confluence] cycle parent_sid={key[0]} "
               f"parent_cycle={key[1]} subsequents={len(subs)}")
-        cycle_results, next_entity_sid = build_parent_cycle_chain(
+        cycle_results = build_parent_cycle_chain(
             m15_df, h1_df,
             bootstrap=bootstrap, subsequents=subs,
-            sub_path_id=sub_path_id, first_entity_sid=next_entity_sid,
+            sub_path_id=sub_path_id,
         )
         stream = _confluence_trigger_stream(
             key, main_first_sd_by_cycle, var4_all_sorted,
@@ -944,16 +949,15 @@ def _run_multi_tf(
     )
 
     lower_tf_results: list = []
-    next_entity_sid = 0
     for key in cycle_keys:
         bootstrap = bootstrap_by_cycle[key]
         subs = subs_by_cycle.get(key, [])
         print(f"[multi_tf] cycle parent_sid={key[0]} parent_cycle={key[1]} "
               f"subsequents={len(subs)}")
-        cycle_results, next_entity_sid = build_parent_cycle_chain(
+        cycle_results = build_parent_cycle_chain(
             m15_df_prepared, h1_df,
             bootstrap=bootstrap, subsequents=subs,
-            sub_path_id=sub_path_id, first_entity_sid=next_entity_sid,
+            sub_path_id=sub_path_id,
         )
         stream = _counter_trigger_stream(key, var3_all_sorted)
         c = _assign_trigger_centric_sub_wvmi(

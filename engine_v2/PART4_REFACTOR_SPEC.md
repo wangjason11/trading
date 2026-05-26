@@ -953,13 +953,16 @@ class StructureRegistry:
 - `role: "main" | "subordinate"`
 
 Per-sid attribution lives **in the df**, not on `EntityState`:
-- `df.attrs["sids"]` — list of sid records, each with `parent_sid`,
-  `parent_cycle_id`, `starting_sd`, `creation_event_idx`,
-  `end_event_idx`, `end_reason`. These are per-sid because one entity has
-  many sub instances (one per parent_cycle), each with its own
-  `starting_sd` derived from parent's current_sd at that moment.
-- Events / zones / POIs / WVMI all carry `sid + cycle + parent_cycle_id`
-  meta to support per-cycle filtering.
+- `df.attrs["sids"]` — list of sid records, each with `sub_sid`,
+  `parent_sid`, `parent_cycle_id`, `starting_sd`, `creation_event_idx`,
+  `end_event_idx`, `end_reason`. The identity is the tuple `(parent_sid,
+  parent_cycle_id, sub_sid)` (`parent_*` None for main → identity reduces
+  to `sub_sid == structure_id`). `sub_sid` resets to 0 each parent cycle;
+  each sid's `starting_sd` is derived from parent's current_sd at that
+  moment.
+- Events / zones / POIs / WVMI all carry the identity tuple
+  (`sub_sid + parent_sid + parent_cycle_id`) plus `cycle_id` meta to
+  support per-cycle filtering.
 
 ### 9.3 Per-entity df contents
 
@@ -968,9 +971,9 @@ Per-sid attribution lives **in the df**, not on `EntityState`:
 | df columns | TF candles (own copy) + `structure_id`, `cycle_id`, `cts_phase`, etc. |
 | `df.attrs["structure_path_id"]` | This entity's id |
 | `df.attrs["parent_path_id"]` | None for main |
-| `df.attrs["sids"]` | Per-sid records: `parent_sid`, `parent_cycle_id`, `starting_sd`, `creation_event_idx`, `end_event_idx`, `end_reason` |
-| `df.attrs["events"]` | Append-only events list, all sids of this entity, with `sid + cycle_id + parent_cycle_id` meta |
-| `df.attrs["kl_zones"]`, `["poi_zones"]`, `["wave_candles"]`, `["fib_states"]`, `["wvmi"]`, `["imbalances"]` | All entity-local; sid + cycle keyed; old sid entries with `deactivated_by` meta |
+| `df.attrs["sids"]` | Per-sid records: `sub_sid`, `parent_sid`, `parent_cycle_id`, `starting_sd`, `creation_event_idx`, `end_event_idx`, `end_reason` |
+| `df.attrs["events"]` | Append-only events list, all sids of this entity, with identity-tuple (`sub_sid + parent_sid + parent_cycle_id`) + `cycle_id` meta |
+| `df.attrs["kl_zones"]`, `["poi_zones"]`, `["wave_candles"]`, `["fib_states"]`, `["wvmi"]`, `["imbalances"]` | All entity-local; identity-tuple + cycle keyed (sids sequential & non-overlapping — no cascade) |
 | `df.attrs["zone_proximity_triggers"]` | This entity's own triggers (children consume via registry) |
 
 ### 9.4 Cross-entity lookups
@@ -985,7 +988,7 @@ sid_rec = self.current_sid_record()  # from df.attrs["sids"]
 parent_bos_zones = [
     z for z in parent.df.attrs["kl_zones"]
     if z.source_kind == "BOS"
-       and z.meta["sid"] == sid_rec.parent_sid
+       and z.meta["structure_id"] == sid_rec.parent_sid
        and z.meta["cycle_id"] == sid_rec.parent_cycle_id
 ]
 ```
@@ -1356,6 +1359,22 @@ between every step:
        persist `prev_bos_lines` (entity-absolute idx,
        entity_sid-attributed) so the M15 chart can read them from
        `m15_df.attrs["prev_bos_lines"]`.
+
+       > **⚠ SUPERSEDED (chart key-swap + §13.5.e, post-redesign).** The
+       > c.iii body above describes the pre-redesign state. Two later
+       > changes apply:
+       > 1. **`entity_sid` removed.** Grouping + `owner_by_idx` + all
+       >    snapshot attribution now key on the identity tuple
+       >    `(parent_sid, parent_cycle_id, sub_sid)` — there is no
+       >    `entity_sid` / `meta["entity_sid"]`. `sub_sid` is the per-parent
+       >    -cycle counter; the tuple is the identity.
+       > 2. **`deactivated_by` opacity gone.** The cascade was deleted
+       >    (redesign Phase 4); zone opacity is now a per-TF tier
+       >    (`_m15_opacity_tier_for_zone`), not a `overwritten_by_sid_{N}`
+       >    /`prior_inactive` lookup.
+       > 3. **§13.5.e (M15 half) DONE.** `export_m15_chart_plotly` is
+       >    registry-only (positional `m15_df`/`h1_df` fallback removed).
+       >    `export_chart_plotly`'s fallback removal is still pending.
 
      **Sid numbering convention (clarifies §6.1 below):** sids are
      **entity-wide** monotonically increasing integers, NOT

@@ -514,13 +514,13 @@ relocating the inline-derivation primitives to their natural home in
 
 ---
 
-## Chart Entry Points: Use Registry, Not Positional df (Part 4 transitional)
+## Chart Entry Points: Use Registry, Not Positional df
 
-**Rule:** `export_chart_plotly()` and `export_m15_chart_plotly()` accept
-**both** a positional df fallback (`df=...` / `m15_df=...` / `h1_df=...`)
-and a registry path (`registry=..., path_id=...`). **The positional
-fallback is transitional** — kept so existing tests and ad-hoc inspection
-scripts keep working. Migration plan §13.5.e removes it.
+**Rule:** `export_m15_chart_plotly()` is **registry-only** — it requires
+`registry=..., path_id=...` (§13.5.e: the positional `m15_df` / `h1_df`
+fallback was removed). `export_chart_plotly()` (the H1 chart) still accepts
+**both** a positional `df=...` fallback and the registry path; its fallback
+removal is the remaining half of §13.5.e (not yet done).
 
 **Don't add new callers that pass positional df.** Use the registry path:
 
@@ -539,18 +539,16 @@ export_m15_chart_plotly(
 its immediate parent, never grandparents"). The H1 chart's M15-zone
 overlay reaches into `registry.get(f"{path_id} >> M15.counter").df.attrs
 ["kl_zones"]`. New callers that hand-pass `m15_df` + `h1_df` separately
-bypass those lookups, and once §13.5.e deletes the orchestrator's
-deprecated `df.attrs` writes the positional path will silently produce
-empty zone overlays.
+bypass those lookups.
 
 **§13.5.c.iii update:** the `lower_tf_results` positional kwarg is
 **removed** from `export_m15_chart_plotly`. The chart consumer reads
 sub data from `m15_df.attrs["events" / "kl_zones" / "poi_zones" /
 "fib_states" / "wave_candles" / "wvmi" / "prev_bos_lines"]` grouped by
-`meta["entity_sid"]` per `m15_df.attrs["sids"]`. The same applies to
-`export_chart_plotly`'s M15-zone overlay — it reads zones from the
-M15.counter sub-entity in the registry, never from
-`dfx.attrs["lower_tf_results"]`.
+each snapshot's identity tuple `(parent_sid, parent_cycle_id, sub_sid)`
+per `m15_df.attrs["sids"]`. The same applies to `export_chart_plotly`'s
+M15-zone overlay — it reads zones from the M15.counter sub-entity in the
+registry, never from `dfx.attrs["lower_tf_results"]`.
 
 ---
 
@@ -912,9 +910,10 @@ out-of-bounds `start_idx`.
 **Rule:** §13.5.c.iii implements spec §16.5's "most recent sid only per
 candle" rule for sid-tied display elements (CTS dots, BOS markers, swing
 lines, PB markers, prev_bos lines, wave-candle hover anchors) by checking
-`owner_by_idx[rendered_candle_idx] == this_entity_sid`. The check uses
-the **rendered candle's idx**, NOT the event's emission idx, because for
-some events these differ:
+`owner_by_idx[rendered_candle_idx] == this_sid_identity` (the identity
+tuple `(parent_sid, parent_cycle_id, sub_sid)`). The check uses the
+**rendered candle's idx**, NOT the event's emission idx, because for some
+events these differ:
 
 | Element | Rendered candle |
 |---|---|
@@ -923,18 +922,22 @@ some events these differ:
 | PB dot | `ev.idx` (pullback STATE_CHANGED event) |
 | Wave-candle vertical line | `wc.last_wave_candle_idx` / `wc.first_wave_candle_idx` |
 | Prev BOS line | `line_info["start_idx"]` |
-| Swing-line extension at last sid | last idx still owned by this entity_sid (walk backward from `sid_rec.end_event_idx` skipping unowned cells) |
+| Swing-line extension at last sid | last idx still owned by this sid (walk backward from `sid_rec.end_event_idx` skipping unowned cells) |
 
-**Why this matters:** when var 4 cascades over var 2 starting at idx X,
-var 2's CTS_CONFIRMED at idx 325 with `cts_anchor_idx=315` should still
-render at 315 if 315 < X. Filtering by ev.idx=325 would hide it; filtering
-by cts_anchor_idx=315 (the actual rendering candle) keeps it visible.
+**Why this matters:** a sid's CTS_CONFIRMED at idx 325 with
+`cts_anchor_idx=315` should render at the *anchor* 315, not the
+confirmation candle 325. Filtering by ev.idx=325 would place/own the dot
+at the wrong candle; using cts_anchor_idx=315 (the actual rendering
+candle) is correct. (Pre-redesign this also mattered for cascade overlap;
+merge-and-bound sids are now non-overlapping, but the rendered-vs-emission
+idx distinction still stands.)
 
-**`owner_by_idx` construction:** walk SidRecords sorted by entity_sid asc;
-for each, claim `[creation_event_idx, end_event_idx]`. Later sids
-overwrite earlier in the dict — `owner_by_idx[i]` always reflects the
-most recent claimant. Built once per chart export by
-`_compute_owner_by_idx`.
+**`owner_by_idx` construction:** walk SidRecords sorted by identity tuple
+`(parent_sid, parent_cycle_id, sub_sid)` asc; for each, claim
+`[creation_event_idx, end_event_idx]`. Later sids overwrite earlier in the
+dict — but since merge-and-bound sids are sequential & non-overlapping,
+ranges don't actually overlap, so `owner_by_idx[i]` is just the single
+owning sid. Built once per chart export by `_compute_owner_by_idx`.
 
 **The default-keep heuristic:** `owner_by_idx.get(idx, eid) == eid` —
 when a candle isn't covered by any SidRecord (e.g., outside every sub's
@@ -982,7 +985,7 @@ and rectangles/dots land at completely wrong x-positions — but at
 internally consistent ones, so no exception fires.
 
 **Diagnostic signature:** sub chart element x-coords are offset from the
-expected position by exactly `slice_begin` for the owning `entity_sid`.
+expected position by exactly `slice_begin` for the owning sub sid.
 The rendered idx via `_lt_time` lands at `actual_idx - slice_begin`
 (slice-local read as entity-absolute). The zone's hover *correctly*
 shows the entity-absolute `base_idx` (because top-level meta IS shifted
@@ -995,7 +998,7 @@ so the key check never matched. KL zone segments on M15.confluence
 rendered with the leftmost expansion step at the correct base_idx (via
 the `seg_x0 < x0` clamp at `export_m15_chart.py:845`), but subsequent
 expansion-step rects landed at `entity_idx - slice_begin` instead of
-`entity_idx`. For entity_sid=0 with `slice_begin=580`: zone base_idx=1761
+`entity_idx`. For the sub `(0,0,0)` with `slice_begin=580`: zone base_idx=1761
 with one expansion at entity 1898 rendered the second rect at M15 row
 1318 (= 1898 − 580). Fixed by changing the loop's key check to
 `"start_idx"`.
