@@ -317,6 +317,7 @@ def derive_poi_zones(
     structure_events: List[StructureEvent],
     fib_tracker: Optional[FibTracker] = None,
     config: Optional[POIConfig] = None,
+    lifecycle_floor: Optional[int] = None,
 ) -> List[POIZone]:
     """
     Derive POI Zones from Fib states and IC identification.
@@ -376,6 +377,29 @@ def derive_poi_zones(
             # Keep the MAX idx for each structure_id (last reversal candle)
             if sid not in reversal_idx_by_sid or idx > reversal_idx_by_sid[sid]:
                 reversal_idx_by_sid[sid] = idx
+
+    # Structure lifecycle-start per sid (Phase 3 Commit 2, 2026-05-26): the idx
+    # a structure first becomes active — sid 0 = first structural anchor (min
+    # event idx); sid N>=1 = reversal-confirmation idx of sid N-1; subordinate
+    # = trigger idx supplied via `lifecycle_floor`. POI activation is floored
+    # here so a post-reversal cycle-0 POI (whose CTS_ESTABLISHED can precede the
+    # reversal) cannot activate before its structure is alive. Mirrors the KL
+    # clamp; see PART4_REFACTOR_SPEC §5 + ARCHITECTURE "Activation floor".
+    struct_start_by_sid: Dict[int, int] = {}
+    for ev in structure_events:
+        s = ev.meta.get("structure_id")
+        if s is None:
+            continue
+        s = int(s)
+        i = int(ev.idx)
+        if s not in struct_start_by_sid or i < struct_start_by_sid[s]:
+            struct_start_by_sid[s] = i
+    for s in list(struct_start_by_sid):
+        if (s - 1) in reversal_idx_by_sid:
+            struct_start_by_sid[s] = int(reversal_idx_by_sid[s - 1])
+    if lifecycle_floor is not None:
+        for s in struct_start_by_sid:
+            struct_start_by_sid[s] = max(struct_start_by_sid[s], int(lifecycle_floor))
 
     # Pre-group CTS_ESTABLISHED + CTS_UPDATED events by (sid, cycle_id) so the
     # per-POI activation scan doesn't re-iterate the full event list for every
@@ -507,6 +531,7 @@ def derive_poi_zones(
                 variant_thresholds=variant_thresholds,
                 imbalances=imbalances,
                 fill_idx_cache=fill_idx_cache,
+                lifecycle_floor_idx=struct_start_by_sid.get(int(sid)),
             )
 
             # confirmed_idx = idx of the most recent ACTIVATE event (if any).
@@ -752,6 +777,7 @@ def _compute_poi_activation_history(
     variant_thresholds: Dict[str, float],
     imbalances: List[ImbalanceInstance],
     fill_idx_cache: Dict[int, Tuple[Optional[int], Optional[int]]],
+    lifecycle_floor_idx: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """Produce the POI's activation history via an event-driven sweep.
 
@@ -788,7 +814,11 @@ def _compute_poi_activation_history(
     Returns `[{"idx", "active", "reason", "versions"?}, ...]`. Empty list
     means POI never activated in the window.
     """
+    # Floor at the structure lifecycle-start (Phase 3 Commit 2): a POI cannot
+    # activate before its structure is alive (post-reversal cycle-0 / sub case).
     first_active = max(cts_established_idx, ic_idx)
+    if lifecycle_floor_idx is not None:
+        first_active = max(first_active, int(lifecycle_floor_idx))
     if first_active > scan_end or ic_idx not in df.index:
         return []
 

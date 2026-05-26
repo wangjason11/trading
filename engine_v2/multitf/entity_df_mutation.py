@@ -575,6 +575,14 @@ def build_one_sid(
 
     bounded.df.attrs["imbalances"] = trigger_df.attrs.get("imbalances", [])
 
+    # Sub structure lifecycle-start (slice-local): the trigger idx. A sub's
+    # structural anchor (start_m15_abs) can sit historically before its trigger
+    # (subsequent / reversal sids), so floor zone/POI activation at the trigger
+    # — no sub zone may be active before the sub structure is alive (Phase 3
+    # Commit 2). For the bootstrap, start_trigger_idx == start_m15_abs, so the
+    # floor equals the structural start (a no-op clamp).
+    sub_lifecycle_floor_local = int(start_trigger_idx) - slice_begin
+
     downstream = _run_downstream_pipeline(
         bounded.df,
         bounded.events,
@@ -585,6 +593,7 @@ def build_one_sid(
         timeframe=timeframe,
         structure_path_id=sub_path_id,
         skip_wvmi=True,
+        lifecycle_floor=sub_lifecycle_floor_local,
     )
 
     # Reversal handoff (slice-local → entity-absolute). The bounded run only

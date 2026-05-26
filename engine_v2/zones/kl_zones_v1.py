@@ -689,6 +689,7 @@ def derive_kl_zones_v1(
     struct_direction: int,
     length_threshold: float = 0.7,
     source_kinds: Optional[List[str]] = None,
+    lifecycle_floor: Optional[int] = None,
 ) -> List[KLZone]:
     """
     Event-driven KL Zones v1:
@@ -1001,11 +1002,43 @@ def derive_kl_zones_v1(
             continue
         cts_est_by_key[(int(esid), int(ecyc))] = int(ev.idx)
 
+    # ----- Phase 3 Commit 2 (2026-05-26): lifecycle-start clamp -----
+    # A structure's lifecycle-start is the idx it first becomes active:
+    #   - main sid 0      : its first structural anchor (min event idx)
+    #   - main sid N >= 1 : the reversal-confirmation idx of sid N-1
+    #   - subordinate     : its trigger idx, supplied via `lifecycle_floor`
+    #     (entity-/slice-local; the sub bounded run is a single structure_id=0)
+    # A zone's first-active is floored at its structure's lifecycle-start; the
+    # cycle term (max with CTS_n ESTABLISHED) is subsumed because a zone's
+    # confirmed_idx is always >= its own cycle's CTS-established. See
+    # KL_ZONES_SPEC.md "Lifecycle-start clamp" and PART4_REFACTOR_SPEC §5.
+    struct_start_by_sid: dict = {}
+    for ev in events:
+        s = (ev.meta or {}).get("structure_id")
+        if s is None:
+            continue
+        s = int(s)
+        i = int(ev.idx)
+        if s not in struct_start_by_sid or i < struct_start_by_sid[s]:
+            struct_start_by_sid[s] = i
+    # Reversal handoff: sid N's lifecycle-start = reversal idx of sid N-1.
+    for s in list(struct_start_by_sid):
+        if (s - 1) in rev_confirmed_by_sid:
+            struct_start_by_sid[s] = int(rev_confirmed_by_sid[s - 1])
+    # Subordinate override: raise every sid's floor to the trigger lifecycle-start.
+    if lifecycle_floor is not None:
+        for s in struct_start_by_sid:
+            struct_start_by_sid[s] = max(struct_start_by_sid[s], int(lifecycle_floor))
+
     for zi, z in enumerate(zones):
         zmeta = z.meta or {}
         zsid = zmeta.get("structure_id")
         zcyc = zmeta.get("cycle_id")
-        confirmed_idx = int(zmeta.get("confirmed_idx"))
+        raw_confirmed = int(zmeta.get("confirmed_idx"))
+        # Clamp first-active to the structure lifecycle-start (no zone may
+        # activate before its structure is alive).
+        sstart = struct_start_by_sid.get(int(zsid)) if zsid is not None else None
+        confirmed_idx = max(raw_confirmed, int(sstart)) if sstart is not None else raw_confirmed
 
         # end_idx/end_reason: first of {reversal, next-cycle CTS-established}.
         end_idx = None
@@ -1045,6 +1078,9 @@ def derive_kl_zones_v1(
             if k not in ("active", "deactivated_by")
         }
         new_meta.update({
+            # confirmed_idx is the clamped first-active idx (>= structure
+            # lifecycle-start); equals the raw structural confirm when unclamped.
+            "confirmed_idx": confirmed_idx,
             "end_idx": end_idx,
             "end_reason": end_reason,
             "activation_history": activation_history,
