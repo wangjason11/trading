@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Any, Callable, List, Optional, Sequence, Tuple
 
 from engine_v2.charting.style_registry import STYLE
+from engine_v2.zones.poi_lifecycle import active_stretches_from_history
 
 
 # ---------------------------------------------------------------------------
@@ -60,31 +61,12 @@ def compute_poi_active_stretches(
     Returned tuples are `(start_idx, end_idx)` with `end_idx` the LAST
     active candle (inclusive on both ends). Callers translate to time
     coordinates at render time.
+
+    Delegates the pairing walk to `zones.poi_lifecycle` so the chart fills,
+    the proximity gate, and the hover labels can never disagree.
     """
     history = zone.meta.get("activation_history", []) or []
-    stretches: List[Tuple[int, int]] = []
-    active_start: Optional[int] = None
-    for ev in history:
-        idx = int(ev["idx"])
-        if idx > render_end_idx:
-            if active_start is not None:
-                stretches.append((active_start, render_end_idx))
-                active_start = None
-            return stretches
-        if ev.get("active"):
-            if active_start is None:
-                active_start = idx
-        else:
-            if active_start is not None:
-                # Deactivation at idx: last active candle is idx - 1.
-                # Guard against degenerate same-idx flip (shouldn't happen
-                # but cheap to defend).
-                end_idx = max(active_start, idx - 1)
-                stretches.append((active_start, end_idx))
-                active_start = None
-    if active_start is not None:
-        stretches.append((active_start, render_end_idx))
-    return stretches
+    return active_stretches_from_history(history, open_end_idx=render_end_idx)
 
 
 # ---------------------------------------------------------------------------

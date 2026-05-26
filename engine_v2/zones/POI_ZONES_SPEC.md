@@ -378,7 +378,7 @@ assumes "POI ⟹ sd direction."
 - `side`: "buy" if sd=+1, "sell" if sd=-1
 - `structure_id`, `struct_direction`, `cycle_id`
 - `ic_idx`: Index of the IC candle (rectangle start)
-- `confirmed_idx`: First activation idx (always > ic_idx, vertical line here)
+- `confirmed_idx`: **LAST** activate idx (lossy scalar — `poi_zones.py` overwrites it on every activation and never clears it on deactivation). A POI can flap active/inactive within a cycle, so this scalar does NOT bound the active interval. To ask "is the POI active as of candle X?" use `zones/poi_lifecycle.py::poi_active_as_of` (walks `activation_history`), never `confirmed_idx`. See GOTCHAS "POI `confirmed_idx` Is a Lossy Scalar".
 - `top`, `bottom`: IC high/low
 - `versions`: List of qualifying variants ["V30", "V60", "V90"]
 - `status`: "active" | "inactive" | "disappeared"
@@ -398,9 +398,9 @@ assumes "POI ⟹ sd direction."
 3. **No event:** Zone remains active (`end_time = None`)
 
 ### Lifecycle
-- Zone activates first time IC is found (`confirmed_idx` recorded)
-- Zone can disappear if IC no longer qualifies on subsequent candles
-- Zone re-appears if IC qualifies again (but `confirmed_idx` stays as first activation)
+- Zone activates the first time IC qualifies; **every** activate/deactivate flip is recorded in `activation_history` (`[{"idx", "active", ...}]`)
+- Zone can deactivate if IC no longer qualifies on subsequent candles, then re-activate later — a cycle can flap multiple times
+- `confirmed_idx` collapses to the **LAST** activate idx (NOT the first). Per-candle activation lives in `activation_history`; query it via `zones/poi_lifecycle.py` (`poi_active_as_of`, `poi_confirmed_idx_as_of`), never the scalar. Consumers that treat `[confirmed_idx, end_idx]` as one active span are blind to earlier active stretches (this caused the sid1-cyc2 proximity-trigger loss — see GOTCHAS)
 
 ### Activation floor — cycle lifecycle-start clamp (REVISED 2026-05-26)
 
@@ -441,7 +441,7 @@ cfg = {
    - Starts at `ic_idx` (the IC candle)
    - Ends at `end_time` (or chart end if None)
    - Horizontal lines at top/bottom bounds
-2. **Confirm Line** — Darker vertical line at `confirmed_idx`
+2. **Confirm Line(s)** — one darker vertical line per activate event in `activation_history` (legacy fallback: a single line at `confirmed_idx` for zones predating the history)
 3. **Fibonacci Lines** — Dotted lines at 0%/100% anchors, rectangle at 61.8-80%
 4. **Imbalance Candle Highlighting** — Entire candle (body + wicks) colored distinctly:
    - Bullish imbalance: Lime Green `rgba(50, 205, 50, 0.8)`

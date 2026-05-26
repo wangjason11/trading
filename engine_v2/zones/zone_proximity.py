@@ -57,6 +57,7 @@ import pandas as pd
 
 from engine_v2.common.types import KLZone
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.zones.poi_lifecycle import poi_active_as_of
 from engine_v2.zones.poi_zones import POIZone
 
 
@@ -458,11 +459,10 @@ def _try_trigger_at_candle(
     if expected_dir == "sd":
         sd_inners: List[Tuple[float, str]] = [(bos_inner, "BOS")]
         for pz in cycle_poi_zones:
-            confirmed_idx = pz.meta.get("confirmed_idx")
-            end_idx_pz = pz.meta.get("end_idx")
-            if confirmed_idx is None or idx < confirmed_idx:
-                continue
-            if end_idx_pz is not None and idx > end_idx_pz:
+            # A POI can flap active/inactive within a cycle, so its live
+            # state is NOT the scalar `confirmed_idx` (= last activate). Ask
+            # the activation history whether it is active AS OF this candle.
+            if not poi_active_as_of(pz, idx):
                 continue
             if sd == 1:
                 sd_inners.append((float(pz.top), "POI"))

@@ -1046,3 +1046,44 @@ inherited the chain-root's trigger. That coverage was an *over-sweep artifact* o
 the old model merging pre/post-reversal structure into one swept sid; the
 redesign made the reversal a sid boundary, which correctly makes the reversal sid
 independently gated.
+
+---
+
+## POI `confirmed_idx` Is a Lossy Scalar — Use Per-Candle `activation_history`
+
+**Problem:** A POI's `meta["confirmed_idx"]` collapses its whole
+`activation_history` to a single int — and `poi_zones.py` (the loop at
+~line 545) sets it to the idx of the **LAST** `active=True` event,
+overwriting on each activation and **never clearing it on deactivation**.
+A POI can flap active→inactive→active multiple times within one cycle, so
+this scalar does NOT represent the POI's live state. Any consumer that
+treats `[confirmed_idx, end_idx]` as a single active interval is blind to
+every earlier active stretch.
+
+**Concrete bug (2026-05-26, sid=1 cycle=2, NZD_USD H1):** POI(inner=0.5772)
+had `activation_history = [905:A, 952:D, 953:A, 992:D, 997:A]` →
+`confirmed_idx` collapsed to **997**. The `sd:POI` proximity gate
+(`zone_proximity.py`) checked `idx < confirmed_idx` and so treated the POI
+as inactive until 997 — even though it was genuinely active at idx 926
+(inside the `[905,951]` stretch). Result: the cycle's first `sd` trigger
+slipped 926→1017, and the `954` `opp_sd` was locked out behind it (opp_sd
+can only fire after an sd). Two proximity candles vanished. Fixed by making
+the gate ask per-candle activation instead of comparing against the scalar.
+
+**Fix shape:** new pure leaf module `zones/poi_lifecycle.py`:
+- `active_stretches_from_history(history, open_end_idx)` — pairs
+  `active=True` with the next `active=False` into `(start,end)` stretches
+  (the shared primitive; `charting/_zone_render.compute_poi_active_stretches`
+  delegates to it so chart fills and the gate can't drift apart).
+- `poi_active_as_of(zone, idx)` — True iff `idx` falls in an active stretch
+  (respects `end_idx` as a hard cap). The proximity gate calls this.
+- `poi_confirmed_idx_as_of(zone, idx)` — start of the active stretch
+  containing `idx` (the per-candle replacement for the scalar; the chart
+  hover `z_conf` now shows this, e.g. 905 at candle 926, not the collapsed 997).
+
+**Rule:** to answer "is this POI active at candle X?" (or "what is its
+confirmed idx as of X?"), ALWAYS walk `activation_history` via
+`zones/poi_lifecycle.py` — never read the scalar `confirmed_idx`. The scalar
+survives only as a legacy chart fallback (zones with no history) and the
+debug print. See LANDMINES "POI Activation Is Per-Candle, Not a Scalar Span"
+and POI_ZONES_SPEC "Zone Data Fields".

@@ -1047,3 +1047,37 @@ should hit it.
 **See also:** `engine_v2/IMBALANCE_FILL_SEMANTICS.md` for the
 canonical call-site matrix and `POI_ZONES_SPEC.md §1` for the
 rationale.
+
+---
+
+## POI Activation Is Per-Candle, Not a Scalar Span
+
+**Rule:** A POI's active interval is its `meta["activation_history"]` (a list
+of `{"idx", "active", ...}` flips), NOT the scalar `meta["confirmed_idx"]`.
+To decide "is this POI active at candle X?" call
+`zones/poi_lifecycle.py::poi_active_as_of(zone, X)`. NEVER gate on
+`confirmed_idx <= X <= end_idx`.
+
+**Why:** `poi_zones.py` collapses the history to `confirmed_idx` = the LAST
+activate idx (overwritten per activation, never cleared on deactivation). A
+POI commonly flaps active→inactive→active within one cycle, so the scalar
+points at the final stretch and hides every earlier one. A gate that uses
+`[confirmed_idx, end_idx]` as one interval silently drops triggers that
+should fire in an earlier active stretch.
+
+**What broke (2026-05-26):** the `sd:POI` proximity gate used the scalar and
+lost the sid1-cyc2 candles at idx 926 (`sd`) and 954 (`opp_sd`) — the POI was
+active at 926 (stretch `[905,951]`) but `confirmed_idx` had collapsed to 997.
+Full causal chain in GOTCHAS "POI `confirmed_idx` Is a Lossy Scalar".
+
+**The single source of the per-candle walk** is `zones/poi_lifecycle.py`
+(`active_stretches_from_history`, `poi_active_as_of`,
+`poi_confirmed_idx_as_of`). It is a pure leaf module — imports nothing from
+`zones/` or `charting/`, so both layers can depend on it without a cycle.
+`charting/_zone_render.compute_poi_active_stretches` already delegates to it;
+keep new consumers on the same helper so chart fills, the proximity gate, and
+hover labels never disagree. `confirmed_idx` remains ONLY as a legacy chart
+fallback (zones predating `activation_history`) and the debug print — do not
+revive it as an activation bound, and do not "fix" the bug by flipping the
+producer to first-activate (that ignores the deactivation flaps and
+over-activates).

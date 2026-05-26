@@ -111,8 +111,14 @@ def _cts_zone(sid: int, cycle_id: int, sd: int, inner: float, outer: float) -> K
 
 
 def _poi_zone(sid: int, cycle_id: int, sd: int, top: float, bottom: float,
-              confirmed_idx: int, end_idx=None) -> POIZone:
+              confirmed_idx: int, end_idx=None, activation_history=None) -> POIZone:
+    """Build a POI zone. The proximity gate reads `activation_history` (not
+    the scalar `confirmed_idx`); a single-span POI defaults to one activate
+    at `confirmed_idx`. Pass `activation_history` explicitly to model a POI
+    that flaps active/inactive within its cycle."""
     side = "buy" if sd == 1 else "sell"
+    if activation_history is None:
+        activation_history = [{"idx": confirmed_idx, "active": True, "reason": "initial"}]
     return POIZone(
         start_time=pd.Timestamp("2026-01-01", tz="UTC"),
         end_time=None, side=side, top=top, bottom=bottom,
@@ -121,6 +127,7 @@ def _poi_zone(sid: int, cycle_id: int, sd: int, top: float, bottom: float,
             "structure_id": sid, "cycle_id": cycle_id,
             "confirmed_idx": confirmed_idx, "end_idx": end_idx,
             "versions": ["V60"],
+            "activation_history": activation_history,
         },
     )
 
@@ -219,6 +226,57 @@ def test_poi_not_active_yet_excluded():
     )
     # Should NOT trigger off POI; should only consider BOS (1.40 + 0.002 = 1.402, low 1.451 too high)
     # → no trigger
+    assert (0, 0) not in triggers
+
+
+def test_poi_fires_in_first_active_stretch_not_last_activate():
+    """Regression (sid1 cyc2 / idx 926): a POI that flaps active->inactive->
+    active has its scalar `confirmed_idx` collapsed to the LAST activate. The
+    gate must use the per-candle activation history, so a candle inside the
+    FIRST active stretch still triggers — even though it is far before the
+    scalar confirmed_idx."""
+    df = _make_df(30, default_h=1.50, default_l=1.49)
+    df.at[6, "l"] = 1.4505  # within 9p of POI inner 1.45; far from BOS inner 1.40
+    bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
+    # Active [5,9], inactive [10,19], active [20,...]. Scalar confirmed_idx=20.
+    poi = _poi_zone(
+        sid=0, cycle_id=0, sd=1, top=1.45, bottom=1.44, confirmed_idx=20,
+        activation_history=[
+            {"idx": 5, "active": True}, {"idx": 10, "active": False},
+            {"idx": 20, "active": True},
+        ],
+    )
+    triggers = check_zone_proximity(
+        df=df, sorted_events=[_cts_confirmed(2)],
+        kl_zones=[bos], poi_zones=[poi],
+        pip_size=0.0001, timeframe="H1",
+    )
+    # Old code (scalar confirmed_idx=20) would exclude the POI at idx 6 and
+    # fire nothing; the per-candle gate fires sd:POI at 6.
+    assert (0, 0) in triggers
+    assert triggers[(0, 0)][0].direction == "sd"
+    assert triggers[(0, 0)][0].idx == 6
+    assert triggers[(0, 0)][0].zone_kind == "POI"
+
+
+def test_poi_suppressed_during_inactive_stretch():
+    """A candle inside an INACTIVE stretch must not trigger off the POI, even
+    though the scalar confirmed_idx (first/only activate) precedes it."""
+    df = _make_df(30, default_h=1.50, default_l=1.49)
+    df.at[12, "l"] = 1.4504  # would hit POI inner 1.45 IF active; BOS too far
+    bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
+    # Active [5,9] then inactive from 10 onward (no reactivation).
+    poi = _poi_zone(
+        sid=0, cycle_id=0, sd=1, top=1.45, bottom=1.44, confirmed_idx=5,
+        activation_history=[
+            {"idx": 5, "active": True}, {"idx": 10, "active": False},
+        ],
+    )
+    triggers = check_zone_proximity(
+        df=df, sorted_events=[_cts_confirmed(2)],
+        kl_zones=[bos], poi_zones=[poi],
+        pip_size=0.0001, timeframe="H1",
+    )
     assert (0, 0) not in triggers
 
 

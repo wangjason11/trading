@@ -15,6 +15,7 @@ from engine_v2.charting._zone_render import (
     compute_kl_active_stretches,
     compute_poi_active_stretches,
 )
+from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
 from engine_v2.common.types import PatternStatus
 from engine_v2.multitf.registry import StructureRegistry
 
@@ -2093,8 +2094,10 @@ def export_chart_plotly(
                 continue
             poi_zones_by_cycle.setdefault((int(sid), int(cyc)), []).append(pz)
 
-        def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int) -> int:
-            """Find POI zone matching the trigger_inner price; return its confirmed_idx."""
+        def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int, at_idx: int) -> int:
+            """Find the POI matching `inner`; return its confirmed idx AS OF
+            `at_idx` (start of the active stretch containing `at_idx`), not the
+            collapsed-scalar `confirmed_idx` which is the LAST activate."""
             cands = poi_zones_by_cycle.get((sid, cyc), [])
             best = None
             best_diff = float("inf")
@@ -2106,7 +2109,7 @@ def export_chart_plotly(
                     best = pz
             if best is None:
                 return -1
-            cidx = best.meta.get("confirmed_idx")
+            cidx = poi_confirmed_idx_as_of(best, at_idx)
             return int(cidx) if cidx is not None else -1
 
         x_vals, y_vals, customdata = [], [], []
@@ -2151,7 +2154,7 @@ def export_chart_plotly(
                 if trig.zone_kind == "POI":
                     z_conf = _poi_confirmed_idx(
                         int(trig.structure_id), int(trig.cycle_id),
-                        float(trig.trigger_inner), int(sd) if sd else 1,
+                        float(trig.trigger_inner), int(sd) if sd else 1, idx,
                     )
                 else:
                     z_conf = kl_conf_idx_by_key.get(

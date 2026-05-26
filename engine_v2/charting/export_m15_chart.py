@@ -34,6 +34,7 @@ from engine_v2.charting._zone_render import (
     compute_poi_active_stretches,
     select_subordinate_tf_tier,
 )
+from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
 from engine_v2.charting.export_plotly import (
     _rgba_from_rgb,
     _zone_style,
@@ -2123,7 +2124,7 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
             continue
         poi_zones_by_cycle.setdefault((int(sid), int(cyc)), []).append(pz)
 
-    def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int) -> int:
+    def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int, at_idx: int) -> int:
         cands = poi_zones_by_cycle.get((sid, cyc), [])
         best = None
         best_diff = float("inf")
@@ -2135,7 +2136,7 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
                 best = pz
         if best is None:
             return -1
-        cidx = best.meta.get("confirmed_idx")
+        cidx = poi_confirmed_idx_as_of(best, at_idx)
         return int(cidx) if cidx is not None else -1
 
     # M15 times (already datetime in dfx; build once for binary lookup).
@@ -2204,7 +2205,7 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
             if trig.zone_kind == "POI":
                 z_conf = _poi_confirmed_idx(
                     int(trig.structure_id), int(trig.cycle_id),
-                    float(trig.trigger_inner), int(sd) if sd else 1,
+                    float(trig.trigger_inner), int(sd) if sd else 1, h1_idx,
                 )
             else:
                 z_conf = kl_conf_idx_by_key.get(
