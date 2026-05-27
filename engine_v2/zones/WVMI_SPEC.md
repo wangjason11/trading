@@ -204,8 +204,17 @@ WVMI renders FB/LB/FP/LP as markers on the wave-candle lines, **per-component**
   - **ended-without-lock** — the sub's own **reversal**, OR a **parent entity
     ending** (parent-cycle end / parent reversal / parent-sid end — the
     `lifecycle_cap` cases) before `BOS_{n+1}` → FB/LB/FP only, no LP.
-  - **open / df-end** (`cap_open`, no end) → FB/LB/FP + the shifting temp LP.
+  - **open / df-end** (`cap_open`, no end) → FB/LB/FP shown; LP per the open
+    decision below.
 - **inactive/collapsed** — nothing shown.
+
+> **OPEN (decide at the chart pass): is the LP line drawn *while active* (before
+> lock)?** (A) draw the **shifting temp LP**, walking each candle as the pullback
+> develops, then finalize at lock; or (B) **no LP line until it locks** — while
+> active show only FB/LB/FP (the temp LP keeps updating in the *data* per
+> `update_temporary_lp`, just isn't drawn). Both are coherent; (B) is cleaner, (A)
+> shows the live pullback. Either way, ended-without-lock = no LP, and a locked LP
+> is always drawn. Not load-bearing for the data-only lifecycle work.
 
 This **diverges from fib** (fib vanishes an ended-unlocked record): WVMI keeps the
 breakout markers because the breakout leg is a fact locked at creation. Opacity/
