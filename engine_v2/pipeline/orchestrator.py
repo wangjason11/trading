@@ -65,6 +65,8 @@ def _run_downstream_pipeline(
     structure_path_id: str = "H1.main",
     skip_wvmi: bool = False,
     lifecycle_floor: Optional[int] = None,
+    lifecycle_cap: Optional[int] = None,
+    cap_reason: str = "lifecycle_end",
 ) -> Dict[str, Any]:
     """Run downstream pipeline (KL zones -> wave candles -> Fib -> POI -> WVMI).
 
@@ -97,6 +99,8 @@ def _run_downstream_pipeline(
         length_threshold=length_threshold,
         source_kinds=None,
         lifecycle_floor=lifecycle_floor,
+        lifecycle_cap=lifecycle_cap,
+        cap_reason=cap_reason,
     )
     if source_kinds is None:
         kl_zones = all_kl_zones
@@ -297,6 +301,8 @@ def _run_downstream_pipeline(
         fib_tracker=fib_tracker,
         config=poi_config,
         lifecycle_floor=lifecycle_floor,
+        lifecycle_cap=lifecycle_cap,
+        cap_reason=cap_reason,
     )
     print(f"{pfx}[poi_zones] total=", len(poi_zones))
 

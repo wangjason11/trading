@@ -28,7 +28,11 @@ from engine_v2.features.fibonacci import FibRetracement
 from engine_v2.patterns.imbalance import has_unfilled_imbalance
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.fib_tracker import FibTracker, FibState, select_fib_anchor_for_cycle
-from engine_v2.zones.structure_lifecycle import compute_struct_start_by_sid
+from engine_v2.zones.structure_lifecycle import (
+    compute_cycle_lifecycle,
+    compute_reversal_idx_by_sid,
+    compute_struct_start_by_sid,
+)
 
 
 @dataclass(frozen=True)
@@ -319,6 +323,8 @@ def derive_poi_zones(
     fib_tracker: Optional[FibTracker] = None,
     config: Optional[POIConfig] = None,
     lifecycle_floor: Optional[int] = None,
+    lifecycle_cap: Optional[int] = None,
+    cap_reason: str = "lifecycle_end",
 ) -> List[POIZone]:
     """
     Derive POI Zones from Fib states and IC identification.
@@ -367,17 +373,10 @@ def derive_poi_zones(
             key = (sid, cycle_id)
             cts_established_by_key[key] = ev
 
-    # Build lookup for reversal_confirmed_idx per structure_id
-    # Reversal ends ALL zones for that structure
-    # Use STATE_CHANGED events where to='reversal'
-    reversal_idx_by_sid: Dict[int, int] = {}
-    for ev in structure_events:
-        if ev.type == "STATE_CHANGED" and ev.meta.get("to") == "reversal":
-            sid = int(ev.meta.get("structure_id", 0))
-            idx = int(ev.idx)
-            # Keep the MAX idx for each structure_id (last reversal candle)
-            if sid not in reversal_idx_by_sid or idx > reversal_idx_by_sid[sid]:
-                reversal_idx_by_sid[sid] = idx
+    # Reversal-confirmed idx per structure_id (reversal ends ALL zones for that
+    # structure). Shared helper (B2 dedup, 2026-05-27) — was duplicated verbatim
+    # here and in kl_zones_v1.
+    reversal_idx_by_sid: Dict[int, int] = compute_reversal_idx_by_sid(structure_events)
 
     # Structure lifecycle-start per sid (Phase 3 Commit 2, 2026-05-26): the idx
     # a structure first becomes active — sid 0 = first structural anchor (min
@@ -388,10 +387,16 @@ def derive_poi_zones(
     # post-reversal cycle-0 POI (whose CTS_ESTABLISHED can precede the reversal)
     # cannot activate before its structure is alive. Mirrors the KL clamp; see
     # PART4_REFACTOR_SPEC §5 + ARCHITECTURE "Activation floor".
-    # Start resolution is the shared pure-leaf helper (B1 unification, 2026-05-27);
-    # reversal_idx_by_sid is passed in (the end resolution below still uses it).
+    # Start resolution is the shared pure-leaf helper (B1 unification, 2026-05-27).
     struct_start_by_sid = compute_struct_start_by_sid(
         structure_events, reversal_idx_by_sid, lifecycle_floor,
+    )
+    # Cycle lifecycle table for END inheritance (B2 pass-through, 2026-05-27):
+    # end = min(next-cycle clamped start, reversal, lifecycle_cap). POI inherits
+    # its (sid, cycle) end from here instead of recomputing it per fib. cap=None
+    # for main; subs supply the slice-local cap (+ cap_reason) via build_one_sid.
+    cycle_life = compute_cycle_lifecycle(
+        structure_events, reversal_idx_by_sid, lifecycle_floor, lifecycle_cap, cap_reason,
     )
 
     # Pre-group CTS_ESTABLISHED + CTS_UPDATED events by (sid, cycle_id) so the
@@ -464,27 +469,13 @@ def derive_poi_zones(
             int(cts_event.idx) if cts_event else int(fib_state.cts_idx)
         )
 
-        # Determine end_idx + end_reason (terminal state — irreversible).
-        # Priority:
-        #   1. Reversal (highest)
-        #   2. Next cycle CTS_ESTABLISHED
-        #   3. None → zone extends to chart end
-        end_idx: Optional[int] = None
-        end_reason: Optional[str] = None
-        end_time = None
-
-        if sid in reversal_idx_by_sid:
-            end_idx = reversal_idx_by_sid[sid]
-            end_reason = "reversal"
-            end_time = _time(end_idx)
-
-        next_cycle_key = (sid, cycle_id + 1)
-        if next_cycle_key in cts_established_by_key:
-            next_cts_idx = int(cts_established_by_key[next_cycle_key].idx)
-            if end_idx is None or next_cts_idx < end_idx:
-                end_idx = next_cts_idx
-                end_reason = "next_cycle"
-                end_time = _time(end_idx)
+        # end_idx + end_reason inherited from the cycle (B2 pass-through):
+        # min(next-cycle clamped start, reversal, lifecycle_cap). Terminal /
+        # irreversible. None → zone extends to chart end.
+        life = cycle_life.get((sid, cycle_id))
+        end_idx: Optional[int] = life[1] if life is not None else None
+        end_reason: Optional[str] = life[2] if life is not None else None
+        end_time = _time(end_idx) if end_idx is not None else None
 
         # Last candle for the activation scan window.
         last_candle = int(df.index.max())
@@ -556,8 +547,12 @@ def derive_poi_zones(
                     current_versions = []
                     currently_active = False
 
-            # Derived 3-state status at end of data (or end_idx if reached).
-            if end_idx is not None and end_idx <= last_candle:
+            # Derived 3-state status. Mirrors KL: a POI that never activated
+            # (empty activation_history — e.g. a collapsed cycle) is "inactive",
+            # not "ended" (it never began). Standardized 2026-05-27.
+            if not activation_history:
+                status = "inactive"
+            elif end_idx is not None and end_idx <= last_candle:
                 status = "ended"
             elif currently_active:
                 status = "active"

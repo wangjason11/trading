@@ -1138,10 +1138,10 @@ fib lines. The migration still ran (H1 fib hover labels switched to the
 
 ---
 
-## Sub Lifecycle-Start Clamp: Uniform, Parent-Floored; Start Resolution Is Shared, End Is NOT (yet)
+## Sub Lifecycle-Start Clamp: Uniform, Parent-Floored; Start AND End Resolution Are Shared
 
-Two interlocking facts about the cycle/structure lifecycle-start clamp
-(B1, 2026-05-27). Canonical model + H1→M15 mapping live in
+Two interlocking facts about the cycle/structure lifecycle clamp (B1 start +
+B2 Phase A end, 2026-05-27). Canonical model + H1→M15 mapping live in
 `PART4_REFACTOR_SPEC.md §5`; full session writeup in
 `memory/project_cycle_lifecycle_parent_cycle_floor.md`.
 
@@ -1176,15 +1176,24 @@ parent_cycle_id_start)`. Do not add a per-cycle carve-out.
   built sub's parent cycle has a `CTS_ESTABLISHED`), but if one ever fired the
   symptom is the original bug — a sub activating before its parent cycle.
 
-**2. Start resolution is SHARED; end resolution + the reversal dict are STILL
-DUPLICATED.** The per-`structure_id` lifecycle-**start** is the single pure-leaf
-helper `zones/structure_lifecycle.py::compute_struct_start_by_sid`, called by
-both `kl_zones_v1` and `poi_zones`. But the **end** resolution (first of
-{reversal, next-cycle `CTS_ESTABLISHED`}) and the reversal dict
-(`kl_zones_v1._get_reversal_confirmed_by_sid_from_events` vs `poi_zones` inline
-`reversal_idx_by_sid` — byte-identical today) are **still duplicated verbatim
-across the two files** (the "B2" end-unification is deferred, pending
-end-condition verification). **Until B2 lands, any change to the end resolution
-or the reversal-dict construction MUST be made in BOTH files** or they silently
-drift (the exact hazard the pass-through was meant to kill). See
-[[feedback-in-flight-vs-downstream-resolver]].
+**2. Start AND end resolution are SHARED (B2 Phase A, 2026-05-27).** All three
+helpers live in the pure-leaf `zones/structure_lifecycle.py`, called by both
+`kl_zones_v1` and `poi_zones`:
+- `compute_struct_start_by_sid` — per-`structure_id` lifecycle-start (the clamp).
+- `compute_cycle_lifecycle(events, reversal_dict, floor, cap, cap_reason)` —
+  per-`(sid, cycle)` `(start, end, end_reason)`. **End is a pass-through:**
+  `end = min(next-cycle clamped start, reversal, lifecycle_cap)`, never computed
+  per-zone. KL/POI INHERIT `end_idx` / `end_reason` from this table.
+- `compute_reversal_idx_by_sid` — the single reversal dict (the old duplicated
+  `_get_reversal_confirmed_by_sid_from_events` / inline `reversal_idx_by_sid`
+  are gone).
+
+**Any change to end resolution or the reversal-dict construction goes in the
+helper, NOT per-zone** — the whole point of the pass-through is one source of
+truth (the drift hazard from [[feedback-in-flight-vs-downstream-resolver]]). The
+post-hoc `build_one_sid` KL/POI cap loops are gone: subs pass `lifecycle_cap`
+(the mirror of `lifecycle_floor` — `min` for end vs `max` for start) into the
+derivation, and that cap doubles as the M15 slice/run bound (load-bearing; see
+§5). Collapsed cycles (clamped `start >= end`) are uniformly `status="inactive"`
+with empty `activation_history` (outline-only) — this replaced the prior split
+where the inner KL derivation said `"ended"` and the cap said `"inactive"`.

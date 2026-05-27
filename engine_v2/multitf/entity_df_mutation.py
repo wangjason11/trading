@@ -602,6 +602,26 @@ def build_one_sid(
         _floor_abs = max(_floor_abs, int(parent_floor_m15))
     sub_lifecycle_floor_local = _floor_abs - slice_begin
 
+    # Sub end-cap (B2 pass-through, 2026-05-27) — the mirror of the floor. The
+    # sub's effective end = its own reversal (the structure boundary, slice-local
+    # and < end_m15_abs) if it reversed inside the window, else the window bound
+    # (parent-cycle / next-sub end). Resolved BEFORE the run so it can be passed
+    # in as `lifecycle_cap`: KL + POI then INHERIT it as their cycle end (this
+    # replaces the prior post-hoc cap loop). The fib cap below still uses
+    # cap_time / cap_idx_local (the fib lifecycle track is not yet on the helper).
+    reversal_idx_abs: Optional[int] = (
+        bounded.reversal_idx + slice_begin if bounded.reversal_idx is not None else None
+    )
+    effective_end_abs = (
+        reversal_idx_abs if reversal_idx_abs is not None else end_m15_abs
+    )
+    end_reason = "reversal" if reversal_idx_abs is not None else "lifecycle_end"
+    sub_lifecycle_cap_local = effective_end_abs - slice_begin
+    cap_time = pd.to_datetime(
+        entity_df.loc[effective_end_abs, "time"], utc=True,
+    )
+    cap_idx_local = effective_end_abs - slice_begin
+
     downstream = _run_downstream_pipeline(
         bounded.df,
         bounded.events,
@@ -616,16 +636,15 @@ def build_one_sid(
         structure_path_id=sub_path_id,
         skip_wvmi=True,
         lifecycle_floor=sub_lifecycle_floor_local,
+        lifecycle_cap=sub_lifecycle_cap_local,
+        cap_reason=end_reason,
     )
 
-    # Reversal handoff (slice-local → entity-absolute). The bounded run only
-    # ever reverses inside the window (end_idx bounds it), so reversal_idx,
-    # when set, is < end_m15_abs.
-    reversal_idx_abs: Optional[int] = None
+    # Reversal handoff (slice-local → entity-absolute). reversal_idx_abs was
+    # resolved above (for the end-cap); here we derive the NEXT sid's start.
     next_start_abs: Optional[int] = None
     next_sd: Optional[int] = None
     if bounded.reversal_idx is not None:
-        reversal_idx_abs = bounded.reversal_idx + slice_begin
         d_next = identify_start_scenario_2_after_reversal(
             bounded.df,
             reversal_idx=bounded.reversal_idx,
@@ -635,18 +654,6 @@ def build_one_sid(
         )
         next_start_abs = int(d_next.start_idx) + slice_begin
         next_sd = int(d_next.struct_direction)
-
-    # Effective end = the reversal (the sid's real boundary) if it reversed,
-    # else the window bound. Open/late artifacts cap here so a sid that
-    # reversed mid-window doesn't extend zones into the next sid's territory.
-    effective_end_abs = (
-        reversal_idx_abs if reversal_idx_abs is not None else end_m15_abs
-    )
-    end_reason = "reversal" if reversal_idx_abs is not None else "lifecycle_end"
-    cap_time = pd.to_datetime(
-        entity_df.loc[effective_end_abs, "time"], utc=True,
-    )
-    cap_idx_local = effective_end_abs - slice_begin
 
     attribution: Dict[str, Any] = {
         "timeframe": timeframe,
@@ -660,34 +667,12 @@ def build_one_sid(
     for zone in downstream["kl_zones"]:
         zone.meta.update(attribution)
 
-    # KL cap = the structure-end → open-cycle-end → zone-end pass-through for
-    # subs (Phase 3 convention). Open/late KL zones inherit the sub's effective
-    # end (reversal or parent lifecycle_end). cap_idx_local is slice-local; the
-    # mirror translates end_idx to entity-absolute alongside confirmed_idx.
-    capped_zones = []
-    for zone in downstream["kl_zones"]:
-        if zone.end_time is None or zone.end_time > cap_time:
-            ah = zone.meta.get("activation_history") or []
-            zone = _replace(
-                zone,
-                end_time=cap_time,
-                meta={**zone.meta,
-                      "end_idx": cap_idx_local,
-                      "end_reason": end_reason,
-                      "status": "ended" if ah else "inactive"},
-            )
-        capped_zones.append(zone)
-
-    capped_pois = []
-    for poi in downstream["poi_zones"]:
-        if poi.end_time is None or poi.end_time > cap_time:
-            poi = _replace(
-                poi,
-                end_time=cap_time,
-                meta={**poi.meta, "active": False,
-                      "deactivated_by": end_reason},
-            )
-        capped_pois.append(poi)
+    # KL + POI now INHERIT their cycle end from the derivation: the cap was
+    # passed in as `lifecycle_cap` above (B2 pass-through), so the prior post-hoc
+    # cap loops are gone. The mirror translates end_idx slice-local→entity-absolute
+    # alongside confirmed_idx, exactly as before.
+    capped_zones = downstream["kl_zones"]
+    capped_pois = downstream["poi_zones"]
 
     capped_fibs = []
     capped_cycles: Dict[tuple, tuple] = {}  # (sid, cycle) -> (end_idx, end_reason, status)

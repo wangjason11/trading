@@ -9,32 +9,16 @@ import pandas as pd
 
 from engine_v2.common.types import KLZone
 from engine_v2.structure.market_structure import StructureEvent
-from engine_v2.zones.structure_lifecycle import compute_struct_start_by_sid
+from engine_v2.zones.structure_lifecycle import (
+    compute_cycle_lifecycle,
+    compute_reversal_idx_by_sid,
+    compute_struct_start_by_sid,
+)
 
 
-def _get_reversal_confirmed_by_sid_from_events(events: list) -> dict:
-    """
-    Get reversal confirmed idx per structure_id from STATE_CHANGED events.
-    Returns dict: {structure_id: last_reversal_idx}
-
-    This is more reliable than df columns because market_state gets overwritten
-    by subsequent structures, but events are preserved.
-    """
-    rev_by_sid = {}
-    for ev in events:
-        if getattr(ev, "type", None) != "STATE_CHANGED":
-            continue
-        if ev.meta.get("to") != "reversal":
-            continue
-        sid = ev.meta.get("structure_id")
-        if sid is None:
-            continue
-        sid = int(sid)
-        idx = int(ev.idx)
-        # Keep the MAX idx for each structure_id (reversal confirmed = last reversal candle)
-        if sid not in rev_by_sid or idx > rev_by_sid[sid]:
-            rev_by_sid[sid] = idx
-    return rev_by_sid
+# Reversal-idx-per-sid now lives in `structure_lifecycle.compute_reversal_idx_by_sid`
+# (B2 dedup, 2026-05-27) — shared with POI; previously duplicated verbatim here
+# and in `poi_zones`.
 
 
 # -------------------------
@@ -691,6 +675,8 @@ def derive_kl_zones_v1(
     length_threshold: float = 0.7,
     source_kinds: Optional[List[str]] = None,
     lifecycle_floor: Optional[int] = None,
+    lifecycle_cap: Optional[int] = None,
+    cap_reason: str = "lifecycle_end",
 ) -> List[KLZone]:
     """
     Event-driven KL Zones v1:
@@ -710,7 +696,7 @@ def derive_kl_zones_v1(
     current_sid: Optional[int] = None  # Track current structure for reversal detection
 
     # Pre-compute reversal confirmed indices per structure_id (for deactivating zones on reversal)
-    rev_confirmed_by_sid = _get_reversal_confirmed_by_sid_from_events(events)
+    rev_confirmed_by_sid = compute_reversal_idx_by_sid(events)
 
     # Debugging
     print("[kl_zones][events] BOS_CONFIRMED:", [
@@ -980,45 +966,24 @@ def derive_kl_zones_v1(
             break
 
     # ------------------------------------------------------------------
-    # Phase 3 (2026-05-26): unified lifecycle. Each zone inherits its owning
-    # cycle's resolved end and adopts the active/inactive/ended convention,
-    # replacing the prior scattered end mechanisms (CTS_ESTABLISHED early-end,
-    # same-side replacement, reversal/terminal caps). End resolution mirrors
-    # POI (zones/poi_zones.py): first of {reversal, next-cycle CTS-established}.
-    # See KL_ZONES_SPEC.md "Lifecycle".
-    #
-    # NOTE (Commit 1): confirmed_idx is left UNCLAMPED here — the
-    # lifecycle-start clamp (cycle/structure floors) lands in Commit 2.
+    # Unified lifecycle (Phase 3 2026-05-26; END pass-through B2 2026-05-27).
+    # Each zone INHERITS its owning cycle's resolved end from the shared
+    # `compute_cycle_lifecycle` table — ends are derived from starts, never
+    # computed per-zone (PART4_REFACTOR_SPEC §5 "End resolution as
+    # start-passthrough"). The zone keeps its OWN start (first-active), clamped
+    # up to the structure lifecycle-start (B1) — nothing inherits cycle start.
     # ------------------------------------------------------------------
     last_candle = int(dfx.index.max())
 
-    # CTS_ESTABLISHED idx per (sid, cycle) — the next-cycle boundary source.
-    cts_est_by_key: dict = {}
-    for ev in events:
-        if ev.type != "CTS_ESTABLISHED":
-            continue
-        esid = (ev.meta or {}).get("structure_id")
-        ecyc = (ev.meta or {}).get("cycle_id")
-        if esid is None or ecyc is None:
-            continue
-        cts_est_by_key[(int(esid), int(ecyc))] = int(ev.idx)
-
-    # ----- Phase 3 Commit 2 (2026-05-26): lifecycle-start clamp -----
-    # A structure's lifecycle-start is the idx it first becomes active:
-    #   - main sid 0      : its first structural anchor (min event idx)
-    #   - main sid N >= 1 : the reversal-confirmation idx of sid N-1
-    #   - subordinate     : `lifecycle_floor` = max(trigger, parent_sid_start,
-    #     parent_cycle_start), supplied (slice-local) by build_one_sid; the sub
-    #     bounded run is a single structure_id=0. The parent floors live in
-    #     build_one_sid — this layer stays parent-agnostic (one int).
-    # A zone's first-active is floored at its structure's lifecycle-start; the
-    # cycle term (max with CTS_n ESTABLISHED) is subsumed because a zone's
-    # confirmed_idx is always >= its own cycle's CTS-established. See
-    # KL_ZONES_SPEC.md "Lifecycle-start clamp" and PART4_REFACTOR_SPEC §5.
-    # Start resolution is the shared pure-leaf helper (B1 unification, 2026-05-27);
-    # rev_confirmed_by_sid is passed in (the end resolution below still uses it).
+    # struct_start (per sid) for the first-active clamp (B1, unchanged). The
+    # cycle lifecycle table (start, end, end_reason) for END inheritance: end =
+    # min(next-cycle clamped start, reversal, lifecycle_cap). For main cap=None;
+    # for subs build_one_sid supplies the slice-local cap (+ cap_reason).
     struct_start_by_sid = compute_struct_start_by_sid(
         events, rev_confirmed_by_sid, lifecycle_floor,
+    )
+    cycle_life = compute_cycle_lifecycle(
+        events, rev_confirmed_by_sid, lifecycle_floor, lifecycle_cap, cap_reason,
     )
 
     for zi, z in enumerate(zones):
@@ -1026,24 +991,15 @@ def derive_kl_zones_v1(
         zsid = zmeta.get("structure_id")
         zcyc = zmeta.get("cycle_id")
         raw_confirmed = int(zmeta.get("confirmed_idx"))
-        # Clamp first-active to the structure lifecycle-start (no zone may
-        # activate before its structure is alive).
+        # Clamp first-active (the zone's OWN start) to the structure
+        # lifecycle-start (no zone may activate before its structure is alive).
         sstart = struct_start_by_sid.get(int(zsid)) if zsid is not None else None
         confirmed_idx = max(raw_confirmed, int(sstart)) if sstart is not None else raw_confirmed
 
-        # end_idx/end_reason: first of {reversal, next-cycle CTS-established}.
-        end_idx = None
-        end_reason = None
-        if zsid is not None and int(zsid) in rev_confirmed_by_sid:
-            end_idx = int(rev_confirmed_by_sid[int(zsid)])
-            end_reason = "reversal"
-        if zsid is not None and zcyc is not None:
-            next_key = (int(zsid), int(zcyc) + 1)
-            if next_key in cts_est_by_key:
-                next_cts = cts_est_by_key[next_key]
-                if end_idx is None or next_cts < end_idx:
-                    end_idx = next_cts
-                    end_reason = "next_cycle"
+        # end_idx/end_reason inherited from the cycle (pass-through).
+        life = cycle_life.get((int(zsid), int(zcyc))) if (zsid is not None and zcyc is not None) else None
+        end_idx = life[1] if life is not None else None
+        end_reason = life[2] if life is not None else None
 
         end_time = _time(end_idx) if end_idx is not None else None
 
@@ -1056,13 +1012,15 @@ def derive_kl_zones_v1(
                 {"idx": confirmed_idx, "active": True, "reason": "confirmed"}
             ]
 
-        # Derived 3-state status at end-of-data (mirrors POI).
-        if end_idx is not None and end_idx <= last_candle:
-            status = "ended"
-        elif activation_history:
-            status = "active"
-        else:
+        # Derived 3-state status. Collapsed (no activation) is "inactive" — it
+        # never became active, so not "ended" (standardized 2026-05-27; matches
+        # the prior build_one_sid cap, replacing the inner derivation's "ended").
+        if not activation_history:
             status = "inactive"
+        elif end_idx is not None and end_idx <= last_candle:
+            status = "ended"
+        else:
+            status = "active"
 
         new_meta = {
             k: v for k, v in zmeta.items()

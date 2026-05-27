@@ -641,8 +641,9 @@ generalized):
   and `SidRecord.creation_event_idx` are all unchanged — only first-active /
   `confirmed_idx` / fill move. The END-side unification (+ dedup of the reversal
   dict currently duplicated across KL `_get_reversal_confirmed_by_sid_from_events`
-  and POI inline `reversal_idx_by_sid`) is a separate later step ("B2"), to follow
-  end-condition verification. Full writeup:
+  and POI inline `reversal_idx_by_sid`) is step "B2" — end-condition verification
+  is **done** (2026-05-27) and the agreed pass-through end model + Phase A/B plan
+  are locked below in "End resolution as start-passthrough". Full writeup:
   `memory/project_cycle_lifecycle_parent_cycle_floor.md`.
 
 Why the clamp is needed: a reversal's confirmation candle is when the new
@@ -691,6 +692,84 @@ sub cycles/structures never start before their parent.
   lifecycle state. `FibState` *should* eventually adopt the convention (it has
   both axes) but its migration is deferred to its own session. Both decisions
   are written up in `ARCHITECTURE.md` "Lifecycle state convention".
+
+##### End resolution as start-passthrough — the B2 unification (Locked 2026-05-27)
+
+End-condition verification (2026-05-27, against commit `2573990`) confirmed the
+model above is correct and the two zone-end resolutions (KL `kl_zones_v1`, POI
+`poi_zones`) are already byte-identical. This subsection locks how the ends are
+*computed*, completing on the end side the pass-through model B1 began on the
+start side.
+
+**Ends are derived from starts — never computed independently.** Every "end" is
+the lifecycle-**start** idx of whatever supersedes it, propagated down
+(structure-end → cycle-end → zone-end). So the same start machinery B1 unified is
+the single source for all ends:
+
+- **cycle end** = `min(` next-cycle-on-same-structure **clamped** start,
+  own-structure end, [sub] parent-cycle end, [sub] parent-sid end `)`.
+- **structure end** = `min(` next-structure start, [sub] parent-cycle end,
+  [sub] parent-sid end `)` — itself a min of superseding starts.
+
+These nest but are computed at once. **`min` for end mirrors `max` for start:** a
+cycle starts no earlier than the latest of its floors (can't begin before any is
+alive) and ends at the earliest of its caps (the first end condition wins; a
+later one is moot).
+
+**Symmetric floor / cap (the sub cross-layer seam).** Main computes its whole
+table from the H1 event stream. A sub cannot — its within-structure ends (next
+sub-cycle, next sub_sid) live in the bounded-run/chain while its parent ends
+(parent-cycle / parent-sid paths) live in the H1 layer. So, exactly mirroring
+B1's start `lifecycle_floor`:
+
+- **`lifecycle_floor`** (single int, `max`) — start floor. [B1]
+- **`lifecycle_cap`** (single int, `min`) — end cap. [B2]
+
+Both are `None` for main and supplied (slice-local) by the multitf layer for
+subs. The cap is **load-bearing**: for a sub it equals `end_m15_abs`, which is
+also the upper bound of the M15 slice the bounded structure runs on — so it must
+be computed *before* the run (in `build_parent_cycle_chain` / `build_one_sid`, as
+today) and any change to its **value** shifts the run, not just an annotation.
+
+**Implementation (`zones/structure_lifecycle.py`).** A pure-leaf
+`compute_cycle_lifecycle(events, reversal_idx_by_sid, lifecycle_floor,
+lifecycle_cap) -> Dict[(sid, cycle), (start_idx, end_idx, end_reason)]`:
+  1. *Pass 1 — clamped cycle starts:* `start = max(CTS_ESTABLISHED.ev.idx,
+     struct_start, floor)` (`struct_start` from `compute_struct_start_by_sid`,
+     the B1 helper).
+  2. *Pass 2 — ends from next starts:* `end = min(next-cycle clamped start,
+     reversal_idx_by_sid[sid], cap)`; `end_reason` records which won
+     (`next_cycle` / `reversal` / `lifecycle_end`). End uses the next cycle's
+     **clamped** start (not its raw `CTS_EST.idx`); these differ only for
+     collapsed sub cycles.
+The reversal dict is built once by a shared `compute_reversal_idx_by_sid(events)`
+(retiring the duplicated KL `_get_reversal_confirmed_by_sid_from_events` vs POI
+inline `reversal_idx_by_sid`) and passed to both the start and the end helpers.
+
+**Elements inherit the END only; they keep their own START.** When a cycle ends,
+every attached element ends with it, so each KL / POI (later Fib / WVMI) looks up
+its `(sid, cycle)` `end_idx` / `end_reason` from the table. **Nothing inherits
+cycle start** — each element computes its own first-active by its own
+active/inactive logic, clamped up to the cycle/structure floor (B1). BOS KL zones
+*coincide* with cycle start but keep computing their own breakout start
+("Option 2", 2026-05-27) so the unification stays byte-identical; the ≤1-candle
+extreme-vs-breakout divergence on a few M15 sub cycles is accepted as the zone
+confirming one candle into its just-opened cycle. active/inactive state stays
+element-specific (POI's per-candle `activation_history`, KL's single interval).
+
+**Collapsed cycles** (clamped `start >= end`, common for reversal-born subs whose
+anchor sits behind the parent start) → `status = "inactive"`, empty
+`activation_history` (renders outline-only). This standardizes the prior split:
+the inner KL derivation said `"ended"`, the `build_one_sid` cap said `"inactive"`.
+
+**Phase B (separate, byte-identical on H1).** The parent-cycle / parent-sid paths
+(the sub `lifecycle_cap`) ARE the *next parent `(sid, cycle)`'s clamped start* —
+exactly the `parent_cycle_floor_h1` table the start side already builds. Today the
+cap is instead sourced from `trigger.lifecycle_end_idx` = next-parent-cycle
+`BOS_CONFIRMED.confirmed_at` (the apply candle), which equals
+`CTS_ESTABLISHED.ev.idx` on H1 (verified 0 mismatches) but is a latent overlap
+hazard if they ever diverge. Phase B re-points the cap onto the parent
+start-table (canonical `CTS_EST.idx`) and retires `lifecycle_end_idx` if unused.
 
 ---
 
