@@ -279,7 +279,7 @@ class TestOnCtsConfirmed:
         assert rec.fb_volume == 200
         assert rec.lb_volume == 300
         assert rec.fp_volume == 150
-        assert rec.status == "created"
+        assert rec.lp_status == "created"
         assert rec.lp_locked is False
 
     def test_breakout_momentum_calculation(self):
@@ -412,7 +412,7 @@ class TestUpdateTemporaryLp:
         assert len(updated) == 1
         rec = updated[0]
         assert rec.lp_idx == 17
-        assert rec.status == "updated"
+        assert rec.lp_status == "updated"
 
     def test_locked_record_not_updated(self):
         """Locked records should not be updated."""
@@ -499,7 +499,7 @@ class TestOnBosConfirmed:
         assert len(locked) == 1
         rec = locked[0]
         assert rec.lp_locked is True
-        assert rec.status == "locked"
+        assert rec.lp_status == "locked"
         assert rec.locked_by_cycle_id == 2
         # LP should be from BOS_2's last wave candle
         assert rec.lp_idx == 18

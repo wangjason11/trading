@@ -149,12 +149,18 @@ is correctly **`active`** (open), not a defect.
 
 ---
 
-## Lifecycle convention (active/ended + start/end) — AGREED 2026-05-27, IMPL PENDING
+## Lifecycle convention (active/ended + start/end) — DATA LAYER IMPLEMENTED 2026-05-27
 
 > Brings `WVMIRecord` onto the lifecycle convention (ARCHITECTURE "Lifecycle state
 > convention"), the LAST element off it. Design agreed 2026-05-27 (full discussion
 > in `memory/project_wvmi_lifecycle_deferred.md`); mirrors the FibState scalar
-> model (`FIB_LIFECYCLE_SPEC.md §15`). **Not yet implemented.**
+> model (`FIB_LIFECYCLE_SPEC.md §15`). **Data layer IMPLEMENTED 2026-05-27**
+> (`status`→`lp_status` rename + scalar `start_idx`/`end_idx`/`end_reason` +
+> derived `status`; `WVMITracker._finalize_lifecycle_fields`; main + trigger-
+> centric sub wiring). `/compare`-validated: 3 chart PNGs + all H1/sub CSVs
+> byte-identical, only the 3 WVMI CSVs gained columns. **Chart rendering is the
+> immediate next step** (no longer deferred to the chart-wide pass) — see the
+> rendering section below.
 
 ### Tier-1: NO active/inactive axis
 
@@ -189,11 +195,20 @@ Lock fires at `BOS_{n+1}` CONFIRMED, and in this engine
 multi-cycle structure `lp_locked` ≈ `end_idx` (coincide). For the open/last cycle,
 neither fires → `active`, temp LP shifting (correct).
 
-### Chart rendering intent — DEFERRED to the chart-wide pass (NOT implemented now)
+### Chart rendering intent — NEXT STEP (decided 2026-05-27: gate existing hover/lines, no new glyphs)
 
-The lifecycle *data* must carry enough for this; the *rendering* lands later.
-WVMI renders FB/LB/FP/LP as markers on the wave-candle lines, **per-component**
-(not a single show/hide gate):
+> **Scope decision (user 2026-05-27):** the rendering is implemented by **gating
+> the EXISTING wave-candle hover/lines** by the WVMI lifecycle — **NOT** by adding
+> new FB/LB/FP/LP marker glyphs. WVMI is hover-only today (the wave-candle vertical
+> lines belong to the wave-candle feature; WVMI rides them as hover momentum on
+> LB/LP — `export_plotly.py` ~1983, `CHARTING_SPEC.md`). The per-component show/hide
+> logic below is the decided behavior; it is applied to that existing rendering.
+> Opacity/tiering is still deferred to the chart-wide pass. The precise hover-vs-line
+> boundary (does an ended-without-lock LP suppress only the WVMI momentum block, or
+> the line association?) is resolved during implementation.
+
+The lifecycle gates the existing per-component rendering (FB/LB/FP/LP on the
+wave-candle lines), **per-component** (not a single show/hide gate):
 
 - **FB, LB, FP** — shown once created (start idx); permanent (locked at creation),
   independent of active/ended/locked.
@@ -212,8 +227,7 @@ WVMI renders FB/LB/FP/LP as markers on the wave-candle lines, **per-component**
 > LP line IS drawn as the shifting temp LP (updates each candle per
 > `update_temporary_lp`), then finalizes to the official LP at lock. (Rejected (B)
 > = "no LP until locked"; (A) shows the live pullback, fits the visualization-first
-> ethos.) ended-without-lock = no LP; a locked LP is always drawn. Still a
-> deferred *chart* change — this just fixes the rule for the chart-wide pass.
+> ethos.) ended-without-lock = no LP; a locked LP is always drawn.
 
 This **diverges from fib** (fib vanishes an ended-unlocked record): WVMI keeps the
 breakout markers because the breakout leg is a fact locked at creation. Opacity/
@@ -348,6 +362,9 @@ for each sub LowerTFResult:
 | `lb_weight`, `lp_weight` | float | Last candle weights (default 1.0) |
 | `breakout_momentum`, `pullback_momentum` | Optional[float] | Computed ratios |
 | `buy_momentum`, `sell_momentum` | Optional[float] | Direction-labeled wrappers |
-| `status` | str | "created"/"updated"/"locked" |
+| `lp_status` | str | Computation axis: "created"/"updated"/"locked" (renamed from `status`) |
 | `lp_locked` | bool | Whether LP is finalized |
 | `locked_by_cycle_id` | Optional[int] | BOS cycle that locked this record |
+| `start_idx` | Optional[int] | Lifecycle start = creation idx (CTS_n CONFIRMED) clamped to struct/parent floor; None when collapsed |
+| `end_idx`, `end_reason` | Optional[int], Optional[str] | Inherited cycle pass-through end (None at the open data edge) |
+| `status` | str | Derived lifecycle: "active"/"ended"/"inactive" (collapsed→inactive; end_idx set→ended; else active) |

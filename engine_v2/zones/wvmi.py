@@ -14,6 +14,11 @@ import pandas as pd
 from engine_v2.common.types import KLZone, WVMIRecord
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.poi_zones import POIZone
+from engine_v2.zones.structure_lifecycle import (
+    compute_cycle_lifecycle,
+    compute_reversal_idx_by_sid,
+    compute_struct_start_by_sid,
+)
 from engine_v2.zones.wave_candles import WaveCandleResult
 
 
@@ -158,10 +163,13 @@ class WVMITracker:
     """
     Tracks Wave Volume Momentum Indicators across market structure cycles.
 
-    Lifecycle (mirrors FibTracker):
-    1. Created at CTS_n confirmation — breakout locked, pullback starts shifting
-    2. Updated as candles arrive — temporary LP may shift to closer qualified candle
-    3. Locked at BOS_n+1 confirmation — LP finalizes from BOS_n+1 wave candles
+    Two orthogonal axes per record (WVMI_SPEC):
+      - Computation (`lp_status`, mirrors FibTracker's create/lock):
+          1. created at CTS_n confirmation — breakout locked, pullback shifting
+          2. updated as candles arrive — temp LP shifts to closer qualified candle
+          3. locked at BOS_n+1 confirmation — LP finalizes from BOS_n+1 wave candles
+      - Lifecycle (`status` + `start_idx`/`end_idx`/`end_reason`): tier-1
+        start/end, stamped once by `_finalize_lifecycle_fields` at end of sweep.
 
     One tracker per entity (Part 4 §9). `structure_path_id` is stamped on
     every record this tracker emits.
@@ -170,6 +178,10 @@ class WVMITracker:
     def __init__(self, structure_path_id: Optional[str] = None):
         self._records: Dict[tuple, WVMIRecord] = {}  # key: (sid, cycle_id)
         self._structure_path_id = structure_path_id
+        # Creation idx per (sid, cycle_id) = CTS_n CONFIRMED event idx, captured
+        # at on_cts_confirmed. The lifecycle `start_idx` source (clamped to the
+        # struct floor in _finalize_lifecycle_fields). WVMI_SPEC "Fields (scalar)".
+        self._creation_idx: Dict[tuple, int] = {}
 
     def on_cts_confirmed(
         self,
@@ -269,12 +281,16 @@ class WVMITracker:
             pullback_momentum=pullback_momentum,
             buy_momentum=buy_mom,
             sell_momentum=sell_mom,
-            status="created",
+            lp_status="created",
             lp_locked=False,
         )
 
         key = (sid, cycle_id)
         self._records[key] = record
+        # Creation idx = the CTS_n CONFIRMED event idx (== confirmed_at, the
+        # confirmation candle — when the record is born and breakout momentum
+        # locks). Sticky per cycle; the lifecycle start_idx source.
+        self._creation_idx.setdefault(key, int(cts_event.idx))
         print(f"[wvmi] CREATED sid={sid} cycle={cycle_id}: bo_mom={breakout_momentum:.4f} pb_mom={pullback_momentum if pullback_momentum is not None else 'N/A'} lp_idx={lp_idx}")
         return record
 
@@ -319,7 +335,7 @@ class WVMITracker:
             rec.buy_momentum, rec.sell_momentum = _assign_direction_labels(
                 rec.zone_side, rec.breakout_momentum, rec.pullback_momentum
             )
-            rec.status = "updated"
+            rec.lp_status = "updated"
             updated.append(rec)
 
         return updated
@@ -374,12 +390,86 @@ class WVMITracker:
             rec.zone_side, rec.breakout_momentum, rec.pullback_momentum
         )
         rec.lp_locked = True
-        rec.status = "locked"
+        rec.lp_status = "locked"
         rec.locked_by_cycle_id = bos_cycle_id
         locked.append(rec)
         print(f"[wvmi] LOCKED sid={sid} cycle={prev_cycle_id}: pb_mom={rec.pullback_momentum if rec.pullback_momentum is not None else 'N/A'} lp_idx={rec.lp_idx} (by BOS cycle={bos_cycle_id})")
 
         return locked
+
+    def _finalize_lifecycle_fields(
+        self,
+        events: List[StructureEvent],
+        lifecycle_floor: Optional[int] = None,
+        lifecycle_cap: Optional[int] = None,
+        cap_reason: str = "lifecycle_end",
+    ) -> None:
+        """Stamp the scalar lifecycle axes onto every WVMI record.
+
+        Mirrors `FibTracker._finalize_lifecycle_fields` (FIB_LIFECYCLE_SPEC §15.6)
+        but TIER-1 — WVMI is created-once / locked-once with NO reversible
+        condition axis (WVMI_SPEC "Tier-1: NO active/inactive axis"), so there is
+        no `active` bool and no `activation_history`. Per record (keyed by its
+        cycle identity `(sid, cycle_id)`):
+
+          - `start_idx` = the creation idx (CTS_n CONFIRMED, captured in
+            `_creation_idx`) CLAMPED UP to the structure/parent floor
+            (`compute_struct_start_by_sid`). Like fib, the clamp is to the
+            STRUCTURE floor (not the full cycle-start) — it only raises a start
+            that precedes the parent floor (the sub B1 gap); main is a no-op
+            (CTS_CONFIRMED always follows the structure's first event).
+          - `end_idx`/`end_reason` = INHERITED from
+            `compute_cycle_lifecycle[(sid,cycle)]` — the cycle pass-through end
+            (next-cycle clamped start / reversal / sub cap). Data-end is NOT a
+            terminator (PART4 §5): an open last / single-cycle WVMI gets
+            `end_idx=None` → stays `active` to the edge.
+          - `status` (derived): collapsed (clamped start ≥ end) or no creation
+            idx → "inactive"; `end_idx` set → "ended"; else "active".
+
+        The computation axis (`lp_status`/`lp_locked`/`locked_by_cycle_id`) is
+        untouched — orthogonal (a record can be `ended` yet not `lp_locked`).
+
+        Coordinate space follows `events`: the main tracker is finalized with the
+        entity-absolute H1 events (floor/cap None); a sub tracker is finalized
+        with the sub's slice-local events + slice-local floor/cap, and
+        `persist_facade_wvmi_to_entity_df` then shifts `start_idx`/`end_idx` to
+        entity-absolute alongside the wave-candle idx fields.
+
+        Idempotent; call once after the create/lock/update sweep.
+        """
+        rev = compute_reversal_idx_by_sid(events)
+        struct_floor = compute_struct_start_by_sid(events, rev, lifecycle_floor)
+        cycle_life = compute_cycle_lifecycle(
+            events, rev, lifecycle_floor, lifecycle_cap, cap_reason,
+        )
+
+        for (sid, cycle_id), rec in self._records.items():
+            start_idx = self._creation_idx.get((sid, cycle_id))
+            if start_idx is not None:
+                sfloor = struct_floor.get(sid)
+                if sfloor is not None and int(sfloor) > start_idx:
+                    start_idx = int(sfloor)
+
+            life = cycle_life.get((sid, cycle_id))
+            end_idx = life[1] if life is not None else None
+            end_reason = life[2] if life is not None else None
+
+            # Collapse (mirrors KL/POI/fib): a clamped start at/after the cycle
+            # end means the cycle had no live window → inactive.
+            if start_idx is not None and end_idx is not None and start_idx >= end_idx:
+                start_idx = None
+
+            if start_idx is None:
+                status = "inactive"
+            elif end_idx is not None:
+                status = "ended"
+            else:
+                status = "active"
+
+            rec.start_idx = start_idx
+            rec.end_idx = end_idx
+            rec.end_reason = end_reason
+            rec.status = status
 
     def get_records(self) -> List[WVMIRecord]:
         """Return all WVMI records."""

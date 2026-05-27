@@ -1049,6 +1049,33 @@ independently gated.
 
 ---
 
+## Cross-referencing a sub record to its zone: join on `sub_sid`, NOT the internal `structure_id`
+
+**Rule:** to match a subordinate WVMI record to its KL / POI / fib record (e.g.
+in a `/compare` validation), join on the **full identity**
+`(parent_sid, parent_cycle_id, sub_sid, cycle_id)` — and read `sub_sid` from
+**both** artifacts. Do **NOT** join on the record's internal `structure_id`
+(`WVMIRecord.bos_structure_id`, `KLZone.meta["structure_id"]`): inside a bounded
+single-structure sub run the internal `structure_id` is **always 0** (the run
+stops at the first reversal, so it never rolls past sid 0), so every sub within a
+parent cycle collapses to `structure_id == 0` and the join silently mismatches.
+
+**Why two different fields exist:** `sub_sid` is the **entity-local per-parent-
+cycle chain counter** (0, 1, 2, … resetting each parent cycle — the redesign's
+identity); the internal `structure_id` is the MarketStructure counter *within one
+bounded run* (always 0 for a sub). Both are stamped into zone/WVMI meta. They
+coincide only for `sub_sid == 0`.
+
+**How it bit (2026-05-27, WVMI lifecycle validation):** cross-checking each sub
+WVMI `(end_idx, end_reason)` against its KL BOS-zone end, joining on
+`structure_id` reported spurious mismatches (a `sub_sid=0` WVMI record matched the
+wrong sub's zone). Re-joining on `sub_sid` made all 8 sub records match exactly.
+The values were correct all along — WVMI inherits the **same**
+`compute_cycle_lifecycle` end as KL/POI/fib (identical events + slice-local floor/
+cap), so a real mismatch there would mean a wiring bug, not a data bug.
+
+---
+
 ## POI `confirmed_idx` Is a Lossy Scalar — Use Per-Candle `activation_history`
 
 **Problem:** A POI's `meta["confirmed_idx"]` collapses its whole
