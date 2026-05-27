@@ -1,10 +1,20 @@
 # FibState Lifecycle Spec — Design & Implementation Plan
 
-> **Status:** Design complete (2026-05-27). **Session 1 / Step 1 IMPLEMENTED
-> (2026-05-27, byte-identical) — Sessions 2 & 3 NOT started.** This document is
+> **Status:** Design complete (2026-05-27). **Sessions 1 & 2 IMPLEMENTED
+> (2026-05-27) — Session 3 OPTIONAL/deferred.** This document is
 > the cold-readable, canonical design produced from a full design session. It is
 > the FIRST spec doc for `zones/fib_tracker.py` (previously the only description
 > was the `cross_cycle` mode memory entry). Per-session status lives in §12.
+>
+> **⚠ READ §15 FIRST (2026-05-27 simplification).** After Sessions 1 & 2, we
+> decided to **drop `activation_history`** (it has no consumer except one cap
+> discriminator) and log the lifecycle as **scalar current values** —
+> `active` + sticky `start_idx` + `end_idx`/`end_reason` + `locked` + derived
+> `status`. §15 is the **current authoritative model**; it **supersedes** the
+> "keep `activation_history`" decision (§8.5, decision-log #6) and the history's
+> role in §8.2/§9/§11. The orthogonal-axes design (§3) and Option A (§7) are
+> unchanged. §15 also folds in the start-clamp + end-pass-through wiring that
+> brings fib onto the same `compute_cycle_lifecycle` machinery KL/POI use.
 >
 > **Scope:** Bring `FibState` onto the active/inactive/ended **lifecycle
 > convention** (ARCHITECTURE.md "Lifecycle state convention"), which `POIZone`
@@ -271,6 +281,13 @@ cycle-end value**, exactly as KL/POI. **Precedence:** passed-through terminal
 ---
 
 ## 8. `activation_history` + derived `status` (the condition axis)
+
+> **⚠ SUPERSEDED by §15 (2026-05-27).** `activation_history` is being **removed** —
+> it had no consumer beyond the one cap discriminator (§15.1). The condition axis
+> is now logged as scalars (`active` current value + sticky `start_idx`). The
+> derived-`status` rules and the axis-separation principle below still hold; only
+> the *history list* is gone. Read §15 for the current model. The text below is
+> retained for the design rationale that produced the axes.
 
 ### 8.1 Two independent axes inside the cross logic
 
@@ -761,9 +778,12 @@ updated deliberately.
    fib early (at the cross-creation idx) — diverges from the zone end at this one
    boundary, preserves "one active fib." Other terminals (reversal, parent) =
    passed-through cycle-end.
-6. **`activation_history`:** sparse, coarse CTS-event granularity, kept (not
+6. **`activation_history`:** ~~sparse, coarse CTS-event granularity, kept (not
    dropped), tracker-level `(sid,cycle)` dict fed by BOTH subsystems; handoffs
-   logged as `reanchor` actives; terminal not in the history.
+   logged as `reanchor` actives; terminal not in the history.~~ **SUPERSEDED by
+   §15 (2026-05-27): `activation_history` is REMOVED** (no consumer); the
+   condition axis is logged as scalars — `active` (current) + sticky `start_idx`
+   (= first-active idx, which subsumes the cap's "ever active" discriminator).
 7. **"Project, don't unify":** keep A's and B's storage; unify the lifecycle at
    the cycle-identity projection.
 8. **Chart gate (per record):** `not scenario1_revert AND (active OR locked)`. No
@@ -774,3 +794,157 @@ updated deliberately.
 10. **Sequencing:** additive byte-identical build → consumer-switch + gate
     (intentional diff, sign-off) + in-place-reactivation → optional opacity
     refactor (separate session).
+
+---
+
+## 15. Simplification (2026-05-27) — scalar lifecycle logging; drop `activation_history`
+
+> **This section is the current authoritative model for the condition/lifecycle
+> axes.** It is a deliberate post-Session-2 simplification. It supersedes §8.5
+> ("KEEP `activation_history`") and decision-log #6, and narrows §8.2/§9.1/§11
+> wherever they lean on the *history list*. The **orthogonal-axes** design (§3.3),
+> **Option A** end (§7), `disappeared` (§10), and the per-record draw gate (§9.1)
+> are all **unchanged in spirit** — only the storage of the condition axis changes
+> (a list → scalars), plus we wire the start-clamp and end-pass-through onto the
+> shared `compute_cycle_lifecycle` machinery (the deferred Fib floor/cap work).
+
+### 15.1 Why — `activation_history` has no consumer
+
+After Sessions 1 & 2, an audit found `FibState.activation_history` has **exactly
+one functional consumer**: the open-sub-fib cap's ended-vs-inactive discriminator
+in `entity_df_mutation.py` (`"ended" if fib.activation_history else "inactive"`).
+Everything else is non-functional:
+
+- **No chart reads it.** Every `activation_history` read in `export_plotly.py` /
+  `export_m15_chart.py` is on **KL/POI zone meta** (`zone.meta[...]` /
+  `poi.meta[...]`), never on a `FibState`. (POI/KL keep their histories — they
+  render per-candle active-stretch fills; **fib does not**, §9.3.)
+- **No CSV exports it** (fibs are in no CSV; debug exports cover imbalances/WVMI).
+- **`_finalize`'s `status` derivation never reads it** — it uses `end_idx` +
+  `_cycle_currently_active` (the `active` bool).
+- The `entity_df_mutation` index-shift mirror for fib history exists *only* to
+  keep the (informational) field coordinate-correct.
+
+So the "kept for cheap debug/parity + self-contained `confirmed_idx`" rationale
+(§8.5) doesn't justify the maintenance surface (`_activation_history` dict,
+`_log_flip`, cross-subsystem feeding, the mirror shift). **Decision (user
+2026-05-27): remove it; log the lifecycle as scalar current values.**
+
+### 15.2 The field set
+
+`FibState` lifecycle/state fields after this change:
+
+| Field | Axis | Nature | Set-once? |
+|---|---|---|---|
+| `active: bool` | condition | reversible; **current value** (last flip) | no — flips with imbalance fill/reform |
+| `start_idx: Optional[int]` | lifecycle start | **sticky** first-active idx; `None` ⟺ never active | **yes** — set at first activation, never re-stamped |
+| `end_idx: Optional[int]` | terminal | **earliest** end among candidates | **yes** — set-if-absent (earliest wins) |
+| `end_reason: Optional[str]` | terminal | which candidate won | with `end_idx` |
+| `locked: bool` | computation | CTS_CONFIRMED froze geometry (§ "how locked is computed") | yes (guarded) |
+| `status: str` | derived | `{active, inactive, ended, disappeared}` | derived in `_finalize` |
+
+`activation_history` is **removed**. `cts_history` (geometry anchor-change tuple)
+is **unrelated and stays** — it predates the lifecycle work and tracks geometry,
+not lifecycle.
+
+### 15.3 `start_idx` — sticky, clamped, "ever active"
+
+- **Definition:** the first idx the cycle's fib became active. Today every created
+  fib activates at creation (`active=True`), so `start_idx` = the creation idx
+  (`activated_at`) — and **"`start_idx` is not None" is exactly "was ever active"**,
+  which is what the cap discriminator needs. A later `imbalance_reformed`
+  reactivation does **not** move it (set-once / sticky), keeping it consistent with
+  the cycle/structure lifecycle-start (which doesn't move when a zone flickers
+  inactive→active).
+- **Clamp (part b, §15.6):** `start_idx = max(own first-active, cycle
+  lifecycle-start)` where the cycle start comes from `compute_cycle_lifecycle`
+  (= `max(CTS_ESTABLISHED.ev.idx, struct_start, floor)`). **Collapsed** (clamped
+  start ≥ end) → `start_idx = None`, `status = "inactive"` — the same collapse rule
+  KL/POI use.
+
+### 15.4 `end_idx` — pass-through is a *candidate*, earliest wins
+
+`end_idx` is **set-once via `_set_terminal` (set-if-absent = earliest wins)**. The
+candidates are:
+
+1. **Fib's own terminals** — `new_cycle`, the **Option A** `n+1` pre-established
+   early-end (§7), `scenario1_revert` (§10), and the existing `reversal` wiring.
+2. **The cycle pass-through end** from `compute_cycle_lifecycle[(sid,cycle)].end`
+   (part b) — fed in as **one more candidate**, NOT an override.
+
+Because earliest-wins, fib's own terminals still win when they fire **before** the
+cycle end — so **Option A's early-end and `scenario1_revert` are preserved**. The
+cycle end only takes effect when no earlier fib terminal exists (the common
+reversal / parent-cap case, where it matches KL/POI). This is the precise meaning
+of "end passed through from cycle" (user-confirmed): a candidate in the
+earliest-wins set, never a blind replacement.
+
+### 15.5 `status` derivation (folds `start_idx`)
+
+In `_finalize_lifecycle_fields`, per cycle identity `(sid, cycle)`:
+
+```
+if end_reason in _INVALIDATION_END_REASONS:   status = "disappeared"
+elif start_idx is None:                        status = "inactive"   # never active / collapsed
+elif end_idx is not None:                      status = "ended"
+elif _cycle_currently_active(sid, cycle):      status = "active"
+else:                                          status = "inactive"
+```
+
+The `start_idx is None` clause (placed **before** the `ended` check) is what makes
+a **collapsed** cycle read `inactive` even though it has an `end_idx` — replacing
+the old `"ended" if activation_history else "inactive"` cap discriminator with the
+scalar `start_idx`. Part (a) is byte-identical because on the main path every
+created fib has `start_idx` set, so this clause never fires there; the change is
+purely the cap discriminator swap (history-emptiness → `start_idx is None`), which
+is equivalent since every created fib logged an `"activated"` flip ⟺ has a
+`start_idx`.
+
+### 15.6 Implementation — the `_finalize` hook (mirrors KL/POI)
+
+Fib is an event-driven tracker, but it already has **one finalize step**
+(`_finalize_lifecycle_fields`, called once at end-of-stream before
+`get_fibs_for_charting` in `_run_downstream_pipeline`). That is the hook for the
+clamp + pass-through, reusing the **same** machinery KL/POI use:
+
+- **Thread `lifecycle_floor` / `lifecycle_cap` into finalize** — the identical
+  values KL/POI already receive in `_run_downstream_pipeline` (`None`/`None` for
+  main; slice-local for subs from `build_one_sid`).
+- **Call `compute_cycle_lifecycle(events, reversal_idx_by_sid, floor, cap,
+  cap_reason)`** (`zones/structure_lifecycle.py`) to get the
+  `(sid,cycle) → (start, end, end_reason)` table. (Cleanest end-state: the
+  orchestrator computes the table once and hands KL, POI, and Fib the same one.)
+- **Clamp `start_idx`** per §15.3; **feed `table[...].end` into `_set_terminal`**
+  as a candidate per §15.4.
+
+### 15.7 Implementation split — (a) refactor, then (b) wiring
+
+Two sequential steps **this session** (do (a), `/compare`, sign-off, commit; then
+(b)):
+
+- **(a) Scalar refactor — BYTE-IDENTICAL.** Remove `activation_history`,
+  `_activation_history`, `_log_flip`; add sticky `start_idx` (recorded set-once at
+  first activation via `_first_active[(sid,cycle)]`); `_finalize` stamps
+  `start_idx` + derives `status` per §15.5; `entity_df_mutation` drops the fib
+  history index-shift, shifts `start_idx` by `slice_begin`, and swaps the cap
+  discriminator to `start_idx is None`. **No floor/cap wiring.** `/compare` must be
+  byte-identical (confirmed possible: no output reads fib history; status
+  unaffected on main; cap discriminator equivalent).
+- **(b) Floor/cap + pass-through wiring** (§15.6). This is the previously-deferred
+  "Fib floor" work (the `lifecycle_floor` was never threaded into `FibTracker`).
+
+### 15.8 Validation caveat — fib state is mostly latent
+
+Fib lifecycle is **not directly observable** in outputs: no fib CSV, M15 sub fib
+lines OFF (`"fib": {"lines": False}`), and H1-main fibs all lock so the §9.2 vanish
+is latent. The **only** surfacing path is **POI** (derived from
+`get_fibs_for_charting`, gated on `status != "disappeared"`), which *is* charted /
+in CSV.
+
+- **(a)** won't move POI (status unaffected) → expect fully byte-identical
+  `/compare`.
+- **(b)** *could* move POI (clamped start / pass-through end can change which fibs
+  are active/ended/disappeared) — but POI already floors independently, so the net
+  effect is uncertain. **Validate (b) with BOTH `/compare` on POI CSVs/charts AND
+  a temporary fib-record dump**, enumerating per-`(sid,cycle)` diffs (a zero-output-
+  diff is possible even when fib internals changed — manufacture visibility).

@@ -257,31 +257,30 @@ def mirror_lower_tf_result_to_entity_df(
         new_poi.append(replace(z, ic_idx=z.ic_idx + slice_begin, meta=new_meta))
     _attrs_setdefault_list(entity_df, "poi_zones").extend(new_poi)
 
-    # 6. Fib states — direct bos_idx / cts_idx + meta. The lifecycle fields
-    #    (FIB_LIFECYCLE_SPEC.md Session 1) also carry slice-local indices:
-    #    `end_idx` and each `activation_history[*]["idx"]` must shift by
-    #    slice_begin alongside the anchors (the nested-dict-idx-translation
-    #    landmine). `end_reason` / `status` are not indices -> pass through.
+    # 6. Fib states — direct bos_idx / cts_idx + meta. The scalar lifecycle
+    #    fields (FIB_LIFECYCLE_SPEC.md §15) carry slice-local indices: both
+    #    `start_idx` and `end_idx` must shift by slice_begin alongside the
+    #    anchors. `end_reason` / `status` are not indices -> pass through.
     new_fibs = []
     for fib in result.fib_states:
         new_meta = _shift_meta_indices(fib.meta, ("deactivated_at",), slice_begin)
         new_meta.update(attribution)
+        new_start_idx = (
+            fib.start_idx + slice_begin
+            if isinstance(fib.start_idx, int)
+            else fib.start_idx
+        )
         new_end_idx = (
             fib.end_idx + slice_begin
             if isinstance(fib.end_idx, int)
             else fib.end_idx
         )
-        new_ah = fib.activation_history
-        if new_ah:
-            new_ah = tuple(
-                {**ev, "idx": int(ev["idx"]) + slice_begin} for ev in new_ah
-            )
         new_fibs.append(replace(
             fib,
             bos_idx=fib.bos_idx + slice_begin,
             cts_idx=fib.cts_idx + slice_begin,
+            start_idx=new_start_idx,
             end_idx=new_end_idx,
-            activation_history=new_ah,
             meta=new_meta,
         ))
     _attrs_setdefault_list(entity_df, "fib_states").extend(new_fibs)
@@ -684,9 +683,10 @@ def build_one_sid(
             # (now condition-only) untouched — mirrors the sibling KL cap above
             # and the in-tracker terminal paths. cap_idx_local is slice-local;
             # the mirror shifts end_idx to entity-absolute. status="ended" once
-            # the cycle has any activation history, else "inactive".
-            ah = fib.activation_history
-            new_status = "ended" if ah else "inactive"
+            # the cycle was ever active (start_idx set), else "inactive"
+            # (collapsed) — §15.3/§15.5 scalar discriminator (was: non-empty
+            # activation_history).
+            new_status = "ended" if fib.start_idx is not None else "inactive"
             fib = _replace(
                 fib,
                 end_idx=cap_idx_local,
