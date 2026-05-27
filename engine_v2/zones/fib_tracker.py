@@ -24,6 +24,11 @@ from engine_v2.features.fibonacci import (
 )
 from engine_v2.patterns.imbalance import has_unfilled_imbalance, get_unfilled_imbalances
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.zones.structure_lifecycle import (
+    compute_cycle_lifecycle,
+    compute_reversal_idx_by_sid,
+    compute_struct_start_by_sid,
+)
 
 # Lifecycle convention (FIB_LIFECYCLE_SPEC.md section 10): terminal reasons
 # that mean "invalidated / retracted" rather than ordinary historical end.
@@ -357,7 +362,13 @@ class FibTracker:
             for cyc in cycles_by_sid.get(prev_sid, ()):
                 self._set_terminal(prev_sid, cyc, int(rv_idx), "reversal")
 
-    def _finalize_lifecycle_fields(self) -> None:
+    def _finalize_lifecycle_fields(
+        self,
+        events: Optional[List[StructureEvent]] = None,
+        lifecycle_floor: Optional[int] = None,
+        lifecycle_cap: Optional[int] = None,
+        cap_reason: str = "lifecycle_end",
+    ) -> None:
         """Project the scalar lifecycle axes onto every FibState record in `_fibs`.
 
         Stamps, per cycle identity (sid, cycle_id): the sticky lifecycle
@@ -367,11 +378,38 @@ class FibTracker:
         written (via dataclasses.replace) — `active`/`locked`/`meta`/`fib`/
         anchors are untouched, so consumers see no change.
 
+        When `events` is supplied (§15.6, part b), fib is put on the shared
+        `structure_lifecycle` helper exactly like KL/POI:
+          - `struct_floor[sid]` (`compute_struct_start_by_sid`) CLAMPS each
+            cycle's `start_idx` up to the structure/parent floor (§15.3). NB the
+            clamp is to the STRUCTURE floor, not the full cycle-start, so the §6
+            pre-established early start survives.
+          - the cycle pass-through end (`compute_cycle_lifecycle`) is fed into
+            `_set_terminal` as an earliest-wins candidate (§15.4): set-if-absent,
+            so fib's own earlier terminals (new_cycle / Option A / scenario1_revert
+            / reversal) win, and the table end only fills cycles with no earlier
+            terminal (the open last cycle / the subordinate cap).
+        `lifecycle_floor`/`lifecycle_cap` are the same ints KL/POI receive
+        (`None` for main; slice-local for subs). When `events` is None the clamp
+        and pass-through are skipped (no caller does this today).
+
         Idempotent and safe to call once at end of the tracker's event stream
         (the orchestrator calls it before get_fibs_for_charting). Does NOT add
         or remove entries in `_fibs`.
         """
         from collections import defaultdict
+
+        struct_floor: Dict[int, int] = {}
+        if events is not None:
+            rev = compute_reversal_idx_by_sid(events)
+            struct_floor = compute_struct_start_by_sid(events, rev, lifecycle_floor)
+            cycle_life = compute_cycle_lifecycle(
+                events, rev, lifecycle_floor, lifecycle_cap, cap_reason,
+            )
+            # Feed the cycle pass-through end as an earliest-wins candidate.
+            for (s, c), (_cstart, cend, creason) in cycle_life.items():
+                if cend is not None:
+                    self._set_terminal(s, c, cend, creason or cap_reason)
 
         keys_by_cycle: Dict[tuple, list] = defaultdict(list)
         for key in self._fibs:
@@ -379,16 +417,28 @@ class FibTracker:
 
         for (sid, cycle_id), keys in keys_by_cycle.items():
             start_idx = self._first_active.get((sid, cycle_id))
+            # Clamp to the structure floor (§15.3): raises a start only when it
+            # precedes the parent/structure floor; the §6 pre-established early
+            # start (after the floor) is left intact.
+            if start_idx is not None:
+                sfloor = struct_floor.get(sid)
+                if sfloor is not None and int(sfloor) > start_idx:
+                    start_idx = int(sfloor)
+
             term = self._terminal.get((sid, cycle_id))
             end_idx = term[0] if term else None
             end_reason = term[1] if term else None
 
+            # Collapse (§15.5): a clamped start at/after the cycle end means the
+            # cycle never had an active window → start_idx None, status inactive
+            # (KL/POI collapse rule).
+            if start_idx is not None and end_idx is not None and start_idx >= end_idx:
+                start_idx = None
+
             # Status derivation (§15.5). The `start_idx is None` clause (before
             # the `ended` check) makes a collapsed/never-active cycle read
-            # `inactive` even with an end_idx — replacing the old
-            # "ended if activation_history else inactive" cap discriminator with
-            # the scalar start_idx. On the main path every created fib activates
-            # (start_idx set), so this clause is a no-op there → byte-identical.
+            # `inactive` even with an end_idx — the scalar start_idx replaces the
+            # old "ended if activation_history else inactive" cap discriminator.
             if end_reason in _INVALIDATION_END_REASONS:
                 status = "disappeared"
             elif start_idx is None:

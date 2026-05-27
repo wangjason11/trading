@@ -726,10 +726,32 @@ B1's start `lifecycle_floor`:
 - **`lifecycle_cap`** (single int, `min`) — end cap. [B2]
 
 Both are `None` for main and supplied (slice-local) by the multitf layer for
-subs. The cap is **load-bearing**: for a sub it equals `end_m15_abs`, which is
-also the upper bound of the M15 slice the bounded structure runs on — so it must
-be computed *before* the run (in `build_parent_cycle_chain` / `build_one_sid`, as
-today) and any change to its **value** shifts the run, not just an annotation.
+subs. The cap is **load-bearing**: for a sub it is normally `end_m15_abs`, which
+is also the upper bound of the M15 slice the bounded structure runs on — so it
+must be computed *before* the run (in `build_parent_cycle_chain` /
+`build_one_sid`, as today).
+
+**The data/window boundary is NOT a lifecycle terminator (2026-05-27).** A
+lifecycle ends only on a **real event** — a reversal, or a genuine next
+cycle/structure forming — never because the data ran out. The backtest's right
+edge is just "the present" (in live, every moment between candles you sit at the
+last available candle, yet active elements stay active). So:
+
+- The **`lifecycle_cap` is a real structural end ONLY**: the sub's own reversal,
+  or a parent-cycle/next-sub boundary that genuinely formed. When a sub instead
+  runs to the **open data edge** — its parent cycle is the open last one
+  (`trigger.lifecycle_end_idx is None`, the signal that `_find_m15_lifecycle_end`
+  fell back to `entity_df.index[-1]`), with no subsequent trigger after it
+  (`cap_open` in `build_parent_cycle_chain`) — the cap is **`None`**. KL / POI /
+  Fib then stay **active to the edge**, exactly like the H1 main's open last
+  cycle (whose cap is always `None`). This makes subs consistent with main.
+- **Run bound vs lifecycle cap are separate.** The bounded structure still *runs*
+  on `[start, end_m15_abs]` (you can only run on data you have), and
+  `SidRecord` run-metadata still records `end_m15_abs`. Only the lifecycle **cap**
+  (what *terminates* zones) is dropped to `None`. `cap_open` is keyed on
+  `lifecycle_end_idx is None`, NOT on `end_m15_abs == last idx`, so a rare
+  H1→M15 mapping failure (which also falls back to the edge) is still treated as
+  a real cap.
 
 **Implementation (`zones/structure_lifecycle.py`).** A pure-leaf
 `compute_cycle_lifecycle(events, reversal_idx_by_sid, lifecycle_floor,

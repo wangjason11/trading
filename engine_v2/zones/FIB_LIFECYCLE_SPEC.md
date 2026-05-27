@@ -856,11 +856,19 @@ not lifecycle.
   reactivation does **not** move it (set-once / sticky), keeping it consistent with
   the cycle/structure lifecycle-start (which doesn't move when a zone flickers
   inactive→active).
-- **Clamp (part b, §15.6):** `start_idx = max(own first-active, cycle
-  lifecycle-start)` where the cycle start comes from `compute_cycle_lifecycle`
-  (= `max(CTS_ESTABLISHED.ev.idx, struct_start, floor)`). **Collapsed** (clamped
-  start ≥ end) → `start_idx = None`, `status = "inactive"` — the same collapse rule
-  KL/POI use.
+- **Clamp (part b, §15.6):** `start_idx = max(own first-active, struct_floor)`
+  where `struct_floor = compute_struct_start_by_sid(events, rev, lifecycle_floor)[sid]`
+  — the **structure** lifecycle-start (reversal handoff + parent floors), **NOT**
+  the full cycle-start `max(CTS_ESTABLISHED.ev.idx, struct_start, floor)` that
+  KL/POI clamp to. **This is the one place fib's clamp differs from zones**, and the
+  reason is §6: a subordinate pre-established cross legitimately starts *before* its
+  own cycle's CTS-established, so clamping up to CTS-established would wrongly erase
+  that early start. Clamping only to the structure/parent floor raises a start *only*
+  when it precedes the parent floor (the B1 gap — a sub active before its parent
+  cycle) while leaving the §6 early start intact (it sits after the floor). For
+  H1-main there is no pre-established phase, so `first-active ≈ CTS_EST` and the two
+  clamps coincide. **Collapsed** (clamped start ≥ resolved end) → `start_idx = None`,
+  `status = "inactive"` — the same collapse rule KL/POI use.
 
 ### 15.4 `end_idx` — pass-through is a *candidate*, earliest wins
 
@@ -909,13 +917,32 @@ clamp + pass-through, reusing the **same** machinery KL/POI use:
 
 - **Thread `lifecycle_floor` / `lifecycle_cap` into finalize** — the identical
   values KL/POI already receive in `_run_downstream_pipeline` (`None`/`None` for
-  main; slice-local for subs from `build_one_sid`).
+  main; slice-local for subs from `build_one_sid`). NB the sub `lifecycle_cap` is
+  `None` when the sub runs to the **open data edge** (`cap_open`, PART4 §5 — "the
+  data/window boundary is not a lifecycle terminator"): the fib then stays open
+  (`end_idx None`) → its POI is derived → live edge zones show. The cap is only a
+  real structural end (reversal / genuine parent-cycle boundary).
 - **Call `compute_cycle_lifecycle(events, reversal_idx_by_sid, floor, cap,
   cap_reason)`** (`zones/structure_lifecycle.py`) to get the
   `(sid,cycle) → (start, end, end_reason)` table. (Cleanest end-state: the
   orchestrator computes the table once and hands KL, POI, and Fib the same one.)
-- **Clamp `start_idx`** per §15.3; **feed `table[...].end` into `_set_terminal`**
-  as a candidate per §15.4.
+- **Clamp `start_idx`** per §15.3 (to `compute_struct_start_by_sid`, the floor);
+  **feed `compute_cycle_lifecycle[...].end` into `_set_terminal`** as a candidate
+  per §15.4. The reversal terminal (`set_reversal_terminals`) and the in-tracker
+  terminals (new_cycle / Option A / scenario1_revert) are already set when finalize
+  runs; set-if-absent means the table end only fills cycles with no earlier terminal
+  (the open last cycle / the sub cap), which is exactly earliest-wins given the
+  in-tracker terminals are set in idx order.
+- **Remove the redundant `entity_df_mutation` post-hoc fib cap loop.** Before (b),
+  open sub fibs were capped there (its comment: "the fib lifecycle track is not yet
+  on the helper"). With the sub already passing `lifecycle_cap` into
+  `_run_downstream_pipeline`, the in-`_finalize` pass-through now caps them (slice-
+  local; the mirror shifts to entity-absolute) — exactly as KL/POI's post-hoc cap
+  loops were removed in B2. NB this also caps a **locked** last-cycle sub fib that
+  the old `active and not locked` guard skipped — more correct, and latent in output
+  (locked fibs always chart; status feeds no sub output). The `capped_cycles`
+  cross-version status recompute is subsumed (finalize stamps status across all
+  version records of a cycle).
 
 ### 15.7 Implementation split — (a) refactor, then (b) wiring
 

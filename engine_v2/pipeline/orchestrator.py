@@ -240,12 +240,20 @@ def _run_downstream_pipeline(
     # deferral). Runs for the H1 main tracker and each sub tracker.
     fib_tracker.set_reversal_terminals(reversal_confirmed_by_sid)
 
-    # Project the lifecycle convention axes (end_idx/end_reason/status/
-    # activation_history) onto FibState records. Session 2 of
-    # FIB_LIFECYCLE_SPEC.md repurposes `active` to condition-only — terminals
-    # now live in end_idx/end_reason and the derived `status`, which the POI
-    # gate and charts read. Runs for both the H1 main tracker and each sub.
-    fib_tracker._finalize_lifecycle_fields()
+    # Project the scalar lifecycle axes (start_idx/end_idx/end_reason/status)
+    # onto FibState records. `active` is condition-only; terminals live in
+    # end_idx/end_reason + derived `status`, which the POI gate and charts read.
+    # Passing events + floor/cap (the same ints KL/POI get) puts fib on the
+    # shared structure_lifecycle helper (FIB_LIFECYCLE_SPEC §15.6, part b):
+    # start_idx clamps to the structure/parent floor and the cycle pass-through
+    # end is fed as an earliest-wins terminal candidate. Runs for the H1 main
+    # tracker (floor/cap None) and each sub (slice-local floor/cap).
+    fib_tracker._finalize_lifecycle_fields(
+        events=events,
+        lifecycle_floor=lifecycle_floor,
+        lifecycle_cap=lifecycle_cap,
+        cap_reason=cap_reason,
+    )
 
     fib_states = fib_tracker.get_fibs_for_charting()
     print(f"{pfx}[fib_tracker] total fibs={len(fib_states)}, active={sum(1 for f in fib_states if f.active)}")

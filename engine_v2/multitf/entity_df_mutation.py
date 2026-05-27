@@ -501,6 +501,7 @@ def build_one_sid(
     start_trigger_idx: int,
     validated_parent_idx: Optional[int] = None,
     parent_floor_m15: Optional[int] = None,
+    cap_open: bool = False,
 ) -> Optional[SidBuildOutcome]:
     """Build ONE bounded single-structure sub sid and mirror it (Part 4 §5/§6.1).
 
@@ -526,8 +527,6 @@ def build_one_sid(
     Returns a ``SidBuildOutcome`` or None on a degenerate window / structure
     failure.
     """
-    from dataclasses import replace as _replace
-
     from engine_v2.patterns.imbalance import compute_imbalance
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
     from engine_v2.structure.identify_start import (
@@ -601,25 +600,38 @@ def build_one_sid(
         _floor_abs = max(_floor_abs, int(parent_floor_m15))
     sub_lifecycle_floor_local = _floor_abs - slice_begin
 
-    # Sub end-cap (B2 pass-through, 2026-05-27) — the mirror of the floor. The
-    # sub's effective end = its own reversal (the structure boundary, slice-local
-    # and < end_m15_abs) if it reversed inside the window, else the window bound
-    # (parent-cycle / next-sub end). Resolved BEFORE the run so it can be passed
-    # in as `lifecycle_cap`: KL + POI then INHERIT it as their cycle end (this
-    # replaces the prior post-hoc cap loop). The fib cap below still uses
-    # cap_time / cap_idx_local (the fib lifecycle track is not yet on the helper).
+    # Sub end-cap (B2 pass-through, 2026-05-27) — the mirror of the floor.
+    # Resolved BEFORE the run so it can be passed in as `lifecycle_cap`: KL + POI
+    # + Fib then INHERIT it as their cycle end via the shared helper (this
+    # replaces the prior post-hoc cap loops — incl. the fib one, removed once fib
+    # joined the helper in §15.6 / part b).
+    #
+    # The cap is a REAL structural end ONLY (PART4 §5 — "the data/window boundary
+    # is not a lifecycle terminator"):
+    #   - the sub's own reversal (structure boundary, slice-local, < end_m15_abs);
+    #   - else the parent-cycle / next-sub boundary (`end_m15_abs`) WHEN it is a
+    #     genuine end (`cap_open` False);
+    #   - else (`cap_open`: the sub runs to the OPEN data edge — its parent cycle
+    #     is the open last one, no next parent cycle / parent reversal) → cap
+    #     None, so KL/POI/Fib stay active to the edge exactly like the H1 main's
+    #     open last cycle. `effective_end_abs` (run/metadata bound) stays the edge;
+    #     only the lifecycle CAP is dropped.
     reversal_idx_abs: Optional[int] = (
         bounded.reversal_idx + slice_begin if bounded.reversal_idx is not None else None
     )
     effective_end_abs = (
         reversal_idx_abs if reversal_idx_abs is not None else end_m15_abs
     )
-    end_reason = "reversal" if reversal_idx_abs is not None else "lifecycle_end"
-    sub_lifecycle_cap_local = effective_end_abs - slice_begin
-    cap_time = pd.to_datetime(
-        entity_df.loc[effective_end_abs, "time"], utc=True,
-    )
-    cap_idx_local = effective_end_abs - slice_begin
+    sub_lifecycle_cap_local: Optional[int]
+    if reversal_idx_abs is not None:
+        end_reason = "reversal"
+        sub_lifecycle_cap_local = effective_end_abs - slice_begin
+    elif cap_open:
+        end_reason = None
+        sub_lifecycle_cap_local = None
+    else:
+        end_reason = "lifecycle_end"
+        sub_lifecycle_cap_local = effective_end_abs - slice_begin
 
     downstream = _run_downstream_pipeline(
         bounded.df,
@@ -673,50 +685,12 @@ def build_one_sid(
     capped_zones = downstream["kl_zones"]
     capped_pois = downstream["poi_zones"]
 
-    capped_fibs = []
-    capped_cycles: Dict[tuple, tuple] = {}  # (sid, cycle) -> (end_idx, end_reason, status)
-    for fib in downstream["fib_states"]:
-        if fib.active and not fib.locked:
-            # Session 2 (FIB_LIFECYCLE_SPEC §7/§11): the lifecycle-end cap is a
-            # CYCLE TERMINAL ("passed-through" — reversal or parent
-            # lifecycle_end). Set end_idx/end_reason/status and leave `active`
-            # (now condition-only) untouched — mirrors the sibling KL cap above
-            # and the in-tracker terminal paths. cap_idx_local is slice-local;
-            # the mirror shifts end_idx to entity-absolute. status="ended" once
-            # the cycle was ever active (start_idx set), else "inactive"
-            # (collapsed) — §15.3/§15.5 scalar discriminator (was: non-empty
-            # activation_history).
-            new_status = "ended" if fib.start_idx is not None else "inactive"
-            fib = _replace(
-                fib,
-                end_idx=cap_idx_local,
-                end_reason=end_reason,
-                status=new_status,
-                meta={**fib.meta, "deactivated_by": end_reason,
-                      "deactivated_at": cap_idx_local},
-            )
-            capped_cycles[(fib.structure_id, fib.cycle_id)] = (
-                cap_idx_local, end_reason, new_status,
-            )
-        capped_fibs.append(fib)
-
-    # Recompute cycle-level status across ALL version records of any cycle the
-    # cap just ended (FIB_LIFECYCLE_SPEC Session 2 deferral 2). The cap only
-    # re-touches the open record; `_finalize_lifecycle_fields` stamped the
-    # (then-live) cycle status onto the cycle's dead cross versions earlier, so
-    # without this they'd keep a stale "active"/"inactive" status. Propagate the
-    # terminal to those records too (their gate result is unaffected — they
-    # vanish via active=False — but their status/hover should read "ended").
-    if capped_cycles:
-        propagated = []
-        for fib in capped_fibs:
-            ck = (fib.structure_id, fib.cycle_id)
-            info = capped_cycles.get(ck)
-            if info is not None and fib.end_idx is None and fib.status != "disappeared":
-                ei, er, st = info
-                fib = _replace(fib, end_idx=ei, end_reason=er, status=st)
-            propagated.append(fib)
-        capped_fibs = propagated
+    # Fib now inherits its cycle end (the sub `lifecycle_cap`) via the shared
+    # helper inside `_finalize_lifecycle_fields` (FIB_LIFECYCLE_SPEC §15.6) — the
+    # earlier post-hoc fib cap loop here is gone, exactly as KL/POI's were in B2.
+    # The mirror (mirror_lower_tf_result_to_entity_df) shifts start_idx/end_idx
+    # slice-local→entity-absolute.
+    capped_fibs = downstream["fib_states"]
 
     result = LowerTFResult(
         trigger=trigger,
@@ -882,6 +856,16 @@ def build_parent_cycle_chain(
         if next_sub is not None:
             bound = min(bound, next_sub["boundary"])
 
+        # cap_open: this sid runs to the OPEN data edge — no subsequent trigger
+        # after it AND the parent cycle is still active (`lifecycle_end_idx None`,
+        # which is exactly why `cycle_end_m15` fell back to `entity_df.index[-1]`).
+        # The data edge is not a lifecycle terminator (PART4 §5), so the sid's
+        # cap is dropped (None) and its zones stay active to the edge. Keyed on
+        # `lifecycle_end_idx is None` (the semantic open-cycle signal), NOT on
+        # `cycle_end_m15 == last idx`, so a rare H1->M15 mapping failure (which
+        # also falls back to the edge) is still treated as a real cap.
+        cap_open = (next_sub is None) and (bootstrap.lifecycle_end_idx is None)
+
         outcome = build_one_sid(
             entity_df,
             start_m15_abs=cur_start, sd=cur_sd, end_m15_abs=bound,
@@ -890,6 +874,7 @@ def build_parent_cycle_chain(
             started_by=cur_started_by, start_trigger_idx=cur_start_trig,
             validated_parent_idx=cur_valid,
             parent_floor_m15=parent_floor_m15,
+            cap_open=cap_open,
         )
         if outcome is None:
             # Degenerate / failed sid ends the chain (conservative — a rare

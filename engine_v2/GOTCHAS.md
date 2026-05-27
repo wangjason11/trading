@@ -1087,3 +1087,51 @@ confirmed idx as of X?"), ALWAYS walk `activation_history` via
 survives only as a legacy chart fallback (zones with no history) and the
 debug print. See LANDMINES "POI Activation Is Per-Candle, Not a Scalar Span"
 and POI_ZONES_SPEC "Zone Data Fields".
+
+---
+
+## A POI's existence is gated on its fib being open-or-locked — cap a fib *before* POI derivation and the POI vanishes
+
+**Principle:** POI derivation reads each fib through the gate `(fib.active AND
+fib.end_idx is None) OR fib.locked` (`poi_zones.py:446`). `locked` == "the fib's
+CTS was confirmed." So a **never-confirmed** fib's ONLY ticket into POI is the
+left branch — "still open" (`end_idx is None`). The moment something stamps an
+`end_idx` on it, that ticket is void and (being unlocked) it has no `locked`
+fallback → **no POI is derived from it**.
+
+**Why this matters (cap ordering):** `_finalize_lifecycle_fields` runs *before*
+`derive_poi_zones` in `_run_downstream_pipeline`. If the cycle end (cap) is fed
+into the fib's terminal *there* (pre-POI), a still-forming sub fib looks "ended"
+at POI time and its POI is suppressed. The baseline applied the sub cap *after*
+POI (post-hoc loop), so those fibs were still open at POI time → POI built. Moving
+the cap pre-POI is therefore a **behavior change**, not a refactor: it suppresses
+POIs from fibs that ended without ever CTS-confirming. (This is intentional for
+**real** structural ends — reversal / genuine next-cycle — but the **data/window
+edge must NOT cap** them; see LANDMINES + PART4 §5 "data boundary is not a
+terminator". `locked` fibs are immune either way — they always feed POI.)
+
+**Rule:** when changing *when* a fib's `end_idx` is set relative to
+`derive_poi_zones`, expect sub-POI count changes. KL/POI can inherit a cap freely
+(nothing is derived *from* them); fib cannot, because POI is derived from it.
+
+---
+
+## `artifacts/debug/` accumulates files from prior runs with DIFFERENT config windows — glob the current window or you'll compare stale data
+
+**Symptom:** a `/compare`-style row-level diff showed sub KL zones "vanishing"
+(10 rows → 4) and a non-open zone's end mysteriously shifting — a phantom
+regression that didn't exist.
+
+**Root cause:** `artifacts/debug/` is never cleared between runs. A prior session
+used a shorter window (`...2026-01-07...`); the current window is
+`...2026-01-20...`. A loose glob like `glob('artifacts/debug/*_M15_counter_kl_zones.csv')`
+returned the **stale 2026-01-07 file** (fewer rows, shorter window), not the
+current one — so the diff compared the 2026-01-20 baseline against a 2026-01-07
+output and reported bogus losses.
+
+**Rule:** when loading a debug CSV for comparison, **match the current config
+window in the basename** (`NZD_USD_H1_<start>_<end>_...`), don't bare-glob the
+suffix. The `/compare` skill is safe because it iterates the *baseline* folder's
+filenames (correct window) and looks each up by basename in `artifacts/debug` —
+so trust `/compare`'s md5 verdict over an ad-hoc glob. (Periodically delete
+stale-window files from `artifacts/debug/`.)

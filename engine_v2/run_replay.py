@@ -334,11 +334,28 @@ def main() -> None:
                 f"artifacts/debug/{basename}_{leaf_label}_wvmi.csv",
             )
 
+            # Debug: per-sub fib lifecycle (start_idx/end_idx/end_reason/status).
+            # Fib was LATENT (no fib CSV, M15 fib lines off) — this is the only
+            # inspectable surface (FIB_LIFECYCLE_SPEC §15.8).
+            from engine_v2.debug.export_fib_lifecycle import export_fib_lifecycle
+            export_fib_lifecycle(
+                sub_entry.df.attrs.get("fib_states", []) or [],
+                f"artifacts/debug/{basename}_{leaf_label}_fib_lifecycle.csv",
+                structure_path_id=sub_path_id,
+            )
+
     from engine_v2.debug.export_zones import export_kl_zones
     export_kl_zones(res.meta.get("kl_zones", []), f"artifacts/debug/{basename}_kl_zones.csv")
 
     from engine_v2.debug.export_wvmi import export_wvmi
     export_wvmi(res.meta.get("wvmi", []) or [], f"artifacts/debug/{basename}_wvmi.csv")
+
+    from engine_v2.debug.export_fib_lifecycle import export_fib_lifecycle
+    export_fib_lifecycle(
+        res.meta.get("fib_states", []) or [],
+        f"artifacts/debug/{basename}_fib_lifecycle.csv",
+        structure_path_id="H1.main",
+    )
 
     from engine_v2.debug.export_events import export_structure_events
     export_structure_events(
