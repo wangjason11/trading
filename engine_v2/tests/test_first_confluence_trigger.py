@@ -73,18 +73,23 @@ def test_end_idx_is_cts_extreme_not_confirmation_candle():
     assert triggers[0].status == "finalized"  # resolved once CTS_CONFIRMED fired
 
 
-def test_lifecycle_end_uses_next_cycle_bos_confirmed_at():
+def test_lifecycle_end_uses_next_cycle_cts_established():
+    # B2 Phase B: lifecycle_end is the next cycle's lifecycle-start =
+    # CTS_ESTABLISHED.ev.idx (the CTS extreme), NOT the next BOS confirmed_at.
+    # Fixture sets cyc2's CTS extreme (58) distinct from its BOS confirmed_at
+    # (65) to prove which one is used.
     events = [
-        _ev(20, "BOS_CONFIRMED", sid=0, cycle=1, sd=1, confirmed_at=22),
-        _ev(40, "CTS_CONFIRMED", sid=0, cycle=1, sd=1),
-        # BOS for next cycle: ev.idx = extreme (60), confirmed_at = 65
-        _ev(60, "BOS_CONFIRMED", sid=0, cycle=2, sd=1, confirmed_at=65),
-        _ev(80, "CTS_CONFIRMED", sid=0, cycle=2, sd=1),
+        _ev(20, "BOS_CONFIRMED",   sid=0, cycle=1, sd=1, confirmed_at=22),
+        _ev(40, "CTS_CONFIRMED",   sid=0, cycle=1, sd=1),
+        # Next cycle: CTS extreme = 58, BOS extreme = 60, BOS confirmed_at = 65.
+        _ev(58, "CTS_ESTABLISHED", sid=0, cycle=2, sd=1),
+        _ev(60, "BOS_CONFIRMED",   sid=0, cycle=2, sd=1, confirmed_at=65),
+        _ev(80, "CTS_CONFIRMED",   sid=0, cycle=2, sd=1),
     ]
     triggers = detect_first_confluence_triggers(events)
     assert len(triggers) == 2
-    # First trigger ends at next BOS confirmed_at (65), not the extreme idx (60)
-    assert triggers[0].lifecycle_end_idx == 65
+    # First trigger ends at next cycle's CTS extreme (58), not BOS confirmed_at (65)
+    assert triggers[0].lifecycle_end_idx == 58
     # Second trigger has no successor — None
     assert triggers[1].lifecycle_end_idx is None
 
@@ -100,15 +105,18 @@ def test_lifecycle_end_uses_reversal_when_no_next_bos():
     assert triggers[0].lifecycle_end_idx == 72
 
 
-def test_lifecycle_end_takes_min_of_next_bos_and_reversal():
+def test_lifecycle_end_takes_min_of_next_cycle_and_reversal():
     events = [
         _ev(20, "BOS_CONFIRMED",      sid=0, cycle=1, sd=1, confirmed_at=22),
         _ev(40, "CTS_CONFIRMED",      sid=0, cycle=1, sd=1),
+        # Next cycle CTS extreme = 80 (later than the reversal at 72), so the
+        # reversal wins the min.
+        _ev(80, "CTS_ESTABLISHED",    sid=0, cycle=2, sd=1),
         _ev(60, "BOS_CONFIRMED",      sid=0, cycle=2, sd=1, confirmed_at=85),
         _ev(70, "REVERSAL_CANDIDATE", sid=0, cycle=2, sd=1, apply_idx=72),
     ]
     triggers = detect_first_confluence_triggers(events)
-    assert triggers[0].lifecycle_end_idx == 72  # reversal first
+    assert triggers[0].lifecycle_end_idx == 72  # reversal (72) < next CTS extreme (80)
     assert triggers[1].lifecycle_end_idx == 72
 
 

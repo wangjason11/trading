@@ -1194,6 +1194,13 @@ truth (the drift hazard from [[feedback-in-flight-vs-downstream-resolver]]). The
 post-hoc `build_one_sid` KL/POI cap loops are gone: subs pass `lifecycle_cap`
 (the mirror of `lifecycle_floor` — `min` for end vs `max` for start) into the
 derivation, and that cap doubles as the M15 slice/run bound (load-bearing; see
-§5). Collapsed cycles (clamped `start >= end`) are uniformly `status="inactive"`
-with empty `activation_history` (outline-only) — this replaced the prior split
+§5). **The sub cap's next-cycle source is the parent's `CTS_ESTABLISHED.ev.idx`**
+(B2 Phase B, 2026-05-27) — the 4 trigger detectors compute `lifecycle_end_idx`'s
+next-cycle term from `CTS_EST.ev.idx`, NOT `BOS_CONFIRMED.confirmed_at`, so it
+matches the start-floor (`parent_cycle_floor_h1`, also `CTS_EST.ev.idx`). Don't
+revert it to `confirmed_at`: equal on H1 today, but they diverge if a parent
+cycle's CTS-extreme ≠ breakout candle, which would make a sub's end-cap and its
+start-floor inconsistent (overlap). Collapsed cycles (clamped `start >= end`) are
+uniformly `status="inactive"` with empty `activation_history` (outline-only) —
+this replaced the prior split
 where the inner KL derivation said `"ended"` and the cap said `"inactive"`.

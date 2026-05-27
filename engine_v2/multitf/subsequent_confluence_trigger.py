@@ -14,8 +14,10 @@ same cycle's list is sd. By the alternation invariant in
 `zones/zone_proximity.py`, every opp_sd trigger past index 0 satisfies
 this — the predecessor is necessarily sd.
 
-`lifecycle_end_idx` is computed as the next BOS_CONFIRMED for
-`(sid, cycle_id+1)` (`meta["confirmed_at"]`) or REVERSAL_CANDIDATE
+`lifecycle_end_idx` is the next cycle's lifecycle-start —
+`CTS_ESTABLISHED.ev.idx` for `(sid, cycle_id+1)` (the CTS extreme,
+canonical per PART4 §5; B2 Phase B re-pointed this from the prior next
+BOS_CONFIRMED.confirmed_at — equal on H1) — or REVERSAL_CANDIDATE
 `apply_idx` for the same sid, whichever fires first. Mirrors the
 first_counter / first_confluence convention.
 
@@ -73,7 +75,7 @@ def detect_subsequent_confluence_triggers(
     list is necessarily sd by the alternation invariant).
     """
     sd_by_key: Dict[Tuple[int, int], int] = {}
-    bos_conf_idx_by_key: Dict[Tuple[int, int], int] = {}
+    cts_est_idx_by_key: Dict[Tuple[int, int], int] = {}
     reversal_idx_by_sid: Dict[int, int] = {}
 
     for ev in sorted_events:
@@ -83,14 +85,14 @@ def detect_subsequent_confluence_triggers(
                 int(ev.meta.get("cycle_id", 0)),
             )
             sd_by_key.setdefault(key, int(ev.meta.get("struct_direction", 0)))
-        elif ev.type == "BOS_CONFIRMED":
+        elif ev.type == "CTS_ESTABLISHED":
             key = (
                 int(ev.meta.get("structure_id", 0)),
                 int(ev.meta.get("cycle_id", 0)),
             )
-            bos_conf_idx_by_key[key] = int(
-                ev.meta.get("confirmed_at", ev.idx)
-            )
+            # Cycle lifecycle-start = CTS_ESTABLISHED.ev.idx (CTS extreme),
+            # canonical per PART4 §5 (B2 Phase B; was next BOS confirmed_at).
+            cts_est_idx_by_key[key] = int(ev.idx)
         elif ev.type == "REVERSAL_CANDIDATE":
             sid = int(ev.meta.get("structure_id", 0))
             apply_idx = ev.meta.get("apply_idx")
@@ -104,12 +106,12 @@ def detect_subsequent_confluence_triggers(
         if parent_sd == 0:
             continue
 
-        next_bos = bos_conf_idx_by_key.get((sid, cycle_id + 1))
+        next_cycle_start = cts_est_idx_by_key.get((sid, cycle_id + 1))
         rev = reversal_idx_by_sid.get(sid)
-        if next_bos is not None and rev is not None:
-            lifecycle_end_idx = min(next_bos, rev)
-        elif next_bos is not None:
-            lifecycle_end_idx = next_bos
+        if next_cycle_start is not None and rev is not None:
+            lifecycle_end_idx = min(next_cycle_start, rev)
+        elif next_cycle_start is not None:
+            lifecycle_end_idx = next_cycle_start
         elif rev is not None:
             lifecycle_end_idx = rev
         else:

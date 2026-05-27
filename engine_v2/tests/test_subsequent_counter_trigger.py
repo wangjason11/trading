@@ -178,10 +178,13 @@ def test_var4_window_includes_endpoints():
     assert out[0].input_idx == 30
 
 
-def test_lifecycle_end_uses_next_cycle_bos_confirmed_at():
+def test_lifecycle_end_uses_next_cycle_cts_established():
+    # B2 Phase B: lifecycle_end = next cycle's CTS extreme (CTS_ESTABLISHED.idx,
+    # 78), not its BOS confirmed_at (85).
     events = [
-        _ev(20, "CTS_CONFIRMED",  sid=0, cycle=1, sd=1),
-        _ev(80, "BOS_CONFIRMED",  sid=0, cycle=2, sd=1, confirmed_at=85),
+        _ev(20, "CTS_CONFIRMED",   sid=0, cycle=1, sd=1),
+        _ev(78, "CTS_ESTABLISHED", sid=0, cycle=2, sd=1),
+        _ev(80, "BOS_CONFIRMED",   sid=0, cycle=2, sd=1, confirmed_at=85),
     ]
     triggers = {
         (0, 1): [
@@ -191,7 +194,7 @@ def test_lifecycle_end_uses_next_cycle_bos_confirmed_at():
         ],
     }
     out = detect_subsequent_counter_triggers(events, triggers, _df_with_highs({}))
-    assert out[0].lifecycle_end_idx == 85
+    assert out[0].lifecycle_end_idx == 78
 
 
 def test_lifecycle_end_uses_reversal_when_no_next_bos():

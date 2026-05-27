@@ -44,14 +44,15 @@ def detect_uc1_triggers(
             key = (ev.meta.get("structure_id", 0), ev.meta.get("cycle_id", 0))
             sd_by_key[key] = int(ev.meta.get("struct_direction", 0))
 
-    # Build lifecycle end lookup: for each (sid, cycle_id),
-    # find the next BOS_CONFIRMED or REVERSAL_CANDIDATE that ends this cycle
-    bos_conf_idx_by_key: Dict[tuple, int] = {}
+    # Build lifecycle end lookup: a cycle ends when the next cycle starts (its
+    # CTS_ESTABLISHED.ev.idx = CTS extreme, canonical per PART4 §5) or at the
+    # REVERSAL_CANDIDATE. B2 Phase B re-pointed the next-cycle term from the
+    # prior next BOS_CONFIRMED.confirmed_at (breakout candle; equal on H1).
+    cts_est_idx_by_key: Dict[tuple, int] = {}
     for ev in sorted_events:
-        if ev.type == "BOS_CONFIRMED":
+        if ev.type == "CTS_ESTABLISHED":
             key = (ev.meta.get("structure_id", 0), ev.meta.get("cycle_id", 0))
-            # Use confirmed_at (the confirmation candle), not ev.idx (the extreme)
-            bos_conf_idx_by_key[key] = int(ev.meta.get("confirmed_at", ev.idx))
+            cts_est_idx_by_key[key] = int(ev.idx)
 
     reversal_idx_by_sid: Dict[int, int] = {}
     for ev in sorted_events:
@@ -90,14 +91,14 @@ def detect_uc1_triggers(
 
         start_time = pd.to_datetime(h1_df.loc[cts_idx, "time"], utc=True)
 
-        # Lifecycle end: next BOS or reversal
+        # Lifecycle end: next cycle's start (CTS extreme) or reversal
         lifecycle_end_idx = None
-        next_bos_idx = bos_conf_idx_by_key.get((sid, cycle_id + 1))
+        next_cycle_start = cts_est_idx_by_key.get((sid, cycle_id + 1))
         rev_idx = reversal_idx_by_sid.get(sid)
-        if next_bos_idx is not None and rev_idx is not None:
-            lifecycle_end_idx = min(next_bos_idx, rev_idx)
-        elif next_bos_idx is not None:
-            lifecycle_end_idx = next_bos_idx
+        if next_cycle_start is not None and rev_idx is not None:
+            lifecycle_end_idx = min(next_cycle_start, rev_idx)
+        elif next_cycle_start is not None:
+            lifecycle_end_idx = next_cycle_start
         elif rev_idx is not None:
             lifecycle_end_idx = rev_idx
 

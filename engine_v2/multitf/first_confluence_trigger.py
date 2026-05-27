@@ -38,15 +38,17 @@ def detect_first_confluence_triggers(
     yet (parent cycle still open at end-of-data), the trigger is emitted with
     `end_idx=None` and `status="pending"` per spec §14.
 
-    `lifecycle_end_idx` is computed as the next BOS_CONFIRMED for
-    `(sid, cycle_id+1)` (using `meta["confirmed_at"]` per the BOS_CONFIRMED
-    convention) or the REVERSAL_CANDIDATE.apply_idx for the same sid,
-    whichever fires first. Mirrors first_counter's logic in `uc1_trigger.py`.
+    `lifecycle_end_idx` is computed as the next cycle's lifecycle-start —
+    `CTS_ESTABLISHED.ev.idx` for `(sid, cycle_id+1)` (the CTS extreme,
+    canonical per PART4 §5; B2 Phase B re-pointed this from the prior next
+    BOS_CONFIRMED.confirmed_at — equal on H1) — or the
+    REVERSAL_CANDIDATE.apply_idx for the same sid, whichever fires first.
+    Mirrors first_counter's logic in `uc1_trigger.py`.
 
     Returns triggers sorted by `trigger_event_idx`.
     """
     cts_conf_by_key: Dict[Tuple[int, int], StructureEvent] = {}
-    bos_conf_idx_by_key: Dict[Tuple[int, int], int] = {}
+    cts_est_idx_by_key: Dict[Tuple[int, int], int] = {}
     reversal_idx_by_sid: Dict[int, int] = {}
 
     for ev in sorted_events:
@@ -56,13 +58,16 @@ def detect_first_confluence_triggers(
                 int(ev.meta.get("cycle_id", 0)),
             )
             cts_conf_by_key.setdefault(key, ev)
-        elif ev.type == "BOS_CONFIRMED":
+        elif ev.type == "CTS_ESTABLISHED":
             key = (
                 int(ev.meta.get("structure_id", 0)),
                 int(ev.meta.get("cycle_id", 0)),
             )
-            # BOS_CONFIRMED.ev.idx = extreme; meta["confirmed_at"] = timing
-            bos_conf_idx_by_key[key] = int(ev.meta.get("confirmed_at", ev.idx))
+            # Cycle lifecycle-start = CTS_ESTABLISHED.ev.idx (the CTS extreme,
+            # canonical per PART4 §5). The prior next-cycle term used the next
+            # BOS_CONFIRMED.confirmed_at (breakout candle); equal on H1 but the
+            # extreme is canonical and matches the sub start-floor (B2 Phase B).
+            cts_est_idx_by_key[key] = int(ev.idx)
         elif ev.type == "REVERSAL_CANDIDATE":
             sid = int(ev.meta.get("structure_id", 0))
             apply_idx = ev.meta.get("apply_idx")
@@ -99,12 +104,12 @@ def detect_first_confluence_triggers(
             end_idx = None
             status = "pending"
 
-        next_bos = bos_conf_idx_by_key.get((sid, cycle_id + 1))
+        next_cycle_start = cts_est_idx_by_key.get((sid, cycle_id + 1))
         rev = reversal_idx_by_sid.get(sid)
-        if next_bos is not None and rev is not None:
-            lifecycle_end_idx = min(next_bos, rev)
-        elif next_bos is not None:
-            lifecycle_end_idx = next_bos
+        if next_cycle_start is not None and rev is not None:
+            lifecycle_end_idx = min(next_cycle_start, rev)
+        elif next_cycle_start is not None:
+            lifecycle_end_idx = next_cycle_start
         elif rev is not None:
             lifecycle_end_idx = rev
         else:

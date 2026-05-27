@@ -762,14 +762,22 @@ anchor sits behind the parent start) → `status = "inactive"`, empty
 `activation_history` (renders outline-only). This standardizes the prior split:
 the inner KL derivation said `"ended"`, the `build_one_sid` cap said `"inactive"`.
 
-**Phase B (separate, byte-identical on H1).** The parent-cycle / parent-sid paths
-(the sub `lifecycle_cap`) ARE the *next parent `(sid, cycle)`'s clamped start* —
-exactly the `parent_cycle_floor_h1` table the start side already builds. Today the
-cap is instead sourced from `trigger.lifecycle_end_idx` = next-parent-cycle
-`BOS_CONFIRMED.confirmed_at` (the apply candle), which equals
-`CTS_ESTABLISHED.ev.idx` on H1 (verified 0 mismatches) but is a latent overlap
-hazard if they ever diverge. Phase B re-points the cap onto the parent
-start-table (canonical `CTS_EST.idx`) and retires `lifecycle_end_idx` if unused.
+**Phase B (DONE 2026-05-27, byte-identical).** The parent-cycle / parent-sid
+paths (the sub `lifecycle_cap`) ARE the *next parent `(sid, cycle)`'s clamped
+start* (the canonical `CTS_EST.ev.idx`). Previously the cap's next-cycle term came
+from `trigger.lifecycle_end_idx` = next-parent-cycle `BOS_CONFIRMED.confirmed_at`
+(the apply candle) — a latent overlap hazard, since the start-floor uses
+`CTS_EST.ev.idx` and the two diverge if a parent H1 cycle's CTS-extreme ≠ breakout
+candle. **Implementation (approach A):** the four trigger detectors (`uc1`,
+`first_confluence`, `subsequent_confluence`, `subsequent_counter`) now compute the
+next-cycle term from the next cycle's `CTS_ESTABLISHED.ev.idx` instead of
+`BOS_CONFIRMED.confirmed_at`; the reversal term (`REVERSAL_CANDIDATE.apply_idx`) is
+unchanged. `lifecycle_end_idx` is **kept** (not retired — still the carrier read by
+`_find_m15_lifecycle_end`); full retirement (sourcing the cap directly from
+`parent_cycle_floor_h1`) was rejected because it would also swap the reversal-cap
+source and is not guaranteed byte-identical. Byte-identical on this data because
+`confirmed_at == CTS_EST.ev.idx` for all 6 H1 cycles (verified 0 mismatches) — a
+pure robustness fix, zero current behavior change.
 
 ---
 
