@@ -257,11 +257,13 @@ exports — drift in them shows up ONLY in the chart's trace/shape counts.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are:
+counts are (last verified 2026-05-27, full 2025-12-01→2026-01-20 window, after
+the cycle-lifecycle `parent_cycle_id` clamp — window-dependent, re-baseline when
+the config window or chart rendering changes):
 
-- `H1` chart: traces=149, shapes=325
-- `M15.counter` chart: traces=471, shapes=372
-- `M15.confluence` chart: traces=697, shapes=549
+- `H1` chart: traces=125, shapes=261
+- `M15.counter` chart: traces=221, shapes=165
+- `M15.confluence` chart: traces=382, shapes=307
 
 These print as `DEBUG traces:` / `DEBUG shapes:` (H1) and `[m15_chart] traces:
 N, shapes: M` (each M15 entity) at the end of `python -m engine_v2.run_replay`.

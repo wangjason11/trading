@@ -160,7 +160,9 @@ constraining event fires, the comparison is fixed).
 its owning cycle's lifecycle-start: `first_active = max(<zone-specific
 confirm idx>, cycle_lifecycle_start)`, where `cycle_lifecycle_start =
 max(CTS_n ESTABLISHED idx, structure lifecycle-start[, parent sid
-lifecycle-start])`. This prevents a zone from activating before its
+lifecycle-start[, parent_cycle_id lifecycle-start]])`. The `parent_cycle_id`
+floor is sub-only and **implemented 2026-05-27 (plan B1)** — see
+`PART4_REFACTOR_SPEC.md §5`. This prevents a zone from activating before its
 structure is alive — e.g. a post-reversal cycle-0 zone whose
 `CTS_ESTABLISHED` precedes the reversal confirmation. See
 `PART4_REFACTOR_SPEC.md §5` (starting_idx vs lifecycle-start + the clamp).

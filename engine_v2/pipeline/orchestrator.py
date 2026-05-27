@@ -26,6 +26,7 @@ from engine_v2.multitf.subsequent_counter_trigger import (
 )
 
 from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
+from engine_v2.zones.structure_lifecycle import compute_struct_start_by_sid
 
 # Week 7: POI zones
 from engine_v2.zones.poi_zones import derive_poi_zones, POIConfig
@@ -545,6 +546,28 @@ def run_pipeline(
     lower_tf_results = []
     confluence_results: List[Any] = []
     if lower_timeframes and "M15" in lower_timeframes:
+        # Parent-cycle lifecycle-start floors (H1 coords) for the sub lifecycle
+        # clamp (PART4 §5; plan B1, 2026-05-27). For each parent (sid, cycle):
+        # max(parent structure lifecycle-start, that cycle's CTS_ESTABLISHED idx)
+        # — i.e. the parent cycle's clamped lifecycle-start (which already embeds
+        # the parent_sid floor). Subs map these H1 idxs to M15 (last-of-hour) and
+        # floor their zone/POI activation so a sub cycle/structure never becomes
+        # active before its parent cycle is alive.
+        _h1_rev_by_sid: Dict[int, int] = {}
+        for ev in sorted_events:
+            if ev.type == "STATE_CHANGED" and ev.meta.get("to") == "reversal":
+                _rsid = int(ev.meta.get("structure_id", 0))
+                if _rsid not in _h1_rev_by_sid or int(ev.idx) > _h1_rev_by_sid[_rsid]:
+                    _h1_rev_by_sid[_rsid] = int(ev.idx)
+        _h1_struct_start = compute_struct_start_by_sid(sorted_events, _h1_rev_by_sid, None)
+        parent_cycle_floor_h1: Dict[tuple, int] = {}
+        for ev in sorted_events:
+            if ev.type == "CTS_ESTABLISHED":
+                _csid = int(ev.meta.get("structure_id", 0))
+                _ccyc = int(ev.meta.get("cycle_id", 0))
+                _sid_floor = _h1_struct_start.get(_csid, int(ev.idx))
+                parent_cycle_floor_h1[(_csid, _ccyc)] = max(_sid_floor, int(ev.idx))
+
         _t0 = time.perf_counter()
         lower_tf_results = _run_multi_tf(
             s_res.df,
@@ -555,6 +578,7 @@ def run_pipeline(
             meta,
             registry,
             subsequent_counter_triggers=subsequent_counter_triggers,
+            parent_cycle_floor_h1=parent_cycle_floor_h1,
         )
         timing["multi_tf_counter"] = time.perf_counter() - _t0
 
@@ -571,6 +595,7 @@ def run_pipeline(
             subsequent_confluence_triggers=subsequent_confluence_triggers,
             subsequent_counter_triggers=subsequent_counter_triggers,
             main_zone_proximity_triggers=zone_proximity_triggers,
+            parent_cycle_floor_h1=parent_cycle_floor_h1,
         )
         timing["multi_tf_confluence"] = time.perf_counter() - _t0
 
@@ -730,6 +755,7 @@ def _run_first_confluence_multi_tf(
     subsequent_confluence_triggers: Optional[list] = None,
     subsequent_counter_triggers: Optional[list] = None,
     main_zone_proximity_triggers: Optional[Dict[tuple, list]] = None,
+    parent_cycle_floor_h1: Optional[Dict[tuple, int]] = None,
 ) -> list:
     """Build confluence subs (var 1 bootstrap + var 3 subsequents) and
     register M15.confluence.
@@ -834,6 +860,7 @@ def _run_first_confluence_multi_tf(
             m15_df, h1_df,
             bootstrap=bootstrap, subsequents=subs,
             sub_path_id=sub_path_id,
+            parent_cycle_floor_h1=parent_cycle_floor_h1,
         )
         stream = _confluence_trigger_stream(
             key, main_first_sd_by_cycle, var4_all_sorted,
@@ -883,6 +910,7 @@ def _run_multi_tf(
     meta: Dict[str, Any],
     registry: StructureRegistry,
     subsequent_counter_triggers: Optional[list] = None,
+    parent_cycle_floor_h1: Optional[Dict[tuple, int]] = None,
 ) -> list:
     """Run multi-TF analysis for the M15.counter entity (var 2 + var 4).
 
@@ -970,6 +998,7 @@ def _run_multi_tf(
             m15_df_prepared, h1_df,
             bootstrap=bootstrap, subsequents=subs,
             sub_path_id=sub_path_id,
+            parent_cycle_floor_h1=parent_cycle_floor_h1,
         )
         stream = _counter_trigger_stream(key, var3_all_sorted)
         c = _assign_trigger_centric_sub_wvmi(

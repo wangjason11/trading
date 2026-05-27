@@ -28,6 +28,7 @@ from engine_v2.features.fibonacci import FibRetracement
 from engine_v2.patterns.imbalance import has_unfilled_imbalance
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.fib_tracker import FibTracker, FibState, select_fib_anchor_for_cycle
+from engine_v2.zones.structure_lifecycle import compute_struct_start_by_sid
 
 
 @dataclass(frozen=True)
@@ -381,25 +382,17 @@ def derive_poi_zones(
     # Structure lifecycle-start per sid (Phase 3 Commit 2, 2026-05-26): the idx
     # a structure first becomes active — sid 0 = first structural anchor (min
     # event idx); sid N>=1 = reversal-confirmation idx of sid N-1; subordinate
-    # = trigger idx supplied via `lifecycle_floor`. POI activation is floored
-    # here so a post-reversal cycle-0 POI (whose CTS_ESTABLISHED can precede the
-    # reversal) cannot activate before its structure is alive. Mirrors the KL
-    # clamp; see PART4_REFACTOR_SPEC §5 + ARCHITECTURE "Activation floor".
-    struct_start_by_sid: Dict[int, int] = {}
-    for ev in structure_events:
-        s = ev.meta.get("structure_id")
-        if s is None:
-            continue
-        s = int(s)
-        i = int(ev.idx)
-        if s not in struct_start_by_sid or i < struct_start_by_sid[s]:
-            struct_start_by_sid[s] = i
-    for s in list(struct_start_by_sid):
-        if (s - 1) in reversal_idx_by_sid:
-            struct_start_by_sid[s] = int(reversal_idx_by_sid[s - 1])
-    if lifecycle_floor is not None:
-        for s in struct_start_by_sid:
-            struct_start_by_sid[s] = max(struct_start_by_sid[s], int(lifecycle_floor))
+    # = `lifecycle_floor` = max(trigger, parent_sid_start, parent_cycle_start),
+    # supplied (slice-local) by build_one_sid (parent floors live there — this
+    # layer stays parent-agnostic). POI activation is floored here so a
+    # post-reversal cycle-0 POI (whose CTS_ESTABLISHED can precede the reversal)
+    # cannot activate before its structure is alive. Mirrors the KL clamp; see
+    # PART4_REFACTOR_SPEC §5 + ARCHITECTURE "Activation floor".
+    # Start resolution is the shared pure-leaf helper (B1 unification, 2026-05-27);
+    # reversal_idx_by_sid is passed in (the end resolution below still uses it).
+    struct_start_by_sid = compute_struct_start_by_sid(
+        structure_events, reversal_idx_by_sid, lifecycle_floor,
+    )
 
     # Pre-group CTS_ESTABLISHED + CTS_UPDATED events by (sid, cycle_id) so the
     # per-POI activation scan doesn't re-iterate the full event list for every

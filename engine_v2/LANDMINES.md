@@ -1135,3 +1135,56 @@ H1-main fibs almost always lock (no unlocked-inactive/ended H1 fib to vanish),
 no CSV. To actually SEE dead-version / ended-unlocked fibs vanish, enable M15
 fib lines. The migration still ran (H1 fib hover labels switched to the
 `status`-based form, e.g. "ended (locked)").
+
+---
+
+## Sub Lifecycle-Start Clamp: Uniform, Parent-Floored; Start Resolution Is Shared, End Is NOT (yet)
+
+Two interlocking facts about the cycle/structure lifecycle-start clamp
+(B1, 2026-05-27). Canonical model + H1→M15 mapping live in
+`PART4_REFACTOR_SPEC.md §5`; full session writeup in
+`memory/project_cycle_lifecycle_parent_cycle_floor.md`.
+
+**1. The clamp is UNIFORM — no per-cycle exception.** A zone's first-active is
+`max(its own confirmed_idx, its structure's lifecycle-start)`, where the
+structure's lifecycle-start embeds the parent floors for subs. It is applied at
+the **structure level** (`struct_start_by_sid[sid]`, raised by `lifecycle_floor`)
+so it lands on **every cycle of a structure including cycle 0**, and on **every
+sub sid** (bootstrap / subsequent / reversal-born — `build_parent_cycle_chain`
+computes `parent_floor_m15` once per parent cycle and passes it to every
+`build_one_sid`). There is NO main-style "cycle 0 == struct start, skip the
+clamp" shortcut on subs — a sub cycle 0 must still floor at `max(parent_sid_start,
+parent_cycle_id_start)`. Do not add a per-cycle carve-out.
+
+- **Parent floors live in `build_one_sid`, not in the zone layer.** The widened
+  `sub_lifecycle_floor_local = max(start_trigger_idx, parent_sid_start,
+  parent_cycle_start) - slice_begin` (parent floors = H1 `CTS_ESTABLISHED` idx
+  mapped to M15 **last-of-hour** via `_map_parent_idx_to_m15_hour_end`). The zone
+  derivations stay parent-agnostic — they receive ONE `lifecycle_floor` int.
+  Don't thread `parent_sid`/`parent_cycle_id` into `kl_zones_v1`/`poi_zones`
+  (they're shared with the main entity, which has no parent).
+- **Lifecycle-only.** The clamp moves ONLY `confirmed_idx`/`activation_history`/
+  fill. It must NOT move `base_idx`, the rendered rectangle outline
+  (`start_time = _time(base_idx)`), the MS run / BOS / CTS, `start_trigger_idx`
+  (the sub-WVMI gating window), or `SidRecord.creation_event_idx`. A `/compare`
+  showing any of those shifted is a red flag.
+- **Graceful-degradation paths (not designed exceptions, but they exist):** if a
+  sub's `(parent_sid, parent_cycle_id)` is absent from the floor dict or the
+  H1→M15 mapping returns `None`, the floor silently degrades to trigger-only
+  (loses the parent term); a zone with no `structure_id` (or a sid absent from
+  `struct_start_by_sid`) gets no clamp at all. Neither occurs in practice (every
+  built sub's parent cycle has a `CTS_ESTABLISHED`), but if one ever fired the
+  symptom is the original bug — a sub activating before its parent cycle.
+
+**2. Start resolution is SHARED; end resolution + the reversal dict are STILL
+DUPLICATED.** The per-`structure_id` lifecycle-**start** is the single pure-leaf
+helper `zones/structure_lifecycle.py::compute_struct_start_by_sid`, called by
+both `kl_zones_v1` and `poi_zones`. But the **end** resolution (first of
+{reversal, next-cycle `CTS_ESTABLISHED`}) and the reversal dict
+(`kl_zones_v1._get_reversal_confirmed_by_sid_from_events` vs `poi_zones` inline
+`reversal_idx_by_sid` — byte-identical today) are **still duplicated verbatim
+across the two files** (the "B2" end-unification is deferred, pending
+end-condition verification). **Until B2 lands, any change to the end resolution
+or the reversal-dict construction MUST be made in BOTH files** or they silently
+drift (the exact hazard the pass-through was meant to kill). See
+[[feedback-in-flight-vs-downstream-resolver]].

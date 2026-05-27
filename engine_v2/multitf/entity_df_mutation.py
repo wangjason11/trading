@@ -501,6 +501,7 @@ def build_one_sid(
     started_by: str,
     start_trigger_idx: int,
     validated_parent_idx: Optional[int] = None,
+    parent_floor_m15: Optional[int] = None,
 ) -> Optional[SidBuildOutcome]:
     """Build ONE bounded single-structure sub sid and mirror it (Part 4 §5/§6.1).
 
@@ -587,13 +588,19 @@ def build_one_sid(
 
     bounded.df.attrs["imbalances"] = trigger_df.attrs.get("imbalances", [])
 
-    # Sub structure lifecycle-start (slice-local): the trigger idx. A sub's
-    # structural anchor (start_m15_abs) can sit historically before its trigger
-    # (subsequent / reversal sids), so floor zone/POI activation at the trigger
-    # — no sub zone may be active before the sub structure is alive (Phase 3
-    # Commit 2). For the bootstrap, start_trigger_idx == start_m15_abs, so the
-    # floor equals the structural start (a no-op clamp).
-    sub_lifecycle_floor_local = int(start_trigger_idx) - slice_begin
+    # Sub structure lifecycle-start (slice-local). Floors zone/POI activation so
+    # no sub artifact is active before the sub structure is alive (Phase 3 Commit
+    # 2). A sub's structural anchor (start_m15_abs) can sit historically before
+    # its trigger (subsequent / reversal sids); for the bootstrap
+    # start_trigger_idx == start_m15_abs. The floor is the LATEST of
+    # {trigger idx, parent-cycle lifecycle-start} — the parent-cycle floor
+    # (entity-absolute M15, last-of-hour H1->M15) already embeds the parent_sid
+    # floor (PART4 §5, plan B1). parent_floor_m15 is None for main / when not
+    # supplied (clamp degrades to trigger-only). All entity-absolute -> slice-local.
+    _floor_abs = int(start_trigger_idx)
+    if parent_floor_m15 is not None:
+        _floor_abs = max(_floor_abs, int(parent_floor_m15))
+    sub_lifecycle_floor_local = _floor_abs - slice_begin
 
     downstream = _run_downstream_pipeline(
         bounded.df,
@@ -788,6 +795,7 @@ def build_parent_cycle_chain(
     bootstrap: MultiTFTrigger,
     subsequents: List[MultiTFTrigger],
     sub_path_id: str,
+    parent_cycle_floor_h1: Optional[Dict[tuple, int]] = None,
 ) -> List[LowerTFResult]:
     """Build one parent cycle's subordinate sid chain (Part 4 §6.1 merge-and-bound).
 
@@ -835,6 +843,21 @@ def build_parent_cycle_chain(
     if cycle_end_m15 is None:
         cycle_end_m15 = int(entity_df.index[-1])
 
+    # Parent-cycle lifecycle-start floor (M15, entity-absolute) for this whole
+    # chain (all sids share this (parent_sid, parent_cycle_id)). The orchestrator
+    # supplies the floor in H1 coords (parent cycle's clamped lifecycle-start);
+    # map H1->M15 last-of-hour here. None if not supplied / not found — the clamp
+    # then degrades to each sid's own trigger floor. PART4 §5, plan B1.
+    parent_floor_m15: Optional[int] = None
+    if parent_cycle_floor_h1:
+        _floor_h1 = parent_cycle_floor_h1.get(
+            (bootstrap.parent_sid, bootstrap.parent_cycle_id)
+        )
+        if _floor_h1 is not None:
+            parent_floor_m15 = _map_parent_idx_to_m15_hour_end(
+                int(_floor_h1), parent_df, entity_df,
+            )
+
     # Resolve subsequents up front: keep only those whose probe finalizes
     # (a pending probe ⇒ no sid AND no boundary, so the prior sid runs
     # through — §6.1). boundary = trigger_event_idx mapped to M15 hour-end.
@@ -881,6 +904,7 @@ def build_parent_cycle_chain(
             trigger=cur_trigger, sub_sid=sub_sid,
             started_by=cur_started_by, start_trigger_idx=cur_start_trig,
             validated_parent_idx=cur_valid,
+            parent_floor_m15=parent_floor_m15,
         )
         if outcome is None:
             # Degenerate / failed sid ends the chain (conservative — a rare

@@ -424,8 +424,9 @@ first_active = max(cts_established_idx, ic_idx, cycle_lifecycle_start)
 ```
 
 where `cycle_lifecycle_start = max(CTS_n ESTABLISHED idx, structure
-lifecycle-start[, parent sid lifecycle-start])` per the unified model
-(`PART4_REFACTOR_SPEC.md §5`). Before this change the floor was just
+lifecycle-start[, parent sid lifecycle-start[, parent_cycle_id lifecycle-start]])`
+per the unified model (`PART4_REFACTOR_SPEC.md §5`). (The `parent_cycle_id` floor
+is sub-only and **implemented 2026-05-27 — plan B1**.) Before this change the floor was just
 `max(cts_established_idx, ic_idx)`; the added term clamps **post-reversal
 cycle-0 POIs** (and sub analogues) whose `CTS_ESTABLISHED` precedes the
 structure's lifecycle-start (e.g. probe placed the anchor historically).

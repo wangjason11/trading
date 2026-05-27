@@ -556,18 +556,22 @@ Structures end when:         1. next structure starts
 
 ANY new cycle starts when:   new CTS established
                              — CLAMP: a cycle's lifecycle-start may not precede
-                               its structure's lifecycle-start (main & sub); for
-                               a sub it also may not precede the parent sid's
+                               its structure's lifecycle-start (main & sub). For a
+                               sub it ALSO may not precede the parent sid's
+                               lifecycle-start NOR the parent_cycle_id's
                                lifecycle-start. If the CTS-established idx is
-                               earlier, the cycle's true lifecycle-start is the
-                               LATEST of those floors.
+                               earlier than any floor, the cycle's true
+                               lifecycle-start is the LATEST of the (up to 3)
+                               floors: own-structure start, parent_sid start,
+                               parent_cycle_id start (the tuple identifier).
 
 Next structure starts when:  1. reversal triggers
                              2. (sub only) subsequent use_case triggers
                              — CLAMP (sub only): a new sub structure's
                                lifecycle-start may not precede the parent sid's
-                               lifecycle-start. If earlier, it snaps to the
-                               parent sid's lifecycle-start.
+                               lifecycle-start NOR the parent_cycle_id's
+                               lifecycle-start. If earlier than either, it snaps to
+                               the LATEST of the 2 parent floors.
 
 Zones start when:            the first time they become active (first confirmed),
                              clamped to their cycle's lifecycle-start (see below).
@@ -602,11 +606,44 @@ generalized):
   - **main structure:** sid 0 → its `starting_idx`; sid N≥1 → the reversal
     confirmation idx of sid N−1 (`STATE_CHANGED to=='reversal'`).
   - **sub structure:** its trigger idx (`start_trigger_idx`, §6.1), clamped
-    `≥ parent sid lifecycle-start`.
+    `≥ max(parent sid lifecycle-start, parent_cycle_id lifecycle-start)`, i.e.
+    `lifecycle-start = max(start_trigger_idx, parent_sid_start, parent_cycle_start)`.
   - **cycle (any):** `max(CTS_established_idx, owning-structure
-    lifecycle-start)`. The structure's lifecycle-start already embeds the
-    parent floor for subs, so the parent floor enters once (at the structure
-    level) and cycles inherit it transitively.
+    lifecycle-start)`. The structure's lifecycle-start already embeds BOTH parent
+    floors (sid + cycle) for subs, so the parent floors enter once (at the
+    structure level) and cycles inherit them transitively.
+
+  **Parent floor mapping (H1→M15, 2026-05-27).** A sub's parent floors are
+  parent-TF idxs and must be mapped to the entity's TF:
+  - `parent_cycle_id lifecycle-start` = the parent cycle's `CTS_ESTABLISHED`
+    `ev.idx` (H1), mapped to M15 via **last-of-hour**
+    (`_map_parent_idx_to_m15_hour_end`). Last-of-hour (not first) because the H1
+    candle isn't closed until its 4th M15 sub-candle, AND because the prior
+    cycle's sub *end* maps the same way → cycle k's start lands on the same candle
+    the prior cycle's sub ended (shared boundary, no gap). NB in this engine BOS
+    `confirmed_at` == CTS-established `ev.idx`, so the start anchor coincides with
+    the prior-cycle end anchor.
+  - `parent_sid lifecycle-start` = the parent cycle-0 floor, reversal-aware for
+    sid≥1: `max(map(CTS_0-established), map(reversal_confirmed[sid]))`.
+
+  **STATUS (2026-05-27).** The `parent_sid` floor is effectively in force today
+  (auto-satisfied: a sub trigger is always within its parent sid's life). The
+  `parent_cycle_id` floor is **IMPLEMENTED 2026-05-27 (plan B1)**: a shared
+  `compute_struct_start_by_sid` pure-leaf helper (`zones/structure_lifecycle.py`)
+  used by both KL + POI, and `build_one_sid`'s `lifecycle_floor` widened to
+  `max(start_trigger_idx, parent_sid_start, parent_cycle_start)` (parent floors
+  mapped H1->M15 last-of-hour in `build_parent_cycle_chain`). Validated /compare
+  vs `310c395`: H1 + counter + WVMI + sids byte-identical, chart counts unchanged;
+  only 5 `first_confluence` bootstrap subs floored their lifecycle-start (none
+  collapsed). Only the `parent_cycle_id` term changed behavior. **Lifecycle-only:**
+  `base_idx`,
+  rectangle outline, BOS/CTS, the MS run, `start_trigger_idx` (sub-WVMI window),
+  and `SidRecord.creation_event_idx` are all unchanged — only first-active /
+  `confirmed_idx` / fill move. The END-side unification (+ dedup of the reversal
+  dict currently duplicated across KL `_get_reversal_confirmed_by_sid_from_events`
+  and POI inline `reversal_idx_by_sid`) is a separate later step ("B2"), to follow
+  end-condition verification. Full writeup:
+  `memory/project_cycle_lifecycle_parent_cycle_floor.md`.
 
 Why the clamp is needed: a reversal's confirmation candle is when the new
 sid's lifecycle begins, but the probe can place the new sid's `starting_idx`

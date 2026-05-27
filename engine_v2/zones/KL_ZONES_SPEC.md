@@ -209,7 +209,10 @@ the start-side clamp below for the other behavioral change.)
 A KL zone's first-active is clamped to its cycle's lifecycle-start
 (`PART4_REFACTOR_SPEC.md §5`): `first_active = max(confirmed_idx,
 cycle_lifecycle_start)`, where `cycle_lifecycle_start = max(CTS_n
-ESTABLISHED idx, structure lifecycle-start[, parent sid lifecycle-start])`.
+ESTABLISHED idx, structure lifecycle-start[, parent sid lifecycle-start[,
+parent_cycle_id lifecycle-start]])`. (The `parent_cycle_id` floor is sub-only and
+**implemented 2026-05-27 — plan B1**; canonical model + mapping in
+`PART4_REFACTOR_SPEC.md §5`.)
 
 - The CTS_n zone's `confirmed_idx` (its pullback candle) is always after the
   cycle start, so it is rarely clamped.
