@@ -956,12 +956,13 @@ rendered idx.
 
 ## Mirror Translation of Nested-Dict Idx Fields Hardcodes Key Names
 
-> **⚠ Slated for removal — sub-structure lifecycle redesign (2026-05-25).**
-> The slice-local→entity-absolute mirror translation (and its hardcoded
-> nested-dict idx-key handling) goes away with the merge-and-bound build,
-> which builds directly in entity coords. Retained as current-code
-> reference until the redesign lands. See
-> `memory/project_sub_structure_lifecycle_redesign.md`.
+> **STILL LIVE (correction, 2026-05-27).** An earlier note here predicted the
+> mirror would be removed by the merge-and-bound redesign "which builds directly
+> in entity coords." That did NOT happen: `build_one_sid` still runs
+> `compute_bounded_structure` on a sliced+reset_index df and calls
+> `mirror_lower_tf_result_to_entity_df` (entity_df_mutation.py ~712) to shift
+> slice-local → entity-absolute. So this translation is load-bearing and growing
+> (FibState lifecycle fields were just added to it). Treat the entry as current.
 
 **Rule:** `mirror_lower_tf_result_to_entity_df` in
 `multitf/entity_df_mutation.py` shifts slice-local idx → entity-absolute
@@ -977,6 +978,15 @@ Current nested-dict idx fields and their hardcoded loop keys:
 |---|---|---|---|
 | `zones/kl_zones_v1.py` (INIT + expansion) | `meta["bounds_steps"][k]` | `"start_idx"` | `"start_idx"` |
 | `zones/poi_zones.py` `_compute_poi_activation_history` | `meta["activation_history"][k]` | `"idx"` | `"idx"` |
+| `zones/fib_tracker.py` `_log_flip` (FibState lifecycle, Session 1) | `FibState.activation_history[k]` (a top-level field, NOT meta) | `"idx"` | `"idx"` |
+
+**Also note (FibState, 2026-05-27):** `FibState.end_idx` is a top-level
+dataclass field (not nested), so the mirror shifts it directly in the fib
+`replace(...)` call alongside `bos_idx`/`cts_idx` — NOT via the meta tuple
+constants. `end_reason`/`status` are not indices and pass through unshifted.
+The cap in `entity_df_mutation.py` writes `end_idx = cap_idx_local`
+(slice-local) and relies on this mirror shift to make it entity-absolute,
+exactly like the sibling KL cap.
 
 **Hazard:** if the producer renames its key (or adds a new idx-bearing
 key in a nested dict), and the mirror loop isn't updated, the special

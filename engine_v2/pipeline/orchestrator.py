@@ -230,6 +230,13 @@ def _run_downstream_pipeline(
             # checks. No-op in h1 mode.
             fib_tracker.on_cts_threshold_updated(ev, df)
 
+    # Project the lifecycle convention axes (end_idx/end_reason/status/
+    # activation_history) onto FibState records. Additive (Session 1 of
+    # FIB_LIFECYCLE_SPEC.md) — populates the new fields without touching
+    # active/locked/meta/geometry, so consumers (POI gate, charts) see no
+    # change. Runs for both the H1 main tracker and each sub tracker.
+    fib_tracker._finalize_lifecycle_fields()
+
     fib_states = fib_tracker.get_fibs_for_charting()
     print(f"{pfx}[fib_tracker] total fibs={len(fib_states)}, active={sum(1 for f in fib_states if f.active)}")
 

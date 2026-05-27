@@ -1,9 +1,10 @@
 # FibState Lifecycle Spec — Design & Implementation Plan
 
-> **Status:** Design complete (2026-05-27); **implementation NOT started.** This
-> document is the cold-readable, canonical design produced from a full design
-> session. It is the FIRST spec doc for `zones/fib_tracker.py` (previously the
-> only description was the `cross_cycle` mode memory entry).
+> **Status:** Design complete (2026-05-27). **Session 1 / Step 1 IMPLEMENTED
+> (2026-05-27, byte-identical) — Sessions 2 & 3 NOT started.** This document is
+> the cold-readable, canonical design produced from a full design session. It is
+> the FIRST spec doc for `zones/fib_tracker.py` (previously the only description
+> was the `cross_cycle` mode memory entry). Per-session status lives in §12.
 >
 > **Scope:** Bring `FibState` onto the active/inactive/ended **lifecycle
 > convention** (ARCHITECTURE.md "Lifecycle state convention"), which `POIZone`
@@ -530,7 +531,38 @@ Three sessions = the three steps, each independently `/compare`-validated.
 > only **adds** the new axes *alongside* the untouched overloaded `active`;
 > Session 2 repurposes `active` and switches consumers together (they're coupled).
 
-### Session 1 — Step 1: additive lifecycle fields (BYTE-IDENTICAL)
+### Session 1 — Step 1: additive lifecycle fields (BYTE-IDENTICAL) — DONE (2026-05-27)
+
+> **IMPLEMENTED 2026-05-27, `/compare` byte-identical** (13/13 CSVs + 3/3 chart
+> PNGs identical; HTML identical after Plotly div-UUID normalization; 245/245
+> tests pass). What landed:
+> - `FibState` gained `end_idx`, `end_reason`, `status`, `activation_history`
+>   (defaults; unconsumed). `active`/`locked`/`meta`/`fib`/anchors untouched.
+> - `FibTracker` gained `_activation_history[(sid,cycle)]` + `_terminal[(sid,
+>   cycle)]` dicts (fed by both subsystems) + helpers `_log_flip`,
+>   `_set_terminal` (set-if-absent), `_cycle_currently_active`, and
+>   `_finalize_lifecycle_fields` (projects axes onto every version record;
+>   cycle-level `status`). Orchestrator calls finalize before
+>   `get_fibs_for_charting` in `_run_downstream_pipeline` (covers H1 + subs).
+> - Flip/terminal sites instrumented additively: `_activate_fib` (+`flip_reason`),
+>   `_m15_create_cross` (activated/reanchor + Option-A early-end via obsolete),
+>   `_update_fib_cts`, `_update_cycle1_fibs` (cross representative only),
+>   `_deactivate_cross` (own_imb_filled only), `_activate_or_update_single_m15`
+>   (reanchor-vs-activated), `_obsolete_prev_cycle_all_fibs` (+end_idx),
+>   `_deactivate_cycle0_fib` (+revert_idx → scenario1_revert/disappeared).
+> - `entity_df_mutation.py`: the mirror now shifts `end_idx` + translates
+>   `activation_history[*]["idx"]` by `slice_begin`; the open-sub-fib cap
+>   additively sets `end_idx`/`end_reason`/`status` (the §7 passed-through
+>   `lifecycle_end` terminal), mirroring the sibling KL cap.
+>
+> **Two deferrals carried into Session 2 (both confirmed acceptable, unconsumed):**
+> 1. **H1-main reversal terminal NOT wired** — reversal_confirmed_idx isn't
+>    threaded into FibTracker, so a reversal-ended H1 fib keeps `end_idx=None`
+>    and derives `status` from its condition (often "active"). The §7
+>    passed-through reversal terminal is Session 2 work.
+> 2. **Cosmetic:** a dead cross version (`cross_shortened`) of an end-capped
+>    cycle keeps the pre-cap cycle `status` (the cap only re-touches the open
+>    record). Session 2's per-record gate + cycle-level status recompute fixes it.
 
 **Goal:** persist the separated axes as NEW data, changing **nothing** any
 consumer sees.

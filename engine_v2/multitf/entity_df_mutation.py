@@ -257,15 +257,31 @@ def mirror_lower_tf_result_to_entity_df(
         new_poi.append(replace(z, ic_idx=z.ic_idx + slice_begin, meta=new_meta))
     _attrs_setdefault_list(entity_df, "poi_zones").extend(new_poi)
 
-    # 6. Fib states — direct bos_idx / cts_idx + meta
+    # 6. Fib states — direct bos_idx / cts_idx + meta. The lifecycle fields
+    #    (FIB_LIFECYCLE_SPEC.md Session 1) also carry slice-local indices:
+    #    `end_idx` and each `activation_history[*]["idx"]` must shift by
+    #    slice_begin alongside the anchors (the nested-dict-idx-translation
+    #    landmine). `end_reason` / `status` are not indices -> pass through.
     new_fibs = []
     for fib in result.fib_states:
         new_meta = _shift_meta_indices(fib.meta, ("deactivated_at",), slice_begin)
         new_meta.update(attribution)
+        new_end_idx = (
+            fib.end_idx + slice_begin
+            if isinstance(fib.end_idx, int)
+            else fib.end_idx
+        )
+        new_ah = fib.activation_history
+        if new_ah:
+            new_ah = tuple(
+                {**ev, "idx": int(ev["idx"]) + slice_begin} for ev in new_ah
+            )
         new_fibs.append(replace(
             fib,
             bos_idx=fib.bos_idx + slice_begin,
             cts_idx=fib.cts_idx + slice_begin,
+            end_idx=new_end_idx,
+            activation_history=new_ah,
             meta=new_meta,
         ))
     _attrs_setdefault_list(entity_df, "fib_states").extend(new_fibs)
@@ -669,9 +685,19 @@ def build_one_sid(
     capped_fibs = []
     for fib in downstream["fib_states"]:
         if fib.active and not fib.locked:
+            # Additively set the lifecycle terminal (FIB_LIFECYCLE_SPEC.md
+            # section 7 "passed-through" terminal) alongside the existing
+            # active/meta writes — mirrors the sibling KL cap above.
+            # cap_idx_local is slice-local; the mirror shifts end_idx to
+            # entity-absolute. status="ended" once the cycle has any activation
+            # history, else "inactive".
+            ah = fib.activation_history
             fib = _replace(
                 fib,
                 active=False,
+                end_idx=cap_idx_local,
+                end_reason=end_reason,
+                status="ended" if ah else "inactive",
                 meta={**fib.meta, "deactivated_by": end_reason,
                       "deactivated_at": cap_idx_local},
             )

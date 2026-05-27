@@ -25,6 +25,12 @@ from engine_v2.features.fibonacci import (
 from engine_v2.patterns.imbalance import has_unfilled_imbalance, get_unfilled_imbalances
 from engine_v2.structure.market_structure import StructureEvent
 
+# Lifecycle convention (FIB_LIFECYCLE_SPEC.md section 10): terminal reasons
+# that mean "invalidated / retracted" rather than ordinary historical end.
+# A cycle whose terminal carries one of these derives status="disappeared"
+# (terminal AND suppressed). Today only Scenario 1 revert qualifies.
+_INVALIDATION_END_REASONS = frozenset({"scenario1_revert"})
+
 
 @dataclass(frozen=True)
 class FibState:
@@ -56,6 +62,31 @@ class FibState:
 
     # History of CTS anchor changes (for logging)
     cts_history: tuple = field(default_factory=tuple)
+
+    # ------------------------------------------------------------------
+    # Lifecycle convention fields (FIB_LIFECYCLE_SPEC.md, Session 1).
+    # ADDED in parallel with the still-overloaded `active`/`locked`; NO
+    # consumer reads them yet (Session 2 repurposes `active` + switches
+    # consumers). They are populated by the tracker's lifecycle layer
+    # (`_finalize_lifecycle_fields`) and the sub lifecycle-end cap. See
+    # FIB_LIFECYCLE_SPEC.md sections 3 (axes), 7 (Option A end), 8
+    # (activation_history), 10 (disappeared).
+    #
+    # NOTE these are CYCLE-IDENTITY artifacts stamped onto every version
+    # record of a cycle: `status` is the cycle-level label (all versions of
+    # a live cycle share it — see spec section 9.1), and `activation_history`
+    # is the cycle's flip list (tracker-level, fed by both subsystems).
+    # ------------------------------------------------------------------
+    # Terminal axis (irreversible). None until the cycle ends.
+    end_idx: Optional[int] = None
+    end_reason: Optional[str] = None
+    # Derived cycle-identity label in {active, inactive, ended, disappeared}.
+    status: str = "active"
+    # Condition-flip history for the cycle: tuple of {idx, active, reason
+    # [, version]} dicts (sparse, coarse CTS-event granularity). Terminal is
+    # NOT in here (it lives in end_idx/end_reason). Non-load-bearing /
+    # informational (spec section 8.2).
+    activation_history: tuple = field(default_factory=tuple)
 
 
 @dataclass
@@ -233,6 +264,133 @@ class FibTracker:
         # in-place (same version); shrink bumps version by 1 and creates a
         # new entry, marking the old one inactive.
         self._cross_version: Dict[tuple, int] = {}
+
+        # ------------------------------------------------------------------
+        # Lifecycle convention layer (FIB_LIFECYCLE_SPEC.md, Session 1).
+        # These accumulate ALONGSIDE the existing `active`/`locked` logic and
+        # are projected onto FibState records by `_finalize_lifecycle_fields`.
+        # No consumer reads them yet.
+        # ------------------------------------------------------------------
+        # Cycle-identity condition-flip log, fed by BOTH subsystems
+        # (A: subordinate cross_cycle; B: H1-main Scenario 2). Keyed
+        # (sid, cycle_id) -> list of {idx, active, reason[, version]} dicts.
+        # Mirrors the cts_history accumulation pattern but at cycle granularity.
+        self._activation_history: Dict[tuple, list] = {}
+
+        # Cycle-identity terminal axis. Keyed (sid, cycle_id) -> (end_idx,
+        # end_reason). Set-if-absent (first/earliest end wins, irreversible).
+        # Populated for tracker-controlled terminals: new_cycle (obsolete) and
+        # scenario1_revert; cross_cycle Option A early-end flows through the
+        # obsolete path. Reversal / lifecycle_end are "passed-through" terminals
+        # (spec section 7): the sub lifecycle_end is set by the external cap in
+        # entity_df_mutation; the H1-main reversal terminal is NOT wired this
+        # session (deferred to Session 2 — reversal_confirmed_idx isn't threaded
+        # into the tracker today).
+        self._terminal: Dict[tuple, tuple] = {}
+
+    # ------------------------------------------------------------------
+    # Lifecycle convention helpers (FIB_LIFECYCLE_SPEC.md, Session 1).
+    # Purely additive: they record the separated axes; nothing here mutates
+    # `active`/`locked`/`meta`/geometry, so output stays byte-identical.
+    # ------------------------------------------------------------------
+    def _log_flip(
+        self,
+        sid: int,
+        cycle_id: int,
+        idx: int,
+        active: bool,
+        reason: str,
+        version: Optional[int] = None,
+    ) -> None:
+        """Append a condition-flip entry to the cycle's activation_history.
+
+        `reason` is a condition/handoff reason (activated, imbalance_filled,
+        imbalance_reformed, reanchor); terminal reasons never go here (they
+        live in `_terminal`). Consecutive actives (e.g. a `reanchor` after an
+        `activated`) are allowed — the spec section 8.5 accepts the broken
+        strict A/D alternation as cosmetic, and `active_stretches_from_history`
+        ignores a consecutive active.
+        """
+        entry: Dict[str, Any] = {"idx": int(idx), "active": bool(active),
+                                 "reason": reason}
+        if version is not None:
+            entry["version"] = int(version)
+        self._activation_history.setdefault((sid, cycle_id), []).append(entry)
+
+    def _set_terminal(
+        self,
+        sid: int,
+        cycle_id: int,
+        end_idx: int,
+        end_reason: str,
+    ) -> None:
+        """Record the cycle's terminal (end_idx, end_reason), set-if-absent.
+
+        First/earliest end wins (terminals are irreversible — spec section 7).
+        e.g. a cross_cycle Option A early-end set at pre-established creation is
+        not overwritten by a later same-cycle obsolete call.
+        """
+        key = (sid, cycle_id)
+        if key not in self._terminal:
+            self._terminal[key] = (int(end_idx), end_reason)
+
+    def _cycle_currently_active(self, sid: int, cycle_id: int) -> bool:
+        """Whether the cycle's representative fib is active right now.
+
+        Representative = active cross version if present, else the single-fib
+        entry (mirrors get_active_fib). Used only for the condition half of the
+        derived `status` when no terminal is set.
+        """
+        latest = self._get_latest_cross(sid, cycle_id)
+        if latest is not None and latest[1].active:
+            return True
+        single = self._fibs.get((sid, cycle_id))
+        return bool(single is not None and single.active)
+
+    def _finalize_lifecycle_fields(self) -> None:
+        """Project the lifecycle axes onto every FibState record in `_fibs`.
+
+        Stamps, per cycle identity (sid, cycle_id): the cycle's
+        `activation_history`, terminal `end_idx`/`end_reason`, and derived
+        `status`. `status` is a CYCLE-level label shared by all version records
+        of the cycle (spec section 3.3 / 9.1). Only the new lifecycle fields are
+        written (via dataclasses.replace) — `active`/`locked`/`meta`/`fib`/
+        anchors are untouched, so consumers see no change.
+
+        Idempotent and safe to call once at end of the tracker's event stream
+        (the orchestrator calls it before get_fibs_for_charting). Does NOT add
+        or remove entries in `_fibs`.
+        """
+        from collections import defaultdict
+
+        keys_by_cycle: Dict[tuple, list] = defaultdict(list)
+        for key in self._fibs:
+            keys_by_cycle[(key[0], key[1])].append(key)
+
+        for (sid, cycle_id), keys in keys_by_cycle.items():
+            history = tuple(self._activation_history.get((sid, cycle_id), ()))
+            term = self._terminal.get((sid, cycle_id))
+            end_idx = term[0] if term else None
+            end_reason = term[1] if term else None
+
+            if end_reason in _INVALIDATION_END_REASONS:
+                status = "disappeared"
+            elif end_idx is not None:
+                status = "ended"
+            elif self._cycle_currently_active(sid, cycle_id):
+                status = "active"
+            else:
+                status = "inactive"
+
+            for key in keys:
+                fib = self._fibs[key]
+                self._fibs[key] = replace(
+                    fib,
+                    end_idx=end_idx,
+                    end_reason=end_reason,
+                    status=status,
+                    activation_history=history,
+                )
 
     def on_cts_established(
         self,
@@ -561,8 +719,9 @@ class FibTracker:
             if self._should_revert_scenario1(bos_price, prev_bos_outer, prev_sd):
                 # Revert Scenario 1 to FALSE
                 self._scenario1[sid] = False
-                # Deactivate cycle 0 Fib if it exists
-                self._deactivate_cycle0_fib(sid)
+                # Deactivate cycle 0 Fib if it exists (revert fires at this
+                # cycle-1 CTS_ESTABLISHED idx = the cycle-0 fib's terminal)
+                self._deactivate_cycle0_fib(sid, cts_idx)
                 scenario1 = False
                 print(f"[fib] sid={sid} Scenario 1 REVERTED to FALSE (BOS_1={bos_price:.5f} touched prev BOS zone outer={prev_bos_outer:.5f})")
             else:
@@ -739,8 +898,14 @@ class FibTracker:
         cts_idx: int,
         cts_price: float,
         meta: Optional[Dict] = None,
+        flip_reason: str = "activated",
     ) -> FibState:
-        """Internal helper to create and store a FibState."""
+        """Internal helper to create and store a FibState.
+
+        `flip_reason` tags the activation_history entry: "activated" for a
+        cycle's first activation, "reanchor" for a handoff that keeps the
+        cycle alive (e.g. cross->single fallback — spec section 8.5).
+        """
         if sd == 1:  # Bullish
             anchor_high = cts_price
             anchor_low = bos_price
@@ -777,6 +942,8 @@ class FibTracker:
             cts_history=((cts_idx, cts_price),),
         )
 
+        activated_at = int((meta or {}).get("activated_at", cts_idx))
+
         # Mark previous cycle's Fib as obsolete (if exists)
         prev_cycle = self._current_cycle.get(sid)
         if prev_cycle is not None and prev_cycle != cycle_id:
@@ -785,10 +952,14 @@ class FibTracker:
                 old_fib = self._fibs[prev_key]
                 obsolete = replace(old_fib, active=False, meta={**old_fib.meta, "obsolete_reason": "new_cycle"})
                 self._fibs[prev_key] = obsolete
+                # Lifecycle: prev cycle ends when this cycle activates.
+                self._set_terminal(sid, prev_cycle, activated_at, "new_cycle")
 
         key = (sid, cycle_id)
         self._fibs[key] = state
         self._current_cycle[sid] = cycle_id
+        # Lifecycle: log the cycle's condition flip (activation / handoff).
+        self._log_flip(sid, cycle_id, activated_at, True, flip_reason)
 
         print(f"[fib] sid={sid} cycle={cycle_id} ACTIVATED: BOS idx={bos_idx} price={bos_price:.5f} -> CTS idx={cts_idx} price={cts_price:.5f}")
 
@@ -1116,10 +1287,12 @@ class FibTracker:
         if has_unfilled and not new_state.active:
             # Reactivate - unfilled imbalances now exist in expanded range
             new_state = replace(new_state, active=True, meta={**new_state.meta, "reactivated_at": cts_idx})
+            self._log_flip(sid, cycle_id, cts_idx, True, "imbalance_reformed")
             print(f"[fib] sid={sid} {label} REACTIVATED: unfilled imbalance found at idx={cts_idx}")
         elif not has_unfilled and new_state.active:
             # Deactivate - all imbalances filled
             new_state = replace(new_state, active=False, meta={**new_state.meta, "deactivated_at": cts_idx, "reason": "all_imbalances_filled"})
+            self._log_flip(sid, cycle_id, cts_idx, False, "imbalance_filled")
             print(f"[fib] sid={sid} {label} DEACTIVATED: all imbalances filled at idx={cts_idx}")
 
         self._fibs[key] = new_state
@@ -1194,9 +1367,13 @@ class FibTracker:
         # --- Determine active state ---
         if cross_active and not new_cross_fib.active:
             new_cross_fib = replace(new_cross_fib, active=True, meta={**new_cross_fib.meta, "reactivated_at": cts_idx})
+            # Lifecycle: cycle 1's representative is the cross fib (Scenario 2).
+            # The normal_cycle1 fallback's own flips are scratch and not logged.
+            self._log_flip(sid, 1, cts_idx, True, "imbalance_reformed")
             print(f"[fib] sid={sid} cross-cycle REACTIVATED")
         elif not cross_active and new_cross_fib.active:
             new_cross_fib = replace(new_cross_fib, active=False, meta={**new_cross_fib.meta, "deactivated_at": cts_idx})
+            self._log_flip(sid, 1, cts_idx, False, "imbalance_filled")
             print(f"[fib] sid={sid} cross-cycle DEACTIVATED")
 
         cross_data["cross_cycle"] = new_cross_fib
@@ -1468,8 +1645,13 @@ class FibTracker:
         else:  # Prev was bearish, sell zone sits below outer (top)
             return bos1_price <= prev_bos_outer
 
-    def _deactivate_cycle0_fib(self, sid: int) -> None:
-        """Deactivate cycle 0 Fib when Scenario 1 reverts to FALSE."""
+    def _deactivate_cycle0_fib(self, sid: int, revert_idx: int) -> None:
+        """Deactivate cycle 0 Fib when Scenario 1 reverts to FALSE.
+
+        `revert_idx` (= the CTS_1 ESTABLISHED idx where the revert fires) is
+        the cycle-0 fib's terminal. This is an invalidation, not an ordinary
+        end → status="disappeared" (spec section 10).
+        """
         key = (sid, 0)
         if key in self._fibs:
             state = self._fibs[key]
@@ -1479,6 +1661,8 @@ class FibTracker:
                     active=False,
                     meta={**state.meta, "deactivated_by": "scenario1_revert"}
                 )
+                # Lifecycle terminal (invalidation class -> disappeared).
+                self._set_terminal(sid, 0, revert_idx, "scenario1_revert")
                 print(f"[fib] sid={sid} cycle=0 DEACTIVATED (Scenario 1 reverted)")
 
     # ------------------------------------------------------------------
@@ -1554,10 +1738,19 @@ class FibTracker:
             return None
         return (key, fib)
 
-    def _obsolete_prev_cycle_all_fibs(self, sid: int, new_cycle_id: int) -> None:
+    def _obsolete_prev_cycle_all_fibs(
+        self, sid: int, new_cycle_id: int, end_idx: Optional[int] = None,
+    ) -> None:
         """Mark every fib for cycle < new_cycle_id (single + all cross versions)
         as inactive via obsolete_reason='new_cycle'. Skips already-inactive
-        fibs."""
+        fibs.
+
+        `end_idx` (the creating cycle's birth idx) is the obsoleted cycles'
+        lifecycle terminal. Set-if-absent implements Option A (spec section 7):
+        when a next-cycle pre-established cross is created during cycle n's
+        tail, cycle n's fib ends at that early creation idx; an older cycle
+        already terminated keeps its earlier end.
+        """
         for key in list(self._fibs.keys()):
             if not isinstance(key, tuple) or len(key) < 2:
                 continue
@@ -1566,6 +1759,8 @@ class FibTracker:
             k_cycle = key[1]
             if k_cycle >= new_cycle_id:
                 continue
+            if end_idx is not None:
+                self._set_terminal(sid, k_cycle, end_idx, "new_cycle")
             state = self._fibs[key]
             if not state.active:
                 continue
@@ -1823,8 +2018,18 @@ class FibTracker:
         self._cross_version[(sid, target_cycle)] = version
         self._current_cycle[sid] = target_cycle
 
-        # Obsolete all prior-cycle fibs (single + cross versions)
-        self._obsolete_prev_cycle_all_fibs(sid, target_cycle)
+        # Obsolete all prior-cycle fibs (single + cross versions). The creation
+        # idx is the obsoleted cycles' terminal (Option A early-end via
+        # set-if-absent).
+        self._obsolete_prev_cycle_all_fibs(sid, target_cycle, end_idx=current_candle)
+
+        # Lifecycle: v0 is the cycle's first activation; a later version (shrink
+        # / revival) is a handoff that keeps the cycle alive -> "reanchor"
+        # (spec section 8.5). Distinguishing shrink-vs-revival is Session 2 work
+        # (the in-place-reactivation change); coarse "reanchor" is fine here.
+        cross_reason = "activated" if version == 0 else "reanchor"
+        self._log_flip(sid, target_cycle, current_candle, True, cross_reason,
+                       version=version)
 
         print(f"[fib] cross_cycle sid={sid} CROSS ({earliest_x}->{target_cycle}) "
               f"v{version} ACTIVATED: bos_x_idx={bos_x_idx} -> anchor_idx={anchor_idx}")
@@ -1888,6 +2093,14 @@ class FibTracker:
             },
         )
         v = state.meta.get("version", 0)
+        # Lifecycle: own_imb_filled is a reversible CONDITION flip; cross_failed
+        # / cross_shortened are version-internal handoffs (the cycle stays
+        # alive via the single fallback / next version), NOT cycle-level
+        # active/inactive flips — so only the condition flip is logged here
+        # (spec sections 3.4 / 8.1).
+        if reason == "own_imb_filled":
+            self._log_flip(state.structure_id, state.cycle_id, current_candle,
+                           False, "imbalance_filled", version=v)
         print(f"[fib] cross_cycle sid={state.structure_id} cycle={state.cycle_id} "
               f"CROSS v{v} DEACTIVATED: {reason}")
 
@@ -1920,6 +2133,15 @@ class FibTracker:
         key = (sid, target_cycle)
         existing = self._fibs.get(key)
         if existing is None or not existing.active:
+            # Lifecycle reason: if a cross was ever created for this cycle,
+            # the single is a cross->single handoff (cycle stays alive) ->
+            # "reanchor"; otherwise it is the cycle's first fib -> "activated"
+            # (spec sections 5 / 6).
+            single_reason = (
+                "reanchor"
+                if self._get_latest_cross(sid, target_cycle) is not None
+                else "activated"
+            )
             # Activate new single fib
             self._activate_fib(
                 sid=sid,
@@ -1934,6 +2156,7 @@ class FibTracker:
                     "via": "cross_failed",
                     "activated_at": current_candle,
                 },
+                flip_reason=single_reason,
             )
         else:
             # Extend existing single fib anchor + re-check imbalance
