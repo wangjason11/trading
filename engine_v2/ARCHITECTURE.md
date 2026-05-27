@@ -170,12 +170,16 @@ condition-state for imbalance check AND terminal flag for `new_cycle` /
 `scenario1_revert` / `cross_failed` / `lifecycle_end`). The convention
 *applies in principle* — FibState genuinely has both axes (imbalance-fill is
 reversible condition-state; the four `deactivated_by` reasons are terminal) —
-but the migration is **deliberately deferred** to its own session: it spans
-~500 lines across `fib_tracker.py`, POI lifecycle, and chart/debug consumers,
-and the cross-fib versioning (`cross_shortened` / `cross_failed` spawning new
-`version`s) complicates the `activation_history` model. Folding it into the
-Phase 3 KL pass would broaden the regression surface and make `/compare`
-illegible. Tracked in `memory/project_lifecycle_convention_klzone_fibstate.md`.
+and the migration is now **fully DESIGNED** (2026-05-27, not yet implemented):
+the cross-fib versioning (`cross_shortened` / `cross_failed` spawning new
+`version`s) that complicated the `activation_history` model is resolved by making
+the **cycle the lifecycle identity** with versions as an internal sub-axis, plus a
+tracker-level `(sid, cycle)` history projection that unifies the two storage
+subsystems without refactoring them. It still spans ~500 lines across
+`fib_tracker.py`, POI lifecycle, and chart/debug consumers, so it remains its own
+staged build. Canonical design: `zones/FIB_LIFECYCLE_SPEC.md`; tracked in
+`memory/project_lifecycle_convention_klzone_fibstate.md` +
+`memory/project_fib_lifecycle_design.md`.
 
 **Deliberately NOT lifecycle objects:** structure events
 (`df.attrs["structure_events"]`) and candle / structure patterns. These are

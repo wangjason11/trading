@@ -381,16 +381,28 @@ assumes "POI ⟹ sd direction."
 - `confirmed_idx`: **LAST** activate idx (lossy scalar — `poi_zones.py` overwrites it on every activation and never clears it on deactivation). A POI can flap active/inactive within a cycle, so this scalar does NOT bound the active interval. To ask "is the POI active as of candle X?" use `zones/poi_lifecycle.py::poi_active_as_of` (walks `activation_history`), never `confirmed_idx`. See GOTCHAS "POI `confirmed_idx` Is a Lossy Scalar".
 - `top`, `bottom`: IC high/low
 - `versions`: List of qualifying variants ["V30", "V60", "V90"]
-- `status`: "active" | "inactive" | "disappeared"
+- `status`: "active" | "inactive" | "ended" (+ "disappeared" — a reserved terminal-invalidation status; see Zone States)
+- `end_idx` / `end_reason`: terminal axis (reversal | next-cycle CTS-established | lifecycle_end)
+- `activation_history`: per-candle activate/deactivate flips (condition axis)
 - `end_time`: When zone ends (None = extends to chart end)
 
 ### Zone States
 
+Per the lifecycle convention (ARCHITECTURE.md "Lifecycle state convention"),
+`status` is **derived** from the two orthogonal axes stored on the zone:
+`end_idx`/`end_reason` (terminal, irreversible) + `activation_history`
+(condition, reversible). POI currently produces `{active, inactive, ended}`
+(`poi_zones.py` status derivation); `disappeared` is a **reserved** terminal-
+invalidation status the chart still filters but POI does **not** currently
+produce (the planned FibState lifecycle work will produce it for
+`scenario1_revert` — see `zones/FIB_LIFECYCLE_SPEC.md`).
+
 | Status | Meaning | Charting |
 |--------|---------|----------|
-| `active` | Zone currently valid | Rendered fully |
-| `inactive` | Valid but superseded by newer zone | Rendered faded |
-| `disappeared` | IC no longer qualifies | NOT rendered (kept in list for history) |
+| `active` | Condition holds at end-of-data (IC qualifies + unfilled imbalance, per the activation conditions) | Rendered fully (bright tier) |
+| `inactive` | Alive but condition currently off (reversible — e.g. imbalance filled; can reactivate) | Rendered faded |
+| `ended` | Terminal — cycle/structure ended (reversal \| next-cycle CTS-established \| lifecycle_end). Irreversible | Rendered faded |
+| `disappeared` | Terminal **+ suppressed** (invalidation). Reserved; produced only by the planned FibState work (`scenario1_revert`), not by POI today | NOT rendered (kept in list for history) |
 
 ### Zone End Time (Priority Order)
 1. **Reversal:** `end_time = reversal_confirmed_idx` (all zones end immediately)
@@ -449,8 +461,8 @@ cfg = {
 
 ### Zone Rendering Rules
 - `active` zones: Full opacity
-- `inactive` zones: Faded opacity
-- `disappeared` zones: NOT rendered
+- `inactive` / `ended` zones: Faded opacity (3-tier by status + sid-recency)
+- `disappeared` zones: NOT rendered (terminal-invalidation; filtered out — reserved, not produced by POI today)
 
 ### Hover Data
 - Side, structure_id, cycle_id
@@ -481,7 +493,7 @@ Select IC variants (30%/60%/90% overlap with 61.8-80% Fib zone)
     ↓
 Create POI zones (one per unique IC, bounds = IC high/low)
     ↓
-Track lifecycle (active → inactive → disappeared)
+Track lifecycle (active ⇄ inactive condition flips; → ended at terminal. disappeared = reserved terminal-invalidation, not produced by POI today)
     ↓
 Charting renders zones + Fib lines + imbalance highlighting
 ```
