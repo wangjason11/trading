@@ -175,15 +175,21 @@ The "one cycle, multiple representations, one active" abstraction is realized
 (Scenario-2 condition inputs); `["normal_cycle1"]` = a **FibState**;
 `["cross_cycle"]` = a **FibState**.
 
-**DECISION — DO NOT unify the storage.** Collapsing `_cross_cycle_data` into
-versioned `_fibs` entries would refactor main-structure fib selection — the
-byte-identical-risk zone. Instead, maintain the lifecycle layer
+**DECISION — DO NOT unify the storage (for the lifecycle migration).** Collapsing
+`_cross_cycle_data` into versioned `_fibs` entries would refactor main-structure
+fib selection — the byte-identical-risk zone. Instead, maintain the lifecycle layer
 (`activation_history` + derived `status`) at the **cycle-identity level** in a
 **tracker-level dict** that *both* subsystems feed (Section 8.4). That makes the
 lifecycle **uniform above the storage** while leaving A's versioned `_fibs` and
 B's `_cross_cycle_data` untouched. **This is "project, don't unify."** The two
 subsystems are conceptually the same model (versions per cycle, one active); only
 their storage differs, and the projection bridges them.
+
+> **Not closed — may be revisited (user 2026-05-27).** The "don't unify" call was
+> scoped to the lifecycle migration (avoid touching the byte-identical-risk main
+> selection). The user may come back to a standalone storage-unification cleanup
+> in the future if the two-subsystem split becomes a maintenance burden. See
+> Section 13's parked-items note.
 
 > The cross→single (`cross_failed`) handoff in A and the cross↔normal fallback
 > in B are treated identically at the cycle level: a **handoff / `reanchor`**, NOT
@@ -715,8 +721,13 @@ updated deliberately.
   `/compare` diffs expected. Nice synergy: if it lands first, the fib renderer
   reuses the helper for free. **NOT** bundled with the fib data changes (would
   make `/compare` illegible).
-- **Collapsing `_cross_cycle_data` into `_fibs` versions** — NOT needed; the
-  tracker-level history unifies above storage (Section 5). Leave it.
+- **Collapsing `_cross_cycle_data` into `_fibs` versions** — NOT needed for the
+  lifecycle migration; the tracker-level history unifies above storage (Section 5),
+  so it was left as-is. **DEFERRED, not closed (user 2026-05-27): may revisit and
+  reconsider in the future** as a standalone storage-unification cleanup (e.g. if
+  the two-subsystem split becomes a maintenance burden). Out of scope for the
+  lifecycle track, which is complete without it; if revisited, treat it as
+  byte-identical-main-risk work (see Section 5's tradeoff).
 - **Live per-candle fib evaluation** — separately deferred (the `is_filled`
   incremental state-machine item). The coarse CTS-event granularity stands.
 - **WVMI lifecycle** — still deferred / design-gated
