@@ -1,0 +1,4 @@
+commit_hash=44e0e69
+timestamp=20260527_120705
+branch=week8-volmom-multitf
+commit_message=Replace fib activation_history with scalar start_idx (Fib lifecycle simplification, byte-identical)
