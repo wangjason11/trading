@@ -198,8 +198,13 @@ WVMI renders FB/LB/FP/LP as markers on the wave-candle lines, **per-component**
 - **FB, LB, FP** — shown once created (start idx); permanent (locked at creation),
   independent of active/ended/locked.
 - **LP** — shown iff `status=="active"` (the shifting temp) **or** `lp_locked`
-  (the official LP). So **reversal-ended-before-lock → FB/LB/FP shown, no LP**;
-  **cycle+1-ended → all four (LP locked)**; **open/df-end → FB/LB/FP + temp LP**.
+  (the official LP). The LP locks ONLY via the sub's own `BOS_{n+1}`; **any other
+  cycle-end leaves it ended-without-lock → FB/LB/FP shown, no LP.** Cases:
+  - **cycle+1 forms** (`BOS_{n+1}`) → all four, LP **locked**.
+  - **ended-without-lock** — the sub's own **reversal**, OR a **parent entity
+    ending** (parent-cycle end / parent reversal / parent-sid end — the
+    `lifecycle_cap` cases) before `BOS_{n+1}` → FB/LB/FP only, no LP.
+  - **open / df-end** (`cap_open`, no end) → FB/LB/FP + the shifting temp LP.
 - **inactive/collapsed** — nothing shown.
 
 This **diverges from fib** (fib vanishes an ended-unlocked record): WVMI keeps the
