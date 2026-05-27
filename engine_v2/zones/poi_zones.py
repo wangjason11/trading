@@ -431,9 +431,21 @@ def derive_poi_zones(
 
     # Process each Fib state
     for fib_state in fib_states:
-        if not fib_state.active and not fib_state.locked:
-            # Skip deactivated Fibs that were never locked
-            # (they were invalidated and shouldn't produce zones)
+        # Lifecycle gate (FIB_LIFECYCLE_SPEC §11, Session 2). Process a fib iff
+        # it is the live condition-active version (active AND its cycle has not
+        # ended) OR it is locked (a confirmed historical record — still feeds IC
+        # detection, including ended-locked fibs). `disappeared` records never
+        # reach here (filtered by get_fibs_for_charting).
+        #
+        # This is the byte-identical-PRESERVING per-record form, NOT the
+        # cycle-level `status == "active" OR locked`: `status` is shared by all
+        # version records of a live cycle, so a status-keyed gate would wrongly
+        # process superseded (dead) cross versions of a still-live cycle (same
+        # reason the chart gate, §9.1, uses raw per-record flags). `active` is
+        # condition-only post-Session-2, so we add `end_idx is None` (cycle not
+        # ended) to reproduce today's behavior (today's `active` was also False
+        # once a cycle ended).
+        if not ((fib_state.active and fib_state.end_idx is None) or fib_state.locked):
             continue
 
         sid = fib_state.structure_id

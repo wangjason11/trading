@@ -230,11 +230,16 @@ def _run_downstream_pipeline(
             # checks. No-op in h1 mode.
             fib_tracker.on_cts_threshold_updated(ev, df)
 
+    # Wire the reversal terminal onto the ended sid's cycles BEFORE finalize so
+    # the derived `status` reflects it (FIB_LIFECYCLE_SPEC §7 / Session 2
+    # deferral). Runs for the H1 main tracker and each sub tracker.
+    fib_tracker.set_reversal_terminals(reversal_confirmed_by_sid)
+
     # Project the lifecycle convention axes (end_idx/end_reason/status/
-    # activation_history) onto FibState records. Additive (Session 1 of
-    # FIB_LIFECYCLE_SPEC.md) — populates the new fields without touching
-    # active/locked/meta/geometry, so consumers (POI gate, charts) see no
-    # change. Runs for both the H1 main tracker and each sub tracker.
+    # activation_history) onto FibState records. Session 2 of
+    # FIB_LIFECYCLE_SPEC.md repurposes `active` to condition-only — terminals
+    # now live in end_idx/end_reason and the derived `status`, which the POI
+    # gate and charts read. Runs for both the H1 main tracker and each sub.
     fib_tracker._finalize_lifecycle_fields()
 
     fib_states = fib_tracker.get_fibs_for_charting()

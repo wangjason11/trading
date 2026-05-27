@@ -1096,3 +1096,42 @@ fallback (zones predating `activation_history`) and the debug print — do not
 revive it as an activation bound, and do not "fix" the bug by flipping the
 producer to first-activate (that ignores the deactivation flaps and
 over-activates).
+
+---
+
+## FibState Lifecycle Gate Is Per-Record, NOT Cycle-`status` (Session 2)
+
+**Rule:** After the Session-2 lifecycle migration (`FIB_LIFECYCLE_SPEC.md`),
+`FibState.active` is **condition-only** and `status` is a **cycle-level** label
+shared by every version record of a cycle. The consumer gates therefore use
+**raw per-record `active`/`locked` for version distinction** and `status` (or
+`end_idx`) ONLY for the cycle-level ended/disappeared terminal:
+
+- **POI gate** (`zones/poi_zones.py`): `(fib.active AND fib.end_idx is None) OR fib.locked`
+- **Chart gate** (`charting/export_plotly.py`): `status != "disappeared" AND ( locked OR (active AND status not in {"ended","disappeared"}) )`
+
+**Do NOT "simplify" the POI gate to `status == "active" OR locked`.** It looks
+equivalent and the spec's first draft proposed it, but it is a **silent
+byte-identical regression on subordinate structures**: a superseded (dead) cross
+version of a *still-live* cycle carries per-record `active=False` yet inherits
+the cycle-shared `status="active"`, so the cycle-status gate would wrongly
+*process* it → extra/incorrect sub POIs. Fibs are in no CSV and M15 sub charts
+have fib lines off, so this would NOT show in a `/compare` CSV/PNG diff — it
+leaks only into rendered sub POI zones. Same reason the chart gate (§9.1) is
+per-record.
+
+**Do NOT make `_deactivate_cross` (`cross_failed`/`cross_shortened`) stop setting
+`active=False`.** Unlike the cycle TERMINALS (new_cycle / scenario1_revert /
+reversal / lifecycle_end — which now set `end_idx`/`end_reason` and leave
+`active` alone), these are **version-internal supersedes**: the cycle stays
+alive via the next version / single fallback, but the dead version MUST read
+`active=False` so the per-record chart gate drops it (the "dead-version trail"
+vanish). They deliberately do NOT call `_set_terminal`.
+
+**Why the §9.2 visible vanish is latent (don't mistake it for a no-op):** in the
+default config the migration is byte-identical on CSVs + PNGs because (a)
+H1-main fibs almost always lock (no unlocked-inactive/ended H1 fib to vanish),
+(b) M15 sub charts render no fibs (`"fib": {"lines": False}`), (c) fibs are in
+no CSV. To actually SEE dead-version / ended-unlocked fibs vanish, enable M15
+fib lines. The migration still ran (H1 fib hover labels switched to the
+`status`-based form, e.g. "ended (locked)").

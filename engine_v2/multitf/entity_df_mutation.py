@@ -683,25 +683,48 @@ def build_one_sid(
         capped_pois.append(poi)
 
     capped_fibs = []
+    capped_cycles: Dict[tuple, tuple] = {}  # (sid, cycle) -> (end_idx, end_reason, status)
     for fib in downstream["fib_states"]:
         if fib.active and not fib.locked:
-            # Additively set the lifecycle terminal (FIB_LIFECYCLE_SPEC.md
-            # section 7 "passed-through" terminal) alongside the existing
-            # active/meta writes — mirrors the sibling KL cap above.
-            # cap_idx_local is slice-local; the mirror shifts end_idx to
-            # entity-absolute. status="ended" once the cycle has any activation
-            # history, else "inactive".
+            # Session 2 (FIB_LIFECYCLE_SPEC §7/§11): the lifecycle-end cap is a
+            # CYCLE TERMINAL ("passed-through" — reversal or parent
+            # lifecycle_end). Set end_idx/end_reason/status and leave `active`
+            # (now condition-only) untouched — mirrors the sibling KL cap above
+            # and the in-tracker terminal paths. cap_idx_local is slice-local;
+            # the mirror shifts end_idx to entity-absolute. status="ended" once
+            # the cycle has any activation history, else "inactive".
             ah = fib.activation_history
+            new_status = "ended" if ah else "inactive"
             fib = _replace(
                 fib,
-                active=False,
                 end_idx=cap_idx_local,
                 end_reason=end_reason,
-                status="ended" if ah else "inactive",
+                status=new_status,
                 meta={**fib.meta, "deactivated_by": end_reason,
                       "deactivated_at": cap_idx_local},
             )
+            capped_cycles[(fib.structure_id, fib.cycle_id)] = (
+                cap_idx_local, end_reason, new_status,
+            )
         capped_fibs.append(fib)
+
+    # Recompute cycle-level status across ALL version records of any cycle the
+    # cap just ended (FIB_LIFECYCLE_SPEC Session 2 deferral 2). The cap only
+    # re-touches the open record; `_finalize_lifecycle_fields` stamped the
+    # (then-live) cycle status onto the cycle's dead cross versions earlier, so
+    # without this they'd keep a stale "active"/"inactive" status. Propagate the
+    # terminal to those records too (their gate result is unaffected — they
+    # vanish via active=False — but their status/hover should read "ended").
+    if capped_cycles:
+        propagated = []
+        for fib in capped_fibs:
+            ck = (fib.structure_id, fib.cycle_id)
+            info = capped_cycles.get(ck)
+            if info is not None and fib.end_idx is None and fib.status != "disappeared":
+                ei, er, st = info
+                fib = _replace(fib, end_idx=ei, end_reason=er, status=st)
+            propagated.append(fib)
+        capped_fibs = propagated
 
     result = LowerTFResult(
         trigger=trigger,

@@ -2512,12 +2512,33 @@ def export_chart_plotly(
         zone_rect_active = _style("fib.zone_rect.active")
         zone_rect_historical = _style("fib.zone_rect.historical")
 
+        _fib_drawn = 0
         for fib_st in fib_states:
             if fib_st.fib is None:
                 continue
 
+            # Per-record draw gate (FIB_LIFECYCLE_SPEC §9.1, Session 2). Draw a
+            # record iff it is NOT terminal-suppressed (status "disappeared")
+            # AND it is either the live condition-active version (active AND its
+            # cycle is not ended) OR locked (confirmed historical, incl.
+            # ended-locked, rendered faded). Inactive-unlocked, ended-unlocked,
+            # and superseded (dead) cross versions (active=False) all VANISH
+            # (§9.2). Uses raw per-record active/locked for version distinction;
+            # cycle-level `status` only for the ended/disappeared terminal.
+            _status = getattr(fib_st, "status", "active")
+            if _status == "disappeared":
+                continue
+            _drawable = fib_st.locked or (
+                fib_st.active and _status not in ("ended", "disappeared")
+            )
+            if not _drawable:
+                continue
+            _fib_drawn += 1
+
             fib = fib_st.fib
-            is_active = fib_st.active and not fib_st.locked
+            # "Bright" = the live active version (condition-active, cycle not
+            # ended, not yet locked). Locked / ended records render faded.
+            is_active = fib_st.active and not fib_st.locked and _status == "active"
             anchor_line = anchor_line_active if is_active else anchor_line_historical
             zone_style = zone_rect_active if is_active else zone_rect_historical
 
@@ -2622,7 +2643,8 @@ def export_chart_plotly(
                 f"{fib_st.cts_price:.5f}",
                 f"{price_618:.5f}",
                 f"{price_80:.5f}",
-                "active" if is_active else "locked" if fib_st.locked else "inactive",
+                # Hover label from lifecycle status + locked axis (§11).
+                f"{_status}{' (locked)' if fib_st.locked else ''}",
             ]
             hover_customdata = [hover_row] * len(seg_times)
 
@@ -2651,7 +2673,8 @@ def export_chart_plotly(
                 )
             )
 
-        print(f"[chart][fib] rendered {len(fib_states)} fib states")
+        print(f"[chart][fib] rendered {_fib_drawn}/{len(fib_states)} fib states "
+              f"(per-record gate: active|locked, not disappeared)")
 
     # -------------------------------------------------
     # Week 7: Prev BOS Lines (black horizontal lines after reversal)

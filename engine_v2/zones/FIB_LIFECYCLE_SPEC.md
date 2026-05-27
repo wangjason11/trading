@@ -362,20 +362,35 @@ win. So `activation_history` ends on a *condition* event (often a trailing
 The chart draws **records** (version FibStates). The gate must distinguish the
 live/locked version from dead ones *within* a cycle — and the cycle-identity
 `status` cannot do that (all versions of a live cycle share `status="active"`, so
-a status-keyed gate would draw every version, dead ones included). So:
+a status-keyed gate would draw every version, dead ones included). So the gate is
+**primarily per-record**:
 
-> **Draw a record iff:**
-> `not (record.deactivated_by == "scenario1_revert") AND (record.active OR record.locked)`
+> **Draw a record iff (as IMPLEMENTED, Session 2 — `export_plotly.py`):**
+> `status != "disappeared" AND ( record.locked OR (record.active AND status not in {"ended","disappeared"}) )`
 
-using the **raw per-record flags** `active`, `locked`, and the invalidation
-marker — NOT `status`. This naturally selects exactly the active-or-locked
-representative per cycle and drops dead versions. The cycle-identity `status`
-(Section 3.3) is used **elsewhere** — opacity tiering (Section 9.4), hover, debug
-— but **not** in this gate.
+The **raw per-record flags** `active`/`locked` do the *version distinction*
+(picking the live-or-locked representative, dropping superseded dead versions
+— which carry `active=False`). The **cycle-level `status`** is consulted ONLY
+for the *terminal* (`ended` / `disappeared`) check, which is genuinely
+cycle-level (all version records share it). This split is the whole point:
+status for the cycle terminal, per-record flags for which version.
+
+> **Reconciliation note (Session 2).** The original design wrote this gate as
+> the bare `not scenario1_revert AND (active OR locked)`, on the implicit
+> assumption that an ended fib also has `active=False`. But Session 2 makes
+> `active` **condition-only** — terminals (new_cycle / reversal / lifecycle_end)
+> set `end_idx`/`end_reason` and leave `active` alone (Section 3.3 / §11). So an
+> ended cycle's open unlocked record keeps `active=True`; the bare
+> `(active OR locked)` would wrongly **draw** it instead of vanishing it (§9.2
+> cat 3). The implemented gate adds the `status not in {ended,disappeared}`
+> terminal check to fix this, while still using per-record `active`/`locked`
+> for version distinction. (Superseded **version-internal** records —
+> `cross_failed` / `cross_shortened` — still carry per-record `active=False`,
+> so they vanish via the `active` term even while their cycle is alive.)
 
 > NB on `status` vs the gate: this is subtle — `status` is a single cycle-level
-> label; the gate is finer-grained (per record). They are related but operate at
-> different levels. Do not conflate them.
+> label; the per-record flags are finer-grained. The gate uses BOTH, at the
+> levels each is meaningful. Do not conflate them.
 
 ### 9.2 What this gate CHANGES (intentional, not byte-identical)
 
@@ -498,18 +513,30 @@ ordinary active/inactive flicker is just the condition axis driving the gate.
 
 | Consumer | Reads today | Post-migration |
 |---|---|---|
-| **POI** (`poi_zones.py:434`) | geometry + final `active`/`locked` as gate (`if not active and not locked: skip`); derives its OWN `end_idx` + activation history | read derived `status`/`locked` (gate ≡ `status=="active" OR locked`, byte-identical because today's `active` already = `condition ∧ ¬ended`, and ended-locked fibs still pass via `locked`) |
-| **Chart H1** (`export_plotly.py:2504-2654`) | geometry + `is_active = active and not locked`; hover label "active/locked/inactive" (`:2625`) | per-record gate (Section 9.1); hover label from `status`+`locked` |
-| **Chart M15** (`export_m15_chart.py`) | same | same |
-| **Cap** (`entity_df_mutation.py:669-678`) | sets `active=False` + `deactivated_by` on `active and not locked` fibs | set `end_idx` + `end_reason` instead |
-| `get_fibs_for_charting:1964-1974` | returns all `_fibs.values()` except `scenario1_revert` | drop the special filter; rely on the uniform `status != "disappeared"` filter |
+| **POI** (`poi_zones.py:434`) | geometry + final `active`/`locked` as gate (`if not active and not locked: skip`); derives its OWN `end_idx` + activation history | **per-record** gate `(active AND end_idx is None) OR locked` — see reconciliation note |
+| **Chart H1** (`export_plotly.py:2504-2654`) | geometry + `is_active = active and not locked`; hover label "active/locked/inactive" (`:2625`) | per-record gate (Section 9.1); `is_active` (bright) = `active AND not locked AND status=="active"`; hover label from `status`+`locked` |
+| **Chart M15** (`export_m15_chart.py`) | fib lines OFF by default (`"fib": {"lines": False}`); `sid_fibs` fetched but unused | unchanged — no fib rendering to gate |
+| **Cap** (`entity_df_mutation.py` open-sub-fib cap) | sets `active=False` + `deactivated_by` on `active and not locked` fibs | set `end_idx` + `end_reason` + `status` instead (leave `active`); recompute cycle `status` across all version records of capped cycles |
+| `get_fibs_for_charting` | returns all `_fibs.values()` except `scenario1_revert` | drop the special filter; rely on the uniform `status != "disappeared"` filter |
 
-**Note on the POI gate preservation:** the convention defines "ended ⇒ active is
-False." So today's `active` bool already equals `condition ∧ ¬ended`. Reproducing
-the gate as `(status=="active") OR locked` is therefore byte-identical, including
-the subtle case where an obsoleted-but-`locked` fib still feeds POI IC detection
-(it passes via `locked`). **The new `ended` status must NOT leak into the POI
-gate** — keep `locked` as the pass-through there.
+**Reconciliation note — the POI gate is PER-RECORD, not `status=="active" OR
+locked` (Session 2).** The original design proposed `status=="active" OR locked`
+and claimed byte-identical. That holds for **H1-main** (fib_mode `"h1"` has one
+record per cycle — no cross versions in `_fibs`), but NOT for **subordinate**
+structures: a superseded (dead) cross version of a *still-live* cycle carries
+per-record `active=False` yet inherits the cycle-level `status="active"`, so the
+cycle-status gate would wrongly **process** it (extra/incorrect POIs on subs).
+This is the exact reason §9.1 uses per-record flags for version distinction. The
+implemented byte-identical-preserving form is therefore per-record:
+
+> `(fib.active AND fib.end_idx is None) OR fib.locked`
+
+— equivalent to today's `(active OR locked)` because (a) the only records whose
+`active` value changed are terminal-ended ones (terminals stopped resetting
+`active`), and the added `end_idx is None` check restores today's skip for them;
+(b) dead cross versions still carry `active=False` and skip; (c) ended-**locked**
+fibs still pass via `locked` (feed IC detection). **`ended` must not leak into
+the gate as an active-pass** — `locked` stays the pass-through.
 
 ---
 
@@ -589,7 +616,36 @@ behavior change (you probably touched `active` or versioning) — back it out.
 **Done when:** new fields present + correct in debug exports, `/compare` clean,
 `/commit-save`.
 
-### Session 2 — Step 2: repurpose `active` + switch consumers + per-record gate + in-place reactivation (INTENTIONAL diff)
+### Session 2 — Step 2: repurpose `active` + switch consumers + per-record gate + in-place reactivation — DONE (2026-05-27)
+
+> **IMPLEMENTED 2026-05-27.** `/compare` vs the Session-1 baseline: **all 13
+> CSVs + 3 chart PNGs byte-identical**; the ONLY diff is the H1 chart fib hover
+> label text (now status-based, e.g. "ended (locked)" — §11). 245/245 tests pass.
+> What landed:
+> - `active` repurposed to condition-only: the cycle TERMINALS stopped setting
+>   `active=False` and now set `end_idx`/`end_reason` — `_obsolete_prev_cycle_all_fibs`
+>   + `_activate_fib`'s new_cycle obsolete, `_deactivate_cycle0_fib`
+>   (scenario1_revert), and the `entity_df_mutation.py` open-sub-fib cap.
+> - **Two reasoned deviations from the original plan** (both validated
+>   byte-identical, spec §9.1/§11 reconciliation notes + LANDMINES "FibState
+>   Lifecycle Gate Is Per-Record"): (1) `_deactivate_cross`
+>   (`cross_failed`/`cross_shortened`) KEEPS per-record `active=False` — they are
+>   version-internal supersedes, not cycle terminals; (2) the POI gate is the
+>   per-record `(active AND end_idx is None) OR locked`, NOT the cycle-level
+>   `status=="active" OR locked` (which would process dead cross versions on subs).
+> - Consumers switched: chart per-record gate + status-based hover/styling;
+>   `get_fibs_for_charting` → `status != "disappeared"`.
+> - In-place cross reactivation (`_m15_reactivate_cross_in_place`) — latent no-op
+>   in the validated window (no cross shrink/revival fired).
+> - Reversal terminal wired (`FibTracker.set_reversal_terminals`, called before
+>   `_finalize_lifecycle_fields` in `_run_downstream_pipeline`) — Session-1
+>   deferral 1 closed. Cap recomputes cycle `status` across version records —
+>   Session-1 deferral 2 closed.
+>
+> **The §9.2 visible vanish is LATENT in the default config:** H1-main fibs all
+> lock (no unlocked-inactive/ended H1 fib), M15 sub charts have fib lines OFF, and
+> fibs are in no CSV — so the sub dead-version/ended-unlocked vanish exists in the
+> data but isn't rendered. Enable M15 fib lines to see it.
 
 **Goal:** flip to the new model; accept the deliberate chart change.
 
