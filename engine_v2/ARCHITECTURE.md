@@ -108,7 +108,25 @@ orthogonal axes of state** that must be kept distinct in its representation:
 Once ended, "active" is undefined / always False. Before ended, the object
 flips between active and inactive based on its activation conditions.
 
-Recommended representation for any new lifecycle object:
+**Two tiers — not every lifecycle object has the condition (active/inactive)
+axis.** It applies ONLY to objects with a genuinely **reversible condition** —
+today just **POI** and **Fib**, whose condition is the unfilled-imbalance state
+(flips as imbalances form / commit-fill). Objects with **no reversible
+condition** — **structure cycles, structures, KL zones, WVMI** — are **tier-1**:
+their "active" simply means **started-and-not-ended**, fully derivable from
+`start_idx`/`end_idx`. They need no stored `active` flag and no
+`activation_history`; `status` derives from start/end alone. So when adding a new
+lifecycle object, ask **"does it have a reversible condition?"** — if not, give it
+only `start_idx` + `end_idx`/`end_reason` + derived `status` (do NOT add an
+`active` axis just for symmetry; it would be redundant).
+
+`activation_history` (the per-flip list) is itself only **load-bearing for POI**,
+whose chart fill + proximity gate walk it per-candle. **Fib dropped it** for
+scalar `start_idx` logging (`FIB_LIFECYCLE_SPEC.md §15`, 2026-05-27 — no consumer
+walked a fib history). **KL** carries a degenerate single-entry history purely as
+a chart-fill convenience. Tier-1 objects carry none.
+
+Recommended representation for a new lifecycle object (full form — trim per tier):
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -127,9 +145,10 @@ else:
     status = "inactive"
 ```
 
-**Currently following this convention:** `POIZone` and `KLZone` (both store
-`end_idx` + `end_reason` + `activation_history` + derived 3-state `status` in
-`meta`). `KLZone` joined the convention in the Phase 3 unified-lifecycle pass
+**Following this convention:** `POIZone` (tier-2, full `activation_history`),
+`KLZone` (tier-1, degenerate single-entry history), and `FibState` (tier-2,
+scalar — see below); `WVMI` designed (tier-1, see below). POI/KL store `end_idx` +
+`end_reason` + `activation_history` + derived 3-state `status` in `meta`. `KLZone` joined the convention in the Phase 3 unified-lifecycle pass
 (2026-05-25): it computes no end of its own and inherits its owning cycle's
 resolved end (reversal / next-cycle CTS-established / parent-cycle-end for
 subs) — see `zones/KL_ZONES_SPEC.md` "Lifecycle". KL has no reversible
@@ -167,21 +186,25 @@ structure is alive — e.g. a post-reversal cycle-0 zone whose
 `CTS_ESTABLISHED` precedes the reversal confirmation. See
 `PART4_REFACTOR_SPEC.md §5` (starting_idx vs lifecycle-start + the clamp).
 
-**Not yet following:** `FibState` (the `active` flag does double duty —
-condition-state for imbalance check AND terminal flag for `new_cycle` /
-`scenario1_revert` / `cross_failed` / `lifecycle_end`). The convention
-*applies in principle* — FibState genuinely has both axes (imbalance-fill is
-reversible condition-state; the four `deactivated_by` reasons are terminal) —
-and the migration is now **fully DESIGNED** (2026-05-27, not yet implemented):
-the cross-fib versioning (`cross_shortened` / `cross_failed` spawning new
-`version`s) that complicated the `activation_history` model is resolved by making
-the **cycle the lifecycle identity** with versions as an internal sub-axis, plus a
-tracker-level `(sid, cycle)` history projection that unifies the two storage
-subsystems without refactoring them. It still spans ~500 lines across
-`fib_tracker.py`, POI lifecycle, and chart/debug consumers, so it remains its own
-staged build. Canonical design: `zones/FIB_LIFECYCLE_SPEC.md`; tracked in
-`memory/project_lifecycle_convention_klzone_fibstate.md` +
-`memory/project_fib_lifecycle_design.md`.
+**`FibState` — NOW following (2026-05-27).** Tier-2 (it has the reversible
+imbalance condition). Sessions 1 & 2 separated the overloaded `active` into
+condition-only `active` + terminal `end_idx`/`end_reason` + derived `status`; the
+cross-fib versioning is handled by making the **cycle the lifecycle identity**
+with versions an internal sub-axis. The **§15 simplification** then DROPPED
+`activation_history` for a sticky scalar `start_idx` (no fib consumer walked the
+history) and wired fib onto the shared `compute_cycle_lifecycle` (clamp start to
+the structure floor; cycle-end as an earliest-wins terminal candidate). Canonical:
+`zones/FIB_LIFECYCLE_SPEC.md` (§15 is authoritative); `memory/project_fib_lifecycle_design.md`.
+
+**`WVMI` — DESIGNED, impl pending (2026-05-27).** Tier-1 (created-once/locked-once,
+no reversible condition): scalar `start_idx` (= creation `CTS_n` CONFIRMED, clamped)
++ inherited `end_idx` + derived `status`; NO active/inactive, NO `activation_history`;
+its existing `created/updated/locked` computation axis is renamed `lp_status` so
+`status` is the lifecycle label. Canonical: `zones/WVMI_SPEC.md` "Lifecycle
+convention"; `memory/project_wvmi_lifecycle_deferred.md`.
+
+So after WVMI lands, **every** lifecycle-like object will be on the convention
+(`project_lifecycle_convention_klzone_fibstate.md` tracked the original migration).
 
 **Deliberately NOT lifecycle objects:** structure events
 (`df.attrs["structure_events"]`) and candle / structure patterns. These are
