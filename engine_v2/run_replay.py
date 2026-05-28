@@ -344,6 +344,19 @@ def main() -> None:
                 structure_path_id=sub_path_id,
             )
 
+            # Debug: per-sub structure events (BOS/CTS/STATE_CHANGED/REVERSAL).
+            # The only sub-entity-scoped event stream — the H1
+            # `_structure_events.csv` is H1-main-only. Needed for diagnosing
+            # any "BOS/CTS sequence looks wrong" issue on a sub chart.
+            # Note attrs key differs from H1 main (which uses "structure_events"):
+            # sub entities mirror events under "events" per
+            # `mirror_lower_tf_result_to_entity_df`.
+            from engine_v2.debug.export_events import export_structure_events
+            export_structure_events(
+                sub_entry.df.attrs.get("events", []) or [],
+                f"artifacts/debug/{basename}_{leaf_label}_structure_events.csv",
+            )
+
     from engine_v2.debug.export_zones import export_kl_zones
     export_kl_zones(res.meta.get("kl_zones", []), f"artifacts/debug/{basename}_kl_zones.csv")
 

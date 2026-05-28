@@ -557,6 +557,29 @@ def build_one_sid(
     if cols_to_drop:
         trigger_df = trigger_df.drop(columns=cols_to_drop, errors="ignore")
 
+    # Re-derive range labels on the slice.
+    # `apply_is_range_labels` runs in `prepare_lower_tf_data` on the FULL
+    # entity-wide M15 df and writes `is_range_confirm_idx` with
+    # ENTITY-ABSOLUTE positional values. After `reset_index(drop=True)`
+    # above, MarketStructure reads those values as if they were slice-local
+    # (see `_is_range_candle_given_confirm` / `_finalize_range_candidate_offline`).
+    # That pollution: (a) emits RANGE_STARTED at a wildly wrong idx that
+    # `mirror_lower_tf_result_to_entity_df` then double-shifts, (b) breaks the
+    # back-fill window bound `min_d = min(confirm_idx, D)` in `_step_anchor`
+    # (the entity-absolute value far exceeds D, so back-fill runs the full
+    # range_max_k window unconditionally), and (c) poisons the `cts_anchor_idx`
+    # snapshot at CTS_CONFIRMED because the over-extended back-fill calls
+    # `_maybe_update_cts_pre_confirm` past the eventual pullback apply_idx,
+    # so `st.cts.idx` records a future extreme. Symptom: BOS_{n+1}.idx can
+    # land BEFORE CTS_n.cts_anchor_idx (cycle-progression invariant
+    # violation). H1 main is unaffected because it never slices.
+    from engine_v2.patterns.range_label import apply_is_range_labels, RangeLabelConfig
+    trigger_df = trigger_df.drop(
+        columns=["is_range", "is_range_confirm_idx", "is_range_lag"],
+        errors="ignore",
+    )
+    trigger_df = apply_is_range_labels(trigger_df, RangeLabelConfig())
+
     start_in_slice = start_m15_abs - slice_begin
     end_in_slice = end_m15_abs - slice_begin
     if len(trigger_df) - start_in_slice < 5:

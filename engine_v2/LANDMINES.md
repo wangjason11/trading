@@ -808,6 +808,102 @@ drop on the slice copy is the cheaper safeguard.
 
 ---
 
+## Sub Slices Must Re-Derive `is_range_*` Labels After `reset_index`
+
+**Rule:** In `multitf/entity_df_mutation.build_one_sid`, after the slice +
+`reset_index(drop=True)`, the `is_range` / `is_range_confirm_idx` /
+`is_range_lag` columns MUST be dropped and recomputed via
+`apply_is_range_labels(trigger_df)` on the slice. The recompute is
+REQUIRED, not optional.
+
+**Why this is a landmine:**
+`apply_is_range_labels` (in `patterns/range_label.py`) is called once in
+`prepare_lower_tf_data` on the **entity-wide** M15 dataframe. It writes
+`is_range_confirm_idx = t` where `t` is the **entity-absolute** positional
+index of the confirm candle. Example: a candle whose confirm landed at
+entity row 4049 gets `is_range_confirm_idx=4049`.
+
+When `build_one_sid` builds a per-sub bounded structure, it slices that
+entity_df and calls `reset_index(drop=True)`. **Row indices reset to
+0..N, but column VALUES are unchanged** — so `is_range_confirm_idx` still
+holds 4049 even though the corresponding slice-local position is, say, 72.
+
+`MarketStructure.run()` then reads
+`self.df.iloc[i].get("is_range_confirm_idx")` (in
+`_is_range_candle_given_confirm` / `_finalize_range_candidate_offline`)
+and **treats the value as slice-local**. Three cascading corruptions
+follow:
+
+1. **`RANGE_STARTED` / `STATE_CHANGED → RANGE` events emit at impossible
+   idx.** `_finalize_range_candidate_offline` uses `confirm_idx` directly
+   as the event idx. Then `mirror_lower_tf_result_to_entity_df` shifts
+   every event by `slice_begin`, so e.g. confirm_idx=4049 →
+   post-mirror idx=4049+3977=**8026** (far outside the M15 data range,
+   ~4228 candles).
+
+2. **Back-fill cap silently goes unbounded.** `_step_anchor` (line ~844):
+   ```python
+   min_d = D if confirm_idx is None else min(confirm_idx, D)
+   for k in range(i, min_d):
+       self._replay_step_no_patterns(k, freeze_range=True)
+   ```
+   With `D = i + range_max_k = i + 5` and polluted `confirm_idx` >> D, the
+   `min` always picks D. Back-fill runs the full 5-candle window instead
+   of stopping at the real confirm idx.
+
+3. **CTS extreme leaks forward past the eventual pattern apply_idx.** The
+   over-run back-fill keeps calling `_maybe_update_cts_pre_confirm(k)` on
+   candles k > the eventual pullback apply_idx (cts_phase is still
+   EST_OR_UPD during back-fill). `st.cts.idx` records a future extreme.
+   When the pullback pattern then applies at apply_idx, `_emit_cts_confirmed_once`
+   snapshots `cts_anchor_idx = st.cts.idx` — the **future-leaked** extreme.
+
+**Visible symptom:** `BOS_{n+1}.idx` can land BEFORE `CTS_n.cts_anchor_idx`,
+violating the cycle-progression invariant (each cycle should progress
+forward in idx). On the chart this manifests as `BOS BOS CTS CTS` ordering
+where you expect `BOS CTS BOS CTS`. Concrete reproduction case (counter
+sub_sid=1 of parent_cycle=2 in the NZD_USD 2025-11→2026-01 window):
+CTS_0 anchor leaked to idx 4050, BOS_1 picked idx 4048, visual
+`BOS(4027)→BOS(4048)→CTS(4050)→CTS(4086)` — cycle_id sequence
+`0→1→0→1` by chart-marker idx.
+
+**Fix (codified in `build_one_sid`):**
+
+```python
+from engine_v2.patterns.range_label import apply_is_range_labels, RangeLabelConfig
+trigger_df = trigger_df.drop(
+    columns=["is_range", "is_range_confirm_idx", "is_range_lag"],
+    errors="ignore",
+)
+trigger_df = apply_is_range_labels(trigger_df, RangeLabelConfig())
+```
+
+After the fix, `confirm_idx` is slice-local (small ints), all three
+corruptions disappear: `RANGE_STARTED` emits at sensible idx, back-fill
+cap works as intended, and CTS extreme stays bounded by the pattern apply
+candle.
+
+**Why H1 main is unaffected:** H1 main runs `apply_is_range_labels` and
+`MarketStructure.run()` on the **same** dataframe — no slice, no
+`reset_index`. Only subordinate subs trip this. The bug only became
+discoverable once we added per-sub `structure_events.csv` debug exports
+and inspected the events list for anomalies.
+
+**Why this rarely surfaces visibly:** the visible cycle-progression-invariant
+violation needs (a) a range candidate detected at an anchor where the
+over-run back-fill reaches a NEW extreme, AND (b) a pullback pattern
+detected on the NEXT anchor with apply_idx BEFORE that new extreme. Most
+pullbacks fire after the price has clearly peaked, so the leak lands at
+an idx earlier than the apply candle and is harmless. The bug lurks
+silently for most data shapes.
+
+**Related:** sibling of "Slice Copies Inherit Mirrored Structure Cols"
+above — both are coord-system bugs introduced by the slice + reset_index
+pattern. Any OTHER positional-index column added in future pre-processing
+on the entity-wide M15 df must be similarly re-derived on the slice.
+
+---
+
 ## MarketStructure Deep-Couples to Its Working DataFrame
 
 > **⚠ Relevant but reframed — sub-structure lifecycle redesign (2026-05-25).**

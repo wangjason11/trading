@@ -1172,6 +1172,43 @@ terminator". `locked` fibs are immune either way — they always feed POI.)
 
 ---
 
+## Sub structure events out-of-idx-order? Suspect entity-absolute pollution of `is_range_confirm_idx`
+
+**Symptom on a sub chart:** BOS and CTS dot markers don't alternate the
+way they should — by chart-marker idx, you see `BOS → BOS → CTS → CTS`
+where you expect `BOS → CTS → BOS → CTS`. Equivalent in the
+`_M15_<entity>_structure_events.csv` dump: the `cycle_id` of confirmed
+events goes forward then backward (e.g., `0, 1, 0, 1`) when sorted by
+the chart's marker idx (`BOS_CONFIRMED.idx` for BOS, `cts_anchor_idx`
+for CTS).
+
+**Root cause:** `is_range_confirm_idx` is computed entity-absolute on
+the wide M15 df, then sub slices retain those values after
+`reset_index(drop=True)`. The MS engine reads them as slice-local,
+polluting back-fill bounds and leaking the CTS extreme past the eventual
+pullback apply candle. See LANDMINES "Sub Slices Must Re-Derive
+`is_range_*` Labels After `reset_index`" for the full mechanism.
+
+**Quick diagnostic:** dump the sub's structure events CSV and filter
+`RANGE_STARTED` events for the sub_sid. If you see any `idx` value
+≥ `len(M15) * 2` (e.g., 8026 when the M15 data has ~4228 rows), the
+pollution is present:
+
+```python
+import pandas as pd, ast
+df = pd.read_csv("artifacts/debug/..._M15_counter_structure_events.csv")
+df['meta_d'] = df['meta'].apply(lambda s: ast.literal_eval(s) if isinstance(s,str) else {})
+rs = df[df['type'] == 'RANGE_STARTED']
+# any idx > ~4500 on a ~4228-candle M15 window is post-double-shift garbage
+print(rs[['idx', 'meta']].head())
+```
+
+**Fix:** `build_one_sid` re-derives the range columns after the slice.
+If you add a NEW pre-computed positional-index column to the M15 prep
+pipeline, you must also re-derive it on the sub slice for the same reason.
+
+---
+
 ## `artifacts/debug/` accumulates files from prior runs with DIFFERENT config windows — glob the current window or you'll compare stale data
 
 **Symptom:** a `/compare`-style row-level diff showed sub KL zones "vanishing"

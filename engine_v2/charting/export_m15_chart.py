@@ -787,7 +787,7 @@ def export_m15_chart_plotly(
                     if p[3] == "CTS":
                         all_cts_pts.append(p)
             if all_cts_pts:
-                _render_m15_dots(fig, all_cts_pts, "CTS", p_sid, p_cycle,
+                _render_m15_dots(fig, all_cts_pts, "CTS", p_sid, p_cycle, sid_rec.sub_sid,
                                  m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
                                  most_recent_lt_sid, m15_to_h1)
 
@@ -798,19 +798,19 @@ def export_m15_chart_plotly(
                     if p[3] == "BOS":
                         all_bos_pts.append(p)
             if all_bos_pts:
-                _render_m15_dots(fig, all_bos_pts, "BOS", p_sid, p_cycle,
+                _render_m15_dots(fig, all_bos_pts, "BOS", p_sid, p_cycle, sid_rec.sub_sid,
                                  m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
                                  most_recent_lt_sid, m15_to_h1)
 
             # --- Unconfirmed CTS dots ---
             if extra_cts_pts:
-                _render_m15_dots(fig, extra_cts_pts, "CTS (unconf)", p_sid, p_cycle,
+                _render_m15_dots(fig, extra_cts_pts, "CTS (unconf)", p_sid, p_cycle, sid_rec.sub_sid,
                                  m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
                                  most_recent_lt_sid, m15_to_h1)
 
             # --- PB dots ---
             if extra_pb_pts:
-                _render_m15_dots(fig, extra_pb_pts, "PB", p_sid, p_cycle,
+                _render_m15_dots(fig, extra_pb_pts, "PB", p_sid, p_cycle, sid_rec.sub_sid,
                                  m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
                                  most_recent_lt_sid, m15_to_h1)
 
@@ -864,7 +864,11 @@ def export_m15_chart_plotly(
 
                 active_stretches = compute_kl_active_stretches(zone, render_end_idx)
 
-                structure_id = int(zone.meta.get("structure_id", -1))
+                # Hover identity uses the SidRecord's user-facing `sub_sid`
+                # (0/1/2/... per parent_cycle). The zone meta carries the
+                # *internal* MS structure_id from the bounded sub run, which
+                # restarts at 0 per sub — useless for telling subs apart.
+                sub_sid = sid_rec.sub_sid
                 cycle_id = int(zone.meta.get("cycle_id", 0))
 
                 # Per-step iteration: fills (only where active) + hover lines.
@@ -919,7 +923,7 @@ def export_m15_chart_plotly(
                         seg_times = pd.Series([seg_x0, seg_x1])
 
                     hover_cd = [[
-                        side, structure_id,
+                        side, sub_sid,
                         int(zone.meta.get("struct_direction", 0)),
                         str(zone.meta.get("base_pattern", "")),
                         int(zone.meta.get("base_idx", -1)),
@@ -937,8 +941,8 @@ def export_m15_chart_plotly(
                                 "TF=15M<br>"
                                 "KL Zone<br>"
                                 "side=%{customdata[0]}<br>"
-                                "sid=%{customdata[1]} | parent_sid=%{customdata[9]}<br>"
-                                "cycle_id=%{customdata[6]} | parent_cycle_id=%{customdata[10]}<br>"
+                                "sub_sid=%{customdata[1]} | parent_sid=%{customdata[9]} | parent_cycle_id=%{customdata[10]}<br>"
+                                "cycle_id=%{customdata[6]}<br>"
                                 "struct_direction=%{customdata[2]}<br>"
                                 "base_pattern=%{customdata[3]}<br>"
                                 "base_idx=%{customdata[4]}<br>"
@@ -959,7 +963,7 @@ def export_m15_chart_plotly(
                     x=outline_xs, y=outline_ys, mode="lines",
                     line=dict(color=sub_outline_color, width=sub_outline_w),
                     fill=None, hoverinfo="skip", showlegend=False,
-                    name=f"M15 KL outline sid={structure_id} c{cycle_id}",
+                    name=f"M15 KL outline h1s{p_sid}c{p_cycle}_sub{sub_sid} c{cycle_id}",
                 ))
 
                 # Single confirm line at confirmed_idx (KL has no reactivation).
@@ -1097,7 +1101,9 @@ def export_m15_chart_plotly(
                         f"idx={full_idx}  idx_1H={h1_info[1]}",
                         # TODO: label hardcodes "BOS zone:" but CTS wave candles render here too
                         # (subs include both BOS+CTS source_kinds internally — orchestrator §5).
-                        f"BOS zone: sid={wc.structure_id} cycle={wc.cycle_id}",
+                        # `wc.structure_id` is the bounded sub's internal MS sid (restarts at 0
+                        # per sub) — use sub_sid for the user-facing identity instead.
+                        f"BOS zone: sub_sid={sid_rec.sub_sid} cycle={wc.cycle_id}",
                         f"parent_sid={p_sid} parent_cycle={p_cycle}",
                         f"Volume: {vol:.0f}",
                     ]
@@ -1220,8 +1226,10 @@ def export_m15_chart_plotly(
 
                 versions = poi.meta.get("versions", [])
                 versions_str = ", ".join(versions) if versions else "none"
+                # `poi.meta["structure_id"]` is the bounded sub's internal MS
+                # sid (restarts at 0 per sub) — use sub_sid for user-facing identity.
                 poi_cd = [[
-                    side, poi.meta.get("structure_id", -1), poi.meta.get("struct_direction", 0),
+                    side, sid_rec.sub_sid, poi.meta.get("struct_direction", 0),
                     poi.ic_idx, conf_idx, poi.meta.get("cycle_id", 0),
                     versions_str, y1, y0, zone_status, p_sid, p_cycle,
                 ]] * len(seg_times)
@@ -1236,8 +1244,8 @@ def export_m15_chart_plotly(
                             "TF=15M<br>"
                             "<b>POI Zone</b><br>"
                             "side=%{customdata[0]}<br>"
-                            "sid=%{customdata[1]} | parent_sid=%{customdata[10]}<br>"
-                            "cycle_id=%{customdata[5]} | parent_cycle_id=%{customdata[11]}<br>"
+                            "sub_sid=%{customdata[1]} | parent_sid=%{customdata[10]} | parent_cycle_id=%{customdata[11]}<br>"
+                            "cycle_id=%{customdata[5]}<br>"
                             "struct_direction=%{customdata[2]}<br>"
                             "ic_idx=%{customdata[3]}<br>"
                             "confirmed_idx=%{customdata[4]}<br>"
@@ -1364,11 +1372,17 @@ def export_m15_chart_plotly(
 # ---------------------------------------------------------------------------
 
 def _render_m15_dots(
-    fig, pts, kind_label, p_sid, p_cycle,
+    fig, pts, kind_label, p_sid, p_cycle, sub_sid,
     most_recent_psid, recent_cycles, is_active_trigger,
     most_recent_lt_sid, m15_to_h1,
 ):
-    """Render M15 structure dots with TF=15M hover."""
+    """Render M15 structure dots with TF=15M hover.
+
+    `sub_sid` is the SidRecord's user-facing per-parent-cycle counter
+    (0/1/2/...). The points' `p[4]` is the bounded sub's *internal* MS
+    structure_id which restarts at 0 per sub — useless for telling subs
+    apart in the hover.
+    """
     style_key = "structure.m15.cts" if "CTS" in kind_label else "structure.m15.bos"
     style = _style(style_key).copy()
 
@@ -1380,7 +1394,7 @@ def _render_m15_dots(
             p[7],  # full M15 idx
             p[3],  # kind
             p[2],  # price
-            p[4],  # m15 sid
+            sub_sid,  # SidRecord sub_sid (user-facing identity, not p[4])
             p[5],  # m15 cycle_id
             p[6],  # sd
             p_sid,  # parent_sid
@@ -1393,7 +1407,7 @@ def _render_m15_dots(
         x=[p[1] for p in pts],
         y=[p[2] for p in pts],
         mode="markers",
-        name=f"M15 {kind_label} h1s{p_sid}c{p_cycle}",
+        name=f"M15 {kind_label} h1s{p_sid}c{p_cycle}_sub{sub_sid}",
         showlegend=False,
         customdata=cd,
         hoverlabel=dict(bgcolor="royalblue", font_color="white"),
@@ -1403,8 +1417,8 @@ def _render_m15_dots(
             "idx_1H=%{customdata[8]}<br>"
             "kind=%{customdata[1]}<br>"
             "price=%{customdata[2]:.5f}<br>"
-            "sid=%{customdata[3]} | parent_sid=%{customdata[6]}<br>"
-            "cycle_id=%{customdata[4]} | parent_cycle_id=%{customdata[7]}<br>"
+            "sub_sid=%{customdata[3]} | parent_sid=%{customdata[6]} | parent_cycle_id=%{customdata[7]}<br>"
+            "cycle_id=%{customdata[4]}<br>"
             "struct_direction=%{customdata[5]}"
             "<extra></extra>"
         ),
