@@ -1,0 +1,4 @@
+commit_hash=804d19d
+timestamp=20260528_195756
+branch=week8-volmom-multitf
+commit_message=big_maru body-pip floor (maru-only, H1=3/M15=2/M5=1) + EPS guard + proximity/probe-reset tuning + MS profiling
