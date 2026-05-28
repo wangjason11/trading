@@ -245,25 +245,10 @@ class WVMIRecord:
     buy_momentum: Optional[float] = None
     sell_momentum: Optional[float] = None
 
-    # Computation axis (LP finalization). Renamed from `status` so the derived
-    # lifecycle `status` below can take the convention name (WVMI_SPEC
-    # "Lifecycle convention"; mirrors FibState's status/locked split).
-    lp_status: Literal["created", "updated", "locked"] = "created"
+    # Lifecycle (LP-finalization computation state)
+    status: Literal["created", "updated", "locked"] = "created"
     lp_locked: bool = False
     locked_by_cycle_id: Optional[int] = None
-
-    # Lifecycle convention (tier-1 — no active/inactive axis; WVMI is created
-    # once / locked once). Scalar start/end + derived status, stamped by
-    # WVMITracker._finalize_lifecycle_fields (WVMI_SPEC "Lifecycle convention").
-    #   start_idx  = creation idx (CTS_n CONFIRMED) clamped to the struct/parent floor
-    #   end_idx/end_reason = inherited from compute_cycle_lifecycle (data-end is
-    #                        NOT a terminator → open/single-cycle stays active)
-    #   status (derived) = collapsed/None start → "inactive"; end_idx set → "ended";
-    #                      else "active"
-    start_idx: Optional[int] = None
-    end_idx: Optional[int] = None
-    end_reason: Optional[str] = None
-    status: str = "active"
 
     # Metadata
     meta: Dict[str, Any] = field(default_factory=dict)

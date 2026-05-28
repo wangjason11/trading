@@ -366,19 +366,6 @@ def _run_downstream_pipeline(
 
         wvmi_tracker.update_temporary_lp(df, kl_zones)
 
-        # Stamp the scalar lifecycle axes (start_idx/end_idx/end_reason +
-        # derived status). Main entity: floor/cap None (= the same ints KL/POI/
-        # fib get here). start_idx = creation idx clamped to the struct floor;
-        # the cycle pass-through end is inherited from compute_cycle_lifecycle
-        # (WVMI_SPEC "Lifecycle convention"). Sub WVMI is finalized separately in
-        # compute_parent_driven_sub_wvmi with the sub's slice-local floor/cap.
-        wvmi_tracker._finalize_lifecycle_fields(
-            events=events,
-            lifecycle_floor=lifecycle_floor,
-            lifecycle_cap=lifecycle_cap,
-            cap_reason=cap_reason,
-        )
-
         wvmi_records = wvmi_tracker.get_records()
         print(f"{pfx}[wvmi] total={len(wvmi_records)}, locked={sum(1 for r in wvmi_records if r.lp_locked)}")
     else:

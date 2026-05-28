@@ -372,10 +372,7 @@ def persist_facade_wvmi_to_entity_df(
     new_records = []
     for w in facade.wvmi_records:
         nw = deepcopy(w)
-        # Wave-candle idx fields + lifecycle start/end shift slice-local →
-        # entity-absolute (end_idx stays None for an open sub — cap_open). The
-        # §8.7 `triggered_by_event_idx` in meta is parent-df coords — NOT shifted.
-        for attr in ("fb_idx", "lb_idx", "fp_idx", "lp_idx", "start_idx", "end_idx"):
+        for attr in ("fb_idx", "lb_idx", "fp_idx", "lp_idx"):
             cur = getattr(nw, attr)
             if cur is not None:
                 setattr(nw, attr, cur + slice_begin)
@@ -720,12 +717,6 @@ def build_one_sid(
             "started_by": started_by,
             "start_trigger_idx": start_trigger_idx,
             "end_reason": end_reason,
-            # Slice-local lifecycle floor/cap (the same ints passed to
-            # _run_downstream_pipeline for KL/POI/fib). Threaded into the
-            # trigger-centric sub-WVMI finalize (sub WVMI is computed AFTER the
-            # sid is built — WVMI_SPEC "Lifecycle convention" / the impl wrinkle).
-            "lifecycle_floor_local": sub_lifecycle_floor_local,
-            "lifecycle_cap_local": sub_lifecycle_cap_local,
             **attribution,
         },
     )

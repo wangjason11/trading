@@ -185,7 +185,7 @@ class TestComputeParentDrivenSubWvmi:
         assert len(records) == 1
         rec = records[0]
         assert rec.lp_locked is True
-        assert rec.lp_status == "locked"
+        assert rec.status == "locked"
         assert rec.locked_by_cycle_id == 2
 
     def test_records_carry_section_8_7_attribution(self):

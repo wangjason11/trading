@@ -1887,38 +1887,58 @@ def export_chart_plotly(
 
     # -------------------------------------------------
     # Week 8: Wave Candle vertical lines
-    # Full-height lines at wave candle positions, colored by candle direction
-    # Opacity follows parent KL zone's 3-tier multiplier
+    # Per-candle (start, end) gated by the cycle lifecycle —
+    # WAVE_CANDLES_SPEC "Chart Rendering & Lifecycle" (2026-05-28).
+    # FB start = cycle start; LB/FP/LP start = CTS_confirmed idx (clamped in
+    # compute_wave_candle_visibility to the cycle start which embeds the
+    # struct/parent floor); all share cycle end. BOS.last is attributed
+    # cross-cycle (offset −1) to cycle N−1 (the locked LP from prev cycle).
+    # `BOS_0.last` (Option C): render iff sub's cyc=0 is non-collapsed —
+    # pre-structure pullback shown for clean structure starts, hidden for
+    # retroactive-Scenario-2 phantoms. Overlap kept via `selected_sids`
+    # (most-recent-sid filter, same as KL). Uniform opacity; hover =
+    # wave-candle info only (no WVMI momentum / weighted vol).
     # -------------------------------------------------
     wave_candles = dfx.attrs.get("wave_candles", [])
     if zone_cfg.get("wave_candles", True) and wave_candles and zones:
-        # Build zone lookup: (sid, cycle_id, source_kind) -> zone
-        zone_lookup = {}
-        for z in zones:
-            zk = (
-                int(z.meta.get("structure_id", 0)),
-                int(z.meta.get("cycle_id", 0)),
-                str(z.source_kind),
-            )
-            zone_lookup[zk] = z
+        from engine_v2.zones.structure_lifecycle import (
+            compute_cycle_lifecycle,
+            compute_reversal_idx_by_sid,
+            compute_struct_start_by_sid,
+        )
+        from engine_v2.zones.wave_candles import (
+            _role_for_wave_candle,
+            compute_wave_candle_visibility,
+        )
 
-        # Reuse selected_sids / most_recent_sid from KL zones section if available
-        # (they are defined in the KL block above when zone_cfg["KL"] is True)
-        # If KL was off, compute them fresh from wave_candle structure_ids
+        # `selected_sids` fallback. Reuses the variable from the KL block above
+        # when KL is on; computes fresh from wave_candle structure_ids otherwise.
         if not zone_cfg.get("KL", False):
             wc_sids = sorted(set(wc.structure_id for wc in wave_candles), reverse=True)
             num_structures = int(zone_cfg.get("num_structures", 1))
             selected_sids = set(wc_sids[:num_structures])
-            most_recent_sid = wc_sids[0] if wc_sids else 0
 
-        # Build WVMI lookup: idx -> (WVMIRecord, role)
-        wvmi_records = dfx.attrs.get("wvmi", [])
-        wvmi_by_idx: dict = {}
-        for _rec in wvmi_records:
-            for _idx_val, _role in [(_rec.fb_idx, "FB"), (_rec.lb_idx, "LB"),
-                                    (_rec.fp_idx, "FP"), (_rec.lp_idx, "LP")]:
-                if _idx_val is not None:
-                    wvmi_by_idx[_idx_val] = (_rec, _role)
+        # Build per-cycle lifecycle from main events (no floor/cap — main entity).
+        events = dfx.attrs.get("structure_events", [])
+        rev = compute_reversal_idx_by_sid(events)
+        struct_floor = compute_struct_start_by_sid(events, rev)
+        cycle_life = compute_cycle_lifecycle(events, rev)
+        cts_conf: dict = {}
+        for ev in events:
+            if getattr(ev, "type", None) != "CTS_CONFIRMED":
+                continue
+            m = ev.meta or {}
+            s = m.get("structure_id")
+            c = m.get("cycle_id")
+            if s is None or c is None:
+                continue
+            s, c = int(s), int(c)
+            idx = int(ev.idx)
+            sfloor = struct_floor.get(s)
+            if sfloor is not None:
+                idx = max(idx, int(sfloor))
+            cts_conf[(s, c)] = idx
+        wc_visibility = compute_wave_candle_visibility(cycle_life, cts_conf)
 
         # Price axis range for invisible hover traces
         wc_y_min = float(dfx["l"].min())
@@ -1926,32 +1946,38 @@ def export_chart_plotly(
 
         wc_rendered = 0
         for wc in wave_candles:
+            # Most-recent-sid filter (same as KL zones).
             if wc.structure_id not in selected_sids:
                 continue
-
-            # Look up parent zone for opacity tier
-            zk = (wc.structure_id, wc.cycle_id, wc.source_kind)
-            parent_zone = zone_lookup.get(zk)
-
-            if parent_zone is not None:
-                z_active = (parent_zone.meta or {}).get("status") == "active"
-                zone_sid = int(parent_zone.meta.get("structure_id", 0))
-            else:
-                z_active = False
-                zone_sid = wc.structure_id
-
-            # 3-tier opacity multiplier (same logic as KL zones)
-            if z_active:
-                opacity_mult = _opacity_tier("active")
-            elif zone_sid == most_recent_sid:
-                opacity_mult = _opacity_tier("recent_inactive")
-            else:
-                opacity_mult = _opacity_tier("prior_inactive")
-
-            # Render each non-None wave candle idx
-            for idx in (wc.last_wave_candle_idx, wc.first_wave_candle_idx):
+            # Render each non-None wave candle idx, gated per-candle by lifecycle.
+            for position, idx in (("last", wc.last_wave_candle_idx),
+                                  ("first", wc.first_wave_candle_idx)):
                 if idx is None or idx not in dfx.index:
                     continue
+
+                role_info = _role_for_wave_candle(str(wc.source_kind), position)
+                if role_info is None:
+                    continue
+                role, cycle_offset = role_info
+                lookup_cycle = wc.cycle_id + cycle_offset
+                if lookup_cycle < 0:
+                    # BOS_0.last (pre-structure pullback). Option C
+                    # (2026-05-28): render iff this sub's cyc=0 is
+                    # non-collapsed — i.e., the structure starts cleanly so
+                    # showing the pullback before BOS_0 is meaningful. If
+                    # cyc=0 is collapsed (retroactive-Scenario-2 phantom),
+                    # hide. See WAVE_CANDLES_SPEC "Chart Rendering".
+                    life0 = cycle_life.get((wc.structure_id, 0))
+                    if life0 is None:
+                        continue
+                    cstart0, cend0, _r0 = life0
+                    if cstart0 is None or (cend0 is not None and cstart0 >= cend0):
+                        continue
+                    # cyc=0 non-collapsed → render the pre-structure pullback.
+                else:
+                    viz = wc_visibility.get((wc.structure_id, lookup_cycle, role))
+                    if viz is None or not viz[0]:
+                        continue
 
                 candle_dir = int(dfx.loc[idx, "direction"])
                 if candle_dir == 0:
@@ -1965,7 +1991,8 @@ def export_chart_plotly(
                 base_opacity = float(wc_style.get("opacity", 0.8))
                 line_width = int(line_info.get("width", 1))
 
-                final_color = f"rgba({color_rgb}, {base_opacity * opacity_mult})"
+                # Uniform opacity (no 3-tier multiplier).
+                final_color = f"rgba({color_rgb}, {base_opacity})"
                 wc_time = pd.to_datetime(dfx.loc[idx, COL_TIME], utc=True)
 
                 fig.add_shape(
@@ -1980,54 +2007,18 @@ def export_chart_plotly(
                     layer="below",
                 )
 
-                # --- Invisible hover overlay for this wave candle line ---
+                # --- Invisible hover overlay (wave-candle info only) ---
                 vol = float(dfx.loc[idx, "volume"])
-                bos_sid = wc.structure_id
-                bos_cycle = wc.cycle_id
-
-                wvmi_entry = wvmi_by_idx.get(idx)
-                if wvmi_entry:
-                    rec, role = wvmi_entry
-                    if role == "LB":
-                        weighted_vol = vol * rec.lb_weight
-                    elif role == "LP":
-                        weighted_vol = vol * rec.lp_weight
-                    else:
-                        weighted_vol = vol  # FB, FP: weight = 1.0
-                else:
-                    role = None
-                    weighted_vol = vol
-
                 hover_lines = [
                     "TF=1H",
                     "<b>Wave Candle</b>",
                     f"idx={idx}",
-                    f"BOS zone: sid={bos_sid} cycle={bos_cycle}",
+                    # TODO: label hardcodes "BOS zone:" but CTS wave candles render here too
+                    # (subs include both BOS+CTS source_kinds internally — orchestrator §5).
+                    # Cleanup: branch on wc.source_kind ∈ {"BOS","CTS"} for a correct label.
+                    f"BOS zone: sid={wc.structure_id} cycle={wc.cycle_id}",
                     f"Volume: {vol:.0f}",
-                    f"Weighted vol: {weighted_vol:.0f}",
                 ]
-
-                if wvmi_entry and role in ("LB", "LP"):
-                    rec, role = wvmi_entry
-                    hover_lines.append("---")
-                    mom_label = "Buy" if candle_dir == 1 else "Sell"
-
-                    if role == "LB":
-                        mom_val = rec.breakout_momentum
-                        mom_str = f"{mom_val:.4f}" if mom_val is not None else "N/A"
-                        fb_wt = f"{rec.fb_volume:.0f}" if rec.fb_volume is not None else "N/A"
-                        lb_wt = f"{weighted_vol:.0f}"
-                        hover_lines.append(f"{mom_label} momentum: {mom_str}")
-                        hover_lines.append(f"FB wt vol: {fb_wt}")
-                        hover_lines.append(f"LB wt vol: {lb_wt}")
-                    else:  # LP
-                        mom_val = rec.pullback_momentum
-                        mom_str = f"{mom_val:.4f}" if mom_val is not None else "N/A"
-                        fp_wt = f"{rec.fp_volume:.0f}" if rec.fp_volume is not None else "N/A"
-                        lp_wt = f"{weighted_vol:.0f}"
-                        hover_lines.append(f"{mom_label} momentum: {mom_str}")
-                        hover_lines.append(f"FP wt vol: {fp_wt}")
-                        hover_lines.append(f"LP wt vol: {lp_wt}")
 
                 # Spread points along vertical line for hover detection
                 # (Plotly only detects hover near data points, not along line segments)

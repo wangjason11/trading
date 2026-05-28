@@ -92,15 +92,13 @@ translated**), `triggered_by_event_type`, `parent_path_id`.
 
 ---
 
-## Computation lifecycle: created / updated / locked (the LP-finalization axis)
+## Computation lifecycle: created / updated / locked (`status`)
 
-> **NOTE (2026-05-27):** this `created`/`updated`/`locked` axis is the
-> **computation** state — it tracks LP (Last Pullback) finalization, NOT an
-> active/inactive lifecycle. When the convention lifecycle below is implemented,
-> this field is **renamed `status` → `lp_status`** so the convention's derived
-> `status` (`active`/`ended`/`inactive`) can take the `status` name (mirrors
-> fib: `status` = lifecycle, a separate field carries computation). `lp_locked`
-> / `locked_by_cycle_id` are unchanged. See "Lifecycle convention" below.
+> **NOTE (2026-05-27):** `WVMIRecord.status` ∈ `{created, updated, locked}` tracks
+> LP (Last Pullback) finalization — the **computation** state. This is WVMI's only
+> status field. (A separate active/ended *lifecycle* layer was briefly added then
+> **removed** 2026-05-27 — see "Lifecycle" below; lifecycle belongs to the cycle /
+> wave candles, not to WVMI.)
 
 ### 0. Gate — see "WVMI Gating" above
 
@@ -140,107 +138,32 @@ pullback_momentum = (LP_vol * LP_weight) / FP_vol   # recomputed each candle
 `on_bos_confirmed()` with cycle_id=N+1 locks WVMI for cycle_id=N:
 - Replaces temp LP with official LP from BOS_n+1's `last_wave_candle_idx`
 - Finalizes pullback_momentum
-- Sets `lp_locked=True`, `lp_status="locked"`
+- Sets `lp_locked=True`, `status="locked"`
 
 A record only locks when its cycle's **successor** BOS forms. A single-cycle
 structure (no N+1 BOS) never locks — it stays `created`/`updated` forever with a
-temp LP scanned to end-of-data. Under the lifecycle convention below that record
-is correctly **`active`** (open), not a defect.
+temp LP scanned to end-of-data.
 
 ---
 
-## Lifecycle convention (active/ended + start/end) — DATA LAYER IMPLEMENTED 2026-05-27
+## Lifecycle — REMOVED 2026-05-27 (lifecycle is a cycle/wave-candle property, not WVMI's)
 
-> Brings `WVMIRecord` onto the lifecycle convention (ARCHITECTURE "Lifecycle state
-> convention"), the LAST element off it. Design agreed 2026-05-27 (full discussion
-> in `memory/project_wvmi_lifecycle_deferred.md`); mirrors the FibState scalar
-> model (`FIB_LIFECYCLE_SPEC.md §15`). **Data layer IMPLEMENTED 2026-05-27**
-> (`status`→`lp_status` rename + scalar `start_idx`/`end_idx`/`end_reason` +
-> derived `status`; `WVMITracker._finalize_lifecycle_fields`; main + trigger-
-> centric sub wiring). `/compare`-validated: 3 chart PNGs + all H1/sub CSVs
-> byte-identical, only the 3 WVMI CSVs gained columns. **Chart rendering is the
-> immediate next step** (no longer deferred to the chart-wide pass) — see the
-> rendering section below.
-
-### Tier-1: NO active/inactive axis
-
-WVMI is created once and locked once — **no reversible condition flips** (unlike
-POI/Fib, whose `active` tracks the unfilled-imbalance condition). So, like KL
-zones / cycles / structures, WVMI is **tier-1**: "active" just means
-"started and not ended." We do **not** store an `active` bool or an
-`activation_history`; `status` is **derived** from `start_idx`/`end_idx`.
-
-### Fields (scalar)
-
-| Field | Meaning |
-|---|---|
-| `start_idx` | **creation idx = `CTS_n` CONFIRMED** (the WVMI's "own start" — when the record is born and breakout momentum locks), clamped to the structure/parent floor. Decision: creation idx, not FB/CTS-established — it's the honest birth (breakout can't be computed before LB = CTS wave candle is known) and entity-local for subs. |
-| `end_idx`, `end_reason` | **inherited** from `compute_cycle_lifecycle[(sid,cycle)]` — the cycle pass-through end (next-cycle clamped start / reversal / sub cap). **Data-end is NOT a terminator** (PART4 §5): an open last / single-cycle WVMI gets `end_idx=None` → stays `active` to the edge. |
-| `status` (derived) | `start_idx None`/collapsed → `inactive`; `end_idx` set & ≤ last candle → `ended`; else `active`. |
-| `lp_status` (renamed from `status`) | computation axis: `created`/`updated`/`locked` (above). Orthogonal — a record can be `ended` yet not `lp_locked` (reversal-ended), or `active` with a shifting temp LP. |
-| `lp_locked`, `locked_by_cycle_id` | unchanged. |
-
-**Uniform main + sub.** Subs inherit the same cycle end via the helper (the sub's
-`compute_cycle_lifecycle`, incl. the `cap_open` data-edge rule). Gating stays
-trigger-centric as today. The **implementation wrinkle**: sub WVMI is computed
-trigger-centrically after the sub is built (`_assign_trigger_centric_sub_wvmi` →
-`compute_parent_driven_sub_wvmi`), so the `(sid,cycle)` lifecycle table must be
-threaded into that path (a fib-style finalize). Main WVMI finalizes in
-`_run_downstream_pipeline` next to the KL/POI/fib derivations.
-
-### Relationship to `lp_locked`
-
-Lock fires at `BOS_{n+1}` CONFIRMED, and in this engine
-`BOS_{n+1}.confirmed_at == CTS_{n+1}.established` = cycle n's end. So for a
-multi-cycle structure `lp_locked` ≈ `end_idx` (coincide). For the open/last cycle,
-neither fires → `active`, temp LP shifting (correct).
-
-### Chart rendering intent — NEXT STEP (decided 2026-05-27: gate existing hover/lines, no new glyphs)
-
-> **Scope decision (user 2026-05-27):** the rendering is implemented by **gating
-> the EXISTING wave-candle hover/lines** by the WVMI lifecycle — **NOT** by adding
-> new FB/LB/FP/LP marker glyphs. WVMI is hover-only today (the wave-candle vertical
-> lines belong to the wave-candle feature; WVMI rides them as hover momentum on
-> LB/LP — `export_plotly.py` ~1983, `CHARTING_SPEC.md`). The per-component show/hide
-> logic below is the decided behavior; it is applied to that existing rendering.
-> Opacity/tiering is still deferred to the chart-wide pass. The precise hover-vs-line
-> boundary (does an ended-without-lock LP suppress only the WVMI momentum block, or
-> the line association?) is resolved during implementation.
-
-The lifecycle gates the existing per-component rendering (FB/LB/FP/LP on the
-wave-candle lines), **per-component** (not a single show/hide gate):
-
-- **FB, LB, FP** — shown once created (start idx); permanent (locked at creation),
-  independent of active/ended/locked.
-- **LP** — shown iff `status=="active"` (the shifting temp) **or** `lp_locked`
-  (the official LP). The LP locks ONLY via the sub's own `BOS_{n+1}`; **any other
-  cycle-end leaves it ended-without-lock → FB/LB/FP shown, no LP.** Cases:
-  - **cycle+1 forms** (`BOS_{n+1}`) → all four, LP **locked**.
-  - **ended-without-lock** — the sub's own **reversal**, OR a **parent entity
-    ending** (parent-cycle end / parent reversal / parent-sid end — the
-    `lifecycle_cap` cases) before `BOS_{n+1}` → FB/LB/FP only, no LP.
-  - **open / df-end** (`cap_open`, no end) → FB/LB/FP shown + the **shifting temp
-    LP** (walks each candle as the pullback develops).
-- **inactive/collapsed** — nothing shown.
-
-> **LP-while-active: DECIDED = (A), 2026-05-27.** While active (before lock) the
-> LP line IS drawn as the shifting temp LP (updates each candle per
-> `update_temporary_lp`), then finalizes to the official LP at lock. (Rejected (B)
-> = "no LP until locked"; (A) shows the live pullback, fits the visualization-first
-> ethos.) ended-without-lock = no LP; a locked LP is always drawn.
-
-This **diverges from fib** (fib vanishes an ended-unlocked record): WVMI keeps the
-breakout markers because the breakout leg is a fact locked at creation. Opacity/
-tiering deferred to the same chart-wide pass.
-
-### Implementation validation
-
-Data-only change (charting deferred): the WVMI CSV (`debug/export_wvmi.py`) gains
-`start_idx`/`end_idx`/`end_reason`/`status` + the `status`→`lp_status` rename;
-the chart is byte-identical. Validate via the WVMI CSV (main + both subs),
-enumerating per-`(sid,cycle)`: `start_idx` = creation, `end_idx` = cycle end
-(None at the open edge), `status` derived correctly, single/open-cycle records
-`active`-not-`ended`.
+> **DECISION 2026-05-27.** A WVMI-record lifecycle (`status`→`lp_status` rename +
+> scalar `start_idx`/`end_idx`/`end_reason` + derived `status`) was briefly added
+> (commit `68b862b`) and then **REMOVED**. Rationale: after reframing, **WVMI is a
+> derived momentum calc; the lifecycle belongs to the CYCLE / wave candles**, which
+> already have it via `compute_cycle_lifecycle` (for ALL cycles — WVMI records exist
+> only for proximity-gated cycles, so a WVMI-record lifecycle can't even serve the
+> "chart all wave candles" goal). The WVMI-record lifecycle had **no consumer** (the
+> chart gates on the cycle/wave-candle lifecycle) — the same "no-consumer → drop it"
+> call as the fib `activation_history` (`FIB_LIFECYCLE_SPEC.md §15`). `WVMIRecord`
+> reverts to its pre-`68b862b` shape: `status` ∈ `{created, updated, locked}` only
+> (the computation axis above), no scalar lifecycle fields, no `_finalize`.
+>
+> **Wave-candle chart rendering** (which is what motivated all this) is specified in
+> **`WAVE_CANDLES_SPEC.md` "Chart Rendering & Lifecycle"** — gated by the cycle
+> lifecycle (hide collapsed/never-active cycles), drawn for ALL structures like
+> zones, with Phase-1 simplifications (no momentum hover, uniform opacity).
 
 ---
 
@@ -362,9 +285,6 @@ for each sub LowerTFResult:
 | `lb_weight`, `lp_weight` | float | Last candle weights (default 1.0) |
 | `breakout_momentum`, `pullback_momentum` | Optional[float] | Computed ratios |
 | `buy_momentum`, `sell_momentum` | Optional[float] | Direction-labeled wrappers |
-| `lp_status` | str | Computation axis: "created"/"updated"/"locked" (renamed from `status`) |
+| `status` | str | "created"/"updated"/"locked" (LP-finalization computation state) |
 | `lp_locked` | bool | Whether LP is finalized |
 | `locked_by_cycle_id` | Optional[int] | BOS cycle that locked this record |
-| `start_idx` | Optional[int] | Lifecycle start = creation idx (CTS_n CONFIRMED) clamped to struct/parent floor; None when collapsed |
-| `end_idx`, `end_reason` | Optional[int], Optional[str] | Inherited cycle pass-through end (None at the open data edge) |
-| `status` | str | Derived lifecycle: "active"/"ended"/"inactive" (collapsed→inactive; end_idx set→ended; else active) |

@@ -569,3 +569,101 @@ def _cts_non_bib_last_breakout(
         return i
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# Per-candle chart visibility (WAVE_CANDLES_SPEC "Chart Rendering & Lifecycle")
+# ---------------------------------------------------------------------------
+
+def compute_wave_candle_visibility(
+    cycle_life: Dict[tuple, tuple],
+    cts_confirmed_by_key: Dict[tuple, int],
+) -> Dict[tuple, tuple]:
+    """Per-`(sid, cycle, role)` `(visible, locked)` for the 4 wave-candle line roles
+    (FB, LB, FP, LP).
+
+    Inputs (caller-supplied so it works for both H1-main and per-sub):
+      - `cycle_life`: `{(sid, cycle_id): (cycle_start, end_idx, end_reason)}` — the
+        cycle lifecycle. For main, build via `compute_cycle_lifecycle(events, ...)`.
+        For a sub, read from the sub's KL BOS-zone meta
+        (`confirmed_idx`, `end_idx`, `end_reason`) which already encodes the
+        slice-local floor/cap applied at sub build time.
+      - `cts_confirmed_by_key`: `{(sid, cycle_id): CTS_CONFIRMED idx}`, clamped to
+        the same struct/parent floor as the cycle start. From iterating
+        `CTS_CONFIRMED` events.
+
+    Per-candle rules (spec):
+      - **FB** start = `cycle_start`; **LB**, **FP**, **LP** start = CTS_confirmed idx.
+        All four end at the cycle end.
+      - Collapse (`start >= end`, `==` included) → never activated → `(False, False)`.
+      - FB/LB/FP lock immediately on activation → `(True, True)` if not collapsed.
+      - LP locks **only** when the cycle ends via `end_reason == "next_cycle"`
+        (the `CTS_{n+1}` ESTABLISHED event, which also activates FB of cycle n+1):
+          - `end_idx is None` (active last cycle) → `(True, False)` (temp).
+          - `end_reason == "next_cycle"` → `(True, True)` (locked).
+          - any other end (`"reversal"` / `"lifecycle_end"`) → `(False, False)`
+            (LP was active-temp through the cycle, then disappears at end_idx — no
+            lock means no carry-over).
+    """
+    out: Dict[tuple, tuple] = {}
+    for (sid, cycle), life in cycle_life.items():
+        cstart, cend, creason = life
+        for role in ("FB", "LB", "FP", "LP"):
+            if role == "FB":
+                start = cstart
+            else:
+                # LB/FP/LP start = CTS_n CONFIRMED idx clamped to the
+                # struct/parent floor. The cycle start (`cstart`) already
+                # embeds that floor (= `max(CTS_n ESTABLISHED, struct_floor)`),
+                # so clamping the raw `CTS_n CONFIRMED` to `cstart` gives the
+                # same answer and is robust against callers passing raw idxs.
+                # Without this, a sub's collapsed cycle whose raw
+                # `CTS_n CONFIRMED` fired below the floor (the chain-clamp
+                # case) would slip past the `start >= end` collapse check
+                # and wrongly render an LP.
+                raw_cts = cts_confirmed_by_key.get((sid, cycle))
+                if raw_cts is None:
+                    start = None
+                else:
+                    start = max(int(raw_cts), int(cstart)) if cstart is not None else int(raw_cts)
+            if start is None:
+                out[(sid, cycle, role)] = (False, False)
+                continue
+            if cend is not None and start >= cend:
+                out[(sid, cycle, role)] = (False, False)
+                continue
+            if role == "LP":
+                if cend is None:
+                    out[(sid, cycle, role)] = (True, False)
+                elif creason == "next_cycle":
+                    out[(sid, cycle, role)] = (True, True)
+                else:
+                    out[(sid, cycle, role)] = (False, False)
+            else:
+                out[(sid, cycle, role)] = (True, True)
+    return out
+
+
+def _role_for_wave_candle(source_kind: str, position: str) -> Optional[tuple]:
+    """Map a drawn wave-candle line `(source_kind, position)` → `(role, cycle_offset)`
+    for visibility lookup.
+
+    `source_kind ∈ {"BOS", "CTS"}`, `position ∈ {"first", "last"}`.
+
+    Per the Zone Type Matrix (WAVE_CANDLES_SPEC): BOS.first=FB, BOS.last=LP,
+    CTS.first=FP, CTS.last=LB. **Cycle attribution: BOS.last (LP) belongs to the
+    PREVIOUS cycle** — `BOS_N.last_wave_candle` is the *Last Pullback before BOS_N
+    started*, which is part of cycle N−1's pullback that BOS_N interrupts (the LP
+    locks at this very event because cycle N−1 ends and cycle N begins together).
+    All other lines stay with the zone's own cycle.
+
+    So the returned `cycle_offset` is `-1` for BOS.last (look up cycle N−1) and
+    `0` for all others. Callers should skip when `wc.cycle_id + offset < 0` (no
+    pre-cycle-0 attribution; e.g., BOS_0.last is pre-structure pullback).
+    """
+    return {
+        ("BOS", "first"): ("FB", 0),
+        ("BOS", "last"): ("LP", -1),
+        ("CTS", "first"): ("FP", 0),
+        ("CTS", "last"): ("LB", 0),
+    }.get((source_kind, position))

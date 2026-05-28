@@ -147,6 +147,148 @@ KL Zones → identify_wave_candles() per zone → WaveCandleResult list
 
 ---
 
+## Chart Rendering & Lifecycle (design 2026-05-27)
+
+Wave candles are the **charted primitive**; WVMI is a derived momentum calc on top
+(see `WVMI_SPEC.md`). On-chart visibility is gated by the **cycle lifecycle**
+(`compute_cycle_lifecycle`, available for every cycle), NOT by WVMI. (The WVMI
+*record* lifecycle was removed 2026-05-27 — it had no consumer; lifecycle is a
+cycle/wave-candle property. See `WVMI_SPEC.md` "Lifecycle".)
+
+### Line → role mapping (the four lines per cycle) — with cross-cycle LP attribution
+
+Each rendered line maps to a `(role, cycle_offset)` for visibility lookup:
+
+| Drawn line | `WaveCandleResult` field | Role | Cycle attribution |
+|---|---|---|---|
+| `BOS_N.first` | BOS zone `first_wave_candle_idx` | **FB** First Breakout  | cycle **N** |
+| `BOS_N.last`  | BOS zone `last_wave_candle_idx`  | **LP** Last Pullback   | cycle **N − 1** ← cross-cycle |
+| `CTS_N.first` | CTS zone `first_wave_candle_idx` | **FP** First Pullback  | cycle **N** |
+| `CTS_N.last`  | CTS zone `last_wave_candle_idx`  | **LB** Last Breakout   | cycle **N** |
+
+> **Why `BOS.last` (LP) belongs to the PREVIOUS cycle (decided 2026-05-28):** per
+> the Zone Type Matrix, `BOS_N.last_wave_candle` is the *Last Pullback before
+> BOS_N began* — i.e., the last candle of the pullback that BOS_N interrupts. That
+> pullback is part of **cycle N − 1**'s tail (the cycle ending right when BOS_N
+> starts and CTS_N is established). LP_N (the **locked** LP for cycle N) is
+> therefore physically located at `BOS_{N+1}.last_wave_candle`, not
+> `BOS_N.last_wave_candle`. Practical consequence: LP_N and FB_{N+1} appear at
+> the same structural-point idx (CTS_{N+1} established) and lock together — the
+> cross-cycle "structural-point pair" visual, but they are independent records
+> attributed to different cycles.
+
+> **`BOS_0.last` — Option C (decided 2026-05-28):** when `wc.cycle_id + offset =
+> −1` (the pre-structure pullback before a sub's first BOS), render **iff the
+> sub's `cyc=0` is non-collapsed**. Rationale: a clean structure start should
+> show the pullback leading into BOS_0 (consistent with how the rest of the
+> structure renders); a retroactive-Scenario-2 phantom (cyc=0 collapsed via the
+> chain-clamp) hides everything including this pre-structure pullback. Chart
+> code special-cases the `lookup_cycle < 0` branch: looks up
+> `cycle_life[(sid, 0)]` and renders only if cyc=0's `start < end`.
+
+**LP has two STATES — both are real wave candles** (clarification 2026-05-28):
+
+- **Locked** — the wave candle is *set and won't change*. Physically located at
+  `BOS_{N+1}.last_wave_candle` (rendered via the wave_candle_results loop with the
+  cross-cycle attribution above). Lock happens at `CTS_{N+1}` ESTABLISHED, only
+  when the cycle ends via `next_cycle`.
+- **Temp** — the wave candle is *not yet locked; it can shift* to a closer-to-outer
+  qualified candle as new bars arrive. While temp, this candle still IS the LP and
+  IS the input that WVMI momentum uses (`_find_temporary_lp` is the mechanism that
+  picks which candle it currently sits on). Physical position: `WVMIRecord.lp_idx`
+  for cycles that have a WVMI record (sd-prox-gated). Rendered as a wave candle
+  line via a separate WVMI-temp-LP rendering pass.
+
+A nice consequence falls out from the cross-cycle attribution combined with the
+lifecycle rules: a cycle ended without `next_cycle` (reversal / parent-end) has
+**no `BOS_{N+1}`** in the same structure, so its locked LP candle physically
+doesn't exist — the "LP drops when ended-without-lock" outcome is enforced
+**automatically by the data**, not by an extra gate. The temp LP for such a cycle
+*was* tracked while alive but, per spec, isn't rendered after the cycle ends
+without lock.
+
+### Per-candle lifecycle
+
+Each drawn line has its own `(start_idx, end_idx)` — all attributed to the
+**current** cycle. The end is shared (= the cycle's `compute_cycle_lifecycle.end`);
+the start differs by role.
+
+| Role | start_idx (clamped to struct/parent floor) | end_idx | Locks on activation? |
+|---|---|---|---|
+| **FB** | `CTS_n` ESTABLISHED (= `compute_cycle_lifecycle.start`) | cycle end | yes (immediate) |
+| **LB** | `CTS_n` CONFIRMED | cycle end | yes (immediate) |
+| **FP** | `CTS_n` CONFIRMED | cycle end | yes (immediate) |
+| **LP** | `CTS_n` CONFIRMED | cycle end | **only if** cycle ended via `next_cycle` (`CTS_{n+1}` ESTABLISHED); active-temp otherwise |
+
+**Cycle end** = `compute_cycle_lifecycle.end` — the **earliest** of three
+candidates (separate machinery; not part of the start-side floor): next-cycle
+clamped start, this-sid reversal, parent-cycle/parent-sid `lifecycle_cap` (subs).
+Absent (open last cycle / open last structure / `cap_open` sub) → `end_idx =
+None`. `end_reason ∈ {"next_cycle", "reversal", "lifecycle_end"}`.
+
+**LP locking is the asymmetric piece.** Only `end_reason == "next_cycle"` locks LP
+(that's the same event that activates FB of cycle n+1). Any other end
+(reversal / parent-end) leaves LP active-temp through end_idx without locking →
+LP **disappears** at end_idx. FB/LB/FP lock immediately on activation, so they
+carry over past `end_idx` regardless of how the cycle ended.
+
+### Visibility rule
+
+A line renders **iff active OR locked**, where collapse (`start ≥ end`, `==`
+included) means *never activated* → not shown:
+
+| Role | Shown on a static end-of-data chart iff… |
+|---|---|
+| **FB** | `start < end` (cycle didn't end before `CTS_n` established) |
+| **LB**, **FP** | `start < end` (cycle didn't end before `CTS_n` confirmed) |
+| **LP** | `start < end` **AND** ( `end_idx is None` *or* `end_reason == "next_cycle"` ) |
+
+The `==` collapse case is load-bearing: chained clamped cycles share a floor idx,
+producing `start == end` exactly; strict `>` would leak a zero-width phantom set.
+(Matches the KL/POI/fib collapse rule.)
+
+### Visual outcomes per cycle (static historical chart)
+
+Reading the table: each cell shows which of cycle N's own four roles render.
+Cycle N's LP is physically the `BOS_{N+1}.last_wave_candle` line, so it requires
+`BOS_{N+1}` to actually exist in the same structure.
+
+| Cycle N ended via… | FB | LB | FP | LP | Notes |
+|---|---|---|---|---|---|
+| `CTS_{N+1}` ESTABLISHED (normal) | ✓ locked | ✓ locked | ✓ locked | ✓ locked | LP rendered via `BOS_{N+1}.last` |
+| Reversal / parent-end **after** `CTS_N` confirmed | ✓ locked | ✓ locked | ✓ locked | — | no `BOS_{N+1}` in same structure → LP candle physically doesn't exist (no extra gate needed) |
+| Reversal / parent-end **between** `CTS_N` est and conf | ✓ locked | — | — | — | LB/FP never activated; LP candle doesn't exist |
+| Reversal / parent-end **before** `CTS_N` established (retroactive Scenario-2, `reversal_example.png`) | — | — | — | — | collapsed; all never activated |
+| Active last cycle (no end yet) | ✓ locked | ✓ locked if `CTS_K` conf fired | ✓ locked if `CTS_K` conf fired | ✓ **temp** if WVMI-gated and `CTS_K` conf fired | LP rendered as the **temp** wave candle from `WVMIRecord.lp_idx` (separate WVMI-temp-LP rendering pass); shifts each bar in live, sits at its end-of-data position in a static chart; no `BOS_{K+1}` exists yet so no locked LP. For cycles NOT WVMI-gated, no temp LP candle is computed → not rendered. |
+
+**Cross-cycle visual at structural points:** at `CTS_{N+1}` ESTABLISHED two
+records hit the same idx — **LP_N locks** (rendered via `BOS_{N+1}.last`) and
+**FB_{N+1} simultaneously activates + locks** (rendered via `BOS_{N+1}.first`).
+They appear together as the "structural-point pair" but are independent records
+attributed to *different* cycles (LP→N, FB→N+1). This is why `BOS.last` needs
+the `cycle_offset = −1` in the role mapping above. KL zones for collapsed
+cycles still render as the hollow rectangle (left as-is).
+
+### Overlap handling — kept aligned with KL zones (2026-05-28)
+
+Wave-candle lines use the **same most-recent-sid overlap filters that KL zones
+use** on each chart — `selected_sids` on the H1 main chart, the §16.5
+`_owned_here` per-candle owner filter on the M15 sub chart. (Considered "chart
+all structures like zones" with overlap filters dropped; user signed off
+2026-05-28 keeping them after the per-candle gating diff was validated
+apples-to-apples. KL/POI/etc. unchanged.)
+
+### Rendering simplifications
+
+- **Hover:** wave-candle info only — `idx`, `BOS zone sid/cycle`, raw `Volume`. Drop
+  the WVMI momentum block **and** `Weighted vol` (WVMI-weight-derived).
+- **Opacity:** uniform across all charts (drop the 3-tier active / recent /
+  prior).
+- **Line style:** keep **dashed = subordinate**, **solid = main overlay**.
+- Full WVMI momentum markers deferred (revisit later).
+
+---
+
 ## Output
 
 `WaveCandleResult` (frozen dataclass):

@@ -336,6 +336,35 @@ fig.add_trace(go.Scatter(x=[time] * _n_pts, y=_y_pts, mode="lines", ...))
 
 ---
 
+## Sub charts can show CTS wave candles even though sub KL zones are BOS-only
+
+**Symptom:** an M15 sub chart renders a `CTS.first`/`CTS.last` wave candle (e.g.
+the LB at idx=4082 from `M15.counter` sid=0 cyc=1 in 2025-12→2026-01) and you
+go looking for the parent CTS KL zone to cross-reference — but the sub's KL
+zone list (and KL CSV) only contains `BOS` rows. Confusion: "where did the CTS
+wave candle come from if there's no CTS zone?"
+
+**Mechanism:** the orchestrator derives the **full** BOS+CTS zone set
+internally (`derive_kl_zones_v1(..., source_kinds=None)`), feeds it to
+`compute_wave_candles` so wave candles see both kinds, and **then** narrows
+the returned/charted zone list with the caller's `source_kinds` filter. For
+sub callers (`entity_df_mutation.build_one_sid`) that filter is `["BOS"]`, so
+the chart-visible KL zone list drops CTS — but the wave candles already
+computed off those CTS zones survive and render. See
+`pipeline/orchestrator.py:86-108` for the in-code comment.
+
+**Practical:** if you need the source CTS zone bounds for a sub wave candle,
+either (a) re-derive the unfiltered zone set, or (b) read the CTS
+extremes from the structure events (`CTS_ESTABLISHED.idx`/`meta`) — they're
+the same source the zones came from.
+
+**Related:** the hover label for these wave candles still hardcodes
+"BOS zone:" — there's a TODO at each of the 3 hover sites
+(`export_plotly.py`, two in `export_m15_chart.py`) to branch on
+`wc.source_kind` for a correct label.
+
+---
+
 ## CTS BIB Last Breakout: Pattern Scan-Back for CTS_ESTABLISHED
 
 **Problem:** In `_cts_bib_last_breakout`, when the CTS_ESTABLISHED event candle is a direct match (qualified + wick enters zone + closes within zone), the algorithm returned it immediately. But the event candle is the *last* candle of the pattern — earlier candles in the pattern may also close within the zone and better represent the initial breakout moment.

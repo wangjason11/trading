@@ -85,18 +85,4 @@ def compute_parent_driven_sub_wvmi(
 
     tracker.update_temporary_lp(result.df, result.kl_zones)
 
-    # Stamp the scalar lifecycle axes on the sub's records, threading the same
-    # slice-local floor/cap that bounded the sub's KL/POI/fib (stored on the
-    # facade by build_one_sid). The records stay in slice-local coords here;
-    # persist_facade_wvmi_to_entity_df shifts start_idx/end_idx to entity-
-    # absolute alongside the wave-candle idx fields. WVMI_SPEC "Uniform main +
-    # sub" — subs inherit the same cycle end (incl. the cap_open data-edge rule,
-    # where lifecycle_cap_local is None → open sub stays active to the edge).
-    tracker._finalize_lifecycle_fields(
-        events=result.events,
-        lifecycle_floor=result.meta.get("lifecycle_floor_local"),
-        lifecycle_cap=result.meta.get("lifecycle_cap_local"),
-        cap_reason=result.meta.get("end_reason") or "lifecycle_end",
-    )
-
     return tracker.get_records()
