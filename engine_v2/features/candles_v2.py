@@ -186,7 +186,18 @@ def classify_big_flags(
         out[f"big_ratio_as{s}"] = 0.0
 
     lengths = out["candle_len"].astype(float).values
+    body_lens = out["body_len"].astype(float).values
     ctype = out["candle_type"].values
+
+    # Absolute-pip floor on body length. Applied to `is_big_maru` ONLY (NOT
+    # `is_big_normal` — kept on legacy ratio-only gate by design). pip_size
+    # derived from pair (JPY pairs: 0.01, others: 0.0001) so the floor in
+    # price units matches what callers express in pips. Skip the floor gate
+    # entirely when params.big_body_pip_floor == 0.0 (legacy behavior).
+    pair_str = str(out.attrs.get("pair", "")).upper()
+    pip_size = 0.01 if "JPY" in pair_str else 0.0001
+    body_floor_price = float(params.big_body_pip_floor) * pip_size
+    body_floor_active = body_floor_price > EPS
 
     for i in range(n):
         for s in anchor_shifts:
@@ -199,16 +210,24 @@ def classify_big_flags(
             ratio = round(lengths[i] / prior_max, 2)
             out.loc[i, f"big_ratio_as{s}"] = ratio
 
-            # if ctype[i] == "maru" and ratio >= params.big_maru_threshold:
-            
-            # big_maru alternatively can apply to every candle
-            if ratio >= params.big_maru_threshold:
+            # Additive body-pip floor for big_maru ONLY. Candles must clear
+            # BOTH the rolling-max ratio AND the absolute body-length floor.
+            # Tolerance EPS guards against float-precision noise (price diffs
+            # like 0.57696 - 0.57676 round-trip through float64 to ~1.999...e-4
+            # not 2e-4, so a "2.0-pip" body would otherwise fail a 2.0-pip
+            # floor by ~2e-15 — see GOTCHAS "Body-pip floor float precision").
+            passes_floor = (not body_floor_active) or (body_lens[i] >= body_floor_price - EPS)
+
+            # big_maru: ratio + (optional) body-pip floor.
+            if ratio >= params.big_maru_threshold and passes_floor:
                 out.loc[i, f"is_big_maru_as{s}"] = True
 
-            # big_normal applies to maru or normal (as you described)
-            # if ctype[i] in ("maru", "normal") and ratio >= params.big_normal_threshold:
-            
-            # big_normal alternatively can apply to every candle
+            # big_normal: ratio ONLY (legacy behavior — no body-pip floor).
+            # Reverted from the additive gate so pattern alt-paths that rely
+            # on `c1.is_big_normal_as1` (e.g., one_maru_continuous) keep
+            # qualifying even when c1's body is small. Big_maru's floor
+            # restricts which CANDLES can ANCHOR a pattern (c0); the alt
+            # path's c1 still uses the legacy gate.
             if ratio >= params.big_normal_threshold:
                 out.loc[i, f"is_big_normal_as{s}"] = True
 

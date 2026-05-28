@@ -67,8 +67,8 @@ from engine_v2.zones.poi_zones import POIZone
 # Proximity threshold in pips. Caller may override per-call. Same values
 # are used regardless of pair (pip_size handles pair scaling separately).
 DEFAULT_PROXIMITY_PIPS: Dict[str, int] = {
-    "H1": 9,
-    "M15": 6,
+    "H1": 8,
+    "M15": 5,
     "M5": 3,
 }
 
@@ -77,8 +77,8 @@ DEFAULT_PROXIMITY_PIPS: Dict[str, int] = {
 # spec §4.4, must be strictly less than DEFAULT_PROXIMITY_PIPS on the same
 # TF so probe-reset and proximity-trigger semantics never overlap.
 DEFAULT_PROBE_RESET_PIPS: Dict[str, float] = {
-    "H1": 3,
-    "M15": 2.5,
+    "H1": 4,
+    "M15": 3,
     "M5": 2,
 }
 

@@ -281,9 +281,9 @@ def test_poi_suppressed_during_inactive_stretch():
 
 
 def test_threshold_default_lookup_by_timeframe():
-    """H1 default is 9 pips; M15 is 6 pips."""
+    """H1 default is 8 pips; M15 is 5 pips."""
     df = _make_df(20, default_h=1.50, default_l=1.49)
-    df.at[5, "l"] = 1.4008  # 8 pips from BOS inner 1.40 — within H1 (9p) but outside M15 (6p)
+    df.at[5, "l"] = 1.4006  # 6 pips from BOS inner 1.40 — within H1 (8p) but outside M15 (5p)
     bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
 
     h1_triggers = check_zone_proximity(
@@ -364,8 +364,8 @@ def test_no_trigger_when_bos_zone_missing():
 
 
 def test_default_proximity_pips_constants():
-    assert DEFAULT_PROXIMITY_PIPS["H1"] == 9
-    assert DEFAULT_PROXIMITY_PIPS["M15"] == 6
+    assert DEFAULT_PROXIMITY_PIPS["H1"] == 8
+    assert DEFAULT_PROXIMITY_PIPS["M15"] == 5
     assert DEFAULT_PROXIMITY_PIPS["M5"] == 3
 
 
