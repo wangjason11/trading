@@ -1,0 +1,4 @@
+commit_hash=44b1aea
+timestamp=20260529_094632
+branch=week8-volmom-multitf
+commit_message=Unified probe Phase 1 Session 1: primitive + reference_zone helper (dormant)
