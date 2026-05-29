@@ -82,6 +82,21 @@ DEFAULT_PROBE_RESET_PIPS: Dict[str, float] = {
     "M5": 2,
 }
 
+# Probe reset WICK cap in pips — condition 2 of the unified probe's two-
+# condition reset (Phase 1 design 2026-05-29). The candidate retrace candle
+# must have its toward-zone wick (the side opposite probe_sd, body-bounded
+# with body_top = max(o,c) / body_bottom = min(o,c)) no longer than this
+# threshold. Rejects single-candle stab wicks that pass the within-X-pips
+# proximity check (condition 1) but represent transient spikes rather than
+# structural retraces. Must be strictly greater than DEFAULT_PROBE_RESET_PIPS
+# on the same TF (a wick cap smaller than the proximity tolerance is
+# self-contradictory — condition 1 would be unreachable).
+DEFAULT_PROBE_RESET_WICK: Dict[str, int] = {
+    "H1": 16,
+    "M15": 12,
+    "M5": 8,
+}
+
 # Narrow-cycle threshold in pips — minimum |cts_threshold − bos_threshold|
 # required to allow unrestricted proximity-trigger generation within a
 # cycle. When the gap is below this, Rules 1/2/3 apply:
@@ -106,6 +121,13 @@ for _tf in DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS:
         f"{_tf}: narrow-gap threshold "
         f"{DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS[_tf]} pips must be "
         f"strictly greater than proximity trigger {DEFAULT_PROXIMITY_PIPS[_tf]} pips"
+    )
+for _tf in DEFAULT_PROBE_RESET_WICK:
+    assert DEFAULT_PROBE_RESET_WICK[_tf] > DEFAULT_PROBE_RESET_PIPS[_tf], (
+        f"{_tf}: probe reset wick cap {DEFAULT_PROBE_RESET_WICK[_tf]} pips "
+        f"must be strictly greater than probe reset proximity "
+        f"{DEFAULT_PROBE_RESET_PIPS[_tf]} pips (a wick cap smaller than the "
+        f"proximity tolerance makes condition 1 unreachable)"
     )
 del _tf
 

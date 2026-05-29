@@ -417,76 +417,78 @@ at the next parent BOS_confirmed.
 
 ---
 
-## 4.4 Probe Reset Thresholds (applies to `reversal` and `subordinate`)
+## 4.4 Probe reset thresholds (applies to unified `reversal` + `subordinate` probe)
 
-Both probe-using scenarios depend on a "did price return to the BOS_0 / last
-CTS zone within X pips" check. That X is the **probe reset threshold**. It
-must always be **strictly less than** the **zone proximity trigger threshold**
-on the same TF, otherwise probe-reset and proximity-trigger semantics overlap
-and `end_idx` / `starting_idx` can invert.
+The unified probe primitive (Phase 1 design 2026-05-29 — see
+`memory/project_unified_identify_start_probe.md`, code in
+`engine_v2/structure/unified_probe.py`) replaces today's four asymmetric
+paths. Per iteration it picks the single most-extreme retrace candle in
+`[first_CTS_EST.idx + 1, end_idx]` and applies a **two-condition reset**;
+both must hold for the probe to restart from that candidate.
 
-### Target values (Part 4)
+### Two-condition reset
 
-`reversal` and `subordinate` probes share a single TF-keyed table.
+**Condition 1 — proximity to inner.** Candle wick extreme within
+`DEFAULT_PROBE_RESET_PIPS[tf]` pips of `reference_zone.inner`.
+- `direction=+1`: `low ≤ inner + reset_tol`
+- `direction=-1`: `high ≥ inner - reset_tol`
 
-| TF | Probe reset (target) | Proximity trigger | Margin |
-|---|---|---|---|
-| H1 | **10** | 20 | 2× ✓ |
-| M15 | **5** | 10 | 2× ✓ |
-| M5 | **3** | 5 | ~1.67× ✓ |
+**Condition 2 — toward-zone wick cap.** Body-bounded
+(`body_top = max(o,c)`, `body_bottom = min(o,c)`). The "toward-zone"
+wick is the side opposite `direction` (= the side pointing at the zone
+outer). Must be ≤ `DEFAULT_PROBE_RESET_WICK[tf]` pips.
+- `direction=+1`: `body_bottom - low ≤ wick_cap`  (lower wick)
+- `direction=-1`: `high - body_top ≤ wick_cap`    (upper wick)
 
-Updated from earlier spec values (H1=10, M15=3, M5=1) on 2026-04-30 — M15 and
-M5 widened so the probe reset margin is more uniform across TFs while still
-strictly less than the proximity trigger.
+Condition 2 is the new ingredient — rejects single-candle stab wicks
+that pass condition 1 today but represent transient spikes rather than
+structural retraces.
 
-### Today's state (pre-refactor)
+### Threshold tables
 
-- **`reversal` Exception 2** in `compute_structure` (`structure_engine.py:122`) —
-  hardcoded `10 * pip_size`, **not TF-aware**.
-- **`reversal` Exception 2** when reached via Phase 2 of
-  `compute_structure_scenario_3` — inherits caller's `pip_tolerance_pips`
-  (Phase 2 not used in production today).
-- **`subordinate`** (today's Scenario 3 / H1 reverse probe) —
-  `pip_tolerance_pips: int = 10` default in `compute_structure_scenario_3`;
-  H1 reverse probe in `lower_tf_pipeline.py:102` passes `10` explicitly.
-- **Proximity trigger** — `DEFAULT_PROXIMITY_PIPS` table in
-  `zones/zone_proximity.py:32`. TF-aware.
+All four tables live in `engine_v2/zones/zone_proximity.py`. Module-load
+asserts guarantee no inversion at startup.
 
-The new M15 / M5 values exist only in spec prose for now; code has no per-TF
-lookup. Since today's only probe path is on H1 data (where 10 pips is
-already correct), no current behavior changes — but Part 4 introduces probes
-on lower-TF parents (e.g., M15 parent of an M5 sub), which forces the issue.
+| TF | Probe reset cond 1 (`reset_pips`) | Probe reset cond 2 (`wick_cap`) | Proximity trigger | Narrow-cycle min gap |
+|---|---|---|---|---|
+| H1 | 4 | 16 | 8 | 50 |
+| M15 | 3 | 12 | 5 | 30 |
+| M5 | 2 | 8 | 3 | 15 |
 
-### Refactor changes
+### Invariants (asserted at module load)
 
-1. Add `DEFAULT_PROBE_RESET_PIPS = {"H1": 10, "M15": 5, "M5": 3}` next to
-   `DEFAULT_PROXIMITY_PIPS` (same module, or a shared
-   `zones/thresholds.py`).
-2. Make every probe-using scenario consult that table by TF instead of
-   hardcoding 10:
-   - `compute_structure_scenario_3` — replace `pip_tolerance_pips: int = 10`
-     default with a TF lookup (default `None`, look up by TF).
-   - `compute_structure` reversal Exception 2 — replace hardcoded
-     `10 * pip_size` with the TF lookup.
-3. Add a startup invariant assertion that for every supported TF:
+```python
+# Existing — locks probe-reset semantics below proximity-trigger semantics:
+assert DEFAULT_PROXIMITY_PIPS[tf] > DEFAULT_PROBE_RESET_PIPS[tf]
 
-   ```python
-   assert DEFAULT_PROXIMITY_PIPS[tf] > DEFAULT_PROBE_RESET_PIPS[tf], (
-       f"{tf}: probe reset {DEFAULT_PROBE_RESET_PIPS[tf]} pips must be "
-       f"strictly less than proximity trigger {DEFAULT_PROXIMITY_PIPS[tf]} pips"
-   )
-   ```
+# Existing — keeps narrow-gap restriction strictly above proximity:
+assert DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS[tf] > DEFAULT_PROXIMITY_PIPS[tf]
 
-   so future tweaks to either table can't silently invert the relationship.
+# NEW — a wick cap below the proximity tolerance is self-contradictory
+# (would make condition 1 unreachable):
+assert DEFAULT_PROBE_RESET_WICK[tf] > DEFAULT_PROBE_RESET_PIPS[tf]
+```
 
-### Why the constraint matters
+### Why proximity > reset matters
 
 If probe reset ≥ proximity trigger on the same TF, the probe could detect a
 "return to BOS_0 zone" at a pips distance that the zone-proximity-trigger
 pipeline already counted as a real proximity event. The probe would then
 push `starting_idx` forward into territory the variation logic considers
 post-trigger — making the variation's `end_idx` and `starting_idx` overlap
-or invert. Strict `trigger > reset` is the cleanest invariant.
+or invert. Strict `proximity > reset` is the cleanest invariant.
+
+### Migration state
+
+- **Tables wired** as of Phase 1 Session 1 (this update). The probe
+  primitive itself exists at `engine_v2/structure/unified_probe.py` but
+  no caller has migrated yet — Sessions 2–6 of Phase 1 migrate per
+  trigger. Until then, the legacy probes
+  (`compute_structure_scenario_3` Phase 1, `compute_structure` Exception
+  2) continue to use `DEFAULT_PROBE_RESET_PIPS` only (single-condition).
+- **Proximity tuning deferred**: a follow-up tightens `DEFAULT_PROXIMITY_PIPS`
+  to `{H1: 8, M15: 6, M5: 4}`. Held back from Session 1 so the unified
+  probe lands byte-identical to the `804d19d` baseline.
 
 ---
 

@@ -236,45 +236,65 @@ All changes are causally linked to the root change.
 
 ## Key Files to Compare
 
-| Current Location | Previous Location |
-|------------------|-------------------|
-| `artifacts/debug/*_final.csv` | `${PREV_PATH}/*_final.csv` |
-| `artifacts/debug/*_raw.csv` | `${PREV_PATH}/*_raw.csv` |
-| `artifacts/debug/*_structure_levels.csv` | `${PREV_PATH}/*_structure_levels.csv` |
-| `artifacts/debug/*_kl_zones.csv` | `${PREV_PATH}/*_kl_zones.csv` |
-| `artifacts/debug/*_structure_events.csv` | `${PREV_PATH}/*_structure_events.csv` |
-| `artifacts/debug/*_imbalance_instances.csv` | `${PREV_PATH}/*_imbalance_instances.csv` |
+Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
+**M15.confluence**. Compare every file md5 by entity:
 
-`${PREV_PATH}` is whichever location step 1 resolved to:
-`artifacts/commits/<branch>/<folder>/` for the new layout or
-`artifacts/commits/<folder>/` for the legacy flat layout.
+**H1.main** (8 files):
 
-## Chart Count Parity (Required — M15 entities have NO CSV equivalent)
+| File pattern |
+|--|
+| `*_final.csv` |
+| `*_raw.csv` |
+| `*_structure_levels.csv` |
+| `*_kl_zones.csv` |
+| `*_structure_events.csv` |
+| `*_imbalance_instances.csv` |
+| `*_fib_lifecycle.csv` |
+| `*_wvmi.csv` |
 
-CSV outputs cover only the **H1.main** entity. **M15.counter** and
-**M15.confluence** entities (Part 4 multi-TF subs) currently have no CSV
-exports — drift in them shows up ONLY in the chart's trace/shape counts.
+**M15.counter** and **M15.confluence** (5 files each — same filename
+suffixes prefixed with `*_M15_counter_` / `*_M15_confluence_`):
+
+| File pattern |
+|--|
+| `*_M15_{entity}_structure_events.csv` |
+| `*_M15_{entity}_kl_zones.csv` |
+| `*_M15_{entity}_sids.csv` |
+| `*_M15_{entity}_fib_lifecycle.csv` |
+| `*_M15_{entity}_wvmi.csv` |
+
+Total: 18 CSVs per replay. Current path is `artifacts/debug/`; baseline
+path is whichever step 1 resolved to: `artifacts/commits/<branch>/<folder>/`
+(new layout) or `artifacts/commits/<folder>/` (legacy flat layout).
+
+## Chart Count Parity (Corroborating check)
+
+Chart trace/shape counts tally everything rendered for an entity, so a
+mismatch confirms divergence even when you can't immediately tell which
+CSV moved. They are no longer the *only* sub-entity signal (the
+per-entity CSVs above are primary), but they're cheap to read from
+stdout and catch chart-side regressions (style registry, hover,
+lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (last verified 2026-05-27, full 2025-12-01→2026-01-20 window, after
-the cycle-lifecycle END pass-through unification "B2 Phase A" — the +1/+2 sub
-shapes vs the prior clamp baseline are collapsed-cycle outlines extending to the
-clamped cycle end; window-dependent, re-baseline when the config window or chart
-rendering changes):
+counts are (last verified 2026-05-29, full 2025-12-01→2026-01-20 window, after
+the 804d19d big_maru body-pip floor + proximity tightening — these are the
+post-804d19d values; the prior 2026-05-27 baseline had `M15.counter` 221/166
+and `M15.confluence` 382/309. Window-dependent, re-baseline when the config
+window or chart rendering changes):
 
 - `H1` chart: traces=125, shapes=261
-- `M15.counter` chart: traces=221, shapes=166
-- `M15.confluence` chart: traces=382, shapes=309
+- `M15.counter` chart: traces=216, shapes=169
+- `M15.confluence` chart: traces=359, shapes=280
 
 These print as `DEBUG traces:` / `DEBUG shapes:` (H1) and `[m15_chart] traces:
 N, shapes: M` (each M15 entity) at the end of `python -m engine_v2.run_replay`.
 
-**A run that has all six CSVs byte-identical but with shifted M15 chart
-counts is NOT parity-clean** — the H1.main entity is unchanged, but a
-sub entity has diverged and CSV md5 will silently fail to detect it.
-Compare chart counts every time. (Once Part 4 §12 lands per-entity CSV
-exports, this carve-out goes away.)
+A run with all 18 CSVs byte-identical but shifted chart counts means a
+purely rendering-side change (e.g. style registry tweak). A run with
+matching chart counts but mismatched CSVs means a logic change. Both
+matrices clean = full parity.
 
 ## Per-Cycle Proximity Trigger Counts (Required when proximity logic changed)
 
