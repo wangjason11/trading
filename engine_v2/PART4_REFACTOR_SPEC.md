@@ -438,12 +438,20 @@ zone is an ad-hoc BOS_0 derived from the input_idx candle. For
 `first_counter` (sibling first_confluence has run by build order) it's
 the sibling's most recent CTS — same rule subsequent_* uses.
 
-**Build-order dependency.** `first_counter`'s sibling-CTS lookup
-requires the confluence M15 entity_df to be populated before counter
-builds. The orchestrator enforces this by running
-`_run_first_confluence_multi_tf` strictly before `_run_multi_tf`
-(counter). See LANDMINES "first_counter Depends on Confluence Building
-First".
+**Build-order dependency.** Every sibling-CTS lookup (first_counter →
+confluence; subsequent_confluence → counter; subsequent_counter →
+confluence) requires the referenced sibling sid to be built before the
+reading probe fires. Because the reads point in OPPOSITE directions, no
+"build one entity fully then the other" order satisfies all of them.
+Session 3 (2026-05-31) replaced the confluence-first serial pair
+(`_run_first_confluence_multi_tf` then `_run_multi_tf`) with a single
+two-entity cadence driver, `_run_multi_tf_dual` →
+`build_two_entity_parent_cycle`, that interleaves both M15 chains in
+trigger-cadence order (advancing whichever `_ChainCursor` has the smaller
+next M15 trigger boundary). Cadence guarantees each sibling CTS read is
+strictly earlier than the reading sid's own trigger, so the sibling sid is
+always already built. See LANDMINES "Cross-entity sibling references
+require cadence-order interleaving".
 
 ---
 

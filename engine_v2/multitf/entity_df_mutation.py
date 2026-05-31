@@ -1126,141 +1126,325 @@ def build_parent_cycle_chain(
 
     Returns the cycle's ``results`` (sids in build order).
     """
-    results: List[LowerTFResult] = []
-
-    # Bootstrap start (entity-absolute). `sibling_entity_df` (confluence
-    # for counter, None for confluence) only matters for `first_counter`
-    # which consults sibling first_confluence's CTS for its reference zone.
-    m15_start_0, validated_parent_0 = _resolve_trigger_m15_start(
-        bootstrap, parent_df, entity_df,
+    cursor = _ChainCursor(
+        entity_df, parent_df,
+        bootstrap=bootstrap, subsequents=subsequents,
+        sub_path_id=sub_path_id,
+        parent_cycle_floor_h1=parent_cycle_floor_h1,
         sibling_entity_df=sibling_entity_df,
     )
-    if m15_start_0 is None:
-        print(
-            f"[chain] no sid=0 for {bootstrap.use_case} "
-            f"sid={bootstrap.parent_sid} cycle={bootstrap.parent_cycle_id} "
-            f"(probe pending / mapping failed) — cycle skipped"
-        )
-        return results
+    while not cursor.done:
+        cursor.step()
+    return cursor.results
 
-    # Parent-cycle end (entity-absolute).
-    from engine_v2.multitf.lower_tf_pipeline import _find_m15_lifecycle_end
-    cycle_end_m15 = _find_m15_lifecycle_end(bootstrap, entity_df, parent_df)
-    if cycle_end_m15 is None:
-        cycle_end_m15 = int(entity_df.index[-1])
 
-    # Parent-cycle lifecycle-start floor (M15, entity-absolute) for this whole
-    # chain (all sids share this (parent_sid, parent_cycle_id)). The orchestrator
-    # supplies the floor in H1 coords (parent cycle's clamped lifecycle-start);
-    # map H1->M15 last-of-hour here. None if not supplied / not found — the clamp
-    # then degrades to each sid's own trigger floor. PART4 §5, plan B1.
-    parent_floor_m15: Optional[int] = None
-    if parent_cycle_floor_h1:
-        _floor_h1 = parent_cycle_floor_h1.get(
-            (bootstrap.parent_sid, bootstrap.parent_cycle_id)
+class _ChainCursor:
+    """Resumable single-entity parent-cycle chain builder (Part 4 §6.1).
+
+    Wraps the per-``(entity, parent_sid, parent_cycle_id)`` sid-chain state so
+    two cursors (confluence + counter) can be advanced in LOCK-STEP by
+    `build_two_entity_parent_cycle`, each reading the OTHER entity_df as its
+    sibling. Within one entity the sids are built in the SAME order as the
+    legacy single-shot loop; the only timing change is that the **bootstrap
+    start is resolved lazily** (on the first `step`) so a sibling-reading
+    bootstrap (``first_counter``) sees the sibling built through the cadence
+    so far. Subsequents are still resolved eagerly here (Step 1: the legacy
+    subsequent probe ignores the sibling, so eager resolution exactly
+    reproduces the legacy drop-on-pending behavior and keeps output
+    byte-identical).
+
+    `next_boundary` is the M15 idx (entity-absolute) that the SIBLING must be
+    built through before this cursor's current sid is built — the current
+    sid's probe end (trigger candle) for trigger-born sids, or its reversal
+    apply idx for reversal-born sids. The driver always steps whichever cursor
+    has the smaller `next_boundary`; because the alternating cadence guarantees
+    every sibling CTS a probe reads is strictly earlier than the probe's own
+    end, that sibling sid is always already built.
+    """
+
+    def __init__(
+        self,
+        entity_df: pd.DataFrame,
+        parent_df: pd.DataFrame,
+        *,
+        bootstrap: MultiTFTrigger,
+        subsequents: List[MultiTFTrigger],
+        sub_path_id: str,
+        parent_cycle_floor_h1: Optional[Dict[tuple, int]] = None,
+        sibling_entity_df: Optional[pd.DataFrame] = None,
+    ) -> None:
+        self.entity_df = entity_df
+        self.parent_df = parent_df
+        self.bootstrap = bootstrap
+        self.sub_path_id = sub_path_id
+        self._sibling_df = sibling_entity_df
+        self.results: List[LowerTFResult] = []
+        self.done = False
+
+        # Parent-cycle end (entity-absolute). None ⇒ open cycle → data edge.
+        from engine_v2.multitf.lower_tf_pipeline import _find_m15_lifecycle_end
+        cend = _find_m15_lifecycle_end(bootstrap, entity_df, parent_df)
+        self.cycle_end_m15 = (
+            cend if cend is not None else int(entity_df.index[-1])
         )
-        if _floor_h1 is not None:
-            parent_floor_m15 = _map_parent_idx_to_m15_hour_end(
-                int(_floor_h1), parent_df, entity_df,
+
+        # Parent-cycle lifecycle-start floor (M15, entity-absolute), PART4 §5.
+        self.parent_floor_m15: Optional[int] = None
+        if parent_cycle_floor_h1:
+            _floor_h1 = parent_cycle_floor_h1.get(
+                (bootstrap.parent_sid, bootstrap.parent_cycle_id)
             )
+            if _floor_h1 is not None:
+                self.parent_floor_m15 = _map_parent_idx_to_m15_hour_end(
+                    int(_floor_h1), parent_df, entity_df,
+                )
 
-    # Resolve subsequents up front: keep only those whose probe finalizes
-    # (a pending probe ⇒ no sid AND no boundary, so the prior sid runs
-    # through — §6.1). boundary = trigger_event_idx mapped to M15 hour-end.
-    resolved_subs: List[Dict[str, Any]] = []
-    for sub in subsequents:
-        s_start, s_valid = _resolve_trigger_m15_start(
-            sub, parent_df, entity_df,
-            sibling_entity_df=sibling_entity_df,
+        # Eager subsequent resolution (legacy probe ignores the sibling; matches
+        # the legacy drop-on-pending behavior so boundaries are exact).
+        self.pending: List[Dict[str, Any]] = []
+        for sub in (subsequents or []):
+            s_start, s_valid = _resolve_trigger_m15_start(
+                sub, parent_df, entity_df,
+                sibling_entity_df=sibling_entity_df,
+            )
+            if s_start is None:
+                continue
+            tei = sub.meta.get("trigger_event_idx")
+            if tei is None:
+                continue
+            boundary = _map_parent_idx_to_m15_hour_end(
+                int(tei), parent_df, entity_df,
+            )
+            if boundary is None:
+                continue
+            self.pending.append({
+                "trigger": sub, "start": s_start,
+                "valid": s_valid, "boundary": boundary,
+            })
+        self.pending.sort(key=lambda x: x["boundary"])
+
+        # Chain state for the NEXT sid to build. cur_start is resolved lazily
+        # on the first step (bootstrap); subsequent/reversal sids set it when
+        # advancing.
+        self.sub_sid = 0
+        self.cur_trigger: MultiTFTrigger = bootstrap
+        self.cur_started_by: str = bootstrap.use_case
+        self.cur_sd: int = int(bootstrap.lower_sd)
+        self.cur_start: Optional[int] = None
+        self.cur_start_trig: Optional[int] = None
+        self.cur_valid: Optional[int] = None
+        self.guard = 0
+        self.max_chain = 50
+
+    def _boundary_for_trigger(self, trig: MultiTFTrigger) -> Optional[int]:
+        """M15 idx the probe reads the sibling through = its probe end."""
+        pe = trig.meta.get("probe_end_idx")
+        if pe is None:
+            pe = trig.meta.get("trigger_event_idx")
+        if pe is None:
+            return None
+        return _map_parent_idx_to_m15_hour_end(
+            int(pe), self.parent_df, self.entity_df,
         )
-        if s_start is None:
-            continue
-        tei = sub.meta.get("trigger_event_idx")
-        if tei is None:
-            continue
-        boundary = _map_parent_idx_to_m15_hour_end(int(tei), parent_df, entity_df)
-        if boundary is None:
-            continue
-        resolved_subs.append({
-            "trigger": sub, "start": s_start,
-            "valid": s_valid, "boundary": boundary,
-        })
-    resolved_subs.sort(key=lambda x: x["boundary"])
-    pending = list(resolved_subs)
 
-    sub_sid = 0
-    cur_start = m15_start_0
-    cur_sd = int(bootstrap.lower_sd)
-    cur_trigger = bootstrap
-    cur_started_by = bootstrap.use_case
-    cur_start_trig = m15_start_0
-    cur_valid = validated_parent_0
+    @property
+    def next_boundary(self) -> Optional[int]:
+        """Merge key: the sibling must be built through this before stepping."""
+        if self.done:
+            return None
+        if self.cur_started_by == "reversal":
+            # Reversal sids read their OWN entity's prior sid, never the sibling;
+            # the apply idx is just a monotonic ordering key.
+            return self.cur_start_trig
+        b = self._boundary_for_trigger(self.cur_trigger)
+        if b is not None:
+            return b
+        return self.cur_start_trig if self.cur_start_trig is not None else self.cur_start
 
-    guard = 0
-    max_chain = 50  # safety against pathological loops
-    while guard < max_chain:
-        guard += 1
+    def step(self) -> None:
+        """Build ONE sid (the current cur_* sid) and advance the cursor."""
+        if self.done:
+            return
+        self.guard += 1
+        if self.guard > self.max_chain:
+            self.done = True
+            return
 
-        next_sub = next((s for s in pending if s["boundary"] > cur_start), None)
-        bound = cycle_end_m15
+        # Lazy bootstrap-start resolution (reads the sibling for first_counter).
+        if self.cur_start is None:
+            m15_start, valid = _resolve_trigger_m15_start(
+                self.cur_trigger, self.parent_df, self.entity_df,
+                sibling_entity_df=self._sibling_df,
+            )
+            if m15_start is None:
+                print(
+                    f"[chain] no sid=0 for {self.cur_trigger.use_case} "
+                    f"sid={self.cur_trigger.parent_sid} "
+                    f"cycle={self.cur_trigger.parent_cycle_id} "
+                    f"(probe pending / mapping failed) — cycle skipped"
+                )
+                self.done = True
+                return
+            self.cur_start = m15_start
+            self.cur_start_trig = m15_start
+            self.cur_valid = valid
+
+        next_sub = next(
+            (s for s in self.pending if s["boundary"] > self.cur_start), None
+        )
+        bound = self.cycle_end_m15
         if next_sub is not None:
             bound = min(bound, next_sub["boundary"])
 
-        # cap_open: this sid runs to the OPEN data edge — no subsequent trigger
-        # after it AND the parent cycle is still active (`lifecycle_end_idx None`,
-        # which is exactly why `cycle_end_m15` fell back to `entity_df.index[-1]`).
-        # The data edge is not a lifecycle terminator (PART4 §5), so the sid's
-        # cap is dropped (None) and its zones stay active to the edge. Keyed on
-        # `lifecycle_end_idx is None` (the semantic open-cycle signal), NOT on
-        # `cycle_end_m15 == last idx`, so a rare H1->M15 mapping failure (which
-        # also falls back to the edge) is still treated as a real cap.
-        cap_open = (next_sub is None) and (bootstrap.lifecycle_end_idx is None)
+        # cap_open: open data edge — no subsequent after it AND parent cycle
+        # still active (`lifecycle_end_idx is None`). PART4 §5.
+        cap_open = (next_sub is None) and (self.bootstrap.lifecycle_end_idx is None)
 
         outcome = build_one_sid(
-            entity_df,
-            start_m15_abs=cur_start, sd=cur_sd, end_m15_abs=bound,
-            sub_path_id=sub_path_id, timeframe=cur_trigger.lower_tf,
-            trigger=cur_trigger, sub_sid=sub_sid,
-            started_by=cur_started_by, start_trigger_idx=cur_start_trig,
-            validated_parent_idx=cur_valid,
-            parent_floor_m15=parent_floor_m15,
+            self.entity_df,
+            start_m15_abs=self.cur_start, sd=self.cur_sd, end_m15_abs=bound,
+            sub_path_id=self.sub_path_id, timeframe=self.cur_trigger.lower_tf,
+            trigger=self.cur_trigger, sub_sid=self.sub_sid,
+            started_by=self.cur_started_by, start_trigger_idx=self.cur_start_trig,
+            validated_parent_idx=self.cur_valid,
+            parent_floor_m15=self.parent_floor_m15,
             cap_open=cap_open,
         )
         if outcome is None:
-            # Degenerate / failed sid ends the chain (conservative — a rare
-            # case on real data; revisit if it drops legitimate later sids).
-            break
+            # Degenerate / failed sid ends the chain (conservative).
+            self.done = True
+            return
 
-        results.append(outcome.result)
-        sub_sid += 1
+        self.results.append(outcome.result)
+        self.sub_sid += 1
 
         # Decide the next sid. Reversal (earlier than the next subsequent by
-        # construction) wins if its handoff start is usable; else fall to the
-        # pending subsequent; else the cycle is done.
+        # construction) wins if its handoff start is usable; else the pending
+        # subsequent; else the cycle is done.
         if (outcome.reversal_idx_abs is not None
                 and outcome.next_start_abs is not None
                 and outcome.next_start_abs < bound
-                and outcome.next_start_abs < len(entity_df)):
-            cur_start = outcome.next_start_abs
-            cur_sd = int(outcome.next_sd)
-            cur_trigger = _synth_reversal_trigger(
-                bootstrap, cur_sd, outcome.reversal_idx_abs,
+                and outcome.next_start_abs < len(self.entity_df)):
+            self.cur_start = outcome.next_start_abs
+            self.cur_sd = int(outcome.next_sd)
+            self.cur_trigger = _synth_reversal_trigger(
+                self.bootstrap, self.cur_sd, outcome.reversal_idx_abs,
             )
-            cur_started_by = "reversal"
-            cur_start_trig = outcome.reversal_idx_abs
-            cur_valid = None
-            continue
+            self.cur_started_by = "reversal"
+            self.cur_start_trig = outcome.reversal_idx_abs
+            self.cur_valid = None
+            return
 
         if next_sub is not None and bound == next_sub["boundary"]:
-            pending.remove(next_sub)
-            cur_start = next_sub["start"]
-            cur_sd = int(next_sub["trigger"].lower_sd)
-            cur_trigger = next_sub["trigger"]
-            cur_started_by = next_sub["trigger"].use_case
-            cur_start_trig = next_sub["boundary"]
-            cur_valid = next_sub["valid"]
-            continue
+            self.pending.remove(next_sub)
+            self.cur_start = next_sub["start"]
+            self.cur_sd = int(next_sub["trigger"].lower_sd)
+            self.cur_trigger = next_sub["trigger"]
+            self.cur_started_by = next_sub["trigger"].use_case
+            self.cur_start_trig = next_sub["boundary"]
+            self.cur_valid = next_sub["valid"]
+            return
 
-        break
+        self.done = True
 
-    return results
+
+def _assert_m15_frames_aligned(
+    a: Optional[pd.DataFrame], b: Optional[pd.DataFrame],
+) -> None:
+    """Guard: the two M15 entity dfs MUST share one entity-absolute index frame.
+
+    The whole cross-entity sibling mechanism (subsequent_* reading the other
+    entity's CTS by entity-absolute M15 idx) is only correct if the same idx
+    means the same candle in both dfs. Both are fetched over the same
+    ``(pair, M15, h1_start, h1_end)`` range, so this should always hold; assert
+    it so a future fetch-range drift fails loudly instead of silently
+    mis-referencing.
+    """
+    if a is None or b is None:
+        return
+    if len(a) != len(b):
+        raise ValueError(
+            f"[two_entity] M15 frame length mismatch: {len(a)} vs {len(b)}"
+        )
+    if a.empty or b.empty:
+        return
+    if (str(a["time"].iloc[0]) != str(b["time"].iloc[0])
+            or str(a["time"].iloc[-1]) != str(b["time"].iloc[-1])):
+        raise ValueError(
+            "[two_entity] M15 frame time bounds mismatch "
+            f"(conf {a['time'].iloc[0]}..{a['time'].iloc[-1]} vs "
+            f"ctr {b['time'].iloc[0]}..{b['time'].iloc[-1]})"
+        )
+
+
+def build_two_entity_parent_cycle(
+    parent_df: pd.DataFrame,
+    *,
+    conf_df: pd.DataFrame,
+    conf_bootstrap: Optional[MultiTFTrigger],
+    conf_subs: List[MultiTFTrigger],
+    conf_path: str,
+    ctr_df: pd.DataFrame,
+    ctr_bootstrap: Optional[MultiTFTrigger],
+    ctr_subs: List[MultiTFTrigger],
+    ctr_path: str,
+    parent_cycle_floor_h1: Optional[Dict[tuple, int]] = None,
+) -> Tuple[List[LowerTFResult], List[LowerTFResult]]:
+    """Build one parent cycle's confluence + counter chains INTERLEAVED in
+    cadence order, each reading the other entity_df as sibling (Part 4 §6.1 +
+    unified-probe Phase 1 Session 3).
+
+    Two `_ChainCursor`s are advanced in lock-step: at each step the cursor with
+    the smaller `next_boundary` builds one sid (mutating its own entity_df,
+    reading the other as sibling). This guarantees that when a sid's probe
+    reads the sibling's CTS within `[…, this_trigger]`, every sibling sid with
+    an earlier boundary is already built — which is what makes the
+    ``subsequent_*`` sibling-CTS reference resolvable (Step 2/3). A cycle may
+    have a bootstrap in only one entity (the other cursor is None).
+
+    Returns ``(conf_results, ctr_results)`` in per-entity build order.
+    """
+    _assert_m15_frames_aligned(conf_df, ctr_df)
+
+    conf_cursor = (
+        _ChainCursor(
+            conf_df, parent_df,
+            bootstrap=conf_bootstrap, subsequents=conf_subs,
+            sub_path_id=conf_path,
+            parent_cycle_floor_h1=parent_cycle_floor_h1,
+            sibling_entity_df=ctr_df,
+        )
+        if conf_bootstrap is not None else None
+    )
+    ctr_cursor = (
+        _ChainCursor(
+            ctr_df, parent_df,
+            bootstrap=ctr_bootstrap, subsequents=ctr_subs,
+            sub_path_id=ctr_path,
+            parent_cycle_floor_h1=parent_cycle_floor_h1,
+            sibling_entity_df=conf_df,
+        )
+        if ctr_bootstrap is not None else None
+    )
+
+    cursors = [c for c in (conf_cursor, ctr_cursor) if c is not None]
+    _INF = float("inf")
+    # Stable tie-break (confluence before counter) — cadence makes ties
+    # essentially impossible (sd-prox vs CTS-prox land on distinct candles),
+    # but keep it deterministic. Index in `cursors` preserves that order.
+    while True:
+        active = [c for c in cursors if not c.done]
+        if not active:
+            break
+        nxt = min(
+            active,
+            key=lambda c: (
+                c.next_boundary if c.next_boundary is not None else _INF,
+                cursors.index(c),
+            ),
+        )
+        nxt.step()
+
+    conf_results = conf_cursor.results if conf_cursor is not None else []
+    ctr_results = ctr_cursor.results if ctr_cursor is not None else []
+    return conf_results, ctr_results

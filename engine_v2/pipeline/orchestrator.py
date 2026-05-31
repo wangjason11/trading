@@ -582,32 +582,14 @@ def run_pipeline(
                 _sid_floor = _h1_struct_start.get(_csid, int(ev.idx))
                 parent_cycle_floor_h1[(_csid, _ccyc)] = max(_sid_floor, int(ev.idx))
 
-        # Build confluence FIRST (Session 2 post-pivot 2026-05-29): the
-        # new first_counter reference-zone rule consults sibling
-        # first_confluence's most recent CTS for the same parent cycle.
-        # That requires confluence's M15 entity_df to be populated when
-        # counter's chain driver fires. Confluence has no equivalent
-        # dependency (its ad-hoc BOS_0 anchors on its own input candle),
-        # so the order is strictly confluence → counter.
+        # Two-entity cadence driver (Session 3, 2026-05-31): confluence +
+        # counter M15 entities are built INTERLEAVED in trigger-cadence order
+        # so each can read the other as sibling. Replaces the former
+        # confluence-first-then-counter serial pair (which couldn't satisfy
+        # subsequent_confluence's reference to the counter sibling). See
+        # `_run_multi_tf_dual` + `build_two_entity_parent_cycle`.
         _t0 = time.perf_counter()
-        confluence_results = _run_first_confluence_multi_tf(
-            s_res.df,
-            first_confluence_triggers,
-            registry,
-            subsequent_confluence_triggers=subsequent_confluence_triggers,
-            subsequent_counter_triggers=subsequent_counter_triggers,
-            main_zone_proximity_triggers=zone_proximity_triggers,
-            parent_cycle_floor_h1=parent_cycle_floor_h1,
-        )
-        timing["multi_tf_confluence"] = time.perf_counter() - _t0
-
-        # Pull the freshly-built confluence M15 entity_df from the registry
-        # so counter's first_counter probes can look up sibling CTS events.
-        _conf_entity = registry.get("H1.main >> M15.confluence")
-        sibling_confluence_df = _conf_entity.df if _conf_entity else None
-
-        _t0 = time.perf_counter()
-        lower_tf_results = _run_multi_tf(
+        confluence_results, lower_tf_results = _run_multi_tf_dual(
             s_res.df,
             sorted_events,
             wvmi_records,
@@ -615,11 +597,13 @@ def run_pipeline(
             poi_zones,
             meta,
             registry,
+            first_confluence_triggers=first_confluence_triggers,
+            subsequent_confluence_triggers=subsequent_confluence_triggers,
             subsequent_counter_triggers=subsequent_counter_triggers,
+            main_zone_proximity_triggers=zone_proximity_triggers,
             parent_cycle_floor_h1=parent_cycle_floor_h1,
-            sibling_confluence_df=sibling_confluence_df,
         )
-        timing["multi_tf_counter"] = time.perf_counter() - _t0
+        timing["multi_tf_dual"] = time.perf_counter() - _t0
 
     meta["lower_tf_results"] = lower_tf_results
     meta["first_confluence_results"] = confluence_results
@@ -770,31 +754,48 @@ def _assign_trigger_centric_sub_wvmi(
     return counts
 
 
-def _run_first_confluence_multi_tf(
+def _merge_wvmi_counts(acc: Dict[str, Any], c: Dict[str, Any]) -> None:
+    """Accumulate one `_assign_trigger_centric_sub_wvmi` count dict into `acc`."""
+    acc["acted"] += c["acted"]
+    acc["records"] += c["records"]
+    for _sb, _n in c["by_started_by"].items():
+        acc["by_started_by"][_sb] = acc["by_started_by"].get(_sb, 0) + _n
+
+
+def _run_multi_tf_dual(
     h1_df: pd.DataFrame,
-    triggers: list,
+    sorted_events: list,
+    wvmi_records: list,
+    kl_zones: list,
+    poi_zones: list,
+    meta: Dict[str, Any],
     registry: StructureRegistry,
+    *,
+    first_confluence_triggers: list,
     subsequent_confluence_triggers: Optional[list] = None,
     subsequent_counter_triggers: Optional[list] = None,
     main_zone_proximity_triggers: Optional[Dict[tuple, list]] = None,
     parent_cycle_floor_h1: Optional[Dict[tuple, int]] = None,
-) -> list:
-    """Build confluence subs (var 1 bootstrap + var 3 subsequents) and
-    register M15.confluence.
+) -> Tuple[list, list]:
+    """Build the M15.confluence + M15.counter entities INTERLEAVED in cadence
+    order so each can read the other as sibling (Part 4 §6.1 + unified-probe
+    Session 3 two-entity driver).
 
-    Phase 2 (merge-and-bound, §6.1 REVISED 2026-05-25): triggers are grouped
-    by `(parent_sid, parent_cycle_id)`. Each cycle's var 1 (finalized) is the
-    sid=0 bootstrap; its var 3 triggers are the subsequents. The
-    `build_parent_cycle_chain` driver stitches a sequential, non-overlapping
-    sid chain per cycle (bounded single-structure sids; reversal or next
-    subsequent starts the next sid). No cascade, no last-per-cycle carve-out —
-    every var 3 builds as its own sid, falling out of the merge-and-bound
-    build for free (old §13.5.d subsumed). Pending var 1 → that cycle has no
-    sid=0, so its var 3 don't build (§4.3.2 / §14).
+    Replaces the former `_run_first_confluence_multi_tf` (confluence, var1+var3)
+    + `_run_multi_tf` (counter, var2+var4) pair, which built each entity fully
+    and serially. Serial order cannot satisfy `subsequent_confluence`'s
+    reference to the counter sibling (counter wasn't built yet); interleaving
+    by cadence resolves every sibling-CTS reference because the read is always
+    strictly earlier than the reading sid's own trigger.
 
-    `subsequent_counter_triggers` is the FULL var 4 list, used to build the
-    confluence WVMI trigger stream (§8.3 / §8.5) for the per-cycle
-    trigger-centric sub-WVMI pass below.
+    Per parent cycle, `build_two_entity_parent_cycle` advances both chains in
+    lock-step. Trigger detection, grouping, the per-cycle trigger-centric sub
+    WVMI passes, sid-records, and registry registration are unchanged and run
+    per-entity AFTER the builds — WVMI is per-entity-isolated (confluence WVMI
+    reads var4 trigger META, not built counter sids, and vice versa), so the
+    deferred timing is byte-identical to the serial version.
+
+    Returns ``(confluence_results, counter_results)``.
     """
     from collections import defaultdict
 
@@ -804,260 +805,185 @@ def _run_first_confluence_multi_tf(
     from engine_v2.multitf.subsequent_confluence_pipeline import (
         to_multi_tf_trigger as subsequent_confluence_to_mt,
     )
-    from engine_v2.multitf.data_bridge import (
-        fetch_lower_tf_data,
-        prepare_lower_tf_data,
+    from engine_v2.multitf.subsequent_counter_pipeline import (
+        to_multi_tf_trigger as subsequent_counter_to_mt,
     )
-    from engine_v2.multitf.entity_df_mutation import build_parent_cycle_chain
+    from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
+    from engine_v2.multitf.data_bridge import (
+        fetch_lower_tf_data, prepare_lower_tf_data,
+    )
+    from engine_v2.multitf.entity_df_mutation import (
+        build_two_entity_parent_cycle,
+    )
 
-    var1_finalized = [t for t in (triggers or []) if t.status == "finalized"]
+    conf_path = "H1.main >> M15.confluence"
+    ctr_path = "H1.main >> M15.counter"
+
+    # --- Trigger grouping inputs ---
+    var1_finalized = [
+        t for t in (first_confluence_triggers or []) if t.status == "finalized"
+    ]
     var3_all = list(subsequent_confluence_triggers or [])
+    var2_triggers = detect_uc1_triggers(
+        sorted_events, h1_df, wvmi_records, kl_zones,
+    )
+    var4_all = list(subsequent_counter_triggers or [])
 
-    if not var1_finalized:
-        # No bootstrap anywhere → no confluence subs (var 3 can't be sid 0).
-        if triggers or var3_all:
-            print(f"[multi_tf:confluence] no finalized var 1 bootstrap "
-                  f"({len(triggers or [])} var1, {len(var3_all)} var3) — "
-                  f"no subs built")
-        return []
+    print(
+        f"[multi_tf:dual] confluence var1 finalized="
+        f"{len(var1_finalized)}/{len(first_confluence_triggers or [])} "
+        f"var3={len(var3_all)} | counter var2={len(var2_triggers)} "
+        f"var4={len(var4_all)}"
+    )
 
-    print(f"[multi_tf:confluence] var 1 finalized: "
-          f"{len(var1_finalized)}/{len(triggers or [])}, var 3 total: "
-          f"{len(var3_all)} (all built, merge-and-bound)")
+    if not var1_finalized and not var2_triggers:
+        if var3_all or var4_all:
+            print("[multi_tf:dual] no bootstraps (var1/var2) — no subs built")
+        return [], []
 
+    # --- Prepare BOTH M15 entity dfs from one raw fetch (frame-aligned) ---
     pair = h1_df.attrs.get("pair", "NZD_USD")
     h1_start = pd.to_datetime(h1_df["time"].iloc[0], utc=True)
     h1_end = pd.to_datetime(h1_df["time"].iloc[-1], utc=True)
-
     m15_raw = fetch_lower_tf_data(pair, "M15", h1_start, h1_end)
     if m15_raw is None or m15_raw.empty:
-        print("[multi_tf:confluence] WARNING: No M15 data available")
-        return []
+        print("[multi_tf:dual] WARNING: No M15 data available")
+        return [], []
+    conf_m15 = prepare_lower_tf_data(m15_raw.copy())
+    conf_m15.attrs["pair"] = pair
+    ctr_m15 = prepare_lower_tf_data(m15_raw.copy())
+    ctr_m15.attrs["pair"] = pair
+    if var2_triggers:
+        # Preserve the legacy `meta["m15_df_prepared"]` write (set only when the
+        # counter entity builds, matching the old `_run_multi_tf`).
+        meta["m15_df_prepared"] = ctr_m15
+    print(f"[multi_tf:dual] M15 data prepared: {len(conf_m15)} candles x2")
 
-    m15_df = prepare_lower_tf_data(m15_raw)
-    m15_df.attrs["pair"] = pair
-
-    sub_path_id = "H1.main >> M15.confluence"
-
-    # Group by parent cycle: one var 1 bootstrap per cycle, var 3 subsequents.
-    bootstrap_by_cycle: Dict[tuple, Any] = {}
+    # --- Group bootstraps + subs by parent cycle ---
+    conf_bootstrap_by_cycle: Dict[tuple, Any] = {}
     for v1 in var1_finalized:
         mt = first_confluence_to_mt(v1, h1_df)
-        bootstrap_by_cycle[(mt.parent_sid, mt.parent_cycle_id)] = mt
-    subs_by_cycle: Dict[tuple, list] = defaultdict(list)
+        conf_bootstrap_by_cycle[(mt.parent_sid, mt.parent_cycle_id)] = mt
+    conf_subs_by_cycle: Dict[tuple, list] = defaultdict(list)
     for v3 in var3_all:
         mt = subsequent_confluence_to_mt(v3, h1_df)
-        subs_by_cycle[(mt.parent_sid, mt.parent_cycle_id)].append(mt)
+        conf_subs_by_cycle[(mt.parent_sid, mt.parent_cycle_id)].append(mt)
 
-    # WVMI gating lookups (precomputed once)
-    main_zpt = main_zone_proximity_triggers or {}
-    main_first_sd_by_cycle: Dict[tuple, int] = {}
-    for key, trig_list in main_zpt.items():
-        if trig_list and trig_list[0].direction == "sd":
-            main_first_sd_by_cycle[key] = int(trig_list[0].idx)
-    var4_all_sorted = sorted(
-        list(subsequent_counter_triggers or []),
-        key=lambda t: t.trigger_event_idx,
+    ctr_bootstrap_by_cycle: Dict[tuple, Any] = {}
+    for v2 in var2_triggers:
+        ctr_bootstrap_by_cycle[(v2.parent_sid, v2.parent_cycle_id)] = v2
+    ctr_subs_by_cycle: Dict[tuple, list] = defaultdict(list)
+    for v4 in var4_all:
+        mt = subsequent_counter_to_mt(v4, h1_df)
+        ctr_subs_by_cycle[(mt.parent_sid, mt.parent_cycle_id)].append(mt)
+
+    # --- Build phase: interleave both entities per parent cycle in
+    #     chronological order. (parent_sid, parent_cycle_id) lexicographic ==
+    #     chronological (sids increase over time, cycles within a sid). ---
+    all_cycle_keys = sorted(
+        set(conf_bootstrap_by_cycle) | set(ctr_bootstrap_by_cycle)
     )
-
-    # Sub WVMI is parent-event-driven & trigger-centric (§8.3 / §8.5): after a
-    # parent cycle's sid chain is built, sweep whichever sid is active at each
-    # confluence trigger (main first sd-prox + each var 4). Reversal-born sids
-    # need no special case — swept iff a trigger lands in their window.
-    wvmi_counts: Dict[str, Any] = {"acted": 0, "records": 0, "by_started_by": {}}
-
-    # Process cycles in time order of the bootstrap's trigger candle.
-    cycle_keys = sorted(
-        bootstrap_by_cycle.keys(),
-        key=lambda k: bootstrap_by_cycle[k].meta.get("trigger_event_idx", 0),
-    )
-
-    results: list = []
-    for key in cycle_keys:
-        bootstrap = bootstrap_by_cycle[key]
-        subs = subs_by_cycle.get(key, [])
-        print(f"[multi_tf:confluence] cycle parent_sid={key[0]} "
-              f"parent_cycle={key[1]} subsequents={len(subs)}")
-        cycle_results = build_parent_cycle_chain(
-            m15_df, h1_df,
-            bootstrap=bootstrap, subsequents=subs,
-            sub_path_id=sub_path_id,
+    conf_results_by_cycle: Dict[tuple, list] = {}
+    ctr_results_by_cycle: Dict[tuple, list] = {}
+    for key in all_cycle_keys:
+        conf_bs = conf_bootstrap_by_cycle.get(key)
+        ctr_bs = ctr_bootstrap_by_cycle.get(key)
+        print(
+            f"[multi_tf:dual] cycle parent_sid={key[0]} parent_cycle={key[1]} "
+            f"conf={'Y' if conf_bs else '-'}"
+            f"(subs={len(conf_subs_by_cycle.get(key, []))}) "
+            f"ctr={'Y' if ctr_bs else '-'}"
+            f"(subs={len(ctr_subs_by_cycle.get(key, []))})"
+        )
+        cr, kr = build_two_entity_parent_cycle(
+            h1_df,
+            conf_df=conf_m15,
+            conf_bootstrap=conf_bs,
+            conf_subs=conf_subs_by_cycle.get(key, []),
+            conf_path=conf_path,
+            ctr_df=ctr_m15,
+            ctr_bootstrap=ctr_bs,
+            ctr_subs=ctr_subs_by_cycle.get(key, []),
+            ctr_path=ctr_path,
             parent_cycle_floor_h1=parent_cycle_floor_h1,
         )
+        conf_results_by_cycle[key] = cr
+        ctr_results_by_cycle[key] = kr
+
+    # --- WVMI gating lookups ---
+    main_zpt = main_zone_proximity_triggers or {}
+    main_first_sd_by_cycle: Dict[tuple, int] = {}
+    for k, trig_list in main_zpt.items():
+        if trig_list and trig_list[0].direction == "sd":
+            main_first_sd_by_cycle[k] = int(trig_list[0].idx)
+    var4_all_sorted = sorted(var4_all, key=lambda t: t.trigger_event_idx)
+    var3_all_sorted = sorted(var3_all, key=lambda t: t.trigger_event_idx)
+
+    # --- Assemble confluence (legacy order: var1 trigger_event_idx) + WVMI ---
+    confluence_results: list = []
+    conf_wvmi: Dict[str, Any] = {"acted": 0, "records": 0, "by_started_by": {}}
+    conf_cycle_order = sorted(
+        conf_bootstrap_by_cycle.keys(),
+        key=lambda k: conf_bootstrap_by_cycle[k].meta.get("trigger_event_idx", 0),
+    )
+    for key in conf_cycle_order:
+        cycle_results = conf_results_by_cycle.get(key, [])
         stream = _confluence_trigger_stream(
             key, main_first_sd_by_cycle, var4_all_sorted,
         )
         c = _assign_trigger_centric_sub_wvmi(
             cycle_results, stream,
-            parent_df=h1_df, m15_df=m15_df, sub_path_id=sub_path_id,
+            parent_df=h1_df, m15_df=conf_m15, sub_path_id=conf_path,
         )
-        wvmi_counts["acted"] += c["acted"]
-        wvmi_counts["records"] += c["records"]
-        for _sb, _n in c["by_started_by"].items():
-            wvmi_counts["by_started_by"][_sb] = (
-                wvmi_counts["by_started_by"].get(_sb, 0) + _n
-            )
-        results.extend(cycle_results)
+        _merge_wvmi_counts(conf_wvmi, c)
+        confluence_results.extend(cycle_results)
 
-    print(f"[multi_tf:confluence] results: {len(results)} sids "
-          f"(var1+var3+reversal, merge-and-bound)")
-    print(f"[multi_tf:confluence_wvmi] trigger-centric: sids activated="
-          f"{wvmi_counts['acted']} total records={wvmi_counts['records']} "
-          f"by_started_by={wvmi_counts['by_started_by']}")
-
-    if results:
-        # Chart consumes m15_df.attrs[...] (events, kl_zones, poi_zones,
-        # fib_states, wave_candles, wvmi, prev_bos_lines) populated by the
-        # chain build per sid.
-        sub_sids = build_sid_records_for_subordinate(results)
-        m15_df.attrs["sids"] = sub_sids
-        print(f"[sid_records] {sub_path_id} sids={len(sub_sids)}")
+    if confluence_results:
+        sub_sids = build_sid_records_for_subordinate(confluence_results)
+        conf_m15.attrs["sids"] = sub_sids
+        print(f"[sid_records] {conf_path} sids={len(sub_sids)}")
         registry.register(
-            sub_path_id,
-            df=m15_df,
-            timeframe="M15",
-            role="subordinate",
-            starting_alignment="confluence",
+            conf_path, df=conf_m15, timeframe="M15",
+            role="subordinate", starting_alignment="confluence",
         )
-
-    return results
-
-
-def _run_multi_tf(
-    h1_df: pd.DataFrame,
-    sorted_events: list,
-    wvmi_records: list,
-    kl_zones: list,
-    poi_zones: list,
-    meta: Dict[str, Any],
-    registry: StructureRegistry,
-    subsequent_counter_triggers: Optional[list] = None,
-    parent_cycle_floor_h1: Optional[Dict[tuple, int]] = None,
-    sibling_confluence_df: Optional[pd.DataFrame] = None,
-) -> list:
-    """Run multi-TF analysis for the M15.counter entity (var 2 + var 4).
-
-    Phase 2 (merge-and-bound, §6.1 REVISED 2026-05-25): triggers are grouped
-    by `(parent_sid, parent_cycle_id)`. Each cycle's var 2 (first_counter) is
-    the sid=0 bootstrap; its var 4 triggers are the subsequents. The
-    `build_parent_cycle_chain` driver stitches a sequential, non-overlapping
-    sid chain per cycle. No cascade, no var 4 last-per-cycle carve-out — every
-    var 4 builds as its own sid (old §13.5.d subsumed). A cycle with no var 2
-    bootstrap doesn't build (var 4 can't be sid 0).
-    """
-    from collections import defaultdict
-
-    from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
-    from engine_v2.multitf.data_bridge import fetch_lower_tf_data, prepare_lower_tf_data
-    from engine_v2.multitf.subsequent_counter_pipeline import (
-        to_multi_tf_trigger as subsequent_counter_to_mt,
-    )
-    from engine_v2.multitf.entity_df_mutation import build_parent_cycle_chain
-
-    var2_triggers = detect_uc1_triggers(
-        sorted_events, h1_df, wvmi_records, kl_zones,
-    )
-    print(f"[multi_tf] first_counter triggers detected: {len(var2_triggers)}")
-
-    var4_all = list(subsequent_counter_triggers or [])
-    print(f"[multi_tf] subsequent_counter triggers (all built): {len(var4_all)}")
-
-    if not var2_triggers:
-        # No bootstrap anywhere → no counter subs (var 4 can't be sid 0).
-        if var4_all:
-            print(f"[multi_tf] no var 2 bootstrap ({len(var4_all)} var4) — "
-                  f"no counter subs built")
-        return []
-
-    # Fetch M15 entity data once
-    pair = h1_df.attrs.get("pair", "NZD_USD")
-    h1_start = pd.to_datetime(h1_df["time"].iloc[0], utc=True)
-    h1_end = pd.to_datetime(h1_df["time"].iloc[-1], utc=True)
-
-    m15_df_raw = fetch_lower_tf_data(pair, "M15", h1_start, h1_end)
-    if m15_df_raw is None or m15_df_raw.empty:
-        print("[multi_tf] WARNING: No M15 data available, skipping multi-TF")
-        return []
-
-    m15_df_prepared = prepare_lower_tf_data(m15_df_raw)
-    m15_df_prepared.attrs["pair"] = pair
-    meta["m15_df_prepared"] = m15_df_prepared
-    print(f"[multi_tf] M15 data prepared: {len(m15_df_prepared)} candles")
-
-    sub_path_id = "H1.main >> M15.counter"
-
-    # Group by parent cycle: one var 2 bootstrap per cycle, var 4 subsequents.
-    bootstrap_by_cycle: Dict[tuple, Any] = {}
-    for v2 in var2_triggers:
-        bootstrap_by_cycle[(v2.parent_sid, v2.parent_cycle_id)] = v2
-    subs_by_cycle: Dict[tuple, list] = defaultdict(list)
-    for v4 in var4_all:
-        mt = subsequent_counter_to_mt(v4, h1_df)
-        subs_by_cycle[(mt.parent_sid, mt.parent_cycle_id)].append(mt)
-
-    # WVMI gating lookups: counter sub WVMI fires on var 3 (CTS-prox-class)
-    # parent events (§8.4 / §8.5).
-    var3_triggers = meta.get("subsequent_confluence_triggers", [])
-    var3_all_sorted = sorted(
-        list(var3_triggers or []),
-        key=lambda t: t.trigger_event_idx,
+    print(
+        f"[multi_tf:dual] confluence results: {len(confluence_results)} sids; "
+        f"wvmi acted={conf_wvmi['acted']} records={conf_wvmi['records']} "
+        f"by_started_by={conf_wvmi['by_started_by']}"
     )
 
-    wvmi_counts: Dict[str, Any] = {"acted": 0, "records": 0, "by_started_by": {}}
-
-    # var 2 trigger candle for time-ordering = probe_end_idx (first sd-prox).
-    cycle_keys = sorted(
-        bootstrap_by_cycle.keys(),
-        key=lambda k: bootstrap_by_cycle[k].meta.get("probe_end_idx", 0) or 0,
+    # --- Assemble counter (legacy order: var2 probe_end_idx) + WVMI ---
+    counter_results: list = []
+    ctr_wvmi: Dict[str, Any] = {"acted": 0, "records": 0, "by_started_by": {}}
+    ctr_cycle_order = sorted(
+        ctr_bootstrap_by_cycle.keys(),
+        key=lambda k: ctr_bootstrap_by_cycle[k].meta.get("probe_end_idx", 0) or 0,
     )
-
-    lower_tf_results: list = []
-    for key in cycle_keys:
-        bootstrap = bootstrap_by_cycle[key]
-        subs = subs_by_cycle.get(key, [])
-        print(f"[multi_tf] cycle parent_sid={key[0]} parent_cycle={key[1]} "
-              f"subsequents={len(subs)}")
-        cycle_results = build_parent_cycle_chain(
-            m15_df_prepared, h1_df,
-            bootstrap=bootstrap, subsequents=subs,
-            sub_path_id=sub_path_id,
-            parent_cycle_floor_h1=parent_cycle_floor_h1,
-            sibling_entity_df=sibling_confluence_df,
-        )
+    for key in ctr_cycle_order:
+        cycle_results = ctr_results_by_cycle.get(key, [])
         stream = _counter_trigger_stream(key, var3_all_sorted)
         c = _assign_trigger_centric_sub_wvmi(
             cycle_results, stream,
-            parent_df=h1_df, m15_df=m15_df_prepared, sub_path_id=sub_path_id,
+            parent_df=h1_df, m15_df=ctr_m15, sub_path_id=ctr_path,
         )
-        wvmi_counts["acted"] += c["acted"]
-        wvmi_counts["records"] += c["records"]
-        for _sb, _n in c["by_started_by"].items():
-            wvmi_counts["by_started_by"][_sb] = (
-                wvmi_counts["by_started_by"].get(_sb, 0) + _n
-            )
-        lower_tf_results.extend(cycle_results)
+        _merge_wvmi_counts(ctr_wvmi, c)
+        counter_results.extend(cycle_results)
 
-    print(f"[multi_tf] counter results: {len(lower_tf_results)} sids "
-          f"(var2+var4+reversal, merge-and-bound)")
-    print(f"[multi_tf:counter_wvmi] trigger-centric: sids activated="
-          f"{wvmi_counts['acted']} total records={wvmi_counts['records']} "
-          f"by_started_by={wvmi_counts['by_started_by']}")
-
-    if lower_tf_results:
-        # Chart consumes m15_df_prepared.attrs[...] populated by the chain
-        # build per sid.
-        sub_sids = build_sid_records_for_subordinate(lower_tf_results)
-        m15_df_prepared.attrs["sids"] = sub_sids
-        print(f"[sid_records] {sub_path_id} sids={len(sub_sids)}")
+    if counter_results:
+        sub_sids = build_sid_records_for_subordinate(counter_results)
+        ctr_m15.attrs["sids"] = sub_sids
+        print(f"[sid_records] {ctr_path} sids={len(sub_sids)}")
         registry.register(
-            sub_path_id,
-            df=m15_df_prepared,
-            timeframe="M15",
-            role="subordinate",
-            starting_alignment="counter",
+            ctr_path, df=ctr_m15, timeframe="M15",
+            role="subordinate", starting_alignment="counter",
         )
+    print(
+        f"[multi_tf:dual] counter results: {len(counter_results)} sids; "
+        f"wvmi acted={ctr_wvmi['acted']} records={ctr_wvmi['records']} "
+        f"by_started_by={ctr_wvmi['by_started_by']}"
+    )
 
-    return lower_tf_results
+    return confluence_results, counter_results
 
 
 def _validate_input(df: pd.DataFrame) -> None:

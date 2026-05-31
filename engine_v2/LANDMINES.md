@@ -554,29 +554,45 @@ registry, never from `dfx.attrs["lower_tf_results"]`.
 
 ---
 
-## first_counter Depends on Confluence Building First
+## Cross-entity sibling references require cadence-order interleaving (Session 3, 2026-05-31)
 
-**Rule:** `_run_first_confluence_multi_tf` must run BEFORE `_run_multi_tf`
-(counter) in the orchestrator. `first_counter`'s probe reference zone is
-sibling `first_confluence`'s most recent CTS for the same parent cycle
-(spec §4.3.3, Session 2 post-pivot). The confluence M15 entity_df must
-already be populated when counter's chain driver fires.
+**Symptom (if violated):** a sub probe that reads its sibling entity's CTS
+resolves the reference zone to `None` (the sibling sid it needs isn't built
+yet), silently falling back / skipping the sub. Subs vanish or shift; the
+chain driver continues with no exception, so the regression manifests only
+via `/compare` deltas.
 
-**Why this is a landmine:** the legacy order had counter FIRST,
-confluence second — and the per-entity build was framed as independent.
-A future cleanup that "tidies up" the order swap (e.g., to share more
-state between the two paths, or restore alphabetical consistency) would
-silently break `first_counter`: `_resolve_first_via_unified_probe` would
-see an empty `sibling_entity_df.attrs["events"]` and return None, every
-first_counter bootstrap would skip, and every parent cycle's counter
-sub_sid=0 would disappear from the output. The chain driver continues
-(no exception) so the regression manifests only via `/compare` deltas.
+**Root cause:** the reference-zone pivots made several probes read the SIBLING
+entity (confluence ↔ counter): `first_counter` → sibling first_confluence's
+CTS (Session 2); `subsequent_confluence` → sibling counter's CTS and
+`subsequent_counter` → sibling confluence's CTS (Session 3). Each read must
+land on a sibling sid that is already built. Because the two reads point in
+OPPOSITE directions (confluence reads counter AND counter reads confluence),
+no static "build entity A fully, then B" order can satisfy both — that is why
+Session 2's confluence-first stopgap (`_run_first_confluence_multi_tf` before
+`_run_multi_tf`) could only support `first_counter`.
 
-**Phase 1 reality:** the per-entity sequential order is the simplest
-expression of the dependency. Phase 1 Session 3 may move both entities
-under a per-parent-cycle two-entity driver that interleaves them in
-cadence order across triggers — once that lands, the orchestrator-level
-ordering becomes irrelevant (the driver handles it internally).
+**Rule:** the two M15 entities are built INTERLEAVED in trigger-cadence order
+by `build_two_entity_parent_cycle` (driven by `_run_multi_tf_dual`), advancing
+whichever `_ChainCursor` has the smaller next M15 trigger boundary. Cadence
+guarantees every sibling CTS a probe reads is strictly EARLIER than the
+reading sid's own trigger candle (`first_confluence`@BOS < `first_counter`@sd-prox
+< `subsequent_confluence`@CTS-prox < `subsequent_counter`@next-sd-prox …), so
+the needed sibling sid is always already built when the probe fires. Bootstrap
+start resolution is therefore LAZY (deferred to the cursor's first `step`),
+NOT eager at cursor construction.
+
+**Frame-alignment invariant:** the sibling read is by entity-absolute M15 idx,
+so the two M15 entity dfs MUST share one index frame (same candle ⇒ same idx).
+Both are fetched over the same `(pair, M15, h1_start, h1_end)` range;
+`_assert_m15_frames_aligned` (length + first/last `time`) fails loudly if a
+future fetch-range drift breaks this.
+
+**Why it's easy to reintroduce:** a refactor that reverts to building one
+entity fully before the other, or that resolves a bootstrap probe eagerly at
+cursor-construction time (before the sibling cadence has advanced), breaks the
+cross-read silently. Guard: each sibling-reading resolver logs a WARNING when
+the sibling CTS is missing.
 
 ---
 
@@ -703,8 +719,8 @@ be removed together.
 
 | Filter | Where | Filters |
 |---|---|---|
-| `var3_last_per_cycle` | `_run_first_confluence_multi_tf` (orchestrator) | subsequent_confluence triggers |
-| `var4_last_per_cycle` | `_run_multi_tf` (orchestrator) | subsequent_counter triggers |
+| `var3_last_per_cycle` | `_run_multi_tf_dual` (orchestrator; was `_run_first_confluence_multi_tf`) | subsequent_confluence triggers |
+| `var4_last_per_cycle` | `_run_multi_tf_dual` (orchestrator; was `_run_multi_tf`) | subsequent_counter triggers |
 
 **Why a pair:** spec §6.1 says each new var 3 sid overwrites the previous
 open confluence sub sid; each new var 4 sid overwrites the previous open
