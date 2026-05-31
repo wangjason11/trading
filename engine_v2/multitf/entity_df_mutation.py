@@ -46,6 +46,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from engine_v2.common.types import KLZone
 from engine_v2.multitf.types import LowerTFResult, MultiTFTrigger
 
 
@@ -391,20 +392,282 @@ def _sub_path_id_for_use_case(use_case: str, fallback: str) -> str:
     return fallback
 
 
-def _resolve_trigger_m15_start(
+def _build_first_confluence_ref_zone(
+    entity_df: pd.DataFrame,
+    m15_input_idx: int,
+    probe_direction: int,
+) -> Optional["ReferenceZone"]:
+    """Ad-hoc BOS_0 reference zone on M15 for first_confluence.
+
+    Anchor = the M15 input_idx candle (= the parent BOS extreme
+    price-mapped to M15). Derives a BOS-style zone from that candle via
+    the same `identify_base_pattern + zone_thresholds` machinery the
+    legacy Scenario 3 used, just on the SUB's TF rather than the parent's.
+
+    Held constant across probe iterations per the unified-probe design.
+    """
+    from engine_v2.structure.reference_zone import (
+        ReferenceZone,
+        _derive_zone_ad_hoc,
+    )
+
+    # `direction` here is the SOURCE structure's direction (= the sub's
+    # own direction for first_confluence, since the BOS_0 belongs to the
+    # sub being built). For first_confluence, sub direction == lower_sd ==
+    # +parent_sd. Pass lower_sd in: the ad-hoc derivation produces a zone
+    # geographic + side keyed off that, then we re-interpret as a probe
+    # reference below.
+    derived = _derive_zone_ad_hoc(
+        entity_df, m15_input_idx, probe_direction, bos=True,
+    )
+    if derived is None:
+        return None
+    outer_geo, inner_geo, _side_geo = derived
+
+    # The probe reads `inner` per probe_direction (see ReferenceZone
+    # docstring): for +1 probe body is above ref, inner = top of zone;
+    # for -1 probe inner = bottom. The ad-hoc helper returns (outer,
+    # inner) in "source-structure" orientation matching the sd=+1 ⇒
+    # zone-above-body convention — for our case that's INVERTED to the
+    # probe's geometry because the source structure direction == probe
+    # direction and the legacy outer/inner convention put outer on the
+    # source direction side (= AWAY from body). For probe direction == +1
+    # the body grows up from the input candle and the zone (BOS_0)
+    # surrounds the input candle from BELOW — so inner = TOP of the zone
+    # (= ad-hoc's "inner" if we asked for the source structure direction).
+    # The ad-hoc helper's return is (outer, inner) where for sd=+1 outer
+    # = base_high and inner = some lower threshold (per zone_thresholds);
+    # that's NOT the probe's outer/inner. We re-key to probe semantics by
+    # taking min/max of the two values:
+    z_top = max(outer_geo, inner_geo)
+    z_bottom = min(outer_geo, inner_geo)
+    if probe_direction == 1:
+        ref_outer, ref_inner, side = z_bottom, z_top, "buy"
+    else:
+        ref_outer, ref_inner, side = z_top, z_bottom, "sell"
+    return ReferenceZone(
+        outer=float(ref_outer),
+        inner=float(ref_inner),
+        side=side,  # type: ignore[arg-type]
+        source="ad_hoc_bos_0",
+        source_event_idx=int(m15_input_idx),
+    )
+
+
+def _build_first_counter_ref_zone(
+    sibling_entity_df: Optional[pd.DataFrame],
+    parent_sid: int,
+    parent_cycle_id: int,
+    probe_direction: int,
+    m15_end_idx: int,
+) -> Optional["ReferenceZone"]:
+    """Reference zone for first_counter — sibling first_confluence's most
+    recent CTS event for the same (parent_sid, parent_cycle_id) sub_sid=0.
+
+    Filters `sibling_entity_df.attrs["events"]` + `["kl_zones"]` to just
+    the sibling first_confluence bootstrap (sub_sid=0 of the same parent
+    cycle), then delegates to `build_reference_zone_from_cts_event` —
+    same primitive subsequent_*/reversal will use in Sessions 3+.
+
+    Returns None when the sibling sub has no events yet (e.g., the
+    bootstrap couldn't build for this cycle — orchestrator-side
+    confluence-first ordering should make this very rare).
+    """
+    from engine_v2.structure.reference_zone import (
+        build_reference_zone_from_cts_event,
+    )
+
+    if sibling_entity_df is None:
+        return None
+    events = sibling_entity_df.attrs.get("events", [])
+    kl_zones = sibling_entity_df.attrs.get("kl_zones", [])
+    sibling_events = [
+        ev for ev in events
+        if ev.meta.get("parent_sid") == parent_sid
+        and ev.meta.get("parent_cycle_id") == parent_cycle_id
+        and ev.meta.get("sub_sid") == 0
+    ]
+    sibling_zones = [
+        z for z in kl_zones
+        if z.meta.get("parent_sid") == parent_sid
+        and z.meta.get("parent_cycle_id") == parent_cycle_id
+        and z.meta.get("sub_sid") == 0
+    ]
+    if not sibling_events:
+        return None
+    # Each sibling sub's MS run uses structure_id=0 locally. Filter window
+    # upper = the counter probe's end so we don't anachronistically pick a
+    # CTS from after the counter trigger.
+    return build_reference_zone_from_cts_event(
+        events=sibling_events,
+        kl_zones=sibling_zones,
+        df=sibling_entity_df,
+        sid=0,
+        probe_direction=int(probe_direction),
+        idx_window=(0, int(m15_end_idx)),
+    )
+
+
+def _resolve_first_via_unified_probe(
+    trigger: MultiTFTrigger,
+    parent_df: pd.DataFrame,
+    entity_df: pd.DataFrame,
+    sibling_entity_df: Optional[pd.DataFrame] = None,
+) -> Tuple[Optional[int], Optional[int]]:
+    """Unified-probe path for `first_counter` / `first_confluence` triggers
+    (Part 4 §4.3, Session 2 design pivot 2026-05-29).
+
+    Reference-zone sources (after the post-Gate-1 pivot):
+
+    - `first_confluence`: ad-hoc BOS_0 derived on M15 from the input_idx
+      candle (the parent BOS extreme price-mapped to M15). No parent or
+      sibling zone read — this is the bootstrap of the confluence entity
+      for this parent cycle, so nothing exists yet.
+    - `first_counter`: sibling first_confluence's most recent CTS event
+      (CONFIRMED → existing CTS zone; UPDATED/EST → ad-hoc CTS) — same
+      rule as subsequent_*. Requires `sibling_entity_df` (the confluence
+      entity's M15 df) to be passed in. The orchestrator builds
+      confluence before counter so this dependency resolves.
+
+    Reset predicate is two-condition (proximity + wick cap) per Session 1
+    design.
+
+    Returns ``(m15_start_idx, parent_extreme_idx)``. The second slot is
+    metadata only (consumed by ``sid_records.validated_parent_start``);
+    its meaning is "parent event extreme that seeded the M15 input."
+    Either may be None on a pending probe, failed mapping, or missing
+    sibling state for first_counter.
+    """
+    from engine_v2.multitf.data_bridge import map_candle_to_lower_tf
+    from engine_v2.structure.unified_probe import unified_probe
+
+    # 1. Parent event extreme. counter sets cts_anchor_idx; confluence
+    #    sets BOS_CONFIRMED.ev.idx (which IS the BOS extreme per §4.3.2).
+    raw_input = trigger.meta.get("probe_input_idx")
+    raw_end = trigger.meta.get("probe_end_idx")
+    if raw_input is None or raw_end is None:
+        print(
+            f"[entity_compute] WARNING: missing probe_input_idx/probe_end_idx "
+            f"in trigger meta for {trigger.use_case} sid={trigger.parent_sid} "
+            f"cycle={trigger.parent_cycle_id}"
+        )
+        return None, None
+    parent_extreme_idx = int(raw_input)
+    parent_end_idx = int(raw_end)
+    if parent_extreme_idx not in parent_df.index:
+        print(
+            f"[entity_compute] WARNING: probe_input_idx={parent_extreme_idx} "
+            f"out of parent_df bounds for {trigger.use_case} "
+            f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}"
+        )
+        return None, None
+
+    # 2. Price-map parent extreme → M15 input_idx. parent_extreme_dir =
+    #    -lower_sd (universal rule, spec §4.3.1).
+    parent_extreme_time = pd.to_datetime(
+        parent_df.loc[parent_extreme_idx, "time"], utc=True,
+    )
+    parent_extreme_dir = -trigger.lower_sd
+    m15_input_idx = map_candle_to_lower_tf(
+        parent_extreme_time, parent_extreme_dir, entity_df,
+    )
+    if m15_input_idx is None:
+        print(
+            f"[entity_compute] WARNING: parent→M15 input mapping failed for "
+            f"{trigger.use_case} sid={trigger.parent_sid} "
+            f"cycle={trigger.parent_cycle_id}"
+        )
+        return None, parent_extreme_idx
+
+    # 3. Time-map probe end_idx (parent gate candle → last M15 of its hour).
+    m15_end_idx = _map_parent_idx_to_m15_hour_end(
+        parent_end_idx, parent_df, entity_df,
+    )
+    if m15_end_idx is None:
+        print(
+            f"[entity_compute] WARNING: parent→M15 end mapping failed for "
+            f"{trigger.use_case} sid={trigger.parent_sid} "
+            f"cycle={trigger.parent_cycle_id}"
+        )
+        return None, parent_extreme_idx
+    if m15_end_idx <= m15_input_idx:
+        print(
+            f"[entity_compute] WARNING: degenerate probe window for "
+            f"{trigger.use_case} sid={trigger.parent_sid} "
+            f"cycle={trigger.parent_cycle_id} "
+            f"(m15_input={m15_input_idx} m15_end={m15_end_idx})"
+        )
+        return None, parent_extreme_idx
+
+    # 4. Build the per-trigger reference zone.
+    if trigger.use_case == "first_confluence":
+        ref_zone = _build_first_confluence_ref_zone(
+            entity_df, int(m15_input_idx), int(trigger.lower_sd),
+        )
+        ref_label = "ad_hoc_bos_0"
+    elif trigger.use_case == "first_counter":
+        ref_zone = _build_first_counter_ref_zone(
+            sibling_entity_df,
+            trigger.parent_sid, trigger.parent_cycle_id,
+            int(trigger.lower_sd), int(m15_end_idx),
+        )
+        ref_label = "sibling_confluence_cts"
+    else:
+        raise ValueError(
+            f"_resolve_first_via_unified_probe called with unsupported "
+            f"use_case={trigger.use_case!r}"
+        )
+    if ref_zone is None:
+        print(
+            f"[entity_compute] WARNING: {ref_label} reference zone unavailable "
+            f"for {trigger.use_case} sid={trigger.parent_sid} "
+            f"cycle={trigger.parent_cycle_id} — skipping trigger"
+        )
+        return None, parent_extreme_idx
+
+    # 5. Run the unified probe on M15.
+    # enable_phase2 only for first_confluence (the trigger whose end_idx
+    # is NULL until parent CTS_CONFIRMED, making the post-end_idx MS
+    # search structurally necessary — see PART4 §4.4 / project memory).
+    _enable_phase2 = (trigger.use_case == "first_confluence")
+    result = unified_probe(
+        entity_df,
+        input_idx=int(m15_input_idx),
+        direction=int(trigger.lower_sd),
+        reference_zone=ref_zone,
+        end_idx=int(m15_end_idx),
+        timeframe="M15",
+        enable_phase2=_enable_phase2,
+    )
+    print(
+        f"[entity_compute] unified_probe ({trigger.use_case}): "
+        f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id} "
+        f"m15_input={m15_input_idx} m15_end={m15_end_idx} "
+        f"ref={ref_zone.source} -> start={result.start_idx} "
+        f"status={result.status} cond={result.finalize_condition} "
+        f"iter={result.iterations}"
+    )
+
+    if result.status == "pending":
+        print(
+            f"[entity_compute] PENDING: unified_probe did not finalize for "
+            f"{trigger.use_case} sid={trigger.parent_sid} "
+            f"cycle={trigger.parent_cycle_id}; skipping M15 build"
+        )
+        return None, parent_extreme_idx
+
+    return int(result.start_idx), parent_extreme_idx
+
+
+def _resolve_via_legacy_probe(
     trigger: MultiTFTrigger,
     parent_df: pd.DataFrame,
     entity_df: pd.DataFrame,
 ) -> Tuple[Optional[int], Optional[int]]:
-    """Run the parent-TF probe and map the validated start to entity-absolute
-    M15 idx.
-
-    Returns ``(m15_start_idx, validated_parent_idx)`` — either may be None on
-    a pending/failed probe or a failed parent→M15 mapping. Pulled out of the
-    old ``apply_trigger_to_entity_df`` steps 1–2 so the chain driver can reuse
-    it for every trigger-born sid (bootstrap + subsequent_*). Reversal-born
-    sids do NOT use this — their start comes from ``identify_start`` on the
-    sub's own data inside ``build_one_sid``.
+    """Legacy Scenario-3-on-parent-TF probe + post-probe parent→M15
+    mapping. Retained for ``subsequent_*`` triggers until their migration
+    lands in Session 3 (per the Phase 1 migration plan in
+    ``memory/project_unified_identify_start_probe.md``).
     """
     from engine_v2.multitf.data_bridge import map_candle_to_lower_tf
     from engine_v2.multitf.lower_tf_pipeline import _run_subordinate_probe
@@ -416,14 +679,13 @@ def _resolve_trigger_m15_start(
     parent_start_time = pd.to_datetime(
         parent_df.loc[validated_parent_idx, "time"], utc=True,
     )
-    mapping_sd = -trigger.lower_sd  # §4.3.1 unified rule
-    if mapping_sd == 1:
-        parent_start_price = float(parent_df.loc[validated_parent_idx, "h"])
-    else:
-        parent_start_price = float(parent_df.loc[validated_parent_idx, "l"])
+    # Universal mapping rule (§4.3.1 + LANDMINE "Subordinate mapping must
+    # use `-lower_sd`"): the side of the parent hour we anchor on is the
+    # OUTER of the sub's reference zone, which is the -lower_sd side.
+    parent_extreme_dir = -trigger.lower_sd
 
     m15_start_idx = map_candle_to_lower_tf(
-        parent_start_time, parent_start_price, mapping_sd, entity_df,
+        parent_start_time, parent_extreme_dir, entity_df,
     )
     if m15_start_idx is None:
         print(
@@ -433,6 +695,55 @@ def _resolve_trigger_m15_start(
         )
         return None, validated_parent_idx
     return m15_start_idx, validated_parent_idx
+
+
+# Use cases routed through the new unified-probe path (Session 2 scope).
+# Other use cases (subsequent_*) stay on the legacy path until their
+# Session 3 migration.
+_UNIFIED_PROBE_USE_CASES = frozenset({"first_counter", "first_confluence"})
+
+
+def _resolve_trigger_m15_start(
+    trigger: MultiTFTrigger,
+    parent_df: pd.DataFrame,
+    entity_df: pd.DataFrame,
+    sibling_entity_df: Optional[pd.DataFrame] = None,
+) -> Tuple[Optional[int], Optional[int]]:
+    """Resolve a trigger's M15 starting idx (entity-absolute) — dispatcher.
+
+    Routes by ``trigger.use_case``:
+
+    - ``first_counter`` / ``first_confluence`` → unified-probe path (M15
+      probe; first_confluence consults an ad-hoc BOS_0; first_counter
+      consults sibling first_confluence's most recent CTS — Session 2
+      post-pivot design).
+    - ``subsequent_confluence`` / ``subsequent_counter`` → legacy
+      parent-TF Scenario-3 + post-probe mapping (until Session 3
+      migration).
+
+    Reversal-born sids do NOT call this — their start comes from
+    ``identify_start_scenario_2_after_reversal`` on the sub's own data
+    inside ``build_one_sid``.
+
+    ``sibling_entity_df`` is the OTHER multi-TF entity's df (confluence
+    if this is counter, None otherwise). Only first_counter consumes it
+    (to look up sibling first_confluence's CTS for its reference zone);
+    every other use_case ignores it. The orchestrator builds confluence
+    before counter so the confluence entity_df is populated when counter
+    asks for it.
+
+    Returns ``(m15_start_idx, validated_or_extreme_parent_idx)``. The
+    second slot is consumed only as metadata
+    (``sid_records.validated_parent_start``); semantics shift slightly
+    between paths (legacy = probe-converged parent idx; unified = parent
+    event extreme that seeded the M15 input).
+    """
+    if trigger.use_case in _UNIFIED_PROBE_USE_CASES:
+        return _resolve_first_via_unified_probe(
+            trigger, parent_df, entity_df,
+            sibling_entity_df=sibling_entity_df,
+        )
+    return _resolve_via_legacy_probe(trigger, parent_df, entity_df)
 
 
 def _map_parent_idx_to_m15_hour_end(
@@ -787,6 +1098,7 @@ def build_parent_cycle_chain(
     subsequents: List[MultiTFTrigger],
     sub_path_id: str,
     parent_cycle_floor_h1: Optional[Dict[tuple, int]] = None,
+    sibling_entity_df: Optional[pd.DataFrame] = None,
 ) -> List[LowerTFResult]:
     """Build one parent cycle's subordinate sid chain (Part 4 §6.1 merge-and-bound).
 
@@ -816,9 +1128,12 @@ def build_parent_cycle_chain(
     """
     results: List[LowerTFResult] = []
 
-    # Bootstrap start (entity-absolute).
+    # Bootstrap start (entity-absolute). `sibling_entity_df` (confluence
+    # for counter, None for confluence) only matters for `first_counter`
+    # which consults sibling first_confluence's CTS for its reference zone.
     m15_start_0, validated_parent_0 = _resolve_trigger_m15_start(
         bootstrap, parent_df, entity_df,
+        sibling_entity_df=sibling_entity_df,
     )
     if m15_start_0 is None:
         print(
@@ -854,7 +1169,10 @@ def build_parent_cycle_chain(
     # through — §6.1). boundary = trigger_event_idx mapped to M15 hour-end.
     resolved_subs: List[Dict[str, Any]] = []
     for sub in subsequents:
-        s_start, s_valid = _resolve_trigger_m15_start(sub, parent_df, entity_df)
+        s_start, s_valid = _resolve_trigger_m15_start(
+            sub, parent_df, entity_df,
+            sibling_entity_df=sibling_entity_df,
+        )
         if s_start is None:
             continue
         tei = sub.meta.get("trigger_event_idx")

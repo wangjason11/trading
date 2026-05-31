@@ -89,17 +89,24 @@ def prepare_lower_tf_data(
 
 def map_candle_to_lower_tf(
     h1_time: pd.Timestamp,
-    h1_extreme_price: float,
-    h1_sd: int,
+    parent_extreme_dir: int,
     m15_df: pd.DataFrame,
 ) -> Optional[int]:
-    """Map an H1 candle to the M15 candle whose extreme matches.
+    """Map an H1 hour to the M15 candle whose extreme matches it.
 
     H1 candle at time T covers M15 candles at T+0, T+15, T+30, T+45.
-    For sd=+1 (CTS marks high): find M15 candle with highest high; tie -> last.
-    For sd=-1 (CTS marks low): find M15 candle with lowest low; tie -> last.
 
-    Returns the M15 DataFrame index, or None if no candles found.
+    - ``parent_extreme_dir == +1`` → find M15 candle with the HIGHEST high
+      in the H1 hour (tie: last). Used to anchor a parent-TF extreme that
+      sits on the +1 side (e.g., parent CTS extreme for parent_sd=+1, or
+      parent BOS extreme for parent_sd=+1 in the post-probe map).
+    - ``parent_extreme_dir == -1`` → find M15 candle with the LOWEST low.
+
+    Callers compute ``parent_extreme_dir`` per spec §4.3.1: the universal
+    rule is ``parent_extreme_dir = -lower_sd`` (= the side of the parent
+    hour that anchors the OUTER of the sub's reference zone).
+
+    Returns the M15 DataFrame index, or None if no candles in the hour.
     """
     h1_time = pd.to_datetime(h1_time, utc=True)
     h1_end = h1_time + timedelta(hours=1)
@@ -113,13 +120,13 @@ def map_candle_to_lower_tf(
         print(f"[data_bridge] WARNING: No M15 candles in H1 window {h1_time} - {h1_end}")
         return None
 
-    if h1_sd == 1:
-        # CTS marks HIGH -> find M15 with highest high (tie: last)
+    if parent_extreme_dir == 1:
+        # Match the H1 high → M15 with the highest high (tie: last)
         max_high = candidates["h"].max()
         matches = candidates[candidates["h"] == max_high]
         best_idx = int(matches.index[-1])
     else:
-        # CTS marks LOW -> find M15 with lowest low (tie: last)
+        # Match the H1 low → M15 with the lowest low (tie: last)
         min_low = candidates["l"].min()
         matches = candidates[candidates["l"] == min_low]
         best_idx = int(matches.index[-1])

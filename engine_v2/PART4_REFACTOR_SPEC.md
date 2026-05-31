@@ -233,20 +233,33 @@ The probe is the existing Scenario 3 BOS_0 iterative probe (today's
 | `subsequent_confluence` | `parent_sd` | parent's TF |
 | `subsequent_counter` | `-parent_sd` | parent's TF |
 
-After the probe, the parent-TF `starting_idx` is mapped down to the
-subordinate's TF using:
+Parent → sub-TF mapping is determined by a single rule (Session 2 rename
++ generalization 2026-05-29):
 
-> `mapping_sd = -sub_sd`
+> `parent_extreme_dir = -lower_sd`
 
-Where `sub_sd` is the subordinate's `starting_sd`. This rule is
-direction-of-the-sub-being-built and does not require knowing parent_sd
-directly. (`map_candle_to_lower_tf` in `data_bridge.py` already
-implements the "highest high" / "lowest low" selection given
-`mapping_sd`.)
+Where `lower_sd` is the subordinate's direction. `parent_extreme_dir` is
+the side of the parent hour the M15 candle must match (`+1` → M15 with
+max-high in the H1 hour; `-1` → min-low). The rule applies to BOTH:
 
-> **Refactor note:** today's UC1 sets `mapping_sd = parent_sd` (which
-> happens to equal `-sub_sd` for counter subs). Change to
-> `mapping_sd = -sub_sd` for the unified rule.
+- **Legacy post-probe map** (subsequent_* until Session 3): the
+  probe-validated parent idx is mapped to a sub-TF candle whose extreme
+  on the `-lower_sd` side seeds the sub start. (`map_candle_to_lower_tf`
+  in `data_bridge.py` implements the selection.)
+- **New first_* input map** (Session 2): the parent EVENT extreme (BOS
+  for first_confluence, CTS for first_counter) is mapped to a sub-TF
+  candle whose extreme on the `-lower_sd` side becomes the unified
+  probe's `input_idx`. The chosen M15 candle is the one whose extreme
+  touches the OUTER of the sub's reference zone.
+
+Both pre- and post-Session-2 forms use the SAME numeric formula
+(`parent_extreme_dir = -lower_sd`); only the *which parent idx is being
+mapped* shifts (probe-validated → event-extreme). The signature change
+on `map_candle_to_lower_tf` dropped the unused `h1_extreme_price` arg
+and renamed `mapping_sd`/`h1_sd` → `parent_extreme_dir`; the LANDMINE
+"Subordinate `parent_extreme_dir` must use `-lower_sd`" tracks the
+non-obvious case (first_confluence diverges from a naive
+`parent_sd`-based mapping).
 
 #### 4.3.2 `first_confluence` — first sub of a parent cycle, sd = parent_sd
 
@@ -410,10 +423,27 @@ at the next parent BOS_confirmed.
 
 | Variation | Trigger | Input idx | End idx | Reference zone | Probe sd |
 |---|---|---|---|---|---|
-| `first_confluence` | Parent BOS_confirmed | Parent BOS extreme | Parent CTS **extreme** (`cts_anchor_idx`; NULL until parent CTS_confirmed fires) | Active parent BOS zone | `+parent_sd` |
-| `first_counter` | 1st parent sd-proximity post-CTS | Parent CTS idx | This trigger candle | Active parent CTS zone | `-parent_sd` |
+| `first_confluence` | Parent BOS_confirmed | Parent BOS extreme | Parent CTS **extreme** (`cts_anchor_idx`; NULL until parent CTS_confirmed fires) | **Ad-hoc BOS_0 on sub TF** (derived from input_idx candle on M15) | `+parent_sd` |
+| `first_counter` | 1st parent sd-proximity post-CTS | Parent CTS idx | This trigger candle | **Sibling first_confluence's most recent CTS** (existing zone if CONFIRMED; ad-hoc CTS if UPDATED/EST) | `-parent_sd` |
 | `subsequent_confluence` | Parent CTS-proximity after sd-prox | Parent-TF window extreme toward BOS | This trigger candle | Counter-sub zone at lower-TF extreme (with fallback) | `+parent_sd` |
-| `subsequent_counter` | Parent sd-prox forming Λ / V | Parent-TF Λ apex / V trough at CTS zone | This trigger candle | Active parent CTS zone | `-parent_sd` |
+| `subsequent_counter` | Parent sd-prox forming Λ / V | Parent-TF Λ apex / V trough at CTS zone | Sibling confluence's most recent CTS (same rule as first_counter) | `-parent_sd` |
+
+**Reference-zone pivot (2026-05-29, Session 2 post-Gate-1).** Earlier
+designs had `first_*` consulting the parent's H1 BOS/CTS zones. Gate-1
+/compare showed many shifts caused by H1 zone bounds being wider than
+M15 candles' tolerance, and the probe finding shallow M15 retraces that
+weren't structural. The fix: every probe references a zone on the sub's
+own TF. For `first_confluence` (no prior structure on the sub yet) that
+zone is an ad-hoc BOS_0 derived from the input_idx candle. For
+`first_counter` (sibling first_confluence has run by build order) it's
+the sibling's most recent CTS — same rule subsequent_* uses.
+
+**Build-order dependency.** `first_counter`'s sibling-CTS lookup
+requires the confluence M15 entity_df to be populated before counter
+builds. The orchestrator enforces this by running
+`_run_first_confluence_multi_tf` strictly before `_run_multi_tf`
+(counter). See LANDMINES "first_counter Depends on Confluence Building
+First".
 
 ---
 
@@ -443,6 +473,65 @@ outer). Must be ≤ `DEFAULT_PROBE_RESET_WICK[tf]` pips.
 Condition 2 is the new ingredient — rejects single-candle stab wicks
 that pass condition 1 today but represent transient spikes rather than
 structural retraces.
+
+### Two-phase probe design (2026-05-31)
+
+The probe runs in two phases:
+
+**Phase 1 (deterministic, no MS, runs for every caller).** Walks
+`df.pat` from `current_start` to `end_idx`, finds the first breakout
+pattern in the probe's direction whose anchor's extreme is a new
+running max/min over `[current_start, idx - 1]`. The retrace search
+then evaluates the 2-condition reset on the deepest candidate in
+`[true_X + 1, end_idx]`. Successful reset advances `current_start`
+and Phase 1 iterates. No qualifying retrace finalizes at
+`current_start`.
+
+For `first_counter`, `subsequent_confluence`, `subsequent_counter`,
+and `reversal` callers, Phase 1 is the entire probe. No MS run.
+
+**Phase 2 (MS-based, runs only when `enable_phase2=True`, used only
+for `first_confluence`).** Picks up from Phase 1's final
+`current_start`. Runs MS with `enforce_cts0_new_extreme=True` (the
+opt-in MarketStructure flag added 2026-05-31). The retrace search
+window becomes:
+
+- `[CTS_0_est + 1, cts_anchor_idx - 1]` once CTS_0 confirms (the
+  cycle's CTS extreme bounds the retrace).
+- `[CTS_0_est + 1, end_idx]` if `end_idx` is reached without
+  CTS_0_CONFIRMED.
+
+Phase 2 terminates via:
+- Successful reset (advance `current_start`, iterate).
+- Reversal AND fewer than 2 CTS_EST → `reversal_in_probe`.
+- Second CTS_EST present AND no qualifying retrace →
+  `second_cts_reached` (cycle 0 completed without a reset, cycle 1
+  begun).
+- No qualifying retrace AND no 2nd CTS_EST → `no_retrace` (backtest
+  with `end_idx` defined).
+- `end_idx` reached without any CTS_EST → `end_idx_reached`.
+
+### `enforce_cts0_new_extreme` MS flag
+
+Opt-in `MarketStructure` constructor parameter. When True, MS rejects
+a breakout pattern that would establish cycle 0 unless its anchor's
+extreme is the running max/min over `[start_idx, cts_idx - 1]`.
+Subsequent cycles (`cts_cycle_id >= 1`) are unaffected — they break
+the prior CTS's threshold by MS construction, so they're implicitly
+new extremes. Default False preserves existing behavior. Currently
+used only by Phase 2 of `unified_probe`.
+
+**Deferred extensions (open items):**
+
+1. **Main structure trading_open (sid=0 cycle=0)** — flip
+   `enforce_cts0_new_extreme=True` for the main pipeline's structure
+   call so the initial BOS_0 → CTS_0 sequence anchors at the true
+   furthest point from BOS_0. Today's main pipeline omits the flag;
+   `identify_start_scenario_1` doesn't enforce it. Deferred to a
+   future session — mechanism is in place, just needs wiring.
+2. **Legacy `_resolve_via_legacy_probe` (subsequent_* via Scenario 3
+   on parent_df)** — once subsequent_* migrates to `unified_probe` in
+   Session 3, they get Phase 1 (no MS, big perf win) for free.
 
 ### Threshold tables
 

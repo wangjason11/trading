@@ -258,7 +258,7 @@ def _install_stubs(monkeypatch, *, cycle_end, reversals=None):
     reversals = reversals or {}
     calls: list[dict] = []
 
-    def fake_resolve(trigger, parent_df, entity_df):
+    def fake_resolve(trigger, parent_df, entity_df, sibling_entity_df=None):
         return trigger.meta.get("_test_start"), 0
 
     def fake_map(parent_idx, parent_df, m15_df):

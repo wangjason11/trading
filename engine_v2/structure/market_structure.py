@@ -250,6 +250,7 @@ class MarketStructure:
         bos_inner_resolver: Optional[BosInnerResolver] = None,
         poi_inners_resolver: Optional[PoiInnersResolver] = None,
         fill_threshold: float = 0.70,
+        enforce_cts0_new_extreme: bool = False,
     ):
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
@@ -259,6 +260,13 @@ class MarketStructure:
         self.end_idx = int(end_idx) if end_idx is not None else None  # optional stopping point (inclusive)
         self.eps = float(eps)
         self.debug_invariants = bool(debug_invariants)
+        # Opt-in 'true first breakout' rule (see PART4_REFACTOR_SPEC §4.4
+        # / project_unified_identify_start_probe memory). When True, MS
+        # rejects a breakout pattern that would establish cycle 0 unless
+        # its anchor's extreme is the running max/min over
+        # [start_idx, cts_idx - 1]. Default False preserves existing
+        # behavior — only Phase 2 of the unified probe passes True.
+        self.enforce_cts0_new_extreme = bool(enforce_cts0_new_extreme)
 
         self.state = MarketStructureState(struct_direction=struct_direction, structure_id=0)
         self.state.struct_direction = int(struct_direction)
@@ -1349,12 +1357,26 @@ class MarketStructure:
         #     return
 
         if kind == "breakout":
+            # CTS from breakout window extreme (already correct helper).
+            # Resolve before any state mutation so the cycle-0 new-extreme
+            # check below can compare against an untouched state.
+            cts_idx, cts_price = self._cts_from_breakout_event(ev)
+
+            # Cycle-0 new-extreme gate (opt-in via
+            # `enforce_cts0_new_extreme`). When set, the FIRST breakout
+            # pattern of the MS run only counts as cycle 0's establishment
+            # if its anchor's extreme is a new running max/min over
+            # `[start_idx, cts_idx - 1]`. A pattern whose anchor sits
+            # shallower than some earlier candle in the window is
+            # treated as if it never fired — MS continues scanning.
+            # See PART4 §4.4 and project_unified_identify_start_probe.
+            if st.cts is None and self.enforce_cts0_new_extreme:
+                if not self._cts0_new_extreme_passes(cts_idx, cts_price):
+                    return
+
             # Breakout breaks range (if active)
             if st.range_active:
                 self._deactivate_range(apply_idx, meta={"reason": "range_breakout", "pat": ev.name})
-
-            # CTS from breakout window extreme (already correct helper)
-            cts_idx, cts_price = self._cts_from_breakout_event(ev)
 
             # Establishing a NEW CTS cycle only if:
             #   - CTS is None (first ever), OR
@@ -1653,6 +1675,25 @@ class MarketStructure:
     #         StructureEvent(idx=idx, category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=meta or {})
     #     )
     #     self.state.cts_event = "CTS_ESTABLISHED"  # written to df row via _write_df_row
+
+    def _cts0_new_extreme_passes(self, cts_idx: int, cts_price: float) -> bool:
+        """Cycle-0 new-extreme gate (opt-in via `enforce_cts0_new_extreme`).
+
+        Returns True iff `cts_price` is the new running max (for sd=+1)
+        or min (for sd=-1) over `[self.start_idx, cts_idx - 1]`. A
+        breakout pattern that fails this check did not actually reach
+        further than something earlier in the probe window, so it
+        doesn't count as cycle 0's establishment. `cts_idx` at or before
+        `start_idx` trivially passes (empty prior window).
+        """
+        if cts_idx <= self.start_idx:
+            return True
+        prior = self.df.loc[self.start_idx:cts_idx - 1]
+        if prior.empty:
+            return True
+        if self.struct_direction == 1:
+            return float(cts_price) >= float(prior["h"].astype(float).max())
+        return float(cts_price) <= float(prior["l"].astype(float).min())
 
     def _emit_cts_established(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
         meta2 = dict(meta or {})

@@ -582,25 +582,13 @@ def run_pipeline(
                 _sid_floor = _h1_struct_start.get(_csid, int(ev.idx))
                 parent_cycle_floor_h1[(_csid, _ccyc)] = max(_sid_floor, int(ev.idx))
 
-        _t0 = time.perf_counter()
-        lower_tf_results = _run_multi_tf(
-            s_res.df,
-            sorted_events,
-            wvmi_records,
-            kl_zones,
-            poi_zones,
-            meta,
-            registry,
-            subsequent_counter_triggers=subsequent_counter_triggers,
-            parent_cycle_floor_h1=parent_cycle_floor_h1,
-        )
-        timing["multi_tf_counter"] = time.perf_counter() - _t0
-
-        # Part 4 Step 3b/3d: confluence subs (var 1 + var 3).
-        # Built independently of first_counter — gets its own M15 entity df.
-        # Var 1 sids land first; var 3 sids appended afterward (the spec's
-        # in-place overwrite semantics from §6.1 are deferred to a later
-        # substep — see subsequent_confluence_pipeline.py docstring).
+        # Build confluence FIRST (Session 2 post-pivot 2026-05-29): the
+        # new first_counter reference-zone rule consults sibling
+        # first_confluence's most recent CTS for the same parent cycle.
+        # That requires confluence's M15 entity_df to be populated when
+        # counter's chain driver fires. Confluence has no equivalent
+        # dependency (its ad-hoc BOS_0 anchors on its own input candle),
+        # so the order is strictly confluence → counter.
         _t0 = time.perf_counter()
         confluence_results = _run_first_confluence_multi_tf(
             s_res.df,
@@ -612,6 +600,26 @@ def run_pipeline(
             parent_cycle_floor_h1=parent_cycle_floor_h1,
         )
         timing["multi_tf_confluence"] = time.perf_counter() - _t0
+
+        # Pull the freshly-built confluence M15 entity_df from the registry
+        # so counter's first_counter probes can look up sibling CTS events.
+        _conf_entity = registry.get("H1.main >> M15.confluence")
+        sibling_confluence_df = _conf_entity.df if _conf_entity else None
+
+        _t0 = time.perf_counter()
+        lower_tf_results = _run_multi_tf(
+            s_res.df,
+            sorted_events,
+            wvmi_records,
+            kl_zones,
+            poi_zones,
+            meta,
+            registry,
+            subsequent_counter_triggers=subsequent_counter_triggers,
+            parent_cycle_floor_h1=parent_cycle_floor_h1,
+            sibling_confluence_df=sibling_confluence_df,
+        )
+        timing["multi_tf_counter"] = time.perf_counter() - _t0
 
     meta["lower_tf_results"] = lower_tf_results
     meta["first_confluence_results"] = confluence_results
@@ -925,6 +933,7 @@ def _run_multi_tf(
     registry: StructureRegistry,
     subsequent_counter_triggers: Optional[list] = None,
     parent_cycle_floor_h1: Optional[Dict[tuple, int]] = None,
+    sibling_confluence_df: Optional[pd.DataFrame] = None,
 ) -> list:
     """Run multi-TF analysis for the M15.counter entity (var 2 + var 4).
 
@@ -1013,6 +1022,7 @@ def _run_multi_tf(
             bootstrap=bootstrap, subsequents=subs,
             sub_path_id=sub_path_id,
             parent_cycle_floor_h1=parent_cycle_floor_h1,
+            sibling_entity_df=sibling_confluence_df,
         )
         stream = _counter_trigger_stream(key, var3_all_sorted)
         c = _assign_trigger_centric_sub_wvmi(

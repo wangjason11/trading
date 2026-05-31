@@ -554,12 +554,47 @@ registry, never from `dfx.attrs["lower_tf_results"]`.
 
 ---
 
-## Subordinate `mapping_sd` Must Use `-trigger.lower_sd`
+## first_counter Depends on Confluence Building First
 
-**Rule:** In `multitf/lower_tf_pipeline.run_lower_tf_pipeline`, the
-mapping step that picks the lower-TF candle within the validated parent
-candle MUST use `mapping_sd = -trigger.lower_sd` (spec §4.3.1 unified
-rule).
+**Rule:** `_run_first_confluence_multi_tf` must run BEFORE `_run_multi_tf`
+(counter) in the orchestrator. `first_counter`'s probe reference zone is
+sibling `first_confluence`'s most recent CTS for the same parent cycle
+(spec §4.3.3, Session 2 post-pivot). The confluence M15 entity_df must
+already be populated when counter's chain driver fires.
+
+**Why this is a landmine:** the legacy order had counter FIRST,
+confluence second — and the per-entity build was framed as independent.
+A future cleanup that "tidies up" the order swap (e.g., to share more
+state between the two paths, or restore alphabetical consistency) would
+silently break `first_counter`: `_resolve_first_via_unified_probe` would
+see an empty `sibling_entity_df.attrs["events"]` and return None, every
+first_counter bootstrap would skip, and every parent cycle's counter
+sub_sid=0 would disappear from the output. The chain driver continues
+(no exception) so the regression manifests only via `/compare` deltas.
+
+**Phase 1 reality:** the per-entity sequential order is the simplest
+expression of the dependency. Phase 1 Session 3 may move both entities
+under a per-parent-cycle two-entity driver that interleaves them in
+cadence order across triggers — once that lands, the orchestrator-level
+ordering becomes irrelevant (the driver handles it internally).
+
+---
+
+## Subordinate `parent_extreme_dir` Must Use `-trigger.lower_sd`
+
+**Rule:** Every parent→sub-TF mapping step MUST compute
+`parent_extreme_dir = -trigger.lower_sd` (spec §4.3.1 unified rule).
+This applies to both call sites:
+
+- `multitf/entity_df_mutation._resolve_via_legacy_probe` — legacy
+  post-probe map for subsequent_* triggers (until Session 3 migration).
+- `multitf/entity_df_mutation._resolve_first_via_unified_probe` —
+  Session 2 first_* path mapping the parent EVENT extreme to a sub-TF
+  `input_idx` for the unified probe.
+
+Both sites pass the value to `map_candle_to_lower_tf(time,
+parent_extreme_dir, m15_df)` (signature post-2026-05-29 rename from the
+older `mapping_sd` / `h1_sd` parameter — same numeric semantics).
 
 **Why this is a landmine:** for `first_counter`, `lower_sd = -parent_sd`,
 so `-lower_sd == parent_sd` — meaning earlier code (`mapping_sd =
@@ -570,9 +605,10 @@ way.
 But for `first_confluence` (3b+), `lower_sd = +parent_sd`, so the two
 expressions diverge:
 - `-lower_sd = -parent_sd` ✓ correct (BOS extreme: lowest low in bullish
-  parent, highest high in bearish)
-- `parent_sd` ✗ wrong (would map to the parent CTS extreme, which is the
-  wrong direction for a confluence sub)
+  parent, highest high in bearish — the BOS candle's deepest touch of
+  the broken zone, which is the OUTER of the confluence sub's reference)
+- `parent_sd` ✗ wrong (would map to the parent BOS HIGH instead of LOW,
+  shifting the confluence sub's input_idx off its proper anchor)
 
 A future "simplification" back to `trigger.parent_sd` silently corrupts
 every confluence (and any future variation where `lower_sd != -parent_sd`)

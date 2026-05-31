@@ -43,20 +43,45 @@ class ReferenceZone:
     """A probe's reference zone — the price target the probe checks
     retraces against.
 
-    `outer` / `inner` are semantic (outer = away from struct direction;
-    inner = near the body). For sd=+1 the zone sits ABOVE price (sell
-    side), so outer=top, inner=bottom. For sd=-1 the zone sits BELOW
-    price (buy side), so outer=bottom, inner=top.
+    Outer/inner semantics are keyed off the **probe's direction** (not the
+    source zone's parent direction):
+
+    - **Probe direction +1** (uptrend): structure body grows UP from
+      `input_idx`; reference zone sits BELOW body; retraces of the
+      uptrend go DOWN and approach the zone from above. So
+      ``inner = z.top`` (body-facing side of zone-below-body) and
+      ``outer = z.bottom`` (far side). ``side="buy"`` (zone acts as
+      support).
+    - **Probe direction -1** (downtrend): body grows DOWN; reference is
+      ABOVE body; retraces approach from below. ``inner = z.bottom``,
+      ``outer = z.top``. ``side="sell"`` (zone acts as resistance).
+
+    Numerically: ``inner > outer`` for +1 probes; ``inner < outer`` for
+    -1 probes.
 
     `source` records provenance for debug/attribution. `source_event_idx`
-    is the idx of the CTS event the zone was derived from (the CTS extreme
-    for UPDATED/ESTABLISHED; `cts_anchor_idx` for CONFIRMED), NOT the
-    confirmation candle.
+    is the parent-frame idx of the structural event the zone was derived
+    from:
+
+    - ``cts_confirmed`` → ``cts_anchor_idx`` (the CTS extreme, NOT the
+      later confirmation candle)
+    - ``cts_updated`` / ``cts_established`` → the event's own idx (which
+      IS the CTS extreme for these types)
+    - ``parent_cts`` / ``parent_bos`` → the parent's CTS / BOS extreme
+      idx (used by ``first_*`` triggers whose reference is the parent's
+      existing zone)
     """
     outer: float
     inner: float
     side: Literal["buy", "sell"]
-    source: Literal["cts_confirmed", "cts_updated", "cts_established"]
+    source: Literal[
+        "cts_confirmed",
+        "cts_updated",
+        "cts_established",
+        "parent_cts",
+        "parent_bos",
+        "ad_hoc_bos_0",
+    ]
     source_event_idx: int
 
 
@@ -90,54 +115,80 @@ def _find_existing_cts_kl_zone(
 
 def _zone_to_reference(
     z: KLZone,
-    direction: int,
+    probe_direction: int,
     source: str,
     source_event_idx: int,
 ) -> ReferenceZone:
     """Convert a KLZone's geographic (top/bottom) to a probe's semantic
-    (outer/inner) per `direction`.
+    (outer/inner), keyed off the **probe's direction** (= the new
+    structure's lower_sd, NOT the source zone's parent direction).
 
-    For sd=+1: CTS is a sell zone above price → outer=top, inner=bottom.
-    For sd=-1: CTS is a buy zone below price → outer=bottom, inner=top.
+    See ReferenceZone docstring for the full rule. In short:
+
+    - ``probe_direction == +1``: body above zone → ``inner = z.top``,
+      ``outer = z.bottom``, ``side = "buy"``.
+    - ``probe_direction == -1``: body below zone → ``inner = z.bottom``,
+      ``outer = z.top``, ``side = "sell"``.
+
+    This rule is universal across all reference-zone sources (parent BOS,
+    parent CTS, sibling CTS, prior-sid CTS): regardless of how the source
+    zone relates to its own parent's direction, ``inner`` is always the
+    side closest to the body of the structure being probed.
     """
-    if direction == 1:
+    if probe_direction == 1:
         return ReferenceZone(
-            outer=float(z.top),
-            inner=float(z.bottom),
-            side="sell",
+            outer=float(z.bottom),
+            inner=float(z.top),
+            side="buy",
             source=source,  # type: ignore[arg-type]
             source_event_idx=int(source_event_idx),
         )
     return ReferenceZone(
-        outer=float(z.bottom),
-        inner=float(z.top),
-        side="buy",
+        outer=float(z.top),
+        inner=float(z.bottom),
+        side="sell",
         source=source,  # type: ignore[arg-type]
         source_event_idx=int(source_event_idx),
     )
 
 
-def _derive_cts_zone_ad_hoc(
+def _derive_zone_ad_hoc(
     df: pd.DataFrame,
-    extreme_idx: int,
+    anchor_idx: int,
     direction: int,
+    *,
+    bos: bool,
 ) -> Optional[Tuple[float, float, Literal["buy", "sell"]]]:
-    """Derive an ad-hoc CTS zone (outer, inner, side) from the extreme
-    candle alone. Mirrors `derive_kl_zones_v1`'s per-event derivation for
-    `CTS_*` events (anchor=extreme, `identify_base_pattern(..., bos=False)`,
-    `zone_thresholds(..., bos=False)`).
+    """Derive an ad-hoc zone (outer, inner, side) from a single anchor
+    candle. Mirrors `derive_kl_zones_v1`'s per-event derivation:
 
-    Returns None if the base pattern can't be identified or `extreme_idx`
-    is out of df bounds — the caller's probe will skip this iteration.
+    - ``bos=False`` (CTS-style): `identify_base_pattern(..., bos=False)` +
+      `zone_thresholds(..., bos=False)`. Used by reversal /
+      subsequent_* fallback paths whose source event is CTS_UPDATED /
+      CTS_ESTABLISHED (no derived KL zone yet).
+    - ``bos=True`` (BOS-style): `identify_base_pattern(..., bos=True)` +
+      `zone_thresholds(..., bos=True)`. Used by first_confluence (the
+      sub's "first BOS the new structure would form" — anchored at the
+      M15 input_idx, which is the parent BOS extreme price-mapped to M15).
+
+    `direction` is the SOURCE structure's direction in both cases (= the
+    "side" assignment below in geographic terms — sd=+1 ⇒ structure
+    rising ⇒ zone-of-its-own-extreme on the +1 side ⇒ "sell" geographic
+    label for that zone). The caller's probe then re-interprets via
+    `_zone_to_reference(z, probe_direction)`.
+
+    Returns None if the base pattern can't be identified or `anchor_idx`
+    is out of df bounds — the caller's probe will skip / treat as
+    missing.
     """
-    if extreme_idx not in df.index:
+    if anchor_idx not in df.index:
         return None
     try:
         zone_pattern, base_idx = identify_base_pattern(
             df,
-            anchor_idx=int(extreme_idx),
+            anchor_idx=int(anchor_idx),
             struct_direction=int(direction),
-            bos=False,
+            bos=bool(bos),
         )
         if base_idx is None or base_idx not in df.index:
             return None
@@ -146,7 +197,7 @@ def _derive_cts_zone_ad_hoc(
             base_idx=int(base_idx),
             struct_direction=int(direction),
             zone_pattern=zone_pattern,
-            bos=False,
+            bos=bool(bos),
         )
     except Exception:
         return None
@@ -156,12 +207,23 @@ def _derive_cts_zone_ad_hoc(
     return (float(outer), float(inner), side)
 
 
+# Back-compat alias for the CTS-only callers that still exist in
+# `build_reference_zone_from_cts_event`. Kept thin (one-line forward)
+# so future readers see it's the same machinery.
+def _derive_cts_zone_ad_hoc(
+    df: pd.DataFrame,
+    extreme_idx: int,
+    direction: int,
+) -> Optional[Tuple[float, float, Literal["buy", "sell"]]]:
+    return _derive_zone_ad_hoc(df, extreme_idx, direction, bos=False)
+
+
 def build_reference_zone_from_cts_event(
     events: List[StructureEvent],
     kl_zones: List[KLZone],
     df: pd.DataFrame,
     sid: int,
-    direction: int,
+    probe_direction: int,
     *,
     idx_window: Optional[Tuple[int, int]] = None,
 ) -> Optional[ReferenceZone]:
@@ -172,11 +234,16 @@ def build_reference_zone_from_cts_event(
     most recent of {CTS_CONFIRMED, CTS_UPDATED, CTS_ESTABLISHED}. Returns:
 
     - CTS_CONFIRMED → the existing KLZone for that cycle, wrapped as a
-      `ReferenceZone` (outer/inner derived from sd). If for any reason the
-      kl_zone is missing (race/slice/derivation skip), falls back to the
-      ad-hoc derivation so the probe can still run.
+      `ReferenceZone` (outer/inner derived from `probe_direction`). If for
+      any reason the kl_zone is missing (race/slice/derivation skip),
+      falls back to the ad-hoc derivation so the probe can still run.
     - CTS_UPDATED / CTS_ESTABLISHED → ad-hoc derivation from the extreme
       candle (= `ev.idx` for these types).
+
+    For ad-hoc derivation, `sid`'s `struct_direction` is reconstructed as
+    `-probe_direction` (callers of this helper run a probe in the OPPOSITE
+    direction to the source sid — that's the reversal / subsequent_*
+    semantic: the new sub flips from the prior sid).
 
     Parameters
     ----------
@@ -190,8 +257,11 @@ def build_reference_zone_from_cts_event(
         the ad-hoc derivation.
     sid : int
         The structure_id whose events anchor the reference.
-    direction : int
-        The sid's struct_direction (+1 or -1). Determines side mapping.
+    probe_direction : int
+        The PROBE's direction (= the new sub's lower_sd, +1 or -1). The
+        source sid's struct_direction is the OPPOSITE (`-probe_direction`).
+        Determines the resulting ReferenceZone's outer/inner/side per
+        `_zone_to_reference`.
     idx_window : (int, int), optional
         Inclusive `(min_idx, max_idx)` filter on event idx. Used by
         `subsequent_*` callers to restrict the walk to events within a
@@ -235,6 +305,11 @@ def build_reference_zone_from_cts_event(
     ev = candidates[0]
     extreme_idx = _extreme_idx_for_cts_event(ev)
 
+    # Source sid's struct_direction is the OPPOSITE of probe_direction
+    # (reversal / subsequent_* semantic — the probe runs in the new sub's
+    # direction, which is flipped from the source sid).
+    source_sd = -probe_direction
+
     if ev.type == "CTS_CONFIRMED":
         cycle_id = ev.meta.get("cycle_id")
         if cycle_id is not None:
@@ -242,13 +317,13 @@ def build_reference_zone_from_cts_event(
             if existing is not None:
                 return _zone_to_reference(
                     existing,
-                    direction,
+                    probe_direction,
                     source="cts_confirmed",
                     source_event_idx=extreme_idx,
                 )
         # CONFIRMED but no derived zone — fall through to ad-hoc.
 
-    derived = _derive_cts_zone_ad_hoc(df, extreme_idx, direction)
+    derived = _derive_cts_zone_ad_hoc(df, extreme_idx, source_sd)
     if derived is None:
         return None
     outer, inner, side = derived

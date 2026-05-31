@@ -42,6 +42,22 @@ A continuation level established within the current structure direction.
     proximity idx; the CTS zone meta is upgraded to `confirmation_method = "pullback"`
     with `pb_reconfirm_idx` recorded.
 
+### Optional cycle-0 new-extreme gate
+
+`MarketStructure` accepts an opt-in constructor flag
+`enforce_cts0_new_extreme: bool = False`. When True, MS rejects any
+breakout pattern that would establish cycle 0 unless its anchor's
+extreme is the running max (sd=+1) or min (sd=-1) over
+`[start_idx, cts_idx - 1]`. The rejected pattern is skipped without
+state mutation; MS continues scanning for the next breakout pattern.
+Cycles ≥ 1 are unaffected because subsequent CTSes break the prior
+CTS's threshold by construction (implicitly extreme).
+
+Used by `unified_probe`'s Phase 2 (`first_confluence` only). The same
+flag is the planned mechanism for the deferred main `sid=0 cycle=0`
+fix — flip it True at the main pipeline's structure call to enforce
+"true first CTS_0" on trading_open.
+
 ### BOS
 A break level; confirmed by breakout logic.
 - BOS emits `BOS_CONFIRMED` when confirmed.

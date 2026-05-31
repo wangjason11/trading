@@ -1228,3 +1228,38 @@ suffix. The `/compare` skill is safe because it iterates the *baseline* folder's
 filenames (correct window) and looks each up by basename in `artifacts/debug` —
 so trust `/compare`'s md5 verdict over an ad-hoc glob. (Periodically delete
 stale-window files from `artifacts/debug/`.)
+
+---
+
+## Filtering MS's CTS_EST list to enforce a "true first breakout" is wrong
+
+When implementing a "the first CTS_EST only counts if its anchor's extreme is a
+new running max/min" rule, the obvious first attempt is to run MS, collect the
+CTS_EST events, and walk the list to find the first one passing the rule —
+discarding earlier ones. **This is incorrect.**
+
+**Why:** MS's state machine establishes cycle N+1 only after cycle N is
+CONFIRMED, and the new BOS / CTS detection uses the *prior CTS's price* as
+threshold (`establishing_new_cycle` requires `st.cts_phase == "CONFIRMED"`,
+then BOS_n+1 is selected against that). If MS's first CTS_EST is rejected
+externally, MS's subsequent CTS_EST events were computed against the
+*rejected* first CTS's threshold — they're not the "true" 2nd / 3rd CTSes
+for the alternate timeline that should have skipped the rejected one.
+Filtering the precomputed list yields a chain that doesn't structurally hold
+together.
+
+**Correct approaches:**
+1. **Walk patterns directly from `df.pat`** (the deterministic-pattern store
+   from `pattern_engine.detect_patterns(break_threshold=None)`) and find the
+   first pattern in the probe's direction whose anchor's extreme is a new
+   running max/min. Patterns there are threshold-independent, so no chain
+   pollution. This is what `unified_probe` Phase 1 does.
+2. **Modify MS itself** via the `enforce_cts0_new_extreme=True` constructor
+   flag. When set, MS rejects cycle-0 breakout patterns that fail the
+   new-extreme check from inside the state machine, then continues scanning
+   — so MS's subsequent state is computed against the *true* first CTS.
+   `unified_probe` Phase 2 uses this for `first_confluence`.
+
+**The deferred main sid=0|cycle=0 fix uses the same MS flag** — flip it True
+at the main pipeline's structure call to enforce "true first CTS_0" on
+trading_open. Same mechanism as Phase 2; just hasn't been wired yet.
