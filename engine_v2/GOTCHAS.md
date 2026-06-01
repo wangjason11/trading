@@ -1263,3 +1263,72 @@ together.
 **The deferred main sid=0|cycle=0 fix uses the same MS flag** — flip it True
 at the main pipeline's structure call to enforce "true first CTS_0" on
 trading_open. Same mechanism as Phase 2; just hasn't been wired yet.
+
+---
+
+## `bos_threshold` is reset to the ORIGINAL BOS at CTS confirmation, discarding expansion (FIX PENDING 2026-06-01)
+
+**Symptom:** a structure reverses *earlier* than it should. Two MS runs with
+byte-identical event streams for hundreds of bars suddenly diverge at the
+reversal: the buggy one reverses against a *stale, un-expanded* BOS threshold.
+
+**Root cause:** `bos_threshold` follows a different lifecycle from
+`cts_threshold`, but the code treats them the same at CTS confirmation:
+
+- **BOS locks at BOS_CONFIRMED** (`_emit_bos_confirmed`, ~line 1813 sets
+  `st.bos_threshold = price`). From then on it legitimately *expands* via the
+  barrier wick-cross probes (`_bos_barrier_step`, ~lines 624/640/658/674,
+  emitting `BOS_THRESHOLD_UPDATED`). The reversal/breakout check reads this
+  stored `st.bos_threshold`.
+- **CTS only locks at CTS_CONFIRMED** — so re-initializing `cts_threshold` at
+  confirmation is correct.
+- **The bug:** both CTS-confirmation paths *also* re-init `bos_threshold` to
+  `bos_confirmed.price` (the ORIGINAL extreme) — pullback path ~line 1500,
+  proximity path ~line 2013. This **discards any expansion that happened in
+  the window `[BOS_CONFIRMED, CTS_CONFIRMED]`**. It's a copy of the (correct)
+  `cts_threshold` init wrongly applied to a threshold with a different
+  lifecycle.
+
+**Contrast — CTS breakout (establishing a new cycle) does this correctly:** it
+uses `_range_breakout_threshold()` = live `range_hi`/`range_lo`, which always
+tracks the expanding zone. Only the BOS-reversal path reads a stored value
+that CTS-confirmation clobbers. (Verify with main zone base 430: its CTS
+breakout fires at the *expanded* threshold 636, not 635.)
+
+**Why it surfaces on pullback far more than proximity:** the bug is symmetric
+(both confirmation paths reset), but pullback confirmation usually lands much
+LATER than proximity (proximity fires as soon as price nears the zone;
+pullback waits for a full pattern), so the `[BOS_CONFIRMED, CTS_CONFIRMED]`
+window is longer → more chance a BOS expansion falls inside it → more chance
+of clobber. A BOS confirmed directly at its expanded extreme (no pre-confirm
+expansion) makes the reset a no-op, which is why it stayed latent so long.
+
+**Diagnosis tip:** the frozen value is in the `REVERSAL_CANDIDATE` event meta
+as `bos_frozen`. Compare it against the `BOS_THRESHOLD_UPDATED` price the zone
+expanded to — if `bos_frozen` < the expanded value (sd=+1) it's the stale
+original. Concrete instance (Session 3, 2026-06-01): confluence (1,2) sub
+BOS confirmed 0.57806 → expanded 0.57827 @3806 → CTS_CONFIRMED@4157 reset to
+0.57806 → reversed at 4179 (against 0.57806) instead of 4200 (against 0.57827).
+
+**Two sibling inconsistencies found in the same review** (pullback vs proximity
+CTS-confirmation paths should behave identically post-confirm):
+- `cts_threshold` is synced inline at confirmation on the pullback path
+  (`_sync_thresholds_from_range`, ~line 1504) but NOT the proximity path
+  (relies on the next candle's `_expand_range` → 1-candle lag).
+- Proximity confirmation *creates a range* but never calls `_set_state`, so it
+  leaves `range_active=True` with state still BREAKOUT — the only
+  range-creating path that doesn't set a coherent state
+  (`_finalize_range_candidate_offline` sets RANGE ~line 1116; the pullback
+  path sets PULLBACK ~line 1503). NOTE: `st.state` gates pattern dispatch
+  (~line 992 — pullback patterns suppressed in NONE/PULLBACK/PULLBACK_RANGE,
+  allowed in BREAKOUT/RANGE), so changing this can shift downstream pattern
+  eligibility — the highest-risk of the three fixes.
+
+**Fix (pending — its own commit, separate /compare):** delete the
+`bos_threshold` reset at both ~1500 and ~2013 (keep `cts_threshold`); add the
+inline `_sync_thresholds_from_range` to the proximity path; add
+`_set_state(RANGE)` inside the proximity path's `if not st.range_active:`
+range-creation block (gated so it only fires when proximity CREATES the range;
+prior state is provably BREAKOUT there). Blast radius is MS-core (H1.main +
+all subs), so it MUST be validated on its own `/compare`, not folded into an
+unrelated change. See `project_unified_identify_start_probe.md`.

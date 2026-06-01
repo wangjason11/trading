@@ -14,6 +14,34 @@ This doc explains how we work on this repo so changes remain safe and explainabl
    - `df.attrs["structure_levels"]`
    - `df.attrs["kl_zones"]`
 3. Export chart artifacts using export_plotly.
+4. **Grep the captured log for silently-skipped work** (see below) before
+   trusting the output or moving to `/compare`.
+
+---
+
+## Post-replay log grep (catch silent skips BEFORE /compare or chart review)
+
+The engine emits `WARNING` lines and skips work — a trigger that can't resolve,
+a reference zone that's unavailable, a degenerate window, a pending probe —
+**without raising**. The run exits 0 and the only trace is a log line. A
+behavioral change that *accidentally* drops sids/zones looks identical to one
+that *correctly* prunes them until you read those lines. After any replay whose
+log you captured (`python -m engine_v2.run_replay > run.log 2>&1`):
+
+```bash
+grep -iaE "warning|skipping|unavailable|degenerate|pending|no sid" run.log
+```
+
+Report the count. A non-zero count is not automatically a bug — some skips are
+correct (a probe that legitimately finds no structure). But each one must be
+**explained, not ignored**. When a `/compare` shows dropped sids/zones, the
+matching skip-warning usually names the exact cause — read it before theorizing.
+
+> **Why this exists:** Session 3 Step 2 (2026-05-31) dropped 5 sub sids because
+> every `subsequent_*` trigger hit "sibling-CTS reference zone unavailable" —
+> the warnings sat in the log the whole time but only surfaced during chart
+> review. A 5-second grep would have caught it immediately. See memory
+> `feedback_implement_against_docs.md`.
 
 ---
 

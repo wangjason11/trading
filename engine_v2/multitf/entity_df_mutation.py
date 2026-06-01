@@ -454,95 +454,110 @@ def _build_first_confluence_ref_zone(
     )
 
 
-def _build_first_counter_ref_zone(
+def _build_sibling_cts_ref_zone(
     sibling_entity_df: Optional[pd.DataFrame],
     parent_sid: int,
     parent_cycle_id: int,
     probe_direction: int,
-    m15_end_idx: int,
+    idx_window: Tuple[int, int],
 ) -> Optional["ReferenceZone"]:
-    """Reference zone for first_counter — sibling first_confluence's most
-    recent CTS event for the same (parent_sid, parent_cycle_id) sub_sid=0.
+    """Sibling-CTS reference zone for the three sibling-referencing variations
+    (`first_counter`, `subsequent_confluence`, `subsequent_counter`) — Session 3
+    uniform rule (2026-05-31).
 
-    Filters `sibling_entity_df.attrs["events"]` + `["kl_zones"]` to just
-    the sibling first_confluence bootstrap (sub_sid=0 of the same parent
-    cycle), then delegates to `build_reference_zone_from_cts_event` —
-    same primitive subsequent_*/reversal will use in Sessions 3+.
+    Walks the SIBLING entity's events for this `(parent_sid, parent_cycle_id)`
+    (across ALL the sibling's sub_sids — the time-bounded `idx_window` selects
+    the right one), takes the most recent of {CTS_CONFIRMED, CTS_UPDATED,
+    CTS_ESTABLISHED} via `build_reference_zone_from_cts_event`. The returned
+    zone's `source_event_idx` is the sibling CTS extreme on the sub TF — the
+    caller uses it as BOTH the probe `input_idx` AND the reference zone (they
+    are co-sourced).
 
-    Returns None when the sibling sub has no events yet (e.g., the
-    bootstrap couldn't build for this cycle — orchestrator-side
-    confluence-first ordering should make this very rare).
+    **sub_sid disambiguation (idx-correctness, LANDMINE "Cross-entity sibling
+    references"):** every sibling sub's MS run uses `structure_id=0` LOCALLY, so
+    the CONFIRMED-branch KL-zone lookup `(structure_id=0, cycle_id)` inside the
+    primitive could match a zone from a DIFFERENT sub_sid that happens to share
+    that local cycle_id. We pre-select the winning CTS event (most-recent in
+    window) here, read its `sub_sid`, and pass the primitive a `kl_zones` list
+    filtered to that winning sub_sid only — so the zone lookup is unambiguous.
+    The event list is unfiltered (the primitive re-selects the same winner by
+    idx), keeping the selection logic single-sourced in the primitive.
+
+    `idx_window` is the inclusive `(lo, hi)` entity-absolute M15 range the
+    sibling CTS must fall in (per-variation; see `_resolve_sibling_cts_probe`).
+
+    Returns None when the sibling df is absent or has no qualifying CTS in the
+    window (caller skips the trigger — extremely rare given cadence ordering).
     """
     from engine_v2.structure.reference_zone import (
         build_reference_zone_from_cts_event,
+        _CTS_EVENT_TYPES,
     )
 
     if sibling_entity_df is None:
         return None
     events = sibling_entity_df.attrs.get("events", [])
     kl_zones = sibling_entity_df.attrs.get("kl_zones", [])
+    lo, hi = int(idx_window[0]), int(idx_window[1])
+
     sibling_events = [
         ev for ev in events
         if ev.meta.get("parent_sid") == parent_sid
         and ev.meta.get("parent_cycle_id") == parent_cycle_id
-        and ev.meta.get("sub_sid") == 0
     ]
+    if not sibling_events:
+        return None
+
+    # Pre-select the winning CTS event to disambiguate the CONFIRMED zone lookup
+    # by sub_sid (see docstring). Tie-break order matches the primitive's.
+    _TYPE_ORDER = {"CTS_CONFIRMED": 2, "CTS_UPDATED": 1, "CTS_ESTABLISHED": 0}
+    cands = [
+        ev for ev in sibling_events
+        if ev.type in _CTS_EVENT_TYPES and lo <= int(ev.idx) <= hi
+    ]
+    if not cands:
+        return None
+    winner = max(cands, key=lambda e: (int(e.idx), _TYPE_ORDER[e.type]))
+    win_sub = winner.meta.get("sub_sid")
+
     sibling_zones = [
         z for z in kl_zones
         if z.meta.get("parent_sid") == parent_sid
         and z.meta.get("parent_cycle_id") == parent_cycle_id
-        and z.meta.get("sub_sid") == 0
+        and z.meta.get("sub_sid") == win_sub
     ]
-    if not sibling_events:
-        return None
-    # Each sibling sub's MS run uses structure_id=0 locally. Filter window
-    # upper = the counter probe's end so we don't anachronistically pick a
-    # CTS from after the counter trigger.
     return build_reference_zone_from_cts_event(
         events=sibling_events,
         kl_zones=sibling_zones,
         df=sibling_entity_df,
         sid=0,
         probe_direction=int(probe_direction),
-        idx_window=(0, int(m15_end_idx)),
+        idx_window=(lo, hi),
     )
 
 
-def _resolve_first_via_unified_probe(
+def _resolve_first_confluence_via_unified_probe(
     trigger: MultiTFTrigger,
     parent_df: pd.DataFrame,
     entity_df: pd.DataFrame,
-    sibling_entity_df: Optional[pd.DataFrame] = None,
 ) -> Tuple[Optional[int], Optional[int]]:
-    """Unified-probe path for `first_counter` / `first_confluence` triggers
-    (Part 4 §4.3, Session 2 design pivot 2026-05-29).
+    """Unified-probe path for `first_confluence` (the one variation that
+    anchors on its OWN ad-hoc BOS_0, not a sibling).
 
-    Reference-zone sources (after the post-Gate-1 pivot):
-
-    - `first_confluence`: ad-hoc BOS_0 derived on M15 from the input_idx
-      candle (the parent BOS extreme price-mapped to M15). No parent or
-      sibling zone read — this is the bootstrap of the confluence entity
-      for this parent cycle, so nothing exists yet.
-    - `first_counter`: sibling first_confluence's most recent CTS event
-      (CONFIRMED → existing CTS zone; UPDATED/EST → ad-hoc CTS) — same
-      rule as subsequent_*. Requires `sibling_entity_df` (the confluence
-      entity's M15 df) to be passed in. The orchestrator builds
-      confluence before counter so this dependency resolves.
-
-    Reset predicate is two-condition (proximity + wick cap) per Session 1
-    design.
+    The confluence entity's sid=0 bootstrap has no prior/sibling structure
+    yet, so its reference zone is an ad-hoc BOS_0 derived on M15 from the
+    input_idx candle (the parent BOS extreme price-mapped to M15). Phase 2
+    (MS-based) runs because first_confluence's end_idx is the parent CTS
+    extreme — the only variation needing the post-end_idx MS search (PART4
+    §4.4).
 
     Returns ``(m15_start_idx, parent_extreme_idx)``. The second slot is
-    metadata only (consumed by ``sid_records.validated_parent_start``);
-    its meaning is "parent event extreme that seeded the M15 input."
-    Either may be None on a pending probe, failed mapping, or missing
-    sibling state for first_counter.
+    metadata only (`sid_records.validated_parent_start`) — the parent BOS
+    extreme that seeded the M15 input.
     """
     from engine_v2.multitf.data_bridge import map_candle_to_lower_tf
     from engine_v2.structure.unified_probe import unified_probe
 
-    # 1. Parent event extreme. counter sets cts_anchor_idx; confluence
-    #    sets BOS_CONFIRMED.ev.idx (which IS the BOS extreme per §4.3.2).
     raw_input = trigger.meta.get("probe_input_idx")
     raw_end = trigger.meta.get("probe_end_idx")
     if raw_input is None or raw_end is None:
@@ -562,14 +577,24 @@ def _resolve_first_via_unified_probe(
         )
         return None, None
 
-    # 2. Price-map parent extreme → M15 input_idx. parent_extreme_dir =
-    #    -lower_sd (universal rule, spec §4.3.1).
+    # Candle-semantics mapping rule (user spec 2026-05-31): BOS/CTS ANCHOR
+    # candles are PRICE-mapped (they anchor a price level into the sub);
+    # trigger/confirmation candles are TIME-mapped (temporal gates). Both of
+    # first_confluence's bounds are ANCHOR candles, so BOTH are price-mapped:
+    #   - input  = parent BOS anchor, extreme on the -lower_sd side (base of
+    #              the breakout — the price the probe measures retraces from).
+    #   - end    = parent CTS anchor, extreme on the +lower_sd side (the
+    #              structure ceiling/floor). NOT a temporal cutoff: it says
+    #              "once price hit the parent CTS extreme, no NEW extreme can
+    #              form, so stop probing." end_idx is unknown until parent CTS
+    #              confirms (cts_anchor_idx only exists then), but the value
+    #              that bounds the probe is the CTS extreme, not the (later)
+    #              confirmation candle — hence price-mapped, not time-mapped.
     parent_extreme_time = pd.to_datetime(
         parent_df.loc[parent_extreme_idx, "time"], utc=True,
     )
-    parent_extreme_dir = -trigger.lower_sd
     m15_input_idx = map_candle_to_lower_tf(
-        parent_extreme_time, parent_extreme_dir, entity_df,
+        parent_extreme_time, -trigger.lower_sd, entity_df,
     )
     if m15_input_idx is None:
         print(
@@ -579,9 +604,18 @@ def _resolve_first_via_unified_probe(
         )
         return None, parent_extreme_idx
 
-    # 3. Time-map probe end_idx (parent gate candle → last M15 of its hour).
-    m15_end_idx = _map_parent_idx_to_m15_hour_end(
-        parent_end_idx, parent_df, entity_df,
+    if parent_end_idx not in parent_df.index:
+        print(
+            f"[entity_compute] WARNING: probe_end_idx={parent_end_idx} out of "
+            f"parent_df bounds for {trigger.use_case} sid={trigger.parent_sid} "
+            f"cycle={trigger.parent_cycle_id}"
+        )
+        return None, parent_extreme_idx
+    parent_cts_time = pd.to_datetime(
+        parent_df.loc[parent_end_idx, "time"], utc=True,
+    )
+    m15_end_idx = map_candle_to_lower_tf(
+        parent_cts_time, trigger.lower_sd, entity_df,
     )
     if m15_end_idx is None:
         print(
@@ -599,37 +633,17 @@ def _resolve_first_via_unified_probe(
         )
         return None, parent_extreme_idx
 
-    # 4. Build the per-trigger reference zone.
-    if trigger.use_case == "first_confluence":
-        ref_zone = _build_first_confluence_ref_zone(
-            entity_df, int(m15_input_idx), int(trigger.lower_sd),
-        )
-        ref_label = "ad_hoc_bos_0"
-    elif trigger.use_case == "first_counter":
-        ref_zone = _build_first_counter_ref_zone(
-            sibling_entity_df,
-            trigger.parent_sid, trigger.parent_cycle_id,
-            int(trigger.lower_sd), int(m15_end_idx),
-        )
-        ref_label = "sibling_confluence_cts"
-    else:
-        raise ValueError(
-            f"_resolve_first_via_unified_probe called with unsupported "
-            f"use_case={trigger.use_case!r}"
-        )
+    ref_zone = _build_first_confluence_ref_zone(
+        entity_df, int(m15_input_idx), int(trigger.lower_sd),
+    )
     if ref_zone is None:
         print(
-            f"[entity_compute] WARNING: {ref_label} reference zone unavailable "
+            f"[entity_compute] WARNING: ad_hoc_bos_0 reference zone unavailable "
             f"for {trigger.use_case} sid={trigger.parent_sid} "
             f"cycle={trigger.parent_cycle_id} — skipping trigger"
         )
         return None, parent_extreme_idx
 
-    # 5. Run the unified probe on M15.
-    # enable_phase2 only for first_confluence (the trigger whose end_idx
-    # is NULL until parent CTS_CONFIRMED, making the post-end_idx MS
-    # search structurally necessary — see PART4 §4.4 / project memory).
-    _enable_phase2 = (trigger.use_case == "first_confluence")
     result = unified_probe(
         entity_df,
         input_idx=int(m15_input_idx),
@@ -637,26 +651,211 @@ def _resolve_first_via_unified_probe(
         reference_zone=ref_zone,
         end_idx=int(m15_end_idx),
         timeframe="M15",
-        enable_phase2=_enable_phase2,
+        enable_phase2=True,
     )
     print(
-        f"[entity_compute] unified_probe ({trigger.use_case}): "
+        f"[entity_compute] unified_probe (first_confluence): "
         f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id} "
         f"m15_input={m15_input_idx} m15_end={m15_end_idx} "
         f"ref={ref_zone.source} -> start={result.start_idx} "
         f"status={result.status} cond={result.finalize_condition} "
         f"iter={result.iterations}"
     )
+    if result.status == "pending":
+        print(
+            f"[entity_compute] PENDING: unified_probe did not finalize for "
+            f"first_confluence sid={trigger.parent_sid} "
+            f"cycle={trigger.parent_cycle_id}; skipping M15 build"
+        )
+        return None, parent_extreme_idx
+    return int(result.start_idx), parent_extreme_idx
 
+
+def _window_extreme_idx(
+    df: pd.DataFrame, lo: int, hi: int, extreme_dir: int,
+) -> Optional[int]:
+    """Idx of the extreme candle in `[lo, hi]` on the `extreme_dir` side.
+
+    `extreme_dir == +1` → highest high; `extreme_dir == -1` → lowest low.
+    Tie-break earliest. Used by the sibling-CTS fallback (PART4 §4.3.4 step 5)
+    to anchor an ad-hoc BOS_0 on the own entity when the sibling has no CTS.
+    Returns None for an empty / out-of-bounds window.
+    """
+    lo = max(int(lo), int(df.index[0]))
+    hi = min(int(hi), int(df.index[-1]))
+    if lo > hi:
+        return None
+    seg = df.loc[lo:hi]
+    if seg.empty:
+        return None
+    if extreme_dir == 1:
+        return int(seg["h"].astype(float).idxmax())
+    return int(seg["l"].astype(float).idxmin())
+
+
+def _sibling_cts_idx_window(
+    trigger: MultiTFTrigger,
+    parent_df: pd.DataFrame,
+    entity_df: pd.DataFrame,
+    m15_end_idx: int,
+) -> Tuple[int, int]:
+    """Inclusive entity-absolute M15 `(lo, hi)` window the sibling CTS must
+    fall in, per use_case (PART4 §4.3.3/4/5, Session 3).
+
+    - `first_counter`: `[0, m15_end_idx]` — the whole parent cycle up to the
+      first sd-prox trigger (events are already filtered to this parent cycle,
+      so 0 is a safe lower bound).
+    - `subsequent_confluence`: `[last-M15 of prior_sd_prox hour, m15_end_idx]`.
+    - `subsequent_counter`: `[last-M15 of prior_cts_prox hour, m15_end_idx]`.
+
+    `hi` is always `m15_end_idx` (= the time-mapped trigger candle). A missing
+    prior-prox meta value degrades `lo` to 0 (safe — the parent-cycle event
+    filter still scopes the walk).
+    """
+    hi = int(m15_end_idx)
+    uc = trigger.use_case
+    prior_parent_idx: Optional[int] = None
+    if uc == "subsequent_confluence":
+        prior_parent_idx = trigger.meta.get("prior_sd_trigger_idx")
+    elif uc == "subsequent_counter":
+        prior_parent_idx = trigger.meta.get("prior_cts_prox_idx")
+    # first_counter (and any fallback): lo = 0.
+    lo = 0
+    if prior_parent_idx is not None:
+        mapped = _map_parent_idx_to_m15_hour_end(
+            int(prior_parent_idx), parent_df, entity_df,
+        )
+        if mapped is not None:
+            lo = int(mapped)
+    return lo, hi
+
+
+def _resolve_sibling_cts_via_unified_probe(
+    trigger: MultiTFTrigger,
+    parent_df: pd.DataFrame,
+    entity_df: pd.DataFrame,
+    sibling_entity_df: Optional[pd.DataFrame] = None,
+) -> Tuple[Optional[int], Optional[int]]:
+    """Unified-probe path for the three sibling-referencing variations
+    (`first_counter`, `subsequent_confluence`, `subsequent_counter`) — Session 3
+    uniform rule (2026-05-31).
+
+    Both the probe `input_idx` AND the `reference_zone` are co-sourced from the
+    **sibling entity's** most recent CTS event in the trigger's sub-TF window
+    (CONFIRMED → existing KL zone + `cts_anchor_idx`; UPDATED/EST → ad-hoc CTS
+    zone + event idx). The sibling is whichever entity the driver passes as
+    `sibling_entity_df` (confluence reads counter; counter reads confluence) —
+    correct for all three by cadence (the read is always strictly earlier than
+    this trigger). The probe runs on the structure's OWN M15 frame; the sibling
+    CTS idx is entity-absolute M15, valid under the frame-alignment guard.
+
+    `enable_phase2=False` — none of these has the NULL-end_idx problem that makes
+    Phase 2 necessary (that's first_confluence only).
+
+    Returns ``(m15_start_idx, sibling_cts_extreme_idx)``. The second slot is
+    metadata only (`sid_records.validated_parent_start`); for these variations
+    it is the sibling CTS extreme (M15 frame) that seeded the input.
+    """
+    from engine_v2.structure.unified_probe import unified_probe
+
+    raw_end = trigger.meta.get("probe_end_idx")
+    if raw_end is None:
+        print(
+            f"[entity_compute] WARNING: missing probe_end_idx in trigger meta "
+            f"for {trigger.use_case} sid={trigger.parent_sid} "
+            f"cycle={trigger.parent_cycle_id}"
+        )
+        return None, None
+
+    # 1. Time-map probe end_idx (parent trigger candle → last M15 of its hour).
+    m15_end_idx = _map_parent_idx_to_m15_hour_end(
+        int(raw_end), parent_df, entity_df,
+    )
+    if m15_end_idx is None:
+        print(
+            f"[entity_compute] WARNING: parent→M15 end mapping failed for "
+            f"{trigger.use_case} sid={trigger.parent_sid} "
+            f"cycle={trigger.parent_cycle_id}"
+        )
+        return None, None
+
+    # 2. Sibling-CTS reference zone within the per-variation M15 window. Its
+    #    `source_event_idx` IS the probe input_idx (co-sourced).
+    idx_window = _sibling_cts_idx_window(
+        trigger, parent_df, entity_df, m15_end_idx,
+    )
+    ref_zone = _build_sibling_cts_ref_zone(
+        sibling_entity_df,
+        trigger.parent_sid, trigger.parent_cycle_id,
+        int(trigger.lower_sd), idx_window,
+    )
+
+    if ref_zone is None:
+        # Fallback (PART4 §4.3.4 step 5) — sibling has no CTS event in the
+        # window (genuinely rare after the lazy-resolution fix, but specced, so
+        # implemented). Anchor on the OWN entity: input = window extreme on the
+        # `-lower_sd` side (the base the structure grows from, same convention
+        # as first_confluence's BOS extreme), reference = own ad-hoc BOS_0 from
+        # that candle.
+        fb_idx = _window_extreme_idx(
+            entity_df, idx_window[0], idx_window[1], -int(trigger.lower_sd),
+        )
+        if fb_idx is not None:
+            ref_zone = _build_first_confluence_ref_zone(
+                entity_df, int(fb_idx), int(trigger.lower_sd),
+            )
+        if ref_zone is None:
+            print(
+                f"[entity_compute] WARNING: sibling-CTS reference zone AND "
+                f"ad-hoc fallback both unavailable for {trigger.use_case} "
+                f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id} "
+                f"window={idx_window} — skipping trigger"
+            )
+            return None, None
+        print(
+            f"[entity_compute] sibling-CTS unavailable for {trigger.use_case} "
+            f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id} "
+            f"window={idx_window} — using ad-hoc BOS_0 fallback at {fb_idx}"
+        )
+
+    m15_input_idx = int(ref_zone.source_event_idx)
+    if m15_input_idx >= m15_end_idx:
+        # The sibling CTS extreme is at/after the probe end — no forward scan
+        # window. Degenerate; skip this trigger.
+        print(
+            f"[entity_compute] WARNING: degenerate sibling-CTS probe window for "
+            f"{trigger.use_case} sid={trigger.parent_sid} "
+            f"cycle={trigger.parent_cycle_id} "
+            f"(m15_input={m15_input_idx} m15_end={m15_end_idx})"
+        )
+        return None, m15_input_idx
+
+    # 3. Run the unified probe on the structure's own M15 frame (Phase 1 only).
+    result = unified_probe(
+        entity_df,
+        input_idx=m15_input_idx,
+        direction=int(trigger.lower_sd),
+        reference_zone=ref_zone,
+        end_idx=int(m15_end_idx),
+        timeframe="M15",
+        enable_phase2=False,
+    )
+    print(
+        f"[entity_compute] unified_probe ({trigger.use_case}): "
+        f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id} "
+        f"m15_input={m15_input_idx} m15_end={m15_end_idx} window={idx_window} "
+        f"ref={ref_zone.source} -> start={result.start_idx} "
+        f"status={result.status} cond={result.finalize_condition} "
+        f"iter={result.iterations}"
+    )
     if result.status == "pending":
         print(
             f"[entity_compute] PENDING: unified_probe did not finalize for "
             f"{trigger.use_case} sid={trigger.parent_sid} "
             f"cycle={trigger.parent_cycle_id}; skipping M15 build"
         )
-        return None, parent_extreme_idx
-
-    return int(result.start_idx), parent_extreme_idx
+        return None, m15_input_idx
+    return int(result.start_idx), m15_input_idx
 
 
 def _resolve_via_legacy_probe(
@@ -665,9 +864,10 @@ def _resolve_via_legacy_probe(
     entity_df: pd.DataFrame,
 ) -> Tuple[Optional[int], Optional[int]]:
     """Legacy Scenario-3-on-parent-TF probe + post-probe parent→M15
-    mapping. Retained for ``subsequent_*`` triggers until their migration
-    lands in Session 3 (per the Phase 1 migration plan in
-    ``memory/project_unified_identify_start_probe.md``).
+    mapping. NO LONGER on any default path (all four variations migrated to
+    the unified probe as of Session 3). Retained ONLY as the bisect escape
+    hatch behind `_LEGACY_PROBE_USE_CASES` — add a use_case to that set to
+    force it back onto this path when isolating a /compare regression.
     """
     from engine_v2.multitf.data_bridge import map_candle_to_lower_tf
     from engine_v2.multitf.lower_tf_pipeline import _run_subordinate_probe
@@ -697,10 +897,18 @@ def _resolve_via_legacy_probe(
     return m15_start_idx, validated_parent_idx
 
 
-# Use cases routed through the new unified-probe path (Session 2 scope).
-# Other use cases (subsequent_*) stay on the legacy path until their
-# Session 3 migration.
-_UNIFIED_PROBE_USE_CASES = frozenset({"first_counter", "first_confluence"})
+# Use-case routing for the start resolver (Session 3, 2026-05-31).
+#   - first_confluence → own ad-hoc BOS_0, Phase 1+2.
+#   - first_counter / subsequent_* → sibling CTS (input + ref co-sourced),
+#     Phase 1 only.
+# `_LEGACY_PROBE_USE_CASES` is the bisect escape hatch: any use_case listed
+# there falls back to the legacy parent-TF Scenario-3 probe. Empty by default
+# (all migrated) — populate it temporarily to isolate a /compare regression.
+_FIRST_CONFLUENCE_USE_CASES = frozenset({"first_confluence"})
+_SIBLING_CTS_USE_CASES = frozenset(
+    {"first_counter", "subsequent_confluence", "subsequent_counter"}
+)
+_LEGACY_PROBE_USE_CASES: frozenset = frozenset()
 
 
 def _resolve_trigger_m15_start(
@@ -711,38 +919,43 @@ def _resolve_trigger_m15_start(
 ) -> Tuple[Optional[int], Optional[int]]:
     """Resolve a trigger's M15 starting idx (entity-absolute) — dispatcher.
 
-    Routes by ``trigger.use_case``:
+    Routes by ``trigger.use_case`` (Session 3 uniform rule):
 
-    - ``first_counter`` / ``first_confluence`` → unified-probe path (M15
-      probe; first_confluence consults an ad-hoc BOS_0; first_counter
-      consults sibling first_confluence's most recent CTS — Session 2
-      post-pivot design).
-    - ``subsequent_confluence`` / ``subsequent_counter`` → legacy
-      parent-TF Scenario-3 + post-probe mapping (until Session 3
-      migration).
+    - ``first_confluence`` → unified probe vs own ad-hoc BOS_0 (Phase 1+2).
+    - ``first_counter`` / ``subsequent_confluence`` / ``subsequent_counter`` →
+      unified probe vs the **sibling** entity's most recent CTS, which supplies
+      BOTH the input_idx and the reference zone (Phase 1 only).
+    - Any use_case in ``_LEGACY_PROBE_USE_CASES`` (empty by default) → legacy
+      parent-TF Scenario-3 probe — the bisect escape hatch.
 
-    Reversal-born sids do NOT call this — their start comes from
-    ``identify_start_scenario_2_after_reversal`` on the sub's own data
-    inside ``build_one_sid``.
+    Reversal-born sids do NOT call this — their start comes from the sub's own
+    reversal handoff inside ``build_one_sid``.
 
-    ``sibling_entity_df`` is the OTHER multi-TF entity's df (confluence
-    if this is counter, None otherwise). Only first_counter consumes it
-    (to look up sibling first_confluence's CTS for its reference zone);
-    every other use_case ignores it. The orchestrator builds confluence
-    before counter so the confluence entity_df is populated when counter
-    asks for it.
+    ``sibling_entity_df`` is the OTHER multi-TF entity's df (counter when this
+    is confluence, confluence when this is counter). The three sibling-CTS
+    variations consume it; first_confluence ignores it. The two-entity cadence
+    driver (`build_two_entity_parent_cycle`) guarantees the needed sibling sid
+    is already built when this fires (LANDMINE "Cross-entity sibling references
+    require cadence-order interleaving").
 
-    Returns ``(m15_start_idx, validated_or_extreme_parent_idx)``. The
-    second slot is consumed only as metadata
-    (``sid_records.validated_parent_start``); semantics shift slightly
-    between paths (legacy = probe-converged parent idx; unified = parent
-    event extreme that seeded the M15 input).
+    Returns ``(m15_start_idx, metadata_idx)``. The second slot is consumed only
+    as metadata (`sid_records.validated_parent_start`); its meaning varies by
+    path (legacy = probe-converged parent idx; first_confluence = parent BOS
+    extreme; sibling-CTS = sibling CTS extreme on M15).
     """
-    if trigger.use_case in _UNIFIED_PROBE_USE_CASES:
-        return _resolve_first_via_unified_probe(
+    uc = trigger.use_case
+    if uc in _LEGACY_PROBE_USE_CASES:
+        return _resolve_via_legacy_probe(trigger, parent_df, entity_df)
+    if uc in _FIRST_CONFLUENCE_USE_CASES:
+        return _resolve_first_confluence_via_unified_probe(
+            trigger, parent_df, entity_df,
+        )
+    if uc in _SIBLING_CTS_USE_CASES:
+        return _resolve_sibling_cts_via_unified_probe(
             trigger, parent_df, entity_df,
             sibling_entity_df=sibling_entity_df,
         )
+    # Unknown use_case → legacy as a conservative default.
     return _resolve_via_legacy_probe(trigger, parent_df, entity_df)
 
 
@@ -1199,16 +1412,17 @@ class _ChainCursor:
                     int(_floor_h1), parent_df, entity_df,
                 )
 
-        # Eager subsequent resolution (legacy probe ignores the sibling; matches
-        # the legacy drop-on-pending behavior so boundaries are exact).
+        # Subsequent triggers: store trigger + boundary ONLY. The probe (which
+        # reads the SIBLING entity for subsequent_*) is resolved LAZILY at
+        # step-time, when the subsequent becomes the current sid — by then the
+        # two-entity driver has built the sibling through this subsequent's
+        # boundary (cadence guarantee). Resolving eagerly here would read an
+        # EMPTY sibling (LANDMINE "Cross-entity sibling references require
+        # cadence-order interleaving" — the Step-2 bug this fixes). `boundary`
+        # comes from trigger meta (no probe needed), so merge-ordering via
+        # `next_boundary` still works without resolving.
         self.pending: List[Dict[str, Any]] = []
         for sub in (subsequents or []):
-            s_start, s_valid = _resolve_trigger_m15_start(
-                sub, parent_df, entity_df,
-                sibling_entity_df=sibling_entity_df,
-            )
-            if s_start is None:
-                continue
             tei = sub.meta.get("trigger_event_idx")
             if tei is None:
                 continue
@@ -1217,10 +1431,7 @@ class _ChainCursor:
             )
             if boundary is None:
                 continue
-            self.pending.append({
-                "trigger": sub, "start": s_start,
-                "valid": s_valid, "boundary": boundary,
-            })
+            self.pending.append({"trigger": sub, "boundary": boundary})
         self.pending.sort(key=lambda x: x["boundary"])
 
         # Chain state for the NEXT sid to build. cur_start is resolved lazily
@@ -1270,24 +1481,60 @@ class _ChainCursor:
             self.done = True
             return
 
-        # Lazy bootstrap-start resolution (reads the sibling for first_counter).
+        # Lazy start resolution (bootstrap AND subsequents read the sibling —
+        # resolution is deferred to here, where the two-entity driver has built
+        # the sibling through this sid's boundary). Reversal sids set cur_start
+        # explicitly when advancing, so they skip this block.
         if self.cur_start is None:
-            m15_start, valid = _resolve_trigger_m15_start(
-                self.cur_trigger, self.parent_df, self.entity_df,
-                sibling_entity_df=self._sibling_df,
-            )
-            if m15_start is None:
+            while True:
+                m15_start, valid = _resolve_trigger_m15_start(
+                    self.cur_trigger, self.parent_df, self.entity_df,
+                    sibling_entity_df=self._sibling_df,
+                )
+                if m15_start is not None:
+                    self.cur_start = m15_start
+                    self.cur_valid = valid
+                    if self.cur_start_trig is None:
+                        # Bootstrap: the start candle IS the lifecycle trigger.
+                        # (Subsequents already have cur_start_trig = boundary.)
+                        self.cur_start_trig = m15_start
+                    break
+                # Resolution failed (mapping / degenerate / unavailable / pending).
+                if self.sub_sid == 0:
+                    # Bootstrap couldn't resolve → no chain for this cycle.
+                    print(
+                        f"[chain] no sid=0 for {self.cur_trigger.use_case} "
+                        f"sid={self.cur_trigger.parent_sid} "
+                        f"cycle={self.cur_trigger.parent_cycle_id} "
+                        f"(probe pending / mapping failed) — cycle skipped"
+                    )
+                    self.done = True
+                    return
+                # A subsequent failed to resolve → skip it and try the NEXT
+                # pending subsequent (don't kill the chain tail). The prior sid
+                # keeps its already-applied bound at the skipped subsequent's
+                # boundary (a small uncovered gap — logged, rare after the
+                # sibling-CTS fix + ad-hoc fallback).
                 print(
-                    f"[chain] no sid=0 for {self.cur_trigger.use_case} "
+                    f"[chain] subsequent {self.cur_trigger.use_case} "
                     f"sid={self.cur_trigger.parent_sid} "
                     f"cycle={self.cur_trigger.parent_cycle_id} "
-                    f"(probe pending / mapping failed) — cycle skipped"
+                    f"(boundary {self.cur_start_trig}) failed to resolve — "
+                    f"skipping to next pending subsequent"
                 )
-                self.done = True
-                return
-            self.cur_start = m15_start
-            self.cur_start_trig = m15_start
-            self.cur_valid = valid
+                _floor = self.cur_start_trig if self.cur_start_trig is not None else -1
+                nxt = next(
+                    (s for s in self.pending if s["boundary"] > _floor), None
+                )
+                if nxt is None:
+                    self.done = True
+                    return
+                self.pending.remove(nxt)
+                self.cur_trigger = nxt["trigger"]
+                self.cur_started_by = nxt["trigger"].use_case
+                self.cur_sd = int(nxt["trigger"].lower_sd)
+                self.cur_start_trig = nxt["boundary"]
+                # loop to resolve the new cur
 
         next_sub = next(
             (s for s in self.pending if s["boundary"] > self.cur_start), None
@@ -1337,12 +1584,16 @@ class _ChainCursor:
 
         if next_sub is not None and bound == next_sub["boundary"]:
             self.pending.remove(next_sub)
-            self.cur_start = next_sub["start"]
-            self.cur_sd = int(next_sub["trigger"].lower_sd)
             self.cur_trigger = next_sub["trigger"]
             self.cur_started_by = next_sub["trigger"].use_case
+            self.cur_sd = int(next_sub["trigger"].lower_sd)
+            # Lazy resolution: leave cur_start None so the top-of-step block
+            # resolves this subsequent's probe NOW (sibling built through its
+            # boundary by the driver). cur_start_trig = boundary (the sub's
+            # lifecycle-start trigger candle); cur_valid filled on resolve.
+            self.cur_start = None
             self.cur_start_trig = next_sub["boundary"]
-            self.cur_valid = next_sub["valid"]
+            self.cur_valid = None
             return
 
         self.done = True

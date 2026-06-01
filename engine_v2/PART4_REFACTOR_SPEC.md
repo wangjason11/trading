@@ -199,67 +199,55 @@ tolerance becomes TF-keyed (see §4.4).
 
 ### 4.3 `subordinate` — Four variations
 
-Used to find `starting_idx` for new subordinate structures. Probe
-**always runs on the immediate parent's TF** and produces a parent-TF
-`starting_idx`, which is then mapped down to the subordinate's TF.
+Used to find `starting_idx` for new subordinate structures.
+
+> **Session 3 (2026-05-31):** the probe now runs on the **structure's OWN sub
+> TF** (the `unified_probe` primitive), NOT on the parent's TF. The old
+> "probe always runs on the parent's TF, produces a parent-TF starting_idx,
+> then map down" model is retired for all four variations. Each variation's
+> `input_idx` and `end_idx` are mapped to the sub TF FIRST, then a single
+> sub-TF probe runs. See §4.4 for the unified-probe mechanics.
 
 #### 4.3.1 Shared probe mechanics
 
-The probe is the existing Scenario 3 BOS_0 iterative probe (today's
-`compute_structure_scenario_3`). Behavior:
+The probe is the `unified_probe` primitive (`engine_v2/structure/unified_probe.py`)
+— a two-phase design (Phase 1 deterministic `df.pat` walk for every caller;
+Phase 2 MS-based, only `first_confluence`). Full mechanics in §4.4. Key
+contract:
 
-- Walks **forward in time monotonically**. `input_idx` is the *initial*
-  starting_idx candidate. The validated `starting_idx` is `≥ input_idx`
-  (never earlier).
-- If the probe never resets, `starting_idx == input_idx`.
-- Iteration: from `current_start`, run a `MarketStructure` forward
-  bounded by `end_idx`. Find first two `CTS_ESTABLISHED` events for sid=0.
-  Search candles in `(CTS_EST[0]+1, CTS_EST[1])` for one that returned
-  to BOS_0's zone within tolerance. If found, that becomes the new
-  `current_start`; restart probe.
-- Terminal conditions:
-  - **Reversal before 2nd CTS_EST** → finalized
-  - **No exception found** (Condition 1) → finalized
-  - **Data exhausted with `end_idx` defined** (Condition 4a) → finalized
-  - **Data exhausted with `end_idx = NULL`** (Condition 4b) → pending;
-    caller may re-run when more data arrives
+- `input_idx` is the *initial* starting_idx candidate (already on the sub TF);
+  the validated `starting_idx` is `≥ input_idx` per the forward retrace-reset
+  walk.
+- `reference_zone` is consulted for the 2-condition retrace reset (proximity to
+  inner + toward-zone wick cap).
+- Terminal conditions: reversal before 2nd CTS_EST; no qualifying retrace;
+  `end_idx` reached; or (live mode) pending.
 
-**Per-variation TF/sd reminders:**
+**Per-variation sd/TF + input+reference source:**
 
-| Variation | Probe sd | Probe TF |
-|---|---|---|
-| `first_confluence` | `parent_sd` | parent's TF |
-| `first_counter` | `-parent_sd` | parent's TF |
-| `subsequent_confluence` | `parent_sd` | parent's TF |
-| `subsequent_counter` | `-parent_sd` | parent's TF |
+| Variation | Probe sd | Probe TF | input_idx + reference source |
+|---|---|---|---|
+| `first_confluence` | `+parent_sd` | sub TF | parent BOS extreme (price→M15) + own ad-hoc BOS_0 |
+| `first_counter` | `-parent_sd` | sub TF | sibling confluence CTS (input == ref's `source_event_idx`) |
+| `subsequent_confluence` | `+parent_sd` | sub TF | sibling counter CTS (input == ref's `source_event_idx`) |
+| `subsequent_counter` | `-parent_sd` | sub TF | sibling confluence CTS (input == ref's `source_event_idx`) |
 
-Parent → sub-TF mapping is determined by a single rule (Session 2 rename
-+ generalization 2026-05-29):
+**Time/price mapping rules (sub-TF translation, Session 2 generalization
+2026-05-29, still current):**
 
-> `parent_extreme_dir = -lower_sd`
+- **Price-based** (`first_confluence` input only): `parent_extreme_dir =
+  -lower_sd`; the parent BOS extreme maps to the M15 candle whose extreme on
+  the `-lower_sd` side touches the OUTER of the sub's reference zone.
+  (`map_candle_to_lower_tf` in `data_bridge.py`.)
+- **Time-based** (every probe `end_idx`, every sub window endpoint):
+  `_map_parent_idx_to_m15_hour_end` — the parent gate candle maps to the LAST
+  M15 candle of its hour.
+- The three sibling-referencing variations need NO parent→sub price map for
+  their input: `input_idx` is the sibling's CTS extreme, already an
+  entity-absolute M15 idx (read directly under the frame-alignment guard).
 
-Where `lower_sd` is the subordinate's direction. `parent_extreme_dir` is
-the side of the parent hour the M15 candle must match (`+1` → M15 with
-max-high in the H1 hour; `-1` → min-low). The rule applies to BOTH:
-
-- **Legacy post-probe map** (subsequent_* until Session 3): the
-  probe-validated parent idx is mapped to a sub-TF candle whose extreme
-  on the `-lower_sd` side seeds the sub start. (`map_candle_to_lower_tf`
-  in `data_bridge.py` implements the selection.)
-- **New first_* input map** (Session 2): the parent EVENT extreme (BOS
-  for first_confluence, CTS for first_counter) is mapped to a sub-TF
-  candle whose extreme on the `-lower_sd` side becomes the unified
-  probe's `input_idx`. The chosen M15 candle is the one whose extreme
-  touches the OUTER of the sub's reference zone.
-
-Both pre- and post-Session-2 forms use the SAME numeric formula
-(`parent_extreme_dir = -lower_sd`); only the *which parent idx is being
-mapped* shifts (probe-validated → event-extreme). The signature change
-on `map_candle_to_lower_tf` dropped the unused `h1_extreme_price` arg
-and renamed `mapping_sd`/`h1_sd` → `parent_extreme_dir`; the LANDMINE
-"Subordinate `parent_extreme_dir` must use `-lower_sd`" tracks the
-non-obvious case (first_confluence diverges from a naive
-`parent_sd`-based mapping).
+The LANDMINE "Subordinate `parent_extreme_dir` must use `-lower_sd`" tracks the
+one remaining price-map case (`first_confluence`).
 
 #### 4.3.2 `first_confluence` — first sub of a parent cycle, sd = parent_sd
 
@@ -300,10 +288,17 @@ probe; mechanics unchanged.
 | Field | Value |
 |---|---|
 | **Trigger** | First parent sd-zone proximity trigger (BOS or POI) after parent CTS |
-| **Idx input** | Most recent parent CTS idx (== CTS of the active CTS zone) |
-| **Probe end_idx** | First parent sd-zone proximity trigger candle after CTS |
-| **Probe reference zone** | Active parent CTS zone |
+| **Idx input** | Sibling first_confluence's most recent CTS **extreme** on the sub TF (= the reference zone's `source_event_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → event idx). **Same candle as the reference zone** — input and ref are co-sourced from the sibling CTS event (Session 3 uniform rule). |
+| **Probe end_idx** | First parent sd-zone proximity trigger candle after CTS (time-mapped to the sub TF's last-of-hour) |
+| **Probe reference zone** | Sibling first_confluence's most recent CTS (existing KL zone if CONFIRMED; ad-hoc CTS zone if UPDATED/EST), within the sub-TF window `[parent-cycle start, this trigger]` |
 | **Output** | `starting_idx` for first counter sub (sid=0) |
+
+> **Session 3 (2026-05-31):** input_idx changed from the price-mapped parent
+> CTS extreme to the sibling first_confluence CTS extreme — the SAME event the
+> reference zone is built from. This completes the Session 2 pivot, which moved
+> the *reference zone* to the sibling CTS but had left the *input* on the parent
+> extreme. first_counter now uses the sibling CTS + zone that first_confluence
+> created, identical in form to `subsequent_*`.
 
 **Sequencing:** by trigger construction, this fires *after* parent
 CTS_CONFIRMED. Since parent sd-proximity is one of the two paths that can
@@ -320,37 +315,23 @@ conditions fire, end the previous confluence sid and create
 | Field | Value |
 |---|---|
 | **Trigger** | Parent CTS-zone proximity trigger AND most recent prior parent proximity trigger was to sd zones |
-| **Idx input** | Parent-TF candle closest to parent BOS, within window `[prior_parent_sd_proximity_trigger_idx (inclusive), current_parent_CTS_proximity_trigger_idx]`. |
-| **Probe end_idx** | Current parent CTS-zone proximity trigger candle |
-| **Probe reference zone** | Counter-sub zone attached to the lower-TF candle that hits the extreme inside the parent input_idx candle's lower-TF window. See "Reference zone resolution" below. |
+| **Idx input** | Sibling **counter** entity's most recent CTS **extreme** on the sub TF (= the reference zone's `source_event_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → event idx). **Same candle as the reference zone.** |
+| **Probe end_idx** | Current parent CTS-zone proximity trigger candle (time-mapped to the sub TF's last-of-hour) |
+| **Probe reference zone** | Sibling **counter** entity's most recent CTS (existing KL zone if CONFIRMED; ad-hoc CTS zone if UPDATED/EST), within the sub-TF window `[last-M15-of prior_sd_prox hour, last-M15-of this_cts_prox hour]` |
 | **Output** | `starting_idx` for next confluence sid |
 
-**Reference zone resolution (subsequent_confluence-specific):**
-1. Take the parent-TF `input_idx` candle from the rule above.
-2. Drill into its lower-TF window (the lower-TF candles with timestamps
-   inside the parent candle's hour/period).
-3. Find the lower-TF candle that hits the extreme **toward parent BOS**
-   (lowest low for bullish parent, highest high for bearish parent).
-4. The reference zone is the counter-sub zone that this lower-TF candle
-   **anchors** — i.e., the candle is the BOS or CTS extreme of a counter-sub
-   zone (not merely contained in one).
-5. **Fallback** (in theory should never trigger): if the lower-TF extreme
-   candle is not anchoring any counter-sub zone:
-   - First fallback: parent sd zone (POI or BOS) closest to parent BOS,
-     whose inner bound is within 20 pips of the parent-TF input_idx
-     extreme.
-   - Final fallback: parent sd zone (POI or BOS) closest to the parent-TF
-     input_idx candle.
+**Reference zone + input resolution (Session 3 uniform rule, 2026-05-31):**
+1. Build the sub-TF idx window: `[_map_parent_idx_to_m15_hour_end(prior_sd_prox_idx), _map_parent_idx_to_m15_hour_end(this_cts_prox_idx)]` (entity-absolute M15).
+2. Walk the **counter** entity's events (filtered to this `(parent_sid, parent_cycle_id)`) within that window, take the most recent of {CTS_CONFIRMED, CTS_UPDATED, CTS_ESTABLISHED} via `build_reference_zone_from_cts_event`.
+3. `input_idx = ref_zone.source_event_idx`; `reference_zone = ref_zone`. Probe runs on the confluence entity's own M15 frame (sibling read is by entity-absolute M15 idx, valid under the frame-alignment guard).
+4. **Fallback** (sibling has zero CTS events in the window — extremely rare): input_idx = window extreme toward parent BOS computed on the confluence M15; reference = own ad-hoc BOS_0 from that candle.
 
-**Why the input rule is not "CTS of most recent counter sub":** if the
-counter sub has reversed before this trigger fires, the candle of interest
-on the counter sub may now be a BOS rather than a CTS. The window-based
-extreme rule handles both cases automatically.
-
-**Why the probe runs on parent TF, not lower TF:** consistency with the
-other variations and avoids an extra mapping step. The reference zone is
-allowed to come from a different TF because the probe only consumes its
-price bounds.
+> **Session 3 supersedes** the old "parent-TF window extreme toward BOS" input
+> rule + the "counter-sub zone attached to the lower-TF extreme" drill-in
+> reference rule. The probe now runs on the SUB TF (not parent TF), and input
+> and reference are co-sourced from the sibling counter CTS event — uniform
+> with first_counter and subsequent_counter. The pre-Session-3 drill-in
+> resolution + its 20-pip fallbacks are retired.
 
 #### 4.3.5 `subsequent_counter` — new counter sid within same parent cycle
 
@@ -361,10 +342,18 @@ conditions fire, end the previous counter sid and create
 | Field | Value |
 |---|---|
 | **Trigger** | Parent sd-zone proximity trigger AND most recent prior parent proximity trigger was to CTS zone AND the proximity trigger before *that* was to sd zones (forms Λ in bullish parent / V in bearish parent) |
-| **Idx input** | Parent-TF candle closest to active parent CTS zone outer bound, between the two parent sd-proximity trigger candles |
-| **Probe end_idx** | Current parent sd-zone proximity trigger candle |
-| **Probe reference zone** | Active parent CTS zone |
+| **Idx input** | Sibling **confluence** entity's most recent CTS **extreme** on the sub TF (= the reference zone's `source_event_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → event idx). **Same candle as the reference zone.** |
+| **Probe end_idx** | Current parent sd-zone proximity trigger candle (time-mapped to the sub TF's last-of-hour) |
+| **Probe reference zone** | Sibling **confluence** entity's most recent CTS (existing KL zone if CONFIRMED; ad-hoc CTS zone if UPDATED/EST), within the sub-TF window `[last-M15-of prior_cts_prox hour, last-M15-of this_sd_prox hour]` |
 | **Output** | `starting_idx` for next counter sid |
+
+> **Session 3 (2026-05-31)** supersedes the old "parent-TF candle closest to
+> parent CTS zone outer bound (Λ apex / V trough)" input rule + "active parent
+> CTS zone" reference rule. Input and reference are now co-sourced from the
+> sibling confluence CTS event, uniform with first_counter and
+> subsequent_confluence. The Λ/V apex geometry below is retained as the
+> conceptual picture of WHERE the counter structure starts, but the actual
+> anchor is the sibling confluence CTS, not a parent-TF apex candle.
 
 **Lambda / V geometry (canonical names):**
 - **Bullish parent** (parent_sd = +1): BOS zone bottom, POI middle, CTS
@@ -373,9 +362,6 @@ conditions fire, end the previous counter sid and create
 - **Bearish parent** (parent_sd = -1): mirrors — BOS top, POI middle,
   CTS bottom. Three trigger sequence sd → CTS → sd traces a **V** with
   trough at parent CTS zone.
-- `idx_input` = the candle furthest into the parent CTS zone (apex of
-  the Λ in bullish, trough of the V in bearish) between the two parent
-  sd-proximity trigger candles.
 
 Reference image: `artifacts/bullish_parent_lambda_proximity.jpeg`.
 
@@ -386,13 +372,13 @@ within each parent cycle:
 
 ```
 parent BOS_confirmed
-    → first_confluence              (input: BOS idx, end: parent CTS confirmed)
+    → first_confluence              (input: own ad-hoc BOS_0, end: parent CTS confirmed)
 parent 1st sd-proximity (post-CTS)
-    → first_counter                 (input: CTS idx, end: this trigger candle)
+    → first_counter                 (input+ref: sibling confluence CTS, end: this trigger candle)
 parent CTS-proximity (after sd-prox)
-    → subsequent_confluence         (input: window extreme, end: this trigger candle)
+    → subsequent_confluence         (input+ref: sibling counter CTS, end: this trigger candle)
 parent sd-proximity (after CTS-prox after sd-prox = Λ/V apex at CTS)
-    → subsequent_counter            (input: Λ/V apex candle, end: this trigger candle)
+    → subsequent_counter            (input+ref: sibling confluence CTS, end: this trigger candle)
 parent CTS-proximity
     → subsequent_confluence
 parent sd-proximity
@@ -423,20 +409,29 @@ at the next parent BOS_confirmed.
 
 | Variation | Trigger | Input idx | End idx | Reference zone | Probe sd |
 |---|---|---|---|---|---|
-| `first_confluence` | Parent BOS_confirmed | Parent BOS extreme | Parent CTS **extreme** (`cts_anchor_idx`; NULL until parent CTS_confirmed fires) | **Ad-hoc BOS_0 on sub TF** (derived from input_idx candle on M15) | `+parent_sd` |
-| `first_counter` | 1st parent sd-proximity post-CTS | Parent CTS idx | This trigger candle | **Sibling first_confluence's most recent CTS** (existing zone if CONFIRMED; ad-hoc CTS if UPDATED/EST) | `-parent_sd` |
-| `subsequent_confluence` | Parent CTS-proximity after sd-prox | Parent-TF window extreme toward BOS | This trigger candle | Counter-sub zone at lower-TF extreme (with fallback) | `+parent_sd` |
-| `subsequent_counter` | Parent sd-prox forming Λ / V | Parent-TF Λ apex / V trough at CTS zone | Sibling confluence's most recent CTS (same rule as first_counter) | `-parent_sd` |
+| `first_confluence` | Parent BOS_confirmed | Parent BOS extreme (price-mapped to M15) | Parent CTS **extreme** (`cts_anchor_idx`; NULL until parent CTS_confirmed fires) | **Ad-hoc BOS_0 on sub TF** (derived from input_idx candle on M15) | `+parent_sd` |
+| `first_counter` | 1st parent sd-proximity post-CTS | **Sibling confluence CTS extreme** (= ref's `source_event_idx`) | This trigger candle | **Sibling first_confluence's most recent CTS** (existing zone if CONFIRMED; ad-hoc CTS if UPDATED/EST) | `-parent_sd` |
+| `subsequent_confluence` | Parent CTS-proximity after sd-prox | **Sibling counter CTS extreme** (= ref's `source_event_idx`) | This trigger candle | Sibling counter's most recent CTS (in M15 window; same rule) | `+parent_sd` |
+| `subsequent_counter` | Parent sd-prox forming Λ / V | **Sibling confluence CTS extreme** (= ref's `source_event_idx`) | This trigger candle | Sibling confluence's most recent CTS (in M15 window; same rule) | `-parent_sd` |
 
-**Reference-zone pivot (2026-05-29, Session 2 post-Gate-1).** Earlier
-designs had `first_*` consulting the parent's H1 BOS/CTS zones. Gate-1
-/compare showed many shifts caused by H1 zone bounds being wider than
-M15 candles' tolerance, and the probe finding shallow M15 retraces that
-weren't structural. The fix: every probe references a zone on the sub's
-own TF. For `first_confluence` (no prior structure on the sub yet) that
-zone is an ad-hoc BOS_0 derived from the input_idx candle. For
-`first_counter` (sibling first_confluence has run by build order) it's
-the sibling's most recent CTS — same rule subsequent_* uses.
+**Uniform input+reference rule (2026-05-31, Session 3).** All three
+sibling-referencing variations (`first_counter`, `subsequent_confluence`,
+`subsequent_counter`) co-source BOTH `input_idx` AND `reference_zone` from the
+**sibling entity's most recent CTS event** (CONFIRMED → existing KL zone +
+`cts_anchor_idx`; UPDATED/EST → ad-hoc CTS zone + event idx), found by walking
+the sibling's events within the trigger's sub-TF idx window. `first_confluence`
+is the only exception — it has no sibling/prior structure yet, so it anchors on
+its own ad-hoc BOS_0 from the parent-BOS-extreme input. The probe always runs
+on the structure's OWN sub TF.
+
+**Reference-zone pivot history.** Session 2 (2026-05-29, post-Gate-1) first
+moved `first_*` off the parent's wide H1 zones onto sub-TF zones (ad-hoc BOS_0
+for confluence; sibling CTS for counter) — but left `first_counter`'s *input*
+on the parent CTS extreme, and left `subsequent_*` on the legacy parent-TF
+Scenario-3 probe. Session 3 (2026-05-31) completed the migration: `subsequent_*`
+moved to the unified probe, and all three sibling-referencing variations adopted
+the co-sourced input+reference rule above. The earlier "parent extreme input" /
+"drill-in counter-sub zone" / "active parent CTS zone" rules are retired.
 
 **Build-order dependency.** Every sibling-CTS lookup (first_counter →
 confluence; subsequent_confluence → counter; subsequent_counter →

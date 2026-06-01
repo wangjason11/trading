@@ -3,7 +3,7 @@ name: compare
 description: Compare current replay output against previous /commit-save to detect unintended changes.
 user-invocable: true
 allowed-tools: Bash, Read, Glob, Grep, Write
-argument-hint:
+argument-hint: "[--reuse-replay]"
 ---
 
 # Compare Replay Output Against Previous Commit-Save
@@ -58,11 +58,48 @@ if [ ! -d "${PREV_PATH}" ]; then
 fi
 ```
 
-### 2. Run Replay on Current Code
+### 2. Get Current Replay Output (run vs reuse)
+
+`/compare` needs the current code's replay output in `artifacts/debug` +
+`artifacts/charts`. Two modes for obtaining it — mirrors `/commit-save`:
+
+- **Run mode (default — plain `/compare`):** run a fresh replay:
+  ```bash
+  python -m engine_v2.run_replay > run.log 2>&1
+  ```
+- **Reuse mode (`/compare --reuse-replay`, or the user says "use the recent
+  replay" / "don't re-run the replay"):** SKIP the replay and compare the
+  outputs already sitting in `artifacts/debug` + `artifacts/charts` from the
+  session's most recent replay.
+
+**Best-judgement reuse (no flag needed).** If a replay for the EXACT current
+code already ran earlier this session (it completed AND no source changed
+since — a re-run would reproduce identical output), you MAY reuse it without
+the flag and SAY you're doing so ("reusing the replay from N minutes ago — no
+code changed since"). When in doubt, or if any source changed after the last
+replay, run a fresh one. Reusing stale outputs silently compares the wrong
+data — the same guard as `/commit-save` reuse mode.
+
+**Always display the `=== Replay Timing ===` block** when a replay is run
+(per `feedback_replay_timing_display`). In reuse mode there's no new timing.
+
+### 2b. Post-replay log grep (catch silent skips)
+
+Whenever a replay was actually run in step 2 (run mode), grep its captured log
+for silently-skipped work BEFORE the CSV comparison:
 
 ```bash
-python -m engine_v2.run_replay
+grep -iaE "warning|skipping|unavailable|degenerate|pending|no sid" run.log
 ```
+
+Report the count + the lines. A non-zero count is not automatically a bug
+(some skips are correct), but each must be **explained, not ignored** — and
+when the CSV/chart comparison below shows dropped sids/zones, the matching
+skip-warning usually names the exact cause. In reuse mode, grep the most recent
+replay's log if it was captured; otherwise note it was unavailable. See
+`engine_v2/WORKFLOWS.md` "Post-replay log grep" + memory
+`feedback_implement_against_docs.md` for why this exists (Session 3 Step 2
+dropped 5 sids whose cause sat unread in the log).
 
 ### 3. Load and Compare Data
 
