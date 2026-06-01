@@ -1266,7 +1266,7 @@ trading_open. Same mechanism as Phase 2; just hasn't been wired yet.
 
 ---
 
-## `bos_threshold` is reset to the ORIGINAL BOS at CTS confirmation, discarding expansion (FIX PENDING 2026-06-01)
+## `bos_threshold` is reset to the ORIGINAL BOS at CTS confirmation, discarding expansion (FIXED 2026-06-01)
 
 **Symptom:** a structure reverses *earlier* than it should. Two MS runs with
 byte-identical event streams for hundreds of bars suddenly diverge at the
@@ -1324,11 +1324,23 @@ CTS-confirmation paths should behave identically post-confirm):
   allowed in BREAKOUT/RANGE), so changing this can shift downstream pattern
   eligibility — the highest-risk of the three fixes.
 
-**Fix (pending — its own commit, separate /compare):** delete the
-`bos_threshold` reset at both ~1500 and ~2013 (keep `cts_threshold`); add the
-inline `_sync_thresholds_from_range` to the proximity path; add
-`_set_state(RANGE)` inside the proximity path's `if not st.range_active:`
-range-creation block (gated so it only fires when proximity CREATES the range;
-prior state is provably BREAKOUT there). Blast radius is MS-core (H1.main +
-all subs), so it MUST be validated on its own `/compare`, not folded into an
-unrelated change. See `project_unified_identify_start_probe.md`.
+**Fix (DONE 2026-06-01, all 3 in one commit):** deleted the `bos_threshold`
+reset at both CTS-confirmation paths (kept `cts_threshold`); added the inline
+`_sync_thresholds_from_range(candle_idx)` to the proximity path; added
+`_set_state(MarketState.RANGE, candle_idx, ...)` inside the proximity path's
+`if not st.range_active:` range-creation block (gated so it only fires when
+proximity CREATES the range; prior state is provably BREAKOUT there). Verified
+blast radius: the only behavioral state-gate (pattern dispatch ~line 992)
+buckets BREAKOUT and RANGE identically, so fix #3 shifts no pattern
+eligibility.
+
+**/compare vs `8865c10`:** H1.main 8/8 + M15.counter 5/5 byte-identical;
+deltas confined to M15.confluence. The documented (1,2,1) `subsequent_confluence`
+reversal corrected **4179→4200** — `bos_frozen` went from the stale `0.57806`
+to the fully-expanded `0.57898` (barrier probes had pushed it even past the
+`0.57827` first spotted). Same 13 sids, no drops. Fixes #2/#3 produced zero
+independent byte-changes on this window (proven by H1.main + counter
+byte-identical — proximity never hit the pre-expanded-range or
+create-range-from-BREAKOUT case there); their correctness rests on the static
+blast-radius analysis. 309 tests green. See
+`project_unified_identify_start_probe.md` (MS fix = Step 3 lead item).

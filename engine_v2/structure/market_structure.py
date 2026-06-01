@@ -1493,11 +1493,13 @@ class MarketStructure:
                 )
                 st.cts_phase = "CONFIRMED"
 
-                # initialize thresholds to the confirmed CTS/BOS values at confirmation time
+                # initialize cts_threshold to the confirmed CTS value at confirmation time.
+                # NOTE: do NOT reset bos_threshold here — BOS locked at BOS_CONFIRMED and
+                # may have legitimately expanded via barrier probes in [BOS_CONFIRMED,
+                # CTS_CONFIRMED]; re-initing it to bos_confirmed.price would discard that
+                # expansion (see GOTCHAS "bos_threshold is reset to the ORIGINAL BOS").
                 if st.cts is not None:
                     st.cts_threshold = float(st.cts.price)
-                if st.bos_confirmed is not None:
-                    st.bos_threshold = float(st.bos_confirmed.price)
 
             st.last_pullback_pat_apply_idx = apply_idx
             self._set_state(MarketState.PULLBACK, apply_idx, meta={"reason": "pullback_pattern", "pat": ev.name})
@@ -2006,16 +2008,36 @@ class MarketStructure:
                     },
                 )
             )
+            # Proximity CREATED the range (prior state is provably BREAKOUT here:
+            # gated on `not range_active`, and no pullback could have confirmed
+            # without setting cts_phase=CONFIRMED, which blocks proximity). Set a
+            # coherent RANGE state to match _finalize_range_candidate_offline and
+            # _ensure_range_on_pullback. Dispatch eligibility is UNCHANGED — line
+            # ~992 treats BREAKOUT and RANGE identically (both allow pullback +
+            # breakout detection); only the no-create branch leaves state as-is.
+            self._set_state(
+                MarketState.RANGE,
+                candle_idx,
+                meta={"reason": "proximity_created_range"},
+            )
 
-        # Initialize thresholds (mirrors pullback path)
+        # Initialize cts_threshold (mirrors pullback path).
+        # NOTE: do NOT reset bos_threshold here — see the matching note on the
+        # pullback path and GOTCHAS "bos_threshold is reset to the ORIGINAL BOS".
         st.cts_threshold = cts_price
-        if st.bos_confirmed is not None:
-            st.bos_threshold = float(st.bos_confirmed.price)
+        # Sync cts_threshold to the live range bound, mirroring the pullback
+        # path's inline _sync_thresholds_from_range(apply_idx) call. Without
+        # this the proximity path lagged one candle (relied on the next
+        # candle's _expand_range). No-op when proximity just created the range
+        # (range bound == cts_price); only fires when the range already
+        # expanded before confirmation.
+        self._sync_thresholds_from_range(candle_idx)
 
-        # Note: state.state stays in BREAKOUT (not transitioned to PULLBACK
-        # since no pullback pattern fired). This preserves the engine's
-        # internal pattern dispatch — both pullback and breakout patterns
-        # remain eligible for subsequent candles.
+        # Note: when proximity CREATES the range above, state is set to RANGE
+        # (coherent with the pullback / offline-finalize paths). When the range
+        # already existed, state is left unchanged. Either way pattern dispatch
+        # is preserved — both pullback and breakout patterns remain eligible for
+        # subsequent candles (line ~992 buckets BREAKOUT and RANGE together).
 
     def _emit_cts_threshold_updated(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
         meta2 = dict(meta or {})
