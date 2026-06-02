@@ -4,6 +4,43 @@
 
 ---
 
+## `bounded.reversal_idx` is the single source — don't re-derive reversal idx from a `market_state` mask in the bounded path (2026-06-01)
+
+**Symptom:** the sub-reversal unified probe (`build_one_sid`) drifted every
+reversal-born start *later*, and in one cycle collapsed the start onto the
+window edge → the reversal-born sid (and its child) were dropped. The probe's
+`end_idx` was logged as ~600 candles *past* the actual reversal.
+
+**Root cause:** I re-derived the probe's `end_idx` inline as
+`bounded.df.loc[(market_state=="reversal")].index.max()`. Two defects:
+- **Missing `& (structure_id == 0)` filter.** `compute_bounded_structure`
+  passes `end_idx`, which triggers terminal stamping that marks rows *past*
+  `end_idx` as `market_state="reversal"` with `structure_id=-1` (see its own
+  comment). Without the structure_id filter the mask swept those phantom rows.
+- **`.max()` on a single bounded structure.** Nothing overwrites rows after the
+  reversal (no next structure), so the "reversal" state persists to the window
+  end → `.max()` drifts to the edge.
+
+**The real lesson (single source of truth):** `compute_bounded_structure`
+already exposes the correct value as `bounded.reversal_idx` (`.min()` + the
+structure_id filter) — and `build_one_sid` already used it 84 lines earlier for
+the lifecycle cap. I re-computed (incorrectly) a value I already had in hand.
+**Fix:** `reversal_end_local = int(bounded.reversal_idx)`.
+
+**Why main's idiom didn't transfer:** `compute_structure` (main) uses
+`rev_mask.index.max()` correctly because it (a) filters by `structure_id`, (b)
+passes no `end_idx` (no terminal stamping), and (c) runs a *next* structure that
+overwrites post-reversal rows. Copying the surface idiom into the bounded
+single-structure context without re-checking those invariants is the trap —
+the same class-2 "correct intent, untraced data-dependency across a seam" bug
+as [[feedback-implement-against-docs]]. See also [[feedback-single-source-of-truth]].
+
+**Generalize:** before deriving a value from raw df state, check whether the
+function/result you already hold exposes it canonically. Re-derivation is where
+bounded-vs-unbounded (and slice-vs-entity) invariant mismatches hide.
+
+---
+
 ## Debugging Philosophy: Trace the Full Flow
 
 **Principle:** When debugging why output differs from expectations or previous iterations, always review the full codebase and trace through the run_replay logic to understand how each step impacts the next. Never look at individual fragments or functions in isolation.

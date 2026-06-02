@@ -1041,8 +1041,13 @@ def build_one_sid(
        Inherit Mirrored Structure Cols").
     2. ``compute_bounded_structure`` bounded to the window.
     3. Downstream pipeline (KL BOS-only, Fib cross_cycle, POI; WVMI deferred).
-    4. If it reversed → ``identify_start_scenario_2`` for the next sid's start
-       (entity-absolute), returned on the outcome.
+    4. If it reversed → the **unified probe** vs the just-reversed structure's
+       most recent CTS reference (PART4 §6 / unified-probe §3 reversal row) for
+       the next sid's start (entity-absolute), returned on the outcome. This
+       replaces ``identify_start_scenario_2_after_reversal`` (Scenario 2 +
+       Exception 1) on the sub path — the probe's furthest-retrace Phase-1 walk
+       subsumes Exception 1. (Main's reversal handoff keeps Scenario 2 + Exc1
+       until Step 4.)
     5. Lifecycle-cap open/late zones/POIs/fibs at the sid's effective end
        (its reversal if any, else the bound).
     6. Mirror into ``entity_df.attrs`` with the canonical identity
@@ -1053,9 +1058,10 @@ def build_one_sid(
     """
     from engine_v2.patterns.imbalance import compute_imbalance
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
-    from engine_v2.structure.identify_start import (
-        identify_start_scenario_2_after_reversal,
+    from engine_v2.structure.reference_zone import (
+        build_reference_zone_from_cts_event,
     )
+    from engine_v2.structure.unified_probe import unified_probe
     from engine_v2.structure.structure_engine import compute_bounded_structure
 
     n = len(entity_df)
@@ -1204,19 +1210,95 @@ def build_one_sid(
     _t_downstream = _t.perf_counter() - _t_downstream_start
 
     # Reversal handoff (slice-local → entity-absolute). reversal_idx_abs was
-    # resolved above (for the end-cap); here we derive the NEXT sid's start.
+    # resolved above (for the end-cap); here we derive the NEXT sid's start via
+    # the unified probe vs the just-reversed structure's most recent CTS
+    # reference (PART4 §6 / unified-probe §3 reversal row). Replaces
+    # identify_start_scenario_2_after_reversal (Scenario 2 + Exception 1) — the
+    # probe's furthest-retrace Phase-1 walk + cond-2 wick filter subsume Exc1.
+    # next_start_abs/next_sd are set TOGETHER only on a successful probe (the
+    # cursor consumer requires next_start_abs not None); every failure branch
+    # leaves both None so the chain falls through to any pending subsequent.
     next_start_abs: Optional[int] = None
     next_sd: Optional[int] = None
     if bounded.reversal_idx is not None:
-        d_next = identify_start_scenario_2_after_reversal(
+        probe_sd = -sd
+        # Reference = prior structure's (sid=0) most recent {CONF/UPD/EST} CTS.
+        # downstream (with kl_zones) already ran above, so the CONFIRMED-zone
+        # lookup is populated; the prior sid is NOT yet mirrored into
+        # entity_df.attrs (that happens below), so we read bounded.events
+        # directly. idx_window=None per the reversal contract.
+        ref_zone = build_reference_zone_from_cts_event(
+            bounded.events,
+            downstream["kl_zones"],
             bounded.df,
-            reversal_idx=bounded.reversal_idx,
-            prev_structure_id=0,
-            prev_struct_direction=sd,
-            min_history=50,
+            sid=0,
+            probe_direction=probe_sd,
+            idx_window=None,
         )
-        next_start_abs = int(d_next.start_idx) + slice_begin
-        next_sd = int(d_next.struct_direction)
+        if ref_zone is None:
+            # Degenerate: a reversal with zero CTS events of any type for the
+            # prior structure (should not occur — a structure must establish a
+            # cycle to reverse). Terminate the chain rather than guess a start.
+            print(
+                f"[entity_compute] WARNING: reversal reference zone unavailable "
+                f"for {started_by} sid=({trigger.parent_sid},"
+                f"{trigger.parent_cycle_id},{sub_sid}) — no CTS event for prior "
+                f"structure; no reversal-born sid (chain falls through)"
+            )
+        else:
+            # Probe end_idx = the reversal candle (slice-local), per PART4 §4.
+            # Use the value compute_bounded_structure ALREADY derived
+            # (`bounded.reversal_idx` = the reversal-marked candle, identical to
+            # the lifecycle-cap `reversal_idx_abs` resolved above) rather than
+            # re-deriving from a market_state mask. Re-deriving via a `.max()`
+            # mask drifts to the window edge: in a bounded single structure the
+            # "reversal" state persists from the reversal candle to the end, and
+            # terminal stamping past end_idx marks structure_id=-1 rows too (see
+            # compute_bounded_structure) — a mask without the structure_id
+            # filter sweeps those up. `bounded.reversal_idx` is the canonical
+            # single-source value; don't recompute it.
+            reversal_end_local = int(bounded.reversal_idx)
+            probe_input_idx = int(ref_zone.source_event_idx)
+            if probe_input_idx >= reversal_end_local:
+                # No forward scan window — degenerate; no reversal-born sid.
+                print(
+                    f"[entity_compute] WARNING: degenerate reversal probe window "
+                    f"for {started_by} sid=({trigger.parent_sid},"
+                    f"{trigger.parent_cycle_id},{sub_sid}) "
+                    f"(input={probe_input_idx} end={reversal_end_local}) — "
+                    f"no reversal-born sid (chain falls through)"
+                )
+            else:
+                rev_probe = unified_probe(
+                    bounded.df,
+                    input_idx=probe_input_idx,
+                    direction=probe_sd,
+                    reference_zone=ref_zone,
+                    end_idx=reversal_end_local,
+                    timeframe=timeframe,
+                    enable_phase2=False,
+                )
+                print(
+                    f"[entity_compute] unified_probe (reversal): "
+                    f"sid=({trigger.parent_sid},{trigger.parent_cycle_id},"
+                    f"{sub_sid}) input={probe_input_idx} "
+                    f"end={reversal_end_local} ref={ref_zone.source} -> "
+                    f"start={rev_probe.start_idx} status={rev_probe.status} "
+                    f"cond={rev_probe.finalize_condition} "
+                    f"iter={rev_probe.iterations}"
+                )
+                if rev_probe.status == "pending":
+                    # Only possible with end_idx=None; we always pass a defined
+                    # end_idx, so this is dormant. Guard for symmetry.
+                    print(
+                        f"[entity_compute] PENDING: reversal unified_probe did "
+                        f"not finalize for {started_by} sid=("
+                        f"{trigger.parent_sid},{trigger.parent_cycle_id},"
+                        f"{sub_sid}); no reversal-born sid (chain falls through)"
+                    )
+                else:
+                    next_start_abs = int(rev_probe.start_idx) + slice_begin
+                    next_sd = probe_sd
 
     attribution: Dict[str, Any] = {
         "timeframe": timeframe,
