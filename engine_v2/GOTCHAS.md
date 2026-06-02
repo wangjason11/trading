@@ -4,6 +4,36 @@
 
 ---
 
+## Base/inside-bar zone inner could land beyond the outer (inverted zone) — FIXED 2026-06-01
+
+**Symptom:** a `base inside bar` KL zone rendered *above* its own anchor candle
+— inner (0.58266) sat *above* the outer = base_high (0.58244), so the zone
+detached from and sat outside the base. Surfaced on confluence `(0,0,1)` BOS at
+anchor 1797.
+
+**Root cause:** `find_base_threshold` built the inner from ±5 neighbour bodies
+testing BOTH `o` and `c` with **no bound against the outer**. A neighbour body
+*beyond* the outer (here the peak candle 1794, close 0.58266 > base_high
+0.58244) could be selected as the inner → inversion. The candles that qualified
+the *inside-bar pattern* (inside the anchor) were not the candles that built the
+inner (the peak, above the anchor).
+
+**Fix:** test only the neighbour's **inner-edge body point** (`min(o,c)` when
+outer=base_high, `max(o,c)` when outer=base_low), **drop points beyond the
+outer**, and take the 2nd such point closest to the outer. Inner is now
+guaranteed within the outer, containing the base. Full rule in
+`KL_ZONES_SPEC.md` "`find_base_threshold` inner — inner-edge rule".
+
+**Scope of the change (verified by /compare):** surgical — only diverges from
+the old logic when a neighbour's inner-edge point is beyond the outer, so a full
+replay changed exactly ONE zone (the 1797 one); every well-behaved base/inside-
+bar zone was byte-identical, and there was no structure/proximity/POI cascade.
+**TODO (user, 2026-06-01):** do a pass over the OTHER zone-forming candle
+patterns (pinbar / 2-candle / star inner rules) for the same outer/inner
+inversion class.
+
+---
+
 ## `bounded.reversal_idx` is the single source — don't re-derive reversal idx from a `market_state` mask in the bounded path (2026-06-01)
 
 **Symptom:** the sub-reversal unified probe (`build_one_sid`) drifted every

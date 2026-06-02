@@ -116,6 +116,33 @@ where the reference depends on BOS/CTS and struct_direction:
 
 Other base_pattern mappings use `mid_price`, `base_min_close_open`, `base_max_close_open`, or a generalized `find_base_threshold(...)` fallback.【fileciteturn2file8】
 
+### `find_base_threshold` inner (for `base` / `base inside bar`) — inner-edge rule (2026-06-01)
+
+The outer of a 1-candle base is the base candle's own extreme (`base_high` for
+BOS sd=−1 / CTS sd=+1; `base_low` for BOS sd=+1 / CTS sd=−1 — the `use_low_ref`
+split). `find_base_threshold` derives the **inner** from the ±5 neighbours
+(pre + post pooled, ranked by price — no positional precedence) using each
+neighbour's **inner-edge body point** — the body extreme on the side facing the
+zone interior:
+
+- outer = `base_high` → inner-edge = `min(o,c)` (bottom of body = `o` of a
+  bullish candle, `c` of a bearish one)
+- outer = `base_low` → inner-edge = `max(o,c)` (top of body = `c` bullish, `o` bearish)
+
+Rule: **drop neighbours whose inner-edge point is beyond the outer** (on its far
+side), then set the inner at the **2nd inner-edge point closest to the outer**
+(two neighbours back it). Only that single point is tested — *not* both `o` and
+`c` — so a neighbour whose far-side body extreme pokes past the outer still
+qualifies on its near side. Fallback: the single closest qualifying neighbour,
+else NaN.
+
+This guarantees the base extreme stays the **outermost** edge, the inner sits
+**within** it (so the zone contains the base; inner never beyond the base
+candle's own high/low), and it avoids degenerate too-narrow zones. Prior code
+tested both `o` and `c` with no inner-side bound, so a neighbour body beyond the
+outer could become the inner → an **inverted** zone sitting outside the base
+(see GOTCHAS "Base/inside-bar zone inner could land beyond the outer").
+
 ---
 
 ## Zone expansion

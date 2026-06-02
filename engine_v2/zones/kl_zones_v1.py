@@ -364,47 +364,67 @@ def compute_base_window_features(
 # -------------------------
 
 def find_base_threshold(df: pd.DataFrame, idx: int, struct_direction: int, *, bos: bool = True) -> float:
-    left = max(0, int(idx) - 5)
-    right = min(len(df), int(idx) + 6)
+    """Inner threshold for a 1-candle base ("base" / "base inside bar").
 
-    neighbor_df = df.iloc[left:idx].copy()
-    neighbor_df = pd.concat([neighbor_df, df.iloc[idx + 1:right]], axis=0)
+    Built from the ±5 neighbours' INNER-EDGE body point — the body extreme on
+    the side of the zone facing the price interior — bounded so the inner can
+    never sit beyond the outer extreme established by the base candle:
 
+      - outer = base_high (BOS sd=-1 / CTS sd=+1): zone opens DOWN, inner-edge =
+        bottom of body = min(o,c); kept points must be <= base_high; inner is
+        the 2nd-highest such point (closest to the outer).
+      - outer = base_low  (BOS sd=+1 / CTS sd=-1): zone opens UP, inner-edge =
+        top of body = max(o,c); kept points must be >= base_low; inner is the
+        2nd-lowest such point.
+
+    Only the single inner-edge point is tested (not BOTH o and c): a neighbour
+    whose far-side body extreme is beyond the outer still qualifies on its near
+    side. This guarantees the base extreme stays the outer edge, the inner sits
+    within it (containing the base), and it widens the zone / avoids degenerate
+    too-narrow bases that requiring both o and c produced. All ±5 neighbours are
+    pooled and ranked by price (no pre/post precedence). Falls back to the
+    single closest qualifying neighbour, else NaN.
+    """
+    n = len(df)
+    i = int(idx)
+    sd = int(struct_direction)
+    if n == 0:
+        return float("nan")
+
+    left = max(0, i - 5)
+    right = min(n, i + 6)
+    neighbor_df = pd.concat([df.iloc[left:i], df.iloc[i + 1:right]], axis=0)
     if neighbor_df.empty:
         return float("nan")
 
-    candidates_desc = sorted(set(np.minimum(neighbor_df["o"], neighbor_df["c"])), reverse=True)
-    candidates_asc = sorted(set(np.maximum(neighbor_df["o"], neighbor_df["c"])), reverse=False)
+    o = neighbor_df["o"].astype(float)
+    c = neighbor_df["c"].astype(float)
 
-    sd = int(struct_direction)
-    result = None
+    # Outer extreme (set by the base candle) + the inner-edge body point that
+    # faces the zone interior. `use_low_outer` mirrors find_pinbar_threshold.
+    use_low_outer = (bos and sd == 1) or ((not bos) and sd == -1)
 
-    if bos:
-        levels = candidates_asc if sd == 1 else candidates_desc
-        for level in levels:
-            if sd == 1:
-                count = ((neighbor_df["o"] <= level) & (neighbor_df["c"] <= level)).sum()
-            else:
-                count = ((neighbor_df["o"] >= level) & (neighbor_df["c"] >= level)).sum()
-            if count >= 1:
-                result = float(level)
-            if count >= 2:
-                return float(level)
-        return float(result) if result is not None else float("nan")
-
+    if use_low_outer:
+        outer = float(df.loc[i, "l"])
+        sel = np.maximum(o, c)        # top of body (c of bullish, o of bearish)
+        sel = sel[sel >= outer]       # keep inner-side points (above the low)
+        levels = sorted(set(sel))     # ascending: closest to the low outer first
+        cmp = lambda lvl: int((sel <= lvl).sum())
     else:
-        levels = candidates_desc if sd == 1 else candidates_asc
-        for level in levels:
-            if sd == 1:
-                count = ((neighbor_df["o"] >= level) & (neighbor_df["c"] >= level)).sum()
-            else:
-                # fixed typo: "<=3 level" -> "<= level"
-                count = ((neighbor_df["o"] <= level) & (neighbor_df["c"] <= level)).sum()
-            if count >= 1:
-                result = float(level)
-            if count >= 2:
-                return float(level)
-        return float(result) if result is not None else float("nan")
+        outer = float(df.loc[i, "h"])
+        sel = np.minimum(o, c)        # bottom of body (o of bullish, c of bearish)
+        sel = sel[sel <= outer]       # keep inner-side points (below the high)
+        levels = sorted(set(sel), reverse=True)  # descending: closest to high first
+        cmp = lambda lvl: int((sel >= lvl).sum())
+
+    result = None
+    for level in levels:
+        count = cmp(level)
+        if count >= 1:
+            result = float(level)
+        if count >= 2:
+            return float(level)
+    return float(result) if result is not None else float("nan")
 
 def find_pinbar_threshold(
     df: pd.DataFrame,
