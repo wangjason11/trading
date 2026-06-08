@@ -65,6 +65,11 @@ class SidBuildOutcome:
     reversal_idx_abs: Optional[int]
     next_start_abs: Optional[int]
     next_sd: Optional[int]
+    # Cycle-0 BOS_0 inner threshold for the NEXT (reversal-born) sid's
+    # pre-CTS_0 scan-from-start, from the reversal probe. Set TOGETHER with
+    # next_start_abs/next_sd (None otherwise). See
+    # project_true_first_breakout_cycle0.md.
+    next_bos0_inner: Optional[float] = None
 
 
 # Structure columns potentially written by MarketStructure; we mirror
@@ -405,52 +410,19 @@ def _build_first_confluence_ref_zone(
     legacy Scenario 3 used, just on the SUB's TF rather than the parent's.
 
     Held constant across probe iterations per the unified-probe design.
+
+    Thin delegate (2026-06-07): the ad-hoc BOS_0 derivation now lives in
+    `reference_zone.build_ad_hoc_bos0_reference_zone` (single source of
+    truth — the unified probe's MOVING BOS_0 reuses the SAME machinery for
+    its post-reset threshold). Behaviour is byte-identical to the prior
+    inline implementation.
     """
     from engine_v2.structure.reference_zone import (
-        ReferenceZone,
-        _derive_zone_ad_hoc,
+        build_ad_hoc_bos0_reference_zone,
     )
 
-    # `direction` here is the SOURCE structure's direction (= the sub's
-    # own direction for first_confluence, since the BOS_0 belongs to the
-    # sub being built). For first_confluence, sub direction == lower_sd ==
-    # +parent_sd. Pass lower_sd in: the ad-hoc derivation produces a zone
-    # geographic + side keyed off that, then we re-interpret as a probe
-    # reference below.
-    derived = _derive_zone_ad_hoc(
-        entity_df, m15_input_idx, probe_direction, bos=True,
-    )
-    if derived is None:
-        return None
-    outer_geo, inner_geo, _side_geo = derived
-
-    # The probe reads `inner` per probe_direction (see ReferenceZone
-    # docstring): for +1 probe body is above ref, inner = top of zone;
-    # for -1 probe inner = bottom. The ad-hoc helper returns (outer,
-    # inner) in "source-structure" orientation matching the sd=+1 ⇒
-    # zone-above-body convention — for our case that's INVERTED to the
-    # probe's geometry because the source structure direction == probe
-    # direction and the legacy outer/inner convention put outer on the
-    # source direction side (= AWAY from body). For probe direction == +1
-    # the body grows up from the input candle and the zone (BOS_0)
-    # surrounds the input candle from BELOW — so inner = TOP of the zone
-    # (= ad-hoc's "inner" if we asked for the source structure direction).
-    # The ad-hoc helper's return is (outer, inner) where for sd=+1 outer
-    # = base_high and inner = some lower threshold (per zone_thresholds);
-    # that's NOT the probe's outer/inner. We re-key to probe semantics by
-    # taking min/max of the two values:
-    z_top = max(outer_geo, inner_geo)
-    z_bottom = min(outer_geo, inner_geo)
-    if probe_direction == 1:
-        ref_outer, ref_inner, side = z_bottom, z_top, "buy"
-    else:
-        ref_outer, ref_inner, side = z_top, z_bottom, "sell"
-    return ReferenceZone(
-        outer=float(ref_outer),
-        inner=float(ref_inner),
-        side=side,  # type: ignore[arg-type]
-        source="ad_hoc_bos_0",
-        source_event_idx=int(m15_input_idx),
+    return build_ad_hoc_bos0_reference_zone(
+        entity_df, int(m15_input_idx), int(probe_direction),
     )
 
 
@@ -540,7 +512,7 @@ def _resolve_first_confluence_via_unified_probe(
     trigger: MultiTFTrigger,
     parent_df: pd.DataFrame,
     entity_df: pd.DataFrame,
-) -> Tuple[Optional[int], Optional[int]]:
+) -> Tuple[Optional[int], Optional[int], Optional[float]]:
     """Unified-probe path for `first_confluence` (the one variation that
     anchors on its OWN ad-hoc BOS_0, not a sibling).
 
@@ -566,7 +538,7 @@ def _resolve_first_confluence_via_unified_probe(
             f"in trigger meta for {trigger.use_case} sid={trigger.parent_sid} "
             f"cycle={trigger.parent_cycle_id}"
         )
-        return None, None
+        return None, None, None
     parent_extreme_idx = int(raw_input)
     parent_end_idx = int(raw_end)
     if parent_extreme_idx not in parent_df.index:
@@ -575,7 +547,7 @@ def _resolve_first_confluence_via_unified_probe(
             f"out of parent_df bounds for {trigger.use_case} "
             f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}"
         )
-        return None, None
+        return None, None, None
 
     # Candle-semantics mapping rule (user spec 2026-05-31): BOS/CTS ANCHOR
     # candles are PRICE-mapped (they anchor a price level into the sub);
@@ -602,7 +574,7 @@ def _resolve_first_confluence_via_unified_probe(
             f"{trigger.use_case} sid={trigger.parent_sid} "
             f"cycle={trigger.parent_cycle_id}"
         )
-        return None, parent_extreme_idx
+        return None, parent_extreme_idx, None
 
     if parent_end_idx not in parent_df.index:
         print(
@@ -610,7 +582,7 @@ def _resolve_first_confluence_via_unified_probe(
             f"parent_df bounds for {trigger.use_case} sid={trigger.parent_sid} "
             f"cycle={trigger.parent_cycle_id}"
         )
-        return None, parent_extreme_idx
+        return None, parent_extreme_idx, None
     parent_cts_time = pd.to_datetime(
         parent_df.loc[parent_end_idx, "time"], utc=True,
     )
@@ -623,7 +595,7 @@ def _resolve_first_confluence_via_unified_probe(
             f"{trigger.use_case} sid={trigger.parent_sid} "
             f"cycle={trigger.parent_cycle_id}"
         )
-        return None, parent_extreme_idx
+        return None, parent_extreme_idx, None
     if m15_end_idx <= m15_input_idx:
         print(
             f"[entity_compute] WARNING: degenerate probe window for "
@@ -631,7 +603,7 @@ def _resolve_first_confluence_via_unified_probe(
             f"cycle={trigger.parent_cycle_id} "
             f"(m15_input={m15_input_idx} m15_end={m15_end_idx})"
         )
-        return None, parent_extreme_idx
+        return None, parent_extreme_idx, None
 
     ref_zone = _build_first_confluence_ref_zone(
         entity_df, int(m15_input_idx), int(trigger.lower_sd),
@@ -642,7 +614,7 @@ def _resolve_first_confluence_via_unified_probe(
             f"for {trigger.use_case} sid={trigger.parent_sid} "
             f"cycle={trigger.parent_cycle_id} — skipping trigger"
         )
-        return None, parent_extreme_idx
+        return None, parent_extreme_idx, None
 
     result = unified_probe(
         entity_df,
@@ -667,8 +639,8 @@ def _resolve_first_confluence_via_unified_probe(
             f"first_confluence sid={trigger.parent_sid} "
             f"cycle={trigger.parent_cycle_id}; skipping M15 build"
         )
-        return None, parent_extreme_idx
-    return int(result.start_idx), parent_extreme_idx
+        return None, parent_extreme_idx, None
+    return int(result.start_idx), parent_extreme_idx, result.bos0_inner
 
 
 def _window_extreme_idx(
@@ -735,7 +707,7 @@ def _resolve_sibling_cts_via_unified_probe(
     parent_df: pd.DataFrame,
     entity_df: pd.DataFrame,
     sibling_entity_df: Optional[pd.DataFrame] = None,
-) -> Tuple[Optional[int], Optional[int]]:
+) -> Tuple[Optional[int], Optional[int], Optional[float]]:
     """Unified-probe path for the three sibling-referencing variations
     (`first_counter`, `subsequent_confluence`, `subsequent_counter`) — Session 3
     uniform rule (2026-05-31).
@@ -765,7 +737,7 @@ def _resolve_sibling_cts_via_unified_probe(
             f"for {trigger.use_case} sid={trigger.parent_sid} "
             f"cycle={trigger.parent_cycle_id}"
         )
-        return None, None
+        return None, None, None
 
     # 1. Time-map probe end_idx (parent trigger candle → last M15 of its hour).
     m15_end_idx = _map_parent_idx_to_m15_hour_end(
@@ -777,7 +749,7 @@ def _resolve_sibling_cts_via_unified_probe(
             f"{trigger.use_case} sid={trigger.parent_sid} "
             f"cycle={trigger.parent_cycle_id}"
         )
-        return None, None
+        return None, None, None
 
     # 2. Sibling-CTS reference zone within the per-variation M15 window. Its
     #    `source_event_idx` IS the probe input_idx (co-sourced).
@@ -811,7 +783,7 @@ def _resolve_sibling_cts_via_unified_probe(
                 f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id} "
                 f"window={idx_window} — skipping trigger"
             )
-            return None, None
+            return None, None, None
         print(
             f"[entity_compute] sibling-CTS unavailable for {trigger.use_case} "
             f"sid={trigger.parent_sid} cycle={trigger.parent_cycle_id} "
@@ -828,7 +800,7 @@ def _resolve_sibling_cts_via_unified_probe(
             f"cycle={trigger.parent_cycle_id} "
             f"(m15_input={m15_input_idx} m15_end={m15_end_idx})"
         )
-        return None, m15_input_idx
+        return None, m15_input_idx, None
 
     # 3. Run the unified probe on the structure's own M15 frame (Phase 1 only).
     result = unified_probe(
@@ -854,15 +826,15 @@ def _resolve_sibling_cts_via_unified_probe(
             f"{trigger.use_case} sid={trigger.parent_sid} "
             f"cycle={trigger.parent_cycle_id}; skipping M15 build"
         )
-        return None, m15_input_idx
-    return int(result.start_idx), m15_input_idx
+        return None, m15_input_idx, None
+    return int(result.start_idx), m15_input_idx, result.bos0_inner
 
 
 def _resolve_via_legacy_probe(
     trigger: MultiTFTrigger,
     parent_df: pd.DataFrame,
     entity_df: pd.DataFrame,
-) -> Tuple[Optional[int], Optional[int]]:
+) -> Tuple[Optional[int], Optional[int], Optional[float]]:
     """Legacy Scenario-3-on-parent-TF probe + post-probe parent→M15
     mapping. NO LONGER on any default path (all four variations migrated to
     the unified probe as of Session 3). Retained ONLY as the bisect escape
@@ -874,7 +846,7 @@ def _resolve_via_legacy_probe(
 
     validated_parent_idx = _run_subordinate_probe(trigger, parent_df)
     if validated_parent_idx is None:
-        return None, None
+        return None, None, None
 
     parent_start_time = pd.to_datetime(
         parent_df.loc[validated_parent_idx, "time"], utc=True,
@@ -893,8 +865,9 @@ def _resolve_via_legacy_probe(
             f"{trigger.use_case} sid={trigger.parent_sid} "
             f"cycle={trigger.parent_cycle_id}"
         )
-        return None, validated_parent_idx
-    return m15_start_idx, validated_parent_idx
+        return None, validated_parent_idx, None
+    # Legacy path computes no BOS_0 inner → scan mode stays off for it.
+    return m15_start_idx, validated_parent_idx, None
 
 
 # Use-case routing for the start resolver (Session 3, 2026-05-31).
@@ -916,7 +889,7 @@ def _resolve_trigger_m15_start(
     parent_df: pd.DataFrame,
     entity_df: pd.DataFrame,
     sibling_entity_df: Optional[pd.DataFrame] = None,
-) -> Tuple[Optional[int], Optional[int]]:
+) -> Tuple[Optional[int], Optional[int], Optional[float]]:
     """Resolve a trigger's M15 starting idx (entity-absolute) — dispatcher.
 
     Routes by ``trigger.use_case`` (Session 3 uniform rule):
@@ -938,10 +911,12 @@ def _resolve_trigger_m15_start(
     is already built when this fires (LANDMINE "Cross-entity sibling references
     require cadence-order interleaving").
 
-    Returns ``(m15_start_idx, metadata_idx)``. The second slot is consumed only
-    as metadata (`sid_records.validated_parent_start`); its meaning varies by
-    path (legacy = probe-converged parent idx; first_confluence = parent BOS
-    extreme; sibling-CTS = sibling CTS extreme on M15).
+    Returns ``(m15_start_idx, metadata_idx, bos0_inner)``. The second slot is
+    consumed only as metadata (`sid_records.validated_parent_start`); its
+    meaning varies by path (legacy = probe-converged parent idx;
+    first_confluence = parent BOS extreme; sibling-CTS = sibling CTS extreme on
+    M15). The third slot is the probe's finalized BOS_0 inner threshold (price)
+    for the sub's pre-CTS_0 scan-from-start gate — None for the legacy path.
     """
     uc = trigger.use_case
     if uc in _LEGACY_PROBE_USE_CASES:
@@ -1026,6 +1001,7 @@ def build_one_sid(
     validated_parent_idx: Optional[int] = None,
     parent_floor_m15: Optional[int] = None,
     cap_open: bool = False,
+    bos0_inner: Optional[float] = None,
 ) -> Optional[SidBuildOutcome]:
     """Build ONE bounded single-structure sub sid and mirror it (Part 4 §5/§6.1).
 
@@ -1130,6 +1106,12 @@ def build_one_sid(
             struct_direction=sd,
             end_idx=end_in_slice,
             timeframe=timeframe,
+            # Pre-CTS_0 scan-from-start: gate cycle-0 on the probe's BOS_0
+            # inner (a price → slice-invariant; no idx remap). When the
+            # probe didn't hand one (legacy / unexpected), scan stays off
+            # (graceful fallback to prior behaviour).
+            enforce_cts0_new_extreme=(bos0_inner is not None),
+            bos0_inner=bos0_inner,
         )
     except (ValueError, IndexError) as exc:
         print(
@@ -1220,6 +1202,7 @@ def build_one_sid(
     # leaves both None so the chain falls through to any pending subsequent.
     next_start_abs: Optional[int] = None
     next_sd: Optional[int] = None
+    next_bos0_inner: Optional[float] = None
     if bounded.reversal_idx is not None:
         probe_sd = -sd
         # Reference = prior structure's (sid=0) most recent {CONF/UPD/EST} CTS.
@@ -1299,6 +1282,9 @@ def build_one_sid(
                 else:
                     next_start_abs = int(rev_probe.start_idx) + slice_begin
                     next_sd = probe_sd
+                    # BOS_0 inner is a price (slice-invariant) → carry as-is
+                    # for the reversal-born sid's scan-from-start gate.
+                    next_bos0_inner = rev_probe.bos0_inner
 
     attribution: Dict[str, Any] = {
         "timeframe": timeframe,
@@ -1382,6 +1368,7 @@ def build_one_sid(
         reversal_idx_abs=reversal_idx_abs,
         next_start_abs=next_start_abs,
         next_sd=next_sd,
+        next_bos0_inner=next_bos0_inner,
     )
 
 
@@ -1524,6 +1511,10 @@ class _ChainCursor:
         self.cur_started_by: str = bootstrap.use_case
         self.cur_sd: int = int(bootstrap.lower_sd)
         self.cur_start: Optional[int] = None
+        # BOS_0 inner (price) for the current sid's pre-CTS_0 scan-from-start
+        # gate. Set from the start resolver (first/sibling) or the reversal
+        # handoff (outcome.next_bos0_inner). None → scan mode off for that sid.
+        self.cur_bos0_inner: Optional[float] = None
         self.cur_start_trig: Optional[int] = None
         self.cur_valid: Optional[int] = None
         self.guard = 0
@@ -1569,13 +1560,14 @@ class _ChainCursor:
         # explicitly when advancing, so they skip this block.
         if self.cur_start is None:
             while True:
-                m15_start, valid = _resolve_trigger_m15_start(
+                m15_start, valid, bos0_inner = _resolve_trigger_m15_start(
                     self.cur_trigger, self.parent_df, self.entity_df,
                     sibling_entity_df=self._sibling_df,
                 )
                 if m15_start is not None:
                     self.cur_start = m15_start
                     self.cur_valid = valid
+                    self.cur_bos0_inner = bos0_inner
                     if self.cur_start_trig is None:
                         # Bootstrap: the start candle IS the lifecycle trigger.
                         # (Subsequents already have cur_start_trig = boundary.)
@@ -1638,6 +1630,7 @@ class _ChainCursor:
             validated_parent_idx=self.cur_valid,
             parent_floor_m15=self.parent_floor_m15,
             cap_open=cap_open,
+            bos0_inner=self.cur_bos0_inner,
         )
         if outcome is None:
             # Degenerate / failed sid ends the chain (conservative).
@@ -1656,6 +1649,9 @@ class _ChainCursor:
                 and outcome.next_start_abs < len(self.entity_df)):
             self.cur_start = outcome.next_start_abs
             self.cur_sd = int(outcome.next_sd)
+            # BOS_0 inner for the reversal-born sid (set TOGETHER with
+            # cur_start/cur_sd — the multi-TF "set together" invariant).
+            self.cur_bos0_inner = outcome.next_bos0_inner
             self.cur_trigger = _synth_reversal_trigger(
                 self.bootstrap, self.cur_sd, outcome.reversal_idx_abs,
             )
@@ -1676,6 +1672,9 @@ class _ChainCursor:
             self.cur_start = None
             self.cur_start_trig = next_sub["boundary"]
             self.cur_valid = None
+            # Cleared so a stale value can't leak into the next sid if its
+            # probe is re-resolved at top-of-step (re-set on success there).
+            self.cur_bos0_inner = None
             return
 
         self.done = True

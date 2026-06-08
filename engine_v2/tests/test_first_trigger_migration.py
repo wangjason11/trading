@@ -255,7 +255,7 @@ class TestResolveFirstConfluence:
             "engine_v2.structure.unified_probe.unified_probe",
             return_value=fake,
         ) as mock_probe:
-            m15_start, parent_idx = _resolve_first_confluence_via_unified_probe(
+            m15_start, parent_idx, _bos0 = _resolve_first_confluence_via_unified_probe(
                 trig, h1, m15,
             )
         # input price-mapped with parent_extreme_dir = -lower_sd = -1
@@ -274,7 +274,7 @@ class TestResolveFirstConfluence:
         h1, m15 = self._fixtures()
         trig = _make_trigger("first_confluence")
         trig.meta.pop("probe_input_idx")
-        m15_start, parent_idx = _resolve_first_confluence_via_unified_probe(
+        m15_start, parent_idx, _bos0 = _resolve_first_confluence_via_unified_probe(
             trig, h1, m15,
         )
         assert m15_start is None
@@ -305,7 +305,7 @@ class TestResolveFirstConfluence:
             "engine_v2.structure.unified_probe.unified_probe",
             return_value=pending,
         ):
-            m15_start, parent_idx = _resolve_first_confluence_via_unified_probe(
+            m15_start, parent_idx, _bos0 = _resolve_first_confluence_via_unified_probe(
                 trig, h1, m15,
             )
         assert m15_start is None
@@ -322,7 +322,7 @@ class TestResolveFirstConfluence:
             "_build_first_confluence_ref_zone",
             return_value=None,
         ):
-            m15_start, parent_idx = _resolve_first_confluence_via_unified_probe(
+            m15_start, parent_idx, _bos0 = _resolve_first_confluence_via_unified_probe(
                 trig, h1, m15,
             )
         assert m15_start is None
@@ -370,7 +370,7 @@ class TestResolveSiblingCts:
             "engine_v2.structure.unified_probe.unified_probe",
             return_value=fake,
         ) as mock_probe:
-            m15_start, meta_idx = _resolve_sibling_cts_via_unified_probe(
+            m15_start, meta_idx, _bos0 = _resolve_sibling_cts_via_unified_probe(
                 trig, h1, m15, sibling_entity_df=sib,
             )
         _, kwargs = mock_probe.call_args
@@ -396,7 +396,7 @@ class TestResolveSiblingCts:
             "engine_v2.structure.unified_probe.unified_probe",
             return_value=fake,
         ) as mock_probe:
-            m15_start, meta_idx = _resolve_sibling_cts_via_unified_probe(
+            m15_start, meta_idx, _bos0 = _resolve_sibling_cts_via_unified_probe(
                 trig, h1, m15, sibling_entity_df=sib,
             )
         _, kwargs = mock_probe.call_args
@@ -422,7 +422,7 @@ class TestResolveSiblingCts:
             "engine_v2.structure.unified_probe.unified_probe",
             return_value=_fake_probe_result(start_idx=9, source="ad_hoc_bos_0"),
         ) as mock_probe:
-            m15_start, meta_idx = _resolve_sibling_cts_via_unified_probe(
+            m15_start, meta_idx, _bos0 = _resolve_sibling_cts_via_unified_probe(
                 trig, h1, m15, sibling_entity_df=None,
             )
         mock_fb.assert_called_once()           # fallback path taken
@@ -450,7 +450,7 @@ class TestResolveSiblingCts:
             "engine_v2.structure.unified_probe.unified_probe",
             return_value=_fake_probe_result(start_idx=9, source="ad_hoc_bos_0"),
         ):
-            m15_start, meta_idx = _resolve_sibling_cts_via_unified_probe(
+            m15_start, meta_idx, _bos0 = _resolve_sibling_cts_via_unified_probe(
                 trig, h1, m15, sibling_entity_df=sib,
             )
         mock_fb.assert_called_once()
@@ -467,7 +467,7 @@ class TestResolveSiblingCts:
             "_build_first_confluence_ref_zone",
             return_value=None,
         ):
-            m15_start, meta_idx = _resolve_sibling_cts_via_unified_probe(
+            m15_start, meta_idx, _bos0 = _resolve_sibling_cts_via_unified_probe(
                 trig, h1, m15, sibling_entity_df=None,
             )
         assert m15_start is None
@@ -478,7 +478,7 @@ class TestResolveSiblingCts:
         sib = self._sibling_with_cts(parent_cycle_id=2, sub_sid=0, idx=8, anchor=6)
         trig = _make_trigger("first_counter", parent_cycle_id=2, probe_end_idx=5)
         trig.meta.pop("probe_end_idx")
-        m15_start, meta_idx = _resolve_sibling_cts_via_unified_probe(
+        m15_start, meta_idx, _bos0 = _resolve_sibling_cts_via_unified_probe(
             trig, h1, m15, sibling_entity_df=sib,
         )
         assert m15_start is None
@@ -491,7 +491,7 @@ class TestResolveSiblingCts:
         # >= m15_end_idx (23) → degenerate-window branch.
         sib = self._sibling_with_cts(parent_cycle_id=2, sub_sid=0, idx=23, anchor=23)
         trig = _make_trigger("first_counter", parent_cycle_id=2, probe_end_idx=5)
-        m15_start, meta_idx = _resolve_sibling_cts_via_unified_probe(
+        m15_start, meta_idx, _bos0 = _resolve_sibling_cts_via_unified_probe(
             trig, h1, m15, sibling_entity_df=sib,
         )
         assert m15_start is None
@@ -513,7 +513,7 @@ class TestResolveSiblingCts:
             "engine_v2.structure.unified_probe.unified_probe",
             return_value=pending,
         ):
-            m15_start, meta_idx = _resolve_sibling_cts_via_unified_probe(
+            m15_start, meta_idx, _bos0 = _resolve_sibling_cts_via_unified_probe(
                 trig, h1, m15, sibling_entity_df=sib,
             )
         assert m15_start is None

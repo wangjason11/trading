@@ -1315,21 +1315,12 @@ for the alternate timeline that should have skipped the rejected one.
 Filtering the precomputed list yields a chain that doesn't structurally hold
 together.
 
-**Correct approaches:**
-1. **Walk patterns directly from `df.pat`** (the deterministic-pattern store
-   from `pattern_engine.detect_patterns(break_threshold=None)`) and find the
-   first pattern in the probe's direction whose anchor's extreme is a new
-   running max/min. Patterns there are threshold-independent, so no chain
-   pollution. This is what `unified_probe` Phase 1 does.
-2. **Modify MS itself** via the `enforce_cts0_new_extreme=True` constructor
-   flag. When set, MS rejects cycle-0 breakout patterns that fail the
-   new-extreme check from inside the state machine, then continues scanning
-   — so MS's subsequent state is computed against the *true* first CTS.
-   `unified_probe` Phase 2 uses this for `first_confluence`.
+**Correct approach (true-first-breakout cycle-0 redesign, 2026-06-07). The lesson above still holds; the mechanics below superseded the earlier `df.pat`-walk / partial-gate approaches:**
+- **ONE shared routine** `engine_v2/structure/true_first_breakout.py::find_true_first_breakout` encodes the 4 conditions: anchor closes past the BOS_0 inner (mechanism B — re-detect via the detectors with `break_threshold=bos0_inner`, NOT the threshold-free `df.pat`), valid pattern (confirmation allowed), **strict** full-pattern new extreme over `[current_start, extreme_candle)`, earliest apply/confirm idx (tie-break `continuous>dm>omc>omo`).
+- The unified probe's **deterministic method** calls this routine (no MS) to decide the start; MS's **pre-CTS_0 scan-from-start mode** (`enforce_cts0_new_extreme=True`, now REQUIRING `bos0_inner`) calls the SAME routine to re-find and establish cycle-0 via its normal path, so probe and MS agree by construction. The old partial anchor-extreme gate (`_cts0_new_extreme_passes`) and the old df.pat Phase-1 walk were REMOVED. Seed-and-resume was rejected in favor of scan-from-start.
+- Detail: [[project-true-first-breakout-cycle0]] (memory).
 
-**The deferred main sid=0|cycle=0 fix uses the same MS flag** — flip it True
-at the main pipeline's structure call to enforce "true first CTS_0" on
-trading_open. Same mechanism as Phase 2; just hasn't been wired yet.
+**The deferred main sid=0|cycle=0 fix (Commit 2) uses the same scan-from-start mechanism** — pass `enforce_cts0_new_extreme=True` + `bos0_inner` at the main pipeline's structure call. Not yet wired.
 
 ---
 

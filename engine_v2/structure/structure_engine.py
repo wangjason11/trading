@@ -813,6 +813,8 @@ def compute_bounded_structure(
     *,
     timeframe: str = "H1",
     end_idx: Optional[int] = None,
+    enforce_cts0_new_extreme: bool = False,
+    bos0_inner: Optional[float] = None,
 ) -> BoundedStructureResult:
     """Run a bounded SINGLE directional structure and stop at its first reversal.
 
@@ -865,6 +867,8 @@ def compute_bounded_structure(
         timeframe=timeframe,
         pip_size=pip_size,
         end_idx=end_idx,
+        enforce_cts0_new_extreme=enforce_cts0_new_extreme,
+        bos0_inner=bos0_inner,
     )
     ms.debug = True
     df2, events, levels = ms.run()

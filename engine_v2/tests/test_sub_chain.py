@@ -259,7 +259,7 @@ def _install_stubs(monkeypatch, *, cycle_end, reversals=None):
     calls: list[dict] = []
 
     def fake_resolve(trigger, parent_df, entity_df, sibling_entity_df=None):
-        return trigger.meta.get("_test_start"), 0
+        return trigger.meta.get("_test_start"), 0, None
 
     def fake_map(parent_idx, parent_df, m15_df):
         return int(parent_idx)   # identity: trigger_event_idx IS the boundary
@@ -271,7 +271,7 @@ def _install_stubs(monkeypatch, *, cycle_end, reversals=None):
                            sub_path_id, timeframe, trigger, sub_sid,
                            started_by, start_trigger_idx,
                            validated_parent_idx=None, parent_floor_m15=None,
-                           cap_open=False):
+                           cap_open=False, bos0_inner=None):
         calls.append({
             "start": start_m15_abs, "sd": sd, "end": end_m15_abs,
             "sub_sid": sub_sid, "started_by": started_by,

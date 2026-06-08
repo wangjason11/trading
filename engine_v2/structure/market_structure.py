@@ -251,6 +251,7 @@ class MarketStructure:
         poi_inners_resolver: Optional[PoiInnersResolver] = None,
         fill_threshold: float = 0.70,
         enforce_cts0_new_extreme: bool = False,
+        bos0_inner: Optional[float] = None,
     ):
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
@@ -266,7 +267,30 @@ class MarketStructure:
         # its anchor's extreme is the running max/min over
         # [start_idx, cts_idx - 1]. Default False preserves existing
         # behavior — only Phase 2 of the unified probe passes True.
+        #
+        # REPURPOSED 2026-06-07 (scan-from-start, see
+        # project_true_first_breakout_cycle0.md): when True this is the
+        # "pre-CTS_0 scan mode" switch. While cycle 0 is unestablished MS
+        # delegates the entire breakout search to the shared
+        # `find_true_first_breakout` routine (mechanism B against the
+        # handed `bos0_inner` + strict full-pattern extreme + cycle-0
+        # tie-break), establishes CTS_0 at the located winner via the
+        # normal cycle-0 path, then resumes. The probe and MS therefore
+        # agree on CTS_0 by construction (same routine, same data, same
+        # `bos0_inner`).
         self.enforce_cts0_new_extreme = bool(enforce_cts0_new_extreme)
+        # The cycle-0 breakout gate threshold (= the BOS_0 inner the probe
+        # finalized). REQUIRED in scan mode — condition 1 (anchor close
+        # past the BOS_0 inner) is meaningless without it.
+        self.bos0_inner = float(bos0_inner) if bos0_inner is not None else None
+        if self.enforce_cts0_new_extreme and self.bos0_inner is None:
+            raise ValueError(
+                "[market_structure] enforce_cts0_new_extreme (pre-CTS_0 scan "
+                "mode) requires bos0_inner (the cycle-0 breakout gate threshold)."
+            )
+        # Lazily-computed cycle-0 true-first-breakout decision (scan mode).
+        self._cts0_tfb = None
+        self._cts0_tfb_computed = False
 
         self.state = MarketStructureState(struct_direction=struct_direction, structure_id=0)
         self.state.struct_direction = int(struct_direction)
@@ -963,6 +987,24 @@ class MarketStructure:
     ) -> Optional[Tuple[PatternEvent, int, Literal["breakout", "pullback"]]]:
         st = self.state
 
+        # Pre-CTS_0 scan-from-start mode: while cycle 0 is unestablished,
+        # the ONLY breakout that may establish CTS_0 is the shared routine's
+        # true first breakout. Suppress every other candidate (range is
+        # already disabled at state NONE; pullback/reversal detection gate
+        # on st.cts/state, so they're dormant pre-CTS_0). MS then drives the
+        # located winner through its normal establishment path — no
+        # duplicated cycle-0 logic. See project_true_first_breakout_cycle0.
+        if self.enforce_cts0_new_extreme and st.cts is None:
+            tfb = self._get_cts0_tfb()
+            if tfb is None:
+                return None
+            if int(i) == int(tfb.pattern.start_idx):
+                # est_idx is the apply/confirm idx == MS's _apply_idx
+                # (asserted) — the candle that establishes cycle-0 CTS.
+                assert int(self._apply_idx(tfb.pattern)) == int(tfb.est_idx)
+                return (tfb.pattern, int(tfb.est_idx), "breakout")
+            return None
+
         # If state NONE: only breakout direction checks (no pullback)
         candidates = []
 
@@ -1362,17 +1404,13 @@ class MarketStructure:
             # check below can compare against an untouched state.
             cts_idx, cts_price = self._cts_from_breakout_event(ev)
 
-            # Cycle-0 new-extreme gate (opt-in via
-            # `enforce_cts0_new_extreme`). When set, the FIRST breakout
-            # pattern of the MS run only counts as cycle 0's establishment
-            # if its anchor's extreme is a new running max/min over
-            # `[start_idx, cts_idx - 1]`. A pattern whose anchor sits
-            # shallower than some earlier candle in the window is
-            # treated as if it never fired — MS continues scanning.
-            # See PART4 §4.4 and project_unified_identify_start_probe.
-            if st.cts is None and self.enforce_cts0_new_extreme:
-                if not self._cts0_new_extreme_passes(cts_idx, cts_price):
-                    return
+            # Cycle-0 scan-from-start mode (`enforce_cts0_new_extreme`):
+            # the breakout reaching this block in scan mode is ALREADY the
+            # shared routine's true-first-breakout (selected in
+            # `_best_bopb_pattern_at_anchor`), so no gate is needed here —
+            # MS establishes it through the normal cycle-0 path below.
+            # (The old partial `_cts0_new_extreme_passes` anchor-extreme
+            # gate is removed; selection-time gating replaced it.)
 
             # Breakout breaks range (if active)
             if st.range_active:
@@ -1678,24 +1716,34 @@ class MarketStructure:
     #     )
     #     self.state.cts_event = "CTS_ESTABLISHED"  # written to df row via _write_df_row
 
-    def _cts0_new_extreme_passes(self, cts_idx: int, cts_price: float) -> bool:
-        """Cycle-0 new-extreme gate (opt-in via `enforce_cts0_new_extreme`).
+    def _get_cts0_tfb(self):
+        """Lazily compute (and cache) the cycle-0 true-first-breakout
+        decision for scan-from-start mode.
 
-        Returns True iff `cts_price` is the new running max (for sd=+1)
-        or min (for sd=-1) over `[self.start_idx, cts_idx - 1]`. A
-        breakout pattern that fails this check did not actually reach
-        further than something earlier in the probe window, so it
-        doesn't count as cycle 0's establishment. `cts_idx` at or before
-        `start_idx` trivially passes (empty prior window).
+        Delegates to the ONE shared `find_true_first_breakout` routine over
+        `[start_idx, effective_end]` against the handed `bos0_inner`
+        threshold — the SAME call the unified probe made, so MS re-finds
+        the identical CTS_0 by construction. Returns a `TrueFirstBreakout`
+        or None (no qualifying breakout in the window — MS then establishes
+        no cycle 0, writing NONE-state rows forward).
         """
-        if cts_idx <= self.start_idx:
-            return True
-        prior = self.df.loc[self.start_idx:cts_idx - 1]
-        if prior.empty:
-            return True
-        if self.struct_direction == 1:
-            return float(cts_price) >= float(prior["h"].astype(float).max())
-        return float(cts_price) <= float(prior["l"].astype(float).min())
+        if not self._cts0_tfb_computed:
+            from engine_v2.structure.true_first_breakout import (
+                find_true_first_breakout,
+            )
+            effective_end = (
+                int(self.end_idx) if self.end_idx is not None
+                else int(len(self.df) - 1)
+            )
+            self._cts0_tfb = find_true_first_breakout(
+                self._bp,
+                int(self.start_idx),
+                effective_end,
+                int(self.struct_direction),
+                self.bos0_inner,
+            )
+            self._cts0_tfb_computed = True
+        return self._cts0_tfb
 
     def _emit_cts_established(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
         meta2 = dict(meta or {})

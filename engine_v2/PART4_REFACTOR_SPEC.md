@@ -477,64 +477,82 @@ Condition 2 is the new ingredient — rejects single-candle stab wicks
 that pass condition 1 today but represent transient spikes rather than
 structural retraces.
 
-### Two-phase probe design (2026-05-31)
+### Probe methods + cycle-0 true-first-breakout (2026-06-07)
 
-The probe runs in two phases:
+> Canonical summary; full design + rationale in
+> `memory/project_true_first_breakout_cycle0.md`. Supersedes the prior
+> "two-phase / `df.pat` walk / partial-gate" text.
 
-**Phase 1 (deterministic, no MS, runs for every caller).** Walks
-`df.pat` from `current_start` to `end_idx`, finds the first breakout
-pattern in the probe's direction whose anchor's extreme is a new
-running max/min over `[current_start, idx - 1]`. The retrace search
-then evaluates the 2-condition reset on the deepest candidate in
-`[true_X + 1, end_idx]`. Successful reset advances `current_start`
-and Phase 1 iterates. No qualifying retrace finalizes at
-`current_start`.
+**The cycle-0 CTS (CTS_0_EST) is the EARLIEST true breakout** meeting all of:
+1. anchor's **close** past the **BOS_0 inner** (`bos0_inner`) in the probe
+   direction — a hard gate even on the confirm path;
+2. a **valid breakout pattern** re-detected with `break_threshold = bos0_inner`
+   (mechanism B — NOT the threshold-free `df.pat`); 30%-body failures may be
+   CONFIRMED via the existing pattern-extreme confirmation;
+3. a **strict** new full-pattern extreme over `[current_start, extreme_candle)`
+   (`>`/`<`; ties do NOT count);
+4. **earliest apply/confirm idx** wins, tie-break `continuous > double_maru >
+   one_maru_continuous > one_maru_opposite` (a cycle-0-specific order — the
+   global `detect_best_for_anchor` priority is unchanged).
 
-For `first_counter`, `subsequent_confluence`, `subsequent_counter`,
-and `reversal` callers, Phase 1 is the entire probe. No MS run.
+This is implemented ONCE in `engine_v2/structure/true_first_breakout.py::find_true_first_breakout`,
+called by both the probe and MS.
 
-**Phase 2 (MS-based, runs only when `enable_phase2=True`, used only
-for `first_confluence`).** Picks up from Phase 1's final
-`current_start`. Runs MS with `enforce_cts0_new_extreme=True` (the
-opt-in MarketStructure flag added 2026-05-31). The retrace search
-window becomes:
+**Two zones (don't conflate):** the **BOS_0 threshold** that gates the breakout
+MOVES with `current_start` (iter 1 = the reference zone inner; iter 2+ = a fresh
+ad-hoc `bos=True` BOS_0 at the reset start, via
+`reference_zone.build_ad_hoc_bos0_reference_zone`). The **retrace-reset
+reference** is CONSTANT (the very-first reference zone) and drives the unchanged
+2-condition reset (cond1 proximity to reference inner; cond2 toward-zone wick
+cap).
 
-- `[CTS_0_est + 1, cts_anchor_idx - 1]` once CTS_0 confirms (the
-  cycle's CTS extreme bounds the retrace).
-- `[CTS_0_est + 1, end_idx]` if `end_idx` is reached without
-  CTS_0_CONFIRMED.
+**Deterministic vs iterative = data availability, not two logics** (same
+conditions, same routine): resolve in one windowed pass over historical data
+(deterministic); process candle-by-candle past the live edge (iterative). Any
+run uses deterministic over available history, then hands to iterative past the
+last available candle. **Commit-1 is all backtest → the iterative path is
+dormant** (like the `pending` finalize conditions).
 
-Phase 2 terminates via:
-- Successful reset (advance `current_start`, iterate).
-- Reversal AND fewer than 2 CTS_EST → `reversal_in_probe`.
-- Second CTS_EST present AND no qualifying retrace →
-  `second_cts_reached` (cycle 0 completed without a reset, cycle 1
-  begun).
-- No qualifying retrace AND no 2nd CTS_EST → `no_retrace` (backtest
-  with `end_idx` defined).
-- `end_idx` reached without any CTS_EST → `end_idx_reached`.
+**Per caller:**
+- **non-FC** (`first_counter` / `subsequent_*` / `reversal`): `end_idx = trigger`
+  (all historical) → fully **deterministic** — find the true breakout + the
+  max-retrace reset over `[CTS_0_EST+1, end_idx]`, multiple resets, NO MS, no
+  `cts_anchor`.
+- **first_confluence** (hybrid): deterministic window upper = the time-mapped
+  parent CTS_EST; the real `end_idx` (parent CTS anchor) is treated as NULL →
+  the probe runs MS (`enable_phase2=True`) only to reach CTS_0_CONFIRMED →
+  `cts_anchor`, which bounds the retrace (`[CTS_0_EST+1, cts_anchor-1]`, else
+  `[CTS_0_EST+1, end_idx]`).
+- **main sid0|cyc0** (`trading_open`): arbitrary ad-hoc BOS_0 at the
+  `identify_start_scenario_1` start; single-shot, no resets (Commit 2 — not yet
+  wired).
 
-### `enforce_cts0_new_extreme` MS flag
+### MS pre-CTS_0 scan-from-start (`enforce_cts0_new_extreme` + `bos0_inner`)
 
-Opt-in `MarketStructure` constructor parameter. When True, MS rejects
-a breakout pattern that would establish cycle 0 unless its anchor's
-extreme is the running max/min over `[start_idx, cts_idx - 1]`.
-Subsequent cycles (`cts_cycle_id >= 1`) are unaffected — they break
-the prior CTS's threshold by MS construction, so they're implicitly
-new extremes. Default False preserves existing behavior. Currently
-used only by Phase 2 of `unified_probe`.
+The probe hands MS a **decision, not events**: `{finalized current_start, BOS_0
+bounds}` (+ `cts0_est_idx` as a sanity-assert). MS does **NOT** seed state at
+CTS_0 (the earlier "seed-and-resume" was rejected — see the design doc's UPDATE
+block). Instead, with `enforce_cts0_new_extreme=True` MS runs the **pre-CTS_0
+scan-from-start** mode: while cycle 0 is unestablished it delegates the breakout
+search to the SAME `find_true_first_breakout` routine (using the **handed
+`bos0_inner`** — REQUIRED in scan mode, else `ValueError`), establishes CTS_0 at
+the located winner via its **normal cycle-0 path** (the establishment bundle:
+`BOS_CONFIRMED` anchored at start w/ `confirmed_at=CTS0_EST`, `CTS_ESTABLISHED`,
+thresholds, BOS_0 zone, state), then resumes normal MS. Because probe and MS use
+the same routine + same `bos0_inner` over the same data, they agree on CTS_0 **by
+construction**. Cycles ≥ 1 are unaffected (they break the prior CTS). The old
+partial anchor-extreme gate (`_cts0_new_extreme_passes`) was removed.
 
-**Deferred extensions (open items):**
+`bos0_inner` is a **price** (slice-invariant), threaded through
+`compute_bounded_structure(enforce_cts0_new_extreme, bos0_inner)` and the
+`build_one_sid` / `_ChainCursor` handoff (`SidBuildOutcome.next_bos0_inner` for
+reversal-born subs) — no index remap.
 
-1. **Main structure trading_open (sid=0 cycle=0)** — flip
-   `enforce_cts0_new_extreme=True` for the main pipeline's structure
-   call so the initial BOS_0 → CTS_0 sequence anchors at the true
-   furthest point from BOS_0. Today's main pipeline omits the flag;
-   `identify_start_scenario_1` doesn't enforce it. Deferred to a
-   future session — mechanism is in place, just needs wiring.
-2. **Legacy `_resolve_via_legacy_probe` (subsequent_* via Scenario 3
-   on parent_df)** — once subsequent_* migrates to `unified_probe` in
-   Session 3, they get Phase 1 (no MS, big perf win) for free.
+**Scope:** all M15 subs use this (Commit 1, every trigger). **Deferred:** main
+`sid0|cyc0` (Commit 2 — flip the flag + pass `bos0_inner` at the main
+`compute_structure` call); main reversals H1 `sid≥1` (Step 4 — migrate to
+`unified_probe` + scan-from-start + delete Exception 1). The legacy
+`_resolve_via_legacy_probe` is an empty escape hatch (`_LEGACY_PROBE_USE_CASES`).
 
 ### Threshold tables
 

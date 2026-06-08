@@ -207,6 +207,50 @@ def _derive_zone_ad_hoc(
     return (float(outer), float(inner), side)
 
 
+def build_ad_hoc_bos0_reference_zone(
+    df: pd.DataFrame,
+    anchor_idx: int,
+    probe_direction: int,
+) -> Optional[ReferenceZone]:
+    """Ad-hoc BOS_0 reference zone anchored at `anchor_idx`, keyed to
+    `probe_direction`.
+
+    The BOS_0 belongs to the structure being PROBED (its own direction ==
+    `probe_direction`), so the ad-hoc derivation passes `probe_direction`
+    as the source-structure direction, then re-keys the geographic
+    (top/bottom) to the probe's outer/inner via the universal rule
+    (`inner = z.top` for +1, `z.bottom` for -1).
+
+    Two callers share this one helper (single source of truth):
+      - `first_confluence`'s CONSTANT reference zone (anchor = the M15
+        input_idx) — via `_build_first_confluence_ref_zone`.
+      - the unified probe's MOVING BOS_0 threshold after a retrace-reset
+        (anchor = the new `current_start`) — per the "two zones" design
+        (`project_true_first_breakout_cycle0.md`: iter 2+ = a fresh
+        `bos=True` BOS_0 at the moved start).
+
+    Returns None when the base pattern can't be derived from `anchor_idx`
+    (the probe caller then falls back to the candle's own extreme).
+    """
+    derived = _derive_zone_ad_hoc(df, anchor_idx, probe_direction, bos=True)
+    if derived is None:
+        return None
+    outer_geo, inner_geo, _side_geo = derived
+    z_top = max(outer_geo, inner_geo)
+    z_bottom = min(outer_geo, inner_geo)
+    if probe_direction == 1:
+        ref_outer, ref_inner, side = z_bottom, z_top, "buy"
+    else:
+        ref_outer, ref_inner, side = z_top, z_bottom, "sell"
+    return ReferenceZone(
+        outer=float(ref_outer),
+        inner=float(ref_inner),
+        side=side,  # type: ignore[arg-type]
+        source="ad_hoc_bos_0",
+        source_event_idx=int(anchor_idx),
+    )
+
+
 # Back-compat alias for the CTS-only callers that still exist in
 # `build_reference_zone_from_cts_event`. Kept thin (one-line forward)
 # so future readers see it's the same machinery.

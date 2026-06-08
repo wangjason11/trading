@@ -42,21 +42,30 @@ A continuation level established within the current structure direction.
     proximity idx; the CTS zone meta is upgraded to `confirmation_method = "pullback"`
     with `pb_reconfirm_idx` recorded.
 
-### Optional cycle-0 new-extreme gate
+### Cycle-0 pre-CTS_0 scan-from-start mode (`enforce_cts0_new_extreme`)
 
-`MarketStructure` accepts an opt-in constructor flag
-`enforce_cts0_new_extreme: bool = False`. When True, MS rejects any
-breakout pattern that would establish cycle 0 unless its anchor's
-extreme is the running max (sd=+1) or min (sd=-1) over
-`[start_idx, cts_idx - 1]`. The rejected pattern is skipped without
-state mutation; MS continues scanning for the next breakout pattern.
-Cycles ≥ 1 are unaffected because subsequent CTSes break the prior
-CTS's threshold by construction (implicitly extreme).
+> **Repurposed 2026-06-07 (true-first-breakout cycle-0 redesign)** from the
+> earlier partial anchor-extreme gate to the full pre-CTS_0 scan-from-start
+> mode. Full design: `memory/project_true_first_breakout_cycle0.md`; probe-side
+> detail: `PART4_REFACTOR_SPEC.md` §4.4.
 
-Used by `unified_probe`'s Phase 2 (`first_confluence` only). The same
-flag is the planned mechanism for the deferred main `sid=0 cycle=0`
-fix — flip it True at the main pipeline's structure call to enforce
-"true first CTS_0" on trading_open.
+`MarketStructure` accepts `enforce_cts0_new_extreme: bool = False` and
+`bos0_inner: Optional[float] = None`. When the flag is True (the
+**pre-CTS_0 scan mode**), `bos0_inner` is **REQUIRED** (raises otherwise):
+while cycle 0 is unestablished MS delegates the entire breakout search to
+the shared `find_true_first_breakout` routine (mechanism B against
+`bos0_inner` + strict full-pattern new extreme + cycle-0 tie-break),
+establishes CTS_0 at the located winner via its NORMAL cycle-0 path, then
+resumes. Because the unified probe used the SAME routine with the SAME
+`bos0_inner` to decide the start, MS re-finds the identical CTS_0 by
+construction (no seed-and-resume). Cycles ≥ 1 are unaffected (subsequent
+CTSes break the prior CTS by construction).
+
+Used by `unified_probe` (deterministic method + phase 2) and by
+`compute_bounded_structure` for every M15 sub (Commit 1). The same
+mechanism is the planned wiring for the deferred main `sid=0 cycle=0` fix
+(Commit 2). The old partial-gate helper `_cts0_new_extreme_passes` was
+removed.
 
 ### BOS
 A break level; confirmed by breakout logic.

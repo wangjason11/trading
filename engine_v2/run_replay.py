@@ -297,13 +297,20 @@ def main() -> None:
         # Debug: export per-sub KL zones (entity-absolute indices after
         # mirror) so we can inspect sub-native zones without parsing the
         # chart HTML.
-        from engine_v2.debug.export_zones import export_kl_zones
+        from engine_v2.debug.export_zones import export_kl_zones, export_poi_zones
         sub_entry = registry.get(sub_path_id)
         if sub_entry is not None:
             sub_zones = sub_entry.df.attrs.get("kl_zones", []) or []
             export_kl_zones(
                 sub_zones,
                 f"artifacts/debug/{basename}_{leaf_label}_kl_zones.csv",
+            )
+
+            # Debug: per-sub POI zones (chart-only otherwise) — one row per IC,
+            # variants in `versions`. The inspectable surface for POI /compare.
+            export_poi_zones(
+                sub_entry.df.attrs.get("poi_zones", []) or [],
+                f"artifacts/debug/{basename}_{leaf_label}_poi_zones.csv",
             )
 
             # Debug: export per-sub SidRecords so we can see each sid's
@@ -357,8 +364,9 @@ def main() -> None:
                 f"artifacts/debug/{basename}_{leaf_label}_structure_events.csv",
             )
 
-    from engine_v2.debug.export_zones import export_kl_zones
+    from engine_v2.debug.export_zones import export_kl_zones, export_poi_zones
     export_kl_zones(res.meta.get("kl_zones", []), f"artifacts/debug/{basename}_kl_zones.csv")
+    export_poi_zones(res.meta.get("poi_zones", []) or [], f"artifacts/debug/{basename}_poi_zones.csv")
 
     from engine_v2.debug.export_wvmi import export_wvmi
     export_wvmi(res.meta.get("wvmi", []) or [], f"artifacts/debug/{basename}_wvmi.csv")
