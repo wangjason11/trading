@@ -34,6 +34,26 @@ inversion class.
 
 ---
 
+## "base inside bar" means anchor ENGULFS neighbours, not nested-inside-prior (naming + knife-edge)
+
+`identify_inside_bar_pattern` (kl_zones_v1) flags an anchor `"base inside bar"`
+when **≥2 of its ±5 neighbours have their entire low–high range CONTAINED within
+the anchor's range** — i.e. the **anchor is the larger, engulfing candle**. This is
+the OPPOSITE of the conventional "inside bar" (a small candle nested inside the
+prior). It's checked FIRST in `identify_base_pattern` (before 2-candle / pinbar /
+star / plain `base`); its inner comes from `find_base_threshold` (same as plain
+`base`).
+
+**Knife-edge sensitivity:** the test compares full ranges, so a sub-pip wick on a
+single neighbour flips it. Concrete (2026-06-07, NZD_USD M15): swing-high candle
+1794 missed `base inside bar` only because neighbour 1793's low sat **0.2 pip**
+below 1794's low; had it qualified, 1794's zone inner would route through
+`find_base_threshold` instead of the 2-candle `"no base"` path and could shift.
+This is current/intended behavior — noted because it's surprising and relevant to
+the deferred **(c) other-zone-pattern inversion pass** (pinbar / 2-candle / star).
+
+---
+
 ## `bounded.reversal_idx` is the single source — don't re-derive reversal idx from a `market_state` mask in the bounded path (2026-06-01)
 
 **Symptom:** the sub-reversal unified probe (`build_one_sid`) drifted every

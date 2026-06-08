@@ -276,7 +276,7 @@ All changes are causally linked to the root change.
 Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 **M15.confluence**. Compare every file md5 by entity:
 
-**H1.main** (8 files):
+**H1.main** (9 files):
 
 | File pattern |
 |--|
@@ -284,23 +284,25 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_raw.csv` |
 | `*_structure_levels.csv` |
 | `*_kl_zones.csv` |
+| `*_poi_zones.csv` |
 | `*_structure_events.csv` |
 | `*_imbalance_instances.csv` |
 | `*_fib_lifecycle.csv` |
 | `*_wvmi.csv` |
 
-**M15.counter** and **M15.confluence** (5 files each — same filename
+**M15.counter** and **M15.confluence** (6 files each — same filename
 suffixes prefixed with `*_M15_counter_` / `*_M15_confluence_`):
 
 | File pattern |
 |--|
 | `*_M15_{entity}_structure_events.csv` |
 | `*_M15_{entity}_kl_zones.csv` |
+| `*_M15_{entity}_poi_zones.csv` |
 | `*_M15_{entity}_sids.csv` |
 | `*_M15_{entity}_fib_lifecycle.csv` |
 | `*_M15_{entity}_wvmi.csv` |
 
-Total: 18 CSVs per replay. Current path is `artifacts/debug/`; baseline
+Total: 21 CSVs per replay (POI-zones CSVs added 2026-06-08). Current path is `artifacts/debug/`; baseline
 path is whichever step 1 resolved to: `artifacts/commits/<branch>/<folder>/`
 (new layout) or `artifacts/commits/<folder>/` (legacy flat layout).
 
