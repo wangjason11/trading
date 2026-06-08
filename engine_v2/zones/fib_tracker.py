@@ -1096,11 +1096,45 @@ class FibTracker:
         """Handle CTS_UPDATED for cross_cycle. Re-run cross check with the
         extended CTS anchor. Cycle 0 uses simple single-fib update."""
         if cycle_id == 0:
-            # Cycle 0: no cross logic. Update single fib via shared helper.
+            # Cycle 0: no cross logic. Single-fib update.
             key = (sid, 0)
-            if key not in self._fibs:
+            if key in self._fibs:
+                return self._update_fib_cts(key, cts_idx, cts_price, df)
+            # First-activation on a later CTS_UPDATED (2026-06-08): the cycle-0
+            # Fib did NOT activate at CTS_ESTABLISHED (no unfilled imbalance
+            # then), but an unfilled sd-direction imbalance may appear as the
+            # CTS extends. Re-check over [BOS_0, cts_idx] as-of cts_idx and
+            # activate now if present — mirrors the Scenario-1 main path
+            # (_handle_cycle0_cts_updated). Fixes the cross_cycle cycle-0
+            # one-shot asymmetry (subs were one-shot; main already re-checks).
+            bos = self._bos_by_cycle.get((sid, 0))
+            if bos is None:
                 return None
-            return self._update_fib_cts(key, cts_idx, cts_price, df)
+            bos_idx, bos_price = bos
+            start_idx = min(bos_idx, cts_idx)
+            end_idx = max(bos_idx, cts_idx)
+            if not has_unfilled_imbalance(
+                df, start_idx, end_idx, cts_idx, self.config.fill_threshold,
+                direction=sd,
+            ):
+                return None
+            print(f"[fib] cross_cycle sid={sid} cycle=0 ACTIVATED on update "
+                  f"(unfilled imbalance found post-EST): BOS idx={bos_idx} -> "
+                  f"CTS idx={cts_idx}")
+            return self._activate_fib(
+                sid=sid,
+                cycle_id=0,
+                sd=sd,
+                bos_idx=bos_idx,
+                bos_price=bos_price,
+                cts_idx=cts_idx,
+                cts_price=cts_price,
+                meta={
+                    "activated_at": cts_idx,
+                    "fib_mode": "cross_cycle",
+                    "activated_on": "update",
+                },
+            )
 
         # Cycle ≥1: should be in established phase. Re-run cross check.
         phase = self._m15_phase.get((sid, cycle_id))

@@ -80,6 +80,45 @@ def test_cycle_0_no_fib_without_imbalance():
     assert result is None
 
 
+def test_cycle_0_first_activates_on_later_update():
+    """Cycle-0 Fib that did NOT activate at CTS_EST must still be able to
+    first-activate on a later CTS_UPDATED when an unfilled imbalance appears
+    (2026-06-08 fix — removes the cross_cycle cycle-0 one-shot asymmetry)."""
+    # Imbalance at idx=23 — OUTSIDE [BOS_0=10, CTS_0_EST=20], so no fib at EST;
+    # a later CTS_UPDATED to 25 brings it into [10, 25] unfilled → activate.
+    inst = ImbalanceInstance(
+        start_idx=23, end_idx=23, direction=1,
+        gap_top=1.10, gap_bottom=1.00, gap_size=0.10,
+    )
+    df = _make_df_with_imbalances(40, [inst])
+    tracker = _make_tracker()
+
+    est = tracker.on_cts_established(
+        _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0, 1), df, bos_idx=10, bos_price=0.9,
+    )
+    assert est is None                       # one-shot would stop here
+    assert (0, 0) not in tracker._fibs
+
+    upd = tracker.on_cts_updated(_ev("CTS_UPDATED", 25, 1.25, 0, 0, 1), df)
+    assert upd is not None
+    assert upd.structure_id == 0 and upd.cycle_id == 0
+    assert upd.active is True
+    assert upd.meta.get("activated_on") == "update"
+    assert (0, 0) in tracker._fibs
+
+
+def test_cycle_0_update_no_activation_when_still_no_imbalance():
+    """Negative: with no unfilled imbalance, a CTS_UPDATED must NOT
+    spuriously activate a cycle-0 Fib."""
+    df = _make_df_with_imbalances(40, [])
+    tracker = _make_tracker()
+    assert tracker.on_cts_established(
+        _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0, 1), df, bos_idx=10, bos_price=0.9,
+    ) is None
+    assert tracker.on_cts_updated(_ev("CTS_UPDATED", 25, 1.25, 0, 0, 1), df) is None
+    assert (0, 0) not in tracker._fibs
+
+
 # ---------- Cross activation: (0→1) ----------
 
 def test_cross_activation_cycle_1():

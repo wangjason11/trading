@@ -1324,6 +1324,39 @@ together.
 
 ---
 
+## Cycle-0 Fib activation was one-shot at CTS_ESTABLISHED in cross_cycle (subs) — FIXED 2026-06-08
+
+**Symptom:** a sub's cycle-0 Fib (and its POIs) never appears even though cycle 0
+has an unfilled sd-imbalance — but only when that imbalance becomes unfilled-in-window
+*after* the cycle-0 CTS-established candle.
+
+**Root cause:** in `fib_mode="cross_cycle"` (all M15 subs) the cycle-0 single Fib
+was evaluated **once, at `CTS_0_ESTABLISHED`** (`_handle_cross_cycle_cts_established`,
+`cycle_id==0`): activate iff `has_unfilled` at that instant, else `NO FIB`. The
+cycle-0 `CTS_UPDATED` handler then did `if key not in self._fibs: return None` — it
+only *extended* an already-active Fib and **never first-activated** one. So if the
+establishment candle had no unfilled imbalance, the cycle-0 Fib could never form,
+even as the CTS extended and unfilled imbalances appeared.
+
+**The asymmetry that revealed it:** the H1-main `sid≥1` cycle-0 path
+(`_handle_cycle0_cts_updated`, Scenario 1) ALREADY re-checks and first-activates on
+`CTS_UPDATED` (lines ~1213-1231). Only the cross_cycle (subs) path was one-shot.
+
+**Fix:** `_handle_cross_cycle_cts_updated` `cycle_id==0` now first-activates when the
+Fib isn't yet active — recompute `has_unfilled` over `[BOS_0, cts_idx]` as-of
+`cts_idx` (BOS from `_bos_by_cycle[(sid,0)]`) and activate if present
+(`meta["activated_on"]="update"`), mirroring the Scenario-1 path. Idempotent (once
+active it routes to the update path). H1 main unaffected (its path already did this).
+/compare vs `f2f5e35`: H1 main + confluence byte-identical; counter gains exactly
+1 cycle-0 Fib + 2 POIs (sub (0,2,0)); kl_zones/sids/structure_events/wvmi unchanged
+(a fib-tracker activation is downstream of MS).
+
+**Surfaced by** the true-first-breakout cycle-0 work: moving CTS_0 changed which
+imbalances fell in cycle-0's window at the establishment instant, exposing that the
+one-shot was silently dropping cycle-0 Fibs whose imbalance arrived later.
+
+---
+
 ## `bos_threshold` is reset to the ORIGINAL BOS at CTS confirmation, discarding expansion (FIXED 2026-06-01)
 
 **Symptom:** a structure reverses *earlier* than it should. Two MS runs with
