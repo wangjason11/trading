@@ -1,0 +1,4 @@
+commit_hash=f2f5e35
+timestamp=20260608_135409
+branch=week8-volmom-multitf
+commit_message=Cycle-0 true-first-breakout redesign — Commit 1 (all M15 subs): scan-from-start
