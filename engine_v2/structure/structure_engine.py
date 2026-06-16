@@ -11,6 +11,7 @@ from engine_v2.structure.identify_start import (
     identify_start_scenario_1,
     identify_start_scenario_2_after_reversal,
 )
+from engine_v2.structure.reference_zone import build_ad_hoc_bos0_reference_zone
 from engine_v2.zones.kl_zones_v1 import (
     compute_bos_inner_from_event,
     derive_kl_zones_v1,
@@ -162,10 +163,45 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
     struct_direction = int(d0.struct_direction)
     structure_id = 0
 
+    # Commit 2 — main sid=0 | cycle=0 true-first-breakout
+    # (project_true_first_breakout_cycle0.md). Establish CTS_0 only via the first
+    # true breakout past the BOS_0 inner. The BOS_0 is an ad-hoc bos=True zone
+    # anchored at the Scenario-1 start; its inner is the cycle-0 breakout gate
+    # threshold MS's pre-CTS_0 scan mode (`enforce_cts0_new_extreme`) gates on.
+    # `.inner` mirrors the sub probe's `bos0_inner = reference_zone.inner`
+    # (unified_probe.py) — single source of truth, NOT a re-derivation. Single-shot:
+    # no probe, no retrace-resets (current_start is fixed at the Scenario-1 start).
+    # Enabled for sid=0 ONLY; reversals (sid>=1) stay on Scenario-2/Exc1/Exc2 (Step 4).
+    #
+    # None => the ad-hoc base can't be derived. In a full backtest all history
+    # exists, so None can only be the DEGENERATE case -> Option A: skip scan mode +
+    # warn (sid=0 establishes as before). The INSUFFICIENT-HISTORY cause (a needed
+    # neighbor candle past the live edge) cannot occur in backtest; if this warn
+    # ever fires at a live edge, the wait-for-candles logic hooks in here
+    # (memory/project_ad_hoc_zone_wait_for_candles).
+    cts0_ref = build_ad_hoc_bos0_reference_zone(df, start_idx, struct_direction)
+    cts0_bos0_inner = cts0_ref.inner if cts0_ref is not None else None
+    if cts0_bos0_inner is None:
+        print(
+            f"[structure_engine][warn] main sid=0 cycle-0 ad-hoc BOS_0 zone could "
+            f"not be built at start_idx={start_idx} (sd={struct_direction}); "
+            f"skipping pre-CTS_0 scan mode (Option A) — sid=0 establishes as before. "
+            f"If this fires at a live edge, the wait-for-candles logic hooks in here "
+            f"(memory/project_ad_hoc_zone_wait_for_candles)."
+        )
+
     # Run multiple structure segments until no more reversals (or we hit end)
     max_structures_guard = 20  # safety guard against infinite loops
     for loop_iter in range(max_structures_guard):
-        ms = _make_market_structure(df2, struct_direction=struct_direction, start_idx=start_idx, structure_id=structure_id, timeframe=timeframe, pip_size=pip_size)
+        # Cycle-0 scan mode applies to sid=0 only (and only when the BOS_0 inner
+        # was derivable). structure_id only increments, so this is the 1st iteration.
+        _use_cts0_scan = (structure_id == 0 and cts0_bos0_inner is not None)
+        ms = _make_market_structure(
+            df2, struct_direction=struct_direction, start_idx=start_idx,
+            structure_id=structure_id, timeframe=timeframe, pip_size=pip_size,
+            enforce_cts0_new_extreme=_use_cts0_scan,
+            bos0_inner=cts0_bos0_inner if _use_cts0_scan else None,
+        )
         ms.debug = True
         df2, ms_events, levels = ms.run()
 
