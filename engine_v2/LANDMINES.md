@@ -594,6 +594,24 @@ cursor-construction time (before the sibling cadence has advanced), breaks the
 cross-read silently. Guard: each sibling-reading resolver logs a WARNING when
 the sibling CTS is missing.
 
+**Direction qualification — the sibling can REVERSE before the trigger (2026-06-15).**
+"Most recent sibling CTS" is NOT simply max-idx across all CTS: the sibling sub
+may have reversed before this trigger fires, and a post-reversal CTS does not
+represent a genuine confluence/counter relationship. `_build_sibling_cts_ref_zone`
+filters candidates to `struct_direction == -probe_direction` (the sibling's own
+bootstrap direction = `-lower_sd`) BEFORE the most-recent selection, and passes
+that filtered list to `build_reference_zone_from_cts_event` (which re-selects by
+idx — so filtering the local pre-selection alone is insufficient; the list handed
+to the primitive must be filtered). **Symptom if violated:** the counter (or
+subsequent confluence/counter) sub starts far too late — anchored on the
+sibling's still-sliding post-reversal `CTS_UPDATED` right before the trigger,
+collapsing its probe window (`end_idx_reached`, iter=1) instead of rooting at the
+sibling's last same-direction CTS. This also silently breaks the primitive's
+`source_sd = -probe_direction` reconstruction (it assumes the picked CTS is from
+a `-probe_direction` structure). Re-reversals back into the expected direction
+re-qualify (most-recent qualifying wins). See PART4 §4.3 "Direction-qualified
+sibling CTS".
+
 ---
 
 ## Subordinate `parent_extreme_dir` Must Use `-trigger.lower_sd`

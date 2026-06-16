@@ -58,7 +58,15 @@ def classify_candles(df: pd.DataFrame, params: CandleParams) -> pd.DataFrame:
       - candle_type: maru|pinbar|normal
       - pinbar_dir: +1 (up) / -1 (down) / 0 (none)
       - normal_dir: +1 (up) / -1 (down) / 0 (none) - computed after is_special_maru reclassification
-      - is_special_maru: bool (independent flag; can be used by patterns later)
+      - is_special_maru: bool (independent flag; currently unused downstream)
+
+    Type-write order (last write wins):
+      1. default normal
+      2. body_pct bands -> pinbar / maru
+      3. special-maru promotion (0.50-0.64 band + tiny close-side wick) -> maru
+      4. absolute body-pip floor -> pinbar (params.pinbar_body_pip_floor; trumps
+         all of the above). Direction sub-flags (pinbar_dir, normal_dir) are
+         computed AFTER this, so the reclassified pinbars are directioned too.
     """
     out = df.copy()
 
@@ -82,17 +90,6 @@ def classify_candles(df: pd.DataFrame, params: CandleParams) -> pd.DataFrame:
     out.loc[is_pinbar, "candle_type"] = "pinbar"
     out.loc[is_maru, "candle_type"] = "maru"
 
-    # Pinbar direction: body near top => up pinbar; body near bottom => down pinbar
-    # Use pinbar_distance as fraction of candle_len.
-    dist = params.pinbar_distance * length
-    # up pinbar: lower_wick large, upper_wick small (body near top)
-    is_up_pin = (out["candle_type"] == "pinbar") & (upper < dist) & (lower > dist)
-    # down pinbar: upper_wick large, lower_wick small (body near bottom)
-    is_dn_pin = (out["candle_type"] == "pinbar") & (lower < dist) & (upper > dist)
-
-    out.loc[is_up_pin, "pinbar_dir"] = 1
-    out.loc[is_dn_pin, "pinbar_dir"] = -1
-
     # Special maru flag (independent): looser body_pct threshold + body location constraint
     # This is NOT the primary candle_type, but meeting this condition means the candle becomes maru.
     # Bullish (dir=+1): small upper wick (body near top)
@@ -103,6 +100,44 @@ def classify_candles(df: pd.DataFrame, params: CandleParams) -> pd.DataFrame:
     )
     out.loc[is_special_maru, "is_special_maru"] = True
     out.loc[is_special_maru, "candle_type"] = "maru"
+
+    # Absolute body-pip floor -> pinbar (applied LAST; trumps maru/normal/pinbar).
+    # A candle whose REAL BODY is shorter than the per-TF floor carries no
+    # directional conviction, so it is reclassified `pinbar` regardless of its
+    # body_pct (and regardless of the special-maru promotion just above). This
+    # is why the legacy `is_big_maru` body-pip floor was removed: these small
+    # candles can no longer be maru in the first place. Pip size is per-pair
+    # (JPY=0.01 else 0.0001), read from df.attrs["pair"] (same source as
+    # classify_big_flags). Strict `<` with an EPS guard so a body sitting exactly
+    # at the floor keeps its original type (a nominal N-pip body can float-round
+    # to N*pip - ~2e-15; see GOTCHAS "Body-pip floor float precision").
+    # 0.0 floor = disabled (legacy: candle_type purely body_pct-driven).
+    pair_str = str(out.attrs.get("pair", "")).upper()
+    pip_size = 0.01 if "JPY" in pair_str else 0.0001
+    floor_price = float(params.pinbar_body_pip_floor) * pip_size
+    if floor_price > EPS:
+        body_len = out["body_len"].astype(float)
+        is_tiny_body = body_len < (floor_price - EPS)
+        out.loc[is_tiny_body, "candle_type"] = "pinbar"
+        # Keep the (downstream-unused) flag self-consistent: a tiny-body pinbar
+        # is not a maru. No behavioral effect — nothing reads is_special_maru.
+        out.loc[is_tiny_body, "is_special_maru"] = False
+
+    # Pinbar direction: body near top => up pinbar; body near bottom => down pinbar.
+    # Computed AFTER candle_type is final (incl. special-maru promotion AND the
+    # body-pip-floor reclassification above) so every final pinbar — including
+    # the newly reclassified ones — is directioned by the same wick-geometry
+    # rule. Moving this below special-maru is byte-neutral for pre-existing
+    # pinbars: special-maru only ever promotes normals, never touches pinbars.
+    # Use pinbar_distance as fraction of candle_len.
+    dist = params.pinbar_distance * length
+    # up pinbar: lower_wick large, upper_wick small (body near top)
+    is_up_pin = (out["candle_type"] == "pinbar") & (upper < dist) & (lower > dist)
+    # down pinbar: upper_wick large, lower_wick small (body near bottom)
+    is_dn_pin = (out["candle_type"] == "pinbar") & (lower < dist) & (upper > dist)
+
+    out.loc[is_up_pin, "pinbar_dir"] = 1
+    out.loc[is_dn_pin, "pinbar_dir"] = -1
 
     # Normal direction: based on where the body midpoint sits within the candle range
     # Computed AFTER is_special_maru reclassification so only true normals get a direction
@@ -186,18 +221,7 @@ def classify_big_flags(
         out[f"big_ratio_as{s}"] = 0.0
 
     lengths = out["candle_len"].astype(float).values
-    body_lens = out["body_len"].astype(float).values
     ctype = out["candle_type"].values
-
-    # Absolute-pip floor on body length. Applied to `is_big_maru` ONLY (NOT
-    # `is_big_normal` — kept on legacy ratio-only gate by design). pip_size
-    # derived from pair (JPY pairs: 0.01, others: 0.0001) so the floor in
-    # price units matches what callers express in pips. Skip the floor gate
-    # entirely when params.big_body_pip_floor == 0.0 (legacy behavior).
-    pair_str = str(out.attrs.get("pair", "")).upper()
-    pip_size = 0.01 if "JPY" in pair_str else 0.0001
-    body_floor_price = float(params.big_body_pip_floor) * pip_size
-    body_floor_active = body_floor_price > EPS
 
     for i in range(n):
         for s in anchor_shifts:
@@ -210,24 +234,16 @@ def classify_big_flags(
             ratio = round(lengths[i] / prior_max, 2)
             out.loc[i, f"big_ratio_as{s}"] = ratio
 
-            # Additive body-pip floor for big_maru ONLY. Candles must clear
-            # BOTH the rolling-max ratio AND the absolute body-length floor.
-            # Tolerance EPS guards against float-precision noise (price diffs
-            # like 0.57696 - 0.57676 round-trip through float64 to ~1.999...e-4
-            # not 2e-4, so a "2.0-pip" body would otherwise fail a 2.0-pip
-            # floor by ~2e-15 — see GOTCHAS "Body-pip floor float precision").
-            passes_floor = (not body_floor_active) or (body_lens[i] >= body_floor_price - EPS)
-
-            # big_maru: ratio + (optional) body-pip floor.
-            if ratio >= params.big_maru_threshold and passes_floor:
+            # big_maru / big_normal are ratio-only (current candle_len vs the
+            # prior-5-maru max range). The former additive body-pip floor on
+            # `is_big_maru` was removed: small-bodied candles are now
+            # reclassified `pinbar` in `classify_candles`
+            # (params.pinbar_body_pip_floor), so they can never be maru — nor
+            # enter the prior-maru pool — in the first place. The floor that
+            # used to live here now lives at the type-assignment layer.
+            if ratio >= params.big_maru_threshold:
                 out.loc[i, f"is_big_maru_as{s}"] = True
 
-            # big_normal: ratio ONLY (legacy behavior — no body-pip floor).
-            # Reverted from the additive gate so pattern alt-paths that rely
-            # on `c1.is_big_normal_as1` (e.g., one_maru_continuous) keep
-            # qualifying even when c1's body is small. Big_maru's floor
-            # restricts which CANDLES can ANCHOR a pattern (c0); the alt
-            # path's c1 still uses the legacy gate.
             if ratio >= params.big_normal_threshold:
                 out.loc[i, f"is_big_normal_as{s}"] = True
 

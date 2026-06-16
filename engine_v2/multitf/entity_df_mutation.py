@@ -440,10 +440,20 @@ def _build_sibling_cts_ref_zone(
     Walks the SIBLING entity's events for this `(parent_sid, parent_cycle_id)`
     (across ALL the sibling's sub_sids — the time-bounded `idx_window` selects
     the right one), takes the most recent of {CTS_CONFIRMED, CTS_UPDATED,
-    CTS_ESTABLISHED} via `build_reference_zone_from_cts_event`. The returned
-    zone's `source_event_idx` is the sibling CTS extreme on the sub TF — the
-    caller uses it as BOTH the probe `input_idx` AND the reference zone (they
-    are co-sourced).
+    CTS_ESTABLISHED} **whose `struct_direction` matches the sibling's expected
+    (bootstrap) direction = `-probe_direction`**, via
+    `build_reference_zone_from_cts_event`. The returned zone's `source_event_idx`
+    is the sibling CTS extreme on the sub TF — the caller uses it as BOTH the
+    probe `input_idx` AND the reference zone (they are co-sourced).
+
+    **Direction qualification (2026-06-15).** A sibling sub that has REVERSED
+    away from its expected direction is no longer a true confluence/counter
+    relative to the parent, so its CTS is excluded — even when it is the most
+    recent CTS in the window. Only same-direction CTS are candidates; if the
+    sibling reverses back later, those re-aligned CTS qualify again. Without this
+    filter a reversed sibling whose CTS keeps UPDATING up to the trigger candle
+    drags the anchor to the trigger and collapses the probe window (the bug this
+    fixes). See PART4 §4.3 + LANDMINES "Cross-entity sibling references".
 
     **sub_sid disambiguation (idx-correctness, LANDMINE "Cross-entity sibling
     references"):** every sibling sub's MS run uses `structure_id=0` LOCALLY, so
@@ -480,11 +490,38 @@ def _build_sibling_cts_ref_zone(
     if not sibling_events:
         return None
 
+    # Direction qualification (2026-06-15). Only CTS from a sibling sub still in
+    # its OWN expected (bootstrap) direction may anchor this trigger. That
+    # direction is the OPPOSITE of this trigger's probe direction: confluence and
+    # counter run in opposite directions, and each variation reads the OTHER
+    # entity as its sibling, so the qualifying sibling direction is uniformly
+    # `-probe_direction` — first_counter / subsequent_counter read the confluence
+    # sibling (at +parent_sd = -lower_sd); subsequent_confluence reads the counter
+    # sibling (at -parent_sd = -lower_sd). Once the sibling REVERSES away from
+    # that direction it is no longer a genuine confluence/counter relative to the
+    # parent, so its post-reversal CTS must NOT seed the trigger (the original
+    # spec overlooked that a sibling can reverse before this trigger fires). If
+    # the sibling later reverses BACK into the expected direction, those CTS
+    # qualify again (most-recent qualifying wins — Q2 2026-06-15). This filter
+    # also keeps the primitive's `source_sd = -probe_direction` reconstruction
+    # valid (it assumes the picked CTS came from a -probe_direction structure).
+    # No qualifying CTS → return None → caller's own-entity fallback (unchanged,
+    # Q3 2026-06-15). See PART4 §4.3 "Direction-qualified sibling CTS" + LANDMINES
+    # "Cross-entity sibling references".
+    expected_sd = -int(probe_direction)
+    dir_events = [
+        ev for ev in sibling_events
+        if int(ev.meta.get("struct_direction", 0)) == expected_sd
+    ]
+
     # Pre-select the winning CTS event to disambiguate the CONFIRMED zone lookup
-    # by sub_sid (see docstring). Tie-break order matches the primitive's.
+    # by sub_sid (see docstring). Tie-break order matches the primitive's. The
+    # primitive re-selects the SAME winner by idx, so the direction filter is
+    # applied to the events passed into it (`dir_events`), not just to this local
+    # pre-selection.
     _TYPE_ORDER = {"CTS_CONFIRMED": 2, "CTS_UPDATED": 1, "CTS_ESTABLISHED": 0}
     cands = [
-        ev for ev in sibling_events
+        ev for ev in dir_events
         if ev.type in _CTS_EVENT_TYPES and lo <= int(ev.idx) <= hi
     ]
     if not cands:
@@ -499,7 +536,7 @@ def _build_sibling_cts_ref_zone(
         and z.meta.get("sub_sid") == win_sub
     ]
     return build_reference_zone_from_cts_event(
-        events=sibling_events,
+        events=dir_events,
         kl_zones=sibling_zones,
         df=sibling_entity_df,
         sid=0,

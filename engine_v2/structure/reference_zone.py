@@ -289,6 +289,14 @@ def build_reference_zone_from_cts_event(
     direction to the source sid — that's the reversal / subsequent_*
     semantic: the new sub flips from the prior sid).
 
+    NOTE: this `-probe_direction` reconstruction ASSUMES every CTS in `events`
+    came from a structure in the `-probe_direction` direction. Reversal callers
+    satisfy this by construction (the only prior sub is the one being reversed).
+    Sibling callers (`_build_sibling_cts_ref_zone`) must PRE-FILTER `events` to
+    that direction, because a sibling can reverse before the trigger fires and a
+    post-reversal CTS would otherwise be picked as "most recent" and mis-sided
+    here (direction qualification, 2026-06-15).
+
     Parameters
     ----------
     events : list of StructureEvent

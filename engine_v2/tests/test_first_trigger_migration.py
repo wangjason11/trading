@@ -340,13 +340,19 @@ class TestResolveSiblingCts:
         m15 = _m15_from_h1(h1)
         return h1, m15
 
-    def _sibling_with_cts(self, parent_cycle_id, sub_sid, idx, anchor):
+    def _sibling_with_cts(self, parent_cycle_id, sub_sid, idx, anchor,
+                          struct_direction=1):
+        # `struct_direction` MUST be the sibling's expected (bootstrap) direction
+        # = `-trigger.lower_sd` for the CTS to qualify under the direction filter:
+        # +1 for a confluence sibling (first_counter / subsequent_counter),
+        # -1 for a counter sibling (subsequent_confluence).
         m15 = _m15_from_h1(_h1_df_uptrend(n_hours=10))
         sib = m15.copy()
         sib.attrs["events"] = [
             _make_sibling_cts_event(
                 parent_sid=0, parent_cycle_id=parent_cycle_id, sub_sid=sub_sid,
-                idx=idx, cts_anchor_idx=anchor, cycle_id=0, struct_direction=1,
+                idx=idx, cts_anchor_idx=anchor, cycle_id=0,
+                struct_direction=struct_direction,
             ),
         ]
         sib.attrs["kl_zones"] = [
@@ -385,7 +391,10 @@ class TestResolveSiblingCts:
 
     def test_subsequent_confluence_routes_and_reads_sibling(self):
         h1, m15 = self._fixtures()
-        sib = self._sibling_with_cts(parent_cycle_id=0, sub_sid=0, idx=8, anchor=6)
+        # subsequent_confluence reads the COUNTER sibling → expected dir = -1.
+        sib = self._sibling_with_cts(
+            parent_cycle_id=0, sub_sid=0, idx=8, anchor=6, struct_direction=-1,
+        )
         trig = _make_trigger(
             "subsequent_confluence", parent_cycle_id=0,
             parent_sd=1, lower_sd=1, probe_end_idx=5,
@@ -564,6 +573,76 @@ class TestResolveSiblingCts:
         assert captured["input"] == 8
         assert captured["ref"].source_event_idx == 8
         assert captured["ref"].inner == pytest.approx(0.6050)  # sub_sid=1 zone
+
+    # --- Direction qualification (2026-06-15): a sibling that has reversed away
+    # from its expected (bootstrap) direction must NOT anchor the trigger, even
+    # when its CTS is the most recent in the window. Tested at the
+    # `_build_sibling_cts_ref_zone` level (CONFIRMED path → source_event_idx is
+    # the picked CTS's cts_anchor_idx). ---
+
+    def _sibling_multi(self, events_spec):
+        """events_spec: list of (sub_sid, idx, anchor, struct_direction). One
+        CTS_CONFIRMED per spec + a matching KL zone per sub_sid so the CONFIRMED
+        path resolves without ad-hoc derivation."""
+        sib = _m15_from_h1(_h1_df_uptrend(n_hours=10)).copy()
+        sib.attrs["events"] = [
+            _make_sibling_cts_event(
+                parent_sid=0, parent_cycle_id=2, sub_sid=ss,
+                idx=ix, cts_anchor_idx=an, cycle_id=ss, struct_direction=sd,
+            )
+            for (ss, ix, an, sd) in events_spec
+        ]
+        sib.attrs["kl_zones"] = [
+            _make_kl_zone("CTS", 0, 2, sub_sid=ss, cycle_id=ss,
+                          top=0.6020 + 0.001 * ss, bottom=0.6010 + 0.001 * ss)
+            for (ss, _ix, _an, _sd) in events_spec
+        ]
+        return sib
+
+    def test_reversed_sibling_cts_excluded(self):
+        # Confluence sibling: aligned +1 CTS (anchor 4) then a LATER reversed
+        # -1 CTS (anchor 8). first_counter (probe_dir -1, expected +1) must pick
+        # the aligned CTS, NOT the later reversed one.
+        sib = self._sibling_multi([(0, 6, 4, 1), (1, 10, 8, -1)])
+        ref = edm._build_sibling_cts_ref_zone(
+            sib, parent_sid=0, parent_cycle_id=2,
+            probe_direction=-1, idx_window=(0, 23),
+        )
+        assert ref is not None
+        assert ref.source_event_idx == 4      # aligned +1 CTS, not the -1 @ idx 10
+
+    def test_reversed_then_realigned_sibling_requalifies(self):
+        # +1 (anchor 4) → reversed -1 (anchor 8) → re-aligned +1 (anchor 12).
+        # Most-recent QUALIFYING (+1) wins → anchor 12 (Q2 2026-06-15).
+        sib = self._sibling_multi([(0, 6, 4, 1), (1, 10, 8, -1), (2, 14, 12, 1)])
+        ref = edm._build_sibling_cts_ref_zone(
+            sib, parent_sid=0, parent_cycle_id=2,
+            probe_direction=-1, idx_window=(0, 23),
+        )
+        assert ref is not None
+        assert ref.source_event_idx == 12
+
+    def test_only_reversed_sibling_cts_returns_none(self):
+        # Sibling has ONLY a reversed (-1) CTS in window → no qualifying CTS →
+        # None, so the caller takes its own-entity fallback (unchanged, Q3).
+        sib = self._sibling_multi([(1, 10, 8, -1)])
+        ref = edm._build_sibling_cts_ref_zone(
+            sib, parent_sid=0, parent_cycle_id=2,
+            probe_direction=-1, idx_window=(0, 23),
+        )
+        assert ref is None
+
+    def test_subsequent_confluence_excludes_reversed_counter_sibling(self):
+        # subsequent_confluence reads the COUNTER sibling (expected dir -1,
+        # probe_dir +1). A later counter REVERSAL (+1) is excluded; the aligned
+        # -1 counter CTS (anchor 4) wins.
+        sib = self._sibling_multi([(0, 6, 4, -1), (1, 10, 8, 1)])
+        ref = edm._build_sibling_cts_ref_zone(
+            sib, parent_sid=0, parent_cycle_id=2,
+            probe_direction=1, idx_window=(0, 23),
+        )
+        assert ref is not None
+        assert ref.source_event_idx == 4
 
 
 # ---------------------------------------------------------------------------

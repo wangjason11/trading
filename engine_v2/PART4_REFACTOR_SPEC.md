@@ -228,9 +228,9 @@ contract:
 | Variation | Probe sd | Probe TF | input_idx + reference source |
 |---|---|---|---|
 | `first_confluence` | `+parent_sd` | sub TF | parent BOS extreme (price→M15) + own ad-hoc BOS_0 |
-| `first_counter` | `-parent_sd` | sub TF | sibling confluence CTS (input == ref's `source_event_idx`) |
-| `subsequent_confluence` | `+parent_sd` | sub TF | sibling counter CTS (input == ref's `source_event_idx`) |
-| `subsequent_counter` | `-parent_sd` | sub TF | sibling confluence CTS (input == ref's `source_event_idx`) |
+| `first_counter` | `-parent_sd` | sub TF | sibling confluence CTS, same-dir only (input == ref's `source_event_idx`) |
+| `subsequent_confluence` | `+parent_sd` | sub TF | sibling counter CTS, same-dir only (input == ref's `source_event_idx`) |
+| `subsequent_counter` | `-parent_sd` | sub TF | sibling confluence CTS, same-dir only (input == ref's `source_event_idx`) |
 
 **Time/price mapping rules (sub-TF translation, Session 2 generalization
 2026-05-29, still current):**
@@ -410,9 +410,9 @@ at the next parent BOS_confirmed.
 | Variation | Trigger | Input idx | End idx | Reference zone | Probe sd |
 |---|---|---|---|---|---|
 | `first_confluence` | Parent BOS_confirmed | Parent BOS extreme (price-mapped to M15) | Parent CTS **extreme** (`cts_anchor_idx`; NULL until parent CTS_confirmed fires) | **Ad-hoc BOS_0 on sub TF** (derived from input_idx candle on M15) | `+parent_sd` |
-| `first_counter` | 1st parent sd-proximity post-CTS | **Sibling confluence CTS extreme** (= ref's `source_event_idx`) | This trigger candle | **Sibling first_confluence's most recent CTS** (existing zone if CONFIRMED; ad-hoc CTS if UPDATED/EST) | `-parent_sd` |
-| `subsequent_confluence` | Parent CTS-proximity after sd-prox | **Sibling counter CTS extreme** (= ref's `source_event_idx`) | This trigger candle | Sibling counter's most recent CTS (in M15 window; same rule) | `+parent_sd` |
-| `subsequent_counter` | Parent sd-prox forming Λ / V | **Sibling confluence CTS extreme** (= ref's `source_event_idx`) | This trigger candle | Sibling confluence's most recent CTS (in M15 window; same rule) | `-parent_sd` |
+| `first_counter` | 1st parent sd-proximity post-CTS | **Sibling confluence CTS extreme** (= ref's `source_event_idx`) | This trigger candle | **Sibling first_confluence's most recent same-direction CTS** (`struct_direction == +parent_sd`; existing zone if CONFIRMED; ad-hoc CTS if UPDATED/EST) | `-parent_sd` |
+| `subsequent_confluence` | Parent CTS-proximity after sd-prox | **Sibling counter CTS extreme** (= ref's `source_event_idx`) | This trigger candle | Sibling counter's most recent same-direction CTS (`struct_direction == -parent_sd`; in M15 window; same rule) | `+parent_sd` |
+| `subsequent_counter` | Parent sd-prox forming Λ / V | **Sibling confluence CTS extreme** (= ref's `source_event_idx`) | This trigger candle | Sibling confluence's most recent same-direction CTS (`struct_direction == +parent_sd`; in M15 window; same rule) | `-parent_sd` |
 
 **Uniform input+reference rule (2026-05-31, Session 3).** All three
 sibling-referencing variations (`first_counter`, `subsequent_confluence`,
@@ -423,6 +423,32 @@ the sibling's events within the trigger's sub-TF idx window. `first_confluence`
 is the only exception — it has no sibling/prior structure yet, so it anchors on
 its own ad-hoc BOS_0 from the parent-BOS-extreme input. The probe always runs
 on the structure's OWN sub TF.
+
+**Direction-qualified sibling CTS (2026-06-15).** "Most recent sibling CTS"
+means the most recent CTS **from a sibling sub still in its OWN expected
+(bootstrap) direction** — uniformly `struct_direction == -lower_sd` (the
+referencing trigger and its sibling run in opposite directions, and each
+variation reads the OTHER entity, so the qualifying sibling direction is always
+the opposite of the trigger's own `lower_sd`):
+
+| Trigger (`lower_sd`) | Sibling read | Qualifying sibling `struct_direction` |
+|---|---|---|
+| `first_counter` (`-parent_sd`) | confluence | `+parent_sd` (`= -lower_sd`) |
+| `subsequent_counter` (`-parent_sd`) | confluence | `+parent_sd` (`= -lower_sd`) |
+| `subsequent_confluence` (`+parent_sd`) | counter | `-parent_sd` (`= -lower_sd`) |
+
+A sibling sub that has **reversed** away from its expected direction is no
+longer a genuine confluence/counter relative to the parent, so its CTS does NOT
+qualify to seed the trigger — even if it is the latest CTS in the window. The
+original Session-3 rule overlooked that a sibling can reverse *before* this
+trigger fires; an in-progress reversed CTS that keeps UPDATING up to the trigger
+candle would otherwise drag the anchor to the trigger and collapse the probe
+window. If the sibling later reverses **back** into the expected direction, those
+re-aligned CTS qualify again (most-recent qualifying wins). When **no**
+same-direction sibling CTS exists in the window, the per-variation own-entity
+fallback (step below) applies — unchanged. Enforced in `_build_sibling_cts_ref_zone`
+by filtering candidate events to `struct_direction == -probe_direction` before
+the most-recent selection.
 
 **Reference-zone pivot history.** Session 2 (2026-05-29, post-Gate-1) first
 moved `first_*` off the parent's wide H1 zones onto sub-TF zones (ad-hoc BOS_0

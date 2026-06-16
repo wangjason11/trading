@@ -506,6 +506,18 @@ class BreakoutPatterns:
         if not self.check_break(c0, break_threshold, direction):
             return None
 
+        # Disqualify when the OPPOSING pullback c1 is itself a strong maru: a
+        # big_maru (at shift-1) OR a maru whose range >= c0's. one_maru_opposite
+        # wants a WEAK opposing pullback after the c0 breakout; a strong opposing
+        # maru is a counter-move, not a pullback. This only bites the
+        # FAIL_NEEDS_CONFIRM -> CONFIRMED branch (the SUCCESS paths already
+        # require c1 small via c1_len_check, or a pinbar via cand2_valid_alt);
+        # it stops a strong opposing maru sneaking a confirmed pattern through
+        # later-candle confirmation (the premature-pullback / BOS-BOS-CTS-CTS
+        # anomaly class).
+        if c1.candle_type == "maru" and (int(c1.is_big_maru_as1) == 1 or c1.candle_len >= c0.candle_len):
+            return None
+
         # 2 ways for valid pattern:
         # 1) main: c0 big maru & break & c1 small body + c1 low higher than c0 mid price
         # 2) alt: c0 big maru & break & c1 is pinbar & beyond break threshold (only used when there is break threshold)
