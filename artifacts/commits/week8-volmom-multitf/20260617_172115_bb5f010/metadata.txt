@@ -1,0 +1,4 @@
+commit_hash=bb5f010
+timestamp=20260617_172115
+branch=week8-volmom-multitf
+commit_message=11a-ii: relocate main Scenario-2 cross to versioned _fibs (byte-identical)
