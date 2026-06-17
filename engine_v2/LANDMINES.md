@@ -183,10 +183,13 @@ structure_events.csv for that combination to catch regressions.
 MarketStructure's in-flight POI snapshot
 (`zones/poi_zones.py::compute_poi_inners_for_cycle`) and FibTracker's
 downstream POI derivation both pick Fib anchors via the shared pure
-utility `zones/fib_tracker.py::select_fib_anchor_for_cycle`. The utility
-embeds the Scenario 2 cross-cycle cond1/cond2/cond3 check, so for
-`sid >= 1, cycle_id == 1` cases both layers agree on whether to anchor at
-`(BOS_0, CTS_1)` (Scenario 2) or `(BOS_n, CTS_n)` (Scenario 3 / intra).
+utility `zones/fib_tracker.py::select_fib_anchor_for_cycle`. The Scenario 2
+cross-cycle cond1/cond2/cond3 check is, since §11a (2026-06-17), DELEGATED to
+the shared pure routine `zones/cross_cycle_fib.py::resolve_cross_cycle_eligibility`
+(single-step `target=1`, `fill_as_of="snapshot"`); `select_fib_anchor_for_cycle`
+is now a thin wrapper applying only the main-only Scenario-1 outer gate around
+it. So for `sid >= 1, cycle_id == 1` cases both layers agree on whether to
+anchor at `(BOS_0, CTS_1)` (Scenario 2) or `(BOS_n, CTS_n)` (Scenario 3 / intra).
 MS tracks the cycle-0 snapshot (`MarketStructureState.cycle0_data`)
 populated at cycle-0 CTS_ESTABLISHED, refreshed on each CTS_UPDATED, and
 locked at CTS_0 CONFIRMED — threaded into the resolver via the

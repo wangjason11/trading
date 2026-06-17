@@ -24,6 +24,7 @@ from engine_v2.features.fibonacci import (
 )
 from engine_v2.patterns.imbalance import has_unfilled_imbalance, get_unfilled_imbalances
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.zones.cross_cycle_fib import resolve_cross_cycle_eligibility
 from engine_v2.zones.structure_lifecycle import (
     compute_cycle_lifecycle,
     compute_reversal_idx_by_sid,
@@ -157,26 +158,34 @@ def select_fib_anchor_for_cycle(
     if c0_data.get("scenario1") is True:
         return (int(bos_idx), float(bos_price), int(cts_idx), float(cts_price), "scenario_1")
 
-    sd_filter = int(struct_direction) if struct_direction in (1, -1) else None
-    c1_lo = int(min(bos_idx, cts_idx))
-    c1_hi = int(max(bos_idx, cts_idx))
-    cond1 = has_unfilled_imbalance(
-        df, c1_lo, c1_hi, int(cts_idx), fill_threshold, direction=sd_filter,
+    # Delegate the Scenario-2 cond1/cond2/cond3 decision to the shared routine
+    # (CROSS_CYCLE_FIB_SPEC.md §11a). This is a single-step (target=1) cross
+    # with the H1-main "snapshot" fill-as-of policy: the cycle-0 liveness is
+    # cond3 (re-checked as of BOS_1 = own_imb_start) AND cond2 (the cached
+    # cycle-0 @CTS_0 liveness in c0_data["has_unfilled"]). cond1 is the routine's
+    # own-imbalance test over [BOS_1, CTS_1] as of CTS_1 (= current_candle).
+    # The Scenario-1 outer gate (above) is main-only and stays here. A fresh
+    # throwaway dead_cycles set is used — the wrapper never caches.
+    elig = resolve_cross_cycle_eligibility(
+        df=df,
+        target_cycle=1,
+        sd=int(struct_direction),
+        current_candle=int(cts_idx),
+        own_imb_start=int(bos_idx),
+        anchor_idx=int(cts_idx),
+        anchor_price=float(cts_price),
+        bos_by_cycle={0: (int(c0_data["bos_idx"]), float(c0_data["bos_price"]))},
+        cts_by_cycle={0: (int(c0_data["cts_idx"]), float(c0_data["cts_price"]))},
+        dead_cycles=set(),
+        fill_threshold=fill_threshold,
+        fill_as_of="snapshot",
+        prior_cached_liveness={0: bool(c0_data.get("has_unfilled", False))},
     )
-    cond2 = bool(c0_data.get("has_unfilled", False))
 
-    c0_bos_idx = int(c0_data["bos_idx"])
-    c0_cts_idx = int(c0_data["cts_idx"])
-    c0_lo = min(c0_bos_idx, c0_cts_idx)
-    c0_hi = max(c0_bos_idx, c0_cts_idx)
-    cond3 = has_unfilled_imbalance(
-        df, c0_lo, c0_hi, int(bos_idx), fill_threshold, direction=sd_filter,
-    )
-
-    if cond1 and cond2 and cond3:
+    if elig.crosses:
         return (
-            c0_bos_idx,
-            float(c0_data["bos_price"]),
+            elig.bos_idx,
+            elig.bos_price,
             int(cts_idx),
             float(cts_price),
             "scenario_2_cross",
@@ -1967,52 +1976,43 @@ class FibTracker:
         """
         phase = self._m15_phase.get((sid, target_cycle))
 
-        # Step 1: target cycle's own imbalance. sd-direction filter — only
-        # imbalances that could ever produce sd POIs count.
-        own_has = has_unfilled_imbalance(
-            df,
-            min(own_imb_start, current_candle),
-            max(own_imb_start, current_candle),
-            current_candle,
-            self.config.fill_threshold,
-            direction=sd,
+        # Steps 1–2 (own-imbalance test + dead-cycle backward walk) are the
+        # shared routine (CROSS_CYCLE_FIB_SPEC.md §11a). `fill_as_of="current"`
+        # = subordinate semantics (each prior cycle checked to the current
+        # candle, Interpretation B). The dead_cycles cache is passed by
+        # reference so the walk's memo persists across candles exactly as
+        # before. `bos_by_cycle`/`cts_by_cycle` are sliced to this sid over the
+        # walk range [0, target_cycle).
+        elig = resolve_cross_cycle_eligibility(
+            df=df,
+            target_cycle=target_cycle,
+            sd=sd,
+            current_candle=current_candle,
+            own_imb_start=own_imb_start,
+            anchor_idx=anchor_idx,
+            anchor_price=anchor_price,
+            bos_by_cycle={
+                k: self._bos_by_cycle[(sid, k)]
+                for k in range(target_cycle)
+                if (sid, k) in self._bos_by_cycle
+            },
+            cts_by_cycle={
+                k: self._cts_by_cycle[(sid, k)]
+                for k in range(target_cycle)
+                if (sid, k) in self._cts_by_cycle
+            },
+            dead_cycles=self._dead_cycles.setdefault(sid, set()),
+            fill_threshold=self.config.fill_threshold,
+            fill_as_of="current",
         )
 
-        if not own_has:
+        if not elig.own_has:
             self._deactivate_active_cross(sid, target_cycle, current_candle, "own_imb_filled")
             # Pre-established: no fallback. Established: existing single fib
             # (if any) is managed by _update_fib_cts elsewhere — nothing to do here.
             return
 
-        # Step 2: walk backward, collect earliest eligible x
-        if sid not in self._dead_cycles:
-            self._dead_cycles[sid] = set()
-
-        earliest_x = target_cycle
-        k = target_cycle - 1
-        while k >= 0:
-            if k in self._dead_cycles[sid]:
-                break
-            bos_k = self._bos_by_cycle.get((sid, k))
-            cts_k = self._cts_by_cycle.get((sid, k))
-            if bos_k is None or cts_k is None:
-                # No data for this cycle — walk stops
-                break
-            range_start = min(bos_k[0], cts_k[0])
-            range_end = max(bos_k[0], cts_k[0])
-            has_unf = has_unfilled_imbalance(
-                df,
-                range_start,
-                range_end,
-                current_candle,
-                self.config.fill_threshold,
-                direction=sd,
-            )
-            if not has_unf:
-                self._dead_cycles[sid].add(k)
-                break
-            earliest_x = k
-            k -= 1
+        earliest_x = elig.earliest_x
 
         # Step 3: act on result
         active_cross = self._get_latest_cross(sid, target_cycle)

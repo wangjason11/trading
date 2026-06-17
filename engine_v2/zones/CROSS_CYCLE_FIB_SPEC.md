@@ -384,6 +384,44 @@ points for byte-identical continuity with 11a. Confirm at implementation.
   **POI** (`FIB_LIFECYCLE_SPEC §15.8`). For 11b, validate via POI CSVs/charts AND a
   temporary fib-record dump (`debug/export_fib_lifecycle.py`).
 
+### 12.1 Worked validation case — the `M = 2` anchor (11b ground truth)
+
+Verified against baseline `20260616_185639_d1bd7bb` (config window
+`2025-11-15 → 2026-01-20`, NZD_USD H1). This is the **concrete expected outcome
+that proves the §4 ceiling fired** — capture it before 11b so the next session
+has a target.
+
+- **Reversal:** sid=0 (bullish, sd=+1) reverses at idx 897 / apply 902 →
+  new sid=1 (bearish, sd=−1). `bos_frozen = 0.5736`.
+- **Threshold coincidence (checked):** `_get_prev_bos_outer(sid=1) = 0.5736`
+  too — sid=0's last BOS zone (cycle 1, `buy`, outer 0.5736) has a single INIT
+  `bounds_steps` (no expansion), so max-expanded outer = bottom = `bos_frozen`.
+  So `P_rev` (the §4 ceiling) and the reversal `bos_frozen` are the **same
+  value** here; no drift.
+- **sid=1 CTS extremes** (clear ⇔ `CTS ≤ 0.5736` for sd=−1):
+
+  | cycle | CTS extreme | vs 0.5736 | clears? |
+  |---|---|---|---|
+  | 0 | 0.57902 | above | no |
+  | 1 | 0.574 | above (~4 pips) | no |
+  | 2 | 0.57112 | **below** | **yes** |
+
+  → **M = 2** (earliest cycle whose CTS clears `P_rev`). Note CTS_1 sits only
+  ~4 pips above the line — the boundary is close, so confirm the clear
+  comparator matches the revert check's inclusive "touch" (`≤`/`≥`) + the same
+  EPS the codebase uses (not a boundary case in *this* data, but tight).
+
+- **Today (target capped at 1):** post-reversal cross can only reach cycle 1.
+- **After 11b:** cross may target cycles 1…M = 1…2; **cycle 2 gets the final
+  cross** (`BOS_earliest_x → CTS_2`); a cycle 3 (none in this data) would fall
+  back to a single. Operationally: target T allowed iff no cycle in `[0, T−1]`
+  has cleared `P_rev` — so the **first clearing cycle is itself the last valid
+  target** (the upper bound), and the next cycle is single-only.
+- **`/compare` signal:** after 11b, main `poi_zones.csv` gains the cycle-2 cross
+  POIs (BOS_earliest_x → CTS_2) that don't exist today; subs stay byte-identical.
+  (`M = 0` — CTS_0 already clears — is NOT exercised by this window; define +
+  unit-test it separately in 11b, no real-data anchor here.)
+
 ---
 
 ## 13. Open items / deferred
