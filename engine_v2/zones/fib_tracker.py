@@ -240,6 +240,14 @@ class FibTracker:
         # None = undetermined, True = CTS_0 >= rv_idx, False = resolved at CTS_0 CONFIRMED
         self._scenario1: Dict[int, Optional[bool]] = {}
 
+        # Per sid: (prev_bos_outer, prev_sd) — the previous structure's last BOS
+        # zone max-expanded OUTER (= _get_prev_bos_outer) and its direction.
+        # Stashed from on_cts_established (H1 sid 1+). §11b uses it as P_rev for
+        # the multi-cycle cross target CEILING M (CROSS_CYCLE_FIB_SPEC §4): the
+        # post-reversal cross may target cycles 1..M, where M = earliest cycle
+        # whose CTS clears P_rev. See `_cross_allowed_for_target`.
+        self._prev_bos_outer: Dict[int, tuple] = {}
+
         # ------------------------------------------------------------------
         # M15 reverse mode: cross-fib state
         # ------------------------------------------------------------------
@@ -533,6 +541,11 @@ class FibTracker:
         # Populate BOS lookup (used by cross-fib walk-backward in cross_cycle)
         self._bos_by_cycle[(sid, cycle_id)] = (bos_idx, bos_price)
 
+        # §11b: stash P_rev (prev-BOS-outer) for the multi-cycle cross ceiling M.
+        # The orchestrator passes it for H1 sid >= 1 (any cycle now). Set-once.
+        if prev_bos_outer is not None and prev_sd is not None and sid not in self._prev_bos_outer:
+            self._prev_bos_outer[sid] = (float(prev_bos_outer), int(prev_sd))
+
         # ============================================================
         # BRANCH: fib_mode determines logic
         # ============================================================
@@ -691,7 +704,18 @@ class FibTracker:
                 prev_bos_outer, prev_sd
             )
 
-        # --- Cycle 2+: Normal Fib ---
+        # --- Cycle 2+: §11b multi-cycle cross (target <= M) or plain single ---
+        # The cross only forms when (a) the M-ceiling allows it (no prior cycle
+        # cleared P_rev) AND (b) the dead-cycle walk finds an eligible prior.
+        # A read-only eligibility PEEK (dead-cycle COPY, so it can't pollute the
+        # real cache) decides cross-vs-single, so a "no cross" outcome stays
+        # byte-identical to the pre-11b plain-single path (same anchors + meta).
+        if self._cross_allowed_for_target(sid, cycle_id, sd):
+            cross = self._maybe_activate_main_cross(sid, cycle_id, sd, cts_idx, cts_price, df)
+            if cross is not None:
+                return cross
+
+        # Plain single (byte-identical with pre-11b).
         if not has_unfilled:
             print(f"[fib] sid={sid} cycle={cycle_id} NOT activated: no unfilled imbalance")
             return None
@@ -868,6 +892,21 @@ class FibTracker:
         )
         print(f"[fib] sid={sid} cycle=1 anchor decision: label={label} "
               f"(has_unfilled={has_unfilled})")
+
+        # §11b M-ceiling: suppress the cycle-1 cross ONLY on a definite M == 0
+        # (P_rev present AND cycle 0 already cleared it) → Scenario-3 single. The
+        # `is not None` guard keeps pre-11b behavior when P_rev is absent
+        # (degenerate sid>=1 with no prev BOS zone): no ceiling → don't suppress.
+        # No-op when M >= 1 (cycle 0 has not cleared), so byte-identical here.
+        if (
+            label == "scenario_2_cross"
+            and self._prev_bos_outer.get(sid) is not None
+            and not self._cross_allowed_for_target(sid, 1, sd)
+        ):
+            print(f"[fib] sid={sid} cycle=1 cross suppressed (M-ceiling: cycle 0 cleared P_rev)")
+            label = "scenario_3"
+            anchor_bos_idx, anchor_bos_price = bos_idx, bos_price
+            anchor_cts_idx, anchor_cts_price = cts_idx, cts_price
 
         if label == "scenario_2_cross":
             # Scenario 2: Cross-cycle Fib
@@ -1233,6 +1272,13 @@ class FibTracker:
         # version map rather than the retired _cross_cycle_data["cross_cycle"].
         if cycle_id == 1 and self._get_latest_cross(sid, 1) is not None:
             return self._update_cycle1_main(sid, cts_idx, cts_price, df)
+
+        # --- Cycle 2+: maintain a §11b multi-cycle cross if one formed at EST ---
+        # (cross only born at EST — main cycle >= 2 keeps its one-shot semantics;
+        # a cycle with no versioned cross falls through to the plain single
+        # update, byte-identical with pre-11b).
+        if cycle_id >= 2 and self._get_latest_cross(sid, cycle_id) is not None:
+            return self._run_main_cross_check(sid, cycle_id, sd, cts_idx, cts_price, df)
 
         # --- Cycle 1+ normal Fib update ---
         key = (sid, cycle_id)
@@ -1688,34 +1734,30 @@ class FibTracker:
 
         key = (sid, cycle_id)
 
-        # §11a-ii: cycle-1 cross now lives in versioned _fibs. Lock the active
-        # cross version and/or the active single (mirrors the subordinate lock
-        # in _handle_cross_cycle_cts_confirmed, minus the phase transitions —
-        # main has no _m15_phase). Return here; the (sid, cycle) single-key
-        # fall-through below is for cycle >= 2 (plain singles).
-        if cycle_id == 1:
-            latest = self._get_latest_cross(sid, 1)
+        # §11a-ii/§11b: a cycle-1 (Scenario-2) OR cycle-2..M (§11b) cross lives in
+        # versioned _fibs. Lock the active cross version and/or the active single
+        # (mirrors the subordinate lock in _handle_cross_cycle_cts_confirmed,
+        # minus the phase transitions — main has no _m15_phase). Guard on "a
+        # versioned cross exists" (not cycle_id == 1) so §11b cycles 2..M lock
+        # too; byte-identical for prior cases (a cycle with no versioned cross
+        # falls through to the single-key lock exactly as before).
+        if self._get_latest_cross(sid, cycle_id) is not None:
+            latest = self._get_latest_cross(sid, cycle_id)
             locked_any = None
             if latest is not None and latest[1].active and not latest[1].locked:
                 ckey, cstate = latest
                 locked_cross = replace(cstate, locked=True, meta={**cstate.meta, "locked_at": event.idx})
                 self._fibs[ckey] = locked_cross
-                print(f"[fib] sid={sid} cross-cycle LOCKED: CTS idx={cstate.cts_idx}")
+                print(f"[fib] sid={sid} cycle={cycle_id} cross-cycle LOCKED: CTS idx={cstate.cts_idx}")
                 locked_any = locked_cross
             single = self._fibs.get(key)
             if single is not None and single.active and not single.locked:
                 locked_single = replace(single, locked=True, meta={**single.meta, "locked_at": event.idx})
                 self._fibs[key] = locked_single
-                print(f"[fib] sid={sid} cycle=1 single LOCKED: CTS idx={single.cts_idx}")
+                print(f"[fib] sid={sid} cycle={cycle_id} single LOCKED: CTS idx={single.cts_idx}")
                 if locked_any is None:
                     locked_any = locked_single
-            if latest is not None:
-                # A versioned cross exists for this cycle — handled here.
-                return locked_any if locked_any is not None else (
-                    self._fibs.get(latest[0])
-                )
-            # No versioned cross (Scenario 3 single) → fall through to the
-            # generic single-key lock below.
+            return locked_any if locked_any is not None else self._fibs.get(latest[0])
 
         if key not in self._fibs:
             return None
@@ -1875,6 +1917,96 @@ class FibTracker:
         else:
             rel = int(window["l"].values.argmin())
             return (start + rel, float(window["l"].values[rel]))
+
+    def _cross_allowed_for_target(self, sid: int, target_cycle: int, sd: int) -> bool:
+        """H1-main multi-cycle cross CEILING M (CROSS_CYCLE_FIB_SPEC §4).
+
+        Allow a cross at ``target_cycle`` iff **no cycle in [0, target_cycle-1]
+        has yet cleared P_rev** (the prev structure's last-BOS-zone outer) in
+        the new structure's sd direction. This is exactly "target <= M" where
+        ``M`` = earliest cycle whose locked CTS clears P_rev — the clearing
+        cycle is itself the last valid target; the next cycle falls back to a
+        plain single.
+
+        Edge cases (§4.4): no P_rev stashed (sid 0 / no prev structure) → no
+        cross. ``M = 0`` (CTS_0 already clears) → cycle 0 cleared, so every
+        target >= 1 is disallowed → no cross ever (cycle-0 single only).
+        Not-yet-cleared (open structure) → allowed (ceiling not reached).
+        Prior cycles are CONFIRMED before ``target_cycle`` so their CTS extremes
+        are locked in ``_cts_by_cycle`` — stable for the life of target_cycle.
+        """
+        pbo = self._prev_bos_outer.get(sid)
+        if pbo is None:
+            return False
+        p_rev, _prev_sd = pbo
+        for k in range(target_cycle):
+            cts = self._cts_by_cycle.get((sid, k))
+            if cts is None:
+                continue
+            cts_price = cts[1]
+            clears = (cts_price >= p_rev) if sd == 1 else (cts_price <= p_rev)
+            if clears:
+                return False
+        return True
+
+    def _run_main_cross_check(
+        self, sid: int, target_cycle: int, sd: int, cts_idx: int, cts_price: float,
+        df: pd.DataFrame,
+    ) -> Optional[FibState]:
+        """Run the versioned cross machinery for an H1-main cycle (§11b).
+
+        Reuses `_m15_cross_check` (mode-agnostic version transitions; main has no
+        `_m15_phase`, so phase=None drives the established-style single fallback).
+        Anchor = CTS_n (the just-seen extreme); own_imb_start = BOS_n. Returns the
+        active fib (cross or single fallback) for the cycle.
+        """
+        bos = self._bos_by_cycle.get((sid, target_cycle))
+        if bos is None:
+            return None
+        self._m15_cross_check(
+            sid=sid, target_cycle=target_cycle, df=df, sd=sd,
+            current_candle=cts_idx, anchor_idx=cts_idx, anchor_price=cts_price,
+            own_imb_start=bos[0],
+        )
+        latest = self._get_latest_cross(sid, target_cycle)
+        if latest is not None and latest[1].active:
+            return latest[1]
+        return self._fibs.get((sid, target_cycle))
+
+    def _maybe_activate_main_cross(
+        self, sid: int, target_cycle: int, sd: int, cts_idx: int, cts_price: float,
+        df: pd.DataFrame,
+    ) -> Optional[FibState]:
+        """Decide (read-only) whether a §11b main cross forms at target_cycle and,
+        if so, apply it. Returns the cross FibState, or None when no cross forms
+        (caller falls back to the byte-identical plain-single path).
+
+        The PEEK runs the shared routine on a COPY of the dead-cycle cache so a
+        no-cross outcome leaves real state untouched — only an actual cross
+        mutates `_fibs`/`_cross_version`/`_dead_cycles` (via `_m15_cross_check`).
+        """
+        bos = self._bos_by_cycle.get((sid, target_cycle))
+        if bos is None:
+            return None
+        elig = resolve_cross_cycle_eligibility(
+            df=df, target_cycle=target_cycle, sd=sd, current_candle=cts_idx,
+            own_imb_start=bos[0], anchor_idx=cts_idx, anchor_price=cts_price,
+            bos_by_cycle={
+                k: self._bos_by_cycle[(sid, k)]
+                for k in range(target_cycle) if (sid, k) in self._bos_by_cycle
+            },
+            cts_by_cycle={
+                k: self._cts_by_cycle[(sid, k)]
+                for k in range(target_cycle) if (sid, k) in self._cts_by_cycle
+            },
+            dead_cycles=set(self._dead_cycles.get(sid, set())),  # COPY (peek only)
+            fill_threshold=self.config.fill_threshold, fill_as_of="current",
+        )
+        if not elig.crosses:
+            return None
+        print(f"[fib] sid={sid} cycle={target_cycle} §11b multi-cycle CROSS "
+              f"(x={elig.earliest_x} -> {target_cycle})")
+        return self._run_main_cross_check(sid, target_cycle, sd, cts_idx, cts_price, df)
 
     def _get_latest_cross(self, sid: int, cycle_id: int) -> Optional[tuple]:
         """Return (key, FibState) for the highest-version cross fib at

@@ -160,6 +160,76 @@ def test_cross_deactivates_when_own_imbalance_fills_no_single():
     assert (1, 1) not in tracker._fibs   # no fallback single materialized
 
 
+# ============================================================================
+# §11b — multi-cycle cross on main (target 1..M), gated by the P_rev ceiling.
+# ============================================================================
+
+def _drive_cycles(tracker, df, p_rev, cts0=1.15, cts1=1.35, cts2=1.55, to_cycle=2):
+    """Drive sid=1 cycles 0..to_cycle with P_rev set (sd=+1, clear = CTS>=P_rev)."""
+    PB = dict(prev_bos_outer=p_rev, prev_sd=1)
+    tracker.on_cts_established(_ev("CTS_ESTABLISHED", 20, cts0, 1, 0, 1), df,
+                              bos_idx=10, bos_price=1.0, reversal_confirmed_idx=_RV, **PB)
+    tracker.on_cts_confirmed(_ev("CTS_CONFIRMED", 25, cts0, 1, 0, 1, cts_anchor_idx=20))
+    if to_cycle < 1:
+        return None
+    r1 = tracker.on_cts_established(_ev("CTS_ESTABLISHED", 40, cts1, 1, 1, 1), df,
+                                   bos_idx=30, bos_price=1.2, reversal_confirmed_idx=_RV, **PB)
+    if to_cycle < 2:
+        return r1
+    tracker.on_cts_confirmed(_ev("CTS_CONFIRMED", 45, cts1, 1, 1, 1, cts_anchor_idx=40))
+    return tracker.on_cts_established(_ev("CTS_ESTABLISHED", 60, cts2, 1, 2, 1), df,
+                                     bos_idx=50, bos_price=1.4, reversal_confirmed_idx=_RV, **PB)
+
+
+def test_cross_allowed_for_target_logic():
+    t = _tracker()
+    t._prev_bos_outer[1] = (1.30, 1)          # P_rev=1.30, sd=+1
+    t._cts_by_cycle[(1, 0)] = (20, 1.15)      # below → no clear
+    t._cts_by_cycle[(1, 1)] = (40, 1.35)      # >= 1.30 → clears (M=1)
+    assert t._cross_allowed_for_target(1, 1, 1) is True    # [0] none cleared
+    assert t._cross_allowed_for_target(1, 2, 1) is False   # cycle 1 cleared
+    # P_rev absent → no ceiling concept → not allowed (cycles 2+ conservative)
+    t2 = _tracker()
+    assert t2._cross_allowed_for_target(1, 2, 1) is False
+
+
+def test_cycle2_forms_cross_when_no_prior_cleared():
+    # P_rev=2.0 → no cycle clears; all three cycles have unfilled imbalances.
+    df = _df(80, _insts())
+    tracker = _tracker()
+    _drive_cycles(tracker, df, p_rev=2.0)
+
+    latest = tracker._get_latest_cross(1, 2)
+    assert latest is not None
+    key, fib = latest
+    assert key == (1, 2, "cross", 0)
+    assert fib.active and fib.meta.get("cross_cycle") is True
+    assert fib.bos_idx < 50          # spans back past BOS_2 (earliest_x 0 or 1)
+    assert fib.cts_idx == 60         # CTS_2
+
+
+def test_cycle2_stays_single_when_prior_cycle_cleared():
+    # cycle 1 CTS (1.35) clears P_rev=1.30 → M=1 → cycle 2 > M → no cross.
+    df = _df(80, _insts())
+    tracker = _tracker()
+    _drive_cycles(tracker, df, p_rev=1.30, cts0=1.15, cts1=1.35, cts2=1.55)
+
+    assert tracker._get_latest_cross(1, 2) is None   # no cross
+    assert (1, 2) in tracker._fibs                   # plain single
+    assert tracker._fibs[(1, 2)].meta.get("cross_cycle") is not True
+
+
+def test_M0_suppresses_cycle1_cross():
+    # CTS_0 (1.15) clears P_rev=1.10 → M=0 → cycle-1 cross suppressed → single.
+    df = _df(80, _insts())
+    tracker = _tracker()
+    _drive_cycles(tracker, df, p_rev=1.10, cts0=1.15, cts1=1.35, to_cycle=1)
+
+    assert tracker._get_latest_cross(1, 1) is None   # cross suppressed
+    assert (1, 1) in tracker._fibs
+    assert tracker._fibs[(1, 1)].meta.get("scenario") == 3
+
+
 def test_scenario3_single_unchanged_at_single_key():
     """Scenario 3 (no cross) still stores a plain single at (sid,1)."""
     # Only cycle-1 has an imbalance; cycle 0 has none → cond2/cond3 false → S3.

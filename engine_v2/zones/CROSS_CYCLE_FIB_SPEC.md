@@ -374,20 +374,39 @@ crosses. **Landmine learned:** the shared `_activate_fib`'s new versioned-cross 
 must be gated to `fib_mode=="h1"` — ungated it flipped a sub cross's `end_reason`
 `next_cycle→new_cycle` (subs obsolete their crosses via `_m15_create_cross`).
 
-### 11b — Bounded multi-cycle extension on main
-Wire `P_rev` (from `_get_prev_bos_outer`) → `M` → `target_ceiling` into the main call;
-allow target cycles 2…M. `/compare`: main post-reversal POIs change where a multi-cycle
-cross now forms (expected, explainable); subs byte-identical. Validate `M`, `M=0`, the
-§10.7 in-flight-resolver generalization, and the **deeper-walk fill-as-of** open point
-below. This is where the post-reversal "update" lands.
+### 11b Part A — Bounded multi-cycle cross capability on main (DONE 2026-06-17, byte-identical)
+Wire `P_rev` (from `_get_prev_bos_outer`, now passed at EVERY sid≥1 cycle) → the
+target ceiling `M` into FibTracker; route main cycles **1…M** through the shared cross
+machinery, cycles **>M** to plain single. Implemented:
+- `_prev_bos_outer[sid]` stash (set-once) + `_cross_allowed_for_target(sid, T, sd)` =
+  "no cycle in [0, T−1] cleared P_rev" (= `T ≤ M`). `M=0` (CTS_0 clears) → no cross.
+  P_rev absent → no cross for cycles ≥2 (conservative); cycle-1 cross only suppressed on
+  a **definite** M=0 (`_prev_bos_outer` present), preserving pre-11b behavior otherwise.
+- Cycle ≥2 EST: a read-only eligibility **peek** (dead-cycle COPY) decides cross-vs-single
+  so a no-cross outcome is byte-identical; an actual cross runs `_m15_cross_check`
+  (`fill_as_of="current"`). Cycle ≥2 UPD maintains an existing cross; CONF lock
+  generalized to any cycle with a versioned cross. Cross is born at EST only (main keeps
+  its cycle≥2 one-shot semantics).
+- **`fill_as_of` decided: "current"** for the deeper (target ≥2) walk (no legacy A
+  behavior; matches subs). Cycle-1 keeps "snapshot" (the 11a-i wrapper) for continuity.
 
-**Open in 11b — fill-as-of for the deeper walk steps.** A's snapshot semantics (§3.1)
-is *defined only for the target=1 single step* (cond2@CTS_0, cond3@BOS_1). When main
-walks back across MULTIPLE cycles (target ≥ 2), there is **no legacy A behavior** to
-preserve for the intermediate cycles — so their `fill_as_of` must be **decided** in
-11b. Recommendation: use **"current"** (B-semantics) for the newly-enabled deeper
-cycles (no legacy to keep; matches subs), while cycle-1-vs-cycle-0 keeps the snapshot
-points for byte-identical continuity with 11a. Confirm at implementation.
+`/compare` byte-identical (21/21) vs `20260616_185639_d1bd7bb` — see §12.1: M=2 *allows*
+a cycle-2 cross but cycle 1 is dead by cycle-2 time, so none forms (§4.3 — the imbalance
+walk still gates; M never manufactures a cross). The capability is correct + unit-tested
+(`test_main_versioned_cross.py`: the cross-forming path is proven on synthetic data) but
+**dormant on this window**. Mirrors true-first-breakout Commit 2 (byte-identical,
+capability live but output unchanged).
+
+### 11b Part B — in-flight POI resolver generalization (§10.7) — DEFERRED 2026-06-17
+The MS in-flight resolver (`compute_poi_inners_for_cycle`, cycle-1-only) must generalize
+to the full walk so MS's proximity-based CTS confirmation agrees with the downstream
+cross for cycles ≥2. **Deferred because no main cycle≥2 cross forms on the current
+window** → there is nothing for `/compare` to exercise/validate, and the change is a
+substantial MS-protocol extension (MS would need per-cycle BOS/CTS maps + `P_rev`).
+**Bounded gap:** it only bites when a main cycle≥2 cross actually forms AND that cycle's
+CTS confirms via POI proximity — neither happens here. Revisit when a window (e.g. via
+incremental config-window expansion) produces a main multi-cycle cross; then implement +
+`/compare`-validate Parts A and B together.
 
 ---
 
@@ -430,14 +449,26 @@ has a target.
   comparator matches the revert check's inclusive "touch" (`≤`/`≥`) + the same
   EPS the codebase uses (not a boundary case in *this* data, but tight).
 
-- **Today (target capped at 1):** post-reversal cross can only reach cycle 1.
-- **After 11b:** cross may target cycles 1…M = 1…2; **cycle 2 gets the final
-  cross** (`BOS_earliest_x → CTS_2`); a cycle 3 (none in this data) would fall
-  back to a single. Operationally: target T allowed iff no cycle in `[0, T−1]`
-  has cleared `P_rev` — so the **first clearing cycle is itself the last valid
-  target** (the upper bound), and the next cycle is single-only.
-- **`/compare` signal:** after 11b, main `poi_zones.csv` gains the cycle-2 cross
-  POIs (BOS_earliest_x → CTS_2) that don't exist today; subs stay byte-identical.
+- **Ceiling result: M = 2** → the §4 ceiling *allows* a cross to target cycle 2.
+
+**ACTUAL 11b-Part-A OUTCOME (2026-06-17): no cycle-2 cross forms → byte-identical.**
+The earlier "cycle 2 gets the final cross" expectation was OPTIMISTIC — it conflated
+"M allows cycle 2" with "the imbalance walk produces a cross at cycle 2." It does not,
+because the dead-cycle walk still gates (§4.3). Measured unfilled sd-imbalance as of
+cycle-2 time (idx 902):
+
+  | cycle | range | unfilled sd-imbalance @902 |
+  |---|---|---|
+  | 0 | [689,710] | True (live) |
+  | 1 | [728,761] | **False (DEAD)** |
+  | 2 own | [826,902] | True |
+
+The walk from target=2 hits cycle 1 first → **dead → stops** (contiguity: a dead cycle 1
+blocks reaching the live cycle 0) → no eligible prior → **no cross**. So sid=1 cycle 2
+stays a plain single exactly as before. `/compare` byte-identical (21/21). The lesson:
+**`M` is a ceiling, not a producer** — a real main multi-cycle cross needs `M ≥ 2` AND a
+*contiguous* live run of prior cycles, which this window doesn't have. To exercise an
+actual main multi-cycle cross (and Part B), expand the config window to find one.
   (`M = 0` — CTS_0 already clears — is NOT exercised by this window; define +
   unit-test it separately in 11b, no real-data anchor here.)
 

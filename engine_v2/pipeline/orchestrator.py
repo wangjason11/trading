@@ -215,7 +215,11 @@ def _run_downstream_pipeline(
                 reversal_idx = reversal_confirmed_by_sid.get(sid)
 
                 prev_bos_outer, prev_sd = None, None
-                if sid >= 1 and cycle_id == 1:
+                # §11b: pass P_rev (prev-BOS-outer) at EVERY cycle for sid >= 1
+                # (was cycle 1 only). FibTracker stashes it set-once for the
+                # multi-cycle cross target ceiling M. Cycle 1 still uses it for
+                # the Scenario-1 revert check exactly as before.
+                if sid >= 1:
                     prev_bos_outer, prev_sd = _get_prev_bos_outer(sid)
 
                 fib_tracker.on_cts_established(
