@@ -1,0 +1,4 @@
+commit_hash=424dc57
+timestamp=20260617_184315
+branch=week8-volmom-multitf
+commit_message=11b Part A: bounded multi-cycle cross capability on main (byte-identical)
