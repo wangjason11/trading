@@ -218,6 +218,26 @@ compare against `df.attrs["poi_zones"]`.
 
 ---
 
+## `_activate_fib`'s Versioned-Cross Obsolete Is H1-Only
+
+**Rule:** The §11a-ii addition in `FibTracker._activate_fib` that obsoletes a
+**prev-cycle versioned cross** (so the next cycle's activation sets the
+`new_cycle` terminal on the now-versioned H1-main cross) is gated to
+`self.fib_mode == "h1"` and MUST stay gated.
+
+**Why:** `_activate_fib` is shared by both modes. Subordinate (`cross_cycle`)
+crosses are obsoleted by `_m15_create_cross` → `_obsolete_prev_cycle_all_fibs`
+at the *next cross's creation*. A sub `cross_failed` single also reaches
+`_activate_fib`; if the versioned-cross obsolete ran there too, it would stamp
+`obsolete_reason`/`_set_terminal(...,"new_cycle")` on the prior sub cross,
+flipping its `end_reason` from `next_cycle` (the finalize pass-through) to
+`new_cycle`. Caught by `/compare` as a 1-row diff in
+`M15_{counter,confluence}_fib_lifecycle.csv` (`end_reason: next_cycle→new_cycle`).
+Only the H1-main cross needs this hook (subs handle their own), so the `"h1"`
+gate is both necessary and sufficient.
+
+---
+
 ## Narrow-Cycle Rules 1+2+3 Are a Triple
 
 **Rule:** The three narrow-cycle rules are interlocking. Removing any

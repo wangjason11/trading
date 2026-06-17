@@ -346,14 +346,33 @@ Two steps, each its own `/compare` + sign-off (project norm: one step per sessio
 preserve config windows, show replay timing).
 
 ### 11a — Extract + reroute, BYTE-IDENTICAL
-Lift §3's cross-requirements into the shared routine; reroute BOTH `_m15_cross_check`
-(sub, `fill_as_of=current`) AND Path A's S1-FALSE branch (main, `target=1`,
-`fill_as_of=snapshot`) through it. No behavior change. `/compare` vs the latest baseline
-must be **byte-identical** (subs + main). The §3.1 fill-as-of parameterization is what
-*makes* main byte-identical (without it, B's current-semantics walk would drop main's
-superset crosses). Sanity floor §3.1 + invariant §10.6 are the proof. Per §8 this also
-migrates main onto versioned `_fibs` — still byte-identical (the named-slot ↔ `v0`
-mapping is 1:1 at `target=1`).
+Split into two sub-commits, each its own byte-identical `/compare`:
+
+**11a-i — decision extract (DONE 2026-06-17, `d6b8f54`).** Lift §3's cross-requirements
+into the shared routine `zones/cross_cycle_fib.py::resolve_cross_cycle_eligibility`;
+reroute BOTH `_m15_cross_check` (sub, `fill_as_of=current`) AND — via the thin
+`select_fib_anchor_for_cycle` wrapper — Path A's S1-FALSE branch (main, `target=1`,
+`fill_as_of=snapshot`) + the in-flight POI resolver through it. No behavior change. The
+§3.1 fill-as-of parameterization is what *makes* main byte-identical (without it, B's
+current-semantics walk would drop main's superset crosses). Storage untouched.
+
+**11a-ii — main storage migration, RELOCATE-ONLY (DONE 2026-06-17).** Main's Scenario-2
+cross relocates from the `_cross_cycle_data` named slot + `_fibs[(sid,1)]` mirror into the
+versioned key `(sid,1,"cross",0)` + `_cross_version` (the `cycle0` decision-input dict
+stays; `normal_cycle1`/`cross_cycle` slots retired). `normal_cycle1` is no longer built
+upfront — **create-on-fail** materializes a single at `(sid,1)` only when the cross fails.
+**Decided relocate-only (not full-adopt):** the fib_lifecycle CSV derives `version`/
+`fib_mode` from *meta* and exports `meta` verbatim, so adopting the sub's meta would
+change those columns → NOT byte-identical. So main keeps its bespoke meta (no
+`version`/`fib_mode` keys) under a versioned key; the cosmetic meta-unification is
+**deferred to 11b** (where main rows change anyway). Byte-identical on this window because
+the sole main cross (sid=1 cyc=1) wins throughout → one record, key-relocated, meta + the
+`new_cycle@902` terminal + the phantom collapse all preserved. NB the h1 FALLBACK-to-single
+path is **unreachable** (cond1/cond3 fixed across cycle-1 updates; cond2 == the normal's
+own check) — create-on-fail is dead/harmless for h1, exercised only by 11b multi-cycle
+crosses. **Landmine learned:** the shared `_activate_fib`'s new versioned-cross obsolete
+must be gated to `fib_mode=="h1"` — ungated it flipped a sub cross's `end_reason`
+`next_cycle→new_cycle` (subs obsolete their crosses via `_m15_create_cross`).
 
 ### 11b — Bounded multi-cycle extension on main
 Wire `P_rev` (from `_get_prev_bos_outer`) → `M` → `target_ceiling` into the main call;
