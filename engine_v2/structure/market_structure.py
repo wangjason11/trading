@@ -391,29 +391,6 @@ class MarketStructure:
 
         self._ensure_output_cols()
 
-        # ---- Profiling instrumentation (temporary) ----
-        # Accumulator dict keyed by sub-step name; populated in
-        # `_replay_step_no_patterns` + `_step_anchor` + helpers. Dumped at the
-        # end of `run()`. Cheap (perf_counter only on slow paths); can be
-        # stripped once we've identified the bottleneck.
-        self._t_prof: Dict[str, float] = {
-            "update_active_range": 0.0,
-            "cts_pre_confirm": 0.0,
-            "cts_proximity": 0.0,
-            "bos_barrier": 0.0,
-            "reversal_watch": 0.0,
-            "pending_reversal": 0.0,
-            "write_df_row": 0.0,
-            "pattern_detect": 0.0,
-            "step_anchor_other": 0.0,
-            "replay_no_pat_total": 0.0,
-        }
-        self._t_prof_count: Dict[str, int] = {
-            "replay_no_pat_calls": 0,
-            "step_anchor_calls": 0,
-            "pattern_detect_calls": 0,
-        }
-
     # ----------------------------
     # Public API
     # ----------------------------
@@ -426,13 +403,6 @@ class MarketStructure:
         If end_idx is set, processing stops after that idx (inclusive).
         """
         n = len(self.df)
-        # ---- Profiling (temporary): per-sub CPU time. process_time() is
-        # immune to wall-clock / machine-load noise (the 38m/44m/6.3h swings);
-        # ~16ms coarse on Windows, but bracketing the whole run keeps the
-        # multi-second delta accurate. Headline metric for the MS perf sprint;
-        # the perf_counter per-substep breakdown below stays for proportions. ----
-        from time import process_time as _ptime
-        _cpu_run_start = _ptime()
         # i = 0
         i = int(self.start_idx)
         if i < 0:
@@ -493,39 +463,6 @@ class MarketStructure:
 
         if self.debug_invariants:
             self._check_invariants_df()
-
-        # ---- Profiling dump (temporary) ----
-        # Only print for non-trivial runs so the H1 main + tiny probe runs
-        # don't drown the log. Threshold: any sub that took > 5s total.
-        _total_step_anchor = self._t_prof["step_anchor_other"]
-        _cpu_total = _ptime() - _cpu_run_start
-        if _total_step_anchor > 5.0:
-            _rnp_calls = max(self._t_prof_count["replay_no_pat_calls"], 1)
-            _anchor_calls = max(self._t_prof_count["step_anchor_calls"], 1)
-            print(
-                f"[ms_prof] sid={self.state.structure_id} sd={self.struct_direction} "
-                f"n={len(self.df)} cpu_total={_cpu_total:.2f}s "
-                f"anchors={_anchor_calls} rnp_calls={_rnp_calls} "
-                f"step_anchor_total={_total_step_anchor:.2f}s "
-                f"pattern_detect={self._t_prof['pattern_detect']:.2f}s "
-                f"rnp_total={self._t_prof['replay_no_pat_total']:.2f}s "
-                f"(per-substep avg ms over rnp_calls): "
-                f"upd_range={self._t_prof['update_active_range']/_rnp_calls*1000:.3f} "
-                f"cts_pre={self._t_prof['cts_pre_confirm']/_rnp_calls*1000:.3f} "
-                f"cts_prox={self._t_prof['cts_proximity']/_rnp_calls*1000:.3f} "
-                f"bos_bar={self._t_prof['bos_barrier']/_rnp_calls*1000:.3f} "
-                f"rev_watch={self._t_prof['reversal_watch']/_rnp_calls*1000:.3f} "
-                f"pend_rev={self._t_prof['pending_reversal']/_rnp_calls*1000:.3f} "
-                f"write_row={self._t_prof['write_df_row']/_rnp_calls*1000:.3f} | "
-                f"per-substep TOTAL (s): "
-                f"upd_range={self._t_prof['update_active_range']:.2f} "
-                f"cts_pre={self._t_prof['cts_pre_confirm']:.2f} "
-                f"cts_prox={self._t_prof['cts_proximity']:.2f} "
-                f"bos_bar={self._t_prof['bos_barrier']:.2f} "
-                f"rev_watch={self._t_prof['reversal_watch']:.2f} "
-                f"pend_rev={self._t_prof['pending_reversal']:.2f} "
-                f"write_row={self._t_prof['write_df_row']:.2f}"
-            )
 
         return self.df, self.events, levels
 
@@ -602,11 +539,6 @@ class MarketStructure:
           - do not transition RANGE->PULLBACK/PULLBACK_RANGE based on candle-by-candle expansion
           - just persist current state (typically RANGE) and write the row
         """
-        # ---- Profiling: per-substep timing accumulator ----
-        from time import perf_counter as _pc
-        _t_entry = _pc()
-        self._t_prof_count["replay_no_pat_calls"] += 1
-
         st = self.state
         if not freeze_range:
             # If an active range exists, evolve it candle-by-candle (unless frozen).
@@ -614,9 +546,7 @@ class MarketStructure:
                 prev_hi = st.range_hi
                 prev_lo = st.range_lo
 
-                _t0 = _pc()
                 self._update_active_range(i)
-                self._t_prof["update_active_range"] += _pc() - _t0
 
                 if st.state in (MarketState.PULLBACK, MarketState.PULLBACK_RANGE):
                     # Do not auto-downgrade on the same candle that *applied* the pullback pattern.
@@ -630,16 +560,12 @@ class MarketStructure:
 
         # Option B: even when backfilling (freeze_range=True), CTS can update pre-confirm
         # based on raw new extremes in struct_direction.
-        _t0 = _pc()
         self._maybe_update_cts_pre_confirm(i, via="replay_raw")
-        self._t_prof["cts_pre_confirm"] += _pc() - _t0
 
         # Per-candle CTS confirmation via sd zone proximity. Runs on every
         # candle (anchor, back-fill, apply, fallthrough) — see LANDMINES
         # "Dual CTS Proximity Confirmation" for the load-bearing gates.
-        _t0 = _pc()
         self._maybe_confirm_cts_via_proximity(i)
-        self._t_prof["cts_proximity"] += _pc() - _t0
 
         # -------------------------------------------------
         # Week 5 Part 3A: BOS barrier semantics
@@ -649,31 +575,19 @@ class MarketStructure:
         # - "break" = close breaks barrier
         # - probe (wick cross, no close break) updates bos_threshold
         # - close break starts reversal watch and freezes barrier
-        _t0 = _pc()
         self._bos_barrier_step(i)
-        self._t_prof["bos_barrier"] += _pc() - _t0
 
-        _t0 = _pc()
         self._maybe_expire_reversal_watch(i)
-        self._t_prof["reversal_watch"] += _pc() - _t0
 
         # NEW: if reversal applies on this candle, it's terminal
-        _t0 = _pc()
         _is_terminal = self._maybe_apply_pending_reversal(i)
-        self._t_prof["pending_reversal"] += _pc() - _t0
 
         if _is_terminal:
             # write row after terminal apply state updates
-            _t0 = _pc()
             self._write_df_row(i)
-            self._t_prof["write_df_row"] += _pc() - _t0
-            self._t_prof["replay_no_pat_total"] += _pc() - _t_entry
             return
 
-        _t0 = _pc()
         self._write_df_row(i)
-        self._t_prof["write_df_row"] += _pc() - _t0
-        self._t_prof["replay_no_pat_total"] += _pc() - _t_entry
 
     # ----------------------------
     # Week 5 Part 3A: BOS barrier + reversal watch helpers
@@ -979,10 +893,6 @@ class MarketStructure:
     # ----------------------------
 
     def _step_anchor(self, i: int) -> int:
-        from time import perf_counter as _pc
-        _t_anchor_entry = _pc()
-        self._t_prof_count["step_anchor_calls"] += 1
-
         n = len(self.df)
         D = min(i + self.range_max_k, n - 1)  # range_max_k is 5 by default
 
@@ -999,15 +909,12 @@ class MarketStructure:
             pullback_th = self._range_pullback_threshold()
 
         # 1) Evaluate patterns starting at i (offline computation), but only "act" at apply candle
-        _t0 = _pc()
-        self._t_prof_count["pattern_detect_calls"] += 1
         winner = self._best_bopb_pattern_at_anchor(
             i=i,
             breakout_th=breakout_th,
             pullback_th=pullback_th,
             D=D,
         )
-        self._t_prof["pattern_detect"] += _pc() - _t0
 
         if winner is not None:
             ev, apply_idx, kind = winner  # kind in {"breakout","pullback", "reversal"}
@@ -1034,7 +941,6 @@ class MarketStructure:
             next_i = apply_idx + 1
             if self.state.jump_to_idx is not None:
                 next_i = int(self.state.jump_to_idx)
-            self._t_prof["step_anchor_other"] += _pc() - _t_anchor_entry
             return next_i
 
         # 2b) No valid pattern by D:
@@ -1055,7 +961,6 @@ class MarketStructure:
         next_i = i + 1
         if self.state.jump_to_idx is not None:
             next_i = int(self.state.jump_to_idx)
-        self._t_prof["step_anchor_other"] += _pc() - _t_anchor_entry
         return next_i
 
     def _best_bopb_pattern_at_anchor(

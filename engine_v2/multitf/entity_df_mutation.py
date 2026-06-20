@@ -1134,8 +1134,6 @@ def build_one_sid(
         )
         return None
 
-    import time as _t
-    _t_bounded_start = _t.perf_counter()
     try:
         bounded = compute_bounded_structure(
             trigger_df,
@@ -1157,7 +1155,6 @@ def build_one_sid(
             f"{trigger.parent_cycle_id},{sub_sid}): {exc}"
         )
         return None
-    _t_bounded = _t.perf_counter() - _t_bounded_start
 
     bounded.df.attrs["imbalances"] = trigger_df.attrs.get("imbalances", [])
 
@@ -1208,7 +1205,6 @@ def build_one_sid(
         end_reason = "lifecycle_end"
         sub_lifecycle_cap_local = effective_end_abs - slice_begin
 
-    _t_downstream_start = _t.perf_counter()
     downstream = _run_downstream_pipeline(
         bounded.df,
         bounded.events,
@@ -1226,7 +1222,6 @@ def build_one_sid(
         lifecycle_cap=sub_lifecycle_cap_local,
         cap_reason=end_reason,
     )
-    _t_downstream = _t.perf_counter() - _t_downstream_start
 
     # Reversal handoff (slice-local → entity-absolute). reversal_idx_abs was
     # resolved above (for the end-cap); here we derive the NEXT sid's start via
@@ -1395,9 +1390,7 @@ def build_one_sid(
         f"slice_len={_slice_len} "
         f"reversed={reversal_idx_abs is not None} "
         f"events={len(bounded.events)} kl={len(capped_zones)} "
-        f"poi={len(capped_pois)} fib={len(capped_fibs)} "
-        f"t_bounded={_t_bounded:.2f}s t_downstream={_t_downstream:.2f}s "
-        f"t_total={(_t_bounded + _t_downstream):.2f}s"
+        f"poi={len(capped_pois)} fib={len(capped_fibs)}"
     )
 
     return SidBuildOutcome(
