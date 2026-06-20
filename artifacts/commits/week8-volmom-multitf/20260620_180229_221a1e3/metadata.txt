@@ -1,0 +1,4 @@
+commit_hash=221a1e3
+timestamp=20260620_180229
+branch=week8-volmom-multitf
+commit_message=MS perf Path 2c: row-view for BreakoutPatterns (byte-identical, MS sub-build 534s->23s)
