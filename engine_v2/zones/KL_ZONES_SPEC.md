@@ -114,6 +114,29 @@ where the reference depends on BOS/CTS and struct_direction:
 - BOS, sd=-1 → reference = HIGH
 - CTS, sd=-1 → reference = LOW【fileciteturn2file12】
 
+**Pinbar inner-side bound (2026-06-20, follow-up (c)).** Before the
+closest-neighbour pick, candidates **beyond the outer** are dropped (outer=LOW
+→ keep `>= ref`; outer=HIGH → keep `<= ref`), so the inner can never sit beyond
+the base candle's own extreme (no inverted zone). If every i±1 neighbour O/C is
+beyond the outer (or no neighbour exists), it falls back to the base candle's
+own body point closest to `ref` (always within the outer). This is the **only**
+change vs the original rule and is **inert in the normal case** (closest
+neighbour already within the outer) → byte-identical.
+
+**Pinbar deliberately keeps the tight closest-neighbour rule — NOT the
+`find_base_threshold` inner-edge rule.** Delegating pinbar to that rule was
+tried and reverted: its ±5 pooling + 2nd-closest widening + body-bottom-only
+selection *over-widened* pinbar zones (that rule is for `base` / `inside bar`).
+Pinbar zones key off the pinbar's own body/tail and must stay tight; only the
+inner-side bound is borrowed. The two neighbour-based inner derivations are
+intentionally NOT unified.
+
+**2-candle and star families need no bound — inversion-safe by construction:**
+their inner is always an `o`/`c`/`mid_price` of a candle *within* the pattern
+window, and `compute_base_window_features` sets `base_low/base_high` = min/max
+over that *whole* window, so `inner ∈ [base_low, base_high]` ⊆ outer always.
+(Pinned by `tests/test_kl_zone_thresholds.py`.)
+
 Other base_pattern mappings use `mid_price`, `base_min_close_open`, `base_max_close_open`, or a generalized `find_base_threshold(...)` fallback.【fileciteturn2file8】
 
 ### `find_base_threshold` inner (for `base` / `base inside bar`) — inner-edge rule (2026-06-01)

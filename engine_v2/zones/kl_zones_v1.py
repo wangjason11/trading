@@ -443,6 +443,21 @@ def find_pinbar_threshold(
       - CTS, sd=+1  -> reference = HIGH
       - BOS, sd=-1  -> reference = HIGH
       - CTS, sd=-1  -> reference = LOW
+
+    (c) inner-side bound (2026-06-20): the chosen inner must sit WITHIN the
+    outer (= the base candle's own extreme `ref`), never beyond it — otherwise
+    the zone inverts (inner past the base extreme, rectangle sitting outside the
+    base). Candidates beyond the outer are dropped before the closest pick:
+    outer=LOW (use_low_ref) -> keep candidates >= ref; outer=HIGH -> keep <= ref.
+    This is the ONLY change vs the original closest-neighbour pinbar rule — it
+    preserves the tight pinbar zone (unchanged whenever the closest neighbour is
+    already within the outer, which is the normal case) and adds inversion
+    safety for the edge case. Deliberately NOT the base/inside-bar inner-edge
+    rule (no ±5 pooling, no 2nd-closest widening): pinbar zones key off the
+    pinbar's own body/tail and must stay tight (decision 2026-06-20 after the
+    inner-edge rule was found to over-widen pinbar zones). If every neighbour is
+    beyond the outer (or no neighbour exists), fall back to the base candle's
+    own body point closest to ref — itself always within the outer.
     """
     n = len(df)
     i = int(base_idx)
@@ -455,11 +470,15 @@ def find_pinbar_threshold(
     use_low_ref = (bos and sd == 1) or ((not bos) and sd == -1)
     ref = float(df.loc[i, "l"] if use_low_ref else df.loc[i, "h"])
 
-    # Need neighbors; if missing, fall back to this candle's body point closest to ref
+    # Base candle's own body point closest to ref — always within the outer
+    # (o, c lie inside [l, h]). Used as the fallback for edges / all-beyond.
+    own_o = float(df.loc[i, "o"])
+    own_c = float(df.loc[i, "c"])
+    own = own_o if abs(own_o - ref) <= abs(own_c - ref) else own_c
+
+    # Need neighbors; if missing, fall back to the base candle's body point.
     if i - 1 < 0 or i + 1 >= n:
-        o = float(df.loc[i, "o"])
-        c = float(df.loc[i, "c"])
-        return o if abs(o - ref) <= abs(c - ref) else c
+        return own
 
     candidates = [
         float(df.loc[i - 1, "o"]),
@@ -468,7 +487,18 @@ def find_pinbar_threshold(
         float(df.loc[i + 1, "c"]),
     ]
 
-    inner = min(candidates, key=lambda x: abs(x - ref))
+    # Inner-side bound: drop neighbour points that sit beyond the outer.
+    if use_low_ref:
+        bounded = [x for x in candidates if x >= ref]
+    else:
+        bounded = [x for x in candidates if x <= ref]
+
+    if not bounded:
+        # Every neighbour point is beyond the outer -> the original rule would
+        # have inverted the zone; fall back to the base body point instead.
+        return own
+
+    inner = min(bounded, key=lambda x: abs(x - ref))
     return float(inner)
 
 

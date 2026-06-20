@@ -28,9 +28,23 @@ guaranteed within the outer, containing the base. Full rule in
 the old logic when a neighbour's inner-edge point is beyond the outer, so a full
 replay changed exactly ONE zone (the 1797 one); every well-behaved base/inside-
 bar zone was byte-identical, and there was no structure/proximity/POI cascade.
-**TODO (user, 2026-06-01):** do a pass over the OTHER zone-forming candle
-patterns (pinbar / 2-candle / star inner rules) for the same outer/inner
-inversion class.
+**Follow-up (c) DONE 2026-06-20** — pass over the OTHER zone-forming candle
+patterns for the same inversion class. Findings:
+- **2-candle + star are inversion-safe BY CONSTRUCTION** — their inner is always
+  an `o`/`c`/`mid_price` of a candle *within* the pattern window, and
+  `compute_base_window_features` sets `base_low/base_high` = min/max over that
+  *whole* window, so `inner ∈ [base_low, base_high]` ⊆ outer always. (No change;
+  pinned by `tests/test_kl_zone_thresholds.py`.)
+- **pinbar (`find_pinbar_threshold`) WAS inversion-capable** (its inner is a
+  neighbour `o`/`c`, sourced from outside the base window, with no bound) → got
+  an **inner-side bound** (drop candidates beyond the outer before the
+  closest-neighbour pick). Deliberately NOT the base/inside-bar inner-edge rule:
+  delegating pinbar to `find_base_threshold` was tried and **reverted** because
+  the 2nd-closest-widening + ±5 pooling + body-bottom-only selection *over-widened*
+  pinbar zones (H1 sid=1 cyc0 BOS @689: 0.58348→0.58298, 7.6→12.6 pips). Pinbar
+  zones must stay tight (key off the pinbar's own body/tail). The bound is inert
+  in the normal case → byte-identical. See `KL_ZONES_SPEC.md` "Pinbar-specific
+  inner threshold".
 
 ---
 
