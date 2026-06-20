@@ -1,0 +1,4 @@
+commit_hash=d164873
+timestamp=20260620_035046
+branch=week8-volmom-multitf
+commit_message=Step 4: main reversals (sid>=1) via unified_probe + scan-from-start (byte-identical)
