@@ -11,7 +11,10 @@ from engine_v2.structure.identify_start import (
     identify_start_scenario_1,
     identify_start_scenario_2_after_reversal,
 )
-from engine_v2.structure.reference_zone import build_ad_hoc_bos0_reference_zone
+from engine_v2.structure.reference_zone import (
+    build_ad_hoc_bos0_reference_zone,
+    build_reference_zone_from_cts_event,
+)
 from engine_v2.zones.kl_zones_v1 import (
     compute_bos_inner_from_event,
     derive_kl_zones_v1,
@@ -163,15 +166,18 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
     struct_direction = int(d0.struct_direction)
     structure_id = 0
 
-    # Commit 2 — main sid=0 | cycle=0 true-first-breakout
-    # (project_true_first_breakout_cycle0.md). Establish CTS_0 only via the first
-    # true breakout past the BOS_0 inner. The BOS_0 is an ad-hoc bos=True zone
-    # anchored at the Scenario-1 start; its inner is the cycle-0 breakout gate
-    # threshold MS's pre-CTS_0 scan mode (`enforce_cts0_new_extreme`) gates on.
+    # Cycle-0 true-first-breakout scan mode (project_true_first_breakout_cycle0.md).
+    # A structure's CTS_0 is established only by the first true breakout past the
+    # BOS_0 inner. MS's pre-CTS_0 scan mode (`enforce_cts0_new_extreme`) gates on
+    # that inner threshold (`cur_bos0_inner`), which is carried per-sid through the
+    # loop below:
+    #   - sid=0  (trading open): the ad-hoc bos=True BOS_0 anchored at the
+    #     Scenario-1 start, built here. Single-shot: no probe, no retrace-resets
+    #     (current_start is fixed at the Scenario-1 start).
+    #   - sid>=1 (reversals, Step 4): the BOS_0 inner returned by the reversal
+    #     unified_probe inside the loop, mirroring the sub reversal path.
     # `.inner` mirrors the sub probe's `bos0_inner = reference_zone.inner`
-    # (unified_probe.py) — single source of truth, NOT a re-derivation. Single-shot:
-    # no probe, no retrace-resets (current_start is fixed at the Scenario-1 start).
-    # Enabled for sid=0 ONLY; reversals (sid>=1) stay on Scenario-2/Exc1/Exc2 (Step 4).
+    # (unified_probe.py) — single source of truth, NOT a re-derivation.
     #
     # None => the ad-hoc base can't be derived. In a full backtest all history
     # exists, so None can only be the DEGENERATE case -> Option A: skip scan mode +
@@ -180,8 +186,8 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
     # ever fires at a live edge, the wait-for-candles logic hooks in here
     # (memory/project_ad_hoc_zone_wait_for_candles).
     cts0_ref = build_ad_hoc_bos0_reference_zone(df, start_idx, struct_direction)
-    cts0_bos0_inner = cts0_ref.inner if cts0_ref is not None else None
-    if cts0_bos0_inner is None:
+    cur_bos0_inner = cts0_ref.inner if cts0_ref is not None else None
+    if cur_bos0_inner is None:
         print(
             f"[structure_engine][warn] main sid=0 cycle-0 ad-hoc BOS_0 zone could "
             f"not be built at start_idx={start_idx} (sd={struct_direction}); "
@@ -193,14 +199,17 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
     # Run multiple structure segments until no more reversals (or we hit end)
     max_structures_guard = 20  # safety guard against infinite loops
     for loop_iter in range(max_structures_guard):
-        # Cycle-0 scan mode applies to sid=0 only (and only when the BOS_0 inner
-        # was derivable). structure_id only increments, so this is the 1st iteration.
-        _use_cts0_scan = (structure_id == 0 and cts0_bos0_inner is not None)
+        # Pre-CTS_0 scan mode runs for EVERY sid whose BOS_0 inner was derivable:
+        # sid=0 from the Scenario-1 ad-hoc above; sid>=1 from the reversal
+        # unified_probe below (Step 4). None -> scan off for that sid (cycle-0
+        # establishes the ordinary way), matching the sub-parity convention
+        # `enforce_cts0_new_extreme=(bos0_inner is not None)`.
+        _use_cts0_scan = (cur_bos0_inner is not None)
         ms = _make_market_structure(
             df2, struct_direction=struct_direction, start_idx=start_idx,
             structure_id=structure_id, timeframe=timeframe, pip_size=pip_size,
             enforce_cts0_new_extreme=_use_cts0_scan,
-            bos0_inner=cts0_bos0_inner if _use_cts0_scan else None,
+            bos0_inner=cur_bos0_inner if _use_cts0_scan else None,
         )
         ms.debug = True
         df2, ms_events, levels = ms.run()
@@ -208,129 +217,108 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
         all_events.extend(ms_events)
         all_levels.extend(levels)
 
-        # Find reversal idx for THIS structure_id (MarketStructure stops when it hits reversal)
-        # We detect it from df to avoid depending on event details.
+        # Find reversal idx for THIS structure_id (MarketStructure stops when it
+        # hits reversal). The mask matches exactly ONE candle — the reversal
+        # apply candle — because the run sets REVERSAL state at a single candle
+        # then breaks, and the terminal forward-stamp touches market_state only
+        # (not structure_id). So .min() == .max() by construction; we WARN (not
+        # crash) if that invariant is ever violated and proceed with the apply
+        # idx. This single value supersedes the old reversal_start/confirmed pair
+        # (vestigial names for the same candle — unification cleanup).
         rev_mask = (df2["market_state"].astype(str).str.lower() == "reversal") & (df2["structure_id"].astype(int) == structure_id)
         if not rev_mask.any():
             break
 
-        reversal_start_idx = int(df2.loc[rev_mask].index.min())
-        reversal_confirmed_idx = int(df2.loc[rev_mask].index.max())
+        reversal_apply_idx = int(df2.loc[rev_mask].index.min())
+        _rev_max = int(df2.loc[rev_mask].index.max())
+        if _rev_max != reversal_apply_idx:
+            print(
+                f"[structure_engine][warn] reversal mask spans >1 candle for "
+                f"sid={structure_id} (min={reversal_apply_idx} max={_rev_max}); "
+                f"proceeding with apply idx (.min())."
+            )
 
-        # --- Scenario 2 (next start after reversal) ---
-        # identify_start_scenario_2_after_reversal handles Exception 1 internally
-        d_next = identify_start_scenario_2_after_reversal(
+        # --- Reversal handoff (Step 4): unified_probe replaces Scenario 2 +
+        # Exception 1 + Exception 2 (project_unified_identify_start_probe.md /
+        # project_true_first_breakout_cycle0.md). Mirrors the sub reversal path
+        # (entity_df_mutation.build_one_sid): reference = the prior sid's most
+        # recent {CONF/UPD/EST} CTS; the probe runs in the flipped direction over
+        # [prior-CTS-extreme, reversal apply idx] and hands back a DECISION
+        # (start + BOS_0 inner) — NOT events. The reversal structure is produced
+        # by a fresh unbounded scan-from-start MS run in the next loop iteration.
+        # `unified_probe` is imported locally: it imports _make_market_structure
+        # from this module, so a top-level import would be circular.
+        from engine_v2.structure.unified_probe import unified_probe
+
+        probe_sd = -struct_direction
+        # Prior sid's CTS zones for the CONFIRMED-zone reference lookup. Same
+        # derivation the (now-removed) Exception-2 path used via
+        # _get_last_cts_zone_bounds; build_reference_zone_from_cts_event falls
+        # back to an ad-hoc CTS derivation when no confirmed zone exists.
+        kl_zones = derive_kl_zones_v1(df2, all_events, struct_direction=struct_direction)
+        ref_zone = build_reference_zone_from_cts_event(
+            all_events,
+            kl_zones,
             df2,
-            reversal_idx=reversal_start_idx,
-            prev_structure_id=structure_id,
-            prev_struct_direction=struct_direction,
-            min_history=50,
+            sid=structure_id,
+            probe_direction=probe_sd,
+            idx_window=None,
         )
-
-        next_start_idx = int(d_next.start_idx)
-        next_struct_direction = int(d_next.struct_direction)
-        next_structure_id = int(structure_id + 1)
-
-        # Guard: if next start doesn't advance logically, stop to avoid loops
-        if next_start_idx == start_idx and next_structure_id == structure_id:
+        if ref_zone is None:
+            # Degenerate: a reversal with zero CTS events for the prior structure
+            # (should not occur — a structure must establish a cycle to reverse).
+            # Stop adding structures rather than guess a start (sub-parity).
+            print(
+                f"[structure_engine][warn] reversal reference zone unavailable "
+                f"for sid={structure_id} — no CTS event for prior structure; "
+                f"stopping (no reversal-born sid)."
+            )
             break
 
-        # ========== Exception 2 Probe Logic ==========
-        # Always run — starts from Exception 1 override if triggered,
-        # otherwise from base last CTS idx.
+        probe_input_idx = int(ref_zone.source_event_idx)
+        if probe_input_idx >= reversal_apply_idx:
+            # No forward scan window — degenerate (sub-parity).
+            print(
+                f"[structure_engine][warn] degenerate reversal probe window for "
+                f"sid={structure_id} (input={probe_input_idx} "
+                f"end={reversal_apply_idx}) — stopping (no reversal-born sid)."
+            )
+            break
 
-        # Get last CTS zone bounds for Exception 2 evaluation
-        zone_bounds = _get_last_cts_zone_bounds(df2, all_events, structure_id, struct_direction)
+        probe = unified_probe(
+            df2.copy(),
+            input_idx=probe_input_idx,
+            direction=probe_sd,
+            reference_zone=ref_zone,
+            end_idx=reversal_apply_idx,
+            timeframe=timeframe,
+            enable_phase2=False,
+        )
+        print(
+            f"[structure_engine] unified_probe (reversal): sid={structure_id} "
+            f"input={probe_input_idx} end={reversal_apply_idx} "
+            f"ref={ref_zone.source} -> start={probe.start_idx} "
+            f"status={probe.status} cond={probe.finalize_condition} "
+            f"iter={probe.iterations}"
+        )
+        if probe.status == "pending":
+            # Only possible with end_idx=None; we always pass a defined end_idx,
+            # so this is dormant. Guard for symmetry with the sub path.
+            print(
+                f"[structure_engine][warn] reversal unified_probe did not "
+                f"finalize for sid={structure_id}; stopping (no reversal-born sid)."
+            )
+            break
 
-        if zone_bounds is not None:
-            outer, inner, zone_side = zone_bounds
-            pip_size = _pip_size_from_pair(df2)
-            pip_tolerance = _probe_reset_pips(timeframe) * pip_size
-
-            # Iterative Exception 2 probing (re-probe when exception triggers)
-            exc2_candidate = next_start_idx
-            max_exc2_iterations = 10
-            exc2_triggered = False
-
-            for _exc2_iter in range(max_exc2_iterations):
-                # Run probe (on COPY of df, separate events list).
-                # No timeframe passed → H1 proximity_pips fallback (Step 1
-                # parity carve-out, see _make_market_structure docstring).
-                df_probe = df2.copy()
-                ms_probe = _make_market_structure(
-                    df_probe,
-                    struct_direction=next_struct_direction,
-                    start_idx=exc2_candidate,
-                    structure_id=next_structure_id,
-                    end_idx=reversal_confirmed_idx,  # Stop at reversal confirmed (inclusive)
-                )
-                ms_probe.debug = True
-                df_probe, probe_events, probe_levels = ms_probe.run()
-
-                # Check for CTS established in probe (CTS_ESTABLISHED event)
-                probe_cts_events = [
-                    ev for ev in probe_events
-                    if ev.type == "CTS_ESTABLISHED"
-                    and ev.meta.get("structure_id") == next_structure_id
-                    and ev.idx <= reversal_confirmed_idx
-                ]
-
-                if not probe_cts_events:
-                    break
-
-                # Get CTS established idx from the first CTS_ESTABLISHED in probe
-                cts_established_idx = int(probe_cts_events[0].idx)
-
-                # Evaluate Exception 2: find candle closest to outer bound
-                # Start from CTS_EST + 1: the CTS_ESTABLISHED candle itself is
-                # the pullback confirmation, naturally near the zone.
-                exception_2_idx = _find_closest_candle_to_outer(
-                    df_probe,
-                    cts_established_idx + 1,
-                    reversal_confirmed_idx,
-                    outer,
-                    inner,
-                    pip_tolerance,
-                    zone_side,
-                )
-
-                if exception_2_idx is None:
-                    break
-
-                # Exception 2 triggered — discard probe, re-probe from new idx
-                print(f"[structure_engine] Exception 2 triggered: "
-                      f"iteration={_exc2_iter}, start_idx={exception_2_idx}")
-                exc2_triggered = True
-                exc2_candidate = exception_2_idx
-
-            if exc2_triggered:
-                # At least one exception triggered — discard all probes,
-                # use settled candidate as start in the outer loop
-                start_idx = exc2_candidate
-                struct_direction = next_struct_direction
-                structure_id = next_structure_id
-                continue
-
-            # No exception ever triggered — keep the first probe's data
-            df2 = df_probe
-            all_events.extend(probe_events)
-            all_levels.extend(probe_levels)
-
-            # Continue from next candle after reversal confirmed
-            if reversal_confirmed_idx + 1 > df2.index.max():
-                break  # No more data
-
-            # Move to next structure, continuing from after reversal
-            start_idx = reversal_confirmed_idx + 1
-            struct_direction = next_struct_direction
-            structure_id = next_structure_id
-            continue
-
-        # Default path (no zone bounds found)
-        # Move to next structure - events will be written in the next loop iteration
+        next_start_idx = int(probe.start_idx)
+        # Advance to the reversal-born structure. Its cycle-0 CTS_0 is
+        # established by the next iteration's scan-from-start MS run gated on
+        # this BOS_0 inner (a price -> slice-invariant; None -> scan off,
+        # sub-parity).
         start_idx = next_start_idx
-        struct_direction = next_struct_direction
-        structure_id = next_structure_id
+        struct_direction = probe_sd
+        structure_id = structure_id + 1
+        cur_bos0_inner = probe.bos0_inner
 
     notes = (
         f"MarketStructure v1: initial_start={d0.start_idx} initial_sd={d0.struct_direction} "

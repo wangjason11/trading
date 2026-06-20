@@ -322,13 +322,26 @@ functions wrap it for different start-identification strategies:
 
 | Function | Initial start source | Phase 1 BOS_0 probe | Multi-structure continuation | Use case |
 |---|---|---|---|---|
-| `compute_structure` | Scenario 1 (auto-identify via `identify_start_scenario_1`) | — | ✓ | H1 main pipeline (orchestrator) |
-| `compute_structure_from_start` | Caller-provided | — | ✓ | All sub-TF entities (start pre-validated by the subordinate probe) |
-| `compute_structure_scenario_3` | Caller-provided + Phase 1 refinement | ✓ | ✓ if `run_continuation=True` (gated) | Subordinate probe across all multi-TF variants (counter and confluence; `run_continuation=False`); tests |
+| `compute_structure` | Scenario 1 (auto-identify via `identify_start_scenario_1`) | — | ✓ (reversal start via `unified_probe` + scan-from-start) | H1 main pipeline (orchestrator) |
+| `compute_structure_from_start` | Caller-provided | — | ✓ (legacy Scenario 2 + Exc1 + Exc2) | Legacy / tests — no production caller (subs use `compute_bounded_structure`) |
+| `compute_structure_scenario_3` | Caller-provided + Phase 1 refinement | ✓ | ✓ if `run_continuation=True` (legacy Scenario 2 + Exc1 + Exc2; gated) | Subordinate probe across all multi-TF variants (counter and confluence; `run_continuation=False`); tests |
 
-All three share the same per-reversal continuation logic (Scenario 2 →
-Exception 1 → Exception 2 probes). They differ only in **how the very first
-start_idx is determined**.
+**Per-reversal continuation differs by function (Step 4, 2026-06-20).**
+`compute_structure` (H1 main) now selects every post-reversal start via the
+**`unified_probe` + scan-from-start** path — the SAME primitive the
+subordinate reversals use: reference = the prior sid's most recent
+`{CONF/UPD/EST}` CTS; the probe runs in the flipped direction over
+`[prior-CTS-extreme, reversal apply idx]` and hands back a DECISION (start +
+BOS_0 inner), NOT events; the reversed structure's cycle-0 CTS_0 is then
+established by a fresh **unbounded** scan-from-start MS run gated on that BOS_0
+inner (`enforce_cts0_new_extreme` + `bos0_inner`). This replaced the old
+**Scenario 2 → Exception 1 → Exception 2** chain, which now survives only in
+`compute_structure_from_start` (no production caller) and
+`compute_structure_scenario_3` Phase 2 (test-only).
+`identify_start_scenario_2_after_reversal` (incl. its Exception 1) is therefore
+no longer reached from the main pipeline; deletion is deferred until those two
+legacy callers are retired. The three functions otherwise still differ in
+**how the very first start_idx is determined**.
 
 ### Starting-point rigor hierarchy
 
@@ -354,8 +367,11 @@ starts at `CTS_EST + 1`) but answer different questions.
 **Question:** "Is the next-structure start (chosen by Exception 1) actually
 a structural start, or just a pullback candle?"
 
-**Where used:** Per reversal in all three `compute_structure*` variants
-(main pipeline, M15 pipeline, Scenario 3 Phase 2).
+**Where used:** Per reversal in the LEGACY continuation only —
+`compute_structure_from_start` (no production caller) and
+`compute_structure_scenario_3` Phase 2 (test-only). **NOT** in
+`compute_structure` (H1 main), which migrated to the `unified_probe` +
+scan-from-start reversal handoff in Step 4 (2026-06-20).
 
 **Bounds:** `[exc2_candidate, reversal_confirmed_idx]` — bounded probe.
 
@@ -444,5 +460,5 @@ start — the path exists.
 - **Always on `df.copy()`** — no mutation of outer state until result accepted
 - **Max iterations cap** (10) — prevents infinite loops
 - **`CTS_EST + 1` scan window start** — excludes the pullback-confirmation candle (naturally near the zone, would cause false exceptions)
-- **Pip tolerance scales with timeframe** — values from `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS` (H1=3, M15=2.5, M5=2; type is `float` because M15 is fractional). Used by `compute_structure_scenario_3` Phase 1 probe AND by Exception 2 probes (both inside `compute_structure` and `compute_structure_scenario_3` Phase 2). Invariant: `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` per TF (asserted at module load).【fileciteturn1file11】
+- **Pip tolerance scales with timeframe** — values from `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS` (H1=3, M15=2.5, M5=2; type is `float` because M15 is fractional). Used by `compute_structure_scenario_3` Phase 1 probe AND by the legacy Exception 2 probes (`compute_structure_from_start` + `compute_structure_scenario_3` Phase 2; `compute_structure` no longer runs Exception 2 after Step 4 — its H1-main reversal handoff uses the `unified_probe` reset tolerances from the same table). Invariant: `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` per TF (asserted at module load).【fileciteturn1file11】
 

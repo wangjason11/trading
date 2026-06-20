@@ -574,11 +574,21 @@ partial anchor-extreme gate (`_cts0_new_extreme_passes`) was removed.
 `build_one_sid` / `_ChainCursor` handoff (`SidBuildOutcome.next_bos0_inner` for
 reversal-born subs) — no index remap.
 
-**Scope:** all M15 subs use this (Commit 1, every trigger). **Deferred:** main
-`sid0|cyc0` (Commit 2 — flip the flag + pass `bos0_inner` at the main
-`compute_structure` call); main reversals H1 `sid≥1` (Step 4 — migrate to
-`unified_probe` + scan-from-start + delete Exception 1). The legacy
-`_resolve_via_legacy_probe` is an empty escape hatch (`_LEGACY_PROBE_USE_CASES`).
+**Scope:** all M15 subs use this (Commit 1, every trigger). **Main `sid0|cyc0`**
+landed in Commit 2 (flip the flag + pass `bos0_inner` at the main
+`compute_structure` call). **Main reversals H1 `sid≥1`** landed in Step 4
+(2026-06-20): `compute_structure`'s per-reversal handoff now runs `unified_probe`
+(reference = prior sid's most recent `{CONF/UPD/EST}` CTS; flipped direction;
+`end_idx` = the reversal apply idx) and feeds its `bos0_inner` to a per-sid
+scan-from-start MS run — the SAME path the subs use. The old Scenario 2 + Exc1 +
+Exc2 chain is gone from the main loop; `/compare` byte-identical on the NZD_USD
+window (the lone main reversal reproduces the old refined start 689 → CTS_0 703,
+established by `find_true_first_breakout`, scan-on==scan-off verified). Exception 1
+is no longer reached from main but is left in
+`identify_start_scenario_2_after_reversal` (deletion deferred — still used by
+`compute_structure_from_start` [no prod caller] + `compute_structure_scenario_3`
+Phase 2 [tests]). The legacy `_resolve_via_legacy_probe` is an empty escape hatch
+(`_LEGACY_PROBE_USE_CASES`).
 
 ### Threshold tables
 
@@ -619,9 +629,11 @@ or invert. Strict `proximity > reset` is the cleanest invariant.
 - **Tables wired** as of Phase 1 Session 1 (this update). The probe
   primitive itself exists at `engine_v2/structure/unified_probe.py` but
   no caller has migrated yet — Sessions 2–6 of Phase 1 migrate per
-  trigger. Until then, the legacy probes
-  (`compute_structure_scenario_3` Phase 1, `compute_structure` Exception
-  2) continue to use `DEFAULT_PROBE_RESET_PIPS` only (single-condition).
+  trigger. The legacy probes that remain
+  (`compute_structure_scenario_3` Phase 1; the Exception 2 probe in
+  `compute_structure_from_start` + `compute_structure_scenario_3` Phase 2 —
+  `compute_structure` itself migrated off Exception 2 in Step 4, 2026-06-20)
+  continue to use `DEFAULT_PROBE_RESET_PIPS` only (single-condition).
 - **Proximity tuning deferred**: a follow-up tightens `DEFAULT_PROXIMITY_PIPS`
   to `{H1: 8, M15: 6, M5: 4}`. Held back from Session 1 so the unified
   probe lands byte-identical to the `804d19d` baseline.

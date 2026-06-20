@@ -137,6 +137,29 @@ bounded-vs-unbounded (and slice-vs-entity) invariant mismatches hide.
 
 ## Multi-Structure Start Detection (Exception 1 & 2)
 
+> **⚠ Step 4 (2026-06-20) — this section + the next ("Bounded Probe + Same
+> structure_id") now describe the LEGACY path only.** `compute_structure` (H1
+> main) no longer uses Scenario 2 / Exception 1 / Exception 2 for reversals — it
+> migrated to `unified_probe` + scan-from-start (the same path subs use; see
+> MARKET_STRUCTURE_SPEC "Per-reversal continuation differs by function"). The
+> Exc1/Exc2 + bounded-probe-keep behavior below survives only in
+> `compute_structure_from_start` (no production caller) and
+> `compute_structure_scenario_3` Phase 2 (tests). Three Step-4 gotchas for the
+> NEW main path:
+> - **`reversal_start_idx == reversal_confirmed_idx`** — the per-sid reversal
+>   mask `(market_state=="reversal") & (structure_id==sid)` matches **exactly one
+>   candle** (the reversal apply candle). MS sets REVERSAL state at one candle then
+>   breaks; the terminal forward-stamp floods `market_state` forward but NOT
+>   `structure_id`, so later rows are excluded by the sid filter. The old dual
+>   names were vestigial — `compute_structure` now uses the single `.min()` apply
+>   idx (WARNs, doesn't crash, if the invariant is ever violated).
+> - **`unified_probe` must be imported LOCALLY inside `compute_structure`** —
+>   `unified_probe.py` imports `_make_market_structure`/`_pip_size_from_pair` from
+>   `structure_engine`, so a top-level import is circular. (Same reason
+>   `entity_df_mutation` imports it inside functions.)
+> - The reversal probe's `end_idx` = that single reversal apply idx (supreme
+>   bound); the reversed structure runs UNBOUNDED to its own next reversal.
+
 **Problem:** After sid N reversal, determining the correct start_idx for sid N+1.
 
 **Flow:**
