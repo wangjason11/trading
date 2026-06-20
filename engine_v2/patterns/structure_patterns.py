@@ -1,9 +1,27 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import Optional, Tuple, List
 
+import numpy as np
+
 from engine_v2.common.types import PatternEvent, PatternStatus
+
+# Path 2c: every candle field the pattern rules read (incl. is_big_normal_as2,
+# reached ONLY via getattr — a naive attribute-grep misses it). The row view
+# below exposes all of them so the existing `c0.<attr>` access stays verbatim.
+# `default` is the value the old code saw for an absent column: 0 for the
+# getattr-defaulted big-flags; the always-present price/feature columns never
+# hit it (their absence would have AttributeError'd the old Series too).
+_ROW_FIELDS = (
+    ("o", float("nan")), ("h", float("nan")), ("l", float("nan")),
+    ("c", float("nan")), ("candle_type", ""), ("direction", 0),
+    ("candle_len", float("nan")), ("body_len", float("nan")),
+    ("mid_price", float("nan")), ("is_big_normal_as0", 0),
+    ("is_big_normal_as1", 0), ("is_big_normal_as2", 0),
+    ("is_big_maru_as0", 0), ("is_big_maru_as1", 0),
+)
 
 class BreakoutPatterns:
     """
@@ -23,6 +41,24 @@ class BreakoutPatterns:
 
     def __init__(self, df):
         self.df = df
+        # Path 2c: pre-extract the candle columns the pattern rules read into
+        # positional numpy arrays once, so `_row(idx)` can build a cheap row
+        # view instead of `df.iloc[idx]` (which constructs a full-row pandas
+        # Series per access — the dominant pattern_detect cost). The numpy
+        # scalars returned (np.float64 / np.int64 / str / np.bool_) are the
+        # SAME types `df.iloc[idx].<attr>` yields on a mixed-dtype row, so the
+        # downstream comparisons + PatternEvent fields are byte-identical.
+        self._cols = {}
+        for name, default in _ROW_FIELDS:
+            if name in df.columns:
+                self._cols[name] = df[name].to_numpy()
+            else:
+                self._cols[name] = np.full(len(df), default)
+
+    def _row(self, idx: int) -> SimpleNamespace:
+        """Lightweight per-candle row view (Path 2c) — replaces df.iloc[idx]."""
+        cols = self._cols
+        return SimpleNamespace(**{name: cols[name][idx] for name, _ in _ROW_FIELDS})
 
     # ---------- helpers ----------
     # def body_check(self, candle, threshold: Optional[float], percent: float = 0.3, direction: int = 1) -> bool:
@@ -68,8 +104,8 @@ class BreakoutPatterns:
         return candle.c > threshold if direction == 1 else candle.c < threshold
 
     def confirmation_threshold(self, i: int, direction: int) -> float:
-        c0 = self.df.iloc[i]
-        c1 = self.df.iloc[i + 1]
+        c0 = self._row(i)
+        c1 = self._row(i + 1)
         return max(c0.h, c1.h) if direction == 1 else min(c0.l, c1.l)
 
     def _price_confirmation(self, anchor_idx: int, direction: int, threshold: float) -> Tuple[bool, Optional[int]]:
@@ -78,7 +114,7 @@ class BreakoutPatterns:
             k = anchor_idx + j
             if k >= len(df):
                 break
-            fwd = df.iloc[k]
+            fwd = self._row(k)
             if fwd.direction != direction:
                 continue
             if fwd.candle_type not in ["normal", "maru"]:
@@ -120,7 +156,7 @@ class BreakoutPatterns:
             if k >= len(self.df):
                 return False, None
 
-            fwd = self.df.iloc[k]
+            fwd = self._row(k)
             if int(fwd.direction) != int(direction):
                 continue
             if str(fwd.candle_type) not in ["normal", "maru"]:
@@ -146,7 +182,7 @@ class BreakoutPatterns:
             return None
 
         df = self.df
-        c0, c1, c2 = df.iloc[idx], df.iloc[idx + 1], df.iloc[idx + 2]
+        c0, c1, c2 = self._row(idx), self._row(idx + 1), self._row(idx + 2)
 
         if not all(int(c.direction) == int(direction) for c in [c0, c1, c2]):
             return None
@@ -314,8 +350,8 @@ class BreakoutPatterns:
             return None
 
         df = self.df
-        c0 = df.iloc[idx]
-        c1 = df.iloc[idx + 1]
+        c0 = self._row(idx)
+        c1 = self._row(idx + 1)
 
         if not (c0.candle_type == "maru" and (c1.candle_type == "maru" or c1.candle_type == "normal")):
             return None
@@ -404,8 +440,8 @@ class BreakoutPatterns:
             return None
 
         df = self.df
-        c0 = df.iloc[idx]
-        c1 = df.iloc[idx + 1]
+        c0 = self._row(idx)
+        c1 = self._row(idx + 1)
 
         # if idx == 100 and direction == 1:
         #     print(
@@ -494,8 +530,8 @@ class BreakoutPatterns:
             return None
 
         df = self.df
-        c0 = df.iloc[idx]
-        c1 = df.iloc[idx + 1]
+        c0 = self._row(idx)
+        c1 = self._row(idx + 1)
 
         if not c0.candle_type == "maru":
             return None
