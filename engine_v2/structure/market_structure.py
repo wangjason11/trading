@@ -4,11 +4,51 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
 
+import numpy as np
 import pandas as pd
 
 from engine_v2.common.types import PatternEvent, PatternStatus, StructureLevel, COL_TIME, COL_O, COL_C
 from engine_v2.patterns.imbalance import has_unfilled_imbalance
 from engine_v2.patterns.structure_patterns import BreakoutPatterns
+
+
+# ---------------------------------------------------------------------
+# Path 2b: MarketStructure output-column schema for batched writes.
+#
+# `_write_df_row` writes 27 columns per candle. Instead of ~27 `df.at`
+# scalar writes per candle (slow on a wide frame), we write into
+# preallocated numpy arrays per column and bulk-assign them to the df once
+# at end of `run()`. Each group's dtype + default reproduces the EXACT final
+# dtype/value the old per-row `df.at` writes produced — VERIFIED against the
+# saved baseline CSV (2026-06-20):
+#   - int64 idx/id columns default -1 (incl. structure_id);
+#   - int64 counter/flag columns default 0 (range_active, cts_cycle_id,
+#     reversal_watch_active, struct_direction);
+#   - range_hi/range_lo are created int -1 by `_ensure_output_cols` but upcast
+#     to float64 on the first nan write, so their UNPROCESSED-row value is
+#     -1.0 (NOT nan) — load-bearing for `range_break_frac` at the first
+#     processed candle;
+#   - threshold/price columns default nan;
+#   - state/event string columns are object "" (written as empty CSV fields).
+# Nothing reads these df output columns mid-run (pattern detection + the
+# zone resolvers read only input columns), so deferring the write to
+# end-of-run is safe.
+_OUT_INT_NEG1 = (
+    "range_start_idx", "range_confirm_idx", "cts_idx", "bos_idx",
+    "pending_reversal_anchor_idx", "pending_reversal_apply_idx",
+    "last_breakout_pat_apply_idx", "structure_id",
+)
+_OUT_INT_ZERO = (
+    "range_active", "cts_cycle_id", "reversal_watch_active", "struct_direction",
+)
+_OUT_FLOAT_NEG1 = ("range_hi", "range_lo")
+_OUT_FLOAT_NAN = (
+    "breakout_th", "pullback_th", "range_break_frac", "cts_price",
+    "bos_price", "cts_threshold", "bos_threshold", "reversal_bos_th_frozen",
+)
+_OUT_OBJ_EMPTY = (
+    "market_state", "cts_event", "bos_event", "cycle_stage", "cts_phase_debug",
+)
 
 
 # Resolver protocol for the dual CTS proximity check (Part 4 §13.5.b).
@@ -405,6 +445,10 @@ class MarketStructure:
         if self.end_idx is not None and self.end_idx < effective_end:
             effective_end = self.end_idx
 
+        # Path 2b: preallocate output arrays (reused across rewinds). Placed
+        # after the start_idx>=n early returns so degenerate runs skip it.
+        self._init_output_arrays(n)
+
         while i <= effective_end:
             if self.state.state == MarketState.REVERSAL:
                 break
@@ -430,6 +474,11 @@ class MarketStructure:
                 continue
 
             i = next_i
+
+        # Path 2b: flush the batched per-candle output arrays to df columns
+        # before the terminal reversal stamping + invariant checks below
+        # (both read the df output columns).
+        self._flush_output_arrays()
 
         levels = self._events_to_structure_levels()
 
@@ -2310,6 +2359,39 @@ class MarketStructure:
         st.state = new_state
 
 
+    def _init_output_arrays(self, n: int) -> None:
+        """Path 2b: preallocate the per-column output arrays. `_write_df_row`
+        writes into these per candle; `run()` bulk-assigns them to the df at
+        the end (one vectorized assignment per column instead of ~27 `df.at`
+        scalar writes per candle). Created once per run and reused across
+        rewinds (which overwrite cells).
+
+        CRITICAL — init each array FROM the existing df column, NOT from fresh
+        defaults. `compute_structure` chains MULTIPLE structures through the
+        SAME df (`df2` is reassigned to each structure's run() output and fed to
+        the next). The old per-row `df.at` writes only touched THIS structure's
+        processed rows; a whole-column flush of default-filled arrays would
+        clobber a PRIOR structure's rows back to defaults. Seeding from the df
+        means rows this structure never processes flush back unchanged. For the
+        first/only structure the df holds `_ensure_output_cols` defaults, so
+        `to_numpy(dtype)` reproduces the schema defaults exactly (the `_OUT_*`
+        dtypes match those defaults' post-write dtype — verified vs saved CSV).
+        `.copy()` so per-candle writes never mutate the df in place pre-flush."""
+        self._out: Dict[str, np.ndarray] = {}
+        for c in _OUT_INT_NEG1 + _OUT_INT_ZERO:
+            self._out[c] = self.df[c].to_numpy(dtype=np.int64).copy()
+        for c in _OUT_FLOAT_NEG1 + _OUT_FLOAT_NAN:
+            self._out[c] = self.df[c].to_numpy(dtype=np.float64).copy()
+        for c in _OUT_OBJ_EMPTY:
+            self._out[c] = self.df[c].to_numpy(dtype=object).copy()
+
+    def _flush_output_arrays(self) -> None:
+        """Path 2b: bulk-assign the per-column output arrays to df columns.
+        Runs after the processing loop, BEFORE terminal reversal stamping +
+        invariant checks (which read the df output columns)."""
+        for col, arr in self._out.items():
+            self.df[col] = arr
+
     def _ensure_output_cols(self) -> None:
         out = self.df
         # market_state
@@ -2359,41 +2441,48 @@ class MarketStructure:
 
 
     def _write_df_row(self, i: int) -> None:
+        # Path 2b: write into the preallocated per-column output arrays at
+        # positional index `i` (bulk-assigned to df at end of run()). Mirrors
+        # the prior per-row `self.df.at[row, col] = ...` writes 1:1 — same
+        # values, same None->default handling.
         st = self.state
-        row = self.df.index[i]
-        prev_row = self.df.index[i - 1] if i > 0 else row
+        out = self._out
+        # prev_i mirrors the old `prev_row = index[i-1] if i>0 else row`: for
+        # range_break_frac we read the PREVIOUS candle's range bounds (i>0),
+        # or the just-written current row for i==0.
+        prev_i = i - 1 if i > 0 else i
 
-        self.df.at[row, "market_state"] = st.state.value
-        self.df.at[row, "range_active"] = int(st.range_active)
-        self.df.at[row, "range_hi"] = float(st.range_hi) if st.range_hi is not None else float("nan")
-        self.df.at[row, "range_lo"] = float(st.range_lo) if st.range_lo is not None else float("nan")
-        self.df.at[row, "range_start_idx"] = int(st.range_start_idx) if st.range_start_idx is not None else -1
-        self.df.at[row, "range_confirm_idx"] = int(st.range_confirm_idx) if st.range_confirm_idx is not None else -1
+        out["market_state"][i] = st.state.value
+        out["range_active"][i] = int(st.range_active)
+        out["range_hi"][i] = float(st.range_hi) if st.range_hi is not None else float("nan")
+        out["range_lo"][i] = float(st.range_lo) if st.range_lo is not None else float("nan")
+        out["range_start_idx"][i] = int(st.range_start_idx) if st.range_start_idx is not None else -1
+        out["range_confirm_idx"][i] = int(st.range_confirm_idx) if st.range_confirm_idx is not None else -1
 
         if st.range_active and st.range_hi is not None and st.range_lo is not None:
-            self.df.at[row, "breakout_th"] = self._range_breakout_threshold()
-            self.df.at[row, "pullback_th"] = self._range_pullback_threshold()
+            out["breakout_th"][i] = self._range_breakout_threshold()
+            out["pullback_th"][i] = self._range_pullback_threshold()
         else:
-            self.df.at[row, "breakout_th"] = float("nan")
-            self.df.at[row, "pullback_th"] = float("nan")
+            out["breakout_th"][i] = float("nan")
+            out["pullback_th"][i] = float("nan")
 
-        self.df.at[row, "cts_idx"] = int(st.cts.idx) if st.cts is not None else -1
-        self.df.at[row, "cts_price"] = float(st.cts.price) if st.cts is not None else float("nan")
-        self.df.at[row, "cts_event"] = st.cts_event
-        self.df.at[row, "cts_cycle_id"] = int(st.cts_cycle_id)
-        self.df.at[row, "cts_threshold"] = float(st.cts_threshold) if st.cts_threshold is not None else float("nan")
-        self.df.at[row, "bos_threshold"] = float(st.bos_threshold) if st.bos_threshold is not None else float("nan")
+        out["cts_idx"][i] = int(st.cts.idx) if st.cts is not None else -1
+        out["cts_price"][i] = float(st.cts.price) if st.cts is not None else float("nan")
+        out["cts_event"][i] = st.cts_event
+        out["cts_cycle_id"][i] = int(st.cts_cycle_id)
+        out["cts_threshold"][i] = float(st.cts_threshold) if st.cts_threshold is not None else float("nan")
+        out["bos_threshold"][i] = float(st.bos_threshold) if st.bos_threshold is not None else float("nan")
 
         # Part 3 (B/D): reversal watch debug (for chart + invariants)
-        self.df.at[row, "reversal_watch_active"] = int(st.reversal_watch_active)
-        self.df.at[row, "reversal_bos_th_frozen"] = (
+        out["reversal_watch_active"][i] = int(st.reversal_watch_active)
+        out["reversal_bos_th_frozen"][i] = (
             float(st.reversal_bos_th_frozen) if st.reversal_bos_th_frozen is not None else float("nan")
         )
 
-        self.df.at[row, "pending_reversal_anchor_idx"] = (
+        out["pending_reversal_anchor_idx"][i] = (
             int(st.pending_reversal_anchor_idx) if st.pending_reversal_anchor_idx is not None else -1
         )
-        self.df.at[row, "pending_reversal_apply_idx"] = (
+        out["pending_reversal_apply_idx"][i] = (
             int(st.pending_reversal_apply_idx) if st.pending_reversal_apply_idx is not None else -1
         )
 
@@ -2401,54 +2490,61 @@ class MarketStructure:
         # ----------------------------
         # Part 3 (C): trend progression / cycle stage
         # ----------------------------
-        self.df.at[row, "cts_phase_debug"] = str(st.cts_phase)
+        out["cts_phase_debug"][i] = str(st.cts_phase)
 
         if st.cts is None:
-            self.df.at[row, "cycle_stage"] = "NONE"
+            out["cycle_stage"][i] = "NONE"
         else:
             # If CTS is confirmed, we're in the "wait for next breakout" portion of the cycle.
             # Otherwise, we're still in the "wait for pullback confirmation" portion.
-            self.df.at[row, "cycle_stage"] = "SEEK_BREAKOUT" if st.cts_phase == "CONFIRMED" else "SEEK_PULLBACK"
+            out["cycle_stage"][i] = "SEEK_BREAKOUT" if st.cts_phase == "CONFIRMED" else "SEEK_PULLBACK"
 
-        self.df.at[row, "bos_idx"] = int(st.bos_confirmed.idx) if st.bos_confirmed is not None else -1
-        self.df.at[row, "bos_price"] = float(st.bos_confirmed.price) if st.bos_confirmed is not None else float("nan")
-        self.df.at[row, "bos_event"] = st.bos_event
+        out["bos_idx"][i] = int(st.bos_confirmed.idx) if st.bos_confirmed is not None else -1
+        out["bos_price"][i] = float(st.bos_confirmed.price) if st.bos_confirmed is not None else float("nan")
+        out["bos_event"][i] = st.bos_event
 
-        self.df.at[row, "last_breakout_pat_apply_idx"] = (
+        out["last_breakout_pat_apply_idx"][i] = (
             int(st.last_breakout_pat_apply_idx) if st.last_breakout_pat_apply_idx is not None else -1
         )
 
         # Debug: range body-break fraction on this candle (close-breaks only)
         # If candle CLOSE breaks above range_hi / below range_lo, compute the fraction of the
         # candle's real body that lies beyond the breached threshold.
+        # NOTE: the old `is not None` guard on the prev range bounds was always
+        # true (df values are never None post-_ensure_output_cols; array values
+        # are never None either), so it's dropped — body runs unconditionally,
+        # identical to before. prev bounds read from the arrays (range_hi/lo
+        # default -1.0 on an unprocessed prev row, matching the int->float
+        # upcast of the old df default).
         frac = float("nan")
-        if self.df.at[prev_row, "range_hi"] is not None and self.df.at[prev_row, "range_lo"] is not None:
-            o = float(self.df.at[row, COL_O])
-            c = float(self.df.at[row, COL_C])
-            body_low = min(o, c)
-            body_high = max(o, c)
-            body_len = body_high - body_low
+        prev_hi = out["range_hi"][prev_i]
+        prev_lo = out["range_lo"][prev_i]
+        o = float(self._o[i])
+        c = float(self._c[i])
+        body_low = min(o, c)
+        body_high = max(o, c)
+        body_len = body_high - body_low
 
-            if body_len > 0:
-                # Close-break above / below range
-                if c > float(self.df.at[prev_row, "range_hi"]):
-                    th = float(self.df.at[prev_row, "range_hi"])
-                    above = max(0.0, body_high - max(th, body_low))
-                    frac = above / body_len
-                elif c < float(self.df.at[prev_row, "range_lo"]):
-                    th = float(self.df.at[prev_row, "range_lo"])
-                    below = max(0.0, min(th, body_high) - body_low)
-                    frac = below / body_len
+        if body_len > 0:
+            # Close-break above / below range
+            if c > float(prev_hi):
+                th = float(prev_hi)
+                above = max(0.0, body_high - max(th, body_low))
+                frac = above / body_len
+            elif c < float(prev_lo):
+                th = float(prev_lo)
+                below = max(0.0, min(th, body_high) - body_low)
+                frac = below / body_len
 
-        self.df.at[row, "range_break_frac"] = frac
+        out["range_break_frac"][i] = frac
 
         # Clear one-candle event fields so they don't smear across rows
         st.cts_event = ""
         st.bos_event = ""
-    
+
         # Structure ID + direction
-        self.df.at[row, "structure_id"] = int(st.structure_id)
-        self.df.at[row, "struct_direction"] = int(st.struct_direction)
+        out["structure_id"][i] = int(st.structure_id)
+        out["struct_direction"][i] = int(st.struct_direction)
 
 
     # ----------------------------

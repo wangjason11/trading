@@ -1051,6 +1051,43 @@ something achievable by changing the call site alone.
 **Rule of thumb:** if you're tempted to "just pass the entity df to MS,"
 list every place MS reads from `self.df` — there are at least five.
 
+> **Update (Path 2b, 2026-06-20):** point 5's `_write_df_row` `range_hi`
+> `df.at` read is now an array read (`self._out["range_hi"][prev_i]`); see
+> the batched-write landmine directly below.
+
+---
+
+## MS Batched Output Writes Must Seed From the df (Multi-Structure Chain)
+
+**Rule:** Any change that batches `MarketStructure`'s per-candle output
+writes into whole-column assignments (Path 2b) MUST initialize the output
+arrays FROM the existing df column values, NOT from fresh defaults.
+
+**Why:** `compute_structure` (H1 main) runs MULTIPLE structures in a loop,
+**chaining them through the same df** — `df2` is reassigned to each
+`ms.run()` output and fed as the input to the next structure. The original
+per-row `self.df.at[row, col] = v` writes only ever touched THIS structure's
+processed rows `[start_idx, end]`, leaving prior structures' rows intact in
+the shared df. A naive whole-column flush (`self.df[col] = default_filled_array`)
+writes DEFAULTS to every row outside this structure's range, **clobbering the
+prior structure's rows back to nan/-1/""**. Symptom: H1 `final.csv` reverts
+to defaults from `start_idx` onward, and H1 `kl_zones`/`wvmi` + the M15
+entities cascade off the corrupted df — while H1 `structure_events.csv` stays
+identical (events are unchanged; it's pure df-column corruption). Bounded
+single-structure sub runs (M15) don't hit this directly (one structure per
+df), but they cascade off the corrupted H1 df.
+
+**Fix:** `_init_output_arrays` seeds each array via
+`self.df[c].to_numpy(dtype).copy()`, so rows this structure never processes
+flush back unchanged. Equivalent to schema defaults for the first/only
+structure (the df then holds `_ensure_output_cols` defaults).
+
+**Detection gap:** the small-df unit tests stayed green through this bug —
+they don't exercise the multi-structure stitch. Only the full `/compare`
+(21/21 byte-identical) caught it. Validate batched-write changes with a full
+replay `/compare`, never tests alone. See memory
+`project_ms_optimization_opportunity.md` UPDATE 2026-06-20c.
+
 ---
 
 ## `MarketStructure.run()` Crashes When `start_idx >= n` (latent)
