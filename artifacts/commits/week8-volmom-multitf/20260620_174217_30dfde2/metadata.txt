@@ -1,0 +1,4 @@
+commit_hash=30dfde2
+timestamp=20260620_174217
+branch=week8-volmom-multitf
+commit_message=MS perf Path 2b: batch output writes (byte-identical, -43% cumulative MS CPU)
