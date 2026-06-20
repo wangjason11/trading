@@ -256,6 +256,29 @@ class MarketStructure:
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
         self.df = df.copy()
+        # ---- Perf (Path 2a): positional numpy price views for the per-candle
+        # hot loop. MS used to read o/h/l/c thousands of times via
+        # `float(df.iloc[i][<col>])`, each of which builds a full-row Series
+        # just to pull one scalar. These float arrays replace that with O(1)
+        # indexed access. Prices are immutable for the whole run (incl. rewind),
+        # so the views never go stale.
+        #
+        # INVARIANT: MS reads candles positionally (`.iloc[i]`) AND by label
+        # (`.loc[candle_idx]`) with candle_idx sourced from the positional loop
+        # var, so the existing code already requires a 0..n-1 RangeIndex. Assert
+        # it so positional array access is provably equivalent (and so a future
+        # caller passing a non-reset index fails loudly instead of silently
+        # corrupting).
+        if not self.df.index.equals(pd.RangeIndex(len(self.df))):
+            raise ValueError(
+                "[market_structure] requires a 0..n-1 RangeIndex df (got "
+                f"{self.df.index!r}); MS mixes positional .iloc[i] and label "
+                ".loc[candle_idx] access."
+            )
+        self._o = self.df["o"].to_numpy(dtype=float)
+        self._h = self.df["h"].to_numpy(dtype=float)
+        self._l = self.df["l"].to_numpy(dtype=float)
+        self._c = self.df["c"].to_numpy(dtype=float)
         self.struct_direction = struct_direction
         self.start_idx = int(start_idx)
         self.end_idx = int(end_idx) if end_idx is not None else None  # optional stopping point (inclusive)
@@ -363,6 +386,13 @@ class MarketStructure:
         If end_idx is set, processing stops after that idx (inclusive).
         """
         n = len(self.df)
+        # ---- Profiling (temporary): per-sub CPU time. process_time() is
+        # immune to wall-clock / machine-load noise (the 38m/44m/6.3h swings);
+        # ~16ms coarse on Windows, but bracketing the whole run keeps the
+        # multi-second delta accurate. Headline metric for the MS perf sprint;
+        # the perf_counter per-substep breakdown below stays for proportions. ----
+        from time import process_time as _ptime
+        _cpu_run_start = _ptime()
         # i = 0
         i = int(self.start_idx)
         if i < 0:
@@ -419,12 +449,14 @@ class MarketStructure:
         # Only print for non-trivial runs so the H1 main + tiny probe runs
         # don't drown the log. Threshold: any sub that took > 5s total.
         _total_step_anchor = self._t_prof["step_anchor_other"]
+        _cpu_total = _ptime() - _cpu_run_start
         if _total_step_anchor > 5.0:
             _rnp_calls = max(self._t_prof_count["replay_no_pat_calls"], 1)
             _anchor_calls = max(self._t_prof_count["step_anchor_calls"], 1)
             print(
                 f"[ms_prof] sid={self.state.structure_id} sd={self.struct_direction} "
-                f"n={len(self.df)} anchors={_anchor_calls} rnp_calls={_rnp_calls} "
+                f"n={len(self.df)} cpu_total={_cpu_total:.2f}s "
+                f"anchors={_anchor_calls} rnp_calls={_rnp_calls} "
                 f"step_anchor_total={_total_step_anchor:.2f}s "
                 f"pattern_detect={self._t_prof['pattern_detect']:.2f}s "
                 f"rnp_total={self._t_prof['replay_no_pat_total']:.2f}s "
@@ -599,7 +631,7 @@ class MarketStructure:
     # ----------------------------
 
     def _close_breaks_bos(self, i: int, bos: float) -> bool:
-        c = float(self.df.iloc[i]["c"])
+        c = float(self._c[i])
         if self.struct_direction == 1:
             return c < bos
         else:
@@ -630,9 +662,9 @@ class MarketStructure:
             return
 
         bos = float(st.bos_threshold)
-        h = float(self.df.iloc[i]["h"])
-        l = float(self.df.iloc[i]["l"])
-        c = float(self.df.iloc[i]["c"])
+        h = float(self._h[i])
+        l = float(self._l[i])
+        c = float(self._c[i])
 
         if self.struct_direction == 1:
             # ---- close-break -> start watch (and maybe immediate false-break resolve)
@@ -767,7 +799,7 @@ class MarketStructure:
         if self.struct_direction == 1:
             # st.bos_threshold = float(self.df.iloc[anchor]["l"])
             prev = st.bos_threshold
-            new_thr = float(self.df.iloc[anchor]["l"])
+            new_thr = float(self._l[anchor])
             st.bos_threshold = new_thr
             self._emit_bos_threshold_updated(
                 i,
@@ -777,7 +809,7 @@ class MarketStructure:
         else:
             # st.bos_threshold = float(self.df.iloc[anchor]["h"])
             prev = st.bos_threshold
-            new_thr = float(self.df.iloc[anchor]["h"])
+            new_thr = float(self._h[anchor])
             st.bos_threshold = new_thr
             self._emit_bos_threshold_updated(
                 i,
@@ -1119,8 +1151,8 @@ class MarketStructure:
         # If we already have an active range, this anchor-range-candidate logic probably shouldn't run.
         # In your simplified model, range-active mode is handled by per-candle expansion instead.
 
-        lo_i = float(self.df.iloc[i]["l"])
-        hi_i = float(self.df.iloc[i]["h"])
+        lo_i = float(self._l[i])
+        hi_i = float(self._h[i])
         confirm_idx = int(self.df.iloc[i]["is_range_confirm_idx"])
 
         # NEW: seed range bound using prior CTS extreme (if exists)
@@ -1169,8 +1201,8 @@ class MarketStructure:
         hi0 = float(st.range_hi) if st.range_hi is not None else float("-inf")
         lo0 = float(st.range_lo) if st.range_lo is not None else float("inf")
 
-        hi1 = max(hi0, float(self.df.iloc[i]["h"]))
-        lo1 = min(lo0, float(self.df.iloc[i]["l"]))
+        hi1 = max(hi0, float(self._h[i]))
+        lo1 = min(lo0, float(self._l[i]))
 
         if hi1 != hi0 or lo1 != lo0:
             st.range_hi = hi1
@@ -1246,8 +1278,8 @@ class MarketStructure:
         end = int(pullback_ev.end_idx)
         start = max(0, end - (L - 1))
 
-        hi_c = float(self.df.iloc[start : end + 1]["h"].max())
-        lo_c = float(self.df.iloc[start : end + 1]["l"].min())
+        hi_c = float(self._h[start : end + 1].max())
+        lo_c = float(self._l[start : end + 1].min())
 
         # apply_idx = self._apply_idx(pullback_ev)  # keep for logging
 
@@ -1591,14 +1623,14 @@ class MarketStructure:
 
         if self.struct_direction == 1:
             # bullish structure -> CTS is max high in pattern span
-            highs = self.df.iloc[s : e + 1]["h"].astype(float).values
+            highs = self._h[s : e + 1]
             k = int(highs.argmax())
             cts_idx = s + k
             cts_price = float(highs[k])
             return cts_idx, cts_price
         else:
             # bearish structure -> CTS is min low in pattern span
-            lows = self.df.iloc[s : e + 1]["l"].astype(float).values
+            lows = self._l[s : e + 1]
             k = int(lows.argmin())
             cts_idx = s + k
             cts_price = float(lows[k])
@@ -1606,8 +1638,8 @@ class MarketStructure:
 
     def _cts_price_at(self, idx: int) -> float:
         if self.struct_direction == 1:
-            return float(self.df.iloc[idx]["h"])
-        return float(self.df.iloc[idx]["l"])
+            return float(self._h[idx])
+        return float(self._l[idx])
 
     def _is_new_cts_extreme(self, new_price: float) -> bool:
         st = self.state
@@ -1630,13 +1662,13 @@ class MarketStructure:
             return
 
         if self.struct_direction == 1:
-            new_price = float(self.df.iloc[i]["h"])
+            new_price = float(self._h[i])
             if new_price > float(st.cts.price):
                 self._emit_cts_updated(i, new_price, meta={"via": via})
                 st.cts = Point(idx=i, price=new_price)
                 self._refresh_poi_inners_for_cycle()
         else:
-            new_price = float(self.df.iloc[i]["l"])
+            new_price = float(self._l[i])
             if new_price < float(st.cts.price):
                 self._emit_cts_updated(i, new_price, meta={"via": via})
                 st.cts = Point(idx=i, price=new_price)
@@ -1666,23 +1698,21 @@ class MarketStructure:
 
         if cts_idx <= start:
             bos_idx = start
-            bos_price = float(self.df.iloc[start]["l"]) if self.struct_direction == 1 else float(self.df.iloc[start]["h"])
+            bos_price = float(self._l[start]) if self.struct_direction == 1 else float(self._h[start])
             return bos_idx, bos_price
 
-        window = self.df.iloc[start:cts_idx]
-
         if self.struct_direction == 1:
-            series = window["l"].astype(float)
-            rel = int(series.values.argmin())   # position within window
+            series = self._l[start:cts_idx]
+            rel = int(series.argmin())          # position within window
             bos_idx = start + rel               # offset by start_idx
-            bos_price = float(series.values[rel])
+            bos_price = float(series[rel])
             return bos_idx, bos_price
 
         else:
-            series = window["h"].astype(float)
-            rel = int(series.values.argmax())   # position within window
+            series = self._h[start:cts_idx]
+            rel = int(series.argmax())          # position within window
             bos_idx = start + rel               # offset by start_idx
-            bos_price = float(series.values[rel])
+            bos_price = float(series[rel])
             return bos_idx, bos_price
 
     def _sync_thresholds_from_range(self, i: int) -> None:
@@ -2034,10 +2064,10 @@ class MarketStructure:
             st.range_confirm_idx = int(candle_idx)
             if self.struct_direction == 1:
                 st.range_hi = cts_price
-                st.range_lo = float(self.df.loc[candle_idx, "l"])
+                st.range_lo = float(self._l[candle_idx])
             else:
                 st.range_lo = cts_price
-                st.range_hi = float(self.df.loc[candle_idx, "h"])
+                st.range_hi = float(self._h[candle_idx])
             self.events.append(
                 StructureEvent(
                     idx=int(candle_idx),
@@ -2171,17 +2201,16 @@ class MarketStructure:
         if e < s:
             s, e = e, s
 
-        window = self.df.iloc[s : e + 1]
         if self.struct_direction == 1:
-            series = window["l"].astype(float)
+            series = self._l[s : e + 1]
             # bos idx in positional coordinates
-            rel = int(series.values.argmin())
+            rel = int(series.argmin())
             bos_idx = s + rel
             bos_price = float(series.min())
             return bos_idx, bos_price
         else:
-            series = window["h"].astype(float)
-            rel = int(series.values.argmax())
+            series = self._h[s : e + 1]
+            rel = int(series.argmax())
             bos_idx = s + rel
             bos_price = float(series.max())
             return bos_idx, bos_price
@@ -2197,9 +2226,9 @@ class MarketStructure:
             return
 
         bos = float(st.bos_threshold)
-        c = float(self.df.iloc[i]["c"])
-        h = float(self.df.iloc[i]["h"])
-        l = float(self.df.iloc[i]["l"])
+        c = float(self._c[i])
+        h = float(self._h[i])
+        l = float(self._l[i])
 
         # Conservative check uses close; you can switch to wick-based later if desired.
         if self.struct_direction == 1:
@@ -2232,8 +2261,8 @@ class MarketStructure:
         lo = st.range_lo if prev_lo is None else prev_lo
 
         if self.struct_direction == 1:
-            return float(self.df.iloc[i]["l"]) < float(lo)
-        return float(self.df.iloc[i]["h"]) > float(hi)
+            return float(self._l[i]) < float(lo)
+        return float(self._h[i]) > float(hi)
 
     # ----------------------------
     # Range threshold helpers
