@@ -149,6 +149,23 @@ class ProbeResult:
     scan-from-start); None when no breakout was found in the window.
     Populated by the deterministic method; left None on the Phase-2 path
     until that path is wired to the MS scan-from-start change.
+
+    `finalize_idx` is the candle at which the probe's terminal DECISION became
+    determinable — the latest idx whose information the finalize condition
+    relied on (same frame as `start_idx`). It is the causally-correct
+    lifecycle-start floor for a probe-resolved structure ("the structure isn't
+    KNOWN until the probe finalized"), threaded into `start_trigger_idx` for the
+    bootstrap sids (FC + first_counter) — see PART4_REFACTOR_SPEC §5/§6.1 +
+    LANDMINES "MS Batched..."'s sibling "Probe finalize idx floors the
+    lifecycle". Per `finalize_condition`:
+      - Phase 1 `no_retrace` / `end_idx_reached`     → `end_idx`
+      - Phase 2 `second_cts_reached`                 → 2nd CTS_ESTABLISHED idx
+      - Phase 2 `reversal_in_probe`                  → reversal apply idx
+      - Phase 2 `no_retrace`                         → CTS_0_CONFIRMED idx
+                                                       (else `end_idx`)
+      - Phase 2 `end_idx_reached`                    → `end_idx`
+      - pending (`*_pending`, `max_iterations`)      → None (sid never builds)
+    None whenever `status="pending"`.
     """
     start_idx: int
     status: Literal["finalized", "pending"]
@@ -159,6 +176,7 @@ class ProbeResult:
     bos0_inner: Optional[float] = None
     bos0_outer: Optional[float] = None
     cts0_est_idx: Optional[int] = None
+    finalize_idx: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -171,6 +189,7 @@ class _DetResult:
     bos0_inner: Optional[float]
     bos0_outer: Optional[float]
     cts0_est_idx: Optional[int]
+    finalize_idx: Optional[int]
 
 
 def _select_extreme_retrace_candidate(
@@ -401,6 +420,15 @@ def _run_phase1(
         current_start = int(candidate_idx)
         bos0_inner, bos0_outer = _bos0_inner_at_start(df, current_start, direction)
 
+    # finalize_idx (lifecycle-start floor): both finalized Phase-1 conditions
+    # (`no_retrace`, `end_idx_reached`) examined the breakout/retrace window up
+    # to `end_idx` (both require `end_idx is not None`), so the decision
+    # depended on candles through `end_idx`. Pending → None (sid never builds).
+    _finalize_idx = (
+        int(end_idx) if (final_status == "finalized" and end_idx is not None)
+        else None
+    )
+
     return _DetResult(
         start_idx=current_start,
         status=final_status,
@@ -409,6 +437,7 @@ def _run_phase1(
         bos0_inner=bos0_inner,
         bos0_outer=bos0_outer,
         cts0_est_idx=cts0_est_idx,
+        finalize_idx=_finalize_idx,
     )
 
 
@@ -457,6 +486,7 @@ def _run_phase2(
     cts0_est_idx: Optional[int] = None
     final_condition: FinalizeCondition = "max_iterations"
     final_status: Literal["finalized", "pending"] = "pending"
+    finalize_idx: Optional[int] = None  # lifecycle-start floor (see ProbeResult)
     iteration = 0
 
     for iteration in range(1, max_iterations + 1):
@@ -491,6 +521,16 @@ def _run_phase2(
                 cts0_est_idx = int(cts_est[0].meta.get("confirmed_at", cts_est[0].idx))
             final_condition = "reversal_in_probe"
             final_status = "finalized"
+            # finalize idx = the reversal apply candle (the latest signal the
+            # "reversal before 2nd CTS" decision relied on).
+            _rev_mask = (
+                (df_probe["market_state"].astype(str).str.lower() == "reversal")
+                & (df_probe["structure_id"].astype(int) == 0)
+            )
+            finalize_idx = (
+                int(df_probe.index[_rev_mask].min()) if bool(_rev_mask.any())
+                else (int(end_idx) if end_idx is not None else None)
+            )
             break
 
         # No CTS_0 emitted in window (scan mode found no true breakout).
@@ -499,6 +539,7 @@ def _run_phase2(
             if end_idx is not None:
                 final_condition = "end_idx_reached"
                 final_status = "finalized"
+                finalize_idx = int(end_idx)
             else:
                 final_condition = "no_cts_pending"
                 final_status = "pending"
@@ -528,12 +569,27 @@ def _run_phase2(
             final_status = "pending"
             break
 
+        # finalize-idx candidates for the three "no qualifying retrace" exits
+        # below (window empty / no candidate / candidate fails reset):
+        #   - second_cts_reached → the 2nd CTS_ESTABLISHED idx (cycle 0
+        #     completed + cycle 1 established — the "double CTS", earlier than
+        #     the parent-CTS end_idx).
+        #   - no_retrace → CTS_0_CONFIRMED idx (the decision needed cycle 0's
+        #     confirmation), else end_idx when cycle 0 didn't confirm in-window.
+        _second_cts_fin = int(cts_est[1].idx) if n_cts >= 2 else None
+        _no_retrace_fin = (
+            int(cycle_0_conf.idx) if cycle_0_conf is not None
+            else (int(end_idx) if end_idx is not None else None)
+        )
+
         if check_lo > check_hi:
             # Window empty — no retrace possible.
             if n_cts >= 2:
                 final_condition = "second_cts_reached"
+                finalize_idx = _second_cts_fin
             else:
                 final_condition = "no_retrace"
+                finalize_idx = _no_retrace_fin
             final_status = "finalized"
             break
 
@@ -543,8 +599,10 @@ def _run_phase2(
         if candidate_idx is None:
             if n_cts >= 2:
                 final_condition = "second_cts_reached"
+                finalize_idx = _second_cts_fin
             else:
                 final_condition = "no_retrace"
+                finalize_idx = _no_retrace_fin
             final_status = "finalized"
             break
 
@@ -555,8 +613,10 @@ def _run_phase2(
         if not passes:
             if n_cts >= 2:
                 final_condition = "second_cts_reached"
+                finalize_idx = _second_cts_fin
             else:
                 final_condition = "no_retrace"
+                finalize_idx = _no_retrace_fin
             final_status = "finalized"
             break
 
@@ -580,6 +640,7 @@ def _run_phase2(
         bos0_inner=cur_bos0_inner,
         bos0_outer=cur_bos0_outer,
         cts0_est_idx=cts0_est_idx,
+        finalize_idx=finalize_idx,
     )
 
 
@@ -678,6 +739,7 @@ def unified_probe(
             bos0_inner=det.bos0_inner,
             bos0_outer=det.bos0_outer,
             cts0_est_idx=det.cts0_est_idx,
+            finalize_idx=det.finalize_idx,
         )
 
     # --- Phase 2: MS-based, only for first_confluence ---
@@ -709,4 +771,5 @@ def unified_probe(
         bos0_inner=p2.bos0_inner,
         bos0_outer=p2.bos0_outer,
         cts0_est_idx=p2.cts0_est_idx,
+        finalize_idx=p2.finalize_idx,
     )

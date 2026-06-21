@@ -758,6 +758,24 @@ generalized):
   - **sub structure:** its trigger idx (`start_trigger_idx`, §6.1), clamped
     `≥ max(parent sid lifecycle-start, parent_cycle_id lifecycle-start)`, i.e.
     `lifecycle-start = max(start_trigger_idx, parent_sid_start, parent_cycle_start)`.
+    **`start_trigger_idx` per sid-type** (the candle from which the sub is
+    *known* to exist):
+    - *subsequent_\** → the trigger candle (the parent sd-/cts-prox event, M15).
+    - *reversal* → the prior sid's reversal-apply idx (the handoff boundary).
+    - *bootstrap (first_confluence / first_counter)* → the **probe's
+      `finalize_idx`** (`unified_probe.ProbeResult.finalize_idx`), NOT the
+      structural anchor (`start_m15_abs`). A probe-resolved start is not *known*
+      until the probe finalizes its retrace-reset search, so the bootstrap's
+      zones/POIs/fibs/cycles (and the sub-WVMI active window, which reads the
+      same `start_trigger_idx`) become active at the finalize idx. Per
+      `finalize_condition`: Phase-1 → `end_idx`; Phase-2 `second_cts_reached` →
+      2nd `CTS_ESTABLISHED` idx (the "double CTS", earlier than the parent-CTS
+      bound); `reversal_in_probe` → reversal idx; `no_retrace` →
+      `CTS_0_CONFIRMED` idx. Subsequent_\*/reversal already floor at their probe
+      `end_idx`/reversal idx (= their finalize), so the rule "floor at the probe
+      finalize idx" is a no-op for them and changes only the two bootstraps.
+      Legacy escape-hatch probe → no finalize idx → falls back to the anchor.
+      (Was the anchor for bootstraps before the finalize-idx floor change.)
   - **cycle (any):** `max(CTS_established_idx, owning-structure
     lifecycle-start)`. The structure's lifecycle-start already embeds BOTH parent
     floors (sid + cycle) for subs, so the parent floors enter once (at the

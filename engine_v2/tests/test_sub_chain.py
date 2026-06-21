@@ -110,7 +110,8 @@ def _make_reversing_data() -> list[dict]:
 
 
 def _mt(use_case="first_confluence", parent_sid=0, parent_cycle_id=0,
-        lower_sd=1, trigger_event_idx=0, m15_start=0) -> MultiTFTrigger:
+        lower_sd=1, trigger_event_idx=0, m15_start=0,
+        finalize_idx=None) -> MultiTFTrigger:
     return MultiTFTrigger(
         parent_tf="H1",
         parent_sid=parent_sid,
@@ -122,7 +123,11 @@ def _mt(use_case="first_confluence", parent_sid=0, parent_cycle_id=0,
         start_time=pd.Timestamp("2024-01-01", tz="UTC"),
         start_price=0.6,
         lifecycle_end_idx=None,
-        meta={"trigger_event_idx": trigger_event_idx, "_test_start": m15_start},
+        meta={
+            "trigger_event_idx": trigger_event_idx,
+            "_test_start": m15_start,
+            "_test_finalize": finalize_idx,
+        },
     )
 
 
@@ -259,7 +264,13 @@ def _install_stubs(monkeypatch, *, cycle_end, reversals=None):
     calls: list[dict] = []
 
     def fake_resolve(trigger, parent_df, entity_df, sibling_entity_df=None):
-        return trigger.meta.get("_test_start"), 0, None
+        # (m15_start, validated_idx, bos0_inner, finalize_idx). finalize_idx
+        # defaults to None (bootstrap floors at the anchor) unless a test sets
+        # `_test_finalize` to exercise the probe-finalize-idx floor.
+        return (
+            trigger.meta.get("_test_start"), 0, None,
+            trigger.meta.get("_test_finalize"),
+        )
 
     def fake_map(parent_idx, parent_df, m15_df):
         return int(parent_idx)   # identity: trigger_event_idx IS the boundary
@@ -312,6 +323,30 @@ class TestBuildParentCycleChain:
         assert calls[0]["sub_sid"] == 0
         assert calls[0]["started_by"] == "first_confluence"
         assert calls[0]["end"] == 80          # bounded by cycle end (no sub)
+
+    def test_bootstrap_floor_uses_probe_finalize_idx(self, monkeypatch):
+        """Bootstrap lifecycle floor (`start_trigger_idx`) = the probe's
+        finalize idx, NOT the structural anchor (`m15_start`). The structure
+        still BUILDS from the anchor; only the lifecycle floor moves."""
+        calls = _install_stubs(monkeypatch, cycle_end=80)
+        boot = _mt(m15_start=10, finalize_idx=25)
+        build_parent_cycle_chain(
+            _dummy_df(100), _dummy_df(100),
+            bootstrap=boot, subsequents=[], sub_path_id=_PATH,
+        )
+        assert calls[0]["start"] == 10              # structural anchor unchanged
+        assert calls[0]["start_trigger_idx"] == 25  # floored at probe finalize
+
+    def test_bootstrap_floor_falls_back_to_anchor_without_finalize(self, monkeypatch):
+        """No probe finalize idx (legacy escape hatch) → bootstrap floors at the
+        anchor, preserving pre-finalize-idx behaviour."""
+        calls = _install_stubs(monkeypatch, cycle_end=80)
+        boot = _mt(m15_start=10)  # finalize_idx defaults None
+        build_parent_cycle_chain(
+            _dummy_df(100), _dummy_df(100),
+            bootstrap=boot, subsequents=[], sub_path_id=_PATH,
+        )
+        assert calls[0]["start_trigger_idx"] == 10  # anchor fallback
 
     def test_bootstrap_plus_subsequent(self, monkeypatch):
         calls = _install_stubs(monkeypatch, cycle_end=80)

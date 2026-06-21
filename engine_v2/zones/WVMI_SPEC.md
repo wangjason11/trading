@@ -70,6 +70,12 @@ is built (`build_parent_cycle_chain`), the orchestrator runs a per-cycle pass
    sid whose **active window `[start_trigger_idx, m15_end_idx]`** (lifecycle-start
    → effective end) contains it. Sweep that sid once via
    `compute_parent_driven_sub_wvmi`, stamping the trigger.
+   - `start_trigger_idx` IS the sub's lifecycle-start (PART4 §5). For a
+     **bootstrap** sid (first_confluence / first_counter) it is the probe's
+     `finalize_idx` (not the structural anchor) — so a parent trigger before the
+     probe finalized attributes to whichever OTHER sid was alive then, not the
+     bootstrap. The window definition here is unchanged; only the value of
+     `start_trigger_idx` moved (see PART4 §5 + `ProbeResult.finalize_idx`).
 
 **There is no `use_case` special-casing.** A sid — bootstrap (var1/var2),
 subsequent (var3/var4), or **reversal-born** — gets WVMI **iff a parent trigger
