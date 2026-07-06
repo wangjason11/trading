@@ -1,0 +1,4 @@
+commit_hash=5a936e4
+timestamp=20260706_155644
+branch=week8-volmom-multitf
+commit_message=Downstream perf: cheap ImbalanceInstance.__deepcopy__ + numpy is_filled (multi_tf_dual 35.6s, total 6.9x vs 535s, byte-identical)
