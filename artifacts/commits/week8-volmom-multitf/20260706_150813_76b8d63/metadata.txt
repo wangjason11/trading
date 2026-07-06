@@ -1,0 +1,4 @@
+commit_hash=76b8d63
+timestamp=20260706_150813
+branch=week8-volmom-multitf
+commit_message=Downstream perf: numpy-ize apply_is_range_labels (attrs deepcopy fix; multi_tf_dual 8.1x, total 4.8x, byte-identical)
