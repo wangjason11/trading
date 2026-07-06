@@ -4,6 +4,42 @@
 
 ---
 
+## Per-cell `.iloc[]` on a df with heavy `.attrs` → pandas `__finalize__` deepcopy explosion (FIXED 2026-07-06)
+
+**Symptom:** the multi-TF sub-build (`multi_tf_dual`) dominated the replay —
+477s of a 535s total. A `cProfile` run showed **822 MILLION `copy.deepcopy`
+calls** (~1500s cumtime under the profiler), routed through pandas
+`generic.py::__finalize__` (265k calls), all under **one function**:
+`patterns/range_label.py::apply_is_range_labels` (19 calls, ~83s each).
+
+**Root cause:** `apply_is_range_labels` read OHLC per cell via
+`out.iloc[t]["c"]` / `out.iloc[i]["l"]` inside a double `for` loop. **Every
+`.iloc[]` row access builds a row-Series, which calls pandas
+`NDFrame.__finalize__`, which does `self.attrs = deepcopy(other.attrs)`.** The
+working df's `.attrs` carried the `imbalances` instance list (167
+`ImbalanceInstance` dataclasses), so each single cell read deep-copied ~3,100
+nested objects. `n × k` cell reads × 16 sub slices ≈ 822M deepcopies. NOT an
+algorithmic cost — a pandas-metadata-propagation cost masquerading as one.
+
+**Fix:** numpy-ize the loop — extract `c/l/h/is_range/is_range_confirm_idx/
+is_range_lag` to numpy arrays once, run the *identical* iteration on arrays,
+write the 3 columns back once. No `.iloc` in the loop → no `__finalize__` → no
+attrs deepcopy. **Byte-identical** (21/21 CSVs vs `c61e670`; 394 tests; ref-impl
+equivalence on 7 cases incl. edge/attrs). `multi_tf_dual` 477s→59s (**8.1×**);
+total replay 535s→111s (**4.8×**), wall 8m58s→1m52s.
+
+**General rule (load-bearing for future perf work):** NEVER do per-cell
+`.iloc[]` / `.at[]` reads in a loop on a DataFrame that carries objects in
+`.attrs`. pandas deep-copies `attrs` on virtually every operation via
+`__finalize__`; when `attrs` holds the imbalance/zone lists (as every per-sub
+`trigger_df` does after `compute_imbalance`), any such loop becomes
+catastrophic. Extract numpy arrays first — same lesson as "Pandas `.loc` Has
+~35× Overhead vs Numpy Positional", **amplified** by the attrs deepcopy. When
+hunting the next hotspot (e.g. `ImbalanceInstance.is_filled`, the chart export
+path), check first whether it loops with `.iloc`/`.at` on a heavy-attrs df.
+
+---
+
 ## Base/inside-bar zone inner could land beyond the outer (inverted zone) — FIXED 2026-06-01
 
 **Symptom:** a `base inside bar` KL zone rendered *above* its own anchor candle
