@@ -141,6 +141,32 @@ class ImbalanceInstance:
         """True if this instance intersects the inclusive [start_idx, end_idx] range."""
         return self.start_idx <= end_idx and self.end_idx >= start_idx
 
+    def __deepcopy__(self, memo):
+        """Return self instead of a deep copy — a deliberate performance escape.
+
+        `ImbalanceInstance`s live in `df.attrs["imbalances"]`. pandas'
+        `NDFrame.__finalize__` does `self.attrs = deepcopy(other.attrs)` on
+        virtually every derived object (column boxing, astype, isna, Series
+        arithmetic, slicing, ...), so the per-sub downstream pipeline was paying
+        to deep-copy this whole instance list — recursing into each `meta` dict —
+        on essentially every pandas operation (the dominant remaining cost after
+        the range_label fix; see GOTCHAS "Per-cell `.iloc[]` ... deepcopy
+        explosion" + the profile that motivated this).
+
+        Returning `self` is byte-identical because engine code only ever
+        reads/mutates the ORIGINAL instances: `compute_imbalance` creates them,
+        and each working df pins the SAME list by reference
+        (`entity_df_mutation.py`: `bounded.df.attrs["imbalances"] =
+        trigger_df.attrs["imbalances"]`). pandas' transient `__finalize__`
+        copies are never read by engine code, so sharing identity with them
+        changes only cost, not values. The only in-place mutation of `meta`
+        (`_compute_fill_idx_cache` stashing `armed_idx`/`confirmed_fill_idx`)
+        happens on those originals either way. Validated byte-identical via
+        `/compare` + the full test suite (POI activation reads that meta cache,
+        so any leak would surface as a POI diff).
+        """
+        return self
+
     def is_filled(
         self,
         df: "pd.DataFrame",
@@ -170,6 +196,58 @@ class ImbalanceInstance:
         if self.gap_size <= 0:
             return True  # invalid gap -> treat as filled (safe default)
 
+        # Fast path: positional numpy scan when the working df is a contiguous
+        # 0..n-1 RangeIndex (always in practice — sub slices are reset_index'd
+        # and the H1 main df is a 0..n-1 RangeIndex). Avoids the ~35x-slower
+        # `df.loc[idx, col]` scalar lookups + `idx not in df.index`
+        # (RangeIndex.__contains__) in the hot per-candle loop; is_filled is
+        # called ~O(1e5) times per replay across the Fib/POI/scenario imbalance
+        # checks. Byte-identical to the label-based loop in the fallback below
+        # (same ascending (end_idx, check_to_idx] scan clamped to the data,
+        # same two-stroke armed/confirmed latch, same inclusive comparisons).
+        # Duck-typed RangeIndex check (types.py has no runtime `pd` import).
+        n = len(df)
+        _index = df.index
+        contiguous = (
+            getattr(_index, "step", None) == 1
+            and getattr(_index, "start", None) == 0
+            and getattr(_index, "stop", None) == n
+        )
+        if contiguous:
+            lo = self.end_idx + 1
+            if lo < 0:
+                lo = 0
+            hi = check_to_idx
+            if hi > n - 1:
+                hi = n - 1
+            if lo > hi:
+                return False
+            if self.direction == 1:
+                l_arr = df["l"].to_numpy(dtype=float)
+                c_arr = df["c"].to_numpy(dtype=float)
+                stroke1_level = self.gap_top - self.gap_size * fill_threshold
+                stroke2_level = self.gap_top
+                armed = False
+                for pos in range(lo, hi + 1):
+                    if not armed and l_arr[pos] <= stroke1_level:
+                        armed = True
+                    if armed and c_arr[pos] >= stroke2_level:
+                        return True
+            elif self.direction == -1:
+                h_arr = df["h"].to_numpy(dtype=float)
+                c_arr = df["c"].to_numpy(dtype=float)
+                stroke1_level = self.gap_bottom + self.gap_size * fill_threshold
+                stroke2_level = self.gap_bottom
+                armed = False
+                for pos in range(lo, hi + 1):
+                    if not armed and h_arr[pos] >= stroke1_level:
+                        armed = True
+                    if armed and c_arr[pos] <= stroke2_level:
+                        return True
+            return False
+
+        # Fallback: label-based loop for a non-contiguous index (rare/never in
+        # practice). Verbatim pre-optimization implementation.
         if self.direction == 1:
             stroke1_level = self.gap_top - self.gap_size * fill_threshold
             stroke2_level = self.gap_top

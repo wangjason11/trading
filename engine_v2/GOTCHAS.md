@@ -38,6 +38,28 @@ catastrophic. Extract numpy arrays first — same lesson as "Pandas `.loc` Has
 hunting the next hotspot (e.g. `ImbalanceInstance.is_filled`, the chart export
 path), check first whether it loops with `.iloc`/`.at` on a heavy-attrs df.
 
+**Follow-up 2026-07-06 (same session) — the tax was DISTRIBUTED, so a systemic
+fix beat whack-a-mole.** After range_label, a re-profile showed `deepcopy` was
+still #1 (203s cumtime under cProfile) but now spread across ~67k
+`__finalize__` calls from MANY pandas ops (`_box_col_values` / column boxing,
+`_construct_result` / Series arithmetic, `astype`, `isna`, datetime accessor,
+`_slice`, `take`, `concat`) throughout the per-sub downstream — not one loop.
+Root: every pandas op on a working df deep-copies `df.attrs`, and attrs carry
+the `imbalances` list. **Systemic fix: `ImbalanceInstance.__deepcopy__` returns
+`self`** (it's frozen + read-only-by-convention; engine code only ever
+reads/mutates the ORIGINAL instances — `compute_imbalance` creates them and each
+working df pins the same list by reference — so pandas' transient `__finalize__`
+copies are never read; sharing identity changes only cost, not values). One
+method, no reader changes, kills the distributed tax across ALL downstream ops.
+Plus numpy-ized `is_filled` (its `df.loc[idx,col]` per-candle loop = the ~35×
+`.loc` scalar overhead). Combined: `multi_tf_dual` 58.6s→35.6s; total
+110.8s→77.8s (**6.9× vs the original 535s**). Byte-identical: 21/21 CSVs, 394
+tests, 2400-case `is_filled` equivalence. **Lesson: when a deepcopy tax is
+spread across many pandas ops rather than one loop, make the heavy `attrs`
+payload deepcopy-cheap (`__deepcopy__`→self on frozen/read-only objects) instead
+of chasing each call site** — but only when you can prove engine code never
+mutates a pandas-transient copy (validate with `/compare`).
+
 ---
 
 ## Base/inside-bar zone inner could land beyond the outer (inverted zone) — FIXED 2026-06-01
