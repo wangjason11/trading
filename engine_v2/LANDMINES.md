@@ -1430,3 +1430,109 @@ start-floor inconsistent (overlap). Collapsed cycles (clamped `start >= end`) ar
 uniformly `status="inactive"` with empty `activation_history` (outline-only) —
 this replaced the prior split
 where the inner KL derivation said `"ended"` and the cap said `"inactive"`.
+
+---
+
+## Sub-Structure Pool: Alignment Is Direction-Derived, NOT Sticky-Per-Entity (Phase 2, 2026-07-08)
+
+> Design LANDMINES for the sub-structure pool. Canonical spec:
+> `PART4_REFACTOR_SPEC.md §17`; memory `project_sub_structure_pool_architecture.md`.
+> These describe the TARGET (pool) model — verify against code once Phase 2 lands.
+
+**Rule:** Under the pool, a sub structure's identity is `(parent_path, sub_TF,
+direction, starting_idx)` with `direction` **absolute (+1/−1)**. Confluence vs
+counter is a **derived, per-chart label** (`direction == parent.current_sd`), NOT
+a sticky entity property and NOT part of identity.
+
+**What changed from Phase 1:** §2 said `starting_alignment` is "sticky for the
+structure's lifetime — does not flip on internal reversals," and the code filed a
+reversal-born sid under its spawning entity (confluence stayed confluence). Under
+the pool a reversal ENDS the sub and spawns a NEW opposite-direction sub, which
+is classified by ITS OWN direction. So:
+
+- **Cross-chain reversal interaction (new, easy to miss):** a confluence-direction
+  sub (dir == parent_sd) that reverses spawns a dir == −parent_sd sub, which is a
+  **counter** sub. Per "at most 1 active per `(parent_path, sub_TF, direction)`",
+  that new counter-direction sub **ends any active counter-direction sub** — a
+  cross-chain end the Phase-1 sticky-entity code does NOT have (there the
+  reversal-born sid stayed in the confluence entity, untouching counter). Don't
+  reintroduce sticky-entity classification; it breaks the ≤1-active-per-direction
+  invariant.
+- **Sticky survives ONLY as chart attribution:** a `reversal` trigger attributes
+  its sub to the **same chart** as the sub it reversed from (so a reversed
+  confluence structure still appears on the confluence chart), PLUS any chart
+  whose own trigger reaches the sub. So a single unique sub can render on BOTH
+  charts. This is chart membership, not structure identity — don't conflate them.
+
+---
+
+## Sub-Structure Pool: Lifecycle End Is `min(end ≥ max start)`, NOT Global-Earliest (Phase 2)
+
+**Rule:** A unique sub has ONE continuous lifecycle: `start = min(trigger_dt)`
+over all mapped triggers; `end = min( end-candidate : end-candidate ≥
+max(trigger_dt) )` (else `None`/open). End candidates = `{own reversal,
+same-direction replacement start, parent-lifecycle-end}`.
+
+**Why not global-earliest end (the trap):** a cross-parent-cycle sub (canonical:
+M15 3304/−1, triggered in parent cycle 1 AND cycle 2) has an end candidate at the
+parent-cycle-1 boundary that sits BEFORE its cycle-2 trigger. Global-earliest
+would force it to end at that boundary and restart — a degenerate same-dt
+start/end, splitting one real structure into two. Excluding end candidates
+earlier than the LAST trigger keeps it continuous across the intervening
+boundary. `start` uses earliest trigger; `end` uses first genuine end after the
+latest trigger.
+
+**Edge to watch (not fixed in v1):** if a same-direction sub genuinely replaces
+this one and THEN a later trigger re-resolves to this sub's exact `(dir, start)`
+(possible — the probe is deterministic), `min(end ≥ max start)` over-extends the
+sub across the gap where it was actually replaced. Symptom: overlapping
+structures on one chart in `/compare` review. Precise fix if it bites: interval
+sweep instead of a single window. Start with the single-window rule.
+
+**Start/end feed the clamps.** These are the values passed to
+`compute_cycle_lifecycle` floor/cap — projected ONCE per unique sub in a post-pass
+(geometry is derived once, cap-free, at creation), NOT once per trigger record.
+
+---
+
+## Sub-Structure Pool: Dedup Reuse Is Byte-Identical ONLY Given a Deterministic Natural-End Build
+
+**Rule:** Reusing a `PooledStructure` for a second trigger (instead of rebuilding)
+is byte-identical ONLY because (a) the probe is deterministic given
+`(parent_path, sub_TF, direction, initial-start)` and (b) the structure runs to
+its **natural end** (first reversal), so its slice/run is independent of which
+trigger asked. If either assumption breaks, dedup silently returns a structure
+that differs from an independent rebuild.
+
+- **Do NOT key the pool including `end_idx` / trigger boundary.** The whole point
+  is that two triggers with the same `(dir, start)` but different `end_idx`
+  resolve to the SAME final start and SAME structure. Keying on `end` yields zero
+  dedup (the real dupes have different ends).
+- **Probe cache** keys on the INITIAL start `(parent_path, sub_TF, direction,
+  initial-start)` and accepts that different `end_idx` return the same final
+  start (explicit approximation). Structure pool keys on the FINAL start.
+- **Validate dedup by chart-visual + event-count parity**, not per-row M15 CSV
+  (storage representation changes — two entity dfs → one store — so per-row M15
+  parity will not hold, per §13). Expected intended deltas: duplicate-structure
+  collapse on charts, `sub_id` renumber, natural-end window-end effects,
+  knowable-at clip. Anything else is a regression.
+
+---
+
+## Sub-Structure Pool: Run Cap ≠ Lifecycle End; Knowable-At Clip on Render
+
+**Rule:** Keep three bounds distinct — they are easy to conflate:
+
+| Bound | What | Value |
+|---|---|---|
+| **Run cap** | how far MS is allowed to compute (slice upper) | `min(parent-structure-end, data-edge)` |
+| **Natural end** | the structure's first reversal (data-intrinsic) | found by the run; ≤ run cap |
+| **Lifecycle end** | when the sub stops being current in a lens | `min(end-candidate ≥ max start)` (§ above) |
+
+The run cap must be ≥ the natural reversal (else the reversal is missed) but is
+otherwise a pure compute/cost bound. **On render into a lens, clip events by the
+KNOWABLE-AT idx** (`confirmed_at` for `BOS_CONFIRMED`, `ev.idx` otherwise) — NOT
+by `ev.idx` uniformly. Clipping by `ev.idx` would surface a BOS whose extreme is
+inside the window but whose confirmation lookahead landed past it — an event the
+Phase-1 bounded run could not have known. Knowable-at matches Phase-1 semantics
+and neutralizes the boundary-straddling-confirmation case.

@@ -54,6 +54,15 @@ both.
 
 ## 2. Structure Identity Model (Locked)
 
+> **⚠ REVISED by §17 (Sub-Structure Pool, 2026-07-08) for subordinates.** Under
+> the pool: a sub's identity is `(parent_path, sub_TF, direction, starting_idx)`
+> with `direction` **absolute**; `sub_id` is a single monotonic pool index (no
+> per-parent-cycle `sub_sid` reset); `starting_alignment` is **not sticky and
+> not part of identity** — confluence/counter is a derived per-chart label
+> (`direction == parent.current_sd`). Sticky behavior survives only as a chart
+> attribution rule for `reversal` triggers. See §17.2–§17.4. The prose below is
+> the Phase-1 two-entity model.
+
 Every market structure output is uniquely identified by a tuple of:
 
 1. **`timeframe`** — the TF of its candles (e.g., H1, M15, M5)
@@ -642,6 +651,15 @@ or invert. Strict `proximity > reset` is the cleanest invariant.
 
 ## 5. Computing Structures — Function Routing per Role
 
+> **⚠ REVISED by §17 (Sub-Structure Pool, 2026-07-08) for subordinates.** Under
+> the pool a sub runs to its **natural end** (run cap = `min(parent-structure-end,
+> data-edge)`), not bounded at the next trigger; its lifecycle is
+> `start = min(trigger_dt)`, `end = min(end-candidate ≥ max(trigger_dt))` over
+> the full end set `{own reversal, same-direction replacement, parent-end}`; and
+> at most one sub is active per `(parent_path, sub_TF, direction)`. The
+> clamp/pass-through machinery below still applies but is projected **once** per
+> unique sub post-pass (§17.6–§17.7). `main` is unchanged.
+
 For `main` (highest TF), continue using `compute_structure`:
 
 - Initial start: `trading_open` scenario (today's `identify_start_scenario_1`).
@@ -973,6 +991,14 @@ pure robustness fix, zero current behavior change.
 
 ## 6. Subordinate Cadence and Lifecycle Rules
 
+> **⚠ REVISED by §17 (Sub-Structure Pool, 2026-07-08).** The per-parent-cycle
+> merge-and-bound sid chain below is superseded by the single-store pool: subs
+> are unique across parent cycles (a sub can belong to several), storage is one
+> shared M15 frame (not per-entity dfs), and the two charts are lens filters over
+> the pool (sticky-per-chart for `reversal`). The cadence driver
+> (`build_two_entity_parent_cycle`) is retained to order trigger firing. See
+> §17.4–§17.8.
+
 (§4.3.6 covers the within-parent-cycle cadence diagram. This section
 specifies how those triggers compose into the sequential sid chain and how
 lifecycles bound it. **REVISED 2026-05-25** — the prior "overwrite
@@ -1206,6 +1232,13 @@ Each of these populates `locked_by` meta on the WVMI record.
 ---
 
 ## 9. Storage Architecture — Per-Entity DFs + Registry
+
+> **⚠ REVISED by §17 (Sub-Structure Pool, 2026-07-08) for subordinates.** The
+> two M15 sub entity dfs (`M15.confluence` / `M15.counter`) collapse into **one**
+> shared M15 feature frame carrying the pool of unique subs (keyed
+> `(parent_path, sub_TF, direction, starting_idx)`), with a single monotonic
+> `sub_id`. The confluence/counter charts become **lens filters** over that one
+> store, not separate storage. `H1.main` is unchanged. See §17.4.
 
 ### 9.0 Terminology
 
@@ -1940,6 +1973,249 @@ sub TF candles and (if toggled) the parent overlay.
 
 This is self-explanatory once the bootstrap rule is understood. No
 special chart annotation.
+
+---
+
+## 17. Sub-Structure Pool (Phase 2) — Locked 2026-07-08
+
+> **Status:** design LOCKED (this session); implementation staged below (§17.11).
+> Phase 1 (unified probe, through main reversals) is the prerequisite and is
+> DONE — deterministic identical starts across converging triggers is what makes
+> the pool fire. Companion memory: `memory/project_sub_structure_pool_architecture.md`
+> and `memory/project_unified_identify_start_probe.md`. This section is the
+> authoritative model; where it conflicts with §2 / §5 / §6 / §9 prose (written
+> for the Phase-1 two-entity build), §17 wins — those sections carry pointer
+> banners.
+
+### 17.1 Motivation
+
+There are exactly five triggers that can start a new sub structure: the four
+confluence/counter variations (`first_confluence`, `first_counter`,
+`subsequent_confluence`, `subsequent_counter`) and `reversal`. Every one uses
+the **same unified probe** to find `starting_idx`. A sub structure is therefore
+fully determined by four things — its own TF, its parent path, its direction,
+and its final `starting_idx` — **independent of which trigger produced it**. If
+two triggers/probes land on the same four, the resulting MS run + all derived
+elements are byte-identical, so re-running is pure waste.
+
+Phase 2 exploits this: **compute each unique sub once**, and let every trigger
+that lands on it point at that one shared structure. The primary value is the
+**correct structural model** (one object per real structure, not N per trigger)
+plus avoiding redundant MS *and downstream* builds; the raw-speed win is
+secondary after the 2026-07-06 deepcopy sprint (MS ≈ 23s; downstream/charts
+dominate).
+
+### 17.2 Structure ↔ Trigger-record split
+
+| Object | Role | Identity | Cardinality |
+|---|---|---|---|
+| **`PooledStructure`** | one MS run + its derived geometry (KL/POI/fib/wave-candle bounds & anchors), computed **once**, run to its **natural end** | `(parent_path, sub_TF, direction, starting_idx)` | one per unique tuple |
+| **`TriggerRecord`** | per-trigger metadata pointing at a `PooledStructure` | `(trigger_type, trigger_dt, parent_sid, parent_cycle_id, lens)` | N per `PooledStructure` (N ≥ 1) |
+
+`PooledStructure` stores its elements in slice-local coords + `slice_begin`
+(the shared M15 feature frame is one frame, §17.4). Geometry is stored
+**cap-free** (computed to the natural end, no lifecycle floor/cap baked in); the
+lifecycle projection is applied once, post-pass (§17.7).
+
+### 17.3 Pool identity — `direction` is absolute; alignment is derived
+
+- `direction ∈ {+1, −1}` is **absolute**, not confluence/counter. Dedup keys off
+  the actual MS run, which is absolute-direction.
+- **Confluence vs counter is a derived, per-chart label**, not part of identity:
+  a sub is *confluence* on a chart iff `direction == parent.current_sd` at that
+  point, else *counter*. This is what lets the **same unique sub appear on both
+  charts** (§17.4).
+- `starting_idx` is an entity-absolute M15 idx (unique in time) and is nearly
+  sufficient alone; the full tuple is the clear key and generalizes to deeper
+  nesting (`parent_path`, not just `parent_TF`, so an M5-under-counter can't
+  collide with an M5-under-confluence).
+
+**This supersedes §2's sticky `starting_alignment`.** Under Phase 1, a
+reversal-born sid kept its spawning entity's alignment (sticky). Under the pool,
+alignment follows the sub's **own** direction — there is no sticky per-entity
+alignment on the *structure*. (Sticky behavior survives only as a **chart
+attribution** rule for reversal triggers — §17.4.)
+
+### 17.4 Single storage + monotonic `sub_id`; two charts as lenses
+
+**Storage is single-entity.** One shared M15 feature frame (candles + imbalance
++ volume features, §9.6) carries the pool. The Phase-1 two entity dfs
+(`M15.confluence`, `M15.counter`) collapse into this one store — storing a
+both-charts sub twice would re-introduce the duplication the pool removes.
+
+- **`sub_id` is a single monotonic pool index** (assigned in deterministic
+  cadence order), replacing §2's per-parent-cycle `sub_sid` reset.
+- A `PooledStructure` carries a **list of `(parent_sid, parent_cycle_id)`
+  memberships** and a **list of `TriggerRecord`s** — it can belong to several
+  parent cycles (see 3304, §17.6).
+
+**The two charts are lenses (attribution filters) over the one store**, not
+separate storage:
+
+- A sub is drawn on a chart iff it has ≥1 `TriggerRecord` assigned to that
+  chart's lens, over the sub's (single) lifecycle window.
+- **Lens assignment per trigger:** `first_confluence` / `subsequent_confluence`
+  → confluence chart; `first_counter` / `subsequent_counter` → counter chart;
+  **`reversal` → sticky-per-chart: the same chart as the sub it reversed from**,
+  *plus* any chart whose own trigger also reaches this sub. So a reversed
+  confluence structure still lands on the confluence chart (your requirement),
+  and the *same unique sub* can legitimately render on **both** charts.
+- **`owner_by_idx` is computed per chart** from the subs attributed to that
+  lens, over their lens windows. Within a chart the timeline is
+  sequential/non-overlapping (reversal successors + same-direction replacements
+  are boundaries, exactly as today's entity chain), so the §16.5 most-recent
+  filter is unchanged. Cross-chart sharing does not affect either chart's
+  internal non-overlap.
+
+### 17.5 Natural-end build + run cap
+
+A `PooledStructure` runs to its **natural end** (its first reversal) — the same
+result regardless of which trigger asked for it — rather than being cut at a
+trigger boundary (the Phase-1 bounded model).
+
+- **Run cap = `min(parent-structure-end, data-edge)`** — the finite upper bound
+  handed to `compute_bounded_structure(end_idx=…)` so it can search for the
+  reversal. A sub can't outlive its parent structure (§6.5), so running past
+  parent-structure-end is wasted. The run cap is a **compute** bound only; it
+  does not move the natural reversal (data-intrinsic) and is distinct from the
+  sub's lifecycle end (§17.6).
+
+### 17.6 Lifecycle — earliest-trigger start, `min(end ≥ max start)` end
+
+A unique sub has **one continuous lifecycle**, computed from its full trigger
+list in a post-pass (§17.7):
+
+- **`start_idx` = `min(trigger_dt)`** over all mapped triggers. `trigger_dt` is
+  the lifecycle-start we already use (`start_trigger_idx`: bootstraps = probe
+  **finalize idx**; subsequent = trigger candle; reversal = reversal-apply idx).
+- **`end_idx` = `min( end-candidate : end-candidate ≥ max(trigger_dt) )`**, else
+  `None` (open to the edge). End candidates come from the full end set:
+  1. the sub's **own reversal** (spawns the opposite-direction successor),
+  2. a **same-direction replacement** — a new sub of the same
+     `(parent, sub_TF, direction)` starting (its `start_idx` ends this one),
+  3. **parent-lifecycle-end** (parent-cycle-end / parent reversal, §6.5).
+
+**Why `≥ max start`, not global-earliest.** The Phase-1-era phrasing
+"lifecycle end = earliest ending dt" is **refined here**. A cross-parent-cycle
+sub (canonical: M15 3304/−1, triggered by `subsequent_confluence`(1,1) +
+`first_counter`-reversal(1,1) *and* `first_confluence`(1,2)) would otherwise be
+force-ended at the parent-cycle-1 boundary (an end candidate that sits *before*
+the cycle-2 trigger), then restarted — a degenerate same-dt start/end. Excluding
+end candidates earlier than the **last** trigger keeps it **continuous** across
+the intervening parent-cycle boundary (your Q3 rule). `start` uses the earliest
+trigger, `end` uses the first genuine end after the latest trigger, so the one
+window spans all the sub's triggers.
+
+**Invariant — at most one active sub per `(parent_path, sub_TF, direction)`.**
+When a new sub starts in a direction, any still-active sub of the same
+`(parent, TF, direction)` ends at the new sub's `start_idx` (same-direction
+replacement). Consequence: at most **two** active subs per `(parent, TF)` — one
+per direction. Scope of "parent" is `parent_path` (spanning that parent's
+cycles), which reduces to per-parent-cycle in practice since only one parent
+cycle is active at a time.
+
+**Edge to watch (not fixed in v1):** if a same-direction sub genuinely replaces
+this one and *then* a later trigger re-resolves to this sub's exact
+`(dir, start)` (possible — the probe is deterministic), the `min(end ≥ max
+start)` rule extends this sub across the gap where it was actually replaced. It
+would show as a chart overlap → caught by `/compare` chart review. If it bites,
+the precise fix is an interval sweep instead of a single window; start with the
+single-window rule.
+
+### 17.7 Build model — cadence driver stays; dedup at compute; project once
+
+The build changes *what is computed*, not the lens cadence:
+
+1. **Cadence driver unchanged.** The two-cursor lock-step driver
+   (`build_two_entity_parent_cycle`, ordered by probe-end boundary) still fires
+   triggers in cadence order so that a sibling-referencing probe finds its
+   sibling already built (§17.8). It now routes builds through the pool and
+   writes to the single store.
+2. **Dedup interception.** After a trigger's probe resolves `(direction,
+   starting_idx)` and *before* MS+downstream runs: look up
+   `(parent_path, sub_TF, direction, starting_idx)`. **Miss** → compute the
+   `PooledStructure` (MS to natural end, cap-free geometry) and cache it.
+   **Hit** → reuse; append this `TriggerRecord` + membership.
+3. **Geometry once, projection once.** Geometry (MS run + zone/POI/fib/wave
+   bounds) is floor/cap-**independent** and computed at creation. After all
+   triggers are mapped, a light **post-pass** finalizes each unique sub's
+   lifecycle (§17.6) and applies **one** floor/cap projection (`compute_cycle_lifecycle`
+   clamps) onto the shared geometry. Because a unique sub has exactly one
+   lifecycle, it gets exactly one projection — not one per trigger.
+4. **Probe cache (secondary).** Keyed `(parent_path, sub_TF, direction, *initial*
+   starting_idx)` → final `starting_idx`. Two probes with the same key but
+   different `end_idx` are accepted to return the same final start (explicit
+   approximation). Mainly saves `first_confluence`'s Phase-2 MS reruns; the
+   structure pool (keyed on *final* start) catches most convergence after the
+   probe.
+
+### 17.8 Sibling reads + reversal successors via the pool
+
+- **Sibling-CTS reads become pool queries.** The sibling-referencing probes
+  (`first_counter`, `subsequent_*`) read "most-recent qualifying CTS of the
+  **opposite-direction** sub" (`struct_direction == −probe_direction`,
+  direction-qualified per §4.3) from the pool, replacing
+  `sibling_entity_df.attrs`. The cadence driver still guarantees the sibling is
+  built first; only the storage the read hits changes. The frame-alignment guard
+  is moot under one shared frame.
+- **Reversal successors route through the pool too.** A sub's reversal handoff
+  resolves `(dir', start')` → pool lookup/create, exactly like a trigger. This
+  is how a reversal-born sub dedups with a trigger-driven one (3304's
+  counter-reversal). Whether a sub spawns a successor at all depends on which
+  end cause wins (§17.6): own reversal vs same-direction replacement vs
+  parent-end.
+
+### 17.9 WVMI
+
+WVMI stays **per-trigger, attached to the unique sub**. Each WVMI-initiating
+parent trigger that maps to the sub fires a sweep over the sub's shared wave
+candles (§8.3/§8.4 gating unchanged); a sub can carry multiple WVMI records (one
+per initiating trigger), preserving §8.7's one-trigger-per-record attribution.
+No WVMI dedup in v1.
+
+### 17.10 Charting
+
+- **Labels** include the global `sub_id` + the **earliest**
+  `(parent_sid, parent_cycle_id)` membership + the sub's own `cycle_id`; hover
+  lists *all* memberships and *all* triggers. Cosmetic — refine on chart review.
+- **Charts look as today** (sticky-per-chart preserves membership), with these
+  **expected `/compare` deltas** (all intended, not regressions):
+  1. **Duplicate-structure collapse** — where a chart today draws two identical
+     overlapping structures (e.g. confluence 3304 from `subsequent_confluence`(1,1)
+     *and* `first_confluence`(1,2)), it now draws **one** structure with two
+     trigger annotations. This is the point of the pool.
+  2. **`sub_id` renumber** — per-entity ids become global; structures render
+     identically, only the numeric labels change.
+  3. **Natural-end** effects at window ends (§17.5) and the **knowable-at clip**
+     (§17.11).
+
+### 17.11 Byte-identicality, clip policy, staging
+
+- **Knowable-at clip.** When rendering a pooled structure into a lens, an event
+  is included iff its **knowable-at** idx is within the window (`confirmed_at`
+  for `BOS_CONFIRMED`, `ev.idx` otherwise) — matching Phase-1 bounded semantics
+  and neutralizing the boundary-straddling-confirmation case.
+- **Dedup is byte-identical given the natural-end build** (reuse of a
+  deterministic `(dir, start)` run == recomputing it). The behavioral change is
+  the natural-end build itself + the deltas in §17.10; validate by
+  **chart-visual + event-count parity** (per §13, per-row M15 CSV parity will
+  not hold once storage changes) with each delta explained, plus `/compare`
+  + chart review + `/commit-save` per stage.
+- **Staging:** the storage representation change (two entity dfs → single
+  store) is a big-bang for the M15 layer; stage the risk by landing the pool +
+  natural-end + dedup + lens attribution together, validated by parity criteria,
+  then explain the intended deltas. (Detailed stage plan tracked with the
+  implementation.)
+
+### 17.12 Out of scope (v1)
+
+- **Main** (`H1.main`) stays on `compute_structure`; the pool is subordinate-only
+  (main produces no dedup wins).
+- **Deeper nesting** (M5 under a M15 sub): identity tuple is recursion-ready but
+  M5 nesting is not built now (additional TFs / multiple counter+confluence subs
+  across TFs with different parents come later).
+- **WVMI dedup** and **live-mode pool GC** (evict when parent ended + no live
+  reference) — Phase 3 concerns; leave hooks, don't implement.
 
 ---
 
