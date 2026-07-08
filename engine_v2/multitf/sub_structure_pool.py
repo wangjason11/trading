@@ -368,8 +368,15 @@ def finalize_lifecycles(
                 continue
             candidates.append((int(other.lifecycle_start), "same_dir_replacement"))
 
-        for m in s.memberships():
-            pe = parent_end_lookup.get(m)
+        # Parent-cycle-end: ONLY the sub's LATEST membership cycle caps it. A sub
+        # that spans several parent cycles lives until its last cycle ends — an
+        # EARLIER membership's cycle-end is a boundary it is triggered past, not a
+        # terminal (else a multi-cycle sub like M15 2365 would be cut at cycle 0's
+        # end even though it continues into cycle 1). `max()` over memberships is
+        # chronological (sids increase over time; cycles within a sid).
+        _memberships = s.memberships()
+        if _memberships:
+            pe = parent_end_lookup.get(max(_memberships))
             if pe is not None:
                 candidates.append((int(pe), "parent_end"))
 

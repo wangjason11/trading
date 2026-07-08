@@ -943,6 +943,41 @@ def _run_multi_tf_dual(
 
     print(f"[pool] unique sub-structure geometries built={len(sub_pool.all())}")
 
+    # --- Phase 2 Stage 3.2a: finalize unified lifecycles over the pool ---
+    # Each unique sub's lifecycle: start = min(trigger_dt), end = min(end-cand >=
+    # max start) over {own reversal, same-direction replacement, parent-cycle-end}
+    # (PART4 §17.6). parent_end_lookup maps (parent_sid, parent_cycle_id) -> M15
+    # end idx = next cycle's CTS_ESTABLISHED (or the parent sid's reversal),
+    # last-of-hour. Rendering is UNCHANGED in 3.2a (still per-trigger) — this
+    # populates + logs the lifecycles so the math can be validated before the
+    # 3.2b collapse re-render.
+    from engine_v2.multitf.sub_structure_pool import finalize_lifecycles
+    _cts_est_h1: Dict[tuple, int] = {}
+    for ev in sorted_events:
+        if ev.type == "CTS_ESTABLISHED":
+            _cts_est_h1[
+                (int(ev.meta.get("structure_id", 0)),
+                 int(ev.meta.get("cycle_id", 0)))
+            ] = int(ev.idx)
+    parent_end_lookup: Dict[tuple, Optional[int]] = {}
+    for (_S, _C), _start_h1 in _cts_est_h1.items():
+        _nxt = _cts_est_h1.get((_S, _C + 1))
+        _end_h1 = _nxt if _nxt is not None else _h1_sid_end.get(_S)
+        if _end_h1 is None:
+            continue  # open parent cycle -> no parent-end cap
+        _m = _map_parent_idx_to_m15_hour_end(int(_end_h1), h1_df, conf_m15)
+        if _m is not None:
+            parent_end_lookup[(_S, _C)] = int(_m)
+    finalize_lifecycles(sub_pool.all(), parent_end_lookup)
+    for _s in sub_pool.all():
+        print(
+            f"[pool] sub_id={_s.sub_id} key=(M15,{_s.direction},{_s.starting_idx}) "
+            f"lenses={sorted(_s.lenses())} memberships={_s.memberships()} "
+            f"lifecycle=[{_s.lifecycle_start},{_s.lifecycle_end}] "
+            f"reason={_s.lifecycle_end_reason} nat_rev={_s.natural_reversal_idx} "
+            f"triggers={[(t.trigger_type, t.trigger_dt) for t in _s.trigger_records]}"
+        )
+
     # --- WVMI gating lookups ---
     main_zpt = main_zone_proximity_triggers or {}
     main_first_sd_by_cycle: Dict[tuple, int] = {}

@@ -1504,6 +1504,27 @@ def build_one_sid(
         f"poi={len(capped_pois)} fib={len(capped_fibs)}"
     )
 
+    # Phase 2 Stage 3.2a: record this trigger against the pooled unique sub.
+    # lens = the entity/chart this sid is built in — which IS sticky-per-chart
+    # for a reversal-born sid (it stays in its spawning entity). Metadata only;
+    # rendering is still per-trigger in 3.2a (the collapse is 3.2b).
+    if pool is not None:
+        from engine_v2.multitf.sub_structure_pool import (
+            StructureKey, TriggerRecord, LENS_CONFLUENCE, LENS_COUNTER,
+        )
+        _lens = LENS_CONFLUENCE if "confluence" in sub_path_id else LENS_COUNTER
+        _pooled = pool.get(
+            StructureKey(parent_path, timeframe, int(sd), int(start_m15_abs))
+        )
+        if _pooled is not None:
+            _pooled.add_trigger(TriggerRecord(
+                trigger_type=started_by,
+                trigger_dt=int(start_trigger_idx),
+                parent_sid=int(trigger.parent_sid),
+                parent_cycle_id=int(trigger.parent_cycle_id),
+                lens=_lens,
+            ))
+
     return SidBuildOutcome(
         result=result,
         reversal_idx_abs=reversal_idx_abs,

@@ -183,6 +183,24 @@ def test_3304_cross_parent_cycle_stays_continuous():
     assert (s.lifecycle_end, s.lifecycle_end_reason) == (3700, "parent_end")
 
 
+def test_earlier_membership_parent_end_does_not_cap_multicycle_sub():
+    """A sub spanning cycles (0,0)+(0,1) must NOT be capped at cycle (0,0)'s end
+    (it continues into (0,1)); only the LATEST membership's parent-end caps it.
+    Regression for the M15 2365 lifecycle bug found via Stage 3.2a logging: an
+    earlier cycle's end >= max(start) was wrongly ending a multi-cycle sub."""
+    pool = SubStructurePool()
+    s, _ = pool.get_or_create(_key(1, 2365))
+    s.add_trigger(_tr("reversal", 2470, 0, 0, LENS_CONFLUENCE))
+    s.add_trigger(_tr("first_confluence", 2608, 0, 1, LENS_CONFLUENCE))
+    s.natural_reversal_idx = 2829
+    # (0,0) ends at 2611 (just after the last trigger) — must NOT cap it; (0,1)
+    # ends at 3200. So the natural reversal 2829 (< 3200) is the terminal.
+    parent_ends = {(0, 0): 2611, (0, 1): 3200}
+    finalize_lifecycles(pool.all(), parent_end_lookup=parent_ends)
+    assert s.lifecycle_start == 2470
+    assert (s.lifecycle_end, s.lifecycle_end_reason) == (2829, "reversal")
+
+
 def test_own_reversal_ends_sub():
     pool = SubStructurePool()
     s, _ = pool.get_or_create(_key(1, 100))
