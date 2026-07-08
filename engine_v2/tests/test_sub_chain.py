@@ -282,7 +282,8 @@ def _install_stubs(monkeypatch, *, cycle_end, reversals=None):
                            sub_path_id, timeframe, trigger, sub_sid,
                            started_by, start_trigger_idx,
                            validated_parent_idx=None, parent_floor_m15=None,
-                           cap_open=False, bos0_inner=None):
+                           cap_open=False, bos0_inner=None,
+                           pool=None, run_cap_abs=None, parent_path="H1.main"):
         calls.append({
             "start": start_m15_abs, "sd": sd, "end": end_m15_abs,
             "sub_sid": sub_sid, "started_by": started_by,

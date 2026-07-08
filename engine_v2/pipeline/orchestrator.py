@@ -863,6 +863,31 @@ def _run_multi_tf_dual(
         meta["m15_df_prepared"] = ctr_m15
     print(f"[multi_tf:dual] M15 data prepared: {len(conf_m15)} candles x2")
 
+    # --- Phase 2 Stage 3.1: shared sub-structure pool + per-parent-sid run cap ---
+    # The pool caches each unique (parent_path, M15, direction, start) NATURAL-end
+    # MS run so triggers converging on the same four reuse it instead of re-running
+    # MarketStructure. `run_cap` = parent-structure-end (the H1 parent sid's
+    # reversal, mapped to M15 last-of-hour); a sub of that parent sid runs its
+    # geometry to there — always >= every trigger's window, so each trigger's
+    # projection clips the shared run to its window (byte-identical). An open last
+    # parent sid (no reversal) is absent from the dict → the cursor runs to the
+    # M15 data edge. See PART4_REFACTOR_SPEC §17.5/§17.7.
+    from engine_v2.multitf.sub_structure_pool import SubStructurePool
+    from engine_v2.multitf.entity_df_mutation import (
+        _map_parent_idx_to_m15_hour_end,
+    )
+    sub_pool = SubStructurePool()
+    _h1_sid_end: Dict[int, int] = {}
+    for ev in sorted_events:
+        if ev.type == "STATE_CHANGED" and ev.meta.get("to") == "reversal":
+            _s = int(ev.meta.get("structure_id", 0))
+            _h1_sid_end[_s] = max(_h1_sid_end.get(_s, -1), int(ev.idx))
+    parent_struct_end_m15: Dict[int, int] = {}
+    for _s, _hidx in _h1_sid_end.items():
+        _m = _map_parent_idx_to_m15_hour_end(int(_hidx), h1_df, conf_m15)
+        if _m is not None:
+            parent_struct_end_m15[_s] = int(_m)
+
     # --- Group bootstraps + subs by parent cycle ---
     conf_bootstrap_by_cycle: Dict[tuple, Any] = {}
     for v1 in var1_finalized:
@@ -910,9 +935,13 @@ def _run_multi_tf_dual(
             ctr_subs=ctr_subs_by_cycle.get(key, []),
             ctr_path=ctr_path,
             parent_cycle_floor_h1=parent_cycle_floor_h1,
+            pool=sub_pool,
+            parent_struct_end_m15=parent_struct_end_m15,
         )
         conf_results_by_cycle[key] = cr
         ctr_results_by_cycle[key] = kr
+
+    print(f"[pool] unique sub-structure geometries built={len(sub_pool.all())}")
 
     # --- WVMI gating lookups ---
     main_zpt = main_zone_proximity_triggers or {}

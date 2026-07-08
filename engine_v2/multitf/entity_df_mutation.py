@@ -1029,6 +1029,102 @@ def _synth_reversal_trigger(
     )
 
 
+def _build_or_get_sub_geometry(
+    pool,
+    entity_df: pd.DataFrame,
+    *,
+    parent_path: str,
+    sd: int,
+    start_abs: int,
+    run_cap_abs: int,
+    bos0_inner: Optional[float],
+    timeframe: str,
+) -> Optional[Tuple[Any, int]]:
+    """Build — or reuse from the pool — the natural-end geometry for a unique sub
+    (Phase 2, PART4_REFACTOR_SPEC §17.5/§17.7).
+
+    Slices ``[start-50, run_cap]``, preprocesses (compute_imbalance + drop
+    inherited structure cols + re-derive is_range labels — the same LANDMINE
+    guards as ``build_one_sid``), and runs ONE ``compute_bounded_structure``
+    bounded to ``run_cap`` (the sub's NATURAL end — it stops at its first
+    reversal regardless). Cached in ``pool`` keyed
+    ``(parent_path, sub_TF, direction, start)`` so triggers that converge on the
+    same four share the MS run. Returns ``(bounded, slice_begin)`` or ``None`` on
+    a degenerate/failed run.
+
+    ``pool=None`` → no caching; caller passes ``run_cap_abs = window`` to get
+    today's exact per-trigger bounded run (the byte-identical fallback).
+
+    NOTE: the returned ``bounded`` is SHARED across triggers — callers must NOT
+    mutate ``bounded.events`` / ``bounded.df`` in place (the projection deepcopies
+    the events it stamps and window-clips the df it mirrors).
+    """
+    from engine_v2.multitf.sub_structure_pool import StructureKey
+
+    key = StructureKey(parent_path, timeframe, int(sd), int(start_abs))
+    if pool is not None:
+        cached = pool.get(key)
+        if cached is not None and cached.geometry is not None:
+            return cached.geometry
+
+    n = len(entity_df)
+    if start_abs >= n or start_abs >= run_cap_abs:
+        return None
+
+    lookback = 50
+    slice_begin = max(0, start_abs - lookback)
+    trigger_df = entity_df.iloc[slice_begin:run_cap_abs + 1].copy()
+    trigger_df = trigger_df.reset_index(drop=True)
+
+    from engine_v2.patterns.imbalance import compute_imbalance
+    trigger_df = compute_imbalance(trigger_df)
+    cols_to_drop = [
+        c for c in (_STRUCTURE_COLS + _MS_AUX_STRUCTURE_COLS)
+        if c in trigger_df.columns
+    ]
+    if cols_to_drop:
+        trigger_df = trigger_df.drop(columns=cols_to_drop, errors="ignore")
+
+    # Re-derive range labels on the slice (LANDMINE "Sub Slices Must Re-Derive
+    # is_range_* Labels After reset_index").
+    from engine_v2.patterns.range_label import apply_is_range_labels, RangeLabelConfig
+    trigger_df = trigger_df.drop(
+        columns=["is_range", "is_range_confirm_idx", "is_range_lag"],
+        errors="ignore",
+    )
+    trigger_df = apply_is_range_labels(trigger_df, RangeLabelConfig())
+
+    start_in_slice = start_abs - slice_begin
+    run_cap_in_slice = run_cap_abs - slice_begin
+    if len(trigger_df) - start_in_slice < 5:
+        return None
+
+    from engine_v2.structure.structure_engine import compute_bounded_structure
+    try:
+        bounded = compute_bounded_structure(
+            trigger_df,
+            start_idx=start_in_slice,
+            struct_direction=sd,
+            end_idx=run_cap_in_slice,
+            timeframe=timeframe,
+            enforce_cts0_new_extreme=(bos0_inner is not None),
+            bos0_inner=bos0_inner,
+        )
+    except (ValueError, IndexError):
+        return None
+
+    bounded.df.attrs["imbalances"] = trigger_df.attrs.get("imbalances", [])
+    geometry = (bounded, slice_begin)
+    if pool is not None:
+        struct, _created = pool.get_or_create(key)
+        struct.geometry = geometry
+        struct.natural_reversal_idx = (
+            int(bounded.reversal_idx) + slice_begin
+            if bounded.reversal_idx is not None else None
+        )
+    return geometry
+
+
 def build_one_sid(
     entity_df: pd.DataFrame,
     *,
@@ -1045,8 +1141,25 @@ def build_one_sid(
     parent_floor_m15: Optional[int] = None,
     cap_open: bool = False,
     bos0_inner: Optional[float] = None,
+    pool: Any = None,
+    run_cap_abs: Optional[int] = None,
+    parent_path: str = "H1.main",
 ) -> Optional[SidBuildOutcome]:
     """Build ONE bounded single-structure sub sid and mirror it (Part 4 §5/§6.1).
+
+    **Phase 2 Stage 3.1 (pool geometry cache).** When ``pool`` is supplied, the
+    MS run + slice preprocess is built ONCE per unique
+    ``(parent_path, sub_TF, direction, start)`` to its NATURAL end (``run_cap_abs``
+    = parent-structure-end) via ``_build_or_get_sub_geometry`` and REUSED across
+    converging triggers. This sid's PROJECTION then clips that shared run to THIS
+    trigger's window ``[.., end_m15_abs]`` (knowable-at event clip + within-window
+    reversal) and derives its own downstream — byte-identical to the old
+    per-trigger window-bounded build (the run stops at its first reversal, so a
+    window reaching that reversal is identical; a shorter window clips it). When
+    ``pool is None`` (or ``run_cap_abs is None``) the run is bounded to the window
+    exactly as before — the byte-identical fallback. Per-unique-sub RENDER
+    (collapse) is Stage 3.2, not here — this stage still mirrors one sid per
+    trigger.
 
     Replaces the old per-trigger ``apply_trigger_to_entity_df`` tail. The
     probe + parent→M15 mapping moved up into the chain driver; this takes an
@@ -1094,75 +1207,61 @@ def build_one_sid(
         )
         return None
 
-    lookback = 50
-    slice_begin = max(0, start_m15_abs - lookback)
-    trigger_df = entity_df.iloc[slice_begin:end_m15_abs + 1].copy()
-    trigger_df = trigger_df.reset_index(drop=True)
-    trigger_df = compute_imbalance(trigger_df)
-    cols_to_drop = [
-        c for c in (_STRUCTURE_COLS + _MS_AUX_STRUCTURE_COLS)
-        if c in trigger_df.columns
-    ]
-    if cols_to_drop:
-        trigger_df = trigger_df.drop(columns=cols_to_drop, errors="ignore")
-
-    # Re-derive range labels on the slice.
-    # `apply_is_range_labels` runs in `prepare_lower_tf_data` on the FULL
-    # entity-wide M15 df and writes `is_range_confirm_idx` with
-    # ENTITY-ABSOLUTE positional values. After `reset_index(drop=True)`
-    # above, MarketStructure reads those values as if they were slice-local
-    # (see `_is_range_candle_given_confirm` / `_finalize_range_candidate_offline`).
-    # That pollution: (a) emits RANGE_STARTED at a wildly wrong idx that
-    # `mirror_lower_tf_result_to_entity_df` then double-shifts, (b) breaks the
-    # back-fill window bound `min_d = min(confirm_idx, D)` in `_step_anchor`
-    # (the entity-absolute value far exceeds D, so back-fill runs the full
-    # range_max_k window unconditionally), and (c) poisons the `cts_anchor_idx`
-    # snapshot at CTS_CONFIRMED because the over-extended back-fill calls
-    # `_maybe_update_cts_pre_confirm` past the eventual pullback apply_idx,
-    # so `st.cts.idx` records a future extreme. Symptom: BOS_{n+1}.idx can
-    # land BEFORE CTS_n.cts_anchor_idx (cycle-progression invariant
-    # violation). H1 main is unaffected because it never slices.
-    from engine_v2.patterns.range_label import apply_is_range_labels, RangeLabelConfig
-    trigger_df = trigger_df.drop(
-        columns=["is_range", "is_range_confirm_idx", "is_range_lag"],
-        errors="ignore",
+    # Geometry (Stage 3.1): build — or reuse from the pool — the sub's NATURAL-end
+    # MS run + slice preprocess, ONCE per (parent_path, sub_TF, dir, start). The
+    # run cap is parent-structure-end (>= this window). Fallback (no pool / no
+    # run_cap) bounds at THIS window = today's exact behaviour.
+    run_cap_eff = (
+        max(int(run_cap_abs), int(end_m15_abs))
+        if (pool is not None and run_cap_abs is not None)
+        else int(end_m15_abs)
     )
-    trigger_df = apply_is_range_labels(trigger_df, RangeLabelConfig())
+    geom = _build_or_get_sub_geometry(
+        pool, entity_df,
+        parent_path=parent_path, sd=sd, start_abs=start_m15_abs,
+        run_cap_abs=run_cap_eff, bos0_inner=bos0_inner, timeframe=timeframe,
+    )
+    if geom is None:
+        print(
+            f"[entity_compute] WARNING: geometry unavailable for {started_by} "
+            f"sid=({trigger.parent_sid},{trigger.parent_cycle_id},{sub_sid}): "
+            f"start={start_m15_abs} run_cap={run_cap_eff} n={n}"
+        )
+        return None
+    bounded, slice_begin = geom
 
     start_in_slice = start_m15_abs - slice_begin
     end_in_slice = end_m15_abs - slice_begin
-    if len(trigger_df) - start_in_slice < 5:
+    if len(bounded.df) - start_in_slice < 5:
         print(
             f"[entity_compute] WARNING: M15 slice too small "
-            f"({len(trigger_df) - start_in_slice} candles after start) "
+            f"({len(bounded.df) - start_in_slice} candles after start) "
             f"for {started_by} sid=({trigger.parent_sid},"
             f"{trigger.parent_cycle_id},{sub_sid})"
         )
         return None
 
-    try:
-        bounded = compute_bounded_structure(
-            trigger_df,
-            start_idx=start_in_slice,
-            struct_direction=sd,
-            end_idx=end_in_slice,
-            timeframe=timeframe,
-            # Pre-CTS_0 scan-from-start: gate cycle-0 on the probe's BOS_0
-            # inner (a price → slice-invariant; no idx remap). When the
-            # probe didn't hand one (legacy / unexpected), scan stays off
-            # (graceful fallback to prior behaviour).
-            enforce_cts0_new_extreme=(bos0_inner is not None),
-            bos0_inner=bos0_inner,
-        )
-    except (ValueError, IndexError) as exc:
-        print(
-            f"[entity_compute] WARNING: bounded structure failed for "
-            f"{started_by} sid=({trigger.parent_sid},"
-            f"{trigger.parent_cycle_id},{sub_sid}): {exc}"
-        )
-        return None
+    # Within-window reversal (Stage 3.1): the shared geometry runs to its natural
+    # reversal (possibly PAST this window). For THIS trigger's projection the
+    # reversal counts only if it lands at/inside the window; else this window
+    # bounded out with no reversal (exactly today). Because
+    # `compute_bounded_structure` stops at the first reversal, a window that
+    # reaches the natural reversal is byte-identical to a window-bounded run.
+    _nat_rev_local = bounded.reversal_idx
+    within_rev_local = (
+        _nat_rev_local
+        if (_nat_rev_local is not None and _nat_rev_local <= end_in_slice)
+        else None
+    )
 
-    bounded.df.attrs["imbalances"] = trigger_df.attrs.get("imbalances", [])
+    # Events clipped to THIS window by knowable-at (§17.11). Deepcopy so the
+    # SHARED geometry's events are never mutated by this trigger's attribution.
+    from copy import deepcopy as _deepcopy
+    from engine_v2.multitf.sub_structure_pool import knowable_at_idx as _knowable
+    window_events = [
+        _deepcopy(ev) for ev in bounded.events
+        if _knowable(ev.type, ev.idx, ev.meta.get("confirmed_at")) <= end_in_slice
+    ]
 
     # Sub structure lifecycle-start (slice-local). Floors zone/POI activation so
     # no sub artifact is active before the sub structure is alive (Phase 3 Commit
@@ -1198,7 +1297,7 @@ def build_one_sid(
     #     open last cycle. `effective_end_abs` (run/metadata bound) stays the edge;
     #     only the lifecycle CAP is dropped.
     reversal_idx_abs: Optional[int] = (
-        bounded.reversal_idx + slice_begin if bounded.reversal_idx is not None else None
+        within_rev_local + slice_begin if within_rev_local is not None else None
     )
     effective_end_abs = (
         reversal_idx_abs if reversal_idx_abs is not None else end_m15_abs
@@ -1216,7 +1315,7 @@ def build_one_sid(
 
     downstream = _run_downstream_pipeline(
         bounded.df,
-        bounded.events,
+        window_events,
         bounded.struct_direction,
         source_kinds=["BOS"],
         fib_mode="cross_cycle",
@@ -1244,7 +1343,7 @@ def build_one_sid(
     next_start_abs: Optional[int] = None
     next_sd: Optional[int] = None
     next_bos0_inner: Optional[float] = None
-    if bounded.reversal_idx is not None:
+    if within_rev_local is not None:
         probe_sd = -sd
         # Reference = prior structure's (sid=0) most recent {CONF/UPD/EST} CTS.
         # downstream (with kl_zones) already ran above, so the CONFIRMED-zone
@@ -1281,7 +1380,7 @@ def build_one_sid(
             # compute_bounded_structure) — a mask without the structure_id
             # filter sweeps those up. `bounded.reversal_idx` is the canonical
             # single-source value; don't recompute it.
-            reversal_end_local = int(bounded.reversal_idx)
+            reversal_end_local = int(within_rev_local)
             probe_input_idx = int(ref_zone.source_event_idx)
             if probe_input_idx >= reversal_end_local:
                 # No forward scan window — degenerate; no reversal-born sid.
@@ -1334,7 +1433,8 @@ def build_one_sid(
         "parent_sid": trigger.parent_sid,
         "parent_cycle_id": trigger.parent_cycle_id,
     }
-    for ev in bounded.events:
+    # Stamp the WINDOW event copies (never the shared geometry's originals).
+    for ev in window_events:
         ev.meta.update(attribution)
     for zone in downstream["kl_zones"]:
         zone.meta.update(attribution)
@@ -1355,8 +1455,10 @@ def build_one_sid(
 
     result = LowerTFResult(
         trigger=trigger,
-        df=bounded.df,
-        events=bounded.events,
+        # Window-clipped for the mirror's structure-column write (the shared
+        # geometry df extends to run_cap; render only THIS window).
+        df=bounded.df.iloc[0:end_in_slice + 1],
+        events=window_events,
         kl_zones=capped_zones,
         wave_candles=downstream["wave_candles"],
         fib_states=capped_fibs,
@@ -1368,7 +1470,7 @@ def build_one_sid(
             "m15_start_idx": start_m15_abs,
             "m15_end_idx": effective_end_abs,
             "m15_bound_idx": end_m15_abs,
-            "m15_candle_count": len(trigger_df),
+            "m15_candle_count": end_in_slice + 1,
             "validated_h1_start": validated_parent_idx,
             "slice_begin": slice_begin,
             # Canonical identity (§2 / §6.1): the tuple
@@ -1391,14 +1493,14 @@ def build_one_sid(
         structure_path_id=sub_path_id,
     )
 
-    _slice_len = len(trigger_df)
+    _slice_len = end_in_slice + 1
     print(
         f"[entity_compute] {started_by} "
         f"id=({trigger.parent_sid},{trigger.parent_cycle_id},{sub_sid}) "
         f"start={start_m15_abs} end={effective_end_abs} bound={end_m15_abs} "
         f"slice_len={_slice_len} "
         f"reversed={reversal_idx_abs is not None} "
-        f"events={len(bounded.events)} kl={len(capped_zones)} "
+        f"events={len(window_events)} kl={len(capped_zones)} "
         f"poi={len(capped_pois)} fib={len(capped_fibs)}"
     )
 
@@ -1493,6 +1595,9 @@ class _ChainCursor:
         sub_path_id: str,
         parent_cycle_floor_h1: Optional[Dict[tuple, int]] = None,
         sibling_entity_df: Optional[pd.DataFrame] = None,
+        pool: Any = None,
+        parent_struct_end_m15: Optional[Dict[int, int]] = None,
+        parent_path: str = "H1.main",
     ) -> None:
         self.entity_df = entity_df
         self.parent_df = parent_df
@@ -1501,6 +1606,19 @@ class _ChainCursor:
         self._sibling_df = sibling_entity_df
         self.results: List[LowerTFResult] = []
         self.done = False
+
+        # Phase 2 Stage 3.1: pool for shared natural-end geometry + the run cap
+        # (parent-structure-end in M15) each sid's geometry runs to. `pool=None`
+        # → per-trigger window-bounded build (byte-identical fallback). The run
+        # cap is per parent_sid (all this cursor's sids share `bootstrap.parent_sid`).
+        self.pool = pool
+        self.parent_path = parent_path
+        self.run_cap_m15: Optional[int] = None
+        if parent_struct_end_m15 is not None:
+            self.run_cap_m15 = parent_struct_end_m15.get(int(bootstrap.parent_sid))
+        if self.run_cap_m15 is None:
+            # Open last parent sid (or no map) → run to the data edge.
+            self.run_cap_m15 = int(entity_df.index[-1])
 
         # Parent-cycle end (entity-absolute). None ⇒ open cycle → data edge.
         from engine_v2.multitf.lower_tf_pipeline import _find_m15_lifecycle_end
@@ -1681,6 +1799,9 @@ class _ChainCursor:
             parent_floor_m15=self.parent_floor_m15,
             cap_open=cap_open,
             bos0_inner=self.cur_bos0_inner,
+            pool=self.pool,
+            run_cap_abs=self.run_cap_m15,
+            parent_path=self.parent_path,
         )
         if outcome is None:
             # Degenerate / failed sid ends the chain (conservative).
@@ -1771,6 +1892,9 @@ def build_two_entity_parent_cycle(
     ctr_subs: List[MultiTFTrigger],
     ctr_path: str,
     parent_cycle_floor_h1: Optional[Dict[tuple, int]] = None,
+    pool: Any = None,
+    parent_struct_end_m15: Optional[Dict[int, int]] = None,
+    parent_path: str = "H1.main",
 ) -> Tuple[List[LowerTFResult], List[LowerTFResult]]:
     """Build one parent cycle's confluence + counter chains INTERLEAVED in
     cadence order, each reading the other entity_df as sibling (Part 4 §6.1 +
@@ -1795,6 +1919,9 @@ def build_two_entity_parent_cycle(
             sub_path_id=conf_path,
             parent_cycle_floor_h1=parent_cycle_floor_h1,
             sibling_entity_df=ctr_df,
+            pool=pool,
+            parent_struct_end_m15=parent_struct_end_m15,
+            parent_path=parent_path,
         )
         if conf_bootstrap is not None else None
     )
@@ -1805,6 +1932,9 @@ def build_two_entity_parent_cycle(
             sub_path_id=ctr_path,
             parent_cycle_floor_h1=parent_cycle_floor_h1,
             sibling_entity_df=conf_df,
+            pool=pool,
+            parent_struct_end_m15=parent_struct_end_m15,
+            parent_path=parent_path,
         )
         if ctr_bootstrap is not None else None
     )
