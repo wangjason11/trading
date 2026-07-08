@@ -1,0 +1,4 @@
+commit_hash=3cb6513
+timestamp=20260708_010854
+branch=week8-volmom-multitf
+commit_message=Phase 2 pool Stage 1+2 (dead code)
