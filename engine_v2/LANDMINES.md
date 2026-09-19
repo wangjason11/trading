@@ -1435,9 +1435,25 @@ where the inner KL derivation said `"ended"` and the cap said `"inactive"`.
 
 ## Sub-Structure Pool: Alignment Is Direction-Derived, NOT Sticky-Per-Entity (Phase 2, 2026-07-08)
 
-> Design LANDMINES for the sub-structure pool. Canonical spec:
-> `PART4_REFACTOR_SPEC.md §17`; memory `project_sub_structure_pool_architecture.md`.
-> These describe the TARGET (pool) model — verify against code once Phase 2 lands.
+> Design LANDMINES for the sub-structure pool. Canonical:
+> PART4 §17 (rev 2, 2026-09-19 — the authoritative model) + memory
+> `project_sub_structure_pool_architecture.md` (rationale history).
+>
+> **⚠ PARTIALLY SUPERSEDED 2026-09-19.** The next four entries describe the
+> 2026-07-08 §17 model. What still holds: identity is `(parent_path, sub_TF,
+> direction, starting_idx)` with ABSOLUTE direction; a `reversal` trigger is
+> sticky-per-chart (lens); the knowable-at clip; run cap ≠ lifecycle end. What
+> is RETRACTED: the pool-wide `≤1 active per (parent_path, sub_TF, direction)`
+> rule and its "cross-chain reversal interaction" (replacement is now scoped to
+> `(lens, parent_sid, parent_cycle_id, sub_TF, direction)` — a counter record
+> never ends a confluence record); the single scalar lifecycle
+> `start = min(trigger_dt)` / `end = min(end ≥ max start)` (replaced by
+> per-record lifecycles aggregated into the unique sub, with the parent-cycle
+> floor on every record and the strict `>` filter — see the memory file);
+> "alignment is direction-derived" now lives in a separate `relative_dir`
+> field, distinct from `lens`; run cap moves to the data edge (a RECORD cannot
+> outlive its parent structure, a unique sub can). Read the entries below as
+> history of what was tried and why it was wrong.
 
 **Rule:** Under the pool, a sub structure's identity is `(parent_path, sub_TF,
 direction, starting_idx)` with `direction` **absolute (+1/−1)**. Confluence vs
@@ -1536,3 +1552,91 @@ by `ev.idx` uniformly. Clipping by `ev.idx` would surface a BOS whose extreme is
 inside the window but whose confirmation lookahead landed past it — an event the
 Phase-1 bounded run could not have known. Knowable-at matches Phase-1 semantics
 and neutralizes the boundary-straddling-confirmation case.
+
+---
+
+## MarketStructure Range Look-Ahead Leaks Past `end_idx` (CONFIRMED 2026-09-10; fix = Plan A)
+
+**Rule:** A bounded MS run (`end_idx` set — every sub build and every Phase-2
+probe) may only *read* candles `≤ effective_end`, because in live those are the
+only candles that exist. Today it does not: the main loop is bounded
+(`effective_end = min(n-1, end_idx)`, `while i <= effective_end`) but the
+range-detection look-ahead is clamped to the **dataframe end**, not the bound:
+
+```python
+# market_structure.py:897 and :1535
+D = min(i + self.range_max_k, n - 1)   # should be min(i + range_max_k, effective_end)
+```
+
+So when `i` is within `range_max_k` (5) candles of the bound, MS reads past it
+and emits `RANGE_STARTED` / `STATE_CHANGED` (and, via the range path,
+`CTS_CONFIRMED`) stamped **beyond `end_idx`**. Measured on the 2025-11→2026-01
+window: FC(0,0) probe +4 candles, FC(1,0) +1 (`CTS_CONFIRMED@2844` on a run
+bounded at 2843), FC(1,1) +3. Main runs are unaffected (`effective_end == n-1`).
+
+**Why it matters:**
+- A bounded run is not reproducible from its stated bound. FC(1,0)'s leaked
+  `CTS_CONFIRMED@2844` is the *only* reason its `finalize_idx` is 2844 and its
+  retrace window is `[…2841]` instead of `[…2843]` — it can move `start_idx`,
+  i.e. the pool key.
+- `unified_probe`'s docstring calls `end_idx` an "Inclusive supreme upper
+  bound". False today.
+- It breaks `end_idx`-causality — the entire justification for the pool's
+  "build once to natural end, clip to window ≡ bounded run" equivalence.
+  `test_pooled_structure_build::test_events_knowable_at_are_causal_in_end_idx`
+  and `test_bounded_structure::test_end_idx_caps_before_reversal` pass ONLY
+  because their fixtures never fire a range check near the boundary.
+
+**Fix (Plan A — `plans/PLAN_A_ms_bounds_leak.md`, written 2026-09-19):** clamping
+`D` is necessary but NOT sufficient. The audit found four sites: **L1** `D`
+(pattern applies + back-fill); **L2** `RANGE_STARTED` / `STATE_CHANGED→RANGE` are
+stamped at the pre-computed `is_range_confirm_idx` label (`:1129/:1144`), which
+is never compared to the bound — that is the FC(1,1) `@3050` leak, untouched by
+`D`; **L3** `BreakoutPatterns` guards on `len(df)`, and its priority rule can let
+a future candle pre-empt a knowable 2-candle pattern; **L4** the reversal-watch
+expiry / rewind target clamp to `n-1`. Decided semantics: a bounded run at `B`
+≡ an unbounded run on the frame truncated at `B` (`effective_end` IS the run's
+data edge) — checked by a property test over EVERY bound, not a single fixture.
+It is NOT prefix-equivalence with the natural-end run (the last 5 candles can
+legitimately differ — see the plan §2). "Look ahead but suppress emission" is NOT
+an option — it uses future information and hides it. Sub geometry builds slice
+their frame to the bound already, so the only production path that changes is
+the first_confluence probe's Phase-2 MS run (FC(1,0) finalize 2844→2843).
+Reproduce with `debug/probe_fc_finalize.py`.
+
+---
+
+## Degenerate Parent Cycles: Log the Trigger, Don't Build the Sub (2026-09-19)
+
+**Rule:** A parent cycle whose lifecycle **floor ≥ lifecycle end** (zero or
+negative length) is *degenerate*. Every sub trigger inside it is provably
+inert — its record's `start_idx = max(finalize, floor) ≥ floor ≥ end ≥
+trigger_end`, so `end_idx == start_idx` no matter what the probe returns. For
+such triggers: **write an unresolved-trigger log row (`reason =
+degenerate_parent_cycle`, no `sub_id`), and do NOT run the probe, MS, or
+downstream.**
+
+**Why they exist:** the reversal handoff makes a post-reversal parent's
+lifecycle start at the prior sid's reversal (`compute_struct_start_by_sid`),
+but that parent's early cycles were built retroactively *before* it. H1 sid 1
+on the 2025-11→2026-01 window: `struct_start = 902`; cycle (1,0) spans H1
+703→748 (M15 floor 3611 > end 2995 — inverted), (1,1) spans 748→902 (floor
+3611 == end 3611 — zero). Only (1,2) is a real cycle. Every sub anomaly that
+motivated the pool redesign traces to those two cycles.
+
+**Why not probe anyway (to link the record to a unique sub):** three of the
+five trigger types resolve their probe input from the *sibling's* CTS events;
+if the sibling in a degenerate cycle was never built, the probe falls back to
+the ad-hoc BOS_0 and returns a **different `starting_idx`** — a phantom pool
+key that never gets geometry. Post-end re-triggers in a LIVE cycle are the
+opposite case: probe normally, link to the frozen sub, skip MS (zero-length
+`TriggerRecord`, has `sub_id`, participates in nothing but the log).
+
+**Consequences to accept:** memberships from degenerate cycles vanish from live
+subs (e.g. sub `3304/-1` loses its (1,1) records and its counter-lens
+presence); reversal-born successors inside a degenerate cycle never fire (the
+reversal is equally inert). **Log a WARNING per degenerate parent cycle** — it
+is the clearest signal of a retroactive parent, and nothing surfaces it today.
+Under 3.2a these subs rendered as outline-only `status="inactive"` zones; under
+3.2b (`9fd3143`, superseded) they were wrongly LIVE because the parent floor was
+dropped on the render path.

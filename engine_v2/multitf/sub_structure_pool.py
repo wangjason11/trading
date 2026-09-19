@@ -9,10 +9,21 @@ of re-running MarketStructure + the downstream pipeline.
 This module is the pure data model + lifecycle logic. It is deliberately
 free of pandas / MS / chart imports so it can be unit-tested in isolation and
 depended on by both the build layer (`entity_df_mutation` / orchestrator) and
-the chart layer. The natural-end structure BUILDER (`build_pooled_structure`)
-and the render projection land in Stage 2 — this stage is dead code (imported
-by nothing on the live path) and validated by unit tests + a byte-identical
-`/compare`.
+the chart layer.
+
+LIVE since Stage 3.1/3.2a — imported by `entity_df_mutation` (geometry cache,
+`TriggerRecord` append, knowable-at clip) and `pipeline/orchestrator`
+(`SubStructurePool`, `finalize_lifecycles`). NOT dead code.
+
+**SUPERSEDED DESIGN (2026-09-19):** the lifecycle model implemented here
+(`finalize_lifecycles`: `start = min(trigger_dt)` with no parent floor,
+`end = min(end-cand >= max start)` over a POOL-WIDE candidate set, one scalar
+lifecycle per sub) is being replaced by the TriggerRecord model — a triggered
+instance with its OWN parent-bound lifecycle `[start_idx, end_idx]`, per-lens
+same-direction replacement, and a unique-sub lifecycle aggregated from its
+records. `TriggerRecord` and `finalize_lifecycles` will be rewritten in Plan C;
+`resolve_lens` becomes the live lens rule (today the build path uses a
+substring test instead). Canonical: `memory/project_sub_structure_pool_architecture.md`.
 
 Key model points (see §17 for the authoritative spec):
 

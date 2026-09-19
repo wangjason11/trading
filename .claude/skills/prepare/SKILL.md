@@ -146,6 +146,23 @@ Once you have reviewed everything, provide a summary:
 
 End with: "Ready for specifications."
 
+### 6. Persist what you found (do not skip)
+
+A `/prepare` that surfaces findings — spec-vs-code divergences, stale docs,
+suspected bugs, contradictions between docs — has produced work that lives
+only in this session unless you write it down. Gitignored artifacts
+(`artifacts/_prep_reports/`, replay logs) and the session scratchpad are
+**not** a handoff; a 2026-08 audit session left ten reports there with no
+memory entry and they were nearly lost.
+
+- If the session will end before the findings are acted on, run `/remember`
+  (at minimum: a memory file + a `MEMORY.md` pointer) before it ends.
+- Prefer a **live reproduction** over inference for any load-bearing claim
+  (e.g. run the actual probe and capture the real `ProbeResult`, rather than
+  inferring `finalize_condition` from CSV values) — one August inference was
+  wrong and cost a discussion round to unwind.
+- See `memory/feedback_persist_prepare_audits.md`.
+
 ## Why This Matters
 
 Building features without full context leads to:

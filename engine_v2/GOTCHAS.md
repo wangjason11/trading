@@ -1550,3 +1550,82 @@ byte-identical — proximity never hit the pre-expanded-range or
 create-range-from-BREAKOUT case there); their correctness rests on the static
 blast-radius analysis. 309 tests green. See
 `project_unified_identify_start_probe.md` (MS fix = Step 3 lead item).
+
+---
+
+## A Lifecycle Floor That Lives in a Build Function Is Lost by Any Path That Bypasses It (3.2b, 2026-09-10)
+
+**Symptom:** Stage 3.2b (`9fd3143`) added `render_unique_sub` to render each
+pooled sub once per lens. Chart review showed five sub structures that were
+inert outlines in the baseline (`confirmed_idx 3611, status inactive`) suddenly
+fully live, zones filled hundreds of candles early, and a counter sub cut off
+at 2844 "by a structure not on that chart". 418 tests green throughout.
+
+**Cause:** the parent-cycle lifecycle floor (plan B1) was computed as a
+**local variable inside `build_one_sid`**
+(`_floor_abs = max(start_trigger_idx, parent_floor_m15)`), never stored on
+the `TriggerRecord` or the `PooledStructure`. `render_unique_sub` bypassed
+`build_one_sid`, read the record's raw `trigger_dt`, and the floor was
+silently gone. The cross-chain cut was a *consequence*: same-direction
+replacement compared other subs' equally-unfloored starts. Root cause was the
+SPEC — §17.6 defined `start = min(trigger_dt)` and stopped; the code
+implemented it faithfully ("incorrect docs, faithfully implemented" — the
+mirror image of the usual failure).
+
+**Lesson:** a lifecycle value that clamps *when an object is active* is a
+property of that object. Put it ON the record/sub (`start_idx` = already
+floored) at creation; never re-derive it per consumer. And when a spec rule
+is a *refinement* of an existing rule (§17.6 refining §5), the spec must
+restate the parent rule, not assume it. Diagnosed by a keyed diff of the KL
+zone CSVs (`(anchor_idx, base_idx, cycle_id, struct_direction)` — immune to
+the `sub_id` renumber): every parent-sid-1 zone flipped `inactive→ended`.
+Canonical fix = the TriggerRecord model, `memory/project_sub_structure_pool_architecture.md`.
+
+---
+
+## `ProbeResult.finalize_idx` Is Native-M15 OR a Mapped H1 Value Depending on `finalize_condition` — Don't Assume Either (2026-09-10)
+
+`finalize_idx` is a single int but its provenance differs by exit:
+
+| `finalize_condition` | value | frame |
+|---|---|---|
+| `second_cts_reached` | 2nd `CTS_ESTABLISHED.idx` from the probe's own MS run | native sub-TF |
+| `reversal_in_probe` | reversal apply idx | native sub-TF |
+| `no_retrace` (cycle 0 confirmed in-window) | `CTS_0_CONFIRMED.idx` | native sub-TF |
+| `no_retrace` (else) / `end_idx_reached` / Phase-1 | `end_idx` | **mapped** from the parent (price-mapped `cts_anchor_idx` for `first_confluence`; last-of-hour for the sibling-referencing variations) |
+
+Live run on the 2025-11→2026-01 window (`debug/probe_fc_finalize.py`):
+FC(0,0) 1020 and FC(0,1) 2608 are native 2nd-CTS values (2608 lands 3 candles
+*before* its own trigger at 2611 — the parent floor repairs it); FC(1,1) 3047
+and FC(1,2) 3621 are the price-mapped parent anchor; FC(1,0) 2844 was a native
+`CTS_0_CONFIRMED` that only existed because of the MS bounds leak (LANDMINES).
+So: (a) the `else end_idx` branch is the COMMON case, not an edge; (b) do not
+"fix the mapping of finalize_idx" — only the `end_idx`-derived branch is
+mapped, and changing that mapping also moves the probe's search bound and
+therefore `starting_idx` (the pool key); (c) when a value looks one candle
+past a mapped bound, suspect the bounds leak before suspecting the mapper.
+
+**Two different "anchor"s** (GLOSSARY): the parent's `cts_anchor_idx` (H1,
+`CTS_CONFIRMED.meta`, the probe bound) vs the probe's own M15 `cts0_anchor`
+(Phase-2 MS `CTS_0_CONFIRMED`). Conflating them cost a full discussion round.
+
+---
+
+## `ref=cts_confirmed` in a Replay Log Does NOT Mean the Derived CTS Zone Was Used (2026-09-19)
+
+`build_reference_zone_from_cts_event` has two branches: the CONFIRMED branch (find the existing CTS
+KL zone for `(structure_id, cycle_id)`) and the ad-hoc fallback (`_derive_cts_zone_ad_hoc`). **Both**
+label the returned `ReferenceZone.source` by the winning EVENT's type — the derived branch hard-codes
+`"cts_confirmed"` (`reference_zone.py:373`) and the ad-hoc branch maps `CTS_CONFIRMED → "cts_confirmed"`,
+`CTS_UPDATED → "cts_updated"`, else `"cts_established"` (`:383-388`). So the `ref=…` token in the probe
+log lines cannot tell you which branch ran. A review this session inferred "8 probes use the derived
+zone" from that token; the truth is the opposite:
+
+**For subs the CONFIRMED branch is dead.** `_find_existing_cts_kl_zone` requires `source_kind == "CTS"`,
+but `_run_downstream_pipeline` derives the full KL set internally and returns `source_kinds=["BOS"]` for
+subs — and that BOS-only list is what both readers get (the reversal probe reads `downstream["kl_zones"]`,
+the sibling-CTS read reads the mirrored `attrs["kl_zones"]`; the sub KL CSVs contain zero CTS rows). Every
+sub reference zone is ad-hoc-derived today. Consequence for Plan C: passing `kl_zones=[]` to the
+primitive from the pool path is exactly behaviour-preserving. If you want to know which branch ran, log
+inside the primitive, not the `source` field. Follow-up (unscheduled): whether subs *should* get the
+derived CTS zone.

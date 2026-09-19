@@ -163,3 +163,26 @@
 | **CTS_RECONFIRMED** | Event emitted at the pullback idx when CTS was originally confirmed via sd zone proximity AND a valid pullback later fires. The original `CTS_CONFIRMED` event stays at the proximity idx (append-only). The CTS zone meta gets upgraded to `"pullback"` with `pb_reconfirm_idx` recorded. |
 | **pb_reconfirm_idx** | Idx of the pullback that re-affirmed a proximity-confirmed CTS. Logged on the CTS KL zone meta. Only present when `confirmation_method` was originally `"sd_zone_proximity"` and a pullback fired afterward. |
 | **proximity-confirmed CTS** | Shorthand for a CTS whose `confirmation_method == "sd_zone_proximity"`. Such cycles can complete WITHOUT a valid pullback pattern firing (the cycle still progresses to next BOS via breakout pattern; BOS_n+1 = max retracement in `[cts_confirmed_idx, breakout_idx]`). |
+
+---
+
+## Sub-Structure Pool Terms (model decided 2026-09-19; canonical: `memory/project_sub_structure_pool_architecture.md`)
+
+| Term | Definition |
+|------|------------|
+| **unique sub** | One M15 (sub-TF) market structure, identified by `(parent_path, sub_TF, direction, starting_idx)` with ABSOLUTE `direction`; `sub_id` is its global monotonic id. Computed once (geometry to the data edge), has ONE lifecycle `[start_idx, end_idx]`, **spans parent cycles and parent sids**, and is what we trade on. |
+| **TriggerRecord** | A triggered *instance* of a unique sub: one trigger that resolved to it. Identity `(lens, parent_sid, parent_cycle_id, trigger_sub_sid)`. Has its OWN parent-bound lifecycle; feeds the unique sub's lifecycle but does not equal it. `sub_id` is never None on a record. |
+| **trigger_sub_sid** | Per-`(lens, parent_sid, parent_cycle_id)` counter, +1 each time a trigger in that scope resolves to a *new* unique sub (two triggers resolving to the same sub share one record). Replaces the old per-parent-cycle `sub_sid`. |
+| **sub_id** | Global unique-sub id. Stamped on every structural artifact (events, KL/POI/fib/WVMI meta, `SidRecord`). Replaces `sub_sid` on those objects (hard rename). |
+| **lens** | Which chart a record attributes its sub to: `confluence` / `counter`. Named triggers map by use case; a `reversal` record inherits the lens of the record whose sub reversed (sticky-per-chart). A unique sub is drawn on every lens it has a non-zero-length record on, over the SUB's window. |
+| **relative_dir** | `confluence` iff `direction == parent_sd` of the record's parent cycle, else `counter`. A *semantic* label distinct from `lens` — a sub can be `relative_dir=counter` yet render on the confluence chart (reversal-stickiness). On the unique sub it is a step function over record handovers. |
+| **trigger_idx** | Candle the trigger fired (last-of-hour map of the parent candle; native M15 for `reversal`). Historical, not a lifecycle value. |
+| **probe_finalize_idx** | `ProbeResult.finalize_idx` as-is — when the probe's decision became final. Native M15 or a mapped parent value depending on `finalize_condition` (GOTCHAS). Historical. |
+| **start_idx (record)** | `max(probe_finalize_idx, parent-cycle floor)` — the TRUE real-time lifecycle start. `start_idx − probe_finalize_idx` measures how retroactive the structure was. |
+| **trigger_end_idx / end_idx (record)** | `trigger_end_idx` = first of {own reversal, same-direction replacement, parent end} (or the sub's frozen end on a post-end re-trigger); `end_idx = max(trigger_end_idx, start_idx)`. Set once, never updated. |
+| **same-direction replacement** | A new record in the same `(lens, parent_sid, parent_cycle_id, sub_TF, direction)` mapping to a DIFFERENT unique sub ends the active record at the new record's `start_idx`. Same-lens only; ≤1 active record per `(lens, parent, direction)`. |
+| **degenerate parent cycle** | Parent cycle whose lifecycle floor ≥ lifecycle end (zero/negative length; caused by the reversal handoff on a retroactive parent). Triggers inside it go to the unresolved-trigger log; nothing is built. |
+| **zero-length record** | A `TriggerRecord` with `end_idx == start_idx` (post-end re-trigger, or own reversal before the floored start). Has a `sub_id`; participates in nothing but the log. |
+| **unresolved-trigger log** | Separate table of triggers that never became records: `reason ∈ {pending, degenerate_parent_cycle, probe_failed}`. No `sub_id`, no `trigger_sub_sid`. |
+| **`cts_anchor_idx` (parent)** | On `CTS_CONFIRMED.meta`: the H1 candle holding the parent CTS **extreme** at confirmation (migrates via `CTS_UPDATED`; ≠ `CTS_ESTABLISHED.idx`). `first_confluence`'s probe bound, price-mapped to M15. |
+| **`cts0_anchor` (probe)** | Inside `unified_probe` Phase 2: the probe's OWN M15 `CTS_0_CONFIRMED.cts_anchor_idx`, which caps the retrace window at `cts0_anchor − 1`. A different object from the parent's `cts_anchor_idx` despite the name. |

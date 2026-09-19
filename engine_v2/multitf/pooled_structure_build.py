@@ -20,7 +20,17 @@ at it share both, which is the dedup win):
   `lifecycle_floor`/`lifecycle_cap`. Byte-identical to a Phase-1 window-bounded
   build (proven by the equivalence tests) because MS is causal in `end_idx`.
 
-Stage 2 lands these as dead code (no live caller) + the equivalence tests.
+Caller status (2026-09-19): `project_to_window` / `clip_events_to_window` were
+called only by `entity_df_mutation.render_unique_sub` (Stage 3.2b, `9fd3143`),
+which is being reverted — after that this module again has NO live caller
+until Plan C, which will call `project_to_window` ONCE per unique sub (unified
+window) and mirror the result into each lens df. `build_structure_geometry` has
+never had a live caller — production geometry is
+`entity_df_mutation._build_or_get_sub_geometry`, which re-implements the same
+`compute_bounded_structure` call plus slicing, 50-candle lookback, `reset_index`,
+`compute_imbalance` and `is_range` re-derivation; the two have already drifted
+and the TESTED one is the dead one. Plan C
+(`memory/project_sub_structure_pool_architecture.md`) should collapse them.
 """
 from __future__ import annotations
 
@@ -101,11 +111,18 @@ def project_to_window(
     """Derive the render snapshots for one lifecycle window over a natural-end run.
 
     Clips events by knowable-at (§17.11), then runs the downstream pipeline with
-    this window's `lifecycle_floor`/`lifecycle_cap`. Called ONCE per unique sub
-    (its single finalized lifecycle, §17.7) — so N triggers pointing at the sub
-    share this one derivation. Returns the downstream dict (kl_zones, poi_zones,
-    fib_states, wave_candles, wvmi_records, prev_bos_lines, ...) plus the clipped
-    `events`.
+    this window's `lifecycle_floor`/`lifecycle_cap`. Intended to be called ONCE
+    per unique sub (§17.7); at HEAD `9fd3143` it is called once per (sub, lens)
+    with DIFFERENT floors (the 3.2b per-lens start) — superseded; Plan C returns
+    to one call per sub (unified window) mirrored into each lens df. Returns the
+    downstream dict (kl_zones, poi_zones, fib_states, wave_candles, wvmi_records,
+    prev_bos_lines, ...) plus the clipped `events`.
+
+    Known limits (2026-09-19): `clip_events_to_window` returns the SHARED event
+    objects un-deepcopied (safe only while nothing downstream mutates `ev.meta`);
+    `knowable_at_idx` special-cases only `BOS_CONFIRMED` — `CTS_ESTABLISHED`
+    (`confirmed_at`) and `REVERSAL_CANDIDATE` (`apply_idx`) also straddle a cap,
+    so a mid-pair clip yields a half-derived cycle.
 
     `skip_wvmi=True` (sub WVMI is parent-event-driven, computed later, §8.3/8.4).
     """

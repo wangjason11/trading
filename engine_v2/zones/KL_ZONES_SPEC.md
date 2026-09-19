@@ -225,7 +225,18 @@ that propagation is applied as a cap with `end_reason="lifecycle_end"` in
 `multitf/entity_df_mutation.py::build_one_sid` (the structure-end →
 open-cycle-end → zone-end pass-through for subs).
 
-### End-side change: BOS ends align to the cycle boundary (CTS-established extreme)
+### End-side change: BOS ends align to the cycle boundary (CTS-established moment)
+
+> **CORRECTED 2026-09-19 — the boundary is the MOMENT, not the extreme.** A cycle's
+> lifecycle begins when it is *established* — `CTS_ESTABLISHED.meta["confirmed_at"]`
+> (the apply candle, == `BOS_CONFIRMED.meta["confirmed_at"]` by definition). `CTS_ESTABLISHED.ev.idx`
+> is the CTS **extreme**, a historical anchor like `BOS_CONFIRMED.ev.idx`; it can precede
+> the moment (3 sub cycles on the current window: 1223 vs 1224, 2828 vs 2829 ×2 — identical on H1
+> there only by coincidence). The text below and today's `structure_lifecycle.compute_cycle_lifecycle`
+> use the extreme; **Plan C (`engine_v2/plans/PLAN_C_lifecycle_rewrite.md` §3) moves the canonical
+> cycle-start — and therefore every cycle end that is "the next cycle's start" — to the moment.**
+> Until Plan C lands, the code behaves as described below; after it, read "`ev.idx`" in this section
+> as `meta["confirmed_at"]`. Lifecycle values are real-time; anchors are historical — never mix.
 
 The cycle boundary is the next cycle's `CTS_ESTABLISHED` **`ev.idx`** — the
 CTS *extreme* candle (the same idx POI uses: `cts_established_by_key[next].idx`).

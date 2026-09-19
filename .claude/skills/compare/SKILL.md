@@ -306,6 +306,24 @@ Total: 21 CSVs per replay (POI-zones CSVs added 2026-06-08). Current path is `ar
 path is whichever step 1 resolved to: `artifacts/commits/<branch>/<folder>/`
 (new layout) or `artifacts/commits/<folder>/` (legacy flat layout).
 
+**Files present on only one side are a finding, not a skip.** Diff the two
+file *lists* first and report every `NEW (no baseline)` and `MISSING (in
+baseline, not produced)` file explicitly. The pool/lifecycle redesign (Plan
+C, 2026-09) replaces the per-lens `*_sids.csv` with `*_subs.csv` +
+`*_triggers.csv` + `*_unresolved_triggers.csv`; on its first run those have
+no baseline and the old file disappears — both must be called out, and the
+new tables are validated against the plan's **predicted table**
+(`memory/reference_pool_redesign_groundtruth.md`) rather than a prior save.
+A missing per-sub CSV can also mean the chart export that it is coupled to
+crashed (see `run_replay.py` — per-sub CSVs are written inside the chart
+loop), so treat MISSING as a possible crash signal.
+
+**Classify deltas against the plan's stated expectations.** When the change
+being compared has a plan that lists its expected deltas (per
+`memory/feedback_one_cause_per_compare.md`), the summary's EXPECTED /
+UNEXPECTED split is *against that list* — an "expected byte-identical" plan
+with any non-empty diff is a bug signal, not a review task.
+
 ## Chart Count Parity (Corroborating check)
 
 Chart trace/shape counts tally everything rendered for an entity, so a
@@ -334,6 +352,12 @@ A run with all 18 CSVs byte-identical but shifted chart counts means a
 purely rendering-side change (e.g. style registry tweak). A run with
 matching chart counts but mismatched CSVs means a logic change. Both
 matrices clean = full parity.
+
+When an M15 count moves and the cause is not obvious, run
+`PYTHONPATH=. python engine_v2/debug/chart_census.py <baseline.html> <current.html>`
+— it prints a per-element / per-sub trace census of the two saved charts side
+by side, so the shifted count is attributed to a specific element class and
+sub before any CSV digging.
 
 ## Per-Cycle Proximity Trigger Counts (Required when proximity logic changed)
 
