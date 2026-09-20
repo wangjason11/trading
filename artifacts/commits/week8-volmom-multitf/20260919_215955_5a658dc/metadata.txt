@@ -1,0 +1,4 @@
+commit_hash=5a658dc
+timestamp=20260919_215955
+branch=week8-volmom-multitf
+commit_message=Revert 3.2b (9fd3143) - tree back to Stage 3.2a semantics (c932610); Plan A baseline
