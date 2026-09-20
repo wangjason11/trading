@@ -1589,7 +1589,7 @@ Canonical fix = the TriggerRecord model, `memory/project_sub_structure_pool_arch
 
 | `finalize_condition` | value | frame |
 |---|---|---|
-| `second_cts_reached` | 2nd `CTS_ESTABLISHED.idx` from the probe's own MS run | native sub-TF |
+| `second_cts_reached` | 2nd `CTS_ESTABLISHED.idx` from the probe's own MS run (the EXTREME; Plan B changes this to `meta["confirmed_at"]`, the moment — decided 2026-09-19, byte-identical here) | native sub-TF |
 | `reversal_in_probe` | reversal apply idx | native sub-TF |
 | `no_retrace` (cycle 0 confirmed in-window) | `CTS_0_CONFIRMED.idx` | native sub-TF |
 | `no_retrace` (else) / `end_idx_reached` / Phase-1 | `end_idx` | **mapped** from the parent (price-mapped `cts_anchor_idx` for `first_confluence`; last-of-hour for the sibling-referencing variations) |

@@ -577,7 +577,9 @@ dormant** (like the `pending` finalize conditions).
   **else `end_idx`** — the common case). Note the double-CTS rule is currently
   a *classification at exit*, not an early stop — MS runs to `end_idx` first;
   Plan B makes it a true early stop (verified safe: nothing past the 2nd
-  CTS_EST is read). Two different "anchor"s here: the parent's
+  CTS_EST is read) and moves that finalize from the 2nd CTS's `.idx` (the
+  extreme) to its `meta["confirmed_at"]` (the moment) — decided 2026-09-19,
+  byte-identical on the reference window. Two different "anchor"s here: the parent's
   `cts_anchor_idx` (H1, the probe bound) vs the probe's own M15 `cts0_anchor`
   (from Phase-2 MS) — see GLOSSARY.
 - **main sid0|cyc0** (`trading_open`): arbitrary ad-hoc BOS_0 at the

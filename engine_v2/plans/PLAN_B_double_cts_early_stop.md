@@ -1,8 +1,7 @@
 # Plan B — The Double-CTS Rule Becomes a True Early Stop in the first_confluence Probe
 
-**Status:** READY TO IMPLEMENT (written 2026-09-19). One author resolution is flagged in §2 (the
-finalize idx of `second_cts_reached` moves from the 2nd CTS's *extreme* to its *moment*; byte-identical
-on the reference window) — confirm before coding.
+**Status:** READY TO IMPLEMENT (written 2026-09-19; every decision closed — the §2 resolution on the
+`second_cts_reached` finalize moment was confirmed by the user the same day).
 **Defect record:** `memory/project_sub_structure_pool_architecture.md` "PRE-EXISTING BUGS" — "Double-CTS
 is classified at exit, not an early stop"; PART4 §4.4 first_confluence bullet (corrected 2026-09-19).
 **Ground truth:** `memory/reference_pool_redesign_groundtruth.md` "first_confluence probe internals"
@@ -99,12 +98,11 @@ LANDMINES "Probe `end_idx` Is the Supreme Bound": an inner rule may end the prob
 narrow logic operating within `end_idx` — the retrace window lies entirely before the 2nd CTS, so
 nothing is narrowed.
 
-**AUTHOR'S RESOLUTION — confirm:** `finalize_idx` for `second_cts_reached` becomes
+**Decided (user-confirmed 2026-09-19):** `finalize_idx` for `second_cts_reached` becomes
 `cts_est[1].meta["confirmed_at"]` (the moment), not `cts_est[1].idx` (the extreme). Byte-identical on the
 reference window (§1). It is the same principle Plan C applies everywhere (`confirmed_at` for timing,
 `.idx` for where the extreme sits) and it is what the early stop actually keys on — MS emits the 2nd
-CTS at its apply candle, which *is* `confirmed_at`. If you prefer to keep `.idx` for now, drop §3.3's
-one line; nothing else depends on it.
+CTS at its apply candle, which *is* `confirmed_at`.
 
 **Equivalence claim (what `/compare` must show):** for every first_confluence trigger, `ProbeResult`
 (`starting_idx`, `finalize_idx`, `finalize_condition`, `iterations`, `bos0_inner`) is identical to the Plan A
@@ -166,7 +164,7 @@ contain the stop-point CTS at the same idx).
    a classification at exit." Termination-conditions list: `second_cts_reached` → "the run stopped at
    the 2nd CTS_EST; finalize = its moment (`confirmed_at`)".
 
-### 3.3 `structure/unified_probe.py` — the finalize moment (AUTHOR'S RESOLUTION, §2)
+### 3.3 `structure/unified_probe.py` — the finalize moment (decided, §2)
 `_second_cts_fin = int(cts_est[1].meta.get("confirmed_at", cts_est[1].idx)) if n_cts >= 2 else None`
 (mirrors the `cts0_est_idx` line). `ProbeResult` docstring table: `second_cts_reached → 2nd
 CTS_ESTABLISHED moment (meta["confirmed_at"])`.

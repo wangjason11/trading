@@ -1,7 +1,7 @@
 # Plan A — Bounded MarketStructure Runs Read Nothing Past Their Bound
 
-**Status:** READY TO IMPLEMENT (written 2026-09-19). One author judgement call is flagged in §2 —
-confirm it before coding, it is a one-line difference.
+**Status:** READY TO IMPLEMENT (written 2026-09-19; every decision closed — the §2 judgement call on
+the reversal watch at the bound was confirmed by the user the same day: option (a)).
 **Defect record:** `LANDMINES.md` "MarketStructure Range Look-Ahead Leaks Past `end_idx`" (corrected by
 this plan — the original entry named only one of the two emission paths).
 **Ground truth:** `memory/reference_pool_redesign_groundtruth.md` (the first_confluence probe table;
@@ -81,9 +81,9 @@ the **data edge** and clips *windows* out of one run rather than relying on boun
 to make prefix-equivalence hold; do not "look ahead but suppress emission" (rejected in LANDMINES —
 it keeps future information inside the state machine).
 
-**Judgement call (AUTHOR'S RESOLUTION — confirm before coding): L4, the reversal watch at the bound.**
-Two consistent choices:
-- **(a) Truncation semantics for the watch too (recommended, adopted below).** `expires_idx =
+**L4, the reversal watch at the bound — decided (user-confirmed 2026-09-19): option (a).** The two
+consistent choices, for the record:
+- **(a) Truncation semantics for the watch too (ADOPTED).** `expires_idx =
   min(i + range_max_k, effective_end)`. A watch open at `B` expires at `B` (false break → BOS threshold
   to the anchor wick → rewind to `anchor+1`), exactly as at the real data edge today. The definition
   above holds unconditionally, the property test (§5.1) is unconditional, and there is one semantics
@@ -321,12 +321,13 @@ the specific mechanism so the failure message names it:
 ---
 
 ## 8. Findings outside scope (record, do not fix here)
-- **`_rewind_to` replays from candle 0, not `start_idx`** (`market_structure.py:492`), and the rebuild
-  **ignores earlier jump requests** (`:497-500`) — a rebuild can differ from the first pass wherever an
-  earlier watch expiry had rewound. Deterministic and identical between bounded and truncated runs, so
-  not a Plan A concern; on the reference window H1 has 0 expiries, M15 confluence 15, counter 3. Worth
-  its own look (does the rebuild's `_replay_step_no_patterns(k)` for `k < start_idx` clobber a prior
-  sid's rows on the main path? seeded arrays make the flush safe, the rebuild writes are the question).
+- **`_rewind_to` replays from candle 0, not `start_idx`** (`market_structure.py:492`) — already a
+  LANDMINE ("MarketStructure Deep-Couples to Its Working DataFrame", point 1: harmless on a slice). Two
+  things that entry did not say, now added to it: the rebuild **ignores earlier jump requests**
+  (`:497-500`), so a rebuilt prefix can differ from the first pass wherever an earlier expiry had
+  rewound; and the main H1 path runs each sid's MS on the full df, so a rewind in sid ≥ 1 would replay
+  from candle 0 (unobserved: 0 expiries on H1 in the reference window; 15 / 3 on the M15 streams, all
+  on slices). Deterministic and identical between bounded and truncated runs, so not a Plan A concern.
 - **Imbalance instance existence at the bound** (§4): an FVG with `c2 == B` exists on the full frame only.
   `has_unfilled_imbalance` is as-of for *fills*, not for *existence*. Feeds only the in-flight
   Scenario-2 / POI-inner snapshot. Same family as `feedback_in_flight_vs_downstream_resolver`.

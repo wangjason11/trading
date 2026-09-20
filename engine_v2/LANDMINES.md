@@ -1015,6 +1015,16 @@ on the entity-wide M15 df must be similarly re-derived on the slice.
    harmless. On an entity df, idx 0 is the very first candle ever —
    MS would replay hundreds-to-thousands of unrelated candles, fire
    spurious patterns, and contaminate `self.df` cols.
+   **Two additions (Plan A audit, 2026-09-19, unverified exposure):**
+   (a) the rebuild ignores jump requests (`market_structure.py:~497-500`),
+   so a rebuilt prefix can differ from the first pass wherever an
+   earlier watch expiry had already rewound — the final event list is
+   not necessarily a superset of what was known at an earlier candle;
+   (b) the MAIN H1 path runs each sid's MS on the full df, so a
+   reversal-watch expiry in sid ≥ 1 would replay from candle 0. Not
+   observed on the reference window (0 expiries on H1; 15 / 3 on the
+   M15 confluence / counter streams, all on slices). If an H1 sid ≥ 1
+   ever logs `probe_no_break`, check rows `< start_idx` first.
 
 2. `BreakoutPatterns(self.df)` precomputes / scans the full df. On a
    slice it sees only relevant candles. On an entity df it sees every

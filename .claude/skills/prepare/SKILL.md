@@ -162,6 +162,14 @@ memory entry and they were nearly lost.
   inferring `finalize_condition` from CSV values) — one August inference was
   wrong and cost a discussion round to unwind.
 - See `memory/feedback_persist_prepare_audits.md`.
+- When the upcoming work is a **fix plan for a recorded defect** (a LANDMINES /
+  GOTCHAS / memory entry), treat the entry as a pointer, not the spec: re-read
+  every code site the mechanism can touch and put an **audit table** in the
+  plan (each read/emission site, classified: fix / already bounded /
+  equivalent / write-only / out of scope). The 2026-09 MS bounds-leak entry
+  named one of four sites, and the fix's real footprint (one probe path, not
+  every bounded build) only appeared from the audit. See
+  `memory/feedback_cold_review_plans.md`.
 
 ## Why This Matters
 
