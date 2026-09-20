@@ -292,6 +292,7 @@ class MarketStructure:
         fill_threshold: float = 0.70,
         enforce_cts0_new_extreme: bool = False,
         bos0_inner: Optional[float] = None,
+        stop_after_cts_established: Optional[int] = None,
     ):
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
@@ -363,6 +364,21 @@ class MarketStructure:
                 "[market_structure] enforce_cts0_new_extreme (pre-CTS_0 scan "
                 "mode) requires bos0_inner (the cycle-0 breakout gate threshold)."
             )
+        # Opt-in early stop (Plan B): end the run at the first QUIESCENT point
+        # (no reversal watch active, no pending reversal, no pending rewind)
+        # after the N-th CTS_ESTABLISHED. `early_stop_idx` records the first
+        # anchor NOT processed because of it (None = no early stop happened).
+        # In addition to `end_idx`, never instead of it. Used only by the
+        # first_confluence probe's Phase 2 (`unified_probe._run_phase2`).
+        self.stop_after_cts_established = (
+            int(stop_after_cts_established) if stop_after_cts_established is not None else None
+        )
+        if self.stop_after_cts_established is not None and self.stop_after_cts_established < 1:
+            raise ValueError(
+                "[market_structure] stop_after_cts_established must be >= 1 "
+                f"(got {stop_after_cts_established}); 0 would stop after the first step."
+            )
+        self.early_stop_idx: Optional[int] = None
         # Lazily-computed cycle-0 true-first-breakout decision (scan mode).
         self._cts0_tfb = None
         self._cts0_tfb_computed = False
@@ -419,6 +435,11 @@ class MarketStructure:
         NOT prefix-equivalence with the natural-end run — the last `range_max_k` candles
         before the bound may legitimately differ (pending confirmations, a reversal
         applying exactly at the edge is a false break). See Plan A §2.
+
+        With `stop_after_cts_established=N` the loop also ends at the first quiescent
+        point (no reversal watch / pending reversal / pending rewind) after the N-th
+        `CTS_ESTABLISHED`; `early_stop_idx` records it. Used by the first_confluence
+        probe (Plan B).
         """
         n = len(self.df)
         # i = 0
@@ -460,6 +481,14 @@ class MarketStructure:
                 continue
 
             i = next_i
+            # Plan B: opt-in early stop. Checked only once no rewind is pending
+            # (the rewind branch above `continue`s first) and only while in-bound
+            # candles remain — if `next_i` is already past the edge nothing is
+            # pre-empted and the run simply ends at its bound (no early stop).
+            if i <= effective_end and self._should_stop_after_cts():
+                self.early_stop_idx = int(i)
+                self._dbg(f"[EARLY_STOP] i={i} cts_established>={self.stop_after_cts_established}")
+                break
 
         # Plan A invariant: a bounded run reads nothing past its data edge, so
         # it can stamp nothing past it either (every emit site stamps `i`, an
@@ -493,6 +522,27 @@ class MarketStructure:
         return self.df, self.events, levels
 
     
+    def _should_stop_after_cts(self) -> bool:
+        """Plan B: True iff the opt-in stop is set, the state is QUIESCENT (no reversal
+        watch active, no pending reversal — a rewind or reversal may still land otherwise)
+        and at least `stop_after_cts_established` CTS_ESTABLISHED events exist.
+
+        Counts the events (the same source of truth the probe's
+        `_collect_cts_established` reads) rather than trusting `st.cts_cycle_id`:
+        `_rewind_to` resets the state and rebuilds. No `structure_id` filter — one MS
+        instance runs exactly one structure, and `_rewind_to` rebuilds the state
+        without `structure_id` (it resets to 0), so a filter would be wrong after a
+        rewind for any sid != 0 caller. O(events) per step only while the option is set.
+        """
+        n = self.stop_after_cts_established
+        if n is None:
+            return False
+        st = self.state
+        if st.reversal_watch_active or st.pending_reversal_apply_idx is not None:
+            return False
+        established = sum(1 for ev in self.events if ev.type == "CTS_ESTABLISHED")
+        return established >= int(n)
+
     def _rewind_to(self, jump_to: int, *, seed: Optional[dict] = None) -> None:
         """
         Rebuild state/events by replaying from the start up to (jump_to - 1),

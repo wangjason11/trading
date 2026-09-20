@@ -335,8 +335,8 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (last verified 2026-09-19 on the Stage-3.2a tree = revert `5a658dc`
-and again after Plan A, full 2025-12-01→2026-01-20 window; the 2026-05-29
+counts are (last verified 2026-09-19 on the Stage-3.2a tree = revert `5a658dc`,
+again after Plan A, and after Plan B 2026-09-20; full 2025-12-01→2026-01-20 window; the 2026-05-29
 values were H1 125/261, counter 216/169, confluence 359/280. Window-dependent,
 re-baseline when the config window or chart rendering changes):
 

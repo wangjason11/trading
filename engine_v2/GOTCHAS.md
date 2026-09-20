@@ -1589,7 +1589,7 @@ Canonical fix = the TriggerRecord model, `memory/project_sub_structure_pool_arch
 
 | `finalize_condition` | value | frame |
 |---|---|---|
-| `second_cts_reached` | 2nd `CTS_ESTABLISHED.idx` from the probe's own MS run (the EXTREME; Plan B changes this to `meta["confirmed_at"]`, the moment — decided 2026-09-19, byte-identical here) | native sub-TF |
+| `second_cts_reached` | 2nd `CTS_ESTABLISHED` moment (`meta["confirmed_at"]`) from the probe's own MS run — the candle the early stop keys on (Plan B, 2026-09-20; was `.idx`, the extreme — equal on this window: 1020/1020, 2608/2608) | native sub-TF |
 | `reversal_in_probe` | reversal apply idx | native sub-TF |
 | `no_retrace` (cycle 0 confirmed in-window) | `CTS_0_CONFIRMED.idx` | native sub-TF |
 | `no_retrace` (else) / `end_idx_reached` / Phase-1 | `end_idx` | **mapped** from the parent (price-mapped `cts_anchor_idx` for `first_confluence`; last-of-hour for the sibling-referencing variations) |
@@ -1646,3 +1646,27 @@ sub reference zone is ad-hoc-derived today. Consequence for Plan C: passing `kl_
 primitive from the pool path is exactly behaviour-preserving. If you want to know which branch ran, log
 inside the primitive, not the `source` field. Follow-up (unscheduled): whether subs *should* get the
 derived CTS zone.
+
+---
+
+## A Cycle Cannot Be Established Inside an Open Reversal Watch — MS Invariant 4 (2026-09-20)
+
+Found while crafting Plan B's §4.1 "quiescence" fixture (a reversal watch open at the moment the
+2nd `CTS_ESTABLISHED` fires). Establishing a cycle writes the new BOS (`_emit_bos_confirmed`,
+`BOS_1` = the pullback extreme, `_select_bos_on_breakout`) and therefore moves `bos_threshold`; the
+close-break candle that opened the watch lies inside that pullback window with `l <` the frozen
+BOS, so **any breakout that establishes a cycle while a watch is active moves `bos_threshold`
+during the watch** and `_check_invariants_df` raises `[INV] bos_threshold changed during reversal
+watch` post-run (default `debug_invariants=True`; every real caller). Two search-built fixtures
+reached the state and both raised; they only "worked" with `debug_invariants=False`. The reachable
+shape is the reverse order **inside one `_step_anchor` call**: the breakout applies (BOS written),
+then `_post_apply_range_check(apply_idx)` back-fills the apply candle's range window and a
+close-break in that back-fill opens the watch — `tests/test_ms_stop_after_cts.py::_make_watch_over_second_cts_data`
+(2nd CTS idx 9 / moment 10, watch at 11 inside the same step, reversal at 14). Whether invariant 4
+*should* forbid the first order is an open MS question, not a Plan B one — record, don't change.
+
+Also reproduced there: the Plan B §2 "rebuilt-prefix" exception (`_make_double_rewind_data`) — two
+expiry-rewinds, one before the 2nd CTS and one after the early stop; `_rewind_to` replays from 0
+ignoring the earlier jump (LANDMINES "MarketStructure Deep-Couples…" 1), so the exit classifier
+reads `cts_est=[2, 8, 12]` while the early stop read the post-J1 `[2, 12]`. No instance on the
+reference window (zero rewinds in any FC Phase-2 run); pinned by a strict `xfail`.

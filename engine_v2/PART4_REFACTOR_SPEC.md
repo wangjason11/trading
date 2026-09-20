@@ -572,16 +572,19 @@ dormant** (like the `pending` finalize conditions).
   — it is NOT treated as NULL. The retrace window is `[CTS_0_EST+1,
   cts0_anchor-1]` when MS confirms cycle 0 inside the window, else
   `[CTS_0_EST+1, end_idx]`. Exit classification: `second_cts_reached` if ≥2
-  CTS established (finalize = the 2nd `CTS_ESTABLISHED.idx`, native M15),
-  else `no_retrace` (finalize = `CTS_0_CONFIRMED.idx` if cycle 0 confirmed,
-  **else `end_idx`** — the common case). Note the double-CTS rule is currently
-  a *classification at exit*, not an early stop — MS runs to `end_idx` first;
-  Plan B makes it a true early stop (verified safe: nothing past the 2nd
-  CTS_EST is read) and moves that finalize from the 2nd CTS's `.idx` (the
-  extreme) to its `meta["confirmed_at"]` (the moment) — decided 2026-09-19,
-  byte-identical on the reference window. Two different "anchor"s here: the parent's
-  `cts_anchor_idx` (H1, the probe bound) vs the probe's own M15 `cts0_anchor`
-  (from Phase-2 MS) — see GLOSSARY.
+  CTS established (finalize = the 2nd `CTS_ESTABLISHED`'s `confirmed_at`,
+  native M15), else `no_retrace` (finalize = `CTS_0_CONFIRMED.idx` if cycle 0
+  confirmed, **else `end_idx`** — the common case). The double-CTS rule is an
+  **early stop** (Plan B, landed 2026-09-20): Phase-2 MS is handed
+  `stop_after_cts_established=2` and stops at the first quiescent point (no
+  reversal watch / pending reversal / pending rewind) after the 2nd
+  `CTS_ESTABLISHED` — in addition to the `end_idx` bound, never instead of
+  it (`n_cts ≤ 1` runs still reach `end_idx`); finalize = that CTS's moment
+  (`confirmed_at`), not its `.idx` (the extreme). Byte-identical on the
+  reference window (FC(0,0) stops at 1021 for finalize 1020, FC(0,1) at 2609
+  for 2608; `.idx == confirmed_at` for both). Two different "anchor"s here:
+  the parent's `cts_anchor_idx` (H1, the probe bound) vs the probe's own M15
+  `cts0_anchor` (from Phase-2 MS) — see GLOSSARY.
 - **main sid0|cyc0** (`trading_open`): arbitrary ad-hoc BOS_0 at the
   `identify_start_scenario_1` start; single-shot, no resets (Commit 2 — not yet
   wired).
@@ -817,8 +820,9 @@ generalized):
       zones/POIs/fibs/cycles (and the sub-WVMI active window, which reads the
       same `start_trigger_idx`) become active at the finalize idx. Per
       `finalize_condition`: Phase-1 → `end_idx`; Phase-2 `second_cts_reached` →
-      2nd `CTS_ESTABLISHED` idx (the "double CTS", earlier than the parent-CTS
-      bound); `reversal_in_probe` → reversal idx; `no_retrace` →
+      the 2nd `CTS_ESTABLISHED`'s moment (`meta["confirmed_at"]`, Plan B; the
+      "double CTS", earlier than the parent-CTS bound); `reversal_in_probe` →
+      reversal idx; `no_retrace` →
       `CTS_0_CONFIRMED` idx **if cycle 0 confirmed inside the probe window,
       else `end_idx`** (the else-branch is the COMMON case — measured after
       Plan A landed (2026-09-19, `debug/probe_fc_finalize.py`): all three
@@ -2531,9 +2535,12 @@ the detector's visible length, the reversal-watch expiry, the resolvers'
 frame; post-run assert + property test; the only production change was the
 first_confluence probe's Phase-2 run — FC(1,0) finalize 2844 → 2843,
 `starting_idx` 2803 unchanged, H1 byte-identical; `plans/PLAN_A_ms_bounds_leak.md`)
-→ **Plan B** (`second_cts_reached` becomes a true early
-stop in `unified_probe` Phase 2; byte-identical — nothing past the 2nd
-`CTS_ESTABLISHED` is read) → **Plan C** (this section; one behavioural change,
+→ **Plan B** (**LANDED 2026-09-20** — `second_cts_reached` is a true early
+stop in `unified_probe` Phase 2: `MarketStructure(stop_after_cts_established=2)`
+ends the run at the first quiescent point after the 2nd `CTS_ESTABLISHED`,
+finalize = its `confirmed_at`; byte-identical on all 21 CSVs — nothing past
+the 2nd `CTS_ESTABLISHED` is read; `plans/PLAN_B_double_cts_early_stop.md`)
+→ **Plan C** (this section; one behavioural change,
 one replay). Each with its own replay, `/compare`, chart-review pause and
 `/commit-save`.
 

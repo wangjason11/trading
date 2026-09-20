@@ -24,7 +24,8 @@ fetches M15 from OANDA (~10 s). Run from the repo root:
     PYTHONPATH=. python engine_v2/debug/probe_fc_finalize.py
 
 Added 2026-09-19 during the pool/lifecycle redesign (Phase-2 MS retention + leak column
-added for Plan A the same day); safe to keep as a diagnostic.
+added for Plan A the same day; per-iteration `early_stop_idx` + `cts1_ext`/`cts1_moment`
+added for Plan B 2026-09-20); safe to keep as a diagnostic.
 """
 import ast
 import csv
@@ -143,12 +144,20 @@ for t in trigs:
         print(f"   ([POST_STEP] lines: {n_post_step})")
     if ms_error:
         print(f"   ASSERTION: {ms_error}")
-    # Per-iteration Phase-2 MS report: bound, event count, max event idx, events past the bound.
+    # Per-iteration Phase-2 MS report: bound, event count, max event idx, events past the
+    # bound, and (Plan B) the early stop: `early_stop_idx` (None = ran to the bound) plus the
+    # 2nd CTS_ESTABLISHED's extreme (`.idx`) vs moment (`confirmed_at`) — the finalize value
+    # is the moment; a difference here would move the row's finalize_idx.
     for k, ms in enumerate(retained_ms, 1):
         mx = max((int(ev.idx) for ev in ms.events), default=None)
         past = [(ev.type, int(ev.idx)) for ev in ms.events if int(ev.idx) > int(ms.end_idx)]
+        _est = sorted((ev for ev in ms.events if ev.type == "CTS_ESTABLISHED"), key=lambda e: int(e.idx))
+        _c1 = _est[1] if len(_est) >= 2 else None
         print(f"   [phase2 ms {k}] start={ms.start_idx} end_idx={ms.end_idx} "
-              f"n_ev={len(ms.events)} max_ev_idx={mx} past_bound={past}")
+              f"n_ev={len(ms.events)} max_ev_idx={mx} past_bound={past} "
+              f"early_stop_idx={getattr(ms, 'early_stop_idx', None)} "
+              f"cts1_ext={None if _c1 is None else int(_c1.idx)} "
+              f"cts1_moment={None if _c1 is None else int(_c1.meta.get('confirmed_at', _c1.idx))}")
     max_ev_all = max((int(ev.idx) for ms in retained_ms for ev in ms.events), default=None)
     res = captured.get("res")
     m15_start, validated, bos0_inner, finalize_idx = out

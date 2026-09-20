@@ -213,7 +213,7 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD); \
 FOLDER_NAME=$(ls -t "artifacts/commits/${CURRENT_BRANCH}/" | head -1); \
 FOLDER_PATH="artifacts/commits/${CURRENT_BRANCH}/${FOLDER_NAME}"; \
 COMMIT_HASH=$(echo "$FOLDER_NAME" | awk -F_ '{print $NF}'); \
-TIMESTAMP=$(echo "$FOLDER_NAME" | awk -F_ '{print $1"_"$2}'); \
+TIMESTAMP=$(echo "$FOLDER_NAME" | cut -d_ -f1,2); \
 printf "commit_hash=%s\ntimestamp=%s\nbranch=%s\ncommit_message=<message>\n" \
   "$COMMIT_HASH" "$TIMESTAMP" "$CURRENT_BRANCH" \
   > "${FOLDER_PATH}/metadata.txt"; \
@@ -221,7 +221,10 @@ echo "${FOLDER_NAME}" > "artifacts/commits/LATEST_${CURRENT_BRANCH}"
 ```
 
 The folder name is `YYYYMMDD_HHMMSS_<hash>` — the commit hash is the last
-underscore-delimited segment, the timestamp is the first two. The
+underscore-delimited segment, the timestamp is the first two (`cut -d_ -f1,2`,
+NOT an awk `$1"_"$2` — positional `$1`/`$2` in this file get substituted with
+the skill's ARGUMENTS when a commit message is passed, which rendered as
+`awk '{print Plan"_"B:}'` on 2026-09-20). The
 per-branch `LATEST_<branch>` pointer holds just the folder name (not the
 full path), since the path's branch prefix is implicit in the pointer
 filename.

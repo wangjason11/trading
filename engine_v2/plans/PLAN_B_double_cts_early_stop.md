@@ -1,9 +1,22 @@
 # Plan B — The Double-CTS Rule Becomes a True Early Stop in the first_confluence Probe
 
-**Status:** READY TO IMPLEMENT (written 2026-09-19; every decision closed — the §2 resolution on the
+**Status:** LANDED 2026-09-20 (commit in `git log` — "Plan B: the double-CTS rule is a true early
+stop in the first_confluence probe"). Measured exactly as predicted: `/compare` byte-identical on all
+21 CSVs vs the Plan A save `20260920_035013_9c868a4`; `debug/probe_fc_finalize.py` rows unchanged;
+FC(0,0) stops at `early_stop_idx` 1021 (115 events instead of 237, `max_ev` 1721 → 1022 — the
+`RANGE_STARTED@1022` is the last step's range label, see MARKET_STRUCTURE_SPEC "Early stop"), FC(0,1)
+at 2609 (= its `end_idx`; one anchor pre-empted); `cts1_ext == cts1_moment` on both (1020, 2608) —
+the §2 finalize change is a no-op here; the three `no_retrace` rows ran to their bound
+(`early_stop_idx None`). Zero `[RV_EXPIRE]`/`[REWIND]`/`[RV_SCHEDULE]` lines in any FC Phase-2 run
+(the §5.5 rebuilt-prefix case has no instance on this window). One refinement beyond §3.1.3: the
+loop sets `early_stop_idx` only when `next_i <= effective_end` (a real pre-emption); if the 2nd CTS
+lands quiescently on the last in-bound step nothing is skipped and no early stop is claimed —
+output-neutral. Tests 460 → 476+ (`tests/test_ms_stop_after_cts.py`, `TestPhase2EarlyStop`,
+`TestSecondCtsMoment`).
+Written 2026-09-19; every decision closed — the §2 resolution on the
 `second_cts_reached` finalize moment was confirmed by the user the same day; cold-reviewed the same day
 by two fresh agents — code-reference audit + implement-on-paper — and a decision-coverage pass; every
-finding applied).
+finding applied.
 **Defect record:** `memory/project_sub_structure_pool_architecture.md` "PRE-EXISTING BUGS" — "Double-CTS
 is classified at exit, not an early stop"; PART4 §4.4 first_confluence bullet (corrected 2026-09-19).
 **Ground truth:** `memory/reference_pool_redesign_groundtruth.md` "first_confluence probe internals"
@@ -135,6 +148,13 @@ on — MS emits the 2nd CTS at its apply candle (`:1414-1424`, `confirmed_at = a
 save's. The one theoretical exception is the rebuilt-prefix case in §1. **It is not pre-authorised:** if
 a `ProbeResult` differs, stop, run the §5.5 check, and ask before accepting — the early-stop value is
 the causally correct one, but whether to accept a non-identical Plan B is the user's call.
+**The exception is real (reproduced 2026-09-20 during the landing's cold review, synthetic candles;
+no instance on the reference window):** `tests/test_ms_stop_after_cts.py::_make_double_rewind_data` —
+an expiry-rewind J1 before the 2nd CTS (whose seed restore moves cycle 1 from 8 to 12) and a
+bound-induced expiry-rewind J2 after the stop; `_rewind_to` replays from 0 IGNORING J1, so the exit
+classifier reads `cts_est = [2, 8, 12]` (finalize 8) while the early stop reads the post-J1 prefix
+`[2, 12]` (finalize 12). Pinned by `TestRebuiltPrefixException` (mechanism test + a strict `xfail`
+on ON == OFF that flips when `_rewind_to` honours earlier jumps — LANDMINES "Deep-Couples" 1).
 
 ---
 
@@ -174,6 +194,10 @@ the causally correct one, but whether to accept a non-identical Plan B is the us
        self._dbg(f"[EARLY_STOP] i={i} cts_established>={self.stop_after_cts_established}")
        break
    ```
+   **As landed:** the check is `if i <= effective_end and self._should_stop_after_cts():` — `early_stop_idx`
+   is set only when an in-bound anchor is actually pre-empted; when the 2nd CTS lands quiescently on the
+   last in-bound step (`next_i > effective_end`) the run simply ends at its bound and no early stop is
+   claimed (output-neutral; tested on the multi-cycle fixture at `end_idx=10` vs `11`).
    The rewind branch `continue`s (`:444`) before this point, so a pending jump is always honoured first
    (the "no rewind pending" half of quiescent). Placement relative to the top-of-loop `REVERSAL` break
    (`:423`) is immaterial: a reversal applied in the same step clears watch + pending, the helper returns
@@ -259,12 +283,13 @@ equivalence claim in unit form; it must pass before the replay.
 
 ### 4.3 Finalize = the moment (§3.3)
 Unit-test `_second_cts_moment` with a stub `cts_est` whose second event has `idx != meta["confirmed_at"]`
-(assert the moment is returned, and `.idx` as the fallback when the meta key is absent). A natural
-fixture is hard by construction: CONFIRMED patterns confirm on a candle whose close is ≥ the pattern's
-extreme (`structure_patterns.py:111-126`), so the extreme lands on the confirming candle; only a
-SUCCESS pattern whose last candle's high sits below an earlier candle's wick separates them. If such a
-fixture falls out of §4.0's series, add the end-to-end assert `finalize_idx == cts_est[1].meta["confirmed_at"]
-!= cts_est[1].idx`; do not block on it.
+(assert the moment is returned, and `.idx` as the fallback when the meta key is absent). "Hard by
+construction" was too strong: the split occurs
+naturally whenever the extreme sits on an earlier candle of the establishing pattern — on the reference
+window FC(0,0)'s 3rd CTS is `idx 1223 / confirmed_at 1224`, and the §4.1 quiescence fixture's 2nd CTS
+is `idx 9 / confirmed_at 10` (`one_maru_opposite(+1)` SUCCESS: the big maru's high, apply on the small
+c1). The end-to-end assert `finalize_idx == cts_est[1].meta["confirmed_at"] != cts_est[1].idx` is
+`TestQuiescence::test_phase2_probe_finalizes_at_the_moment_not_the_extreme` (landed).
 
 ### 4.4 Existing
 `test_unified_probe` (all), `test_bounded_structure`, `test_pooled_structure_build`, Plan A's property
@@ -293,7 +318,8 @@ early-stopped run too.
 5. **Any CSV delta is a regression — stop and ask.** The only mechanism that could produce one is the
    rebuilt-prefix case (§1/§2). To check it: in the Plan A save's `run.log`, per first_confluence Phase-2
    iteration (delimited by the `[unified_probe …]` prints; all `_dbg` lines are on), look for a
-   `[REWIND] … jump_to=J` with `J-1 < stop_idx` **and** one with `J-1 > stop_idx` in the same iteration.
+   `[REWIND] … jump_to=J` with `J-1 < stop_idx` **and** one with `J-1 >= stop_idx` in the same iteration
+   (a watch anchored exactly at `early_stop_idx` rewinds to it).
    Neither → the claim holds by determinism and the delta is something else (a real regression). Both →
    name it, show the two rewinds, and let the user decide whether the new (causal) value is accepted.
 6. No chart change is expected; a short chart look is still the habit — then `/commit-save`.

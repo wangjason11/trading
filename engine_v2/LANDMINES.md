@@ -388,7 +388,12 @@ future similar probe), it is a HARD bound on the probe window. All inner
 logic — termination conditions, exception-check windows, fallback paths —
 must respect `end_idx` as the upper limit. Inner rules like "stop after 2
 CTS_EST" can terminate the probe early but must NOT bypass or narrow logic
-that operates within `end_idx`.
+that operates within `end_idx`. Plan B's early stop at the 2nd CTS_EST
+(`MarketStructure(stop_after_cts_established=2)` in `unified_probe` Phase 2,
+landed 2026-09-20) is the sanctioned form of "stop after 2 CTS_EST": it ends
+the run but the retrace window it classifies lies before the 2nd CTS, so
+nothing inside `end_idx` is narrowed — and it is *in addition to* the bound
+(`n_cts <= 1` runs still reach `end_idx`), never instead of it.
 
 **Why:** `end_idx` is a caller-defined terminal that represents a known
 real-world boundary (a WVMI activation candle, a reversal_confirmed idx,

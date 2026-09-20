@@ -159,7 +159,8 @@ class ProbeResult:
     LANDMINES "MS Batched..."'s sibling "Probe finalize idx floors the
     lifecycle". Per `finalize_condition`:
       - Phase 1 `no_retrace` / `end_idx_reached`     → `end_idx`
-      - Phase 2 `second_cts_reached`                 → 2nd CTS_ESTABLISHED idx
+      - Phase 2 `second_cts_reached`                 → 2nd CTS_ESTABLISHED moment
+                                                       (meta["confirmed_at"], Plan B)
       - Phase 2 `reversal_in_probe`                  → reversal apply idx
       - Phase 2 `no_retrace`                         → CTS_0_CONFIRMED idx
                                                        (else `end_idx`)
@@ -445,6 +446,15 @@ def _run_phase1(
     )
 
 
+def _second_cts_moment(cts_est: list) -> int:
+    """finalize_idx for `second_cts_reached`: the MOMENT the 2nd CTS was established
+    (meta["confirmed_at"] = its apply candle), not `.idx` (the extreme inside the pattern
+    span). Plan B §3.3 — the same principle as every lifecycle value (`confirmed_at` for
+    timing, `.idx` for where the extreme sits), and it is what the early stop keys on."""
+    ev = cts_est[1]
+    return int(ev.meta.get("confirmed_at", ev.idx))
+
+
 def _run_phase2(
     df: pd.DataFrame,
     start_idx: int,
@@ -465,7 +475,14 @@ def _run_phase2(
     establishes cycle 0 at the shared routine's true-first-breakout. Phase
     2's job is to drive MS far enough to reach CTS_0_CONFIRMED → its
     `cts_anchor_idx`, which bounds the retrace search (FC's real end_idx is
-    NULL, so it uses this earlier signal rather than waiting).
+    NULL, so it uses this earlier signal rather than waiting) — and it stops
+    at the 2nd `CTS_ESTABLISHED` (Plan B): the double-CTS rule is an early
+    stop, not a classification at exit. The MS run is handed
+    `stop_after_cts_established=2` and ends at the first quiescent point (no
+    reversal watch / pending reversal / pending rewind) after the 2nd CTS;
+    `ms.early_stop_idx` says whether it actually stopped early (a run whose
+    2nd CTS lands on the last in-bound step reaches `end_idx` without one).
+    Runs that never reach a 2nd CTS still run to `end_idx`.
 
     Retrace search window:
       - If CTS_0 confirmed before end_idx: `[CTS_0_est+1, cts_anchor_idx-1]`
@@ -478,7 +495,9 @@ def _run_phase2(
         moving BOS_0 at the new start), iterate
       - Retrace candidate exists + fails (or window empty) → `no_retrace`
         if no 2nd CTS_EST; `second_cts_reached` if a 2nd CTS_EST is
-        already present (cycle 0 completed without a qualifying retrace)
+        already present (cycle 0 completed without a qualifying retrace —
+        the run stopped at the 2nd CTS_EST; finalize = its moment,
+        `confirmed_at`)
 
     `bos0_inner`/`bos0_outer` are the deterministic method's finalized
     BOS_0 bounds (the threshold at `start_idx`); they MOVE with each reset
@@ -507,6 +526,9 @@ def _run_phase2(
         # past it and asserts post-run that no event is stamped past it
         # (Plan A — `MarketStructure.run()`), so `probe_events` and the
         # `df_probe` rows below are reproducible from the stated bound.
+        # Plan B: the double-CTS rule is a true early stop — MS ends at the first
+        # quiescent point after the 2nd CTS_ESTABLISHED (in addition to the
+        # bound, never instead of it; `n_cts <= 1` runs still reach `end_idx`).
         ms = _make_market_structure(
             df_probe,
             struct_direction=direction,
@@ -515,6 +537,7 @@ def _run_phase2(
             end_idx=end_idx,
             enforce_cts0_new_extreme=True,
             bos0_inner=cur_bos0_inner,
+            stop_after_cts_established=2,
         )
         ms.debug = True
         df_probe, probe_events, _ = ms.run()
@@ -522,6 +545,18 @@ def _run_phase2(
         cts_est = _collect_cts_established(probe_events, structure_id=0)
         n_cts = len(cts_est)
         has_rev = _has_reversal(df_probe, structure_id=0)
+
+        # "Stopped early" comes from `ms.early_stop_idx`, never from `n_cts >= 2`
+        # (a 2nd CTS on the last in-bound step with a pending reversal reaches
+        # `end_idx` without stopping). The print also checks the §2
+        # extreme-vs-moment pair on the probe's OWN run.
+        if ms.early_stop_idx is not None:
+            print(
+                f"[unified_probe phase2] early stop: p2_iter={iteration} "
+                f"stop_idx={ms.early_stop_idx} end_idx={end_idx} "
+                f"cts1_ext={int(cts_est[1].idx) if n_cts >= 2 else None} "
+                f"cts1_moment={_second_cts_moment(cts_est) if n_cts >= 2 else None}"
+            )
 
         # Reversal before 2 cycles → structure not viable.
         if has_rev and n_cts < 2:
@@ -579,12 +614,12 @@ def _run_phase2(
 
         # finalize-idx candidates for the three "no qualifying retrace" exits
         # below (window empty / no candidate / candidate fails reset):
-        #   - second_cts_reached → the 2nd CTS_ESTABLISHED idx (cycle 0
-        #     completed + cycle 1 established — the "double CTS", earlier than
-        #     the parent-CTS end_idx).
+        #   - second_cts_reached → the 2nd CTS_ESTABLISHED's MOMENT
+        #     (`confirmed_at`; cycle 0 completed + cycle 1 established — the
+        #     "double CTS", earlier than the parent-CTS end_idx) — Plan B.
         #   - no_retrace → CTS_0_CONFIRMED idx (the decision needed cycle 0's
         #     confirmation), else end_idx when cycle 0 didn't confirm in-window.
-        _second_cts_fin = int(cts_est[1].idx) if n_cts >= 2 else None
+        _second_cts_fin = _second_cts_moment(cts_est) if n_cts >= 2 else None
         _no_retrace_fin = (
             int(cycle_0_conf.idx) if cycle_0_conf is not None
             else (int(end_idx) if end_idx is not None else None)

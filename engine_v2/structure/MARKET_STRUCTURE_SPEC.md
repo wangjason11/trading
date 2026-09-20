@@ -349,6 +349,38 @@ Callers: `compute_bounded_structure` (subs — their frames are already sliced t
 the bound), `unified_probe` Phase 2 (the first_confluence probe — the one
 production path that runs MS on a frame longer than its bound).
 
+## Early stop after N `CTS_ESTABLISHED` (`stop_after_cts_established`)
+
+Opt-in (`MarketStructure(stop_after_cts_established=N)`, keyword-only, `N >= 1`,
+default `None`; Plan B, 2026-09-20). The main loop also ends at the first
+**quiescent** point — no reversal watch active, no pending (scheduled)
+reversal, no pending rewind — after the N-th `CTS_ESTABLISHED` in `events`
+(counted from the event list, the same source the probe classifies from;
+`_rewind_to` rebuilds it, so no state counter is trusted and no `structure_id`
+filter is applied — one instance runs one structure). `early_stop_idx` records
+the first anchor NOT processed because of the stop (`None` = no early stop:
+the count was never reached, or the N-th CTS landed on the last in-bound step
+— then the run simply ends at its bound; "stopped early" is read from
+`early_stop_idx`, never from the count). The check runs after `_step_anchor`
+returns and after any pending rewind has been honoured (the rewind branch
+`continue`s first), so the event list handed back is never one a rewind was
+about to rewrite. Cost of "quiescent": a watch open at the N-th CTS resolves
+within its window (apply → reversal, the loop ends anyway; expiry → rewind →
+the stop lands after the next step) — a few extra candles, not asserted `<= 5`.
+
+Semantics: the stopped run's events are an **ordered prefix** of the run without
+the option (exact whenever that run has no rewind after the stop point), and its
+output rows before `early_stop_idx` are that run's rows. The last step's range
+back-fill may have stamped events/rows up to `range_max_k` past
+`early_stop_idx` (a range candidate at the apply candle is stamped at its label
+`confirm_idx`, exactly as in the unbounded run — FC(0,0) on the reference
+window stops at 1021 with `RANGE_STARTED@1022`); rows from
+`early_stop_idx + range_max_k` on are never written. The `end_idx` bound and
+its post-run assert apply unchanged — the stop is in addition to the bound.
+Only consumer: `unified_probe._run_phase2` (the first_confluence probe,
+`N = 2`: the double-CTS rule is an early stop, finalize = the 2nd CTS's
+`confirmed_at`). Tests: `tests/test_ms_stop_after_cts.py`.
+
 ---
 
 ## DF outputs (selected)

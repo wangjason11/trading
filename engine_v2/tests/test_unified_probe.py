@@ -618,3 +618,120 @@ class TestPhase2MultiCycle:
         assert res.finalize_condition == "no_retrace"
         assert res.finalize_idx == 7
         assert res.finalize_idx <= 9
+
+
+# ---------------------------------------------------------------------------
+# Plan B — the double-CTS rule is a true early stop in Phase 2
+# ---------------------------------------------------------------------------
+
+class TestPhase2EarlyStop:
+    """Plan B §4.2 / §4.3. Phase 2 passes `stop_after_cts_established=2` to its MS; the
+    classification then runs on the truncated event list and must equal classify-at-exit."""
+
+    @staticmethod
+    def _retain(monkeypatch, *, disable_stop: bool):
+        import engine_v2.structure.unified_probe as up
+        retained = []
+        orig = up._make_market_structure
+
+        def wrapped(df, **kw):
+            if disable_stop:
+                kw.pop("stop_after_cts_established", None)
+            ms = orig(df, **kw)
+            retained.append(ms)
+            return ms
+
+        monkeypatch.setattr(up, "_make_market_structure", wrapped)
+        return retained
+
+    def test_phase2_passes_the_stop_option_and_stops_early(self, monkeypatch, capsys):
+        """end_idx=22 (past the 3rd cycle at 15 and the 4th at 20): the shipped probe stops at
+        the first quiescent point after the 2nd CTS (11) and reads nothing later."""
+        retained = self._retain(monkeypatch, disable_stop=False)
+        df = _prepare_df(_make_multicycle_data())
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 22, "H1", enable_phase2=True)
+        assert len(retained) == 1
+        ms = retained[0]
+        assert ms.stop_after_cts_established == 2
+        assert ms.early_stop_idx == 11
+        est = [(int(e.idx), int(e.meta["confirmed_at"])) for e in ms.events
+               if e.type == "CTS_ESTABLISHED"]
+        assert est == [(2, 2), (10, 10)]
+        assert max(int(e.idx) for e in ms.events) <= 10
+        assert res.finalize_condition == "second_cts_reached"
+        assert res.finalize_idx == 10
+        assert res.start_idx == 0
+        out = capsys.readouterr().out
+        stop_lines = [l for l in out.splitlines() if l.startswith("[unified_probe phase2] early stop")]
+        assert stop_lines == [
+            "[unified_probe phase2] early stop: p2_iter=1 stop_idx=11 end_idx=22 "
+            "cts1_ext=10 cts1_moment=10"
+        ]
+
+    @pytest.mark.parametrize("end_idx", [10, 11, 14, 22, 23])
+    def test_early_stop_equals_classify_at_exit(self, monkeypatch, end_idx):
+        """§2 equivalence claim in unit form: the shipped probe (early stop) and the same
+        probe with the stop popped (MS runs to end_idx, classify at exit) return the same
+        `_DetResult` field by field. `end_idx=10` is the edge where the 2nd CTS lands on the
+        last in-bound step: two CTS_ESTABLISHED, `second_cts_reached`, but NO early stop
+        (`early_stop_idx` None, no print) — "stopped early" is never derived from the count."""
+        from engine_v2.structure.unified_probe import _run_phase2
+        df = _prepare_df(_make_multicycle_data())
+        ref = _ref_zone_uptrend()
+        pip = 0.0001
+        kw = dict(reset_tol=DEFAULT_PROBE_RESET_PIPS["H1"] * pip,
+                  wick_cap=DEFAULT_PROBE_RESET_WICK["H1"] * pip, max_iterations=10)
+
+        retained_on = self._retain(monkeypatch, disable_stop=False)
+        on = _run_phase2(df, 0, ref.inner, ref.outer, 1, ref, end_idx, **kw)
+        monkeypatch.undo()
+        retained_off = self._retain(monkeypatch, disable_stop=True)
+        off = _run_phase2(df, 0, ref.inner, ref.outer, 1, ref, end_idx, **kw)
+
+        assert on == off
+        assert on.finalize_condition == "second_cts_reached"
+        assert on.finalize_idx == 10
+        assert retained_off[-1].early_stop_idx is None
+        sig = lambda evs: [(e.type, int(e.idx), e.price, repr(sorted(e.meta.items()))) for e in evs]
+        if end_idx == 10:
+            # Nothing to pre-empt: the run ends at its bound, no early stop is claimed.
+            assert retained_on[-1].early_stop_idx is None
+            assert sig(retained_on[-1].events) == sig(retained_off[-1].events)
+        else:
+            # The stopped run really did read less than the full one (a prefix of it).
+            assert retained_on[-1].early_stop_idx == 11
+            assert len(retained_on[-1].events) <= len(retained_off[-1].events)
+            assert sig(retained_off[-1].events)[: len(retained_on[-1].events)] == sig(retained_on[-1].events)
+
+    def test_no_second_cts_runs_are_untouched(self, monkeypatch):
+        """`n_cts <= 1` at `end_idx` (=9): the option is inert, the run reaches the bound,
+        and the classification is the Plan A `no_retrace` / finalize 7 result."""
+        retained = self._retain(monkeypatch, disable_stop=False)
+        df = _prepare_df(_make_multicycle_data())
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 9, "H1", enable_phase2=True)
+        assert retained[-1].early_stop_idx is None
+        assert res.finalize_condition == "no_retrace"
+        assert res.finalize_idx == 7
+
+
+class TestSecondCtsMoment:
+    """Plan B §3.3 / §4.3 — `second_cts_reached` finalizes at the 2nd CTS's MOMENT
+    (`meta["confirmed_at"]`), not its `.idx` (the extreme inside the pattern span)."""
+
+    def test_returns_the_moment_not_the_extreme(self):
+        from engine_v2.structure.unified_probe import _second_cts_moment
+        cts_est = [
+            StructureEvent(idx=458, category="STRUCTURE", type="CTS_ESTABLISHED", price=0.5,
+                           meta={"structure_id": 0, "cycle_id": 0, "confirmed_at": 458}),
+            StructureEvent(idx=1223, category="STRUCTURE", type="CTS_ESTABLISHED", price=0.5,
+                           meta={"structure_id": 0, "cycle_id": 1, "confirmed_at": 1224}),
+        ]
+        assert _second_cts_moment(cts_est) == 1224
+
+    def test_falls_back_to_idx_without_the_meta_key(self):
+        from engine_v2.structure.unified_probe import _second_cts_moment
+        cts_est = [
+            StructureEvent(idx=1, category="STRUCTURE", type="CTS_ESTABLISHED", price=0.5, meta={}),
+            StructureEvent(idx=9, category="STRUCTURE", type="CTS_ESTABLISHED", price=0.5, meta={}),
+        ]
+        assert _second_cts_moment(cts_est) == 9
