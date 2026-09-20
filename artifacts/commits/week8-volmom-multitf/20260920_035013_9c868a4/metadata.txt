@@ -1,0 +1,4 @@
+commit_hash=9c868a4
+timestamp=20260920_035013
+branch=week8-volmom-multitf
+commit_message=Plan A: bounded MarketStructure runs read nothing past end_idx (truncation semantics)
