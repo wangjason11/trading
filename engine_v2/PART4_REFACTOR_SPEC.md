@@ -2535,7 +2535,7 @@ the detector's visible length, the reversal-watch expiry, the resolvers'
 frame; post-run assert + property test; the only production change was the
 first_confluence probe's Phase-2 run — FC(1,0) finalize 2844 → 2843,
 `starting_idx` 2803 unchanged, H1 byte-identical; `plans/PLAN_A_ms_bounds_leak.md`)
-→ **Plan B** (**LANDED 2026-09-20** — `second_cts_reached` is a true early
+→ **Plan B** (**LANDED 2026-09-20**, `189c127` — `second_cts_reached` is a true early
 stop in `unified_probe` Phase 2: `MarketStructure(stop_after_cts_established=2)`
 ends the run at the first quiescent point after the 2nd `CTS_ESTABLISHED`,
 finalize = its `confirmed_at`; byte-identical on all 21 CSVs — nothing past

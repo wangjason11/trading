@@ -1,8 +1,8 @@
 # Plan B — The Double-CTS Rule Becomes a True Early Stop in the first_confluence Probe
 
-**Status:** LANDED 2026-09-20 (commit in `git log` — "Plan B: the double-CTS rule is a true early
-stop in the first_confluence probe"). Measured exactly as predicted: `/compare` byte-identical on all
-21 CSVs vs the Plan A save `20260920_035013_9c868a4`; `debug/probe_fc_finalize.py` rows unchanged;
+**Status:** LANDED 2026-09-20 — commit `189c127`, save `20260920_104606_189c127` (Plan C's `/compare`
+baseline). Measured exactly as predicted: `/compare` byte-identical on all 21 CSVs vs the Plan A save
+`20260920_035013_9c868a4`; chart counts 107/250, 198/133, 342/222 unchanged; `debug/probe_fc_finalize.py` rows unchanged;
 FC(0,0) stops at `early_stop_idx` 1021 (115 events instead of 237, `max_ev` 1721 → 1022 — the
 `RANGE_STARTED@1022` is the last step's range label, see MARKET_STRUCTURE_SPEC "Early stop"), FC(0,1)
 at 2609 (= its `end_idx`; one anchor pre-empted); `cts1_ext == cts1_moment` on both (1020, 2608) —
@@ -11,7 +11,7 @@ the §2 finalize change is a no-op here; the three `no_retrace` rows ran to thei
 (the §5.5 rebuilt-prefix case has no instance on this window). One refinement beyond §3.1.3: the
 loop sets `early_stop_idx` only when `next_i <= effective_end` (a real pre-emption); if the 2nd CTS
 lands quiescently on the last in-bound step nothing is skipped and no early stop is claimed —
-output-neutral. Tests 460 → 476+ (`tests/test_ms_stop_after_cts.py`, `TestPhase2EarlyStop`,
+output-neutral. Tests 460 → 486 + 1 strict xfail (`tests/test_ms_stop_after_cts.py`, `TestPhase2EarlyStop`,
 `TestSecondCtsMoment`).
 Written 2026-09-19; every decision closed — the §2 resolution on the
 `second_cts_reached` finalize moment was confirmed by the user the same day; cold-reviewed the same day
