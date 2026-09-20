@@ -1015,16 +1015,21 @@ on the entity-wide M15 df must be similarly re-derived on the slice.
    harmless. On an entity df, idx 0 is the very first candle ever —
    MS would replay hundreds-to-thousands of unrelated candles, fire
    spurious patterns, and contaminate `self.df` cols.
-   **Two additions (Plan A audit, 2026-09-19, unverified exposure):**
+   **Three additions (Plan A/B audits, 2026-09-19, unverified exposure):**
    (a) the rebuild ignores jump requests (`market_structure.py:~497-500`),
    so a rebuilt prefix can differ from the first pass wherever an
    earlier watch expiry had already rewound — the final event list is
    not necessarily a superset of what was known at an earlier candle;
    (b) the MAIN H1 path runs each sid's MS on the full df, so a
-   reversal-watch expiry in sid ≥ 1 would replay from candle 0. Not
-   observed on the reference window (0 expiries on H1; 15 / 3 on the
-   M15 confluence / counter streams, all on slices). If an H1 sid ≥ 1
-   ever logs `probe_no_break`, check rows `< start_idx` first.
+   reversal-watch expiry in sid ≥ 1 would replay from candle 0;
+   (c) the rebuild constructs `MarketStructureState(struct_direction=…)`
+   (`:485`) WITHOUT the ctor's `structure_id` (set only in `__init__`,
+   `:360`), so after a rewind in an H1 sid ≥ 1 every later event / row
+   would be stamped `structure_id=0`. Not observed on the reference
+   window (0 expiries on H1; 15 / 3 on the M15 confluence / counter
+   streams, all on slices, sid 0). If an H1 sid ≥ 1 ever logs a
+   `[RV_EXPIRE]` / `probe_no_break`, check `structure_id` on the events
+   after it and rows `< start_idx` first.
 
 2. `BreakoutPatterns(self.df)` precomputes / scans the full df. On a
    slice it sees only relevant candles. On an entity df it sees every
@@ -1597,22 +1602,33 @@ bounded at 2843), FC(1,1) +3. Main runs are unaffected (`effective_end == n-1`).
   and `test_bounded_structure::test_end_idx_caps_before_reversal` pass ONLY
   because their fixtures never fire a range check near the boundary.
 
-**Fix (Plan A — `plans/PLAN_A_ms_bounds_leak.md`, written 2026-09-19):** clamping
-`D` is necessary but NOT sufficient. The audit found four sites: **L1** `D`
-(pattern applies + back-fill); **L2** `RANGE_STARTED` / `STATE_CHANGED→RANGE` are
-stamped at the pre-computed `is_range_confirm_idx` label (`:1129/:1144`), which
-is never compared to the bound — that is the FC(1,1) `@3050` leak, untouched by
-`D`; **L3** `BreakoutPatterns` guards on `len(df)`, and its priority rule can let
-a future candle pre-empt a knowable 2-candle pattern; **L4** the reversal-watch
-expiry / rewind target clamp to `n-1`. Decided semantics: a bounded run at `B`
-≡ an unbounded run on the frame truncated at `B` (`effective_end` IS the run's
-data edge) — checked by a property test over EVERY bound, not a single fixture.
-It is NOT prefix-equivalence with the natural-end run (the last 5 candles can
-legitimately differ — see the plan §2). "Look ahead but suppress emission" is NOT
-an option — it uses future information and hides it. Sub geometry builds slice
-their frame to the bound already, so the only production path that changes is
-the first_confluence probe's Phase-2 MS run (FC(1,0) finalize 2844→2843).
-Reproduce with `debug/probe_fc_finalize.py`.
+**Fix (Plan A — `plans/PLAN_A_ms_bounds_leak.md`, written + cold-reviewed
+2026-09-19):** clamping `D` is necessary but NOT sufficient. The audits found
+FIVE sites: **L1** `D` (pattern applies + back-fill); **L2** `RANGE_STARTED` /
+`STATE_CHANGED→RANGE` are stamped at the pre-computed `is_range_confirm_idx`
+label (`:1129/:1144`), which is never compared to the bound — that is the
+FC(1,1) `@3050` leak, untouched by `D`; **L3** `BreakoutPatterns` guards on
+`len(df)`, and (once L1 is fixed) its priority rule can let a future candle
+pre-empt a knowable 2-candle pattern; **L4** the reversal-watch expiry / rewind
+target clamp to `n-1` (a watch survives only with a pending reversal whose apply
+is inside the window, and expiry runs BEFORE the pending apply — `:578-581` —
+so a reversal applying exactly at the edge is a false break); **L5** the two
+resolvers MS calls with `self.df` (`:1468`, `:1912`) derive base patterns whose
+inside-bar scan reads to `anchor+5` clamped to the FRAME (`kl_zones_v1.py:58-59`)
+— fixed by handing them a view truncated at `effective_end`. Decided semantics:
+a bounded run at `B` ≡ an unbounded run on the frame truncated at `B`
+(`effective_end` IS the run's data edge) — checked by a property test over EVERY
+bound, not a single fixture (fails at HEAD on 22 of 57 bounds of the reversing
+fixture). Known residual: `attrs["imbalances"]` stays full-frame (instance
+existence / merged bounds at the edge). It is NOT prefix-equivalence with the
+natural-end run (the last 5 candles can legitimately differ — plan §2). "Look
+ahead but suppress emission" is NOT an option — it uses future information and
+hides it. Sub geometry builds slice their frame to the bound already, so the
+only production path that changes is the first_confluence probe's Phase-2 MS
+run (FC(1,0) finalize 2844→2843). Deliberately OUT (**L5b**): the probe's ad-hoc
+BOS_0 derivation at a reset candidate reads to `candidate+5` past `probe_end_idx`
+— a search-bound reproducibility gap, not causality, and closing it can move the
+H1 sid-1 start. Reproduce with `debug/probe_fc_finalize.py`.
 
 ---
 
