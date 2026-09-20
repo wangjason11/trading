@@ -978,7 +978,7 @@ def _run_multi_tf_dual(
             f"triggers={[(t.trigger_type, t.trigger_dt) for t in _s.trigger_records]}"
         )
 
-    # --- WVMI gating lookups (unchanged) ---
+    # --- WVMI gating lookups ---
     main_zpt = main_zone_proximity_triggers or {}
     main_first_sd_by_cycle: Dict[tuple, int] = {}
     for k, trig_list in main_zpt.items():
@@ -987,83 +987,66 @@ def _run_multi_tf_dual(
     var4_all_sorted = sorted(var4_all, key=lambda t: t.trigger_event_idx)
     var3_all_sorted = sorted(var3_all, key=lambda t: t.trigger_event_idx)
 
-    # --- Stage 3.2b: COLLAPSE render. Each unique pooled sub renders ONCE per
-    # lens (over its per-lens window = [earliest THIS-lens trigger, unified end])
-    # into FRESH per-lens dfs. This replaces the per-trigger scratch mirror in
-    # conf_m15/ctr_m15, which only served the sibling-CTS reads during the cadence
-    # and is now discarded. PART4_REFACTOR_SPEC §17. ---
-    from engine_v2.multitf.entity_df_mutation import render_unique_sub
-    conf_render = prepare_lower_tf_data(m15_raw.copy())
-    conf_render.attrs["pair"] = pair
-    ctr_render = prepare_lower_tf_data(m15_raw.copy())
-    ctr_render.attrs["pair"] = pair
-    _m15_edge = int(conf_render.index[-1])
-    if var2_triggers:
-        # Legacy `meta["m15_df_prepared"]` now points at the RENDERED counter df.
-        meta["m15_df_prepared"] = ctr_render
-
+    # --- Assemble confluence (legacy order: var1 trigger_event_idx) + WVMI ---
     confluence_results: list = []
-    counter_results: list = []
-    for s in sub_pool.all():
-        for lens in sorted(s.lenses()):
-            rdf = conf_render if lens == "confluence" else ctr_render
-            spath = conf_path if lens == "confluence" else ctr_path
-            res = render_unique_sub(
-                rdf, s, lens, sub_path_id=spath, timeframe="M15",
-                m15_edge=_m15_edge,
-            )
-            if res is None:
-                continue
-            if lens == "confluence":
-                confluence_results.append(res)
-            else:
-                counter_results.append(res)
-
-    # --- WVMI over the unique subs (full per-lens trigger stream). The
-    # trigger-centric pass finds, per parent trigger, the active unique sub (by
-    # its [start_trigger_idx, m15_end_idx] window) and sweeps it once. ---
-    conf_stream_full: List[Tuple[int, str]] = []
-    ctr_stream_full: List[Tuple[int, str]] = []
-    for key in sorted(set(conf_bootstrap_by_cycle) | set(ctr_bootstrap_by_cycle)):
-        conf_stream_full.extend(
-            _confluence_trigger_stream(key, main_first_sd_by_cycle, var4_all_sorted)
+    conf_wvmi: Dict[str, Any] = {"acted": 0, "records": 0, "by_started_by": {}}
+    conf_cycle_order = sorted(
+        conf_bootstrap_by_cycle.keys(),
+        key=lambda k: conf_bootstrap_by_cycle[k].meta.get("trigger_event_idx", 0),
+    )
+    for key in conf_cycle_order:
+        cycle_results = conf_results_by_cycle.get(key, [])
+        stream = _confluence_trigger_stream(
+            key, main_first_sd_by_cycle, var4_all_sorted,
         )
-        ctr_stream_full.extend(_counter_trigger_stream(key, var3_all_sorted))
-    conf_wvmi = _assign_trigger_centric_sub_wvmi(
-        confluence_results, conf_stream_full,
-        parent_df=h1_df, m15_df=conf_render, sub_path_id=conf_path,
-    )
-    ctr_wvmi = _assign_trigger_centric_sub_wvmi(
-        counter_results, ctr_stream_full,
-        parent_df=h1_df, m15_df=ctr_render, sub_path_id=ctr_path,
-    )
+        c = _assign_trigger_centric_sub_wvmi(
+            cycle_results, stream,
+            parent_df=h1_df, m15_df=conf_m15, sub_path_id=conf_path,
+        )
+        _merge_wvmi_counts(conf_wvmi, c)
+        confluence_results.extend(cycle_results)
 
-    # --- sid records + registry (the RENDER dfs are the entities now) ---
     if confluence_results:
-        conf_render.attrs["sids"] = build_sid_records_for_subordinate(
-            confluence_results
-        )
-        print(f"[sid_records] {conf_path} sids={len(conf_render.attrs['sids'])}")
+        sub_sids = build_sid_records_for_subordinate(confluence_results)
+        conf_m15.attrs["sids"] = sub_sids
+        print(f"[sid_records] {conf_path} sids={len(sub_sids)}")
         registry.register(
-            conf_path, df=conf_render, timeframe="M15",
+            conf_path, df=conf_m15, timeframe="M15",
             role="subordinate", starting_alignment="confluence",
         )
     print(
-        f"[multi_tf:dual] confluence unique sids={len(confluence_results)}; "
+        f"[multi_tf:dual] confluence results: {len(confluence_results)} sids; "
         f"wvmi acted={conf_wvmi['acted']} records={conf_wvmi['records']} "
         f"by_started_by={conf_wvmi['by_started_by']}"
     )
-    if counter_results:
-        ctr_render.attrs["sids"] = build_sid_records_for_subordinate(
-            counter_results
+
+    # --- Assemble counter (legacy order: var2 probe_end_idx) + WVMI ---
+    counter_results: list = []
+    ctr_wvmi: Dict[str, Any] = {"acted": 0, "records": 0, "by_started_by": {}}
+    ctr_cycle_order = sorted(
+        ctr_bootstrap_by_cycle.keys(),
+        key=lambda k: ctr_bootstrap_by_cycle[k].meta.get("probe_end_idx", 0) or 0,
+    )
+    for key in ctr_cycle_order:
+        cycle_results = ctr_results_by_cycle.get(key, [])
+        stream = _counter_trigger_stream(key, var3_all_sorted)
+        c = _assign_trigger_centric_sub_wvmi(
+            cycle_results, stream,
+            parent_df=h1_df, m15_df=ctr_m15, sub_path_id=ctr_path,
         )
-        print(f"[sid_records] {ctr_path} sids={len(ctr_render.attrs['sids'])}")
+        _merge_wvmi_counts(ctr_wvmi, c)
+        counter_results.extend(cycle_results)
+
+    if counter_results:
+        sub_sids = build_sid_records_for_subordinate(counter_results)
+        ctr_m15.attrs["sids"] = sub_sids
+        print(f"[sid_records] {ctr_path} sids={len(sub_sids)}")
         registry.register(
-            ctr_path, df=ctr_render, timeframe="M15",
+            ctr_path, df=ctr_m15, timeframe="M15",
             role="subordinate", starting_alignment="counter",
         )
     print(
-        f"[multi_tf:dual] counter unique sids={len(counter_results)}; "
+        f"[multi_tf:dual] counter results: {len(counter_results)} sids; "
         f"wvmi acted={ctr_wvmi['acted']} records={ctr_wvmi['records']} "
         f"by_started_by={ctr_wvmi['by_started_by']}"
     )

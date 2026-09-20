@@ -1523,10 +1523,6 @@ def build_one_sid(
                 parent_sid=int(trigger.parent_sid),
                 parent_cycle_id=int(trigger.parent_cycle_id),
                 lens=_lens,
-                # Carry the MultiTFTrigger so the 3.2b unified render can stamp
-                # attribution (use_case + parent identity) from the EARLIEST
-                # trigger. `sub_path_id` records which entity/lens built it.
-                meta={"mt": trigger, "sub_path_id": sub_path_id},
             ))
 
     return SidBuildOutcome(
@@ -1536,88 +1532,6 @@ def build_one_sid(
         next_sd=next_sd,
         next_bos0_inner=next_bos0_inner,
     )
-
-
-def render_unique_sub(
-    render_df: pd.DataFrame,
-    pooled,
-    lens: str,
-    *,
-    sub_path_id: str,
-    timeframe: str,
-    m15_edge: int,
-) -> Optional[LowerTFResult]:
-    """Stage 3.2b: render ONE unique pooled sub onto ONE lens's chart (PART4 §17).
-
-    The collapse: instead of one mirrored sid per trigger, a unique sub renders
-    ONCE per lens it belongs to, over the PER-LENS window
-    ``[earliest trigger of THIS lens, unified end]`` (the unified end is
-    structural — direction-keyed reversal / same-direction replacement /
-    parent-end; the per-lens START keeps each chart looking as it does today, so
-    a sub shared across charts appears on the counter chart at its counter
-    trigger, not its earlier confluence trigger). Reuses the pool geometry +
-    ``project_to_window`` (downstream ONCE per (sub, lens)) and mirrors with the
-    collapsed identity: global ``sub_id`` + the earliest THIS-lens trigger's
-    membership / started_by for attribution. Returns the ``LowerTFResult`` (fed to
-    WVMI + sid records) or None.
-    """
-    from engine_v2.multitf.pooled_structure_build import project_to_window
-
-    if pooled.geometry is None:
-        return None
-    lens_trs = [t for t in pooled.trigger_records if t.lens == lens]
-    if not lens_trs:
-        return None
-    bounded, slice_begin = pooled.geometry
-    ers = min(lens_trs, key=lambda t: t.trigger_dt)   # earliest OF THIS lens
-    mt = ers.meta.get("mt")
-    if mt is None:
-        return None
-
-    floor_abs = int(ers.trigger_dt)                   # per-lens start
-    cap_abs = pooled.lifecycle_end                    # unified (structural) end
-    floor_local = floor_abs - slice_begin
-    cap_local = (int(cap_abs) - slice_begin) if cap_abs is not None else None
-
-    down = project_to_window(
-        bounded,
-        floor=floor_local, cap=cap_local,
-        cap_reason=pooled.lifecycle_end_reason,
-        direction=pooled.direction, timeframe=timeframe,
-        structure_path_id=sub_path_id,
-        log_prefix=f"M15_uniq{pooled.sub_id}_{lens}",
-    )
-
-    end_abs = int(cap_abs) if cap_abs is not None else int(m15_edge)
-    end_local_for_df = cap_local if cap_local is not None else (len(bounded.df) - 1)
-
-    result = LowerTFResult(
-        trigger=mt,
-        df=bounded.df.iloc[0:end_local_for_df + 1],
-        events=down["events"],
-        kl_zones=down["kl_zones"],
-        wave_candles=down["wave_candles"],
-        fib_states=down["fib_states"],
-        poi_zones=down["poi_zones"],
-        wvmi_records=down["wvmi_records"],
-        prev_bos_lines=down["prev_bos_lines"],
-        status="finalized",
-        meta={
-            "m15_start_idx": int(pooled.starting_idx),
-            "m15_end_idx": end_abs,
-            "m15_bound_idx": end_abs,
-            "slice_begin": slice_begin,
-            "sub_sid": int(pooled.sub_id),
-            "started_by": ers.trigger_type,
-            "start_trigger_idx": floor_abs,
-            "end_reason": pooled.lifecycle_end_reason,
-            "validated_h1_start": None,
-        },
-    )
-    mirror_lower_tf_result_to_entity_df(
-        render_df, result, structure_path_id=sub_path_id,
-    )
-    return result
 
 
 def build_parent_cycle_chain(
