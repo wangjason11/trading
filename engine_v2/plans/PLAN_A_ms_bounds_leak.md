@@ -1,8 +1,8 @@
 # Plan A — Bounded MarketStructure Runs Read Nothing Past Their Bound
 
 **Status:** READY TO IMPLEMENT (written 2026-09-19; cold-reviewed the same day by two fresh agents —
-code-reference audit + implement-on-paper — and a decision-coverage pass; every finding applied). One
-scope resolution added by the review is flagged **AUTHOR'S RESOLUTION — confirm** in §1 (L5).
+code-reference audit + implement-on-paper — and a decision-coverage pass; every finding applied; the
+L5 scope resolution the review added was confirmed by the user the same day). **No open items.**
 **Defect record:** `LANDMINES.md` "MarketStructure Range Look-Ahead Leaks Past `end_idx`" (the plan
 corrects it — the original entry named only site L1 of the five below). §7 retitles that entry; when it
 does, update this header's citation in the same commit.
@@ -44,8 +44,8 @@ five things inside the loop still see the dataframe end `n-1`, not `B`:
 | L4 | `_start_reversal_watch` `:710`: `reversal_watch_expires_idx = min(i + range_max_k, len(self.df) - 1)`; `_maybe_expire_reversal_watch` `:784`: `jump_to = min(anchor + 1, len(self.df) - 1)`; `_rewind_to` `:481-482` clamps to `n-1`. | **How the watch actually works (verified):** a watch survives its anchor only if `_schedule_reversal_from_anchor` (`:816-845`) found a reversal pattern with `apply_r <= expires_idx`; otherwise it is cleared at once (`rv_anchor_failed`, `:640-650`). Expiry (`probe_no_break` + rewind) fires only when the pending apply equals `expires_idx`, because `_maybe_expire_reversal_watch` runs **before** `_maybe_apply_pending_reversal` in the per-candle step (`:578-581`). So with `expires_idx` clamped to `n-1` instead of `B`: a reversal pattern applying in `(B, i+5]` is *scheduled* (the run then ends at `B` with a watch and pending reversal open), whereas a frame ending at `B` never schedules it. | Not measured; the §5.2 L4 fixture pins it. |
 | L5 | The two **resolvers** MS calls with `self.df` — `_bos_inner_resolver` at `BOS_CONFIRMED` (`:1468-1472` → `compute_bos_inner_from_event`, `kl_zones_v1.py:1102-1145`) and `_poi_inners_resolver` at `CTS_ESTABLISHED` / `CTS_UPDATED` (`:1912-1922`) — derive a base pattern with `identify_base_pattern`, whose inside-bar scan reads `[anchor-5, min(len(df)-1, anchor+5)]` (`kl_zones_v1.py:58-59`), whose 2-candle / star paths read `anchor+1` (`:639-643`, `:662-673`) and whose `zone_thresholds` reads `base_idx+1/+2` (`:540-553`). Clamped to the **frame**, not the bound. | A BOS extreme within 5 candles of `B` gets its inner from candles `> B`; that inner feeds `_maybe_confirm_cts_via_proximity` at candles `<= B` → a `CTS_CONFIRMED` that a frame ending at `B` would not (or would differently) produce. **Found by the cold audit; my original table classified these reads as "bounded".** | Not measured; on the two test fixtures the read past the current candle occurs (bos_idx=0, confirmed_at=2, reads to 5) but the inner happened to be equal. |
 
-**AUTHOR'S RESOLUTION — confirm: L5 is IN scope (§3.1.7), via a truncated *view* of the frame handed to
-the resolvers, not via signature changes in `zones/`.** Without it the §2 definition is false and the
+**Decided (user-confirmed 2026-09-19): L5 is IN scope (§3.1.7), via a truncated *view* of the frame
+handed to the resolvers, not via signature changes in `zones/`.** Without it the §2 definition is false and the
 §5.1 property test can only pass by fixture luck (any `BOS_CONFIRMED` has bounds within 5 candles after
 it). The zone-derivation reads are the same class as L1–L4 (clamped to `len(df)-1`), the fix is
 two call sites inside MS, and the main path is untouched by construction (`end_idx=None` → no view). Its
