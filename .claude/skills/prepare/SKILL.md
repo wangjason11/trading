@@ -63,7 +63,7 @@ engine_v2/
 ├── common/
 │   └── types.py                     # Core data types (StructureLevel, KLZone, etc.)
 ├── data/
-│   └── fetcher.py                   # OANDA data fetching
+│   └── provider_oanda.py            # OANDA data fetching (`get_history`)
 ├── pipeline/
 │   └── orchestrator.py              # Pipeline ordering (LOCKED)
 ├── features/

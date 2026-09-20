@@ -356,7 +356,11 @@ def _run_phase1(
     The new-extreme comparison re-anchors to `current_start` on every
     reset (handled inside the shared routine). `end_idx` is the inclusive
     supreme upper bound for BOTH the breakout search and the retrace
-    window.
+    window, and for the MS run Phase 2 drives (no candle past it is read
+    there — Plan A; the detector `bp` is bounded at it too). The ad-hoc
+    BOS_0 zone derivation at a reset candidate (`_bos0_inner_at_start`)
+    still reads up to 5 candles past it (Plan A §8, L5b — deliberately out
+    of scope).
     """
     current_start = int(input_idx)
     bos0_inner = float(reference_zone.inner)   # iter 1 = reference inner (they coincide)
@@ -499,6 +503,10 @@ def _run_phase2(
         ]
         if _stale_cols:
             df_probe = df_probe.drop(columns=_stale_cols)
+        # Bounded at `end_idx` with truncation semantics: MS reads nothing
+        # past it and asserts post-run that no event is stamped past it
+        # (Plan A — `MarketStructure.run()`), so `probe_events` and the
+        # `df_probe` rows below are reproducible from the stated bound.
         ms = _make_market_structure(
             df_probe,
             struct_direction=direction,
@@ -688,7 +696,11 @@ def unified_probe(
         The CONSTANT retrace-reset reference (held across iterations) AND
         the iter-1 BOS_0 threshold.
     end_idx : int, optional
-        Inclusive supreme upper bound. None enables live-mode pending paths.
+        Inclusive supreme upper bound for the breakout search, the retrace
+        window and the MS run Phase 2 drives (no candle past it is read
+        there — Plan A). The ad-hoc BOS_0 zone derivation at a reset
+        candidate still reads up to 5 candles past it (Plan A §8, L5b).
+        None enables live-mode pending paths.
     timeframe : str
         TF for threshold lookup (H1 / M15 / M5).
     max_iterations : int
@@ -712,7 +724,10 @@ def unified_probe(
     reset_tol = float(reset_pips) * pip_size
     wick_cap = float(wick_pips) * pip_size
 
-    bp = BreakoutPatterns(df)
+    # Bounded detector: candles past `end_idx` do not exist for Phase 1's
+    # breakout search (Plan A §3.3 — equivalent to the `est > hi` drop in
+    # `find_true_first_breakout`, now by construction). None → whole frame.
+    bp = BreakoutPatterns(df, end_idx=end_idx)
 
     # --- Deterministic method ---
     det = _run_phase1(

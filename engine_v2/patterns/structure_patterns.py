@@ -39,8 +39,15 @@ class BreakoutPatterns:
       - direction, candle_type, o/h/l/c
     """
 
-    def __init__(self, df):
+    def __init__(self, df, end_idx: Optional[int] = None):
         self.df = df
+        # Visible length: a bounded caller (MarketStructure / unified_probe with
+        # end_idx) hands the inclusive last candle it may read; the detector
+        # treats it exactly like the end of the frame (Plan A, L3). The `_cols`
+        # arrays below stay full-length — safety rests solely on the length
+        # guards in the detectors + confirmation helpers, which all test
+        # against `n_visible`, never `len(df)`.
+        self.n_visible = len(df) if end_idx is None else min(len(df), int(end_idx) + 1)
         # Path 2c: pre-extract the candle columns the pattern rules read into
         # positional numpy arrays once, so `_row(idx)` can build a cheap row
         # view instead of `df.iloc[idx]` (which constructs a full-row pandas
@@ -109,10 +116,9 @@ class BreakoutPatterns:
         return max(c0.h, c1.h) if direction == 1 else min(c0.l, c1.l)
 
     def _price_confirmation(self, anchor_idx: int, direction: int, threshold: float) -> Tuple[bool, Optional[int]]:
-        df = self.df
         for j in range(1, 5):
             k = anchor_idx + j
-            if k >= len(df):
+            if k >= self.n_visible:
                 break
             fwd = self._row(k)
             if fwd.direction != direction:
@@ -153,7 +159,7 @@ class BreakoutPatterns:
         """
         for offset in range(1, 4):
             k = int(anchor_end_idx) + offset
-            if k >= len(self.df):
+            if k >= self.n_visible:
                 return False, None
 
             fwd = self._row(k)
@@ -178,7 +184,7 @@ class BreakoutPatterns:
         break_threshold: Optional[float] = None,
         do_confirm: bool = True,
     ) -> Optional[PatternEvent]:
-        if idx + 2 >= len(self.df):
+        if idx + 2 >= self.n_visible:
             return None
 
         df = self.df
@@ -346,7 +352,7 @@ class BreakoutPatterns:
         break_threshold: Optional[float] = None,
         do_confirm: bool = True,
     ) -> Optional[PatternEvent]:
-        if idx + 1 >= len(self.df):
+        if idx + 1 >= self.n_visible:
             return None
 
         df = self.df
@@ -436,7 +442,7 @@ class BreakoutPatterns:
         small_body_tail: float = 0.5,
         do_confirm: bool = True,
     ) -> Optional[PatternEvent]:
-        if idx + 1 >= len(self.df):
+        if idx + 1 >= self.n_visible:
             return None
 
         df = self.df
@@ -526,7 +532,7 @@ class BreakoutPatterns:
         small_body_size: float = 0.35,
         do_confirm: bool = True,
     ) -> Optional[PatternEvent]:
-        if idx + 1 >= len(self.df):
+        if idx + 1 >= self.n_visible:
             return None
 
         df = self.df
@@ -671,6 +677,9 @@ class BreakoutPatterns:
         Notes:
           - Confirmation lookahead max is 4 candles AFTER end_idx, so latest confirmation is idx+5.
           - continuous has precedence even though it needs idx+2.
+          - With `end_idx`, candles past it do not exist for this detector: a
+            SUCCESS/CONFIRMED that would need them is reported as `None` /
+            unconfirmed, never as a candidate to be dropped later.
         """
 
         # 1) Highest priority: continuous

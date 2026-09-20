@@ -99,6 +99,55 @@ def _make_downtrend_data(n: int = 60) -> list[dict]:
     return rows
 
 
+def _make_multicycle_data() -> list[dict]:
+    """Multi-cycle fixture (Plan A §5.3 / Plan B §4.0): sd=+1, start_idx=0, 24 H1
+    candles, NZD_USD, deterministic. Every existing fixture establishes exactly ONE
+    CTS cycle; this one establishes FOUR before any reversal.
+
+    Shape: impulse (6 bullish marus, 20-pip bodies) -> 2 big bearish marus (a
+    `one_maru_continuous(-1)` pullback pattern -> CTS_CONFIRMED, range created) ->
+    one climb candle closing INSIDE the range -> big bullish maru closing above
+    range_hi + follow-through maru (`one_maru_continuous(+1)` -> new CTS cycle at
+    anchor+1, BOS = pullback extreme) -> repeat. Wicks 2 pips (1 pip on the climb
+    candle's low so BOS lows are distinct).
+
+    Unbounded run (`compute_bounded_structure(df, 0, +1)`): CTS_ESTABLISHED cycles
+    0/1/2/3 at idx 2/10/15/20 (confirmed_at == idx), CTS_CONFIRMED (pullback) at
+    7/12/17, BOS_CONFIRMED at 0/7/12/17, no reversal, no reversal watch, no
+    proximity confirmation. Bodies >= 15 pips (all marus under the H1 2.2-pip floor).
+    """
+    rows: list[dict] = []
+    p = 0.6000
+
+    def bull(body, wu=0.0002, wd=0.0002):
+        nonlocal p
+        o = p
+        c = o + body
+        rows.append({"o": round(o, 5), "h": round(c + wu, 5), "l": round(o - wd, 5), "c": round(c, 5)})
+        p = c
+
+    def bear(body, wu=0.0002, wd=0.0002):
+        nonlocal p
+        o = p
+        c = o - body
+        rows.append({"o": round(o, 5), "h": round(o + wu, 5), "l": round(c - wd, 5), "c": round(c, 5)})
+        p = c
+
+    for _ in range(6):          # 0-5   impulse 1 -> cycle 0 established at 2 (CTS_UPDATED to 5)
+        bull(0.0020)
+    bear(0.0015); bear(0.0015)  # 6-7   pullback 1 -> CTS_CONFIRMED cycle 0 @7 (range hi .6122, lo .6088)
+    bull(0.0025, wd=0.0001)     # 8     climb inside the range (close .6115 < range_hi .6122)
+    bull(0.0030); bull(0.0020)  # 9-10  breakout anchor 9 (close .6145 > .6122) -> cycle 1 at 10
+    bear(0.0025); bear(0.0025)  # 11-12 pullback 2 -> CTS_CONFIRMED cycle 1 @12 (range hi .6167, lo .6113)
+    bull(0.0025, wd=0.0001)     # 13    climb inside the range
+    bull(0.0045); bull(0.0020)  # 14-15 breakout anchor 14 (close .6185 > .6167) -> cycle 2 at 15
+    bear(0.0030); bear(0.0030)  # 16-17 pullback 3 -> CTS_CONFIRMED cycle 2 @17 (range hi .6207, lo .6143)
+    bull(0.0030, wd=0.0001)     # 18    climb inside the range
+    bull(0.0050); bull(0.0020)  # 19-20 breakout anchor 19 (close .6225 > .6207) -> cycle 3 at 20
+    bull(0.0018); bull(0.0018); bull(0.0018)  # 21-23 tail (CTS_UPDATED 21/22/23)
+    return rows
+
+
 def _make_short_data(n: int = 10) -> list[dict]:
     rows = []
     price = 0.6500
@@ -498,3 +547,74 @@ class TestStructureColCleanup:
         assert (df["cycle_id"] == 3).all()
         assert (df["range_confirm_idx"] == 99).all()
 
+
+# ---------------------------------------------------------------------------
+# Phase 2 on a multi-cycle series (Plan A §5.3). The only place in the suite where
+# Phase 2 actually runs (elsewhere `enable_phase2` is a mocked kwarg) and the only
+# fixture with >= 2 CTS cycles. Plan B §4 reuses it.
+# ---------------------------------------------------------------------------
+
+class TestPhase2MultiCycle:
+    @staticmethod
+    def _retain_phase2_ms(monkeypatch):
+        """Keep every MarketStructure Phase 2 constructs. `_run_phase2` resolves
+        `_make_market_structure` from unified_probe's module globals at call time,
+        so that is the name to patch."""
+        import engine_v2.structure.unified_probe as up
+        retained = []
+        orig = up._make_market_structure
+
+        def wrapped(df, struct_direction, **kw):
+            ms = orig(df, struct_direction, **kw)
+            retained.append(ms)
+            return ms
+
+        monkeypatch.setattr(up, "_make_market_structure", wrapped)
+        return retained
+
+    def test_fixture_establishes_four_cts_cycles(self):
+        from engine_v2.structure.structure_engine import compute_bounded_structure
+
+        res = compute_bounded_structure(_prepare_df(_make_multicycle_data()), 0, 1)
+        est = [(int(e.idx), int(e.meta["cycle_id"]), int(e.meta["confirmed_at"]))
+               for e in res.events if e.type == "CTS_ESTABLISHED"]
+        conf = [(int(e.idx), int(e.meta["cycle_id"])) for e in res.events if e.type == "CTS_CONFIRMED"]
+        assert est == [(2, 0, 2), (10, 1, 10), (15, 2, 15), (20, 3, 20)]
+        assert conf == [(7, 0), (12, 1), (17, 2)]
+        assert res.reversal_idx is None
+
+    def test_phase2_bounded_ms_emits_nothing_past_end_idx(self, monkeypatch):
+        """end_idx=14: the breakout anchored at 14 applies at 15. Before Plan A the
+        Phase-2 MS stamped CTS_ESTABLISHED@15 / BOS_CONFIRMED (confirmed_at 15) past
+        its bound; the ProbeResult happened not to change. After: nothing past 14,
+        two CTS_ESTABLISHED inside [0, 14] -> `second_cts_reached`."""
+        retained = self._retain_phase2_ms(monkeypatch)
+        df = _prepare_df(_make_multicycle_data())
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 14, "H1", enable_phase2=True)
+
+        assert len(retained) >= 1, "Phase 2 must actually run an MS"
+        for ms in retained:
+            assert ms.end_idx == 14
+            assert max(int(ev.idx) for ev in ms.events) <= 14
+        est = [(int(e.idx), int(e.meta["cycle_id"])) for e in retained[-1].events
+               if e.type == "CTS_ESTABLISHED"]
+        assert est == [(2, 0), (10, 1)]
+        assert res.status == "finalized"
+        assert res.finalize_condition == "second_cts_reached"
+        assert res.finalize_idx == 10
+        assert res.start_idx == 0
+
+    def test_phase2_finalize_cannot_come_from_past_the_bound(self, monkeypatch):
+        """end_idx=9: before Plan A the leaked CTS_ESTABLISHED@10 made the probe
+        report `second_cts_reached` with finalize_idx 10 > end_idx (the FC(1,0)
+        2844-on-2843 pathology in miniature). After: `no_retrace`, finalize_idx 7 =
+        the cycle-0 CTS_CONFIRMED candle, nothing past 9."""
+        retained = self._retain_phase2_ms(monkeypatch)
+        df = _prepare_df(_make_multicycle_data())
+        res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 9, "H1", enable_phase2=True)
+
+        assert retained and all(max(int(ev.idx) for ev in ms.events) <= 9 for ms in retained)
+        assert res.status == "finalized"
+        assert res.finalize_condition == "no_retrace"
+        assert res.finalize_idx == 7
+        assert res.finalize_idx <= 9

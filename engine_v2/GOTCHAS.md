@@ -1598,16 +1598,33 @@ Live run on the 2025-11→2026-01 window (`debug/probe_fc_finalize.py`):
 FC(0,0) 1020 and FC(0,1) 2608 are native 2nd-CTS values (2608 lands 3 candles
 *before* its own trigger at 2611 — the parent floor repairs it); FC(1,1) 3047
 and FC(1,2) 3621 are the price-mapped parent anchor; FC(1,0) 2844 was a native
-`CTS_0_CONFIRMED` that only existed because of the MS bounds leak (LANDMINES).
-So: (a) the `else end_idx` branch is the COMMON case, not an edge; (b) do not
-"fix the mapping of finalize_idx" — only the `end_idx`-derived branch is
-mapped, and changing that mapping also moves the probe's search bound and
-therefore `starting_idx` (the pool key); (c) when a value looks one candle
-past a mapped bound, suspect the bounds leak before suspecting the mapper.
+`CTS_0_CONFIRMED` that only existed because of the MS bounds leak (LANDMINES
+"Bounded MS Runs Must Not Read Past `end_idx`") — **fixed by Plan A
+(2026-09-19): FC(1,0) is now 2843, the else-branch `end_idx`, so all three
+`no_retrace` FCs are the price-mapped bound.** So: (a) the `else end_idx`
+branch is the COMMON case, not an edge; (b) do not "fix the mapping of
+finalize_idx" — only the `end_idx`-derived branch is mapped, and changing that
+mapping also moves the probe's search bound and therefore `starting_idx` (the
+pool key); (c) historically, when a value looked one candle past a mapped
+bound the cause was the bounds leak, not the mapper — since Plan A the MS
+post-run assert makes that impossible, so a value past a mapped bound now
+points at the mapper (or at L5b, the probe's ad-hoc BOS_0 read).
 
 **Two different "anchor"s** (GLOSSARY): the parent's `cts_anchor_idx` (H1,
 `CTS_CONFIRMED.meta`, the probe bound) vs the probe's own M15 `cts0_anchor`
 (Phase-2 MS `CTS_0_CONFIRMED`). Conflating them cost a full discussion round.
+
+---
+
+## `REVERSAL_CANDIDATE.meta["pattern"]` Is Always `"?"` (found 2026-09-19, not yet fixed)
+
+`_schedule_reversal_from_anchor` (and `_maybe_apply_pending_reversal`'s debug line) reads the
+pattern name as `getattr(ev_r, "pat", None) or getattr(ev_r, "pattern", None) or "?"`, but
+`PatternEvent` carries it as `.name` — so every `REVERSAL_CANDIDATE` event (and the `[RV_SCHEDULE]` /
+`[RV_APPLY]` debug lines) report `pattern='?'`. The `STATE_CHANGED → reversal` event's `meta["pat"]`
+is correct (it uses `ev.name`), so use that when you need the reversing pattern. Found by the Plan A
+L4 fixture verifier; a one-line fix (`ev_r.name`) for a later commit — it changes event meta, so it
+gets its own `/compare`.
 
 ---
 

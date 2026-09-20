@@ -335,20 +335,19 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (last verified 2026-05-29, full 2025-12-01→2026-01-20 window, after
-the 804d19d big_maru body-pip floor + proximity tightening — these are the
-post-804d19d values; the prior 2026-05-27 baseline had `M15.counter` 221/166
-and `M15.confluence` 382/309. Window-dependent, re-baseline when the config
-window or chart rendering changes):
+counts are (last verified 2026-09-19 on the Stage-3.2a tree = revert `5a658dc`
+and again after Plan A, full 2025-12-01→2026-01-20 window; the 2026-05-29
+values were H1 125/261, counter 216/169, confluence 359/280. Window-dependent,
+re-baseline when the config window or chart rendering changes):
 
-- `H1` chart: traces=125, shapes=261
-- `M15.counter` chart: traces=216, shapes=169
-- `M15.confluence` chart: traces=359, shapes=280
+- `H1` chart: traces=107, shapes=250
+- `M15.counter` chart: traces=198, shapes=133
+- `M15.confluence` chart: traces=342, shapes=222
 
 These print as `DEBUG traces:` / `DEBUG shapes:` (H1) and `[m15_chart] traces:
 N, shapes: M` (each M15 entity) at the end of `python -m engine_v2.run_replay`.
 
-A run with all 18 CSVs byte-identical but shifted chart counts means a
+A run with all 21 CSVs byte-identical but shifted chart counts means a
 purely rendering-side change (e.g. style registry tweak). A run with
 matching chart counts but mismatched CSVs means a logic change. Both
 matrices clean = full parity.

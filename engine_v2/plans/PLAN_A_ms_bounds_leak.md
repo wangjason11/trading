@@ -1,11 +1,18 @@
 # Plan A — Bounded MarketStructure Runs Read Nothing Past Their Bound
 
-**Status:** READY TO IMPLEMENT (written 2026-09-19; cold-reviewed the same day by two fresh agents —
+**Status:** LANDED 2026-09-19 (written + cold-reviewed the same day by two fresh agents —
 code-reference audit + implement-on-paper — and a decision-coverage pass; every finding applied; the
-L5 scope resolution the review added was confirmed by the user the same day). **No open items.**
-**Defect record:** `LANDMINES.md` "MarketStructure Range Look-Ahead Leaks Past `end_idx`" (the plan
-corrects it — the original entry named only site L1 of the five below). §7 retitles that entry; when it
-does, update this header's citation in the same commit.
+L5 scope resolution the review added was confirmed by the user the same day). Execution notes: the
+property test measured 26/57 bounds at the base on the reversing fixture with the full-meta signature
+(22 with a leaked event + 4 that differ only in the L4 `expires_idx` field — the plan's "22" was the
+narrower count); the L5 resolver view is built ONCE per run and cached because an `iloc` slice
+deep-copies `attrs` (GOTCHAS "Per-cell `.iloc[]`…" — the per-call cost §3.1.7 estimated as "one
+pandas slice" was ×2–×11 per resolver call on the probe frames); the §6.2 predicted table was
+reproduced exactly (FC(1,0) 2844 → 2843 `no_retrace` else-branch, `starting_idx` 2803 unchanged,
+every other row identical, all leak columns 0).
+**Defect record:** `LANDMINES.md` "Bounded MS Runs Must Not Read Past `end_idx` (FIXED — Plan A,
+2026-09-19)" (retitled + rewritten by §7 of this plan; the original entry named only site L1 of the
+five below).
 **Ground truth:** `memory/reference_pool_redesign_groundtruth.md` (the first_confluence probe table;
 "Observed leaks past `end_idx`"). Reproduce with `engine_v2/debug/probe_fc_finalize.py` (OANDA, ~2 min).
 **Sequencing:** first of three — `git revert 9fd3143` → **Plan A** → Plan B → Plan C (PART4 §17.11).
@@ -120,7 +127,15 @@ it keeps future information inside the state machine).
 a reversal pattern whose apply is `> effective_end` is never scheduled (anchor fails at `i`); one whose
 apply is `< effective_end` reverses as today; one whose apply is **exactly** `effective_end` is discarded
 as a false break (`probe_no_break` at `effective_end`, rewind to `anchor+1`) because expiry precedes the
-pending apply in the per-candle step. The rejected alternative (leave `expires_idx` at `n-1`) would keep
+pending apply in the per-candle step. **Two precisions found at execution (L4 fixture + its verifier,
+2026-09-19):** (i) that holds on the *pending-apply* path — the close-break candle processed inside
+`_replay_step_no_patterns` (e.g. as an earlier winner's apply candle); when the close-break candle is
+itself an `_step_anchor` anchor, `_best_bopb_pattern_at_anchor` detects the reversal directly
+(`bos_frozen_for_anchor`) and applies it as the "reversal" winner (apply `<= D = effective_end`), so on
+that path the truncated run reverses exactly at the edge. Both runs agree either way — truncation
+equivalence is unaffected; only the *description* of the edge is path-dependent. (ii) The expiry's own
+`BOS_THRESHOLD_UPDATED(probe_no_break)` never appears in the event list: `_rewind_to` resets
+`self.events = []` and the rebuild stops before the expiry candle (pre-existing, §8). The rejected alternative (leave `expires_idx` at `n-1`) would keep
 a watch and a pending reversal open past the bound, making bounded ≠ truncated whenever a watch
 straddles the bound.
 
@@ -328,6 +343,11 @@ names it:
   `i+k`, `k <= 5`. `B = i+k` → `BOS_THRESHOLD_UPDATED(reason="probe_no_break")` at `B` and **no**
   reversal (expiry precedes the pending apply); `B > i+k` → reversal at `i+k` (unchanged); `B < i+k` →
   the anchor fails at `i` (`rv_anchor_failed`; no watch survives) — no events at `B`.
+  *As built (`_make_l4_watch_at_bound`, i=4, k=2, pending-apply path):* the `probe_no_break` event is
+  emitted and then wiped by the rewind (§2 (ii)), so the test asserts what survives — `REVERSAL_CANDIDATE`
+  with `apply_idx == expires_idx == B`, no reversal, every event `<= B`; at `B > i+k` the reversal is at
+  `i+k` but the watch events' `expires_idx` still clamps to `min(i+5, B)` (whole-meta equality only
+  from `B >= i+5`).
 - **L5 BOS inner at the bound:** a `BOS_CONFIRMED` whose extreme `bos_idx` has an inside-bar pair at
   `bos_idx+3..+5` and a cycle-1 proximity confirmation that depends on that inner. `B = bos_idx+2` → the
   inner is derived without them (or is `None` → proximity off); `B >= bos_idx+5` → as today.
@@ -425,12 +445,24 @@ names it:
   Working DataFrame", point 1. Identical in bounded and truncated runs, so not a Plan A concern.
 - `run()` `:411` returns `self.levels`, which is never defined → `AttributeError` when `start_idx >= n`
   (pre-existing; no live caller hits it — `_build_or_get_sub_geometry` guards `start_abs >= n`).
+- **Found while executing (L4 fixture, 2026-09-19):** the expiry's `BOS_THRESHOLD_UPDATED(probe_no_break)`
+  event is emitted at the expiry candle and then wiped by `_rewind_to`'s `self.events = []` (stamped past
+  `jump_to - 1`, so the rebuild never re-emits it); the threshold reaches the resumed run only via the
+  seed, and the event stream shows the jump with no event between (the next threshold event's `prev`
+  betrays it). Identical in bounded and truncated runs. Recorded in LANDMINES "MarketStructure
+  Deep-Couples…" point 1 (d). Not fixed here.
+- **The prefix (clip) tail divergence is exactly what the L4 fixture shows at `B = i+k`:** the bounded run
+  discards the reversal as a false break at the edge while the natural-end run reverses there.
 - **Prefix (clip) equivalence does not hold in the last 5 candles** (§2) — inherent; Plan C's model
   (geometry to the data edge, windows clipped from one run) is the answer, and `knowable_at_idx`'s
   half-clip of `CTS_ESTABLISHED` / `REVERSAL_CANDIDATE` remains a separate, known gap. The
   expiry-before-apply ordering (`:578-581`) is the sharpest instance (a reversal exactly at the edge is a
   false break).
 - Terminal reversal stamping writes rows past the bound (WRITE, harmless for every live caller).
+- **`REVERSAL_CANDIDATE.meta["pattern"]` is always `"?"`** (found by the L4 verifier): `_schedule_reversal_from_anchor`
+  reads `getattr(ev_r, "pat", None) or getattr(ev_r, "pattern", None)`, but `PatternEvent` exposes the name as
+  `.name`. Same in `_maybe_apply_pending_reversal`'s debug line. Pre-existing, cosmetic (meta only); a one-line
+  fix for a later commit — recorded in GOTCHAS.
 
 ## 9. Definition of done
 §5 tests green (the property test fails at the base — `B=3`, L1 — and passes after, in both modes);

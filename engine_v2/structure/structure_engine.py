@@ -869,7 +869,10 @@ def compute_bounded_structure(
         TF for proximity-pips lookup (H1/M15/M5).
     end_idx : int, optional
         Inclusive upper bound on the run (parent-cycle-end or next subsequent
-        trigger). The run never writes/emits past it.
+        trigger). The run is identical to an unbounded run on the frame
+        truncated at ``end_idx`` (nothing past it is read — Plan A §2, with
+        the ``attrs["imbalances"]`` residual noted there); no event carries an
+        ``idx`` past it (asserted in ``MarketStructure.run()``).
 
     Returns
     -------

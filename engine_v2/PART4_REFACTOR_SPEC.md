@@ -820,9 +820,13 @@ generalized):
       2nd `CTS_ESTABLISHED` idx (the "double CTS", earlier than the parent-CTS
       bound); `reversal_in_probe` → reversal idx; `no_retrace` →
       `CTS_0_CONFIRMED` idx **if cycle 0 confirmed inside the probe window,
-      else `end_idx`** (the else-branch is the COMMON case — 2 of 3
-      `no_retrace` FCs on the 2025-11→2026-01 window, all 3 once the MS
-      bounds leak is fixed; corrected 2026-09-19). Subsequent_\*/reversal already floor at their probe
+      else `end_idx`** (the else-branch is the COMMON case — measured after
+      Plan A landed (2026-09-19, `debug/probe_fc_finalize.py`): all three
+      `no_retrace` FCs on the 2025-11→2026-01 window take it — FC(1,0) 2843,
+      FC(1,1) 3047, FC(1,2) 3621 = the price-mapped parent CTS anchor; FC(0,0)
+      1020 and FC(0,1) 2608 are `second_cts_reached`. Before Plan A FC(1,0)
+      was 2844 via the if-branch, from a `CTS_CONFIRMED` the bounded MS had
+      leaked one candle past its bound). Subsequent_\*/reversal already floor at their probe
       `end_idx`/reversal idx (= their finalize), so the rule "floor at the probe
       finalize idx" is a no-op for them and changes only the two bootstraps.
       Legacy escape-hatch probe → no finalize idx → falls back to the anchor.
@@ -2520,10 +2524,14 @@ withdrawn but the WVMI pass may return to per-(sub, lens) sweeps — do not trea
 ### 17.11 Validation — sequencing, predicted table, `/compare`
 
 **Sequencing (one cause per `/compare`).** `git revert 9fd3143` (tree = Stage
-3.2a) → **Plan A** (MS range look-ahead clamp, `market_structure.py` `D =
-min(i + range_max_k, n − 1)` → clamp to `effective_end`; small
-`RANGE_STARTED` / `STATE_CHANGED` deltas at bounded-run tails; FC(1,0)'s
-finalize 2844 → 2843) → **Plan B** (`second_cts_reached` becomes a true early
+3.2a; landed `5a658dc`, save `20260919_215955_5a658dc`, byte-identical to
+`c932610`) → **Plan A** (**LANDED 2026-09-19** — bounded MS runs have
+truncation semantics at five sites: `D`, the `is_range_confirm_idx` label,
+the detector's visible length, the reversal-watch expiry, the resolvers'
+frame; post-run assert + property test; the only production change was the
+first_confluence probe's Phase-2 run — FC(1,0) finalize 2844 → 2843,
+`starting_idx` 2803 unchanged, H1 byte-identical; `plans/PLAN_A_ms_bounds_leak.md`)
+→ **Plan B** (`second_cts_reached` becomes a true early
 stop in `unified_probe` Phase 2; byte-identical — nothing past the 2nd
 `CTS_ESTABLISHED` is read) → **Plan C** (this section; one behavioural change,
 one replay). Each with its own replay, `/compare`, chart-review pause and

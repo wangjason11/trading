@@ -98,6 +98,10 @@ def test_capped_run_emits_nothing_past_cap(reversing_df, natural_reversal_idx):
     capped = compute_bounded_structure(reversing_df, _START, _SD, end_idx=cap)
     for ev in capped.events:
         assert knowable_at_idx(ev.type, ev.idx, ev.meta.get("confirmed_at")) <= cap
+        # Plan A: a bounded run stamps NO event past its bound — `ev.idx` included
+        # (for BOS_CONFIRMED the extreme, which precedes `confirmed_at`). MS asserts
+        # this itself post-run; stated here so the guarantee is explicit.
+        assert int(ev.idx) <= cap
 
 
 def _cols_equal(a, b):

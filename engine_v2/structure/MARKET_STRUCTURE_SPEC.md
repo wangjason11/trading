@@ -294,6 +294,63 @@ This avoids “cheating” while still allowing batch computation.
 
 ---
 
+## Bounded runs (`end_idx`)
+
+A run with `end_idx=B` has **truncation semantics** (Plan A, 2026-09-19): it
+produces exactly the events and output rows an unbounded run on the frame
+truncated to `[0, B]` would (look-ahead labels recomputed on the truncated
+frame). `effective_end = min(n-1, B)` is the run's **data edge** — nothing
+past it is read, and the run does at the edge exactly what it does at the real
+data edge. Unbounded runs (`end_idx=None`, the main H1 path) are the identity
+case (`effective_end = n-1`).
+
+What clamps at `effective_end` (never at `len(df) - 1`):
+- the pattern-apply / range back-fill horizon `D = min(i + range_max_k, effective_end)`;
+- the range label: a candidate whose `is_range_confirm_idx` (the FIRST confirming
+  close in `[i+2, i+5]`, computed full-frame) is past the edge is *not* a range
+  candle yet;
+- the pattern detector: `BreakoutPatterns(df, end_idx=effective_end)` — candles
+  past the edge do not exist for it (a SUCCESS / CONFIRMED that would need them is
+  `None` / unconfirmed, never a candidate to be dropped later — which matters
+  because `detect_best_for_anchor` returns ONE pattern per anchor by priority);
+- the reversal watch: `expires_idx = min(anchor + range_max_k, effective_end)`
+  and the expiry rewind target. A reversal pattern applying past the edge is
+  never scheduled; one applying **exactly at** the edge is discarded as a false
+  break (`probe_no_break`, rewind to `anchor + 1`) because expiry runs before the
+  pending apply in the per-candle step — on the pending-apply path, i.e. when the
+  close-break candle was processed inside `_replay_step_no_patterns`; a close-break
+  candle that is itself an `_step_anchor` anchor has its reversal applied directly
+  as the anchor's winner (apply ≤ `D`). Either way bounded == truncated. Note the
+  expiry's own `BOS_THRESHOLD_UPDATED(probe_no_break)` does not survive the rewind
+  (LANDMINES "MarketStructure Deep-Couples…" 1 (d)); one applying before the edge
+  reverses as usual;
+- the zone resolvers (BOS inner at `BOS_CONFIRMED`, POI inners at
+  `CTS_ESTABLISHED` / `CTS_UPDATED`) read a view of the frame truncated at the
+  edge (`_resolver_df()`, built once per run). `attrs["imbalances"]` stays
+  full-frame — a documented residual (instance existence / merged bounds at the
+  edge).
+
+**Shared 5-candle horizon:** `range_max_k` = the detector's max confirmation
+offset (`idx+5`) = `RangeLabelConfig.max_lookahead` = the inside-bar scan
+half-width. One number; do not decouple them.
+
+**Guard:** `run()` asserts post-loop that `max(ev.idx) <= effective_end`
+(every emit site stamps `i`, an anchor, an extreme inside a pattern span ≤
+apply ≤ `D`, or the range label's `confirm_idx`). If it fires, a forward read
+was missed — fix the read, never the assert. Property test over every bound:
+`tests/test_ms_bounded_equals_truncated.py`.
+
+**Not prefix-equivalence.** A bounded run at `B` is NOT the natural-end run
+clipped at `B`: the last `range_max_k` candles before `B` can legitimately
+differ (a pattern the natural run is back-filling past `B` vs. those candles
+processed as anchors; a reversal pending past `B`; a reversal applying exactly
+at `B`). That is the 5-candle pending-confirmation nature of the machine.
+Callers: `compute_bounded_structure` (subs — their frames are already sliced to
+the bound), `unified_probe` Phase 2 (the first_confluence probe — the one
+production path that runs MS on a frame longer than its bound).
+
+---
+
 ## DF outputs (selected)
 
 MarketStructure writes:

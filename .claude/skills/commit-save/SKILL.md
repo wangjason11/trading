@@ -17,7 +17,7 @@ argument-hint: [commit message] [--reuse-replay]
 
 ## Replay modes: run (default) vs reuse
 
-Step 4 (the replay) is the slow part (~15 min on the full M15 window). Two modes:
+Step 4 (the replay) is the slow part (~80 s on the full M15 window since the 2026-07 perf sprint; it was ~15 min before). Two modes:
 
 - **Run mode (default — plain `/commit-save`):** run a fresh replay in Step 4,
   then copy its just-written outputs via the `.before_replay_marker`.
@@ -32,7 +32,11 @@ Step 4 (the replay) is the slow part (~15 min on the full M15 window). Two modes
   committed.** Reuse mode is correct ONLY if a replay was already run earlier
   in this session AND no code changed since (a re-run would reproduce identical
   output). If any source changed after the last replay — or you're unsure — use
-  run mode. Reusing stale outputs silently saves the wrong data.
+  run mode. Reusing stale outputs silently saves the wrong data. Concrete case
+  (2026-09-19): after `git revert 9fd3143` the on-disk `artifacts/debug` still
+  held the *3.2b* replay (same filenames, different M15 CSVs) — a reuse save
+  would have baselined Plan A against the superseded code. A revert or checkout
+  is a code change: run mode.
 
 When `--reuse-replay` (or the natural-language equivalent) is present, strip it
 from `$ARGUMENTS` before using the remainder as the commit message.

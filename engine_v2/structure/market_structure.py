@@ -322,6 +322,18 @@ class MarketStructure:
         self.struct_direction = struct_direction
         self.start_idx = int(start_idx)
         self.end_idx = int(end_idx) if end_idx is not None else None  # optional stopping point (inclusive)
+        # The run's DATA EDGE (inclusive). A bounded run reads nothing past it:
+        # it is identical to an unbounded run on the frame truncated at
+        # `end_idx` (Plan A; MARKET_STRUCTURE_SPEC "Bounded runs"). Every
+        # internal horizon — pattern applies / range back-fill (`D`), the
+        # range label's confirming close, the reversal-watch expiry, the
+        # detector's visible length and the resolvers' frame — clamps here,
+        # never to `len(self.df) - 1`. Unbounded runs: `n - 1` (identity).
+        n = len(self.df)
+        self._effective_end = n - 1 if self.end_idx is None else min(n - 1, int(self.end_idx))
+        # Lazily-built truncated view handed to the zone resolvers (L5);
+        # see `_resolver_df`.
+        self._resolver_view: Optional[pd.DataFrame] = None
         self.eps = float(eps)
         self.debug_invariants = bool(debug_invariants)
         # Opt-in 'true first breakout' rule (see PART4_REFACTOR_SPEC §4.4
@@ -360,8 +372,9 @@ class MarketStructure:
         self.state.structure_id = int(structure_id)
         self.events: List[StructureEvent] = []
 
-        # Pattern detector (uses df feature columns)
-        self._bp = BreakoutPatterns(self.df)
+        # Pattern detector (uses df feature columns), bounded at the data edge
+        # so a pattern that would need candles past `end_idx` does not exist.
+        self._bp = BreakoutPatterns(self.df, end_idx=self._effective_end)
 
         self.range_min_k = int(range_min_k)
         self.range_max_k = int(range_max_k)
@@ -400,7 +413,12 @@ class MarketStructure:
         Sequentially labels market_state, CTS/BOS/range fields, and emits StructureEvents.
         No skipping. Uses pending confirmation for patterns + internal range evaluation window (min/max lookahead) with rewind+replay.
 
-        If end_idx is set, processing stops after that idx (inclusive).
+        If `end_idx` is set the run has TRUNCATION semantics: it produces exactly the
+        events and output rows an unbounded run on the frame truncated to `[0, end_idx]`
+        would (nothing past `end_idx` is read; `end_idx` is the run's data edge). This is
+        NOT prefix-equivalence with the natural-end run — the last `range_max_k` candles
+        before the bound may legitimately differ (pending confirmations, a reversal
+        applying exactly at the edge is a false break). See Plan A §2.
         """
         n = len(self.df)
         # i = 0
@@ -410,10 +428,8 @@ class MarketStructure:
         if i >= n:
             return self.df, self.events, self.levels
 
-        # Determine effective end index (inclusive)
-        effective_end = n - 1
-        if self.end_idx is not None and self.end_idx < effective_end:
-            effective_end = self.end_idx
+        # Effective end index (inclusive) = the run's data edge (set in __init__).
+        effective_end = self._effective_end
 
         # Path 2b: preallocate output arrays (reused across rewinds). Placed
         # after the start_idx>=n early returns so degenerate runs skip it.
@@ -445,6 +461,16 @@ class MarketStructure:
 
             i = next_i
 
+        # Plan A invariant: a bounded run reads nothing past its data edge, so
+        # it can stamp nothing past it either (every emit site stamps `i`, an
+        # anchor, an extreme inside a pattern span <= apply <= D, or the range
+        # label's confirm_idx — all clamped at `_effective_end`). Unconditional
+        # (O(events)); if it fires a forward read was missed — do not weaken it.
+        if self.events:
+            _max_idx = max(int(ev.idx) for ev in self.events)
+            assert _max_idx <= self._effective_end, (
+                f"[market_structure] event past effective_end: max idx {_max_idx} > {self._effective_end}")
+
         # Path 2b: flush the batched per-candle output arrays to df columns
         # before the terminal reversal stamping + invariant checks below
         # (both read the df output columns).
@@ -473,13 +499,12 @@ class MarketStructure:
         then restore a provided seed snapshot (used for reversal-watch false-break rewinds).
         """
         jump_to = int(jump_to)
-        n = len(self.df)
         if jump_to <= 0:
             self.state = MarketStructureState(struct_direction=self.struct_direction)
             self.events = []
             return
-        if jump_to >= n:
-            jump_to = n - 1
+        if jump_to > self._effective_end:
+            jump_to = self._effective_end
 
         # Reset state + events (df price/features stay; output cols will be overwritten as we replay)
         self.state = MarketStructureState(struct_direction=self.struct_direction)
@@ -707,7 +732,10 @@ class MarketStructure:
         st.reversal_watch_active = True
         st.reversal_watch_start_idx = int(i)
         st.reversal_bos_th_frozen = float(bos_frozen)
-        st.reversal_watch_expires_idx = min(int(i) + int(self.range_max_k), len(self.df) - 1)
+        # Watch window clamps at the run's data edge (L4): a reversal pattern
+        # applying past it is never scheduled; one applying exactly at it is a
+        # false break (expiry precedes the pending apply in the per-candle step).
+        st.reversal_watch_expires_idx = min(int(i) + int(self.range_max_k), self._effective_end)
 
         # Emit REVERSAL_WATCH_START event for all close-breaks (survives rewinds)
         # This captures the moment reversal watch begins, even if no pattern is found
@@ -781,7 +809,7 @@ class MarketStructure:
             )
 
         # Rewind to anchor + 1 (do NOT jump to extremes)
-        jump_to = min(anchor + 1, len(self.df) - 1)
+        jump_to = min(anchor + 1, self._effective_end)
         st.jump_to_idx = jump_to
 
         # Seed snapshot: this is the state we want to be true when we resume at jump_to
@@ -893,8 +921,9 @@ class MarketStructure:
     # ----------------------------
 
     def _step_anchor(self, i: int) -> int:
-        n = len(self.df)
-        D = min(i + self.range_max_k, n - 1)  # range_max_k is 5 by default
+        # Horizon for pattern applies + range back-fill, clamped at the run's
+        # data edge (L1) — never at len(df) - 1.
+        D = min(i + self.range_max_k, self._effective_end)  # range_max_k is 5 by default
 
         st = self.state
 
@@ -1022,19 +1051,6 @@ class MarketStructure:
         if allow_pullback_detection:
             ev_p = self._bp.detect_best_for_anchor(i, -self.struct_direction, pullback_th)
 
-            # Pullback Pattern Debugging Print
-            if i in (102, 103):
-                omo = self._bp.one_maru_opposite(i, -self.struct_direction, pullback_th, do_confirm=False)
-                omc = self._bp.one_maru_continuous(i, -self.struct_direction, pullback_th, do_confirm=False)
-                dm  = self._bp.double_maru(i, -self.struct_direction, pullback_th, do_confirm=False)
-                print(f"[DBG] i={i} pullback_th={pullback_th} "
-                    f"OMO={None if omo is None else omo.status} "
-                    f"OMC={None if omc is None else omc.status} "
-                    f"DM={None if dm is None else dm.status}")
-                if omc is not None:
-                    print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
-                    print(f"[DBG] candle+1 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
-
             if ev_p is not None:
                 apply_p = self._apply_idx(ev_p)
                 if apply_p is not None and apply_p <= D:
@@ -1090,7 +1106,12 @@ class MarketStructure:
             return (False, None)
 
         confirm_idx = int(self.df.iloc[i].get("is_range_confirm_idx", -1))
-        if confirm_idx < 0:
+        if confirm_idx < 0 or confirm_idx > self._effective_end:
+            # The confirming close has not happened yet (L2): the label is
+            # computed full-frame and locks the FIRST close in [i+2, i+5]
+            # inside candle i's range, so a confirm past the data edge means
+            # no close <= effective_end confirmed it — exactly what the label
+            # would say on the truncated frame.
             return (False, None)
 
         candle_i = str(self.df.iloc[i].get("candle_type", ""))
@@ -1466,7 +1487,7 @@ class MarketStructure:
                 # the resolver wired by structure_engine.py (Part 4 §13.5.b).
                 if self._bos_inner_resolver is not None:
                     st.bos_inner_for_cycle = self._bos_inner_resolver(
-                        self.df,
+                        self._resolver_df(),
                         int(bos_idx),
                         int(self.struct_direction),
                     )
@@ -1531,8 +1552,7 @@ class MarketStructure:
             return
 
     def _post_apply_range_check(self, i: int) -> None:
-        n = len(self.df)
-        D = min(i + self.range_max_k, n - 1)  # range_max_k is 5 by default
+        D = min(i + self.range_max_k, self._effective_end)  # range_max_k is 5 by default (L1)
 
         st = self.state
 
@@ -1555,6 +1575,31 @@ class MarketStructure:
             st.bos_event = saved_bos_event
             st.cts_event = saved_cts_event
 
+
+    # ----------------------------
+    # Zone-resolver frame (L5)
+    # ----------------------------
+
+    def _resolver_df(self) -> pd.DataFrame:
+        """The frame a resolver may read: truncated at the run's data edge.
+
+        Main / unbounded runs (`end_idx=None`) and runs whose frame already ends
+        at the bound get `self.df` itself — no slicing, no behaviour or perf
+        change. A bounded run on a longer frame (the first_confluence probe's
+        Phase-2 MS) gets `self.df.iloc[: effective_end + 1]` — a RangeIndex
+        frame with `loc == iloc`, `len(df) == effective_end + 1` and the same
+        `attrs` (`attrs["imbalances"]` stays full-frame: the documented Plan A
+        §2 residual). Built ONCE per run and cached: the resolvers read only
+        immutable feature columns, and an `iloc` slice deep-copies `attrs`
+        (GOTCHAS "Per-cell .iloc[] on a df with heavy .attrs"), which on a
+        probe frame carrying the mirrored sub attrs is far too slow to pay per
+        CTS_UPDATED.
+        """
+        if self._effective_end >= len(self.df) - 1:
+            return self.df
+        if self._resolver_view is None:
+            self._resolver_view = self.df.iloc[: self._effective_end + 1]
+        return self._resolver_view
 
     # ----------------------------
     # CTS/BOS helpers & emits
@@ -1715,14 +1760,10 @@ class MarketStructure:
             from engine_v2.structure.true_first_breakout import (
                 find_true_first_breakout,
             )
-            effective_end = (
-                int(self.end_idx) if self.end_idx is not None
-                else int(len(self.df) - 1)
-            )
             self._cts0_tfb = find_true_first_breakout(
                 self._bp,
                 int(self.start_idx),
-                effective_end,
+                int(self._effective_end),
                 int(self.struct_direction),
                 self.bos0_inner,
             )
@@ -1910,7 +1951,7 @@ class MarketStructure:
         if st.cts_cycle_id == 0:
             self._update_cycle0_data()
         st.poi_inners_for_cycle = self._poi_inners_resolver(
-            self.df,
+            self._resolver_df(),
             int(st.bos_confirmed.idx),
             float(st.bos_confirmed.price),
             int(st.cts.idx),
