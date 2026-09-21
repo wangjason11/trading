@@ -268,6 +268,14 @@ else \
 fi
 ```
 
+**Verify you are back on the work branch afterwards** (`git rev-parse
+--abbrev-ref HEAD`). `git cherry-pick` has NO `-q` flag — passing one prints
+usage and fails, and because the snippet is an `&&` chain the checkout back
+never runs, leaving the session on `artifacts-trunk` with its stale code
+(happened 2026-09-21; the "file changed on disk" notices for
+`sid_records.py` were the trunk's old copy). If that happens: `git checkout
+<work-branch>` first, then redo the cherry-pick from a fresh command.
+
 **If the cherry-pick fails** (rare — typically only if you manually
 edited LATEST_<branch> on artifacts-trunk to a value that conflicts):
 resolve manually, finish the cherry-pick, then `git checkout
