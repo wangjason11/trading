@@ -3,7 +3,7 @@
 Per spec §4.3.2:
   Probe sd:        +parent_sd  (confluence — same direction as parent)
   Probe input_idx: parent BOS extreme idx (= BOS_CONFIRMED.ev.idx)
-  Probe end_idx:   the confirmed CTS's extreme idx (`cts_anchor_idx`) in the
+  Probe probe_end_idx: the confirmed CTS's extreme idx (`cts_anchor_idx`) in the
                    same parent cycle (resolved once parent CTS_CONFIRMED fires —
                    not the confirmation candle)
 
@@ -51,7 +51,7 @@ def to_multi_tf_trigger(
         lifecycle_end_idx=trig.lifecycle_end_idx,
         meta={
             "probe_input_idx": trig.input_idx,
-            "probe_end_idx": trig.end_idx,
+            "probe_end_idx": trig.probe_end_idx,
             "trigger_event_idx": trig.trigger_event_idx,
             "bos_price": trig.meta.get("bos_price"),
         },

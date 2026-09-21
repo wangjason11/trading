@@ -387,7 +387,7 @@ class TestQuiescence:
         res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 17, "H1", enable_phase2=True)
         assert res.finalize_condition == "second_cts_reached"
         assert res.finalize_idx == 10
-        assert res.start_idx == 0
+        assert res.starting_idx == 0
         on, off = _phase2_pair(df, 17)
         assert on == off
         assert on.finalize_idx == 10

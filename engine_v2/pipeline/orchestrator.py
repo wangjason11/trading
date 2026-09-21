@@ -26,7 +26,6 @@ from engine_v2.multitf.subsequent_counter_trigger import (
 )
 
 from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
-from engine_v2.zones.structure_lifecycle import compute_struct_start_by_sid
 
 # Week 7: POI zones
 from engine_v2.zones.poi_zones import derive_poi_zones, POIConfig
@@ -564,34 +563,10 @@ def run_pipeline(
     lower_tf_results = []
     confluence_results: List[Any] = []
     if lower_timeframes and "M15" in lower_timeframes:
-        # Parent-cycle lifecycle-start floors (H1 coords) for the sub lifecycle
-        # clamp (PART4 §5; plan B1, 2026-05-27). For each parent (sid, cycle):
-        # max(parent structure lifecycle-start, that cycle's CTS_ESTABLISHED idx)
-        # — i.e. the parent cycle's clamped lifecycle-start (which already embeds
-        # the parent_sid floor). Subs map these H1 idxs to M15 (last-of-hour) and
-        # floor their zone/POI activation so a sub cycle/structure never becomes
-        # active before its parent cycle is alive.
-        _h1_rev_by_sid: Dict[int, int] = {}
-        for ev in sorted_events:
-            if ev.type == "STATE_CHANGED" and ev.meta.get("to") == "reversal":
-                _rsid = int(ev.meta.get("structure_id", 0))
-                if _rsid not in _h1_rev_by_sid or int(ev.idx) > _h1_rev_by_sid[_rsid]:
-                    _h1_rev_by_sid[_rsid] = int(ev.idx)
-        _h1_struct_start = compute_struct_start_by_sid(sorted_events, _h1_rev_by_sid, None)
-        parent_cycle_floor_h1: Dict[tuple, int] = {}
-        for ev in sorted_events:
-            if ev.type == "CTS_ESTABLISHED":
-                _csid = int(ev.meta.get("structure_id", 0))
-                _ccyc = int(ev.meta.get("cycle_id", 0))
-                _sid_floor = _h1_struct_start.get(_csid, int(ev.idx))
-                parent_cycle_floor_h1[(_csid, _ccyc)] = max(_sid_floor, int(ev.idx))
-
-        # Two-entity cadence driver (Session 3, 2026-05-31): confluence +
-        # counter M15 entities are built INTERLEAVED in trigger-cadence order
-        # so each can read the other as sibling. Replaces the former
-        # confluence-first-then-counter serial pair (which couldn't satisfy
-        # subsequent_confluence's reference to the counter sibling). See
-        # `_run_multi_tf_dual` + `build_two_entity_parent_cycle`.
+        # Sub-structure pool driver (PART4 §17, Plan C): parent tables + the
+        # lifecycle sweep + one projection per unique sub, mirrored per lens.
+        # The parent-cycle floors/ends every record uses are computed inside
+        # (`multitf/parent_tables.py`, on the CTS-established MOMENT).
         _t0 = time.perf_counter()
         confluence_results, lower_tf_results = _run_multi_tf_dual(
             s_res.df,
@@ -605,7 +580,6 @@ def run_pipeline(
             subsequent_confluence_triggers=subsequent_confluence_triggers,
             subsequent_counter_triggers=subsequent_counter_triggers,
             main_zone_proximity_triggers=zone_proximity_triggers,
-            parent_cycle_floor_h1=parent_cycle_floor_h1,
         )
         timing["multi_tf_dual"] = time.perf_counter() - _t0
 
@@ -635,8 +609,8 @@ def _confluence_trigger_stream(
     Confluence sub WVMI is initiated at sd-prox-class parent events: the
     main's first sd-prox after CTS, plus each subsequent_counter (var 4) in
     this parent cycle. Returned as `(parent_idx, event_type)` pairs in
-    parent-df coords; the caller (`_assign_trigger_centric_sub_wvmi`) sorts and
-    maps them to M15.
+    parent-df coords; the caller (`_assign_sub_wvmi_per_sub`) sorts and maps
+    them to M15.
     """
     stream: List[Tuple[int, str]] = []
     sd_idx = main_first_sd_by_cycle.get(key)
@@ -668,31 +642,31 @@ def _counter_trigger_stream(
     return stream
 
 
-def _assign_trigger_centric_sub_wvmi(
-    results: list,
-    trigger_stream: List[Tuple[int, str]],
+def _assign_sub_wvmi_per_sub(
+    sub_results: list,
+    streams_by_lens: Dict[str, List[Tuple[int, str]]],
     *,
     parent_df: pd.DataFrame,
     m15_df: pd.DataFrame,
-    sub_path_id: str,
+    lens_dfs: Dict[str, pd.DataFrame],
+    lens_paths: Dict[str, str],
 ) -> Dict[str, Any]:
-    """Trigger-centric sub WVMI gating for one parent cycle (§8.3 / §8.4 / §8.5).
+    """Trigger-centric sub WVMI, ONE sweep per unique sub (§17.10 — the user's
+    stated lean, implemented minimally so the code runs; the deferred WVMI
+    pass may return to per-(sub, lens) sweeps — do not treat as settled).
 
-    For each parent trigger (time-ordered), find whichever sub sid in
-    `results` is ACTIVE at the trigger moment — active window =
-    `[start_trigger_idx, m15_end_idx]` (lifecycle-start to effective end, both
-    entity-absolute M15 idx) — and sweep that sid's WVMI once, stamping the
-    trigger. A sid touched by multiple triggers is swept once (continuous
-    tracker; the sweep already covers all the sid's cycles), so the earliest
-    (initiating) trigger wins attribution.
+    For each sub projection: window = `[start_idx, m15_end_idx]` (the sub's
+    real-time lifecycle, edge for an open sub); stream = the union of the
+    confluence and the counter parent-trigger streams (over ALL parent cycles
+    — a sub spans cycles) restricted to the sub's lenses; the FIRST trigger
+    (by parent idx, LOH-mapped) inside the window sweeps the sub once
+    (`compute_parent_driven_sub_wvmi`), with the sweeping trigger's lens
+    deciding the records' `structure_path_id`; the records are persisted into
+    every lens df the sub is on. Dedup key `sub_id`. `triggered_by_event_idx`
+    stays in parent-df coords (LANDMINE "WVMI Records Carry Mixed-Coordinate
+    Meta") — never translated.
 
-    This is how reversal-born sids are gated — there is NO `use_case` special
-    case. A reversal sid is swept iff a parent trigger of the entity's class
-    lands inside its window; otherwise it gets no WVMI (correct under the
-    parent-driven model). `triggered_by_event_idx` stays in parent-df coords
-    (LANDMINE "WVMI Records Carry Mixed-Coordinate Meta") — never translated.
-
-    Returns counts `{"acted", "records", "by_started_by"}`.
+    Returns counts `{"acted", "records", "by_started_by", "by_lens"}`.
     """
     from engine_v2.multitf.entity_df_mutation import (
         _map_parent_idx_to_m15_hour_end,
@@ -703,67 +677,56 @@ def _assign_trigger_centric_sub_wvmi(
         compute_parent_driven_sub_wvmi,
     )
 
-    counts: Dict[str, Any] = {"acted": 0, "records": 0, "by_started_by": {}}
-    swept: set = set()
-    for parent_idx, event_type in sorted(trigger_stream, key=lambda t: t[0]):
-        m15_idx = _map_parent_idx_to_m15_hour_end(
-            int(parent_idx), parent_df, m15_df,
-        )
-        if m15_idx is None:
-            continue
-        # Active sid = the most-recently-started sid whose
-        # [start_trigger_idx, m15_end_idx] window contains the trigger.
-        active = None
-        best_start = -1
-        for res in results:
-            start = res.meta.get("start_trigger_idx")
-            end = res.meta.get("m15_end_idx")
-            if start is None or end is None:
+    counts: Dict[str, Any] = {
+        "acted": 0, "records": 0, "by_started_by": {}, "by_lens": {},
+    }
+    # LOH-map each stream once: (m15_idx, parent_idx, event_type, lens).
+    mapped: List[Tuple[int, int, str, str]] = []
+    for lens, stream in streams_by_lens.items():
+        for parent_idx, event_type in stream:
+            m15_idx = _map_parent_idx_to_m15_hour_end(int(parent_idx), parent_df, m15_df)
+            if m15_idx is None:
                 continue
-            if start <= m15_idx <= end and start > best_start:
-                active = res
-                best_start = start
-        if active is None:
+            mapped.append((int(m15_idx), int(parent_idx), event_type, lens))
+    mapped.sort(key=lambda t: (t[0], t[1]))
+
+    swept: set = set()
+    for res in sub_results:
+        sub_id = res.meta.get("sub_id")
+        start = res.meta.get("start_idx")
+        end = res.meta.get("m15_end_idx")
+        lenses = set(res.meta.get("lenses") or ())
+        if sub_id is None or start is None or end is None or sub_id in swept:
             continue
-        # Identity tuple (parent_sid, parent_cycle_id, sub_sid) — sweep each
-        # sid at most once.
-        identity = (
-            active.meta.get("parent_sid"),
-            active.meta.get("parent_cycle_id"),
-            active.meta.get("sub_sid"),
+        hit = next(
+            (t for t in mapped if t[3] in lenses and start <= t[0] <= end), None,
         )
-        if identity in swept:
+        if hit is None:
             continue
+        _m15_idx, parent_idx, event_type, lens = hit
         recs = compute_parent_driven_sub_wvmi(
-            active,
-            sub_path_id=sub_path_id,
+            res,
+            sub_path_id=lens_paths[lens],
             parent_trigger=ParentTrigger(
                 idx=int(parent_idx),
                 event_type=event_type,
                 parent_path_id="H1.main",
             ),
         )
-        active.wvmi_records = recs
-        persist_facade_wvmi_to_entity_df(
-            m15_df, active, structure_path_id=sub_path_id,
-        )
-        swept.add(identity)
+        res.wvmi_records = recs
+        for l in sorted(lenses):
+            persist_facade_wvmi_to_entity_df(
+                lens_dfs[l], res, structure_path_id=lens_paths[l],
+            )
+        swept.add(sub_id)
         if recs:
             counts["acted"] += 1
             counts["records"] += len(recs)
-            sb = active.meta.get("started_by", "?")
-            counts["by_started_by"][sb] = (
-                counts["by_started_by"].get(sb, 0) + len(recs)
-            )
+            sb = res.meta.get("started_by", "?")
+            counts["by_started_by"][sb] = counts["by_started_by"].get(sb, 0) + len(recs)
+            for l in lenses:
+                counts["by_lens"][l] = counts["by_lens"].get(l, 0) + len(recs)
     return counts
-
-
-def _merge_wvmi_counts(acc: Dict[str, Any], c: Dict[str, Any]) -> None:
-    """Accumulate one `_assign_trigger_centric_sub_wvmi` count dict into `acc`."""
-    acc["acted"] += c["acted"]
-    acc["records"] += c["records"]
-    for _sb, _n in c["by_started_by"].items():
-        acc["by_started_by"][_sb] = acc["by_started_by"].get(_sb, 0) + _n
 
 
 def _run_multi_tf_dual(
@@ -779,30 +742,30 @@ def _run_multi_tf_dual(
     subsequent_confluence_triggers: Optional[list] = None,
     subsequent_counter_triggers: Optional[list] = None,
     main_zone_proximity_triggers: Optional[Dict[tuple, list]] = None,
-    parent_cycle_floor_h1: Optional[Dict[tuple, int]] = None,
 ) -> Tuple[list, list]:
-    """Build the M15.confluence + M15.counter entities INTERLEAVED in cadence
-    order so each can read the other as sibling (Part 4 §6.1 + unified-probe
-    Session 3 two-entity driver).
+    """Build the M15 sub-structure pool and the two lens dfs (PART4 §17,
+    Plan C — replaces the Phase-1 two-entity cadence driver):
 
-    Replaces the former `_run_first_confluence_multi_tf` (confluence, var1+var3)
-    + `_run_multi_tf` (counter, var2+var4) pair, which built each entity fully
-    and serially. Serial order cannot satisfy `subsequent_confluence`'s
-    reference to the counter sibling (counter wasn't built yet); interleaving
-    by cadence resolves every sibling-CTS reference because the read is always
-    strictly earlier than the reading sid's own trigger.
+      1. detect the H1 triggers (var1 first_confluence, var2 first_counter,
+         var3 subsequent_confluence, var4 subsequent_counter) and tag each
+         with its lens + `trigger_idx = LOH(trigger_event_idx)`;
+      2. prepare ONE shared M15 feature frame (`prepare_lower_tf_data` once)
+         and two lens dfs (copies — views for the chart/export readers);
+      3. `build_parent_tables` (§17.6) from the H1 events;
+      4. `run_lifecycle_sweep` (§17.6) with the real resolvers / geometry
+         builder / reversal handoff injected — every unique sub + its
+         TriggerRecords + the unresolved-trigger log land in the pool;
+      5. ONE projection per sub (`render_sub_projection`) mirrored into every
+         lens df it belongs to, in `start_idx` order (later-live wins
+         overlapping structure columns);
+      6. per-sub WVMI (§17.10 minimal);
+      7. `attrs["sids"]` (one SidRecord per sub), `attrs["triggers"]` (this
+         lens's records incl. zero-length), `attrs["unresolved_triggers"]`
+         (pool-wide) on each lens df + registry registration.
 
-    Per parent cycle, `build_two_entity_parent_cycle` advances both chains in
-    lock-step. Trigger detection, grouping, the per-cycle trigger-centric sub
-    WVMI passes, sid-records, and registry registration are unchanged and run
-    per-entity AFTER the builds — WVMI is per-entity-isolated (confluence WVMI
-    reads var4 trigger META, not built counter sids, and vice versa), so the
-    deferred timing is byte-identical to the serial version.
-
-    Returns ``(confluence_results, counter_results)``.
+    Returns ``(confluence_results, counter_results)`` — the per-sub
+    projections rendered on each lens, in `start_idx` order.
     """
-    from collections import defaultdict
-
     from engine_v2.multitf.first_confluence_pipeline import (
         to_multi_tf_trigger as first_confluence_to_mt,
     )
@@ -817,16 +780,27 @@ def _run_multi_tf_dual(
         fetch_lower_tf_data, prepare_lower_tf_data,
     )
     from engine_v2.multitf.entity_df_mutation import (
-        build_two_entity_parent_cycle,
+        _map_parent_idx_to_m15_hour_end,
+        _resolve_reversal_start,
+        _resolve_trigger_m15_start,
+        build_or_get_geometry,
+        render_sub_projection,
+    )
+    from engine_v2.multitf.lifecycle_sweep import SweepTrigger, run_lifecycle_sweep
+    from engine_v2.multitf.parent_tables import build_parent_tables
+    from engine_v2.multitf.sub_structure_pool import (
+        LENS_CONFLUENCE, LENS_COUNTER, SubStructurePool, resolve_lens,
     )
 
-    conf_path = "H1.main >> M15.confluence"
-    ctr_path = "H1.main >> M15.counter"
+    parent_path = "H1.main"
+    lens_paths = {
+        LENS_CONFLUENCE: "H1.main >> M15.confluence",
+        LENS_COUNTER: "H1.main >> M15.counter",
+    }
 
-    # --- Trigger grouping inputs ---
-    var1_finalized = [
-        t for t in (first_confluence_triggers or []) if t.status == "finalized"
-    ]
+    # --- 1. Trigger detection ---
+    var1_all = list(first_confluence_triggers or [])
+    var1_finalized = [t for t in var1_all if t.status == "finalized"]
     var3_all = list(subsequent_confluence_triggers or [])
     var2_triggers = detect_uc1_triggers(
         sorted_events, h1_df, wvmi_records, kl_zones,
@@ -835,17 +809,15 @@ def _run_multi_tf_dual(
 
     print(
         f"[multi_tf:dual] confluence var1 finalized="
-        f"{len(var1_finalized)}/{len(first_confluence_triggers or [])} "
+        f"{len(var1_finalized)}/{len(var1_all)} "
         f"var3={len(var3_all)} | counter var2={len(var2_triggers)} "
         f"var4={len(var4_all)}"
     )
-
-    if not var1_finalized and not var2_triggers:
-        if var3_all or var4_all:
-            print("[multi_tf:dual] no bootstraps (var1/var2) — no subs built")
+    if not var1_all and not var2_triggers and not var3_all and not var4_all:
+        print("[multi_tf:dual] no triggers — no subs built")
         return [], []
 
-    # --- Prepare BOTH M15 entity dfs from one raw fetch (frame-aligned) ---
+    # --- 2. ONE shared M15 feature frame + the two lens dfs ---
     pair = h1_df.attrs.get("pair", "NZD_USD")
     h1_start = pd.to_datetime(h1_df["time"].iloc[0], utc=True)
     h1_end = pd.to_datetime(h1_df["time"].iloc[-1], utc=True)
@@ -853,132 +825,135 @@ def _run_multi_tf_dual(
     if m15_raw is None or m15_raw.empty:
         print("[multi_tf:dual] WARNING: No M15 data available")
         return [], []
-    conf_m15 = prepare_lower_tf_data(m15_raw.copy())
-    conf_m15.attrs["pair"] = pair
-    ctr_m15 = prepare_lower_tf_data(m15_raw.copy())
-    ctr_m15.attrs["pair"] = pair
-    if var2_triggers:
-        # Preserve the legacy `meta["m15_df_prepared"]` write (set only when the
-        # counter entity builds, matching the old `_run_multi_tf`).
-        meta["m15_df_prepared"] = ctr_m15
-    print(f"[multi_tf:dual] M15 data prepared: {len(conf_m15)} candles x2")
+    m15 = prepare_lower_tf_data(m15_raw)
+    m15.attrs["pair"] = pair
+    lens_dfs = {
+        LENS_CONFLUENCE: m15.copy(),
+        LENS_COUNTER: m15.copy(),
+    }
+    for _df in lens_dfs.values():
+        _df.attrs["pair"] = pair
+    print(f"[multi_tf:dual] M15 data prepared: {len(m15)} candles (shared frame + 2 lens dfs)")
 
-    # --- Phase 2 Stage 3.1: shared sub-structure pool + per-parent-sid run cap ---
-    # The pool caches each unique (parent_path, M15, direction, start) NATURAL-end
-    # MS run so triggers converging on the same four reuse it instead of re-running
-    # MarketStructure. `run_cap` = parent-structure-end (the H1 parent sid's
-    # reversal, mapped to M15 last-of-hour); a sub of that parent sid runs its
-    # geometry to there — always >= every trigger's window, so each trigger's
-    # projection clips the shared run to its window (byte-identical). An open last
-    # parent sid (no reversal) is absent from the dict → the cursor runs to the
-    # M15 data edge. See PART4_REFACTOR_SPEC §17.5/§17.7.
-    from engine_v2.multitf.sub_structure_pool import SubStructurePool
-    from engine_v2.multitf.entity_df_mutation import (
-        _map_parent_idx_to_m15_hour_end,
-    )
-    sub_pool = SubStructurePool()
-    _h1_sid_end: Dict[int, int] = {}
-    for ev in sorted_events:
-        if ev.type == "STATE_CHANGED" and ev.meta.get("to") == "reversal":
-            _s = int(ev.meta.get("structure_id", 0))
-            _h1_sid_end[_s] = max(_h1_sid_end.get(_s, -1), int(ev.idx))
-    parent_struct_end_m15: Dict[int, int] = {}
-    for _s, _hidx in _h1_sid_end.items():
-        _m = _map_parent_idx_to_m15_hour_end(int(_hidx), h1_df, conf_m15)
-        if _m is not None:
-            parent_struct_end_m15[_s] = int(_m)
+    # --- 3. Static parent tables (§17.6) ---
+    tables = build_parent_tables(sorted_events, h1_df, m15)
 
-    # --- Group bootstraps + subs by parent cycle ---
-    conf_bootstrap_by_cycle: Dict[tuple, Any] = {}
-    for v1 in var1_finalized:
+    # --- Sweep triggers: lens-tagged + LOH-mapped ---
+    def _loh(parent_idx: int) -> int:
+        m = _map_parent_idx_to_m15_hour_end(int(parent_idx), h1_df, m15)
+        assert m is not None, f"[multi_tf:dual] LOH map failed for H1 idx {parent_idx}"
+        return int(m)
+
+    sweep_triggers: List[SweepTrigger] = []
+    for v1 in var1_all:
         mt = first_confluence_to_mt(v1, h1_df)
-        conf_bootstrap_by_cycle[(mt.parent_sid, mt.parent_cycle_id)] = mt
-    conf_subs_by_cycle: Dict[tuple, list] = defaultdict(list)
+        sweep_triggers.append(SweepTrigger(
+            lens=resolve_lens("first_confluence"),
+            parent_sid=int(mt.parent_sid), parent_cycle_id=int(mt.parent_cycle_id),
+            trigger_type="first_confluence",
+            trigger_idx=_loh(v1.trigger_event_idx), direction=int(mt.lower_sd),
+            trigger_event_idx=int(v1.trigger_event_idx), source=mt,
+            pending=(v1.status != "finalized"),
+            probe_input_idx=int(v1.input_idx),
+        ))
+    for v2 in var2_triggers:
+        tei = v2.meta.get("trigger_event_idx")
+        assert tei is not None, (
+            f"[multi_tf:dual] first_counter sid={v2.parent_sid} cycle={v2.parent_cycle_id} "
+            f"has no trigger_event_idx"
+        )
+        sweep_triggers.append(SweepTrigger(
+            lens=resolve_lens("first_counter"),
+            parent_sid=int(v2.parent_sid), parent_cycle_id=int(v2.parent_cycle_id),
+            trigger_type="first_counter",
+            trigger_idx=_loh(tei), direction=int(v2.lower_sd),
+            trigger_event_idx=int(tei), source=v2,
+            probe_input_idx=v2.meta.get("probe_input_idx"),
+        ))
     for v3 in var3_all:
         mt = subsequent_confluence_to_mt(v3, h1_df)
-        conf_subs_by_cycle[(mt.parent_sid, mt.parent_cycle_id)].append(mt)
-
-    ctr_bootstrap_by_cycle: Dict[tuple, Any] = {}
-    for v2 in var2_triggers:
-        ctr_bootstrap_by_cycle[(v2.parent_sid, v2.parent_cycle_id)] = v2
-    ctr_subs_by_cycle: Dict[tuple, list] = defaultdict(list)
+        sweep_triggers.append(SweepTrigger(
+            lens=resolve_lens("subsequent_confluence"),
+            parent_sid=int(mt.parent_sid), parent_cycle_id=int(mt.parent_cycle_id),
+            trigger_type="subsequent_confluence",
+            trigger_idx=_loh(v3.trigger_event_idx), direction=int(mt.lower_sd),
+            trigger_event_idx=int(v3.trigger_event_idx), source=mt,
+            probe_input_idx=int(v3.input_idx),
+        ))
     for v4 in var4_all:
         mt = subsequent_counter_to_mt(v4, h1_df)
-        ctr_subs_by_cycle[(mt.parent_sid, mt.parent_cycle_id)].append(mt)
+        sweep_triggers.append(SweepTrigger(
+            lens=resolve_lens("subsequent_counter"),
+            parent_sid=int(mt.parent_sid), parent_cycle_id=int(mt.parent_cycle_id),
+            trigger_type="subsequent_counter",
+            trigger_idx=_loh(v4.trigger_event_idx), direction=int(mt.lower_sd),
+            trigger_event_idx=int(v4.trigger_event_idx), source=mt,
+            probe_input_idx=int(v4.input_idx),
+        ))
 
-    # --- Build phase: interleave both entities per parent cycle in
-    #     chronological order. (parent_sid, parent_cycle_id) lexicographic ==
-    #     chronological (sids increase over time, cycles within a sid). ---
-    all_cycle_keys = sorted(
-        set(conf_bootstrap_by_cycle) | set(ctr_bootstrap_by_cycle)
+    # --- 4. The sweep (§17.6) ---
+    sub_pool = SubStructurePool()
+
+    def _resolve_start(t: SweepTrigger, hi: int):
+        return _resolve_trigger_m15_start(
+            t.source, h1_df, m15, pool=sub_pool, hi=hi, parent_path=parent_path,
+        )
+
+    def _build_geometry(key, bos0_inner):
+        return build_or_get_geometry(
+            sub_pool, m15, parent_path=key.parent_path, sd=key.direction,
+            start_abs=key.starting_idx, bos0_inner=bos0_inner, timeframe=key.sub_tf,
+        )
+
+    def _resolve_reversal(sub, R, probe_direction):
+        return _resolve_reversal_start(
+            sub_pool, sub, R, probe_direction, m15, timeframe="M15", parent_path=parent_path,
+        )
+
+    sweep = run_lifecycle_sweep(
+        sweep_triggers, pool=sub_pool, tables=tables,
+        resolve_start=_resolve_start, build_geometry=_build_geometry,
+        resolve_reversal=_resolve_reversal, parent_path=parent_path, sub_tf="M15",
     )
-    conf_results_by_cycle: Dict[tuple, list] = {}
-    ctr_results_by_cycle: Dict[tuple, list] = {}
-    for key in all_cycle_keys:
-        conf_bs = conf_bootstrap_by_cycle.get(key)
-        ctr_bs = ctr_bootstrap_by_cycle.get(key)
-        print(
-            f"[multi_tf:dual] cycle parent_sid={key[0]} parent_cycle={key[1]} "
-            f"conf={'Y' if conf_bs else '-'}"
-            f"(subs={len(conf_subs_by_cycle.get(key, []))}) "
-            f"ctr={'Y' if ctr_bs else '-'}"
-            f"(subs={len(ctr_subs_by_cycle.get(key, []))})"
-        )
-        cr, kr = build_two_entity_parent_cycle(
-            h1_df,
-            conf_df=conf_m15,
-            conf_bootstrap=conf_bs,
-            conf_subs=conf_subs_by_cycle.get(key, []),
-            conf_path=conf_path,
-            ctr_df=ctr_m15,
-            ctr_bootstrap=ctr_bs,
-            ctr_subs=ctr_subs_by_cycle.get(key, []),
-            ctr_path=ctr_path,
-            parent_cycle_floor_h1=parent_cycle_floor_h1,
-            pool=sub_pool,
-            parent_struct_end_m15=parent_struct_end_m15,
-        )
-        conf_results_by_cycle[key] = cr
-        ctr_results_by_cycle[key] = kr
-
-    print(f"[pool] unique sub-structure geometries built={len(sub_pool.all())}")
-
-    # --- Phase 2 Stage 3.2a: finalize unified lifecycles over the pool ---
-    # Each unique sub's lifecycle: start = min(trigger_dt), end = min(end-cand >=
-    # max start) over {own reversal, same-direction replacement, parent-cycle-end}
-    # (PART4 §17.6). parent_end_lookup maps (parent_sid, parent_cycle_id) -> M15
-    # end idx = next cycle's CTS_ESTABLISHED (or the parent sid's reversal),
-    # last-of-hour. Rendering is UNCHANGED in 3.2a (still per-trigger) — this
-    # populates + logs the lifecycles so the math can be validated before the
-    # 3.2b collapse re-render.
-    from engine_v2.multitf.sub_structure_pool import finalize_lifecycles
-    _cts_est_h1: Dict[tuple, int] = {}
-    for ev in sorted_events:
-        if ev.type == "CTS_ESTABLISHED":
-            _cts_est_h1[
-                (int(ev.meta.get("structure_id", 0)),
-                 int(ev.meta.get("cycle_id", 0)))
-            ] = int(ev.idx)
-    parent_end_lookup: Dict[tuple, Optional[int]] = {}
-    for (_S, _C), _start_h1 in _cts_est_h1.items():
-        _nxt = _cts_est_h1.get((_S, _C + 1))
-        _end_h1 = _nxt if _nxt is not None else _h1_sid_end.get(_S)
-        if _end_h1 is None:
-            continue  # open parent cycle -> no parent-end cap
-        _m = _map_parent_idx_to_m15_hour_end(int(_end_h1), h1_df, conf_m15)
-        if _m is not None:
-            parent_end_lookup[(_S, _C)] = int(_m)
-    finalize_lifecycles(sub_pool.all(), parent_end_lookup)
+    n_records = len(sub_pool.all_records())
+    print(
+        f"[pool] unique subs={len(sub_pool.all())} records={n_records} "
+        f"unresolved={len(sweep.unresolved)} spawned_reversals={len(sweep.spawned)}"
+    )
     for _s in sub_pool.all():
         print(
             f"[pool] sub_id={_s.sub_id} key=(M15,{_s.direction},{_s.starting_idx}) "
-            f"lenses={sorted(_s.lenses())} memberships={_s.memberships()} "
-            f"lifecycle=[{_s.lifecycle_start},{_s.lifecycle_end}] "
-            f"reason={_s.lifecycle_end_reason} nat_rev={_s.natural_reversal_idx} "
-            f"triggers={[(t.trigger_type, t.trigger_dt) for t in _s.trigger_records]}"
+            f"start={_s.start_idx} end={_s.end_idx} reason={_s.end_reason} "
+            f"lenses={sorted(_s.lenses())} nat_rev={_s.natural_reversal_idx} "
+            f"relative_dir={_s.relative_dir_segments} "
+            f"records={[(r.lens, (r.parent_sid, r.parent_cycle_id), r.trigger_sub_sid, r.trigger_type, r.trigger_idx, r.start_idx, r.end_idx, r.end_reason, 'ZL' if r.is_zero_length else '') for r in _s.records]}"
+        )
+    for u in sweep.unresolved:
+        print(
+            f"[pool] unresolved lens={u.lens} parent=({u.parent_sid},{u.parent_cycle_id}) "
+            f"type={u.trigger_type} trigger_idx={u.trigger_idx} reason={u.reason} detail={u.detail}"
         )
 
-    # --- WVMI gating lookups ---
+    # --- 5. One projection per sub, mirrored per lens, in start_idx order ---
+    rendered = [s for s in sub_pool.all() if s.start_idx is not None]
+    rendered.sort(key=lambda s: (s.start_idx, s.sub_id))
+    results_by_lens: Dict[str, list] = {LENS_CONFLUENCE: [], LENS_COUNTER: []}
+    all_results: list = []
+    for sub in rendered:
+        res = render_sub_projection(
+            sub, m15, lens_paths=lens_paths, lens_dfs=lens_dfs, timeframe="M15",
+        )
+        all_results.append(res)
+        for lens in sub.lenses():
+            results_by_lens[lens].append(res)
+    for sub in sub_pool.all():
+        if sub.start_idx is None:
+            print(
+                f"[pool] sub_id={sub.sub_id} key=(M15,{sub.direction},{sub.starting_idx}) "
+                f"has no live record — logged, not rendered"
+            )
+
+    # --- 6. WVMI (§17.10 minimal: one sweep per unique sub) ---
     main_zpt = main_zone_proximity_triggers or {}
     main_first_sd_by_cycle: Dict[tuple, int] = {}
     for k, trig_list in main_zpt.items():
@@ -986,72 +961,51 @@ def _run_multi_tf_dual(
             main_first_sd_by_cycle[k] = int(trig_list[0].idx)
     var4_all_sorted = sorted(var4_all, key=lambda t: t.trigger_event_idx)
     var3_all_sorted = sorted(var3_all, key=lambda t: t.trigger_event_idx)
-
-    # --- Assemble confluence (legacy order: var1 trigger_event_idx) + WVMI ---
-    confluence_results: list = []
-    conf_wvmi: Dict[str, Any] = {"acted": 0, "records": 0, "by_started_by": {}}
-    conf_cycle_order = sorted(
-        conf_bootstrap_by_cycle.keys(),
-        key=lambda k: conf_bootstrap_by_cycle[k].meta.get("trigger_event_idx", 0),
+    conf_stream: List[Tuple[int, str]] = []
+    ctr_stream: List[Tuple[int, str]] = []
+    for key in tables.cycles():
+        conf_stream.extend(_confluence_trigger_stream(key, main_first_sd_by_cycle, var4_all_sorted))
+        ctr_stream.extend(_counter_trigger_stream(key, var3_all_sorted))
+    wvmi_counts = _assign_sub_wvmi_per_sub(
+        all_results,
+        {LENS_CONFLUENCE: conf_stream, LENS_COUNTER: ctr_stream},
+        parent_df=h1_df, m15_df=m15, lens_dfs=lens_dfs, lens_paths=lens_paths,
     )
-    for key in conf_cycle_order:
-        cycle_results = conf_results_by_cycle.get(key, [])
-        stream = _confluence_trigger_stream(
-            key, main_first_sd_by_cycle, var4_all_sorted,
-        )
-        c = _assign_trigger_centric_sub_wvmi(
-            cycle_results, stream,
-            parent_df=h1_df, m15_df=conf_m15, sub_path_id=conf_path,
-        )
-        _merge_wvmi_counts(conf_wvmi, c)
-        confluence_results.extend(cycle_results)
-
-    if confluence_results:
-        sub_sids = build_sid_records_for_subordinate(confluence_results)
-        conf_m15.attrs["sids"] = sub_sids
-        print(f"[sid_records] {conf_path} sids={len(sub_sids)}")
-        registry.register(
-            conf_path, df=conf_m15, timeframe="M15",
-            role="subordinate", starting_alignment="confluence",
-        )
     print(
-        f"[multi_tf:dual] confluence results: {len(confluence_results)} sids; "
-        f"wvmi acted={conf_wvmi['acted']} records={conf_wvmi['records']} "
-        f"by_started_by={conf_wvmi['by_started_by']}"
+        f"[multi_tf:dual] sub wvmi acted={wvmi_counts['acted']} "
+        f"records={wvmi_counts['records']} by_started_by={wvmi_counts['by_started_by']} "
+        f"by_lens={wvmi_counts['by_lens']}"
     )
 
-    # --- Assemble counter (legacy order: var2 probe_end_idx) + WVMI ---
-    counter_results: list = []
-    ctr_wvmi: Dict[str, Any] = {"acted": 0, "records": 0, "by_started_by": {}}
-    ctr_cycle_order = sorted(
-        ctr_bootstrap_by_cycle.keys(),
-        key=lambda k: ctr_bootstrap_by_cycle[k].meta.get("probe_end_idx", 0) or 0,
-    )
-    for key in ctr_cycle_order:
-        cycle_results = ctr_results_by_cycle.get(key, [])
-        stream = _counter_trigger_stream(key, var3_all_sorted)
-        c = _assign_trigger_centric_sub_wvmi(
-            cycle_results, stream,
-            parent_df=h1_df, m15_df=ctr_m15, sub_path_id=ctr_path,
+    # --- 7. Sid records, record tables, registry ---
+    unresolved = list(sweep.unresolved)
+    for lens, lens_df in lens_dfs.items():
+        lens_results = results_by_lens[lens]
+        lens_df.attrs["triggers"] = [
+            r for r in sub_pool.all_records() if r.lens == lens
+        ]
+        lens_df.attrs["unresolved_triggers"] = unresolved
+        lens_df.attrs["sids"] = build_sid_records_for_subordinate(lens_results)
+        print(
+            f"[sid_records] {lens_paths[lens]} subs={len(lens_df.attrs['sids'])} "
+            f"records={len(lens_df.attrs['triggers'])}"
         )
-        _merge_wvmi_counts(ctr_wvmi, c)
-        counter_results.extend(cycle_results)
-
-    if counter_results:
-        sub_sids = build_sid_records_for_subordinate(counter_results)
-        ctr_m15.attrs["sids"] = sub_sids
-        print(f"[sid_records] {ctr_path} sids={len(sub_sids)}")
-        registry.register(
-            ctr_path, df=ctr_m15, timeframe="M15",
-            role="subordinate", starting_alignment="counter",
-        )
+        if lens_results:
+            registry.register(
+                lens_paths[lens], df=lens_df, timeframe="M15",
+                role="subordinate", starting_alignment=lens,
+            )
+    meta["sub_pool"] = sub_pool
+    meta["parent_tables"] = tables
+    # Every lens df (registered or not) for the pool-table exports — a lens
+    # with records but no rendered sub is not registered (no chart) yet its
+    # `_triggers.csv` and the pool-wide unresolved table must still be written.
+    meta["sub_lens_dfs"] = dict(lens_dfs)
     print(
-        f"[multi_tf:dual] counter results: {len(counter_results)} sids; "
-        f"wvmi acted={ctr_wvmi['acted']} records={ctr_wvmi['records']} "
-        f"by_started_by={ctr_wvmi['by_started_by']}"
+        f"[multi_tf:dual] confluence results: {len(results_by_lens[LENS_CONFLUENCE])} subs; "
+        f"counter results: {len(results_by_lens[LENS_COUNTER])} subs"
     )
-
-    return confluence_results, counter_results
+    return results_by_lens[LENS_CONFLUENCE], results_by_lens[LENS_COUNTER]
 
 
 def _validate_input(df: pd.DataFrame) -> None:

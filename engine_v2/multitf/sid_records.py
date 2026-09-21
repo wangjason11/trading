@@ -1,10 +1,10 @@
 """Per-sid record building for entity dfs.
 
-Spec §9.2: each entity df carries `df.attrs["sids"]` — one `SidRecord` per
-sid in that entity. For `main`, `sub_sid` == `structure_id` (increments on
-reversal). For `subordinate`, `sub_sid` is the per-parent-cycle counter
-(resets to 0 each parent cycle); the sub's full identity is the tuple
-`(parent_sid, parent_cycle_id, sub_sid)`.
+Spec §9.2 / §17.9: each entity df carries `df.attrs["sids"]` — one `SidRecord`
+per sid in that entity. For `main`, `sub_sid` == `structure_id` (increments on
+reversal). For a subordinate lens df, one `SidRecord` per UNIQUE SUB rendered
+on that lens (`sub_id` set, `sub_sid = None`); the record table
+(`attrs["triggers"]`) carries the per-parent-cycle attribution.
 """
 from __future__ import annotations
 
@@ -68,54 +68,47 @@ def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
 def build_sid_records_for_subordinate(
     lower_tf_results: List[LowerTFResult],
 ) -> List[SidRecord]:
-    """Derive per-sid records for a subordinate entity from its sid results.
+    """Derive per-sub records for a subordinate lens df from the per-sub
+    projections (§17.9; `entity_df_mutation.render_sub_projection`).
 
-    Each `LowerTFResult` is one bounded sub sid (§6.1 merge-and-bound). Its
-    identity tuple `(parent_sid, parent_cycle_id, sub_sid)` is read from the
-    trigger + `result.meta["sub_sid"]`. Results arrive in build order
-    (lexicographic by tuple), preserved here.
-
-    Indices are recorded in the entity df's coordinate space — for the
-    M15.counter entity that's `m15_df_prepared` indices, which the
-    pipeline already stashed on `LowerTFResult.meta` as
-    `m15_start_idx` / `m15_end_idx`.
+    One `SidRecord` per unique sub on this lens, in the order given (the
+    orchestrator passes them in `start_idx` order). Read off `result.meta`:
+    `sub_id`, `m15_start_idx` (= `starting_idx`, the structural anchor →
+    `creation_event_idx`), `start_idx` / `end_idx` (the real-time lifecycle
+    window → `start_idx` / `end_event_idx`; `end_idx` None while open),
+    `end_reason` (None while open — no fallback), `lenses`,
+    `relative_dir_segments`, plus `natural_reversal_idx`, `n_records`,
+    `first_record`, `slice_begin`, `validated_h1_start` into `meta`.
+    `sub_sid` and the parent fields are None: parent attribution lives on the
+    TriggerRecord table.
     """
     out: List[SidRecord] = []
-    # Results are in build order (lexicographic by identity tuple); preserve
-    # that order so the chart renders sids in a stable sequence.
     for result in lower_tf_results:
+        m = result.meta
         trigger = result.trigger
-        creation = result.meta.get("m15_start_idx")
-        end = result.meta.get("m15_end_idx")
-        # Canonical per-parent-cycle identity (§2 / §6.1): the sub is the
-        # tuple (parent_sid, parent_cycle_id, sub_sid). `SidRecord.sub_sid`
-        # is the per-cycle counter (was `meta["sid"]` on the result).
-        # end_reason is the sid's resolved end cause.
-        end_reason = result.meta.get(
-            "end_reason", "lifecycle_end" if end is not None else None,
-        )
-
+        creation = m.get("m15_start_idx")
+        start = m.get("start_idx")
+        end = m.get("end_idx")
+        lenses = m.get("lenses") or ()
+        segs = m.get("relative_dir_segments") or ()
         out.append(SidRecord(
-            sub_sid=int(result.meta["sub_sid"]),
+            sub_sid=None,
             starting_sd=int(trigger.lower_sd),
             creation_event_idx=int(creation) if creation is not None else None,
             end_event_idx=int(end) if end is not None else None,
-            end_reason=end_reason,
-            parent_sid=int(trigger.parent_sid),
-            parent_cycle_id=int(trigger.parent_cycle_id),
+            end_reason=m.get("end_reason"),
+            parent_sid=None,
+            parent_cycle_id=None,
             meta={
-                "use_case": trigger.use_case,
-                "validated_parent_start": result.meta.get("validated_h1_start"),
-                "slice_begin": result.meta.get("slice_begin"),
-                "started_by": result.meta.get("started_by"),
-                "start_trigger_idx": result.meta.get("start_trigger_idx"),
-                # Parent-TF candle idx where the trigger event fired
-                # (BOS_CONFIRMED.confirmed_at for var1, sd-prox candle for
-                # var3/var4, etc). Stored on the trigger object.
-                "trigger_event_idx": getattr(
-                    trigger, "trigger_event_idx",
-                    trigger.meta.get("trigger_event_idx"),
-                ),
+                "natural_reversal_idx": m.get("natural_reversal_idx"),
+                "n_records": m.get("n_records"),
+                "first_record": m.get("first_record"),
+                "slice_begin": m.get("slice_begin"),
+                "validated_parent_start": m.get("validated_h1_start"),
             },
+            sub_id=int(m["sub_id"]) if m.get("sub_id") is not None else None,
+            start_idx=int(start) if start is not None else None,
+            lenses=tuple(lenses),
+            relative_dir_segments=tuple((int(a), str(b)) for a, b in segs),
         ))
     return out

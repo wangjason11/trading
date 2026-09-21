@@ -206,74 +206,103 @@ zones: the **BOS_n** zone (buy if `sd=+1`, sell if `sd=-1`) and the
 
 ### End resolution (pure inheritance — identical to POI)
 
-A cycle ends at the first of:
+A cycle ends at the first of (`zones/structure_lifecycle.compute_cycle_lifecycle`):
 1. **reversal** of its structure, or
-2. **next cycle starts** — the `(structure_id, cycle_id+1)` `CTS_ESTABLISHED` idx.
+2. **next cycle starts** — the `(structure_id, cycle_id+1)` cycle's **clamped
+   lifecycle-start** = `max(CTS_ESTABLISHED.meta["confirmed_at"], struct_start[,
+   lifecycle_floor])` — the CTS-established **moment**, not the extreme
+   (Plan C, 2026-09-20; see "End-side change" below), or
+3. **the sub's window end** (subs only) — `lifecycle_cap`.
 
 ```python
 end_idx = None; end_reason = None
 if sid has a reversal:                end_idx, end_reason = reversal_idx[sid], "reversal"
-if (sid, cycle_id+1) CTS_ESTABLISHED exists and < end_idx (or end_idx is None):
-                                      end_idx, end_reason = next_cts_est_idx, "next_cycle"
+if (sid, cycle_id+1) exists and its clamped start < end_idx (or end_idx is None):
+                                      end_idx, end_reason = next_cycle_clamped_start, "next_cycle"
+if lifecycle_cap is not None and lifecycle_cap < end_idx (or end_idx is None):
+                                      end_idx, end_reason = lifecycle_cap, cap_reason
 # else: end_idx = None  → zone extends to end of data
 ```
 
 Both the BOS_n and CTS_n zone of cycle *n* inherit this **same** `end_idx` /
 `end_reason`. `end_time = df.time[end_idx]` (or `None`). For subordinate
-(lower-TF) structures the owning structure also ends at parent-cycle-end;
-that propagation is applied as a cap with `end_reason="lifecycle_end"` in
-`multitf/entity_df_mutation.py::build_one_sid` (the structure-end →
-open-cycle-end → zone-end pass-through for subs).
+(lower-TF) structures the cap is the **unique sub's real-time `end_idx`**
+(slice-local) with `cap_reason` = the sub's `end_reason`, passed as
+`lifecycle_cap` / `cap_reason` by
+`multitf/entity_df_mutation.py::render_sub_projection` →
+`pooled_structure_build.project_to_window` → `_run_downstream_pipeline` →
+`derive_kl_zones_v1` (Plan C, 2026-09-20 — before Plan C the cap was applied in
+the now-deleted `build_one_sid` with `end_reason="lifecycle_end"`). `cap =
+None` for an open sub (the data edge is not a lifecycle terminator) and for
+main.
 
 ### End-side change: BOS ends align to the cycle boundary (CTS-established moment)
 
-> **CORRECTED 2026-09-19 — the boundary is the MOMENT, not the extreme.** A cycle's
-> lifecycle begins when it is *established* — `CTS_ESTABLISHED.meta["confirmed_at"]`
-> (the apply candle, == `BOS_CONFIRMED.meta["confirmed_at"]` by definition). `CTS_ESTABLISHED.ev.idx`
-> is the CTS **extreme**, a historical anchor like `BOS_CONFIRMED.ev.idx`; it can precede
-> the moment (3 sub cycles on the current window: 1223 vs 1224, 2828 vs 2829 ×2 — identical on H1
-> there only by coincidence). The text below and today's `structure_lifecycle.compute_cycle_lifecycle`
-> use the extreme; **Plan C (`engine_v2/plans/PLAN_C_lifecycle_rewrite.md` §3) moves the canonical
-> cycle-start — and therefore every cycle end that is "the next cycle's start" — to the moment.**
-> Until Plan C lands, the code behaves as described below; after it, read "`ev.idx`" in this section
-> as `meta["confirmed_at"]`. Lifecycle values are real-time; anchors are historical — never mix.
+> **CORRECTED 2026-09-19 — the boundary is the MOMENT, not the extreme. LANDED by
+> Plan C 2026-09-20.** A cycle's lifecycle begins when it is *established* —
+> `CTS_ESTABLISHED.meta["confirmed_at"]` (the apply candle, == `BOS_CONFIRMED.meta["confirmed_at"]`
+> by definition). `CTS_ESTABLISHED.ev.idx` is the CTS **extreme**, a historical anchor like
+> `BOS_CONFIRMED.ev.idx`; it can precede the moment (3 sub cycles on the reference window: 1223 vs
+> 1224, 2828 vs 2829 ×2 — identical on H1 there only by coincidence).
+> `structure_lifecycle.compute_cycle_lifecycle` now reads the moment — for main, every sub cycle and
+> the sub-structure parent tables (`multitf/parent_tables.py`) alike — and **raises** (`AssertionError`)
+> on a `CTS_ESTABLISHED` without `meta["confirmed_at"]` rather than falling back to the extreme.
+> Measured on the first Plan C replay (2026-09-20): H1 byte-identical; ONE visible sub shift (sub
+> `454/+1`'s cycle-1 end 1223→1224); the two predicted 2828→2829 shifts are masked by the identical
+> record floor 2829 on both lenses (same value before and after). Lifecycle values are
+> real-time; anchors are historical — never mix. (Historical: from Phase 3 (2026-05-26) until Plan C
+> the code used the extreme, as the earlier revision of this section described.)
 
-The cycle boundary is the next cycle's `CTS_ESTABLISHED` **`ev.idx`** — the
-CTS *extreme* candle (the same idx POI uses: `cts_established_by_key[next].idx`).
-Both the BOS_n and CTS_n zone of cycle *n* now end there.
+The cycle boundary is the next cycle's **clamped lifecycle-start** —
+`max(CTS_{n+1} ESTABLISHED.meta["confirmed_at"], struct_start[, lifecycle_floor])`,
+the CTS-established *moment* (the same value POI inherits through
+`compute_cycle_lifecycle`). Both the BOS_n and CTS_n zone of cycle *n* end there.
 
-| Zone | Old end | New end (cycle-end) | Change |
+| Zone | Old end (pre-Phase-3) | End (cycle-end, Plan C) | Change |
 |------|---------|---------------------|--------|
-| **CTS_n** | next CTS established `ev.idx` (early-end) | next CTS established `ev.idx` | **none** — already this idx |
-| **BOS_n** | next BOS's `confirmed_at` (breakout, same-side replace) | next CTS established `ev.idx` (extreme) | **≤1 candle earlier** — see below |
+| **CTS_n** | next CTS established `ev.idx` (early-end) | next cycle's clamped start (moment) | none where extreme == moment; +1 candle where the extreme precedes the moment |
+| **BOS_n** | next BOS's `confirmed_at` (breakout, same-side replace) | next cycle's clamped start (moment) | **none** by definition when the next cycle's start is unclamped — `BOS_{n+1}.confirmed_at == CTS_{n+1}.confirmed_at` (the Phase-3 "≤1 candle earlier" shift onto the extreme is undone by Plan C); later only when `struct_start` / `lifecycle_floor` clamps the next cycle's start |
 | reversal-capped | reversal idx | reversal idx | label only (`end_reason` replaces `deactivated_by`) |
+| sub-window-capped | — | the sub's `end_idx` | `end_reason` = the sub's `end_reason` |
 | last / open zone | `None` / reversal | `None` / reversal | none |
 
-The BOS shift size depends on whether the breakout candle is itself the CTS
-extreme: a breakout emits `BOS_{n+1} CONFIRMED` (`confirmed_at` = breakout
-`apply_idx`) and `CTS_{n+1} ESTABLISHED` (`ev.idx` = the breakout-window
-extreme) together. When the breakout candle *is* the extreme they coincide
-(`confirmed_at == ev.idx`) and the BOS end is unchanged; otherwise `ev.idx`
-is 1 candle earlier. **Empirically:** all 10 H1 zones in baseline `e0b70dd`
-had `confirmed_at == ev.idx`, so H1 `end_time` is byte-identical; on the M15
-subs (BOS-only zones) exactly one BOS zone per sub shifts 1 candle earlier
-(e.g. counter cyc1: 09:15→09:00). This is the intended unification — BOS
-ends now match where CTS/POI of the same cycle end, removing the old
-1-candle inconsistency between a cycle's BOS and CTS zone ends.
+Why the two definitions can differ: a breakout emits `BOS_{n+1} CONFIRMED`
+(`confirmed_at` = breakout `apply_idx`) and `CTS_{n+1} ESTABLISHED`
+(`ev.idx` = the breakout-window extreme, `meta["confirmed_at"]` = the same
+`apply_idx`) together. When the breakout candle *is* the extreme, extreme and
+moment coincide; otherwise the extreme is 1 candle earlier. **Empirically
+(history):** all 10 H1 zones in baseline `e0b70dd` had `confirmed_at == ev.idx`,
+so the Phase-3 extreme rule left H1 `end_time` byte-identical; on the M15 subs
+(BOS-only zones) exactly one BOS zone per sub shifted 1 candle earlier under the
+extreme rule (e.g. counter cyc1: 09:15→09:00). Plan C's moment rule brings a
+cycle's BOS-zone end back onto the breakout candle that established the next
+cycle, while keeping the unification that a cycle's BOS zone, CTS zone and POI
+all end at the SAME idx.
 
-Aside from that ≤1-candle BOS alignment, the end side is a *representation*
+Aside from that ≤1-candle boundary alignment, the end side is a *representation*
 change (`active`→`status`, `deactivated_by`→`end_reason`, +`end_idx`). (See
 the start-side clamp below for the other behavioral change.)
 
-### Lifecycle-start clamp (start-side behavior change — REVISED 2026-05-26)
+### Lifecycle-start clamp (start-side behavior change — REVISED 2026-05-26; floor terms REVISED by Plan C 2026-09-20)
 
 A KL zone's first-active is clamped to its cycle's lifecycle-start
-(`PART4_REFACTOR_SPEC.md §5`): `first_active = max(confirmed_idx,
-cycle_lifecycle_start)`, where `cycle_lifecycle_start = max(CTS_n
-ESTABLISHED idx, structure lifecycle-start[, parent sid lifecycle-start[,
-parent_cycle_id lifecycle-start]])`. (The `parent_cycle_id` floor is sub-only and
-**implemented 2026-05-27 — plan B1**; canonical model + mapping in
-`PART4_REFACTOR_SPEC.md §5`.)
+(`PART4_REFACTOR_SPEC.md §5` / `§17.4`): `first_active = max(confirmed_idx,
+cycle_lifecycle_start)`, where `cycle_lifecycle_start = max(CTS_n ESTABLISHED
+MOMENT (meta["confirmed_at"]), structure lifecycle-start[, lifecycle_floor])`.
+`structure lifecycle-start` is `compute_struct_start_by_sid` (first anchor /
+reversal handoff); `lifecycle_floor` is `None` for main and, for a sub, the
+**unique sub's real-time `start_idx`** (slice-local, from
+`render_sub_projection`) — which already contains the parent-cycle floor
+(`TriggerRecord.parent_floor_idx = LOH(max(struct_start[S], cts_moment[(S,C)]))`)
+because the record's `start_idx = max(probe_finalize_idx, trigger_idx,
+parent_floor_idx)`. (Historical: plan B1, 2026-05-27, wrote the sub floor as
+separate "parent sid / parent_cycle_id lifecycle-start" terms; Plan C folds
+them into the one `lifecycle_floor` value.) Implementation note: in
+`derive_kl_zones_v1` the per-zone clamp is `confirmed_idx = max(raw
+confirmed_idx, struct_start_by_sid[sid])`; the `CTS_n` moment term is
+satisfied by construction for the BOS_n zone (its raw `confirmed_idx` IS
+`BOS_CONFIRMED.meta["confirmed_at"]` = the moment) and for the CTS_n zone (its
+pullback `confirmed_idx` is later).
 
 - The CTS_n zone's `confirmed_idx` (its pullback candle) is always after the
   cycle start, so it is rarely clamped.
@@ -298,9 +327,9 @@ dataclass; POI stores the same set in `meta`):
 | Field | Meaning |
 |-------|---------|
 | `end_idx` | Terminal idx if the cycle ended, else `None` |
-| `end_reason` | `"reversal"` \| `"next_cycle"` \| `"lifecycle_end"` (subs) \| `None` |
+| `end_reason` | `"reversal"` \| `"next_cycle"` \| the sub's `cap_reason` — `"reversal"` \| `"same_dir_replacement"` \| `"parent_end"` — when the sub's `end_idx` capped the cycle (subs only; Plan C 2026-09-20 — `"lifecycle_end"` is no longer emitted) \| `None` |
 | `activation_history` | KL has no condition-state flips, so it is the single interval `[{"idx": clamped_first_active, "active": True, "reason": "confirmed"}]`, or `[]` if the clamped first-active is at/after `end_idx` (collapsed — never active) |
-| `status` (derived) | `"active"` (clamped-confirmed, not ended) \| `"ended"` (`t >= end_idx`) \| `"inactive"` (before clamped first-active, or collapsed) |
+| `status` (derived) | `"active"` (clamped-confirmed, not ended) \| `"ended"` (`t >= end_idx`) \| `"inactive"` (before clamped first-active, or collapsed). A COLLAPSED zone (`"inactive"` with clamped `confirmed_idx >= end_idx` — the cycle's whole span precedes its structure's lifecycle start: a sub's forming-phase cycles, H1's retroactive post-reversal cycles) is kept in the data/CSVs but NOT drawn on any chart since 2026-09-20 (`charting/_zone_render.is_collapsed_cycle_zone`). |
 
 `status` is derived once at end-of-data (like POI). The retired
 `meta["active"]` boolean and `meta["deactivated_by"]` string are gone —

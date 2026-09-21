@@ -54,47 +54,96 @@ confirmation candle.
 
 ### Sub entities (`H1.main >> M15.counter`, `H1.main >> M15.confluence`)
 
-Sub WVMI is **parent-event-driven and trigger-centric** (§8.3 / §8.4 / §8.5).
-`_run_downstream_pipeline` runs with `skip_wvmi=True` for subs (the
-entity-local proximity gate is bypassed). After a parent cycle's sub sid chain
-is built (`build_parent_cycle_chain`), the orchestrator runs a per-cycle pass
-(`_assign_trigger_centric_sub_wvmi`):
+> **Status (Plan C, landed 2026-09-20): this is the MINIMAL implementation of the
+> deferred WVMI design under the sub-structure pool (`PART4_REFACTOR_SPEC.md
+> §17.10`) — the user's stated lean ("WVMI is a property of the unique sub → one
+> sweep"), implemented so the code runs. It is NOT settled: the deferred WVMI
+> pass may return to per-(sub, lens) sweeps. Do not build on it as final.
+> REVISIT (user decision 2026-09-20 — "accept for now, revisit later"): the
+> persist-into-every-lens rule puts a sub's records on BOTH lens CSVs/charts
+> (measured: sub `2639/−1`'s three records also on counter, sub `4027/+1`'s
+> two also on confluence); the WVMI pass decides sub-owned vs lens-owned.**
+> The pre-pool text (per-parent-cycle pass `_assign_trigger_centric_sub_wvmi`
+> after `build_parent_cycle_chain`, window `[start_trigger_idx, m15_end_idx]`
+> with "`start_trigger_idx` IS the sub's lifecycle-start") is superseded by the
+> rules below: the window is now the unique sub's real-time `start_idx`, and
+> `start_trigger_idx` was split into `trigger_idx` / `probe_finalize_idx` /
+> `start_idx` (GLOSSARY "Sub-Structure Pool Terms").
 
-1. Build the cycle's **parent trigger stream** (parent-df idxs):
+Sub WVMI is **parent-event-driven and trigger-centric** (§8.3 / §8.4 / §8.5),
+computed **once per unique sub**. `_run_downstream_pipeline` runs with
+`skip_wvmi=True` for subs (the entity-local proximity gate is bypassed;
+`project_to_window` returns `wvmi_records=[]`). After every sub projection has
+been mirrored into its lens dfs, the orchestrator runs ONE pass over the unique
+subs (`pipeline/orchestrator._assign_sub_wvmi_per_sub(sub_results,
+streams_by_lens, ...)`):
+
+1. Build the **parent trigger streams** (parent-df idxs) over **all** parent
+   cycles (`ParentTables.cycles()` — a unique sub spans parent cycles):
    - **confluence** (`_confluence_trigger_stream`): main's first sd-prox after
      CTS **plus each var 4** (`subsequent_counter`) in the cycle — the
-     sd-prox-class events.
+     sd-prox-class events (`event_type` `ZONE_PROXIMITY_TRIGGER` /
+     `SUBSEQUENT_COUNTER_TRIGGER`).
    - **counter** (`_counter_trigger_stream`): **each var 3**
-     (`subsequent_confluence`) in the cycle — the CTS-prox-class events.
-2. For each trigger (time-ordered), map its parent idx to M15 and find the sub
-   sid whose **active window `[start_trigger_idx, m15_end_idx]`** (lifecycle-start
-   → effective end) contains it. Sweep that sid once via
-   `compute_parent_driven_sub_wvmi`, stamping the trigger.
-   - `start_trigger_idx` IS the sub's lifecycle-start (PART4 §5). For a
-     **bootstrap** sid (first_confluence / first_counter) it is the probe's
-     `finalize_idx` (not the structural anchor) — so a parent trigger before the
-     probe finalized attributes to whichever OTHER sid was alive then, not the
-     bootstrap. The window definition here is unchanged; only the value of
-     `start_trigger_idx` moved (see PART4 §5 + `ProbeResult.finalize_idx`).
+     (`subsequent_confluence`) in the cycle — the CTS-prox-class events
+     (`SUBSEQUENT_CONFLUENCE_TRIGGER`).
+   Each stream entry is LOH-mapped once (`_map_parent_idx_to_m15_hour_end`) and
+   tagged with its lens; the union is sorted by `(m15_idx, parent_idx)`.
+2. For each sub projection (`LowerTFResult`, in the sub `start_idx` order the
+   orchestrator renders them): the window is the sub's real-time lifecycle
+   **`[meta["start_idx"], meta["m15_end_idx"]]`** — `start_idx` = the unique
+   sub's `start_idx` (the first live record's
+   `max(probe_finalize_idx, trigger_idx, parent_floor_idx)`); `m15_end_idx` =
+   the sub's `end_idx`, or the geometry's data edge for an open sub. The stream
+   is the union of the two lens streams **restricted to the sub's lenses**
+   (`meta["lenses"]`, a confluence entry counts only for a sub on the
+   confluence lens, a counter entry only for a sub on the counter lens). The
+   **first** entry (by `m15_idx`) with `start_idx <= m15_idx <= m15_end_idx`
+   sweeps the sub once via `compute_parent_driven_sub_wvmi(result,
+   sub_path_id=lens_paths[lens], parent_trigger=ParentTrigger(idx=parent_idx,
+   event_type, parent_path_id="H1.main"))` — **the sweeping trigger's lens
+   decides the records' `structure_path_id`**. No entry inside the window → no
+   WVMI for that sub.
+3. **Dedup key = `sub_id`** (a sub is swept at most once, whatever number of
+   lenses or triggers touch it). The records are written to
+   `result.wvmi_records` and **persisted into EVERY lens df the sub is on**
+   (`persist_facade_wvmi_to_entity_df(lens_dfs[l], result,
+   structure_path_id=lens_paths[l])` for each `l` in the sub's lenses), each
+   stamped with the §17.9 attribution (`sub_id` + informational `parent_sid` /
+   `parent_cycle_id` / `use_case` / `started_by` from the sub's first record).
 
-**There is no `use_case` special-casing.** A sid — bootstrap (var1/var2),
-subsequent (var3/var4), or **reversal-born** — gets WVMI **iff a parent trigger
-of the entity's class lands inside its active window**; a sid no trigger lands
-on gets none. This is the correct reading of §8.3's "whichever sid is active —
-created by var1, var3, or sub internal reversal": a reversal sid is covered when
-a *later* parent trigger falls in its window, **not** by self-triggering on the
-reversal (a sub reversal is neither an sd-prox nor a CTS-prox parent event). See
-GOTCHAS "Sub WVMI is Trigger-Centric, Not Sid-Centric".
+**Measured consequence on the reference window (first Plan C replay,
+2026-09-20):** a sub on both lenses now carries its WVMI rows on both lens
+CSVs — sub `2639/−1` (`sub_id` 3; confluence record reversal-born from
+`2365/+1`, counter record from `first_counter`) has rows on the counter
+`_wvmi.csv` as well as the confluence one; sub `4027/+1` (`sub_id` 7;
+`subsequent_counter` on counter, reversal-born on confluence) has rows on the
+confluence `_wvmi.csv` too. Before Plan C each per-trigger sid was swept on its
+own lens only.
 
-A sid touched by multiple triggers is swept once (continuous tracker — the sweep
-already covers all the sid's cycles); the earliest (initiating) trigger wins
-attribution. Re-trigger semantics (a var 4 landing on an already-swept confluence
-sid) are deferred to the forthcoming WVMI lifecycle spec.
+**There is no `use_case` special-casing.** A unique sub — first-born
+(var1/var2), subsequent (var3/var4), or **reversal-born** — gets WVMI **iff a
+parent trigger of one of its lenses' classes lands inside its window**; a sub
+no trigger lands on gets none. This is the correct reading of §8.3's "whichever
+sid is active — created by var1, var3, or sub internal reversal": a
+reversal-born sub is covered when a *later* parent trigger falls in its window,
+**not** by self-triggering on the reversal (a sub reversal is neither an sd-prox
+nor a CTS-prox parent event). See GOTCHAS "Sub WVMI is Trigger-Centric, Not
+Sid-Centric".
+
+A sub touched by multiple triggers is swept once (continuous tracker — the sweep
+already covers all the sub's internal cycles); the earliest (initiating) trigger
+wins attribution. Re-trigger semantics (a var 4 landing on an already-swept
+confluence sub) are deferred to the WVMI pass.
 
 Records share main's `WVMITracker.on_cts_confirmed` / `on_bos_confirmed` /
 `update_temporary_lp` lifecycle, plus §8.7 attribution merged into
 `record.meta`: `triggered_by_event_idx` (**parent-df coords — never
-translated**), `triggered_by_event_type`, `parent_path_id`.
+translated**), `triggered_by_event_type`, `parent_path_id`; and the sub
+identity **`sub_id`** (renamed from `sub_sid` by Plan C — the `_wvmi.csv`
+exporter's column is `sub_id`; on the reference window this is the H1
+`_wvmi.csv`'s only diff vs the Plan B save: header-only, the shared exporter's
+column rename).
 
 ---
 
@@ -267,13 +316,18 @@ wave_candles → Fib tracking → POI zones → WVMI:
 ```
 
 ```
-# Sub (M15.counter / M15.confluence) — parent-event gate
+# Sub (M15.counter / M15.confluence) — parent-event gate, ONE sweep per unique sub
+# (§17.10 minimal, Plan C 2026-09-20 — not settled)
 # `_run_downstream_pipeline(..., skip_wvmi=True)` short-circuits the gate above.
-# Orchestrator computes sub WVMI after sub LowerTFResult is built:
-for each sub LowerTFResult:
-    if parent trigger fired in this result's parent cycle:
-        compute_parent_driven_sub_wvmi(result, sub_path_id, parent_trigger)
+# Orchestrator (`_assign_sub_wvmi_per_sub`) runs after every sub projection is mirrored:
+mapped = LOH-map(confluence stream ∪ counter stream over ALL parent cycles), sorted
+for each unique sub projection (start_idx order):
+    window = [meta["start_idx"], meta["m15_end_idx"]]      # real-time lifecycle
+    hit = first mapped entry whose lens ∈ meta["lenses"] and start <= m15_idx <= end
+    if hit and sub_id not yet swept:
+        compute_parent_driven_sub_wvmi(result, sub_path_id=lens_paths[hit.lens], parent_trigger)
         → result.wvmi_records = [...]
+        persist_facade_wvmi_to_entity_df(lens_df, result) for EVERY lens the sub is on
 ```
 
 ---

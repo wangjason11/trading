@@ -128,7 +128,8 @@ the deferred **(c) other-zone-pattern inversion pass** (pinbar / 2-candle / star
 
 ## `bounded.reversal_idx` is the single source — don't re-derive reversal idx from a `market_state` mask in the bounded path (2026-06-01)
 
-**Symptom:** the sub-reversal unified probe (`build_one_sid`) drifted every
+**Symptom:** the sub-reversal unified probe (then in `build_one_sid`; since Plan C
+`entity_df_mutation._resolve_reversal_start`) drifted every
 reversal-born start *later*, and in one cycle collapsed the start onto the
 window edge → the reversal-born sid (and its child) were dropped. The probe's
 `end_idx` was logged as ~600 candles *past* the actual reversal.
@@ -147,7 +148,12 @@ window edge → the reversal-born sid (and its child) were dropped. The probe's
 already exposes the correct value as `bounded.reversal_idx` (`.min()` + the
 structure_id filter) — and `build_one_sid` already used it 84 lines earlier for
 the lifecycle cap. I re-computed (incorrectly) a value I already had in hand.
-**Fix:** `reversal_end_local = int(bounded.reversal_idx)`.
+**Fix:** `reversal_end_local = int(bounded.reversal_idx)`. *(Plan C, 2026-09-20:
+`_resolve_reversal_start` goes further and ASSERTS `bounded.reversal_idx == R - slice_begin`
+against the sweep's `natural_reversal_idx` before probing, and the probe's bound is now
+spelled `probe_end_idx`; `build_or_get_geometry` sets `sub.natural_reversal_idx =
+bounded.reversal_idx + slice_begin` — the one canonical source, read by the sweep, the
+record's `reversal` end candidate and the spawn rule.)*
 
 **Why main's idiom didn't transfer:** `compute_structure` (main) uses
 `rev_mask.index.max()` correctly because it (a) filters by `structure_id`, (b)
@@ -530,7 +536,8 @@ wave candle come from if there's no CTS zone?"
 internally (`derive_kl_zones_v1(..., source_kinds=None)`), feeds it to
 `compute_wave_candles` so wave candles see both kinds, and **then** narrows
 the returned/charted zone list with the caller's `source_kinds` filter. For
-sub callers (`entity_df_mutation.build_one_sid`) that filter is `["BOS"]`, so
+sub callers (`pooled_structure_build.project_to_window`, `source_kinds=("BOS",)`;
+was `entity_df_mutation.build_one_sid` before Plan C) that filter is `["BOS"]`, so
 the chart-visible KL zone list drops CTS — but the wave candles already
 computed off those CTS zones survive and render. See
 `pipeline/orchestrator.py:86-108` for the in-code comment.
@@ -819,7 +826,8 @@ old indices — silently wrong.
 **Symptom:** Fib activation and POI IC validation would silently use
 instances with indices pointing at the wrong candles (or out of bounds).
 
-**Fix:** In `multitf/lower_tf_pipeline.py`, re-run `compute_imbalance` on the
+**Fix:** In `multitf/entity_df_mutation._build_geometry` (was
+`multitf/lower_tf_pipeline.py`, then `build_one_sid`), re-run `compute_imbalance` on the
 sliced `trigger_df` after `reset_index`. The `is_imbalance` column itself
 copies correctly; only the attrs list is stale.
 
@@ -1183,7 +1191,7 @@ but emits no M15 structure event, so it never closes the dangling zone via
 those mechanisms. Without the cap, that zone keeps `end_time=None` and the
 chart renders it to the far-right edge (`x1 = t_last_m15`), across regions
 the sub never analyzed — zones are NOT clipped by the `owner_by_idx`/§16.5
-filter (that only governs dots/lines).
+filter (that only governs dots/lines; `owner_by_idx_dir[(candle, direction)]` since Plan C).
 
 **Contrast with main:** a main open zone at end-of-data genuinely *is*
 active at the chart's right edge (`end_time=None` is correct there) — main
@@ -1193,6 +1201,17 @@ runs over all data, has no parent boundary. So the cap is **sub-only**.
 this cap survives as the "structure ends when parent next cycle/sid starts"
 end condition in the unified lifecycle model. See
 `memory/project_sub_structure_lifecycle_redesign.md`.
+
+**Note (Plan C, 2026-09-20):** the premise above — "the slice truncates the sub's
+ongoing structure" — is gone: sub geometry runs to the DATA EDGE
+(`build_or_get_geometry`), so the last zone of an ended sub is not truncated, it is
+simply OPEN in a geometry that outlives the sub. The cap is therefore MORE
+load-bearing, not less: `render_sub_projection` passes the unique sub's `end_idx` as
+`lifecycle_cap` (+ `end_reason` as `cap_reason`) into the derivations, and every zone /
+POI / fib inherits that end through `compute_cycle_lifecycle`. `deactivated_by` /
+`"lifecycle_end"` no longer exist on any artifact — the end reads `end_idx` /
+`end_reason ∈ {reversal, same_dir_replacement, parent_end}`. LANDMINES "Lower-TF Zones,
+POIs, and Fibs Must Be Capped at Lifecycle End".
 
 ---
 
@@ -1218,7 +1237,8 @@ then deleted the cascade helper outright. See
 **If a backward/degenerate sub zone resurfaces:** the cascade is gone, so a
 new instance would point to a different mechanism (e.g. a zone-end cap landing
 before its start, or a bad slice→entity translation). The per-sub
-`*_kl_zones.csv` + `*_sids.csv` debug exports in `run_replay.py` are still
+`*_kl_zones.csv` + `*_subs.csv` / `*_triggers.csv` (Plan C; `*_sids.csv` is
+removed) debug exports in `run_replay.py` are still
 emitted — inspect them directly for `end_time <= start_time` (check both the
 `<` backward and `==` degenerate cases). The purpose-built
 `analyze_cascade_backward.py` tool was deleted with the cascade.
@@ -1233,6 +1253,24 @@ parent trigger of its entity's class lands inside its active window**
 no `use_case` branch; `_assign_trigger_centric_sub_wvmi` (orchestrator) iterates
 the parent trigger stream (confluence = main-first-sd-prox + each var 4; counter
 = each var 3) and sweeps whichever sid is active at each trigger.
+
+**Plan C (2026-09-20) — same principle, one sweep per UNIQUE SUB (PART4 §17.10,
+the user's stated lean, NOT a settled WVMI design).** `orchestrator._assign_sub_wvmi_per_sub`
+runs once over the per-sub projections: window = `[sub.start_idx, sub.end_idx or edge]`
+(`result.meta["start_idx"]` / `["m15_end_idx"]` — the sub's REAL-TIME lifecycle; the
+old `start_trigger_idx` is split into `trigger_idx` / `probe_finalize_idx` / `start_idx`
+and the WVMI window reads the lifecycle value); stream = the union of the confluence
+stream and the counter stream over ALL parent cycles (a sub spans cycles), each entry
+tagged with its lens and LOH-mapped, RESTRICTED to the sub's `lenses`; the FIRST such
+trigger (by M15 idx, then parent idx) inside the window sweeps the sub once
+(`compute_parent_driven_sub_wvmi`, `sub_path_id` = the sweeping trigger's lens path);
+dedup key `sub_id`; the records are persisted with `persist_facade_wvmi_to_entity_df`
+into EVERY lens df the sub is on. Measured on the first Plan C replay: sub `2639/−1`'s
+WVMI rows now also appear on the counter lens df and sub `4027/+1`'s also on the
+confluence lens df (rows the baseline's per-(sub, lens) sweeps did not produce on those
+lenses — the sub's one sweep is persisted to every lens it is on); WVMI record meta carries
+`sub_id` (`sub_sid` gone). The deferred WVMI pass may return to per-(sub, lens) sweeps —
+do not build on the per-sub choice.
 
 **Why this is the correct model:** sub WVMI exists to read the sub's momentum at
 the moment the *parent* signals confluence/counter (§8.3–8.5). A reversal-born
@@ -1260,22 +1298,41 @@ independently gated.
 
 ---
 
-## Cross-referencing a sub record to its zone: join on `sub_sid`, NOT the internal `structure_id`
+## Cross-referencing a sub record to its zone: join on `sub_id`, NOT the internal `structure_id`
 
-**Rule:** to match a subordinate WVMI record to its KL / POI / fib record (e.g.
-in a `/compare` validation), join on the **full identity**
-`(parent_sid, parent_cycle_id, sub_sid, cycle_id)` — and read `sub_sid` from
-**both** artifacts. Do **NOT** join on the record's internal `structure_id`
-(`WVMIRecord.bos_structure_id`, `KLZone.meta["structure_id"]`): inside a bounded
-single-structure sub run the internal `structure_id` is **always 0** (the run
-stops at the first reversal, so it never rolls past sid 0), so every sub within a
-parent cycle collapses to `structure_id == 0` and the join silently mismatches.
+**Rule (Plan C, 2026-09-20 — was `sub_sid` before the pool):** to match a
+subordinate WVMI record to its KL / POI / fib record (e.g. in a `/compare`
+validation), join on **`sub_id` + `cycle_id`** — and read `sub_id` from **both**
+artifacts. `sub_id` is the unique sub's global creation index (PART4 §17.9) and
+is stamped by the mirror (`entity_df_mutation._sub_attribution`) into every
+structural artifact on a lens df: event meta, KL / POI / fib / wave-candle /
+WVMI record meta, `prev_bos_lines[*]["meta"]`, `SidRecord.sub_id`, and the
+`sub_id` column of the WVMI CSV (the events / zones / POI / fib CSVs carry it
+inside the serialised `meta` dict). `parent_sid` / `parent_cycle_id` /
+`use_case` in that meta are INFORMATIONAL (the sub's first live record) and
+must never be part of the join — a sub spans parent cycles, and both of its
+records stamp the same first-record values. Do **NOT** join on the record's
+internal `structure_id` (`WVMIRecord.bos_structure_id`,
+`KLZone.meta["structure_id"]`): inside a single-structure sub run the internal
+`structure_id` is **always 0** (the run stops at the sub's first reversal — a
+reversal-born successor is a NEW unique sub with its own `sub_id`), so every
+sub collapses to `structure_id == 0` and the join silently mismatches.
 
-**Why two different fields exist:** `sub_sid` is the **entity-local per-parent-
-cycle chain counter** (0, 1, 2, … resetting each parent cycle — the redesign's
-identity); the internal `structure_id` is the MarketStructure counter *within one
-bounded run* (always 0 for a sub). Both are stamped into zone/WVMI meta. They
-coincide only for `sub_sid == 0`.
+**Why two different fields exist:** `sub_id` is the pool's structure identity
+(one per unique `(parent_path, sub_tf, direction, starting_idx)`); the
+internal `structure_id` is the MarketStructure counter *within one bounded
+run* (always 0 for a sub). Both are stamped into zone / WVMI meta; they
+coincide only for `sub_id == 0`. `sub_sid` is GONE from every structural
+artifact — only a MAIN `SidRecord` keeps `sub_sid = structure_id`; the
+per-parent-cycle counter survives as `TriggerRecord.trigger_sub_sid`, which
+lives on the record table (`attrs["triggers"]`, `_triggers.csv`) and is not
+stamped on zones. A record's `sub_id` is the FK to its sub, so joining a
+`_triggers.csv` row to its zones also goes through `sub_id`.
+
+**History (pre-pool, 2026-05-27):** the rule then read "join on
+`(parent_sid, parent_cycle_id, sub_sid, cycle_id)`", where `sub_sid` was the
+entity-local per-parent-cycle chain counter (0, 1, 2, … resetting each parent
+cycle — the merge-and-bound redesign's identity) stamped on every artifact.
 
 **How it bit (2026-05-27, WVMI lifecycle validation):** cross-checking each sub
 WVMI `(end_idx, end_reason)` against its KL BOS-zone end, joining on
@@ -1372,7 +1429,7 @@ pullback apply candle. See LANDMINES "Sub Slices Must Re-Derive
 `is_range_*` Labels After `reset_index`" for the full mechanism.
 
 **Quick diagnostic:** dump the sub's structure events CSV and filter
-`RANGE_STARTED` events for the sub_sid. If you see any `idx` value
+`RANGE_STARTED` events for the `sub_id` (was `sub_sid`). If you see any `idx` value
 ≥ `len(M15) * 2` (e.g., 8026 when the M15 data has ~4228 rows), the
 pollution is present:
 
@@ -1385,7 +1442,7 @@ rs = df[df['type'] == 'RANGE_STARTED']
 print(rs[['idx', 'meta']].head())
 ```
 
-**Fix:** `build_one_sid` re-derives the range columns after the slice.
+**Fix:** `_build_geometry` (was `build_one_sid`) re-derives the range columns after the slice.
 If you add a NEW pre-computed positional-index column to the M15 prep
 pipeline, you must also re-derive it on the sub slice for the same reason.
 
@@ -1581,6 +1638,24 @@ zone CSVs (`(anchor_idx, base_idx, cycle_id, struct_direction)` — immune to
 the `sub_id` renumber): every parent-sid-1 zone flipped `inactive→ended`.
 Canonical fix = the TriggerRecord model, `memory/project_sub_structure_pool_architecture.md`.
 
+**Fixed by Plan C (2026-09-20).** The floor is a FIELD of `TriggerRecord`:
+`start_idx = max(probe_finalize_idx, trigger_idx, parent_floor_idx)`, set ONCE
+at record creation by `lifecycle_sweep._Sweep._resolve_and_record` (step 5),
+with `parent_floor_idx = ParentTables.floor(S, C)` from
+`multitf/parent_tables.py` kept alongside as the diagnostic copy. Every
+consumer — the sub-end aggregation (phase 4), the sibling read
+(`start_idx <= hi`), the projection's `lifecycle_floor`
+(`render_sub_projection`: `sub.start_idx - slice_begin`, where `sub.start_idx`
+is the first live record's `start_idx`), the chart's `owner_by_idx_dir`
+window, the WVMI window, `SidRecord.start_idx`, `_triggers.csv` — reads the
+stored value; nothing re-derives it. `build_one_sid`, `_floor_abs`,
+`render_unique_sub` and `TriggerRecord.trigger_dt` are gone. Measured on the
+first Plan C replay: the four (1,0)/(1,1) triggers — the source of every
+"suddenly live" zone in that diff — are unresolved (`degenerate_parent_cycle`,
+LANDMINES "Degenerate Parent Cycles"), and every record's `start_idx` equals
+the predicted table. The spec side of the lesson was applied too: PART4 §17.4
+states the floor on the record and restates the §5 clamp it refines.
+
 ---
 
 ## `ProbeResult.finalize_idx` Is Native-M15 OR a Mapped H1 Value Depending on `finalize_condition` — Don't Assume Either (2026-09-10)
@@ -1592,7 +1667,23 @@ Canonical fix = the TriggerRecord model, `memory/project_sub_structure_pool_arch
 | `second_cts_reached` | 2nd `CTS_ESTABLISHED` moment (`meta["confirmed_at"]`) from the probe's own MS run — the candle the early stop keys on (Plan B, 2026-09-20; was `.idx`, the extreme — equal on this window: 1020/1020, 2608/2608) | native sub-TF |
 | `reversal_in_probe` | reversal apply idx | native sub-TF |
 | `no_retrace` (cycle 0 confirmed in-window) | `CTS_0_CONFIRMED.idx` | native sub-TF |
-| `no_retrace` (else) / `end_idx_reached` / Phase-1 | `end_idx` | **mapped** from the parent (price-mapped `cts_anchor_idx` for `first_confluence`; last-of-hour for the sibling-referencing variations) |
+| `no_retrace` (else) / `end_idx_reached` / Phase-1 | `probe_end_idx` (the probe's search bound — was spelled `end_idx` before Plan C renamed it, 2026-09-20; the `end_idx_reached` condition NAME is unchanged) | **mapped** from the parent (price-mapped `cts_anchor_idx` for `first_confluence`; last-of-hour for the sibling-referencing variations; the reversal candle for the reversal handoff — native) |
+
+**Its role under §17 (Plan C):** `ProbeResult.finalize_idx` becomes the
+record's **`probe_finalize_idx`** — a HISTORICAL field, ONE input to
+`TriggerRecord.start_idx = max(probe_finalize_idx, trigger_idx,
+parent_floor_idx)`, never a lifecycle value by itself (it may precede the
+trigger: FC(0,1) 2608 < 2611; it may exceed it: FC(0,0) 1020 > 463). On a
+probe-cache hit it is INHERITED raw from the first probe of that key — the
+record's own probe never ran, so its `probe_finalize_condition` is the cached
+one too (LANDMINES "Probe Cache Keys Are Shared by Reversal Handoffs": three
+such records on the reference window; e.g. FC(0,1) now carries 2470
+`no_retrace` from the sub-1 reversal handoff instead of its own 2608
+`second_cts_reached`, and `start_idx` is 2611 either way). Read
+`_triggers.csv` with that in mind: a `probe_finalize_idx` far below
+`trigger_idx` with a Phase-1-looking condition on an FC record is a hit, not a
+mapper bug. The probe's OUTPUT anchor is `ProbeResult.starting_idx` (was
+`start_idx`) — the pool key.
 
 Live run on the 2025-11→2026-01 window (`debug/probe_fc_finalize.py`):
 FC(0,0) 1020 and FC(0,1) 2608 are native 2nd-CTS values (2608 lands 3 candles
@@ -1647,6 +1738,17 @@ primitive from the pool path is exactly behaviour-preserving. If you want to kno
 inside the primitive, not the `source` field. Follow-up (unscheduled): whether subs *should* get the
 derived CTS zone.
 
+**Landed that way (Plan C, 2026-09-20).** Both pool-path readers pass `kl_zones=[]` to
+`build_reference_zone_from_cts_event` for exactly this reason: the sibling read
+`_build_sibling_cts_ref_zone_from_pool` (`kl_zones=[]`, `df=` the shared entity-absolute M15 frame,
+`sid=0`, `idx_window=(lo, hi)`) and the reversal handoff `_resolve_reversal_start` (`bounded.events, [],
+bounded.df, sid=0, idx_window=None`). Neither reader has a KL zone list to hand over any more — pool
+geometry is cap-free MS output with no KL derivation (`build_or_get_geometry`), and the per-trigger
+mirror-then-read of `attrs["kl_zones"]` is gone — so `[]` is not only behaviour-preserving, it is the
+only honest input. The `ref=cts_confirmed` / `ref=cts_updated` / `ref=cts_established` token in the
+`[entity_compute] unified_probe (...)` lines is still the winning EVENT's type. Reopening the derived-zone
+question now means deriving CTS KL zones from the pool geometry on demand — its own `/compare`.
+
 ---
 
 ## A Cycle Cannot Be Established Inside an Open Reversal Watch — MS Invariant 4 (2026-09-20)
@@ -1670,3 +1772,65 @@ expiry-rewinds, one before the 2nd CTS and one after the early stop; `_rewind_to
 ignoring the earlier jump (LANDMINES "MarketStructure Deep-Couples…" 1), so the exit classifier
 reads `cts_est=[2, 8, 12]` while the early stop read the post-J1 `[2, 12]`. No instance on the
 reference window (zero rewinds in any FC Phase-2 run); pinned by a strict `xfail`.
+
+---
+
+## Phase-1 Incumbents Must Be STARTED Records, Not Interval-Active Ones (Plan C, 2026-09-20)
+
+**Found by:** the same-idx collision case in `tests/test_lifecycle_sweep_unit.py` while
+implementing the sweep (`multitf/lifecycle_sweep.py`). Plan C §4.3′ wrote phase 1 as `inc =
+pool.active_record(lens, S, C, direction, at_idx=t)` (the interval rule on `trigger_end_idx`:
+`not is_zero_length and start_idx <= t and (trigger_end_idx is None or trigger_end_idx > t)`) and
+"queue a `same_dir_replacement` end for the incumbent at `t`".
+
+**The trap:** the interval rule is a property of the RECORD, not of the sweep's progress. When two
+records of the same `(lens, parent_sid, parent_cycle_id, direction)` for DIFFERENT subs both start at
+`t` (the acausal collision §17.6 warns about), the earlier-`seq` record's `RECORD_START` runs first; at
+that moment `pool.active_record` also returns the later-`seq` record — its `start_idx <= t` and it has
+no end yet — because its own `RECORD_START` is merely still queued. The earlier record would then
+freeze the LATER one as its "incumbent", inverting the collision rule ("the later `seq` replaces the
+earlier"), and the sub-level `start_idx` / `end_idx` of both subs would come out swapped.
+
+**Fix (as landed, `_phase1_record_start`):** the incumbent candidates are filtered to records whose
+start moment has RUN — `r.seq in self._active and r.is_active_at(t)` — so only a started record can be
+replaced. And when the collision is real (`inc.start_idx == rec.start_idx`), the incumbent is frozen
+IMMEDIATELY in phase 1 (`trigger_end_idx = t`, `end_reason = "same_dir_replacement"`, `ended_by_sub_id`,
+`end_idx`, removed from `_active`; `WARNING [sweep] same-idx start collision` logged) rather than queued
+to phase 3 — it is zero-length by construction (`end == start`), and a zero-length record must
+participate in nothing, so deferring to phase 3 would let phase 2 (`SUB_START`) read it as live for one
+moment. The ordinary replacement (`inc.start_idx < t`) is still queued to phase 3 as a candidate.
+`pool.active_record` keeps the pure interval rule (it is the right test everywhere else — the sibling
+read, the spawn rule's `is_live_at_reversal`, the post-sweep asserts).
+
+**General form:** in a moment-ordered sweep, "active" has two readings — the record's interval says
+where it WILL be active; the sweep's `_active` set says which starts have been APPLIED. Any phase that
+mutates another record based on "who is active now" must use the applied set, or it will act on a
+record that does not exist yet at that phase (LANDMINES "The Sweep Phase Order Is Load-Bearing",
+rules 4 and 6). Not observable on the reference window (no same-idx collision there); the unit test is
+the only guard.
+
+---
+
+## A Predicted +1 Shift Can Be Masked by an Equal Floor (Plan C, 2026-09-20)
+
+**Prediction:** the moment-not-extreme rule (`compute_cycle_lifecycle` start =
+`max(CTS_ESTABLISHED.meta["confirmed_at"], struct_start, floor)` instead of `.idx`) was expected to
+move exactly three M15 sub-cycle lifecycle starts by +1 candle — the three saved M15 `CTS_ESTABLISHED`
+events whose extreme precedes the apply candle: 1223→1224 and 2828→2829 ×2.
+
+**Measured on the first Plan C replay:** ONE visible shift — sub `454/+1`'s cycle-1 END
+1223→1224 (the pass-through end follows the next cycle's clamped start; that next cycle's
+`CTS_ESTABLISHED` has extreme 1223 and moment 1224). The two 2828→2829 cycle starts belong to sub
+`2639/−1`, whose lifecycle floor is 2829 on BOTH lenses under Plan C — the unique sub's `start_idx`,
+which is its reversal-born confluence record's `start_idx = R = 2829` (its counter record starts
+later, at 2843, but the floor the projection passes is the SUB's start, and there is one projection
+for both lenses). The zone layer clamps every cycle start at that `lifecycle_floor`, so
+`max(extreme 2828, floor 2829) = 2829` and `max(moment 2829, floor 2829) = 2829` — identical. A
+clamp EQUAL to the new value hides the shift; nothing was wrong on either side.
+
+**Rule for the next prediction of this kind:** count a lifecycle shift as observable only where the
+floor that will be applied is STRICTLY below the new value. For a sub cycle that floor is the unique
+sub's `start_idx` (`render_sub_projection` → `lifecycle_floor`); for a main cycle it is the reversal
+handoff `struct_start`. Write the prediction as "N candidates, M observable" and list the masked ones
+with the floor that masks them, so a `/compare` showing fewer shifts than candidates is not mistaken
+for a lost change — and one showing MORE is still a regression.

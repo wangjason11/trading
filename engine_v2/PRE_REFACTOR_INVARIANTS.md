@@ -82,6 +82,19 @@ candle features → structure patterns → imbalance → market structure
 **Event ordering invariant:** `sorted_events` uses `(idx, type)` (alphabetical
 type tiebreak). Mode C M15 phase gate depends on this — see LANDMINES.
 
+> **Correction note (Plan C, 2026-09-20) — historical snapshot left as written
+> above; this row was wrong.** `CTS_ESTABLISHED.ev.idx` is NOT the confirmation
+> candle: it is the CTS **extreme** inside the breakout pattern span
+> (`market_structure._emit_cts_established(cts_idx, ...)`); the establishing
+> moment is `meta["confirmed_at"]` (= the pattern's `apply_idx`, == the same
+> cycle's `BOS_CONFIRMED.meta["confirmed_at"]` by definition). The extreme can
+> precede the moment (three M15 sub cycles on the reference window: 1223 vs
+> 1224, 2828 vs 2829 ×2; equal on all five H1 cycles only by coincidence).
+> `CTS_ESTABLISHED` is therefore the second extreme-not-apply exception beside
+> `BOS_CONFIRMED` (`ARCHITECTURE.md` "`ev.idx` convention"); every lifecycle
+> reader (`zones/structure_lifecycle.compute_cycle_lifecycle`,
+> `multitf/parent_tables.py`) uses `meta["confirmed_at"]`.
+
 **Event append-only contract:** Events are never modified after emission.
 Augmentations (e.g., the imbalance instance refactor's "rewrite events")
 must replace events in the list, not mutate event objects.
@@ -154,6 +167,20 @@ must replace events in the list, not mutate event objects.
 - Open-ended zones / POIs / fibs capped at lifecycle end with `deactivated_by="lifecycle_end"`
 - M15 events / zones carry attribution: `timeframe`, `use_case`, `parent_tf`, `parent_sid`, `parent_cycle_id`
 - M15 slice includes 50-candle lookback buffer; `compute_imbalance` re-run after slice
+
+> **Superseded note (Plan C, 2026-09-20) — the four bullets above are the
+> pre-refactor snapshot and are intentionally left as written.** Under the
+> sub-structure pool (`PART4_REFACTOR_SPEC.md §17`): a *TriggerRecord* is
+> bounded by its parent cycle (`parent_end` from `multitf/parent_tables.py`;
+> the detectors' `lifecycle_end_idx` field is RETIRED and unread), while the
+> *unique sub* it points at is NOT parent-bound — its window is aggregated from
+> its records and spans parent cycles/sids; zones / POIs / fibs are capped at
+> the sub's `end_idx` with `end_reason` = the sub's `end_reason`
+> (`reversal` \| `same_dir_replacement` \| `parent_end`) — `deactivated_by` and
+> `"lifecycle_end"` no longer exist on those objects; attribution gains
+> **`sub_id`** (the identity) with `use_case` / `parent_sid` /
+> `parent_cycle_id` informational only; the 50-candle lookback slice +
+> `compute_imbalance` re-run are preserved (`entity_df_mutation._build_geometry`).
 
 **Refactor watch:**
 - UC1 trigger detection itself will likely change (mentioned during

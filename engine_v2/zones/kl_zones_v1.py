@@ -1028,7 +1028,8 @@ def derive_kl_zones_v1(
     # struct_start (per sid) for the first-active clamp (B1, unchanged). The
     # cycle lifecycle table (start, end, end_reason) for END inheritance: end =
     # min(next-cycle clamped start, reversal, lifecycle_cap). For main cap=None;
-    # for subs build_one_sid supplies the slice-local cap (+ cap_reason).
+    # for subs the projection (`render_sub_projection`) supplies the slice-local
+    # cap (+ cap_reason) — the unique sub's lifecycle end (PART4 §17.9).
     struct_start_by_sid = compute_struct_start_by_sid(
         events, rev_confirmed_by_sid, lifecycle_floor,
     )
@@ -1064,7 +1065,7 @@ def derive_kl_zones_v1(
 
         # Derived 3-state status. Collapsed (no activation) is "inactive" — it
         # never became active, so not "ended" (standardized 2026-05-27; matches
-        # the prior build_one_sid cap, replacing the inner derivation's "ended").
+        # the prior per-sid cap, replacing the inner derivation's "ended").
         if not activation_history:
             status = "inactive"
         elif end_idx is not None and end_idx <= last_candle:

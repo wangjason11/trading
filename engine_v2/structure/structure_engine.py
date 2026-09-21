@@ -241,7 +241,7 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
         # --- Reversal handoff (Step 4): unified_probe replaces Scenario 2 +
         # Exception 1 + Exception 2 (project_unified_identify_start_probe.md /
         # project_true_first_breakout_cycle0.md). Mirrors the sub reversal path
-        # (entity_df_mutation.build_one_sid): reference = the prior sid's most
+        # (entity_df_mutation._resolve_reversal_start): reference = the prior sid's most
         # recent {CONF/UPD/EST} CTS; the probe runs in the flipped direction over
         # [prior-CTS-extreme, reversal apply idx] and hands back a DECISION
         # (start + BOS_0 inner) — NOT events. The reversal structure is produced
@@ -290,14 +290,14 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
             input_idx=probe_input_idx,
             direction=probe_sd,
             reference_zone=ref_zone,
-            end_idx=reversal_apply_idx,
+            probe_end_idx=reversal_apply_idx,
             timeframe=timeframe,
             enable_phase2=False,
         )
         print(
             f"[structure_engine] unified_probe (reversal): sid={structure_id} "
             f"input={probe_input_idx} end={reversal_apply_idx} "
-            f"ref={ref_zone.source} -> start={probe.start_idx} "
+            f"ref={ref_zone.source} -> start={probe.starting_idx} "
             f"status={probe.status} cond={probe.finalize_condition} "
             f"iter={probe.iterations}"
         )
@@ -310,7 +310,7 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
             )
             break
 
-        next_start_idx = int(probe.start_idx)
+        next_start_idx = int(probe.starting_idx)
         # Advance to the reversal-born structure. Its cycle-0 CTS_0 is
         # established by the next iteration's scan-from-start MS run gated on
         # this BOS_0 inner (a price -> slice-invariant; None -> scan off,

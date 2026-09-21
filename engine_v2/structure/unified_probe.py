@@ -7,7 +7,7 @@ reversal) with a single primitive whose contract is:
     "Given a candidate start `input_idx` and a price reference (the
     `reference_zone`), produce a validated structural anchor for a new
     structure running in `direction` from that anchor, bounded above by
-    `end_idx`."
+    `probe_end_idx`."
 
 Design notes — full spec lives in
 `memory/project_true_first_breakout_cycle0.md` (cycle-0 true-first-breakout,
@@ -21,11 +21,11 @@ DESIGN LOCKED 2026-06-07 + scan-from-start pivot) and
   BOS_0 inner threshold — iter 1 = `reference_zone.inner`; iter 2+ = an
   ad-hoc `bos=True` BOS_0 at the reset `current_start`), then evaluates
   the 2-condition retrace reset on the deepest candidate in
-  `[CTS_0_EST+1, end_idx]` against the CONSTANT `reference_zone`. No MS.
+  `[CTS_0_EST+1, probe_end_idx]` against the CONSTANT `reference_zone`. No MS.
   This is the entire probe for non-FC callers (first_counter /
   subsequent_* / reversal).
 - **Phase 2 (`_run_phase2`, only when `enable_phase2=True`):** MS-based,
-  used by `first_confluence` (whose real end_idx is NULL → it needs MS to
+  used by `first_confluence` (whose real probe_end_idx is NULL → it needs MS to
   reach CTS_0_CONFIRMED → `cts_anchor` to bound the retrace). Finalized
   alongside the MS scan-from-start change.
 - Two-condition reset (BOTH must hold to restart from the candidate):
@@ -36,7 +36,7 @@ DESIGN LOCKED 2026-06-07 + scan-from-start pivot) and
 - Max 10 iterations. The retrace-reset `reference_zone` is CONSTANT across
   iterations (only the BOS_0 *threshold* moves — "two zones, don't
   conflate").
-- `end_idx` is the SUPREME upper bound (LANDMINES: "Probe `end_idx` Is the
+- `probe_end_idx` is the SUPREME upper bound (LANDMINES: "Probe `end_idx` Is the
   Supreme Bound") for both the breakout search and the retrace window.
 
 The probe hands MS a DECISION, not events: `{finalized current_start,
@@ -121,9 +121,9 @@ FinalizeCondition = Literal[
     "no_retrace",            # ≥1 CTS_EST + candidate fails reset → finalized
     "reversal_in_probe",     # reversal before 2nd CTS_EST in Phase 2 → finalized
     "second_cts_reached",    # Phase 2 saw cycle-1 CTS_EST without a qualifying retrace → finalized
-    "end_idx_reached",       # end_idx reached without CTS_EST → finalized at caller bound
-    "no_cts_pending",        # no CTS_EST + end_idx None → pending (live mode only)
-    "one_cts_pending",       # 1 CTS_EST + end_idx None → pending (can't bound check window)
+    "end_idx_reached",       # probe_end_idx reached without CTS_EST → finalized at caller bound
+    "no_cts_pending",        # no CTS_EST + probe_end_idx None → pending (live mode only)
+    "one_cts_pending",       # 1 CTS_EST + probe_end_idx None → pending (can't bound check window)
     "max_iterations",        # all iterations triggered reset → pending
 ]
 
@@ -132,16 +132,17 @@ FinalizeCondition = Literal[
 class ProbeResult:
     """Outcome of one `unified_probe` invocation.
 
-    `start_idx` is the validated/finalized start when `status="finalized"`,
-    or the best current candidate when `status="pending"` (caller may
-    re-invoke once more data lands).
+    `starting_idx` is the validated/finalized structural anchor (the pool
+    key under §17 — a HISTORICAL field, never a lifecycle value) when
+    `status="finalized"`, or the best current candidate when
+    `status="pending"` (caller may re-invoke once more data lands).
 
     `original_ref_zone` is the same `ReferenceZone` passed in — the probe
     never refines its reference. Returned for caller convenience /
     debug attribution.
 
     `bos0_inner` / `bos0_outer` are the BOS_0 threshold bounds at the
-    finalized `start_idx` (iter 1 = the reference inner/outer; iter 2+ =
+    finalized `starting_idx` (iter 1 = the reference inner/outer; iter 2+ =
     the ad-hoc BOS_0 at the reset start). MS uses `bos0_inner` as the
     cycle-0 breakout gate so probe and MS gate on the EXACT same number.
     `cts0_est_idx` is the apply/confirm idx of the located true first
@@ -152,23 +153,23 @@ class ProbeResult:
 
     `finalize_idx` is the candle at which the probe's terminal DECISION became
     determinable — the latest idx whose information the finalize condition
-    relied on (same frame as `start_idx`). It is the causally-correct
+    relied on (same frame as `starting_idx`). It is the causally-correct
     lifecycle-start floor for a probe-resolved structure ("the structure isn't
-    KNOWN until the probe finalized"), threaded into `start_trigger_idx` for the
-    bootstrap sids (FC + first_counter) — see PART4_REFACTOR_SPEC §5/§6.1 +
-    LANDMINES "MS Batched..."'s sibling "Probe finalize idx floors the
-    lifecycle". Per `finalize_condition`:
-      - Phase 1 `no_retrace` / `end_idx_reached`     → `end_idx`
+    KNOWN until the probe finalized"): under §17 it is the record's
+    `probe_finalize_idx`, one of the three terms of `start_idx =
+    max(probe_finalize_idx, trigger_idx, parent_floor_idx)` (PART4 §17.4).
+    Per `finalize_condition`:
+      - Phase 1 `no_retrace` / `end_idx_reached`     → `probe_end_idx`
       - Phase 2 `second_cts_reached`                 → 2nd CTS_ESTABLISHED moment
                                                        (meta["confirmed_at"], Plan B)
       - Phase 2 `reversal_in_probe`                  → reversal apply idx
       - Phase 2 `no_retrace`                         → CTS_0_CONFIRMED idx
-                                                       (else `end_idx`)
-      - Phase 2 `end_idx_reached`                    → `end_idx`
+                                                       (else `probe_end_idx`)
+      - Phase 2 `end_idx_reached`                    → `probe_end_idx`
       - pending (`*_pending`, `max_iterations`)      → None (sid never builds)
     None whenever `status="pending"`.
     """
-    start_idx: int
+    starting_idx: int
     status: Literal["finalized", "pending"]
     iterations: int
     original_ref_zone: ReferenceZone
@@ -183,7 +184,7 @@ class ProbeResult:
 @dataclass(frozen=True)
 class _DetResult:
     """Internal return of the deterministic method (`_run_phase1`)."""
-    start_idx: int
+    starting_idx: int
     status: Literal["finalized", "pending"]
     finalize_condition: FinalizeCondition
     iterations: int
@@ -337,7 +338,7 @@ def _run_phase1(
     input_idx: int,
     direction: int,
     reference_zone: ReferenceZone,
-    end_idx: Optional[int],
+    probe_end_idx: Optional[int],
     reset_tol: float,
     wick_cap: float,
     *,
@@ -348,14 +349,14 @@ def _run_phase1(
     Per iteration: locate the cycle-0 true first breakout from
     `current_start` against the MOVING BOS_0 inner threshold
     (`find_true_first_breakout`); if found, look for the deepest retrace
-    candidate in `[CTS_0_EST+1, end_idx]` and evaluate the 2-condition
+    candidate in `[CTS_0_EST+1, probe_end_idx]` and evaluate the 2-condition
     reset against the CONSTANT `reference_zone`. A successful reset
     advances `current_start` (and re-derives the moving BOS_0); no
     qualifying retrace finalizes; no breakout finalizes (or stays pending
-    in live mode with `end_idx=None`).
+    in live mode with `probe_end_idx=None`).
 
     The new-extreme comparison re-anchors to `current_start` on every
-    reset (handled inside the shared routine). `end_idx` is the inclusive
+    reset (handled inside the shared routine). `probe_end_idx` is the inclusive
     supreme upper bound for BOTH the breakout search and the retrace
     window, and for the MS run Phase 2 drives (no candle past it is read
     there — Plan A; the detector `bp` is bounded at it too). The ad-hoc
@@ -371,7 +372,7 @@ def _run_phase1(
     final_status: Literal["finalized", "pending"] = "pending"
     iteration = 0
 
-    upper = int(end_idx) if end_idx is not None else int(df.index[-1])
+    upper = int(probe_end_idx) if probe_end_idx is not None else int(df.index[-1])
 
     for iteration in range(1, max_iterations + 1):
         tfb = find_true_first_breakout(
@@ -381,7 +382,7 @@ def _run_phase1(
         if tfb is None:
             # No true first breakout in window.
             cts0_est_idx = None
-            if end_idx is not None:
+            if probe_end_idx is not None:
                 final_condition = "end_idx_reached"
                 final_status = "finalized"
             else:
@@ -391,15 +392,15 @@ def _run_phase1(
 
         cts0_est_idx = int(tfb.est_idx)
 
-        # Can't bound the retrace without end_idx (Phase 2 picks this up
+        # Can't bound the retrace without probe_end_idx (Phase 2 picks this up
         # for first_confluence callers).
-        if end_idx is None:
+        if probe_end_idx is None:
             final_condition = "one_cts_pending"
             final_status = "pending"
             break
 
         candidate_idx = _select_extreme_retrace_candidate(
-            df, int(tfb.est_idx) + 1, int(end_idx), direction,
+            df, int(tfb.est_idx) + 1, int(probe_end_idx), direction,
         )
         if candidate_idx is None:
             final_condition = "no_retrace"
@@ -427,15 +428,15 @@ def _run_phase1(
 
     # finalize_idx (lifecycle-start floor): both finalized Phase-1 conditions
     # (`no_retrace`, `end_idx_reached`) examined the breakout/retrace window up
-    # to `end_idx` (both require `end_idx is not None`), so the decision
-    # depended on candles through `end_idx`. Pending → None (sid never builds).
+    # to `probe_end_idx` (both require `probe_end_idx is not None`), so the decision
+    # depended on candles through `probe_end_idx`. Pending → None (sid never builds).
     _finalize_idx = (
-        int(end_idx) if (final_status == "finalized" and end_idx is not None)
+        int(probe_end_idx) if (final_status == "finalized" and probe_end_idx is not None)
         else None
     )
 
     return _DetResult(
-        start_idx=current_start,
+        starting_idx=current_start,
         status=final_status,
         finalize_condition=final_condition,
         iterations=iteration,
@@ -457,12 +458,12 @@ def _second_cts_moment(cts_est: list) -> int:
 
 def _run_phase2(
     df: pd.DataFrame,
-    start_idx: int,
+    starting_idx: int,
     bos0_inner: float,
     bos0_outer: float,
     direction: int,
     reference_zone: ReferenceZone,
-    end_idx: Optional[int],
+    probe_end_idx: Optional[int],
     reset_tol: float,
     wick_cap: float,
     *,
@@ -474,19 +475,19 @@ def _run_phase2(
     (`enforce_cts0_new_extreme=True` + the handed `bos0_inner`), so MS
     establishes cycle 0 at the shared routine's true-first-breakout. Phase
     2's job is to drive MS far enough to reach CTS_0_CONFIRMED → its
-    `cts_anchor_idx`, which bounds the retrace search (FC's real end_idx is
+    `cts_anchor_idx`, which bounds the retrace search (FC's real probe_end_idx is
     NULL, so it uses this earlier signal rather than waiting) — and it stops
     at the 2nd `CTS_ESTABLISHED` (Plan B): the double-CTS rule is an early
     stop, not a classification at exit. The MS run is handed
     `stop_after_cts_established=2` and ends at the first quiescent point (no
     reversal watch / pending reversal / pending rewind) after the 2nd CTS;
     `ms.early_stop_idx` says whether it actually stopped early (a run whose
-    2nd CTS lands on the last in-bound step reaches `end_idx` without one).
-    Runs that never reach a 2nd CTS still run to `end_idx`.
+    2nd CTS lands on the last in-bound step reaches `probe_end_idx` without one).
+    Runs that never reach a 2nd CTS still run to `probe_end_idx`.
 
     Retrace search window:
-      - If CTS_0 confirmed before end_idx: `[CTS_0_est+1, cts_anchor_idx-1]`
-      - Else (CTS_0 not confirmed before end_idx): `[CTS_0_est+1, end_idx]`
+      - If CTS_0 confirmed before probe_end_idx: `[CTS_0_est+1, cts_anchor_idx-1]`
+      - Else (CTS_0 not confirmed before probe_end_idx): `[CTS_0_est+1, probe_end_idx]`
 
     Termination conditions:
       - Reversal AND <2 CTS_EST → `reversal_in_probe`
@@ -500,10 +501,10 @@ def _run_phase2(
         `confirmed_at`)
 
     `bos0_inner`/`bos0_outer` are the deterministic method's finalized
-    BOS_0 bounds (the threshold at `start_idx`); they MOVE with each reset
+    BOS_0 bounds (the threshold at `starting_idx`); they MOVE with each reset
     via `_bos0_inner_at_start`, mirroring the deterministic method.
     """
-    current_start = int(start_idx)
+    current_start = int(starting_idx)
     cur_bos0_inner = float(bos0_inner)
     cur_bos0_outer = float(bos0_outer)
     cts0_est_idx: Optional[int] = None
@@ -522,19 +523,19 @@ def _run_phase2(
         ]
         if _stale_cols:
             df_probe = df_probe.drop(columns=_stale_cols)
-        # Bounded at `end_idx` with truncation semantics: MS reads nothing
+        # Bounded at `probe_end_idx` with truncation semantics: MS reads nothing
         # past it and asserts post-run that no event is stamped past it
         # (Plan A — `MarketStructure.run()`), so `probe_events` and the
         # `df_probe` rows below are reproducible from the stated bound.
         # Plan B: the double-CTS rule is a true early stop — MS ends at the first
         # quiescent point after the 2nd CTS_ESTABLISHED (in addition to the
-        # bound, never instead of it; `n_cts <= 1` runs still reach `end_idx`).
+        # bound, never instead of it; `n_cts <= 1` runs still reach `probe_end_idx`).
         ms = _make_market_structure(
             df_probe,
             struct_direction=direction,
             start_idx=current_start,
             structure_id=0,
-            end_idx=end_idx,
+            end_idx=probe_end_idx,
             enforce_cts0_new_extreme=True,
             bos0_inner=cur_bos0_inner,
             stop_after_cts_established=2,
@@ -548,12 +549,12 @@ def _run_phase2(
 
         # "Stopped early" comes from `ms.early_stop_idx`, never from `n_cts >= 2`
         # (a 2nd CTS on the last in-bound step with a pending reversal reaches
-        # `end_idx` without stopping). The print also checks the §2
+        # `probe_end_idx` without stopping). The print also checks the §2
         # extreme-vs-moment pair on the probe's OWN run.
         if ms.early_stop_idx is not None:
             print(
                 f"[unified_probe phase2] early stop: p2_iter={iteration} "
-                f"stop_idx={ms.early_stop_idx} end_idx={end_idx} "
+                f"stop_idx={ms.early_stop_idx} probe_end_idx={probe_end_idx} "
                 f"cts1_ext={int(cts_est[1].idx) if n_cts >= 2 else None} "
                 f"cts1_moment={_second_cts_moment(cts_est) if n_cts >= 2 else None}"
             )
@@ -572,17 +573,17 @@ def _run_phase2(
             )
             finalize_idx = (
                 int(df_probe.index[_rev_mask].min()) if bool(_rev_mask.any())
-                else (int(end_idx) if end_idx is not None else None)
+                else (int(probe_end_idx) if probe_end_idx is not None else None)
             )
             break
 
         # No CTS_0 emitted in window (scan mode found no true breakout).
         if n_cts == 0:
             cts0_est_idx = None
-            if end_idx is not None:
+            if probe_end_idx is not None:
                 final_condition = "end_idx_reached"
                 final_status = "finalized"
-                finalize_idx = int(end_idx)
+                finalize_idx = int(probe_end_idx)
             else:
                 final_condition = "no_cts_pending"
                 final_status = "pending"
@@ -593,7 +594,7 @@ def _run_phase2(
         cts0_est_idx = int(first_cts.meta.get("confirmed_at", first_cts.idx))
 
         # Try to find CTS_0_CONFIRMED — if present, bound by its
-        # cts_anchor_idx. Else fall back to end_idx.
+        # cts_anchor_idx. Else fall back to probe_end_idx.
         cycle_0_conf = _collect_cts_confirmed_for_cycle(
             probe_events, structure_id=0, cycle_id=first_cycle_id,
         )
@@ -604,10 +605,10 @@ def _run_phase2(
                 cycle_0_conf.meta.get("cts_anchor_idx", first_cts.idx)
             )
             check_hi = cts0_anchor_idx - 1
-        elif end_idx is not None:
-            check_hi = int(end_idx)
+        elif probe_end_idx is not None:
+            check_hi = int(probe_end_idx)
         else:
-            # CTS_0 not confirmed AND end_idx None → pending in live.
+            # CTS_0 not confirmed AND probe_end_idx None → pending in live.
             final_condition = "one_cts_pending"
             final_status = "pending"
             break
@@ -616,13 +617,13 @@ def _run_phase2(
         # below (window empty / no candidate / candidate fails reset):
         #   - second_cts_reached → the 2nd CTS_ESTABLISHED's MOMENT
         #     (`confirmed_at`; cycle 0 completed + cycle 1 established — the
-        #     "double CTS", earlier than the parent-CTS end_idx) — Plan B.
+        #     "double CTS", earlier than the parent-CTS probe_end_idx) — Plan B.
         #   - no_retrace → CTS_0_CONFIRMED idx (the decision needed cycle 0's
-        #     confirmation), else end_idx when cycle 0 didn't confirm in-window.
+        #     confirmation), else probe_end_idx when cycle 0 didn't confirm in-window.
         _second_cts_fin = _second_cts_moment(cts_est) if n_cts >= 2 else None
         _no_retrace_fin = (
             int(cycle_0_conf.idx) if cycle_0_conf is not None
-            else (int(end_idx) if end_idx is not None else None)
+            else (int(probe_end_idx) if probe_end_idx is not None else None)
         )
 
         if check_lo > check_hi:
@@ -676,7 +677,7 @@ def _run_phase2(
         )
 
     return _DetResult(
-        start_idx=current_start,
+        starting_idx=current_start,
         status=final_status,
         finalize_condition=final_condition,
         iterations=iteration,
@@ -692,7 +693,7 @@ def unified_probe(
     input_idx: int,
     direction: int,
     reference_zone: ReferenceZone,
-    end_idx: Optional[int],
+    probe_end_idx: Optional[int],
     timeframe: str,
     *,
     max_iterations: int = 10,
@@ -705,11 +706,11 @@ def unified_probe(
     B against the MOVING BOS_0 inner; iter 1 = `reference_zone.inner`,
     iter 2+ = ad-hoc BOS_0 at the reset start), then evaluates the
     2-condition retrace reset on the deepest candidate in
-    `[CTS_0_EST+1, end_idx]`. Iterates on a successful reset. No MS run.
+    `[CTS_0_EST+1, probe_end_idx]`. Iterates on a successful reset. No MS run.
 
     **Phase 2 (`_run_phase2`, only when `enable_phase2=True`):** MS-based,
     invoked after the deterministic method for `first_confluence` callers
-    (whose real end_idx is NULL → MS reaches CTS_0_CONFIRMED → `cts_anchor`
+    (whose real probe_end_idx is NULL → MS reaches CTS_0_CONFIRMED → `cts_anchor`
     to bound the retrace).
 
     For first_counter, subsequent_*, reversal, `enable_phase2=False`
@@ -730,11 +731,13 @@ def unified_probe(
     reference_zone : ReferenceZone
         The CONSTANT retrace-reset reference (held across iterations) AND
         the iter-1 BOS_0 threshold.
-    end_idx : int, optional
+    probe_end_idx : int, optional
         Inclusive supreme upper bound for the breakout search, the retrace
         window and the MS run Phase 2 drives (no candle past it is read
-        there — Plan A). The ad-hoc BOS_0 zone derivation at a reset
-        candidate still reads up to 5 candles past it (Plan A §8, L5b).
+        there — Plan A). A COMPUTE bound (like the run cap) — nothing to do
+        with the lifecycle `end_idx` of §17 (renamed from `end_idx` by Plan C
+        for exactly that collision). The ad-hoc BOS_0 zone derivation at a
+        reset candidate still reads up to 5 candles past it (Plan A §8, L5b).
         None enables live-mode pending paths.
     timeframe : str
         TF for threshold lookup (H1 / M15 / M5).
@@ -759,28 +762,28 @@ def unified_probe(
     reset_tol = float(reset_pips) * pip_size
     wick_cap = float(wick_pips) * pip_size
 
-    # Bounded detector: candles past `end_idx` do not exist for Phase 1's
+    # Bounded detector: candles past `probe_end_idx` do not exist for Phase 1's
     # breakout search (Plan A §3.3 — equivalent to the `est > hi` drop in
     # `find_true_first_breakout`, now by construction). None → whole frame.
-    bp = BreakoutPatterns(df, end_idx=end_idx)
+    bp = BreakoutPatterns(df, end_idx=probe_end_idx)
 
     # --- Deterministic method ---
     det = _run_phase1(
-        df, bp, int(input_idx), direction, reference_zone, end_idx,
+        df, bp, int(input_idx), direction, reference_zone, probe_end_idx,
         reset_tol, wick_cap,
         max_iterations=max_iterations,
     )
 
     if not enable_phase2:
         notes = (
-            f"unified_probe deterministic: start={det.start_idx} "
+            f"unified_probe deterministic: start={det.starting_idx} "
             f"direction={direction} iter={det.iterations} "
             f"status={det.status} condition={det.finalize_condition} "
             f"bos0_inner={det.bos0_inner} cts0_est={det.cts0_est_idx} "
-            f"end_idx={end_idx} timeframe={timeframe}"
+            f"probe_end_idx={probe_end_idx} timeframe={timeframe}"
         )
         return ProbeResult(
-            start_idx=det.start_idx,
+            starting_idx=det.starting_idx,
             status=det.status,
             iterations=det.iterations,
             original_ref_zone=reference_zone,
@@ -797,22 +800,22 @@ def unified_probe(
     # and its finalized BOS_0 bounds (the MS pre-CTS_0 scan gate). It
     # re-derives the moving BOS_0 on each of its own resets.
     p2 = _run_phase2(
-        df, det.start_idx, det.bos0_inner, det.bos0_outer,
-        direction, reference_zone, end_idx,
+        df, det.starting_idx, det.bos0_inner, det.bos0_outer,
+        direction, reference_zone, probe_end_idx,
         reset_tol, wick_cap,
         max_iterations=max_iterations,
     )
 
     notes = (
-        f"unified_probe deterministic+phase2: start={p2.start_idx} "
+        f"unified_probe deterministic+phase2: start={p2.starting_idx} "
         f"direction={direction} det_iter={det.iterations} "
         f"det_cond={det.finalize_condition} p2_iter={p2.iterations} "
         f"status={p2.status} condition={p2.finalize_condition} "
         f"bos0_inner={p2.bos0_inner} cts0_est={p2.cts0_est_idx} "
-        f"end_idx={end_idx} timeframe={timeframe}"
+        f"probe_end_idx={probe_end_idx} timeframe={timeframe}"
     )
     return ProbeResult(
-        start_idx=p2.start_idx,
+        starting_idx=p2.starting_idx,
         status=p2.status,
         iterations=det.iterations + p2.iterations,
         original_ref_zone=reference_zone,

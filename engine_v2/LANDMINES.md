@@ -350,37 +350,70 @@ start_in_slice = start_idx - slice_begin  # Offset from slice start
 
 ## Lower-TF Zones, POIs, and Fibs Must Be Capped at Lifecycle End
 
-**Rule:** After running the downstream pipeline for a lower-TF structure,
-cap every open-ended artifact to the M15 slice's last candle with
-`deactivated_by: "lifecycle_end"`:
-- **Zones:** any with `end_time=None`
-- **POIs:** any with `end_time=None`
-- **Fibs:** any with `active=True AND locked=False` (still-unlocked fibs
-  that never saw CTS_n+1 CONFIRMED before the parent cycle ended, including
-  pre-established cross fibs that never had a CTS_n+1 ESTABLISHED)
+**Rule (Plan C, 2026-09-20 — restated on the pool model; PART4 §17.9):** every
+KL zone / POI / fib / wave-candle element of a sub is derived over the unique
+sub's real-time lifecycle window and MUST end at the sub's `end_idx`. The cap
+is not a post-hoc pass: `entity_df_mutation.render_sub_projection` passes the
+sub's `end_idx` (slice-local, `sub.end_idx - slice_begin`) as `lifecycle_cap`
+and `sub.end_reason` as `cap_reason` into `pooled_structure_build.project_to_window`
+→ `orchestrator._run_downstream_pipeline` → `structure_lifecycle.compute_cycle_lifecycle`,
+whose per-`(sid, cycle)` end is `min(next-cycle clamped start, reversal,
+lifecycle_cap)`. KL / POI / fib records INHERIT that `end_idx` / `end_reason`
+(pass-through — see "Sub Lifecycle-Start Clamp … Start AND End Resolution Are
+Shared" below); the KL derivation drops any legacy `active` / `deactivated_by`
+keys from zone meta (`kl_zones_v1`, the lifecycle block), and no derivation
+writes `deactivated_by` for a LIFECYCLE end (`fib_tracker` still writes it for
+its version-internal `cross_failed` / `cross_shortened` / `scenario1_revert`
+supersedes — a different mechanism, see "FibState Lifecycle Gate Is
+Per-Record"). An open sub (`end_idx is None`) passes `lifecycle_cap=None`
+and its elements stay open to the data edge, exactly like main.
 
-**Why:** The M15 structure's lifecycle is bounded by the parent H1 cycle
-(ends at next BOS or reversal). Without capping, these artifacts render as
-extending indefinitely on the chart — past the lifecycle boundary.
+**Vocabulary:** a sub's `end_reason` is one of `{reversal,
+same_dir_replacement, parent_end}` (or `None` while open) — the reason of the
+record end that won the §17.5 aggregation. That is the string the zone / POI /
+fib `end_reason` carries for an element the cap ended. `deactivated_by` and
+`"lifecycle_end"` are gone from every artifact (`"lifecycle_end"` survives only
+as the dead default of the `cap_reason` parameter — never reached, because a
+sub with a cap always passes its own `end_reason` and main passes no cap).
+`next_cycle` (an end produced by the next sub cycle on the same sub, not by
+the cap) is unchanged and stays internal to the zone layer.
 
-**Implementation:** In `lower_tf_pipeline.py`, after the downstream pipeline,
-use `dataclasses.replace()` to cap each artifact kind:
+**Why (stronger under the pool):** sub geometry now runs to the DATA EDGE
+(`build_or_get_geometry`, run cap = `len(m15) - 1`), not to the parent
+boundary. Without the cap every element of a sub that ended (by its own
+reversal, by a same-lens replacement, or because its parent cycle ended)
+would render to the far-right edge, across candles the sub was no longer
+tradeable on. The cap is the only thing bounding derived elements to the
+lifecycle; the geometry no longer does it for free.
 
-```python
-# Zones / POIs: cap by end_time
-if zone.end_time is None:
-    zone = replace(zone, end_time=last_time,
-                   meta={**zone.meta, "active": False, "deactivated_by": "lifecycle_end"})
-
-# Fibs: cap by active flag
-if fib.active and not fib.locked:
-    fib = replace(fib, active=False,
-                  meta={**fib.meta, "deactivated_by": "lifecycle_end", "deactivated_at": last_idx})
-```
+**History (pre-Plan C; `multitf/lower_tf_pipeline.py`, deleted by Plan C):**
+the original rule was a post-hoc `dataclasses.replace()` loop after the
+downstream pipeline — zones / POIs with `end_time=None` and fibs with
+`active=True AND locked=False` were closed at the M15 slice's last candle with
+`meta["deactivated_by"] = "lifecycle_end"`. The slice was itself bounded by the
+parent cycle's end, so the slice edge and the lifecycle end coincided. B2
+(2026-05-27) moved the cap into the derivations as `lifecycle_cap`; Plan C
+decoupled it from the run bound (the run bound is now the data edge, the cap
+is the sub's aggregated `end_idx`).
 
 ---
 
 ## Probe `end_idx` Is the Supreme Bound
+
+> **Rename note (Plan C, 2026-09-20):** the probe's search bound is now spelled
+> **`probe_end_idx`** — the parameter of `unified_probe` / `_run_phase1` /
+> `_run_phase2` (`structure/unified_probe.py`), the `FirstConfluenceTrigger.probe_end_idx`
+> field (`multitf/types.py`), the `MultiTFTrigger.meta["probe_end_idx"]` key
+> (already so named) and the `[probe_cache]` log strings. It is a COMPUTE bound
+> (the inclusive upper edge of the search window, like the run cap) and has
+> nothing to do with the lifecycle `end_idx` of a `TriggerRecord` /
+> `PooledStructure` (PART4 §17.4–§17.5) — that name collision is why it was
+> renamed. The MS bound keeps its name: `MarketStructure(end_idx=...)` /
+> `compute_bounded_structure(end_idx=...)`. The probe's OUTPUT anchor is
+> `ProbeResult.starting_idx` (was `start_idx`) — a HISTORICAL field, the pool
+> key, never a lifecycle value. Everything below still holds; read `end_idx`
+> in this entry as the probe bound (`probe_end_idx`) unless it names the MS
+> parameter.
 
 **Rule:** When `end_idx` is passed to a probe (`compute_structure_scenario_3`
 Phase 1, Exception 2 loops in `compute_structure` / Scenario 3 Phase 2, or any
@@ -488,6 +521,22 @@ except (ValueError, IndexError) as exc:
     return None
 ```
 
+**Where the rule lives now (Plan C, 2026-09-20 — `lower_tf_pipeline.py` is
+deleted):** the same two seams survive as the sweep's two failure reasons
+(PART4 §17.7). The probe side: every resolver (`_resolve_trigger_m15_start`,
+`_resolve_reversal_start` in `multitf/entity_df_mutation.py`) returns a
+`ProbeFailure` instead of raising → the trigger is logged as
+`UnresolvedTrigger(reason="probe_failed")`. The MS side: `_build_geometry`
+wraps `compute_bounded_structure` in `try/except (ValueError, IndexError)` and
+returns `None` → `build_or_get_geometry` creates NO pool entry (no `sub_id`
+consumed) and the trigger is logged as `reason="geometry_failed"`. Both go
+through `lifecycle_sweep._Sweep._unresolved` → the `[sweep] UNRESOLVED
+(skipping) …` line the `/compare` skill greps. What is NOT graceful any more:
+a parent cycle without a `CTS_ESTABLISHED`, a failed LOH map, a `BOS_CONFIRMED`
+whose `confirmed_at` differs from its cycle's `CTS_ESTABLISHED.confirmed_at`
+— those raise in `multitf/parent_tables.build_parent_tables` (see "Sub
+Lifecycle-Start Clamp" below).
+
 ---
 
 ## Event Sort Order Is a Dispatch Invariant
@@ -586,14 +635,85 @@ bypass those lookups.
 **removed** from `export_m15_chart_plotly`. The chart consumer reads
 sub data from `m15_df.attrs["events" / "kl_zones" / "poi_zones" /
 "fib_states" / "wave_candles" / "wvmi" / "prev_bos_lines"]` grouped by
-each snapshot's identity tuple `(parent_sid, parent_cycle_id, sub_sid)`
-per `m15_df.attrs["sids"]`. The same applies to `export_chart_plotly`'s
+each snapshot's identity per `m15_df.attrs["sids"]`. **Plan C
+(2026-09-20): that identity is the unique sub's `meta["sub_id"]`** (one
+`SidRecord` per unique sub on the lens, `SidRecord.sub_id`; the pre-pool
+tuple `(parent_sid, parent_cycle_id, sub_sid)` is gone — `parent_sid` /
+`parent_cycle_id` in snapshot meta are informational, never identity, PART4
+§17.9). The same applies to `export_chart_plotly`'s
 M15-zone overlay — it reads zones from the M15.counter sub-entity in the
 registry, never from `dfx.attrs["lower_tf_results"]`.
 
 ---
 
 ## Cross-entity sibling references require cadence-order interleaving (Session 3, 2026-05-31)
+
+> **SUPERSEDED by Plan C (2026-09-20) — the sibling read is a POOL QUERY; the
+> cadence chain is gone.** The rule below this banner is the current one; the
+> Session-3 text after it is kept as history (it explains WHY the read must be
+> causal, which has not changed).
+>
+> **Rule (PART4 §17.8).** The three sibling-referencing variations
+> (`first_counter` / `subsequent_counter` read the confluence lens;
+> `subsequent_confluence` reads the counter lens — `_SIBLING_LENS` in
+> `multitf/entity_df_mutation.py`) resolve their reference zone with
+> `_build_sibling_cts_ref_zone_from_pool(pool, other_lens, parent_sid,
+> parent_cycle_id, probe_direction, idx_window=(lo, hi), m15_df)`:
+>
+> - candidates = `pool.records_for(other_lens, S, C)` filtered to
+>   `r.direction == -probe_direction` (direction qualification, unchanged),
+>   `not r.is_zero_length`, and LIVE somewhere in the window:
+>   `r.start_idx <= hi and (r.trigger_end_idx is None or r.trigger_end_idx >= lo)`.
+>   A record that exists but has not started (an FC record between its
+>   `trigger_idx` and its `start_idx`) is excluded by `start_idx <= hi`.
+> - each candidate's CTS events (`_CTS_EVENT_TYPES`) come from its sub's
+>   geometry (`pool.get_by_id(r.sub_id).geometry` = `(bounded, slice_begin)`,
+>   SLICE-LOCAL → shifted by `slice_begin`, deep-copied), **clipped to the
+>   record's own live window ∩ `[lo, hi]`**: `r_lo = max(lo, r.start_idx)`,
+>   `r_hi = min(hi, r.trigger_end_idx or hi)`. This clip is what reproduces
+>   the pre-pool candidate set now that geometry runs to the DATA EDGE — a
+>   REPLACED sub's later `CTS_UPDATED`s must not compete (sub `3304/−1` is
+>   replaced at 3819 but its geometry continues; unclipped, its post-3819 CTS
+>   events would move `subsequent_counter`(1,2)@4083's `starting_idx` 4027 —
+>   a pool key both `4027/+1` records dedup on).
+> - `hi` = the reading trigger's `trigger_idx` (`_sibling_cts_idx_window`;
+>   `lo` = 0 for `first_counter`, the LOH of the prior sd-prox / CTS-prox
+>   candle for `subsequent_*`). **The window is the ONLY thing keeping the
+>   read causal** now that geometry is not bounded per trigger — never widen
+>   it, never drop `hi`.
+> - the zone is built by `build_reference_zone_from_cts_event(events,
+>   kl_zones=[], df=m15_df (the shared entity-absolute frame, not the winner's
+>   slice-local `bounded.df`), sid=0, probe_direction, idx_window=(lo, hi))`.
+>   `kl_zones=[]` is behaviour-preserving (GOTCHAS "`ref=cts_confirmed` in a
+>   Replay Log Does NOT Mean…").
+>
+> **What replaces the cadence interleaving:** the sweep's phase-0 order key
+> (`lifecycle_sweep._fire_order_key`): at one `trigger_idx`, `TRIGGER_FIRE`s
+> run confluence before counter (`_LENS_RANK`), `first_*` before
+> `subsequent_*` (`_TYPE_RANK`), then by `trigger_event_idx`; and
+> `REVERSAL_SPAWN` sorts BEFORE `TRIGGER_FIRE` at the same idx (the
+> reversal-born successor must exist before an H1 trigger at that candle
+> runs its sibling read). Across different idxs the heap order is the cadence.
+> A missing sibling still takes the resolver's own-frame ad-hoc BOS_0
+> fallback (`_window_extreme_idx`, PART4 §4.3.4 step 5, unchanged; logged
+> `[entity_compute] sibling-CTS unavailable …`), and a resolver that cannot
+> build any zone returns a `ProbeFailure` → `UnresolvedTrigger(reason=
+> "probe_failed")` — no longer a silently skipped sub. No `probe_failed` row
+> appeared on the first Plan C replay (all four unresolved rows are
+> `degenerate_parent_cycle`).
+>
+> **Expected behavioural delta (PART4 §17.8), stated as an expectation, not a
+> measurement:** within a record's live window the sibling now sees the
+> natural-end CTS stream (a `CTS_UPDATED` the old per-trigger bound had cut),
+> so small `starting_idx` shifts are possible; each must be explained by such
+> an event inside `[r_lo, r_hi]`. On the first Plan C replay every sub's
+> `starting_idx` matched the predicted table (no such shift was observed).
+>
+> Retired with the chain: `build_two_entity_parent_cycle`, `_ChainCursor`,
+> `build_parent_cycle_chain`, the two scratch M15 entity dfs and
+> `_assert_m15_frames_aligned` (there is ONE shared M15 feature frame; the
+> two lens dfs are copies of it, populated by the mirror — §17.9), and
+> `_build_sibling_cts_ref_zone(sibling_entity_df, …)`.
 
 **Symptom (if violated):** a sub probe that reads its sibling entity's CTS
 resolves the reference zone to `None` (the sibling sid it needs isn't built
@@ -641,7 +761,11 @@ filters candidates to `struct_direction == -probe_direction` (the sibling's own
 bootstrap direction = `-lower_sd`) BEFORE the most-recent selection, and passes
 that filtered list to `build_reference_zone_from_cts_event` (which re-selects by
 idx — so filtering the local pre-selection alone is insufficient; the list handed
-to the primitive must be filtered). **Symptom if violated:** the counter (or
+to the primitive must be filtered). *(Plan C: the same qualification is the
+`r.direction == -probe_direction` filter on RECORDS in
+`_build_sibling_cts_ref_zone_from_pool` — a record's `direction` is its sub's
+absolute direction, and a reversal-born successor is a different sub with a
+different record, so post-reversal CTS events never enter the candidate list.)* **Symptom if violated:** the counter (or
 subsequent confluence/counter) sub starts far too late — anchored on the
 sibling's still-sliding post-reversal `CTS_UPDATED` right before the trigger,
 collapsing its probe window (`end_idx_reached`, iter=1) instead of rooting at the
@@ -800,6 +924,13 @@ When §6.1 in-place overwrite lands: drop both filters, build all
 triggers, let the overwrite path mark older sids `deactivated_by` as it
 goes.
 
+*(Plan C, 2026-09-20: this is now the state of the code, in pool terms —
+`_run_multi_tf_dual` feeds EVERY var 3 / var 4 trigger to the sweep
+("triggers are independent", PART4 §17.4); the "overwrite" is the
+`same_dir_replacement` end on the incumbent `TriggerRecord` at the new
+record's `start_idx` (§17.4 end condition 2), and `deactivated_by` does
+not exist on any artifact.)*
+
 ---
 
 ## Wrapping Logic in Loops: Preserve Post-Loop Behavior
@@ -919,7 +1050,8 @@ drop on the slice copy is the cheaper safeguard.
 
 ## Sub Slices Must Re-Derive `is_range_*` Labels After `reset_index`
 
-**Rule:** In `multitf/entity_df_mutation.build_one_sid`, after the slice +
+**Rule:** In `multitf/entity_df_mutation._build_geometry` (the pool-free core
+of `build_or_get_geometry`; was `build_one_sid` before Plan C), after the slice +
 `reset_index(drop=True)`, the `is_range` / `is_range_confirm_idx` /
 `is_range_lag` columns MUST be dropped and recomputed via
 `apply_is_range_labels(trigger_df)` on the slice. The recompute is
@@ -932,7 +1064,7 @@ REQUIRED, not optional.
 index of the confirm candle. Example: a candle whose confirm landed at
 entity row 4049 gets `is_range_confirm_idx=4049`.
 
-When `build_one_sid` builds a per-sub bounded structure, it slices that
+When `_build_geometry` builds a sub's natural-end structure, it slices that
 entity_df and calls `reset_index(drop=True)`. **Row indices reset to
 0..N, but column VALUES are unchanged** — so `is_range_confirm_idx` still
 holds 4049 even though the corresponding slice-local position is, say, 72.
@@ -976,7 +1108,7 @@ CTS_0 anchor leaked to idx 4050, BOS_1 picked idx 4048, visual
 `BOS(4027)→BOS(4048)→CTS(4050)→CTS(4086)` — cycle_id sequence
 `0→1→0→1` by chart-marker idx.
 
-**Fix (codified in `build_one_sid`):**
+**Fix (codified in `_build_geometry`; was `build_one_sid`):**
 
 ```python
 from engine_v2.patterns.range_label import apply_is_range_labels, RangeLabelConfig
@@ -1178,11 +1310,41 @@ out-of-bounds `start_idx`.
 
 ## M15 Chart Sid-Tied Filter Uses `owner_by_idx` Per Rendered Candle
 
+> **Plan C (2026-09-20) — ownership is the lifecycle window, per direction
+> (PART4 §17.9 / §16.5 rev 2).** The map is now
+> `owner_by_idx_dir[(candle, direction)]`, built by
+> `export_m15_chart._compute_owner_by_idx_dir(sid_records, edge_idx)`: each
+> sub `SidRecord` (identity = `sub_id`, via `_sid_record_identity`) claims
+> `[start_idx, end_event_idx or edge_idx]` — its REAL-TIME lifecycle window
+> (`SidRecord.start_idx` / `end_event_idx = sub.end_idx`), NOT
+> `creation_event_idx` (= `starting_idx`, the structural anchor) — under the
+> key `(candle, starting_sd)`. Rows are walked in `(start_idx, sub_id)` order
+> so a later start wins a same-direction overlap; opposite-direction subs
+> never collide (a `+1` and a `−1` sub may both be live on one chart, e.g.
+> `4027/+1` on confluence from 4083 while `3760/−1` runs to 4200). The
+> per-element check is `_owned_here(idx)`: **the default-keep heuristic below
+> is RETIRED** — a candle nobody owns draws nothing. **Chart review
+> 2026-09-20 refinement (option 2): two layers.** `_is_live(idx) = idx >=
+> sub.start_idx` picks the layer: a live candle is drawn iff the LIVE map
+> (`_compute_owner_by_idx_dir`, later start wins) names this sub; a candle in
+> the sub's FORMING span `[starting_idx, start_idx)` is drawn iff the
+> FORMING map (`_compute_forming_by_idx_dir`, later anchor wins) names it —
+> independently of any live sub of the same direction — in the dotted/dimmed
+> forming style. Do NOT "simplify" this back to one map: hiding the forming
+> span broke every BOS→CTS line mid-structure (the first Plan C chart), and
+> letting the live map veto forming elements left `3304/−1` / `3760/−1` as
+> single points. The rendered-vs-emission idx rule in the table below is
+> unchanged. Persisting elements (KL / POI rectangles, fibs) are NOT filtered
+> by these maps: drawn from their anchor, active from `start_idx` (the KL/POI
+> clamp) — except collapsed-cycle zones, which both charts skip
+> (`_zone_render.is_collapsed_cycle_zone`; CHARTING_SPEC "Collapsed-cycle").
+
 **Rule:** §13.5.c.iii implements spec §16.5's "most recent sid only per
 candle" rule for sid-tied display elements (CTS dots, BOS markers, swing
 lines, PB markers, prev_bos lines, wave-candle hover anchors) by checking
 `owner_by_idx[rendered_candle_idx] == this_sid_identity` (the identity
-tuple `(parent_sid, parent_cycle_id, sub_sid)`). The check uses the
+tuple `(parent_sid, parent_cycle_id, sub_sid)` before Plan C; `sub_id` now —
+see the banner). The check uses the
 **rendered candle's idx**, NOT the event's emission idx, because for some
 events these differ:
 
@@ -1203,18 +1365,21 @@ candle) is correct. (Pre-redesign this also mattered for cascade overlap;
 merge-and-bound sids are now non-overlapping, but the rendered-vs-emission
 idx distinction still stands.)
 
-**`owner_by_idx` construction:** walk SidRecords sorted by identity tuple
+**`owner_by_idx` construction (pre-Plan C, history):** walk SidRecords sorted by identity tuple
 `(parent_sid, parent_cycle_id, sub_sid)` asc; for each, claim
 `[creation_event_idx, end_event_idx]`. Later sids overwrite earlier in the
 dict — but since merge-and-bound sids are sequential & non-overlapping,
 ranges don't actually overlap, so `owner_by_idx[i]` is just the single
 owning sid. Built once per chart export by `_compute_owner_by_idx`.
+*(Plan C: `_compute_owner_by_idx_dir`, `[start_idx, end_event_idx or edge]`,
+keyed per direction, `(start_idx, sub_id)` walk order — see the banner.)*
 
-**The default-keep heuristic:** `owner_by_idx.get(idx, eid) == eid` —
+**The default-keep heuristic (pre-Plan C, RETIRED):** `owner_by_idx.get(idx, eid) == eid` —
 when a candle isn't covered by any SidRecord (e.g., outside every sub's
 lifecycle), default to "owned by this sid" so the rendering doesn't
 disappear. Practically rare today (most rendered idx fall inside some
-sid's range), but the default is safer than skipping.
+sid's range), but the default is safer than skipping. *(Plan C: unowned
+candles draw nothing — hiding pre-`start_idx` dots is the point.)*
 
 **Don't fall back to `ev.idx` filtering uniformly** — it loses the
 cts_anchor_idx case. If you find yourself adding a new event-sourced
@@ -1232,6 +1397,17 @@ rendered idx.
 > `mirror_lower_tf_result_to_entity_df` (entity_df_mutation.py ~712) to shift
 > slice-local → entity-absolute. So this translation is load-bearing and growing
 > (FibState lifecycle fields were just added to it). Treat the entry as current.
+>
+> **Still live under Plan C (2026-09-20).** `build_one_sid` is gone but the
+> shape is the same: `_build_geometry` runs `compute_bounded_structure` on the
+> sliced + `reset_index` df (geometry is SLICE-LOCAL + `slice_begin`, stored on
+> `PooledStructure.geometry`), `render_sub_projection` derives the sub's
+> elements on that slice, and `mirror_lower_tf_result_to_entity_df` translates
+> once per lens df the sub is on (`sub.lenses()`). Two more places now shift
+> slice-local → entity-absolute and must follow the same key lists:
+> `_build_sibling_cts_ref_zone_from_pool` (shifts the sibling's CTS events by
+> `slice_begin` with `_EVENT_META_IDX_KEYS`) and `_resolve_reversal_start`
+> (shifts the reversal probe's `starting_idx` / `finalize_idx` / cache key).
 
 **Rule:** `mirror_lower_tf_result_to_entity_df` in
 `multitf/entity_df_mutation.py` shifts slice-local idx → entity-absolute
@@ -1392,7 +1568,9 @@ per-record.
 **Do NOT make `_deactivate_cross` (`cross_failed`/`cross_shortened`) stop setting
 `active=False`.** Unlike the cycle TERMINALS (new_cycle / scenario1_revert /
 reversal / lifecycle_end — which now set `end_idx`/`end_reason` and leave
-`active` alone), these are **version-internal supersedes**: the cycle stays
+`active` alone; under Plan C the cap-produced terminal carries the sub's
+`end_reason` — `parent_end` / `same_dir_replacement` / `reversal` — in place
+of `lifecycle_end`, same path), these are **version-internal supersedes**: the cycle stays
 alive via the next version / single fallback, but the dead version MUST read
 `active=False` so the per-record chart gate drops it (the "dead-version trail"
 vanish). They deliberately do NOT call `_set_terminal`.
@@ -1410,69 +1588,132 @@ fib lines. The migration still ran (H1 fib hover labels switched to the
 ## Sub Lifecycle-Start Clamp: Uniform, Parent-Floored; Start AND End Resolution Are Shared
 
 Two interlocking facts about the cycle/structure lifecycle clamp (B1 start +
-B2 Phase A end, 2026-05-27). Canonical model + H1→M15 mapping live in
-`PART4_REFACTOR_SPEC.md §5`; full session writeup in
-`memory/project_cycle_lifecycle_parent_cycle_floor.md`.
+B2 Phase A end, 2026-05-27; **rewritten for Plan C, 2026-09-20** — the floor
+now lives ON THE RECORD, PART4 §17.4). Canonical model + H1→M15 mapping live
+in `PART4_REFACTOR_SPEC.md §5` / §17.4–§17.6; session writeup in
+`memory/project_cycle_lifecycle_parent_cycle_floor.md`; the 3.2b failure that
+forced the floor onto the record is GOTCHAS "A Lifecycle Floor That Lives in a
+Build Function Is Lost by Any Path That Bypasses It".
 
 **1. The clamp is UNIFORM — no per-cycle exception.** A zone's first-active is
 `max(its own confirmed_idx, its structure's lifecycle-start)`, where the
 structure's lifecycle-start embeds the parent floors for subs. It is applied at
 the **structure level** (`struct_start_by_sid[sid]`, raised by `lifecycle_floor`)
-so it lands on **every cycle of a structure including cycle 0**, and on **every
-sub sid** (bootstrap / subsequent / reversal-born — `build_parent_cycle_chain`
-computes `parent_floor_m15` once per parent cycle and passes it to every
-`build_one_sid`). There is NO main-style "cycle 0 == struct start, skip the
-clamp" shortcut on subs — a sub cycle 0 must still floor at `max(parent_sid_start,
-parent_cycle_id_start)`. Do not add a per-cycle carve-out.
+so it lands on **every cycle of a structure including cycle 0**. There is NO
+main-style "cycle 0 == struct start, skip the clamp" shortcut on subs — a sub
+cycle 0 must still floor at the parent floor. Do not add a per-cycle carve-out.
 
-- **Parent floors live in `build_one_sid`, not in the zone layer.** The widened
-  `sub_lifecycle_floor_local = max(start_trigger_idx, parent_sid_start,
-  parent_cycle_start) - slice_begin` (parent floors = H1 `CTS_ESTABLISHED` idx
-  mapped to M15 **last-of-hour** via `_map_parent_idx_to_m15_hour_end`). The zone
-  derivations stay parent-agnostic — they receive ONE `lifecycle_floor` int.
-  Don't thread `parent_sid`/`parent_cycle_id` into `kl_zones_v1`/`poi_zones`
-  (they're shared with the main entity, which has no parent).
-- **Lifecycle-only.** The clamp moves ONLY `confirmed_idx`/`activation_history`/
+- **The floor is a FIELD of the record, set once at creation (Plan C).**
+  `lifecycle_sweep._Sweep._resolve_and_record` (step 5) creates every
+  `TriggerRecord` with
+  `start_idx = max(probe_finalize_idx, trigger_idx, parent_floor_idx)` where
+  `parent_floor_idx = ParentTables.floor(S, C)` = `floor_m15[(S,C)]` =
+  `LOH(max(struct_start[S], cts_moment[(S,C)]))` (`multitf/parent_tables.py`;
+  `LOH` = `_map_parent_idx_to_m15_hour_end`, last-of-hour — the timing mapper).
+  All three terms are load-bearing (§17.4): `probe_finalize_idx` when the probe
+  finished after the trigger (FC(0,0): trigger 463 → start 1020),
+  `trigger_idx` when the structure was already known before this trigger
+  fired (a probe-cache hit inherits an earlier finalize — see "Probe Cache
+  Keys Are Shared by Reversal Handoffs"), `parent_floor_idx` when the parent
+  cycle was not alive yet. Historical fields (`starting_idx`, `trigger_idx`,
+  `probe_finalize_idx`) are never adjusted — only `start_idx` is. The unique
+  sub's `start_idx` = its FIRST non-zero-length record's `start_idx` (§17.5,
+  sweep phase 2). `build_parent_cycle_chain`, `build_one_sid` and its local
+  `_floor_abs` are gone; there is no per-consumer re-derivation of the floor.
+- **What the zone layer receives.** `render_sub_projection` passes the unique
+  sub's `start_idx - slice_begin` as `lifecycle_floor` (and `end_idx -
+  slice_begin` as `lifecycle_cap`, `end_reason` as `cap_reason`) to
+  `project_to_window` → `_run_downstream_pipeline` → `kl_zones_v1` /
+  `poi_zones` / `fib_tracker` → `compute_struct_start_by_sid` /
+  `compute_cycle_lifecycle`. The zone derivations stay parent-agnostic — they
+  receive ONE `lifecycle_floor` int. Don't thread `parent_sid` /
+  `parent_cycle_id` into `kl_zones_v1` / `poi_zones` (they're shared with the
+  main entity, which has no parent). There is exactly one projection per
+  unique sub, mirrored into every lens df it belongs to (§17.9) — so both
+  charts see the same floored window.
+- **Lifecycle-only.** The clamp moves ONLY `confirmed_idx` / `activation_history` /
   fill. It must NOT move `base_idx`, the rendered rectangle outline
-  (`start_time = _time(base_idx)`), the MS run / BOS / CTS, `start_trigger_idx`
-  (the sub-WVMI gating window), or `SidRecord.creation_event_idx`. A `/compare`
-  showing any of those shifted is a red flag.
-- **Graceful-degradation paths (not designed exceptions, but they exist):** if a
-  sub's `(parent_sid, parent_cycle_id)` is absent from the floor dict or the
-  H1→M15 mapping returns `None`, the floor silently degrades to trigger-only
-  (loses the parent term); a zone with no `structure_id` (or a sid absent from
-  `struct_start_by_sid`) gets no clamp at all. Neither occurs in practice (every
-  built sub's parent cycle has a `CTS_ESTABLISHED`), but if one ever fired the
-  symptom is the original bug — a sub activating before its parent cycle.
+  (`start_time = _time(base_idx)`), the MS run / BOS / CTS, `starting_idx` (the
+  pool key; `SidRecord.creation_event_idx` for a sub), `trigger_idx` or
+  `probe_finalize_idx`. A `/compare` showing any of those shifted is a red
+  flag. (Pre-Plan C this list named `start_trigger_idx`, "the sub-WVMI gating
+  window"; that field is split into `trigger_idx` / `probe_finalize_idx` /
+  `start_idx`, and the sub-WVMI window is now `[sub.start_idx, sub.end_idx or
+  edge]` — the floored lifecycle itself, §17.10.)
+- **Former graceful-degradation paths are now ASSERTS.** Before Plan C a sub
+  whose `(parent_sid, parent_cycle_id)` was absent from the floor dict, or
+  whose H1→M15 map returned `None`, silently lost the parent term. Now
+  `build_parent_tables` raises when a `CTS_ESTABLISHED` lacks
+  `meta["confirmed_at"]`, when a `BOS_CONFIRMED (S,C)` has no `CTS_ESTABLISHED`,
+  when `BOS_CONFIRMED(S,C).meta["confirmed_at"] !=
+  CTS_ESTABLISHED(S,C).meta["confirmed_at"]` (the definitional identity —
+  NEVER assert it against `CTS_ESTABLISHED.idx`, the extreme), and when any LOH
+  map returns `None`; the sweep asserts `tables.has_cycle(S, C)` for every
+  trigger it resolves and `parent_sd[S]` for every record it creates. Nothing degrades to an
+  unfloored sub. The one remaining zone-layer soft spot — a zone with no
+  `structure_id` gets no clamp — cannot fire for subs (the internal
+  `structure_id` is always 0 inside a sub run).
 
 **2. Start AND end resolution are SHARED (B2 Phase A, 2026-05-27).** All three
-helpers live in the pure-leaf `zones/structure_lifecycle.py`, called by both
-`kl_zones_v1` and `poi_zones`:
+helpers live in the pure-leaf `zones/structure_lifecycle.py`, called by
+`kl_zones_v1`, `poi_zones`, `fib_tracker` AND (Plan C) `multitf/parent_tables.py`
+(which uses `compute_reversal_idx_by_sid` + `compute_struct_start_by_sid` and
+re-states the cycle-start/end rule of `compute_cycle_lifecycle` on H1 → M15):
 - `compute_struct_start_by_sid` — per-`structure_id` lifecycle-start (the clamp).
 - `compute_cycle_lifecycle(events, reversal_dict, floor, cap, cap_reason)` —
-  per-`(sid, cycle)` `(start, end, end_reason)`. **End is a pass-through:**
+  per-`(sid, cycle)` `(start, end, end_reason)`. **Start = the CTS-established
+  MOMENT** (`CTS_ESTABLISHED.meta["confirmed_at"]`, the apply candle; Plan C
+  2026-09-20 — NOT `CTS_ESTABLISHED.idx`, which is the CTS EXTREME, a
+  historical anchor exactly like `BOS_CONFIRMED.idx`), clamped by
+  `struct_start` and the floor. **End is a pass-through:**
   `end = min(next-cycle clamped start, reversal, lifecycle_cap)`, never computed
-  per-zone. KL/POI INHERIT `end_idx` / `end_reason` from this table.
+  per-zone. KL/POI/fib INHERIT `end_idx` / `end_reason` from this table.
 - `compute_reversal_idx_by_sid` — the single reversal dict (the old duplicated
   `_get_reversal_confirmed_by_sid_from_events` / inline `reversal_idx_by_sid`
   are gone).
 
 **Any change to end resolution or the reversal-dict construction goes in the
 helper, NOT per-zone** — the whole point of the pass-through is one source of
-truth (the drift hazard from [[feedback-in-flight-vs-downstream-resolver]]). The
-post-hoc `build_one_sid` KL/POI cap loops are gone: subs pass `lifecycle_cap`
-(the mirror of `lifecycle_floor` — `min` for end vs `max` for start) into the
-derivation, and that cap doubles as the M15 slice/run bound (load-bearing; see
-§5). **The sub cap's next-cycle source is the parent's `CTS_ESTABLISHED.ev.idx`**
-(B2 Phase B, 2026-05-27) — the 4 trigger detectors compute `lifecycle_end_idx`'s
-next-cycle term from `CTS_EST.ev.idx`, NOT `BOS_CONFIRMED.confirmed_at`, so it
-matches the start-floor (`parent_cycle_floor_h1`, also `CTS_EST.ev.idx`). Don't
-revert it to `confirmed_at`: equal on H1 today, but they diverge if a parent
-cycle's CTS-extreme ≠ breakout candle, which would make a sub's end-cap and its
-start-floor inconsistent (overlap). Collapsed cycles (clamped `start >= end`) are
+truth (the drift hazard from [[feedback-in-flight-vs-downstream-resolver]]).
+Subs pass `lifecycle_cap` (the mirror of `lifecycle_floor` — `min` for end vs
+`max` for start) into the derivation. **The cap is no longer the run bound**
+(Plan C): the sub's geometry runs to the DATA EDGE (`build_or_get_geometry`,
+`run_cap_abs = len(m15) - 1`) and the cap is purely the projection's
+lifecycle input — see "Lower-TF Zones, POIs, and Fibs Must Be Capped at
+Lifecycle End".
+
+**The floor and the end-cap come from ONE table, on the MOMENT — so they
+cannot diverge (Plan C, supersedes B2 Phase B).** `multitf/parent_tables.py`:
+`cts_moment[(S,C)] = CTS_ESTABLISHED.meta["confirmed_at"]` (last-seen per
+cycle; `== BOS_CONFIRMED.confirmed_at`, asserted), `floor_h1[(S,C)] =
+max(struct_start[S], cts_moment[(S,C)])` (the cycle's CLAMPED
+lifecycle-start), `end_h1[(S,C)] = floor_h1[(S,C+1)]` if that cycle exists,
+else `rev_by_sid[S]` (`STATE_CHANGED→reversal`, never `REVERSAL_CANDIDATE`),
+else `None`; both LOH-mapped to `floor_m15` / `end_m15`. The record's
+`parent_floor_idx` is `floor_m15[(S,C)]` and its `parent_end` candidate is
+`end_m15[(S,C)]` (sweep step 6) — by construction the end of `(S,C)` IS the
+floor of `(S,C+1)`. The B2 Phase B rule that stood here ("next-cycle source
+= `CTS_ESTABLISHED.ev.idx`, don't revert it to `confirmed_at`") had the right
+aim (floor and cap from the same field) and the wrong field: the extreme is
+historical, the moment is when the cycle became tradeable, and the two differ
+whenever the CTS extreme precedes the apply candle (three M15 sub cycles on
+the reference window; the five H1 cycles coincide only by luck). Retired with
+it: the 4 trigger detectors' `lifecycle_end_idx` (field kept one commit,
+unread), `_find_m15_lifecycle_end`, `parent_end_lookup`, `parent_struct_end_m15`
+and `run_pipeline`'s `parent_cycle_floor_h1`. Same rule inside a sub:
+`compute_cycle_lifecycle` floors each sub cycle on ITS `CTS_ESTABLISHED`
+moment, so main, sub cycles and the parent table agree (expected from the plan:
+three sub-cycle starts +1 — 1223→1224, 2828→2829 ×2; measured on the first
+Plan C replay: one visible shift, sub `454/+1`'s cycle-1 end 1223→1224 — the
+other two are masked by an equal floor, GOTCHAS "A Predicted +1 Shift Can Be
+Masked by an Equal Floor"; H1 byte-identical).
+Collapsed cycles (clamped `start >= end`) are
 uniformly `status="inactive"` with empty `activation_history` (outline-only) —
 this replaced the prior split
 where the inner KL derivation said `"ended"` and the cap said `"inactive"`.
+Under Plan C a DEGENERATE parent cycle (`floor_m15 >= end_m15`) never reaches
+the zone layer at all — its triggers are unresolved (see "Degenerate Parent
+Cycles" below).
 
 ---
 
@@ -1482,21 +1723,71 @@ where the inner KL derivation said `"ended"` and the cap said `"inactive"`.
 > PART4 §17 (rev 2, 2026-09-19 — the authoritative model) + memory
 > `project_sub_structure_pool_architecture.md` (rationale history).
 >
-> **⚠ PARTIALLY SUPERSEDED 2026-09-19.** The next four entries describe the
-> 2026-07-08 §17 model. What still holds: identity is `(parent_path, sub_TF,
-> direction, starting_idx)` with ABSOLUTE direction; a `reversal` trigger is
-> sticky-per-chart (lens); the knowable-at clip; run cap ≠ lifecycle end. What
-> is RETRACTED: the pool-wide `≤1 active per (parent_path, sub_TF, direction)`
-> rule and its "cross-chain reversal interaction" (replacement is now scoped to
-> `(lens, parent_sid, parent_cycle_id, sub_TF, direction)` — a counter record
-> never ends a confluence record); the single scalar lifecycle
-> `start = min(trigger_dt)` / `end = min(end ≥ max start)` (replaced by
-> per-record lifecycles aggregated into the unique sub, with the parent-cycle
-> floor on every record and the strict `>` filter — see the memory file);
-> "alignment is direction-derived" now lives in a separate `relative_dir`
-> field, distinct from `lens`; run cap moves to the data edge (a RECORD cannot
-> outlive its parent structure, a unique sub can). Read the entries below as
-> history of what was tried and why it was wrong.
+> **⚠ SUPERSEDED by Plan C (2026-09-20).** The next four entries describe the
+> 2026-07-08 rev-1 model (landed as Stages 1–3.2a, found wrong at 3.2b,
+> reverted). Read them as history of what was tried and why it was wrong. The
+> rev-2 rules that replace them, as landed in `multitf/sub_structure_pool.py`,
+> `multitf/lifecycle_sweep.py`, `multitf/parent_tables.py` and
+> `multitf/entity_df_mutation.py`:
+>
+> - **Identity — unchanged.** A unique sub (`PooledStructure`) is
+>   `StructureKey(parent_path, sub_tf, direction, starting_idx)` with ABSOLUTE
+>   `direction`; `sub_id` is global creation order (§17.3). A `TriggerRecord`
+>   is `(lens, parent_sid, parent_cycle_id, trigger_sub_sid)` with FK `sub_id`
+>   (never None); `trigger_sub_sid` starts at 0 per `(lens, parent_sid,
+>   parent_cycle_id)` and is CREATION-ordered (§17.4). `sub_sid` no longer
+>   exists on any structural artifact (only main `SidRecord`s keep
+>   `sub_sid = structure_id`); the chart identity of a sub is `sub_id`.
+> - **`relative_dir` vs `lens` (§17.3).** Two record fields, neither on the
+>   structure: `relative_dir = "confluence"` iff `direction ==
+>   parent_sd[parent_sid]` (`CTS_ESTABLISHED.meta["struct_direction"]`) else
+>   `"counter"` — semantic; `lens` = the chart the record draws on:
+>   `resolve_lens(use_case)` for the four named types, and the SPAWNING
+>   record's lens for a `reversal` record (sticky-per-chart). They legitimately
+>   differ (sub `2639/−1` is `relative_dir=counter` on the confluence chart).
+>   A sub's `relative_dir_segments` is the step function over its records.
+> - **Replacement is scoped per `(lens, parent_sid, parent_cycle_id, sub_tf,
+>   direction)` — SAME-LENS ONLY.** A new record of that scope mapping to a
+>   DIFFERENT sub ends the incumbent record with `end_reason =
+>   "same_dir_replacement"` at the new record's true `start_idx` (not its
+>   `trigger_idx`, not its finalize). A counter record never ends a
+>   confluence record; the rev-1 pool-wide "≤1 active per direction" rule and
+>   its cross-chain reversal interaction are RETRACTED. Invariant: ≤1 active
+>   record per scope (`SubStructurePool.active_record` asserts).
+> - **Per-record lifecycles, aggregated into the unique sub (§17.4–§17.5).**
+>   Record: `start_idx = max(probe_finalize_idx, trigger_idx,
+>   parent_floor_idx)`; `trigger_end_idx` = the first of {own reversal,
+>   same_dir_replacement, parent_end} (equal-idx priority `reversal >
+>   parent_end > same_dir_replacement`, `_END_REASON_PRIORITY`); `end_idx =
+>   max(trigger_end_idx, start_idx)`; `is_zero_length = trigger_end_idx <=
+>   start_idx` → participates in nothing. Sub: `start_idx` = the first
+>   non-zero-length record's `start_idx`; `end_idx` = over the live records
+>   that EXIST at `t` (`start_idx <= t`), `min` of the record `end_idx`s
+>   STRICTLY `> max_start` — start-before-end at the same idx is what keeps
+>   a sub continuous across a same-candle handover (see "The Sweep Phase
+>   Order Is Load-Bearing" below).
+> - **A RECORD cannot outlive its parent structure; a unique SUB can.** The
+>   parent bound is the record's `parent_end` (`ParentTables.end(S, C)` =
+>   LOH of the next cycle's clamped start, else the sid's reversal, else
+>   None); the sub inherits it only through the aggregation rule, so a sub
+>   spans parent cycles AND parent sids (sub `2365/+1` runs `[2470, 2829]`
+>   across H1 (0,0)→(0,1)).
+> - **Run cap = the DATA EDGE** for every sub (`build_or_get_geometry`,
+>   `run_cap_abs = len(m15) - 1`) — a compute bound only; the lifecycle
+>   projection (`render_sub_projection`) applies the sub's `[start_idx,
+>   end_idx]` once and mirrors it into every lens df in `sub.lenses()`. The
+>   knowable-at clip on render (`knowable_at_idx`) is unchanged.
+> - **Probe cache** keys `(parent_path, sub_tf, direction, initial_input_idx)`
+>   (unchanged in shape; first-probe-is-truth, `ProbeCacheEntry`). See "Probe
+>   Cache Keys Are Shared by Reversal Handoffs" for the measured hits.
+>
+> Measured on the first Plan C replay (2026-09-20, reference window): 8 subs /
+> 11 records / 4 unresolved (all `degenerate_parent_cycle`), every sub window
+> and record start/end/reason equal to the predicted table in
+> `memory/reference_pool_redesign_groundtruth.md`; `sub_id`s 0–7 in creation
+> order (454/+1, 1797/−1, 2365/+1, 2639/−1, 3304/−1, 3621/+1, 3760/−1,
+> 4027/+1); H1 8 of 9 CSVs byte-identical (`_wvmi.csv` header-only: the
+> shared exporter column `sub_sid` → `sub_id`).
 
 **Rule:** Under the pool, a sub structure's identity is `(parent_path, sub_TF,
 direction, starting_idx)` with `direction` **absolute (+1/−1)**. Confluence vs
@@ -1527,6 +1818,8 @@ is classified by ITS OWN direction. So:
 
 ## Sub-Structure Pool: Lifecycle End Is `min(end ≥ max start)`, NOT Global-Earliest (Phase 2)
 
+> *(rev-1 entry — HISTORY; superseded by Plan C 2026-09-20, see the banner under "Sub-Structure Pool: Alignment Is Direction-Derived…" above.)*
+
 **Rule:** A unique sub has ONE continuous lifecycle: `start = min(trigger_dt)`
 over all mapped triggers; `end = min( end-candidate : end-candidate ≥
 max(trigger_dt) )` (else `None`/open). End candidates = `{own reversal,
@@ -1556,6 +1849,8 @@ sweep instead of a single window. Start with the single-window rule.
 
 ## Sub-Structure Pool: Dedup Reuse Is Byte-Identical ONLY Given a Deterministic Natural-End Build
 
+> *(rev-1 entry — HISTORY; superseded by Plan C 2026-09-20, see the banner under "Sub-Structure Pool: Alignment Is Direction-Derived…" above.)*
+
 **Rule:** Reusing a `PooledStructure` for a second trigger (instead of rebuilding)
 is byte-identical ONLY because (a) the probe is deterministic given
 `(parent_path, sub_TF, direction, initial-start)` and (b) the structure runs to
@@ -1580,6 +1875,8 @@ that differs from an independent rebuild.
 
 ## Sub-Structure Pool: Run Cap ≠ Lifecycle End; Knowable-At Clip on Render
 
+> *(rev-1 entry — HISTORY; superseded by Plan C 2026-09-20, see the banner under "Sub-Structure Pool: Alignment Is Direction-Derived…" above.)*
+
 **Rule:** Keep three bounds distinct — they are easy to conflate:
 
 | Bound | What | Value |
@@ -1595,6 +1892,107 @@ by `ev.idx` uniformly. Clipping by `ev.idx` would surface a BOS whose extreme is
 inside the window but whose confirmation lookahead landed past it — an event the
 Phase-1 bounded run could not have known. Knowable-at matches Phase-1 semantics
 and neutralizes the boundary-straddling-confirmation case.
+
+---
+
+## The Sweep Phase Order Is Load-Bearing (Plan C, 2026-09-20)
+
+**Where:** `multitf/lifecycle_sweep.py` (`_Sweep.run` + `_phase0_fire` /
+`_phase0_spawn` / `_resolve_and_record` / `_phase1_record_start` /
+`_phase2_sub_start` / `_phase3_record_end` / `_phase4_sub_end`), PART4 §17.6.
+The sweep is a priority-queue over moments `(idx, phase, order_key, push_n)`;
+every rule in §17.4–§17.5 is monotone and write-once, which is the only reason
+the sweep is equivalent to iterating candle-by-candle. The ordering rules below
+are not implementation details — each one changes a lifecycle value if broken.
+
+**1. Phases 0→4 at each idx, each to completion before the next.**
+`0 TRIGGER_FIRE / REVERSAL_SPAWN` (resolve → create record → queue its
+`RECORD_START` and any end already known) → `1 RECORD_START` → `2 SUB_START` →
+`3 RECORD_END` → `4 SUB_END`. Within phase 0, `REVERSAL_SPAWN` sorts before
+`TRIGGER_FIRE` (`_KIND_REVERSAL_SPAWN = 0 < _KIND_TRIGGER_FIRE = 1`) and
+`TRIGGER_FIRE`s order by `(lens_rank, type_rank, trigger_event_idx)` —
+confluence before counter, `first_*` before `subsequent_*` (the second
+trigger's sibling read at `hi = t` inclusive can see the first's sub). Every
+other moment orders by record `seq`.
+
+**2. Start-before-end at the same idx is what keeps a sub continuous across a
+same-candle handover.** Phase 4's candidate filter is STRICT: `end_idx >
+max_start` over the records that EXIST at `t`. When record A ends at `t` and
+record B (a different record of the same sub) starts at `t`, phase 1 starts B
+first, so at phase 4 `max_start = t` and A's end `t > t` is false → the sub
+persists. Reference-window cases (both §9.2 fixtures): sub `2365/+1` — its
+(0,0) record ends `parent_end` at 2611 and its (0,1) record starts at 2611 →
+one sub `[2470, 2829]` ending on its own reversal (rev 1's `>=` rule would
+have ended it at 2611 and restarted it — §17.5); and the `3304/−1` → `3760/−1` handover at 3819 on
+the confluence lens — sub `3760/−1`'s record starts at 3819 in phase 1, which
+queues the `same_dir_replacement` end on `3304/−1`'s record for phase 3 of the
+SAME idx; `3304/−1` then ends at 3819 (`3819 > max_start 3621`) and the two
+live windows share the boundary candle as half-open intervals `[3621, 3819)`
+/ `[3819, …)` — no gap, no overlap. Both depend on phase 1 running before
+phase 3 at one idx.
+
+**3. The heap is idx-monotone — never queue a moment in the past.** `_push`
+asserts `(idx, phase) >= (cur_idx, cur_phase)`; `run` asserts each pop's idx
+≥ the previous. Consequence at build time: a sub whose `natural_reversal_idx
+R <= idx` of the trigger that built it spawns NOTHING (no record can be live
+at `R`, every `start_idx >= idx > R`); step 6 makes that record zero-length
+instead. A `REVERSAL_SPAWN` is queued only when `R > idx`, and only once, when
+the geometry is CREATED (`created is True`).
+
+**4. A record EXISTS only from its `start_idx`.** The object is instantiated
+at phase 0 of its `trigger_idx` (every historical field is known then), but
+until its `RECORD_START` moment it is invisible to every lifecycle
+computation: not in `max_start`, not an end candidate, not an incumbent, not
+a lens member, not a sibling-read candidate (`start_idx <= hi`). An FC record
+created at 463 that starts at 1020 must not end anything, be ended by
+anything, or be seen by anything in between. "All the existing records" in
+the §17.5 sub-end rule means exactly the STARTED ones (`start_idx <= t`).
+
+**5. Zero-length records participate in nothing.** `is_zero_length =
+trigger_end_idx is not None and trigger_end_idx <= start_idx` — defined on
+`trigger_end_idx`, NOT `end_idx`, so it is already correct in phases 1–2 of
+the idx at which the record is ended (phase 3 writes `end_idx` later the same
+idx). Not the sub's start, not `max_start`, not an end candidate, not an
+incumbent, not lens membership (`live_records()` / `lenses()`), not rendering,
+not a sibling-read candidate. Logged only (`_triggers.csv`, `is_zero_length`
+column). Two sources: a post-end re-trigger (step 6: `sub.end_idx is not None
+and rec.start_idx > sub.end_idx` → frozen with the sub's end, linked via
+`ended_by_sub_id`) and a sub whose own reversal / parent end precedes the
+record's floored start (step 6: `e[0] <= rec.start_idx`). A record that
+reaches phase 1 after its sub froze (`sub.end_idx < rec.start_idx`, strict —
+`==` is the handover of rule 2) is frozen there.
+
+**6. The phase-1 incumbent is a STARTED record.** The incumbent test filters
+to records whose `RECORD_START` has run (`r.seq in self._active`) AND
+`r.is_active_at(t)` — not `pool.active_record` alone. The interval rule alone
+would also see a same-idx record whose start moment is still queued (a later
+`seq`), inverting the "later `seq` replaces earlier" collision rule; and a
+same-idx collision's incumbent is frozen zero-length IMMEDIATELY in phase 1
+(never queued to phase 3) so phase 2 cannot read it as live. GOTCHAS
+"Phase-1 Incumbents Must Be STARTED Records, Not Interval-Active Ones".
+
+**7. `RECORD_END` entries for an already-ended record are stale and dropped.**
+Every entry carries `(idx, reason, ended_by)`; phase 3 applies the
+highest-priority entry at `t` (`reversal > parent_end >
+same_dir_replacement`) only if `rec.trigger_end_idx is None`. Earliest idx
+always wins across idxs because earlier entries run first and later ones
+become stale; a stale entry does not mark the sub "touched" and does not
+queue a `SUB_END`.
+
+**Post-sweep asserts (`_after_sweep`)** — if any fires, the order was broken:
+every live record has `start_idx < end_idx` (or open) and `start_idx <=
+sub.end_idx`; every sub with a `start_idx` has `end_idx > start_idx` (or
+open); a sub without `start_idx` has no live record; per `(lens, parent_sid,
+parent_cycle_id, direction)` the live windows are non-overlapping as
+HALF-OPEN intervals `[start_idx, end_idx)` (a handover shares its boundary
+candle: `[3621, 3819]` / `[3819, …]`).
+
+**Testing this:** the predicted-table test
+(`tests/test_lifecycle_sweep_predicted_table.py`, stubbed probe + geometry,
+< 1 s) cannot distinguish rules 2/4/6 from a wrong ordering (no sub on the
+reference window has a pending record across an end); the unit tests in
+`tests/test_lifecycle_sweep_unit.py` must. Add a unit case, not a replay, when
+touching the phases.
 
 ---
 
@@ -1720,3 +2118,102 @@ is the clearest signal of a retroactive parent, and nothing surfaces it today.
 Under 3.2a these subs rendered as outline-only `status="inactive"` zones; under
 3.2b (`9fd3143`, superseded) they were wrongly LIVE because the parent floor was
 dropped on the render path.
+
+**Implemented by Plan C (2026-09-20).** `multitf/parent_tables.build_parent_tables`
+computes `degenerate[(S,C)] = end_m15 is not None and floor_m15 >= end_m15`
+(with `end_h1[(S,C)] = floor_h1[(S,C+1)]`, the next cycle's CLAMPED start —
+so (1,0)'s end is 3611, not the raw 2995; degenerate either way) and logs one
+`WARNING [parent_tables] degenerate parent cycle (S,C): floor=… end=…` per
+cycle. `lifecycle_sweep._Sweep._resolve_and_record` step 1 checks
+`tables.is_degenerate(S, C)` BEFORE the probe and appends
+`UnresolvedTrigger(reason="degenerate_parent_cycle", detail="floor F >= end
+E")` to `pool.unresolved` (`[sweep] UNRESOLVED (skipping) …`; exported to
+`*_M15_unresolved_triggers.csv`). A reversal-born spawn inside a degenerate
+cycle takes the same path (it is resolved through `_resolve_and_record` too),
+so it is inert as specified. Measured on the first Plan C replay (reference
+window): exactly the four (1,0) / (1,1) triggers are unresolved — FC(1,0),
+FC(1,1), `first_counter`(1,1), `subsequent_confluence`(1,1) — and no other
+reason appears; the (1,1) counter reversal at 3589 never fires because
+`3230/+1` is never built. "Memberships" above = rev-1 vocabulary for what are
+now `TriggerRecord`s.
+
+---
+
+## Probe Cache Keys Are Shared by Reversal Handoffs (Plan C, 2026-09-20)
+
+**Rule (PART4 §17.8, as landed):** the probe cache key is
+`(parent_path, sub_tf, direction, initial_input_idx)` with `initial_input_idx`
+ENTITY-ABSOLUTE for EVERY probe — the FC probe's price-mapped BOS extreme
+(`_probe_with_cache`, `multitf/entity_df_mutation.py`), a sibling type's
+`ref_zone.source_event_idx` (same wrapper), AND the reversal handoff's input
+(`_resolve_reversal_start`: the probe runs slice-local on the reversing sub's
+`bounded.df`, but the cache is read/written with `input_abs = probe_input_local +
+slice_begin` and the cached `starting_idx` / `finalize_idx` are shifted the same
+way). "Same probe" = same direction + same initial input; the FIRST probe to
+finalize for a key is the truth for every later probe of that key, regardless
+of its `probe_end_idx` and regardless of its reference zone (accepted
+approximation, user decision 2026-09-19). A hit returns the cached
+`ProbeCacheEntry` (`starting_idx, finalize_idx, finalize_condition, bos0_inner,
+probe_end_idx`) and SKIPS `unified_probe`; `[probe_cache] hit` when the bound
+equals the cached one, `[probe_cache] APPROX hit` otherwise, `[probe_cache]
+REF-ZONE DIFFERS …` when the hitting trigger's reference inner is not
+`isclose` to the cached probe's OWN reference inner (`ProbeCacheEntry.ref_inner`
+— iteration 1's threshold). NOT the cached `bos0_inner`: that is the FINAL
+iteration's threshold, which moves on every reset (the first Plan C replay
+compared against it and logged two spurious `REF-ZONE DIFFERS`; cold review
+2026-09-20). A second write for a key with a different entry asserts
+(`SubStructurePool.record_probe`).
+
+**What was not foreseen:** the plan counted only H1-trigger pairs and
+predicted ZERO hits on the reference window. But a reversal handoff probe and
+an H1 trigger can resolve the SAME input candle in the same direction: the
+handoff's input is the reversing sub's most recent qualifying CTS extreme
+(`build_reference_zone_from_cts_event(...).source_event_idx`), and on this
+window that candle coincided with the FC probe's price-mapped parent BOS
+extreme (2365) and with two sibling reads' `source_event_idx` (2609, 4000).
+Once the reversal key was made entity-absolute (it must be — the pool is
+shared across subs), the two probes share the entry, and whichever ran first
+in sweep order owns it.
+
+**Consequences for the record (§17.4):** the later record INHERITS the cached
+`probe_finalize_idx` (which may be EARLIER than its own `trigger_idx` — the
+`trigger_idx` term of `start_idx = max(probe_finalize_idx, trigger_idx,
+parent_floor_idx)` absorbs it) and its own Phase-2 probe is skipped, so there
+is one fewer `[unified_probe phase2] early stop` line for an FC hit. `probe_finalize_condition`
+is the cached probe's. The sweep's `finalize_idx == trigger_idx` assert for
+non-FC types is bypassed on a hit (`ResolvedStart.cache_hit`). The record's
+`validated_parent_idx` is still its own (the H1 candle that seeded the probe;
+None only for reversal-born records).
+
+**Measured on the first Plan C replay (reference window) — THREE hits:**
+
+| hitting trigger | key (direction, input) | earlier probe that owned the key | inherited `starting_idx` / finalize | tripwire |
+|---|---|---|---|---|
+| FC(0,1), trigger 2611 | (+1, 2365) | sub-1 (`1797/−1`) reversal handoff at 2470 | 2365 / 2470 `no_retrace` (own Phase-2 probe skipped) | inners equal |
+| `first_counter`(0,1), trigger 2843 | (−1, 2609) | sub-2 (`2365/+1`) reversal handoff at 2829 | 2639 / 2829 | inners equal (no tripwire) |
+| sub-6 (`3760/−1`) reversal handoff at 4200 | (+1, 4000) | `subsequent_counter`(1,2), trigger 4083 | 4027 / 4083 | inners equal (no tripwire) |
+
+No lifecycle value changed: each record's `start_idx = max(finalize,
+trigger_idx, floor)` absorbed the inherited finalize (FC(0,1): `max(2470,
+2611, 2611) = 2611`, previously `max(2608, 2611, 2611)`; `first_counter`(0,1):
+`max(2829, 2843, 2611) = 2843`; the 4200 successor: `max(4083, 4200, 3611) =
+4200`), and every inherited `starting_idx` equals the value the pre-pool
+baseline had probed independently for that trigger (2365, 2639, 4027 — the
+predicted table). The tripwire fired on none of the three once its comparand
+was corrected (the two `REF-ZONE DIFFERS` lines of the very first replay
+compared against the post-reset final `bos0_inner` — spurious). **Accepted
+as designed (user decision, 2026-09-20)** — the
+sharing is the specced key (PART4 §17.8: the reversal handoff's input is part
+of the key space); the plan's "zero hits" was an enumeration error. Do not
+"fix" it by widening the key (a reference-zone-in-key and a window-exact hit
+rule were both considered and rejected on 2026-09-19) or by excluding the
+reversal handoff (considered and not adopted 2026-09-20); either change is
+its own `/compare`. Consequence to remember: a record's `probe_finalize_idx`
+can be an INHERITED value earlier than its own `trigger_idx` — the
+`trigger_idx` term of `start_idx` exists for exactly that.
+
+**How to see it:** grep the replay log for `[probe_cache] hit` /
+`APPROX hit` / `REF-ZONE DIFFERS`; the `_triggers.csv` rows show the inherited
+`probe_finalize_idx` next to a later `trigger_idx`. The `/compare` skill's
+`[unified_probe phase2] early stop` count drops by one per FC hit — that is
+not a Plan B regression.

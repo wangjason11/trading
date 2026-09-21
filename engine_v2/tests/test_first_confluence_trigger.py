@@ -50,7 +50,7 @@ def test_single_bos_with_matching_cts_finalized():
     assert t.parent_sd == 1
     assert t.input_idx == 20             # BOS extreme
     assert t.trigger_event_idx == 22     # confirmed_at
-    assert t.end_idx == 35               # CTS extreme (cts_anchor_idx), NOT the
+    assert t.probe_end_idx == 35               # CTS extreme (cts_anchor_idx), NOT the
                                          # confirmation candle (CTS_CONFIRMED.idx==40)
     assert t.lifecycle_end_idx is None   # no next BOS, no reversal
     assert t.status == "finalized"
@@ -69,7 +69,7 @@ def test_end_idx_is_cts_extreme_not_confirmation_candle():
     ]
     triggers = detect_first_confluence_triggers(events)
     assert len(triggers) == 1
-    assert triggers[0].end_idx == 38          # the CTS extreme
+    assert triggers[0].probe_end_idx == 38          # the CTS extreme
     assert triggers[0].status == "finalized"  # resolved once CTS_CONFIRMED fired
 
 
@@ -128,7 +128,7 @@ def test_bos_without_cts_is_pending():
     triggers = detect_first_confluence_triggers(events)
     assert len(triggers) == 1
     assert triggers[0].status == "pending"
-    assert triggers[0].end_idx is None
+    assert triggers[0].probe_end_idx is None
 
 
 def test_multiple_bos_emit_in_trigger_event_order():
@@ -153,9 +153,9 @@ def test_multiple_sids_each_paired_independently():
     triggers = detect_first_confluence_triggers(events)
     assert len(triggers) == 2
     assert triggers[0].parent_sd == 1
-    assert triggers[0].end_idx == 28     # CTS extreme, not confirmation candle (30)
+    assert triggers[0].probe_end_idx == 28     # CTS extreme, not confirmation candle (30)
     assert triggers[1].parent_sd == -1
-    assert triggers[1].end_idx == 66     # CTS extreme, not confirmation candle (70)
+    assert triggers[1].probe_end_idx == 66     # CTS extreme, not confirmation candle (70)
 
 
 def test_skips_zero_sd():

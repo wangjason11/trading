@@ -10,12 +10,12 @@ Pure leaf: imports nothing from `zones/`, `charting/`, or `structure/` — it on
 reads duck-typed structure events (`ev.meta`, `ev.idx`). Both callers depend on
 it without a cycle.
 
-Scope is START-ONLY. The end resolution (reversal / next-cycle CTS-established)
-and the reversal-dict construction stay in each caller for now; unifying them
-(+ deduping the reversal dict, currently
-`kl_zones_v1._get_reversal_confirmed_by_sid_from_events` vs POI inline
-`reversal_idx_by_sid` — proven byte-identical) is the deferred "B2" step, to
-follow end-condition verification. See
+Start AND end resolution live here (B1 + B2, 2026-05-27): the per-cycle
+lifecycle (`compute_cycle_lifecycle`) starts at the CTS-established MOMENT
+(`meta["confirmed_at"]`, Plan C 2026-09-19 — not the extreme) and ends as a
+pass-through of the next cycle's clamped start / the reversal / the cap. The
+same rule serves the H1 main, every sub cycle, and the sub-structure parent
+tables (`multitf/parent_tables.py`). See
 `memory/project_cycle_lifecycle_parent_cycle_floor.md`.
 """
 from __future__ import annotations
@@ -65,10 +65,14 @@ def compute_cycle_lifecycle(
     "End resolution as start-passthrough", plan "B2", 2026-05-27). Ends are
     derived from starts — never computed independently:
 
-      - `start` = `max(CTS_ESTABLISHED.ev.idx` (the CTS extreme — canonical
-        cycle-start idx)`, struct_start, floor)`. `struct_start` from
-        `compute_struct_start_by_sid` already embeds the reversal handoff and,
-        for subs, both parent floors via `lifecycle_floor`.
+      - `start` = `max(CTS_ESTABLISHED.meta["confirmed_at"]` (the MOMENT the
+        cycle was established — the apply candle; canonical cycle-start idx,
+        Plan C 2026-09-19)`, struct_start, floor)`. NOT `CTS_ESTABLISHED.ev.idx`,
+        which is the CTS EXTREME inside the pattern span — a historical anchor
+        exactly like `BOS_CONFIRMED.idx` — and can precede the apply candle
+        (three M15 sub cycles on the reference window; H1 equal only by luck).
+        `struct_start` from `compute_struct_start_by_sid` already embeds the
+        reversal handoff and, for subs, both parent floors via `lifecycle_floor`.
       - `end` = `min(next-cycle clamped start, reversal_idx_by_sid[sid],
         lifecycle_cap)`. Each term is the lifecycle-START of whatever supersedes
         the cycle (next cycle on the same structure / structure-end via reversal /
@@ -84,13 +88,15 @@ def compute_cycle_lifecycle(
 
     Tie-break matches the prior per-zone code: reversal set first, next-cycle and
     cap override only when *strictly* earlier. End uses the next cycle's CLAMPED
-    start (not its raw `CTS_EST.idx`); the two differ only for collapsed sub
-    cycles. A collapsed cycle (clamped `start >= end`) is left for the caller to
+    start (not its raw established moment); the two differ only for collapsed
+    sub cycles. A collapsed cycle (clamped `start >= end`) is left for the caller to
     render inert (`status="inactive"`, empty activation_history).
     """
     struct_start = compute_struct_start_by_sid(events, reversal_idx_by_sid, lifecycle_floor)
 
-    # CTS_ESTABLISHED idx per (sid, cycle); last-seen wins (matches prior code).
+    # CTS-established MOMENT per (sid, cycle) — `meta["confirmed_at"]`, the apply
+    # candle (== BOS_CONFIRMED.confirmed_at, definitional). Last-seen wins. The
+    # extreme (`ev.idx`) is a historical anchor and never a lifecycle value.
     cts_est_by_key: Dict[Tuple[int, int], int] = {}
     for ev in events:
         if getattr(ev, "type", None) != "CTS_ESTABLISHED":
@@ -100,7 +106,12 @@ def compute_cycle_lifecycle(
         ecyc = meta.get("cycle_id")
         if esid is None or ecyc is None:
             continue
-        cts_est_by_key[(int(esid), int(ecyc))] = int(ev.idx)
+        moment = meta.get("confirmed_at")
+        assert moment is not None, (
+            f"CTS_ESTABLISHED ({esid},{ecyc}) @ {ev.idx} lacks meta['confirmed_at'] "
+            f"(the established moment — market_structure always stamps it)"
+        )
+        cts_est_by_key[(int(esid), int(ecyc))] = int(moment)
 
     # Pass 1: clamped cycle starts.
     start_by_key: Dict[Tuple[int, int], int] = {}
@@ -154,10 +165,11 @@ def compute_struct_start_by_sid(
     `lifecycle_floor` semantics:
       - main pipeline → `None` (no extra floor; cycles still floor against this
         structure-start via the caller's per-zone `max(confirmed_idx, struct_start)`).
-      - subordinate → `max(start_trigger_idx, parent_sid_start, parent_cycle_start)`
-        (slice-local), computed by `multitf/entity_df_mutation.build_one_sid`. The
-        zones layer stays parent-agnostic — it only sees one int. See
-        `PART4_REFACTOR_SPEC.md §5` (the parent floors and their H1->M15 mapping).
+      - subordinate → the unique sub's real-time `start_idx` (slice-local) —
+        already `max(probe_finalize_idx, trigger_idx, parent_floor_idx)` on its
+        first live record (PART4 §17.4/§17.9; passed by
+        `entity_df_mutation.render_sub_projection`). The zones layer stays
+        parent-agnostic — it only sees one int.
     """
     struct_start_by_sid: Dict[int, int] = {}
     for ev in events:

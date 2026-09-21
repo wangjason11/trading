@@ -3,8 +3,8 @@
 Per spec §4.3.2:
   Trigger: parent BOS_CONFIRMED
   Idx input: parent BOS extreme idx (== BOS_CONFIRMED.ev.idx)
-  Probe end_idx: the confirmed CTS's EXTREME idx (`cts_anchor_idx`) in the
-                 same parent cycle — NOT the confirmation candle. None until
+  Probe probe_end_idx: the confirmed CTS's EXTREME idx (`cts_anchor_idx`) in
+                 the same parent cycle — NOT the confirmation candle. None until
                  that CTS_CONFIRMED fires (pending state): the confirmation
                  candle gates *knowing* the value; the CTS extreme IS the value.
   Probe sd: +parent_sd (confluence)
@@ -36,14 +36,13 @@ def detect_first_confluence_triggers(
     (`meta["cts_anchor_idx"]`), which is earlier than the confirmation
     candle (`CTS_CONFIRMED.idx == confirmed_at`). If no CTS_CONFIRMED exists
     yet (parent cycle still open at end-of-data), the trigger is emitted with
-    `end_idx=None` and `status="pending"` per spec §14.
+    `probe_end_idx=None` and `status="pending"` per spec §14.
 
-    `lifecycle_end_idx` is computed as the next cycle's lifecycle-start —
-    `CTS_ESTABLISHED.ev.idx` for `(sid, cycle_id+1)` (the CTS extreme,
-    canonical per PART4 §5; B2 Phase B re-pointed this from the prior next
-    BOS_CONFIRMED.confirmed_at — equal on H1) — or the
-    REVERSAL_CANDIDATE.apply_idx for the same sid, whichever fires first.
-    Mirrors first_counter's logic in `uc1_trigger.py`.
+    `lifecycle_end_idx` is RETIRED (Plan C §3): still computed here for one
+    commit (next cycle's `CTS_ESTABLISHED.ev.idx` or the
+    `REVERSAL_CANDIDATE.apply_idx`) but NOTHING reads it — the parent-cycle end
+    every record uses is `multitf/parent_tables.py` (the moment-based clamped
+    next-cycle start, else `STATE_CHANGED→reversal`).
 
     Returns triggers sorted by `trigger_event_idx`.
     """
@@ -121,7 +120,7 @@ def detect_first_confluence_triggers(
             parent_cycle_id=cycle_id,
             parent_sd=parent_sd,
             input_idx=input_idx,
-            end_idx=end_idx,
+            probe_end_idx=end_idx,
             trigger_event_idx=trigger_event_idx,
             lifecycle_end_idx=lifecycle_end_idx,
             status=status,

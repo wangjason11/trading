@@ -10,6 +10,10 @@ This doc explains how we work on this repo so changes remain safe and explainabl
    - raw CSV export
    - final pipeline CSV export
    - printed summaries (pattern counts, structure levels, zone stats)
+   - the sub-structure pool tables (`*_M15_{lens}_subs.csv`,
+     `*_M15_{lens}_triggers.csv`, `*_M15_unresolved_triggers.csv` —
+     `debug/export_sub_tables.py`, written BEFORE the M15 chart loop) and the
+     per-lens M15 CSVs (written inside it)
 2. Attach structure levels + zones to df attrs:
    - `df.attrs["structure_levels"]`
    - `df.attrs["kl_zones"]`
@@ -36,6 +40,22 @@ Report the count. A non-zero count is not automatically a bug — some skips are
 correct (a probe that legitimately finds no structure). But each one must be
 **explained, not ignored**. When a `/compare` shows dropped sids/zones, the
 matching skip-warning usually names the exact cause — read it before theorizing.
+
+Since the sub-structure pool (Plan C, 2026-09-20) the grep also catches, by
+design, `[sweep] UNRESOLVED (skipping) reason=… lens=… parent=(S,C) type=…
+trigger_idx=… detail=…` (one per trigger that produced no record: `pending` /
+`degenerate_parent_cycle` / `probe_failed` / `geometry_failed` — the same rows
+as `*_M15_unresolved_triggers.csv`) and `WARNING [parent_tables] degenerate
+parent cycle (S,C): floor=… end=…` (one per parent cycle whose lifecycle floor
+≥ its end). Each is a finding to explain against `PART4_REFACTOR_SPEC.md §17.7`
+(reference window — measured on the first Plan C replay: 4 unresolved rows, all
+`degenerate_parent_cycle`; expected per §17.6: the degenerate cycles are (1,0)
+and (1,1)), not a bug by itself. Related
+non-grep lines worth reading in the same pass: `[probe_cache] hit|APPROX hit`
+and `[probe_cache] REF-ZONE DIFFERS …` (the accepted-approximation tripwire —
+a probe skipped because an earlier same-direction, same-input probe already
+finalized) and `WARNING [sweep] bos0_inner mismatch` / `same-idx start
+collision`.
 
 > **Why this exists:** Session 3 Step 2 (2026-05-31) dropped 5 sub sids because
 > every `subsequent_*` trigger hit "sibling-CTS reference zone unavailable" —

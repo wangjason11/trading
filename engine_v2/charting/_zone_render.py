@@ -22,6 +22,62 @@ from engine_v2.zones.poi_lifecycle import active_stretches_from_history
 
 
 # ---------------------------------------------------------------------------
+# Collapsed-cycle zones (never tradeable) — not drawn (chart review 2026-09-20)
+# ---------------------------------------------------------------------------
+
+def is_collapsed_cycle_zone(zone: Any) -> bool:
+    """True for a KL zone whose cycle COLLAPSED under its structure's
+    lifecycle floor: `status == "inactive"` with a known `end_idx` and the
+    clamped `confirmed_idx >= end_idx` (`compute_cycle_lifecycle`: cycle start
+    >= cycle end → empty activation_history → "inactive"). Such a zone existed
+    geometrically but was never active in real time — on H1 the retroactive
+    cycles of a post-reversal sid (sid 1's (1,0)/(1,1) on the reference
+    window, the "degenerate parent cycles"); on a sub its forming-phase cycles
+    (ended at/before the sub's `start_idx`). Both charts skip them; the rows
+    stay in the CSVs. A zone that is inactive for any OTHER reason (a POI that
+    never met its activation conditions inside a live window: `end_idx` None
+    or later than its start) is NOT collapsed and is still drawn as an outline.
+    """
+    meta = getattr(zone, "meta", None) or {}
+    if meta.get("status") != "inactive":
+        return False
+    end_idx = meta.get("end_idx")
+    conf = meta.get("confirmed_idx")
+    if end_idx is None or conf is None:
+        return False
+    try:
+        return int(conf) >= int(end_idx)
+    except (TypeError, ValueError):
+        return False
+
+
+def collapsed_cycles(kl_zones: Sequence[Any]) -> set:
+    """`{(structure_id, cycle_id)}` of the cycles whose BOS KL zone is
+    collapsed (`is_collapsed_cycle_zone`) — the key set used to skip the
+    POIs of those cycles (a POI's own `status` cannot distinguish "collapsed
+    cycle" from "never activated inside a live cycle")."""
+    out = set()
+    for z in kl_zones:
+        if getattr(z, "source_kind", None) != "BOS":
+            continue
+        if not is_collapsed_cycle_zone(z):
+            continue
+        m = z.meta or {}
+        sid, cyc = m.get("structure_id"), m.get("cycle_id")
+        if sid is not None and cyc is not None:
+            out.add((int(sid), int(cyc)))
+    return out
+
+
+def is_poi_of_collapsed_cycle(poi: Any, collapsed: set) -> bool:
+    m = getattr(poi, "meta", None) or {}
+    sid, cyc = m.get("structure_id"), m.get("cycle_id")
+    if sid is None or cyc is None:
+        return False
+    return (int(sid), int(cyc)) in collapsed
+
+
+# ---------------------------------------------------------------------------
 # Active stretches
 # ---------------------------------------------------------------------------
 

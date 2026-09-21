@@ -23,6 +23,28 @@
 >
 > **Line numbers** below are as of 2026-05-27 and are hints — anchor on the
 > method/field names, which are stable.
+>
+> **Plan C note (2026-09-20 — sub-structure pool landed; vocabulary + wiring
+> updates, the design itself is unchanged).** (1) The sub `lifecycle_floor` /
+> `lifecycle_cap` / `cap_reason` that reach `FibTracker._finalize_lifecycle_fields`
+> (§15.6) are now the **unique sub's** real-time `start_idx` / `end_idx` /
+> `end_reason` (slice-local), passed by
+> `multitf/entity_df_mutation.render_sub_projection` →
+> `pooled_structure_build.project_to_window` → `_run_downstream_pipeline`; the
+> `build_one_sid` named in §15.6 is deleted. (2) The subordinate terminal that
+> this document calls `lifecycle_end` is now tagged with the sub's `end_reason`
+> — `"reversal"` \| `"same_dir_replacement"` \| `"parent_end"` — the value of
+> `cap_reason`; the string `"lifecycle_end"` survives only as the unused default
+> of the `cap_reason` parameters and is emitted by no production path. `"new_cycle"`
+> / `"reversal"` / `"scenario1_revert"` / the version-internal reasons are
+> unchanged. (3) The cycle lifecycle-START that `compute_cycle_lifecycle` clamps
+> a fib's `start_idx` to (§15.3) and uses as the next-cycle END boundary (§15.4)
+> is the CTS-established **moment** (`CTS_ESTABLISHED.meta["confirmed_at"]`),
+> never `CTS_ESTABLISHED.idx` (the CTS extreme, a historical anchor). (4) Sub
+> fib states are attributed by `sub_id` (mirror attribution; `sub_sid` is gone),
+> and `end_idx` / `start_idx` are shifted by `slice_begin` by the mirror as §15
+> describes. Read every "`entity_df_mutation.py:669-678` cap" mention below as
+> history (that post-hoc loop was removed by §15.6 (b)).
 
 ---
 
@@ -130,7 +152,7 @@ instead).
 | Today's reason | New bucket | Representation |
 |---|---|---|
 | `all_imbalances_filled`, `own_imb_filled` | **condition flip** | `active=False`, an `activation_history` entry; reversible |
-| `new_cycle`, `reversal`, `lifecycle_end` | **terminal** | `end_idx` + `end_reason`; `status="ended"` |
+| `new_cycle`, `reversal`, the subordinate window cap (historically `lifecycle_end`; since Plan C 2026-09-20 the sub's `end_reason`: `reversal` / `same_dir_replacement` / `parent_end`) | **terminal** | `end_idx` + `end_reason`; `status="ended"` |
 | `scenario1_revert` | **terminal + invalidation** | `end_idx` + `end_reason="scenario1_revert"`; `status="disappeared"` (Section 10) |
 | `cross_shortened`, `cross_failed`→single, re-create-after-inactive | **version-internal** | NOT a cycle-level event; handled inside the version axis (Sections 4, 8.3) |
 
@@ -251,7 +273,9 @@ cycle `n`. So:
 
 Consequences (accepted):
 - Cycle `n`'s fib end is **earlier** than the zone end for cycle `n` (zones end
-  at the next-cycle `CTS_{n+1}` ESTABLISHED idx, `poi_zones.py:476-482`). So
+  at the next cycle's clamped lifecycle-start — since Plan C 2026-09-20 the
+  `CTS_{n+1}` ESTABLISHED **moment** `meta["confirmed_at"]`, not the extreme
+  `.idx`; `compute_cycle_lifecycle`, inherited by `poi_zones.py`). So
   **fib cycle-end diverges from zone cycle-end at this one boundary.** This is
   the price of the honest early *start*; start and end shift earlier *together*.
 - It preserves the **"exactly one active fib per structure"** invariant (cycle
@@ -272,9 +296,11 @@ Consequences (accepted):
 
 **Scope of Option A's early-end:** same-sid next-cycle progression only — which,
 because pre-established is subordinate-only, is a **subordinate phenomenon**. For
-**every other terminal** — reversal (`sid → sid+1`), parent-cycle change / parent
-reversal (subordinate `lifecycle_end`) — `end_idx` = the **passed-through
-cycle-end value**, exactly as KL/POI. **Precedence:** passed-through terminal
+**every other terminal** — reversal (`sid → sid+1`), the subordinate window
+cap (historically "parent-cycle change / parent reversal = `lifecycle_end`";
+since Plan C 2026-09-20 the unique sub's `end_idx` with `end_reason` ∈
+{`reversal`, `same_dir_replacement`, `parent_end`}) — `end_idx` = the
+**passed-through cycle-end value**, exactly as KL/POI. **Precedence:** passed-through terminal
 (reversal/parent) wins; absent that, the same-sid next-cycle boundary sets it
 (early if a pre-established cross forms, else next-cycle CTS-established).
 
@@ -917,7 +943,10 @@ clamp + pass-through, reusing the **same** machinery KL/POI use:
 
 - **Thread `lifecycle_floor` / `lifecycle_cap` into finalize** — the identical
   values KL/POI already receive in `_run_downstream_pipeline` (`None`/`None` for
-  main; slice-local for subs from `build_one_sid`). NB the sub `lifecycle_cap` is
+  main; slice-local for subs — since Plan C 2026-09-20 the unique sub's
+  `start_idx` / `end_idx` (+ `cap_reason` = the sub's `end_reason`) from
+  `render_sub_projection` → `project_to_window`; originally from the
+  now-deleted `build_one_sid`). NB the sub `lifecycle_cap` is
   `None` when the sub runs to the **open data edge** (`cap_open`, PART4 §5 — "the
   data/window boundary is not a lifecycle terminator"): the fib then stays open
   (`end_idx None`) → its POI is derived → live edge zones show. The cap is only a

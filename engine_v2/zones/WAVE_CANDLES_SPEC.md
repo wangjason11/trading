@@ -215,20 +215,26 @@ the start differs by role.
 
 | Role | start_idx (clamped to struct/parent floor) | end_idx | Locks on activation? |
 |---|---|---|---|
-| **FB** | `CTS_n` ESTABLISHED (= `compute_cycle_lifecycle.start`) | cycle end | yes (immediate) |
+| **FB** | `CTS_n` established **moment** (`CTS_ESTABLISHED.meta["confirmed_at"]`, clamped = `compute_cycle_lifecycle.start`; NOT `CTS_ESTABLISHED.idx`, the extreme — Plan C 2026-09-20) | cycle end | yes (immediate) |
 | **LB** | `CTS_n` CONFIRMED | cycle end | yes (immediate) |
 | **FP** | `CTS_n` CONFIRMED | cycle end | yes (immediate) |
 | **LP** | `CTS_n` CONFIRMED | cycle end | **only if** cycle ended via `next_cycle` (`CTS_{n+1}` ESTABLISHED); active-temp otherwise |
 
 **Cycle end** = `compute_cycle_lifecycle.end` — the **earliest** of three
 candidates (separate machinery; not part of the start-side floor): next-cycle
-clamped start, this-sid reversal, parent-cycle/parent-sid `lifecycle_cap` (subs).
-Absent (open last cycle / open last structure / `cap_open` sub) → `end_idx =
-None`. `end_reason ∈ {"next_cycle", "reversal", "lifecycle_end"}`.
+clamped start (on the CTS-established moment), this-sid reversal, and — subs
+only — the `lifecycle_cap` = the unique sub's real-time `end_idx` (Plan C,
+2026-09-20; was the parent-cycle/parent-sid end). Absent (open last cycle / open
+last structure / open sub) → `end_idx = None`. `end_reason ∈ {"next_cycle",
+"reversal", <cap_reason>}` where `cap_reason` is the sub's `end_reason`:
+`"reversal"` \| `"same_dir_replacement"` \| `"parent_end"` (the pre-Plan-C
+`"lifecycle_end"` is no longer emitted). The LP-lock test below branches only
+on `"next_cycle"`, so it is correct for every cap value by construction.
 
 **LP locking is the asymmetric piece.** Only `end_reason == "next_cycle"` locks LP
 (that's the same event that activates FB of cycle n+1). Any other end
-(reversal / parent-end) leaves LP active-temp through end_idx without locking →
+(reversal / the sub's window cap: `reversal`, `same_dir_replacement`,
+`parent_end`) leaves LP active-temp through end_idx without locking →
 LP **disappears** at end_idx. FB/LB/FP lock immediately on activation, so they
 carry over past `end_idx` regardless of how the cycle ended.
 

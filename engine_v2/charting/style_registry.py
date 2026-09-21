@@ -123,20 +123,24 @@ STYLE = {
     # -----------------------------
     # Week 7: POI Zones (rectangles) - Yellow for both buy/sell
     # -----------------------------
+    # POI zones are side-tinted (chart review 2026-09-20): buy = gold mixed
+    # with green (yellow-green), sell = gold mixed with red (orange), so the
+    # two sides read apart at a glance like the KL zones do. Confirm lines
+    # follow the tint (dark olive / dark brick).
     "zone.poi.buy": {
-        "rgb": "255, 215, 0",  # Gold
+        "rgb": "225, 220, 30",  # Gold + a little green -> gold-lime (more gold, 2026-09-21)
         "fill_opacity_active": 0.9,
         "fill_opacity_inactive": 0.12,
-        "confirm_line_rgb": "101, 67, 33",  # Dark Brown
+        "confirm_line_rgb": "60, 90, 20",  # Dark olive
         "confirm_line_width": 2,
         "confirm_opacity_active": 0.9,
         "confirm_opacity_inactive": 0.25,
     },
     "zone.poi.sell": {
-        "rgb": "255, 215, 0",  # Gold (same for both sides)
+        "rgb": "255, 180, 30",  # Gold + a little red -> amber (more gold, 2026-09-21)
         "fill_opacity_active": 0.9,
         "fill_opacity_inactive": 0.12,
-        "confirm_line_rgb": "101, 67, 33",  # Dark Brown
+        "confirm_line_rgb": "120, 45, 15",  # Dark brick
         "confirm_line_width": 2,
         "confirm_opacity_active": 0.9,
         "confirm_opacity_inactive": 0.25,
@@ -345,11 +349,30 @@ STYLE = {
         "line": {"width": 2, "color": "royalblue"},
         "opacity": 0.9,
     },
+    # "Forming" phase (PART4 §16.5 rev 2 / chart review 2026-09-20): a sub's
+    # structure BEFORE its real-time `start_idx` — drawn from the structural
+    # anchor so BOS→CTS lines stay continuous, but dimmed + dashed so the chart
+    # shows "forming, not yet tradeable" vs the live window.
+    # Forming = darker blue (navy), dotted, lightly dimmed (0.75) so it reads
+    # clearly against the live royalblue; dots 20% larger than before (chart
+    # review 2026-09-20: "more visible, dots ~20% thicker").
+    "structure.m15.swing_line_forming": {
+        "line": {"width": 2, "color": "navy", "dash": "dot"},
+        "opacity": 0.75,
+    },
     "structure.m15.cts": {
-        "marker": {"size": 3, "symbol": "circle", "opacity": 0.95, "color": "royalblue"},
+        "marker": {"size": 3.6, "symbol": "circle", "opacity": 0.95, "color": "royalblue"},
     },
     "structure.m15.bos": {
-        "marker": {"size": 3, "symbol": "circle", "opacity": 0.95, "color": "royalblue"},
+        "marker": {"size": 3.6, "symbol": "circle", "opacity": 0.95, "color": "royalblue"},
+    },
+    "structure.m15.cts_forming": {
+        "marker": {"size": 3.6, "symbol": "circle-open", "opacity": 0.85, "color": "navy",
+                   "line": {"width": 1.5, "color": "navy"}},
+    },
+    "structure.m15.bos_forming": {
+        "marker": {"size": 3.6, "symbol": "circle-open", "opacity": 0.85, "color": "navy",
+                   "line": {"width": 1.5, "color": "navy"}},
     },
     "prev_bos_line.m15": {
         "line": {"width": 2, "color": "royalblue"},

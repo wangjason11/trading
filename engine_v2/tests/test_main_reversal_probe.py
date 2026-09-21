@@ -196,7 +196,7 @@ class TestMainReversalProbe:
             input_idx=int(ref_zone.source_event_idx),
             direction=probe_sd,
             reference_zone=ref_zone,
-            end_idx=rev_apply,
+            probe_end_idx=rev_apply,      # Plan C §7: the probe's search bound
             timeframe="H1",
             enable_phase2=False,
         )
@@ -206,7 +206,7 @@ class TestMainReversalProbe:
         # probe's bos0_inner (mirrors MarketStructure._get_cts0_tfb).
         bp = BreakoutPatterns(df)
         tfb = find_true_first_breakout(
-            bp, int(probe.start_idx), int(len(df) - 1), probe_sd, probe.bos0_inner,
+            bp, int(probe.starting_idx), int(len(df) - 1), probe_sd, probe.bos0_inner,
         )
         assert tfb is not None, "reconstructed probe found no true first breakout"
         expected_est = int(tfb.est_idx)

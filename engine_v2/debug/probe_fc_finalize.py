@@ -4,7 +4,7 @@ Reproduces the EXACT production resolution path for every first_confluence trigg
 current replay window:
   saved H1 events -> detect_first_confluence_triggers -> to_multi_tf_trigger
   -> _resolve_first_confluence_via_unified_probe
-and captures the full ProbeResult (start_idx, finalize_idx, finalize_condition, iterations)
+and captures the full ProbeResult (starting_idx, finalize_idx, finalize_condition, iterations)
 plus every candidate H1->M15 mapping (price-mapped anchor, LOH of anchor / CTS_EST /
 CTS_CONFIRMED / trigger), so a finalize value can be attributed to native-M15 vs mapped
 without inference. See GOTCHAS "ProbeResult.finalize_idx Is Native-M15 OR a Mapped H1 Value".
@@ -89,11 +89,11 @@ def loh(h1_idx):
 captured = {}
 _orig = up.unified_probe
 
-def _wrapped(df, input_idx, direction, reference_zone, end_idx, timeframe, **kw):
-    res = _orig(df, input_idx, direction, reference_zone, end_idx, timeframe, **kw)
+def _wrapped(df, input_idx, direction, reference_zone, probe_end_idx, timeframe, **kw):
+    res = _orig(df, input_idx, direction, reference_zone, probe_end_idx, timeframe, **kw)
     captured["res"] = res
     captured["probe_input_m15"] = input_idx
-    captured["probe_end_m15"] = end_idx
+    captured["probe_end_m15"] = probe_end_idx
     captured["enable_phase2"] = kw.get("enable_phase2")
     return res
 
@@ -129,10 +129,11 @@ for t in trigs:
     ms_error = None
     with contextlib.redirect_stdout(_sink):
         try:
-            out = edm._resolve_first_confluence_via_unified_probe(mt, h1, m15)
+            # pool=None → no probe cache (each cycle probes fresh, as the diagnostic wants)
+            out = edm._resolve_first_confluence_via_unified_probe(mt, h1, m15, pool=None)
         except AssertionError as exc:  # Plan A post-run assert: show it, keep going
             ms_error = str(exc)
-            out = (None, None, None, None)
+            out = None
     print(f"--- cycle {key}")
     n_post_step = 0
     for _line in _sink.getvalue().splitlines():
@@ -160,7 +161,12 @@ for t in trigs:
               f"cts1_moment={None if _c1 is None else int(_c1.meta.get('confirmed_at', _c1.idx))}")
     max_ev_all = max((int(ev.idx) for ms in retained_ms for ev in ms.events), default=None)
     res = captured.get("res")
-    m15_start, validated, bos0_inner, finalize_idx = out
+    if isinstance(out, edm.ResolvedStart):
+        m15_start, validated, bos0_inner, finalize_idx = (
+            out.starting_idx, out.validated_parent_idx, out.bos0_inner, out.finalize_idx,
+        )
+    else:  # ProbeFailure / None
+        m15_start, validated, bos0_inner, finalize_idx = None, None, None, None
 
     cc = cts_conf.get(key)
     rows.append(dict(
@@ -169,15 +175,15 @@ for t in trigs:
         bos_idx_h1=t.input_idx,
         tei_h1=t.trigger_event_idx,
         cts_est_h1=cts_est.get(key),
-        cts_anchor_h1=t.end_idx,
+        cts_anchor_h1=t.probe_end_idx,
         cts_conf_h1=int(cc.idx) if cc is not None else None,
         m15_input=captured.get("probe_input_m15"),
         m15_end_TODAY=captured.get("probe_end_m15"),
-        loh_cts_anchor=loh(t.end_idx) if t.end_idx is not None else None,
+        loh_cts_anchor=loh(t.probe_end_idx) if t.probe_end_idx is not None else None,
         loh_cts_est=loh(cts_est[key]) if key in cts_est else None,
         loh_cts_conf=loh(int(cc.idx)) if cc is not None else None,
         loh_tei=loh(t.trigger_event_idx),
-        probe_start=getattr(res, "start_idx", None),
+        probe_start=getattr(res, "starting_idx", None),
         finalize_idx=finalize_idx,
         finalize_cond=getattr(res, "finalize_condition", None),
         iters=getattr(res, "iterations", None),

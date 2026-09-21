@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -24,7 +24,8 @@ class MultiTFTrigger:
     lower_sd: int                     # struct_direction for lower TF (opposite for UC1)
     start_time: pd.Timestamp          # H1 CTS candle time -> mapped to M15
     start_price: float                # H1 CTS extreme price
-    lifecycle_end_idx: Optional[int]  # H1 index where this lower TF run ends (None = open)
+    lifecycle_end_idx: Optional[int]  # RETIRED (Plan C §3): unread; the parent-cycle end lives
+                                      # in `multitf/parent_tables.py`. Kept one commit for callers.
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -46,31 +47,37 @@ class LowerTFResult:
 
 @dataclass(frozen=True)
 class SidRecord:
-    """Per-sid record within an entity's df (`df.attrs["sids"]`).
+    """Per-sid record within an entity's df (`df.attrs["sids"]`) — ONE class,
+    two roles (PART4 §9.4 / §17.9).
 
-    Spec §9.2: per-sid attribution lives in the df, not on EntityState. One
-    record per `structure_id` (main) or per parent_cycle (subordinate).
+    - **main** (`build_sid_records_for_main`): one record per MarketStructure
+      `structure_id`; `sub_sid = structure_id`, `sub_id = None`, parent fields
+      None. Chart identity = `sub_sid`.
+    - **sub** (`build_sid_records_for_subordinate`): one record per UNIQUE SUB
+      (`sub_id` set, `sub_sid = None`, parent fields None — parent attribution
+      lives on the TriggerRecord table `attrs["triggers"]`);
+      `creation_event_idx = starting_idx` (the structural anchor, historical),
+      `start_idx` / `end_event_idx = end_idx` (the real-time lifecycle window),
+      `end_reason`, `lenses`, `relative_dir_segments`. Chart identity = `sub_id`;
+      ownership = the lifecycle window per direction.
 
-    `sub_sid` is the entity-local structure counter: for `main` it equals
-    the MarketStructure `structure_id`; for a subordinate it is the
-    per-parent-cycle counter (resets to 0 each parent cycle). The record's
-    full identity is the tuple `(parent_sid, parent_cycle_id, sub_sid)` —
-    `parent_*` are None for main, so a main sid reduces to its `sub_sid`.
-    `sub_sid` alone is not a unique identifier for subs.
-
-    Indices use the entity df's own coordinate space.
+    `end_reason` vocabulary: `"reversal" | "same_dir_replacement" |
+    "parent_end" | None` (Plan C; the pre-pool `"lifecycle_end"` is gone —
+    `next_cycle` never reaches a SidRecord). Indices use the entity df's own
+    coordinate space.
     """
-    sub_sid: int
+    sub_sid: Optional[int]
     starting_sd: int                  # +1 / -1
-    creation_event_idx: Optional[int] # candle idx where this sid begins
-    end_event_idx: Optional[int]      # candle idx where this sid ends (None = still active)
+    creation_event_idx: Optional[int] # main: first event idx; sub: starting_idx (anchor)
+    end_event_idx: Optional[int]      # main: reversal apply idx; sub: lifecycle end_idx (None = open)
     end_reason: Optional[str]         # "reversal" | "same_dir_replacement" | "parent_end" | None
-                                      # (pre-pool subs: "lifecycle_end" = any external cap; the
-                                      # two pool reasons are its refinements — see KL_ZONES_SPEC
-                                      # "Lifecycle". `next_cycle` never reaches a SidRecord.)
-    parent_sid: Optional[int] = None         # None for main
-    parent_cycle_id: Optional[int] = None    # None for main
+    parent_sid: Optional[int] = None         # None for main AND for subs (see docstring)
+    parent_cycle_id: Optional[int] = None    # None for main AND for subs
     meta: Dict[str, Any] = field(default_factory=dict)
+    sub_id: Optional[int] = None             # subs only — the chart identity
+    start_idx: Optional[int] = None          # subs only — lifecycle start (real-time)
+    lenses: Tuple[str, ...] = ()             # subs only — charts this sub draws on
+    relative_dir_segments: Tuple[Tuple[int, str], ...] = ()   # subs only — §17.3 step function
 
 
 @dataclass(frozen=True)
@@ -97,7 +104,7 @@ class SubsequentConfluenceTrigger:
     input_idx: int                     # parent-TF window extreme toward BOS
     end_idx: int                       # the CTS-prox trigger candle
     trigger_event_idx: int             # same as end_idx (CTS-prox candle)
-    lifecycle_end_idx: Optional[int] = None
+    lifecycle_end_idx: Optional[int] = None   # RETIRED (Plan C §3) — unread
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -135,7 +142,7 @@ class SubsequentCounterTrigger:
     input_idx: int                     # parent-TF window extreme toward CTS
     end_idx: int                       # the sd-prox trigger candle
     trigger_event_idx: int             # same as end_idx (sd-prox candle)
-    lifecycle_end_idx: Optional[int] = None
+    lifecycle_end_idx: Optional[int] = None   # RETIRED (Plan C §3) — unread
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -143,23 +150,24 @@ class SubsequentCounterTrigger:
 class FirstConfluenceTrigger:
     """`first_confluence` (var 1) trigger — fires on parent BOS_CONFIRMED.
 
-    Per spec §4.3.2: probe runs on parent TF with sd = +parent_sd,
-    input_idx = parent BOS extreme, end_idx = parent CTS_CONFIRMED in the
-    same parent cycle. `end_idx` is None (pending) until that CTS_CONFIRMED
-    fires; per spec §14 / §16.6 a pending sub is hidden entirely until
-    end_idx resolves.
+    Per spec §4.3.2: probe sd = +parent_sd, `input_idx` = parent BOS extreme,
+    `probe_end_idx` = the confirmed CTS's EXTREME (`cts_anchor_idx`) in the
+    same parent cycle — a PRICE bound for the probe's search (renamed from
+    `end_idx` by Plan C: it is a compute bound, unrelated to the lifecycle
+    `end_idx` of PART4 §17). None (pending) until that CTS_CONFIRMED fires; a
+    pending trigger is logged as `UnresolvedTrigger(reason="pending")`.
 
-    `lifecycle_end_idx` bounds the sub's lifetime — it ends at the next
-    parent BOS for cycle_id+1 (the cycle this trigger belongs to ends
-    when the next cycle's BOS confirms) or at the parent's reversal.
+    `lifecycle_end_idx` is RETIRED (Plan C §3): the parent-cycle end lives in
+    `multitf/parent_tables.py` (one helper for every record). The field is
+    kept for one commit for the detector's tests; nothing reads it.
     """
     parent_tf: str
     parent_sid: int
     parent_cycle_id: int               # same cycle_id as the BOS_CONFIRMED
     parent_sd: int                     # parent struct_direction at trigger time
     input_idx: int                     # BOS extreme idx (== BOS_CONFIRMED.ev.idx)
-    end_idx: Optional[int]             # CTS_CONFIRMED idx in same cycle; None = pending
+    probe_end_idx: Optional[int]       # CTS extreme (cts_anchor_idx) in same cycle; None = pending
     trigger_event_idx: int             # BOS_CONFIRMED.confirmed_at (candle when trigger fires)
-    lifecycle_end_idx: Optional[int] = None  # next BOS (cycle+1) or reversal idx; None = parent cycle still open
-    status: str = "finalized"          # "finalized" once end_idx is known, else "pending"
+    lifecycle_end_idx: Optional[int] = None  # RETIRED — unread (see docstring)
+    status: str = "finalized"          # "finalized" once probe_end_idx is known, else "pending"
     meta: Dict[str, Any] = field(default_factory=dict)

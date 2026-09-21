@@ -32,7 +32,7 @@ def test_to_multi_tf_trigger_bullish_parent_uses_high():
     h1_df = _h1_df()
     trig = FirstConfluenceTrigger(
         parent_tf="H1", parent_sid=0, parent_cycle_id=1, parent_sd=1,
-        input_idx=50, end_idx=58, trigger_event_idx=52,
+        input_idx=50, probe_end_idx=58, trigger_event_idx=52,
         lifecycle_end_idx=200, status="finalized",
         meta={"bos_price": 0.6100},
     )
@@ -53,7 +53,7 @@ def test_to_multi_tf_trigger_bearish_parent_uses_low():
     h1_df = _h1_df()
     trig = FirstConfluenceTrigger(
         parent_tf="H1", parent_sid=1, parent_cycle_id=2, parent_sd=-1,
-        input_idx=50, end_idx=58, trigger_event_idx=52,
+        input_idx=50, probe_end_idx=58, trigger_event_idx=52,
         lifecycle_end_idx=None, status="finalized",
     )
     out = to_multi_tf_trigger(trig, h1_df)

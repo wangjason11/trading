@@ -46,7 +46,7 @@ def census(path):
         elif name.startswith("M15 Prev BOS"):
             c[("prev_bos", name)] += 1
         elif not name and ht.startswith("TF=15M<br><b>Wave Candle"):
-            mm = re.search(r'sub_sid=(\d+) cycle=(-?\d+)<br>parent_sid=(\S+) parent_cycle=(\S+)', ht)
+            mm = re.search(r'sub_id=(\d+) cycle=(-?\d+)<br>first record parent_sid=(\S+) parent_cycle=(\S+)', ht)
             key = (mm.group(3), mm.group(4), mm.group(1)) if mm else "?"
             c[("wave_hover_M15", key)] += 1
         elif not name and ht.startswith("TF=1H<br><b>Wave Candle"):
@@ -77,7 +77,7 @@ if len(cs) == 1:
     for k in keys:
         print(f"{cs[0][k]:6d}  {k[0]:20s} {k[1]}")
 else:
-    print(f"{'A':>6} {'B':>6} {'d':>6}  element / (parent_sid,parent_cycle,sub_sid)")
+    print(f"{'A':>6} {'B':>6} {'d':>6}  element / (parent_sid,parent_cycle,sub_id)")
     for k in keys:
         a, b = cs[0][k], cs[1][k]
         flag = "" if a == b else "   <<<"

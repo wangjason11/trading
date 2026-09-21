@@ -101,6 +101,26 @@ replay's log if it was captured; otherwise note it was unavailable. See
 `feedback_implement_against_docs.md` for why this exists (Session 3 Step 2
 dropped 5 sids whose cause sat unread in the log).
 
+Since the sub-structure pool (Plan C, 2026-09-20) this grep also catches, by
+design, two line families — each is a **finding to explain**, not a bug by
+itself:
+
+- `[sweep] UNRESOLVED (skipping) reason=… lens=… parent=(S,C) type=…
+  trigger_idx=… detail=…` — one per trigger that produced no record (`pending`
+  / `degenerate_parent_cycle` / `probe_failed` / `geometry_failed`); the same
+  rows land in `*_M15_unresolved_triggers.csv`. Compare the set against the
+  plan's expectation (reference window, measured on the first Plan C replay:
+  4 rows, all `degenerate_parent_cycle`).
+- `WARNING [parent_tables] degenerate parent cycle (S,C): floor=… end=…` —
+  one per parent cycle whose lifecycle floor ≥ its end (`PART4 §17.7`;
+  expected on the reference window: (1,0) and (1,1)).
+
+Also read (not caught by the grep) `[probe_cache] hit|APPROX hit …` and
+`[probe_cache] REF-ZONE DIFFERS …` — a probe skipped because an earlier
+same-direction, same-input probe already finalized (the §17.8 accepted
+approximation's tripwire). Any lifecycle delta must be traceable to one of
+these when the cache bit.
+
 ### 3. Load and Compare Data
 
 Use Python to load both datasets and perform detailed comparison:
@@ -290,33 +310,55 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_fib_lifecycle.csv` |
 | `*_wvmi.csv` |
 
-**M15.counter** and **M15.confluence** (6 files each — same filename
-suffixes prefixed with `*_M15_counter_` / `*_M15_confluence_`):
+**M15.counter** and **M15.confluence** (7 files each — 5 per-lens debug CSVs
+with the same filename suffixes prefixed `*_M15_counter_` /
+`*_M15_confluence_`, plus the two per-lens pool tables):
 
-| File pattern |
-|--|
-| `*_M15_{entity}_structure_events.csv` |
-| `*_M15_{entity}_kl_zones.csv` |
-| `*_M15_{entity}_poi_zones.csv` |
-| `*_M15_{entity}_sids.csv` |
-| `*_M15_{entity}_fib_lifecycle.csv` |
-| `*_M15_{entity}_wvmi.csv` |
+| File pattern | Written by |
+|--|--|
+| `*_M15_{lens}_structure_events.csv` | chart loop (`run_replay.py`) |
+| `*_M15_{lens}_kl_zones.csv` | chart loop |
+| `*_M15_{lens}_poi_zones.csv` | chart loop |
+| `*_M15_{lens}_fib_lifecycle.csv` | chart loop |
+| `*_M15_{lens}_wvmi.csv` | chart loop |
+| `*_M15_{lens}_subs.csv` — one row per unique sub on this lens | `debug/export_sub_tables.py`, BEFORE the chart loop |
+| `*_M15_{lens}_triggers.csv` — one row per `TriggerRecord` on this lens (incl. zero-length) | `debug/export_sub_tables.py`, BEFORE the chart loop |
 
-Total: 21 CSVs per replay (POI-zones CSVs added 2026-06-08). Current path is `artifacts/debug/`; baseline
+**Pool-wide** (1 file): `*_M15_unresolved_triggers.csv` — one row per
+`UnresolvedTrigger` (`debug/export_sub_tables.py`, written once).
+
+Total: **9 + 2×7 + 1 = 24 CSVs** per replay (POI-zones CSVs added 2026-06-08;
+pool tables added by Plan C 2026-09-20). `*_M15_{lens}_sids.csv` is **GONE**
+since Plan C — its role is split across `_subs.csv` / `_triggers.csv`. **Delete
+stale `*_sids.csv` copies from `artifacts/debug/` before comparing**: the replay
+no longer writes them, so a leftover from a pre-Plan-C run is never overwritten
+and would be compared as if current. Current path is `artifacts/debug/`; baseline
 path is whichever step 1 resolved to: `artifacts/commits/<branch>/<folder>/`
 (new layout) or `artifacts/commits/<folder>/` (legacy flat layout).
 
 **Files present on only one side are a finding, not a skip.** Diff the two
 file *lists* first and report every `NEW (no baseline)` and `MISSING (in
 baseline, not produced)` file explicitly. The pool/lifecycle redesign (Plan
-C, 2026-09) replaces the per-lens `*_sids.csv` with `*_subs.csv` +
-`*_triggers.csv` + `*_unresolved_triggers.csv`; on its first run those have
-no baseline and the old file disappears — both must be called out, and the
+C, 2026-09-20) replaced the per-lens `*_sids.csv` with `*_subs.csv` +
+`*_triggers.csv` + `*_unresolved_triggers.csv`; on its first run those had
+no baseline and the old file disappeared — both were called out, and the
 new tables are validated against the plan's **predicted table**
-(`memory/reference_pool_redesign_groundtruth.md`) rather than a prior save.
-A missing per-sub CSV can also mean the chart export that it is coupled to
-crashed (see `run_replay.py` — per-sub CSVs are written inside the chart
-loop), so treat MISSING as a possible crash signal.
+(`memory/reference_pool_redesign_groundtruth.md`, matched by
+`(direction, starting_idx)` — `sub_id`s are 0–7 in creation order on the
+reference window) rather than a prior save; from the next `/commit-save` on
+they have a baseline like any other CSV. The three pool tables are written
+**before** the chart loop, decoupled from it (`export_sub_tables` in its own
+try/except — a chart-export exception cannot lose them), so a MISSING pool
+table means the sweep/export itself failed; the other per-lens CSVs are still
+written **inside** the chart loop, so a missing one of those can mean the
+chart export it is coupled to crashed — treat MISSING as a possible crash
+signal either way.
+
+Column vocabulary to expect since Plan C: `sub_id` replaces `sub_sid` on every
+M15 structural artifact (and on the shared `export_wvmi` column — the H1
+`_wvmi.csv` header changes with it); `end_reason ∈ {reversal,
+same_dir_replacement, parent_end}` or empty (no `lifecycle_end`; `next_cycle`
+only on cycle-owned zone/fib rows).
 
 **Classify deltas against the plan's stated expectations.** When the change
 being compared has a plan that lists its expected deltas (per
@@ -340,14 +382,22 @@ again after Plan A, and after Plan B 2026-09-20; full 2025-12-01→2026-01-20 wi
 values were H1 125/261, counter 216/169, confluence 359/280. Window-dependent,
 re-baseline when the config window or chart rendering changes):
 
-- `H1` chart: traces=107, shapes=250
-- `M15.counter` chart: traces=198, shapes=133
-- `M15.confluence` chart: traces=342, shapes=222
+- `H1` chart: traces=85, shapes=245
+- `M15.counter` chart: traces=157, shapes=125
+- `M15.confluence` chart: traces=301, shapes=233
+
+**History:** pre-Plan C (through the Plan B save 2026-09-20) the counts were H1
+107/250, counter 198/133, confluence 342/222. Plan C's first replay moved the
+M15 counts (174/128, 321/238: 8 unique subs instead of 16 per-trigger sids,
+ownership by lifecycle window, degenerate subs absent); the chart review then
+added the forming layer (+ traces), hid collapsed-cycle zones on BOTH charts
+(H1 107→85: sid 1's retroactive (1,0)/(1,1) zones + POI gone; M15 −22/−20) and
+tinted POIs — the bullets above are the Plan C save's values.
 
 These print as `DEBUG traces:` / `DEBUG shapes:` (H1) and `[m15_chart] traces:
 N, shapes: M` (each M15 entity) at the end of `python -m engine_v2.run_replay`.
 
-A run with all 21 CSVs byte-identical but shifted chart counts means a
+A run with all 24 CSVs byte-identical but shifted chart counts means a
 purely rendering-side change (e.g. style registry tweak). A run with
 matching chart counts but mismatched CSVs means a logic change. Both
 matrices clean = full parity.

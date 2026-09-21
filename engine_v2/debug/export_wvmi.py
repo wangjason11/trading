@@ -7,13 +7,13 @@ from engine_v2.common.types import WVMIRecord
 
 
 # Explicit column order so an empty export still emits a usable header.
-# Sub identity is the tuple (parent_sid, parent_cycle_id, sub_sid) — its
-# three components are first-class columns (sub_sid alone is meaningless).
+# Sub identity is `sub_id` (the unique sub, PART4 §17.9); `parent_sid` /
+# `parent_cycle_id` / `started_by` are the sub's FIRST record's — informational.
 _COLUMNS = [
     "structure_path_id",
     "parent_sid",
     "parent_cycle_id",
-    "sub_sid",
+    "sub_id",
     "started_by",
     "bos_structure_id",
     "bos_cycle_id",
@@ -41,8 +41,8 @@ _COLUMNS = [
 def export_wvmi(records: list[WVMIRecord], path: str | Path) -> None:
     """Export WVMI records to CSV (main + sub entities).
 
-    Flattens the §8.7 attribution + identity tuple (parent_sid /
-    parent_cycle_id / sub_sid / started_by) out of `meta` into their own
+    Flattens the §8.7 attribution + sub identity (`sub_id`; parent_sid /
+    parent_cycle_id / started_by informational) out of `meta` into their own
     columns, keeping the full `meta` dict as the last column. Wave-candle idx
     fields are entity-df coords; `triggered_by_event_idx` is parent-df coords
     for subs.
@@ -57,7 +57,7 @@ def export_wvmi(records: list[WVMIRecord], path: str | Path) -> None:
             "structure_path_id": r.structure_path_id,
             "parent_sid": m.get("parent_sid"),
             "parent_cycle_id": m.get("parent_cycle_id"),
-            "sub_sid": m.get("sub_sid"),
+            "sub_id": m.get("sub_id"),
             "started_by": m.get("started_by"),
             "bos_structure_id": r.bos_structure_id,
             "bos_cycle_id": r.bos_cycle_id,

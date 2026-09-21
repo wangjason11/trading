@@ -93,9 +93,17 @@ To change any visual element:
 - Entire candle (body + wicks) colored (Plotly limitation)
 - Style keys: `imbalance.bullish`, `imbalance.bearish`
 
-### 7) POI zones (Week 7, updated Item 5 / 2026-05-20)
+### 7) POI zones (Week 7, updated Item 5 / 2026-05-20; side tints + collapsed-cycle skip 2026-09-20/21)
 - Reads `df.attrs["poi_zones"]`
 - Fib-based zones from Institutional Candle identification
+- **Side tints (2026-09-21):** buy = gold-lime `rgb(225, 220, 30)` with a dark-olive
+  confirm line (`60, 90, 20`); sell = amber `rgb(255, 180, 30)` with a dark-brick
+  confirm line (`120, 45, 15`) — `zone.poi.buy` / `zone.poi.sell`; the two sides now
+  read apart like KL zones. Opacities unchanged (0.9 active / 0.12 inactive).
+- **Collapsed-cycle skip (2026-09-20):** POIs whose cycle's BOS KL zone is collapsed
+  (`_zone_render.collapsed_cycles`) are not drawn on the H1 chart, the M15 charts or
+  the H1 overlay — on H1 that is sid 1's retroactive cycles (1,0)/(1,1) (the
+  "degenerate parent cycles"); see "Collapsed-cycle zones" under the KL section.
 - **3-tier opacity (MAIN H1 chart only)**: tier picked by `meta["status"]` (3-state lifecycle convention). Sub charts use per-TF tier.
 - **Outline (Item 5)**: single rect outline (no fill) spanning `[start_time, end_time]`. Color matches confirm line (`confirm_line_rgb = 101,67,33` brown), width = `confirm_line_width` (=2). Opacity = `confirm_opacity_active × tier`.
 - **Fill (Item 5)**: ONE filled rect per active stretch in `meta["activation_history"]` — each `A` event paired with the next `D` (or `end_idx` for trailing activate). Inactive stretches render as outline only.
@@ -245,7 +253,7 @@ Implementation: shared helpers in `engine_v2/charting/_zone_render.py`:
 | POI | main-TF overlay, H1 (×0.2) | 0.9 × 0.2 = **0.18** | 0.9 × 0.2 = **0.18** |
 | POI | sub-TF native, M15 (×0.5) | 0.9 × 0.5 = **0.45** | 0.9 × 0.5 = **0.45** |
 
-**Cascaded sub zones** (`meta["deactivated_by"]="overwritten_by_sid_N"`) stay rendered — their `end_time` was already capped by `_tag_old_sid_on_overwrite`, so their visible extent is naturally truncated to the cascade boundary. They use the same per-TF tier as non-cascaded sub zones.
+**Sub zones capped by their sub's window** (historical: this paragraph described "cascaded sub zones" with `meta["deactivated_by"]="overwritten_by_sid_N"` capped by `_tag_old_sid_on_overwrite`; the cascade was DELETED 2026-05-26 and `deactivated_by` no longer exists on zones). Under the pool (Plan C, 2026-09-20) a sub-native KL/POI zone's `end_idx` / `end_time` comes from `compute_cycle_lifecycle` with `lifecycle_cap` = the unique sub's `end_idx` and `cap_reason` = the sub's `end_reason` (`render_sub_projection` → `project_to_window`), so a zone of a sub that ended by `same_dir_replacement` / `parent_end` / `reversal` has its visible extent truncated at the sub's window end. Such zones stay rendered (outline + any active stretch) and use the same per-TF tier as every other sub-native zone.
 
 ### Outline color/width matrix
 
@@ -266,7 +274,7 @@ These tables are derived from `style_registry.py` + the rendering code in `expor
 A separate chart file renders M15 candles with both M15 structure and H1 overlay elements. This is NOT the same as the H1 chart — it has its own rendering logic.
 
 ### Architecture
-- **Entry:** `export_m15_chart_plotly(registry=..., path_id=..., title=..., ...)` — registry-only (§13.5.e); resolves its M15 entity + parent overlay from the registry. Reads sub data from `m15_df.attrs[...]` grouped by the identity tuple `(parent_sid, parent_cycle_id, sub_sid)`
+- **Entry:** `export_m15_chart_plotly(registry=..., path_id=..., title=..., ...)` — registry-only (§13.5.e); resolves its M15 entity + parent overlay from the registry. Reads sub data from `m15_df.attrs["events" / "kl_zones" / "poi_zones" / "fib_states" / "wave_candles" / "wvmi" / "prev_bos_lines"]` grouped by each snapshot's **`meta["sub_id"]`** (`_sub_identity`) per the `m15_df.attrs["sids"]` `SidRecord` manifest (one row per unique sub rendered on this lens; `_sid_record_identity` = `sub_id` for a sub row, `sub_sid` for a main row), with `m15_df.attrs["triggers"]` (this lens's `TriggerRecord`s) for hover attribution. (Plan C, 2026-09-20 — replaces the pre-pool identity tuple `(parent_sid, parent_cycle_id, sub_sid)`; `sub_sid` no longer exists on any sub artifact.)
 - **M15 candles** as the base OHLC
 - **M15 structure** (swing lines, CTS/BOS dots, prev BOS lines) in **royalblue**
 - **H1 overlay** (swing lines, CTS/BOS dots, prev BOS lines) in **black**
@@ -296,6 +304,95 @@ A separate chart file renders M15 candles with both M15 structure and H1 overlay
 ### Opacity
 - All swing/connector lines use **flat opacity** from the style (no per-sid multiplier).
 - **Zone opacity follows the per-TF tier system** (Item 5) — see "Opacity composition tables" above. The legacy 3-tier (active/recent_inactive/prior_inactive) is the MAIN H1 chart only; sub charts use main_tf (0.2) for H1 overlays and sub_tf (0.5) for M15 native.
+- The dot-trace opacity tier (`_m15_opacity_tier_for_events`) keys on `m15_most_recent_psid` / `m15_recent_cycles`, computed by `_compute_m15_tier_context_from_sids` from each sub's FIRST record (`SidRecord.meta["first_record"]`, informational only) — semantics unchanged from the per-trigger era.
+
+### Sub ownership, identity and hover — PART4 §16.5 rev 2 (Plan C, landed 2026-09-20)
+
+This is the M15-chart half of `PART4_REFACTOR_SPEC.md §16.5` / `§17.9`; the
+numbered §16.5 rules live in PART4, this section states them as the chart
+implements them (`export_m15_chart.py`).
+
+**Identity = `sub_id`** (the unique sub, `PART4 §17.2`). One `SidRecord` per
+unique sub on the lens (`sub_id` set, `sub_sid = None`, `parent_sid` /
+`parent_cycle_id` None — parent attribution is on the record table
+`attrs["triggers"]`). Every element of a sub is grouped by `meta["sub_id"]`;
+the informational `parent_sid` / `parent_cycle_id` / `use_case` on a snapshot
+are never used for grouping. Trace names carry the identity: sid-tied dots are
+`M15 {CTS|BOS|CTS (unconf)|PB} sub{sub_id}` (`_render_m15_dots`), KL outlines
+are `M15 KL outline sub{sub_id} c{cycle_id}`; the swing / PB→BOS / prev-BOS
+line names still carry the first record's parent `h1s{parent_sid}c{parent_cycle_id}`
+(informational).
+
+**Ownership = the sub's real-time lifecycle window, per direction.**
+`_compute_owner_by_idx_dir(sid_records, edge_idx)` builds
+`owner_by_idx_dir[(candle, direction)] = sub_id` over each sub's
+`[start_idx, end_idx or edge_idx]` (`SidRecord.start_idx` /
+`SidRecord.end_event_idx` — the lifecycle, NOT the structural anchor
+`creation_event_idx = starting_idx`), keyed by `(candle, starting_sd)` because
+a `+1` and a `−1` sub may both be live on one chart (`PART4 §17.5`; e.g.
+`4027/+1` on the confluence chart from 4083 while `3760/−1` runs to 4200 —
+opposite directions, intended). Rows are walked in `(start_idx, sub_id)` order
+so a later start wins a same-direction overlap. Rows with `start_idx is None`
+(a sub with no live record) are skipped — logged, not rendered.
+
+**Sid-tied elements draw only where owned** (`_owned_here(idx)`): CTS/BOS
+dots, unconfirmed-CTS and PB dots, swing lines (the last-sid extension walks
+back to the last owned candle), PB→BOS lines, prev-BOS lines (hidden if their
+start candle is not owned), wave-candle verticals (per candle, on top of the
+per-candle cycle lifecycle gate of `WAVE_CANDLES_SPEC.md`, whose `cycle_life`
+the chart reads off the sub's KL BOS-zone meta `confirmed_idx` / `end_idx` /
+`end_reason`). WVMI records are grouped by `sub_id` too but the M15 chart
+renders no WVMI hover (wave-candle hover only).
+
+**Two ownership layers (chart review 2026-09-20, option 2).** The rule as first
+landed hid everything before `start_idx`, which broke every BOS→CTS line
+mid-structure. Now: `_is_live(idx) = idx >= sub.start_idx` picks the layer —
+a LIVE candle is drawn iff `_compute_owner_by_idx_dir` (the lifecycle window,
+later start wins among live subs) names this sub; a FORMING candle (the sub's
+`[starting_idx, start_idx)` span, `_compute_forming_by_idx_dir`, later anchor
+wins among forming subs) is drawn iff that map names this sub — independently
+of any live sub of the same direction, so a structure forming under a live one
+stays visible (`3304/−1` forming 3304→3621 under live `2639/−1`). Forming
+elements use the forming styles: swing segments `structure.m15.swing_line_forming`
+(navy, `dash: dot`, opacity 0.75 — the segment bridging the last forming point
+to the first live point is forming), dots `structure.m15.{cts,bos}_forming`
+(navy open circles, 1.5-px ring, opacity 0.85), PB→BOS and prev-BOS lines
+dotted when their start candle precedes `start_idx`; hover carries
+`phase=forming|live`. Trace names: `M15 swing (forming) sub{sub_id}_m15s{sid}`
+/ `M15 swing sub{sub_id}_m15s{sid}`, dots `M15 {kind} sub{sub_id} (forming)`.
+All M15 structure dots are `size 3.6` (+20%, 2026-09-20).
+
+**Persisting elements:** KL / POI rectangles and fibs render the sub's
+snapshots — drawn from the anchor (`base_idx` / `ic_idx`), active from
+`start_idx` (the KL/POI first-active clamp), ended at the sub's `end_idx` (the
+projection's cap). Opacity is the per-TF tier. **Exception (chart review
+2026-09-20, option 1): collapsed-cycle zones are not drawn** — a KL zone with
+`status="inactive"` and clamped `confirmed_idx >= end_idx`
+(`_zone_render.is_collapsed_cycle_zone`: the sub's forming-phase cycles, which
+ended at/before `start_idx`) and the POIs of those cycles
+(`collapsed_cycles(sid_kls)` / `is_poi_of_collapsed_cycle`). They existed
+geometrically but were never tradeable; the forming dots/lines already show
+that geometry. Their rows stay in the KL/POI CSVs. A POI that is inactive
+because it never met its activation conditions inside a live cycle (cycle not
+collapsed) is still drawn as an outline. The same predicate governs the H1
+chart and the H1 overlay (below).
+
+**Every lens draws the same window.** A sub on both charts (e.g. `2639/−1`:
+a confluence record reversal-born from `2365/+1` and a counter `first_counter`
+record, both in H1 (0,1)) is drawn over the SUB's window `[start_idx, end_idx]`
+on both charts — the counter chart draws it from the sub's `start_idx` (2829 on
+the reference window), not from its own record's `start_idx` (2843). Reverses
+Stage 3.2b's per-lens "earliest trigger of this lens" start.
+
+**Hover** (`_render_m15_dots` customdata): `sub_id` (NOT the bounded run's
+internal `structure_id`, which restarts at 0 per sub), `struct_direction`,
+`relative_dir` at that candle (the §17.3 step function read from
+`SidRecord.relative_dir_segments`), `sub window=[start_idx,end_idx|open] <end_reason|open>`,
+and `records:` the sub's record list `{lens}({parent_sid},{parent_cycle_id})
+{trigger_type} {trigger_idx}→{start_idx}` (a `†` suffix marks a zero-length
+record), plus the first record's `parent_sid` / `parent_cycle_id`
+(informational). `end_reason ∈ {reversal, same_dir_replacement, parent_end}`
+or `open`.
 
 ---
 

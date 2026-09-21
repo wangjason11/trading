@@ -79,10 +79,15 @@ engine_v2/
 │   ├── poi_zones.py                 # POI Zone derivation (Fib + IC)
 │   └── wvmi.py                      # Wave Volume Momentum Indicator
 ├── multitf/
-│   ├── types.py                     # MultiTFTrigger, LowerTFResult
+│   ├── types.py                     # MultiTFTrigger, LowerTFResult, SidRecord
 │   ├── data_bridge.py               # Fetch/prepare lower-TF data
-│   ├── uc1_trigger.py               # UC1 trigger detection
-│   └── lower_tf_pipeline.py         # Lower-TF pipeline runner
+│   ├── uc1_trigger.py               # first_counter trigger detection (+ *_trigger.py / *_pipeline.py per variation)
+│   ├── sub_structure_pool.py        # Pool data model: PooledStructure (unique sub), TriggerRecord, UnresolvedTrigger, probe cache (PART4 §17)
+│   ├── parent_tables.py             # Static parent-cycle floor/end tables from H1 events (§17.6)
+│   ├── lifecycle_sweep.py           # The sub-structure driver — ordered sweep over moments (§17.6)
+│   ├── entity_df_mutation.py        # Start resolvers + probe cache, geometry builder, per-sub projection + mirror (§17.8–§17.9)
+│   ├── pooled_structure_build.py    # project_to_window (one downstream derivation per unique sub)
+│   └── sid_records.py               # SidRecord builders (main + sub)   [lower_tf_pipeline.py was deleted by Plan C, 2026-09-20]
 ├── patterns/
 │   ├── structure_patterns.py        # Breakout pattern detection
 │   └── imbalance.py                 # Imbalance (FVG) pattern detection

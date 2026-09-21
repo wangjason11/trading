@@ -1,6 +1,14 @@
 # Plan C — Sub-Structure Pool Lifecycle Rewrite (TriggerRecord + unique sub)
 
-**Status:** READY TO IMPLEMENT (written 2026-09-19; every design decision closed).
+**Status:** LANDED 2026-09-20 (commit + `/commit-save` folder recorded in
+`memory/project_sub_structure_pool_architecture.md` STATUS and PART4 §17.11). The
+text below is the contract as written on 2026-09-19; the **"AS LANDED" notes** at
+the end of §4 record where the landing refined it (cold review 2026-09-20 — code
+side correct, plan wording stale). Measured outcome: the predicted table reproduced
+cell for cell (8 subs / 11 records / 4 unresolved); H1 8/9 byte-identical (+ the
+`_wvmi.csv` header rename); three probe-cache hits (accepted as designed — §5.3's
+"zero hits" was an enumeration error); one visible moment shift (two masked by an
+equal floor); 698 tests + 1 strict xfail.
 **Canonical decisions + rationale:** `memory/project_sub_structure_pool_architecture.md` (read first).
 **Ground truth + acceptance table:** `memory/reference_pool_redesign_groundtruth.md`.
 **Vocabulary:** `GLOSSARY.md` "Sub-Structure Pool Terms".
@@ -420,6 +428,42 @@ The strict `>` with start-before-end is what keeps a sub continuous across a sam
 ends at t, record B started at t ⇒ `max_start = t`, `t > t` false ⇒ no end). Verified by hand on subs
 `2365` (→ 2829) and `3304` (→ 3819); both are §9.2 fixtures (an independent cold hand-run of the whole
 sweep reproduced the full predicted table at every step).
+
+### 4.4′ AS LANDED (2026-09-20) — refinements found by the cold review; code is the rule
+
+- **Phase-1 incumbent = a STARTED record.** §4.3′'s `pool.active_record(...)` (the
+  bare interval rule, §2.4 "not an 'active' flag") also sees a same-idx record
+  whose `RECORD_START` is still queued (a later `seq`); applied literally, two
+  same-idx starters replace EACH OTHER (mutual annihilation — both subs get a
+  `start_idx` with no live record, which then crashes `render_sub_projection`), or
+  the post-assert raises. The sweep therefore filters incumbents to records whose
+  start moment has run (`_active`) and are `is_active_at(t)`; a same-idx
+  collision's incumbent is frozen zero-length IN phase 1 (`WARNING [sweep]
+  same-idx start collision`), not queued to phase 3 (so phase 2 never reads it as
+  live); with an earlier open incumbent plus several same-idx starters every
+  started incumbent is replaced (`WARNING`), never asserted. Outcome = §4.2's "the
+  later seq replaces the earlier". `pool.active_record` remains the post-sweep
+  query. (LANDMINES "The Sweep Phase Order Is Load-Bearing" rule 6; GOTCHAS
+  "Phase-1 Incumbents Must Be STARTED Records".)
+- **Known-in-advance ends (§4.3 step 6) tie-break by `_END_REASON_PRIORITY`**, not
+  the literal `min(cands)` (which would order equal idxs by reason STRING —
+  `parent_end` < `reversal` — inverting §2.4's priority).
+- `finalize_idx == trigger_idx` (§4.3 step 2 / §5.2) is asserted only when the
+  probe RAN; a cache-hit record inherits the earlier finalize (§2.1).
+- `validated_parent_idx` is the candle that seeded the probe IN ITS OWN FRAME: the
+  H1 BOS extreme for `first_confluence`, the M15 sibling CTS extreme for the
+  sibling types, None for reversal-born (§2.1's "H1 candle" was imprecise).
+- §5.3's "zero hits on this window" counted H1-trigger pairs only; the reversal
+  handoff's entity-absolute key shares inputs with later triggers → 3 hits
+  measured, accepted as designed. The tripwire compares against the cached probe's
+  OWN reference inner (`ProbeCacheEntry.ref_inner`), not its final `bos0_inner`.
+- §3's "trigger_idx is provably ≤ the floor … NOT a floor term" is wrong for the
+  sibling types (`first_counter`(0,1): trigger 2843 > floor 2611); §2.1's three-term
+  formula is what landed.
+- `_STRUCTURE_COLS` are painted over the sub's LIVE rows only (`[start_idx, end]`),
+  so "later-live wins" holds literally.
+- A sub with no live record is logged on stdout, not in a per-lens `_subs.csv`
+  (it is on no lens; its zero-length records are in `_triggers.csv`).
 
 ### 4.5 After the sweep
 ```

@@ -269,12 +269,34 @@ def main() -> None:
     )
     timing["chart_h1"] = time.perf_counter() - _t0
 
+    # Sub-structure pool tables (PART4 §17.9) — one row per unique sub /
+    # per TriggerRecord / per unresolved trigger. Written BEFORE the M15
+    # chart loop, in their own try/except, so a chart-export exception can
+    # never lose them (Plan C §6.3: decoupled from the chart loop).
+    m15_sub_path_ids = ["H1.main >> M15.counter", "H1.main >> M15.confluence"]
+    # Source = every lens df the pool driver built (`meta["sub_lens_dfs"]`),
+    # NOT the registry: a lens with records but no rendered sub is not
+    # registered (no chart) yet its tables must still be written.
+    _lens_dfs = dict(res.meta.get("sub_lens_dfs") or {})
+    if not _lens_dfs:
+        for sub_path_id in m15_sub_path_ids:
+            _entry = registry.get(sub_path_id)
+            if _entry is not None:
+                _lens_dfs[sub_path_id.split(" >> ")[-1].split(".")[-1]] = _entry.df
+    if _lens_dfs:
+        try:
+            from engine_v2.debug.export_sub_tables import export_sub_tables
+            _written = export_sub_tables(_lens_dfs, basename, "artifacts/debug")
+            for _label, _path in _written.items():
+                print(f"[sub_tables] {_label}: {_path}")
+        except Exception as _exc:  # noqa: BLE001 — never block the chart export
+            print(f"[sub_tables] WARNING: export failed: {_exc!r}")
+
     # M15 chart exports (one per registered M15 sub entity).
     # Part 4 §16.1 / §16.2: each entity gets its own chart, candles in own
     # TF, immediate parent overlaid. Both M15.counter and M15.confluence
     # share the same H1.main parent overlay; only the per-entity sub data
     # (events, zones, wave candles, sub WVMI) differs.
-    m15_sub_path_ids = ["H1.main >> M15.counter", "H1.main >> M15.confluence"]
     for sub_path_id in m15_sub_path_ids:
         if registry.get(sub_path_id) is None:
             continue
@@ -313,24 +335,8 @@ def main() -> None:
                 f"artifacts/debug/{basename}_{leaf_label}_poi_zones.csv",
             )
 
-            # Debug: export per-sub SidRecords so we can see each sid's
-            # boundary (creation_event_idx) and trigger info.
-            sub_sids = sub_entry.df.attrs.get("sids", []) or []
-            if sub_sids:
-                import pandas as _pd
-                _pd.DataFrame([{
-                    "parent_sid": s.parent_sid,
-                    "parent_cycle_id": s.parent_cycle_id,
-                    "sub_sid": s.sub_sid,
-                    "starting_sd": s.starting_sd,
-                    "creation_event_idx": s.creation_event_idx,
-                    "end_event_idx": s.end_event_idx,
-                    "end_reason": s.end_reason,
-                    "meta": s.meta,
-                } for s in sub_sids]).to_csv(
-                    f"artifacts/debug/{basename}_{leaf_label}_sids.csv",
-                    index=False,
-                )
+            # (The per-sub `_sids.csv` is gone — its role is split across
+            # `_subs.csv` / `_triggers.csv` written above, §17.9.)
 
             # Debug: export per-sub WVMI records (parent-event-driven,
             # trigger-centric — see WVMI_SPEC "Sub entities"). Not in any other

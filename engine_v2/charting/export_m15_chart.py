@@ -1,19 +1,38 @@
 """M15 chart with H1 overlay — separate chart file alongside the H1 chart.
 
 Renders the full M15 dataset as the base candle layer, with all M15 structures
-overlaid. Part 4 §13.5.c.iii: data sourced from `m15_df.attrs["events"] /
-["kl_zones"] / ["poi_zones"] / ["fib_states"] / ["wave_candles"] / ["wvmi"]`
-grouped by each snapshot's identity tuple `(parent_sid, parent_cycle_id,
-sub_sid)`, with the `m15_df.attrs["sids"]` SidRecord list as the per-sid
-manifest. Per spec §16.5:
+overlaid. Data sourced from `m15_df.attrs["events"] / ["kl_zones"] /
+["poi_zones"] / ["fib_states"] / ["wave_candles"] / ["wvmi"]` grouped by each
+snapshot's **`sub_id`** (PART4 §17.9 — the unique sub is the chart identity),
+with the `m15_df.attrs["sids"]` SidRecord list (one row per unique sub on this
+lens) as the manifest and `attrs["triggers"]` (this lens's TriggerRecords) for
+hover attribution. Per spec §16.5 (rev 2):
 
-  - Sid-tied elements (CTS/BOS dots, swing lines, PB markers, prev_bos lines,
-    WVMI hover anchors): only render at candles owned by the rendering sid
-    (`owner_by_idx`). Merge-and-bound sids are sequential & non-overlapping
-    (§6.1), so each candle has exactly one owner.
-  - Persisting events (KL zones, POI zones, fibs): render all snapshots;
-    opacity is a per-TF tier (`_m15_opacity_tier_for_zone`: sub-TF zones get
-    the sub multiplier, H1 overlays the main multiplier).
+  - Sid-tied elements (CTS/BOS dots, swing lines, PB markers, prev_bos lines;
+    the M15 chart renders no WVMI hover): only render at candles the sub OWNS,
+    keyed `(candle, direction)` because a +1 and a −1 sub may both be live
+    (§17.5). Two layers (chart review 2026-09-20, option 2): the LIVE layer
+    `_compute_owner_by_idx_dir` = the sub's real-time lifecycle window
+    `[start_idx, end_idx or edge]`, later start wins among live subs; the
+    FORMING layer `_compute_forming_by_idx_dir` = the sub's pre-live span
+    `[starting_idx, start_idx)`, later anchor wins among forming subs. A sub's
+    live elements draw where it is the live owner; its forming elements draw
+    where it is the forming owner — even under a live sub of the same direction
+    (a structure forming under a live one stays visible; the styles make the
+    overlap legible). So a sub's BOS→CTS structure is drawn continuously from
+    its structural anchor, and the pre-`start_idx` portion is rendered in the
+    dimmed/dashed "forming" style (`structure.m15.*_forming`) with
+    `phase=forming` in the hover — the chart shows both the geometry and the
+    trading window. Forming-phase ZONES (a KL/POI whose cycle ended at/before
+    the sub's `start_idx`, collapsed to `status="inactive"`) are NOT drawn
+    (`_zone_render.is_collapsed_cycle_zone`, shared with the H1 chart, which skips
+    the collapsed retroactive cycles of a post-reversal sid the same way); they
+    stay in the CSVs.
+  - Persisting events (KL zones, POI zones, fibs): render all snapshots —
+    drawn from the anchor, active from `start_idx` (the KL/POI clamp);
+    opacity is a per-TF tier (`_m15_opacity_tier_for_zone`).
+  - Every lens draws a sub over the SAME window (the sub's), so a sub on both
+    charts looks identical on each.
 """
 from __future__ import annotations
 
@@ -29,8 +48,11 @@ from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME, COL_V, 
 from engine_v2.charting.style_registry import STYLE
 from engine_v2.charting._zone_render import (
     build_stepped_outline_xy,
+    collapsed_cycles,
     compute_kl_active_stretches,
     compute_poi_active_stretches,
+    is_collapsed_cycle_zone,
+    is_poi_of_collapsed_cycle,
     select_subordinate_tf_tier,
 )
 from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
@@ -137,9 +159,10 @@ def _m15_opacity_tier_for_zone(
     Replaces the prior active/recent_inactive/prior_inactive 3-tier system
     with a per-TF tier (Spec 2): zones from the chart's primary sub-TF (M15)
     get the `sub_tf` multiplier (0.5), main-TF overlays (H1) get `main_tf`
-    (0.2). A zone's end_time is capped at its sid's resolved end by
-    `build_one_sid` (reversal | lifecycle_end), so its visible extent is
-    already truncated to that boundary regardless of tier.
+    (0.2). A zone's end_time is capped at its sub's lifecycle end by the
+    projection (`render_sub_projection`: reversal | same_dir_replacement |
+    parent_end), so its visible extent is already truncated to that boundary
+    regardless of tier.
 
     Zone's TF comes from `meta["timeframe"]`; defaults to `primary_sub_tf`
     when missing (the M15-native rendering path always emits M15 zones).
@@ -168,75 +191,90 @@ def _compute_m15_tier_context_from_sids(
 ) -> tuple:
     """Compute most_recent_parent_sid and recent_cycle_ids across SidRecords.
 
-    §13.5.c.iii: replaces the prior `_compute_m15_tier_context` (which read
-    from `LowerTFResult.trigger`). The semantics are unchanged — same
-    parent_sid / parent_cycle_id values come through, just from a different
-    list shape.
+    Sourced from each sub's FIRST record (`_sid_parent`, §17.9 — parent fields
+    on a sub SidRecord are None); semantics unchanged from the per-trigger era.
     """
-    parent_sids = [
-        s.parent_sid for s in sid_records if s.parent_sid is not None
-    ]
+    parents = [_sid_parent(s) for s in sid_records]
+    parent_sids = [ps for (ps, _pc) in parents if ps is not None]
     if not parent_sids:
         return (0, set())
     most_recent = max(parent_sids)
     cycles_for_recent = sorted(
-        [s.parent_cycle_id for s in sid_records
-         if s.parent_sid == most_recent and s.parent_cycle_id is not None],
+        [pc for (ps, pc) in parents if ps == most_recent and pc is not None],
         reverse=True,
     )
     recent_cycle_ids = set(cycles_for_recent[:2])
     return (most_recent, recent_cycle_ids)
 
 
-def _sub_identity(meta: dict) -> Optional[tuple]:
-    """Identity tuple `(parent_sid, parent_cycle_id, sub_sid)` from a snapshot
-    meta dict, or None if the snapshot carries no `sub_sid` attribution.
+def _sub_identity(meta: dict) -> Optional[int]:
+    """The unique sub's `sub_id` from a snapshot meta dict, or None if the
+    snapshot carries no `sub_id` attribution (§17.9 — `sub_id` IS the
+    identity; the informational `parent_sid` / `parent_cycle_id` are never
+    used for grouping)."""
+    sid = meta.get("sub_id")
+    return int(sid) if sid is not None else None
 
-    The tuple — not `sub_sid` alone — is the sub's unique identity; the chart
-    groups every attrs list by it.
-    """
-    ss = meta.get("sub_sid")
-    if ss is None:
-        return None
-    ps = meta.get("parent_sid")
-    pc = meta.get("parent_cycle_id")
+
+def _sid_record_identity(rec: SidRecord) -> int:
+    """Chart identity of a SidRecord: `sub_id` for a sub row, `sub_sid`
+    (= structure_id) for a main row."""
+    if rec.sub_id is not None:
+        return int(rec.sub_id)
+    return int(rec.sub_sid)
+
+
+def _sid_parent(rec: SidRecord) -> tuple:
+    """`(parent_sid, parent_cycle_id)` for hover/tier context: the record's own
+    fields for main rows, else the sub's FIRST record (`meta["first_record"]`,
+    informational only)."""
+    if rec.parent_sid is not None or rec.parent_cycle_id is not None:
+        return (
+            int(rec.parent_sid) if rec.parent_sid is not None else None,
+            int(rec.parent_cycle_id) if rec.parent_cycle_id is not None else None,
+        )
+    fr = (rec.meta or {}).get("first_record") or {}
+    ps, pc = fr.get("parent_sid"), fr.get("parent_cycle_id")
     return (
         int(ps) if ps is not None else None,
         int(pc) if pc is not None else None,
-        int(ss),
     )
 
 
-def _sid_record_identity(rec: SidRecord) -> tuple:
-    """Identity tuple for a SidRecord — matches `_sub_identity` keys."""
-    return (
-        int(rec.parent_sid) if rec.parent_sid is not None else None,
-        int(rec.parent_cycle_id) if rec.parent_cycle_id is not None else None,
-        int(rec.sub_sid),
-    )
-
-
-def _compute_owner_by_idx(sid_records: Iterable[SidRecord]) -> dict:
-    """Per-candle owner map for §16.5 sid-tied display rule.
-
-    Walks SidRecords in identity-tuple order; later sids overwrite earlier in
-    their `[creation_event_idx, end_event_idx]` range (with merge-and-bound
-    sids being sequential & non-overlapping, ranges don't actually overlap).
-    The result tells each rendering pass which sid — by identity tuple
-    `(parent_sid, parent_cycle_id, sub_sid)` — owns each candle; sid-tied
-    elements (CTS/BOS dots, swing lines, PB markers, prev_bos lines) only
-    render at candles their owning sid owns.
-
-    SidRecords with `creation_event_idx is None` or `end_event_idx is None`
-    are skipped (they can't bound a range).
-    """
+def _compute_forming_by_idx_dir(sid_records: Iterable[SidRecord]) -> dict:
+    """Per-(candle, direction) FORMING owner map: each sub's pre-live span
+    `[creation_event_idx (= starting_idx, the structural anchor), start_idx)`,
+    later anchor wins among forming subs. Independent of the LIVE map
+    (`_compute_owner_by_idx_dir`): a sub's forming elements draw where it is
+    the forming owner even under a live sub of the same direction (the
+    forming style is visually subordinate). Rows with `start_idx is None` or
+    `creation_event_idx is None` are skipped."""
     owner: dict = {}
-    for rec in sorted(sid_records, key=_sid_record_identity):
-        if rec.creation_event_idx is None or rec.end_event_idx is None:
-            continue
+    rows = [r for r in sid_records if r.start_idx is not None and r.creation_event_idx is not None]
+    for rec in sorted(rows, key=lambda r: (int(r.creation_event_idx), _sid_record_identity(r))):
         ident = _sid_record_identity(rec)
-        for i in range(rec.creation_event_idx, rec.end_event_idx + 1):
-            owner[i] = ident
+        d = int(rec.starting_sd)
+        for i in range(int(rec.creation_event_idx), int(rec.start_idx)):
+            owner[(i, d)] = ident
+    return owner
+
+
+def _compute_owner_by_idx_dir(sid_records: Iterable[SidRecord], edge_idx: int) -> dict:
+    """Per-(candle, direction) owner map for the §16.5 sid-tied display rule
+    (rev 2): each sub owns `[start_idx, end_idx or edge_idx]` — its REAL-TIME
+    lifecycle window, not its structural anchor — keyed by `(candle,
+    direction)` because opposite-direction subs may both be live on one chart
+    (§17.5). Walked in `(start_idx, identity)` order so a later start wins a
+    same-direction overlap. Rows with `start_idx is None` are skipped (a sub
+    with no live record is logged, not rendered)."""
+    owner: dict = {}
+    rows = [r for r in sid_records if r.start_idx is not None]
+    for rec in sorted(rows, key=lambda r: (int(r.start_idx), _sid_record_identity(r))):
+        ident = _sid_record_identity(rec)
+        end = int(rec.end_event_idx) if rec.end_event_idx is not None else int(edge_idx)
+        d = int(rec.starting_sd)
+        for i in range(int(rec.start_idx), end + 1):
+            owner[(i, d)] = ident
     return owner
 
 
@@ -257,11 +295,10 @@ def export_m15_chart_plotly(
 ) -> ChartExportPaths:
     """Export an interactive M15 chart with H1 overlay elements.
 
-    Part 4 §13.5.c.iii: data is read directly from
-    `m15_df.attrs["events" / "kl_zones" / "poi_zones" / "fib_states" /
-    "wave_candles" / "wvmi"]` and grouped by each snapshot's identity tuple
-    `(parent_sid, parent_cycle_id, sub_sid)` per the `m15_df.attrs["sids"]`
-    SidRecord manifest.
+    Data is read directly from `m15_df.attrs["events" / "kl_zones" /
+    "poi_zones" / "fib_states" / "wave_candles" / "wvmi"]` and grouped by each
+    snapshot's `sub_id` per the `m15_df.attrs["sids"]` SidRecord manifest
+    (one row per unique sub on this lens, §17.9).
 
     The chart resolves its M15 entity (and its parent for the overlay) via
     ``registry`` + ``path_id`` (§13.5.e: the legacy positional
@@ -312,11 +349,13 @@ def export_m15_chart_plotly(
     h1_to_m15 = _build_h1_to_m15_map(h1_times, m15_times)
     m15_to_h1 = _build_m15_to_h1_map(h1_df, m15_times)
 
-    # M15 entity-wide attrs reads (§13.5.c.iii). Each list is the union
-    # across all sids; we group by the identity tuple
-    # `(parent_sid, parent_cycle_id, sub_sid)` per SidRecord below for
-    # per-sid rendering.
+    # M15 entity-wide attrs reads. Each list is the union across all subs on
+    # this lens; we group by `sub_id` per SidRecord below for per-sub rendering.
     sid_records: list = list(m15_df.attrs.get("sids", []))
+    trigger_records: list = list(m15_df.attrs.get("triggers", []))
+    records_by_sub: dict = defaultdict(list)
+    for tr in trigger_records:
+        records_by_sub[int(tr.sub_id)].append(tr)
     all_events: list = list(m15_df.attrs.get("events", []))
     all_kl_zones: list = list(m15_df.attrs.get("kl_zones", []))
     all_poi_zones: list = list(m15_df.attrs.get("poi_zones", []))
@@ -325,9 +364,9 @@ def export_m15_chart_plotly(
     all_wvmi_records: list = list(m15_df.attrs.get("wvmi", []))
     all_prev_bos_lines: list = list(m15_df.attrs.get("prev_bos_lines", []))
 
-    # Group by identity tuple. Snapshots without a sub_sid attribution are
-    # ignored — they belong to no sub-build (defensive; the mirror always
-    # stamps the tuple, but partial entity dfs in tests may not).
+    # Group by sub_id. Snapshots without a sub_id attribution are ignored —
+    # they belong to no sub-build (defensive; the mirror always stamps it,
+    # but partial entity dfs in tests may not).
     events_by_sid: dict = defaultdict(list)
     kls_by_sid: dict = defaultdict(list)
     pois_by_sid: dict = defaultdict(list)
@@ -364,8 +403,11 @@ def export_m15_chart_plotly(
         if ident is not None:
             prev_bos_by_sid[ident].append(ln)
 
-    # §16.5 sid-tied filter: owner (identity tuple) per candle.
-    owner_by_idx = _compute_owner_by_idx(sid_records)
+    # §16.5 sid-tied filter: owner (sub_id) per (candle, direction) — the LIVE
+    # layer (lifecycle window) wins; the FORMING layer (anchor → start_idx)
+    # fills where no same-direction sub is live.
+    live_by_idx_dir = _compute_owner_by_idx_dir(sid_records, int(m15_df.index[-1]))
+    forming_by_idx_dir = _compute_forming_by_idx_dir(sid_records)
 
     # M15 opacity tier context (parent_sid + recent cycles). Same semantics
     # as before, just sourced from SidRecord meta rather than trigger meta.
@@ -585,12 +627,33 @@ def export_m15_chart_plotly(
     idx_set_m15 = set(map(int, dfx.index.to_numpy()))
 
     for sid_rec in sid_records:
-        # Each SidRecord drives one rendering pass — analogous to one
-        # LowerTFResult pre-c.iii. Idx values are entity-absolute.
+        # Each SidRecord (one unique sub) drives one rendering pass. Idx
+        # values are entity-absolute.
         if m15_df.empty:
             continue
 
         eid = _sid_record_identity(sid_rec)
+        sub_dir = int(sid_rec.starting_sd)
+        sub_records = records_by_sub.get(eid, [])
+        # Hover strings for this sub: its window + reason and its record list
+        # `(lens, (S,C), trigger_type, trigger_idx→start_idx)` (§17.9).
+        _win_end = sid_rec.end_event_idx if sid_rec.end_event_idx is not None else "open"
+        sub_window_str = f"[{sid_rec.start_idx},{_win_end}] {sid_rec.end_reason or 'open'}"
+        sub_records_str = "; ".join(
+            f"{tr.lens}({tr.parent_sid},{tr.parent_cycle_id}) {tr.trigger_type} "
+            f"{tr.trigger_idx}→{tr.start_idx}" + ("†" if tr.is_zero_length else "")
+            for tr in sorted(sub_records, key=lambda r: (r.start_idx, r.seq))
+        ) or "-"
+        _segs = list(sid_rec.relative_dir_segments or ())
+
+        def _relative_dir_at(idx: int, _segs=_segs) -> str:
+            cur = "-"
+            for from_idx, rd in _segs:
+                if int(from_idx) <= int(idx):
+                    cur = rd
+                else:
+                    break
+            return cur
         sid_events = events_by_sid.get(eid, [])
         sid_kls = kls_by_sid.get(eid, [])
         sid_pois = pois_by_sid.get(eid, [])
@@ -603,8 +666,7 @@ def export_m15_chart_plotly(
         # downstream rendering blocks read identically.
         lt_df = m15_df
         slice_begin = 0  # entity-absolute idx — no offset
-        p_sid = sid_rec.parent_sid
-        p_cycle = sid_rec.parent_cycle_id
+        p_sid, p_cycle = _sid_parent(sid_rec)   # informational (first record)
         lt_times = pd.to_datetime(lt_df[COL_TIME], utc=True)
 
         def _lt_time(idx: int):
@@ -617,11 +679,36 @@ def export_m15_chart_plotly(
             """Identity — idx is entity-absolute already."""
             return idx
 
-        # §16.5 sid-tied filter: the rendered candle must be owned by this
-        # sid's identity tuple. (Merge-and-bound sids are non-overlapping,
-        # so a candle outside this sid's range is owned by another sid.)
+        # §16.5 sid-tied filter (rev 2 + chart review 2026-09-20): a candle in
+        # this sub's LIVE window is drawn iff this sub is its live owner for its
+        # DIRECTION (later start wins among live subs); a candle in this sub's
+        # FORMING span is drawn in the dimmed/dashed forming style regardless of
+        # any live sub of the same direction (the styles make the overlap
+        # legible — a structure forming under a live one must stay visible),
+        # ownership deciding only among forming subs (later anchor wins).
+        _sub_start = int(sid_rec.start_idx) if sid_rec.start_idx is not None else None
+
+        def _is_live(idx: int) -> bool:
+            return _sub_start is not None and int(idx) >= _sub_start
+
         def _owned_here(idx: int) -> bool:
-            return owner_by_idx.get(int(idx), eid) == eid
+            k = (int(idx), sub_dir)
+            if _is_live(idx):
+                return live_by_idx_dir.get(k) == eid
+            return forming_by_idx_dir.get(k) == eid
+
+        # Forming-phase ZONES are not drawn (chart review 2026-09-20, option 1):
+        # a KL/POI zone whose cycle ended at/before the sub's `start_idx` was
+        # collapsed by the sub's lifecycle floor (`status="inactive"`, empty
+        # activation_history) — it existed geometrically but was never
+        # tradeable. The forming dots/lines already show that geometry; the
+        # zone rectangles only add clutter. The rows stay in the CSVs
+        # (inspectable); only the rendering skips them. Shared predicate with
+        # the H1 chart (`_zone_render.is_collapsed_cycle_zone`: clamped
+        # confirmed_idx >= end_idx); POIs are keyed off their cycle's BOS KL
+        # zone. A live-window POI that never activated (its cycle not
+        # collapsed) is still drawn as an outline (pre-existing convention).
+        _collapsed_sub_cycles = collapsed_cycles(sid_kls)
 
         # Determine if this sid's structure is the "most recent active"
         # by parent identifiers. Used downstream by `_render_m15_dots`
@@ -739,44 +826,61 @@ def export_m15_chart_plotly(
                                 fb_t = _lt_time(fb.idx)
                                 fb_price = float(fb.price) if fb.price is not None else 0.0
                                 if fb_t is not None:
-                                    pb_to_bos_lines.append((sid, t, pb_price, fb_t, fb_price))
+                                    pb_to_bos_lines.append((sid, t, pb_price, fb_t, fb_price, latest_pb.idx))
 
             # Draw swing lines per sid. Extend the most-recent internal-sid
-            # line to this sid's lifecycle end (or the last candle it still
+            # line to this sub's lifecycle end (or the last candle it still
             # owns, whichever comes first).
             extend_to_idx = sid_rec.end_event_idx if sid_rec.end_event_idx is not None else (len(lt_df) - 1)
-            # Stop extension at the boundary where the next sid takes over
-            # (§6.1). owner_by_idx encodes ownership; walk back from
-            # extend_to_idx to the last idx owned by this sid.
+            # Stop extension at the boundary where a later same-direction sub
+            # takes over. owner_by_idx_dir encodes ownership; walk back from
+            # extend_to_idx to the last idx owned by this sub.
             while extend_to_idx > 0 and not _owned_here(extend_to_idx):
                 extend_to_idx -= 1
             for sid in sorted(points_by_sid.keys()):
                 sid_pts = sorted(points_by_sid[sid], key=lambda x: x[0])
-                x_line = [p[1] for p in sid_pts]
-                y_line = [p[2] for p in sid_pts]
+                # Split the polyline at the sub's start_idx: the FORMING part
+                # (points before start_idx, plus the bridging segment to the
+                # first live point) is dimmed/dashed; the LIVE part is solid.
+                forming_pts = [p for p in sid_pts if not _is_live(p[0])]
+                live_pts = [p for p in sid_pts if _is_live(p[0])]
+                if forming_pts:
+                    bridge = forming_pts + live_pts[:1]
+                    if len(bridge) >= 2:
+                        f_style = _style("structure.m15.swing_line_forming").copy()
+                        fig.add_trace(go.Scatter(
+                            x=[p[1] for p in bridge], y=[p[2] for p in bridge], mode="lines",
+                            name=f"M15 swing (forming) sub{eid}_m15s{sid}",
+                            hoverinfo="skip", line_shape="linear",
+                            showlegend=False, **f_style,
+                        ))
+                x_line = [p[1] for p in live_pts]
+                y_line = [p[2] for p in live_pts]
 
                 if sid == most_recent_lt_sid and 0 <= extend_to_idx < len(lt_df):
                     end_time = _lt_time(extend_to_idx)
                     end_price = float(lt_df.iloc[extend_to_idx][COL_C])
-                    if end_time is not None:
+                    if end_time is not None and live_pts:
                         x_line.append(end_time)
                         y_line.append(end_price)
 
-                line_style = _style("structure.m15.swing_line").copy()
+                if len(x_line) >= 2:
+                    line_style = _style("structure.m15.swing_line").copy()
+                    fig.add_trace(go.Scatter(
+                        x=x_line, y=y_line, mode="lines",
+                        name=f"M15 swing sub{eid}_m15s{sid}",
+                        hoverinfo="skip", line_shape="linear",
+                        showlegend=False, **line_style,
+                    ))
 
-                fig.add_trace(go.Scatter(
-                    x=x_line, y=y_line, mode="lines",
-                    name=f"M15 swing h1s{p_sid}c{p_cycle}_m15s{sid}",
-                    hoverinfo="skip", line_shape="linear",
-                    showlegend=False, **line_style,
-                ))
-
-            # Cross-structure PB→BOS lines
-            for _pb_sid, pb_t, pb_p, bos_t, bos_p in pb_to_bos_lines:
-                line_style = _style("structure.m15.swing_line").copy()
+            # Cross-structure PB→BOS lines (forming style when the PB precedes start_idx)
+            for _pb_sid, pb_t, pb_p, bos_t, bos_p, pb_idx in pb_to_bos_lines:
+                line_style = _style(
+                    "structure.m15.swing_line" if _is_live(pb_idx) else "structure.m15.swing_line_forming"
+                ).copy()
                 fig.add_trace(go.Scatter(
                     x=[pb_t, bos_t], y=[pb_p, bos_p], mode="lines",
-                    name=f"M15 PB→BOS h1s{p_sid}c{p_cycle}",
+                    name=f"M15 PB→BOS sub{eid}",
                     hoverinfo="skip", line_shape="linear", showlegend=False, **line_style,
                 ))
 
@@ -787,9 +891,10 @@ def export_m15_chart_plotly(
                     if p[3] == "CTS":
                         all_cts_pts.append(p)
             if all_cts_pts:
-                _render_m15_dots(fig, all_cts_pts, "CTS", p_sid, p_cycle, sid_rec.sub_sid,
+                _render_m15_dots(fig, all_cts_pts, "CTS", p_sid, p_cycle, eid,
                                  m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
-                                 most_recent_lt_sid, m15_to_h1)
+                                 most_recent_lt_sid, m15_to_h1,
+                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live)
 
             # --- BOS confirmed dots ---
             all_bos_pts = []
@@ -798,27 +903,32 @@ def export_m15_chart_plotly(
                     if p[3] == "BOS":
                         all_bos_pts.append(p)
             if all_bos_pts:
-                _render_m15_dots(fig, all_bos_pts, "BOS", p_sid, p_cycle, sid_rec.sub_sid,
+                _render_m15_dots(fig, all_bos_pts, "BOS", p_sid, p_cycle, eid,
                                  m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
-                                 most_recent_lt_sid, m15_to_h1)
+                                 most_recent_lt_sid, m15_to_h1,
+                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live)
 
             # --- Unconfirmed CTS dots ---
             if extra_cts_pts:
-                _render_m15_dots(fig, extra_cts_pts, "CTS (unconf)", p_sid, p_cycle, sid_rec.sub_sid,
+                _render_m15_dots(fig, extra_cts_pts, "CTS (unconf)", p_sid, p_cycle, eid,
                                  m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
-                                 most_recent_lt_sid, m15_to_h1)
+                                 most_recent_lt_sid, m15_to_h1,
+                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live)
 
             # --- PB dots ---
             if extra_pb_pts:
-                _render_m15_dots(fig, extra_pb_pts, "PB", p_sid, p_cycle, sid_rec.sub_sid,
+                _render_m15_dots(fig, extra_pb_pts, "PB", p_sid, p_cycle, eid,
                                  m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
-                                 most_recent_lt_sid, m15_to_h1)
+                                 most_recent_lt_sid, m15_to_h1,
+                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live)
 
         # --- KL zone rectangles + hover ---
         if zone_cfg.get("KL", False) and sid_kls:
             t_last_m15 = dfx[COL_TIME].iloc[-1]
 
             for zone in sid_kls:
+                if is_collapsed_cycle_zone(zone):
+                    continue
                 side = str(zone.side)
                 stz = _zone_style(side)
                 op_mult = _m15_opacity_tier_for_zone(zone)
@@ -864,11 +974,10 @@ def export_m15_chart_plotly(
 
                 active_stretches = compute_kl_active_stretches(zone, render_end_idx)
 
-                # Hover identity uses the SidRecord's user-facing `sub_sid`
-                # (0/1/2/... per parent_cycle). The zone meta carries the
+                # Hover identity = the sub's `sub_id`. The zone meta carries the
                 # *internal* MS structure_id from the bounded sub run, which
                 # restarts at 0 per sub — useless for telling subs apart.
-                sub_sid = sid_rec.sub_sid
+                sub_id = eid
                 cycle_id = int(zone.meta.get("cycle_id", 0))
 
                 # Per-step iteration: fills (only where active) + hover lines.
@@ -923,12 +1032,13 @@ def export_m15_chart_plotly(
                         seg_times = pd.Series([seg_x0, seg_x1])
 
                     hover_cd = [[
-                        side, sub_sid,
+                        side, sub_id,
                         int(zone.meta.get("struct_direction", 0)),
                         str(zone.meta.get("base_pattern", "")),
                         int(zone.meta.get("base_idx", -1)),
                         conf_idx, cycle_id,
                         sy1, sy0, p_sid, p_cycle,
+                        sub_window_str, sub_records_str,
                     ]] * len(seg_times)
 
                     kl_hover_line = {"width": 6, "color": "rgba(0,0,0,0)"}
@@ -941,7 +1051,9 @@ def export_m15_chart_plotly(
                                 "TF=15M<br>"
                                 "KL Zone<br>"
                                 "side=%{customdata[0]}<br>"
-                                "sub_sid=%{customdata[1]} | parent_sid=%{customdata[9]} | parent_cycle_id=%{customdata[10]}<br>"
+                                "sub_id=%{customdata[1]} | first record parent_sid=%{customdata[9]} parent_cycle_id=%{customdata[10]}<br>"
+                                "sub window=%{customdata[11]}<br>"
+                                "records: %{customdata[12]}<br>"
                                 "cycle_id=%{customdata[6]}<br>"
                                 "struct_direction=%{customdata[2]}<br>"
                                 "base_pattern=%{customdata[3]}<br>"
@@ -963,7 +1075,7 @@ def export_m15_chart_plotly(
                     x=outline_xs, y=outline_ys, mode="lines",
                     line=dict(color=sub_outline_color, width=sub_outline_w),
                     fill=None, hoverinfo="skip", showlegend=False,
-                    name=f"M15 KL outline h1s{p_sid}c{p_cycle}_sub{sub_sid} c{cycle_id}",
+                    name=f"M15 KL outline sub{sub_id} c{cycle_id}",
                 ))
 
                 # Single confirm line at confirmed_idx (KL has no reactivation).
@@ -1007,7 +1119,7 @@ def export_m15_chart_plotly(
                 compute_wave_candle_visibility,
             )
 
-            # cycle_life per (sub_sid, cycle) from this sub's KL BOS zones.
+            # cycle_life per (internal sid, cycle) from this sub's KL BOS zones.
             # KL meta already encodes (cycle_start=confirmed_idx, end_idx,
             # end_reason) computed with the slice-local floor/cap at build time.
             cycle_life: dict = {}
@@ -1102,9 +1214,10 @@ def export_m15_chart_plotly(
                         # TODO: label hardcodes "BOS zone:" but CTS wave candles render here too
                         # (subs include both BOS+CTS source_kinds internally — orchestrator §5).
                         # `wc.structure_id` is the bounded sub's internal MS sid (restarts at 0
-                        # per sub) — use sub_sid for the user-facing identity instead.
-                        f"BOS zone: sub_sid={sid_rec.sub_sid} cycle={wc.cycle_id}",
-                        f"parent_sid={p_sid} parent_cycle={p_cycle}",
+                        # per sub) — use sub_id for the user-facing identity instead.
+                        f"BOS zone: sub_id={eid} cycle={wc.cycle_id}",
+                        f"first record parent_sid={p_sid} parent_cycle={p_cycle}",
+                        f"sub window={sub_window_str}",
                         f"Volume: {vol:.0f}",
                     ]
 
@@ -1123,6 +1236,8 @@ def export_m15_chart_plotly(
 
             for poi in sid_pois:
                 if poi.meta.get("status") == "disappeared":
+                    continue
+                if is_poi_of_collapsed_cycle(poi, _collapsed_sub_cycles):
                     continue
                 side = str(poi.side)
                 stz = STYLE.get(f"zone.poi.{side}", {})
@@ -1227,11 +1342,12 @@ def export_m15_chart_plotly(
                 versions = poi.meta.get("versions", [])
                 versions_str = ", ".join(versions) if versions else "none"
                 # `poi.meta["structure_id"]` is the bounded sub's internal MS
-                # sid (restarts at 0 per sub) — use sub_sid for user-facing identity.
+                # sid (restarts at 0 per sub) — use sub_id for user-facing identity.
                 poi_cd = [[
-                    side, sid_rec.sub_sid, poi.meta.get("struct_direction", 0),
+                    side, eid, poi.meta.get("struct_direction", 0),
                     poi.ic_idx, conf_idx, poi.meta.get("cycle_id", 0),
                     versions_str, y1, y0, zone_status, p_sid, p_cycle,
+                    sub_window_str, sub_records_str,
                 ]] * len(seg_times)
 
                 poi_hover_line = {"width": 6, "color": "rgba(0,0,0,0)"}
@@ -1244,7 +1360,9 @@ def export_m15_chart_plotly(
                             "TF=15M<br>"
                             "<b>POI Zone</b><br>"
                             "side=%{customdata[0]}<br>"
-                            "sub_sid=%{customdata[1]} | parent_sid=%{customdata[10]} | parent_cycle_id=%{customdata[11]}<br>"
+                            "sub_id=%{customdata[1]} | first record parent_sid=%{customdata[10]} parent_cycle_id=%{customdata[11]}<br>"
+                            "sub window=%{customdata[12]}<br>"
+                            "records: %{customdata[13]}<br>"
                             "cycle_id=%{customdata[5]}<br>"
                             "struct_direction=%{customdata[2]}<br>"
                             "ic_idx=%{customdata[3]}<br>"
@@ -1275,6 +1393,8 @@ def export_m15_chart_plotly(
                 )
                 line_s = _style("prev_bos_line.m15").get("line", {"width": 2, "color": "royalblue"})
                 line_s = dict(line_s)
+                if not _is_live(start_slice):
+                    line_s["dash"] = "dot"
                 fig.add_trace(go.Scatter(
                     x=[t0, t1], y=[price, price], mode="lines", line=line_s,
                     name=f"M15 Prev BOS h1s{p_sid}c{p_cycle}", showlegend=False,
@@ -1283,7 +1403,7 @@ def export_m15_chart_plotly(
                         f"TF=15M<br>"
                         f"Prev BOS Line<br>"
                         f"Price: {price:.5f}<br>"
-                        f"parent_sid={p_sid} parent_cycle={p_cycle}<br>"
+                        f"sub_id={eid} | first record parent_sid={p_sid} parent_cycle={p_cycle}<br>"
                         f"<extra></extra>"
                     ),
                 ))
@@ -1372,18 +1492,48 @@ def export_m15_chart_plotly(
 # ---------------------------------------------------------------------------
 
 def _render_m15_dots(
-    fig, pts, kind_label, p_sid, p_cycle, sub_sid,
+    fig, pts, kind_label, p_sid, p_cycle, sub_id,
     most_recent_psid, recent_cycles, is_active_trigger,
     most_recent_lt_sid, m15_to_h1,
+    sub_window_str="", sub_records_str="", relative_dir_at=None, is_live=None,
 ):
     """Render M15 structure dots with TF=15M hover.
 
-    `sub_sid` is the SidRecord's user-facing per-parent-cycle counter
-    (0/1/2/...). The points' `p[4]` is the bounded sub's *internal* MS
-    structure_id which restarts at 0 per sub — useless for telling subs
-    apart in the hover.
+    `sub_id` is the unique sub's identity (§17.9). The points' `p[4]` is the
+    bounded sub's *internal* MS structure_id which restarts at 0 per sub —
+    useless for telling subs apart in the hover. `sub_window_str` /
+    `sub_records_str` carry the sub's lifecycle window + reason and its
+    record list; `relative_dir_at(idx)` gives the §17.3 step function at the
+    dot's candle. `is_live(idx)` splits the points into the LIVE set (solid
+    style) and the FORMING set before the sub's `start_idx` (dimmed, open
+    markers, `phase=forming` in the hover) — two traces.
     """
-    style_key = "structure.m15.cts" if "CTS" in kind_label else "structure.m15.bos"
+    if is_live is not None:
+        live_pts = [p for p in pts if is_live(p[0])]
+        forming_pts = [p for p in pts if not is_live(p[0])]
+        if forming_pts:
+            _render_m15_dots_phase(
+                fig, forming_pts, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
+                sub_window_str, sub_records_str, relative_dir_at, phase="forming",
+            )
+        if live_pts:
+            _render_m15_dots_phase(
+                fig, live_pts, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
+                sub_window_str, sub_records_str, relative_dir_at, phase="live",
+            )
+        return
+    _render_m15_dots_phase(
+        fig, pts, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
+        sub_window_str, sub_records_str, relative_dir_at, phase="live",
+    )
+
+
+def _render_m15_dots_phase(
+    fig, pts, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
+    sub_window_str, sub_records_str, relative_dir_at, phase,
+):
+    base = "structure.m15.cts" if "CTS" in kind_label else "structure.m15.bos"
+    style_key = base if phase == "live" else base + "_forming"
     style = _style(style_key).copy()
 
     cd = []
@@ -1394,20 +1544,24 @@ def _render_m15_dots(
             p[7],  # full M15 idx
             p[3],  # kind
             p[2],  # price
-            sub_sid,  # SidRecord sub_sid (user-facing identity, not p[4])
+            sub_id,  # unique sub identity (not p[4])
             p[5],  # m15 cycle_id
             p[6],  # sd
-            p_sid,  # parent_sid
-            p_cycle,  # parent_cycle_id
+            p_sid,  # first record parent_sid (informational)
+            p_cycle,  # first record parent_cycle_id (informational)
             h1_info[1] if h1_info[1] is not None else "",  # idx_1H
             str(h1_info[0]) if h1_info[0] is not None else "",  # time_1H
+            relative_dir_at(p[7]) if relative_dir_at is not None else "",  # relative_dir at this candle
+            sub_window_str,   # [start_idx,end_idx] reason
+            sub_records_str,  # record list
+            phase,            # live | forming (before the sub's start_idx)
         ])
 
     fig.add_trace(go.Scatter(
         x=[p[1] for p in pts],
         y=[p[2] for p in pts],
         mode="markers",
-        name=f"M15 {kind_label} h1s{p_sid}c{p_cycle}_sub{sub_sid}",
+        name=f"M15 {kind_label} sub{sub_id}" + (" (forming)" if phase == "forming" else ""),
         showlegend=False,
         customdata=cd,
         hoverlabel=dict(bgcolor="royalblue", font_color="white"),
@@ -1417,7 +1571,11 @@ def _render_m15_dots(
             "idx_1H=%{customdata[8]}<br>"
             "kind=%{customdata[1]}<br>"
             "price=%{customdata[2]:.5f}<br>"
-            "sub_sid=%{customdata[3]} | parent_sid=%{customdata[6]} | parent_cycle_id=%{customdata[7]}<br>"
+            "sub_id=%{customdata[3]} | first record parent_sid=%{customdata[6]} parent_cycle_id=%{customdata[7]}<br>"
+            "phase=%{customdata[13]}<br>"
+            "relative_dir=%{customdata[10]}<br>"
+            "sub window=%{customdata[11]}<br>"
+            "records: %{customdata[12]}<br>"
             "cycle_id=%{customdata[4]}<br>"
             "struct_direction=%{customdata[5]}"
             "<extra></extra>"
@@ -1680,6 +1838,8 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             zone_sid = int(z.meta.get("structure_id", 0))
             if zone_sid not in selected_kl_sids:
                 continue
+            if is_collapsed_cycle_zone(z):
+                continue          # collapsed (retroactive) cycle — never active; not drawn
 
             side = str(z.side)
             # Read unified base values from zone.kl.* (Item 5: legacy
@@ -1957,8 +2117,11 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
         # Per-TF tier for H1 POI on M15 chart = main_tf (0.2).
         h1_overlay_tier_poi = select_subordinate_tf_tier("H1", primary_sub_tf="M15")
 
+        _collapsed_h1 = collapsed_cycles(h1_kl_zones)
         for poi in h1_poi_zones:
             if poi.meta.get("status") == "disappeared":
+                continue
+            if is_poi_of_collapsed_cycle(poi, _collapsed_h1):
                 continue
 
             side = str(poi.side)

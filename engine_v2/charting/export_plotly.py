@@ -12,8 +12,11 @@ from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME, COL_V
 from engine_v2.charting.style_registry import STYLE
 from engine_v2.charting._zone_render import (
     build_stepped_outline_xy,
+    collapsed_cycles,
     compute_kl_active_stretches,
     compute_poi_active_stretches,
+    is_collapsed_cycle_zone,
+    is_poi_of_collapsed_cycle,
 )
 from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
 from engine_v2.common.types import PatternStatus
@@ -1638,7 +1641,13 @@ def export_chart_plotly(
         selected_sids = set(all_sids[:num_structures])
         most_recent_sid = all_sids[0] if all_sids else 0  # Track most recent for opacity tiers
 
-        zones_cur = [z for z in zones if int(z.meta.get("structure_id", 0)) in selected_sids]
+        # Collapsed cycles (never active in real time — the retroactive cycles
+        # of a post-reversal sid) are not drawn; their rows stay in the CSVs.
+        zones_cur = [
+            z for z in zones
+            if int(z.meta.get("structure_id", 0)) in selected_sids
+            and not is_collapsed_cycle_zone(z)
+        ]
 
         print("[chart][kl] zone structures sides:", {k: sorted(list(v)) for k, v in sorted(by_struct.items())})
         print("[chart][kl] selected_structure_ids:", sorted(selected_sids))
@@ -2281,8 +2290,14 @@ def export_chart_plotly(
             key = f"zone.poi.{side}"
             return STYLE.get(key, {})
 
-        # Filter out disappeared zones
-        visible_zones = [z for z in poi_zones if z.meta.get("status") != "disappeared"]
+        # Filter out disappeared zones and the POIs of collapsed cycles (never
+        # active in real time; keyed off the cycle's BOS KL zone).
+        _collapsed = collapsed_cycles(dfx.attrs.get("kl_zones", []))
+        visible_zones = [
+            z for z in poi_zones
+            if z.meta.get("status") != "disappeared"
+            and not is_poi_of_collapsed_cycle(z, _collapsed)
+        ]
 
         # Find most recent structure_id for opacity tiers
         all_poi_sids = set(int(z.meta.get("structure_id", 0)) for z in visible_zones)

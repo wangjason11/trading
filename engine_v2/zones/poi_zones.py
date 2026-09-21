@@ -381,9 +381,10 @@ def derive_poi_zones(
     # Structure lifecycle-start per sid (Phase 3 Commit 2, 2026-05-26): the idx
     # a structure first becomes active — sid 0 = first structural anchor (min
     # event idx); sid N>=1 = reversal-confirmation idx of sid N-1; subordinate
-    # = `lifecycle_floor` = max(trigger, parent_sid_start, parent_cycle_start),
-    # supplied (slice-local) by build_one_sid (parent floors live there — this
-    # layer stays parent-agnostic). POI activation is floored here so a
+    # = `lifecycle_floor` = the unique sub's real-time `start_idx`
+    # (= max(probe_finalize, trigger, parent floor) on its first live record,
+    # PART4 §17.4), supplied (slice-local) by the projection
+    # (`render_sub_projection`) — this layer stays parent-agnostic. POI activation is floored here so a
     # post-reversal cycle-0 POI (whose CTS_ESTABLISHED can precede the reversal)
     # cannot activate before its structure is alive. Mirrors the KL clamp; see
     # PART4_REFACTOR_SPEC §5 + ARCHITECTURE "Activation floor".
@@ -394,7 +395,7 @@ def derive_poi_zones(
     # Cycle lifecycle table for END inheritance (B2 pass-through, 2026-05-27):
     # end = min(next-cycle clamped start, reversal, lifecycle_cap). POI inherits
     # its (sid, cycle) end from here instead of recomputing it per fib. cap=None
-    # for main; subs supply the slice-local cap (+ cap_reason) via build_one_sid.
+    # for main; subs supply the slice-local cap (+ cap_reason) via the projection.
     cycle_life = compute_cycle_lifecycle(
         structure_events, reversal_idx_by_sid, lifecycle_floor, lifecycle_cap, cap_reason,
     )
