@@ -1,0 +1,5 @@
+lens,parent_sid,parent_cycle_id,trigger_type,trigger_idx,direction,probe_input_idx,reason,detail
+confluence,1,0,first_confluence,2815,-1,689,degenerate_parent_cycle,floor 3611 >= end 3611
+confluence,1,1,first_confluence,2995,-1,728,degenerate_parent_cycle,floor 3611 >= end 3611
+counter,1,1,first_counter,3283,1,761,degenerate_parent_cycle,floor 3611 >= end 3611
+confluence,1,1,subsequent_confluence,3487,-1,826,degenerate_parent_cycle,floor 3611 >= end 3611
