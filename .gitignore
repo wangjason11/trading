@@ -8,6 +8,8 @@ __pycache__/
 # Outputs (except commits folder for /compare)
 artifacts/*
 !artifacts/commits/
+# Captured replay log (written by /compare, /commit-save and WORKFLOWS.md)
+run.log
 
 # Secrets
 .env
