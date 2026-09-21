@@ -12,8 +12,8 @@
 > rationale + phased implementation plan:
 > `memory/project_sub_structure_lifecycle_redesign.md`.
 >
-> **⚠ REVISED 2026-09-20 — sub-structure pool (Plan C LANDED; commit pending
-> `/commit-save`).** The per-parent-cycle sid identity + merge-and-bound chain
+> **⚠ REVISED 2026-09-20 — sub-structure pool (Plan C LANDED 2026-09-21,
+> commit `afaa326`, save `20260921_125218_afaa326`).** The per-parent-cycle sid identity + merge-and-bound chain
 > above are themselves superseded for subordinates by **§17** (`TriggerRecord`
 > + unique sub, `sub_id`, the lifecycle sweep, cycle lifecycle-start = the
 > CTS-established **moment**). §2, §4.3.6, §5, §6, §7, §9, §16.5 bodies are
@@ -2586,7 +2586,8 @@ special chart annotation.
 
 ## 17. Sub-Structure Pool (Phase 2) — Design LOCKED 2026-09-19 (rev 2) — LANDED by Plan C
 
-> **Status:** **LANDED by Plan C (2026-09-20; commit pending `/commit-save`).**
+> **Status:** **LANDED by Plan C — commit `afaa326` (2026-09-21), save
+> `20260921_125218_afaa326` (the next `/compare` baseline).**
 > Design LOCKED 2026-09-19 (rev 2). Rev 1 (2026-07-08) was landed
 > byte-identically as Stages 1–3.2a (`3cb6513`, `22969d3`, `c932610`) and then
 > found wrong on chart review at Stage 3.2b (`9fd3143`, reverted as `5a658dc`,
@@ -3201,7 +3202,9 @@ one replay). Each with its own replay, `/compare`, chart-review pause and
    changed.
 
 > **Measured — first Plan C replay + `/compare` vs the Plan B save
-> `20260920_104606_189c127` (2026-09-20, commit pending `/commit-save`):**
+> `20260920_104606_189c127` (2026-09-20; landed as `afaa326`, save
+> `20260921_125218_afaa326` — the chart-review refinements of §16.5 changed
+> only the charts, every CSV of the save is byte-identical to that first replay):**
 > 1. pool = **8 subs / 11 records / 4 unresolved** (all four
 >    `degenerate_parent_cycle`); every sub window and every record
 >    `start_idx` / `end_idx` / `end_reason` equals the predicted table;

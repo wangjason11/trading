@@ -1,7 +1,9 @@
 # Plan C — Sub-Structure Pool Lifecycle Rewrite (TriggerRecord + unique sub)
 
-**Status:** LANDED 2026-09-20 (commit + `/commit-save` folder recorded in
-`memory/project_sub_structure_pool_architecture.md` STATUS and PART4 §17.11). The
+**Status:** LANDED — commit `afaa326` (2026-09-21), `/commit-save` folder
+`artifacts/commits/week8-volmom-multitf/20260921_125218_afaa326` (save commit `64aa4b8`,
+cherry-picked onto `artifacts-trunk` as `2c38500`); this is the `/compare` baseline for whatever
+comes next. The
 text below is the contract as written on 2026-09-19; the **"AS LANDED" notes** at
 the end of §4 record where the landing refined it (cold review 2026-09-20 — code
 side correct, plan wording stale). Measured outcome: the predicted table reproduced
