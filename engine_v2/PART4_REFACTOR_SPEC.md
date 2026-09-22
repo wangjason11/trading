@@ -2465,7 +2465,8 @@ three refinements of the rules above; the CSVs are untouched by all three:**
    `2639/−1`; `3760/−1` forming under live `3304/−1`); the styles make the
    overlap legible. Styles: `structure.m15.swing_line_forming`,
    `structure.m15.{cts,bos}_forming`; all M15 structure dots +20%
-   (`size 3.6`).
+   (`size 3.6`). ("The bridging segment is dotted" was superseded by the wave
+   rule, item 4.)
 2. **Collapsed-cycle zones are not drawn (option 1)** — on BOTH charts.
    A KL/POI zone whose cycle collapsed under its structure's lifecycle floor
    (`status="inactive"` with clamped `confirmed_idx >= end_idx`; on a sub the
@@ -2484,9 +2485,78 @@ three refinements of the rules above; the CSVs are untouched by all three:**
    `rgb(225, 220, 30)` (confirm line dark olive), sell = amber
    `rgb(255, 180, 30)` (confirm line dark brick) — `zone.poi.buy` /
    `zone.poi.sell` in `style_registry.py`; opacities unchanged.
+4. **Wave rule (2026-09-21).** Forming vs live is decided per WAVE (one
+   segment between two consecutive drawn points, over the extreme candles the
+   line runs through — not the confirmation candles): a wave is solid if any
+   part of its candle span lies inside the sub's `[start_idx, end_idx]`, and
+   forming only if none of it does (`_wave_touches_window` /
+   `_split_polyline_by_wave`; PB→BOS lines follow the same rule; the
+   extension to the last owned candle is a wave). The bridge wave that crosses
+   `start_idx` — the one the first live KL BOS zone hangs on — is therefore
+   solid (item 1 had drawn it dotted, so live zones sat on dotted waves).
+   Dots follow their waves (filled iff they end a solid wave); the hover
+   `phase` stays the per-candle fact. Prev-BOS lines carry no lifecycle
+   formatting (always solid, sub and main). On the reference window the five
+   subs whose pre-start span sits inside one wave (`2365/+1`, `3304/−1`,
+   `3621/+1`, `3760/−1`, `4027/+1`) lose their forming run entirely.
+5. **H1 overlay structure lines are lifecycle-filtered per wave (2026-09-21).**
+   On the sub charts (`_render_h1_overlay`) an H1 wave / PB→BOS line is drawn
+   iff its span intersects its sid's lifecycle window `[struct_start_by_sid,
+   reversal idx]` (the reversal-handoff start; canonical
+   `zones.structure_lifecycle` helpers) — never-live waves are not drawn (sid
+   1's retroactive 689→826 waves on the reference window; 826→905 spans 902 and
+   is drawn whole); an H1 dot is drawn iff a drawn wave touches it (BOS@689
+   stays as the end of sid 0's PB→BOS line). The H1 chart is deliberately
+   unchanged (every sid in full, prior dimmed): the high-level picture wants
+   the most recent structure's full geometry, the trading charts do not.
 
-Chart counts after all three (the standard counts from the Plan C save on):
-H1 85/245, `M15.counter` 157/125, `M15.confluence` 301/233.
+6. **Recent vs prior — what solid and dotted mean (2026-09-22).** Item 4's
+   lifecycle test is REPLACED for the sub charts (the H1 overlay filter, item
+   5, still uses it). Where two different structures draw segments over the
+   same candles, the MOST RECENT one is solid and the PRIOR one's whole segment
+   is dotted; a segment nothing overlaps is solid, whether or not the structure
+   was ever live in real time. Recency = the hierarchical `(parent_sid,
+   parent_cycle_id, sub_id)` tuple (`_recency_key`; orders like `sub_id` on
+   every window measured). Overlap = more than one shared candle (a single join
+   candle does not count) and is direction-agnostic (sub `3760/−1` is dotted
+   under sub `4027/+1` although both are live). Formatting is per whole
+   segment. Computed per lens (`_prior_line_segments` over that chart's drawn
+   segments), so a sub can be prior on one lens and solid on the other (sub
+   `2639/−1`'s 3304→3611: dotted on confluence, solid on counter) — a
+   deliberate exception to "every lens draws the sub identically", which still
+   holds for the window and the geometry. Ownership is unchanged and still
+   decides which points exist (a same-direction structure the ownership layers
+   collapse is hidden, not dotted). Dots follow their segments (filled iff the
+   dot ends ≥1 solid segment); prev-BOS lines are always solid and never make
+   anything prior. The hover carries both facts: `phase=live|forming` (real
+   time) and `layer=recent|prior` (why this style); the real-time lifecycle is
+   otherwise carried by the zones. Consequence accepted at review: an ACTIVE
+   zone can hang on a dotted segment once a later structure supersedes it — the
+   inverse of item 4's motivation, with a different meaning. Styles renamed
+   `structure.m15.*_forming` → `*_prior`.
+
+7. **Replaced subs run through one more structural point (2026-09-22).** A sub
+   ended by `same_dir_replacement` breaks its final segment at the counter-move
+   extreme over `(last drawn point, the REPLACING structure's anchor]`
+   (`_replacement_break_point`, a PB dot; `−1` → highest high, `+1` → lowest
+   low). Bounding at the replacing anchor yields the STRUCTURAL swing, not a
+   later marginal overshoot (sub `3304/−1`: 3760 @ 0.57806, not the literal high
+   3806 @ 0.57827), and the new segments mirror the sibling structures point for
+   point (`3304/−1`'s 3621→3760 = `3621/+1`'s segment; `3621/+1`'s 3760→4000 =
+   `3760/−1`'s), which also splits the partial overlap into one solid and one
+   prior piece. Replacement only: every reversal-ended sub's final segment
+   already ends at its counter-move extreme (0–2 candles on the reference
+   window) and `parent_end` ends at the parent's candle.
+
+Chart counts after all seven (the standard counts from the 2026-09-22 chart
+review on): H1 85/245, `M15.counter` 152/125, `M15.confluence` 293/233; shapes
+never move (items 4–6 are trace-level). Measured against the Plan C save
+(`20260921_125218_afaa326`, 157/125 and 301/233): confluence −8 = 7 forming
+swing traces replaced by 6 prior ones (−1: sub `4027/+1` has no prior segment)
+plus 7 forming dot traces merged into their subs' live dot traces (only sub
+`2639/−1`'s 3611 CTS dot is still prior); counter −5 = 3 forming swing traces
+replaced by 1 prior one plus 3 dot-trace merges. Intermediate value after items
+4–5 alone (2026-09-21): counter 154/125, confluence 295/233.
 
 - **Hover on a sub's dots:** `sub_id`, `struct_direction`, `relative_dir` at
   that candle (`SidRecord.relative_dir_segments` step function), the sub
@@ -3112,7 +3182,14 @@ record. `clip_events_to_window` deep-copies (geometry objects are shared).
   anchor. Sid-tied elements (CTS dots, swing lines, PB markers, prev-BOS lines)
   draw only where owned. REFINED by the chart review 2026-09-20/21 (§16.5):
   pre-`start_idx` elements are drawn from the anchor in the FORMING style
-  (dotted/dimmed, `phase=forming`) rather than hidden; collapsed-cycle KL/POI
+  (dotted/dimmed) rather than hidden, and the dotted/solid split is decided
+  per SEGMENT by RECENCY, not by the lifecycle: where two structures draw over
+  the same candles the most recent is solid and the prior one's whole segment
+  is dotted, and a segment nothing overlaps is always solid (§16.5 item 6;
+  dots follow their segments; prev-BOS lines always solid; hover keeps
+  `phase=live|forming` and adds `layer=recent|prior`); the H1
+  overlay on the sub charts is lifecycle-FILTERED per wave (never-live H1 waves
+  not drawn, §16.5 item 5; the H1 chart unchanged); collapsed-cycle KL/POI
   zones (never active in real time) are not drawn on either chart; POI zones
   are side-tinted. Persisting elements (KL/POI rectangles, fibs) are otherwise
   unchanged: **drawn from the anchor, active from `start_idx`** (already the

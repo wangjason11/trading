@@ -349,14 +349,19 @@ STYLE = {
         "line": {"width": 2, "color": "royalblue"},
         "opacity": 0.9,
     },
-    # "Forming" phase (PART4 §16.5 rev 2 / chart review 2026-09-20): a sub's
-    # structure BEFORE its real-time `start_idx` — drawn from the structural
-    # anchor so BOS→CTS lines stay continuous, but dimmed + dashed so the chart
-    # shows "forming, not yet tradeable" vs the live window.
-    # Forming = darker blue (navy), dotted, lightly dimmed (0.75) so it reads
-    # clearly against the live royalblue; dots 20% larger than before (chart
-    # review 2026-09-20: "more visible, dots ~20% thicker").
-    "structure.m15.swing_line_forming": {
+    # "PRIOR" layer (PART4 §16.5 item 6 / chart review 2026-09-22): a sub's
+    # line segment that a MORE RECENT structure (higher
+    # `(parent_sid, parent_cycle_id, sub_id)`) also draws over the same candles.
+    # The recent structure stays royalblue + solid; the prior one is dimmed and
+    # dotted so the two are legible where they overlap. A segment no other
+    # structure overlaps is always solid, whether or not it was ever live in
+    # real time (the real-time lifecycle lives in the zones and the hover
+    # `phase`). Prior = darker blue (navy), dotted, lightly dimmed (0.75) so it
+    # reads clearly against the recent royalblue; dots 20% larger than before
+    # (chart review 2026-09-20: "more visible, dots ~20% thicker").
+    # (These keys were `*_forming` while dotting meant "before `start_idx`",
+    # 2026-09-20/21 — renamed with the rule.)
+    "structure.m15.swing_line_prior": {
         "line": {"width": 2, "color": "navy", "dash": "dot"},
         "opacity": 0.75,
     },
@@ -366,11 +371,11 @@ STYLE = {
     "structure.m15.bos": {
         "marker": {"size": 3.6, "symbol": "circle", "opacity": 0.95, "color": "royalblue"},
     },
-    "structure.m15.cts_forming": {
+    "structure.m15.cts_prior": {
         "marker": {"size": 3.6, "symbol": "circle-open", "opacity": 0.85, "color": "navy",
                    "line": {"width": 1.5, "color": "navy"}},
     },
-    "structure.m15.bos_forming": {
+    "structure.m15.bos_prior": {
         "marker": {"size": 3.6, "symbol": "circle-open", "opacity": 0.85, "color": "navy",
                    "line": {"width": 1.5, "color": "navy"}},
     },

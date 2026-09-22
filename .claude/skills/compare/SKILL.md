@@ -383,8 +383,8 @@ values were H1 125/261, counter 216/169, confluence 359/280. Window-dependent,
 re-baseline when the config window or chart rendering changes):
 
 - `H1` chart: traces=85, shapes=245
-- `M15.counter` chart: traces=157, shapes=125
-- `M15.confluence` chart: traces=301, shapes=233
+- `M15.counter` chart: traces=153, shapes=125
+- `M15.confluence` chart: traces=294, shapes=233
 
 **History:** pre-Plan C (through the Plan B save 2026-09-20) the counts were H1
 107/250, counter 198/133, confluence 342/222. Plan C's first replay moved the
@@ -392,7 +392,16 @@ M15 counts (174/128, 321/238: 8 unique subs instead of 16 per-trigger sids,
 ownership by lifecycle window, degenerate subs absent); the chart review then
 added the forming layer (+ traces), hid collapsed-cycle zones on BOTH charts
 (H1 107→85: sid 1's retroactive (1,0)/(1,1) zones + POI gone; M15 −22/−20) and
-tinted POIs — the bullets above are the Plan C save's values.
+tinted POIs — the Plan C save (`20260921_125218_afaa326`) = 85/245, 157/125,
+301/233. The 2026-09-21 chart review's wave rule + H1-overlay lifecycle filter
+(PART4 §16.5 items 4–5) then moved the M15 traces 157→154 / 301→295, and the
+2026-09-22 recent-vs-prior rule (§16.5 item 6) to 152 / 293 — all CSVs
+byte-identical throughout. Item 6's deltas: forming swing traces replaced by
+prior ones (one per overlap region: confluence 7→6, counter 3→1) and the
+forming dot traces merged into their subs' live dot traces (only sub `2639/−1`'s
+3611 CTS dot is still prior, on confluence). The replacement-break rule (§16.5
+item 7) then added one PB-dot trace per lens → 153 / 294; the bullets above are
+those values.
 
 These print as `DEBUG traces:` / `DEBUG shapes:` (H1) and `[m15_chart] traces:
 N, shapes: M` (each M15 entity) at the end of `python -m engine_v2.run_replay`.

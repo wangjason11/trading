@@ -476,6 +476,42 @@ idx3 = anchor + 1    # maru/normal
 
 ---
 
+## Reading a Saved Chart Back: Plotly Encodes Numeric Arrays as Base64
+
+**Context:** verifying a chart-rendering change by reconstructing what was
+actually drawn from `artifacts/charts/*.html` (see WORKFLOWS "Verifying a
+chart-rendering change").
+
+Plotly serialises numeric arrays in the embedded `Plotly.newPlot(...)` payload
+as `{"dtype": "f8", "bdata": "<base64>"}` — **not** as JSON lists. Which
+attributes get encoded varies by trace: on our charts `customdata` and
+datetime `x` on line traces stay lists, while candlestick `x` / `high` / `low`
+/ `close` and line `y` are encoded. The failure is silent and destructive:
+
+```python
+for x, hi in zip(tr["x"], tr["high"]):   # tr["high"] is a dict
+    ...                                   # zip iterates its 2-3 KEYS -> loop runs twice
+```
+
+`zip` over a dict yields its keys, so the loop silently truncates to 2-3
+iterations instead of thousands and the resulting map is nearly empty (the
+symptom is a downstream `KeyError` on a timestamp that IS in the chart, or an
+analysis that reports "nothing found"). Decode first:
+
+```python
+import base64, numpy as np
+def arr(v):
+    if isinstance(v, dict) and "bdata" in v:
+        return list(np.frombuffer(base64.b64decode(v["bdata"]), dtype=np.dtype(v.get("dtype", "f8"))))
+    return v
+```
+
+Also normalise timestamps before using them as dict keys: candlestick `x`
+comes back tz-NAIVE (`'2025-11-16T22:00:00.000000000'`) while line-trace `x`
+is tz-AWARE (`'2025-11-21T15:30:00+00:00'`), so `pd.Timestamp(x)` of the two
+never compares equal. `engine_v2/debug/chart_census.py` only reads `name` /
+`customdata` so it is unaffected — any new chart-reading tool is not.
+
 ## Plotly Hover on Vertical Lines Requires Multiple Data Points
 
 **Problem:** `go.Scatter` with `mode="lines"` only triggers hover near actual data points, not at intermediate positions along the line segment. A vertical line with only 2 points (top and bottom) only hovers when the cursor is at the very top or bottom.

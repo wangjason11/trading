@@ -65,6 +65,36 @@ collision`.
 
 ---
 
+## Verifying a chart-rendering change
+
+A chart-only change has no CSV delta to diff, so "it looks right" is the only
+evidence unless you reconstruct what was drawn. The loop that worked for the
+2026-09-21/22 chart review (three rule changes, zero regressions):
+
+1. **Predict from the data first.** Derive the expected outcome from the CSVs /
+   events / lifecycle tables BEFORE editing (which segments flip, which dots
+   change, which counts move). State it to the user as a table — a wrong
+   prediction here is cheap; a wrong rule rendered is a whole re-run.
+2. **Re-render** (`python -m engine_v2.run_replay`, ~45 s of chart time) and
+   **prove the CSVs are byte-identical** to the baseline save — that is what
+   makes it chart-only:
+   `for f in <save>/*.csv; do cmp -s "$f" "artifacts/debug/$(basename $f)"; done`
+3. **Reconstruct the drawing from the saved HTML and re-derive the rule
+   independently** — parse `Plotly.newPlot`'s trace list (`chart_census.load_fig`;
+   mind the base64 `bdata` trap in GOTCHAS), map x back to candle idx via the
+   candlestick `customdata`, then recompute the rule from the reconstructed
+   geometry and assert it matches what the trace names/styles say. This catches
+   a rule that is right in the abstract but wrong as applied, which counts
+   cannot.
+4. **Attribute every count move** with `PYTHONPATH=. python
+   engine_v2/debug/chart_census.py <baseline.html> <current.html>` before
+   re-baselining the numbers in the `/compare` skill. A style-only change
+   renames traces, so it shows up as `-1/+1` pairs, and a trace that merges into
+   an existing one nets `-1` — predict which, then check.
+5. **Re-baseline the counts in `.claude/skills/compare/SKILL.md`** in the same
+   commit as the rendering change, with the docs (CHARTING_SPEC + PART4 §16.5 +
+   style registry). Never leave the skill's "standard counts" stale.
+
 ## Debug checklist (when something looks wrong)
 
 ### A) Trace the full flow first (CRITICAL)

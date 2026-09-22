@@ -20,10 +20,27 @@ hover attribution. Per spec §16.5 (rev 2):
     where it is the forming owner — even under a live sub of the same direction
     (a structure forming under a live one stays visible; the styles make the
     overlap legible). So a sub's BOS→CTS structure is drawn continuously from
-    its structural anchor, and the pre-`start_idx` portion is rendered in the
-    dimmed/dashed "forming" style (`structure.m15.*_forming`) with
-    `phase=forming` in the hover — the chart shows both the geometry and the
-    trading window. Forming-phase ZONES (a KL/POI whose cycle ended at/before
+    its structural anchor. Style is decided per SEGMENT by the RECENT-vs-PRIOR
+    rule (chart review 2026-09-22, `_prior_line_segments`): where two different
+    structures draw lines over the same candles, the MOST RECENT one (higher
+    `_recency_key` = `(parent_sid, parent_cycle_id, sub_id)`) is solid and the
+    prior one's whole segment is dotted (`structure.m15.*_prior`); a segment no
+    other structure overlaps is always solid, whether or not it was ever live in
+    real time. Overlap needs more than one shared candle (a shared join candle
+    does not count) and ignores direction. Dots follow their segments (filled
+    iff they end at least one solid segment). The hover keeps the real-time fact
+    `phase=live|forming` (`idx >= start_idx`) and adds `layer=recent|prior`, so
+    a dotted line that WAS live in real time is still readable as such — the
+    zones carry the real-time lifecycle. (This replaces the 2026-09-21 wave rule
+    — solid iff the wave's span touched the lifecycle window — which is still
+    what the H1 overlay filter uses.) Prev-BOS lines carry no lifecycle or
+    recency formatting at all (always solid, and they never dot anything). A sub
+    ended by `same_dir_replacement` runs its final segment through one more
+    structural point (`_replacement_break_point`) instead of straight to the
+    handover candle. The H1
+    OVERLAY's structure lines are lifecycle-FILTERED per wave instead
+    (`_render_h1_overlay`: waves never live are not drawn — the H1 chart itself
+    is unchanged). Forming-phase ZONES (a KL/POI whose cycle ended at/before
     the sub's `start_idx`, collapsed to `status="inactive"`) are NOT drawn
     (`_zone_render.is_collapsed_cycle_zone`, shared with the H1 chart, which skips
     the collapsed retroactive cycles of a post-reversal sid the same way); they
@@ -39,7 +56,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import timedelta
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Sequence
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -56,6 +73,10 @@ from engine_v2.charting._zone_render import (
     select_subordinate_tf_tier,
 )
 from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
+from engine_v2.zones.structure_lifecycle import (
+    compute_reversal_idx_by_sid,
+    compute_struct_start_by_sid,
+)
 from engine_v2.charting.export_plotly import (
     _rgba_from_rgb,
     _zone_style,
@@ -276,6 +297,380 @@ def _compute_owner_by_idx_dir(sid_records: Iterable[SidRecord], edge_idx: int) -
         for i in range(int(rec.start_idx), end + 1):
             owner[(i, d)] = ident
     return owner
+
+
+def _wave_touches_window(
+    a_idx: int, b_idx: int, start_idx: Optional[int], end_idx: Optional[int],
+) -> bool:
+    """Wave rule (chart review 2026-09-21). A WAVE is one straight segment of a
+    sid-tied line between candles `a_idx` and `b_idx` — the EXTREME candles the
+    line is drawn through (`cts_anchor_idx` / BOS idx), not the confirmation
+    candles. It was live at some point iff its candle span intersects the
+    structure's real-time lifecycle window `[start_idx, end_idx]` (`end_idx`
+    None = open): `max(a,b) >= start_idx and (end_idx is None or min(a,b) <=
+    end_idx)`. A structure with no `start_idx` (never live) has no live wave.
+    Used for the sub charts' solid-vs-forming style AND the H1 overlay's
+    drawn-vs-hidden filter."""
+    if start_idx is None:
+        return False
+    lo, hi = (int(a_idx), int(b_idx)) if int(a_idx) <= int(b_idx) else (int(b_idx), int(a_idx))
+    if hi < int(start_idx):
+        return False
+    return end_idx is None or lo <= int(end_idx)
+
+
+def _group_flag_runs(flags: Sequence[bool]) -> list:
+    """Group per-SEGMENT flags into point-index runs `[(flag, i0, i1), ...]` —
+    the run is drawn through points `i0..i1` (inclusive, `i1 > i0`), `flags[i]`
+    being the flag of the segment between points `i` and `i+1`. Adjacent runs
+    alternate; no flags → `[]`. The shared point belongs to BOTH neighbouring
+    runs, so a style change never leaves a gap."""
+    n = len(flags)
+    if n == 0:
+        return []
+    runs: list = []
+    i0 = 0
+    for i in range(1, n):
+        if flags[i] != flags[i0]:
+            runs.append((flags[i0], i0, i))
+            i0 = i
+    runs.append((flags[i0], i0, n))
+    return runs
+
+
+def _split_polyline_by_wave(
+    idx_seq: Sequence[int], start_idx: Optional[int], end_idx: Optional[int],
+) -> list:
+    """Split a polyline (point candle idxs in drawing order) into runs of
+    consecutive waves that share one live flag (`_wave_touches_window` per
+    wave, `_group_flag_runs` over the flags). An ENTIRE wave counts as live
+    when any part of it was. Used by the H1 OVERLAY filter (never-live waves
+    are not drawn); the sub charts style their segments by
+    `_prior_line_segments` instead."""
+    n = len(idx_seq)
+    if n < 2:
+        return []
+    return _group_flag_runs(
+        [_wave_touches_window(idx_seq[i], idx_seq[i + 1], start_idx, end_idx) for i in range(n - 1)]
+    )
+
+
+def _recency_key(rec: SidRecord) -> tuple:
+    """Display recency of a structure: the hierarchical `(parent_sid,
+    parent_cycle_id, sub_id)` tuple (chart review 2026-09-22). Of two
+    structures drawing over the same candles the later one always has the
+    higher tuple. The first two components come from the sub's FIRST record
+    (`_sid_parent`, informational) and the last is the canonical monotonic
+    identity, so the tuple orders exactly like `sub_id` whenever the parents
+    agree — which they do on every window measured (triggers fire in
+    parent-cycle order). Missing parents sort first (`-1`)."""
+    ps, pc = _sid_parent(rec)
+    return (
+        int(ps) if ps is not None else -1,
+        int(pc) if pc is not None else -1,
+        _sid_record_identity(rec),
+    )
+
+
+def _prior_line_segments(segments_by_sub: dict) -> set:
+    """RECENT-vs-PRIOR rule (chart review 2026-09-22). Input
+    `{sub_key: (recency_key, [(seg_id, lo_idx, hi_idx), ...])}` over every
+    sid-tied line segment DRAWN ON THIS LENS (each wave of each polyline, the
+    extension to the last owned candle, and each PB→BOS line; prev-BOS lines
+    do not take part). Returns `{(sub_key, seg_id)}` — the segments to draw in
+    the PRIOR (dotted) style because a structure with a HIGHER `recency_key`
+    draws a segment over the same candles:
+
+        overlap  ⇔  `lo_a < hi_b and lo_b < hi_a`
+
+    i.e. MORE THAN ONE shared candle — two segments meeting at a single join
+    candle are not an overlap. Direction-agnostic: a `+1` and a `−1` structure
+    crowding the same candles are still ordered (the newer wins). Formatting is
+    per WHOLE segment: a segment that overlaps for even part of its span is
+    dotted end to end. Everything not returned is drawn solid — including
+    structures that were never live in real time, which no other structure
+    overlaps. Per lens: a sub can be prior on one chart and solid on the other
+    (the other lens may not draw the structure that supersedes it)."""
+    out: set = set()
+    items = list(segments_by_sub.items())
+    for key_a, (ord_a, segs_a) in items:
+        for key_b, (ord_b, segs_b) in items:
+            if key_b == key_a or not (ord_b > ord_a):
+                continue
+            for seg_id, lo_a, hi_a in segs_a:
+                if (key_a, seg_id) in out:
+                    continue
+                for _seg_b, lo_b, hi_b in segs_b:
+                    if lo_a < hi_b and lo_b < hi_a:
+                        out.add((key_a, seg_id))
+                        break
+    return out
+
+
+def _make_sub_phase_fns(eid: int, sub_dir: int, sub_start: Optional[int],
+                        live_by_idx_dir: dict, forming_by_idx_dir: dict):
+    """`(is_live, owned_here)` for one sub. `is_live(idx)` is the real-time
+    fact (`idx >= start_idx`, feeds the hover `phase`); `owned_here(idx)` is
+    the §16.5 sid-tied filter that decides whether this sub draws at that
+    candle at all — the LIVE map inside its lifecycle window, the FORMING map
+    before it (see the two ownership layers above). Style is decided
+    separately by `_prior_line_segments`."""
+    def is_live(idx: int) -> bool:
+        return sub_start is not None and int(idx) >= sub_start
+
+    def owned_here(idx: int) -> bool:
+        k = (int(idx), sub_dir)
+        if is_live(idx):
+            return live_by_idx_dir.get(k) == eid
+        return forming_by_idx_dir.get(k) == eid
+
+    return is_live, owned_here
+
+
+def _replacement_break_point(
+    sid_rec, sub_records, anchors_by_sub, lt_df, last_pt_idx: int, ext_end_idx: int,
+):
+    """The extra structural point a REPLACED sub's final segment runs through
+    (chart review 2026-09-22b), or None.
+
+    A sub ended by `same_dir_replacement` is superseded while price keeps
+    moving, so its line is dragged from its last confirmed point to the handover
+    candle — straight through a real swing extreme. Every other end reason
+    already ends at one (measured on the reference window: the four
+    reversal-ended subs' extensions end 0–2 candles from their counter-move
+    extreme; `parent_end` ends at the parent's candle), so the break applies to
+    replacement only.
+
+    The point is the extreme of the COUNTER-move (a `−1` sub pulls up → highest
+    high; a `+1` sub pulls down → lowest low — the same low/high convention as
+    the existing pullback dots) over `(last_pt_idx, hi]`, where `hi` is the
+    REPLACING structure's anchor (`starting_idx`, clamped to the drawn end).
+    Bounding at the anchor is what makes it the STRUCTURAL swing rather than a
+    later marginal overshoot: on the reference window sub `3304/−1` breaks at
+    3760 (0.57806, where the sibling structures put the swing) and not at the
+    literal highest high 3806 (0.57827, 2.1 pips higher — MS saw it, see sub
+    `3621/+1`'s `CTS_THRESHOLD_UPDATED@3806`, and kept the swing at 3760). The
+    resulting segments mirror the sibling structures point for point: sub
+    `3304/−1`'s 3621→3760 is sub `3621/+1`'s segment, sub `3621/+1`'s 3760→4000
+    is sub `3760/−1`'s.
+
+    The replacing sub comes from the record that ended this sub
+    (`TriggerRecord.ended_by_sub_id`; same lens by construction — a counter
+    record never ends a confluence one) and its anchor from `anchors_by_sub`.
+    Returns `(idx, price)` strictly inside `(last_pt_idx, ext_end_idx)`, else
+    None."""
+    if (getattr(sid_rec, "end_reason", None) or "") != "same_dir_replacement":
+        return None
+    sub_end = sid_rec.end_event_idx
+    repl_id = None
+    for tr in sub_records or ():
+        if getattr(tr, "end_reason", None) != "same_dir_replacement":
+            continue
+        if getattr(tr, "ended_by_sub_id", None) is None:
+            continue
+        if sub_end is not None and tr.end_idx is not None and int(tr.end_idx) != int(sub_end):
+            continue
+        repl_id = int(tr.ended_by_sub_id)
+        break
+    if repl_id is None:
+        return None
+    anchor = anchors_by_sub.get(repl_id)
+    if anchor is None:
+        return None
+
+    lo = int(last_pt_idx) + 1
+    hi = min(int(anchor), int(ext_end_idx))
+    if hi < lo:
+        return None
+    col = COL_H if int(sid_rec.starting_sd) == -1 else COL_L
+    best_idx, best_price = None, None
+    for i in range(lo, hi + 1):
+        if i >= len(lt_df):
+            break
+        price = float(lt_df.iloc[i][col])
+        if best_price is None or (price > best_price if col == COL_H else price < best_price):
+            best_idx, best_price = i, price
+    if best_idx is None or not (int(last_pt_idx) < best_idx < int(ext_end_idx)):
+        return None
+    return best_idx, best_price
+
+
+def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned_here,
+                         sub_records=None, anchors_by_sub=None) -> dict:
+    """Build one sub's sid-tied POLYLINES (no drawing) so every sub's segments
+    exist before any is styled (`_prior_line_segments` compares across subs).
+
+    Returns `points_by_sid` (per internal MS sid, the confirmed CTS/BOS points
+    plus the trailing unconfirmed-CTS or pullback point), the `extra_cts_pts` /
+    `extra_pb_pts` dot lists, the cross-structure `pb_to_bos_lines`
+    (`… , pb_idx, bos_idx`), `extend_to_idx` (the sub's lifecycle end walked
+    back to the last candle it still owns), `most_recent_lt_sid`, and
+    `seq_by_sid` — the drawn point sequence per internal sid, with the
+    extension appended as an `"EXT"` pseudo-point on the most recent one.
+    Every point is filtered by `owned_here` at the candle it is DRAWN at
+    (`cts_anchor_idx` for CTS, `ev.idx` for BOS)."""
+    cts_events = [e for e in sid_events if e.type == "CTS_CONFIRMED"]
+    bos_events = [e for e in sid_events if e.type == "BOS_CONFIRMED"]
+    all_sids_lt = set()
+    for e in cts_events + bos_events:
+        all_sids_lt.add(int(e.meta.get("structure_id", 0)))
+    most_recent_lt_sid = max(all_sids_lt) if all_sids_lt else 0
+
+    points_by_sid = defaultdict(list)
+    for ev in cts_events:
+        p_idx = int(ev.meta.get("cts_anchor_idx", ev.idx))
+        if not owned_here(p_idx):
+            continue
+        t = lt_time(p_idx)
+        if t is None:
+            continue
+        price = float(ev.price) if ev.price is not None else 0.0
+        if price == 0.0 and "cts_price" in lt_df.columns and p_idx < len(lt_df):
+            price = float(lt_df.iloc[p_idx]["cts_price"]) if not pd.isna(lt_df.iloc[p_idx].get("cts_price", float("nan"))) else 0.0
+        sid = int(ev.meta.get("structure_id", 0))
+        cycle = int(ev.meta.get("cycle_id", 0))
+        sd = int(ev.meta.get("struct_direction", 0))
+        full_idx = lt_full_idx(p_idx)
+        points_by_sid[sid].append((p_idx, t, price, "CTS", sid, cycle, sd, full_idx))
+
+    for ev in bos_events:
+        if not owned_here(ev.idx):
+            continue
+        t = lt_time(ev.idx)
+        if t is None:
+            continue
+        price = float(ev.price) if ev.price is not None else 0.0
+        sid = int(ev.meta.get("structure_id", 0))
+        cycle = int(ev.meta.get("cycle_id", 0))
+        sd = int(ev.meta.get("struct_direction", 0))
+        full_idx = lt_full_idx(ev.idx)
+        points_by_sid[sid].append((ev.idx, t, price, "BOS", sid, cycle, sd, full_idx))
+
+    # Unconfirmed CTS + PB dots
+    cts_unconf = [e for e in sid_events if e.type in ("CTS_ESTABLISHED", "CTS_UPDATED")]
+    pb_events = [e for e in sid_events if e.type == "STATE_CHANGED" and e.meta.get("to") == "pullback"]
+
+    extra_cts_pts = []
+    extra_pb_pts = []
+    pb_to_bos_lines = []
+
+    for sid in sorted(all_sids_lt):
+        sid_pts = sorted(points_by_sid.get(sid, []), key=lambda x: x[0])
+        if not sid_pts:
+            continue
+        last_pt = sid_pts[-1]
+        last_kind = last_pt[3]
+        last_slice_idx = last_pt[0]
+        sd_for_sid = last_pt[6]
+
+        if last_kind == "BOS":
+            cts_after = [e for e in cts_unconf
+                         if int(e.meta.get("structure_id", -1)) == sid
+                         and int(e.idx) > last_slice_idx
+                         and owned_here(e.idx)]
+            if cts_after:
+                latest = max(cts_after, key=lambda e: int(e.idx))
+                t = lt_time(latest.idx)
+                if t is not None:
+                    price = float(latest.price) if latest.price is not None else 0.0
+                    cycle = int(latest.meta.get("cycle_id", 0))
+                    full_idx = lt_full_idx(latest.idx)
+                    kind_label = latest.type.replace("CTS_", "").lower()
+                    points_by_sid[sid].append((latest.idx, t, price, "CTS", sid, cycle, sd_for_sid, full_idx))
+                    extra_cts_pts.append((latest.idx, t, price, f"CTS ({kind_label})", sid, cycle, sd_for_sid, full_idx))
+
+        elif last_kind == "CTS" and sid != most_recent_lt_sid:
+            next_sid = sid + 1
+            next_bos_evs = sorted(
+                [e for e in bos_events if int(e.meta.get("structure_id", -1)) == next_sid],
+                key=lambda e: int(e.idx),
+            )
+            next_bos_idx = int(next_bos_evs[0].idx) if next_bos_evs else None
+
+            pb_after = [e for e in pb_events
+                        if int(e.meta.get("structure_id", -1)) == sid
+                        and int(e.idx) > last_slice_idx
+                        and (next_bos_idx is None or int(e.idx) < next_bos_idx)
+                        and owned_here(e.idx)]
+            if pb_after:
+                latest_pb = max(pb_after, key=lambda e: int(e.idx))
+                t = lt_time(latest_pb.idx)
+                if t is not None:
+                    if sd_for_sid == 1:
+                        pb_price = float(lt_df.iloc[latest_pb.idx][COL_L])
+                    else:
+                        pb_price = float(lt_df.iloc[latest_pb.idx][COL_H])
+                    full_idx = lt_full_idx(latest_pb.idx)
+                    points_by_sid[sid].append((latest_pb.idx, t, pb_price, "PB", sid, 0, sd_for_sid, full_idx))
+                    extra_pb_pts.append((latest_pb.idx, t, pb_price, "PB", sid, 0, sd_for_sid, full_idx))
+                    if next_bos_evs:
+                        fb = next_bos_evs[0]
+                        fb_t = lt_time(fb.idx)
+                        fb_price = float(fb.price) if fb.price is not None else 0.0
+                        if fb_t is not None:
+                            pb_to_bos_lines.append((sid, t, pb_price, fb_t, fb_price,
+                                                    int(latest_pb.idx), int(fb.idx)))
+
+    # The most-recent internal sid's line extends to this sub's lifecycle end,
+    # walked back to the last candle the sub still owns (where a later
+    # same-direction sub takes over).
+    extend_to_idx = sid_rec.end_event_idx if sid_rec.end_event_idx is not None else (len(lt_df) - 1)
+    while extend_to_idx > 0 and not owned_here(extend_to_idx):
+        extend_to_idx -= 1
+
+    # A sub ended by `same_dir_replacement` runs its final segment through the
+    # last structural swing before the replacement (`_replacement_break_point`)
+    # instead of straight to the handover candle — one more wave, drawn with a
+    # PB dot (the same low/high convention as the pullback dots above).
+    _last_seq = sorted(points_by_sid.get(most_recent_lt_sid, []), key=lambda x: x[0])
+    if _last_seq and anchors_by_sub is not None:
+        _bp = _replacement_break_point(
+            sid_rec, sub_records, anchors_by_sub, lt_df, int(_last_seq[-1][0]), int(extend_to_idx),
+        )
+        if _bp is not None:
+            _b_idx, _b_price = _bp
+            _b_t = lt_time(_b_idx)
+            if _b_t is not None:
+                _pt = (_b_idx, _b_t, _b_price, "PB", most_recent_lt_sid, 0,
+                       int(sid_rec.starting_sd), lt_full_idx(_b_idx))
+                points_by_sid[most_recent_lt_sid].append(_pt)
+                extra_pb_pts.append(_pt)
+
+    seq_by_sid: dict = {}
+    for sid, pts in points_by_sid.items():
+        seq = sorted(pts, key=lambda x: x[0])
+        if sid == most_recent_lt_sid and 0 <= extend_to_idx < len(lt_df) and seq and extend_to_idx > seq[-1][0]:
+            end_time = lt_time(extend_to_idx)
+            if end_time is not None:
+                end_price = float(lt_df.iloc[extend_to_idx][COL_C])
+                seq.append((extend_to_idx, end_time, end_price, "EXT", sid, -1,
+                            int(sid_rec.starting_sd), extend_to_idx))
+        seq_by_sid[sid] = seq
+
+    return {
+        "points_by_sid": points_by_sid,
+        "extra_cts_pts": extra_cts_pts,
+        "extra_pb_pts": extra_pb_pts,
+        "pb_to_bos_lines": pb_to_bos_lines,
+        "extend_to_idx": extend_to_idx,
+        "most_recent_lt_sid": most_recent_lt_sid,
+        "seq_by_sid": seq_by_sid,
+    }
+
+
+def _segments_of(poly: dict) -> list:
+    """`[(seg_id, lo_idx, hi_idx)]` for one sub's drawn line segments — one per
+    wave of each internal sid's polyline (`("w", sid, i)`) plus each PB→BOS
+    line (`("pb", k)`). The input for `_prior_line_segments`."""
+    segs = []
+    for sid, seq in poly["seq_by_sid"].items():
+        for i in range(len(seq) - 1):
+            a, b = int(seq[i][0]), int(seq[i + 1][0])
+            segs.append((("w", sid, i), min(a, b), max(a, b)))
+    for k, ln in enumerate(poly["pb_to_bos_lines"]):
+        a, b = int(ln[5]), int(ln[6])
+        segs.append((("pb", k), min(a, b), max(a, b)))
+    return segs
 
 
 # ---------------------------------------------------------------------------
@@ -626,6 +1021,49 @@ def export_m15_chart_plotly(
     time_by_idx_m15 = {int(i): t for i, t in zip(dfx.index.to_numpy(), dfx[COL_TIME])}
     idx_set_m15 = set(map(int, dfx.index.to_numpy()))
 
+    # Entity-wide aliases (idx is entity-absolute — no slice offset).
+    lt_df = m15_df
+    slice_begin = 0  # noqa: F841 — kept: entity-absolute idx, no offset
+    lt_times = pd.to_datetime(lt_df[COL_TIME], utc=True)
+
+    def _lt_time(idx: int):
+        """Get M15 candle time at entity-absolute idx, or None if OOB."""
+        if 0 <= idx < len(lt_times):
+            return lt_times.iloc[idx]
+        return None
+
+    def _lt_full_idx(idx: int) -> int:
+        """Identity — idx is entity-absolute already."""
+        return idx
+
+    # --- PRE-PASS: every sub's ownership fns + polylines, then the recency rule.
+    # The recent-vs-prior rule (chart review 2026-09-22) compares the drawn
+    # segments of DIFFERENT subs, so all of them must exist before any is drawn.
+    sub_ctx: dict = {}
+    _segments_by_sub: dict = {}
+    _anchors_by_sub = {
+        _sid_record_identity(r): int(r.creation_event_idx)
+        for r in sid_records if r.creation_event_idx is not None
+    }
+    for _rec in sid_records:
+        if m15_df.empty:
+            continue
+        _eid = _sid_record_identity(_rec)
+        _is_live_fn, _owned_fn = _make_sub_phase_fns(
+            _eid, int(_rec.starting_sd),
+            int(_rec.start_idx) if _rec.start_idx is not None else None,
+            live_by_idx_dir, forming_by_idx_dir,
+        )
+        _poly = None
+        if struct_cfg.get("levels", False):
+            _poly = _build_sub_polylines(
+                _rec, events_by_sid.get(_eid, []), lt_df, _lt_time, _lt_full_idx, _owned_fn,
+                sub_records=records_by_sub.get(_eid, []), anchors_by_sub=_anchors_by_sub,
+            )
+            _segments_by_sub[_eid] = (_recency_key(_rec), _segments_of(_poly))
+        sub_ctx[_eid] = {"is_live": _is_live_fn, "owned_here": _owned_fn, "poly": _poly}
+    prior_segs = _prior_line_segments(_segments_by_sub)
+
     for sid_rec in sid_records:
         # Each SidRecord (one unique sub) drives one rendering pass. Idx
         # values are entity-absolute.
@@ -662,40 +1100,19 @@ def export_m15_chart_plotly(
         sid_wvmis = wvmis_by_sid.get(eid, [])
         sid_prev_bos = prev_bos_by_sid.get(eid, [])
 
-        # Local aliases preserve the prior loop's variable names so the
-        # downstream rendering blocks read identically.
-        lt_df = m15_df
-        slice_begin = 0  # entity-absolute idx — no offset
         p_sid, p_cycle = _sid_parent(sid_rec)   # informational (first record)
-        lt_times = pd.to_datetime(lt_df[COL_TIME], utc=True)
-
-        def _lt_time(idx: int):
-            """Get M15 candle time at entity-absolute idx, or None if OOB."""
-            if 0 <= idx < len(lt_times):
-                return lt_times.iloc[idx]
-            return None
-
-        def _lt_full_idx(idx: int) -> int:
-            """Identity — idx is entity-absolute already."""
-            return idx
 
         # §16.5 sid-tied filter (rev 2 + chart review 2026-09-20): a candle in
         # this sub's LIVE window is drawn iff this sub is its live owner for its
         # DIRECTION (later start wins among live subs); a candle in this sub's
-        # FORMING span is drawn in the dimmed/dashed forming style regardless of
-        # any live sub of the same direction (the styles make the overlap
-        # legible — a structure forming under a live one must stay visible),
-        # ownership deciding only among forming subs (later anchor wins).
+        # FORMING span is drawn regardless of any live sub of the same direction
+        # (a structure forming under a live one must stay visible), ownership
+        # deciding only among forming subs (later anchor wins). Built in the
+        # pre-pass (`_make_sub_phase_fns`) together with this sub's polylines.
         _sub_start = int(sid_rec.start_idx) if sid_rec.start_idx is not None else None
-
-        def _is_live(idx: int) -> bool:
-            return _sub_start is not None and int(idx) >= _sub_start
-
-        def _owned_here(idx: int) -> bool:
-            k = (int(idx), sub_dir)
-            if _is_live(idx):
-                return live_by_idx_dir.get(k) == eid
-            return forming_by_idx_dir.get(k) == eid
+        _ctx = sub_ctx[eid]
+        _is_live = _ctx["is_live"]
+        _owned_here = _ctx["owned_here"]
 
         # Forming-phase ZONES are not drawn (chart review 2026-09-20, option 1):
         # a KL/POI zone whose cycle ended at/before the sub's `start_idx` was
@@ -722,161 +1139,54 @@ def export_m15_chart_plotly(
         )
 
         # --- Structure swing lines ---
-        if struct_cfg.get("levels", False):
-            cts_events = [e for e in sid_events if e.type == "CTS_CONFIRMED"]
-            bos_events = [e for e in sid_events if e.type == "BOS_CONFIRMED"]
-            all_sids_lt = set()
-            for e in cts_events + bos_events:
-                all_sids_lt.add(int(e.meta.get("structure_id", 0)))
-            most_recent_lt_sid = max(all_sids_lt) if all_sids_lt else 0
+        if struct_cfg.get("levels", False) and _ctx["poly"] is not None:
+            _poly = _ctx["poly"]
+            points_by_sid = _poly["points_by_sid"]
+            extra_cts_pts = _poly["extra_cts_pts"]
+            extra_pb_pts = _poly["extra_pb_pts"]
+            pb_to_bos_lines = _poly["pb_to_bos_lines"]
+            most_recent_lt_sid = _poly["most_recent_lt_sid"]
 
-            # Build confirmed points per internal MS sid. §16.5 filter is
-            # applied per-rendered-candle (cts_anchor_idx for CTS,
-            # ev.idx for BOS), so a CTS dot at an unowned anchor candle
-            # is skipped even if its emission candle is owned.
-            points_by_sid = defaultdict(list)
-            for ev in cts_events:
-                p_idx = int(ev.meta.get("cts_anchor_idx", ev.idx))
-                if not _owned_here(p_idx):
+            # RECENT-vs-PRIOR rule (chart review 2026-09-22): a segment is drawn
+            # in the dotted PRIOR style iff a structure with a higher
+            # `_recency_key` draws a segment over the same candles (more than
+            # one shared candle, any direction) — `prior_segs`, computed once
+            # per lens in the pre-pass. Everything else is solid, including
+            # structures that were never live in real time (nothing supersedes
+            # them there). Consecutive segments sharing a style are drawn as one
+            # run (`_group_flag_runs`), the boundary point belonging to both.
+            # The endpoints of solid segments go into `recent_pts` so the dots
+            # follow their segments; the hover `phase` stays the real-time fact.
+            recent_pts: set = set()   # {(internal sid, idx)}: ends a solid segment
+            for sid, seq in sorted(_poly["seq_by_sid"].items()):
+                if len(seq) == 1:
+                    # A lone point has no segment to decide it — draw it solid.
+                    recent_pts.add((seq[0][4], seq[0][0]))
                     continue
-                t = _lt_time(p_idx)
-                if t is None:
-                    continue
-                price = float(ev.price) if ev.price is not None else 0.0
-                if price == 0.0 and "cts_price" in lt_df.columns and p_idx < len(lt_df):
-                    price = float(lt_df.iloc[p_idx]["cts_price"]) if not pd.isna(lt_df.iloc[p_idx].get("cts_price", float("nan"))) else 0.0
-                sid = int(ev.meta.get("structure_id", 0))
-                cycle = int(ev.meta.get("cycle_id", 0))
-                sd = int(ev.meta.get("struct_direction", 0))
-                full_idx = _lt_full_idx(p_idx)
-                points_by_sid[sid].append((p_idx, t, price, "CTS", sid, cycle, sd, full_idx))
-
-            for ev in bos_events:
-                if not _owned_here(ev.idx):
-                    continue
-                t = _lt_time(ev.idx)
-                if t is None:
-                    continue
-                price = float(ev.price) if ev.price is not None else 0.0
-                sid = int(ev.meta.get("structure_id", 0))
-                cycle = int(ev.meta.get("cycle_id", 0))
-                sd = int(ev.meta.get("struct_direction", 0))
-                full_idx = _lt_full_idx(ev.idx)
-                points_by_sid[sid].append((ev.idx, t, price, "BOS", sid, cycle, sd, full_idx))
-
-            # Unconfirmed CTS + PB dots
-            cts_unconf = [e for e in sid_events if e.type in ("CTS_ESTABLISHED", "CTS_UPDATED")]
-            pb_events = [e for e in sid_events if e.type == "STATE_CHANGED" and e.meta.get("to") == "pullback"]
-
-            extra_cts_pts = []
-            extra_pb_pts = []
-            pb_to_bos_lines = []
-
-            for sid in sorted(all_sids_lt):
-                sid_pts = sorted(points_by_sid.get(sid, []), key=lambda x: x[0])
-                if not sid_pts:
-                    continue
-                last_pt = sid_pts[-1]
-                last_kind = last_pt[3]
-                last_slice_idx = last_pt[0]
-                sd_for_sid = last_pt[6]
-
-                if last_kind == "BOS":
-                    cts_after = [e for e in cts_unconf
-                                 if int(e.meta.get("structure_id", -1)) == sid
-                                 and int(e.idx) > last_slice_idx
-                                 and _owned_here(e.idx)]
-                    if cts_after:
-                        latest = max(cts_after, key=lambda e: int(e.idx))
-                        t = _lt_time(latest.idx)
-                        if t is not None:
-                            price = float(latest.price) if latest.price is not None else 0.0
-                            cycle = int(latest.meta.get("cycle_id", 0))
-                            full_idx = _lt_full_idx(latest.idx)
-                            kind_label = latest.type.replace("CTS_", "").lower()
-                            points_by_sid[sid].append((latest.idx, t, price, "CTS", sid, cycle, sd_for_sid, full_idx))
-                            extra_cts_pts.append((latest.idx, t, price, f"CTS ({kind_label})", sid, cycle, sd_for_sid, full_idx))
-
-                elif last_kind == "CTS" and sid != most_recent_lt_sid:
-                    next_sid = sid + 1
-                    next_bos_evs = sorted(
-                        [e for e in bos_events if int(e.meta.get("structure_id", -1)) == next_sid],
-                        key=lambda e: int(e.idx),
-                    )
-                    next_bos_idx = int(next_bos_evs[0].idx) if next_bos_evs else None
-
-                    pb_after = [e for e in pb_events
-                                if int(e.meta.get("structure_id", -1)) == sid
-                                and int(e.idx) > last_slice_idx
-                                and (next_bos_idx is None or int(e.idx) < next_bos_idx)
-                                and _owned_here(e.idx)]
-                    if pb_after:
-                        latest_pb = max(pb_after, key=lambda e: int(e.idx))
-                        t = _lt_time(latest_pb.idx)
-                        if t is not None:
-                            if sd_for_sid == 1:
-                                pb_price = float(lt_df.iloc[latest_pb.idx][COL_L])
-                            else:
-                                pb_price = float(lt_df.iloc[latest_pb.idx][COL_H])
-                            full_idx = _lt_full_idx(latest_pb.idx)
-                            points_by_sid[sid].append((latest_pb.idx, t, pb_price, "PB", sid, 0, sd_for_sid, full_idx))
-                            extra_pb_pts.append((latest_pb.idx, t, pb_price, "PB", sid, 0, sd_for_sid, full_idx))
-                            if next_bos_evs:
-                                fb = next_bos_evs[0]
-                                fb_t = _lt_time(fb.idx)
-                                fb_price = float(fb.price) if fb.price is not None else 0.0
-                                if fb_t is not None:
-                                    pb_to_bos_lines.append((sid, t, pb_price, fb_t, fb_price, latest_pb.idx))
-
-            # Draw swing lines per sid. Extend the most-recent internal-sid
-            # line to this sub's lifecycle end (or the last candle it still
-            # owns, whichever comes first).
-            extend_to_idx = sid_rec.end_event_idx if sid_rec.end_event_idx is not None else (len(lt_df) - 1)
-            # Stop extension at the boundary where a later same-direction sub
-            # takes over. owner_by_idx_dir encodes ownership; walk back from
-            # extend_to_idx to the last idx owned by this sub.
-            while extend_to_idx > 0 and not _owned_here(extend_to_idx):
-                extend_to_idx -= 1
-            for sid in sorted(points_by_sid.keys()):
-                sid_pts = sorted(points_by_sid[sid], key=lambda x: x[0])
-                # Split the polyline at the sub's start_idx: the FORMING part
-                # (points before start_idx, plus the bridging segment to the
-                # first live point) is dimmed/dashed; the LIVE part is solid.
-                forming_pts = [p for p in sid_pts if not _is_live(p[0])]
-                live_pts = [p for p in sid_pts if _is_live(p[0])]
-                if forming_pts:
-                    bridge = forming_pts + live_pts[:1]
-                    if len(bridge) >= 2:
-                        f_style = _style("structure.m15.swing_line_forming").copy()
-                        fig.add_trace(go.Scatter(
-                            x=[p[1] for p in bridge], y=[p[2] for p in bridge], mode="lines",
-                            name=f"M15 swing (forming) sub{eid}_m15s{sid}",
-                            hoverinfo="skip", line_shape="linear",
-                            showlegend=False, **f_style,
-                        ))
-                x_line = [p[1] for p in live_pts]
-                y_line = [p[2] for p in live_pts]
-
-                if sid == most_recent_lt_sid and 0 <= extend_to_idx < len(lt_df):
-                    end_time = _lt_time(extend_to_idx)
-                    end_price = float(lt_df.iloc[extend_to_idx][COL_C])
-                    if end_time is not None and live_pts:
-                        x_line.append(end_time)
-                        y_line.append(end_price)
-
-                if len(x_line) >= 2:
-                    line_style = _style("structure.m15.swing_line").copy()
+                flags = [(eid, ("w", sid, i)) not in prior_segs for i in range(len(seq) - 1)]
+                for is_recent, i0, i1 in _group_flag_runs(flags):
+                    run = seq[i0:i1 + 1]
+                    if is_recent:
+                        recent_pts.update((p[4], p[0]) for p in run if p[3] != "EXT")
+                        line_style = _style("structure.m15.swing_line").copy()
+                        trace_name = f"M15 swing sub{eid}_m15s{sid}"
+                    else:
+                        line_style = _style("structure.m15.swing_line_prior").copy()
+                        trace_name = f"M15 swing (prior) sub{eid}_m15s{sid}"
                     fig.add_trace(go.Scatter(
-                        x=x_line, y=y_line, mode="lines",
-                        name=f"M15 swing sub{eid}_m15s{sid}",
-                        hoverinfo="skip", line_shape="linear",
+                        x=[p[1] for p in run], y=[p[2] for p in run], mode="lines",
+                        name=trace_name, hoverinfo="skip", line_shape="linear",
                         showlegend=False, **line_style,
                     ))
 
-            # Cross-structure PB→BOS lines (forming style when the PB precedes start_idx)
-            for _pb_sid, pb_t, pb_p, bos_t, bos_p, pb_idx in pb_to_bos_lines:
+            # Cross-structure PB→BOS lines take part in the same rule.
+            for _k, (_pb_sid, pb_t, pb_p, bos_t, bos_p, pb_idx, bos_idx) in enumerate(pb_to_bos_lines):
+                is_recent = (eid, ("pb", _k)) not in prior_segs
+                if is_recent:
+                    recent_pts.add((_pb_sid, pb_idx))
+                    recent_pts.add((_pb_sid + 1, bos_idx))
                 line_style = _style(
-                    "structure.m15.swing_line" if _is_live(pb_idx) else "structure.m15.swing_line_forming"
+                    "structure.m15.swing_line" if is_recent else "structure.m15.swing_line_prior"
                 ).copy()
                 fig.add_trace(go.Scatter(
                     x=[pb_t, bos_t], y=[pb_p, bos_p], mode="lines",
@@ -894,7 +1204,8 @@ def export_m15_chart_plotly(
                 _render_m15_dots(fig, all_cts_pts, "CTS", p_sid, p_cycle, eid,
                                  m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
                                  most_recent_lt_sid, m15_to_h1,
-                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live)
+                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live,
+                                 recent_pts)
 
             # --- BOS confirmed dots ---
             all_bos_pts = []
@@ -906,21 +1217,24 @@ def export_m15_chart_plotly(
                 _render_m15_dots(fig, all_bos_pts, "BOS", p_sid, p_cycle, eid,
                                  m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
                                  most_recent_lt_sid, m15_to_h1,
-                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live)
+                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live,
+                                 recent_pts)
 
             # --- Unconfirmed CTS dots ---
             if extra_cts_pts:
                 _render_m15_dots(fig, extra_cts_pts, "CTS (unconf)", p_sid, p_cycle, eid,
                                  m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
                                  most_recent_lt_sid, m15_to_h1,
-                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live)
+                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live,
+                                 recent_pts)
 
             # --- PB dots ---
             if extra_pb_pts:
                 _render_m15_dots(fig, extra_pb_pts, "PB", p_sid, p_cycle, eid,
                                  m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
                                  most_recent_lt_sid, m15_to_h1,
-                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live)
+                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live,
+                                 recent_pts)
 
         # --- KL zone rectangles + hover ---
         if zone_cfg.get("KL", False) and sid_kls:
@@ -1381,8 +1695,9 @@ def export_m15_chart_plotly(
             start_slice = line_info["start_idx"]
             end_slice = line_info["end_idx"]
             price = line_info["price"]
-            # §16.5 sid-tied filter: hide line if any portion of its
-            # range was overwritten by a later sid.
+            # §16.5 sid-tied filter: the owning sub at the line's start candle
+            # draws it. Prev-BOS lines carry NO lifecycle formatting (chart
+            # review 2026-09-21): always solid, on the sub charts and on main.
             if not _owned_here(start_slice):
                 continue
             t0 = _lt_time(start_slice)
@@ -1392,9 +1707,6 @@ def export_m15_chart_plotly(
                     p_sid, p_cycle, m15_most_recent_psid, m15_recent_cycles, False,
                 )
                 line_s = _style("prev_bos_line.m15").get("line", {"width": 2, "color": "royalblue"})
-                line_s = dict(line_s)
-                if not _is_live(start_slice):
-                    line_s["dash"] = "dot"
                 fig.add_trace(go.Scatter(
                     x=[t0, t1], y=[price, price], mode="lines", line=line_s,
                     name=f"M15 Prev BOS h1s{p_sid}c{p_cycle}", showlegend=False,
@@ -1496,6 +1808,7 @@ def _render_m15_dots(
     most_recent_psid, recent_cycles, is_active_trigger,
     most_recent_lt_sid, m15_to_h1,
     sub_window_str="", sub_records_str="", relative_dir_at=None, is_live=None,
+    recent_pts=None,
 ):
     """Render M15 structure dots with TF=15M hover.
 
@@ -1504,36 +1817,51 @@ def _render_m15_dots(
     useless for telling subs apart in the hover. `sub_window_str` /
     `sub_records_str` carry the sub's lifecycle window + reason and its
     record list; `relative_dir_at(idx)` gives the §17.3 step function at the
-    dot's candle. `is_live(idx)` splits the points into the LIVE set (solid
-    style) and the FORMING set before the sub's `start_idx` (dimmed, open
-    markers, `phase=forming` in the hover) — two traces.
+    dot's candle. Dots follow their SEGMENTS (chart review 2026-09-22): a point
+    in `recent_pts` (`{(internal sid, idx)}` — the endpoints of the solid
+    segments, and any point no segment decides) is drawn filled in the RECENT
+    style, every other point as a dimmed open PRIOR marker — two traces.
+    `is_live(idx)` is the real-time fact (`idx >= start_idx`) and only feeds the
+    hover `phase`; without `recent_pts` it decides the style too (legacy
+    per-point split).
     """
     if is_live is not None:
-        live_pts = [p for p in pts if is_live(p[0])]
-        forming_pts = [p for p in pts if not is_live(p[0])]
-        if forming_pts:
-            _render_m15_dots_phase(
-                fig, forming_pts, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
-                sub_window_str, sub_records_str, relative_dir_at, phase="forming",
+        def _styled_recent(p) -> bool:
+            if recent_pts is not None:
+                return (p[4], p[0]) in recent_pts
+            return bool(is_live(p[0]))
+        recent = [p for p in pts if _styled_recent(p)]
+        prior = [p for p in pts if not _styled_recent(p)]
+        if prior:
+            _render_m15_dots_layer(
+                fig, prior, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
+                sub_window_str, sub_records_str, relative_dir_at, layer="prior",
+                phase_at=is_live,
             )
-        if live_pts:
-            _render_m15_dots_phase(
-                fig, live_pts, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
-                sub_window_str, sub_records_str, relative_dir_at, phase="live",
+        if recent:
+            _render_m15_dots_layer(
+                fig, recent, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
+                sub_window_str, sub_records_str, relative_dir_at, layer="recent",
+                phase_at=is_live,
             )
         return
-    _render_m15_dots_phase(
+    _render_m15_dots_layer(
         fig, pts, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
-        sub_window_str, sub_records_str, relative_dir_at, phase="live",
+        sub_window_str, sub_records_str, relative_dir_at, layer="recent",
     )
 
 
-def _render_m15_dots_phase(
+def _render_m15_dots_layer(
     fig, pts, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
-    sub_window_str, sub_records_str, relative_dir_at, phase,
+    sub_window_str, sub_records_str, relative_dir_at, layer, phase_at=None,
 ):
+    """`layer` picks the marker STYLE (`recent` = filled, `prior` = dimmed open
+    circle) and is reported in the hover; the hover `phase` per point is
+    `phase_at(idx)` — the real-time fact — when given, so a filled dot that was
+    never live still hovers `phase=forming` and a dotted-segment dot that WAS
+    live still hovers `phase=live`."""
     base = "structure.m15.cts" if "CTS" in kind_label else "structure.m15.bos"
-    style_key = base if phase == "live" else base + "_forming"
+    style_key = base if layer == "recent" else base + "_prior"
     style = _style(style_key).copy()
 
     cd = []
@@ -1554,14 +1882,15 @@ def _render_m15_dots_phase(
             relative_dir_at(p[7]) if relative_dir_at is not None else "",  # relative_dir at this candle
             sub_window_str,   # [start_idx,end_idx] reason
             sub_records_str,  # record list
-            phase,            # live | forming (before the sub's start_idx)
+            ("live" if phase_at(p[0]) else "forming") if phase_at is not None else "live",  # real-time fact
+            layer,            # recent | prior (why this style — see _prior_line_segments)
         ])
 
     fig.add_trace(go.Scatter(
         x=[p[1] for p in pts],
         y=[p[2] for p in pts],
         mode="markers",
-        name=f"M15 {kind_label} sub{sub_id}" + (" (forming)" if phase == "forming" else ""),
+        name=f"M15 {kind_label} sub{sub_id}" + (" (prior)" if layer == "prior" else ""),
         showlegend=False,
         customdata=cd,
         hoverlabel=dict(bgcolor="royalblue", font_color="white"),
@@ -1572,7 +1901,7 @@ def _render_m15_dots_phase(
             "kind=%{customdata[1]}<br>"
             "price=%{customdata[2]:.5f}<br>"
             "sub_id=%{customdata[3]} | first record parent_sid=%{customdata[6]} parent_cycle_id=%{customdata[7]}<br>"
-            "phase=%{customdata[13]}<br>"
+            "phase=%{customdata[13]} | layer=%{customdata[14]}<br>"
             "relative_dir=%{customdata[10]}<br>"
             "sub window=%{customdata[11]}<br>"
             "records: %{customdata[12]}<br>"
@@ -1764,31 +2093,53 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                             fb_t = _h1_idx_to_m15_time(fb.idx)
                             fb_price = float(fb.price) if fb.price is not None else 0.0
                             if fb_t is not None:
-                                pb_to_bos_lines.append((sid, m15_t, pb_price, fb_t, fb_price))
+                                pb_to_bos_lines.append((sid, m15_t, pb_price, fb_t, fb_price,
+                                                        int(latest_pb.idx), int(fb.idx)))
 
-        # Draw H1 swing lines (dashed)
+        # Lifecycle filter (chart review 2026-09-21): on the SUB charts the H1
+        # overlay draws only the waves that were live at some point. A wave —
+        # a segment between two consecutive H1 points, or the most recent sid's
+        # extension to the last candle — is drawn iff its candle span intersects
+        # its sid's real-time lifecycle window `[struct_start, reversal idx]`
+        # (`compute_struct_start_by_sid` with the reversal handoff /
+        # `compute_reversal_idx_by_sid` — the helpers the wave-candle overlay
+        # already uses); waves wholly outside it (the retroactive (1,0)/(1,1)
+        # waves of the post-reversal sid, which precede its 902 start on the
+        # reference window) are NOT drawn — they only crowd the sub structures
+        # they overlap. The H1 chart itself is unchanged (every sid, prior sids
+        # dimmed). A dot is drawn iff a drawn wave or a drawn PB→BOS line
+        # touches it.
+        rev_h1 = compute_reversal_idx_by_sid(structure_events)
+        struct_start_h1 = compute_struct_start_by_sid(structure_events, rev_h1)
+        drawn_h1_pts: set = set()   # {(sid, h1 idx)} endpoints of drawn waves
         for sid in sorted(points_by_sid.keys()):
-            sid_pts = sorted(points_by_sid[sid], key=lambda x: x[0])
-            x_line = [p[1] for p in sid_pts]
-            y_line = [p[2] for p in sid_pts]
-
+            seq = sorted(points_by_sid[sid], key=lambda x: x[0])
             if sid == most_recent_h1_sid:
-                end_t = _h1_idx_to_m15_time(int(h1_df.index[-1]))
-                if end_t is not None:
-                    end_price = float(h1_df[COL_C].iloc[-1])
-                    x_line.append(end_t)
-                    y_line.append(end_price)
+                last_h1_idx = int(h1_df.index[-1])
+                end_t = _h1_idx_to_m15_time(last_h1_idx)
+                if end_t is not None and seq and last_h1_idx > seq[-1][0]:
+                    seq.append((last_h1_idx, end_t, float(h1_df[COL_C].iloc[-1]), "EXT", sid, -1, seq[-1][6]))
+            w_start = struct_start_h1.get(sid, seq[0][0] if seq else None)
+            w_end = rev_h1.get(sid)
+            for is_live_run, i0, i1 in _split_polyline_by_wave([p[0] for p in seq], w_start, w_end):
+                if not is_live_run:
+                    continue          # never live — not drawn on the sub charts
+                run = seq[i0:i1 + 1]
+                drawn_h1_pts.update((p[4], p[0]) for p in run if p[3] != "EXT")
+                line_style = _style("structure.h1_overlay.swing_line").copy()
+                fig.add_trace(go.Scatter(
+                    x=[p[1] for p in run], y=[p[2] for p in run], mode="lines",
+                    name=f"H1 swing sid={sid}", hoverinfo="skip",
+                    line_shape="linear", showlegend=False, **line_style,
+                ))
 
-            line_style = _style("structure.h1_overlay.swing_line").copy()
-
-            fig.add_trace(go.Scatter(
-                x=x_line, y=y_line, mode="lines",
-                name=f"H1 swing sid={sid}", hoverinfo="skip",
-                line_shape="linear", showlegend=False, **line_style,
-            ))
-
-        # Cross-structure PB→BOS lines
-        for _pb_sid, pb_t, pb_p, bos_t, bos_p in pb_to_bos_lines:
+        # Cross-structure PB→BOS lines belong to the PRIOR sid — same wave rule
+        # on its window (drawn on the reference window: sid 0's 683→689).
+        for _pb_sid, pb_t, pb_p, bos_t, bos_p, pb_idx, bos_idx in pb_to_bos_lines:
+            if not _wave_touches_window(pb_idx, bos_idx, struct_start_h1.get(_pb_sid), rev_h1.get(_pb_sid)):
+                continue
+            drawn_h1_pts.add((_pb_sid, pb_idx))
+            drawn_h1_pts.add((_pb_sid + 1, bos_idx))
             line_style = _style("structure.h1_overlay.swing_line").copy()
             fig.add_trace(go.Scatter(
                 x=[pb_t, bos_t], y=[pb_p, bos_p], mode="lines",
@@ -1796,10 +2147,10 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 line_shape="linear", showlegend=False, **line_style,
             ))
 
-        # H1 CTS/BOS dots
+        # H1 CTS/BOS dots — only the points a drawn wave / PB→BOS line touches.
         all_pts = []
         for sid_pts in points_by_sid.values():
-            all_pts.extend(sid_pts)
+            all_pts.extend(p for p in sid_pts if (p[4], p[0]) in drawn_h1_pts)
         for kind_filter, style_key in [("CTS", "structure.cts"), ("BOS", "structure.bos"), ("PB", "structure.bos")]:
             pts = [p for p in all_pts if p[3] == kind_filter or (kind_filter == "CTS" and p[3].startswith("CTS"))]
             if not pts:
@@ -2004,11 +2355,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
     # --- H1 Wave candle verticals (dashed; per-candle lifecycle gating) ---
     h1_wave_candles = h1_df.attrs.get("wave_candles", [])
     if zone_cfg.get("wave_candles", True) and h1_wave_candles:
-        from engine_v2.zones.structure_lifecycle import (
-            compute_cycle_lifecycle,
-            compute_reversal_idx_by_sid,
-            compute_struct_start_by_sid,
-        )
+        from engine_v2.zones.structure_lifecycle import compute_cycle_lifecycle
         from engine_v2.zones.wave_candles import (
             _role_for_wave_candle,
             compute_wave_candle_visibility,

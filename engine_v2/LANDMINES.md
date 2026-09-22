@@ -1338,6 +1338,31 @@ out-of-bounds `start_idx`.
 > by these maps: drawn from their anchor, active from `start_idx` (the KL/POI
 > clamp) — except collapsed-cycle zones, which both charts skip
 > (`_zone_render.is_collapsed_cycle_zone`; CHARTING_SPEC "Collapsed-cycle").
+>
+> **Chart review 2026-09-22 — ownership decides EXISTENCE, not STYLE.** Both
+> maps still decide which points a sub draws at all; solid-vs-dotted is now a
+> separate, purely visual rule (`_prior_line_segments`, CHARTING_SPEC "Recent vs
+> prior"): a line SEGMENT is dotted iff a structure with a higher
+> `_recency_key` `(parent_sid, parent_cycle_id, sub_id)` draws a segment over
+> the same candles (>1 shared candle, direction-agnostic, per lens, whole
+> segments), and is solid otherwise — **including structures that were never
+> live in real time**. So `phase` (real-time) and `layer` (recency) are
+> independent and both ride in the hover; do NOT re-derive one from the other,
+> and do NOT expect a dotted line to mean "not tradeable" — an ACTIVE zone can
+> hang on a dotted segment once a later structure supersedes it (accepted at
+> review; the zones carry the real-time lifecycle). Consequences: the styles are
+> `structure.m15.*_prior` (renamed from `*_forming`); the polyline is drawn as
+> one trace per run of same-styled segments (`_group_flag_runs`), so a
+> style-only change shows up in a chart census as renamed traces; every sub's
+> polyline must be built BEFORE any is drawn (the pre-pass
+> `_build_sub_polylines` + `sub_ctx`), because the rule compares across subs.
+> Two adjuncts: the H1 OVERLAY on the sub charts is lifecycle-FILTERED per wave
+> (`_wave_touches_window` / `_split_polyline_by_wave` — a wave never inside its
+> H1 sid's `[struct_start, reversal]` is not drawn; the H1 chart itself is
+> untouched and still draws every sid), and a sub ended by
+> `same_dir_replacement` breaks its final segment at
+> `_replacement_break_point` (the counter-move extreme up to the REPLACING
+> structure's anchor — the structural swing, not the literal extreme).
 
 **Rule:** §13.5.c.iii implements spec §16.5's "most recent sid only per
 candle" rule for sid-tied display elements (CTS dots, BOS markers, swing

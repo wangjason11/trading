@@ -16,9 +16,15 @@ from typing import Any, Dict, Optional, Tuple
 from engine_v2.charting.export_m15_chart import (
     _compute_forming_by_idx_dir,
     _compute_owner_by_idx_dir,
+    _group_flag_runs,
+    _prior_line_segments,
+    _recency_key,
+    _replacement_break_point,
     _sid_parent,
     _sid_record_identity,
+    _split_polyline_by_wave,
     _sub_identity,
+    _wave_touches_window,
 )
 from engine_v2.multitf.types import SidRecord
 
@@ -271,3 +277,234 @@ def test_forming_draws_under_a_live_same_direction_sub():
     assert (3621, -1) not in forming and live[(3621, -1)] == 4
     assert forming[(2700, -1)] == 3                 # sub 3's own forming span 2639..2828
     assert (2638, -1) not in forming and (2638, -1) not in live
+
+
+# --- wave rule (chart review 2026-09-21) ----------------------------------------
+# A WAVE (segment between two consecutive drawn points, over the EXTREME candles)
+# is solid iff any part of its candle span lies inside the lifecycle window
+# `[start_idx, end_idx]`; only waves wholly outside it are forming (sub charts)
+# or hidden (H1 overlay). Reference-window facts: sub 0 (454/+1) live [1020, 1940]
+
+
+def test_wave_crossing_start_idx_is_live_whole():
+    """A wave covering the window's first candle counts live as a whole
+    (sub 0's BOS c1@917 -> CTS c1@1020, start_idx 1020)."""
+    assert _wave_touches_window(917, 1020, 1020, 1940)
+    assert _wave_touches_window(1020, 917, 1020, 1940)      # order-insensitive
+
+
+def test_wave_entirely_before_start_is_not_live():
+    """Waves ending before the window are not live, even though the BOS at 917
+    was CONFIRMED at 1020 (the rule reads the extreme candles, not the
+    confirmation candles)."""
+    assert not _wave_touches_window(454, 784, 1020, 1940)
+    assert not _wave_touches_window(784, 917, 1020, 1940)
+    assert not _wave_touches_window(1019, 1019, 1020, 1940)
+
+
+def test_wave_window_end_is_inclusive_and_open_end_never_bounds():
+    assert _wave_touches_window(1900, 2000, 1020, 1940)      # starts inside, runs past the end
+    assert _wave_touches_window(1940, 2000, 1020, 1940)      # starts ON the end candle
+    assert not _wave_touches_window(1941, 2000, 1020, 1940)  # wholly after the end
+    assert _wave_touches_window(4222, 4300, 4083, None)      # open sub: nothing bounds the right side
+
+
+def test_structure_without_start_idx_has_no_live_wave():
+    assert not _wave_touches_window(100, 200, None, None)
+    assert _split_polyline_by_wave([100, 200, 300], None, None) == [(False, 0, 2)]
+
+
+def test_split_polyline_never_live_prefix_then_live_suffix():
+    """Points 454, 784, 917, 1020, 1107 with window [1020, 1940] -> two runs
+    sharing point 917: not-live 454->784->917 (2 waves), live 917->1020->1107
+    (the wave crossing the window start counts live as a whole)."""
+    runs = _split_polyline_by_wave([454, 784, 917, 1020, 1107], 1020, 1940)
+    assert runs == [(False, 0, 2), (True, 2, 4)]
+
+
+def test_split_all_live_when_the_only_pre_start_wave_crosses_start():
+    """Sub 4 (3304/-1, live [3621, 3819]): BOS c0@3304 -> CTS c0@3621 -> ext 3819
+    — no forming run at all (its whole pre-start span sits inside one wave that
+    goes live)."""
+    assert _split_polyline_by_wave([3304, 3621, 3819], 3621, 3819) == [(True, 0, 2)]
+
+
+def test_split_h1_sid1_hides_the_retroactive_waves_only():
+    """H1 sid 1 (live from 902): 689->710->728->761->826 wholly before 902 ->
+    one hidden run; 826->905->edge -> one drawn run. Point 826 belongs to both."""
+    runs = _split_polyline_by_wave([689, 710, 728, 761, 826, 905, 1057], 902, None)
+    assert runs == [(False, 0, 4), (True, 4, 6)]
+
+
+def test_split_degenerate_inputs():
+    assert _split_polyline_by_wave([], 10, None) == []
+    assert _split_polyline_by_wave([5], 10, None) == []
+    assert _split_polyline_by_wave([5, 20], 10, None) == [(True, 0, 1)]
+    assert _split_polyline_by_wave([5, 9], 10, None) == [(False, 0, 1)]
+
+
+def test_split_alternates_when_a_wave_lies_past_a_closed_end():
+    """A wave wholly after `end_idx` is not live either (defensive: points past
+    the window end are normally clipped by the projection)."""
+    runs = _split_polyline_by_wave([90, 110, 150, 200], 100, 120)
+    assert runs == [(True, 0, 2), (False, 2, 3)]
+
+
+# --- recent-vs-prior rule (chart review 2026-09-22) -----------------------------
+# Where two structures draw lines over the same candles the MOST RECENT one
+# (higher `_recency_key`) stays solid and the prior one's WHOLE segment is
+# dotted; a segment nothing overlaps is solid even if the structure was never
+# live. Overlap needs >1 shared candle and ignores direction. Reference-window
+# confluence segments (measured from the rendered chart):
+#   sub 0 ... 1761->1794, 1794->1940(ext)     sub 1  1797->1816 ... 2365->2470(ext)
+#   sub 2  2365->2557 ... 2609->2829(ext)     sub 3  2639->2736 ... 3304->3611
+#   sub 4  3304->3621, 3621->3818(ext)        sub 6  3760->4000, 4000->4200(ext)
+#   sub 7  4027->4086 ...
+
+def _segs(*spans):
+    return [((i,), lo, hi) for i, (lo, hi) in enumerate(spans)]
+
+
+def test_prior_marks_the_older_structures_segment_only():
+    """sub 0's extension 1794->1940 overlaps sub 1's first waves: sub 1 is newer,
+    so sub 0's segment is PRIOR and every segment of sub 1 stays solid."""
+    prior = _prior_line_segments({
+        0: ((0, 0, 0), _segs((1761, 1794), (1794, 1940))),
+        1: ((0, 0, 1), _segs((1797, 1816), (1816, 1837), (1837, 1898), (1898, 1934), (1934, 1945))),
+    })
+    assert prior == {(0, (1,))}
+
+
+def test_single_shared_candle_is_not_an_overlap():
+    """sub 1's 2270->2365 meets sub 2's 2365->2557 at exactly one candle — the
+    join is not an overlap, both stay solid (chart review 2026-09-22)."""
+    prior = _prior_line_segments({
+        1: ((0, 0, 1), _segs((2270, 2365))),
+        2: ((0, 0, 2), _segs((2365, 2557))),
+    })
+    assert prior == set()
+
+
+def test_partial_overlap_dots_the_whole_segment():
+    """sub 4's extension 3621->3818 overlaps sub 6's 3760->4000 only over
+    [3760, 3818]; the WHOLE 3621->3818 segment is dotted, sub 6 stays solid."""
+    prior = _prior_line_segments({
+        4: ((1, 2, 4), _segs((3304, 3621), (3621, 3818))),
+        6: ((1, 2, 6), _segs((3760, 4000), (4000, 4200))),
+    })
+    assert prior == {(4, (1,))}
+
+
+def test_rule_is_direction_agnostic_and_chains():
+    """sub 6 (-1) and sub 7 (+1) are both live and opposite-direction at
+    [4027, 4200]; the newer sub 7 still wins, so sub 6's extension is prior.
+    With three structures the two older ones are prior and only the newest is
+    solid."""
+    prior = _prior_line_segments({
+        4: ((1, 2, 4), _segs((3621, 3900))),
+        6: ((1, 2, 6), _segs((3760, 4000), (4000, 4200))),
+        7: ((1, 2, 7), _segs((4027, 4086))),
+    })
+    assert prior == {(4, (0,)), (6, (1,))}
+
+
+def test_structure_with_no_overlap_is_solid_even_if_never_live():
+    """Sub 0's 454->784->917 prefix (never live in real time) has nothing over
+    the same candles, so nothing is prior."""
+    prior = _prior_line_segments({0: ((0, 0, 0), _segs((454, 784), (784, 917)))})
+    assert prior == set()
+
+
+def test_recency_key_is_the_hierarchical_tuple():
+    sub = _sub(4, -1, 3304, 3621, 3819, first_record={"parent_sid": 1, "parent_cycle_id": 2})
+    assert _recency_key(sub) == (1, 2, 4)
+    main = _main(3, +1, 10, None)
+    assert _recency_key(main) == (-1, -1, 3)       # main rows: no parent -> sorts first
+    a = _sub(2, +1, 100, 200, 300, first_record={"parent_sid": 0, "parent_cycle_id": 1})
+    b = _sub(3, -1, 150, 250, 350, first_record={"parent_sid": 0, "parent_cycle_id": 1})
+    assert _recency_key(b) > _recency_key(a)
+
+
+def test_group_flag_runs_alternates_and_shares_boundary_points():
+    assert _group_flag_runs([]) == []
+    assert _group_flag_runs([True]) == [(True, 0, 1)]
+    assert _group_flag_runs([False, False, True, True]) == [(False, 0, 2), (True, 2, 4)]
+    assert _group_flag_runs([True, False, True]) == [(True, 0, 1), (False, 1, 2), (True, 2, 3)]
+
+
+# --- replacement break point (chart review 2026-09-22b) -------------------------
+# A sub ended by `same_dir_replacement` runs its final segment through the last
+# structural swing before the REPLACING structure's anchor, instead of straight
+# to the handover candle. Reference window: sub `3304/-1` (conf) breaks at 3760
+# (bounded by sub `3760/-1`'s anchor) and NOT at the literal high 3806; sub
+# `3621/+1` (counter) breaks at 4000 (bounded by sub `4027/+1`'s anchor 4027).
+
+import pandas as pd  # noqa: E402
+
+from engine_v2.common.types import COL_H, COL_L  # noqa: E402
+
+
+class _Rec:
+    """Minimal TriggerRecord stand-in (only the fields the helper reads)."""
+
+    def __init__(self, end_reason, ended_by_sub_id, end_idx):
+        self.end_reason = end_reason
+        self.ended_by_sub_id = ended_by_sub_id
+        self.end_idx = end_idx
+
+
+def _df(highs, lows):
+    return pd.DataFrame({COL_H: highs, COL_L: lows})
+
+
+# 11 candles. The high rises to a peak at 5 (the structural swing, = the
+# replacing anchor) and overshoots marginally at 8 (a later, higher high).
+_HIGHS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.50, 1.45, 1.46, 1.52, 1.48, 1.47]
+_LOWS = [0.9, 0.8, 0.7, 0.6, 0.55, 0.50, 0.60, 0.58, 0.45, 0.62, 0.61]
+_DF = _df(_HIGHS, _LOWS)
+_REPL = [_Rec("same_dir_replacement", 9, 10)]
+
+
+def test_break_is_bounded_by_the_replacing_anchor_not_the_literal_extreme():
+    """A `-1` sub pulls UP: the extreme is searched only to the replacement's
+    anchor (5), so the break is the structural swing 5 @ 1.50 — not the higher
+    high at 8 (1.52). This is the 3760-vs-3806 case."""
+    sub = _sub(4, -1, 0, 1, 10, "same_dir_replacement")
+    assert _replacement_break_point(sub, _REPL, {9: 5}, _DF, 1, 10) == (5, 1.50)
+    # unbounded (anchor past the end) would have picked the overshoot at 8
+    assert _replacement_break_point(sub, _REPL, {9: 99}, _DF, 1, 10) == (8, 1.52)
+
+
+def test_plus_one_sub_breaks_at_the_lowest_low():
+    """A `+1` sub pulls DOWN: lowest low in (1, anchor]. With anchor 5 that is
+    idx 5 @ 0.50 (idx 8's 0.45 is past the anchor)."""
+    sub = _sub(5, +1, 0, 1, 10, "same_dir_replacement")
+    assert _replacement_break_point(sub, _REPL, {9: 5}, _DF, 1, 10) == (5, 0.50)
+
+
+def test_no_break_for_other_end_reasons():
+    """Reversal / parent_end / open subs already end at a structural point —
+    measured on the reference window, so the rule is replacement-only."""
+    for reason in ("reversal", "parent_end", None):
+        sub = _sub(4, -1, 0, 1, 10, reason)
+        recs = [_Rec(reason, 9, 10)]
+        assert _replacement_break_point(sub, recs, {9: 5}, _DF, 1, 10) is None
+
+
+def test_no_break_when_the_extreme_is_an_endpoint_or_the_range_is_empty():
+    sub = _sub(4, -1, 0, 1, 10, "same_dir_replacement")
+    # anchor == last point -> empty range
+    assert _replacement_break_point(sub, _REPL, {9: 1}, _DF, 1, 10) is None
+    # the extreme lands ON the extension end -> no degenerate zero-length piece
+    assert _replacement_break_point(sub, _REPL, {9: 5}, _DF, 4, 5) is None
+    # unknown replacing sub / missing anchor
+    assert _replacement_break_point(sub, _REPL, {}, _DF, 1, 10) is None
+    assert _replacement_break_point(sub, [], {9: 5}, _DF, 1, 10) is None
+
+
+def test_break_uses_the_record_that_ended_this_sub():
+    """A sub with several records: the one whose `end_idx` is the sub's end
+    carries `ended_by_sub_id`."""
+    sub = _sub(4, -1, 0, 1, 10, "same_dir_replacement")
+    recs = [_Rec("parent_end", None, 4), _Rec("same_dir_replacement", 9, 10)]
+    assert _replacement_break_point(sub, recs, {9: 5}, _DF, 1, 10) == (5, 1.50)

@@ -105,7 +105,7 @@ To change any visual element:
   the H1 overlay — on H1 that is sid 1's retroactive cycles (1,0)/(1,1) (the
   "degenerate parent cycles"); see "Collapsed-cycle zones" under the KL section.
 - **3-tier opacity (MAIN H1 chart only)**: tier picked by `meta["status"]` (3-state lifecycle convention). Sub charts use per-TF tier.
-- **Outline (Item 5)**: single rect outline (no fill) spanning `[start_time, end_time]`. Color matches confirm line (`confirm_line_rgb = 101,67,33` brown), width = `confirm_line_width` (=2). Opacity = `confirm_opacity_active × tier`.
+- **Outline (Item 5)**: single rect outline (no fill) spanning `[start_time, end_time]`. Color matches the side's confirm line (`confirm_line_rgb`: dark olive `60,90,20` buy / dark brick `120,45,15` sell since the 2026-09-21 side tints; the `101,67,33` brown in the code is only a `.get` fallback), width = `confirm_line_width` (=2). Opacity = `confirm_opacity_active × tier`.
 - **Fill (Item 5)**: ONE filled rect per active stretch in `meta["activation_history"]` — each `A` event paired with the next `D` (or `end_idx` for trailing activate). Inactive stretches render as outline only.
 - **Confirm lines (Item 5)**: ONE vertical line per `A` event in `activation_history` (replaces the prior single line at `confirmed_idx`). For zones derived before activation_history was added, falls back to a single line at `confirmed_idx`.
 - Style keys: `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line`
@@ -198,7 +198,7 @@ All zone rectangles (KL + POI, both charts) follow these rules:
 | KL confirm line | One vertical line at `confirmed_idx`. |
 | POI confirm lines | N vertical lines, one per `A` event in `activation_history`. Fallback to single line at `confirmed_idx` for legacy zones without history. |
 | Outline color (KL) | Side color: green `rgb(0,180,0)` (buy) / red `rgb(220,0,0)` (sell). Sub-native M15 zones use thin black `rgba(0,0,0, line_op)` width 0.5. |
-| Outline color (POI) | Brown `rgb(101,67,33)` (matches confirm line). Sub-native M15 zones use thin black `rgba(0,0,0, line_op)` width 0.5. |
+| Outline color (POI) | Side confirm-line colour: dark olive `rgb(60,90,20)` (buy) / dark brick `rgb(120,45,15)` (sell). Sub-native M15 zones use thin black `rgba(0,0,0, line_op)` width 0.5. |
 
 Implementation: shared helpers in `engine_v2/charting/_zone_render.py`:
 - `compute_kl_active_stretches(zone, render_end_idx)`
@@ -260,7 +260,7 @@ Implementation: shared helpers in `engine_v2/charting/_zone_render.py`:
 | Context | Outline color | Outline width |
 |---|---|---|
 | Main H1 chart, KL | `rgb(0,180,0)` (buy) / `rgb(220,0,0)` (sell) at `confirm_opacity_active × tier` | 2 |
-| Main H1 chart, POI | `rgb(101,67,33)` (brown) at `confirm_opacity_active × tier` | 2 |
+| Main H1 chart, POI | side confirm colour — olive `rgb(60,90,20)` (buy) / brick `rgb(120,45,15)` (sell) — at `confirm_opacity_active × tier` | 2 |
 | Sub M15 chart, sub-native KL/POI (M15) | `rgba(0,0,0, line_op)` (thin black) | 0.5 |
 | Sub M15 chart, main-TF overlay KL | side color at `confirm_opacity_active × main_tf_tier` | 2 |
 | Sub M15 chart, main-TF overlay POI | brown at `confirm_opacity_active × main_tf_tier` | 2 |
@@ -276,9 +276,16 @@ A separate chart file renders M15 candles with both M15 structure and H1 overlay
 ### Architecture
 - **Entry:** `export_m15_chart_plotly(registry=..., path_id=..., title=..., ...)` — registry-only (§13.5.e); resolves its M15 entity + parent overlay from the registry. Reads sub data from `m15_df.attrs["events" / "kl_zones" / "poi_zones" / "fib_states" / "wave_candles" / "wvmi" / "prev_bos_lines"]` grouped by each snapshot's **`meta["sub_id"]`** (`_sub_identity`) per the `m15_df.attrs["sids"]` `SidRecord` manifest (one row per unique sub rendered on this lens; `_sid_record_identity` = `sub_id` for a sub row, `sub_sid` for a main row), with `m15_df.attrs["triggers"]` (this lens's `TriggerRecord`s) for hover attribution. (Plan C, 2026-09-20 — replaces the pre-pool identity tuple `(parent_sid, parent_cycle_id, sub_sid)`; `sub_sid` no longer exists on any sub artifact.)
 - **M15 candles** as the base OHLC
-- **M15 structure** (swing lines, CTS/BOS dots, prev BOS lines) in **royalblue**
-- **H1 overlay** (swing lines, CTS/BOS dots, prev BOS lines) in **black**
-- All connector lines are **solid** (no dash) for both M15 and H1
+- **M15 structure** (swing lines, CTS/BOS dots, prev BOS lines) in **royalblue**;
+  where two structures draw over the same candles, the older one's segments are
+  drawn in the navy dotted PRIOR style (see "Recent vs prior" below)
+- **H1 overlay** (swing lines, CTS/BOS dots, prev BOS lines) in **black**; since
+  the chart review of 2026-09-21 the overlay's swing / PB→BOS lines are
+  **lifecycle-filtered per wave** — a wave that was never live on the H1
+  structure's lifecycle is not drawn at all (see "H1 overlay structure lines"
+  below). The H1 chart itself is unchanged.
+- Connector lines are solid for every live wave (M15 and H1); only M15 waves
+  that were never live are dotted; prev-BOS lines are always solid
 
 ### Color Differentiation Convention
 | Element | M15 (sub-native) | H1 (main-TF overlay) |
@@ -304,7 +311,7 @@ A separate chart file renders M15 candles with both M15 structure and H1 overlay
 ### Opacity
 - All swing/connector lines use **flat opacity** from the style (no per-sid multiplier).
 - **Zone opacity follows the per-TF tier system** (Item 5) — see "Opacity composition tables" above. The legacy 3-tier (active/recent_inactive/prior_inactive) is the MAIN H1 chart only; sub charts use main_tf (0.2) for H1 overlays and sub_tf (0.5) for M15 native.
-- The dot-trace opacity tier (`_m15_opacity_tier_for_events`) keys on `m15_most_recent_psid` / `m15_recent_cycles`, computed by `_compute_m15_tier_context_from_sids` from each sub's FIRST record (`SidRecord.meta["first_record"]`, informational only) — semantics unchanged from the per-trigger era.
+- **The dot-trace opacity tier is INERT** (audit 2026-09-21; predates the pool). `_m15_opacity_tier_for_events` is called once (the prev-BOS block) and its result is discarded; `_render_m15_dots` ignores `is_active_trigger` / `most_recent_psid` / `recent_cycles`, so every M15 dot and line renders at its flat registry opacity — consistent with "flat opacity" above. `_compute_m15_tier_context_from_sids` (from each sub's FIRST record, `SidRecord.meta["first_record"]`) still feeds the hover's informational parent fields. Removing the dead path is a pending cleanup.
 
 ### Sub ownership, identity and hover — PART4 §16.5 rev 2 (Plan C, landed 2026-09-20)
 
@@ -319,9 +326,10 @@ unique sub on the lens (`sub_id` set, `sub_sid = None`, `parent_sid` /
 the informational `parent_sid` / `parent_cycle_id` / `use_case` on a snapshot
 are never used for grouping. Trace names carry the identity: sid-tied dots are
 `M15 {CTS|BOS|CTS (unconf)|PB} sub{sub_id}` (`_render_m15_dots`), KL outlines
-are `M15 KL outline sub{sub_id} c{cycle_id}`; the swing / PB→BOS / prev-BOS
-line names still carry the first record's parent `h1s{parent_sid}c{parent_cycle_id}`
-(informational).
+are `M15 KL outline sub{sub_id} c{cycle_id}`, swing lines are
+`M15 swing[ (prior)] sub{sub_id}_m15s{internal_sid}` and the cross-structure
+line is `M15 PB→BOS sub{sub_id}`; only the prev-BOS trace name still carries the
+first record's parent `h1s{parent_sid}c{parent_cycle_id}` (informational).
 
 **Ownership = the sub's real-time lifecycle window, per direction.**
 `_compute_owner_by_idx_dir(sid_records, edge_idx)` builds
@@ -352,15 +360,105 @@ later start wins among live subs) names this sub; a FORMING candle (the sub's
 `[starting_idx, start_idx)` span, `_compute_forming_by_idx_dir`, later anchor
 wins among forming subs) is drawn iff that map names this sub — independently
 of any live sub of the same direction, so a structure forming under a live one
-stays visible (`3304/−1` forming 3304→3621 under live `2639/−1`). Forming
-elements use the forming styles: swing segments `structure.m15.swing_line_forming`
-(navy, `dash: dot`, opacity 0.75 — the segment bridging the last forming point
-to the first live point is forming), dots `structure.m15.{cts,bos}_forming`
-(navy open circles, 1.5-px ring, opacity 0.85), PB→BOS and prev-BOS lines
-dotted when their start candle precedes `start_idx`; hover carries
-`phase=forming|live`. Trace names: `M15 swing (forming) sub{sub_id}_m15s{sid}`
-/ `M15 swing sub{sub_id}_m15s{sid}`, dots `M15 {kind} sub{sub_id} (forming)`.
-All M15 structure dots are `size 3.6` (+20%, 2026-09-20).
+stays visible (`3304/−1` forming 3304→3621 under live `2639/−1`). Ownership
+decides WHICH points exist; the wave rule below decides their STYLE.
+
+**Recent vs prior (chart review 2026-09-22) — what solid and dotted mean.**
+A *segment* is one straight piece of a sid-tied line between two consecutive
+drawn points — over the EXTREME candles the line runs through
+(`cts_anchor_idx` / BOS idx), never the confirmation candles — including the
+most recent internal sid's extension to the last owned candle and each
+cross-structure PB→BOS line. Where the structures of two different subs draw
+segments over the same candles, the **most recent** structure is solid and the
+**prior** one's segment is dotted:
+
+- **Recency** = `_recency_key` = the hierarchical `(parent_sid,
+  parent_cycle_id, sub_id)` tuple (the first two from the sub's first record,
+  informational; `sub_id` is the canonical monotonic identity). The structure
+  that occupies a candle span later always has the higher tuple; on every
+  window measured the tuple orders exactly like `sub_id`.
+- **Overlap** = `lo_a < hi_b and lo_b < hi_a` — MORE THAN ONE shared candle.
+  Two segments meeting at a single join candle are not an overlap (reference
+  window: sub `1797/−1` 2270→2365 vs sub `2365/+1` 2365→2557, and sub `2639/−1`
+  3047→3304 vs sub `3304/−1` 3304→3621 — all four stay solid).
+- **Direction-agnostic**: a `+1` and a `−1` sub crowding the same candles are
+  still ordered (sub `3760/−1`'s extension 4000→4200 is dotted under sub
+  `4027/+1`, though both are live).
+- **Whole segments**: a segment that overlaps for even part of its span is
+  dotted end to end (sub `3304/−1`'s extension 3621→3818 overlaps sub
+  `3760/−1` only over [3760, 3818] and is dotted in full).
+- **No overlap ⇒ solid**, whether or not the structure was ever live in real
+  time — sub `454/+1`'s 454→784→917 prefix is solid because nothing else draws
+  there. Conversely a live structure's segment CAN be dotted once a later one
+  supersedes it, so an active zone may hang on a dotted segment; the real-time
+  lifecycle is carried by the zones and by the hover `phase`.
+- **Per lens**: overlap is computed over the segments drawn on THAT chart, so a
+  sub can be prior on one lens and solid on the other (sub `2639/−1`'s
+  3304→3611 is dotted on confluence, where sub `3304/−1` supersedes it, and
+  solid on counter, where that sub is not drawn). This is a deliberate
+  exception to "every lens draws the sub identically", which still holds for
+  the window and the geometry.
+
+**Replaced subs run through one more point.** A sub whose `end_reason` is
+`same_dir_replacement` is superseded while price keeps moving, so its final
+segment would be dragged from its last confirmed point straight to the handover
+candle, through a real swing extreme. Such a sub's line breaks at that extreme
+(`_replacement_break_point`, drawn with a **PB dot**): the counter-move extreme
+(`−1` sub pulls up → highest high; `+1` → lowest low, the same convention as the
+other pullback dots) over `(last point, the REPLACING structure's anchor]`.
+Bounding at the replacing anchor is what makes it the structural swing rather
+than a later marginal overshoot — sub `3304/−1` breaks at 3760 (0.57806, where
+the sibling structures put the swing), not at the literal highest high 3806
+(0.57827; MS saw it — sub `3621/+1` fires `CTS_THRESHOLD_UPDATED@3806` — and
+kept the swing at 3760). The resulting segments mirror the sibling structures
+point for point (sub `3304/−1`'s 3621→3760 IS sub `3621/+1`'s segment; sub
+`3621/+1`'s 3760→4000 IS sub `3760/−1`'s), and the break also resolves the
+partial overlap: 3621→3760 meets sub `3760/−1` only at the join candle so it
+stays solid, while 3760→3818 is prior. **Only replacement** gets this: measured
+on the reference window, every reversal-ended sub's final segment already ends
+at its counter-move extreme (0–2 candles) and `parent_end` ends at the parent's
+candle — they are already one clean wave.
+
+Implementation: `_prior_line_segments` (pure, over every drawn segment of the
+lens) decides the set; `_group_flag_runs` merges consecutive segments of one
+style into a single trace, the boundary point belonging to both. Ownership is
+unchanged and still decides which points exist at all (two ownership layers,
+above) — where two same-direction structures claim one candle the older one's
+points are hidden, not dotted. **Dots follow their segments:** filled (recent
+style) iff the dot ends at least one solid segment, else a dimmed open circle;
+a lone point with no segment is solid. **Prev-BOS lines carry no lifecycle or
+recency formatting at all** — always solid, and they never make another segment
+prior. Hover carries both facts: `phase=live|forming` (the real-time
+`idx >= start_idx`) and `layer=recent|prior` (why this style).
+Styles: `structure.m15.swing_line_prior` (navy, `dash: dot`, opacity 0.75),
+`structure.m15.{cts,bos}_prior` (navy open circles, 1.5-px ring, opacity 0.85)
+— renamed from `*_forming` with this rule. Trace names: `M15 swing (prior)
+sub{sub_id}_m15s{sid}` / `M15 swing sub{sub_id}_m15s{sid}` (one per run),
+`M15 PB→BOS sub{sub_id}`, dots `M15 {kind} sub{sub_id}[ (prior)]`; only the
+prev-BOS trace still carries the first record's parent `h1s{parent_sid}c{cycle}`
+(informational). All M15 structure dots are `size 3.6` (+20%, 2026-09-20).
+The superseded 2026-09-21 rule (solid iff the segment's span touched
+`[start_idx, end_idx]`, `_wave_touches_window` / `_split_polyline_by_wave`) is
+still what the H1 overlay filter below uses.
+
+**H1 overlay structure lines — lifecycle filter (chart review 2026-09-21).**
+On the sub charts the H1 overlay (`_render_h1_overlay`) draws only the H1 waves
+that were live at some point: each wave (segment between consecutive H1
+points, or the most recent sid's extension to the last candle, or a PB→BOS
+line of the prior sid) is drawn iff its candle span intersects its sid's
+real-time lifecycle window `[struct_start_by_sid, reversal idx]`
+(`zones.structure_lifecycle.compute_struct_start_by_sid` with the reversal
+handoff / `compute_reversal_idx_by_sid` — the helpers the overlay's wave-candle
+block already uses) — the same `_wave_touches_window` predicate as the sub
+rule, but hidden instead of dotted. Waves never live are not drawn: on the
+reference window sid 1's retroactive (1,0)/(1,1) waves 689→710→728→761→826,
+which precede its 902 start and crowd the sub structures they overlap; sid 1's
+826→905 wave (it spans 902) and everything after it are drawn, and all of sid 0
+(incl. its PB@683 → BOS(sid 1)@689 line, inside sid 0's `[96, 902]`). An H1 dot
+is drawn iff a drawn wave or PB→BOS line touches it (so the BOS@689 dot stays as
+the end of sid 0's PB→BOS line). H1 prev-BOS lines, `bo/pb/pr/rv` labels and
+zones are unaffected. **The H1 chart itself is unchanged** — it draws every sid
+in full (prior sids at 50%) as the high-level market picture.
 
 **Persisting elements:** KL / POI rectangles and fibs render the sub's
 snapshots — drawn from the anchor (`base_idx` / `ic_idx`), active from
