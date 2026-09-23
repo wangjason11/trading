@@ -366,6 +366,16 @@ being compared has a plan that lists its expected deltas (per
 UNEXPECTED split is *against that list* — an "expected byte-identical" plan
 with any non-empty diff is a bug signal, not a review task.
 
+## File learnings before moving on (checkpoint)
+
+A finished `/compare` (and the chart-review pause that follows it) is a
+**checkpoint** for the continuous-documentation rule
+(`memory/feedback_continuous_documentation.md`): before starting the next change,
+drain `memory/_INBOX.md`, file what this round established — the decision AND its
+rationale, any scope boundary the user drew, any measured fact a future session
+would re-derive — and run the reconcile checklist (edit in place, one canonical
+home, `MEMORY.md` true end to end). Do not defer it to `/commit-save`.
+
 ## Chart Count Parity (Corroborating check)
 
 Chart trace/shape counts tally everything rendered for an entity, so a

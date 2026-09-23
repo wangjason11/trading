@@ -10,6 +10,43 @@ argument-hint: [topic or lesson to remember]
 
 Let's update our documentation, memory, and skills where appropriate so we are more knowledgeable & efficient in the future, and don't make the same errors/bugs. Ensure there are no unnecessary duplications with what we've already documented. Ensure there are no contradictions or inconsistencies. Ensure if information is outdated or contradicts with new information, we remove it or update it. If you ever have any doubts about whether you should add / change / remove something, always clarify with me.
 
+## Continuous mode (the DEFAULT since 2026-09-22)
+
+Learnings are captured **throughout** a session, not in one sweep at the end — an
+end-of-session pass compresses hours of discussion from memory and flattens the
+early, most carefully-reasoned exchanges. Standing rule + trigger list + routing
+table: `memory/feedback_continuous_documentation.md` (loaded every session via
+`MEMORY.md`). This skill is the procedure.
+
+**Two tempos — do not conflate them:**
+
+| | When | What |
+|---|---|---|
+| **Capture** | the moment it is said / measured | verbatim quote or measured fact + why it matters. Destination obvious and the entry self-contained → write it into the target doc now. Still unresolved → ONE line into `memory/_INBOX.md` |
+| **File + reconcile** | every checkpoint: after each landed change, at each `/compare` chart-review pause, at `/commit-save` | drain the inbox, route each entry (table below), then run the reconcile checklist over everything written since the last checkpoint |
+
+Batching the reconcile is *better* than doing it per item: related entries checked
+in one pass see each other; separate passes cannot, and that is how duplicates are
+born. Capture, however, is never batched.
+
+**Also sweep retrospectively at each checkpoint:** *what was said since the last
+checkpoint that a future session would need and cannot re-derive?* In-the-moment
+vigilance misses things; this catch-up is what makes the rule hold.
+
+**Reconcile checklist (every checkpoint, not just at the end):**
+
+1. Entry already exists? → **edit in place**; never append a second, contradicting one.
+2. New fact contradicts something older? → update/delete the old text in the same edit.
+3. Same fact now in two files? → keep the canonical home, replace the other with a pointer.
+4. Rule changed? → code comment + spec + style registry / skill values + memory move in the SAME commit.
+5. Is `MEMORY.md` true END TO END — status line, "next session priorities", topic sections? Stale spots
+   are never only where you just edited (2026-09-22: the ACTIVE THREAD was updated while four other
+   sections still described the superseded rule).
+
+**Invoked explicitly (`/remember`) or at `/commit-save` step 1:** do the same
+thing, but scoped to everything not yet filed — the inbox plus the retrospective
+sweep over the whole session.
+
 ## Instructions
 
 1. **Identify what to remember:**

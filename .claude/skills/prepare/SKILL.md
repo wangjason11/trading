@@ -176,6 +176,15 @@ memory entry and they were nearly lost.
   every bounded build) only appeared from the audit. See
   `memory/feedback_cold_review_plans.md`.
 
+## Documentation cadence for the session ahead
+
+`/prepare` opens a session; the continuous-documentation rule governs the rest of
+it (`memory/feedback_continuous_documentation.md`, loaded via `MEMORY.md`):
+capture learnings as they happen, file + reconcile at every checkpoint. Two things
+to do HERE: (1) if `memory/_INBOX.md` is non-empty, drain it before starting new
+work — it means a previous session ended before its last checkpoint; (2) treat the
+findings of this `/prepare` itself as the session's first capture (Section 6).
+
 ## Why This Matters
 
 Building features without full context leads to:

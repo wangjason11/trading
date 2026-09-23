@@ -86,10 +86,12 @@ Invoke the `remember` skill via the `Skill` tool **before staging anything**:
 Skill(skill="remember")
 ```
 
-This lets `/remember` propose candidate learnings (gotchas, landmines,
-spec clarifications, memory updates), surface them to the user for
-confirmation if non-obvious, and edit the appropriate files. Any files
-it touches become part of the working tree and will be picked up by the
+Since 2026-09-22 learnings are captured **continuously** during the session
+(`memory/feedback_continuous_documentation.md`), so this step is the FINAL
+reconcile, not the first capture: drain `memory/_INBOX.md`, sweep for anything
+said since the last checkpoint that was never filed, and run the reconcile
+checklist (edit-in-place, one canonical home, `MEMORY.md` true end to end). Any
+files it touches become part of the working tree and will be picked up by the
 source commit in Step 2.
 
 If `/remember` reports nothing worth saving, continue. Don't force a

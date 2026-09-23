@@ -137,6 +137,19 @@ See `GOTCHAS.md` for detailed debugging lessons (including cascading effect exam
 
 ---
 
+## Documentation cadence (standing rule, 2026-09-22)
+
+Capture learnings **continuously through the session**, not in one sweep at the end:
+write the nuance down when it is said (verbatim + why it matters), then **file and
+reconcile at every checkpoint** — after each landed change, at each `/compare`
+pause, and at `/commit-save`. Reconciling is the new risk that frequent writes
+create: edit existing entries **in place** rather than appending contradicting ones,
+keep one canonical home per fact, and move code + spec + skill values + memory in the
+same commit. Unresolved items go one line into `memory/_INBOX.md` (durable; drained
+at the next checkpoint). Full rule + trigger list + routing table:
+`memory/feedback_continuous_documentation.md`; procedure: the `/remember` skill's
+"Continuous mode".
+
 ## Development Workflow
 
 ```
