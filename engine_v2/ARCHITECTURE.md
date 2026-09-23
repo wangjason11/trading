@@ -136,7 +136,10 @@ Every **timing / lifecycle** read of a cycle start — `zones/structure_lifecycl
 recorded as separate causes (the POI activation sweep's `CTS_UPDATED` transitions at `ev.idx`
 (pre-window and in-window; the pattern path records no moment — an event-contract change, parked);
 FibTracker activation/terminal timing; the pool's `knowable_at_idx` / sibling clip — PART4 §17.12; `unified_probe` Phase 2's retrace-window
-start `check_lo = first_cts.idx + 1`, the CTS anchor, vs Phase 1's moment-based `tfb.est_idx + 1`).
+start `check_lo = first_cts.idx + 1`, the CTS anchor, vs Phase 1's moment-based `tfb.est_idx + 1`; the MS
+in-flight POI-inner resolver, which evaluates fills as-of the CTS anchor — `_refresh_poi_inners_for_cycle` →
+`compute_poi_inners_for_cycle` / `select_fib_anchor_for_cycle`, and `_update_cycle0_data` — not yet measured, and it
+feeds the sd-zone-proximity CTS confirmation). Site lists + staging: `plans/PLAN_E_inputs.md`.
 
 The engine maintains a stable downstream interface by converting structure events into StructureLevels (CTS/BOS list).【fileciteturn1file14】
 

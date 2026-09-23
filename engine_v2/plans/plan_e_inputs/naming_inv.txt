@@ -1,0 +1,992 @@
+Plan E input inventory — rendered in full from the naming-inventory (`naming_inv`) workflow result (zones pass, 2026-09-22/23).
+Coordinates: HEAD e2e0f89 (see ../PLAN_E_inputs.md §0 for the Plan D offsets). Counts measured on save 20260922_195430_aadb887.
+SUPERSEDED WHERE IT DISAGREES WITH ../PLAN_E_inputs.md §0.1 (final user decisions): e.g. cts_extreme_idx / *_extreme_idx for
+endpoints, extreme_time, additive aliases / 'old keys never removed', retiring the word 'anchor'. Read the digest first.
+Only the consolidated result ('cons'/'feas') is kept; the per-reader partials were dropped.
+
+### summary
+
+I merged the four inventories and re-grepped all of engine_v2 (excluding legacy_2025*); the .py files are unmodified at HEAD. I re-traced every non-obvious 'violates' value in the code and in the baseline CSVs, and all of them hold what the inventories claimed.
+
+Measured on the baseline: CTS_ESTABLISHED idx != confirmed_at on exactly 2 unique M15 cycles, which are 3 CSV rows (sub 0 cyc 2: 1223 vs 1224; sub 3 cyc 1: 2828 vs 2829, mirrored in both lenses). All 5 H1 cycles have lag 0.
+
+The highest-impact violations are both exported and time-carrying:
+- POI meta cts_established_idx holds the CTS_ESTABLISHED extreme; it is the Plan D gate term and appears in all 48 POI rows.
+- Fib meta activated_at holds the extreme on the establish paths. It feeds start_idx and the previous cycle's end, which is why sub 3 cyc 0's fib ends at 2828 while its KL and POI end at 2829. It is in all 33 fib rows.
+
+Internal violations:
+- The retired lifecycle_end_idx / cts_est_idx_by_key / next_cycle_start chain: delete it.
+- validated_h1_start and validated_parent_start.
+- structure_engine cts_est_idx and cts_established_idx.
+- identify_start last_cts_confirmed_idx.
+- MS bos_confirmed and cts_confirmed_for_idx.
+- Two log labels that print the extreme under 'est'.
+- Two bare names holding the moment where the rest of the repo means the extreme: structure_lifecycle cts_idx and zone_proximity next_bos_idx.
+- probe_fc_finalize's cts_est* columns.
+- A latent test bug: test_main_reversal_probe._cts0_established_idx compares the extreme with tfb.est_idx, the moment.
+- charting ext_end_idx, where 'ext' means extension.
+
+Missed by all four inventories:
+- 15 silent cross-kind fallback sites.
+- fib_tracker defaulting c0_cts_idx to a BOS idx.
+- The FibRetracement anchor_*_idx fields.
+- The dataclass-derived trigger CSV headers.
+- The shift-list coupling.
+
+Exported renames:
+- Five headers over 10 CSV header lines, with no data rows changed.
+- Four or five meta keys: KL anchor_idx 39 rows, POI bos_idx/cts_idx 48, POI cts_established_idx 48 (or re-value it: 3 rows), fib cycle1_bos_idx 1.
+- activated_at should be value-fixed (4 rows), not renamed.
+
+Frozen keys stay; the ARCHITECTURE table must still bridge these:
+- pb_start
+- BOS source
+- the RANGE_STARTED keys
+- structure_levels time
+- the M15 slice-local keys
+- the event-type-token rule
+
+Plan D decision 1 (keep the key as the extreme) conflicts with the new standard. Land Plan D with its parameter named cts_moment_idx, then rename or re-value the key in its own /compare.
+
+Key files:
+- engine_v2/zones/poi_zones.py
+- engine_v2/zones/fib_tracker.py
+- engine_v2/multitf/entity_df_mutation.py
+- engine_v2/structure/market_structure.py
+- engine_v2/plans/PLAN_D_poi_activation_moment.md
+
+### sizing
+
+Rows kept: 20 violates (18 CTS/BOS-specific plus 2 non-CTS name collisions), 1 reversal-scope item filed as ambiguous, about 32 ambiguous families, 8 frozen rows (16 bridge entries), plus a few follows/n_a near-misses. Internal renames (byte-identical on /compare) total about 95 identifiers across about 22 production files, plus deletions. Single-module locals and labels, about 45, touch no tests: MS state fields and locals; structure_engine, identify_start and unified_probe locals and labels; structure_lifecycle and zone_proximity locals; poi, kl and fib locals and print labels; FC resolver locals; the chart ext_end_idx and locals; probe_fc_finalize. Cross-module internal renames, about 25, touch tests: ReferenceZone.source_event_idx (34 test lines / 4 files); validated_h1_start and validated_parent_start (21 / 6); the cross-fib API kwargs (resolve_cross_cycle_eligibility, CrossEligibility, _cts_by_cycle; about 20 lines in 2 files); FibTracker.on_cts_established(bos_idx=) (2 files); identify_base_pattern / identify_wave_candles anchor_idx (about 14 calls, mostly keyword, in test_wave_candles); _find_prior_cts_anchor (1 file); the cycle0 dict keys (no tests). Deletions: the lifecycle_end_idx chain, which is cts_est_idx_by_key + next_cycle_start + the trigger-side reversal_idx_by_sid across 4 detectors, 3 pipelines, types.py and the uc1 label (33 production lines / 9 files, 34 test lines / 12 files); MultiTFTrigger.start_time and start_price (about 25 test lines); MS proximity_confirmed_idx; debug/zone_proximity_diag.py. One test-only fix: _cts0_established_idx. Optional big renames to defer: probe_end_idx (94 production / 150 test lines), creation_event_idx (17 / 18), enforce_cts0_new_extreme (14 / 7), CONF (208). Exported: 5 header renames over 10 CSV header lines with zero data rows changed (final.csv cts_idx and bos_idx, structure_levels time, KL source_time x3, fib bos_idx and cts_idx x3, triggers validated_parent_idx x2). 4 or 5 meta-key renames: KL anchor_idx 39 rows, POI bos_idx and cts_idx 48 rows, POI cts_established_idx 48 rows (or re-value it: 3 rows), fib cycle1_bos_idx 1 row, plus optional KL source_event_idx (39). 2 value fixes that make a rename unnecessary: fib activated_at (4 rows) and POI cts_established_idx re-value (3 rows). The frozen event and levels meta and the events idx column never change.
+
+### proposed_sequencing
+
+One cause per /compare, from the baseline 20260922_195430_aadb887.
+
+Step 0, docs only (no replay): write the standard into GLOSSARY and add the frozen_bridge rows to the ARCHITECTURE ev.idx table. The missing rows are pb_start, BOS source, the RANGE_STARTED keys, the levels time, the M15 coordinate note, and the event-type-token rule.
+
+Step 1, Plan D as written: gate only, 1 CSV row (confluence POI line 4: confirmed_idx and activation_history 1223 -> 1224). Name its parameter cts_moment_idx, never cts_established_idx, because the meta key it leaves behind still holds the extreme. Its test (a) pins meta['cts_established_idx'] == 9; flag that this pin must move in step 5.
+
+Step 2, internal rename sweep (byte-identical). Split into 3-4 commits by layer, each verified by /compare: 24/24 CSVs identical, chart counts H1 85/245, counter 153/125, confluence 294/233, identical silent-skip grep output, and run.log diffs limited to renamed labels.
+- 2a: deletions (the lifecycle_end_idx chain, start_time/start_price, proximity_confirmed_idx, zone_proximity_diag.py) plus the _cts0_established_idx test fix and the comment fixes.
+- 2b: the structure layer.
+- 2c: multitf, pipeline, charting and debug.
+- 2d: zones. Do the poi_zones and fib_tracker renames after the queued behavioural items in step 3, which touch the same lines, or before them if those items are not imminent.
+- Keep chart hover and legend text out of this step; it changes the figure.
+- Optionally tighten the silent fallbacks here, since there is no delta on the baseline; check test fixtures first.
+
+Step 3, the user's queued behavioural items, each its own /compare:
+- Imbalance knowable at c3 (4 POI rows).
+- FibTracker timing: activated_at becomes the moment (4 fib rows, sub 3 in both lenses). After this, activated_at follows the standard and is never renamed.
+- The never-established fallback POI.
+
+Step 4, exported header renames: one /compare, 10 CSV header lines, 0 data rows. Verify that substituting the old headers back gives byte-identity.
+
+Step 5, exported meta-key renames: one /compare. KL anchor_idx (39 rows), POI bos_idx/cts_idx (48), fib cycle1_bos_idx (1), and POI cts_established_idx -> cts_extreme_idx (48) if the user keeps Plan D decision 1. Move the shift-list entries in the same commit, and verify that reverse key substitution gives byte-identity. If the user instead re-values cts_established_idx to the moment, that is its own /compare with exactly 3 rows, not folded into step 5. It then allows Plan D's parameter to be renamed cts_established_idx.
+
+Step 6, coordinate hygiene (slice-local -> absolute): after step 5, so each renamed key enters the shift lists once. One /compare per family, M15 rows only.
+
+Step 7, behaviour-mixing decisions, independent of the renames and each its own /compare: the Phase-2 check_lo extreme+1 vs moment+1, knowable_at_idx and the sibling clip (§17.12), the charts' next_bos_idx time bound, the orchestrator's (idx, type) sort, the _update_cycle0_data as-of extreme, and the sid-0 struct_start base.
+
+How the POI names interact with Plan D: Plan D rewrites the POI gate name this inventory flags. After it lands, the POI meta key and local cts_established_idx are the only CTS names containing 'established' that still hold an extreme. Resolve that in step 5 (rename) or in a 3-row re-value step, together with the cts_est= debug label at poi_zones.py:613, Plan D test (a), and the POI_ZONES_SPEC field-list text. POI bos_idx/cts_idx are Plan D's parked §7.4 hygiene item: rename in step 5 and re-coordinate in step 6. POI confirmed_idx follows the standard; Plan D changes its value, not its name.
+
+### missed by the partial inventories (10)
+
+1. Silent cross-kind fallbacks, as a complete set of 15 sites. Moment-named values falling back to the extreme: first_confluence_trigger.py:89, zone_proximity.py:311, unified_probe.py:456 (_second_cts_moment) and :594 (Phase-2 cts0_est_idx), kl_zones_v1.py:889. Extreme-named values falling back to the CTS_CONFIRMED moment: export_m15_chart.py:521 and :2025, export_plotly.py:1089, uc1_trigger.py:82, reference_zone.py:96, fib_tracker.py:1640, kl_zones_v1.py:896. None fire on production data, but the ARCHITECTURE rule says never fall back to the extreme. The inventories noted only FC:89 and uc1:82.
+2. zones/fib_tracker.py:1433 and :1524: c0_cts_idx = c0.get('cts_idx', new_state.bos_idx) gives a CTS-named value a BOS extreme. :1442 and :1532: cycle1_bos_idx = meta.get('cycle1_bos_idx', cts_idx) gives a BOS-named value the CTS extreme.
+3. features/fibonacci.py FibRetracement.anchor_high_idx / anchor_low_idx dataclass fields (:39-40, :143-144, :190-191). The structure inventory reported no matches in features/, and the zones inventory listed only the kwargs.
+4. Export coupling: debug/export_sub_tables._TRIGGER_COLUMNS / _UNRESOLVED_COLUMNS are built from fields(TriggerRecord) / fields(UnresolvedTrigger). Renaming any of those dataclass fields (validated_parent_idx, probe_input_idx, probe_finalize_idx, trigger_idx, parent_floor_idx) silently renames a /compare CSV header. No inventory flagged this.
+5. Shift-list coupling: renaming a key that is in _ZONE_META_IDX_KEYS / _EVENT_META_IDX_KEYS (KL anchor_idx, POI cts_established_idx, confirmed_idx) without moving the entry reverts the M15 values to slice-local. For KL anchor_idx that is a value diff on 29 rows; for POI cts_established_idx, 43 rows. /compare would catch it, but it would be a second cause.
+6. The orchestrator drives FibTracker, WVMI and the prev-BOS lines in sorted(events, key=(e.idx, e.type)) order (orchestrator.py:145), so CTS_ESTABLISHED and BOS_CONFIRMED are processed at their EXTREME candle. FibTracker._m15_phase flips to 'established' there. The labels are event vocabulary; this is behaviour, and it is Plan D's parked item.
+7. structure_engine.py legacy Exception-2 filters (:565-567, :768-771) compare CTS_ESTABLISHED.idx (an extreme) with reversal_confirmed_idx (the reversal apply candle); partly noted only as n_a.
+8. The MS _select_bos_on_breakout fallback (market_structure.py:2240) passes breakout_apply_idx (a MOMENT) into _initial_bos_before_first_cts(cts_idx=...), whose parameter otherwise receives the CTS extreme. This was noted only inside the breakout_apply_idx row.
+9. Re-verified side bug: market_structure.py:450 returns self.levels, which is never assigned, so the start_idx >= n early return raises AttributeError.
+10. Plan D decision 1 ('meta key cts_established_idx is KEPT as CTS_ESTABLISHED.idx') conflicts with the 2026-09-22 standard. Plan D's test (a) will pin meta['cts_established_idx'] == 9, an extreme, under an 'established' name. The zones inventory flagged the conflict; the test pin is new.
+
+### frozen_bridge (16)
+
+1. Event TYPE names: CTS_ESTABLISHED and BOS_CONFIRMED carry a past-tense 'moment' word, but their ev.idx is the price EXTREME; the moment is meta['confirmed_at']. State the rule explicitly: an event-type token in a name names the event, not its timing.
+2. CTS_CONFIRMED / CTS_RECONFIRMED: ev.idx == meta['confirmed_at'] = the MOMENT (the only CTS/BOS events whose idx is a moment).
+3. CTS_UPDATED: ev.idx = the new extreme. Moment = ev.idx on the raw path; unrecorded on the pattern path.
+4. meta['confirmed_at'] on CTS_ESTABLISHED, BOS_CONFIRMED, CTS_CONFIRMED and CTS_RECONFIRMED = the MOMENT (already follows the standard).
+5. CTS_CONFIRMED / CTS_RECONFIRMED meta['cts_anchor_idx'] = the CTS EXTREME at confirmation. Read 'anchor' as 'extreme'; local copies must be named *_extreme_idx.
+6. CTS_ESTABLISHED meta['anchor_idx'] = the breakout pattern's first candle (neither moment nor extreme). REVERSAL_CANDIDATE / REVERSAL_WATCH_START meta['anchor_idx'] = the reversal anchor / close-break candle. Never equal to the KL-zone meta 'anchor_idx', which is an extreme and not frozen.
+7. REVERSAL_CANDIDATE meta['apply_idx'] = the SCHEDULED moment (a prediction; the confirmed reversal is STATE_CHANGED(to=reversal).idx); meta['expires_idx'].
+8. BOS_CONFIRMED meta['pb_start'] = the cycle's pullback-pattern apply candle = the pullback-path CTS_CONFIRMED MOMENT. None on cycle 0 and on proximity-only cycles. NOT yet in the table.
+9. BOS_CONFIRMED meta['source'] = 'initial_prior_extreme' | 'pullback_extreme' (labels that use 'extreme' correctly). NOT yet in the table.
+10. RANGE_STARTED meta['cts_idx'] / ['cts_price'] = the CTS EXTREME (a bare frozen name). The table currently says RANGE_* is not audited.
+11. RANGE_STARTED meta['pullback_apply_idx'] / ['proximity_apply_idx'] = the CTS confirmation MOMENT. meta['start_idx'] / ['confirm_idx'] (offline range) = the range candidate / range confirmation candle.
+12. STATE_CHANGED meta['effective_idx'] (defaults to ev.idx).
+13. structure_events.csv 'idx' column = ev.idx, with the per-type meaning above.
+14. structure_levels.csv 'time' = t[ev.idx] = the EXTREME's time for CTS_ESTABLISHED / CTS_UPDATED / BOS_CONFIRMED. Its 'meta' is a frozen copy of the event meta.
+15. M15 coordinate note: only confirmed_at, apply_idx, anchor_idx and cts_anchor_idx (plus the dead confirmed_idx and bos_anchor_idx) are rebased to entity-absolute. RANGE_STARTED cts_idx / start_idx / confirm_idx / pullback_apply_idx, pb_start, effective_idx and expires_idx stay slice-local.
+16. Event-type-derived identifiers and labels (_emit_cts_established, on_cts_established, stop_after_cts_established, _collect_cts_established, _find_cts_established, _handle_*_cts_established, ReferenceZone.source 'cts_established' / 'cts_confirmed', FibTracker phases 'pre_established' / 'established' / 'confirmed', df cts_event / bos_event, cts_phase_debug 'EST_OR_UPD', chart legend 'CTS (confirmed)') name the event or phase. The standard governs *_idx and *_time-valued names only.
+
+### exported_changes (15 rows)
+
+[1] H1 df columns cts_idx / bos_idx -> cts_extreme_idx / bos_extreme_idx
+    files: structure/market_structure.py:37, :2405, :2465, :2498, :2571-2598; structure/identify_start.py:167; structure/unified_probe.py:102-104; multitf/entity_df_mutation.py:84-86
+    csv_effect: NZD_USD_H1_..._final.csv: header line only (columns 53 and 56); all 1058 data rows byte-identical. No other CSV.
+
+[2] StructureLevel.time -> extreme_time
+    files: common/types.py:62; structure/market_structure.py:2659, :2669; debug/export_structure.py:16
+    csv_effect: *_structure_levels.csv: header line only; 63 data rows identical.
+
+[3] KLZone.source_time -> confirmed_time (raw, unclamped)
+    files: common/types.py:285; zones/kl_zones_v1.py:941; debug/export_zones.py:54; 6 test lines in test_sub_wvmi, test_wave_candles, test_wvmi, test_zone_proximity
+    csv_effect: Header line of the 3 *_kl_zones.csv (H1 10, confluence 21, counter 8 rows); data identical.
+
+[4] fib CSV columns bos_idx / cts_idx -> bos_extreme_idx / cts_extreme_idx
+    files: Exporter-only: debug/export_fib_lifecycle.py:24-25, :58-59. Or a full FibState field rename: zones/fib_tracker.py, poi_zones.py, cross_cycle_fib consumers, both charts, multitf/entity_df_mutation.py:288-289, tests in 4 files (~50 lines)
+    csv_effect: Header line of the 3 *_fib_lifecycle.csv (3 / 21 / 9 rows); data identical.
+
+[5] TriggerRecord.validated_parent_idx -> validated_anchor_extreme_idx
+    files: multitf/sub_structure_pool.py:165; lifecycle_sweep.py:89, :337; entity_df_mutation.py:612-983; debug/probe_fc_finalize.py; 41 test lines in 8 files (header auto-derived via _TRIGGER_COLUMNS)
+    csv_effect: Header of *_M15_confluence_triggers.csv (8 rows) and *_M15_counter_triggers.csv (3 rows); values identical (96.0 / 591.0 / 826.0 / 3760.0 and 2609 / 3621 / 4000).
+
+[6] KL zone meta anchor_idx -> extreme_idx
+    files: zones/kl_zones_v1.py:894-954; multitf/entity_df_mutation.py:116 (_ZONE_META_IDX_KEYS; keep 'anchor_idx' in _EVENT_META_IDX_KEYS, where it is the frozen event key); pipeline/orchestrator.py:124; zones/wave_candles.py:403; KL-meta test fixtures (test_render_sub_projection, test_wave_candles, test_wvmi, test_sub_wvmi)
+    csv_effect: Meta text of all 39 KL rows (10 / 21 / 8); the key is renamed and values are identical. If the shift-list entry is forgotten, the 29 M15 values revert to slice-local: a value diff and a second cause.
+
+[7] KL zone meta source_event_idx (optional; recommended keep and document)
+    files: zones/kl_zones_v1.py:888, :951
+    csv_effect: If renamed or split: meta text of 39 KL rows. Values stay slice-local on the 29 M15 rows unless a separate coordinate fix is made.
+
+[8] POI meta cts_established_idx: (a) rename to cts_extreme_idx or (b) re-value to the moment
+    files: zones/poi_zones.py:469-471, :586, :613; multitf/entity_df_mutation.py:118; Plan D test (a) and POI_ZONES_SPEC field list
+    csv_effect: (a) Meta text of all 48 POI rows (H1 5, confluence 30, counter 13); values identical; forgetting the shift entry makes 43 M15 values slice-local. (b) Exactly 3 rows: M15_confluence_poi_zones line 4 (sub 0 cyc 2 IC 678) 1223 -> 1224; M15_confluence line 19 and M15_counter line 4 (sub 3 cyc 1 IC 2808) 2828 -> 2829. Counter line 7 (fallback 3806) and all H1 rows are unchanged.
+
+[9] POI meta bos_idx / cts_idx -> fib_bos_extreme_idx / fib_cts_extreme_idx
+    files: zones/poi_zones.py:584-585, :613
+    csv_effect: Meta text of all 48 POI rows; values identical, but 43 M15 rows are slice-local. Coordinate fix (adding the keys to _ZONE_META_IDX_KEYS) = a value change on those 43 rows, a separate cause.
+
+[10] fib meta activated_at: value fix to the moment (preferred) or rename
+    files: zones/fib_tracker.py:1056 + meta writes (Plan D queued item 2)
+    csv_effect: Value fix: 4 rows. M15_confluence_fib_lifecycle lines 14 and 15 and M15_counter lines 2 and 3: sub 3 cyc 0 end_idx 2828.0 -> 2829.0 (new_cycle); sub 3 cyc 1 meta activated_at 239 -> 240 (slice-local). H1 0 rows. A rename instead changes meta text on all 33 fib rows. Separately, activated_at is slice-local on 30 M15 rows.
+
+[11] fib meta cycle1_bos_idx -> cycle1_bos_extreme_idx
+    files: zones/fib_tracker.py:938, :1442, :1532; tests/test_main_versioned_cross.py:90
+    csv_effect: 1 row: H1 *_fib_lifecycle.csv line 3 (sid 1 cyc 1, value 728).
+
+[12] fib meta deactivated_at / reactivated_at (recommended keep)
+    files: zones/fib_tracker.py; multitf/entity_df_mutation.py:111, :122, :274; tests/test_main_versioned_cross.py:159
+    csv_effect: If renamed: 2 rows (sub 3 cyc 0 in each M15 fib CSV: confluence line 14, counter line 2).
+
+[13] Frozen event / levels meta and the events idx column
+    files: structure/market_structure.py (document only)
+    csv_effect: None: never renamed. The ARCHITECTURE table bridges them.
+
+[14] Internal-only renames and deletions (structure / zones / multitf / charting / debug / tests)
+    files: see the rows (MS state fields, locals, ReferenceZone.source_event_idx, validated_h1_start / validated_parent_start, cross-fib API, lifecycle_end_idx chain, start_time / start_price, zone_proximity_diag.py, ...)
+    csv_effect: 24/24 CSVs byte-identical and chart counts identical. run.log changes only on renamed labels (cts0_est at unified_probe:671, '[fib] CTS idx=', '[kl_zones][events]', '[uc1_trigger] lifecycle_end_idx='). None of them match the /compare silent-skip grep words.
+
+[15] Coordinate hygiene (value fixes, NOT renames)
+    files: multitf/entity_df_mutation.py _EVENT_META_IDX_KEYS / _ZONE_META_IDX_KEYS / the fib shift tuple
+    csv_effect: M15 value changes only. POI bos_idx / cts_idx: 43 rows. fib activated_at 30, locked_at 25, reactivated_at 2, sub cycle1_bos_idx 0. KL source_event_idx 29, expanded_last_idx 4. Event meta cts_idx (RANGE_STARTED 39 + 15), pb_start (21 + 8), pullback_apply_idx (7 + 2), start_idx / confirm_idx / effective_idx / expires_idx. Each family is its own /compare.
+
+
+### ROWS (every name inventoried) (70 rows)
+
+[1] cts_established_idx (POI meta key + derive_poi_zones local + _compute_poi_activation_history kwarg)
+    verdict: violates
+    kind: meta_key
+    where: engine_v2/zones/poi_zones.py:469-471 (local), :520 (kwarg pass), :586 (meta write), :770 (param), :613 (debug label); engine_v2/multitf/entity_df_mutation.py:118 (_ZONE_META_IDX_KEYS)
+    holds: EXTREME. int(CTS_ESTABLISHED.idx); when the (sid,cycle) has no CTS_ESTABLISHED it falls back to int(fib_state.cts_idx), the fib's final CTS anchor, also a location. Also the cycle term of the activation gate first_active = max(it, ic_idx, floor). Re-traced on the baseline: confluence POI line 4 (sub 0 cyc 2 IC 678) stores 1223 while the moment is 1224, and its first_active is 1223. Confluence line 19 and counter line 4 (sub 3 cyc 1 IC 2808) store 2828 vs 2829, masked by the sub floor 2829. Counter line 7 (sub 5 cyc 1) is the fallback 3806
+    uses: 14 prod lines / 3 files; 0 tests at HEAD (Plan D's test (a) will add one)
+    proposed_name: If the historical value is kept (Plan D decision 1), rename the meta key and local to cts_extreme_idx. The gate parameter is cts_moment_idx per Plan D. Alternatively re-value the key to CTS_ESTABLISHED.meta['confirmed_at'], after which the name follows
+    exported: True
+    export_detail: meta column of all 48 POI rows (H1 5, M15 confluence 30, M15 counter 13), rebased to entity-absolute by _ZONE_META_IDX_KEYS. A key rename changes the meta text of 48 rows. A re-value changes 3 rows. If the rename forgets the shift-list entry, 43 M15 values silently revert to slice-local
+    cross_module: True
+    notes: Plan D interplay: Plan D splits this into a historical meta value and a cts_moment_idx gate term. After Plan D, the meta key and its local are the only CTS 'established' names that still hold an extreme. Never give Plan D's moment parameter the name cts_established_idx while the key holds the extreme. The debug label cts_est= at :613 reads this key, so fix it in the same edit. structure_engine.py:777 has an unrelated local with the same name (row below)
+
+[2] activated_at (fib meta key + _activate_fib local)
+    verdict: violates
+    kind: meta_key
+    where: engine_v2/zones/fib_tracker.py:1056 (local, defaults to cts_idx); meta writes :602,:664,:731,:782,:846,:865,:937,:956,:1200,:1340,:1360,:1588 (= cts_idx) and :2313,:2520 (= current_candle); multitf/entity_df_mutation.py:274 shifts only deactivated_at
+    holds: Mostly EXTREME: CTS_ESTABLISHED.idx on the establish paths. CTS_UPDATED.idx on the 'activated_on: update' paths. current_candle on the cross paths (the CTS extreme at EST, or the CTS_THRESHOLD_UPDATED idx pre-established). It becomes FibState.start_idx (via _mark_first_active) and the previous cycle's 'new_cycle' end_idx. Re-traced: the M15 sub 3 cyc 1 value is slice-local 239 = abs 2828 (the extreme; moment 2829), so the sub 3 cyc 0 fib ends at 2828 'new_cycle' in both lenses while KL and POI end that cycle at 2829. The H1 lag is 0 on all 5 cycles
+    uses: 27 prod lines / 2 files; 0 test asserts
+    proposed_name: Keep the name and fix the value to the moment (Plan D queued item 2, 'FibTracker timing on the extreme'); the name then follows. Only if the value is kept: activated_cts_extreme_idx
+    exported: True
+    export_detail: meta of all 33 fib_lifecycle rows (H1 3, M15 confluence 21, M15 counter 9). The value fix changes 4 rows: sub 3 cyc 0 end_idx 2828 to 2829 and sub 3 cyc 1 meta activated_at 239 to 240, in both lenses. A rename changes 33 rows. On the 30 M15 rows the value is also SLICE-LOCAL (separate coordinate fix)
+    cross_module: False
+    notes: The past-tense '_at' promises a moment. The value fix makes a rename unnecessary; do not do both
+
+[3] cts_est_idx_by_key
+    verdict: violates
+    kind: variable
+    where: engine_v2/multitf/first_confluence_trigger.py:50, uc1_trigger.py:51, subsequent_confluence_trigger.py:78, subsequent_counter_trigger.py:78
+    holds: EXTREME: int(CTS_ESTABLISHED.idx) per (sid,cycle), last-seen (re-traced at first_confluence_trigger.py:59-68)
+    uses: 12 prod lines (4 duplicate copies); 0 tests
+    proposed_name: Delete with the retired lifecycle_end_idx chain (else cts_extreme_idx_by_key)
+    exported: False
+    export_detail: only feeds next_cycle_start, then the unread lifecycle_end_idx
+    cross_module: False
+    notes: The comments beside it still call CTS_ESTABLISHED.ev.idx the 'canonical' cycle lifecycle-start, which has been stale since Plan C (parent_tables.cts_moment uses confirmed_at)
+
+[4] next_cycle_start
+    verdict: violates
+    kind: variable
+    where: engine_v2/multitf/first_confluence_trigger.py:106, uc1_trigger.py:96, subsequent_confluence_trigger.py:109, subsequent_counter_trigger.py:109
+    holds: EXTREME: the next cycle's CTS_ESTABLISHED.idx, used as a lifecycle term
+    uses: 20 prod lines / 4 files
+    proposed_name: delete (retired chain)
+    exported: False
+    cross_module: False
+    notes: A lifecycle 'start' name holding a historical extreme, which breaks the 'never mix' rule
+
+[5] lifecycle_end_idx
+    verdict: violates
+    kind: field
+    where: engine_v2/multitf/types.py:27, :107, :145, :171; computed in the 4 detectors; passed through in the 3 *_pipeline.py; stdout label uc1_trigger.py:131
+    holds: min(next cycle's CTS_ESTABLISHED.idx [EXTREME], REVERSAL_CANDIDATE.meta['apply_idx'] [scheduled]) in H1 coords. Unread in production (grep-verified)
+    uses: 33 prod lines / 9 files; 34 test lines / 12 files
+    proposed_name: delete (Plan C §3 retired it)
+    exported: False
+    export_detail: not in any CSV; the [uc1_trigger] run.log line only
+    cross_module: True
+    notes: Pinned at tests/test_first_confluence_trigger.py:63 (58 = the next cycle's CTS extreme). Deleting it touches 12 test files
+
+[6] validated_h1_start
+    verdict: violates
+    kind: meta_key
+    where: engine_v2/multitf/entity_df_mutation.py:1245 (LowerTFResult.meta); read at multitf/sid_records.py:107
+    holds: EXTREME: the first live record's validated_parent_idx. first_confluence: the H1 BOS extreme (BOS_CONFIRMED.idx). Sibling types: the M15 sibling-CTS extreme. reversal: None
+    uses: 3 prod lines / 2 files; 12 test lines / 3 files
+    proposed_name: validated_anchor_extreme_idx (in lockstep with validated_parent_idx / validated_parent_start)
+    exported: False
+    export_detail: LowerTFResult.meta is not exported
+    cross_module: True
+    notes: 'h1' is false for 3 of 5 trigger types, and 'start' is lifecycle vocabulary
+
+[7] validated_parent_start
+    verdict: violates
+    kind: meta_key
+    where: engine_v2/multitf/sid_records.py:107 (SidRecord.meta)
+    holds: EXTREME, the same value as validated_h1_start
+    uses: 1 prod line; 9 test lines / 3 files
+    proposed_name: validated_anchor_extreme_idx
+    exported: False
+    export_detail: export_sub_tables._sub_row does not write it
+    cross_module: True
+    notes: The same value goes by three names (validated_parent_idx / validated_h1_start / validated_parent_start)
+
+[8] cts_established_idx (structure_engine local)
+    verdict: violates
+    kind: variable
+    where: engine_v2/structure/structure_engine.py:777-779 (compute_structure_from_start Exception 2)
+    holds: EXTREME: int(probe_cts_events[0].idx) of CTS_ESTABLISHED (re-traced)
+    uses: 2
+    proposed_name: cts0_extreme_idx
+    exported: False
+    cross_module: False
+    notes: Legacy path; only tests call compute_structure_from_start. The name also collides with the POI key
+
+[9] cts_est_idx (structure_engine local) + comments :463-464, :574
+    verdict: violates
+    kind: variable
+    where: engine_v2/structure/structure_engine.py:573-576
+    holds: EXTREME: int(exc2_cts[0].idx). The comments wrongly call that candle 'the pullback confirmation'
+    uses: 2
+    proposed_name: cts0_extreme_idx (fix both comments)
+    exported: False
+    cross_module: False
+    notes: Test-only scenario_3 path. The filter ev.idx <= reversal_confirmed_idx also compares an extreme with a reversal apply candle
+
+[10] last_cts_confirmed_idx / last_cts_confirmed_price (StartDecision.meta) + local cts_idx + reason 'scenario_2:base_last_cts_confirmed'
+    verdict: violates
+    kind: meta_key
+    where: engine_v2/structure/identify_start.py:167 (local), :172 (reason), :209-210 (meta)
+    holds: EXTREME: the df cts_idx at the last CTS_CONFIRMED row = st.cts.idx = that CTS_CONFIRMED's cts_anchor_idx, not the confirmation candle (re-traced)
+    uses: 1 write each; no reader
+    proposed_name: last_confirmed_cts_extreme_idx / last_confirmed_cts_price; local cts_extreme_idx
+    exported: False
+    export_detail: StartDecision.meta is not exported
+    cross_module: False
+    notes: Legacy Scenario 2
+
+[11] bos_confirmed (MarketStructureState field)
+    verdict: violates
+    kind: field
+    where: engine_v2/structure/market_structure.py:183 (def), :1937 (set in _emit_bos_confirmed), :1995-2041, :2498
+    holds: EXTREME: Point(idx = BOS_CONFIRMED.idx, the BOS extreme, price) (re-traced at :1937)
+    uses: 13 refs, MS only
+    proposed_name: bos (parallel to the cts field) or bos_extreme
+    exported: False
+    export_detail: feeds the df bos_idx / bos_price columns
+    cross_module: False
+    notes: The 'bos_confirmed' hits in wvmi/sub_wvmi/tests are the unrelated on_bos_confirmed method
+
+[12] cts_confirmed_for_idx (MarketStructureState field)
+    verdict: violates
+    kind: field
+    where: engine_v2/structure/market_structure.py:175, :1528, :1859, :1882
+    holds: EXTREME: st.cts.idx at confirmation (dedupe guard)
+    uses: 4
+    proposed_name: confirmed_cts_extreme_idx
+    exported: False
+    cross_module: False
+    notes: Next to cts_confirmed_idx (:210), which IS the moment and follows
+
+[13] log label cts0_est= (Phase-2 reset print)
+    verdict: violates
+    kind: log_label
+    where: engine_v2/structure/unified_probe.py:671
+    holds: EXTREME: first_cts.idx (CTS_ESTABLISHED.idx)
+    uses: 1 (the same label at :424, :782, :814 prints the moment)
+    proposed_name: print first_cts.meta['confirmed_at'] as cts0_est=, or relabel cts0_ext=
+    exported: False
+    export_detail: run.log only; not matched by the /compare silent-skip grep
+    cross_module: False
+
+[14] POI_LIFECYCLE_DEBUG label cts_est= (plus bos_idx= / cts=)
+    verdict: violates
+    kind: log_label
+    where: engine_v2/zones/poi_zones.py:612-617
+    holds: EXTREME: meta cts_established_idx; bos_idx / cts = fib extremes
+    uses: opt-in env var
+    proposed_name: cts_ext= / bos_ext= / cts_ext_final=
+    exported: False
+    export_detail: stdout only when POI_LIFECYCLE_DEBUG is set
+    cross_module: False
+    notes: Move with the POI meta-key decision
+
+[15] cts_idx (loop var in compute_cycle_lifecycle)
+    verdict: violates
+    kind: variable
+    where: engine_v2/zones/structure_lifecycle.py:118-120
+    holds: MOMENT: the value of cts_est_by_key = CTS_ESTABLISHED.meta['confirmed_at'] (re-traced :100-114)
+    uses: 2
+    proposed_name: cts_moment (matches ParentTables.cts_moment)
+    exported: False
+    cross_module: False
+    notes: Inverts the repo-wide bare meaning (cts_idx = extreme in the df column, FibState, c0_data, POI meta and the frozen RANGE_STARTED key)
+
+[16] next_bos_idx (zone_proximity)
+    verdict: violates
+    kind: variable
+    where: engine_v2/zones/zone_proximity.py:348
+    holds: MOMENT: the next cycle's BOS_CONFIRMED.meta['confirmed_at'] (via bos_conf_idx_by_key, which falls back to ev.idx)
+    uses: 3
+    proposed_name: next_bos_confirmed_idx
+    exported: False
+    export_detail: bounds the proximity triggers
+    cross_module: True
+    notes: The same local name in export_plotly.py:1197 and export_m15_chart.py:588/:2077 holds the BOS EXTREME (re-traced)
+
+[17] cts_est / cts_est_h1 ('CTSest') / loh_cts_est ('LOH(est)') + tei_h1 ('tei')
+    verdict: violates
+    kind: log_label
+    where: engine_v2/debug/probe_fc_finalize.py:75, :177, :183, :176, :201-211
+    holds: cts_est* = EXTREME: int(CTS_ESTABLISHED.idx) and its LOH. tei_h1 = the MOMENT (trigger_event_idx = BOS.confirmed_at)
+    uses: ~12
+    proposed_name: cts_ext_at_est(_h1) / loh_cts_ext_at_est; tei_h1 -> cts_est_moment_h1
+    exported: False
+    export_detail: stdout diagnostic table
+    cross_module: False
+    notes: The same file's cts1_ext / cts1_moment are the model to copy
+
+[18] _cts0_established_idx (test helper) + expected_est / actual_est
+    verdict: violates
+    kind: function
+    where: engine_v2/tests/test_main_reversal_probe.py:109 (compared at :212-218)
+    holds: EXTREME: int(ev.idx) of cycle-0 CTS_ESTABLISHED. It is asserted equal to tfb.est_idx, which is the MOMENT
+    uses: 3
+    proposed_name: _cts0_established_moment (return meta['confirmed_at']) or compare against tfb.extreme_idx
+    exported: False
+    cross_module: False
+    notes: LATENT TEST BUG (re-traced). It passes only because the fixture's extreme and moment fall on the same candle. test_ms_cts0_scan.py:81-83 pins cts0.idx == tfb.extreme_idx and confirmed_at == tfb.est_idx
+
+[19] this_cts_idx / cts_idx / window_span_post_cts (diagnostic CSV)
+    verdict: violates
+    kind: csv_column
+    where: engine_v2/debug/zone_proximity_diag.py:220, :278, :282
+    holds: other: the CTS-zone PROXIMITY-TRIGGER candle (neither extreme nor moment)
+    uses: 5
+    proposed_name: delete the file (its docstring says so), or *_cts_prox_idx
+    exported: False
+    export_detail: /tmp CSVs only; not in the save or /compare
+    cross_module: False
+
+[20] ext_end_idx (+ 'EXT' pseudo-point tag)
+    verdict: violates
+    kind: parameter
+    where: engine_v2/charting/export_m15_chart.py:431 (_replacement_break_point), tag at :646 and :2121
+    holds: other: the EXTENSION end (extend_to_idx walked back to the last owned candle), not a price extreme
+    uses: 4 + 5
+    proposed_name: extend_to_idx; tag 'EXTEND'
+    exported: False
+    export_detail: chart-internal (the tag is filtered from dots and hover)
+    cross_module: False
+    notes: 'ext' = extreme elsewhere (cts1_ext). The tests call the function positionally, so none break
+
+[21] reversal_confirmed_by_sid (orchestrator) + FibTracker param reversal_confirmed_idx / set_reversal_terminals
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/pipeline/orchestrator.py:148-155 (keyed sid+1); zones/fib_tracker.py:352, :486, :678, :743, :804, :1109
+    holds: SCHEDULED moment: REVERSAL_CANDIDATE.meta['apply_idx'] (a prediction, last-seen). On this window it equals STATE_CHANGED(to=reversal) every time
+    uses: 6 orchestrator + 20 fib_tracker
+    proposed_name: reversal_apply_idx_by_sid / reversal_apply_idx
+    exported: False
+    export_detail: drives fib end_idx / end_reason = 'reversal' and the prev-BOS line bounds
+    cross_module: True
+    notes: Reversal scope (prediction vs confirmed, not moment vs extreme). Same-named objects (structure_lifecycle docstring, export_plotly._get_reversal_confirmed_by_sid) hold STATE_CHANGED max idx. Scenario 1 compares a CTS EXTREME against it
+
+[22] cts_idx / bos_idx (MS df output columns)
+    verdict: ambiguous
+    kind: csv_column
+    where: engine_v2/structure/market_structure.py:37, :2405, :2465, :2498, :2571-2598 (invariants); read identify_start.py:167; listed unified_probe.py:102-104 (STRUCTURE_AUX_COLS) and multitf/entity_df_mutation.py:84-86 (drop list)
+    holds: EXTREME: st.cts.idx (current CTS extreme, -1 before cycle 0) / st.bos_confirmed.idx (BOS extreme). The BOS moment is not on the df
+    uses: written every row
+    proposed_name: cts_extreme_idx / bos_extreme_idx
+    exported: True
+    export_detail: H1 *_final.csv header columns 53 and 56; values unchanged
+    cross_module: True
+    notes: Not an event contract, so renamable. Move the lockstep list together with it
+
+[23] cycle0_data / FibTracker _cross_cycle_data['cycle0'] keys bos_idx, cts_idx + select_fib_anchor_for_cycle(bos_idx, cts_idx) + compute_poi_inners_for_cycle(bos_idx, cts_idx)
+    verdict: ambiguous
+    kind: field
+    where: engine_v2/structure/market_structure.py:228, :2013, :2050-2058; zones/fib_tracker.py:100-107, :177-178, :757-761, :1310-1317; zones/poi_zones.py:986-988
+    holds: EXTREME: the BOS_0 extreme and the latest cycle-0 CTS extreme. _update_cycle0_data:2050 also uses the CTS extreme as the imbalance as-of time
+    uses: ~30
+    proposed_name: bos_extreme_idx / cts_extreme_idx (both producers move together)
+    exported: False
+    export_detail: in-memory
+    cross_module: True
+    notes: This is a dict contract shared by two producers (MS and FibTracker)
+
+[24] MS cts_idx / bos_idx locals + _initial_bos_before_first_cts(cts_idx) + _emit_cts_established(idx) / _emit_bos_confirmed(idx) / _emit_cts_confirmed_once(idx)
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/structure/market_structure.py:1462, :1501-1516, :1658-1765, :1823, :1851, :1927, :2218-2261
+    holds: EXTREMES for the establish/BOS locals and the emit(idx) arguments. _emit_cts_confirmed_once(idx) takes the MOMENT. On the _select_bos_on_breakout fallback, _initial_bos_before_first_cts(cts_idx=) receives breakout_apply_idx, a MOMENT
+    uses: ~30
+    proposed_name: cts_extreme_idx / bos_extreme_idx; emit params extreme_idx / confirmed_idx
+    exported: False
+    export_detail: the values become the events CSV idx column (frozen)
+    cross_module: False
+    notes: Private to MS; the docstrings already say 'extreme'
+
+[25] 'anchor'-named copies of the frozen cts_anchor_idx: MS cts_anchor, unified_probe cts0_anchor_idx, fib_tracker cts_anchor_idx local, wave_candles cts_anchor_idx locals/params, _find_prior_cts_anchor, probe_fc_finalize cts_anchor_h1 ('CTSanch') / loh_cts_anchor, test _cts_event(anchor_local)
+    verdict: ambiguous
+    kind: variable
+    where: structure/market_structure.py:1858-1910; structure/unified_probe.py:604-607 (+ docstrings :29, :489, :713); zones/fib_tracker.py:1640; zones/wave_candles.py:152, :403, :450, :537; debug/probe_fc_finalize.py:178-211; tests/test_first_trigger_migration.py:258
+    holds: EXTREME: CTS_CONFIRMED.meta['cts_anchor_idx'] = st.cts.idx at confirmation
+    uses: ~45
+    proposed_name: *cts_extreme_idx (e.g. cts0_extreme_idx, _find_prior_cts_extreme_idx)
+    exported: False
+    cross_module: True
+    notes: The key is frozen; its local copies are not. _find_prior_cts_anchor is imported by test_wave_candles.py:21
+
+[26] check_lo (Phase-2 retrace window) vs the Phase-1 lower bound
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/structure/unified_probe.py:602 (int(first_cts.idx)+1) vs :403 (int(tfb.est_idx)+1); docstring :489
+    holds: Phase 2 = CTS_0 EXTREME + 1; Phase 1 = MOMENT + 1
+    uses: 3
+    proposed_name: (behaviour decision first)
+    exported: False
+    cross_module: False
+    notes: BEHAVIOUR MIX, not a naming issue. The tests describe both windows as 'est+1', but the fixture has extreme == moment, so the difference is never exercised
+
+[27] StructureLevel.time
+    verdict: ambiguous
+    kind: field
+    where: engine_v2/common/types.py:62; set structure/market_structure.py:2659, :2669; exported debug/export_structure.py:16
+    holds: EXTREME time: t.iloc[ev.idx] for CTS_ESTABLISHED, CTS_UPDATED and BOS_CONFIRMED (the BOS row = candle 96, whose moment is 115)
+    uses: 1 exporter; carried by orchestrator/run_replay; no test reads
+    proposed_name: extreme_time
+    exported: True
+    export_detail: *_structure_levels.csv header 'time' (63 rows: 58 CTS, 5 BOS)
+    cross_module: True
+    notes: The levels meta copies event meta (frozen)
+
+[28] KLZone.source_time (paired with source_price)
+    verdict: ambiguous
+    kind: field
+    where: engine_v2/common/types.py:285; zones/kl_zones_v1.py:941-942; debug/export_zones.py:54
+    holds: RAW (unclamped) MOMENT time: _time(confirmed_at), while source_price = ev.price = the EXTREME's price (re-traced: H1 BOS 96 -> source_time = candle 115; H1 BOS (1,0) source_time = candle 703 while meta confirmed_idx = 902 clamped)
+    uses: exporter + 6 test lines / 4 files (KLZone(source_time=...))
+    proposed_name: confirmed_time (or raw_confirmed_time)
+    exported: True
+    export_detail: header of 3 *_kl_zones.csv (10 / 21 / 8 rows)
+    cross_module: True
+    notes: One 'source_' pair mixes a moment's time with an extreme's price
+
+[29] source_event_idx (KL zone meta)
+    verdict: ambiguous
+    kind: meta_key
+    where: engine_v2/zones/kl_zones_v1.py:888, :951
+    holds: MIXED: int(ev.idx). BOS zones = the BOS EXTREME (H1 96). CTS zones = the CTS_CONFIRMED MOMENT (H1 439, extreme 430)
+    uses: 6
+    proposed_name: keep (it is literally the source event's idx) and fix the docstring :710 / inline comment; or split into bos_extreme_idx / cts_confirmed_idx
+    exported: True
+    export_detail: meta of all 39 KL rows; NOT in _ZONE_META_IDX_KEYS, so the 29 M15 values are slice-local (50 next to anchor_idx 454)
+    cross_module: True
+    notes: Collides with ReferenceZone.source_event_idx (extreme)
+
+[30] anchor_idx (KL zone meta + derive local) + identify_base_pattern / identify_inside_bar_pattern / identify_1candle_pattern(anchor_idx) + orchestrator z_anchor + identify_wave_candles(anchor_idx) + WaveCandleResult.meta['anchor_idx']
+    verdict: ambiguous
+    kind: meta_key
+    where: engine_v2/zones/kl_zones_v1.py:30, :161, :597, :894-899, :954, :1122; pipeline/orchestrator.py:124; zones/wave_candles.py:167, :212, :272, :278, :344, :444; multitf/entity_df_mutation.py:116
+    holds: EXTREME: BOS zone = BOS_CONFIRMED.idx; CTS zone = CTS_CONFIRMED.meta['cts_anchor_idx']
+    uses: ~70 prod; KL-meta fixtures in test_render_sub_projection, test_wave_candles (11 calls), test_wvmi, test_sub_wvmi
+    proposed_name: extreme_idx (zone key and params); z_extreme
+    exported: True
+    export_detail: meta of all 39 KL rows; rebased by _ZONE_META_IDX_KEYS (if a rename forgets it, 29 M15 values revert to slice-local)
+    cross_module: True
+    notes: The same string as the frozen CTS_ESTABLISHED key (the pattern's first candle) with a different meaning. The wave_candles docstring :181 wrongly equates it with base_idx
+
+[31] ReferenceZone.source_event_idx
+    verdict: ambiguous
+    kind: field
+    where: engine_v2/structure/reference_zone.py:85 (set :144/:151/:250/:374/:395); read structure_engine.py:278, multitf/entity_df_mutation.py:798, :913
+    holds: EXTREME: cts_anchor_idx (CTS_CONFIRMED) or ev.idx (CTS_UPDATED/ESTABLISHED), the parent CTS/BOS extreme; the start candle for 'ad_hoc_bos_0'
+    uses: 19 prod lines / 4 files; 34 test lines / 4 files
+    proposed_name: source_extreme_idx
+    exported: False
+    export_detail: its value becomes probe_input_idx (unresolved CSV); the name is not exported
+    cross_module: True
+    notes: A byte-identical rename
+
+[32] anchor_idx params of _derive_zone_ad_hoc / build_ad_hoc_bos0_reference_zone
+    verdict: ambiguous
+    kind: parameter
+    where: engine_v2/structure/reference_zone.py:157, :212, :235, :250
+    holds: other: the zone-anchor candle (the CTS extreme on the CTS path; the start candle on the BOS_0 path)
+    uses: positional callers: structure_engine.py:188, unified_probe.py:327, entity_df_mutation.py:405, 2 test files
+    proposed_name: zone_anchor_idx
+    exported: False
+    cross_module: True
+    notes: Positional callers, so the rename is local
+
+[33] FibState.bos_idx / FibState.cts_idx
+    verdict: ambiguous
+    kind: csv_column
+    where: engine_v2/zones/fib_tracker.py:54, :56; exported debug/export_fib_lifecycle.py:24-25, :58-59; shifted multitf/entity_df_mutation.py:288-289
+    holds: EXTREME: the fib's price anchors (BOS_CONFIRMED.idx or BOS_x; running CTS extreme)
+    uses: fib_tracker 73 / 164 word uses; poi_zones, both charts, the mirror; tests 4 files (~50 lines)
+    proposed_name: bos_extreme_idx / cts_extreme_idx (or rename only the exporter's header)
+    exported: True
+    export_detail: header of 3 *_fib_lifecycle.csv (3 / 21 / 9 rows)
+    cross_module: True
+    notes: Largest blast radius. A cheaper option is an exporter-only header rename
+
+[34] bos_idx / cts_idx (POI zone meta)
+    verdict: ambiguous
+    kind: meta_key
+    where: engine_v2/zones/poi_zones.py:584-585
+    holds: EXTREME: fib_state.bos_idx / fib_state.cts_idx (final)
+    uses: export + debug print
+    proposed_name: fib_bos_extreme_idx / fib_cts_extreme_idx
+    exported: True
+    export_detail: meta of all 48 POI rows; NOT shifted, so the 43 M15 rows are slice-local (bos_idx 50 next to absolute cts_established_idx)
+    cross_module: False
+    notes: Plan D §7 parks the coordinate fix. Rename and re-coordinate as separate causes
+
+[35] POI / KL internal extreme-named params and locals: find_ic_candidates bos_idx/cts_idx, cts_idx_at_t, anchor_bos_idx/anchor_cts_idx, compute_bos_inner_from_event(bos_idx)
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/zones/poi_zones.py:203-204, :832, :1027, :1045-1049; zones/kl_zones_v1.py:1105
+    holds: EXTREME. cts_idx_at_t schedules each CTS transition AT ev.idx, so the extreme is used as a time. find_ic_candidates uses the CTS extreme as the fill as-of time
+    uses: ~25
+    proposed_name: *_extreme_idx
+    exported: False
+    cross_module: True
+    notes: compute_bos_inner_from_event and compute_poi_inners_for_cycle are MS resolvers, called positionally
+
+[36] Cross-fib API: CrossEligibility.bos_idx/cts_idx; resolve_cross_cycle_eligibility(anchor_idx, anchor_price, own_imb_start, bos_by_cycle, cts_by_cycle); FibTracker _bos_by_cycle / _cts_by_cycle
+    verdict: ambiguous
+    kind: field
+    where: engine_v2/zones/cross_cycle_fib.py:49-64; zones/fib_tracker.py:272, :277, :2122+
+    holds: EXTREME. With no cross, CrossEligibility.bos_idx == the CTS-side extreme
+    uses: ~60; tests test_cross_cycle_fib_routine (keyword args, 4 asserts), test_main_versioned_cross:187-188 pokes _cts_by_cycle
+    proposed_name: cts_extreme_idx / cts_extreme_price / own_bos_extreme_idx / _bos_extreme_by_cycle / _cts_extreme_by_cycle
+    exported: False
+    export_detail: they become FibState.bos_idx / cts_idx (exported)
+    cross_module: True
+    notes: The anchor_idx param collides with the frozen key
+
+[37] current_candle
+    verdict: ambiguous
+    kind: parameter
+    where: engine_v2/zones/cross_cycle_fib.py:59; zones/fib_tracker.py:2090, :2128, :2269, :2384, :2440, :2480, :2495
+    holds: MIXED: CTS_ESTABLISHED.idx or CTS_UPDATED.idx (EXTREME) on the EST/UPDATE and main-cross paths; CTS_THRESHOLD_UPDATED idx pre-established
+    uses: ~47
+    proposed_name: as_of_idx, and pass the moment at CTS_ESTABLISHED
+    exported: False
+    export_detail: feeds fib meta activated_at / deactivated_at / reactivated_at and start/end
+    cross_module: True
+    notes: A 'now' name that receives the extreme
+
+[38] FibTracker.on_cts_established(bos_idx) + handler params; cts_idx local in on_cts_established / on_cts_updated
+    verdict: ambiguous
+    kind: parameter
+    where: engine_v2/zones/fib_tracker.py:484, :521, :1131 (+ :572, :630, :672, :738, :798, :966, :1000)
+    holds: EXTREME. The cts_idx local is used both as the anchor (correct) and as timing (fill as-of, activated_at, the Scenario-1 test, the revert terminal)
+    uses: orchestrator positional; tests keyword/positional (test_cross_cycle_fib, test_main_versioned_cross)
+    proposed_name: bos_extreme_idx / cts_extreme_idx, plus cts_est_idx = meta['confirmed_at'] for the timing uses
+    exported: False
+    export_detail: feeds exported FibState.cts_idx and meta activated_at
+    cross_module: True
+    notes: The root of Plan D queued item 2; rename in the same pass as that fix or after it
+
+[39] deactivated_at / reactivated_at (fib meta)
+    verdict: ambiguous
+    kind: meta_key
+    where: engine_v2/zones/fib_tracker.py:1469, :1473, :1550, :1553 (= cts_idx); :2432, :2466 (= current_candle)
+    holds: MIXED: CTS_UPDATED.idx (raw path = moment, pattern path = extreme) or current_candle
+    uses: ~6; test_main_versioned_cross.py:159
+    proposed_name: keep the names; make the value the moment
+    exported: True
+    export_detail: sub 3 cyc 0 row in each M15 fib CSV (2 rows); deactivated_at is shifted (2667) but reactivated_at is not (83)
+    cross_module: True
+
+[40] cycle1_bos_idx (fib meta + locals)
+    verdict: ambiguous
+    kind: meta_key
+    where: engine_v2/zones/fib_tracker.py:938, :1442, :1532
+    holds: EXTREME: BOS_1 = BOS_CONFIRMED.idx (H1 728, moment 748), used as the cond3 fill as-of time. The local falls back to cts_idx
+    uses: 9; test_main_versioned_cross.py:90
+    proposed_name: cycle1_bos_extreme_idx
+    exported: True
+    export_detail: 1 row: H1 fib_lifecycle line 3 (sid 1 cyc 1, value 728)
+    cross_module: False
+
+[41] fib locals and labels: c0_bos_idx, c0_cts_idx, bos1_idx, bos_x_idx, revert_idx, FibState.cts_history, _find_prospective_bos, print labels 'CTS idx=' / 'BOS idx='
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/zones/fib_tracker.py:1432-1433, :1523-1524, :1568, :1794, :1837, :1864, :2272, :70; labels :647-2438
+    holds: EXTREME. c0_cts_idx is used as a time (check_to_idx). revert_idx (the terminal) takes an extreme
+    uses: ~50
+    proposed_name: *_extreme_idx; labels 'CTS ext=' / 'BOS ext='
+    exported: False
+    export_detail: run.log only
+    cross_module: False
+    notes: See the missed fallbacks: c0_cts_idx defaults to a BOS idx
+
+[42] compute_struct_start_by_sid sid-0 base
+    verdict: ambiguous
+    kind: function
+    where: engine_v2/zones/structure_lifecycle.py:148-191
+    holds: LOCATION used as a lifecycle floor: min ev.idx per sid (re-traced H1: sid 0 = 96, BOS_0 extreme, moment 115; sid 1 = 689, overridden by the reversal handoff 902)
+    uses: KL, POI, fib, H1 chart floors
+    proposed_name: keep the name; seed from a moment or document it
+    exported: False
+    export_detail: only a lower clamp; no measured effect
+    cross_module: True
+    notes: SidRecord.creation_event_idx (main) uses the same min-ev.idx value
+
+[43] [kl_zones][events] unlabeled debug tuples
+    verdict: ambiguous
+    kind: log_label
+    where: engine_v2/zones/kl_zones_v1.py:752-772
+    holds: int(ev.idx): the extreme for BOS_CONFIRMED and CTS_ESTABLISHED, the moment for CTS_CONFIRMED
+    uses: run.log
+    proposed_name: label the fields (extreme_idx, confirmed_at, ...)
+    exported: False
+    export_detail: run.log
+    cross_module: False
+
+[44] raw_cts
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/zones/wave_candles.py:624
+    holds: MOMENT: CTS_CONFIRMED idx
+    uses: 3
+    proposed_name: raw_cts_confirmed_idx
+    exported: False
+    cross_module: False
+    notes: A bare 'cts' reads as the extreme
+
+[45] validated_parent_idx (TriggerRecord / ResolvedStart)
+    verdict: ambiguous
+    kind: csv_column
+    where: engine_v2/multitf/sub_structure_pool.py:165; multitf/lifecycle_sweep.py:89, :337; set entity_df_mutation.py:675, :822, :943, :983
+    holds: EXTREME, MIXED TIMEFRAME: the H1 BOS extreme for first_confluence (96, 591, 826); the M15 sibling-CTS extreme for the others (2609, 3621, 3760, 4000); None for reversal
+    uses: 13 prod lines / 4 files; 41 test lines / 8 files
+    proposed_name: validated_anchor_extreme_idx
+    exported: True
+    export_detail: header of both *_triggers.csv (8 / 3 rows); _TRIGGER_COLUMNS is derived from the dataclass fields, so a field rename renames the header
+    cross_module: True
+    notes: 'validated' reads as a moment. The confluence column is float-formatted (96.0) because of NaNs
+
+[46] probe_end_idx
+    verdict: ambiguous
+    kind: field
+    where: engine_v2/multitf/types.py:169; multitf/sub_structure_pool.py:248; entity_df_mutation.py:511; meta key in the 3 *_pipeline.py and uc1_trigger.py:122; structure/unified_probe.py params
+    holds: MIXED: CTS_CONFIRMED.meta['cts_anchor_idx'] (EXTREME) on the first_confluence path; the proximity trigger candle (a MOMENT) for first_counter / var3 / var4; R for reversal
+    uses: 94 prod lines / 11 files; 150 test lines / 10 files
+    proposed_name: keep as the probe parameter; FirstConfluenceTrigger field -> cts_extreme_idx (optional)
+    exported: False
+    export_detail: stdout labels; appears in the unresolved CSV 'detail' text only through parent_end_idx
+    cross_module: True
+    notes: The costliest optional rename; defer
+
+[47] FC resolver locals: first_confluence_trigger end_idx (+ docstring :35), entity_df_mutation parent_end_idx, parent_cts_time, m15_end_idx (local vs LowerTFResult.meta key), fb_idx
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/multitf/first_confluence_trigger.py:100-103; multitf/entity_df_mutation.py:624, :648, :649, :784, meta :1237
+    holds: EXTREME (the H1 / M15-mapped CTS extreme; the fallback window extreme). The m15_end_idx meta key is the lifecycle end
+    uses: ~25
+    proposed_name: cts_extreme_idx / parent_cts_extreme_idx / parent_cts_extreme_time / m15_cts_extreme_idx / fallback_extreme_idx
+    exported: False
+    export_detail: parent_end_idx is interpolated into ProbeFailure.detail ('probe_end_idx {..} out of parent bounds'), i.e. unresolved CSV text only if that path fires (0 rows on baseline)
+    cross_module: False
+    notes: fb_idx collides with the WVMI fb_idx column in the same module
+
+[48] abs_idx (sibling-CTS clip)
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/multitf/entity_df_mutation.py:481
+    holds: ev.idx + slice_begin: the MOMENT for CTS_CONFIRMED, the EXTREME for CTS_ESTABLISHED and pattern-path CTS_UPDATED
+    uses: 3
+    proposed_name: abs_ev_idx; correct the false comment 'ev.idx == knowable-at'
+    exported: False
+    export_detail: a behaviour fix would move pool keys (§17.12)
+    cross_module: False
+
+[49] orchestrator bos_by_cycle / bos_idx local / last_bos_by_sid / prev_bos_lines start_idx, end_idx (+ '[prev_bos_line]' label)
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/pipeline/orchestrator.py:166, :213, :266-298; shifted entity_df_mutation.py:338-341; read export_m15_chart.py:1695, :2595
+    holds: EXTREME: BOS_CONFIRMED.idx. The prev_bos end_idx = the first CTS EXTREME with ev.idx >= the REVERSAL_CANDIDATE apply candle (an extreme compared with a moment)
+    uses: ~15
+    proposed_name: bos_extreme_by_cycle / bos_extreme_idx / last_bos_extreme_by_sid / line_start_idx, line_end_idx
+    exported: False
+    export_detail: chart plus run.log; bos_idx becomes FibState.bos_idx (exported)
+    cross_module: True
+
+[50] uc1 cts_idx local + MultiTFTrigger.meta['cts_idx']
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/multitf/uc1_trigger.py:82, :117
+    holds: EXTREME (cts_anchor_idx); silently falls back to CTS_CONFIRMED.idx, the MOMENT
+    uses: 8
+    proposed_name: cts_extreme_idx, and replace the fallback with an assert
+    exported: False
+    export_detail: meta['cts_idx'] is unread; its copy probe_input_idx reaches the unresolved CSV
+    cross_module: False
+
+[51] MultiTFTrigger.start_time / start_price
+    verdict: ambiguous
+    kind: field
+    where: engine_v2/multitf/types.py:25-26; set in the 3 *_pipeline.py and uc1_trigger.py:88-92
+    holds: EXTREME location/price (BOS extreme, CTS extreme or window extreme per type). The comments 'H1 CTS candle' are wrong for 3 of 4 types. first_confluence start_price takes 'h' for a bullish parent
+    uses: ~27 prod; ~25 test lines
+    proposed_name: delete (never read)
+    exported: False
+    cross_module: True
+
+[52] SidRecord.creation_event_idx
+    verdict: ambiguous
+    kind: field
+    where: engine_v2/multitf/types.py:71; multitf/sid_records.py:35-41, :97; export_sub_tables.py:46; export_m15_chart.py:274-278, :1045
+    holds: Main: min ev.idx per sid (sid 0 = 96, sid 1 = 689, both BOS EXTREMES). Sub: starting_idx
+    uses: 17 prod lines / 4 files; 18 test lines / 3 files
+    proposed_name: first_event_idx (main) / starting_idx (sub)
+    exported: True
+    export_detail: exported as the subs CSV column 'starting_idx' (renamed by the exporter), so a field rename is byte-identical
+    cross_module: True
+
+[53] reversal_apply_idx (_synth_reversal_trigger param + meta)
+    verdict: ambiguous
+    kind: meta_key
+    where: engine_v2/multitf/entity_df_mutation.py:1020, :1036
+    holds: R = sub.natural_reversal_idx = STATE_CHANGED(to=reversal), the confirmed moment, not a REVERSAL_CANDIDATE apply
+    uses: 2 prod; 7 test
+    proposed_name: reversal_idx
+    exported: False
+    cross_module: True
+    notes: Reversal scope
+
+[54] chart locals and labels: next_bos_idx (both charts), bos_idx / cts_idx locals, cts_by_idx / bos_by_idx, sid_confirmed / last_confirmed, legend/hover 'CTS (confirmed)' / 'BOS (confirmed)' / 'CTS (established)' / 'CTS (updated)'
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/charting/export_m15_chart.py:588, :1183, :2077, :2138, :578-580, :1197-1225; charting/export_plotly.py:1084-1085, :1157-1219, :1331-1476, :2552-2553
+    holds: EXTREME: every dot and line sits at the extreme. next_bos_idx (an extreme) is used as an exclusive TIME bound on pullback STATE_CHANGED events. The labels name event types
+    uses: ~60
+    proposed_name: *_ext_idx locals; the labels can stay (event-type names)
+    exported: False
+    export_detail: HTML hover/legend only; changing label text changes the figure, not the counts
+    cross_module: False
+    notes: Keep label changes out of any byte-identical step
+
+[55] structure_engine cts_est (scenario_3 list) + comment :463-464; cts0_ref
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/structure/structure_engine.py:427-483, :188-189
+    holds: A list of CTS_ESTABLISHED events whose .idx (EXTREME) keys the exception window. cts0_ref is a BOS_0 ReferenceZone
+    uses: ~11
+    proposed_name: cts_est_events; bos0_ref
+    exported: False
+    cross_module: False
+    notes: The comment calls the extreme 'the pullback confirmation'. Test-only path
+
+[56] enforce_cts0_new_extreme
+    verdict: ambiguous
+    kind: parameter
+    where: engine_v2/structure/market_structure.py:293, :347-365, :1062; structure_engine.py:171-211, :840-897; unified_probe.py:539; multitf/entity_df_mutation.py:1097
+    holds: other: a bool switch for pre-CTS_0 scan mode (repurposed 2026-06-07)
+    uses: 14 prod lines / 4 files; 7 test lines / 3 files
+    proposed_name: cts0_scan_mode (optional)
+    exported: False
+    cross_module: True
+    notes: Stale but not a moment/extreme mix; low priority
+
+[57] FibRetracement.anchor_high_idx / anchor_low_idx (+ create_fib_retracement kwargs)
+    verdict: ambiguous
+    kind: field
+    where: engine_v2/features/fibonacci.py:39-40, :102-103, :143-144, :190-191; callers fib_tracker.py:977-2409, poi_zones.py:1045-1049
+    holds: EXTREME: the fib's high/low price-location candles
+    uses: ~40
+    proposed_name: high_extreme_idx / low_extreme_idx (optional)
+    exported: False
+    cross_module: True
+    notes: MISSED by the structure inventory, which reported no matches in features/. Standard Fib vocabulary; lowest priority
+
+[58] CONF / mock_conf (tests)
+    verdict: ambiguous
+    kind: variable
+    where: engine_v2/tests/test_lifecycle_sweep_predicted_table.py:53, test_lifecycle_sweep_unit.py, test_first_trigger_migration.py:930
+    holds: other: CONF = LENS_CONFLUENCE
+    uses: 208 / 5
+    proposed_name: CFL / mock_fc (optional)
+    exported: False
+    cross_module: False
+    notes: 'conf' means 'confirmed' in charting/debug (cts_conf, 'CTSconf')
+
+[59] silent cross-kind fallbacks: .get('confirmed_at', ev.idx), .get('cts_anchor_idx', ev.idx), c0.get('cts_idx', bos_idx), meta.get('cycle1_bos_idx', cts_idx)
+    verdict: ambiguous
+    kind: other
+    where: moment name falling back to the extreme: multitf/first_confluence_trigger.py:89, zones/zone_proximity.py:311, structure/unified_probe.py:456 (_second_cts_moment), :594 (cts0_est_idx), zones/kl_zones_v1.py:889. Extreme name falling back to the CTS_CONFIRMED moment: charting/export_m15_chart.py:521, :2025, charting/export_plotly.py:1089, multitf/uc1_trigger.py:82, structure/reference_zone.py:96, zones/fib_tracker.py:1640, zones/kl_zones_v1.py:896. CTS name falling back to a BOS extreme: zones/fib_tracker.py:1433, :1524. BOS name falling back to the CTS extreme: fib_tracker.py:1442, :1532
+    holds: The other kind, whenever the key is missing. MS always stamps confirmed_at and cts_anchor_idx, so none fire on production data
+    uses: 15 sites
+    proposed_name: direct indexing / assert (as parent_tables and structure_lifecycle already do)
+    exported: False
+    export_detail: byte-identical on the baseline; test fixtures that omit the keys (e.g. test_zone_proximity _bos_confirmed(confirmed_at=None)) must be checked first
+    cross_module: True
+    notes: MISSED as a set (only FC:89 and uc1:82 were noted). ARCHITECTURE: 'never fall back to the extreme'
+
+[60] range_start_idx (MS state + df column)
+    verdict: n_a
+    kind: csv_column
+    where: engine_v2/structure/market_structure.py:191, :1193, :1314, :2108
+    holds: The offline range = candidate candle i; pullback- and proximity-created ranges = st.cts.idx (the CTS EXTREME)
+    uses: 16
+    proposed_name: (document only)
+    exported: True
+    export_detail: H1 *_final.csv column
+    cross_module: True
+    notes: Near-miss: a range 'start' name that holds a CTS extreme on 2 of 3 paths
+
+[61] knowable_at_idx
+    verdict: follows
+    kind: function
+    where: engine_v2/multitf/sub_structure_pool.py:84; used multitf/pooled_structure_build.py:43
+    holds: BOS_CONFIRMED -> confirmed_at (moment). Every other type -> ev.idx, which is the EXTREME for CTS_ESTABLISHED and pattern-path CTS_UPDATED
+    uses: 4 prod; 6 test (pinned test_sub_structure_pool.py:563-564)
+    proposed_name: keep; fix the value (§17.12), a separate behavioural cause
+    exported: False
+    export_detail: a value fix changes which events are clipped into sub CSVs
+    cross_module: True
+    notes: Near-miss: the name follows the standard, the value does not
+
+[62] canonical moment readers: cts_moment / bos_moment (ParentTables), cts_est_by_key / moment (compute_cycle_lifecycle), cts_confirmed_idx (MS), _cts_confirmed_idx / locked_at (FibTracker), KL/POI confirmed_idx, bos_conf_idx_by_key / scan_start (zone_proximity), TrueFirstBreakout.est_idx / extreme_idx, ProbeResult.cts0_est_idx, _second_cts_moment, cts1_ext / cts1_moment
+    verdict: follows
+    kind: variable
+    where: multitf/parent_tables.py:50, :101-103; zones/structure_lifecycle.py:100-114; structure/market_structure.py:210; zones/fib_tracker.py:268, :1671+; structure/true_first_breakout.py:77-78; structure/unified_probe.py:180, :450, :558-559
+    holds: moment / extreme exactly as named
+    uses: models
+    exported: False
+    export_detail: locked_at and KL/POI confirmed_idx are exported and follow
+    cross_module: True
+    notes: The models to copy. Plan D's cts_moment_idx is consistent with cts_moment. ProbeResult.cts0_est_idx Phase 2 has an extreme fallback (see the fallbacks row). MS proximity_confirmed_idx is dead state: delete it
+
+[63] idx (structure_events.csv column)
+    verdict: frozen_event_contract
+    kind: event_meta_key_frozen
+    where: common/types StructureEvent; debug/export_events.py; 3 *_structure_events.csv
+    holds: Per type: CTS_ESTABLISHED / BOS_CONFIRMED / CTS_UPDATED = EXTREME; CTS_CONFIRMED / RECONFIRMED = MOMENT; REVERSAL_CANDIDATE = pattern anchor; STATE_CHANGED = transition candle
+    uses: every event row
+    exported: True
+    export_detail: idx column of 3 events CSVs (328 / 1322 / 476 rows)
+    cross_module: True
+    notes: Document only; the canonical table already exists
+
+[64] confirmed_at (CTS_ESTABLISHED / BOS_CONFIRMED / CTS_CONFIRMED / CTS_RECONFIRMED meta)
+    verdict: frozen_event_contract
+    kind: event_meta_key_frozen
+    where: engine_v2/structure/market_structure.py:1493, :1507, :1522, :1868, :1909
+    holds: MOMENT. CTS_ESTABLISHED lags its idx on 2 unique M15 cycles (3 CSV rows: 1223/1224, 2828/2829 in both lenses); lag 0 on all H1 cycles
+    uses: ~30 prod; ~145 test
+    exported: True
+    export_detail: events meta (H1 15, conf 62, counter 22 rows) and levels meta (10)
+    cross_module: True
+    notes: Already follows the standard
+
+[65] anchor_idx (CTS_ESTABLISHED / REVERSAL_WATCH_START / REVERSAL_CANDIDATE meta)
+    verdict: frozen_event_contract
+    kind: event_meta_key_frozen
+    where: engine_v2/structure/market_structure.py:1491, :799, :938
+    holds: CTS_ESTABLISHED = the breakout pattern's FIRST candle (neither moment nor extreme; the unreachable fallback would be apply_idx, a moment). REVERSAL_* = the reversal anchor / close-break candle
+    uses: read at wave_candles.py:295, :492, :553 and export_plotly.py:1551-1558
+    exported: True
+    export_detail: events meta (H1 7, conf 32, counter 8) and levels meta (5)
+    cross_module: True
+    notes: Same string as the KL zone meta key (an extreme)
+
+[66] cts_anchor_idx (CTS_CONFIRMED / CTS_RECONFIRMED meta)
+    verdict: frozen_event_contract
+    kind: event_meta_key_frozen
+    where: engine_v2/structure/market_structure.py:1869, :1910
+    holds: EXTREME: the current CTS extreme at confirmation
+    uses: ~10 prod; ~40 test
+    exported: True
+    export_detail: events meta (H1 5, conf 20, counter 6)
+    cross_module: True
+    notes: The frozen name most at odds with the standard; local copies should say 'extreme'
+
+[67] apply_idx / expires_idx (REVERSAL_CANDIDATE); effective_idx (STATE_CHANGED)
+    verdict: frozen_event_contract
+    kind: event_meta_key_frozen
+    where: engine_v2/structure/market_structure.py:939 and emitters
+    holds: apply_idx = the scheduled moment (a prediction); expires_idx = expiry; effective_idx defaults to ev.idx
+    uses: apply_idx 28 prod
+    exported: True
+    export_detail: events meta; expires_idx and effective_idx are SLICE-LOCAL on M15 (e.g. apply 1940 next to expires 1537)
+    cross_module: True
+    notes: Reversal scope
+
+[68] pb_start (BOS_CONFIRMED meta)
+    verdict: frozen_event_contract
+    kind: event_meta_key_frozen
+    where: engine_v2/structure/market_structure.py:1508, :1523
+    holds: MOMENT: st.last_pullback_pat_apply_idx (reset per cycle at :1548) = the pullback-path CTS_CONFIRMED moment. None on cycle 0 and on proximity-only cycles (the BOS window then starts at cts_confirmed_idx)
+    uses: 2 emits
+    exported: True
+    export_detail: events meta (H1 5, conf 21, counter 8) and levels meta (5); slice-local on M15
+    cross_module: False
+    notes: Not in the ARCHITECTURE table yet
+
+[69] RANGE_STARTED meta cts_idx / cts_price / pullback_apply_idx / proximity_apply_idx / start_idx / confirm_idx
+    verdict: frozen_event_contract
+    kind: event_meta_key_frozen
+    where: engine_v2/structure/market_structure.py:1198-1212, :1325-1340, :2117-2130
+    holds: cts_idx / cts_price = the CTS EXTREME. pullback_apply_idx / proximity_apply_idx = the CTS confirmation MOMENT. start_idx / confirm_idx (offline range) = the range candidate / range confirmation candle
+    uses: 3 emits
+    exported: True
+    export_detail: events meta (cts_idx rows: H1 10, conf 39, counter 15); all slice-local on M15
+    cross_module: False
+    notes: The table says RANGE_* is not audited; the bare cts_idx needs a bridge row
+
+[70] BOS_CONFIRMED meta source = 'initial_prior_extreme' | 'pullback_extreme'
+    verdict: frozen_event_contract
+    kind: event_meta_key_frozen
+    where: engine_v2/structure/market_structure.py:1506, :1521
+    holds: labels; 'extreme' is used correctly
+    uses: 2 emits; 5 test fixtures
+    exported: True
+    export_detail: events and levels meta
+    cross_module: False
+

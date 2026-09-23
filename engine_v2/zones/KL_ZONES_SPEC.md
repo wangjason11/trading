@@ -45,8 +45,9 @@ index" wording for both events (a `.py` follow-up).
   - CTS-derived: the confirmation candle (`== ev.idx`)
 
 ### Chart rules
-- Show zones for the most recent `structure_id`.
-- Within that structure, the most recent buy and sell zones have higher opacity (`active=True`).【fileciteturn2file2】
+Canonical in `charting/CHARTING_SPEC.md`: KL zone opacity is 3-tier — `meta["status"]=="active"` → active; else the
+most recent `structure_id` → recent_inactive; else prior_inactive. (The old `meta["active"]` flag was retired in
+Phase 3, 2026-05-26, when KL adopted the active/inactive/ended convention.)
 
 ---
 
@@ -336,7 +337,9 @@ satisfied by construction for the BOS_n zone (its raw `confirmed_idx` IS
   CTS-established moment precedes the reversal confirmation. Then the BOS (and CTS)
   zone's first-active snaps forward to the structure lifecycle-start. (Live
   instance: sid 1 cycle 0 zones at idx 703 → clamp to the sid-0 reversal at
-  710.)
+  902 on the 2025-11-15 window — 710 on the older 2025-12-01 window; here the
+  clamped start 902 equals the cycle end 902, so sid 1 cycles 0–1 collapse to
+  `status="inactive"`.)
 - The zone **rectangle is still drawn from `base_idx`** (historical anchor);
   only first-active / `confirmed_idx` / `status` move. If the clamped
   first-active lands at/after `end_idx`, the zone never becomes active

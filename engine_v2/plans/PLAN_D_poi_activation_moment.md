@@ -1,5 +1,7 @@
 # Plan D — POI activation gate on the cycle's established MOMENT (zones pass, 2026-09-22; amended 2026-09-23)
 
+**LANDED 2026-09-23 as `0a4eadc`; save `20260923_172626_0a4eadc` (save commit `fba64f1`) — see §9.**
+
 **Base:** `week8-volmom-multitf` after the docs-only `ev.idx`-convention + naming-standard commit (itself on `e2e0f89`).
 **`/compare` baseline:** `artifacts/commits/week8-volmom-multitf/20260922_195430_aadb887` (24 CSVs, 3 charts).
 **One cause:** the POI's cycle term becomes the cycle's established moment. That covers both the activation gate and
@@ -252,7 +254,7 @@ step 4 (`feedback_spec_writing_precision` rule 8). "2026-09-23" becomes the land
 ## 7. Out of scope
 
 **Queued (each its own `/compare`, in this order after Plan D):**
-1. **Imbalance knowable at c3, not c2.** `poi_zones.py` ~:896 enters an imbalance at `inst.start_idx`, the middle candle.
+1. **Imbalance knowable at c3, not c2.** `poi_zones.py` ~:896 (HEAD `:920`) enters an imbalance at `inst.start_idx`, the middle candle.
    NEXT. Measured: 4 POI rows (H1 sid 1 cyc 2 IC 865/860: re-activations 953→954 and 997→998; M15 sub 7 IC 4048 in both
    lenses: 4118→4119). It does not interact with this fix on the replay (measured); unit test (d) pins only the first
    activation, so it is unaffected too.
@@ -264,6 +266,8 @@ step 4 (`feedback_spec_writing_precision` rule 8). "2026-09-23" becomes the land
      cycle's `new_cycle` terminal; measured 4 fib_lifecycle rows, sub 3 in both lenses);
    - the CTS_ESTABLISHED + BOS_CONFIRMED flip;
    - the remaining renames.
+
+   Inputs (every site list, design constraint, open question): `engine_v2/plans/PLAN_E_inputs.md`.
 3. **The never-established-cycle fallback POI** (counter sub 5, cycle 1) is drawn past its sub's end and carries a fib
    anchor under a moment name. Skipping such POIs would give: counter CSV 13→12, shapes 125→124, traces 153→151.
 
@@ -300,7 +304,7 @@ step 4 (`feedback_spec_writing_precision` rule 8). "2026-09-23" becomes the land
    shows `confirmed_idx=1224`. Then a checkpoint recording the user's verdict.
 7. Commit + `/commit-save` on the user's go-ahead. Nothing is re-baselined; the counts are unchanged.
 
-## 9. As landed (2026-09-23) — every §4 prediction held
+## 9. As landed (2026-09-23, `0a4eadc`) — every §4 prediction held
 
 - **Tests:** written first. At HEAD the §5 "At HEAD" column was confirmed exactly: 6 failed, each for the predicted
   reason (activation at the anchor 9 where the moment 10 is expected; `DID NOT RAISE KeyError` for (g)). After the

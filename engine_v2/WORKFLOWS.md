@@ -171,11 +171,14 @@ If ranges or zones don't expand:
 **Before every commit and merge, run `/compare`** to ensure changes don't unintentionally alter prior logic.
 
 The `/compare` command:
-1. Runs replay on the previous commit
-2. Runs replay on current code
-3. Compares key metrics (structure events, zones, candle patterns, Fib states)
+1. Resolves the baseline = the last `/commit-save` folder (`artifacts/commits/LATEST_<branch>`) — it does NOT re-run
+   the previous commit
+2. Runs a replay on the current code (or reuses this session's replay of the exact same code) and applies the M15
+   fetch gate before trusting any diff
+3. Compares the 24 CSVs + chart counts (structure events incl. `confirmed_at`, zones, candle patterns, Fib states,
+   pool tables)
 4. Reports what stayed the same vs what changed
-5. Flags unexpected changes for investigation
+5. Flags changes outside the plan's expected deltas for investigation
 
 **Why this matters:**
 - Catches regression bugs early

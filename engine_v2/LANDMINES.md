@@ -40,6 +40,12 @@ Events are the communication backbone of the system. Breaking contracts causes c
 4. **Events are append-only** — never modify an event after it's emitted
 5. **Events must include structure_id** — so downstream consumers can filter by structure
 
+> **Planned amendment (user-agreed 2026-09-23; exact wording to be approved in Plan E stage E1 —
+> `plans/PLAN_E_inputs.md`):** a meta-key rename becomes allowed ONLY as an atomic migration — the emitter,
+> every reader and the docs move in one commit, `.get(key, fallback)` reads of that key become direct
+> indexing, and no alias is kept. First use: `anchor_idx` → `pattern_anchor_idx`. Until E1 lands, rules 1–2
+> bind as written.
+
 **Key events and their consumers:**
 | Event Type | Primary Consumer |
 |------------|------------------|

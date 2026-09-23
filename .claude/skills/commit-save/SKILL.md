@@ -226,7 +226,7 @@ ls "${FOLDER_PATH}/"
 
 **Reuse mode** — no replay was run, so there's no marker. Use the most recent
 replay's `*_raw.csv` as the **run-start reference**: `raw.csv` is the FIRST
-file a replay writes (before the ~13-min pipeline), so "raw + every same-prefix
+file a replay writes (before the pipeline, ~40–100 s since the 2026-07 perf sprint), so "raw + every same-prefix
 output newer than raw" captures the whole current run while excluding stale
 same-prefix files from earlier dates (e.g. a superseded `_M15.html` or a months
 -old `_swings.csv`). `PREFIX` (the config window `NZD_USD_H1_<start>_<end>`) is

@@ -1,0 +1,2003 @@
+Plan E input inventory — rendered in full from the anchor-meaning + ev.idx-read inventory and flip-feasibility (`anchor_feas`) workflow result (zones pass, 2026-09-22/23).
+Coordinates: HEAD e2e0f89 (see ../PLAN_E_inputs.md §0 for the Plan D offsets). Counts measured on save 20260922_195430_aadb887.
+SUPERSEDED WHERE IT DISAGREES WITH ../PLAN_E_inputs.md §0.1 (final user decisions): e.g. cts_extreme_idx / *_extreme_idx for
+endpoints, extreme_time, additive aliases / 'old keys never removed', retiring the word 'anchor'. Read the digest first.
+Only the consolidated result ('cons'/'feas') is kept; the per-reader partials were dropped.
+
+## Part 1 — inventory (cons)
+
+### summary
+
+Read-only consolidation at HEAD e2e0f89 (.py files unmodified), repo . I merged and deduped the four partial inventories (structure, zones, multitf-pipeline, charting-debug-tests), re-grepped all of engine_v2 (excluding legacy_2025*), and re-checked the doubtful rows against the code and the baseline CSVs in artifacts/commits/week8-volmom-multitf/20260922_195430_aadb887.
+
+JOB A: what "anchor" means (50 rows)
+- The word has seven different meanings in the code; the counts are in anchor_meaning_counts.
+- The bare key anchor_idx alone means three things: a pattern's FIRST candle on CTS_ESTABLISHED and REVERSAL_CANDIDATE, the close-break candle on REVERSAL_WATCH_START, and the price EXTREME on KL zones. Both keys pass through the same mirror key lists in entity_df_mutation.py:103-124.
+- The user's recollection is half right. CTS_CONFIRMED and CTS_RECONFIRMED use anchor = extreme (cts_anchor_idx). CTS_UPDATED has no anchor key at all. CTS_ESTABLISHED.anchor_idx is the breakout pattern's first candle.
+- Other collisions:
+  - "anchor" means the first candle in detect_best_for_anchor but the last candle in _price_confirmation.
+  - Prose calls base_idx the anchor. This is wrong: base_idx is the base pattern's first candle.
+  - "clear pullback anchor" refers to a moment.
+  - The fib "START ANCHOR" is the BOS end of the fib span.
+  - One reversal candle carries four or more names.
+- Correction to the partials: REVERSAL_WATCH_START.anchor_idx, rv_anchor_failed and _schedule_reversal_from_anchor refer to the close-break candle from the per-candle replay. That candle can be a back-fill candle, so it is not the MS scan candle.
+- A template already exists in the code. TrueFirstBreakout has anchor_idx (pattern start), est_idx (MOMENT) and extreme_idx (LOCATION). unified_probe's docstring states the rule "confirmed_at for timing, .idx for where the extreme sits".
+
+Proposed standard
+- Past tense *_established_at / *_confirmed_at / *_moment_idx means a MOMENT. *_extreme_idx means a price LOCATION.
+- pattern_start_idx and pattern_end_idx name candles inside a pattern.
+- close_break_idx names the reversal close-break candle.
+- scan_idx names the MS loop candle.
+- starting_idx stays as the structural start.
+- "fib anchor" is either retired or kept as the only reserved sense of the word.
+- Frozen keys get additive aliases, never renames, and every new idx-bearing key must be added to _EVENT_META_IDX_KEYS.
+- For CTS_ESTABLISHED's new extreme key, use cts_extreme_idx, not cts_anchor_idx. The event already carries anchor_idx for the pattern start. Add cts_extreme_idx as an alias on CTS_CONFIRMED and CTS_RECONFIRMED too.
+
+Existing naming violations: cts_confirmed_for_idx, StartDecision.meta last_cts_confirmed_idx, the structure_engine locals cts_est_idx and cts_established_idx, the POI meta cts_established_idx, the fib meta activated_at, and the log label cts0_est. All of them hold EXTREMES.
+
+JOB B: reads of ev.idx (74 rows)
+- 69 production/debug rows: 26 LOCATION, 18 TIMING, 17 BOTH, 4 AMBIGUOUS, 4 neither/raw. The other 5 rows are test groups.
+- What breaks under an EST flip (must move to an explicit extreme key first):
+  - reference_zone._extreme_idx_for_cts_event. In production it feeds the H1 main reversal probe input and the sub sibling/reversal inputs, i.e. the sub pool keys.
+  - FibTracker's cts_idx: the fib 100% point, the IC scan range, the imbalance ranges and the new-extreme guards.
+  - The wave-candle CTS BIB scan.
+  - The CTS dots on the H1 chart, on the M15 subs and on the M15 H1 overlay.
+  - structure_levels.csv time and the cts1_ext log labels.
+  - The location half of POI cond1.
+- What becomes correct:
+  - The POI activation gate (Plan D). Verified live instance: confluence sub 0 cycle 2 would move 1223 -> 1224.
+  - The fib activated_at / new_cycle terminal. Verified live instance: sub 3 cycle 0's fib end would move 2828 -> 2829 on both lenses.
+  - knowable_at_idx (closes §17.12 for EST).
+  - The reference_zone causal window and recency sort.
+  - The unified_probe Phase-2 check_lo, which today disagrees with Phase 1.
+  - scenario1_revert, and the unread lifecycle_end_idx.
+- The crux: many sites use one value in both roles. In fib and cross_cycle_fib, current_candle and anchor_idx are both cts_idx. The POI transitions do the same, and so do the has_unfilled_imbalance range/as-of calls. These cannot be reinterpreted in place; each call has to be split into (moment, extreme) first.
+- Needs a user decision: the Scenario 1 test `CTS_0 idx >= reversal_confirmed_idx`.
+- BOS_CONFIRMED lags on all 34 rows. A BOS flip would additionally move the KL BOS zones, the fib BOS point, cycle1_bos_idx, the first_confluence probe input (every FC pool key), the prev-BOS lines, every BOS dot, and the struct_start base (masked downstream). _emit_bos_confirmed builds MS state from the same idx argument, so the emitter must be decoupled first.
+
+Hazards I found beyond the partials
+1. The orchestrator's (idx, type) sort. After a flip, an sd-prox CTS_CONFIRMED can tie its cycle's EST moment, and 'CTS_CONFIRMED' sorts before 'CTS_ESTABLISHED', so on_cts_confirmed would run before on_cts_established.
+2. Prior-cycle CTS_THRESHOLD_UPDATED events in [extreme, moment) would be dispatched while the phase is still pre_established.
+3. BOS-before-EST ordering holds only by alphabetical accident.
+All three have 0 instances on the window. The fix is an explicit type rank in the sort before any flip.
+
+Blast radius on the baseline
+- EST: 2 unique events, 3 CSV rows (confluence 1223/1224 and 2828/2829; counter 2828/2829), and 0 of 5 on H1. An EST flip is zero-delta on H1.
+- BOS: 34/34 rows lag (H1 14-76 candles, confluence 2-411, counter 4-285).
+- CTS_UPDATED: 53/259/114 rows, of which 7/23/7 are pattern-path rows with no recorded moment.
+- Tests: 6 pins break outright (listed in the test rows). test_main_reversal_probe.py:212-219 already asserts idx == moment, which contradicts test_ms_cts0_scan.py:75.
+
+Recommended sequence, each step its own /compare
+1. Add cts_extreme_idx (and bos_extreme_idx) as meta keys, add them to _EVENT_META_IDX_KEYS, and migrate every LOCATION read to them. This step should be byte-identical.
+2. Make the event ordering explicit with a type rank.
+3. Flip the idx at the emit site only: pass apply_idx at market_structure.py:1485 and keep st.cts as the extreme Point. Expected deltas: POI 1223 -> 1224 and fib end 2828 -> 2829, plus any timing reads split in step 1.
+4. Treat a BOS flip as a separate, much larger change.
+
+### anchor_meaning_counts
+
+50 merged JOB-A rows, deduped from about 95 partial rows. Re-grep of engine_v2/**/*.py (excluding legacy_2025*): 863 case-insensitive 'anchor' hits in 53 files and 62 distinct identifiers containing 'anchor'. Every identifier is traced to a row.
+
+Rows per meaning:
+- price_extreme: 13. The CTS_CONFIRMED/CTS_RECONFIRMED key cts_anchor_idx and its locals and fixtures, cts_confirmed_for_idx, the probe's cts0_anchor, the wave-candle cts_anchor_idx, _find_prior_cts_anchor, _running_extreme_anchor, 'historical anchor' prose, reference_zone prose, the KL 'level anchored' docstring, the price-mapping-rule prose, the debug CTSanch column, and 'range anchored to CTS'.
+- pattern_first_candle: 9. The CTS_ESTABLISHED.meta anchor_idx, the REVERSAL_CANDIDATE.meta anchor_idx, pending_reversal_anchor_idx, detect_best_for_anchor, the wave-candle first_bo_anchor/pattern_anchor, TrueFirstBreakout.anchor_idx/_anchor_candidates, the enforce_cts0 comments, anchor_shift/_asN, and rc_by_anchor.
+- other: 8. Three are the close-break candle: the REVERSAL_WATCH_START.meta anchor_idx, _schedule_reversal_from_anchor with the expiry anchor, and the value 'rv_anchor_failed'. The rest are one pattern-LAST-candle use (_price_confirmation*), one MOMENT mislabel ('clear pullback anchor'), one dead key (bos_anchor_idx), Plotly anchor/xanchor, and English-verb uses.
+- fib_anchor: 7, all price extremes. select_fib_anchor_for_cycle, FibRetracement anchor_* (the *_idx fields are write-only), FibState prose, the cross-cycle anchor_idx/anchor_price, _m15_extend_cross_anchor, 'START ANCHOR' (the BOS side), and the fib.anchor_line style keys.
+- zone_anchor: 7, all price extremes except the mislabel. The KL meta anchor_idx, the identify_base_pattern params, the prose that mislabels base_idx as the anchor, the identify_wave_candles params and z_anchor, WaveCandleResult.meta anchor_idx, reference_zone _derive_zone_ad_hoc, and 'drawn from the anchor'.
+- structural_start: 4. 'first structural anchor = min event idx', whose value is always the BOS_0 extreme; the 'structural anchor' prose for starting_idx; anchors_by_sub; and build_ad_hoc_bos0_reference_zone(anchor_idx), which is mixed by caller.
+- ms_loop_anchor: 2. _step_anchor with the 'anchor i' prose, and _best_bopb_pattern_at_anchor.
+
+By VALUE, 27 of 50 rows (price_extreme + fib_anchor + zone_anchor) denote a price extreme. For reversals, the pattern start, the close-break candle and (often) the scan candle are the same candle.
+
+Frozen: 5 event-meta keys (anchor_idx on CTS_ESTABLISHED, REVERSAL_CANDIDATE and REVERSAL_WATCH_START; cts_anchor_idx on CTS_CONFIRMED and CTS_RECONFIRMED) plus 1 meta value, 'rv_anchor_failed'.
+
+Exported but not frozen: KL meta anchor_idx, the final.csv column pending_reversal_anchor_idx, and the 12 final.csv *_as0.._as2 columns.
+
+### missed (10)
+
+1. engine_v2/tests/test_main_reversal_probe.py:109-117, 212-219: `_cts0_established_idx` returns CTS_ESTABLISHED.idx and asserts it == tfb.est_idx, the MOMENT. engine_v2/tests/test_ms_cts0_scan.py:75 asserts the same field == tfb.extreme_idx, the EXTREME. The suite pins the field to both frames; this passes today only because the fixture's sid-1 CTS_0 has extreme == moment. Under the flip this pin becomes correct by construction.
+2. NEW ordering hazard at engine_v2/pipeline/orchestrator.py:146 ((e.idx, e.type) sort): the sd-prox gate `i > st.cts.idx` (market_structure.py:1981) runs on the apply candle, so on a lagging cycle a CTS_CONFIRMED can land exactly on the EST moment. After a flip that CTS_CONFIRMED ties with CTS_ESTABLISHED, and 'CTS_CONFIRMED' < 'CTS_ESTABLISHED' alphabetically, so FibTracker.on_cts_confirmed would run before on_cts_established for the same cycle and the fib would never lock. This is impossible today (EST.idx = extreme < apply). 0 instances on the window: the minimum CTS_CONFIRMED.idx minus EST moment is 2.
+3. NEW ordering hazard (same sort): fib_tracker.on_cts_threshold_updated acts only while the target cycle's _m15_phase == 'pre_established' (engine_v2/zones/fib_tracker.py:2081-2084). A prior-cycle CTS_THRESHOLD_UPDATED with idx in [EST extreme, moment) is a no-op today, because it is dispatched after the EST. After a flip it would be dispatched before the EST and trigger extra cross-fib checks. 0 instances on the window (no TH events near 1223 or 2828).
+4. engine_v2/charting/export_m15_chart.py:481, 620-638 `_replacement_break_point`: lo = last polyline point + 1, where that point is a BOS/CTS dot idx. It is a one-hop LOCATION read that breaks transitively with the dot reads.
+5. REVERSAL_WATCH_START / REVERSAL_CANDIDATE meta `expires_idx` is exported SLICE-LOCAL on M15 (e.g. idx 1936, expires_idx 1537), because the key is missing from _EVENT_META_IDX_KEYS (engine_v2/multitf/entity_df_mutation.py:103-112). It joins the other slice-local keys: pb_start, KL source_event_idx, POI bos_idx/cts_idx, fib activated_at/reactivated_at/locked_at/cycle1_bos_idx and WaveCandleResult.meta.anchor_idx.
+6. Correction to the multitf and charting partials. REVERSAL_WATCH_START.anchor_idx, 'rv_anchor_failed' and _schedule_reversal_from_anchor(anchor_idx) all refer to the CLOSE-BREAK candle, which comes from the per-candle replay (market_structure.py:605 -> 653 -> 678-711). It can be a back-fill candle inside a pattern span, not the _step_anchor scan candle, so the right label is 'other (close-break)', not ms_loop_anchor. pending_reversal_anchor_idx is set only when a reversal pattern starts there, so it is pattern_first_candle (== REVERSAL_CANDIDATE.anchor_idx), also not ms_loop_anchor.
+7. engine_v2/structure/structure_engine.py:449-450 has the prose 'to anchor the check window's lower bound at cts_est[0].idx + 1'. It is on the test-only Scenario-3 path.
+8. engine_v2/structure/reference_zone.py:344-347 comment ('the engine never emits two CTS-type events at the same idx for the same cycle') becomes false under a flip: EST at its moment can tie an sd-prox CTS_CONFIRMED. The CONFIRMED > ESTABLISHED type-order tie-break then decides (acceptable), but the comment must change.
+9. Docs at HEAD. GLOSSARY.md:27 defines base_idx as 'Index of the zone anchor candle', which is wrong: it is the base pattern's first candle, anchor-1 for 2-candle and star bases. GLOSSARY.md:28 defines anchor_idx only in the KL-zone sense and omits the event-meta anchor_idx (pattern start / close-break). Blast radius for the vocabulary standard: 368 'anchor' occurrences in 18 engine_v2 .md files at HEAD. The largest are GOTCHAS 70, PART4_REFACTOR_SPEC 59, FIB_LIFECYCLE_SPEC 37, LANDMINES 36, CROSS_CYCLE_FIB_SPEC 34, PLAN_A 23, KL_ZONES_SPEC 21, POI_ZONES_SPEC 18, MARKET_STRUCTURE_SPEC 15 and GLOSSARY 11.
+10. Verified the zones partial's two live-behaviour claims against the baseline CSVs. The confluence sub 0 cycle 2 POI activates at 1223 while its moment is 1224. The sub 3 cycle 0 fib has end_idx 2828 (new_cycle) on both lenses while KL/POI end at 2829. Also verified: BOS_0 is the min event idx on all 12 structures, and under a BOS flip every structure's min would move (H1 96->115, 689->703; subs +2..+35).
+
+### JOB A — every 'anchor' name (50 rows)
+
+[1] CTS_ESTABLISHED.meta["anchor_idx"]
+    meaning_or_use: pattern_first_candle: ev.start_idx of the breakout pattern that established the cycle. Falls back to int(apply_idx), a MOMENT, but that fallback is believed dead. Baseline example: anchor 1221, extreme 1223, moment 1224
+    where: engine_v2/structure/market_structure.py:1491 (emitted); readers engine_v2/zones/wave_candles.py:295, 492-495, 553; shifted at engine_v2/multitf/entity_df_mutation.py:106
+    event_types: CTS_ESTABLISHED
+    frozen: True
+    exported: True
+    export_detail: structure_events.csv meta on every CTS_ESTABLISHED row (H1 5, M15 confluence 21, M15 counter 8). H1 structure_levels.csv meta on CTS rows. Shifted slice-local to absolute via _EVENT_META_IDX_KEYS
+    cross_module: True
+    under_flip: n/a: independent of ev.idx. After a flip the event would carry pattern start (anchor_idx), extreme (new key) and moment (idx), so the new extreme key must not contain 'anchor'
+    job: A_anchor_name
+    proposed_name: alias meta["pattern_start_idx"]; keep anchor_idx (frozen)
+    notes: The inline comment 'required for Scenario 2 Exception #2' (market_structure.py:1490) is stale: Exception 2 is gone, and wave_candles is the only reader
+
+[2] REVERSAL_CANDIDATE.meta["anchor_idx"] (== ev.idx)
+    meaning_or_use: pattern_first_candle: the reversal pattern returned by detect_best_for_anchor(close-break candle) starts at this candle. meta apply_idx = the scheduled apply
+    where: engine_v2/structure/market_structure.py:894-938; reader engine_v2/charting/export_plotly.py:1550-1551
+    event_types: REVERSAL_CANDIDATE
+    frozen: True
+    exported: True
+    export_detail: structure_events.csv: H1 1 row (897, apply 902); M15 confluence 4 rows (1936, 2465, 2824, 4196)
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: alias pattern_start_idx (= close_break_idx)
+    notes: Same key name as CTS_ESTABLISHED's (also a pattern start), but a different meaning from REVERSAL_WATCH_START's and the KL zone key of the same name
+
+[3] REVERSAL_WATCH_START.meta["anchor_idx"] (== ev.idx)
+    meaning_or_use: other (close-break candle): the per-candle replay candle whose CLOSE broke bos_threshold (_replay_step_no_patterns -> _bos_barrier_step, market_structure.py:605, 653, 678-711). Emitted even when no reversal pattern exists. It can be a back-fill candle inside a pattern span, so it is NOT necessarily the _step_anchor scan candle. This corrects the multitf and charting partials, which labelled it ms_loop_anchor
+    where: engine_v2/structure/market_structure.py:780-806; reader engine_v2/charting/export_plotly.py:1558
+    event_types: REVERSAL_WATCH_START
+    frozen: True
+    exported: True
+    export_detail: structure_events.csv (H1 1 row, M15 confluence 7 rows)
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: alias meta["close_break_idx"]
+    notes: Its meta expires_idx (also on REVERSAL_CANDIDATE) is exported SLICE-LOCAL on M15, e.g. idx 1936 with expires_idx 1537, because it is not in _EVENT_META_IDX_KEYS
+
+[4] pending_reversal_anchor_idx (state field, df column, 'anchor=' log label)
+    meaning_or_use: pattern_first_candle: set only when a reversal pattern is scheduled, and equal to REVERSAL_CANDIDATE.anchor_idx (the close-break candle). This corrects the multitf partial, which labelled it ms_loop_anchor
+    where: engine_v2/structure/market_structure.py:38, 250, 891, 920, 925, 962, 2424, 2478-2479; engine_v2/structure/unified_probe.py:113; engine_v2/multitf/entity_df_mutation.py:95
+    event_types: n/a (MS state mirror of REVERSAL_CANDIDATE)
+    frozen: False
+    exported: True
+    export_detail: H1 *_final.csv column (-1 when none). Dropped from the MS working copy for subs
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: pending_reversal_pattern_start_idx (changes a final.csv header, so /compare needs a rename allowance)
+
+[5] _schedule_reversal_from_anchor(anchor_idx); expiry local `anchor`; [RV_SCHEDULE]/[RV_APPLY]/[RV_EXPIRE] 'anchor=' labels; comments
+    meaning_or_use: other (close-break candle) = st.reversal_watch_start_idx. On expiry bos_threshold becomes that candle's wick and execution rewinds to anchor+1
+    where: engine_v2/structure/market_structure.py:894 (callers 711, 746), 832-862, 880, 925, 962; comments 238-248, 683, 713, 819-821, 831, 861
+    event_types: emits REVERSAL_CANDIDATE
+    frozen: False
+    exported: False
+    export_detail: debug print only
+    cross_module: False
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: _schedule_reversal_from_close_break(close_break_idx) / close_break_idx
+    notes: One candle has four or more names: REVERSAL_WATCH_START.anchor_idx, REVERSAL_CANDIDATE.anchor_idx, reversal_watch_start_idx, pending_reversal_anchor_idx. MARKET_STRUCTURE_SPEC (HEAD) calls it 'close-break anchor candle'
+
+[6] 'rv_anchor_failed' (BOS_THRESHOLD_UPDATED.meta['reason'] VALUE)
+    meaning_or_use: other (close-break candle): no reversal pattern starts at the close-break candle, so this is an immediate false break
+    where: engine_v2/structure/market_structure.py:722, 756; asserted engine_v2/tests/test_ms_bounded_equals_truncated.py:186, 392, 398; prose engine_v2/tests/test_ms_stop_after_cts.py:362
+    event_types: BOS_THRESHOLD_UPDATED
+    frozen: True
+    exported: True
+    export_detail: meta value in 3 M15 confluence structure_events rows (0 H1, 0 counter)
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: keep (reason code); document it as close-break
+    notes: A meta VALUE, not a key, but /compare diffs it
+
+[7] _step_anchor(i) and the 'anchor i' prose (next anchor override, early_stop_idx 'first anchor NOT processed', 'Next anchor always i+1', 'Range candidate anchored at current candle i')
+    meaning_or_use: ms_loop_anchor: the candle MarketStructure is stepping; patterns are searched starting there
+    where: engine_v2/structure/market_structure.py:973 (def), 463, 569; prose 253, 268, 370, 495, 641, 1001, 1016, 1039, 1176, 1191, 1575, 1614, 1624, 1964; engine_v2/debug/probe_fc_finalize.py:16; engine_v2/tests/test_ms_stop_after_cts.py:71-85 (monkeypatches ms._step_anchor BY NAME), 132, 228, 278-287, 314, 411; engine_v2/tests/test_ms_bounded_equals_truncated.py:18, 70-79, 139-149; engine_v2/tests/test_unified_probe.py:128, 157-163, 695, 1066, 1161
+    event_types: n/a
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: _step_candle / scan_idx
+    notes: L1575 'pass apply_idx (time) not anchor i' already contrasts the two. MARKET_STRUCTURE_SPEC uses this sense throughout. It is the one sense where 'anchor' is arguably idiomatic. Renaming _step_anchor means updating the test monkeypatch
+
+[8] _best_bopb_pattern_at_anchor(i) and local bos_frozen_for_anchor
+    meaning_or_use: ms_loop_anchor: the best breakout, pullback or reversal pattern STARTING at scan candle i. Scan mode asserts i == tfb.pattern.start_idx (L1066)
+    where: engine_v2/structure/market_structure.py:1045 (def), 991, 1113-1123, 1467
+    event_types: n/a
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: _best_bopb_pattern_starting_at / bos_frozen_for_scan
+
+[9] BreakoutPatterns.detect_best_for_anchor(idx, direction, break_threshold)
+    meaning_or_use: pattern_first_candle: every detector returns start_idx == idx. The argument is the scan candle at 1077/1102/1123 and the close-break candle at 905
+    where: engine_v2/patterns/structure_patterns.py:663; callers engine_v2/structure/market_structure.py:905, 1077, 1102, 1123 and engine_v2/patterns/pattern_engine.py:56; named in engine_v2/structure/true_first_breakout.py:27, 50
+    event_types: n/a
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: detect_best_starting_at
+    notes: Its legacy sibling is detect_first_success (L610)
+
+[10] _price_confirmation(anchor_idx=event.end_idx) / _price_confirmation_1step(anchor_end_idx)
+    meaning_or_use: other (the pattern's LAST candle, end_idx): the base of the confirmation look-ahead
+    where: engine_v2/patterns/structure_patterns.py:118-139, 151-161; callers 336, 638, 706
+    event_types: n/a
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: pattern_end_idx
+    notes: patterns/ alone gives 'anchor' two opposite meanings: the first candle (detect_best_for_anchor) and the last candle (here)
+
+[11] CTS_CONFIRMED / CTS_RECONFIRMED meta["cts_anchor_idx"]
+    meaning_or_use: price_extreme: st.cts.idx at confirmation, i.e. the CURRENT CTS extreme. It can be a later CTS_UPDATED extreme (H1 sid0 cycle 0: EST idx 115, cts_anchor_idx 430)
+    where: emitted engine_v2/structure/market_structure.py:1858-1869, 1903-1910. Readers: engine_v2/charting/export_plotly.py:1088-1089; engine_v2/charting/export_m15_chart.py:521, 2025; engine_v2/zones/kl_zones_v1.py:896; engine_v2/zones/fib_tracker.py:1638-1642; engine_v2/zones/wave_candles.py:152-159; engine_v2/multitf/first_confluence_trigger.py:100 (prose 6, 36, 96); engine_v2/multitf/first_confluence_pipeline.py:6; engine_v2/multitf/types.py:154, 169; engine_v2/multitf/uc1_trigger.py:81-82; engine_v2/structure/unified_probe.py:605; engine_v2/structure/reference_zone.py:96. Shifted at engine_v2/multitf/entity_df_mutation.py:108
+    event_types: CTS_CONFIRMED, CTS_RECONFIRMED
+    frozen: True
+    exported: True
+    export_detail: structure_events.csv meta (H1 5, M15 confluence 20, M15 counter 6). Also flows into KL CSV meta anchor_idx for CTS zones, and via uc1 into _M15_unresolved_triggers.csv probe_input_idx
+    cross_module: True
+    under_flip: Unaffected. This is the template the user wants: idx = moment, extreme in meta
+    job: A_anchor_name
+    proposed_name: add alias meta["cts_extreme_idx"] here AND on CTS_ESTABLISHED, so every CTS event shares one spelling
+    notes: The user's recollection is half right. CTS_CONFIRMED and CTS_RECONFIRMED do use anchor = extreme, but CTS_UPDATED has NO anchor key (its extreme is ev.idx), and CTS_ESTABLISHED.anchor_idx is the pattern's FIRST candle
+
+[12] local cts_anchor; state cts_confirmed_for_idx; comment 'confirmed_at > anchor_idx'
+    meaning_or_use: price_extreme, used as the CTS_CONFIRMED dedupe identity key. In the L1875 comment 'anchor_idx' means cts_anchor_idx (the extreme), which contradicts CTS_ESTABLISHED.meta.anchor_idx (pattern start) in the same file
+    where: engine_v2/structure/market_structure.py:175, 1528, 1858-1859, 1873-1876, 1882, 1903
+    event_types: CTS_CONFIRMED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: unaffected (reads st.cts.idx)
+    job: A_anchor_name
+    proposed_name: cts_confirmed_extreme_idx; comment -> 'cts_extreme_idx'
+    notes: cts_confirmed_for_idx also breaks standard (1): 'confirmed' in the name, but it holds an extreme
+
+[13] unified_probe prose cts_anchor / cts_anchor_idx and local cts0_anchor_idx
+    meaning_or_use: price_extreme: the probe's own CTS_0_CONFIRMED.cts_anchor_idx caps the Phase-2 retrace window (check_hi = extreme - 1)
+    where: engine_v2/structure/unified_probe.py:29, 285, 478, 489, 597, 604-607, 713 (GLOSSARY 'cts0_anchor (probe)')
+    event_types: CTS_CONFIRMED (fallback CTS_ESTABLISHED.idx)
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: see JOB B row unified_probe.py:603-607
+    job: A_anchor_name
+    proposed_name: cts0_extreme_idx
+
+[14] test fixture params/meta cts_anchor_idx and anchor_local
+    meaning_or_use: price_extreme (mirrors the CTS_CONFIRMED key)
+    where: engine_v2/tests/test_first_confluence_trigger.py:19-24, 43, 68, 149-151; test_cross_cycle_fib.py:41-44; test_main_versioned_cross.py:38-41; test_first_trigger_migration.py:259-272, 522, 580, 609, 780-812; test_wave_candles.py:227, 244; test_unified_probe.py:219, 976-981, 1033, 1087-1097; test_reversal_resolver.py:286-293
+    event_types: CTS_CONFIRMED
+    frozen: False
+    exported: False
+    export_detail: test fixtures
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: follow the event alias; anchor_local -> extreme_local
+    notes: test_first_trigger_migration.py:807/812 pins that the mirror SHIFTS cts_anchor_idx, so any new alias key must be added to _EVENT_META_IDX_KEYS
+
+[15] KL zone meta["anchor_idx"]
+    meaning_or_use: zone_anchor whose VALUE is a price_extreme: BOS zones use BOS_CONFIRMED.idx, CTS zones use CTS_CONFIRMED.cts_anchor_idx. The CTS fallback is CTS_CONFIRMED.idx, a moment, and is dead. It is the candle the base-pattern search is centred on
+    where: engine_v2/zones/kl_zones_v1.py:892-899, 954. Readers engine_v2/pipeline/orchestrator.py:124-131 and engine_v2/zones/wave_candles.py:403; shifted engine_v2/multitf/entity_df_mutation.py:116. Tests: engine_v2/tests/test_render_sub_projection.py:705-710, test_wvmi.py, test_sub_wvmi.py:60, test_wave_candles.py (many)
+    event_types: BOS_CONFIRMED (idx), CTS_CONFIRMED (cts_anchor_idx)
+    frozen: False
+    exported: True
+    export_detail: kl_zones.csv meta (H1 10, M15 confluence 21, M15 counter 8); entity-absolute on subs
+    cross_module: True
+    under_flip: CTS_EST flip: unaffected. BOS flip: every BOS-zone value moves unless the producer reads an explicit BOS extreme
+    job: A_anchor_name
+    proposed_name: extreme_idx
+    notes: SAME key name as the event-meta anchor_idx (pattern start); both sit in entity_df_mutation's key lists. Sibling meta source_event_idx is overloaded: the BOS extreme for BOS zones but the CTS_CONFIRMED MOMENT for CTS zones (H1: 439 vs anchor 430). It is exported SLICE-LOCAL on subs (50 vs anchor_idx 454)
+
+[16] identify_base_pattern(anchor_idx) family: anchor_idx params, anchor_low/anchor_high/anchor_dir locals, star docstring 'before anchor / anchor/middle / after anchor'
+    meaning_or_use: zone_anchor = price_extreme (docstrings: 'Index of the BOS/CTS candle')
+    where: engine_v2/zones/kl_zones_v1.py:28-79, 159-195, 198-231, 595-690, 1103-1126 (compute_bos_inner_from_event passes anchor_idx=bos_idx; wired as the MS bos_inner_resolver at engine_v2/structure/structure_engine.py:81)
+    event_types: BOS_CONFIRMED / CTS_CONFIRMED via caller; MS state for the resolver
+    frozen: False
+    exported: False
+    export_detail: indirect, via KL meta anchor_idx / base_idx
+    cross_module: True
+    under_flip: LOCATION parameter: callers must pass an explicit extreme
+    job: A_anchor_name
+    proposed_name: extreme_idx; extreme_low / extreme_high / extreme_dir
+
+[17] prose calling base_idx the 'anchor candle of the zone base pattern' / 'base anchor candle'
+    meaning_or_use: zone_anchor, MISLABELLED: base_idx is the base pattern's FIRST candle, which is anchor-1 for 2-candle and star bases (e.g. M15 BOS sub 3: anchor 2758, base 2757; they differ on 4 confluence, 2 counter and 2 H1 zones)
+    where: engine_v2/zones/kl_zones_v1.py:709, 966; engine_v2/zones/wave_candles.py:180-181; GLOSSARY.md (HEAD):27 'base_idx | Index of the zone anchor candle'
+    event_types: n/a
+    frozen: False
+    exported: True
+    export_detail: base_idx is in the KL CSV meta; start_time = time(base_idx)
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: prose 'first candle of the zone base pattern'; key stays base_idx
+    notes: Charting reads base_idx (export_plotly.py:1656, 1729; export_m15_chart.py:1278, 1352, 2220, 2290)
+
+[18] KL docstring 'ev.idx: the level index (where the BOS/CTS level is anchored)' + 'source_event_idx: the StructureEvent level index'
+    meaning_or_use: price_extreme ('anchored' = located). This is wrong for CTS zones, whose ev is CTS_CONFIRMED (idx = moment)
+    where: engine_v2/zones/kl_zones_v1.py:704-713, 887
+    event_types: BOS_CONFIRMED, CTS_CONFIRMED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: the doc must be rewritten under any flip
+    job: A_anchor_name
+    proposed_name: 'ev.idx: BOS extreme (BOS_CONFIRMED) / confirmation moment (CTS_CONFIRMED)'
+
+[19] identify_wave_candles(anchor_idx, anchor_type), the _bos_*/_cts_* anchor_idx params, orchestrator local z_anchor, module doc 'at a BOS/CTS anchor'
+    meaning_or_use: zone_anchor = price_extreme (the KL meta anchor_idx). anchor_type is the zone source_kind 'BOS'/'CTS' (other)
+    where: engine_v2/zones/wave_candles.py:4, 166-243, 277-413; engine_v2/pipeline/orchestrator.py:124-131
+    event_types: BOS_CONFIRMED / CTS_CONFIRMED (one hop via KL meta)
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: LOCATION (see JOB B wave-candle rows)
+    job: A_anchor_name
+    proposed_name: extreme_idx / zone_kind; z_extreme_idx
+
+[20] wave_candles local/param cts_anchor_idx
+    meaning_or_use: price_extreme: the KL CTS-zone anchor, which is CTS_CONFIRMED.cts_anchor_idx
+    where: engine_v2/zones/wave_candles.py:403-413, 449-533, 536-571
+    event_types: CTS_CONFIRMED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: unaffected
+    job: A_anchor_name
+    proposed_name: cts_extreme_idx
+    notes: L546 'window [pattern_anchor, cts_anchor_idx+5]' uses two meanings of anchor in one line
+
+[21] wave_candles locals first_bo_anchor / anchor / pattern_anchor
+    meaning_or_use: pattern_first_candle: these read CTS_ESTABLISHED.meta['anchor_idx']
+    where: engine_v2/zones/wave_candles.py:288, 295-303, 490-499, 546-559
+    event_types: CTS_ESTABLISHED (meta)
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: n/a (meta key, not idx)
+    job: A_anchor_name
+    proposed_name: breakout_pattern_start_idx
+
+[22] WaveCandleResult.meta["anchor_idx"]
+    meaning_or_use: zone_anchor (= the KL zone anchor_idx used for the search, a price extreme)
+    where: engine_v2/zones/wave_candles.py:270-273, 442-445
+    event_types: BOS_CONFIRMED / CTS_CONFIRMED via KL meta
+    frozen: False
+    exported: False
+    export_detail: attrs['wave_candles'] only; no exporter
+    cross_module: True
+    under_flip: follows KL anchor_idx
+    job: A_anchor_name
+    proposed_name: extreme_idx
+    notes: entity_df_mutation.py:297-312 copies wc.meta WITHOUT shifting it, so the value stays slice-local on subs
+
+[23] _find_prior_cts_anchor()
+    meaning_or_use: price_extreme: the prior cycle's CTS_CONFIRMED.cts_anchor_idx
+    where: engine_v2/zones/wave_candles.py:152-159, 320-321; engine_v2/tests/test_wave_candles.py:21, 242-247
+    event_types: CTS_CONFIRMED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: unaffected
+    job: A_anchor_name
+    proposed_name: _find_prior_cts_extreme_idx
+
+[24] 'historical anchor' / 'anchored at the full-pattern extreme' prose
+    meaning_or_use: price_extreme: says CTS_ESTABLISHED.idx is the CTS extreme, 'exactly like BOS_CONFIRMED.idx'
+    where: engine_v2/zones/structure_lifecycle.py:71, 99; engine_v2/tests/test_structure_lifecycle_moment.py:4; engine_v2/tests/test_ms_cts0_scan.py:71-74
+    event_types: CTS_ESTABLISHED, BOS_CONFIRMED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: the prose becomes false after an EST flip
+    job: A_anchor_name
+    proposed_name: 'historical extreme (price location)'
+
+[25] 'first structural anchor = min event idx'
+    meaning_or_use: structural_start: the base of the structure lifecycle start. Verified: its value is the BOS_0 EXTREME on all 12 structures on the window (H1 96/689; subs 454, 1797, 2365, 2639, 3304, 3760, 4027, 3621)
+    where: engine_v2/zones/structure_lifecycle.py:156; engine_v2/zones/poi_zones.py:381-383
+    event_types: BOS_CONFIRMED (always the min)
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: see JOB B compute_struct_start_by_sid
+    job: A_anchor_name
+    proposed_name: 'earliest event idx (= BOS_0 extreme)'
+    notes: A TIMING concept, named 'anchor', computed from a LOCATION field
+
+[26] 'structural anchor' / '(anchor)' / 'later anchor wins' prose for starting_idx
+    meaning_or_use: structural_start: ProbeResult.starting_idx, which is the pool key and sub SidRecord.creation_event_idx
+    where: engine_v2/structure/unified_probe.py:8-9, 135, 358; engine_v2/structure/structure_engine.py:864; engine_v2/multitf/types.py:59, 71; engine_v2/multitf/sid_records.py:76; engine_v2/multitf/sub_structure_pool.py:139; engine_v2/charting/export_m15_chart.py:18, 23, 267-268, 286, 802, 1110. Tests: test_unified_probe.py:15, 20, 858; test_sid_records.py:258; test_reversal_resolver.py:255, 267; test_render_sub_projection.py:39, 164, 470, 613, 745; test_m15_chart_ownership.py:6, 100-110, 170, 248-259 (4 test names); GLOSSARY starting_idx
+    event_types: n/a
+    frozen: False
+    exported: True
+    export_detail: The value is exported as subs.csv 'starting_idx' (debug/export_sub_tables.py:46). The word itself appears only in prose and test names
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: 'structural start (starting_idx)'
+    notes: For MAIN SidRecords, creation_event_idx means 'min ev.idx': one field with two meanings
+
+[27] anchors_by_sub / _anchors_by_sub / local anchor
+    meaning_or_use: structural_start: the replacing sub's starting_idx, used as the LOCATION upper bound of the replacement-break extreme scan
+    where: engine_v2/charting/export_m15_chart.py:431-493, 499, 626-628, 1044-1061; engine_v2/tests/test_m15_chart_ownership.py:437-500
+    event_types: n/a
+    frozen: False
+    exported: False
+    export_detail: chart only
+    cross_module: False
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: starting_idx_by_sub
+
+[28] build_ad_hoc_bos0_reference_zone(df, anchor_idx, ...) -> ReferenceZone.source_event_idx=anchor_idx; 'anchored at the Scenario-1 start'; 'Anchor = the M15 input_idx candle'
+    meaning_or_use: MIXED by caller. structural_start for the Scenario-1 start and the probe's moving current_start. price_extreme for the FC caller (the parent BOS extreme, price-mapped)
+    where: engine_v2/structure/reference_zone.py:210-251; callers engine_v2/structure/structure_engine.py:174, 188, engine_v2/structure/unified_probe.py:327, engine_v2/multitf/entity_df_mutation.py:388, 405
+    event_types: n/a (FC path: BOS_CONFIRMED via probe_input_idx)
+    frozen: False
+    exported: False
+    export_detail: indirect: starting_idx / validated_parent_idx
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: start_idx / level_idx; source_event_idx -> source_idx
+    notes: ReferenceZone.source_event_idx is not an event idx here at all
+
+[29] _derive_zone_ad_hoc(df, anchor_idx, direction, *, bos) -> identify_base_pattern(anchor_idx)
+    meaning_or_use: zone_anchor: fed the CTS EXTREME on the CTS path, and a structural start on the BOS_0 path
+    where: engine_v2/structure/reference_zone.py:155-207 (+ _derive_cts_zone_ad_hoc(extreme_idx) 257-262)
+    event_types: CTS_ESTABLISHED / CTS_UPDATED via _extreme_idx_for_cts_event
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: see JOB B reference_zone.py:97
+    job: A_anchor_name
+    proposed_name: level_idx
+
+[30] reference_zone prose ("cts_confirmed -> cts_anchor_idx (the CTS extreme)", 'ev.idx IS the extreme by construction', 'anchors against', 'whose events anchor the reference')
+    meaning_or_use: price_extreme, plus 'anchor' used as a verb
+    where: engine_v2/structure/reference_zone.py:66-72, 91-93, 274, 311
+    event_types: CTS_CONFIRMED / CTS_UPDATED / CTS_ESTABLISHED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: L92-93 ('ev.idx IS the extreme' for EST) becomes false
+    job: A_anchor_name
+    proposed_name: cts_extreme_idx / 'references'
+
+[31] price-mapping-rule prose: 'BOS/CTS ANCHOR candles are PRICE-mapped', 'parent BOS/CTS anchor', 'structural (price) anchor', 'anchor an ad-hoc BOS_0', 'Anchor on the OWN frame', 'price-mapped anchor, LOH of anchor'
+    meaning_or_use: price_extreme: whatever map_candle_to_lower_tf maps, as opposed to moments, which are LOH-mapped
+    where: engine_v2/multitf/entity_df_mutation.py:629-635, 687, 782, 998; engine_v2/multitf/data_bridge.py:100, 107; engine_v2/debug/probe_fc_finalize.py:8
+    event_types: BOS_CONFIRMED, CTS_CONFIRMED
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: 'EXTREME candles (price-mapped)' vs 'MOMENT candles (LOH-mapped)'
+    notes: Spec vocabulary: PART4 §4.3.1, 'user spec 2026-05-31', and memory's 'Two H1->M15 mappers'. It maps 1:1 onto the proposed extreme/moment standard. parent_tables.py:25 already says 'price-extreme mapper'
+
+[32] debug row keys cts_anchor_h1 / loh_cts_anchor; headers 'CTSanch' / 'LOH(anch)'
+    meaning_or_use: price_extreme: FirstConfluenceTrigger.probe_end_idx = CTS_CONFIRMED.cts_anchor_idx
+    where: engine_v2/debug/probe_fc_finalize.py:178, 182, 201-219
+    event_types: CTS_CONFIRMED
+    frozen: False
+    exported: False
+    export_detail: console table
+    cross_module: False
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: cts_extreme_h1 / loh_cts_extreme; header 'CTSext'
+
+[33] TrueFirstBreakout.anchor_idx; _anchor_candidates(); docstrings 'Anchor breaks the BOS_0 inner', 'NOT anchor idx', 'no anchor at idx >= E'
+    meaning_or_use: pattern_first_candle (pat.start_idx; the routine scans candidate pattern-start candles)
+    where: engine_v2/structure/true_first_breakout.py:11-12, 24, 76, 150, 208-209, 234, 249; engine_v2/tests/test_true_first_breakout.py:109-118, 156, 168-185, 198, 255, 312-328 (2 test names)
+    event_types: n/a (feeds cycle-0 CTS_ESTABLISHED via MS)
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: pattern_start_idx
+    notes: This dataclass is the template for the standard: anchor_idx (pattern start) / est_idx (MOMENT) / extreme_idx (LOCATION). Only tests read .anchor_idx; MS reads tfb.pattern.start_idx
+
+[34] enforce_cts0_new_extreme comments: 'its anchor's extreme', 'condition 1 (anchor close past the BOS_0 inner)', 'anchor-extreme gate'
+    meaning_or_use: pattern_first_candle: the breakout pattern's first candle, whose close must pass bos0_inner
+    where: engine_v2/structure/market_structure.py:343, 359-360, 1469-1470
+    event_types: CTS_ESTABLISHED (cycle 0)
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: 'pattern-start candle'
+    notes: L343 describes the removed gate (historical)
+
+[35] anchor_shift / anchor_shifts params and the *_as0.._as2 column suffix
+    meaning_or_use: pattern_first_candle, as a relative offset: the evaluated candle is pattern start + s, and the big-flag reference set is taken strictly before the pattern start
+    where: engine_v2/features/candles_v2.py:169-250, 304-316; engine_v2/features/candle_classifier.py:71; engine_v2/debug/candle_size_distribution.py:59; engine_v2/tests/test_candles_v2.py:127-200, 300, 314; read by engine_v2/patterns/structure_patterns.py _ROW_FIELDS and engine_v2/zones/kl_zones_v1.py:185
+    event_types: n/a
+    frozen: False
+    exported: True
+    export_detail: 12 H1 *_final.csv columns: is_big_maru_as0..2, is_big_normal_as0..2, prior_maru_max_len_as0..2, big_ratio_as0..2
+    cross_module: True
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: keep and add a glossary entry (a rename costs CSV headers plus detector churn; the meaning already agrees with pattern start)
+
+[36] rc_by_anchor (local dict)
+    meaning_or_use: pattern_first_candle: REVERSAL_CANDIDATE.anchor_idx, looked up by REVERSAL_WATCH_START.anchor_idx (the close-break candle). The two are equal by construction
+    where: engine_v2/charting/export_plotly.py:1550-1551, 1584
+    event_types: REVERSAL_CANDIDATE, REVERSAL_WATCH_START
+    frozen: False
+    exported: False
+    export_detail: chart hover only
+    cross_module: False
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: rc_by_close_break_idx
+
+[37] select_fib_anchor_for_cycle(); returned anchor_bos_idx / anchor_bos_price / anchor_cts_idx / anchor_cts_price; prose 'BOS_0 anchor', 'anchor decision', 'intra anchors'
+    meaning_or_use: fib_anchor: the two fib endpoints. Both are price EXTREMES: BOS_1 (or BOS_0 for a Scenario-2 cross) and CTS_1
+    where: engine_v2/zones/fib_tracker.py:100-193, 870-955; engine_v2/zones/poi_zones.py:30, 996-1067; engine_v2/zones/cross_cycle_fib.py:14; engine_v2/structure/market_structure.py:72-79, 219, 2023-2047
+    event_types: BOS_CONFIRMED, CTS_ESTABLISHED/CTS_UPDATED (via caller or MS state)
+    frozen: False
+    exported: True
+    export_detail: flows into FibState.bos_idx/cts_idx and from there the fib_lifecycle.csv bos_idx/cts_idx columns
+    cross_module: True
+    under_flip: LOCATION: inputs must be explicit extremes
+    job: A_anchor_name
+    proposed_name: either keep 'fib anchor' as the ONE reserved sense of anchor, or rename to select_fib_span_for_cycle / fib_bos_extreme_idx
+    notes: MS calls it in-flight via compute_poi_inners_for_cycle
+
+[38] FibRetracement anchor_high / anchor_low / anchor_high_idx / anchor_low_idx
+    meaning_or_use: fib_anchor: high/low are the BOS and CTS extremes
+    where: engine_v2/features/fibonacci.py:27-50, 59-146, 177-191; set at engine_v2/zones/fib_tracker.py:974-991, 1020-1039, 1391-1409, 2276-2294, 2346-2363, 2400-2418 and engine_v2/zones/poi_zones.py:842-856 (price-only locals), 1044-1057
+    event_types: BOS_CONFIRMED, CTS_ESTABLISHED, CTS_UPDATED (via FibState)
+    frozen: False
+    exported: False
+    export_detail: not in any CSV
+    cross_module: True
+    under_flip: The _idx fields are WRITE-ONLY (verified: the only read of anchor_high/anchor_low is price_at_pct, fibonacci.py:46-47). If fed CTS_EST.idx after a flip they would silently hold a moment
+    job: A_anchor_name
+    proposed_name: high_price / low_price; delete the unread *_idx fields
+    notes: 'Fib anchor' is standard trading jargon
+
+[39] FibState 'anchors' prose ('# Anchors', 'anchor 1', 'update CTS anchor', 'anchors are untouched'); entity_df_mutation 'anchors'
+    meaning_or_use: fib_anchor: FibState.bos_idx / cts_idx, which are extremes
+    where: engine_v2/zones/fib_tracker.py:53, 63, 69-70, 202, 396, 500, 712, 973, 1017, 1112, 1164, 1375; engine_v2/multitf/entity_df_mutation.py:271
+    event_types: BOS_CONFIRMED, CTS_ESTABLISHED, CTS_UPDATED
+    frozen: False
+    exported: True
+    export_detail: fib_lifecycle.csv columns bos_idx / cts_idx
+    cross_module: True
+    under_flip: LOCATION
+    job: A_anchor_name
+    proposed_name: 'fib BOS/CTS extreme'
+
+[40] cross-cycle anchor_idx / anchor_price params; logs 'anchor=CTS_n' and '-> anchor_idx='
+    meaning_or_use: fib_anchor, CTS side: the CTS_EST/UPD idx or the running extreme. A no-cross result mirrors it into BOTH bos_idx and cts_idx
+    where: engine_v2/zones/fib_tracker.py:605-618, 1218-1227, 1960-2004, 2122-2332, 2487-2525; engine_v2/zones/cross_cycle_fib.py:40-42, 61-62, 126-185; tests test_cross_cycle_fib_routine.py:47-223, test_cross_cycle_fib.py:158, test_main_versioned_cross.py:85, 244
+    event_types: CTS_ESTABLISHED, CTS_UPDATED
+    frozen: False
+    exported: True
+    export_detail: becomes FibState.cts_idx, i.e. the fib_lifecycle.csv cts_idx column
+    cross_module: False
+    under_flip: LOCATION, but the same value is also passed as current_candle (a TIMING role); see JOB B
+    job: A_anchor_name
+    proposed_name: cts_extreme_idx / cts_extreme_price
+
+[41] _running_extreme_anchor(); doc 'The anchor is the running extreme past CTS_n'
+    meaning_or_use: price_extreme: argmax high / argmin low over [CTS_n confirmed+1, current]
+    where: engine_v2/zones/fib_tracker.py:1894-1919, 2072-2100
+    event_types: (CTS_CONFIRMED / CTS_THRESHOLD_UPDATED, out of scope)
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: unaffected
+    job: A_anchor_name
+    proposed_name: _running_cts_extreme
+
+[42] _m15_extend_cross_anchor() / new_anchor_idx / new_anchor_price
+    meaning_or_use: fib_anchor: extends the cross fib's CTS-side extreme
+    where: engine_v2/zones/fib_tracker.py:2243-2247, 2334-2438
+    event_types: CTS_ESTABLISHED, CTS_UPDATED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: LOCATION (guards at 2342 and 2396)
+    job: A_anchor_name
+    proposed_name: _m15_extend_cross_cts / new_cts_idx / new_cts_price
+
+[43] 'START ANCHOR' / 'start anchor' / 'same-start-anchor revival'
+    meaning_or_use: fib_anchor, BOS side: the earliest_x cycle's BOS extreme, or the prospective BOS pullback extreme
+    where: engine_v2/zones/fib_tracker.py:1876-1878, 2209-2239, 2388
+    event_types: BOS_CONFIRMED (via _bos_by_cycle)
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: LOCATION
+    job: A_anchor_name
+    proposed_name: 'BOS-side extreme'
+    notes: 'start' here means the BOS END of the span, which collides with the lifecycle term start_idx in the same class
+
+[44] style keys fib.anchor_line.active / fib.anchor_line.historical; locals anchor_line*; comments 'BOS anchor / CTS anchor'
+    meaning_or_use: fib_anchor: the 0% and 100% lines at the BOS/CTS extremes
+    where: engine_v2/charting/style_registry.py:156-162; engine_v2/charting/export_plotly.py:2516-2517, 2548, 2562-2615
+    event_types: n/a (FibState)
+    frozen: False
+    exported: False
+    export_detail: style registry key (CHARTING_SPEC references it)
+    cross_module: False
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: fib.extreme_line.*
+    notes: H1 fib lines are on by default
+
+[45] prose 'drawn from the anchor, active from start_idx'
+    meaning_or_use: zone_anchor: the zone's base candle (historical draw start) as opposed to real-time activation
+    where: engine_v2/charting/export_m15_chart.py:49
+    event_types: n/a
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: 'drawn from its base candle'
+    notes: The same file uses 'anchor' for structural_start (L18/23/267)
+
+[46] comment 'clear pullback anchor'
+    meaning_or_use: other (mislabelled MOMENT): refers to st.last_pullback_pat_apply_idx, the pullback pattern's APPLY candle, which becomes BOS meta pb_start
+    where: engine_v2/structure/market_structure.py:1547-1548
+    event_types: BOS_CONFIRMED (pb_start)
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: 'clear last_pullback_pat_apply_idx'
+
+[47] comment 'Create range anchored to CTS and pullback low/high' (range_start_idx = st.cts.idx)
+    meaning_or_use: price_extreme (verb): the range starts at the CTS extreme candle
+    where: engine_v2/structure/market_structure.py:1312-1314, 2108
+    event_types: CTS_ESTABLISHED/UPDATED (st.cts)
+    frozen: False
+    exported: True
+    export_detail: range_start_idx column in H1 final.csv
+    cross_module: False
+    under_flip: unaffected (st.cts)
+    job: A_anchor_name
+    proposed_name: 'range starts at the CTS extreme'
+
+[48] bos_anchor_idx (in _EVENT_META_IDX_KEYS)
+    meaning_or_use: other: a DEAD key with no producer anywhere and 0 CSV occurrences
+    where: engine_v2/multitf/entity_df_mutation.py:109
+    event_types: none
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: If the flip adds an extreme meta key, that key MUST be added to this list
+    job: A_anchor_name
+    proposed_name: delete, or reuse the slot as bos_extreme_idx
+    notes: The list is not maintained. These all ship SLICE-LOCAL on M15 today: BOS pb_start, REVERSAL_* expires_idx, KL source_event_idx, POI bos_idx/cts_idx, fib activated_at/reactivated_at/locked_at/cycle1_bos_idx, WaveCandleResult.meta.anchor_idx
+
+[49] Plotly anchor / xanchor and 'anchored at' prose
+    meaning_or_use: other: Plotly layout API keywords; 'anchored' = positioned
+    where: engine_v2/charting/export_m15_chart.py:1729, 1747, 2618, 2625; engine_v2/charting/export_plotly.py:368, 1358-1453, 2820
+    event_types: n/a
+    frozen: True
+    exported: False
+    export_detail: Plotly API
+    cross_module: False
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: keep (API); exclude from any bulk rename
+
+[50] English-verb uses of 'anchor'
+    meaning_or_use: other (verb: support / reference / bound / pin)
+    where: engine_v2/zones/poi_zones.py:225-226; engine_v2/multitf/entity_df_mutation.py:608; engine_v2/structure/structure_engine.py:449-450 (missed by the partials: 'to anchor the check window's lower bound at cts_est[0].idx + 1'); engine_v2/tests/test_bounded_structure.py:6; engine_v2/tests/test_main_reversal_probe.py:92
+    event_types: n/a
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: n/a
+    job: A_anchor_name
+    proposed_name: reword
+    notes: Grep noise for any rename sweep
+
+
+### JOB B — every read of CTS_ESTABLISHED / BOS_CONFIRMED / CTS_UPDATED .idx (74 rows)
+
+[1] _extreme_idx_for_cts_event: `return int(ev.idx)` for CTS_UPDATED/CTS_ESTABLISHED
+    meaning_or_use: LOCATION: ev.idx is taken as the CTS extreme. It is the candle the ad-hoc CTS KL base is derived from, and becomes ReferenceZone.source_event_idx, which is the probe input_idx
+    where: engine_v2/structure/reference_zone.py:88-97 (used at 358 -> ad-hoc zone 378 and source_event_idx 374/395)
+    event_types: CTS_ESTABLISHED, CTS_UPDATED
+    frozen: False
+    exported: True
+    export_detail: indirect: probe starting_idx sets the H1 sid start and the sub pool key (subs.csv / triggers.csv)
+    cross_module: True
+    under_flip: BREAKS on the EST branch: the zone and the probe input would move to the moment candle. Migrate to the explicit extreme key first, the same way the CTS_CONFIRMED branch already reads cts_anchor_idx
+    job: B_idx_read
+    proposed_name: read meta['cts_extreme_idx'] for all three types
+    notes: Production consumers: structure_engine.py:278 (H1 main reversal) and entity_df_mutation.py:798/913 (subs)
+
+[2] idx_window filter `if ev.idx < lo or ev.idx > hi: continue`
+    meaning_or_use: TIMING: a causal window (the sibling caller sets hi = trigger_idx, 'the ONLY thing keeping the read causal'). The frames are mixed today: CTS_CONFIRMED is filtered on its moment, EST/UPD on their extreme
+    where: engine_v2/structure/reference_zone.py:335-338
+    event_types: CTS_ESTABLISHED, CTS_UPDATED (+CTS_CONFIRMED)
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: Becomes CORRECT for EST: today a lagging EST with extreme <= trigger_idx < moment is admitted before it is knowable. The CTS_UPDATED pattern path keeps the latent leak (its moment is unrecorded)
+    job: B_idx_read
+    proposed_name: filter on the moment
+
+[3] most-recent sort `key=(int(e.idx), _TYPE_ORDER[e.type]), reverse=True`
+    meaning_or_use: TIMING ('most recent CTS event wins'), but it compares CTS_CONFIRMED moments against EST/UPD extremes
+    where: engine_v2/structure/reference_zone.py:344-357
+    event_types: CTS_ESTABLISHED, CTS_UPDATED (+CTS_CONFIRMED)
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: Becomes CORRECT/consistent. The winner changes only when a lagging EST moment crosses another candidate. Comment L344-347 ('never two CTS-type events at the same idx') becomes false: EST@moment can tie an sd-prox CTS_CONFIRMED, and the CONFIRMED>ESTABLISHED tie-break then decides
+    job: B_idx_read
+    notes: Also used by the H1 main reversal (idx_window=None)
+
+[4] probe_input_idx = int(ref_zone.source_event_idx); degenerate check `>= reversal_apply_idx`
+    meaning_or_use: LOCATION, one hop from reference_zone.py:97: the reversal probe runs over [prior-CTS-extreme, reversal apply]
+    where: engine_v2/structure/structure_engine.py:278-296 (production H1 main)
+    event_types: CTS_ESTABLISHED, CTS_UPDATED (CTS_CONFIRMED via cts_anchor_idx)
+    frozen: False
+    exported: True
+    export_detail: indirect: sets the next H1 sid's start, which feeds every H1 CSV
+    cross_module: False
+    under_flip: BREAKS when the prior sid's most recent CTS event is an EST. No change on this window (ref=cts_confirmed, input 652 -> start 689)
+    job: B_idx_read
+
+[5] sibling CTS read: abs_idx = ev.idx + slice_begin; clip r_lo <= abs_idx <= r_hi; then m15_input_idx = ref_zone.source_event_idx
+    meaning_or_use: BOTH. TIMING: the clip to the record's live windows ∩ [lo, hi=trigger_idx]. The comment at :481 ('ev.idx == knowable-at for CTS types') is FALSE for a lagging EST and for pattern-path UPD. LOCATION: the winner's extreme becomes the probe input and ref-zone base, which sets starting_idx (the POOL KEY)
+    where: engine_v2/multitf/entity_df_mutation.py:478-489, 774-798, 822 (callee engine_v2/structure/reference_zone.py:337, 353-358, 97)
+    event_types: CTS_ESTABLISHED, CTS_UPDATED (+CTS_CONFIRMED)
+    frozen: False
+    exported: True
+    export_detail: triggers.csv validated_parent_idx / starting_idx (sibling winners 2609, 3760, 4000)
+    cross_module: True
+    under_flip: Split: the clip and recency become CORRECT, and the extreme read BREAKS unless migrated. On the window the winners are not the lagging ESTs, so there is no change once migrated
+    job: B_idx_read
+    proposed_name: abs_idx -> abs_knowable_idx; source_event_idx -> source_extreme_idx
+    notes: Highest-risk site for an EST flip: mixed semantics in one expression, and it determines the pool key
+
+[6] _resolve_reversal_start: build_reference_zone_from_cts_event(bounded.events, idx_window=None) -> probe_input_local
+    meaning_or_use: BOTH: a recency pick by ev.idx (TIMING) plus the extreme used as the probe input, the degeneracy test at :914 and the cache key input_abs (LOCATION -> the successor's starting_idx)
+    where: engine_v2/multitf/entity_df_mutation.py:903-926, 974
+    event_types: CTS_ESTABLISHED, CTS_UPDATED (+CTS_CONFIRMED)
+    frozen: False
+    exported: True
+    export_detail: reversal records' starting_idx in triggers.csv (1797, 2365, 2639, 4027)
+    cross_module: True
+    under_flip: The extreme read BREAKS unless migrated. Recency is probably unchanged here (sub 0's lagging 1223 is not the most recent before R=1940; sub 3 never reverses)
+    job: B_idx_read
+
+[7] _events_to_structure_levels: time=t.iloc[ev.idx]
+    meaning_or_use: LOCATION: the level's time is where its price sits (price = ev.price, the extreme)
+    where: engine_v2/structure/market_structure.py:2643-2677 -> engine_v2/debug/export_structure.py:13-24
+    event_types: CTS_ESTABLISHED, CTS_UPDATED, BOS_CONFIRMED
+    frozen: False
+    exported: True
+    export_detail: H1 *_structure_levels.csv 'time'. There is no in-pipeline consumer (export_plotly accepts structure_levels but never reads it)
+    cross_module: True
+    under_flip: BREAKS semantically (time/price desync). EST flip changes 0/5 H1 rows; a BOS flip would move all 5 BOS rows (96->115, 591->652, 689->703, 728->748, 826->902)
+    job: B_idx_read
+    proposed_name: time from the extreme key
+
+[8] Plan A assert `max(int(ev.idx) for ev in self.events) <= self._effective_end`
+    meaning_or_use: NEITHER: an edge-bound check over all events
+    where: engine_v2/structure/market_structure.py:498-501
+    event_types: all (incl. the 3 types)
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: unaffected (extreme <= moment <= processing candle <= effective_end)
+    job: B_idx_read
+    notes: Besides levels and the CTS_EST count at L543, this is the only in-MS read of the emitted events; _rewind_to rebuilds without idx reads
+
+[9] CTS_ESTABLISHED ordering sorts by idx
+    meaning_or_use: TIMING: event ordering used to pick the 1st/2nd CTS
+    where: engine_v2/structure/unified_probe.py:274; engine_v2/structure/structure_engine.py:427-432
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: unaffected (within one MS run both extremes and moments are monotone in cycle order)
+    job: B_idx_read
+
+[10] _second_cts_moment `ev.meta.get('confirmed_at', ev.idx)`; cts0_est_idx = meta.get('confirmed_at', cts_est[0].idx)
+    meaning_or_use: TIMING, already on the moment via meta; the ev.idx fallback is dead
+    where: engine_v2/structure/unified_probe.py:450-456, 565, 594
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: True
+    export_detail: finalize_idx becomes probe_finalize_idx (triggers.csv)
+    cross_module: True
+    under_flip: unaffected (the fallback would also equal the moment)
+    job: B_idx_read
+    notes: Precedent: the L451-454 docstring states the standard ('confirmed_at for timing, .idx for where the extreme sits')
+
+[11] Phase-2 retrace window `check_lo = int(first_cts.idx) + 1`
+    meaning_or_use: AMBIGUOUS, intended TIMING. The docstring (L489) says '[CTS_0_est+1, ...]', and Phase 1 uses int(tfb.est_idx)+1 = the MOMENT (L403). Phase 2 uses the EXTREME
+    where: engine_v2/structure/unified_probe.py:602 (window used 629-642)
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: True
+    export_detail: indirect: FC probe starting_idx / finalize_idx
+    cross_module: False
+    under_flip: Becomes CORRECT and consistent with Phase 1. Today a lagging CTS_0 lets Phase 2 consider (extreme, moment] candles that Phase 1 excludes. Not measured on the window
+    job: B_idx_read
+    notes: A real Phase-1/Phase-2 inconsistency today, independent of any flip
+
+[12] `cycle_0_conf.meta.get('cts_anchor_idx', first_cts.idx)` -> check_hi
+    meaning_or_use: LOCATION: the retrace upper bound is the CTS extreme. The EST.idx fallback is treated as an extreme
+    where: engine_v2/structure/unified_probe.py:603-607
+    event_types: CTS_ESTABLISHED (fallback only)
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: The fallback would BREAK, but it is dead (CTS_CONFIRMED always carries cts_anchor_idx)
+    job: B_idx_read
+    proposed_name: fall back to meta['cts_extreme_idx']
+
+[13] log labels `cts1_ext={cts_est[1].idx}` and `cts0_est={first_cts.idx}`
+    meaning_or_use: BOTH (log only). cts1_ext is a LOCATION label and is correct today. cts0_est is a TIMING label that prints the extreme, which is wrong today; Phase 1 at L424 prints the moment
+    where: engine_v2/structure/unified_probe.py:555-560, 669-673
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: False
+    export_detail: run.log
+    cross_module: True
+    under_flip: cts1_ext BREAKS (it would print the moment); cts0_est becomes correct
+    job: B_idx_read
+    proposed_name: read the extreme key for cts1_ext
+
+[14] Scenario-3 exception window `_find_closest_candle_to_outer(df_probe, cts_est[0].idx + 1, exc_upper, ...)`; live `exc_upper = cts_est[1].idx`
+    meaning_or_use: AMBIGUOUS. The lower bound starts after the CTS_0 extreme, but the comment calls that candle 'the pullback confirmation', which is wrong twice. exc_upper is TIMING
+    where: engine_v2/structure/structure_engine.py:449-484
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: The lower bound would move to moment+1 and exc_upper becomes correct. TEST-ONLY: no production caller of compute_structure_scenario_3 (verified; only tests/test_scenario3.py)
+    job: B_idx_read
+    notes: Candidate for deletion rather than migration
+
+[15] `ev.idx <= reversal_confirmed_idx` filters; Exception-2 windows `cts_est_idx = int(exc2_cts[0].idx)` / `cts_established_idx = int(probe_cts_events[0].idx)` + 1
+    meaning_or_use: The filters are TIMING and vacuous (the run is bounded there). The window bound is AMBIGUOUS, and locals named *_est / *_established hold the EXTREME
+    where: engine_v2/structure/structure_engine.py:563-578, 767-782
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: The lower bound moves to moment+1. TEST-ONLY (compute_structure_scenario_3 / compute_structure_from_start: tests/test_scenario3.py, tests/test_bounded_structure.py)
+    job: B_idx_read
+
+[16] sd-proximity gate `i > st.cts.idx` (st.cts co-sourced with the EST/UPD idx)
+    meaning_or_use: LOCATION/AMBIGUOUS: confirmation may fire only strictly after the CTS extreme. On a lagging cycle it can fire ON the apply candle, the EST moment
+    where: engine_v2/structure/market_structure.py:1960-1987 (runs on every replayed candle incl. the apply candle, via 653)
+    event_types: CTS_ESTABLISHED, CTS_UPDATED (state)
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: Unaffected under an emit-site-only flip (pass apply_idx as idx at L1485, keep st.cts = Point(extreme)). This is the gate that lets CTS_CONFIRMED.idx == EST moment, which creates the orchestrator sort-tie hazard (see the orchestrator:146 row)
+    job: B_idx_read
+
+[17] st.cts.idx / st.bos_confirmed.idx into the POI resolver and cycle0_data (incl. has_unfilled_imbalance(check_to_idx=cts_idx))
+    meaning_or_use: BOTH: the leg/window [BOS_0, CTS_0] is LOCATION; check_to_idx is TIMING-like (fill 'as of' the extreme)
+    where: engine_v2/structure/market_structure.py:2003-2014, 2040-2062
+    event_types: CTS_ESTABLISHED, CTS_UPDATED, BOS_CONFIRMED (state)
+    frozen: False
+    exported: False
+    export_detail: in-memory, handed to zones/poi_zones.compute_poi_inners_for_cycle
+    cross_module: True
+    under_flip: Unaffected in MS (reads state). PARITY HAZARD: MS must keep agreeing with FibTracker, which reads int(event.idx) (fib_tracker.py:521, 1131), so FibTracker must migrate in the same change
+    job: B_idx_read
+
+[18] RANGE_STARTED.meta['cts_idx']; range_start_idx = st.cts.idx; df columns cts_idx / bos_idx
+    meaning_or_use: LOCATION (the CTS/BOS extreme candle)
+    where: engine_v2/structure/market_structure.py:1208, 1314, 1332, 2108, 2124, 2465, 2498; mirrored engine_v2/multitf/entity_df_mutation.py:84-86
+    event_types: CTS_ESTABLISHED, CTS_UPDATED, BOS_CONFIRMED (state)
+    frozen: True
+    exported: True
+    export_detail: RANGE_STARTED meta key (structure_events.csv); final.csv columns range_start_idx / cts_idx / bos_idx
+    cross_module: True
+    under_flip: unaffected under an emit-site-only flip
+    job: B_idx_read
+    notes: The df cts_idx column is read by structure/identify_start.py:167
+
+[19] _initial_bos_before_first_cts(cts_idx): the same local passed as the CTS_ESTABLISHED idx
+    meaning_or_use: LOCATION: the BOS_0 search window [start_idx, cts_idx) ends at the CTS_0 extreme
+    where: engine_v2/structure/market_structure.py:1462, 1485-1501, 1739-1765
+    event_types: CTS_ESTABLISHED (co-sourced local)
+    frozen: False
+    exported: True
+    export_detail: BOS_0 idx/price -> BOS_CONFIRMED rows
+    cross_module: False
+    under_flip: Unaffected under an emit-site-only flip. BREAKS BOS_0 selection if the cts_idx local itself is redefined as the moment
+    job: B_idx_read
+
+[20] _emit_bos_confirmed builds st.bos_confirmed = Point(idx=idx) from the event idx argument; bos_inner resolver(bos_idx)
+    meaning_or_use: LOCATION: the BOS extreme drives the BOS inner (proximity), the POI/fib leg, cycle0_data and the df bos_idx column
+    where: engine_v2/structure/market_structure.py:1927-1938, 1538-1545; readers 2005, 2040, 2498
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: True
+    export_detail: final.csv bos_idx / bos_price
+    cross_module: True
+    under_flip: EST flip: n/a. BOS flip: BREAKS unless the emitter is decoupled first (unlike CTS, whose state is set separately at L1554). BOS lags on every row: H1 5/5, confluence 21/21, counter 8/8
+    job: B_idx_read
+
+[21] identify_start_scenario_2_after_reversal: cts_idx = int(last_conf_row['cts_idx'])
+    meaning_or_use: LOCATION: the next structure starts at the last confirmed CTS extreme (df column co-sourced from st.cts)
+    where: engine_v2/structure/identify_start.py:154-215
+    event_types: CTS_ESTABLISHED/UPDATED via the df column
+    frozen: False
+    exported: False
+    export_detail: StartDecision.meta
+    cross_module: False
+    under_flip: Unaffected. TEST-ONLY path
+    job: B_idx_read
+    notes: meta 'last_cts_confirmed_idx' holds an EXTREME (violates the naming standard)
+
+[22] compute_struct_start_by_sid: min(int(ev.idx)) over every event of a sid
+    meaning_or_use: TIMING (the lifecycle-start base / floor), computed from a LOCATION value
+    where: engine_v2/zones/structure_lifecycle.py:174-182. Consumers: engine_v2/zones/kl_zones_v1.py:1033/1048, engine_v2/zones/poi_zones.py:392/531/821, engine_v2/zones/fib_tracker.py:422/441-443, engine_v2/multitf/parent_tables.py:99/144-146, engine_v2/charting/export_m15_chart.py:2112-2122/2366-2378, engine_v2/charting/export_plotly.py:1931-1950
+    event_types: BOS_CONFIRMED (the min on all 12 structures, verified), CTS_ESTABLISHED/UPDATED (never the min)
+    frozen: False
+    exported: True
+    export_detail: indirect: KL/POI confirmed_idx, fib start_idx, triggers.csv parent_floor_idx, chart floors
+    cross_module: True
+    under_flip: EST flip: unaffected. BOS flip: the min becomes the BOS moment (H1 sid0 96->115; subs 454->458, 1797->1816, 2365->2368, 2639->2649, 3304->3306, 3760->3786, 4027->4031, 3621->3656). It is 'correct' as a real-time start but masked in most consumers (reversal handoff for sid>=1, sub floors, max with later values)
+    job: B_idx_read
+    proposed_name: min(moment) over events, or BOS_0 meta['confirmed_at']
+    notes: Pinned by tests/test_structure_lifecycle_moment.py:179-189 and test_parent_tables.py:116
+
+[23] compute_cycle_lifecycle / build_parent_tables read CTS_ESTABLISHED meta['confirmed_at'] (ev.idx only in assert messages)
+    meaning_or_use: TIMING, already on the MOMENT (Plan C): the reference implementation of the target semantics
+    where: engine_v2/zones/structure_lifecycle.py:96-114; engine_v2/multitf/parent_tables.py:107-141
+    event_types: CTS_ESTABLISHED, BOS_CONFIRMED
+    frozen: False
+    exported: True
+    export_detail: KL/POI/fib end_idx/end_reason; triggers.csv floors
+    cross_module: True
+    under_flip: unaffected (idx would equal confirmed_at)
+    job: B_idx_read
+    proposed_name: cts_est_by_key -> cts_moment_by_key
+    notes: The fib new_cycle terminal disagrees with it on lagging cycles (see the activated_at row)
+
+[24] KL BOS branch: source_event_idx = int(ev.idx) -> anchor_idx -> identify_base_pattern / zone_thresholds
+    meaning_or_use: LOCATION: the BOS zone's base pattern is searched around the BOS extreme (sets top/bottom, base_idx, start_time, bounds_steps)
+    where: engine_v2/zones/kl_zones_v1.py:886-900, 935, 951-966
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: True
+    export_detail: KL CSV meta source_event_idx / anchor_idx / base_idx / outer / inner; start_time
+    cross_module: True
+    under_flip: EST flip: unaffected (the CTS_ESTABLISHED branch at 874-885 reads no idx, and CTS zones use CTS_CONFIRMED.cts_anchor_idx). BOS flip: BREAKS every BOS zone (5 H1 + 21 confluence + 8 counter rows) plus wave candles and WVMI downstream
+    job: B_idx_read
+    proposed_name: meta['bos_extreme_idx']
+    notes: confirmed_idx (kl:889) already reads confirmed_at. KL iterates the events in emission order (unsorted), so it is not sort-sensitive
+
+[25] [kl_zones] debug prints of int(ev.idx) for BOS_CONFIRMED / CTS_ESTABLISHED
+    meaning_or_use: log only
+    where: engine_v2/zones/kl_zones_v1.py:752-772
+    event_types: BOS_CONFIRMED, CTS_ESTABLISHED
+    frozen: False
+    exported: False
+    export_detail: run.log
+    cross_module: False
+    under_flip: log values change; no behaviour change
+    job: B_idx_read
+    proposed_name: print both idx and confirmed_at
+
+[26] cts_established_idx = int(cts_event.idx) (fallback int(fib_state.cts_idx)) -> first_active = max(cts_established_idx, ic_idx, floor)
+    meaning_or_use: TIMING: the POI activation gate ('active after establishment')
+    where: engine_v2/zones/poi_zones.py:366-374, 467-471, 517-531, 586, 820-824
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: True
+    export_detail: POI CSV meta cts_established_idx (entity-absolute on subs); confirmed_idx / activation_history
+    cross_module: True
+    under_flip: Becomes CORRECT, a behaviour change on lagging cycles. Verified live instance: confluence sub 0 cycle 2 activates at 1223, one candle before its moment 1224. Sub 3 cycle 1 (2828) is masked by the 2829 floor on both lenses. The fallback (counter sub 5 cycle 1, no EST) uses the fib CTS extreme 3806 as a time, but that POI never activates
+    job: B_idx_read
+    proposed_name: cts_moment_idx (Plan D §2)
+    notes: This is Plan D (engine_v2/plans/PLAN_D_poi_activation_moment.md, untracked). The meta KEY name violates 'established = moment' until the flip; under a full flip the key would silently become the moment
+
+[27] cts_events_by_key sorted by int(e.idx); pre-window split ev_idx < first_active / <= scan_end
+    meaning_or_use: BOTH: the sort and window membership are TIMING; the same value then becomes cts_idx_at_t (LOCATION)
+    where: engine_v2/zones/poi_zones.py:403-416, 829, 862-878
+    event_types: CTS_ESTABLISHED, CTS_UPDATED
+    frozen: False
+    exported: False
+    export_detail: affects POI activation_history
+    cross_module: False
+    under_flip: Ordering is preserved on the window (the first update after each lagging moment: 1225 > 1224, 2836 > 2829). A CTS_UPDATED in [extreme, moment) would reorder (latent)
+    job: B_idx_read
+    proposed_name: split each event into (moment, extreme)
+    notes: The comment at poi:863-866 ('ic_idx <= cts_extreme < cts_established_idx') is FALSE at HEAD, because cts_established_idx IS the extreme. It becomes true under Plan D or a flip
+
+[28] transitions.append((int(ev.idx), PRIO_CTS, 'cts', ev)); cts_idx_at_t = int(payload.idx); cond1 = cts_idx_at_t >= ic_idx
+    meaning_or_use: BOTH: the transition candle is TIMING; cts_idx_at_t in cond1 is LOCATION (is the IC inside the fib span yet)
+    where: engine_v2/zones/poi_zones.py:911-946
+    event_types: CTS_ESTABLISHED, CTS_UPDATED
+    frozen: False
+    exported: False
+    export_detail: POI activation_history / status
+    cross_module: False
+    under_flip: The time half becomes CORRECT; the location half BREAKS (an IC in (EST extreme, moment] would pass cond1 early). cond5 is unaffected (it uses ev.price)
+    job: B_idx_read
+    proposed_name: transition at confirmed_at; cts_idx_at_t from the extreme key
+    notes: Plan D changes only first_active and leaves this block on ev.idx
+
+[29] find_ic_candidates range(fib_state.bos_idx, fib_state.cts_idx + 1); has_unfilled_imbalance(end=cts_idx, check_to_idx=cts_idx)
+    meaning_or_use: BOTH: the IC search window [BOS extreme, CTS extreme] is LOCATION; check_to_idx=cts_idx is TIMING evaluated at an extreme
+    where: engine_v2/zones/poi_zones.py:203-244 (called 456, 1074), select_ic_variants 247-317
+    event_types: BOS_CONFIRMED (fib bos_idx from orchestrator.py:209), CTS_ESTABLISHED / CTS_UPDATED (fib cts_idx)
+    frozen: False
+    exported: True
+    export_detail: which ICs exist in the POI CSV; meta bos_idx/cts_idx (slice-local on subs, e.g. 50/841)
+    cross_module: True
+    under_flip: The LOCATION half BREAKS if the fib's last CTS event is the EST (on the window every lagging cycle has later updates). check_to becomes the moment
+    job: B_idx_read
+    proposed_name: FibState bos_extreme_idx / cts_extreme_idx
+
+[30] FibTracker.on_cts_established: cts_idx = int(event.idx); price fallback df.h/l[cts_idx] (dispatched from orchestrator.py:224)
+    meaning_or_use: LOCATION: the fib CTS point, plus a price lookup at the extreme when ev.price is falsy (practically dead)
+    where: engine_v2/zones/fib_tracker.py:518-529; engine_v2/pipeline/orchestrator.py:211-227
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: True
+    export_detail: fib_lifecycle.csv cts_idx
+    cross_module: True
+    under_flip: BREAKS unless FibTracker reads the extreme key: on the window fib cts_idx would go 1223->1224 (sub 0 cycle 2) and 2828->2829 (sub 3 cycle 1). This cts_idx then feeds every fib row below
+    job: B_idx_read
+    proposed_name: cts_extreme_idx
+
+[31] has_unfilled_imbalance(df, min(bos,cts), max(bos,cts), cts_idx) at CTS_ESTABLISHED
+    meaning_or_use: BOTH: the range [BOS extreme, CTS extreme] is LOCATION; the as-of point is TIMING
+    where: engine_v2/zones/fib_tracker.py:531-539
+    event_types: CTS_ESTABLISHED, BOS_CONFIRMED
+    frozen: False
+    exported: False
+    export_detail: decides fib activation -> fib_lifecycle / POIs
+    cross_module: True
+    under_flip: The range end BREAKS (it extends to the moment); the as-of point becomes CORRECT. A BOS flip moves the range start (wrong)
+    job: B_idx_read
+    proposed_name: range from extremes, as-of confirmed_at
+
+[32] bos_by_cycle[key] = (ev.idx, ev.price) -> FibTracker _bos_by_cycle and its uses (own_imb_start, bos_x, bos1_idx, c0['bos_idx'])
+    meaning_or_use: LOCATION: the BOS-side fib point and the start of the own/prior-cycle imbalance ranges
+    where: engine_v2/pipeline/orchestrator.py:208-227; engine_v2/zones/fib_tracker.py:541-542, 757-765, 1177-1182, 1214-1226, 1565-1573, 1963-2000, 2166-2220, 2499-2516
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: True
+    export_detail: fib_lifecycle.csv bos_idx
+    cross_module: True
+    under_flip: EST flip: unaffected. BOS flip: BREAKS every fib BOS point (its price stays at the extreme)
+    job: B_idx_read
+    proposed_name: bos_extreme_idx
+    notes: Runs for H1 and for every sub projection
+
+[33] FibState.bos_idx / cts_idx / cts_history / FibRetracement anchor_*_idx via _activate_fib, _update_fib_cts, _create_updated_fib_state, _m15_create_cross/extend/reactivate; drawn by the H1 chart
+    meaning_or_use: LOCATION: the fib's BOS/CTS extreme points (levels, the fib rectangle x-span [min, max], the IC span)
+    where: engine_v2/zones/fib_tracker.py:995-1103, 1367-1419, 1597-1616, 2260-2438; engine_v2/charting/export_plotly.py:2551-2559, 2644-2648; mirrored engine_v2/multitf/entity_df_mutation.py:288-289
+    event_types: BOS_CONFIRMED, CTS_ESTABLISHED, CTS_UPDATED
+    frozen: False
+    exported: True
+    export_detail: fib_lifecycle.csv bos_idx / cts_idx; POI meta bos_idx / cts_idx
+    cross_module: True
+    under_flip: BREAKS: the fib 100% point would sit on the moment candle at the extreme's price
+    job: B_idx_read
+    proposed_name: bos_extreme_idx / cts_extreme_idx
+    notes: H1 fib lines are on by default
+
+[34] 'CTS moved to new extreme' guards: cts_idx <= state.cts_idx; cts_idx > c0['cts_idx']; new_anchor_idx <= / > state.cts_idx
+    meaning_or_use: LOCATION: compares the incoming extreme candle with the stored one
+    where: engine_v2/zones/fib_tracker.py:1310, 1383-1385, 1509-1511, 2342-2343, 2396
+    event_types: CTS_UPDATED (incoming) vs CTS_ESTABLISHED (stored)
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: An EST-only flip makes these MIXED-SCALE (UPD extreme vs EST moment) and silently DROPS any update whose extreme lies in (EST extreme, moment]. 0 instances on the window
+    job: B_idx_read
+    proposed_name: compare extreme keys on both sides
+    notes: The strongest argument for flipping only after adding an explicit extreme field
+
+[35] meta['activated_at'] = cts_idx -> _activate_fib -> _mark_first_active (start_idx) and _set_terminal(prev cycle, activated_at, 'new_cycle')
+    meaning_or_use: TIMING: the fib cycle's lifecycle START and the previous cycle's END
+    where: engine_v2/zones/fib_tracker.py:602, 664, 731, 782, 846, 865, 937, 956, 1200, 1340, 1360, 1588; consumed 1056, 1071, 1086, 1099; set-if-absent merge 427-429
+    event_types: CTS_ESTABLISHED (+CTS_UPDATED activate-on-update paths)
+    frozen: False
+    exported: True
+    export_detail: fib_lifecycle.csv start_idx / end_idx / end_reason / status, plus meta activated_at (slice-local on subs: 61 / 239)
+    cross_module: True
+    under_flip: Becomes CORRECT, a behaviour change. Verified live instance: sub 3 cycle 0 fib end_idx is 2828 (new_cycle) on BOTH lenses while KL/POI end at 2829. It would become 2829. The record is inactive/collapsed, so the change shows in the CSV only
+    job: B_idx_read
+    proposed_name: activated_at would become a true moment (today it violates 'past tense = moment')
+    notes: The moment-based cycle_life end is only set-if-absent, so the fib's earlier extreme-based terminal wins; that is why the fib and KL/POI ends disagree
+
+[36] _m15_cross_check / resolve_cross_cycle_eligibility called with current_candle=cts_idx AND anchor_idx=cts_idx
+    meaning_or_use: BOTH, one value in two roles. current_candle is TIMING: the fill as-of point, activated_at / reactivated_at / deactivated_at, _mark_first_active and the new_cycle terminal. anchor_idx and the own-imbalance range are LOCATION
+    where: engine_v2/zones/fib_tracker.py:609-618, 1218-1227, 1966-2004, 2122-2258; engine_v2/zones/cross_cycle_fib.py:117-159
+    event_types: CTS_ESTABLISHED, CTS_UPDATED (BOS via own_imb_start)
+    frozen: False
+    exported: True
+    export_detail: fib_lifecycle.csv (versions, start/end, cts_idx, meta)
+    cross_module: False
+    under_flip: The TIMING half becomes CORRECT and the LOCATION half BREAKS. Live on the window: sub 3 cycle 1 cross_failed (activated_at 2828); confluence sub 0 cycle 2's EST at 1223 extends the pre-established cross that started at 1169
+    job: B_idx_read
+    proposed_name: pass as_of_idx (moment) and cts_extreme_idx separately
+
+[37] Scenario 1: cts_idx >= reversal_confirmed_idx
+    meaning_or_use: AMBIGUOUS: it compares the CTS_0 extreme with the reversal apply candle; as written it reads as LOCATION
+    where: engine_v2/zones/fib_tracker.py:767-771, 1344-1348 (spec POI_ZONES_SPEC.md:160-161)
+    event_types: CTS_ESTABLISHED (sid>=1 cycle 0), CTS_UPDATED
+    frozen: False
+    exported: False
+    export_detail: decides the cycle-0 fib -> fib_lifecycle / POI
+    cross_module: True
+    under_flip: H1-main only, and H1 EST never lags, so zero delta on the window. In general an EST-only flip makes the EST path compare a moment while the UPD path compares an extreme. Treat as BREAK unless the user rules it TIMING
+    job: B_idx_read
+    proposed_name: needs a user decision
+    notes: orchestrator.py:284-287 applies the same test to the prev-BOS line end
+
+[38] _deactivate_cycle0_fib(sid, cts_idx) -> _set_terminal(0, revert_idx, 'scenario1_revert')
+    meaning_or_use: TIMING: the cycle-0 fib's terminal end_idx is the cycle-1 CTS_ESTABLISHED candle
+    where: engine_v2/zones/fib_tracker.py:823-826, 1837-1858
+    event_types: CTS_ESTABLISHED (cycle 1)
+    frozen: False
+    exported: True
+    export_detail: fib_lifecycle end_idx / end_reason / status='disappeared'
+    cross_module: False
+    under_flip: Becomes CORRECT; zero delta on the window
+    job: B_idx_read
+
+[39] cycle-0 snapshot c0['cts_idx'] (from CTS_0 EST/UPD idx) -> select_fib_anchor_for_cycle cts_by_cycle; cond1/cond2 check_to_idx=c0_cts_idx
+    meaning_or_use: BOTH: the [BOS_0, CTS_0] range is LOCATION; 'cond2 @CTS_0' is TIMING evaluated at an extreme
+    where: engine_v2/zones/fib_tracker.py:177-178, 757-765, 1308-1321, 1431-1439, 1522-1530
+    event_types: CTS_ESTABLISHED, CTS_UPDATED (cycle 0)
+    frozen: False
+    exported: False
+    export_detail: Scenario 2 decision -> fib / POI
+    cross_module: True
+    under_flip: The range BREAKS; as-of becomes correct. It must stay in lock-step with MS cycle0_data (market_structure.py:72-81)
+    job: B_idx_read
+    proposed_name: c0['cts_extreme_idx'] plus an as-of moment
+
+[40] meta['cycle1_bos_idx'] = bos_idx -> cond2 range start; cond3 has_unfilled_imbalance(check_to_idx=cycle1_bos_idx)
+    meaning_or_use: BOTH: the range start is LOCATION; 'BOS_1 did not fill cycle 0' is measured AT the BOS_1 extreme (a price-reach test)
+    where: engine_v2/zones/fib_tracker.py:938, 1442-1454, 1532-1543
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: True
+    export_detail: fib_lifecycle.csv meta cycle1_bos_idx (e.g. 728)
+    cross_module: False
+    under_flip: EST flip: unaffected. BOS flip: BREAKS (later fills would be counted)
+    job: B_idx_read
+    proposed_name: cycle1_bos_extreme_idx
+
+[41] _update_fib_cts / create-on-fail imbalance checks with check_to=cts_idx; meta reactivated_at / deactivated_at = cts_idx
+    meaning_or_use: BOTH: the [bos, cts] range is LOCATION; the as-of point and the *_at labels are TIMING
+    where: engine_v2/zones/fib_tracker.py:1181-1187, 1443-1474, 1535-1574
+    event_types: CTS_UPDATED (and CTS_ESTABLISHED via cross_failed -> _update_fib_cts)
+    frozen: False
+    exported: True
+    export_detail: fib_lifecycle meta reactivated_at / deactivated_at (deactivated_at shifted on subs, reactivated_at not)
+    cross_module: False
+    under_flip: CTS_UPDATED is not planned to flip (its pattern-path moment is unrecorded). As things stand these '*_at' fields hold extremes
+    job: B_idx_read
+    proposed_name: *_at labels should hold moments
+
+[42] FibTracker.on_cts_updated: cts_idx = int(event.idx) (dispatched from orchestrator.py:229-231)
+    meaning_or_use: LOCATION: the fib CTS point moves to the new extreme
+    where: engine_v2/zones/fib_tracker.py:1105-1131; engine_v2/pipeline/orchestrator.py:229-231
+    event_types: CTS_UPDATED
+    frozen: False
+    exported: True
+    export_detail: fib_lifecycle.csv cts_idx
+    cross_module: True
+    under_flip: Unaffected by the EST/BOS flip. It would BREAK if CTS_UPDATED were ever flipped (and pattern-path UPD has no recorded moment)
+    job: B_idx_read
+
+[43] _cts_bib_last_breakout: ordered_events sorted by e.idx; test at ev_idx; range(CTS_EST.meta.anchor_idx, ev_idx); scan range(ev_idx+1, next_ev_idx)
+    meaning_or_use: LOCATION: walks successive CTS extreme candles, tests each (qualified + wick enters + closes in zone) and scans the breakout wave between extremes
+    where: engine_v2/zones/wave_candles.py:117-124, 461-514
+    event_types: CTS_ESTABLISHED, CTS_UPDATED
+    frozen: False
+    exported: False
+    export_detail: WaveCandleResult last_wave_candle_idx -> WVMI CSVs
+    cross_module: True
+    under_flip: BREAKS: it would test the moment candle and extend the EST scan past the extreme. Live only for CTS zones with 'base inside bar'; H1 has 3 such zones but H1 EST never lags. Sub impact unmeasured
+    job: B_idx_read
+    proposed_name: read cts_extreme_idx
+
+[44] BOS wave candles on KL meta anchor_idx (= BOS_CONFIRMED.idx): range(anchor+1, first_bo_anchor), _close_distance_to_outer(anchor), _find_last_pullback_idx(before_idx=anchor), ±5 / -15 / -50 windows
+    meaning_or_use: LOCATION, one hop: every search is centred on the BOS extreme candle. The STATE_CHANGED idx < BOS extreme bound looks like timing but defines the pullback wave's location
+    where: engine_v2/zones/wave_candles.py:137-148, 211-370; fed by engine_v2/pipeline/orchestrator.py:120-137 <- kl_zones_v1.py:894/954
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: True
+    export_detail: fb/lp wave candles -> *_wvmi.csv idx columns
+    cross_module: True
+    under_flip: EST flip: unaffected. BOS flip: BREAKS unless KL anchor_idx is migrated first
+    job: B_idx_read
+    proposed_name: bos_extreme_idx
+
+[45] zone_proximity: BOS meta['confirmed_at'] (ev.idx fallback) -> scan_end; threshold timeline sorted by (idx, type) with idx <= scan_start / < i
+    meaning_or_use: TIMING, already moment-based for scan_end. The running-BOS timeline applies BOS_CONFIRMED at its extreme, which is always inside the initial pass (extreme < moment <= scan_start)
+    where: engine_v2/zones/zone_proximity.py:199-206, 306-311, 346-353, 374-407
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: False
+    export_detail: zone-proximity triggers -> WVMI triggered_by_event_idx
+    cross_module: False
+    under_flip: unaffected (also inert under a BOS flip)
+    job: B_idx_read
+    notes: No CTS_ESTABLISHED/UPDATED reads. wvmi.py and poi_lifecycle.py have no idx reads of the three types
+
+[46] first_confluence input_idx = int(ev.idx) (BOS_CONFIRMED) -> FirstConfluenceTrigger.input_idx -> meta['probe_input_idx'] -> price-mapped probe input
+    meaning_or_use: LOCATION: the H1 BOS extreme, price-mapped to M15, becomes the probe input and the ad-hoc BOS_0 ref-zone base. It sets starting_idx (POOL KEY) and validated_parent_idx
+    where: engine_v2/multitf/first_confluence_trigger.py:88, 122; engine_v2/multitf/first_confluence_pipeline.py:34-53; engine_v2/multitf/entity_df_mutation.py:618-675; engine_v2/pipeline/orchestrator.py:849, 857; engine_v2/debug/probe_fc_finalize.py:175, 208; test pins engine_v2/tests/test_first_confluence_trigger.py:49, engine_v2/tests/test_subsequent_counter_trigger.py:180
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: True
+    export_detail: triggers.csv validated_parent_idx (96, 591, 826); unresolved CSV probe_input_idx (689, 728)
+    cross_module: True
+    under_flip: EST flip: unaffected. BOS flip: BREAKS. Inputs would go 96->115, 591->652, 689->703, 728->748, 826->902 (inside the confirmation hour), moving every first_confluence pool key (subs 0/454, 2/2365, 4/3304)
+    job: B_idx_read
+    proposed_name: bos_extreme_idx; input_idx -> parent_bos_extreme_idx
+    notes: The main BOS pool-key dependency
+
+[47] trigger_event_idx = int(ev.meta.get('confirmed_at', ev.idx))
+    meaning_or_use: TIMING: when the trigger fires (LOH-mapped to trigger_idx at orchestrator.py:854); the ev.idx fallback is never taken
+    where: engine_v2/multitf/first_confluence_trigger.py:89
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: True
+    export_detail: triggers.csv trigger_idx
+    cross_module: False
+    under_flip: unaffected (the fallback becomes exact)
+    job: B_idx_read
+
+[48] cts_est_idx_by_key[key] = int(ev.idx) -> lifecycle_end_idx
+    meaning_or_use: TIMING: the next cycle's start becomes lifecycle_end_idx, a retired and UNREAD field (only uc1's log prints it)
+    where: engine_v2/multitf/first_confluence_trigger.py:60-69, 106-115; engine_v2/multitf/uc1_trigger.py:48-55, 96-103, 131; engine_v2/multitf/subsequent_confluence_trigger.py:88-95, 109-118; engine_v2/multitf/subsequent_counter_trigger.py:88-95, 109-118
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: False
+    export_detail: log text only
+    cross_module: False
+    under_flip: Becomes CORRECT with no output change. Test pins: test_first_confluence_trigger.py:76-118, test_subsequent_confluence_trigger.py:130-160, test_subsequent_counter_trigger.py:181-213
+    job: B_idx_read
+    proposed_name: delete (Plan C residual)
+    notes: The comments calling CTS_ESTABLISHED.ev.idx 'canonical per PART4 §5' are stale (parent_tables.py:113 uses the moment)
+
+[49] knowable_at_idx(ev.type, ev.idx, confirmed_at) via clip_events_to_window
+    meaning_or_use: TIMING: the knowable-at clip. BOS uses confirmed_at; EST/UPD use ev.idx (the documented §17.12 'known limit')
+    where: engine_v2/multitf/sub_structure_pool.py:84-100; engine_v2/multitf/pooled_structure_build.py:34-43, 71-72 (project_to_window <- render_sub_projection entity_df_mutation.py:1202)
+    event_types: CTS_ESTABLISHED, CTS_UPDATED (BOS special-cased)
+    frozen: False
+    exported: True
+    export_detail: decides which events reach the sub structure_events CSVs and every downstream sub artefact
+    cross_module: True
+    under_flip: EST flip: becomes CORRECT (closes §17.12 for EST). It changes output only when a sub cap falls in [extreme, moment); no instance on the window (caps 1940, 3611). BOS flip: the special case becomes redundant
+    job: B_idx_read
+    notes: REVERSAL_CANDIDATE (apply_idx) is still mis-keyed (outside the 3 types)
+
+[50] new_ev.idx = ev.idx + slice_begin; _shift_meta_indices(meta, _EVENT_META_IDX_KEYS, slice_begin)
+    meaning_or_use: NEITHER: slice-local to entity-absolute translation of every sub event
+    where: engine_v2/multitf/entity_df_mutation.py:103-124, 222-225, 486-488
+    event_types: all
+    frozen: False
+    exported: True
+    export_detail: M15 structure_events.csv idx + meta
+    cross_module: True
+    under_flip: Unaffected in itself. MIGRATION HAZARD: any new extreme meta key (cts_extreme_idx / bos_extreme_idx) must be added to _EVENT_META_IDX_KEYS, or it stays slice-local
+    job: B_idx_read
+    notes: Already live today: pb_start, expires_idx, KL source_event_idx, POI bos_idx/cts_idx and fib activated_at export slice-local; 'bos_anchor_idx' is dead
+
+[51] sorted_events = sorted(events, key=lambda e: (e.idx, e.type))
+    meaning_or_use: TIMING: event processing order for H1 and every sub projection
+    where: engine_v2/pipeline/orchestrator.py:146 (feeds the fib loop 203-236, prev-BOS lines 267-288, zone proximity, the WVMI loops 357-368, the trigger detectors and build_parent_tables)
+    event_types: all (incl. the 3 types)
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: Becomes moment order, which creates three hazards. (1) The fib loop needs BOS(S,C) before EST(S,C) (key in bos_by_cycle): a joint flip keeps that only by the alphabetical accident 'BOS_CONFIRMED' < 'CTS_ESTABLISHED'; a BOS-only flip skips fibs on lagging cycles. (2) NEW: an sd-prox CTS_CONFIRMED can land ON the EST moment (gate i > st.cts.idx, market_structure.py:1981), and 'CTS_CONFIRMED' < 'CTS_ESTABLISHED', so on_cts_confirmed would run before on_cts_established for the same cycle and the fib would never lock. Impossible today. (3) NEW: a prior-cycle CTS_THRESHOLD_UPDATED with idx in [extreme, moment) would be dispatched while _m15_phase is still 'pre_established' (fib_tracker.py:2081-2084), adding cross-fib checks. For (2) and (3) there are 0 instances on the window (min CTS_CONFIRMED - EST moment gap = 2; no TH events near 1223/2828)
+    job: B_idx_read
+    proposed_name: sort by an explicit (idx, type_rank) with BOS < EST < UPD < THRESHOLD < CONFIRMED
+    notes: Make the ordering explicit before any flip
+
+[52] last_bos_by_sid[sid] = (ev.idx, ev.price) -> prev_bos_lines start_idx
+    meaning_or_use: LOCATION: the prior structure's last-BOS line starts at the BOS extreme at the BOS price
+    where: engine_v2/pipeline/orchestrator.py:266-292 (mirrored entity_df_mutation.py:338-339)
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: False
+    export_detail: H1 chart line
+    cross_module: True
+    under_flip: EST flip: unaffected. BOS flip: BREAKS (H1 sid 1 line 591->652)
+    job: B_idx_read
+    proposed_name: bos_extreme_idx
+    notes: H1 only in practice (sub runs have only sid 0)
+
+[53] prev-BOS line end: for CTS_ESTABLISHED/CTS_UPDATED of the new sid, if ev.idx >= rv_idx: end_idx = ev.idx
+    meaning_or_use: BOTH: the filter is TIMING (the first CTS at or after the reversal apply); the value is the line's end candle (LOCATION)
+    where: engine_v2/pipeline/orchestrator.py:279-288
+    event_types: CTS_ESTABLISHED, CTS_UPDATED
+    frozen: False
+    exported: False
+    export_detail: H1 chart
+    cross_module: False
+    under_flip: The filter becomes moment-based (correct); the end moves from extreme to moment on lagging cycles. No change on the window (H1 EST(1,0) 703 == confirmed_at)
+    job: B_idx_read
+    notes: Whether the line should end at the extreme or at the moment is a chart-review question
+
+[54] compute_parent_driven_sub_wvmi: sorted(result.events, key=(e.idx, e.type))
+    meaning_or_use: TIMING, ordering only; on_bos_confirmed keys by cycle and reads no idx
+    where: engine_v2/multitf/sub_wvmi.py:68, 82-84
+    event_types: BOS_CONFIRMED (+all)
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: unaffected
+    job: B_idx_read
+
+[55] main SidRecord creation_event_idx = min ev.idx over the sid's events
+    meaning_or_use: AMBIGUOUS: 'first event idx', a min over extremes and moments alike
+    where: engine_v2/multitf/sid_records.py:35-41 (called pipeline/orchestrator.py:507-508)
+    event_types: all
+    frozen: False
+    exported: False
+    export_detail: H1 df.attrs['sids']; no reader
+    cross_module: False
+    under_flip: EST flip: unaffected (BOS_0 is the min). BOS flip: moves (96->115); no CSV/chart effect. Tests tests/test_sid_records.py:31-104 pin fixture values
+    job: B_idx_read
+    proposed_name: first_event_idx (main), split from the sub meaning (starting_idx)
+
+[56] M15 sub polylines: BOS_CONFIRMED ev.idx -> owned_here(ev.idx), lt_time(ev.idx), point idx
+    meaning_or_use: LOCATION: the BOS dot/vertex at the extreme. The ownership filter is evaluated at that candle, and the point idx feeds the recent-vs-prior overlap spans
+    where: engine_v2/charting/export_m15_chart.py:513, 536-547
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: False
+    export_detail: hover idx
+    cross_module: False
+    under_flip: EST flip: unaffected. BOS flip: BREAKS on every BOS (lag 2..411): x moves to the moment while y stays ev.price
+    job: B_idx_read
+
+[57] M15 sub trailing CTS: `e.idx > last_slice_idx`, owned_here(e.idx), max(key=idx), lt_time(latest.idx)
+    meaning_or_use: LOCATION: the trailing 'CTS (established|updated)' dot and line vertex after the last BOS
+    where: engine_v2/charting/export_m15_chart.py:550, 566-580
+    event_types: CTS_ESTABLISHED, CTS_UPDATED
+    frozen: False
+    exported: False
+    export_detail: hover idx
+    cross_module: False
+    under_flip: BREAKS: x moves to the moment while y stays ev.price; the ownership test shifts to the moment candle
+    job: B_idx_read
+
+[58] M15 next-sid first BOS .idx (next_bos_idx, fb.idx) -> pullback STATE_CHANGED search bound + PB->BOS endpoint + recent_pts
+    meaning_or_use: BOTH: the upper bound of the pullback search plus a LOCATION endpoint
+    where: engine_v2/charting/export_m15_chart.py:584-612, 670-672, 1183-1187
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: EST flip: unaffected. BOS flip: the endpoint BREAKS and the search window widens
+    job: B_idx_read
+
+[59] _replacement_break_point: lo = last polyline point + 1 (last point = a BOS/CTS dot idx)
+    meaning_or_use: LOCATION, one hop: the counter-move extreme scan runs over (last dot, replacing starting_idx]
+    where: engine_v2/charting/export_m15_chart.py:430-495, 620-638 (MISSED by the partials)
+    event_types: BOS_CONFIRMED, CTS_ESTABLISHED, CTS_UPDATED (via the dot points), CTS_CONFIRMED.cts_anchor_idx
+    frozen: False
+    exported: False
+    export_detail: chart PB dot (3760 / 4000 on the window)
+    cross_module: False
+    under_flip: BREAKS transitively if the dot reads are not migrated
+    job: B_idx_read
+
+[60] H1 overlay on M15: BOS ev.idx -> _h1_idx_to_m15_time, point idx; wave spans vs the lifecycle window (_wave_touches_window / _split_polyline_by_wave)
+    meaning_or_use: BOTH: the dot/vertex is LOCATION; the lifecycle filter intersects extreme-location wave spans with the timing window [struct_start, reversal]
+    where: engine_v2/charting/export_m15_chart.py:2021-2045, 2104-2134, 302-319
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: EST flip: unaffected. BOS flip: BREAKS (5 H1 BOS, lag 14..76); drawn/hidden decisions could change
+    job: B_idx_read
+
+[61] H1 overlay trailing CTS: `ev.idx > last_idx`, max, _h1_idx_to_m15_time(latest.idx)
+    meaning_or_use: LOCATION: the trailing unconfirmed H1 CTS vertex
+    where: engine_v2/charting/export_m15_chart.py:2048, 2061-2069
+    event_types: CTS_ESTABLISHED, CTS_UPDATED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: BREAKS (no visible change on the window: 0 lagging H1 EST)
+    job: B_idx_read
+
+[62] H1 overlay next-sid BOS idx (sort, pb bound, PB->BOS endpoint, _wave_touches_window(pb_idx, bos_idx, ...), drawn_h1_pts)
+    meaning_or_use: BOTH: location endpoint, pullback-search bound and lifecycle wave test
+    where: engine_v2/charting/export_m15_chart.py:2073-2097, 2138-2142
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: EST flip: unaffected. BOS flip: BREAKS
+    job: B_idx_read
+
+[63] H1 chart BOS p_idx = ev.idx -> bos_by_idx, time_by_idx, points
+    meaning_or_use: LOCATION: H1 BOS dots and swing line
+    where: engine_v2/charting/export_plotly.py:1069-1096, 1130-1143
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: False
+    export_detail: hover idx
+    cross_module: False
+    under_flip: EST flip: unaffected. BOS flip: BREAKS (all 5 H1 BOS move 14..76 candles)
+    job: B_idx_read
+
+[64] H1 chart trailing CTS: `> last_idx`, max, cts_idx = int(latest_cts.idx)
+    meaning_or_use: LOCATION: the unconfirmed-CTS marker and line vertex
+    where: engine_v2/charting/export_plotly.py:1146-1147, 1171-1186
+    event_types: CTS_ESTABLISHED, CTS_UPDATED
+    frozen: False
+    exported: False
+    export_detail: hover idx
+    cross_module: False
+    under_flip: BREAKS (price = latest_cts.price stays the extreme)
+    job: B_idx_read
+
+[65] H1 chart next-sid BOS (next_bos_idx, bos_idx = int(first_bos.idx))
+    meaning_or_use: BOTH: pullback-search upper bound plus the PB->BOS line endpoint
+    where: engine_v2/charting/export_plotly.py:1192-1223
+    event_types: BOS_CONFIRMED
+    frozen: False
+    exported: False
+    cross_module: False
+    under_flip: EST flip: unaffected. BOS flip: BREAKS
+    job: B_idx_read
+
+[66] structure_events.csv 'idx' column = ev.idx
+    meaning_or_use: The raw stamp, AMBIGUOUS by type: the extreme for EST/BOS/pattern-path UPD, the moment for CTS_CONFIRMED and raw-path UPD
+    where: engine_v2/debug/export_events.py:13-21
+    event_types: CTS_ESTABLISHED, BOS_CONFIRMED, CTS_UPDATED
+    frozen: True
+    exported: True
+    export_detail: *_structure_events.csv (H1, M15 confluence, M15 counter); the /compare baseline
+    cross_module: True
+    under_flip: Changes by definition. EST flip: 3 rows (confluence 1223->1224 and 2828->2829; counter 2828->2829), 0 H1. BOS flip: all 34 BOS rows. Row order is emission order, so only values change
+    job: B_idx_read
+
+[67] probe_fc_finalize cts_est[k] = int(e.idx) -> printed 'CTSest' and loh(cts_est[key])
+    meaning_or_use: TIMING: the last-of-hour (timing mapper) of the establishment, as a candidate finalize mapping
+    where: engine_v2/debug/probe_fc_finalize.py:79-80, 177, 183
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: False
+    export_detail: console table
+    cross_module: False
+    under_flip: Becomes CORRECT; numerically unchanged on the window (H1 idx == confirmed_at)
+    job: B_idx_read
+
+[68] probe_fc_finalize max(int(ev.idx)) / past_bound (ev.idx > ms.end_idx)
+    meaning_or_use: TIMING: the Plan A leak check
+    where: engine_v2/debug/probe_fc_finalize.py:153-154, 162, 193-194
+    event_types: all
+    frozen: False
+    exported: False
+    export_detail: console
+    cross_module: False
+    under_flip: still valid; max may grow by the lag
+    job: B_idx_read
+
+[69] probe_fc_finalize cts1_ext = int(_c1.idx) (vs cts1_moment = confirmed_at)
+    meaning_or_use: LOCATION label: explicitly prints the 2nd CTS's EXTREME
+    where: engine_v2/debug/probe_fc_finalize.py:150-161
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: False
+    export_detail: console
+    cross_module: False
+    under_flip: BREAKS (it would print the moment); read the extreme key
+    job: B_idx_read
+
+[70] TEST PINS THAT BREAK OUTRIGHT under an EST flip
+    meaning_or_use: LOCATION contract pins (EST.idx IS the extreme) plus fixtures built on idx != confirmed_at
+    where: engine_v2/tests/test_ms_cts0_scan.py:75 (cts0.idx == tfb.extreme_idx); engine_v2/tests/test_unified_probe.py:1056-1060 ((idx, confirmed_at) = (9, 10) 'extreme != moment'); engine_v2/tests/test_ms_stop_after_cts.py:318 ((9, 10) tuple); engine_v2/tests/test_structure_lifecycle_moment.py:189 ([_cts_est(10,0,0,11)] -> {0: 10}); engine_v2/tests/test_parent_tables.py:250-268 (negative-control fixtures with idx != confirmed_at become contract-illegal); engine_v2/tests/test_reversal_resolver.py:284-296 (extreme branch = winner.idx)
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: BREAK: re-point them to the new meta extreme key; the confirmed_at pins survive
+    job: B_idx_read
+
+[71] _cts0_established_idx(events, sid) returns CTS_ESTABLISHED.idx; asserted == tfb.est_idx (the MOMENT)
+    meaning_or_use: TIMING-framed pin: compares CTS_ESTABLISHED.idx with the establishment MOMENT, while test_ms_cts0_scan.py:75 pins the same field to the EXTREME. Both pass only because this fixture's sid-1 CTS_0 has extreme == moment
+    where: engine_v2/tests/test_main_reversal_probe.py:109-117, 212-219 (MISSED by the partials)
+    event_types: CTS_ESTABLISHED
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: Becomes CORRECT by construction (a latent frame contradiction in the test suite today)
+    job: B_idx_read
+    notes: Also evidence that 'est_idx' already means the moment in the TrueFirstBreakout vocabulary
+
+[72] TEST PINS on LOCATION values that need re-authoring
+    meaning_or_use: LOCATION (fib 100% point, pattern-span scans, BOS extreme)
+    where: engine_v2/tests/test_cross_cycle_fib.py:64-65, 140-319 and engine_v2/tests/test_main_versioned_cross.py:86, 110, 207-208, 244 (fib cts_idx == EST/UPD idx); engine_v2/tests/test_wave_candles.py:198-224, 389-618 (range(anchor_idx, ev.idx) scans); engine_v2/tests/test_render_sub_projection.py:609-638, 705-710 (BOS idx = extreme, KL anchor == BOS_0 idx == starting_idx)
+    event_types: CTS_ESTABLISHED, CTS_UPDATED, BOS_CONFIRMED
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: The fixtures have no confirmed_at, so the values pass unchanged until the fixtures are re-authored to the flipped contract (idx = moment, extreme in meta). The BOS pins break under a BOS flip
+    job: B_idx_read
+
+[73] TEST PINS on TIMING values whose meaning flips to correct
+    meaning_or_use: TIMING (knowable-at, causal clip, processing order), with the sibling tests also carrying a LOCATION input
+    where: engine_v2/tests/test_sub_structure_pool.py:562-564 (knowable_at_idx('CTS_ESTABLISHED', 10, confirmed_at=14) == 10); engine_v2/tests/test_render_sub_projection.py:312-323, 575-603 (_knowable_at: EST known at its extreme); engine_v2/tests/test_first_trigger_migration.py:258-277, 600-812 (sibling clip by ev.idx + max-idx winner as input); engine_v2/tests/test_sub_wvmi.py:108-241 and engine_v2/tests/test_wvmi.py:446-547 ((e.idx, type) sort)
+    event_types: CTS_ESTABLISHED, CTS_UPDATED, BOS_CONFIRMED
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: The pins pass explicit idx values, so they still pass, but their meaning becomes 'correct'. The sibling input would BREAK for EST candidates unless the reader uses the extreme key (the fixtures use UPD/CONFIRMED only)
+    job: B_idx_read
+
+[74] TESTS UNAFFECTED
+    meaning_or_use: TIMING bound checks / symmetric equality oracles / fixtures copied from the H1 CSV
+    where: engine_v2/tests/test_pooled_structure_build.py:128-136; engine_v2/tests/test_ms_bounded_equals_truncated.py:265-378; engine_v2/tests/test_bounded_structure.py:182, 204; engine_v2/tests/test_sid_records.py:31-104; engine_v2/tests/test_lifecycle_sweep_predicted_table.py:64-125; engine_v2/tests/test_zone_proximity.py (trigger idx only)
+    event_types: all
+    frozen: False
+    exported: False
+    cross_module: True
+    under_flip: Unaffected by an EST flip (H1 extreme == moment on all 5 cycles). The predicted-table fixture's BOS values would need updating under a BOS flip
+    job: B_idx_read
+
+
+## Part 2 — flip feasibility (feas)
+
+### summary
+
+Feasibility read at HEAD e2e0f89 (.py unmodified). I checked the load-bearing claims myself: the emit sites, the accessor candidates, run.log, and the baseline CSVs in artifacts/commits/week8-volmom-multitf/20260922_195430_aadb887.
+
+Facts
+- There is one CTS_ESTABLISHED emit site (engine_v2/structure/market_structure.py:1485), and two BOS_CONFIRMED emit sites (:1502, :1517).
+- On the baseline, CTS_ESTABLISHED extreme != moment on only 3 of 34 rows, which are 2 unique M15 cycles:
+  - confluence sub 0 cycle 2: 1223 vs 1224;
+  - sub 3 cycle 1: 2828 vs 2829, on both lenses.
+  - H1: 0 of 5.
+- BOS_CONFIRMED lags on 34 of 34 rows (H1 14-76 candles, M15 2-411).
+- CTS_UPDATED carries no confirmed_at on any row.
+- anchor_idx < extreme on every CTS_ESTABLISHED row: the event's 'anchor' is the pattern START, never the extreme.
+- No probe on the window used a CTS_ESTABLISHED reference (run.log: cts_confirmed x5, cts_updated x2, ad_hoc_bos_0 x2, 3 cache hits).
+- The only Phase-2 probe run (sub 0) has a lag-0 CTS_0.
+
+Verdict
+- The flip is feasible and, done last, is a pure relabel: 3 structure_events idx cells, plus 3 POI meta cells depending on Q5. Nothing else changes.
+- That only holds if it is preceded by:
+  - an explicit-field stage: accessors in a new structure/event_fields.py, a new CTS_ESTABLISHED.meta["cts_extreme_idx"] added to _EVENT_META_IDX_KEYS, about 10 production location sites in 9 modules migrated, the dual-role fib and POI calls split into (as_of, extreme), and the sort keys pinned;
+  - the timing fixes, each its own /compare: Plan D (1 POI row), fib timing (4 fib_lifecycle rows), and pool knowable-at / sibling clip, probe Phase-2 check_lo and the prev-BOS filter (0 each).
+- The riskiest site is reference_zone._extreme_idx_for_cts_event. It sets probe inputs, and therefore pool keys, sub_ids and the probe-cache keys. An unmigrated flip there is invisible on this window.
+- A BOS flip is a separate, much larger job. Its roughly 15 location sites include the first_confluence pool-key input and MS state built from the emitted idx. Unmigrated, it would collapse every H1 fib.
+
+Vocabulary
+- *_at, *_moment_idx and any past participle = a MOMENT; *_extreme_idx = a LOCATION.
+- pattern_start_idx / pattern_end_idx, close_break_idx, scan_idx, starting_idx (structural start) and base_idx name specific candles.
+- 'anchor' is retired, except for the frozen event keys (bridged by accessors), Plotly's xanchor, and possibly the anchor_shift feature columns.
+- The main correction to your recollection: CTS_CONFIRMED.cts_anchor_idx is the extreme, but CTS_ESTABLISHED.anchor_idx is the breakout pattern's first candle. The new extreme key on CTS_ESTABLISHED must therefore be 'cts_extreme_idx', not '*anchor*'.
+
+Plan
+- Stage 0: Plan D.
+- Stage 1: explicit fields; only a meta key is added.
+- Stage 2: the timing fixes, one per /compare.
+- Stage 3: the EST flip.
+- Stage 3': BOS, optional.
+- Stage 4: renames (internal, byte-identical; then exported, under a rename map).
+- Most of the value is in stages 1-2 whether or not the flip happens.
+
+Relevant files
+- engine_v2/structure/market_structure.py, engine_v2/structure/reference_zone.py, engine_v2/zones/fib_tracker.py, engine_v2/zones/poi_zones.py, engine_v2/zones/wave_candles.py
+- engine_v2/multitf/entity_df_mutation.py, engine_v2/multitf/sub_structure_pool.py, engine_v2/pipeline/orchestrator.py
+- engine_v2/charting/export_m15_chart.py, engine_v2/charting/export_plotly.py
+- engine_v2/plans/PLAN_D_poi_activation_moment.md
+
+### vocabulary_proposal
+
+STANDARD. One rule per suffix. It applies to every new or renamed identifier, meta key, CSV column and prose term.
+
+1. MOMENT: the candle at which something became knowable or took effect.
+   - Spelled `*_at` for event and lifecycle stamps: confirmed_at, activated_at, locked_at, deactivated_at, reactivated_at.
+   - Spelled `*_moment_idx` for derived values and params: cts_moment_idx, bos_moment_idx.
+   - Any past participle in an idx name also means a moment: *_established_idx, *_confirmed_idx, *_updated_idx, *_activated_idx.
+   - Already compliant: confirmed_at; apply_idx (the pattern's apply candle); trigger_idx; probe_finalize_idx; TrueFirstBreakout.est_idx; ParentTables.cts_moment; lifecycle start_idx / end_idx / trigger_end_idx.
+   - `confirmed_at` on CTS_ESTABLISHED and BOS_CONFIRMED is documented as the universal "moment" key, not the CTS_CONFIRMED concept.
+
+2. LOCATION: the candle that holds a price high or low.
+   - Spelled `*_extreme_idx`, paired with `*_extreme_price`: cts_extreme_idx, bos_extreme_idx, or a generic extreme_idx in shared helpers.
+   - A location field is never used as a time. A timing read of an `*_extreme_idx` is a bug you can see from the name.
+
+3. CANDLES INSIDE A PATTERN:
+   - pattern_start_idx = the pattern's first candle (breakout, reversal, pullback, range or base pattern). It replaces every "anchor" used in this sense.
+   - pattern_end_idx = the pattern's last candle.
+   - confirmation_idx = the existing PatternEvent field.
+   - apply_idx = a moment (rule 1).
+
+4. NAMED CANDLES:
+   - close_break_idx = the reversal-watch candle whose CLOSE broke bos_threshold. It can be a back-fill candle, so it is not necessarily the scan candle.
+   - scan_idx = the candle MarketStructure is stepping.
+   - base_idx = the FIRST candle of a KL base pattern. The key stays; the prose "zone anchor candle" is wrong and gets corrected.
+   - ic_idx is unchanged.
+
+5. STRUCTURAL START:
+   - starting_idx = historical structural start (the pool key). start_idx = real-time lifecycle start. Both names stay.
+   - Prose says "structural start", never "structural anchor".
+   - The main SidRecord.creation_event_idx (min ev.idx) is split from the sub meaning and renamed first_event_idx.
+
+6. FIB: the endpoints are extremes, so they are called "fib BOS extreme" and "fib CTS extreme". "Fib anchor" is retired.
+
+7. "ANCHOR" IS RETIRED from every engine-owned identifier, key, CSV column, style key and prose. Only these survive:
+   - (a) The FROZEN event-meta keys and value, each given a GLOSSARY entry with its true meaning and read only through accessors:
+     - CTS_ESTABLISHED.meta["anchor_idx"] = breakout pattern start.
+     - REVERSAL_CANDIDATE.meta["anchor_idx"] = reversal pattern start, which equals the close-break candle by construction.
+     - REVERSAL_WATCH_START.meta["anchor_idx"] = close-break candle.
+     - CTS_CONFIRMED / CTS_RECONFIRMED.meta["cts_anchor_idx"] = the current CTS extreme.
+     - The reason value "rv_anchor_failed" = close-break.
+   - (b) Plotly's xanchor / yanchor.
+   - (c) features anchor_shift and the 12 `*_as0..2` columns in the H1 final.csv, unless a header rename is approved (Q11).
+   - Your recollection is half right. CTS_CONFIRMED/RECONFIRMED do use anchor = extreme. But CTS_UPDATED has no anchor key (its ev.idx is the extreme), and CTS_ESTABLISHED.anchor_idx is the pattern's FIRST candle, not the extreme (anchor < extreme on all 34 rows in the baseline).
+
+BRIDGING THE FROZEN NAMES
+- One pure module, proposed as structure/event_fields.py, with accessors: moment_idx(ev), cts_extreme_idx(ev), bos_extreme_idx(ev), pattern_start_idx(ev), close_break_idx(ev).
+- The accessors encode the per-type table in ARCHITECTURE ("ev.idx convention"). Every reader goes through them, so a flip changes one table and one emitter.
+- New meta keys are added only where a value would otherwise be LOST:
+  - CTS_ESTABLISHED.meta["cts_extreme_idx"]. The flip requires it: afterwards the extreme exists nowhere else, because st.cts is not exported on the event.
+  - It must NOT be spelled cts_anchor_idx, since this event already uses anchor_idx for the pattern start.
+  - BOS_CONFIRMED.meta["bos_extreme_idx"], only if BOS flips.
+- Optional human-facing aliases (your call; each one churns CSV meta):
+  - cts_extreme_idx on CTS_CONFIRMED/RECONFIRMED: 31 rows.
+  - pattern_start_idx on CTS_ESTABLISHED/REVERSAL_CANDIDATE.
+  - close_break_idx on REVERSAL_WATCH_START.
+- Every new idx key must be added to entity_df_mutation._EVENT_META_IDX_KEYS (:103-112), or it ships slice-local on M15.
+- Old keys are never removed (LANDMINES Event Contract Rule 2).
+- After the flip, confirmed_at stays and is asserted == idx, as on CTS_CONFIRMED.
+
+RENAMES OF NON-FROZEN NAMES (definition sites)
+
+structure/market_structure.py
+- _step_anchor (:973) -> _step_scan. tests/test_ms_stop_after_cts.py:71-85 monkeypatches it by name.
+- _best_bopb_pattern_at_anchor (:1045) -> _best_bopb_pattern_starting_at; the local bos_frozen_for_anchor -> bos_frozen_for_scan.
+- _schedule_reversal_from_anchor(anchor_idx) (:894), plus the expiry local `anchor` and the "anchor=" labels in [RV_SCHEDULE]/[RV_APPLY]/[RV_EXPIRE] -> _schedule_reversal_from_close_break(close_break_idx).
+- The state field and df column pending_reversal_anchor_idx (:38) -> pending_reversal_close_break_idx. This is an EXPORTED H1 final.csv header.
+- cts_confirmed_for_idx (:175) -> cts_confirmed_extreme_idx. It holds an extreme, so today it violates rule 1.
+- The local cts_anchor (:1903) -> cts_extreme.
+- Stale or wrong comments:
+  - :1490 "required for Scenario 2 Exception #2" -> "pattern start".
+  - :1547 "clear pullback anchor" -> "clear last_pullback_pat_apply_idx".
+  - :1312 "range anchored to CTS" -> "range starts at the CTS extreme".
+  - :343-360 "anchor close" -> "pattern-start candle".
+
+patterns/structure_patterns.py
+- detect_best_for_anchor (:663) -> detect_best_starting_at.
+- _price_confirmation(anchor_idx) (:118) and _price_confirmation_1step(anchor_end_idx) (:151) -> pattern_end_idx. Today "anchor" means the LAST candle here and the first candle at :663.
+
+structure/true_first_breakout.py
+- TrueFirstBreakout.anchor_idx -> pattern_start_idx; _anchor_candidates -> _pattern_start_candidates.
+- Its est_idx (moment) and extreme_idx (location) already follow the standard; this class is the template.
+
+structure/unified_probe.py
+- cts0_anchor_idx (:604) -> cts0_extreme_idx.
+- The log label "cts0_est=" (:671) prints the extreme today; print the moment instead.
+
+structure/reference_zone.py
+- build_ad_hoc_bos0_reference_zone(anchor_idx) (:210) and _derive_zone_ad_hoc(anchor_idx) (:155) -> level_idx. The value is a structural start or an extreme depending on the caller.
+- ReferenceZone.source_event_idx -> source_idx. On the ad-hoc path it is not an event idx.
+- _extreme_idx_for_cts_event (:88) -> the accessor.
+
+structure/identify_start.py and structure_engine.py (test-only paths)
+- StartDecision.meta last_cts_confirmed_idx -> last_cts_extreme_idx.
+- The structure_engine test-only locals cts_est_idx / cts_established_idx (:565-578, :767-782) hold EXTREMES -> cts0_extreme_idx.
+
+zones/kl_zones_v1.py
+- identify_base_pattern(anchor_idx) and the locals anchor_low / anchor_high / anchor_dir -> extreme_idx / extreme_low / extreme_high / extreme_dir.
+- The KL zone meta "anchor_idx" (:894, :954) -> "extreme_idx". This is an EXPORTED rename. It also touches _ZONE_META_IDX_KEYS and the readers orchestrator.py:124-131 (z_anchor) and wave_candles.py:403.
+- Docstring :704-713 ("ev.idx: the level index") is rewritten per type.
+- Prose :709 and :966 ("anchor candle of the zone base pattern") -> "first candle of the base pattern".
+- source_event_idx keeps its name but is documented as "the source event's ev.idx": the BOS extreme for BOS zones, the CTS_CONFIRMED moment for CTS zones.
+
+zones/wave_candles.py
+- identify_wave_candles(anchor_idx, anchor_type) -> (extreme_idx, zone_kind).
+- cts_anchor_idx -> cts_extreme_idx.
+- first_bo_anchor / pattern_anchor / anchor -> breakout_pattern_start_idx.
+- _find_prior_cts_anchor -> _find_prior_cts_extreme_idx.
+- WaveCandleResult.meta["anchor_idx"] -> "extreme_idx" (attrs only, no exporter).
+
+zones/fib_tracker.py, cross_cycle_fib.py, features/fibonacci.py
+- select_fib_anchor_for_cycle -> select_fib_span_for_cycle, returning bos_extreme_idx/price and cts_extreme_idx/price.
+- FibRetracement anchor_high / anchor_low -> high_price / low_price; delete the write-only anchor_*_idx fields.
+- The cross-cycle (current_candle, anchor_idx, anchor_price) -> (as_of_idx, cts_extreme_idx, cts_extreme_price). This split is the load-bearing one.
+- _running_extreme_anchor -> _running_cts_extreme.
+- _m15_extend_cross_anchor / new_anchor_* -> _m15_extend_cross_cts / new_cts_*.
+- "START ANCHOR" -> "BOS-side extreme".
+- FibState.bos_idx / cts_idx -> bos_extreme_idx / cts_extreme_idx ONLY if you accept renaming the fib_lifecycle.csv headers and the POI meta keys. Otherwise keep them and add a GLOSSARY rule: "a bare element idx (bos_idx, cts_idx, ic_idx, base_idx) is a location".
+- meta activated_at holds an EXTREME today and becomes a true moment in stage 2b (the name is kept).
+
+zones/poi_zones.py
+- The param cts_established_idx -> cts_moment_idx (Plan D).
+- The POI meta key cts_established_idx needs your decision (Q5).
+
+Prose
+- structure_lifecycle.py:156 and poi_zones.py:381 "first structural anchor = min event idx" -> "earliest event idx (= the BOS_0 extreme)".
+- structure_lifecycle.py:71/99 "historical anchor" -> "historical extreme".
+
+multitf
+- Delete the dead key bos_anchor_idx (entity_df_mutation.py:109).
+- Delete cts_est_idx_by_key and lifecycle_end_idx in the 4 trigger detectors (a Plan C residual). Their comments calling CTS_ESTABLISHED.idx "canonical per PART4 §5" are stale.
+- entity_df_mutation.py:629-635 and data_bridge.py:100-107: "ANCHOR candles are PRICE-mapped" -> "EXTREME candles are price-mapped, MOMENT candles are LOH-mapped". The two-mapper rule maps 1:1 onto the standard.
+- The sibling local abs_idx (:481, whose comment is false) -> abs_knowable_idx.
+
+charting
+- anchors_by_sub (export_m15_chart.py:431-499) -> starting_idx_by_sub.
+- rc_by_anchor (export_plotly.py:1550) -> rc_by_close_break_idx.
+- Style keys fib.anchor_line.active / .historical (style_registry.py:156-162) -> fib.extreme_line.*.
+- Prose at export_m15_chart.py:18/23/49/267.
+
+debug/probe_fc_finalize.py
+- cts_anchor_h1 / loh_cts_anchor and the headers "CTSanch" / "LOH(anch)" -> cts_extreme_h1 / loh_cts_extreme / "CTSext".
+
+Docs
+- GLOSSARY:27 base_idx (wrong); :28 anchor_idx (gives only the KL sense); :217 cts_moment ("NOT CTS_ESTABLISHED.idx" flips at stage 3); :223-224.
+- ARCHITECTURE's "Four different anchor fields" paragraph becomes the bridging table.
+- About 368 "anchor" mentions in 18 .md files.
+
+### flip_blast_radius
+
+CTS_ESTABLISHED.idx -> MOMENT
+
+How the flip is done: at the emit site only.
+- market_structure.py:1485 is the only CTS_ESTABLISHED emit site. It passes int(apply_idx) as idx and adds meta["cts_extreme_idx"] = cts_idx.
+- MS state stays on the extreme: st.cts = Point(cts_idx) (:1554), _initial_bos_before_first_cts(cts_idx) (:1502), range_start_idx, the sd-prox gate `i > st.cts.idx` (:1981), and the POI-inner resolver (:2040-2062).
+- Redefining the cts_idx local itself would break BOS_0 selection.
+
+Exposure on the baseline (20260922_195430_aadb887, measured):
+- Extreme != moment on 3 of 34 rows, which are 2 unique cycles, both lag 1:
+  - Confluence sub 0 cycle 2: 1223 vs 1224 (anchor 1221).
+  - Sub 3 cycle 1: 2828 vs 2829, mirrored on both lenses (anchor 2824).
+- H1: 0 of 5.
+
+LOCATION reads that break and must migrate first: 10 production sites in 9 modules, plus pinned sorts.
+1. structure/reference_zone.py:88-97, the CTS_ESTABLISHED branch of _extreme_idx_for_cts_event. It sets ReferenceZone.source_event_idx, which is the probe input. POOL-KEY and PROBE relevant:
+   - structure_engine.py:278: the H1 main reversal input sets the next H1 sid's start.
+   - entity_df_mutation.py:798 (sibling: first_counter / subsequent_*) and :913-926 (reversal handoff): these set starting_idx, the pool key and sub_id numbering, and the probe-cache key (dir, input). The 3 cache hits on the window depend on input equality.
+   - Window: the 9 probe runs used ref=cts_confirmed x5, cts_updated x2, ad_hoc_bos_0 x2, and never cts_established (run.log). So this break would be SILENT on the window.
+2. zones/fib_tracker.py:521 `cts_idx = int(event.idx)`, one entry point that fans out into:
+   - FibState.cts_idx / FibRetracement (995-1103);
+   - the _m15_cross_check anchor (609-618);
+   - the has_unfilled_imbalance range end (531-539);
+   - the c0 snapshot (757-765), which must stay in lock-step with MS cycle0_data;
+   - the new-extreme guards (1310, 1383-1385, 1509-1511, 2342, 2396). After an EST-only flip these compare on mixed scales and silently drop any CTS_UPDATED whose extreme is in (EST extreme, moment];
+   - the Scenario-1 test (767-771), which is ambiguous (Q7).
+   - Exports: fib_lifecycle.csv cts_idx, the POI IC range (poi_zones.py:203-244), and H1 fib lines.
+3. zones/poi_zones.py:911-946: cts_idx_at_t in cond1, plus the pre-window apply (862-878). After Plan D the CTS_ESTABLISHED is always pre-window, so its transition time is moot and only the location matters.
+4. zones/wave_candles.py:477-514, _cts_bib_last_breakout. It tests the event candle and scans range(anchor, ev_idx) and range(ev_idx+1, next); the result feeds WVMI.
+5. market_structure.py:2643-2677, the time column of structure_levels.
+6-8. Trailing-CTS dots:
+   - export_m15_chart.py:550-580 (sub dot and vertex; it also feeds the recent-vs-prior spans and, one hop on, _replacement_break_point :430-495 / :620-638);
+   - export_m15_chart.py:2048-2069 (H1 overlay);
+   - export_plotly.py:1146-1186 (H1).
+   Unmigrated, x moves to the moment while y stays ev.price. 0 visible on the window, because a lagging CTS_ESTABLISHED is never the trailing CTS.
+9. orchestrator.py:279-288, the end value of the prev-BOS line.
+10. unified_probe.py:603-607 (a dead fallback) and the :555-560 cts1_ext label; probe_fc_finalize.py:150-161.
+
+Sort keys to PIN to the legacy location, so the flip reorders nothing: orchestrator.py:146, sub_wvmi.py:68, poi_zones.py:416, wave_candles.py:481, reference_zone.py:353. unified_probe.py:274 is monotone and safe.
+
+Test-only: structure_engine.py:449-484, :563-578, :767-782.
+
+Unaffected:
+- KL: its CTS_ESTABLISHED branch reads no idx, and CTS zones use CTS_CONFIRMED.cts_anchor_idx.
+- compute_cycle_lifecycle and build_parent_tables (already on confirmed_at), first_confluence, zone_proximity.
+- The Plan A assert (:498-501), the Plan B count (:543), and _rewind_to (it replays; no idx filter).
+
+TIMING reads that become CORRECT:
+- POI gate (Plan D): 1 POI row.
+- Fib timing (activated_at, first-active, new_cycle terminal, fill as-of, cross current_candle, scenario1_revert): 4 fib_lifecycle rows. Verified example: the counter sub 3 cycle 0 end is 2828 new_cycle and becomes 2829.
+- knowable_at_idx (sub_structure_pool.py:84-100) and the sibling clip / recency (entity_df_mutation.py:478-489, reference_zone.py:335-357): 0 (caps 1940 / 3611).
+- unified_probe Phase-2 check_lo (:602): predicted 0. There is one Phase-2 run (sub 0, whose CTS_0 at 458 has lag 0; p2_iter=1, no reset; run.log:1794).
+- Orchestrator sort, prev-BOS filter, structure_levels: 0.
+
+PREDICTED /compare of the flip, once every read goes through an accessor:
+- structure_events.csv idx: M15 confluence 1223->1224 and 2828->2829, M15 counter 2828->2829. H1: 0 rows.
+- Meta unchanged, if cts_extreme_idx was added in stage 1.
+- 3 POI meta cells (cts_established_idx on confluence IC 678 and on IC 2808 in both lenses) change ONLY IF that key stays on ev.idx (Q5).
+- Everything else is byte-identical: the other 21 CSVs, triggers / subs / pool keys, and the charts (H1 85/245, counter 153/125, confluence 294/233).
+
+Tests:
+- 6 pins break outright: test_ms_cts0_scan.py:75, test_unified_probe.py:1056-1060, test_ms_stop_after_cts.py:318, test_structure_lifecycle_moment.py:189, test_parent_tables.py:250-268, test_reversal_resolver.py:284-296.
+- test_main_reversal_probe.py:212-219 becomes correct by construction.
+- 18 test files mention CTS_ESTABLISHED (~139 hits).
+
+BOS_CONFIRMED.idx -> MOMENT (a separate, much larger change)
+
+Exposure: 34 of 34 rows lag.
+- H1: 96->115, 591->652, 689->703, 728->748, 826->902 (lag 14-76).
+- Confluence: 21 rows, lag 2-411. Counter: 8 rows, lag 4-285.
+
+Location reads (~15 sites):
+- MS _emit_bos_confirmed (:1927-1938) builds st.bos_confirmed and bos_threshold from the SAME idx argument, so it must be decoupled first. That state feeds the BOS-inner resolver (:1538-1545), the POI/fib leg, cycle0_data and the df bos_idx.
+- KL BOS branch (kl_zones_v1.py:886-966): every BOS zone, i.e. 34 KL rows, and from there wave candles and WVMI.
+- orchestrator bos_by_cycle (:208-227): every fib BOS point, the own-imbalance ranges, and cycle1_bos_idx.
+- first_confluence_trigger.py:88 input_idx is the POOL-KEY input for subs 0/2/4 (keys (1,385), (1,2365) via the cache, (-1,3304)). It also sets validated_parent_idx 96/591/826 and the unresolved probe_input_idx 689/728.
+- The prev-BOS line start (:266-292).
+- Every BOS dot and PB->BOS endpoint on all 3 charts, including the H1-overlay lifecycle wave tests (export_plotly.py:1069-1096, 1192-1223; export_m15_chart.py:513-547, 584-612, 2021-2045, 2073-2097).
+- 5 structure_levels rows.
+- compute_struct_start_by_sid min(ev.idx) (structure_lifecycle.py:174-182): H1 96->115, subs +2..+35; masked in most consumers.
+- SidRecord.creation_event_idx; the sub_wvmi sort.
+
+Unmigrated, a BOS flip is catastrophic: on H1 every BOS moment equals its cycle's CTS_ESTABLISHED idx, so every H1 fib collapses to bos_idx == cts_idx and range(bos, cts+1) spans a single candle.
+
+Ordering: a joint flip ties BOS and EST at the moment. The fib loop needs BOS first (orchestrator.py:208-213), which today holds only because "BOS_CONFIRMED" < "CTS_ESTABLISHED" alphabetically. MS EMITS the CTS_ESTABLISHED BEFORE the BOS_CONFIRMED (baseline row order), so a stable moment sort would skip the fibs.
+
+After full migration, the BOS flip's own /compare is 34 idx cells, plus any deliberate timing choices (Q9).
+
+### migration_plan
+
+Principle: every behaviour change lands BEFORE the flip, with one cause per /compare. The flip itself is a pure relabel.
+
+STAGE 0: Plan D, as written (engine_v2/plans/PLAN_D_poi_activation_moment.md)
+- What: the POI gate reads CTS_ESTABLISHED.meta["confirmed_at"]; the param is renamed cts_moment_idx.
+- Expected: 1 POI row changes (confluence sub 0 cycle 2, IC 678: confirmed_idx and activation_history 1223->1224). On the confluence chart, 2 shapes and 2 hover customdata change. The other 23 CSVs are byte-identical.
+- This is stage 2a of this plan and conflicts with nothing. Its meta cts_established_idx should be written through whichever accessor Q5 picks.
+- The queued "imbalance knowable at c3" item (4 POI rows) is unrelated and can land between any two stages.
+
+STAGE 1: explicit fields, no behaviour change (one /compare)
+- 1a: Add structure/event_fields.py, with accessors that encode the ARCHITECTURE table:
+  - moment_idx(ev);
+  - cts_extreme_idx(ev): CTS_ESTABLISHED -> meta["cts_extreme_idx"]; CTS_CONFIRMED/RECONFIRMED -> meta["cts_anchor_idx"]; CTS_UPDATED -> ev.idx;
+  - bos_extreme_idx(ev), pattern_start_idx(ev), close_break_idx(ev).
+  Then:
+  - Emit CTS_ESTABLISHED.meta["cts_extreme_idx"] (== idx today) and add it to _EVENT_META_IDX_KEYS.
+  - Add one test factory, make_cts_established(extreme, moment, ...), and move the synthetic fixtures onto it.
+  - Re-point the 6 LOCATION pins to the accessor.
+- 1b: Route every LOCATION read through cts_extreme_idx (sites 1-10 in the blast radius).
+  - SPLIT every dual-role call into (as_of_idx, extreme_idx), both still fed the same value: fib_tracker.on_cts_established / _handle_* / _m15_cross_check / resolve_cross_cycle_eligibility / the has_unfilled_imbalance calls; the POI transitions; the reference_zone clip vs the extreme; the prev-BOS end.
+  - PIN the sort keys to the legacy location.
+  - Timing reads that are deferred call the extreme accessor, with a marker "# timing-on-extreme residual (stage 2x)".
+  - Grep gate: no production .idx read of a CTS_ESTABLISHED remains outside event_fields.py.
+- Expected: 34 structure_events meta strings (H1 5, confluence 21, counter 8) and 5 H1 structure_levels meta strings gain cts_extreme_idx. Nothing else changes.
+- Verify with a meta-key-stripping diff of all 24 CSVs, which must be empty. Charts identical, suite green.
+- 1c (optional, its own /compare): the cts_extreme_idx alias on CTS_CONFIRMED/RECONFIRMED, +31 meta rows.
+- 1d (optional): the stage-4a internal renames can land here to ease review; they are byte-identical.
+
+STAGE 2: timing reads, one /compare each. Each switches as_of from the extreme to moment_idx.
+- 2a = Plan D.
+- 2b FibTracker timing (activated_at, _mark_first_active, the previous cycle's new_cycle terminal, the fill-check as-of, cross current_candle, scenario1_revert). This is Plan D §7.2. Expected: 4 fib_lifecycle rows (sub 3, both lenses); re-measure. The zones audit says POIs do not change.
+- 2c Pool reads on the moment: knowable_at_idx special-cases CTS_ESTABLISHED on confirmed_at, closing §17.12 for CTS_ESTABLISHED; the sibling clip and recency move to the moment; fix the false comments at entity_df_mutation.py:481 and reference_zone.py:344-347. Expected: 0.
+- 2d unified_probe Phase-2 check_lo = moment + 1, aligning it with Phase 1 (:403). Expected: 0; verify.
+- 2e prev-BOS line filter on the moment. Expected: 0. Where the line ENDS is Q8.
+- 2f (optional, Q10) process events in moment order with an explicit type rank. Expected 0, but it carries the 3 ordering hazards, so it may instead stay pinned for good.
+- 2g Scenario-1 fib test (Q7), if you rule it TIMING. Expected: 0 (H1 lag 0).
+- Test-only Scenario-3 / Exception-2 paths: delete or migrate (Q12), byte-identical.
+
+STAGE 3: the flip (one /compare)
+- Code: market_structure.py:1485 passes int(apply_idx) as idx. It keeps confirmed_at (assert == idx) and anchor_idx, and keeps cts_extreme_idx. Update the accessor table; flip the fixture factory.
+- Docs in the same commit:
+  - ARCHITECTURE: the ev.idx table and the "Four anchor fields" paragraph.
+  - GLOSSARY: cts_moment, anchor_idx, base_idx.
+  - LANDMINES: :493 and :1929-1953.
+  - Prose: structure_lifecycle.py:71-99, reference_zone.py:66-72 and :91-93.
+  - MEMORY: "Key Architecture Points".
+- Expected: 3 structure_events idx cells (confluence 1223->1224 and 2828->2829; counter 2828->2829); 0 on H1; +/-3 POI meta cells depending on Q5. All else is byte-identical, including the charts. The run.log kl_zones debug prints and probe labels change.
+
+STAGE 3' (only if you want the full rule): BOS_CONFIRMED
+- A migration the size of stage 1: the ~15 BOS location sites; the MS state decoupled from the emitted idx; a bos_extreme_idx key; the first_confluence input read through bos_extreme_idx (pool keys); a sort rank that keeps BOS before EST.
+- Its own timing decisions: compute_struct_start_by_sid, SidRecord first_event_idx.
+- Then the flip, whose /compare is 34 idx cells.
+- Optional 3'': record a moment on pattern-path CTS_UPDATED (apply_idx is in scope at market_structure.py:1551). Additive meta first, measured separately. The window has 7 / 23 / 7 pattern-path rows (H1 / confluence / counter).
+
+STAGE 4: renames
+- 4a Internal-only: the MS scan and close-break names, patterns, TrueFirstBreakout, the probe, reference_zone, the fib helpers, chart locals, debug labels, prose, and the dead bos_anchor_idx; plus the test monkeypatch of _step_anchor. Byte-identical CSVs and charts; only run.log labels change.
+- 4b Exported renames, one /compare under a rename map (value-identical):
+  - KL meta anchor_idx -> extreme_idx (every KL row in 3 CSVs);
+  - the H1 final.csv column pending_reversal_anchor_idx;
+  - the style key fib.anchor_line.*;
+  - optionally FibState bos_idx/cts_idx and the *_as0..2 columns.
+- 4c Optional frozen-key aliases (meta additions only).
+- 4d Doc sweep and the GLOSSARY bridging table.
+
+SIZE, honestly
+- Stage 1 is the bulk:
+  - 10 production location sites in 9 modules;
+  - about 5 sort pins;
+  - the fib_tracker role split across about 8 helpers;
+  - the accessor module;
+  - a fixture factory touching up to 18 test files.
+  It should be byte-identical apart from the meta key.
+- Stages 2c-2g are a few lines each.
+- Stage 3 is about 10 lines of code plus a docs pass.
+- BOS adds another pass the size of stage 1.
+- Most of the value (stages 1 and 2) comes with or without the flip. After those stages the flip is cheap and optional.
+
+### risks
+
+1. POOL KEYS / starting_idx
+- reference_zone._extreme_idx_for_cts_event (:88-97) is the one CTS_ESTABLISHED read that sets probe inputs: sibling, reversal handoff and the H1 main reversal.
+- If it is left unmigrated at the flip, any reference whose winner is a CTS_ESTABLISHED moves the probe input and the ad-hoc base candle to the moment. That changes starting_idx, the pool key, sub_id numbering, the probe-cache key (dir, input) and hit/miss behaviour.
+- On this window it would be INVISIBLE: no probe used ref=cts_established. So /compare cannot catch it; a unit test with an EST winner and lag > 0 must pin it.
+- The sibling site mixes timing and location inside one expression (entity_df_mutation.py:481-489), so it needs a careful split.
+- For BOS, first_confluence input_idx is the pool-key input for every first_confluence sub.
+
+2. Silent mixed-scale compares
+- After an EST-only flip, the fib new-extreme guards (fib_tracker.py:1310, 1383, 1509, 2342, 2396) compare an UPD extreme against a CTS_ESTABLISHED moment. They silently drop an update in (extreme, moment]. There are 0 instances on the window.
+- The poi cond1 has the same shape.
+
+3. Chart dot positions
+- The trailing-CTS dots on 3 charts would move 1-5 candles in x while y stays ev.price. _replacement_break_point inherits the shift.
+- A BOS flip moves every BOS dot 2-411 candles. Unmigrated, it collapses every H1 fib (BOS moment == CTS_ESTABLISHED idx on all 5 H1 cycles), and with it the POIs.
+
+4. Ordering
+- The (idx, type) sort in the orchestrator and sub_wvmi holds BOS before EST only by alphabet.
+- After a flip, an sd-prox CTS_CONFIRMED can tie the CTS_ESTABLISHED moment and run first ("CTS_CONFIRMED" < "CTS_ESTABLISHED"), and the fib then never locks.
+- A prior-cycle CTS_THRESHOLD_UPDATED in [extreme, moment) would be dispatched while the phase is still pre_established (fib_tracker.py:2081-2084).
+- MS emits the CTS_ESTABLISHED BEFORE the BOS_CONFIRMED, so a naive stable sort by moment breaks the fib loop.
+- All have 0 instances on the window. Pin the sort keys in stage 1.
+
+5. _EVENT_META_IDX_KEYS is unmaintained
+- 9 keys already ship slice-local: pb_start, expires_idx, KL source_event_idx, POI bos_idx/cts_idx, fib activated_at / reactivated_at / locked_at / cycle1_bos_idx, WaveCandleResult anchor_idx.
+- A new cts_extreme_idx or bos_extreme_idx that is not listed there would export wrong values on M15.
+- Add a test that every *_idx / *_at meta key on mirrored sub events is entity-absolute.
+
+6. The window barely exercises this
+- Only 2 unique lagging CTS_ESTABLISHED cycles exist, so a zero-delta /compare proves little.
+- Every migrated site needs a synthetic lagging fixture, e.g. test_unified_probe._make_second_cts_moment_after_extreme_data with (idx, confirmed_at) = (9, 10).
+
+7. Fixture drift
+- 18 test files build CTS_ESTABLISHED events. A strict accessor raises KeyError on old fixtures.
+- An accessor that falls back to ev.idx is silently wrong after the flip. Use one factory, and never write .get(key, ev.idx).
+
+8. MS internal state must stay on the extreme
+- "Cleaning up" the cts_idx local to the moment breaks BOS_0 selection (window [start, cts_idx)), range_start_idx, the sd-prox gate and the POI inner resolver.
+- Unlike CTS, BOS state is built from the emitted idx, so it must be decoupled first.
+
+9. Contract and doc drift
+- Changing what CTS_ESTABLISHED.idx means is not forbidden by the letter of the LANDMINES Event Contract rules (type names, meta fields, append-only, structure_id). It is still a semantic change to a frozen type.
+- Many docs and memory entries assert "CTS_ESTABLISHED.idx = extreme": ARCHITECTURE, GLOSSARY:217, LANDMINES:493, structure_lifecycle.py:71-99, reference_zone.py:91-93, MEMORY "Key Architecture Points". So do external CSV readers.
+- Everything must move in the same commit; otherwise future sessions implement against stale docs.
+
+10. Plan D's meta cts_established_idx = int(ev.idx) silently becomes the moment at the flip (3 POI cells) unless Q5 is decided first.
+
+11. Residual exceptions remain after an EST-only flip
+- BOS_CONFIRMED.idx is still an extreme.
+- Pattern-path CTS_UPDATED.idx is an extreme with NO recorded moment (the §17.12 latent leak).
+- So "ev.idx = moment" is still not universal, and readers must keep using accessors.
+- Benefit for live mode: a flipped event is no longer back-dated. Its idx equals the candle at which it is emitted, which removes this look-ahead class.
+
+12. Scope creep: a rename sweep over 863 "anchor" hits in 53 .py files and 368 in 18 .md files. Keep the renames in stage 4, separate from the behaviour stages.
+
+### open_questions_for_user (13)
+
+1. Scope: flip only CTS_ESTABLISHED, or also BOS_CONFIRMED, so that ev.idx is the moment for every 'established/confirmed' event? A BOS flip moves all 34 BOS rows and needs its own large migration, including the first_confluence pool-key input and the MS BOS state. Should pattern-path CTS_UPDATED also get a recorded moment, and later flip?
+2. New extreme key on CTS_ESTABLISHED: 'cts_extreme_idx' (proposed; it fits the standard) or 'cts_anchor_idx' (it matches CTS_CONFIRMED as you phrased it, but CTS_ESTABLISHED already uses anchor_idx for the pattern's first candle)? Also add a 'cts_extreme_idx' alias on CTS_CONFIRMED/RECONFIRMED, so every CTS event spells the extreme the same way? That changes the meta on 31 rows.
+3. How should the frozen names be bridged? Option 1: accessor functions only, with no CSV churn beyond the one required key. Option 2: additive alias keys that are visible in the CSVs (pattern_start_idx on CTS_ESTABLISHED/REVERSAL_CANDIDATE, close_break_idx on REVERSAL_WATCH_START, cts_extreme_idx / bos_extreme_idx).
+4. 'anchor': retire it completely from engine-owned names (proposed), or keep ONE reserved sense, either 'fib anchor' (trading jargon) or the MarketStructure scan candle ('anchor i')?
+5. POI meta 'cts_established_idx'. Plan D decision 1 keeps it as CTS_ESTABLISHED.idx, the extreme. After the flip, should it follow the standard and become the moment (3 POI meta cells change at the flip; add 'cts_extreme_idx' if you still want the extreme), or stay the extreme, which contradicts its name?
+6. Should every deferred timing read be fixed BEFORE the flip, each with its own /compare (proposed: fib timing 4 rows, pool knowable-at/sibling clip 0, probe Phase-2 check_lo 0, prev-BOS filter 0)? The alternative is to let the flip carry them, which mixes causes in one /compare.
+7. Fib Scenario 1 test `CTS_0 idx >= reversal_confirmed_idx` (fib_tracker.py:767-771, orchestrator.py:284-287): is it a LOCATION question (is the CTS_0 extreme past the reversal apply) or a TIMING one (was CTS_0 established after the reversal)?
+8. Prev-BOS line on the H1 chart: should it end at the new structure's CTS extreme (today) or at its establishment moment? Chart-review question; 0 difference on the window.
+9. compute_struct_start_by_sid uses min ev.idx, which is always the BOS_0 extreme, as the lifecycle base. Keep it on the extreme, or move it to a moment? Only matters under a BOS flip: H1 sid0 96->115, subs +2..+35, mostly masked downstream.
+10. Event processing order (orchestrator.py:146, sub_wvmi.py:68): keep today's order pinned permanently via the extreme accessor, or move to true moment order with an explicit type rank (BOS < EST < UPD < THRESHOLD < CONFIRMED)? The latter has 3 ordering hazards, all with 0 instances on the window.
+11. Exported renames, each needing a /compare rename allowance: KL zone meta anchor_idx -> extreme_idx; H1 final.csv pending_reversal_anchor_idx; fib_lifecycle.csv / POI meta bos_idx/cts_idx -> *_extreme_idx; the 12 final.csv *_as0..2 (anchor_shift) columns. Rename each, or keep it with a GLOSSARY entry?
+12. The test-only Scenario-3 / Exception-2 paths in structure_engine.py (compute_structure_scenario_3, compute_structure_from_start; used only by tests/test_scenario3.py and tests/test_bounded_structure.py): delete them, or migrate them?
+13. Sequencing: land Plan D (ready) and the queued 'imbalance knowable at c3' item first, then this plan's stage 1? Plan D §7.2's fib timing item would then become stage 2b here.

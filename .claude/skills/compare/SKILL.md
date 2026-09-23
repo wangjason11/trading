@@ -460,16 +460,18 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (last verified 2026-09-19 on the Stage-3.2a tree = revert `5a658dc`,
-again after Plan A, and after Plan B 2026-09-20; full 2025-12-01→2026-01-20 window; the 2026-05-29
-values were H1 125/261, counter 216/169, confluence 359/280. Window-dependent,
-re-baseline when the config window or chart rendering changes):
+counts are (set by the 2026-09-22 chart review round 2, `aadb887`; last verified
+2026-09-23 at the Plan D save `20260923_172626_0a4eadc`; config window
+2025-12-01→2026-01-20, auto-extended to 2025-11-15. Window-dependent,
+re-baseline when the config window or chart rendering changes; older values in
+**History** below):
 
 - `H1` chart: traces=85, shapes=245
 - `M15.counter` chart: traces=153, shapes=125
 - `M15.confluence` chart: traces=294, shapes=233
 
-**History:** pre-Plan C (through the Plan B save 2026-09-20) the counts were H1
+**History:** on 2026-05-29 the counts were H1 125/261, counter 216/169, confluence
+359/280. Pre-Plan C (through the Plan B save 2026-09-20) they were H1
 107/250, counter 198/133, confluence 342/222. Plan C's first replay moved the
 M15 counts (174/128, 321/238: 8 unique subs instead of 16 per-trigger sids,
 ownership by lifecycle window, degenerate subs absent); the chart review then

@@ -2998,7 +2998,7 @@ common case (31 of the 34 `CTS_ESTABLISHED` rows), not luck — but it is not
 guaranteed, and the one-candle lag is empirical, not a bound (`ARCHITECTURE.md`
 "`ev.idx` convention").
 
-> **Resolved for POI — Plan D, 2026-09-23.** POI's activation floor is now
+> **Resolved for POI — Plan D (`0a4eadc`), 2026-09-23.** POI's activation floor is now
 > `max(cts_established_idx, ic_idx, lifecycle_floor_idx)` with `cts_established_idx =
 > CTS_ESTABLISHED.meta["confirmed_at"]` (fallback `fib_state.cts_idx` when the cycle has no
 > `CTS_ESTABLISHED`), and the POI meta key `cts_established_idx` holds that moment (it held
