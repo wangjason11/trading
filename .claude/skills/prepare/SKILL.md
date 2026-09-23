@@ -38,7 +38,8 @@ the upcoming feature crosses many modules.
 Read all key documentation files to understand current state and constraints:
 
 ```
-CLAUDE.md                                    # Project status, current week's focus
+CLAUDE.md                                    # root: pointer + the documentation-cadence rule
+engine_v2/CLAUDE.md                          # Project status, current week's focus
 engine_v2/ARCHITECTURE.md                    # System design, event contracts
 engine_v2/PROJECT_PRINCIPLES.md              # Non-negotiable guardrails
 engine_v2/GLOSSARY.md                        # Domain terminology

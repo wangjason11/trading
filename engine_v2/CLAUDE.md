@@ -1,6 +1,8 @@
 # CLAUDE.md — Project Context for Claude Code
 
-> This file is automatically read by Claude Code on startup.
+> Project context for the engine. The **repo-root `CLAUDE.md`** is what loads at startup (it points
+> here); this nested file comes in with work under `engine_v2/`. Keep the root file a pointer — the
+> content lives here.
 
 ## Project Overview
 
