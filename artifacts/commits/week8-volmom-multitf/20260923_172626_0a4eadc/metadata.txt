@@ -1,0 +1,4 @@
+commit_hash=0a4eadc
+timestamp=20260923_172626
+branch=week8-volmom-multitf
+commit_message=Plan D: POI activation gate + POI meta cts_established_idx on the cycle's established moment
