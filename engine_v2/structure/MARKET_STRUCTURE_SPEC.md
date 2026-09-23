@@ -501,7 +501,11 @@ candle (later than current). `original_bos0_bounds` captured at iteration
 0 only and preserved across iterations.
 
 **Exception check window:**
-- Lower bound: `cts_est[0].idx + 1` (excludes pullback-confirmation candle)
+- Lower bound: `cts_est[0].idx + 1` — excludes the `CTS_ESTABLISHED.idx` candle, i.e. the
+  breakout span's CTS **extreme** (not a pullback candle; and the extreme, not the established
+  moment `meta["confirmed_at"]`, though the two usually coincide — `ARCHITECTURE.md` "`ev.idx`
+  convention"). That candle is still part of the breakout leg away from the zone, so its far wick
+  is not a return to it (GOTCHAS "Exception Check Must Exclude CTS_ESTABLISHED Candle")
 - Upper bound (`exc_upper`):
   - `end_idx` when defined (supersedes `cts_est[1]` per LANDMINES "Probe
     `end_idx` Is the Supreme Bound" — `end_idx` is a caller-defined hard
@@ -548,6 +552,6 @@ start — the path exists.
 
 - **Always on `df.copy()`** — no mutation of outer state until result accepted
 - **Max iterations cap** (10) — prevents infinite loops
-- **`CTS_EST + 1` scan window start** — excludes the pullback-confirmation candle (naturally near the zone, would cause false exceptions)
+- **`CTS_EST + 1` scan window start** (`structure_engine.py` Scenario 3 Phase 1 probe, `compute_structure_from_start` and Scenario 3 Phase 2 Exception 2) — excludes the `CTS_ESTABLISHED.idx` candle = the breakout span's CTS **extreme**, still part of the breakout leg away from the zone: its far wick is not a return to the zone, and including it caused false exceptions. It is not a pullback candle, and it is keyed on the extreme, not the established moment `meta["confirmed_at"]` (the two usually coincide; `ARCHITECTURE.md` "`ev.idx` convention"; GOTCHAS "Exception Check Must Exclude CTS_ESTABLISHED Candle")
 - **Pip tolerance scales with timeframe** — values from `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS` (H1=3, M15=2.5, M5=2; type is `float` because M15 is fractional). Used by `compute_structure_scenario_3` Phase 1 probe AND by the legacy Exception 2 probes (`compute_structure_from_start` + `compute_structure_scenario_3` Phase 2; `compute_structure` no longer runs Exception 2 after Step 4 — its H1-main reversal handoff uses the `unified_probe` reset tolerances from the same table). Invariant: `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` per TF (asserted at module load).【fileciteturn1file11】
 

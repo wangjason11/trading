@@ -12,7 +12,7 @@ argument-hint: [commit message] [--reuse-replay]
 
 1. Capture learnings via `/remember` (project docs, LANDMINES, memory) — runs FIRST so any doc edits land in the same source commit
 2. Commit current changes
-3. Run the replay and save outputs to a branch-namespaced timestamped folder in `artifacts/commits/<branch>/` for later `/compare`
+3. Run the replay, check that its M15 fetch was complete (Step 4b), and save outputs to a branch-namespaced timestamped folder in `artifacts/commits/<branch>/` for later `/compare`
 4. Cherry-pick the save commit onto `artifacts-trunk` so artifacts remain visible across branch checkouts
 
 ## Replay modes: run (default) vs reuse
@@ -26,7 +26,9 @@ Step 4 (the replay) is the slow part (~80 s on the full M15 window since the 202
   Step 4 and instead copy the outputs already sitting in `artifacts/debug` +
   `artifacts/charts` from the session's most recent replay (Step 5 **reuse
   variant**). This avoids a redundant second replay when one was already run
-  earlier this session.
+  earlier this session. The Step 4b fetch gate still runs, on that replay's
+  captured `run.log`. A replay run without `> run.log 2>&1` cannot be shown to
+  be complete, so use run mode for it.
 
   **Guard — only valid when the on-disk outputs reflect the exact code being
   committed.** Reuse mode is correct ONLY if a replay was already run earlier
@@ -155,13 +157,56 @@ FOLDER_PATH="artifacts/commits/${CURRENT_BRANCH}/${FOLDER_NAME}"
 ### 4. Run Replay  *(run mode only — SKIP this step in reuse mode)*
 
 ```bash
-# Run replay - outputs go to standard locations (artifacts/debug, artifacts/charts)
-python -m engine_v2.run_replay
+# Run replay - outputs go to standard locations (artifacts/debug, artifacts/charts).
+# Capture the log: the Step 4b fetch gate reads it.
+python -m engine_v2.run_replay > run.log 2>&1
 ```
 
 **After the replay finishes, display the `=== Replay Timing ===` block** from
-the run output to the user (see "Always surface replay timing" below). This is
-required for every replay, not just this skill.
+the captured log (`sed -n '/=== Replay Timing ===/,$p' run.log`) to the user
+(see "Always surface replay timing" below). This is required for every replay,
+not just this skill.
+
+### 4b. Fetch-completeness gate  *(MANDATORY in both modes, before Step 5 copies anything)*
+
+**A partial M15 fetch must never become a baseline.**
+`multitf/data_bridge.fetch_lower_tf_data` swallows a failed OANDA chunk: it
+prints `[data_bridge] ERROR fetching M15 chunk …`, keeps going, and the replay
+exits 0. The M15 input is not among the saved CSVs, so a truncated run saved
+here would make every later `/compare` diff against broken M15 outputs. The
+full rationale and the canonical expected value are in the `/compare` skill
+§2b "Fetch-completeness gate". Keep the snippet below identical to the one
+there (only the FAIL message differs), including the `EXPECTED_FETCH` value.
+
+```bash
+RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
+EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
+if [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log \
+   && grep -aqF "$EXPECTED_FETCH" run.log && ! grep -aqF "[data_bridge] ERROR" run.log; then \
+    echo "FETCH GATE: PASS"; \
+else \
+    echo "FETCH GATE: FAIL - do NOT save"; grep -aF "[data_bridge]" run.log; \
+fi
+```
+
+PASS needs all four conditions. The first two are the **same-run check**: they
+tie `run.log` to the replay whose outputs will be saved. `run_replay.py` writes
+`*_raw.csv` first and prints the timing block last, so that run's log is newer
+than its `*_raw.csv` and contains its timing block. This matters in reuse mode,
+where a stale log would otherwise vouch for a later, uncaptured replay. The last
+two are the fetch check: the exact expected `Fetched` line AND no
+`[data_bridge] ERROR` line. The gate is N/A only when the run has no lower
+timeframe (`config.py` `lower_timeframes=()` — then no M15 CSVs exist either).
+
+**On FAIL, STOP and do not run Steps 5–7.** Report a data-fetch failure, quote
+the `[data_bridge]` lines, and re-run Step 4. The Step 3 folder and its
+`.before_replay_marker` are still valid, and the re-run's outputs are newer than
+the marker. In reuse mode, switch to run mode. If the fetch keeps failing (an
+OANDA outage), remove the still-empty save folder (re-derive `FOLDER_PATH` as in
+Step 3, then `rm "${FOLDER_PATH}/.before_replay_marker" && rmdir
+"${FOLDER_PATH}"`) and report that the Step 2 source commit has no save. The
+expected line depends on the window. When `config.py`'s window changes,
+re-baseline it in `/compare`, here and `engine_v2/WORKFLOWS.md` in the same commit.
 
 ### 5. Copy Outputs to Commit Folder
 

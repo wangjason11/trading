@@ -83,20 +83,82 @@ data — the same guard as `/commit-save` reuse mode.
 **Always display the `=== Replay Timing ===` block** when a replay is run
 (per `feedback_replay_timing_display`). In reuse mode there's no new timing.
 
-### 2b. Post-replay log grep (catch silent skips)
+### 2b. Post-replay log grep (fetch gate FIRST, then the silent-skip grep)
 
-Whenever a replay was actually run in step 2 (run mode), grep its captured log
-for silently-skipped work BEFORE the CSV comparison:
+**Fetch-completeness gate: MANDATORY, and it runs before any diff is
+trusted.** `multitf/data_bridge.fetch_lower_tf_data` fetches the M15 input in
+14-day OANDA chunks and does **not** raise when a chunk fails. It prints
+`[data_bridge] ERROR fetching M15 chunk <from>-<to>: <exception>`, carries on
+with the chunks it got, and still prints `[data_bridge] Fetched N M15 candles
+for NZD_USD in K chunks`, where K counts only the chunks that returned data.
+The replay exits 0 on the truncated frame. The M15 input is not among the 24
+saved CSVs and saves carry no `run.log`, so a partial fetch shows up only as
+M15 deltas that look exactly like an engine change. This happened in a
+2026-09-22 audit run: two HTTP 504s left 2500 of 4228 M15 candles, and nothing
+failed. The H1 fetch does not have this problem: `provider_oanda.get_history`
+raises on a non-200 response and `run_replay.py` does not catch it, so a failed
+H1 fetch crashes the run.
 
 ```bash
-grep -iaE "warning|skipping|unavailable|degenerate|pending|no sid" run.log
+RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
+EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
+if [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log \
+   && grep -aqF "$EXPECTED_FETCH" run.log && ! grep -aqF "[data_bridge] ERROR" run.log; then \
+    echo "FETCH GATE: PASS"; \
+else \
+    echo "FETCH GATE: FAIL"; grep -aF "[data_bridge]" run.log; \
+fi
+```
+
+- **PASS needs all four conditions.** The first two are the **same-run check**:
+  `run.log` is newer than the newest `*_raw.csv` AND contains the `=== Replay
+  Timing ===` block. `run_replay.py` writes `*_raw.csv` first (before
+  `run_pipeline`) and prints the timing block last, so the log of the replay
+  whose outputs are on disk passes both. A stale `run.log` from an earlier
+  replay fails the first (a later replay run without `> run.log 2>&1` wrote a
+  newer `*_raw.csv`), and a crashed run fails the second. The last two are the
+  fetch check: the exact expected `Fetched` line is present AND there is no
+  `[data_bridge] ERROR` line. `/commit-save` Step 4b runs this same snippet.
+- **On FAIL, STOP.** Report a **data-fetch failure** and quote the
+  `[data_bridge]` lines. If those lines look complete, the same-run check is
+  what failed: the log does not belong to the outputs on disk. Either way,
+  re-run the replay (step 2, run mode) and check again. **Never interpret the
+  diff of a run that failed the gate.** Nothing it shows is evidence about the
+  code.
+- **Reuse mode:** the gate still applies, to the captured log of the replay
+  being reused, and the same-run check is what stops reuse from passing on a
+  stale log. If that replay was run without `> run.log 2>&1`, completeness
+  cannot be checked, so run a fresh replay instead of comparing.
+- **N/A only when the run has no lower timeframe** (`config.py`
+  `lower_timeframes=()` — then no M15 CSVs exist either).
+- **The expected line depends on the window.** The M15 fetch spans the H1 frame
+  (`orchestrator._run_multi_tf_dual`, first to last H1 candle), which is
+  `config.py`'s window after `[auto_extend]` moves its start. On the reference
+  window, `config.py` says 2025-12-01, auto-extend moves it to 2025-11-15, and
+  the fetch covers 2025-11-15→2026-01-20: **4228 candles in 5 chunks**. That
+  value is measured, not computed: the 2026-09-22 `run.log` and
+  `artifacts/replay_{msfix,session2,subrev,subrev2,zonefix}.log` all show it,
+  while older logs from a shorter window (`artifacts/phase2_*.log`, May 2026)
+  show `3364 … in 4 chunks`. **Re-baseline `EXPECTED_FETCH` whenever
+  `config.py`'s window changes**, using a replay whose log has no
+  `[data_bridge] ERROR` line. This skill holds the canonical value, and
+  `/commit-save` Step 4b and `engine_v2/WORKFLOWS.md` repeat it, so update all
+  three in the same commit.
+
+**Silent-skip grep.** Once the gate passes, grep the same log for
+silently-skipped work BEFORE the CSV comparison. `error` is in the pattern
+(case-insensitive) as a backstop, so a fetch error or any other error line
+cannot be missed:
+
+```bash
+grep -iaE "error|warning|skipping|unavailable|degenerate|pending|no sid" run.log
 ```
 
 Report the count + the lines. A non-zero count is not automatically a bug
 (some skips are correct), but each must be **explained, not ignored** — and
 when the CSV/chart comparison below shows dropped sids/zones, the matching
-skip-warning usually names the exact cause. In reuse mode, grep the most recent
-replay's log if it was captured; otherwise note it was unavailable. See
+skip-warning usually names the exact cause. In reuse mode, grep the captured
+log of the replay being reused (the fetch gate above already requires it). See
 `engine_v2/WORKFLOWS.md` "Post-replay log grep" + memory
 `feedback_implement_against_docs.md` for why this exists (Session 3 Step 2
 dropped 5 sids whose cause sat unread in the log).
@@ -174,15 +236,25 @@ Compare structural events between iterations:
 
 | Event Type | What to Track |
 |------------|---------------|
-| **BOS_CONFIRMED** | `(idx, structure_id, cycle_id)` |
+| **BOS_CONFIRMED** | `(idx, confirmed_at, structure_id, cycle_id)` |
 | **CTS_CONFIRMED** | `(idx, structure_id, cycle_id)` |
-| **CTS_ESTABLISHED** | `(idx, structure_id, cycle_id)` |
+| **CTS_ESTABLISHED** | `(idx, confirmed_at, structure_id, cycle_id)` |
 | **STATE_CHANGED to reversal** | `(idx, structure_id)` |
+
+On `BOS_CONFIRMED` / `CTS_ESTABLISHED`, `idx` is the price **extreme**, stamped
+after the fact. The moment the event became known is `meta["confirmed_at"]`,
+stored inside the `meta` column of `*_structure_events.csv`, and it is the
+value that timing and lifecycle code reads. A shift in `confirmed_at` alone
+leaves `idx` unchanged, so compare both. On `CTS_CONFIRMED`, `idx` ==
+`confirmed_at`. The canonical per-event table is `engine_v2/ARCHITECTURE.md`
+"`ev.idx` convention".
 
 Detect:
 - **Removed events**: In previous but not current
 - **Added events**: In current but not previous
-- **Shifted events**: Same `(structure_id, cycle_id)` but different `idx`
+- **Shifted events**: Same `(structure_id, cycle_id)` (and `sub_id` on M15 —
+  every sub's events carry `structure_id` 0) but different `idx` OR different
+  `confirmed_at`
 
 Output format:
 ```
@@ -190,6 +262,7 @@ EVENT-LEVEL SHIFTS:
 
 BOS_CONFIRMED:
   SHIFTED: sid=1 cycle=1 moved from idx=728 to idx=826 (+98 candles)
+  SHIFTED (moment only): M15.counter sub_id=3 cycle=1 idx=2758 unchanged, confirmed_at moved from 2829 to 2830 (+1 candle)
 
 REVERSAL:
   SHIFTED: sid=0 moved from idx=710 to idx=748 (+38 candles)

@@ -9,8 +9,9 @@ the end of §4 record where the landing refined it (cold review 2026-09-20 — c
 side correct, plan wording stale). Measured outcome: the predicted table reproduced
 cell for cell (8 subs / 11 records / 4 unresolved); H1 8/9 byte-identical (+ the
 `_wvmi.csv` header rename); three probe-cache hits (accepted as designed — §5.3's
-"zero hits" was an enumeration error); one visible moment shift (two masked by an
-equal floor); 698 tests + 1 strict xfail.
+"zero hits" was an enumeration error); one visible moment shift (the only other
+extreme ≠ moment cycle — sub `2639/−1` cycle 1, two lens rows because the sub is on
+both lenses — masked by an equal floor); 698 tests + 1 strict xfail.
 **Canonical decisions + rationale:** `memory/project_sub_structure_pool_architecture.md` (read first).
 **Ground truth + acceptance table:** `memory/reference_pool_redesign_groundtruth.md`.
 **Vocabulary:** `GLOSSARY.md` "Sub-Structure Pool Terms".
@@ -46,7 +47,8 @@ acceptance is §10.
 
 **Changes one shared leaf:** `zones/structure_lifecycle.py` — cycle lifecycle-start becomes the
 CTS-established *moment* (`meta["confirmed_at"]`) instead of the extreme (`.idx`) (§3). H1-byte-identical
-on this window; three sub cycles shift +1 candle.
+on this window; three sub-cycle rows (two unique cycles — `2639/−1` is on both lenses) predicted to shift
++1 candle (measured: one visible, the other masked by an equal floor — header).
 
 **Does NOT change:** `H1.main` (`compute_structure`), `unified_probe` (except reading its result),
 `compute_bounded_structure`, `zones/*` derivations (`kl_zones_v1`, `poi_zones`, `fib_tracker`,
@@ -505,7 +507,10 @@ for r in recs:
     bounded, slice_begin = pool.get_by_id(r.sub_id).geometry
     r_lo, r_hi = max(lo, r.start_idx), min(hi, r.trigger_end_idx if r.trigger_end_idx is not None else hi)
     events += [shift(ev, slice_begin) for ev in bounded.events
-               if r_lo <= ev.idx + slice_begin <= r_hi and ev.type in _CTS_EVENT_TYPES]   # ev.idx == knowable-at for CTS types
+               if r_lo <= ev.idx + slice_begin <= r_hi and ev.type in _CTS_EVENT_TYPES]
+    # keyed on ev.idx: knowable-at only for CTS_CONFIRMED and a raw-path CTS_UPDATED; for CTS_ESTABLISHED
+    # (and a pattern-path CTS_UPDATED) ev.idx is the EXTREME, which can precede the apply candle —
+    # known limit, PART4 §17.8 / §17.12; ARCHITECTURE.md "ev.idx convention"
 winner = max(events, key=(idx, type order))
 return build_reference_zone_from_cts_event(events=events, kl_zones=[], df=m15 (the shared entity-absolute
                                            frame — NOT the winner's slice-local bounded.df), sid=0,

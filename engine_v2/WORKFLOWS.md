@@ -6,7 +6,9 @@ This doc explains how we work on this repo so changes remain safe and explainabl
 
 ## Replay workflow (canonical)
 
-1. Run `run_replay.py` to fetch and replay a dataset and generate:
+1. Run `run_replay.py` from the repo root, capturing its log:
+   `python -m engine_v2.run_replay > run.log 2>&1` (the fetch gate in step 4
+   reads `run.log`). It fetches and replays a dataset and generates:
    - raw CSV export
    - final pipeline CSV export
    - printed summaries (pattern counts, structure levels, zone stats)
@@ -18,22 +20,52 @@ This doc explains how we work on this repo so changes remain safe and explainabl
    - `df.attrs["structure_levels"]`
    - `df.attrs["kl_zones"]`
 3. Export chart artifacts using export_plotly.
-4. **Grep the captured log for silently-skipped work** (see below) before
-   trusting the output or moving to `/compare`.
+4. **Check the captured log**: the M15 fetch-completeness gate first, then the
+   silent-skip grep (see below). Do both before trusting the output or moving
+   to `/compare`.
 
 ---
 
-## Post-replay log grep (catch silent skips BEFORE /compare or chart review)
+## Post-replay log grep (fetch gate + silent skips, BEFORE /compare or chart review)
 
 The engine emits `WARNING` lines and skips work — a trigger that can't resolve,
 a reference zone that's unavailable, a degenerate window, a pending probe —
 **without raising**. The run exits 0 and the only trace is a log line. A
 behavioral change that *accidentally* drops sids/zones looks identical to one
 that *correctly* prunes them until you read those lines. After any replay whose
-log you captured (`python -m engine_v2.run_replay > run.log 2>&1`):
+log you captured (`python -m engine_v2.run_replay > run.log 2>&1`), run two
+checks in this order.
+
+**1. Fetch-completeness gate (MANDATORY; no diff is trusted until it passes).**
+`multitf/data_bridge.fetch_lower_tf_data` also fails without raising: a failed
+OANDA chunk prints `[data_bridge] ERROR fetching M15 chunk …`, the fetch keeps
+the other chunks, and the replay exits 0 on a truncated M15 frame. The full
+rationale, the same-run check and the canonical `EXPECTED_FETCH` value live in
+the `/compare` skill §2b; `/commit-save` Step 4b runs the same snippet:
 
 ```bash
-grep -iaE "warning|skipping|unavailable|degenerate|pending|no sid" run.log
+RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
+EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
+if [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log \
+   && grep -aqF "$EXPECTED_FETCH" run.log && ! grep -aqF "[data_bridge] ERROR" run.log; then \
+    echo "FETCH GATE: PASS"; \
+else \
+    echo "FETCH GATE: FAIL"; grep -aF "[data_bridge]" run.log; \
+fi
+```
+
+**On FAIL, STOP.** Report a data-fetch failure, re-run the replay, and never
+interpret that run's diff. N/A only when the run has no lower timeframe
+(`config.py` `lower_timeframes=()` — then no M15 CSVs exist either). The
+expected line depends on the window (reference window 2025-11-15→2026-01-20:
+4228 in 5 chunks); re-baseline it in `/compare`, `/commit-save` and here in one
+commit whenever `config.py`'s window changes.
+
+**2. Silent-skip grep.** `error` is in the pattern (case-insensitive) as a
+backstop:
+
+```bash
+grep -iaE "error|warning|skipping|unavailable|degenerate|pending|no sid" run.log
 ```
 
 Report the count. A non-zero count is not automatically a bug — some skips are
@@ -75,9 +107,10 @@ evidence unless you reconstruct what was drawn. The loop that worked for the
    events / lifecycle tables BEFORE editing (which segments flip, which dots
    change, which counts move). State it to the user as a table — a wrong
    prediction here is cheap; a wrong rule rendered is a whole re-run.
-2. **Re-render** (`python -m engine_v2.run_replay`, ~45 s of chart time) and
-   **prove the CSVs are byte-identical** to the baseline save — that is what
-   makes it chart-only:
+2. **Re-render** (`python -m engine_v2.run_replay > run.log 2>&1`, ~45 s of
+   chart time), **pass the fetch gate** (Post-replay log grep above; a partial
+   M15 fetch would fake a CSV delta), and **prove the CSVs are byte-identical**
+   to the baseline save. That comparison is what makes it chart-only:
    `for f in <save>/*.csv; do cmp -s "$f" "artifacts/debug/$(basename $f)"; done`
 3. **Reconstruct the drawing from the saved HTML and re-derive the rule
    independently** — parse `Plotly.newPlot`'s trace list (`chart_census.load_fig`;
@@ -123,7 +156,7 @@ If zones "disappear", confirm the chart is selecting the most recent structure_i
 ### D) Confirm timing indices
 When something "happens too late/too early", check:
 - PatternEvent.apply_idx (end_idx vs confirmation_idx)
-- StructureEvent.idx vs meta["confirmed_at"]
+- StructureEvent.idx vs meta["confirmed_at"]: on `BOS_CONFIRMED` / `CTS_ESTABLISHED`, `idx` is the price extreme (stamped after the fact) and `confirmed_at` is the moment the event became known. The canonical per-event table is `ARCHITECTURE.md` "`ev.idx` convention".
 - Zone meta["confirmed_idx"] rules (BOS vs CTS)
 
 ### E) Confirm thresholds

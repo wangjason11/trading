@@ -318,7 +318,7 @@ against the post-Rules-1-2-3 baseline.
 1. **Zero FB/FP volume blocks WVMI creation** — division by zero guard. Ensure candle features (volume) are computed before WVMI runs.
 2. **Temp LP only locks on BOS_n+1** — do not assume `lp_locked=True` until BOS of the next cycle confirms. Until then, LP and pullback_momentum can shift every candle.
 3. **buy_momentum/sell_momentum are direction-mapped** — for buy zones: buy=breakout, sell=pullback. For sell zones: reversed. Always check `zone_side` when interpreting.
-4. **Zone proximity gate is mandatory (today)** — WVMI records are only created for cycles where the **first sd-direction zone-proximity trigger** fires (via `check_zone_proximity` in `zones/zone_proximity.py`). Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, REVERSAL apply_idx - 1]` (note: scan starts AT the CTS confirmation candle, not +1). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Uses only active POI zones at each candle (BOS KL zone is throughout-active). The orchestrator extracts the first sd trigger per cycle as the WVMI gate (`triggered_by_event_idx` in WVMIRecord.meta — Part 4 §8.7 attribution schema). Future refactor will rewire WVMI off this gate.
+4. **Zone proximity gate is mandatory (today)** — WVMI records are only created for cycles where the **first sd-direction zone-proximity trigger** fires (via `check_zone_proximity` in `zones/zone_proximity.py`). Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, REVERSAL_CANDIDATE.meta["apply_idx"] - 1]` (note: scan starts AT the CTS confirmation candle, not +1; the reversal term is the sid's LAST `REVERSAL_CANDIDATE` in event order — a SCHEDULED apply, i.e. a prediction that can expire, not the confirmed `STATE_CHANGED(to=reversal)`; ARCHITECTURE "`ev.idx` convention"). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Uses only active POI zones at each candle (BOS KL zone is throughout-active). The orchestrator extracts the first sd trigger per cycle as the WVMI gate (`triggered_by_event_idx` in WVMIRecord.meta — Part 4 §8.7 attribution schema). Future refactor will rewire WVMI off this gate.
 
 ---
 
@@ -490,7 +490,7 @@ main reversal probe, so it needs its own decision and `/compare`.
 1. **original_bos0_bounds captured at iteration 0 only** — subsequent probe iterations reuse the first BOS_0 zone for exception evaluation. Do not re-derive bounds mid-loop.
 2. **Phase 2 only runs if status == "finalized" AND `run_continuation=True`** — when `run_continuation=False`, Phase 2 is skipped entirely (probe-only mode). The result contains only Phase 1 probe data.
 3. **Exception evaluation checks inner bound, not outer** — proximity is measured as "candle high/low within tolerance of zone inner bound" (the bound closer to current price).
-4. **Exception check window starts from CTS_EST + 1** — the CTS_ESTABLISHED candle itself is the pullback confirmation, naturally near the zone. Exclude it from the exception check (see GOTCHAS.md).
+4. **Exception check window starts from `CTS_ESTABLISHED.idx + 1`** (`cts_est[0].idx + 1`; the two Exception 2 loops do the same). That `ev.idx` is the cycle-0 CTS **extreme** — the first argmax(`h`) / argmin(`l`) over the breakout pattern's span, retro-stamped — NOT a pullback confirmation and NOT the moment the cycle was established (`meta["confirmed_at"]`, the apply candle; ARCHITECTURE "`ev.idx` convention"). The extreme candle belongs to the breakout itself, and the check asks whether price returns to the zone *after* the breakout, so exclude it (see GOTCHAS.md). When the extreme precedes the apply candle, the window's first candles (up to `confirmed_at`) are still inside the breakout pattern.
 5. **Condition 4 split — `end_idx` is the discriminator:**
    - **4a) `end_idx is not None`** AND probe reached it without 2 CTS_EST → **finalized**. The caller-defined boundary is treated as a real terminal point (e.g., the first sd zone-proximity trigger candle is known and definitive).
    - **4b) `end_idx is None`** AND probe ran past available `df` data without 2 CTS_EST → **pending**. More candles may arrive later that resolve the probe; the caller can re-invoke with the same or advanced `start_idx`.
@@ -680,7 +680,15 @@ registry, never from `dfx.attrs["lower_tf_results"]`.
 >   `lo` = 0 for `first_counter`, the LOH of the prior sd-prox / CTS-prox
 >   candle for `subsequent_*`). **The window is the ONLY thing keeping the
 >   read causal** now that geometry is not bounded per trigger — never widen
->   it, never drop `hi`.
+>   it, never drop `hi`. Known limit (PART4 §17.8): the clip keys every CTS
+>   type (`structure/reference_zone._CTS_EVENT_TYPES`) on `ev.idx` — the
+>   EXTREME for `CTS_ESTABLISHED` (and a pattern-path `CTS_UPDATED`, whose
+>   apply candle is not recorded) — so a CTS whose moment (`confirmed_at` /
+>   the apply candle) is after `hi` but whose extreme is `<= hi` is still a
+>   candidate (the in-code comment "`ev.idx == knowable-at for CTS types`" is
+>   wrong for `CTS_ESTABLISHED` and pattern-path `CTS_UPDATED`; ARCHITECTURE
+>   "`ev.idx` convention").
+>   Changing it moves `starting_idx` = pool keys → its own `/compare`.
 > - the zone is built by `build_reference_zone_from_cts_event(events,
 >   kl_zones=[], df=m15_df (the shared entity-absolute frame, not the winner's
 >   slice-local `bounded.df`), sid=0, probe_direction, idx_window=(lo, hi))`.
@@ -1721,17 +1729,22 @@ floor of `(S,C+1)`. The B2 Phase B rule that stood here ("next-cycle source
 = `CTS_ESTABLISHED.ev.idx`, don't revert it to `confirmed_at`") had the right
 aim (floor and cap from the same field) and the wrong field: the extreme is
 historical, the moment is when the cycle became tradeable, and the two differ
-whenever the CTS extreme precedes the apply candle (three M15 sub cycles on
-the reference window; the five H1 cycles coincide only by luck). Retired with
+whenever the CTS extreme precedes the apply candle (on the reference window 3
+of the 34 `CTS_ESTABLISHED` CSV rows = 2 unique M15 sub cycles, sub 3 being
+mirrored into both lenses, each with an empirical lag of 1 candle; extreme ==
+apply candle is the COMMON case — 31/34, including all five H1 cycles — not
+luck. The only bound is `anchor_idx <= idx <= confirmed_at <= anchor_idx + 5`;
+ARCHITECTURE "`ev.idx` convention"). Retired with
 it: the 4 trigger detectors' `lifecycle_end_idx` (field kept one commit,
 unread), `_find_m15_lifecycle_end`, `parent_end_lookup`, `parent_struct_end_m15`
 and `run_pipeline`'s `parent_cycle_floor_h1`. Same rule inside a sub:
 `compute_cycle_lifecycle` floors each sub cycle on ITS `CTS_ESTABLISHED`
 moment, so main, sub cycles and the parent table agree (expected from the plan:
-three sub-cycle starts +1 — 1223→1224, 2828→2829 ×2; measured on the first
-Plan C replay: one visible shift, sub `454/+1`'s cycle-1 end 1223→1224 — the
-other two are masked by an equal floor, GOTCHAS "A Predicted +1 Shift Can Be
-Masked by an Equal Floor"; H1 byte-identical).
+three sub-cycle starts +1 — 1223→1224, 2828→2829 ×2, i.e. 3 lens rows = 2
+unique cycles, the 2828→2829 one being sub `2639/−1` mirrored into both lenses;
+measured on the first Plan C replay: one visible shift, sub `454/+1`'s cycle-1
+end 1223→1224 — the 2828→2829 pair is masked by an equal floor, GOTCHAS "A
+Predicted +1 Shift Can Be Masked by an Equal Floor"; H1 byte-identical).
 Collapsed cycles (clamped `start >= end`) are
 uniformly `status="inactive"` with empty `activation_history` (outline-only) —
 this replaced the prior split
@@ -1801,7 +1814,10 @@ Cycles" below).
 >   `run_cap_abs = len(m15) - 1`) — a compute bound only; the lifecycle
 >   projection (`render_sub_projection`) applies the sub's `[start_idx,
 >   end_idx]` once and mirrors it into every lens df in `sub.lenses()`. The
->   knowable-at clip on render (`knowable_at_idx`) is unchanged.
+>   knowable-at clip on render (`knowable_at_idx`) is unchanged — it keys only
+>   `BOS_CONFIRMED` on its moment and everything else on `ev.idx`, so
+>   `CTS_ESTABLISHED` / `REVERSAL_CANDIDATE` can straddle a cap (known limit,
+>   PART4 §17.12; see "Sub-Structure Pool: Run Cap ≠ Lifecycle End…" below).
 > - **Probe cache** keys `(parent_path, sub_tf, direction, initial_input_idx)`
 >   (unchanged in shape; first-probe-is-truth, `ProbeCacheEntry`). See "Probe
 >   Cache Keys Are Shared by Reversal Handoffs" for the measured hits.
@@ -1911,12 +1927,30 @@ that differs from an independent rebuild.
 | **Lifecycle end** | when the sub stops being current in a lens | `min(end-candidate ≥ max start)` (§ above) |
 
 The run cap must be ≥ the natural reversal (else the reversal is missed) but is
-otherwise a pure compute/cost bound. **On render into a lens, clip events by the
-KNOWABLE-AT idx** (`confirmed_at` for `BOS_CONFIRMED`, `ev.idx` otherwise) — NOT
-by `ev.idx` uniformly. Clipping by `ev.idx` would surface a BOS whose extreme is
-inside the window but whose confirmation lookahead landed past it — an event the
-Phase-1 bounded run could not have known. Knowable-at matches Phase-1 semantics
-and neutralizes the boundary-straddling-confirmation case.
+otherwise a pure compute/cost bound. **On render into a lens, events are clipped
+by `knowable_at_idx`** (`multitf/sub_structure_pool.py`, applied by
+`pooled_structure_build.clip_events_to_window`) — NOT by `ev.idx` uniformly.
+What the code does: `BOS_CONFIRMED` is keyed on `meta["confirmed_at"]`, every
+other type on `ev.idx`. The `BOS_CONFIRMED` case is the point: clipping it by
+`ev.idx` (the BOS extreme) would surface a BOS whose extreme is inside the
+window but whose confirmation landed past it — an event the Phase-1 bounded run
+could not have known.
+
+**That key is the code's behaviour, not the rule.** `ev.idx` is the knowable-at
+candle only for events whose `ev.idx` IS their moment (`CTS_CONFIRMED` /
+`CTS_RECONFIRMED` — `ev.idx == confirmed_at` — raw-path `CTS_UPDATED`,
+`STATE_CHANGED`). It is NOT for
+`CTS_ESTABLISHED` (`ev.idx` = the retro-stamped CTS extreme, knowable at
+`meta["confirmed_at"]`), `REVERSAL_CANDIDATE` (applies at `meta["apply_idx"]`),
+or a pattern-path `CTS_UPDATED` (`via` = a pattern name: stamped at the span
+extreme, no moment recorded) — see ARCHITECTURE "`ev.idx` convention". Any of
+the three can straddle a cap (`ev.idx <= cap <` its moment) and survive the
+clip; for the first two a mid-pair clip yields a half-derived cycle — the
+known limit recorded in PART4 §17.12 (not fixed; zero `CTS_ESTABLISHED` /
+`REVERSAL_CANDIDATE` straddles on the reference window, `/compare` baseline
+`20260922_195430_aadb887`); the third has no moment column to key on at all.
+The rule for any new or changed clip: key each type on its moment column, never
+on `ev.idx` by default. Changing this clip is its own `/compare`.
 
 ---
 

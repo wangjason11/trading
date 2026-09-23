@@ -45,6 +45,25 @@ Match ONE of:
 
 ---
 
+## Index fields used below
+
+The searches mix several "anchor" values. They are **different fields** — never interchangeable
+(canonical per-event table: `ARCHITECTURE.md` "`ev.idx` convention"):
+
+| Name here | Source | What it is |
+|---|---|---|
+| `anchor_idx` (BOS sections) | the BOS zone's `meta["anchor_idx"]` = `BOS_CONFIRMED.idx` | the BOS **anchor** |
+| `cts_anchor_idx` (CTS sections) | the CTS zone's `meta["anchor_idx"]` = `CTS_CONFIRMED.meta["cts_anchor_idx"]` | the CTS **anchor at confirmation** (equals `CTS_ESTABLISHED.idx` unless a `CTS_UPDATED` moved it) |
+| `first_CTS_anchor`, `pattern_anchor_idx`, the scan-back `anchor_idx` | the same cycle's `CTS_ESTABLISHED.meta["anchor_idx"]` | the breakout pattern's **first candle** (a pattern-realm anchor) — not necessarily the CTS anchor |
+| the event candle in the CTS event walk | `ev.idx` of `CTS_ESTABLISHED` / `CTS_UPDATED` | a **price location**: the CTS anchor (`CTS_ESTABLISHED`, pattern-path `CTS_UPDATED`) or the processed candle (raw-path `CTS_UPDATED`, `via == "replay_raw"`) |
+
+A bare `confirmed_at` below (the CTS Last Breakout BIB Step 3 bound, and the Step 1(b) gap-scan end
+after the last event) is the same cycle's `CTS_CONFIRMED.meta["confirmed_at"]` (== its `idx`, the
+confirmation candle). `CTS_ESTABLISHED`'s own `meta["confirmed_at"]` (its apply candle, the
+established moment) is always written out in full.
+
+---
+
 ## BOS Wave Candles
 
 ### Last Pullback (BIB path)
@@ -81,13 +100,13 @@ Scan forward from `last_pb_idx + 1` to next CTS_CONFIRMED (or end of data).
 
 Three-step event walk:
 
-**Step 1 — Event walk:** Iterate CTS_ESTABLISHED + CTS_UPDATED events in order.
+**Step 1 — Event walk:** Iterate CTS_ESTABLISHED + CTS_UPDATED events sorted by `ev.idx` (the event candle — see "Index fields used below").
 For each event:
 - (a) Direct check: event candle is qualified AND wick enters zone AND closes within zone
   - **Pattern scan-back (CTS_ESTABLISHED only):** If the event candle matches AND has `anchor_idx` in meta, scan from `anchor_idx` to `ev_idx` (exclusive) for the first qualified candle closing within the zone. If found, return that earlier candle instead of the event candle.
-  - **Rationale:** The event candle is the last candle of the pattern. The *first* pattern candle entering the zone better represents the initial breakout moment.
+  - **Rationale:** The event candle is the CTS **extreme** — the first highest high / lowest low over the breakout pattern's span, so `meta["anchor_idx"]` (the pattern's first candle) `<= ev_idx <=` the apply candle `CTS_ESTABLISHED.meta["confirmed_at"]` (not the bare `confirmed_at` of Steps 1(b)/3). It is usually the apply candle, but can be an earlier pattern candle; when the first candle itself holds the extreme (`anchor_idx == ev_idx`) the scan-back is empty. The *first* pattern candle entering the zone better represents the initial breakout moment.
   - If no earlier pattern candle qualifies, return the event candle itself.
-- (b) Gap scan: scan between current event idx and next event idx for qualified candle closing within zone
+- (b) Gap scan: scan between current event idx and next event idx (after the last event: up to `confirmed_at`, exclusive, if the cycle has a `CTS_CONFIRMED`) for qualified candle closing within zone
 
 **Step 2 — Fallback before anchor:** `[cts_anchor_idx - 10, cts_anchor_idx)`
 - First qualified candle closing within zone
@@ -190,8 +209,8 @@ Each rendered line maps to a `(role, cycle_offset)` for visibility lookup:
 
 - **Locked** — the wave candle is *set and won't change*. Physically located at
   `BOS_{N+1}.last_wave_candle` (rendered via the wave_candle_results loop with the
-  cross-cycle attribution above). Lock happens at `CTS_{N+1}` ESTABLISHED, only
-  when the cycle ends via `next_cycle`.
+  cross-cycle attribution above). Lock happens at the `CTS_{N+1}` ESTABLISHED
+  moment (the cycle end), only when the cycle ends via `next_cycle`.
 - **Temp** — the wave candle is *not yet locked; it can shift* to a closer-to-outer
   qualified candle as new bars arrive. While temp, this candle still IS the LP and
   IS the input that WVMI momentum uses (`_find_temporary_lp` is the mechanism that
@@ -267,8 +286,8 @@ Cycle N's LP is physically the `BOS_{N+1}.last_wave_candle` line, so it requires
 | Reversal / parent-end **before** `CTS_N` established (retroactive Scenario-2, `reversal_example.png`) | — | — | — | — | collapsed; all never activated |
 | Active last cycle (no end yet) | ✓ locked | ✓ locked if `CTS_K` conf fired | ✓ locked if `CTS_K` conf fired | ✓ **temp** if WVMI-gated and `CTS_K` conf fired | LP rendered as the **temp** wave candle from `WVMIRecord.lp_idx` (separate WVMI-temp-LP rendering pass); shifts each bar in live, sits at its end-of-data position in a static chart; no `BOS_{K+1}` exists yet so no locked LP. For cycles NOT WVMI-gated, no temp LP candle is computed → not rendered. |
 
-**Cross-cycle visual at structural points:** at `CTS_{N+1}` ESTABLISHED two
-records hit the same idx — **LP_N locks** (rendered via `BOS_{N+1}.last`) and
+**Cross-cycle visual at structural points:** at the `CTS_{N+1}` ESTABLISHED
+moment two records hit the same idx — **LP_N locks** (rendered via `BOS_{N+1}.last`) and
 **FB_{N+1} simultaneously activates + locks** (rendered via `BOS_{N+1}.first`).
 They appear together as the "structural-point pair" but are independent records
 attributed to *different* cycles (LP→N, FB→N+1). This is why `BOS.last` needs
@@ -301,4 +320,4 @@ apples-to-apples. KL/POI/etc. unchanged.)
 - `structure_id`, `cycle_id`, `source_kind` (BOS/CTS), `zone_side`
 - `last_wave_candle_idx`: Optional[int]
 - `first_wave_candle_idx`: Optional[int]
-- `meta`: dict with `base_pattern` and `anchor_idx`
+- `meta`: dict with `base_pattern` and `anchor_idx` (the zone's `meta["anchor_idx"]` — the BOS / CTS extreme; see "Index fields used below")

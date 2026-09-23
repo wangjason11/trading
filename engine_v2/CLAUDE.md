@@ -34,8 +34,9 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 ## Quick Commands
 
 ```bash
-# Run replay pipeline (generates charts + CSVs)
-python -m engine_v2.run_replay
+# Run replay pipeline (generates charts + CSVs), from the repo root.
+# Capture the log: the M15 fetch gate (WORKFLOWS.md / /compare §2b) reads run.log.
+python -m engine_v2.run_replay > run.log 2>&1
 
 # Run tests
 pytest

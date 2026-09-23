@@ -618,6 +618,19 @@ paths. Per iteration it picks the single most-extreme retrace candle in
 `[first_CTS_EST.idx + 1, probe_end_idx]` and applies a **two-condition reset**;
 both must hold for the probe to restart from that candidate.
 
+> **What "`first_CTS_EST.idx`" is differs by phase (verified 2026-09-22).**
+> Phase 1 (deterministic) starts the window at `tfb.est_idx + 1`
+> (`unified_probe.py` Phase 1, `_select_extreme_retrace_candidate`) —
+> `est_idx` is the true first breakout's apply candle, i.e. the CTS_0
+> established **MOMENT**. Phase 2 (MS-based, first_confluence only) starts
+> it at `cts_est[0].idx + 1` (`check_lo = first_cts.idx + 1`) — the CTS_0
+> **EXTREME** (`ARCHITECTURE.md` "`ev.idx` convention"). A known divergence
+> whenever the extreme precedes the moment (Phase 2 then also scans the
+> candles after the extreme up to and including the moment, which Phase 1
+> skips); it is not reconciled here — changing either start
+> can change the reset candidate (so `starting_idx` = the pool key) and is
+> its own `/compare`.
+
 ### Two-condition reset
 
 **Condition 1 — proximity to inner.** Candle wick extreme within
@@ -1123,8 +1136,10 @@ sub cycles/structures never start before their parent.
   > on the apply candle (which is the breakout candle for BOS), not the CTS
   > extreme. Where extreme == moment nothing changes (H1 on the reference
   > window: byte-identical). Measured on the M15 subs: one visible +1 shift
-  > (sub `454/+1` cycle-1 end 1223 → 1224); two more (2828 → 2829) are masked
-  > by the identical record floor 2829 (§17.11).
+  > (sub `454/+1` cycle-1 end 1223 → 1224); the only other extreme ≠ moment
+  > cycle (sub `2639/−1` cycle 1, 2828 → 2829 — two CSV rows because the sub
+  > is mirrored into both lenses) is masked by the identical record floor 2829
+  > (§17.11).
 - **Scope of the unification.** The pass-through lifecycle model governs
   **zones and cycles** (KL + POI). It deliberately does **not** apply to
   structure events or patterns — those are immutable append-only facts whose
@@ -2969,12 +2984,16 @@ canonical cycle-start idx"). Plan C changes the canonical rule in
 `zones/structure_lifecycle.py::compute_cycle_lifecycle` — cycle start =
 `max(CTS_ESTABLISHED.meta["confirmed_at"], struct_start, floor)` — so main, sub
 cycles and this parent table all agree. On the reference window H1 is
-byte-identical (extreme == moment on all five cycles); three M15 sub cycles
-have extreme ≠ moment (1223/1224, 2828/2829 ×2) and were PREDICTED to shift
-+1 — measured: ONE visible shift (the 1223→1224 case, as the END of sub
-`454/+1`'s cycle 1), the two 2828→2829 cases masked by an equal record floor
-(see the blockquote below and GOTCHAS "A Predicted +1 Shift Can Be Masked by
-an Equal Floor").
+byte-identical (extreme == moment on all five cycles); two unique M15 sub
+cycles have extreme ≠ moment, each by one candle — three CSV rows, because
+sub `2639/−1` is mirrored into both lenses (1223/1224; 2828/2829 ×2) — and
+were PREDICTED to shift +1 — measured: ONE visible shift (the 1223→1224 case,
+as the END of sub `454/+1`'s cycle 1), the 2828→2829 cycle (both lens rows)
+masked by an equal record floor (see the blockquote below and GOTCHAS "A
+Predicted +1 Shift Can Be Masked by an Equal Floor"). Extreme == moment is the
+common case (31 of the 34 `CTS_ESTABLISHED` rows), not luck — but it is not
+guaranteed, and the one-candle lag is empirical, not a bound (`ARCHITECTURE.md`
+"`ev.idx` convention").
 
 > **As landed (2026-09-20) — what the moment rule actually reaches.**
 > `compute_cycle_lifecycle` Pass 1 is on the moment, and the cycle START feeds
@@ -2996,9 +3015,11 @@ an Equal Floor").
 **Assert** `BOS_CONFIRMED(S,C).meta["confirmed_at"] ==
 CTS_ESTABLISHED(S,C).meta["confirmed_at"]` (definitional — both are the same
 `apply_idx`); **never** assert it against `CTS_ESTABLISHED.idx` (false on 3
-of the saved M15 pairs, true on H1 here only by luck). `ARCHITECTURE.md`'s
-"`ev.idx` convention" gains `CTS_ESTABLISHED` as a second extreme-not-apply
-exception beside `BOS_CONFIRMED`.
+of the 34 saved `CTS_ESTABLISHED` rows — 2 unique M15 cycles; true on all 5 H1
+cycles here because extreme == apply candle is the common case, not a
+guarantee). The per-event field table (`ev.idx` vs `meta["confirmed_at"]` vs
+the `anchor_idx` keys of the two anchor realms, for every structural event) is canonical
+in `ARCHITECTURE.md` "`ev.idx` convention".
 
 Reference window values: floors `(0,0)=463 (0,1)=2611 (1,x)=3611`; ends
 `2611 / 3611 / 3611 / 3611 / None`; degenerate `{(1,0), (1,1)}`.
@@ -3269,7 +3290,9 @@ one replay). Each with its own replay, `/compare`, chart-review pause and
    over [4083, 4200] (opposite directions); `end_reason` vocabulary;
    `sub_sid` → `sub_id`; `lifecycle_end` absent; possible small
    `starting_idx` shifts from the sibling read (§17.8, each explained); exactly
-   three sub-cycle lifecycle starts +1 candle (§17.6). Own reversals for the
+   three sub-cycle lifecycle starts +1 candle (§17.6 — three lens rows, two
+   unique sub cycles: `2639/−1` is on both lenses; measured: one visible, the
+   other masked — below). Own reversals for the
    subs whose baseline build was cut at a parent bound may now be discovered
    with the run cap at the data edge — if one lands before the listed end,
    that end moves earlier and a successor appears (intended, document it).
@@ -3322,8 +3345,11 @@ sibling dfs. `test_sub_id_is_monotonic_and_stable` must survive unchanged.
   parent ended + no live reference), and the **Phase 3 per-candle dual-lens
   driver** (the sweep's step body is its loop body) — leave hooks.
 - `knowable_at_idx` special-cases only `BOS_CONFIRMED`; `CTS_ESTABLISHED` /
-  `REVERSAL_CANDIDATE` straddle too and are half-clipped at a window edge. Not
-  fixed here — note any half-clipped cycle seen during chart review.
+  `REVERSAL_CANDIDATE` straddle too and are half-clipped at a window edge, and
+  so can a pattern-path `CTS_UPDATED` (`meta["via"]` = a pattern name: `ev.idx`
+  is the span extreme, and its apply candle is not recorded at all —
+  `ARCHITECTURE.md` "`ev.idx` convention"). Not fixed here — note any
+  half-clipped cycle seen during chart review.
 - Whether subs should receive the **derived** CTS KL zone as a probe reference
   (§17.8 — the branch is dead for subs today).
 

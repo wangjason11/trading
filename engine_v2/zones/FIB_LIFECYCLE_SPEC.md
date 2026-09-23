@@ -234,6 +234,12 @@ their storage differs, and the projection bridges them.
 
 **`start_idx` = the cycle-fib IDENTITY's FIRST version's birth idx.** Normally
 that is the cycle's lifecycle-start (the CTS-established floor, as zones use).
+(Known limit: the tracker stamps that birth at its `activated_at` — usually
+`CTS_ESTABLISHED.idx` (the extreme); a fib first activated on a later
+`CTS_UPDATED` (`meta["activated_on"] == "update"`, `fib_tracker.py`
+`_handle_cross_cycle_cts_updated` / `_handle_cycle0_cts_updated`) stamps that
+update's idx — while zones use the established moment `meta["confirmed_at"]`;
+the extreme and the moment are equal in the common case. See §15.3.)
 
 **The one exception — pre-established cross (SUBORDINATE-ONLY).** In `cross_cycle`
 mode a cross fib for cycle `n+1` is created during cycle `n`'s **tail**
@@ -250,7 +256,9 @@ Corollaries:
   belongs to the identity, not to a version).
 - **Main (h1) has no pre-established phase** (`_m15_phase` is never set on the
   main path; the Scenario-2 cross is created at `CTS_1` ESTABLISHED). So main
-  fibs always start at cycle-start — the exception is subordinate-only. This is
+  fibs start at their `activated_at`, which equals cycle-start wherever extreme == moment and
+  there was no update-activation (all H1 fibs on the reference window; see the known limit
+  above) — the pre-established early start is subordinate-only. This is
   why the start-anchor change **does not** touch H1-main fib timing.
 - Implementation: the value already exists as `meta["activated_at"]` on the
   first version (`_m15_create_cross:1818`); take it from the **earliest** version
@@ -291,7 +299,16 @@ Consequences (accepted):
    flips phase to `established` before any single can be created. So singles
    only ever appear at/after `CTS` established.
 2. **Cycle `n`'s fib (single OR cross) end = passed-through cycle-`n`-end value**
-   (= next-cycle `CTS_{n+1}` ESTABLISHED when non-terminal). Zone-consistent.
+   (= next-cycle `CTS_{n+1}` ESTABLISHED moment when non-terminal). Zone-consistent
+   — **known limit:** when cycle `n+1`'s fib is created at `CTS_{n+1}` ESTABLISHED
+   (`_activate_fib`'s `new_cycle` stamp, or a cross created there, whose
+   `_obsolete_prev_cycle_all_fibs` stamps it), the tracker sets cycle `n`'s terminal
+   at `CTS_{n+1}.idx` — the extreme — and earliest-wins keeps it over the
+   pass-through moment, so fib and zone ends agree only where the extreme equals
+   the moment (the common case). Latent instance on the reference window: sub 3
+   cycle 0's fib ends `new_cycle` at 2828 vs the cycle end (its KL zone's
+   `end_idx`) 2829, on both lenses (the fib is collapsed, so nothing renders). A separate cause (`ARCHITECTURE.md` "`ev.idx`
+   convention"); not fixed here.
 3. **Cycle `n+1`'s fib start = its first-active = cycle start.** Zone-consistent.
 
 **Scope of Option A's early-end:** same-sid next-cycle progression only — which,
@@ -885,15 +902,29 @@ not lifecycle.
 - **Clamp (part b, §15.6):** `start_idx = max(own first-active, struct_floor)`
   where `struct_floor = compute_struct_start_by_sid(events, rev, lifecycle_floor)[sid]`
   — the **structure** lifecycle-start (reversal handoff + parent floors), **NOT**
-  the full cycle-start `max(CTS_ESTABLISHED.ev.idx, struct_start, floor)` that
-  KL/POI clamp to. **This is the one place fib's clamp differs from zones**, and the
+  the full cycle-start `max(CTS_ESTABLISHED.meta["confirmed_at"], struct_start,
+  floor)` (`compute_cycle_lifecycle` — the established **moment**, not
+  `CTS_ESTABLISHED.idx`, the extreme, since Plan C 2026-09-20). KL's zone clamp is
+  equivalent to that full cycle-start: it clamps `confirmed_idx` to `struct_start`
+  (`kl_zones_v1.derive_kl_zones_v1`), and the moment term holds by construction (a
+  BOS zone's raw `confirmed_idx` IS the moment; a CTS zone's is at or after it). POI's
+  activation floor is its own rule — see `POI_ZONES_SPEC.md` §4 "Activation floor".
+  **This is the one place fib's clamp differs from zones**, and the
   reason is §6: a subordinate pre-established cross legitimately starts *before* its
   own cycle's CTS-established, so clamping up to CTS-established would wrongly erase
   that early start. Clamping only to the structure/parent floor raises a start *only*
   when it precedes the parent floor (the B1 gap — a sub active before its parent
   cycle) while leaving the §6 early start intact (it sits after the floor). For
-  H1-main there is no pre-established phase, so `first-active ≈ CTS_EST` and the two
-  clamps coincide. **Collapsed** (clamped start ≥ resolved end) → `start_idx = None`,
+  H1-main there is no pre-established phase, so first-active = the tracker's
+  `activated_at` — usually `CTS_ESTABLISHED.idx`, the **extreme**, which FibTracker
+  still reads as a time (**known limit**, a separate cause listed under
+  `ARCHITECTURE.md` "`ev.idx` convention"; not fixed here); on main and subs alike a
+  fib first activated on a later `CTS_UPDATED` (`meta["activated_on"] == "update"`)
+  stamps that update's idx instead (e.g. on the reference window the counter lens's
+  sub 3 cycle 0: first-active 2650 — slice-local `activated_at` 61 in the fib CSV
+  meta — vs its `CTS_ESTABLISHED.idx` 2649). The two clamps therefore coincide wherever
+  the fib's first-active equals the moment — i.e. extreme == moment and no update-activation
+  — the common case, incl. all three H1 fibs on the reference window. **Collapsed** (clamped start ≥ resolved end) → `start_idx = None`,
   `status = "inactive"` — the same collapse rule KL/POI use.
 
 ### 15.4 `end_idx` — pass-through is a *candidate*, earliest wins

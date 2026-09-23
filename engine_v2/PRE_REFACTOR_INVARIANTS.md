@@ -67,32 +67,41 @@ candle features → structure patterns → imbalance → market structure
 
 ## Event contracts
 
-**`ev.idx` semantics — index conventions per event type (CRITICAL):**
+**`ev.idx` semantics — index conventions per event type (CRITICAL):** the
+canonical per-event field table (every field, the bound, the measured
+frequencies) is `ARCHITECTURE.md` "`ev.idx` convention" — read it there. Summary
+only (corrected 2026-09-22; see the note below):
 
 | Event | `ev.idx` means | Notes |
 |---|---|---|
-| `CTS_ESTABLISHED` | confirmation candle | extreme is in `meta["anchor_idx"]` for pattern context |
-| `CTS_UPDATED` | confirmation candle | |
-| `CTS_CONFIRMED` | confirmation candle | extreme in `meta["cts_anchor_idx"]`; `confirmed_at` mirrors `ev.idx`; **new:** `meta["confirmation_method"]` |
-| `CTS_RECONFIRMED` (new) | pullback confirmation candle | only fires after proximity-confirmed CTS |
-| `BOS_CONFIRMED` | **BOS extreme candle** (NOT confirmation) | `meta["confirmed_at"]` = confirmation candle |
-| `REVERSAL_CANDIDATE` | anchor candle | `meta["apply_idx"]` = effective application |
+| `CTS_ESTABLISHED` | **CTS extreme** in the breakout pattern span (retro-stamped — NOT the confirmation candle) | moment = `meta["confirmed_at"]` (the pattern's apply candle); `meta["anchor_idx"]` = the breakout pattern's FIRST candle — **not necessarily the extreme** (it is when the first candle holds it; 0 of 34 on the reference window), never a timing value |
+| `CTS_UPDATED` | raw path (`meta["via"] == "replay_raw"`): the processed candle; pattern path (`via` = a pattern name): the pattern-span extreme | no `confirmed_at` / `anchor_idx` on any `CTS_UPDATED` — a pattern-path update's apply candle is not recorded |
+| `CTS_CONFIRMED` | confirmation candle | `confirmed_at` mirrors `ev.idx`; `meta["cts_anchor_idx"]` = the CURRENT CTS extreme at confirmation (== `CTS_ESTABLISHED.idx` only if no `CTS_UPDATED` moved it); `meta["confirmation_method"]` |
+| `CTS_RECONFIRMED` (new) | pullback confirmation candle | only fires after proximity-confirmed CTS; `confirmed_at` mirrors `ev.idx` |
+| `BOS_CONFIRMED` | **BOS extreme candle** (NOT confirmation) | `meta["confirmed_at"]` = the same apply candle as the cycle's `CTS_ESTABLISHED.meta["confirmed_at"]` |
+| `REVERSAL_CANDIDATE` | reversal-pattern anchor candle | `meta["apply_idx"]` = the SCHEDULED apply — a prediction that can expire (the applied reversal is `STATE_CHANGED(to=reversal)`) |
 | `RANGE_*` | varies — see GOTCHAS for sort-order rules | |
 
 **Event ordering invariant:** `sorted_events` uses `(idx, type)` (alphabetical
 type tiebreak). Mode C M15 phase gate depends on this — see LANDMINES.
 
-> **Correction note (Plan C, 2026-09-20) — historical snapshot left as written
-> above; this row was wrong.** `CTS_ESTABLISHED.ev.idx` is NOT the confirmation
-> candle: it is the CTS **extreme** inside the breakout pattern span
-> (`market_structure._emit_cts_established(cts_idx, ...)`); the establishing
-> moment is `meta["confirmed_at"]` (= the pattern's `apply_idx`, == the same
-> cycle's `BOS_CONFIRMED.meta["confirmed_at"]` by definition). The extreme can
-> precede the moment (three M15 sub cycles on the reference window: 1223 vs
-> 1224, 2828 vs 2829 ×2; equal on all five H1 cycles only by coincidence).
-> `CTS_ESTABLISHED` is therefore the second extreme-not-apply exception beside
-> `BOS_CONFIRMED` (`ARCHITECTURE.md` "`ev.idx` convention"); every lifecycle
-> reader (`zones/structure_lifecycle.compute_cycle_lifecycle`,
+> **Correction note (Plan C 2026-09-20; rewritten 2026-09-22).** The pre-Part-4
+> snapshot of this table was wrong on two rows: it gave `CTS_ESTABLISHED` and
+> `CTS_UPDATED` `ev.idx` as "confirmation candle", and said of `CTS_ESTABLISHED`
+> "extreme is in `meta["anchor_idx"]` for pattern context". **That sentence is
+> RETRACTED:** `CTS_ESTABLISHED.meta["anchor_idx"]` is the breakout pattern's
+> first candle (`ev.start_idx`, the MS loop anchor) — on the reference window it
+> is never the extreme (0 of 34 `CTS_ESTABLISHED` CSV rows); the extreme is
+> `ev.idx` itself. The 2026-09-20 note fixed the `ev.idx` column but left that
+> sentence standing, and it is the probable origin of a wrong `memory/_INBOX.md`
+> line ("anchor_idx is the extreme", 2026-09-22). Extreme == moment is the
+> COMMON case, not a coincidence (31 of 34 rows); the 3 lagging rows are 2 unique
+> M15 cycles (sub 3 is mirrored into both lenses) — 1223 vs 1224 and 2828 vs
+> 2829, lag 1, empirical and not a bound (the bound is `anchor_idx <= ev.idx <=
+> confirmed_at <= anchor_idx + 5`). `CTS_ESTABLISHED` is one of the
+> extreme-located events (with `BOS_CONFIRMED` and pattern-path `CTS_UPDATED` —
+> ARCHITECTURE.md "`ev.idx` convention"); every lifecycle reader
+> (`zones/structure_lifecycle.compute_cycle_lifecycle`,
 > `multitf/parent_tables.py`) uses `meta["confirmed_at"]`.
 
 **Event append-only contract:** Events are never modified after emission.

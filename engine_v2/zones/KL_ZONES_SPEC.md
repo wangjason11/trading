@@ -9,22 +9,40 @@ They are intended to be visually validated (and later traded) as “key levels�
 
 ## Canonical semantics (authoritative)
 
-This is copied from the canonical spec block in the module:
+Originally copied from the canonical spec block in the module docstring (`kl_zones_v1.py`). The
+indexing bullets below were corrected 2026-09-22 against `ARCHITECTURE.md` "`ev.idx` convention"
+(the canonical per-event field table); the module docstring still carries the older "level
+index" wording for both events (a `.py` follow-up).
 
 ### Identifiers
 - `structure_id`: market structure unit id (directional regime). Starts at 0. Increments on reversal.
 - `cts_cycle_id`: internal CTS/BOS cycle id within a structure. Starts at 0.
 
-### StructureEvent indexing
-- `ev.idx`: the *level index* (where the BOS/CTS level is anchored; often an earlier extreme).
-- `ev.meta["confirmed_at"]`: candle index where that level was confirmed (breakout/pullback timing).
+### StructureEvent indexing (the two zone-creating events)
+`ev.idx` is **event-specific** — it is not uniformly "the level" nor "when it is known":
+- `BOS_CONFIRMED.idx` = the BOS **extreme** (the level; `<= confirmed_at` on the normal path —
+  34/34 rows on the reference window; not asserted in code).
+  `meta["confirmed_at"]` = the breakout's apply candle — the cycle's CTS-established moment.
+- `CTS_CONFIRMED.idx` = the **confirmation candle** (the pullback apply candle, or the
+  sd-proximity candle) and `== meta["confirmed_at"]`; it is NOT the CTS level. The level — the
+  current CTS extreme at confirmation — is `meta["cts_anchor_idx"]`.
 
 ### Zone indexing
-- `meta["base_idx"]`: anchor candle of the zone base pattern (where rectangle begins).
-- `meta["source_event_idx"]`: the StructureEvent level index used to derive the zone (ev.idx).
-- `meta["confirmed_idx"]`: candle index where the zone becomes confirmed for charting:
-  - BOS-derived: confirmed_idx = `ev.meta["confirmed_at"]` (breakout candle)
-  - CTS-derived: confirmed_idx = `ev.idx` (pullback candle)
+- `meta["base_idx"]`: FIRST candle of the zone base pattern (where the rectangle begins) — at or before
+  the zone's `anchor_idx` (see "base_idx by Pattern Type"); a different field from the anchor.
+- `meta["source_event_idx"]`: the source event's `ev.idx` — BOS: the BOS extreme; CTS: the
+  confirmation candle (so it equals the CTS zone's raw `confirmed_idx`). Slice-local (not shifted
+  by `slice_begin`) in the M15 lens CSVs — it is not in `_ZONE_META_IDX_KEYS`.
+- `meta["anchor_idx"]`: the candle base-pattern identification starts from — BOS:
+  `source_event_idx` (the BOS anchor); CTS: `CTS_CONFIRMED.meta["cts_anchor_idx"]` (the CTS
+  anchor at confirmation). A market-structure-realm anchor — **not** `CTS_ESTABLISHED.meta
+  ["anchor_idx"]` (the breakout pattern's first candle, a pattern-realm anchor); see GLOSSARY
+  "Naming Standard" / ARCHITECTURE.md "Anchor has two realms".
+- `meta["confirmed_idx"]`: candle index where the zone becomes confirmed for charting — raw value
+  `ev.meta["confirmed_at"]` for both kinds (fallback `ev.idx`), then clamped up to the structure
+  lifecycle-start (see "Lifecycle-start clamp" below):
+  - BOS-derived: the breakout's apply candle (the moment)
+  - CTS-derived: the confirmation candle (`== ev.idx`)
 
 ### Chart rules
 - Show zones for the most recent `structure_id`.
@@ -41,7 +59,7 @@ KL zones are computed after structure, with **base patterns identified on-demand
 
 ## Base Pattern Identification (Structure-Aware)
 
-Base patterns are now identified **on-demand** when a BOS/CTS event is received, using the anchor_idx and struct_direction context. Pattern identification is performed by `identify_base_pattern()`.
+Base patterns are now identified **on-demand** when a BOS/CTS event is received, using the zone's anchor_idx (the BOS / CTS extreme — "Zone indexing" above) and struct_direction context. Pattern identification is performed by `identify_base_pattern()`.
 
 ### Pattern Check Order
 1. **Inside bar pattern** (new): Check if anchor candle has ≥2 candles within its range (5 left + 5 right)
@@ -83,9 +101,11 @@ Base window features (`base_low`, `base_high`, etc.) are computed on-the-fly via
   1) Determine `source_event_idx = ev.idx`
   2) Determine `confirmed_idx`:
      - `confirmed_idx = ev.meta["confirmed_at"]` when present else source_event_idx
-  3) Determine anchor_idx:
-     - BOS: anchor_idx = source_event_idx
-     - CTS: anchor_idx = ev.meta["cts_anchor_idx"] (fallback to source_event_idx)
+  3) Determine anchor_idx (stored as the zone's `meta["anchor_idx"]` — a different field from
+     `CTS_ESTABLISHED.meta["anchor_idx"]`, the breakout pattern's first candle):
+     - BOS: anchor_idx = source_event_idx (the BOS extreme)
+     - CTS: anchor_idx = ev.meta["cts_anchor_idx"] (the CTS extreme at confirmation; fallback to
+       source_event_idx)
   4) Identify (base_pattern, base_idx) via `identify_base_pattern(df, anchor_idx, struct_direction, bos=...)`
   5) Compute thresholds via `zone_thresholds(...)`
   6) Map side based on struct_direction + event type
@@ -242,8 +262,9 @@ main.
 > Plan C 2026-09-20.** A cycle's lifecycle begins when it is *established* —
 > `CTS_ESTABLISHED.meta["confirmed_at"]` (the apply candle, == `BOS_CONFIRMED.meta["confirmed_at"]`
 > by definition). `CTS_ESTABLISHED.ev.idx` is the CTS **extreme**, a historical anchor like
-> `BOS_CONFIRMED.ev.idx`; it can precede the moment (3 sub cycles on the reference window: 1223 vs
-> 1224, 2828 vs 2829 ×2 — identical on H1 there only by coincidence).
+> `BOS_CONFIRMED.ev.idx`; it can precede the moment. Extreme == moment is the COMMON case, not a
+> coincidence (31 of 34 `CTS_ESTABLISHED` CSV rows on the reference window, all five H1 cycles;
+> the bound, the lagging rows and why they lag: canonical: `ARCHITECTURE.md` "`ev.idx` convention").
 > `structure_lifecycle.compute_cycle_lifecycle` now reads the moment — for main, every sub cycle and
 > the sub-structure parent tables (`multitf/parent_tables.py`) alike — and **raises** (`AssertionError`)
 > on a `CTS_ESTABLISHED` without `meta["confirmed_at"]` rather than falling back to the extreme.
@@ -260,8 +281,8 @@ the CTS-established *moment* (the same value POI inherits through
 
 | Zone | Old end (pre-Phase-3) | End (cycle-end, Plan C) | Change |
 |------|---------|---------------------|--------|
-| **CTS_n** | next CTS established `ev.idx` (early-end) | next cycle's clamped start (moment) | none where extreme == moment; +1 candle where the extreme precedes the moment |
-| **BOS_n** | next BOS's `confirmed_at` (breakout, same-side replace) | next cycle's clamped start (moment) | **none** by definition when the next cycle's start is unclamped — `BOS_{n+1}.confirmed_at == CTS_{n+1}.confirmed_at` (the Phase-3 "≤1 candle earlier" shift onto the extreme is undone by Plan C); later only when `struct_start` / `lifecycle_floor` clamps the next cycle's start |
+| **CTS_n** | next CTS established `ev.idx` (early-end) | next cycle's clamped start (moment) | none where extreme == moment (the common case); later by the extreme→moment lag where the extreme precedes the moment (see the note above) |
+| **BOS_n** | next BOS's `confirmed_at` (breakout, same-side replace) | next cycle's clamped start (moment) | **none** by definition when the next cycle's start is unclamped — `BOS_{n+1}.confirmed_at == CTS_{n+1}.confirmed_at` (the Phase-3 shift onto the extreme — that same extreme→moment lag — is undone by Plan C); later only when `struct_start` / `lifecycle_floor` clamps the next cycle's start |
 | reversal-capped | reversal idx | reversal idx | label only (`end_reason` replaces `deactivated_by`) |
 | sub-window-capped | — | the sub's `end_idx` | `end_reason` = the sub's `end_reason` |
 | last / open zone | `None` / reversal | `None` / reversal | none |
@@ -269,8 +290,9 @@ the CTS-established *moment* (the same value POI inherits through
 Why the two definitions can differ: a breakout emits `BOS_{n+1} CONFIRMED`
 (`confirmed_at` = breakout `apply_idx`) and `CTS_{n+1} ESTABLISHED`
 (`ev.idx` = the breakout-window extreme, `meta["confirmed_at"]` = the same
-`apply_idx`) together. When the breakout candle *is* the extreme, extreme and
-moment coincide; otherwise the extreme is 1 candle earlier. **Empirically
+`apply_idx`) together. When the apply candle *is* the extreme (the common case),
+extreme and moment coincide; otherwise the extreme is earlier (bound and lag
+figures: `ARCHITECTURE.md` "`ev.idx` convention"). **Empirically
 (history):** all 10 H1 zones in baseline `e0b70dd` had `confirmed_at == ev.idx`,
 so the Phase-3 extreme rule left H1 `end_time` byte-identical; on the M15 subs
 (BOS-only zones) exactly one BOS zone per sub shifted 1 candle earlier under the
@@ -279,7 +301,7 @@ cycle's BOS-zone end back onto the breakout candle that established the next
 cycle, while keeping the unification that a cycle's BOS zone, CTS zone and POI
 all end at the SAME idx.
 
-Aside from that ≤1-candle boundary alignment, the end side is a *representation*
+Aside from that boundary alignment (the extreme→moment lag above), the end side is a *representation*
 change (`active`→`status`, `deactivated_by`→`end_reason`, +`end_idx`). (See
 the start-side clamp below for the other behavioral change.)
 
@@ -302,14 +324,16 @@ them into the one `lifecycle_floor` value.) Implementation note: in
 confirmed_idx, struct_start_by_sid[sid])`; the `CTS_n` moment term is
 satisfied by construction for the BOS_n zone (its raw `confirmed_idx` IS
 `BOS_CONFIRMED.meta["confirmed_at"]` = the moment) and for the CTS_n zone (its
-pullback `confirmed_idx` is later).
+`CTS_CONFIRMED` confirmation-candle `confirmed_idx` is later).
 
-- The CTS_n zone's `confirmed_idx` (its pullback candle) is always after the
-  cycle start, so it is rarely clamped.
+- The CTS_n zone's `confirmed_idx` (its confirmation candle — pullback or
+  sd-proximity) is at or after the cycle start (a pullback confirmation is strictly later; a
+  proximity confirmation can fire on the apply candle itself when the extreme precedes it), so it
+  is rarely clamped.
 - The BOS_n zone's `confirmed_idx` (the breakout) equals the cycle's
-  CTS-established for *normal* cycles, but for **post-reversal cycle 0** the
-  probe can place the structure's anchor historically so cycle-0
-  CTS-established precedes the reversal confirmation. Then the BOS (and CTS)
+  CTS-established moment for *normal* cycles, but for **post-reversal cycle 0** the
+  probe can place the structure's anchor historically so the cycle-0
+  CTS-established moment precedes the reversal confirmation. Then the BOS (and CTS)
   zone's first-active snaps forward to the structure lifecycle-start. (Live
   instance: sid 1 cycle 0 zones at idx 703 → clamp to the sid-0 reversal at
   710.)
@@ -349,7 +373,7 @@ active-start moves forward to the clamped lifecycle-start.
 
 For reference, the removed behavior was:
 
-CTS zones ended at `CTS_ESTABLISHED` (not at the next `CTS_CONFIRMED`). When a new CTS is established, the previous CTS zone's `end_time` is set to the CTS_ESTABLISHED candle's time, and its `active` flag is set to `False` with `deactivated_by = "cts_established"`.
+CTS zones ended at `CTS_ESTABLISHED` (not at the next `CTS_CONFIRMED`). When a new CTS is established, the previous CTS zone's `end_time` is set to the time of the CTS_ESTABLISHED `ev.idx` candle (the new CTS extreme — not the establishing moment), and its `active` flag is set to `False` with `deactivated_by = "cts_established"`.
 
 This means there can be periods with **no active CTS zone** — between CTS_ESTABLISHED (old zone ends) and CTS_CONFIRMED (new zone created). BOS zones are unaffected; they still end when replaced by a new BOS zone of the same side.【fileciteturn2file0】
 

@@ -455,7 +455,7 @@ idx3 = anchor + 1    # maru/normal
 
 **Why forward-looking was wrong:**
 - The star pattern should center on the BOS/CTS anchor candle
-- In a star pattern, the anchor (confirmation candle) IS the pinbar
+- In a star pattern, the anchor IS the pinbar — the anchor being the BOS/CTS **extreme** candle the zone is built from (`BOS_CONFIRMED.idx` / `CTS_CONFIRMED.meta["cts_anchor_idx"]`, `kl_zones_v1.derive_kl_zones_v1`), NOT a confirmation candle
 - Forward-looking incorrectly made the anchor the first maru/normal
 
 **Symptom:** Zones incorrectly identified as "no base star 2nd big" when the anchor wasn't actually part of a valid star pattern. Example: anchor=710 (normal) was matched with 711 (pinbar) + 712 (normal), but the correct check should be 709 + 710 + 711 which fails because 710 isn't a pinbar.
@@ -554,7 +554,7 @@ fig.add_trace(go.Scatter(x=[time] * _n_pts, y=_y_pts, mode="lines", ...))
 
 **BOS zones** (both BIB and non-BIB) select last pullback by **closest to outer bound** — the candle whose close is nearest the zone's outer threshold wins, regardless of time order.
 
-**CTS zones** select last breakout by **first qualified candle closing within the zone** — temporal order wins. The search window starts at the breakout pattern's `anchor_idx` (or `cts_anchor_idx - 5` if earlier).
+**CTS zones** select last breakout by **first qualified candle closing within the zone** — temporal order wins. The (non-BIB) search window is `[max(anchor_idx, cts_anchor_idx - 5), cts_anchor_idx + 5]` — it starts at the establishing breakout pattern's `anchor_idx` (`CTS_ESTABLISHED.meta`, the breakout pattern's FIRST candle — not necessarily the extreme (it is when the first candle holds it; 0 of 34 on the reference window)), or at `cts_anchor_idx - 5` if that is LATER (or there is no `anchor_idx`); `cts_anchor_idx` is the zone's anchor, the CTS extreme at confirmation (`_cts_non_bib_last_breakout`).
 
 **Gotcha:** When debugging wave candle selection, check which zone type it is first. BOS uses distance metric, CTS uses first-match.
 
@@ -580,8 +580,14 @@ computed off those CTS zones survive and render. See
 
 **Practical:** if you need the source CTS zone bounds for a sub wave candle,
 either (a) re-derive the unfiltered zone set, or (b) read the CTS
-extremes from the structure events (`CTS_ESTABLISHED.idx`/`meta`) — they're
-the same source the zones came from.
+extreme from the structure events — the CTS KL zone is anchored at
+`CTS_CONFIRMED.meta["cts_anchor_idx"]` (the CTS extreme at confirmation), the
+same source the zones came from. That equals `CTS_ESTABLISHED.idx` only when no
+`CTS_UPDATED` moved the extreme (7 of the 30 `CTS_CONFIRMED` rows on the
+reference window — 6 of 25 unique cycles; see ARCHITECTURE.md "`ev.idx`
+convention"), and `CTS_ESTABLISHED.meta["anchor_idx"]` is the breakout pattern's
+FIRST candle — not necessarily the extreme (it is when the first candle holds
+it; 0 of 34 on the reference window) — ARCHITECTURE.md "`ev.idx` convention".
 
 **Related:** the hover label for these wave candles still hardcodes
 "BOS zone:" — there's a TODO at each of the 3 hover sites
@@ -592,7 +598,7 @@ the same source the zones came from.
 
 ## CTS BIB Last Breakout: Pattern Scan-Back for CTS_ESTABLISHED
 
-**Problem:** In `_cts_bib_last_breakout`, when the CTS_ESTABLISHED event candle is a direct match (qualified + wick enters zone + closes within zone), the algorithm returned it immediately. But the event candle is the *last* candle of the pattern — earlier candles in the pattern may also close within the zone and better represent the initial breakout moment.
+**Problem:** In `_cts_bib_last_breakout`, when the CTS_ESTABLISHED event candle is a direct match (qualified + wick enters zone + closes within zone), the algorithm returned it immediately. But the event candle (`ev.idx`) is the pattern-span **extreme**, never before `anchor_idx` — usually the pattern's last (apply) candle (31 of 34 `CTS_ESTABLISHED` rows on the reference window), sometimes an interior one (M15 sub 0 cycle 2: `ev.idx=1223` in span 1221..1224; ARCHITECTURE.md "`ev.idx` convention"). Either way, earlier candles in the pattern may also close within the zone and better represent the initial breakout moment.
 
 **Example:** CTS_ESTABLISHED at idx=636 with `anchor_idx=634` (pattern=one_maru_continuous spans 634-636). idx=635 is a qualified maru that also closes within the zone, but the old code returned 636 without checking.
 
@@ -608,7 +614,7 @@ if anchor is not None and ev.type == "CTS_ESTABLISHED":
 return ev_idx
 ```
 
-**Why only CTS_ESTABLISHED:** CTS_UPDATED events don't have pattern info — they're threshold shifts, not pattern-based events.
+**Why only CTS_ESTABLISHED:** it is the only CTS event whose meta carries `anchor_idx` (the pattern's first candle — where the scan-back starts). A raw-path `CTS_UPDATED` (`via="replay_raw"`) is a single-candle wick extension with no pattern at all. A pattern-path `CTS_UPDATED` (a breakout while the cycle is still unconfirmed) DOES carry pattern info — the pattern name in `via` — but records neither `anchor_idx` nor `confirmed_at` (37 of 426 `CTS_UPDATED` rows on the reference window are pattern-path), so there is no pattern start to scan back from.
 
 ---
 
@@ -617,7 +623,10 @@ return ev_idx
 **Rule:** `check_zone_proximity` scans starting at the CTS_CONFIRMED candle
 itself (`ev.meta["confirmed_at"]`, NOT `+ 1`). The CTS_CONFIRMED candle is
 the candle that confirmed the CTS via pullback pattern — past the pullback
-extreme — so it's a valid first candle to evaluate proximity. The first
+extreme — (or, under dual confirmation, the sd-zone proximity candle — then no
+pullback has happened yet; 2 of 30 `CTS_CONFIRMED` rows on the reference
+window, `meta["confirmation_method"] == "sd_zone_proximity"`), so it's a valid
+first candle to evaluate proximity. The first
 sd-direction proximity match captures the post-pullback retracement (or,
 in some cases, may fire on the confirmation candle itself).
 
@@ -642,10 +651,10 @@ zones.
 **Example:** sid=0 cycle=1 had CTS_CONFIRMED at idx=640 and BOS_CONFIRMED for cycle=2 also at idx=640. The scan window was empty [641, 639] — correctly skipped. Without the boundary, the scan would have continued to idx=710 and found a match that belonged to structure 1.
 
 **Key boundaries:**
-- Next BOS_CONFIRMED for `(sid, cycle_id + 1)` → current cycle zones become inactive
-- REVERSAL_CANDIDATE `apply_idx` for sid → structure ends
+- Next BOS_CONFIRMED for `(sid, cycle_id + 1)` — its `meta["confirmed_at"]`, not its `.idx` (the BOS extreme) → current cycle zones become inactive
+- the sid's last REVERSAL_CANDIDATE `meta["apply_idx"]` (the SCHEDULED reversal apply, a prediction; the scan cap, not the confirmed `STATE_CHANGED(to=reversal)`) → scan window ends (`zone_proximity.py`, `reversal_idx_by_sid`; the scan stops at `apply_idx - 1`)
 
-**Also:** Within the scan window, only use active POI zones at each candle (check `confirmed_idx <= candle <= end_idx`). The BOS KL zone is throughout-active. The CTS KL zone (used for opp_sd triggers) is also throughout-active within this window — `CTS_(n+1)_ESTABLISHED`, which deactivates CTS_n zone, fires AT or AFTER `next_BOS.confirmed_at`, so within `[CTS_n_conf, next_BOS.confirmed_at - 1]` the CTS_n zone is still alive.
+**Also:** Within the scan window, only use active POI zones at each candle (check `confirmed_idx <= candle <= end_idx`). The BOS KL zone is throughout-active. The CTS KL zone (used for opp_sd triggers) is also throughout-active within this window — `CTS_(n+1)_ESTABLISHED`, which deactivates CTS_n zone, fires exactly AT `next_BOS.confirmed_at` (its moment `meta["confirmed_at"]` is the same apply candle by construction; its `.idx` is the CTS extreme and can be earlier — ARCHITECTURE.md "`ev.idx` convention"), so within `[CTS_n_conf, next_BOS.confirmed_at - 1]` the CTS_n zone is still alive.
 
 ---
 
@@ -661,7 +670,7 @@ zones.
 
 ## CTS_CONFIRMED `ev.idx` Is the Confirmation Candle, Not the CTS Extreme
 
-**Problem:** `CTS_CONFIRMED` events have `ev.idx` set to the **confirmation candle** (where the pullback confirmed the CTS level), not the CTS extreme candle (where the high/low was set). The extreme candle index is in `ev.meta["cts_anchor_idx"]`.
+**Problem:** `CTS_CONFIRMED` events have `ev.idx` set to the **confirmation candle** (where the pullback — or, under dual confirmation, the sd-zone proximity — confirmed the CTS level), not the CTS extreme candle (where the high/low was set). The extreme candle index is in `ev.meta["cts_anchor_idx"]`.
 
 **Example:** H1 CTS extreme at idx=652, pullback confirmed at idx=683. `CTS_CONFIRMED` event has `ev.idx=683` and `ev.meta["cts_anchor_idx"]=652`.
 
@@ -669,24 +678,24 @@ zones.
 
 **Fix:** Use `ev.meta["cts_anchor_idx"]` when you need the CTS extreme candle. Nuance on the fallback: `ev.meta.get("cts_anchor_idx", ev.idx)` is fine for a *best-effort display* read, but for a **load-bearing** value (e.g. a probe bound) do NOT fall back to `ev.idx` — a silent fallback re-introduces the exact confirmation-candle bug. `cts_anchor_idx` is an invariant whenever `CTS_CONFIRMED` fired, so a strict `[...]` access is correct and fails loud if the invariant ever breaks.
 
-**Related fields:**
-- `ev.idx` = confirmation candle (where pullback confirmed)
+**Related fields** (full table: ARCHITECTURE.md "`ev.idx` convention"):
+- `ev.idx` = confirmation candle — the pullback pattern's apply candle, or the proximity candle when `meta["confirmation_method"] == "sd_zone_proximity"` (2 of 30 rows on the reference window)
 - `ev.meta["confirmed_at"]` = same as `ev.idx` (confirmation candle)
-- `ev.meta["cts_anchor_idx"]` = CTS extreme candle (where high/low was set)
+- `ev.meta["cts_anchor_idx"]` = CTS extreme candle (where high/low was set) — the CURRENT extreme at confirmation (`st.cts.idx`), so it equals `CTS_ESTABLISHED.idx` only when no `CTS_UPDATED` moved it (7 of the 30 `CTS_CONFIRMED` rows on the reference window — 6 of 25 unique cycles; see ARCHITECTURE.md "`ev.idx` convention"). Not the same field as `CTS_ESTABLISHED.meta["anchor_idx"]` (the breakout pattern's first candle).
 
 ---
 
 ## BOS_CONFIRMED `ev.idx` Is the BOS Extreme, Not the Confirmation Candle
 
-**Problem:** Unlike every other event type, `BOS_CONFIRMED` has `ev.idx` set to the **BOS extreme candle** (where the BOS level price was set), not the confirmation candle. The confirmation candle index is in `ev.meta["confirmed_at"]`.
+**Problem:** `BOS_CONFIRMED` has `ev.idx` set to the **BOS extreme candle** (where the BOS level price was set), not the confirmation candle. The confirmation candle index is in `ev.meta["confirmed_at"]`. It is NOT the lone exception — `CTS_ESTABLISHED` and pattern-path `CTS_UPDATED` are extreme-located too.
 
-**Convention mismatch:**
-| Event | `ev.idx` means |
-|-------|---------------|
-| CTS_ESTABLISHED | confirmation candle |
-| CTS_CONFIRMED | confirmation candle |
-| REVERSAL_CANDIDATE | anchor candle (with `apply_idx` in meta) |
-| **BOS_CONFIRMED** | **BOS extreme candle** (exception!) |
+**Convention (short form — the canonical per-event table is ARCHITECTURE.md "`ev.idx` convention"; do not re-grow a copy here):**
+- `ev.idx` is a **price location** (NOT knowable at that candle) for `BOS_CONFIRMED` (the BOS extreme), `CTS_ESTABLISHED` (the CTS extreme — first argmax `h` / argmin `l` over the breakout span, retro-stamped) and pattern-path `CTS_UPDATED` (the span extreme; no `confirmed_at` recorded).
+- `ev.idx` is the **moment** for `CTS_CONFIRMED` / `CTS_RECONFIRMED` (the confirmation candle, `== confirmed_at`) and raw-path `CTS_UPDATED` (`via="replay_raw"`, the processed candle).
+- `REVERSAL_CANDIDATE`: `ev.idx` = the reversal pattern's anchor; `meta["apply_idx"]` = the SCHEDULED apply (a prediction that can expire).
+- The moment of `BOS_CONFIRMED` and `CTS_ESTABLISHED` is `meta["confirmed_at"]` — the same apply candle for the same cycle, by construction.
+
+(An earlier copy of this table listed `CTS_ESTABLISHED` as "confirmation candle" and BOS as the lone "exception!" — both wrong; corrected 2026-09-22.)
 
 **Symptom:** Using `ev.idx` for timing boundaries (scan windows, lifecycle ends) cuts the window short — the BOS isn't actually known until `confirmed_at`, which can be many candles later.
 
@@ -694,23 +703,23 @@ zones.
 - UC1 lifecycle boundary ended at BOS extreme instead of confirmation → M15 structure too short to finalize
 - WVMI scan window ended at BOS extreme → missed valid proximity activations
 
-**Fix:** Always use `int(ev.meta.get("confirmed_at", ev.idx))` when you need the candle where BOS was actually confirmed.
+**Fix:** Use `ev.meta["confirmed_at"]` when you need the candle where BOS was actually confirmed. Every `BOS_CONFIRMED` carries it (both emit sites in `_apply_pattern_at_apply_idx` set it; 34/34 rows on the reference window), so the defensive `int(ev.meta.get("confirmed_at", ev.idx))` never takes its fallback today — but for a load-bearing timing read prefer the strict access: the fallback IS the extreme-as-time bug (same nuance as the CTS_CONFIRMED entry above).
 
 **Related fields:**
 - `ev.idx` = BOS extreme candle (where the BOS price level was set)
 - `ev.price` = BOS price level
-- `ev.meta["confirmed_at"]` = confirmation candle (when the breakout was detected)
+- `ev.meta["confirmed_at"]` = confirmation candle (when the breakout was detected) — the apply candle of the breakout that established the cycle, `==` the same cycle's `CTS_ESTABLISHED.meta["confirmed_at"]`
 - `ev.meta["pb_start"]` = pullback start index
 
 ---
 
 ## Exception Check Must Exclude CTS_ESTABLISHED Candle
 
-**Problem:** The Scenario 3 BOS_0 probe exception and Exception 2 probe both check whether price returns near the zone after a pullback. The check window was `[CTS_EST.idx, CTS_EST_next.idx]`, which **includes** the CTS_ESTABLISHED candle itself.
+**Problem:** The Scenario 3 BOS_0 probe exception and Exception 2 probe both check whether price returns near the zone after the CTS is set (i.e. in the retracement that follows). The check window was `[CTS_EST.idx, CTS_EST_next.idx]`, which **includes** the `CTS_ESTABLISHED.idx` candle itself.
 
-**Why this is wrong:** CTS_ESTABLISHED is the pullback confirmation candle — for a bearish structure (sd=-1), CTS marks a HIGH, so the CTS_ESTABLISHED candle's high is naturally near the BOS zone. Including it in the exception check causes false restarts.
+**Why this is wrong:** `CTS_ESTABLISHED` is emitted by a BREAKOUT pattern, and its `ev.idx` is the CTS **extreme** — the candle of the breakout span that holds the furthest price away from the BOS_0 zone (ARCHITECTURE.md "`ev.idx` convention"); it is NOT a pullback candle. For a bearish structure (sd=-1) the CTS marks a LOW, and that candle's opposite wick — its HIGH — still belongs to the breakout move, so it can sit right under the BOS zone the move started from. Including it in the exception check causes false restarts.
 
-**Example:** M15 probe iteration 0 had CTS_EST at idx=53 with high=0.58486, only 4.8 pips from BOS_0 outer=0.58534. This trivially triggered the exception because the pullback confirmation candle was inherently close to the zone.
+**Example:** M15 probe iteration 0 had CTS_EST at idx=53 with high=0.58486, only 4.8 pips from BOS_0 outer=0.58534. This trivially triggered the exception because the CTS-extreme candle's far wick was inherently close to the zone.
 
 **Fix:** Start the check from `CTS_EST.idx + 1`:
 ```python
@@ -721,9 +730,9 @@ exc_idx = _find_closest_candle_to_outer(df, cts_est[0].idx, cts_est[1].idx, ...)
 exc_idx = _find_closest_candle_to_outer(df, cts_est[0].idx + 1, cts_est[1].idx, ...)
 ```
 
-**Applies to:** Scenario 3 Phase 1 probe, Exception 2 in `compute_structure`, and Exception 2 in Scenario 3 Phase 2.
+**Applies to:** Scenario 3 Phase 1 probe, Exception 2 in `compute_structure_from_start`, and Exception 2 in Scenario 3 Phase 2 (`compute_structure` no longer runs Exception 2 — MARKET_STRUCTURE_SPEC).
 
-**Lesson:** Same principle as "WVMI scan must start at CTS_CONFIRMED" — the pullback candle itself should never be used to evaluate post-pullback conditions.
+**Lesson:** a check for price *returning* to a zone must start AFTER the candle that set the level — the `CTS_ESTABLISHED.idx` candle is still part of the breakout leg away from the zone, so its far wick can never evidence a return. Same care as "Zone Proximity Trigger: Scan Starts AT CTS_CONFIRMED Candle" (the old WVMI proximity scan): know which phase of the cycle a candle belongs to before using it to evaluate a condition about a later phase.
 
 ---
 
@@ -1740,6 +1749,11 @@ points at the mapper (or at L5b, the probe's ad-hoc BOS_0 read).
 **Two different "anchor"s** (GLOSSARY): the parent's `cts_anchor_idx` (H1,
 `CTS_CONFIRMED.meta`, the probe bound) vs the probe's own M15 `cts0_anchor`
 (Phase-2 MS `CTS_0_CONFIRMED`). Conflating them cost a full discussion round.
+The parent's `cts_anchor_idx` is a market-structure-realm anchor (the CTS endpoint).
+The bare key `anchor_idx` also exists in the pattern realm — e.g.
+`CTS_ESTABLISHED.meta["anchor_idx"]` is the breakout pattern's FIRST candle — so never
+compare anchor fields across event / zone types (GLOSSARY "Naming Standard";
+ARCHITECTURE.md "`ev.idx` convention", "Anchor has two realms").
 
 ---
 
@@ -1851,12 +1865,14 @@ the only guard.
 
 **Prediction:** the moment-not-extreme rule (`compute_cycle_lifecycle` start =
 `max(CTS_ESTABLISHED.meta["confirmed_at"], struct_start, floor)` instead of `.idx`) was expected to
-move exactly three M15 sub-cycle lifecycle starts by +1 candle — the three saved M15 `CTS_ESTABLISHED`
-events whose extreme precedes the apply candle: 1223→1224 and 2828→2829 ×2.
+move three M15 sub-cycle lifecycle-start ROWS by +1 candle (2 unique cycles; sub `2639/−1` is on both
+lenses) — the three saved M15 `CTS_ESTABLISHED` rows whose extreme precedes the apply candle:
+1223→1224 and 2828→2829 ×2.
 
 **Measured on the first Plan C replay:** ONE visible shift — sub `454/+1`'s cycle-1 END
 1223→1224 (the pass-through end follows the next cycle's clamped start; that next cycle's
-`CTS_ESTABLISHED` has extreme 1223 and moment 1224). The two 2828→2829 cycle starts belong to sub
+`CTS_ESTABLISHED` has extreme 1223 and moment 1224). The 2828→2829 cycle start (one cycle, two lens
+rows) belongs to sub
 `2639/−1`, whose lifecycle floor is 2829 on BOTH lenses under Plan C — the unique sub's `start_idx`,
 which is its reversal-born confluence record's `start_idx = R = 2829` (its counter record starts
 later, at 2843, but the floor the projection passes is the SUB's start, and there is one projection
