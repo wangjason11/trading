@@ -4,7 +4,8 @@
 `artifacts/commits/week8-volmom-multitf/20260921_125218_afaa326` (save commit `64aa4b8`,
 cherry-picked onto `artifacts-trunk` as `2c38500`); this is the `/compare` baseline for whatever
 comes next. The
-text below is the contract as written on 2026-09-19; the **"AS LANDED" notes** at
+text below is the contract as written on 2026-09-19 (plus inline `[AS LANDED …]` / `[Superseded 2026-09-23 …]`
+brackets added by the Plan D reconciliation); the **"AS LANDED" notes** at
 the end of §4 record where the landing refined it (cold review 2026-09-20 — code
 side correct, plan wording stale). Measured outcome: the predicted table reproduced
 cell for cell (8 subs / 11 records / 4 unresolved); H1 8/9 byte-identical (+ the
@@ -226,20 +227,22 @@ is where its extreme sits — a historical anchor, exactly like `BOS_CONFIRMED.i
 (PART4 §5 called the extreme "the canonical cycle-start idx"). **Plan C changes the canonical rule in
 `zones/structure_lifecycle.py`** — cycle start = `max(CTS_ESTABLISHED.meta["confirmed_at"], struct_start,
 floor)` — so main, sub cycles, and this parent table all agree. Consequences: H1 byte-identical on this
-window (extreme == moment on all five cycles); three sub cycles shift their lifecycle start by +1 candle
-(1223→1224, 2828→2829 ×2) — the KL/POI `confirmed_idx` clamp follows; and `trigger_idx` is provably
+window (extreme == moment on all five cycles); three sub-cycle rows (= 2 unique cycles; sub `2639/−1` is on
+both lenses) shift their lifecycle start by +1 candle (1223→1224, 2828→2829 ×2) — the KL/POI `confirmed_idx`
+clamp follows [AS LANDED: only the cycle ENDS followed; the POI start moved to the moment in Plan D,
+2026-09-23 — `plans/PLAN_D_poi_activation_moment.md`]; and `trigger_idx` is provably
 ≤ the floor for every trigger type, so it is NOT a floor term (assert it instead). Using the clamped next
 start for the end keeps this helper identical to `compute_cycle_lifecycle`; on this window (1,0)'s end
 becomes 3611 (still degenerate).
-`ARCHITECTURE.md`'s "`ev.idx` convention" lists `BOS_CONFIRMED` as the only extreme-not-apply exception;
-`CTS_ESTABLISHED` is a second one — fix in §11.
+[Superseded 2026-09-23: `ARCHITECTURE.md` "`ev.idx` convention" is now the canonical per-event field table,
+with `BOS_CONFIRMED`, `CTS_ESTABLISHED` and pattern-path `CTS_UPDATED` all price-located.]
 
 **Asserts (raise, do not degrade):** every `(S,C)` with a trigger has a `CTS_ESTABLISHED`;
 **`BOS_CONFIRMED(S,C).meta["confirmed_at"] == CTS_ESTABLISHED(S,C).meta["confirmed_at"]`** for every BOS
 with a matching cycle — this is the definitional identity (both are the same `apply_idx`,
 `market_structure.py` ~1414-1451). **NOT `CTS_ESTABLISHED.idx`**: that is the CTS *extreme* within the
 pattern span and can precede the apply candle (3 such pairs in the saved M15 streams — 1223 vs 1224,
-2828 vs 2829; 0 of 5 on H1 only by luck). Every LOH map returns non-None. Log one `WARNING
+2828 vs 2829; 0 of 5 on H1 — anchor == moment is the common case, 31/34 rows, not luck). Every LOH map returns non-None. Log one `WARNING
 [parent_tables] degenerate parent cycle (S,C): floor=… end=…` per degenerate cycle.
 
 `trigger_idx` stays a floor term in `start_idx` (§2.1). For a record whose probe actually ran it is
@@ -766,9 +769,10 @@ rule (equal `end_idx` / native / re-probe); `BOS≡CTS_EST` assert; `finalize_id
    2843); sub 10 on confluence from 4083 overlapping sub 9 over [4083,4200] (opposite directions —
    intended); `end_reason` vocabulary; `sub_sid`→`sub_id` column renames; `lifecycle_end` absent; possible
    small `starting_idx` shifts from §5.1 (each must be explained by a sibling `CTS_UPDATED` inside the
-   window that the old bounded build had cut); exactly three sub-cycle lifecycle starts +1 candle from
-   the moment-not-extreme rule (§3 — the cycles whose `CTS_ESTABLISHED.idx` precedes `confirmed_at`:
-   1223→1224, 2828→2829 ×2) with their KL/POI `confirmed_idx` clamps following.
+   window that the old bounded build had cut); exactly three sub-cycle lifecycle-start rows (= 2 unique
+   cycles) +1 candle from the moment-not-extreme rule (§3 — the cycles whose `CTS_ESTABLISHED.idx` precedes
+   `confirmed_at`: 1223→1224, 2828→2829 ×2) with their KL/POI `confirmed_idx` clamps following [AS LANDED:
+   only the ENDS followed; the POI start moved in Plan D, 2026-09-23].
 4. Anything else = regression. The `/compare` skill now reports NEW/MISSING files explicitly.
 5. **Pause for chart review** before `/commit-save` (ownership + hover changed).
 

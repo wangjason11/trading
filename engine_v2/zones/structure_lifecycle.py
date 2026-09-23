@@ -12,7 +12,7 @@ it without a cycle.
 
 Start AND end resolution live here (B1 + B2, 2026-05-27): the per-cycle
 lifecycle (`compute_cycle_lifecycle`) starts at the CTS-established MOMENT
-(`meta["confirmed_at"]`, Plan C 2026-09-19 — not the extreme) and ends as a
+(`meta["confirmed_at"]`, Plan C 2026-09-19 — not the CTS anchor `ev.idx`) and ends as a
 pass-through of the next cycle's clamped start / the reversal / the cap. The
 same rule serves the H1 main, every sub cycle, and the sub-structure parent
 tables (`multitf/parent_tables.py`). See
@@ -68,9 +68,11 @@ def compute_cycle_lifecycle(
       - `start` = `max(CTS_ESTABLISHED.meta["confirmed_at"]` (the MOMENT the
         cycle was established — the apply candle; canonical cycle-start idx,
         Plan C 2026-09-19)`, struct_start, floor)`. NOT `CTS_ESTABLISHED.ev.idx`,
-        which is the CTS EXTREME inside the pattern span — a historical anchor
-        exactly like `BOS_CONFIRMED.idx` — and can precede the apply candle
-        (three M15 sub cycles on the reference window; H1 equal only by luck).
+        which is the CTS ANCHOR (the pattern's extreme candle) — a historical
+        price location exactly like `BOS_CONFIRMED.idx` — and can precede the
+        apply candle (bound `meta["anchor_idx"]` (the PATTERN anchor) `<= ev.idx <=
+        confirmed_at <= meta["anchor_idx"] + range_max_k`; CTS anchor == moment is
+        the common case — ARCHITECTURE "`ev.idx` convention").
         `struct_start` from `compute_struct_start_by_sid` already embeds the
         reversal handoff and, for subs, both parent floors via `lifecycle_floor`.
       - `end` = `min(next-cycle clamped start, reversal_idx_by_sid[sid],
@@ -96,7 +98,8 @@ def compute_cycle_lifecycle(
 
     # CTS-established MOMENT per (sid, cycle) — `meta["confirmed_at"]`, the apply
     # candle (== BOS_CONFIRMED.confirmed_at, definitional). Last-seen wins. The
-    # extreme (`ev.idx`) is a historical anchor and never a lifecycle value.
+    # CTS anchor (`ev.idx`, the pattern's extreme candle) is a historical price
+    # location and never a lifecycle value.
     cts_est_by_key: Dict[Tuple[int, int], int] = {}
     for ev in events:
         if getattr(ev, "type", None) != "CTS_ESTABLISHED":

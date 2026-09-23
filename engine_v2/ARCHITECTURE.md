@@ -127,13 +127,15 @@ confirmation), KL-zone `meta["anchor_idx"]` (the BOS anchor for a BOS zone, the 
 zone — the candle its base pattern is found around, `zones/KL_ZONES_SPEC.md`), the fib anchors.
 
 Every **timing / lifecycle** read of a cycle start — `zones/structure_lifecycle.compute_cycle_lifecycle`,
-`multitf/parent_tables.build_parent_tables` (`cts_moment`), the Plan-B early stop's finalize — uses
+`multitf/parent_tables.build_parent_tables` (`cts_moment`), the POI activation floor's cycle term
+(`zones/poi_zones.derive_poi_zones`, direct index — Plan D), the Plan-B early stop's finalize — uses
 `meta["confirmed_at"]`. A `CTS_ESTABLISHED` without it makes the first two raise (`AssertionError`);
 `unified_probe`'s finalize / `cts0_est_idx` reads (`_second_cts_moment`, Phase 2) use
 `meta.get("confirmed_at", ev.idx)` instead — a fallback to the CTS anchor that is never taken today
 (every `CTS_ESTABLISHED` carries `confirmed_at`). Known sites that still read `ev.idx` as a time are
-recorded as separate causes (the POI activation gate, FibTracker activation/terminal timing, the
-pool's `knowable_at_idx` / sibling clip — PART4 §17.12; `unified_probe` Phase 2's retrace-window
+recorded as separate causes (the POI activation sweep's `CTS_UPDATED` transitions at `ev.idx`
+(pre-window and in-window; the pattern path records no moment — an event-contract change, parked);
+FibTracker activation/terminal timing; the pool's `knowable_at_idx` / sibling clip — PART4 §17.12; `unified_probe` Phase 2's retrace-window
 start `check_lo = first_cts.idx + 1`, the CTS anchor, vs Phase 1's moment-based `tfb.est_idx + 1`).
 
 The engine maintains a stable downstream interface by converting structure events into StructureLevels (CTS/BOS list).【fileciteturn1file14】
@@ -229,7 +231,7 @@ confirm idx>, cycle_lifecycle_start)`, where `cycle_lifecycle_start =
 max(CTS_n ESTABLISHED MOMENT (meta["confirmed_at"]), structure lifecycle-start[,
 lifecycle_floor])` — `zones/structure_lifecycle.compute_cycle_lifecycle`
 (Plan C, 2026-09-20: the canonical cycle-start is the established **moment**,
-never `CTS_ESTABLISHED.idx`, the extreme — see the `ev.idx` convention above).
+never `CTS_ESTABLISHED.idx`, the CTS anchor — see the `ev.idx` convention above).
 `lifecycle_floor` is `None` for main; for a sub it is the unique sub's
 real-time `start_idx` (slice-local, passed by
 `multitf/entity_df_mutation.render_sub_projection`) — the pre-Plan-C
@@ -242,11 +244,12 @@ its structure is alive — e.g. a post-reversal cycle-0 zone whose
 clamp). NB the per-zone `<zone-specific confirm idx>` term: for KL it is the
 zone's own `confirmed_idx` (a BOS zone's `confirmed_idx` IS
 `BOS_CONFIRMED.meta["confirmed_at"]` = the moment) clamped to the per-sid
-structure start (`compute_struct_start_by_sid`); for POI
-`_compute_poi_activation_history` takes `cts_established_idx =
-CTS_ESTABLISHED.idx` (the **extreme**) as its cycle term — flagged 2026-09-20
-as a ≤1-candle inconsistency with the moment rule on cycles where the extreme
-precedes the moment; not changed by Plan C.
+structure start (`compute_struct_start_by_sid`); for POI it is `ic_idx`, and
+the cycle term is `cts_established_idx = CTS_ESTABLISHED.meta["confirmed_at"]`
+(the moment — Plan D, 2026-09-23; until then it was `CTS_ESTABLISHED.idx`, the
+CTS anchor), plus the `struct_start_by_sid` floor. Exception: a (sid, cycle)
+with no `CTS_ESTABLISHED` has no cycle-lifecycle entry, and its POI cycle term
+falls back to `fib_state.cts_idx` (`zones/POI_ZONES_SPEC.md` §4).
 
 **`FibState` — NOW following (2026-05-27).** Tier-2 (it has the reversible
 imbalance condition). Sessions 1 & 2 separated the overloaded `active` into

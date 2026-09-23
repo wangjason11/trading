@@ -721,6 +721,87 @@ def test_kl_zones_take_the_floor_and_the_cap(geometry, m15_df):
                 assert v is None or 0 <= int(v) < n
 
 
+def _mirrored_pois_first_activations(sub, m15_df):
+    """Render the sub and return (res, {lens: [(ic_idx, first activation idx,
+    meta cts_established_idx)]}) — all entity-absolute after the mirror."""
+    lens_dfs = _lens_dfs(m15_df)
+    res = _render(sub, m15_df, lens_dfs)
+    out = {}
+    for lens in (LENS_CONFLUENCE, LENS_COUNTER):
+        zones = lens_dfs[lens].attrs["poi_zones"]
+        assert len(zones) == len(res.poi_zones) >= 1
+        out[lens] = [(int(z.ic_idx), z.meta["activation_history"][0]["idx"],
+                      z.meta["cts_established_idx"])
+                     for z in zones if z.meta["activation_history"]]
+        assert out[lens], "at least one mirrored POI activates"
+    return res, out
+
+
+def _cycle_cts_established(sub, cycle_id):
+    """The geometry's (slice-local) CTS_ESTABLISHED for `cycle_id`."""
+    bounded, _ = sub.geometry
+    return next(ev for ev in bounded.events if ev.type == "CTS_ESTABLISHED"
+                and ev.meta.get("cycle_id") == cycle_id)
+
+
+def test_poi_first_activation_at_or_after_sub_start(geometry, m15_df):
+    """The POI twin of the R6 KL pin (Plan D §5) in an OPEN window — under the
+    R6 cap (85) the only fib is active-unlocked with an end, so poi_zones' fib
+    gate yields zero POIs and a pin there would pass vacuously. Here the floor
+    does NOT bind (IC 63 and the raw activation 75 are both after start 60), so
+    `first >= start_idx` holds by construction: this test pins non-vacuity and
+    the mirror's rebase of `cts_established_idx` (the cycle's moment,
+    slice-local -> entity-absolute via `_ZONE_META_IDX_KEYS`). The floor
+    plumbing is pinned by the floor-decides test below; the moment rule by
+    tests/test_poi_activation_moment.py and the moved-moment test below."""
+    pool, sub = geometry
+    _two_lens_records(pool, sub, m15_df)
+    _set_lifecycle(sub, _START, None, None)
+    _, slice_begin = sub.geometry
+    moment_abs = int(_cycle_cts_established(sub, 0).meta["confirmed_at"]) + slice_begin
+    _, firsts = _mirrored_pois_first_activations(sub, m15_df)
+    for lens, rows in firsts.items():
+        for _ic, first, _cse in rows:
+            assert first >= sub.start_idx
+        assert rows == [(63, 75, moment_abs)], (lens, rows)
+
+
+def test_poi_floor_decides_first_activation_through_the_projection(geometry, m15_df):
+    """Start the sub AFTER the raw activation (75): the sub's start_idx (78)
+    reaches the POI activation floor through render_sub_projection. (The sub's
+    start_idx is set directly, as `_set_lifecycle` does elsewhere; the records
+    are not re-derived — only the projection's floor plumbing is under test.)"""
+    pool, sub = geometry
+    _two_lens_records(pool, sub, m15_df)
+    _set_lifecycle(sub, 78, None, None)
+    _, firsts = _mirrored_pois_first_activations(sub, m15_df)
+    for lens, rows in firsts.items():
+        assert [(ic, first) for ic, first, _ in rows] == [(63, 78)], (lens, rows)
+
+
+def test_poi_cycle_term_is_the_moment_through_the_projection(geometry, m15_df):
+    """Plan D through projection + mirror (the replay's sub-3 case: a meta-only
+    re-value). Move the geometry's cycle-0 moment 2 candles past its anchor
+    (CTS_ESTABLISHED and BOS_CONFIRMED together — the definitional identity):
+    the mirrored `cts_established_idx` follows the MOMENT, not `.idx`; the
+    first activation is unchanged (IC 63 still decides)."""
+    pool, sub = geometry
+    _two_lens_records(pool, sub, m15_df)
+    _set_lifecycle(sub, _START, None, None)
+    bounded, slice_begin = sub.geometry
+    est = _cycle_cts_established(sub, 0)
+    bos = next(ev for ev in bounded.events if ev.type == "BOS_CONFIRMED"
+               and ev.meta.get("cycle_id") == 0)
+    assert est.idx == est.meta["confirmed_at"] == bos.meta["confirmed_at"]
+    moved = int(est.meta["confirmed_at"]) + 2
+    est.meta["confirmed_at"] = moved
+    bos.meta["confirmed_at"] = moved
+    _, firsts = _mirrored_pois_first_activations(sub, m15_df)
+    for lens, rows in firsts.items():
+        # Old rule: cts_established_idx == est.idx + slice_begin (2 less).
+        assert rows == [(63, 75, moved + slice_begin)], (lens, rows)
+
+
 # ---------------------------------------------------------------------------
 # R7 — _STRUCTURE_COLS painted only over the live rows [start_idx, end]
 # ---------------------------------------------------------------------------

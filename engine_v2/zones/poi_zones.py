@@ -53,11 +53,11 @@ class POIZone:
 
     # Metadata
     meta: Dict[str, Any] = field(default_factory=dict)
-    # meta contains:
-    #   structure_id, struct_direction, cycle_id
-    #   confirmed_idx (first activation idx, always > ic_idx)
-    #   versions: ["V30", "V60", "V90"]
-    #   status: "active" | "inactive" | "disappeared"
+    # meta: the field list (confirmed_idx = the LAST activate idx, end_idx /
+    # end_reason, activation_history, status, versions / current_versions,
+    # cts_established_idx = the cycle's CTS-established moment (fallback: the
+    # fib's CTS anchor when the cycle has no CTS_ESTABLISHED), ...) is
+    # canonical in POI_ZONES_SPEC.md "Zone Data Fields".
 
 
 # Configuration for POI Zone detection
@@ -363,8 +363,9 @@ def derive_poi_zones(
     # Get all Fib states from tracker (for charting)
     fib_states = fib_tracker.get_fibs_for_charting()
 
-    # Build lookup for CTS_ESTABLISHED events (for confirmed_idx and end_time)
-    # Key: (sid, cycle_id) -> event
+    # Build lookup for CTS_ESTABLISHED events: each cycle's establishment moment
+    # (`meta["confirmed_at"]`) is the activation floor's cycle term and the
+    # exported `meta["cts_established_idx"]`. Key: (sid, cycle_id) -> event
     cts_established_by_key = {}
     for ev in structure_events:
         if ev.type == "CTS_ESTABLISHED":
@@ -464,10 +465,21 @@ def derive_poi_zones(
         if not ic_variants:
             continue
 
-        # CTS_ESTABLISHED idx for the cycle (needed for activation condition 1).
+        # The activation floor's cycle term: the cycle's CTS-established MOMENT
+        # (`CTS_ESTABLISHED.meta["confirmed_at"]`, the canonical cycle
+        # lifecycle-start — structure_lifecycle.compute_cycle_lifecycle), NOT
+        # `CTS_ESTABLISHED.idx` (the CTS anchor: the pattern's extreme candle,
+        # retro-stamped, which can precede the moment — Plan D, zones pass
+        # 2026-09-23). Direct index, no `.get(..., ev.idx)` fallback: a missing
+        # moment must fail loudly (compute_cycle_lifecycle above asserts it
+        # first for every event carrying structure_id / cycle_id — the event
+        # contract; the lookup below keys a missing one to 0, a pre-existing
+        # default no emitter exercises). Fallback when the cycle has no CTS_ESTABLISHED at all: the
+        # fib's CTS anchor — a location, not a moment (a known naming-standard
+        # exception; such a cycle has no lifecycle entry; PLAN_D §7.3).
         cts_event = cts_established_by_key.get(key)
         cts_established_idx = (
-            int(cts_event.idx) if cts_event else int(fib_state.cts_idx)
+            int(cts_event.meta["confirmed_at"]) if cts_event else int(fib_state.cts_idx)
         )
 
         # end_idx + end_reason inherited from the cycle (B2 pass-through):
@@ -499,7 +511,8 @@ def derive_poi_zones(
             #      within the fib's bounds at t. The fib's cts only grows, so
             #      becomes monotonic once reached.
             #   2. ic_idx <= t  (the IC candle exists in data — implied by t
-            #      starting at first_active = max(cts_established_idx, ic_idx)).
+            #      starting at first_active = max(cts_established_idx, ic_idx,
+            #      lifecycle floor)).
             #   3. `has_unfilled_imbalance(df, ic_idx+1, t, check_to_idx=t,
             #      direction=sd)` — POI-specific sd-direction imbalance check
             #      decoupled from Fib's `active` flag.
@@ -788,7 +801,11 @@ def _compute_poi_activation_history(
       Condition 1 — `cts_at(t) >= ic_idx`. The fib's `cts_idx` only grows
                     via CTS_UPDATED events, so once met, monotonic.
       Condition 2 — `ic_idx <= t` (implicit: scan starts at first_active
-                    = max(cts_established_idx, ic_idx)).
+                    = max(cts_established_idx, ic_idx, lifecycle_floor_idx),
+                    with `cts_established_idx` = the cycle's CTS-established
+                    moment — or, for a cycle with no CTS_ESTABLISHED, the fib's
+                    CTS anchor (see derive_poi_zones) — POI_ZONES_SPEC.md §4
+                    "Activation floor").
       Condition 3 — sd-direction imbalance overlaps `(ic_idx, t]` that is
                     not yet committed-filled (two-stroke: stroke 1 = 70%
                     retrace, stroke 2 = close past gap outer). Flips as
@@ -815,8 +832,10 @@ def _compute_poi_activation_history(
     Returns `[{"idx", "active", "reason", "versions"?}, ...]`. Empty list
     means POI never activated in the window.
     """
-    # Floor at the structure lifecycle-start (Phase 3 Commit 2): a POI cannot
-    # activate before its structure is alive (post-reversal cycle-0 / sub case).
+    # First-active = max(the cycle's established moment, the IC candle, the
+    # structure lifecycle-start floor): a POI cannot activate before its cycle
+    # is knowable (Plan D) nor before its structure is alive (post-reversal
+    # cycle-0 / sub case, Phase 3 Commit 2).
     first_active = max(cts_established_idx, ic_idx)
     if lifecycle_floor_idx is not None:
         first_active = max(first_active, int(lifecycle_floor_idx))
@@ -860,10 +879,15 @@ def _compute_poi_activation_history(
         return sorted(v for v, th in variant_thresholds.items() if overlap >= th)
 
     # --- Pre-window state: apply CTS events strictly before first_active so
-    # current_versions reflects the entering state at first_active. (In
-    # practice ic_idx <= cts_extreme < cts_established_idx, so first_active
-    # equals cts_established_idx and this loop is a no-op — kept for
-    # correctness if that invariant ever loosens.)
+    # current_versions (and condition 1) reflect the entering state at
+    # first_active. Load-bearing: CTS_ESTABLISHED.idx (the CTS anchor) <=
+    # cts_established_idx (the moment) <= first_active, so the establishing
+    # CTS event (and any CTS_UPDATED before first_active) is applied HERE, not
+    # as an in-window transition, whenever the anchor precedes first_active —
+    # on every cycle whose anchor precedes its moment, and on every POI whose
+    # ic_idx or lifecycle floor lies past the anchor. (The IC CAN lie past the
+    # anchor, even past the moment: IC candidates range up to the fib's FINAL
+    # cts_idx, which CTS_UPDATED advances — 12/48 POIs on the reference window.)
     in_window_cts: List[StructureEvent] = []
     for ev in sorted_cts_events:
         ev_idx = int(ev.idx)

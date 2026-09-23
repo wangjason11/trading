@@ -388,6 +388,15 @@ assumes "POI ⟹ sd direction."
 - `status`: "active" | "inactive" | "ended" (+ "disappeared" — a reserved terminal-invalidation status; see Zone States). Charting note (2026-09-20): a POI whose CYCLE collapsed (its BOS KL zone is `inactive` with clamped `confirmed_idx >= end_idx`) is not drawn on any chart (`charting/_zone_render.collapsed_cycles` / `is_poi_of_collapsed_cycle`); an `"inactive"` POI whose cycle is live (never met its activation conditions) is still drawn as an outline. POI fills are side-tinted since 2026-09-21 (buy gold-lime, sell amber — CHARTING_SPEC §7).
 - `end_idx` / `end_reason`: terminal axis inherited from the owning cycle (`compute_cycle_lifecycle`): `"reversal"` | `"next_cycle"` (the next cycle's clamped lifecycle-start = the CTS-established **moment** `meta["confirmed_at"]`, Plan C 2026-09-20) | for subs the sub's `cap_reason` — `"reversal"` | `"same_dir_replacement"` | `"parent_end"` — when the unique sub's `end_idx` capped the cycle (`"lifecycle_end"` is no longer emitted) | `None`
 - `activation_history`: per-candle activate/deactivate flips (condition axis)
+- `current_versions`: the variants live at the last activate event (empty while the POI is deactivated) — vs
+  `versions` = the peak variants ever achieved
+- `cts_established_idx`: the owning cycle's CTS-established **moment** (`CTS_ESTABLISHED.meta["confirmed_at"]`)
+  — the activation floor's cycle term (see "Activation floor" below). **Meaning changed by Plan D (2026-09-23):**
+  saves before it hold `CTS_ESTABLISHED.idx` (the CTS anchor) under this key. Fallback when the cycle has no
+  `CTS_ESTABLISHED`: `fib_state.cts_idx` — the fib's CTS anchor, NOT a moment (a known exception to the GLOSSARY
+  "Naming Standard"; live case on the reference window: counter sub 5 cycle 1, IC 3654: value 3806 (never activates); queued follow-up).
+  Rebased to entity-absolute on sub POIs by the mirror (`entity_df_mutation._ZONE_META_IDX_KEYS`). Readers: none
+  that decide anything (the env-gated `POI_LIFECYCLE_DEBUG` print only).
 - `end_time`: When zone ends (None = extends to chart end)
 
 ### Zone States
@@ -410,7 +419,7 @@ produce (the planned FibState lifecycle work will produce it for
 
 ### Zone End Time (Priority Order)
 1. **Reversal:** `end_time = reversal_confirmed_idx` (all zones end immediately)
-2. **New CTS:** Cycle N zones end at cycle N+1's clamped lifecycle-start = `max(CTS_{N+1} ESTABLISHED.meta["confirmed_at"], struct_start[, lifecycle_floor])` — the CTS-established **moment**, not `CTS_ESTABLISHED.idx` (the extreme; Plan C, 2026-09-20)
+2. **New CTS:** Cycle N zones end at cycle N+1's clamped lifecycle-start = `max(CTS_{N+1} ESTABLISHED.meta["confirmed_at"], struct_start[, lifecycle_floor])` — the CTS-established **moment**, not `CTS_ESTABLISHED.idx` (the CTS anchor; Plan C, 2026-09-20)
 3. **Sub window end (subs only):** the unique sub's `end_idx` (`lifecycle_cap`), tagged with the sub's `end_reason`
 4. **No event:** Zone remains active (`end_time = None`)
 `end_idx` is `min(...)` of the applicable candidates (earliest wins; reversal wins an equal-idx tie) — the cycle table from `zones/structure_lifecycle.compute_cycle_lifecycle`, shared with KL and fib.
@@ -420,7 +429,7 @@ produce (the planned FibState lifecycle work will produce it for
 - Zone can deactivate if IC no longer qualifies on subsequent candles, then re-activate later — a cycle can flap multiple times
 - `confirmed_idx` collapses to the **LAST** activate idx (NOT the first). Per-candle activation lives in `activation_history`; query it via `zones/poi_lifecycle.py` (`poi_active_as_of`, `poi_confirmed_idx_as_of`), never the scalar. Consumers that treat `[confirmed_idx, end_idx]` as one active span are blind to earlier active stretches (this caused the sid1-cyc2 proximity-trigger loss — see GOTCHAS)
 
-### Activation floor — cycle lifecycle-start clamp (REVISED 2026-05-26; floor terms REVISED by Plan C 2026-09-20)
+### Activation floor — cycle lifecycle-start clamp (REVISED 2026-05-26; floor terms REVISED by Plan C 2026-09-20; cycle term moved to the MOMENT by Plan D 2026-09-23)
 
 POI activation is gated to start no earlier than the owning cycle's
 lifecycle-start. The activation scan begins at
@@ -428,6 +437,7 @@ lifecycle-start. The activation scan begins at
 
 ```
 first_active = max(cts_established_idx, ic_idx, lifecycle_floor_idx)
+cts_established_idx = CTS_ESTABLISHED(sid, cycle).meta["confirmed_at"]   # the cycle's established MOMENT
 ```
 
 where `lifecycle_floor_idx = struct_start_by_sid[sid]` =
@@ -446,16 +456,22 @@ term clamps **post-reversal cycle-0 POIs** (and sub analogues) whose
 `CTS_ESTABLISHED` precedes the structure's lifecycle-start (e.g. probe placed
 the anchor historically).
 
-> **Open inconsistency, flagged 2026-09-20 (not changed by Plan C).** The
-> canonical cycle lifecycle-start is the CTS-established **moment**
-> (`CTS_ESTABLISHED.meta["confirmed_at"]`; `compute_cycle_lifecycle`, PART4
-> §17.6), but the `cts_established_idx` term of this per-POI floor is still
-> `cts_established_by_key[key].idx` — the CTS **extreme** (`poi_zones.py`,
-> "CTS_ESTABLISHED idx for the cycle (needed for activation condition 1)"). On a
-> cycle whose extreme precedes its moment (three M15 sub cycles on the
-> reference window) a POI may therefore activate one candle before the cycle's
-> canonical start. The cycle END side (`end_idx` / `end_reason`) already uses
-> the moment through `compute_cycle_lifecycle`.
+`max(cts_established_idx, lifecycle_floor_idx)` equals the cycle's clamped lifecycle-start
+(`compute_cycle_lifecycle`) whenever the cycle has a `CTS_ESTABLISHED`; with none, the cycle term falls back to
+`fib_state.cts_idx` (see the field list). The lookup indexes `meta["confirmed_at"]` directly — no fallback to
+`ev.idx`; `compute_cycle_lifecycle` asserts the key first for every event carrying `structure_id`/`cycle_id`.
+
+> **Resolved (Plan D, 2026-09-23).** Until Plan D the cycle term was `CTS_ESTABLISHED.idx` — the CTS
+> **anchor** (the breakout pattern's extreme candle, retro-stamped), not the moment the cycle became knowable —
+> while the canonical cycle lifecycle-start and every cycle END were already on the moment
+> (`compute_cycle_lifecycle`, Plan C). On a cycle whose anchor precedes its moment a POI could go live
+> `confirmed_at − idx` candles (≤ 5) before its cycle existed, overlap the previous cycle's POI on those candles,
+> and activate on a cycle collapsed at its moment. On the reference window 3 CSV rows = 2 unique M15 cycles lag by 1
+> (sub 0 cyc 2 1223/1224; sub 3 cyc 1 2828/2829, masked by the sub's floor). Measured at landing (PLAN_D §9; exactly the §4 prediction,
+> as predicted): M15 confluence sub 0 cyc 2 IC 678 activation 1223 → 1224, plus 3 `cts_established_idx` meta cells
+> re-valued to the moment; the other 22 CSVs byte-identical; chart counts unchanged. Pinned by
+> `tests/test_poi_activation_moment.py`.
+
 Any activate/deactivate flips before `first_active` are discarded; if the
 POI would have been active earlier, its first active snaps to
 `first_active`. If `first_active >= end_idx` the POI never activates

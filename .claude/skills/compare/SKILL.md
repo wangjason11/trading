@@ -484,7 +484,8 @@ prior ones (one per overlap region: confluence 7→6, counter 3→1) and the
 forming dot traces merged into their subs' live dot traces (only sub `2639/−1`'s
 3611 CTS dot is still prior, on confluence). The replacement-break rule (§16.5
 item 7) then added one PB-dot trace per lens → 153 / 294; the bullets above are
-those values.
+those values. Plan D (2026-09-23, POI activation on the moment) left every count unchanged: its only
+figure delta was 2 shapes moved + 2 hover traces' customdata on the confluence chart.
 
 These print as `DEBUG traces:` / `DEBUG shapes:` (H1) and `[m15_chart] traces:
 N, shapes: M` (each M15 entity) at the end of `python -m engine_v2.run_replay`.

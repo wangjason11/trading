@@ -690,7 +690,7 @@ zones.
 **Problem:** `BOS_CONFIRMED` has `ev.idx` set to the **BOS extreme candle** (where the BOS level price was set), not the confirmation candle. The confirmation candle index is in `ev.meta["confirmed_at"]`. It is NOT the lone exception — `CTS_ESTABLISHED` and pattern-path `CTS_UPDATED` are extreme-located too.
 
 **Convention (short form — the canonical per-event table is ARCHITECTURE.md "`ev.idx` convention"; do not re-grow a copy here):**
-- `ev.idx` is a **price location** (NOT knowable at that candle) for `BOS_CONFIRMED` (the BOS extreme), `CTS_ESTABLISHED` (the CTS extreme — first argmax `h` / argmin `l` over the breakout span, retro-stamped) and pattern-path `CTS_UPDATED` (the span extreme; no `confirmed_at` recorded).
+- `ev.idx` is a **price location** (NOT knowable at that candle) for `BOS_CONFIRMED` (the BOS extreme), `CTS_ESTABLISHED` (the CTS anchor — the first argmax `h` / argmin `l` over the breakout span, retro-stamped) and pattern-path `CTS_UPDATED` (the span extreme; no `confirmed_at` recorded).
 - `ev.idx` is the **moment** for `CTS_CONFIRMED` / `CTS_RECONFIRMED` (the confirmation candle, `== confirmed_at`) and raw-path `CTS_UPDATED` (`via="replay_raw"`, the processed candle).
 - `REVERSAL_CANDIDATE`: `ev.idx` = the reversal pattern's anchor; `meta["apply_idx"]` = the SCHEDULED apply (a prediction that can expire).
 - The moment of `BOS_CONFIRMED` and `CTS_ESTABLISHED` is `meta["confirmed_at"]` — the same apply candle for the same cycle, by construction.
@@ -702,6 +702,7 @@ zones.
 **Bugs caused by this:**
 - UC1 lifecycle boundary ended at BOS extreme instead of confirmation → M15 structure too short to finalize
 - WVMI scan window ended at BOS extreme → missed valid proximity activations
+- POI activation gate read `CTS_ESTABLISHED.idx` (the CTS anchor) under the moment name `cts_established_idx` → a POI could go live up to 5 candles (the bound) before its cycle existed — observed: 1 candle, M15 confluence sub 0 cycle 2, IC 678: 1223 → 1224. Fixed by Plan D, 2026-09-23 (`plans/PLAN_D_poi_activation_moment.md`).
 
 **Fix:** Use `ev.meta["confirmed_at"]` when you need the candle where BOS was actually confirmed. Every `BOS_CONFIRMED` carries it (both emit sites in `_apply_pattern_at_apply_idx` set it; 34/34 rows on the reference window), so the defensive `int(ev.meta.get("confirmed_at", ev.idx))` never takes its fallback today — but for a load-bearing timing read prefer the strict access: the fallback IS the extreme-as-time bug (same nuance as the CTS_CONFIRMED entry above).
 

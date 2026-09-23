@@ -1109,7 +1109,8 @@ sub cycles/structures never start before their parent.
   `starting_idx` are immutable facts — the clamp never rewrites them (so
   `structure_events` stays byte-identical; any shift there is a red flag).
 
-- **Unifies KL and POI (Phase 3, 2026-05-26).** POI already resolved
+- **Unifies KL and POI (Phase 3, 2026-05-26 — as landed then; POI's cycle term was `CTS_ESTABLISHED.idx`,
+  the CTS anchor, until Plan D moved it to the moment on 2026-09-23 — see the §17.6 "As landed" blockquote).** POI already resolved
   `end_idx` + `end_reason` by the reversal / next_cycle priority and gated
   activation at `max(cts_established_idx, ic_idx)`. KL now uses the same
   end-resolution (its prior scattered `end_time` mechanisms — CTS_ESTABLISHED
@@ -1122,7 +1123,7 @@ sub cycles/structures never start before their parent.
   CTS extreme — the idx POI used). The CTS-zone end was unchanged (already this
   idx). The BOS-zone end moved from the old next-BOS-`confirmed_at` (breakout)
   to that extreme idx — identical when the breakout candle *is* the extreme,
-  else ≤1 candle earlier. Empirically the H1 main was byte-identical (breakout
+  else earlier (1 candle observed; bound `confirmed_at <= meta["anchor_idx"] + 5`, the pattern anchor). Empirically the H1 main was byte-identical (breakout
   == extreme for all sampled cycles); the M15 subs (BOS-only zones) showed one
   1-candle BOS-end shift each. **Start-side change:** post-reversal cycle-0
   zones (and sub analogues) shift their active-start forward to the clamped
@@ -1252,10 +1253,12 @@ every attached element ends with it, so each KL / POI (later Fib / WVMI) looks u
 its `(sid, cycle)` `end_idx` / `end_reason` from the table. **Nothing inherits
 cycle start** — each element computes its own first-active by its own
 active/inactive logic, clamped up to the cycle/structure floor (B1). BOS KL zones
-*coincide* with cycle start but keep computing their own breakout start
-("Option 2", 2026-05-27) so the unification stays byte-identical; the ≤1-candle
-extreme-vs-breakout divergence on a few M15 sub cycles is accepted as the zone
-confirming one candle into its just-opened cycle. active/inactive state stays
+keep computing their own breakout start ("Option 2", 2026-05-27), which since
+Plan C *equals* the cycle start by construction (a BOS zone's confirm is
+`BOS_CONFIRMED.meta["confirmed_at"]` = the cycle's moment) — the 2026-05-27
+"≤1-candle extreme-vs-breakout divergence" disappeared when the cycle start moved
+to the moment. POI's first-active takes the moment as its cycle term since Plan D
+(2026-09-23). active/inactive state stays
 element-specific (POI's per-candle `activation_history`, KL's single interval).
 
 **Collapsed cycles** (clamped `start >= end`, e.g. a sub cycle whose
@@ -2995,22 +2998,32 @@ common case (31 of the 34 `CTS_ESTABLISHED` rows), not luck — but it is not
 guaranteed, and the one-candle lag is empirical, not a bound (`ARCHITECTURE.md`
 "`ev.idx` convention").
 
+> **Resolved for POI — Plan D, 2026-09-23.** POI's activation floor is now
+> `max(cts_established_idx, ic_idx, lifecycle_floor_idx)` with `cts_established_idx =
+> CTS_ESTABLISHED.meta["confirmed_at"]` (fallback `fib_state.cts_idx` when the cycle has no
+> `CTS_ESTABLISHED`), and the POI meta key `cts_established_idx` holds that moment (it held
+> `.idx`, the CTS anchor, before). Measured on the reference window: M15 confluence sub 0 cycle 2
+> IC 678 activation 1223 → 1224 and 3 `cts_established_idx` meta cells re-valued (1223 → 1224,
+> 2828 → 2829 on both lenses); the other 22 CSVs byte-identical; chart counts unchanged
+> (`plans/PLAN_D_poi_activation_moment.md`). KL's start side is unchanged. The text below is the
+> Plan C "as landed" record, in the past tense for POI.
+>
 > **As landed (2026-09-20) — what the moment rule actually reaches.**
 > `compute_cycle_lifecycle` Pass 1 is on the moment, and the cycle START feeds
 > only the END side (cycle *n* ends at cycle *n+1*'s clamped start — B2:
 > "elements inherit the END only; they keep their own START", §5). Measured:
 > one visible +1 shift (sub `454/+1` cycle-1 **end** 1223 → 1224); the two
 > 2828 → 2829 cases are masked by the identical record floor 2829. The zone
-> START side is unchanged by Plan C and is **not** on the moment: KL clamps a
+> START side was unchanged by Plan C and was **not** on the moment: KL clamps a
 > zone's own `confirmed_idx` to the **structure** start
 > (`compute_struct_start_by_sid`, B1) — for a BOS zone that confirm IS the
-> moment by construction; POI gates `first_active = max(cts_established_idx,
+> moment by construction; POI gated `first_active = max(cts_established_idx,
 > ic_idx, struct_start)` with `cts_established_idx = CTS_ESTABLISHED.idx` (the
-> **extreme**, `poi_zones.py`). So the "KL/POI `confirmed_idx` clamps
-> following" above is true only of their ends; a POI can activate up to
-> (moment − extreme) candles before its cycle's clamped lifecycle-start.
-> Flagged as a code-vs-spec residual (Plan C §1 scoped `zones/*` out except
-> via the leaf); decide in a zones pass whether POI's gate moves to the moment.
+> CTS **anchor**, `poi_zones.py`) until Plan D. So the "KL/POI `confirmed_idx`
+> clamps following" above was true only of their ends; a POI could activate up
+> to (moment − anchor) candles before its cycle's clamped lifecycle-start.
+> Flagged then as a code-vs-spec residual (Plan C §1 scoped `zones/*` out except
+> via the leaf); resolved by Plan D (above).
 
 **Assert** `BOS_CONFIRMED(S,C).meta["confirmed_at"] ==
 CTS_ESTABLISHED(S,C).meta["confirmed_at"]` (definitional — both are the same

@@ -76,6 +76,14 @@ def _poi_sig(zones):
             round(float(z.top), 5), round(float(z.bottom), 5), int(z.ic_idx),
             z.meta.get("structure_id"), z.meta.get("cycle_id"),
             z.meta.get("end_idx"), z.meta.get("status"),
+            # Activation + its cycle term (Plan D): the dedup-equivalence must
+            # cover when a POI goes live, not only its geometry and end.
+            z.meta.get("confirmed_idx"), z.meta.get("cts_established_idx"),
+            tuple(
+                (e["idx"], e["active"], e.get("reason"), tuple(e.get("versions", ())))
+                for e in z.meta.get("activation_history") or []
+            ),
+            tuple(z.meta.get("current_versions") or ()),
         )
         for z in zones
     )
