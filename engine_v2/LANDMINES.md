@@ -195,11 +195,41 @@ the shared pure routine `zones/cross_cycle_fib.py::resolve_cross_cycle_eligibili
 (single-step `target=1`, `fill_as_of="snapshot"`); `select_fib_anchor_for_cycle`
 is now a thin wrapper applying only the main-only Scenario-1 outer gate around
 it. So for `sid >= 1, cycle_id == 1` cases both layers agree on whether to
-anchor at `(BOS_0, CTS_1)` (Scenario 2) or `(BOS_n, CTS_n)` (Scenario 3 / intra).
+anchor at `(BOS_0, CTS_1)` (Scenario 2) or `(BOS_n, CTS_n)` (Scenario 3 / intra)
+— except the knowability divergence (M1) below.
 MS tracks the cycle-0 snapshot (`MarketStructureState.cycle0_data`)
 populated at cycle-0 CTS_ESTABLISHED, refreshed on each CTS_UPDATED, and
 locked at CTS_0 CONFIRMED — threaded into the resolver via the
-`PoiInnersResolver` protocol's `c0_data` slot.
+`PoiInnersResolver` protocol's `c0_data` slot. Its `has_unfilled` and
+FibTracker's cycle-0 cache (`_cross_cycle_data[sid]["cycle0"]["has_unfilled"]`)
+are both Scenario-2 **cond2** and both stored **UNCUT** (`evaluated_at=None`,
+Plan F): their only reader is `select_fib_anchor_for_cycle`
+(`prior_cached_liveness`) at cycle 1 only (sid ≥ 1) — FibTracker at CTS_1 ESTABLISHED, MS
+at each cycle-1 refresh — i.e. after CTS_0, when every gap in `[BOS_0, CTS_0]`
+has formed. Keep BOTH uncut or cond2 diverges. A FibTracker decision taken
+at a write event itself — the Scenario-1 cycle-0 activation — uses the value
+cut at that event's moment (at CTS_0 ESTABLISHED `_on_cts_established`'s own
+`has_unfilled`; on update `FibTracker._c0_has_unfilled_now`), never the cache.
+
+**Documented exception — the knowability divergence (M1, accepted
+2026-09-24, Plan F):** FibTracker asks every decision read at the handled
+event's moment (`evaluated_at` = `market_structure.event_moment(ev)`; its two
+cycle-0 cache writes stay uncut); the MS
+in-flight resolver passes `evaluated_at=None` (its snapshot is read only at
+`i > st.cts.idx` — MARKET_STRUCTURE_SPEC "Snapshot vs per-candle"). cond2
+(cached, uncut in both) and cond3 (its window ends at CTS_0, before any moment)
+still agree; **cond1 and the fib's existence can diverge**. Drop case: the ONLY
+sd gap of a lag-0 CTS_ESTABLISHED or a raw CTS_UPDATED has c2 == the event
+candle → FibTracker creates no fib at that event, while MS — which builds its
+fib as always-active in `compute_poi_inners_for_cycle` — keeps a POI inner,
+usable for sd-proximity CTS confirmation from the next candle. Permanent on H1
+cycle ≥ 1 (fib activation is one-shot at EST); on subs until a later
+CTS_UPDATED re-asks. **0 cases on the reference window.** The same class
+already existed: a gap that forms after an H1 cycle-≥1 EST enters the MS inners
+at the next CTS refresh but never activates the downstream fib (not measured).
+Pinned by `tests/test_imbalance_c3_knowability.py::test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib`
+(flips when the "re-ask when the gap's c3 closes" follow-up lands, PLAN_F §7).
+Canonical: IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
 
 **Documented approximation:** MS does NOT track Scenario 1 (TRUE / revert
 to FALSE on BOS_1 touching prev BOS zone outer). It passes
@@ -1511,10 +1541,12 @@ own update.
 
 **Rule:** Every `has_unfilled_imbalance` call inside Fib activation,
 Scenario 2 cond1/cond2/cond3, the cross-cycle dead-cycle walks, AND
-MarketStructure's cycle-0 snapshot passes `direction=sd`. The only
-permissive (no direction filter) call remaining in the codebase is
-`get_unfilled_imbalances` in FibTracker's locking path (deferred —
-doesn't affect behavior).
+MarketStructure's cycle-0 snapshot passes `direction=sd` (POI IC
+validation in `find_ic_candidates` is strict by design too). No production
+call is permissive: `get_unfilled_imbalances` / `has_imbalance_in_range`
+(no direction filter) have no production caller — the
+`get_unfilled_imbalances` import in `fib_tracker.py` is unused (hygiene
+follow-up, PLAN_F §7).
 
 **Why this is a landmine:** the pre-2026-05-23 design was permissive,
 with a documented rationale in POI_ZONES_SPEC §1 arguing that the
@@ -1532,16 +1564,34 @@ in-flight resolver and FibTracker — re-introduces the Scenario 2
 anchor agreement divergence closed 2026-05-13. Subtle; no test
 failure unless someone has written a direction-mismatch test.
 
-**Sites involved (15 total):**
-- `zones/fib_tracker.py:120, 127, 275, 943, 1056, 1062, 1065, 1073,
-  1132, 1137, 1139, 1158, 1620, 1650`
-- `structure/market_structure.py:1791`
+**Sites involved** (by function — line numbers drift; per-site table with
+window / `check_to_idx` / `evaluated_at`: IMBALANCE_FILL_SEMANTICS.md
+"Consumer call-site matrix"):
+- `zones/fib_tracker.py` — the `FibTracker._has_unfilled` helper (every
+  decision read: `_on_cts_established`, the cross_cycle cycle-0 first
+  activation on update, `_c0_has_unfilled_now`, `_update_fib_cts`,
+  `_update_cycle1_main`) + the two uncut cycle-0 cache writes
+  (`_handle_sid1plus_cts_established`, `_handle_cycle0_cts_updated`)
+- `zones/cross_cycle_fib.py::resolve_cross_cycle_eligibility` — the own test
+  + both dead-cycle walks (`direction = sd` when `sd ∈ {+1, -1}`); reached via
+  `select_fib_anchor_for_cycle`, `_maybe_activate_main_cross`, `_m15_cross_check`
+- `structure/market_structure.py::_update_cycle0_data`
 
 Plus `select_fib_anchor_for_cycle` takes `struct_direction` as a
 parameter; the two callers (`compute_poi_inners_for_cycle` and
 FibTracker's internal use) must pass it. Default value of 0 falls
 back to permissive — kept for backward compat but no production caller
 should hit it.
+
+**The second knob — `evaluated_at` (Plan F, 2026-09-24):** the same sites
+also pass the MOMENT of the question. `has_unfilled_imbalance`,
+`resolve_cross_cycle_eligibility` and `select_fib_anchor_for_cycle` take it
+keyword-only and REQUIRED, so a forgotten moment is a `TypeError`, never a
+silent default; `evaluated_at=None` is an explicit, justified no-cut
+(FibTracker's decisions pass the handled event's moment, `event_moment(ev)` —
+`None` on a pattern-path CTS_UPDATED, which records none; its two cycle-0 cache
+writes, `_update_cycle0_data` and `compute_poi_inners_for_cycle` pass `None`).
+Rule: IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
 
 **See also:** `engine_v2/IMBALANCE_FILL_SEMANTICS.md` for the
 canonical call-site matrix and `POI_ZONES_SPEC.md §1` for the
@@ -1567,7 +1617,9 @@ should fire in an earlier active stretch.
 **What broke (2026-05-26):** the `sd:POI` proximity gate used the scalar and
 lost the sid1-cyc2 candles at idx 926 (`sd`) and 954 (`opp_sd`) — the POI was
 active at 926 (stretch `[905,951]`) but `confirmed_idx` had collapsed to 997.
-Full causal chain in GOTCHAS "POI `confirmed_idx` Is a Lossy Scalar".
+(As of 2026-05-26. Since Plan F, 2026-09-24, the re-activations wait for the
+gap's first c3 — 953→954, 997→998, so `confirmed_idx` is 998; `[905,951]` is
+unchanged.) Full causal chain in GOTCHAS "POI `confirmed_idx` Is a Lossy Scalar".
 
 **The single source of the per-candle walk** is `zones/poi_lifecycle.py`
 (`active_stretches_from_history`, `poi_active_as_of`,
@@ -2095,7 +2147,8 @@ by clamping to `self._effective_end` instead of `len(self.df) - 1`):**
 | L5 | the two resolvers MS hands `self.df` — `_bos_inner_resolver` at `BOS_CONFIRMED` (`compute_bos_inner_from_event`) and `_poi_inners_resolver` at `CTS_ESTABLISHED`/`CTS_UPDATED` — derive base patterns whose reads (`identify_base_pattern` inside-bar scan to `anchor+5`, `find_base_threshold` to `i+5`, 2-candle/star `+1`, `zone_thresholds` `+1/+2`, `kl_zones_v1.py`) are clamped to the **frame**, not the bound; a BOS inner derived from candles `> B` feeds `_maybe_confirm_cts_via_proximity` at candles `<= B` | `_resolver_df()`: the resolvers get `self.df.iloc[:effective_end+1]` (RangeIndex, `loc == iloc`, attrs propagated), built ONCE per run and cached — an `iloc` slice deep-copies `attrs` (see GOTCHAS "Per-cell `.iloc[]`…"), and on the probe frame (which carries the mirrored sub attrs) paying that per `CTS_UPDATED` is far too slow. Main / unbounded runs and frames that already end at the bound get `self.df` (fast path, no change). The resolvers never write to the frame — keep it that way (a write through the view would land in `self.df` silently) |
 
 **Who was actually affected:** every sub geometry build already slices its
-frame to the bound (`_build_or_get_sub_geometry`: `iloc[slice_begin:run_cap+1]`,
+frame to the bound (`_build_or_get_sub_geometry` then — since Plan C
+`entity_df_mutation.build_or_get_geometry` → `_build_geometry`: `iloc[slice_begin:run_cap+1]`,
 `compute_imbalance` + `is_range_*` re-derived on the slice, `end_idx =
 run_cap_in_slice`), so `n-1 == effective_end` there and the fix is a no-op by
 construction; main runs pass `end_idx=None`. The only production path that ran
@@ -2109,14 +2162,28 @@ probe-row change is FC(1,0) `finalize_idx` 2844 → 2843 (`no_retrace`,
 else-branch), `starting_idx` 2803 unchanged. Phase 1 (`find_true_first_breakout`)
 was already equivalent (`est > hi` drop) — H1 byte-identical.
 
-**Known residual (documented, not fixed):** `df.attrs["imbalances"]` is a
-full-frame instance list — an FVG whose `c2 == B` exists only because `c3 =
-B+1` was seen, and a merged run ending at `B-1` gets its bounds from `B+1`
-(`imbalance.py`). `has_unfilled_imbalance` is as-of for *fills*, not for
-existence/bounds. Consumers: `_update_cycle0_data` and
-`_refresh_poi_inners_for_cycle → find_ic_candidates`. Sub builds are immune
-(they re-run `compute_imbalance` on the slice). If the property test ever trips
-on it, record and decide — do not silently exclude it.
+**Known residual (documented, not fixed — narrowed by Plan F, 2026-09-24):**
+`df.attrs["imbalances"]` is a full-frame instance list — an FVG whose `c2 == B`
+exists only because `c3 = B+1` was seen, and a merged run ending at `B-1` gets
+its bounds from `B+1` (`imbalance.py`). The MS consumers — `_update_cycle0_data`
+and `_refresh_poi_inners_for_cycle` → `compute_poi_inners_for_cycle`
+(`find_ic_candidates` IC cond3; `select_fib_anchor_for_cycle` cond1/cond3) — ask
+with `evaluated_at=None`: as-of for *fills* (`check_to_idx <= st.cts.idx <= B`),
+no existence cut, by decision (MARKET_STRUCTURE_SPEC "Snapshot vs per-candle").
+What each half can reach in a bounded run's events / rows:
+- **existence — nothing.** Every window ends at or before `st.cts.idx`, so a gap
+  whose c3 is past `B` is counted only when its c2 `== B == st.cts.idx`; the
+  snapshot is read at `i > st.cts.idx` and `cycle0_data` at a later cycle-1
+  refresh — candles the run never processes.
+- **merged bounds — only a degeneracy mismatch.** The truncated frame's
+  instance is the full run's formed prefix at `B`; asked with `check_to_idx <=
+  B`, both are unfilled (the c3 rule's exactness) unless the prefix and the
+  merged run differ in degeneracy (`gap_size <= 0` counts as filled) — 0 cases
+  on the reference data (IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3
+  rule").
+
+Sub builds are immune (they re-run `compute_imbalance` on the slice). If the
+property test ever trips on it, record and decide — do not silently exclude it.
 
 **What this is NOT — prefix (clip) equivalence.** "Clip of the natural-end run
 ≡ bounded run" does NOT hold in the last `range_max_k` (5) candles before `B`,

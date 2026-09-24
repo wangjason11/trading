@@ -91,22 +91,31 @@ knowable is a separate meta field. In the naming standard (GLOSSARY "Naming Stan
 is the element's **anchor** (a structure endpoint); the knowable candle is its **moment**. Timing / lifecycle reads (scan windows, lifecycle starts/ends,
 activation gates, "knowable-at" clips) must use the **moment** column, never `ev.idx` — the
 "real-time vs historical: never mix" rule. Verified against the emitters in
-`structure/market_structure.py` and live on the reference window (zones-pass audit, 2026-09-22).
+`structure/market_structure.py` and live on the reference window (zones-pass audit, 2026-09-22; the
+`CTS_THRESHOLD_UPDATED` row added by Plan F, 2026-09-24, verified against its emitter).
 
 | Event | `ev.idx` (price location — for CTS/BOS the element's anchor) | The moment (knowable at) | Other index meta |
 |---|---|---|---|
 | `CTS_ESTABLISHED` | the new cycle's CTS **anchor**: the breakout pattern's extreme candle — the FIRST argmax(`h`) (sd +1) / argmin(`l`) (sd −1) over the winning pattern's span `[start_idx, max(end_idx, confirmation_idx)]` (`_cts_from_breakout_event`) — adopted as the cycle's CTS; `ev.price` = that high/low. When the anchor precedes the apply candle it is retro-stamped: no CTS event is emitted when the anchor candle closes (raw CTS updates are off during the anchor→apply back-fill of an establishing cycle; the back-fill still runs `_bos_barrier_step` and the reversal-watch checks, which can emit their own events) | `meta["confirmed_at"]` = the pattern's apply candle (`end_idx` on SUCCESS, `confirmation_idx` on CONFIRMED). Equals the same cycle's `BOS_CONFIRMED.meta["confirmed_at"]` **by construction** (one `apply_idx`, one emission block; `multitf/parent_tables.py` asserts it) | `meta["anchor_idx"]` = the breakout pattern's FIRST candle (`ev.start_idx`, the MS scan candle) — the PATTERN-realm anchor (planned rename `pattern_anchor_idx`), **not necessarily the CTS anchor** (the two coincide when the pattern's first candle holds the extreme; 0 of 34 `CTS_ESTABLISHED` rows on the reference window) and never a timing value |
 | `BOS_CONFIRMED` | the BOS **anchor**: the extreme found by the BOS search (cycle 0: the extreme in `[start, cts_idx−1]`; cycle ≥ 1: the retracement extreme) — `<= confirmed_at` on the normal path (34/34 on the reference window) but NOT asserted in code: `_select_bos_on_breakout` swaps a reversed `[window_start, apply]` window, which would put the search past the apply candle | `meta["confirmed_at"]` (the same `apply_idx` as the cycle's `CTS_ESTABLISHED`; it is only ever emitted together with one) | — |
-| `CTS_UPDATED` | the new CTS anchor. Raw path (`meta["via"] == "replay_raw"`): the processed candle whose wick made a new high/low — knowable at its close. Pattern path (`via` = a pattern name; a breakout while the cycle is unconfirmed): the pattern's extreme candle, which can precede the pattern's apply candle; when it precedes the apply candle and extends the extreme, a raw-path `CTS_UPDATED` at the same idx/price was already emitted at that candle's close (raw updates stay on during a non-establishing back-fill) — 1 of 37 pattern-path rows on the reference window (confluence sub 2, 2468, a same-price duplicate) | raw path: `ev.idx`. Pattern path: the apply candle, which is **NOT recorded** (no `confirmed_at` on any `CTS_UPDATED`) | — |
+| `CTS_UPDATED` | the new CTS anchor. Raw path (`meta["via"] == CTS_UPDATED_RAW_VIA`, `"replay_raw"` — the constant in `structure/market_structure.py`, one definition of "raw path"): the processed candle whose wick made a new high/low — knowable at its close. Pattern path (`via` = a pattern name; a breakout while the cycle is unconfirmed): the pattern's extreme candle, which can precede the pattern's apply candle; when it precedes the apply candle and extends the extreme, a raw-path `CTS_UPDATED` at the same idx/price was already emitted at that candle's close (raw updates stay on during a non-establishing back-fill) — 1 of 37 pattern-path rows on the reference window (confluence sub 2, 2468, a same-price duplicate) | raw path: `ev.idx`. Pattern path: the apply candle, which is **NOT recorded** (no `confirmed_at` on any `CTS_UPDATED`; `event_moment` returns `None`) | — |
 | `CTS_CONFIRMED` / `CTS_RECONFIRMED` | the confirmation candle (pullback apply candle, or the proximity candle) | `ev.idx` == `meta["confirmed_at"]` | `CTS_CONFIRMED.meta["cts_anchor_idx"]` = `st.cts.idx` at confirmation = the CURRENT CTS anchor (equals `CTS_ESTABLISHED.idx` unless a `CTS_UPDATED` moved it). Measured: equal to the same cycle's `CTS_ESTABLISHED.idx` on only 7 of the 30 `CTS_CONFIRMED` rows on the reference window (6 of 25 unique cycles; sub 7 cycle 1 is on both lenses) — never assume either way |
+| `CTS_THRESHOLD_UPDATED` | NOT a price location: the processing candle whose range sync moved the CTS threshold — emitted only by `_sync_thresholds_from_range(i)` (active-range upkeep `_update_active_range(i)`, a pullback's apply candle, the sd-proximity confirmation candle); `ev.price` = the new threshold (the range breakout bound) | `ev.idx` | — (`meta["prev"]` is a price) |
 | `REVERSAL_CANDIDATE` | the reversal pattern's first candle — its pattern-realm anchor (`meta["anchor_idx"]`, same value; = the close-break candle) | `meta["apply_idx"]` = the SCHEDULED apply — a prediction that can expire; the confirmed reversal is `STATE_CHANGED(to=reversal)` at its `ev.idx` | `meta["expires_idx"]` — slice-local (not shifted by `slice_begin`) in the M15 lens CSVs |
 | `REVERSAL_WATCH_START` | the close-break candle MS processed when it emitted it (`_bos_barrier_step`) | `ev.idx` | `meta["anchor_idx"]` = that same close-break candle; `meta["expires_idx"]` — slice-local in the M15 lens CSVs |
 | `STATE_CHANGED` | the candle at which the state change takes effect: the processed candle, a pattern's apply candle, or a range's confirm candle | `ev.idx` | `meta["effective_idx"]` defaults to `ev.idx` but is the range-start anchor for `to=range` (`reason="range_confirmed"`), and is slice-local (not shifted by `slice_begin`) in the M15 lens CSVs |
 
-Not audited in this table: `RANGE_*` and `*_THRESHOLD_UPDATED` (`RANGE_STARTED` from
+Not audited in this table: `RANGE_*` and `BOS_THRESHOLD_UPDATED` (`RANGE_STARTED` from
 `_finalize_range_candidate_offline` is stamped at the `is_range_confirm_idx` label — see LANDMINES "Bounded MS
 Runs Must Not Read Past `end_idx`"; pullback- / proximity-created ranges are stamped at the pullback apply /
 proximity candle).
+
+**In code (Plan F, 2026-09-24):** `structure/market_structure.event_moment(ev)`, defined next to the emitter, is
+this table's moment column for the three events whose handlers ask imbalance questions (FibTracker):
+`CTS_ESTABLISHED` → `meta["confirmed_at"]` (direct index), `CTS_UPDATED` → `ev.idx` on the raw path / `None` on the
+pattern path (no recorded moment), `CTS_THRESHOLD_UPDATED` → `ev.idx`; any other type raises `ValueError` (a new
+consumer must first define its event's moment in `event_moment`). Why it matters: IMBALANCE_FILL_SEMANTICS.md
+"Knowability — the c3 rule".
 
 **Bound and frequency (CTS_ESTABLISHED):** `meta["anchor_idx"]` (pattern anchor) `<= ev.idx` (CTS anchor)
 `<= meta["confirmed_at"]` (moment) `<= meta["anchor_idx"] + range_max_k (5)`. The CTS anchor (the pattern's extreme candle) precedes the moment whenever an
@@ -128,18 +137,28 @@ zone — the candle its base pattern is found around, `zones/KL_ZONES_SPEC.md`),
 
 Every **timing / lifecycle** read of a cycle start — `zones/structure_lifecycle.compute_cycle_lifecycle`,
 `multitf/parent_tables.build_parent_tables` (`cts_moment`), the POI activation floor's cycle term
-(`zones/poi_zones.derive_poi_zones`, direct index — Plan D), the Plan-B early stop's finalize — uses
-`meta["confirmed_at"]`. A `CTS_ESTABLISHED` without it makes the first two raise (`AssertionError`);
+(`zones/poi_zones.derive_poi_zones`, direct index — Plan D), the Plan-B early stop's finalize, FibTracker's
+imbalance questions at a `CTS_ESTABLISHED` (`event_moment`, direct index — Plan F) — uses
+`meta["confirmed_at"]`. A `CTS_ESTABLISHED` without it makes the first two raise (`AssertionError`) and the
+direct-index readers raise `KeyError`;
 `unified_probe`'s finalize / `cts0_est_idx` reads (`_second_cts_moment`, Phase 2) use
 `meta.get("confirmed_at", ev.idx)` instead — a fallback to the CTS anchor that is never taken today
 (every `CTS_ESTABLISHED` carries `confirmed_at`). Known sites that still read `ev.idx` as a time are
-recorded as separate causes (the POI activation sweep's `CTS_UPDATED` transitions at `ev.idx`
-(pre-window and in-window; the pattern path records no moment — an event-contract change, parked);
-FibTracker activation/terminal timing; the pool's `knowable_at_idx` / sibling clip — PART4 §17.12; `unified_probe` Phase 2's retrace-window
+recorded as separate causes (the POI activation sweep's `CTS_UPDATED` transitions at `ev.idx`, pre-window and
+in-window — correct on the raw path, whose `ev.idx` IS the moment; on the pattern path it is the CTS anchor and no
+moment is recorded — an event-contract change, parked;
+FibTracker's stamped activation / terminal timing (`activated_at` holds the CTS anchor — GLOSSARY "Naming
+Standard") and the fill horizon `check_to_idx` of its imbalance reads at `CTS_ESTABLISHED` — the knowability cut
+itself is on the moment (`evaluated_at`, Plan F); the pool's `knowable_at_idx` / sibling clip — PART4 §17.12; `unified_probe` Phase 2's retrace-window
 start `check_lo = first_cts.idx + 1`, the CTS anchor, vs Phase 1's moment-based `tfb.est_idx + 1`; the MS
-in-flight POI-inner resolver, which evaluates fills as-of the CTS anchor — `_refresh_poi_inners_for_cycle` →
-`compute_poi_inners_for_cycle` / `select_fib_anchor_for_cycle`, and `_update_cycle0_data` — not yet measured, and it
-feeds the sd-zone-proximity CTS confirmation). Site lists + staging: `plans/PLAN_E_inputs.md`.
+in-flight POI-inner resolver, which evaluates fills as-of `st.cts.idx` — the processing candle after a raw
+`CTS_UPDATED`, the CTS anchor after a `CTS_ESTABLISHED` or a pattern-path update — `_refresh_poi_inners_for_cycle` →
+`compute_poi_inners_for_cycle` / `select_fib_anchor_for_cycle`, and `_update_cycle0_data`, and feeds the
+sd-zone-proximity CTS confirmation: its imbalance-EXISTENCE half is settled — no c3 cut, by decision, because the
+POI-inner snapshot's only reader is gated `i > st.cts.idx` and the cycle-0 mirror is read only at a later cycle-1
+refresh, so no decision uses a gap before it forms (Plan F, measured 24/24 CSVs identical with a cut;
+`structure/MARKET_STRUCTURE_SPEC.md` "Snapshot vs per-candle"; the one accepted MS/FibTracker activation divergence
+this leaves: IMBALANCE_FILL_SEMANTICS.md "Decided at the event") — its fill-horizon half is not yet measured). Site lists + staging: `plans/PLAN_E_inputs.md`.
 
 The engine maintains a stable downstream interface by converting structure events into StructureLevels (CTS/BOS list).【fileciteturn1file14】
 
@@ -164,7 +183,9 @@ flips between active and inactive based on its activation conditions.
 **Two tiers — not every lifecycle object has the condition (active/inactive)
 axis.** It applies ONLY to objects with a genuinely **reversible condition** —
 today just **POI** and **Fib**, whose condition is the unfilled-imbalance state
-(flips as imbalances form / commit-fill). Objects with **no reversible
+(flips as imbalances form / commit-fill; an imbalance FORMS at the close of its first c3,
+`ImbalanceInstance.formed_at` = `start_idx + 1` — IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3
+rule"). Objects with **no reversible
 condition** — **structure cycles, structures, KL zones, WVMI** — are **tier-1**:
 their "active" simply means **started-and-not-ended**, fully derivable from
 `start_idx`/`end_idx`. They need no stored `active` flag and no
@@ -215,11 +236,16 @@ POI activation conditions
      (the fib's `cts_idx` only grows via `CTS_UPDATED`).
   2. `ic_idx <= t` — IC candle exists.
   3. `has_unfilled_imbalance(df, ic_idx + 1, t, check_to_idx=t,
-     direction=sd)` — sd-direction imbalance overlaps `(ic_idx, t]`
-     that is not yet *committed-filled* per the two-stroke state machine
-     (stroke 1 = 70% retrace; stroke 2 = close past gap outer in
-     instance direction). See `IMBALANCE_FILL_SEMANTICS.md` for the full
-     predicate definition. Flips as imbalances form / commit-fill.
+     direction=sd, evaluated_at=t)` — an sd-direction imbalance FORMED by
+     t (its first c3 has closed: `inst.formed_at <= t` — Plan F) overlaps
+     `(ic_idx, t]` and is not yet *committed-filled* per the two-stroke
+     state machine (stroke 1 = 70% retrace; stroke 2 = close past gap
+     outer in instance direction). The sweep evaluates it event-driven,
+     not through the wrapper: an instance enters the unfilled set at
+     `max(inst.formed_at, first_active)` and leaves at its cached stroke-2
+     candle (`_compute_fill_idx_cache`). See `IMBALANCE_FILL_SEMANTICS.md`
+     ("Knowability — the c3 rule" + the predicate). Flips as imbalances
+     form / commit-fill.
   5. Variant ≥ V30 — IC candle overlaps the 61.8-80% fib zone
      (computed from `bos_price` and the time-varying `cts_price_at(t)`)
      by at least 30%. Variants can downgrade (V90 → V60 → V30) or

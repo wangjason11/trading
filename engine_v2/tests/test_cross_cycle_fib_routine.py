@@ -64,7 +64,7 @@ def _resolve_snapshot(df, cond2: bool, dead=None):
         bos_by_cycle={0: _BOS[0]}, cts_by_cycle={0: _CTS[0]},
         dead_cycles=set() if dead is None else dead,
         fill_threshold=0.70, fill_as_of="snapshot",
-        prior_cached_liveness={0: cond2},
+        prior_cached_liveness={0: cond2}, evaluated_at=None,
     )
 
 
@@ -77,7 +77,7 @@ def _resolve_current(df, target_cycle, current_candle, own_imb_start,
         bos_by_cycle={k: _BOS[k] for k in range(target_cycle)},
         cts_by_cycle={k: _CTS[k] for k in range(target_cycle)},
         dead_cycles=set() if dead is None else dead,
-        fill_threshold=0.70, fill_as_of="current",
+        fill_threshold=0.70, fill_as_of="current", evaluated_at=None,
     )
 
 
@@ -205,7 +205,7 @@ def test_current_missing_cycle_data_stops_walk():
         df=df, target_cycle=1, sd=1, current_candle=40, own_imb_start=30,
         anchor_idx=40, anchor_price=1.35,
         bos_by_cycle={}, cts_by_cycle={}, dead_cycles=set(),
-        fill_threshold=0.70, fill_as_of="current",
+        fill_threshold=0.70, fill_as_of="current", evaluated_at=None,
     )
     assert e.own_has is True
     assert e.crosses is False
@@ -222,6 +222,41 @@ def test_direction_filter_ignores_counter_direction_imbalance():
         df=df, target_cycle=1, sd=1, current_candle=40, own_imb_start=30,
         anchor_idx=40, anchor_price=1.35,
         bos_by_cycle={0: _BOS[0]}, cts_by_cycle={0: _CTS[0]},
-        dead_cycles=set(), fill_threshold=0.70, fill_as_of="current",
+        dead_cycles=set(), fill_threshold=0.70, fill_as_of="current", evaluated_at=None,
     )
     assert e.own_has is False  # counter-direction imbalance filtered out
+
+
+# ---------- knowability: the own-imbalance test is asked at the moment (Plan F) ----------
+
+def _resolve_own(df, evaluated_at):
+    return resolve_cross_cycle_eligibility(
+        df=df, target_cycle=1, sd=1, current_candle=40, own_imb_start=30,
+        anchor_idx=40, anchor_price=1.35,
+        bos_by_cycle={0: _BOS[0]}, cts_by_cycle={0: _CTS[0]},
+        dead_cycles=set(), fill_threshold=0.70, fill_as_of="current",
+        evaluated_at=evaluated_at,
+    )
+
+
+def test_own_gap_not_formed_at_the_moment_is_not_counted():
+    # The only own gap has c2 == current_candle (40): its c3 is 41.
+    df = _df(60, [_INST0, ImbalanceInstance(40, 40, 1, 1.30, 1.20, 0.10)])
+    assert _resolve_own(df, evaluated_at=40).own_has is False
+    assert _resolve_own(df, evaluated_at=41).own_has is True
+    assert _resolve_own(df, evaluated_at=None).own_has is True   # uncut (MS in-flight)
+
+
+def test_evaluated_at_is_required_on_the_routine_and_the_anchor_selector():
+    from engine_v2.zones.fib_tracker import select_fib_anchor_for_cycle
+    df = _df(60, [_INST0, _INST1])
+    with pytest.raises(TypeError, match="evaluated_at"):
+        resolve_cross_cycle_eligibility(
+            df=df, target_cycle=1, sd=1, current_candle=40, own_imb_start=30,
+            anchor_idx=40, anchor_price=1.35, bos_by_cycle={}, cts_by_cycle={},
+            dead_cycles=set(), fill_threshold=0.70, fill_as_of="current",
+        )
+    c0 = {"bos_idx": 10, "bos_price": 1.0, "cts_idx": 20, "cts_price": 1.15,
+          "has_unfilled": True, "scenario1": None}
+    with pytest.raises(TypeError, match="evaluated_at"):
+        select_fib_anchor_for_cycle(df, 1, 1, 30, 1.2, 40, 1.35, c0, 0.70, struct_direction=1)

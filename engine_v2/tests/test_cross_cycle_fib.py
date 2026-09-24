@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 
 from engine_v2.common.types import ImbalanceInstance
-from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.structure.market_structure import CTS_UPDATED_RAW_VIA, StructureEvent
 from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig
 
 
@@ -40,6 +40,13 @@ def _make_df_with_imbalances(n_candles: int, instances: list[ImbalanceInstance])
 def _ev(ev_type: str, idx: int, price: float, sid: int, cycle_id: int, sd: int,
         cts_anchor_idx: int = None) -> StructureEvent:
     meta = {"structure_id": sid, "cycle_id": cycle_id, "struct_direction": sd}
+    # The event contract FibTracker reads by direct index (event_moment): a
+    # CTS_ESTABLISHED carries its moment (lag 0 here), a CTS_UPDATED its via
+    # (the raw path here).
+    if ev_type == "CTS_ESTABLISHED":
+        meta["confirmed_at"] = idx
+    if ev_type == "CTS_UPDATED":
+        meta["via"] = CTS_UPDATED_RAW_VIA
     if cts_anchor_idx is not None:
         meta["cts_anchor_idx"] = cts_anchor_idx
     return StructureEvent(idx=idx, category="STRUCTURE", type=ev_type,

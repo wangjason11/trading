@@ -155,8 +155,8 @@ def test_poi_unchanged_when_anchor_equals_moment():
     assert ev.idx == ev.meta["confirmed_at"]
     assert z.ic_idx == 12
     # First activation only: with anchor == moment, first_active is identical
-    # under both rules, so every later transition is too. (Pinning the full
-    # history would couple this test to unrelated imbalance-timing changes.)
+    # under both rules. The full history (incl. the c3-knowability deactivation
+    # at 19) is pinned by test_imbalance_c3_knowability (Plan F).
     assert _hist(z)[0] == (15, True)
     assert (z.meta["end_idx"], z.meta["end_reason"]) == (20, "next_cycle")
     assert z.meta["cts_established_idx"] == ev.meta["confirmed_at"]
@@ -248,9 +248,9 @@ def test_activation_applies_pre_window_cts_state():
         variant_thresholds={"V30": 0.3, "V60": 0.6, "V90": 0.9},
         imbalances=[imb], fill_idx_cache={id(imb): (None, None)}, lifecycle_floor_idx=None,
     )
-    # The CTS (idx 5) is applied BEFORE the sweep; the imbalance (entered at 3)
-    # enters at first_active; so the POI is active exactly AT the moment, with
-    # variants computed from the pre-window CTS state.
+    # The CTS (idx 5) is applied BEFORE the sweep; the imbalance (formed at 4 —
+    # its first c3, Plan F) enters at first_active; so the POI is active exactly
+    # AT the moment, with variants computed from the pre-window CTS state.
     assert history and history[0]["idx"] == 6 and history[0]["active"]
     assert history[0]["versions"]
 

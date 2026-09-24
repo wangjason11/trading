@@ -131,35 +131,48 @@ def has_unfilled_imbalance(
     fill_threshold: float = 0.70,
     *,
     direction: Optional[int] = None,
+    evaluated_at: Optional[int],
 ) -> bool:
     """True if at least one imbalance instance overlapping `[start_idx, end_idx]`
-    is unfilled as of `check_to_idx`.
+    is unfilled as of `check_to_idx`, counting only instances that have FORMED by
+    the moment the question is asked (`evaluated_at`).
+
+    Two as-ofs (IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule"):
+    ``check_to_idx`` is the fill horizon, ``evaluated_at`` the moment of the
+    question.
 
     Parameters
     ----------
     start_idx, end_idx
         Inclusive window in which the instance must overlap.
     check_to_idx
-        The "as-of" candle for the fill scan — `inst.is_filled` checks candles
-        in `(inst.end_idx, check_to_idx]` for a ≥70% retrace into the merged gap.
-        Callers pick this based on the question being asked: fib activation uses
-        the fib's current `cts_idx`; per-candle / live evaluation uses the
-        current candle; scenario condition checks use the relevant reference
-        event idx (e.g., BOS_1 idx to ask "did BOS_1 fill cycle 0's imbalances?").
+        The FILL HORIZON — `inst.is_filled` scans `(inst.end_idx, check_to_idx]`
+        for the two-stroke fill. Callers pick it for the question asked (the
+        fib's `cts_idx`, a reference event idx such as BOS_1, or the current
+        candle); on several fib sites it is still a CTS anchor (Plan E E3).
+    evaluated_at
+        Keyword-only and REQUIRED. The MOMENT the question is asked. An instance
+        counts only once its first c3 has closed (`inst.formed_at <=
+        evaluated_at`), and only its formed prefix is tested against the window
+        (`inst.overlaps_formed_prefix`). The cut is keyed on the moment, never on
+        `check_to_idx` (which can be an anchor that precedes the moment).
+        ``None`` = an explicit "no knowability cut" — retrospective questions,
+        the unchanged MS in-flight resolver, cached values judged at their later
+        use, and events with no recorded moment — and is today's answer.
     direction
-        Optional struct-direction filter. ``None`` (default) accepts any
-        direction — used for fib activation and most cycle-/scenario-level
-        questions (the fib's BOS→CTS span is structurally directional, so the
-        check is permissive). Set to ``±1`` for IC candidate validation, which
-        is strict about same-direction follow-through.
+        Struct-direction filter; every production caller passes ``sd`` (all
+        Fib / scenario / POI checks are sd-direction strict since 2026-05-23 —
+        IMBALANCE_FILL_SEMANTICS.md). ``None`` accepts any direction.
     fill_threshold
-        Retracement fraction (default 0.70) at which an instance is considered
-        filled.
+        Retracement fraction (default 0.70) at which stroke 1 fires.
     """
     for inst in df.attrs.get("imbalances", []):
         if direction is not None and inst.direction != direction:
             continue
-        if not inst.overlaps(start_idx, end_idx):
+        if evaluated_at is None:
+            if not inst.overlaps(start_idx, end_idx):
+                continue
+        elif not inst.overlaps_formed_prefix(start_idx, end_idx, evaluated_at):
             continue
         if not inst.is_filled(df, check_to_idx, fill_threshold):
             return True

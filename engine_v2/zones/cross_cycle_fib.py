@@ -67,6 +67,8 @@ def resolve_cross_cycle_eligibility(
     fill_as_of: str = "current",
     prior_cached_liveness: Optional[Dict[int, bool]] = None,
     target_ceiling: Optional[int] = None,
+    *,
+    evaluated_at: Optional[int],
 ) -> CrossEligibility:
     """Decide cross-cycle eligibility at ``target_cycle`` (pure).
 
@@ -106,6 +108,17 @@ def resolve_cross_cycle_eligibility(
         defaults to ``True`` (no extra constraint).
     target_ceiling : int, optional
         Reserved for §11b (the main-only ``M`` cap). **Ignored in §11a.**
+    evaluated_at : int or None
+        Keyword-only, REQUIRED: the MOMENT the decision is taken (Plan F;
+        IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule"). Every
+        imbalance question below counts only instances formed by then. The
+        step-1 own test is the one it can change (its window ends AT
+        ``current_candle``); the prior-cycle walks end at ``CTS_k`` < the moment
+        (already bounded) and get it for uniformity. ``prior_cached_liveness``
+        (cond2) is a cached value judged at its use, so it is not re-cut here.
+        ``None`` = no cut: the unchanged MS in-flight resolver. On the moment
+        paths (THRESHOLD, raw UPDATED) ``current_candle`` carries the same value
+        — Plan E E3a keeps ONE moment parameter.
 
     Returns
     -------
@@ -121,6 +134,7 @@ def resolve_cross_cycle_eligibility(
         current_candle,
         fill_threshold,
         direction=direction,
+        evaluated_at=evaluated_at,
     )
     if not own_has:
         return CrossEligibility(
@@ -148,14 +162,14 @@ def resolve_cross_cycle_eligibility(
         if fill_as_of == "snapshot":
             live = has_unfilled_imbalance(
                 df, range_start, range_end, own_imb_start, fill_threshold,
-                direction=direction,
+                direction=direction, evaluated_at=evaluated_at,
             )
             if prior_cached_liveness is not None:
                 live = live and bool(prior_cached_liveness.get(k, True))
         else:  # "current"
             live = has_unfilled_imbalance(
                 df, range_start, range_end, current_candle, fill_threshold,
-                direction=direction,
+                direction=direction, evaluated_at=evaluated_at,
             )
         if not live:
             dead_cycles.add(k)

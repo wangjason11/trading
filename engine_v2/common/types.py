@@ -141,6 +141,25 @@ class ImbalanceInstance:
         """True if this instance intersects the inclusive [start_idx, end_idx] range."""
         return self.start_idx <= end_idx and self.end_idx >= start_idx
 
+    @property
+    def formed_at(self) -> int:
+        """The moment the instance's gap exists: the close of its FIRST c3
+        (`start_idx + 1`). A merged run keeps growing — its `end_idx` and merged
+        bounds are final only at `end_idx + 1` — but from `formed_at` a live
+        engine already sees its formed prefix. See IMBALANCE_FILL_SEMANTICS.md
+        "Knowability — the c3 rule"."""
+        return self.start_idx + 1
+
+    def overlaps_formed_prefix(self, start_idx: int, end_idx: int, evaluated_at: int) -> bool:
+        """`overlaps` as known at the moment `evaluated_at`: False before
+        `formed_at`; otherwise the formed prefix `[start_idx, min(end_idx,
+        evaluated_at - 1)]` (the c2s whose c3 has closed) must intersect the
+        inclusive `[start_idx, end_idx]` window."""
+        if self.formed_at > evaluated_at:
+            return False
+        formed_end_idx = min(self.end_idx, evaluated_at - 1)
+        return self.start_idx <= end_idx and formed_end_idx >= start_idx
+
     def __deepcopy__(self, memo):
         """Return self instead of a deep copy — a deliberate performance escape.
 
@@ -191,7 +210,11 @@ class ImbalanceInstance:
 
         Degenerate gap (gap_size <= 0): returns True (safe default — treat
           invalid gap as filled).
-        Empty scan range (end_idx >= check_to_idx): returns False (unfilled).
+        Empty scan range (end_idx >= check_to_idx): returns False (unfilled) —
+          correct for a FORMED prefix (its only scanned candle, its own c3,
+          cannot arm its gap), but an instance that has not formed yet is not
+          an imbalance at all: a caller asking at a moment must apply the
+          `formed_at` cut first (`has_unfilled_imbalance(evaluated_at=...)`).
         """
         if self.gap_size <= 0:
             return True  # invalid gap -> treat as filled (safe default)

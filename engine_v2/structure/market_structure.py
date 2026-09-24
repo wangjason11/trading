@@ -161,6 +161,35 @@ class StructureEvent:
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
+# `CTS_UPDATED.meta["via"]` of the RAW path (`_maybe_update_cts_pre_confirm`): a
+# new extreme seen on the processing candle, so `ev.idx` IS that candle. Every
+# other `via` is a breakout-pattern name, whose `ev.idx` is the CTS anchor.
+CTS_UPDATED_RAW_VIA = "replay_raw"
+
+
+def event_moment(ev: StructureEvent) -> Optional[int]:
+    """The candle at which a CTS event became knowable (its MOMENT — GLOSSARY
+    "Naming Standard"; ARCHITECTURE "`ev.idx` convention").
+
+    - CTS_ESTABLISHED: `meta["confirmed_at"]` (`ev.idx` is the CTS anchor).
+    - CTS_UPDATED: `ev.idx` on the raw path (`via == CTS_UPDATED_RAW_VIA`);
+      None on the pattern path — its `ev.idx` is the CTS anchor and no moment
+      is recorded (Plan E).
+    - CTS_THRESHOLD_UPDATED: `ev.idx` (the processing candle,
+      `_sync_thresholds_from_range`).
+
+    Any other type raises: a new consumer must define its event's moment.
+    Direct indexing: every emitter sets `confirmed_at` / `via` (event contract).
+    """
+    if ev.type == "CTS_ESTABLISHED":
+        return int(ev.meta["confirmed_at"])
+    if ev.type == "CTS_UPDATED":
+        return int(ev.idx) if ev.meta["via"] == CTS_UPDATED_RAW_VIA else None
+    if ev.type == "CTS_THRESHOLD_UPDATED":
+        return int(ev.idx)
+    raise ValueError(f"event_moment: no moment defined for {ev.type}")
+
+
 @dataclass
 class MarketStructureState:
     # Structure unit id (increments on reversal)
@@ -635,7 +664,7 @@ class MarketStructure:
 
         # Option B: even when backfilling (freeze_range=True), CTS can update pre-confirm
         # based on raw new extremes in struct_direction.
-        self._maybe_update_cts_pre_confirm(i, via="replay_raw")
+        self._maybe_update_cts_pre_confirm(i, via=CTS_UPDATED_RAW_VIA)
 
         # Per-candle CTS confirmation via sd zone proximity. Runs on every
         # candle (anchor, back-fill, apply, fallthrough) — see LANDMINES
@@ -1698,7 +1727,7 @@ class MarketStructure:
             return new_price > float(st.cts.price)
         return new_price < float(st.cts.price)
     
-    def _maybe_update_cts_pre_confirm(self, i: int, *, via: str = "raw") -> None:
+    def _maybe_update_cts_pre_confirm(self, i: int, *, via: str) -> None:
         """
         Option B: Before the current CTS is confirmed (cts_phase != CONFIRMED),
         update CTS whenever price makes a new extreme in struct_direction,
@@ -2047,9 +2076,13 @@ class MarketStructure:
         # filter applied to Scenario 2 cond1/cond3 in select_fib_anchor_for_cycle).
         # Counter-direction imbalances in [BOS_0, CTS_0] never become POIs, so
         # they shouldn't influence the in-flight Scenario 2 decision either.
+        # No knowability cut (evaluated_at=None, Plan F): this is Scenario-2
+        # cond2, read only at a later cycle-1 refresh (> CTS_0), when every gap
+        # in [BOS_0, CTS_0] has formed — and FibTracker's cycle-0 cache is
+        # likewise stored uncut, so the two mirrors agree.
         has_unfilled = has_unfilled_imbalance(
             self.df, c0_lo, c0_hi, cts_idx, self._fill_threshold,
-            direction=int(st.struct_direction),
+            direction=int(st.struct_direction), evaluated_at=None,
         )
         st.cycle0_data = {
             "bos_idx": bos_idx,

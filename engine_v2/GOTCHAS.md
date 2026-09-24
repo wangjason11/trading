@@ -691,9 +691,10 @@ zones.
 
 **Convention (short form — the canonical per-event table is ARCHITECTURE.md "`ev.idx` convention"; do not re-grow a copy here):**
 - `ev.idx` is a **price location** (NOT knowable at that candle) for `BOS_CONFIRMED` (the BOS extreme), `CTS_ESTABLISHED` (the CTS anchor — the first argmax `h` / argmin `l` over the breakout span, retro-stamped) and pattern-path `CTS_UPDATED` (the span extreme; no `confirmed_at` recorded).
-- `ev.idx` is the **moment** for `CTS_CONFIRMED` / `CTS_RECONFIRMED` (the confirmation candle, `== confirmed_at`) and raw-path `CTS_UPDATED` (`via="replay_raw"`, the processed candle).
+- `ev.idx` is the **moment** for `CTS_CONFIRMED` / `CTS_RECONFIRMED` (the confirmation candle, `== confirmed_at`), raw-path `CTS_UPDATED` (`meta["via"] == CTS_UPDATED_RAW_VIA`, i.e. `"replay_raw"`; the processed candle) and `CTS_THRESHOLD_UPDATED` (the processing candle passed to `_sync_thresholds_from_range`).
 - `REVERSAL_CANDIDATE`: `ev.idx` = the reversal pattern's anchor; `meta["apply_idx"]` = the SCHEDULED apply (a prediction that can expire).
 - The moment of `BOS_CONFIRMED` and `CTS_ESTABLISHED` is `meta["confirmed_at"]` — the same apply candle for the same cycle, by construction.
+- In code, `structure/market_structure.py::event_moment(ev)` resolves the moment of `CTS_ESTABLISHED` / `CTS_UPDATED` / `CTS_THRESHOLD_UPDATED` in one place (pattern-path `CTS_UPDATED` → `None`, no moment recorded; any other type raises). FibTracker's imbalance reads are asked at it (Plan F, 2026-09-24).
 
 (An earlier copy of this table listed `CTS_ESTABLISHED` as "confirmation candle" and BOS as the lone "exception!" — both wrong; corrected 2026-09-22.)
 
@@ -777,6 +778,12 @@ event (e.g., the M15 reverse cross-fib pre-established phase).
 **Emission source:** Only emitted by `_sync_thresholds_from_range` in
 `market_structure.py`. Nowhere else.
 
+**`ev.idx` is the moment:** the `i` passed to `_sync_thresholds_from_range(i)`
+— the candle being processed (the loop candle, a pattern's apply candle, or the
+proximity-confirmation candle). Unlike `CTS_ESTABLISHED`, nothing is
+retro-stamped, so `event_moment(ev)` returns `ev.idx` (ARCHITECTURE.md "`ev.idx`
+convention").
+
 **Preconditions for emission:**
 1. `range_active == True`
 2. `range_hi` (sd=+1) or `range_lo` (sd=-1) CHANGED from its previous value
@@ -837,6 +844,43 @@ stdout). Same for log/CSV output if encoded as UTF-8.
 
 ---
 
+## Windows MAX_PATH: Python Reports Long Scratchpad Paths as Missing (2026-09-24)
+
+**Problem:** Windows' legacy path limit is 260 characters (`MAX_PATH`), and this
+machine has `LongPathsEnabled = 0`
+(`HKLM\SYSTEM\CurrentControlSet\Control\FileSystem`). The Claude scratchpad
+directory alone is 164 characters
+(`C:\Users\wangj\AppData\Local\Temp\claude\<project slug>\<session uuid>\scratchpad`)
+and the replay CSV names run up to 89
+(`NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence_structure_events.csv`),
+so ONE subfolder crosses the limit — e.g. a save copied to
+`…\scratchpad\20260923_172626_0a4eadc\<csv>` is 278 characters. (The repo paths
+stay under it: `artifacts/commits/<branch>/<save>/<csv>` is about 230.)
+
+**Symptom:** Python says the file is not there although it is:
+`os.path.exists` → `False` (a false "missing": a script that checks before it
+reads concludes the CSV is absent), `open` / `pd.read_csv` →
+`FileNotFoundError: [Errno 2] No such file or directory`. Bash `cp` / `ls`
+(MSYS) handle the same path fine, so it looks like a Python bug or a race
+rather than a path limit.
+
+**Fix:** either (a) give Python the extended-length form — prefix the ABSOLUTE,
+backslash-separated path with `\\?\`, in Python
+`"\\\\?\\" + os.path.abspath(p)` (`abspath` also turns `/` into `\`, which the
+prefix requires), or (b) copy / write to a short path (a short folder directly
+under the scratchpad, short file names). Verified 2026-09-24 (Python 3.14) on a
+286-character copy of the confluence `structure_events` CSV: the plain path →
+`exists False` / `FileNotFoundError`; the `\\?\` form → `exists True`,
+`read_csv` 1322 rows. (Machine-wide alternative: set
+`LongPathsEnabled = 1` — needs admin, not done. git has its own switch,
+`git -c core.longpaths=true`, for the long worktree paths.)
+
+**Rule:** when a scratchpad script reads or writes replay CSVs, keep the path
+short or use `\\?\`. A "missing file" from Python while bash lists it → check the
+path length first.
+
+---
+
 ## Merged Imbalance Instances Carry Hindsight Bias in Backtest
 
 **Problem:** `ImbalanceInstance.gap_top` / `gap_bottom` depend on `df[end_idx+1]`
@@ -846,18 +890,35 @@ activation query at `check_to=CTS_idx=120` sees the complete instance with
 bounds computed from `df[126].low` (bullish) — data that wouldn't exist yet
 in a true live-timing simulation.
 
-**Why we accept it:** The pre-existing `compute_imbalance` already had 1-candle
-hindsight (flag at idx 120 requires df[121]). Merging extends the window
-from 1 candle to the length of the run. The fill check is still time-bounded
-by `check_to_idx`, so the practical impact on Fib/POI activation is small:
-the scan `(end_idx, check_to_idx]` is empty when `end_idx >= check_to_idx`,
-resulting in "unfilled" — which matches the expected behavior at that point
-in time.
+The hindsight has two halves:
+
+- **Existence — CLOSED by Plan F (2026-09-24).** `compute_imbalance` flags the
+  c2, but the gap exists only once a c3 has closed (the flag at idx 120 requires
+  `df[121]`). This entry used to accept that because "the scan
+  `(end_idx, check_to_idx]` is empty when `end_idx >= check_to_idx`, resulting in
+  'unfilled' — which matches the expected behavior at that point in time". It
+  does not: at a moment before its first c3 the instance is not an imbalance at
+  all, and counting it re-activated POIs one candle early (H1 IC 865 / 860:
+  997 → 998) and let FibTracker decide on a gap that did not exist yet. Now an
+  instance exists from `ImbalanceInstance.formed_at = start_idx + 1`, and a
+  question asked at a moment passes `evaluated_at` so only instances formed by
+  then — and only their **formed prefix** — count. The cut is keyed on the
+  moment, never on `check_to_idx` (the fill horizon, which can be a CTS anchor
+  that precedes the moment). Where it is applied and where it is deliberately
+  not (the MS in-flight snapshot, IC identification, the cycle-0 caches):
+  IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
+- **Merged bounds — harmless except degenerate gaps.** While the run is still
+  growing (`formed_at` … `end_idx`), testing the formed prefix against the
+  final merged bounds gives exactly a live engine's answer: the prefix's only
+  scanned candle is its own c3, which cannot arm its own gap. The one exception
+  is degeneracy (`gap_size <= 0`, which `is_filled` treats as filled) — a prefix
+  and its merged run can differ there; 0 cases on the reference data (H1 0/218
+  prefixes, M15 0/842).
 
 **When to revisit:** When moving to a live pipeline, detection must run
-incrementally per candle and instances must grow via explicit
-`IMBALANCE_EXTENDED` events (or equivalent in-place updates) so queries only
-see what was known at query time.
+incrementally per candle: create each instance at `formed_at` and grow it via
+explicit `IMBALANCE_EXTENDED` events (or equivalent in-place updates) so queries
+only see what was known at query time.
 
 ---
 
@@ -1029,7 +1090,8 @@ downstream FibTracker-derived POI zones (Scenario 2 cross-cycle). See
 which handles CTS_UPDATED events emitted via the breakout-pattern path.
 But CTS can also UPDATE via the raw-extreme path in
 `_maybe_update_cts_pre_confirm` (called per candle from
-`_replay_step_no_patterns` with `via="replay_raw"`). That path did NOT
+`_replay_step_no_patterns` with `via="replay_raw"` — the constant
+`CTS_UPDATED_RAW_VIA` since Plan F). That path did NOT
 refresh the snapshot.
 
 **Symptom (2026-05-13, sid=1 cycle=2, NZD_USD H1):** CTS_ESTABLISHED at
@@ -1069,6 +1131,13 @@ FibTracker downstream). Without that, MS's in-flight resolver could
 silently disagree with FibTracker on which POI inners exist for a cycle
 — a separate hazard from the stale-snapshot one this entry describes.
 See LANDMINES "Scenario 2 anchor agreement" for the closing rule.
+(Plan F, 2026-09-24, added one accepted, documented exception — the **M1
+divergence**: FibTracker asks its imbalance questions at the event's moment,
+the in-flight resolver does not cut, so when a lag-0 CTS_ESTABLISHED / raw
+CTS_UPDATED's only sd gap forms one candle later, MS keeps a POI inner for a fib
+FibTracker never creates; 0 cases on the reference window. The two layers still
+agree on cond2 / cond3. IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3
+rule".)
 
 ---
 
@@ -1410,6 +1479,11 @@ as inactive until 997 — even though it was genuinely active at idx 926
 slipped 926→1017, and the `954` `opp_sd` was locked out behind it (opp_sd
 can only fire after an sd). Two proximity candles vanished. Fixed by making
 the gate ask per-candle activation instead of comparing against the scalar.
+(That history is as of 2026-05-26 and held through save `0a4eadc`. Since Plan F,
+2026-09-24, a re-entering gap counts from its first c3, so both re-activations
+land one candle later: this POI (IC 865) now reads
+`[905:A, 952:D, 954:A, 992:D, 998:A]` and the scalar collapses to 998. The
+lesson is unchanged.)
 
 **Fix shape:** new pure leaf module `zones/poi_lifecycle.py`:
 - `active_stretches_from_history(history, open_end_idx)` — pairs
@@ -1420,7 +1494,8 @@ the gate ask per-candle activation instead of comparing against the scalar.
   (respects `end_idx` as a hard cap). The proximity gate calls this.
 - `poi_confirmed_idx_as_of(zone, idx)` — start of the active stretch
   containing `idx` (the per-candle replacement for the scalar; the chart
-  hover `z_conf` now shows this, e.g. 905 at candle 926, not the collapsed 997).
+  hover `z_conf` now shows this, e.g. 905 at candle 926, not the collapsed 997
+  (998 since Plan F)).
 
 **Rule:** to answer "is this POI active at candle X?" (or "what is its
 confirmed idx as of X?"), ALWAYS walk `activation_history` via
@@ -1568,6 +1643,18 @@ active it routes to the update path). H1 main unaffected (its path already did t
 /compare vs `f2f5e35`: H1 main + confluence byte-identical; counter gains exactly
 1 cycle-0 Fib + 2 POIs (sub (0,2,0)); kl_zones/sids/structure_events/wvmi unchanged
 (a fib-tracker activation is downstream of MS).
+
+**Since Plan F (2026-09-24) both re-checks are asked AT the update's moment:**
+`_handle_cross_cycle_cts_updated` calls `_has_unfilled` (raw `CTS_UPDATED` →
+`evaluated_at` = its `ev.idx`; a pattern-path update records no moment → uncut),
+and `_handle_cycle0_cts_updated` re-asks via `_c0_has_unfilled_now` instead of
+reading the cycle-0 cache (the cache stays uncut: it is Scenario-2 cond2, judged
+at its later use). A gap whose c3 closes after the update first-activates the
+fib at a later update, not this one — measured: M15 sub 3 cycle 0
+`activated_at` 61 → 62 (slice-local, both lenses); M15 confluence sub 2 cycle 0,
+no longer activated at its lag-0 CTS_ESTABLISHED (53), now activates through
+this path at 54 (`activated_on: "update"`). IMBALANCE_FILL_SEMANTICS.md
+"Knowability — the c3 rule".
 
 **Surfaced by** the true-first-breakout cycle-0 work: moving CTS_0 changed which
 imbalances fell in cycle-0's window at the establishment instant, exposing that the

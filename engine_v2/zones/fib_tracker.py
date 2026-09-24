@@ -12,6 +12,7 @@ Scenario Logic (sid 1+ only):
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from typing import List, Optional, Dict, Any
 
@@ -23,7 +24,7 @@ from engine_v2.features.fibonacci import (
     DEFAULT_FIB_LEVELS,
 )
 from engine_v2.patterns.imbalance import has_unfilled_imbalance, get_unfilled_imbalances
-from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.structure.market_structure import StructureEvent, event_moment
 from engine_v2.zones.cross_cycle_fib import resolve_cross_cycle_eligibility
 from engine_v2.zones.structure_lifecycle import (
     compute_cycle_lifecycle,
@@ -108,6 +109,8 @@ def select_fib_anchor_for_cycle(
     c0_data: Optional[Dict[str, Any]],
     fill_threshold: float = 0.70,
     struct_direction: int = 0,
+    *,
+    evaluated_at: Optional[int],
 ) -> tuple:
     """Pick the Fib anchor for a cycle. Pure function — no FibTracker state.
 
@@ -124,13 +127,21 @@ def select_fib_anchor_for_cycle(
     - Otherwise evaluate Scenario 2 conditions over the imbalance set:
 
         cond1 — cycle 1 has unfilled sd-direction imbalance in [BOS_1, CTS_1]
-                as of cts_idx
+                as of cts_idx, counting only gaps formed by ``evaluated_at``
         cond2 — cycle 0 has unfilled sd-direction imbalance (cached on
                 ``c0_data``; caller computed with the same direction filter)
         cond3 — BOS_1 has not filled cycle 0's sd-direction imbalances
 
       All three true → cross-cycle, label ``"scenario_2_cross"`` (anchor
       becomes BOS_0 → CTS_1). Else → intra-cycle, label ``"scenario_3"``.
+
+    ``evaluated_at`` (keyword-only, REQUIRED) is the moment the decision is
+    taken (Plan F; IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule"):
+    FibTracker passes the CTS_1 ESTABLISHED moment; the MS in-flight resolver
+    passes ``None`` (no cut — its snapshot is only read at candles after the
+    CTS, where every gap it counts has formed). The two layers therefore agree
+    on cond2 / cond3 but not always on cond1 — the accepted M1 divergence
+    (LANDMINES "Scenario 2 anchor agreement").
 
     ``struct_direction`` is the sd of the structure being evaluated (+1 / -1).
     Threads into cond1 / cond3 as the imbalance direction filter — counter-
@@ -180,6 +191,7 @@ def select_fib_anchor_for_cycle(
         fill_threshold=fill_threshold,
         fill_as_of="snapshot",
         prior_cached_liveness={0: bool(c0_data.get("has_unfilled", False))},
+        evaluated_at=evaluated_at,
     )
 
     if elig.crosses:
@@ -303,6 +315,55 @@ class FibTracker:
         # cap in entity_df_mutation (and, once §15.6/(b) lands, by the cycle
         # pass-through end fed in as a candidate).
         self._terminal: Dict[tuple, tuple] = {}
+
+        # The MOMENT of the event being handled (Plan F — IMBALANCE_FILL_SEMANTICS
+        # "Knowability — the c3 rule"): every imbalance question a handler asks
+        # counts only gaps formed by then. Set by `_evaluating` around the three
+        # handlers that reach an imbalance read; None outside a handler, and
+        # inside one when the event records no moment (pattern-path CTS_UPDATED).
+        self._evaluated_at: Optional[int] = None
+        self._in_event = False
+
+    # ------------------------------------------------------------------
+    # Knowability (Plan F): the moment an imbalance question is asked.
+    # ------------------------------------------------------------------
+    @contextmanager
+    def _evaluating(self, event: StructureEvent):
+        """Scope `_evaluated_at` to one handler: set it to the event's moment
+        (`market_structure.event_moment`), restore the previous value on exit.
+        Handlers do not nest (no handler calls another); assert it."""
+        assert not self._in_event, "FibTracker event handlers must not nest"
+        # Resolve the moment BEFORE touching state: event_moment raises on a
+        # malformed / unsupported event, and must not leave the scope flag set.
+        moment = event_moment(event)
+        previous = self._evaluated_at
+        self._in_event = True
+        self._evaluated_at = moment
+        try:
+            yield
+        finally:
+            self._evaluated_at = previous
+            self._in_event = False
+
+    def _has_unfilled(self, df: pd.DataFrame, lo: int, hi: int, check_to: int, sd: int) -> bool:
+        """`has_unfilled_imbalance` over [lo, hi] (fill horizon `check_to`,
+        sd-direction strict), counting only gaps formed by the handled event's
+        moment."""
+        return has_unfilled_imbalance(
+            df, lo, hi, check_to, self.config.fill_threshold,
+            direction=sd, evaluated_at=self._evaluated_at,
+        )
+
+    def _c0_has_unfilled_now(self, c0: Dict[str, Any], df: pd.DataFrame, sd: int) -> bool:
+        """The cycle-0 liveness cache asked AT the handled event's moment. The
+        cache itself stays uncut (it is Scenario-2 cond2, judged at its later
+        use); a decision taken now re-asks it with the cut. Absent c0 → False
+        (today's `.get` default; `_handle_cycle0_cts_updated` can reach it)."""
+        if not c0:
+            return False
+        lo = min(c0["bos_idx"], c0["cts_idx"])
+        hi = max(c0["bos_idx"], c0["cts_idx"])
+        return self._has_unfilled(df, lo, hi, c0["cts_idx"], sd)
 
     # ------------------------------------------------------------------
     # Lifecycle convention helpers (FIB_LIFECYCLE_SPEC.md §15).
@@ -487,6 +548,24 @@ class FibTracker:
         prev_bos_outer: Optional[float] = None,
         prev_sd: Optional[int] = None,
     ) -> Optional[FibState]:
+        """Handle CTS_ESTABLISHED (body: `_on_cts_established`). Its imbalance
+        questions are asked at the event's moment, `meta["confirmed_at"]`."""
+        with self._evaluating(event):
+            return self._on_cts_established(
+                event, df, bos_idx, bos_price,
+                reversal_confirmed_idx, prev_bos_outer, prev_sd,
+            )
+
+    def _on_cts_established(
+        self,
+        event: StructureEvent,
+        df: pd.DataFrame,
+        bos_idx: int,
+        bos_price: float,
+        reversal_confirmed_idx: Optional[int] = None,
+        prev_bos_outer: Optional[float] = None,
+        prev_sd: Optional[int] = None,
+    ) -> Optional[FibState]:
         """
         Handle CTS_ESTABLISHED event - potentially activate a new Fib.
 
@@ -528,15 +607,13 @@ class FibTracker:
             else:
                 cts_price = float(df.loc[cts_idx, "l"])
 
-        # Check for unfilled imbalance between BOS and CTS. sd-direction
-        # filter: Fibs only ever produce sd-direction POIs, so counter-
-        # direction imbalances in the BOS->CTS swing don't justify activation.
+        # Check for unfilled imbalance between BOS and CTS, counting only gaps
+        # formed by the moment (Plan F). sd-direction filter: Fibs only ever
+        # produce sd-direction POIs, so counter-direction imbalances in the
+        # BOS->CTS swing don't justify activation.
         start_idx = min(bos_idx, cts_idx)
         end_idx = max(bos_idx, cts_idx)
-        has_unfilled = has_unfilled_imbalance(
-            df, start_idx, end_idx, cts_idx, self.config.fill_threshold,
-            direction=sd,
-        )
+        has_unfilled = self._has_unfilled(df, start_idx, end_idx, cts_idx, sd)
 
         # Populate BOS lookup (used by cross-fib walk-backward in cross_cycle)
         self._bos_by_cycle[(sid, cycle_id)] = (bos_idx, bos_price)
@@ -588,7 +665,7 @@ class FibTracker:
         if cycle_id == 0:
             # Cycle 0: no cross possible. Simple single-fib activation.
             if not has_unfilled:
-                print(f"[fib] cross_cycle sid={sid} cycle=0 NO FIB: no unfilled imbalance")
+                print(f"[fib] cross_cycle sid={sid} cycle=0 NO FIB: no unfilled imbalance (evaluated_at={self._evaluated_at})")
                 return None
             print(f"[fib] cross_cycle sid={sid} cycle=0 ACTIVATED (single, no cross)")
             return self._activate_fib(
@@ -649,7 +726,7 @@ class FibTracker:
 
         # sid=0, cycle 1+: Normal Fib activation
         if not has_unfilled:
-            print(f"[fib] sid=0 cycle={cycle_id} NOT activated (simple flow): no unfilled imbalance")
+            print(f"[fib] sid=0 cycle={cycle_id} NOT activated (simple flow): no unfilled imbalance (evaluated_at={self._evaluated_at})")
             return None
 
         print(f"[fib] sid=0 cycle={cycle_id} ACTIVATED (simple flow)")
@@ -691,9 +768,18 @@ class FibTracker:
         """
         # --- Cycle 0: Scenario 1 check ---
         if cycle_id == 0:
+            # The cycle-0 liveness CACHE is Scenario-2 cond2, judged at its later
+            # use (CTS_1 ESTABLISHED > CTS_0: every gap in [BOS_0, CTS_0] has
+            # formed) → stored UNCUT, which also keeps it equal to the MS
+            # in-flight mirror (`_update_cycle0_data`). The decision taken NOW
+            # uses the cut `has_unfilled` (Plan F §2).
+            c0_has_unfilled_uncut = has_unfilled_imbalance(
+                df, min(bos_idx, cts_idx), max(bos_idx, cts_idx), cts_idx,
+                self.config.fill_threshold, direction=sd, evaluated_at=None,
+            )
             return self._handle_cycle0_scenario1(
                 sid, sd, bos_idx, bos_price, cts_idx, cts_price,
-                has_unfilled, reversal_confirmed_idx
+                has_unfilled, c0_has_unfilled_uncut, reversal_confirmed_idx
             )
 
         # --- Cycle 1: Depends on Scenario 1 resolution ---
@@ -717,7 +803,7 @@ class FibTracker:
 
         # Plain single (byte-identical with pre-11b).
         if not has_unfilled:
-            print(f"[fib] sid={sid} cycle={cycle_id} NOT activated: no unfilled imbalance")
+            print(f"[fib] sid={sid} cycle={cycle_id} NOT activated: no unfilled imbalance (evaluated_at={self._evaluated_at})")
             return None
 
         return self._activate_fib(
@@ -740,10 +826,14 @@ class FibTracker:
         cts_idx: int,
         cts_price: float,
         has_unfilled: bool,
+        c0_has_unfilled_uncut: bool,
         reversal_confirmed_idx: Optional[int],
     ) -> Optional[FibState]:
         """
         Handle cycle 0 CTS_ESTABLISHED for sid 1+ - check Scenario 1.
+
+        `has_unfilled` is asked at the event's moment (the Scenario-1 activation
+        decision); `c0_has_unfilled_uncut` is what the cycle-0 cache stores.
 
         Scenario 1: CTS_0 idx >= reversal_confirmed_idx
         - If TRUE → cycle 0 Fib unlocked (permanent)
@@ -760,7 +850,7 @@ class FibTracker:
             "cts_idx": cts_idx,
             "cts_price": cts_price,
             "struct_direction": sd,
-            "has_unfilled": has_unfilled,
+            "has_unfilled": c0_has_unfilled_uncut,
             "locked": False,
         }
 
@@ -782,13 +872,13 @@ class FibTracker:
                     meta={"activated_at": cts_idx, "scenario1": True},
                 )
             else:
-                print(f"[fib] sid={sid} cycle=0 NOT activated: Scenario 1 TRUE but no unfilled imbalance")
+                print(f"[fib] sid={sid} cycle=0 NOT activated: Scenario 1 TRUE but no unfilled imbalance (evaluated_at={self._evaluated_at})")
                 return None
         else:
             # Scenario 1 undetermined - store data, no Fib yet
             if sid not in self._scenario1:
                 self._scenario1[sid] = None  # Undetermined
-            print(f"[fib] sid={sid} cycle=0 STORED for cross-cycle check: BOS idx={bos_idx} -> CTS idx={cts_idx}, has_unfilled={has_unfilled} (Scenario 1 undetermined)")
+            print(f"[fib] sid={sid} cycle=0 STORED for cross-cycle check: BOS idx={bos_idx} -> CTS idx={cts_idx}, has_unfilled={c0_has_unfilled_uncut} (Scenario 1 undetermined)")
             return None
 
     def _handle_cycle1_scenarios(
@@ -831,7 +921,7 @@ class FibTracker:
         # Scenario 1 TRUE: Normal cycle 1 Fib
         if scenario1 is True:
             if not has_unfilled:
-                print(f"[fib] sid={sid} cycle=1 NOT activated (Scenario 1): no unfilled imbalance")
+                print(f"[fib] sid={sid} cycle=1 NOT activated (Scenario 1): no unfilled imbalance (evaluated_at={self._evaluated_at})")
                 return None
 
             print(f"[fib] sid={sid} cycle=1 ACTIVATED (Scenario 1 TRUE, normal flow)")
@@ -851,7 +941,7 @@ class FibTracker:
         if sid not in self._cross_cycle_data or "cycle0" not in self._cross_cycle_data[sid]:
             # No cycle 0 data - fallback to normal
             if not has_unfilled:
-                print(f"[fib] sid={sid} cycle=1 NOT activated: no cycle 0 data, no unfilled imbalance")
+                print(f"[fib] sid={sid} cycle=1 NOT activated: no cycle 0 data, no unfilled imbalance (evaluated_at={self._evaluated_at})")
                 return None
 
             return self._activate_fib(
@@ -870,7 +960,9 @@ class FibTracker:
         # Route cross vs intra anchor selection through the shared utility so
         # MarketStructure's in-flight POI resolver and this downstream layer
         # agree on Scenario 2 (see select_fib_anchor_for_cycle for the
-        # decision contract). `scenario1` here is the post-revert value
+        # decision contract). They agree on cond2 / cond3; on cond1 this layer
+        # asks at the CTS_1 moment while the in-flight resolver does not cut —
+        # the accepted M1 divergence (Plan F §2). `scenario1` here is the post-revert value
         # (Scenario 1 TRUE was handled above); pass it explicitly so the
         # utility doesn't have to re-derive Scenario 1 from inputs.
         c0_for_utility = dict(c0)
@@ -888,6 +980,7 @@ class FibTracker:
                 c0_for_utility,
                 self.config.fill_threshold,
                 struct_direction=sd,
+                evaluated_at=self._evaluated_at,
             )
         )
         print(f"[fib] sid={sid} cycle=1 anchor decision: label={label} "
@@ -957,7 +1050,7 @@ class FibTracker:
             )
 
         # No unfilled imbalance in cycle 1
-        print(f"[fib] sid={sid} cycle=1 NOT activated: no unfilled imbalance in cycle 1")
+        print(f"[fib] sid={sid} cycle=1 NOT activated: no unfilled imbalance in cycle 1 (evaluated_at={self._evaluated_at})")
         return None
 
     def _create_fib_retracement(
@@ -1108,6 +1201,18 @@ class FibTracker:
         df: pd.DataFrame,
         reversal_confirmed_idx: Optional[int] = None,
     ) -> Optional[FibState]:
+        """Handle CTS_UPDATED (body: `_on_cts_updated`). Its imbalance questions
+        are asked at the event's moment: `ev.idx` on the raw path; none recorded
+        on the pattern path (no cut — Plan E)."""
+        with self._evaluating(event):
+            return self._on_cts_updated(event, df, reversal_confirmed_idx)
+
+    def _on_cts_updated(
+        self,
+        event: StructureEvent,
+        df: pd.DataFrame,
+        reversal_confirmed_idx: Optional[int] = None,
+    ) -> Optional[FibState]:
         """
         Handle CTS_UPDATED event - update CTS anchor if Fib is active.
 
@@ -1180,10 +1285,7 @@ class FibTracker:
             bos_idx, bos_price = bos
             start_idx = min(bos_idx, cts_idx)
             end_idx = max(bos_idx, cts_idx)
-            if not has_unfilled_imbalance(
-                df, start_idx, end_idx, cts_idx, self.config.fill_threshold,
-                direction=sd,
-            ):
+            if not self._has_unfilled(df, start_idx, end_idx, cts_idx, sd):
                 return None
             print(f"[fib] cross_cycle sid={sid} cycle=0 ACTIVATED on update "
                   f"(unfilled imbalance found post-EST): BOS idx={bos_idx} -> "
@@ -1313,11 +1415,14 @@ class FibTracker:
                 # Re-check unfilled imbalance. sd-direction filter mirrors
                 # the activation-time filter at on_cts_established so the
                 # cycle-0 snapshot stays direction-consistent across updates.
+                # UNCUT: the cache is Scenario-2 cond2, judged at its later use
+                # (Plan F §2); a decision taken now re-asks it at the moment
+                # (`_c0_has_unfilled_now`).
                 start_idx = min(c0["bos_idx"], cts_idx)
                 end_idx = max(c0["bos_idx"], cts_idx)
                 c0["has_unfilled"] = has_unfilled_imbalance(
                     df, start_idx, end_idx, cts_idx, self.config.fill_threshold,
-                    direction=sd,
+                    direction=sd, evaluated_at=None,
                 )
 
         # If Scenario 1 is already TRUE, update the Fib
@@ -1327,7 +1432,7 @@ class FibTracker:
                 return self._update_fib_cts(key, cts_idx, cts_price, df)
             # No Fib but Scenario 1 is TRUE - check if we can activate now
             c0 = self._cross_cycle_data.get(sid, {}).get("cycle0", {})
-            if c0.get("has_unfilled", False):
+            if self._c0_has_unfilled_now(c0, df, sd):
                 print(f"[fib] sid={sid} cycle=0 ACTIVATED on update (Scenario 1 TRUE, unfilled imbalance found)")
                 return self._activate_fib(
                     sid=sid,
@@ -1348,7 +1453,7 @@ class FibTracker:
             print(f"[fib] sid={sid} cycle=0 Scenario 1 TRUE at idx={cts_idx} (CTS >= rv_idx={reversal_confirmed_idx}) on update")
 
             c0 = self._cross_cycle_data.get(sid, {}).get("cycle0", {})
-            if c0.get("has_unfilled", False):
+            if self._c0_has_unfilled_now(c0, df, sd):
                 return self._activate_fib(
                     sid=sid,
                     cycle_id=0,
@@ -1360,7 +1465,7 @@ class FibTracker:
                     meta={"activated_at": cts_idx, "scenario1": True, "activated_on": "update"},
                 )
             else:
-                print(f"[fib] sid={sid} cycle=0 NOT activated: Scenario 1 TRUE but no unfilled imbalance")
+                print(f"[fib] sid={sid} cycle=0 NOT activated: Scenario 1 TRUE but no unfilled imbalance (evaluated_at={self._evaluated_at})")
 
         return None
 
@@ -1433,36 +1538,25 @@ class FibTracker:
             c0_cts_idx = c0.get("cts_idx", new_state.bos_idx)  # Locked CTS_0
             c0_start = min(c0_bos_idx, c0_cts_idx)
             c0_end = max(c0_bos_idx, c0_cts_idx)
-            cond1 = has_unfilled_imbalance(
-                df, c0_start, c0_end, c0_cts_idx, self.config.fill_threshold,
-                direction=sd,
-            )
+            cond1 = self._has_unfilled(df, c0_start, c0_end, c0_cts_idx, sd)
 
             # Condition 2: Cycle 1 has unfilled imbalance (BOS_1 to current CTS_1)
             cycle1_bos_idx = new_state.meta.get("cycle1_bos_idx", cts_idx)
             c1_start = min(cycle1_bos_idx, cts_idx)
             c1_end = max(cycle1_bos_idx, cts_idx)
-            cond2 = has_unfilled_imbalance(
-                df, c1_start, c1_end, cts_idx, self.config.fill_threshold,
-                direction=sd,
-            )
+            cond2 = self._has_unfilled(df, c1_start, c1_end, cts_idx, sd)
 
             # Condition 3: Cycle 1's BOS doesn't fill cycle 0's imbalances (static check)
-            cond3 = has_unfilled_imbalance(
-                df, c0_start, c0_end, cycle1_bos_idx, self.config.fill_threshold,
-                direction=sd,
-            )
+            cond3 = self._has_unfilled(df, c0_start, c0_end, cycle1_bos_idx, sd)
 
             has_unfilled = cond1 and cond2 and cond3
             print(f"[fib] sid={sid} cross-cycle check: cond1={cond1} cond2={cond2} cond3={cond3}")
         else:
-            # Normal Fib: check its own range. sd-direction filter.
+            # Normal Fib: check its own range (sd-direction; formed gaps only —
+            # "all_imbalances_filled" below means "no FORMED unfilled imbalance").
             start_idx = min(new_state.bos_idx, new_state.cts_idx)
             end_idx = max(new_state.bos_idx, new_state.cts_idx)
-            has_unfilled = has_unfilled_imbalance(
-                df, start_idx, end_idx, cts_idx, self.config.fill_threshold,
-                direction=sd,
-            )
+            has_unfilled = self._has_unfilled(df, start_idx, end_idx, cts_idx, sd)
 
         if has_unfilled and not new_state.active:
             # Reactivate - unfilled imbalances now exist in expanded range
@@ -1471,7 +1565,8 @@ class FibTracker:
         elif not has_unfilled and new_state.active:
             # Deactivate - all imbalances filled
             new_state = replace(new_state, active=False, meta={**new_state.meta, "deactivated_at": cts_idx, "reason": "all_imbalances_filled"})
-            print(f"[fib] sid={sid} {label} DEACTIVATED: all imbalances filled at idx={cts_idx}")
+            print(f"[fib] sid={sid} {label} DEACTIVATED: all imbalances filled at idx={cts_idx} "
+                  f"(evaluated_at={self._evaluated_at})")
 
         self._fibs[key] = new_state
         return new_state
@@ -1524,23 +1619,14 @@ class FibTracker:
         c0_cts_idx = c0.get("cts_idx", new_cross_fib.bos_idx)
         c0_start = min(c0_bos_idx, c0_cts_idx)
         c0_end = max(c0_bos_idx, c0_cts_idx)
-        cond1 = has_unfilled_imbalance(
-            df, c0_start, c0_end, c0_cts_idx, self.config.fill_threshold,
-            direction=sd,
-        )
+        cond1 = self._has_unfilled(df, c0_start, c0_end, c0_cts_idx, sd)
 
         cycle1_bos_idx = new_cross_fib.meta.get("cycle1_bos_idx", cts_idx)
         c1_start = min(cycle1_bos_idx, cts_idx)
         c1_end = max(cycle1_bos_idx, cts_idx)
-        cond2 = has_unfilled_imbalance(
-            df, c1_start, c1_end, cts_idx, self.config.fill_threshold,
-            direction=sd,
-        )
+        cond2 = self._has_unfilled(df, c1_start, c1_end, cts_idx, sd)
 
-        cond3 = has_unfilled_imbalance(
-            df, c0_start, c0_end, cycle1_bos_idx, self.config.fill_threshold,
-            direction=sd,
-        )
+        cond3 = self._has_unfilled(df, c0_start, c0_end, cycle1_bos_idx, sd)
 
         cross_active = cond1 and cond2 and cond3
         print(f"[fib] sid={sid} cross-cycle check: cond1={cond1} cond2={cond2} cond3={cond3}")
@@ -1568,10 +1654,7 @@ class FibTracker:
         bos1_idx, bos1_price = bos1
         normal_start = min(bos1_idx, cts_idx)
         normal_end = max(bos1_idx, cts_idx)
-        normal_has_unfilled = has_unfilled_imbalance(
-            df, normal_start, normal_end, cts_idx, self.config.fill_threshold,
-            direction=sd,
-        )
+        normal_has_unfilled = self._has_unfilled(df, normal_start, normal_end, cts_idx, sd)
         single_key = (sid, 1)
         existing = self._fibs.get(single_key)
         if normal_has_unfilled:
@@ -2001,6 +2084,7 @@ class FibTracker:
             },
             dead_cycles=set(self._dead_cycles.get(sid, set())),  # COPY (peek only)
             fill_threshold=self.config.fill_threshold, fill_as_of="current",
+            evaluated_at=self._evaluated_at,
         )
         if not elig.crosses:
             return None
@@ -2059,6 +2143,17 @@ class FibTracker:
     # ------------------------------------------------------------------
 
     def on_cts_threshold_updated(
+        self,
+        event: StructureEvent,
+        df: pd.DataFrame,
+    ) -> None:
+        """Handle CTS_THRESHOLD_UPDATED (body: `_on_cts_threshold_updated`). Its
+        imbalance questions are asked at the event's moment, `ev.idx` (the
+        processing candle)."""
+        with self._evaluating(event):
+            self._on_cts_threshold_updated(event, df)
+
+    def _on_cts_threshold_updated(
         self,
         event: StructureEvent,
         df: pd.DataFrame,
@@ -2176,6 +2271,7 @@ class FibTracker:
             dead_cycles=self._dead_cycles.setdefault(sid, set()),
             fill_threshold=self.config.fill_threshold,
             fill_as_of="current",
+            evaluated_at=self._evaluated_at,
         )
 
         if not elig.own_has:

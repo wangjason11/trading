@@ -87,7 +87,15 @@ To change any visual element:
 - Style keys: `zone.kl.buy`, `zone.kl.sell`, `zone.kl.hover_line`
 
 ### 6) Imbalance candle highlighting (Week 7)
-- Candles with FVG imbalance get distinct colors
+- Candles with FVG imbalance get distinct colors: every flagged **c2**
+  (`is_imbalance == 1`, the middle candle; a merged run highlights each of its
+  c2s)
+- A rendering of the pattern's **location**, not a time: each highlighted c2's
+  gap exists only once its c3 closes, one candle later (an instance exists from
+  its first c3, `ImbalanceInstance.formed_at = start_idx + 1`). A POI confirm
+  line driven by a new gap therefore sits at least one candle AFTER the run's
+  first highlighted candle, never on it (Plan F, 2026-09-24;
+  IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule")
 - Bullish imbalance: Lime Green `rgba(50, 205, 50, 0.8)`
 - Bearish imbalance: Amber Yellow `rgba(235, 190, 0, 0.8)`
 - Entire candle (body + wicks) colored (Plotly limitation)

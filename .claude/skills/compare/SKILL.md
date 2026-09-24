@@ -460,14 +460,14 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (set by the 2026-09-22 chart review round 2, `aadb887`; last verified
-2026-09-23 at the Plan D save `20260923_172626_0a4eadc`; config window
-2025-12-01→2026-01-20, auto-extended to 2025-11-15. Window-dependent,
-re-baseline when the config window or chart rendering changes; older values in
-**History** below):
+counts are (H1 and confluence set by the 2026-09-22 chart review round 2,
+`aadb887`; counter by Plan F, 2026-09-24; all three last verified 2026-09-24 at
+the Plan F `/compare`; config window 2025-12-01→2026-01-20, auto-extended to
+2025-11-15. Window-dependent, re-baseline when the config window or chart
+rendering changes; older values in **History** below):
 
 - `H1` chart: traces=85, shapes=245
-- `M15.counter` chart: traces=153, shapes=125
+- `M15.counter` chart: traces=151, shapes=124
 - `M15.confluence` chart: traces=294, shapes=233
 
 **History:** on 2026-05-29 the counts were H1 125/261, counter 216/169, confluence
@@ -485,9 +485,13 @@ byte-identical throughout. Item 6's deltas: forming swing traces replaced by
 prior ones (one per overlap region: confluence 7→6, counter 3→1) and the
 forming dot traces merged into their subs' live dot traces (only sub `2639/−1`'s
 3611 CTS dot is still prior, on confluence). The replacement-break rule (§16.5
-item 7) then added one PB-dot trace per lens → 153 / 294; the bullets above are
-those values. Plan D (2026-09-23, POI activation on the moment) left every count unchanged: its only
+item 7) then added one PB-dot trace per lens → 153 / 294. Plan D (2026-09-23, POI activation on the moment) left every count unchanged: its only
 figure delta was 2 shapes moved + 2 hover traces' customdata on the confluence chart.
+Plan F (2026-09-24, imbalance c3 knowability) moved counter 153/125 → 151/124
+(`chart_census`: −2 `POI_hover` traces of sub 5 and −1 outline rect). That is the
+removed POI twin of IC 3654, attached to a cross fib FibTracker had pre-created
+for a cycle 1 that sub 5 never establishes. M15 fibs are not drawn, so the dropped
+fib shows only in `_fib_lifecycle.csv`. H1 and confluence counts were unchanged.
 
 These print as `DEBUG traces:` / `DEBUG shapes:` (H1) and `[m15_chart] traces:
 N, shapes: M` (each M15 entity) at the end of `python -m engine_v2.run_replay`.

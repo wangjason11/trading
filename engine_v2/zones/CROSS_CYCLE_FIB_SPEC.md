@@ -64,6 +64,12 @@ the branch happens *inside* each handler.
   CTS_0 EST/UPD (`_handle_cycle0_scenario1:701`): `CTS_0_idx >= reversal_confirmed_idx`
   → TRUE (cycle-0 single fib unlocked); resolves FALSE at CTS_0 CONFIRMED if never
   reached. Cycle-0 data cached as a plain dict in `_cross_cycle_data[sid]["cycle0"]`.
+  Its `has_unfilled` is stored **uncut** by the c3 knowability rule: it is cond2,
+  judged at its use (CTS_1 EST, when every gap in `[BOS_0, CTS_0]` has formed), which
+  keeps it equal to the MS in-flight mirror `cycle0_data`. The Scenario-1 activation
+  decided at CTS_0 EST/UPD asks at that event's moment instead (the cut check at EST,
+  `_c0_has_unfilled_now` on updates) — Plan F 2026-09-24; `IMBALANCE_FILL_SEMANTICS.md`
+  "Knowability — the c3 rule".
 - **Cycle-1 decision** (`_handle_cycle1_scenarios:761`): if S1 TRUE → **revert check**
   (`_should_revert_scenario1:1725` — BOS_1 reaches into prev structure's last BOS
   zone outer → flip S1 FALSE, kill cycle-0 fib via `_deactivate_cycle0_fib`, terminal
@@ -79,7 +85,9 @@ the branch happens *inside* each handler.
   a pure function ALSO called by the MS in-flight POI resolver
   (`market_structure.py:1928`) so in-flight and downstream agree on Scenario 2. It
   covers **cycle 1 only** and only the S2-vs-S3 decision (not S1, not revert, not a
-  walk).
+  walk). (Since Plan F, 2026-09-24, they agree on cond2 / cond3 but not always on
+  cond1: FibTracker passes `evaluated_at` = the CTS_1 moment, the in-flight resolver
+  `None` — the accepted M1 divergence, LANDMINES "Scenario 2 anchor agreement".)
 
 ### 2.2 Path B — subordinate `cross_cycle` mode
 
@@ -89,19 +97,30 @@ the branch happens *inside* each handler.
   `CTS_THRESHOLD_UPDATED` (`on_cts_threshold_updated:1880`): anchor = running extreme
   past CTS_n (`_running_extreme_anchor:1803`), own-imbalance start = prospective
   BOS_{n+1} (`_find_prospective_bos:1773`, deepest pullback since CTS_n CONFIRMED).
-- **Cross check** (`_m15_cross_check:1941`): (1) target cycle's own imbalance; if none,
-  deactivate cross (no pre-established fallback). (2) **dead-cycle backward walk** from
-  target-1 to 0 using `_dead_cycles[sid]` cache (Interpretation B: cycle k dead when
-  `[BOS_k,CTS_k]` has no unfilled sd-imbalance with fill checked **to the current
-  candle**); finds `earliest_x`. (3) version transition keyed by **start anchor**: new
-  cross = v0; CTS extend = same version in place; start-anchor shrink (`earliest_x`
+- **Cross check** (`_m15_cross_check:1941`): (1) target cycle's own imbalance — since
+  Plan F (2026-09-24) only a gap **formed** by the handled event's moment counts (§3
+  item 1); if none, deactivate cross (no pre-established fallback). An own gap whose
+  c2 is the `CTS_THRESHOLD_UPDATED` candle itself has not formed there, and with no
+  later re-check the pre-established cross is never created (reference window: the
+  cross fib counter sub 5 used to pre-create at 3806 for a cycle 1 that never
+  establishes — sub 5 only ever establishes cycle 0 — and its IC 3654 twin POI no
+  longer exist; `IMBALANCE_FILL_SEMANTICS.md` "Decided at the event"). (2) **dead-cycle
+  backward walk** from target-1 to 0 using `_dead_cycles[sid]` cache (Interpretation
+  B: cycle k dead when `[BOS_k,CTS_k]` has no unfilled sd-imbalance with fill checked
+  **to the current candle**; each walked window ends at `CTS_k`, before the moment, so
+  the knowability cut cannot change it); finds `earliest_x`. (3) version transition
+  keyed by **start anchor**: new cross = v0; CTS extend = same version in place; start-anchor shrink (`earliest_x`
   moved up) = `cross_shortened` + v+1; same-anchor revival = in-place reactivate;
   `earliest_x == target` (no eligible prior) = `cross_failed`, established-phase falls
   back to single.
 - **Storage:** ALL versions in `_fibs` as `(sid,cycle,"cross",v)` + a `(sid,cycle)`
   single fallback. Integer `_cross_version`. Monotonic supersede. Up to **N** versions.
 - **Cycle 0:** single fib only, no cross, no pre-established. Late-activate on
-  CTS_UPDATED (`18a6b32`, `_handle_cross_cycle_cts_updated:1098`).
+  CTS_UPDATED (`18a6b32`, `_handle_cross_cycle_cts_updated:1098`) — since Plan F asked
+  at the update's moment (a raw update's `idx`; a pattern-path update records none →
+  no cut), so when the only gap has its c2 at the moment of an EST or raw update, the
+  fib can first activate at the next raw update instead (reference window: conf sub 2
+  and sub 3, cycle 0, one candle later).
 
 ### 2.3 Divergence map
 
@@ -132,7 +151,15 @@ from the per-cycle BOS/CTS geometry + imbalance state. The four unified ingredie
 (the user's stated scope):
 
 1. **Unfilled-imbalance test** — sd-direction `has_unfilled_imbalance` over a cycle's
-   `[BOS_k, CTS_k]` range with fill checked to the current candle (Interpretation B).
+   `[BOS_k, CTS_k]` range with fill checked to the current candle (Interpretation B),
+   counting only gaps **formed** by the moment of the decision. Two as-ofs (Plan F,
+   2026-09-24; canonical: `IMBALANCE_FILL_SEMANTICS.md` "Knowability — the c3 rule"):
+   `current_candle` is the **fill horizon**, and is a moment only on
+   `CTS_THRESHOLD_UPDATED` and a raw `CTS_UPDATED` — on `CTS_ESTABLISHED` and a
+   pattern-path `CTS_UPDATED` it is the CTS anchor; the **moment** is the routine's
+   keyword-only, required `evaluated_at` (FibTracker: `event_moment` of the handled
+   event; the MS in-flight resolver: `None` = no cut). Plan E E3a keeps ONE moment
+   parameter (`evaluated_at`).
 2. **Deepest-retrace / running-extreme anchor** — the CTS-side anchor (running
    extreme) and, for pre-established only (sub), the prospective-BOS start.
 3. **Cross-cycle (dead-cycle) walk** — backward from `target-1` to 0, stopping at the
@@ -317,7 +344,9 @@ resolve_cross_cycle_anchor(
 
 `_m15_cross_check` becomes a thin wrapper that calls this + applies the version
 transition to `_fibs`. Path A's `_handle_cycle1_scenarios` S1-FALSE branch calls the
-same, passing `target_ceiling=M`. (Exact shape to be finalized with the §8 decision.)
+same, passing `target_ceiling=M`. (Exact shape to be finalized with the §8 decision.
+As landed, §11a-i: `resolve_cross_cycle_eligibility`, which since Plan F also takes a
+keyword-only, required `evaluated_at` — §3 item 1.)
 
 ---
 
@@ -331,7 +360,9 @@ same, passing `target_ceiling=M`. (Exact shape to be finalized with the §8 deci
 6. Main `target=1` reproduces today's S2/S3 byte-identically (§3 sanity floor).
 7. **In-flight POI resolver agreement (`market_structure.py:1928`).** The MS in-flight
    resolver shares `select_fib_anchor_for_cycle`, which is **cycle-1-only** today. For
-   §11a (byte-identical, `target=1`, snapshot fill-as-of) agreement is automatic. But
+   §11a (byte-identical, `target=1`, snapshot fill-as-of) agreement is automatic
+   (since Plan F on cond2 / cond3 only — cond1 is cut at the CTS_1 moment downstream,
+   not in-flight: the accepted M1 divergence, §2.1). But
    **§11b is bigger than "pass M":** extending main to target ≥ 2 means the in-flight
    resolver needs the **whole generalized walk** (with the snapshot fill-as-of), not
    just the `M` value — else the in-flight POI snapshot and the downstream fib diverge

@@ -333,16 +333,71 @@ def test_aggregation_helpers():
     assert has_imbalance_in_range(out, 3, 4) is False
 
     # Instance unfilled -> has_unfilled True
-    assert has_unfilled_imbalance(out, 1, 2, check_to_idx=4) is True
+    assert has_unfilled_imbalance(out, 1, 2, check_to_idx=4, evaluated_at=None) is True
 
     # Direction filter: wrong direction returns False, correct returns True.
     # check_to_idx == end_idx mirrors the IC-validation call shape.
-    assert has_unfilled_imbalance(out, 1, 2, check_to_idx=2, direction=-1) is False
-    assert has_unfilled_imbalance(out, 1, 2, check_to_idx=2, direction=1) is True
+    assert has_unfilled_imbalance(out, 1, 2, check_to_idx=2, direction=-1, evaluated_at=None) is False
+    assert has_unfilled_imbalance(out, 1, 2, check_to_idx=2, direction=1, evaluated_at=None) is True
 
     unfilled = get_unfilled_imbalances(out, 1, 4, check_to_idx=4)
     assert len(unfilled) == 1
     assert unfilled[0].direction == 1
+
+
+# ---------- Knowability — the c3 rule (Plan F; IMBALANCE_FILL_SEMANTICS "Knowability") ----------
+
+def _gap(start, end):
+    return ImbalanceInstance(start_idx=start, end_idx=end, direction=1,
+                             gap_top=1.10, gap_bottom=1.00, gap_size=0.10)
+
+
+def _flat_df(n, instances):
+    """Candles far above the 1.00-1.10 gaps: nothing fills."""
+    df = _make_df([(1.50, 1.501, 1.499, 1.50)] * n)
+    df.attrs["imbalances"] = list(instances)
+    return df
+
+
+def test_formed_at_is_the_first_c3():
+    assert _gap(5, 5).formed_at == 6
+    assert _gap(5, 8).formed_at == 6          # a merged run exists from its FIRST c3
+
+
+def test_overlaps_formed_prefix():
+    inst = _gap(10, 12)
+    assert inst.overlaps_formed_prefix(0, 20, evaluated_at=10) is False   # not formed yet
+    assert inst.overlaps_formed_prefix(0, 20, evaluated_at=11) is True    # prefix [10, 10]
+    assert inst.overlaps_formed_prefix(11, 20, evaluated_at=11) is False  # prefix ends at 10
+    assert inst.overlaps_formed_prefix(11, 20, evaluated_at=12) is True   # prefix [10, 11]
+    assert inst.overlaps_formed_prefix(12, 20, evaluated_at=15) is True   # fully formed
+    assert inst.overlaps_formed_prefix(13, 20, evaluated_at=15) is False  # outside the window
+
+
+def test_has_unfilled_counts_an_instance_only_once_formed():
+    df = _flat_df(12, [_gap(5, 5)])
+    assert has_unfilled_imbalance(df, 0, 5, check_to_idx=5, evaluated_at=5) is False
+    assert has_unfilled_imbalance(df, 0, 5, check_to_idx=5, evaluated_at=6) is True
+
+
+def test_has_unfilled_tests_the_formed_prefix_against_the_window():
+    df = _flat_df(12, [_gap(1, 3)])
+    # At 3 the prefix [1, 2] has formed; it does not reach a window starting at 3.
+    assert has_unfilled_imbalance(df, 3, 3, check_to_idx=3, evaluated_at=3) is False
+    # Guard (catches R2 = "exists only from end_idx + 1"): the prefix counts.
+    assert has_unfilled_imbalance(df, 0, 3, check_to_idx=2, evaluated_at=2) is True
+
+
+def test_has_unfilled_evaluated_at_none_is_the_uncut_answer():
+    df = _flat_df(12, [_gap(5, 5)])
+    # The not-yet-formed instance counts (empty fill scan → unfilled): today's answer.
+    assert has_unfilled_imbalance(df, 0, 5, check_to_idx=5, evaluated_at=None) is True
+
+
+def test_has_unfilled_evaluated_at_is_required():
+    df = _flat_df(12, [_gap(5, 5)])
+    with pytest.raises(TypeError, match="evaluated_at"):
+        has_unfilled_imbalance(df, 0, 5, check_to_idx=5)
 
 
 def test_attrs_empty_when_no_imbalances():
@@ -355,4 +410,4 @@ def test_attrs_empty_when_no_imbalances():
     assert out.attrs["imbalances"] == []
     assert out["is_imbalance"].sum() == 0
     assert has_imbalance_in_range(out, 0, 2) is False
-    assert has_unfilled_imbalance(out, 0, 2, check_to_idx=2) is False
+    assert has_unfilled_imbalance(out, 0, 2, check_to_idx=2, evaluated_at=None) is False

@@ -54,11 +54,17 @@ the run.
   `df.attrs["imbalances"]` indices don't survive `reset_index(drop=True)`
 
 ### Role in POI Zones
-- Imbalance instance must exist **overlapping the Fib anchor points** for POI
-  zone creation (via `has_unfilled_imbalance`)
+- An unfilled imbalance must exist **overlapping the Fib's BOS→CTS span** for
+  the Fib — and so its POIs — to exist (FibTracker's `has_unfilled_imbalance` check)
 - Imbalance must be **after the IC candle** (between IC and the break) —
   POI IC validation passes `direction=sd` so only structure-direction
   imbalances qualify
+- **"Exists" means FORMED (Plan F, 2026-09-24).** An instance exists from its
+  first c3, `ImbalanceInstance.formed_at = start_idx + 1` — never from its c2.
+  A question asked at a moment counts only instances formed by then, and only
+  their **formed prefix** (`overlaps_formed_prefix`); the POI activation sweep
+  enters an instance at `formed_at` (§4 "Lifecycle"). Canonical:
+  `IMBALANCE_FILL_SEMANTICS.md` "Knowability — the c3 rule".
 
 ### All Fib + scenario + POI imbalance checks are sd-direction strict
 Every consumer of `has_unfilled_imbalance` — Fib activation, Scenario 2
@@ -77,12 +83,22 @@ from effect (sd-direction POIs). The strict filter aligns the question
 ("should this Fib be drawn?") with what it actually affects downstream
 ("the sd-direction POI set").
 
-The other axis the primitive exposes — `check_to_idx` — is the more
-load-bearing distinction across call sites: fib lifecycle and scenario
-checks pass varying "as-of" idx (the fib's current `cts_idx`, a fixed
-reference event idx, or the current candle in live evaluation), while POI
-IC validation always passes `check_to_idx = end_idx = cts_idx` because the
-question is asked once at the cycle's current state.
+The more load-bearing distinction across call sites is the primitive's **two
+as-ofs** (Plan F, 2026-09-24):
+
+- **`check_to_idx` — the fill horizon** (`is_filled` scans `(end_idx,
+  check_to_idx]`). Fib lifecycle and scenario checks pass varying horizons: the
+  fib's current `cts_idx` (on several sites still a CTS anchor — Plan E E3), a
+  fixed reference event idx (BOS_1 for cond3), or the cross-cycle routine's
+  `current_candle`. POI IC validation passes `check_to_idx = end_idx = cts_idx`,
+  the fib's CTS.
+- **`evaluated_at` — the moment the question is asked** (keyword-only,
+  REQUIRED): only instances formed by then count. FibTracker passes the handled
+  CTS event's moment (`market_structure.event_moment`); POI IC validation passes
+  `evaluated_at=None`, an explicit "no cut" (§3.1 condition 3) — as do
+  FibTracker's two cycle-0 cache writes and MarketStructure's in-flight reads
+  (IMBALANCE_FILL_SEMANTICS call-site matrix). The cut is keyed on the moment,
+  never on `check_to_idx`.
 
 ### Fill Check (per instance) — two-stroke state machine
 
@@ -97,8 +113,9 @@ Filled iff BOTH strokes fire by `check_to_idx`:
   - Bearish: `close <= gap_bottom`
 
 Both strokes latch monotonically (stroke 1 then stroke 2; neither un-latches).
-Scan starts at `end_idx + 1` — the instance's own candles (including the
-last c3 that defines the gap) are excluded.
+Scan starts at `end_idx + 1` — the **last c3**, which cannot arm its own gap
+(its wick IS the gap edge; stroke 1 needs 70% of the gap past it); the
+instance's c2s are excluded.
 
 See `engine_v2/IMBALANCE_FILL_SEMANTICS.md` for the canonical reference —
 state machine details, edge cases, consumer call-site matrix, and the
@@ -134,13 +151,13 @@ fib_price = anchor_low + (anchor_high - anchor_low) * (level_pct / 100)
 ```
 CTS_ESTABLISHED (cycle 1+)
     ↓
-Check: unfilled imbalance between BOS and CTS?
+Check: unfilled imbalance between BOS and CTS, FORMED by the event's moment?
     ↓ (yes)
 Fib ACTIVATED: BOS idx/price → CTS idx/price
     ↓
 On CTS_UPDATED:
   - Anchor 2 (CTS) UPDATES to new extreme
-  - Re-check imbalance condition → can DEACTIVATE or REACTIVATE
+  - Re-check imbalance condition (formed by the update's moment) → can DEACTIVATE or REACTIVATE
     ↓
 CTS_CONFIRMED
     ↓
@@ -151,6 +168,14 @@ Fib LOCKED (anchor 2 stops updating)
 - **For sid=0:** Cycle 0 never has its own Fib — only stored for cross-cycle check
 - **For sid 1+:** See Scenario Logic below (cycle 0 may have Fib in Scenario 1)
 - **Deactivation/Reactivation:** Fib can toggle active state based on imbalance conditions at each CTS update
+- **Each check is asked at the handled event's MOMENT** (Plan F, 2026-09-24),
+  `market_structure.event_moment(ev)` — per-event values in ARCHITECTURE
+  "`ev.idx` convention" (a pattern-path CTS_UPDATED records none, so no cut).
+  FibTracker re-asks only at CTS events, so a
+  gap whose c3 closes after an event counts only if a later event re-asks — none
+  does for an H1 cycle ≥ 1 fib that failed at EST (activation is one-shot there),
+  so such a fib is dropped, not delayed (IMBALANCE_FILL_SEMANTICS "Decided at the
+  event")
 - **Obsolescence:** When new cycle forms, previous cycle's Fib becomes obsolete
 
 ### Scenario Logic (Post-Reversal, sid 1+)
@@ -175,6 +200,14 @@ For structures after a reversal, Fib activation follows a 3-scenario system:
 1. cond1: Cycle 1 has unfilled imbalance
 2. cond2: Cycle 0 has unfilled imbalance
 3. cond3: BOS_1 doesn't fill cycle 0's imbalances
+
+As-ofs (Plan F): FibTracker asks cond1 at the CTS_1 ESTABLISHED moment (formed
+gaps only); cond2 reads the cycle-0 liveness cache, stored UNCUT (every gap in
+`[BOS_0, CTS_0]` has formed by CTS_1 ESTABLISHED); cond3's window ends before any
+moment. MarketStructure's in-flight resolver asks all three uncut, so the layers
+agree on cond2 / cond3 and can differ on cond1 — the accepted M1 divergence
+(IMBALANCE_FILL_SEMANTICS "Knowability — the c3 rule"; LANDMINES "Scenario 2
+anchor agreement").
 
 **Behavior:**
 - No cycle 0 Fib
@@ -213,7 +246,9 @@ Cycle 0 has no pre_established phase (there's no CTS_-1 to trigger it).
 For target cycle n+1, walk backward from cycle n to 0, skipping cycles in
 the `_dead_cycles` cache (permanently-filled cycles). For each live cycle
 k, check whether its own swing `[BOS_k, CTS_k]` still has unfilled
-imbalance with fill-check extended to the current candle (Interpretation B).
+imbalance with fill-check extended to `current_candle` (Interpretation B — the
+fill horizon: the processing candle on CTS_THRESHOLD_UPDATED / raw CTS_UPDATED,
+the CTS anchor on CTS_ESTABLISHED / pattern-path CTS_UPDATED; CROSS_CYCLE_FIB_SPEC).
 
 The earliest contiguous cycle `x` (where all cycles `x..n` are live) becomes
 the cross fib's BOS anchor. If no prior cycle qualifies, cross fails and —
@@ -225,9 +260,18 @@ in established phase — single fib is activated as fallback.
   `prospective_BOS_n+1` is the deepest pullback since CTS_n CONFIRMED
 - **established** (cycle n+1): anchor = CTS_n+1; own range = `[BOS_n+1, CTS_n+1]`
 
+The own-imbalance test counts only gaps FORMED by the event's moment
+(`evaluated_at`, Plan F). In pre_established the moment IS `current_candle`, so a
+gap whose c2 is `current_candle` does not count yet. Reference window: the cross
+fib that counter sub 5 used to PRE-CREATE at 3806 for a cycle 1 it never
+establishes (sub 5 only ever establishes cycle 0), and that fib's IC 3654 twin
+POI, no longer exist — the only gap in its own-imbalance window was the instance
+(3806, 3806), formed at 3807, and no later event re-checks it (§4 field list).
+
 #### Triggers
 - pre_established: `CTS_THRESHOLD_UPDATED` events for cycle n drive re-checks
-  (natural trigger — fires on every new running extreme past CTS_n)
+  (natural trigger — fires on every new running extreme past CTS_n; its `ev.idx`
+  is the processing candle = the moment)
 - established: `CTS_UPDATED` events for cycle n+1
 
 #### State transitions (cross fib)
@@ -260,7 +304,8 @@ After each reversal, a black horizontal line shows the Scenario 1 revert thresho
 ### Unfilled vs Filled Imbalance
 
 - **FVG gap** = distance between candle 1 wick and candle 3 wick
-- Check candles from **imbalance_idx+1 to check_to_idx**
+- The gap exists once its c3 closes (`formed_at`, §1 "Role in POI Zones")
+- Check candles in **`(end_idx, check_to_idx]`** — from the last c3
 - **Filled** requires TWO strokes within the scan range (see §1
   "Fill Check" and `IMBALANCE_FILL_SEMANTICS.md` for the canonical
   definition):
@@ -270,7 +315,9 @@ After each reversal, a black horizontal line shows the Scenario 1 revert thresho
     gap outer in the imbalance's direction (≥ gap_top bullish,
     ≤ gap_bottom bearish) → instance is **confirmed-filled**
 - **Unfilled:** stroke 1 hasn't fired yet, OR stroke 1 fired but stroke 2
-  hasn't yet — both cases keep the instance "in play"
+  hasn't yet — both cases keep the instance "in play". Only a FORMED instance
+  can be in play: one whose first c3 has not closed by the moment of the
+  question is not an imbalance yet (neither filled nor unfilled)
 
 ---
 
@@ -286,7 +333,10 @@ No IC candidates → No IC variants → No POI zones.
 
 1. **Within Fib bounds (inclusive):** `BOS_idx <= candle_idx <= CTS_idx`
 2. **Opposite direction of struct_direction:** `candle.direction == -struct_direction`
-3. **Unfilled imbalance after:** At least 1 unfilled imbalance (matching sd) in range `(candidate_idx, CTS_idx]`
+3. **Unfilled imbalance after:** At least 1 unfilled imbalance (matching sd) in range `(candidate_idx, CTS_idx]`,
+   fill horizon `CTS_idx` (the fib's CTS). **No knowability cut** (`evaluated_at=None`, Plan F): ICs are identified
+   retrospectively on the final fib (and, in MarketStructure's in-flight snapshot, read only at candles after the
+   CTS); WHEN the POI can go live is the activation sweep's job, which counts only formed gaps (§4 "Lifecycle")
 
 If Fib is deactivated, there are no bounds → no candidates.
 
@@ -394,7 +444,10 @@ assumes "POI ⟹ sd direction."
   — the activation floor's cycle term (see "Activation floor" below). **Meaning changed by Plan D (2026-09-23):**
   saves before it hold `CTS_ESTABLISHED.idx` (the CTS anchor) under this key. Fallback when the cycle has no
   `CTS_ESTABLISHED`: `fib_state.cts_idx` — the fib's CTS anchor, NOT a moment (a known exception to the GLOSSARY
-  "Naming Standard"; live case on the reference window: counter sub 5 cycle 1, IC 3654: value 3806 (never activates); queued follow-up).
+  "Naming Standard"; the general defect stays a parked follow-up). **No live case on the reference window since
+  Plan F (2026-09-24):** the only one was the IC 3654 twin POI on the cross fib counter sub 5 PRE-CREATED at 3806
+  for a cycle 1 it never establishes (value 3806, never activated); Plan F no longer creates that fib (§2
+  "Anchor by phase"). The sub 5 cycle-0 IC 3654 POI is a different row and unchanged.
   Rebased to entity-absolute on sub POIs by the mirror (`entity_df_mutation._ZONE_META_IDX_KEYS`). Readers: none
   that decide anything (the env-gated `POI_LIFECYCLE_DEBUG` print only).
 - `end_time`: When zone ends (None = extends to chart end)
@@ -427,6 +480,13 @@ produce (the planned FibState lifecycle work will produce it for
 ### Lifecycle
 - Zone activates the first time IC qualifies; **every** activate/deactivate flip is recorded in `activation_history` (`[{"idx", "active", ...}]`)
 - Zone can deactivate if IC no longer qualifies on subsequent candles, then re-activate later — a cycle can flap multiple times
+- The imbalance condition (an sd imbalance in `(ic_idx, t]` that has formed and is not committed-filled) is swept by
+  events (`_compute_poi_activation_history`): each instance **enters** the unfilled set at
+  `max(inst.formed_at, first_active)` — its first c3 — and **leaves** at its cached stroke-2 candle
+  `confirmed_fill_idx` (`_compute_fill_idx_cache`). Identity: `has_unfilled_imbalance(df, ic_idx+1, t,
+  check_to_idx=t, direction=sd, evaluated_at=t)`. Plan F (2026-09-24) moved the enter from the c2 (`inst.start_idx`,
+  one candle before the gap existed) to `formed_at`: on the reference window H1 sid 1 cyc 2 IC 865 and IC 860 each
+  re-activate at 954 and 998 (were 953 and 997), and M15 sub 7 IC 4048 re-activates at 4119 (was 4118)
 - `confirmed_idx` collapses to the **LAST** activate idx (NOT the first). Per-candle activation lives in `activation_history`; query it via `zones/poi_lifecycle.py` (`poi_active_as_of`, `poi_confirmed_idx_as_of`), never the scalar. Consumers that treat `[confirmed_idx, end_idx]` as one active span are blind to earlier active stretches (this caused the sid1-cyc2 proximity-trigger loss — see GOTCHAS)
 
 ### Activation floor — cycle lifecycle-start clamp (REVISED 2026-05-26; floor terms REVISED by Plan C 2026-09-20; cycle term moved to the MOMENT by Plan D 2026-09-23)
@@ -498,7 +558,8 @@ cfg = {
    - Horizontal lines at top/bottom bounds
 2. **Confirm Line(s)** — one darker vertical line per activate event in `activation_history` (legacy fallback: a single line at `confirmed_idx` for zones predating the history)
 3. **Fibonacci Lines** — Dotted lines at 0%/100% anchors, rectangle at 61.8-80%
-4. **Imbalance Candle Highlighting** — Entire candle (body + wicks) colored distinctly:
+4. **Imbalance Candle Highlighting** — Entire candle (body + wicks) colored distinctly. Marks each flagged c2
+   (`is_imbalance`) — the pattern's location, not the moment its gap exists (CHARTING_SPEC §6):
    - Bullish imbalance: Lime Green `rgba(50, 205, 50, 0.8)`
    - Bearish imbalance: Amber Yellow `rgba(235, 190, 0, 0.8)`
 

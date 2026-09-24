@@ -75,7 +75,8 @@ only (corrected 2026-09-22; see the note below):
 | Event | `ev.idx` means | Notes |
 |---|---|---|
 | `CTS_ESTABLISHED` | **CTS extreme** in the breakout pattern span (retro-stamped — NOT the confirmation candle) | moment = `meta["confirmed_at"]` (the pattern's apply candle); `meta["anchor_idx"]` = the breakout pattern's FIRST candle — **not necessarily the extreme** (it is when the first candle holds it; 0 of 34 on the reference window), never a timing value |
-| `CTS_UPDATED` | raw path (`meta["via"] == "replay_raw"`): the processed candle; pattern path (`via` = a pattern name): the pattern-span extreme | no `confirmed_at` / `anchor_idx` on any `CTS_UPDATED` — a pattern-path update's apply candle is not recorded |
+| `CTS_UPDATED` | raw path (`meta["via"] == CTS_UPDATED_RAW_VIA`, i.e. `"replay_raw"`): the processed candle; pattern path (`via` = a pattern name): the pattern-span extreme | no `confirmed_at` / `anchor_idx` on any `CTS_UPDATED` — a pattern-path update's apply candle is not recorded, so `event_moment(ev)` is `None` there |
+| `CTS_THRESHOLD_UPDATED` | the processing candle (`_sync_thresholds_from_range(i)`) — a moment | `market_structure.event_moment(ev)` (Plan F) resolves the moment of this, `CTS_ESTABLISHED` (`confirmed_at`) and `CTS_UPDATED` in one place |
 | `CTS_CONFIRMED` | confirmation candle | `confirmed_at` mirrors `ev.idx`; `meta["cts_anchor_idx"]` = the CURRENT CTS extreme at confirmation (== `CTS_ESTABLISHED.idx` only if no `CTS_UPDATED` moved it); `meta["confirmation_method"]` |
 | `CTS_RECONFIRMED` (new) | pullback confirmation candle | only fires after proximity-confirmed CTS; `confirmed_at` mirrors `ev.idx` |
 | `BOS_CONFIRMED` | **BOS extreme candle** (NOT confirmation) | `meta["confirmed_at"]` = the same apply candle as the cycle's `CTS_ESTABLISHED.meta["confirmed_at"]` |
@@ -221,16 +222,28 @@ must replace events in the list, not mutate event objects.
 ## Imbalance instance model
 
 **Today's invariants:**
-- Per-candle `is_imbalance` flag for charting
+- Per-candle `is_imbalance` flag for charting — it marks the **c2** (the
+  pattern's middle candle): a rendering location, not the moment the gap exists
 - `df.attrs["imbalances"]` list of `ImbalanceInstance` for Fib/POI logic
 - Detection requires c2 direction matches FVG direction
 - Consecutive same-direction imbalance candles merge into one instance
 - Merged bounds: first c1 to last c3
-- `imb_idx` references "last candle of run" (representative)
+- An instance's `start_idx` / `end_idx` are its first / last c2 (corrected
+  2026-09-24: this bullet used to read "`imb_idx` references 'last candle of
+  run' (representative)" — no such field; `imb_idx` was the c2 argument of the
+  pre-instance helpers, removed in `9ecce9d`)
+- **An instance exists from its first c3** (Plan F, 2026-09-24):
+  `ImbalanceInstance.formed_at = start_idx + 1`. A question asked at a moment
+  counts only instances formed by then, and only their formed prefix
+  (`has_unfilled_imbalance(..., evaluated_at=)` — keyword-only and required;
+  `None` = an explicit no-cut). Canonical: `IMBALANCE_FILL_SEMANTICS.md`
+  "Knowability — the c3 rule"
 - M15 lower-TF re-runs `compute_imbalance` after slicing
 
 **Refactor watch:**
 - Live trading mode will need incremental detection; current is one-pass
+  (a live engine creates each instance at `formed_at` and grows it while the
+  run continues)
 
 ---
 

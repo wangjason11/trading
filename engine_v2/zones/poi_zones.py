@@ -223,9 +223,13 @@ def find_ic_candidates(
         # Check range (candidate_idx + 1, CTS_idx] for unfilled imbalance in sd direction.
         # IC validation is strict: the same-direction filter (direction=sd) is the
         # whole point — an IC's role is to anchor a same-direction continuation, so
-        # a counter-direction imbalance in the tail wouldn't justify it. (Fib
-        # activation, by contrast, calls this same primitive without `direction` to
-        # stay permissive — see fib_tracker.py call sites.)
+        # a counter-direction imbalance in the tail wouldn't justify it. (Every Fib /
+        # scenario check is sd-strict too since 2026-05-23 — IMBALANCE_FILL_SEMANTICS.)
+        # evaluated_at=None (no knowability cut, Plan F) for both callers:
+        # derive_poi_zones identifies ICs retrospectively on the final fib (the
+        # activation SWEEP enforces when a POI can go live; Plan E §2.4 item 8),
+        # and the MS in-flight resolver's snapshot is read only at candles after
+        # the CTS, where every gap it counts has formed (MARKET_STRUCTURE_SPEC).
         has_unfilled_after = has_unfilled_imbalance(
             df,
             start_idx=idx + 1,        # strictly after
@@ -233,6 +237,7 @@ def find_ic_candidates(
             check_to_idx=cts_idx,     # evaluate fill as of fib's current CTS upper bound
             direction=sd,
             fill_threshold=config.fill_threshold,
+            evaluated_at=None,
         )
 
         if not has_unfilled_after:
@@ -514,7 +519,9 @@ def derive_poi_zones(
             #      starting at first_active = max(cts_established_idx, ic_idx,
             #      lifecycle floor)).
             #   3. `has_unfilled_imbalance(df, ic_idx+1, t, check_to_idx=t,
-            #      direction=sd)` — POI-specific sd-direction imbalance check
+            #      direction=sd, evaluated_at=t)` — POI-specific sd-direction
+            #      imbalance check, counting only gaps FORMED by t (Plan F: an
+            #      instance exists from its first c3, `inst.formed_at`),
             #      decoupled from Fib's `active` flag.
             #   5. Variant qualification: at the fib's bounds [bos_price,
             #      cts_price_at(t)], the IC candle's overlap with the 61.8-80%
@@ -642,7 +649,7 @@ def derive_poi_zones(
                 if inst.direction == z_sd
                 and inst.gap_size > 0
                 and inst.end_idx > z_ic_idx
-                and (z_scan_end is None or inst.start_idx <= z_scan_end)
+                and (z_scan_end is None or inst.formed_at <= z_scan_end)
             ]
             for k, inst in enumerate(z_relevant):
                 print(f"[poi_zones]   imb#{k} start={inst.start_idx} end={inst.end_idx} "
@@ -806,16 +813,17 @@ def _compute_poi_activation_history(
                     moment — or, for a cycle with no CTS_ESTABLISHED, the fib's
                     CTS anchor (see derive_poi_zones) — POI_ZONES_SPEC.md §4
                     "Activation floor").
-      Condition 3 — sd-direction imbalance overlaps `(ic_idx, t]` that is
-                    not yet committed-filled (two-stroke: stroke 1 = 70%
-                    retrace, stroke 2 = close past gap outer). Flips as
-                    imbalances form / commit-fill.
+      Condition 3 — an sd-direction imbalance FORMED by t (its first c3 has
+                    closed: `inst.formed_at <= t` — Plan F) overlaps
+                    `(ic_idx, t]` and is not yet committed-filled (two-stroke:
+                    stroke 1 = 70% retrace, stroke 2 = close past gap outer).
+                    Flips as imbalances form / commit-fill.
       Condition 5 — Variant qualification: the IC candle overlaps the
                     61.8-80% Fib zone (computed from `bos_price` and the
                     time-varying `cts_price_at(t)`) by at least V30.
 
     Why event-driven: state can change only at three kinds of idx —
-    imbalance "enter unfilled set" (`inst.start_idx`), imbalance "leave
+    imbalance "enter unfilled set" (`inst.formed_at`, the first c3), imbalance "leave
     unfilled set" (cached `confirmed_fill_idx` — the stroke-2 candle),
     and CTS event idx (cts_price / cts_idx update → cond5 may flip).
     Between these idx state is constant, so the per-candle loop over
@@ -914,14 +922,16 @@ def _compute_poi_activation_history(
         if inst.direction == sd
         and inst.gap_size > 0
         and inst.end_idx > ic_idx          # overlaps (ic_idx, t] only when end_idx > ic_idx
-        and inst.start_idx <= scan_end     # could enter the window at all
+        and inst.formed_at <= scan_end     # could enter the window at all (formed by scan_end)
     ]
     for inst in relevant_imbalances:
-        enter_idx = max(inst.start_idx, first_active)
+        # An FVG exists from its first c3 (`formed_at` = start_idx + 1), not its
+        # c2 — Plan F; IMBALANCE_FILL_SEMANTICS "Knowability — the c3 rule".
+        enter_idx = max(inst.formed_at, first_active)
         if enter_idx > scan_end:
             continue
         _armed_cached, confirmed_cached = fill_idx_cache.get(id(inst), (None, None))
-        # Instance contributes "unfilled" on [inst.start_idx, confirmed_fill_idx - 1]
+        # Instance contributes "unfilled" on [inst.formed_at, confirmed_fill_idx - 1]
         # (or forever if stroke 2 never confirms). Clip to scan window.
         # ``armed_idx`` alone doesn't drive transitions — the imbalance only
         # leaves the unfilled set when stroke 2 latches (cf. is_filled).
@@ -1028,6 +1038,16 @@ def compute_poi_inners_for_cycle(
     always sd-direction by Fib construction. Returns [] gracefully on any
     error so the proximity check falls back to BOS-only without crashing.
 
+    Knowability (Plan F): no c3 cut here — the snapshot is built at the CTS
+    refresh candle and may count a gap whose c3 is the next candle, but its
+    only reader (`MarketStructure._maybe_confirm_cts_via_proximity`) is gated
+    `i > st.cts.idx`, so no decision uses a gap before it forms
+    (MARKET_STRUCTURE_SPEC "Snapshot vs per-candle"). FibTracker cuts at the
+    event, so in the drop case (the only sd gap formed one candle after a
+    lag-0 EST / raw UPDATED) this resolver keeps an inner for a fib FibTracker
+    never creates — the accepted M1 divergence (LANDMINES "Scenario 2 anchor
+    agreement").
+
     Parameters
     ----------
     c0_data : optional dict
@@ -1060,6 +1080,11 @@ def compute_poi_inners_for_cycle(
                 c0_data,
                 float(fill_threshold),
                 struct_direction=sd,
+                # No knowability cut (Plan F): this snapshot is read only at
+                # candles after the CTS (market_structure `i > st.cts.idx`),
+                # where every gap it counts has formed. FibTracker asks cond1 at
+                # the CTS_1 moment instead — the accepted M1 divergence.
+                evaluated_at=None,
             )
         )
         if anchor_cts_idx <= anchor_bos_idx:

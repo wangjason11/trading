@@ -9,6 +9,14 @@ in the ephemeral session scratchpad.
 
 - **State:** written at HEAD `fba64f1` (= Plan D source commit `0a4eadc` + its save commit). The `/compare` baseline is
   save **`20260923_172626_0a4eadc`**.
+  - **Since then: Plan F** (the imbalance-c3 knowability fix, 2026-09-24, the commit after `754a642`;
+    [`PLAN_F_imbalance_c3_knowability.md`](PLAN_F_imbalance_c3_knowability.md)). Canonical rule: IMBALANCE_FILL_SEMANTICS.md
+    "Knowability — the c3 rule". In short: an imbalance exists from its first c3 (`ImbalanceInstance.formed_at`);
+    `has_unfilled_imbalance` takes the moment of the question as a keyword-only, required `evaluated_at` (FibTracker
+    passes `market_structure.event_moment(ev)`; `None` = an explicit no-cut); the POI sweep enters an imbalance at
+    `max(inst.formed_at, first_active)`. Plan F's save (made at its `/commit-save`) becomes the `/compare` baseline in
+    place of `20260923_172626_0a4eadc`.
+    Items below that Plan F touches carry a "Plan F" note.
 - **Coordinates:** every line reference is an **`e2e0f89` coordinate unless it is marked HEAD**. Convert with the §0
   offset table.
 - **Full per-row inventories:** the sibling folder [`plan_e_inputs/`](plan_e_inputs/README.md) (rendered in full from
@@ -45,7 +53,10 @@ All three inventories were re-verified against **HEAD `e2e0f89`**, and all count
 
 The current baseline differs from the inventories' baseline only in Plan D's cells: the confluence POI IC 678 changed
 1223→1224 (`confirmed_idx` and `activation_history`), and 3 POI meta cells of `cts_established_idx` were re-valued to
-the moment. Every other measured value below stands.
+the moment. Every other measured value below stands. **Plan F** then moved further cells (listed in
+IMBALANCE_FILL_SEMANTICS.md "c3 knowability (2026-09-24, Plan F)"): 4 POI rows re-timed by one candle; 3 fib
+`activated_at` cells; sub 5's cycle-0 fib end; one counter fib_lifecycle row (9→8) and one counter POI row (13→12)
+removed; the counter chart 153/125 → 151/124. Values below that these touch carry a Plan F note.
 
 **Line numbers.**
 - **Code:** `e2e0f89` coordinates are exact for every `.py` file except the four files below (verified with
@@ -59,6 +70,20 @@ the moment. Every other measured value below stands.
 | `zones/structure_lifecycle.py` | ≤:72 → 0 · :73–:99 → +2 · ≥:100 → +3 (e.g. :100→:103, :148→:151, :174-182→:177-185) |
 | `tests/test_pooled_structure_build.py` | ≤:78 → 0 · ≥:79 → +8 (e.g. :128-136 → :136-144) |
 | `tests/test_render_sub_projection.py` | ≤:723 → 0 · ≥:724 → +81 (e.g. :745 → :826) |
+
+**Plan F shifted six more `.py` files** (offsets from `754a642`, verified with `git diff -U0`). `754a642` equals
+`e2e0f89` for every file below except `poi_zones.py`, which takes the Plan D row first. A line inside a span Plan F
+rewrote (mostly the `has_unfilled_imbalance` calls) has no offset: re-grep it.
+
+| File (Plan F offsets, verified) | `754a642` line range → add |
+|---|---|
+| `zones/fib_tracker.py` | ≤:14 → 0 · :15–:110 → +1 · :111–:134 → +3 · :135–:182 → +11 · :183–:306 → +12 · :307–:488 → +61 · :489–:535 → +79/+80 · :540–:693 → +77 · :694–:747 → +86/+87 · :748–:872 → +90 · :874–:890 → +92 · :891–:1109 → +93 · :1110–:1182 → +105 · :1187–:1315 → +102 · :1316–:1435 → +105 · :1436–:1474 → +94…+102 (rewritten calls) · :1475–:1526 → +95 · :1527–:1574 → +86…+92 (rewritten calls) · :1575–:2003 → +83 · :2004–:2064 → +84 · :2065–:2178 → +95 · ≥:2179 → +96 (e.g. :521→:600, :767→:857, :938→:1031, :1056→:1149, :1131→:1236, :1310→:1412, :2090→:2185, :2342→:2438) |
+| `zones/poi_zones.py` | ≤:225 → 0 · :229–:235 → +4 · :236–:516 → +5 · :518–:808 → +7 · :813–:919 → +8 · :921–:1030 → +10 · :1031–:1062 → +20 · ≥:1063 → +25 (e.g. :456→:461, :482→:487, :893→:901, :935→:945, :1074→:1099) |
+| `structure/market_structure.py` | ≤:163 → 0 · :164–:2049 → +29 · ≥:2050 → +33 (e.g. :1485→:1514, :1981→:2010, :2050→:2083) |
+| `zones/cross_cycle_fib.py` | ≤:69 → 0 · :70–:108 → +2 · :109–:123 → +13 · ≥:124 → +14 (e.g. :117→:130, :149→:163, :156→:170) |
+| `common/types.py` | ≤:143 → 0 · :144–:193 → +19 · ≥:195 → +23 |
+| `patterns/imbalance.py` | ≤:133 → 0 · `has_unfilled_imbalance` rewritten · ≥:163 → +13 |
+| tests | `test_cross_cycle_fib.py` ≥:43 → +7 · `test_main_versioned_cross.py` ≥:40 → +7 · `test_poi_lifecycle.py` ≥:18 → +2 · `test_imbalance.py` ≥:348 → +55 · `test_cross_cycle_fib_routine.py` ≥:228 → +35 · `test_poi_activation_moment.py` comments only (no shift) |
 
 ### 0.1 FINAL USER DECISIONS: the authority (verbatim from the session; anything in the sources that contradicts them is SUPERSEDED)
 
@@ -83,7 +108,7 @@ the moment. Every other measured value below stands.
 - Event contract to be amended: a rename/meaning change allowed only as an atomic migration (emitter + all readers +
   docs in one commit, `.get(key, fallback)` reads of that key become direct indexing), NO aliases — exact wording to be
   approved by the user in Plan E.
-- Sequence: imbalance-at-c3 fix NEXT (own session) → Plan E written + cold-reviewed (stages: pattern-anchor rename +
+- Sequence: imbalance-at-c3 fix NEXT (own session) [DONE: Plan F, 2026-09-24] → Plan E written + cold-reviewed (stages: pattern-anchor rename +
   contract amendment → explicit anchor fields (accessors, migrate LOCATION reads, split dual-role calls, pin sort keys)
   → timing fixes one per `/compare` (fib timing 4 rows, pool knowable-at/sibling clip 0, probe Phase-2 `check_lo`,
   prev-BOS) → `CTS_ESTABLISHED` + `BOS_CONFIRMED` flip → remaining renames) → the never-established-cycle fallback POI.
@@ -116,7 +141,7 @@ the moment. Every other measured value below stands.
 | **E3a–d** | the timing fixes, one per `/compare`:<br>- a: fib timing;<br>- b: pool knowable-at / sibling clip (+ reference-zone recency);<br>- c: probe Phase-2 `check_lo`;<br>- d: prev-BOS filter.<br>- **e (proposed, not in the user's list):** the MS in-flight POI-inner resolver as-of (§2.3), its own `/compare`.<br>Optional or undecided items are marked E3? |
 | **E4** | the `CTS_ESTABLISHED` + `BOS_CONFIRMED` idx flip (emit sites only) + the docs that invert |
 | **E5** | the remaining renames and (unless moved before E2, §1.8) the deletions:<br>- internal ones are byte-identical;<br>- exported ones go under a `/compare` rename map |
-| **post** | the never-established-cycle fallback POI; the coordinate-hygiene families (each its own `/compare`) |
+| **post** | the never-established-cycle fallback POI (no live case on the reference window since Plan F, §3 #19); the coordinate-hygiene families (each its own `/compare`) |
 
 ### 0.4 Measured facts the stages rely on (baseline `20260922_195430_aadb887`; unchanged by Plan D unless noted)
 
@@ -138,6 +163,9 @@ the moment. Every other measured value below stands.
 - **`CTS_UPDATED`**
   - 53 / 259 / 114 rows (H1 / confluence / counter), of which 7 / 23 / 7 are pattern-path.
   - No `CTS_UPDATED` carries `confirmed_at`.
+  - The raw path is `meta["via"] == CTS_UPDATED_RAW_VIA` (`"replay_raw"`; a named constant in `market_structure.py`
+    since Plan F): its `idx` is the processing candle, a moment. Every other `via` is a breakout-pattern name, whose
+    `idx` is the CTS anchor.
   - The pattern path has 1 lagging instance: confluence sub 2 cyc 0, 2468 vs apply 2470, a same-price duplicate of a
     raw update, masked by sub 2's start 2470.
 - **Probes on the window**
@@ -238,7 +266,7 @@ E2 diff self-checking.
 | orchestrator `bos_by_cycle` / tuple local `bos_idx` → `bos_anchor_by_cycle` / `bos_anchor_idx` | `orchestrator.py:166`, `:209`, `:212-213`, `:224-226` | E2 |
 | orchestrator `last_bos_by_sid` → `last_bos_anchor_by_sid`; `prev_bos_lines` keys `start_idx`/`end_idx` → `bos_anchor_idx` / `cts_anchor_idx` (historical values under real-time lifecycle names today). Which value the line END takes is Q4.6 | `orchestrator.py:262-298` (label `[prev_bos_line]`); shifted at `entity_df_mutation.py:338-341`; read `export_plotly.py:2688-2698`, `export_m15_chart.py:760`, `:796`, `:2593` (naming_inv: `:1695`, `:2595`) | E2 |
 | uc1 local `cts_idx` → `cts_anchor_idx`; the fallback to `cts_ev.idx` (a moment) becomes direct indexing; delete meta key `cts_idx` (no reader) | `uc1_trigger.py:80-92`, `:117`, `:121` | E5 |
-| `FibTracker.on_cts_established(bos_idx)` → `bos_anchor_idx`; local `cts_idx = int(event.idx)` → `cts_anchor_idx` (from meta) **plus a new local `cts_established_idx` = the moment** for the timing uses (§2.4) | `fib_tracker.py:480-565` (param `:484`; `:521`; fill as-of `:537`; `_bos_by_cycle` `:542`); Scenario-1 check `:768` | E2 (split) → E3a (timing uses switch) |
+| `FibTracker.on_cts_established(bos_idx)` → `bos_anchor_idx`; local `cts_idx = int(event.idx)` → `cts_anchor_idx` (from meta) **plus a new local `cts_established_idx` = the moment** for the timing uses (§2.4). Plan F: the public `on_cts_established` is now a wrapper that runs the body `_on_cts_established` under `_evaluating(event)`, so the handler already holds the moment as `self._evaluated_at` (`event_moment(event)` = `confirmed_at`); today only the imbalance knowability cut reads it | `fib_tracker.py:480-565` (param `:484`; `:521`; fill as-of `:537`; `_bos_by_cycle` `:542`); Scenario-1 check `:768` | E2 (split) → E3a (timing uses switch) |
 | poi `cts_idx_at_t` → `cts_anchor_idx_at_t` (it forces the split: the transition time stays the moment, cond1's location comes from meta) | `poi_zones.py:832`, `:840`, `:871`, `:912`, `:930`, `:946` (HEAD +19/+24) | E2 |
 | `compute_bos_inner_from_event(bos_idx)` → `bos_anchor_idx` (the caller passes it positionally) | `kl_zones_v1.py:1103-1122`; caller `market_structure.py:1539-1542` | E2 |
 | charts `next_bos_idx` → `next_bos_anchor_idx` (both charts) | `export_plotly.py:1197` (`:1192-1223`); `export_m15_chart.py:588` (`:584-612`), `:1183`, `:2077` (`:2073-2097`), `:2138` | E2 |
@@ -501,8 +529,10 @@ E2 diff self-checking.
   - `enforce_cts0_new_extreme`: optional rename to `cts0_scan_mode`, about 23 sites (Q4.13).
   - `starting_idx`.
   - Main `SidRecord.creation_event_idx`: re-source at E4 (§2.2 B10).
-  - `activated_at`, `current_candle`, `revert_idx`, `reactivated_at`, `deactivated_at`: names kept; values become
-    moments (E3a).
+  - `activated_at`, `revert_idx`, `reactivated_at`, `deactivated_at`: names kept; values become moments (E3a).
+    `current_candle` left this list with Plan F: the moment is now its own parameter, `evaluated_at`, and E3a keeps ONE
+    moment parameter, so `current_candle` is renamed to its fill-horizon role or folded into `evaluated_at` (§2.4
+    item 2).
   - `knowable_at_idx`.
   - The test helper `_cts0_established_idx` (`test_main_reversal_probe.py:109-118`): correct under the final
     vocabulary; its value becomes correct at E4.
@@ -581,7 +611,11 @@ E2 diff self-checking.
     `ev.idx` (unless it joins the flip, Q4.1);
   - `bos_anchor_idx(ev)` → `meta["bos_anchor_idx"]`;
   - `pattern_anchor_idx(ev)`;
-  - a moment accessor (name open, Q4.16).
+  - a moment accessor (name open, Q4.16). Plan F landed one for the three CTS types, `market_structure.event_moment(ev)`,
+    defined next to the emitter: CTS_ESTABLISHED → `meta["confirmed_at"]`; CTS_UPDATED → `ev.idx` on the raw path
+    (`meta["via"] == CTS_UPDATED_RAW_VIA`), `None` on the pattern path; CTS_THRESHOLD_UPDATED → `ev.idx` (the
+    processing candle); any other type raises `ValueError`. Extend it or move it into the accessor module; do not add
+    a second.
   - Rules:
     - direct indexing only, never `.get(key, ev.idx)`;
     - one fixture factory `make_cts_established(anchor, moment, …)` (+ a BOS equivalent);
@@ -630,13 +664,13 @@ Test-only paths: `structure_engine.py:449-484`, `:563-578`, `:767-782` (Q4.10).
 | Stage | Site | Predicted delta (window) |
 |---|---|---|
 | done | **POI activation gate (Plan D)** | landed: 1 row + 3 meta cells |
-| **E3a** | **FibTracker timing.**<br>- `activated_at` writes: `fib_tracker.py:602`, `664`, `731`, `782`, `846`, `865`, `937`, `956`, `1200`, `1340`, `1360`, `1588` (= `cts_idx`); `:2313`, `:2520` (= `current_candle`). `current_candle` = CTS_ESTABLISHED.idx from `:614`/`:1968`/`:1992` and CTS_UPDATED.idx from `:1223`; it is a real moment only on the CTS_THRESHOLD_UPDATED path (`:2090`).<br>- Consumers: `:1056` → the new_cycle terminal `:1071`/`:1086`; `_mark_first_active` `:1099`, `:2324`/`:2329`.<br>- The fill-check as-of: `:537`, `:1184`, `:1320`, `:1446`, `:1463`.<br>- The set-if-absent merge `:427-429`: the moment-based `cycle_life` end is only set-if-absent, so the anchor-based fib terminal wins today.<br>- Cross `current_candle` (§2.4).<br>- `scenario1_revert` / `revert_idx` (`:823-826`, `:1837-1858`).<br>- `reactivated_at`/`deactivated_at` (`:1469`, `:1473`, `:1550`, `:1553`) are CTS_UPDATED values and stay until Q4.1 | **4 fib_lifecycle rows**, on M15_confluence lines 14, 15 and M15_counter lines 2, 3:<br>- sub 3 cyc 0: `end_idx` 2828.0→2829.0 (new_cycle; KL/POI already end at 2829);<br>- sub 3 cyc 1: meta `activated_at` 239→240 (slice-local);<br>- H1: 0; POIs: 0.<br>Re-measure. The spec conflicts: FIB_LIFECYCLE_SPEC §7 cases 2-3 ("zone-consistent"), and the wording at §15.3 / `:888` |
-| **E3b** | `knowable_at_idx` (`sub_structure_pool.py:84-100`; `pooled_structure_build.py:34-43`, `71-72`; ← `render_sub_projection` `entity_df_mutation.py:1202`): special-case CTS_ESTABLISHED on `confirmed_at` (BOS already is). The sibling clip + recency (`entity_df_mutation.py:478-489`) and `reference_zone.py:335-338` (window) / `:344-357` (recency) move to the moment. Fix the comment at `:481`. This is the documented known limit at `LANDMINES.md:683-690` / PART4 §17.8 / §17.12 | **0** (caps 1940 / 3611). It closes §17.12 for EST. In general it can move pool keys |
+| **E3a** | **FibTracker timing.**<br>- `activated_at` writes: `fib_tracker.py:602`, `664`, `731`, `782`, `846`, `865`, `937`, `956`, `1200`, `1340`, `1360`, `1588` (= `cts_idx`); `:2313`, `:2520` (= `current_candle`). `current_candle` = CTS_ESTABLISHED.idx from `:614`/`:1968`/`:1992` and CTS_UPDATED.idx from `:1223`. It is a real moment on the CTS_THRESHOLD_UPDATED path (`:2090`) and on the RAW CTS_UPDATED path (`ev.idx` = the processing candle), and the CTS anchor on CTS_ESTABLISHED and on pattern-path CTS_UPDATED (corrected by Plan F; `event_moment`).<br>- Consumers: `:1056` → the new_cycle terminal `:1071`/`:1086`; `_mark_first_active` `:1099`, `:2324`/`:2329`.<br>- The fill-check as-of: `:537`, `:1184`, `:1320`, `:1463`. (`:1446` struck: it sits in `_update_fib_cts`'s dead cross branch, which is never reached; its deletion is a Plan F §7 hygiene item.) Plan F already moved the knowability cut of these reads to the moment (`evaluated_at`); their fill horizon `check_to_idx` is unchanged (`cts_idx`: the EST anchor at `:537`, the update's `idx` at the others), so only that half is E3a's. `:1320` is the cycle-0 cache write, which Plan F keeps uncut on purpose (a cached value is judged at its use).<br>- The set-if-absent merge `:427-429`: the moment-based `cycle_life` end is only set-if-absent, so the anchor-based fib terminal wins today.<br>- Cross `current_candle` (§2.4).<br>- `scenario1_revert` / `revert_idx` (`:823-826`, `:1837-1858`).<br>- `reactivated_at`/`deactivated_at` (`:1469`, `:1473`, `:1550`, `:1553`) are CTS_UPDATED values (already the moment on the raw path, the anchor on the pattern path) and stay until Q4.1 | **4 fib_lifecycle rows**, on M15_confluence lines 14, 15 and M15_counter lines 2, 3:<br>- sub 3 cyc 0: `end_idx` 2828.0→2829.0 (new_cycle; KL/POI already end at 2829);<br>- sub 3 cyc 1: meta `activated_at` 239→240 (slice-local);<br>- H1: 0; POIs: 0.<br>Re-measure. (Plan F left these cells and line numbers in place: on the same sub 3 cyc 0 rows it re-valued meta `activated_at` 61→62, and it removed counter line 7.) The spec conflicts: FIB_LIFECYCLE_SPEC §7 cases 2-3 ("zone-consistent"), and the wording at §15.3 / `:888` |
+| **E3b** | `knowable_at_idx` (`sub_structure_pool.py:84-100`; `pooled_structure_build.py:34-43`, `71-72`; ← `render_sub_projection` `entity_df_mutation.py:1202`): special-case CTS_ESTABLISHED on `confirmed_at` (BOS already is). The sibling clip + recency (`entity_df_mutation.py:478-489`) and `reference_zone.py:335-338` (window) / `:344-357` (recency) move to the moment. Fix the comment at `:481`. This is the documented known limit at `LANDMINES.md:683-690` / PART4 §17.8 / §17.12. Plan F §7: `knowable_at_idx` and `unified_probe._second_cts_moment` converge onto `market_structure.event_moment` here (one moment concept) | **0** (caps 1940 / 3611). It closes §17.12 for EST. In general it can move pool keys |
 | **E3c** | unified_probe Phase-2 `check_lo = int(first_cts.idx)+1` (`:602`; window `:629-642`; docstring `:489-490`) → moment + 1, aligning with Phase 1 (`:403`). The label `cts0_est=` (`:671`) prints `first_cts.idx` (the anchor) and is not touched by the `check_lo` change. Re-source it in this commit to the existing moment local `cts0_est_idx` (`:594`), following naming_inv's option, so from E3c on it prints the moment under its moment name. It prints only on a Phase-2 reset, and the window's one Phase-2 run has no reset (`p2_iter=1`, lag 0), so run.log is unchanged on the window. (The 8 run.log `cts0_est=` lines on the window are all Phase-1 resets from `:424`, which already prints the moment `tfb.est_idx`.) | **0** predicted (verify). In general it can shift `starting_idx` |
 | **E3d** | the prev-BOS line FILTER (`orchestrator.py:279-288`) on the moment | **0**. Where the line ENDS is Q4.6 |
 | E3? | the event processing order (Q4.3) · Scenario 1 (Q4.2) · the struct_start base (Q4.5) · the `cycle1_bos_idx` cond3 as-of (Q4.8) · the test-only Exception-2 windows (Q4.10) | 0 (H1 lag 0) / unmeasured |
-| **E3e (proposed; not in the user's decided list — confirm)** | **The MS in-flight POI-inner resolver evaluates fills as-of the CTS anchor.** Path: `_refresh_poi_inners_for_cycle` → `compute_poi_inners_for_cycle` / `select_fib_anchor_for_cycle` (`market_structure.py` ~`1989-2062`; `fib_tracker.py:100-127`); `_update_cycle0_data` likewise uses the anchor as the imbalance as-of (`market_structure.py:2050`; resolver `:2003-2014`). It feeds the sd-zone-proximity CTS confirmation, so it is engine-side (MS events can move). The audit's same-class sweep classified it "unclear, not measured" | **not measured** — measure before the plan predicts. Its own `/compare`. MS ↔ FibTracker parity must hold (§2.4 item 9) |
-| E3? (behaviour mixing, naming_inv step 7) | `find_ic_candidates` `check_to_idx = cts_idx` (`poi_zones.py:232-233`); the charts use `next_bos_idx` (an anchor) as an exclusive TIME bound on pullback STATE_CHANGED events | unmeasured |
+| **E3e (proposed; not in the user's decided list — confirm)** | **The MS in-flight POI-inner resolver evaluates fills as-of the CTS anchor.** Path: `_refresh_poi_inners_for_cycle` → `compute_poi_inners_for_cycle` / `select_fib_anchor_for_cycle` (`market_structure.py` ~`1989-2062`; `fib_tracker.py:100-127`); `_update_cycle0_data` likewise uses the anchor as the imbalance as-of (`market_structure.py:2050`; resolver `:2003-2014`). It feeds the sd-zone-proximity CTS confirmation, so it is engine-side (MS events can move). The audit's same-class sweep classified it "unclear, not measured". Plan F settled the knowability half: both MS reads stay UNCUT by decision (explicit `evaluated_at=None`; the snapshot's only reader is gated `i > st.cts.idx`, so no decision uses a gap before it forms), so E3e concerns only the fill horizon | **not measured** — measure before the plan predicts. Its own `/compare`. MS ↔ FibTracker parity must hold (§2.4 item 9; since Plan F it has one documented exception, the M1 activation divergence) |
+| E3? (behaviour mixing, naming_inv step 7) | `find_ic_candidates` `check_to_idx = cts_idx` (`poi_zones.py:232-233`; its knowability is settled by Plan F, §2.4 item 8); the charts use `next_bos_idx` (an anchor) as an exclusive TIME bound on pullback STATE_CHANGED events | unmeasured |
 | pre-E2 or E5 (delete; §1.8) | the `lifecycle_end_idx` chain (unread) | 0 |
 | automatic at E4 | `probe_fc_finalize` `cts_est` LOH (`:79-80`, `:177`, `:183`) | console |
 
@@ -658,23 +692,49 @@ These carry `.get('confirmed_at', ev.idx)` fallbacks, which become direct indexi
    - One source today (`:614-615`, `:1968`, `:1993`).
    - Live on the window: sub 3 cyc 1 `cross_failed` (`activated_at` 2828); confluence sub 0 cyc 2's EST at 1223
      extends the pre-established cross that started at 1169.
-   - The split: `current_candle` (moment) / `anchor_idx` (fib family, anchor).
+   - The split (revised by Plan F): Plan F added the moment as its own keyword-only, required parameter
+     `evaluated_at` (FibTracker passes `self._evaluated_at`, the handled event's `event_moment`; the MS in-flight
+     resolver passes `None`), which drives the knowability cut in all three of the routine's `has_unfilled_imbalance`
+     calls. `current_candle` still carries today's value in both of its roles (the own-test window end and the fill
+     horizon): a moment on CTS_THRESHOLD_UPDATED and raw CTS_UPDATED, the CTS anchor on CTS_ESTABLISHED and
+     pattern-path CTS_UPDATED. **E3a keeps ONE moment parameter, `evaluated_at`:** `current_candle` does not become a
+     second moment; it is renamed to its fill-horizon role or folded into `evaluated_at`. `anchor_idx` stays (fib
+     family, anchor).
 3. **`has_unfilled_imbalance(df, min(bos,cts), max(bos,cts), cts_idx)` at EST** (`fib_tracker.py:531-539`): the range
-   is anchors; the as-of is a time. NB: the imbalance-at-c3 fix lands BEFORE Plan E and may touch these same
-   `has_unfilled_imbalance` consumers (fib_tracker ~536/1183/1318/1436-1462/1527-1540, `find_ic_candidates` ~229, the
-   MS cycle-0 snapshot, zone_proximity); re-read items 3-6 and 8-9 after it lands.
+   is anchors; the as-of is a time. **Plan F (landed 2026-09-24; items 3-6 and 8-9 were re-read against it):** the
+   as-of is now two values. The knowability cut asks at the moment (`evaluated_at` = `confirmed_at`, through
+   `FibTracker._has_unfilled`); the fill horizon `check_to_idx` is still `cts_idx` (the anchor), and only that half is
+   left for E3a. (zone_proximity, named in the pre-landing note, calls no imbalance primitive: it reads POI activity
+   through `poi_active_as_of` and moves with the POI rows.)
 4. **`_update_fib_cts` / create-on-fail** (`:1181-1187`, `1443-1474`, `1535-1574`): the range, the as-of, and
-   `reactivated_at` / `deactivated_at`.
+   `reactivated_at` / `deactivated_at`. Plan F: every read here goes through `_has_unfilled` at the event's moment
+   (raw CTS_UPDATED → its `idx`; pattern path → no cut, `event_moment` is `None`), so the deactivate reason
+   `all_imbalances_filled` now means "no FORMED unfilled imbalance". The fill horizon is the update's `idx`: already
+   the moment on the raw path.
 5. **The c0 snapshot** `c0['cts_idx']` (`:177-178`, `757-765`, `1308-1321`, `1431-1439`, `1522-1530`): the range, and
-   cond2's "@CTS_0" as-of.
-6. **`cycle1_bos_idx`** (`:938`, `1442-1454`, `1532-1543`): the range start, and cond3's as-of.
+   cond2's "@CTS_0" as-of (`select_fib_anchor_for_cycle`'s labels; `_update_cycle1_main` calls this read cond1).
+   Plan F: the cycle-0 liveness cache `c0["has_unfilled"]` (cond2) is stored UNCUT (`evaluated_at=None`). It is
+   judged at its later use (CTS_1 ESTABLISHED, after CTS_0, when every gap in `[BOS_0, CTS_0]` has formed), which keeps
+   it equal to the MS mirror. A decision taken at the write event asks again at that event's moment
+   (`FibTracker._c0_has_unfilled_now`). The range and the fill horizon are unchanged.
+6. **`cycle1_bos_idx`** (`:938`, `1442-1454`, `1532-1543`): the range start, and cond3's as-of. Plan F: these reads
+   pass the moment too. cond3's window ends at CTS_0, before any moment, so the cut cannot change it (only its fill
+   horizon is open, Q4.8). The cycle-1 own window `[BOS_1, CTS]` ends at the update and is cut at its moment (no cut on
+   the pattern path), in lock-step with the create-on-fail read.
 7. **POI transitions** (`poi_zones.py:911-946` → HEAD `:935-970`): the time (transition) and the location (cond1).
    The same for the pre-window split + sort (`:403-416`, `:829`, `:862-878`).
 8. **`find_ic_candidates`** `range(fib.bos_idx, fib.cts_idx+1)` + `has_unfilled_imbalance(end=cts_idx,
-   check_to_idx=cts_idx)` (`poi_zones.py:203-244`, called `:456`, `:1074`; `select_ic_variants` `247-317`).
+   check_to_idx=cts_idx)` (`poi_zones.py:203-244`, called `:456`, `:1074`; `select_ic_variants` `247-317`). Plan F:
+   both callers pass `evaluated_at=None` explicitly. `derive_poi_zones` identifies ICs retrospectively on the final fib
+   (measured 0 cells even if cut), and the POI sweep now decides WHEN a POI can go live (it enters an imbalance at
+   `max(inst.formed_at, first_active)`); the MS in-flight caller is item 9. The fill horizon `check_to_idx=cts_idx`
+   (the anchor) is unchanged and is still this item's question.
 9. **The MS POI resolver / cycle0_data** (`market_structure.py:2003-2014`, `2040-2062`). This is MS state and is
    unaffected by the emit flip, but it must keep parity with FibTracker (`fib_tracker.py:521`, `:1131`) in the same
-   change.
+   change. Plan F: both MS reads pass `evaluated_at=None` explicitly (no knowability cut, by decision: the snapshot's
+   only reader is gated `i > st.cts.idx`). Parity with FibTracker now holds for cond2 and cond3 only. cond1 and the
+   activation can diverge (the accepted M1 divergence: 0 cases on the window; LANDMINES "Scenario 2 anchor
+   agreement"; IMBALANCE_FILL_SEMANTICS "Decided at the event — and the accepted divergence").
 10. **The sibling clip** (`entity_df_mutation.py:478-489`): `abs_idx` is the clip time and the winner's anchor is the
     probe input. The highest-risk site: one expression mixes both roles, and it sets the pool key.
 11. **`_resolve_reversal_start`** (`entity_df_mutation.py:903-926`, `:974`): the recency pick is a time; the probe
@@ -758,7 +818,9 @@ only because the fixture has lag 0.
 **Silent label pin:** `test_unified_probe.py:782` (the `cts1_ext=` regex).
 
 **Re-author to the flipped contract.** These LOCATION fixtures carry no `confirmed_at`, so they pass unchanged until
-re-authored:
+re-authored. Exception since Plan F: the `_ev` helpers of the first two files set `confirmed_at = idx` (lag 0) on
+CTS_ESTABLISHED and `via = CTS_UPDATED_RAW_VIA` on CTS_UPDATED, because FibTracker now reads both by direct index
+(`event_moment`); their lines below are pre-Plan-F (+7, §0):
 - `test_cross_cycle_fib.py:64-65`, `140-319`;
 - `test_main_versioned_cross.py:86`, `110`, `207-208`, `244`;
 - `test_wave_candles.py:198-224`, `389-618`;
@@ -802,18 +864,22 @@ re-authored:
 
 ### 2.8 Per-stage predicted `/compare` (vs `20260923_172626_0a4eadc`)
 
+Written against `20260923_172626_0a4eadc`. Since Plan F, predict against Plan F's save: Plan F's cells
+(IMBALANCE_FILL_SEMANTICS.md "c3 knowability (2026-09-24, Plan F)") are then the baseline, and the counter chart
+count is 151/124.
+
 | Stage | Predicted | Verification |
 |---|---|---|
 | E1 pattern-anchor rename + amendment | Events meta **key text** changes on 47 rows (H1 7 = CTS_EST 5 + RC 1 + RWS 1; conf 32 = 21 + 4 + 7; counter 8) and on 5 H1 `structure_levels` meta rows; values identical. +1 H1 final.csv header line if `pending_reversal_*` is included. Charts identical | Reverse key substitution → byte-identical. WVMI byte-identical proves the `wave_candles` readers moved |
-| E2 explicit anchor fields | The events meta **gains** `cts_anchor_idx` on 34 CTS_EST rows (H1 5 / conf 21 / counter 8) and `bos_anchor_idx` on 34 BOS rows (5 / 21 / 8); the levels meta gains 10 (5 + 5). Nothing else changes in the CSVs. run.log: the Phase-2 early-stop label `cts1_ext=` becomes `cts1_anchor=` (values identical) | A meta-key-stripping diff of all 24 CSVs is empty; charts identical (85/245, 153/125, 294/233); suite green; the grep gate; synthetic lagging fixtures (an EST winner for L1; a lagging BOS for B5) |
-| E3a fib timing | 4 fib_lifecycle rows (§2.3) | re-measure first. A unit regression fixture already exists in shape: `test_unified_probe._make_second_cts_moment_after_extreme_data` (EST(0,1) idx 9, `confirmed_at` 10) through `_run_downstream_pipeline` (fib_mode `cross_cycle` or `h1`; `project_to_window` in the source) gives the cycle-1 fib `start_idx` = meta `activated_at` = 9 (the anchor) against the moment 10, and the cycle-0 fib `end_idx` 9 (re-run 2026-09-23). E3a should make these 10 |
+| E2 explicit anchor fields | The events meta **gains** `cts_anchor_idx` on 34 CTS_EST rows (H1 5 / conf 21 / counter 8) and `bos_anchor_idx` on 34 BOS rows (5 / 21 / 8); the levels meta gains 10 (5 + 5). Nothing else changes in the CSVs. run.log: the Phase-2 early-stop label `cts1_ext=` becomes `cts1_anchor=` (values identical) | A meta-key-stripping diff of all 24 CSVs is empty; charts identical (85/245, 151/124 since Plan F, 294/233); suite green; the grep gate; synthetic lagging fixtures (an EST winner for L1; a lagging BOS for B5) |
+| E3a fib timing | 4 fib_lifecycle rows (§2.3) | re-measure first. A unit regression fixture already exists in shape: `test_unified_probe._make_second_cts_moment_after_extreme_data` (EST(0,1) idx 9, `confirmed_at` 10) through `_run_downstream_pipeline` (fib_mode `cross_cycle` or `h1`; `project_to_window` in the source) gives the cycle-1 fib `start_idx` = meta `activated_at` = 9 (the anchor) against the moment 10, and the cycle-0 fib `end_idx` 9 (re-run 2026-09-23; unchanged under Plan F, re-run 2026-09-24). E3a should make these 10 |
 | E3b pool clip / recency | 0 | a synthetic cap in [anchor, moment) |
 | E3c `check_lo` | 0 | verify the Phase-2 run |
 | E3d prev-BOS filter | 0 | — |
 | E3? type-rank order / struct_start base | 0 / unmeasured (H1 sid0 96→115, masked) | per decision |
 | E4 flip | **Events `idx`:**<br>- CTS_EST: 3 cells (conf 1223→1224, 2828→2829; counter 2828→2829); H1 0;<br>- BOS: 34 cells (H1 96→115, 591→652, 689→703, 728→748, 826→902; conf 21, lag 2–411; counter 8, lag 4–285).<br>**KL meta `source_event_idx`** on the 34 BOS-zone rows (verified on `20260923_172626_0a4eadc`: KL `source_kind` BOS = 5 / 21 / 8; all 29 M15 values slice-local).<br>**POI `activation_history` on IC 678 / IC 2808** (the pre-window → in-window path switch, §2.2 L3): expected identical.<br>**Zero change** in `structure_levels` (re-sourced in E2), POI `cts_established_idx` (already the moment) and fib `cycle1_bos_idx`.<br>**Everything else byte-identical**, including triggers / subs / pool keys and the charts.<br>**run.log** `kl_zones` debug prints and probe labels change | cell-for-cell against this table |
 | E5 remaining renames | Internal: 24/24 byte-identical; no run.log label renames expected. The naming_inv list is superseded: `cts0_est` is re-sourced in E3c; the `[fib] CTS idx=` labels stay (§1.10); the `[kl_zones][events]` prints change at E4 (B12); `[uc1_trigger] lifecycle_end_idx=` goes with the §1.8 deletion. Re-check with the silent-skip grep. Exported: the triggers header `validated_parent_idx` (2 lines) | reverse substitution. Keep chart hover / legend text out of byte-identical steps |
-| post: fallback POI | counter CSV 13→12, shapes 125→124, traces 153→151 | — |
+| post: fallback POI | **0 on this window since Plan F.** The delta predicted here (counter CSV 13→12, shapes 125→124, traces 153→151) already happened in Plan F, which removed the only live case (§3 #19). The general defect stays parked | — |
 | post: coordinate hygiene (one family per `/compare`, M15 rows only) | POI `bos_idx`/`cts_idx` 43 rows · fib `activated_at` 30, `locked_at` 25, `reactivated_at` 2 · KL `source_event_idx` 29, `expanded_last_idx` 4 · event meta RANGE_STARTED `cts_idx` (39 + 15), `pb_start` (21 + 8), `pullback_apply_idx` (7 + 2), `start_idx`/`confirm_idx`/`effective_idx`/`expires_idx` | after the renames, so each key enters the shift list once |
 
 **Sizing** (naming_inv, re-scoped):
@@ -885,7 +951,7 @@ re-authored:
 | 16 | `KLZone.source_time` / `source_price` pairs a moment's time with an anchor's price | `kl_zones_v1.py:941-942` | Q4.12 |
 | 17 | `knowable_at_idx` keys REVERSAL_CANDIDATE on its idx although its moment is `meta["apply_idx"]` | `sub_structure_pool.py:84-100` | Outside the 3 types; note for E3b |
 | 18 | Parked by Plan D §7:<br>- `poi_active_as_of` treats the end as inclusive while the scan is exclusive (`poi_lifecycle.py:69` vs `poi_zones.py:483`; only the H1 proximity caller; 0 delta);<br>- the POI_ZONES_SPEC §3.2 IC idx constraints are not implemented (dead `scenario_context`) | — | not Plan E |
-| 19 | The never-established-cycle fallback POI: counter sub 5 cyc 1 IC 3654, `cts_established_idx` 3806 = a fib anchor under a moment name; `end_idx` None; drawn past sub 5's end 4083; its fib is uncapped | `poi_zones.py:482` (HEAD) fallback | the post-E item (§2.8) |
+| 19 | The never-established-cycle fallback POI: a POI whose `(sid, cycle)` has no CTS_ESTABLISHED takes `fib_state.cts_idx` (a fib anchor) under the moment name `cts_established_idx`. **No live case since Plan F.** The only one on the window was the twin of IC 3654 attached to a cross fib that FibTracker PRE-CREATED for a cycle 1 that counter sub 5 never establishes (sub 5 only ever establishes cycle 0): value 3806, `end_idx` None, drawn past sub 5's end 4083, its fib uncapped. Plan F no longer creates that fib: at the CTS_THRESHOLD_UPDATED at 3806, the only imbalance in the own window is the single-c2 instance (3806, 3806), not yet formed. The fib row and the POI are gone | `poi_zones.py:482` (HEAD `754a642`; `:487` after Plan F) fallback | the post-E item (§2.8); 0 delta on this window |
 | 20 | **Pattern-path CTS_UPDATED sets `st.cts` unconditionally**: no new-extreme check, so it could regress the CTS. 0 observed | `market_structure.py` ~`1549-1554` (the "Update current CTS point (always)" block) | Record; decide with Q4.1 |
 | 21 | **The anchor-first offline selection can establish a cycle LATER than a live engine would, never earlier.** Continuous SUCCESS is checked before an earlier 2-candle SUCCESS (`structure_patterns.py:685-698`), and anchors inside a back-fill are never pattern-tested. Code-read only | `structure_patterns.py:685-698` | **Live-mode relevant** (Phase 3 / live driver), not Plan E |
 | 22 | The dormant `_select_bos_on_breakout` fallback passes the apply MOMENT into `_initial_bos_before_first_cts(cts_idx=)` | = #11 | E2 |
@@ -920,6 +986,8 @@ re-authored:
    rows. It affects the reference-zone recency, the sibling clip, the wave_candles sort, POI `cts_idx_at_t` and fib
    `reactivated_at`. FibTracker `on_cts_updated` (`fib_tracker.py:1105-1131`, dispatched at `orchestrator.py:229-231`)
    would then need the anchor accessor. Should it also carry meta `cts_anchor_idx` so that every CTS event shares one accessor path?
+   Plan F adds a reader: FibTracker's imbalance knowability cut is skipped on a pattern-path update
+   (`event_moment` returns `None`; 0 cells on the window). A recorded moment would turn the cut on there (Plan F §7).
 2. **Fib Scenario 1** `CTS_0 idx >= reversal_confirmed_idx` (`fib_tracker.py:767-771`, `:1344-1348`;
    `POI_ZONES_SPEC.md:160-161`; the same test at `orchestrator.py:284-287`): a LOCATION question (is the CTS_0 anchor
    past the reversal apply?) or a TIMING one (was CTS_0 established after it)?
@@ -968,11 +1036,13 @@ re-authored:
 15. **The write-only `FibRetracement.anchor_high_idx/anchor_low_idx`**: delete the unread fields, or keep them (the fib
     family stays as named)?
 16. **Accessor-module naming**: the moment accessor's name under the final moment vocabulary (feas used `moment_idx(ev)`,
-    which is not a moment spelling in 0.1). Should the existing moment names outside 0.1 (`ParentTables.cts_moment` /
+    which is not a moment spelling in 0.1; Plan F has since landed `market_structure.event_moment(ev)` for the three
+    CTS types, §2.1). Should the existing moment names outside 0.1 (`ParentTables.cts_moment` /
     `bos_moment`, `TrueFirstBreakout.est_idx`, `ProbeResult.cts0_est_idx`) be respelled as `*_established_idx`?
 17. **Scheduling**:
     - the §1.8 deletions: before E2 (so E2 does not migrate dead `.idx` reads through its grep gate) or in E5?
     - the non-Plan-E queue: the coordinate-hygiene families (one `/compare` each), the fetch-gate N/A edge case, the
       frozen-bridge rows missing from the ARCHITECTURE table (put them in E1's docs?), and `self.levels` (any stage).
 18. **E3e, the MS in-flight POI-inner resolver as-of** (§2.3): add it to the timing-fix stage as its own `/compare`
-    (proposed; it is engine-side and unmeasured), or park it?
+    (proposed; it is engine-side and unmeasured), or park it? (Plan F settled its knowability half, which stays uncut;
+    the question is only the fill horizon.)

@@ -64,6 +64,9 @@ This is that pass.
    - That value is the fib's CTS anchor, not a moment. This is a KNOWN exception to the naming standard, documented at
      the site.
    - Its only live case (counter sub 5, cycle 1, IC 3654, value 3806) never activates, so the delta is zero.
+     [Plan F, 2026-09-24: that case is gone. Sub 5 never establishes a cycle 1; the POI was the twin of IC 3654
+     attached to a cross fib FibTracker PRE-CREATED for that cycle, and Plan F's c3 cut no longer creates the fib
+     (§7.3). The fallback itself is unchanged.]
    - That POI also lacks an end and is drawn to the chart edge. This is a queued follow-up (§7.3), where the exception
      gets resolved.
 
@@ -93,7 +96,9 @@ cts_established_idx = (
   the pre-window loop (~:862-878). That loop applies `cts_idx` / `cts_price` before the sweep, so condition 1 and the
   variants at `first_active` are identical.
 - Condition 3 needs an unfilled imbalance, and every such imbalance enters at `max(start, first_active)` (~:896). So a POI
-  is always evaluated AT `first_active`; it cannot land later than the moment.
+  is always evaluated AT `first_active`; it cannot land later than the moment. [Plan F, 2026-09-24: the enter point is
+  now `max(inst.formed_at, first_active)`, the first c3. An imbalance formed by `first_active` still enters AT it, so
+  this argument stands; one that forms later enters at its first c3, which is the c3 rule, not this gate.]
 - In-window `CTS_UPDATED` stays on `ev.idx`. The raw path is causal. The pattern path records no moment, and fixing that
   is an event-contract change: parked for the convention plan, with one masked instance on this window.
 
@@ -155,7 +160,7 @@ Preconditions asserted: `CTS_ESTABLISHED(0,1)` has `(idx, confirmed_at) == (9, 1
 | a | `test_poi_first_activation_is_the_cycle_moment_not_the_anchor` | history `[(10,T,initial),(12,F,imbalance_filled)]`; `history[0]["versions"] == ["V30"]`; `confirmed_idx` 10; end `(14,"reversal")`; status "ended"; **`meta["cts_established_idx"] == 10`** (the moment) | FAILS (9, 9) |
 | b | `test_poi_never_activates_before_its_cycle_lifecycle_start` | invariant over every POI: `history[0].idx >= compute_cycle_lifecycle(events, compute_reversal_idx_by_sid(events), floor, cap)[(sid,cyc)][0]`, using the run's own floor and cap; also over `_make_multicycle_data()` | FAILS (9 < 10; multicycle passes) |
 | c | `test_poi_first_activation_tracks_confirmed_at_exactly` | set `confirmed_at = 11` on CTS_EST(0,1) **and** BOS(0,1), keeping the definitional identity → `history[0] == (11,T)` and `meta["cts_established_idx"] == 11`. Separates "reads confirmed_at" from "idx+1" | FAILS (9) |
-| d | `test_poi_unchanged_when_anchor_equals_moment` | `_make_multicycle_data()` POI (0,2) IC 12: first activation `(15,T)` (only the first — a full-history pin would couple it to the queued imbalance-at-c3 change), end `(20,"next_cycle")`, `cts_established_idx == confirmed_at` | passes |
+| d | `test_poi_unchanged_when_anchor_equals_moment` | `_make_multicycle_data()` POI (0,2) IC 12: first activation `(15,T)` (only the first — a full-history pin would couple it to the queued imbalance-at-c3 change; Plan F confirmed it, adding a deactivation at 19, and pins the full history in `test_imbalance_c3_knowability.py::test_multicycle_poi_full_history`), end `(20,"next_cycle")`, `cts_established_idx == confirmed_at` | passes |
 | e | `test_poi_floor_vs_moment` (table-driven) | floor 9 (≤ anchor: the moment decides, the IC-678 analogue) → `[(10,T),(12,F)]`; floor 10 (== moment: masked, the sub-3 analogue) → the same; floor 11 (> moment: the floor decides) → `[(11,T),(12,F)]`; **`cts_established_idx == 10` in every case** (the masked case's only delta is the meta, as on the replay) | all 3 FAIL (floor 9 on the history; floors 10/11 on the meta) |
 | f | `test_poi_of_cycle_collapsed_at_its_moment_never_activates` | `lifecycle_cap=10` → `[]`, `confirmed_idx` None, "inactive"; `cap=11` → `[(10,T)]`. Pass `cap_reason` explicitly and do not assert the dead default `"lifecycle_end"` | FAILS (`[(9,T)]` "ended") |
 | g | `test_poi_lookup_reads_confirmed_at_without_fallback` | deep-copy the events and pop `confirmed_at` from CTS_EST(0,1); `monkeypatch.setattr(engine_v2.zones.poi_zones, "compute_cycle_lifecycle", lambda *a, **k: {})`; pass the run's `fib_tracker`; `pytest.raises(KeyError, match="confirmed_at")`. Fails again if someone writes `.get("confirmed_at", ev.idx)` | FAILS (no raise) |
@@ -199,7 +204,9 @@ Expected suite: 722 + every new test passes + 1 strict xfail. The exact count is
   ["confirmed_at"]`), the activation floor's cycle term.
   - **Meaning changed by Plan D:** saves before it hold `CTS_ESTABLISHED.idx` (the CTS anchor) under this key.
   - Fallback when the cycle has no CTS_ESTABLISHED: `fib_state.cts_idx`, the fib's CTS anchor, not a moment — a known
-    naming-standard exception. Live case: counter sub 5 cycle 1, IC 3654 → 3806.
+    naming-standard exception. Live case: counter sub 5 cycle 1, IC 3654 → 3806. [Plan F, 2026-09-24: no live case
+    any more — that POI was the twin of IC 3654 on a cross fib FibTracker pre-created for a cycle 1 that sub 5 never
+    establishes; see §7.3.]
   - Rebased to entity-absolute on sub POIs by the mirror (`_ZONE_META_IDX_KEYS`)."
 - `bos_idx` / `cts_idx` are NOT added. They are slice-local on sub POIs and belong to the parked export-hygiene item.
 
@@ -255,9 +262,14 @@ step 4 (`feedback_spec_writing_precision` rule 8). "2026-09-23" becomes the land
 
 **Queued (each its own `/compare`, in this order after Plan D):**
 1. **Imbalance knowable at c3, not c2.** `poi_zones.py` ~:896 (HEAD `:920`) enters an imbalance at `inst.start_idx`, the middle candle.
-   NEXT. Measured: 4 POI rows (H1 sid 1 cyc 2 IC 865/860: re-activations 953→954 and 997→998; M15 sub 7 IC 4048 in both
+   (Was NEXT.) Measured: 4 POI rows (H1 sid 1 cyc 2 IC 865/860: re-activations 953→954 and 997→998; M15 sub 7 IC 4048 in both
    lenses: 4118→4119). It does not interact with this fix on the replay (measured); unit test (d) pins only the first
    activation, so it is unaffected too.
+   **DONE — Plan F, 2026-09-24** ([`PLAN_F_imbalance_c3_knowability.md`](PLAN_F_imbalance_c3_knowability.md); rule:
+   IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule"). The sweep now enters at `max(inst.formed_at, first_active)`,
+   and these 4 POI rows moved exactly as measured. The scope grew to every FibTracker imbalance read with a recorded
+   moment, which also moved 3 fib `activated_at` cells and removed the §7.3 fallback POI (deltas:
+   IMBALANCE_FILL_SEMANTICS "c3 knowability (2026-09-24, Plan F)"). Test (d) still passes.
 2. **The naming / event-convention project**, written up as its own plan (Plan E) with per-stage predictions and a cold
    review. Stages:
    - the pattern-anchor rename + the event-contract amendment;
@@ -270,6 +282,12 @@ step 4 (`feedback_spec_writing_precision` rule 8). "2026-09-23" becomes the land
    Inputs (every site list, design constraint, open question): `engine_v2/plans/PLAN_E_inputs.md`.
 3. **The never-established-cycle fallback POI** (counter sub 5, cycle 1) is drawn past its sub's end and carries a fib
    anchor under a moment name. Skipping such POIs would give: counter CSV 13→12, shapes 125→124, traces 153→151.
+   **No live case since Plan F (2026-09-24)**, so this delta is now 0 on the reference window. Sub 5 only ever
+   establishes cycle 0; the POI was the twin of IC 3654 attached to a cross fib FibTracker PRE-CREATED for a cycle 1
+   that never established. At that CTS_THRESHOLD_UPDATED (3806) the own window's only imbalance was the single-c2
+   instance (3806, 3806), not yet formed, so Plan F no longer creates the fib and the POI goes with it. Plan F already
+   made the counts move: counter POI CSV 13→12, chart 153/125 → 151/124 (−2 POI hover traces, −1 outline rect). The
+   general defect (the fallback to `fib_state.cts_idx`) stays parked.
 
 **Parked (0 delta on this window; not queued):**
 - the pattern-path `CTS_UPDATED` moment field (event contract, Plan E);

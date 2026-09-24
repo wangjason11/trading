@@ -196,9 +196,10 @@ BOS and POIs. POI inners are refreshed at `CTS_ESTABLISHED` (new cycle)
 and at each `CTS_UPDATED` (CTS extended → Fib bounds expand → IC
 candidates may shift). The snapshot is per-cycle in
 `MarketStructureState.poi_inners_for_cycle`. Both refreshes still run
-on cycle 0 (cheap; downstream code reads `bos_inner_for_cycle` /
-`poi_inners_for_cycle` for other purposes), but the per-candle check
-is gated off.
+on cycle 0 (cheap; the cycle-0 POI refresh also keeps `cycle0_data` —
+the Scenario-2 cond2 mirror — in sync via `_update_cycle0_data`), but
+the per-candle check is gated off. The snapshot's ONLY reader is that
+check (`_maybe_confirm_cts_via_proximity` → `_check_proximity_at_candle`).
 
 **Snapshot vs per-candle — deliberate approximation:** The proximity
 check uses a per-cycle POI snapshot, NOT a full per-candle activity check.
@@ -210,6 +211,27 @@ snapshot. In practice the deviation is small — POIs typically materialize
 at CTS_ESTABLISHED time and don't shift much during the cycle. The
 performance cost of full per-candle recomputation (Fib + IC scan + variant
 selection) is substantial. The major refactor may revisit this.
+
+**Snapshot vs per-candle — imbalance knowability is bounded by the consumer
+gate, no refresh-time cut (Plan F, 2026-09-24):** MS's in-flight imbalance
+reads — IC cond3 in `find_ic_candidates` over `(candidate, st.cts.idx]` and
+Scenario-2 cond1 / cond3 in `select_fib_anchor_for_cycle` over `[BOS_1, CTS_1]`
+/ `[BOS_0, CTS_0]` (both inside the resolver `compute_poi_inners_for_cycle`),
+plus the cycle-0 mirror `_update_cycle0_data` over `[BOS_0, CTS_0]` — pass
+`evaluated_at=None`: no c3 cut (IMBALANCE_FILL_SEMANTICS.md "Knowability — the
+c3 rule"). Refreshed on `st.cts.idx` itself (a lag-0 `CTS_ESTABLISHED`, a raw
+`CTS_UPDATED`), the snapshot can therefore count a gap whose c2 is the refresh
+candle — one that forms only at the NEXT candle. The consumer gate makes that
+safe: `_maybe_confirm_cts_via_proximity` is gated `i > st.cts.idx` and every
+window ends at or before `st.cts.idx`, so every gap it counts (c2 ≤
+`st.cts.idx`) has formed (`formed_at` ≤ `st.cts.idx + 1` ≤ `i`) by the candle
+it is used on; `cycle0_data["has_unfilled"]` is read only at a later cycle-1
+refresh (> CTS_0). **Do NOT add a refresh-time cut:** it would drop a gap that
+is formed at every candle the snapshot is read on (and the snapshot stays fixed
+until the next refresh), and it would break cond2 agreement with FibTracker's
+equally uncut cycle-0 cache. FibTracker, which decides once per event, does cut
+at the event's moment — the accepted MS/FibTracker divergence that follows (M1)
+is documented in LANDMINES "Scenario 2 anchor agreement".
 
 Whichever fires first confirms the CTS at that candle's idx:
 - `CTS_CONFIRMED.meta["confirmation_method"] = "pullback"` if pullback won
@@ -328,7 +350,14 @@ What clamps at `effective_end` (never at `len(df) - 1`):
   `CTS_ESTABLISHED` / `CTS_UPDATED`) read a view of the frame truncated at the
   edge (`_resolver_df()`, built once per run). `attrs["imbalances"]` stays
   full-frame — a documented residual (instance existence / merged bounds at the
-  edge).
+  edge). Its **existence** half is unobservable (Plan F): a full-frame-only gap
+  (c3 past the edge) is inside a resolver window only when its c2 == the edge ==
+  `st.cts.idx`, and the snapshot is read only at `i > st.cts.idx`,
+  `cycle0_data` only at a later cycle-1 refresh ("Snapshot vs per-candle"
+  above) — candles the run never processes. The **merged-bounds**
+  half matters only where a prefix and its merged run differ in degeneracy (the
+  c3 rule's caveat) — LANDMINES "Bounded MS Runs Must Not Read Past `end_idx`",
+  Known residual.
 
 **Shared 5-candle horizon:** `range_max_k` = the detector's max confirmation
 offset (`idx+5`) = `RangeLabelConfig.max_lookahead` = the inside-bar scan

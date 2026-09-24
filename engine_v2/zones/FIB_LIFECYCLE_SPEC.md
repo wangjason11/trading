@@ -94,7 +94,7 @@ the `fib` retracement, `meta: dict`, and `cts_history: tuple`.
 
 | Reason (stored in meta) | Set where | True nature |
 |---|---|---|
-| `all_imbalances_filled` (`reason`) + `deactivated_at` | `_update_fib_cts:1120-1123` | **condition** (reversible — can reactivate `:1116-1119`) |
+| `all_imbalances_filled` (`reason`) + `deactivated_at` | `_update_fib_cts` (deactivate branch) | **condition** (reversible — the same method reactivates, `reactivated_at`). Since Plan F (2026-09-24) it means "no FORMED unfilled imbalance at the event's moment" (§3.3) |
 | `own_imb_filled` (cross) | `_deactivate_active_cross` ← `_m15_cross_check:1683-1687` | **condition** (reversible) |
 | `new_cycle` (`obsolete_reason`) | `_activate_fib:786`, `_obsolete_prev_cycle_all_fibs:1572` | **terminal** |
 | `scenario1_revert` (`deactivated_by`) | `_deactivate_cycle0_fib:1480` | **terminal + invalidation** (hidden entirely) |
@@ -136,7 +136,7 @@ cycle fib continues as the new version.
 
 | Axis | Field(s) | Meaning |
 |---|---|---|
-| **condition** | `active` (repurposed: condition-ONLY) + `activation_history` | unfilled sd-direction imbalance in the **live version's** `[bos, cts]` range as of t. Reversible. |
+| **condition** | `active` (repurposed: condition-ONLY) + `activation_history` | a **formed** unfilled sd-direction imbalance in the **live version's** `[bos, cts]` range as of t, where t is the handled CTS event's moment — a gap counts only once its first c3 has closed (Plan F, 2026-09-24; `IMBALANCE_FILL_SEMANTICS.md` "Knowability — the c3 rule"). Reversible. |
 | **terminal** | `end_idx`, `end_reason` | cycle end. Irreversible. |
 | **computation** | `locked` (UNCHANGED) | CTS_CONFIRMED → bounds frozen. A genuinely separate axis (analogous to WVMI's `created/updated/locked`). |
 | **derived** | `status ∈ {active, inactive, ended, disappeared}` | computed from `end_idx` + condition. **`locked` is NOT folded into `status`.** Lossy convenience label (like POI's). |
@@ -204,7 +204,11 @@ The "one cycle, multiple representations, one active" abstraction is realized
 
 `_cross_cycle_data[sid]` contents (H1-main only): `["cycle0"]` = a plain **dict**
 `{bos_idx, bos_price, cts_idx, cts_price, struct_direction, has_unfilled, locked}`
-(Scenario-2 condition inputs); `["normal_cycle1"]` = a **FibState**;
+(Scenario-2 condition inputs; `has_unfilled` is stored **uncut** — it is cond2,
+judged at its later use; a decision taken at a write event asks at that event's
+moment instead — the cut check at CTS_0 EST, `_c0_has_unfilled_now` on CTS_0
+updates — Plan F, `IMBALANCE_FILL_SEMANTICS.md` "Cached values are judged at the
+moment they are USED"); `["normal_cycle1"]` = a **FibState**;
 `["cross_cycle"]` = a **FibState**.
 
 **DECISION — DO NOT unify the storage (for the lifecycle migration).** Collapsing
@@ -336,7 +340,9 @@ since Plan C 2026-09-20 the unique sub's `end_idx` with `end_reason` ∈
 
 - **Condition axis** (active/inactive): "unfilled sd-direction imbalance in the
   **live version's** `[bos, cts]` range as of t." Driven by the fib's own
-  imbalances (`all_imbalances_filled` / `own_imb_filled` / reactivate).
+  imbalances (`all_imbalances_filled` / `own_imb_filled` / reactivate). Since
+  Plan F (2026-09-24) only imbalances **formed** by the handled event's moment
+  count, so both reasons mean "no formed unfilled imbalance" (§3.3).
 - **Version/anchor axis**: driven by prior-cycle deaths (the dead-cycle walk
   shrinking the span). **Independent** of the condition. **Version handoffs are
   NOT cycle-level active/inactive flips** — the cycle stays active across them.
@@ -363,8 +369,19 @@ the history is a cheap byproduct (Section 8.5 — kept, not dropped).
 
 Today the fib re-checks `has_unfilled` only at **CTS events** (`_update_fib_cts`
 on `CTS_UPDATED`), NOT every candle — so its condition is coarse (an imbalance
-filling *between* CTS events isn't reflected until the next event). **Decision:
-keep this coarse, event-granularity logging** — record flips where the tracker
+filling *between* CTS events isn't reflected until the next event). The same
+holds for an imbalance **forming**: each check counts only gaps formed by the
+handled event's moment (Plan F, 2026-09-24 — `FibTracker._evaluating` takes it from
+`market_structure.event_moment`; per-event values in ARCHITECTURE "`ev.idx`
+convention" — a pattern-path `CTS_UPDATED` records none → no cut). So
+`reason="all_imbalances_filled"` now means "no
+**formed** unfilled imbalance": a raw update whose only unfilled gap has its c2 on
+the update candle deactivates there and can reactivate at the next event. A decision
+with no later re-check (e.g. an H1 cycle-≥1 fib, activated only at its EST) is
+**dropped**, not delayed, when its only gap forms one candle after the event —
+accepted; `IMBALANCE_FILL_SEMANTICS.md` "Decided at the event — and the accepted
+divergence" (the re-ask follow-up: `plans/PLAN_F_imbalance_c3_knowability.md` §7).
+**Decision: keep this coarse, event-granularity logging** — record flips where the tracker
 *already* detects them, add **no** per-candle walk. Rationale: no consumer needs
 per-candle fib accuracy; it matches current behavior (clean `/compare`); and it's
 consistent-in-principle with POI (both store *sparse* flip lists — only the
@@ -579,8 +596,8 @@ ordinary active/inactive flicker is just the condition axis driving the gate.
 
 | Consumer | Reads today | Post-migration |
 |---|---|---|
-| **POI** (`poi_zones.py:434`) | geometry + final `active`/`locked` as gate (`if not active and not locked: skip`); derives its OWN `end_idx` + activation history | **per-record** gate `(active AND end_idx is None) OR locked` — see reconciliation note |
-| **Chart H1** (`export_plotly.py:2504-2654`) | geometry + `is_active = active and not locked`; hover label "active/locked/inactive" (`:2625`) | per-record gate (Section 9.1); `is_active` (bright) = `active AND not locked AND status=="active"`; hover label from `status`+`locked` |
+| **POI** (`poi_zones.derive_poi_zones`, its fib gate) | geometry + final `active`/`locked` as gate (`if not active and not locked: skip`); derives its OWN `end_idx` + activation history | **per-record** gate `(active AND end_idx is None) OR locked` — see reconciliation note |
+| **Chart H1** (`export_plotly.py`, the "Fib Lines from FibTracker" block) | geometry + `is_active = active and not locked`; hover label "active/locked/inactive" | per-record gate (Section 9.1); `is_active` (bright) = `active AND not locked AND status=="active"`; hover label from `status`+`locked` |
 | **Chart M15** (`export_m15_chart.py`) | fib lines OFF by default (`"fib": {"lines": False}`); `sid_fibs` fetched but unused | unchanged — no fib rendering to gate |
 | **Cap** (`entity_df_mutation.py` open-sub-fib cap) | sets `active=False` + `deactivated_by` on `active and not locked` fibs | set `end_idx` + `end_reason` + `status` instead (leave `active`); recompute cycle `status` across all version records of capped cycles |
 | `get_fibs_for_charting` | returns all `_fibs.values()` except `scenario1_revert` | drop the special filter; rely on the uniform `status != "disappeared"` filter |
@@ -789,7 +806,10 @@ updated deliberately.
   lifecycle track, which is complete without it; if revisited, treat it as
   byte-identical-main-risk work (see Section 5's tradeoff).
 - **Live per-candle fib evaluation** — separately deferred (the `is_filled`
-  incremental state-machine item). The coarse CTS-event granularity stands.
+  incremental state-machine item). The coarse CTS-event granularity stands. The
+  narrower Plan F follow-up — re-ask a failed decision when a relevant gap's c3
+  closes, so a gap forming just after an event delays rather than drops the fib
+  (§8.3) — is logged in `plans/PLAN_F_imbalance_c3_knowability.md` §7.
 - **WVMI lifecycle** — still deferred / design-gated
   (`memory/project_wvmi_lifecycle_deferred.md`). **This FibState design is the
   precedent template** if WVMI is ever revisited (cycle identity, orthogonal
@@ -920,12 +940,16 @@ not lifecycle.
   still reads as a time (**known limit**, a separate cause listed under
   `ARCHITECTURE.md` "`ev.idx` convention"; not fixed here); on main and subs alike a
   fib first activated on a later `CTS_UPDATED` (`meta["activated_on"] == "update"`)
-  stamps that update's idx instead (e.g. on the reference window the counter lens's
-  sub 3 cycle 0: first-active 2650 — slice-local `activated_at` 61 in the fib CSV
-  meta — vs its `CTS_ESTABLISHED.idx` 2649). The two clamps therefore coincide wherever
-  the fib's first-active equals the moment — i.e. extreme == moment and no update-activation
-  — the common case, incl. all three H1 fibs on the reference window. **Collapsed** (clamped start ≥ resolved end) → `start_idx = None`,
-  `status = "inactive"` — the same collapse rule KL/POI use.
+  stamps that update's idx instead (e.g. on the reference window sub 3 cycle 0, on
+  both lenses: first-active 2651 — slice-local `activated_at` 62 in the fib CSV
+  meta — vs its `CTS_ESTABLISHED.idx` 2649; it was 2650 / 61 before Plan F
+  2026-09-24: the cycle's only sd gap, instance c2s 2650-2651, forms at 2651 (its
+  first c3), so it does not count at the raw update 2650 and activates the fib at
+  the next raw update 2651 — `IMBALANCE_FILL_SEMANTICS.md` "Knowability — the c3
+  rule"). The two clamps therefore coincide wherever the fib's first-active equals
+  the moment — i.e. extreme == moment and no update-activation — the common case,
+  incl. all three H1 fibs on the reference window. **Collapsed** (clamped start ≥
+  resolved end) → `start_idx = None`, `status = "inactive"` — the same collapse rule KL/POI use.
 
 ### 15.4 `end_idx` — pass-through is a *candidate*, earliest wins
 

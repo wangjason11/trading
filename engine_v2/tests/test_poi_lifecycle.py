@@ -14,7 +14,9 @@ def _zone(history, end_idx=None):
     return SimpleNamespace(meta={"activation_history": history, "end_idx": end_idx})
 
 
-# The real sid1 cyc2 POI(0.5772) history that surfaced the bug.
+# The real sid1 cyc2 POI(0.5772) history that surfaced the bug — as of save
+# 0a4eadc, pre-c3 (Plan F moved the re-activations 953→954 and 997→998). A
+# fixture for the history walk; the values need not track the engine.
 REAL = [
     {"idx": 905, "active": True},
     {"idx": 952, "active": False},
