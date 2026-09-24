@@ -372,7 +372,7 @@ on `CTS_UPDATED`), NOT every candle — so its condition is coarse (an imbalance
 filling *between* CTS events isn't reflected until the next event). The same
 holds for an imbalance **forming**: each check counts only gaps formed by the
 handled event's moment (Plan F, 2026-09-24 — `FibTracker._evaluating` takes it from
-`market_structure.event_moment`; per-event values in ARCHITECTURE "`ev.idx`
+`event_fields.event_moment`; per-event values in ARCHITECTURE "`ev.idx`
 convention" — a pattern-path `CTS_UPDATED` records none → no cut). So
 `reason="all_imbalances_filled"` now means "no
 **formed** unfilled imbalance": a raw update whose only unfilled gap has its c2 on

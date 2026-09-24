@@ -45,6 +45,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from engine_v2.structure import event_fields as ef
 from engine_v2.multitf import entity_df_mutation as edm
 from engine_v2.multitf.lifecycle_sweep import ProbeFailure, ResolvedStart
 from engine_v2.multitf.sub_structure_pool import (
@@ -283,15 +284,15 @@ def test_reference_is_the_sub_own_most_recent_cts(built):
     R = sub.natural_reversal_idx
     rz = _expected_reference(sub)
     # The winning event is the most recent {CONF/UPD/EST} CTS of sid 0 — its
-    # extreme (for CTS_CONFIRMED, meta["cts_anchor_idx"]) is the source idx.
+    # CTS anchor (`ef.cts_anchor_idx`: the meta key on CONF/EST, idx on UPD) is
+    # the source idx.
     cts = [e for e in bounded.events
            if e.type in ("CTS_CONFIRMED", "CTS_UPDATED", "CTS_ESTABLISHED")
            and e.meta.get("structure_id") == 0]
     assert cts
     winner = max(cts, key=lambda e: (int(e.idx), {"CTS_CONFIRMED": 2, "CTS_UPDATED": 1,
                                                   "CTS_ESTABLISHED": 0}[e.type]))
-    extreme = int(winner.meta.get("cts_anchor_idx", winner.idx)) if winner.type == "CTS_CONFIRMED" \
-        else int(winner.idx)
+    extreme = ef.cts_anchor_idx(winner)
     assert int(rz.source_event_idx) == extreme
     # Probe direction -1 → the reference sits ABOVE the body: inner < outer.
     assert rz.inner < rz.outer and rz.side == "sell"

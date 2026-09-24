@@ -26,7 +26,9 @@ import json
 
 import pytest
 
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import MarketStructure, StructureEvent
+from engine_v2.tests._event_factory import make_cts_established
 from engine_v2.structure.structure_engine import (
     _make_market_structure,
     _pip_size_from_pair,
@@ -240,8 +242,8 @@ class TestStopAfterCtsEstablished:
         """`_should_stop_after_cts` in isolation, on a stub event list: True only when the
         option is set, the count is reached, and no watch / pending reversal is open."""
         ms = _make(_make_multicycle_data(), stop_after_cts_established=2)
-        est = lambda i: StructureEvent(idx=i, category="STRUCTURE", type="CTS_ESTABLISHED",
-                                       price=0.6, meta={"structure_id": 0, "confirmed_at": i})
+        est = lambda i: make_cts_established(cts_anchor_idx=i, confirmed_at=i, price=0.6,
+                                             cycle_id=None, struct_direction=None)
         ms.events = [est(2), est(10)]
         assert ms._should_stop_after_cts() is True
         ms.state.reversal_watch_active = True
@@ -315,7 +317,7 @@ class TestQuiescence:
         which returns with the watch open (started 11, expires 16) and a pending reversal at
         14; the reversal applies at 14; no rewind."""
         full, log = _run_logged(_make_watch_over_second_cts_data())
-        assert [(int(e.idx), int(e.meta["confirmed_at"])) for e in _cts_est(full.events)] == [(2, 2), (9, 10)]
+        assert [(ef.cts_anchor_idx(e), int(e.meta["confirmed_at"])) for e in _cts_est(full.events)] == [(2, 2), (9, 10)]
         ws = [(int(e.idx), int(e.meta["expires_idx"])) for e in full.events if e.type == "REVERSAL_WATCH_START"]
         assert ws == [(11, 16)]
         cands = [(int(e.idx), int(e.meta["apply_idx"])) for e in full.events if e.type == "REVERSAL_CANDIDATE"]

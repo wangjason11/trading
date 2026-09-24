@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_event
 from engine_v2.zones.structure_lifecycle import (
     compute_cycle_lifecycle,
     compute_reversal_idx_by_sid,
@@ -38,7 +39,11 @@ def _ev(idx: int, type_: str, sid: int, cycle: Optional[int] = None, sd: int = 1
         meta["cycle_id"] = cycle
     meta.update(extra)
     category = "STATE" if type_ == "STATE_CHANGED" else "STRUCTURE"
-    return StructureEvent(idx=idx, category=category, type=type_, meta=meta)
+    if type_ in ("CTS_ESTABLISHED", "BOS_CONFIRMED") and "confirmed_at" not in meta:
+        # Contract-illegal on purpose (test (d); `illegal_event_contract`).
+        return StructureEvent(idx=idx, category=category, type=type_, meta=meta)
+    # CTS_ESTABLISHED / BOS_CONFIRMED: idx is the anchor (tests/_event_factory.py).
+    return make_event(type_, idx, category=category, **meta)
 
 
 def _cts_est(idx: int, sid: int, cycle: int, confirmed_at: Optional[int], sd: int = 1) -> StructureEvent:
@@ -156,6 +161,7 @@ def test_c_reversal_end_still_wins_ties_and_cap_is_unchanged():
 
 # --- (d) a CTS_ESTABLISHED without confirmed_at ---------------------------------
 
+@pytest.mark.illegal_event_contract
 def test_d_cts_established_without_confirmed_at_raises():
     # PLAN-AMBIGUITY: the plan says the cycle start IS meta["confirmed_at"] and is silent on a missing key.
     # market_structure._emit_cts_established ALWAYS stamps confirmed_at (the only live emitter), and

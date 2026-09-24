@@ -31,6 +31,7 @@ import pytest
 
 from engine_v2.multitf.parent_tables import ParentTables, build_parent_tables
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_event
 
 
 # --- fixtures ----------------------------------------------------------------
@@ -42,7 +43,8 @@ def _ev(idx: int, type_: str, sid: int, cycle: Optional[int] = None, sd: int = 1
         meta["cycle_id"] = cycle
     meta.update(extra)
     category = "STATE" if type_ == "STATE_CHANGED" else "STRUCTURE"
-    return StructureEvent(idx=idx, category=category, type=type_, meta=meta)
+    # CTS_ESTABLISHED / BOS_CONFIRMED: idx is the anchor (tests/_event_factory.py).
+    return make_event(type_, idx, category=category, **meta)
 
 
 def _cts_est(idx: int, sid: int, cycle: int, confirmed_at: int, sd: int = 1) -> StructureEvent:

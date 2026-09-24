@@ -64,8 +64,10 @@ by the moment. `has_unfilled_imbalance` therefore takes `evaluated_at` as a
 **keyword-only, REQUIRED** argument; `evaluated_at=None` is an explicit "no cut"
 that every such caller justifies (table below).
 
-**Event moments** — `structure/market_structure.py::event_moment(ev)`, defined next
-to the emitter: CTS_ESTABLISHED → `meta["confirmed_at"]`; CTS_UPDATED →
+**Event moments** — `structure/event_fields.py::event_moment(ev)` (Plan F; moved
+out of `market_structure` and extended to BOS_CONFIRMED → `confirmed_at` and
+CTS_CONFIRMED / CTS_RECONFIRMED → `ev.idx` by Plan E E2a): CTS_ESTABLISHED →
+`meta["confirmed_at"]`; CTS_UPDATED →
 `ev.idx` on the raw path (`meta["via"] == CTS_UPDATED_RAW_VIA`), `None` on the
 pattern path (its `idx` is the CTS anchor and no moment is recorded — Plan E);
 CTS_THRESHOLD_UPDATED → `ev.idx` (the processing candle); any other type raises.

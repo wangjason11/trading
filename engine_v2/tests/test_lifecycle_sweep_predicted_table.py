@@ -47,6 +47,7 @@ from engine_v2.multitf.lifecycle_sweep import (
     run_lifecycle_sweep,
 )
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_event
 
 PARENT = "H1.main"
 SUB_TF = "M15"
@@ -85,7 +86,8 @@ def _loh(parent_idx: int, _h1_df: Any, _m15_df: Any) -> Optional[int]:
 
 
 def _ev(idx: int, category: str, ev_type: str, price: Optional[float], **meta) -> StructureEvent:
-    return StructureEvent(idx=int(idx), category=category, type=ev_type, price=price, meta=dict(meta))
+    # CTS_ESTABLISHED / BOS_CONFIRMED: idx is the anchor (tests/_event_factory.py).
+    return make_event(ev_type, idx, price=price, category=category, **meta)
 
 
 def _h1_events() -> List[StructureEvent]:
@@ -602,6 +604,7 @@ def _events_from_csv(path: Path) -> List[StructureEvent]:
 
 
 @pytest.mark.skipif(not _H1_EVENTS_CSV.exists(), reason="Plan-B save's H1 structure_events CSV not present")
+@pytest.mark.illegal_event_contract  # the Plan-B save predates the meta anchor keys (Plan E E2a)
 def test_parent_tables_from_saved_h1_csv_match_synthetic(tables):
     """Cross-check: the synthetic H1 stream reproduces the saved stream's tables."""
     t_syn, _ = tables

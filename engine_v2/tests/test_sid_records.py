@@ -18,12 +18,17 @@ from engine_v2.multitf.sid_records import (
 )
 from engine_v2.multitf.types import LowerTFResult, MultiTFTrigger, SidRecord
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_event
 
 
 def _ev(idx: int, type_: str, sid: int, sd: int = 1, **extra) -> StructureEvent:
     meta: Dict[str, Any] = {"structure_id": sid, "struct_direction": sd}
+    # CTS_ESTABLISHED / BOS_CONFIRMED: idx is the anchor (tests/_event_factory.py);
+    # the moment defaults to it (lag 0) unless a test passes `confirmed_at`.
+    if type_ in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
+        meta["confirmed_at"] = idx
     meta.update(extra)
-    return StructureEvent(idx=idx, category="STRUCTURE", type=type_, meta=meta)
+    return make_event(type_, idx, **meta)
 
 
 # --- main (unchanged by Plan C) -----------------------------------------------

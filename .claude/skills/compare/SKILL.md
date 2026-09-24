@@ -236,13 +236,15 @@ Compare structural events between iterations:
 
 | Event Type | What to Track |
 |------------|---------------|
-| **BOS_CONFIRMED** | `(idx, confirmed_at, structure_id, cycle_id)` |
-| **CTS_CONFIRMED** | `(idx, structure_id, cycle_id)` |
-| **CTS_ESTABLISHED** | `(idx, confirmed_at, structure_id, cycle_id)` |
+| **BOS_CONFIRMED** | `(idx, confirmed_at, bos_anchor_idx, structure_id, cycle_id)` |
+| **CTS_CONFIRMED** | `(idx, cts_anchor_idx, structure_id, cycle_id)` |
+| **CTS_ESTABLISHED** | `(idx, confirmed_at, cts_anchor_idx, structure_id, cycle_id)` |
 | **STATE_CHANGED to reversal** | `(idx, structure_id)` |
 
-On `BOS_CONFIRMED` / `CTS_ESTABLISHED`, `idx` is the price **extreme**, stamped
-after the fact. The moment the event became known is `meta["confirmed_at"]`,
+On `BOS_CONFIRMED` / `CTS_ESTABLISHED`, `idx` is the price **extreme** (the
+anchor), stamped after the fact; since Plan E E2a (2026-09-24) the anchor is
+also in meta `bos_anchor_idx` / `cts_anchor_idx` (`== idx` until Plan E E4 flips
+`idx` to the moment — from then on track the meta anchor for location shifts). The moment the event became known is `meta["confirmed_at"]`,
 stored inside the `meta` column of `*_structure_events.csv`, and it is the
 value that timing and lifecycle code reads. A shift in `confirmed_at` alone
 leaves `idx` unchanged, so compare both. On `CTS_CONFIRMED`, `idx` ==
@@ -448,6 +450,17 @@ drain `memory/_INBOX.md`, file what this round established — the decision AND 
 rationale, any scope boundary the user drew, any measured fact a future session
 would re-derive — and run the reconcile checklist (edit in place, one canonical
 home, `MEMORY.md` true end to end). Do not defer it to `/commit-save`.
+
+## Figure-JSON diff (required for Plan E stages; recommended whenever charts should be identical)
+
+Count parity cannot see a marker that MOVES (a BOS dot shifting 2–411 candles
+keeps every count). Compare the figures themselves: load both `.html` files with
+`engine_v2/debug/chart_census.load_fig` (it returns `(data, layout)`; import it
+with `sys.argv` reset — the module runs a census on import) and compare, per
+trace, `(name, x, y)`, plus `layout["shapes"]`. Report "traces_xy_equal /
+shapes_equal" per chart; on a difference list the first differing traces
+(name + x before → after). Plan E E2 stages must be figure-identical; the E4
+variant replays must differ exactly in PLAN_E §8's cells.
 
 ## Chart Count Parity (Corroborating check)
 

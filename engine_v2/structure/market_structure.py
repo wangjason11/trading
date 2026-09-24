@@ -10,6 +10,7 @@ import pandas as pd
 from engine_v2.common.types import PatternEvent, PatternStatus, StructureLevel, COL_TIME, COL_O, COL_C
 from engine_v2.patterns.imbalance import has_unfilled_imbalance
 from engine_v2.patterns.structure_patterns import BreakoutPatterns
+from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 
 
 # ---------------------------------------------------------------------
@@ -161,35 +162,6 @@ class StructureEvent:
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
-# `CTS_UPDATED.meta["via"]` of the RAW path (`_maybe_update_cts_pre_confirm`): a
-# new extreme seen on the processing candle, so `ev.idx` IS that candle. Every
-# other `via` is a breakout-pattern name, whose `ev.idx` is the CTS anchor.
-CTS_UPDATED_RAW_VIA = "replay_raw"
-
-
-def event_moment(ev: StructureEvent) -> Optional[int]:
-    """The candle at which a CTS event became knowable (its MOMENT — GLOSSARY
-    "Naming Standard"; ARCHITECTURE "`ev.idx` convention").
-
-    - CTS_ESTABLISHED: `meta["confirmed_at"]` (`ev.idx` is the CTS anchor).
-    - CTS_UPDATED: `ev.idx` on the raw path (`via == CTS_UPDATED_RAW_VIA`);
-      None on the pattern path — its `ev.idx` is the CTS anchor and no moment
-      is recorded (Plan E).
-    - CTS_THRESHOLD_UPDATED: `ev.idx` (the processing candle,
-      `_sync_thresholds_from_range`).
-
-    Any other type raises: a new consumer must define its event's moment.
-    Direct indexing: every emitter sets `confirmed_at` / `via` (event contract).
-    """
-    if ev.type == "CTS_ESTABLISHED":
-        return int(ev.meta["confirmed_at"])
-    if ev.type == "CTS_UPDATED":
-        return int(ev.idx) if ev.meta["via"] == CTS_UPDATED_RAW_VIA else None
-    if ev.type == "CTS_THRESHOLD_UPDATED":
-        return int(ev.idx)
-    raise ValueError(f"event_moment: no moment defined for {ev.type}")
-
-
 @dataclass
 class MarketStructureState:
     # Structure unit id (increments on reversal)
@@ -209,7 +181,7 @@ class MarketStructureState:
     cts_threshold: Optional[float] = None  # mirrors active range bound after CTS confirmation (debug)
 
     # BOS lifecycle
-    bos_confirmed: Optional[Point] = None
+    bos: Optional[Point] = None  # the BOS anchor (Point(bos_anchor_idx, price)), set by _emit_bos_confirmed
     bos_threshold: Optional[float] = None  # used for reversal checks when implemented
     bos_event: str = ""  # one-candle event marker written by _write_df_row
 
@@ -1506,6 +1478,7 @@ class MarketStructure:
                 self._emit_cts_established(
                     cts_idx,
                     cts_price,
+                    cts_anchor_idx=cts_idx,
                     meta={
                         "via": ev.name,
                         # The breakout pattern's FIRST candle (pattern realm; GLOSSARY "Naming Standard").
@@ -1524,6 +1497,7 @@ class MarketStructure:
                     self._emit_bos_confirmed(
                         bos_idx,
                         bos_price,
+                        bos_anchor_idx=bos_idx,
                         meta={
                             "source": "initial_prior_extreme",
                             "confirmed_at": apply_idx,
@@ -1539,6 +1513,7 @@ class MarketStructure:
                     self._emit_bos_confirmed(
                         bos_idx,
                         bos_price,
+                        bos_anchor_idx=bos_idx,
                         meta={
                             "source": "pullback_extreme",
                             "confirmed_at": apply_idx,
@@ -1612,7 +1587,7 @@ class MarketStructure:
                 # initialize cts_threshold to the confirmed CTS value at confirmation time.
                 # NOTE: do NOT reset bos_threshold here — BOS locked at BOS_CONFIRMED and
                 # may have legitimately expanded via barrier probes in [BOS_CONFIRMED,
-                # CTS_CONFIRMED]; re-initing it to bos_confirmed.price would discard that
+                # CTS_CONFIRMED]; re-initing it to st.bos.price would discard that
                 # expansion (see GOTCHAS "bos_threshold is reset to the ORIGINAL BOS").
                 if st.cts is not None:
                     st.cts_threshold = float(st.cts.price)
@@ -1829,12 +1804,17 @@ class MarketStructure:
             self._cts0_tfb_computed = True
         return self._cts0_tfb
 
-    def _emit_cts_established(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
+    def _emit_cts_established(
+        self, idx: int, price: float, *, cts_anchor_idx: int, meta: Optional[dict] = None
+    ) -> None:
         meta2 = dict(meta or {})
         # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
         meta2["structure_id"] = int(self.state.structure_id)
         meta2["struct_direction"] = int(self.state.struct_direction)
+        # The CTS endpoint (a price location; == idx until Plan E E4a flips idx
+        # to the moment). int(): `_shift_meta_indices` shifts Python int only.
+        meta2["cts_anchor_idx"] = int(cts_anchor_idx)
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=meta2)
         )
@@ -1933,17 +1913,26 @@ class MarketStructure:
     #     self.state.bos_confirmed = Point(idx=idx, price=float(price))
     #     self.state.bos_threshold = float(price)
 
-    def _emit_bos_confirmed(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
+    def _emit_bos_confirmed(
+        self, idx: int, price: float, *, bos_anchor_idx: int, meta: Optional[dict] = None
+    ) -> None:
         meta2 = dict(meta or {})
         # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
         meta2["structure_id"] = int(self.state.structure_id)
         meta2["struct_direction"] = int(self.state.struct_direction)
+        # The BOS endpoint (the swing extreme; == idx until Plan E E4b flips idx
+        # to the moment). int(): `_shift_meta_indices` shifts Python int only,
+        # and the degenerate `_initial_bos_before_first_cts` branch passes the
+        # caller's type through.
+        meta2["bos_anchor_idx"] = int(bos_anchor_idx)
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="BOS_CONFIRMED", price=price, meta=meta2)
         )
         self.state.bos_event = "BOS_CONFIRMED"
-        self.state.bos_confirmed = Point(idx=idx, price=float(price))
+        # MS state stays on the ANCHOR (PLAN_E §6.1): built from the param, not
+        # from the emitted idx, so the E4b idx flip leaves it unchanged.
+        self.state.bos = Point(idx=int(bos_anchor_idx), price=float(price))
         self.state.bos_threshold = float(price)
 
     # ----------------------------
@@ -2001,7 +1990,7 @@ class MarketStructure:
         extended). Stage 2 — adds POI awareness to the proximity check.
         Uses the resolver wired by structure_engine.py (Part 4 §13.5.b)."""
         st = self.state
-        if st.cts is None or st.bos_confirmed is None or self._poi_inners_resolver is None:
+        if st.cts is None or st.bos is None or self._poi_inners_resolver is None:
             st.poi_inners_for_cycle = []
             return
         # While we're on cycle 0, keep the cycle-0 snapshot in sync with
@@ -2011,8 +2000,8 @@ class MarketStructure:
             self._update_cycle0_data()
         st.poi_inners_for_cycle = self._poi_inners_resolver(
             self._resolver_df(),
-            int(st.bos_confirmed.idx),
-            float(st.bos_confirmed.price),
+            int(st.bos.idx),
+            float(st.bos.price),
             int(st.cts.idx),
             float(st.cts.price),
             int(self.struct_direction),
@@ -2041,13 +2030,13 @@ class MarketStructure:
           CONFIRMED
         """
         st = self.state
-        if st.cts_cycle_id != 0 or st.cts is None or st.bos_confirmed is None:
+        if st.cts_cycle_id != 0 or st.cts is None or st.bos is None:
             return
         existing = st.cycle0_data
         if existing is not None and existing.get("locked"):
             return
-        bos_idx = int(st.bos_confirmed.idx)
-        bos_price = float(st.bos_confirmed.price)
+        bos_idx = int(st.bos.idx)
+        bos_price = float(st.bos.price)
         cts_idx = int(st.cts.idx)
         cts_price = float(st.cts.price)
         c0_lo = min(bos_idx, cts_idx)
@@ -2250,7 +2239,9 @@ class MarketStructure:
             window_start = st.cts_confirmed_idx
         else:
             # Neither pullback nor proximity confirmed (shouldn't happen if
-            # we got here, but safe fallback)
+            # we got here, but safe fallback). Dormant; note it passes a MOMENT
+            # (the breakout apply candle) where `_initial_bos_before_first_cts`
+            # expects the CTS ANCHOR (PLAN_E_inputs §3 #11).
             return self._initial_bos_before_first_cts(breakout_apply_idx)
 
         s = int(window_start)
@@ -2507,8 +2498,8 @@ class MarketStructure:
             # Otherwise, we're still in the "wait for pullback confirmation" portion.
             out["cycle_stage"][i] = "SEEK_BREAKOUT" if st.cts_phase == "CONFIRMED" else "SEEK_PULLBACK"
 
-        out["bos_idx"][i] = int(st.bos_confirmed.idx) if st.bos_confirmed is not None else -1
-        out["bos_price"][i] = float(st.bos_confirmed.price) if st.bos_confirmed is not None else float("nan")
+        out["bos_idx"][i] = int(st.bos.idx) if st.bos is not None else -1
+        out["bos_price"][i] = float(st.bos.price) if st.bos is not None else float("nan")
         out["bos_event"][i] = st.bos_event
 
         out["last_breakout_pat_apply_idx"][i] = (

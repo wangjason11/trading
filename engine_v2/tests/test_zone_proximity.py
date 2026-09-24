@@ -8,6 +8,7 @@ import pytest
 
 from engine_v2.common.types import KLZone
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_bos_confirmed
 from engine_v2.zones.poi_zones import POIZone
 from engine_v2.zones.zone_proximity import (
     DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS,
@@ -43,12 +44,9 @@ def _cts_confirmed(idx: int, sid: int = 0, cycle_id: int = 0, sd: int = 1,
 
 def _bos_confirmed(idx: int, price: float, sid: int = 0, cycle_id: int = 0,
                    sd: int = 1, confirmed_at: Optional[int] = None) -> StructureEvent:
-    return StructureEvent(
-        idx=idx, category="STRUCTURE", type="BOS_CONFIRMED",
-        price=price,
-        meta={"structure_id": sid, "cycle_id": cycle_id,
-              "struct_direction": sd,
-              "confirmed_at": confirmed_at if confirmed_at is not None else idx},
+    return make_bos_confirmed(
+        bos_anchor_idx=idx, price=price, structure_id=sid, cycle_id=cycle_id,
+        struct_direction=sd, confirmed_at=confirmed_at if confirmed_at is not None else idx,
     )
 
 
@@ -320,11 +318,8 @@ def test_scan_window_bounded_by_next_bos():
     df.at[15, "l"] = 1.401  # would trigger if scan reached it
 
     bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
-    next_bos_event = StructureEvent(
-        idx=12, category="STRUCTURE", type="BOS_CONFIRMED",
-        price=1.50,
-        meta={"structure_id": 0, "cycle_id": 1, "confirmed_at": 12,
-              "struct_direction": 1},
+    next_bos_event = make_bos_confirmed(
+        bos_anchor_idx=12, confirmed_at=12, price=1.50, structure_id=0, cycle_id=1,
     )
 
     triggers = check_zone_proximity(

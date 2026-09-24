@@ -94,7 +94,7 @@ as-ofs** (Plan F, 2026-09-24):
   the fib's CTS.
 - **`evaluated_at` — the moment the question is asked** (keyword-only,
   REQUIRED): only instances formed by then count. FibTracker passes the handled
-  CTS event's moment (`market_structure.event_moment`); POI IC validation passes
+  CTS event's moment (`event_fields.event_moment`); POI IC validation passes
   `evaluated_at=None`, an explicit "no cut" (§3.1 condition 3) — as do
   FibTracker's two cycle-0 cache writes and MarketStructure's in-flight reads
   (IMBALANCE_FILL_SEMANTICS call-site matrix). The cut is keyed on the moment,
@@ -169,7 +169,7 @@ Fib LOCKED (anchor 2 stops updating)
 - **For sid 1+:** See Scenario Logic below (cycle 0 may have Fib in Scenario 1)
 - **Deactivation/Reactivation:** Fib can toggle active state based on imbalance conditions at each CTS update
 - **Each check is asked at the handled event's MOMENT** (Plan F, 2026-09-24),
-  `market_structure.event_moment(ev)` — per-event values in ARCHITECTURE
+  `event_fields.event_moment(ev)` — per-event values in ARCHITECTURE
   "`ev.idx` convention" (a pattern-path CTS_UPDATED records none, so no cut).
   FibTracker re-asks only at CTS events, so a
   gap whose c3 closes after an event counts only if a later event re-asks — none

@@ -1,0 +1,128 @@
+"""`structure/event_fields.py` — the named reads of a CTS / BOS event's indices
+(Plan E E2a; PLAN_E §6.1)."""
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+import pytest
+
+import engine_v2
+from engine_v2.structure import event_fields as ef
+from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established, make_event
+
+
+def _ev(etype, idx, **meta):
+    return StructureEvent(idx=idx, category="STRUCTURE", type=etype, price=1.0, meta=meta)
+
+
+# --- accessors: direct index, the named key, strict types -----------------------
+
+@pytest.mark.illegal_event_contract  # the E4 shape: idx != the anchor
+def test_cts_anchor_idx_reads_the_meta_key_not_idx():
+    # idx deliberately != the key: the accessor must read the key (the E4 shape).
+    est = make_cts_established(cts_anchor_idx=9, confirmed_at=10, idx=10)
+    assert ef.cts_anchor_idx(est) == 9
+    conf = _ev("CTS_CONFIRMED", 25, cts_anchor_idx=20, confirmed_at=25)
+    assert ef.cts_anchor_idx(conf) == 20
+    assert ef.cts_anchor_idx(_ev("CTS_RECONFIRMED", 30, cts_anchor_idx=20)) == 20
+    assert ef.cts_anchor_idx(_ev("CTS_UPDATED", 12, via="continuous")) == 12
+
+
+@pytest.mark.illegal_event_contract  # the E4 shape: idx != the anchor
+def test_bos_anchor_idx_reads_the_meta_key_not_idx():
+    bos = make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10, idx=10)
+    assert ef.bos_anchor_idx(bos) == 3
+
+
+def test_pattern_anchor_idx():
+    est = make_cts_established(cts_anchor_idx=9, confirmed_at=10, pattern_anchor_idx=8)
+    assert ef.pattern_anchor_idx(est) == 8
+    assert ef.pattern_anchor_idx(_ev("REVERSAL_CANDIDATE", 5, pattern_anchor_idx=5)) == 5
+
+
+@pytest.mark.illegal_event_contract
+def test_accessors_raise_on_a_missing_key():
+    """No `.get(key, ev.idx)` fallback (LANDMINES "Event Contract Rules")."""
+    with pytest.raises(KeyError):
+        ef.cts_anchor_idx(_ev("CTS_ESTABLISHED", 9, confirmed_at=10))
+    with pytest.raises(KeyError):
+        ef.bos_anchor_idx(_ev("BOS_CONFIRMED", 3, confirmed_at=10))
+    with pytest.raises(KeyError):
+        ef.pattern_anchor_idx(_ev("CTS_ESTABLISHED", 9, confirmed_at=10, cts_anchor_idx=9))
+
+
+def test_accessors_raise_on_the_wrong_type():
+    with pytest.raises(ValueError):
+        ef.cts_anchor_idx(make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10))
+    with pytest.raises(ValueError):
+        ef.bos_anchor_idx(make_cts_established(cts_anchor_idx=9, confirmed_at=10))
+    with pytest.raises(ValueError):
+        ef.pattern_anchor_idx(_ev("CTS_UPDATED", 12, via="continuous"))
+
+
+def test_event_moment_extended_to_bos_and_confirmations():
+    assert ef.event_moment(make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10)) == 10
+    assert ef.event_moment(make_cts_established(cts_anchor_idx=9, confirmed_at=10)) == 10
+    assert ef.event_moment(_ev("CTS_RECONFIRMED", 30, cts_anchor_idx=20)) == 30
+
+
+def test_processing_order_key_is_todays_idx_type_order():
+    """Pre-E4 `processing_order_key` == `(ev.idx, ev.type)` for every type."""
+    evs = [
+        make_cts_established(cts_anchor_idx=9, confirmed_at=10),
+        make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10),
+        _ev("CTS_UPDATED", 12, via="continuous"),
+        _ev("CTS_CONFIRMED", 14, cts_anchor_idx=12, confirmed_at=14),
+        StructureEvent(idx=11, category="RANGE", type="RANGE_STARTED", meta={}),
+    ]
+    assert [ef.processing_order_key(e) for e in evs] == [(e.idx, e.type) for e in evs]
+
+
+# --- the factory ------------------------------------------------------------------
+
+def test_factory_idx_defaults_to_the_anchor_and_carries_both_keys():
+    est = make_cts_established(cts_anchor_idx=9, confirmed_at=10, structure_id=2, cycle_id=1)
+    assert (est.idx, est.meta["cts_anchor_idx"], est.meta["confirmed_at"]) == (9, 9, 10)
+    bos = make_event("BOS_CONFIRMED", 3, confirmed_at=10, structure_id=2, cycle_id=1)
+    assert (bos.idx, bos.meta["bos_anchor_idx"], bos.meta["confirmed_at"]) == (3, 3, 10)
+    assert "struct_direction" not in bos.meta  # make_event adds no key the caller omitted
+
+
+# --- the qualified-call rule (Q16) ----------------------------------------------
+
+_ACCESSORS = {"cts_anchor_idx", "bos_anchor_idx", "pattern_anchor_idx", "event_moment",
+              "processing_order_key", "_location_idx", "*"}
+
+
+def test_no_module_imports_an_accessor_by_name():
+    """`from ...event_fields import cts_anchor_idx` would collide with the many
+    locals of the same name (`cts_anchor_idx = cts_anchor_idx(ev)` raises
+    UnboundLocalError). Import the module and call `ef.<accessor>(ev)`."""
+    root = Path(engine_v2.__file__).parent
+    offenders = []
+    for path in root.rglob("*.py"):
+        if "legacy_2025" in path.parts:  # archived, not importable
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for n in ast.walk(tree):
+            if (isinstance(n, ast.ImportFrom) and n.module == "engine_v2.structure.event_fields"
+                    and any(a.name in _ACCESSORS for a in n.names)):
+                offenders.append(f"{path.relative_to(root)}:{n.lineno}")
+    assert offenders == []
+
+
+# --- MS state stays on the anchor (the st.bos decoupling, PLAN_E §6.1) ----------
+
+@pytest.mark.illegal_event_contract  # the E4 shape: idx != the anchor
+def test_emit_bos_confirmed_builds_st_bos_from_the_anchor_param():
+    from engine_v2.structure.market_structure import MarketStructure
+    from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_df
+    ms = MarketStructure(_prepare_df(_make_multicycle_data()), 1)
+    # idx = X (what E4b will emit: the moment), bos_anchor_idx = Y (the location).
+    ms._emit_bos_confirmed(12, 0.95, bos_anchor_idx=7, meta={"confirmed_at": 12})
+    assert ms.state.bos.idx == 7
+    assert ms.state.bos.price == 0.95 and ms.state.bos_threshold == 0.95
+    ev = ms.events[-1]
+    assert (ev.idx, ev.meta["bos_anchor_idx"]) == (12, 7)

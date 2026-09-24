@@ -25,9 +25,11 @@ import pandas as pd
 import pytest
 
 import engine_v2.zones.poi_zones as poi_zones
+from engine_v2.structure import event_fields as ef
 from engine_v2.common.types import ImbalanceInstance
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_cts_established
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests.test_unified_probe import (
     _make_multicycle_data,
@@ -84,7 +86,7 @@ def test_fixture_preconditions():
     """The cycle-1 CTS anchor (9) precedes its moment (10); one POI (0,1) at IC 7."""
     _, events, out = _run(_make_second_cts_moment_after_extreme_data())
     ev = _event(events, "CTS_ESTABLISHED", 0, 1)
-    assert (ev.idx, ev.meta["confirmed_at"]) == (9, 10)
+    assert (ef.cts_anchor_idx(ev), ev.meta["confirmed_at"]) == (9, 10)
     assert [(z.meta["structure_id"], z.meta["cycle_id"], z.ic_idx)
             for z in out["poi_zones"]] == [(0, 1, 7)]
 
@@ -239,8 +241,7 @@ def test_activation_applies_pre_window_cts_state():
     df.loc[2, ["o", "h", "l", "c"]] = [0.6034, 0.6035, 0.6025, 0.6026]
     imb = ImbalanceInstance(start_idx=3, end_idx=3, direction=1,
                             gap_top=0.6090, gap_bottom=0.6080, gap_size=0.0010)
-    cts = StructureEvent(idx=5, category="STRUCTURE", type="CTS_ESTABLISHED", price=0.6100,
-                         meta={"structure_id": 0, "cycle_id": 0, "confirmed_at": 6})
+    cts = make_cts_established(cts_anchor_idx=5, confirmed_at=6, price=0.6100, struct_direction=None)
     history = poi_zones._compute_poi_activation_history(
         df,
         ic_idx=2, cts_established_idx=6, sd=1, scan_end=9, fill_threshold=0.70,

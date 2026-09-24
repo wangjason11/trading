@@ -7,6 +7,7 @@ from engine_v2.multitf.first_confluence_trigger import (
     detect_first_confluence_triggers,
 )
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_event
 
 
 def _ev(idx: int, type_: str, sid: int, cycle: int, sd: int = 1,
@@ -22,9 +23,12 @@ def _ev(idx: int, type_: str, sid: int, cycle: int, sd: int = 1,
     # that do pass an explicit (earlier) cts_anchor_idx via **extra.
     if type_ == "CTS_CONFIRMED":
         meta["cts_anchor_idx"] = idx
+    # CTS_ESTABLISHED / BOS_CONFIRMED: idx is the anchor (the factory); the
+    # moment defaults to it (lag 0) unless a test passes `confirmed_at`.
+    if type_ in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
+        meta["confirmed_at"] = idx
     meta.update(extra)
-    return StructureEvent(idx=idx, category="STRUCTURE", type=type_,
-                          price=price, meta=meta)
+    return make_event(type_, idx, price=price, **meta)
 
 
 def test_no_bos_no_triggers():

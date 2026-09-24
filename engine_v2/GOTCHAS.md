@@ -695,7 +695,7 @@ zones.
 - `ev.idx` is the **moment** for `CTS_CONFIRMED` / `CTS_RECONFIRMED` (the confirmation candle, `== confirmed_at`), raw-path `CTS_UPDATED` (`meta["via"] == CTS_UPDATED_RAW_VIA`, i.e. `"replay_raw"`; the processed candle) and `CTS_THRESHOLD_UPDATED` (the processing candle passed to `_sync_thresholds_from_range`).
 - `REVERSAL_CANDIDATE`: `ev.idx` = the reversal pattern's anchor; `meta["apply_idx"]` = the SCHEDULED apply (a prediction that can expire).
 - The moment of `BOS_CONFIRMED` and `CTS_ESTABLISHED` is `meta["confirmed_at"]` — the same apply candle for the same cycle, by construction.
-- In code, `structure/market_structure.py::event_moment(ev)` resolves the moment of `CTS_ESTABLISHED` / `CTS_UPDATED` / `CTS_THRESHOLD_UPDATED` in one place (pattern-path `CTS_UPDATED` → `None`, no moment recorded; any other type raises). FibTracker's imbalance reads are asked at it (Plan F, 2026-09-24).
+- In code, `structure/event_fields.py` names each role in one place (Plan E E2a; call it qualified, `ef.<fn>(ev)`): `ef.event_moment(ev)` — `confirmed_at` for `CTS_ESTABLISHED` / `BOS_CONFIRMED`, `ev.idx` for `CTS_CONFIRMED` / `CTS_RECONFIRMED` / `CTS_THRESHOLD_UPDATED` / raw-path `CTS_UPDATED`, `None` for pattern-path `CTS_UPDATED` (no moment recorded), any other type raises; FibTracker's imbalance reads are asked at it (Plan F). The anchors: `ef.cts_anchor_idx(ev)` / `ef.bos_anchor_idx(ev)` read meta `cts_anchor_idx` / `bos_anchor_idx` (`== ev.idx` until Plan E E4).
 
 (An earlier copy of this table listed `CTS_ESTABLISHED` as "confirmation candle" and BOS as the lone "exception!" — both wrong; corrected 2026-09-22.)
 
@@ -1680,7 +1680,7 @@ reversal: the buggy one reverses against a *stale, un-expanded* BOS threshold.
 - **CTS only locks at CTS_CONFIRMED** — so re-initializing `cts_threshold` at
   confirmation is correct.
 - **The bug:** both CTS-confirmation paths *also* re-init `bos_threshold` to
-  `bos_confirmed.price` (the ORIGINAL extreme) — pullback path ~line 1500,
+  `st.bos.price` (the ORIGINAL extreme; `st.bos_confirmed` before Plan E E2a) — pullback path ~line 1500,
   proximity path ~line 2013. This **discards any expansion that happened in
   the window `[BOS_CONFIRMED, CTS_CONFIRMED]`**. It's a copy of the (correct)
   `cts_threshold` init wrongly applied to a threshold with a different

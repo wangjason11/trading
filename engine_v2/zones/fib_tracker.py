@@ -24,7 +24,8 @@ from engine_v2.features.fibonacci import (
     DEFAULT_FIB_LEVELS,
 )
 from engine_v2.patterns.imbalance import has_unfilled_imbalance, get_unfilled_imbalances
-from engine_v2.structure.market_structure import StructureEvent, event_moment
+from engine_v2.structure import event_fields as ef
+from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.cross_cycle_fib import resolve_cross_cycle_eligibility
 from engine_v2.zones.structure_lifecycle import (
     compute_cycle_lifecycle,
@@ -330,12 +331,12 @@ class FibTracker:
     @contextmanager
     def _evaluating(self, event: StructureEvent):
         """Scope `_evaluated_at` to one handler: set it to the event's moment
-        (`market_structure.event_moment`), restore the previous value on exit.
+        (`event_fields.event_moment`), restore the previous value on exit.
         Handlers do not nest (no handler calls another); assert it."""
         assert not self._in_event, "FibTracker event handlers must not nest"
         # Resolve the moment BEFORE touching state: event_moment raises on a
         # malformed / unsupported event, and must not leave the scope flag set.
-        moment = event_moment(event)
+        moment = ef.event_moment(event)
         previous = self._evaluated_at
         self._in_event = True
         self._evaluated_at = moment

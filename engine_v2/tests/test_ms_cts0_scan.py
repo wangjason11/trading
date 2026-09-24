@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 
+from engine_v2.structure import event_fields as ef
 from engine_v2.patterns.structure_patterns import BreakoutPatterns
 from engine_v2.structure.structure_engine import _make_market_structure
 from engine_v2.structure.true_first_breakout import find_true_first_breakout
@@ -72,9 +73,9 @@ def test_ms_scan_mode_agrees_with_shared_routine(make_data, direction, bos0_inne
     # the full-pattern extreme (idx + price), and its confirmed_at is the
     # apply/confirm idx — exactly the routine's extreme_idx / extreme_price
     # / est_idx.
-    assert int(cts0.idx) == int(tfb.extreme_idx)
+    assert ef.cts_anchor_idx(cts0) == int(tfb.extreme_idx)
     assert float(cts0.price) == pytest.approx(float(tfb.extreme_price))
-    assert int(cts0.meta.get("confirmed_at")) == int(tfb.est_idx)
+    assert int(cts0.meta["confirmed_at"]) == int(tfb.est_idx)
 
 
 def test_scan_mode_requires_bos0_inner():

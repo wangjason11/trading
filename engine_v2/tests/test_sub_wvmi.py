@@ -11,6 +11,7 @@ from engine_v2.multitf.sub_wvmi import (
 )
 from engine_v2.multitf.types import LowerTFResult, MultiTFTrigger
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_event
 from engine_v2.zones.wave_candles import WaveCandleResult
 
 
@@ -66,13 +67,11 @@ def _make_zone(side: str, top: float, bottom: float, source_kind: str = "BOS",
 
 def _make_event(etype: str, idx: int, sid: int = 0, cycle_id: int = 1,
                 price: float | None = None) -> StructureEvent:
-    return StructureEvent(
-        idx=idx,
-        category="STRUCTURE",
-        type=etype,
-        price=price,
-        meta={"structure_id": sid, "cycle_id": cycle_id},
-    )
+    meta = {"structure_id": sid, "cycle_id": cycle_id}
+    if etype in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
+        # idx is the anchor (tests/_event_factory.py); the moment = it (lag 0).
+        meta["confirmed_at"] = idx
+    return make_event(etype, idx, price=price, **meta)
 
 
 def _make_wc(sid: int, cycle_id: int, source_kind: str, zone_side: str,

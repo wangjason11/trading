@@ -31,12 +31,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from engine_v2.structure import event_fields as ef
 from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.patterns.imbalance import compute_imbalance
 from engine_v2.patterns.pattern_engine import detect_patterns
 from engine_v2.patterns.structure_patterns import BreakoutPatterns
 from engine_v2.structure.reference_zone import ReferenceZone
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_cts_established
 from engine_v2.structure.unified_probe import (
     STRUCTURE_AUX_COLS,
     STRUCTURE_MIRROR_COLS,
@@ -837,13 +839,14 @@ class TestSecondCtsMoment:
     def test_returns_the_moment_not_the_extreme(self):
         from engine_v2.structure.unified_probe import _second_cts_moment
         cts_est = [
-            StructureEvent(idx=458, category="STRUCTURE", type="CTS_ESTABLISHED", price=0.5,
-                           meta={"structure_id": 0, "cycle_id": 0, "confirmed_at": 458}),
-            StructureEvent(idx=1223, category="STRUCTURE", type="CTS_ESTABLISHED", price=0.5,
-                           meta={"structure_id": 0, "cycle_id": 1, "confirmed_at": 1224}),
+            make_cts_established(cts_anchor_idx=458, confirmed_at=458, price=0.5,
+                                 cycle_id=0, struct_direction=None),
+            make_cts_established(cts_anchor_idx=1223, confirmed_at=1224, price=0.5,
+                                 cycle_id=1, struct_direction=None),
         ]
         assert _second_cts_moment(cts_est) == 1224
 
+    @pytest.mark.illegal_event_contract  # pins the fallback Plan E E2d removes (PLAN_E §6.4)
     def test_falls_back_to_idx_without_the_meta_key(self):
         from engine_v2.structure.unified_probe import _second_cts_moment
         cts_est = [
@@ -1054,8 +1057,8 @@ class TestFinalizeIdxTable:
         assert res.status == "finalized"
         assert res.finalize_condition == "second_cts_reached"
         cts_est = [e for e in retained[-1].events if e.type == "CTS_ESTABLISHED"]
-        assert [(int(e.idx), int(e.meta["confirmed_at"])) for e in cts_est] == [(2, 2), (9, 10)]
-        assert int(cts_est[1].idx) != int(cts_est[1].meta["confirmed_at"])   # the fixture's point
+        assert [(ef.cts_anchor_idx(e), int(e.meta["confirmed_at"])) for e in cts_est] == [(2, 2), (9, 10)]
+        assert ef.cts_anchor_idx(cts_est[1]) != int(cts_est[1].meta["confirmed_at"])   # the fixture's point
         # Plan E E1 value pin: the pattern-realm anchor is the OMO's FIRST candle 9 (c0) —
         # not its end / apply candle 10 — and the reversal close-break candle is 11.
         assert cts_est[1].meta["pattern_anchor_idx"] == 9
@@ -1063,7 +1066,7 @@ class TestFinalizeIdxTable:
               if e.type in ("REVERSAL_WATCH_START", "REVERSAL_CANDIDATE")]
         assert rv == [("REVERSAL_WATCH_START", 11), ("REVERSAL_CANDIDATE", 11)]
         assert res.finalize_idx == int(cts_est[1].meta["confirmed_at"]) == 10
-        assert res.finalize_idx != int(cts_est[1].idx)
+        assert res.finalize_idx != ef.cts_anchor_idx(cts_est[1])
         assert res.starting_idx == 0
 
     @pytest.mark.parametrize("probe_end_idx", [None, 12])

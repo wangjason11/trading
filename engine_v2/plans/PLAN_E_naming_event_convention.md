@@ -433,6 +433,33 @@ list, and the test fails. E2a extends it: `meta["cts_anchor_idx"] == ev.idx` (pr
 - `.claude/skills/compare/SKILL.md:239-250`: add the figure-JSON diff step for Plan E stages and track the anchor
   keys from E2 on.
 
+### 6.7 E2 as landed (2026-09-24)
+
+- **E2a.** `/compare` vs `20260924_171755_31f51ee` == §6.5 exactly: 4 CSVs change and only by key additions —
+  H1 events 10 cells, `structure_levels` 10, conf events 42, counter 16 (EST `cts_anchor_idx` 5/21/8, BOS
+  `bos_anchor_idx` 5/21/8, each `== idx`); a meta-key-stripped diff of all 24 is empty; the 3 figures JSON-identical;
+  run.log differs only by a warning's line number and the parked `by_lens` set order. Tests 783 → 805 + 1 xfail.
+  Deviations / additions:
+  - the `tests/conftest.py` validator raises `EventContractViolation(BaseException)`, not `AssertionError`: with an
+    AssertionError one `pytest.raises((KeyError, AssertionError))` test went vacuous (it no longer reached the
+    production leaf), and engine `except Exception` skip paths could swallow a violation. It checks the full
+    pre-E4 contract (`idx == anchor`, both keys Python `int`), not only presence; E4 flips `EVENT_IDX_IS`.
+  - factory: besides the typed `make_cts_established` / `make_bos_confirmed`, a generic `make_event(etype, idx,
+    **meta)` (idx = the anchor for CTS_EST / BOS) so the per-file `_ev` helpers route through the factory without
+    rewriting ≈300 call sites; an attribution argument set to `None` omits its key.
+  - the E1 guard gaps: `proximity_apply_idx` allow-listed + a static AST scan of every event-meta key MS writes;
+    wave-candle meta `anchor_idx` allow-listed (checked on the mirrored fixture). Nothing shifted.
+  - NOT re-authored (legal until E4, E4's job): the Plan D `mutate=` hooks (`test_poi_activation_moment.py:138`,
+    `test_render_sub_projection.py:789`) rewrite `confirmed_at` on engine-built events — the factory cannot build
+    them; E4 must move `idx` with `confirmed_at` there.
+  - landing review (2 lenses, ≈241k): conformance found 0 BLOCKER / 0 MAJOR (MINORs folded in: 2 missed idx pins
+    in `test_unified_probe`, strict-int validator, `e4flip_plugin.py` updated to the keyword-only emitters,
+    validator limits documented); mutation lens killed 23/26 — the 3 survivors were the validator's own checks →
+    `tests/test_event_contract_validator.py`.
+  - **Plan correction for E2b:** §6.2's reference-zone recency key `ef.cts_anchor_idx(e)` is wrong for a
+    CTS_CONFIRMED (it returns the anchor; today's key is its `ev.idx`, the confirmation candle). Mixed-type time
+    halves need "today's `ev.idx`" (`_location_idx`) — see E2b.
+
 ---
 
 ## 7. E3 — timing fixes (each its own `/compare`; each flips `# Plan E E3x` markers to `ef.event_moment`)

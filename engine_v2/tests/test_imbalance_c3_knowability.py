@@ -27,11 +27,10 @@ import pytest
 
 import engine_v2.zones.poi_zones as poi_zones
 from engine_v2.common.types import ImbalanceInstance
-from engine_v2.structure.market_structure import (
-    CTS_UPDATED_RAW_VIA,
-    StructureEvent,
-    event_moment,
-)
+from engine_v2.structure import event_fields as ef
+from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
+from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_cts_established
 from engine_v2.tests.test_poi_activation_moment import _only_poi, _run
 from engine_v2.tests.test_unified_probe import _make_multicycle_data
 from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig, select_fib_anchor_for_cycle
@@ -58,9 +57,12 @@ def _gap(start, end=None, top=1.10, bottom=1.00):
 
 def _ev(etype, idx, price, sid, cyc, *, confirmed_at=None, via=CTS_UPDATED_RAW_VIA,
         cts_anchor_idx=None):
-    meta = {"structure_id": sid, "cycle_id": cyc, "struct_direction": 1}
     if etype == "CTS_ESTABLISHED":
-        meta["confirmed_at"] = idx if confirmed_at is None else confirmed_at
+        return make_cts_established(
+            cts_anchor_idx=idx, confirmed_at=idx if confirmed_at is None else confirmed_at,
+            price=price, structure_id=sid, cycle_id=cyc,
+        )
+    meta = {"structure_id": sid, "cycle_id": cyc, "struct_direction": 1}
     if etype == "CTS_UPDATED":
         meta["via"] = via
     if cts_anchor_idx is not None:
@@ -86,8 +88,8 @@ def _sweep(imbalances, *, first_active=6, scan_end=12):
         for i in range(scan_end + 3)
     ])
     df.loc[2, ["o", "h", "l", "c"]] = [0.6034, 0.6035, 0.6025, 0.6026]
-    cts = StructureEvent(idx=5, category="STRUCTURE", type="CTS_ESTABLISHED", price=0.6100,
-                         meta={"structure_id": 0, "cycle_id": 0, "confirmed_at": first_active})
+    cts = make_cts_established(cts_anchor_idx=5, confirmed_at=first_active, price=0.6100,
+                               struct_direction=None)
     return poi_zones._compute_poi_activation_history(
         df, ic_idx=2, cts_established_idx=first_active, sd=1, scan_end=scan_end,
         fill_threshold=0.70, bos_price=0.6000, cts_events=[cts],
@@ -320,27 +322,31 @@ def test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib():
 
 
 # ===========================================================================
-# event_moment — the moment of a CTS event, defined next to its emitter
+# event_moment — the moment of a CTS / BOS event (structure/event_fields.py;
+# moved from market_structure and extended in Plan E E2a)
 # ===========================================================================
 
 def test_event_moment_per_type():
-    assert event_moment(_ev("CTS_ESTABLISHED", 9, 1.2, 0, 1, confirmed_at=10)) == 10
-    assert event_moment(_ev("CTS_UPDATED", 25, 1.2, 0, 0)) == 25
-    assert event_moment(_ev("CTS_UPDATED", 25, 1.2, 0, 0, via="continuous")) is None
-    assert event_moment(_ev("CTS_THRESHOLD_UPDATED", 30, 1.2, 0, 0)) == 30
-    with pytest.raises(ValueError, match="CTS_CONFIRMED"):
-        event_moment(_ev("CTS_CONFIRMED", 25, 1.2, 0, 0))
+    assert ef.event_moment(_ev("CTS_ESTABLISHED", 9, 1.2, 0, 1, confirmed_at=10)) == 10
+    assert ef.event_moment(_ev("CTS_UPDATED", 25, 1.2, 0, 0)) == 25
+    assert ef.event_moment(_ev("CTS_UPDATED", 25, 1.2, 0, 0, via="continuous")) is None
+    assert ef.event_moment(_ev("CTS_THRESHOLD_UPDATED", 30, 1.2, 0, 0)) == 30
+    # Plan E E2a extends it (reversing Plan F's "any other CTS type raises"):
+    # a CTS_CONFIRMED's idx IS its confirmation candle.
+    assert ef.event_moment(_ev("CTS_CONFIRMED", 25, 1.2, 0, 0)) == 25
+    with pytest.raises(ValueError, match="RANGE_STARTED"):
+        ef.event_moment(_ev("RANGE_STARTED", 25, 1.2, 0, 0))
 
 
 def test_event_moment_reads_the_contract_keys_directly():
     ev = _ev("CTS_ESTABLISHED", 9, 1.2, 0, 1)
     del ev.meta["confirmed_at"]
     with pytest.raises(KeyError):
-        event_moment(ev)
+        ef.event_moment(ev)
     ev = _ev("CTS_UPDATED", 9, 1.2, 0, 1)
     del ev.meta["via"]
     with pytest.raises(KeyError):
-        event_moment(ev)
+        ef.event_moment(ev)
 
 
 def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_without():
@@ -353,7 +359,7 @@ def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_without():
     raw = [e for e in updates if e.meta["via"] == CTS_UPDATED_RAW_VIA]
     patterns = [e for e in updates if e.meta["via"] != CTS_UPDATED_RAW_VIA]
     assert raw and patterns
-    assert all(event_moment(e) is None for e in patterns)
+    assert all(ef.event_moment(e) is None for e in patterns)
 
 
 # ===========================================================================
@@ -448,7 +454,7 @@ def test_guard_ms_cycle0_snapshot_is_uncut():
     ms.df = _df(40, [_gap(20)])
     ms._fill_threshold = 0.70
     ms.state = SimpleNamespace(cts_cycle_id=0, cts=SimpleNamespace(idx=20, price=1.2),
-                               bos_confirmed=SimpleNamespace(idx=10, price=0.9),
+                               bos=SimpleNamespace(idx=10, price=0.9),
                                struct_direction=1, cycle0_data=None)
     ms._update_cycle0_data()
     assert ms.state.cycle0_data["has_unfilled"] is True

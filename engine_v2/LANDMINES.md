@@ -56,7 +56,13 @@ Events are the communication backbone of the system. Breaking contracts causes c
 Rule 3 was approved by the user on 2026-09-24 (Plan E §4.2). First use: E1, the pattern-realm event key
 `anchor_idx` → `pattern_anchor_idx` on `CTS_ESTABLISHED` / `REVERSAL_CANDIDATE` / `REVERSAL_WATCH_START`.
 `tests/test_event_meta_idx_keys.py` guards the registry half: an index-valued event/zone meta key must be in
-`_EVENT_META_IDX_KEYS` / `_ZONE_META_IDX_KEYS` or in the test's explicit slice-local allow-list.
+`_EVENT_META_IDX_KEYS` / `_ZONE_META_IDX_KEYS` or in the test's explicit slice-local allow-list (since Plan E
+E2a it also scans every event-meta key `market_structure` writes, so a key the fixture never produces is covered).
+Rule 4 use, Plan E E2a (2026-09-24): `CTS_ESTABLISHED.meta["cts_anchor_idx"]` and
+`BOS_CONFIRMED.meta["bos_anchor_idx"]` (documented in ARCHITECTURE "`ev.idx` convention"). **Tests:** every
+`CTS_ESTABLISHED` / `BOS_CONFIRMED` built during a test must satisfy the contract — `tests/conftest.py` validates
+each construction (keys present as ints, `idx` == the anchor until Plan E E4); build them with
+`tests/_event_factory.py`, or mark a deliberately illegal test `@pytest.mark.illegal_event_contract`.
 
 **Key events and their consumers:**
 | Event Type | Primary Consumer |
@@ -225,7 +231,7 @@ cut at that event's moment (at CTS_0 ESTABLISHED `_on_cts_established`'s own
 
 **Documented exception — the knowability divergence (M1, accepted
 2026-09-24, Plan F):** FibTracker asks every decision read at the handled
-event's moment (`evaluated_at` = `market_structure.event_moment(ev)`; its two
+event's moment (`evaluated_at` = `event_fields.event_moment(ev)`; its two
 cycle-0 cache writes stay uncut); the MS
 in-flight resolver passes `evaluated_at=None` (its snapshot is read only at
 `i > st.cts.idx` — MARKET_STRUCTURE_SPEC "Snapshot vs per-candle"). cond2

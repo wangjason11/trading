@@ -20,7 +20,9 @@ from __future__ import annotations
 import pandas as pd
 
 from engine_v2.common.types import ImbalanceInstance
-from engine_v2.structure.market_structure import CTS_UPDATED_RAW_VIA, StructureEvent
+from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
+from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_cts_established
 from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig
 
 
@@ -38,10 +40,11 @@ def _df(n, instances):
 def _ev(t, idx, price, sid, cyc, sd, cts_anchor_idx=None):
     meta = {"structure_id": sid, "cycle_id": cyc, "struct_direction": sd}
     # The event contract FibTracker reads by direct index (event_moment): a
-    # CTS_ESTABLISHED carries its moment (lag 0 here), a CTS_UPDATED its via
+    # CTS_ESTABLISHED carries its moment and anchor (lag 0 here; the factory), a CTS_UPDATED its via
     # (the raw path here).
     if t == "CTS_ESTABLISHED":
-        meta["confirmed_at"] = idx
+        return make_cts_established(cts_anchor_idx=idx, confirmed_at=idx, price=price,
+                                    structure_id=sid, cycle_id=cyc, struct_direction=sd)
     if t == "CTS_UPDATED":
         meta["via"] = CTS_UPDATED_RAW_VIA
     if cts_anchor_idx is not None:

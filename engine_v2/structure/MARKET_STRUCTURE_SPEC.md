@@ -20,7 +20,7 @@ MarketStructure maintains an internal state object (MarketStructureState) with:
 - `struct_direction` (+1 / -1)
 - `structure_id` (regime id)
 - CTS lifecycle: `cts_cycle_id`, `cts`, `cts_threshold`, `cts_phase_debug`, `cycle_stage`
-- BOS lifecycle: `bos_confirmed`, `bos_threshold`, `bos_event`
+- BOS lifecycle: `bos` (the BOS anchor `Point(bos_anchor_idx, price)`, built from `_emit_bos_confirmed`'s `bos_anchor_idx` parameter, never from the emitted `ev.idx`; `bos_confirmed` before Plan E E2a), `bos_threshold`, `bos_event`
 - Range: `range_active`, `range_hi`, `range_lo`, `range_start_idx`, `range_confirm_idx`
 - Reversal watch: `reversal_watch_active`, `reversal_bos_th_frozen`, and pending reversal fields【fileciteturn1file3】
 

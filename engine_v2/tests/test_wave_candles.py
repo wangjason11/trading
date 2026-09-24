@@ -7,6 +7,7 @@ import pytest
 
 from engine_v2.common.types import KLZone
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_event
 from engine_v2.zones.wave_candles import (
     WaveCandleResult,
     _is_qualified,
@@ -74,12 +75,14 @@ def _make_zone(side: str, top: float, bottom: float, source_kind: str = "BOS",
 
 
 def _make_event(etype: str, idx: int, price: float = None, meta: dict | None = None) -> StructureEvent:
-    return StructureEvent(
-        idx=idx,
+    meta = dict(meta or {})
+    if etype in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
+        # idx is the anchor (tests/_event_factory.py); the moment defaults to it (lag 0).
+        meta.setdefault("confirmed_at", idx)
+    return make_event(
+        etype, idx, price=price,
         category="STRUCTURE" if etype != "STATE_CHANGED" else "STATE",
-        type=etype,
-        price=price,
-        meta=meta or {},
+        **meta,
     )
 
 
