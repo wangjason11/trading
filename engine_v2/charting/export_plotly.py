@@ -8,6 +8,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from engine_v2.structure import event_fields as ef
 from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME, COL_V
 from engine_v2.charting.style_registry import STYLE
 from engine_v2.charting._zone_render import (
@@ -1169,12 +1170,13 @@ def export_chart_plotly(
 
             # Change 1: Unconfirmed CTS after final confirmed BOS
             if last_kind == "BOS":
+                # The marker sits at the CTS ANCHOR — a location.
                 cts_after = [ev for ev in cts_unconf_events
                              if int(ev.meta.get("structure_id", -1)) == sid
-                             and int(ev.idx) > last_idx]
+                             and ef.cts_anchor_idx(ev) > last_idx]
                 if cts_after:
-                    latest_cts = max(cts_after, key=lambda e: int(e.idx))
-                    cts_idx = int(latest_cts.idx)
+                    latest_cts = max(cts_after, key=ef.cts_anchor_idx)
+                    cts_idx = ef.cts_anchor_idx(latest_cts)
                     if cts_idx in time_by_idx:
                         cts_price = float(latest_cts.price) if latest_cts.price is not None else 0.0
                         cts_time = time_by_idx[cts_idx]

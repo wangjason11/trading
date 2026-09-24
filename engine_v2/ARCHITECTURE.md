@@ -125,6 +125,10 @@ callers import the MODULE and call it qualified (`from engine_v2.structure impor
   `ev.idx` on `CTS_UPDATED`; `ef.bos_anchor_idx(ev)` — `BOS_CONFIRMED.meta["bos_anchor_idx"]`;
   `ef.pattern_anchor_idx(ev)`; `ef.processing_order_key(ev)` — today's event processing order `(ev.idx,
   ev.type)` frozen on the anchors (PLAN_E §6.2). Other types raise.
+- `ef.stamped_idx(ev)` — the index `ev.idx` holds TODAY, frozen against the Plan E E4 flip (the anchor for
+  `CTS_ESTABLISHED` / `BOS_CONFIRMED` / `CTS_UPDATED`, `ev.idx` otherwise). Neither a location nor a moment:
+  only the sort keys and the E2 TIME halves over mixed CTS types, each written with a `# Plan E E3x → moment`
+  marker naming the stage that switches it to `ef.event_moment` (user decision 2026-09-24).
 - `CTS_UPDATED_RAW_VIA` lives here too (`market_structure` imports it).
 
 **Bound and frequency (CTS_ESTABLISHED):** `meta["pattern_anchor_idx"]` (pattern anchor) `<= ev.idx` (CTS anchor)

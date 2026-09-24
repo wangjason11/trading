@@ -154,9 +154,11 @@ from the per-cycle BOS/CTS geometry + imbalance state. The four unified ingredie
    `[BOS_k, CTS_k]` range with fill checked to the current candle (Interpretation B),
    counting only gaps **formed** by the moment of the decision. Two as-ofs (Plan F,
    2026-09-24; canonical: `IMBALANCE_FILL_SEMANTICS.md` "Knowability — the c3 rule"):
-   `current_candle` is the **fill horizon**, and is a moment only on
+   the **fill horizon** (`fill_horizon_idx`; the snapshot walk's
+   `snapshot_horizon_idx` — split from the window ends `own_window_end_idx` /
+   `own_imb_start` in Plan E E2b) is a moment only on
    `CTS_THRESHOLD_UPDATED` and a raw `CTS_UPDATED` — on `CTS_ESTABLISHED` and a
-   pattern-path `CTS_UPDATED` it is the CTS anchor; the **moment** is the routine's
+   pattern-path `CTS_UPDATED` it is the CTS anchor until Plan E E3a; the **moment** is the routine's
    keyword-only, required `evaluated_at` (FibTracker: `event_moment` of the handled
    event; the MS in-flight resolver: `None` = no cut). Plan E E3a keeps ONE moment
    parameter (`evaluated_at`).

@@ -234,13 +234,17 @@ CTS_UPDATED — no recorded moment).
 
 | Site | Window | `check_to_idx` | Question |
 |---|---|---|---|
-| `:130` own test | `[own_imb_start, current_candle]` | `current_candle` | "Does the target cycle have its own FORMED unfilled imbalance?" — the site the cut can change (the window ends AT `current_candle`) |
-| `:163` snapshot walk | `[BOS_0, CTS_0]` | `own_imb_start` (= BOS_1) | cond3 — already bounded (window ends before the moment) |
-| `:170` current walk | `[BOS_k, CTS_k]` | `current_candle` | prior-cycle liveness — already bounded (`CTS_k < conf_k <=` the moment) |
+| own test | `[own_imb_start, own_window_end_idx]` | `fill_horizon_idx` | "Does the target cycle have its own FORMED unfilled imbalance?" — the site the cut can change (the window ends AT `own_window_end_idx`) |
+| snapshot walk | `[BOS_0, CTS_0]` | `snapshot_horizon_idx` (= BOS_1) | cond3 — already bounded (window ends before the moment) |
+| current walk | `[BOS_k, CTS_k]` | `fill_horizon_idx` | prior-cycle liveness — already bounded (`CTS_k < conf_k <=` the moment) |
 
-`current_candle` is a moment only on CTS_THRESHOLD_UPDATED and raw CTS_UPDATED;
-on CTS_ESTABLISHED and pattern-path CTS_UPDATED it is the CTS anchor. Plan E E3a
-keeps ONE moment parameter (`evaluated_at`). `select_fib_anchor_for_cycle` also
+Plan E E2b split the old `current_candle` / `own_imb_start` into their LOCATION role
+(`own_window_end_idx`, `own_imb_start`: the window) and their TIME role
+(`fill_horizon_idx`, `snapshot_horizon_idx`: keyword-only, required). The horizons
+equal today's values (on CTS_ESTABLISHED and pattern-path CTS_UPDATED the CTS / BOS
+anchor; the moment only on CTS_THRESHOLD_UPDATED and raw CTS_UPDATED); Plan E E3a /
+E3a′ move only them. The moment of the question stays ONE parameter
+(`evaluated_at`). `select_fib_anchor_for_cycle` also
 requires `evaluated_at`: FibTracker passes the CTS_1 moment, the MS in-flight
 resolver `None`.
 

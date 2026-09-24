@@ -28,6 +28,7 @@ from typing import List, Literal, Optional, Tuple
 import pandas as pd
 
 from engine_v2.common.types import KLZone
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.kl_zones_v1 import identify_base_pattern, zone_thresholds
 
@@ -83,18 +84,6 @@ class ReferenceZone:
         "ad_hoc_bos_0",
     ]
     source_event_idx: int
-
-
-def _extreme_idx_for_cts_event(ev: StructureEvent) -> int:
-    """Return the CTS extreme candle's idx for a given CTS-type event.
-
-    For CTS_CONFIRMED: `ev.idx` is the confirmation candle (later); the
-    extreme is `meta["cts_anchor_idx"]` (earlier). For CTS_UPDATED /
-    CTS_ESTABLISHED: `ev.idx` IS the extreme by construction.
-    """
-    if ev.type == "CTS_CONFIRMED":
-        return int(ev.meta.get("cts_anchor_idx", ev.idx))
-    return int(ev.idx)
 
 
 def _find_existing_cts_kl_zone(
@@ -281,8 +270,8 @@ def build_reference_zone_from_cts_event(
       `ReferenceZone` (outer/inner derived from `probe_direction`). If for
       any reason the kl_zone is missing (race/slice/derivation skip),
       falls back to the ad-hoc derivation so the probe can still run.
-    - CTS_UPDATED / CTS_ESTABLISHED → ad-hoc derivation from the extreme
-      candle (= `ev.idx` for these types).
+    - CTS_UPDATED / CTS_ESTABLISHED → ad-hoc derivation from the CTS anchor
+      (`ef.cts_anchor_idx`).
 
     For ad-hoc derivation, `sid`'s `struct_direction` is reconstructed as
     `-probe_direction` (callers of this helper run a probe in the OPPOSITE
@@ -334,7 +323,10 @@ def build_reference_zone_from_cts_event(
             continue
         if idx_window is not None:
             lo, hi = idx_window
-            if ev.idx < lo or ev.idx > hi:
+            # A TIME filter (the sibling window). Today's stamped idx; Plan E
+            # E3b switches it to the event's moment.
+            ev_moment_idx = ef.stamped_idx(ev)  # Plan E E3b → moment
+            if ev_moment_idx < lo or ev_moment_idx > hi:
                 continue
         candidates.append(ev)
 
@@ -350,12 +342,16 @@ def build_reference_zone_from_cts_event(
         "CTS_UPDATED": 1,
         "CTS_ESTABLISHED": 0,
     }
+    # The recency pick is a TIME (hazard H5; Plan E E3b switches it, and this
+    # comment's "never at the same idx" claim, to the moment).
     candidates.sort(
-        key=lambda e: (int(e.idx), _TYPE_ORDER[e.type]),
+        key=lambda e: (ef.stamped_idx(e), _TYPE_ORDER[e.type]),  # Plan E E3b → moment
         reverse=True,
     )
     ev = candidates[0]
-    extreme_idx = _extreme_idx_for_cts_event(ev)
+    # The winner's CTS ANCHOR (a location): the ad-hoc zone base and the probe
+    # input (`source_event_idx` → the pool key).
+    extreme_idx = ef.cts_anchor_idx(ev)
 
     # Source sid's struct_direction is the OPPOSITE of probe_direction
     # (reversal / subsequent_* semantic — the probe runs in the new sub's

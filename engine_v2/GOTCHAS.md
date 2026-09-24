@@ -987,7 +987,8 @@ columns are NOT safe for cross-structure reads (see LANDMINES
 
 - `_build_cycle_threshold_timeline(sorted_events, sid, cycle_id)`
   returns the `BOS_CONFIRMED + CTS_CONFIRMED + *_THRESHOLD_UPDATED`
-  events for this `(sid, cycle_id)`, sorted by `(idx, type)`.
+  events for this `(sid, cycle_id)`, sorted by `(idx, type)`
+  (`event_fields.processing_order_key`, pinned against the Plan E E4 flip).
 - A pointer walks the timeline as the per-candle scan advances. At each
   candle `i`, events with `idx < i` are applied to running cts/bos
   thresholds; events at `idx == i` are NOT (start-of-candle).

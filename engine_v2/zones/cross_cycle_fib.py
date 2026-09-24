@@ -56,7 +56,7 @@ def resolve_cross_cycle_eligibility(
     df: pd.DataFrame,
     target_cycle: int,
     sd: int,
-    current_candle: int,
+    own_window_end_idx: int,
     own_imb_start: int,
     anchor_idx: int,
     anchor_price: float,
@@ -69,13 +69,15 @@ def resolve_cross_cycle_eligibility(
     target_ceiling: Optional[int] = None,
     *,
     evaluated_at: Optional[int],
+    fill_horizon_idx: int,
+    snapshot_horizon_idx: Optional[int],
 ) -> CrossEligibility:
     """Decide cross-cycle eligibility at ``target_cycle`` (pure).
 
     Reproduces ``FibTracker._m15_cross_check`` steps 1–3 exactly:
 
     1. **Own-imbalance test** — sd-direction unfilled imbalance over
-       ``[own_imb_start, current_candle]`` as of ``current_candle``. None ⇒
+       ``[own_imb_start, own_window_end_idx]`` as of ``fill_horizon_idx``. None ⇒
        ``own_has=False`` (caller deactivates any active cross; no cross).
     2. **Dead-cycle backward walk** ``k = target-1 … 0``, stopping at the first
        cycle already in ``dead_cycles`` / missing data / dead. A cycle is *live*
@@ -97,8 +99,8 @@ def resolve_cross_cycle_eligibility(
         Per-cycle liveness fill point (CROSS_CYCLE_FIB_SPEC.md §3.1):
 
         - ``"current"`` (subs) — each prior cycle's ``[BOS_k, CTS_k]`` checked
-          as of ``current_candle``.
-        - ``"snapshot"`` (H1-main single step) — checked as of ``own_imb_start``
+          as of ``fill_horizon_idx``.
+        - ``"snapshot"`` (H1-main single step) — checked as of ``snapshot_horizon_idx``
           (= cond3 @BOS_target) AND-ed with ``prior_cached_liveness[k]``
           (= cond2, the cached cycle-0 @CTS_0 liveness). Defined only for the
           ``target=1`` single step in §11a; deeper-walk snapshot semantics are
@@ -108,16 +110,27 @@ def resolve_cross_cycle_eligibility(
         defaults to ``True`` (no extra constraint).
     target_ceiling : int, optional
         Reserved for §11b (the main-only ``M`` cap). **Ignored in §11a.**
+    own_window_end_idx, own_imb_start : int
+        The target cycle's own-test window ``[own_imb_start, own_window_end_idx]``
+        (LOCATIONS: the cycle's BOS and its CTS anchor / running extreme).
+    fill_horizon_idx : int
+        Keyword-only, REQUIRED: the fill horizon of the own test and of the
+        ``"current"`` walk (a TIME; Plan E E2b split it from the window end, so
+        Plan E E3a can move the horizon alone).
+    snapshot_horizon_idx : int or None
+        Keyword-only, REQUIRED: the ``"snapshot"`` walk's fill horizon (cond3,
+        "has BOS_target filled the prior cycle?"); None only with
+        ``fill_as_of="current"``.
     evaluated_at : int or None
         Keyword-only, REQUIRED: the MOMENT the decision is taken (Plan F;
         IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule"). Every
         imbalance question below counts only instances formed by then. The
         step-1 own test is the one it can change (its window ends AT
-        ``current_candle``); the prior-cycle walks end at ``CTS_k`` < the moment
+        ``own_window_end_idx``); the prior-cycle walks end at ``CTS_k`` < the moment
         (already bounded) and get it for uniformity. ``prior_cached_liveness``
         (cond2) is a cached value judged at its use, so it is not re-cut here.
         ``None`` = no cut: the unchanged MS in-flight resolver. On the moment
-        paths (THRESHOLD, raw UPDATED) ``current_candle`` carries the same value
+        paths (THRESHOLD, raw UPDATED) ``fill_horizon_idx`` carries the same value
         — Plan E E3a keeps ONE moment parameter.
 
     Returns
@@ -125,13 +138,15 @@ def resolve_cross_cycle_eligibility(
     CrossEligibility
     """
     direction = sd if sd in (1, -1) else None
+    if fill_as_of == "snapshot" and snapshot_horizon_idx is None:
+        raise ValueError("fill_as_of='snapshot' needs snapshot_horizon_idx")
 
     # Step 1: target cycle's own imbalance.
     own_has = has_unfilled_imbalance(
         df,
-        min(own_imb_start, current_candle),
-        max(own_imb_start, current_candle),
-        current_candle,
+        min(own_imb_start, own_window_end_idx),
+        max(own_imb_start, own_window_end_idx),
+        fill_horizon_idx,
         fill_threshold,
         direction=direction,
         evaluated_at=evaluated_at,
@@ -161,14 +176,14 @@ def resolve_cross_cycle_eligibility(
         range_end = max(bos_k[0], cts_k[0])
         if fill_as_of == "snapshot":
             live = has_unfilled_imbalance(
-                df, range_start, range_end, own_imb_start, fill_threshold,
+                df, range_start, range_end, snapshot_horizon_idx, fill_threshold,
                 direction=direction, evaluated_at=evaluated_at,
             )
             if prior_cached_liveness is not None:
                 live = live and bool(prior_cached_liveness.get(k, True))
         else:  # "current"
             live = has_unfilled_imbalance(
-                df, range_start, range_end, current_candle, fill_threshold,
+                df, range_start, range_end, fill_horizon_idx, fill_threshold,
                 direction=direction, evaluated_at=evaluated_at,
             )
         if not live:

@@ -596,9 +596,18 @@ Lifecycle-Start Clamp" below).
 ## Event Sort Order Is a Dispatch Invariant
 
 **Rule:** `sorted_events` in `_run_downstream_pipeline` is sorted by
-`(e.idx, e.type)`. The alphabetical tie-break on event type is **relied upon
-by handlers** — do not change the sort key without auditing downstream
-dispatch logic.
+`event_fields.processing_order_key` = `(ef.stamped_idx(e), e.type)` — today's
+`(e.idx, e.type)`, pinned on the ANCHORS so the Plan E E4 flip (`ev.idx` :=
+the moment on CTS_ESTABLISHED / BOS_CONFIRMED) reorders nothing (PLAN_E Q3; moment
+order + an explicit type rank is post-Plan-E). The same key sorts `sub_wvmi`'s
+loop and zone_proximity's threshold timeline; the POI sweep sorts on the idx
+component alone (`ef.stamped_idx`, stable, as before) and the wave-candle walk on
+`ef.cts_anchor_idx` (the same value on EST / UPDATED — a location walk). The alphabetical tie-break on
+event type is **relied upon by handlers** — do not change the sort key without
+auditing downstream dispatch logic. Pinned by `tests/test_event_order_pins.py`
+(hazards H1–H3: BOS before EST of a cycle in every flip order; an EST before a
+CTS_CONFIRMED on its moment; a CTS_THRESHOLD_UPDATED in [EST anchor, moment)
+after the EST).
 
 **Specific dependency (`cross_cycle` mode, formerly Mode C / `m15_reverse`):**
 At a candle where both `CTS_ESTABLISHED` (cycle n+1) AND

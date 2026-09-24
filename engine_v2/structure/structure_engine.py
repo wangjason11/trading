@@ -6,6 +6,7 @@ from typing import List, Optional, Tuple
 import pandas as pd
 
 from engine_v2.common.types import REQUIRED_CANDLE_COLS, StructureLevel
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import MarketStructure, StructureEvent
 from engine_v2.structure.identify_start import (
     identify_start_scenario_1,
@@ -428,8 +429,10 @@ def compute_structure_scenario_3(
             [ev for ev in probe_events
              if ev.type == "CTS_ESTABLISHED"
              and ev.meta.get("structure_id") == 0],
-            key=lambda e: e.idx,
+            key=ef.cts_anchor_idx,
         )
+        # Test-only path (PLAN_E Q10): its CTS reads go through the anchor
+        # accessor, behaviour kept (they read the CTS anchor today).
 
         # First time: extract original BOS_0 zone bounds
         if original_bos0_bounds is None and len(cts_est) >= 1:
@@ -472,7 +475,7 @@ def compute_structure_scenario_3(
         if end_idx is not None:
             exc_upper = end_idx
         elif len(cts_est) >= 2:
-            exc_upper = cts_est[1].idx
+            exc_upper = ef.cts_anchor_idx(cts_est[1])
         else:
             # Live mode, only 1 CTS, no end_idx → can't bound the check.
             status = "pending"
@@ -480,7 +483,7 @@ def compute_structure_scenario_3(
 
         outer, inner, zone_side = original_bos0_bounds
         exc_idx = _find_closest_candle_to_outer(
-            df_probe, cts_est[0].idx + 1, exc_upper,
+            df_probe, ef.cts_anchor_idx(cts_est[0]) + 1, exc_upper,
             outer, inner, tolerance, zone_side)
 
         if exc_idx is None:
@@ -564,13 +567,13 @@ def compute_structure_scenario_3(
                         ev for ev in exc2_events
                         if ev.type == "CTS_ESTABLISHED"
                         and ev.meta.get("structure_id") == next_sid
-                        and ev.idx <= reversal_confirmed_idx
+                        and ef.cts_anchor_idx(ev) <= reversal_confirmed_idx  # test-only (Q10)
                     ]
 
                     if not exc2_cts:
                         break
 
-                    cts_est_idx = int(exc2_cts[0].idx)
+                    cts_est_idx = ef.cts_anchor_idx(exc2_cts[0])
                     # Start from CTS_EST + 1: exclude the pullback candle itself
                     exc2_idx = _find_closest_candle_to_outer(
                         df_exc2_probe, cts_est_idx + 1,
@@ -768,13 +771,13 @@ def compute_structure_from_start(
                     ev for ev in probe_events
                     if ev.type == "CTS_ESTABLISHED"
                     and ev.meta.get("structure_id") == next_sid
-                    and ev.idx <= reversal_confirmed_idx
+                    and ef.cts_anchor_idx(ev) <= reversal_confirmed_idx  # test-only (Q10)
                 ]
 
                 if not probe_cts_events:
                     break
 
-                cts_established_idx = int(probe_cts_events[0].idx)
+                cts_established_idx = ef.cts_anchor_idx(probe_cts_events[0])
                 exception_2_idx = _find_closest_candle_to_outer(
                     df_probe, cts_established_idx + 1,
                     reversal_confirmed_idx,

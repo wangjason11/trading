@@ -459,6 +459,51 @@ list, and the test fails. E2a extends it: `meta["cts_anchor_idx"] == ev.idx` (pr
   - **Plan correction for E2b:** §6.2's reference-zone recency key `ef.cts_anchor_idx(e)` is wrong for a
     CTS_CONFIRMED (it returns the anchor; today's key is its `ev.idx`, the confirmation candle). Mixed-type time
     halves need "today's `ev.idx`" (`_location_idx`) — see E2b.
+- **E2b.** **User decision 2026-09-24:** the planned private `_location_idx` is public as **`ef.stamped_idx(ev)`**
+  ("the index `ev.idx` holds today, frozen against E4" — neither a location nor a moment); used only by
+  `processing_order_key` / the sort pins and by the E2 time halves over mixed CTS types, each with its
+  `# Plan E E3x → moment` marker. `/compare` vs E2a: 24/24 CSVs byte-identical, figures identical, run.log only
+  the parked `by_lens` order. **EST-only E4 variant** (`e4flip_plugin.py`, `FLIP=est`) vs E2b == §8 E4a exactly:
+  3 events `idx` cells (conf 1223→1224, 2828→2829; counter 2828→2829), run.log the 2 `[kl_zones]` lines
+  (819→820, 239→240), figures JSON-identical. Sites:
+  - FibTracker EST: `cts_idx` (anchor) + `cts_established_idx` (time, `# Plan E E3a`) threaded through the three
+    EST handlers; time uses = `activated_at`, the EST fill horizon, the uncut cycle-0 cache horizon (lock-step
+    with the MS mirror), Scenario 1 (T5), the revert terminal; helper splits — `resolve_cross_cycle_eligibility`
+    (`current_candle` → `own_window_end_idx` + kw `fill_horizon_idx`; kw `snapshot_horizon_idx`),
+    `select_fib_anchor_for_cycle` (kw `fill_horizon_idx` / `snapshot_horizon_idx`, marked E3a / E3a′ at both
+    callers incl. the MS resolver), `_m15_cross_check` (kw `own_window_end_idx`), `_maybe_activate_main_cross`,
+    `_run_main_cross_check`.
+  - reference_zone L1 (`_extreme_idx_for_cts_event` deleted → `ef.cts_anchor_idx`), window + recency
+    (`ef.stamped_idx`, E3b); sibling clip time (E3b) split from the mirror's raw `new_ev.idx`; POI sorts, pre-window
+    split + transition time (`ef.stamped_idx`, E3g-1) vs cond1 (`ef.cts_anchor_idx`); wave candles L4 (location
+    walk); `structure_levels` CTS time (L5); chart dots L6–L8; prev-BOS END (anchor, Q6) vs filter (E3d);
+    unified_probe `check_lo` (E3c) + the CTS_EST sort; the Q10 test-only structure_engine paths; the debug
+    `probe_fc_finalize` reads; sort pins `orchestrator` / `sub_wvmi` / `zone_proximity` → `processing_order_key`.
+  - **Deviation:** CTS_UPDATED — only its LOCATION read is routed (`ef.cts_anchor_idx`, for E4c); its time halves
+    (the update handlers' activation stamps / horizons, ~6 helpers) are NOT split in E2 — the raw path's idx is
+    its moment already, and the pattern path's moment only exists from E3·0; E3·0/E3a own that split.
+  - Tests: `tests/test_event_order_pins.py` (H1 in all four flip orders, H2, H3, H5 tie, L1 EST-winner pool key,
+    the stamped window filter; each in today's AND the E4 shape; 3 fail under a raw `(idx, type)` key).
+    806 → 820 + 1 xfail.
+  - Landing review — role/completeness lens (≈184k): 0 BLOCKER / 0 MAJOR. Folded in: **plan contradiction
+    resolved** — §7 lists the c0 cond2 fill horizon under both E3a (`_update_cycle0_data`) and E3a′; per Q8 it is
+    **E3a′** in BOTH layers (FibTracker's uncut cycle-0 cache `c0_fill_horizon_idx` and MS `_update_cycle0_data`,
+    each `# Plan E E3a′`); `pooled_structure_build` `knowable_at_idx` input → `ef.stamped_idx` (E3b); the Phase-2
+    `cts0_est=` label → accessor (E3c re-sources it); per-site `UPD time half: E3·0/E3a` markers on the update
+    path; snapshot-horizon check `assert` → `ValueError`. **E2c inherits:** zone_proximity's threshold timeline is
+    now sorted by `processing_order_key` (BOS anchor) but its pointer walk (`:380`, `:404`) compares raw `.idx` —
+    after E4b the walk would stop at a BOS stamped at its moment (T3) → E2c must walk on `ef.stamped_idx`.
+  - Mutation lens (≈118k): 5/30 killed — the splits had no unit pin (the replay + the EST variant were their only
+    proof). Added: `tests/test_e4_simulation.py` (§6.4's unit E4 simulation, pulled forward: EST flip on
+    `_make_second_cts_moment_after_extreme_data` in both fib modes passes; the BOS / both flips are strict xfails
+    until E2c; bites — reverting FibTracker's EST read to raw `ev.idx` fails it. **Correction:**
+    `_make_multicycle_data` has 4 lagging BOS and NO lagging EST, not "3 lagging EST"); `tests/test_plan_e_role_pins.py`
+    (FibTracker EST location vs time in both modes; the routine's window vs horizon; the anchor selector's cond3
+    at the snapshot horizon; POI cond1 = the anchor + a positive control; an AST guard: no sort/max key in the
+    pinned modules reads `.idx`). Re-mutated: M01 (fib location → moment), M09 (raw orchestrator sort), M23 (POI
+    pre-window cond1 → moment) now killed. Known unkillable before E3: the in-window POI cond1 read (only an
+    UPDATED reaches it, where anchor == idx) and the prev-BOS END (inside `_run_downstream_pipeline`, no reversal
+    in the fixtures). Suite 829 passed + 9 xfailed (1 + 8 E2c-pending); replay after the fixes == E2b's.
 
 ---
 

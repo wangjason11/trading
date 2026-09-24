@@ -83,8 +83,9 @@ only (corrected 2026-09-22; see the note below):
 | `REVERSAL_CANDIDATE` | reversal-pattern anchor candle (= `meta["pattern_anchor_idx"]`) | `meta["apply_idx"]` = the SCHEDULED apply — a prediction that can expire (the applied reversal is `STATE_CHANGED(to=reversal)`) |
 | `RANGE_*` | varies — see GOTCHAS for sort-order rules | |
 
-**Event ordering invariant:** `sorted_events` uses `(idx, type)` (alphabetical
-type tiebreak). Mode C M15 phase gate depends on this — see LANDMINES.
+**Event ordering invariant:** `sorted_events` uses `event_fields.processing_order_key`
+= today's `(idx, type)` pinned on the anchors (alphabetical type tiebreak; Plan E
+E2b). Mode C M15 phase gate depends on this — see LANDMINES.
 
 > **Correction note (Plan C 2026-09-20; rewritten 2026-09-22).** The pre-Part-4
 > snapshot of this table was wrong on two rows: it gave `CTS_ESTABLISHED` and

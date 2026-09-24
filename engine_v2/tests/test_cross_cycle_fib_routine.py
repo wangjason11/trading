@@ -59,12 +59,12 @@ _CTS = {0: (20, 1.15), 1: (40, 1.35), 2: (60, 1.55)}
 def _resolve_snapshot(df, cond2: bool, dead=None):
     """Single-step (target=1) snapshot resolve, mirroring the main wrapper."""
     return resolve_cross_cycle_eligibility(
-        df=df, target_cycle=1, sd=1, current_candle=40, own_imb_start=30,
+        df=df, target_cycle=1, sd=1, own_window_end_idx=40, fill_horizon_idx=40, own_imb_start=30,
         anchor_idx=40, anchor_price=1.35,
         bos_by_cycle={0: _BOS[0]}, cts_by_cycle={0: _CTS[0]},
         dead_cycles=set() if dead is None else dead,
         fill_threshold=0.70, fill_as_of="snapshot",
-        prior_cached_liveness={0: cond2}, evaluated_at=None,
+        prior_cached_liveness={0: cond2}, evaluated_at=None, snapshot_horizon_idx=30,
     )
 
 
@@ -72,12 +72,13 @@ def _resolve_current(df, target_cycle, current_candle, own_imb_start,
                      anchor_idx, anchor_price, dead=None):
     """Subordinate-mode resolve over cycles [0, target_cycle)."""
     return resolve_cross_cycle_eligibility(
-        df=df, target_cycle=target_cycle, sd=1, current_candle=current_candle,
+        df=df, target_cycle=target_cycle, sd=1, own_window_end_idx=current_candle, fill_horizon_idx=current_candle,
         own_imb_start=own_imb_start, anchor_idx=anchor_idx, anchor_price=anchor_price,
         bos_by_cycle={k: _BOS[k] for k in range(target_cycle)},
         cts_by_cycle={k: _CTS[k] for k in range(target_cycle)},
         dead_cycles=set() if dead is None else dead,
         fill_threshold=0.70, fill_as_of="current", evaluated_at=None,
+        snapshot_horizon_idx=None,
     )
 
 
@@ -202,10 +203,11 @@ def test_current_missing_cycle_data_stops_walk():
     # No bos/cts maps for any prior cycle → walk stops, no cross
     df = _df(80, [_INST1])
     e = resolve_cross_cycle_eligibility(
-        df=df, target_cycle=1, sd=1, current_candle=40, own_imb_start=30,
+        df=df, target_cycle=1, sd=1, own_window_end_idx=40, fill_horizon_idx=40, own_imb_start=30,
         anchor_idx=40, anchor_price=1.35,
         bos_by_cycle={}, cts_by_cycle={}, dead_cycles=set(),
         fill_threshold=0.70, fill_as_of="current", evaluated_at=None,
+        snapshot_horizon_idx=None,
     )
     assert e.own_has is True
     assert e.crosses is False
@@ -219,10 +221,11 @@ def test_direction_filter_ignores_counter_direction_imbalance():
     bearish = ImbalanceInstance(35, 35, -1, 1.30, 1.20, 0.10)
     df = _df(60, [bearish])
     e = resolve_cross_cycle_eligibility(
-        df=df, target_cycle=1, sd=1, current_candle=40, own_imb_start=30,
+        df=df, target_cycle=1, sd=1, own_window_end_idx=40, fill_horizon_idx=40, own_imb_start=30,
         anchor_idx=40, anchor_price=1.35,
         bos_by_cycle={0: _BOS[0]}, cts_by_cycle={0: _CTS[0]},
         dead_cycles=set(), fill_threshold=0.70, fill_as_of="current", evaluated_at=None,
+        snapshot_horizon_idx=None,
     )
     assert e.own_has is False  # counter-direction imbalance filtered out
 
@@ -231,11 +234,11 @@ def test_direction_filter_ignores_counter_direction_imbalance():
 
 def _resolve_own(df, evaluated_at):
     return resolve_cross_cycle_eligibility(
-        df=df, target_cycle=1, sd=1, current_candle=40, own_imb_start=30,
+        df=df, target_cycle=1, sd=1, own_window_end_idx=40, fill_horizon_idx=40, own_imb_start=30,
         anchor_idx=40, anchor_price=1.35,
         bos_by_cycle={0: _BOS[0]}, cts_by_cycle={0: _CTS[0]},
         dead_cycles=set(), fill_threshold=0.70, fill_as_of="current",
-        evaluated_at=evaluated_at,
+        evaluated_at=evaluated_at, snapshot_horizon_idx=None,
     )
 
 
@@ -252,7 +255,7 @@ def test_evaluated_at_is_required_on_the_routine_and_the_anchor_selector():
     df = _df(60, [_INST0, _INST1])
     with pytest.raises(TypeError, match="evaluated_at"):
         resolve_cross_cycle_eligibility(
-            df=df, target_cycle=1, sd=1, current_candle=40, own_imb_start=30,
+            df=df, target_cycle=1, sd=1, own_window_end_idx=40, fill_horizon_idx=40, own_imb_start=30,
             anchor_idx=40, anchor_price=1.35, bos_by_cycle={}, cts_by_cycle={},
             dead_cycles=set(), fill_threshold=0.70, fill_as_of="current",
         )

@@ -93,10 +93,16 @@ def event_moment(ev: Any) -> Optional[int]:
     raise ValueError(f"event_moment: no moment defined for {ev.type}")
 
 
-def _location_idx(ev: Any) -> int:
-    """The index the event processing order sorts on: the anchor for
-    CTS_ESTABLISHED / BOS_CONFIRMED / CTS_UPDATED, `ev.idx` otherwise (today's
-    `ev.idx` for every type, frozen against the E4 flip)."""
+def stamped_idx(ev: Any) -> int:
+    """The index `ev.idx` holds TODAY, frozen against the Plan E E4 flip: the
+    anchor for CTS_ESTABLISHED / BOS_CONFIRMED / CTS_UPDATED, `ev.idx`
+    otherwise. Neither a location nor a moment by itself (user decision
+    2026-09-24, E2b). Two uses only:
+
+    - the event processing order (`processing_order_key`, the sort pins);
+    - an E2 TIME half over mixed CTS types that an E3 stage will switch to
+      `event_moment` — always written with its `# Plan E E3x → moment` marker.
+    """
     if ev.type == "CTS_ESTABLISHED":
         return cts_anchor_idx(ev)
     if ev.type == "BOS_CONFIRMED":
@@ -107,8 +113,8 @@ def _location_idx(ev: Any) -> int:
 
 
 def processing_order_key(ev: Any) -> Tuple[int, str]:
-    """The event processing order: `(location, type)` — today's `(ev.idx,
+    """The event processing order: `(stamped_idx, type)` — today's `(ev.idx,
     ev.type)`, pinned so the E4 flip reorders nothing (PLAN_E Q3; LANDMINES
     "Event Sort Order Is a Dispatch Invariant"). BOS before EST at a tied index holds by the type
     string ("BOS_CONFIRMED" < "CTS_ESTABLISHED")."""
-    return (_location_idx(ev), ev.type)
+    return (stamped_idx(ev), ev.type)

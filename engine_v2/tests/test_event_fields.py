@@ -78,6 +78,16 @@ def test_processing_order_key_is_todays_idx_type_order():
         StructureEvent(idx=11, category="RANGE", type="RANGE_STARTED", meta={}),
     ]
     assert [ef.processing_order_key(e) for e in evs] == [(e.idx, e.type) for e in evs]
+    assert [ef.stamped_idx(e) for e in evs] == [e.idx for e in evs]
+
+
+@pytest.mark.illegal_event_contract  # the E4 shape: idx != the anchor
+def test_stamped_idx_reads_the_anchor_keys_not_idx():
+    """Frozen against E4: an EST / BOS whose idx is the moment still stamps at
+    its anchor; CONFIRMED stays at its idx (the confirmation candle)."""
+    assert ef.stamped_idx(make_cts_established(cts_anchor_idx=9, confirmed_at=10, idx=10)) == 9
+    assert ef.stamped_idx(make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10, idx=10)) == 3
+    assert ef.stamped_idx(_ev("CTS_CONFIRMED", 14, cts_anchor_idx=12, confirmed_at=14)) == 14
 
 
 # --- the factory ------------------------------------------------------------------
@@ -93,7 +103,7 @@ def test_factory_idx_defaults_to_the_anchor_and_carries_both_keys():
 # --- the qualified-call rule (Q16) ----------------------------------------------
 
 _ACCESSORS = {"cts_anchor_idx", "bos_anchor_idx", "pattern_anchor_idx", "event_moment",
-              "processing_order_key", "_location_idx", "*"}
+              "processing_order_key", "stamped_idx", "*"}
 
 
 def test_no_module_imports_an_accessor_by_name():

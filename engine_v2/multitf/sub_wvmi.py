@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import List
 
 from engine_v2.common.types import WVMIRecord
+from engine_v2.structure import event_fields as ef
 from engine_v2.multitf.types import LowerTFResult
 from engine_v2.zones.wvmi import WVMITracker
 
@@ -65,7 +66,7 @@ def compute_parent_driven_sub_wvmi(
     """
     tracker = WVMITracker(structure_path_id=sub_path_id)
 
-    sorted_events = sorted(result.events, key=lambda e: (e.idx, e.type))
+    sorted_events = sorted(result.events, key=ef.processing_order_key)  # pinned (Plan E)
 
     for ev in sorted_events:
         if ev.type == "CTS_CONFIRMED":

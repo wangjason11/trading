@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Literal, Optional
 import pandas as pd
 
 from engine_v2.common.types import KLZone
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 
 
@@ -121,7 +122,7 @@ def _find_cts_updated_events(events: List[StructureEvent], sid: int, cycle_id: i
         if ev.type == "CTS_UPDATED":
             if ev.meta.get("structure_id") == sid and ev.meta.get("cycle_id") == cycle_id:
                 result.append(ev)
-    return sorted(result, key=lambda e: e.idx)
+    return sorted(result, key=ef.cts_anchor_idx)
 
 
 def _find_cts_confirmed(events: List[StructureEvent], sid: int, cycle_id: int) -> Optional[StructureEvent]:
@@ -457,10 +458,11 @@ def _cts_bib_last_breakout(
     """
     CTS + base inside bar: last breakout candle.
 
-    Step 1: Event walk — collect CTS_ESTABLISHED + CTS_UPDATED, sorted by ev.idx.
+    Step 1: Event walk — collect CTS_ESTABLISHED + CTS_UPDATED, sorted by their
+    CTS anchor (`ef.cts_anchor_idx`; a location walk).
     For each event:
-      (a) Check ev.idx: qualified AND wick enters zone AND closes within zone → done
-      (b) If not: scan between current ev.idx and next CTS_UPDATED
+      (a) Check the anchor: qualified AND wick enters zone AND closes within zone → done
+      (b) If not: scan between the current anchor and the next CTS_UPDATED's
     Step 2: Fallback — scan before/after cts_anchor_idx
     """
     cts_est = _find_cts_established(events, sid, cycle_id)
@@ -478,11 +480,11 @@ def _cts_bib_last_breakout(
     if cts_est is not None:
         ordered_events.append(cts_est)
     ordered_events.extend(cts_updates)
-    ordered_events.sort(key=lambda e: e.idx)
+    ordered_events.sort(key=ef.cts_anchor_idx)
 
     # Step 1: Event walk
     for ei, ev in enumerate(ordered_events):
-        ev_idx = int(ev.idx)
+        ev_idx = ef.cts_anchor_idx(ev)
 
         # (a) Direct check on event candle
         if _is_qualified(df, ev_idx, bo_dir) and _wick_enters_zone(df, ev_idx, zone) and _closes_within_zone(df, ev_idx, zone):
@@ -500,7 +502,7 @@ def _cts_bib_last_breakout(
 
         # (b) Scan between current ev and next event
         if ei + 1 < len(ordered_events):
-            next_ev_idx = int(ordered_events[ei + 1].idx)
+            next_ev_idx = ef.cts_anchor_idx(ordered_events[ei + 1])
         elif confirmed_at is not None:
             next_ev_idx = confirmed_at
         else:

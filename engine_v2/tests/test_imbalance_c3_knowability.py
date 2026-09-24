@@ -291,9 +291,10 @@ def test_guard_routine_evaluated_at_none_is_uncut():
     from engine_v2.zones.cross_cycle_fib import resolve_cross_cycle_eligibility
     df = _df(40, [_gap(30)])
     elig = resolve_cross_cycle_eligibility(
-        df=df, target_cycle=1, sd=1, current_candle=30, own_imb_start=27,
+        df=df, target_cycle=1, sd=1, own_window_end_idx=30, fill_horizon_idx=30, own_imb_start=27,
         anchor_idx=30, anchor_price=1.5, bos_by_cycle={}, cts_by_cycle={},
         dead_cycles=set(), fill_threshold=0.70, fill_as_of="current", evaluated_at=None,
+        snapshot_horizon_idx=None,
     )
     assert elig.own_has is True                 # the not-yet-formed gap still counts, uncut
 
@@ -426,7 +427,8 @@ def _c0():
 def test_select_fib_anchor_cond1_at_the_moment(evaluated_at, label):
     df = _df(60, [_gap(15), _gap(40, top=1.30, bottom=1.20)])
     out = select_fib_anchor_for_cycle(df, 1, 1, 30, 1.2, 40, 1.35, _c0(), 0.70,
-                                      struct_direction=1, evaluated_at=evaluated_at)
+                                      struct_direction=1, evaluated_at=evaluated_at,
+                                      fill_horizon_idx=40, snapshot_horizon_idx=30)
     assert out[-1] == label
 
 

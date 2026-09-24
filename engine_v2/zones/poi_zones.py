@@ -26,6 +26,7 @@ import pandas as pd
 from engine_v2.common.types import ImbalanceInstance
 from engine_v2.features.fibonacci import FibRetracement
 from engine_v2.patterns.imbalance import has_unfilled_imbalance
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.fib_tracker import FibTracker, FibState, select_fib_anchor_for_cycle
 from engine_v2.zones.structure_lifecycle import (
@@ -408,7 +409,8 @@ def derive_poi_zones(
 
     # Pre-group CTS_ESTABLISHED + CTS_UPDATED events by (sid, cycle_id) so the
     # per-POI activation scan doesn't re-iterate the full event list for every
-    # IC. Sort once in ascending idx order.
+    # IC. Sort once in ascending order of today's stamped idx (pinned against
+    # the Plan E E4 flip; idx-only + stable, exactly as before).
     cts_events_by_key: Dict[tuple, List[StructureEvent]] = defaultdict(list)
     for ev in structure_events:
         if ev.type not in ("CTS_ESTABLISHED", "CTS_UPDATED"):
@@ -419,7 +421,7 @@ def derive_poi_zones(
             continue
         cts_events_by_key[(int(sid_ev), int(cycle_ev))].append(ev)
     for key in cts_events_by_key:
-        cts_events_by_key[key].sort(key=lambda e: int(e.idx))
+        cts_events_by_key[key].sort(key=ef.stamped_idx)
 
     # Precompute each imbalance instance's fill_idx (the first candle after
     # inst.end_idx where ≥70% retrace into the merged gap fires). One linear
@@ -853,7 +855,7 @@ def _compute_poi_activation_history(
     ic_high = float(df.loc[ic_idx, "h"])
     ic_low = float(df.loc[ic_idx, "l"])
 
-    sorted_cts_events = sorted(cts_events, key=lambda e: int(e.idx))
+    sorted_cts_events = sorted(cts_events, key=ef.stamped_idx)
 
     # State carried through the sweep.
     cts_idx_at_t = -1
@@ -896,16 +898,20 @@ def _compute_poi_activation_history(
     # ic_idx or lifecycle floor lies past the anchor. (The IC CAN lie past the
     # anchor, even past the moment: IC candidates range up to the fib's FINAL
     # cts_idx, which CTS_UPDATED advances — 12/48 POIs on the reference window.)
+    # Each CTS event has two roles here: WHEN it applies (the pre-window split
+    # and the transition time — a TIME, today the stamped idx; Plan E E3g-1
+    # switches it to the moment, PLAN_E §7.1 T1) and WHERE the CTS is (cond1 —
+    # the CTS anchor, a location).
     in_window_cts: List[StructureEvent] = []
     for ev in sorted_cts_events:
-        ev_idx = int(ev.idx)
-        if ev_idx < first_active:
-            cts_idx_at_t = ev_idx
+        ev_moment_idx = ef.stamped_idx(ev)  # Plan E E3g-1 → moment
+        if ev_moment_idx < first_active:
+            cts_idx_at_t = ef.cts_anchor_idx(ev)
             try:
                 cts_price_at_t = float(ev.price)
             except (TypeError, ValueError):
                 pass
-        elif ev_idx <= scan_end:
+        elif ev_moment_idx <= scan_end:
             in_window_cts.append(ev)
     current_versions = _compute_versions()
 
@@ -943,7 +949,7 @@ def _compute_poi_activation_history(
             transitions.append((leave_idx, PRIO_IMB, "leave", None))
 
     for ev in in_window_cts:
-        transitions.append((int(ev.idx), PRIO_CTS, "cts", ev))
+        transitions.append((ef.stamped_idx(ev), PRIO_CTS, "cts", ev))  # Plan E E3g-1 → moment
 
     transitions.sort(key=lambda x: (x[0], x[1]))
 
@@ -961,7 +967,7 @@ def _compute_poi_activation_history(
             elif kind == "leave":
                 unfilled_count -= 1
             elif kind == "cts":
-                cts_idx_at_t = int(payload.idx)
+                cts_idx_at_t = ef.cts_anchor_idx(payload)
                 try:
                     cts_price_at_t = float(payload.price)
                 except (TypeError, ValueError):
@@ -1085,6 +1091,11 @@ def compute_poi_inners_for_cycle(
                 # where every gap it counts has formed. FibTracker asks cond1 at
                 # the CTS_1 moment instead — the accepted M1 divergence.
                 evaluated_at=None,
+                # The fill horizons, in lock-step with FibTracker (Plan E E3a /
+                # E3a′ move both layers together; LANDMINES "Scenario 2 anchor
+                # agreement").
+                fill_horizon_idx=int(cts_idx),  # Plan E E3a → moment
+                snapshot_horizon_idx=int(bos_idx),  # Plan E E3a′ → moment
             )
         )
         if anchor_cts_idx <= anchor_bos_idx:

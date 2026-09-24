@@ -25,6 +25,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Tuple
 
+from engine_v2.structure import event_fields as ef
 from engine_v2.multitf.sub_structure_pool import knowable_at_idx
 
 
@@ -40,7 +41,9 @@ def clip_events_to_window(events: List[Any], cap: Optional[int]) -> List[Any]:
     out = []
     for ev in events:
         if cap is not None:
-            k = knowable_at_idx(ev.type, ev.idx, ev.meta.get("confirmed_at"))
+            # A TIME clip; `knowable_at_idx` special-cases BOS only. Plan E E3b
+            # moves CTS_ESTABLISHED onto its moment.
+            k = knowable_at_idx(ev.type, ef.stamped_idx(ev), ev.meta.get("confirmed_at"))  # Plan E E3b → moment
             if k > cap:
                 continue
         out.append(deepcopy(ev))

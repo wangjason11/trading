@@ -43,6 +43,7 @@ import pandas as pd
 
 from engine_v2.common.types import KLZone
 from engine_v2.multitf.lifecycle_sweep import ProbeFailure, ResolvedStart
+from engine_v2.structure import event_fields as ef
 from engine_v2.multitf.sub_structure_pool import (
     LENS_CONFLUENCE,
     LENS_COUNTER,
@@ -478,11 +479,14 @@ def _build_sibling_cts_ref_zone_from_pool(
         for ev in bounded.events:
             if ev.type not in _CTS_EVENT_TYPES:
                 continue
-            abs_idx = int(ev.idx) + int(slice_begin)   # ev.idx == knowable-at for CTS types
-            if not (r_lo <= abs_idx <= r_hi):
+            # The clip is a TIME (Plan E E3b switches it to the moment: today a
+            # CTS_ESTABLISHED is stamped at its anchor, which can precede it).
+            clip_idx = ef.stamped_idx(ev) + int(slice_begin)  # Plan E E3b → moment
+            if not (r_lo <= clip_idx <= r_hi):
                 continue
             new_ev = deepcopy(ev)
-            new_ev.idx = abs_idx
+            # The mirror keeps the RAW index (shifted to entity-absolute).
+            new_ev.idx = int(ev.idx) + int(slice_begin)
             new_ev.meta = _shift_meta_indices(
                 new_ev.meta, _EVENT_META_IDX_KEYS, int(slice_begin),
             )

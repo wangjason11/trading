@@ -56,6 +56,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 import pandas as pd
 
 from engine_v2.common.types import KLZone
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.poi_lifecycle import poi_active_as_of
 from engine_v2.zones.poi_zones import POIZone
@@ -202,7 +203,7 @@ def _build_cycle_threshold_timeline(
         and ev.meta.get("structure_id") == sid
         and ev.meta.get("cycle_id") == cycle_id
     ]
-    out.sort(key=lambda e: (e.idx, e.type))
+    out.sort(key=ef.processing_order_key)  # pinned (Plan E)
     return out
 
 

@@ -52,6 +52,7 @@ import pandas as pd
 
 from engine_v2.common.types import REQUIRED_CANDLE_COLS
 from engine_v2.patterns.structure_patterns import BreakoutPatterns
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.structure.reference_zone import (
     ReferenceZone,
@@ -265,13 +266,13 @@ def _collect_cts_established(
     structure_id: int,
 ) -> List[StructureEvent]:
     """Return CTS_ESTABLISHED events for the given `structure_id`, sorted
-    by idx ascending."""
+    by CTS anchor ascending (= cycle order)."""
     out = [
         ev for ev in events
         if ev.type == "CTS_ESTABLISHED"
         and ev.meta.get("structure_id") == structure_id
     ]
-    out.sort(key=lambda e: int(e.idx))
+    out.sort(key=ef.cts_anchor_idx)
     return out
 
 
@@ -599,7 +600,9 @@ def _run_phase2(
             probe_events, structure_id=0, cycle_id=first_cycle_id,
         )
 
-        check_lo = int(first_cts.idx) + 1
+        # A TIME bound (the retrace window opens after CTS_0 is known); today the
+        # anchor. Plan E E3c switches it to the moment + 1 (Phase 1 already is).
+        check_lo = ef.cts_anchor_idx(first_cts) + 1  # Plan E E3c → moment
         if cycle_0_conf is not None:
             cts0_anchor_idx = int(
                 cycle_0_conf.meta.get("cts_anchor_idx", first_cts.idx)
@@ -668,7 +671,7 @@ def _run_phase2(
         # threshold at the new start (mirrors the deterministic method).
         print(
             f"[unified_probe phase2] reset triggered: iter={iteration} "
-            f"cts0_est={first_cts.idx} candidate={candidate_idx} "
+            f"cts0_est={ef.cts_anchor_idx(first_cts)} candidate={candidate_idx} "  # Plan E E3c: re-source to the moment
             f"(was {current_start})"
         )
         current_start = int(candidate_idx)

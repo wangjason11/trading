@@ -41,6 +41,7 @@ from engine_v2.multitf.data_bridge import (
 )
 import engine_v2.structure.unified_probe as up
 import engine_v2.multitf.entity_df_mutation as edm
+from engine_v2.structure import event_fields as ef
 
 # ---- H1 parent frame + events (from the saved replay) -----------------------
 final_path = glob.glob("artifacts/debug/*_final.csv")[0]
@@ -77,7 +78,7 @@ cts_conf = {}
 for e in events:
     k = (int(e.meta.get("structure_id", -1)), int(e.meta.get("cycle_id", -1)))
     if e.type == "CTS_ESTABLISHED":
-        cts_est[k] = int(e.idx)
+        cts_est[k] = ef.cts_anchor_idx(e)
     elif e.type == "CTS_CONFIRMED":
         cts_conf.setdefault(k, e)
 
@@ -152,12 +153,12 @@ for t in trigs:
     for k, ms in enumerate(retained_ms, 1):
         mx = max((int(ev.idx) for ev in ms.events), default=None)
         past = [(ev.type, int(ev.idx)) for ev in ms.events if int(ev.idx) > int(ms.end_idx)]
-        _est = sorted((ev for ev in ms.events if ev.type == "CTS_ESTABLISHED"), key=lambda e: int(e.idx))
+        _est = sorted((ev for ev in ms.events if ev.type == "CTS_ESTABLISHED"), key=ef.cts_anchor_idx)
         _c1 = _est[1] if len(_est) >= 2 else None
         print(f"   [phase2 ms {k}] start={ms.start_idx} end_idx={ms.end_idx} "
               f"n_ev={len(ms.events)} max_ev_idx={mx} past_bound={past} "
               f"early_stop_idx={getattr(ms, 'early_stop_idx', None)} "
-              f"cts1_ext={None if _c1 is None else int(_c1.idx)} "
+              f"cts1_ext={None if _c1 is None else ef.cts_anchor_idx(_c1)} "
               f"cts1_moment={None if _c1 is None else int(_c1.meta.get('confirmed_at', _c1.idx))}")
     max_ev_all = max((int(ev.idx) for ms in retained_ms for ev in ms.events), default=None)
     res = captured.get("res")

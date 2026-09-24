@@ -63,6 +63,7 @@ import plotly.graph_objects as go
 
 from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME, COL_V, PatternStatus
 from engine_v2.charting.style_registry import STYLE
+from engine_v2.structure import event_fields as ef
 from engine_v2.charting._zone_render import (
     build_stepped_outline_xy,
     collapsed_cycles,
@@ -564,20 +565,22 @@ def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned
         sd_for_sid = last_pt[6]
 
         if last_kind == "BOS":
+            # The dot sits at the CTS ANCHOR (x) with ev.price (y) — a location.
             cts_after = [e for e in cts_unconf
                          if int(e.meta.get("structure_id", -1)) == sid
-                         and int(e.idx) > last_slice_idx
-                         and owned_here(e.idx)]
+                         and ef.cts_anchor_idx(e) > last_slice_idx
+                         and owned_here(ef.cts_anchor_idx(e))]
             if cts_after:
-                latest = max(cts_after, key=lambda e: int(e.idx))
-                t = lt_time(latest.idx)
+                latest = max(cts_after, key=ef.cts_anchor_idx)
+                latest_idx = ef.cts_anchor_idx(latest)
+                t = lt_time(latest_idx)
                 if t is not None:
                     price = float(latest.price) if latest.price is not None else 0.0
                     cycle = int(latest.meta.get("cycle_id", 0))
-                    full_idx = lt_full_idx(latest.idx)
+                    full_idx = lt_full_idx(latest_idx)
                     kind_label = latest.type.replace("CTS_", "").lower()
-                    points_by_sid[sid].append((latest.idx, t, price, "CTS", sid, cycle, sd_for_sid, full_idx))
-                    extra_cts_pts.append((latest.idx, t, price, f"CTS ({kind_label})", sid, cycle, sd_for_sid, full_idx))
+                    points_by_sid[sid].append((latest_idx, t, price, "CTS", sid, cycle, sd_for_sid, full_idx))
+                    extra_cts_pts.append((latest_idx, t, price, f"CTS ({kind_label})", sid, cycle, sd_for_sid, full_idx))
 
         elif last_kind == "CTS" and sid != most_recent_lt_sid:
             next_sid = sid + 1
@@ -2059,14 +2062,17 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             sd_for_sid = last_pt[6]
 
             if last_kind == "BOS":
-                cts_after = [e for e in cts_unconf if int(e.meta.get("structure_id", -1)) == sid and int(e.idx) > last_idx]
+                # The dot sits at the CTS ANCHOR — a location.
+                cts_after = [e for e in cts_unconf
+                             if int(e.meta.get("structure_id", -1)) == sid and ef.cts_anchor_idx(e) > last_idx]
                 if cts_after:
-                    latest = max(cts_after, key=lambda e: int(e.idx))
-                    m15_t = _h1_idx_to_m15_time(latest.idx)
+                    latest = max(cts_after, key=ef.cts_anchor_idx)
+                    latest_idx = ef.cts_anchor_idx(latest)
+                    m15_t = _h1_idx_to_m15_time(latest_idx)
                     if m15_t is not None:
                         price = float(latest.price) if latest.price is not None else 0.0
                         cycle = int(latest.meta.get("cycle_id", 0))
-                        points_by_sid[sid].append((latest.idx, m15_t, price, "CTS", sid, cycle, sd_for_sid))
+                        points_by_sid[sid].append((latest_idx, m15_t, price, "CTS", sid, cycle, sd_for_sid))
 
             elif last_kind == "CTS" and sid != most_recent_h1_sid:
                 next_sid = sid + 1

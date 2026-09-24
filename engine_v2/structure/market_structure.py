@@ -10,6 +10,7 @@ import pandas as pd
 from engine_v2.common.types import PatternEvent, PatternStatus, StructureLevel, COL_TIME, COL_O, COL_C
 from engine_v2.patterns.imbalance import has_unfilled_imbalance
 from engine_v2.patterns.structure_patterns import BreakoutPatterns
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 
 
@@ -2049,8 +2050,11 @@ class MarketStructure:
         # cond2, read only at a later cycle-1 refresh (> CTS_0), when every gap
         # in [BOS_0, CTS_0] has formed — and FibTracker's cycle-0 cache is
         # likewise stored uncut, so the two mirrors agree.
+        # Fill horizon: cond2 "@CTS_0" — a TIME, today the CTS_0 anchor; moves
+        # with FibTracker's cycle-0 cache in Plan E E3a′ (Q8).
+        c0_fill_horizon_idx = cts_idx  # Plan E E3a′ → moment
         has_unfilled = has_unfilled_imbalance(
-            self.df, c0_lo, c0_hi, cts_idx, self._fill_threshold,
+            self.df, c0_lo, c0_hi, c0_fill_horizon_idx, self._fill_threshold,
             direction=int(st.struct_direction), evaluated_at=None,
         )
         st.cycle0_data = {
@@ -2659,7 +2663,7 @@ class MarketStructure:
             if ev.type in ("CTS_ESTABLISHED", "CTS_UPDATED") and ev.price is not None:
                 levels.append(
                     StructureLevel(
-                        time=t.iloc[ev.idx],
+                        time=t.iloc[ef.cts_anchor_idx(ev)],  # the level's location (Q12)
                         kind="CTS",
                         direction=self.struct_direction,
                         price=float(ev.price),

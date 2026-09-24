@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import pandas as pd
 
 from engine_v2.common.types import PatternEvent, StructureLevel, REQUIRED_CANDLE_COLS
+from engine_v2.structure import event_fields as ef
 from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.patterns.pattern_engine import detect_patterns
 from engine_v2.structure.structure_engine import compute_structure
@@ -142,8 +143,10 @@ def _run_downstream_pipeline(
     wc_with_first = sum(1 for wc in wave_candle_results if wc.first_wave_candle_idx is not None)
     print(f"{pfx}[wave_candles] total={len(wave_candle_results)}, with_last={wc_with_last}, with_first={wc_with_first}")
 
-    # Sort events by idx (used by WVMI, Fib tracking, prev BOS lines)
-    sorted_events = sorted(events, key=lambda e: (e.idx, e.type))
+    # The event processing order (used by WVMI, Fib tracking, prev BOS lines):
+    # today's (idx, type), pinned against the Plan E E4 flip (PLAN_E Q3; LANDMINES
+    # "Event Sort Order Is a Dispatch Invariant").
+    sorted_events = sorted(events, key=ef.processing_order_key)
 
     # Find reversal_confirmed_idx per structure (from REVERSAL_CANDIDATE apply_idx)
     reversal_confirmed_by_sid = {}  # {sid: apply_idx}
@@ -283,8 +286,10 @@ def _run_downstream_pipeline(
                 continue
             if ev.type not in ("CTS_ESTABLISHED", "CTS_UPDATED"):
                 continue
-            if ev.idx >= rv_idx:
-                end_idx = ev.idx
+            # The filter is a TIME ("the first CTS of sid known at/after the
+            # reversal"); the line END is the CTS anchor (a location, PLAN_E Q6).
+            if ef.stamped_idx(ev) >= rv_idx:  # Plan E E3d → moment
+                end_idx = ef.cts_anchor_idx(ev)
                 break
 
         if end_idx is not None:
