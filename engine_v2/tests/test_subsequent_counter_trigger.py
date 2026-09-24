@@ -99,7 +99,7 @@ def test_emits_one_per_sd_at_index_2_or_higher():
     assert t.parent_sid == 0
     assert t.parent_cycle_id == 1
     assert t.parent_sd == 1
-    assert t.end_idx == 70
+    assert t.trigger_event_idx == 70
     assert t.trigger_event_idx == 70
     assert t.meta["prior_sd_trigger_idx"] == 30
     assert t.meta["prior_cts_prox_idx"] == 50
@@ -153,7 +153,7 @@ def test_multiple_sequential_var4_per_cycle():
     }
     out = detect_subsequent_counter_triggers(events, triggers, _df_with_highs({}))
     assert len(out) == 2
-    assert [t.end_idx for t in out] == [55, 85]
+    assert [t.trigger_event_idx for t in out] == [55, 85]
     assert out[0].meta["prior_sd_trigger_idx"] == 30
     assert out[0].meta["prior_cts_prox_idx"] == 40
     assert out[1].meta["prior_sd_trigger_idx"] == 55

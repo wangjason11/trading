@@ -106,7 +106,6 @@ def detect_subsequent_confluence_triggers(
                 parent_cycle_id=cycle_id,
                 parent_sd=parent_sd,
                 input_idx=input_idx,
-                end_idx=this_t.idx,
                 trigger_event_idx=this_t.idx,
                 meta={
                     "prior_sd_trigger_idx": prior_t.idx,

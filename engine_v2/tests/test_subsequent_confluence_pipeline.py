@@ -25,7 +25,7 @@ def test_to_multi_tf_trigger_bullish_parent():
     h1 = _h1_df()
     trig = SubsequentConfluenceTrigger(
         parent_tf="H1", parent_sid=0, parent_cycle_id=1, parent_sd=1,
-        input_idx=42, end_idx=50, trigger_event_idx=50,
+        input_idx=42, trigger_event_idx=50,
         meta={"prior_sd_trigger_idx": 30, "sequence_index_in_cycle": 1},
     )
     out = to_multi_tf_trigger(trig, h1)
@@ -42,7 +42,7 @@ def test_to_multi_tf_trigger_bearish_parent():
     h1 = _h1_df()
     trig = SubsequentConfluenceTrigger(
         parent_tf="H1", parent_sid=1, parent_cycle_id=2, parent_sd=-1,
-        input_idx=42, end_idx=55, trigger_event_idx=55,
+        input_idx=42, trigger_event_idx=55,
     )
     out = to_multi_tf_trigger(trig, h1)
     assert out.lower_sd == -1

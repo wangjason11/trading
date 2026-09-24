@@ -25,7 +25,7 @@ def test_to_multi_tf_trigger_bullish_parent():
     h1 = _h1_df()
     trig = SubsequentCounterTrigger(
         parent_tf="H1", parent_sid=0, parent_cycle_id=1, parent_sd=1,
-        input_idx=42, end_idx=70, trigger_event_idx=70,
+        input_idx=42, trigger_event_idx=70,
         meta={
             "prior_sd_trigger_idx": 30,
             "prior_cts_prox_idx": 50,
@@ -47,7 +47,7 @@ def test_to_multi_tf_trigger_bearish_parent():
     h1 = _h1_df()
     trig = SubsequentCounterTrigger(
         parent_tf="H1", parent_sid=1, parent_cycle_id=2, parent_sd=-1,
-        input_idx=42, end_idx=80, trigger_event_idx=80,
+        input_idx=42, trigger_event_idx=80,
     )
     out = to_multi_tf_trigger(trig, h1)
     assert out.lower_sd == 1                    # counter to bearish parent

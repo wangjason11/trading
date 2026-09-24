@@ -271,8 +271,9 @@ list, and the test fails. E2a extends it: `meta["cts_anchor_idx"] == ev.idx` (pr
   `start_time=… lifecycle_end_idx=…` (both fields deleted). Tests 783 + 1 xfail (−7 retired-chain pins, +1
   `self.levels` pin). Deviations: (1) `debug/zone_proximity_diag.py` KEPT — the `/compare` skill ("Per-Cycle
   Proximity Trigger Counts") and GOTCHAS use it as the per-cycle proximity tool; (2) `Subsequent*Trigger.end_idx`
-  untouched — after the unread meta `probe_end_idx` went it is unread and == `trigger_event_idx`; the sibling
-  probe's end is the sweep's `hi`, so the §1.8 rename to `probe_end_idx` would misname it (delete vs keep: open);
+  untouched in E1b — after the unread meta `probe_end_idx` went it is unread and == `trigger_event_idx`; the sibling
+  probe's end is the sweep's `hi`, so the §1.8 rename to `probe_end_idx` would misname it. **User 2026-09-24: keep
+  the diag file; delete `end_idx`** → deleted in its own commit after E1b (24/24 CSVs + figures + run.log identical);
   (3) the fib anchor-idx deletion reached 7 call sites (fib_tracker ×6, poi_zones ×1), not only `fibonacci.py`.
 
 ---

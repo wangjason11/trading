@@ -68,7 +68,7 @@ def test_emits_one_per_opp_sd_after_sd():
     assert t.parent_sid == 0
     assert t.parent_cycle_id == 1
     assert t.parent_sd == 1
-    assert t.end_idx == 50
+    assert t.trigger_event_idx == 50
     assert t.trigger_event_idx == 50
     assert t.meta["prior_sd_trigger_idx"] == 30
     assert t.meta["prior_sd_zone_kind"] == "BOS"
@@ -122,7 +122,7 @@ def test_multiple_sequential_var3_per_cycle():
     }
     out = detect_subsequent_confluence_triggers(events, triggers, _df_with_lows({}))
     assert len(out) == 2
-    assert [t.end_idx for t in out] == [40, 70]
+    assert [t.trigger_event_idx for t in out] == [40, 70]
     assert out[0].meta["prior_sd_trigger_idx"] == 30
     assert out[1].meta["prior_sd_trigger_idx"] == 55
 

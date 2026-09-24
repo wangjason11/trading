@@ -98,8 +98,7 @@ class SubsequentConfluenceTrigger:
     parent_cycle_id: int               # parent cycle this trigger fires within
     parent_sd: int
     input_idx: int                     # parent-TF window extreme toward BOS
-    end_idx: int                       # the CTS-prox trigger candle
-    trigger_event_idx: int             # same as end_idx (CTS-prox candle)
+    trigger_event_idx: int             # the CTS-prox trigger candle (the probe ends at its M15 `hi`)
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -135,8 +134,7 @@ class SubsequentCounterTrigger:
     parent_cycle_id: int
     parent_sd: int
     input_idx: int                     # parent-TF window extreme toward CTS
-    end_idx: int                       # the sd-prox trigger candle
-    trigger_event_idx: int             # same as end_idx (sd-prox candle)
+    trigger_event_idx: int             # the sd-prox trigger candle (the probe ends at its M15 `hi`)
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
