@@ -455,7 +455,7 @@ idx3 = anchor + 1    # maru/normal
 
 **Why forward-looking was wrong:**
 - The star pattern should center on the BOS/CTS anchor candle
-- In a star pattern, the anchor IS the pinbar — the anchor being the BOS/CTS **extreme** candle the zone is built from (`BOS_CONFIRMED.idx` / `CTS_CONFIRMED.meta["cts_anchor_idx"]`, `kl_zones_v1.derive_kl_zones_v1`), NOT a confirmation candle
+- In a star pattern, the anchor IS the pinbar — the anchor being the BOS/CTS **extreme** candle the zone is built from (`BOS_CONFIRMED.meta["bos_anchor_idx"]` / `CTS_CONFIRMED.meta["cts_anchor_idx"]`, `kl_zones_v1.derive_kl_zones_v1`), NOT a confirmation candle
 - Forward-looking incorrectly made the anchor the first maru/normal
 
 **Symptom:** Zones incorrectly identified as "no base star 2nd big" when the anchor wasn't actually part of a valid star pattern. Example: anchor=710 (normal) was matched with 711 (pinbar) + 712 (normal), but the correct check should be 709 + 710 + 711 which fails because 710 isn't a pinbar.
@@ -1541,8 +1541,8 @@ way they should — by chart-marker idx, you see `BOS → BOS → CTS → CTS`
 where you expect `BOS → CTS → BOS → CTS`. Equivalent in the
 `_M15_<entity>_structure_events.csv` dump: the `cycle_id` of confirmed
 events goes forward then backward (e.g., `0, 1, 0, 1`) when sorted by
-the chart's marker idx (`BOS_CONFIRMED.idx` for BOS, `cts_anchor_idx`
-for CTS).
+the chart's marker idx (`bos_anchor_idx` for BOS — `BOS_CONFIRMED.idx` until
+Plan E E4b —, `cts_anchor_idx` for CTS).
 
 **Root cause:** `is_range_confirm_idx` is computed entity-absolute on
 the wide M15 df, then sub slices retain those values after

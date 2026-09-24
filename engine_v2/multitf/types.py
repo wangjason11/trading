@@ -156,7 +156,7 @@ class FirstConfluenceTrigger:
     parent_sid: int
     parent_cycle_id: int               # same cycle_id as the BOS_CONFIRMED
     parent_sd: int                     # parent struct_direction at trigger time
-    input_idx: int                     # BOS extreme idx (== BOS_CONFIRMED.ev.idx)
+    input_idx: int                     # the BOS anchor (BOS_CONFIRMED.meta["bos_anchor_idx"])
     probe_end_idx: Optional[int]       # CTS extreme (cts_anchor_idx) in same cycle; None = pending
     trigger_event_idx: int             # BOS_CONFIRMED.confirmed_at (candle when trigger fires)
     status: str = "finalized"          # "finalized" once probe_end_idx is known, else "pending"

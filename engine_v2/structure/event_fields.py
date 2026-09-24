@@ -100,8 +100,11 @@ def stamped_idx(ev: Any) -> int:
     2026-09-24, E2b). Two uses only:
 
     - the event processing order (`processing_order_key`, the sort pins);
-    - an E2 TIME half over mixed CTS types that an E3 stage will switch to
-      `event_moment` — always written with its `# Plan E E3x → moment` marker.
+    - an E2 TIME half over mixed event types (CTS lists, the all-type
+      struct_start minima, the threshold timeline) that an E3 stage will switch
+      — always written with its `# Plan E E3x → moment` marker. Where the list
+      holds types `event_moment` does not define, that stage must define them
+      first (PLAN_E §7, E3f / E3g-2 notes).
     """
     if ev.type == "CTS_ESTABLISHED":
         return cts_anchor_idx(ev)

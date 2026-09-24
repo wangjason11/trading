@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from engine_v2.common.types import KLZone
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.structure_lifecycle import (
     compute_cycle_lifecycle,
@@ -702,12 +703,13 @@ Identifiers
 - cts_cycle_id: internal CTS/BOS cycle id within a structure. Starts at 0.
 
 StructureEvent indexing
-- ev.idx: the *level index* (where the BOS/CTS level is anchored; often an earlier extreme).
+- ev.idx: the raw index (today the BOS anchor / the CTS_CONFIRMED confirmation candle; Plan E E4
+  flips BOS to the moment). The BOS level is read from meta["bos_anchor_idx"] (`ef.bos_anchor_idx`).
 - ev.meta["confirmed_at"]: the candle index where that level was confirmed (breakout/pullback timing).
 
 Zone indexing
 - meta["base_idx"]: anchor candle of the zone base pattern (where rectangle begins).
-- meta["source_event_idx"]: the StructureEvent level index used to derive the zone (ev.idx).
+- meta["source_event_idx"]: the source event's raw ev.idx — write-only (no reader; Plan E E4b-pre deletes it).
 - meta["confirmed_idx"]: the candle index where the zone becomes confirmed for charting:
     - BOS-derived zones: confirmed_idx = ev.meta["confirmed_at"] (breakout candle)
     - CTS-derived zones: confirmed_idx = ev.idx (pullback candle)
@@ -749,12 +751,14 @@ def derive_kl_zones_v1(
     rev_confirmed_by_sid = compute_reversal_idx_by_sid(events)
 
     # Debugging
+    # (idx, anchor, sid, cycle): the raw idx AND the anchor, so the Plan E E4
+    # flip shows as idx moving while the anchor stays (PLAN_E §6.3 B12).
     print("[kl_zones][events] BOS_CONFIRMED:", [
-        (int(ev.idx), ev.meta.get("structure_id"), ev.meta.get("cycle_id"), ev.meta.get("bos_prev"))
+        (int(ev.idx), ef.bos_anchor_idx(ev), ev.meta.get("structure_id"), ev.meta.get("cycle_id"))
         for ev in events if ev.type == "BOS_CONFIRMED"
     ])
     print("[kl_zones][events] CTS_ESTABLISHED:", [
-        (int(ev.idx), ev.meta.get("structure_id"), ev.meta.get("cycle_id"))
+        (int(ev.idx), ef.cts_anchor_idx(ev), ev.meta.get("structure_id"), ev.meta.get("cycle_id"))
         for ev in events if ev.type == "CTS_ESTABLISHED"
     ])
     print("[kl_zones][events] CTS_CONFIRMED:", [
@@ -764,6 +768,7 @@ def derive_kl_zones_v1(
 
     print("[kl_zones][events] BOS_CONFIRMED:", [
         (int(ev.idx),
+        ef.bos_anchor_idx(ev),
         (ev.meta or {}).get("confirmed_at"),
         (ev.meta or {}).get("structure_id"),
         (ev.meta or {}).get("cycle_id"),
@@ -884,14 +889,16 @@ def derive_kl_zones_v1(
                         active_buy_idx = None
             continue
 
-        # Event idx is the BOS/CTS LEVEL index; confirmed_at is the candle that CONFIRMED it.
+        # The event's RAW idx, exported write-only as meta `source_event_idx`
+        # (a declared raw reader; Plan E E4b-pre deletes it). confirmed_at is the
+        # candle that CONFIRMED the zone.
         source_event_idx = int(ev.idx)
         confirmed_idx = int((ev.meta or {}).get("confirmed_at", source_event_idx))
         bos = (ev.type == "BOS_CONFIRMED")
 
         # Anchor for pattern identification differs by event type
         if bos:
-            anchor_idx = source_event_idx
+            anchor_idx = ef.bos_anchor_idx(ev)   # the BOS anchor: the zone's base candle
         else:
             anchor_idx = int((ev.meta or {}).get("cts_anchor_idx", source_event_idx))
 

@@ -32,8 +32,9 @@ from engine_v2.multitf.sub_structure_pool import knowable_at_idx
 def clip_events_to_window(events: List[Any], cap: Optional[int]) -> List[Any]:
     """Return DEEP COPIES of the events whose **knowable-at** idx is <= `cap`
     (§17.9). `cap` None → no clip (open lifecycle to the data edge).
-    `BOS_CONFIRMED` is keyed on `meta["confirmed_at"]`, every other event on
-    `ev.idx`.
+    `BOS_CONFIRMED` is keyed on `meta["confirmed_at"]`, every other event on its
+    stamped idx (`ef.stamped_idx`, today's `ev.idx`; Plan E E3b moves CTS_ESTABLISHED
+    onto its moment).
 
     Deep-copied because the geometry's event objects are SHARED across every
     consumer of the pool (the mirror stamps attribution onto `ev.meta`).

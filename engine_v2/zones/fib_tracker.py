@@ -1578,7 +1578,8 @@ class FibTracker:
             cond2 = self._has_unfilled(df, c1_start, c1_end, cts_idx, sd)
 
             # Condition 3: Cycle 1's BOS doesn't fill cycle 0's imbalances (static check)
-            cond3 = self._has_unfilled(df, c0_start, c0_end, cycle1_bos_idx, sd)
+            # — asked as of BOS_1 (a TIME: today its anchor; PLAN_E Q8).
+            cond3 = self._has_unfilled(df, c0_start, c0_end, cycle1_bos_idx, sd)  # Plan E E3a′ → moment
 
             has_unfilled = cond1 and cond2 and cond3
             print(f"[fib] sid={sid} cross-cycle check: cond1={cond1} cond2={cond2} cond3={cond3}")
@@ -1657,7 +1658,7 @@ class FibTracker:
         c1_end = max(cycle1_bos_idx, cts_idx)
         cond2 = self._has_unfilled(df, c1_start, c1_end, cts_idx, sd)
 
-        cond3 = self._has_unfilled(df, c0_start, c0_end, cycle1_bos_idx, sd)
+        cond3 = self._has_unfilled(df, c0_start, c0_end, cycle1_bos_idx, sd)  # Plan E E3a′ → moment
 
         cross_active = cond1 and cond2 and cond3
         print(f"[fib] sid={sid} cross-cycle check: cond1={cond1} cond2={cond2} cond3={cond3}")

@@ -10,7 +10,7 @@ object (its repr is an address), and — on a BOS flip — the write-only KL met
 
 Fixtures: `_make_second_cts_moment_after_extreme_data` (EST (9, 10); BOS (0, 2),
 (7, 10)) and `_make_multicycle_data` (4 lagging BOS, no lagging EST — PLAN_E §6.4
-said 3; measured 2026-09-24), in both fib modes. E2b made the EST half pass; E2c the BOS half. Plan E E4 turns this into a
+said 3; measured 2026-09-24), in both fib modes. E2b made the EST half pass; E2c the BOS half (8 strict xfails until then). Plan E E4 turns this into a
 regression pin of the real emitter.
 """
 from __future__ import annotations
@@ -59,18 +59,17 @@ def _run(df, events, mode):
         return _run_downstream_pipeline(df, events, +1, fib_mode=mode, skip_wvmi=False)
 
 
-_E2C = pytest.mark.xfail(strict=True, reason="BOS readers migrate in Plan E E2c")
 _SECOND = _make_second_cts_moment_after_extreme_data
 _MULTI = _make_multicycle_data
 
 
 @pytest.mark.parametrize("mode", ["h1", "cross_cycle"])
 @pytest.mark.parametrize("flip,maker", [
-    ("est", _SECOND),                       # the only fixture with a lagging EST (9 → 10)
-    pytest.param("bos", _SECOND, marks=_E2C),
-    pytest.param("bos", _MULTI, marks=_E2C),  # 4 lagging BOS
-    pytest.param("both", _SECOND, marks=_E2C),
-    pytest.param("both", _MULTI, marks=_E2C),
+    ("est", _SECOND),    # the only fixture with a lagging EST (9 → 10)
+    ("bos", _SECOND),
+    ("bos", _MULTI),     # 4 lagging BOS
+    ("both", _SECOND),
+    ("both", _MULTI),
 ])
 def test_downstream_outputs_do_not_depend_on_the_flip(flip, maker, mode):
     res = compute_bounded_structure(_prepare_df(maker()), 0, +1)

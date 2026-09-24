@@ -87,7 +87,7 @@ def knowable_at_idx(
     """The idx at which an event became KNOWN — the clip key for projecting a
     pooled structure into a lifecycle window (§17.9 / `project_to_window`).
 
-    `BOS_CONFIRMED.ev.idx` is the BOS EXTREME candle, but the break isn't known
+    `BOS_CONFIRMED.ev.idx` is the BOS EXTREME candle (until Plan E E4b), but the break isn't known
     until `meta["confirmed_at"]` (later); every other event is known at `ev.idx`.
     Clipping by knowable-at (not `ev.idx`) neutralizes the
     boundary-straddling-confirmation case: a BOS whose extreme is inside the

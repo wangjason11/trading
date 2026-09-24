@@ -595,6 +595,11 @@ def _events_from_csv(path: Path) -> List[StructureEvent]:
     with path.open(newline="") as fh:
         for row in csv.DictReader(fh):
             meta = ast.literal_eval(row["meta"]) if row.get("meta") else {}
+            # A save older than Plan E E2a lacks the anchor keys; there `idx` IS the
+            # anchor (the pre-E4 contract), so translate the legacy row.
+            key = {"CTS_ESTABLISHED": "cts_anchor_idx", "BOS_CONFIRMED": "bos_anchor_idx"}.get(row["type"])
+            if key is not None:
+                meta.setdefault(key, int(row["idx"]))
             price = float(row["price"]) if row.get("price") not in (None, "") else None
             out.append(StructureEvent(
                 idx=int(row["idx"]), category=row["category"], type=row["type"],
@@ -604,7 +609,6 @@ def _events_from_csv(path: Path) -> List[StructureEvent]:
 
 
 @pytest.mark.skipif(not _H1_EVENTS_CSV.exists(), reason="Plan-B save's H1 structure_events CSV not present")
-@pytest.mark.illegal_event_contract  # the Plan-B save predates the meta anchor keys (Plan E E2a)
 def test_parent_tables_from_saved_h1_csv_match_synthetic(tables):
     """Cross-check: the synthetic H1 stream reproduces the saved stream's tables."""
     t_syn, _ = tables

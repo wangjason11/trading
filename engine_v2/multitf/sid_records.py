@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import List
 
 from engine_v2.multitf.types import LowerTFResult, SidRecord
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 
 
@@ -18,7 +19,7 @@ def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
     """Derive per-sid records for a main entity from its event stream.
 
     For each sid present in events:
-      - creation_event_idx = min ev.idx among events for that sid
+      - creation_event_idx = min `ef.stamped_idx` (today's ev.idx) among events for that sid
       - end_event_idx = REVERSAL_CANDIDATE.apply_idx for that sid (None if absent)
       - end_reason = "reversal" if reversal exists, else None
       - starting_sd = struct_direction from any event of that sid
@@ -31,14 +32,16 @@ def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
             continue
         sid = int(sid)
 
+        # creation_event_idx: pinned to today's stamped idx (Plan E E3f → moment).
+        stamped = ef.stamped_idx(ev)
         rec = sids.setdefault(sid, {
-            "creation_event_idx": ev.idx,
+            "creation_event_idx": stamped,
             "end_event_idx": None,
             "end_reason": None,
             "starting_sd": int(ev.meta.get("struct_direction", 0)),
         })
-        if ev.idx < rec["creation_event_idx"]:
-            rec["creation_event_idx"] = ev.idx
+        if stamped < rec["creation_event_idx"]:
+            rec["creation_event_idx"] = stamped
         if rec["starting_sd"] == 0 and ev.meta.get("struct_direction") is not None:
             rec["starting_sd"] = int(ev.meta["struct_direction"])
 

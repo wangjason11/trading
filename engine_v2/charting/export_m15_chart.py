@@ -305,7 +305,7 @@ def _wave_touches_window(
 ) -> bool:
     """Wave rule (chart review 2026-09-21). A WAVE is one straight segment of a
     sid-tied line between candles `a_idx` and `b_idx` — the EXTREME candles the
-    line is drawn through (`cts_anchor_idx` / BOS idx), not the confirmation
+    line is drawn through (`cts_anchor_idx` / `bos_anchor_idx`), not the confirmation
     candles. It was live at some point iff its candle span intersects the
     structure's real-time lifecycle window `[start_idx, end_idx]` (`end_idx`
     None = open): `max(a,b) >= start_idx and (end_idx is None or min(a,b) <=
@@ -509,7 +509,7 @@ def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned
     `seq_by_sid` — the drawn point sequence per internal sid, with the
     extension appended as an `"EXT"` pseudo-point on the most recent one.
     Every point is filtered by `owned_here` at the candle it is DRAWN at
-    (`cts_anchor_idx` for CTS, `ev.idx` for BOS)."""
+    (`cts_anchor_idx` for CTS, `bos_anchor_idx` for BOS)."""
     cts_events = [e for e in sid_events if e.type == "CTS_CONFIRMED"]
     bos_events = [e for e in sid_events if e.type == "BOS_CONFIRMED"]
     all_sids_lt = set()
@@ -535,17 +535,18 @@ def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned
         points_by_sid[sid].append((p_idx, t, price, "CTS", sid, cycle, sd, full_idx))
 
     for ev in bos_events:
-        if not owned_here(ev.idx):
+        b_idx = ef.bos_anchor_idx(ev)   # the BOS dot sits at its anchor
+        if not owned_here(b_idx):
             continue
-        t = lt_time(ev.idx)
+        t = lt_time(b_idx)
         if t is None:
             continue
         price = float(ev.price) if ev.price is not None else 0.0
         sid = int(ev.meta.get("structure_id", 0))
         cycle = int(ev.meta.get("cycle_id", 0))
         sd = int(ev.meta.get("struct_direction", 0))
-        full_idx = lt_full_idx(ev.idx)
-        points_by_sid[sid].append((ev.idx, t, price, "BOS", sid, cycle, sd, full_idx))
+        full_idx = lt_full_idx(b_idx)
+        points_by_sid[sid].append((b_idx, t, price, "BOS", sid, cycle, sd, full_idx))
 
     # Unconfirmed CTS + PB dots
     cts_unconf = [e for e in sid_events if e.type in ("CTS_ESTABLISHED", "CTS_UPDATED")]
@@ -586,9 +587,10 @@ def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned
             next_sid = sid + 1
             next_bos_evs = sorted(
                 [e for e in bos_events if int(e.meta.get("structure_id", -1)) == next_sid],
-                key=lambda e: int(e.idx),
+                key=ef.bos_anchor_idx,
             )
-            next_bos_idx = int(next_bos_evs[0].idx) if next_bos_evs else None
+            # The PB search's upper bound is a TIME (PLAN_E §7.1 T4).
+            next_bos_idx = ef.bos_anchor_idx(next_bos_evs[0]) if next_bos_evs else None  # Plan E E3g-3 → moment
 
             pb_after = [e for e in pb_events
                         if int(e.meta.get("structure_id", -1)) == sid
@@ -608,11 +610,12 @@ def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned
                     extra_pb_pts.append((latest_pb.idx, t, pb_price, "PB", sid, 0, sd_for_sid, full_idx))
                     if next_bos_evs:
                         fb = next_bos_evs[0]
-                        fb_t = lt_time(fb.idx)
+                        fb_idx = ef.bos_anchor_idx(fb)   # the line's BOS end (location)
+                        fb_t = lt_time(fb_idx)
                         fb_price = float(fb.price) if fb.price is not None else 0.0
                         if fb_t is not None:
                             pb_to_bos_lines.append((sid, t, pb_price, fb_t, fb_price,
-                                                    int(latest_pb.idx), int(fb.idx)))
+                                                    int(latest_pb.idx), fb_idx))
 
     # The most-recent internal sid's line extends to this sub's lifecycle end,
     # walked back to the last candle the sub still owns (where a later
@@ -2038,14 +2041,15 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             points_by_sid[sid].append((p_idx, m15_t, price, "CTS", sid, cycle, sd))
 
         for ev in bos_events:
-            m15_t = _h1_idx_to_m15_time(ev.idx)
+            b_idx = ef.bos_anchor_idx(ev)   # the BOS dot sits at its anchor
+            m15_t = _h1_idx_to_m15_time(b_idx)
             if m15_t is None:
                 continue
             price = float(ev.price) if ev.price is not None else 0.0
             sid = int(ev.meta.get("structure_id", 0))
             cycle = int(ev.meta.get("cycle_id", 0))
             sd = int(ev.meta.get("struct_direction", 0))
-            points_by_sid[sid].append((ev.idx, m15_t, price, "BOS", sid, cycle, sd))
+            points_by_sid[sid].append((b_idx, m15_t, price, "BOS", sid, cycle, sd))
 
         # Unconfirmed CTS + PB for H1
         cts_unconf = [ev for ev in structure_events if ev.type in ("CTS_ESTABLISHED", "CTS_UPDATED")]
@@ -2078,9 +2082,10 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 next_sid = sid + 1
                 next_bos = sorted(
                     [e for e in bos_events if int(e.meta.get("structure_id", -1)) == next_sid],
-                    key=lambda e: int(e.idx),
+                    key=ef.bos_anchor_idx,
                 )
-                next_bos_idx = int(next_bos[0].idx) if next_bos else None
+                # The PB search's upper bound is a TIME (PLAN_E §7.1 T4).
+                next_bos_idx = ef.bos_anchor_idx(next_bos[0]) if next_bos else None  # Plan E E3g-3 → moment
                 pb_after = [e for e in pb_state
                             if int(e.meta.get("structure_id", -1)) == sid
                             and int(e.idx) > last_idx
@@ -2096,11 +2101,12 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                         points_by_sid[sid].append((latest_pb.idx, m15_t, pb_price, "PB", sid, 0, sd_for_sid))
                         if next_bos:
                             fb = next_bos[0]
-                            fb_t = _h1_idx_to_m15_time(fb.idx)
+                            fb_idx = ef.bos_anchor_idx(fb)   # the line's BOS end (location)
+                            fb_t = _h1_idx_to_m15_time(fb_idx)
                             fb_price = float(fb.price) if fb.price is not None else 0.0
                             if fb_t is not None:
                                 pb_to_bos_lines.append((sid, m15_t, pb_price, fb_t, fb_price,
-                                                        int(latest_pb.idx), int(fb.idx)))
+                                                        int(latest_pb.idx), fb_idx))
 
         # Lifecycle filter (chart review 2026-09-21): on the SUB charts the H1
         # overlay draws only the waves that were live at some point. A wave —
@@ -2125,6 +2131,8 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 end_t = _h1_idx_to_m15_time(last_h1_idx)
                 if end_t is not None and seq and last_h1_idx > seq[-1][0]:
                     seq.append((last_h1_idx, end_t, float(h1_df[COL_C].iloc[-1]), "EXT", sid, -1, seq[-1][6]))
+            # The live window's start is a TIME (the struct_start base moves with
+            # Plan E E3f — its prediction needs the figure diff; PLAN_E §7.1 T4).
             w_start = struct_start_h1.get(sid, seq[0][0] if seq else None)
             w_end = rev_h1.get(sid)
             for is_live_run, i0, i1 in _split_polyline_by_wave([p[0] for p in seq], w_start, w_end):

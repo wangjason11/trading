@@ -52,7 +52,7 @@ The searches mix several "anchor" values. They are **different fields** — neve
 
 | Name here | Source | What it is |
 |---|---|---|
-| `anchor_idx` (BOS sections) | the BOS zone's `meta["anchor_idx"]` = `BOS_CONFIRMED.idx` | the BOS **anchor** |
+| `anchor_idx` (BOS sections) | the BOS zone's `meta["anchor_idx"]` = `BOS_CONFIRMED.meta["bos_anchor_idx"]` (Plan E E2c; `== .idx` until E4b) | the BOS **anchor** |
 | `cts_anchor_idx` (CTS sections) | the CTS zone's `meta["anchor_idx"]` = `CTS_CONFIRMED.meta["cts_anchor_idx"]` | the CTS **anchor at confirmation** (equals `CTS_ESTABLISHED.idx` unless a `CTS_UPDATED` moved it) |
 | `pattern_anchor_idx` | the same cycle's `CTS_ESTABLISHED.meta["pattern_anchor_idx"]` — on every `CTS_ESTABLISHED`, read by direct index (a missing key raises `KeyError`) | the breakout pattern's **first candle** (a pattern-realm anchor) — not necessarily the CTS anchor |
 | the event candle in the CTS event walk | `ev.idx` of `CTS_ESTABLISHED` / `CTS_UPDATED` | a **price location**: the CTS anchor (`CTS_ESTABLISHED`, pattern-path `CTS_UPDATED`) or the processed candle (raw-path `CTS_UPDATED`, `via == "replay_raw"`) |

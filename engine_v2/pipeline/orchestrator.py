@@ -52,6 +52,50 @@ class PipelineResult:
     meta: Dict[str, Any]
 
 
+def _prev_bos_lines(sorted_events: list, reversal_confirmed_by_sid: dict, pfx: str = "") -> list:
+    """The previous structure's last BOS, drawn from its ANCHOR (START) to the
+    ANCHOR of the first CTS of the next structure known at/after the reversal
+    (END; PLAN_E Q6). Extracted from `_run_downstream_pipeline` (Plan E E2c
+    landing review) so the START / END roles are unit-pinned."""
+    prev_bos_lines = []
+    last_bos_by_sid = {}
+    for ev in sorted_events:
+        if ev.type == "BOS_CONFIRMED":
+            sid = ev.meta.get("structure_id", 0)
+            last_bos_by_sid[sid] = (ef.bos_anchor_idx(ev), ev.price)   # the line START (location)
+
+    for sid, rv_idx in reversal_confirmed_by_sid.items():
+        prev_sid = sid - 1
+        if prev_sid not in last_bos_by_sid:
+            continue
+
+        start_idx, price = last_bos_by_sid[prev_sid]
+
+        end_idx = None
+        for ev in sorted_events:
+            ev_sid = ev.meta.get("structure_id", 0)
+            if ev_sid != sid:
+                continue
+            if ev.type not in ("CTS_ESTABLISHED", "CTS_UPDATED"):
+                continue
+            # The filter is a TIME ("the first CTS of sid known at/after the
+            # reversal"); the line END is the CTS anchor (a location, PLAN_E Q6).
+            if ef.stamped_idx(ev) >= rv_idx:  # Plan E E3d → moment
+                end_idx = ef.cts_anchor_idx(ev)
+                break
+
+        if end_idx is not None:
+            prev_bos_lines.append({
+                "start_idx": start_idx,
+                "end_idx": end_idx,
+                "price": price,
+                "structure_id": sid,
+                "prev_structure_id": prev_sid,
+            })
+            print(f"{pfx}[prev_bos_line] sid={sid}: start_idx={start_idx} end_idx={end_idx} price={price:.5f}")
+    return prev_bos_lines
+
+
 def _run_downstream_pipeline(
     df: pd.DataFrame,
     events: list,
@@ -209,7 +253,7 @@ def _run_downstream_pipeline(
         key = (sid, cycle_id)
 
         if ev.type == "BOS_CONFIRMED":
-            bos_by_cycle[key] = (ev.idx, ev.price)
+            bos_by_cycle[key] = (ef.bos_anchor_idx(ev), ev.price)   # the fib's BOS point (location)
 
         elif ev.type == "CTS_ESTABLISHED":
             if key in bos_by_cycle:
@@ -265,42 +309,7 @@ def _run_downstream_pipeline(
     print(f"{pfx}[fib_tracker] total fibs={len(fib_states)}, active={sum(1 for f in fib_states if f.active)}")
 
     # 7) Prev BOS lines
-    prev_bos_lines = []
-    last_bos_by_sid = {}
-    for ev in sorted_events:
-        if ev.type == "BOS_CONFIRMED":
-            sid = ev.meta.get("structure_id", 0)
-            last_bos_by_sid[sid] = (ev.idx, ev.price)
-
-    for sid, rv_idx in reversal_confirmed_by_sid.items():
-        prev_sid = sid - 1
-        if prev_sid not in last_bos_by_sid:
-            continue
-
-        start_idx, price = last_bos_by_sid[prev_sid]
-
-        end_idx = None
-        for ev in sorted_events:
-            ev_sid = ev.meta.get("structure_id", 0)
-            if ev_sid != sid:
-                continue
-            if ev.type not in ("CTS_ESTABLISHED", "CTS_UPDATED"):
-                continue
-            # The filter is a TIME ("the first CTS of sid known at/after the
-            # reversal"); the line END is the CTS anchor (a location, PLAN_E Q6).
-            if ef.stamped_idx(ev) >= rv_idx:  # Plan E E3d → moment
-                end_idx = ef.cts_anchor_idx(ev)
-                break
-
-        if end_idx is not None:
-            prev_bos_lines.append({
-                "start_idx": start_idx,
-                "end_idx": end_idx,
-                "price": price,
-                "structure_id": sid,
-                "prev_structure_id": prev_sid,
-            })
-            print(f"{pfx}[prev_bos_line] sid={sid}: start_idx={start_idx} end_idx={end_idx} price={price:.5f}")
+    prev_bos_lines = _prev_bos_lines(sorted_events, reversal_confirmed_by_sid, pfx)
 
     # 8) POI zones
     poi_config = POIConfig(

@@ -30,11 +30,11 @@ index" wording for both events (a `.py` follow-up).
 ### Zone indexing
 - `meta["base_idx"]`: FIRST candle of the zone base pattern (where the rectangle begins) — at or before
   the zone's `anchor_idx` (see "base_idx by Pattern Type"); a different field from the anchor.
-- `meta["source_event_idx"]`: the source event's `ev.idx` — BOS: the BOS extreme; CTS: the
-  confirmation candle (so it equals the CTS zone's raw `confirmed_idx`). Slice-local (not shifted
-  by `slice_begin`) in the M15 lens CSVs — it is not in `_ZONE_META_IDX_KEYS`.
+- `meta["source_event_idx"]`: the source event's RAW `ev.idx` — BOS: the BOS extreme; CTS: the confirmation candle (so it equals the CTS zone's raw
+  `confirmed_idx`). Write-only (no reader; a declared raw reader, deleted in Plan E E4b-pre). Slice-local
+  (not shifted by `slice_begin`) in the M15 lens CSVs — it is not in `_ZONE_META_IDX_KEYS`.
 - `meta["anchor_idx"]`: the candle base-pattern identification starts from — BOS:
-  `source_event_idx` (the BOS anchor); CTS: `CTS_CONFIRMED.meta["cts_anchor_idx"]` (the CTS
+  `BOS_CONFIRMED.meta["bos_anchor_idx"]` (the BOS anchor, via `event_fields.bos_anchor_idx`; Plan E E2c); CTS: `CTS_CONFIRMED.meta["cts_anchor_idx"]` (the CTS
   anchor at confirmation). A market-structure-realm anchor — **not** `CTS_ESTABLISHED.meta
   ["pattern_anchor_idx"]` (the breakout pattern's first candle, a pattern-realm anchor); see GLOSSARY
   "Naming Standard" / ARCHITECTURE.md "Anchor has two realms".

@@ -2673,7 +2673,7 @@ class MarketStructure:
             if ev.type == "BOS_CONFIRMED" and ev.price is not None:
                 levels.append(
                     StructureLevel(
-                        time=t.iloc[ev.idx],
+                        time=t.iloc[ef.bos_anchor_idx(ev)],  # the level's location (Q12)
                         kind="BOS",
                         direction=self.struct_direction,
                         price=float(ev.price),

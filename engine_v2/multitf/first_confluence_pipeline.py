@@ -2,7 +2,7 @@
 
 Per spec §4.3.2:
   Probe sd:        +parent_sd  (confluence — same direction as parent)
-  Probe input_idx: parent BOS extreme idx (= BOS_CONFIRMED.ev.idx)
+  Probe input_idx: parent BOS anchor (BOS_CONFIRMED.meta["bos_anchor_idx"])
   Probe probe_end_idx: the confirmed CTS's extreme idx (`cts_anchor_idx`) in the
                    same parent cycle (resolved once parent CTS_CONFIRMED fires —
                    not the confirmation candle)

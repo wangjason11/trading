@@ -504,6 +504,30 @@ list, and the test fails. E2a extends it: `meta["cts_anchor_idx"] == ev.idx` (pr
     pre-window cond1 → moment) now killed. Known unkillable before E3: the in-window POI cond1 read (only an
     UPDATED reaches it, where anchor == idx) and the prev-BOS END (inside `_run_downstream_pipeline`, no reversal
     in the fixtures). Suite 829 passed + 9 xfailed (1 + 8 E2c-pending); replay after the fixes == E2b's.
+- **E2c.** Sites: KL BOS zone base (`anchor_idx` ← `ef.bos_anchor_idx`; `source_event_idx` stays raw, declared);
+  B12 `[kl_zones]` prints = (raw idx, anchor, sid, cycle) for EST and BOS, the dead `bos_prev` read dropped;
+  orchestrator `bos_by_cycle` (B4) + prev-BOS START (B6); FC `input_idx` (B5, pool key); `structure_levels` BOS
+  time (B8); `compute_struct_start_by_sid` / `SidRecord.creation_event_idx` (B9/B10) on `ef.stamped_idx`
+  `# Plan E E3f`; zone_proximity's timeline pointer (T3) on `ef.stamped_idx` `# Plan E E3g-2` (the E2b coupling);
+  chart BOS dots / PB→BOS ends (location) vs the PB-search bound (`# Plan E E3g-3`, T4) in all three charts;
+  FibTracker cond3 horizon (`cycle1_bos_idx`) `# Plan E E3a′`. `/compare` vs E2b: 24/24 CSVs + figures identical;
+  run.log = the `[kl_zones]` prints only (declared B12; §6.5 had put them under E2d). **BOS-only variant** vs E2c
+  == §8 E4b + §6.3: 34 events `idx` (H1 96→115, 591→652, 689→703, 728→748, 826→902; conf 21; counter 8) + 34 KL
+  `source_event_idx` (key-only), figures identical, run.log the BOS prints' raw idx. **The first BOS variant run
+  caught a miss** — `structure_levels` BOS `time` (B8; E2b had migrated only the CTS half of L5): 5 cells —
+  fixed + pinned (`test_structure_levels_are_timed_at_the_anchors`). `test_e4_simulation`'s BOS / both flips
+  now pass (the 8 strict xfails removed); FC input + struct_start/creation pins added. The Plan-B-save CSV test
+  translates legacy rows (pre-E2a: `idx` IS the anchor). Tests 840 passed + 1 xfail.
+  - Landing review (≈230k: role 148k + mutation 81k): 0 BLOCKER / 0 MAJOR. Folded in: the prev-BOS block is a
+    pure helper `orchestrator._prev_bos_lines` (byte-identical) + pin `test_prev_bos_line_runs_anchor_to_anchor`
+    (no fixture had a reversal, so START (E2c) and END (E2b) were unpinned; 3 mutants now killed); the debug
+    probe script's leak check declared a raw reader; docs (WAVE_CANDLES_SPEC, GOTCHAS ×2, KL docstring, CHARTING_SPEC,
+    struct_start / creation / pool docstrings, `stamped_idx` docstring); E3f / E3g notes in §7 (the all-type
+    minima and the BOS_THRESHOLD timeline hold types `event_moment` does not define; E3g-2 must re-sort). Mutation
+    11/27 killed; survivors: 9 chart-only (covered by the variant figure diff — accepted), the zone_proximity
+    pointer (equivalent on every contract-legal stream: a BOS moment == its cycle's EST moment <= the
+    CTS_CONFIRMED candle = `scan_start`), and the pre-existing FibTracker cond3 call sites (`:1582`, `:1661`) —
+    E3a′ changes that value and must pin it there. Tests 841 passed + 1 xfail; replay after the fixes == E2c's.
 
 ---
 
@@ -517,8 +541,8 @@ list, and the test fails. E2a extends it: `meta["cts_anchor_idx"] == ev.idx` (pr
 | **E3b** pool clock | `knowable_at_idx` (`sub_structure_pool.py:84-100`) on `ef.event_moment` for `CTS_ESTABLISHED`; the sibling-clip TIME (split in E2b; comment `:481`); `reference_zone.py:335-357` window + the recency sort key; `unified_probe._second_cts_moment` converges on `event_moment`; rewrite the false comment `reference_zone.py:344-347` (hazard H5) | **0**: no lagging EST straddles a sub cap (caps 1940, 2470, 2829, 3611, 3819, 4200) | synthetic cap in [anchor, moment); `test_sub_structure_pool.py:562-564` expectation 10 → 14. Closes PART4 §17.12 for EST |
 | **E3c** probe Phase 2 | `unified_probe.py:602` `check_lo` → moment + 1; label `cts0_est=` (`:671`) re-sourced to the moment local | **0**; run.log identical (the window's one Phase-2 run: `p2_iter=1`, lag 0) | unit on the (9, 10) fixture: `check_lo` 10 → 11 |
 | **E3d** prev-BOS filter | `orchestrator.py:279-288` `ef.event_moment(ev) >= rv_idx` over CTS_EST + CTS_UPDATED (needs E3·0; rev 1 would have raised `TypeError` at sid 1, pattern-path CTS_UPDATED 710). END value per Q6 | **0**: `[prev_bos_line] sid=1 start_idx=591 end_idx=902` | run.log identical |
-| **E3f** *(Q5 = moment)* | `compute_struct_start_by_sid` → min over moments; main `creation_event_idx` likewise or split | **measure first**. Raw base: H1 sid 0 96→115; subs 454→458, 1797→1816, 2365→2368, 2639→2649, 3304→3306, 3760→3786, 4027→4031, 3621→3656 (IN B9). Expected masked (KL/POI/fib start at moments ≥ the base) | `test_structure_lifecycle_moment.py:179-184`, `test_parent_tables.py:116` |
-| **E3g** *(Q20)* | the remaining time halves of §7.1 marked "moment" | 0 each (one `/compare` per row; chart row with the figure diff) | per row |
+| **E3f** *(Q5 = moment; landing-review note 2026-09-24: `compute_struct_start_by_sid` / `SidRecord.creation_event_idx` take a min over ALL event types — `event_moment` raises on STATE_CHANGED / RANGE_* / REVERSAL_* and is None on pattern-path CTS_UPDATED, so E3f must define the per-type moment first; the H1-overlay wave window (`w_start`) moves with it → figure diff)* | `compute_struct_start_by_sid` → min over moments; main `creation_event_idx` likewise or split | **measure first**. Raw base: H1 sid 0 96→115; subs 454→458, 1797→1816, 2365→2368, 2639→2649, 3304→3306, 3760→3786, 4027→4031, 3621→3656 (IN B9). Expected masked (KL/POI/fib start at moments ≥ the base) | `test_structure_lifecycle_moment.py:179-184`, `test_parent_tables.py:116` |
+| **E3g** *(Q20; note: E3g-2's zone_proximity timeline holds BOS_THRESHOLD_UPDATED, on which `event_moment` raises, and is SORTED by `processing_order_key` — a moment-keyed walk needs the timeline re-sorted on the moment too)* | the remaining time halves of §7.1 marked "moment" | 0 each (one `/compare` per row; chart row with the figure diff) | per row |
 
 After the last E3 stage, re-run both E4 variants; they must still equal §8.
 

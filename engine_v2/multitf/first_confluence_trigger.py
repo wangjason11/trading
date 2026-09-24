@@ -2,7 +2,7 @@
 
 Per spec §4.3.2:
   Trigger: parent BOS_CONFIRMED
-  Idx input: parent BOS extreme idx (== BOS_CONFIRMED.ev.idx)
+  Idx input: parent BOS anchor (`ef.bos_anchor_idx`, meta `bos_anchor_idx`)
   Probe probe_end_idx: the confirmed CTS's EXTREME idx (`cts_anchor_idx`) in
                  the same parent cycle — NOT the confirmation candle. None until
                  that CTS_CONFIRMED fires (pending state): the confirmation
@@ -22,6 +22,7 @@ from __future__ import annotations
 from typing import Dict, List, Tuple
 
 from engine_v2.multitf.types import FirstConfluenceTrigger
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 
 
@@ -66,7 +67,7 @@ def detect_first_confluence_triggers(
         if parent_sd == 0:
             continue
 
-        input_idx = int(ev.idx)
+        input_idx = ef.bos_anchor_idx(ev)   # the BOS anchor: the probe input / FC pool key
         trigger_event_idx = int(ev.meta.get("confirmed_at", ev.idx))
 
         cts_conf = cts_conf_by_key.get((sid, cycle_id))

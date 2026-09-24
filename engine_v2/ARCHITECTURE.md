@@ -130,6 +130,13 @@ callers import the MODULE and call it qualified (`from engine_v2.structure impor
   only the sort keys and the E2 TIME halves over mixed CTS types, each written with a `# Plan E E3x → moment`
   marker naming the stage that switches it to `ef.event_moment` (user decision 2026-09-24).
 - `CTS_UPDATED_RAW_VIA` lives here too (`market_structure` imports it).
+- **Declared raw `ev.idx` readers** (the only production reads of a `CTS_ESTABLISHED` / `BOS_CONFIRMED` index
+  outside this module after Plan E E2c): the events CSV writer (`debug/export_events.py`); the M15 mirror and the
+  sibling clip's `new_ev.idx` (they copy the raw index); KL meta `source_event_idx` (write-only; deleted in Plan E
+  E4b-pre); the `[kl_zones]` debug prints (they print the raw idx next to the anchor); the Plan A bounded-run
+  assert; the debug probe script `debug/probe_fc_finalize.py`'s Phase-2 leak check (`max_ev_idx` / `past_bound`
+  over all events — after E4 the BOS rows count at their moment, the right value for a bound check). Proof: the E4 variant replays (`plans/plan_e_inputs/review_scripts/e4flip_plugin.py`) and
+  `tests/test_e4_simulation.py` (PLAN_E §6.4, §6.7).
 
 **Bound and frequency (CTS_ESTABLISHED):** `meta["pattern_anchor_idx"]` (pattern anchor) `<= ev.idx` (CTS anchor)
 `<= meta["confirmed_at"]` (moment) `<= meta["pattern_anchor_idx"] + range_max_k (5)`. The CTS anchor (the pattern's extreme candle) precedes the moment whenever an

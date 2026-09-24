@@ -1092,7 +1092,7 @@ def export_chart_plotly(
                 cts_by_idx[p_idx].append(ev)
 
         for ev in bos_events:
-            p_idx = ev.idx
+            p_idx = ef.bos_anchor_idx(ev)   # the BOS dot sits at its anchor
             if p_idx in time_by_idx:
                 bos_by_idx[p_idx].append(ev)
 
@@ -1194,9 +1194,10 @@ def export_chart_plotly(
                 next_bos = sorted(
                     [ev for ev in bos_events
                      if int(ev.meta.get("structure_id", -1)) == next_sid],
-                    key=lambda e: int(e.idx),
+                    key=ef.bos_anchor_idx,
                 )
-                next_bos_idx = int(next_bos[0].idx) if next_bos else None
+                # The PB search's upper bound is a TIME (PLAN_E §7.1 T4).
+                next_bos_idx = ef.bos_anchor_idx(next_bos[0]) if next_bos else None  # Plan E E3g-3 → moment
 
                 # Only search for pb events between last CTS and next sid's first BOS
                 pb_after = [ev for ev in pb_state_events
@@ -1218,7 +1219,7 @@ def export_chart_plotly(
                                                  sd_for_sid, opacity, False))
                         if next_bos:
                             first_bos = next_bos[0]
-                            bos_idx = int(first_bos.idx)
+                            bos_idx = ef.bos_anchor_idx(first_bos)   # the line's BOS end (location)
                             if bos_idx in time_by_idx:
                                 bos_price = float(first_bos.price) if first_bos.price is not None else 0.0
                                 bos_time = time_by_idx[bos_idx]

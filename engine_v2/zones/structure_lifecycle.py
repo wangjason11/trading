@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
+from engine_v2.structure import event_fields as ef
+
 
 def compute_reversal_idx_by_sid(events: List) -> Dict[int, int]:
     """Reversal-confirmation idx per `structure_id` from `STATE_CHANGED` events.
@@ -156,7 +158,8 @@ def compute_struct_start_by_sid(
     """Per-`structure_id` lifecycle-start idx (the first idx a structure is active).
 
     Rule (identical for main and subordinate):
-      1. base = the structure's first structural anchor = min event idx for that sid.
+      1. base = the structure's first structural anchor = min `ef.stamped_idx` (today's
+         ev.idx; pinned against the Plan E E4 flip) for that sid.
       2. reversal handoff = sid N's lifecycle-start is the reversal-confirmation idx
          of sid N-1 (`reversal_idx_by_sid[N-1]`), overriding the min-idx base.
       3. floor = raise every sid to `lifecycle_floor` when given.
@@ -180,7 +183,9 @@ def compute_struct_start_by_sid(
         if s is None:
             continue
         s = int(s)
-        i = int(ev.idx)
+        # The lifecycle-start base: a TIME computed today from the first anchor
+        # (BOS_0's). Pinned to today's stamped idx; PLAN_E Q5 → the moment in E3f.
+        i = ef.stamped_idx(ev)  # Plan E E3f → moment
         if s not in struct_start_by_sid or i < struct_start_by_sid[s]:
             struct_start_by_sid[s] = i
     # Reversal handoff: sid N's lifecycle-start = reversal idx of sid N-1.

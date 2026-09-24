@@ -377,7 +377,10 @@ def check_zone_proximity(
         # post-CTS-confirmation state. Includes any same-idx
         # BOS_THRESHOLD_UPDATED events (sort order is `(idx, type)`,
         # alphabetical — BOS_* < CTS_*).
-        while tl_ptr < len(timeline) and timeline[tl_ptr].idx <= scan_start:
+        # The walk is a TIME pointer over the processing-ordered timeline: it
+        # must use the same stamped idx the timeline is sorted on (Plan E
+        # E3g-2 → moment, PLAN_E §7.1 T3).
+        while tl_ptr < len(timeline) and ef.stamped_idx(timeline[tl_ptr]) <= scan_start:
             running_cts, running_bos = _apply_threshold_event(
                 timeline[tl_ptr], running_cts, running_bos
             )
@@ -401,7 +404,7 @@ def check_zone_proximity(
             # own eligibility; see GOTCHAS "Narrow-Cycle Gap: Evaluate at
             # Start-of-Candle"). For i == scan_start the initial pass
             # above has already applied everything at idx ≤ scan_start.
-            while tl_ptr < len(timeline) and timeline[tl_ptr].idx < i:
+            while tl_ptr < len(timeline) and ef.stamped_idx(timeline[tl_ptr]) < i:  # Plan E E3g-2 → moment
                 running_cts, running_bos = _apply_threshold_event(
                     timeline[tl_ptr], running_cts, running_bos
                 )

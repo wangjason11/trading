@@ -9,6 +9,8 @@ marker flips them to the moment.
 from __future__ import annotations
 
 import ast
+import contextlib
+import io
 from pathlib import Path
 
 import pandas as pd
@@ -135,3 +137,63 @@ def test_no_pinned_module_sorts_events_on_a_raw_idx():
                     if any(isinstance(a, ast.Attribute) and a.attr == "idx" for a in ast.walk(kw.value.body)):
                         offenders.append(f"{rel}:{n.lineno}")
     assert offenders == []
+
+
+# --- E2c: BOS readers outside the downstream pipeline ------------------------------
+# (inside it, `test_e4_simulation` covers KL / fib / POI / wave candles / WVMI /
+# zone proximity for a BOS flip)
+
+def _e4_bos(anchor=20, moment=22, **kw):
+    from engine_v2.tests._event_factory import make_bos_confirmed
+    return make_bos_confirmed(bos_anchor_idx=anchor, confirmed_at=moment, idx=moment, **kw)
+
+
+@pytest.mark.illegal_event_contract
+def test_first_confluence_input_is_the_bos_anchor():
+    """B5 / R1: the FC probe input (the pool key) is the BOS ANCHOR; the trigger
+    fires at the moment."""
+    from engine_v2.multitf.first_confluence_trigger import detect_first_confluence_triggers
+    t, = detect_first_confluence_triggers([_e4_bos(structure_id=0, cycle_id=1, price=0.61)])
+    assert (t.input_idx, t.trigger_event_idx) == (20, 22)
+
+
+@pytest.mark.illegal_event_contract
+def test_struct_start_and_creation_idx_are_pinned_to_the_stamped_idx():
+    """B9 / B10: today's base = the first ANCHOR (BOS_0 20, not its moment 22);
+    PLAN_E Q5 moves both to the moment in E3f."""
+    from engine_v2.multitf.sid_records import build_sid_records_for_main
+    from engine_v2.zones.structure_lifecycle import compute_struct_start_by_sid
+    evs = [_e4_est(anchor=21, moment=22, structure_id=0, cycle_id=0),
+           _e4_bos(structure_id=0, cycle_id=0)]
+    assert compute_struct_start_by_sid(evs, {}, None) == {0: 20}   # Plan E E3f → 22
+    rec, = build_sid_records_for_main(evs)
+    assert rec.creation_event_idx == 20                            # Plan E E3f → 22
+
+
+@pytest.mark.illegal_event_contract
+def test_structure_levels_are_timed_at_the_anchors():
+    """L5 / B8: `structure_levels` place each CTS / BOS level at its ANCHOR candle
+    (the E2c BOS-only variant replay caught a raw `ev.idx` read here)."""
+    from engine_v2.structure.market_structure import MarketStructure
+    from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_df
+    ms = MarketStructure(_prepare_df(_make_multicycle_data()), 1)
+    ms.events = [_e4_est(anchor=9, moment=12, structure_id=0, cycle_id=1),
+                 _e4_bos(anchor=7, moment=12, structure_id=0, cycle_id=1, price=0.95)]
+    t = pd.to_datetime(ms.df["time"], utc=True)
+    cts, bos = ms._events_to_structure_levels()
+    assert (cts.kind, cts.time) == ("CTS", t.iloc[9])
+    assert (bos.kind, bos.time) == ("BOS", t.iloc[7])
+
+
+@pytest.mark.illegal_event_contract
+def test_prev_bos_line_runs_anchor_to_anchor():
+    """B6 / L9 (Q6): the line starts at sid 0's last BOS ANCHOR and ends at the
+    ANCHOR of sid 1's first CTS stamped at/after the reversal (the filter: E3d)."""
+    from engine_v2.pipeline.orchestrator import _prev_bos_lines
+    from engine_v2.structure import event_fields as ef
+    evs = [_e4_bos(anchor=7, moment=10, structure_id=0, cycle_id=1, price=0.95),
+           _e4_est(anchor=16, moment=18, structure_id=1, cycle_id=0)]
+    evs.sort(key=ef.processing_order_key)
+    with contextlib.redirect_stdout(io.StringIO()):
+        lines = _prev_bos_lines(evs, {1: 15})
+    assert [(ln["start_idx"], ln["end_idx"]) for ln in lines] == [(7, 16)]
