@@ -36,8 +36,6 @@ class FibRetracement:
     anchor_low: float
     direction: int  # +1 = bullish swing (low to high), -1 = bearish swing (high to low)
     levels: Tuple[FibLevel, ...]
-    anchor_high_idx: int = -1
-    anchor_low_idx: int = -1
     meta: Dict[str, Any] = field(default_factory=dict)
 
     def price_at_pct(self, pct: float) -> float:
@@ -99,8 +97,6 @@ def create_fib_retracement(
     direction: int,
     *,
     levels: List[float] = None,
-    anchor_high_idx: int = -1,
-    anchor_low_idx: int = -1,
     meta: Dict[str, Any] = None,
 ) -> FibRetracement:
     """
@@ -116,10 +112,6 @@ def create_fib_retracement(
         +1 bullish, -1 bearish
     levels : list of float, optional
         Fib percentages to calculate. Defaults to DEFAULT_FIB_LEVELS.
-    anchor_high_idx : int
-        DataFrame index of the high anchor
-    anchor_low_idx : int
-        DataFrame index of the low anchor
     meta : dict, optional
         Additional metadata
 
@@ -140,8 +132,6 @@ def create_fib_retracement(
         anchor_low=anchor_low,
         direction=direction,
         levels=tuple(fib_levels),
-        anchor_high_idx=anchor_high_idx,
-        anchor_low_idx=anchor_low_idx,
         meta=meta or {},
     )
 
@@ -187,7 +177,5 @@ def fib_from_swing(
         anchor_low=anchor_low,
         direction=direction,
         levels=levels,
-        anchor_high_idx=high_idx,
-        anchor_low_idx=low_idx,
         meta={"source": "swing"},
     )

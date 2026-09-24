@@ -1307,7 +1307,8 @@ on this data because `confirmed_at == CTS_EST.ev.idx` for all 6 H1 cycles
 > **Plan C (LANDED 2026-09-20) — Phase B completed on the moment.** The
 > approach-A carrier is retired: `lifecycle_end_idx` on the four trigger
 > dataclasses is **unread** (the field is kept for one commit for the
-> detectors' tests; `MultiTFTrigger.lifecycle_end_idx` likewise), and
+> detectors' tests; `MultiTFTrigger.lifecycle_end_idx` likewise — both deleted in
+> Plan E E1b, 2026-09-24), and
 > `_find_m15_lifecycle_end`, `parent_end_lookup`, `parent_struct_end_m15` and
 > `parent_cycle_floor_h1` are deleted. Both the record's start floor
 > (`parent_floor_idx = floor_m15[(S,C)]`) and the record's `parent_end`
@@ -1772,7 +1773,8 @@ Per-sid / per-sub attribution lives **in the df**, not on `EntityState`
   {`reversal`, `same_dir_replacement`, `parent_end`, None}, `lenses`,
   `relative_dir_segments`, and `meta = {natural_reversal_idx, n_records,
   first_record: {lens, parent_sid, parent_cycle_id, trigger_type, trigger_idx,
-  start_idx}, slice_begin, validated_parent_start}`. Chart identity = `sub_id`
+  start_idx}, slice_begin}` (`validated_parent_start` deleted in Plan E E1b —
+  unread). Chart identity = `sub_id`
   (`_sid_record_identity`: `sub_id` when set, else `sub_sid`).
 - **`df.attrs["triggers"]` on a lens df**: the `TriggerRecord`s whose `lens`
   is this lens, **including zero-length ones**, creation (`seq`) order —
@@ -2810,7 +2812,7 @@ structural inputs (§17.8). Do not unify them.
 | `trigger_end_idx` | the first end condition to fire (below), or the sub's frozen end on a post-end re-trigger. |
 | `end_idx` | REAL-TIME. `max(trigger_end_idx, start_idx)`; None while open. |
 | `end_reason` | `reversal` \| `same_dir_replacement` \| `parent_end` \| None. `ended_by_sub_id` names the replacing sub for `same_dir_replacement`. |
-| `starting_idx`, `direction`, `sub_tf`, `relative_dir`, `validated_parent_idx`, `probe_finalize_condition` | structural / provenance copies (denormalised for the export). `validated_parent_idx` = the candle that seeded the probe, in the frame the seed lives in (the rule that `validated_h1_start` always had): the **H1** parent BOS extreme (`FirstConfluenceTrigger.input_idx`) for `first_confluence`; the **M15** sibling CTS extreme (`ref_zone.source_event_idx`, the probe's own `input_idx`) for the three sibling types; None for reversal-born. `SidRecord.meta["validated_parent_start"]` carries the first live record's value. Diagnostic only — no lifecycle value reads it (Plan C §2.1's "H1 candle" wording was imprecise; corrected 2026-09-20). |
+| `starting_idx`, `direction`, `sub_tf`, `relative_dir`, `validated_parent_idx`, `probe_finalize_condition` | structural / provenance copies (denormalised for the export). `validated_parent_idx` = the candle that seeded the probe, in the frame the seed lives in (the rule that `validated_h1_start` always had): the **H1** parent BOS extreme (`FirstConfluenceTrigger.input_idx`) for `first_confluence`; the **M15** sibling CTS extreme (`ref_zone.source_event_idx`, the probe's own `input_idx`) for the three sibling types; None for reversal-born. The sub-level copy `SidRecord.meta["validated_parent_start"]` was deleted in Plan E E1b (unread). Diagnostic only — no lifecycle value reads it (Plan C §2.1's "H1 candle" wording was imprecise; corrected 2026-09-20). |
 | `extra_trigger_idxs` | later triggers in the same `(lens, parent_sid, parent_cycle_id)` that resolved to the same sub — **absorbed into this record**, no new record, `trigger_sub_sid` not consumed. The match includes a ZERO-LENGTH record (a re-trigger into a scope whose record was frozen — post-end or collision — is absorbed, not revived; acausal cases only). |
 
 **End conditions — record level ONLY** (the sub never has its own; it only

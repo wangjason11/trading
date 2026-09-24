@@ -22,10 +22,6 @@ class MultiTFTrigger:
     use_case: str                     # "first_counter" (formerly "uc1_reverse")
     lower_tf: str                     # "M15"
     lower_sd: int                     # struct_direction for lower TF (opposite for UC1)
-    start_time: pd.Timestamp          # H1 CTS candle time -> mapped to M15
-    start_price: float                # H1 CTS extreme price
-    lifecycle_end_idx: Optional[int]  # RETIRED (Plan C §3): unread; the parent-cycle end lives
-                                      # in `multitf/parent_tables.py`. Kept one commit for callers.
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -104,7 +100,6 @@ class SubsequentConfluenceTrigger:
     input_idx: int                     # parent-TF window extreme toward BOS
     end_idx: int                       # the CTS-prox trigger candle
     trigger_event_idx: int             # same as end_idx (CTS-prox candle)
-    lifecycle_end_idx: Optional[int] = None   # RETIRED (Plan C §3) — unread
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -142,7 +137,6 @@ class SubsequentCounterTrigger:
     input_idx: int                     # parent-TF window extreme toward CTS
     end_idx: int                       # the sd-prox trigger candle
     trigger_event_idx: int             # same as end_idx (sd-prox candle)
-    lifecycle_end_idx: Optional[int] = None   # RETIRED (Plan C §3) — unread
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -157,9 +151,8 @@ class FirstConfluenceTrigger:
     `end_idx` of PART4 §17). None (pending) until that CTS_CONFIRMED fires; a
     pending trigger is logged as `UnresolvedTrigger(reason="pending")`.
 
-    `lifecycle_end_idx` is RETIRED (Plan C §3): the parent-cycle end lives in
-    `multitf/parent_tables.py` (one helper for every record). The field is
-    kept for one commit for the detector's tests; nothing reads it.
+    The parent-cycle end lives in `multitf/parent_tables.py` (one helper for
+    every record).
     """
     parent_tf: str
     parent_sid: int
@@ -168,6 +161,5 @@ class FirstConfluenceTrigger:
     input_idx: int                     # BOS extreme idx (== BOS_CONFIRMED.ev.idx)
     probe_end_idx: Optional[int]       # CTS extreme (cts_anchor_idx) in same cycle; None = pending
     trigger_event_idx: int             # BOS_CONFIRMED.confirmed_at (candle when trigger fires)
-    lifecycle_end_idx: Optional[int] = None  # RETIRED — unread (see docstring)
     status: str = "finalized"          # "finalized" once probe_end_idx is known, else "pending"
     meta: Dict[str, Any] = field(default_factory=dict)

@@ -1026,8 +1026,7 @@ def _synth_reversal_trigger(
     the ``LowerTFResult`` / mirror / WVMI paths stay uniform. Inherits parent
     linkage + TF from the SPAWNING RECORD's own source trigger (not the
     cycle's bootstrap); ``use_case="reversal"``; ``lower_sd`` is the
-    reversal-flipped direction. ``start_time``/``start_price`` are
-    inherited-but-unused (no mapping happens for reversal records).
+    reversal-flipped direction.
     """
     return replace(
         source_trigger,
@@ -1242,7 +1241,6 @@ def render_sub_projection(
             "relative_dir_segments": tuple(sub.relative_dir_segments),
             "n_records": len(sub.records),
             "first_record": first_record,
-            "validated_h1_start": first.validated_parent_idx,
             "timeframe": timeframe,
             "use_case": first.trigger_type,
             "started_by": first.trigger_type,

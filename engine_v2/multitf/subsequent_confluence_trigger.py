@@ -14,12 +14,8 @@ same cycle's list is sd. By the alternation invariant in
 `zones/zone_proximity.py`, every opp_sd trigger past index 0 satisfies
 this — the predecessor is necessarily sd.
 
-`lifecycle_end_idx` is the next cycle's lifecycle-start —
-`CTS_ESTABLISHED.ev.idx` for `(sid, cycle_id+1)` (the CTS extreme,
-canonical per PART4 §5; B2 Phase B re-pointed this from the prior next
-BOS_CONFIRMED.confirmed_at — equal on H1) — or REVERSAL_CANDIDATE
-`apply_idx` for the same sid, whichever fires first. Mirrors the
-first_counter / first_confluence convention.
+The parent-cycle end every record uses lives in `multitf/parent_tables.py`
+(the retired `lifecycle_end_idx` was deleted in Plan E E1b).
 
 Reference-zone resolution per spec §4.3.4 step 1-5 is descriptive only;
 the probe in `compute_structure_scenario_3` derives its own BOS_0 zone
@@ -75,8 +71,6 @@ def detect_subsequent_confluence_triggers(
     list is necessarily sd by the alternation invariant).
     """
     sd_by_key: Dict[Tuple[int, int], int] = {}
-    cts_est_idx_by_key: Dict[Tuple[int, int], int] = {}
-    reversal_idx_by_sid: Dict[int, int] = {}
 
     for ev in sorted_events:
         if ev.type == "CTS_CONFIRMED":
@@ -85,19 +79,6 @@ def detect_subsequent_confluence_triggers(
                 int(ev.meta.get("cycle_id", 0)),
             )
             sd_by_key.setdefault(key, int(ev.meta.get("struct_direction", 0)))
-        elif ev.type == "CTS_ESTABLISHED":
-            key = (
-                int(ev.meta.get("structure_id", 0)),
-                int(ev.meta.get("cycle_id", 0)),
-            )
-            # Cycle lifecycle-start = CTS_ESTABLISHED.ev.idx (CTS extreme),
-            # canonical per PART4 §5 (B2 Phase B; was next BOS confirmed_at).
-            cts_est_idx_by_key[key] = int(ev.idx)
-        elif ev.type == "REVERSAL_CANDIDATE":
-            sid = int(ev.meta.get("structure_id", 0))
-            apply_idx = ev.meta.get("apply_idx")
-            if apply_idx is not None:
-                reversal_idx_by_sid[sid] = int(apply_idx)
 
     out: List[SubsequentConfluenceTrigger] = []
 
@@ -105,17 +86,6 @@ def detect_subsequent_confluence_triggers(
         parent_sd = sd_by_key.get((sid, cycle_id), 0)
         if parent_sd == 0:
             continue
-
-        next_cycle_start = cts_est_idx_by_key.get((sid, cycle_id + 1))
-        rev = reversal_idx_by_sid.get(sid)
-        if next_cycle_start is not None and rev is not None:
-            lifecycle_end_idx = min(next_cycle_start, rev)
-        elif next_cycle_start is not None:
-            lifecycle_end_idx = next_cycle_start
-        elif rev is not None:
-            lifecycle_end_idx = rev
-        else:
-            lifecycle_end_idx = None
 
         for i in range(1, len(trig_list)):
             this_t = trig_list[i]
@@ -138,7 +108,6 @@ def detect_subsequent_confluence_triggers(
                 input_idx=input_idx,
                 end_idx=this_t.idx,
                 trigger_event_idx=this_t.idx,
-                lifecycle_end_idx=lifecycle_end_idx,
                 meta={
                     "prior_sd_trigger_idx": prior_t.idx,
                     "prior_sd_zone_kind": prior_t.zone_kind,

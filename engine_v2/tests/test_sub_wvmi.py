@@ -98,9 +98,6 @@ def _make_trigger(use_case: str, parent_sid: int = 0, parent_cycle_id: int = 1,
         use_case=use_case,
         lower_tf="M15",
         lower_sd=lower_sd,
-        start_time=pd.Timestamp("2024-01-01", tz="UTC"),
-        start_price=1.0,
-        lifecycle_end_idx=None,
     )
 
 

@@ -232,8 +232,6 @@ class MarketStructureState:
     cts_confirmed_method: Optional[Literal["pullback", "sd_zone_proximity"]] = None
     # Whether a valid pullback pattern fired for the current cycle.
     pullback_fired_for_cycle: bool = False
-    # Idx where proximity confirmed CTS for the current cycle (None if not).
-    proximity_confirmed_idx: Optional[int] = None
     # Idx where CTS was confirmed (proximity or pullback, whichever first).
     # Used to bound BOS_n+1 max-retracement search.
     cts_confirmed_idx: Optional[int] = None
@@ -476,7 +474,7 @@ class MarketStructure:
         if i < 0:
             i = 0
         if i >= n:
-            return self.df, self.events, self.levels
+            return self.df, self.events, self._events_to_structure_levels()
 
         # Effective end index (inclusive) = the run's data edge (set in __init__).
         effective_end = self._effective_end
@@ -1274,13 +1272,6 @@ class MarketStructure:
                     },
                 )
             )
-
-            # CTS_UPDATED can happen while in range per your rule (only if in EST_OR_UPD track)
-            # if st.cts is not None and st.cts_phase == "EST_OR_UPD":
-            #     cts_ext = self._cts_price_at(i)
-            #     if self._is_new_cts_extreme(cts_ext):
-            #         self._emit_cts_updated(i, cts_ext, meta={"via": "range_expand"})
-            #         st.cts = Point(idx=i, price=cts_ext)
             
         # keep thresholds aligned whenever range is active
         self._sync_thresholds_from_range(i)
@@ -1562,7 +1553,6 @@ class MarketStructure:
                 # New cycle => reset proximity-based confirmation state
                 st.cts_confirmed_method = None
                 st.pullback_fired_for_cycle = False
-                st.proximity_confirmed_idx = None
                 st.cts_confirmed_idx = None
                 # Compute BOS inner for the new cycle's proximity check via
                 # the resolver wired by structure_engine.py (Part 4 §13.5.b).
@@ -1716,18 +1706,6 @@ class MarketStructure:
             cts_price = float(lows[k])
             return cts_idx, cts_price
 
-    def _cts_price_at(self, idx: int) -> float:
-        if self.struct_direction == 1:
-            return float(self._h[idx])
-        return float(self._l[idx])
-
-    def _is_new_cts_extreme(self, new_price: float) -> bool:
-        st = self.state
-        if st.cts is None:
-            return True
-        if self.struct_direction == 1:
-            return new_price > float(st.cts.price)
-        return new_price < float(st.cts.price)
     
     def _maybe_update_cts_pre_confirm(self, i: int, *, via: str) -> None:
         """
@@ -2133,7 +2111,6 @@ class MarketStructure:
             confirmation_method="sd_zone_proximity",
         )
         st.cts_phase = "CONFIRMED"
-        st.proximity_confirmed_idx = int(candle_idx)
 
         # Create range (Option B: range_lo = proximity candle's low for sd=+1)
         # Mirror the logic in _ensure_range_on_pullback's "create" branch.

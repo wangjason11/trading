@@ -1067,21 +1067,15 @@ class FibTracker:
         if sd == 1:  # Bullish
             anchor_high = cts_price
             anchor_low = bos_price
-            anchor_high_idx = cts_idx
-            anchor_low_idx = bos_idx
         else:  # Bearish
             anchor_high = bos_price
             anchor_low = cts_price
-            anchor_high_idx = bos_idx
-            anchor_low_idx = cts_idx
 
         return create_fib_retracement(
             anchor_high=anchor_high,
             anchor_low=anchor_low,
             direction=sd,
             levels=self.config.fib_levels,
-            anchor_high_idx=anchor_high_idx,
-            anchor_low_idx=anchor_low_idx,
             meta={"structure_id": sid, "cycle_id": cycle_id},
         )
 
@@ -1113,21 +1107,15 @@ class FibTracker:
         if sd == 1:  # Bullish
             anchor_high = cts_price
             anchor_low = bos_price
-            anchor_high_idx = cts_idx
-            anchor_low_idx = bos_idx
         else:  # Bearish
             anchor_high = bos_price
             anchor_low = cts_price
-            anchor_high_idx = bos_idx
-            anchor_low_idx = cts_idx
 
         fib = create_fib_retracement(
             anchor_high=anchor_high,
             anchor_low=anchor_low,
             direction=sd,
             levels=self.config.fib_levels,
-            anchor_high_idx=anchor_high_idx,
-            anchor_low_idx=anchor_low_idx,
             meta={"structure_id": sid, "cycle_id": cycle_id},
         )
 
@@ -1496,21 +1484,15 @@ class FibTracker:
         if sd == 1:
             anchor_high = cts_price
             anchor_low = state.bos_price
-            anchor_high_idx = cts_idx
-            anchor_low_idx = state.bos_idx
         else:
             anchor_high = state.bos_price
             anchor_low = cts_price
-            anchor_high_idx = state.bos_idx
-            anchor_low_idx = cts_idx
 
         new_fib = create_fib_retracement(
             anchor_high=anchor_high,
             anchor_low=anchor_low,
             direction=sd,
             levels=self.config.fib_levels,
-            anchor_high_idx=anchor_high_idx,
-            anchor_low_idx=anchor_low_idx,
             meta={"structure_id": sid, "cycle_id": cycle_id},
         )
 
@@ -2372,21 +2354,15 @@ class FibTracker:
         if sd == 1:
             anchor_high = anchor_price
             anchor_low = bos_x_price
-            anchor_high_idx = anchor_idx
-            anchor_low_idx = bos_x_idx
         else:
             anchor_high = bos_x_price
             anchor_low = anchor_price
-            anchor_high_idx = bos_x_idx
-            anchor_low_idx = anchor_idx
 
         fib = create_fib_retracement(
             anchor_high=anchor_high,
             anchor_low=anchor_low,
             direction=sd,
             levels=self.config.fib_levels,
-            anchor_high_idx=anchor_high_idx,
-            anchor_low_idx=anchor_low_idx,
             meta={"structure_id": sid, "cycle_id": target_cycle},
         )
 
@@ -2442,21 +2418,15 @@ class FibTracker:
         if sd == 1:
             anchor_high = new_anchor_price
             anchor_low = state.bos_price
-            anchor_high_idx = new_anchor_idx
-            anchor_low_idx = state.bos_idx
         else:
             anchor_high = state.bos_price
             anchor_low = new_anchor_price
-            anchor_high_idx = state.bos_idx
-            anchor_low_idx = new_anchor_idx
 
         new_fib = create_fib_retracement(
             anchor_high=anchor_high,
             anchor_low=anchor_low,
             direction=sd,
             levels=self.config.fib_levels,
-            anchor_high_idx=anchor_high_idx,
-            anchor_low_idx=anchor_low_idx,
             meta={"structure_id": state.structure_id, "cycle_id": state.cycle_id},
         )
         new_history = state.cts_history + ((new_anchor_idx, new_anchor_price),)
@@ -2496,21 +2466,15 @@ class FibTracker:
         if sd == 1:
             anchor_high = anchor_price
             anchor_low = state.bos_price
-            anchor_high_idx = anchor_idx
-            anchor_low_idx = state.bos_idx
         else:
             anchor_high = state.bos_price
             anchor_low = anchor_price
-            anchor_high_idx = state.bos_idx
-            anchor_low_idx = anchor_idx
 
         new_fib = create_fib_retracement(
             anchor_high=anchor_high,
             anchor_low=anchor_low,
             direction=sd,
             levels=self.config.fib_levels,
-            anchor_high_idx=anchor_high_idx,
-            anchor_low_idx=anchor_low_idx,
             meta={"structure_id": state.structure_id, "cycle_id": state.cycle_id},
         )
 

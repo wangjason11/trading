@@ -67,22 +67,6 @@ class StructureLevel:
 
 
 @dataclass(frozen=True)
-class Zone:
-    """A zone (KL or POI) used for context and/or entries."""
-
-    id: str
-    zone_type: Literal["KL", "POI"]
-    timeframe: str
-    formed_at: Any
-    low: float
-    high: float
-    status: Literal["active", "mitigated", "broken", "expired"] = "active"
-    strength_score: float = 0.0
-    strength_flags: List[str] = field(default_factory=list)
-    meta: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
 class TradeIntent:
     """A planned trade (not necessarily executed yet)."""
 

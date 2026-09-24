@@ -258,6 +258,23 @@ list, and the test fails. E2a extends it: `meta["cts_anchor_idx"] == ev.idx` (pr
 - **Prediction:** 24/24 byte-identical. run.log loses the `[uc1_trigger] lifecycle_end_idx=` lines and nothing else.
   Tests lose the pins in IN §1.8.
 
+### 5.1 E1 + E1b as landed (2026-09-24)
+
+- **E1 = `5facfe0`.** `/compare` measured == §4.5 exactly (47 + 5 + 1 key-text cells; 24/24 after reverse
+  substitution; the 3 chart figures JSON-identical to the baseline). Tests 789 + 1 xfail. Deviations / additions:
+  the guard needed a ZONE allow-list too (`bos_idx`, `cts_idx`, `source_event_idx` — slice-local KL meta); the
+  landing review's mutation lens found no test pinned the key's VALUE, so a pattern-bound pin (guard) + an exact
+  pin (`test_unified_probe`: OMO c0 9, close-break 11) were added; 2 GOTCHAS lines missing from §4.4 were fixed.
+  Not covered by the guard (→ E2a): `WaveCandleResult.meta["anchor_idx"]` (exported slice-local),
+  `RANGE_STARTED.meta["proximity_apply_idx"]`.
+- **E1b.** `/compare` vs E1: 24/24 byte-identical, figures identical; run.log: the 3 `[uc1_trigger]` lines lose
+  `start_time=… lifecycle_end_idx=…` (both fields deleted). Tests 783 + 1 xfail (−7 retired-chain pins, +1
+  `self.levels` pin). Deviations: (1) `debug/zone_proximity_diag.py` KEPT — the `/compare` skill ("Per-Cycle
+  Proximity Trigger Counts") and GOTCHAS use it as the per-cycle proximity tool; (2) `Subsequent*Trigger.end_idx`
+  untouched — after the unread meta `probe_end_idx` went it is unread and == `trigger_event_idx`; the sibling
+  probe's end is the sweep's `hi`, so the §1.8 rename to `probe_end_idx` would misname it (delete vs keep: open);
+  (3) the fib anchor-idx deletion reached 7 call sites (fib_tracker ×6, poi_zones ×1), not only `fibonacci.py`.
+
 ---
 
 ## 6. E2 — explicit anchor fields (four byte-identical commits; the bulk)

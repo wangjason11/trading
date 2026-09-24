@@ -178,41 +178,6 @@ def test_var4_window_includes_endpoints():
     assert out[0].input_idx == 30
 
 
-def test_lifecycle_end_uses_next_cycle_cts_established():
-    # B2 Phase B: lifecycle_end = next cycle's CTS extreme (CTS_ESTABLISHED.idx,
-    # 78), not its BOS confirmed_at (85).
-    events = [
-        _ev(20, "CTS_CONFIRMED",   sid=0, cycle=1, sd=1),
-        _ev(78, "CTS_ESTABLISHED", sid=0, cycle=2, sd=1),
-        _ev(80, "BOS_CONFIRMED",   sid=0, cycle=2, sd=1, confirmed_at=85),
-    ]
-    triggers = {
-        (0, 1): [
-            _trig(0, 1, "sd", 30),
-            _trig(0, 1, "opp_sd", 50, zone_kind="CTS"),
-            _trig(0, 1, "sd", 70),
-        ],
-    }
-    out = detect_subsequent_counter_triggers(events, triggers, _df_with_highs({}))
-    assert out[0].lifecycle_end_idx == 78
-
-
-def test_lifecycle_end_uses_reversal_when_no_next_bos():
-    events = [
-        _ev(20, "CTS_CONFIRMED",      sid=0, cycle=1, sd=1),
-        _ev(75, "REVERSAL_CANDIDATE", sid=0, cycle=1, sd=1, apply_idx=78),
-    ]
-    triggers = {
-        (0, 1): [
-            _trig(0, 1, "sd", 30),
-            _trig(0, 1, "opp_sd", 50, zone_kind="CTS"),
-            _trig(0, 1, "sd", 70),
-        ],
-    }
-    out = detect_subsequent_counter_triggers(events, triggers, _df_with_highs({}))
-    assert out[0].lifecycle_end_idx == 78
-
-
 def test_skips_cycle_without_struct_direction():
     """No CTS_CONFIRMED for a cycle → no parent_sd known → skip."""
     events: List[StructureEvent] = []

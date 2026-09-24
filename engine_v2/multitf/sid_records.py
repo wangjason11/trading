@@ -78,7 +78,7 @@ def build_sid_records_for_subordinate(
     window → `start_idx` / `end_event_idx`; `end_idx` None while open),
     `end_reason` (None while open — no fallback), `lenses`,
     `relative_dir_segments`, plus `natural_reversal_idx`, `n_records`,
-    `first_record`, `slice_begin`, `validated_h1_start` into `meta`.
+    `first_record`, `slice_begin` into `meta`.
     `sub_sid` and the parent fields are None: parent attribution lives on the
     TriggerRecord table.
     """
@@ -104,7 +104,6 @@ def build_sid_records_for_subordinate(
                 "n_records": m.get("n_records"),
                 "first_record": m.get("first_record"),
                 "slice_begin": m.get("slice_begin"),
-                "validated_parent_start": m.get("validated_h1_start"),
             },
             sub_id=int(m["sub_id"]) if m.get("sub_id") is not None else None,
             start_idx=int(start) if start is not None else None,

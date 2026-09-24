@@ -1321,15 +1321,17 @@ replay `/compare`, never tests alone. See memory
 
 ---
 
-## `MarketStructure.run()` Crashes When `start_idx >= n` (latent)
+## `MarketStructure.run()` Crashed When `start_idx >= n` — RESOLVED (Plan E E1b, 2026-09-24)
 
-**Rule:** Never call `MarketStructure.run()` (or any wrapper:
-`compute_structure_from_start`, `compute_bounded_structure`,
-`compute_structure_scenario_3`) with a `start_idx` at or past the end of
-its working df. The `i >= n` early-return at `market_structure.py:316` is
-broken.
+**Status:** FIXED. The early return now builds the levels like the normal path
+(`self._events_to_structure_levels()`, `[]` there), so `run()` with a `start_idx`
+at or past the end of its working df returns `(df, [], [])`. Pin:
+`tests/test_ms_stop_after_cts.py::test_run_with_start_past_the_frame_returns_empty_levels`.
+What follows is the record of the bug; the remaining caution is semantic — an
+empty result from a past-the-frame start is not a structure, so callers that
+stitch successors (reversal handoffs) should still treat it as "no successor".
 
-**The bug:**
+**The bug (before E1b):**
 
 ```python
 def run(self):
@@ -1805,8 +1807,8 @@ mirrored into both lenses, each with an empirical lag of 1 candle; extreme ==
 apply candle is the COMMON case — 31/34, including all five H1 cycles — not
 luck. The only bound is `pattern_anchor_idx <= idx <= confirmed_at <= pattern_anchor_idx + 5`;
 ARCHITECTURE "`ev.idx` convention"). Retired with
-it: the 4 trigger detectors' `lifecycle_end_idx` (field kept one commit,
-unread), `_find_m15_lifecycle_end`, `parent_end_lookup`, `parent_struct_end_m15`
+it: the 4 trigger detectors' `lifecycle_end_idx` (the unread field was deleted
+in Plan E E1b), `_find_m15_lifecycle_end`, `parent_end_lookup`, `parent_struct_end_m15`
 and `run_pipeline`'s `parent_cycle_floor_h1`. Same rule inside a sub:
 `compute_cycle_lifecycle` floors each sub cycle on ITS `CTS_ESTABLISHED`
 moment, so main, sub cycles and the parent table agree (expected from the plan:

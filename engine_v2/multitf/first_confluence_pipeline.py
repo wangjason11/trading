@@ -30,14 +30,9 @@ def to_multi_tf_trigger(
     trig: FirstConfluenceTrigger,
     parent_df: pd.DataFrame,
 ) -> MultiTFTrigger:
-    """Translate a FirstConfluenceTrigger into a generic MultiTFTrigger."""
-    bos_idx = int(trig.input_idx)
-    if trig.parent_sd == 1:
-        start_price = float(parent_df.loc[bos_idx, "h"])
-    else:
-        start_price = float(parent_df.loc[bos_idx, "l"])
-    start_time = pd.to_datetime(parent_df.loc[bos_idx, "time"], utc=True)
-
+    """Translate a FirstConfluenceTrigger into a generic MultiTFTrigger.
+    (`parent_df` is unused since the unread `start_time` / `start_price` were
+    deleted in Plan E E1b; the translator signature is shared by all three.)"""
     return MultiTFTrigger(
         parent_tf=trig.parent_tf,
         parent_sid=trig.parent_sid,
@@ -46,9 +41,6 @@ def to_multi_tf_trigger(
         use_case="first_confluence",
         lower_tf="M15",
         lower_sd=trig.parent_sd,        # confluence: same direction as parent
-        start_time=start_time,
-        start_price=start_price,
-        lifecycle_end_idx=trig.lifecycle_end_idx,
         meta={
             "probe_input_idx": trig.input_idx,
             "probe_end_idx": trig.probe_end_idx,

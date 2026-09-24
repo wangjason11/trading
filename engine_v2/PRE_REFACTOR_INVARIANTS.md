@@ -182,7 +182,7 @@ must replace events in the list, not mutate event objects.
 > pre-refactor snapshot and are intentionally left as written.** Under the
 > sub-structure pool (`PART4_REFACTOR_SPEC.md §17`): a *TriggerRecord* is
 > bounded by its parent cycle (`parent_end` from `multitf/parent_tables.py`;
-> the detectors' `lifecycle_end_idx` field is RETIRED and unread), while the
+> the detectors' `lifecycle_end_idx` field is RETIRED — deleted in Plan E E1b), while the
 > *unique sub* it points at is NOT parent-bound — its window is aggregated from
 > its records and spans parent cycles/sids; zones / POIs / fibs are capped at
 > the sub's `end_idx` with `end_reason` = the sub's `end_reason`

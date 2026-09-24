@@ -47,8 +47,7 @@ _UNRESOLVED_FIELDS = [f.name for f in _dc_fields(UnresolvedTrigger)]
 
 
 def _sub(sub_id, direction, starting_idx, start_idx, end_idx, end_reason,
-         natural_reversal_idx, lenses, segments, n_records, first_record,
-         validated_parent_start=None) -> SidRecord:
+         natural_reversal_idx, lenses, segments, n_records, first_record) -> SidRecord:
     """A §2.5 sub-level SidRecord (sub_sid None, sub_id set, parent fields
     None; `first_record` = the 6-key dict of the sub's first live record)."""
     return SidRecord(
@@ -62,7 +61,6 @@ def _sub(sub_id, direction, starting_idx, start_idx, end_idx, end_reason,
             "n_records": n_records,
             "first_record": dict(first_record),
             "slice_begin": starting_idx - 50,
-            "validated_parent_start": validated_parent_start,
         },
     )
 
@@ -100,14 +98,12 @@ def _confluence_fixture() -> Tuple[List[SidRecord], List[TriggerRecord]]:
              ((3819, "confluence"),), 1,
              {"lens": "confluence", "parent_sid": 1, "parent_cycle_id": 2,
               "trigger_type": "subsequent_confluence", "trigger_idx": 3819,
-              "start_idx": 3819},
-             validated_parent_start=954),
+              "start_idx": 3819}),
         _sub(7, +1, 4027, 4083, None, None, None, ("counter", "confluence"),
              ((4083, "counter"),), 2,
              {"lens": "counter", "parent_sid": 1, "parent_cycle_id": 2,
               "trigger_type": "subsequent_counter", "trigger_idx": 4083,
-              "start_idx": 4083},
-             validated_parent_start=1020),
+              "start_idx": 4083}),
     ]
     triggers = [
         TriggerRecord(

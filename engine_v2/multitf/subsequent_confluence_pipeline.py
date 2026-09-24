@@ -30,14 +30,6 @@ def to_multi_tf_trigger(
     parent_df: pd.DataFrame,
 ) -> MultiTFTrigger:
     """Translate a SubsequentConfluenceTrigger into a generic MultiTFTrigger."""
-    input_idx = int(trig.input_idx)
-    if trig.parent_sd == 1:
-        # Bullish parent: input_idx is the lowest-low candle (extreme toward BOS)
-        start_price = float(parent_df.loc[input_idx, "l"])
-    else:
-        start_price = float(parent_df.loc[input_idx, "h"])
-    start_time = pd.to_datetime(parent_df.loc[input_idx, "time"], utc=True)
-
     return MultiTFTrigger(
         parent_tf=trig.parent_tf,
         parent_sid=trig.parent_sid,
@@ -46,12 +38,8 @@ def to_multi_tf_trigger(
         use_case="subsequent_confluence",
         lower_tf="M15",
         lower_sd=trig.parent_sd,        # confluence: same direction as parent
-        start_time=start_time,
-        start_price=start_price,
-        lifecycle_end_idx=trig.lifecycle_end_idx,
         meta={
             "probe_input_idx": trig.input_idx,
-            "probe_end_idx": trig.end_idx,
             "trigger_event_idx": trig.trigger_event_idx,
             "prior_sd_trigger_idx": trig.meta.get("prior_sd_trigger_idx"),
             "sequence_index_in_cycle": trig.meta.get("sequence_index_in_cycle"),

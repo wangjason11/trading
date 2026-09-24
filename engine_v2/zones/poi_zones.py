@@ -1091,19 +1091,17 @@ def compute_poi_inners_for_cycle(
             return []
 
         if sd == 1:
-            anchor_high, anchor_high_idx = anchor_cts_price, anchor_cts_idx
-            anchor_low, anchor_low_idx = anchor_bos_price, anchor_bos_idx
+            anchor_high = anchor_cts_price
+            anchor_low = anchor_bos_price
         else:
-            anchor_high, anchor_high_idx = anchor_bos_price, anchor_bos_idx
-            anchor_low, anchor_low_idx = anchor_cts_price, anchor_cts_idx
+            anchor_high = anchor_bos_price
+            anchor_low = anchor_cts_price
 
         fib = create_fib_retracement(
             anchor_high=anchor_high,
             anchor_low=anchor_low,
             direction=sd,
             levels=DEFAULT_FIB_LEVELS,
-            anchor_high_idx=anchor_high_idx,
-            anchor_low_idx=anchor_low_idx,
             meta={"structure_id": structure_id, "cycle_id": cycle_id},
         )
         fib_state = FibState(

@@ -25,7 +25,7 @@ Conventions
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import fields as _dc_fields, replace as _dc_replace
+from dataclasses import replace as _dc_replace
 from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
@@ -1572,17 +1572,12 @@ def test_missing_parent_sd_for_a_sid_raises():
 
 
 def _multi_tf_trigger(**overrides: Any) -> MultiTFTrigger:
-    """A real `MultiTFTrigger` (the production record source). `lifecycle_end_idx`
-    is retired (§3: "keep the field for one commit") — passed only while the
-    dataclass still declares it."""
+    """A real `MultiTFTrigger` (the production record source)."""
     kwargs: Dict[str, Any] = dict(
         parent_tf="H1", parent_sid=0, parent_cycle_id=0, parent_sd=+1,
         use_case="first_confluence", lower_tf="M15", lower_sd=+1,
-        start_time=pd.Timestamp("2025-12-01 00:00", tz="UTC"), start_price=0.5700,
         meta={"trigger_event_idx": 15, "probe_end_idx": 40},
     )
-    if "lifecycle_end_idx" in {f.name for f in _dc_fields(MultiTFTrigger)}:
-        kwargs["lifecycle_end_idx"] = None
     kwargs.update(overrides)
     return MultiTFTrigger(**kwargs)
 

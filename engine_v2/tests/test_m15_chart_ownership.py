@@ -56,7 +56,6 @@ def _sub(
             "n_records": 1,
             "first_record": first_record or {},
             "slice_begin": max(0, starting_idx - 50),
-            "validated_parent_start": None,
         },
     )
 

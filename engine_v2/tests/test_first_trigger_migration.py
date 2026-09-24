@@ -217,14 +217,8 @@ def _make_trigger(
         use_case=use_case,
         lower_tf="M15",
         lower_sd=lower_sd,
-        start_time=pd.Timestamp("2024-01-01 01:00", tz="UTC"),
-        start_price=0.6005,
         meta=meta,
     )
-    # `lifecycle_end_idx` is retired as a READ (§3) but the field may survive
-    # one commit on `MultiTFTrigger`; construct it only if it still exists.
-    if any(f.name == "lifecycle_end_idx" for f in dataclasses.fields(MultiTFTrigger)):
-        kwargs["lifecycle_end_idx"] = None
     return MultiTFTrigger(**kwargs)
 
 

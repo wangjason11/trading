@@ -17,8 +17,7 @@ never read off the code's output):
       end_idx (None when open), m15_end_idx (= end_idx, or the geometry EDGE when
       open), end_reason, natural_reversal_idx, slice_begin, lenses,
       relative_dir_segments, n_records, first_record{lens, parent_sid,
-      parent_cycle_id, trigger_type, trigger_idx, start_idx},
-      validated_h1_start (= first.validated_parent_idx), timeframe, use_case,
+      parent_cycle_id, trigger_type, trigger_idx, start_idx}, timeframe, use_case,
       started_by, parent_tf, parent_sid, parent_cycle_id}` (§6.1; GLOSSARY
       "projection").
   R4  Attribution stamped on EVERY mirrored event / KL zone / POI / fib / wave /
@@ -221,9 +220,6 @@ def _trigger(m15_df: pd.DataFrame, use_case: str, parent_sid: int,
         use_case=use_case,
         lower_tf=_TF,
         lower_sd=1,
-        start_time=m15_df["time"].iloc[_STARTING_IDX],
-        start_price=float(m15_df["h"].iloc[_STARTING_IDX]),
-        lifecycle_end_idx=None,
         meta={},
     )
 
@@ -411,7 +407,6 @@ def test_trigger_is_first_live_record_by_start_then_seq(geometry, m15_df):
         "trigger_idx": b.trigger_idx,           # 57 (historical; != start_idx)
         "start_idx": b.start_idx,               # 60
     }
-    assert res.meta["validated_h1_start"] == b.validated_parent_idx == 12
     assert res.meta["use_case"] == res.meta["started_by"] == "first_confluence"
     assert res.meta["parent_sid"] == 3 and res.meta["parent_cycle_id"] == 1
 
@@ -440,7 +435,6 @@ def test_first_live_record_tie_breaks_on_seq(geometry, m15_df):
     assert res.meta["first_record"]["lens"] == LENS_CONFLUENCE
     assert res.meta["first_record"]["trigger_type"] == "subsequent_confluence"
     assert (res.meta["parent_sid"], res.meta["parent_cycle_id"]) == (4, 2)
-    assert res.meta["validated_h1_start"] == early.validated_parent_idx == 21
     assert res.trigger is not late.source_trigger and res.trigger is not tail.source_trigger
 
 
@@ -460,7 +454,7 @@ def test_meta_contract_capped_sub(geometry, m15_df):
         "sub_id", "m15_start_idx", "start_idx", "end_idx", "m15_end_idx",
         "end_reason", "natural_reversal_idx", "slice_begin", "lenses",
         "relative_dir_segments", "n_records", "first_record",
-        "validated_h1_start", "timeframe", "use_case", "started_by",
+        "timeframe", "use_case", "started_by",
         "parent_tf", "parent_sid", "parent_cycle_id",
     }
     assert required <= set(res.meta), sorted(required - set(res.meta))

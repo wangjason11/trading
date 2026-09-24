@@ -28,12 +28,12 @@ def _h1_df() -> pd.DataFrame:
     return df
 
 
-def test_to_multi_tf_trigger_bullish_parent_uses_high():
+def test_to_multi_tf_trigger_bullish_parent():
     h1_df = _h1_df()
     trig = FirstConfluenceTrigger(
         parent_tf="H1", parent_sid=0, parent_cycle_id=1, parent_sd=1,
         input_idx=50, probe_end_idx=58, trigger_event_idx=52,
-        lifecycle_end_idx=200, status="finalized",
+        status="finalized",
         meta={"bos_price": 0.6100},
     )
     out = to_multi_tf_trigger(trig, h1_df)
@@ -43,20 +43,18 @@ def test_to_multi_tf_trigger_bullish_parent_uses_high():
     assert out.parent_sid == 0
     assert out.parent_cycle_id == 1
     assert out.parent_sd == 1
-    assert out.start_price == 0.6100              # bullish parent → BOS high
-    assert out.lifecycle_end_idx == 200
     assert out.meta["probe_input_idx"] == 50
     assert out.meta["probe_end_idx"] == 58
 
 
-def test_to_multi_tf_trigger_bearish_parent_uses_low():
+def test_to_multi_tf_trigger_bearish_parent():
     h1_df = _h1_df()
     trig = FirstConfluenceTrigger(
         parent_tf="H1", parent_sid=1, parent_cycle_id=2, parent_sd=-1,
         input_idx=50, probe_end_idx=58, trigger_event_idx=52,
-        lifecycle_end_idx=None, status="finalized",
+        status="finalized",
     )
     out = to_multi_tf_trigger(trig, h1_df)
     assert out.lower_sd == -1                     # confluence with bearish parent
-    assert out.start_price == 0.5900              # bearish parent → BOS low
-    assert out.lifecycle_end_idx is None
+    assert out.meta["probe_input_idx"] == 50
+    assert out.meta["probe_end_idx"] == 58

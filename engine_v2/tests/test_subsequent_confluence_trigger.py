@@ -127,39 +127,6 @@ def test_multiple_sequential_var3_per_cycle():
     assert out[1].meta["prior_sd_trigger_idx"] == 55
 
 
-def test_lifecycle_end_uses_next_cycle_cts_established():
-    # B2 Phase B: lifecycle_end = next cycle's CTS extreme (CTS_ESTABLISHED.idx,
-    # 58), not its BOS confirmed_at (65).
-    events = [
-        _ev(20, "CTS_CONFIRMED",   sid=0, cycle=1, sd=1),
-        _ev(58, "CTS_ESTABLISHED", sid=0, cycle=2, sd=1),
-        _ev(60, "BOS_CONFIRMED",   sid=0, cycle=2, sd=1, confirmed_at=65),
-    ]
-    triggers = {
-        (0, 1): [
-            _trig(0, 1, "sd", 30),
-            _trig(0, 1, "opp_sd", 50, zone_kind="CTS"),
-        ],
-    }
-    out = detect_subsequent_confluence_triggers(events, triggers, _df_with_lows({}))
-    assert out[0].lifecycle_end_idx == 58
-
-
-def test_lifecycle_end_uses_reversal_when_no_next_bos():
-    events = [
-        _ev(20, "CTS_CONFIRMED",      sid=0, cycle=1, sd=1),
-        _ev(70, "REVERSAL_CANDIDATE", sid=0, cycle=1, sd=1, apply_idx=72),
-    ]
-    triggers = {
-        (0, 1): [
-            _trig(0, 1, "sd", 30),
-            _trig(0, 1, "opp_sd", 50, zone_kind="CTS"),
-        ],
-    }
-    out = detect_subsequent_confluence_triggers(events, triggers, _df_with_lows({}))
-    assert out[0].lifecycle_end_idx == 72
-
-
 def test_skips_cycle_without_struct_direction():
     events: List[StructureEvent] = []  # no CTS_CONFIRMED → no sd lookup
     triggers = {

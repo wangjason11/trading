@@ -507,3 +507,14 @@ class TestRebuiltPrefixException:
     def test_early_stop_equals_classify_at_exit_under_a_post_stop_rewind(self):
         on, off = _phase2_pair(_prepare_df(_make_double_rewind_data()), 17)
         assert on == off
+
+
+def test_run_with_start_past_the_frame_returns_empty_levels():
+    """`run()`'s start-past-the-frame early return used `self.levels`, an
+    attribute that never existed (AttributeError; latent, never reached on the
+    window). Plan E E1b: it builds the levels like the normal path does — from
+    the (empty) events."""
+    df = _prepare_df(_make_multicycle_data())
+    out_df, events, levels = MarketStructure(df, 1, start_idx=len(df)).run()
+    assert len(out_df) == len(df)
+    assert events == [] and levels == []

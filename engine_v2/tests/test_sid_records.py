@@ -8,7 +8,6 @@ parent attribution lives on the record table, not on the `SidRecord`.
 """
 from __future__ import annotations
 
-from dataclasses import fields as _dc_fields
 from typing import Any, Dict, Optional, Sequence, Tuple
 
 import pandas as pd
@@ -120,13 +119,7 @@ def _trigger(parent_sid: int, parent_cycle: int, lower_sd: int,
         use_case=use_case,
         lower_tf="M15",
         lower_sd=lower_sd,
-        start_time=pd.Timestamp("2026-01-01", tz="UTC"),
-        start_price=0.6000,
     )
-    # Plan C §3 retires `lifecycle_end_idx` ("keep the field for one commit if
-    # convenient, but nothing may read it") — pass it only while it exists.
-    if "lifecycle_end_idx" in {f.name for f in _dc_fields(MultiTFTrigger)}:
-        kwargs["lifecycle_end_idx"] = None
     return MultiTFTrigger(**kwargs)
 
 
@@ -142,7 +135,6 @@ def _projection_result(
     lenses: Sequence[str],
     relative_dir_segments: Sequence[Tuple[int, str]],
     first_record: Dict[str, Any],
-    validated_h1_start: Optional[int],
     n_records: int,
     m15_edge: int = 4400,
 ) -> LowerTFResult:
@@ -181,7 +173,6 @@ def _projection_result(
             "n_records": n_records,
             "first_record": dict(first_record),
             "slice_begin": starting_idx - 50,
-            "validated_h1_start": validated_h1_start,
         },
     )
 
@@ -214,7 +205,7 @@ def _predicted_table_projections():
                 "lens": "confluence", "parent_sid": 0, "parent_cycle_id": 0,
                 "trigger_type": "reversal", "trigger_idx": 2470, "start_idx": 2470,
             },
-            validated_h1_start=None, n_records=2,
+            n_records=2,
         ),
         _projection_result(
             sub_id=3, direction=-1, starting_idx=2639, start_idx=2829,
@@ -225,7 +216,7 @@ def _predicted_table_projections():
                 "lens": "confluence", "parent_sid": 0, "parent_cycle_id": 1,
                 "trigger_type": "reversal", "trigger_idx": 2829, "start_idx": 2829,
             },
-            validated_h1_start=None, n_records=2,
+            n_records=2,
         ),
         _projection_result(
             sub_id=7, direction=1, starting_idx=4027, start_idx=4083,
@@ -237,7 +228,7 @@ def _predicted_table_projections():
                 "trigger_type": "subsequent_counter", "trigger_idx": 4083,
                 "start_idx": 4083,
             },
-            validated_h1_start=1020, n_records=2,
+            n_records=2,
         ),
     ]
 
@@ -282,7 +273,7 @@ def test_subordinate_open_sub_reads_end_idx_not_m15_end_idx():
             "trigger_type": "subsequent_counter", "trigger_idx": 4083,
             "start_idx": 4083,
         },
-        validated_h1_start=1020, n_records=1, m15_edge=4400,
+        n_records=1, m15_edge=4400,
     )
     assert res.meta["m15_end_idx"] == 4400          # fixture sanity: edge is present
     out = build_sid_records_for_subordinate([res])
@@ -308,22 +299,20 @@ def test_subordinate_lenses_and_segments_are_tuples():
 
 
 def test_subordinate_meta_carries_provenance():
-    """meta = {natural_reversal_idx, n_records, first_record, slice_begin,
-    validated_parent_start} (§2.5). `first_record` is the sub's first live
-    record `(lens, parent_sid, parent_cycle_id, trigger_type, trigger_idx,
-    start_idx)`; `validated_parent_start` = the projection's
-    `validated_h1_start` (the H1 candle that seeded the first record's probe;
-    None for a reversal-born first record)."""
+    """meta = {natural_reversal_idx, n_records, first_record, slice_begin}
+    (§2.5). `first_record` is the sub's first live record `(lens, parent_sid,
+    parent_cycle_id, trigger_type, trigger_idx, start_idx)`. (The unread
+    `validated_parent_start` was deleted in Plan E E1b; the per-record value is
+    `TriggerRecord.validated_parent_idx`, exported in `_triggers.csv`.)"""
     out = build_sid_records_for_subordinate(_predicted_table_projections())
     for r in out:
         for k in ("natural_reversal_idx", "n_records", "first_record",
-                  "slice_begin", "validated_parent_start"):
+                  "slice_begin"):
             assert k in r.meta, f"meta missing {k!r}"
 
     assert [r.meta["natural_reversal_idx"] for r in out] == [2829, None, None]
     assert [r.meta["n_records"] for r in out] == [2, 2, 2]
     assert [r.meta["slice_begin"] for r in out] == [2315, 2589, 3977]   # starting_idx - 50
-    assert [r.meta["validated_parent_start"] for r in out] == [None, None, 1020]
 
     assert out[0].meta["first_record"] == {
         "lens": "confluence", "parent_sid": 0, "parent_cycle_id": 0,

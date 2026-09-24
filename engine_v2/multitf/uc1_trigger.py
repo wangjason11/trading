@@ -25,8 +25,7 @@ def detect_uc1_triggers(
     For each WVMI record (implying CTS_CONFIRMED + proximity activation):
     - Look up the CTS_CONFIRMED event for (sid, cycle_id)
     - lower_sd = opposite of H1 struct_direction
-    - start_time = time of H1 CTS candle
-    - start_price = CTS extreme (high for sd=+1, low for sd=-1)
+    - probe input = the CTS anchor (`CTS_CONFIRMED.meta["cts_anchor_idx"]`)
 
     Returns list of MultiTFTrigger.
     """
@@ -43,24 +42,6 @@ def detect_uc1_triggers(
         if ev.type == "BOS_CONFIRMED":
             key = (ev.meta.get("structure_id", 0), ev.meta.get("cycle_id", 0))
             sd_by_key[key] = int(ev.meta.get("struct_direction", 0))
-
-    # Build lifecycle end lookup: a cycle ends when the next cycle starts (its
-    # CTS_ESTABLISHED.ev.idx = CTS extreme, canonical per PART4 §5) or at the
-    # REVERSAL_CANDIDATE. B2 Phase B re-pointed the next-cycle term from the
-    # prior next BOS_CONFIRMED.confirmed_at (breakout candle; equal on H1).
-    cts_est_idx_by_key: Dict[tuple, int] = {}
-    for ev in sorted_events:
-        if ev.type == "CTS_ESTABLISHED":
-            key = (ev.meta.get("structure_id", 0), ev.meta.get("cycle_id", 0))
-            cts_est_idx_by_key[key] = int(ev.idx)
-
-    reversal_idx_by_sid: Dict[int, int] = {}
-    for ev in sorted_events:
-        if ev.type == "REVERSAL_CANDIDATE":
-            sid = ev.meta.get("structure_id", 0)
-            apply_idx = ev.meta.get("apply_idx")
-            if apply_idx is not None:
-                reversal_idx_by_sid[sid] = apply_idx
 
     triggers: List[MultiTFTrigger] = []
 
@@ -81,26 +62,9 @@ def detect_uc1_triggers(
         # cts_ev.idx = confirmation candle; cts_anchor_idx = actual CTS extreme
         cts_idx = int(cts_ev.meta.get("cts_anchor_idx", cts_ev.idx))
 
-        # Get CTS extreme price
+        # The CTS anchor seeds the probe input: it must lie inside the parent frame.
         if cts_idx not in h1_df.index:
             continue
-        if h1_sd == 1:
-            start_price = float(h1_df.loc[cts_idx, "h"])
-        else:
-            start_price = float(h1_df.loc[cts_idx, "l"])
-
-        start_time = pd.to_datetime(h1_df.loc[cts_idx, "time"], utc=True)
-
-        # Lifecycle end: next cycle's start (CTS extreme) or reversal
-        lifecycle_end_idx = None
-        next_cycle_start = cts_est_idx_by_key.get((sid, cycle_id + 1))
-        rev_idx = reversal_idx_by_sid.get(sid)
-        if next_cycle_start is not None and rev_idx is not None:
-            lifecycle_end_idx = min(next_cycle_start, rev_idx)
-        elif next_cycle_start is not None:
-            lifecycle_end_idx = next_cycle_start
-        elif rev_idx is not None:
-            lifecycle_end_idx = rev_idx
 
         trigger = MultiTFTrigger(
             parent_tf="H1",
@@ -110,16 +74,11 @@ def detect_uc1_triggers(
             use_case="first_counter",
             lower_tf="M15",
             lower_sd=-1 * h1_sd,  # Opposite direction
-            start_time=start_time,
-            start_price=start_price,
-            lifecycle_end_idx=lifecycle_end_idx,
             meta={
-                "cts_idx": cts_idx,
-                # Generic probe params consumed by _run_subordinate_probe.
-                # For first_counter the probe walks `[cts_idx,
-                # triggered_by_event_idx]` in lower_sd direction.
+                # Informational H1 input (the sweep trigger's `probe_input_idx`,
+                # exported on unresolved rows); the sibling-CTS probe co-sources
+                # its own M15 input and ends at the sweep's `hi`.
                 "probe_input_idx": cts_idx,
-                "probe_end_idx": rec.meta.get("triggered_by_event_idx"),
                 # Parent-TF candle where this trigger fires (sd zone-prox).
                 "trigger_event_idx": rec.meta.get("triggered_by_event_idx"),
             },
@@ -127,8 +86,7 @@ def detect_uc1_triggers(
         triggers.append(trigger)
         print(
             f"[uc1_trigger] sid={sid} cycle={cycle_id} h1_sd={h1_sd} "
-            f"-> M15 sd={trigger.lower_sd} start_time={start_time} "
-            f"lifecycle_end_idx={lifecycle_end_idx}"
+            f"-> M15 sd={trigger.lower_sd}"
         )
 
     return triggers
