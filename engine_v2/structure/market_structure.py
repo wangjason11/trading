@@ -35,7 +35,7 @@ from engine_v2.patterns.structure_patterns import BreakoutPatterns
 # end-of-run is safe.
 _OUT_INT_NEG1 = (
     "range_start_idx", "range_confirm_idx", "cts_idx", "bos_idx",
-    "pending_reversal_anchor_idx", "pending_reversal_apply_idx",
+    "pending_reversal_pattern_anchor_idx", "pending_reversal_apply_idx",
     "last_breakout_pat_apply_idx", "structure_id",
 )
 _OUT_INT_ZERO = (
@@ -276,7 +276,7 @@ class MarketStructureState:
 
     # Pending reversal (scheduled on BOS close-break anchor candle)
     pending_reversal_ev: Optional[PatternEvent] = None
-    pending_reversal_anchor_idx: Optional[int] = None
+    pending_reversal_pattern_anchor_idx: Optional[int] = None
     pending_reversal_apply_idx: Optional[int] = None
 
     jump_to_idx: Optional[int] = None   # next anchor override
@@ -825,7 +825,7 @@ class MarketStructure:
                 type="REVERSAL_WATCH_START",
                 price=float(bos_frozen),
                 meta={
-                    "anchor_idx": int(i),
+                    "pattern_anchor_idx": int(i),
                     "bos_frozen": float(bos_frozen),
                     "expires_idx": int(st.reversal_watch_expires_idx),
                     "structure_id": int(st.structure_id),
@@ -917,7 +917,7 @@ class MarketStructure:
     def _clear_pending_reversal(self) -> None:
         st = self.state
         st.pending_reversal_ev = None
-        st.pending_reversal_anchor_idx = None
+        st.pending_reversal_pattern_anchor_idx = None
         st.pending_reversal_apply_idx = None
 
     def _schedule_reversal_from_anchor(self, anchor_idx: int, *, bos_frozen: float) -> None:
@@ -946,12 +946,12 @@ class MarketStructure:
         # Keep earliest scheduled reversal apply
         if st.pending_reversal_apply_idx is None or int(apply_r) < int(st.pending_reversal_apply_idx):
             st.pending_reversal_ev = ev_r
-            st.pending_reversal_anchor_idx = int(anchor_idx)
+            st.pending_reversal_pattern_anchor_idx = int(anchor_idx)
             st.pending_reversal_apply_idx = int(apply_r)
 
             pat = getattr(ev_r, "pat", None) or getattr(ev_r, "pattern", None) or "?"
             self._dbg(
-                f"[RV_SCHEDULE] anchor={st.pending_reversal_anchor_idx} "
+                f"[RV_SCHEDULE] anchor={st.pending_reversal_pattern_anchor_idx} "
                 f"apply={st.pending_reversal_apply_idx} pat={pat} "
                 f"bos_frozen={bos_frozen:.5f} expires={st.reversal_watch_expires_idx}"
             )
@@ -964,7 +964,7 @@ class MarketStructure:
                     type="REVERSAL_CANDIDATE",
                     price=float(bos_frozen),
                     meta={
-                        "anchor_idx": int(anchor_idx),
+                        "pattern_anchor_idx": int(anchor_idx),
                         "apply_idx": int(apply_r),
                         "pattern": pat,
                         "bos_frozen": float(bos_frozen),
@@ -988,7 +988,7 @@ class MarketStructure:
 
         pat = getattr(st.pending_reversal_ev, "pat", None) or getattr(st.pending_reversal_ev, "pattern", None) or "?"
         self._dbg(
-            f"[RV_APPLY] i={i} anchor={st.pending_reversal_anchor_idx} "
+            f"[RV_APPLY] i={i} anchor={st.pending_reversal_pattern_anchor_idx} "
             f"apply={st.pending_reversal_apply_idx} pat={pat}"
         )
 
@@ -1511,13 +1511,15 @@ class MarketStructure:
                 # advance CTS cycle id for the new CTS
                 st.cts_cycle_id += 1
                 # self._emit_cts_established(cts_idx, cts_price, meta={"via": ev.name})
+                assert ev.start_idx is not None, "a breakout pattern always has a first candle"
                 self._emit_cts_established(
                     cts_idx,
                     cts_price,
                     meta={
                         "via": ev.name,
-                        # NEW: required for Scenario 2 Exception #2
-                        "anchor_idx": int(ev.start_idx) if ev.start_idx is not None else int(apply_idx),
+                        # The breakout pattern's FIRST candle (pattern realm; GLOSSARY "Naming Standard").
+                        # Read by wave_candles (the BIB forward scan + CTS window start).
+                        "pattern_anchor_idx": int(ev.start_idx),
                         "pattern_name": str(ev.name),
                         "confirmed_at": int(apply_idx),  # apply candle that established CTS
                     },
@@ -1901,7 +1903,7 @@ class MarketStructure:
 
         # Carry the CTS extreme price on the event so chart consumers don't have
         # to fall back to the df's cts_price column (which is NaN at the CTS-
-        # established candle's own row when confirmed_at > anchor_idx — see the
+        # established candle's own row when confirmed_at > the CTS anchor — see the
         # sd_zone_proximity path that can fire 1–2 candles after CTS_ESTABLISHED).
         cts_price_val = float(st.cts.price) if st.cts is not None else None
 
@@ -2454,7 +2456,7 @@ class MarketStructure:
                 else:
                     out[c] = float("nan")
         # pending reversal columns
-        for c in ("pending_reversal_anchor_idx", "pending_reversal_apply_idx"):
+        for c in ("pending_reversal_pattern_anchor_idx", "pending_reversal_apply_idx"):
             if c not in out.columns:
                 out[c] = -1
         # structure
@@ -2508,8 +2510,8 @@ class MarketStructure:
             float(st.reversal_bos_th_frozen) if st.reversal_bos_th_frozen is not None else float("nan")
         )
 
-        out["pending_reversal_anchor_idx"][i] = (
-            int(st.pending_reversal_anchor_idx) if st.pending_reversal_anchor_idx is not None else -1
+        out["pending_reversal_pattern_anchor_idx"][i] = (
+            int(st.pending_reversal_pattern_anchor_idx) if st.pending_reversal_pattern_anchor_idx is not None else -1
         )
         out["pending_reversal_apply_idx"][i] = (
             int(st.pending_reversal_apply_idx) if st.pending_reversal_apply_idx is not None else -1

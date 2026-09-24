@@ -387,7 +387,7 @@ class TestBOSBIB:
 
         events = [
             _make_event("CTS_ESTABLISHED", 10, 1.08, {
-                "structure_id": 0, "cycle_id": 1, "anchor_idx": 9,
+                "structure_id": 0, "cycle_id": 1, "pattern_anchor_idx": 9,
             }),
         ]
 
@@ -431,7 +431,7 @@ class TestBOSBIB:
 
         events = [
             _make_event("CTS_ESTABLISHED", 12, 1.08, {
-                "structure_id": 0, "cycle_id": 1, "anchor_idx": 11,
+                "structure_id": 0, "cycle_id": 1, "pattern_anchor_idx": 11,
             }),
             _make_event("STATE_CHANGED", 5, meta={
                 "structure_id": 0, "to": "pullback",
@@ -510,7 +510,9 @@ class TestCTSBIB:
                 "direction": -1, "c": 0.95, "l": 0.9, "h": 1.0,
                 "candle_type": "normal", "is_big_normal_as0": 0,
             })
-        # CTS_ESTABLISHED at idx=10, candle is bullish, wick enters sell zone, close within
+        # CTS_ESTABLISHED at idx=10, candle is bullish, wick enters sell zone, close within.
+        # The pattern scan-back covers [pattern_anchor_idx 9, 10): row 9 is bearish, so the
+        # event candle itself is returned.
         rows[10] = {
             "direction": 1, "c": 1.05, "l": 0.98, "h": 1.12,
             "candle_type": "normal", "is_big_normal_as0": 0,
@@ -524,7 +526,7 @@ class TestCTSBIB:
 
         events = [
             _make_event("CTS_ESTABLISHED", 10, 1.08, {
-                "structure_id": 0, "cycle_id": 1,
+                "structure_id": 0, "cycle_id": 1, "pattern_anchor_idx": 9,
             }),
             _make_event("CTS_CONFIRMED", 15, meta={
                 "structure_id": 0, "cycle_id": 1, "confirmed_at": 15,
@@ -566,7 +568,7 @@ class TestCTSBIB:
 
         events = [
             _make_event("CTS_ESTABLISHED", 10, 1.08, {
-                "structure_id": 0, "cycle_id": 1,
+                "structure_id": 0, "cycle_id": 1, "pattern_anchor_idx": 9,
             }),
             _make_event("CTS_UPDATED", 14, 1.09, {
                 "structure_id": 0, "cycle_id": 1,
@@ -607,7 +609,7 @@ class TestCTSBIB:
 
         events = [
             _make_event("CTS_ESTABLISHED", 10, 1.08, {
-                "structure_id": 0, "cycle_id": 1,
+                "structure_id": 0, "cycle_id": 1, "pattern_anchor_idx": 9,
             }),
             _make_event("CTS_CONFIRMED", 15, meta={
                 "structure_id": 0, "cycle_id": 1, "confirmed_at": 15,
@@ -702,3 +704,110 @@ class TestEmptyResults:
         assert result is not None
         assert result.last_wave_candle_idx is None
         assert result.first_wave_candle_idx is None
+
+
+# ---------------------------------------------------------------------------
+# CTS_ESTABLISHED.meta["pattern_anchor_idx"] — direct index (Plan E E1; LANDMINES
+# "Event Contract Rules" rule 3: a migrated key is read as meta[key], no fallback)
+# ---------------------------------------------------------------------------
+
+def _cts_bib_setup(n: int = 20):
+    """Sell CTS zone [1.0, 1.1]; every candle bearish (never qualifies for a
+    bullish breakout) unless a test overrides a row."""
+    rows = [{"direction": -1, "c": 0.95, "l": 0.9, "h": 1.0,
+             "candle_type": "normal", "is_big_normal_as0": 0} for _ in range(n)]
+    zone_meta = {"cycle_id": 1, "anchor_idx": 10, "base_pattern": "base inside bar", "outer": 1.1}
+    return rows, zone_meta
+
+
+_BULL_IN_ZONE = {"direction": 1, "c": 1.05, "l": 0.98, "h": 1.12,
+                 "candle_type": "normal", "is_big_normal_as0": 0}
+
+
+class TestPatternAnchorIdxDirectIndex:
+    def test_cts_bib_scans_from_the_pattern_anchor(self):
+        """The event candle 10 qualifies directly; the scan from the pattern's
+        first candle (8) returns the first pattern candle closing in the zone (9)."""
+        rows, zone_meta = _cts_bib_setup()
+        rows[9] = dict(_BULL_IN_ZONE)
+        rows[10] = dict(_BULL_IN_ZONE)
+        zone = _make_zone("sell", top=1.1, bottom=1.0, source_kind="CTS", meta=zone_meta)
+        events = [
+            _make_event("CTS_ESTABLISHED", 10, 1.08, {
+                "structure_id": 0, "cycle_id": 1, "pattern_anchor_idx": 8}),
+            _make_event("CTS_CONFIRMED", 15, meta={
+                "structure_id": 0, "cycle_id": 1, "confirmed_at": 15}),
+        ]
+        result = identify_wave_candles(
+            anchor_idx=10, anchor_type="CTS", zone=zone, events=events,
+            structure_id=0, struct_direction=1, df=_make_df(rows))
+        assert result.last_wave_candle_idx == 9
+
+    def test_cts_bib_missing_pattern_anchor_raises(self):
+        rows, zone_meta = _cts_bib_setup()
+        rows[10] = dict(_BULL_IN_ZONE)
+        zone = _make_zone("sell", top=1.1, bottom=1.0, source_kind="CTS", meta=zone_meta)
+        events = [_make_event("CTS_ESTABLISHED", 10, 1.08, {"structure_id": 0, "cycle_id": 1})]
+        with pytest.raises(KeyError, match="pattern_anchor_idx"):
+            identify_wave_candles(
+                anchor_idx=10, anchor_type="CTS", zone=zone, events=events,
+                structure_id=0, struct_direction=1, df=_make_df(rows))
+
+    def test_cts_bib_cts_updated_without_the_key_does_not_raise(self):
+        """The walk list holds CTS_UPDATED too, which carries no pattern_anchor_idx:
+        the reader tests the event type before indexing. CTS_ESTABLISHED at 10 does
+        not qualify; nothing between 11..13 does; CTS_UPDATED at 14 does."""
+        rows, zone_meta = _cts_bib_setup()
+        rows[14] = dict(_BULL_IN_ZONE)
+        zone = _make_zone("sell", top=1.1, bottom=1.0, source_kind="CTS", meta=zone_meta)
+        events = [
+            _make_event("CTS_ESTABLISHED", 10, 1.08, {
+                "structure_id": 0, "cycle_id": 1, "pattern_anchor_idx": 9}),
+            _make_event("CTS_UPDATED", 14, 1.09, {"structure_id": 0, "cycle_id": 1}),
+            _make_event("CTS_CONFIRMED", 18, meta={
+                "structure_id": 0, "cycle_id": 1, "confirmed_at": 18}),
+        ]
+        result = identify_wave_candles(
+            anchor_idx=10, anchor_type="CTS", zone=zone, events=events,
+            structure_id=0, struct_direction=1, df=_make_df(rows))
+        assert result.last_wave_candle_idx == 14
+
+    def test_cts_non_bib_window_starts_at_the_pattern_anchor(self):
+        """Non-BIB window = [max(cts_anchor_idx-5, pattern_anchor_idx), cts_anchor_idx+5]
+        = [max(5, 8), 15]: the qualifying candle at 6 lies before the pattern and is
+        skipped; the first one inside the window (9) is returned."""
+        rows, zone_meta = _cts_bib_setup()
+        zone_meta["base_pattern"] = "no base"
+        rows[6] = dict(_BULL_IN_ZONE)
+        rows[9] = dict(_BULL_IN_ZONE)
+        zone = _make_zone("sell", top=1.1, bottom=1.0, source_kind="CTS", meta=zone_meta)
+        events = [
+            _make_event("CTS_ESTABLISHED", 10, 1.08, {
+                "structure_id": 0, "cycle_id": 1, "pattern_anchor_idx": 8}),
+            _make_event("CTS_CONFIRMED", 15, meta={
+                "structure_id": 0, "cycle_id": 1, "confirmed_at": 15}),
+        ]
+        result = identify_wave_candles(
+            anchor_idx=10, anchor_type="CTS", zone=zone, events=events,
+            structure_id=0, struct_direction=1, df=_make_df(rows))
+        assert result.last_wave_candle_idx == 9
+
+    def test_cts_non_bib_missing_pattern_anchor_raises(self):
+        rows, zone_meta = _cts_bib_setup()
+        zone_meta["base_pattern"] = "no base"
+        zone = _make_zone("sell", top=1.1, bottom=1.0, source_kind="CTS", meta=zone_meta)
+        events = [_make_event("CTS_ESTABLISHED", 10, 1.08, {"structure_id": 0, "cycle_id": 1})]
+        with pytest.raises(KeyError, match="pattern_anchor_idx"):
+            identify_wave_candles(
+                anchor_idx=10, anchor_type="CTS", zone=zone, events=events,
+                structure_id=0, struct_direction=1, df=_make_df(rows))
+
+    def test_bos_bib_missing_pattern_anchor_raises(self):
+        rows, _ = _cts_bib_setup()
+        zone = _make_zone("buy", top=1.0, bottom=0.9, source_kind="BOS", meta={
+            "cycle_id": 1, "anchor_idx": 5, "base_pattern": "base inside bar", "outer": 0.9})
+        events = [_make_event("CTS_ESTABLISHED", 10, 1.08, {"structure_id": 0, "cycle_id": 1})]
+        with pytest.raises(KeyError, match="pattern_anchor_idx"):
+            identify_wave_candles(
+                anchor_idx=5, anchor_type="BOS", zone=zone, events=events,
+                structure_id=0, struct_direction=1, df=_make_df(rows))

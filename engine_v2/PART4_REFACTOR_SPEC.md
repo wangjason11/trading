@@ -1123,7 +1123,7 @@ sub cycles/structures never start before their parent.
   CTS extreme — the idx POI used). The CTS-zone end was unchanged (already this
   idx). The BOS-zone end moved from the old next-BOS-`confirmed_at` (breakout)
   to that extreme idx — identical when the breakout candle *is* the extreme,
-  else earlier (1 candle observed; bound `confirmed_at <= meta["anchor_idx"] + 5`, the pattern anchor). Empirically the H1 main was byte-identical (breakout
+  else earlier (1 candle observed; bound `confirmed_at <= meta["pattern_anchor_idx"] + 5`, the pattern anchor). Empirically the H1 main was byte-identical (breakout
   == extreme for all sampled cycles); the M15 subs (BOS-only zones) showed one
   1-candle BOS-end shift each. **Start-side change:** post-reversal cycle-0
   zones (and sub analogues) shift their active-start forward to the clamped
@@ -3031,7 +3031,7 @@ CTS_ESTABLISHED(S,C).meta["confirmed_at"]` (definitional — both are the same
 of the 34 saved `CTS_ESTABLISHED` rows — 2 unique M15 cycles; true on all 5 H1
 cycles here because extreme == apply candle is the common case, not a
 guarantee). The per-event field table (`ev.idx` vs `meta["confirmed_at"]` vs
-the `anchor_idx` keys of the two anchor realms, for every structural event) is canonical
+the anchor keys of the two anchor realms, for every structural event) is canonical
 in `ARCHITECTURE.md` "`ev.idx` convention".
 
 Reference window values: floors `(0,0)=463 (0,1)=2611 (1,x)=3611`; ends

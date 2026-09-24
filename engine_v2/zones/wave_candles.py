@@ -285,34 +285,33 @@ def _bos_bib_last_pullback(
 ) -> Optional[int]:
     """
     BOS + base inside bar: last pullback candle.
-    1. Forward search: (anchor_idx+1, first_breakout_anchor).
+    1. Forward search: (anchor_idx+1, pattern_anchor_idx) — the first breakout
+       pattern's first candle (CTS_ESTABLISHED.meta["pattern_anchor_idx"]).
        Accept only if closer to outer than BOS candle's close.
     2. Backward fallback: [most_recent_pb_idx, anchor_idx].
     """
     # Forward search
     cts_est = _find_cts_established(events, sid, cycle_id)
     if cts_est is not None:
-        first_bo_anchor = cts_est.meta.get("anchor_idx")
-        if first_bo_anchor is not None:
-            first_bo_anchor = int(first_bo_anchor)
-            # BOS candle's close distance to outer
-            bos_dist = _close_distance_to_outer(df, anchor_idx, zone)
+        pattern_anchor_idx = int(cts_est.meta["pattern_anchor_idx"])
+        # BOS candle's close distance to outer
+        bos_dist = _close_distance_to_outer(df, anchor_idx, zone)
 
-            best_idx = None
-            best_dist = float("inf")
-            for i in range(anchor_idx + 1, first_bo_anchor):
-                if i not in df.index:
-                    continue
-                if not _is_qualified(df, i, pb_dir):
-                    continue
-                d = _close_distance_to_outer(df, i, zone)
-                if d < best_dist:
-                    best_dist = d
-                    best_idx = i
+        best_idx = None
+        best_dist = float("inf")
+        for i in range(anchor_idx + 1, pattern_anchor_idx):
+            if i not in df.index:
+                continue
+            if not _is_qualified(df, i, pb_dir):
+                continue
+            d = _close_distance_to_outer(df, i, zone)
+            if d < best_dist:
+                best_dist = d
+                best_idx = i
 
-            # Accept only if closer to outer than BOS candle's close
-            if best_idx is not None and best_dist < bos_dist:
-                return best_idx
+        # Accept only if closer to outer than BOS candle's close
+        if best_idx is not None and best_dist < bos_dist:
+            return best_idx
 
     # Backward fallback
     pb_state_idx = _find_last_pullback_idx(events, sid, anchor_idx)
@@ -487,12 +486,12 @@ def _cts_bib_last_breakout(
 
         # (a) Direct check on event candle
         if _is_qualified(df, ev_idx, bo_dir) and _wick_enters_zone(df, ev_idx, zone) and _closes_within_zone(df, ev_idx, zone):
-            # For CTS_ESTABLISHED with pattern info, scan from anchor_idx forward
-            # to find the first pattern candle that closes within the zone
-            anchor = ev.meta.get("anchor_idx")
-            if anchor is not None and ev.type == "CTS_ESTABLISHED":
-                anchor = int(anchor)
-                for j in range(anchor, ev_idx):
+            # For CTS_ESTABLISHED, scan from the breakout pattern's first candle
+            # forward to find the first pattern candle that closes within the zone
+            # (CTS_UPDATED carries no pattern_anchor_idx: test the type first).
+            if ev.type == "CTS_ESTABLISHED":
+                pattern_anchor_idx = int(ev.meta["pattern_anchor_idx"])
+                for j in range(pattern_anchor_idx, ev_idx):
                     if j not in df.index:
                         continue
                     if _is_qualified(df, j, bo_dir) and _closes_within_zone(df, j, zone):
@@ -543,20 +542,19 @@ def _cts_non_bib_last_breakout(
     cycle_id: int,
 ) -> Optional[int]:
     """
-    CTS + non-BIB: window [pattern_anchor, cts_anchor_idx+5].
+    CTS + non-BIB: window [max(cts_anchor_idx-5, pattern_anchor_idx), cts_anchor_idx+5].
     First qualified candle that closes within the CTS zone.
-    Start is the anchor_idx of the breakout pattern that formed CTS_ESTABLISHED.
+    Start is the first candle of the breakout pattern that formed CTS_ESTABLISHED
+    (meta["pattern_anchor_idx"]), floored at cts_anchor_idx-5.
     """
     cts_est = _find_cts_established(events, sid, cycle_id)
-    pattern_anchor = None
+    pattern_anchor_idx = None
     if cts_est is not None:
-        pattern_anchor = cts_est.meta.get("anchor_idx")
-        if pattern_anchor is not None:
-            pattern_anchor = int(pattern_anchor)
+        pattern_anchor_idx = int(cts_est.meta["pattern_anchor_idx"])
 
     start = max(0, cts_anchor_idx - 5)
-    if pattern_anchor is not None and pattern_anchor > start:
-        start = pattern_anchor
+    if pattern_anchor_idx is not None and pattern_anchor_idx > start:
+        start = pattern_anchor_idx
     end = min(len(df) - 1, cts_anchor_idx + 5)
 
     for i in range(start, end + 1):

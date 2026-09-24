@@ -63,7 +63,9 @@ Each stage:
 - Leaves earlier columns intact
 
 ### Event contracts
-Downstream components must rely on events over inference.
+Downstream components must rely on events over inference. An `event.meta` key is renamed, or the meaning of `ev.idx` /
+`ev.price` / a meta key changed, only by an atomic migration — LANDMINES "Event Contract Rules" rule 3 (type names
+are never changed and meta fields never removed: rules 1–2).
 
 #### PatternEvent
 Produced by structure patterns:
@@ -96,13 +98,13 @@ activation gates, "knowable-at" clips) must use the **moment** column, never `ev
 
 | Event | `ev.idx` (price location — for CTS/BOS the element's anchor) | The moment (knowable at) | Other index meta |
 |---|---|---|---|
-| `CTS_ESTABLISHED` | the new cycle's CTS **anchor**: the breakout pattern's extreme candle — the FIRST argmax(`h`) (sd +1) / argmin(`l`) (sd −1) over the winning pattern's span `[start_idx, max(end_idx, confirmation_idx)]` (`_cts_from_breakout_event`) — adopted as the cycle's CTS; `ev.price` = that high/low. When the anchor precedes the apply candle it is retro-stamped: no CTS event is emitted when the anchor candle closes (raw CTS updates are off during the anchor→apply back-fill of an establishing cycle; the back-fill still runs `_bos_barrier_step` and the reversal-watch checks, which can emit their own events) | `meta["confirmed_at"]` = the pattern's apply candle (`end_idx` on SUCCESS, `confirmation_idx` on CONFIRMED). Equals the same cycle's `BOS_CONFIRMED.meta["confirmed_at"]` **by construction** (one `apply_idx`, one emission block; `multitf/parent_tables.py` asserts it) | `meta["anchor_idx"]` = the breakout pattern's FIRST candle (`ev.start_idx`, the MS scan candle) — the PATTERN-realm anchor (planned rename `pattern_anchor_idx`), **not necessarily the CTS anchor** (the two coincide when the pattern's first candle holds the extreme; 0 of 34 `CTS_ESTABLISHED` rows on the reference window) and never a timing value |
+| `CTS_ESTABLISHED` | the new cycle's CTS **anchor**: the breakout pattern's extreme candle — the FIRST argmax(`h`) (sd +1) / argmin(`l`) (sd −1) over the winning pattern's span `[start_idx, max(end_idx, confirmation_idx)]` (`_cts_from_breakout_event`) — adopted as the cycle's CTS; `ev.price` = that high/low. When the anchor precedes the apply candle it is retro-stamped: no CTS event is emitted when the anchor candle closes (raw CTS updates are off during the anchor→apply back-fill of an establishing cycle; the back-fill still runs `_bos_barrier_step` and the reversal-watch checks, which can emit their own events) | `meta["confirmed_at"]` = the pattern's apply candle (`end_idx` on SUCCESS, `confirmation_idx` on CONFIRMED). Equals the same cycle's `BOS_CONFIRMED.meta["confirmed_at"]` **by construction** (one `apply_idx`, one emission block; `multitf/parent_tables.py` asserts it) | `meta["pattern_anchor_idx"]` = the breakout pattern's FIRST candle (`ev.start_idx`, the MS scan candle) — the PATTERN-realm anchor (renamed from `anchor_idx`, Plan E E1), **not necessarily the CTS anchor** (the two coincide when the pattern's first candle holds the extreme; 0 of 34 `CTS_ESTABLISHED` rows on the reference window) and never a timing value |
 | `BOS_CONFIRMED` | the BOS **anchor**: the extreme found by the BOS search (cycle 0: the extreme in `[start, cts_idx−1]`; cycle ≥ 1: the retracement extreme) — `<= confirmed_at` on the normal path (34/34 on the reference window) but NOT asserted in code: `_select_bos_on_breakout` swaps a reversed `[window_start, apply]` window, which would put the search past the apply candle | `meta["confirmed_at"]` (the same `apply_idx` as the cycle's `CTS_ESTABLISHED`; it is only ever emitted together with one) | — |
 | `CTS_UPDATED` | the new CTS anchor. Raw path (`meta["via"] == CTS_UPDATED_RAW_VIA`, `"replay_raw"` — the constant in `structure/market_structure.py`, one definition of "raw path"): the processed candle whose wick made a new high/low — knowable at its close. Pattern path (`via` = a pattern name; a breakout while the cycle is unconfirmed): the pattern's extreme candle, which can precede the pattern's apply candle; when it precedes the apply candle and extends the extreme, a raw-path `CTS_UPDATED` at the same idx/price was already emitted at that candle's close (raw updates stay on during a non-establishing back-fill) — 1 of 37 pattern-path rows on the reference window (confluence sub 2, 2468, a same-price duplicate) | raw path: `ev.idx`. Pattern path: the apply candle, which is **NOT recorded** (no `confirmed_at` on any `CTS_UPDATED`; `event_moment` returns `None`) | — |
 | `CTS_CONFIRMED` / `CTS_RECONFIRMED` | the confirmation candle (pullback apply candle, or the proximity candle) | `ev.idx` == `meta["confirmed_at"]` | `CTS_CONFIRMED.meta["cts_anchor_idx"]` = `st.cts.idx` at confirmation = the CURRENT CTS anchor (equals `CTS_ESTABLISHED.idx` unless a `CTS_UPDATED` moved it). Measured: equal to the same cycle's `CTS_ESTABLISHED.idx` on only 7 of the 30 `CTS_CONFIRMED` rows on the reference window (6 of 25 unique cycles; sub 7 cycle 1 is on both lenses) — never assume either way |
 | `CTS_THRESHOLD_UPDATED` | NOT a price location: the processing candle whose range sync moved the CTS threshold — emitted only by `_sync_thresholds_from_range(i)` (active-range upkeep `_update_active_range(i)`, a pullback's apply candle, the sd-proximity confirmation candle); `ev.price` = the new threshold (the range breakout bound) | `ev.idx` | — (`meta["prev"]` is a price) |
-| `REVERSAL_CANDIDATE` | the reversal pattern's first candle — its pattern-realm anchor (`meta["anchor_idx"]`, same value; = the close-break candle) | `meta["apply_idx"]` = the SCHEDULED apply — a prediction that can expire; the confirmed reversal is `STATE_CHANGED(to=reversal)` at its `ev.idx` | `meta["expires_idx"]` — slice-local (not shifted by `slice_begin`) in the M15 lens CSVs |
-| `REVERSAL_WATCH_START` | the close-break candle MS processed when it emitted it (`_bos_barrier_step`) | `ev.idx` | `meta["anchor_idx"]` = that same close-break candle; `meta["expires_idx"]` — slice-local in the M15 lens CSVs |
+| `REVERSAL_CANDIDATE` | the reversal pattern's first candle — its pattern-realm anchor (`meta["pattern_anchor_idx"]`, same value; = the close-break candle) | `meta["apply_idx"]` = the SCHEDULED apply — a prediction that can expire; the confirmed reversal is `STATE_CHANGED(to=reversal)` at its `ev.idx` | `meta["expires_idx"]` — slice-local (not shifted by `slice_begin`) in the M15 lens CSVs |
+| `REVERSAL_WATCH_START` | the close-break candle MS processed when it emitted it (`_bos_barrier_step`) | `ev.idx` | `meta["pattern_anchor_idx"]` = that same close-break candle; `meta["expires_idx"]` — slice-local in the M15 lens CSVs |
 | `STATE_CHANGED` | the candle at which the state change takes effect: the processed candle, a pattern's apply candle, or a range's confirm candle | `ev.idx` | `meta["effective_idx"]` defaults to `ev.idx` but is the range-start anchor for `to=range` (`reason="range_confirmed"`), and is slice-local (not shifted by `slice_begin`) in the M15 lens CSVs |
 
 Not audited in this table: `RANGE_*` and `BOS_THRESHOLD_UPDATED` (`RANGE_STARTED` from
@@ -117,8 +119,8 @@ pattern path (no recorded moment), `CTS_THRESHOLD_UPDATED` → `ev.idx`; any oth
 consumer must first define its event's moment in `event_moment`). Why it matters: IMBALANCE_FILL_SEMANTICS.md
 "Knowability — the c3 rule".
 
-**Bound and frequency (CTS_ESTABLISHED):** `meta["anchor_idx"]` (pattern anchor) `<= ev.idx` (CTS anchor)
-`<= meta["confirmed_at"]` (moment) `<= meta["anchor_idx"] + range_max_k (5)`. The CTS anchor (the pattern's extreme candle) precedes the moment whenever an
+**Bound and frequency (CTS_ESTABLISHED):** `meta["pattern_anchor_idx"]` (pattern anchor) `<= ev.idx` (CTS anchor)
+`<= meta["confirmed_at"]` (moment) `<= meta["pattern_anchor_idx"] + range_max_k (5)`. The CTS anchor (the pattern's extreme candle) precedes the moment whenever an
 earlier pattern candle (SUCCESS path) or a candle the confirmation search SKIPPED (CONFIRMED path, `_price_confirmation` / `_price_confirmation_1step` (continuous) — wrong direction,
 wrong candle type (e.g. a pinbar), or a close just short of the threshold) holds the extreme. CTS anchor (`ev.idx`) == apply
 candle is the COMMON case, not luck: on the reference window 31 of 34 CSV rows; the 3 others are 2 unique M15 cycles (sub 3 is mirrored into
@@ -126,11 +128,11 @@ both lenses), both `one_maru_opposite` CONFIRMED with lag 1 — sub 0 cyc 2: 122
 skipped by the type filter, holds the highest high) vs 1224; sub 3 cyc 1: 2828 (closes 0.2 pip
 short of the threshold, prints the lowest low) vs 2829. All five H1 cycles have lag 0.
 
-**"Anchor" has two realms (GLOSSARY "Naming Standard") — the bare key `anchor_idx` exists in both today,
-so never compare it across event / zone types.** *Pattern realm* — a candle pattern's FIRST candle:
-`CTS_ESTABLISHED.meta["anchor_idx"]` (the breakout pattern) and `REVERSAL_CANDIDATE` /
-`REVERSAL_WATCH_START.meta["anchor_idx"]` (the close-break candle = the first candle of the reversal
-pattern searched from it); planned rename `pattern_anchor_idx`. *Market-structure realm* — an ENDPOINT
+**"Anchor" has two realms (GLOSSARY "Naming Standard"); the key names which one.** *Pattern realm* — a
+candle pattern's FIRST candle, event meta `pattern_anchor_idx` (Plan E E1, 2026-09-24; was the bare
+`anchor_idx`): `CTS_ESTABLISHED.meta["pattern_anchor_idx"]` (the breakout pattern) and `REVERSAL_CANDIDATE` /
+`REVERSAL_WATCH_START.meta["pattern_anchor_idx"]` (the close-break candle = the first candle of the reversal
+pattern searched from it). *Market-structure realm* — an ENDPOINT
 (start or end) of a structure element: `CTS_CONFIRMED.meta["cts_anchor_idx"]` (the CTS anchor at
 confirmation), KL-zone `meta["anchor_idx"]` (the BOS anchor for a BOS zone, the CTS anchor for a CTS
 zone — the candle its base pattern is found around, `zones/KL_ZONES_SPEC.md`), the fib anchors.

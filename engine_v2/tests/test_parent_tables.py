@@ -49,7 +49,7 @@ def _cts_est(idx: int, sid: int, cycle: int, confirmed_at: int, sd: int = 1) -> 
     # market_structure._emit_cts_established stamps confirmed_at = the apply candle;
     # `idx` is the CTS EXTREME (historical) and may precede confirmed_at.
     return _ev(idx, "CTS_ESTABLISHED", sid, cycle, sd, confirmed_at=confirmed_at,
-               anchor_idx=idx - 1, pattern_name="one_maru_continuous")
+               pattern_anchor_idx=idx - 1, pattern_name="one_maru_continuous")
 
 
 def _bos(idx: int, sid: int, cycle: int, confirmed_at: int, sd: int = 1) -> StructureEvent:
@@ -66,7 +66,7 @@ def _reversal(idx: int, sid: int, sd: int = 1) -> StructureEvent:
 
 def _rev_candidate(idx: int, sid: int, apply_idx: int, sd: int = 1) -> StructureEvent:
     # A prediction, not a lifecycle fact: MUST be ignored by the tables.
-    return _ev(idx, "REVERSAL_CANDIDATE", sid, None, sd, anchor_idx=idx, apply_idx=apply_idx,
+    return _ev(idx, "REVERSAL_CANDIDATE", sid, None, sd, pattern_anchor_idx=idx, apply_idx=apply_idx,
                expires_idx=apply_idx)
 
 

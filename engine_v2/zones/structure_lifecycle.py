@@ -70,8 +70,8 @@ def compute_cycle_lifecycle(
         Plan C 2026-09-19)`, struct_start, floor)`. NOT `CTS_ESTABLISHED.ev.idx`,
         which is the CTS ANCHOR (the pattern's extreme candle) — a historical
         price location exactly like `BOS_CONFIRMED.idx` — and can precede the
-        apply candle (bound `meta["anchor_idx"]` (the PATTERN anchor) `<= ev.idx <=
-        confirmed_at <= meta["anchor_idx"] + range_max_k`; CTS anchor == moment is
+        apply candle (bound `meta["pattern_anchor_idx"]` `<= ev.idx <=
+        confirmed_at <= meta["pattern_anchor_idx"] + range_max_k`; CTS anchor == moment is
         the common case — ARCHITECTURE "`ev.idx` convention").
         `struct_start` from `compute_struct_start_by_sid` already embeds the
         reversal handoff and, for subs, both parent floors via `lifecycle_floor`.

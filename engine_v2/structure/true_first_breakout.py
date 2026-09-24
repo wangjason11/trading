@@ -73,7 +73,7 @@ class TrueFirstBreakout:
     so MS can drive its existing establishment path with it.
     """
     pattern: PatternEvent
-    anchor_idx: int      # pattern start_idx (the breakout anchor)
+    pattern_anchor_idx: int  # the breakout pattern's first candle (pattern.start_idx)
     est_idx: int         # apply/confirm idx (= cycle-0 establishment candle)
     extreme_idx: int     # full-pattern extreme candle idx (incl. confirm candle)
     extreme_price: float  # the strict new-extreme value
@@ -205,7 +205,7 @@ def find_true_first_breakout(
     - Indices are POSITIONAL (the detectors use `df.iloc`; callers pass
       positional `start`/`end`). `df` is assumed 0-based RangeIndexed
       (loc == iloc), the standard MS / slice convention.
-    - A candidate's apply/confirm idx is always `>= anchor_idx + 1`, so
+    - A candidate's apply/confirm idx is always `>= pattern_anchor_idx + 1`, so
       once a best `est_idx = E` is found, no anchor at `idx >= E` can
       tie or beat it (its est would be `>= idx + 1 > E`). The scan stops
       there — bounding work to roughly `[current_start, CTS_0_EST]`.
@@ -246,7 +246,7 @@ def find_true_first_breakout(
                 best_key = key
                 best = TrueFirstBreakout(
                     pattern=pat,
-                    anchor_idx=int(pat.start_idx),
+                    pattern_anchor_idx=int(pat.start_idx),
                     est_idx=int(est),
                     extreme_idx=int(ext_idx),
                     extreme_price=float(ext_price),

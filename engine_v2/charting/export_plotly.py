@@ -1547,15 +1547,15 @@ def export_chart_plotly(
             ev for ev in structure_events
             if getattr(ev, "type", None) == "REVERSAL_CANDIDATE"
         ]
-        # Map anchor_idx to REVERSAL_CANDIDATE event (if pattern found)
-        rc_by_anchor = {int(ev.meta.get("anchor_idx", ev.idx)): ev for ev in reversal_candidates}
+        # Map the close-break candle (meta pattern_anchor_idx) to its REVERSAL_CANDIDATE (if pattern found)
+        rc_by_anchor = {int(ev.meta["pattern_anchor_idx"]): ev for ev in reversal_candidates}
 
         if reversal_watch_starts:
             # Group events by idx to detect overlaps (multiple structures at same candle)
             from collections import defaultdict
             events_by_idx = defaultdict(list)
             for ev in reversal_watch_starts:
-                idx = int(ev.meta.get("anchor_idx", ev.idx))
+                idx = int(ev.meta["pattern_anchor_idx"])
                 if idx in dfx.index:
                     events_by_idx[idx].append(ev)
 

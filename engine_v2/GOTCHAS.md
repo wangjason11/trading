@@ -554,7 +554,7 @@ fig.add_trace(go.Scatter(x=[time] * _n_pts, y=_y_pts, mode="lines", ...))
 
 **BOS zones** (both BIB and non-BIB) select last pullback by **closest to outer bound** — the candle whose close is nearest the zone's outer threshold wins, regardless of time order.
 
-**CTS zones** select last breakout by **first qualified candle closing within the zone** — temporal order wins. The (non-BIB) search window is `[max(anchor_idx, cts_anchor_idx - 5), cts_anchor_idx + 5]` — it starts at the establishing breakout pattern's `anchor_idx` (`CTS_ESTABLISHED.meta`, the breakout pattern's FIRST candle — not necessarily the extreme (it is when the first candle holds it; 0 of 34 on the reference window)), or at `cts_anchor_idx - 5` if that is LATER (or there is no `anchor_idx`); `cts_anchor_idx` is the zone's anchor, the CTS extreme at confirmation (`_cts_non_bib_last_breakout`).
+**CTS zones** select last breakout by **first qualified candle closing within the zone** — temporal order wins. The (non-BIB) search window is `[max(pattern_anchor_idx, cts_anchor_idx - 5), cts_anchor_idx + 5]` — it starts at `CTS_ESTABLISHED.meta["pattern_anchor_idx"]` (the breakout pattern's FIRST candle — not necessarily the extreme (it is when the first candle holds it; 0 of 34 on the reference window)), or at `cts_anchor_idx - 5` if that is LATER (or the cycle has no `CTS_ESTABLISHED`); `cts_anchor_idx` is the zone's anchor, the CTS extreme at confirmation (`_cts_non_bib_last_breakout`).
 
 **Gotcha:** When debugging wave candle selection, check which zone type it is first. BOS uses distance metric, CTS uses first-match.
 
@@ -585,7 +585,7 @@ extreme from the structure events — the CTS KL zone is anchored at
 same source the zones came from. That equals `CTS_ESTABLISHED.idx` only when no
 `CTS_UPDATED` moved the extreme (7 of the 30 `CTS_CONFIRMED` rows on the
 reference window — 6 of 25 unique cycles; see ARCHITECTURE.md "`ev.idx`
-convention"), and `CTS_ESTABLISHED.meta["anchor_idx"]` is the breakout pattern's
+convention"), and `CTS_ESTABLISHED.meta["pattern_anchor_idx"]` is the breakout pattern's
 FIRST candle — not necessarily the extreme (it is when the first candle holds
 it; 0 of 34 on the reference window) — ARCHITECTURE.md "`ev.idx` convention".
 
@@ -598,23 +598,24 @@ it; 0 of 34 on the reference window) — ARCHITECTURE.md "`ev.idx` convention".
 
 ## CTS BIB Last Breakout: Pattern Scan-Back for CTS_ESTABLISHED
 
-**Problem:** In `_cts_bib_last_breakout`, when the CTS_ESTABLISHED event candle is a direct match (qualified + wick enters zone + closes within zone), the algorithm returned it immediately. But the event candle (`ev.idx`) is the pattern-span **extreme**, never before `anchor_idx` — usually the pattern's last (apply) candle (31 of 34 `CTS_ESTABLISHED` rows on the reference window), sometimes an interior one (M15 sub 0 cycle 2: `ev.idx=1223` in span 1221..1224; ARCHITECTURE.md "`ev.idx` convention"). Either way, earlier candles in the pattern may also close within the zone and better represent the initial breakout moment.
+**Problem:** In `_cts_bib_last_breakout`, when the CTS_ESTABLISHED event candle is a direct match (qualified + wick enters zone + closes within zone), the algorithm returned it immediately. But the event candle (`ev.idx`) is the pattern-span **extreme**, never before `meta["pattern_anchor_idx"]` — usually the pattern's last (apply) candle (31 of 34 `CTS_ESTABLISHED` rows on the reference window), sometimes an interior one (M15 sub 0 cycle 2: `ev.idx=1223` in span 1221..1224; ARCHITECTURE.md "`ev.idx` convention"). Either way, earlier candles in the pattern may also close within the zone and better represent the initial breakout moment.
 
-**Example:** CTS_ESTABLISHED at idx=636 with `anchor_idx=634` (pattern=one_maru_continuous spans 634-636). idx=635 is a qualified maru that also closes within the zone, but the old code returned 636 without checking.
+**Example:** CTS_ESTABLISHED at idx=636 with `pattern_anchor_idx=634` (pattern=one_maru_continuous spans 634-636). idx=635 is a qualified maru that also closes within the zone, but the old code returned 636 without checking.
 
-**Fix:** When CTS_ESTABLISHED event candle matches AND has `anchor_idx` in meta, scan from `anchor_idx` forward to `ev_idx` (exclusive). Return the first qualified candle closing within the zone. If none found, fall back to the event candle.
+**Fix:** When the CTS_ESTABLISHED event candle matches, scan from `meta["pattern_anchor_idx"]` forward to `ev_idx` (exclusive). The key is on every CTS_ESTABLISHED and is read by direct index (LANDMINES "Event Contract Rules" rule 3) — test the type FIRST, because the walk list also holds `CTS_UPDATED`, which does not carry it. Return the first qualified candle closing within the zone. If none found, fall back to the event candle.
 
 ```python
-anchor = ev.meta.get("anchor_idx")
-if anchor is not None and ev.type == "CTS_ESTABLISHED":
-    anchor = int(anchor)
-    for j in range(anchor, ev_idx):
+if ev.type == "CTS_ESTABLISHED":
+    pattern_anchor_idx = int(ev.meta["pattern_anchor_idx"])
+    for j in range(pattern_anchor_idx, ev_idx):
+        if j not in df.index:
+            continue
         if _is_qualified(df, j, bo_dir) and _closes_within_zone(df, j, zone):
             return j
 return ev_idx
 ```
 
-**Why only CTS_ESTABLISHED:** it is the only CTS event whose meta carries `anchor_idx` (the pattern's first candle — where the scan-back starts). A raw-path `CTS_UPDATED` (`via="replay_raw"`) is a single-candle wick extension with no pattern at all. A pattern-path `CTS_UPDATED` (a breakout while the cycle is still unconfirmed) DOES carry pattern info — the pattern name in `via` — but records neither `anchor_idx` nor `confirmed_at` (37 of 426 `CTS_UPDATED` rows on the reference window are pattern-path), so there is no pattern start to scan back from.
+**Why only CTS_ESTABLISHED:** it is the only CTS event whose meta carries `pattern_anchor_idx` (the pattern's first candle — where the scan-back starts). A raw-path `CTS_UPDATED` (`via="replay_raw"`) is a single-candle wick extension with no pattern at all. A pattern-path `CTS_UPDATED` (a breakout while the cycle is still unconfirmed) DOES carry pattern info — the pattern name in `via` — but records neither `pattern_anchor_idx` nor `confirmed_at` (37 of 426 `CTS_UPDATED` rows on the reference window are pattern-path), so there is no pattern start to scan back from.
 
 ---
 
@@ -681,7 +682,7 @@ zones.
 **Related fields** (full table: ARCHITECTURE.md "`ev.idx` convention"):
 - `ev.idx` = confirmation candle — the pullback pattern's apply candle, or the proximity candle when `meta["confirmation_method"] == "sd_zone_proximity"` (2 of 30 rows on the reference window)
 - `ev.meta["confirmed_at"]` = same as `ev.idx` (confirmation candle)
-- `ev.meta["cts_anchor_idx"]` = CTS extreme candle (where high/low was set) — the CURRENT extreme at confirmation (`st.cts.idx`), so it equals `CTS_ESTABLISHED.idx` only when no `CTS_UPDATED` moved it (7 of the 30 `CTS_CONFIRMED` rows on the reference window — 6 of 25 unique cycles; see ARCHITECTURE.md "`ev.idx` convention"). Not the same field as `CTS_ESTABLISHED.meta["anchor_idx"]` (the breakout pattern's first candle).
+- `ev.meta["cts_anchor_idx"]` = CTS extreme candle (where high/low was set) — the CURRENT extreme at confirmation (`st.cts.idx`), so it equals `CTS_ESTABLISHED.idx` only when no `CTS_UPDATED` moved it (7 of the 30 `CTS_CONFIRMED` rows on the reference window — 6 of 25 unique cycles; see ARCHITECTURE.md "`ev.idx` convention"). Not the same field as `CTS_ESTABLISHED.meta["pattern_anchor_idx"]` (the breakout pattern's first candle).
 
 ---
 
@@ -1838,9 +1839,9 @@ points at the mapper (or at L5b, the probe's ad-hoc BOS_0 read).
 `CTS_CONFIRMED.meta`, the probe bound) vs the probe's own M15 `cts0_anchor`
 (Phase-2 MS `CTS_0_CONFIRMED`). Conflating them cost a full discussion round.
 The parent's `cts_anchor_idx` is a market-structure-realm anchor (the CTS endpoint).
-The bare key `anchor_idx` also exists in the pattern realm — e.g.
-`CTS_ESTABLISHED.meta["anchor_idx"]` is the breakout pattern's FIRST candle — so never
-compare anchor fields across event / zone types (GLOSSARY "Naming Standard";
+A pattern-realm anchor is a different thing — e.g.
+`CTS_ESTABLISHED.meta["pattern_anchor_idx"]` is the breakout pattern's FIRST candle — so never
+compare anchor fields across realms (GLOSSARY "Naming Standard";
 ARCHITECTURE.md "`ev.idx` convention", "Anchor has two realms").
 
 ---

@@ -115,9 +115,9 @@ class BreakoutPatterns:
         c1 = self._row(i + 1)
         return max(c0.h, c1.h) if direction == 1 else min(c0.l, c1.l)
 
-    def _price_confirmation(self, anchor_idx: int, direction: int, threshold: float) -> Tuple[bool, Optional[int]]:
+    def _price_confirmation(self, pattern_end_idx: int, direction: int, threshold: float) -> Tuple[bool, Optional[int]]:
         for j in range(1, 5):
-            k = anchor_idx + j
+            k = pattern_end_idx + j
             if k >= self.n_visible:
                 break
             fwd = self._row(k)
@@ -136,7 +136,7 @@ class BreakoutPatterns:
             return event
 
         ok, conf_idx = self._price_confirmation(
-            anchor_idx=event.end_idx,
+            pattern_end_idx=event.end_idx,
             direction=event.direction,
             threshold=event.confirmation_threshold,
         )
@@ -148,17 +148,17 @@ class BreakoutPatterns:
             )
         return event
     
-    def _price_confirmation_1step(self, anchor_end_idx: int, direction: int, threshold: float) -> Tuple[bool, Optional[int]]:
+    def _price_confirmation_1step(self, pattern_end_idx: int, direction: int, threshold: float) -> Tuple[bool, Optional[int]]:
         """
         Continuous-only confirmation:
-        - Look ahead up to 3 candles from anchor_end_idx
+        - Look ahead up to 3 candles from pattern_end_idx
         - Candle must be normal/maru
         - Candle direction must match `direction`
         - Close must break beyond `threshold` in the direction
         - Returns the first qualifying candle found
         """
         for offset in range(1, 4):
-            k = int(anchor_end_idx) + offset
+            k = int(pattern_end_idx) + offset
             if k >= self.n_visible:
                 return False, None
 
@@ -333,7 +333,7 @@ class BreakoutPatterns:
                 return ev
 
             ok, conf_idx = self._price_confirmation_1step(
-                anchor_end_idx=ev.end_idx,
+                pattern_end_idx=ev.end_idx,
                 direction=ev.direction,
                 threshold=float(ev.confirmation_threshold),
             )
@@ -635,7 +635,7 @@ class BreakoutPatterns:
         # NEW: continuous confirm (1-step)
         if cont is not None and cont.status == PatternStatus.FAIL_NEEDS_CONFIRM:
             ok, conf_idx = self._price_confirmation_1step(
-                anchor_end_idx=cont.end_idx,
+                pattern_end_idx=cont.end_idx,
                 direction=cont.direction,
                 threshold=float(cont.confirmation_threshold),
             )
@@ -703,7 +703,7 @@ class BreakoutPatterns:
         # NEW: continuous confirmation (priority first in confirm stage)
         if cont is not None and cont.status == PatternStatus.FAIL_NEEDS_CONFIRM and cont.confirmation_threshold is not None:
             ok, conf_idx = self._price_confirmation_1step(
-                anchor_end_idx=cont.end_idx,
+                pattern_end_idx=cont.end_idx,
                 direction=cont.direction,
                 threshold=float(cont.confirmation_threshold),
             )

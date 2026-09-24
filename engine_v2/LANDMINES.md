@@ -34,17 +34,29 @@ candle features → structure patterns → imbalance → market structure → KL
 Events are the communication backbone of the system. Breaking contracts causes cascading failures.
 
 **Rules:**
-1. **Never change event type names** — downstream consumers filter by exact string match
-2. **Never remove fields from event.meta** — existing code may depend on them
-3. **Adding fields is OK** — but document them in the relevant spec file
-4. **Events are append-only** — never modify an event after it's emitted
-5. **Events must include structure_id** — so downstream consumers can filter by structure
+1. **Never change event type names** — downstream consumers filter by exact string match.
+2. **Never remove a field from `event.meta`.** Existing code may depend on it.
+3. **Never rename an `event.meta` key, or change the meaning of an event field (`ev.idx`, `ev.price` or a meta
+   key), except by an atomic migration.**
+   - The migration is declared in its commit message together with its `/compare` prediction: the exact CSV cells
+     and run.log lines that may change.
+   - The **migration commit** — the one in which the emitted key or meaning changes — also moves every site that
+     reads **or writes** the field (production, debug, charts, test fixtures), every registry that lists it (e.g.
+     `_EVENT_META_IDX_KEYS`), and every current doc and skill that names it. Dated records (landed plans, save
+     folders, commit messages) are history and stay as written; memory is updated at the same checkpoint.
+   - The emitter sets the key on every event of that type (`None` allowed). Every `.get(key)`,
+     `.get(key, default)` and `key in meta` read of it becomes `meta[key]`. **No alias** is kept.
+   - Readers may be made independent of a meaning change in earlier commits (e.g. by routing them through an
+     accessor). The migration commit must then carry a proof that no reader still depends on the old meaning: a
+     variant replay or test whose diff is exactly the declared cells.
+4. **Adding fields is OK** — document them in the relevant spec file.
+5. **Events are append-only** — never modify an event after it's emitted
+6. **Events must include structure_id** — so downstream consumers can filter by structure
 
-> **Planned amendment (user-agreed 2026-09-23; exact wording to be approved in Plan E stage E1 —
-> `plans/PLAN_E_inputs.md`):** a meta-key rename becomes allowed ONLY as an atomic migration — the emitter,
-> every reader and the docs move in one commit, `.get(key, fallback)` reads of that key become direct
-> indexing, and no alias is kept. First use: `anchor_idx` → `pattern_anchor_idx`. Until E1 lands, rules 1–2
-> bind as written.
+Rule 3 was approved by the user on 2026-09-24 (Plan E §4.2). First use: E1, the pattern-realm event key
+`anchor_idx` → `pattern_anchor_idx` on `CTS_ESTABLISHED` / `REVERSAL_CANDIDATE` / `REVERSAL_WATCH_START`.
+`tests/test_event_meta_idx_keys.py` guards the registry half: an index-valued event/zone meta key must be in
+`_EVENT_META_IDX_KEYS` / `_ZONE_META_IDX_KEYS` or in the test's explicit slice-local allow-list.
 
 **Key events and their consumers:**
 | Event Type | Primary Consumer |
@@ -1791,7 +1803,7 @@ whenever the CTS extreme precedes the apply candle (on the reference window 3
 of the 34 `CTS_ESTABLISHED` CSV rows = 2 unique M15 sub cycles, sub 3 being
 mirrored into both lenses, each with an empirical lag of 1 candle; extreme ==
 apply candle is the COMMON case — 31/34, including all five H1 cycles — not
-luck. The only bound is `anchor_idx <= idx <= confirmed_at <= anchor_idx + 5`;
+luck. The only bound is `pattern_anchor_idx <= idx <= confirmed_at <= pattern_anchor_idx + 5`;
 ARCHITECTURE "`ev.idx` convention"). Retired with
 it: the 4 trigger detectors' `lifecycle_end_idx` (field kept one commit,
 unread), `_find_m15_lifecycle_end`, `parent_end_lookup`, `parent_struct_end_m15`

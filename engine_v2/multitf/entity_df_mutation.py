@@ -92,7 +92,7 @@ _MS_AUX_STRUCTURE_COLS = (
     "cts_phase_debug",
     "reversal_watch_active",
     "reversal_bos_th_frozen",
-    "pending_reversal_anchor_idx",
+    "pending_reversal_pattern_anchor_idx",
     "pending_reversal_apply_idx",
     "struct_direction",
     "last_breakout_pat_apply_idx",
@@ -103,7 +103,7 @@ _MS_AUX_STRUCTURE_COLS = (
 _EVENT_META_IDX_KEYS = (
     "confirmed_at",
     "apply_idx",
-    "anchor_idx",
+    "pattern_anchor_idx",
     "confirmed_idx",
     "cts_anchor_idx",
     "bos_anchor_idx",

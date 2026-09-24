@@ -36,7 +36,7 @@ index" wording for both events (a `.py` follow-up).
 - `meta["anchor_idx"]`: the candle base-pattern identification starts from — BOS:
   `source_event_idx` (the BOS anchor); CTS: `CTS_CONFIRMED.meta["cts_anchor_idx"]` (the CTS
   anchor at confirmation). A market-structure-realm anchor — **not** `CTS_ESTABLISHED.meta
-  ["anchor_idx"]` (the breakout pattern's first candle, a pattern-realm anchor); see GLOSSARY
+  ["pattern_anchor_idx"]` (the breakout pattern's first candle, a pattern-realm anchor); see GLOSSARY
   "Naming Standard" / ARCHITECTURE.md "Anchor has two realms".
 - `meta["confirmed_idx"]`: candle index where the zone becomes confirmed for charting — raw value
   `ev.meta["confirmed_at"]` for both kinds (fallback `ev.idx`), then clamped up to the structure
@@ -103,7 +103,7 @@ Base window features (`base_low`, `base_high`, etc.) are computed on-the-fly via
   2) Determine `confirmed_idx`:
      - `confirmed_idx = ev.meta["confirmed_at"]` when present else source_event_idx
   3) Determine anchor_idx (stored as the zone's `meta["anchor_idx"]` — a different field from
-     `CTS_ESTABLISHED.meta["anchor_idx"]`, the breakout pattern's first candle):
+     `CTS_ESTABLISHED.meta["pattern_anchor_idx"]`, the breakout pattern's first candle):
      - BOS: anchor_idx = source_event_idx (the BOS extreme)
      - CTS: anchor_idx = ev.meta["cts_anchor_idx"] (the CTS extreme at confirmation; fallback to
        source_event_idx)

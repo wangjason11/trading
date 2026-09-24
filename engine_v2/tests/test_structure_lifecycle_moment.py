@@ -44,7 +44,7 @@ def _ev(idx: int, type_: str, sid: int, cycle: Optional[int] = None, sd: int = 1
 def _cts_est(idx: int, sid: int, cycle: int, confirmed_at: Optional[int], sd: int = 1) -> StructureEvent:
     # idx = the CTS extreme (historical); confirmed_at = the apply candle (the MOMENT), as stamped by
     # market_structure._emit_cts_established. `confirmed_at=None` OMITS the key (test (d)).
-    extra: Dict[str, Any] = {"anchor_idx": idx - 1, "pattern_name": "one_maru_continuous"}
+    extra: Dict[str, Any] = {"pattern_anchor_idx": idx - 1, "pattern_name": "one_maru_continuous"}
     if confirmed_at is not None:
         extra["confirmed_at"] = confirmed_at
     return _ev(idx, "CTS_ESTABLISHED", sid, cycle, sd, **extra)
@@ -61,7 +61,7 @@ def _reversal(idx: int, sid: int, sd: int = 1) -> StructureEvent:
 
 
 def _rev_candidate(idx: int, sid: int, apply_idx: int, sd: int = 1) -> StructureEvent:
-    return _ev(idx, "REVERSAL_CANDIDATE", sid, None, sd, anchor_idx=idx, apply_idx=apply_idx,
+    return _ev(idx, "REVERSAL_CANDIDATE", sid, None, sd, pattern_anchor_idx=idx, apply_idx=apply_idx,
                expires_idx=apply_idx)
 
 

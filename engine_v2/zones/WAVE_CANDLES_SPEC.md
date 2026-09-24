@@ -54,7 +54,7 @@ The searches mix several "anchor" values. They are **different fields** — neve
 |---|---|---|
 | `anchor_idx` (BOS sections) | the BOS zone's `meta["anchor_idx"]` = `BOS_CONFIRMED.idx` | the BOS **anchor** |
 | `cts_anchor_idx` (CTS sections) | the CTS zone's `meta["anchor_idx"]` = `CTS_CONFIRMED.meta["cts_anchor_idx"]` | the CTS **anchor at confirmation** (equals `CTS_ESTABLISHED.idx` unless a `CTS_UPDATED` moved it) |
-| `first_CTS_anchor`, `pattern_anchor_idx`, the scan-back `anchor_idx` | the same cycle's `CTS_ESTABLISHED.meta["anchor_idx"]` | the breakout pattern's **first candle** (a pattern-realm anchor) — not necessarily the CTS anchor |
+| `pattern_anchor_idx` | the same cycle's `CTS_ESTABLISHED.meta["pattern_anchor_idx"]` — on every `CTS_ESTABLISHED`, read by direct index (a missing key raises `KeyError`) | the breakout pattern's **first candle** (a pattern-realm anchor) — not necessarily the CTS anchor |
 | the event candle in the CTS event walk | `ev.idx` of `CTS_ESTABLISHED` / `CTS_UPDATED` | a **price location**: the CTS anchor (`CTS_ESTABLISHED`, pattern-path `CTS_UPDATED`) or the processed candle (raw-path `CTS_UPDATED`, `via == "replay_raw"`) |
 
 A bare `confirmed_at` below (the CTS Last Breakout BIB Step 3 bound, and the Step 1(b) gap-scan end
@@ -70,7 +70,7 @@ established moment) is always written out in full.
 
 Two-step search:
 
-**Step 1 — Forward search:** `(anchor_idx+1, first_CTS_anchor)`
+**Step 1 — Forward search:** `(anchor_idx+1, pattern_anchor_idx)`
 - Find qualified candle closest to zone outer bound
 - Accept ONLY if closer to outer than the BOS candle's own close distance
 - Rationale: candidate must be a better "pullback into zone" than the BOS candle itself
@@ -103,8 +103,8 @@ Three-step event walk:
 **Step 1 — Event walk:** Iterate CTS_ESTABLISHED + CTS_UPDATED events sorted by `ev.idx` (the event candle — see "Index fields used below").
 For each event:
 - (a) Direct check: event candle is qualified AND wick enters zone AND closes within zone
-  - **Pattern scan-back (CTS_ESTABLISHED only):** If the event candle matches AND has `anchor_idx` in meta, scan from `anchor_idx` to `ev_idx` (exclusive) for the first qualified candle closing within the zone. If found, return that earlier candle instead of the event candle.
-  - **Rationale:** The event candle is the CTS **extreme** — the first highest high / lowest low over the breakout pattern's span, so `meta["anchor_idx"]` (the pattern's first candle) `<= ev_idx <=` the apply candle `CTS_ESTABLISHED.meta["confirmed_at"]` (not the bare `confirmed_at` of Steps 1(b)/3). It is usually the apply candle, but can be an earlier pattern candle; when the first candle itself holds the extreme (`anchor_idx == ev_idx`) the scan-back is empty. The *first* pattern candle entering the zone better represents the initial breakout moment.
+  - **Pattern scan-back (CTS_ESTABLISHED only):** If the event candle matches, scan from `pattern_anchor_idx` to `ev_idx` (exclusive) for the first qualified candle closing within the zone. If found, return that earlier candle instead of the event candle.
+  - **Rationale:** The event candle is the CTS **extreme** — the first highest high / lowest low over the breakout pattern's span, so `meta["pattern_anchor_idx"]` (the pattern's first candle) `<= ev_idx <=` the apply candle `CTS_ESTABLISHED.meta["confirmed_at"]` (not the bare `confirmed_at` of Steps 1(b)/3). It is usually the apply candle, but can be an earlier pattern candle; when the first candle itself holds the extreme (`pattern_anchor_idx == ev_idx`) the scan-back is empty. The *first* pattern candle entering the zone better represents the initial breakout moment.
   - If no earlier pattern candle qualifies, return the event candle itself.
 - (b) Gap scan: scan between current event idx and next event idx (after the last event: up to `confirmed_at`, exclusive, if the cycle has a `CTS_CONFIRMED`) for qualified candle closing within zone
 
@@ -119,7 +119,7 @@ For each event:
 ### Last Breakout (Non-BIB path)
 
 Window: `[max(cts_anchor_idx-5, pattern_anchor_idx), cts_anchor_idx+5]`
-- `pattern_anchor_idx` = `anchor_idx` from CTS_ESTABLISHED event meta (the first candle of the breakout pattern)
+- `pattern_anchor_idx` = `CTS_ESTABLISHED.meta["pattern_anchor_idx"]` (the first candle of the breakout pattern)
 - If pattern anchor is after `cts_anchor_idx - 5`, the window shrinks (candles before the pattern are excluded)
 - Selection: first qualified candle that **closes within** the CTS zone (not closest to outer)
 - **Rationale:** For CTS zones, the first candle entering the zone represents the initial breakout moment. Unlike BOS zones which use closest-to-outer, CTS prioritizes temporal order.

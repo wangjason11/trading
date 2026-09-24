@@ -115,7 +115,7 @@ def test_strict_new_extreme_accepts_strictly_greater():
     assert res.est_idx == 4
     assert res.extreme_idx == 4
     assert res.extreme_price == 14.0
-    assert res.anchor_idx == 3
+    assert res.pattern_anchor_idx == 3
 
 
 def test_strict_new_extreme_rejects_a_tie():
@@ -177,7 +177,7 @@ def test_earliest_est_wins_across_anchors_not_first_anchor():
     res = find_true_first_breakout(bp, current_start=0, upper_idx=4, direction=1, bos0_inner=0.0)
     assert res is not None
     assert res.est_idx == 2
-    assert res.anchor_idx == 1
+    assert res.pattern_anchor_idx == 1
 
 
 def test_tie_break_prefers_continuous_over_double_maru_at_equal_est():
@@ -325,4 +325,4 @@ def test_early_stop_does_not_skip_a_later_anchor_with_smaller_est():
     res = find_true_first_breakout(bp, current_start=0, upper_idx=8, direction=1, bos0_inner=0.0)
     assert res is not None
     assert res.est_idx == 4
-    assert res.anchor_idx == 3
+    assert res.pattern_anchor_idx == 3

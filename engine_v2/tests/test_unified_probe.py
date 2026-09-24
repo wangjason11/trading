@@ -1056,6 +1056,12 @@ class TestFinalizeIdxTable:
         cts_est = [e for e in retained[-1].events if e.type == "CTS_ESTABLISHED"]
         assert [(int(e.idx), int(e.meta["confirmed_at"])) for e in cts_est] == [(2, 2), (9, 10)]
         assert int(cts_est[1].idx) != int(cts_est[1].meta["confirmed_at"])   # the fixture's point
+        # Plan E E1 value pin: the pattern-realm anchor is the OMO's FIRST candle 9 (c0) —
+        # not its end / apply candle 10 — and the reversal close-break candle is 11.
+        assert cts_est[1].meta["pattern_anchor_idx"] == 9
+        rv = [(e.type, e.meta["pattern_anchor_idx"]) for e in retained[-1].events
+              if e.type in ("REVERSAL_WATCH_START", "REVERSAL_CANDIDATE")]
+        assert rv == [("REVERSAL_WATCH_START", 11), ("REVERSAL_CANDIDATE", 11)]
         assert res.finalize_idx == int(cts_est[1].meta["confirmed_at"]) == 10
         assert res.finalize_idx != int(cts_est[1].idx)
         assert res.starting_idx == 0
