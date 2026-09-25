@@ -1,0 +1,4 @@
+commit_hash=6c37053
+timestamp=20260925_165323
+branch=week8-volmom-multitf
+commit_message=Plan E E5·3: prose + Q12 source_time documentation (byte-identical)
