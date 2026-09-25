@@ -321,5 +321,182 @@ def test_compute_poi_inners_uses_its_fill_horizon(monkeypatch):
     c0 = {"bos_idx": 10, "bos_price": 1.0, "cts_idx": 20, "cts_price": 1.15,
           "has_unfilled": True, "scenario1": None}
     poi_zones.compute_poi_inners_for_cycle(df, 30, 1.2, 40, 1.35, 1, structure_id=1, cycle_id=1,
-                                           c0_data=c0, fill_horizon_idx=42)
+                                           c0_data=c0, fill_horizon_idx=42,
+                                           snapshot_horizon_idx=42)
     assert seen == [(42, "scenario_3")]
+
+
+# --- Plan E E3a′: the cycle-0 caches, cond3, `_c0_has_unfilled_now` ---------------
+# (The update-path cond3 and cond1-c0 re-asks in `_update_cycle1_main` are
+# equivalent to their anchor reverts on every reachable stream: a fill that makes
+# the two horizons disagree already fails the same check at CTS_1 EST, so no cross
+# reaches the update path.)
+
+def test_e3ap_est_cycle0_cache_is_asked_at_the_cts0_moment():
+    """The cycle-0 gap (@15) fills at 21 — after the CTS_0 anchor 20, by its
+    moment 22 → the uncut cache says filled, and records its horizon 22."""
+    t = _t()
+    _c0(t, _df(fills=[(21, 1.02)]), 100)
+    c0 = t._cross_cycle_data[1]["cycle0"]
+    assert (c0["has_unfilled"], c0["fill_horizon_idx"]) == (False, 22)
+
+
+def test_e3ap_update_cycle0_cache_is_asked_at_the_update_moment():
+    """A CTS_0 update (anchor 23, moment 25): the gap fills at 24 → the
+    re-snapshot says filled, horizon 25."""
+    t = _t()
+    df = _df(fills=[(24, 1.02)])
+    _c0(t, df, 100)
+    _q(t.on_cts_updated, _upd(23, 1.2, 1, 0), df, reversal_confirmed_idx=100)
+    c0 = t._cross_cycle_data[1]["cycle0"]
+    assert (c0["cts_idx"], c0["has_unfilled"], c0["fill_horizon_idx"]) == (23, False, 25)
+
+
+def test_e3ap_scenario2_cond3_is_asked_at_the_bos1_moment():
+    """cond3 "has BOS_1 filled cycle 0?" at BOS_1's MOMENT (== the CTS_1 EST
+    moment 42), not its anchor 30: the cycle-0 gap fills at 35 → no cross
+    (Scenario 3); asked at 30 it would still be unfilled → a Scenario-2 cross."""
+    t = _t()
+    df = _df(fills=[(35, 1.02)])
+    _c0(t, df, 100)
+    fib = _c1(t, df, 100)
+    assert fib.meta["scenario"] == 3
+    assert t._get_latest_cross(1, 1) is None
+
+
+def test_e3ap_c0_has_unfilled_now_is_asked_at_the_update_moment():
+    """Scenario 1 TRUE at EST (rv 21), the only gap (c2 21) outside [10, 20] → no
+    fib. The update (anchor 23, moment 25) brings it in range, but it fills at
+    24 → asked at the moment: no activation (at the anchor 23 it would activate)."""
+    t = _t()
+    df = _df(insts=[ImbalanceInstance(21, 21, 1, 1.10, 1.00, 0.10)], fills=[(24, 1.02)])
+    assert _c0(t, df, 21) is None and t._scenario1[1] is True
+    assert _q(t.on_cts_updated, _upd(23, 1.2, 1, 0), df, reversal_confirmed_idx=21) is None
+    assert (1, 0) not in t._fibs
+
+
+def test_e3ap_ms_cycle0_snapshot_is_asked_at_the_refresh_moment():
+    """The MS mirror: CTS_0 anchor 20, refresh moment 22, the gap fills at 21 →
+    filled (lock-step with FibTracker's cache)."""
+    from types import SimpleNamespace
+    from engine_v2.structure.market_structure import MarketStructure
+    ms = MarketStructure.__new__(MarketStructure)
+    ms.df = _df(fills=[(21, 1.02)])
+    ms._fill_threshold = 0.70
+    ms.state = SimpleNamespace(cts_cycle_id=0, cts=SimpleNamespace(idx=20, price=1.15),
+                               bos=SimpleNamespace(idx=10, price=1.0),
+                               struct_direction=1, cycle0_data=None)
+    ms._update_cycle0_data(22)
+    assert ms.state.cycle0_data["has_unfilled"] is False
+
+
+def test_e3ap_compute_poi_inners_uses_its_snapshot_horizon(monkeypatch):
+    """`compute_poi_inners_for_cycle` forwards `snapshot_horizon_idx` (not
+    `bos_idx`) as cond3's horizon: the cycle-0 gap fills at 35 → asked at 42 →
+    scenario_3 (at the BOS anchor 30 it would be a cross)."""
+    import engine_v2.zones.poi_zones as poi_zones
+    seen = []
+    real = poi_zones.select_fib_anchor_for_cycle
+
+    def spy(*a, **k):
+        out = real(*a, **k)
+        seen.append((k["snapshot_horizon_idx"], out[-1]))
+        return out
+
+    monkeypatch.setattr(poi_zones, "select_fib_anchor_for_cycle", spy)
+    df = _df(60, [ImbalanceInstance(15, 15, 1, 1.10, 1.00, 0.10),
+                  ImbalanceInstance(35, 35, 1, 1.30, 1.20, 0.10)], fills=[(35, 1.02)])
+    c0 = {"bos_idx": 10, "bos_price": 1.0, "cts_idx": 20, "cts_price": 1.15,
+          "has_unfilled": True, "scenario1": None}
+    poi_zones.compute_poi_inners_for_cycle(df, 30, 1.2, 40, 1.35, 1, structure_id=1, cycle_id=1,
+                                           c0_data=c0, fill_horizon_idx=42, snapshot_horizon_idx=42)
+    assert seen == [(42, "scenario_3")]
+
+
+def test_e3ap_ms_refresh_snapshot_horizon_is_the_cycle_established_moment(monkeypatch):
+    """MS passes the current cycle's CTS_ESTABLISHED moment as the snapshot
+    horizon: on the lagging-EST fixture (anchor 9, moment 10) every cycle-1
+    refresh carries 10."""
+    import engine_v2.structure.structure_engine as se
+    from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_extreme_data, _prepare_df
+    calls = []
+    real = se.compute_poi_inners_for_cycle
+
+    def spy(df, bos_idx, bos_price, cts_idx, cts_price, sd, sid, cycle_id, *a, **k):
+        calls.append((cycle_id, k["snapshot_horizon_idx"]))
+        return real(df, bos_idx, bos_price, cts_idx, cts_price, sd, sid, cycle_id, *a, **k)
+
+    monkeypatch.setattr(se, "compute_poi_inners_for_cycle", spy)
+    with contextlib.redirect_stdout(io.StringIO()):
+        se.compute_bounded_structure(_prepare_df(_make_second_cts_moment_after_extreme_data()), 0, +1)
+    assert (1, 10) in calls
+    assert all(h == 10 for c, h in calls if c == 1)
+
+
+def _raw_upd(i, price, sid, cyc):
+    from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
+    return StructureEvent(idx=i, category="STRUCTURE", type="CTS_UPDATED", price=price,
+                          meta={"structure_id": sid, "cycle_id": cyc, "struct_direction": 1,
+                                "via": CTS_UPDATED_RAW_VIA})
+
+
+def _pat_upd(anchor, moment, price, sid, cyc):
+    return StructureEvent(idx=anchor, category="STRUCTURE", type="CTS_UPDATED", price=price,
+                          meta={"structure_id": sid, "cycle_id": cyc, "struct_direction": 1,
+                                "via": "one_maru_continuous", "confirmed_at": moment})
+
+
+def test_e3ap_c0_now_on_an_equal_anchor_pattern_update():
+    """(E3a′ landing review.) Scenario 1 undetermined at EST (22 < rv 24) and at
+    the raw update (23); the pattern update restates anchor 23 at moment 25
+    (>= rv) → Scenario 1 TRUE. The gap fills at 24 → asked at the moment: no
+    activation (a read of an older horizon 23 would activate). The cycle-0 cache
+    re-snapshots on the equal-anchor update too — horizon 25, filled — in
+    lock-step with the MS mirror, which re-snapshots on every cycle-0 refresh."""
+    t = _t()
+    df = _df(fills=[(24, 1.02)])
+    assert _c0(t, df, 24) is None and t._scenario1[1] is None
+    assert _q(t.on_cts_updated, _raw_upd(23, 1.2, 1, 0), df, reversal_confirmed_idx=24) is None
+    assert _q(t.on_cts_updated, _pat_upd(23, 25, 1.2, 1, 0), df, reversal_confirmed_idx=24) is None
+    assert t._scenario1[1] is True and (1, 0) not in t._fibs
+    c0 = t._cross_cycle_data[1]["cycle0"]
+    assert (c0["cts_idx"], c0["fill_horizon_idx"], c0["has_unfilled"]) == (23, 25, False)
+
+
+def test_e3ap_cycle0_cache_matches_the_ms_mirror_on_an_equal_anchor_update():
+    """Parity pin (LANDMINES "Scenario 2 anchor agreement"): feed FibTracker and
+    the MS `_update_cycle0_data` the same stream — EST (20 / 22), raw @23, pattern
+    restating 23 at 25; the gap fills at 24 — both caches end (has_unfilled False)."""
+    from types import SimpleNamespace
+    from engine_v2.structure.market_structure import MarketStructure
+    df = _df(fills=[(24, 1.02)])
+    t = _t()
+    _c0(t, df, 100)
+    _q(t.on_cts_updated, _raw_upd(23, 1.2, 1, 0), df, reversal_confirmed_idx=100)
+    _q(t.on_cts_updated, _pat_upd(23, 25, 1.2, 1, 0), df, reversal_confirmed_idx=100)
+    ms = MarketStructure.__new__(MarketStructure)
+    ms.df = df
+    ms._fill_threshold = 0.70
+    ms.state = SimpleNamespace(cts_cycle_id=0, cts=SimpleNamespace(idx=20, price=1.15),
+                               bos=SimpleNamespace(idx=10, price=1.0),
+                               struct_direction=1, cycle0_data=None)
+    for cts, moment in ((20, 22), (23, 23), (23, 25)):
+        ms.state.cts = SimpleNamespace(idx=cts, price=1.2)
+        ms._update_cycle0_data(moment)
+    assert t._cross_cycle_data[1]["cycle0"]["has_unfilled"] == ms.state.cycle0_data["has_unfilled"] is False
+
+
+def test_e3ap_c0_now_asks_at_the_moment_not_the_cache_horizon():
+    """`_c0_has_unfilled_now` asks at the update's moment even when the cache was
+    not re-snapshotted — the one such stream is a pattern update whose anchor
+    REGRESSES below the cached one (the latent "pattern-path CTS_UPDATED
+    regressing st.cts" shape, zones-audit memory). EST 20 / 22 and raw @23 leave
+    Scenario 1 undetermined (rv 26); the pattern (anchor 21, moment 27) makes it
+    TRUE; the cache keeps horizon 23, the gap fills at 24 → asked at 27: no fib."""
+    t = _t()
+    df = _df(fills=[(24, 1.02)])
+    assert _c0(t, df, 26) is None
+    _q(t.on_cts_updated, _raw_upd(23, 1.2, 1, 0), df, reversal_confirmed_idx=26)
+    assert _q(t.on_cts_updated, _pat_upd(21, 27, 1.2, 1, 0), df, reversal_confirmed_idx=26) is None
+    assert t._scenario1[1] is True and (1, 0) not in t._fibs
+    assert t._cross_cycle_data[1]["cycle0"]["fill_horizon_idx"] == 23

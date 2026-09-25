@@ -63,7 +63,9 @@ BosInnerResolver = Callable[[pd.DataFrame, int, int], Optional[float]]
 
 PoiInnersResolver = Callable[..., List[float]]
 # (df, bos_idx, bos_price, cts_idx, cts_price, sd, sid, cycle_id,
-#  fill_threshold, c0_data, *, fill_horizon_idx) -> [inner prices]
+#  fill_threshold, c0_data, *, fill_horizon_idx, snapshot_horizon_idx) -> [inner prices]
+# `snapshot_horizon_idx` = the cycle's CTS_ESTABLISHED (== BOS) moment — cond3
+# (Plan E E3a′).
 # `fill_horizon_idx` = the MOMENT of the event that triggered the refresh
 # (Plan E E3a — in lock-step with FibTracker's fill horizon).
 #
@@ -225,6 +227,11 @@ class MarketStructureState:
     # treats `scenario1=None` as "evaluate Scenario 2/3" — see the utility's
     # docstring for the approximation contract.
     cycle0_data: Optional[Dict[str, Any]] = None
+
+    # The current cycle's CTS_ESTABLISHED MOMENT (`confirmed_at`) == its
+    # BOS_CONFIRMED moment: the in-flight resolver's cond3 fill horizon ("has
+    # BOS_1 filled cycle 0?"), in lock-step with FibTracker (Plan E E3a′).
+    cts_established_moment_idx: Optional[int] = None
 
     # -------------------------------------------------
     # Week 5 Part 3A: BOS barrier semantics + reversal watch
@@ -1820,6 +1827,7 @@ class MarketStructure:
         # The CTS endpoint (a price location; == idx until Plan E E4a flips idx
         # to the moment). int(): `_shift_meta_indices` shifts Python int only.
         meta2["cts_anchor_idx"] = int(cts_anchor_idx)
+        self.state.cts_established_moment_idx = int(meta2["confirmed_at"])
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=meta2)
         )
@@ -2007,7 +2015,7 @@ class MarketStructure:
         # the current BOS_0/CTS_0 + imbalance fill state. The snapshot is
         # consumed when cycle 1+ POIs refresh.
         if st.cts_cycle_id == 0:
-            self._update_cycle0_data()
+            self._update_cycle0_data(moment_idx)
         st.poi_inners_for_cycle = self._poi_inners_resolver(
             self._resolver_df(),
             int(st.bos.idx),
@@ -2020,10 +2028,11 @@ class MarketStructure:
             float(self._fill_threshold),
             st.cycle0_data,
             fill_horizon_idx=int(moment_idx),
+            snapshot_horizon_idx=int(st.cts_established_moment_idx),
         )
 
 
-    def _update_cycle0_data(self) -> None:
+    def _update_cycle0_data(self, moment_idx: int) -> None:
         """Refresh the cycle-0 snapshot from current state. Skips when
         cycle 0 has been locked (CTS_0 CONFIRMED already fired) or when
         BOS_0 / CTS_0 aren't both available.
@@ -2034,7 +2043,7 @@ class MarketStructure:
         - ``bos_idx`` / ``bos_price`` — BOS_0 anchor (immutable once captured)
         - ``cts_idx`` / ``cts_price`` — latest cycle-0 CTS extreme
         - ``has_unfilled`` — at least one imbalance in [BOS_0, CTS_0]
-          remains unfilled as of ``cts_idx``
+          remains unfilled as of ``moment_idx`` (the refresh's moment; Plan E E3a′)
         - ``scenario1`` — always ``None`` (MS does not track Scenario 1;
           see ``select_fib_anchor_for_cycle`` docstring for the contract)
         - ``locked`` — flipped True by ``_lock_cycle0_data`` at CTS_0
@@ -2060,9 +2069,9 @@ class MarketStructure:
         # cond2, read only at a later cycle-1 refresh (> CTS_0), when every gap
         # in [BOS_0, CTS_0] has formed — and FibTracker's cycle-0 cache is
         # likewise stored uncut, so the two mirrors agree.
-        # Fill horizon: cond2 "@CTS_0" — a TIME, today the CTS_0 anchor; moves
-        # with FibTracker's cycle-0 cache in Plan E E3a′ (Q8).
-        c0_fill_horizon_idx = cts_idx  # Plan E E3a′ → moment
+        # Fill horizon: cond2 "@CTS_0" — the MOMENT of this refresh, in
+        # lock-step with FibTracker's cycle-0 cache (Plan E E3a′, Q8).
+        c0_fill_horizon_idx = int(moment_idx)
         has_unfilled = has_unfilled_imbalance(
             self.df, c0_lo, c0_hi, c0_fill_horizon_idx, self._fill_threshold,
             direction=int(st.struct_direction), evaluated_at=None,

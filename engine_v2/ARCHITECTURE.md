@@ -169,7 +169,7 @@ recorded as separate causes (the POI activation sweep's `CTS_UPDATED` transition
 in-window — correct on the raw path, whose `ev.idx` IS the moment; on the pattern path it is the CTS anchor, and the
 moment (`confirmed_at`, recorded since Plan E E3·0) is not yet read there — PLAN_E §7.1 T1 / E4c;
 (FibTracker's stamped activation / terminal timing and the fill horizons of its CTS_ESTABLISHED / CTS_UPDATED
-imbalance reads are on the moment since Plan E E3a, 2026-09-24 — except the cycle-0 cond2 / cond3 horizons, E3a′;)
+imbalance reads are on the moment since Plan E E3a, 2026-09-24 — the cycle-0 cond2 / cond3 horizons since E3a′, 2026-09-25;)
 the pool's `knowable_at_idx` / sibling clip — PART4 §17.12; `unified_probe` Phase 2's retrace-window
 start `check_lo = first_cts.idx + 1`, the CTS anchor, vs Phase 1's moment-based `tfb.est_idx + 1`; the MS
 in-flight POI-inner resolver, which evaluates fills as-of `st.cts.idx` — the processing candle after a raw
@@ -181,7 +181,8 @@ POI-inner snapshot's only reader is gated `i > st.cts.idx` and the cycle-0 mirro
 refresh, so no decision uses a gap before it forms (Plan F, measured 24/24 CSVs identical with a cut;
 `structure/MARKET_STRUCTURE_SPEC.md` "Snapshot vs per-candle"; the one accepted MS/FibTracker activation divergence
 this leaves: IMBALANCE_FILL_SEMANTICS.md "Decided at the event") — its fill-horizon half: Scenario-2 cond1's horizon is the triggering event's moment since Plan E E3a (measured 0 cells
-through the mirror); cond2 / cond3 / IC cond3 horizons stay on their anchors (E3a′ / T2)). Site lists + staging: `plans/PLAN_E_inputs.md`.
+through the mirror), and cond2 (the cycle-0 mirror) / cond3 on theirs since E3a′ (0 cells; 0 answer flips at the
+16 cond3 and 1 cycle-0 calls whose horizon moved); IC cond3 stays on the anchor by decision (T2)). Site lists + staging: `plans/PLAN_E_inputs.md`.
 
 The engine maintains a stable downstream interface by converting structure events into StructureLevels (CTS/BOS list).【fileciteturn1file14】
 

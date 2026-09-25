@@ -213,8 +213,9 @@ the shared pure routine `zones/cross_cycle_fib.py::resolve_cross_cycle_eligibili
 (single-step `target=1`, `fill_as_of="snapshot"`). Fill horizons are in lock-step
 too: cond1's is the triggering event's MOMENT in both layers (FibTracker: the
 handled event's; MS: `_refresh_poi_inners_for_cycle(moment_idx)` — Plan E E3a),
-cond2 (the cycle-0 caches) and cond3 (`snapshot_horizon_idx` = BOS_1) stay on
-their anchors in both until Plan E E3a′ — move both layers in the same change.
+cond2 (the cycle-0 caches: the moment of their last write) and cond3
+(`snapshot_horizon_idx` = the BOS_1 moment == the CTS_1 ESTABLISHED moment) since
+Plan E E3a′ — any change moves both layers in the same change.
 `select_fib_anchor_for_cycle`
 is now a thin wrapper applying only the main-only Scenario-1 outer gate around
 it. So for `sid >= 1, cycle_id == 1` cases both layers agree on whether to

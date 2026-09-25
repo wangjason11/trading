@@ -159,7 +159,7 @@ from the per-cycle BOS/CTS geometry + imbalance state. The four unified ingredie
    `snapshot_horizon_idx` — split from the window ends `own_window_end_idx` /
    `own_imb_start` in Plan E E2b) is the handled event's moment since Plan E E3a
    (2026-09-24; before it the CTS anchor on `CTS_ESTABLISHED` / a pattern-path
-   `CTS_UPDATED`; `snapshot_horizon_idx` stays the BOS anchor until E3a′); the **moment** is the routine's
+   `CTS_UPDATED`; `snapshot_horizon_idx` = the BOS_1 moment since E3a′); the **moment** is the routine's
    keyword-only, required `evaluated_at` (FibTracker: `event_moment` of the handled
    event; the MS in-flight resolver: `None` = no cut). Plan E E3a keeps ONE moment
    parameter (`evaluated_at`).

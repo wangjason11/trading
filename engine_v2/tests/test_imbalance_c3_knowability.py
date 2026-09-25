@@ -336,7 +336,7 @@ def test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib():
     # IC candidate at 32: bearish, inside the 61.8-80% band of (BOS 1.00 → CTS 1.35).
     df.loc[32, ["o", "h", "l", "c", "direction"]] = [1.12, 1.13, 1.08, 1.09, -1]
     inners = poi_zones.compute_poi_inners_for_cycle(
-        df, 30, 1.00, 40, 1.35, 1, structure_id=0, cycle_id=1, fill_horizon_idx=40,
+        df, 30, 1.00, 40, 1.35, 1, structure_id=0, cycle_id=1, fill_horizon_idx=40, snapshot_horizon_idx=40,
     )
     assert inners == [1.13]
     tracker = _tracker("h1")
@@ -493,7 +493,7 @@ def test_guard_ms_inflight_select_call_is_uncut(monkeypatch):
     df = _df(60, [_gap(15), _gap(40, top=1.30, bottom=1.20)])
     poi_zones.compute_poi_inners_for_cycle(df, 30, 1.2, 40, 1.35, 1,
                                            structure_id=1, cycle_id=1, c0_data=_c0(),
-                                           fill_horizon_idx=40)
+                                           fill_horizon_idx=40, snapshot_horizon_idx=40)
     assert seen == [None]
 
 
@@ -507,7 +507,7 @@ def test_guard_ms_cycle0_snapshot_is_uncut():
     ms.state = SimpleNamespace(cts_cycle_id=0, cts=SimpleNamespace(idx=20, price=1.2),
                                bos=SimpleNamespace(idx=10, price=0.9),
                                struct_direction=1, cycle0_data=None)
-    ms._update_cycle0_data()
+    ms._update_cycle0_data(20)
     assert ms.state.cycle0_data["has_unfilled"] is True
 
 

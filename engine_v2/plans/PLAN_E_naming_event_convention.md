@@ -669,6 +669,56 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
     in the dead-code hygiene pass); M32 — the h1 create-on-fail stamp is unreachable (cond2 and the normal check ask
     the same window at the same horizon). Tests 853 → 873 + 1 xfail; replay after the fixes == the measured E3a.
 
+- **E3a′ (2026-09-25; Q8).** Both layers, one change. FibTracker: cond3 "has BOS_1 filled cycle 0?" at the BOS_1
+  MOMENT (== the CTS_1 ESTABLISHED moment, definitional): at EST the anchor selector's `snapshot_horizon_idx =
+  cts_established_idx`, on the update path `_update_cycle1_main` / `_update_fib_cts` read
+  `self._bos_moment_by_cycle[(sid, 1)]` (new, set at every EST next to `_bos_by_cycle`); the cycle-0 cond2 cache at
+  the moment of its write (EST: `c0_fill_horizon_idx = cts_established_idx`; update re-snapshot: `self._moment()`),
+  recorded as `c0["fill_horizon_idx"]` and read by the update path's cond1-c0 re-asks; `_c0_has_unfilled_now` asks
+  at `self._moment()` (closes E3a's EST/UPD asymmetry). MS: `_update_cycle0_data(moment_idx)` (the refresh's
+  moment); new state field `cts_established_moment_idx` (set in `_emit_cts_established` from `confirmed_at`) →
+  `compute_poi_inners_for_cycle(*, snapshot_horizon_idx)` (keyword-only, REQUIRED) → the selector. No `E3a′`
+  markers remain.
+  **Measured (vs `20260925_073236_9bfc4bc`): 0 real cells; figures JSON-identical; run.log identical.** The plan
+  expected H1 cells possible (BOS lag 14–76), so a shadow run (scratch `e3ap_shadow.py`: old vs new horizon + answer
+  at every E3a′ call) explains the 0: cond3's horizon moved at all 16 of its calls (FibTracker EST 2, update 6, MS
+  mirror 8) — the Q8 example itself, H1 sid 1 cyc 1 BOS 728 → 748, windows [689, 710] / [728, 748] — and **no answer
+  flipped** (cycle 0's gap is still unfilled at 748); the MS cycle-0 cache moved once (an M15 frame, 153 → 155,
+  same answer); the FibTracker caches / cond1-c0 re-asks have lag 0 here; `_c0_has_unfilled_now` is not reached on
+  this window. (One replay's M15 fetch failed with an OANDA 504 — 3648/4228 candles, 1255+ event cells "changed" —
+  the fetch gate caught it; the re-run passed.)
+  Tests 873 → 880 + 1 xfail (883 after the review): 7 `test_e3ap_*` pins in `tests/test_e3a_mutation_pins.py` (EST / update cycle-0 cache,
+  cond3 at the BOS_1 moment via the selector, `_c0_has_unfilled_now`, the MS cycle-0 snapshot, `compute_poi_inners`
+  forwarding `snapshot_horizon_idx`, the MS spy: every cycle-1 refresh on the lagging-EST fixture carries 10); 4
+  direct calls pass the new arguments. **Own mutation loop (scratch `mut_e3ap.py`, full suite per mutant): 7/9
+  killed**; the 2 survivors are equivalent by lock-step — the update path's cond3 and cond1-c0 re-asks: a fill that
+  makes the anchor and moment horizons disagree fails the same check at CTS_1 EST, so no cross reaches
+  `_update_cycle1_main`. (Harness lesson: `subprocess.run(["python", …])` resolved to a Python without pytest and
+  reported every mutant "SURVIVED" — use `sys.executable` and treat a non-zero rc without FAILED lines as an error.)
+  Docs: ARCHITECTURE (2 places), IMBALANCE_FILL_SEMANTICS (FibTracker + MS tables, horizons prose), LANDMINES
+  "Scenario 2 anchor agreement", CROSS_CYCLE_FIB_SPEC, POI_ZONES_SPEC, selector / resolver docstrings.
+  - Landing review (1 combined lens, ≈139k): 0 BLOCKER. **MAJOR (fixed in E3a′):** E3a′ itself created an MS ↔
+    FibTracker cycle-0 cache divergence — MS re-snapshots on EVERY cycle-0 refresh, incl. a pattern update RESTATING
+    the current anchor (raw @i, then the pattern applies at i+k with the same extreme), but FibTracker re-snapshotted
+    only on a strictly later anchor; with both keyed on the moment, a gap filling in (i, i+k] made the layers
+    disagree on Scenario 2 (before E3a′ both asked at the same anchor). Fix: `_handle_cycle0_cts_updated`
+    re-snapshots on every unlocked update with anchor `>=` the cached one (the anchor moves only on `>`). The shadow
+    run's "MS cache moved once (M15 153 → 155)" was an MS-only cache (subs run no FibTracker cycle-0 cache), so this
+    window has no instance; the replay with the fix == 0 cells again. MS still re-snapshots on a REGRESSING pattern
+    anchor — the known latent "pattern-path CTS_UPDATED regressing st.cts" bug, left as is. Pins: the reviewer's
+    `test_e3ap_c0_now_on_an_equal_anchor_pattern_update` (horizon 25 after the equal-anchor update — kills the pre-fix
+    `>`), a parity pin feeding FibTracker and MS `_update_cycle0_data` the same stream, and
+    `test_e3ap_c0_now_asks_at_the_moment_not_the_cache_horizon` (the regressing-anchor stream: kills the reviewer's
+    surviving M6, `_c0_has_unfilled_now` reading the cache horizon). **MINORs:** IMBALANCE_FILL_SEMANTICS three stale
+    rows, the `has_unfilled_imbalance` docstring, a fib_tracker comment — fixed. **Stronger equivalence** (the
+    reviewer's proof): the update-path cond3 / cond1-c0 re-asks in `_update_cycle1_main` are TAUTOLOGICAL — a cycle-1
+    cross exists only if cond3 (at the CTS_1 moment m) and cond2 (at the cache horizon h) were True at EST; a
+    two-stroke fill never un-fills, BOS_1 anchor <= m and `c0_cts_idx` <= h, the c0 range is frozen by then and
+    `_maybe_activate_main_cross` handles cycles >= 2 only, so both reads are always True where reached (only cond2
+    decides) → dead-code hygiene list, with `_update_fib_cts`'s dead cross branch. Its mutants M1 / M2 / M5
+    (`_bos_moment_by_cycle` = the anchor) survive for that reason. Mutation 7/10 killed by the reviewer + both of mine
+    re-killed here. Tests 880 → 883 + 1 xfail.
+
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 
 **E4a — `CTS_ESTABLISHED`.** `market_structure.py:1514` passes `int(apply_idx)` as `idx` and asserts

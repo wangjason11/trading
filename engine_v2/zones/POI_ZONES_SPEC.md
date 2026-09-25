@@ -88,9 +88,8 @@ as-ofs** (Plan F, 2026-09-24):
 
 - **`check_to_idx` — the fill horizon** (`is_filled` scans `(end_idx,
   check_to_idx]`). Fib lifecycle and scenario checks pass varying horizons: the
-  handled event's moment (FibTracker, since Plan E E3a; cycle-0 re-asks still the
-  cached CTS_0 anchor until E3a′), a
-  fixed reference event idx (BOS_1 for cond3), or the cross-cycle routine's
+  handled event's moment (FibTracker, since Plan E E3a / E3a′), a
+  fixed reference event's moment (BOS_1 for cond3, since E3a′), or the cross-cycle routine's
   `current_candle`. POI IC validation passes `check_to_idx = end_idx = cts_idx`,
   the fib's CTS.
 - **`evaluated_at` — the moment the question is asked** (keyword-only,

@@ -148,8 +148,9 @@ def has_unfilled_imbalance(
     check_to_idx
         The FILL HORIZON — `inst.is_filled` scans `(inst.end_idx, check_to_idx]`
         for the two-stroke fill. Callers pick it for the question asked (the
-        fib's `cts_idx`, a reference event idx such as BOS_1, or the current
-        candle); on several fib sites it is still a CTS anchor (Plan E E3).
+        handled event's moment, a reference event's moment such as BOS_1's, or
+        the current candle — moments on every FibTracker site since Plan E
+        E3a / E3a′); IC cond3 keeps the fib's CTS anchor by decision (T2).
     evaluated_at
         Keyword-only and REQUIRED. The MOMENT the question is asked. An instance
         counts only once its first c3 has closed (`inst.formed_at <=

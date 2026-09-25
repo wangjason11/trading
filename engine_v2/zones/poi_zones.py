@@ -1034,6 +1034,7 @@ def compute_poi_inners_for_cycle(
     c0_data: Optional[Dict[str, Any]] = None,
     *,
     fill_horizon_idx: int,
+    snapshot_horizon_idx: int,
 ) -> List[float]:
     """Derive POI zone inner prices for the cycle's current Fib state.
 
@@ -1062,7 +1063,10 @@ def compute_poi_inners_for_cycle(
         The fill horizon of the cycle-1 own-imbalance check (cond1 / the
         Scenario-2 decision): the MOMENT of the event that triggered the MS
         refresh — in lock-step with FibTracker's EST / update fill horizon
-        (Plan E E3a). The snapshot horizon (BOS) moves in E3a′.
+        (Plan E E3a).
+    snapshot_horizon_idx : int (keyword-only, required)
+        cond3's fill horizon ("has BOS_1 filled cycle 0?"): the BOS_1 MOMENT
+        (== the cycle's CTS_ESTABLISHED moment; Plan E E3a′).
     c0_data : optional dict
         Cycle-0 snapshot for the structure_id. When provided and the
         utility selects Scenario 2 (cross-cycle), the Fib anchors flip
@@ -1098,11 +1102,10 @@ def compute_poi_inners_for_cycle(
                 # where every gap it counts has formed. FibTracker asks cond1 at
                 # the CTS_1 moment instead — the accepted M1 divergence.
                 evaluated_at=None,
-                # The fill horizons, in lock-step with FibTracker (Plan E E3a /
-                # E3a′ move both layers together; LANDMINES "Scenario 2 anchor
-                # agreement").
+                # The fill horizons, in lock-step with FibTracker (moments since
+                # Plan E E3a / E3a′; LANDMINES "Scenario 2 anchor agreement").
                 fill_horizon_idx=int(fill_horizon_idx),
-                snapshot_horizon_idx=int(bos_idx),  # Plan E E3a′ → moment
+                snapshot_horizon_idx=int(snapshot_horizon_idx),
             )
         )
         if anchor_cts_idx <= anchor_bos_idx:
