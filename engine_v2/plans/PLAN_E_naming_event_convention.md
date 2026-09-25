@@ -837,6 +837,11 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
   subs have one sid each). The chart sites have no unit harness — as accepted in the E2c review, their proof is the
   figure diff. Tests stay 900 + 1 xfail. **All §7 / §7.1 E3 rows are now landed; no `# Plan E E3` markers remain.**
 
+- **E4 variant re-run after the last E3 stage (2026-09-25, at `0ba0c84`) == §8 E4a + E4b exactly:** `FLIP=both`
+  vs the normal replay of the same code: 37 events `idx` cells (H1 5 BOS; conf 21 BOS + 1223→1224, 2828→2829; counter
+  8 BOS + 2828→2829) — every one in the `idx` column; 34 KL `source_event_idx` (key-only); 3 figures JSON-identical;
+  run.log only the 22 `[kl_zones]` print lines. The E3 stages changed no reader's role; E4 is unblocked.
+
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 
 **E4a — `CTS_ESTABLISHED`.** `market_structure.py:1514` passes `int(apply_idx)` as `idx` and asserts
