@@ -313,16 +313,17 @@ def test_prev_bos_line_falls_through_to_a_raw_cts_update():
 
 def test_prev_bos_line_picks_the_earliest_moment_not_the_first_stamped():
     """E3d (landing review): a pattern-path CTS_UPDATED that REGRESSES the CTS
-    (zones-audit latent bug (a)) is stamped at 15 but known at 20, after a raw
-    update at 17. Reversal 17: the earliest-known qualifying CTS is the raw
+    (zones-audit latent bug (a)) is anchored at 15 (its processing key) but known
+    at 20 (its idx since Plan E E4c), after a raw update at 17. Reversal 17: the earliest-known qualifying CTS is the raw
     update (END 17), not the first in processing order (END 15)."""
     from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
     from engine_v2.structure.market_structure import StructureEvent
     from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established
     raw = StructureEvent(idx=17, category="STRUCTURE", type="CTS_UPDATED", price=1.3,
                          meta={"structure_id": 1, "cycle_id": 0, "via": CTS_UPDATED_RAW_VIA})
-    pat = StructureEvent(idx=15, category="STRUCTURE", type="CTS_UPDATED", price=1.25,
-                         meta={"structure_id": 1, "cycle_id": 0, "via": "continuous", "confirmed_at": 20})
+    pat = StructureEvent(idx=20, category="STRUCTURE", type="CTS_UPDATED", price=1.25,
+                         meta={"structure_id": 1, "cycle_id": 0, "via": "continuous", "confirmed_at": 20,
+                               "cts_anchor_idx": 15})
     evs = [make_bos_confirmed(bos_anchor_idx=7, confirmed_at=10, structure_id=0, cycle_id=1, price=0.95),
            make_cts_established(cts_anchor_idx=13, confirmed_at=16, structure_id=1, cycle_id=0),
            raw, pat]

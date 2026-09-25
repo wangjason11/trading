@@ -1554,11 +1554,14 @@ class MarketStructure:
                 st.last_pullback_pat_apply_idx = None
             else:
                 # Not allowed to create a new CTS cycle yet => this breakout just updates CTS (pre-confirm)
-                # `ev.idx` = the CTS anchor (a location); the MOMENT the update became
-                # knowable is the pattern's apply candle (Plan E E3·0; ARCHITECTURE
-                # "`ev.idx` convention"). E4c flips `ev.idx` to it.
+                # `ev.idx` = the MOMENT the update became knowable, the pattern's apply
+                # candle (recorded as `confirmed_at` since Plan E E3·0; the idx since
+                # E4c); the CTS anchor (a location) rides in meta `cts_anchor_idx`
+                # (ARCHITECTURE "`ev.idx` convention").
                 self._emit_cts_updated(
-                    cts_anchor_idx, cts_price, meta={"via": ev.name, "confirmed_at": int(apply_idx)}
+                    int(apply_idx), cts_price,
+                    meta={"via": ev.name, "confirmed_at": int(apply_idx),
+                          "cts_anchor_idx": int(cts_anchor_idx)},
                 )
 
             # Update current CTS point (always)
@@ -1851,6 +1854,13 @@ class MarketStructure:
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
         meta2["structure_id"] = int(self.state.structure_id)
         meta2["struct_direction"] = int(self.state.struct_direction)
+        # Raw path: `idx` = the processing candle, anchor and moment at once (no
+        # meta keys). Pattern path: `idx` = the moment (Plan E E4c), the anchor in
+        # meta `cts_anchor_idx`.
+        if meta2["via"] != CTS_UPDATED_RAW_VIA:
+            assert int(idx) == meta2["confirmed_at"] and meta2["cts_anchor_idx"] <= int(idx), (
+                f"pattern-path CTS_UPDATED idx {idx} != confirmed_at {meta2.get('confirmed_at')} "
+                f"or anchor {meta2.get('cts_anchor_idx')} past it (ev.idx is the moment)")
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_UPDATED", price=price, meta=meta2)
         )

@@ -266,6 +266,7 @@ def _cts_event(
         meta["cts_anchor_idx"] = anchor_local
     if ev_type == "CTS_UPDATED":
         meta["via"] = "continuous"   # a pattern-path update: confirmed_at = its apply (== idx here)
+        meta["cts_anchor_idx"] = idx_local if anchor_local is None else anchor_local  # Plan E E4c
     return StructureEvent(
         idx=idx_local, category="STRUCTURE", type=ev_type,
         price=0.6020, meta=meta,

@@ -69,7 +69,7 @@ out of `market_structure` and extended to BOS_CONFIRMED → `confirmed_at` and
 CTS_CONFIRMED / CTS_RECONFIRMED → `ev.idx` by Plan E E2a): CTS_ESTABLISHED →
 `meta["confirmed_at"]` (== `ev.idx` since Plan E E4a); CTS_UPDATED →
 `ev.idx` on the raw path (`meta["via"] == CTS_UPDATED_RAW_VIA`), `meta["confirmed_at"]`
-(the apply candle) on the pattern path, whose `idx` is the CTS anchor (Plan E E3·0,
+(the apply candle; `== ev.idx` since Plan E E4c, the anchor in `cts_anchor_idx`) on the pattern path (Plan E E3·0,
 2026-09-24 — before it no moment was recorded and the pattern path was uncut;
 measured on the reference window: the cut changes 0 cells);
 CTS_THRESHOLD_UPDATED → `ev.idx` (the processing candle); any other type raises.

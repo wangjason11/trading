@@ -30,7 +30,7 @@ from engine_v2.common.types import ImbalanceInstance
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 from engine_v2.structure.market_structure import StructureEvent
-from engine_v2.tests._event_factory import make_cts_established
+from engine_v2.tests._event_factory import make_cts_established, make_cts_updated
 from engine_v2.tests.test_poi_activation_moment import _only_poi, _run
 from engine_v2.tests.test_unified_probe import _make_multicycle_data
 from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig, select_fib_anchor_for_cycle
@@ -63,10 +63,14 @@ def _ev(etype, idx, price, sid, cyc, *, confirmed_at=None, via=CTS_UPDATED_RAW_V
             price=price, structure_id=sid, cycle_id=cyc,
         )
     meta = {"structure_id": sid, "cycle_id": cyc, "struct_direction": 1}
+    if etype == "CTS_UPDATED" and via != CTS_UPDATED_RAW_VIA:
+        # Pattern path: the `idx` ARGUMENT is the anchor; the event stamps its
+        # moment, the apply candle (`confirmed_at`, Plan E E3·0; the idx, E4c).
+        return make_cts_updated(cts_anchor_idx=idx, via=via,
+                                confirmed_at=idx if confirmed_at is None else confirmed_at,
+                                price=price, meta=meta)
     if etype == "CTS_UPDATED":
         meta["via"] = via
-        if via != CTS_UPDATED_RAW_VIA:   # pattern path: the apply candle (Plan E E3·0)
-            meta["confirmed_at"] = idx if confirmed_at is None else confirmed_at
     if cts_anchor_idx is not None:
         meta["cts_anchor_idx"] = cts_anchor_idx
     return StructureEvent(idx=idx, category="STRUCTURE", type=etype, price=price, meta=meta)
@@ -395,8 +399,9 @@ def _multicycle_with_lagging_pattern_update():
 def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_with_their_apply():
     """A live MS run: every raw-path CTS_UPDATED carries CTS_UPDATED_RAW_VIA and
     sits on its processing candle; every other via is a breakout-pattern name and
-    records its apply candle as `meta["confirmed_at"]` (Plan E E3·0) — the moment
-    `event_moment` returns, never before the anchor `ev.idx`."""
+    records its apply candle as `meta["confirmed_at"]` (Plan E E3·0) and as its
+    `idx` (E4c) — the moment `event_moment` returns, never before the anchor
+    `meta["cts_anchor_idx"]`."""
     from engine_v2.structure.structure_engine import compute_bounded_structure
     from engine_v2.tests.test_unified_probe import _prepare_df
     with contextlib.redirect_stdout(io.StringIO()):
@@ -405,11 +410,11 @@ def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_with_their_apply():
     raw = [e for e in updates if e.meta["via"] == CTS_UPDATED_RAW_VIA]
     patterns = [e for e in updates if e.meta["via"] != CTS_UPDATED_RAW_VIA]
     assert raw and patterns
-    assert all("confirmed_at" not in e.meta for e in raw)
+    assert all("confirmed_at" not in e.meta and "cts_anchor_idx" not in e.meta for e in raw)
     for e in patterns:
-        assert ef.event_moment(e) == e.meta["confirmed_at"] >= e.idx
-    lagging = [(e.idx, e.meta["confirmed_at"], e.meta["via"]) for e in patterns
-               if e.meta["confirmed_at"] != e.idx]
+        assert ef.event_moment(e) == e.meta["confirmed_at"] == e.idx >= e.meta["cts_anchor_idx"]
+    lagging = [(ef.cts_anchor_idx(e), e.idx, e.meta["via"]) for e in patterns
+               if ef.cts_anchor_idx(e) != e.idx]
     assert lagging == [(24, 25, "one_maru_opposite")]
 
 

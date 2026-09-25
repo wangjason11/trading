@@ -45,10 +45,12 @@ def _est(anchor, price, sid, cyc):
 
 
 def _upd(anchor, price, sid, cyc):
-    """A pattern-path CTS_UPDATED: anchor `anchor`, moment `anchor + LAG`."""
-    return StructureEvent(idx=anchor, category="STRUCTURE", type="CTS_UPDATED", price=price,
+    """A pattern-path CTS_UPDATED: anchor `anchor`, moment `anchor + LAG` (its idx
+    since Plan E E4c)."""
+    return StructureEvent(idx=anchor + LAG, category="STRUCTURE", type="CTS_UPDATED", price=price,
                           meta={"structure_id": sid, "cycle_id": cyc, "struct_direction": 1,
-                                "via": "one_maru_continuous", "confirmed_at": anchor + LAG})
+                                "via": "one_maru_continuous", "confirmed_at": anchor + LAG,
+                                "cts_anchor_idx": anchor})
 
 
 def _conf(idx, anchor, price, sid, cyc):
@@ -441,9 +443,10 @@ def _raw_upd(i, price, sid, cyc):
 
 
 def _pat_upd(anchor, moment, price, sid, cyc):
-    return StructureEvent(idx=anchor, category="STRUCTURE", type="CTS_UPDATED", price=price,
+    return StructureEvent(idx=moment, category="STRUCTURE", type="CTS_UPDATED", price=price,
                           meta={"structure_id": sid, "cycle_id": cyc, "struct_direction": 1,
-                                "via": "one_maru_continuous", "confirmed_at": moment})
+                                "via": "one_maru_continuous", "confirmed_at": moment,
+                                "cts_anchor_idx": anchor})
 
 
 def test_e3ap_c0_now_on_an_equal_anchor_pattern_update():

@@ -70,16 +70,22 @@ def test_the_autouse_hook_is_active():
 @pytest.mark.illegal_event_contract
 def test_cts_updated_legal_shapes():
     validate_event_contract(_raw("CTS_UPDATED", 24, via="replay_raw"))
-    validate_event_contract(_raw("CTS_UPDATED", 24, via="one_maru_opposite", confirmed_at=25))
-    validate_event_contract(_raw("CTS_UPDATED", 24, via="continuous", confirmed_at=24))
+    # Pattern path since Plan E E4c: idx = the moment, the anchor in meta.
+    validate_event_contract(_raw("CTS_UPDATED", 25, via="one_maru_opposite", confirmed_at=25,
+                                 cts_anchor_idx=24))
+    validate_event_contract(_raw("CTS_UPDATED", 24, via="continuous", confirmed_at=24,
+                                 cts_anchor_idx=24))
 
 
 @pytest.mark.illegal_event_contract
 @pytest.mark.parametrize("meta", [
-    {"via": "continuous"},                         # pattern path without its moment
-    {"via": "continuous", "confirmed_at": 23},     # moment before the anchor
-    {"via": "continuous", "confirmed_at": 25.0},   # not a Python int
-    {"via": "replay_raw", "confirmed_at": 24},     # the raw path carries none
+    {"via": "continuous"},                                             # pattern path without its moment
+    {"via": "continuous", "confirmed_at": 24},                         # ... or its anchor
+    {"via": "continuous", "confirmed_at": 25, "cts_anchor_idx": 24},   # idx 24 != its moment (pre-E4c)
+    {"via": "continuous", "confirmed_at": 24, "cts_anchor_idx": 25},   # anchor past the moment
+    {"via": "continuous", "confirmed_at": 24.0, "cts_anchor_idx": 24}, # not a Python int
+    {"via": "replay_raw", "confirmed_at": 24},                         # the raw path carries none
+    {"via": "replay_raw", "cts_anchor_idx": 24},                       # ... of either key
 ])
 def test_cts_updated_rejects(meta):
     with pytest.raises(EventContractViolation, match="CTS_UPDATED"):

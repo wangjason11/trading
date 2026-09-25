@@ -60,21 +60,23 @@ def _is_int(v) -> bool:
 
 
 def _validate_cts_updated(ev) -> None:
-    """Plan E E3·0: a pattern-path CTS_UPDATED records its moment (the apply
-    candle) as an int `confirmed_at >= idx` (idx = the CTS anchor until E4c); a
-    raw-path one (`via == CTS_UPDATED_RAW_VIA`) carries none — its idx IS the
-    moment. `via` itself is required (Plan E E3b: every CTS_UPDATED reader now
-    asks `event_fields.event_moment`, which needs it)."""
+    """A pattern-path CTS_UPDATED records its moment (the apply candle) as an
+    int `confirmed_at` (Plan E E3·0) and, since Plan E E4c, stamps it as its
+    `idx` (`idx == confirmed_at`) with the CTS anchor in an int meta
+    `cts_anchor_idx <= idx`. A raw-path one (`via == CTS_UPDATED_RAW_VIA`)
+    carries neither key — its idx IS anchor and moment. `via` itself is required
+    (Plan E E3b: every CTS_UPDATED reader asks `event_fields`, which needs it).
+    Build them with `tests/_event_factory.make_cts_updated` / `make_event`."""
     meta = ev.meta or {}
     _check("via" in meta, f"CTS_UPDATED at idx {ev.idx} lacks meta['via'] (use tests/_event_factory.py)")
     if meta["via"] == CTS_UPDATED_RAW_VIA:
-        _check("confirmed_at" not in meta,
-               f"raw-path CTS_UPDATED at idx {ev.idx} must not carry confirmed_at")
+        _check("confirmed_at" not in meta and "cts_anchor_idx" not in meta,
+               f"raw-path CTS_UPDATED at idx {ev.idx} must carry neither confirmed_at nor cts_anchor_idx")
         return
-    ca = meta.get("confirmed_at")
-    _check(_is_int(ca) and ca >= ev.idx, (
-        f"pattern-path CTS_UPDATED at idx {ev.idx} (via {meta['via']!r}) needs an int "
-        f"meta['confirmed_at'] >= idx, got {ca!r}"
+    ca, anchor = meta.get("confirmed_at"), meta.get("cts_anchor_idx")
+    _check(_is_int(ca) and ca == ev.idx and _is_int(anchor) and anchor <= ev.idx, (
+        f"pattern-path CTS_UPDATED at idx {ev.idx} (via {meta['via']!r}) needs int "
+        f"meta['confirmed_at'] == idx and int meta['cts_anchor_idx'] <= idx, got {ca!r} / {anchor!r}"
     ))
 
 

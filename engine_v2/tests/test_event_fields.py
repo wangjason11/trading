@@ -29,7 +29,11 @@ def test_cts_anchor_idx_reads_the_meta_key_not_idx():
     conf = _ev("CTS_CONFIRMED", 25, cts_anchor_idx=20, confirmed_at=25)
     assert ef.cts_anchor_idx(conf) == 20
     assert ef.cts_anchor_idx(_ev("CTS_RECONFIRMED", 30, cts_anchor_idx=20)) == 20
-    assert ef.cts_anchor_idx(_ev("CTS_UPDATED", 12, via="continuous", confirmed_at=12)) == 12
+    # A pattern-path CTS_UPDATED stamps its moment (14) since Plan E E4c; its
+    # anchor (12) is the meta key. A raw-path one's idx is both.
+    assert ef.cts_anchor_idx(_ev("CTS_UPDATED", 14, via="continuous", confirmed_at=14,
+                                 cts_anchor_idx=12)) == 12
+    assert ef.cts_anchor_idx(_ev("CTS_UPDATED", 13, via="replay_raw")) == 13
 
 
 def test_bos_anchor_idx_reads_the_meta_key_not_idx():
@@ -63,7 +67,7 @@ def test_accessors_raise_on_the_wrong_type():
     with pytest.raises(ValueError):
         ef.bos_anchor_idx(make_cts_established(cts_anchor_idx=9, confirmed_at=10))
     with pytest.raises(ValueError):
-        ef.pattern_anchor_idx(_ev("CTS_UPDATED", 12, via="continuous", confirmed_at=12))
+        ef.pattern_anchor_idx(_ev("CTS_UPDATED", 12, via="continuous", confirmed_at=12, cts_anchor_idx=12))
 
 
 def test_event_moment_extended_to_bos_and_confirmations():
@@ -74,16 +78,17 @@ def test_event_moment_extended_to_bos_and_confirmations():
 
 def test_processing_order_key_is_the_pre_e4_idx_type_order():
     """`processing_order_key` == the pre-E4 `(ev.idx, ev.type)` for every type:
-    a CTS_ESTABLISHED / BOS_CONFIRMED keys on its anchor (9 / 3), not its idx
-    (the moment 10 since Plan E E4a / E4b); every other type on its idx."""
+    a CTS_ESTABLISHED / BOS_CONFIRMED / pattern-path CTS_UPDATED keys on its
+    anchor (9 / 3 / 12), not its idx (the moment 10 / 10 / 13 since Plan E E4a /
+    E4b / E4c); every other type on its idx."""
     evs = [
         make_cts_established(cts_anchor_idx=9, confirmed_at=10),
         make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10),
-        _ev("CTS_UPDATED", 12, via="continuous", confirmed_at=12),
+        _ev("CTS_UPDATED", 13, via="continuous", confirmed_at=13, cts_anchor_idx=12),
         _ev("CTS_CONFIRMED", 14, cts_anchor_idx=12, confirmed_at=14),
         StructureEvent(idx=11, category="RANGE", type="RANGE_STARTED", meta={}),
     ]
-    assert (evs[0].idx, evs[1].idx) == (10, 10)
+    assert (evs[0].idx, evs[1].idx, evs[2].idx) == (10, 10, 13)
     assert [ef.processing_order_key(e) for e in evs] == [
         (9, "CTS_ESTABLISHED"), (3, "BOS_CONFIRMED"), (12, "CTS_UPDATED"),
         (14, "CTS_CONFIRMED"), (11, "RANGE_STARTED"),

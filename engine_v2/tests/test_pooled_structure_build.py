@@ -309,9 +309,9 @@ def test_clip_keys_est_and_pattern_update_on_the_moment():
     from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established
     est = make_cts_established(cts_anchor_idx=10, confirmed_at=14, price=1.2,
                                structure_id=0, cycle_id=1)
-    pat = StructureEvent(idx=10, category="STRUCTURE", type="CTS_UPDATED", price=1.2,
+    pat = StructureEvent(idx=14, category="STRUCTURE", type="CTS_UPDATED", price=1.2,
                          meta={"structure_id": 0, "cycle_id": 0, "via": "continuous",
-                               "confirmed_at": 14})
+                               "confirmed_at": 14, "cts_anchor_idx": 10})
     raw = StructureEvent(idx=10, category="STRUCTURE", type="CTS_UPDATED", price=1.2,
                          meta={"structure_id": 0, "cycle_id": 0, "via": "replay_raw"})
     bos = make_bos_confirmed(bos_anchor_idx=5, confirmed_at=12, structure_id=0, cycle_id=1)

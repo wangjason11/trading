@@ -2048,11 +2048,10 @@ could not have known.
 
 `ev.idx` is the knowable-at candle only for events whose `ev.idx` IS their
 moment (`CTS_CONFIRMED` / `CTS_RECONFIRMED` — `ev.idx == confirmed_at` —
-raw-path `CTS_UPDATED`, `STATE_CHANGED`, and `CTS_ESTABLISHED` / `BOS_CONFIRMED`
-since Plan E E4a / E4b). It is NOT for a pattern-path `CTS_UPDATED` (the span
-extreme, until E4c) — keyed on `confirmed_at` since Plan E E3b, like
-`CTS_ESTABLISHED` / `BOS_CONFIRMED`, whose `ev.idx` was the retro-stamped
-extreme before E4a / E4b — nor for
+raw-path `CTS_UPDATED`, `STATE_CHANGED`, and `CTS_ESTABLISHED` / `BOS_CONFIRMED` /
+pattern-path `CTS_UPDATED` since Plan E E4a / E4b / E4c — the clip keys the last
+three on `confirmed_at` (the pattern path since Plan E E3b), from the time their
+`ev.idx` was the retro-stamped extreme). It is NOT for
 `REVERSAL_CANDIDATE` (applies at `meta["apply_idx"]`), which can still straddle a
 cap (`ev.idx <= cap <` its apply) and survive the clip, yielding a half-derived
 reversal — the remaining known limit in PART4 §17.12 (zero straddles on the

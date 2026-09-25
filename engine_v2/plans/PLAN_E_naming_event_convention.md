@@ -1045,7 +1045,30 @@ the real emitter.
     `…_clipped_by_its_moment_not_its_anchor`; `reference_zone` docstring (EST → the anchor accessor); the review
     README (`FLIP=bos` is a no-op too). **Hardening:** both BOS emit sites now pass `"confirmed_at": int(apply_idx)`
     like the EST site (a numpy value would shift `idx` but not `confirmed_at` in the mirror). Replay after the
-    fold-ins: 0 cells, figures + run.log identical; tests 920 + 1 xfail.
+    fold-ins: 0 cells, figures + run.log identical; tests 920 + 1 xfail. Fold-in commit `19a6391`.
+
+- **E4c (2026-09-25; Q1 = flip).** The pattern-path `_emit_cts_updated` call passes `int(apply_idx)` as `idx` with
+  meta `confirmed_at` (E3·0) and the new `cts_anchor_idx`; `_emit_cts_updated` asserts, on the pattern path, `idx
+  == confirmed_at` and `cts_anchor_idx <= idx`; the raw path is unchanged (idx = the processing candle, anchor and
+  moment at once, neither key). `ef.cts_anchor_idx` on `CTS_UPDATED` branches on `via` (raw → `ev.idx`, pattern →
+  `meta["cts_anchor_idx"]`), so every E2 location reader — FibTracker's update handler, the POI sweep (both
+  branches), the wave-candle walk, the reference zone, the prev-BOS line END, `structure_levels`, the chart
+  unconfirmed-CTS markers — and `stamped_idx` (the processing order) keep the anchor. `st.cts` stays built from
+  the local anchor. **Measured (vs `20260925_125921_7216c9d`, `--strip cts_anchor_idx`) == §8:** **1 real cell**
+  (conf sub 2 cyc 0: `idx` 2468 → 2470) + the new key on exactly the 37 pattern-path rows (H1 7 / conf 23 /
+  counter 7) and the 7 H1 `structure_levels` rows (their meta copies the event's) — the same footprint as E3·0;
+  figures JSON-identical; run.log only the FutureWarning line number and the parked `by_lens` order. Replay 82.2 s.
+  Test contract: the validator's pattern path now requires `idx == confirmed_at` and an int `cts_anchor_idx <=
+  idx` (raw: neither key) — 3 new reject shapes; `tests/_event_factory.make_cts_updated` (+ `make_event` routes
+  `CTS_UPDATED`, its `idx` ARGUMENT the anchor); the fixture helpers of `test_imbalance_c3_knowability` (also
+  used by the role pins), `test_e3a_mutation_pins`, `test_first_trigger_migration`, and three hand-built events
+  (role pins, pooled build) moved to the moment shape; the MS emit test pins `event_moment == confirmed_at ==
+  idx >= cts_anchor_idx` and the lagging (24, 25); the Plan-B-save CSV loader stands in `cts_anchor_idx = idx`.
+  31 tests failed on the bare flip, every one a fixture shape. Tests 920 → 923 + 1 xfail. Docs: ARCHITECTURE
+  (intro — `ev.idx` is now the moment on every type —, the `CTS_UPDATED` row incl. the anchor column, the
+  `ef.cts_anchor_idx` / `stamped_idx` bullets), GLOSSARY (moment, `event.idx`, `confirmed_at`, `CTS_UPDATED`),
+  GOTCHAS, LANDMINES knowable-at clip, PRE_REFACTOR_INVARIANTS, WORKFLOWS, IMBALANCE_FILL_SEMANTICS,
+  WAVE_CANDLES_SPEC, the `/compare` skill, code comments.
 
 ## 9. E5 — remaining renames + prose
 

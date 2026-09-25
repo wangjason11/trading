@@ -43,14 +43,18 @@ def cts_anchor_idx(ev: Any) -> int:
     - CTS_ESTABLISHED / CTS_CONFIRMED / CTS_RECONFIRMED: `meta["cts_anchor_idx"]`
       (a CONFIRMED / RECONFIRMED emitted with no current CTS carries None — a
       state the engine never reaches — and raises TypeError here, loudly).
-    - CTS_UPDATED: `ev.idx` (both paths; the pattern path until Plan E E4c).
+    - CTS_UPDATED: `ev.idx` on the raw path (`via == CTS_UPDATED_RAW_VIA`, the
+      processing candle — anchor and moment at once); `meta["cts_anchor_idx"]`
+      on the pattern path (its `ev.idx` is the moment since Plan E E4c).
 
     Any other type raises.
     """
     if ev.type in _CTS_ANCHOR_META_TYPES:
         return int(ev.meta["cts_anchor_idx"])
     if ev.type == "CTS_UPDATED":
-        return int(ev.idx)
+        if ev.meta["via"] == CTS_UPDATED_RAW_VIA:
+            return int(ev.idx)
+        return int(ev.meta["cts_anchor_idx"])
     raise ValueError(f"cts_anchor_idx: not a CTS event: {ev.type}")
 
 
@@ -79,8 +83,7 @@ def event_moment(ev: Any) -> int:
     - CTS_CONFIRMED / CTS_RECONFIRMED: `ev.idx` (the confirmation candle).
     - CTS_UPDATED: `ev.idx` on the raw path (`via == CTS_UPDATED_RAW_VIA`, the
       processing candle); `meta["confirmed_at"]` on the pattern path (the
-      pattern's apply candle, Plan E E3·0 — its `ev.idx` is the CTS anchor
-      until E4c).
+      pattern's apply candle, Plan E E3·0 — `== ev.idx` since E4c).
     - CTS_THRESHOLD_UPDATED / BOS_THRESHOLD_UPDATED: `ev.idx` (the processing
       candle — `_sync_thresholds_from_range` / `_bos_barrier_step` /
       `_maybe_expire_reversal_watch` all stamp `i`; BOS added in Plan E E3g-2).
@@ -103,8 +106,8 @@ def event_moment(ev: Any) -> int:
 
 def stamped_idx(ev: Any) -> int:
     """The index `ev.idx` held before the Plan E E4 flip, frozen against it: the
-    anchor for CTS_ESTABLISHED / BOS_CONFIRMED (whose `ev.idx` is the moment
-    since E4a / E4b) / CTS_UPDATED, `ev.idx` otherwise. Neither a location nor a
+    anchor for CTS_ESTABLISHED / BOS_CONFIRMED / CTS_UPDATED (whose `ev.idx` is
+    the moment since E4a / E4b / E4c on the pattern path), `ev.idx` otherwise. Neither a location nor a
     moment by itself (user decision 2026-09-24, E2b). Its uses:
 
     - the event processing order (`processing_order_key`, the sort pins);

@@ -75,7 +75,7 @@ only (corrected 2026-09-22; see the note below):
 | Event | `ev.idx` means | Notes |
 |---|---|---|
 | `CTS_ESTABLISHED` | **the moment** = `meta["confirmed_at"]`, the pattern's apply candle (Plan E E4a, 2026-09-25; before it the CTS extreme — retro-stamped) | the anchor (the **CTS extreme** in the breakout pattern span) = `meta["cts_anchor_idx"]` (Plan E E2a); `ev.price` = the anchor's price; `meta["pattern_anchor_idx"]` = the breakout pattern's FIRST candle — **not necessarily the extreme** (it is when the first candle holds it; 0 of 34 on the reference window), never a timing value |
-| `CTS_UPDATED` | raw path (`meta["via"] == CTS_UPDATED_RAW_VIA`, i.e. `"replay_raw"`): the processed candle; pattern path (`via` = a pattern name): the pattern-span extreme | no `pattern_anchor_idx` on any `CTS_UPDATED`; a pattern-path update records its apply candle as `confirmed_at` (Plan E E3·0, 2026-09-24 — `event_moment(ev)` returns it; before it `None`); the raw path has no `confirmed_at` |
+| `CTS_UPDATED` | raw path (`meta["via"] == CTS_UPDATED_RAW_VIA`, i.e. `"replay_raw"`): the processed candle; pattern path (`via` = a pattern name): **the moment**, the apply candle `confirmed_at` (Plan E E4c, 2026-09-25; before it the pattern-span extreme) | no `pattern_anchor_idx` on any `CTS_UPDATED`; a pattern-path update records its apply candle as `confirmed_at` (Plan E E3·0 — `event_moment(ev)` returns it) and its anchor (the span extreme) as `cts_anchor_idx` (E4c); the raw path has neither |
 | `CTS_THRESHOLD_UPDATED` | the processing candle (`_sync_thresholds_from_range(i)`) — a moment | `event_fields.event_moment(ev)` (Plan F; moved + extended by Plan E E2a) resolves the moment of every CTS / BOS event in one place |
 | `CTS_CONFIRMED` | confirmation candle | `confirmed_at` mirrors `ev.idx`; `meta["cts_anchor_idx"]` = the CURRENT CTS extreme at confirmation (== the cycle's `CTS_ESTABLISHED.meta["cts_anchor_idx"]` only if no `CTS_UPDATED` moved it); `meta["confirmation_method"]` |
 | `CTS_RECONFIRMED` (new) | pullback confirmation candle | only fires after proximity-confirmed CTS; `confirmed_at` mirrors `ev.idx` |
@@ -103,7 +103,7 @@ E2b) — the E4 flips reorder nothing. Mode C M15 phase gate depends on this —
 > 2829, lag 1, empirical and not a bound (the bound is `pattern_anchor_idx <= cts_anchor_idx <=
 > confirmed_at <= pattern_anchor_idx + 5`). `CTS_ESTABLISHED` was one of the
 > extreme-located events until Plan E E4a (with `BOS_CONFIRMED` until E4b and pattern-path
-> `CTS_UPDATED` until E4c — ARCHITECTURE.md "`ev.idx` convention"); every lifecycle reader
+> `CTS_UPDATED` until E4c — none since; ARCHITECTURE.md "`ev.idx` convention"); every lifecycle reader
 > (`zones/structure_lifecycle.compute_cycle_lifecycle`,
 > `multitf/parent_tables.py`) uses `meta["confirmed_at"]`.
 

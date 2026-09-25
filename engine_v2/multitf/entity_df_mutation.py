@@ -479,9 +479,9 @@ def _build_sibling_cts_ref_zone_from_pool(
         for ev in bounded.events:
             if ev.type not in _CTS_EVENT_TYPES:
                 continue
-            # The clip is a TIME: the event's MOMENT (Plan E E3b — a
-            # pattern-path CTS_UPDATED is stamped at its anchor, which can
-            # precede it, as a CTS_ESTABLISHED was until Plan E E4a).
+            # The clip is a TIME: the event's MOMENT (Plan E E3b — keyed so
+            # while a CTS_ESTABLISHED / pattern-path CTS_UPDATED was stamped at
+            # its anchor, until Plan E E4a / E4c).
             clip_idx = ef.event_moment(ev) + int(slice_begin)
             if not (r_lo <= clip_idx <= r_hi):
                 continue

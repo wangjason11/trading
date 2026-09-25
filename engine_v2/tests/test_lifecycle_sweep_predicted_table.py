@@ -612,8 +612,13 @@ def _events_from_csv(path: Path) -> List[StructureEvent]:
             # Stand in `idx`: every H1 pattern-path update on this window has
             # apply == idx (measured at E3·0), and parent_tables reads no
             # CTS_UPDATED moment.
+            # A save older than Plan E E4c stamps a pattern-path CTS_UPDATED at its
+            # anchor and has no `cts_anchor_idx`: with the stand-in apply == idx the
+            # row's idx is anchor and moment at once.
             if row["type"] == "CTS_UPDATED" and meta.get("via") != CTS_UPDATED_RAW_VIA:
                 meta.setdefault("confirmed_at", int(row["idx"]))
+                meta.setdefault("cts_anchor_idx", int(row["idx"]))
+                idx = int(meta["confirmed_at"])
             price = float(row["price"]) if row.get("price") not in (None, "") else None
             out.append(StructureEvent(
                 idx=idx, category=row["category"], type=row["type"],

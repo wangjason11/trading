@@ -88,10 +88,9 @@ def knowable_at_idx(ev) -> int:
     pooled structure into a lifecycle window (§17.9 / `project_to_window`).
 
     `BOS_CONFIRMED` / `CTS_ESTABLISHED` / `CTS_UPDATED`: `event_fields.event_moment`
-    (their `confirmed_at`; a raw-path CTS_UPDATED's `ev.idx`) — a pattern-path
-    CTS_UPDATED (until Plan E E4c) is stamped at an ANCHOR that can precede that
-    moment, as CTS_ESTABLISHED / BOS_CONFIRMED were until E4a / E4b
-    (CTS_ESTABLISHED / CTS_UPDATED keyed on the moment since Plan E E3b). Every
+    (their `confirmed_at`; a raw-path CTS_UPDATED's `ev.idx`) — all three were
+    stamped at an ANCHOR that can precede that moment until Plan E E4a / E4b /
+    E4c (CTS_ESTABLISHED / CTS_UPDATED keyed on the moment since Plan E E3b). Every
     other event: `ev.idx`. Clipping by knowable-at (not `ev.idx`) neutralizes
     the boundary-straddling case: an event whose anchor is inside the window but
     whose moment landed past it is correctly excluded.
