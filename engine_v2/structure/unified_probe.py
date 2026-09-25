@@ -149,8 +149,8 @@ class ProbeResult:
     `cts0_est_idx` is the apply/confirm idx of the located true first
     breakout — carried as a sanity-assert (MS re-finds it via
     scan-from-start); None when no breakout was found in the window.
-    Populated by the deterministic method; left None on the Phase-2 path
-    until that path is wired to the MS scan-from-start change.
+    Populated by the deterministic method, and on the Phase-2 path with the
+    first CTS_ESTABLISHED's MOMENT (`ef.event_moment`).
 
     `finalize_idx` is the candle at which the probe's terminal DECISION became
     determinable — the latest idx whose information the finalize condition
@@ -487,8 +487,9 @@ def _run_phase2(
     Runs that never reach a 2nd CTS still run to `probe_end_idx`.
 
     Retrace search window:
-      - If CTS_0 confirmed before probe_end_idx: `[CTS_0_est+1, cts_anchor_idx-1]`
-      - Else (CTS_0 not confirmed before probe_end_idx): `[CTS_0_est+1, probe_end_idx]`
+      - If CTS_0 confirmed before probe_end_idx: `[CTS_0 moment + 1, CTS_0_CONFIRMED cts_anchor_idx - 1]`
+      - Else (CTS_0 not confirmed before probe_end_idx): `[CTS_0 moment + 1, probe_end_idx]`
+      (the CTS_0 moment = its CTS_ESTABLISHED `confirmed_at`; Plan E E3c)
 
     Termination conditions:
       - Reversal AND <2 CTS_EST → `reversal_in_probe`

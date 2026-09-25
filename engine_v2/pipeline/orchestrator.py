@@ -71,20 +71,20 @@ def _prev_bos_lines(sorted_events: list, reversal_confirmed_by_sid: dict, pfx: s
 
         start_idx, price = last_bos_anchor_by_sid[prev_sid]
 
-        end_idx = None
-        for ev in sorted_events:
-            ev_sid = ev.meta.get("structure_id", 0)
-            if ev_sid != sid:
-                continue
-            if ev.type not in ("CTS_ESTABLISHED", "CTS_UPDATED"):
-                continue
-            # The filter is a TIME ("the first CTS of sid known at/after the
-            # reversal"): the event's MOMENT (Plan E E3d; a pattern-path
-            # CTS_UPDATED's since E3·0). The line END is the CTS anchor (a
-            # location, PLAN_E Q6).
-            if ef.event_moment(ev) >= rv_idx:
-                end_idx = ef.cts_anchor_idx(ev)
-                break
+        # "The first CTS of sid known at/after the reversal": a TIME — the
+        # earliest MOMENT among sid's CTS_ESTABLISHED / CTS_UPDATED with moment
+        # >= the reversal (Plan E E3d; a pattern-path CTS_UPDATED's since E3·0).
+        # Picked by moment, not by processing order: a pattern-path update that
+        # regresses the CTS (zones-audit latent bug (a)) is stamped before a
+        # raw update it is known after (E3c/E3d landing review). `min` is stable
+        # on ties. The line END is the winner's CTS anchor (a location, Q6).
+        qualifying = [
+            ev for ev in sorted_events
+            if ev.meta.get("structure_id", 0) == sid
+            and ev.type in ("CTS_ESTABLISHED", "CTS_UPDATED")
+            and ef.event_moment(ev) >= rv_idx
+        ]
+        end_idx = ef.cts_anchor_idx(min(qualifying, key=ef.event_moment)) if qualifying else None
 
         if end_idx is not None:
             prev_bos_lines.append({

@@ -283,3 +283,52 @@ def test_lagging_est_fib_lifecycle_is_timed_at_the_moment(mode):
     assert (c1.cts_idx, c1.start_idx, c1.meta["activated_at"]) == (9, 10, 10)
     if mode == "cross_cycle":
         assert (fibs[(0, 0)].end_idx, fibs[(0, 0)].end_reason) == (10, "new_cycle")
+
+
+def _prev_bos_pairs(evs, rv):
+    from engine_v2.pipeline.orchestrator import _prev_bos_lines
+    from engine_v2.structure import event_fields as ef
+    evs = sorted(evs, key=ef.processing_order_key)
+    with contextlib.redirect_stdout(io.StringIO()):
+        return [(ln["start_idx"], ln["end_idx"]) for ln in _prev_bos_lines(evs, {1: rv})]
+
+
+def test_prev_bos_line_filter_is_inclusive_at_the_reversal():
+    """E3d (landing review): "known AT/after the reversal" — a CTS_0 whose moment
+    == the reversal qualifies."""
+    from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established
+    evs = [make_bos_confirmed(bos_anchor_idx=7, confirmed_at=10, structure_id=0, cycle_id=1, price=0.95),
+           make_cts_established(cts_anchor_idx=13, confirmed_at=15, structure_id=1, cycle_id=0)]
+    assert _prev_bos_pairs(evs, 15) == [(7, 13)]
+
+
+def test_prev_bos_line_falls_through_to_a_raw_cts_update():
+    """E3d (landing review): sid 1's CTS_0 is known BEFORE the reversal → the first
+    qualifying CTS is a later raw CTS_UPDATED (moment == its idx) → END = its anchor."""
+    from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
+    from engine_v2.structure.market_structure import StructureEvent
+    from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established
+    upd = StructureEvent(idx=18, category="STRUCTURE", type="CTS_UPDATED", price=1.3,
+                         meta={"structure_id": 1, "cycle_id": 0, "via": CTS_UPDATED_RAW_VIA})
+    evs = [make_bos_confirmed(bos_anchor_idx=7, confirmed_at=10, structure_id=0, cycle_id=1, price=0.95),
+           make_cts_established(cts_anchor_idx=12, confirmed_at=14, structure_id=1, cycle_id=0),
+           upd]
+    assert _prev_bos_pairs(evs, 15) == [(7, 18)]
+
+
+def test_prev_bos_line_picks_the_earliest_moment_not_the_first_stamped():
+    """E3d (landing review): a pattern-path CTS_UPDATED that REGRESSES the CTS
+    (zones-audit latent bug (a)) is stamped at 15 but known at 20, after a raw
+    update at 17. Reversal 17: the earliest-known qualifying CTS is the raw
+    update (END 17), not the first in processing order (END 15)."""
+    from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
+    from engine_v2.structure.market_structure import StructureEvent
+    from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established
+    raw = StructureEvent(idx=17, category="STRUCTURE", type="CTS_UPDATED", price=1.3,
+                         meta={"structure_id": 1, "cycle_id": 0, "via": CTS_UPDATED_RAW_VIA})
+    pat = StructureEvent(idx=15, category="STRUCTURE", type="CTS_UPDATED", price=1.25,
+                         meta={"structure_id": 1, "cycle_id": 0, "via": "continuous", "confirmed_at": 20})
+    evs = [make_bos_confirmed(bos_anchor_idx=7, confirmed_at=10, structure_id=0, cycle_id=1, price=0.95),
+           make_cts_established(cts_anchor_idx=13, confirmed_at=16, structure_id=1, cycle_id=0),
+           raw, pat]
+    assert _prev_bos_pairs(evs, 17) == [(7, 17)]

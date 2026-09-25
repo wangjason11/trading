@@ -615,7 +615,8 @@ The unified probe primitive (Phase 1 design 2026-05-29 — see
 `memory/project_unified_identify_start_probe.md`, code in
 `engine_v2/structure/unified_probe.py`) replaces today's four asymmetric
 paths. Per iteration it picks the single most-extreme retrace candle in
-`[first_CTS_EST.idx + 1, probe_end_idx]` and applies a **two-condition reset**;
+`[first CTS_ESTABLISHED moment + 1, probe_end_idx]` (Phase 2: the upper bound is
+the CTS_0_CONFIRMED anchor − 1 when cycle 0 confirmed) and applies a **two-condition reset**;
 both must hold for the probe to restart from that candidate.
 
 > **Both phases start the retrace window at the CTS_0 established MOMENT + 1.**

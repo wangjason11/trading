@@ -773,6 +773,18 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
   `[prev_bos_line] sid=1: start_idx=591 end_idx=902`. Pin: `test_prev_bos_line_filter_is_the_moment` (sid 1's CTS_0
   anchor 13 / moment 16, reversal 15, a later raw update at 20 → END 13; the stamped revert ends at 20 — checked).
   Tests 892 → 893 + 1 xfail.
+- **E3c + E3d landing review** (1 combined lens, ≈107k): 0 BLOCKER, 0 MAJOR. **The ordering claim above was
+  incomplete:** a pattern-path CTS_UPDATED that REGRESSES the CTS (zones-audit latent bug (a)) is stamped before a
+  raw update it is known after (EST 13/16, raw 17, pattern anchor 15 / moment 20, reversal 17 → first-in-order picks
+  END 15, the earliest-known is 17) → `_prev_bos_lines` now takes `min(qualifying, key=ef.event_moment)` (stable;
+  byte-identical wherever the orders agree; pin `test_prev_bos_line_picks_the_earliest_moment_not_the_first_stamped`
+  kills the first-in-order rule — checked). Surviving mutants pinned: `>=` → `>`
+  (`…_inclusive_at_the_reversal`) and dropping CTS_UPDATED (`…_falls_through_to_a_raw_cts_update`). E3c: nothing
+  else belongs to it (`check_hi` = the CTS_0_CONFIRMED anchor − 1 is a location bound; `_no_retrace_fin` /
+  `_second_cts_fin` already moments); an empty window finalizes identically; reachable non-zero cases (an extreme
+  in [anchor+1, moment] passing / failing the reset) all follow the intended rule. MINORs: PART4 window sentence,
+  `ProbeResult.cts0_est_idx` docstring (Phase 2 fills it), `_run_phase2` window docstring. Replay after the fix ==
+  0 cells. Tests 893 → 896 + 1 xfail.
 
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 
