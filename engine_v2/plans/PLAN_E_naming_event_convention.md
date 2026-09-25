@@ -1199,7 +1199,26 @@ the real emitter.
   documented in `common/types.py`, KL_ZONES_SPEC "Zone indexing" (H1 BOS zone sid 0 cyc 0: time of 115, price of
   96) and ARCHITECTURE (with `StructureLevel.time` = the anchor's time). **Measured (vs
   `20260925_152746_9ac70ba`):** 24/24 byte-identical, figures JSON-identical, fetch gate PASS, run.log identical.
-  Replay 46.1 s. Tests 935 + 1 xfail.
+  Replay 46.1 s. Tests 935 + 1 xfail. Commit `6c37053`; save `20260925_165323_6c37053`.
+  - Landing review (1 conformance lens, ≈255k — over the 150–200k estimate): 0 BLOCKER; every rewritten sentence
+    true to the code (Q12 example verified in the save: `source_time` 2025-11-21 17:00 = candle 115, `source_price`
+    0.55808 = candle 96's low). **MAJOR (folded in):** the sweep's regex (`CTS/BOS extreme`, `extreme idx|candle`)
+    missed bare forms ("the extreme", "extreme ==", "(the extreme)", "extreme precedes", "the price extreme") —
+    ~40 present-tense sites: the tracked `/compare` skill + WORKFLOWS, KL_ZONES_SPEC ×9, LANDMINES ×7, GOTCHAS ×5,
+    PART4 ×15 (incl. the §17.6 heading → "…MOMENT, not the anchor" and "the moment-not-anchor rule"), FIB ×5,
+    WAVE, `export_plotly`, `probe_fc_finalize`; the GLOSSARY Status claim was false until then. **MINOR (folded
+    in):** two wrong FACTS stale since E4a / E4b — FIB_LIFECYCLE_SPEC "not the extreme `.idx`" and LANDMINES's
+    rendered-candle table "BOS_CONFIRMED dot | `ev.idx`" (the charts draw it at `ef.bos_anchor_idx`); the
+    `ReferenceZone.anchor_idx` docstring said "the probe's `input_idx` (hence the pool key)" — not an input for
+    main sid 0 / the moving BOS_0, and the input feeds the probe-CACHE key; the module docstring's first lines +
+    a stale `_build_sibling_cts_ref_zone` name; the Status kept-list (+ `ParentTables.cts_moment`,
+    `TrueFirstBreakout.est_idx`, the pending E5·4). **NIT (folded in):** `_select_bos_on_breakout` ("Cycle k>1"
+    → ">= 1"; its `bos_idx` locals → `bos_anchor_idx`, an E2 row's leftover); CROSS_CYCLE_FIB_SPEC's `file:line`
+    refs → function names; ARCHITECTURE's `StructureLevel.meta` = `{"event": ev.type, **ev.meta}`; the
+    `first_confluence` frame. Correction to the bullet above: a few history-adjacent parentheticals (the PART4
+    blockquote near "was then a DIFFERENT thing", LANDMINES "What was not foreseen", PRE_REFACTOR "before it
+    …") WERE reworded, meaning unchanged (reviewer-checked). Lesson: a prose sweep's regex must include the
+    bare-noun forms; classify EVERY `extreme` hit, not a phrase list.
 - **Remaining E5:** ~~E5·3 = the IN §1.9 prose +
   §3 #14 + the Q12 `KLZone.source_time` documentation + the GLOSSARY Naming-Standard "Status" paragraph + from
   the E5·1 / E5·2 reviews: the `ReferenceZone` docstring (`anchor_idx` defined for every constructed source,

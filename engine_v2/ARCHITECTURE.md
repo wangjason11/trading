@@ -203,8 +203,7 @@ through the mirror), and cond2 (the cycle-0 mirror) / cond3 on theirs since E3a�
 
 The engine maintains a stable downstream interface by converting structure events into StructureLevels (CTS/BOS list).【fileciteturn1file14】
 `StructureLevel.time` (the `structure_levels.csv` `time` column) is the timestamp of the level's ANCHOR
-(`ef.cts_anchor_idx` / `ef.bos_anchor_idx`) — a location's time; `price` is that anchor's price and `meta` a copy of
-the event meta. Contrast `KLZone.source_time` = the source event's MOMENT (PLAN_E Q12: both names kept, documented).
+(`ef.cts_anchor_idx` / `ef.bos_anchor_idx`) — a location's time; `price` is that anchor's price and `meta` = `{"event": ev.type, **ev.meta}`. Contrast `KLZone.source_time` = the source event's MOMENT (PLAN_E Q12: both names kept, documented).
 
 #### KLZone
 Produced by `derive_kl_zones_v1` from structure events (not structure levels).【fileciteturn2file4】

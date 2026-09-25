@@ -21,7 +21,7 @@ indexing bullets below were corrected 2026-09-22 against `ARCHITECTURE.md` "`ev.
 `ev.idx` is **event-specific** — it is not uniformly "the level" nor "when it is known":
 - `BOS_CONFIRMED.idx` = `meta["confirmed_at"]` = the breakout's apply candle — the cycle's
   CTS-established moment (Plan E E4b, 2026-09-25; asserted at the emit). The level — the BOS
-  **extreme**, `<= confirmed_at` on the normal path (34/34 rows on the reference window; not asserted
+  **anchor**, `<= confirmed_at` on the normal path (34/34 rows on the reference window; not asserted
   in code) — is `meta["bos_anchor_idx"]` (`ef.bos_anchor_idx`); it was `ev.idx` before E4b. `ev.price`
   is the level's price.
 - `CTS_CONFIRMED.idx` = the **confirmation candle** (the pullback apply candle, or the
@@ -237,7 +237,7 @@ A cycle ends at the first of (`zones/structure_lifecycle.compute_cycle_lifecycle
 1. **reversal** of its structure, or
 2. **next cycle starts** — the `(structure_id, cycle_id+1)` cycle's **clamped
    lifecycle-start** = `max(CTS_ESTABLISHED.meta["confirmed_at"], struct_start[,
-   lifecycle_floor])` — the CTS-established **moment**, not the extreme
+   lifecycle_floor])` — the CTS-established **moment**, not the CTS anchor
    (Plan C, 2026-09-20; see "End-side change" below), or
 3. **the sub's window end** (subs only) — `lifecycle_cap`.
 
@@ -275,7 +275,7 @@ main.
 > the bound, the lagging rows and why they lag: canonical: `ARCHITECTURE.md` "`ev.idx` convention").
 > `structure_lifecycle.compute_cycle_lifecycle` now reads the moment — for main, every sub cycle and
 > the sub-structure parent tables (`multitf/parent_tables.py`) alike — and **raises** (`AssertionError`)
-> on a `CTS_ESTABLISHED` without `meta["confirmed_at"]` rather than falling back to the extreme.
+> on a `CTS_ESTABLISHED` without `meta["confirmed_at"]` rather than falling back to the anchor.
 > Measured on the first Plan C replay (2026-09-20): H1 byte-identical; ONE visible sub shift (sub
 > `454/+1`'s cycle-1 end 1223→1224); the two predicted 2828→2829 shifts are masked by the identical
 > record floor 2829 on both lenses (same value before and after). Lifecycle values are
@@ -289,8 +289,8 @@ the CTS-established *moment* (the same value POI inherits through
 
 | Zone | Old end (pre-Phase-3) | End (cycle-end, Plan C) | Change |
 |------|---------|---------------------|--------|
-| **CTS_n** | next CTS established `ev.idx` (early-end) | next cycle's clamped start (moment) | none where extreme == moment (the common case); later by the extreme→moment lag where the extreme precedes the moment (see the note above) |
-| **BOS_n** | next BOS's `confirmed_at` (breakout, same-side replace) | next cycle's clamped start (moment) | **none** by definition when the next cycle's start is unclamped — `BOS_{n+1}.confirmed_at == CTS_{n+1}.confirmed_at` (the Phase-3 shift onto the extreme — that same extreme→moment lag — is undone by Plan C); later only when `struct_start` / `lifecycle_floor` clamps the next cycle's start |
+| **CTS_n** | next CTS established `ev.idx` (early-end) | next cycle's clamped start (moment) | none where anchor == moment (the common case); later by the anchor→moment lag where the anchor precedes the moment (see the note above) |
+| **BOS_n** | next BOS's `confirmed_at` (breakout, same-side replace) | next cycle's clamped start (moment) | **none** by definition when the next cycle's start is unclamped — `BOS_{n+1}.confirmed_at == CTS_{n+1}.confirmed_at` (the Phase-3 shift onto the anchor — that same anchor→moment lag — is undone by Plan C); later only when `struct_start` / `lifecycle_floor` clamps the next cycle's start |
 | reversal-capped | reversal idx | reversal idx | label only (`end_reason` replaces `deactivated_by`) |
 | sub-window-capped | — | the sub's `end_idx` | `end_reason` = the sub's `end_reason` |
 | last / open zone | `None` / reversal | `None` / reversal | none |
@@ -298,8 +298,8 @@ the CTS-established *moment* (the same value POI inherits through
 Why the two definitions can differ: a breakout emits `BOS_{n+1} CONFIRMED`
 (`confirmed_at` = breakout `apply_idx`) and `CTS_{n+1} ESTABLISHED`
 (`meta["cts_anchor_idx"]` = the breakout-window extreme — `ev.idx` until Plan E E4a;
-`ev.idx` = `meta["confirmed_at"]` = the same `apply_idx`) together. When the apply candle *is* the extreme (the common case),
-extreme and moment coincide; otherwise the extreme is earlier (bound and lag
+`ev.idx` = `meta["confirmed_at"]` = the same `apply_idx`) together. When the apply candle *is* the anchor (the common case),
+anchor and moment coincide; otherwise the anchor is earlier (bound and lag
 figures: `ARCHITECTURE.md` "`ev.idx` convention"). **Empirically
 (history):** all 10 H1 zones in baseline `e0b70dd` had `confirmed_at == ev.idx`,
 so the Phase-3 extreme rule left H1 `end_time` byte-identical; on the M15 subs
@@ -309,7 +309,7 @@ cycle's BOS-zone end back onto the breakout candle that established the next
 cycle, while keeping the unification that a cycle's BOS zone, CTS zone and POI
 all end at the SAME idx.
 
-Aside from that boundary alignment (the extreme→moment lag above), the end side is a *representation*
+Aside from that boundary alignment (the anchor→moment lag above), the end side is a *representation*
 change (`active`→`status`, `deactivated_by`→`end_reason`, +`end_idx`). (See
 the start-side clamp below for the other behavioral change.)
 
@@ -337,7 +337,7 @@ satisfied by construction for the BOS_n zone (its raw `confirmed_idx` IS
 
 - The CTS_n zone's `confirmed_idx` (its confirmation candle — pullback or
   sd-proximity) is at or after the cycle start (a pullback confirmation is strictly later; a
-  proximity confirmation can fire on the apply candle itself when the extreme precedes it), so it
+  proximity confirmation can fire on the apply candle itself when the CTS anchor precedes it), so it
   is rarely clamped.
 - The BOS_n zone's `confirmed_idx` (the breakout) equals the cycle's
   CTS-established moment for *normal* cycles, but for **post-reversal cycle 0** the

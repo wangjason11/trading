@@ -241,7 +241,7 @@ their storage differs, and the projection bridges them.
 that is the cycle's lifecycle-start (the CTS-established floor, as zones use).
 (The tracker stamps that birth at its `activated_at` = the MOMENT of the
 activating event — `CTS_ESTABLISHED.meta["confirmed_at"]`, as zones use, since
-Plan E E3a 2026-09-24 (before it the extreme `CTS_ESTABLISHED.idx`); a fib first
+Plan E E3a 2026-09-24 (before it the anchor `CTS_ESTABLISHED.idx`); a fib first
 activated on a later `CTS_UPDATED` (`meta["activated_on"] == "update"`,
 `fib_tracker.py` `_handle_cross_cycle_cts_updated` / `_handle_cycle0_cts_updated`)
 stamps that update's moment. See §15.3.)
@@ -286,8 +286,8 @@ cycle `n`. So:
 Consequences (accepted):
 - Cycle `n`'s fib end is **earlier** than the zone end for cycle `n` (zones end
   at the next cycle's clamped lifecycle-start — since Plan C 2026-09-20 the
-  `CTS_{n+1}` ESTABLISHED **moment** `meta["confirmed_at"]`, not the extreme
-  `.idx`; `compute_cycle_lifecycle`, inherited by `poi_zones.py`). So
+  `CTS_{n+1}` ESTABLISHED **moment** `meta["confirmed_at"]`, not the CTS anchor
+  (`meta["cts_anchor_idx"]`; `.idx` until Plan E E4a); `compute_cycle_lifecycle`, inherited by `poi_zones.py`). So
   **fib cycle-end diverges from zone cycle-end at this one boundary.** This is
   the price of the honest early *start*; start and end shift earlier *together*.
 - It preserves the **"exactly one active fib per structure"** invariant (cycle
@@ -307,7 +307,7 @@ Consequences (accepted):
    when cycle `n+1`'s fib is created at `CTS_{n+1}` ESTABLISHED (`_activate_fib`'s
    `new_cycle` stamp, or a cross created there, whose `_obsolete_prev_cycle_all_fibs`
    stamps it), the tracker sets cycle `n`'s terminal at the `CTS_{n+1}` ESTABLISHED
-   **moment** (`activated_at`, since Plan E E3a 2026-09-24 — before it the extreme
+   **moment** (`activated_at`, since Plan E E3a 2026-09-24 — before it the anchor
    `CTS_{n+1}.idx`, which earliest-wins kept over the pass-through). Reference window:
    sub 3 cycle 0's fib ends `new_cycle` at 2829 (was 2828) == the cycle end (its KL
    zone's `end_idx`), on both lenses (the fib is collapsed, so nothing renders).
@@ -923,7 +923,7 @@ not lifecycle.
   — the **structure** lifecycle-start (reversal handoff + parent floors), **NOT**
   the full cycle-start `max(CTS_ESTABLISHED.meta["confirmed_at"], struct_start,
   floor)` (`compute_cycle_lifecycle` — the established **moment**, not
-  the CTS anchor, the extreme, since Plan C 2026-09-20). KL's zone clamp is
+  the CTS anchor, since Plan C 2026-09-20). KL's zone clamp is
   equivalent to that full cycle-start: it clamps `confirmed_idx` to `struct_start`
   (`kl_zones_v1.derive_kl_zones_v1`), and the moment term holds by construction (a
   BOS zone's raw `confirmed_idx` IS the moment; a CTS zone's is at or after it). POI's
@@ -936,7 +936,7 @@ not lifecycle.
   cycle) while leaving the §6 early start intact (it sits after the floor). For
   H1-main there is no pre-established phase, so first-active = the tracker's
   `activated_at` — the `CTS_ESTABLISHED` **moment** `meta["confirmed_at"]` since Plan E
-  E3a (2026-09-24; before it the extreme `CTS_ESTABLISHED.idx`); on main and subs alike a
+  E3a (2026-09-24; before it the anchor `CTS_ESTABLISHED.idx`); on main and subs alike a
   fib first activated on a later `CTS_UPDATED` (`meta["activated_on"] == "update"`)
   stamps that update's moment instead (e.g. on the reference window sub 3 cycle 0, on
   both lenses: first-active 2651 — slice-local `activated_at` 62 in the fib CSV

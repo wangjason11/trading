@@ -243,8 +243,8 @@ Compare structural events between iterations:
 
 On `CTS_ESTABLISHED` / `BOS_CONFIRMED` / pattern-path `CTS_UPDATED`, `idx` IS the
 moment since Plan E E4a / E4b / E4c (2026-09-25; `== confirmed_at`) — track meta
-`cts_anchor_idx` / `bos_anchor_idx` for location shifts (the price **extreme**; `price` stays the
-extreme's price). The moment the event became known is `meta["confirmed_at"]`,
+`cts_anchor_idx` / `bos_anchor_idx` for location shifts (the ANCHOR — a price location; `price` stays
+the anchor's price). The moment the event became known is `meta["confirmed_at"]`,
 stored inside the `meta` column of `*_structure_events.csv`, and it is the
 value that timing and lifecycle code reads. Since Plan E E4 an anchor shift alone
 leaves `idx` unchanged (and, diffing against a pre-E4 save, a `confirmed_at` shift

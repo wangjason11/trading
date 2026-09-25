@@ -560,7 +560,7 @@ main reversal probe, so it needs its own decision and `/compare`.
 1. **original_bos0_bounds captured at iteration 0 only** — subsequent probe iterations reuse the first BOS_0 zone for exception evaluation. Do not re-derive bounds mid-loop.
 2. **Phase 2 only runs if status == "finalized" AND `run_continuation=True`** — when `run_continuation=False`, Phase 2 is skipped entirely (probe-only mode). The result contains only Phase 1 probe data.
 3. **Exception evaluation checks inner bound, not outer** — proximity is measured as "candle high/low within tolerance of zone inner bound" (the bound closer to current price).
-4. **Exception check window starts from the CTS anchor + 1** (`ef.cts_anchor_idx(cts_est[0]) + 1`; the two Exception 2 loops do the same — test-only paths that keep the anchor, PLAN_E Q10). That anchor (`meta["cts_anchor_idx"]`; `ev.idx` until Plan E E4a) is the cycle-0 CTS **anchor** — the pattern extreme, the first argmax(`h`) / argmin(`l`) over the breakout pattern's span — NOT a pullback confirmation and NOT the moment the cycle was established (`meta["confirmed_at"]` = `ev.idx` since E4a, the apply candle; ARCHITECTURE "`ev.idx` convention"). The anchor candle belongs to the breakout itself, and the check asks whether price returns to the zone *after* the breakout, so exclude it (see GOTCHAS.md). When the extreme precedes the apply candle, the window's first candles (up to `confirmed_at`) are still inside the breakout pattern.
+4. **Exception check window starts from the CTS anchor + 1** (`ef.cts_anchor_idx(cts_est[0]) + 1`; the two Exception 2 loops do the same — test-only paths that keep the anchor, PLAN_E Q10). That anchor (`meta["cts_anchor_idx"]`; `ev.idx` until Plan E E4a) is the cycle-0 CTS **anchor** — the pattern extreme, the first argmax(`h`) / argmin(`l`) over the breakout pattern's span — NOT a pullback confirmation and NOT the moment the cycle was established (`meta["confirmed_at"]` = `ev.idx` since E4a, the apply candle; ARCHITECTURE "`ev.idx` convention"). The anchor candle belongs to the breakout itself, and the check asks whether price returns to the zone *after* the breakout, so exclude it (see GOTCHAS.md). When the CTS anchor precedes the apply candle, the window's first candles (up to `confirmed_at`) are still inside the breakout pattern.
 5. **Condition 4 split — `end_idx` is the discriminator:**
    - **4a) `end_idx is not None`** AND probe reached it without 2 CTS_EST → **finalized**. The caller-defined boundary is treated as a real terminal point (e.g., the first sd zone-proximity trigger candle is known and definitive).
    - **4b) `end_idx is None`** AND probe ran past available `df` data without 2 CTS_EST → **pending**. More candles may arrive later that resolve the probe; the caller can re-invoke with the same or advanced `start_idx`.
@@ -762,9 +762,9 @@ registry, never from `dfx.attrs["lower_tf_results"]`.
 >   read causal** now that geometry is not bounded per trigger — never widen
 >   it, never drop `hi`. The clip (per record) and the reference window both
 >   key every CTS type (`structure/reference_zone._CTS_EVENT_TYPES`) on its
->   MOMENT (`ef.event_moment`, Plan E E3b, 2026-09-25): a CTS whose extreme is
+>   MOMENT (`ef.event_moment`, Plan E E3b, 2026-09-25): a CTS whose anchor is
 >   `<= hi` but whose moment is after it is NOT a candidate (before E3b they
->   keyed on `ev.idx`, the extreme for `CTS_ESTABLISHED` / a pattern-path
+>   keyed on `ev.idx`, the anchor for `CTS_ESTABLISHED` / a pattern-path
 >   `CTS_UPDATED`; 0 cells on the reference window). The recency pick keys on
 >   the moment too. Any change moves `starting_idx` = pool keys → its own `/compare`.
 > - the zone is built by `build_reference_zone_from_cts_event(events,
@@ -1466,8 +1466,8 @@ events these differ:
 
 | Element | Rendered candle |
 |---|---|
-| CTS_CONFIRMED dot | `meta["cts_anchor_idx"]` (the extreme), not `ev.idx` (the confirmation candle) |
-| BOS_CONFIRMED dot | `ev.idx` |
+| CTS_CONFIRMED dot | `meta["cts_anchor_idx"]` (the anchor), not `ev.idx` (the confirmation candle) |
+| BOS_CONFIRMED dot | `ef.bos_anchor_idx(ev)` (the anchor), not `ev.idx` (the moment since Plan E E4b) |
 | PB dot | `ev.idx` (pullback STATE_CHANGED event) |
 | Wave-candle vertical line | `wc.last_wave_candle_idx` / `wc.first_wave_candle_idx` |
 | Prev BOS line | `line_info["start_idx"]` |
@@ -1785,7 +1785,7 @@ cycle 0 must still floor at the parent floor. Do not add a per-cycle carve-out.
   `meta["confirmed_at"]`, when a `BOS_CONFIRMED (S,C)` has no `CTS_ESTABLISHED`,
   when `BOS_CONFIRMED(S,C).meta["confirmed_at"] !=
   CTS_ESTABLISHED(S,C).meta["confirmed_at"]` (the definitional identity —
-  NEVER assert it against the CTS anchor `meta["cts_anchor_idx"]`, the extreme;
+  NEVER assert it against the CTS anchor `meta["cts_anchor_idx"]`, a location;
   `CTS_ESTABLISHED.idx` is the moment since Plan E E4a), and when any LOH
   map returns `None`; the sweep asserts `tables.has_cycle(S, C)` for every
   trigger it resolves and `parent_sd[S]` for every record it creates. Nothing degrades to an
@@ -2052,7 +2052,7 @@ moment (`CTS_CONFIRMED` / `CTS_RECONFIRMED` — `ev.idx == confirmed_at` —
 raw-path `CTS_UPDATED`, `STATE_CHANGED`, and `CTS_ESTABLISHED` / `BOS_CONFIRMED` /
 pattern-path `CTS_UPDATED` since Plan E E4a / E4b / E4c — the clip keys the last
 three on `confirmed_at` (the pattern path since Plan E E3b), from the time their
-`ev.idx` was the retro-stamped extreme). It is NOT for
+`ev.idx` was the retro-stamped anchor). It is NOT for
 `REVERSAL_CANDIDATE` (applies at `meta["apply_idx"]`), which can still straddle a
 cap (`ev.idx <= cap <` its apply) and survive the clip, yielding a half-derived
 reversal — the remaining known limit in PART4 §17.12 (zero straddles on the

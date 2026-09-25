@@ -52,7 +52,7 @@ post-reversal-fib-heavy — unify before Step 4 so Step 4 builds on settled logi
 
 Both paths live in `FibTracker` (`zones/fib_tracker.py`), selected by
 `fib_mode ∈ {"h1", "cross_cycle"}` at construction (orchestrator passes it). The
-same orchestrator event loop drives both (`orchestrator.py:204-236`,
+same orchestrator event loop drives both (`orchestrator._run_downstream_pipeline`,
 `on_cts_established / on_cts_updated / on_cts_confirmed / on_cts_threshold_updated`);
 the branch happens *inside* each handler.
 
@@ -82,9 +82,9 @@ the branch happens *inside* each handler.
   `normal_cycle1` FibState, `cross_cycle` FibState); only the active winner mirrors
   to `_fibs[(sid,1)]`. **≤2 anchor candidates** (BOS_0 cross vs BOS_1 normal), no
   integer version. Update toggles cross↔normal (`_update_cycle1_fibs`).
-- **Shared util already used:** `select_fib_anchor_for_cycle` (`fib_tracker.py:99`),
+- **Shared util already used:** `select_fib_anchor_for_cycle` (`zones/fib_tracker.py`),
   a pure function ALSO called by the MS in-flight POI resolver
-  (`market_structure.py:1928`) so in-flight and downstream agree on Scenario 2. It
+  (`MarketStructure._update_cycle0_data` / `_refresh_poi_inners_for_cycle`) so in-flight and downstream agree on Scenario 2. It
   covers **cycle 1 only** and only the S2-vs-S3 decision (not S1, not revert, not a
   walk). (Since Plan F, 2026-09-24, they agree on cond2 / cond3 but not always on
   cond1: FibTracker passes `evaluated_at` = the CTS_1 moment, the in-flight resolver
@@ -219,7 +219,7 @@ This is the **new capability** (the "update" task): main's cross may target cycl
 
 ### 4.1 Definitions
 - `P_rev` = the previous structure's (sid−1) **last BOS zone max-expanded OUTER** —
-  the SAME value `_get_prev_bos_outer` (`orchestrator.py:177`) computes today for the
+  the SAME value `_get_prev_bos_outer` (`orchestrator._run_downstream_pipeline`) computes today for the
   Scenario-1 revert check. (Single source of truth — reuse it, do not re-derive.)
 - `M` = the **earliest** cycle of the new structure whose **CTS anchor** clears
   `P_rev` (past it in the new structure's sd direction: sd=+1 ⇒ `CTS_M.price >= P_rev`;
@@ -361,7 +361,7 @@ keyword-only, required `evaluated_at` — §3 item 1.)
 4. Scenario-1/revert independent of the ceiling (§5).
 5. Sub output byte-identical (§7).
 6. Main `target=1` reproduces today's S2/S3 byte-identically (§3 sanity floor).
-7. **In-flight POI resolver agreement (`market_structure.py:1928`).** The MS in-flight
+7. **In-flight POI resolver agreement (`MarketStructure._refresh_poi_inners_for_cycle`).** The MS in-flight
    resolver shares `select_fib_anchor_for_cycle`, which is **cycle-1-only** today. For
    §11a (byte-identical, `target=1`, snapshot fill-as-of) agreement is automatic
    (since Plan F on cond2 / cond3 only — cond1 is cut at the CTS_1 moment downstream,

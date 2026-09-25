@@ -234,7 +234,7 @@ the start differs by role.
 
 | Role | start_idx (clamped to struct/parent floor) | end_idx | Locks on activation? |
 |---|---|---|---|
-| **FB** | `CTS_n` established **moment** (`CTS_ESTABLISHED.meta["confirmed_at"]`, clamped = `compute_cycle_lifecycle.start`; NOT the CTS anchor, the extreme (`CTS_ESTABLISHED.idx` until Plan E E4a made that idx the moment) — Plan C 2026-09-20) | cycle end | yes (immediate) |
+| **FB** | `CTS_n` established **moment** (`CTS_ESTABLISHED.meta["confirmed_at"]`, clamped = `compute_cycle_lifecycle.start`; NOT the CTS anchor (`CTS_ESTABLISHED.idx` until Plan E E4a made that idx the moment) — Plan C 2026-09-20) | cycle end | yes (immediate) |
 | **LB** | `CTS_n` CONFIRMED | cycle end | yes (immediate) |
 | **FP** | `CTS_n` CONFIRMED | cycle end | yes (immediate) |
 | **LP** | `CTS_n` CONFIRMED | cycle end | **only if** cycle ended via `next_cycle` (`CTS_{n+1}` ESTABLISHED); active-temp otherwise |

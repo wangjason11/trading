@@ -37,8 +37,10 @@ Status (Plan E E5, 2026-09-25): the code, the current specs and the tracked skil
 Kept by decision: frozen event names (bridged by `ARCHITECTURE.md` "`ev.idx` convention") and event-type
 tokens / legend labels; `KLZone.source_time` (a moment's time next to the anchor's `source_price`) and
 `StructureLevel.time` (the anchor's time) — PLAN_E Q12; the reversal-scope names (`reversal_confirmed_by_sid`
-…, PLAN_E Q14 — a separate pass); run.log labels (`cts0_est=`, `[fib] CTS idx=`); the
-`debug/zone_proximity_diag.py` CSV columns. Dated history — landed plans, "as landed" / "history" notes, bug
+…, PLAN_E Q14 — a separate pass); moment names that predate the `*_established_idx` spelling
+(`ParentTables.cts_moment` and its builder's local `bos_moment`, `TrueFirstBreakout.est_idx`); run.log labels (`cts0_est=`,
+`[fib] CTS idx=`); the `debug/zone_proximity_diag.py` CSV columns. Pending: the triggers-CSV
+`validated_parent_idx` (mixes an H1 BOS anchor with M15 values — PLAN_E E5·4, Q4). Dated history — landed plans, "as landed" / "history" notes, bug
 narratives — keeps its original wording: there "the CTS/BOS **extreme** (at confirmation)" for
 `CTS_ESTABLISHED.idx` / `BOS_CONFIRMED.idx`, `CTS_CONFIRMED.meta["cts_anchor_idx"]` or a KL-zone
 `meta["anchor_idx"]` means the CTS/BOS **anchor** (`CTS_ESTABLISHED.idx` / `BOS_CONFIRMED.idx` were the

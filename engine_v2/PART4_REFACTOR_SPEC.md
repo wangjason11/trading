@@ -158,8 +158,8 @@ structure (and likewise a cycle) has both:
 
 These mirror main structure: a cycle's `starting_idx` is the prior BOS
 candle, but the cycle becomes active at the CTS-established **moment**
-(`CTS_ESTABLISHED.meta["confirmed_at"]`, §5 / §17.6 — never the CTS anchor, the
-extreme; `.idx` IS the moment since Plan E E4a). For a sub, a **record**'s `start_idx = max(probe_finalize_idx,
+(`CTS_ESTABLISHED.meta["confirmed_at"]`, §5 / §17.6 — never the CTS anchor, a
+location; `.idx` IS the moment since Plan E E4a). For a sub, a **record**'s `start_idx = max(probe_finalize_idx,
 trigger_idx, parent_floor_idx)` and the **unique sub**'s `start_idx` is its
 first non-zero-length record's `start_idx` (§17.4–§17.5); `starting_idx` is
 only the geometric anchor. The active window is `[start_idx, end_idx)` —
@@ -711,7 +711,7 @@ dormant** (like the `pending` finalize conditions).
   reversal watch / pending reversal / pending rewind) after the 2nd
   `CTS_ESTABLISHED` — in addition to the `probe_end_idx` bound, never instead
   of it (`n_cts ≤ 1` runs still reach `probe_end_idx`); finalize = that CTS's
-  moment (`confirmed_at`), not its CTS anchor (`cts_anchor_idx`, the extreme; `.idx` until Plan E
+  moment (`confirmed_at`), not its CTS anchor (`cts_anchor_idx`; `.idx` until Plan E
   E4a). Byte-identical on the
   reference window (FC(0,0) stops at 1021 for finalize 1020, FC(0,1) at 2609
   for 2608; `.idx == confirmed_at` for both). Two different "anchor"s here:
@@ -830,7 +830,7 @@ overlap or invert. Strict `proximity > reset` is the cleanest invariant.
 > parent_cycle_id, direction)`. The clamp/pass-through machinery below still
 > applies but is projected **once** per unique sub (§17.9). The cycle
 > lifecycle-start becomes the CTS-established **moment**
-> (`meta["confirmed_at"]`), not the extreme (§17.6) — this reaches `main` too
+> (`meta["confirmed_at"]`), not the CTS anchor (§17.6) — this reaches `main` too
 > (byte-identical on the reference window).
 
 For `main` (highest TF), continue using `compute_structure`:
@@ -924,7 +924,7 @@ Structures end when:         main: next structure starts (sid+1 = reversal)
 
 ANY new cycle starts when:   new CTS established — at the MOMENT it is established
                              (CTS_ESTABLISHED.meta["confirmed_at"] == BOS_CONFIRMED
-                             .meta["confirmed_at"]; NEVER the CTS anchor, the extreme —
+                             .meta["confirmed_at"]; NEVER the CTS anchor —
                              CTS_ESTABLISHED.idx until Plan E E4a, the moment since)
                              — CLAMP: a cycle's lifecycle-start may not precede
                                its structure's lifecycle-start (main & sub). For a
@@ -1048,7 +1048,7 @@ generalized):
   entity's TF in `multitf/parent_tables.py::build_parent_tables`:
   - `parent_cycle_id lifecycle-start` = the parent cycle's **`CTS_ESTABLISHED
     .meta["confirmed_at"]`** (H1 — the moment; the 2026-05-27 text said
-    `ev.idx`, the extreme, which is a historical anchor), clamped
+    `ev.idx`, then the anchor, a historical location), clamped
     `max(struct_start[S], cts_moment[(S,C)])` = `floor_h1[(S,C)]`, then mapped to
     M15 via **last-of-hour** (`_map_parent_idx_to_m15_hour_end`, LOH). Last-of-hour
     (not first) because the H1 candle isn't closed until its 4th M15 sub-candle,
@@ -1226,7 +1226,7 @@ last available candle, yet active elements stay active). So:
 lifecycle_cap, cap_reason) -> Dict[(sid, cycle), (start_idx, end_idx, end_reason)]`:
   1. *Pass 1 — clamped cycle starts:* `start = max(CTS_ESTABLISHED
      .meta["confirmed_at"], struct_start, floor)` — **the established MOMENT
-     (Plan C, 2026-09-20; was `CTS_ESTABLISHED.ev.idx`, the extreme, until
+     (Plan C, 2026-09-20; was `CTS_ESTABLISHED.ev.idx`, the anchor, until
      then)**; asserts that every `CTS_ESTABLISHED` carries `confirmed_at`
      (`struct_start` from `compute_struct_start_by_sid`, the B1 helper, which
      for a sub is already floored at the sub's `start_idx`).
@@ -2976,7 +2976,7 @@ rev_by_sid[S]     = STATE_CHANGED→reversal idx of sid S          (compute_reve
 struct_start[S]   = reversal handoff floor                       (compute_struct_start_by_sid)
 cts_moment[(S,C)] = CTS_ESTABLISHED.meta["confirmed_at"]          # the MOMENT the cycle was established
                                                                  #   (== BOS_CONFIRMED.confirmed_at, definitional;
-                                                                 #   last-seen per (S,C)) — NOT the CTS anchor (the extreme)
+                                                                 #   last-seen per (S,C)) — NOT the CTS anchor (a location)
 parent_sd[S]      = CTS_ESTABLISHED.meta["struct_direction"]
 floor_h1[(S,C)]   = max(struct_start[S], cts_moment[(S,C)])      # == the cycle's CLAMPED lifecycle-start
 end_h1[(S,C)]     = floor_h1[(S,C+1)] if it exists, else rev_by_sid[S], else None
@@ -2984,23 +2984,23 @@ floor_m15 / end_m15 = LOH(...)                                   # every map mus
 degenerate[(S,C)] = end_m15 is not None and floor_m15 >= end_m15
 ```
 
-**Cycle lifecycle-start = the CTS-established MOMENT, not the extreme
+**Cycle lifecycle-start = the CTS-established MOMENT, not the anchor
 (decided 2026-09-19).** A cycle's real-time lifecycle begins when it is
 *established* (`CTS_ESTABLISHED.meta["confirmed_at"]`, the apply candle);
 its CTS anchor (`meta["cts_anchor_idx"]`; `CTS_ESTABLISHED.idx` until Plan E E4a
-made that idx the moment) is where its **extreme** sits — a historical anchor,
-like the BOS anchor. Rev 1 and §5 used the extreme ("the
+made that idx the moment) is where its price sits — a historical location,
+like the BOS anchor. Rev 1 and §5 used the anchor ("the
 canonical cycle-start idx"). Plan C changes the canonical rule in
 `zones/structure_lifecycle.py::compute_cycle_lifecycle` — cycle start =
 `max(CTS_ESTABLISHED.meta["confirmed_at"], struct_start, floor)` — so main, sub
 cycles and this parent table all agree. On the reference window H1 is
-byte-identical (extreme == moment on all five cycles); two unique M15 sub
-cycles have extreme ≠ moment, each by one candle — three CSV rows, because
+byte-identical (anchor == moment on all five cycles); two unique M15 sub
+cycles have anchor ≠ moment, each by one candle — three CSV rows, because
 sub `2639/−1` is mirrored into both lenses (1223/1224; 2828/2829 ×2) — and
 were PREDICTED to shift +1 — measured: ONE visible shift (the 1223→1224 case,
 as the END of sub `454/+1`'s cycle 1), the 2828→2829 cycle (both lens rows)
 masked by an equal record floor (see the blockquote below and GOTCHAS "A
-Predicted +1 Shift Can Be Masked by an Equal Floor"). Extreme == moment is the
+Predicted +1 Shift Can Be Masked by an Equal Floor"). Anchor == moment is the
 common case (31 of the 34 `CTS_ESTABLISHED` rows), not luck — but it is not
 guaranteed, and the one-candle lag is empirical, not a bound (`ARCHITECTURE.md`
 "`ev.idx` convention").
@@ -3037,7 +3037,7 @@ CTS_ESTABLISHED(S,C).meta["confirmed_at"]` (definitional — both are the same
 `apply_idx`); **never** assert it against the CTS anchor `meta["cts_anchor_idx"]`
 (`CTS_ESTABLISHED.idx` until Plan E E4a; false on 3
 of the 34 saved `CTS_ESTABLISHED` rows — 2 unique M15 cycles; true on all 5 H1
-cycles here because extreme == apply candle is the common case, not a
+cycles here because anchor == apply candle is the common case, not a
 guarantee). The per-event field table (`ev.idx` vs `meta["confirmed_at"]` vs
 the anchor keys of the two anchor realms, for every structural event) is canonical
 in `ARCHITECTURE.md` "`ev.idx` convention".
@@ -3090,7 +3090,7 @@ CTS-zone inner). No KL derivation happens in the builder (see the sibling read).
 **Probe cache — accepted approximation (design, 2026-09-19).** Key
 `(parent_path, sub_TF, direction, initial_input_idx)`: "same probe" = same
 direction + same initial input, where the input is the FC's price-mapped BOS
-extreme, a sibling type's `ref_zone.anchor_idx`, or the reversal
+anchor, a sibling type's `ref_zone.anchor_idx`, or the reversal
 handoff input. **The first probe to finalize for a key is the truth for every
 later probe of that key — (a) regardless of its search bound `probe_end_idx`
 and (b) regardless of its reference zone.** (b) is a real assumption: the
@@ -3178,8 +3178,8 @@ of the opposite-direction sub on the other lens in this parent cycle":
 - `hi` = the reading trigger's `trigger_idx`: **the window is the only thing
   keeping the read causal**; never widen it. The clip keys every
   CTS type on its MOMENT since Plan E E3b (2026-09-25; before it on `ev.idx`,
-  the EXTREME for `CTS_ESTABLISHED` — the cold-review known limit of
-  2026-09-20), so a CTS whose extreme is `<= hi` but whose moment is after it is
+  the ANCHOR for `CTS_ESTABLISHED` — the cold-review known limit of
+  2026-09-20), so a CTS whose anchor is `<= hi` but whose moment is after it is
   not a candidate. Changing it moves `starting_idx` = pool keys → its own `/compare`;
 - the reference zone is built ad hoc from the winning CTS event with
   `kl_zones=[]` — behaviour-preserving, not a shortcut: subs only ever receive
@@ -3357,7 +3357,7 @@ sibling dfs. `test_sub_id_is_monotonic_and_stable` must survive unchanged.
 ### 17.12 Out of scope (v1)
 
 - **Main** (`H1.main`) stays on `compute_structure`; the pool is
-  subordinate-only. The moment-not-extreme rule (§17.6) does reach main through
+  subordinate-only. The moment-not-anchor rule (§17.6) does reach main through
   `structure_lifecycle` — byte-identical on the reference window.
 - **Deeper nesting** (M5 under an M15 sub): the identity tuple is recursion-ready
   but M5 nesting is not built now.

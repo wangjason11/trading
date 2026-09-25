@@ -580,10 +580,10 @@ computed off those CTS zones survive and render. See
 
 **Practical:** if you need the source CTS zone bounds for a sub wave candle,
 either (a) re-derive the unfiltered zone set, or (b) read the CTS
-extreme from the structure events — the CTS KL zone is anchored at
+anchor from the structure events — the CTS KL zone is anchored at
 `CTS_CONFIRMED.meta["cts_anchor_idx"]` (the CTS anchor at confirmation), the
 same source the zones came from. That equals the same cycle's `CTS_ESTABLISHED.meta["cts_anchor_idx"]`
-only when no `CTS_UPDATED` moved the extreme (7 of the 30 `CTS_CONFIRMED` rows on the
+only when no `CTS_UPDATED` moved the anchor (7 of the 30 `CTS_CONFIRMED` rows on the
 reference window — 6 of 25 unique cycles; see ARCHITECTURE.md "`ev.idx`
 convention"), and `CTS_ESTABLISHED.meta["pattern_anchor_idx"]` is the breakout pattern's
 FIRST candle — not necessarily the extreme (it is when the first candle holds
@@ -657,7 +657,7 @@ zones.
 - Next BOS_CONFIRMED for `(sid, cycle_id + 1)` — its moment `meta["confirmed_at"]` (`== .idx` since Plan E E4b), not its anchor `meta["bos_anchor_idx"]` (a location) → current cycle zones become inactive
 - the sid's last REVERSAL_CANDIDATE `meta["apply_idx"]` (the SCHEDULED reversal apply, a prediction; the scan cap, not the confirmed `STATE_CHANGED(to=reversal)`) → scan window ends (`zone_proximity.py`, `reversal_idx_by_sid`; the scan stops at `apply_idx - 1`)
 
-**Also:** Within the scan window, only use active POI zones at each candle (check `confirmed_idx <= candle <= end_idx`). The BOS KL zone is throughout-active. The CTS KL zone (used for opp_sd triggers) is also throughout-active within this window — `CTS_(n+1)_ESTABLISHED`, which deactivates CTS_n zone, fires exactly AT `next_BOS.confirmed_at` (its moment `meta["confirmed_at"]` is the same apply candle by construction — and its `.idx` since Plan E E4a; its CTS anchor `meta["cts_anchor_idx"]`, the extreme, can be earlier — ARCHITECTURE.md "`ev.idx` convention"), so within `[CTS_n_conf, next_BOS.confirmed_at - 1]` the CTS_n zone is still alive.
+**Also:** Within the scan window, only use active POI zones at each candle (check `confirmed_idx <= candle <= end_idx`). The BOS KL zone is throughout-active. The CTS KL zone (used for opp_sd triggers) is also throughout-active within this window — `CTS_(n+1)_ESTABLISHED`, which deactivates CTS_n zone, fires exactly AT `next_BOS.confirmed_at` (its moment `meta["confirmed_at"]` is the same apply candle by construction — and its `.idx` since Plan E E4a; its CTS anchor `meta["cts_anchor_idx"]` can be earlier — ARCHITECTURE.md "`ev.idx` convention"), so within `[CTS_n_conf, next_BOS.confirmed_at - 1]` the CTS_n zone is still alive.
 
 ---
 
@@ -1689,7 +1689,7 @@ reversal: the buggy one reverses against a *stale, un-expanded* BOS threshold.
 - **CTS only locks at CTS_CONFIRMED** — so re-initializing `cts_threshold` at
   confirmation is correct.
 - **The bug:** both CTS-confirmation paths *also* re-init `bos_threshold` to
-  `st.bos.price` (the ORIGINAL extreme; `st.bos_confirmed` before Plan E E2a) — pullback path ~line 1500,
+  `st.bos.price` (the ORIGINAL BOS level; `st.bos_confirmed` before Plan E E2a) — pullback path ~line 1500,
   proximity path ~line 2013. This **discards any expansion that happened in
   the window `[BOS_CONFIRMED, CTS_CONFIRMED]`**. It's a copy of the (correct)
   `cts_threshold` init wrongly applied to a threshold with a different
@@ -1807,7 +1807,7 @@ states the floor on the record and restates the §5 clamp it refines.
 
 | `finalize_condition` | value | frame |
 |---|---|---|
-| `second_cts_reached` | 2nd `CTS_ESTABLISHED` moment (`meta["confirmed_at"]`) from the probe's own MS run — the candle the early stop keys on (Plan B, 2026-09-20; was `.idx`, the extreme — equal on this window: 1020/1020, 2608/2608) | native sub-TF |
+| `second_cts_reached` | 2nd `CTS_ESTABLISHED` moment (`meta["confirmed_at"]`) from the probe's own MS run — the candle the early stop keys on (Plan B, 2026-09-20; was `.idx`, then the anchor — equal on this window: 1020/1020, 2608/2608) | native sub-TF |
 | `reversal_in_probe` | reversal apply idx | native sub-TF |
 | `no_retrace` (cycle 0 confirmed in-window) | `CTS_0_CONFIRMED.idx` | native sub-TF |
 | `no_retrace` (else) / `end_idx_reached` / Phase-1 | `probe_end_idx` (the probe's search bound — was spelled `end_idx` before Plan C renamed it, 2026-09-20; the `end_idx_reached` condition NAME is unchanged) | **mapped** from the parent (price-mapped `cts_anchor_idx` for `first_confluence`; last-of-hour for the sibling-referencing variations; the reversal candle for the reversal handoff — native) |

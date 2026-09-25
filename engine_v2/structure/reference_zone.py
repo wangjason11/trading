@@ -2,9 +2,8 @@
 
 Per the Phase 1 design (2026-05-29, see project memory
 `project_unified_identify_start_probe.md`), every probe consults a
-`reference_zone` derived from the relevant prior/sibling sid's most recent
-CTS event. The construction rule is uniform across `subsequent_*` and
-`reversal` triggers:
+`reference_zone`. For the CTS-sourced callers (listed below) it is derived
+from the relevant prior/sibling sid's most recent CTS event, by one rule:
 
     take the event with the most recent MOMENT (Plan E E3b) among
     {CTS_CONFIRMED, CTS_UPDATED, CTS_ESTABLISHED}
@@ -67,7 +66,8 @@ class ReferenceZone:
 
     `source` records provenance for debug/attribution. `anchor_idx` is the
     market-structure ANCHOR the zone is built at — a price location, never a
-    moment — and it is also the probe's `input_idx` (hence the pool key):
+    moment. For the probing callers it is also the probe's `input_idx` (→ the
+    probe-cache key; the pool key is the probe's `starting_idx`):
 
     - ``cts_confirmed`` / ``cts_updated`` / ``cts_established`` → the
       winning CTS event's anchor ``ef.cts_anchor_idx(ev)`` (never a
@@ -80,7 +80,7 @@ class ReferenceZone:
 
     Frame: that of the `df` it was built on — H1 for the main structure,
     slice-local M15 on the sub reversal path, entity-absolute M15 on the
-    sibling path.
+    sibling and `first_confluence` paths.
     """
     outer: float
     inner: float
@@ -290,7 +290,7 @@ def build_reference_zone_from_cts_event(
     NOTE: this `-probe_direction` reconstruction ASSUMES every CTS in `events`
     came from a structure in the `-probe_direction` direction. Reversal callers
     satisfy this by construction (the only prior sub is the one being reversed).
-    Sibling callers (`_build_sibling_cts_ref_zone`) must PRE-FILTER `events` to
+    Sibling callers (`_build_sibling_cts_ref_zone_from_pool`) must PRE-FILTER `events` to
     that direction, because a sibling can reverse before the trigger fires and a
     post-reversal CTS would otherwise be picked as "most recent" and mis-sided
     here (direction qualification, 2026-06-15).
@@ -358,7 +358,7 @@ def build_reference_zone_from_cts_event(
     )
     ev = candidates[0]
     # The winner's CTS ANCHOR (a location): the ad-hoc zone base and the probe
-    # input (`anchor_idx` → the pool key).
+    # input (`anchor_idx` → the probe-cache key).
     cts_anchor_idx = ef.cts_anchor_idx(ev)
 
     # Source sid's struct_direction is the OPPOSITE of probe_direction

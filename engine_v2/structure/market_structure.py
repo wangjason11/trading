@@ -2202,7 +2202,7 @@ class MarketStructure:
 
     def _select_bos_on_breakout(self, breakout_apply_idx: int) -> tuple[int, float]:
         """
-        Cycle k>1 BOS: select the BOS anchor — the price extreme of the cycle's retracement window.
+        Cycle >= 1 BOS: select the BOS anchor — the price extreme of the cycle's retracement window.
 
         Window selection:
         - If a pullback fired for the just-completed cycle: use
@@ -2211,7 +2211,7 @@ class MarketStructure:
           [cts_confirmed_idx, breakout_apply_idx] (max retracement across the
           full proximity-to-breakout window).
 
-        Returns (bos_idx, bos_price).
+        Returns (bos_anchor_idx, bos_price).
         """
         st = self.state
 
@@ -2237,15 +2237,15 @@ class MarketStructure:
             series = self._l[s : e + 1]
             # bos idx in positional coordinates
             rel = int(series.argmin())
-            bos_idx = s + rel
+            bos_anchor_idx = s + rel
             bos_price = float(series.min())
-            return bos_idx, bos_price
+            return bos_anchor_idx, bos_price
         else:
             series = self._h[s : e + 1]
             rel = int(series.argmax())
-            bos_idx = s + rel
+            bos_anchor_idx = s + rel
             bos_price = float(series.max())
-            return bos_idx, bos_price
+            return bos_anchor_idx, bos_price
 
     def _maybe_trigger_reversal(self, i: int) -> None:
         """
