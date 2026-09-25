@@ -80,14 +80,15 @@ def event_moment(ev: Any) -> int:
       processing candle); `meta["confirmed_at"]` on the pattern path (the
       pattern's apply candle, Plan E E3·0 — its `ev.idx` is the CTS anchor
       until E4c).
-    - CTS_THRESHOLD_UPDATED: `ev.idx` (the processing candle,
-      `_sync_thresholds_from_range`).
+    - CTS_THRESHOLD_UPDATED / BOS_THRESHOLD_UPDATED: `ev.idx` (the processing
+      candle — `_sync_thresholds_from_range` / `_bos_barrier_step` /
+      `_maybe_expire_reversal_watch` all stamp `i`; BOS added in Plan E E3g-2).
 
     Any other type raises: a new consumer must define its event's moment.
     """
     if ev.type in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
         return int(ev.meta["confirmed_at"])
-    if ev.type in ("CTS_CONFIRMED", "CTS_RECONFIRMED", "CTS_THRESHOLD_UPDATED"):
+    if ev.type in ("CTS_CONFIRMED", "CTS_RECONFIRMED", "CTS_THRESHOLD_UPDATED", "BOS_THRESHOLD_UPDATED"):
         return int(ev.idx)
     if ev.type == "CTS_UPDATED":
         if ev.meta["via"] == CTS_UPDATED_RAW_VIA:
@@ -105,10 +106,9 @@ def stamped_idx(ev: Any) -> int:
     - the event processing order (`processing_order_key`, the sort pins);
     - the historical first-anchor value `SidRecord.creation_event_idx` (stays,
       Plan E E3f) and struct_start's never-established fallback;
-    - an E2 TIME half over mixed event types still to be switched (the
-      threshold timeline, E3g-2) — always with its `# Plan E E3x → moment`
-      marker; where the list holds types `event_moment` does not define, that
-      stage must define them first (PLAN_E §7, E3g-2 note).
+    - an E2 TIME half still to be switched — always with its
+      `# Plan E E3x → moment` marker; where the list holds types `event_moment`
+      does not define, that stage must define them first (PLAN_E §7).
     """
     if ev.type == "CTS_ESTABLISHED":
         return cts_anchor_idx(ev)

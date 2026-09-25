@@ -817,6 +817,18 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
   equivalent (the sweep re-sorts by moment, stably, and an EST / pattern-UPDATED pair cannot tie on a moment). Docs:
   ARCHITECTURE known-sites. Tests 896 → 899 + 1 xfail.
 
+- **E3g-2 (2026-09-25; §7.1 T3).** First the per-type moment the note asked for: `ef.event_moment` now defines
+  `BOS_THRESHOLD_UPDATED` → `ev.idx` (every emitter — `_bos_barrier_step`, `_maybe_expire_reversal_watch` — stamps the
+  processing candle `i`; a fact, like CTS_THRESHOLD_UPDATED). zone_proximity: `_build_cycle_threshold_timeline` sorts
+  on `(ef.event_moment, type)` (re-sorted, per the note) and both pointer walks (the initial `<= scan_start` pass and
+  the per-candle `< i`) compare moments. **Measured == T3's 0:** 0 real cells, figures identical, run.log identical.
+  Pins: `event_moment(BOS_THRESHOLD_UPDATED) == idx`; `test_threshold_timeline_is_ordered_by_moment` (a BOS anchored 5
+  / known 12 sorts after a threshold event at 10). Own mutation loop 2/4: the two pointer reverts are EQUIVALENT on
+  contract-legal streams (the E2c landing review's argument: a cycle's BOS moment == its EST moment <= its
+  CTS_CONFIRMED candle = `scan_start`, and threshold events are stamped at their moment, so both keys agree wherever
+  the walk runs). Docs: GOTCHAS narrow-cycle timeline, LANDMINES "Event Sort Order", `event_moment` / `stamped_idx`
+  docstrings. Tests 899 → 900 + 1 xfail.
+
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 
 **E4a — `CTS_ESTABLISHED`.** `market_structure.py:1514` passes `int(apply_idx)` as `idx` and asserts

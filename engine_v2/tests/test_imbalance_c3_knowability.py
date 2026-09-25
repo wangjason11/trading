@@ -356,6 +356,8 @@ def test_event_moment_per_type():
     # pattern path: the apply candle (Plan E E3·0), not the anchor idx
     assert ef.event_moment(_ev("CTS_UPDATED", 25, 1.2, 0, 0, via="continuous", confirmed_at=27)) == 27
     assert ef.event_moment(_ev("CTS_THRESHOLD_UPDATED", 30, 1.2, 0, 0)) == 30
+    # Plan E E3g-2: BOS_THRESHOLD_UPDATED is stamped at its processing candle too
+    assert ef.event_moment(_ev("BOS_THRESHOLD_UPDATED", 31, 1.1, 0, 0)) == 31
     # Plan E E2a extends it (reversing Plan F's "any other CTS type raises"):
     # a CTS_CONFIRMED's idx IS its confirmation candle.
     assert ef.event_moment(_ev("CTS_CONFIRMED", 25, 1.2, 0, 0)) == 25

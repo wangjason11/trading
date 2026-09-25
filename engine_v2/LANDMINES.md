@@ -606,8 +606,9 @@ Lifecycle-Start Clamp" below).
 `(e.idx, e.type)`, pinned on the ANCHORS so the Plan E E4 flip (`ev.idx` :=
 the moment on CTS_ESTABLISHED / BOS_CONFIRMED) reorders nothing (PLAN_E Q3; moment
 order + an explicit type rank is post-Plan-E). The same key sorts `sub_wvmi`'s
-loop and zone_proximity's threshold timeline; the POI sweep sorts on the idx
-component alone (`ef.stamped_idx`, stable, as before) and the wave-candle walk on
+loop. TIME walks sort on the MOMENT instead (`ef.event_moment`): zone_proximity's
+threshold timeline (`(moment, type)`, Plan E E3g-2) and the POI sweep's CTS events
+(stable, Plan E E3g-1); the wave-candle walk sorts on
 `ef.cts_anchor_idx` (the same value on EST / UPDATED — a location walk). The alphabetical tie-break on
 event type is **relied upon by handlers** — do not change the sort key without
 auditing downstream dispatch logic. Pinned by `tests/test_event_order_pins.py`

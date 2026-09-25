@@ -987,13 +987,14 @@ columns are NOT safe for cross-structure reads (see LANDMINES
 
 - `_build_cycle_threshold_timeline(sorted_events, sid, cycle_id)`
   returns the `BOS_CONFIRMED + CTS_CONFIRMED + *_THRESHOLD_UPDATED`
-  events for this `(sid, cycle_id)`, sorted by `(idx, type)`
-  (`event_fields.processing_order_key`, pinned against the Plan E E4 flip).
+  events for this `(sid, cycle_id)`, sorted by `(moment, type)`
+  (`event_fields.event_moment` — a BOS_CONFIRMED at its `confirmed_at`;
+  Plan E E3g-2, before it `processing_order_key`, the stamped anchor).
 - A pointer walks the timeline as the per-candle scan advances. At each
-  candle `i`, events with `idx < i` are applied to running cts/bos
-  thresholds; events at `idx == i` are NOT (start-of-candle).
+  candle `i`, events with moment `< i` are applied to running cts/bos
+  thresholds; events at moment `== i` are NOT (start-of-candle).
 - For `i == scan_start` (the `CTS_CONFIRMED` candle), an initial pass
-  applies all events at `idx ≤ scan_start` — including
+  applies all events with moment `≤ scan_start` — including
   `CTS_CONFIRMED` itself and any same-idx `BOS_THRESHOLD_UPDATED`
   events — so the cycle starts with a defined gap.
 

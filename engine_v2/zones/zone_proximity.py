@@ -174,8 +174,9 @@ def _build_cycle_threshold_timeline(
     cycle_id: int,
 ) -> List[StructureEvent]:
     """Return the threshold-defining events for `(sid, cycle_id)` sorted
-    by `(idx, type)`. Used to drive the running cts/bos thresholds
-    during the scan.
+    by `(moment, type)` (`ef.event_moment`; Plan E E3g-2 — a BOS_CONFIRMED's
+    initial threshold is known at its `confirmed_at`, not its anchor). Used to
+    drive the running cts/bos thresholds during the scan.
 
     Includes:
       - `BOS_CONFIRMED` (initial bos_threshold)
@@ -203,7 +204,7 @@ def _build_cycle_threshold_timeline(
         and ev.meta.get("structure_id") == sid
         and ev.meta.get("cycle_id") == cycle_id
     ]
-    out.sort(key=ef.processing_order_key)  # pinned (Plan E)
+    out.sort(key=lambda e: (ef.event_moment(e), e.type))  # the time order (Plan E E3g-2)
     return out
 
 
@@ -374,13 +375,12 @@ def check_zone_proximity(
         tl_ptr = 0
         # Initial pass: apply all events at idx ≤ scan_start so the gap
         # at idx = scan_start (the CTS_CONFIRMED candle) reflects the
-        # post-CTS-confirmation state. Includes any same-idx
-        # BOS_THRESHOLD_UPDATED events (sort order is `(idx, type)`,
+        # post-CTS-confirmation state. Includes any same-moment
+        # BOS_THRESHOLD_UPDATED events (sort order is `(moment, type)`,
         # alphabetical — BOS_* < CTS_*).
-        # The walk is a TIME pointer over the processing-ordered timeline: it
-        # must use the same stamped idx the timeline is sorted on (Plan E
-        # E3g-2 → moment, PLAN_E §7.1 T3).
-        while tl_ptr < len(timeline) and ef.stamped_idx(timeline[tl_ptr]) <= scan_start:
+        # The walk is a TIME pointer: it compares the same MOMENT the timeline
+        # is sorted on (Plan E E3g-2, PLAN_E §7.1 T3).
+        while tl_ptr < len(timeline) and ef.event_moment(timeline[tl_ptr]) <= scan_start:
             running_cts, running_bos = _apply_threshold_event(
                 timeline[tl_ptr], running_cts, running_bos
             )
@@ -404,7 +404,7 @@ def check_zone_proximity(
             # own eligibility; see GOTCHAS "Narrow-Cycle Gap: Evaluate at
             # Start-of-Candle"). For i == scan_start the initial pass
             # above has already applied everything at idx ≤ scan_start.
-            while tl_ptr < len(timeline) and ef.stamped_idx(timeline[tl_ptr]) < i:  # Plan E E3g-2 → moment
+            while tl_ptr < len(timeline) and ef.event_moment(timeline[tl_ptr]) < i:
                 running_cts, running_bos = _apply_threshold_event(
                     timeline[tl_ptr], running_cts, running_bos
                 )

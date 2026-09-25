@@ -582,3 +582,15 @@ def test_sell_direction_trigger():
     assert (0, 0) in triggers
     assert triggers[(0, 0)][0].direction == "sd"
     assert triggers[(0, 0)][0].idx == 5
+
+
+def test_threshold_timeline_is_ordered_by_moment():
+    """Plan E E3g-2: the threshold timeline sorts on (moment, type). A BOS_CONFIRMED
+    anchored at 5 is known at 12 → after a threshold event at 10 (on the stamped
+    idx it would sort first)."""
+    from engine_v2.zones.zone_proximity import _build_cycle_threshold_timeline
+    bos = make_bos_confirmed(bos_anchor_idx=5, confirmed_at=12, structure_id=0, cycle_id=1, price=0.60)
+    thr = StructureEvent(idx=10, category="STRUCTURE", type="CTS_THRESHOLD_UPDATED", price=0.61,
+                         meta={"structure_id": 0, "cycle_id": 1})
+    tl = _build_cycle_threshold_timeline([bos, thr], 0, 1)
+    assert [e.type for e in tl] == ["CTS_THRESHOLD_UPDATED", "BOS_CONFIRMED"]
