@@ -174,20 +174,24 @@ def test_d_cts_established_without_confirmed_at_raises():
 
 # --- (e) compute_struct_start_by_sid / compute_reversal_idx_by_sid unchanged (SURVIVE) --
 
-def test_e_compute_struct_start_by_sid_unchanged():
+def test_e_compute_struct_start_by_sid_is_the_first_cts_established_moment():
     evs = _sorted(_h1_reference_events())
     rev = compute_reversal_idx_by_sid(evs)
     # STATE_CHANGED->reversal only: {0: 902}; the REVERSAL_CANDIDATE (idx 897, apply 902) is ignored.
     assert rev == {0: 902}
-    # min event idx: sid 0 = 96 (the BOS extreme, NOT the (0,0) moment 115); sid 1 = 689 before handoff
-    # reversal handoff: sid 1 -> rev[0] = 902
-    assert compute_struct_start_by_sid(evs, rev, None) == {0: 96, 1: 902}
-    # floor raises every sid: max(96, 1000) = 1000; max(902, 1000) = 1000
+    # base = the first CTS_ESTABLISHED MOMENT (Plan E E3f / Q5): sid 0 = 115 (NOT the BOS_0
+    # anchor 96); sid 1 = 703 before the reversal handoff -> rev[0] = 902
+    assert compute_struct_start_by_sid(evs, rev, None) == {0: 115, 1: 902}
+    # floor raises every sid: max(115, 1000) = 1000; max(902, 1000) = 1000
     assert compute_struct_start_by_sid(evs, rev, 1000) == {0: 1000, 1: 1000}
     # floor below both: no-op
-    assert compute_struct_start_by_sid(evs, rev, 50) == {0: 96, 1: 902}
-    # the struct_start of a sid is NOT the CTS moment: a CTS_EST idx 10 / confirmed_at 11 alone gives 10
-    assert compute_struct_start_by_sid([_cts_est(10, 0, 0, 11)], {}, None) == {0: 10}
+    assert compute_struct_start_by_sid(evs, rev, 50) == {0: 115, 1: 902}
+    # a CTS_EST idx 10 / confirmed_at 11 alone gives its moment 11
+    assert compute_struct_start_by_sid([_cts_est(10, 0, 0, 11)], {}, None) == {0: 11}
+    # a sid that never established (data edge) keeps its first stamped idx
+    st = StructureEvent(idx=7, category="STATE", type="STATE_CHANGED", price=None,
+                        meta={"structure_id": 3})
+    assert compute_struct_start_by_sid([st], {}, None) == {3: 7}
 
 
 # --- (f) the H1 reference window is byte-identical under the moment rule (SURVIVES) ------

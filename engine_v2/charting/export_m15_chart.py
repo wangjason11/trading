@@ -2131,8 +2131,8 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 end_t = _h1_idx_to_m15_time(last_h1_idx)
                 if end_t is not None and seq and last_h1_idx > seq[-1][0]:
                     seq.append((last_h1_idx, end_t, float(h1_df[COL_C].iloc[-1]), "EXT", sid, -1, seq[-1][6]))
-            # The live window's start is a TIME (the struct_start base moves with
-            # Plan E E3f — its prediction needs the figure diff; PLAN_E §7.1 T4).
+            # The live window's start is a TIME: struct_start (the first
+            # CTS_ESTABLISHED moment since Plan E E3f; figure-diffed there).
             w_start = struct_start_h1.get(sid, seq[0][0] if seq else None)
             w_end = rev_h1.get(sid)
             for is_live_run, i0, i1 in _split_polyline_by_wave([p[0] for p in seq], w_start, w_end):

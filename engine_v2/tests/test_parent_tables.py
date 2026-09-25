@@ -114,8 +114,9 @@ def test_cts_moment_is_confirmed_at_not_the_extreme():
     # CTS_ESTABLISHED idx 10 (extreme) / confirmed_at 11 (moment); BOS idx 5 / confirmed_at 11.
     t = _build([_bos(5, 0, 0, 11), _cts_est(10, 0, 0, 11)])
     assert t.cts_moment == {(0, 0): 11}           # the MOMENT, not .idx == 10
-    # struct_start[0] = min event idx = 5 (the BOS extreme); floor_h1 = max(5, 11) = 11 -- uses 11, not 10
-    assert t.struct_start == {0: 5}
+    # struct_start[0] = the first CTS_ESTABLISHED moment = 11 (Plan E E3f; was the BOS anchor 5);
+    # floor_h1 = max(11, 11) = 11 -- uses 11, not 10
+    assert t.struct_start == {0: 11}
     assert t.floor_h1[(0, 0)] == 11
     assert t.floor_m15[(0, 0)] == 4 * 11 + 3 == 47
     assert t.floor(0, 0) == 47
@@ -155,9 +156,9 @@ def test_reversal_handoff_produces_zero_inverted_and_real_cycles():
     ]
     t = _build(events)
     assert t.rev_by_sid == {0: 40, 1: 35}
-    # struct_start: sid 0 = min idx 5; sid 1 = rev[0] = 40 (handoff overrides min idx 20);
-    #               sid 2 = rev[1] = 35 (handoff overrides min idx 45)
-    assert t.struct_start == {0: 5, 1: 40, 2: 35}
+    # struct_start: sid 0 = its first CTS_ESTABLISHED moment 10 (Plan E E3f; was the BOS anchor 5);
+    #               sid 1 = rev[0] = 40 (handoff overrides 20); sid 2 = rev[1] = 35 (handoff overrides 45)
+    assert t.struct_start == {0: 10, 1: 40, 2: 35}
     # floor_h1 = max(struct_start, moment): (0,0)=max(5,10)=10; (1,0)=max(40,20)=40;
     #            (1,1)=max(40,30)=40; (2,0)=max(35,45)=45
     assert t.floor_h1 == {(0, 0): 10, (1, 0): 40, (1, 1): 40, (2, 0): 45}
@@ -326,8 +327,9 @@ def test_reference_window_tables():
     degenerate {(1,0), (1,1)} -- from synthetic events reproducing the H1 facts."""
     t = _build(_reference_window_events())
     assert t.rev_by_sid == {0: 902}
-    # struct_start: sid 0 = min idx 96 (the (0,0) BOS extreme); sid 1 = rev[0] = 902 (handoff; min idx 689)
-    assert t.struct_start == {0: 96, 1: 902}
+    # struct_start: sid 0 = the (0,0) CTS_ESTABLISHED moment 115 (Plan E E3f; was the BOS anchor 96);
+    #               sid 1 = rev[0] = 902 (handoff; its own moment 703)
+    assert t.struct_start == {0: 115, 1: 902}
     assert t.cts_moment == {(0, 0): 115, (0, 1): 652, (1, 0): 703, (1, 1): 748, (1, 2): 902}
     assert t.parent_sd == {0: 1, 1: -1}
     # floor_h1 = max(struct_start, moment): (0,0)=max(96,115)=115; (0,1)=max(96,652)=652;

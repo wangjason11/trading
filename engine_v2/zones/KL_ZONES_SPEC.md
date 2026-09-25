@@ -312,7 +312,8 @@ A KL zone's first-active is clamped to its cycle's lifecycle-start
 (`PART4_REFACTOR_SPEC.md §5` / `§17.4`): `first_active = max(confirmed_idx,
 cycle_lifecycle_start)`, where `cycle_lifecycle_start = max(CTS_n ESTABLISHED
 MOMENT (meta["confirmed_at"]), structure lifecycle-start[, lifecycle_floor])`.
-`structure lifecycle-start` is `compute_struct_start_by_sid` (first anchor /
+`structure lifecycle-start` is `compute_struct_start_by_sid` (the structure's first
+CTS_ESTABLISHED moment since Plan E E3f — before it the first anchor, BOS_0's — / the
 reversal handoff); `lifecycle_floor` is `None` for main and, for a sub, the
 **unique sub's real-time `start_idx`** (slice-local, from
 `render_sub_projection`) — which already contains the parent-cycle floor

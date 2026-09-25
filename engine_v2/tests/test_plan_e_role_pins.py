@@ -206,16 +206,17 @@ def test_first_confluence_input_is_the_bos_anchor():
 
 
 @pytest.mark.illegal_event_contract
-def test_struct_start_and_creation_idx_are_pinned_to_the_stamped_idx():
-    """B9 / B10: today's base = the first ANCHOR (BOS_0 20, not its moment 22);
-    PLAN_E Q5 moves both to the moment in E3f."""
+def test_struct_start_is_the_moment_and_creation_idx_the_anchor():
+    """B9 / B10 (Plan E E3f, user decision 2026-09-25): the lifecycle-start base
+    is the first CTS_ESTABLISHED MOMENT (22, not BOS_0's anchor 20); the
+    historical `creation_event_idx` stays the first ANCHOR (20)."""
     from engine_v2.multitf.sid_records import build_sid_records_for_main
     from engine_v2.zones.structure_lifecycle import compute_struct_start_by_sid
     evs = [_e4_est(anchor=21, moment=22, structure_id=0, cycle_id=0),
            _e4_bos(structure_id=0, cycle_id=0)]
-    assert compute_struct_start_by_sid(evs, {}, None) == {0: 20}   # Plan E E3f → 22
+    assert compute_struct_start_by_sid(evs, {}, None) == {0: 22}   # the moment (E3f)
     rec, = build_sid_records_for_main(evs)
-    assert rec.creation_event_idx == 20                            # Plan E E3f → 22
+    assert rec.creation_event_idx == 20                            # stays the anchor (E3f)
 
 
 @pytest.mark.illegal_event_contract

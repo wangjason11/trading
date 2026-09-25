@@ -1783,7 +1783,9 @@ helpers live in the pure-leaf `zones/structure_lifecycle.py`, called by
 `kl_zones_v1`, `poi_zones`, `fib_tracker` AND (Plan C) `multitf/parent_tables.py`
 (which uses `compute_reversal_idx_by_sid` + `compute_struct_start_by_sid` and
 re-states the cycle-start/end rule of `compute_cycle_lifecycle` on H1 → M15):
-- `compute_struct_start_by_sid` — per-`structure_id` lifecycle-start (the clamp).
+- `compute_struct_start_by_sid` — per-`structure_id` lifecycle-start (the clamp): the
+  structure's first `CTS_ESTABLISHED` MOMENT (Plan E E3f, 2026-09-25; before it the
+  first anchor, BOS_0's — e.g. H1 sid 0 96 → 115), then the reversal handoff and floor.
 - `compute_cycle_lifecycle(events, reversal_dict, floor, cap, cap_reason)` —
   per-`(sid, cycle)` `(start, end, end_reason)`. **Start = the CTS-established
   MOMENT** (`CTS_ESTABLISHED.meta["confirmed_at"]`, the apply candle; Plan C

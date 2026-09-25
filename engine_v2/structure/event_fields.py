@@ -100,14 +100,15 @@ def stamped_idx(ev: Any) -> int:
     """The index `ev.idx` holds TODAY, frozen against the Plan E E4 flip: the
     anchor for CTS_ESTABLISHED / BOS_CONFIRMED / CTS_UPDATED, `ev.idx`
     otherwise. Neither a location nor a moment by itself (user decision
-    2026-09-24, E2b). Two uses only:
+    2026-09-24, E2b). Its uses:
 
     - the event processing order (`processing_order_key`, the sort pins);
-    - an E2 TIME half over mixed event types (CTS lists, the all-type
-      struct_start minima, the threshold timeline) that an E3 stage will switch
-      — always written with its `# Plan E E3x → moment` marker. Where the list
-      holds types `event_moment` does not define, that stage must define them
-      first (PLAN_E §7, E3f / E3g-2 notes).
+    - the historical first-anchor value `SidRecord.creation_event_idx` (stays,
+      Plan E E3f) and struct_start's never-established fallback;
+    - an E2 TIME half over mixed event types still to be switched (the
+      threshold timeline, E3g-2) — always with its `# Plan E E3x → moment`
+      marker; where the list holds types `event_moment` does not define, that
+      stage must define them first (PLAN_E §7, E3g-2 note).
     """
     if ev.type == "CTS_ESTABLISHED":
         return cts_anchor_idx(ev)

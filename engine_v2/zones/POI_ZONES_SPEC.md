@@ -502,7 +502,7 @@ cts_established_idx = CTS_ESTABLISHED(sid, cycle).meta["confirmed_at"]   # the c
 
 where `lifecycle_floor_idx = struct_start_by_sid[sid]` =
 `compute_struct_start_by_sid(events, reversal_idx_by_sid, lifecycle_floor)` —
-the structure lifecycle-start (first anchor / reversal handoff), raised to
+the structure lifecycle-start (the first CTS_ESTABLISHED moment since Plan E E3f / the reversal handoff), raised to
 `lifecycle_floor`: `None` for main; for a sub the **unique sub's real-time
 `start_idx`** (slice-local, passed by `render_sub_projection` →
 `project_to_window`), which already contains the parent-cycle floor

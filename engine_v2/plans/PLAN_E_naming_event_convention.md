@@ -786,6 +786,24 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
   `ProbeResult.cts0_est_idx` docstring (Phase 2 fills it), `_run_phase2` window docstring. Replay after the fix ==
   0 cells. Tests 893 → 896 + 1 xfail.
 
+- **E3f (2026-09-25; Q5).** **User decision 2026-09-25** (AskUserQuestion with the window's first-event table): the
+  `compute_struct_start_by_sid` base = the structure's **first CTS_ESTABLISHED moment** (== its BOS_0 moment) —
+  chosen over "min over every event's moment" (which would first need moments for STATE_CHANGED / RANGE_* /
+  REVERSAL_*) and over keeping the anchor; `SidRecord.creation_event_idx` **stays the anchor** (a historical field,
+  like the sub side's `starting_idx`; `# stays`). A sid that emitted events but never established (data edge only)
+  keeps its first stamped idx (the reversal handoff overrides it) — explicit, pinned. Evidence: on every structure
+  of the window the first two events are BOS_0 (at its anchor) then CTS_0 ESTABLISHED (at the moment), nothing
+  earlier. **Measured (variant first, then the change; vs `20260925_081206_efc04bd`): 0 real cells, figures
+  JSON-identical** — the plan note's "the H1-overlay wave window `w_start` moves → figure diff" did not materialise;
+  run.log identical. Base moves: H1 sid 0 96 → 115, sid 1 689 → 703 (then the handoff: 902), subs slice-local
+  50 → 52..85 (then the sub floor) — masked everywhere, since every zone already clamps at or after the moment.
+  Tests: 7 expectations follow the new base (parent tables `struct_start` 96 → 115 / 5 → 11 / 5 → 10, the
+  structure_lifecycle test, the role pin → `test_struct_start_is_the_moment_and_creation_idx_the_anchor`
+  (22 / 20), the POI missing-`confirmed_at` test now fails loudly as a KeyError at the struct_start read) + a
+  never-established assertion. Own mutation loop 4/4 killed (base → stamped, base → EST anchor, the fallback
+  dropped, creation → moment). Docs: KL_ZONES_SPEC, POI_ZONES_SPEC, LANDMINES, `stamped_idx` docstring, sid_records
+  / structure_lifecycle docstrings. Tests stay 896 + 1 xfail.
+
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 
 **E4a — `CTS_ESTABLISHED`.** `market_structure.py:1514` passes `int(apply_idx)` as `idx` and asserts

@@ -19,7 +19,9 @@ def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
     """Derive per-sid records for a main entity from its event stream.
 
     For each sid present in events:
-      - creation_event_idx = min `ef.stamped_idx` (today's ev.idx) among events for that sid
+      - creation_event_idx = min `ef.stamped_idx` among events for that sid — the
+        first structural ANCHOR (BOS_0's), a historical field like the sub side's
+        `starting_idx` (stays the anchor: Plan E E3f user decision 2026-09-25)
       - end_event_idx = REVERSAL_CANDIDATE.apply_idx for that sid (None if absent)
       - end_reason = "reversal" if reversal exists, else None
       - starting_sd = struct_direction from any event of that sid
@@ -32,7 +34,8 @@ def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
             continue
         sid = int(sid)
 
-        # creation_event_idx: pinned to today's stamped idx (Plan E E3f → moment).
+        # creation_event_idx: the first structural ANCHOR — historical, pinned to the
+        # stamped idx against the E4 flip (# stays: Plan E E3f decision).
         stamped = ef.stamped_idx(ev)
         rec = sids.setdefault(sid, {
             "creation_event_idx": stamped,

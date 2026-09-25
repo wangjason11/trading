@@ -149,7 +149,7 @@ def _h1_events() -> List[StructureEvent]:
 #                  (0,0) 463>=2611 F  (0,1) 2611>=3611 F  (1,0) 3611>=3611 T
 #                  (1,1) 3611>=3611 T  (1,2) end None -> F
 EXPECTED_REV_BY_SID = {0: 902}
-EXPECTED_STRUCT_START = {0: 96, 1: 902}
+EXPECTED_STRUCT_START = {0: 115, 1: 902}   # sid 0: the CTS_0 moment (Plan E E3f; was the BOS_0 anchor 96)
 EXPECTED_CTS_MOMENT = {(0, 0): 115, (0, 1): 652, (1, 0): 703, (1, 1): 748, (1, 2): 902}
 EXPECTED_PARENT_SD = {0: 1, 1: -1}
 EXPECTED_FLOOR_H1 = {(0, 0): 115, (0, 1): 652, (1, 0): 902, (1, 1): 902, (1, 2): 902}

@@ -158,8 +158,13 @@ def compute_struct_start_by_sid(
     """Per-`structure_id` lifecycle-start idx (the first idx a structure is active).
 
     Rule (identical for main and subordinate):
-      1. base = the structure's first structural anchor = min `ef.stamped_idx` (today's
-         ev.idx; pinned against the Plan E E4 flip) for that sid.
+      1. base = the MOMENT the structure became known = its first
+         `CTS_ESTABLISHED` moment (`ef.event_moment`; == its BOS_0 moment) —
+         Plan E E3f / Q5 (user decision 2026-09-25; before it the first
+         structural ANCHOR, BOS_0's, e.g. H1 sid 0 96 → 115). A sid that emitted
+         events but never established (reachable only at the data edge) has no
+         such moment: its base is its first stamped idx (`ef.stamped_idx`), which
+         the reversal handoff then overrides.
       2. reversal handoff = sid N's lifecycle-start is the reversal-confirmation idx
          of sid N-1 (`reversal_idx_by_sid[N-1]`), overriding the min-idx base.
       3. floor = raise every sid to `lifecycle_floor` when given.
@@ -178,16 +183,21 @@ def compute_struct_start_by_sid(
         parent-agnostic — it only sees one int.
     """
     struct_start_by_sid: Dict[int, int] = {}
+    established_by_sid: Dict[int, int] = {}
     for ev in events:
         s = (ev.meta or {}).get("structure_id")
         if s is None:
             continue
         s = int(s)
-        # The lifecycle-start base: a TIME computed today from the first anchor
-        # (BOS_0's). Pinned to today's stamped idx; PLAN_E Q5 → the moment in E3f.
-        i = ef.stamped_idx(ev)  # Plan E E3f → moment
+        i = ef.stamped_idx(ev)   # the never-established fallback (see rule 1)
         if s not in struct_start_by_sid or i < struct_start_by_sid[s]:
             struct_start_by_sid[s] = i
+        if ev.type == "CTS_ESTABLISHED":
+            m = ef.event_moment(ev)
+            if s not in established_by_sid or m < established_by_sid[s]:
+                established_by_sid[s] = m
+    # The lifecycle-start base is a TIME: the first CTS_ESTABLISHED moment (E3f).
+    struct_start_by_sid.update(established_by_sid)
     # Reversal handoff: sid N's lifecycle-start = reversal idx of sid N-1.
     for s in list(struct_start_by_sid):
         if (s - 1) in reversal_idx_by_sid:

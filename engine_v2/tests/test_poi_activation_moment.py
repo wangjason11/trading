@@ -218,11 +218,12 @@ def test_poi_lookup_reads_confirmed_at_without_fallback(monkeypatch):
 
 @pytest.mark.skipif(not __debug__, reason="asserts are stripped under python -O")
 def test_derive_poi_zones_raises_on_cts_established_without_confirmed_at():
-    """Without the stub the upstream assert in compute_cycle_lifecycle fires first."""
+    """Without the stub the struct_start base (Plan E E3f: the first
+    CTS_ESTABLISHED moment, read directly) raises first — loudly, as a KeyError."""
     res, events, out = _run(_make_second_cts_moment_after_extreme_data())
     stripped = copy.deepcopy(events)
     del _event(stripped, "CTS_ESTABLISHED", 0, 1).meta["confirmed_at"]
-    with pytest.raises(AssertionError, match=r"lacks meta\['confirmed_at'\]"):
+    with pytest.raises(KeyError, match="confirmed_at"):
         derive_poi_zones(res.df, stripped, fib_tracker=out["fib_tracker"], config=POIConfig())
 
 
