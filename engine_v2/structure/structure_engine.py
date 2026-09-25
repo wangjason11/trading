@@ -244,7 +244,7 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
         # project_true_first_breakout_cycle0.md). Mirrors the sub reversal path
         # (entity_df_mutation._resolve_reversal_start): reference = the prior sid's most
         # recent {CONF/UPD/EST} CTS; the probe runs in the flipped direction over
-        # [prior-CTS-extreme, reversal apply idx] and hands back a DECISION
+        # [the prior CTS anchor, reversal apply idx] and hands back a DECISION
         # (start + BOS_0 inner) — NOT events. The reversal structure is produced
         # by a fresh unbounded scan-from-start MS run in the next loop iteration.
         # `unified_probe` is imported locally: it imports _make_market_structure

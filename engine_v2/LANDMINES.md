@@ -560,7 +560,7 @@ main reversal probe, so it needs its own decision and `/compare`.
 1. **original_bos0_bounds captured at iteration 0 only** — subsequent probe iterations reuse the first BOS_0 zone for exception evaluation. Do not re-derive bounds mid-loop.
 2. **Phase 2 only runs if status == "finalized" AND `run_continuation=True`** — when `run_continuation=False`, Phase 2 is skipped entirely (probe-only mode). The result contains only Phase 1 probe data.
 3. **Exception evaluation checks inner bound, not outer** — proximity is measured as "candle high/low within tolerance of zone inner bound" (the bound closer to current price).
-4. **Exception check window starts from the CTS anchor + 1** (`ef.cts_anchor_idx(cts_est[0]) + 1`; the two Exception 2 loops do the same — test-only paths that keep the anchor, PLAN_E Q10). That anchor (`meta["cts_anchor_idx"]`; `ev.idx` until Plan E E4a) is the cycle-0 CTS **extreme** — the first argmax(`h`) / argmin(`l`) over the breakout pattern's span — NOT a pullback confirmation and NOT the moment the cycle was established (`meta["confirmed_at"]` = `ev.idx` since E4a, the apply candle; ARCHITECTURE "`ev.idx` convention"). The extreme candle belongs to the breakout itself, and the check asks whether price returns to the zone *after* the breakout, so exclude it (see GOTCHAS.md). When the extreme precedes the apply candle, the window's first candles (up to `confirmed_at`) are still inside the breakout pattern.
+4. **Exception check window starts from the CTS anchor + 1** (`ef.cts_anchor_idx(cts_est[0]) + 1`; the two Exception 2 loops do the same — test-only paths that keep the anchor, PLAN_E Q10). That anchor (`meta["cts_anchor_idx"]`; `ev.idx` until Plan E E4a) is the cycle-0 CTS **anchor** — the pattern extreme, the first argmax(`h`) / argmin(`l`) over the breakout pattern's span — NOT a pullback confirmation and NOT the moment the cycle was established (`meta["confirmed_at"]` = `ev.idx` since E4a, the apply candle; ARCHITECTURE "`ev.idx` convention"). The anchor candle belongs to the breakout itself, and the check asks whether price returns to the zone *after* the breakout, so exclude it (see GOTCHAS.md). When the extreme precedes the apply candle, the window's first candles (up to `confirmed_at`) are still inside the breakout pattern.
 5. **Condition 4 split — `end_idx` is the discriminator:**
    - **4a) `end_idx is not None`** AND probe reached it without 2 CTS_EST → **finalized**. The caller-defined boundary is treated as a real terminal point (e.g., the first sd zone-proximity trigger candle is known and definitive).
    - **4b) `end_idx is None`** AND probe ran past available `df` data without 2 CTS_EST → **pending**. More candles may arrive later that resolve the probe; the caller can re-invoke with the same or advanced `start_idx`.
@@ -865,19 +865,20 @@ sibling CTS".
 
 ## Subordinate `parent_extreme_dir` Must Use `-trigger.lower_sd`
 
-**Rule:** Every parent→sub-TF mapping step MUST compute
+**Rule:** Every parent→sub-TF probe-INPUT mapping MUST compute
 `parent_extreme_dir = -trigger.lower_sd` (spec §4.3.1 unified rule).
-This applies to both call sites:
+Today one call site: `multitf/entity_df_mutation._resolve_first_confluence_via_unified_probe`
+maps the parent BOS ANCHOR to the sub-TF `input_idx` for the unified probe (the
+legacy `_resolve_via_legacy_probe` path is gone; `first_counter` / `subsequent_*`
+take their input from the sibling lens, already on M15). It passes the value to
+`map_candle_to_lower_tf(time, parent_extreme_dir, m15_df)` (signature
+post-2026-05-29 rename from the older `mapping_sd` / `h1_sd` parameter — same
+numeric semantics).
 
-- `multitf/entity_df_mutation._resolve_via_legacy_probe` — legacy
-  post-probe map for subsequent_* triggers (until Session 3 migration).
-- `multitf/entity_df_mutation._resolve_first_via_unified_probe` —
-  Session 2 first_* path mapping the parent EVENT extreme to a sub-TF
-  `input_idx` for the unified probe.
-
-Both sites pass the value to `map_candle_to_lower_tf(time,
-parent_extreme_dir, m15_df)` (signature post-2026-05-29 rename from the
-older `mapping_sd` / `h1_sd` parameter — same numeric semantics).
+NOT input mappings, so NOT this rule (Plan E E5·3, 2026-09-25): the same
+function's `probe_end_idx` mapping of the parent CTS ANCHOR uses `+lower_sd`
+(the structure ceiling / floor), and the M15 chart's H1 zone-proximity markers
+(display) pass the trigger wick's side. Do not "unify" either to `-lower_sd`.
 
 **Why this is a landmine:** for `first_counter`, `lower_sd = -parent_sd`,
 so `-lower_sd == parent_sd` — meaning earlier code (`mapping_sd =
@@ -887,7 +888,7 @@ way.
 
 But for `first_confluence` (3b+), `lower_sd = +parent_sd`, so the two
 expressions diverge:
-- `-lower_sd = -parent_sd` ✓ correct (BOS extreme: lowest low in bullish
+- `-lower_sd = -parent_sd` ✓ correct (BOS anchor: lowest low in bullish
   parent, highest high in bearish — the BOS candle's deepest touch of
   the broken zone, which is the OUTER of the confluence sub's reference)
 - `parent_sd` ✗ wrong (would map to the parent BOS HIGH instead of LOW,
@@ -1804,7 +1805,7 @@ re-states the cycle-start/end rule of `compute_cycle_lifecycle` on H1 → M15):
   per-`(sid, cycle)` `(start, end, end_reason)`. **Start = the CTS-established
   MOMENT** (`CTS_ESTABLISHED.meta["confirmed_at"]`, the apply candle — `== ev.idx`
   since Plan E E4a; Plan C 2026-09-20 — NOT the CTS anchor `meta["cts_anchor_idx"]`,
-  the CTS EXTREME, a historical anchor like the BOS anchor), clamped by
+  the pattern's extreme candle, a historical location like the BOS anchor), clamped by
   `struct_start` and the floor. **End is a pass-through:**
   `end = min(next-cycle clamped start, reversal, lifecycle_cap)`, never computed
   per-zone. KL/POI/fib INHERIT `end_idx` / `end_reason` from this table.
@@ -1834,13 +1835,13 @@ else `None`; both LOH-mapped to `floor_m15` / `end_m15`. The record's
 `end_m15[(S,C)]` (sweep step 6) — by construction the end of `(S,C)` IS the
 floor of `(S,C+1)`. The B2 Phase B rule that stood here ("next-cycle source
 = `CTS_ESTABLISHED.ev.idx`, don't revert it to `confirmed_at`") had the right
-aim (floor and cap from the same field) and the wrong field: the extreme is
+aim (floor and cap from the same field) and the wrong field: the anchor is
 historical, the moment is when the cycle became tradeable, and the two differ
-whenever the CTS extreme precedes the apply candle (on the reference window 3
+whenever the CTS anchor precedes the apply candle (on the reference window 3
 of the 34 `CTS_ESTABLISHED` CSV rows = 2 unique M15 sub cycles, sub 3 being
-mirrored into both lenses, each with an empirical lag of 1 candle; extreme ==
+mirrored into both lenses, each with an empirical lag of 1 candle; anchor ==
 apply candle is the COMMON case — 31/34, including all five H1 cycles — not
-luck. The only bound is `pattern_anchor_idx <= idx <= confirmed_at <= pattern_anchor_idx + 5`;
+luck. The only bound is `pattern_anchor_idx <= cts_anchor_idx <= confirmed_at <= pattern_anchor_idx + 5`;
 ARCHITECTURE "`ev.idx` convention"). Retired with
 it: the 4 trigger detectors' `lifecycle_end_idx` (the unread field was deleted
 in Plan E E1b), `_find_m15_lifecycle_end`, `parent_end_lookup`, `parent_struct_end_m15`
@@ -2042,7 +2043,7 @@ What the code does: `BOS_CONFIRMED`, `CTS_ESTABLISHED` and pattern-path
 `CTS_UPDATED` are keyed on their moment `meta["confirmed_at"]` (the last two since
 Plan E E3b, 2026-09-25), every other type on `ev.idx`. The `BOS_CONFIRMED` case
 shows the point: clipping it by
-its anchor (the BOS extreme — `ev.idx` until Plan E E4b) would surface a BOS whose extreme is inside the
+its anchor (`ev.idx` until Plan E E4b) would surface a BOS whose anchor is inside the
 window but whose confirmation landed past it — an event the Phase-1 bounded run
 could not have known.
 
@@ -2326,7 +2327,7 @@ now `TriggerRecord`s.
 
 **Rule (PART4 §17.8, as landed):** the probe cache key is
 `(parent_path, sub_tf, direction, initial_input_idx)` with `initial_input_idx`
-ENTITY-ABSOLUTE for EVERY probe — the FC probe's price-mapped BOS extreme
+ENTITY-ABSOLUTE for EVERY probe — the FC probe's price-mapped BOS anchor
 (`_probe_with_cache`, `multitf/entity_df_mutation.py`), a sibling type's
 `ref_zone.anchor_idx` (same wrapper), AND the reversal handoff's input
 (`_resolve_reversal_start`: the probe runs slice-local on the reversing sub's
@@ -2350,10 +2351,10 @@ compared against it and logged two spurious `REF-ZONE DIFFERS`; cold review
 **What was not foreseen:** the plan counted only H1-trigger pairs and
 predicted ZERO hits on the reference window. But a reversal handoff probe and
 an H1 trigger can resolve the SAME input candle in the same direction: the
-handoff's input is the reversing sub's most recent qualifying CTS extreme
+handoff's input is the reversing sub's most recent qualifying CTS anchor
 (`build_reference_zone_from_cts_event(...).anchor_idx`), and on this
 window that candle coincided with the FC probe's price-mapped parent BOS
-extreme (2365) and with two sibling reads' `anchor_idx` (2609, 4000).
+anchor (2365) and with two sibling reads' `anchor_idx` (2609, 4000).
 Once the reversal key was made entity-absolute (it must be — the pool is
 shared across subs), the two probes share the entry, and whichever ran first
 in sweep order owns it.

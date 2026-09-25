@@ -38,7 +38,8 @@ class CrossEligibility:
     Storage-agnostic: callers map this onto their own version / named-slot
     model. ``earliest_x == target_cycle`` means no eligible prior cycle (no
     cross). The resolved anchors describe the cross ``BOS_earliest_x → CTS-side
-    running extreme``; they mirror the CTS-side inputs when ``crosses`` is False
+    anchor`` (CTS_n, or the running extreme past CTS_n when pre-established);
+    they mirror the CTS-side inputs when ``crosses`` is False
     (so the fields are always populated, never garbage).
     """
 

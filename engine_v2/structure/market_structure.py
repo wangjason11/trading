@@ -1186,7 +1186,7 @@ class MarketStructure:
         hi_i = float(self._h[i])
         confirm_idx = int(self.df.iloc[i]["is_range_confirm_idx"])
 
-        # NEW: seed range bound using prior CTS extreme (if exists)
+        # NEW: seed range bound using the current CTS anchor's price (if any)
         if st.cts is not None:
             cts_price = float(st.cts.price)
             if self.struct_direction == 1:
@@ -1414,9 +1414,9 @@ class MarketStructure:
             return
 
         if kind == "breakout":
-            # CTS from breakout window extreme (already correct helper).
-            # Resolve before any state mutation so the cycle-0 new-extreme
-            # check below can compare against an untouched state.
+            # CTS anchor = the breakout's pattern extreme (`pattern_extreme`,
+            # shared with find_true_first_breakout); resolved before any state
+            # mutation.
             cts_anchor_idx, cts_price = self._cts_from_breakout_event(ev)
 
             # Cycle-0 scan-from-start mode (`enforce_cts0_new_extreme`):
@@ -1509,7 +1509,7 @@ class MarketStructure:
                 else:
                     st.bos_inner_for_cycle = None
 
-                # After consuming the pullback to create BOS for the new cycle, clear pullback anchor
+                # After consuming the pullback to create BOS for the new cycle, clear the pullback moment
                 st.last_pullback_pat_apply_idx = None
             else:
                 # Not allowed to create a new CTS cycle yet => this breakout just updates CTS (pre-confirm)
@@ -1683,10 +1683,10 @@ class MarketStructure:
 
     def _initial_bos_before_first_cts(self, cts_anchor_idx: int) -> tuple[int, float]:
         """
-        Cycle 1 BOS: extreme prior to the first CTS.
+        Cycle-0 BOS (BOS_0) anchor: the price extreme before the first CTS anchor.
         - Uptrend: min low in [start_idx .. cts_anchor_idx-1]
         - Downtrend: max high in [start_idx .. cts_anchor_idx-1]
-        Returns (bos_idx, bos_price) where bos_idx is a *positional* index.
+        Returns (bos_anchor_idx, bos_price); bos_anchor_idx is a *positional* index.
         """
         start = self.start_idx
 
@@ -1831,7 +1831,7 @@ class MarketStructure:
         # confirmation_method: "pullback" (existing path) or "sd_zone_proximity" (new path)
         meta2["confirmation_method"] = str(confirmation_method)
 
-        # Carry the CTS extreme price on the event so chart consumers don't have
+        # Carry the CTS anchor's price on the event so chart consumers don't have
         # to fall back to the df's cts_price column (which is NaN at the CTS-
         # established candle's own row when confirmed_at > the CTS anchor — see the
         # sd_zone_proximity path that can fire 1–2 candles after CTS_ESTABLISHED).
@@ -2002,7 +2002,7 @@ class MarketStructure:
         :func:`zones.fib_tracker.select_fib_anchor_for_cycle`):
 
         - ``bos_idx`` / ``bos_price`` — BOS_0 anchor (immutable once captured)
-        - ``cts_idx`` / ``cts_price`` — latest cycle-0 CTS extreme
+        - ``cts_idx`` / ``cts_price`` — latest cycle-0 CTS anchor
         - ``has_unfilled`` — at least one imbalance in [BOS_0, CTS_0]
           remains unfilled as of ``moment_idx`` (the refresh's moment; Plan E E3a′)
         - ``scenario1`` — always ``None`` (MS does not track Scenario 1;
@@ -2202,7 +2202,7 @@ class MarketStructure:
 
     def _select_bos_on_breakout(self, breakout_apply_idx: int) -> tuple[int, float]:
         """
-        Cycle k>1 BOS: select the BOS extreme from the cycle's retracement window.
+        Cycle k>1 BOS: select the BOS anchor — the price extreme of the cycle's retracement window.
 
         Window selection:
         - If a pullback fired for the just-completed cycle: use

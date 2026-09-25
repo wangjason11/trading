@@ -709,7 +709,8 @@ StructureEvent indexing
 - ev.meta["confirmed_at"]: the candle index where that level was confirmed (breakout/pullback timing).
 
 Zone indexing
-- meta["base_idx"]: anchor candle of the zone base pattern (where rectangle begins).
+- meta["base_idx"]: FIRST candle of the zone base pattern (where the rectangle begins) —
+  at or before the zone's anchor_idx; a different field (KL_ZONES_SPEC "base_idx by Pattern Type").
 - meta["confirmed_idx"]: the candle index where the zone becomes confirmed for charting:
     - BOS-derived zones: confirmed_idx = ev.meta["confirmed_at"] (breakout candle)
     - CTS-derived zones: confirmed_idx = ev.idx (pullback candle)

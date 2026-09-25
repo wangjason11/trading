@@ -46,7 +46,7 @@ hover attribution. Per spec §16.5 (rev 2):
     the collapsed retroactive cycles of a post-reversal sid the same way); they
     stay in the CSVs.
   - Persisting events (KL zones, POI zones, fibs): render all snapshots —
-    drawn from the anchor, active from `start_idx` (the KL/POI clamp);
+    drawn from its base candle, active from `start_idx` (the KL/POI clamp);
     opacity is a per-TF tier (`_m15_opacity_tier_for_zone`).
   - Every lens draws a sub over the SAME window (the sub's), so a sub on both
     charts looks identical on each.
@@ -329,7 +329,7 @@ def _wave_touches_window(
     a_idx: int, b_idx: int, start_idx: Optional[int], end_idx: Optional[int],
 ) -> bool:
     """Wave rule (chart review 2026-09-21). A WAVE is one straight segment of a
-    sid-tied line between candles `a_idx` and `b_idx` — the EXTREME candles the
+    sid-tied line between candles `a_idx` and `b_idx` — the ANCHOR candles the
     line is drawn through (`cts_anchor_idx` / `bos_anchor_idx`), not the confirmation
     candles. It was live at some point iff its candle span intersects the
     structure's real-time lifecycle window `[start_idx, end_idx]` (`end_idx`
@@ -620,7 +620,7 @@ def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned
 
             pb_after = [e for e in pb_events
                         if int(e.meta.get("structure_id", -1)) == sid
-                        and int(e.idx) > last_slice_idx   # a LOCATION lower bound: PBs after the last point's extreme
+                        and int(e.idx) > last_slice_idx   # a LOCATION lower bound: PBs after the last point's anchor
                         and (next_bos_confirmed_idx is None or int(e.idx) < next_bos_confirmed_idx)
                         and owned_here(e.idx)]
             if pb_after:
@@ -2115,7 +2115,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 next_bos_confirmed_idx = ef.event_moment(next_bos[0]) if next_bos else None
                 pb_after = [e for e in pb_state
                             if int(e.meta.get("structure_id", -1)) == sid
-                            and int(e.idx) > last_idx   # a LOCATION lower bound: PBs after the last point's extreme
+                            and int(e.idx) > last_idx   # a LOCATION lower bound: PBs after the last point's anchor
                             and (next_bos_confirmed_idx is None or int(e.idx) < next_bos_confirmed_idx)]
                 if pb_after:
                     latest_pb = max(pb_after, key=lambda e: int(e.idx))

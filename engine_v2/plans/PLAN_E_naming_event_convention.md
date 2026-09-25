@@ -1178,13 +1178,35 @@ the real emitter.
     chart passes the wick side) → names both callers; the chart comment notes that a SLICED chart now logs a
     `[data_bridge] WARNING` per clipped trigger (production never slices); the four kept MS blocks joined the
     memory hygiene line. Deferred to E5·3 (prose, listed below).
-- **Remaining E5:** E5·3 = the IN §1.9 prose +
+- **E5·3 — prose + Q12 (2026-09-25; byte-identical).** **User 2026-09-25: "Full present-tense sweep"** of "CTS / BOS
+  extreme" where the value is an anchor. Code (~35 comment / docstring lines): MS (range seed, CTS_CONFIRMED price
+  comment, cycle-0 data, `_select_bos_on_breakout`, the stale "new-extreme check below" breakout comment, "clear
+  pullback anchor" (a moment), `_initial_bos_before_first_cts` "Cycle 1 BOS" → BOS_0 anchor — MS line count kept, so
+  run.log stays identical), `reference_zone` (module docstring: the retired "parent BOS / CTS zone" design → the
+  current callers; `ReferenceZone.anchor_idx` defined for every source incl. `ad_hoc_bos_0` + its frame;
+  `_zone_to_reference`), `structure_engine`, `entity_df_mutation`, the first-confluence trigger / pipeline /
+  `types`, `uc1`, `parent_tables`, `unified_probe`, `fib_tracker`, `cross_cycle_fib`, KL `base_idx` ("first candle"),
+  `wave_candles` `anchor_idx` param, both charts. Docs (present tense; ~60 lines): PART4 (§4.3 tables, §17.4 row,
+  §17.8), GOTCHAS (incl. heading "…Not the CTS Anchor"), LANDMINES (incl. a bound still written `<= idx <=`
+  since E4a → `cts_anchor_idx`), PRE_REFACTOR_INVARIANTS, MARKET_STRUCTURE_SPEC, KL / FIB / CROSS_CYCLE_FIB /
+  WAVE_CANDLES / CHARTING specs, GLOSSARY; kept: "the pattern's extreme candle" (pattern realm, where an anchor
+  comes from), raw "wick extreme", price searches, dated history / bug narratives. GLOSSARY Naming-Standard
+  "Status" rewritten (the standard holds; kept-by-decision list; history's "extreme" = anchor). §3 #14:
+  CROSS_CYCLE_FIB_SPEC's stale `function:line` refs (9) dropped; LANDMINES "`parent_extreme_dir` Must Use
+  `-trigger.lower_sd`" named deleted / renamed call sites AND overstated its scope → probe-INPUT mappings only
+  (the FC `probe_end_idx` map uses `+lower_sd`, the chart markers the wick side). **Q12:** `KLZone.source_time` =
+  the source event's MOMENT (raw, unclamped `ef.event_moment`) next to `source_price` = the anchor's price —
+  documented in `common/types.py`, KL_ZONES_SPEC "Zone indexing" (H1 BOS zone sid 0 cyc 0: time of 115, price of
+  96) and ARCHITECTURE (with `StructureLevel.time` = the anchor's time). **Measured (vs
+  `20260925_152746_9ac70ba`):** 24/24 byte-identical, figures JSON-identical, fetch gate PASS, run.log identical.
+  Replay 46.1 s. Tests 935 + 1 xfail.
+- **Remaining E5:** ~~E5·3 = the IN §1.9 prose +
   §3 #14 + the Q12 `KLZone.source_time` documentation + the GLOSSARY Naming-Standard "Status" paragraph + from
   the E5·1 / E5·2 reviews: the `ReferenceZone` docstring (`anchor_idx` defined for every constructed source,
   incl. `ad_hoc_bos_0`, the common case; slice-local on the reversal path, entity-absolute on the sibling path),
   the `reference_zone` module docstring + `_zone_to_reference` still describing the retired "parent BOS / CTS
   zone" design, LANDMINES "both call sites" of `map_candle_to_lower_tf` (names deleted / renamed functions;
-  misses the chart caller); E5·4 =
+  misses the chart caller)~~ (done, above); E5·4 =
   the exported Q4 change (triggers CSV `validated_parent_idx` → FC-only `parent_bos_anchor_idx`; measured table
   first).
 ---

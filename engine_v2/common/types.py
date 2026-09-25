@@ -59,7 +59,7 @@ class PatternEvent:
 class StructureLevel:
     """A BOS/CTS (or other structure) horizontal level."""
 
-    time: Any
+    time: Any  # the level ANCHOR's timestamp (ef.cts_anchor_idx / ef.bos_anchor_idx): a location, not a moment (PLAN_E Q12)
     kind: Literal["BOS", "CTS"]
     direction: Direction
     price: float
@@ -289,8 +289,8 @@ class KLZone:
     top: float
     bottom: float
     source_kind: Literal["BOS", "CTS"]
-    source_time: "pd.Timestamp"
-    source_price: float
+    source_time: "pd.Timestamp"  # the source event's MOMENT (raw, unclamped ef.event_moment) — PLAN_E Q12
+    source_price: float          # the level's price = the ANCHOR's price (ev.price, Q19)
     strength: float = 0.0
     meta: Dict[str, Any] = field(default_factory=dict)
 

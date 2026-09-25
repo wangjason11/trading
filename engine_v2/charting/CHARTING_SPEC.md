@@ -373,7 +373,7 @@ decides WHICH points exist; the wave rule below decides their STYLE.
 
 **Recent vs prior (chart review 2026-09-22) — what solid and dotted mean.**
 A *segment* is one straight piece of a sid-tied line between two consecutive
-drawn points — over the EXTREME candles the line runs through
+drawn points — over the ANCHOR candles the line runs through
 (`cts_anchor_idx` / `bos_anchor_idx`), never the confirmation candles — including the
 most recent internal sid's extension to the last owned candle and each
 cross-structure PB→BOS line. Where the structures of two different subs draw

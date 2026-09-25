@@ -1103,7 +1103,7 @@ def export_chart_plotly(
             bos_by_idx[idx].sort(key=lambda e: int(e.meta.get("structure_id", 0)))
 
         # Build CTS points - no time offset, track overlap for hover positioning
-        # CTS_CONFIRMED carries the CTS extreme price on ev.price; df fallback
+        # CTS_CONFIRMED carries the CTS anchor's price on ev.price; df fallback
         # remains for legacy events that may have been emitted with price=None.
         pts_cts = []
         for idx, evs in sorted(cts_by_idx.items()):

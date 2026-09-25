@@ -40,7 +40,7 @@
 > unchanged. (3) The cycle lifecycle-START that `compute_cycle_lifecycle` clamps
 > a fib's `start_idx` to (§15.3) and uses as the next-cycle END boundary (§15.4)
 > is the CTS-established **moment** (`CTS_ESTABLISHED.meta["confirmed_at"]`),
-> never the CTS anchor (`meta["cts_anchor_idx"]`, the CTS extreme, a historical anchor —
+> never the CTS anchor (`meta["cts_anchor_idx"]`, the pattern's extreme candle, a historical location —
 > `CTS_ESTABLISHED.idx` until Plan E E4a made that idx the moment). (4) Sub
 > fib states are attributed by `sub_id` (mirror attribution; `sub_sid` is gone),
 > and `end_idx` / `start_idx` are shifted by `slice_begin` by the mirror as §15

@@ -142,8 +142,8 @@ class SubsequentCounterTrigger:
 class FirstConfluenceTrigger:
     """`first_confluence` (var 1) trigger — fires on parent BOS_CONFIRMED.
 
-    Per spec §4.3.2: probe sd = +parent_sd, `input_idx` = parent BOS extreme,
-    `probe_end_idx` = the confirmed CTS's EXTREME (`cts_anchor_idx`) in the
+    Per spec §4.3.2: probe sd = +parent_sd, `input_idx` = parent BOS anchor,
+    `probe_end_idx` = the confirmed CTS's ANCHOR (`cts_anchor_idx`) in the
     same parent cycle — a PRICE bound for the probe's search (renamed from
     `end_idx` by Plan C: it is a compute bound, unrelated to the lifecycle
     `end_idx` of PART4 §17). None (pending) until that CTS_CONFIRMED fires; a
@@ -157,7 +157,7 @@ class FirstConfluenceTrigger:
     parent_cycle_id: int               # same cycle_id as the BOS_CONFIRMED
     parent_sd: int                     # parent struct_direction at trigger time
     input_idx: int                     # the BOS anchor (BOS_CONFIRMED.meta["bos_anchor_idx"])
-    probe_end_idx: Optional[int]       # CTS extreme (cts_anchor_idx) in same cycle; None = pending
+    probe_end_idx: Optional[int]       # CTS anchor (cts_anchor_idx) in same cycle; None = pending
     trigger_event_idx: int             # BOS_CONFIRMED.confirmed_at (candle when trigger fires)
     status: str = "finalized"          # "finalized" once probe_end_idx is known, else "pending"
     meta: Dict[str, Any] = field(default_factory=dict)

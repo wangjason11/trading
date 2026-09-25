@@ -3,10 +3,10 @@
 Per spec §4.3.2:
   Trigger: parent BOS_CONFIRMED
   Idx input: parent BOS anchor (`ef.bos_anchor_idx`, meta `bos_anchor_idx`)
-  Probe probe_end_idx: the confirmed CTS's EXTREME idx (`cts_anchor_idx`) in
+  Probe probe_end_idx: the confirmed CTS's ANCHOR (`cts_anchor_idx`) in
                  the same parent cycle — NOT the confirmation candle. None until
                  that CTS_CONFIRMED fires (pending state): the confirmation
-                 candle gates *knowing* the value; the CTS extreme IS the value.
+                 candle gates *knowing* the value; the CTS anchor IS the value.
   Probe sd: +parent_sd (confluence)
   Output: starting_idx for first confluence sub (sid=0) of that parent cycle
 
@@ -33,7 +33,7 @@ def detect_first_confluence_triggers(
     """Walk sorted parent events and emit one trigger per BOS_CONFIRMED.
 
     Pairs each BOS_CONFIRMED with the matching CTS_CONFIRMED for the same
-    (sid, cycle_id). `probe_end_idx` is set to that CTS's EXTREME idx
+    (sid, cycle_id). `probe_end_idx` is set to that CTS's ANCHOR
     (`meta["cts_anchor_idx"]`), which is earlier than the confirmation
     candle (`CTS_CONFIRMED.idx == confirmed_at`). If no CTS_CONFIRMED exists
     yet (parent cycle still open at end-of-data), the trigger is emitted with
@@ -72,13 +72,13 @@ def detect_first_confluence_triggers(
 
         cts_conf = cts_conf_by_key.get((sid, cycle_id))
         if cts_conf is not None:
-            # probe_end_idx = the confirmed CTS's EXTREME idx, not the
+            # probe_end_idx = the confirmed CTS's ANCHOR, not the
             # confirmation candle. CTS_CONFIRMED.idx is the confirmation candle
             # (== confirmed_at, the later pullback / sd-prox candle); the CTS
-            # extreme is meta["cts_anchor_idx"] (earlier). We still WAIT for
+            # anchor is meta["cts_anchor_idx"] (earlier). We still WAIT for
             # CTS_CONFIRMED to fire before the value is known (status flips to
             # finalized here), but the value bounding the probe is the CTS
-            # extreme. (spec §4.3.2)
+            # anchor. (spec §4.3.2)
             probe_end_idx = int(cts_conf.meta["cts_anchor_idx"])
             status = "finalized"
         else:

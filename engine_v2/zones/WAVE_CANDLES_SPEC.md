@@ -104,7 +104,7 @@ Three-step event walk:
 For each event:
 - (a) Direct check: event candle is qualified AND wick enters zone AND closes within zone
   - **Pattern scan-back (CTS_ESTABLISHED only):** If the event candle matches, scan from `pattern_anchor_idx` to `ev_idx` (exclusive) for the first qualified candle closing within the zone. If found, return that earlier candle instead of the event candle.
-  - **Rationale:** The event candle is the CTS **extreme** — the first highest high / lowest low over the breakout pattern's span, so `meta["pattern_anchor_idx"]` (the pattern's first candle) `<= ev_idx <=` the apply candle `CTS_ESTABLISHED.meta["confirmed_at"]` (not the bare `confirmed_at` of Steps 1(b)/3). It is usually the apply candle, but can be an earlier pattern candle; when the first candle itself holds the extreme (`pattern_anchor_idx == ev_idx`) the scan-back is empty. The *first* pattern candle entering the zone better represents the initial breakout moment.
+  - **Rationale:** The event candle is the CTS **anchor** — the pattern extreme, the first highest high / lowest low over the breakout pattern's span, so `meta["pattern_anchor_idx"]` (the pattern's first candle) `<= ev_idx <=` the apply candle `CTS_ESTABLISHED.meta["confirmed_at"]` (not the bare `confirmed_at` of Steps 1(b)/3). It is usually the apply candle, but can be an earlier pattern candle; when the first candle itself holds the extreme (`pattern_anchor_idx == ev_idx`) the scan-back is empty. The *first* pattern candle entering the zone better represents the initial breakout moment.
   - If no earlier pattern candle qualifies, return the event candle itself.
 - (b) Gap scan: scan between current event idx and next event idx (after the last event: up to `confirmed_at`, exclusive, if the cycle has a `CTS_CONFIRMED`) for qualified candle closing within zone
 
@@ -320,4 +320,4 @@ apples-to-apples. KL/POI/etc. unchanged.)
 - `structure_id`, `cycle_id`, `source_kind` (BOS/CTS), `zone_side`
 - `last_wave_candle_idx`: Optional[int]
 - `first_wave_candle_idx`: Optional[int]
-- `meta`: dict with `base_pattern` and `anchor_idx` (the zone's `meta["anchor_idx"]` — the BOS / CTS extreme; see "Index fields used below")
+- `meta`: dict with `base_pattern` and `anchor_idx` (the zone's `meta["anchor_idx"]` — the BOS / CTS anchor; see "Index fields used below")

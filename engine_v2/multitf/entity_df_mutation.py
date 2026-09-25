@@ -386,7 +386,7 @@ def _build_first_confluence_ref_zone(
 ) -> Optional["ReferenceZone"]:
     """Ad-hoc BOS_0 reference zone on M15 for first_confluence.
 
-    Anchor = the M15 input_idx candle (= the parent BOS extreme
+    Anchor = the M15 input_idx candle (= the parent BOS anchor,
     price-mapped to M15). Derives a BOS-style zone from that candle via
     the same `identify_base_pattern + zone_thresholds` machinery the
     legacy Scenario 3 used, just on the SUB's TF rather than the parent's.
@@ -446,7 +446,7 @@ def _build_sibling_cts_ref_zone_from_pool(
       "`ref=cts_confirmed` in a Replay Log Does NOT Mean…"). `df` = the shared
       entity-absolute M15 frame (the winner's own `bounded.df` is slice-local).
 
-    The returned zone's `anchor_idx` is the sibling CTS extreme
+    The returned zone's `anchor_idx` is the sibling CTS anchor
     (entity-absolute) — the caller uses it as BOTH the probe `input_idx` AND
     the reference zone (co-sourced). Returns None when no qualifying CTS exists
     in the window (caller → own-entity ad-hoc fallback).
@@ -611,11 +611,11 @@ def _resolve_first_confluence_via_unified_probe(
 ):
     """Unified-probe path for `first_confluence` (the one variation that
     anchors on its OWN ad-hoc BOS_0, not a sibling). Phase 2 (MS-based) runs
-    because first_confluence's probe bound is the parent CTS extreme — the only
+    because first_confluence's probe bound is the parent CTS anchor — the only
     variation needing the post-bound MS search (PART4 §4.4).
 
-    Returns a `ResolvedStart` (`validated_parent_idx` = the parent BOS extreme
-    that seeded the M15 input) or a `ProbeFailure`.
+    Returns a `ResolvedStart` (`validated_parent_idx` = the parent BOS anchor,
+    H1, that seeded the M15 input) or a `ProbeFailure`.
     """
     from engine_v2.multitf.data_bridge import map_candle_to_lower_tf
 
@@ -767,7 +767,7 @@ def _resolve_sibling_cts_via_unified_probe(
     sibling lens's most recent qualifying CTS in the trigger's M15 window
     `[lo, hi]` (`hi` = this trigger's `trigger_idx`, the last M15 of its H1
     hour). `enable_phase2=False`. Returns a `ResolvedStart`
-    (`validated_parent_idx` = the sibling CTS extreme, M15) or a `ProbeFailure`.
+    (`validated_parent_idx` = the sibling CTS anchor, M15) or a `ProbeFailure`.
     """
     label = f"{trigger.use_case} sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}"
     other_lens = _SIBLING_LENS.get(trigger.use_case)

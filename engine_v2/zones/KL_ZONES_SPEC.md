@@ -26,7 +26,7 @@ indexing bullets below were corrected 2026-09-22 against `ARCHITECTURE.md` "`ev.
   is the level's price.
 - `CTS_CONFIRMED.idx` = the **confirmation candle** (the pullback apply candle, or the
   sd-proximity candle) and `== meta["confirmed_at"]`; it is NOT the CTS level. The level — the
-  current CTS extreme at confirmation — is `meta["cts_anchor_idx"]`.
+  current CTS anchor at confirmation — is `meta["cts_anchor_idx"]`.
 
 ### Zone indexing
 - `meta["base_idx"]`: FIRST candle of the zone base pattern (where the rectangle begins) — at or before
@@ -39,6 +39,11 @@ indexing bullets below were corrected 2026-09-22 against `ARCHITECTURE.md` "`ev.
   anchor at confirmation). A market-structure-realm anchor — **not** `CTS_ESTABLISHED.meta
   ["pattern_anchor_idx"]` (the breakout pattern's first candle, a pattern-realm anchor); see GLOSSARY
   "Naming Standard" / ARCHITECTURE.md "Anchor has two realms".
+- `KLZone.source_time` / `source_price` (the `*_kl_zones.csv` columns): `source_time` = the timestamp of the
+  source event's MOMENT — the raw, unclamped `ef.event_moment(ev)` (BOS: the breakout's apply candle; CTS: the
+  confirmation candle), e.g. H1 BOS zone sid 0 cyc 0: the time of candle 115; `source_price` = the level's price
+  (`ev.price`, the ANCHOR's price — candle 96's low). A moment's time next to an anchor's price, by design; the
+  names are kept (PLAN_E Q12). The anchor's own time is `StructureLevel.time`.
 - `meta["confirmed_idx"]`: candle index where the zone becomes confirmed for charting — raw value
   `ef.event_moment(ev)` (BOS: `meta["confirmed_at"]`; CTS_CONFIRMED: `ev.idx` == `meta["confirmed_at"]`),
   no fallback, then clamped up to the structure lifecycle-start (see "Lifecycle-start clamp" below):
@@ -61,7 +66,7 @@ KL zones are computed after structure, with **base patterns identified on-demand
 
 ## Base Pattern Identification (Structure-Aware)
 
-Base patterns are now identified **on-demand** when a BOS/CTS event is received, using the zone's anchor_idx (the BOS / CTS extreme — "Zone indexing" above) and struct_direction context. Pattern identification is performed by `identify_base_pattern()`.
+Base patterns are now identified **on-demand** when a BOS/CTS event is received, using the zone's anchor_idx (the BOS / CTS anchor — "Zone indexing" above) and struct_direction context. Pattern identification is performed by `identify_base_pattern()`.
 
 ### Pattern Check Order
 1. **Inside bar pattern** (new): Check if anchor candle has ≥2 candles within its range (5 left + 5 right)
@@ -105,8 +110,8 @@ Base window features (`base_low`, `base_high`, etc.) are computed on-the-fly via
      CTS_CONFIRMED: `ev.idx` == `meta["confirmed_at"]`) — direct, no fallback
   3) Determine anchor_idx (stored as the zone's `meta["anchor_idx"]` — a different field from
      `CTS_ESTABLISHED.meta["pattern_anchor_idx"]`, the breakout pattern's first candle):
-     - BOS: anchor_idx = `ef.bos_anchor_idx(ev)` = `meta["bos_anchor_idx"]` (the BOS extreme)
-     - CTS: anchor_idx = `ef.cts_anchor_idx(ev)` = `meta["cts_anchor_idx"]` (the CTS extreme at
+     - BOS: anchor_idx = `ef.bos_anchor_idx(ev)` = `meta["bos_anchor_idx"]` (the BOS anchor)
+     - CTS: anchor_idx = `ef.cts_anchor_idx(ev)` = `meta["cts_anchor_idx"]` (the CTS anchor at
        confirmation; direct, no fallback — Plan E E2d)
   4) Identify (base_pattern, base_idx) via `identify_base_pattern(df, anchor_idx, struct_direction, bos=...)`
   5) Compute thresholds via `zone_thresholds(...)`
@@ -264,8 +269,8 @@ main.
 > Plan C 2026-09-20.** A cycle's lifecycle begins when it is *established* —
 > `CTS_ESTABLISHED.meta["confirmed_at"]` (the apply candle, == `BOS_CONFIRMED.meta["confirmed_at"]`
 > by definition). The CTS anchor `meta["cts_anchor_idx"]` (`CTS_ESTABLISHED.ev.idx` until Plan E E4a
-> made that idx the moment) is the CTS **extreme**, a historical anchor like the BOS anchor; it can
-> precede the moment. Extreme == moment is the COMMON case, not a
+> made that idx the moment) is the pattern's extreme candle — a historical location, like the BOS anchor; it
+> can precede the moment. Anchor == moment is the COMMON case, not a
 > coincidence (31 of 34 `CTS_ESTABLISHED` CSV rows on the reference window, all five H1 cycles;
 > the bound, the lagging rows and why they lag: canonical: `ARCHITECTURE.md` "`ev.idx` convention").
 > `structure_lifecycle.compute_cycle_lifecycle` now reads the moment — for main, every sub cycle and

@@ -179,7 +179,8 @@ def identify_wave_candles(
     Parameters
     ----------
     anchor_idx : int
-        The anchor candle index of the zone base pattern.
+        The zone's meta ``anchor_idx`` — its BOS / CTS anchor (the base
+        pattern is identified at it; not ``base_idx``).
     anchor_type : "BOS" or "CTS"
         Which type of zone this is.
     zone : KLZone

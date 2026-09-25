@@ -1782,8 +1782,8 @@ class FibTracker:
         cycle_id = int(event.meta.get("cycle_id", 0))
 
         # Populate CTS lookup (used by cross-fib walk-backward for dead-cycle
-        # evaluation). CTS_anchor_idx is the CTS extreme; ev.idx is the
-        # confirmation candle.
+        # evaluation). `cts_anchor_idx` is the CTS anchor (a location); ev.idx is
+        # the confirmation candle (the moment).
         cts_anchor_idx = ef.cts_anchor_idx(event)
         cts_price_val = float(event.price) if event.price else 0.0
         self._cts_by_cycle[(sid, cycle_id)] = (cts_anchor_idx, cts_price_val)
@@ -2079,7 +2079,7 @@ class FibTracker:
         cross. ``M = 0`` (CTS_0 already clears) → cycle 0 cleared, so every
         target >= 1 is disallowed → no cross ever (cycle-0 single only).
         Not-yet-cleared (open structure) → allowed (ceiling not reached).
-        Prior cycles are CONFIRMED before ``target_cycle`` so their CTS extremes
+        Prior cycles are CONFIRMED before ``target_cycle`` so their CTS anchors
         are locked in ``_cts_by_cycle`` — stable for the life of target_cycle.
         """
         pbo = self._prev_bos_outer.get(sid)
@@ -2104,7 +2104,7 @@ class FibTracker:
 
         Reuses `_m15_cross_check` (mode-agnostic version transitions; main has no
         `_m15_phase`, so phase=None drives the established-style single fallback).
-        Anchor = CTS_n (the just-seen extreme); own_imb_start = BOS_n. Returns the
+        Anchor = CTS_n (the just-seen CTS anchor); own_imb_start = BOS_n. Returns the
         active fib (cross or single fallback) for the cycle.
         """
         bos = self._bos_by_cycle.get((sid, target_cycle))

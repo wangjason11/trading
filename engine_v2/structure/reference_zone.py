@@ -9,13 +9,18 @@ CTS event. The construction rule is uniform across `subsequent_*` and
     take the event with the most recent MOMENT (Plan E E3b) among
     {CTS_CONFIRMED, CTS_UPDATED, CTS_ESTABLISHED}
         - CTS_CONFIRMED → use the existing KLZone derived from the event
-        - CTS_UPDATED / CTS_ESTABLISHED → build ad hoc from the extreme
-          candle, mirroring the BOS_0 ad-hoc shape Scenario 3 already
-          uses (`identify_base_pattern` + `zone_thresholds(bos=False)`)
+        - CTS_UPDATED / CTS_ESTABLISHED (or a CONFIRMED one with no derived
+          zone) → build ad hoc at the CTS ANCHOR candle, mirroring the
+          BOS_0 ad-hoc shape (`identify_base_pattern` +
+          `zone_thresholds(bos=False)`)
 
-`first_*` triggers skip this helper — their reference zones are the
-parent's BOS / CTS zones, which are guaranteed to exist by trigger
-prerequisite.
+Callers: the sub `reversal` path and the main-structure reversal
+(`structure_engine`), and — through the sibling-CTS pool read
+(`entity_df_mutation._build_sibling_cts_ref_zone_from_pool`) —
+`first_counter` / `subsequent_*`. `first_confluence` does not use this
+helper: it builds its own ad-hoc BOS_0 (`build_ad_hoc_bos0_reference_zone`)
+at its M15 input, the parent BOS anchor price-mapped to M15. (The retired
+"parent BOS / CTS zone" sources were deleted in Plan E E5·2.)
 
 The helper is intentionally TF-agnostic; the caller decides which `df`
 and `events` belong to which TF.
@@ -60,15 +65,22 @@ class ReferenceZone:
     Numerically: ``inner > outer`` for +1 probes; ``inner < outer`` for
     -1 probes.
 
-    `source` records provenance for debug/attribution. `anchor_idx`
-    is the parent-frame idx of the structural event the zone was derived
-    from:
+    `source` records provenance for debug/attribution. `anchor_idx` is the
+    market-structure ANCHOR the zone is built at — a price location, never a
+    moment — and it is also the probe's `input_idx` (hence the pool key):
 
-    - ``cts_confirmed`` → ``cts_anchor_idx`` (the CTS extreme, NOT the
-      later confirmation candle)
-    - ``cts_updated`` / ``cts_established`` → the CTS anchor
-      ``ef.cts_anchor_idx(ev)`` (the CTS extreme; not an EST's ``ev.idx``,
-      the moment since Plan E E4a)
+    - ``cts_confirmed`` / ``cts_updated`` / ``cts_established`` → the
+      winning CTS event's anchor ``ef.cts_anchor_idx(ev)`` (never a
+      confirmation candle; not an EST's ``ev.idx``, the moment since Plan E
+      E4a);
+    - ``ad_hoc_bos_0`` → the candle the ad-hoc BOS_0 zone is based at: the
+      structure start being probed (main sid 0; the probe's moving BOS_0 at
+      a reset start), the `first_confluence` M15 input (the parent BOS
+      anchor, price-mapped), or the sibling fallback's window extreme.
+
+    Frame: that of the `df` it was built on — H1 for the main structure,
+    slice-local M15 on the sub reversal path, entity-absolute M15 on the
+    sibling path.
     """
     outer: float
     inner: float
@@ -115,8 +127,8 @@ def _zone_to_reference(
     - ``probe_direction == -1``: body below zone → ``inner = z.bottom``,
       ``outer = z.top``, ``side = "sell"``.
 
-    This rule is universal across all reference-zone sources (parent BOS,
-    parent CTS, sibling CTS, prior-sid CTS): regardless of how the source
+    This rule is universal across all reference-zone sources (sibling CTS,
+    prior-sid CTS, ad-hoc BOS_0): regardless of how the source
     zone relates to its own parent's direction, ``inner`` is always the
     side closest to the body of the structure being probed.
     """
@@ -154,7 +166,7 @@ def _derive_zone_ad_hoc(
     - ``bos=True`` (BOS-style): `identify_base_pattern(..., bos=True)` +
       `zone_thresholds(..., bos=True)`. Used by first_confluence (the
       sub's "first BOS the new structure would form" — anchored at the
-      M15 input_idx, which is the parent BOS extreme price-mapped to M15).
+      M15 input_idx, which is the parent BOS anchor price-mapped to M15).
 
     `direction` is the SOURCE structure's direction in both cases (= the
     "side" assignment below in geographic terms — sd=+1 ⇒ structure

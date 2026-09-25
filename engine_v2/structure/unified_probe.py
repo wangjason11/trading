@@ -452,9 +452,9 @@ def _run_phase1(
 def _second_cts_moment(cts_est: list) -> int:
     """finalize_idx for `second_cts_reached`: the MOMENT the 2nd CTS was established
     (meta["confirmed_at"] = its apply candle, `.idx` since Plan E E4a), not its CTS anchor
-    (`ef.cts_anchor_idx`, the extreme inside the pattern span). Plan B §3.3 — the same
+    (`ef.cts_anchor_idx`, the pattern extreme it was taken from). Plan B §3.3 — the same
     principle as every lifecycle value (the moment for timing, the anchor for where the
-    extreme sits), and it is what the early stop keys on."""
+    price sits), and it is what the early stop keys on."""
     ev = cts_est[1]
     return ef.event_moment(ev)
 
@@ -554,7 +554,7 @@ def _run_phase2(
         # "Stopped early" comes from `ms.early_stop_idx`, never from `n_cts >= 2`
         # (a 2nd CTS on the last in-bound step with a pending reversal reaches
         # `probe_end_idx` without stopping). The print also checks the §2
-        # extreme-vs-moment pair on the probe's OWN run.
+        # anchor-vs-moment pair on the probe's OWN run.
         if ms.early_stop_idx is not None:
             print(
                 f"[unified_probe phase2] early stop: p2_iter={iteration} "

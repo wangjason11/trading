@@ -59,8 +59,8 @@ def detect_uc1_triggers(
         if h1_sd == 0:
             continue
 
-        # CTS level index (the extreme candle, not the confirmation candle)
-        # cts_ev.idx = confirmation candle; cts_anchor_idx = actual CTS extreme
+        # CTS level index (the anchor candle, not the confirmation candle)
+        # cts_ev.idx = confirmation candle (the moment); cts_anchor_idx = the CTS anchor
         cts_anchor_idx = ef.cts_anchor_idx(cts_ev)
 
         # The CTS anchor seeds the probe input: it must lie inside the parent frame.

@@ -302,7 +302,7 @@ contract:
 
 | Variation | Probe sd | Probe TF | input_idx + reference source |
 |---|---|---|---|
-| `first_confluence` | `+parent_sd` | sub TF | parent BOS extreme (price→M15) + own ad-hoc BOS_0 |
+| `first_confluence` | `+parent_sd` | sub TF | parent BOS anchor (price→M15) + own ad-hoc BOS_0 |
 | `first_counter` | `-parent_sd` | sub TF | sibling confluence CTS, same-dir only (input == ref's `anchor_idx`) |
 | `subsequent_confluence` | `+parent_sd` | sub TF | sibling counter CTS, same-dir only (input == ref's `anchor_idx`) |
 | `subsequent_counter` | `-parent_sd` | sub TF | sibling confluence CTS, same-dir only (input == ref's `anchor_idx`) |
@@ -311,10 +311,10 @@ contract:
 2026-05-29, still current):**
 
 - **Price-based** (`first_confluence` input **and end**): `parent_extreme_dir =
-  -lower_sd`; the parent BOS extreme maps to the M15 candle whose extreme on
+  -lower_sd`; the parent BOS anchor maps to the M15 candle whose extreme on
   the `-lower_sd` side touches the OUTER of the sub's reference zone.
   (`map_candle_to_lower_tf` in `data_bridge.py`.) **CORRECTED 2026-09-19:**
-  `first_confluence`'s `probe_end_idx` (the parent CTS extreme,
+  `first_confluence`'s `probe_end_idx` (the parent CTS anchor,
   `cts_anchor_idx`) is ALSO price-mapped (`+lower_sd` side) — it is a PRICE
   bound for the search, not a temporal gate (`entity_df_mutation.py`
   `_resolve_first_confluence_via_unified_probe`). This section previously said
@@ -333,7 +333,7 @@ contract:
   gate candle maps to the LAST M15 candle of its hour. Never unified with the
   price mapper.
 - The three sibling-referencing variations need NO parent→sub price map for
-  their input: `input_idx` is the sibling's CTS extreme, already an
+  their input: `input_idx` is the sibling's CTS anchor, already an
   entity-absolute M15 idx — read from the **pool** (§17.8
   `_build_sibling_cts_ref_zone_from_pool`: the sibling lens's records for this
   parent cycle, their subs' geometry shifted to entity-absolute, clipped to
@@ -351,7 +351,7 @@ cycle (sid=0 of the confluence entity).
 |---|---|
 | **Trigger** | Most recent parent BOS confirmed (== CTS established for the new cycle, by definition same candle: `BOS_CONFIRMED.meta["confirmed_at"] == CTS_ESTABLISHED.meta["confirmed_at"]`) |
 | **Idx input** | Idx of the newly confirmed BOS (`FirstConfluenceTrigger.input_idx`, price-mapped to M15 on the `-lower_sd` side) |
-| **Probe `probe_end_idx`** | The confirmed CTS's **extreme idx** (`cts_anchor_idx` on the `CTS_CONFIRMED` event) in the same parent cycle — *not* the confirmation candle (`CTS_CONFIRMED.idx == confirmed_at`, which is later). Price-mapped to M15 on the `+lower_sd` side. NULL (`FirstConfluenceTrigger.probe_end_idx = None`, `status = "pending"`) until parent `CTS_CONFIRMED` fires. |
+| **Probe `probe_end_idx`** | The confirmed CTS's **anchor** (`cts_anchor_idx` on the `CTS_CONFIRMED` event) in the same parent cycle — *not* the confirmation candle (`CTS_CONFIRMED.idx == confirmed_at`, which is later). Price-mapped to M15 on the `+lower_sd` side. NULL (`FirstConfluenceTrigger.probe_end_idx = None`, `status = "pending"`) until parent `CTS_CONFIRMED` fires. |
 | **Probe reference zone** | Own ad-hoc BOS_0 on the sub TF from the mapped input candle (`_build_first_confluence_ref_zone`) |
 | **Output** | `starting_idx` for the first confluence sub of the cycle (the record gets `trigger_sub_sid = 0` on the confluence lens if it is the first to resolve there) |
 
@@ -361,9 +361,9 @@ parent CTS_CONFIRMED resolves it (consistent with today's "pending" handling,
 but the result is "do not produce" rather than "produce tentatively"); under
 the pool a still-pending trigger is logged as
 `UnresolvedTrigger(reason="pending")` (§17.7). When it resolves,
-`probe_end_idx` is set to the confirmed CTS's **extreme** idx
+`probe_end_idx` is set to the confirmed CTS's **anchor**
 (`cts_anchor_idx`), which is *earlier* than the confirmation candle: the
-confirmation candle gates only *when* the value becomes known; the CTS extreme
+confirmation candle gates only *when* the value becomes known; the CTS anchor
 is the value that bounds the probe. Using the confirmation candle would
 over-extend the probe window past the CTS, shifting the confluence sub's
 validated start.
@@ -383,7 +383,7 @@ probe; mechanics unchanged.
 | Field | Value |
 |---|---|
 | **Trigger** | First parent sd-zone proximity trigger (BOS or POI) after parent CTS (`WVMIRecord.meta["triggered_by_event_idx"]` → `trigger_event_idx`) |
-| **Idx input** | Sibling confluence lens's most recent qualifying CTS **extreme** on the sub TF (= the reference zone's `anchor_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone** — input and ref are co-sourced from the sibling CTS event (Session 3 uniform rule). |
+| **Idx input** | Sibling confluence lens's most recent qualifying CTS **anchor** on the sub TF (= the reference zone's `anchor_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone** — input and ref are co-sourced from the sibling CTS event (Session 3 uniform rule). |
 | **Probe `probe_end_idx`** | First parent sd-zone proximity trigger candle after CTS, time-mapped to the sub TF's last-of-hour = the trigger's `trigger_idx` (`hi`) |
 | **Probe reference zone** | Sibling confluence lens's most recent qualifying CTS, built ad hoc from the winning CTS event (§17.8: `kl_zones=[]` — subs receive BOS zones only, so no derived CTS zone exists), read from the pool within the sub-TF window `[0, this trigger]` (`_sibling_cts_idx_window`; the pool read is already scoped to this parent cycle) |
 | **Output** | `starting_idx` for the first counter sub of the cycle |
@@ -410,7 +410,7 @@ conditions fire, end the previous confluence sid and create
 | Field | Value |
 |---|---|
 | **Trigger** | Parent CTS-zone proximity trigger AND most recent prior parent proximity trigger was to sd zones |
-| **Idx input** | Sibling **counter** lens's most recent qualifying CTS **extreme** on the sub TF (= the reference zone's `anchor_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone.** |
+| **Idx input** | Sibling **counter** lens's most recent qualifying CTS **anchor** on the sub TF (= the reference zone's `anchor_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone.** |
 | **Probe `probe_end_idx`** | Current parent CTS-zone proximity trigger candle, time-mapped to the sub TF's last-of-hour = the trigger's `trigger_idx` (`hi`) |
 | **Probe reference zone** | Sibling **counter** lens's most recent qualifying CTS, built ad hoc from the winning event (`kl_zones=[]`, §17.8), read from the pool within the sub-TF window `[last-M15-of prior_sd_prox hour, last-M15-of this_cts_prox hour]` |
 | **Output** | `starting_idx` for the next confluence record's sub (a new unique sub, or an existing one if the key repeats) |
@@ -438,7 +438,7 @@ conditions fire, end the previous counter sid and create
 | Field | Value |
 |---|---|
 | **Trigger** | Parent sd-zone proximity trigger AND most recent prior parent proximity trigger was to CTS zone AND the proximity trigger before *that* was to sd zones (forms Λ in bullish parent / V in bearish parent) |
-| **Idx input** | Sibling **confluence** lens's most recent qualifying CTS **extreme** on the sub TF (= the reference zone's `anchor_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone.** |
+| **Idx input** | Sibling **confluence** lens's most recent qualifying CTS **anchor** on the sub TF (= the reference zone's `anchor_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone.** |
 | **Probe `probe_end_idx`** | Current parent sd-zone proximity trigger candle, time-mapped to the sub TF's last-of-hour = the trigger's `trigger_idx` (`hi`) |
 | **Probe reference zone** | Sibling **confluence** lens's most recent qualifying CTS, built ad hoc from the winning event (`kl_zones=[]`, §17.8), read from the pool within the sub-TF window `[last-M15-of prior_cts_prox hour, last-M15-of this_sd_prox hour]` (same pool read as §4.3.4 step 2 with `other_lens="confluence"`) |
 | **Output** | `starting_idx` for the next counter record's sub |
@@ -470,7 +470,7 @@ prior trigger to be the opposite kind):
 
 ```
 parent BOS_confirmed
-    → first_confluence              (input: own ad-hoc BOS_0, probe_end_idx: parent CTS extreme, price-mapped)
+    → first_confluence              (input: own ad-hoc BOS_0, probe_end_idx: parent CTS anchor, price-mapped)
 parent 1st sd-proximity (post-CTS)
     → first_counter                 (input+ref: sibling confluence CTS, probe_end_idx: this trigger candle)
 parent CTS-proximity (after sd-prox)
@@ -531,10 +531,10 @@ at the next parent BOS_confirmed.
 
 | Variation | Trigger | Input idx | `probe_end_idx` | Reference zone | Probe sd |
 |---|---|---|---|---|---|
-| `first_confluence` | Parent BOS_confirmed | Parent BOS extreme (price-mapped to M15) | Parent CTS **extreme** (`cts_anchor_idx`, price-mapped; NULL until parent CTS_confirmed fires) | **Ad-hoc BOS_0 on sub TF** (derived from input_idx candle on M15) | `+parent_sd` |
-| `first_counter` | 1st parent sd-proximity post-CTS | **Sibling confluence CTS extreme** (= ref's `anchor_idx`) | This trigger candle (`trigger_idx`) | **Sibling confluence lens's most recent same-direction CTS** (`struct_direction == +parent_sd`; ad-hoc zone from the winning event, from the pool) | `-parent_sd` |
-| `subsequent_confluence` | Parent CTS-proximity after sd-prox | **Sibling counter CTS extreme** (= ref's `anchor_idx`) | This trigger candle (`trigger_idx`) | Sibling counter lens's most recent same-direction CTS (`struct_direction == -parent_sd`; in M15 window; same rule) | `+parent_sd` |
-| `subsequent_counter` | Parent sd-prox forming Λ / V | **Sibling confluence CTS extreme** (= ref's `anchor_idx`) | This trigger candle (`trigger_idx`) | Sibling confluence lens's most recent same-direction CTS (`struct_direction == +parent_sd`; in M15 window; same rule) | `-parent_sd` |
+| `first_confluence` | Parent BOS_confirmed | Parent BOS anchor (price-mapped to M15) | Parent CTS **anchor** (`cts_anchor_idx`, price-mapped; NULL until parent CTS_confirmed fires) | **Ad-hoc BOS_0 on sub TF** (derived from input_idx candle on M15) | `+parent_sd` |
+| `first_counter` | 1st parent sd-proximity post-CTS | **Sibling confluence CTS anchor** (= ref's `anchor_idx`) | This trigger candle (`trigger_idx`) | **Sibling confluence lens's most recent same-direction CTS** (`struct_direction == +parent_sd`; ad-hoc zone from the winning event, from the pool) | `-parent_sd` |
+| `subsequent_confluence` | Parent CTS-proximity after sd-prox | **Sibling counter CTS anchor** (= ref's `anchor_idx`) | This trigger candle (`trigger_idx`) | Sibling counter lens's most recent same-direction CTS (`struct_direction == -parent_sd`; in M15 window; same rule) | `+parent_sd` |
+| `subsequent_counter` | Parent sd-prox forming Λ / V | **Sibling confluence CTS anchor** (= ref's `anchor_idx`) | This trigger candle (`trigger_idx`) | Sibling confluence lens's most recent same-direction CTS (`struct_direction == +parent_sd`; in M15 window; same rule) | `-parent_sd` |
 
 Output of every row: `ProbeResult.starting_idx` → the pool key
 `(parent_path, "M15", lower_sd, starting_idx)` (§17.3); `ProbeResult.finalize_idx`
@@ -548,7 +548,7 @@ sibling-referencing variations (`first_counter`, `subsequent_confluence`,
 an EST's `ev.idx`, the moment since Plan E E4a), found by walking
 the sibling's events within the trigger's sub-TF idx window. `first_confluence`
 is the only exception — it has no sibling/prior structure yet, so it anchors on
-its own ad-hoc BOS_0 from the parent-BOS-extreme input. The probe always runs
+its own ad-hoc BOS_0 from the parent-BOS-anchor input. The probe always runs
 on the structure's OWN sub TF.
 
 **Direction-qualified sibling CTS (2026-06-15).** "Most recent sibling CTS"
@@ -697,7 +697,7 @@ dormant** (like the `pending` finalize conditions).
   not separately asserted).
 - **first_confluence** (hybrid) — **CORRECTED 2026-09-19 to match the code**:
   both the deterministic pass and Phase 2 receive `probe_end_idx` = the
-  **price-mapped parent CTS extreme** (`cts_anchor_idx`, §4.3.1); Phase 2 runs
+  **price-mapped parent CTS anchor** (`cts_anchor_idx`, §4.3.1); Phase 2 runs
   MS **bounded at `probe_end_idx`** (`_make_market_structure(...,
   end_idx=probe_end_idx)` — MS's own bound parameter keeps its `end_idx` name)
   — it is NOT treated as NULL. The retrace window is `[CTS_0_EST+1,
@@ -1035,7 +1035,7 @@ generalized):
       `start_idx` (`LowerTFResult.meta["start_idx"]`, §17.10).
   - **cycle (any):** `max(cts_moment, owning-structure lifecycle-start)` where
     `cts_moment = CTS_ESTABLISHED.meta["confirmed_at"]` — **the moment the cycle
-    was established, never the CTS anchor (the CTS extreme; `CTS_ESTABLISHED.idx` until
+    was established, never the CTS anchor (the pattern extreme; `CTS_ESTABLISHED.idx` until
     Plan E E4a)** (Plan C,
     §17.6; `compute_cycle_lifecycle` Pass 1). The structure's lifecycle-start
     already embeds the parent floor for subs (through the record's
@@ -1296,7 +1296,7 @@ on this data because `confirmed_at == CTS_EST.ev.idx` for all 6 H1 cycles
 > — both are the same `apply_idx` (`market_structure.py` ~1414-1451; the BOS
 > confirms at the candle that establishes the new cycle's CTS — one real-time
 > moment). `CTS_ESTABLISHED.idx` was then a DIFFERENT thing (until Plan E E4a,
-> 2026-09-25, made it the moment; the extreme is `meta["cts_anchor_idx"]`): the CTS **extreme**
+> 2026-09-25, made it the moment; the anchor is `meta["cts_anchor_idx"]`): the CTS **anchor** (the pattern extreme)
 > within the pattern span, which can precede the apply candle (3 such pairs in
 > the saved M15 event streams — 1223/1224, 2828/2829; 0 of 5 on H1 on this
 > window). The hedge above is therefore *right* about `CTS_EST.ev.idx` vs
@@ -1823,7 +1823,7 @@ the serialised `meta`).
 
 ### 9.4 Cross-entity lookups
 
-When a sub needs parent zones (`first_confluence`'s BOS extreme input; the
+When a sub needs parent zones (`first_confluence`'s BOS anchor input; the
 main's proximity triggers that fire the counter/subsequent variations) it
 reads them **at trigger-detection time on H1** (`first_confluence_trigger`,
 `uc1_trigger`, `subsequent_*_trigger`) and carries what it needs on the
@@ -2509,7 +2509,7 @@ three refinements of the rules above; the CSVs are untouched by all three:**
    `rgb(255, 180, 30)` (confirm line dark brick) — `zone.poi.buy` /
    `zone.poi.sell` in `style_registry.py`; opacities unchanged.
 4. **Wave rule (2026-09-21).** Forming vs live is decided per WAVE (one
-   segment between two consecutive drawn points, over the extreme candles the
+   segment between two consecutive drawn points, over the anchor candles the
    line runs through — not the confirmation candles): a wave is solid if any
    part of its candle span lies inside the sub's `[start_idx, end_idx]`, and
    forming only if none of it does (`_wave_touches_window` /
@@ -2816,7 +2816,7 @@ markers (Plan E E5·2). Do not unify them.
 | `trigger_end_idx` | the first end condition to fire (below), or the sub's frozen end on a post-end re-trigger. |
 | `end_idx` | REAL-TIME. `max(trigger_end_idx, start_idx)`; None while open. |
 | `end_reason` | `reversal` \| `same_dir_replacement` \| `parent_end` \| None. `ended_by_sub_id` names the replacing sub for `same_dir_replacement`. |
-| `starting_idx`, `direction`, `sub_tf`, `relative_dir`, `validated_parent_idx`, `probe_finalize_condition` | structural / provenance copies (denormalised for the export). `validated_parent_idx` = the candle that seeded the probe, in the frame the seed lives in (the rule that `validated_h1_start` always had): the **H1** parent BOS extreme (`FirstConfluenceTrigger.input_idx`) for `first_confluence`; the **M15** sibling CTS extreme (`ref_zone.anchor_idx`, the probe's own `input_idx`) for the three sibling types; None for reversal-born. The sub-level copy `SidRecord.meta["validated_parent_start"]` was deleted in Plan E E1b (unread). Diagnostic only — no lifecycle value reads it (Plan C §2.1's "H1 candle" wording was imprecise; corrected 2026-09-20). |
+| `starting_idx`, `direction`, `sub_tf`, `relative_dir`, `validated_parent_idx`, `probe_finalize_condition` | structural / provenance copies (denormalised for the export). `validated_parent_idx` = the candle that seeded the probe, in the frame the seed lives in (the rule that `validated_h1_start` always had): the **H1** parent BOS anchor (`FirstConfluenceTrigger.input_idx`) for `first_confluence`; the **M15** sibling CTS anchor (`ref_zone.anchor_idx`, the probe's own `input_idx`) for the three sibling types; None for reversal-born. The sub-level copy `SidRecord.meta["validated_parent_start"]` was deleted in Plan E E1b (unread). Diagnostic only — no lifecycle value reads it (Plan C §2.1's "H1 candle" wording was imprecise; corrected 2026-09-20). |
 | `extra_trigger_idxs` | later triggers in the same `(lens, parent_sid, parent_cycle_id)` that resolved to the same sub — **absorbed into this record**, no new record, `trigger_sub_sid` not consumed. The match includes a ZERO-LENGTH record (a re-trigger into a scope whose record was frozen — post-end or collision — is absorbed, not revived; acausal cases only). |
 
 **End conditions — record level ONLY** (the sub never has its own; it only
@@ -3149,7 +3149,7 @@ key), then skips MS + downstream.
 > and NOT adopted; revisiting any of them is its own `/compare`.
 
 **FC probe end mapping — unchanged.** The FC probe's search bound is the
-parent's confirmed-CTS **extreme** (`cts_anchor_idx`), **price-mapped** — it is
+parent's confirmed-CTS **anchor** (`cts_anchor_idx`), **price-mapped** — it is
 a price bound for the search, and changing it moves `starting_idx` = the pool
 key (§4.3.1). It is renamed **`probe_end_idx`** everywhere (the trigger meta
 already used that name): a compute bound like the run cap, unrelated to

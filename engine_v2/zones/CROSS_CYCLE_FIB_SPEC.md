@@ -61,7 +61,7 @@ the branch happens *inside* each handler.
 - **Scope:** `sid ≥ 1` only, and **only the cycle-0 → cycle-1 cross**. `sid == 0`
   never crosses ("simple flow"). Cycles 2+ get plain single fibs.
 - **State:** `self._scenario1[sid] ∈ {None, True, False}`. Scenario 1 decided at
-  CTS_0 EST/UPD (`_handle_cycle0_scenario1:701`): the CTS_0 event's MOMENT `>= reversal_confirmed_idx` (the EST `confirmed_at` / the
+  CTS_0 EST/UPD (`_handle_cycle0_scenario1`): the CTS_0 event's MOMENT `>= reversal_confirmed_idx` (the EST `confirmed_at` / the
   update's moment since Plan E E3a; before it the CTS_0 anchor idx)
   → TRUE (cycle-0 single fib unlocked); resolves FALSE at CTS_0 CONFIRMED if never
   reached. Cycle-0 data cached as a plain dict in `_cross_cycle_data[sid]["cycle0"]`.
@@ -71,8 +71,8 @@ the branch happens *inside* each handler.
   decided at CTS_0 EST/UPD asks at that event's moment instead (the cut check at EST,
   `_c0_has_unfilled_now` on updates) — Plan F 2026-09-24; `IMBALANCE_FILL_SEMANTICS.md`
   "Knowability — the c3 rule".
-- **Cycle-1 decision** (`_handle_cycle1_scenarios:761`): if S1 TRUE → **revert check**
-  (`_should_revert_scenario1:1725` — BOS_1 reaches into prev structure's last BOS
+- **Cycle-1 decision** (`_handle_cycle1_scenarios`): if S1 TRUE → **revert check**
+  (`_should_revert_scenario1` — BOS_1 reaches into prev structure's last BOS
   zone outer → flip S1 FALSE, kill cycle-0 fib via `_deactivate_cycle0_fib`, terminal
   `scenario1_revert`). If S1 (post-revert) TRUE → normal cycle-1 single fib. If S1
   FALSE → **Scenario 2 vs 3** via `select_fib_anchor_for_cycle` (3 static imbalance
@@ -81,7 +81,7 @@ the branch happens *inside* each handler.
 - **Storage:** named slots in `_cross_cycle_data[sid]` (`cycle0` dict,
   `normal_cycle1` FibState, `cross_cycle` FibState); only the active winner mirrors
   to `_fibs[(sid,1)]`. **≤2 anchor candidates** (BOS_0 cross vs BOS_1 normal), no
-  integer version. Update toggles cross↔normal (`_update_cycle1_fibs:1403`).
+  integer version. Update toggles cross↔normal (`_update_cycle1_fibs`).
 - **Shared util already used:** `select_fib_anchor_for_cycle` (`fib_tracker.py:99`),
   a pure function ALSO called by the MS in-flight POI resolver
   (`market_structure.py:1928`) so in-flight and downstream agree on Scenario 2. It
@@ -95,10 +95,10 @@ the branch happens *inside* each handler.
 - **Scope:** all subordinate variants, every cycle, generalized cross.
 - **Phase machine** `_m15_phase[(sid,cycle)] ∈ {pre_established, established, confirmed}`.
   `pre_established` (entered at CTS_{n-1} CONFIRMED) is driven by
-  `CTS_THRESHOLD_UPDATED` (`on_cts_threshold_updated:1880`): anchor = running extreme
-  past CTS_n (`_running_extreme_anchor:1803`), own-imbalance start = prospective
-  BOS_{n+1} (`_find_prospective_bos:1773`, deepest pullback since CTS_n CONFIRMED).
-- **Cross check** (`_m15_cross_check:1941`): (1) target cycle's own imbalance — since
+  `CTS_THRESHOLD_UPDATED` (`on_cts_threshold_updated`): anchor = running extreme
+  past CTS_n (`_running_extreme_anchor`), own-imbalance start = prospective
+  BOS_{n+1} (`_find_prospective_bos`, deepest pullback since CTS_n CONFIRMED).
+- **Cross check** (`_m15_cross_check`): (1) target cycle's own imbalance — since
   Plan F (2026-09-24) only a gap **formed** by the handled event's moment counts (§3
   item 1); if none, deactivate cross (no pre-established fallback). An own gap whose
   c2 is the `CTS_THRESHOLD_UPDATED` candle itself has not formed there, and with no
@@ -117,7 +117,7 @@ the branch happens *inside* each handler.
 - **Storage:** ALL versions in `_fibs` as `(sid,cycle,"cross",v)` + a `(sid,cycle)`
   single fallback. Integer `_cross_version`. Monotonic supersede. Up to **N** versions.
 - **Cycle 0:** single fib only, no cross, no pre-established. Late-activate on
-  CTS_UPDATED (`18a6b32`, `_handle_cross_cycle_cts_updated:1098`) — since Plan F asked
+  CTS_UPDATED (`18a6b32`, `_handle_cross_cycle_cts_updated`) — since Plan F asked
   at the update's moment (a raw update's `idx`; a pattern-path update's apply candle
   `confirmed_at`, since Plan E E3·0), so when the only gap has its c2 at the moment of an EST or raw update, the
   fib can first activate at the next raw update instead (reference window: conf sub 2
@@ -221,11 +221,11 @@ This is the **new capability** (the "update" task): main's cross may target cycl
 - `P_rev` = the previous structure's (sid−1) **last BOS zone max-expanded OUTER** —
   the SAME value `_get_prev_bos_outer` (`orchestrator.py:177`) computes today for the
   Scenario-1 revert check. (Single source of truth — reuse it, do not re-derive.)
-- `M` = the **earliest** cycle of the new structure whose **CTS extreme** clears
+- `M` = the **earliest** cycle of the new structure whose **CTS anchor** clears
   `P_rev` (past it in the new structure's sd direction: sd=+1 ⇒ `CTS_M.price >= P_rev`;
   sd=−1 ⇒ `<= P_rev`). The ceiling check at target `T` only inspects cycles
   `[0, T−1]`, all of which are completed → use each prior cycle's **locked/confirmed
-  CTS extreme** (`_cts_by_cycle`), not a still-updating running extreme.
+  CTS anchor** (`_cts_by_cycle`), not a still-updating running extreme.
 
 ### 4.2 Rule
 - The post-reversal cross target cycle ranges **1 … M**. Cycle `M` gets the
@@ -470,9 +470,9 @@ has a target.
   `bounds_steps` (no expansion), so max-expanded outer = bottom = `bos_frozen`.
   So `P_rev` (the §4 ceiling) and the reversal `bos_frozen` are the **same
   value** here; no drift.
-- **sid=1 CTS extremes** (clear ⇔ `CTS ≤ 0.5736` for sd=−1):
+- **sid=1 CTS anchors** (clear ⇔ `CTS ≤ 0.5736` for sd=−1):
 
-  | cycle | CTS extreme | vs 0.5736 | clears? |
+  | cycle | CTS anchor price | vs 0.5736 | clears? |
   |---|---|---|---|
   | 0 | 0.57902 | above | no |
   | 1 | 0.574 | above (~4 pips) | no |
