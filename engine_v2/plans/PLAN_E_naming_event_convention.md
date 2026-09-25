@@ -1170,9 +1170,21 @@ the real emitter.
   the dead-code hygiene list. **Measured (vs `20260925_145355_029401f`):** 24/24 CSVs byte-identical, the 3
   figures JSON-identical (incl. the 12 delegated markers, 6 per M15 chart; no empty hour, so no new
   `[data_bridge] WARNING`), fetch gate PASS; run.log only the FutureWarning line number (2648 → 2607). Replay
-  46.2 s. Tests 935 + 1 xfail.
+  46.2 s. Tests 935 + 1 xfail. Commit `9ac70ba`; save `20260925_152746_9ac70ba`.
+  - Landing review (1 conformance lens, ≈125k; `git archive` copy; the old vs new mapper fuzzed on 34,684 cases
+    — gaps, ties, NaN, shifted / sliced indices, string times: 0 differences; flipping the sign moves all 12
+    markers, so the figure diff pins the direction): 0 BLOCKER / 0 MAJOR. **Folded in:** the mapper's own
+    docstring still claimed one "universal" `-lower_sd` rule (the FC `probe_end_idx` uses `+lower_sd`; the
+    chart passes the wick side) → names both callers; the chart comment notes that a SLICED chart now logs a
+    `[data_bridge] WARNING` per clipped trigger (production never slices); the four kept MS blocks joined the
+    memory hygiene line. Deferred to E5·3 (prose, listed below).
 - **Remaining E5:** E5·3 = the IN §1.9 prose +
-  §3 #14 + the Q12 `KLZone.source_time` documentation + the GLOSSARY Naming-Standard "Status" paragraph; E5·4 =
+  §3 #14 + the Q12 `KLZone.source_time` documentation + the GLOSSARY Naming-Standard "Status" paragraph + from
+  the E5·1 / E5·2 reviews: the `ReferenceZone` docstring (`anchor_idx` defined for every constructed source,
+  incl. `ad_hoc_bos_0`, the common case; slice-local on the reversal path, entity-absolute on the sibling path),
+  the `reference_zone` module docstring + `_zone_to_reference` still describing the retired "parent BOS / CTS
+  zone" design, LANDMINES "both call sites" of `map_candle_to_lower_tf` (names deleted / renamed functions;
+  misses the chart caller); E5·4 =
   the exported Q4 change (triggers CSV `validated_parent_idx` → FC-only `parent_bos_anchor_idx`; measured table
   first).
 ---

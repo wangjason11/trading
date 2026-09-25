@@ -92,21 +92,29 @@ def map_candle_to_lower_tf(
     parent_extreme_dir: int,
     m15_df: pd.DataFrame,
 ) -> Optional[int]:
-    """Map an H1 hour to the M15 candle whose extreme matches it.
+    """Map an H1 hour to the M15 candle holding that hour's price extreme.
 
     H1 candle at time T covers M15 candles at T+0, T+15, T+30, T+45.
 
-    - ``parent_extreme_dir == +1`` → find M15 candle with the HIGHEST high
-      in the H1 hour (tie: last). Used to anchor a parent-TF extreme that
-      sits on the +1 side (e.g., parent CTS extreme for parent_sd=+1, or
-      parent BOS extreme for parent_sd=+1 in the post-probe map).
-    - ``parent_extreme_dir == -1`` → find M15 candle with the LOWEST low.
+    - ``parent_extreme_dir == +1`` → the M15 candle with the HIGHEST high in
+      the hour (tie: last) — for a parent-TF price location on the +1 side
+      (e.g. the CTS anchor of an up-structure).
+    - ``parent_extreme_dir == -1`` → the M15 candle with the LOWEST low
+      (tie: last).
 
-    Callers compute ``parent_extreme_dir`` per spec §4.3.1: the universal
-    rule is ``parent_extreme_dir = -lower_sd`` (= the side of the parent
-    hour that anchors the OUTER of the sub's reference zone).
+    The callers choose the side:
+    - the ``first_confluence`` probe (`entity_df_mutation`): its input, the
+      parent BOS anchor, with ``-lower_sd`` (spec §4.3.1: the side of the
+      parent hour that anchors the OUTER of the sub's reference zone), and its
+      ``probe_end_idx``, the parent CTS anchor, with ``+lower_sd`` (the
+      structure ceiling / floor);
+    - the M15 chart's H1 zone-proximity markers (display): the side of the
+      trigger wick (``-1`` when price approaches from above).
+    A price-location mapper only — every TIMING value uses the LOH mapper
+    (`entity_df_mutation._map_parent_idx_to_m15_hour_end`); never unify them.
 
-    Returns the M15 DataFrame index, or None if no candles in the hour.
+    Returns the M15 DataFrame index, or None (with a WARNING print) if no
+    candles fall in the hour.
     """
     h1_time = pd.to_datetime(h1_time, utc=True)
     h1_end = h1_time + timedelta(hours=1)

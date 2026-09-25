@@ -2729,7 +2729,9 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
     # The ONE price-extreme mapper (multitf.data_bridge): the H1 trigger wick is
     # the hour's low when the approach is from above (lowest-low M15 candle), else
     # its high (highest-high); tie → the last candle. Plan E E5·2 deleted this
-    # chart's private copy of the same rule (`_find_m15_by_extreme`).
+    # chart's private copy of the same rule (`_find_m15_by_extreme`). On a sliced
+    # chart (`idx_range` / `max_points`) a trigger whose hour was clipped away now
+    # also logs a `[data_bridge] WARNING` (display only; `run_replay` never slices).
     from engine_v2.multitf.data_bridge import map_candle_to_lower_tf
 
     x_vals, y_vals, customdata = [], [], []
