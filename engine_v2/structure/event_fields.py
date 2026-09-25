@@ -24,7 +24,7 @@ Imports nothing from `market_structure` (it imports this module), so no cycle.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Tuple
+from typing import Any, Tuple
 
 
 # `CTS_UPDATED.meta["via"]` of the RAW path (`_maybe_update_cts_pre_confirm`): a
@@ -70,15 +70,16 @@ def pattern_anchor_idx(ev: Any) -> int:
     raise ValueError(f"pattern_anchor_idx: no pattern anchor on {ev.type}")
 
 
-def event_moment(ev: Any) -> Optional[int]:
+def event_moment(ev: Any) -> int:
     """The candle at which a CTS / BOS event became knowable (its MOMENT).
 
     - CTS_ESTABLISHED / BOS_CONFIRMED: `meta["confirmed_at"]` (until Plan E E4
       `ev.idx` is the anchor).
     - CTS_CONFIRMED / CTS_RECONFIRMED: `ev.idx` (the confirmation candle).
-    - CTS_UPDATED: `ev.idx` on the raw path (`via == CTS_UPDATED_RAW_VIA`);
-      None on the pattern path — its `ev.idx` is the CTS anchor and no moment
-      is recorded (until Plan E E3·0).
+    - CTS_UPDATED: `ev.idx` on the raw path (`via == CTS_UPDATED_RAW_VIA`, the
+      processing candle); `meta["confirmed_at"]` on the pattern path (the
+      pattern's apply candle, Plan E E3·0 — its `ev.idx` is the CTS anchor
+      until E4c).
     - CTS_THRESHOLD_UPDATED: `ev.idx` (the processing candle,
       `_sync_thresholds_from_range`).
 
@@ -89,7 +90,9 @@ def event_moment(ev: Any) -> Optional[int]:
     if ev.type in ("CTS_CONFIRMED", "CTS_RECONFIRMED", "CTS_THRESHOLD_UPDATED"):
         return int(ev.idx)
     if ev.type == "CTS_UPDATED":
-        return int(ev.idx) if ev.meta["via"] == CTS_UPDATED_RAW_VIA else None
+        if ev.meta["via"] == CTS_UPDATED_RAW_VIA:
+            return int(ev.idx)
+        return int(ev.meta["confirmed_at"])
     raise ValueError(f"event_moment: no moment defined for {ev.type}")
 
 

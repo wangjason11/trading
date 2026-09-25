@@ -563,7 +563,7 @@ list, and the test fails. E2a extends it: `meta["cts_anchor_idx"] == ev.idx` (pr
 
 | Stage | Sites (IN) | Prediction | Verification |
 |---|---|---|---|
-| **E3·0** pattern-path moment | `market_structure.py:1580`: pattern-path `CTS_UPDATED` gains `meta["confirmed_at"] = int(apply_idx)`; `event_moment` returns it (and the raw path keeps `ev.idx`). Plan F's knowability cut then applies on the pattern path (Plan F §7 follow-up) | events meta +37 keys (7/23/7); the cut effect was measured by Plan F as 0 cells → **re-measure with a variant**; expected 0 other cells | unit: a pattern-path update with apply > idx is cut at the apply. Docs: ARCHITECTURE table `CTS_UPDATED` row; IMBALANCE_FILL_SEMANTICS |
+| **E3·0** pattern-path moment | `market_structure.py:1580` (at E3·0: `:1545–1553`): pattern-path `CTS_UPDATED` gains `meta["confirmed_at"] = int(apply_idx)`; `event_moment` returns it (and the raw path keeps `ev.idx`). Plan F's knowability cut then applies on the pattern path (Plan F §7 follow-up) | events meta +37 keys (7/23/7); the cut effect was measured by Plan F as 0 cells → **re-measure with a variant**; expected 0 other cells | unit: a pattern-path update with apply > idx is cut at the apply. Docs: ARCHITECTURE table `CTS_UPDATED` row; IMBALANCE_FILL_SEMANTICS |
 | **E3a** fib + MS-mirror timing | IN §2.3 E3a + §2.4 items 1–6 and 9:<br>- `activated_at` writes;<br>- the fill horizon at EST (`fib_tracker.py:616`);<br>- the split `fill_horizon_idx` of `resolve_cross_cycle_eligibility` / `select_fib_anchor_for_cycle` (§6.2);<br>- the new_cycle terminal / `_mark_first_active`;<br>- the set-if-absent merge;<br>- the `scenario1_revert` terminal;<br>- `:1149` `.get("activated_at", cts_idx)` → direct;<br>- **the MS mirror** `_refresh_poi_inners_for_cycle` / `_update_cycle0_data` horizons (the old proposed "E3e", merged per Q18: IN §2.4 item 9 requires MS ↔ FibTracker parity "in the same change").<br>Scenario 1 per Q2 | **Named: 4 fib_lifecycle cells.** conf line 14 + counter line 2 (sub 3 cyc 0) `end_idx` 2828.0→2829.0; conf line 15 + counter line 3 (sub 3 cyc 1) meta `activated_at` 239→240 (slice-local).<br>**At risk** (the horizon moves one candle at 2829 and at 1224):<br>- sub 3 cyc 1's `cross_failed` single fib + POI IC 2808 (both lenses) if a fill confirms at 2829;<br>- conf sub 0 cyc 2's re-run `_m15_cross_check` on the cross started at 1169 (reactivate / deactivate / version cells);<br>- via the MS mirror, MS events (sd-prox CTS confirmation).<br>H1 0 **only if Q8 stays out of E3a**.<br>**Measure first** with a variant replay; the variant's cell list becomes the prediction | unit: `_make_second_cts_moment_after_extreme_data` via `_run_downstream_pipeline` → cycle-1 fib `start_idx` / `activated_at` 9→10, cycle-0 fib `end_idx` 9→10. Spec: FIB_LIFECYCLE_SPEC §7 cases 2–3, §15.3 |
 | **E3a′** *(Q8)* | `cycle1_bos_idx` cond3 fill horizon (`:1544`, `:1624`) + c0 cond2 fill horizon (IN §2.4 item 5) → moment | measure first; H1 cells possible (BOS lag 14–76) | per measurement |
 | **E3b** pool clock | `knowable_at_idx` (`sub_structure_pool.py:84-100`) on `ef.event_moment` for `CTS_ESTABLISHED`; the sibling-clip TIME (split in E2b; comment `:481`); `reference_zone.py:335-357` window + the recency sort key; `unified_probe._second_cts_moment` converges on `event_moment`; rewrite the false comment `reference_zone.py:344-347` (hazard H5) | **0**: no lagging EST straddles a sub cap (caps 1940, 2470, 2829, 3611, 3819, 4200) | synthetic cap in [anchor, moment); `test_sub_structure_pool.py:562-564` expectation 10 → 14. Closes PART4 §17.12 for EST |
@@ -585,6 +585,37 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
 | T5 | fib Scenario-1 comparison (Q2) | anchor | **moment**, in E3a |
 
 ---
+
+### 7.2 E3 as landed
+
+- **E3·0 (2026-09-24).** `market_structure` pattern-path emit: `meta["confirmed_at"] = int(apply_idx)`;
+  `ef.event_moment` returns it on the pattern path (`meta["confirmed_at"]`, direct — a pattern-path
+  CTS_UPDATED without it raises `KeyError`) and is now `-> int` (never None). Measured on the change itself
+  (`cmp_save.py --strip confirmed_at` vs `20260924_202017_4ef2607`): **0 real cells**; key-only cells H1 events 7,
+  conf 23, counter 7 (== §7's 37) **+ `structure_levels` 7** (not in §7's prediction: its `meta` column carries the
+  H1 CTS events' meta, as in E2a); figures JSON-identical (85/245, 151/124, 294/233); run.log only the FutureWarning
+  line number (2627 → 2632). The one lagging row: conf sub 2 cyc 0, idx 2468, `confirmed_at` 2470 (entity-absolute —
+  already in `_EVENT_META_IDX_KEYS`; the E1 guard needed no change, its static scan sees the new key). The Plan F
+  knowability cut now applies on the pattern path (0 cells, as Plan F measured). Tests 842 → 848 + 1 xfail: Plan F's
+  `test_guard_pattern_path_update_is_not_cut` replaced by `test_pattern_path_update_is_cut_at_its_apply_not_its_anchor`
+  (anchor 25, apply 26, gap c2 25 → counted; kills a cut too early, e.g. at the anchor) +
+  `test_pattern_path_update_gap_at_its_apply_waits_one_update` (anchor = apply = 25, gap c2 25 → not counted; the next
+  update at 26 activates — the only shape where cut and uncut differ); the MS emit test runs a new lagging fixture (`_make_multicycle_data` + 24 maru / 25 small
+  bear → `one_maru_opposite`, anchor 24 / apply 25) and pins every pattern update `event_moment == confirmed_at >= idx`.
+  The FibTracker UPDATED time halves (`# UPD time half: Plan E E3·0/E3a`) still read the anchor — E3a. Docs:
+  ARCHITECTURE table row + the `event_moment` bullet + the POI-sweep note; GLOSSARY `event_moment` / `event.idx` /
+  `CTS_UPDATED` / `evaluated_at`; IMBALANCE_FILL_SEMANTICS; GOTCHAS ×4; LANDMINES ×4; PART4 §17.12 note; CROSS_CYCLE /
+  FIB_LIFECYCLE / POI_ZONES specs; PRE_REFACTOR_INVARIANTS; `imbalance.py` / `fib_tracker.py` comments.
+  - Landing review (1 combined lens, ≈96k): 0 BLOCKER. **MAJOR** — my first second pin (gap c2 26, past the anchor)
+    passed with no cut at all (outside the fib range), so the exact pre-E3·0 behaviour (M6p: `_evaluated_at = None`
+    on the pattern path) survived → replaced by the anchor = apply = c2 pin above (M6p now killed). MINORs folded
+    in: the FibTracker markers `UPD time half: Plan E E3·0/E3a` → `Plan E E3a` (§6.7's text is historical); the
+    conftest contract validator now checks `CTS_UPDATED` (pattern path: int `confirmed_at >= idx`; raw: none) +
+    `test_event_contract_validator.py` pins (5). The validator surfaced three legacy constructions: 3 test-built
+    pattern updates in `test_event_fields.py` (key added) and the Plan-B-save CSV test (pre-E3·0 rows: stand in
+    `confirmed_at = idx`, H1 apply == idx on all 7 rows). Mutation 10/11 killed (M10, the dropped `int()` cast, is
+    equivalent: `apply_idx` is already an int). `apply_idx >= cts_anchor_idx` holds by construction
+    (`_cts_from_breakout_event` spans `[start, max(end, confirmation)]`, apply = confirmation or end).
 
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 

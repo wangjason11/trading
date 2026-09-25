@@ -47,6 +47,7 @@ from engine_v2.multitf.lifecycle_sweep import (
     run_lifecycle_sweep,
 )
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 from engine_v2.tests._event_factory import make_event
 
 PARENT = "H1.main"
@@ -600,6 +601,13 @@ def _events_from_csv(path: Path) -> List[StructureEvent]:
             key = {"CTS_ESTABLISHED": "cts_anchor_idx", "BOS_CONFIRMED": "bos_anchor_idx"}.get(row["type"])
             if key is not None:
                 meta.setdefault(key, int(row["idx"]))
+            # A save older than Plan E E3·0 lacks a pattern-path CTS_UPDATED's
+            # `confirmed_at` (its apply candle — not recoverable from the row).
+            # Stand in `idx`: every H1 pattern-path update on this window has
+            # apply == idx (measured at E3·0), and parent_tables reads no
+            # CTS_UPDATED moment.
+            if row["type"] == "CTS_UPDATED" and meta.get("via") != CTS_UPDATED_RAW_VIA:
+                meta.setdefault("confirmed_at", int(row["idx"]))
             price = float(row["price"]) if row.get("price") not in (None, "") else None
             out.append(StructureEvent(
                 idx=int(row["idx"]), category=row["category"], type=row["type"],

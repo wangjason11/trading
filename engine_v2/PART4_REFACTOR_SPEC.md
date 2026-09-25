@@ -3362,7 +3362,7 @@ sibling dfs. `test_sub_id_is_monotonic_and_stable` must survive unchanged.
 - `knowable_at_idx` special-cases only `BOS_CONFIRMED`; `CTS_ESTABLISHED` /
   `REVERSAL_CANDIDATE` straddle too and are half-clipped at a window edge, and
   so can a pattern-path `CTS_UPDATED` (`meta["via"]` = a pattern name: `ev.idx`
-  is the span extreme, and its apply candle is not recorded at all —
+  is the span extreme; its apply candle is `meta["confirmed_at"]` since Plan E E3·0 —
   `ARCHITECTURE.md` "`ev.idx` convention"). Not fixed here — note any
   half-clipped cycle seen during chart review.
 - Whether subs should receive the **derived** CTS KL zone as a probe reference

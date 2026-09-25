@@ -615,7 +615,7 @@ if ev.type == "CTS_ESTABLISHED":
 return ev_idx
 ```
 
-**Why only CTS_ESTABLISHED:** it is the only CTS event whose meta carries `pattern_anchor_idx` (the pattern's first candle — where the scan-back starts). A raw-path `CTS_UPDATED` (`via="replay_raw"`) is a single-candle wick extension with no pattern at all. A pattern-path `CTS_UPDATED` (a breakout while the cycle is still unconfirmed) DOES carry pattern info — the pattern name in `via` — but records neither `pattern_anchor_idx` nor `confirmed_at` (37 of 426 `CTS_UPDATED` rows on the reference window are pattern-path), so there is no pattern start to scan back from.
+**Why only CTS_ESTABLISHED:** it is the only CTS event whose meta carries `pattern_anchor_idx` (the pattern's first candle — where the scan-back starts). A raw-path `CTS_UPDATED` (`via="replay_raw"`) is a single-candle wick extension with no pattern at all. A pattern-path `CTS_UPDATED` (a breakout while the cycle is still unconfirmed) DOES carry pattern info — the pattern name in `via` — but records no `pattern_anchor_idx` (only its apply candle `confirmed_at`, since Plan E E3·0) (37 of 426 `CTS_UPDATED` rows on the reference window are pattern-path), so there is no pattern start to scan back from.
 
 ---
 
@@ -691,11 +691,11 @@ zones.
 **Problem:** `BOS_CONFIRMED` has `ev.idx` set to the **BOS extreme candle** (where the BOS level price was set), not the confirmation candle. The confirmation candle index is in `ev.meta["confirmed_at"]`. It is NOT the lone exception — `CTS_ESTABLISHED` and pattern-path `CTS_UPDATED` are extreme-located too.
 
 **Convention (short form — the canonical per-event table is ARCHITECTURE.md "`ev.idx` convention"; do not re-grow a copy here):**
-- `ev.idx` is a **price location** (NOT knowable at that candle) for `BOS_CONFIRMED` (the BOS extreme), `CTS_ESTABLISHED` (the CTS anchor — the first argmax `h` / argmin `l` over the breakout span, retro-stamped) and pattern-path `CTS_UPDATED` (the span extreme; no `confirmed_at` recorded).
+- `ev.idx` is a **price location** (NOT knowable at that candle) for `BOS_CONFIRMED` (the BOS extreme), `CTS_ESTABLISHED` (the CTS anchor — the first argmax `h` / argmin `l` over the breakout span, retro-stamped) and pattern-path `CTS_UPDATED` (the span extreme; its apply candle is `confirmed_at`, since Plan E E3·0).
 - `ev.idx` is the **moment** for `CTS_CONFIRMED` / `CTS_RECONFIRMED` (the confirmation candle, `== confirmed_at`), raw-path `CTS_UPDATED` (`meta["via"] == CTS_UPDATED_RAW_VIA`, i.e. `"replay_raw"`; the processed candle) and `CTS_THRESHOLD_UPDATED` (the processing candle passed to `_sync_thresholds_from_range`).
 - `REVERSAL_CANDIDATE`: `ev.idx` = the reversal pattern's anchor; `meta["apply_idx"]` = the SCHEDULED apply (a prediction that can expire).
 - The moment of `BOS_CONFIRMED` and `CTS_ESTABLISHED` is `meta["confirmed_at"]` — the same apply candle for the same cycle, by construction.
-- In code, `structure/event_fields.py` names each role in one place (Plan E E2a; call it qualified, `ef.<fn>(ev)`): `ef.event_moment(ev)` — `confirmed_at` for `CTS_ESTABLISHED` / `BOS_CONFIRMED`, `ev.idx` for `CTS_CONFIRMED` / `CTS_RECONFIRMED` / `CTS_THRESHOLD_UPDATED` / raw-path `CTS_UPDATED`, `None` for pattern-path `CTS_UPDATED` (no moment recorded), any other type raises; FibTracker's imbalance reads are asked at it (Plan F). The anchors: `ef.cts_anchor_idx(ev)` / `ef.bos_anchor_idx(ev)` read meta `cts_anchor_idx` / `bos_anchor_idx` (`== ev.idx` until Plan E E4).
+- In code, `structure/event_fields.py` names each role in one place (Plan E E2a; call it qualified, `ef.<fn>(ev)`): `ef.event_moment(ev)` — `confirmed_at` for `CTS_ESTABLISHED` / `BOS_CONFIRMED`, `ev.idx` for `CTS_CONFIRMED` / `CTS_RECONFIRMED` / `CTS_THRESHOLD_UPDATED` / raw-path `CTS_UPDATED`, `confirmed_at` for pattern-path `CTS_UPDATED` (the apply candle, since Plan E E3·0), any other type raises; FibTracker's imbalance reads are asked at it (Plan F). The anchors: `ef.cts_anchor_idx(ev)` / `ef.bos_anchor_idx(ev)` read meta `cts_anchor_idx` / `bos_anchor_idx` (`== ev.idx` until Plan E E4).
 
 (An earlier copy of this table listed `CTS_ESTABLISHED` as "confirmation candle" and BOS as the lone "exception!" — both wrong; corrected 2026-09-22.)
 
@@ -1648,7 +1648,7 @@ active it routes to the update path). H1 main unaffected (its path already did t
 
 **Since Plan F (2026-09-24) both re-checks are asked AT the update's moment:**
 `_handle_cross_cycle_cts_updated` calls `_has_unfilled` (raw `CTS_UPDATED` →
-`evaluated_at` = its `ev.idx`; a pattern-path update records no moment → uncut),
+`evaluated_at` = its `ev.idx`; a pattern-path update → its apply candle `confirmed_at`, since Plan E E3·0),
 and `_handle_cycle0_cts_updated` re-asks via `_c0_has_unfilled_now` instead of
 reading the cycle-0 cache (the cache stays uncut: it is Scenario-2 cond2, judged
 at its later use). A gap whose c3 closes after the update first-activates the

@@ -158,7 +158,7 @@ def has_unfilled_imbalance(
         `check_to_idx` (which can be an anchor that precedes the moment).
         ``None`` = an explicit "no knowability cut" — retrospective questions,
         the unchanged MS in-flight resolver, cached values judged at their later
-        use, and events with no recorded moment — and is today's answer.
+        use — and is today's answer.
     direction
         Struct-direction filter; every production caller passes ``sd`` (all
         Fib / scenario / POI checks are sd-direction strict since 2026-05-23 —

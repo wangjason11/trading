@@ -1545,7 +1545,12 @@ class MarketStructure:
                 st.last_pullback_pat_apply_idx = None
             else:
                 # Not allowed to create a new CTS cycle yet => this breakout just updates CTS (pre-confirm)
-                self._emit_cts_updated(cts_anchor_idx, cts_price, meta={"via": ev.name})
+                # `ev.idx` = the CTS anchor (a location); the MOMENT the update became
+                # knowable is the pattern's apply candle (Plan E E3·0; ARCHITECTURE
+                # "`ev.idx` convention"). E4c flips `ev.idx` to it.
+                self._emit_cts_updated(
+                    cts_anchor_idx, cts_price, meta={"via": ev.name, "confirmed_at": int(apply_idx)}
+                )
 
             # Update current CTS point (always)
             st.cts = Point(idx=cts_anchor_idx, price=cts_price)

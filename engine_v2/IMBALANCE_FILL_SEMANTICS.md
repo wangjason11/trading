@@ -68,8 +68,10 @@ that every such caller justifies (table below).
 out of `market_structure` and extended to BOS_CONFIRMED → `confirmed_at` and
 CTS_CONFIRMED / CTS_RECONFIRMED → `ev.idx` by Plan E E2a): CTS_ESTABLISHED →
 `meta["confirmed_at"]`; CTS_UPDATED →
-`ev.idx` on the raw path (`meta["via"] == CTS_UPDATED_RAW_VIA`), `None` on the
-pattern path (its `idx` is the CTS anchor and no moment is recorded — Plan E);
+`ev.idx` on the raw path (`meta["via"] == CTS_UPDATED_RAW_VIA`), `meta["confirmed_at"]`
+(the apply candle) on the pattern path, whose `idx` is the CTS anchor (Plan E E3·0,
+2026-09-24 — before it no moment was recorded and the pattern path was uncut;
+measured on the reference window: the cut changes 0 cells);
 CTS_THRESHOLD_UPDATED → `ev.idx` (the processing candle); any other type raises.
 Canonical `ev.idx` table: ARCHITECTURE.md "`ev.idx` convention".
 
@@ -213,8 +215,8 @@ Each consumer tunes four knobs: the **window**, the fill horizon
 ### FibTracker — `evaluated_at = self._evaluated_at` = `event_moment` of the handled event
 
 `on_cts_established` / `on_cts_updated` / `on_cts_threshold_updated` run under
-`_evaluating(event)`; `_has_unfilled(...)` passes the moment (None on a pattern-path
-CTS_UPDATED — no recorded moment).
+`_evaluating(event)`; `_has_unfilled(...)` passes the moment (a pattern-path
+CTS_UPDATED's apply candle since Plan E E3·0).
 
 | Site | Window | `check_to_idx` | Question |
 |---|---|---|---|

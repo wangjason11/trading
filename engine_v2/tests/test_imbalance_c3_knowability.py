@@ -65,6 +65,8 @@ def _ev(etype, idx, price, sid, cyc, *, confirmed_at=None, via=CTS_UPDATED_RAW_V
     meta = {"structure_id": sid, "cycle_id": cyc, "struct_direction": 1}
     if etype == "CTS_UPDATED":
         meta["via"] = via
+        if via != CTS_UPDATED_RAW_VIA:   # pattern path: the apply candle (Plan E E3·0)
+            meta["confirmed_at"] = idx if confirmed_at is None else confirmed_at
     if cts_anchor_idx is not None:
         meta["cts_anchor_idx"] = cts_anchor_idx
     return StructureEvent(idx=idx, category="STRUCTURE", type=etype, price=price, meta=meta)
@@ -253,17 +255,38 @@ def test_guard_lag1_est_gap_at_the_anchor_still_activates():
     assert res is not None and res.active
 
 
-def test_guard_pattern_path_update_is_not_cut():
-    """A pattern-path CTS_UPDATED has no recorded moment (its idx is the CTS
-    anchor) → no cut. Catches cutting on an anchor as if it were a moment."""
+def test_pattern_path_update_is_cut_at_its_apply_not_its_anchor():
+    """Plan E E3·0: a pattern-path CTS_UPDATED records its moment (the apply
+    candle, `meta["confirmed_at"]`), so the knowability cut applies there.
+    Anchor 25, apply 26. Gap c2 25 → formed at 26 == the apply → counted (a cut
+    at the anchor 25 would drop it). The activation stamp still reads the
+    anchor until Plan E E3a."""
     tracker = _tracker("cross_cycle")
     df = _df(40, [_gap(25)])
     _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0), df,
            bos_idx=10, bos_price=0.9)
     upd = _quiet(tracker.on_cts_updated,
-                 _ev("CTS_UPDATED", 25, 1.25, 0, 0, via="one_maru_continuous"), df)
+                 _ev("CTS_UPDATED", 25, 1.25, 0, 0, via="one_maru_continuous", confirmed_at=26), df)
     assert upd is not None and upd.active
-    assert upd.meta["activated_at"] == 25
+    assert upd.meta["activated_at"] == 25   # Plan E E3a → 26
+
+
+def test_pattern_path_update_gap_at_its_apply_waits_one_update():
+    """Plan E E3·0: anchor = apply = 25; the only gap has c2 25 → formed at 26,
+    after the moment → not counted (uncut — before E3·0 — it activated here).
+    The next pattern update (anchor = apply = 26) counts it. Landing review:
+    only this shape changes the answer between cut and uncut."""
+    tracker = _tracker("cross_cycle")
+    df = _df(40, [_gap(25)])
+    _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0), df,
+           bos_idx=10, bos_price=0.9)
+    upd = _quiet(tracker.on_cts_updated,
+                 _ev("CTS_UPDATED", 25, 1.25, 0, 0, via="one_maru_continuous", confirmed_at=25), df)
+    assert upd is None or not upd.active
+    upd = _quiet(tracker.on_cts_updated,
+                 _ev("CTS_UPDATED", 26, 1.26, 0, 0, via="one_maru_continuous", confirmed_at=26), df)
+    assert upd is not None and upd.active
+    assert upd.meta["activated_at"] == 26
 
 
 def test_guard_cycle0_cache_stays_uncut():
@@ -330,7 +353,8 @@ def test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib():
 def test_event_moment_per_type():
     assert ef.event_moment(_ev("CTS_ESTABLISHED", 9, 1.2, 0, 1, confirmed_at=10)) == 10
     assert ef.event_moment(_ev("CTS_UPDATED", 25, 1.2, 0, 0)) == 25
-    assert ef.event_moment(_ev("CTS_UPDATED", 25, 1.2, 0, 0, via="continuous")) is None
+    # pattern path: the apply candle (Plan E E3·0), not the anchor idx
+    assert ef.event_moment(_ev("CTS_UPDATED", 25, 1.2, 0, 0, via="continuous", confirmed_at=27)) == 27
     assert ef.event_moment(_ev("CTS_THRESHOLD_UPDATED", 30, 1.2, 0, 0)) == 30
     # Plan E E2a extends it (reversing Plan F's "any other CTS type raises"):
     # a CTS_CONFIRMED's idx IS its confirmation candle.
@@ -350,17 +374,41 @@ def test_event_moment_reads_the_contract_keys_directly():
         ef.event_moment(ev)
 
 
-def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_without():
+def _multicycle_with_lagging_pattern_update():
+    """`_make_multicycle_data` (0-23, cycle 3 established at 20, pre-confirm) +
+    24 big bull maru (the new CTS extreme; a raw update at 24) + 25 small bear
+    normal → `one_maru_opposite(+1)` applied at 25: a pattern-path CTS_UPDATED
+    with anchor 24 and moment 25 (hand-verified 2026-09-24) + 26 a filler."""
+    from engine_v2.tests.test_unified_probe import _R
+    rows = _make_multicycle_data()
+    c = rows[-1]["c"]                                              # .6299
+    rows.append(_R(c, c + 0.0052, c - 0.0002, c + 0.0050))         # 24
+    c += 0.0050
+    rows.append(_R(c - 0.0001, c + 0.0001, c - 0.0009, c - 0.0007))  # 25
+    c -= 0.0007
+    rows.append(_R(c, c + 0.0002, c - 0.0006, c - 0.0004))         # 26
+    return rows
+
+
+def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_with_their_apply():
     """A live MS run: every raw-path CTS_UPDATED carries CTS_UPDATED_RAW_VIA and
-    sits on its processing candle; every other via is a breakout-pattern name."""
+    sits on its processing candle; every other via is a breakout-pattern name and
+    records its apply candle as `meta["confirmed_at"]` (Plan E E3·0) — the moment
+    `event_moment` returns, never before the anchor `ev.idx`."""
     from engine_v2.structure.structure_engine import compute_bounded_structure
     from engine_v2.tests.test_unified_probe import _prepare_df
-    res = compute_bounded_structure(_prepare_df(_make_multicycle_data()), 0, +1)
+    with contextlib.redirect_stdout(io.StringIO()):
+        res = compute_bounded_structure(_prepare_df(_multicycle_with_lagging_pattern_update()), 0, +1)
     updates = [e for e in res.events if e.type == "CTS_UPDATED"]
     raw = [e for e in updates if e.meta["via"] == CTS_UPDATED_RAW_VIA]
     patterns = [e for e in updates if e.meta["via"] != CTS_UPDATED_RAW_VIA]
     assert raw and patterns
-    assert all(ef.event_moment(e) is None for e in patterns)
+    assert all("confirmed_at" not in e.meta for e in raw)
+    for e in patterns:
+        assert ef.event_moment(e) == e.meta["confirmed_at"] >= e.idx
+    lagging = [(e.idx, e.meta["confirmed_at"], e.meta["via"]) for e in patterns
+               if e.meta["confirmed_at"] != e.idx]
+    assert lagging == [(24, 25, "one_maru_opposite")]
 
 
 # ===========================================================================

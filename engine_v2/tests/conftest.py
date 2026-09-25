@@ -21,6 +21,7 @@ from __future__ import annotations
 import pytest
 
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 
 # What `ev.idx` is on CTS_ESTABLISHED / BOS_CONFIRMED: the anchor today; Plan E
 # E4 flips it to "moment" (`idx == meta["confirmed_at"]`), with the factory default.
@@ -54,8 +55,31 @@ def _is_int(v) -> bool:
     return type(v) is int
 
 
+def _validate_cts_updated(ev) -> None:
+    """Plan E E3·0: a pattern-path CTS_UPDATED records its moment (the apply
+    candle) as an int `confirmed_at >= idx` (idx = the CTS anchor until E4c); a
+    raw-path one (`via == CTS_UPDATED_RAW_VIA`) carries none — its idx IS the
+    moment. Checked only when `via` is set (event_moment itself raises without it)."""
+    meta = ev.meta or {}
+    if "via" not in meta:
+        return
+    if meta["via"] == CTS_UPDATED_RAW_VIA:
+        _check("confirmed_at" not in meta,
+               f"raw-path CTS_UPDATED at idx {ev.idx} must not carry confirmed_at")
+        return
+    ca = meta.get("confirmed_at")
+    _check(_is_int(ca) and ca >= ev.idx, (
+        f"pattern-path CTS_UPDATED at idx {ev.idx} (via {meta['via']!r}) needs an int "
+        f"meta['confirmed_at'] >= idx, got {ca!r}"
+    ))
+
+
 def validate_event_contract(ev) -> None:
-    """Raise EventContractViolation if a CTS_ESTABLISHED / BOS_CONFIRMED breaks the contract."""
+    """Raise EventContractViolation if a CTS_ESTABLISHED / BOS_CONFIRMED /
+    CTS_UPDATED breaks the contract."""
+    if ev.type == "CTS_UPDATED":
+        _validate_cts_updated(ev)
+        return
     key = _ANCHOR_KEY.get(ev.type)
     if key is None:
         return

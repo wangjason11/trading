@@ -28,7 +28,7 @@ def test_cts_anchor_idx_reads_the_meta_key_not_idx():
     conf = _ev("CTS_CONFIRMED", 25, cts_anchor_idx=20, confirmed_at=25)
     assert ef.cts_anchor_idx(conf) == 20
     assert ef.cts_anchor_idx(_ev("CTS_RECONFIRMED", 30, cts_anchor_idx=20)) == 20
-    assert ef.cts_anchor_idx(_ev("CTS_UPDATED", 12, via="continuous")) == 12
+    assert ef.cts_anchor_idx(_ev("CTS_UPDATED", 12, via="continuous", confirmed_at=12)) == 12
 
 
 @pytest.mark.illegal_event_contract  # the E4 shape: idx != the anchor
@@ -60,7 +60,7 @@ def test_accessors_raise_on_the_wrong_type():
     with pytest.raises(ValueError):
         ef.bos_anchor_idx(make_cts_established(cts_anchor_idx=9, confirmed_at=10))
     with pytest.raises(ValueError):
-        ef.pattern_anchor_idx(_ev("CTS_UPDATED", 12, via="continuous"))
+        ef.pattern_anchor_idx(_ev("CTS_UPDATED", 12, via="continuous", confirmed_at=12))
 
 
 def test_event_moment_extended_to_bos_and_confirmations():
@@ -74,7 +74,7 @@ def test_processing_order_key_is_todays_idx_type_order():
     evs = [
         make_cts_established(cts_anchor_idx=9, confirmed_at=10),
         make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10),
-        _ev("CTS_UPDATED", 12, via="continuous"),
+        _ev("CTS_UPDATED", 12, via="continuous", confirmed_at=12),
         _ev("CTS_CONFIRMED", 14, cts_anchor_idx=12, confirmed_at=14),
         StructureEvent(idx=11, category="RANGE", type="RANGE_STARTED", meta={}),
     ]

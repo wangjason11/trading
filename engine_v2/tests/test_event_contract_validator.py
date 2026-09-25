@@ -61,3 +61,24 @@ def test_the_autouse_hook_is_active():
     """Unmarked test: constructing an illegal event raises at construction."""
     with pytest.raises(EventContractViolation):
         make_cts_established(cts_anchor_idx=9, confirmed_at=10, idx=10)
+
+
+# --- Plan E E3·0: CTS_UPDATED (landing review) ----------------------------------
+
+@pytest.mark.illegal_event_contract
+def test_cts_updated_legal_shapes():
+    validate_event_contract(_raw("CTS_UPDATED", 24, via="replay_raw"))
+    validate_event_contract(_raw("CTS_UPDATED", 24, via="one_maru_opposite", confirmed_at=25))
+    validate_event_contract(_raw("CTS_UPDATED", 24, via="continuous", confirmed_at=24))
+
+
+@pytest.mark.illegal_event_contract
+@pytest.mark.parametrize("meta", [
+    {"via": "continuous"},                         # pattern path without its moment
+    {"via": "continuous", "confirmed_at": 23},     # moment before the anchor
+    {"via": "continuous", "confirmed_at": 25.0},   # not a Python int
+    {"via": "replay_raw", "confirmed_at": 24},     # the raw path carries none
+])
+def test_cts_updated_rejects(meta):
+    with pytest.raises(EventContractViolation, match="CTS_UPDATED"):
+        validate_event_contract(_raw("CTS_UPDATED", 24, **meta))

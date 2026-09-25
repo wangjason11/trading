@@ -117,8 +117,8 @@ the branch happens *inside* each handler.
   single fallback. Integer `_cross_version`. Monotonic supersede. Up to **N** versions.
 - **Cycle 0:** single fib only, no cross, no pre-established. Late-activate on
   CTS_UPDATED (`18a6b32`, `_handle_cross_cycle_cts_updated:1098`) — since Plan F asked
-  at the update's moment (a raw update's `idx`; a pattern-path update records none →
-  no cut), so when the only gap has its c2 at the moment of an EST or raw update, the
+  at the update's moment (a raw update's `idx`; a pattern-path update's apply candle
+  `confirmed_at`, since Plan E E3·0), so when the only gap has its c2 at the moment of an EST or raw update, the
   fib can first activate at the next raw update instead (reference window: conf sub 2
   and sub 3, cycle 0, one candle later).
 

@@ -746,7 +746,7 @@ registry, never from `dfx.attrs["lower_tf_results"]`.
 >   it, never drop `hi`. Known limit (PART4 §17.8): the clip keys every CTS
 >   type (`structure/reference_zone._CTS_EVENT_TYPES`) on `ev.idx` — the
 >   EXTREME for `CTS_ESTABLISHED` (and a pattern-path `CTS_UPDATED`, whose
->   apply candle is not recorded) — so a CTS whose moment (`confirmed_at` /
+>   apply candle is `confirmed_at` since Plan E E3·0, unread by the clip) — so a CTS whose moment (`confirmed_at` /
 >   the apply candle) is after `hi` but whose extreme is `<= hi` is still a
 >   candidate (the in-code comment "`ev.idx == knowable-at for CTS types`" is
 >   wrong for `CTS_ESTABLISHED` and pattern-path `CTS_UPDATED`; ARCHITECTURE
@@ -1618,7 +1618,7 @@ also pass the MOMENT of the question. `has_unfilled_imbalance`,
 keyword-only and REQUIRED, so a forgotten moment is a `TypeError`, never a
 silent default; `evaluated_at=None` is an explicit, justified no-cut
 (FibTracker's decisions pass the handled event's moment, `event_moment(ev)` —
-`None` on a pattern-path CTS_UPDATED, which records none; its two cycle-0 cache
+the apply candle `confirmed_at` on a pattern-path CTS_UPDATED since Plan E E3·0; its two cycle-0 cache
 writes, `_update_cycle0_data` and `compute_poi_inners_for_cycle` pass `None`).
 Rule: IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
 
@@ -2030,12 +2030,12 @@ candle only for events whose `ev.idx` IS their moment (`CTS_CONFIRMED` /
 `CTS_ESTABLISHED` (`ev.idx` = the retro-stamped CTS extreme, knowable at
 `meta["confirmed_at"]`), `REVERSAL_CANDIDATE` (applies at `meta["apply_idx"]`),
 or a pattern-path `CTS_UPDATED` (`via` = a pattern name: stamped at the span
-extreme, no moment recorded) — see ARCHITECTURE "`ev.idx` convention". Any of
+extreme, its moment `confirmed_at` since Plan E E3·0) — see ARCHITECTURE "`ev.idx` convention". Any of
 the three can straddle a cap (`ev.idx <= cap <` its moment) and survive the
 clip; for the first two a mid-pair clip yields a half-derived cycle — the
 known limit recorded in PART4 §17.12 (not fixed; zero `CTS_ESTABLISHED` /
 `REVERSAL_CANDIDATE` straddles on the reference window, `/compare` baseline
-`20260922_195430_aadb887`); the third has no moment column to key on at all.
+`20260922_195430_aadb887`); the third has had a moment column (`confirmed_at`) since Plan E E3·0.
 The rule for any new or changed clip: key each type on its moment column, never
 on `ev.idx` by default. Changing this clip is its own `/compare`.
 

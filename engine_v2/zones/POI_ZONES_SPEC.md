@@ -170,7 +170,7 @@ Fib LOCKED (anchor 2 stops updating)
 - **Deactivation/Reactivation:** Fib can toggle active state based on imbalance conditions at each CTS update
 - **Each check is asked at the handled event's MOMENT** (Plan F, 2026-09-24),
   `event_fields.event_moment(ev)` — per-event values in ARCHITECTURE
-  "`ev.idx` convention" (a pattern-path CTS_UPDATED records none, so no cut).
+  "`ev.idx` convention" (a pattern-path CTS_UPDATED: its apply candle, since Plan E E3·0).
   FibTracker re-asks only at CTS events, so a
   gap whose c3 closes after an event counts only if a later event re-asks — none
   does for an H1 cycle ≥ 1 fib that failed at EST (activation is one-shot there),
