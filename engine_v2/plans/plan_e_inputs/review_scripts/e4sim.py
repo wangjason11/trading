@@ -1,12 +1,12 @@
 import sys, copy, io, contextlib
 sys.path.insert(0, r"C:\Users\wangj\OneDrive\Documents\codingproj\Project Retire\forex_engine_v2")
-from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_extreme_data, _make_multicycle_data, _prepare_df
+from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_anchor_data, _make_multicycle_data, _prepare_df
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 
 import os
 MODE=os.environ.get("MODE","h1")
-for maker in (_make_second_cts_moment_after_extreme_data, _make_multicycle_data):
+for maker in (_make_second_cts_moment_after_anchor_data, _make_multicycle_data):
     df = _prepare_df(maker())
     res = compute_bounded_structure(df, 0, +1)
     print("==", maker.__name__, "n=", len(df))

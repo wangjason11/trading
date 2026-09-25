@@ -660,7 +660,7 @@ structural retraces.
 2. a **valid breakout pattern** re-detected with `break_threshold = bos0_inner`
    (mechanism B — NOT the threshold-free `df.pat`); 30%-body failures may be
    CONFIRMED via the existing pattern-extreme confirmation;
-3. a **strict** new full-pattern extreme over `[current_start, extreme_candle)`
+3. a **strict** new full-pattern extreme over `[current_start, pattern_extreme_idx)`
    (`>`/`<`; ties do NOT count);
 4. **earliest apply/confirm idx** wins, tie-break `continuous > double_maru >
    one_maru_continuous > one_maru_opposite` (a cycle-0-specific order — the
@@ -727,7 +727,7 @@ dormant** (like the `pending` finalize conditions).
 ### MS pre-CTS_0 scan-from-start (`enforce_cts0_new_extreme` + `bos0_inner`)
 
 The probe hands MS a **decision, not events**: `{finalized current_start, BOS_0
-bounds}` (+ `cts0_established_idx` as a sanity-assert). MS does **NOT** seed state at
+bounds}` (+ `cts0_established_idx`, informational — logged, no production reader). MS does **NOT** seed state at
 CTS_0 (the earlier "seed-and-resume" was rejected — see the design doc's UPDATE
 block). Instead, with `enforce_cts0_new_extreme=True` MS runs the **pre-CTS_0
 scan-from-start** mode: while cycle 0 is unestablished it delegates the breakout

@@ -3,7 +3,8 @@
 **Status:** rev 2 — cold-reviewed (§11: 3 lenses, 1 BLOCKER + 15 MAJOR findings folded in). **All §10 questions
 DECIDED by the user 2026-09-24** (Q11 wording approved as §4.2). **Progress (2026-09-25): E1–E4 LANDED** —
 as-landed records §5.1 (E1/E1b), §6.7 (E2), §7.2 (E3), §8.1 (E4a / E4b-pre / E4b / E4c, each with its landing
-review); `ev.idx` is the moment on every CTS / BOS event. Next: E5 (§9).
+review); `ev.idx` is the moment on every CTS / BOS event. **E5 in progress** (§9.1): E5·1 internal renames
+landed (`029401f`); remaining: E5·2 dead code, E5·3 prose + Q12, E5·4 the exported Q4 change.
 **Inputs (canonical site lists — read first):** [`PLAN_E_inputs.md`](PLAN_E_inputs.md) (the digest; §0.1 = the
 user's FINAL decisions) + the raw inventories [`plan_e_inputs/`](plan_e_inputs/README.md). This plan does NOT
 re-list every site: it schedules them, states each stage's mechanism and numeric prediction, and cites the inputs by
@@ -1144,7 +1145,24 @@ the real emitter.
   **Measured (vs `20260925_133849_c182eb6`):** 24/24 CSVs byte-identical, the 3 figures JSON-identical, fetch
   gate PASS; run.log only the FutureWarning line number (MS 16 lines shorter) and the parked `by_lens` order.
   Replay 45.4 s wall. Tests 935 + 1 xfail (unchanged). Docs: GOTCHAS "`_cts_from_breakout_event`: Include
-  Confirmation Candle" names the shared function; memory names reconciled.
+  Confirmation Candle" names the shared function; memory names reconciled. Commit `029401f`; save
+  `20260925_145355_029401f`.
+  - Landing review (1 combined conformance lens, ≈204k; full suite on a `git archive` copy; 20,000-case fuzz of
+    `pattern_extreme` against the old TFB helper and the old MS body: 0 differences; the new MS assert is
+    unreachable — MS patterns come only from `BreakoutPatterns(df, end_idx=_effective_end)`, bounded by
+    `n_visible`): 0 BLOCKER / 0 MAJOR. **MINOR / NIT (folded in):** `review_scripts/e4sim.py` still imported the
+    old fixture name; the `extreme_candle` pseudo-id in GOTCHAS, PART4 and the TFB design memory; this status
+    line; GLOSSARY `anchor_idx` now names the `ReferenceZone.anchor_idx` field; a test stub's `extreme_idx`
+    param; the "sanity-assert" claim on `cts0_established_idx` (no production reader — informational);
+    `_cts_from_breakout_event`'s span wording (`max(end_idx, confirmation_idx)`). Deferred to E5·2/E5·3: the
+    `ReferenceZone` docstring defines `anchor_idx` only for the `cts_*` sources (omits `ad_hoc_bos_0`, the
+    common case; the value is slice-local on the reversal path, entity-absolute on the sibling path).
+- **Remaining E5:** E5·2 = IN §3 #13 dead code (the never-constructed `ReferenceZone` sources `parent_cts` /
+  `parent_bos`; `export_m15_chart._find_m15_by_extreme` duplicating `data_bridge.map_candle_to_lower_tf`; the
+  commented `_cts_price_at` caller block E1b missed in `_apply_pattern_at_apply_idx`); E5·3 = the IN §1.9 prose +
+  §3 #14 + the Q12 `KLZone.source_time` documentation + the GLOSSARY Naming-Standard "Status" paragraph; E5·4 =
+  the exported Q4 change (triggers CSV `validated_parent_idx` → FC-only `parent_bos_anchor_idx`; measured table
+  first).
 ---
 
 ## 10. Open questions for the user (recommendation first; concrete window data)

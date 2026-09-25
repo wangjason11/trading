@@ -1674,9 +1674,9 @@ class MarketStructure:
         CTS anchor of a breakout = the pattern extreme of its full span
         (`structure_patterns.pattern_extreme`, the same computation as
         `find_true_first_breakout`): max high for a bullish structure, min
-        low for a bearish one, over [start_idx..end_idx] for SUCCESS
-        patterns and [start_idx..confirmation_idx] (the confirming candle
-        included) for CONFIRMED ones. The only place a pattern extreme
+        low for a bearish one, over [start_idx..max(end_idx,
+        confirmation_idx)] — the confirming candle included whenever the
+        pattern has one (CONFIRMED). The only place a pattern extreme
         becomes a CTS anchor. Returns (cts_anchor_idx, cts_price).
         """
         found = pattern_extreme(self._h, self._l, ev, self.struct_direction)

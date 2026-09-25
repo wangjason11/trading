@@ -147,8 +147,9 @@ class ProbeResult:
     the ad-hoc BOS_0 at the reset start). MS uses `bos0_inner` as the
     cycle-0 breakout gate so probe and MS gate on the EXACT same number.
     `cts0_established_idx` is the apply/confirm idx of the located true first
-    breakout — carried as a sanity-assert (MS re-finds it via
-    scan-from-start); None when no breakout was found in the window.
+    breakout — informational (logged as `cts0_est=`, pinned by tests; no
+    production reader: MS re-finds it via scan-from-start); None when no
+    breakout was found in the window.
     Populated by the deterministic method, and on the Phase-2 path with the
     first CTS_ESTABLISHED's MOMENT (`ef.event_moment`).
 

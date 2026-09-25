@@ -1619,7 +1619,7 @@ Filtering the precomputed list yields a chain that doesn't structurally hold
 together.
 
 **Correct approach (true-first-breakout cycle-0 redesign, 2026-06-07). The lesson above still holds; the mechanics below superseded the earlier `df.pat`-walk / partial-gate approaches:**
-- **ONE shared routine** `engine_v2/structure/true_first_breakout.py::find_true_first_breakout` encodes the 4 conditions: anchor closes past the BOS_0 inner (mechanism B — re-detect via the detectors with `break_threshold=bos0_inner`, NOT the threshold-free `df.pat`), valid pattern (confirmation allowed), **strict** full-pattern new extreme over `[current_start, extreme_candle)`, earliest apply/confirm idx (tie-break `continuous>dm>omc>omo`).
+- **ONE shared routine** `engine_v2/structure/true_first_breakout.py::find_true_first_breakout` encodes the 4 conditions: anchor closes past the BOS_0 inner (mechanism B — re-detect via the detectors with `break_threshold=bos0_inner`, NOT the threshold-free `df.pat`), valid pattern (confirmation allowed), **strict** full-pattern new extreme over `[current_start, pattern_extreme_idx)`, earliest apply/confirm idx (tie-break `continuous>dm>omc>omo`).
 - The unified probe's **deterministic method** calls this routine (no MS) to decide the start; MS's **pre-CTS_0 scan-from-start mode** (`enforce_cts0_new_extreme=True`, now REQUIRING `bos0_inner`) calls the SAME routine to re-find and establish cycle-0 via its normal path, so probe and MS agree by construction. The old partial anchor-extreme gate (`_cts0_new_extreme_passes`) and the old df.pat Phase-1 walk were REMOVED. Seed-and-resume was rejected in favor of scan-from-start.
 - Detail: [[project-true-first-breakout-cycle0]] (memory).
 

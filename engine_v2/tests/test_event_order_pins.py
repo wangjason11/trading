@@ -74,8 +74,8 @@ def _stub_ad_hoc(monkeypatch):
     """The ad-hoc zone geometry is not under test: record the base candle."""
     seen = []
 
-    def _derive(df, extreme_idx, source_sd):
-        seen.append(int(extreme_idx))
+    def _derive(df, cts_anchor_idx, source_sd):
+        seen.append(int(cts_anchor_idx))
         return (1.0, 0.9, "sell")
 
     monkeypatch.setattr(rz, "_derive_cts_zone_ad_hoc", _derive)
