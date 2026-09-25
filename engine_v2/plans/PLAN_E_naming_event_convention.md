@@ -1,7 +1,9 @@
 # Plan E — naming standard + event-index convention: `ev.idx` = the moment (zones pass, 2026-09-24)
 
 **Status:** rev 2 — cold-reviewed (§11: 3 lenses, 1 BLOCKER + 15 MAJOR findings folded in). **All §10 questions
-DECIDED by the user 2026-09-24** (Q11 wording approved as §4.2). Next: E1 + E1b.
+DECIDED by the user 2026-09-24** (Q11 wording approved as §4.2). **Progress (2026-09-25): E1–E4 LANDED** —
+as-landed records §5.1 (E1/E1b), §6.7 (E2), §7.2 (E3), §8.1 (E4a / E4b-pre / E4b / E4c, each with its landing
+review); `ev.idx` is the moment on every CTS / BOS event. Next: E5 (§9).
 **Inputs (canonical site lists — read first):** [`PLAN_E_inputs.md`](PLAN_E_inputs.md) (the digest; §0.1 = the
 user's FINAL decisions) + the raw inventories [`plan_e_inputs/`](plan_e_inputs/README.md). This plan does NOT
 re-list every site: it schedules them, states each stage's mechanism and numeric prediction, and cites the inputs by
