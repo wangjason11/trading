@@ -141,8 +141,8 @@ callers import the MODULE and call it qualified (`from engine_v2.structure impor
 - `CTS_UPDATED_RAW_VIA` lives here too (`market_structure` imports it).
 - **Declared raw `ev.idx` readers** (the only production reads of a `CTS_ESTABLISHED` / `BOS_CONFIRMED` index
   outside this module after Plan E E2c): the events CSV writer (`debug/export_events.py`); the M15 mirror and the
-  sibling clip's `new_ev.idx` (they copy the raw index); KL meta `source_event_idx` (write-only; deleted in Plan E
-  E4b-pre); the `[kl_zones]` debug prints (they print the raw idx next to the anchor); the Plan A bounded-run
+  sibling clip's `new_ev.idx` (they copy the raw index); (KL meta `source_event_idx`, write-only, was one until
+  Plan E E4b-pre deleted it); the `[kl_zones]` debug prints (they print the raw idx next to the anchor); the Plan A bounded-run
   assert; the debug probe script `debug/probe_fc_finalize.py`'s Phase-2 leak check (`max_ev_idx` / `past_bound`
   over all events — the `CTS_ESTABLISHED` rows count at their moment since E4a, the BOS rows after E4b: the right
   value for a bound check). Proof: the E4 variant replays (`plans/plan_e_inputs/review_scripts/e4flip_plugin.py`)

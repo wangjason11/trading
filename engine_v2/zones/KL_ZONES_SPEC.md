@@ -30,9 +30,9 @@ index" wording for both events (a `.py` follow-up).
 ### Zone indexing
 - `meta["base_idx"]`: FIRST candle of the zone base pattern (where the rectangle begins) — at or before
   the zone's `anchor_idx` (see "base_idx by Pattern Type"); a different field from the anchor.
-- `meta["source_event_idx"]`: the source event's RAW `ev.idx` — BOS: the BOS extreme; CTS: the confirmation candle (so it equals the CTS zone's raw
-  `confirmed_idx`). Write-only (no reader; a declared raw reader, deleted in Plan E E4b-pre). Slice-local
-  (not shifted by `slice_begin`) in the M15 lens CSVs — it is not in `_ZONE_META_IDX_KEYS`.
+- *(Removed, Plan E E4b-pre, 2026-09-25:* `meta["source_event_idx"]` — the source event's RAW `ev.idx`,
+  write-only, slice-local in the M15 lens CSVs; it would have become a copy of `confirmed_idx` after the E4b
+  flip (PLAN_E Q21); saves before E4b-pre still carry it.)*
 - `meta["anchor_idx"]`: the candle base-pattern identification starts from — BOS:
   `BOS_CONFIRMED.meta["bos_anchor_idx"]` (the BOS anchor, via `event_fields.bos_anchor_idx`; Plan E E2c); CTS: `CTS_CONFIRMED.meta["cts_anchor_idx"]` (the CTS
   anchor at confirmation). A market-structure-realm anchor — **not** `CTS_ESTABLISHED.meta
@@ -99,14 +99,14 @@ Base window features (`base_low`, `base_high`, etc.) are computed on-the-fly via
 
 `derive_kl_zones_v1(df, events, struct_direction)` iterates structure events in order:
 - For each eligible event (CTS_CONFIRMED / BOS_CONFIRMED), create a zone:
-  1) Determine `source_event_idx = ev.idx`
-  2) Determine `confirmed_idx`:
-     - `confirmed_idx = ev.meta["confirmed_at"]` when present else source_event_idx
+  1) *(step removed with the write-only `source_event_idx`, Plan E E4b-pre)*
+  2) Determine `confirmed_idx` = the event's moment `ef.event_moment(ev)` (BOS: `meta["confirmed_at"]`;
+     CTS_CONFIRMED: `ev.idx` == `meta["confirmed_at"]`) — direct, no fallback
   3) Determine anchor_idx (stored as the zone's `meta["anchor_idx"]` — a different field from
      `CTS_ESTABLISHED.meta["pattern_anchor_idx"]`, the breakout pattern's first candle):
-     - BOS: anchor_idx = source_event_idx (the BOS extreme)
-     - CTS: anchor_idx = ev.meta["cts_anchor_idx"] (the CTS extreme at confirmation; fallback to
-       source_event_idx)
+     - BOS: anchor_idx = `ef.bos_anchor_idx(ev)` = `meta["bos_anchor_idx"]` (the BOS extreme)
+     - CTS: anchor_idx = `ef.cts_anchor_idx(ev)` = `meta["cts_anchor_idx"]` (the CTS extreme at
+       confirmation; direct, no fallback — Plan E E2d)
   4) Identify (base_pattern, base_idx) via `identify_base_pattern(df, anchor_idx, struct_direction, bos=...)`
   5) Compute thresholds via `zone_thresholds(...)`
   6) Map side based on struct_direction + event type

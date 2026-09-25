@@ -10,9 +10,9 @@ event at its MOMENT, and the downstream pipeline does not depend on what
    role in `ev.idx`: a CTS_ESTABLISHED back at its anchor (the pre-E4a shape), a
    BOS_CONFIRMED at its moment (the E4b shape, until E4b lands) — and every
    output must be identical except the declared raw readers: `sorted_events` (it
-   holds the events themselves), the `fib_tracker` object (its repr is an
-   address), and — on a BOS swap — the write-only KL meta `source_event_idx`
-   (PLAN_E §6.3; Plan E E4b-pre deletes it).
+   holds the events themselves) and the `fib_tracker` object (its repr is an
+   address). (The write-only KL meta `source_event_idx`, the third one on a BOS
+   swap, was deleted in Plan E E4b-pre — the KL output is now compared whole.)
 
 Fixtures: `_make_second_cts_moment_after_extreme_data` (EST (9, 10); BOS (0, 2),
 (7, 10)) and `_make_multicycle_data` (4 lagging BOS, no lagging EST — PLAN_E §6.4
@@ -55,14 +55,8 @@ def _swappable(events, types):
             if e.type in types and e.idx != _OTHER_ROLE[e.type](e)]
 
 
-def _strip_raw(out, swap):
-    res = {k: repr(v) for k, v in out.items() if k not in _EXCLUDED}
-    if "BOS_CONFIRMED" in _SWAP_TYPES[swap]:
-        zones = copy.deepcopy(out["kl_zones"])
-        for z in zones:
-            z.meta.pop("source_event_idx", None)
-        res["kl_zones"] = repr(zones)
-    return res
+def _strip_raw(out):
+    return {k: repr(v) for k, v in out.items() if k not in _EXCLUDED}
 
 
 def _run(df, events, mode):
@@ -119,7 +113,7 @@ def test_downstream_outputs_do_not_depend_on_the_idx_role(swap, maker, mode):
     for e in swapped:
         if e.type in types:
             e.idx = int(_OTHER_ROLE[e.type](e))
-    a = _strip_raw(_run(res.df, res.events, mode), swap)
-    b = _strip_raw(_run(res.df, swapped, mode), swap)
+    a = _strip_raw(_run(res.df, res.events, mode))
+    b = _strip_raw(_run(res.df, swapped, mode))
     assert a.keys() == b.keys()
     assert [k for k in a if a[k] != b[k]] == []

@@ -710,7 +710,6 @@ StructureEvent indexing
 
 Zone indexing
 - meta["base_idx"]: anchor candle of the zone base pattern (where rectangle begins).
-- meta["source_event_idx"]: the source event's raw ev.idx — write-only (no reader; Plan E E4b-pre deletes it).
 - meta["confirmed_idx"]: the candle index where the zone becomes confirmed for charting:
     - BOS-derived zones: confirmed_idx = ev.meta["confirmed_at"] (breakout candle)
     - CTS-derived zones: confirmed_idx = ev.idx (pullback candle)
@@ -890,10 +889,9 @@ def derive_kl_zones_v1(
                         active_buy_idx = None
             continue
 
-        # The event's RAW idx, exported write-only as meta `source_event_idx`
-        # (a declared raw reader; Plan E E4b-pre deletes it). confirmed_at is the
-        # candle that CONFIRMED the zone.
-        source_event_idx = int(ev.idx)
+        # The candle that CONFIRMED the zone: the event's moment (BOS:
+        # meta["confirmed_at"]; CTS_CONFIRMED: its idx). (The write-only meta
+        # `source_event_idx`, the raw ev.idx, was deleted in Plan E E4b-pre.)
         confirmed_idx = ef.event_moment(ev)
         bos = (ev.type == "BOS_CONFIRMED")
 
@@ -956,7 +954,6 @@ def derive_kl_zones_v1(
 
                 # Zone confirmation semantics
                 "confirmed_idx": confirmed_idx,          # breakout / pullback candle
-                "source_event_idx": source_event_idx,    # BOS/CTS level candle
 
                 # Zone base
                 "anchor_idx": anchor_idx,

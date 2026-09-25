@@ -57,7 +57,6 @@ EXTRA_EVENT_IDX_KEYS = frozenset({"pb_start"})
 KNOWN_SLICE_LOCAL_ZONE = frozenset({
     "bos_idx",              # KL zone
     "cts_idx",              # KL zone
-    "source_event_idx",     # KL zone (write-only; Plan E E4b-pre deletes it)
 })
 
 

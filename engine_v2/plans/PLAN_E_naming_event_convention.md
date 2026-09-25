@@ -978,7 +978,20 @@ the real emitter.
     the two M15-chart twins of P5 (`_build_sub_polylines`, `_render_h1_overlay`) read `ef.cts_anchor_idx` and are
     covered only by the figure diff (as accepted in the E2c review). Side note (pre-existing, hygiene list): the
     `compute_structure_scenario_3` docstring still names `_run_h1_reverse_probe`, which no longer exists.
-    Tests 905 → **910 + 1 xfail**.
+    Tests 905 → **910 + 1 xfail**. Commit `e583f8a`; save `20260925_121648_e583f8a`.
+
+- **E4b-pre (2026-09-25; Q21).** `kl_zones_v1.derive_kl_zones_v1` no longer writes the KL meta
+  `source_event_idx` (the source event's raw `ev.idx`, write-only — the only KL-side raw reader). Grep-verified
+  no reader: every other `source_event_idx` in the code is the separate `ReferenceZone.source_event_idx` (the
+  probe input; E5 renames it). **Measured (vs `20260925_121648_e583f8a`, `--strip source_event_idx`) == Q21's
+  prediction:** 39 key-only KL meta cells (H1 10 / conf 21 / counter 8), **0 real cells**, figures
+  JSON-identical, run.log only the parked `by_lens` order. Tests: the guard's `KNOWN_SLICE_LOCAL_ZONE` drops the
+  key; `test_e4_simulation`'s BOS swap now compares the KL output WHOLE (no exclusion) — so a raw-`ev.idx` KL
+  key re-added for a BOS zone fails it. Docs: KL_ZONES_SPEC (field list → a dated removal note; the stale
+  "Creating a zone" steps rewritten to the accessors — `confirmed_idx = ef.event_moment`, anchors via
+  `ef.bos_anchor_idx` / `ef.cts_anchor_idx`, no fallback), ARCHITECTURE declared raw readers, the
+  `kl_zones_v1` docstring. Tests 910 + 1 xfail. E4b therefore changes only the events CSV `idx` column + the KL
+  prints (§8 E4b "KL: 0").
 
 ## 9. E5 — remaining renames + prose
 
