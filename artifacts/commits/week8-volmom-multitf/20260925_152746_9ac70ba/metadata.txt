@@ -1,0 +1,4 @@
+commit_hash=9ac70ba
+timestamp=20260925_152746
+branch=week8-volmom-multitf
+commit_message=Plan E E5·2: IN §3 #13 dead code (byte-identical)
