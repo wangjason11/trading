@@ -460,7 +460,9 @@ with `sys.argv` reset — the module runs a census on import) and compare, per
 trace, `(name, x, y)`, plus `layout["shapes"]`. Report "traces_xy_equal /
 shapes_equal" per chart; on a difference list the first differing traces
 (name + x before → after). Plan E E2 stages must be figure-identical; the E4
-variant replays must differ exactly in PLAN_E §8's cells.
+variant replays must differ exactly in PLAN_E §8's cells. Tool:
+`engine_v2/plans/plan_e_inputs/review_scripts/cmp_save.py BASE CUR_DEBUG CUR_CHARTS [--strip k]`
+(the CSV cell diff + this figure diff in one; the E4 variant recipe is in that folder's README).
 
 ## Chart Count Parity (Corroborating check)
 
