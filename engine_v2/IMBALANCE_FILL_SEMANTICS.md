@@ -220,15 +220,15 @@ CTS_UPDATED's apply candle since Plan E E3·0).
 
 | Site | Window | `check_to_idx` | Question |
 |---|---|---|---|
-| `_on_cts_established` `:616` | `[BOS_n, CTS_n]` | `cts_idx` (EST anchor) | fib activation at EST (single / sid0 / sid≥1 / Scenario 1) |
+| `_on_cts_established` `:616` | `[BOS_n, CTS_n]` | the EST moment `confirmed_at` (Plan E E3a; the anchor before) | fib activation at EST (single / sid0 / sid≥1 / Scenario 1) |
 | `_handle_sid1plus_cts_established` cycle 0 `:776` | `[BOS_0, CTS_0]` | `cts_idx` | the cycle-0 liveness **cache** (cond2) — `evaluated_at=None`, uncut |
-| `_handle_cross_cycle_cts_updated` `:1288` | `[BOS_0, CTS]` | update `idx` | cross_cycle cycle-0 first activation on update |
+| `_handle_cross_cycle_cts_updated` `:1288` | `[BOS_0, CTS]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a) | cross_cycle cycle-0 first activation on update |
 | `_handle_cycle0_cts_updated` `:1423` | `[BOS_0, CTS]` | update `idx` | the cycle-0 **cache** re-snapshot — `evaluated_at=None`, uncut |
-| `_handle_cycle0_cts_updated` `:1435`, `:1456` (`_c0_has_unfilled_now`) | cached `[bos_idx, cts_idx]` | cached `cts_idx` | Scenario-1 cycle-0 activation on update, asked at the moment |
-| `_update_fib_cts` `:1559` | `[bos, cts]` | update `idx` | reactivate / deactivate (`all_imbalances_filled` = no FORMED unfilled imbalance) |
+| `_handle_cycle0_cts_updated` `:1435`, `:1456` (`_c0_has_unfilled_now`) | cached `[bos_idx, cts_idx]` | cached `cts_idx` (the anchor until Plan E E3a′ — at CTS_0 EST the same decision's horizon is already the moment) | Scenario-1 cycle-0 activation on update, asked at the moment |
+| `_update_fib_cts` `:1559` | `[bos, cts]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a) | reactivate / deactivate (`all_imbalances_filled` = no FORMED unfilled imbalance) |
 | `_update_fib_cts` cross branch `:1541/:1547/:1550` | — | — | dead code (never reached; hygiene follow-up) |
-| `_update_cycle1_main` `:1622` (cycle 0 @CTS_0), `:1627` (cycle 1 own), `:1629` (@BOS_1) | as named | `c0_cts_idx` / update `idx` / `cycle1_bos_idx` | H1 cycle-1 cross update — the code's cond1/cond2 labels are the REVERSE of `select_fib_anchor_for_cycle`'s docstring; read the questions, not the labels |
-| `_update_cycle1_main` `:1657` | `[BOS_1, CTS_1]` | update `idx` | create-on-fail single (lock-step with `:1627`) |
+| `_update_cycle1_main` `:1622` (cycle 0 @CTS_0), `:1627` (cycle 1 own), `:1629` (@BOS_1) | as named | `c0_cts_idx` (E3a′) / the update's moment (E3a) / `cycle1_bos_idx` (E3a′) | H1 cycle-1 cross update — the code's cond1/cond2 labels are the REVERSE of `select_fib_anchor_for_cycle`'s docstring; read the questions, not the labels |
+| `_update_cycle1_main` `:1657` | `[BOS_1, CTS_1]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a) | create-on-fail single (lock-step with `:1627`) |
 | `select_fib_anchor_for_cycle` call `:972` | via the routine | — | H1 cycle-1 Scenario 2/3 at CTS_1 EST |
 | `_maybe_activate_main_cross` `:2074`, `_m15_cross_check` `:2253` | via the routine | — | §11b main cross peek / subordinate cross check |
 
@@ -242,10 +242,11 @@ CTS_UPDATED's apply candle since Plan E E3·0).
 
 Plan E E2b split the old `current_candle` / `own_imb_start` into their LOCATION role
 (`own_window_end_idx`, `own_imb_start`: the window) and their TIME role
-(`fill_horizon_idx`, `snapshot_horizon_idx`: keyword-only, required). The horizons
-equal today's values (on CTS_ESTABLISHED and pattern-path CTS_UPDATED the CTS / BOS
-anchor; the moment only on CTS_THRESHOLD_UPDATED and raw CTS_UPDATED); Plan E E3a /
-E3a′ move only them. The moment of the question stays ONE parameter
+(`fill_horizon_idx`, `snapshot_horizon_idx`: keyword-only, required). `fill_horizon_idx`
+is the handled event's moment since Plan E E3a (2026-09-24; before it the CTS anchor
+on CTS_ESTABLISHED / pattern-path CTS_UPDATED); `snapshot_horizon_idx` is still the
+BOS_1 anchor until E3a′. The MS in-flight resolver passes the triggering event's
+moment as `fill_horizon_idx` too (lock-step). The moment of the question stays ONE parameter
 (`evaluated_at`). `select_fib_anchor_for_cycle` also
 requires `evaluated_at`: FibTracker passes the CTS_1 moment, the MS in-flight
 resolver `None`.
@@ -254,7 +255,8 @@ resolver `None`.
 
 | Site | Window | `check_to_idx` | `evaluated_at` | Question |
 |---|---|---|---|---|
-| `market_structure._update_cycle0_data` `:2083` | `[BOS_0, CTS_0]` | `cts_idx` | `None` (cond2 mirror; read later) | In-flight Scenario-2 cycle-0 snapshot, mirroring FibTracker's cache |
+| `market_structure._update_cycle0_data` `:2083` | `[BOS_0, CTS_0]` | `cts_idx` (E3a′) | `None` (cond2 mirror; read later) | In-flight Scenario-2 cycle-0 snapshot, mirroring FibTracker's cache |
+| `market_structure._refresh_poi_inners_for_cycle` → `compute_poi_inners_for_cycle` → `select_fib_anchor_for_cycle` cond1 | `[BOS_1, CTS_1]` | `fill_horizon_idx` = the triggering event's moment (apply / processing candle; Plan E E3a, lock-step with FibTracker) | `None` | In-flight Scenario-2 cond1 |
 
 This mirror is load-bearing: the in-flight POI resolver reads
 `cycle0_data["has_unfilled"]` to make the same Scenario 2 decision as
@@ -342,8 +344,8 @@ The universal change (rolled in 2026-05-23) replaces the old single-stroke
 The geometric invariant for cond3 means most production behavior outside
 POI Layer 2 stays put. The exception is `cross_cycle` dead-cycle walks
 (M15 subordinate pipelines), where `check_to_idx` is `current_candle` — the
-processing candle on CTS_THRESHOLD_UPDATED and raw CTS_UPDATED, the CTS anchor
-on CTS_ESTABLISHED and pattern-path CTS_UPDATED — rather than a fixed structural
+handled event's moment (since Plan E E3a, 2026-09-24; before it the CTS anchor
+on CTS_ESTABLISHED and pattern-path CTS_UPDATED) — rather than a fixed structural
 event; those genuinely see "cycle stays alive longer" under the new semantics.
 
 ### c3 knowability (2026-09-24, Plan F)

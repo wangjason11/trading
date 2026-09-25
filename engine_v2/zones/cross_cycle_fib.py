@@ -115,8 +115,8 @@ def resolve_cross_cycle_eligibility(
         (LOCATIONS: the cycle's BOS and its CTS anchor / running extreme).
     fill_horizon_idx : int
         Keyword-only, REQUIRED: the fill horizon of the own test and of the
-        ``"current"`` walk (a TIME; Plan E E2b split it from the window end, so
-        Plan E E3a can move the horizon alone).
+        ``"current"`` walk (a TIME; Plan E E2b split it from the window end; the handled
+        event's moment since Plan E E3a).
     snapshot_horizon_idx : int or None
         Keyword-only, REQUIRED: the ``"snapshot"`` walk's fill horizon (cond3,
         "has BOS_target filled the prior cycle?"); None only with
@@ -129,9 +129,10 @@ def resolve_cross_cycle_eligibility(
         ``own_window_end_idx``); the prior-cycle walks end at ``CTS_k`` < the moment
         (already bounded) and get it for uniformity. ``prior_cached_liveness``
         (cond2) is a cached value judged at its use, so it is not re-cut here.
-        ``None`` = no cut: the unchanged MS in-flight resolver. On the moment
-        paths (THRESHOLD, raw UPDATED) ``fill_horizon_idx`` carries the same value
-        — Plan E E3a keeps ONE moment parameter.
+        ``None`` = no cut: the unchanged MS in-flight resolver. FibTracker passes
+        the same value as ``fill_horizon_idx`` on every path since Plan E E3a;
+        they stay two parameters because the MS in-flight resolver passes a
+        horizon (its refresh moment) with no cut.
 
     Returns
     -------

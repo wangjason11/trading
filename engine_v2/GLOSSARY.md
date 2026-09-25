@@ -36,9 +36,9 @@ coincidence.
 Status: many existing names do not follow this yet — they move in staged, one-cause-per-`/compare`
 migrations. Frozen event names are bridged by `ARCHITECTURE.md` "`ev.idx` convention". Older prose that
 calls `CTS_ESTABLISHED.idx` / `BOS_CONFIRMED.idx`, `CTS_CONFIRMED.meta["cts_anchor_idx"]` or a KL-zone
-`meta["anchor_idx"]` "the CTS/BOS **extreme** (at confirmation)" means the CTS/BOS **anchor**. Known
-mismatch still in code: the fib meta `activated_at` currently holds the CTS anchor, not a moment (fixed in the
-fib-timing stage — `FIB_LIFECYCLE_SPEC.md` §15.3).
+`meta["anchor_idx"]` "the CTS/BOS **extreme** (at confirmation)" means the CTS/BOS **anchor**. The fib
+meta `activated_at` is a moment (the activating event's; Plan E E3a, 2026-09-24 — before it the CTS anchor;
+`FIB_LIFECYCLE_SPEC.md` §15.3).
 
 ---
 

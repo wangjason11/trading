@@ -3,8 +3,9 @@ into a LOCATION (the anchor) and a TIME (today the anchor too, marked for an E3
 stage) is pinned with an E4-shaped event (`idx` = the moment 12, anchor 9) so a
 location read switched to the moment — or a raw `ev.idx` read — fails.
 
-The TIME pins state TODAY's value (the anchor); the E3 stage named in the site's
-marker flips them to the moment.
+The TIME pins state the value of the stage that switched them: the anchor
+until the E3 stage named in the site's marker, the moment after it (E3a: the
+FibTracker EST / update time halves and the MS in-flight fill horizon).
 """
 from __future__ import annotations
 
@@ -22,7 +23,7 @@ from engine_v2.common.types import ImbalanceInstance
 from engine_v2.tests._event_factory import make_cts_established
 from engine_v2.tests.test_cross_cycle_fib_routine import _BOS, _CTS, _INST0, _INST1
 from engine_v2.tests.test_cross_cycle_fib_routine import _df as _routine_df
-from engine_v2.tests.test_imbalance_c3_knowability import _df, _gap, _quiet, _tracker
+from engine_v2.tests.test_imbalance_c3_knowability import _df, _ev, _gap, _quiet, _tracker
 from engine_v2.zones.cross_cycle_fib import resolve_cross_cycle_eligibility
 from engine_v2.zones.fib_tracker import select_fib_anchor_for_cycle
 
@@ -36,7 +37,7 @@ def _e4_est(anchor=20, moment=22, **kw):
 
 @pytest.mark.illegal_event_contract
 @pytest.mark.parametrize("mode", ["h1", "cross_cycle"])
-def test_fib_tracker_est_reads_the_anchor_for_the_fib_and_today_for_activated_at(mode):
+def test_fib_tracker_est_reads_the_anchor_for_the_fib_and_the_moment_for_activated_at(mode):
     tracker = _tracker(mode)
     df = _df(40, [_gap(15)])
     # sid 0 cycle 1 (h1 simple flow activates at cycle >= 1); cross_cycle cycle 0.
@@ -45,7 +46,54 @@ def test_fib_tracker_est_reads_the_anchor_for_the_fib_and_today_for_activated_at
                  bos_idx=10, bos_price=0.9)
     assert fib is not None and fib.active
     assert fib.cts_idx == 20                        # LOCATION: the CTS anchor, never the moment
-    assert fib.meta["activated_at"] == 20           # TIME: today the anchor; Plan E E3a → 22
+    assert fib.meta["activated_at"] == 22           # TIME: the moment (Plan E E3a)
+
+
+def test_fib_tracker_update_fill_horizon_and_stamp_are_the_moment():
+    """Plan E E3a, update path (`_update_fib_cts`): the only gap (c2 15) fills
+    at 31. A pattern-path update with anchor 30 / moment 32 asks the fill at
+    32 → filled → deactivated, stamped 32. Asked at the anchor 30 it would stay
+    active; stamped at the anchor it would read 30."""
+    tracker = _tracker("h1")
+    df = _df(40, [_gap(15)])
+    df.at[31, "l"] = 0.99
+    fib = _quiet(tracker.on_cts_established, _e4_est(anchor=20, moment=20, structure_id=0, cycle_id=1),
+                 df, bos_idx=10, bos_price=0.9)
+    assert fib.active
+    upd = _quiet(tracker.on_cts_updated, _ev("CTS_UPDATED", 30, 1.3, 0, 1, via="continuous",
+                                             confirmed_at=32), df)
+    assert upd.cts_idx == 30                          # LOCATION
+    assert not upd.active
+    assert upd.meta["deactivated_at"] == 32           # TIME
+
+
+@pytest.mark.parametrize("fixture, pair", [
+    ("second_cts", (9, 10)),          # a lagging CTS_ESTABLISHED: anchor 9, apply 10
+    ("lagging_update", (24, 25)),     # a lagging pattern-path CTS_UPDATED: anchor 24, apply 25
+])
+def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment(monkeypatch, fixture, pair):
+    """Plan E E3a, the MS mirror: `_refresh_poi_inners_for_cycle` hands the
+    resolver the triggering event's moment as `fill_horizon_idx` (lock-step with
+    FibTracker), never the CTS anchor; a raw update's moment IS its candle."""
+    import engine_v2.structure.structure_engine as se
+    from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_lagging_pattern_update
+    from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_extreme_data, _prepare_df
+    calls = []
+    real = se.compute_poi_inners_for_cycle
+
+    def spy(df, bos_idx, bos_price, cts_idx, *a, **k):
+        calls.append((int(cts_idx), k["fill_horizon_idx"]))
+        return real(df, bos_idx, bos_price, cts_idx, *a, **k)
+
+    monkeypatch.setattr(se, "compute_poi_inners_for_cycle", spy)
+    rows = (_make_second_cts_moment_after_extreme_data() if fixture == "second_cts"
+            else _multicycle_with_lagging_pattern_update())
+    with contextlib.redirect_stdout(io.StringIO()):
+        res = se.compute_bounded_structure(_prepare_df(rows), 0, +1)
+    assert pair in calls
+    assert all(h >= c for c, h in calls)
+    raw = [e.idx for e in res.events if e.type == "CTS_UPDATED" and e.meta["via"] == "replay_raw"]
+    assert all((r, r) in calls for r in raw)
 
 
 # --- the shared routine / anchor selector: window vs horizon --------------------
@@ -197,3 +245,21 @@ def test_prev_bos_line_runs_anchor_to_anchor():
     with contextlib.redirect_stdout(io.StringIO()):
         lines = _prev_bos_lines(evs, {1: 15})
     assert [(ln["start_idx"], ln["end_idx"]) for ln in lines] == [(7, 16)]
+
+
+@pytest.mark.parametrize("mode", ["h1", "cross_cycle"])
+def test_lagging_est_fib_lifecycle_is_timed_at_the_moment(mode):
+    """PLAN_E §7 E3a unit: the 2nd CTS_ESTABLISHED has anchor 9 / moment 10.
+    Through the downstream pipeline the cycle-1 fib starts (and is stamped
+    `activated_at`) at 10, and in cross_cycle the cycle-0 fib's `new_cycle`
+    terminal is 10 — the moment, not the anchor 9."""
+    from engine_v2.structure.structure_engine import compute_bounded_structure
+    from engine_v2.tests.test_e4_simulation import _run
+    from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_extreme_data, _prepare_df
+    with contextlib.redirect_stdout(io.StringIO()):
+        res = compute_bounded_structure(_prepare_df(_make_second_cts_moment_after_extreme_data()), 0, +1)
+    fibs = {(f.structure_id, f.cycle_id): f for f in _run(res.df, res.events, mode)["fib_states"]}
+    c1 = fibs[(0, 1)]
+    assert (c1.cts_idx, c1.start_idx, c1.meta["activated_at"]) == (9, 10, 10)
+    if mode == "cross_cycle":
+        assert (fibs[(0, 0)].end_idx, fibs[(0, 0)].end_reason) == (10, "new_cycle")

@@ -259,8 +259,8 @@ def test_pattern_path_update_is_cut_at_its_apply_not_its_anchor():
     """Plan E E3·0: a pattern-path CTS_UPDATED records its moment (the apply
     candle, `meta["confirmed_at"]`), so the knowability cut applies there.
     Anchor 25, apply 26. Gap c2 25 → formed at 26 == the apply → counted (a cut
-    at the anchor 25 would drop it). The activation stamp still reads the
-    anchor until Plan E E3a."""
+    at the anchor 25 would drop it). The activation stamp is the moment
+    too (Plan E E3a)."""
     tracker = _tracker("cross_cycle")
     df = _df(40, [_gap(25)])
     _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0), df,
@@ -268,7 +268,7 @@ def test_pattern_path_update_is_cut_at_its_apply_not_its_anchor():
     upd = _quiet(tracker.on_cts_updated,
                  _ev("CTS_UPDATED", 25, 1.25, 0, 0, via="one_maru_continuous", confirmed_at=26), df)
     assert upd is not None and upd.active
-    assert upd.meta["activated_at"] == 25   # Plan E E3a → 26
+    assert upd.meta["activated_at"] == 26   # the moment (Plan E E3a), not the anchor 25
 
 
 def test_pattern_path_update_gap_at_its_apply_waits_one_update():
@@ -336,7 +336,7 @@ def test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib():
     # IC candidate at 32: bearish, inside the 61.8-80% band of (BOS 1.00 → CTS 1.35).
     df.loc[32, ["o", "h", "l", "c", "direction"]] = [1.12, 1.13, 1.08, 1.09, -1]
     inners = poi_zones.compute_poi_inners_for_cycle(
-        df, 30, 1.00, 40, 1.35, 1, structure_id=0, cycle_id=1,
+        df, 30, 1.00, 40, 1.35, 1, structure_id=0, cycle_id=1, fill_horizon_idx=40,
     )
     assert inners == [1.13]
     tracker = _tracker("h1")
@@ -492,7 +492,8 @@ def test_guard_ms_inflight_select_call_is_uncut(monkeypatch):
     monkeypatch.setattr(poi_zones, "select_fib_anchor_for_cycle", spy)
     df = _df(60, [_gap(15), _gap(40, top=1.30, bottom=1.20)])
     poi_zones.compute_poi_inners_for_cycle(df, 30, 1.2, 40, 1.35, 1,
-                                           structure_id=1, cycle_id=1, c0_data=_c0())
+                                           structure_id=1, cycle_id=1, c0_data=_c0(),
+                                           fill_horizon_idx=40)
     assert seen == [None]
 
 

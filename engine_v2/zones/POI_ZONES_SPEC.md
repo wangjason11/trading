@@ -88,7 +88,8 @@ as-ofs** (Plan F, 2026-09-24):
 
 - **`check_to_idx` — the fill horizon** (`is_filled` scans `(end_idx,
   check_to_idx]`). Fib lifecycle and scenario checks pass varying horizons: the
-  fib's current `cts_idx` (on several sites still a CTS anchor — Plan E E3), a
+  handled event's moment (FibTracker, since Plan E E3a; cycle-0 re-asks still the
+  cached CTS_0 anchor until E3a′), a
   fixed reference event idx (BOS_1 for cond3), or the cross-cycle routine's
   `current_candle`. POI IC validation passes `check_to_idx = end_idx = cts_idx`,
   the fib's CTS.
@@ -183,7 +184,8 @@ Fib LOCKED (anchor 2 stops updating)
 For structures after a reversal, Fib activation follows a 3-scenario system:
 
 #### Scenario 1: Normal Cycle 0 Fib
-**Condition:** CTS_0 idx >= reversal_confirmed_idx
+**Condition:** the CTS_0 event's moment >= reversal_confirmed_idx (the EST
+`confirmed_at` / the update's moment — Plan E E3a; before it the CTS_0 anchor idx)
 
 **Behavior:**
 - Cycle 0 gets normal Fib (if unfilled imbalance)
@@ -247,8 +249,7 @@ For target cycle n+1, walk backward from cycle n to 0, skipping cycles in
 the `_dead_cycles` cache (permanently-filled cycles). For each live cycle
 k, check whether its own swing `[BOS_k, CTS_k]` still has unfilled
 imbalance with fill-check extended to `current_candle` (Interpretation B — the
-fill horizon: the processing candle on CTS_THRESHOLD_UPDATED / raw CTS_UPDATED,
-the CTS anchor on CTS_ESTABLISHED / pattern-path CTS_UPDATED; CROSS_CYCLE_FIB_SPEC).
+fill horizon: the handled event's moment since Plan E E3a; CROSS_CYCLE_FIB_SPEC).
 
 The earliest contiguous cycle `x` (where all cycles `x..n` are live) becomes
 the cross fib's BOS anchor. If no prior cycle qualifies, cross fails and —

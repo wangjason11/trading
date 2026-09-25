@@ -238,12 +238,12 @@ their storage differs, and the projection bridges them.
 
 **`start_idx` = the cycle-fib IDENTITY's FIRST version's birth idx.** Normally
 that is the cycle's lifecycle-start (the CTS-established floor, as zones use).
-(Known limit: the tracker stamps that birth at its `activated_at` — usually
-`CTS_ESTABLISHED.idx` (the extreme); a fib first activated on a later
-`CTS_UPDATED` (`meta["activated_on"] == "update"`, `fib_tracker.py`
-`_handle_cross_cycle_cts_updated` / `_handle_cycle0_cts_updated`) stamps that
-update's idx — while zones use the established moment `meta["confirmed_at"]`;
-the extreme and the moment are equal in the common case. See §15.3.)
+(The tracker stamps that birth at its `activated_at` = the MOMENT of the
+activating event — `CTS_ESTABLISHED.meta["confirmed_at"]`, as zones use, since
+Plan E E3a 2026-09-24 (before it the extreme `CTS_ESTABLISHED.idx`); a fib first
+activated on a later `CTS_UPDATED` (`meta["activated_on"] == "update"`,
+`fib_tracker.py` `_handle_cross_cycle_cts_updated` / `_handle_cycle0_cts_updated`)
+stamps that update's moment. See §15.3.)
 
 **The one exception — pre-established cross (SUBORDINATE-ONLY).** In `cross_cycle`
 mode a cross fib for cycle `n+1` is created during cycle `n`'s **tail**
@@ -260,9 +260,8 @@ Corollaries:
   belongs to the identity, not to a version).
 - **Main (h1) has no pre-established phase** (`_m15_phase` is never set on the
   main path; the Scenario-2 cross is created at `CTS_1` ESTABLISHED). So main
-  fibs start at their `activated_at`, which equals cycle-start wherever extreme == moment and
-  there was no update-activation (all H1 fibs on the reference window; see the known limit
-  above) — the pre-established early start is subordinate-only. This is
+  fibs start at their `activated_at` (the established moment since Plan E E3a), which equals
+  cycle-start wherever there was no update-activation (all H1 fibs on the reference window) — the pre-established early start is subordinate-only. This is
   why the start-anchor change **does not** touch H1-main fib timing.
 - Implementation: the value already exists as `meta["activated_at"]` on the
   first version (`_m15_create_cross:1818`); take it from the **earliest** version
@@ -303,16 +302,14 @@ Consequences (accepted):
    flips phase to `established` before any single can be created. So singles
    only ever appear at/after `CTS` established.
 2. **Cycle `n`'s fib (single OR cross) end = passed-through cycle-`n`-end value**
-   (= next-cycle `CTS_{n+1}` ESTABLISHED moment when non-terminal). Zone-consistent
-   — **known limit:** when cycle `n+1`'s fib is created at `CTS_{n+1}` ESTABLISHED
-   (`_activate_fib`'s `new_cycle` stamp, or a cross created there, whose
-   `_obsolete_prev_cycle_all_fibs` stamps it), the tracker sets cycle `n`'s terminal
-   at `CTS_{n+1}.idx` — the extreme — and earliest-wins keeps it over the
-   pass-through moment, so fib and zone ends agree only where the extreme equals
-   the moment (the common case). Latent instance on the reference window: sub 3
-   cycle 0's fib ends `new_cycle` at 2828 vs the cycle end (its KL zone's
-   `end_idx`) 2829, on both lenses (the fib is collapsed, so nothing renders). A separate cause (`ARCHITECTURE.md` "`ev.idx`
-   convention"); not fixed here.
+   (= next-cycle `CTS_{n+1}` ESTABLISHED moment when non-terminal). Zone-consistent:
+   when cycle `n+1`'s fib is created at `CTS_{n+1}` ESTABLISHED (`_activate_fib`'s
+   `new_cycle` stamp, or a cross created there, whose `_obsolete_prev_cycle_all_fibs`
+   stamps it), the tracker sets cycle `n`'s terminal at the `CTS_{n+1}` ESTABLISHED
+   **moment** (`activated_at`, since Plan E E3a 2026-09-24 — before it the extreme
+   `CTS_{n+1}.idx`, which earliest-wins kept over the pass-through). Reference window:
+   sub 3 cycle 0's fib ends `new_cycle` at 2829 (was 2828) == the cycle end (its KL
+   zone's `end_idx`), on both lenses (the fib is collapsed, so nothing renders).
 3. **Cycle `n+1`'s fib start = its first-active = cycle start.** Zone-consistent.
 
 **Scope of Option A's early-end:** same-sid next-cycle progression only — which,
@@ -533,7 +530,8 @@ members. A 3-tier split (recent-locked vs prior-locked) is a pure aesthetic and 
 It **reverts the Scenario 1 determination, TRUE → FALSE** (H1-main only; the
 `cross_cycle` sub path has no Scenario-1 logic).
 
-- **Scenario 1** (h1 main, sid ≥ 1): `CTS_0 idx >= reversal_confirmed_idx` →
+- **Scenario 1** (h1 main, sid ≥ 1): the CTS_0 event's moment `>= reversal_confirmed_idx`
+  (Plan E E3a; before it the CTS_0 anchor idx) →
   cycle 0 is treated as a legit post-reversal structure → the **cycle-0 single
   fib** activates. If it *stays* TRUE, cycle 1 also gets a normal single fib →
   this is the **"2 single fibs, no cross"** outcome.
@@ -936,18 +934,17 @@ not lifecycle.
   when it precedes the parent floor (the B1 gap — a sub active before its parent
   cycle) while leaving the §6 early start intact (it sits after the floor). For
   H1-main there is no pre-established phase, so first-active = the tracker's
-  `activated_at` — usually `CTS_ESTABLISHED.idx`, the **extreme**, which FibTracker
-  still reads as a time (**known limit**, a separate cause listed under
-  `ARCHITECTURE.md` "`ev.idx` convention"; not fixed here); on main and subs alike a
+  `activated_at` — the `CTS_ESTABLISHED` **moment** `meta["confirmed_at"]` since Plan E
+  E3a (2026-09-24; before it the extreme `CTS_ESTABLISHED.idx`); on main and subs alike a
   fib first activated on a later `CTS_UPDATED` (`meta["activated_on"] == "update"`)
-  stamps that update's idx instead (e.g. on the reference window sub 3 cycle 0, on
+  stamps that update's moment instead (e.g. on the reference window sub 3 cycle 0, on
   both lenses: first-active 2651 — slice-local `activated_at` 62 in the fib CSV
   meta — vs its `CTS_ESTABLISHED.idx` 2649; it was 2650 / 61 before Plan F
   2026-09-24: the cycle's only sd gap, instance c2s 2650-2651, forms at 2651 (its
   first c3), so it does not count at the raw update 2650 and activates the fib at
   the next raw update 2651 — `IMBALANCE_FILL_SEMANTICS.md` "Knowability — the c3
   rule"). The two clamps therefore coincide wherever the fib's first-active equals
-  the moment — i.e. extreme == moment and no update-activation — the common case,
+  the established moment — i.e. no update-activation — the common case,
   incl. all three H1 fibs on the reference window. **Collapsed** (clamped start ≥
   resolved end) → `start_idx = None`, `status = "inactive"` — the same collapse rule KL/POI use.
 

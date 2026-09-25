@@ -210,7 +210,12 @@ downstream POI derivation both pick Fib anchors via the shared pure
 utility `zones/fib_tracker.py::select_fib_anchor_for_cycle`. The Scenario 2
 cross-cycle cond1/cond2/cond3 check is, since §11a (2026-06-17), DELEGATED to
 the shared pure routine `zones/cross_cycle_fib.py::resolve_cross_cycle_eligibility`
-(single-step `target=1`, `fill_as_of="snapshot"`); `select_fib_anchor_for_cycle`
+(single-step `target=1`, `fill_as_of="snapshot"`). Fill horizons are in lock-step
+too: cond1's is the triggering event's MOMENT in both layers (FibTracker: the
+handled event's; MS: `_refresh_poi_inners_for_cycle(moment_idx)` — Plan E E3a),
+cond2 (the cycle-0 caches) and cond3 (`snapshot_horizon_idx` = BOS_1) stay on
+their anchors in both until Plan E E3a′ — move both layers in the same change.
+`select_fib_anchor_for_cycle`
 is now a thin wrapper applying only the main-only Scenario-1 outer gate around
 it. So for `sid >= 1, cycle_id == 1` cases both layers agree on whether to
 anchor at `(BOS_0, CTS_1)` (Scenario 2) or `(BOS_n, CTS_n)` (Scenario 3 / intra)
@@ -254,7 +259,7 @@ to FALSE on BOS_1 touching prev BOS zone outer). It passes
 `scenario1=None` in c0_data, which routes the utility into the Scenario
 2/3 evaluation path. FibTracker passes the post-revert `scenario1` value
 through. When Scenario 1 is TRUE in FibTracker's view (rare — requires
-CTS_0 idx >= reversal_confirmed_idx) AND Scenario 2 cond1/cond2/cond3 all
+the CTS_0 event's moment >= reversal_confirmed_idx) AND Scenario 2 cond1/cond2/cond3 all
 match (also rare), MS would pick cross-cycle anchors where FibTracker
 picks intra. To plug that gap, thread the parent reversal_confirmed_idx
 and prev BOS outer/sd through `structure_engine._make_market_structure`,
@@ -2197,7 +2202,9 @@ exists only because `c3 = B+1` was seen, and a merged run ending at `B-1` gets
 its bounds from `B+1` (`imbalance.py`). The MS consumers — `_update_cycle0_data`
 and `_refresh_poi_inners_for_cycle` → `compute_poi_inners_for_cycle`
 (`find_ic_candidates` IC cond3; `select_fib_anchor_for_cycle` cond1/cond3) — ask
-with `evaluated_at=None`: as-of for *fills* (`check_to_idx <= st.cts.idx <= B`),
+with `evaluated_at=None`: as-of for *fills* (`check_to_idx <=` the refresh moment
+`<= B` — `st.cts.idx`, or since Plan E E3a the triggering event's moment for
+Scenario-2 cond1; the apply / processing candle is never past the edge),
 no existence cut, by decision (MARKET_STRUCTURE_SPEC "Snapshot vs per-candle").
 What each half can reach in a bounded run's events / rows:
 - **existence — nothing.** Every window ends at or before `st.cts.idx`, so a gap

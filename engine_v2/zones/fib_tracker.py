@@ -6,7 +6,7 @@ Fib levels are drawn from BOS to CTS within each market structure cycle.
 This module handles activation, updates, and lifecycle management.
 
 Scenario Logic (sid 1+ only):
-- Scenario 1: CTS_0 idx >= reversal_confirmed_idx → cycle 0 Fib unlocked
+- Scenario 1: CTS_0's moment >= reversal_confirmed_idx → cycle 0 Fib unlocked
 - Scenario 2: Cross-cycle Fib (BOS_0 → CTS_1) when all conditions met
 - Scenario 3: Normal cycle 1 Fib when cross-cycle conditions fail
 """
@@ -130,7 +130,7 @@ def select_fib_anchor_for_cycle(
     - Otherwise evaluate Scenario 2 conditions over the imbalance set:
 
         cond1 — cycle 1 has unfilled sd-direction imbalance in [BOS_1, CTS_1]
-                as of cts_idx, counting only gaps formed by ``evaluated_at``
+                as of ``fill_horizon_idx``, counting only gaps formed by ``evaluated_at``
         cond2 — cycle 0 has unfilled sd-direction imbalance (cached on
                 ``c0_data``; caller computed with the same direction filter)
         cond3 — BOS_1 has not filled cycle 0's sd-direction imbalances
@@ -147,9 +147,10 @@ def select_fib_anchor_for_cycle(
     (LANDMINES "Scenario 2 anchor agreement").
 
     ``fill_horizon_idx`` / ``snapshot_horizon_idx`` (keyword-only, REQUIRED;
-    Plan E E2b) are the fill horizons of cond1 (today the CTS_1 anchor) and of
-    cond3 (today the BOS_1 anchor) — TIMES, split from the ``bos_idx`` /
-    ``cts_idx`` locations so Plan E E3a / E3a′ can move them alone.
+    Plan E E2b) are the fill horizons of cond1 (the CTS_1 moment since Plan E
+    E3a; the MS in-flight caller passes its refresh moment) and of cond3 (the
+    BOS_1 anchor until Plan E E3a′) — TIMES, split from the ``bos_idx`` /
+    ``cts_idx`` locations.
 
     ``struct_direction`` is the sd of the structure being evaluated (+1 / -1).
     Threads into cond1 / cond3 as the imbalance direction filter — counter-
@@ -182,7 +183,7 @@ def select_fib_anchor_for_cycle(
     # with the H1-main "snapshot" fill-as-of policy: the cycle-0 liveness is
     # cond3 (re-checked as of BOS_1 = own_imb_start) AND cond2 (the cached
     # cycle-0 @CTS_0 liveness in c0_data["has_unfilled"]). cond1 is the routine's
-    # own-imbalance test over [BOS_1, CTS_1] as of CTS_1 (= current_candle).
+    # own-imbalance test over [BOS_1, CTS_1] as of `fill_horizon_idx` (the CTS_1 moment).
     # The Scenario-1 outer gate (above) is main-only and stays here. A fresh
     # throwaway dead_cycles set is used — the wrapper never caches.
     elig = resolve_cross_cycle_eligibility(
@@ -227,7 +228,7 @@ class FibTracker:
 
     Scenario Logic (sid 1+ only):
     - Scenario 1 checked at each CTS_0 ESTABLISHED/UPDATED
-    - If CTS_0 idx >= rv_idx → Scenario 1 TRUE (permanent), cycle 0 Fib unlocked
+    - If CTS_0's moment >= rv_idx → Scenario 1 TRUE (permanent), cycle 0 Fib unlocked
     - If still FALSE at CTS_0 CONFIRMED → Scenario 1 FALSE (permanent)
     - Scenario 2/3 determined at CTS_1 ESTABLISHED (only when Scenario 1 is FALSE)
 
@@ -365,6 +366,14 @@ class FibTracker:
             direction=sd, evaluated_at=self._evaluated_at,
         )
 
+    def _moment(self) -> int:
+        """The handled event's MOMENT (Plan E E3a): the TIME half of every
+        handler — activation / reactivation / deactivation stamps, fill
+        horizons, the Scenario-1 comparison. Only inside a handler."""
+        if not self._in_event or self._evaluated_at is None:
+            raise RuntimeError("FibTracker._moment(): no handled event")
+        return self._evaluated_at
+
     def _c0_has_unfilled_now(self, c0: Dict[str, Any], df: pd.DataFrame, sd: int) -> bool:
         """The cycle-0 liveness cache asked AT the handled event's moment. The
         cache itself stays uncut (it is Scenario-2 cond2, judged at its later
@@ -374,7 +383,7 @@ class FibTracker:
             return False
         lo = min(c0["bos_idx"], c0["cts_idx"])
         hi = max(c0["bos_idx"], c0["cts_idx"])
-        return self._has_unfilled(df, lo, hi, c0["cts_idx"], sd)
+        return self._has_unfilled(df, lo, hi, c0["cts_idx"], sd)  # Plan E E3a′ → moment (the EST path asks at it already)
 
     # ------------------------------------------------------------------
     # Lifecycle convention helpers (FIB_LIFECYCLE_SPEC.md §15).
@@ -611,10 +620,9 @@ class FibTracker:
         # The CTS ANCHOR (a location): the fib 100% point, the IC / imbalance
         # range end, the cross anchor, the cycle-0 snapshot.
         cts_idx = ef.cts_anchor_idx(event)
-        # The TIME half (Plan E E2b split): activation stamps, fill horizons,
-        # Scenario 1, the revert terminal. Today's value (the anchor); Plan E
-        # E3a switches it to the moment (`self._evaluated_at`).
-        cts_established_idx = ef.cts_anchor_idx(event)  # Plan E E3a → moment
+        # The TIME half (Plan E E2b split; the moment since E3a): activation
+        # stamps, fill horizons, Scenario 1, the revert terminal.
+        cts_established_idx = self._moment()
         cts_price = float(event.price) if event.price else 0.0
 
         # Get CTS price from event or df
@@ -787,7 +795,7 @@ class FibTracker:
         Handle CTS_ESTABLISHED for sid=1+ (post-reversal).
 
         Scenario logic:
-        - Cycle 0: Check Scenario 1 (CTS_0 idx >= rv_idx)
+        - Cycle 0: Check Scenario 1 (CTS_0's moment >= rv_idx)
           - If TRUE → cycle 0 Fib unlocked (can activate if unfilled imbalance)
           - If undetermined → store data, no Fib yet
         - Cycle 1: If Scenario 1 is TRUE, check revert condition; if FALSE check Scenario 2/3
@@ -871,7 +879,7 @@ class FibTracker:
         `has_unfilled` is asked at the event's moment (the Scenario-1 activation
         decision); `c0_has_unfilled_uncut` is what the cycle-0 cache stores.
 
-        Scenario 1: CTS_0 idx >= reversal_confirmed_idx
+        Scenario 1: CTS_0's moment (the EST `confirmed_at`, Plan E E3a) >= reversal_confirmed_idx
         - If TRUE → cycle 0 Fib unlocked (permanent)
         - If FALSE/undetermined → store data for cross-cycle check
         """
@@ -890,7 +898,7 @@ class FibTracker:
             "locked": False,
         }
 
-        # Check Scenario 1: CTS_0 idx >= rv_idx
+        # Check Scenario 1: CTS_0's moment >= rv_idx (Plan E E3a, T5)
         # A timing question (PLAN_E Q2 / §7.1 T5): has CTS_0 become known by the
         # reversal's confirmation?
         if reversal_confirmed_idx is not None and cts_established_idx >= reversal_confirmed_idx:
@@ -951,7 +959,7 @@ class FibTracker:
                 # Revert Scenario 1 to FALSE
                 self._scenario1[sid] = False
                 # Deactivate cycle 0 Fib if it exists (revert fires at this
-                # cycle-1 CTS_ESTABLISHED idx = the cycle-0 fib's terminal)
+                # cycle-1 CTS_ESTABLISHED moment = the cycle-0 fib's terminal)
                 self._deactivate_cycle0_fib(sid, cts_established_idx)
                 scenario1 = False
                 print(f"[fib] sid={sid} Scenario 1 REVERTED to FALSE (BOS_1={bos_price:.5f} touched prev BOS zone outer={prev_bos_outer:.5f})")
@@ -1131,10 +1139,11 @@ class FibTracker:
         bos_price: float,
         cts_idx: int,
         cts_price: float,
-        meta: Optional[Dict] = None,
+        meta: Dict,
         cross_version: Optional[int] = None,
     ) -> FibState:
-        """Internal helper to create and store a FibState.
+        """Internal helper to create and store a FibState. `meta["activated_at"]`
+        (the activating event's moment) is required.
 
         Records the cycle's sticky lifecycle `start_idx` on first activation
         (§15.3) via `_mark_first_active`.
@@ -1177,7 +1186,7 @@ class FibTracker:
             cts_history=((cts_idx, cts_price),),
         )
 
-        activated_at = int((meta or {}).get("activated_at", cts_idx))
+        activated_at = int(meta["activated_at"])
 
         # Mark previous cycle's Fib as obsolete (if exists)
         prev_cycle = self._current_cycle.get(sid)
@@ -1265,9 +1274,9 @@ class FibTracker:
         cycle_id = int(event.meta.get("cycle_id", 0))
         sd = int(event.meta.get("struct_direction", 0))
         # The updated CTS ANCHOR (a location). Its time half (activation stamps,
-        # fill horizons) still reads the same value — the raw path's idx IS its
-        # moment; the pattern path's moment (`confirmed_at`, Plan E E3·0) is
-        # switched in E3a (PLAN_E §6.7: the UPDATED time halves are not split in E2).
+        # fill horizons, the Scenario-1 comparison) is the update's moment,
+        # `self._moment()` (Plan E E3a; the raw path's idx, the pattern path's
+        # `confirmed_at`).
         cts_idx = ef.cts_anchor_idx(event)
         cts_price = float(event.price) if event.price else 0.0
 
@@ -1310,7 +1319,7 @@ class FibTracker:
             # First-activation on a later CTS_UPDATED (2026-06-08): the cycle-0
             # Fib did NOT activate at CTS_ESTABLISHED (no unfilled imbalance
             # then), but an unfilled sd-direction imbalance may appear as the
-            # CTS extends. Re-check over [BOS_0, cts_idx] as-of cts_idx and
+            # CTS extends. Re-check over [BOS_0, cts_idx] as of the update's moment and
             # activate now if present — mirrors the Scenario-1 main path
             # (_handle_cycle0_cts_updated). Fixes the cross_cycle cycle-0
             # one-shot asymmetry (subs were one-shot; main already re-checks).
@@ -1320,7 +1329,7 @@ class FibTracker:
             bos_idx, bos_price = bos
             start_idx = min(bos_idx, cts_idx)
             end_idx = max(bos_idx, cts_idx)
-            if not self._has_unfilled(df, start_idx, end_idx, cts_idx, sd):  # UPD time half: Plan E E3a
+            if not self._has_unfilled(df, start_idx, end_idx, self._moment(), sd):
                 return None
             print(f"[fib] cross_cycle sid={sid} cycle=0 ACTIVATED on update "
                   f"(unfilled imbalance found post-EST): BOS idx={bos_idx} -> "
@@ -1334,7 +1343,7 @@ class FibTracker:
                 cts_idx=cts_idx,
                 cts_price=cts_price,
                 meta={
-                    "activated_at": cts_idx,  # UPD time half: Plan E E3a
+                    "activated_at": self._moment(),
                     "fib_mode": "cross_cycle",
                     "activated_on": "update",
                 },
@@ -1358,7 +1367,7 @@ class FibTracker:
             df=df,
             sd=sd,
             own_window_end_idx=cts_idx,
-            current_candle=cts_idx,  # UPD time half: Plan E E3a
+            current_candle=self._moment(),
             anchor_idx=cts_idx,
             anchor_price=cts_price,
             own_imb_start=bos[0],
@@ -1417,7 +1426,7 @@ class FibTracker:
         # update, byte-identical with pre-11b).
         if cycle_id >= 2 and self._get_latest_cross(sid, cycle_id) is not None:
             return self._run_main_cross_check(
-                sid, cycle_id, sd, cts_idx, cts_price, df, current_candle=cts_idx,  # UPD time half: Plan E E3a
+                sid, cycle_id, sd, cts_idx, cts_price, df, current_candle=self._moment(),
             )
 
         # --- Cycle 1+ normal Fib update ---
@@ -1459,7 +1468,7 @@ class FibTracker:
                 start_idx = min(c0["bos_idx"], cts_idx)
                 end_idx = max(c0["bos_idx"], cts_idx)
                 c0["has_unfilled"] = has_unfilled_imbalance(
-                    df, start_idx, end_idx, cts_idx, self.config.fill_threshold,
+                    df, start_idx, end_idx, cts_idx, self.config.fill_threshold,  # Plan E E3a′ → moment
                     direction=sd, evaluated_at=None,
                 )
 
@@ -1480,12 +1489,12 @@ class FibTracker:
                     bos_price=c0["bos_price"],
                     cts_idx=cts_idx,
                     cts_price=cts_price,
-                    meta={"activated_at": cts_idx, "scenario1": True, "activated_on": "update"},  # UPD time: Plan E E3a
+                    meta={"activated_at": self._moment(), "scenario1": True, "activated_on": "update"},
                 )
             return None
 
-        # Scenario 1 undetermined - check again (UPD time half: Plan E E3a)
-        if reversal_confirmed_idx is not None and cts_idx >= reversal_confirmed_idx:
+        # Scenario 1 undetermined - check again, at the update's moment (Plan E E3a, Q2)
+        if reversal_confirmed_idx is not None and self._moment() >= reversal_confirmed_idx:
             # Scenario 1 becomes TRUE
             self._scenario1[sid] = True
             print(f"[fib] sid={sid} cycle=0 Scenario 1 TRUE at idx={cts_idx} (CTS >= rv_idx={reversal_confirmed_idx}) on update")
@@ -1500,7 +1509,7 @@ class FibTracker:
                     bos_price=c0["bos_price"],
                     cts_idx=cts_idx,
                     cts_price=cts_price,
-                    meta={"activated_at": cts_idx, "scenario1": True, "activated_on": "update"},  # UPD time: Plan E E3a
+                    meta={"activated_at": self._moment(), "scenario1": True, "activated_on": "update"},
                 )
             else:
                 print(f"[fib] sid={sid} cycle=0 NOT activated: Scenario 1 TRUE but no unfilled imbalance (evaluated_at={self._evaluated_at})")
@@ -1570,13 +1579,13 @@ class FibTracker:
             c0_cts_idx = c0["cts_idx"]  # Locked CTS_0
             c0_start = min(c0_bos_idx, c0_cts_idx)
             c0_end = max(c0_bos_idx, c0_cts_idx)
-            cond1 = self._has_unfilled(df, c0_start, c0_end, c0_cts_idx, sd)
+            cond1 = self._has_unfilled(df, c0_start, c0_end, c0_cts_idx, sd)  # Plan E E3a′ → moment
 
             # Condition 2: Cycle 1 has unfilled imbalance (BOS_1 to current CTS_1)
             cycle1_bos_idx = new_state.meta["cycle1_bos_idx"]
             c1_start = min(cycle1_bos_idx, cts_idx)
             c1_end = max(cycle1_bos_idx, cts_idx)
-            cond2 = self._has_unfilled(df, c1_start, c1_end, cts_idx, sd)
+            cond2 = self._has_unfilled(df, c1_start, c1_end, self._moment(), sd)
 
             # Condition 3: Cycle 1's BOS doesn't fill cycle 0's imbalances (static check)
             # — asked as of BOS_1 (a TIME: today its anchor; PLAN_E Q8).
@@ -1589,15 +1598,15 @@ class FibTracker:
             # "all_imbalances_filled" below means "no FORMED unfilled imbalance").
             start_idx = min(new_state.bos_idx, new_state.cts_idx)
             end_idx = max(new_state.bos_idx, new_state.cts_idx)
-            has_unfilled = self._has_unfilled(df, start_idx, end_idx, cts_idx, sd)
+            has_unfilled = self._has_unfilled(df, start_idx, end_idx, self._moment(), sd)
 
         if has_unfilled and not new_state.active:
             # Reactivate - unfilled imbalances now exist in expanded range
-            new_state = replace(new_state, active=True, meta={**new_state.meta, "reactivated_at": cts_idx})
+            new_state = replace(new_state, active=True, meta={**new_state.meta, "reactivated_at": self._moment()})
             print(f"[fib] sid={sid} {label} REACTIVATED: unfilled imbalance found at idx={cts_idx}")
         elif not has_unfilled and new_state.active:
             # Deactivate - all imbalances filled
-            new_state = replace(new_state, active=False, meta={**new_state.meta, "deactivated_at": cts_idx, "reason": "all_imbalances_filled"})
+            new_state = replace(new_state, active=False, meta={**new_state.meta, "deactivated_at": self._moment(), "reason": "all_imbalances_filled"})
             print(f"[fib] sid={sid} {label} DEACTIVATED: all imbalances filled at idx={cts_idx} "
                   f"(evaluated_at={self._evaluated_at})")
 
@@ -1652,12 +1661,12 @@ class FibTracker:
         c0_cts_idx = c0["cts_idx"]
         c0_start = min(c0_bos_idx, c0_cts_idx)
         c0_end = max(c0_bos_idx, c0_cts_idx)
-        cond1 = self._has_unfilled(df, c0_start, c0_end, c0_cts_idx, sd)
+        cond1 = self._has_unfilled(df, c0_start, c0_end, c0_cts_idx, sd)  # Plan E E3a′ → moment
 
         cycle1_bos_idx = new_cross_fib.meta["cycle1_bos_idx"]
         c1_start = min(cycle1_bos_idx, cts_idx)
         c1_end = max(cycle1_bos_idx, cts_idx)
-        cond2 = self._has_unfilled(df, c1_start, c1_end, cts_idx, sd)
+        cond2 = self._has_unfilled(df, c1_start, c1_end, self._moment(), sd)
 
         cond3 = self._has_unfilled(df, c0_start, c0_end, cycle1_bos_idx, sd)  # Plan E E3a′ → moment
 
@@ -1666,10 +1675,10 @@ class FibTracker:
 
         # --- Determine active state ---
         if cross_active and not new_cross_fib.active:
-            new_cross_fib = replace(new_cross_fib, active=True, meta={**new_cross_fib.meta, "reactivated_at": cts_idx})
+            new_cross_fib = replace(new_cross_fib, active=True, meta={**new_cross_fib.meta, "reactivated_at": self._moment()})
             print(f"[fib] sid={sid} cross-cycle REACTIVATED")
         elif not cross_active and new_cross_fib.active:
-            new_cross_fib = replace(new_cross_fib, active=False, meta={**new_cross_fib.meta, "deactivated_at": cts_idx})
+            new_cross_fib = replace(new_cross_fib, active=False, meta={**new_cross_fib.meta, "deactivated_at": self._moment()})
             print(f"[fib] sid={sid} cross-cycle DEACTIVATED")
 
         self._fibs[cross_key] = new_cross_fib
@@ -1687,7 +1696,7 @@ class FibTracker:
         bos1_idx, bos1_price = bos1
         normal_start = min(bos1_idx, cts_idx)
         normal_end = max(bos1_idx, cts_idx)
-        normal_has_unfilled = self._has_unfilled(df, normal_start, normal_end, cts_idx, sd)
+        normal_has_unfilled = self._has_unfilled(df, normal_start, normal_end, self._moment(), sd)
         single_key = (sid, 1)
         existing = self._fibs.get(single_key)
         if normal_has_unfilled:
@@ -1701,7 +1710,7 @@ class FibTracker:
                     bos_price=bos1_price,
                     cts_idx=cts_idx,
                     cts_price=cts_price,
-                    meta={"activated_at": cts_idx, "scenario": 2, "role": "fallback"},
+                    meta={"activated_at": self._moment(), "scenario": 2, "role": "fallback"},
                 )
             return self._update_fib_cts(single_key, cts_idx, cts_price, df)
         # Cross dead and own imbalance also filled → keep an existing single in
@@ -1953,7 +1962,7 @@ class FibTracker:
     def _deactivate_cycle0_fib(self, sid: int, revert_idx: int) -> None:
         """Deactivate cycle 0 Fib when Scenario 1 reverts to FALSE.
 
-        `revert_idx` (= the CTS_1 ESTABLISHED idx where the revert fires) is
+        `revert_idx` (= the CTS_1 ESTABLISHED MOMENT where the revert fires; Plan E E3a) is
         the cycle-0 fib's terminal. This is an invalidation, not an ordinary
         end → status="disappeared" (spec section 10).
         """
@@ -2269,8 +2278,8 @@ class FibTracker:
         `own_window_end_idx` (a LOCATION: the CTS anchor at CTS_ESTABLISHED /
         CTS_UPDATED, the processing candle on the threshold path) ends the own
         test's window; `current_candle` is the TIME — the fill horizon and every
-        lifecycle stamp (activated_at / deactivated_at / terminal). Split in
-        Plan E E2b so E3a moves only the time.
+        lifecycle stamp (activated_at / deactivated_at / terminal) — the handled
+        event's moment (split in Plan E E2b, switched in E3a).
 
         1. Check target cycle's own imbalance (range [own_imb_start, own_window_end_idx]).
            If none: deactivate any active cross; no fallback in pre-established.

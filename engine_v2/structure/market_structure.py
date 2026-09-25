@@ -61,12 +61,11 @@ _OUT_OBJ_EMPTY = (
 BosInnerResolver = Callable[[pd.DataFrame, int, int], Optional[float]]
 # (df, bos_idx, struct_direction) -> inner_price | None
 
-PoiInnersResolver = Callable[
-    [pd.DataFrame, int, float, int, float, int, int, int, float, Optional[Dict[str, Any]]],
-    List[float],
-]
+PoiInnersResolver = Callable[..., List[float]]
 # (df, bos_idx, bos_price, cts_idx, cts_price, sd, sid, cycle_id,
-#  fill_threshold, c0_data) -> [inner prices]
+#  fill_threshold, c0_data, *, fill_horizon_idx) -> [inner prices]
+# `fill_horizon_idx` = the MOMENT of the event that triggered the refresh
+# (Plan E E3a — in lock-step with FibTracker's fill horizon).
 #
 # `fill_threshold` matches the POIConfig default (0.70). Passed explicitly
 # so MarketStructure controls the value its has_unfilled checks (in
@@ -1560,7 +1559,7 @@ class MarketStructure:
             # Refresh POI inner snapshot for the cycle (Stage 2). New cycle:
             # uses fresh BOS_n + CTS_n. Continuation breakout (CTS_UPDATED):
             # same BOS, extended CTS — POIs may shift as Fib bounds expand.
-            self._refresh_poi_inners_for_cycle()
+            self._refresh_poi_inners_for_cycle(apply_idx)
 
             self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
             self._post_apply_range_check(apply_idx)
@@ -1705,13 +1704,13 @@ class MarketStructure:
             if new_price > float(st.cts.price):
                 self._emit_cts_updated(i, new_price, meta={"via": via})
                 st.cts = Point(idx=i, price=new_price)
-                self._refresh_poi_inners_for_cycle()
+                self._refresh_poi_inners_for_cycle(i)
         else:
             new_price = float(self._l[i])
             if new_price < float(st.cts.price):
                 self._emit_cts_updated(i, new_price, meta={"via": via})
                 st.cts = Point(idx=i, price=new_price)
-                self._refresh_poi_inners_for_cycle()
+                self._refresh_poi_inners_for_cycle(i)
 
     # def _initial_bos_before_first_cts(self, cts_idx: int) -> float:
     #     """
@@ -1990,11 +1989,16 @@ class MarketStructure:
         trigger_inner, zone_kind = hit
         self._fire_cts_confirmation_via_proximity(i, trigger_inner, zone_kind)
 
-    def _refresh_poi_inners_for_cycle(self) -> None:
+    def _refresh_poi_inners_for_cycle(self, moment_idx: int) -> None:
         """Recompute the cycle's POI inner snapshot using current BOS_n + CTS_n.
         Called at CTS_ESTABLISHED (new cycle) and each CTS_UPDATED (CTS
         extended). Stage 2 — adds POI awareness to the proximity check.
-        Uses the resolver wired by structure_engine.py (Part 4 §13.5.b)."""
+        Uses the resolver wired by structure_engine.py (Part 4 §13.5.b).
+
+        `moment_idx` = the triggering event's MOMENT (the pattern's apply candle,
+        or the raw update's processing candle): the resolver's fill horizon, in
+        lock-step with FibTracker (Plan E E3a; LANDMINES "Scenario 2 anchor
+        agreement")."""
         st = self.state
         if st.cts is None or st.bos is None or self._poi_inners_resolver is None:
             st.poi_inners_for_cycle = []
@@ -2015,6 +2019,7 @@ class MarketStructure:
             int(st.cts_cycle_id),
             float(self._fill_threshold),
             st.cycle0_data,
+            fill_horizon_idx=int(moment_idx),
         )
 
 

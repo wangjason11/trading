@@ -61,7 +61,8 @@ the branch happens *inside* each handler.
 - **Scope:** `sid ≥ 1` only, and **only the cycle-0 → cycle-1 cross**. `sid == 0`
   never crosses ("simple flow"). Cycles 2+ get plain single fibs.
 - **State:** `self._scenario1[sid] ∈ {None, True, False}`. Scenario 1 decided at
-  CTS_0 EST/UPD (`_handle_cycle0_scenario1:701`): `CTS_0_idx >= reversal_confirmed_idx`
+  CTS_0 EST/UPD (`_handle_cycle0_scenario1:701`): the CTS_0 event's MOMENT `>= reversal_confirmed_idx` (the EST `confirmed_at` / the
+  update's moment since Plan E E3a; before it the CTS_0 anchor idx)
   → TRUE (cycle-0 single fib unlocked); resolves FALSE at CTS_0 CONFIRMED if never
   reached. Cycle-0 data cached as a plain dict in `_cross_cycle_data[sid]["cycle0"]`.
   Its `has_unfilled` is stored **uncut** by the c3 knowability rule: it is cond2,
@@ -156,9 +157,9 @@ from the per-cycle BOS/CTS geometry + imbalance state. The four unified ingredie
    2026-09-24; canonical: `IMBALANCE_FILL_SEMANTICS.md` "Knowability — the c3 rule"):
    the **fill horizon** (`fill_horizon_idx`; the snapshot walk's
    `snapshot_horizon_idx` — split from the window ends `own_window_end_idx` /
-   `own_imb_start` in Plan E E2b) is a moment only on
-   `CTS_THRESHOLD_UPDATED` and a raw `CTS_UPDATED` — on `CTS_ESTABLISHED` and a
-   pattern-path `CTS_UPDATED` it is the CTS anchor until Plan E E3a; the **moment** is the routine's
+   `own_imb_start` in Plan E E2b) is the handled event's moment since Plan E E3a
+   (2026-09-24; before it the CTS anchor on `CTS_ESTABLISHED` / a pattern-path
+   `CTS_UPDATED`; `snapshot_horizon_idx` stays the BOS anchor until E3a′); the **moment** is the routine's
    keyword-only, required `evaluated_at` (FibTracker: `event_moment` of the handled
    event; the MS in-flight resolver: `None` = no cut). Plan E E3a keeps ONE moment
    parameter (`evaluated_at`).

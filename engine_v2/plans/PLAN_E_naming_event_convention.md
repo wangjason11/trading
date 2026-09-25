@@ -617,6 +617,58 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
     equivalent: `apply_idx` is already an int). `apply_idx >= cts_anchor_idx` holds by construction
     (`_cts_from_breakout_event` spans `[start, max(end, confirmation)]`, apply = confirmation or end).
 
+- **E3a (2026-09-24).** FibTracker: `_moment()` (= `_evaluated_at`, asserted inside a handler) is the TIME half of
+  every handler. EST: `cts_established_idx = self._moment()` (one line flips everything E2b threaded: `activated_at`,
+  the EST fill horizon, the routine / anchor-selector `fill_horizon_idx`, Scenario 1 (T5), the revert terminal,
+  `current_candle`); the new_cycle terminal and `_mark_first_active` follow from `activated_at`. Update path (the
+  `UPD time half` sites): the cross-cycle cycle-0 late activation (horizon + `activated_at`), `current_candle` of
+  `_m15_cross_check` / `_run_main_cross_check`, `_handle_cycle0_cts_updated` (both `activated_at` + the Scenario-1
+  comparison, Q2), `_update_fib_cts` (cond2 / own fill horizon, `reactivated_at` / `deactivated_at`),
+  `_update_cycle1_main` (cond2 horizon, stamps, create-on-fail horizon + `activated_at`). `_activate_fib`:
+  `meta["activated_at"]` direct. **Not moved (E3a′):** cond3 (`cycle1_bos_idx`), the c0 cond2 caches, the anchor
+  selector's `snapshot_horizon_idx`; cond1's c0 horizon (`c0_cts_idx`) is the cycle-0 cache's (E3a′ too). **MS
+  mirror:** `_refresh_poi_inners_for_cycle(moment_idx)` — the pattern branch passes `apply_idx`, the raw update `i`
+  — → `compute_poi_inners_for_cycle(..., *, fill_horizon_idx)` (keyword-only, REQUIRED; `PoiInnersResolver` is now
+  `Callable[..., List[float]]`) → `select_fib_anchor_for_cycle(fill_horizon_idx=...)`. No real choice here: the
+  refresh runs ON the triggering event's moment, so "apply candle" and "processing candle" coincide. IC cond3 inside
+  the resolver (`find_ic_candidates`, `check_to_idx = cts_idx`) stays (T2).
+  **Measured (the change itself vs `20260924_202017_4ef2607`, `--strip confirmed_at`) == §7's named prediction
+  exactly: 4 real cells** — conf fib_lifecycle line 14 + counter line 2 `end_idx` 2828.0 → 2829.0 (sub 3 cyc 0,
+  `new_cycle`); conf line 15 + counter line 3 meta `activated_at` 239 → 240 (sub 3 cyc 1, slice-local). **None of the
+  at-risk items moved** (IC 2808 / the `cross_failed` single, conf sub 0 cyc 2's re-run `_m15_cross_check` at 1224,
+  MS events via the mirror); H1 0; the 3 figures JSON-identical; run.log only the parked `by_lens` order. (Plus
+  E3·0's key-only cells, unchanged.) Tests 848 → 853 + 1 xfail: the role pin `…_the_moment_for_activated_at` (20 →
+  22), `test_fib_tracker_update_fill_horizon_and_stamp_are_the_moment` (gap fills at 31; update anchor 30 / moment 32
+  → deactivated, stamped 32), `test_ms_inflight_poi_refresh_fill_horizon_is_the_moment` (spy: (9, 10) on the lagging
+  EST fixture, (24, 25) on the lagging pattern update, raw refreshes (r, r)), §7's unit
+  `test_lagging_est_fib_lifecycle_is_timed_at_the_moment` (cycle-1 fib start / `activated_at` 10, cross_cycle cycle-0
+  `new_cycle` end 10; both modes); the E3·0 pin's stamp 25 → 26; 2 direct resolver calls pass `fill_horizon_idx`.
+  Docs: FIB_LIFECYCLE_SPEC §6 / §7 case 2 / §15.3 (the three "known limit"s resolved), ARCHITECTURE "known sites"
+  paragraph, GLOSSARY Naming Standard (`activated_at` mismatch), IMBALANCE_FILL_SEMANTICS horizons, LANDMINES
+  bounded-run residual, CROSS_CYCLE_FIB_SPEC, routine / selector / `_m15_cross_check` docstrings.
+  - Landing review (2 lenses, ≈396k: conformance 198k, mutation 198k). **Conformance:** 0 BLOCKER, 2 MAJOR, 8 MINOR.
+    MAJOR 1 — the IMBALANCE_FILL_SEMANTICS FibTracker table + POI_ZONES_SPEC horizon prose were stale → rewritten (+ a
+    MarketStructure-table row for the resolver's cond1). MAJOR 2 — four cycle-0 horizons correctly left on the anchor
+    had no marker → `# Plan E E3a′ → moment` at `_c0_has_unfilled_now`, the update-path c0 cache re-snapshot, and
+    both `c0_cts_idx` cond1 reads. **E3a′ note:** after E3a the Scenario-1 cycle-0 activation asks at the moment at
+    CTS_0 EST but at the cached CTS_0 anchor on CTS_0 UPDATED (`_c0_has_unfilled_now`) — E3a′ closes it. MINORs
+    folded: Scenario-1 docs say "the CTS_0 event's moment >= rv" (LANDMINES, 3 specs, 5 docstrings/comments); the
+    revert terminal "moment" wording; "as of `fill_horizon_idx`" docstrings; LANDMINES "Scenario 2 anchor agreement"
+    now states the horizon lock-step rule; ARCHITECTURE's "fill-horizon half not yet measured" updated; `_moment()`
+    raises `RuntimeError` (not a bare assert); `_activate_fib(meta)` required. **Declared deviation (§2.4 item 2):**
+    FibTracker still threads `current_candle` / `cts_established_idx` through `_m15_cross_check` /
+    `_run_main_cross_check` / `_maybe_activate_main_cross`; every value equals `self._moment()` (reviewer-traced) —
+    folding them is E5 hygiene. Not changed: the Scenario-1 prints (`at idx={cts_idx}`) log the anchor (run.log kept
+    byte-identical); `plan_f_inputs/inners_shadow.py` already declares it runs at `754a642` only.
+    **Mutation:** the landed suite killed only 16/41 site reverts (every H1-main sid≥1 EST / update path, the
+    Scenario-1 comparisons, the revert terminal, the §11b peek / stamps, the bearish MS raw refresh, and
+    `compute_poi_inners_for_cycle` ignoring its horizon survived) → the reviewer's 20 pins adopted as
+    `tests/test_e3a_mutation_pins.py` (lagging grid, moment = anchor + 2; mirrored sd −1 MS fixture): 39/41 killed;
+    spot-re-killed here (Scenario-1 EST comparison → anchor; resolver horizon → `cts_idx`). Equivalent survivors:
+    M24 — `_update_fib_cts`'s `is_cross_cycle` branch is DEAD (no single key ever holds `cross_cycle: True`; delete
+    in the dead-code hygiene pass); M32 — the h1 create-on-fail stamp is unreachable (cond2 and the normal check ask
+    the same window at the same horizon). Tests 853 → 873 + 1 xfail; replay after the fixes == the measured E3a.
+
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 
 **E4a — `CTS_ESTABLISHED`.** `market_structure.py:1514` passes `int(apply_idx)` as `idx` and asserts
