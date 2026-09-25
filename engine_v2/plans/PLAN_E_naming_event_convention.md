@@ -719,6 +719,41 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
     (`_bos_moment_by_cycle` = the anchor) survive for that reason. Mutation 7/10 killed by the reviewer + both of mine
     re-killed here. Tests 880 → 883 + 1 xfail.
 
+- **E3b (2026-09-25).** The pool clock on the moment. `knowable_at_idx` keys `CTS_ESTABLISHED` and **pattern-path
+  `CTS_UPDATED`** (declared extension: its moment exists since E3·0 and it had the same §17.12 straddle) on
+  `confirmed_at`, like `BOS_CONFIRMED` (a raw `CTS_UPDATED` carries none → `ev.idx`, its moment); the sibling clip
+  (`entity_df_mutation._build_sibling_cts_ref_zone_from_pool`) and the reference-zone window + recency sort key on
+  `ef.event_moment`; the false H5 comment ("never at the same idx") rewritten; `unified_probe._second_cts_moment`
+  already read `ef.event_moment` (E2d). §17.12 now names only `REVERSAL_CANDIDATE`.
+  **Measured (vs `20260925_081206_efc04bd`) == §7's 0:** 0 real cells, figures JSON-identical, run.log identical
+  (the parked `by_lens` order aside). Shadow run (scratch `e3b_shadow.py`): the pool clip saw 1417 events, the key
+  moved on 3, none crossed a cap; the reference builder saw 216 candidates, 2 keys moved, the winner's anchor never
+  changed (the sibling clip itself is upstream of that wrap — not separately shadowed).
+  Tests 883 → 890 + 1 xfail (891 after the review): the stamped-window pin → `test_reference_window_filters_on_the_moment_since_e3b` (anchor 9 /
+  moment 12: outside [5, 10], inside [5, 12]); `test_reference_recency_is_the_moment_since_e3b`;
+  `test_clip_keys_est_and_pattern_update_on_the_moment`; `TestSiblingClipOnTheMoment` ×3 (incl. a record window
+  narrower than the read window — the first two alone let the sibling-clip revert survive, masked by the
+  downstream window); §7's `test_sub_structure_pool.py` expectation 10 → 14. **The conftest validator now requires
+  `via` on every `CTS_UPDATED`** (E3b's readers all ask `event_moment`, which needs it): it surfaced two legacy
+  fixtures (`test_first_trigger_migration._cts_event` → pattern path; `test_wave_candles._make_event` → raw path by
+  default) + a self-pin. Own mutation loop: 5/5 killed. Docs: ARCHITECTURE known-sites, LANDMINES (sibling window,
+  run cap, "Run Cap ≠ Lifecycle End" clip rule), PART4 §17.8 note + §17.12.
+  - Note: the recency change also reaches the two `idx_window=None` callers — the main-H1 reversal reference
+    (`structure_engine.py`) and the entity reversal path — in scope, 0 cells.
+  - Landing review (1 combined lens, ≈123k): 0 BLOCKER. **MAJOR:** the mirror's raw-idx split
+    (`new_ev.idx = ev.idx + slice_begin`, clip on the moment) lost its pin once the clip time differed from the
+    stamped idx — a mutant writing the clip time moved a pattern-path winner's probe input / pool key from the anchor
+    to the moment and survived → the reviewer's `test_mirror_keeps_the_raw_idx_of_a_pattern_path_update` (anchor 17,
+    moment 19, slice_begin 3 → 20). **MINOR 1 (done):** `knowable_at_idx(ev)` now takes the event and delegates to
+    `ef.event_moment` for BOS / EST / CTS_UPDATED (no hand-copied per-type rule, no `.get("confirmed_at")`
+    fallback); its two test callers updated. MINORs 2–3: the `project_to_window` docstring and 4 `reference_zone`
+    "reverse-idx / on event idx" phrases. Tie analysis (reviewer): on every reachable stream a same-moment tie within
+    a sid is EST(N) + CONFIRMED(N) at the apply candle (same anchor; CONFIRMED wins); an EST vs raw UPDATED tie is
+    impossible (the span contains the apply candle); E3b also fixes a pre-E3b misorder (CONFIRMED(N) at c with
+    anchor(N+1) < c < moment(N+1) used to beat EST(N+1)); saved data has no same-sub moment tie. The tie-order
+    UPDATED/EST swap survives as equivalent. Mutation 6/6 (+ M9) killed on the final code; replay after the fixes
+    == 0 cells. Tests 883 → 891 + 1 xfail.
+
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 
 **E4a — `CTS_ESTABLISHED`.** `market_structure.py:1514` passes `int(apply_idx)` as `idx` and asserts

@@ -6,7 +6,7 @@ Per the Phase 1 design (2026-05-29, see project memory
 CTS event. The construction rule is uniform across `subsequent_*` and
 `reversal` triggers:
 
-    walk events reverse-idx, take the most recent of
+    take the event with the most recent MOMENT (Plan E E3b) among
     {CTS_CONFIRMED, CTS_UPDATED, CTS_ESTABLISHED}
         - CTS_CONFIRMED → use the existing KLZone derived from the event
         - CTS_UPDATED / CTS_ESTABLISHED → build ad hoc from the extreme
@@ -33,7 +33,7 @@ from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.kl_zones_v1 import identify_base_pattern, zone_thresholds
 
 
-# CTS event types consulted by the reverse-idx walk, in spec priority order
+# CTS event types consulted by the most-recent-moment pick, in spec priority order
 # (most-recent wins regardless of type — type only matters for the
 # CONFIRMED-vs-ad-hoc branch).
 _CTS_EVENT_TYPES = frozenset({"CTS_CONFIRMED", "CTS_UPDATED", "CTS_ESTABLISHED"})
@@ -263,8 +263,9 @@ def build_reference_zone_from_cts_event(
     """Find the reference zone for a probe that anchors against `sid`'s
     most recent CTS event.
 
-    Walks `events` reverse-idx for `structure_id == sid`, taking the
-    most recent of {CTS_CONFIRMED, CTS_UPDATED, CTS_ESTABLISHED}. Returns:
+    Picks, among `events` with `structure_id == sid`, the most recent MOMENT
+    (`ef.event_moment`, Plan E E3b; ties CONFIRMED > UPDATED > ESTABLISHED) of
+    {CTS_CONFIRMED, CTS_UPDATED, CTS_ESTABLISHED}. Returns:
 
     - CTS_CONFIRMED → the existing KLZone for that cycle, wrapped as a
       `ReferenceZone` (outer/inner derived from `probe_direction`). If for
@@ -304,7 +305,8 @@ def build_reference_zone_from_cts_event(
         Determines the resulting ReferenceZone's outer/inner/side per
         `_zone_to_reference`.
     idx_window : (int, int), optional
-        Inclusive `(min_idx, max_idx)` filter on event idx. Used by
+        Inclusive `(min_idx, max_idx)` filter on the event's MOMENT
+        (`ef.event_moment`, Plan E E3b). Used by
         `subsequent_*` callers to restrict the walk to events within a
         time-mapped sibling window. Reversal callers leave this None.
 
@@ -323,9 +325,8 @@ def build_reference_zone_from_cts_event(
             continue
         if idx_window is not None:
             lo, hi = idx_window
-            # A TIME filter (the sibling window). Today's stamped idx; Plan E
-            # E3b switches it to the event's moment.
-            ev_moment_idx = ef.stamped_idx(ev)  # Plan E E3b → moment
+            # A TIME filter (the sibling window): the event's MOMENT (Plan E E3b).
+            ev_moment_idx = ef.event_moment(ev)
             if ev_moment_idx < lo or ev_moment_idx > hi:
                 continue
         candidates.append(ev)
@@ -333,19 +334,18 @@ def build_reference_zone_from_cts_event(
     if not candidates:
         return None
 
-    # Most-recent wins regardless of type. Tie-break on type order
-    # (CONFIRMED > UPDATED > ESTABLISHED) is irrelevant in practice because
-    # the engine never emits two CTS-type events at the same idx for the
-    # same cycle — but make the order deterministic anyway for safety.
+    # Most-recent MOMENT wins regardless of type (Plan E E3b; hazard H5). Ties
+    # break on type order (CONFIRMED > UPDATED > ESTABLISHED). A tie is real: a
+    # cycle's CTS_ESTABLISHED and a CTS_UPDATED / CTS_CONFIRMED can share a
+    # moment candle (the stamped idx of an EST is its anchor, so the old
+    # "never at the same idx" claim held only for stamped indices).
     _TYPE_ORDER = {
         "CTS_CONFIRMED": 2,
         "CTS_UPDATED": 1,
         "CTS_ESTABLISHED": 0,
     }
-    # The recency pick is a TIME (hazard H5; Plan E E3b switches it, and this
-    # comment's "never at the same idx" claim, to the moment).
     candidates.sort(
-        key=lambda e: (ef.stamped_idx(e), _TYPE_ORDER[e.type]),  # Plan E E3b → moment
+        key=lambda e: (ef.event_moment(e), _TYPE_ORDER[e.type]),
         reverse=True,
     )
     ev = candidates[0]

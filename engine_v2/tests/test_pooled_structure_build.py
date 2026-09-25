@@ -138,7 +138,7 @@ def test_capped_run_emits_nothing_past_cap(reversing_df, natural_reversal_idx):
     cap = natural_reversal_idx - 6
     capped = compute_bounded_structure(reversing_df, _START, _SD, end_idx=cap)
     for ev in capped.events:
-        assert knowable_at_idx(ev.type, ev.idx, ev.meta.get("confirmed_at")) <= cap
+        assert knowable_at_idx(ev) <= cap
         # Plan A: a bounded run stamps NO event past its bound — `ev.idx` included
         # (for BOS_CONFIRMED the extreme, which precedes `confirmed_at`). MS asserts
         # this itself post-run; stated here so the guarantee is explicit.
@@ -298,3 +298,23 @@ def test_build_structure_geometry_is_deleted():
     """§5.4 / §7: the dead twin never had a live caller; the surviving builder
     is `entity_df_mutation.build_or_get_geometry`."""
     assert not hasattr(pooled_structure_build, "build_structure_geometry")
+
+
+def test_clip_keys_est_and_pattern_update_on_the_moment():
+    """Plan E E3b: `clip_events_to_window` keys CTS_ESTABLISHED and a pattern-path
+    CTS_UPDATED on their moment `confirmed_at`; a raw CTS_UPDATED on its idx (its
+    moment). Cap 12: anchors 10 with moments 14 are clipped; the raw update at 10
+    and a BOS with moment 12 stay."""
+    from engine_v2.structure.market_structure import StructureEvent
+    from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established
+    est = make_cts_established(cts_anchor_idx=10, confirmed_at=14, price=1.2,
+                               structure_id=0, cycle_id=1)
+    pat = StructureEvent(idx=10, category="STRUCTURE", type="CTS_UPDATED", price=1.2,
+                         meta={"structure_id": 0, "cycle_id": 0, "via": "continuous",
+                               "confirmed_at": 14})
+    raw = StructureEvent(idx=10, category="STRUCTURE", type="CTS_UPDATED", price=1.2,
+                         meta={"structure_id": 0, "cycle_id": 0, "via": "replay_raw"})
+    bos = make_bos_confirmed(bos_anchor_idx=5, confirmed_at=12, structure_id=0, cycle_id=1)
+    kept = pooled_structure_build.clip_events_to_window([est, pat, raw, bos], 12)
+    assert [(e.type, e.meta.get("via")) for e in kept] == [("CTS_UPDATED", "replay_raw"),
+                                                            ("BOS_CONFIRMED", None)]

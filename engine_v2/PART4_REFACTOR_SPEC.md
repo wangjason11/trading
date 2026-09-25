@@ -3170,12 +3170,11 @@ of the opposite-direction sub on the other lens in this parent cycle":
   CTS events would otherwise move `subsequent_counter`(1,2)@4083's
   `starting_idx` 4027 — a pool key);
 - `hi` = the reading trigger's `trigger_idx`: **the window is the only thing
-  keeping the read causal**; never widen it. Known limit (cold review
-  2026-09-20, same as the pre-pool mirrored read): the clip keys every CTS
-  type on `ev.idx` — the EXTREME for `CTS_ESTABLISHED` — so a CTS whose
-  moment (`confirmed_at`) is after `hi` but whose extreme is `<= hi` is still
-  a candidate (`knowable_at_idx` special-cases only `BOS_CONFIRMED`, §17.12).
-  Changing it moves `starting_idx` = pool keys → its own `/compare`;
+  keeping the read causal**; never widen it. The clip keys every
+  CTS type on its MOMENT since Plan E E3b (2026-09-25; before it on `ev.idx`,
+  the EXTREME for `CTS_ESTABLISHED` — the cold-review known limit of
+  2026-09-20), so a CTS whose extreme is `<= hi` but whose moment is after it is
+  not a candidate. Changing it moves `starting_idx` = pool keys → its own `/compare`;
 - the reference zone is built ad hoc from the winning CTS event with
   `kl_zones=[]` — behaviour-preserving, not a shortcut: subs only ever receive
   BOS zones (`source_kinds=["BOS"]`), so the primitive's CONFIRMED-zone branch
@@ -3359,12 +3358,11 @@ sibling dfs. `test_sub_id_is_monotonic_and_stable` must survive unchanged.
 - **WVMI design** under the pool (§17.10), **live-mode pool GC** (evict when
   parent ended + no live reference), and the **Phase 3 per-candle dual-lens
   driver** (the sweep's step body is its loop body) — leave hooks.
-- `knowable_at_idx` special-cases only `BOS_CONFIRMED`; `CTS_ESTABLISHED` /
-  `REVERSAL_CANDIDATE` straddle too and are half-clipped at a window edge, and
-  so can a pattern-path `CTS_UPDATED` (`meta["via"]` = a pattern name: `ev.idx`
-  is the span extreme; its apply candle is `meta["confirmed_at"]` since Plan E E3·0 —
-  `ARCHITECTURE.md` "`ev.idx` convention"). Not fixed here — note any
-  half-clipped cycle seen during chart review.
+- `knowable_at_idx` keys `BOS_CONFIRMED`, `CTS_ESTABLISHED` and pattern-path
+  `CTS_UPDATED` on their moment `confirmed_at` (the last two since Plan E E3b,
+  2026-09-25 — closed for them); `REVERSAL_CANDIDATE` (applies at
+  `meta["apply_idx"]`) still straddles and can be half-clipped at a window edge.
+  Not fixed here — note any half-clipped reversal seen during chart review.
 - Whether subs should receive the **derived** CTS KL zone as a probe reference
   (§17.8 — the branch is dead for subs today).
 

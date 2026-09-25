@@ -35,6 +35,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple
 
+from engine_v2.structure import event_fields as ef
+
 
 # --- Identity -----------------------------------------------------------------
 
@@ -81,23 +83,27 @@ UNRESOLVED_REASONS = frozenset(
 )
 
 
-def knowable_at_idx(
-    ev_type: str, ev_idx: int, confirmed_at: Optional[int] = None,
-) -> int:
+def knowable_at_idx(ev) -> int:
     """The idx at which an event became KNOWN — the clip key for projecting a
     pooled structure into a lifecycle window (§17.9 / `project_to_window`).
 
-    `BOS_CONFIRMED.ev.idx` is the BOS EXTREME candle (until Plan E E4b), but the break isn't known
-    until `meta["confirmed_at"]` (later); every other event is known at `ev.idx`.
-    Clipping by knowable-at (not `ev.idx`) neutralizes the
-    boundary-straddling-confirmation case: a BOS whose extreme is inside the
-    window but whose confirmation landed past it is correctly excluded.
-    Known limit (§17.12): `CTS_ESTABLISHED` / `REVERSAL_CANDIDATE` straddle too
-    and are not special-cased here.
+    `BOS_CONFIRMED` / `CTS_ESTABLISHED` / `CTS_UPDATED`: `event_fields.event_moment`
+    (their `confirmed_at`; a raw-path CTS_UPDATED's `ev.idx`) — the first two and
+    a pattern-path CTS_UPDATED are stamped at an ANCHOR (until Plan E E4) that can
+    precede that moment (CTS_ESTABLISHED / CTS_UPDATED since Plan E E3b). Every
+    other event: `ev.idx`. Clipping by knowable-at (not `ev.idx`) neutralizes
+    the boundary-straddling case: an event whose anchor is inside the window but
+    whose moment landed past it is correctly excluded.
+    Known limit (§17.12): `REVERSAL_CANDIDATE` (applies at `meta["apply_idx"]`)
+    straddles too and is not special-cased here.
     """
-    if ev_type == "BOS_CONFIRMED" and confirmed_at is not None:
-        return int(confirmed_at)
-    return int(ev_idx)
+    if ev.type in _KNOWABLE_AT_MOMENT_TYPES:
+        return ef.event_moment(ev)
+    return int(ev.idx)
+
+
+# Event types keyed on `event_fields.event_moment` (Plan E E3b).
+_KNOWABLE_AT_MOMENT_TYPES = frozenset({"BOS_CONFIRMED", "CTS_ESTABLISHED", "CTS_UPDATED"})
 
 
 def resolve_lens(use_case: str, *, reversed_from_lens: Optional[str] = None) -> str:

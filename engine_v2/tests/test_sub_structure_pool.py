@@ -559,6 +559,12 @@ def test_deleted_lifecycle_api_is_gone():
         assert not hasattr(s, name), name
     # Kept: the priority table is used by phase 3.
     assert hasattr(ssp, "_END_REASON_PRIORITY")
-    # Kept: `knowable_at_idx` (render-side clip key) is unchanged.
-    assert ssp.knowable_at_idx("BOS_CONFIRMED", 10, confirmed_at=14) == 14
-    assert ssp.knowable_at_idx("CTS_ESTABLISHED", 10, confirmed_at=14) == 10
+    # Kept: `knowable_at_idx` (render-side clip key) — keyed on the moment for
+    # BOS_CONFIRMED and, since Plan E E3b, CTS_ESTABLISHED / pattern-path
+    # CTS_UPDATED; a raw CTS_UPDATED (no confirmed_at) and other types on idx.
+    from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established, make_event
+    assert ssp.knowable_at_idx(make_bos_confirmed(bos_anchor_idx=10, confirmed_at=14)) == 14
+    assert ssp.knowable_at_idx(make_cts_established(cts_anchor_idx=10, confirmed_at=14)) == 14
+    assert ssp.knowable_at_idx(make_event("CTS_UPDATED", 10, via="continuous", confirmed_at=14)) == 14
+    assert ssp.knowable_at_idx(make_event("CTS_UPDATED", 10, via="replay_raw")) == 10
+    assert ssp.knowable_at_idx(make_event("REVERSAL_CANDIDATE", 10, apply_idx=14)) == 10

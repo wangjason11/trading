@@ -749,15 +749,13 @@ registry, never from `dfx.attrs["lower_tf_results"]`.
 >   `lo` = 0 for `first_counter`, the LOH of the prior sd-prox / CTS-prox
 >   candle for `subsequent_*`). **The window is the ONLY thing keeping the
 >   read causal** now that geometry is not bounded per trigger — never widen
->   it, never drop `hi`. Known limit (PART4 §17.8): the clip keys every CTS
->   type (`structure/reference_zone._CTS_EVENT_TYPES`) on `ev.idx` — the
->   EXTREME for `CTS_ESTABLISHED` (and a pattern-path `CTS_UPDATED`, whose
->   apply candle is `confirmed_at` since Plan E E3·0, unread by the clip) — so a CTS whose moment (`confirmed_at` /
->   the apply candle) is after `hi` but whose extreme is `<= hi` is still a
->   candidate (the in-code comment "`ev.idx == knowable-at for CTS types`" is
->   wrong for `CTS_ESTABLISHED` and pattern-path `CTS_UPDATED`; ARCHITECTURE
->   "`ev.idx` convention").
->   Changing it moves `starting_idx` = pool keys → its own `/compare`.
+>   it, never drop `hi`. The clip (per record) and the reference window both
+>   key every CTS type (`structure/reference_zone._CTS_EVENT_TYPES`) on its
+>   MOMENT (`ef.event_moment`, Plan E E3b, 2026-09-25): a CTS whose extreme is
+>   `<= hi` but whose moment is after it is NOT a candidate (before E3b they
+>   keyed on `ev.idx`, the extreme for `CTS_ESTABLISHED` / a pattern-path
+>   `CTS_UPDATED`; 0 cells on the reference window). The recency pick keys on
+>   the moment too. Any change moves `starting_idx` = pool keys → its own `/compare`.
 > - the zone is built by `build_reference_zone_from_cts_event(events,
 >   kl_zones=[], df=m15_df (the shared entity-absolute frame, not the winner's
 >   slice-local `bounded.df`), sid=0, probe_direction, idx_window=(lo, hi))`.
@@ -1907,9 +1905,10 @@ Cycles" below).
 >   `run_cap_abs = len(m15) - 1`) — a compute bound only; the lifecycle
 >   projection (`render_sub_projection`) applies the sub's `[start_idx,
 >   end_idx]` once and mirrors it into every lens df in `sub.lenses()`. The
->   knowable-at clip on render (`knowable_at_idx`) is unchanged — it keys only
->   `BOS_CONFIRMED` on its moment and everything else on `ev.idx`, so
->   `CTS_ESTABLISHED` / `REVERSAL_CANDIDATE` can straddle a cap (known limit,
+>   knowable-at clip on render (`knowable_at_idx`) keys `BOS_CONFIRMED`,
+>   `CTS_ESTABLISHED` and pattern-path `CTS_UPDATED` on their moment
+>   `confirmed_at` (the last two since Plan E E3b) and everything else on
+>   `ev.idx`, so only `REVERSAL_CANDIDATE` can still straddle a cap (known limit,
 >   PART4 §17.12; see "Sub-Structure Pool: Run Cap ≠ Lifecycle End…" below).
 > - **Probe cache** keys `(parent_path, sub_tf, direction, initial_input_idx)`
 >   (unchanged in shape; first-probe-is-truth, `ProbeCacheEntry`). See "Probe
@@ -2023,25 +2022,23 @@ The run cap must be ≥ the natural reversal (else the reversal is missed) but i
 otherwise a pure compute/cost bound. **On render into a lens, events are clipped
 by `knowable_at_idx`** (`multitf/sub_structure_pool.py`, applied by
 `pooled_structure_build.clip_events_to_window`) — NOT by `ev.idx` uniformly.
-What the code does: `BOS_CONFIRMED` is keyed on `meta["confirmed_at"]`, every
-other type on `ev.idx`. The `BOS_CONFIRMED` case is the point: clipping it by
+What the code does: `BOS_CONFIRMED`, `CTS_ESTABLISHED` and pattern-path
+`CTS_UPDATED` are keyed on their moment `meta["confirmed_at"]` (the last two since
+Plan E E3b, 2026-09-25), every other type on `ev.idx`. The `BOS_CONFIRMED` case
+shows the point: clipping it by
 `ev.idx` (the BOS extreme) would surface a BOS whose extreme is inside the
 window but whose confirmation landed past it — an event the Phase-1 bounded run
 could not have known.
 
-**That key is the code's behaviour, not the rule.** `ev.idx` is the knowable-at
-candle only for events whose `ev.idx` IS their moment (`CTS_CONFIRMED` /
-`CTS_RECONFIRMED` — `ev.idx == confirmed_at` — raw-path `CTS_UPDATED`,
-`STATE_CHANGED`). It is NOT for
-`CTS_ESTABLISHED` (`ev.idx` = the retro-stamped CTS extreme, knowable at
-`meta["confirmed_at"]`), `REVERSAL_CANDIDATE` (applies at `meta["apply_idx"]`),
-or a pattern-path `CTS_UPDATED` (`via` = a pattern name: stamped at the span
-extreme, its moment `confirmed_at` since Plan E E3·0) — see ARCHITECTURE "`ev.idx` convention". Any of
-the three can straddle a cap (`ev.idx <= cap <` its moment) and survive the
-clip; for the first two a mid-pair clip yields a half-derived cycle — the
-known limit recorded in PART4 §17.12 (not fixed; zero `CTS_ESTABLISHED` /
-`REVERSAL_CANDIDATE` straddles on the reference window, `/compare` baseline
-`20260922_195430_aadb887`); the third has had a moment column (`confirmed_at`) since Plan E E3·0.
+`ev.idx` is the knowable-at candle only for events whose `ev.idx` IS their
+moment (`CTS_CONFIRMED` / `CTS_RECONFIRMED` — `ev.idx == confirmed_at` —
+raw-path `CTS_UPDATED`, `STATE_CHANGED`). It is NOT for `CTS_ESTABLISHED`
+(`ev.idx` = the retro-stamped CTS extreme), a pattern-path `CTS_UPDATED` (the
+span extreme) — both keyed on `confirmed_at` since Plan E E3b — nor for
+`REVERSAL_CANDIDATE` (applies at `meta["apply_idx"]`), which can still straddle a
+cap (`ev.idx <= cap <` its apply) and survive the clip, yielding a half-derived
+reversal — the remaining known limit in PART4 §17.12 (zero straddles on the
+reference window). See ARCHITECTURE "`ev.idx` convention".
 The rule for any new or changed clip: key each type on its moment column, never
 on `ev.idx` by default. Changing this clip is its own `/compare`.
 

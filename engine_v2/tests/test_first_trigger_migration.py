@@ -264,6 +264,8 @@ def _cts_event(
     }
     if ev_type == "CTS_CONFIRMED":
         meta["cts_anchor_idx"] = anchor_local
+    if ev_type == "CTS_UPDATED":
+        meta["via"] = "continuous"   # a pattern-path update: confirmed_at = its apply (== idx here)
     return StructureEvent(
         idx=idx_local, category="STRUCTURE", type=ev_type,
         price=0.6020, meta=meta,
@@ -1243,3 +1245,67 @@ class TestFinalizeEqualsTrigger:
         assert r2.probe_input_idx == 6
         cached = pool.get_cached_probe(_PARENT_PATH, _SUB_TF, -1, 6)
         assert cached is not None and cached.finalize_idx == 23 and cached.probe_end_idx == 23
+
+
+class TestSiblingClipOnTheMoment:
+    """Plan E E3b: the sibling read clips each record's CTS events on their
+    MOMENT, not the stamped anchor — a CTS_ESTABLISHED anchored inside the
+    window but established after it is not yet knowable to the reader."""
+
+    def _pool(self):
+        from engine_v2.tests._event_factory import make_cts_established
+        pool = SubStructurePool()
+        est = make_cts_established(cts_anchor_idx=20, confirmed_at=26, price=0.6020,
+                                   structure_id=0, cycle_id=0, struct_direction=1)
+        sib = _stub_sub(pool, direction=1, starting_idx=5, slice_begin=0, events=[est])
+        _rec(sib, pool=pool, lens="confluence", S=0, C=2, tss=0, trigger_type="first_confluence",
+             trigger_idx=3, start_idx=5, seq=0)
+        return pool
+
+    def test_est_established_after_the_window_is_excluded(self):
+        from engine_v2.multitf.entity_df_mutation import _build_sibling_cts_ref_zone_from_pool
+        with _patched_cts_derivation():
+            zone = _build_sibling_cts_ref_zone_from_pool(
+                self._pool(), "confluence", 0, 2, -1, (5, 24), None)
+        assert zone is None          # anchor 20 is inside [5, 24]; the moment 26 is not
+
+    def test_est_established_inside_the_window_is_read_at_its_anchor(self):
+        from engine_v2.multitf.entity_df_mutation import _build_sibling_cts_ref_zone_from_pool
+        with _patched_cts_derivation():
+            zone = _build_sibling_cts_ref_zone_from_pool(
+                self._pool(), "confluence", 0, 2, -1, (5, 26), None)
+        assert zone is not None and zone.source_event_idx == 20
+
+    def test_record_window_clips_on_the_moment(self):
+        """The record's own window ends at 24 (replaced there); the read window
+        runs to 30. The EST anchored at 20 but established at 26 belongs to the
+        record after its end → excluded by the per-record clip (the read window
+        alone would admit it)."""
+        from engine_v2.multitf.entity_df_mutation import _build_sibling_cts_ref_zone_from_pool
+        from engine_v2.tests._event_factory import make_cts_established
+        pool = SubStructurePool()
+        est = make_cts_established(cts_anchor_idx=20, confirmed_at=26, price=0.6020,
+                                   structure_id=0, cycle_id=0, struct_direction=1)
+        sib = _stub_sub(pool, direction=1, starting_idx=5, slice_begin=0, events=[est])
+        _rec(sib, pool=pool, lens="confluence", S=0, C=2, tss=0, trigger_type="first_confluence",
+             trigger_idx=3, start_idx=5, trigger_end_idx=24, end_reason="same_dir_replacement",
+             seq=0)
+        with _patched_cts_derivation():
+            zone = _build_sibling_cts_ref_zone_from_pool(pool, "confluence", 0, 2, -1, (5, 30), None)
+        assert zone is None
+
+    def test_mirror_keeps_the_raw_idx_of_a_pattern_path_update(self):
+        """(E3b landing review.) The mirror keeps the RAW idx (the anchor) while the
+        clip uses the moment: a pattern-path CTS_UPDATED anchored at 17 (moment 19),
+        slice_begin 3 → the zone / probe input is the anchor 20, not the moment 22."""
+        from engine_v2.multitf.entity_df_mutation import _build_sibling_cts_ref_zone_from_pool
+        from engine_v2.tests._event_factory import make_event
+        pool = SubStructurePool()
+        upd = make_event("CTS_UPDATED", 17, price=0.6020, via="continuous", confirmed_at=19,
+                         structure_id=0, cycle_id=0, struct_direction=1)
+        sib = _stub_sub(pool, direction=1, starting_idx=5, slice_begin=3, events=[upd])
+        _rec(sib, pool=pool, lens="confluence", S=0, C=2, tss=0, trigger_type="first_confluence",
+             trigger_idx=3, start_idx=5, seq=0)
+        with _patched_cts_derivation():
+            zone = _build_sibling_cts_ref_zone_from_pool(pool, "confluence", 0, 2, -1, (5, 30), None)
+        assert zone is not None and zone.source_event_idx == 20   # anchor 17 + slice_begin 3

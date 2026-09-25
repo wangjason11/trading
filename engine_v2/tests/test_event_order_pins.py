@@ -108,11 +108,28 @@ def test_h5_reference_recency_tie_with_a_confirmation(shape, _stub_ad_hoc):
 
 
 @pytest.mark.parametrize("shape", SHAPES)
-def test_reference_window_filters_on_the_stamped_idx_until_e3b(shape, _stub_ad_hoc):
-    """The sibling window is a TIME filter, still on the stamped idx (the anchor
-    for EST) until Plan E E3b: an EST anchored at 9 (moment 12) is inside
-    [5, 10] today and after E4."""
+def test_reference_window_filters_on_the_moment_since_e3b(shape, _stub_ad_hoc):
+    """The sibling window is a TIME filter on the event's MOMENT (Plan E E3b): an
+    EST anchored at 9 with moment 12 is outside [5, 10] and inside [5, 12] —
+    today and after E4; the zone's base stays the anchor 9."""
     zone = rz.build_reference_zone_from_cts_event(
         [_est(9, 12, shape)], [], None, sid=0, probe_direction=-1, idx_window=(5, 10),
     )
+    assert zone is None
+    zone = rz.build_reference_zone_from_cts_event(
+        [_est(9, 12, shape)], [], None, sid=0, probe_direction=-1, idx_window=(5, 12),
+    )
     assert zone is not None and zone.source_event_idx == 9
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_reference_recency_is_the_moment_since_e3b(shape, _stub_ad_hoc):
+    """Plan E E3b: the recency pick keys on the MOMENT. An EST (anchor 9, moment 12)
+    and a raw CTS_UPDATED at 11 (moment 11): on the stamped idx the UPDATED (11 > 9)
+    would win; on the moment the EST (12 > 11) wins, so the zone is based at its
+    anchor 9."""
+    upd = _ev("CTS_UPDATED", 11, structure_id=0, cycle_id=0, via="replay_raw")
+    zone = rz.build_reference_zone_from_cts_event(
+        [_est(9, 12, shape), upd], [], None, sid=0, probe_direction=-1,
+    )
+    assert zone.source_event_idx == 9

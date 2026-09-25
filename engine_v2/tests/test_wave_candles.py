@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import pytest
 
+from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 from engine_v2.common.types import KLZone
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.tests._event_factory import make_event
@@ -79,6 +80,9 @@ def _make_event(etype: str, idx: int, price: float = None, meta: dict | None = N
     if etype in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
         # idx is the anchor (tests/_event_factory.py); the moment defaults to it (lag 0).
         meta.setdefault("confirmed_at", idx)
+    if etype == "CTS_UPDATED":
+        # a raw-path update by default (its idx IS its moment; conftest requires `via`)
+        meta.setdefault("via", CTS_UPDATED_RAW_VIA)
     return make_event(
         etype, idx, price=price,
         category="STRUCTURE" if etype != "STATE_CHANGED" else "STATE",

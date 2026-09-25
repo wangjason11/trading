@@ -82,3 +82,10 @@ def test_cts_updated_legal_shapes():
 def test_cts_updated_rejects(meta):
     with pytest.raises(EventContractViolation, match="CTS_UPDATED"):
         validate_event_contract(_raw("CTS_UPDATED", 24, **meta))
+
+
+@pytest.mark.illegal_event_contract
+def test_cts_updated_requires_via():
+    """Plan E E3b: every CTS_UPDATED reader asks `event_moment`, which needs `via`."""
+    with pytest.raises(EventContractViolation, match="via"):
+        validate_event_contract(_raw("CTS_UPDATED", 24))

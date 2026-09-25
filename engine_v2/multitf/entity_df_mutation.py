@@ -479,9 +479,10 @@ def _build_sibling_cts_ref_zone_from_pool(
         for ev in bounded.events:
             if ev.type not in _CTS_EVENT_TYPES:
                 continue
-            # The clip is a TIME (Plan E E3b switches it to the moment: today a
-            # CTS_ESTABLISHED is stamped at its anchor, which can precede it).
-            clip_idx = ef.stamped_idx(ev) + int(slice_begin)  # Plan E E3b → moment
+            # The clip is a TIME: the event's MOMENT (Plan E E3b — a
+            # CTS_ESTABLISHED / pattern-path CTS_UPDATED is stamped at its
+            # anchor, which can precede it).
+            clip_idx = ef.event_moment(ev) + int(slice_begin)
             if not (r_lo <= clip_idx <= r_hi):
                 continue
             new_ev = deepcopy(ev)

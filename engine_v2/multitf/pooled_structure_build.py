@@ -32,9 +32,9 @@ from engine_v2.multitf.sub_structure_pool import knowable_at_idx
 def clip_events_to_window(events: List[Any], cap: Optional[int]) -> List[Any]:
     """Return DEEP COPIES of the events whose **knowable-at** idx is <= `cap`
     (§17.9). `cap` None → no clip (open lifecycle to the data edge).
-    `BOS_CONFIRMED` is keyed on `meta["confirmed_at"]`, every other event on its
-    stamped idx (`ef.stamped_idx`, today's `ev.idx`; Plan E E3b moves CTS_ESTABLISHED
-    onto its moment).
+    `BOS_CONFIRMED` / `CTS_ESTABLISHED` / pattern-path `CTS_UPDATED` are keyed on
+    their moment `meta["confirmed_at"]` (Plan E E3b), every other event on its
+    stamped idx (`ef.stamped_idx`, today's `ev.idx`).
 
     Deep-copied because the geometry's event objects are SHARED across every
     consumer of the pool (the mirror stamps attribution onto `ev.meta`).
@@ -42,9 +42,8 @@ def clip_events_to_window(events: List[Any], cap: Optional[int]) -> List[Any]:
     out = []
     for ev in events:
         if cap is not None:
-            # A TIME clip; `knowable_at_idx` special-cases BOS only. Plan E E3b
-            # moves CTS_ESTABLISHED onto its moment.
-            k = knowable_at_idx(ev.type, ef.stamped_idx(ev), ev.meta.get("confirmed_at"))  # Plan E E3b → moment
+            # A TIME clip on the event's moment (Plan E E3b).
+            k = knowable_at_idx(ev)
             if k > cap:
                 continue
         out.append(deepcopy(ev))
@@ -72,9 +71,10 @@ def project_to_window(
     downstream dict (kl_zones, poi_zones, fib_states, wave_candles,
     wvmi_records, prev_bos_lines, ...) plus the clipped `events`.
 
-    Known limit (§17.12): `knowable_at_idx` special-cases only `BOS_CONFIRMED`
-    — `CTS_ESTABLISHED` (`confirmed_at`) and `REVERSAL_CANDIDATE` (`apply_idx`)
-    also straddle a cap, so a mid-pair clip yields a half-derived cycle.
+    Known limit (§17.12): `knowable_at_idx` keys CTS / BOS events on their moment
+    (CTS_ESTABLISHED / CTS_UPDATED since Plan E E3b); only `REVERSAL_CANDIDATE`
+    (`apply_idx`) still straddles a cap, so a mid-pair clip can yield a
+    half-derived reversal.
 
     `skip_wvmi=True` (sub WVMI is parent-event-driven, computed later, §8.3/8.4).
     """

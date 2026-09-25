@@ -170,7 +170,8 @@ in-window — correct on the raw path, whose `ev.idx` IS the moment; on the patt
 moment (`confirmed_at`, recorded since Plan E E3·0) is not yet read there — PLAN_E §7.1 T1 / E4c;
 (FibTracker's stamped activation / terminal timing and the fill horizons of its CTS_ESTABLISHED / CTS_UPDATED
 imbalance reads are on the moment since Plan E E3a, 2026-09-24 — the cycle-0 cond2 / cond3 horizons since E3a′, 2026-09-25;)
-the pool's `knowable_at_idx` / sibling clip — PART4 §17.12; `unified_probe` Phase 2's retrace-window
+(the pool's `knowable_at_idx`, the sibling clip and the reference-zone window / recency key on the moment since
+Plan E E3b, 2026-09-25 — `REVERSAL_CANDIDATE` still on `ev.idx`, PART4 §17.12;) `unified_probe` Phase 2's retrace-window
 start `check_lo = first_cts.idx + 1`, the CTS anchor, vs Phase 1's moment-based `tfb.est_idx + 1`; the MS
 in-flight POI-inner resolver, which evaluates fills as-of `st.cts.idx` — the processing candle after a raw
 `CTS_UPDATED`, the CTS anchor after a `CTS_ESTABLISHED` or a pattern-path update (except Scenario-2 cond1, whose

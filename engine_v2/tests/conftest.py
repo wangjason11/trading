@@ -59,10 +59,10 @@ def _validate_cts_updated(ev) -> None:
     """Plan E E3·0: a pattern-path CTS_UPDATED records its moment (the apply
     candle) as an int `confirmed_at >= idx` (idx = the CTS anchor until E4c); a
     raw-path one (`via == CTS_UPDATED_RAW_VIA`) carries none — its idx IS the
-    moment. Checked only when `via` is set (event_moment itself raises without it)."""
+    moment. `via` itself is required (Plan E E3b: every CTS_UPDATED reader now
+    asks `event_fields.event_moment`, which needs it)."""
     meta = ev.meta or {}
-    if "via" not in meta:
-        return
+    _check("via" in meta, f"CTS_UPDATED at idx {ev.idx} lacks meta['via'] (use tests/_event_factory.py)")
     if meta["via"] == CTS_UPDATED_RAW_VIA:
         _check("confirmed_at" not in meta,
                f"raw-path CTS_UPDATED at idx {ev.idx} must not carry confirmed_at")
