@@ -75,8 +75,8 @@ _H1_EVENTS_CSV = (
 #       (0,0) 96->115  (0,1) 591->652  (1,0) 689->703  (1,1) 728->748  (1,2) 826->902
 #   STATE_CHANGED to=reversal: sid 0 @ 902. sid 1 never reverses.
 #   parent_sd: sid 0 = +1, sid 1 = -1.
-#   min event idx per sid (the struct_start base): sid 0 = 96 (its cycle-0 BOS
-#   extreme), sid 1 = 689 (its cycle-0 BOS extreme) -> reversal handoff lifts
+#   the struct_start base = the first CTS_ESTABLISHED moment (Plan E E3f): sid 0 =
+#   115 (its BOS extreme 96 before E3f), sid 1 = 703 -> reversal handoff lifts
 #   sid 1 to rev_by_sid[0] = 902.
 #
 # LOH(h) = 4h + 3 holds exactly on this window (groundtruth header); injected.

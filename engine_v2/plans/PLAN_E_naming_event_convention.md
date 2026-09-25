@@ -841,6 +841,21 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
   vs the normal replay of the same code: 37 events `idx` cells (H1 5 BOS; conf 21 BOS + 1223→1224, 2828→2829; counter
   8 BOS + 2828→2829) — every one in the `idx` column; 34 KL `source_event_idx` (key-only); 3 figures JSON-identical;
   run.log only the 22 `[kl_zones]` print lines. The E3 stages changed no reader's role; E4 is unblocked.
+- **E3f + E3g landing review** (1 combined lens, ≈163k): 0 BLOCKER, 0 MAJOR. Verified: E3f matches the user
+  decision exactly (the fallback only reachable for a never-established sid 0 — harmless, no zone exists); E3g-1 an
+  EST at `first_active` gives the same history in-window as pre-window (atomic same-idx evaluation — the pre-window
+  `<` vs `<=` mutant is EQUIVALENT, do not pin it); E3g-2 every BOS_THRESHOLD_UPDATED emitter stamps `i`, pointer
+  reverts equivalent; E3g-3 conforms; no undeclared anchor-as-time read remains in production. **Folded in:** the
+  E3g-2 initial pass's `<=` was unpinned and NOT equivalent (a touch on the CTS_CONFIRMED candle of a narrow cycle
+  counts against the Rule-3 cap) → `test_initial_pass_applies_events_known_at_scan_start`; stale comments / docstrings
+  (poi_zones struct_start, zone_proximity "idx" → "moment", ARCHITECTURE known-sites wording, parent_tables header,
+  test docstrings); the PB-search LOWER bound declared a location (3 chart sites); the `event_moment` threshold
+  caveat (after a reversal-watch expiry rewind, replayed candles re-emit threshold events stamped j < i — true in the
+  replay frame only; pre-existing). **Open — user decision (MINOR-1):** the H1-overlay wave filter on the sub charts
+  compares anchor-to-anchor wave spans against `w_start = struct_start` (now the moment): for H1 sid 0 the first leg
+  (BOS_0 anchor → cycle-0 CTS_CONFIRMED anchor) would be hidden whenever that CTS anchor < CTS_0's moment (a lagging
+  EST with no CTS extension before confirmation) — 0 on this window. The E3f bullet's "masked everywhere" holds for
+  the zones, not for this filter. Tests 900 → 901 + 1 xfail.
 
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 

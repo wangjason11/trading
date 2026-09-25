@@ -83,6 +83,9 @@ def event_moment(ev: Any) -> int:
     - CTS_THRESHOLD_UPDATED / BOS_THRESHOLD_UPDATED: `ev.idx` (the processing
       candle — `_sync_thresholds_from_range` / `_bos_barrier_step` /
       `_maybe_expire_reversal_watch` all stamp `i`; BOS added in Plan E E3g-2).
+      Caveat (pre-existing): after a reversal-watch expiry rewind, replayed
+      candles j < i re-emit threshold events stamped j although they are only
+      known at i — "the processing candle" holds in the replay frame.
 
     Any other type raises: a new consumer must define its event's moment.
     """

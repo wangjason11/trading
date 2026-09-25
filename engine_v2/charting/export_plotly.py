@@ -1203,7 +1203,7 @@ def export_chart_plotly(
                 # Only search for pb events between last CTS and next sid's first BOS
                 pb_after = [ev for ev in pb_state_events
                             if int(ev.meta.get("structure_id", -1)) == sid
-                            and int(ev.idx) > last_idx
+                            and int(ev.idx) > last_idx   # a LOCATION lower bound: PBs after the last point's extreme
                             and (next_bos_idx is None or int(ev.idx) < next_bos_idx)]
                 if pb_after:
                     latest_pb = max(pb_after, key=lambda e: int(e.idx))

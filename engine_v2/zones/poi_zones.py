@@ -386,8 +386,8 @@ def derive_poi_zones(
     reversal_idx_by_sid: Dict[int, int] = compute_reversal_idx_by_sid(structure_events)
 
     # Structure lifecycle-start per sid (Phase 3 Commit 2, 2026-05-26): the idx
-    # a structure first becomes active — sid 0 = first structural anchor (min
-    # event idx); sid N>=1 = reversal-confirmation idx of sid N-1; subordinate
+    # a structure first becomes active — sid 0 = its first CTS_ESTABLISHED
+    # moment (Plan E E3f); sid N>=1 = reversal-confirmation idx of sid N-1; subordinate
     # = `lifecycle_floor` = the unique sub's real-time `start_idx`
     # (= max(probe_finalize, trigger, parent floor) on its first live record,
     # PART4 §17.4), supplied (slice-local) by the projection

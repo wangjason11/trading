@@ -8,8 +8,8 @@
     cycle end   = min(next cycle's CLAMPED start, reversal_idx_by_sid[sid], cap)   # unchanged rule,
                                                                                  # now on the moment
 
-`compute_struct_start_by_sid` (min event idx, reversal handoff, floor) and
-`compute_reversal_idx_by_sid` are UNCHANGED.
+`compute_struct_start_by_sid` (the first CTS_ESTABLISHED moment since Plan E E3f,
+reversal handoff, floor) and `compute_reversal_idx_by_sid`.
 
 Written TESTS-FIRST. Tests (a) and (c) and the M15 fixture FAIL at the base (start/end == the
 extreme); (b), (e), (f) pin behaviour the plan says must SURVIVE (H1 byte-identical on the reference
@@ -98,7 +98,7 @@ def _h1_reference_events() -> List[StructureEvent]:
 
 def test_a_cycle_start_is_the_moment_not_the_extreme():
     # CTS_ESTABLISHED idx 10 / confirmed_at 11; BOS idx 5 / confirmed_at 11.
-    # struct_start[0] = min event idx = 5; start = max(moment 11, 5) = 11   (base: max(idx 10, 5) = 10)
+    # struct_start[0] = the CTS_EST moment 11 (Plan E E3f; was min idx 5); start = max(moment 11, 11) = 11
     life = _life([_bos(5, 0, 0, 11), _cts_est(10, 0, 0, 11)])
     assert life[(0, 0)] == (11, None, None)
     # The same with no BOS: struct_start = 10 (the CTS extreme itself); start = max(11, 10) = 11
@@ -172,7 +172,7 @@ def test_d_cts_established_without_confirmed_at_raises():
         _life([_cts_est(10, 0, 0, None)])
 
 
-# --- (e) compute_struct_start_by_sid / compute_reversal_idx_by_sid unchanged (SURVIVE) --
+# --- (e) compute_struct_start_by_sid (the moment since Plan E E3f) / compute_reversal_idx_by_sid --
 
 def test_e_compute_struct_start_by_sid_is_the_first_cts_established_moment():
     evs = _sorted(_h1_reference_events())

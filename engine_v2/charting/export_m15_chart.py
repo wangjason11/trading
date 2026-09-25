@@ -595,7 +595,7 @@ def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned
 
             pb_after = [e for e in pb_events
                         if int(e.meta.get("structure_id", -1)) == sid
-                        and int(e.idx) > last_slice_idx
+                        and int(e.idx) > last_slice_idx   # a LOCATION lower bound: PBs after the last point's extreme
                         and (next_bos_idx is None or int(e.idx) < next_bos_idx)
                         and owned_here(e.idx)]
             if pb_after:
@@ -2090,7 +2090,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 next_bos_idx = ef.event_moment(next_bos[0]) if next_bos else None
                 pb_after = [e for e in pb_state
                             if int(e.meta.get("structure_id", -1)) == sid
-                            and int(e.idx) > last_idx
+                            and int(e.idx) > last_idx   # a LOCATION lower bound: PBs after the last point's extreme
                             and (next_bos_idx is None or int(e.idx) < next_bos_idx)]
                 if pb_after:
                     latest_pb = max(pb_after, key=lambda e: int(e.idx))

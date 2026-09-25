@@ -9,7 +9,7 @@ replaces the three derivations the Phase-1 chain carried
 ```
 rev_by_sid[S]      = STATE_CHANGED→reversal idx of sid S      (compute_reversal_idx_by_sid —
                                                                NOT REVERSAL_CANDIDATE.apply_idx, a prediction)
-struct_start[S]    = reversal-handoff floor                    (compute_struct_start_by_sid)
+struct_start[S]    = first CTS_EST moment / reversal handoff   (compute_struct_start_by_sid; Plan E E3f)
 cts_moment[(S,C)]  = CTS_ESTABLISHED.meta["confirmed_at"]      # the MOMENT the cycle was established
                                                                #   (== BOS_CONFIRMED.confirmed_at, definitional;
                                                                #   last-seen per (S,C)) — NOT .idx (the extreme)

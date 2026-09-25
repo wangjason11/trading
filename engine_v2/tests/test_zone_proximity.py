@@ -594,3 +594,24 @@ def test_threshold_timeline_is_ordered_by_moment():
                          meta={"structure_id": 0, "cycle_id": 1})
     tl = _build_cycle_threshold_timeline([bos, thr], 0, 1)
     assert [e.type for e in tl] == ["CTS_THRESHOLD_UPDATED", "BOS_CONFIRMED"]
+
+
+def test_initial_pass_applies_events_known_at_scan_start():
+    """(E3f/E3g landing review.) The scan_start candle sees the thresholds known AT
+    scan_start (inclusive initial pass): an sd touch ON the CTS_CONFIRMED candle of
+    a narrow cycle already counts against the Rule-3 cap, so a later sd touch is capped."""
+    df = _make_df(30, default_h=1.4010, default_l=1.4010)
+    df.at[2, "l"] = 1.4005    # sd touch on scan_start itself
+    df.at[10, "h"] = 1.4015   # opp_sd
+    df.at[15, "l"] = 1.4004   # second sd -> capped only if 2 was narrow
+    bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
+    cts = _cts_zone(sid=0, cycle_id=0, sd=1, inner=1.4020, outer=1.4030)
+    events = [
+        _bos_confirmed(idx=0, price=1.40, sid=0, cycle_id=0, sd=1, confirmed_at=2),
+        StructureEvent(idx=2, category="STRUCTURE", type="CTS_CONFIRMED", price=1.4020,
+                       meta={"structure_id": 0, "cycle_id": 0, "struct_direction": 1,
+                             "confirmed_at": 2, "confirmation_method": "pullback"}),
+    ]
+    tr = check_zone_proximity(df=df, sorted_events=events, kl_zones=[bos, cts],
+                              poi_zones=[], pip_size=0.0001, timeframe="H1")[(0, 0)]
+    assert [(t.direction, t.idx) for t in tr] == [("sd", 2), ("opp_sd", 10)]

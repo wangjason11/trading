@@ -164,9 +164,10 @@ imbalance questions at a `CTS_ESTABLISHED` (`ef.event_moment`, direct index — 
 direct-index readers raise `KeyError`;
 `unified_probe`'s finalize / `cts0_est_idx` reads (`_second_cts_moment`, Phase 2) read it through
 `ef.event_moment` too (Plan E E2d removed their `.get("confirmed_at", ev.idx)` fallback to the CTS anchor, and the
-other cross-kind `.get` fallbacks — PLAN_E_inputs §3 #3). Known sites that still read `ev.idx` as a time are
-recorded as separate causes ((the POI activation sweep applies its CTS_ESTABLISHED / CTS_UPDATED events at their
-moment — pre-window split, transition time and order — since Plan E E3g-1, PLAN_E §7.1 T1;)
+other cross-kind `.get` fallbacks — PLAN_E_inputs §3 #3). Every former anchor-as-time read now uses the moment
+(Plan E E3·0–E3g, 2026-09-24/25; the list below records where each moved) — (the POI activation sweep applies its
+CTS_ESTABLISHED / CTS_UPDATED events at their moment — pre-window split, transition time and order — since Plan E
+E3g-1, PLAN_E §7.1 T1;)
 (FibTracker's stamped activation / terminal timing and the fill horizons of its CTS_ESTABLISHED / CTS_UPDATED
 imbalance reads are on the moment since Plan E E3a, 2026-09-24 — the cycle-0 cond2 / cond3 horizons since E3a′, 2026-09-25;)
 (the pool's `knowable_at_idx`, the sibling clip and the reference-zone window / recency key on the moment since

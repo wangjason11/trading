@@ -373,7 +373,7 @@ def check_zone_proximity(
         running_cts: Optional[float] = None
         running_bos: Optional[float] = None
         tl_ptr = 0
-        # Initial pass: apply all events at idx ≤ scan_start so the gap
+        # Initial pass: apply all events with moment ≤ scan_start so the gap
         # at idx = scan_start (the CTS_CONFIRMED candle) reflects the
         # post-CTS-confirmation state. Includes any same-moment
         # BOS_THRESHOLD_UPDATED events (sort order is `(moment, type)`,
@@ -399,11 +399,11 @@ def check_zone_proximity(
                 continue
 
             # For i > scan_start, advance the timeline pointer through
-            # events with idx < i (start-of-candle semantics — the
+            # events with moment < i (start-of-candle semantics — the
             # current candle's own threshold events do NOT influence its
             # own eligibility; see GOTCHAS "Narrow-Cycle Gap: Evaluate at
             # Start-of-Candle"). For i == scan_start the initial pass
-            # above has already applied everything at idx ≤ scan_start.
+            # above has already applied everything with moment ≤ scan_start.
             while tl_ptr < len(timeline) and ef.event_moment(timeline[tl_ptr]) < i:
                 running_cts, running_bos = _apply_threshold_event(
                     timeline[tl_ptr], running_cts, running_bos
