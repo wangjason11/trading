@@ -77,7 +77,7 @@ def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment(monkeypatch, fixture
     FibTracker), never the CTS anchor; a raw update's moment IS its candle."""
     import engine_v2.structure.structure_engine as se
     from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_lagging_pattern_update
-    from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_extreme_data, _prepare_df
+    from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_anchor_data, _prepare_df
     calls = []
     real = se.compute_poi_inners_for_cycle
 
@@ -86,7 +86,7 @@ def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment(monkeypatch, fixture
         return real(df, bos_idx, bos_price, cts_idx, *a, **k)
 
     monkeypatch.setattr(se, "compute_poi_inners_for_cycle", spy)
-    rows = (_make_second_cts_moment_after_extreme_data() if fixture == "second_cts"
+    rows = (_make_second_cts_moment_after_anchor_data() if fixture == "second_cts"
             else _multicycle_with_lagging_pattern_update())
     with contextlib.redirect_stdout(io.StringIO()):
         res = se.compute_bounded_structure(_prepare_df(rows), 0, +1)
@@ -270,9 +270,9 @@ def test_lagging_est_fib_lifecycle_is_timed_at_the_moment(mode):
     terminal is 10 — the moment, not the anchor 9."""
     from engine_v2.structure.structure_engine import compute_bounded_structure
     from engine_v2.tests.test_e4_simulation import _run
-    from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_extreme_data, _prepare_df
+    from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_anchor_data, _prepare_df
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(_make_second_cts_moment_after_extreme_data()), 0, +1)
+        res = compute_bounded_structure(_prepare_df(_make_second_cts_moment_after_anchor_data()), 0, +1)
     fibs = {(f.structure_id, f.cycle_id): f for f in _run(res.df, res.events, mode)["fib_states"]}
     c1 = fibs[(0, 1)]
     assert (c1.cts_idx, c1.start_idx, c1.meta["activated_at"]) == (9, 10, 10)
@@ -352,11 +352,11 @@ def test_h1_chart_unconfirmed_cts_marker_sits_at_the_cts_anchor(tmp_path, monkey
     from engine_v2.multitf.registry import StructureRegistry
     from engine_v2.structure.structure_engine import compute_bounded_structure
     from engine_v2.tests.test_unified_probe import (
-        _make_second_cts_moment_after_extreme_data, _prepare_df)
+        _make_second_cts_moment_after_anchor_data, _prepare_df)
 
     with contextlib.redirect_stdout(io.StringIO()):
         res = compute_bounded_structure(
-            _prepare_df(_make_second_cts_moment_after_extreme_data()), 0, +1)
+            _prepare_df(_make_second_cts_moment_after_anchor_data()), 0, +1)
     # Stop the stream before CTS_CONFIRMED(0,1) @ 11: sid 0's last confirmed
     # point is BOS(0,1) @ anchor 7; CTS(0,1) is established (anchor 9,
     # moment 10) but unconfirmed.
@@ -388,8 +388,8 @@ def test_scenario3_exception_window_opens_after_the_cts0_anchor(monkeypatch):
     (the moment 6 since Plan E E4a)."""
     import engine_v2.structure.structure_engine as se
     from engine_v2.tests.test_unified_probe import (
-        _make_second_cts_moment_after_extreme_data, _prepare_df)
-    df = _prepare_df(_make_second_cts_moment_after_extreme_data())
+        _make_second_cts_moment_after_anchor_data, _prepare_df)
+    df = _prepare_df(_make_second_cts_moment_after_anchor_data())
     probe_df = df.copy()
     probe_df["market_state"] = "pullback"
     probe_df["structure_id"] = 0

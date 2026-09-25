@@ -9,7 +9,7 @@ highest-priority isolation check (Verification process #4).
 The detectors (continuous / double_maru / one_maru_*) are tested in
 `test_structure_patterns*`; here we drive the routine with a FakeBP that
 returns canned PatternEvents, so we isolate THIS routine's contributions:
-  - condition 3: strict full-pattern new extreme over `[current_start, extreme_candle)`
+  - condition 3: strict full-pattern new extreme over `[current_start, pattern_extreme_idx)`
   - condition 4: earliest apply/confirm idx, cycle-0 tie-break continuous>dm>omc>omo
   - est_idx == MS `_apply_idx` (confirmation_idx for CONFIRMED, else end_idx)
   - full-pattern extreme includes the confirm candle
@@ -102,7 +102,7 @@ class FakeBP:
 
 
 # ---------------------------------------------------------------------------
-# Condition 3 — strict full-pattern new extreme over [current_start, extreme_candle)
+# Condition 3 — strict full-pattern new extreme over [current_start, pattern_extreme_idx)
 # ---------------------------------------------------------------------------
 
 def test_strict_new_extreme_accepts_strictly_greater():
@@ -113,8 +113,8 @@ def test_strict_new_extreme_accepts_strictly_greater():
     res = find_true_first_breakout(bp, current_start=0, upper_idx=4, direction=1, bos0_inner=0.0)
     assert res is not None
     assert res.est_idx == 4
-    assert res.extreme_idx == 4
-    assert res.extreme_price == 14.0
+    assert res.pattern_extreme_idx == 4
+    assert res.pattern_extreme_price == 14.0
     assert res.pattern_anchor_idx == 3
 
 
@@ -127,15 +127,15 @@ def test_strict_new_extreme_rejects_a_tie():
     assert res is None
 
 
-def test_strict_new_extreme_window_is_half_open_before_extreme_candle():
+def test_strict_new_extreme_window_is_half_open_before_pattern_extreme_idx():
     # The extreme candle itself is excluded from the comparison window:
     # extreme at idx4=14; window [0,4) = highs[10,13,11,12]. The pattern's
     # own earlier candle (idx3=12) is INSIDE the window but below 14, so it
-    # doesn't block. Confirms [current_start, extreme_idx) semantics.
+    # doesn't block. Confirms [current_start, pattern_extreme_idx) semantics.
     df = _df_from_highs_lows([10, 13, 11, 12, 14])
     bp = FakeBP(df, {(3, "continuous"): _pat("continuous", start_idx=3, end_idx=4)})
     res = find_true_first_breakout(bp, current_start=0, upper_idx=4, direction=1, bos0_inner=0.0)
-    assert res is not None and res.extreme_idx == 4
+    assert res is not None and res.pattern_extreme_idx == 4
 
 
 def test_strict_new_extreme_downtrend_min():
@@ -148,17 +148,17 @@ def test_strict_new_extreme_downtrend_min():
     bp = FakeBP(df, {(3, "double_maru"): _pat("double_maru", start_idx=3, end_idx=4, direction=-1)})
     res = find_true_first_breakout(bp, current_start=0, upper_idx=4, direction=-1, bos0_inner=2.0)
     assert res is not None
-    assert res.extreme_idx == 4
-    assert res.extreme_price == pytest.approx(0.39)
+    assert res.pattern_extreme_idx == 4
+    assert res.pattern_extreme_price == pytest.approx(0.39)
 
 
 def test_empty_prior_window_trivially_passes():
     # current_start == anchor and extreme at the very first candle of the
-    # span -> window [current_start, extreme_idx) empty -> passes.
+    # span -> window [current_start, pattern_extreme_idx) empty -> passes.
     df = _df_from_highs_lows([10, 9, 9])
     bp = FakeBP(df, {(0, "double_maru"): _pat("double_maru", start_idx=0, end_idx=1)})
     res = find_true_first_breakout(bp, current_start=0, upper_idx=2, direction=1, bos0_inner=0.0)
-    assert res is not None and res.extreme_idx == 0
+    assert res is not None and res.pattern_extreme_idx == 0
 
 
 # ---------------------------------------------------------------------------
@@ -230,8 +230,8 @@ def test_confirmed_pattern_est_idx_is_confirmation_idx_and_extreme_includes_conf
     res = find_true_first_breakout(bp, current_start=0, upper_idx=6, direction=1, bos0_inner=0.0)
     assert res is not None
     assert res.est_idx == 5            # confirmation_idx, not end_idx
-    assert res.extreme_idx == 5        # confirm candle included in the span
-    assert res.extreme_price == 20.0
+    assert res.pattern_extreme_idx == 5        # confirm candle included in the span
+    assert res.pattern_extreme_price == 20.0
 
 
 def test_success_pattern_est_idx_is_end_idx():

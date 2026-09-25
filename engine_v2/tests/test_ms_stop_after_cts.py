@@ -383,7 +383,7 @@ class TestQuiescence:
         assert int(b14.df.index[b14.df["market_state"].astype(str) == "reversal"].min()) == 14
         assert _sig(b14.events) == _sig(_run(raw, end_idx=14).events)
 
-    def test_phase2_probe_finalizes_at_the_moment_not_the_extreme(self):
+    def test_phase2_probe_finalizes_at_the_moment_not_the_anchor(self):
         """End-to-end Plan B §4.3 on a natural fixture: the 2nd CTS has idx 9 but moment 10;
         the probe (early stop at 15) finalizes `second_cts_reached` at 10, and equals the
         classify-at-exit result."""

@@ -962,6 +962,10 @@ if ev.confirmation_idx is not None:
 
 **Rule:** For SUCCESS patterns (no confirmation needed), the span is `[start_idx..end_idx]`. For CONFIRMED patterns, the span is `[start_idx..confirmation_idx]`.
 
+**Where (Plan E E5, 2026-09-25):** the span logic lives in ONE function, `patterns/structure_patterns.pattern_extreme`
+→ `(pattern_extreme_idx, pattern_extreme_price)`; `_cts_from_breakout_event` (the only place a pattern extreme
+becomes a CTS anchor) and `find_true_first_breakout` (its strict new-extreme test) both call it, so they cannot diverge.
+
 ---
 
 ## Narrow-Cycle Gap: Event-Based, Start-of-Candle, Cycle-Scoped

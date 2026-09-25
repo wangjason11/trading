@@ -178,7 +178,7 @@ Every **timing / lifecycle** read of a cycle start — `zones/structure_lifecycl
 imbalance questions at a `CTS_ESTABLISHED` (`ef.event_moment`, direct index — Plan F) — uses
 `meta["confirmed_at"]`. A `CTS_ESTABLISHED` without it makes the first two raise (`AssertionError`) and the
 direct-index readers raise `KeyError`;
-`unified_probe`'s finalize / `cts0_est_idx` reads (`_second_cts_moment`, Phase 2) read it through
+`unified_probe`'s finalize / `cts0_established_idx` reads (`_second_cts_moment`, Phase 2) read it through
 `ef.event_moment` too (Plan E E2d removed their `.get("confirmed_at", ev.idx)` fallback to the CTS anchor, and the
 other cross-kind `.get` fallbacks — PLAN_E_inputs §3 #3). Every former anchor-as-time read now uses the moment
 (Plan E E3·0–E3g, 2026-09-24/25; the list below records where each moved) — (the POI activation sweep applies its

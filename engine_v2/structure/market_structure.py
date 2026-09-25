@@ -9,7 +9,7 @@ import pandas as pd
 
 from engine_v2.common.types import PatternEvent, PatternStatus, StructureLevel, COL_TIME, COL_O, COL_C
 from engine_v2.patterns.imbalance import has_unfilled_imbalance
-from engine_v2.patterns.structure_patterns import BreakoutPatterns
+from engine_v2.patterns.structure_patterns import BreakoutPatterns, pattern_extreme
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 
@@ -175,7 +175,7 @@ class MarketStructureState:
     # CTS lifecycle
     cts: Optional[Point] = None
     cts_phase: Literal["NONE", "EST_OR_UPD", "CONFIRMED", "FALSE_BREAK"] = "NONE"
-    cts_confirmed_for_idx: Optional[int] = None  # prevent duplicate CTS_CONFIRMED emits for same CTS
+    confirmed_cts_anchor_idx: Optional[int] = None  # prevent duplicate CTS_CONFIRMED emits for same CTS
     cts_event: str = ""  # one-candle event marker written by _write_df_row
 
     # NEW (Part 2): CTS cycles + thresholds
@@ -1532,7 +1532,7 @@ class MarketStructure:
                     )
 
                 # New cycle => reset CTS confirmation guard & threshold
-                st.cts_confirmed_for_idx = None
+                st.confirmed_cts_anchor_idx = None
                 st.cts_threshold = None
 
                 # New cycle => reset proximity-based confirmation state
@@ -1671,33 +1671,17 @@ class MarketStructure:
 
     def _cts_from_breakout_event(self, ev: PatternEvent) -> tuple[int, float]:
         """
-        CTS for breakout = extreme of the full confirmed pattern span.
-        For SUCCESS patterns: [start_idx..end_idx] (pattern candles only).
-        For CONFIRMED patterns: [start_idx..confirmation_idx] (includes confirming candle).
-        Returns (cts_idx, cts_price).
+        CTS anchor of a breakout = the pattern extreme of its full span
+        (`structure_patterns.pattern_extreme`, the same computation as
+        `find_true_first_breakout`): max high for a bullish structure, min
+        low for a bearish one, over [start_idx..end_idx] for SUCCESS
+        patterns and [start_idx..confirmation_idx] (the confirming candle
+        included) for CONFIRMED ones. The only place a pattern extreme
+        becomes a CTS anchor. Returns (cts_anchor_idx, cts_price).
         """
-        s = int(ev.start_idx)
-        e = int(ev.end_idx)
-        # Extend span to include confirmation candle when pattern needed confirmation
-        if ev.confirmation_idx is not None:
-            e = max(e, int(ev.confirmation_idx))
-        if e < s:
-            s, e = e, s
-
-        if self.struct_direction == 1:
-            # bullish structure -> CTS is max high in pattern span
-            highs = self._h[s : e + 1]
-            k = int(highs.argmax())
-            cts_idx = s + k
-            cts_price = float(highs[k])
-            return cts_idx, cts_price
-        else:
-            # bearish structure -> CTS is min low in pattern span
-            lows = self._l[s : e + 1]
-            k = int(lows.argmin())
-            cts_idx = s + k
-            cts_price = float(lows[k])
-            return cts_idx, cts_price
+        found = pattern_extreme(self._h, self._l, ev, self.struct_direction)
+        assert found is not None, f"breakout pattern span out of bounds: {ev}"
+        return found
 
     
     def _maybe_update_cts_pre_confirm(self, i: int, *, via: str) -> None:
@@ -1874,7 +1858,7 @@ class MarketStructure:
     ) -> None:
         st = self.state
         cts_anchor = st.cts.idx if st.cts is not None else None
-        if cts_anchor is not None and st.cts_confirmed_for_idx == cts_anchor:
+        if cts_anchor is not None and st.confirmed_cts_anchor_idx == cts_anchor:
             return
 
         meta2 = dict(meta or {})
@@ -1897,7 +1881,7 @@ class MarketStructure:
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_CONFIRMED", price=cts_price_val, meta=meta2)
         )
-        st.cts_confirmed_for_idx = cts_anchor
+        st.confirmed_cts_anchor_idx = cts_anchor
         st.cts_confirmed_method = confirmation_method
         st.cts_confirmed_idx = int(idx)
         st.cts_event = "CTS_CONFIRMED"

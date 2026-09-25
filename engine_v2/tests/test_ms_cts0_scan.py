@@ -71,10 +71,10 @@ def test_ms_scan_mode_agrees_with_shared_routine(make_data, direction, bos0_inne
 
     # Agreement BY CONSTRUCTION: the CTS_ESTABLISHED event is anchored at
     # the full-pattern extreme (idx + price), and its confirmed_at is the
-    # apply/confirm idx — exactly the routine's extreme_idx / extreme_price
+    # apply/confirm idx — exactly the routine's pattern_extreme_idx / pattern_extreme_price
     # / est_idx.
-    assert ef.cts_anchor_idx(cts0) == int(tfb.extreme_idx)
-    assert float(cts0.price) == pytest.approx(float(tfb.extreme_price))
+    assert ef.cts_anchor_idx(cts0) == int(tfb.pattern_extreme_idx)
+    assert float(cts0.price) == pytest.approx(float(tfb.pattern_extreme_price))
     assert int(cts0.meta["confirmed_at"]) == int(tfb.est_idx)
 
 

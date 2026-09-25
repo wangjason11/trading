@@ -114,7 +114,7 @@ def _reference_window_events() -> List[StructureEvent]:
 
 # --- the moment, not the extreme ---------------------------------------------
 
-def test_cts_moment_is_confirmed_at_not_the_extreme():
+def test_cts_moment_is_confirmed_at_not_the_anchor():
     # CTS_ESTABLISHED idx 10 (extreme) / confirmed_at 11 (moment); BOS idx 5 / confirmed_at 11.
     t = _build([_bos(5, 0, 0, 11), _cts_est(10, 0, 0, 11)])
     assert t.cts_moment == {(0, 0): 11}           # the MOMENT, not .idx == 10
@@ -261,7 +261,7 @@ def test_bos_confirmed_at_mismatching_cts_confirmed_at_raises():
         _build([_bos(5, 0, 0, 12), _cts_est(10, 0, 0, 11)])
 
 
-def test_bos_cts_identity_is_on_the_moment_never_on_the_extreme():
+def test_bos_cts_identity_is_on_the_moment_never_on_the_anchor():
     # NEGATIVE CONTROL: cts_anchor_idx 10 != confirmed_at 11, but BOS.confirmed_at 11 ==
     # CTS.confirmed_at 11 -> must NOT raise (the assert is on the moment, never on the anchor). 3 such pairs
     # exist in the saved M15 streams (1223/1224, 2828/2829 x2).

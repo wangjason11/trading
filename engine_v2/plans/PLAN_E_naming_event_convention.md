@@ -1107,6 +1107,44 @@ the real emitter.
 - the fetch-gate N/A edge case;
 - moment-order processing (Q3).
 
+### 9.1 E5 as landed
+
+- **E5·1 — internal renames (2026-09-25; byte-identical).** Every IN §1.3–1.7 E5 row re-grepped at `47e6a66`.
+  Q13 = no optional renames (not done: MS local `cts_anchor`, the `"EXT"` point tag, `continuous()`'s own
+  `extreme`); Q14 reversal-scope names separate.
+  - §1.3: `TrueFirstBreakout.extreme_idx` / `extreme_price` → `pattern_extreme_idx` / `pattern_extreme_price`;
+    `_full_pattern_extreme` deleted — ONE `patterns/structure_patterns.pattern_extreme(highs, lows, pat, direction)`
+    (numpy arrays; an undefined / out-of-bounds span → None) behind both `find_true_first_breakout` and
+    `MarketStructure._cts_from_breakout_event`, now a thin adapter (asserts in bounds; returns `(cts_anchor_idx,
+    cts_price)`) — the only place a pattern extreme becomes a CTS anchor; the TFB locals and the
+    `_is_strict_new_extreme` params → `pattern_extreme_idx` / `_price`; the `extreme_candle` pseudo-id + its test
+    name; `close_to_ext` → `c1_close_near_c0_extreme`.
+  - §1.4: fixture `_make_second_cts_moment_after_anchor_data` (5 test files); the 10 test names that contrasted the
+    moment with "the extreme" → `…_not_the_anchor` / `…_anchor_equals_moment` / `…_probe_end_idx_is_cts_anchor_…` /
+    `…_record_anchor`.
+  - §1.5: `st.cts_confirmed_for_idx` → `confirmed_cts_anchor_idx`; identify_start scenario-2 meta
+    `last_confirmed_cts_anchor_idx` / `last_confirmed_cts_price` + local `cts_anchor_idx` (no reader, not exported;
+    the df column `cts_idx` it reads stays); `ReferenceZone.source_event_idx` → `anchor_idx` (incl.
+    `_zone_to_reference`'s param; PART4 ×13, LANDMINES ×3); FC trigger local `probe_end_idx`; FC resolver
+    `parent_cts_anchor_idx` / `parent_cts_anchor_time` / `m15_probe_end_idx` (the projection meta key
+    `"m15_end_idx"` — the lifecycle end — stays); sibling fallback `fallback_anchor_idx`; uc1 local
+    `cts_anchor_idx`; `debug/probe_fc_finalize` `bos_anchor_h1` + header `BOSanch`; `cts0_ref` → `bos0_ref`.
+    Superseded rows: the sibling-clip `abs_idx` (E3b named it `clip_idx`); uc1's `.get` fallback and meta
+    `cts_idx` (gone since E1b / E2d).
+  - §1.6: zone_proximity `bos_confirmed_idx_by_key` / `next_bos_confirmed_idx`; `compute_cycle_lifecycle`
+    `cts_established_idx_by_key` / `cts_established_idx`; wave_candles `raw_cts_confirmed_idx`; **plus** the three
+    chart `next_bos_idx` locals (a MOMENT since E3g-3 — IN §3 #15's row was superseded) → `next_bos_confirmed_idx`,
+    one name for one role (closes the #15 collision).
+  - §1.7: `_replacement_break_point`'s `ext_end_idx` → `extend_to_idx`.
+  - `cts0_est_idx` → `cts0_established_idx` (`unified_probe` results + tests; ARCHITECTURE, PART4). The run.log
+    label `cts0_est=` is kept, so run.log stays identical.
+  - Not done (outside §1.3–1.7): the §1.2 `debug/zone_proximity_diag.py` CSV columns (`cts_idx` /
+    `this_cts_idx` / `window_span_post_cts`, /tmp output only) — **user 2026-09-25: "leave the diag columns as
+    is"**.
+  **Measured (vs `20260925_133849_c182eb6`):** 24/24 CSVs byte-identical, the 3 figures JSON-identical, fetch
+  gate PASS; run.log only the FutureWarning line number (MS 16 lines shorter) and the parked `by_lens` order.
+  Replay 45.4 s wall. Tests 935 + 1 xfail (unchanged). Docs: GOTCHAS "`_cts_from_breakout_event`: Include
+  Confirmation Candle" names the shared function; memory names reconciled.
 ---
 
 ## 10. Open questions for the user (recommendation first; concrete window data)

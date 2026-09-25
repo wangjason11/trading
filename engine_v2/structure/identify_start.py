@@ -164,16 +164,16 @@ def identify_start_scenario_2_after_reversal(
         )
 
     last_conf_row = cts_conf.iloc[-1]
-    cts_idx = int(last_conf_row["cts_idx"])
+    cts_anchor_idx = int(last_conf_row["cts_idx"])
     cts_price = float(last_conf_row["cts_price"])
 
     # default start
-    start_idx = cts_idx
+    start_idx = cts_anchor_idx
     reason = "scenario_2:base_last_cts_confirmed"
 
     # Exception #1
-    if cts_idx < reversal_idx - 1:
-        span = df.loc[cts_idx + 1 : reversal_idx - 1]
+    if cts_anchor_idx < reversal_idx - 1:
+        span = df.loc[cts_anchor_idx + 1 : reversal_idx - 1]
 
         if int(prev_struct_direction) == 1:
             # look for higher high than confirmed CTS price
@@ -206,8 +206,8 @@ def identify_start_scenario_2_after_reversal(
             "reversal_idx": int(reversal_idx),
             "prev_structure_id": int(prev_structure_id),
             "prev_struct_direction": int(prev_struct_direction),
-            "last_cts_confirmed_idx": int(cts_idx),
-            "last_cts_confirmed_price": float(cts_price),
+            "last_confirmed_cts_anchor_idx": int(cts_anchor_idx),
+            "last_confirmed_cts_price": float(cts_price),
             "raw_start_idx": int(raw_start_idx),
             "min_history": int(min_history),
             "too_early": bool(too_early),

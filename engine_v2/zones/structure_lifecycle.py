@@ -104,7 +104,7 @@ def compute_cycle_lifecycle(
     # candle (== BOS_CONFIRMED.confirmed_at, definitional). Last-seen wins. The
     # CTS anchor (`meta["cts_anchor_idx"]`, the pattern's extreme candle) is a
     # historical price location and never a lifecycle value.
-    cts_est_by_key: Dict[Tuple[int, int], int] = {}
+    cts_established_idx_by_key: Dict[Tuple[int, int], int] = {}
     for ev in events:
         if getattr(ev, "type", None) != "CTS_ESTABLISHED":
             continue
@@ -118,13 +118,13 @@ def compute_cycle_lifecycle(
             f"CTS_ESTABLISHED ({esid},{ecyc}) @ {ev.idx} lacks meta['confirmed_at'] "
             f"(the established moment — market_structure always stamps it)"
         )
-        cts_est_by_key[(int(esid), int(ecyc))] = int(moment)
+        cts_established_idx_by_key[(int(esid), int(ecyc))] = int(moment)
 
     # Pass 1: clamped cycle starts.
     start_by_key: Dict[Tuple[int, int], int] = {}
-    for (s, c), cts_idx in cts_est_by_key.items():
+    for (s, c), cts_established_idx in cts_established_idx_by_key.items():
         ss = struct_start.get(s)
-        start_by_key[(s, c)] = max(cts_idx, int(ss)) if ss is not None else cts_idx
+        start_by_key[(s, c)] = max(cts_established_idx, int(ss)) if ss is not None else cts_established_idx
 
     # Pass 2: ends = min(next-cycle clamped start, reversal, cap).
     out: Dict[Tuple[int, int], Tuple[int, Optional[int], Optional[str]]] = {}

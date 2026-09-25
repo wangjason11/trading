@@ -60,7 +60,7 @@ class ReferenceZone:
     Numerically: ``inner > outer`` for +1 probes; ``inner < outer`` for
     -1 probes.
 
-    `source` records provenance for debug/attribution. `source_event_idx`
+    `source` records provenance for debug/attribution. `anchor_idx`
     is the parent-frame idx of the structural event the zone was derived
     from:
 
@@ -84,7 +84,7 @@ class ReferenceZone:
         "parent_bos",
         "ad_hoc_bos_0",
     ]
-    source_event_idx: int
+    anchor_idx: int
 
 
 def _find_existing_cts_kl_zone(
@@ -107,7 +107,7 @@ def _zone_to_reference(
     z: KLZone,
     probe_direction: int,
     source: str,
-    source_event_idx: int,
+    anchor_idx: int,
 ) -> ReferenceZone:
     """Convert a KLZone's geographic (top/bottom) to a probe's semantic
     (outer/inner), keyed off the **probe's direction** (= the new
@@ -131,14 +131,14 @@ def _zone_to_reference(
             inner=float(z.top),
             side="buy",
             source=source,  # type: ignore[arg-type]
-            source_event_idx=int(source_event_idx),
+            anchor_idx=int(anchor_idx),
         )
     return ReferenceZone(
         outer=float(z.top),
         inner=float(z.bottom),
         side="sell",
         source=source,  # type: ignore[arg-type]
-        source_event_idx=int(source_event_idx),
+        anchor_idx=int(anchor_idx),
     )
 
 
@@ -237,7 +237,7 @@ def build_ad_hoc_bos0_reference_zone(
         inner=float(ref_inner),
         side=side,  # type: ignore[arg-type]
         source="ad_hoc_bos_0",
-        source_event_idx=int(anchor_idx),
+        anchor_idx=int(anchor_idx),
     )
 
 
@@ -351,7 +351,7 @@ def build_reference_zone_from_cts_event(
     )
     ev = candidates[0]
     # The winner's CTS ANCHOR (a location): the ad-hoc zone base and the probe
-    # input (`source_event_idx` → the pool key).
+    # input (`anchor_idx` → the pool key).
     cts_anchor_idx = ef.cts_anchor_idx(ev)
 
     # Source sid's struct_direction is the OPPOSITE of probe_direction
@@ -368,7 +368,7 @@ def build_reference_zone_from_cts_event(
                     existing,
                     probe_direction,
                     source="cts_confirmed",
-                    source_event_idx=cts_anchor_idx,
+                    anchor_idx=cts_anchor_idx,
                 )
         # CONFIRMED but no derived zone — fall through to ad-hoc.
 
@@ -389,5 +389,5 @@ def build_reference_zone_from_cts_event(
         inner=inner,
         side=side,
         source=source,
-        source_event_idx=int(cts_anchor_idx),
+        anchor_idx=int(cts_anchor_idx),
     )

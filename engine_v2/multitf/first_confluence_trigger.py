@@ -33,7 +33,7 @@ def detect_first_confluence_triggers(
     """Walk sorted parent events and emit one trigger per BOS_CONFIRMED.
 
     Pairs each BOS_CONFIRMED with the matching CTS_CONFIRMED for the same
-    (sid, cycle_id). `end_idx` is set to that CTS's EXTREME idx
+    (sid, cycle_id). `probe_end_idx` is set to that CTS's EXTREME idx
     (`meta["cts_anchor_idx"]`), which is earlier than the confirmation
     candle (`CTS_CONFIRMED.idx == confirmed_at`). If no CTS_CONFIRMED exists
     yet (parent cycle still open at end-of-data), the trigger is emitted with
@@ -72,17 +72,17 @@ def detect_first_confluence_triggers(
 
         cts_conf = cts_conf_by_key.get((sid, cycle_id))
         if cts_conf is not None:
-            # Probe end_idx = the confirmed CTS's EXTREME idx, not the
+            # probe_end_idx = the confirmed CTS's EXTREME idx, not the
             # confirmation candle. CTS_CONFIRMED.idx is the confirmation candle
             # (== confirmed_at, the later pullback / sd-prox candle); the CTS
             # extreme is meta["cts_anchor_idx"] (earlier). We still WAIT for
             # CTS_CONFIRMED to fire before the value is known (status flips to
             # finalized here), but the value bounding the probe is the CTS
             # extreme. (spec §4.3.2)
-            end_idx = int(cts_conf.meta["cts_anchor_idx"])
+            probe_end_idx = int(cts_conf.meta["cts_anchor_idx"])
             status = "finalized"
         else:
-            end_idx = None
+            probe_end_idx = None
             status = "pending"
 
         triggers.append(FirstConfluenceTrigger(
@@ -91,7 +91,7 @@ def detect_first_confluence_triggers(
             parent_cycle_id=cycle_id,
             parent_sd=parent_sd,
             input_idx=input_idx,
-            probe_end_idx=end_idx,
+            probe_end_idx=probe_end_idx,
             trigger_event_idx=trigger_event_idx,
             status=status,
             meta={

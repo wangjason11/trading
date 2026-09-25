@@ -193,7 +193,7 @@ class TestMainReversalProbe:
         assert ref_zone is not None, "no prior CTS reference for the reversal probe"
         probe = unified_probe(
             bounded0.df.copy(),
-            input_idx=int(ref_zone.source_event_idx),
+            input_idx=int(ref_zone.anchor_idx),
             direction=probe_sd,
             reference_zone=ref_zone,
             probe_end_idx=rev_apply,      # Plan C §7: the probe's search bound

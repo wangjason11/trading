@@ -23,6 +23,42 @@ _ROW_FIELDS = (
     ("is_big_maru_as0", 0), ("is_big_maru_as1", 0),
 )
 
+
+def pattern_extreme(
+    highs: np.ndarray,
+    lows: np.ndarray,
+    pat: PatternEvent,
+    direction: int,
+) -> Optional[Tuple[int, float]]:
+    """A breakout pattern's extreme over its FULL span `[start_idx ..
+    max(end_idx, confirmation_idx)]` (the confirming candle included):
+    max-high for +1, min-low for -1 (first occurrence on a tie).
+
+    Returns `(pattern_extreme_idx, pattern_extreme_price)` as POSITIONAL idx
+    into `highs` / `lows`, or None if the span is undefined or out of bounds.
+    Pattern realm; the one computation behind `find_true_first_breakout`'s
+    strict new-extreme test and `MarketStructure._cts_from_breakout_event` (the
+    only place a pattern extreme becomes a CTS anchor).
+    """
+    if pat.start_idx is None or pat.end_idx is None:
+        return None
+    s = int(pat.start_idx)
+    e = int(pat.end_idx)
+    if pat.confirmation_idx is not None:
+        e = max(e, int(pat.confirmation_idx))
+    if e < s:
+        s, e = e, s
+    if s < 0 or e >= len(highs):
+        return None
+    if direction == 1:
+        span = highs[s : e + 1]
+        k = int(span.argmax())
+    else:
+        span = lows[s : e + 1]
+        k = int(span.argmin())
+    return s + k, float(span[k])
+
+
 class BreakoutPatterns:
     """
     Structure-only candle patterns used for breakout/pullback logic.
@@ -239,13 +275,13 @@ class BreakoutPatterns:
         # ------------------------------------------------------------
         # Variant 2 subconditions (3 conditions)
         # ------------------------------------------------------------
-        close_to_ext = (
+        c1_close_near_c0_extreme = (
             abs(float(c1.c) - float(c0.h)) <= 0.00015
             if direction == 1
             else abs(float(c1.c) - float(c0.l)) <= 0.00015
         )
         v2_c0 = (c0.candle_type == "pinbar") and (int(getattr(c0, "is_big_normal_as0", 0)) == 1)
-        v2_c1 = bool(close_to_ext)
+        v2_c1 = bool(c1_close_near_c0_extreme)
         v2_c2 = (
             (c2.candle_type == "maru")
             and (int(getattr(c2, "is_big_normal_as2", 0)) == 1)

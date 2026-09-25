@@ -186,8 +186,8 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
     # neighbor candle past the live edge) cannot occur in backtest; if this warn
     # ever fires at a live edge, the wait-for-candles logic hooks in here
     # (memory/project_ad_hoc_zone_wait_for_candles).
-    cts0_ref = build_ad_hoc_bos0_reference_zone(df, start_idx, struct_direction)
-    cur_bos0_inner = cts0_ref.inner if cts0_ref is not None else None
+    bos0_ref = build_ad_hoc_bos0_reference_zone(df, start_idx, struct_direction)
+    cur_bos0_inner = bos0_ref.inner if bos0_ref is not None else None
     if cur_bos0_inner is None:
         print(
             f"[structure_engine][warn] main sid=0 cycle-0 ad-hoc BOS_0 zone could "
@@ -276,7 +276,7 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
             )
             break
 
-        probe_input_idx = int(ref_zone.source_event_idx)
+        probe_input_idx = int(ref_zone.anchor_idx)
         if probe_input_idx >= reversal_apply_idx:
             # No forward scan window — degenerate (sub-parity).
             print(

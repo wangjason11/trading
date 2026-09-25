@@ -20,7 +20,7 @@ four conditions verbatim so the probe and MS can never diverge:
       3. Strict new extreme — the FULL-pattern extreme (max-high for +1 /
          min-low for -1 across ALL pattern candles incl. the confirm
          candle) is a STRICT new extreme over `[current_start,
-         extreme_candle)` (`>` highs / `<` lows; ties do NOT count).
+         pattern_extreme_idx)` (`>` highs / `<` lows; ties do NOT count).
       4. Earliest apply/confirm idx wins (NOT anchor idx). Tie-break
          `continuous > double_maru > one_maru_continuous > one_maru_opposite`
          — a CYCLE-0-SPECIFIC order, distinct from the global
@@ -42,7 +42,7 @@ from typing import List, Optional, Tuple
 import pandas as pd
 
 from engine_v2.common.types import PatternEvent, PatternStatus
-from engine_v2.patterns.structure_patterns import BreakoutPatterns
+from engine_v2.patterns.structure_patterns import BreakoutPatterns, pattern_extreme
 
 
 # Cycle-0-specific tie-break order (gotcha #2/#3). This is ONLY used to
@@ -67,16 +67,16 @@ class TrueFirstBreakout:
     (`confirmation_idx` for CONFIRMED patterns, else `end_idx`) so the
     probe and MS agree on the establishment candle.
 
-    `extreme_idx` / `extreme_price` are the FULL-pattern extreme (incl. the
-    confirm candle) — the CTS price/idx MS records via
-    `_cts_from_breakout_event`. `pattern` is the raw winning PatternEvent
+    `pattern_extreme_idx` / `pattern_extreme_price` are the FULL-pattern
+    extreme (incl. the confirm candle) — the CTS anchor / price MS records via
+    `_cts_from_breakout_event` (both use `pattern_extreme`). `pattern` is the raw winning PatternEvent
     so MS can drive its existing establishment path with it.
     """
     pattern: PatternEvent
     pattern_anchor_idx: int  # the breakout pattern's first candle (pattern.start_idx)
     est_idx: int         # apply/confirm idx (= cycle-0 establishment candle)
-    extreme_idx: int     # full-pattern extreme candle idx (incl. confirm candle)
-    extreme_price: float  # the strict new-extreme value
+    pattern_extreme_idx: int     # full-pattern extreme candle idx (incl. confirm candle)
+    pattern_extreme_price: float  # the strict new-extreme value
 
 
 def _apply_idx(pat: PatternEvent) -> Optional[int]:
@@ -87,64 +87,29 @@ def _apply_idx(pat: PatternEvent) -> Optional[int]:
     return pat.end_idx
 
 
-def _full_pattern_extreme(
-    df: pd.DataFrame,
-    pat: PatternEvent,
-    direction: int,
-) -> Optional[Tuple[int, float]]:
-    """Full-pattern extreme over `[start_idx .. max(end_idx, confirm_idx)]`.
-
-    Mirrors `MarketStructure._cts_from_breakout_event` (which extends the
-    span to include the confirmation candle): max-high for +1, min-low for
-    -1. Returns `(extreme_idx, extreme_price)` as POSITIONAL idx, or None
-    if the span is out of bounds.
-    """
-    if pat.start_idx is None or pat.end_idx is None:
-        return None
-    s = int(pat.start_idx)
-    e = int(pat.end_idx)
-    if pat.confirmation_idx is not None:
-        e = max(e, int(pat.confirmation_idx))
-    if e < s:
-        s, e = e, s
-    n = len(df)
-    if s < 0 or e >= n:
-        return None
-    span = df.iloc[s : e + 1]
-    if span.empty:
-        return None
-    if direction == 1:
-        vals = span["h"].astype(float).values
-        k = int(vals.argmax())
-        return s + k, float(vals[k])
-    vals = span["l"].astype(float).values
-    k = int(vals.argmin())
-    return s + k, float(vals[k])
-
-
 def _is_strict_new_extreme(
     df: pd.DataFrame,
     current_start: int,
-    extreme_idx: int,
-    extreme_price: float,
+    pattern_extreme_idx: int,
+    pattern_extreme_price: float,
     direction: int,
 ) -> bool:
     """STRICT new extreme over the half-open window `[current_start,
-    extreme_idx)` (gotcha #1 strict, #6 window).
+    pattern_extreme_idx)` (gotcha #1 strict, #6 window).
 
-    For +1: `extreme_price` strictly greater than every prior high. For
-    -1: strictly less than every prior low. An empty prior window
-    (`extreme_idx <= current_start`) trivially passes — there is nothing
-    earlier to beat.
+    For +1: `pattern_extreme_price` strictly greater than every prior high.
+    For -1: strictly less than every prior low. An empty prior window
+    (`pattern_extreme_idx <= current_start`) trivially passes — there is
+    nothing earlier to beat.
     """
-    if extreme_idx <= current_start:
+    if pattern_extreme_idx <= current_start:
         return True
-    prior = df.iloc[current_start:extreme_idx]  # iloc end-exclusive → [current_start, extreme_idx)
+    prior = df.iloc[current_start:pattern_extreme_idx]  # iloc end-exclusive → [current_start, pattern_extreme_idx)
     if prior.empty:
         return True
     if direction == 1:
-        return float(extreme_price) > float(prior["h"].astype(float).max())
-    return float(extreme_price) < float(prior["l"].astype(float).min())
+        return float(pattern_extreme_price) > float(prior["h"].astype(float).max())
+    return float(pattern_extreme_price) < float(prior["l"].astype(float).min())
 
 
 def _anchor_candidates(
@@ -193,7 +158,7 @@ def find_true_first_breakout(
 
     Scans every anchor for breakout candidates (mechanism B, threshold =
     `bos0_inner`), keeps those whose full-pattern extreme is a strict new
-    extreme over `[current_start, extreme_candle)`, and returns the one
+    extreme over `[current_start, pattern_extreme_idx)`, and returns the one
     with the earliest apply/confirm idx (tie-break by `_CYCLE0_PRIORITY`).
 
     Returns None when no candidate in the window qualifies — the caller
@@ -216,6 +181,8 @@ def find_true_first_breakout(
     """
     df = bp.df
     n = len(df)
+    highs = df["h"].to_numpy(dtype=float)
+    lows = df["l"].to_numpy(dtype=float)
     lo = int(current_start)
     hi = min(int(upper_idx), n - 1)
     if lo > hi:
@@ -235,11 +202,13 @@ def find_true_first_breakout(
             est = _apply_idx(pat)
             if est is None or int(est) > hi:
                 continue
-            ext = _full_pattern_extreme(df, pat, direction)
-            if ext is None:
+            found = pattern_extreme(highs, lows, pat, direction)
+            if found is None:
                 continue
-            ext_idx, ext_price = ext
-            if not _is_strict_new_extreme(df, lo, ext_idx, ext_price, direction):
+            pattern_extreme_idx, pattern_extreme_price = found
+            if not _is_strict_new_extreme(
+                df, lo, pattern_extreme_idx, pattern_extreme_price, direction,
+            ):
                 continue
             key = (int(est), int(prio))
             if best_key is None or key < best_key:
@@ -248,8 +217,8 @@ def find_true_first_breakout(
                     pattern=pat,
                     pattern_anchor_idx=int(pat.start_idx),
                     est_idx=int(est),
-                    extreme_idx=int(ext_idx),
-                    extreme_price=float(ext_price),
+                    pattern_extreme_idx=int(pattern_extreme_idx),
+                    pattern_extreme_price=float(pattern_extreme_price),
                 )
 
     return best

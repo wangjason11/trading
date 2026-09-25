@@ -1198,13 +1198,13 @@ def export_chart_plotly(
                 )
                 # The PB search's upper bound is a TIME: the next sid's first BOS MOMENT
                 # (Plan E E3g-3, PLAN_E §7.1 T4).
-                next_bos_idx = ef.event_moment(next_bos[0]) if next_bos else None
+                next_bos_confirmed_idx = ef.event_moment(next_bos[0]) if next_bos else None
 
                 # Only search for pb events between last CTS and next sid's first BOS
                 pb_after = [ev for ev in pb_state_events
                             if int(ev.meta.get("structure_id", -1)) == sid
                             and int(ev.idx) > last_idx   # a LOCATION lower bound: PBs after the last point's extreme
-                            and (next_bos_idx is None or int(ev.idx) < next_bos_idx)]
+                            and (next_bos_confirmed_idx is None or int(ev.idx) < next_bos_confirmed_idx)]
                 if pb_after:
                     latest_pb = max(pb_after, key=lambda e: int(e.idx))
                     pb_idx = int(latest_pb.idx)

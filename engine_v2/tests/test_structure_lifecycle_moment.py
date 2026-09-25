@@ -100,7 +100,7 @@ def _h1_reference_events() -> List[StructureEvent]:
 
 # --- (a) the moment, not the extreme -------------------------------------------
 
-def test_a_cycle_start_is_the_moment_not_the_extreme():
+def test_a_cycle_start_is_the_moment_not_the_anchor():
     # CTS_ESTABLISHED idx 10 / confirmed_at 11; BOS idx 5 / confirmed_at 11.
     # struct_start[0] = the CTS_EST moment 11 (Plan E E3f; was min idx 5); start = max(moment 11, 11) = 11
     life = _life([_bos(5, 0, 0, 11), _cts_est(10, 0, 0, 11)])
@@ -121,7 +121,7 @@ def test_a_floor_still_applies_on_top_of_the_moment():
 
 # --- (b) extreme == moment -> unchanged (SURVIVES the base) ---------------------
 
-def test_b_cycle_start_unchanged_when_extreme_equals_moment():
+def test_b_cycle_start_unchanged_when_anchor_equals_moment():
     # SURVIVES: idx 10 / confirmed_at 10 -> start 10 under both rules.
     life = _life([_bos(5, 0, 0, 10), _cts_est(10, 0, 0, 10)])
     assert life[(0, 0)] == (10, None, None)
@@ -217,7 +217,7 @@ def test_f_h1_reference_window_is_byte_identical_under_the_moment_rule():
 
 # --- the three M15 sub cycles that shift +1 (the plan's stated consequence) --------------
 
-def test_m15_sub_cycle_with_extreme_before_moment_shifts_plus_one():
+def test_m15_sub_cycle_with_anchor_before_moment_shifts_plus_one():
     # Sub 0 of the reference window (FC(0,0), +1, starting 454; Plan B save M15 confluence stream):
     #   CTS_EST idx/confirmed_at: c0 458/458, c1 1020/1020, c2 1223/1224 (!), c3 1721/1721, c4 1793/1793
     #   own reversal @1940. Lifecycle floor = the sub's start_idx 1020 (entity-absolute for readability).

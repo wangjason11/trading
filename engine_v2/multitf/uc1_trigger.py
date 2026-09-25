@@ -61,10 +61,10 @@ def detect_uc1_triggers(
 
         # CTS level index (the extreme candle, not the confirmation candle)
         # cts_ev.idx = confirmation candle; cts_anchor_idx = actual CTS extreme
-        cts_idx = ef.cts_anchor_idx(cts_ev)
+        cts_anchor_idx = ef.cts_anchor_idx(cts_ev)
 
         # The CTS anchor seeds the probe input: it must lie inside the parent frame.
-        if cts_idx not in h1_df.index:
+        if cts_anchor_idx not in h1_df.index:
             continue
 
         trigger = MultiTFTrigger(
@@ -79,7 +79,7 @@ def detect_uc1_triggers(
                 # Informational H1 input (the sweep trigger's `probe_input_idx`,
                 # exported on unresolved rows); the sibling-CTS probe co-sources
                 # its own M15 input and ends at the sweep's `hi`.
-                "probe_input_idx": cts_idx,
+                "probe_input_idx": cts_anchor_idx,
                 # Parent-TF candle where this trigger fires (sd zone-prox).
                 "trigger_event_idx": rec.meta.get("triggered_by_event_idx"),
             },

@@ -61,7 +61,7 @@ def test_single_bos_with_matching_cts_finalized():
     assert t.meta["cts_confirmation_method"] == "pullback"
 
 
-def test_end_idx_is_cts_extreme_not_confirmation_candle():
+def test_probe_end_idx_is_cts_anchor_not_confirmation_candle():
     """Probe end_idx must be the CTS extreme (cts_anchor_idx), which is
     earlier than the confirmation candle (CTS_CONFIRMED.idx). The confirmation
     candle only gates *when* the value is known, not the value itself (§4.3.2).

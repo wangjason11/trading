@@ -84,14 +84,14 @@ def _stub_ad_hoc(monkeypatch):
 
 @pytest.mark.parametrize("shape", SHAPES)
 def test_l1_est_winner_with_lag_feeds_the_anchor_to_the_probe(shape, _stub_ad_hoc):
-    """R1: the reference's `source_event_idx` is the probe input and the pool key.
+    """R1: the reference's `anchor_idx` is the probe input and the pool key.
     An EST winner whose anchor (9) precedes its moment (10) must give 9 — in both
     shapes (invisible on the reference window: no probe used an EST)."""
     zone = rz.build_reference_zone_from_cts_event(
         [_bos(3, 10, shape), _est(9, 10, shape)], [], None, sid=0, probe_direction=-1,
     )
     assert zone.source == "cts_established"
-    assert zone.source_event_idx == 9
+    assert zone.anchor_idx == 9
     assert _stub_ad_hoc == [9]
 
 
@@ -106,7 +106,7 @@ def test_h5_reference_recency_tie_with_a_confirmation(shape, _stub_ad_hoc):
         [_est(9, 10, shape), conf], [], None, sid=0, probe_direction=-1,
     )
     assert zone.source == "cts_confirmed"
-    assert zone.source_event_idx == 9
+    assert zone.anchor_idx == 9
 
 
 @pytest.mark.parametrize("shape", SHAPES)
@@ -121,7 +121,7 @@ def test_reference_window_filters_on_the_moment_since_e3b(shape, _stub_ad_hoc):
     zone = rz.build_reference_zone_from_cts_event(
         [_est(9, 12, shape)], [], None, sid=0, probe_direction=-1, idx_window=(5, 12),
     )
-    assert zone is not None and zone.source_event_idx == 9
+    assert zone is not None and zone.anchor_idx == 9
 
 
 @pytest.mark.parametrize("shape", SHAPES)
@@ -134,4 +134,4 @@ def test_reference_recency_is_the_moment_since_e3b(shape, _stub_ad_hoc):
     zone = rz.build_reference_zone_from_cts_event(
         [_est(9, 12, shape), upd], [], None, sid=0, probe_direction=-1,
     )
-    assert zone.source_event_idx == 9
+    assert zone.anchor_idx == 9

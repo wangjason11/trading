@@ -146,7 +146,7 @@ class ProbeResult:
     finalized `starting_idx` (iter 1 = the reference inner/outer; iter 2+ =
     the ad-hoc BOS_0 at the reset start). MS uses `bos0_inner` as the
     cycle-0 breakout gate so probe and MS gate on the EXACT same number.
-    `cts0_est_idx` is the apply/confirm idx of the located true first
+    `cts0_established_idx` is the apply/confirm idx of the located true first
     breakout — carried as a sanity-assert (MS re-finds it via
     scan-from-start); None when no breakout was found in the window.
     Populated by the deterministic method, and on the Phase-2 path with the
@@ -178,7 +178,7 @@ class ProbeResult:
     notes: str = ""
     bos0_inner: Optional[float] = None
     bos0_outer: Optional[float] = None
-    cts0_est_idx: Optional[int] = None
+    cts0_established_idx: Optional[int] = None
     finalize_idx: Optional[int] = None
 
 
@@ -191,7 +191,7 @@ class _DetResult:
     iterations: int
     bos0_inner: Optional[float]
     bos0_outer: Optional[float]
-    cts0_est_idx: Optional[int]
+    cts0_established_idx: Optional[int]
     finalize_idx: Optional[int]
 
 
@@ -368,7 +368,7 @@ def _run_phase1(
     current_start = int(input_idx)
     bos0_inner = float(reference_zone.inner)   # iter 1 = reference inner (they coincide)
     bos0_outer = float(reference_zone.outer)
-    cts0_est_idx: Optional[int] = None
+    cts0_established_idx: Optional[int] = None
     final_condition: FinalizeCondition = "max_iterations"
     final_status: Literal["finalized", "pending"] = "pending"
     iteration = 0
@@ -382,7 +382,7 @@ def _run_phase1(
 
         if tfb is None:
             # No true first breakout in window.
-            cts0_est_idx = None
+            cts0_established_idx = None
             if probe_end_idx is not None:
                 final_condition = "end_idx_reached"
                 final_status = "finalized"
@@ -391,7 +391,7 @@ def _run_phase1(
                 final_status = "pending"
             break
 
-        cts0_est_idx = int(tfb.est_idx)
+        cts0_established_idx = int(tfb.est_idx)
 
         # Can't bound the retrace without probe_end_idx (Phase 2 picks this up
         # for first_confluence callers).
@@ -443,7 +443,7 @@ def _run_phase1(
         iterations=iteration,
         bos0_inner=bos0_inner,
         bos0_outer=bos0_outer,
-        cts0_est_idx=cts0_est_idx,
+        cts0_established_idx=cts0_established_idx,
         finalize_idx=_finalize_idx,
     )
 
@@ -510,7 +510,7 @@ def _run_phase2(
     current_start = int(starting_idx)
     cur_bos0_inner = float(bos0_inner)
     cur_bos0_outer = float(bos0_outer)
-    cts0_est_idx: Optional[int] = None
+    cts0_established_idx: Optional[int] = None
     final_condition: FinalizeCondition = "max_iterations"
     final_status: Literal["finalized", "pending"] = "pending"
     finalize_idx: Optional[int] = None  # lifecycle-start floor (see ProbeResult)
@@ -565,7 +565,7 @@ def _run_phase2(
         # Reversal before 2 cycles → structure not viable.
         if has_rev and n_cts < 2:
             if cts_est:
-                cts0_est_idx = ef.event_moment(cts_est[0])
+                cts0_established_idx = ef.event_moment(cts_est[0])
             final_condition = "reversal_in_probe"
             final_status = "finalized"
             # finalize idx = the reversal apply candle (the latest signal the
@@ -582,7 +582,7 @@ def _run_phase2(
 
         # No CTS_0 emitted in window (scan mode found no true breakout).
         if n_cts == 0:
-            cts0_est_idx = None
+            cts0_established_idx = None
             if probe_end_idx is not None:
                 final_condition = "end_idx_reached"
                 final_status = "finalized"
@@ -594,7 +594,7 @@ def _run_phase2(
 
         first_cts = cts_est[0]
         first_cycle_id = int(first_cts.meta.get("cycle_id", 0))
-        cts0_est_idx = ef.event_moment(first_cts)
+        cts0_established_idx = ef.event_moment(first_cts)
 
         # Try to find CTS_0_CONFIRMED — if present, bound by its
         # cts_anchor_idx. Else fall back to probe_end_idx.
@@ -604,7 +604,7 @@ def _run_phase2(
 
         # A TIME bound: the retrace window opens after CTS_0 is KNOWN — its
         # moment + 1 (Plan E E3c; Phase 1's `tfb.est_idx + 1` already was).
-        check_lo = cts0_est_idx + 1
+        check_lo = cts0_established_idx + 1
         if cycle_0_conf is not None:
             cts0_anchor_idx = int(
                 ef.cts_anchor_idx(cycle_0_conf)
@@ -673,7 +673,7 @@ def _run_phase2(
         # threshold at the new start (mirrors the deterministic method).
         print(
             f"[unified_probe phase2] reset triggered: iter={iteration} "
-            f"cts0_est={cts0_est_idx} candidate={candidate_idx} "
+            f"cts0_est={cts0_established_idx} candidate={candidate_idx} "
             f"(was {current_start})"
         )
         current_start = int(candidate_idx)
@@ -688,7 +688,7 @@ def _run_phase2(
         iterations=iteration,
         bos0_inner=cur_bos0_inner,
         bos0_outer=cur_bos0_outer,
-        cts0_est_idx=cts0_est_idx,
+        cts0_established_idx=cts0_established_idx,
         finalize_idx=finalize_idx,
     )
 
@@ -784,7 +784,7 @@ def unified_probe(
             f"unified_probe deterministic: start={det.starting_idx} "
             f"direction={direction} iter={det.iterations} "
             f"status={det.status} condition={det.finalize_condition} "
-            f"bos0_inner={det.bos0_inner} cts0_est={det.cts0_est_idx} "
+            f"bos0_inner={det.bos0_inner} cts0_est={det.cts0_established_idx} "
             f"probe_end_idx={probe_end_idx} timeframe={timeframe}"
         )
         return ProbeResult(
@@ -796,7 +796,7 @@ def unified_probe(
             notes=notes,
             bos0_inner=det.bos0_inner,
             bos0_outer=det.bos0_outer,
-            cts0_est_idx=det.cts0_est_idx,
+            cts0_established_idx=det.cts0_established_idx,
             finalize_idx=det.finalize_idx,
         )
 
@@ -816,7 +816,7 @@ def unified_probe(
         f"direction={direction} det_iter={det.iterations} "
         f"det_cond={det.finalize_condition} p2_iter={p2.iterations} "
         f"status={p2.status} condition={p2.finalize_condition} "
-        f"bos0_inner={p2.bos0_inner} cts0_est={p2.cts0_est_idx} "
+        f"bos0_inner={p2.bos0_inner} cts0_est={p2.cts0_established_idx} "
         f"probe_end_idx={probe_end_idx} timeframe={timeframe}"
     )
     return ProbeResult(
@@ -828,6 +828,6 @@ def unified_probe(
         notes=notes,
         bos0_inner=p2.bos0_inner,
         bos0_outer=p2.bos0_outer,
-        cts0_est_idx=p2.cts0_est_idx,
+        cts0_established_idx=p2.cts0_established_idx,
         finalize_idx=p2.finalize_idx,
     )

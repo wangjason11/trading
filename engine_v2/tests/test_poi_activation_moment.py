@@ -14,7 +14,7 @@ on a cycle collapsed at its moment. See `plans/PLAN_D_poi_activation_moment.md`
 moment).
 
 Fixture: the repo's live-MS candles whose cycle-1 CTS anchor (idx 9) precedes
-its moment (confirmed_at 10) — `test_unified_probe._make_second_cts_moment_after_extreme_data`.
+its moment (confirmed_at 10) — `test_unified_probe._make_second_cts_moment_after_anchor_data`.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from engine_v2.tests._event_factory import make_cts_established
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests.test_unified_probe import (
     _make_multicycle_data,
-    _make_second_cts_moment_after_extreme_data,
+    _make_second_cts_moment_after_anchor_data,
     _prepare_df,
 )
 from engine_v2.zones.poi_zones import POIConfig, derive_poi_zones
@@ -90,7 +90,7 @@ def _event(events, etype, sid, cyc):
 
 def test_fixture_preconditions():
     """The cycle-1 CTS anchor (9) precedes its moment (10); one POI (0,1) at IC 7."""
-    _, events, out = _run(_make_second_cts_moment_after_extreme_data())
+    _, events, out = _run(_make_second_cts_moment_after_anchor_data())
     ev = _event(events, "CTS_ESTABLISHED", 0, 1)
     assert (ef.cts_anchor_idx(ev), ev.meta["confirmed_at"]) == (9, 10)
     assert [(z.meta["structure_id"], z.meta["cycle_id"], z.ic_idx)
@@ -102,7 +102,7 @@ def test_fixture_preconditions():
 # ---------------------------------------------------------------------------
 
 def test_poi_first_activation_is_the_cycle_moment_not_the_anchor():
-    _, _, out = _run(_make_second_cts_moment_after_extreme_data())
+    _, _, out = _run(_make_second_cts_moment_after_anchor_data())
     z = _only_poi(out, 0, 1)
     assert [(e["idx"], e["active"], e["reason"]) for e in z.meta["activation_history"]] == [
         (10, True, "initial"), (12, False, "imbalance_filled"),
@@ -120,7 +120,7 @@ def test_poi_first_activation_is_the_cycle_moment_not_the_anchor():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
-    "maker", [_make_second_cts_moment_after_extreme_data, _make_multicycle_data],
+    "maker", [_make_second_cts_moment_after_anchor_data, _make_multicycle_data],
 )
 def test_poi_never_activates_before_its_cycle_lifecycle_start(maker):
     _, events, out = _run(maker())
@@ -151,7 +151,7 @@ def test_poi_first_activation_tracks_confirmed_at_exactly():
             ev.meta["confirmed_at"] = 11
             ev.idx = 11
 
-    _, _, out = _run(_make_second_cts_moment_after_extreme_data(), mutate=move_moment)
+    _, _, out = _run(_make_second_cts_moment_after_anchor_data(), mutate=move_moment)
     z = _only_poi(out, 0, 1)
     assert _hist(z)[0] == (11, True)
     assert z.meta["cts_established_idx"] == 11
@@ -189,7 +189,7 @@ def test_poi_unchanged_when_anchor_equals_moment():
     (11, [(11, True), (12, False)]),    # the floor decides
 ])
 def test_poi_floor_vs_moment(floor, expected):
-    _, _, out = _run(_make_second_cts_moment_after_extreme_data(), lifecycle_floor=floor)
+    _, _, out = _run(_make_second_cts_moment_after_anchor_data(), lifecycle_floor=floor)
     z = _only_poi(out, 0, 1)
     assert _hist(z) == expected
     assert z.meta["cts_established_idx"] == 10
@@ -201,13 +201,13 @@ def test_poi_floor_vs_moment(floor, expected):
 # ---------------------------------------------------------------------------
 
 def test_poi_of_cycle_collapsed_at_its_moment_never_activates():
-    _, _, out = _run(_make_second_cts_moment_after_extreme_data(), lifecycle_cap=10)
+    _, _, out = _run(_make_second_cts_moment_after_anchor_data(), lifecycle_cap=10)
     z = _only_poi(out, 0, 1)
     assert z.meta["activation_history"] == []
     assert z.meta["confirmed_idx"] is None
     assert z.meta["status"] == "inactive"
 
-    _, _, out = _run(_make_second_cts_moment_after_extreme_data(), lifecycle_cap=11)
+    _, _, out = _run(_make_second_cts_moment_after_anchor_data(), lifecycle_cap=11)
     assert _hist(_only_poi(out, 0, 1)) == [(10, True)]
 
 
@@ -216,7 +216,7 @@ def test_poi_of_cycle_collapsed_at_its_moment_never_activates():
 # ---------------------------------------------------------------------------
 
 def test_poi_lookup_reads_confirmed_at_without_fallback(monkeypatch):
-    res, events, out = _run(_make_second_cts_moment_after_extreme_data())
+    res, events, out = _run(_make_second_cts_moment_after_anchor_data())
     stripped = copy.deepcopy(events)
     del _event(stripped, "CTS_ESTABLISHED", 0, 1).meta["confirmed_at"]
     # Stub the upstream assert (compute_cycle_lifecycle) so the lookup's OWN
@@ -231,7 +231,7 @@ def test_poi_lookup_reads_confirmed_at_without_fallback(monkeypatch):
 def test_derive_poi_zones_raises_on_cts_established_without_confirmed_at():
     """Without the stub the struct_start base (Plan E E3f: the first
     CTS_ESTABLISHED moment, read directly) raises first — loudly, as a KeyError."""
-    res, events, out = _run(_make_second_cts_moment_after_extreme_data())
+    res, events, out = _run(_make_second_cts_moment_after_anchor_data())
     stripped = copy.deepcopy(events)
     del _event(stripped, "CTS_ESTABLISHED", 0, 1).meta["confirmed_at"]
     with pytest.raises(KeyError, match="confirmed_at"):
@@ -349,7 +349,7 @@ def test_activation_applies_cts_events_in_moment_order():
 # ---------------------------------------------------------------------------
 
 def test_fallback_cycle_without_cts_established_keeps_fib_anchor():
-    res, events, out = _run(_make_second_cts_moment_after_extreme_data())
+    res, events, out = _run(_make_second_cts_moment_after_anchor_data())
     fib = next(f for f in out["fib_tracker"].get_fibs_for_charting()
                if (f.structure_id, f.cycle_id) == (0, 1))
     without = [e for e in events

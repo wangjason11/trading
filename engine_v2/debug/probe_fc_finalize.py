@@ -173,7 +173,7 @@ for t in trigs:
     rows.append(dict(
         key=key,
         status=t.status,
-        bos_idx_h1=t.input_idx,
+        bos_anchor_h1=t.input_idx,
         tei_h1=t.trigger_event_idx,
         cts_est_h1=cts_est.get(key),
         cts_anchor_h1=t.probe_end_idx,
@@ -199,14 +199,14 @@ for t in trigs:
 up.unified_probe = _orig
 up._make_market_structure = _orig_mms
 
-hdr = ("cycle   st     BOS  tei  CTSest  CTSanch  CTSconf | m15_in  m15_end*  "
+hdr = ("cycle   st   BOSanch  tei  CTSest  CTSanch  CTSconf | m15_in  m15_end*  "
        "LOH(anch) LOH(est) LOH(conf) LOH(tei) | start  finalize  condition            it | n_ms  max_ev  leak")
 print(hdr)
-print("-" * 156)
+print("-" * 158)
 for r in rows:
     print(
         f"{str(r['key']):<7} {str(r['status'])[:4]:<5} "
-        f"{str(r['bos_idx_h1']):>5} {str(r['tei_h1']):>4} {str(r['cts_est_h1']):>6} "
+        f"{str(r['bos_anchor_h1']):>7} {str(r['tei_h1']):>4} {str(r['cts_est_h1']):>6} "
         f"{str(r['cts_anchor_h1']):>8} {str(r['cts_conf_h1']):>8} | "
         f"{str(r['m15_input']):>6} {str(r['m15_end_TODAY']):>8}  "
         f"{str(r['loh_cts_anchor']):>9} {str(r['loh_cts_est']):>8} "

@@ -190,7 +190,7 @@ def _ref_zone_uptrend(outer: float = 0.5500, inner: float = 0.5550) -> Reference
     retraces never reach them (no-retrace finalize path)."""
     return ReferenceZone(
         outer=outer, inner=inner, side="buy",
-        source="cts_established", source_event_idx=0,
+        source="cts_established", anchor_idx=0,
     )
 
 
@@ -201,7 +201,7 @@ def _ref_zone_downtrend(outer: float = 0.8000, inner: float = 0.7950) -> Referen
     far TOP)."""
     return ReferenceZone(
         outer=outer, inner=inner, side="sell",
-        source="cts_established", source_event_idx=0,
+        source="cts_established", anchor_idx=0,
     )
 
 
@@ -209,7 +209,7 @@ def _R(o: float, h: float, l: float, c: float) -> dict:
     return {"o": round(o, 5), "h": round(h, 5), "l": round(l, 5), "c": round(c, 5)}
 
 
-def _make_second_cts_moment_after_extreme_data() -> list[dict]:
+def _make_second_cts_moment_after_anchor_data() -> list[dict]:
     """The 2nd CTS's EXTREME (its anchor `meta["cts_anchor_idx"]` 9) precedes its MOMENT
     (`meta["confirmed_at"]` 10, its `idx` since Plan E E4a) — the natural anchor != moment
     case the Plan B / Plan C
@@ -426,7 +426,7 @@ class TestEvaluateResetConditions:
         # l=0.6011 (no lower wick) → cond1: 0.6011 ≤ 0.6010 + 0.0004 = 0.6014 ✓
         # lower wick: 0.6011 - 0.6011 = 0 ≤ 0.0016 ✓
         ref = ReferenceZone(outer=0.6020, inner=0.6010, side="buy",
-                            source="cts_established", source_event_idx=0)
+                            source="cts_established", anchor_idx=0)
         df = self._one_candle_df(o=0.6011, h=0.6013, l=0.6011, c=0.6013)
         assert _evaluate_reset_conditions(
             df, 0, ref, 1, self.reset_tol, self.wick_cap) is True
@@ -436,7 +436,7 @@ class TestEvaluateResetConditions:
         # ref inner=0.6010, reset_tol=0.0004 → cond1 threshold = 0.6014
         # candle l=0.6020 (far above) → 0.6020 > 0.6014 → cond1 fails
         ref = ReferenceZone(outer=0.6030, inner=0.6010, side="buy",
-                            source="cts_established", source_event_idx=0)
+                            source="cts_established", anchor_idx=0)
         df = self._one_candle_df(o=0.6020, h=0.6025, l=0.6020, c=0.6023)
         assert _evaluate_reset_conditions(
             df, 0, ref, 1, self.reset_tol, self.wick_cap) is False
@@ -452,7 +452,7 @@ class TestEvaluateResetConditions:
         # l=0.6011 → cond1: 0.6011 ≤ 0.6014 ✓
         # lower wick: 0.6028 - 0.6011 = 0.0017 > 0.0016 → cond2 fails ✓
         ref = ReferenceZone(outer=0.6040, inner=0.6010, side="buy",
-                            source="cts_established", source_event_idx=0)
+                            source="cts_established", anchor_idx=0)
         df = self._one_candle_df(o=0.6030, h=0.6032, l=0.6011, c=0.6028)
         assert _evaluate_reset_conditions(
             df, 0, ref, 1, self.reset_tol, self.wick_cap) is False
@@ -461,7 +461,7 @@ class TestEvaluateResetConditions:
         """Both conditions fail → no reset."""
         # Far above inner AND long wick
         ref = ReferenceZone(outer=0.6040, inner=0.6010, side="buy",
-                            source="cts_established", source_event_idx=0)
+                            source="cts_established", anchor_idx=0)
         df = self._one_candle_df(o=0.6035, h=0.6038, l=0.6018, c=0.6032)
         # cond1: 0.6018 ≤ 0.6014 → False; cond2: 0.6032-0.6018=0.0014 ≤ wick_cap → True
         # That actually has cond2 pass... let me make wick long too:
@@ -480,7 +480,7 @@ class TestEvaluateResetConditions:
         # h=0.7998 → cond1: 0.7998 ≥ 0.7996 ✓
         # upper wick: h - body_top = 0.7998 - 0.7998 = 0 ≤ 0.0016 ✓
         ref = ReferenceZone(outer=0.7990, inner=0.8000, side="sell",
-                            source="cts_established", source_event_idx=0)
+                            source="cts_established", anchor_idx=0)
         df = self._one_candle_df(o=0.7998, h=0.7998, l=0.7995, c=0.7996)
         assert _evaluate_reset_conditions(
             df, 0, ref, -1, self.reset_tol, self.wick_cap) is True
@@ -492,7 +492,7 @@ class TestEvaluateResetConditions:
         # h=0.7999 → cond1: 0.7999 ≥ 0.7996 ✓
         # upper wick: 0.7999 - 0.7982 = 0.0017 > 0.0016 → cond2 fails
         ref = ReferenceZone(outer=0.7970, inner=0.8000, side="sell",
-                            source="cts_established", source_event_idx=0)
+                            source="cts_established", anchor_idx=0)
         df = self._one_candle_df(o=0.7980, h=0.7999, l=0.7978, c=0.7982)
         assert _evaluate_reset_conditions(
             df, 0, ref, -1, self.reset_tol, self.wick_cap) is False
@@ -837,7 +837,7 @@ class TestSecondCtsMoment:
     """Plan B §3.3 / §4.3 — `second_cts_reached` finalizes at the 2nd CTS's MOMENT
     (`meta["confirmed_at"]`), not its `.idx` (the extreme inside the pattern span)."""
 
-    def test_returns_the_moment_not_the_extreme(self):
+    def test_returns_the_moment_not_the_anchor(self):
         from engine_v2.structure.unified_probe import _second_cts_moment
         cts_est = [
             make_cts_established(cts_anchor_idx=458, confirmed_at=458, price=0.5,
@@ -896,7 +896,7 @@ class TestPlanCRenames:
     def test_det_result_starting_idx_is_the_only_spelling(self):
         d = _DetResult(
             starting_idx=7, status="pending", finalize_condition="max_iterations",
-            iterations=1, bos0_inner=0.6090, bos0_outer=0.6050, cts0_est_idx=5,
+            iterations=1, bos0_inner=0.6090, bos0_outer=0.6050, cts0_established_idx=5,
             finalize_idx=None,
         )
         assert d.starting_idx == 7
@@ -904,7 +904,7 @@ class TestPlanCRenames:
         with pytest.raises(TypeError):
             _DetResult(
                 start_idx=7, status="pending", finalize_condition="max_iterations",   # type: ignore[call-arg]
-                iterations=1, bos0_inner=0.6090, bos0_outer=0.6050, cts0_est_idx=5,
+                iterations=1, bos0_inner=0.6090, bos0_outer=0.6050, cts0_established_idx=5,
                 finalize_idx=None,
             )
 
@@ -1003,7 +1003,7 @@ class TestFinalizeIdxTable:
         res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx=probe_end_idx, timeframe="H1")
         assert res.status == "finalized"
         assert res.finalize_condition == "no_retrace"
-        assert res.cts0_est_idx == 2
+        assert res.cts0_established_idx == 2
         assert res.iterations == 1
         assert res.finalize_idx == probe_end_idx
         assert res.starting_idx == 0
@@ -1017,7 +1017,7 @@ class TestFinalizeIdxTable:
         res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx=probe_end_idx, timeframe="H1")
         assert res.status == "finalized"
         assert res.finalize_condition == "end_idx_reached"
-        assert res.cts0_est_idx is None
+        assert res.cts0_established_idx is None
         assert res.finalize_idx == probe_end_idx
         assert res.starting_idx == 0
 
@@ -1028,7 +1028,7 @@ class TestFinalizeIdxTable:
         res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx=20, timeframe="H1")
         assert res.status == "finalized"
         assert res.finalize_condition == "end_idx_reached"
-        assert res.cts0_est_idx is None
+        assert res.cts0_established_idx is None
         assert res.finalize_idx == 20
 
     # --- Phase 2 (enable_phase2=True: the MS-based path) ----------------------------
@@ -1051,12 +1051,12 @@ class TestFinalizeIdxTable:
         assert res.finalize_idx == int(cts_est[1].meta["confirmed_at"]) == 10
         assert res.starting_idx == 0
 
-    def test_phase2_second_cts_reached_is_the_moment_not_the_extreme(self, monkeypatch):
-        # `_make_second_cts_moment_after_extreme_data`: the 2nd CTS has anchor 9 (its extreme,
+    def test_phase2_second_cts_reached_is_the_moment_not_the_anchor(self, monkeypatch):
+        # `_make_second_cts_moment_after_anchor_data`: the 2nd CTS has anchor 9 (its extreme,
         # h9 .6147) but confirmed_at 10 (the OMO apply candle). finalize = 10, NOT 9.
         # The reversal at 14 does not make this `reversal_in_probe`: n_cts = 2 at the exit.
         retained = _retain_phase2_ms(monkeypatch)
-        df = _prepare_df(_make_second_cts_moment_after_extreme_data())
+        df = _prepare_df(_make_second_cts_moment_after_anchor_data())
         res = unified_probe(df, 0, 1, _ref_zone_uptrend(), 17, "H1", enable_phase2=True)
         assert res.status == "finalized"
         assert res.finalize_condition == "second_cts_reached"
@@ -1092,7 +1092,7 @@ class TestFinalizeIdxTable:
         rev_rows = ms.df.index[ms.df["market_state"].astype(str).str.lower() == "reversal"]
         assert int(rev_rows.min()) == 10
         assert res.finalize_idx == int(rev_rows.min()) == 10
-        assert res.cts0_est_idx == 2
+        assert res.cts0_established_idx == 2
         assert res.starting_idx == 0
 
     @pytest.mark.parametrize("probe_end_idx", [8, 9])
@@ -1127,7 +1127,7 @@ class TestFinalizeIdxTable:
         types = [e.type for e in retained[-1].events]
         assert types.count("CTS_ESTABLISHED") == 1
         assert "CTS_CONFIRMED" not in types
-        assert res.cts0_est_idx == 2
+        assert res.cts0_established_idx == 2
         assert res.finalize_idx == probe_end_idx
         assert res.starting_idx == 0
 
@@ -1143,7 +1143,7 @@ class TestFinalizeIdxTable:
         assert not any(e.type == "CTS_ESTABLISHED" for e in retained[-1].events)
         assert res.status == "finalized"
         assert res.finalize_condition == "end_idx_reached"
-        assert res.cts0_est_idx is None
+        assert res.cts0_established_idx is None
         assert res.finalize_idx == probe_end_idx
         assert res.starting_idx == 0
 
@@ -1156,7 +1156,7 @@ class TestFinalizeIdxTable:
         res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx=None, timeframe="H1")
         assert res.status == "pending"
         assert res.finalize_condition == "no_cts_pending"
-        assert res.cts0_est_idx is None
+        assert res.cts0_established_idx is None
         assert res.finalize_idx is None
 
     def test_phase1_one_cts_pending_is_none(self):
@@ -1166,7 +1166,7 @@ class TestFinalizeIdxTable:
         res = unified_probe(df, 0, 1, _ref_zone_uptrend(), probe_end_idx=None, timeframe="H1")
         assert res.status == "pending"
         assert res.finalize_condition == "one_cts_pending"
-        assert res.cts0_est_idx == 2
+        assert res.cts0_established_idx == 2
         assert res.finalize_idx is None
 
     def test_phase1_max_iterations_is_none(self):
@@ -1178,12 +1178,12 @@ class TestFinalizeIdxTable:
         # finalize None; `starting_idx` = the reset start 7.
         df = _prepare_df(_make_multicycle_data())
         ref = ReferenceZone(outer=0.6050, inner=0.6090, side="buy",
-                            source="cts_established", source_event_idx=0)
+                            source="cts_established", anchor_idx=0)
         res = unified_probe(df, 0, 1, ref, probe_end_idx=9, timeframe="H1", max_iterations=1)
         assert res.status == "pending"
         assert res.finalize_condition == "max_iterations"
         assert res.iterations == 1
-        assert res.cts0_est_idx == 5
+        assert res.cts0_established_idx == 5
         assert res.starting_idx == 7
         assert res.finalize_idx is None
 
@@ -1211,7 +1211,7 @@ class TestFinalizeIdxTable:
         assert "CTS_CONFIRMED" not in types
         assert res.status == "pending"
         assert res.finalize_condition == "one_cts_pending"
-        assert res.cts0_est_idx == 2
+        assert res.cts0_established_idx == 2
         assert res.finalize_idx is None
 
 
@@ -1234,7 +1234,7 @@ def test_phase2_retrace_window_opens_after_the_first_cts_moment(monkeypatch):
     monkeypatch.setattr(up, "_select_extreme_retrace_candidate",
                         lambda d, lo, hi, direction: seen.append((lo, hi)) or None)
     ref = ReferenceZone(outer=0.5980, inner=0.5990, side="buy",
-                        source="cts_confirmed", source_event_idx=0)
+                        source="cts_confirmed", anchor_idx=0)
     res = up._run_phase2(df, 0, 0.5990, 0.5980, 1, ref, 20, 0.0, 0.0, max_iterations=2)
     assert seen == [(13, 20)]
     assert res.finalize_condition == "no_retrace"

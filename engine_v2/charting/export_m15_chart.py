@@ -454,7 +454,7 @@ def _make_sub_phase_fns(eid: int, sub_dir: int, sub_start: Optional[int],
 
 
 def _replacement_break_point(
-    sid_rec, sub_records, anchors_by_sub, lt_df, last_pt_idx: int, ext_end_idx: int,
+    sid_rec, sub_records, anchors_by_sub, lt_df, last_pt_idx: int, extend_to_idx: int,
 ):
     """The extra structural point a REPLACED sub's final segment runs through
     (chart review 2026-09-22b), or None.
@@ -483,7 +483,7 @@ def _replacement_break_point(
     The replacing sub comes from the record that ended this sub
     (`TriggerRecord.ended_by_sub_id`; same lens by construction — a counter
     record never ends a confluence one) and its anchor from `anchors_by_sub`.
-    Returns `(idx, price)` strictly inside `(last_pt_idx, ext_end_idx)`, else
+    Returns `(idx, price)` strictly inside `(last_pt_idx, extend_to_idx)`, else
     None."""
     if (getattr(sid_rec, "end_reason", None) or "") != "same_dir_replacement":
         return None
@@ -505,7 +505,7 @@ def _replacement_break_point(
         return None
 
     lo = int(last_pt_idx) + 1
-    hi = min(int(anchor), int(ext_end_idx))
+    hi = min(int(anchor), int(extend_to_idx))
     if hi < lo:
         return None
     col = COL_H if int(sid_rec.starting_sd) == -1 else COL_L
@@ -516,7 +516,7 @@ def _replacement_break_point(
         price = float(lt_df.iloc[i][col])
         if best_price is None or (price > best_price if col == COL_H else price < best_price):
             best_idx, best_price = i, price
-    if best_idx is None or not (int(last_pt_idx) < best_idx < int(ext_end_idx)):
+    if best_idx is None or not (int(last_pt_idx) < best_idx < int(extend_to_idx)):
         return None
     return best_idx, best_price
 
@@ -616,12 +616,12 @@ def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned
             )
             # The PB search's upper bound is a TIME: the next sid's first BOS MOMENT
             # (Plan E E3g-3, PLAN_E §7.1 T4).
-            next_bos_idx = ef.event_moment(next_bos_evs[0]) if next_bos_evs else None
+            next_bos_confirmed_idx = ef.event_moment(next_bos_evs[0]) if next_bos_evs else None
 
             pb_after = [e for e in pb_events
                         if int(e.meta.get("structure_id", -1)) == sid
                         and int(e.idx) > last_slice_idx   # a LOCATION lower bound: PBs after the last point's extreme
-                        and (next_bos_idx is None or int(e.idx) < next_bos_idx)
+                        and (next_bos_confirmed_idx is None or int(e.idx) < next_bos_confirmed_idx)
                         and owned_here(e.idx)]
             if pb_after:
                 latest_pb = max(pb_after, key=lambda e: int(e.idx))
@@ -2112,11 +2112,11 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 )
                 # The PB search's upper bound is a TIME: the next sid's first BOS MOMENT
                 # (Plan E E3g-3, PLAN_E §7.1 T4).
-                next_bos_idx = ef.event_moment(next_bos[0]) if next_bos else None
+                next_bos_confirmed_idx = ef.event_moment(next_bos[0]) if next_bos else None
                 pb_after = [e for e in pb_state
                             if int(e.meta.get("structure_id", -1)) == sid
                             and int(e.idx) > last_idx   # a LOCATION lower bound: PBs after the last point's extreme
-                            and (next_bos_idx is None or int(e.idx) < next_bos_idx)]
+                            and (next_bos_confirmed_idx is None or int(e.idx) < next_bos_confirmed_idx)]
                 if pb_after:
                     latest_pb = max(pb_after, key=lambda e: int(e.idx))
                     m15_t = _h1_idx_to_m15_time(latest_pb.idx)

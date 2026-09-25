@@ -15,7 +15,7 @@ event at its MOMENT, and the downstream pipeline does not depend on what
    address). (The write-only KL meta `source_event_idx`, the third one on a BOS
    swap, was deleted in Plan E E4b-pre — the KL output is now compared whole.)
 
-Fixtures: `_make_second_cts_moment_after_extreme_data` (EST (9, 10); BOS (0, 2),
+Fixtures: `_make_second_cts_moment_after_anchor_data` (EST (9, 10); BOS (0, 2),
 (7, 10)) and `_make_multicycle_data` (4 lagging BOS, no lagging EST — PLAN_E §6.4
 said 3; measured 2026-09-24), in both fib modes. History: E2b made the EST half
 of the (then forward) simulation pass, E2c the BOS half; E4a / E4b turned each
@@ -34,7 +34,7 @@ from engine_v2.structure import event_fields as ef
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests.test_unified_probe import (
     _make_multicycle_data,
-    _make_second_cts_moment_after_extreme_data,
+    _make_second_cts_moment_after_anchor_data,
     _prepare_df,
 )
 
@@ -66,7 +66,7 @@ def _run(df, events, mode):
         return _run_downstream_pipeline(df, events, +1, fib_mode=mode, skip_wvmi=False)
 
 
-_SECOND = _make_second_cts_moment_after_extreme_data
+_SECOND = _make_second_cts_moment_after_anchor_data
 _MULTI = _make_multicycle_data
 
 

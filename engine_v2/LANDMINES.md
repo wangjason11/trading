@@ -2328,7 +2328,7 @@ now `TriggerRecord`s.
 `(parent_path, sub_tf, direction, initial_input_idx)` with `initial_input_idx`
 ENTITY-ABSOLUTE for EVERY probe — the FC probe's price-mapped BOS extreme
 (`_probe_with_cache`, `multitf/entity_df_mutation.py`), a sibling type's
-`ref_zone.source_event_idx` (same wrapper), AND the reversal handoff's input
+`ref_zone.anchor_idx` (same wrapper), AND the reversal handoff's input
 (`_resolve_reversal_start`: the probe runs slice-local on the reversing sub's
 `bounded.df`, but the cache is read/written with `input_abs = probe_input_local +
 slice_begin` and the cached `starting_idx` / `finalize_idx` are shifted the same
@@ -2351,9 +2351,9 @@ compared against it and logged two spurious `REF-ZONE DIFFERS`; cold review
 predicted ZERO hits on the reference window. But a reversal handoff probe and
 an H1 trigger can resolve the SAME input candle in the same direction: the
 handoff's input is the reversing sub's most recent qualifying CTS extreme
-(`build_reference_zone_from_cts_event(...).source_event_idx`), and on this
+(`build_reference_zone_from_cts_event(...).anchor_idx`), and on this
 window that candle coincided with the FC probe's price-mapped parent BOS
-extreme (2365) and with two sibling reads' `source_event_idx` (2609, 4000).
+extreme (2365) and with two sibling reads' `anchor_idx` (2609, 4000).
 Once the reversal key was made entity-absolute (it must be — the pool is
 shared across subs), the two probes share the entry, and whichever ran first
 in sweep order owns it.

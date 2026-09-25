@@ -9,7 +9,7 @@ What is pinned:
   * the reference is the reversing structure's (sid=0) most recent CTS, read
     from the sub's OWN events with `kl_zones=[]` (§5.1 note / §17.8);
   * the probe cache key is ENTITY-ABSOLUTE — `(parent_path, "M15",
-    probe_direction, input_abs = source_event_idx + slice_begin)` (§5.3; the
+    probe_direction, input_abs = anchor_idx + slice_begin)` (§5.3; the
     pool is shared across subs, so a slice-local key would collide) — and the
     entry stores the probe's OWN bound `probe_end_idx = R` and the reference
     inner it ran against;
@@ -194,12 +194,12 @@ def _expected_reference(sub):
 
 def _expected_local_probe(sub, R):
     """The slice-local probe the resolver must run: Phase-1 only, input = the
-    reference's `source_event_idx` (local), bound = `R - slice_begin`."""
+    reference's `anchor_idx` (local), bound = `R - slice_begin`."""
     bounded, slice_begin = sub.geometry
     rz = _expected_reference(sub)
     return rz, up_mod.unified_probe(
         bounded.df,
-        input_idx=int(rz.source_event_idx),
+        input_idx=int(rz.anchor_idx),
         direction=_PROBE_DIR,
         reference_zone=rz,
         probe_end_idx=int(R) - int(slice_begin),
@@ -242,7 +242,7 @@ def test_happy_path_shifts_every_idx_by_slice_begin(built):
     # slice-local, then shift.
     rz, local = _expected_local_probe(sub, R)
     assert local.status == "finalized"
-    expected_input_abs = int(rz.source_event_idx) + slice_begin
+    expected_input_abs = int(rz.anchor_idx) + slice_begin
 
     res = _resolve(pool, sub, R, df)
 
@@ -261,7 +261,7 @@ def test_happy_path_shifts_every_idx_by_slice_begin(built):
     # 20 candles too early on every field.
     assert res.starting_idx != int(local.starting_idx)
     assert res.finalize_idx != int(local.finalize_idx)
-    assert res.probe_input_idx != int(rz.source_event_idx)
+    assert res.probe_input_idx != int(rz.anchor_idx)
     # Entity-absolute: inside the entity frame and never before the slice.
     for v in (res.starting_idx, res.finalize_idx, res.probe_input_idx):
         assert slice_begin <= v < len(df)
@@ -278,7 +278,7 @@ def test_happy_path_shifts_every_idx_by_slice_begin(built):
 def test_reference_is_the_sub_own_most_recent_cts(built):
     """The reference the resolver ran against is derivable from the sub's OWN
     events alone (sid=0, kl_zones=[]): its inner is what the cache stores as
-    `ref_inner`, and its `source_event_idx` (+ slice_begin) is the input."""
+    `ref_inner`, and its `anchor_idx` (+ slice_begin) is the input."""
     pool, sub, df = built
     bounded, slice_begin = sub.geometry
     R = sub.natural_reversal_idx
@@ -293,7 +293,7 @@ def test_reference_is_the_sub_own_most_recent_cts(built):
     winner = max(cts, key=lambda e: (int(e.idx), {"CTS_CONFIRMED": 2, "CTS_UPDATED": 1,
                                                   "CTS_ESTABLISHED": 0}[e.type]))
     extreme = ef.cts_anchor_idx(winner)
-    assert int(rz.source_event_idx) == extreme
+    assert int(rz.anchor_idx) == extreme
     # Probe direction -1 → the reference sits ABOVE the body: inner < outer.
     assert rz.inner < rz.outer and rz.side == "sell"
 
@@ -314,7 +314,7 @@ def test_cache_entry_is_written_under_entity_absolute_key(built):
     bounded, slice_begin = sub.geometry
     R = sub.natural_reversal_idx
     rz, local = _expected_local_probe(sub, R)
-    input_local = int(rz.source_event_idx)
+    input_local = int(rz.anchor_idx)
     input_abs = input_local + slice_begin
 
     assert pool.get_cached_probe(_PARENT, _TF, _PROBE_DIR, input_abs) is None
@@ -379,7 +379,7 @@ def test_seeded_cache_entry_is_returned_verbatim(built, bound_delta):
     bounded, slice_begin = sub.geometry
     R = sub.natural_reversal_idx
     rz = _expected_reference(sub)
-    input_abs = int(rz.source_event_idx) + slice_begin
+    input_abs = int(rz.anchor_idx) + slice_begin
 
     sentinel = ProbeCacheEntry(
         starting_idx=999, finalize_idx=998, finalize_condition="end_idx_reached",
@@ -409,7 +409,7 @@ def test_seeded_entry_under_slice_local_key_is_not_a_hit(built):
     bounded, slice_begin = sub.geometry
     R = sub.natural_reversal_idx
     rz = _expected_reference(sub)
-    input_local = int(rz.source_event_idx)
+    input_local = int(rz.anchor_idx)
     decoy = ProbeCacheEntry(
         starting_idx=999, finalize_idx=998, finalize_condition="end_idx_reached",
         bos0_inner=0.5, probe_end_idx=R, ref_inner=float(rz.inner),
@@ -443,7 +443,7 @@ def test_wrong_reversal_idx_is_an_assertion(built, delta):
     rz = _expected_reference(sub)
     _, slice_begin = sub.geometry
     assert pool.get_cached_probe(_PARENT, _TF, _PROBE_DIR,
-                                 int(rz.source_event_idx) + slice_begin) is None
+                                 int(rz.anchor_idx) + slice_begin) is None
 
 
 def test_sub_without_geometry_is_an_assertion(built):
@@ -535,7 +535,7 @@ def test_input_at_or_past_reversal_is_a_probe_failure(built):
     pool, sub, df = built
     bounded, slice_begin = sub.geometry
     rz = _expected_reference(sub)
-    input_local = int(rz.source_event_idx)
+    input_local = int(rz.anchor_idx)
     # Spoof the geometry's reversal onto the input candle: R' = input_abs.
     fake_rev_local = input_local
     R_prime = fake_rev_local + slice_begin
@@ -563,13 +563,13 @@ def test_pending_probe_is_a_probe_failure_and_writes_no_cache(built):
     bounded, slice_begin = sub.geometry
     R = sub.natural_reversal_idx
     rz = _expected_reference(sub)
-    input_abs = int(rz.source_event_idx) + slice_begin
+    input_abs = int(rz.anchor_idx) + slice_begin
 
     def pending(df_, input_idx, direction, reference_zone, probe_end_idx, timeframe, **kw):
         # The resolver must call the probe SLICE-LOCAL: on bounded.df with the
         # local input and the local bound, in the successor's direction.
         assert df_ is bounded.df
-        assert input_idx == int(rz.source_event_idx)
+        assert input_idx == int(rz.anchor_idx)
         assert probe_end_idx == R - slice_begin
         assert direction == _PROBE_DIR
         assert timeframe == _TF

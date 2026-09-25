@@ -446,7 +446,7 @@ def _build_sibling_cts_ref_zone_from_pool(
       "`ref=cts_confirmed` in a Replay Log Does NOT Mean…"). `df` = the shared
       entity-absolute M15 frame (the winner's own `bounded.df` is slice-local).
 
-    The returned zone's `source_event_idx` is the sibling CTS extreme
+    The returned zone's `anchor_idx` is the sibling CTS extreme
     (entity-absolute) — the caller uses it as BOTH the probe `input_idx` AND
     the reference zone (co-sourced). Returns None when no qualifying CTS exists
     in the window (caller → own-entity ad-hoc fallback).
@@ -626,7 +626,7 @@ def _resolve_first_confluence_via_unified_probe(
         print(f"[entity_compute] WARNING: missing probe_input_idx/probe_end_idx in trigger meta for {label}")
         return ProbeFailure("missing probe_input_idx/probe_end_idx", None)
     parent_bos_anchor_idx = int(raw_input)
-    parent_end_idx = int(raw_end)
+    parent_cts_anchor_idx = int(raw_end)
     if parent_bos_anchor_idx not in parent_df.index:
         print(f"[entity_compute] WARNING: probe_input_idx={parent_bos_anchor_idx} out of parent_df bounds for {label}")
         return ProbeFailure(f"probe_input_idx {parent_bos_anchor_idx} out of parent bounds", None)
@@ -647,20 +647,20 @@ def _resolve_first_confluence_via_unified_probe(
     if m15_input_idx is None:
         print(f"[entity_compute] WARNING: parent→M15 input mapping failed for {label}")
         return ProbeFailure("parent→M15 input mapping failed", parent_bos_anchor_idx)
-    if parent_end_idx not in parent_df.index:
-        print(f"[entity_compute] WARNING: probe_end_idx={parent_end_idx} out of parent_df bounds for {label}")
-        return ProbeFailure(f"probe_end_idx {parent_end_idx} out of parent bounds", parent_bos_anchor_idx)
-    parent_cts_time = pd.to_datetime(parent_df.loc[parent_end_idx, "time"], utc=True)
-    m15_end_idx = map_candle_to_lower_tf(parent_cts_time, trigger.lower_sd, m15_df)
-    if m15_end_idx is None:
+    if parent_cts_anchor_idx not in parent_df.index:
+        print(f"[entity_compute] WARNING: probe_end_idx={parent_cts_anchor_idx} out of parent_df bounds for {label}")
+        return ProbeFailure(f"probe_end_idx {parent_cts_anchor_idx} out of parent bounds", parent_bos_anchor_idx)
+    parent_cts_anchor_time = pd.to_datetime(parent_df.loc[parent_cts_anchor_idx, "time"], utc=True)
+    m15_probe_end_idx = map_candle_to_lower_tf(parent_cts_anchor_time, trigger.lower_sd, m15_df)
+    if m15_probe_end_idx is None:
         print(f"[entity_compute] WARNING: parent→M15 end mapping failed for {label}")
         return ProbeFailure("parent→M15 end mapping failed", parent_bos_anchor_idx)
-    if m15_end_idx <= m15_input_idx:
+    if m15_probe_end_idx <= m15_input_idx:
         print(
             f"[entity_compute] WARNING: degenerate probe window for {label} "
-            f"(m15_input={m15_input_idx} m15_end={m15_end_idx})"
+            f"(m15_input={m15_input_idx} m15_end={m15_probe_end_idx})"
         )
-        return ProbeFailure(f"degenerate probe window ({m15_input_idx} >= {m15_end_idx})", int(m15_input_idx))
+        return ProbeFailure(f"degenerate probe window ({m15_input_idx} >= {m15_probe_end_idx})", int(m15_input_idx))
 
     ref_zone = _build_first_confluence_ref_zone(m15_df, int(m15_input_idx), int(trigger.lower_sd))
     if ref_zone is None:
@@ -670,7 +670,7 @@ def _resolve_first_confluence_via_unified_probe(
     starting_idx, finalize_idx, cond, bos0_inner, status, cache_hit = _probe_with_cache(
         pool, m15_df=m15_df, parent_path=parent_path, sub_tf=trigger.lower_tf,
         direction=int(trigger.lower_sd), input_idx=int(m15_input_idx),
-        reference_zone=ref_zone, probe_end_idx=int(m15_end_idx),
+        reference_zone=ref_zone, probe_end_idx=int(m15_probe_end_idx),
         enable_phase2=True, timeframe=trigger.lower_tf, label=label,
     )
     if status == "pending":
@@ -776,7 +776,7 @@ def _resolve_sibling_cts_via_unified_probe(
     hi = int(hi)
 
     # 1. Sibling-CTS reference zone within the per-variation M15 window. Its
-    #    `source_event_idx` IS the probe input_idx (co-sourced).
+    #    `anchor_idx` IS the probe input_idx (co-sourced).
     idx_window = _sibling_cts_idx_window(trigger, parent_df, m15_df, hi)
     ref_zone = _build_sibling_cts_ref_zone_from_pool(
         pool, other_lens, int(trigger.parent_sid), int(trigger.parent_cycle_id),
@@ -786,9 +786,9 @@ def _resolve_sibling_cts_via_unified_probe(
         # Fallback (PART4 §4.3.4 step 5) — the sibling has no qualifying CTS in
         # the window. Anchor on the OWN frame: input = window extreme on the
         # `-lower_sd` side, reference = own ad-hoc BOS_0 from that candle.
-        fb_idx = _window_extreme_idx(m15_df, idx_window[0], idx_window[1], -int(trigger.lower_sd))
-        if fb_idx is not None:
-            ref_zone = _build_first_confluence_ref_zone(m15_df, int(fb_idx), int(trigger.lower_sd))
+        fallback_anchor_idx = _window_extreme_idx(m15_df, idx_window[0], idx_window[1], -int(trigger.lower_sd))
+        if fallback_anchor_idx is not None:
+            ref_zone = _build_first_confluence_ref_zone(m15_df, int(fallback_anchor_idx), int(trigger.lower_sd))
         if ref_zone is None:
             print(
                 f"[entity_compute] WARNING: sibling-CTS reference zone AND ad-hoc fallback "
@@ -797,10 +797,10 @@ def _resolve_sibling_cts_via_unified_probe(
             return ProbeFailure("sibling-CTS reference zone and ad-hoc fallback unavailable", None)
         print(
             f"[entity_compute] sibling-CTS unavailable for {label} window={idx_window} "
-            f"— using ad-hoc BOS_0 fallback at {fb_idx}"
+            f"— using ad-hoc BOS_0 fallback at {fallback_anchor_idx}"
         )
 
-    m15_input_idx = int(ref_zone.source_event_idx)
+    m15_input_idx = int(ref_zone.anchor_idx)
     if m15_input_idx >= hi:
         print(
             f"[entity_compute] WARNING: degenerate sibling-CTS probe window for {label} "
@@ -915,7 +915,7 @@ def _resolve_reversal_start(
             f"no CTS event for the reversing structure; no successor"
         )
         return ProbeFailure("reversal reference zone unavailable (no CTS event)", None)
-    probe_input_local = int(ref_zone.source_event_idx)
+    probe_input_local = int(ref_zone.anchor_idx)
     if probe_input_local >= reversal_end_local:
         print(
             f"[entity_compute] WARNING: degenerate reversal probe window for {label} "

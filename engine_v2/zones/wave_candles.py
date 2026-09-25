@@ -621,11 +621,11 @@ def compute_wave_candle_visibility(
                 # `CTS_n CONFIRMED` fired below the floor (the chain-clamp
                 # case) would slip past the `start >= end` collapse check
                 # and wrongly render an LP.
-                raw_cts = cts_confirmed_by_key.get((sid, cycle))
-                if raw_cts is None:
+                raw_cts_confirmed_idx = cts_confirmed_by_key.get((sid, cycle))
+                if raw_cts_confirmed_idx is None:
                     start = None
                 else:
-                    start = max(int(raw_cts), int(cstart)) if cstart is not None else int(raw_cts)
+                    start = max(int(raw_cts_confirmed_idx), int(cstart)) if cstart is not None else int(raw_cts_confirmed_idx)
             if start is None:
                 out[(sid, cycle, role)] = (False, False)
                 continue

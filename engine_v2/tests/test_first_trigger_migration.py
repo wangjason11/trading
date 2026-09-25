@@ -223,12 +223,12 @@ def _make_trigger(
 
 
 def _ref_zone(
-    source: str = "ad_hoc_bos_0", source_event_idx: int = 0,
+    source: str = "ad_hoc_bos_0", anchor_idx: int = 0,
     inner: float = 0.6020, outer: float = 0.6010, side: str = "buy",
 ) -> ReferenceZone:
     return ReferenceZone(
         outer=outer, inner=inner, side=side,  # type: ignore[arg-type]
-        source=source, source_event_idx=source_event_idx,  # type: ignore[arg-type]
+        source=source, anchor_idx=anchor_idx,  # type: ignore[arg-type]
     )
 
 
@@ -512,7 +512,7 @@ class TestResolveSiblingCts:
         return h1, m15
 
     # --- (1) first_counter reads the confluence lens -------------------------
-    def test_first_counter_reads_confluence_lens_record_extreme(self):
+    def test_first_counter_reads_confluence_lens_record_anchor(self):
         h1, m15 = self._fixtures()
         pool = SubStructurePool()
         # Confluence-lens sibling: +1 sub (= -probe_direction for a -1 probe),
@@ -545,7 +545,7 @@ class TestResolveSiblingCts:
         assert kw["enable_phase2"] is False          # sibling path = Phase 1 only
         assert kw["input_idx"] == 6                  # winning CTS extreme, entity-absolute
         assert kw["reference_zone"].source == "cts_confirmed"
-        assert kw["reference_zone"].source_event_idx == 6
+        assert kw["reference_zone"].anchor_idx == 6
         assert kw["probe_end_idx"] == hi
         assert isinstance(res, ResolvedStart)
         assert res.starting_idx == 12
@@ -644,7 +644,7 @@ class TestResolveSiblingCts:
             )
         kw = _probe_kwargs(mock_probe)
         assert kw["input_idx"] == 3850
-        assert kw["reference_zone"].source_event_idx == 3850
+        assert kw["reference_zone"].anchor_idx == 3850
         assert kw["direction"] == 1
         assert kw["probe_end_idx"] == 4083
         assert isinstance(res, ResolvedStart)
@@ -716,7 +716,7 @@ class TestResolveSiblingCts:
         ) is None
         # Resolver: fallback = own-frame window extreme on the -lower_sd = +1
         # side over [0, 23] → highest high = idx 20 (verified on the fixture),
-        # then the ad-hoc BOS_0 at that candle (patched) with source_event_idx 6.
+        # then the ad-hoc BOS_0 at that candle (patched) with anchor_idx 6.
         fb_ref = _ref_zone("ad_hoc_bos_0", 6, inner=0.6020, outer=0.6010, side="sell")
         fake = _fake_probe_result(starting_idx=9, source="ad_hoc_bos_0", finalize_idx=hi)
         with _patched_fc_ref(fb_ref) as mock_fb, _patched_probe(return_value=fake) as mock_probe:
@@ -729,7 +729,7 @@ class TestResolveSiblingCts:
         assert bound["probe_direction"] == -1
         kw = _probe_kwargs(mock_probe)
         assert kw["reference_zone"].source == "ad_hoc_bos_0"
-        assert kw["input_idx"] == 6                  # fallback ref's source_event_idx
+        assert kw["input_idx"] == 6                  # fallback ref's anchor_idx
         assert kw["probe_end_idx"] == hi
         assert isinstance(res, ResolvedStart)
         assert res.starting_idx == 9
@@ -754,7 +754,7 @@ class TestResolveSiblingCts:
         h1, m15 = self._fixtures()
         pool = SubStructurePool()
         # CTS_CONFIRMED at entity 23 (== hi, inside the window) with its anchor
-        # AT 23 → ref builds with source_event_idx 23, but 23 >= hi 23 → no
+        # AT 23 → ref builds with anchor_idx 23, but 23 >= hi 23 → no
         # forward scan window.
         sib = _stub_sub(pool, direction=1, starting_idx=4, slice_begin=0,
                         events=[_cts_event("CTS_CONFIRMED", 23, 23)])
@@ -788,7 +788,7 @@ class TestResolveSiblingCts:
             ref = _build_sibling_cts_ref_zone_from_pool(
                 pool, "confluence", 0, 2, -1, (0, 23), m15,
             )
-        assert ref is not None and ref.source_event_idx == 6
+        assert ref is not None and ref.anchor_idx == 6
         mock_prim.assert_called_once()
         bound = _PRIMITIVE_SIG.bind(*mock_prim.call_args.args, **mock_prim.call_args.kwargs).arguments
         assert bound["kl_zones"] == []               # §5.1: the CONFIRMED-zone branch is dead for subs
@@ -833,8 +833,8 @@ class TestResolveSiblingCts:
             ref_plus_probe = _build_sibling_cts_ref_zone_from_pool(
                 pool, "confluence", 0, 2, 1, (0, 23), m15,
             )
-        assert ref_minus_probe is not None and ref_minus_probe.source_event_idx == 6
-        assert ref_plus_probe is not None and ref_plus_probe.source_event_idx == 14
+        assert ref_minus_probe is not None and ref_minus_probe.anchor_idx == 6
+        assert ref_plus_probe is not None and ref_plus_probe.anchor_idx == 14
 
     # --- (12) the probe bound is the PASSED hi, not the trigger's meta ------
     def test_probe_end_is_the_passed_hi(self):
@@ -1275,7 +1275,7 @@ class TestSiblingClipOnTheMoment:
         with _patched_cts_derivation():
             zone = _build_sibling_cts_ref_zone_from_pool(
                 self._pool(), "confluence", 0, 2, -1, (5, 26), None)
-        assert zone is not None and zone.source_event_idx == 20
+        assert zone is not None and zone.anchor_idx == 20
 
     def test_record_window_clips_on_the_moment(self):
         """The record's own window ends at 24 (replaced there); the read window
@@ -1310,4 +1310,4 @@ class TestSiblingClipOnTheMoment:
              trigger_idx=3, start_idx=5, seq=0)
         with _patched_cts_derivation():
             zone = _build_sibling_cts_ref_zone_from_pool(pool, "confluence", 0, 2, -1, (5, 30), None)
-        assert zone is not None and zone.source_event_idx == 20   # anchor 17 + slice_begin 3
+        assert zone is not None and zone.anchor_idx == 20   # anchor 17 + slice_begin 3

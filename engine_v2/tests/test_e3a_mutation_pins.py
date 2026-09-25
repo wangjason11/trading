@@ -420,7 +420,7 @@ def test_e3ap_ms_refresh_snapshot_horizon_is_the_cycle_established_moment(monkey
     horizon: on the lagging-EST fixture (anchor 9, moment 10) every cycle-1
     refresh carries 10."""
     import engine_v2.structure.structure_engine as se
-    from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_extreme_data, _prepare_df
+    from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_anchor_data, _prepare_df
     calls = []
     real = se.compute_poi_inners_for_cycle
 
@@ -430,7 +430,7 @@ def test_e3ap_ms_refresh_snapshot_horizon_is_the_cycle_established_moment(monkey
 
     monkeypatch.setattr(se, "compute_poi_inners_for_cycle", spy)
     with contextlib.redirect_stdout(io.StringIO()):
-        se.compute_bounded_structure(_prepare_df(_make_second_cts_moment_after_extreme_data()), 0, +1)
+        se.compute_bounded_structure(_prepare_df(_make_second_cts_moment_after_anchor_data()), 0, +1)
     assert (1, 10) in calls
     assert all(h == 10 for c, h in calls if c == 1)
 
