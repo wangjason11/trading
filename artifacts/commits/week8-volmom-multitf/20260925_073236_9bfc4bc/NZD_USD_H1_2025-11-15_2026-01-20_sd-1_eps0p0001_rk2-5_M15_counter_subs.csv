@@ -1,0 +1,4 @@
+sub_id,direction,starting_idx,start_idx,end_idx,end_reason,natural_reversal_idx,lenses,relative_dir_segments,n_records,first_record_lens,first_record_parent_sid,first_record_parent_cycle_id,first_record_trigger_type,first_record_trigger_idx
+3,-1,2639,2829,3611.0,parent_end,,"('confluence', 'counter')","((2829, 'counter'),)",2,confluence,0,1,reversal,2829
+5,1,3621,3707,4083.0,same_dir_replacement,,"('counter',)","((3707, 'counter'),)",1,counter,1,2,first_counter,3707
+7,1,4027,4083,,,,"('confluence', 'counter')","((4083, 'counter'),)",2,counter,1,2,subsequent_counter,4083
