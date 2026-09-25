@@ -1296,9 +1296,10 @@ class TestSiblingClipOnTheMoment:
         assert zone is None
 
     def test_mirror_keeps_the_raw_idx_of_a_pattern_path_update(self):
-        """(E3b landing review.) The mirror keeps the RAW idx (the anchor) while the
-        clip uses the moment: a pattern-path CTS_UPDATED anchored at 17 (moment 19),
-        slice_begin 3 → the zone / probe input is the anchor 20, not the moment 22."""
+        """(E3b landing review.) The mirror shifts the RAW idx (the moment since Plan
+        E E4c) and `cts_anchor_idx` by one offset while the clip uses the moment: a
+        pattern-path CTS_UPDATED anchored at 17 (moment 19), slice_begin 3 → the
+        zone / probe input is the anchor 20, not the moment 22."""
         from engine_v2.multitf.entity_df_mutation import _build_sibling_cts_ref_zone_from_pool
         from engine_v2.tests._event_factory import make_event
         pool = SubStructurePool()

@@ -1068,7 +1068,28 @@ the real emitter.
   (intro — `ev.idx` is now the moment on every type —, the `CTS_UPDATED` row incl. the anchor column, the
   `ef.cts_anchor_idx` / `stamped_idx` bullets), GLOSSARY (moment, `event.idx`, `confirmed_at`, `CTS_UPDATED`),
   GOTCHAS, LANDMINES knowable-at clip, PRE_REFACTOR_INVARIANTS, WORKFLOWS, IMBALANCE_FILL_SEMANTICS,
-  WAVE_CANDLES_SPEC, the `/compare` skill, code comments.
+  WAVE_CANDLES_SPEC, the `/compare` skill, code comments. Commit `c182eb6`; save `20260925_133849_c182eb6`.
+  - **Pre-review mutation loop (mine; `%TEMP%/pe/e4c_mut/harness.py`):** each of 14 CTS location reads switched to
+    the raw `ev.idx` for CTS_UPDATED only, full suite each: 5 killed (the reference zone, FibTracker's update
+    handler, the POI pre-window branch, `stamped_idx`, and the wave-walk sort — by the AST guard only), **9
+    survived** — the 4 chart unconfirmed-CTS sites, the prev-BOS line END, `structure_levels`, the POI in-window
+    cond1, the wave walk's `ev_idx` / `next_ev_idx`: before E4c `ev.idx` WAS the anchor on the pattern path, and
+    almost no fixture has a lagging pattern-path update → the landing review's combined lens writes the pins.
+  - Landing review (1 combined lens, ≈272k; copy from the commit): 0 BLOCKER. **All 9 survivors pinned** (lagging
+    pattern-path updates through `make_cts_updated`: the sub-chart unconfirmed-CTS filter + dot, the H1 overlay
+    dot, the H1 chart marker, the prev-BOS END on a pattern-update winner, `structure_levels`, the POI in-window
+    cond1 (IC between anchor 5 and moment 7), the wave walk `ev_idx` and `next_ev_idx` — the latter nearly
+    equivalent: it differs only on an unconfirmed cycle, where the correct walk never scans past the last
+    anchor; U10 re-killed here). Contract mutants: emitter revert 3 kills, **the E4c assert unpinned (V2
+    survived)** → `test_emit_cts_updated_asserts_the_pattern_path_idx_is_the_moment`; accessor branch 20;
+    validator 1; factory default 17. Plus the E4c swap case (lagging fixture back to its anchor → downstream
+    outputs identical; also kills the FibTracker update read). **MAJOR (docs, fixed):** the new "`ev.idx` is the
+    moment on every event type" (ARCHITECTURE intro, GLOSSARY moment / `event.idx`) contradicted the table's
+    `REVERSAL_CANDIDATE` row (pattern-first candle; moment `meta["apply_idx"]`; `event_moment` raises on it) →
+    scoped to the CTS / BOS family with the exception named. **MINOR (fixed):** the `CTS_UPDATED` row's `ev.idx`
+    cell opened "the new CTS anchor"; the mirror-test docstring ("keeps the RAW idx (the anchor)"); a garbled
+    mirror-clip comment; the `/compare` skill's anchor-stamped sentence (pre-E4 saves only). Tests 923 → **935
+    + 1 xfail**. The fold-in changes tests, docs and one comment only.
 
 ## 9. E5 — remaining renames + prose
 

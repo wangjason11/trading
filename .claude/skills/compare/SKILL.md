@@ -246,9 +246,9 @@ moment since Plan E E4a / E4b / E4c (2026-09-25; `== confirmed_at`) — track me
 `cts_anchor_idx` / `bos_anchor_idx` for location shifts (the price **extreme**; `price` stays the
 extreme's price). The moment the event became known is `meta["confirmed_at"]`,
 stored inside the `meta` column of `*_structure_events.csv`, and it is the
-value that timing and lifecycle code reads. On an anchor-stamped event a shift in
-`confirmed_at` alone leaves `idx` unchanged, and on a moment-stamped one an
-anchor shift leaves `idx` unchanged — so compare both. On `CTS_CONFIRMED`, `idx` ==
+value that timing and lifecycle code reads. Since Plan E E4 an anchor shift alone
+leaves `idx` unchanged (and, diffing against a pre-E4 save, a `confirmed_at` shift
+alone left the old anchor-stamped `idx` unchanged) — so compare both. On `CTS_CONFIRMED`, `idx` ==
 `confirmed_at`. The canonical per-event table is `engine_v2/ARCHITECTURE.md`
 "`ev.idx` convention".
 

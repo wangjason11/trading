@@ -838,3 +838,55 @@ def test_cts_bib_event_walk_checks_a_lagging_est_at_its_anchor():
         anchor_idx=10, anchor_type="CTS", zone=zone, events=events,
         structure_id=0, struct_direction=1, df=_make_df(rows))
     assert result.last_wave_candle_idx == 10
+
+
+def test_cts_bib_event_walk_checks_a_lagging_pattern_update_at_its_anchor():
+    """Plan E E4c landing review (U12): the BIB event walk is a LOCATION walk. A
+    lagging pattern-path CTS_UPDATED (anchor 12, moment 14 == its `ev.idx`) is
+    checked at its ANCHOR 12 (qualifies -> 12). Checked at `ev.idx` 14 (bearish)
+    the walk would scan 15..17 and return 15."""
+    rows, zone_meta = _cts_bib_setup()
+    rows[12] = dict(_BULL_IN_ZONE)
+    rows[15] = dict(_BULL_IN_ZONE)
+    zone = _make_zone("sell", top=1.1, bottom=1.0, source_kind="CTS", meta=zone_meta)
+    upd = _make_event("CTS_UPDATED", 12, 1.09, {
+        "structure_id": 0, "cycle_id": 1, "via": "continuous", "confirmed_at": 14})
+    assert (upd.idx, upd.meta["cts_anchor_idx"]) == (14, 12)
+    events = [
+        _make_event("CTS_ESTABLISHED", 10, 1.08, {
+            "structure_id": 0, "cycle_id": 1, "pattern_anchor_idx": 9}),
+        upd,
+        _make_event("CTS_CONFIRMED", 18, meta={
+            "structure_id": 0, "cycle_id": 1, "confirmed_at": 18}),
+    ]
+    result = identify_wave_candles(
+        anchor_idx=10, anchor_type="CTS", zone=zone, events=events,
+        structure_id=0, struct_direction=1, df=_make_df(rows))
+    assert result.last_wave_candle_idx == 12
+
+
+def test_cts_bib_walk_scan_ends_at_a_lagging_pattern_update_anchor():
+    """Plan E E4c landing review (U13): the scan between two walk events is a
+    LOCATION span -- it ends at the next event's ANCHOR. An unconfirmed cycle (no
+    CTS_CONFIRMED yet): CTS_ESTABLISHED at 10, then a lagging pattern-path
+    CTS_UPDATED anchored at 21 (bearish) and known at 24 (its `ev.idx`). The walk
+    scans 11..20, checks 21 and stops (nothing to scan to); the fallback's
+    before-window finds 9. Ending the first scan at `ev.idx` 24 would return 22.
+    (With a CTS_CONFIRMED to scan to, both spans visit the same candles in the
+    same order on valid OHLC -- the site shows on an unconfirmed cycle.)"""
+    rows, zone_meta = _cts_bib_setup(n=30)
+    rows[9] = dict(_BULL_IN_ZONE)
+    rows[22] = dict(_BULL_IN_ZONE)
+    zone = _make_zone("sell", top=1.1, bottom=1.0, source_kind="CTS", meta=zone_meta)
+    upd = _make_event("CTS_UPDATED", 21, 1.09, {
+        "structure_id": 0, "cycle_id": 1, "via": "continuous", "confirmed_at": 24})
+    assert (upd.idx, upd.meta["cts_anchor_idx"]) == (24, 21)
+    events = [
+        _make_event("CTS_ESTABLISHED", 10, 1.08, {
+            "structure_id": 0, "cycle_id": 1, "pattern_anchor_idx": 10}),
+        upd,
+    ]
+    result = identify_wave_candles(
+        anchor_idx=10, anchor_type="CTS", zone=zone, events=events,
+        structure_id=0, struct_direction=1, df=_make_df(rows))
+    assert result.last_wave_candle_idx == 9

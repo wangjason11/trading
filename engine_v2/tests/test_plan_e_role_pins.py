@@ -553,3 +553,190 @@ def test_h1_chart_pb_to_next_bos_line_ends_at_the_bos_anchor(tmp_path, monkeypat
     tr, = [t for t in fig.data if t.name == "PB→BOS sid=0→1"]
     assert tuple(tr.x) == (df.loc[11, "time"], df.loc[13, "time"])
     assert tuple(tr.y)[1] == 0.6130
+
+
+# --- E4c landing review: pattern-path CTS_UPDATED LOCATION reads -----------------
+# A LAGGING pattern-path CTS_UPDATED (anchor < moment == ev.idx since Plan E E4c):
+# a location read of the raw `ev.idx` lands on the moment. Each pin is killed by
+# the pre-review harness mutant named in its docstring (U#).
+
+def _e4c_upd(anchor, moment, *, sid=0, cyc=0, price=0.6150, sd=1):
+    from engine_v2.tests._event_factory import make_cts_updated
+    ev = make_cts_updated(cts_anchor_idx=anchor, confirmed_at=moment, via="continuous",
+                          price=price, meta={"structure_id": sid, "cycle_id": cyc,
+                                             "struct_direction": sd})
+    assert (ev.idx, ev.meta["cts_anchor_idx"]) == (moment, anchor)
+    return ev
+
+
+def _e4c_unconf_events():
+    """sid 0 (sd +1): BOS(0,0) anchor 2 / moment 5, CTS_ESTABLISHED(0,0) anchor 6 /
+    moment 7, a lagging pattern-path CTS_UPDATED(0,0) anchor 8 / moment 10. Sid 0's
+    last confirmed point is its BOS, so every chart draws the unconfirmed-CTS dot
+    at the latest CTS ANCHOR (8)."""
+    from engine_v2.tests._event_factory import make_bos_confirmed
+    return [
+        make_bos_confirmed(bos_anchor_idx=2, confirmed_at=5, price=0.6010,
+                           structure_id=0, cycle_id=0, struct_direction=1),
+        make_cts_established(cts_anchor_idx=6, confirmed_at=7, price=0.6120,
+                             structure_id=0, cycle_id=0, struct_direction=1),
+        _e4c_upd(8, 10),
+    ]
+
+
+def _e4c_sub_polylines(events, owned_here):
+    from types import SimpleNamespace
+    pytest.importorskip("plotly")
+    from engine_v2.charting.export_m15_chart import _build_sub_polylines
+    lt = _e4b_ohlc(24, "15min")
+
+    def lt_time(i):
+        return lt["time"].iloc[int(i)] if 0 <= int(i) < len(lt) else None
+
+    poly = _build_sub_polylines(SimpleNamespace(end_event_idx=None, starting_sd=1), events, lt,
+                                lt_time, lambda i: int(i) + 100, owned_here)
+    return poly, lt
+
+
+def test_m15_sub_unconfirmed_cts_filter_reads_the_update_anchor():
+    """U1 (`_build_sub_polylines`, the "CTS after the last BOS" filter): sid 0's
+    last point is BOS(0,1) at anchor 9; the pattern-path CTS_UPDATED(0,0) is
+    anchored at 8 (before it) but known at 10 (its `ev.idx`). The filter is a
+    LOCATION test -> the update is not after the BOS, and CTS_ESTABLISHED(0,1)
+    (anchor 14) lies outside the candles this sub owns (<= 12) -> no unconfirmed
+    dot. Filtering on `ev.idx` 10 > 9 would draw a stale "CTS (updated)" dot."""
+    from engine_v2.tests._event_factory import make_bos_confirmed, make_event
+    events = _e4c_unconf_events() + [
+        make_event("CTS_CONFIRMED", 11, price=0.6150, cts_anchor_idx=8,
+                   structure_id=0, cycle_id=0, struct_direction=1),
+        make_bos_confirmed(bos_anchor_idx=9, confirmed_at=15, price=0.6090,
+                           structure_id=0, cycle_id=1, struct_direction=1),
+        make_cts_established(cts_anchor_idx=14, confirmed_at=15, price=0.6170,
+                             structure_id=0, cycle_id=1, struct_direction=1),
+    ]
+    poly, _ = _e4c_sub_polylines(events, lambda i: int(i) <= 12)
+    assert [(p[0], p[3]) for p in poly["points_by_sid"][0]] == [(8, "CTS"), (2, "BOS"), (9, "BOS")]
+    assert poly["extra_cts_pts"] == []
+
+
+def test_m15_sub_unconfirmed_cts_dot_sits_at_the_update_anchor():
+    """U2 (`_build_sub_polylines`): the unconfirmed-CTS dot after sid 0's last
+    BOS sits at the lagging pattern-path CTS_UPDATED's ANCHOR (8), never its
+    `ev.idx` (the moment 10 since Plan E E4c)."""
+    poly, lt = _e4c_sub_polylines(_e4c_unconf_events(), lambda i: True)
+    assert [(p[0], p[1], p[3], p[7]) for p in poly["extra_cts_pts"]] == [
+        (8, lt["time"].iloc[8], "CTS (updated)", 108)]
+
+
+def test_h1_overlay_unconfirmed_cts_dot_sits_at_the_update_anchor():
+    """U3 (`_render_h1_overlay`): the H1 overlay's unconfirmed-CTS dot after
+    sid 0's last BOS sits at the pattern-path CTS_UPDATED's ANCHOR (8), never
+    its `ev.idx` (the moment 10)."""
+    go = pytest.importorskip("plotly.graph_objects")
+    from engine_v2.charting.export_m15_chart import _render_h1_overlay
+    h1 = _e4b_ohlc(24, "1h")
+    h1.attrs["structure_events"] = _e4c_unconf_events()
+    m15 = pd.DataFrame({"time": pd.date_range(h1["time"].iloc[0], periods=24 * 4,
+                                              freq="15min", tz="UTC")})
+    fig = go.Figure()
+    _render_h1_overlay(fig, m15, h1, {}, {}, {"labels": False}, {"levels": True},
+                       {"KL": False, "POI": False, "wave_candles": False})
+    tr, = [t for t in fig.data if t.name == "H1 CTS"]
+    assert [int(c[0]) for c in tr.customdata] == [8]
+    assert list(tr.x) == [h1["time"].iloc[8] + pd.Timedelta(minutes=45)]
+
+
+def test_h1_chart_unconfirmed_cts_marker_sits_at_the_update_anchor(tmp_path, monkeypatch):
+    """U4 (`export_plotly`): the H1 chart's "CTS (unconfirmed)" marker after
+    sid 0's last BOS sits at the pattern-path CTS_UPDATED's ANCHOR (8), never
+    its `ev.idx` (the moment 10 since Plan E E4c)."""
+    go = pytest.importorskip("plotly.graph_objects")
+    from engine_v2.charting.export_plotly import export_chart_plotly
+    from engine_v2.multitf.registry import StructureRegistry
+    from engine_v2.structure.structure_engine import compute_bounded_structure
+    from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_df
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        res = compute_bounded_structure(_prepare_df(_make_multicycle_data()), 0, +1)
+    df = res.df.copy()
+    df.attrs["structure_events"] = _e4c_unconf_events()   # the chart reads events only
+    reg = StructureRegistry()
+    reg.register("H1", df=df, timeframe="H1", role="main")
+    figs = []
+    monkeypatch.setattr(go.Figure, "write_html", lambda self, *a, **k: figs.append(self))
+    monkeypatch.setattr(go.Figure, "write_image", lambda self, *a, **k: None)
+    cfg = {"structure": {"levels": True}, "struct_state": {"labels": False},
+           "range_visual": {"rectangles": False}, "fib": {"lines": False},
+           "imbalance": {"highlight": False}, "zones": {"wave_candles": False},
+           "volume": {"bars": False, "ema_line": False, "spike_marker": False}}
+    with contextlib.redirect_stdout(io.StringIO()):
+        export_chart_plotly(title="t", registry=reg, path_id="H1", out_dir=tmp_path, cfg=cfg)
+    fig, = figs
+    marks = [tr for tr in fig.data if (tr.name or "").startswith("CTS (unconfirmed)")]
+    assert [int(c[0]) for tr in marks for c in tr.customdata] == [8]
+    assert [x for tr in marks for x in tr.x] == [df.loc[8, "time"]]
+
+
+def test_prev_bos_line_ends_at_a_pattern_update_anchor():
+    """U5 (`_prev_bos_lines` END): sid 1's CTS_0 is known (14) before the
+    reversal (17); the first CTS known at/after it is a lagging pattern-path
+    CTS_UPDATED (anchor 16, moment 18 == its `ev.idx` since Plan E E4c). The
+    line END is its ANCHOR 16, not its idx 18."""
+    from engine_v2.tests._event_factory import make_bos_confirmed
+    evs = [make_bos_confirmed(bos_anchor_idx=7, confirmed_at=10, structure_id=0, cycle_id=1, price=0.95),
+           make_cts_established(cts_anchor_idx=13, confirmed_at=14, structure_id=1, cycle_id=0),
+           _e4c_upd(16, 18, sid=1, cyc=0, price=1.3)]
+    assert _prev_bos_pairs(evs, 17) == [(7, 16)]
+
+
+def test_structure_levels_time_a_pattern_update_at_its_anchor():
+    """U6 (`_events_to_structure_levels`): a pattern-path CTS_UPDATED's level is
+    placed at its ANCHOR candle (9), not its `ev.idx` (the moment 12 since Plan E
+    E4c); a raw-path one at its idx (13, anchor and moment at once)."""
+    from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
+    from engine_v2.structure.market_structure import MarketStructure
+    from engine_v2.tests._event_factory import make_cts_updated
+    from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_df
+    ms = MarketStructure(_prepare_df(_make_multicycle_data()), 1)
+    ms.events = [_e4c_upd(9, 12, price=1.2),
+                 make_cts_updated(cts_anchor_idx=13, via=CTS_UPDATED_RAW_VIA, price=1.25,
+                                  meta={"structure_id": 0, "cycle_id": 0})]
+    t = pd.to_datetime(ms.df["time"], utc=True)
+    assert [(lv.kind, lv.time, lv.meta["via"]) for lv in ms._events_to_structure_levels()] == [
+        ("CTS", t.iloc[9], "continuous"), ("CTS", t.iloc[13], CTS_UPDATED_RAW_VIA)]
+
+
+def _e4c_poi_history(cts_events, established_moment):
+    """`_poi_history`'s frame (IC 6 inside the 61.8-80 band of BOS 0.6000 / CTS
+    0.6100; an unfilled FVG formed at 9) with a caller-given CTS event list."""
+    t0 = pd.Timestamp("2024-01-01", tz="UTC")
+    df = pd.DataFrame([
+        {"time": t0 + pd.Timedelta(hours=i), "o": 0.6040, "h": 0.6045, "l": 0.6035, "c": 0.6040}
+        for i in range(14)
+    ])
+    df.loc[6, ["o", "h", "l", "c"]] = [0.6034, 0.6035, 0.6025, 0.6026]
+    imb = ImbalanceInstance(start_idx=8, end_idx=8, direction=1,
+                            gap_top=0.6090, gap_bottom=0.6080, gap_size=0.0010)
+    return poi_zones._compute_poi_activation_history(
+        df, ic_idx=6, cts_established_idx=established_moment, sd=1, scan_end=12,
+        fill_threshold=0.70, bos_price=0.6000, cts_events=cts_events, fib_min_pct=61.8,
+        fib_max_pct=80.0, variant_thresholds={"V30": 0.3, "V60": 0.6, "V90": 0.9},
+        imbalances=[imb], fill_idx_cache={id(imb): (None, None)}, lifecycle_floor_idx=None,
+    )
+
+
+def test_poi_sweep_in_window_cond1_reads_a_pattern_update_anchor():
+    """U10 (POI sweep, the IN-WINDOW CTS transition): CTS_ESTABLISHED anchor 3 /
+    moment 4 (pre-window; first_active = the IC 6). A lagging pattern-path
+    CTS_UPDATED anchored at 5 (before the IC) and known at 7 applies at 7 -- its
+    cond1 location is the ANCHOR (5 < 6 -> still not met); a raw update at 11
+    moves the CTS past the IC -> active at 11. Reading `ev.idx` (the moment 7)
+    for cond1 would activate at 9, when the FVG forms."""
+    from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
+    from engine_v2.tests._event_factory import make_cts_updated
+    evs = [make_cts_established(cts_anchor_idx=3, confirmed_at=4, price=0.6100, struct_direction=None),
+           _e4c_upd(5, 7, price=0.6100),
+           make_cts_updated(cts_anchor_idx=11, via=CTS_UPDATED_RAW_VIA, price=0.6100,
+                            meta={"structure_id": 0, "cycle_id": 0})]
+    hist = _e4c_poi_history(evs, established_moment=4)
+    assert [(h["idx"], h["active"]) for h in hist] == [(11, True)]

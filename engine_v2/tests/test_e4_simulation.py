@@ -1,6 +1,7 @@
 """E4 regression pins (PLAN_E §6.4 → §8): the real emitter stamps each flipped
 event at its MOMENT, and the downstream pipeline does not depend on what
-`ev.idx` holds on CTS_ESTABLISHED / BOS_CONFIRMED.
+`ev.idx` holds on CTS_ESTABLISHED / BOS_CONFIRMED / pattern-path CTS_UPDATED
+(E4c, the last two tests).
 
 1. The emitter: since Plan E E4a (CTS_ESTABLISHED) / E4b (BOS_CONFIRMED) every
    such event of a real MS run carries `idx == meta["confirmed_at"]`, and the
@@ -135,6 +136,51 @@ def test_downstream_outputs_do_not_depend_on_the_idx_role(swap, maker, mode):
     for e in swapped:
         if e.type in types:
             e.idx = int(_OTHER_ROLE[e.type](e))
+    a = _strip_raw(_run(res.df, res.events, mode))
+    b = _strip_raw(_run(res.df, swapped, mode))
+    assert a.keys() == b.keys()
+    assert [k for k in a if a[k] != b[k]] == []
+
+
+# --- E4c landing review: the pattern-path CTS_UPDATED half ------------------------
+
+@pytest.mark.illegal_event_contract  # else the validator pre-empts the emitter's own assert
+@pytest.mark.skipif(not __debug__, reason="the emitter's check is an assert (stripped under -O)")
+def test_emit_cts_updated_asserts_the_pattern_path_idx_is_the_moment():
+    """The pattern-path CTS_UPDATED emitter refuses an `idx` other than
+    `meta["confirmed_at"]`, or an anchor past it (Plan E E4c) -- before any event
+    is built. The raw path carries neither key."""
+    from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
+    from engine_v2.structure.market_structure import MarketStructure
+    ms = MarketStructure(_prepare_df(_SECOND()), 1)
+    with pytest.raises(AssertionError, match="ev.idx is the moment"):
+        ms._emit_cts_updated(9, 1.0, meta={"via": "continuous", "confirmed_at": 10, "cts_anchor_idx": 9})
+    with pytest.raises(AssertionError, match="ev.idx is the moment"):
+        ms._emit_cts_updated(10, 1.0, meta={"via": "continuous", "confirmed_at": 10, "cts_anchor_idx": 11})
+    assert ms.events == []
+    ms._emit_cts_updated(10, 1.0, meta={"via": "continuous", "confirmed_at": 10, "cts_anchor_idx": 9})
+    ms._emit_cts_updated(11, 1.1, meta={"via": CTS_UPDATED_RAW_VIA})
+    pat, raw = ms.events
+    assert (pat.idx, pat.meta["cts_anchor_idx"], pat.meta["confirmed_at"]) == (10, 9, 10)
+    assert raw.idx == 11 and "confirmed_at" not in raw.meta and "cts_anchor_idx" not in raw.meta
+
+
+@pytest.mark.illegal_event_contract  # the clones hold the anchor (the pre-E4c shape)
+@pytest.mark.parametrize("mode", ["h1", "cross_cycle"])
+def test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role(mode):
+    """The E4a / E4b swap for pattern-path CTS_UPDATED (Plan E E4c): the lagging
+    fixture's one pattern-path update (anchor 24, moment 25) is cloned back to its
+    ANCHOR in `ev.idx`; every downstream output is identical (the raw readers
+    excepted, `_EXCLUDED`)."""
+    from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_lagging_pattern_update
+    with contextlib.redirect_stdout(io.StringIO()):
+        res = compute_bounded_structure(_prepare_df(_multicycle_with_lagging_pattern_update()), 0, +1)
+    upd = [e for e in res.events if e.type == "CTS_UPDATED"]
+    assert [(e.idx, ef.cts_anchor_idx(e)) for e in upd if e.idx != ef.cts_anchor_idx(e)] == [(25, 24)]
+    swapped = copy.deepcopy(res.events)
+    for e in swapped:
+        if e.type == "CTS_UPDATED":
+            e.idx = ef.cts_anchor_idx(e)
     a = _strip_raw(_run(res.df, res.events, mode))
     b = _strip_raw(_run(res.df, swapped, mode))
     assert a.keys() == b.keys()
