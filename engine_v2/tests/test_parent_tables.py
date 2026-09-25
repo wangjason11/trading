@@ -58,7 +58,8 @@ def _cts_est(idx: int, sid: int, cycle: int, confirmed_at: int, sd: int = 1) -> 
 
 
 def _bos(idx: int, sid: int, cycle: int, confirmed_at: int, sd: int = 1) -> StructureEvent:
-    # BOS_CONFIRMED.idx = the BOS extreme; confirmed_at = the same apply candle as the CTS_EST.
+    # `idx` (the argument) = the BOS anchor, the extreme; confirmed_at = the same apply candle
+    # as the CTS_EST (the event's idx since Plan E E4b).
     return _ev(idx, "BOS_CONFIRMED", sid, cycle, sd, confirmed_at=confirmed_at,
                source="pullback_extreme")
 
@@ -96,7 +97,7 @@ def _reference_window_events() -> List[StructureEvent]:
 
         CTS_ESTABLISHED (S,C).idx / confirmed_at : (0,0)=115/115 (0,1)=652/652 (1,0)=703/703
                                                    (1,1)=748/748 (1,2)=902/902
-        BOS_CONFIRMED   (S,C).idx / confirmed_at : (0,0)=96/115  (0,1)=591/652 (1,0)=689/703
+        BOS_CONFIRMED   (S,C).anchor / confirmed_at : (0,0)=96/115  (0,1)=591/652 (1,0)=689/703
                                                    (1,1)=728/748 (1,2)=826/902
         STATE_CHANGED->reversal: sid 0 @ 902.  REVERSAL_CANDIDATE: idx 897, apply 902.
         sid 0 sd=+1, sid 1 sd=-1; sid 1 never reverses.

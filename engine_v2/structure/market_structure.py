@@ -1503,8 +1503,9 @@ class MarketStructure:
                     # bos_price = self._initial_bos_before_first_cts(cts_idx)
                     # self._emit_bos_confirmed(apply_idx, bos_price, meta={"source": "initial_prior_extreme"})
                     bos_anchor_idx, bos_price = self._initial_bos_before_first_cts(cts_anchor_idx)
+                    # `ev.idx` = the MOMENT (Plan E E4b), like the cycle's CTS_ESTABLISHED.
                     self._emit_bos_confirmed(
-                        bos_anchor_idx,
+                        int(apply_idx),
                         bos_price,
                         bos_anchor_idx=bos_anchor_idx,
                         meta={
@@ -1520,7 +1521,7 @@ class MarketStructure:
                     # self._emit_bos_confirmed(apply_idx, bos_price, meta={"source": "pullback_extreme", "pb_start": st.last_pullback_pat_apply_idx})
                     bos_anchor_idx, bos_price = self._select_bos_on_breakout(apply_idx)
                     self._emit_bos_confirmed(
-                        bos_anchor_idx,
+                        int(apply_idx),
                         bos_price,
                         bos_anchor_idx=bos_anchor_idx,
                         meta={
@@ -1939,11 +1940,13 @@ class MarketStructure:
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
         meta2["structure_id"] = int(self.state.structure_id)
         meta2["struct_direction"] = int(self.state.struct_direction)
-        # The BOS endpoint (the swing extreme; == idx until Plan E E4b flips idx
-        # to the moment). int(): `_shift_meta_indices` shifts Python int only,
-        # and the degenerate `_initial_bos_before_first_cts` branch passes the
-        # caller's type through.
+        # The BOS endpoint (the swing extreme; `ev.price` is its price). `idx` is
+        # the MOMENT (Plan E E4b; ARCHITECTURE "`ev.idx` convention"). int():
+        # `_shift_meta_indices` shifts Python int only, and the degenerate
+        # `_initial_bos_before_first_cts` branch passes the caller's type through.
         meta2["bos_anchor_idx"] = int(bos_anchor_idx)
+        assert int(idx) == meta2["confirmed_at"], (
+            f"BOS_CONFIRMED idx {idx} != confirmed_at {meta2['confirmed_at']} (ev.idx is the moment)")
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="BOS_CONFIRMED", price=price, meta=meta2)
         )

@@ -79,7 +79,7 @@ only (corrected 2026-09-22; see the note below):
 | `CTS_THRESHOLD_UPDATED` | the processing candle (`_sync_thresholds_from_range(i)`) — a moment | `event_fields.event_moment(ev)` (Plan F; moved + extended by Plan E E2a) resolves the moment of every CTS / BOS event in one place |
 | `CTS_CONFIRMED` | confirmation candle | `confirmed_at` mirrors `ev.idx`; `meta["cts_anchor_idx"]` = the CURRENT CTS extreme at confirmation (== the cycle's `CTS_ESTABLISHED.meta["cts_anchor_idx"]` only if no `CTS_UPDATED` moved it); `meta["confirmation_method"]` |
 | `CTS_RECONFIRMED` (new) | pullback confirmation candle | only fires after proximity-confirmed CTS; `confirmed_at` mirrors `ev.idx` |
-| `BOS_CONFIRMED` | **BOS extreme candle** (NOT confirmation; until Plan E E4b) | `meta["confirmed_at"]` = the same apply candle as the cycle's `CTS_ESTABLISHED.meta["confirmed_at"]`; anchor also in `meta["bos_anchor_idx"]` (Plan E E2a) |
+| `BOS_CONFIRMED` | **the moment** = `meta["confirmed_at"]`, the same apply candle as the cycle's `CTS_ESTABLISHED` (Plan E E4b, 2026-09-25; before it the **BOS extreme candle**) | the anchor (the BOS extreme) = `meta["bos_anchor_idx"]` (Plan E E2a); `ev.price` = the anchor's price |
 | `REVERSAL_CANDIDATE` | reversal-pattern anchor candle (= `meta["pattern_anchor_idx"]`) | `meta["apply_idx"]` = the SCHEDULED apply — a prediction that can expire (the applied reversal is `STATE_CHANGED(to=reversal)`) |
 | `RANGE_*` | varies — see GOTCHAS for sort-order rules | |
 
@@ -102,8 +102,8 @@ E2b) — the E4 flips reorder nothing. Mode C M15 phase gate depends on this —
 > M15 cycles (sub 3 is mirrored into both lenses) — 1223 vs 1224 and 2828 vs
 > 2829, lag 1, empirical and not a bound (the bound is `pattern_anchor_idx <= cts_anchor_idx <=
 > confirmed_at <= pattern_anchor_idx + 5`). `CTS_ESTABLISHED` was one of the
-> extreme-located events until Plan E E4a (with `BOS_CONFIRMED` and pattern-path
-> `CTS_UPDATED`, until E4b / E4c — ARCHITECTURE.md "`ev.idx` convention"); every lifecycle reader
+> extreme-located events until Plan E E4a (with `BOS_CONFIRMED` until E4b and pattern-path
+> `CTS_UPDATED` until E4c — ARCHITECTURE.md "`ev.idx` convention"); every lifecycle reader
 > (`zones/structure_lifecycle.compute_cycle_lifecycle`,
 > `multitf/parent_tables.py`) uses `meta["confirmed_at"]`.
 

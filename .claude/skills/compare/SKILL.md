@@ -241,12 +241,10 @@ Compare structural events between iterations:
 | **CTS_ESTABLISHED** | `(idx, confirmed_at, cts_anchor_idx, structure_id, cycle_id)` |
 | **STATE_CHANGED to reversal** | `(idx, structure_id)` |
 
-On `CTS_ESTABLISHED`, `idx` IS the moment since Plan E E4a (2026-09-25; `==
-confirmed_at`) — track meta `cts_anchor_idx` for location shifts (the price
-**extreme**; `price` stays the extreme's price). On `BOS_CONFIRMED`, `idx` is the
-price extreme (the anchor), stamped after the fact, until Plan E E4b flips it to
-the moment (from then on track meta `bos_anchor_idx`, which carries the anchor
-since Plan E E2a). The moment the event became known is `meta["confirmed_at"]`,
+On `CTS_ESTABLISHED` / `BOS_CONFIRMED`, `idx` IS the moment since Plan E E4a /
+E4b (2026-09-25; `== confirmed_at`) — track meta `cts_anchor_idx` /
+`bos_anchor_idx` for location shifts (the price **extreme**; `price` stays the
+extreme's price). The moment the event became known is `meta["confirmed_at"]`,
 stored inside the `meta` column of `*_structure_events.csv`, and it is the
 value that timing and lifecycle code reads. On an anchor-stamped event a shift in
 `confirmed_at` alone leaves `idx` unchanged, and on a moment-stamped one an

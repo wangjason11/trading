@@ -32,9 +32,11 @@ def test_cts_anchor_idx_reads_the_meta_key_not_idx():
     assert ef.cts_anchor_idx(_ev("CTS_UPDATED", 12, via="continuous", confirmed_at=12)) == 12
 
 
-@pytest.mark.illegal_event_contract  # the E4b shape: idx != the anchor
 def test_bos_anchor_idx_reads_the_meta_key_not_idx():
-    bos = make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10, idx=10)
+    # Since Plan E E4b a BOS_CONFIRMED's idx is its moment (10): the accessor
+    # must read the key.
+    bos = make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10)
+    assert bos.idx == 10
     assert ef.bos_anchor_idx(bos) == 3
 
 
@@ -72,8 +74,8 @@ def test_event_moment_extended_to_bos_and_confirmations():
 
 def test_processing_order_key_is_the_pre_e4_idx_type_order():
     """`processing_order_key` == the pre-E4 `(ev.idx, ev.type)` for every type:
-    a CTS_ESTABLISHED keys on its anchor (9), not its idx (the moment 10 since
-    Plan E E4a); every other type on its idx."""
+    a CTS_ESTABLISHED / BOS_CONFIRMED keys on its anchor (9 / 3), not its idx
+    (the moment 10 since Plan E E4a / E4b); every other type on its idx."""
     evs = [
         make_cts_established(cts_anchor_idx=9, confirmed_at=10),
         make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10),
@@ -81,7 +83,7 @@ def test_processing_order_key_is_the_pre_e4_idx_type_order():
         _ev("CTS_CONFIRMED", 14, cts_anchor_idx=12, confirmed_at=14),
         StructureEvent(idx=11, category="RANGE", type="RANGE_STARTED", meta={}),
     ]
-    assert evs[0].idx == 10
+    assert (evs[0].idx, evs[1].idx) == (10, 10)
     assert [ef.processing_order_key(e) for e in evs] == [
         (9, "CTS_ESTABLISHED"), (3, "BOS_CONFIRMED"), (12, "CTS_UPDATED"),
         (14, "CTS_CONFIRMED"), (11, "RANGE_STARTED"),
@@ -89,26 +91,25 @@ def test_processing_order_key_is_the_pre_e4_idx_type_order():
     assert [ef.stamped_idx(e) for e in evs] == [9, 3, 12, 14, 11]
 
 
-@pytest.mark.illegal_event_contract  # the BOS half is the E4b shape: idx != the anchor
 def test_stamped_idx_reads_the_anchor_keys_not_idx():
     """Frozen against E4: an EST / BOS whose idx is the moment still stamps at
     its anchor; CONFIRMED stays at its idx (the confirmation candle)."""
     assert ef.stamped_idx(make_cts_established(cts_anchor_idx=9, confirmed_at=10)) == 9
-    assert ef.stamped_idx(make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10, idx=10)) == 3
+    assert ef.stamped_idx(make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10)) == 3
     assert ef.stamped_idx(_ev("CTS_CONFIRMED", 14, cts_anchor_idx=12, confirmed_at=14)) == 14
 
 
 # --- the factory ------------------------------------------------------------------
 
 def test_factory_idx_defaults_to_the_contract_index_and_carries_both_keys():
-    """The moment on CTS_ESTABLISHED (Plan E E4a), the anchor on BOS_CONFIRMED
-    (until E4b); `make_event`'s `idx` argument is the anchor either way."""
+    """The moment on both types (Plan E E4a CTS_ESTABLISHED, E4b BOS_CONFIRMED);
+    `make_event`'s `idx` argument is the anchor either way."""
     est = make_cts_established(cts_anchor_idx=9, confirmed_at=10, structure_id=2, cycle_id=1)
     assert (est.idx, est.meta["cts_anchor_idx"], est.meta["confirmed_at"]) == (10, 9, 10)
     est = make_event("CTS_ESTABLISHED", 9, confirmed_at=10, structure_id=2, cycle_id=1)
     assert (est.idx, est.meta["cts_anchor_idx"], est.meta["confirmed_at"]) == (10, 9, 10)
     bos = make_event("BOS_CONFIRMED", 3, confirmed_at=10, structure_id=2, cycle_id=1)
-    assert (bos.idx, bos.meta["bos_anchor_idx"], bos.meta["confirmed_at"]) == (3, 3, 10)
+    assert (bos.idx, bos.meta["bos_anchor_idx"], bos.meta["confirmed_at"]) == (10, 3, 10)
     assert "struct_direction" not in bos.meta  # make_event adds no key the caller omitted
 
 
@@ -137,12 +138,11 @@ def test_no_module_imports_an_accessor_by_name():
 
 # --- MS state stays on the anchor (the st.bos decoupling, PLAN_E §6.1) ----------
 
-@pytest.mark.illegal_event_contract  # the E4 shape: idx != the anchor
 def test_emit_bos_confirmed_builds_st_bos_from_the_anchor_param():
     from engine_v2.structure.market_structure import MarketStructure
     from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_df
     ms = MarketStructure(_prepare_df(_make_multicycle_data()), 1)
-    # idx = X (what E4b will emit: the moment), bos_anchor_idx = Y (the location).
+    # idx = X (the moment, emitted since Plan E E4b), bos_anchor_idx = Y (the location).
     ms._emit_bos_confirmed(12, 0.95, bos_anchor_idx=7, meta={"confirmed_at": 12})
     assert ms.state.bos.idx == 7
     assert ms.state.bos.price == 0.95 and ms.state.bos_threshold == 0.95

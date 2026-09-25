@@ -3,10 +3,9 @@ frozen against the E4 flip (PLAN_E §2 item 4, §6.4; PLAN_E_inputs §2.5 hazard
 H1–H5, risk R1).
 
 Each case is built in BOTH shapes — `ev.idx` = the anchor (the pre-E4
-contract) and `ev.idx` = the moment, `confirmed_at` (the E4 contract:
-CTS_ESTABLISHED since Plan E E4a, BOS_CONFIRMED from E4b) — and must give the
-same answer. One shape of each type breaks the current contract, hence
-`illegal_event_contract`.
+contract) and `ev.idx` = the moment, `confirmed_at` (the E4 contract since Plan
+E E4a / E4b) — and must give the same answer. The anchor shape breaks the
+current contract, hence `illegal_event_contract`.
 """
 from __future__ import annotations
 
@@ -42,9 +41,9 @@ def _order(evs):
 
 @pytest.mark.parametrize("est_shape,bos_shape", [
     ("anchor", "anchor"),  # pre-E4
-    ("moment", "moment"),  # after E4b
+    ("moment", "moment"),  # after E4b (the current contract)
     ("anchor", "moment"),  # a BOS-only flip: a raw (idx, type) sort puts EST (9) first
-    ("moment", "anchor"),  # after E4a, before E4b (the current contract)
+    ("moment", "anchor"),  # after E4a, before E4b
 ])
 def test_h1_bos_before_est_of_the_same_cycle(est_shape, bos_shape):
     """The fib loop needs BOS(S,C) before EST(S,C); MS emits EST first. The

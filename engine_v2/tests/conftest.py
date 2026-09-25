@@ -27,9 +27,9 @@ from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 
 # What `ev.idx` is on CTS_ESTABLISHED / BOS_CONFIRMED, per type: "moment"
 # (`idx == meta["confirmed_at"]`) or "anchor" (`idx == meta[<anchor key>]`).
-# CTS_ESTABLISHED flipped to the moment in Plan E E4a; BOS_CONFIRMED flips in
-# E4b — each together with the factory default (`tests/_event_factory.py`).
-EVENT_IDX_IS = {"CTS_ESTABLISHED": "moment", "BOS_CONFIRMED": "anchor"}
+# CTS_ESTABLISHED flipped to the moment in Plan E E4a, BOS_CONFIRMED in E4b —
+# each together with the factory default (`tests/_event_factory.py`).
+EVENT_IDX_IS = {"CTS_ESTABLISHED": "moment", "BOS_CONFIRMED": "moment"}
 
 _ANCHOR_KEY = {"CTS_ESTABLISHED": "cts_anchor_idx", "BOS_CONFIRMED": "bos_anchor_idx"}
 

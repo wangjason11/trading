@@ -62,13 +62,14 @@ Rule 4 use, Plan E E2a (2026-09-24): `CTS_ESTABLISHED.meta["cts_anchor_idx"]` an
 `BOS_CONFIRMED.meta["bos_anchor_idx"]` (documented in ARCHITECTURE "`ev.idx` convention"). Rule 3 meaning
 change, Plan E E4a (2026-09-25): `CTS_ESTABLISHED.idx` := the MOMENT (`== meta["confirmed_at"]`, asserted at
 the emit; `ev.price` stays the anchor's price); proof = the E4 variant replays (`FLIP=est` == the landed
-`/compare`: 3 events `idx` cells) + `tests/test_e4_simulation.py`. **Tests:** every
+`/compare`: 3 events `idx` cells) + `tests/test_e4_simulation.py`; Plan E E4b (2026-09-25): `BOS_CONFIRMED.idx`
+:= the MOMENT likewise (`FLIP=bos` == the landed `/compare`: 34 events `idx` cells). **Tests:** every
 `CTS_ESTABLISHED` / `BOS_CONFIRMED` built during a test must satisfy the contract — `tests/conftest.py` validates
 each construction (keys present as ints, `idx` == the index `EVENT_IDX_IS` names for the type: the moment on
-`CTS_ESTABLISHED` since Plan E E4a, the anchor on `BOS_CONFIRMED` until E4b); build them with
+both since Plan E E4a / E4b); build them with
 `tests/_event_factory.py` (its `idx` default follows the same table), or mark a deliberately illegal test
 `@pytest.mark.illegal_event_contract`. A `mutate=` hook that edits `confirmed_at` after construction bypasses
-the validator: it must move a `CTS_ESTABLISHED`'s `idx` with it and re-run `validate_event_contract` on the
+the validator: it must move the event's `idx` with it and re-run `validate_event_contract` on the
 edited events (Plan E E4a review pins P1/P2 — a dropped `idx` move had left an illegal event nobody noticed).
 
 **Key events and their consumers:**
@@ -2041,17 +2042,17 @@ What the code does: `BOS_CONFIRMED`, `CTS_ESTABLISHED` and pattern-path
 `CTS_UPDATED` are keyed on their moment `meta["confirmed_at"]` (the last two since
 Plan E E3b, 2026-09-25), every other type on `ev.idx`. The `BOS_CONFIRMED` case
 shows the point: clipping it by
-`ev.idx` (the BOS extreme) would surface a BOS whose extreme is inside the
+its anchor (the BOS extreme — `ev.idx` until Plan E E4b) would surface a BOS whose extreme is inside the
 window but whose confirmation landed past it — an event the Phase-1 bounded run
 could not have known.
 
 `ev.idx` is the knowable-at candle only for events whose `ev.idx` IS their
 moment (`CTS_CONFIRMED` / `CTS_RECONFIRMED` — `ev.idx == confirmed_at` —
-raw-path `CTS_UPDATED`, `STATE_CHANGED`, and `CTS_ESTABLISHED` since Plan E
-E4a). It is NOT for `BOS_CONFIRMED` (the BOS extreme, until E4b), a
-pattern-path `CTS_UPDATED` (the span extreme, until E4c) — both keyed on
-`confirmed_at` (the pattern path since Plan E E3b, like `CTS_ESTABLISHED`,
-whose `ev.idx` was the retro-stamped CTS extreme before E4a) — nor for
+raw-path `CTS_UPDATED`, `STATE_CHANGED`, and `CTS_ESTABLISHED` / `BOS_CONFIRMED`
+since Plan E E4a / E4b). It is NOT for a pattern-path `CTS_UPDATED` (the span
+extreme, until E4c) — keyed on `confirmed_at` since Plan E E3b, like
+`CTS_ESTABLISHED` / `BOS_CONFIRMED`, whose `ev.idx` was the retro-stamped
+extreme before E4a / E4b — nor for
 `REVERSAL_CANDIDATE` (applies at `meta["apply_idx"]`), which can still straddle a
 cap (`ev.idx <= cap <` its apply) and survive the clip, yielding a half-derived
 reversal — the remaining known limit in PART4 §17.12 (zero straddles on the

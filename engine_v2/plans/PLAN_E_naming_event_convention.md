@@ -888,8 +888,8 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
 - **Everything else byte-identical, including figures:** KL geometry, fib `bos_idx` / `cycle1_bos_idx`, FC probe
   inputs / pool keys / `validated_parent_idx` 96/591/826, prev-BOS line start 591, chart dots, `structure_levels`,
   final.csv `bos_idx` (MS state). The events CSVs are written in emission order, so no rows reorder.
-- **Docs:** the BOS half (GOTCHAS "BOS_CONFIRMED `ev.idx` Is the BOS Extreme…"; the ARCHITECTURE row;
-  KL_ZONES_SPEC `source_event_idx`; MEMORY "Key Architecture Points").
+- **Docs:** the BOS half (GOTCHAS "BOS_CONFIRMED `ev.idx` Is the BOS Extreme…" — renamed "…Was the BOS Extreme Until Plan E E4b…"; the ARCHITECTURE row;
+  KL_ZONES_SPEC event indexing (its `source_event_idx` part done in E4b-pre); MEMORY "Key Architecture Points").
 - **Lesson from the E4a mutation lens (§8.1), apply BEFORE the flip:** a flip turns every raw-`ev.idx` LOCATION
   read into a moment read, and the E4a lens found 3 production location readers with no lagging fixture (all
   existing fixtures had lag 0 at those sites). For E4b, enumerate every BOS LOCATION reader (`ef.bos_anchor_idx`
@@ -991,7 +991,29 @@ the real emitter.
   "Creating a zone" steps rewritten to the accessors — `confirmed_idx = ef.event_moment`, anchors via
   `ef.bos_anchor_idx` / `ef.cts_anchor_idx`, no fallback), ARCHITECTURE declared raw readers, the
   `kl_zones_v1` docstring. Tests 910 + 1 xfail. E4b therefore changes only the events CSV `idx` column + the KL
-  prints (§8 E4b "KL: 0").
+  prints (§8 E4b "KL: 0"). Commit `6bcd2e9`; save `20260925_124105_6bcd2e9`.
+  - Landing review (1 combined lens, ≈121k; scratch copy built from the commit): 0 BLOCKER / 0 MAJOR. No reader
+    of the KL key anywhere (skills and plan tools included; `_shift_meta_indices` never listed it); the
+    rewritten zone-creation steps match the code sentence by sentence; rule 2 covers EVENT meta, a KL zone's meta
+    is zone meta. Mutation: re-adding `"source_event_idx": int(ev.idx)` is killed by 9 tests (the 8 BOS / both
+    swap cases + the zone-meta guard). MINORs folded in the E4b commit: KL_ZONES_SPEC's `confirmed_idx` bullet
+    still claimed a "fallback `ev.idx`" (→ `ef.event_moment`, no fallback), a stale "module docstring … `.py`
+    follow-up" sentence, the removal note's wording (the raw, unclamped confirm candle) and a stray `*`;
+    memory reconciled.
+
+- **E4b (2026-09-25).** Both `_emit_bos_confirmed` call sites (cycle 0 `initial_prior_extreme`, cycle ≥ 1
+  `pullback_extreme`) pass `int(apply_idx)`; the emitter asserts `idx == meta["confirmed_at"]` before building the
+  event; `st.bos` stays built from the `bos_anchor_idx` parameter. **Measured (vs `20260925_124105_6bcd2e9`) == §8
+  exactly:** 34 events `idx` cells — H1 96→115, 591→652, 689→703, 728→748, 826→902; conf 21; counter 8 (lag 2–411)
+  — every one in the `idx` column; the 3 figures JSON-identical; run.log only the `[kl_zones]` BOS prints (both
+  forms; the idx moves, the anchor stays) + the FutureWarning line number. Replay 104.6 s wall (machine variance;
+  46–105 s this session). Contract flip in the same commit: `EVENT_IDX_IS` both "moment"; the factory BOS default
+  `idx = confirmed_at`; `test_e4_simulation`'s emitter pin covers both types (BOS lags (0,2), (7,10) on the
+  second-CTS fixture, (0,2), (7,10), (12,15), (17,20) on the multicycle one) + a BOS emitter-assert pin, and the
+  swap returns BOS to its anchor; the E4-shaped BOS pins lost their `illegal_event_contract` markers; the
+  `mutate=` hooks move the BOS idx too (their E4a re-validation caught it); three tests that read a BOS's raw
+  `.idx` as its anchor moved to `ef.bos_anchor_idx` (the render-projection straddle + KL floor tests) and the
+  Plan-B-save CSV loader translates pre-E4b BOS rows. Tests 910 → 913 + 1 xfail.
 
 ## 9. E5 — remaining renames + prose
 

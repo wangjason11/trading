@@ -22,12 +22,12 @@ def test_accepts_a_legal_event():
 
 @pytest.mark.illegal_event_contract
 def test_rejects_idx_that_is_not_the_contract_index():
-    """CTS_ESTABLISHED: `idx` is the moment (Plan E E4a) — the pre-E4a shape
-    (`idx` = the anchor) is rejected. BOS_CONFIRMED: the anchor until E4b."""
+    """`idx` is the moment on both types (Plan E E4a CTS_ESTABLISHED, E4b
+    BOS_CONFIRMED) — the pre-E4 shape (`idx` = the anchor) is rejected."""
     with pytest.raises(EventContractViolation, match=r"idx 9 != meta\['confirmed_at'\]"):
         validate_event_contract(make_cts_established(cts_anchor_idx=9, confirmed_at=10, idx=9))
-    with pytest.raises(EventContractViolation, match="idx 10"):
-        validate_event_contract(make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10, idx=10))
+    with pytest.raises(EventContractViolation, match=r"idx 3 != meta\['confirmed_at'\]"):
+        validate_event_contract(make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10, idx=3))
 
 
 @pytest.mark.illegal_event_contract

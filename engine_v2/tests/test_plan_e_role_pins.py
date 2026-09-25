@@ -1,7 +1,7 @@
 """Plan E E2b role pins (landing-review mutation lens): each site that E2b split
 into a LOCATION (the anchor) and a TIME (then the anchor too, marked for an E3
 stage) is pinned with an E4-shaped event (`idx` = the moment 12, anchor 9 — the
-contract on CTS_ESTABLISHED since Plan E E4a, on BOS_CONFIRMED from E4b) so a
+contract since Plan E E4a (CTS_ESTABLISHED) / E4b (BOS_CONFIRMED)) so a
 location read switched to the moment — or a raw `ev.idx` read — fails.
 
 The TIME pins state the value of the stage that switched them: the anchor
@@ -194,7 +194,6 @@ def _e4_bos(anchor=20, moment=22, **kw):
     return make_bos_confirmed(bos_anchor_idx=anchor, confirmed_at=moment, idx=moment, **kw)
 
 
-@pytest.mark.illegal_event_contract
 def test_first_confluence_input_is_the_bos_anchor():
     """B5 / R1: the FC probe input (the pool key) is the BOS ANCHOR; the trigger
     fires at the moment."""
@@ -203,7 +202,6 @@ def test_first_confluence_input_is_the_bos_anchor():
     assert (t.input_idx, t.trigger_event_idx) == (20, 22)
 
 
-@pytest.mark.illegal_event_contract
 def test_struct_start_is_the_moment_and_creation_idx_the_anchor():
     """B9 / B10 (Plan E E3f, user decision 2026-09-25): the lifecycle-start base
     is the first CTS_ESTABLISHED MOMENT (22, not BOS_0's anchor 20); the
@@ -217,7 +215,6 @@ def test_struct_start_is_the_moment_and_creation_idx_the_anchor():
     assert rec.creation_event_idx == 20                            # stays the anchor (E3f)
 
 
-@pytest.mark.illegal_event_contract
 def test_structure_levels_are_timed_at_the_anchors():
     """L5 / B8: `structure_levels` place each CTS / BOS level at its ANCHOR candle
     (the E2c BOS-only variant replay caught a raw `ev.idx` read here)."""
@@ -232,7 +229,6 @@ def test_structure_levels_are_timed_at_the_anchors():
     assert (bos.kind, bos.time) == ("BOS", t.iloc[7])
 
 
-@pytest.mark.illegal_event_contract
 def test_prev_bos_line_runs_anchor_to_anchor():
     """B6 / L9 (Q6): the line starts at sid 0's last BOS ANCHOR and ends at the
     ANCHOR of sid 1's first CTS known at/after the reversal (the filter: its moment, E3d)."""

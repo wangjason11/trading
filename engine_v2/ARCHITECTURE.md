@@ -88,9 +88,9 @@ Produced by MarketStructure:
 
 **`ev.idx` convention — IMPORTANT (the CANONICAL per-event field table; every other doc points here).**
 `ev.idx` is **not yet** uniformly "when the event is known". Plan E moves it to the event's **moment**
-one type at a time: `CTS_ESTABLISHED` since E4a (2026-09-25); `BOS_CONFIRMED` (E4b) and pattern-path
-`CTS_UPDATED` (E4c) still stamp their **price location** there (a historical, element-definition
-field). In the naming standard (GLOSSARY "Naming Standard") that location is the element's **anchor**
+one type at a time: `CTS_ESTABLISHED` since E4a and `BOS_CONFIRMED` since E4b (both 2026-09-25); only
+pattern-path `CTS_UPDATED` (E4c) still stamps its **price location** there (a historical,
+element-definition field). In the naming standard (GLOSSARY "Naming Standard") that location is the element's **anchor**
 (a structure endpoint) and the knowable candle its **moment**; a `CTS_ESTABLISHED` / `BOS_CONFIRMED`
 carries both in meta (`cts_anchor_idx` / `bos_anchor_idx` and `confirmed_at`), whatever `ev.idx` holds.
 Timing / lifecycle reads (scan windows, lifecycle starts/ends, activation gates, "knowable-at" clips)
@@ -105,7 +105,7 @@ reference window (zones-pass audit, 2026-09-22; the `CTS_THRESHOLD_UPDATED` row 
 | Event | `ev.idx` | The moment (knowable at) | The anchor (price location) | `ev.price` | Other index meta |
 |---|---|---|---|---|---|
 | `CTS_ESTABLISHED` | **the moment** (Plan E E4a, 2026-09-25 — the emitter asserts `ev.idx == meta["confirmed_at"]`; before E4a it was the CTS anchor) | `meta["confirmed_at"]` = the pattern's apply candle (`end_idx` on SUCCESS, `confirmation_idx` on CONFIRMED). Equals the same cycle's `BOS_CONFIRMED.meta["confirmed_at"]` **by construction** (one `apply_idx`, one emission block; `multitf/parent_tables.py` asserts it) | `meta["cts_anchor_idx"]` (Plan E E2a; `ef.cts_anchor_idx`) = the new cycle's CTS **anchor**: the breakout pattern's extreme candle — the FIRST argmax(`h`) (sd +1) / argmin(`l`) (sd −1) over the winning pattern's span `[start_idx, max(end_idx, confirmation_idx)]` (`_cts_from_breakout_event`) — adopted as the cycle's CTS. When the anchor precedes the apply candle it is adopted retroactively: no CTS event is emitted when the anchor candle closes (raw CTS updates are off during the anchor→apply back-fill of an establishing cycle; the back-fill still runs `_bos_barrier_step` and the reversal-watch checks, which can emit their own events) | the anchor's high (sd +1) / low (sd −1) — when the anchor lags, NOT a price of the `ev.idx` candle | `meta["pattern_anchor_idx"]` = the breakout pattern's FIRST candle (`ev.start_idx`, the MS scan candle) — the PATTERN-realm anchor (renamed from `anchor_idx`, Plan E E1), **not necessarily the CTS anchor** (the two coincide when the pattern's first candle holds the extreme; 0 of 34 `CTS_ESTABLISHED` rows on the reference window) and never a timing value |
-| `BOS_CONFIRMED` | the BOS anchor (`== meta["bos_anchor_idx"]`) until Plan E E4b flips it to the moment | `meta["confirmed_at"]` (the same `apply_idx` as the cycle's `CTS_ESTABLISHED`; it is only ever emitted together with one) | `meta["bos_anchor_idx"]` (Plan E E2a; `ef.bos_anchor_idx`) = the BOS **anchor**: the extreme found by the BOS search (cycle 0: the extreme in `[start, cts_idx−1]`; cycle ≥ 1: the retracement extreme) — `<= confirmed_at` on the normal path (34/34 on the reference window) but NOT asserted in code: `_select_bos_on_breakout` swaps a reversed `[window_start, apply]` window, which would put the search past the apply candle | the BOS level (the anchor's price; stays after E4b) | MS state `st.bos` (was `st.bos_confirmed`) is built from the anchor, not from `ev.idx` |
+| `BOS_CONFIRMED` | **the moment** (Plan E E4b, 2026-09-25 — the emitter asserts `ev.idx == meta["confirmed_at"]`; before E4b it was the BOS anchor) | `meta["confirmed_at"]` (the same `apply_idx` as the cycle's `CTS_ESTABLISHED`; it is only ever emitted together with one) | `meta["bos_anchor_idx"]` (Plan E E2a; `ef.bos_anchor_idx`) = the BOS **anchor**: the extreme found by the BOS search (cycle 0: the extreme in `[start, cts_idx−1]`; cycle ≥ 1: the retracement extreme) — `<= confirmed_at` on the normal path (34/34 on the reference window) but NOT asserted in code: `_select_bos_on_breakout` swaps a reversed `[window_start, apply]` window, which would put the search past the apply candle | the BOS level (the anchor's price; stays after E4b) | MS state `st.bos` (was `st.bos_confirmed`) is built from the anchor, not from `ev.idx` |
 | `CTS_UPDATED` | the new CTS anchor. Raw path (`meta["via"] == CTS_UPDATED_RAW_VIA`, `"replay_raw"` — the constant in `structure/event_fields.py`, one definition of "raw path"): the processed candle whose wick made a new high/low — knowable at its close. Pattern path (`via` = a pattern name; a breakout while the cycle is unconfirmed): the pattern's extreme candle (until Plan E E4c flips it to the moment), which can precede the pattern's apply candle; when it precedes the apply candle and extends the extreme, a raw-path `CTS_UPDATED` at the same idx/price was already emitted at that candle's close (raw updates stay on during a non-establishing back-fill) — 1 of 37 pattern-path rows on the reference window (confluence sub 2, 2468, a same-price duplicate) | raw path: `ev.idx`. Pattern path: the apply candle, recorded as `meta["confirmed_at"]` (since Plan E E3·0, 2026-09-24; `ev.idx <= confirmed_at`; the raw path carries no `confirmed_at`) — `event_moment` returns it | `ev.idx` (`ef.cts_anchor_idx`) | the new extreme's high / low | pattern path: `confirmed_at` |
 | `CTS_CONFIRMED` / `CTS_RECONFIRMED` | the confirmation candle (pullback apply candle, or the proximity candle) | `ev.idx` == `meta["confirmed_at"]` | `meta["cts_anchor_idx"]` = `st.cts.idx` at confirmation = the CURRENT CTS anchor (equals the same cycle's `CTS_ESTABLISHED` anchor unless a `CTS_UPDATED` moved it). Measured: equal on only 7 of the 30 `CTS_CONFIRMED` rows on the reference window (6 of 25 unique cycles; sub 7 cycle 1 is on both lenses) — never assume either way | the current CTS price (`st.cts.price`) | — |
 | `CTS_THRESHOLD_UPDATED` | NOT a price location: the processing candle whose range sync moved the CTS threshold — emitted only by `_sync_thresholds_from_range(i)` (active-range upkeep `_update_active_range(i)`, a pullback's apply candle, the sd-proximity confirmation candle) | `ev.idx` | — | the new threshold (the range breakout bound) | — (`meta["prev"]` is a price) |
@@ -123,8 +123,8 @@ callers import the MODULE and call it qualified (`from engine_v2.structure impor
 `ef.cts_anchor_idx(ev)`) — a direct import would collide with the many locals of the same names
 (`tests/test_event_fields.py` bans it). Direct indexing only, never `.get(key, ev.idx)`:
 - `ef.event_moment(ev)` — this table's moment column (added in Plan F in `market_structure`, moved here and
-  extended in E2a): `CTS_ESTABLISHED` / `BOS_CONFIRMED` → `meta["confirmed_at"]` (== `ev.idx` on
-  `CTS_ESTABLISHED` since E4a); `CTS_CONFIRMED` /
+  extended in E2a): `CTS_ESTABLISHED` / `BOS_CONFIRMED` → `meta["confirmed_at"]` (== `ev.idx` since
+  E4a / E4b); `CTS_CONFIRMED` /
   `CTS_RECONFIRMED` / `CTS_THRESHOLD_UPDATED` → `ev.idx`; `CTS_UPDATED` → `ev.idx` on the raw path / `meta["confirmed_at"]`
   on the pattern path (the apply candle, recorded since Plan E E3·0); any other type raises `ValueError` (a new consumer must first define
   its event's moment here). Why it matters: IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
@@ -133,7 +133,7 @@ callers import the MODULE and call it qualified (`from engine_v2.structure impor
   `ef.pattern_anchor_idx(ev)`; `ef.processing_order_key(ev)` — the pre-E4 event processing order `(ev.idx,
   ev.type)` frozen on the anchors (PLAN_E §6.2): the flip reorders nothing. Other types raise.
 - `ef.stamped_idx(ev)` — the index `ev.idx` held before the Plan E E4 flip, frozen against it (the anchor for
-  `CTS_ESTABLISHED` — whose `ev.idx` is the moment since E4a — / `BOS_CONFIRMED` / `CTS_UPDATED`, `ev.idx`
+  `CTS_ESTABLISHED` / `BOS_CONFIRMED` — whose `ev.idx` is the moment since E4a / E4b — / `CTS_UPDATED`, `ev.idx`
   otherwise). Neither a location nor a moment: the sort keys, the historical `SidRecord.creation_event_idx`,
   struct_start's never-established fallback and the H1-overlay window start
   (`export_m15_chart._h1_overlay_window_start_by_sid`, the first structural anchor) — every E2
@@ -144,10 +144,11 @@ callers import the MODULE and call it qualified (`from engine_v2.structure impor
   sibling clip's `new_ev.idx` (they copy the raw index); (KL meta `source_event_idx`, write-only, was one until
   Plan E E4b-pre deleted it); the `[kl_zones]` debug prints (they print the raw idx next to the anchor); the Plan A bounded-run
   assert; the debug probe script `debug/probe_fc_finalize.py`'s Phase-2 leak check (`max_ev_idx` / `past_bound`
-  over all events — the `CTS_ESTABLISHED` rows count at their moment since E4a, the BOS rows after E4b: the right
+  over all events — the `CTS_ESTABLISHED` / BOS rows count at their moment since E4a / E4b: the right
   value for a bound check). Proof: the E4 variant replays (`plans/plan_e_inputs/review_scripts/e4flip_plugin.py`)
-  and `tests/test_e4_simulation.py` (PLAN_E §6.4, §6.7; since E4a also a regression pin of the real emitter —
-  the downstream outputs are identical with every `CTS_ESTABLISHED` swapped back to its anchor).
+  and `tests/test_e4_simulation.py` (PLAN_E §6.4, §6.7; since E4a / E4b also a regression pin of the real
+  emitter — the downstream outputs are identical with every `CTS_ESTABLISHED` / `BOS_CONFIRMED` swapped back
+  to its anchor).
 
 **Bound and frequency (CTS_ESTABLISHED):** `meta["pattern_anchor_idx"]` (pattern anchor) `<= meta["cts_anchor_idx"]`
 (CTS anchor) `<= meta["confirmed_at"]` (moment, `== ev.idx` since Plan E E4a) `<= meta["pattern_anchor_idx"] +

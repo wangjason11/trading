@@ -72,7 +72,8 @@ _H1_EVENTS_CSV = (
 #
 #   CTS_ESTABLISHED (S,C).idx == meta["confirmed_at"] (the MOMENT):
 #       (0,0)=115  (0,1)=652  (1,0)=703  (1,1)=748  (1,2)=902
-#   BOS_CONFIRMED (S,C): idx = the BOS extreme, confirmed_at == the CTS moment:
+#   BOS_CONFIRMED (S,C): anchor (the BOS extreme; the `idx` argument) -> confirmed_at == the CTS
+#   moment (the event's idx since Plan E E4b):
 #       (0,0) 96->115  (0,1) 591->652  (1,0) 689->703  (1,1) 728->748  (1,2) 826->902
 #   STATE_CHANGED to=reversal: sid 0 @ 902. sid 1 never reverses.
 #   parent_sd: sid 0 = +1, sid 1 = -1.
@@ -603,9 +604,9 @@ def _events_from_csv(path: Path) -> List[StructureEvent]:
             key = {"CTS_ESTABLISHED": "cts_anchor_idx", "BOS_CONFIRMED": "bos_anchor_idx"}.get(row["type"])
             if key is not None:
                 meta.setdefault(key, int(row["idx"]))
-            # A save older than Plan E E4a stamps a CTS_ESTABLISHED at its anchor;
-            # since E4a its idx is the moment.
-            idx = int(meta["confirmed_at"]) if row["type"] == "CTS_ESTABLISHED" else int(row["idx"])
+            # A save older than Plan E E4a / E4b stamps a CTS_ESTABLISHED /
+            # BOS_CONFIRMED at its anchor; since then its idx is the moment.
+            idx = int(meta["confirmed_at"]) if key is not None else int(row["idx"])
             # A save older than Plan E E3·0 lacks a pattern-path CTS_UPDATED's
             # `confirmed_at` (its apply candle — not recoverable from the row).
             # Stand in `idx`: every H1 pattern-path update on this window has

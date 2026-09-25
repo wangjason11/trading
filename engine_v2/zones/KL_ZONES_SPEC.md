@@ -11,8 +11,7 @@ They are intended to be visually validated (and later traded) as “key levels�
 
 Originally copied from the canonical spec block in the module docstring (`kl_zones_v1.py`). The
 indexing bullets below were corrected 2026-09-22 against `ARCHITECTURE.md` "`ev.idx` convention"
-(the canonical per-event field table); the module docstring still carries the older "level
-index" wording for both events (a `.py` follow-up).
+(the canonical per-event field table), and again for Plan E E4b (2026-09-25).
 
 ### Identifiers
 - `structure_id`: market structure unit id (directional regime). Starts at 0. Increments on reversal.
@@ -20,9 +19,11 @@ index" wording for both events (a `.py` follow-up).
 
 ### StructureEvent indexing (the two zone-creating events)
 `ev.idx` is **event-specific** — it is not uniformly "the level" nor "when it is known":
-- `BOS_CONFIRMED.idx` = the BOS **extreme** (the level; `<= confirmed_at` on the normal path —
-  34/34 rows on the reference window; not asserted in code).
-  `meta["confirmed_at"]` = the breakout's apply candle — the cycle's CTS-established moment.
+- `BOS_CONFIRMED.idx` = `meta["confirmed_at"]` = the breakout's apply candle — the cycle's
+  CTS-established moment (Plan E E4b, 2026-09-25; asserted at the emit). The level — the BOS
+  **extreme**, `<= confirmed_at` on the normal path (34/34 rows on the reference window; not asserted
+  in code) — is `meta["bos_anchor_idx"]` (`ef.bos_anchor_idx`); it was `ev.idx` before E4b. `ev.price`
+  is the level's price.
 - `CTS_CONFIRMED.idx` = the **confirmation candle** (the pullback apply candle, or the
   sd-proximity candle) and `== meta["confirmed_at"]`; it is NOT the CTS level. The level — the
   current CTS extreme at confirmation — is `meta["cts_anchor_idx"]`.
@@ -30,17 +31,17 @@ index" wording for both events (a `.py` follow-up).
 ### Zone indexing
 - `meta["base_idx"]`: FIRST candle of the zone base pattern (where the rectangle begins) — at or before
   the zone's `anchor_idx` (see "base_idx by Pattern Type"); a different field from the anchor.
-- *(Removed, Plan E E4b-pre, 2026-09-25:* `meta["source_event_idx"]` — the source event's RAW `ev.idx`,
-  write-only, slice-local in the M15 lens CSVs; it would have become a copy of `confirmed_idx` after the E4b
-  flip (PLAN_E Q21); saves before E4b-pre still carry it.)*
+- *(Removed in Plan E E4b-pre, 2026-09-25: `meta["source_event_idx"]` — the source event's RAW `ev.idx`,
+  write-only, slice-local in the M15 lens CSVs; after the E4b flip it would have equalled the zone's raw,
+  unclamped confirm candle (PLAN_E Q21). Saves before E4b-pre still carry it.)*
 - `meta["anchor_idx"]`: the candle base-pattern identification starts from — BOS:
   `BOS_CONFIRMED.meta["bos_anchor_idx"]` (the BOS anchor, via `event_fields.bos_anchor_idx`; Plan E E2c); CTS: `CTS_CONFIRMED.meta["cts_anchor_idx"]` (the CTS
   anchor at confirmation). A market-structure-realm anchor — **not** `CTS_ESTABLISHED.meta
   ["pattern_anchor_idx"]` (the breakout pattern's first candle, a pattern-realm anchor); see GLOSSARY
   "Naming Standard" / ARCHITECTURE.md "Anchor has two realms".
 - `meta["confirmed_idx"]`: candle index where the zone becomes confirmed for charting — raw value
-  `ev.meta["confirmed_at"]` for both kinds (fallback `ev.idx`), then clamped up to the structure
-  lifecycle-start (see "Lifecycle-start clamp" below):
+  `ef.event_moment(ev)` (BOS: `meta["confirmed_at"]`; CTS_CONFIRMED: `ev.idx` == `meta["confirmed_at"]`),
+  no fallback, then clamped up to the structure lifecycle-start (see "Lifecycle-start clamp" below):
   - BOS-derived: the breakout's apply candle (the moment)
   - CTS-derived: the confirmation candle (`== ev.idx`)
 

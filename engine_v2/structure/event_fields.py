@@ -73,9 +73,8 @@ def pattern_anchor_idx(ev: Any) -> int:
 def event_moment(ev: Any) -> int:
     """The candle at which a CTS / BOS event became knowable (its MOMENT).
 
-    - CTS_ESTABLISHED / BOS_CONFIRMED: `meta["confirmed_at"]` (== `ev.idx` on
-      CTS_ESTABLISHED since Plan E E4a; `ev.idx` of a BOS_CONFIRMED is its
-      anchor until E4b).
+    - CTS_ESTABLISHED / BOS_CONFIRMED: `meta["confirmed_at"]` (== `ev.idx`
+      since Plan E E4a / E4b).
     - CTS_CONFIRMED / CTS_RECONFIRMED: `ev.idx` (the confirmation candle).
     - CTS_UPDATED: `ev.idx` on the raw path (`via == CTS_UPDATED_RAW_VIA`, the
       processing candle); `meta["confirmed_at"]` on the pattern path (the

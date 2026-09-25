@@ -143,12 +143,13 @@ def test_poi_never_activates_before_its_cycle_lifecycle_start(maker):
 def test_poi_first_activation_tracks_confirmed_at_exactly():
     def move_moment(events):
         # Keep the definitional identity: BOS and CTS_ESTABLISHED share the moment.
-        # A CTS_ESTABLISHED's idx IS its moment (Plan E E4a): it moves with it
-        # (a meta edit after construction bypasses the conftest validator).
-        est = _event(events, "CTS_ESTABLISHED", 0, 1)
-        est.meta["confirmed_at"] = 11
-        est.idx = 11
-        _event(events, "BOS_CONFIRMED", 0, 1).meta["confirmed_at"] = 11
+        # Each event's idx IS its moment (Plan E E4a / E4b): it moves with it (a
+        # meta edit after construction bypasses the conftest validator; `_run`
+        # re-validates).
+        for etype in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
+            ev = _event(events, etype, 0, 1)
+            ev.meta["confirmed_at"] = 11
+            ev.idx = 11
 
     _, _, out = _run(_make_second_cts_moment_after_extreme_data(), mutate=move_moment)
     z = _only_poi(out, 0, 1)

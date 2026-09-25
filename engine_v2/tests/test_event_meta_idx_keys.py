@@ -217,11 +217,11 @@ def test_anchor_keys_are_int_and_idx_is_the_contract_index(geometry, m15_df):
     """Plan E E2a: CTS_ESTABLISHED `cts_anchor_idx` / BOS_CONFIRMED
     `bos_anchor_idx` and `confirmed_at` are Python ints, and `ev.idx` equals the
     index the contract names — after the mirror's shift too (all are shifted by
-    the same offset): the moment `confirmed_at` on CTS_ESTABLISHED (Plan E E4a),
-    the anchor on BOS_CONFIRMED (until E4b)."""
+    the same offset): the moment `confirmed_at` on both types (Plan E E4a
+    CTS_ESTABLISHED, E4b BOS_CONFIRMED)."""
     events, _ = _mirrored(geometry, m15_df)
     for t, key, idx_key in (("CTS_ESTABLISHED", "cts_anchor_idx", "confirmed_at"),
-                            ("BOS_CONFIRMED", "bos_anchor_idx", "bos_anchor_idx")):
+                            ("BOS_CONFIRMED", "bos_anchor_idx", "confirmed_at")):
         evs = [ev for ev in events if ev.type == t]
         assert evs, t
         for ev in evs:

@@ -654,7 +654,7 @@ zones.
 **Example:** sid=0 cycle=1 had CTS_CONFIRMED at idx=640 and BOS_CONFIRMED for cycle=2 also at idx=640. The scan window was empty [641, 639] — correctly skipped. Without the boundary, the scan would have continued to idx=710 and found a match that belonged to structure 1.
 
 **Key boundaries:**
-- Next BOS_CONFIRMED for `(sid, cycle_id + 1)` — its `meta["confirmed_at"]`, not its `.idx` (the BOS extreme) → current cycle zones become inactive
+- Next BOS_CONFIRMED for `(sid, cycle_id + 1)` — its moment `meta["confirmed_at"]` (`== .idx` since Plan E E4b), not its anchor `meta["bos_anchor_idx"]` (the BOS extreme) → current cycle zones become inactive
 - the sid's last REVERSAL_CANDIDATE `meta["apply_idx"]` (the SCHEDULED reversal apply, a prediction; the scan cap, not the confirmed `STATE_CHANGED(to=reversal)`) → scan window ends (`zone_proximity.py`, `reversal_idx_by_sid`; the scan stops at `apply_idx - 1`)
 
 **Also:** Within the scan window, only use active POI zones at each candle (check `confirmed_idx <= candle <= end_idx`). The BOS KL zone is throughout-active. The CTS KL zone (used for opp_sd triggers) is also throughout-active within this window — `CTS_(n+1)_ESTABLISHED`, which deactivates CTS_n zone, fires exactly AT `next_BOS.confirmed_at` (its moment `meta["confirmed_at"]` is the same apply candle by construction — and its `.idx` since Plan E E4a; its CTS anchor `meta["cts_anchor_idx"]`, the extreme, can be earlier — ARCHITECTURE.md "`ev.idx` convention"), so within `[CTS_n_conf, next_BOS.confirmed_at - 1]` the CTS_n zone is still alive.
@@ -688,31 +688,32 @@ zones.
 
 ---
 
-## BOS_CONFIRMED `ev.idx` Is the BOS Extreme, Not the Confirmation Candle
+## BOS_CONFIRMED `ev.idx` Was the BOS Extreme Until Plan E E4b — Read the Role, Never the Raw `ev.idx`
 
-**Problem:** `BOS_CONFIRMED` has `ev.idx` set to the **BOS extreme candle** (where the BOS level price was set), not the confirmation candle — until Plan E E4b flips it to the moment. The confirmation candle index is in `ev.meta["confirmed_at"]`. It is NOT the lone exception — pattern-path `CTS_UPDATED` is extreme-located too (until E4c), and `CTS_ESTABLISHED` was until Plan E E4a (2026-09-25).
+**Problem (history; the lesson stands):** until Plan E E4b (2026-09-25) `BOS_CONFIRMED` had `ev.idx` set to the **BOS extreme candle** (where the BOS level price was set), not the confirmation candle (`ev.meta["confirmed_at"]`), and `CTS_ESTABLISHED` did the same until E4a — reading it as a TIME cut windows short. Since E4b `ev.idx` IS the moment (`== confirmed_at`, asserted at the emit) and the extreme lives in `meta["bos_anchor_idx"]`, so the trap inverted: a raw `ev.idx` read used as a LOCATION (the BOS level candle) now lands on the confirmation candle — 2 to 411 M15 candles late on the reference window. Pattern-path `CTS_UPDATED` is still extreme-located until E4c.
 
 **Convention (short form — the canonical per-event table is ARCHITECTURE.md "`ev.idx` convention"; do not re-grow a copy here):**
-- `ev.idx` is a **price location** (NOT knowable at that candle) for `BOS_CONFIRMED` (the BOS extreme; until Plan E E4b) and pattern-path `CTS_UPDATED` (the span extreme; its apply candle is `confirmed_at`, since Plan E E3·0; until E4c).
-- `ev.idx` is the **moment** for `CTS_ESTABLISHED` (the breakout's apply candle, `== confirmed_at` — since Plan E E4a, 2026-09-25; its CTS anchor, the first argmax `h` / argmin `l` over the breakout span, is `meta["cts_anchor_idx"]`, and `ev.price` stays that anchor's price), `CTS_CONFIRMED` / `CTS_RECONFIRMED` (the confirmation candle, `== confirmed_at`), raw-path `CTS_UPDATED` (`meta["via"] == CTS_UPDATED_RAW_VIA`, i.e. `"replay_raw"`; the processed candle) and `CTS_THRESHOLD_UPDATED` (the processing candle passed to `_sync_thresholds_from_range`).
+- `ev.idx` is a **price location** (NOT knowable at that candle) only for pattern-path `CTS_UPDATED` (the span extreme; its apply candle is `confirmed_at`, since Plan E E3·0; until E4c).
+- `ev.idx` is the **moment** for `CTS_ESTABLISHED` (the breakout's apply candle, `== confirmed_at` — since Plan E E4a, 2026-09-25; its CTS anchor, the first argmax `h` / argmin `l` over the breakout span, is `meta["cts_anchor_idx"]`, and `ev.price` stays that anchor's price), `BOS_CONFIRMED` (the same apply candle — since Plan E E4b; its anchor, the BOS extreme, is `meta["bos_anchor_idx"]`, and `ev.price` stays the BOS level), `CTS_CONFIRMED` / `CTS_RECONFIRMED` (the confirmation candle, `== confirmed_at`), raw-path `CTS_UPDATED` (`meta["via"] == CTS_UPDATED_RAW_VIA`, i.e. `"replay_raw"`; the processed candle) and `CTS_THRESHOLD_UPDATED` (the processing candle passed to `_sync_thresholds_from_range`).
 - `REVERSAL_CANDIDATE`: `ev.idx` = the reversal pattern's anchor; `meta["apply_idx"]` = the SCHEDULED apply (a prediction that can expire).
 - The moment of `BOS_CONFIRMED` and `CTS_ESTABLISHED` is `meta["confirmed_at"]` — the same apply candle for the same cycle, by construction.
-- In code, `structure/event_fields.py` names each role in one place (Plan E E2a; call it qualified, `ef.<fn>(ev)`): `ef.event_moment(ev)` — `confirmed_at` for `CTS_ESTABLISHED` / `BOS_CONFIRMED`, `ev.idx` for `CTS_CONFIRMED` / `CTS_RECONFIRMED` / `CTS_THRESHOLD_UPDATED` / raw-path `CTS_UPDATED`, `confirmed_at` for pattern-path `CTS_UPDATED` (the apply candle, since Plan E E3·0), any other type raises; FibTracker's imbalance reads are asked at it (Plan F). The anchors: `ef.cts_anchor_idx(ev)` / `ef.bos_anchor_idx(ev)` read meta `cts_anchor_idx` / `bos_anchor_idx` (`== ev.idx` on `BOS_CONFIRMED` until Plan E E4b; never on a lagging `CTS_ESTABLISHED` since E4a).
+- In code, `structure/event_fields.py` names each role in one place (Plan E E2a; call it qualified, `ef.<fn>(ev)`): `ef.event_moment(ev)` — `confirmed_at` for `CTS_ESTABLISHED` / `BOS_CONFIRMED`, `ev.idx` for `CTS_CONFIRMED` / `CTS_RECONFIRMED` / `CTS_THRESHOLD_UPDATED` / raw-path `CTS_UPDATED`, `confirmed_at` for pattern-path `CTS_UPDATED` (the apply candle, since Plan E E3·0), any other type raises; FibTracker's imbalance reads are asked at it (Plan F). The anchors: `ef.cts_anchor_idx(ev)` / `ef.bos_anchor_idx(ev)` read meta `cts_anchor_idx` / `bos_anchor_idx` (never `== ev.idx` on a lagging `CTS_ESTABLISHED` / `BOS_CONFIRMED` since Plan E E4a / E4b).
 
 (An earlier copy of this table listed `CTS_ESTABLISHED` as "confirmation candle" and BOS as the lone "exception!" — both wrong; corrected 2026-09-22.)
 
-**Symptom:** Using `ev.idx` for timing boundaries (scan windows, lifecycle ends) cuts the window short — the BOS isn't actually known until `confirmed_at`, which can be many candles later.
+**Symptom:** Before E4b, using `ev.idx` for timing boundaries (scan windows, lifecycle ends) cut the window short — the BOS isn't actually known until `confirmed_at`, which can be many candles later. Since E4b, using `ev.idx` for the BOS LOCATION (a zone base, a chart dot, a probe input, a fib point) moves it to the confirmation candle.
 
 **Bugs caused by this:**
 - UC1 lifecycle boundary ended at BOS extreme instead of confirmation → M15 structure too short to finalize
 - WVMI scan window ended at BOS extreme → missed valid proximity activations
 - POI activation gate read `CTS_ESTABLISHED.idx` (then the CTS anchor) under the moment name `cts_established_idx` → a POI could go live up to 5 candles (the bound) before its cycle existed — observed: 1 candle, M15 confluence sub 0 cycle 2, IC 678: 1223 → 1224. Fixed by Plan D, 2026-09-23 (`plans/PLAN_D_poi_activation_moment.md`).
 
-**Fix:** Use `ev.meta["confirmed_at"]` when you need the candle where BOS was actually confirmed. Every `BOS_CONFIRMED` carries it (both emit sites in `_apply_pattern_at_apply_idx` set it; 34/34 rows on the reference window), so read it strictly — `ef.event_moment(ev)` (`structure/event_fields.py`); Plan E E2d removed the last defensive `int(ev.meta.get("confirmed_at", ev.idx))` reads: that fallback IS the extreme-as-time bug (same nuance as the CTS_CONFIRMED entry above).
+**Fix:** Name the role: `ef.event_moment(ev)` for the candle where the BOS was actually confirmed, `ef.bos_anchor_idx(ev)` for the BOS level candle (`structure/event_fields.py`) — never the raw `ev.idx`. Every `BOS_CONFIRMED` carries both keys (both emit sites in `_apply_pattern_at_apply_idx` set them; 34/34 rows on the reference window), so read them strictly; Plan E E2d removed the last defensive `int(ev.meta.get("confirmed_at", ev.idx))` reads: that fallback WAS the extreme-as-time bug (same nuance as the CTS_CONFIRMED entry above).
 
 **Related fields:**
-- `ev.idx` = BOS extreme candle (where the BOS price level was set)
-- `ev.price` = BOS price level
+- `ev.idx` = the confirmation candle (the moment, `== confirmed_at`) since Plan E E4b — the BOS extreme before
+- `ev.meta["bos_anchor_idx"]` = the BOS extreme candle (where the BOS price level was set; Plan E E2a)
+- `ev.price` = BOS price level (the anchor's price — NOT a price of the `ev.idx` candle since E4b)
 - `ev.meta["confirmed_at"]` = confirmation candle (when the breakout was detected) — the apply candle of the breakout that established the cycle, `==` the same cycle's `CTS_ESTABLISHED.meta["confirmed_at"]`
 - `ev.meta["pb_start"]` = pullback start index
 
@@ -1544,7 +1545,7 @@ way they should — by chart-marker idx, you see `BOS → BOS → CTS → CTS`
 where you expect `BOS → CTS → BOS → CTS`. Equivalent in the
 `_M15_<entity>_structure_events.csv` dump: the `cycle_id` of confirmed
 events goes forward then backward (e.g., `0, 1, 0, 1`) when sorted by
-the chart's marker idx (`bos_anchor_idx` for BOS — `BOS_CONFIRMED.idx` until
+the chart's marker idx (`bos_anchor_idx` for BOS — `BOS_CONFIRMED.idx` before
 Plan E E4b —, `cts_anchor_idx` for CTS).
 
 **Root cause:** `is_range_confirm_idx` is computed entity-absolute on

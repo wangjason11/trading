@@ -61,6 +61,7 @@ import pandas as pd
 import pytest
 
 from engine_v2.multitf import entity_df_mutation as edm
+from engine_v2.structure import event_fields as ef
 from engine_v2.multitf.sub_structure_pool import (
     LENS_CONFLUENCE,
     LENS_COUNTER,
@@ -604,15 +605,15 @@ def test_events_clipped_by_knowable_at_inclusive_at_cap(geometry, m15_df):
 
 
 def test_bos_straddling_the_cap_is_clipped_by_confirmed_at_not_idx(geometry, m15_df):
-    """The BOS_0 of this geometry has its EXTREME at 55 and is CONFIRMED at 57
-    (entity-absolute). A cap of 56 lies between them: `ev.idx` (55) is inside
-    the window but the break was not knowable until 57 -> the event must be
-    excluded. A cap of 57 includes it. (start_idx = the anchor here — the
-    only way to put a cap between the two.)"""
+    """The BOS_0 of this geometry has its EXTREME (anchor) at 55 and is CONFIRMED
+    at 57 (entity-absolute; its `ev.idx` since Plan E E4b). A cap of 56 lies
+    between them: the anchor (55) is inside the window but the break was not
+    knowable until 57 -> the event must be excluded. A cap of 57 includes it.
+    (start_idx = the anchor here — the only way to put a cap between the two.)"""
     pool, sub = geometry
     bounded, slice_begin = sub.geometry
     bos = _bos0(bounded)
-    bos_anchor_abs = int(bos.idx) + slice_begin
+    bos_anchor_abs = ef.bos_anchor_idx(bos) + slice_begin
     bos_known_abs = int(bos.meta["confirmed_at"]) + slice_begin
     assert bos_anchor_abs == _STARTING_IDX and bos_known_abs == _STARTING_IDX + 2   # 55 / 57
 
@@ -631,9 +632,10 @@ def test_bos_straddling_the_cap_is_clipped_by_confirmed_at_not_idx(geometry, m15
     assert "BOS_CONFIRMED" in kinds_in
     mirrored_bos = [ev for ev in lens_dfs[LENS_CONFLUENCE].attrs["events"] if ev.type == "BOS_CONFIRMED"]
     assert len(mirrored_bos) == 1
-    # Entity-absolute after the mirror: extreme 55, confirmed_at 57.
-    assert int(mirrored_bos[0].idx) == bos_anchor_abs
-    assert int(mirrored_bos[0].meta["confirmed_at"]) == bos_known_abs
+    # Entity-absolute after the mirror: anchor 55, confirmed_at = idx 57 (the
+    # mirror shifts idx and both meta keys by the same offset).
+    assert ef.bos_anchor_idx(mirrored_bos[0]) == bos_anchor_abs
+    assert int(mirrored_bos[0].idx) == int(mirrored_bos[0].meta["confirmed_at"]) == bos_known_abs
 
 
 def test_mirrored_events_are_deep_copies_of_the_shared_geometry(geometry, m15_df):
@@ -704,7 +706,7 @@ def test_kl_zones_take_the_floor_and_the_cap(geometry, m15_df):
         assert z0.meta["end_idx"] == _END
         # The zone's structural anchor is the BOS extreme (55) — historical,
         # NOT floored (a floor is never applied to a historical field, §1).
-        assert z0.meta["anchor_idx"] == int(_bos0(bounded).idx) + slice_begin == _STARTING_IDX
+        assert z0.meta["anchor_idx"] == ef.bos_anchor_idx(_bos0(bounded)) + slice_begin == _STARTING_IDX
         # Fib lifecycle scalars follow the same window (FIB_LIFECYCLE_SPEC §15).
         for f in lens_dfs[lens].attrs["fib_states"]:
             assert f.start_idx >= sub.start_idx
@@ -780,7 +782,7 @@ def test_poi_cycle_term_is_the_moment_through_the_projection(geometry, m15_df):
     """Plan D through projection + mirror (the replay's sub-3 case: a meta-only
     re-value). Move the geometry's cycle-0 moment 2 candles past its anchor
     (CTS_ESTABLISHED and BOS_CONFIRMED together — the definitional identity;
-    the CTS_ESTABLISHED's idx moves with it, Plan E E4a): the mirrored
+    both idx move with it, Plan E E4a / E4b): the mirrored
     `cts_established_idx` follows the MOMENT, not the anchor; the first
     activation is unchanged (IC 63 still decides)."""
     pool, sub = geometry
@@ -793,10 +795,11 @@ def test_poi_cycle_term_is_the_moment_through_the_projection(geometry, m15_df):
     assert est.meta["cts_anchor_idx"] == est.meta["confirmed_at"] == bos.meta["confirmed_at"]
     moved = int(est.meta["confirmed_at"]) + 2
     # A meta edit after construction bypasses the conftest validator: keep the
-    # contract by hand (a CTS_ESTABLISHED's idx IS its moment, Plan E E4a).
+    # contract by hand (the idx IS the moment, Plan E E4a / E4b).
     est.meta["confirmed_at"] = moved
     est.idx = moved
     bos.meta["confirmed_at"] = moved
+    bos.idx = moved
     from engine_v2.tests.conftest import validate_event_contract
     validate_event_contract(est)
     validate_event_contract(bos)
