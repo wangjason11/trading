@@ -703,8 +703,9 @@ Identifiers
 - cts_cycle_id: internal CTS/BOS cycle id within a structure. Starts at 0.
 
 StructureEvent indexing
-- ev.idx: the raw index (today the BOS anchor / the CTS_CONFIRMED confirmation candle; Plan E E4
-  flips BOS to the moment). The BOS level is read from meta["bos_anchor_idx"] (`ef.bos_anchor_idx`).
+- ev.idx: the raw index (the BOS anchor until Plan E E4b flips BOS to the moment; the
+  CTS_ESTABLISHED moment since E4a; the CTS_CONFIRMED confirmation candle). The BOS level is
+  read from meta["bos_anchor_idx"] (`ef.bos_anchor_idx`).
 - ev.meta["confirmed_at"]: the candle index where that level was confirmed (breakout/pullback timing).
 
 Zone indexing

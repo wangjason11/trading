@@ -156,7 +156,7 @@ If zones "disappear", confirm the chart is selecting the most recent structure_i
 ### D) Confirm timing indices
 When something "happens too late/too early", check:
 - PatternEvent.apply_idx (end_idx vs confirmation_idx)
-- StructureEvent.idx vs meta["confirmed_at"]: on `BOS_CONFIRMED` / `CTS_ESTABLISHED`, `idx` is the price extreme (stamped after the fact) and `confirmed_at` is the moment the event became known. The canonical per-event table is `ARCHITECTURE.md` "`ev.idx` convention".
+- StructureEvent.idx vs meta["confirmed_at"]: on `BOS_CONFIRMED`, `idx` is the price extreme (stamped after the fact; until Plan E E4b) and `confirmed_at` is the moment the event became known; on `CTS_ESTABLISHED` `idx` IS the moment since Plan E E4a (the extreme is `meta["cts_anchor_idx"]`; `price` stays the extreme's). Read roles through `structure/event_fields.py` (`ef.event_moment` / `ef.cts_anchor_idx` / `ef.bos_anchor_idx`), never a raw CTS / BOS `idx`. The canonical per-event table is `ARCHITECTURE.md` "`ev.idx` convention".
 - Zone meta["confirmed_idx"] rules (BOS vs CTS)
 
 ### E) Confirm thresholds

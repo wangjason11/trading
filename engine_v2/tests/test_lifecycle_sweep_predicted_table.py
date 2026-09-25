@@ -47,6 +47,7 @@ from engine_v2.multitf.lifecycle_sweep import (
     run_lifecycle_sweep,
 )
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 from engine_v2.tests._event_factory import make_event
 
@@ -87,7 +88,8 @@ def _loh(parent_idx: int, _h1_df: Any, _m15_df: Any) -> Optional[int]:
 
 
 def _ev(idx: int, category: str, ev_type: str, price: Optional[float], **meta) -> StructureEvent:
-    # CTS_ESTABLISHED / BOS_CONFIRMED: idx is the anchor (tests/_event_factory.py).
+    # CTS_ESTABLISHED / BOS_CONFIRMED: the `idx` argument is the ANCHOR (`make_event`); the event's idx is the
+    # contract's (the moment on CTS_ESTABLISHED since Plan E E4a).
     return make_event(ev_type, idx, price=price, category=category, **meta)
 
 
@@ -128,8 +130,8 @@ def _h1_events() -> List[StructureEvent]:
         _ev(826, "STRUCTURE", "BOS_CONFIRMED", 0.58105, source="pullback_extreme",
             confirmed_at=902, pb_start=810, cycle_id=2, structure_id=1, struct_direction=-1),
     ]
-    # The orchestrator's `sorted_events` order (orchestrator.py: key=(idx, type)).
-    return sorted(evs, key=lambda e: (e.idx, e.type))
+    # The orchestrator's `sorted_events` order (`ef.processing_order_key`).
+    return sorted(evs, key=ef.processing_order_key)
 
 
 # Expected section-3 tables (derived):
@@ -601,6 +603,9 @@ def _events_from_csv(path: Path) -> List[StructureEvent]:
             key = {"CTS_ESTABLISHED": "cts_anchor_idx", "BOS_CONFIRMED": "bos_anchor_idx"}.get(row["type"])
             if key is not None:
                 meta.setdefault(key, int(row["idx"]))
+            # A save older than Plan E E4a stamps a CTS_ESTABLISHED at its anchor;
+            # since E4a its idx is the moment.
+            idx = int(meta["confirmed_at"]) if row["type"] == "CTS_ESTABLISHED" else int(row["idx"])
             # A save older than Plan E E3·0 lacks a pattern-path CTS_UPDATED's
             # `confirmed_at` (its apply candle — not recoverable from the row).
             # Stand in `idx`: every H1 pattern-path update on this window has
@@ -610,10 +615,10 @@ def _events_from_csv(path: Path) -> List[StructureEvent]:
                 meta.setdefault("confirmed_at", int(row["idx"]))
             price = float(row["price"]) if row.get("price") not in (None, "") else None
             out.append(StructureEvent(
-                idx=int(row["idx"]), category=row["category"], type=row["type"],
+                idx=idx, category=row["category"], type=row["type"],
                 price=price, meta=meta,
             ))
-    return sorted(out, key=lambda e: (e.idx, e.type))
+    return sorted(out, key=ef.processing_order_key)
 
 
 @pytest.mark.skipif(not _H1_EVENTS_CSV.exists(), reason="Plan-B save's H1 structure_events CSV not present")

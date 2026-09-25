@@ -67,7 +67,7 @@ that every such caller justifies (table below).
 **Event moments** — `structure/event_fields.py::event_moment(ev)` (Plan F; moved
 out of `market_structure` and extended to BOS_CONFIRMED → `confirmed_at` and
 CTS_CONFIRMED / CTS_RECONFIRMED → `ev.idx` by Plan E E2a): CTS_ESTABLISHED →
-`meta["confirmed_at"]`; CTS_UPDATED →
+`meta["confirmed_at"]` (== `ev.idx` since Plan E E4a); CTS_UPDATED →
 `ev.idx` on the raw path (`meta["via"] == CTS_UPDATED_RAW_VIA`), `meta["confirmed_at"]`
 (the apply candle) on the pattern path, whose `idx` is the CTS anchor (Plan E E3·0,
 2026-09-24 — before it no moment was recorded and the pattern path was uncut;

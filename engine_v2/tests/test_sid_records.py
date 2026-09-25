@@ -23,8 +23,9 @@ from engine_v2.tests._event_factory import make_event
 
 def _ev(idx: int, type_: str, sid: int, sd: int = 1, **extra) -> StructureEvent:
     meta: Dict[str, Any] = {"structure_id": sid, "struct_direction": sd}
-    # CTS_ESTABLISHED / BOS_CONFIRMED: idx is the anchor (tests/_event_factory.py);
-    # the moment defaults to it (lag 0) unless a test passes `confirmed_at`.
+    # CTS_ESTABLISHED / BOS_CONFIRMED: the `idx` argument is the anchor
+    # (`make_event`); the moment defaults to it (lag 0) unless a test passes
+    # `confirmed_at` (a CTS_ESTABLISHED's own idx is the moment, Plan E E4a).
     if type_ in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
         meta["confirmed_at"] = idx
     meta.update(extra)

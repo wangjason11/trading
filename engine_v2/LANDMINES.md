@@ -59,10 +59,17 @@ Rule 3 was approved by the user on 2026-09-24 (Plan E §4.2). First use: E1, the
 `_EVENT_META_IDX_KEYS` / `_ZONE_META_IDX_KEYS` or in the test's explicit slice-local allow-list (since Plan E
 E2a it also scans every event-meta key `market_structure` writes, so a key the fixture never produces is covered).
 Rule 4 use, Plan E E2a (2026-09-24): `CTS_ESTABLISHED.meta["cts_anchor_idx"]` and
-`BOS_CONFIRMED.meta["bos_anchor_idx"]` (documented in ARCHITECTURE "`ev.idx` convention"). **Tests:** every
+`BOS_CONFIRMED.meta["bos_anchor_idx"]` (documented in ARCHITECTURE "`ev.idx` convention"). Rule 3 meaning
+change, Plan E E4a (2026-09-25): `CTS_ESTABLISHED.idx` := the MOMENT (`== meta["confirmed_at"]`, asserted at
+the emit; `ev.price` stays the anchor's price); proof = the E4 variant replays (`FLIP=est` == the landed
+`/compare`: 3 events `idx` cells) + `tests/test_e4_simulation.py`. **Tests:** every
 `CTS_ESTABLISHED` / `BOS_CONFIRMED` built during a test must satisfy the contract — `tests/conftest.py` validates
-each construction (keys present as ints, `idx` == the anchor until Plan E E4); build them with
-`tests/_event_factory.py`, or mark a deliberately illegal test `@pytest.mark.illegal_event_contract`.
+each construction (keys present as ints, `idx` == the index `EVENT_IDX_IS` names for the type: the moment on
+`CTS_ESTABLISHED` since Plan E E4a, the anchor on `BOS_CONFIRMED` until E4b); build them with
+`tests/_event_factory.py` (its `idx` default follows the same table), or mark a deliberately illegal test
+`@pytest.mark.illegal_event_contract`. A `mutate=` hook that edits `confirmed_at` after construction bypasses
+the validator: it must move a `CTS_ESTABLISHED`'s `idx` with it and re-run `validate_event_contract` on the
+edited events (Plan E E4a review pins P1/P2 — a dropped `idx` move had left an illegal event nobody noticed).
 
 **Key events and their consumers:**
 | Event Type | Primary Consumer |
@@ -505,7 +512,9 @@ within the 3-pip tolerance of BOS_0 inner (idx 152, 157, 158) but were
 never evaluated. Fix: when `end_idx` is defined, the exception check window
 is `[cts_est[0].idx + 1, end_idx]` regardless of whether `cts_est[1]`
 exists. Fallback to `cts_est[1].idx` only when `end_idx is None` (live
-mode without an explicit terminal).
+mode without an explicit terminal). (`.idx` was the CTS anchor then; the code
+reads `ef.cts_anchor_idx(...)` since Plan E E2b — an EST's `.idx` is its moment
+since E4a.)
 
 **Already-aligned locations:** Exception 2 in `compute_structure` (line
 ~231) and in `compute_structure_scenario_3` Phase 2 (line ~517) already
@@ -550,7 +559,7 @@ main reversal probe, so it needs its own decision and `/compare`.
 1. **original_bos0_bounds captured at iteration 0 only** — subsequent probe iterations reuse the first BOS_0 zone for exception evaluation. Do not re-derive bounds mid-loop.
 2. **Phase 2 only runs if status == "finalized" AND `run_continuation=True`** — when `run_continuation=False`, Phase 2 is skipped entirely (probe-only mode). The result contains only Phase 1 probe data.
 3. **Exception evaluation checks inner bound, not outer** — proximity is measured as "candle high/low within tolerance of zone inner bound" (the bound closer to current price).
-4. **Exception check window starts from `CTS_ESTABLISHED.idx + 1`** (`cts_est[0].idx + 1`; the two Exception 2 loops do the same). That `ev.idx` is the cycle-0 CTS **extreme** — the first argmax(`h`) / argmin(`l`) over the breakout pattern's span, retro-stamped — NOT a pullback confirmation and NOT the moment the cycle was established (`meta["confirmed_at"]`, the apply candle; ARCHITECTURE "`ev.idx` convention"). The extreme candle belongs to the breakout itself, and the check asks whether price returns to the zone *after* the breakout, so exclude it (see GOTCHAS.md). When the extreme precedes the apply candle, the window's first candles (up to `confirmed_at`) are still inside the breakout pattern.
+4. **Exception check window starts from the CTS anchor + 1** (`ef.cts_anchor_idx(cts_est[0]) + 1`; the two Exception 2 loops do the same — test-only paths that keep the anchor, PLAN_E Q10). That anchor (`meta["cts_anchor_idx"]`; `ev.idx` until Plan E E4a) is the cycle-0 CTS **extreme** — the first argmax(`h`) / argmin(`l`) over the breakout pattern's span — NOT a pullback confirmation and NOT the moment the cycle was established (`meta["confirmed_at"]` = `ev.idx` since E4a, the apply candle; ARCHITECTURE "`ev.idx` convention"). The extreme candle belongs to the breakout itself, and the check asks whether price returns to the zone *after* the breakout, so exclude it (see GOTCHAS.md). When the extreme precedes the apply candle, the window's first candles (up to `confirmed_at`) are still inside the breakout pattern.
 5. **Condition 4 split — `end_idx` is the discriminator:**
    - **4a) `end_idx is not None`** AND probe reached it without 2 CTS_EST → **finalized**. The caller-defined boundary is treated as a real terminal point (e.g., the first sd zone-proximity trigger candle is known and definitive).
    - **4b) `end_idx is None`** AND probe ran past available `df` data without 2 CTS_EST → **pending**. More candles may arrive later that resolve the probe; the caller can re-invoke with the same or advanced `start_idx`.
@@ -602,9 +611,9 @@ Lifecycle-Start Clamp" below).
 ## Event Sort Order Is a Dispatch Invariant
 
 **Rule:** `sorted_events` in `_run_downstream_pipeline` is sorted by
-`event_fields.processing_order_key` = `(ef.stamped_idx(e), e.type)` — today's
+`event_fields.processing_order_key` = `(ef.stamped_idx(e), e.type)` — the pre-E4
 `(e.idx, e.type)`, pinned on the ANCHORS so the Plan E E4 flip (`ev.idx` :=
-the moment on CTS_ESTABLISHED / BOS_CONFIRMED) reorders nothing (PLAN_E Q3; moment
+the moment on CTS_ESTABLISHED since E4a / BOS_CONFIRMED from E4b) reorders nothing (PLAN_E Q3; moment
 order + an explicit type rank is post-Plan-E). The same key sorts `sub_wvmi`'s
 loop. TIME walks sort on the MOMENT instead (`ef.event_moment`): zone_proximity's
 threshold timeline (`(moment, type)`, Plan E E3g-2) and the POI sweep's CTS events
@@ -1774,7 +1783,8 @@ cycle 0 must still floor at the parent floor. Do not add a per-cycle carve-out.
   `meta["confirmed_at"]`, when a `BOS_CONFIRMED (S,C)` has no `CTS_ESTABLISHED`,
   when `BOS_CONFIRMED(S,C).meta["confirmed_at"] !=
   CTS_ESTABLISHED(S,C).meta["confirmed_at"]` (the definitional identity —
-  NEVER assert it against `CTS_ESTABLISHED.idx`, the extreme), and when any LOH
+  NEVER assert it against the CTS anchor `meta["cts_anchor_idx"]`, the extreme;
+  `CTS_ESTABLISHED.idx` is the moment since Plan E E4a), and when any LOH
   map returns `None`; the sweep asserts `tables.has_cycle(S, C)` for every
   trigger it resolves and `parent_sd[S]` for every record it creates. Nothing degrades to an
   unfloored sub. The one remaining zone-layer soft spot — a zone with no
@@ -1791,9 +1801,9 @@ re-states the cycle-start/end rule of `compute_cycle_lifecycle` on H1 → M15):
   first anchor, BOS_0's — e.g. H1 sid 0 96 → 115), then the reversal handoff and floor.
 - `compute_cycle_lifecycle(events, reversal_dict, floor, cap, cap_reason)` —
   per-`(sid, cycle)` `(start, end, end_reason)`. **Start = the CTS-established
-  MOMENT** (`CTS_ESTABLISHED.meta["confirmed_at"]`, the apply candle; Plan C
-  2026-09-20 — NOT `CTS_ESTABLISHED.idx`, which is the CTS EXTREME, a
-  historical anchor exactly like `BOS_CONFIRMED.idx`), clamped by
+  MOMENT** (`CTS_ESTABLISHED.meta["confirmed_at"]`, the apply candle — `== ev.idx`
+  since Plan E E4a; Plan C 2026-09-20 — NOT the CTS anchor `meta["cts_anchor_idx"]`,
+  the CTS EXTREME, a historical anchor like the BOS anchor), clamped by
   `struct_start` and the floor. **End is a pass-through:**
   `end = min(next-cycle clamped start, reversal, lifecycle_cap)`, never computed
   per-zone. KL/POI/fib INHERIT `end_idx` / `end_reason` from this table.
@@ -2037,9 +2047,11 @@ could not have known.
 
 `ev.idx` is the knowable-at candle only for events whose `ev.idx` IS their
 moment (`CTS_CONFIRMED` / `CTS_RECONFIRMED` — `ev.idx == confirmed_at` —
-raw-path `CTS_UPDATED`, `STATE_CHANGED`). It is NOT for `CTS_ESTABLISHED`
-(`ev.idx` = the retro-stamped CTS extreme), a pattern-path `CTS_UPDATED` (the
-span extreme) — both keyed on `confirmed_at` since Plan E E3b — nor for
+raw-path `CTS_UPDATED`, `STATE_CHANGED`, and `CTS_ESTABLISHED` since Plan E
+E4a). It is NOT for `BOS_CONFIRMED` (the BOS extreme, until E4b), a
+pattern-path `CTS_UPDATED` (the span extreme, until E4c) — both keyed on
+`confirmed_at` (the pattern path since Plan E E3b, like `CTS_ESTABLISHED`,
+whose `ev.idx` was the retro-stamped CTS extreme before E4a) — nor for
 `REVERSAL_CANDIDATE` (applies at `meta["apply_idx"]`), which can still straddle a
 cap (`ev.idx <= cap <` its apply) and survive the clip, yielding a half-derived
 reversal — the remaining known limit in PART4 §17.12 (zero straddles on the

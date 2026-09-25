@@ -5,7 +5,7 @@ session API contract (`PLAN_C_API_CONTRACT.md`):
 
     rev_by_sid[S]      = compute_reversal_idx_by_sid(events)      # STATE_CHANGED->reversal, NOT REVERSAL_CANDIDATE
     struct_start[S]    = compute_struct_start_by_sid(events, rev_by_sid, None)
-    cts_moment[(S,C)]  = CTS_ESTABLISHED.meta["confirmed_at"]      # the MOMENT (== BOS.confirmed_at); NOT .idx; LAST-seen
+    cts_moment[(S,C)]  = CTS_ESTABLISHED.meta["confirmed_at"]      # the MOMENT (== BOS.confirmed_at); NOT the anchor; LAST-seen
     parent_sd[S]       = CTS_ESTABLISHED.meta["struct_direction"]
     floor_h1[(S,C)]    = max(struct_start[S], cts_moment[(S,C)])   # the CLAMPED cycle start
     end_h1[(S,C)]      = floor_h1[(S,C+1)] if (S,C+1) exists else rev_by_sid.get(S) else None
@@ -13,7 +13,7 @@ session API contract (`PLAN_C_API_CONTRACT.md`):
     degenerate[(S,C)]  = end_m15 is not None and floor_m15 >= end_m15
 
 Asserts (raise, do not degrade): BOS_CONFIRMED(S,C).confirmed_at == CTS_ESTABLISHED(S,C).confirmed_at
-(on the MOMENT, never on CTS_ESTABLISHED.idx -- the extreme); a BOS_CONFIRMED without a matching
+(on the MOMENT, never on the CTS anchor -- the extreme); a BOS_CONFIRMED without a matching
 CTS_ESTABLISHED raises; an LOH map returning None raises.
 
 Pure logic: `h1_df=None, m15_df=None` with an injected `loh=lambda p, h1, m15: 4*p + 3`
@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Optional
 import pytest
 
 from engine_v2.multitf.parent_tables import ParentTables, build_parent_tables
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.tests._event_factory import make_event
 
@@ -43,13 +44,15 @@ def _ev(idx: int, type_: str, sid: int, cycle: Optional[int] = None, sd: int = 1
         meta["cycle_id"] = cycle
     meta.update(extra)
     category = "STATE" if type_ == "STATE_CHANGED" else "STRUCTURE"
-    # CTS_ESTABLISHED / BOS_CONFIRMED: idx is the anchor (tests/_event_factory.py).
+    # CTS_ESTABLISHED / BOS_CONFIRMED: the `idx` argument is the ANCHOR (`make_event`); the event's idx is the
+    # contract's (the moment on CTS_ESTABLISHED since Plan E E4a).
     return make_event(type_, idx, category=category, **meta)
 
 
 def _cts_est(idx: int, sid: int, cycle: int, confirmed_at: int, sd: int = 1) -> StructureEvent:
-    # market_structure._emit_cts_established stamps confirmed_at = the apply candle;
-    # `idx` is the CTS EXTREME (historical) and may precede confirmed_at.
+    # market_structure._emit_cts_established stamps confirmed_at = the apply candle
+    # (the event's idx since Plan E E4a); the `idx` argument is the CTS anchor (the
+    # extreme, historical) and may precede confirmed_at.
     return _ev(idx, "CTS_ESTABLISHED", sid, cycle, sd, confirmed_at=confirmed_at,
                pattern_anchor_idx=idx - 1, pattern_name="one_maru_continuous")
 
@@ -73,8 +76,8 @@ def _rev_candidate(idx: int, sid: int, apply_idx: int, sd: int = 1) -> Structure
 
 
 def _sorted(events: List[StructureEvent]) -> List[StructureEvent]:
-    # The orchestrator's `sorted_events` order (orchestrator.py:147).
-    return sorted(events, key=lambda e: (e.idx, e.type))
+    # The orchestrator's `sorted_events` order (`ef.processing_order_key`).
+    return sorted(events, key=ef.processing_order_key)
 
 
 def _loh(parent_idx: int, h1_df: Any, m15_df: Any) -> Optional[int]:
@@ -258,8 +261,8 @@ def test_bos_confirmed_at_mismatching_cts_confirmed_at_raises():
 
 
 def test_bos_cts_identity_is_on_the_moment_never_on_the_extreme():
-    # NEGATIVE CONTROL: CTS_ESTABLISHED.idx 10 != confirmed_at 11, but BOS.confirmed_at 11 ==
-    # CTS.confirmed_at 11 -> must NOT raise (the assert is on the moment, never on .idx). 3 such pairs
+    # NEGATIVE CONTROL: cts_anchor_idx 10 != confirmed_at 11, but BOS.confirmed_at 11 ==
+    # CTS.confirmed_at 11 -> must NOT raise (the assert is on the moment, never on the anchor). 3 such pairs
     # exist in the saved M15 streams (1223/1224, 2828/2829 x2).
     t = _build([_bos(5, 0, 0, 11), _cts_est(10, 0, 0, 11)])
     assert t.cts_moment[(0, 0)] == 11

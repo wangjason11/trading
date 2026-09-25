@@ -78,7 +78,7 @@ def _make_zone(side: str, top: float, bottom: float, source_kind: str = "BOS",
 def _make_event(etype: str, idx: int, price: float = None, meta: dict | None = None) -> StructureEvent:
     meta = dict(meta or {})
     if etype in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
-        # idx is the anchor (tests/_event_factory.py); the moment defaults to it (lag 0).
+        # the `idx` argument is the anchor (`make_event`); the moment defaults to it (lag 0).
         meta.setdefault("confirmed_at", idx)
     if etype == "CTS_UPDATED":
         # a raw-path update by default (its idx IS its moment; conftest requires `via`)
@@ -818,3 +818,23 @@ class TestPatternAnchorIdxDirectIndex:
             identify_wave_candles(
                 anchor_idx=5, anchor_type="BOS", zone=zone, events=events,
                 structure_id=0, struct_direction=1, df=_make_df(rows))
+
+
+def test_cts_bib_event_walk_checks_a_lagging_est_at_its_anchor():
+    """Plan E E4a: the BIB event walk is a LOCATION walk. A lagging
+    CTS_ESTABLISHED (anchor 10, moment 12 == its `ev.idx`) is checked at its
+    ANCHOR 10 (qualifies -> 10). Checked at `ev.idx` 12 (bearish) the walk
+    would scan 13..14 and return 13."""
+    rows, zone_meta = _cts_bib_setup()
+    rows[10] = dict(_BULL_IN_ZONE)
+    rows[13] = dict(_BULL_IN_ZONE)
+    zone = _make_zone("sell", top=1.1, bottom=1.0, source_kind="CTS", meta=zone_meta)
+    est = _make_event("CTS_ESTABLISHED", 10, 1.08, {
+        "structure_id": 0, "cycle_id": 1, "pattern_anchor_idx": 10, "confirmed_at": 12})
+    assert (est.idx, est.meta["cts_anchor_idx"]) == (12, 10)
+    events = [est, _make_event("CTS_CONFIRMED", 15, meta={
+        "structure_id": 0, "cycle_id": 1, "confirmed_at": 15})]
+    result = identify_wave_candles(
+        anchor_idx=10, anchor_type="CTS", zone=zone, events=events,
+        structure_id=0, struct_direction=1, df=_make_df(rows))
+    assert result.last_wave_candle_idx == 10

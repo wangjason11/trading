@@ -12,7 +12,7 @@ rev_by_sid[S]      = STATE_CHANGED→reversal idx of sid S      (compute_reversa
 struct_start[S]    = first CTS_EST moment / reversal handoff   (compute_struct_start_by_sid; Plan E E3f)
 cts_moment[(S,C)]  = CTS_ESTABLISHED.meta["confirmed_at"]      # the MOMENT the cycle was established
                                                                #   (== BOS_CONFIRMED.confirmed_at, definitional;
-                                                               #   last-seen per (S,C)) — NOT .idx (the extreme)
+                                                               #   last-seen per (S,C)) — NOT the CTS anchor (the extreme)
 parent_sd[S]       = CTS_ESTABLISHED.meta["struct_direction"]  # one direction per sid
 floor_h1[(S,C)]    = max(struct_start[S], cts_moment[(S,C)])   # == the cycle's CLAMPED lifecycle-start
 end_h1[(S,C)]      = floor_h1[(S,C+1)] if it exists            # next cycle's CLAMPED start (same rule as
@@ -27,8 +27,9 @@ the mapper for every TIMING value. Never the price-extreme mapper.
 Asserts (raise, do not degrade — §17.7): every `(S,C)` that has a
 `BOS_CONFIRMED` has a `CTS_ESTABLISHED`; `BOS_CONFIRMED(S,C).meta["confirmed_at"]
 == CTS_ESTABLISHED(S,C).meta["confirmed_at"]` (the definitional identity — NEVER
-against `CTS_ESTABLISHED.idx`, the extreme, which can precede the apply
-candle); every LOH map returns non-None.
+against the CTS anchor `meta["cts_anchor_idx"]`, the extreme, which can precede
+the apply candle; `CTS_ESTABLISHED.idx` is the moment since Plan E E4a); every
+LOH map returns non-None.
 """
 from __future__ import annotations
 
@@ -110,7 +111,7 @@ def build_parent_tables(
             if sid is None or cyc is None:
                 continue
             key = (int(sid), int(cyc))
-            # The MOMENT (apply candle), never `.idx` (the extreme). A
+            # The MOMENT (apply candle), never the CTS anchor `meta["cts_anchor_idx"]` (the extreme). A
             # CTS_ESTABLISHED always carries confirmed_at (market_structure
             # stamps it at emission); assert rather than fall back to the extreme.
             assert meta.get("confirmed_at") is not None, (

@@ -210,8 +210,9 @@ def _R(o: float, h: float, l: float, c: float) -> dict:
 
 
 def _make_second_cts_moment_after_extreme_data() -> list[dict]:
-    """The 2nd CTS's EXTREME (`CTS_ESTABLISHED.idx` 9) precedes its MOMENT
-    (`meta["confirmed_at"]` 10) — the natural idx != moment case the Plan B / Plan C
+    """The 2nd CTS's EXTREME (its anchor `meta["cts_anchor_idx"]` 9) precedes its MOMENT
+    (`meta["confirmed_at"]` 10, its `idx` since Plan E E4a) — the natural anchor != moment
+    case the Plan B / Plan C
     `second_cts_reached` rule is about. Byte-for-byte the candles of
     `test_ms_stop_after_cts._make_watch_over_second_cts_data` (crafted + independently
     verified 2026-09-20; copied here so this file stays self-contained and import-acyclic —
@@ -220,9 +221,9 @@ def _make_second_cts_moment_after_extreme_data() -> list[dict]:
     Candles 0-8 = `_make_multicycle_data()[:9]` (cycle 0 established at 2, CTS_CONFIRMED at 7
     with `cts_anchor_idx` 5, range hi .6122 / lo .6088, climb 8 inside it).
     9   big bull maru closing .6145 ABOVE range_hi = c0 of `one_maru_opposite(+1)`; its high
-        .6147 is the cycle-1 CTS extreme (`CTS_ESTABLISHED.idx` 9).
-    10  SMALL bearish normal -> OMO SUCCESS, apply 10 -> 2nd CTS_ESTABLISHED (idx 9,
-        confirmed_at 10), BOS_1 = l7 .6088.
+        .6147 is the cycle-1 CTS extreme (the CTS anchor 9).
+    10  SMALL bearish normal -> OMO SUCCESS, apply 10 -> 2nd CTS_ESTABLISHED (anchor 9,
+        confirmed_at = idx 10), BOS_1 = l7 .6088.
     11  big bear maru closing .6060 < BOS_1 -> REVERSAL_WATCH_START (expires 16) +
         REVERSAL_CANDIDATE anchor 11 apply 14.
     12-13 bull pinbar / small bull normal (the -1 confirmation scan skips them).
@@ -232,7 +233,7 @@ def _make_second_cts_moment_after_extreme_data() -> list[dict]:
 
     Under `unified_probe(..., probe_end_idx=17, enable_phase2=True)`: n_cts = 2 at the exit
     (so the reversal at 14 is NOT `reversal_in_probe`), no retrace resets ->
-    `second_cts_reached`, finalize = the 2nd CTS's moment 10 (NOT its idx 9).
+    `second_cts_reached`, finalize = the 2nd CTS's moment 10 (NOT its anchor 9).
     """
     rows = list(_make_multicycle_data()[:9])
     rows += [
@@ -1051,7 +1052,7 @@ class TestFinalizeIdxTable:
         assert res.starting_idx == 0
 
     def test_phase2_second_cts_reached_is_the_moment_not_the_extreme(self, monkeypatch):
-        # `_make_second_cts_moment_after_extreme_data`: the 2nd CTS has idx 9 (its extreme,
+        # `_make_second_cts_moment_after_extreme_data`: the 2nd CTS has anchor 9 (its extreme,
         # h9 .6147) but confirmed_at 10 (the OMO apply candle). finalize = 10, NOT 9.
         # The reversal at 14 does not make this `reversal_in_probe`: n_cts = 2 at the exit.
         retained = _retain_phase2_ms(monkeypatch)

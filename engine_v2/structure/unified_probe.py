@@ -450,9 +450,10 @@ def _run_phase1(
 
 def _second_cts_moment(cts_est: list) -> int:
     """finalize_idx for `second_cts_reached`: the MOMENT the 2nd CTS was established
-    (meta["confirmed_at"] = its apply candle), not `.idx` (the extreme inside the pattern
-    span). Plan B §3.3 — the same principle as every lifecycle value (`confirmed_at` for
-    timing, `.idx` for where the extreme sits), and it is what the early stop keys on."""
+    (meta["confirmed_at"] = its apply candle, `.idx` since Plan E E4a), not its CTS anchor
+    (`ef.cts_anchor_idx`, the extreme inside the pattern span). Plan B §3.3 — the same
+    principle as every lifecycle value (the moment for timing, the anchor for where the
+    extreme sits), and it is what the early stop keys on."""
     ev = cts_est[1]
     return ef.event_moment(ev)
 

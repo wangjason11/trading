@@ -1482,8 +1482,10 @@ class MarketStructure:
                 st.cts_cycle_id += 1
                 # self._emit_cts_established(cts_idx, cts_price, meta={"via": ev.name})
                 assert ev.start_idx is not None, "a breakout pattern always has a first candle"
+                # `ev.idx` = the MOMENT (the apply candle; Plan E E4a); the CTS
+                # anchor rides in meta `cts_anchor_idx`, `ev.price` is its price.
                 self._emit_cts_established(
-                    cts_anchor_idx,
+                    int(apply_idx),
                     cts_price,
                     cts_anchor_idx=cts_anchor_idx,
                     meta={
@@ -1824,9 +1826,12 @@ class MarketStructure:
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
         meta2["structure_id"] = int(self.state.structure_id)
         meta2["struct_direction"] = int(self.state.struct_direction)
-        # The CTS endpoint (a price location; == idx until Plan E E4a flips idx
-        # to the moment). int(): `_shift_meta_indices` shifts Python int only.
+        # The CTS endpoint (a price location; `ev.price` is its price). `idx` is
+        # the MOMENT (Plan E E4a; ARCHITECTURE "`ev.idx` convention"). int():
+        # `_shift_meta_indices` shifts Python int only.
         meta2["cts_anchor_idx"] = int(cts_anchor_idx)
+        assert int(idx) == meta2["confirmed_at"], (
+            f"CTS_ESTABLISHED idx {idx} != confirmed_at {meta2['confirmed_at']} (ev.idx is the moment)")
         self.state.cts_established_moment_idx = int(meta2["confirmed_at"])
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=meta2)

@@ -1,6 +1,7 @@
 """Plan E E2b role pins (landing-review mutation lens): each site that E2b split
-into a LOCATION (the anchor) and a TIME (today the anchor too, marked for an E3
-stage) is pinned with an E4-shaped event (`idx` = the moment 12, anchor 9) so a
+into a LOCATION (the anchor) and a TIME (then the anchor too, marked for an E3
+stage) is pinned with an E4-shaped event (`idx` = the moment 12, anchor 9 — the
+contract on CTS_ESTABLISHED since Plan E E4a, on BOS_CONFIRMED from E4b) so a
 location read switched to the moment — or a raw `ev.idx` read — fails.
 
 The TIME pins state the value of the stage that switched them: the anchor
@@ -35,7 +36,6 @@ def _e4_est(anchor=20, moment=22, **kw):
 
 # --- FibTracker EST: location vs time -------------------------------------------
 
-@pytest.mark.illegal_event_contract
 @pytest.mark.parametrize("mode", ["h1", "cross_cycle"])
 def test_fib_tracker_est_reads_the_anchor_for_the_fib_and_the_moment_for_activated_at(mode):
     tracker = _tracker(mode)
@@ -124,7 +124,7 @@ def test_anchor_selector_asks_cond3_at_the_snapshot_horizon():
 
 # --- POI sweep: cond1 is a location -----------------------------------------------
 
-def _poi_history(anchor, moment=7):
+def _poi_history(anchor, moment=7, floor=None):
     t0 = pd.Timestamp("2024-01-01", tz="UTC")
     df = pd.DataFrame([
         {"time": t0 + pd.Timedelta(hours=i), "o": 0.6040, "h": 0.6045, "l": 0.6035, "c": 0.6040}
@@ -140,11 +140,10 @@ def _poi_history(anchor, moment=7):
         df, ic_idx=6, cts_established_idx=moment, sd=1, scan_end=12, fill_threshold=0.70,
         bos_price=0.6000, cts_events=[cts], fib_min_pct=61.8, fib_max_pct=80.0,
         variant_thresholds={"V30": 0.3, "V60": 0.6, "V90": 0.9},
-        imbalances=[imb], fill_idx_cache={id(imb): (None, None)}, lifecycle_floor_idx=None,
+        imbalances=[imb], fill_idx_cache={id(imb): (None, None)}, lifecycle_floor_idx=floor,
     )
 
 
-@pytest.mark.illegal_event_contract
 def test_poi_sweep_cond1_reads_the_cts_anchor():
     """An IC (6) past the CTS anchor (5) but before the moment (7): cond1 ("the
     IC lies inside the fib", `cts_at_t >= ic`) reads the ANCHOR → never active.
@@ -152,7 +151,6 @@ def test_poi_sweep_cond1_reads_the_cts_anchor():
     assert _poi_history(anchor=5) == []
 
 
-@pytest.mark.illegal_event_contract
 def test_poi_sweep_positive_control():
     """The same fixture with the anchor at the IC activates (so the pin above is not vacuous)."""
     hist = _poi_history(anchor=6)
@@ -333,3 +331,86 @@ def test_prev_bos_line_picks_the_earliest_moment_not_the_first_stamped():
            make_cts_established(cts_anchor_idx=13, confirmed_at=16, structure_id=1, cycle_id=0),
            raw, pat]
     assert _prev_bos_pairs(evs, 17) == [(7, 17)]
+
+
+def test_poi_sweep_cond1_pre_window_reads_the_cts_anchor():
+    """Plan E E4a, the PRE-WINDOW branch: the CTS_ESTABLISHED is known (moment 7)
+    before first_active (the lifecycle floor 8), so it enters as prior state;
+    its cond1 location is still the ANCHOR (5 < IC 6 -> never active). A read of
+    `ev.idx` (the moment 7 since E4a) would activate at 9."""
+    assert _poi_history(anchor=5, floor=8) == []
+
+
+def test_poi_sweep_pre_window_positive_control():
+    hist = _poi_history(anchor=6, floor=8)
+    assert hist and hist[0]["idx"] == 9 and hist[0]["active"] is True
+
+
+def test_h1_chart_unconfirmed_cts_marker_sits_at_the_cts_anchor(tmp_path, monkeypatch):
+    """Plan E E4a: the H1 chart's "CTS (unconfirmed)" dot after a sid's last
+    confirmed BOS is a LOCATION -- the CTS anchor (9), never the
+    CTS_ESTABLISHED's `ev.idx` (its moment 10 since E4a)."""
+    go = pytest.importorskip("plotly.graph_objects")
+    from engine_v2.charting.export_plotly import export_chart_plotly
+    from engine_v2.multitf.registry import StructureRegistry
+    from engine_v2.structure.structure_engine import compute_bounded_structure
+    from engine_v2.tests.test_unified_probe import (
+        _make_second_cts_moment_after_extreme_data, _prepare_df)
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        res = compute_bounded_structure(
+            _prepare_df(_make_second_cts_moment_after_extreme_data()), 0, +1)
+    # Stop the stream before CTS_CONFIRMED(0,1) @ 11: sid 0's last confirmed
+    # point is BOS(0,1) @ anchor 7; CTS(0,1) is established (anchor 9,
+    # moment 10) but unconfirmed.
+    events = [e for e in res.events if e.idx <= 10]
+    est = next(e for e in events if e.type == "CTS_ESTABLISHED" and e.meta["cycle_id"] == 1)
+    assert (est.meta["cts_anchor_idx"], est.meta["confirmed_at"]) == (9, 10)
+    df = res.df.copy()
+    df.attrs["structure_events"] = events
+    reg = StructureRegistry()
+    reg.register("H1", df=df, timeframe="H1", role="main")
+    figs = []
+    monkeypatch.setattr(go.Figure, "write_html", lambda self, *a, **k: figs.append(self))
+    monkeypatch.setattr(go.Figure, "write_image", lambda self, *a, **k: None)
+    cfg = {"structure": {"levels": True}, "struct_state": {"labels": False},
+           "range_visual": {"rectangles": False}, "fib": {"lines": False},
+           "imbalance": {"highlight": False}, "zones": {"wave_candles": False},
+           "volume": {"bars": False, "ema_line": False, "spike_marker": False}}
+    with contextlib.redirect_stdout(io.StringIO()):
+        export_chart_plotly(title="t", registry=reg, path_id="H1", out_dir=tmp_path, cfg=cfg)
+    fig, = figs
+    marks = [tr for tr in fig.data if (tr.name or "").startswith("CTS (unconfirmed)")]
+    assert [int(c[0]) for tr in marks for c in tr.customdata] == [9]
+    assert [x for tr in marks for x in tr.x] == [df.loc[9, "time"]]
+
+
+def test_scenario3_exception_window_opens_after_the_cts0_anchor(monkeypatch):
+    """Q10 test-only path, pinned against a raw read: scenario 3's BOS_0
+    exception window opens at CTS_0's ANCHOR + 1 (5), not at its `ev.idx`
+    (the moment 6 since Plan E E4a)."""
+    import engine_v2.structure.structure_engine as se
+    from engine_v2.tests.test_unified_probe import (
+        _make_second_cts_moment_after_extreme_data, _prepare_df)
+    df = _prepare_df(_make_second_cts_moment_after_extreme_data())
+    probe_df = df.copy()
+    probe_df["market_state"] = "pullback"
+    probe_df["structure_id"] = 0
+    est = make_cts_established(cts_anchor_idx=4, confirmed_at=6, price=1.2,
+                               structure_id=0, cycle_id=0)
+
+    class _MS:
+        debug = False
+
+        def run(self):
+            return probe_df, [est], []
+
+    lows = []
+    monkeypatch.setattr(se, "_make_market_structure", lambda *a, **k: _MS())
+    monkeypatch.setattr(se, "_get_bos0_zone_bounds", lambda *a, **k: (0.59, 0.60, "buy"))
+    monkeypatch.setattr(se, "_find_closest_candle_to_outer",
+                        lambda _df, lo, hi, *a: lows.append(lo))
+    with contextlib.redirect_stdout(io.StringIO()):
+        res = se.compute_structure_scenario_3(df, 0, +1, end_idx=15, run_continuation=False)
+    assert res.status == "finalized"
+    assert lows == [5]

@@ -1,8 +1,9 @@
 """The one factory for test-built CTS_ESTABLISHED / BOS_CONFIRMED events (Plan E
 E2a; PLAN_E §6.1). Keyword-only; parameter names equal the meta keys.
 
-`idx` defaults to the ANCHOR — today's contract (ARCHITECTURE "`ev.idx`
-convention"). Plan E E4 flips the default to `confirmed_at` here, in one place,
+`idx` defaults to what the contract names (ARCHITECTURE "`ev.idx` convention";
+`conftest.EVENT_IDX_IS`): the MOMENT `confirmed_at` on CTS_ESTABLISHED (Plan E
+E4a), the ANCHOR on BOS_CONFIRMED until E4b flips it here, in one place,
 together with `conftest.EVENT_IDX_IS`.
 
 `tests/conftest.py` validates every CTS_ESTABLISHED / BOS_CONFIRMED built during a
@@ -38,7 +39,7 @@ def make_cts_established(
     _attribution(m, structure_id, cycle_id, struct_direction)
     m["cts_anchor_idx"] = int(cts_anchor_idx)
     return StructureEvent(
-        idx=int(cts_anchor_idx if idx is None else idx),
+        idx=int(confirmed_at if idx is None else idx),
         category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=m,
     )
 
@@ -73,10 +74,12 @@ def make_event(
     category: str = "STRUCTURE",
     **meta: Any,
 ) -> StructureEvent:
-    """Any structure event; for CTS_ESTABLISHED / BOS_CONFIRMED `idx` is the
-    ANCHOR and the event goes through the typed factory (so the E4 default flip
-    reaches it). `meta` must then carry `confirmed_at`; `structure_id` /
-    `cycle_id` / `struct_direction` / `pattern_anchor_idx` are taken from it."""
+    """Any structure event; for CTS_ESTABLISHED / BOS_CONFIRMED the `idx`
+    ARGUMENT is the ANCHOR (`cts_anchor_idx` / `bos_anchor_idx`) and the event
+    goes through the typed factory, whose default sets the emitted `ev.idx`
+    (the moment on CTS_ESTABLISHED since Plan E E4a). `meta` must then carry
+    `confirmed_at`; `structure_id` / `cycle_id` / `struct_direction` /
+    `pattern_anchor_idx` are taken from it."""
     if etype in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
         m = dict(meta)
         kw: Dict[str, Any] = {

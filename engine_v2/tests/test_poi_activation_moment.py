@@ -1,5 +1,6 @@
 """Plan D (zones pass, 2026-09-22/23) — POI activation gates on the cycle's
-CTS-established MOMENT, not on `CTS_ESTABLISHED.idx` (the CTS anchor).
+CTS-established MOMENT, not on the CTS anchor (`CTS_ESTABLISHED.idx` until
+Plan E E4a flipped that idx to the moment; the anchor is `meta["cts_anchor_idx"]`).
 
 `poi_zones.derive_poi_zones` reads the cycle term of the activation floor as
 `cts_established_idx = CTS_ESTABLISHED.meta["confirmed_at"]` (the moment, the
@@ -56,6 +57,11 @@ def _run(rows, *, mutate=None, lifecycle_floor=None, lifecycle_cap=None,
     if mutate is not None:
         events = copy.deepcopy(events)
         mutate(events)
+        # A post-construction edit bypasses the autouse validator: re-check
+        # the contract (a CTS_ESTABLISHED's idx IS its moment, Plan E E4a).
+        from engine_v2.tests.conftest import validate_event_contract
+        for e in events:
+            validate_event_contract(e)
     with contextlib.redirect_stdout(io.StringIO()):
         out = _run_downstream_pipeline(
             res.df, events, +1, fib_mode="h1", skip_wvmi=True,
@@ -137,7 +143,11 @@ def test_poi_never_activates_before_its_cycle_lifecycle_start(maker):
 def test_poi_first_activation_tracks_confirmed_at_exactly():
     def move_moment(events):
         # Keep the definitional identity: BOS and CTS_ESTABLISHED share the moment.
-        _event(events, "CTS_ESTABLISHED", 0, 1).meta["confirmed_at"] = 11
+        # A CTS_ESTABLISHED's idx IS its moment (Plan E E4a): it moves with it
+        # (a meta edit after construction bypasses the conftest validator).
+        est = _event(events, "CTS_ESTABLISHED", 0, 1)
+        est.meta["confirmed_at"] = 11
+        est.idx = 11
         _event(events, "BOS_CONFIRMED", 0, 1).meta["confirmed_at"] = 11
 
     _, _, out = _run(_make_second_cts_moment_after_extreme_data(), mutate=move_moment)
@@ -154,7 +164,7 @@ def test_poi_unchanged_when_anchor_equals_moment():
     _, events, out = _run(_make_multicycle_data())
     z = _only_poi(out, 0, 2)
     ev = _event(events, "CTS_ESTABLISHED", 0, 2)
-    assert ev.idx == ev.meta["confirmed_at"]
+    assert ef.cts_anchor_idx(ev) == ev.meta["confirmed_at"]
     assert z.ic_idx == 12
     # First activation only: with anchor == moment, first_active is identical
     # under both rules. The full history (incl. the c3-knowability deactivation
@@ -250,7 +260,7 @@ def test_activation_applies_pre_window_cts_state():
         variant_thresholds={"V30": 0.3, "V60": 0.6, "V90": 0.9},
         imbalances=[imb], fill_idx_cache={id(imb): (None, None)}, lifecycle_floor_idx=None,
     )
-    # The CTS (idx 5) is applied BEFORE the sweep; the imbalance (formed at 4 —
+    # The CTS (anchor 5, moment 6) is applied BEFORE the sweep; the imbalance (formed at 4 —
     # its first c3, Plan F) enters at first_active; so the POI is active exactly
     # AT the moment, with variants computed from the pre-window CTS state.
     assert history and history[0]["idx"] == 6 and history[0]["active"]

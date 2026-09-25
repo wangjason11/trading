@@ -53,9 +53,9 @@ The searches mix several "anchor" values. They are **different fields** — neve
 | Name here | Source | What it is |
 |---|---|---|
 | `anchor_idx` (BOS sections) | the BOS zone's `meta["anchor_idx"]` = `BOS_CONFIRMED.meta["bos_anchor_idx"]` (Plan E E2c; `== .idx` until E4b) | the BOS **anchor** |
-| `cts_anchor_idx` (CTS sections) | the CTS zone's `meta["anchor_idx"]` = `CTS_CONFIRMED.meta["cts_anchor_idx"]` | the CTS **anchor at confirmation** (equals `CTS_ESTABLISHED.idx` unless a `CTS_UPDATED` moved it) |
+| `cts_anchor_idx` (CTS sections) | the CTS zone's `meta["anchor_idx"]` = `CTS_CONFIRMED.meta["cts_anchor_idx"]` | the CTS **anchor at confirmation** (equals the cycle's `CTS_ESTABLISHED.meta["cts_anchor_idx"]` unless a `CTS_UPDATED` moved it) |
 | `pattern_anchor_idx` | the same cycle's `CTS_ESTABLISHED.meta["pattern_anchor_idx"]` — on every `CTS_ESTABLISHED`, read by direct index (a missing key raises `KeyError`) | the breakout pattern's **first candle** (a pattern-realm anchor) — not necessarily the CTS anchor |
-| the event candle in the CTS event walk | `ev.idx` of `CTS_ESTABLISHED` / `CTS_UPDATED` | a **price location**: the CTS anchor (`CTS_ESTABLISHED`, pattern-path `CTS_UPDATED`) or the processed candle (raw-path `CTS_UPDATED`, `via == "replay_raw"`) |
+| the event candle in the CTS event walk (`ev_idx`) | `ef.cts_anchor_idx(ev)` of `CTS_ESTABLISHED` / `CTS_UPDATED` — `meta["cts_anchor_idx"]` on `CTS_ESTABLISHED` (whose `ev.idx` is the moment since Plan E E4a), `ev.idx` on `CTS_UPDATED` | a **price location**: the CTS anchor (`CTS_ESTABLISHED`, pattern-path `CTS_UPDATED`) or the processed candle (raw-path `CTS_UPDATED`, `via == "replay_raw"`) |
 
 A bare `confirmed_at` below (the CTS Last Breakout BIB Step 3 bound, and the Step 1(b) gap-scan end
 after the last event) is the same cycle's `CTS_CONFIRMED.meta["confirmed_at"]` (== its `idx`, the
@@ -100,7 +100,7 @@ Scan forward from `last_pb_idx + 1` to next CTS_CONFIRMED (or end of data).
 
 Three-step event walk:
 
-**Step 1 — Event walk:** Iterate CTS_ESTABLISHED + CTS_UPDATED events sorted by `ev.idx` (the event candle — see "Index fields used below").
+**Step 1 — Event walk:** Iterate CTS_ESTABLISHED + CTS_UPDATED events sorted by their CTS anchor `ef.cts_anchor_idx` (the event candle `ev_idx` — see "Index fields used below"; a location walk, not `ev.idx`).
 For each event:
 - (a) Direct check: event candle is qualified AND wick enters zone AND closes within zone
   - **Pattern scan-back (CTS_ESTABLISHED only):** If the event candle matches, scan from `pattern_anchor_idx` to `ev_idx` (exclusive) for the first qualified candle closing within the zone. If found, return that earlier candle instead of the event candle.
@@ -234,7 +234,7 @@ the start differs by role.
 
 | Role | start_idx (clamped to struct/parent floor) | end_idx | Locks on activation? |
 |---|---|---|---|
-| **FB** | `CTS_n` established **moment** (`CTS_ESTABLISHED.meta["confirmed_at"]`, clamped = `compute_cycle_lifecycle.start`; NOT `CTS_ESTABLISHED.idx`, the extreme — Plan C 2026-09-20) | cycle end | yes (immediate) |
+| **FB** | `CTS_n` established **moment** (`CTS_ESTABLISHED.meta["confirmed_at"]`, clamped = `compute_cycle_lifecycle.start`; NOT the CTS anchor, the extreme (`CTS_ESTABLISHED.idx` until Plan E E4a made that idx the moment) — Plan C 2026-09-20) | cycle end | yes (immediate) |
 | **LB** | `CTS_n` CONFIRMED | cycle end | yes (immediate) |
 | **FP** | `CTS_n` CONFIRMED | cycle end | yes (immediate) |
 | **LP** | `CTS_n` CONFIRMED | cycle end | **only if** cycle ended via `next_cycle` (`CTS_{n+1}` ESTABLISHED); active-temp otherwise |

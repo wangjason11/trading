@@ -148,7 +148,7 @@ for t in trigs:
         print(f"   ASSERTION: {ms_error}")
     # Per-iteration Phase-2 MS report: bound, event count, max event idx, events past the
     # bound, and (Plan B) the early stop: `early_stop_idx` (None = ran to the bound) plus the
-    # 2nd CTS_ESTABLISHED's extreme (`.idx`) vs moment (`confirmed_at`) — the finalize value
+    # 2nd CTS_ESTABLISHED's anchor (`cts_anchor_idx`, the extreme) vs moment (`confirmed_at`) — the finalize value
     # is the moment; a difference here would move the row's finalize_idx.
     for k, ms in enumerate(retained_ms, 1):
         mx = max((int(ev.idx) for ev in ms.events), default=None)

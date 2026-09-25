@@ -34,7 +34,7 @@ def clip_events_to_window(events: List[Any], cap: Optional[int]) -> List[Any]:
     (§17.9). `cap` None → no clip (open lifecycle to the data edge).
     `BOS_CONFIRMED` / `CTS_ESTABLISHED` / pattern-path `CTS_UPDATED` are keyed on
     their moment `meta["confirmed_at"]` (Plan E E3b), every other event on its
-    stamped idx (`ef.stamped_idx`, today's `ev.idx`).
+    stamped idx (`ef.stamped_idx` — `ev.idx` for those types).
 
     Deep-copied because the geometry's event objects are SHARED across every
     consumer of the pool (the mirror stamps attribution onto `ev.meta`).

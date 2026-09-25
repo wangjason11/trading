@@ -1,7 +1,7 @@
 """Plan C section 3 -- the shared lifecycle leaf moves the cycle start to the MOMENT.
 
-`zones/structure_lifecycle.compute_cycle_lifecycle` today uses `CTS_ESTABLISHED.ev.idx`
-(the CTS EXTREME, a historical anchor) as the cycle-start term. Plan C section 3 (decided
+`zones/structure_lifecycle.compute_cycle_lifecycle` used `CTS_ESTABLISHED.ev.idx` (then
+the CTS EXTREME, a historical anchor; the moment since Plan E E4a) as the cycle-start term. Plan C section 3 (decided
 2026-09-19; PART4 section 17.6) changes the canonical rule for main / sub / parent alike:
 
     cycle start = max(CTS_ESTABLISHED.meta["confirmed_at"], struct_start, floor)
@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.tests._event_factory import make_event
 from engine_v2.zones.structure_lifecycle import (
@@ -42,12 +43,14 @@ def _ev(idx: int, type_: str, sid: int, cycle: Optional[int] = None, sd: int = 1
     if type_ in ("CTS_ESTABLISHED", "BOS_CONFIRMED") and "confirmed_at" not in meta:
         # Contract-illegal on purpose (test (d); `illegal_event_contract`).
         return StructureEvent(idx=idx, category=category, type=type_, meta=meta)
-    # CTS_ESTABLISHED / BOS_CONFIRMED: idx is the anchor (tests/_event_factory.py).
+    # CTS_ESTABLISHED / BOS_CONFIRMED: the `idx` argument is the ANCHOR (`make_event`); the event's idx is the
+    # contract's (the moment on CTS_ESTABLISHED since Plan E E4a).
     return make_event(type_, idx, category=category, **meta)
 
 
 def _cts_est(idx: int, sid: int, cycle: int, confirmed_at: Optional[int], sd: int = 1) -> StructureEvent:
-    # idx = the CTS extreme (historical); confirmed_at = the apply candle (the MOMENT), as stamped by
+    # idx (the argument) = the CTS anchor, the extreme (historical); confirmed_at = the apply candle
+    # (the MOMENT — the event's idx since Plan E E4a), as stamped by
     # market_structure._emit_cts_established. `confirmed_at=None` OMITS the key (test (d)).
     extra: Dict[str, Any] = {"pattern_anchor_idx": idx - 1, "pattern_name": "one_maru_continuous"}
     if confirmed_at is not None:
@@ -71,7 +74,8 @@ def _rev_candidate(idx: int, sid: int, apply_idx: int, sd: int = 1) -> Structure
 
 
 def _sorted(events: List[StructureEvent]) -> List[StructureEvent]:
-    return sorted(events, key=lambda e: (e.idx, e.type))
+    # The orchestrator's `sorted_events` order (`ef.processing_order_key`).
+    return sorted(events, key=ef.processing_order_key)
 
 
 def _life(events: List[StructureEvent], **kw):

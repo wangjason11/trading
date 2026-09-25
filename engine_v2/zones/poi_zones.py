@@ -475,9 +475,10 @@ def derive_poi_zones(
         # The activation floor's cycle term: the cycle's CTS-established MOMENT
         # (`CTS_ESTABLISHED.meta["confirmed_at"]`, the canonical cycle
         # lifecycle-start — structure_lifecycle.compute_cycle_lifecycle), NOT
-        # `CTS_ESTABLISHED.idx` (the CTS anchor: the pattern's extreme candle,
-        # retro-stamped, which can precede the moment — Plan D, zones pass
-        # 2026-09-23). Direct index, no `.get(..., ev.idx)` fallback: a missing
+        # the CTS anchor (`meta["cts_anchor_idx"]`, `CTS_ESTABLISHED.idx` until
+        # Plan E E4a: the pattern's extreme candle, retro-stamped, which can
+        # precede the moment — Plan D, zones pass 2026-09-23). Direct index, no
+        # `.get(...)` fallback: a missing
         # moment must fail loudly (compute_cycle_lifecycle above asserts it
         # first for every event carrying structure_id / cycle_id — the event
         # contract; the lookup below keys a missing one to 0, a pre-existing

@@ -2,9 +2,11 @@
 frozen against the E4 flip (PLAN_E §2 item 4, §6.4; PLAN_E_inputs §2.5 hazards
 H1–H5, risk R1).
 
-Each case is built in BOTH shapes — today's (`ev.idx` = the anchor) and E4's
-(`ev.idx` = the moment, `confirmed_at`) — and must give the same answer. The E4
-shape breaks the current contract, hence `illegal_event_contract`.
+Each case is built in BOTH shapes — `ev.idx` = the anchor (the pre-E4
+contract) and `ev.idx` = the moment, `confirmed_at` (the E4 contract:
+CTS_ESTABLISHED since Plan E E4a, BOS_CONFIRMED from E4b) — and must give the
+same answer. One shape of each type breaks the current contract, hence
+`illegal_event_contract`.
 """
 from __future__ import annotations
 
@@ -17,17 +19,17 @@ from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_establis
 
 pytestmark = pytest.mark.illegal_event_contract
 
-SHAPES = ["today", "e4"]
+SHAPES = ["anchor", "moment"]
 
 
 def _est(anchor, moment, shape, **kw):
     return make_cts_established(cts_anchor_idx=anchor, confirmed_at=moment,
-                                idx=anchor if shape == "today" else moment, **kw)
+                                idx=anchor if shape == "anchor" else moment, **kw)
 
 
 def _bos(anchor, moment, shape, **kw):
     return make_bos_confirmed(bos_anchor_idx=anchor, confirmed_at=moment,
-                              idx=anchor if shape == "today" else moment, **kw)
+                              idx=anchor if shape == "anchor" else moment, **kw)
 
 
 def _ev(etype, idx, category="STRUCTURE", **meta):
@@ -39,9 +41,10 @@ def _order(evs):
 
 
 @pytest.mark.parametrize("est_shape,bos_shape", [
-    ("today", "today"), ("e4", "e4"),
-    ("today", "e4"),   # E4b before E4a (BOS-only flip): a raw (idx, type) sort puts EST (9) first
-    ("e4", "today"),
+    ("anchor", "anchor"),  # pre-E4
+    ("moment", "moment"),  # after E4b
+    ("anchor", "moment"),  # a BOS-only flip: a raw (idx, type) sort puts EST (9) first
+    ("moment", "anchor"),  # after E4a, before E4b (the current contract)
 ])
 def test_h1_bos_before_est_of_the_same_cycle(est_shape, bos_shape):
     """The fib loop needs BOS(S,C) before EST(S,C); MS emits EST first. The
@@ -83,8 +86,8 @@ def _stub_ad_hoc(monkeypatch):
 @pytest.mark.parametrize("shape", SHAPES)
 def test_l1_est_winner_with_lag_feeds_the_anchor_to_the_probe(shape, _stub_ad_hoc):
     """R1: the reference's `source_event_idx` is the probe input and the pool key.
-    An EST winner whose anchor (9) precedes its moment (10) must give 9 — today
-    and after E4 (invisible on the reference window: no probe used an EST)."""
+    An EST winner whose anchor (9) precedes its moment (10) must give 9 — in both
+    shapes (invisible on the reference window: no probe used an EST)."""
     zone = rz.build_reference_zone_from_cts_event(
         [_bos(3, 10, shape), _est(9, 10, shape)], [], None, sid=0, probe_direction=-1,
     )
@@ -95,10 +98,10 @@ def test_l1_est_winner_with_lag_feeds_the_anchor_to_the_probe(shape, _stub_ad_ho
 
 @pytest.mark.parametrize("shape", SHAPES)
 def test_h5_reference_recency_tie_with_a_confirmation(shape, _stub_ad_hoc):
-    """H5: an EST (anchor 9, moment 10) and a CTS_CONFIRMED at 10. Today the EST
-    stamps at 9, so the CONFIRMED is the most recent; pinned through E4 (Plan E
-    E3b moves the recency key to the moment, where the CONFIRMED > ESTABLISHED
-    tie-break decides the same way)."""
+    """H5: an EST (anchor 9, moment 10) and a CTS_CONFIRMED at 10. Before Plan E
+    E3b the recency key was the stamped idx (the EST at 9 → the CONFIRMED most
+    recent); since E3b it is the moment, a 10 / 10 tie that the CONFIRMED >
+    ESTABLISHED type order decides the same way — in both shapes."""
     conf = _ev("CTS_CONFIRMED", 10, structure_id=0, cycle_id=0, cts_anchor_idx=9, confirmed_at=10)
     zone = rz.build_reference_zone_from_cts_event(
         [_est(9, 10, shape), conf], [], None, sid=0, probe_direction=-1,
@@ -110,8 +113,8 @@ def test_h5_reference_recency_tie_with_a_confirmation(shape, _stub_ad_hoc):
 @pytest.mark.parametrize("shape", SHAPES)
 def test_reference_window_filters_on_the_moment_since_e3b(shape, _stub_ad_hoc):
     """The sibling window is a TIME filter on the event's MOMENT (Plan E E3b): an
-    EST anchored at 9 with moment 12 is outside [5, 10] and inside [5, 12] —
-    today and after E4; the zone's base stays the anchor 9."""
+    EST anchored at 9 with moment 12 is outside [5, 10] and inside [5, 12] — in
+    both shapes; the zone's base stays the anchor 9."""
     zone = rz.build_reference_zone_from_cts_event(
         [_est(9, 12, shape)], [], None, sid=0, probe_direction=-1, idx_window=(5, 10),
     )

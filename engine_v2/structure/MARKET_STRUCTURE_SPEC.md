@@ -33,7 +33,8 @@ A continuation level established within the current structure direction.
 - It is confirmed by EITHER a pullback pattern OR sd zone proximity
   (whichever fires first — see "Dual CTS confirmation paths" below).
 - CTS emits:
-  - `CTS_ESTABLISHED` when a new CTS cycle begins (level anchored at an extreme).
+  - `CTS_ESTABLISHED` when a new CTS cycle begins (level anchored at an extreme, `meta["cts_anchor_idx"]`;
+    `ev.idx` = the moment, the breakout's apply candle, since Plan E E4a).
   - `CTS_CONFIRMED` when CTS is confirmed by the first of pullback / proximity.
     `meta["confirmation_method"]` ∈ {`"pullback"`, `"sd_zone_proximity"`}.
   - `CTS_UPDATED` when the CTS extreme is extended within the appropriate stage (rules depend on cycle stage).
@@ -523,23 +524,23 @@ subsequent counter and confluence) with `run_continuation=False`.
 
 **Mechanics:** Run MarketStructure from candidate. After ≥1 `CTS_EST`
 fires AND the check window can be bounded (via `end_idx` or
-`cts_est[1].idx`), check if any candle in
-`[cts_est[0].idx + 1, exc_upper]` reaches the BOS_0 zone inner bound
+`ef.cts_anchor_idx(cts_est[1])`), check if any candle in
+`[ef.cts_anchor_idx(cts_est[0]) + 1, exc_upper]` reaches the BOS_0 zone inner bound
 (within `pip_tolerance_pips`). If so, restart from that reach-back
 candle (later than current). `original_bos0_bounds` captured at iteration
 0 only and preserved across iterations.
 
 **Exception check window:**
-- Lower bound: `cts_est[0].idx + 1` — excludes the `CTS_ESTABLISHED.idx` candle, i.e. the
+- Lower bound: `ef.cts_anchor_idx(cts_est[0]) + 1` — excludes the CTS anchor candle, i.e. the
   breakout span's CTS **extreme** (not a pullback candle; and the extreme, not the established
-  moment `meta["confirmed_at"]`, though the two usually coincide — `ARCHITECTURE.md` "`ev.idx`
-  convention"). That candle is still part of the breakout leg away from the zone, so its far wick
+  moment `meta["confirmed_at"]` = `ev.idx` since Plan E E4a, though the two usually coincide —
+  `ARCHITECTURE.md` "`ev.idx` convention"; a test-only path that keeps the anchor, PLAN_E Q10). That candle is still part of the breakout leg away from the zone, so its far wick
   is not a return to it (GOTCHAS "Exception Check Must Exclude CTS_ESTABLISHED Candle")
 - Upper bound (`exc_upper`):
   - `end_idx` when defined (supersedes `cts_est[1]` per LANDMINES "Probe
     `end_idx` Is the Supreme Bound" — `end_idx` is a caller-defined hard
     bound; inner rules like "2 CTS_EST" don't narrow it)
-  - else `cts_est[1].idx` when ≥2 CTS_EST exist (live-mode fallback)
+  - else the second CTS_EST's anchor `ef.cts_anchor_idx(cts_est[1])` when ≥2 CTS_EST exist (live-mode fallback)
   - else no upper bound → pending
 
 **Status field — conditions:**
@@ -581,6 +582,6 @@ start — the path exists.
 
 - **Always on `df.copy()`** — no mutation of outer state until result accepted
 - **Max iterations cap** (10) — prevents infinite loops
-- **`CTS_EST + 1` scan window start** (`structure_engine.py` Scenario 3 Phase 1 probe, `compute_structure_from_start` and Scenario 3 Phase 2 Exception 2) — excludes the `CTS_ESTABLISHED.idx` candle = the breakout span's CTS **extreme**, still part of the breakout leg away from the zone: its far wick is not a return to the zone, and including it caused false exceptions. It is not a pullback candle, and it is keyed on the extreme, not the established moment `meta["confirmed_at"]` (the two usually coincide; `ARCHITECTURE.md` "`ev.idx` convention"; GOTCHAS "Exception Check Must Exclude CTS_ESTABLISHED Candle")
+- **`CTS_EST + 1` scan window start** (`structure_engine.py` Scenario 3 Phase 1 probe, `compute_structure_from_start` and Scenario 3 Phase 2 Exception 2) — excludes the CTS anchor candle (`ef.cts_anchor_idx`; `CTS_ESTABLISHED.idx` until Plan E E4a) = the breakout span's CTS **extreme**, still part of the breakout leg away from the zone: its far wick is not a return to the zone, and including it caused false exceptions. It is not a pullback candle, and it is keyed on the extreme, not the established moment `meta["confirmed_at"]` (the two usually coincide; `ARCHITECTURE.md` "`ev.idx` convention"; GOTCHAS "Exception Check Must Exclude CTS_ESTABLISHED Candle")
 - **Pip tolerance scales with timeframe** — values from `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS` (H1=3, M15=2.5, M5=2; type is `float` because M15 is fractional). Used by `compute_structure_scenario_3` Phase 1 probe AND by the legacy Exception 2 probes (`compute_structure_from_start` + `compute_structure_scenario_3` Phase 2; `compute_structure` no longer runs Exception 2 after Step 4 — its H1-main reversal handoff uses the `unified_probe` reset tolerances from the same table). Invariant: `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` per TF (asserted at module load).【fileciteturn1file11】
 

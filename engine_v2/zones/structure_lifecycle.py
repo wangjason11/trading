@@ -69,12 +69,14 @@ def compute_cycle_lifecycle(
 
       - `start` = `max(CTS_ESTABLISHED.meta["confirmed_at"]` (the MOMENT the
         cycle was established — the apply candle; canonical cycle-start idx,
-        Plan C 2026-09-19)`, struct_start, floor)`. NOT `CTS_ESTABLISHED.ev.idx`,
-        which is the CTS ANCHOR (the pattern's extreme candle) — a historical
-        price location exactly like `BOS_CONFIRMED.idx` — and can precede the
-        apply candle (bound `meta["pattern_anchor_idx"]` `<= ev.idx <=
-        confirmed_at <= meta["pattern_anchor_idx"] + range_max_k`; CTS anchor == moment is
-        the common case — ARCHITECTURE "`ev.idx` convention").
+        Plan C 2026-09-19)`, struct_start, floor)`. NOT the CTS ANCHOR
+        (`meta["cts_anchor_idx"]`, `CTS_ESTABLISHED.ev.idx` until Plan E E4a: the
+        pattern's extreme candle) — a historical price location like the BOS
+        anchor — which can precede the apply candle (bound
+        `meta["pattern_anchor_idx"] <= cts_anchor_idx <= confirmed_at <=
+        meta["pattern_anchor_idx"] + range_max_k`; CTS anchor == moment is the
+        common case — ARCHITECTURE "`ev.idx` convention"). Since E4a `ev.idx`
+        IS `confirmed_at`; the reader keeps the named key.
         `struct_start` from `compute_struct_start_by_sid` already embeds the
         reversal handoff and, for subs, both parent floors via `lifecycle_floor`.
       - `end` = `min(next-cycle clamped start, reversal_idx_by_sid[sid],
@@ -100,8 +102,8 @@ def compute_cycle_lifecycle(
 
     # CTS-established MOMENT per (sid, cycle) — `meta["confirmed_at"]`, the apply
     # candle (== BOS_CONFIRMED.confirmed_at, definitional). Last-seen wins. The
-    # CTS anchor (`ev.idx`, the pattern's extreme candle) is a historical price
-    # location and never a lifecycle value.
+    # CTS anchor (`meta["cts_anchor_idx"]`, the pattern's extreme candle) is a
+    # historical price location and never a lifecycle value.
     cts_est_by_key: Dict[Tuple[int, int], int] = {}
     for ev in events:
         if getattr(ev, "type", None) != "CTS_ESTABLISHED":

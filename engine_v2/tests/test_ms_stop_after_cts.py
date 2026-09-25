@@ -273,9 +273,9 @@ def _make_watch_over_second_cts_data() -> list[dict]:
     established at 2, CTS_CONFIRMED at 7, range hi .6122 / lo .6088, climb 8 inside it).
 
     9   big bull maru closing .6145 ABOVE range_hi = c0 of `one_maru_opposite(+1)`; its high
-        .6147 is the cycle-1 CTS extreme (`CTS_ESTABLISHED.idx` 9).
+        .6147 is the cycle-1 CTS extreme (the CTS anchor 9).
     10  SMALL bearish normal (cand2 valid) -> OMO SUCCESS, apply 10 -> 2nd CTS_ESTABLISHED
-        (idx 9, confirmed_at 10 — a natural idx != moment case), BOS_1 = l7 .6088. Bearish +
+        (anchor 9, confirmed_at = idx 10 — a natural anchor != moment case), BOS_1 = l7 .6088. Bearish +
         `is_range` (candle 12 closes inside its range) -> `_post_apply_range_check(10)`
         back-fills 10..11 INSIDE THE SAME `_step_anchor(9)` call, AFTER the BOS_1 write.
     11  big bear maru closing .6060 < BOS_1 .6088 -> during that back-fill: BOS close-break

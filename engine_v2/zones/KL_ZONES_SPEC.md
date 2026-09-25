@@ -262,8 +262,9 @@ main.
 > **CORRECTED 2026-09-19 — the boundary is the MOMENT, not the extreme. LANDED by
 > Plan C 2026-09-20.** A cycle's lifecycle begins when it is *established* —
 > `CTS_ESTABLISHED.meta["confirmed_at"]` (the apply candle, == `BOS_CONFIRMED.meta["confirmed_at"]`
-> by definition). `CTS_ESTABLISHED.ev.idx` is the CTS **extreme**, a historical anchor like
-> `BOS_CONFIRMED.ev.idx`; it can precede the moment. Extreme == moment is the COMMON case, not a
+> by definition). The CTS anchor `meta["cts_anchor_idx"]` (`CTS_ESTABLISHED.ev.idx` until Plan E E4a
+> made that idx the moment) is the CTS **extreme**, a historical anchor like the BOS anchor; it can
+> precede the moment. Extreme == moment is the COMMON case, not a
 > coincidence (31 of 34 `CTS_ESTABLISHED` CSV rows on the reference window, all five H1 cycles;
 > the bound, the lagging rows and why they lag: canonical: `ARCHITECTURE.md` "`ev.idx` convention").
 > `structure_lifecycle.compute_cycle_lifecycle` now reads the moment — for main, every sub cycle and

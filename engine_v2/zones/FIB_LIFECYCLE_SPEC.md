@@ -40,7 +40,8 @@
 > unchanged. (3) The cycle lifecycle-START that `compute_cycle_lifecycle` clamps
 > a fib's `start_idx` to (§15.3) and uses as the next-cycle END boundary (§15.4)
 > is the CTS-established **moment** (`CTS_ESTABLISHED.meta["confirmed_at"]`),
-> never `CTS_ESTABLISHED.idx` (the CTS extreme, a historical anchor). (4) Sub
+> never the CTS anchor (`meta["cts_anchor_idx"]`, the CTS extreme, a historical anchor —
+> `CTS_ESTABLISHED.idx` until Plan E E4a made that idx the moment). (4) Sub
 > fib states are attributed by `sub_id` (mirror attribution; `sub_sid` is gone),
 > and `end_idx` / `start_idx` are shifted by `slice_begin` by the mirror as §15
 > describes. Read every "`entity_df_mutation.py:669-678` cap" mention below as
@@ -922,7 +923,7 @@ not lifecycle.
   — the **structure** lifecycle-start (reversal handoff + parent floors), **NOT**
   the full cycle-start `max(CTS_ESTABLISHED.meta["confirmed_at"], struct_start,
   floor)` (`compute_cycle_lifecycle` — the established **moment**, not
-  `CTS_ESTABLISHED.idx`, the extreme, since Plan C 2026-09-20). KL's zone clamp is
+  the CTS anchor, the extreme, since Plan C 2026-09-20). KL's zone clamp is
   equivalent to that full cycle-start: it clamps `confirmed_idx` to `struct_start`
   (`kl_zones_v1.derive_kl_zones_v1`), and the moment term holds by construction (a
   BOS zone's raw `confirmed_idx` IS the moment; a CTS zone's is at or after it). POI's
@@ -939,7 +940,7 @@ not lifecycle.
   fib first activated on a later `CTS_UPDATED` (`meta["activated_on"] == "update"`)
   stamps that update's moment instead (e.g. on the reference window sub 3 cycle 0, on
   both lenses: first-active 2651 — slice-local `activated_at` 62 in the fib CSV
-  meta — vs its `CTS_ESTABLISHED.idx` 2649; it was 2650 / 61 before Plan F
+  meta — vs its `CTS_ESTABLISHED` 2649 (anchor = moment); it was 2650 / 61 before Plan F
   2026-09-24: the cycle's only sd gap, instance c2s 2650-2651, forms at 2651 (its
   first c3), so it does not count at the raw update 2650 and activates the fib at
   the next raw update 2651 — `IMBALANCE_FILL_SEMANTICS.md` "Knowability — the c3

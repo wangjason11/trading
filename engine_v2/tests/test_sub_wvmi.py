@@ -69,7 +69,7 @@ def _make_event(etype: str, idx: int, sid: int = 0, cycle_id: int = 1,
                 price: float | None = None) -> StructureEvent:
     meta = {"structure_id": sid, "cycle_id": cycle_id}
     if etype in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
-        # idx is the anchor (tests/_event_factory.py); the moment = it (lag 0).
+        # the `idx` argument is the anchor (`make_event`); the moment = it (lag 0).
         meta["confirmed_at"] = idx
     return make_event(etype, idx, price=price, **meta)
 

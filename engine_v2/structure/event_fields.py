@@ -10,8 +10,8 @@ A CTS / BOS event carries two candle indices with different roles:
   (`event_moment`).
 
 Every production read of a `CTS_ESTABLISHED` / `BOS_CONFIRMED` index names its
-role through this module, so the E4 flip (`ev.idx` := the moment) changes no
-reader. Direct indexing only: every emitter writes these keys (event contract,
+role through this module, so the E4 flip (`ev.idx` := the moment; E4a
+`CTS_ESTABLISHED`, E4b `BOS_CONFIRMED`) changes no reader. Direct indexing only: every emitter writes these keys (event contract,
 LANDMINES "Event Contract Rules" rule 3) — never `.get(key, ev.idx)`.
 
 Call QUALIFIED — `from engine_v2.structure import event_fields as ef`;
@@ -73,8 +73,9 @@ def pattern_anchor_idx(ev: Any) -> int:
 def event_moment(ev: Any) -> int:
     """The candle at which a CTS / BOS event became knowable (its MOMENT).
 
-    - CTS_ESTABLISHED / BOS_CONFIRMED: `meta["confirmed_at"]` (until Plan E E4
-      `ev.idx` is the anchor).
+    - CTS_ESTABLISHED / BOS_CONFIRMED: `meta["confirmed_at"]` (== `ev.idx` on
+      CTS_ESTABLISHED since Plan E E4a; `ev.idx` of a BOS_CONFIRMED is its
+      anchor until E4b).
     - CTS_CONFIRMED / CTS_RECONFIRMED: `ev.idx` (the confirmation candle).
     - CTS_UPDATED: `ev.idx` on the raw path (`via == CTS_UPDATED_RAW_VIA`, the
       processing candle); `meta["confirmed_at"]` on the pattern path (the
@@ -101,17 +102,17 @@ def event_moment(ev: Any) -> int:
 
 
 def stamped_idx(ev: Any) -> int:
-    """The index `ev.idx` holds TODAY, frozen against the Plan E E4 flip: the
-    anchor for CTS_ESTABLISHED / BOS_CONFIRMED / CTS_UPDATED, `ev.idx`
-    otherwise. Neither a location nor a moment by itself (user decision
-    2026-09-24, E2b). Its uses:
+    """The index `ev.idx` held before the Plan E E4 flip, frozen against it: the
+    anchor for CTS_ESTABLISHED (whose `ev.idx` is the moment since E4a) /
+    BOS_CONFIRMED / CTS_UPDATED, `ev.idx` otherwise. Neither a location nor a
+    moment by itself (user decision 2026-09-24, E2b). Its uses:
 
     - the event processing order (`processing_order_key`, the sort pins);
     - the historical first-anchor value `SidRecord.creation_event_idx` (stays,
       Plan E E3f) and struct_start's never-established fallback;
-    - an E2 TIME half still to be switched — always with its
-      `# Plan E E3x → moment` marker; where the list holds types `event_moment`
-      does not define, that stage must define them first (PLAN_E §7).
+    - the H1-overlay window start `export_m15_chart._h1_overlay_window_start_by_sid`
+      (the sid's first structural anchor — a location; user decision 2026-09-25).
+    Every E2 `# Plan E E3x → moment` TIME half has moved to `event_moment` (E3).
     """
     if ev.type == "CTS_ESTABLISHED":
         return cts_anchor_idx(ev)
@@ -123,7 +124,7 @@ def stamped_idx(ev: Any) -> int:
 
 
 def processing_order_key(ev: Any) -> Tuple[int, str]:
-    """The event processing order: `(stamped_idx, type)` — today's `(ev.idx,
+    """The event processing order: `(stamped_idx, type)` — the pre-E4 `(ev.idx,
     ev.type)`, pinned so the E4 flip reorders nothing (PLAN_E Q3; LANDMINES
     "Event Sort Order Is a Dispatch Invariant"). BOS before EST at a tied index holds by the type
     string ("BOS_CONFIRMED" < "CTS_ESTABLISHED")."""

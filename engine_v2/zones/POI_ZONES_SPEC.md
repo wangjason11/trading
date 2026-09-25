@@ -442,7 +442,7 @@ assumes "POI ⟹ sd direction."
   `versions` = the peak variants ever achieved
 - `cts_established_idx`: the owning cycle's CTS-established **moment** (`CTS_ESTABLISHED.meta["confirmed_at"]`)
   — the activation floor's cycle term (see "Activation floor" below). **Meaning changed by Plan D (2026-09-23):**
-  saves before it hold `CTS_ESTABLISHED.idx` (the CTS anchor) under this key. Fallback when the cycle has no
+  saves before it hold the CTS anchor (then `CTS_ESTABLISHED.idx`) under this key. Fallback when the cycle has no
   `CTS_ESTABLISHED`: `fib_state.cts_idx` — the fib's CTS anchor, NOT a moment (a known exception to the GLOSSARY
   "Naming Standard"; the general defect stays a parked follow-up). **No live case on the reference window since
   Plan F (2026-09-24):** the only one was the IC 3654 twin POI on the cross fib counter sub 5 PRE-CREATED at 3806
@@ -472,7 +472,7 @@ produce (the planned FibState lifecycle work will produce it for
 
 ### Zone End Time (Priority Order)
 1. **Reversal:** `end_time = reversal_confirmed_idx` (all zones end immediately)
-2. **New CTS:** Cycle N zones end at cycle N+1's clamped lifecycle-start = `max(CTS_{N+1} ESTABLISHED.meta["confirmed_at"], struct_start[, lifecycle_floor])` — the CTS-established **moment**, not `CTS_ESTABLISHED.idx` (the CTS anchor; Plan C, 2026-09-20)
+2. **New CTS:** Cycle N zones end at cycle N+1's clamped lifecycle-start = `max(CTS_{N+1} ESTABLISHED.meta["confirmed_at"], struct_start[, lifecycle_floor])` — the CTS-established **moment**, not the CTS anchor (`meta["cts_anchor_idx"]`, `CTS_ESTABLISHED.idx` until Plan E E4a; Plan C, 2026-09-20)
 3. **Sub window end (subs only):** the unique sub's `end_idx` (`lifecycle_cap`), tagged with the sub's `end_reason`
 4. **No event:** Zone remains active (`end_time = None`)
 `end_idx` is `min(...)` of the applicable candidates (earliest wins; reversal wins an equal-idx tie) — the cycle table from `zones/structure_lifecycle.compute_cycle_lifecycle`, shared with KL and fib.
@@ -521,8 +521,8 @@ the anchor historically).
 `fib_state.cts_idx` (see the field list). The lookup indexes `meta["confirmed_at"]` directly — no fallback to
 `ev.idx`; `compute_cycle_lifecycle` asserts the key first for every event carrying `structure_id`/`cycle_id`.
 
-> **Resolved (Plan D, 2026-09-23).** Until Plan D the cycle term was `CTS_ESTABLISHED.idx` — the CTS
-> **anchor** (the breakout pattern's extreme candle, retro-stamped), not the moment the cycle became knowable —
+> **Resolved (Plan D, 2026-09-23).** Until Plan D the cycle term was `CTS_ESTABLISHED.idx` — then the CTS
+> **anchor** (the breakout pattern's extreme candle, retro-stamped; the idx is the moment since Plan E E4a), not the moment the cycle became knowable —
 > while the canonical cycle lifecycle-start and every cycle END were already on the moment
 > (`compute_cycle_lifecycle`, Plan C). On a cycle whose anchor precedes its moment a POI could go live
 > `confirmed_at − idx` candles (≤ 5) before its cycle existed, overlap the previous cycle's POI on those candles,

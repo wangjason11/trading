@@ -23,8 +23,9 @@ def _ev(idx: int, type_: str, sid: int, cycle: int, sd: int = 1,
     # that do pass an explicit (earlier) cts_anchor_idx via **extra.
     if type_ == "CTS_CONFIRMED":
         meta["cts_anchor_idx"] = idx
-    # CTS_ESTABLISHED / BOS_CONFIRMED: idx is the anchor (the factory); the
-    # moment defaults to it (lag 0) unless a test passes `confirmed_at`.
+    # CTS_ESTABLISHED / BOS_CONFIRMED: the `idx` argument is the anchor
+    # (`make_event`); the moment defaults to it (lag 0) unless a test passes
+    # `confirmed_at` (a CTS_ESTABLISHED's own idx is the moment, Plan E E4a).
     if type_ in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
         meta["confirmed_at"] = idx
     meta.update(extra)

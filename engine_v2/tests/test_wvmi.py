@@ -73,7 +73,7 @@ def _make_zone(side: str, top: float, bottom: float, source_kind: str = "BOS",
 def _make_event(etype: str, idx: int, price: float = None, meta: dict | None = None) -> StructureEvent:
     meta = dict(meta or {})
     if etype in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
-        # idx is the anchor (tests/_event_factory.py); the moment defaults to it (lag 0).
+        # the `idx` argument is the anchor (`make_event`); the moment defaults to it (lag 0).
         meta.setdefault("confirmed_at", idx)
     return make_event(
         etype, idx, price=price,

@@ -20,10 +20,11 @@ def _ev(etype, idx, **meta):
 
 # --- accessors: direct index, the named key, strict types -----------------------
 
-@pytest.mark.illegal_event_contract  # the E4 shape: idx != the anchor
 def test_cts_anchor_idx_reads_the_meta_key_not_idx():
-    # idx deliberately != the key: the accessor must read the key (the E4 shape).
-    est = make_cts_established(cts_anchor_idx=9, confirmed_at=10, idx=10)
+    # Since Plan E E4a a CTS_ESTABLISHED's idx is its moment (10): the accessor
+    # must read the key.
+    est = make_cts_established(cts_anchor_idx=9, confirmed_at=10)
+    assert est.idx == 10
     assert ef.cts_anchor_idx(est) == 9
     conf = _ev("CTS_CONFIRMED", 25, cts_anchor_idx=20, confirmed_at=25)
     assert ef.cts_anchor_idx(conf) == 20
@@ -31,7 +32,7 @@ def test_cts_anchor_idx_reads_the_meta_key_not_idx():
     assert ef.cts_anchor_idx(_ev("CTS_UPDATED", 12, via="continuous", confirmed_at=12)) == 12
 
 
-@pytest.mark.illegal_event_contract  # the E4 shape: idx != the anchor
+@pytest.mark.illegal_event_contract  # the E4b shape: idx != the anchor
 def test_bos_anchor_idx_reads_the_meta_key_not_idx():
     bos = make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10, idx=10)
     assert ef.bos_anchor_idx(bos) == 3
@@ -69,8 +70,10 @@ def test_event_moment_extended_to_bos_and_confirmations():
     assert ef.event_moment(_ev("CTS_RECONFIRMED", 30, cts_anchor_idx=20)) == 30
 
 
-def test_processing_order_key_is_todays_idx_type_order():
-    """Pre-E4 `processing_order_key` == `(ev.idx, ev.type)` for every type."""
+def test_processing_order_key_is_the_pre_e4_idx_type_order():
+    """`processing_order_key` == the pre-E4 `(ev.idx, ev.type)` for every type:
+    a CTS_ESTABLISHED keys on its anchor (9), not its idx (the moment 10 since
+    Plan E E4a); every other type on its idx."""
     evs = [
         make_cts_established(cts_anchor_idx=9, confirmed_at=10),
         make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10),
@@ -78,24 +81,32 @@ def test_processing_order_key_is_todays_idx_type_order():
         _ev("CTS_CONFIRMED", 14, cts_anchor_idx=12, confirmed_at=14),
         StructureEvent(idx=11, category="RANGE", type="RANGE_STARTED", meta={}),
     ]
-    assert [ef.processing_order_key(e) for e in evs] == [(e.idx, e.type) for e in evs]
-    assert [ef.stamped_idx(e) for e in evs] == [e.idx for e in evs]
+    assert evs[0].idx == 10
+    assert [ef.processing_order_key(e) for e in evs] == [
+        (9, "CTS_ESTABLISHED"), (3, "BOS_CONFIRMED"), (12, "CTS_UPDATED"),
+        (14, "CTS_CONFIRMED"), (11, "RANGE_STARTED"),
+    ]
+    assert [ef.stamped_idx(e) for e in evs] == [9, 3, 12, 14, 11]
 
 
-@pytest.mark.illegal_event_contract  # the E4 shape: idx != the anchor
+@pytest.mark.illegal_event_contract  # the BOS half is the E4b shape: idx != the anchor
 def test_stamped_idx_reads_the_anchor_keys_not_idx():
     """Frozen against E4: an EST / BOS whose idx is the moment still stamps at
     its anchor; CONFIRMED stays at its idx (the confirmation candle)."""
-    assert ef.stamped_idx(make_cts_established(cts_anchor_idx=9, confirmed_at=10, idx=10)) == 9
+    assert ef.stamped_idx(make_cts_established(cts_anchor_idx=9, confirmed_at=10)) == 9
     assert ef.stamped_idx(make_bos_confirmed(bos_anchor_idx=3, confirmed_at=10, idx=10)) == 3
     assert ef.stamped_idx(_ev("CTS_CONFIRMED", 14, cts_anchor_idx=12, confirmed_at=14)) == 14
 
 
 # --- the factory ------------------------------------------------------------------
 
-def test_factory_idx_defaults_to_the_anchor_and_carries_both_keys():
+def test_factory_idx_defaults_to_the_contract_index_and_carries_both_keys():
+    """The moment on CTS_ESTABLISHED (Plan E E4a), the anchor on BOS_CONFIRMED
+    (until E4b); `make_event`'s `idx` argument is the anchor either way."""
     est = make_cts_established(cts_anchor_idx=9, confirmed_at=10, structure_id=2, cycle_id=1)
-    assert (est.idx, est.meta["cts_anchor_idx"], est.meta["confirmed_at"]) == (9, 9, 10)
+    assert (est.idx, est.meta["cts_anchor_idx"], est.meta["confirmed_at"]) == (10, 9, 10)
+    est = make_event("CTS_ESTABLISHED", 9, confirmed_at=10, structure_id=2, cycle_id=1)
+    assert (est.idx, est.meta["cts_anchor_idx"], est.meta["confirmed_at"]) == (10, 9, 10)
     bos = make_event("BOS_CONFIRMED", 3, confirmed_at=10, structure_id=2, cycle_id=1)
     assert (bos.idx, bos.meta["bos_anchor_idx"], bos.meta["confirmed_at"]) == (3, 3, 10)
     assert "struct_direction" not in bos.meta  # make_event adds no key the caller omitted

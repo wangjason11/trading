@@ -890,6 +890,13 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
   final.csv `bos_idx` (MS state). The events CSVs are written in emission order, so no rows reorder.
 - **Docs:** the BOS half (GOTCHAS "BOS_CONFIRMED `ev.idx` Is the BOS Extreme…"; the ARCHITECTURE row;
   KL_ZONES_SPEC `source_event_idx`; MEMORY "Key Architecture Points").
+- **Lesson from the E4a mutation lens (§8.1), apply BEFORE the flip:** a flip turns every raw-`ev.idx` LOCATION
+  read into a moment read, and the E4a lens found 3 production location readers with no lagging fixture (all
+  existing fixtures had lag 0 at those sites). For E4b, enumerate every BOS LOCATION reader (`ef.bos_anchor_idx`
+  call sites: KL geometry, fib `bos_idx` / `cycle1_bos_idx`, FC probe input, prev-BOS line start, the chart
+  dots / PB bound, `structure_levels`) and check each has a lagging-BOS pin (anchor < moment) — the mutation lens
+  then confirms. The BOS lag is large on this window (H1 14–76, M15 2–411), so an unpinned reader is likely to
+  move the figures, not only the CSVs.
 
 **E4c — pattern-path `CTS_UPDATED`** (Q1 = flip). `idx := apply_idx` + meta `cts_anchor_idx` (E2 readers then use
 `ef.cts_anchor_idx` for every CTS_UPDATED, and E2b must already route CTS_UPDATED LOCATION reads through it).
@@ -899,6 +906,79 @@ Prediction: 1 idx cell; everything else identical (the moment already drives the
 **E4 tests:** the expected-value edits (IN §2.7 "E4, EST part" / "E4, BOS part"); the factory default `idx =
 confirmed_at` and the conftest validator's `idx == confirmed_at`; the E4-simulation test becomes a regression pin of
 the real emitter.
+
+### 8.1 E4 as landed
+
+- **E4a (2026-09-25).** The establish block calls `_emit_cts_established(int(apply_idx), cts_price,
+  cts_anchor_idx=…)`; `_emit_cts_established` asserts `idx == meta["confirmed_at"]` BEFORE building the event (the
+  single EST emit site — grep-verified; `MarketStructure._rewind_to` replays from scratch, it re-stamps nothing).
+  **Measured (vs `20260925_112624_c031972`) == §8 exactly:** events `idx` 3 cells (conf 1223→1224, 2828→2829;
+  counter 2828→2829), H1 0; the 3 figures JSON-identical; run.log only the two `[kl_zones]` EST prints — B12
+  prints the anchor next to the idx: `(819, 819, 0, 2)` → `(820, 819, 0, 2)`, `(239, 239, 0, 1)` → `(240, 239, 0,
+  1)` (plus the FutureWarning line number and the parked `by_lens` order). Replay 48.4 s wall.
+  **Contract flip, same commit:** `conftest.EVENT_IDX_IS` is per type (`{"CTS_ESTABLISHED": "moment",
+  "BOS_CONFIRMED": "anchor"}` — E4b flips the second); the factory's EST default `idx` = `confirmed_at`
+  (`make_event`'s `idx` ARGUMENT stays the anchor); `test_e4_simulation.py` → the real-emitter pin (every EST
+  `idx == confirmed_at`, the lagging one (anchor 9, idx 10)), the emitter-assert pin, and a role SWAP test (EST
+  back to its anchor = the pre-E4a shape, BOS to its moment = the E4b shape → downstream outputs identical); the
+  Plan D `mutate=` hooks move the EST `idx` with `confirmed_at`, and their "anchor == moment" preconditions read
+  `cts_anchor_idx` (the old `ev.idx == confirmed_at` had become tautological); the mirror pin →
+  `test_anchor_keys_are_int_and_idx_is_the_contract_index`; the validator / `event_fields` / order-pin tests follow
+  (shapes renamed "anchor" / "moment"); 3 EST-only role pins dropped `illegal_event_contract` (legal now); the
+  Plan-B-save CSV loader translates a pre-E4a EST row (`idx := confirmed_at`) and sorts with
+  `ef.processing_order_key`. Only 6 tests failed on the bare flip (validator ×2, `event_fields` ×2, the old
+  simulation's EST half ×2) — E2's accessors had made the rest of the suite role-neutral. Tests 902 → 905 + 1 xfail.
+  **Docs (the inversion list, built by grep first):** ARCHITECTURE "`ev.idx` convention" (intro; table re-cut into
+  `ev.idx` / moment / anchor / `ev.price` (Q19) / other-meta columns, every `ev.price` cell checked against its
+  emitter; the `ef.*` bullets; declared raw readers; the bound paragraph; the activation-floor paragraph); GLOSSARY
+  (Status + "`ev.idx`/`ev.price` are not a bare-element pair", `confirmed_at` — also its stale "absent on every
+  CTS_UPDATED" since E3·0 —, moment, `event_moment`, `event.idx`, `CTS_ESTABLISHED`, `cts_moment`, parent
+  `cts_anchor_idx`); GOTCHAS (the "BOS_CONFIRMED `ev.idx`…" convention bullets, BIB scan-back, exception window +
+  its code snippet → `ef.cts_anchor_idx(…) + 1`, proximity scan, CTS_THRESHOLD note); LANDMINES (rule 3's E4a use +
+  the per-type test contract + the `mutate=` rule, Scenario 3 constraint 4, Event Sort Order, parent-tables
+  assert, cycle start, knowable-at clip); PRE_REFACTOR_INVARIANTS; WORKFLOWS; KL / POI / FIB_LIFECYCLE /
+  WAVE_CANDLES (the event walk is `ef.cts_anchor_idx`, not `ev.idx`) / MARKET_STRUCTURE specs; PART4 (5
+  present-tense rules + the 2026-09-19 note); IMBALANCE_FILL_SEMANTICS; production comments (`event_fields`,
+  `knowable_at_idx`, the orchestrator sort, the KL docstring, the mirror clip, `parent_tables`, `poi_zones`,
+  `structure_lifecycle`); test-helper comments ("the `idx` argument is the anchor"). Dated history left as is.
+  `e4flip_plugin.py` `FLIP=est` is a no-op from here on (README).
+  - Landing review, conformance lens (≈294k): 0 BLOCKER; verified the single emit site, that nothing re-stamps an
+    EST (rewind replays from scratch; mirror / sibling clip shift `idx` and `confirmed_at` by one offset; the pool
+    clip keys the moment), every production `.idx` read type-filtered away from EST or a declared raw reader, no
+    read silently correct only because anchor == moment, KL `source_event_idx` never written for an EST (the EST
+    branch `continue`s first), and every cell of the re-cut ARCHITECTURE table against the emitters. **MAJOR
+    (fixed):** `test_pattern_anchor_idx_values_obey_the_pattern_bound` (not in the diff) had become half-vacuous —
+    `pa <= ev.idx <= conf` read `conf <= conf` → now `pa <= ef.cts_anchor_idx(ev) <= conf <= pa + 5` and
+    `ev.idx == conf`; MARKET_STRUCTURE_SPEC's Scenario-3 "Mechanics" window (`cts_est[0].idx + 1`) contradicted
+    the fixed lines ten below; a GOTCHAS next-BOS sentence ("its `.idx` is the CTS extreme"); the tracked `/compare`
+    skill's events paragraph (now split by type: EST → track `cts_anchor_idx`). **MINOR (fixed):** stale
+    present-tense comments (`structure_lifecycle`, `parent_tables` ×2, `_second_cts_moment`, `structure_engine`'s
+    exception-window comments — incl. the retracted "that candle is the pullback confirmation" —,
+    `probe_fc_finalize`); `stamped_idx`'s use list (the E3 marker bullet → the H1-overlay window start, also in
+    ARCHITECTURE); test docstrings (`test_unified_probe` fixture + phase-2 comment, `test_ms_stop_after_cts`,
+    `test_parent_tables` negative control "idx 10" → "cts_anchor_idx 10" — its test still kills the anchor
+    mutant —, `test_structure_lifecycle_moment`, the POI sweep comment, the H5 docstring); three test `_sorted`
+    helpers now use `ef.processing_order_key` (they modelled the orchestrator with a raw `(idx, type)`, which
+    differs for a lagging EST since E4a; no assertion depended on it); the emitter-assert pin skips under `-O`;
+    two history lines disambiguated (ARCHITECTURE activation floor, LANDMINES 2026-05-13 case). Tests 905 + 1 xfail.
+  - Landing review, mutation lens (≈229k; 22 mutants on a scratch copy, full suite each): the contract core is
+    pinned — the emitter revert (33 kills), its assert (1: the emitter-assert pin — without it the validator
+    still raises, but as `EventContractViolation`), the factory / conftest / validator, `ef.stamped_idx` /
+    `cts_anchor_idx` for EST, and even `event_moment` for EST → `ev.idx` (equivalent on legal events, killed by
+    the deliberately illegal swap clones and "anchor"-shape order pins). **Survivors → 6 pins adopted
+    (`apply_pins.py`, each verified to fail on its mutant; wave-candle and POI pre-window re-killed here):**
+    P1/P2 the Plan D `mutate=` hooks re-validate the contract after the edit (dropping `est.idx = …` left an
+    illegal event nothing noticed); P3 `test_cts_bib_event_walk_checks_a_lagging_est_at_its_anchor` — the
+    wave-candle BIB walk's `ev_idx` read as `ev.idx` survived (every wave fixture has lag 0; only the AST sort
+    guard caught the sort-key half); P4 the POI sweep's PRE-WINDOW cond1 branch (`lifecycle_floor_idx` past the
+    moment; the existing pin reached only the in-window branch) + its positive control; P5 the H1 chart's
+    "CTS (unconfirmed)" marker at the CTS anchor (no pytest coverage before); P6 the Scenario-3 exception window
+    opens at the CTS_0 anchor + 1 (Q10 test-only path). Equivalent: the Plan-B-save CSV loader translation (all
+    5 H1 ESTs lag 0). N/A: no EST location read in `first_confluence_trigger` / `kl_zones_v1`. Declared residual:
+    the two M15-chart twins of P5 (`_build_sub_polylines`, `_render_h1_overlay`) read `ef.cts_anchor_idx` and are
+    covered only by the figure diff (as accepted in the E2c review). Side note (pre-existing, hygiene list): the
+    `compute_structure_scenario_3` docstring still names `_run_h1_reverse_probe`, which no longer exists.
+    Tests 905 → **910 + 1 xfail**.
 
 ## 9. E5 — remaining renames + prose
 

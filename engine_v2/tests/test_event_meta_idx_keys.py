@@ -24,6 +24,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure import market_structure
 
 from engine_v2.multitf import entity_df_mutation as edm
@@ -149,7 +150,8 @@ def test_every_zone_meta_index_key_is_shifted_or_known_slice_local(geometry, m15
 def test_pattern_anchor_idx_values_obey_the_pattern_bound(geometry, m15_df):
     """The VALUE, not just the key (a mutation writing the apply candle under the
     key survived the key-only pins). ARCHITECTURE "`ev.idx` convention" bound:
-    `pattern_anchor_idx <= ev.idx <= confirmed_at <= pattern_anchor_idx + 5`, and
+    `pattern_anchor_idx <= cts_anchor_idx <= confirmed_at <= pattern_anchor_idx + 5`
+    (and `ev.idx == confirmed_at` since Plan E E4a), and
     `pattern_anchor_idx < confirmed_at` strictly — every breakout pattern spans at
     least two candles, so its first candle is never its apply candle. Both
     REVERSAL events are stamped AT the close-break candle, which is the key."""
@@ -158,7 +160,8 @@ def test_pattern_anchor_idx_values_obey_the_pattern_bound(geometry, m15_df):
     assert est
     for ev in est:
         pa, conf = ev.meta["pattern_anchor_idx"], ev.meta["confirmed_at"]
-        assert pa <= ev.idx <= conf <= pa + 5
+        assert pa <= ef.cts_anchor_idx(ev) <= conf <= pa + 5
+        assert ev.idx == conf
         assert pa < conf
     for t in ("REVERSAL_WATCH_START", "REVERSAL_CANDIDATE"):
         for ev in (e for e in events if e.type == t):
@@ -211,15 +214,17 @@ def test_every_wave_candle_meta_index_key_is_known_slice_local(geometry, m15_df)
     assert unlisted == [], unlisted
 
 
-def test_anchor_keys_are_int_and_equal_idx_before_e4(geometry, m15_df):
+def test_anchor_keys_are_int_and_idx_is_the_contract_index(geometry, m15_df):
     """Plan E E2a: CTS_ESTABLISHED `cts_anchor_idx` / BOS_CONFIRMED
-    `bos_anchor_idx` are Python ints equal to `ev.idx` — after the mirror's
-    shift too (both are shifted by the same offset). Plan E E4 changes this pin:
-    `ev.idx` becomes `confirmed_at` and the anchor key keeps the location."""
+    `bos_anchor_idx` and `confirmed_at` are Python ints, and `ev.idx` equals the
+    index the contract names — after the mirror's shift too (all are shifted by
+    the same offset): the moment `confirmed_at` on CTS_ESTABLISHED (Plan E E4a),
+    the anchor on BOS_CONFIRMED (until E4b)."""
     events, _ = _mirrored(geometry, m15_df)
-    for t, key in (("CTS_ESTABLISHED", "cts_anchor_idx"), ("BOS_CONFIRMED", "bos_anchor_idx")):
+    for t, key, idx_key in (("CTS_ESTABLISHED", "cts_anchor_idx", "confirmed_at"),
+                            ("BOS_CONFIRMED", "bos_anchor_idx", "bos_anchor_idx")):
         evs = [ev for ev in events if ev.type == t]
         assert evs, t
         for ev in evs:
-            assert type(ev.meta[key]) is int, (t, ev.meta)
-            assert ev.meta[key] == ev.idx, (t, ev.idx, ev.meta)
+            assert type(ev.meta[key]) is int and type(ev.meta["confirmed_at"]) is int, (t, ev.meta)
+            assert ev.meta[idx_key] == ev.idx, (t, ev.idx, ev.meta)

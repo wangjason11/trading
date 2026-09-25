@@ -26,7 +26,10 @@ never read off the code's output):
       `parent_cycle_id` / `use_case` / `started_by` from the first record (§6.1
       / §17.9).
   R5  Events are clipped by KNOWABLE-AT at the cap (`BOS_CONFIRMED` is known at
-      `meta["confirmed_at"]`, every other event at `ev.idx`; `<= cap` inclusive)
+      `meta["confirmed_at"]`, every other event at `ev.idx` — a
+      `CTS_ESTABLISHED`'s idx IS its moment since Plan E E4a; a pattern-path
+      `CTS_UPDATED` is known at `confirmed_at` since E3b, none lags in this
+      geometry; `<= cap` inclusive)
       and DEEP-COPIED — geometry objects are shared, so mutating a mirrored
       event's meta must not touch `bounded.events` (§6.1, §12 landmine).
   R6  KL zones inherit the window: `confirmed_idx >= sub.start_idx` (the floor
@@ -308,7 +311,7 @@ def _render(sub: PooledStructure, m15_df: pd.DataFrame,
 def _knowable_at(ev) -> int:
     """§17.9 / R5, written out independently of `knowable_at_idx`: a
     `BOS_CONFIRMED` is known at `meta["confirmed_at"]`; every other event at
-    `ev.idx`."""
+    `ev.idx` (a `CTS_ESTABLISHED`'s idx IS its moment since Plan E E4a)."""
     if ev.type == "BOS_CONFIRMED" and ev.meta.get("confirmed_at") is not None:
         return int(ev.meta["confirmed_at"])
     return int(ev.idx)
@@ -776,9 +779,10 @@ def test_poi_floor_decides_first_activation_through_the_projection(geometry, m15
 def test_poi_cycle_term_is_the_moment_through_the_projection(geometry, m15_df):
     """Plan D through projection + mirror (the replay's sub-3 case: a meta-only
     re-value). Move the geometry's cycle-0 moment 2 candles past its anchor
-    (CTS_ESTABLISHED and BOS_CONFIRMED together — the definitional identity):
-    the mirrored `cts_established_idx` follows the MOMENT, not `.idx`; the
-    first activation is unchanged (IC 63 still decides)."""
+    (CTS_ESTABLISHED and BOS_CONFIRMED together — the definitional identity;
+    the CTS_ESTABLISHED's idx moves with it, Plan E E4a): the mirrored
+    `cts_established_idx` follows the MOMENT, not the anchor; the first
+    activation is unchanged (IC 63 still decides)."""
     pool, sub = geometry
     _two_lens_records(pool, sub, m15_df)
     _set_lifecycle(sub, _START, None, None)
@@ -786,13 +790,19 @@ def test_poi_cycle_term_is_the_moment_through_the_projection(geometry, m15_df):
     est = _cycle_cts_established(sub, 0)
     bos = next(ev for ev in bounded.events if ev.type == "BOS_CONFIRMED"
                and ev.meta.get("cycle_id") == 0)
-    assert est.idx == est.meta["confirmed_at"] == bos.meta["confirmed_at"]
+    assert est.meta["cts_anchor_idx"] == est.meta["confirmed_at"] == bos.meta["confirmed_at"]
     moved = int(est.meta["confirmed_at"]) + 2
+    # A meta edit after construction bypasses the conftest validator: keep the
+    # contract by hand (a CTS_ESTABLISHED's idx IS its moment, Plan E E4a).
     est.meta["confirmed_at"] = moved
+    est.idx = moved
     bos.meta["confirmed_at"] = moved
+    from engine_v2.tests.conftest import validate_event_contract
+    validate_event_contract(est)
+    validate_event_contract(bos)
     _, firsts = _mirrored_pois_first_activations(sub, m15_df)
     for lens, rows in firsts.items():
-        # Old rule: cts_established_idx == est.idx + slice_begin (2 less).
+        # Old rule (pre-Plan D): the CTS anchor + slice_begin (2 less).
         assert rows == [(63, 75, moved + slice_begin)], (lens, rows)
 
 

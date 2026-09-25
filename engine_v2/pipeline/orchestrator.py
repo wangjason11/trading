@@ -190,8 +190,9 @@ def _run_downstream_pipeline(
     print(f"{pfx}[wave_candles] total={len(wave_candle_results)}, with_last={wc_with_last}, with_first={wc_with_first}")
 
     # The event processing order (used by WVMI, Fib tracking, prev BOS lines):
-    # today's (idx, type), pinned against the Plan E E4 flip (PLAN_E Q3; LANDMINES
-    # "Event Sort Order Is a Dispatch Invariant").
+    # the pre-E4 (idx, type) — a CTS_ESTABLISHED / BOS_CONFIRMED keyed on its
+    # anchor (`ef.stamped_idx`) — pinned against the Plan E E4 flip (PLAN_E Q3;
+    # LANDMINES "Event Sort Order Is a Dispatch Invariant").
     sorted_events = sorted(events, key=ef.processing_order_key)
 
     # Find reversal_confirmed_idx per structure (from REVERSAL_CANDIDATE apply_idx)

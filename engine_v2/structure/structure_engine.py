@@ -450,7 +450,7 @@ def compute_structure_scenario_3(
 
         # --- Condition 4: Insufficient data for exception check ---
         # We need at least 1 CTS_EST (to anchor the check window's lower bound
-        # at cts_est[0].idx + 1) AND a captured BOS_0 zone (to define the
+        # at its CTS anchor + 1) AND a captured BOS_0 zone (to define the
         # proximity target). Without these, no exception check is possible:
         #   - end_idx defined → finalize at caller's bound
         #   - end_idx None → pending (more candles may resolve later)
@@ -462,15 +462,16 @@ def compute_structure_scenario_3(
             break
 
         # --- Conditions 1 & 2: Evaluate exception ---
-        # Window: [cts_est[0].idx + 1, exc_upper]
-        #   Lower bound excludes the CTS_ESTABLISHED candle itself — that
-        #   candle is the pullback confirmation, naturally near the zone.
-        #   We only care if price returns to the zone AFTER the pullback.
+        # Window: [ef.cts_anchor_idx(cts_est[0]) + 1, exc_upper]
+        #   Lower bound excludes the CTS anchor candle itself — the breakout
+        #   span's extreme, whose far wick still belongs to the breakout leg
+        #   (GOTCHAS "Exception Check Must Exclude CTS_ESTABLISHED Candle").
+        #   We only care if price returns to the zone AFTER the breakout.
         #
         #   Upper bound respects end_idx-supersedes principle (see
         #   MARKET_STRUCTURE_SPEC.md): end_idx is a caller-defined hard
         #   bound on the probe; inner rules like "2 CTS_EST seen" don't
-        #   narrow the check window. Fall back to cts_est[1].idx only when
+        #   narrow the check window. Fall back to cts_est[1]'s anchor only when
         #   end_idx is None (live-mode probes without an explicit terminal).
         if end_idx is not None:
             exc_upper = end_idx

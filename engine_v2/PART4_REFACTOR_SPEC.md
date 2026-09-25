@@ -158,8 +158,8 @@ structure (and likewise a cycle) has both:
 
 These mirror main structure: a cycle's `starting_idx` is the prior BOS
 candle, but the cycle becomes active at the CTS-established **moment**
-(`CTS_ESTABLISHED.meta["confirmed_at"]`, §5 / §17.6 — never `.idx`, the CTS
-extreme). For a sub, a **record**'s `start_idx = max(probe_finalize_idx,
+(`CTS_ESTABLISHED.meta["confirmed_at"]`, §5 / §17.6 — never the CTS anchor, the
+extreme; `.idx` IS the moment since Plan E E4a). For a sub, a **record**'s `start_idx = max(probe_finalize_idx,
 trigger_idx, parent_floor_idx)` and the **unique sub**'s `start_idx` is its
 first non-zero-length record's `start_idx` (§17.4–§17.5); `starting_idx` is
 only the geometric anchor. The active window is `[start_idx, end_idx)` —
@@ -383,7 +383,7 @@ probe; mechanics unchanged.
 | Field | Value |
 |---|---|
 | **Trigger** | First parent sd-zone proximity trigger (BOS or POI) after parent CTS (`WVMIRecord.meta["triggered_by_event_idx"]` → `trigger_event_idx`) |
-| **Idx input** | Sibling confluence lens's most recent qualifying CTS **extreme** on the sub TF (= the reference zone's `source_event_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → event idx). **Same candle as the reference zone** — input and ref are co-sourced from the sibling CTS event (Session 3 uniform rule). |
+| **Idx input** | Sibling confluence lens's most recent qualifying CTS **extreme** on the sub TF (= the reference zone's `source_event_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone** — input and ref are co-sourced from the sibling CTS event (Session 3 uniform rule). |
 | **Probe `probe_end_idx`** | First parent sd-zone proximity trigger candle after CTS, time-mapped to the sub TF's last-of-hour = the trigger's `trigger_idx` (`hi`) |
 | **Probe reference zone** | Sibling confluence lens's most recent qualifying CTS, built ad hoc from the winning CTS event (§17.8: `kl_zones=[]` — subs receive BOS zones only, so no derived CTS zone exists), read from the pool within the sub-TF window `[0, this trigger]` (`_sibling_cts_idx_window`; the pool read is already scoped to this parent cycle) |
 | **Output** | `starting_idx` for the first counter sub of the cycle |
@@ -410,7 +410,7 @@ conditions fire, end the previous confluence sid and create
 | Field | Value |
 |---|---|
 | **Trigger** | Parent CTS-zone proximity trigger AND most recent prior parent proximity trigger was to sd zones |
-| **Idx input** | Sibling **counter** lens's most recent qualifying CTS **extreme** on the sub TF (= the reference zone's `source_event_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → event idx). **Same candle as the reference zone.** |
+| **Idx input** | Sibling **counter** lens's most recent qualifying CTS **extreme** on the sub TF (= the reference zone's `source_event_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone.** |
 | **Probe `probe_end_idx`** | Current parent CTS-zone proximity trigger candle, time-mapped to the sub TF's last-of-hour = the trigger's `trigger_idx` (`hi`) |
 | **Probe reference zone** | Sibling **counter** lens's most recent qualifying CTS, built ad hoc from the winning event (`kl_zones=[]`, §17.8), read from the pool within the sub-TF window `[last-M15-of prior_sd_prox hour, last-M15-of this_cts_prox hour]` |
 | **Output** | `starting_idx` for the next confluence record's sub (a new unique sub, or an existing one if the key repeats) |
@@ -438,7 +438,7 @@ conditions fire, end the previous counter sid and create
 | Field | Value |
 |---|---|
 | **Trigger** | Parent sd-zone proximity trigger AND most recent prior parent proximity trigger was to CTS zone AND the proximity trigger before *that* was to sd zones (forms Λ in bullish parent / V in bearish parent) |
-| **Idx input** | Sibling **confluence** lens's most recent qualifying CTS **extreme** on the sub TF (= the reference zone's `source_event_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → event idx). **Same candle as the reference zone.** |
+| **Idx input** | Sibling **confluence** lens's most recent qualifying CTS **extreme** on the sub TF (= the reference zone's `source_event_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone.** |
 | **Probe `probe_end_idx`** | Current parent sd-zone proximity trigger candle, time-mapped to the sub TF's last-of-hour = the trigger's `trigger_idx` (`hi`) |
 | **Probe reference zone** | Sibling **confluence** lens's most recent qualifying CTS, built ad hoc from the winning event (`kl_zones=[]`, §17.8), read from the pool within the sub-TF window `[last-M15-of prior_cts_prox hour, last-M15-of this_sd_prox hour]` (same pool read as §4.3.4 step 2 with `other_lens="confluence"`) |
 | **Output** | `starting_idx` for the next counter record's sub |
@@ -544,7 +544,8 @@ Output of every row: `ProbeResult.starting_idx` → the pool key
 sibling-referencing variations (`first_counter`, `subsequent_confluence`,
 `subsequent_counter`) co-source BOTH `input_idx` AND `reference_zone` from the
 **sibling entity's most recent CTS event** (CONFIRMED → existing KL zone +
-`cts_anchor_idx`; UPDATED/EST → ad-hoc CTS zone + event idx), found by walking
+`cts_anchor_idx`; UPDATED/EST → ad-hoc CTS zone + the CTS anchor `ef.cts_anchor_idx` — not
+an EST's `ev.idx`, the moment since Plan E E4a), found by walking
 the sibling's events within the trigger's sub-TF idx window. `first_confluence`
 is the only exception — it has no sibling/prior structure yet, so it anchors on
 its own ad-hoc BOS_0 from the parent-BOS-extreme input. The probe always runs
@@ -922,7 +923,8 @@ Structures end when:         main: next structure starts (sid+1 = reversal)
 
 ANY new cycle starts when:   new CTS established — at the MOMENT it is established
                              (CTS_ESTABLISHED.meta["confirmed_at"] == BOS_CONFIRMED
-                             .meta["confirmed_at"]; NEVER CTS_ESTABLISHED.idx, the extreme)
+                             .meta["confirmed_at"]; NEVER the CTS anchor, the extreme —
+                             CTS_ESTABLISHED.idx until Plan E E4a, the moment since)
                              — CLAMP: a cycle's lifecycle-start may not precede
                                its structure's lifecycle-start (main & sub). For a
                                sub the structure's lifecycle-start is the sub's
@@ -1032,7 +1034,8 @@ generalized):
       `start_idx` (`LowerTFResult.meta["start_idx"]`, §17.10).
   - **cycle (any):** `max(cts_moment, owning-structure lifecycle-start)` where
     `cts_moment = CTS_ESTABLISHED.meta["confirmed_at"]` — **the moment the cycle
-    was established, never `CTS_ESTABLISHED.idx` (the CTS extreme)** (Plan C,
+    was established, never the CTS anchor (the CTS extreme; `CTS_ESTABLISHED.idx` until
+    Plan E E4a)** (Plan C,
     §17.6; `compute_cycle_lifecycle` Pass 1). The structure's lifecycle-start
     already embeds the parent floor for subs (through the record's
     `parent_floor_idx` → the sub's `start_idx` → `lifecycle_floor`), so the
@@ -1291,7 +1294,8 @@ on this data because `confirmed_at == CTS_EST.ev.idx` for all 6 H1 cycles
 > **`BOS_CONFIRMED.meta["confirmed_at"] == CTS_ESTABLISHED.meta["confirmed_at"]`**
 > — both are the same `apply_idx` (`market_structure.py` ~1414-1451; the BOS
 > confirms at the candle that establishes the new cycle's CTS — one real-time
-> moment). `CTS_ESTABLISHED.idx` is a DIFFERENT thing: the CTS **extreme**
+> moment). `CTS_ESTABLISHED.idx` was then a DIFFERENT thing (until Plan E E4a,
+> 2026-09-25, made it the moment; the extreme is `meta["cts_anchor_idx"]`): the CTS **extreme**
 > within the pattern span, which can precede the apply candle (3 such pairs in
 > the saved M15 event streams — 1223/1224, 2828/2829; 0 of 5 on H1 on this
 > window). The hedge above is therefore *right* about `CTS_EST.ev.idx` vs
@@ -2981,8 +2985,9 @@ degenerate[(S,C)] = end_m15 is not None and floor_m15 >= end_m15
 **Cycle lifecycle-start = the CTS-established MOMENT, not the extreme
 (decided 2026-09-19).** A cycle's real-time lifecycle begins when it is
 *established* (`CTS_ESTABLISHED.meta["confirmed_at"]`, the apply candle);
-`CTS_ESTABLISHED.idx` is where its **extreme** sits — a historical anchor,
-exactly like `BOS_CONFIRMED.idx`. Rev 1 and §5 used the extreme ("the
+its CTS anchor (`meta["cts_anchor_idx"]`; `CTS_ESTABLISHED.idx` until Plan E E4a
+made that idx the moment) is where its **extreme** sits — a historical anchor,
+like the BOS anchor. Rev 1 and §5 used the extreme ("the
 canonical cycle-start idx"). Plan C changes the canonical rule in
 `zones/structure_lifecycle.py::compute_cycle_lifecycle` — cycle start =
 `max(CTS_ESTABLISHED.meta["confirmed_at"], struct_start, floor)` — so main, sub
@@ -3027,7 +3032,8 @@ guaranteed, and the one-candle lag is empirical, not a bound (`ARCHITECTURE.md`
 
 **Assert** `BOS_CONFIRMED(S,C).meta["confirmed_at"] ==
 CTS_ESTABLISHED(S,C).meta["confirmed_at"]` (definitional — both are the same
-`apply_idx`); **never** assert it against `CTS_ESTABLISHED.idx` (false on 3
+`apply_idx`); **never** assert it against the CTS anchor `meta["cts_anchor_idx"]`
+(`CTS_ESTABLISHED.idx` until Plan E E4a; false on 3
 of the 34 saved `CTS_ESTABLISHED` rows — 2 unique M15 cycles; true on all 5 H1
 cycles here because extreme == apply candle is the common case, not a
 guarantee). The per-event field table (`ev.idx` vs `meta["confirmed_at"]` vs
