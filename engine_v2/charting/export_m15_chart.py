@@ -587,10 +587,11 @@ def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned
             next_sid = sid + 1
             next_bos_evs = sorted(
                 [e for e in bos_events if int(e.meta.get("structure_id", -1)) == next_sid],
-                key=ef.bos_anchor_idx,
+                key=ef.event_moment,
             )
-            # The PB search's upper bound is a TIME (PLAN_E §7.1 T4).
-            next_bos_idx = ef.bos_anchor_idx(next_bos_evs[0]) if next_bos_evs else None  # Plan E E3g-3 → moment
+            # The PB search's upper bound is a TIME: the next sid's first BOS MOMENT
+            # (Plan E E3g-3, PLAN_E §7.1 T4).
+            next_bos_idx = ef.event_moment(next_bos_evs[0]) if next_bos_evs else None
 
             pb_after = [e for e in pb_events
                         if int(e.meta.get("structure_id", -1)) == sid
@@ -2082,10 +2083,11 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 next_sid = sid + 1
                 next_bos = sorted(
                     [e for e in bos_events if int(e.meta.get("structure_id", -1)) == next_sid],
-                    key=ef.bos_anchor_idx,
+                    key=ef.event_moment,
                 )
-                # The PB search's upper bound is a TIME (PLAN_E §7.1 T4).
-                next_bos_idx = ef.bos_anchor_idx(next_bos[0]) if next_bos else None  # Plan E E3g-3 → moment
+                # The PB search's upper bound is a TIME: the next sid's first BOS MOMENT
+                # (Plan E E3g-3, PLAN_E §7.1 T4).
+                next_bos_idx = ef.event_moment(next_bos[0]) if next_bos else None
                 pb_after = [e for e in pb_state
                             if int(e.meta.get("structure_id", -1)) == sid
                             and int(e.idx) > last_idx

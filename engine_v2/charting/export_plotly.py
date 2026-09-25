@@ -1194,10 +1194,11 @@ def export_chart_plotly(
                 next_bos = sorted(
                     [ev for ev in bos_events
                      if int(ev.meta.get("structure_id", -1)) == next_sid],
-                    key=ef.bos_anchor_idx,
+                    key=ef.event_moment,
                 )
-                # The PB search's upper bound is a TIME (PLAN_E §7.1 T4).
-                next_bos_idx = ef.bos_anchor_idx(next_bos[0]) if next_bos else None  # Plan E E3g-3 → moment
+                # The PB search's upper bound is a TIME: the next sid's first BOS MOMENT
+                # (Plan E E3g-3, PLAN_E §7.1 T4).
+                next_bos_idx = ef.event_moment(next_bos[0]) if next_bos else None
 
                 # Only search for pb events between last CTS and next sid's first BOS
                 pb_after = [ev for ev in pb_state_events

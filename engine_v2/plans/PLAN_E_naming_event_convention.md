@@ -829,6 +829,14 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
   the walk runs). Docs: GOTCHAS narrow-cycle timeline, LANDMINES "Event Sort Order", `event_moment` / `stamped_idx`
   docstrings. Tests 899 → 900 + 1 xfail.
 
+- **E3g-3 (2026-09-25; §7.1 T4).** The charts' PB-search upper bound (`next_bos_idx`: the next sid's first BOS) is its
+  MOMENT, and "first" is picked by moment, at all three sites (`export_m15_chart.py` ×2, `export_plotly.py`); the
+  H1-overlay `_wave_touches_window` start already moved with E3f's struct_start. **Measured with the figure diff:
+  0 real cells, 3 figures JSON-identical** (== T4's prediction), run.log identical. Why 0 (data check): no
+  previous-sid `STATE_CHANGED` lies in `[first BOS anchor, its moment)` on any structure (H1 sid 1: 689 → 703; the
+  subs have one sid each). The chart sites have no unit harness — as accepted in the E2c review, their proof is the
+  figure diff. Tests stay 900 + 1 xfail. **All §7 / §7.1 E3 rows are now landed; no `# Plan E E3` markers remain.**
+
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 
 **E4a — `CTS_ESTABLISHED`.** `market_structure.py:1514` passes `int(apply_idx)` as `idx` and asserts
