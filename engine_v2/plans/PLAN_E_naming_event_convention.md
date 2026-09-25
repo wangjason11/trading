@@ -754,6 +754,17 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
     UPDATED/EST swap survives as equivalent. Mutation 6/6 (+ M9) killed on the final code; replay after the fixes
     == 0 cells. Tests 883 → 891 + 1 xfail.
 
+- **E3c (2026-09-25).** `unified_probe._run_phase2`: `check_lo = cts0_est_idx + 1` (the first CTS_ESTABLISHED's
+  moment, the existing `ef.event_moment` local) — Phase 1 and Phase 2 now open the retrace window at the same
+  place; the `[unified_probe phase2] reset triggered … cts0_est=` label prints that moment. **Measured (vs
+  `20260925_081206_efc04bd`; E3b changed nothing) == §7's 0:** 0 real cells, figures JSON-identical, run.log
+  identical — the window's one Phase-2 run (`p2_iter=1`, `cts1_anchor=1020 cts1_moment=1020`) has a lag-0 first CTS,
+  so the value is the same there (no shadow run needed: the plan named the single call). Pin:
+  `test_phase2_retrace_window_opens_after_the_first_cts_moment` (stubbed MS run, CTS_0 anchor 9 / moment 12, no
+  confirmation, probe_end 20 → the candidate search is asked over [13, 20]; fails on the anchor revert — checked).
+  The label is a debug print, not pinned. Docs: ARCHITECTURE known-sites, PART4 "What `first_CTS_EST.idx` is"
+  (the verified divergence → closed). Tests 891 → 892 + 1 xfail.
+
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 
 **E4a — `CTS_ESTABLISHED`.** `market_structure.py:1514` passes `int(apply_idx)` as `idx` and asserts

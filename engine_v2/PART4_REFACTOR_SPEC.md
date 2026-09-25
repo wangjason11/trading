@@ -618,18 +618,15 @@ paths. Per iteration it picks the single most-extreme retrace candle in
 `[first_CTS_EST.idx + 1, probe_end_idx]` and applies a **two-condition reset**;
 both must hold for the probe to restart from that candidate.
 
-> **What "`first_CTS_EST.idx`" is differs by phase (verified 2026-09-22).**
-> Phase 1 (deterministic) starts the window at `tfb.est_idx + 1`
-> (`unified_probe.py` Phase 1, `_select_extreme_retrace_candidate`) —
-> `est_idx` is the true first breakout's apply candle, i.e. the CTS_0
-> established **MOMENT**. Phase 2 (MS-based, first_confluence only) starts
-> it at `cts_est[0].idx + 1` (`check_lo = first_cts.idx + 1`) — the CTS_0
-> **EXTREME** (`ARCHITECTURE.md` "`ev.idx` convention"). A known divergence
-> whenever the extreme precedes the moment (Phase 2 then also scans the
-> candles after the extreme up to and including the moment, which Phase 1
-> skips); it is not reconciled here — changing either start
-> can change the reset candidate (so `starting_idx` = the pool key) and is
-> its own `/compare`.
+> **Both phases start the retrace window at the CTS_0 established MOMENT + 1.**
+> Phase 1 (deterministic): `tfb.est_idx + 1` (`est_idx` = the true first
+> breakout's apply candle). Phase 2 (MS-based, first_confluence only):
+> `check_lo = ef.event_moment(cts_est[0]) + 1` since Plan E E3c (2026-09-25;
+> before it `cts_est[0].idx + 1`, the CTS_0 EXTREME — the divergence verified
+> 2026-09-22, where Phase 2 also scanned the candles after the extreme up to
+> and including the moment). 0 cells on the reference window (its one Phase-2
+> run has a lag-0 first CTS). Any change can move the reset candidate (so
+> `starting_idx` = the pool key) and is its own `/compare`.
 
 ### Two-condition reset
 

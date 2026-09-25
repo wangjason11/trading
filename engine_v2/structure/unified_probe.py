@@ -600,9 +600,9 @@ def _run_phase2(
             probe_events, structure_id=0, cycle_id=first_cycle_id,
         )
 
-        # A TIME bound (the retrace window opens after CTS_0 is known); today the
-        # anchor. Plan E E3c switches it to the moment + 1 (Phase 1 already is).
-        check_lo = ef.cts_anchor_idx(first_cts) + 1  # Plan E E3c → moment
+        # A TIME bound: the retrace window opens after CTS_0 is KNOWN — its
+        # moment + 1 (Plan E E3c; Phase 1's `tfb.est_idx + 1` already was).
+        check_lo = cts0_est_idx + 1
         if cycle_0_conf is not None:
             cts0_anchor_idx = int(
                 ef.cts_anchor_idx(cycle_0_conf)
@@ -671,7 +671,7 @@ def _run_phase2(
         # threshold at the new start (mirrors the deterministic method).
         print(
             f"[unified_probe phase2] reset triggered: iter={iteration} "
-            f"cts0_est={ef.cts_anchor_idx(first_cts)} candidate={candidate_idx} "  # Plan E E3c: re-source to the moment
+            f"cts0_est={cts0_est_idx} candidate={candidate_idx} "
             f"(was {current_start})"
         )
         current_start = int(candidate_idx)

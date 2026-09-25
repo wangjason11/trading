@@ -1212,3 +1212,28 @@ class TestFinalizeIdxTable:
         assert res.finalize_condition == "one_cts_pending"
         assert res.cts0_est_idx == 2
         assert res.finalize_idx is None
+
+
+def test_phase2_retrace_window_opens_after_the_first_cts_moment(monkeypatch):
+    """Plan E E3c: Phase 2's retrace window starts at the first CTS_ESTABLISHED's
+    MOMENT + 1 (like Phase 1's `tfb.est_idx + 1`), not its anchor + 1. Stubbed MS
+    run: CTS_0 anchor 9, moment 12, no confirmation, probe_end 20 → the candidate
+    search is asked over [13, 20]."""
+    import engine_v2.structure.unified_probe as up
+    from types import SimpleNamespace
+    n = 25
+    df = pd.DataFrame({"o": [0.6] * n, "h": [0.601] * n, "l": [0.599] * n, "c": [0.6] * n,
+                       "market_state": ["breakout"] * n, "structure_id": [0] * n})
+    est = make_cts_established(cts_anchor_idx=9, confirmed_at=12, price=0.61,
+                               structure_id=0, cycle_id=0, struct_direction=1)
+    stub = SimpleNamespace(debug=False, early_stop_idx=None,
+                           run=lambda: (df.copy(), [est], None))
+    monkeypatch.setattr(up, "_make_market_structure", lambda *a, **k: stub)
+    seen = []
+    monkeypatch.setattr(up, "_select_extreme_retrace_candidate",
+                        lambda d, lo, hi, direction: seen.append((lo, hi)) or None)
+    ref = ReferenceZone(outer=0.5980, inner=0.5990, side="buy",
+                        source="cts_confirmed", source_event_idx=0)
+    res = up._run_phase2(df, 0, 0.5990, 0.5980, 1, ref, 20, 0.0, 0.0, max_iterations=2)
+    assert seen == [(13, 20)]
+    assert res.finalize_condition == "no_retrace"

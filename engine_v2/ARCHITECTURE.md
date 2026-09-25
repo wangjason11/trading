@@ -171,8 +171,8 @@ moment (`confirmed_at`, recorded since Plan E E3·0) is not yet read there — P
 (FibTracker's stamped activation / terminal timing and the fill horizons of its CTS_ESTABLISHED / CTS_UPDATED
 imbalance reads are on the moment since Plan E E3a, 2026-09-24 — the cycle-0 cond2 / cond3 horizons since E3a′, 2026-09-25;)
 (the pool's `knowable_at_idx`, the sibling clip and the reference-zone window / recency key on the moment since
-Plan E E3b, 2026-09-25 — `REVERSAL_CANDIDATE` still on `ev.idx`, PART4 §17.12;) `unified_probe` Phase 2's retrace-window
-start `check_lo = first_cts.idx + 1`, the CTS anchor, vs Phase 1's moment-based `tfb.est_idx + 1`; the MS
+Plan E E3b, 2026-09-25 — `REVERSAL_CANDIDATE` still on `ev.idx`, PART4 §17.12; `unified_probe` Phase 2's retrace-window start `check_lo` is the first CTS's moment + 1 since
+Plan E E3c, like Phase 1's `tfb.est_idx + 1`;) the MS
 in-flight POI-inner resolver, which evaluates fills as-of `st.cts.idx` — the processing candle after a raw
 `CTS_UPDATED`, the CTS anchor after a `CTS_ESTABLISHED` or a pattern-path update (except Scenario-2 cond1, whose
 fill horizon is the triggering event's moment since Plan E E3a, in lock-step with FibTracker) — `_refresh_poi_inners_for_cycle` →
