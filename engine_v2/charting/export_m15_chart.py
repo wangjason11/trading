@@ -300,6 +300,31 @@ def _compute_owner_by_idx_dir(sid_records: Iterable[SidRecord], edge_idx: int) -
     return owner
 
 
+def _h1_overlay_window_start_by_sid(events, reversal_idx_by_sid) -> dict:
+    """The H1 overlay's per-sid window START on the sub charts — a LOCATION
+    (user decision 2026-09-25, Plan E E3f landing review): the overlay draws
+    structure geometry anchor-to-anchor, so a sid's window opens at its first
+    structural ANCHOR (min `ef.stamped_idx` — BOS_0's) and its defining first
+    leg is always shown, even when CTS_0 lags its moment; a sid N >= 1 whose
+    predecessor reversed opens at that reversal (the handoff — its retroactive
+    legs before it stay hidden, chart review 2026-09-21). Not
+    `compute_struct_start_by_sid`, whose base is the first CTS_ESTABLISHED
+    MOMENT (a lifecycle TIME)."""
+    start = {}
+    for ev in events:
+        s = (ev.meta or {}).get("structure_id")
+        if s is None:
+            continue
+        s = int(s)
+        i = ef.stamped_idx(ev)
+        if s not in start or i < start[s]:
+            start[s] = i
+    for s in list(start):
+        if (s - 1) in reversal_idx_by_sid:
+            start[s] = int(reversal_idx_by_sid[s - 1])
+    return start
+
+
 def _wave_touches_window(
     a_idx: int, b_idx: int, start_idx: Optional[int], end_idx: Optional[int],
 ) -> bool:
@@ -2114,17 +2139,17 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
         # overlay draws only the waves that were live at some point. A wave —
         # a segment between two consecutive H1 points, or the most recent sid's
         # extension to the last candle — is drawn iff its candle span intersects
-        # its sid's real-time lifecycle window `[struct_start, reversal idx]`
-        # (`compute_struct_start_by_sid` with the reversal handoff /
-        # `compute_reversal_idx_by_sid` — the helpers the wave-candle overlay
-        # already uses); waves wholly outside it (the retroactive (1,0)/(1,1)
+        # its sid's window `[overlay start, reversal idx]` — the start is a
+        # LOCATION (`_h1_overlay_window_start_by_sid`: the first structural
+        # anchor, or the reversal handoff; user decision 2026-09-25), the end
+        # `compute_reversal_idx_by_sid`; waves wholly outside it (the retroactive (1,0)/(1,1)
         # waves of the post-reversal sid, which precede its 902 start on the
         # reference window) are NOT drawn — they only crowd the sub structures
         # they overlap. The H1 chart itself is unchanged (every sid, prior sids
         # dimmed). A dot is drawn iff a drawn wave or a drawn PB→BOS line
         # touches it.
         rev_h1 = compute_reversal_idx_by_sid(structure_events)
-        struct_start_h1 = compute_struct_start_by_sid(structure_events, rev_h1)
+        overlay_start_h1 = _h1_overlay_window_start_by_sid(structure_events, rev_h1)
         drawn_h1_pts: set = set()   # {(sid, h1 idx)} endpoints of drawn waves
         for sid in sorted(points_by_sid.keys()):
             seq = sorted(points_by_sid[sid], key=lambda x: x[0])
@@ -2133,9 +2158,8 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 end_t = _h1_idx_to_m15_time(last_h1_idx)
                 if end_t is not None and seq and last_h1_idx > seq[-1][0]:
                     seq.append((last_h1_idx, end_t, float(h1_df[COL_C].iloc[-1]), "EXT", sid, -1, seq[-1][6]))
-            # The live window's start is a TIME: struct_start (the first
-            # CTS_ESTABLISHED moment since Plan E E3f; figure-diffed there).
-            w_start = struct_start_h1.get(sid, seq[0][0] if seq else None)
+            # The window start is a LOCATION (the first anchor / the handoff).
+            w_start = overlay_start_h1.get(sid, seq[0][0] if seq else None)
             w_end = rev_h1.get(sid)
             for is_live_run, i0, i1 in _split_polyline_by_wave([p[0] for p in seq], w_start, w_end):
                 if not is_live_run:
@@ -2152,7 +2176,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
         # Cross-structure PB→BOS lines belong to the PRIOR sid — same wave rule
         # on its window (drawn on the reference window: sid 0's 683→689).
         for _pb_sid, pb_t, pb_p, bos_t, bos_p, pb_idx, bos_idx in pb_to_bos_lines:
-            if not _wave_touches_window(pb_idx, bos_idx, struct_start_h1.get(_pb_sid), rev_h1.get(_pb_sid)):
+            if not _wave_touches_window(pb_idx, bos_idx, overlay_start_h1.get(_pb_sid), rev_h1.get(_pb_sid)):
                 continue
             drawn_h1_pts.add((_pb_sid, pb_idx))
             drawn_h1_pts.add((_pb_sid + 1, bos_idx))

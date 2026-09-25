@@ -1436,7 +1436,9 @@ out-of-bounds `start_idx`.
 > `_build_sub_polylines` + `sub_ctx`), because the rule compares across subs.
 > Two adjuncts: the H1 OVERLAY on the sub charts is lifecycle-FILTERED per wave
 > (`_wave_touches_window` / `_split_polyline_by_wave` — a wave never inside its
-> H1 sid's `[struct_start, reversal]` is not drawn; the H1 chart itself is
+> H1 sid's `[first anchor or reversal handoff, reversal]` window — a LOCATION start,
+> `_h1_overlay_window_start_by_sid`, not the moment-based struct_start (Plan E E3f
+> decision) — is not drawn; the H1 chart itself is
 > untouched and still draws every sid), and a sub ended by
 > `same_dir_replacement` breaks its final segment at
 > `_replacement_break_point` (the counter-move extreme up to the REPLACING

@@ -507,3 +507,25 @@ def test_break_uses_the_record_that_ended_this_sub():
     sub = _sub(4, -1, 0, 1, 10, "same_dir_replacement")
     recs = [_Rec("parent_end", None, 4), _Rec("same_dir_replacement", 9, 10)]
     assert _replacement_break_point(sub, recs, {9: 5}, _DF, 1, 10) == (5, 1.50)
+
+
+def test_h1_overlay_window_starts_at_the_first_anchor_not_the_moment():
+    """User decision 2026-09-25 (Plan E E3f landing review): the sub charts' H1
+    overlay window opens at the sid's first structural ANCHOR (a location), so a
+    lagging CTS_0's defining leg (BOS_0 anchor 96 → CTS_0 anchor 110, CTS_0 known
+    at 115) is still drawn; a sid whose predecessor reversed opens at that
+    reversal (the handoff), so its retroactive legs stay hidden."""
+    from engine_v2.charting.export_m15_chart import (
+        _h1_overlay_window_start_by_sid,
+        _wave_touches_window,
+    )
+    from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established
+    evs = [make_bos_confirmed(bos_anchor_idx=96, confirmed_at=115, structure_id=0, cycle_id=0),
+           make_cts_established(cts_anchor_idx=110, confirmed_at=115, structure_id=0, cycle_id=0),
+           make_bos_confirmed(bos_anchor_idx=689, confirmed_at=703, structure_id=1, cycle_id=0),
+           make_cts_established(cts_anchor_idx=703, confirmed_at=703, structure_id=1, cycle_id=0)]
+    start = _h1_overlay_window_start_by_sid(evs, {0: 902})
+    assert start == {0: 96, 1: 902}
+    assert _wave_touches_window(96, 110, start[0], 902)          # the defining leg is drawn
+    assert not _wave_touches_window(96, 110, 115, 902)           # (keyed on the moment it would not be)
+    assert not _wave_touches_window(689, 703, start[1], None)    # sid 1's retroactive leg stays hidden

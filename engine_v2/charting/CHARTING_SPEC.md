@@ -454,11 +454,14 @@ On the sub charts the H1 overlay (`_render_h1_overlay`) draws only the H1 waves
 that were live at some point: each wave (segment between consecutive H1
 points, or the most recent sid's extension to the last candle, or a PB→BOS
 line of the prior sid) is drawn iff its candle span intersects its sid's
-real-time lifecycle window `[struct_start_by_sid, reversal idx]`
-(`zones.structure_lifecycle.compute_struct_start_by_sid` with the reversal
-handoff / `compute_reversal_idx_by_sid` — the helpers the overlay's wave-candle
-block already uses) — the same `_wave_touches_window` predicate as the sub
-rule, but hidden instead of dotted. Waves never live are not drawn: on the
+window `[overlay start, reversal idx]` — the start is a LOCATION
+(`_h1_overlay_window_start_by_sid`: the sid's first structural anchor, BOS_0's,
+or the reversal handoff for a sid whose predecessor reversed; user decision
+2026-09-25, Plan E E3f landing review — NOT `compute_struct_start_by_sid`, whose
+base is the first CTS_ESTABLISHED moment, a lifecycle time: keyed on the moment,
+a lagging CTS_0's defining leg BOS_0 → CTS_0 would be hidden), the end
+`compute_reversal_idx_by_sid` — the same `_wave_touches_window` predicate as the
+sub rule, but hidden instead of dotted. Waves never live are not drawn: on the
 reference window sid 1's retroactive (1,0)/(1,1) waves 689→710→728→761→826,
 which precede its 902 start and crowd the sub structures they overlap; sid 1's
 826→905 wave (it spans 902) and everything after it are drawn, and all of sid 0

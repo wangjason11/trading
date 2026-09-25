@@ -856,6 +856,13 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
   (BOS_0 anchor → cycle-0 CTS_CONFIRMED anchor) would be hidden whenever that CTS anchor < CTS_0's moment (a lagging
   EST with no CTS extension before confirmation) — 0 on this window. The E3f bullet's "masked everywhere" holds for
   the zones, not for this filter. Tests 900 → 901 + 1 xfail.
+  **MINOR-1 resolved (user decision 2026-09-25, AskUserQuestion with the lagging-CTS_0 example):** the overlay's window
+  start is a LOCATION — `export_m15_chart._h1_overlay_window_start_by_sid` = the sid's first structural anchor (min
+  `ef.stamped_idx`, BOS_0's) or, for a sid whose predecessor reversed, the handoff — used by the wave filter and the
+  PB→BOS line filter instead of `compute_struct_start_by_sid`. Replay: 0 cells, 3 figures JSON-identical. Pin
+  `test_h1_overlay_window_starts_at_the_first_anchor_not_the_moment` (BOS_0 96 / CTS_0 anchor 110 known 115: the
+  defining leg is drawn; keyed on the moment it would not be; sid 1 handoff 902 still hides its retroactive leg).
+  Docs: CHARTING_SPEC "H1 overlay structure lines", LANDMINES. Tests 901 → 902 + 1 xfail.
 
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 
