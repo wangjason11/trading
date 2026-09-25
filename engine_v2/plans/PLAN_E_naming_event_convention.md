@@ -528,6 +528,34 @@ list, and the test fails. E2a extends it: `meta["cts_anchor_idx"] == ev.idx` (pr
     pointer (equivalent on every contract-legal stream: a BOS moment == its cycle's EST moment <= the
     CTS_CONFIRMED candle = `scan_start`), and the pre-existing FibTracker cond3 call sites (`:1582`, `:1661`) —
     E3a′ changes that value and must pin it there. Tests 841 passed + 1 xfail; replay after the fixes == E2c's.
+- **E2d.** Fallbacks → direct: moment ← anchor (`ef.event_moment`): FC `trigger_event_idx`, zone_proximity
+  `bos_conf_idx_by_key` + `scan_start`, unified_probe `_second_cts_moment` + both `cts0_est_idx`, KL
+  `confirmed_idx`, the debug `cts1_moment`; anchor ← CTS_CONFIRMED moment (`ef.cts_anchor_idx`): the 3 chart
+  CTS dots, uc1 `cts_idx`, FibTracker `on_cts_confirmed`, KL CTS base, unified_probe `cts0_anchor_idx`;
+  FibTracker-internal `c0.get(...)` / `meta.get("cycle1_bos_idx", cts_idx)` → direct (the keys exist on every
+  path that reaches them; the versioned §11b crosses lack `cycle1_bos_idx` but never reach those branches).
+  Renames: `cts1_ext=` → `cts1_anchor=` (unified_probe label, value now the accessor — the E2b miss the E2c
+  review found; the debug script), `parent_extreme_*` → `parent_bos_anchor_*`, orchestrator `bos_anchor_by_cycle`
+  / `last_bos_anchor_by_sid`, reference_zone `cts_anchor_idx` (+ `_derive_cts_zone_ad_hoc` param), POI
+  `cts_anchor_idx_at_t`, MS establish-block locals + `_initial_bos_before_first_cts(cts_anchor_idx)`,
+  `compute_bos_inner_from_event(bos_anchor_idx)`, structure_engine Q10 locals `cts0_anchor_idx`, test
+  `bos_anchor_abs`. **Not renamed (deviations):** the charts' `next_bos_idx` — since §7.1 T4 it is the PB-search
+  TIME bound (E3g-3 → moment), so `next_bos_anchor_idx` would be wrong after E3g-3; `FibTracker.on_cts_established
+  (bos_idx)` → E5 (the fib-family `bos_idx` vocabulary + test call sites). Tests: the fallback pin inverted
+  (`test_raises_without_the_meta_key`), the label regex re-pointed. `/compare` vs E2c: 24/24 + figures identical,
+  run.log exactly 1 line (`cts1_ext=1020` → `cts1_anchor=1020`).
+- **E2 completeness proof (the full E4 variant, `FLIP=both`) vs E2d == §8 E4a + E4b:** 37 events `idx` cells (H1 5
+  BOS; conf 21 BOS + 1223→1224, 2828→2829; counter 8 BOS + 2828→2829), 34 KL `source_event_idx` (key-only), 3
+  figures JSON-identical, run.log only the `[kl_zones]` prints' raw idx. Re-run it after the last E3 stage (§7).
+- E2d landing review (combined lens ≈135k): 0 BLOCKER / 0 MAJOR. The FibTracker direct-index conversions are
+  safe (traced: `_update_fib_cts`'s cross branch is unreachable; `_update_cycle1_main` runs only on the `:1070`
+  cross, which carries `cycle1_bos_idx`, after the cycle-0 guard). Four reintroduced `.get(key, ev.idx)` mutants
+  survived (equivalent on contract-legal streams) → a static guard `test_no_production_module_falls_back_on_a_contract_index_key`
+  (kills all four); it also caught `wave_candles.py:252` `.get("confirmed_at", len(df) - 1)` → direct. Also: the
+  orchestrator tuple local `bos_anchor_idx`, GOTCHAS `:680` (no display-read fallback), the `cts1_anchor` docs.
+  Tests 842 passed + 1 xfail; replay == E2d's.
+- **E2 session totals (2026-09-24):** landing reviews ≈0.9M subagent tokens (E2a 241k, E2b 302k, E2c 230k, E2d
+  135k); tests 783 → 842 + 1 xfail; four byte-identical `/compare`s (E2a: the additive keys only).
 
 ---
 

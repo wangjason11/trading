@@ -68,7 +68,7 @@ def detect_first_confluence_triggers(
             continue
 
         input_idx = ef.bos_anchor_idx(ev)   # the BOS anchor: the probe input / FC pool key
-        trigger_event_idx = int(ev.meta.get("confirmed_at", ev.idx))
+        trigger_event_idx = ef.event_moment(ev)
 
         cts_conf = cts_conf_by_key.get((sid, cycle_id))
         if cts_conf is not None:

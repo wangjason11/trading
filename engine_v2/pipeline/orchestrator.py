@@ -58,18 +58,18 @@ def _prev_bos_lines(sorted_events: list, reversal_confirmed_by_sid: dict, pfx: s
     (END; PLAN_E Q6). Extracted from `_run_downstream_pipeline` (Plan E E2c
     landing review) so the START / END roles are unit-pinned."""
     prev_bos_lines = []
-    last_bos_by_sid = {}
+    last_bos_anchor_by_sid = {}
     for ev in sorted_events:
         if ev.type == "BOS_CONFIRMED":
             sid = ev.meta.get("structure_id", 0)
-            last_bos_by_sid[sid] = (ef.bos_anchor_idx(ev), ev.price)   # the line START (location)
+            last_bos_anchor_by_sid[sid] = (ef.bos_anchor_idx(ev), ev.price)   # the line START (location)
 
     for sid, rv_idx in reversal_confirmed_by_sid.items():
         prev_sid = sid - 1
-        if prev_sid not in last_bos_by_sid:
+        if prev_sid not in last_bos_anchor_by_sid:
             continue
 
-        start_idx, price = last_bos_by_sid[prev_sid]
+        start_idx, price = last_bos_anchor_by_sid[prev_sid]
 
         end_idx = None
         for ev in sorted_events:
@@ -210,7 +210,7 @@ def _run_downstream_pipeline(
         fib_mode=fib_mode,
     )
 
-    bos_by_cycle = {}  # {(sid, cycle_id): (bos_idx, bos_price)}
+    bos_anchor_by_cycle = {}  # {(sid, cycle_id): (bos_anchor_idx, bos_price)}
 
     # Track previous structure's direction (for Scenario 1 revert check)
     prev_sd_by_sid = {}  # {sid: prev_sd}
@@ -253,11 +253,11 @@ def _run_downstream_pipeline(
         key = (sid, cycle_id)
 
         if ev.type == "BOS_CONFIRMED":
-            bos_by_cycle[key] = (ef.bos_anchor_idx(ev), ev.price)   # the fib's BOS point (location)
+            bos_anchor_by_cycle[key] = (ef.bos_anchor_idx(ev), ev.price)   # the fib's BOS point (location)
 
         elif ev.type == "CTS_ESTABLISHED":
-            if key in bos_by_cycle:
-                bos_idx, bos_price = bos_by_cycle[key]
+            if key in bos_anchor_by_cycle:
+                bos_anchor_idx, bos_price = bos_anchor_by_cycle[key]
                 reversal_idx = reversal_confirmed_by_sid.get(sid)
 
                 prev_bos_outer, prev_sd = None, None
@@ -269,7 +269,7 @@ def _run_downstream_pipeline(
                     prev_bos_outer, prev_sd = _get_prev_bos_outer(sid)
 
                 fib_tracker.on_cts_established(
-                    ev, df, bos_idx, bos_price, reversal_idx,
+                    ev, df, bos_anchor_idx, bos_price, reversal_idx,
                     prev_bos_outer, prev_sd
                 )
 

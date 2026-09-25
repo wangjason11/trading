@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -136,3 +137,28 @@ def test_emit_bos_confirmed_builds_st_bos_from_the_anchor_param():
     assert ms.state.bos.price == 0.95 and ms.state.bos_threshold == 0.95
     ev = ms.events[-1]
     assert (ev.idx, ev.meta["bos_anchor_idx"]) == (12, 7)
+
+
+# --- no silent cross-kind fallback on a contract key (Plan E E2d) ----------------
+
+_FALLBACK = re.compile(
+    r"""\.get\(\s*["'](confirmed_at|cts_anchor_idx|bos_anchor_idx|pattern_anchor_idx|cycle1_bos_idx)["']\s*,"""
+    r"""|\bc0\.get\(\s*["'](bos_idx|cts_idx)["']\s*,"""
+)
+
+
+def test_no_production_module_falls_back_on_a_contract_index_key():
+    """LANDMINES "Event Contract Rules" rule 3: every emitter sets these keys, so a
+    reader indexes them directly — a `.get(key, <default>)` would silently read
+    another kind of index (the anchor for a moment, or vice versa)."""
+    root = Path(engine_v2.__file__).parent
+    offenders = []
+    for path in root.rglob("*.py"):
+        if {"legacy_2025", "tests", "plans"} & set(path.parts):
+            continue
+        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            if _FALLBACK.search(line):
+                offenders.append(f"{path.relative_to(root)}:{n}: {line.strip()}")
+    assert offenders == []

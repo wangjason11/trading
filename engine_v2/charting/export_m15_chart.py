@@ -519,7 +519,7 @@ def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned
 
     points_by_sid = defaultdict(list)
     for ev in cts_events:
-        p_idx = int(ev.meta.get("cts_anchor_idx", ev.idx))
+        p_idx = ef.cts_anchor_idx(ev)
         if not owned_here(p_idx):
             continue
         t = lt_time(p_idx)
@@ -2028,7 +2028,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
 
         points_by_sid = defaultdict(list)
         for ev in cts_events:
-            p_idx = int(ev.meta.get("cts_anchor_idx", ev.idx))
+            p_idx = ef.cts_anchor_idx(ev)
             m15_t = _h1_idx_to_m15_time(p_idx)
             if m15_t is None:
                 continue

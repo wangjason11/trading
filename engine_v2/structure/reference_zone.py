@@ -245,10 +245,10 @@ def build_ad_hoc_bos0_reference_zone(
 # so future readers see it's the same machinery.
 def _derive_cts_zone_ad_hoc(
     df: pd.DataFrame,
-    extreme_idx: int,
+    cts_anchor_idx: int,
     direction: int,
 ) -> Optional[Tuple[float, float, Literal["buy", "sell"]]]:
-    return _derive_zone_ad_hoc(df, extreme_idx, direction, bos=False)
+    return _derive_zone_ad_hoc(df, cts_anchor_idx, direction, bos=False)
 
 
 def build_reference_zone_from_cts_event(
@@ -351,7 +351,7 @@ def build_reference_zone_from_cts_event(
     ev = candidates[0]
     # The winner's CTS ANCHOR (a location): the ad-hoc zone base and the probe
     # input (`source_event_idx` → the pool key).
-    extreme_idx = ef.cts_anchor_idx(ev)
+    cts_anchor_idx = ef.cts_anchor_idx(ev)
 
     # Source sid's struct_direction is the OPPOSITE of probe_direction
     # (reversal / subsequent_* semantic — the probe runs in the new sub's
@@ -367,11 +367,11 @@ def build_reference_zone_from_cts_event(
                     existing,
                     probe_direction,
                     source="cts_confirmed",
-                    source_event_idx=extreme_idx,
+                    source_event_idx=cts_anchor_idx,
                 )
         # CONFIRMED but no derived zone — fall through to ad-hoc.
 
-    derived = _derive_cts_zone_ad_hoc(df, extreme_idx, source_sd)
+    derived = _derive_cts_zone_ad_hoc(df, cts_anchor_idx, source_sd)
     if derived is None:
         return None
     outer, inner, side = derived
@@ -388,5 +388,5 @@ def build_reference_zone_from_cts_event(
         inner=inner,
         side=side,
         source=source,
-        source_event_idx=int(extreme_idx),
+        source_event_idx=int(cts_anchor_idx),
     )

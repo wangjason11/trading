@@ -573,10 +573,10 @@ def compute_structure_scenario_3(
                     if not exc2_cts:
                         break
 
-                    cts_est_idx = ef.cts_anchor_idx(exc2_cts[0])
+                    cts0_anchor_idx = ef.cts_anchor_idx(exc2_cts[0])
                     # Start from CTS_EST + 1: exclude the pullback candle itself
                     exc2_idx = _find_closest_candle_to_outer(
-                        df_exc2_probe, cts_est_idx + 1,
+                        df_exc2_probe, cts0_anchor_idx + 1,
                         reversal_confirmed_idx,
                         zb_outer, zb_inner, pip_tol, zb_side)
 
@@ -777,9 +777,9 @@ def compute_structure_from_start(
                 if not probe_cts_events:
                     break
 
-                cts_established_idx = ef.cts_anchor_idx(probe_cts_events[0])
+                cts0_anchor_idx = ef.cts_anchor_idx(probe_cts_events[0])
                 exception_2_idx = _find_closest_candle_to_outer(
-                    df_probe, cts_established_idx + 1,
+                    df_probe, cts0_anchor_idx + 1,
                     reversal_confirmed_idx,
                     outer, inner, pip_tolerance, zone_side,
                 )

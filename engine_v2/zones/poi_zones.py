@@ -858,7 +858,7 @@ def _compute_poi_activation_history(
     sorted_cts_events = sorted(cts_events, key=ef.stamped_idx)
 
     # State carried through the sweep.
-    cts_idx_at_t = -1
+    cts_anchor_idx_at_t = -1
     cts_price_at_t = 0.0
     unfilled_count = 0
     current_versions: List[str] = []
@@ -866,7 +866,7 @@ def _compute_poi_activation_history(
     def _compute_versions() -> List[str]:
         # Retracement math is direction-aware (mirrors
         # `features.fibonacci.calculate_fib_price`).
-        if cts_idx_at_t < ic_idx or cts_price_at_t <= 0:
+        if cts_anchor_idx_at_t < ic_idx or cts_price_at_t <= 0:
             return []
         if sd == 1:
             anchor_high = cts_price_at_t
@@ -906,7 +906,7 @@ def _compute_poi_activation_history(
     for ev in sorted_cts_events:
         ev_moment_idx = ef.stamped_idx(ev)  # Plan E E3g-1 → moment
         if ev_moment_idx < first_active:
-            cts_idx_at_t = ef.cts_anchor_idx(ev)
+            cts_anchor_idx_at_t = ef.cts_anchor_idx(ev)
             try:
                 cts_price_at_t = float(ev.price)
             except (TypeError, ValueError):
@@ -967,7 +967,7 @@ def _compute_poi_activation_history(
             elif kind == "leave":
                 unfilled_count -= 1
             elif kind == "cts":
-                cts_idx_at_t = ef.cts_anchor_idx(payload)
+                cts_anchor_idx_at_t = ef.cts_anchor_idx(payload)
                 try:
                     cts_price_at_t = float(payload.price)
                 except (TypeError, ValueError):
@@ -983,7 +983,7 @@ def _compute_poi_activation_history(
         if cur_idx not in df.index:
             continue
 
-        cond1 = cts_idx_at_t >= ic_idx
+        cond1 = cts_anchor_idx_at_t >= ic_idx
         cond3 = unfilled_count > 0
         cond5 = len(current_versions) > 0
         is_active = cond1 and cond3 and cond5

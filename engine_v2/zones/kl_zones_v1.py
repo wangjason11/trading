@@ -893,14 +893,14 @@ def derive_kl_zones_v1(
         # (a declared raw reader; Plan E E4b-pre deletes it). confirmed_at is the
         # candle that CONFIRMED the zone.
         source_event_idx = int(ev.idx)
-        confirmed_idx = int((ev.meta or {}).get("confirmed_at", source_event_idx))
+        confirmed_idx = ef.event_moment(ev)
         bos = (ev.type == "BOS_CONFIRMED")
 
         # Anchor for pattern identification differs by event type
         if bos:
             anchor_idx = ef.bos_anchor_idx(ev)   # the BOS anchor: the zone's base candle
         else:
-            anchor_idx = int((ev.meta or {}).get("cts_anchor_idx", source_event_idx))
+            anchor_idx = ef.cts_anchor_idx(ev)   # CTS_CONFIRMED: the CTS anchor at confirmation
 
         # Identify base pattern (structure-aware)
         pat, base_idx = identify_base_pattern(dfx, anchor_idx, sd, bos=bos, length_threshold=length_threshold)
@@ -1109,7 +1109,7 @@ def derive_kl_zones_v1(
 
 def compute_bos_inner_from_event(
     df: pd.DataFrame,
-    bos_idx: int,
+    bos_anchor_idx: int,
     struct_direction: int,
     length_threshold: float = 0.7,
 ) -> Optional[float]:
@@ -1120,13 +1120,13 @@ def compute_bos_inner_from_event(
     base pattern can't be identified, so the caller's proximity check
     naturally falls back to no-trigger.
     """
-    if bos_idx not in df.index:
+    if bos_anchor_idx not in df.index:
         return None
 
     try:
         zone_pattern, base_idx = identify_base_pattern(
             df,
-            anchor_idx=int(bos_idx),
+            anchor_idx=int(bos_anchor_idx),
             struct_direction=int(struct_direction),
             bos=True,
             length_threshold=length_threshold,

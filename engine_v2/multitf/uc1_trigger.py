@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 
+from engine_v2.structure import event_fields as ef
 from engine_v2.common.types import KLZone, WVMIRecord
 from engine_v2.multitf.types import MultiTFTrigger
 from engine_v2.structure.market_structure import StructureEvent
@@ -60,7 +61,7 @@ def detect_uc1_triggers(
 
         # CTS level index (the extreme candle, not the confirmation candle)
         # cts_ev.idx = confirmation candle; cts_anchor_idx = actual CTS extreme
-        cts_idx = int(cts_ev.meta.get("cts_anchor_idx", cts_ev.idx))
+        cts_idx = ef.cts_anchor_idx(cts_ev)
 
         # The CTS anchor seeds the probe input: it must lie inside the parent frame.
         if cts_idx not in h1_df.index:

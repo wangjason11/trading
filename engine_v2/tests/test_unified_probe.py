@@ -781,7 +781,7 @@ class TestPhase2EarlyStop:
         # (stop 11, bound 22, extreme 10 == moment 10) are pinned exactly.
         assert re.fullmatch(
             r"\[unified_probe phase2\] early stop: p2_iter=1 stop_idx=11 "
-            r"(probe_)?end_idx=22 cts1_ext=10 cts1_moment=10",
+            r"(probe_)?end_idx=22 cts1_anchor=10 cts1_moment=10",
             stop_lines[0],
         ), stop_lines[0]
 
@@ -846,14 +846,17 @@ class TestSecondCtsMoment:
         ]
         assert _second_cts_moment(cts_est) == 1224
 
-    @pytest.mark.illegal_event_contract  # pins the fallback Plan E E2d removes (PLAN_E §6.4)
-    def test_falls_back_to_idx_without_the_meta_key(self):
+    @pytest.mark.illegal_event_contract  # a CTS_ESTABLISHED without its moment (contract-illegal)
+    def test_raises_without_the_meta_key(self):
+        """Plan E E2d: no `.get("confirmed_at", ev.idx)` fallback to the anchor —
+        a missing moment raises (LANDMINES "Event Contract Rules")."""
         from engine_v2.structure.unified_probe import _second_cts_moment
         cts_est = [
             StructureEvent(idx=1, category="STRUCTURE", type="CTS_ESTABLISHED", price=0.5, meta={}),
             StructureEvent(idx=9, category="STRUCTURE", type="CTS_ESTABLISHED", price=0.5, meta={}),
         ]
-        assert _second_cts_moment(cts_est) == 9
+        with pytest.raises(KeyError):
+            _second_cts_moment(cts_est)
 
 
 # ---------------------------------------------------------------------------

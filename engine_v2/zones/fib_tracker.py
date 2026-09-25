@@ -1564,15 +1564,15 @@ class FibTracker:
             # sd-direction filter throughout (counter-direction imbalances
             # never produce POIs, so they don't influence cross-cycle eligibility).
             # Condition 1: Cycle 0 has unfilled imbalance (in cycle 0's locked range)
-            c0 = self._cross_cycle_data.get(sid, {}).get("cycle0", {})
-            c0_bos_idx = c0.get("bos_idx", new_state.bos_idx)
-            c0_cts_idx = c0.get("cts_idx", new_state.bos_idx)  # Locked CTS_0
+            c0 = self._cross_cycle_data[sid]["cycle0"]
+            c0_bos_idx = c0["bos_idx"]
+            c0_cts_idx = c0["cts_idx"]  # Locked CTS_0
             c0_start = min(c0_bos_idx, c0_cts_idx)
             c0_end = max(c0_bos_idx, c0_cts_idx)
             cond1 = self._has_unfilled(df, c0_start, c0_end, c0_cts_idx, sd)
 
             # Condition 2: Cycle 1 has unfilled imbalance (BOS_1 to current CTS_1)
-            cycle1_bos_idx = new_state.meta.get("cycle1_bos_idx", cts_idx)
+            cycle1_bos_idx = new_state.meta["cycle1_bos_idx"]
             c1_start = min(cycle1_bos_idx, cts_idx)
             c1_end = max(cycle1_bos_idx, cts_idx)
             cond2 = self._has_unfilled(df, c1_start, c1_end, cts_idx, sd)
@@ -1646,14 +1646,14 @@ class FibTracker:
 
         # --- Check cross-cycle conditions --- sd-direction filter throughout.
         # Computation is unchanged from the prior named-slot path.
-        c0 = self._cross_cycle_data.get(sid, {}).get("cycle0", {})
-        c0_bos_idx = c0.get("bos_idx", new_cross_fib.bos_idx)
-        c0_cts_idx = c0.get("cts_idx", new_cross_fib.bos_idx)
+        c0 = self._cross_cycle_data[sid]["cycle0"]
+        c0_bos_idx = c0["bos_idx"]
+        c0_cts_idx = c0["cts_idx"]
         c0_start = min(c0_bos_idx, c0_cts_idx)
         c0_end = max(c0_bos_idx, c0_cts_idx)
         cond1 = self._has_unfilled(df, c0_start, c0_end, c0_cts_idx, sd)
 
-        cycle1_bos_idx = new_cross_fib.meta.get("cycle1_bos_idx", cts_idx)
+        cycle1_bos_idx = new_cross_fib.meta["cycle1_bos_idx"]
         c1_start = min(cycle1_bos_idx, cts_idx)
         c1_end = max(cycle1_bos_idx, cts_idx)
         cond2 = self._has_unfilled(df, c1_start, c1_end, cts_idx, sd)
@@ -1752,7 +1752,7 @@ class FibTracker:
         # Populate CTS lookup (used by cross-fib walk-backward for dead-cycle
         # evaluation). CTS_anchor_idx is the CTS extreme; ev.idx is the
         # confirmation candle.
-        cts_anchor_idx = int(event.meta.get("cts_anchor_idx", event.idx))
+        cts_anchor_idx = ef.cts_anchor_idx(event)
         cts_price_val = float(event.price) if event.price else 0.0
         self._cts_by_cycle[(sid, cycle_id)] = (cts_anchor_idx, cts_price_val)
         # Record confirmation candle (used to bound prospective-BOS search for n+1)

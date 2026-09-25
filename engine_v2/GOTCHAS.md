@@ -677,7 +677,7 @@ zones.
 
 **Symptom:** Two known bites. (1) Mapping CTS to lower TFs (UC1 trigger): using `ev.idx` started the M15 structure 31 candles too late. (2) `first_confluence` (var 1) probe `end_idx`: the spec said "parent CTS_CONFIRMED idx", which was read as `ev.idx` (the confirmation candle) — over-extending the probe window past the CTS and shifting the confluence sub's validated start. Fixed 2026-05-26 to use `cts_anchor_idx` (`first_confluence_trigger.py`); spec §4.3.2 disambiguated to "CTS extreme idx".
 
-**Fix:** Use `ev.meta["cts_anchor_idx"]` when you need the CTS extreme candle. Nuance on the fallback: `ev.meta.get("cts_anchor_idx", ev.idx)` is fine for a *best-effort display* read, but for a **load-bearing** value (e.g. a probe bound) do NOT fall back to `ev.idx` — a silent fallback re-introduces the exact confirmation-candle bug. `cts_anchor_idx` is an invariant whenever `CTS_CONFIRMED` fired, so a strict `[...]` access is correct and fails loud if the invariant ever breaks.
+**Fix:** Use `ev.meta["cts_anchor_idx"]` when you need the CTS extreme candle. Read it through `ef.cts_anchor_idx(ev)` (direct index) — never `ev.meta.get("cts_anchor_idx", ev.idx)`, not even for a display read: a silent fallback re-introduces the exact confirmation-candle bug (Plan E E2d removed the last ones, the chart CTS dots; `tests/test_event_fields.py` bans the pattern). `cts_anchor_idx` is an invariant whenever `CTS_CONFIRMED` fired, so a strict `[...]` access is correct and fails loud if the invariant ever breaks.
 
 **Related fields** (full table: ARCHITECTURE.md "`ev.idx` convention"):
 - `ev.idx` = confirmation candle — the pullback pattern's apply candle, or the proximity candle when `meta["confirmation_method"] == "sd_zone_proximity"` (2 of 30 rows on the reference window)
@@ -706,7 +706,7 @@ zones.
 - WVMI scan window ended at BOS extreme → missed valid proximity activations
 - POI activation gate read `CTS_ESTABLISHED.idx` (the CTS anchor) under the moment name `cts_established_idx` → a POI could go live up to 5 candles (the bound) before its cycle existed — observed: 1 candle, M15 confluence sub 0 cycle 2, IC 678: 1223 → 1224. Fixed by Plan D, 2026-09-23 (`plans/PLAN_D_poi_activation_moment.md`).
 
-**Fix:** Use `ev.meta["confirmed_at"]` when you need the candle where BOS was actually confirmed. Every `BOS_CONFIRMED` carries it (both emit sites in `_apply_pattern_at_apply_idx` set it; 34/34 rows on the reference window), so the defensive `int(ev.meta.get("confirmed_at", ev.idx))` never takes its fallback today — but for a load-bearing timing read prefer the strict access: the fallback IS the extreme-as-time bug (same nuance as the CTS_CONFIRMED entry above).
+**Fix:** Use `ev.meta["confirmed_at"]` when you need the candle where BOS was actually confirmed. Every `BOS_CONFIRMED` carries it (both emit sites in `_apply_pattern_at_apply_idx` set it; 34/34 rows on the reference window), so read it strictly — `ef.event_moment(ev)` (`structure/event_fields.py`); Plan E E2d removed the last defensive `int(ev.meta.get("confirmed_at", ev.idx))` reads: that fallback IS the extreme-as-time bug (same nuance as the CTS_CONFIRMED entry above).
 
 **Related fields:**
 - `ev.idx` = BOS extreme candle (where the BOS price level was set)

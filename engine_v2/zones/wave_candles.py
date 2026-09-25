@@ -249,7 +249,7 @@ def _bos_wave_candles(
         # Scan forward from last_pb_idx+1
         # Upper bound: next CTS confirmed or end of structure
         cts_conf = _find_cts_confirmed(events, sid, cycle_id)
-        upper = int(cts_conf.meta.get("confirmed_at", len(df) - 1)) if cts_conf else len(df) - 1
+        upper = int(cts_conf.meta["confirmed_at"]) if cts_conf else len(df) - 1
         upper = min(upper, len(df) - 1)
 
         for i in range(last_pb_idx + 1, upper + 1):

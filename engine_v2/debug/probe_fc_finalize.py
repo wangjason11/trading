@@ -24,8 +24,8 @@ fetches M15 from OANDA (~10 s). Run from the repo root:
     PYTHONPATH=. python engine_v2/debug/probe_fc_finalize.py
 
 Added 2026-09-19 during the pool/lifecycle redesign (Phase-2 MS retention + leak column
-added for Plan A the same day; per-iteration `early_stop_idx` + `cts1_ext`/`cts1_moment`
-added for Plan B 2026-09-20); safe to keep as a diagnostic.
+added for Plan A the same day; per-iteration `early_stop_idx` + `cts1_anchor`/`cts1_moment`
+added for Plan B 2026-09-20; `cts1_ext` until Plan E E2d); safe to keep as a diagnostic.
 """
 import ast
 import csv
@@ -158,8 +158,8 @@ for t in trigs:
         print(f"   [phase2 ms {k}] start={ms.start_idx} end_idx={ms.end_idx} "
               f"n_ev={len(ms.events)} max_ev_idx={mx} past_bound={past} "
               f"early_stop_idx={getattr(ms, 'early_stop_idx', None)} "
-              f"cts1_ext={None if _c1 is None else ef.cts_anchor_idx(_c1)} "
-              f"cts1_moment={None if _c1 is None else int(_c1.meta.get('confirmed_at', _c1.idx))}")
+              f"cts1_anchor={None if _c1 is None else ef.cts_anchor_idx(_c1)} "
+              f"cts1_moment={None if _c1 is None else ef.event_moment(_c1)}")
     max_ev_all = max((int(ev.idx) for ms in retained_ms for ev in ms.events), default=None)
     res = captured.get("res")
     if isinstance(out, edm.ResolvedStart):

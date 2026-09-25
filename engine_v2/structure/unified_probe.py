@@ -454,7 +454,7 @@ def _second_cts_moment(cts_est: list) -> int:
     span). Plan B §3.3 — the same principle as every lifecycle value (`confirmed_at` for
     timing, `.idx` for where the extreme sits), and it is what the early stop keys on."""
     ev = cts_est[1]
-    return int(ev.meta.get("confirmed_at", ev.idx))
+    return ef.event_moment(ev)
 
 
 def _run_phase2(
@@ -556,14 +556,14 @@ def _run_phase2(
             print(
                 f"[unified_probe phase2] early stop: p2_iter={iteration} "
                 f"stop_idx={ms.early_stop_idx} probe_end_idx={probe_end_idx} "
-                f"cts1_ext={int(cts_est[1].idx) if n_cts >= 2 else None} "
+                f"cts1_anchor={ef.cts_anchor_idx(cts_est[1]) if n_cts >= 2 else None} "
                 f"cts1_moment={_second_cts_moment(cts_est) if n_cts >= 2 else None}"
             )
 
         # Reversal before 2 cycles → structure not viable.
         if has_rev and n_cts < 2:
             if cts_est:
-                cts0_est_idx = int(cts_est[0].meta.get("confirmed_at", cts_est[0].idx))
+                cts0_est_idx = ef.event_moment(cts_est[0])
             final_condition = "reversal_in_probe"
             final_status = "finalized"
             # finalize idx = the reversal apply candle (the latest signal the
@@ -592,7 +592,7 @@ def _run_phase2(
 
         first_cts = cts_est[0]
         first_cycle_id = int(first_cts.meta.get("cycle_id", 0))
-        cts0_est_idx = int(first_cts.meta.get("confirmed_at", first_cts.idx))
+        cts0_est_idx = ef.event_moment(first_cts)
 
         # Try to find CTS_0_CONFIRMED — if present, bound by its
         # cts_anchor_idx. Else fall back to probe_end_idx.
@@ -605,7 +605,7 @@ def _run_phase2(
         check_lo = ef.cts_anchor_idx(first_cts) + 1  # Plan E E3c → moment
         if cycle_0_conf is not None:
             cts0_anchor_idx = int(
-                cycle_0_conf.meta.get("cts_anchor_idx", first_cts.idx)
+                ef.cts_anchor_idx(cycle_0_conf)
             )
             check_hi = cts0_anchor_idx - 1
         elif probe_end_idx is not None:

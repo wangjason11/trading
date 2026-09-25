@@ -1086,8 +1086,8 @@ def export_chart_plotly(
         bos_by_idx = defaultdict(list)
 
         for ev in cts_events:
-            # CTS confirmed: use cts_anchor_idx if available, else event idx
-            p_idx = int(ev.meta.get("cts_anchor_idx", ev.idx))
+            # CTS confirmed: the dot sits at its CTS anchor
+            p_idx = ef.cts_anchor_idx(ev)
             if p_idx in time_by_idx:
                 cts_by_idx[p_idx].append(ev)
 

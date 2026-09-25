@@ -624,11 +624,11 @@ def _resolve_first_confluence_via_unified_probe(
     if raw_input is None or raw_end is None:
         print(f"[entity_compute] WARNING: missing probe_input_idx/probe_end_idx in trigger meta for {label}")
         return ProbeFailure("missing probe_input_idx/probe_end_idx", None)
-    parent_extreme_idx = int(raw_input)
+    parent_bos_anchor_idx = int(raw_input)
     parent_end_idx = int(raw_end)
-    if parent_extreme_idx not in parent_df.index:
-        print(f"[entity_compute] WARNING: probe_input_idx={parent_extreme_idx} out of parent_df bounds for {label}")
-        return ProbeFailure(f"probe_input_idx {parent_extreme_idx} out of parent bounds", None)
+    if parent_bos_anchor_idx not in parent_df.index:
+        print(f"[entity_compute] WARNING: probe_input_idx={parent_bos_anchor_idx} out of parent_df bounds for {label}")
+        return ProbeFailure(f"probe_input_idx {parent_bos_anchor_idx} out of parent bounds", None)
 
     # Candle-semantics mapping rule (user spec 2026-05-31): BOS/CTS ANCHOR
     # candles are PRICE-mapped (they anchor a price level into the sub);
@@ -641,19 +641,19 @@ def _resolve_first_confluence_via_unified_probe(
     #     parent CTS extreme, no NEW extreme can form, so stop probing" — a
     #     price bound for the search; changing it moves `starting_idx` = the
     #     pool key (§17.8 "FC probe end mapping — unchanged").
-    parent_extreme_time = pd.to_datetime(parent_df.loc[parent_extreme_idx, "time"], utc=True)
-    m15_input_idx = map_candle_to_lower_tf(parent_extreme_time, -trigger.lower_sd, m15_df)
+    parent_bos_anchor_time = pd.to_datetime(parent_df.loc[parent_bos_anchor_idx, "time"], utc=True)
+    m15_input_idx = map_candle_to_lower_tf(parent_bos_anchor_time, -trigger.lower_sd, m15_df)
     if m15_input_idx is None:
         print(f"[entity_compute] WARNING: parent→M15 input mapping failed for {label}")
-        return ProbeFailure("parent→M15 input mapping failed", parent_extreme_idx)
+        return ProbeFailure("parent→M15 input mapping failed", parent_bos_anchor_idx)
     if parent_end_idx not in parent_df.index:
         print(f"[entity_compute] WARNING: probe_end_idx={parent_end_idx} out of parent_df bounds for {label}")
-        return ProbeFailure(f"probe_end_idx {parent_end_idx} out of parent bounds", parent_extreme_idx)
+        return ProbeFailure(f"probe_end_idx {parent_end_idx} out of parent bounds", parent_bos_anchor_idx)
     parent_cts_time = pd.to_datetime(parent_df.loc[parent_end_idx, "time"], utc=True)
     m15_end_idx = map_candle_to_lower_tf(parent_cts_time, trigger.lower_sd, m15_df)
     if m15_end_idx is None:
         print(f"[entity_compute] WARNING: parent→M15 end mapping failed for {label}")
-        return ProbeFailure("parent→M15 end mapping failed", parent_extreme_idx)
+        return ProbeFailure("parent→M15 end mapping failed", parent_bos_anchor_idx)
     if m15_end_idx <= m15_input_idx:
         print(
             f"[entity_compute] WARNING: degenerate probe window for {label} "
@@ -676,7 +676,7 @@ def _resolve_first_confluence_via_unified_probe(
         print(f"[entity_compute] PENDING: unified_probe did not finalize for {label}; skipping M15 build")
         return ProbeFailure("probe pending", int(m15_input_idx))
     return ResolvedStart(
-        starting_idx=starting_idx, validated_parent_idx=parent_extreme_idx,
+        starting_idx=starting_idx, validated_parent_idx=parent_bos_anchor_idx,
         bos0_inner=bos0_inner, finalize_idx=finalize_idx, finalize_condition=cond,
         probe_input_idx=int(m15_input_idx), cache_hit=cache_hit,
     )

@@ -1452,7 +1452,7 @@ class MarketStructure:
             # CTS from breakout window extreme (already correct helper).
             # Resolve before any state mutation so the cycle-0 new-extreme
             # check below can compare against an untouched state.
-            cts_idx, cts_price = self._cts_from_breakout_event(ev)
+            cts_anchor_idx, cts_price = self._cts_from_breakout_event(ev)
 
             # Cycle-0 scan-from-start mode (`enforce_cts0_new_extreme`):
             # the breakout reaching this block in scan mode is ALREADY the
@@ -1477,9 +1477,9 @@ class MarketStructure:
                 # self._emit_cts_established(cts_idx, cts_price, meta={"via": ev.name})
                 assert ev.start_idx is not None, "a breakout pattern always has a first candle"
                 self._emit_cts_established(
-                    cts_idx,
+                    cts_anchor_idx,
                     cts_price,
-                    cts_anchor_idx=cts_idx,
+                    cts_anchor_idx=cts_anchor_idx,
                     meta={
                         "via": ev.name,
                         # The breakout pattern's FIRST candle (pattern realm; GLOSSARY "Naming Standard").
@@ -1494,11 +1494,11 @@ class MarketStructure:
                 if st.cts_cycle_id == 0:
                     # bos_price = self._initial_bos_before_first_cts(cts_idx)
                     # self._emit_bos_confirmed(apply_idx, bos_price, meta={"source": "initial_prior_extreme"})
-                    bos_idx, bos_price = self._initial_bos_before_first_cts(cts_idx)
+                    bos_anchor_idx, bos_price = self._initial_bos_before_first_cts(cts_anchor_idx)
                     self._emit_bos_confirmed(
-                        bos_idx,
+                        bos_anchor_idx,
                         bos_price,
-                        bos_anchor_idx=bos_idx,
+                        bos_anchor_idx=bos_anchor_idx,
                         meta={
                             "source": "initial_prior_extreme",
                             "confirmed_at": apply_idx,
@@ -1510,11 +1510,11 @@ class MarketStructure:
                     # Uses existing helper _select_bos_price_on_breakout which references last_pullback_pat_apply_idx
                     # bos_price = self._select_bos_price_on_breakout(apply_idx)
                     # self._emit_bos_confirmed(apply_idx, bos_price, meta={"source": "pullback_extreme", "pb_start": st.last_pullback_pat_apply_idx})
-                    bos_idx, bos_price = self._select_bos_on_breakout(apply_idx)
+                    bos_anchor_idx, bos_price = self._select_bos_on_breakout(apply_idx)
                     self._emit_bos_confirmed(
-                        bos_idx,
+                        bos_anchor_idx,
                         bos_price,
-                        bos_anchor_idx=bos_idx,
+                        bos_anchor_idx=bos_anchor_idx,
                         meta={
                             "source": "pullback_extreme",
                             "confirmed_at": apply_idx,
@@ -1535,7 +1535,7 @@ class MarketStructure:
                 if self._bos_inner_resolver is not None:
                     st.bos_inner_for_cycle = self._bos_inner_resolver(
                         self._resolver_df(),
-                        int(bos_idx),
+                        int(bos_anchor_idx),
                         int(self.struct_direction),
                     )
                 else:
@@ -1545,10 +1545,10 @@ class MarketStructure:
                 st.last_pullback_pat_apply_idx = None
             else:
                 # Not allowed to create a new CTS cycle yet => this breakout just updates CTS (pre-confirm)
-                self._emit_cts_updated(cts_idx, cts_price, meta={"via": ev.name})
+                self._emit_cts_updated(cts_anchor_idx, cts_price, meta={"via": ev.name})
 
             # Update current CTS point (always)
-            st.cts = Point(idx=cts_idx, price=cts_price)
+            st.cts = Point(idx=cts_anchor_idx, price=cts_price)
             st.cts_phase = "EST_OR_UPD"
             st.last_breakout_pat_apply_idx = apply_idx
 
@@ -1721,29 +1721,29 @@ class MarketStructure:
     #         return float(self.df.iloc[0:cts_idx]["l"].astype(float).min())
     #     return float(self.df.iloc[0:cts_idx]["h"].astype(float).max())
 
-    def _initial_bos_before_first_cts(self, cts_idx: int) -> tuple[int, float]:
+    def _initial_bos_before_first_cts(self, cts_anchor_idx: int) -> tuple[int, float]:
         """
         Cycle 1 BOS: extreme prior to the first CTS.
-        - Uptrend: min low in [start_idx .. cts_idx-1]
-        - Downtrend: max high in [start_idx .. cts_idx-1]
+        - Uptrend: min low in [start_idx .. cts_anchor_idx-1]
+        - Downtrend: max high in [start_idx .. cts_anchor_idx-1]
         Returns (bos_idx, bos_price) where bos_idx is a *positional* index.
         """
         start = self.start_idx
 
-        if cts_idx <= start:
+        if cts_anchor_idx <= start:
             bos_idx = start
             bos_price = float(self._l[start]) if self.struct_direction == 1 else float(self._h[start])
             return bos_idx, bos_price
 
         if self.struct_direction == 1:
-            series = self._l[start:cts_idx]
+            series = self._l[start:cts_anchor_idx]
             rel = int(series.argmin())          # position within window
             bos_idx = start + rel               # offset by start_idx
             bos_price = float(series[rel])
             return bos_idx, bos_price
 
         else:
-            series = self._h[start:cts_idx]
+            series = self._h[start:cts_anchor_idx]
             rel = int(series.argmax())          # position within window
             bos_idx = start + rel               # offset by start_idx
             bos_price = float(series[rel])

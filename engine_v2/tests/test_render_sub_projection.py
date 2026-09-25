@@ -609,9 +609,9 @@ def test_bos_straddling_the_cap_is_clipped_by_confirmed_at_not_idx(geometry, m15
     pool, sub = geometry
     bounded, slice_begin = sub.geometry
     bos = _bos0(bounded)
-    bos_extreme_abs = int(bos.idx) + slice_begin
+    bos_anchor_abs = int(bos.idx) + slice_begin
     bos_known_abs = int(bos.meta["confirmed_at"]) + slice_begin
-    assert bos_extreme_abs == _STARTING_IDX and bos_known_abs == _STARTING_IDX + 2   # 55 / 57
+    assert bos_anchor_abs == _STARTING_IDX and bos_known_abs == _STARTING_IDX + 2   # 55 / 57
 
     _record(pool, sub, m15_df, LENS_CONFLUENCE, start_idx=_STARTING_IDX, seq=0,
             trigger_type="first_confluence", parent_sid=3, parent_cycle_id=1)
@@ -629,7 +629,7 @@ def test_bos_straddling_the_cap_is_clipped_by_confirmed_at_not_idx(geometry, m15
     mirrored_bos = [ev for ev in lens_dfs[LENS_CONFLUENCE].attrs["events"] if ev.type == "BOS_CONFIRMED"]
     assert len(mirrored_bos) == 1
     # Entity-absolute after the mirror: extreme 55, confirmed_at 57.
-    assert int(mirrored_bos[0].idx) == bos_extreme_abs
+    assert int(mirrored_bos[0].idx) == bos_anchor_abs
     assert int(mirrored_bos[0].meta["confirmed_at"]) == bos_known_abs
 
 

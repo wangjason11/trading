@@ -309,7 +309,7 @@ def check_zone_proximity(
         if ev.type == "BOS_CONFIRMED":
             key = (ev.meta.get("structure_id", 0), ev.meta.get("cycle_id", 0))
             # confirmed_at = confirmation candle, not BOS extreme
-            bos_conf_idx_by_key[key] = int(ev.meta.get("confirmed_at", ev.idx))
+            bos_conf_idx_by_key[key] = ef.event_moment(ev)
 
     reversal_idx_by_sid: Dict[int, int] = {}
     for ev in sorted_events:
@@ -344,7 +344,7 @@ def check_zone_proximity(
         ]
 
         # Scan window
-        scan_start = int(cts_ev.meta.get("confirmed_at", cts_ev.idx))
+        scan_start = ef.event_moment(cts_ev)
         scan_end = len(df) - 1
         next_bos_idx = bos_conf_idx_by_key.get((sid, cycle_id + 1))
         if next_bos_idx is not None:
