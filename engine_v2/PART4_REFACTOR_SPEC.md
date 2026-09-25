@@ -2801,7 +2801,8 @@ as the lens rule for `reversal` records.
 All idxs are entity-absolute M15 ints. `LOH(h)` = `_map_parent_idx_to_m15_hour_end`
 (last M15 candle of H1 candle `h`) — the mapper for every **timing** value; the
 price-extreme mapper (`map_candle_to_lower_tf`) is used only for the FC probe's
-structural inputs (§17.8). Do not unify them.
+structural inputs (§17.8) — and, for display, the M15 chart's H1 zone-proximity
+markers (Plan E E5·2). Do not unify them.
 
 | Field | Rule |
 |---|---|

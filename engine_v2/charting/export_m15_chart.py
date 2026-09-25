@@ -2726,30 +2726,11 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
         cidx = poi_confirmed_idx_as_of(best, at_idx)
         return int(cidx) if cidx is not None else -1
 
-    # M15 times (already datetime in dfx; build once for binary lookup).
-    m15_times = pd.to_datetime(dfx[COL_TIME], utc=True)
-
-    def _find_m15_by_extreme(h1_time: pd.Timestamp, approach_from_above: bool):
-        """Return the M15 dfx idx whose wick extreme matches the H1 trigger.
-
-        approach_from_above=True -> trigger wick is the H1 candle low,
-        so pick the M15 candle with the lowest low (tie -> last).
-        approach_from_above=False -> trigger wick is the H1 candle high,
-        so pick the M15 candle with the highest high (tie -> last).
-        Returns None if no M15 candles fall inside [h1_time, h1_time+1h).
-        """
-        h1_end = h1_time + timedelta(hours=1)
-        mask = (m15_times >= h1_time) & (m15_times < h1_end)
-        candidates = dfx[mask]
-        if candidates.empty:
-            return None
-        if approach_from_above:
-            best_val = candidates[COL_L].min()
-            matches = candidates[candidates[COL_L] == best_val]
-        else:
-            best_val = candidates[COL_H].max()
-            matches = candidates[candidates[COL_H] == best_val]
-        return int(matches.index[-1])
+    # The ONE price-extreme mapper (multitf.data_bridge): the H1 trigger wick is
+    # the hour's low when the approach is from above (lowest-low M15 candle), else
+    # its high (highest-high); tie → the last candle. Plan E E5·2 deleted this
+    # chart's private copy of the same rule (`_find_m15_by_extreme`).
+    from engine_v2.multitf.data_bridge import map_candle_to_lower_tf
 
     x_vals, y_vals, customdata = [], [], []
     skipped_no_m15 = 0
@@ -2767,7 +2748,7 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
                 or (sd == -1 and trig.direction == "opp_sd")
             )
 
-            m15_idx = _find_m15_by_extreme(h1_time, approach_from_above)
+            m15_idx = map_candle_to_lower_tf(h1_time, -1 if approach_from_above else 1, dfx)
             if m15_idx is None or m15_idx not in dfx.index:
                 skipped_no_m15 += 1
                 continue

@@ -69,9 +69,6 @@ class ReferenceZone:
     - ``cts_updated`` / ``cts_established`` → the CTS anchor
       ``ef.cts_anchor_idx(ev)`` (the CTS extreme; not an EST's ``ev.idx``,
       the moment since Plan E E4a)
-    - ``parent_cts`` / ``parent_bos`` → the parent's CTS / BOS extreme
-      idx (used by ``first_*`` triggers whose reference is the parent's
-      existing zone)
     """
     outer: float
     inner: float
@@ -80,8 +77,6 @@ class ReferenceZone:
         "cts_confirmed",
         "cts_updated",
         "cts_established",
-        "parent_cts",
-        "parent_bos",
         "ad_hoc_bos_0",
     ]
     anchor_idx: int

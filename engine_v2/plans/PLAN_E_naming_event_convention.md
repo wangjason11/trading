@@ -1157,9 +1157,21 @@ the real emitter.
     `_cts_from_breakout_event`'s span wording (`max(end_idx, confirmation_idx)`). Deferred to E5·2/E5·3: the
     `ReferenceZone` docstring defines `anchor_idx` only for the `cts_*` sources (omits `ad_hoc_bos_0`, the
     common case; the value is slice-local on the reversal path, entity-absolute on the sibling path).
-- **Remaining E5:** E5·2 = IN §3 #13 dead code (the never-constructed `ReferenceZone` sources `parent_cts` /
-  `parent_bos`; `export_m15_chart._find_m15_by_extreme` duplicating `data_bridge.map_candle_to_lower_tf`; the
-  commented `_cts_price_at` caller block E1b missed in `_apply_pattern_at_apply_idx`); E5·3 = the IN §1.9 prose +
+- **E5·2 — IN §3 #13 dead code (2026-09-25; byte-identical).** `_is_new_cts_extreme` / `proximity_confirmed_idx`
+  were already gone (E1b). Deleted: the never-constructed `ReferenceZone.source` literals `parent_cts` /
+  `parent_bos` + their docstring bullet; the M15 chart's `_find_m15_by_extreme` — **user 2026-09-25: "Delegate"**:
+  the H1 zone-proximity markers now call `data_bridge.map_candle_to_lower_tf(h1_time, -1 if approach_from_above
+  else 1, dfx)` (lazy import, as in `entity_df_mutation`), one price-extreme mapper (ARCHITECTURE / PART4 §17.4 /
+  GLOSSARY LOH: "used only for the FC probe's structural inputs — and, for display, the M15 chart's H1
+  zone-proximity markers"); the 41-line commented `_cts_price_at` caller block E1b missed in
+  `_apply_pattern_at_apply_idx` — **user: "E1b leftover only"**; the other four commented-out legacy blocks in
+  `market_structure.py` (the `i in (387, 388)` debug print, the old `_initial_bos_before_first_cts(cts_idx)`, the
+  old `_emit_bos_confirmed` setting the retired `st.bos_confirmed`, the old `_select_bos_price_on_breakout`) →
+  the dead-code hygiene list. **Measured (vs `20260925_145355_029401f`):** 24/24 CSVs byte-identical, the 3
+  figures JSON-identical (incl. the 12 delegated markers, 6 per M15 chart; no empty hour, so no new
+  `[data_bridge] WARNING`), fetch gate PASS; run.log only the FutureWarning line number (2648 → 2607). Replay
+  46.2 s. Tests 935 + 1 xfail.
+- **Remaining E5:** E5·3 = the IN §1.9 prose +
   §3 #14 + the Q12 `KLZone.source_time` documentation + the GLOSSARY Naming-Standard "Status" paragraph; E5·4 =
   the exported Q4 change (triggers CSV `validated_parent_idx` → FC-only `parent_bos_anchor_idx`; measured table
   first).

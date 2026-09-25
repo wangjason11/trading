@@ -438,7 +438,8 @@ was replaced by the sweep below.
    (`entity_df_mutation._map_parent_idx_to_m15_hour_end`, last M15 candle of the
    H1 hour — the mapper for EVERY timing value; the price-extreme mapper
    `data_bridge.map_candle_to_lower_tf` is used only for the `first_confluence`
-   probe's structural inputs; never unify them).
+   probe's structural inputs — and, for display, the M15 chart's H1
+   zone-proximity markers (Plan E E5·2); never unify them).
 2. Prepare ONE shared M15 feature frame (`prepare_lower_tf_data`, once) plus two
    **lens dfs** (copies; views for the chart/export readers).
 3. `multitf/parent_tables.build_parent_tables(sorted_events, h1_df, m15)` — the

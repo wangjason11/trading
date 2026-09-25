@@ -1413,47 +1413,6 @@ class MarketStructure:
             self._clear_reversal_watch()
             return
 
-        # if kind == "breakout":
-        #     # BOS confirmation (Part 2, Option B):
-        #     # Confirm BOS on the first breakout after CTS has been CONFIRMED (i.e., after a pullback pattern applied).
-        #     # BOS price is the pullback extreme between pullback apply and this breakout apply.
-        #     if st.cts_phase == "CONFIRMED" and st.last_pullback_pat_apply_idx is not None:
-        #         bos_price = self._select_bos_price_on_breakout(apply_idx)
-        #         self._emit_bos_confirmed(apply_idx, bos_price, meta={"via": ev.name, "pb_start": st.last_pullback_pat_apply_idx})
-
-        #         # reset pullback-cycle bookkeeping
-        #         st.bos_candidate = None
-        #         st.false_break_active = False
-        #         st.reentered_pullback_after_false_break = False
-        #         st.trend_leg_id += 1
-        #         st.last_pullback_pat_apply_idx = None
-
-
-        #     # Breakout breaks range (if active)
-        #     if st.range_active:
-        #         self._deactivate_range(apply_idx, meta={"reason": "range_breakout", "pat": ev.name})
-
-        #     # cts_price = self._cts_price_at(apply_idx)
-        #     # if st.state == MarketState.BREAKOUT:
-        #     #     self._emit_cts_updated(apply_idx, cts_price, meta={"via": ev.name})
-        #     # else:
-        #     #     self._emit_cts_established(apply_idx, cts_price, meta={"via": ev.name})
-
-        #     cts_idx, cts_price = self._cts_from_breakout_event(ev)
-
-        #     # emit CTS event using cts_idx/cts_price
-        #     if st.cts is not None:
-        #         self._emit_cts_updated(cts_idx, cts_price, meta={"via": ev.name})
-        #     else:
-        #         self._emit_cts_established(cts_idx, cts_price, meta={"via": ev.name})
-
-        #     st.cts = Point(idx=cts_idx, price=cts_price)
-        #     st.cts_phase = "EST_OR_UPD"
-        #     st.last_breakout_pat_apply_idx = apply_idx
-        #     self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
-        #     self._post_apply_range_check(apply_idx)
-        #     return
-
         if kind == "breakout":
             # CTS from breakout window extreme (already correct helper).
             # Resolve before any state mutation so the cycle-0 new-extreme
