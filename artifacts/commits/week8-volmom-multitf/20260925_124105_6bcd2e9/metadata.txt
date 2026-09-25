@@ -1,0 +1,4 @@
+commit_hash=6bcd2e9
+timestamp=20260925_124105
+branch=week8-volmom-multitf
+commit_message=Plan E E4b-pre: delete the write-only KL meta source_event_idx (Q21)
