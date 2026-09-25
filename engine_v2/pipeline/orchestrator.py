@@ -79,8 +79,10 @@ def _prev_bos_lines(sorted_events: list, reversal_confirmed_by_sid: dict, pfx: s
             if ev.type not in ("CTS_ESTABLISHED", "CTS_UPDATED"):
                 continue
             # The filter is a TIME ("the first CTS of sid known at/after the
-            # reversal"); the line END is the CTS anchor (a location, PLAN_E Q6).
-            if ef.stamped_idx(ev) >= rv_idx:  # Plan E E3d → moment
+            # reversal"): the event's MOMENT (Plan E E3d; a pattern-path
+            # CTS_UPDATED's since E3·0). The line END is the CTS anchor (a
+            # location, PLAN_E Q6).
+            if ef.event_moment(ev) >= rv_idx:
                 end_idx = ef.cts_anchor_idx(ev)
                 break
 

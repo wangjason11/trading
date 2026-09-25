@@ -765,6 +765,15 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
   The label is a debug print, not pinned. Docs: ARCHITECTURE known-sites, PART4 "What `first_CTS_EST.idx` is"
   (the verified divergence → closed). Tests 891 → 892 + 1 xfail.
 
+- **E3d (2026-09-25).** `orchestrator._prev_bos_lines`: "the first CTS of the new sid known at/after the reversal"
+  filters on `ef.event_moment(ev) >= rv_idx` over CTS_ESTABLISHED + CTS_UPDATED (possible since E3·0 — rev 1 would
+  have raised on the pattern-path CTS_UPDATED 710); the line END stays the anchor (Q6); iteration stays in processing
+  order (within one sid the stamped order and the moment order agree: a raw update needs `st.cts`, set at the EST's
+  apply). **Measured == §7's 0:** 0 real cells, figures identical, run.log identical incl.
+  `[prev_bos_line] sid=1: start_idx=591 end_idx=902`. Pin: `test_prev_bos_line_filter_is_the_moment` (sid 1's CTS_0
+  anchor 13 / moment 16, reversal 15, a later raw update at 20 → END 13; the stamped revert ends at 20 — checked).
+  Tests 892 → 893 + 1 xfail.
+
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 
 **E4a — `CTS_ESTABLISHED`.** `market_structure.py:1514` passes `int(apply_idx)` as `idx` and asserts

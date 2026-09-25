@@ -236,7 +236,7 @@ def test_structure_levels_are_timed_at_the_anchors():
 @pytest.mark.illegal_event_contract
 def test_prev_bos_line_runs_anchor_to_anchor():
     """B6 / L9 (Q6): the line starts at sid 0's last BOS ANCHOR and ends at the
-    ANCHOR of sid 1's first CTS stamped at/after the reversal (the filter: E3d)."""
+    ANCHOR of sid 1's first CTS known at/after the reversal (the filter: its moment, E3d)."""
     from engine_v2.pipeline.orchestrator import _prev_bos_lines
     from engine_v2.structure import event_fields as ef
     evs = [_e4_bos(anchor=7, moment=10, structure_id=0, cycle_id=1, price=0.95),
@@ -245,6 +245,26 @@ def test_prev_bos_line_runs_anchor_to_anchor():
     with contextlib.redirect_stdout(io.StringIO()):
         lines = _prev_bos_lines(evs, {1: 15})
     assert [(ln["start_idx"], ln["end_idx"]) for ln in lines] == [(7, 16)]
+
+
+def test_prev_bos_line_filter_is_the_moment():
+    """Plan E E3d: "the first CTS of sid 1 known at/after the reversal" is decided
+    on the MOMENT. sid 1's CTS_0 is anchored at 13 but established at 16; the
+    reversal is confirmed at 15 → it qualifies (on its anchor 13 it would not,
+    and the line would end at the later update's anchor 20). END = its anchor 13."""
+    from engine_v2.pipeline.orchestrator import _prev_bos_lines
+    from engine_v2.structure import event_fields as ef
+    from engine_v2.structure.market_structure import StructureEvent
+    from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established
+    upd = StructureEvent(idx=20, category="STRUCTURE", type="CTS_UPDATED", price=1.3,
+                         meta={"structure_id": 1, "cycle_id": 0, "via": "replay_raw"})
+    evs = [make_bos_confirmed(bos_anchor_idx=7, confirmed_at=10, structure_id=0, cycle_id=1, price=0.95),
+           make_cts_established(cts_anchor_idx=13, confirmed_at=16, structure_id=1, cycle_id=0),
+           upd]
+    evs.sort(key=ef.processing_order_key)
+    with contextlib.redirect_stdout(io.StringIO()):
+        lines = _prev_bos_lines(evs, {1: 15})
+    assert [(ln["start_idx"], ln["end_idx"]) for ln in lines] == [(7, 13)]
 
 
 @pytest.mark.parametrize("mode", ["h1", "cross_cycle"])
