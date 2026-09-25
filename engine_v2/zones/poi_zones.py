@@ -409,8 +409,8 @@ def derive_poi_zones(
 
     # Pre-group CTS_ESTABLISHED + CTS_UPDATED events by (sid, cycle_id) so the
     # per-POI activation scan doesn't re-iterate the full event list for every
-    # IC. Sort once in ascending order of today's stamped idx (pinned against
-    # the Plan E E4 flip; idx-only + stable, exactly as before).
+    # IC. Sort once in ascending order of each event's MOMENT (the sweep's time
+    # order; Plan E E3g-1 — stable, so ties keep the processing order).
     cts_events_by_key: Dict[tuple, List[StructureEvent]] = defaultdict(list)
     for ev in structure_events:
         if ev.type not in ("CTS_ESTABLISHED", "CTS_UPDATED"):
@@ -421,7 +421,7 @@ def derive_poi_zones(
             continue
         cts_events_by_key[(int(sid_ev), int(cycle_ev))].append(ev)
     for key in cts_events_by_key:
-        cts_events_by_key[key].sort(key=ef.stamped_idx)
+        cts_events_by_key[key].sort(key=ef.event_moment)
 
     # Precompute each imbalance instance's fill_idx (the first candle after
     # inst.end_idx where ≥70% retrace into the merged gap fires). One linear
@@ -855,7 +855,7 @@ def _compute_poi_activation_history(
     ic_high = float(df.loc[ic_idx, "h"])
     ic_low = float(df.loc[ic_idx, "l"])
 
-    sorted_cts_events = sorted(cts_events, key=ef.stamped_idx)
+    sorted_cts_events = sorted(cts_events, key=ef.event_moment)   # the time order (E3g-1)
 
     # State carried through the sweep.
     cts_anchor_idx_at_t = -1
@@ -888,23 +888,22 @@ def _compute_poi_activation_history(
         )
         return sorted(v for v, th in variant_thresholds.items() if overlap >= th)
 
-    # --- Pre-window state: apply CTS events strictly before first_active so
-    # current_versions (and condition 1) reflect the entering state at
-    # first_active. Load-bearing: CTS_ESTABLISHED.idx (the CTS anchor) <=
-    # cts_established_idx (the moment) <= first_active, so the establishing
-    # CTS event (and any CTS_UPDATED before first_active) is applied HERE, not
-    # as an in-window transition, whenever the anchor precedes first_active —
-    # on every cycle whose anchor precedes its moment, and on every POI whose
-    # ic_idx or lifecycle floor lies past the anchor. (The IC CAN lie past the
-    # anchor, even past the moment: IC candidates range up to the fib's FINAL
-    # cts_idx, which CTS_UPDATED advances — 12/48 POIs on the reference window.)
-    # Each CTS event has two roles here: WHEN it applies (the pre-window split
-    # and the transition time — a TIME, today the stamped idx; Plan E E3g-1
-    # switches it to the moment, PLAN_E §7.1 T1) and WHERE the CTS is (cond1 —
-    # the CTS anchor, a location).
+    # --- Pre-window state: apply CTS events KNOWN strictly before first_active
+    # (their moment < first_active) so current_versions (and condition 1) reflect
+    # the entering state at first_active; events known in [first_active,
+    # scan_end] are in-window transitions AT their moment (Plan E E3g-1, PLAN_E
+    # §7.1 T1 — before it both keyed on the stamped idx, the CTS anchor for
+    # CTS_ESTABLISHED / pattern-path CTS_UPDATED). The establishing
+    # CTS_ESTABLISHED is known at cts_established_idx <= first_active: pre-window
+    # when strictly before, else a transition at first_active itself, applied
+    # atomically before that candle's evaluation (same entering state). (The IC
+    # CAN lie past the anchor, even past the moment: IC candidates range up to
+    # the fib's FINAL cts_idx, which CTS_UPDATED advances — 12/48 POIs on the
+    # reference window.) Each CTS event has two roles: WHEN it applies (its
+    # moment) and WHERE the CTS is (cond1 — the CTS anchor, a location).
     in_window_cts: List[StructureEvent] = []
     for ev in sorted_cts_events:
-        ev_moment_idx = ef.stamped_idx(ev)  # Plan E E3g-1 → moment
+        ev_moment_idx = ef.event_moment(ev)
         if ev_moment_idx < first_active:
             cts_anchor_idx_at_t = ef.cts_anchor_idx(ev)
             try:
@@ -949,7 +948,7 @@ def _compute_poi_activation_history(
             transitions.append((leave_idx, PRIO_IMB, "leave", None))
 
     for ev in in_window_cts:
-        transitions.append((ef.stamped_idx(ev), PRIO_CTS, "cts", ev))  # Plan E E3g-1 → moment
+        transitions.append((ef.event_moment(ev), PRIO_CTS, "cts", ev))
 
     transitions.sort(key=lambda x: (x[0], x[1]))
 

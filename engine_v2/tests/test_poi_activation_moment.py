@@ -257,6 +257,81 @@ def test_activation_applies_pre_window_cts_state():
     assert history[0]["versions"]
 
 
+def test_activation_cts_update_applies_at_its_moment_not_its_anchor():
+    """Plan E E3g-1 (§7.1 T1): a CTS event's transition time is its MOMENT. IC at 7
+    lies past the EST anchor 5 (so cond1 fails until the CTS reaches it); a
+    pattern-path CTS_UPDATED anchored at 8 is known only at 11; the imbalance
+    forms at 9. Keyed on the anchor the POI would go active at 9; on the moment
+    it goes active at 11."""
+    from engine_v2.tests._event_factory import make_event
+    t0 = pd.Timestamp("2024-01-01", tz="UTC")
+    df = pd.DataFrame([
+        {"time": t0 + pd.Timedelta(hours=i), "o": 0.6040, "h": 0.6045, "l": 0.6035, "c": 0.6040}
+        for i in range(14)
+    ])
+    df.loc[7, ["o", "h", "l", "c"]] = [0.6034, 0.6035, 0.6025, 0.6026]
+    imb = ImbalanceInstance(start_idx=8, end_idx=8, direction=1,
+                            gap_top=0.6090, gap_bottom=0.6080, gap_size=0.0010)
+    est = make_cts_established(cts_anchor_idx=5, confirmed_at=6, price=0.6100, struct_direction=None)
+    upd = make_event("CTS_UPDATED", 8, price=0.6105, via="continuous", confirmed_at=11,
+                     structure_id=0, cycle_id=0)
+    history = poi_zones._compute_poi_activation_history(
+        df,
+        ic_idx=7, cts_established_idx=6, sd=1, scan_end=13, fill_threshold=0.70,
+        bos_price=0.6000, cts_events=[est, upd], fib_min_pct=61.8, fib_max_pct=80.0,
+        variant_thresholds={"V30": 0.3, "V60": 0.6, "V90": 0.9},
+        imbalances=[imb], fill_idx_cache={id(imb): (None, None)}, lifecycle_floor_idx=None,
+    )
+    assert history and history[0]["idx"] == 11 and history[0]["active"]
+
+
+def _e3g1_history(cts_events, *, ic_idx, floor, imb_start, n=16):
+    from engine_v2.tests._event_factory import make_event  # noqa: F401
+    t0 = pd.Timestamp("2024-01-01", tz="UTC")
+    df = pd.DataFrame([
+        {"time": t0 + pd.Timedelta(hours=i), "o": 0.6040, "h": 0.6045, "l": 0.6035, "c": 0.6040}
+        for i in range(n)
+    ])
+    df.loc[ic_idx, ["o", "h", "l", "c"]] = [0.6034, 0.6035, 0.6025, 0.6026]
+    imb = ImbalanceInstance(start_idx=imb_start, end_idx=imb_start, direction=1,
+                            gap_top=0.6090, gap_bottom=0.6080, gap_size=0.0010)
+    return poi_zones._compute_poi_activation_history(
+        df,
+        ic_idx=ic_idx, cts_established_idx=6, sd=1, scan_end=n - 1, fill_threshold=0.70,
+        bos_price=0.6000, cts_events=cts_events, fib_min_pct=61.8, fib_max_pct=80.0,
+        variant_thresholds={"V30": 0.3, "V60": 0.6, "V90": 0.9},
+        imbalances=[imb], fill_idx_cache={id(imb): (None, None)}, lifecycle_floor_idx=floor,
+    )
+
+
+def test_activation_pre_window_split_is_the_moment():
+    """Plan E E3g-1: the pre-window split keys on the MOMENT. Floor 9 → first_active 9;
+    a pattern-path CTS_UPDATED anchored at 8 (< 9) is known at 11 (> 9) → it is an
+    in-window transition at 11, not pre-window state (which would activate at 9)."""
+    from engine_v2.tests._event_factory import make_event
+    est = make_cts_established(cts_anchor_idx=5, confirmed_at=6, price=0.6100, struct_direction=None)
+    upd = make_event("CTS_UPDATED", 8, price=0.6105, via="continuous", confirmed_at=11,
+                     structure_id=0, cycle_id=0)
+    history = _e3g1_history([est, upd], ic_idx=7, floor=9, imb_start=8)   # formed at 9
+    assert history and history[0]["idx"] == 11
+
+
+def test_activation_applies_cts_events_in_moment_order():
+    """Plan E E3g-1: the sweep applies CTS events in MOMENT order. A pattern-path
+    update that regresses the CTS (zones-audit latent (a): anchor 8, known at 12)
+    lands after a raw update to 9 (known at 9); pre-window at first_active 13 the
+    latest KNOWN CTS is anchor 8 < IC 9 → cond1 fails (in stamped order the raw
+    9 would be applied last and the POI would activate at 13)."""
+    from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
+    from engine_v2.tests._event_factory import make_event
+    est = make_cts_established(cts_anchor_idx=5, confirmed_at=6, price=0.6100, struct_direction=None)
+    raw = make_event("CTS_UPDATED", 9, price=0.6110, via=CTS_UPDATED_RAW_VIA, structure_id=0, cycle_id=0)
+    pat = make_event("CTS_UPDATED", 8, price=0.6105, via="continuous", confirmed_at=12,
+                     structure_id=0, cycle_id=0)
+    history = _e3g1_history([est, pat, raw], ic_idx=9, floor=13, imb_start=10)   # formed at 11
+    assert history == []
+
+
 # ---------------------------------------------------------------------------
 # (i) — the fallback for a cycle with no CTS_ESTABLISHED is unchanged (Plan D
 #       decision 3; the fib's CTS anchor — a known naming-standard exception)

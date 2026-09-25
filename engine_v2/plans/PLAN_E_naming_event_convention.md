@@ -804,6 +804,19 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
   dropped, creation → moment). Docs: KL_ZONES_SPEC, POI_ZONES_SPEC, LANDMINES, `stamped_idx` docstring, sid_records
   / structure_lifecycle docstrings. Tests stay 896 + 1 xfail.
 
+- **E3g-1 (2026-09-25; §7.1 T1).** `poi_zones._compute_poi_activation_history`: the CTS events' pre-window split,
+  in-window transition time AND the sweep's order key on `ef.event_moment` (the two stamped-idx sorts — the by-key
+  pre-group and `sorted_cts_events` — were unmarked in E2 but are the same time order); cond1 keeps the anchor. The
+  "load-bearing" pre-window comment rewritten for the moment key (the establishing EST, known at
+  `cts_established_idx <= first_active`, is pre-window when strictly before, else a transition at `first_active`
+  applied before that candle's evaluation). **Measured (vs `20260925_081206_efc04bd`) == T1's 0:** 0 real cells,
+  figures identical, run.log identical. Pins (`test_poi_activation_moment.py`): the transition time (IC 7 past the EST
+  anchor; a pattern update anchored 8 / known 11 → active at 11, not 9), the pre-window split (floor 9 → the same
+  update is in-window at 11), the order (a regressing pattern update — latent (a) — known at 12 after a raw update to
+  9: the latest KNOWN CTS, anchor 8 < IC 9 → no activation). Own mutation loop 3/4 killed; the by-key pre-sort is
+  equivalent (the sweep re-sorts by moment, stably, and an EST / pattern-UPDATED pair cannot tie on a moment). Docs:
+  ARCHITECTURE known-sites. Tests 896 → 899 + 1 xfail.
+
 ## 8. E4 — the flip (emit sites only + the docs that invert)
 
 **E4a — `CTS_ESTABLISHED`.** `market_structure.py:1514` passes `int(apply_idx)` as `idx` and asserts
