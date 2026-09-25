@@ -100,7 +100,7 @@ use the **moment** column (`ef.event_moment`), location reads the **anchor** col
 (PLAN_E Q19): after a flip, `ev.idx` and `ev.price` no longer name the same candle — pair the price with
 the anchor key. Verified against the emitters in `structure/market_structure.py` and live on the
 reference window (zones-pass audit, 2026-09-22; the `CTS_THRESHOLD_UPDATED` row added by Plan F,
-2026-09-24, verified against its emitter; the `ev.price` column and the E4a row, 2026-09-25).
+2026-09-24, verified against its emitter; the `ev.price` column and the E4a / E4b rows, 2026-09-25).
 
 | Event | `ev.idx` | The moment (knowable at) | The anchor (price location) | `ev.price` | Other index meta |
 |---|---|---|---|---|---|
@@ -125,7 +125,7 @@ callers import the MODULE and call it qualified (`from engine_v2.structure impor
 - `ef.event_moment(ev)` — this table's moment column (added in Plan F in `market_structure`, moved here and
   extended in E2a): `CTS_ESTABLISHED` / `BOS_CONFIRMED` → `meta["confirmed_at"]` (== `ev.idx` since
   E4a / E4b); `CTS_CONFIRMED` /
-  `CTS_RECONFIRMED` / `CTS_THRESHOLD_UPDATED` → `ev.idx`; `CTS_UPDATED` → `ev.idx` on the raw path / `meta["confirmed_at"]`
+  `CTS_RECONFIRMED` / `CTS_THRESHOLD_UPDATED` / `BOS_THRESHOLD_UPDATED` (E3g-2) → `ev.idx`; `CTS_UPDATED` → `ev.idx` on the raw path / `meta["confirmed_at"]`
   on the pattern path (the apply candle, recorded since Plan E E3·0); any other type raises `ValueError` (a new consumer must first define
   its event's moment here). Why it matters: IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
 - `ef.cts_anchor_idx(ev)` — `meta["cts_anchor_idx"]` on `CTS_ESTABLISHED` / `CTS_CONFIRMED` / `CTS_RECONFIRMED`,

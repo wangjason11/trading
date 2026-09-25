@@ -614,7 +614,7 @@ Lifecycle-Start Clamp" below).
 **Rule:** `sorted_events` in `_run_downstream_pipeline` is sorted by
 `event_fields.processing_order_key` = `(ef.stamped_idx(e), e.type)` — the pre-E4
 `(e.idx, e.type)`, pinned on the ANCHORS so the Plan E E4 flip (`ev.idx` :=
-the moment on CTS_ESTABLISHED since E4a / BOS_CONFIRMED from E4b) reorders nothing (PLAN_E Q3; moment
+the moment on CTS_ESTABLISHED / BOS_CONFIRMED since E4a / E4b) reorders nothing (PLAN_E Q3; moment
 order + an explicit type rank is post-Plan-E). The same key sorts `sub_wvmi`'s
 loop. TIME walks sort on the MOMENT instead (`ef.event_moment`): zone_proximity's
 threshold timeline (`(moment, type)`, Plan E E3g-2) and the POI sweep's CTS events

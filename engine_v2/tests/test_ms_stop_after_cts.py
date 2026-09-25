@@ -140,7 +140,9 @@ class TestStopAfterCtsEstablished:
         assert max(int(ev.idx) for ev in stopped.events) < third_moment
         # No reversal rows.
         assert not (stopped.df["market_state"].astype(str) == "reversal").any()
-        # Ordered prefix (not an idx filter: a later BOS_CONFIRMED.idx can be <= stop_idx).
+        # Ordered prefix (not an idx filter: an event stamped at an anchor or a label — a
+        # pattern-path CTS_UPDATED, a RANGE_STARTED at its confirm_idx; a BOS_CONFIRMED
+        # until Plan E E4b — can be <= stop_idx though emitted after it).
         assert _sig(full.events)[: len(stopped.events)] == _sig(stopped.events)
         assert len(stopped.events) < len(full.events)
 

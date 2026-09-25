@@ -1013,7 +1013,39 @@ the real emitter.
   swap returns BOS to its anchor; the E4-shaped BOS pins lost their `illegal_event_contract` markers; the
   `mutate=` hooks move the BOS idx too (their E4a re-validation caught it); three tests that read a BOS's raw
   `.idx` as its anchor moved to `ef.bos_anchor_idx` (the render-projection straddle + KL floor tests) and the
-  Plan-B-save CSV loader translates pre-E4b BOS rows. Tests 910 → 913 + 1 xfail.
+  Plan-B-save CSV loader translates pre-E4b BOS rows. Tests 910 → 913 + 1 xfail. Commit `7216c9d`; save
+  `20260925_125921_7216c9d`.
+  - **Pre-review mutation loop (mine, per the E4a lesson; `%TEMP%/pe/e4b_mut/harness.py`):** each of the 12 BOS
+    LOCATION readers switched from `ef.bos_anchor_idx(X)` to the raw `int(X.idx)` (the moment since E4b), full
+    suite each: 7 killed (FC input, prev-BOS start, fib BOS point, structure levels, KL anchor, `stamped_idx`, the
+    H1 BOS dot — incidentally), **5 chart sites survived** (the M15 sub-chart BOS dot + PB→BOS line end, the H1
+    overlay's twins, the H1 chart's PB→next-BOS line end) — only the figure diff guarded them.
+  - Landing review, mutation lens (≈197k; copy from the commit): all 5 survivors now killed by one pin each + an
+    explicit H1 BOS-dot pin (a hand-built sid-handoff stream with lagging BOS 2/5 and 13/16, through
+    `_build_sub_polylines`, `_render_h1_overlay` and `export_chart_plotly`; each pin kills only its site). The 10
+    contract mutants all killed (emitter revert 193, its assert 1 — only that pin; factory 39; conftest 229;
+    `stamped_idx` 22; `bos_anchor_idx` 50; `event_moment` 8 — equivalent on legal events, caught by the
+    deliberately illegal swap clones; both hooks via their re-validation; `st.bos` from `idx` 2). Own mutants:
+    **D1 survived** — zone_proximity's next-BOS scan bound read as the anchor (the existing test had anchor ==
+    moment; the swap test cannot see a meta-only read; pre-existing since before E4b) → pinned
+    (`test_scan_window_ends_before_the_next_bos_moment_not_its_anchor`, re-killed here); D2 (KL BOS
+    `confirmed_idx` → anchor) and D3 (the threshold timeline sort) killed; `uc1_trigger` / WVMI `on_bos_confirmed`
+    read no BOS index. Tests 913 → **920 + 1 xfail**.
+  - Landing review, conformance lens (≈304k): 0 BLOCKER; no production location read became wrong (every raw BOS
+    `.idx` read is type-filtered away or a declared raw reader; all timing reads `ef.event_moment`, all location
+    reads `ef.bos_anchor_idx`); the mirror / sibling clip shift `idx`, `confirmed_at` and `bos_anchor_idx` by one
+    offset; nothing correct only by this window's data (one pre-existing latent: `_select_bos_on_breakout`'s
+    swap branch could put a BOS anchor after its apply candle → the anchor-keyed sort would run EST before BOS —
+    34/34 anchors <= moment here). **MAJOR ×2 (E4a leftovers, fixed):** KL_ZONES_SPEC "Why the two definitions
+    can differ" and PART4 ×2 still said the EST `ev.idx` is the extreme. **MINOR (fixed):** `stamped_idx` /
+    GLOSSARY `event_moment` / LANDMINES sort-order / ARCHITECTURE "verified" note still E4a-only;
+    `BOS_THRESHOLD_UPDATED → ev.idx` (E3g-2) missing from the three `event_moment` lists; POI_ZONES_SPEC bare "BOS
+    idx" (now the anchor, named); a `test_ms_stop_after_cts` comment ("a later BOS idx can be <= stop"); five
+    test-helper comments EST-only; the render-projection oracle docstrings + the straddle test renamed
+    `…_clipped_by_its_moment_not_its_anchor`; `reference_zone` docstring (EST → the anchor accessor); the review
+    README (`FLIP=bos` is a no-op too). **Hardening:** both BOS emit sites now pass `"confirmed_at": int(apply_idx)`
+    like the EST site (a numpy value would shift `idx` but not `confirmed_at` in the mirror). Replay after the
+    fold-ins: 0 cells, figures + run.log identical; tests 920 + 1 xfail.
 
 ## 9. E5 — remaining renames + prose
 

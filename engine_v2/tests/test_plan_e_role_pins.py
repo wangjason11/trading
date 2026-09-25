@@ -410,3 +410,145 @@ def test_scenario3_exception_window_opens_after_the_cts0_anchor(monkeypatch):
         res = se.compute_structure_scenario_3(df, 0, +1, end_idx=15, run_continuation=False)
     assert res.status == "finalized"
     assert lows == [5]
+
+
+# --- E4b landing review: the charts' BOS LOCATION reads (dots + PB→BOS lines) ---------
+# A sid handoff built with LAGGING BOS events (anchor < moment == ev.idx since E4b):
+# a BOS dot / a PB→BOS line end read from the raw `ev.idx` lands on the moment.
+
+def _e4b_handoff_events():
+    """sid 0 (sd +1): BOS(0,0) anchor 2 / moment 5, CTS_CONFIRMED(0,0) anchor 8 at 9,
+    a pullback at 11, the reversal at 12. sid 1 (sd -1): BOS(1,0) anchor 13 /
+    moment 16. Sid 0 ends on a CTS, so every chart draws its PB(11) → sid 1's
+    first BOS line (the PB search's upper bound is that BOS's moment 16 > 11)."""
+    from engine_v2.tests._event_factory import make_bos_confirmed, make_event
+    return [
+        make_bos_confirmed(bos_anchor_idx=2, confirmed_at=5, price=0.6010,
+                           structure_id=0, cycle_id=0, struct_direction=1),
+        make_event("CTS_CONFIRMED", 9, price=0.6120, cts_anchor_idx=8,
+                   structure_id=0, cycle_id=0, struct_direction=1),
+        make_event("STATE_CHANGED", 11, to="pullback", structure_id=0, struct_direction=1),
+        make_event("STATE_CHANGED", 12, to="reversal", structure_id=0, struct_direction=1),
+        make_bos_confirmed(bos_anchor_idx=13, confirmed_at=16, price=0.6130,
+                           structure_id=1, cycle_id=0, struct_direction=-1),
+    ]
+
+
+def _e4b_ohlc(n, freq):
+    return pd.DataFrame({
+        "time": pd.date_range("2025-12-01", periods=n, freq=freq, tz="UTC"),
+        "o": 0.6050, "h": [0.6100 + k * 1e-4 for k in range(n)],
+        "l": [0.6000 - k * 1e-4 for k in range(n)], "c": 0.6050,
+    })
+
+
+def _e4b_sub_polylines():
+    from types import SimpleNamespace
+    pytest.importorskip("plotly")
+    from engine_v2.charting.export_m15_chart import _build_sub_polylines
+    lt = _e4b_ohlc(24, "15min")
+
+    def lt_time(i):
+        return lt["time"].iloc[int(i)] if 0 <= int(i) < len(lt) else None
+
+    poly = _build_sub_polylines(
+        SimpleNamespace(end_event_idx=None, starting_sd=1), _e4b_handoff_events(), lt,
+        lt_time, lambda i: int(i) + 100, lambda i: True)
+    return poly, lt
+
+
+def test_m15_sub_polyline_bos_dots_sit_at_the_bos_anchor():
+    """B1 (`_build_sub_polylines`): a sub's BOS dot is a LOCATION -- the BOS
+    anchor (2, 13), never `ev.idx` (the moment 5, 16 since Plan E E4b)."""
+    poly, lt = _e4b_sub_polylines()
+    bos = sorted((p[4], p[0], p[1], p[7]) for pts in poly["points_by_sid"].values()
+                 for p in pts if p[3] == "BOS")
+    assert bos == [(0, 2, lt["time"].iloc[2], 102), (1, 13, lt["time"].iloc[13], 113)]
+
+
+def test_m15_sub_polyline_pb_to_bos_line_ends_at_the_bos_anchor():
+    """B2 (`_build_sub_polylines`): the cross-structure PB→BOS line runs from
+    sid 0's pullback (11) to sid 1's first BOS ANCHOR (13), not its moment (16)."""
+    poly, lt = _e4b_sub_polylines()
+    (sid, pb_t, _, bos_t, bos_p, pb_idx, bos_idx), = poly["pb_to_bos_lines"]
+    assert (sid, pb_idx, bos_idx, bos_p) == (0, 11, 13, 0.6130)
+    assert (pb_t, bos_t) == (lt["time"].iloc[11], lt["time"].iloc[13])
+
+
+def _e4b_h1_overlay_fig():
+    go = pytest.importorskip("plotly.graph_objects")
+    from engine_v2.charting.export_m15_chart import _render_h1_overlay
+    h1 = _e4b_ohlc(24, "1h")
+    h1.attrs["structure_events"] = _e4b_handoff_events()
+    m15 = pd.DataFrame({"time": pd.date_range(h1["time"].iloc[0], periods=24 * 4,
+                                              freq="15min", tz="UTC")})
+    fig = go.Figure()
+    _render_h1_overlay(fig, m15, h1, {}, {}, {"labels": False}, {"levels": True},
+                       {"KL": False, "POI": False, "wave_candles": False})
+
+    def m15_t(i):   # an H1 candle's M15 x: its 4th quarter (the default mapping)
+        return h1["time"].iloc[i] + pd.Timedelta(minutes=45)
+    return fig, m15_t
+
+
+def test_h1_overlay_bos_dots_sit_at_the_bos_anchor():
+    """B3 (`_render_h1_overlay`): the H1 overlay's BOS dots sit at the BOS
+    anchors (2, 13), never at `ev.idx` (the moments 5, 16 since Plan E E4b)."""
+    fig, m15_t = _e4b_h1_overlay_fig()
+    tr, = [t for t in fig.data if t.name == "H1 BOS"]
+    assert sorted(int(c[0]) for c in tr.customdata) == [2, 13]
+    assert sorted(tr.x) == [m15_t(2), m15_t(13)]
+
+
+def test_h1_overlay_pb_to_bos_line_ends_at_the_bos_anchor():
+    """B4 (`_render_h1_overlay`): the H1 overlay's PB→BOS line ends at sid 1's
+    first BOS ANCHOR (13), not its moment (16)."""
+    fig, m15_t = _e4b_h1_overlay_fig()
+    tr, = [t for t in fig.data if t.name == "H1 PB→BOS sid=0"]
+    assert tuple(tr.x) == (m15_t(11), m15_t(13))
+    assert tuple(tr.y)[1] == 0.6130
+
+
+def _e4b_h1_chart_fig(tmp_path, monkeypatch):
+    go = pytest.importorskip("plotly.graph_objects")
+    from engine_v2.charting.export_plotly import export_chart_plotly
+    from engine_v2.multitf.registry import StructureRegistry
+    from engine_v2.structure.structure_engine import compute_bounded_structure
+    from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_df
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        res = compute_bounded_structure(_prepare_df(_make_multicycle_data()), 0, +1)
+    df = res.df.copy()
+    df.attrs["structure_events"] = _e4b_handoff_events()   # the chart reads events only
+    reg = StructureRegistry()
+    reg.register("H1", df=df, timeframe="H1", role="main")
+    figs = []
+    monkeypatch.setattr(go.Figure, "write_html", lambda self, *a, **k: figs.append(self))
+    monkeypatch.setattr(go.Figure, "write_image", lambda self, *a, **k: None)
+    cfg = {"structure": {"levels": True}, "struct_state": {"labels": False},
+           "range_visual": {"rectangles": False}, "fib": {"lines": False},
+           "imbalance": {"highlight": False}, "zones": {"wave_candles": False},
+           "volume": {"bars": False, "ema_line": False, "spike_marker": False}}
+    with contextlib.redirect_stdout(io.StringIO()):
+        export_chart_plotly(title="t", registry=reg, path_id="H1", out_dir=tmp_path, cfg=cfg)
+    fig, = figs
+    return fig, df
+
+
+def test_h1_chart_bos_dots_sit_at_the_bos_anchor(tmp_path, monkeypatch):
+    """B5 (`export_plotly`, explicit since the E4b landing review): the H1
+    chart's confirmed-BOS dots sit at the BOS anchors (2, 13), never at `ev.idx`
+    (the moments 5, 16)."""
+    fig, df = _e4b_h1_chart_fig(tmp_path, monkeypatch)
+    trs = [t for t in fig.data if (t.name or "").startswith("BOS (confirmed)")]
+    assert sorted(int(c[0]) for t in trs for c in t.customdata) == [2, 13]
+    assert sorted(x for t in trs for x in t.x) == [df.loc[2, "time"], df.loc[13, "time"]]
+
+
+def test_h1_chart_pb_to_next_bos_line_ends_at_the_bos_anchor(tmp_path, monkeypatch):
+    """B6 (`export_plotly`): the H1 chart's PB→next-BOS line ends at sid 1's
+    first BOS ANCHOR (13), not its moment (16)."""
+    fig, df = _e4b_h1_chart_fig(tmp_path, monkeypatch)
+    tr, = [t for t in fig.data if t.name == "PB→BOS sid=0→1"]
+    assert tuple(tr.x) == (df.loc[11, "time"], df.loc[13, "time"])
+    assert tuple(tr.y)[1] == 0.6130

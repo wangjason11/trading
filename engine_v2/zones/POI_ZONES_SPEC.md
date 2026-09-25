@@ -131,7 +131,7 @@ FIB_LEVELS = [30, 50, 61.8, 80]  # percentages
 ```
 
 ### Anchor Points
-- **Anchor 1 (BOS):** idx & price of confirmed BOS — **LOCKED** once established
+- **Anchor 1 (BOS):** the BOS anchor (`ef.bos_anchor_idx`) & its price — **LOCKED** once established
 - **Anchor 2 (CTS):** idx & price of CTS — **UPDATES** as CTS moves to new extreme
 - **Only draw Fib if unfilled imbalance exists between the anchor points**
 
@@ -297,8 +297,9 @@ inactive snapshots so the chart can render them with faded styling.
 ### Prev BOS Line (Visualization Helper)
 
 After each reversal, a black horizontal line shows the Scenario 1 revert threshold:
-- **Start idx:** Last BOS idx of previous structure
-- **End idx:** Earliest CTS event at or after reversal_confirmed_idx
+- **Start idx:** the previous structure's last BOS anchor (`ef.bos_anchor_idx`)
+- **End idx:** the CTS anchor of the new sid's earliest-moment CTS_ESTABLISHED / CTS_UPDATED whose moment is
+  at or after reversal_confirmed_idx (Plan E E3d; the END is a location, Q6)
 - **Price:** Last BOS price of previous structure
 
 ### Unfilled vs Filled Imbalance

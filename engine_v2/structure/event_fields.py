@@ -11,8 +11,9 @@ A CTS / BOS event carries two candle indices with different roles:
 
 Every production read of a `CTS_ESTABLISHED` / `BOS_CONFIRMED` index names its
 role through this module, so the E4 flip (`ev.idx` := the moment; E4a
-`CTS_ESTABLISHED`, E4b `BOS_CONFIRMED`) changes no reader. Direct indexing only: every emitter writes these keys (event contract,
-LANDMINES "Event Contract Rules" rule 3) — never `.get(key, ev.idx)`.
+`CTS_ESTABLISHED`, E4b `BOS_CONFIRMED`) changes no reader. Direct indexing
+only: every emitter writes these keys (event contract, LANDMINES "Event
+Contract Rules" rule 3) — never `.get(key, ev.idx)`.
 
 Call QUALIFIED — `from engine_v2.structure import event_fields as ef`;
 `ef.cts_anchor_idx(ev)`. A direct import would collide with the many locals and
@@ -102,8 +103,8 @@ def event_moment(ev: Any) -> int:
 
 def stamped_idx(ev: Any) -> int:
     """The index `ev.idx` held before the Plan E E4 flip, frozen against it: the
-    anchor for CTS_ESTABLISHED (whose `ev.idx` is the moment since E4a) /
-    BOS_CONFIRMED / CTS_UPDATED, `ev.idx` otherwise. Neither a location nor a
+    anchor for CTS_ESTABLISHED / BOS_CONFIRMED (whose `ev.idx` is the moment
+    since E4a / E4b) / CTS_UPDATED, `ev.idx` otherwise. Neither a location nor a
     moment by itself (user decision 2026-09-24, E2b). Its uses:
 
     - the event processing order (`processing_order_key`, the sort pins);

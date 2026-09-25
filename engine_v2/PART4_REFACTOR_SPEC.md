@@ -711,7 +711,8 @@ dormant** (like the `pending` finalize conditions).
   reversal watch / pending reversal / pending rewind) after the 2nd
   `CTS_ESTABLISHED` — in addition to the `probe_end_idx` bound, never instead
   of it (`n_cts ≤ 1` runs still reach `probe_end_idx`); finalize = that CTS's
-  moment (`confirmed_at`), not its `.idx` (the extreme). Byte-identical on the
+  moment (`confirmed_at`), not its CTS anchor (`cts_anchor_idx`, the extreme; `.idx` until Plan E
+  E4a). Byte-identical on the
   reference window (FC(0,0) stops at 1021 for finalize 1020, FC(0,1) at 2609
   for 2608; `.idx == confirmed_at` for both). Two different "anchor"s here:
   the parent's `cts_anchor_idx` (H1, the probe bound) vs the probe's own M15
@@ -2974,7 +2975,7 @@ rev_by_sid[S]     = STATE_CHANGED→reversal idx of sid S          (compute_reve
 struct_start[S]   = reversal handoff floor                       (compute_struct_start_by_sid)
 cts_moment[(S,C)] = CTS_ESTABLISHED.meta["confirmed_at"]          # the MOMENT the cycle was established
                                                                  #   (== BOS_CONFIRMED.confirmed_at, definitional;
-                                                                 #   last-seen per (S,C)) — NOT .idx (the extreme)
+                                                                 #   last-seen per (S,C)) — NOT the CTS anchor (the extreme)
 parent_sd[S]      = CTS_ESTABLISHED.meta["struct_direction"]
 floor_h1[(S,C)]   = max(struct_start[S], cts_moment[(S,C)])      # == the cycle's CLAMPED lifecycle-start
 end_h1[(S,C)]     = floor_h1[(S,C+1)] if it exists, else rev_by_sid[S], else None

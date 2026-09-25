@@ -25,7 +25,7 @@ def _ev(idx: int, type_: str, sid: int, sd: int = 1, **extra) -> StructureEvent:
     meta: Dict[str, Any] = {"structure_id": sid, "struct_direction": sd}
     # CTS_ESTABLISHED / BOS_CONFIRMED: the `idx` argument is the anchor
     # (`make_event`); the moment defaults to it (lag 0) unless a test passes
-    # `confirmed_at` (a CTS_ESTABLISHED's own idx is the moment, Plan E E4a).
+    # `confirmed_at` (the event's own idx is the moment, Plan E E4a / E4b).
     if type_ in ("CTS_ESTABLISHED", "BOS_CONFIRMED"):
         meta["confirmed_at"] = idx
     meta.update(extra)

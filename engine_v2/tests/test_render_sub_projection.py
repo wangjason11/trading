@@ -25,11 +25,10 @@ never read off the code's output):
       `parent_tf`, `sub_id` (identity) + informational `parent_sid` /
       `parent_cycle_id` / `use_case` / `started_by` from the first record (§6.1
       / §17.9).
-  R5  Events are clipped by KNOWABLE-AT at the cap (`BOS_CONFIRMED` is known at
-      `meta["confirmed_at"]`, every other event at `ev.idx` — a
-      `CTS_ESTABLISHED`'s idx IS its moment since Plan E E4a; a pattern-path
-      `CTS_UPDATED` is known at `confirmed_at` since E3b, none lags in this
-      geometry; `<= cap` inclusive)
+  R5  Events are clipped by KNOWABLE-AT at the cap (every event at its moment:
+      `ev.idx` — a `CTS_ESTABLISHED` / `BOS_CONFIRMED`'s idx IS its moment
+      since Plan E E4a / E4b; a pattern-path `CTS_UPDATED` is known at
+      `confirmed_at` since E3b, none lags in this geometry; `<= cap` inclusive)
       and DEEP-COPIED — geometry objects are shared, so mutating a mirrored
       event's meta must not touch `bounded.events` (§6.1, §12 landmine).
   R6  KL zones inherit the window: `confirmed_idx >= sub.start_idx` (the floor
@@ -312,7 +311,9 @@ def _render(sub: PooledStructure, m15_df: pd.DataFrame,
 def _knowable_at(ev) -> int:
     """§17.9 / R5, written out independently of `knowable_at_idx`: a
     `BOS_CONFIRMED` is known at `meta["confirmed_at"]`; every other event at
-    `ev.idx` (a `CTS_ESTABLISHED`'s idx IS its moment since Plan E E4a)."""
+    `ev.idx`. (Since Plan E E4a / E4b a `CTS_ESTABLISHED` / `BOS_CONFIRMED`'s idx
+    IS its moment, so the BOS branch equals `ev.idx`; the anchor-vs-moment
+    discrimination lives in the straddle test's anchor 55 / moment 57.)"""
     if ev.type == "BOS_CONFIRMED" and ev.meta.get("confirmed_at") is not None:
         return int(ev.meta["confirmed_at"])
     return int(ev.idx)
@@ -604,7 +605,7 @@ def test_events_clipped_by_knowable_at_inclusive_at_cap(geometry, m15_df):
         assert all(k <= sub.end_idx for (_, _, k) in got)
 
 
-def test_bos_straddling_the_cap_is_clipped_by_confirmed_at_not_idx(geometry, m15_df):
+def test_bos_straddling_the_cap_is_clipped_by_its_moment_not_its_anchor(geometry, m15_df):
     """The BOS_0 of this geometry has its EXTREME (anchor) at 55 and is CONFIRMED
     at 57 (entity-absolute; its `ev.idx` since Plan E E4b). A cap of 56 lies
     between them: the anchor (55) is inside the window but the break was not

@@ -58,7 +58,7 @@ def _run(rows, *, mutate=None, lifecycle_floor=None, lifecycle_cap=None,
         events = copy.deepcopy(events)
         mutate(events)
         # A post-construction edit bypasses the autouse validator: re-check
-        # the contract (a CTS_ESTABLISHED's idx IS its moment, Plan E E4a).
+        # the contract (the event's idx IS its moment, Plan E E4a / E4b).
         from engine_v2.tests.conftest import validate_event_contract
         for e in events:
             validate_event_contract(e)

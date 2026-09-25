@@ -66,8 +66,9 @@ class ReferenceZone:
 
     - ``cts_confirmed`` → ``cts_anchor_idx`` (the CTS extreme, NOT the
       later confirmation candle)
-    - ``cts_updated`` / ``cts_established`` → the event's own idx (which
-      IS the CTS extreme for these types)
+    - ``cts_updated`` / ``cts_established`` → the CTS anchor
+      ``ef.cts_anchor_idx(ev)`` (the CTS extreme; not an EST's ``ev.idx``,
+      the moment since Plan E E4a)
     - ``parent_cts`` / ``parent_bos`` → the parent's CTS / BOS extreme
       idx (used by ``first_*`` triggers whose reference is the parent's
       existing zone)

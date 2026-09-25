@@ -615,3 +615,20 @@ def test_initial_pass_applies_events_known_at_scan_start():
     tr = check_zone_proximity(df=df, sorted_events=events, kl_zones=[bos, cts],
                               poi_zones=[], pip_size=0.0001, timeframe="H1")[(0, 0)]
     assert [(t.direction, t.idx) for t in tr] == [("sd", 2), ("opp_sd", 10)]
+
+
+# --- E4b landing review: the scan window's next-BOS bound is a TIME -------------------
+
+def test_scan_window_ends_before_the_next_bos_moment_not_its_anchor():
+    """(Plan E E4b landing review, mutation lens.) The scan window ends at the next
+    cycle's BOS_CONFIRMED MOMENT - 1 (`confirmed_at` 16 -> 15), not at its anchor
+    - 1 (12 -> 11): a touch at 14 -- after the next BOS's anchor but before that
+    BOS is known -- still fires."""
+    df = _make_df(30, default_h=1.50, default_l=1.49)
+    df.at[14, "l"] = 1.4005   # 5 pips above the BOS inner 1.40
+    bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
+    next_bos = make_bos_confirmed(bos_anchor_idx=12, confirmed_at=16, price=1.50,
+                                  structure_id=0, cycle_id=1)
+    tr = check_zone_proximity(df=df, sorted_events=[_cts_confirmed(2), next_bos],
+                              kl_zones=[bos], poi_zones=[], pip_size=0.0001, timeframe="H1")
+    assert [(t.direction, t.idx) for t in tr[(0, 0)]] == [("sd", 14)]

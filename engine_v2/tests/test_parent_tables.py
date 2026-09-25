@@ -45,7 +45,7 @@ def _ev(idx: int, type_: str, sid: int, cycle: Optional[int] = None, sd: int = 1
     meta.update(extra)
     category = "STATE" if type_ == "STATE_CHANGED" else "STRUCTURE"
     # CTS_ESTABLISHED / BOS_CONFIRMED: the `idx` argument is the ANCHOR (`make_event`); the event's idx is the
-    # contract's (the moment on CTS_ESTABLISHED since Plan E E4a).
+    # contract's (the moment on both types since Plan E E4a / E4b).
     return make_event(type_, idx, category=category, **meta)
 
 

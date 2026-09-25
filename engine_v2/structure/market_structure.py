@@ -1510,7 +1510,7 @@ class MarketStructure:
                         bos_anchor_idx=bos_anchor_idx,
                         meta={
                             "source": "initial_prior_extreme",
-                            "confirmed_at": apply_idx,
+                            "confirmed_at": int(apply_idx),
                             "pb_start": self.state.last_pullback_pat_apply_idx,
                         },
                     )
@@ -1526,7 +1526,7 @@ class MarketStructure:
                         bos_anchor_idx=bos_anchor_idx,
                         meta={
                             "source": "pullback_extreme",
-                            "confirmed_at": apply_idx,
+                            "confirmed_at": int(apply_idx),
                             "pb_start": self.state.last_pullback_pat_apply_idx,
                         },
                     )

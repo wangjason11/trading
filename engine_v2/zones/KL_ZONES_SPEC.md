@@ -292,8 +292,8 @@ the CTS-established *moment* (the same value POI inherits through
 
 Why the two definitions can differ: a breakout emits `BOS_{n+1} CONFIRMED`
 (`confirmed_at` = breakout `apply_idx`) and `CTS_{n+1} ESTABLISHED`
-(`ev.idx` = the breakout-window extreme, `meta["confirmed_at"]` = the same
-`apply_idx`) together. When the apply candle *is* the extreme (the common case),
+(`meta["cts_anchor_idx"]` = the breakout-window extreme — `ev.idx` until Plan E E4a;
+`ev.idx` = `meta["confirmed_at"]` = the same `apply_idx`) together. When the apply candle *is* the extreme (the common case),
 extreme and moment coincide; otherwise the extreme is earlier (bound and lag
 figures: `ARCHITECTURE.md` "`ev.idx` convention"). **Empirically
 (history):** all 10 H1 zones in baseline `e0b70dd` had `confirmed_at == ev.idx`,

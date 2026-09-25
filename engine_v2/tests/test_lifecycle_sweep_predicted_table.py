@@ -90,7 +90,7 @@ def _loh(parent_idx: int, _h1_df: Any, _m15_df: Any) -> Optional[int]:
 
 def _ev(idx: int, category: str, ev_type: str, price: Optional[float], **meta) -> StructureEvent:
     # CTS_ESTABLISHED / BOS_CONFIRMED: the `idx` argument is the ANCHOR (`make_event`); the event's idx is the
-    # contract's (the moment on CTS_ESTABLISHED since Plan E E4a).
+    # contract's (the moment on both types since Plan E E4a / E4b).
     return make_event(ev_type, idx, price=price, category=category, **meta)
 
 
