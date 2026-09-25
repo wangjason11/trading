@@ -1017,7 +1017,7 @@ the real emitter.
   `.idx` as its anchor moved to `ef.bos_anchor_idx` (the render-projection straddle + KL floor tests) and the
   Plan-B-save CSV loader translates pre-E4b BOS rows. Tests 910 → 913 + 1 xfail. Commit `7216c9d`; save
   `20260925_125921_7216c9d`.
-  - **Pre-review mutation loop (mine, per the E4a lesson; `%TEMP%/pe/e4b_mut/harness.py`):** each of the 12 BOS
+  - **Pre-review mutation loop (mine, per the E4a lesson; `plan_e_inputs/review_scripts/mut_loc_e4b.py`):** each of the 12 BOS
     LOCATION readers switched from `ef.bos_anchor_idx(X)` to the raw `int(X.idx)` (the moment since E4b), full
     suite each: 7 killed (FC input, prev-BOS start, fib BOS point, structure levels, KL anchor, `stamped_idx`, the
     H1 BOS dot — incidentally), **5 chart sites survived** (the M15 sub-chart BOS dot + PB→BOS line end, the H1
@@ -1071,7 +1071,7 @@ the real emitter.
   `ef.cts_anchor_idx` / `stamped_idx` bullets), GLOSSARY (moment, `event.idx`, `confirmed_at`, `CTS_UPDATED`),
   GOTCHAS, LANDMINES knowable-at clip, PRE_REFACTOR_INVARIANTS, WORKFLOWS, IMBALANCE_FILL_SEMANTICS,
   WAVE_CANDLES_SPEC, the `/compare` skill, code comments. Commit `c182eb6`; save `20260925_133849_c182eb6`.
-  - **Pre-review mutation loop (mine; `%TEMP%/pe/e4c_mut/harness.py`):** each of 14 CTS location reads switched to
+  - **Pre-review mutation loop (mine; `plan_e_inputs/review_scripts/mut_loc_e4c.py`):** each of 14 CTS location reads switched to
     the raw `ev.idx` for CTS_UPDATED only, full suite each: 5 killed (the reference zone, FibTracker's update
     handler, the POI pre-window branch, `stamped_idx`, and the wave-walk sort — by the AST guard only), **9
     survived** — the 4 chart unconfirmed-CTS sites, the prev-BOS line END, `structure_levels`, the POI in-window
