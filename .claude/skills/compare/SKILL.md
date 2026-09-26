@@ -463,7 +463,8 @@ shapes_equal" per chart; on a difference list the first differing traces
 (name + x before → after). Plan E E2 stages must be figure-identical; the E4
 variant replays must differ exactly in PLAN_E §8's cells. Tool:
 `engine_v2/plans/plan_e_inputs/review_scripts/cmp_save.py BASE CUR_DEBUG CUR_CHARTS [--strip k]`
-(the CSV cell diff + this figure diff in one; the E4 variant recipe is in that folder's README).
+(the CSV cell diff + this figure diff in one; the E4 variant recipe is in that folder's README). Its CSV
+diff is POSITIONAL: on a header change (an added / renamed column) diff that CSV keyed by column name.
 
 ## Chart Count Parity (Corroborating check)
 

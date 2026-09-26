@@ -15,6 +15,10 @@ figure JSON). Plan E E2 (2026-09-24); used for every E2 `/compare` and E4 varian
 - Figures: per trace (name, x, y) and layout["shapes"] via
   `debug/chart_census.load_fig` — count parity cannot see a moved marker.
 
+The CSV diff is POSITIONAL (row, column index): a header change (an inserted / renamed
+column) shifts every later cell of the row and over-reports — diff such a CSV keyed by
+column name instead (Plan E Post-E·1a: 1 new column + 4 real cells showed as 16).
+
 Windows: keep BASE_DIR short (e.g. %TEMP%/pe/...); the saved file names exceed
 MAX_PATH under the long session scratchpad path.
 """

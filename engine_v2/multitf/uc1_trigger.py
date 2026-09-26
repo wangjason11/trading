@@ -63,7 +63,9 @@ def detect_uc1_triggers(
         # cts_ev.idx = confirmation candle (the moment); cts_anchor_idx = the CTS anchor
         cts_anchor_idx = ef.cts_anchor_idx(cts_ev)
 
-        # The CTS anchor seeds the probe input: it must lie inside the parent frame.
+        # The CTS anchor is this trigger's H1 input (the sweep's `parent_input_idx`;
+        # informational — the sibling-CTS probe co-sources its M15 input); it must lie
+        # inside the parent frame.
         if cts_anchor_idx not in h1_df.index:
             continue
 

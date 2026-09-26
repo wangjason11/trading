@@ -232,8 +232,9 @@ class UnresolvedTrigger:
     (PLAN_E §9.2): `parent_input_idx` = the parent trigger's H1 input candle
     (`SweepTrigger.parent_input_idx`; every parent-triggered type — it seeds the
     probe only for `first_confluence`; None for `reversal`); `probe_input_idx` =
-    the M15 input the resolver had mapped / co-sourced before it failed (None when
-    it never got one — every `pending` / `degenerate_parent_cycle` row)."""
+    the M15 input the resolver had mapped / co-sourced — a `ProbeFailure`'s, or the
+    successful `ResolvedStart`'s on a `geometry_failed` row (None when it never got
+    one — every `pending` / `degenerate_parent_cycle` row)."""
     lens: str
     parent_sid: int
     parent_cycle_id: int

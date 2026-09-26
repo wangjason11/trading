@@ -1804,3 +1804,59 @@ def test_incumbent_plus_two_same_idx_starters_degrades_with_warning_not_raise():
     assert pool.active_record(CONF, 0, 0, +1, 502) is recI
     assert result.unresolved == []
     _assert_sweep_invariants(pool)
+
+
+# =============================================================================
+# Orchestrator wiring: `_run_multi_tf_dual` builds one SweepTrigger per H1 trigger (PLAN_E §9.2)
+# =============================================================================
+
+def test_orchestrator_sweep_triggers_carry_each_types_h1_parent_input(monkeypatch):
+    """PLAN_E §9.2: `_run_multi_tf_dual` stamps every parent-triggered SweepTrigger's
+    `parent_input_idx` with the H1 input of ITS trigger — FC / subsequent_* `input_idx`,
+    first_counter `meta["probe_input_idx"]` (the cycle's CTS anchor) — never another H1 idx
+    (the trigger event, the FC probe end). The orchestrator imports its collaborators INSIDE
+    the function, so they are monkeypatched on their defining modules; the sweep stub
+    captures the triggers and aborts (nothing past step 4 runs)."""
+    from types import SimpleNamespace
+    from engine_v2.pipeline.orchestrator import _run_multi_tf_dual
+
+    class _Stop(Exception):
+        pass
+
+    captured: List[SweepTrigger] = []
+
+    def _sweep(triggers, **_kw):
+        captured.extend(triggers)
+        raise _Stop
+
+    mt = lambda _v, _h1: SimpleNamespace(parent_sid=0, parent_cycle_id=1, lower_sd=+1)   # noqa: E731
+    for mod in ("first_confluence_pipeline", "subsequent_confluence_pipeline", "subsequent_counter_pipeline"):
+        monkeypatch.setattr(f"engine_v2.multitf.{mod}.to_multi_tf_trigger", mt)
+    v2 = SimpleNamespace(parent_sid=0, parent_cycle_id=1, lower_sd=-1,
+                         meta={"trigger_event_idx": 12, "probe_input_idx": 9})
+    monkeypatch.setattr("engine_v2.multitf.uc1_trigger.detect_uc1_triggers", lambda *a, **k: [v2])
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
+                        lambda *a, **k: pd.DataFrame({"time": [0]}))
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
+    monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables", lambda *a, **k: None)
+    monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",
+                        lambda p, _h1, _m15: 4 * int(p) + 3)
+    monkeypatch.setattr("engine_v2.multitf.lifecycle_sweep.run_lifecycle_sweep", _sweep)
+
+    h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
+    # every H1 idx distinct, so a wrong source (trigger event / probe end) cannot pass
+    v1 = SimpleNamespace(status="finalized", trigger_event_idx=10, input_idx=3, probe_end_idx=7)
+    v3 = SimpleNamespace(trigger_event_idx=20, input_idx=15)
+    v4 = SimpleNamespace(trigger_event_idx=30, input_idx=25)
+    with pytest.raises(_Stop):
+        _run_multi_tf_dual(
+            h1, [], [], [], [], {}, None,
+            first_confluence_triggers=[v1], subsequent_confluence_triggers=[v3],
+            subsequent_counter_triggers=[v4],
+        )
+    assert [(t.trigger_type, t.trigger_idx, t.parent_input_idx) for t in captured] == [
+        ("first_confluence", 43, 3),        # LOH(10) = 43; H1 input = the BOS anchor 3 (not end 7)
+        ("first_counter", 51, 9),           # LOH(12) = 51; H1 input = meta probe_input_idx 9
+        ("subsequent_confluence", 83, 15),  # LOH(20) = 83
+        ("subsequent_counter", 123, 25),    # LOH(30) = 123
+    ]

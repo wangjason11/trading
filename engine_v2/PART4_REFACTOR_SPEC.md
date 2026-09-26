@@ -3064,11 +3064,14 @@ Reference window values: floors `(0,0)=463 (0,1)=2611 (1,x)=3611`; ends
   `reason ∈ {pending, degenerate_parent_cycle, probe_failed, geometry_failed}`
   with the trigger's identity, `trigger_idx`, direction, the parent trigger's
   H1 input (`parent_input_idx`; None for `reversal`), the M15 probe input the
-  resolver had reached before it failed (`probe_input_idx`; empty when it never
+  resolver had reached (`probe_input_idx` — a `ProbeFailure`'s, or the
+  successful `ResolvedStart`'s on a `geometry_failed` row; empty when it never
   got one — every `pending` / `degenerate_parent_cycle` row) — one frame per
   column since Plan E Post-E·1 (2026-09-26, PLAN_E §9.2) — and free-text
-  detail. `probe_failed` covers the resolver's failure
-  branches (no CTS reference zone, input ≥ reversal, pending); a failed
+  detail. `probe_failed` covers every resolver `ProbeFailure` (a missing /
+  unmappable / out-of-bounds input or end, no reference zone, a degenerate
+  window (input ≥ end), a probe that did not finalize) and a resolver returning
+  None; a failed
   geometry build creates **no pool entry** (MS runs first; the entry is created
   only on success — rev 1's `get_or_create`-first order left a geometry-less
   entry that consumed a `sub_id` and turned every later trigger to that key

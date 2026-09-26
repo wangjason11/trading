@@ -459,8 +459,22 @@ class TestResolveFirstConfluence:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
         mock_probe.assert_not_called()
         assert isinstance(res, ProbeFailure)
-        assert "out of parent bounds" in res.detail
+        assert "probe_end_idx 99 out of parent bounds" in res.detail   # the END branch, not the input's
         assert res.probe_input_idx == 13            # the mapped M15 input, not the H1 3 (PLAN_E §9.2)
+
+    def test_input_out_of_parent_bounds_returns_probe_failure_without_input(self):
+        h1, m15 = self._fixtures()
+        # H1 input 99 is not in parent_df: nothing is mapped → no M15 input (PLAN_E §9.2).
+        trig = _make_trigger(
+            "first_confluence", parent_sd=1, lower_sd=1,
+            probe_input_idx=99, probe_end_idx=7,
+        )
+        with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
+            res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
+        mock_probe.assert_not_called()
+        assert isinstance(res, ProbeFailure)
+        assert "99 out of parent bounds" in res.detail
+        assert res.probe_input_idx is None
 
     def test_end_mapping_failure_returns_probe_failure_with_m15_input(self):
         # parent_df has 10 hours, the M15 frame covers the first 5: input H1 3 → 13 maps,
@@ -798,6 +812,32 @@ class TestResolveSiblingCts:
         mock_probe.assert_not_called()
         assert isinstance(res, ProbeFailure)
         assert res.probe_input_idx == 23             # reported for traceability
+
+    # --- (9b) pending probe → ProbeFailure carrying the M15 input -----------
+    def test_pending_probe_returns_probe_failure_with_m15_input(self):
+        h1, m15 = self._fixtures()
+        pool = SubStructurePool()
+        # The confluence-lens sibling of (1): slice-local CTS_CONFIRMED 6 / anchor 4,
+        # slice_begin 2 → co-sourced M15 input 6. The probe does not finalize →
+        # ProbeFailure carrying that M15 input (the unresolved row's `probe_input_idx`,
+        # PLAN_E §9.2) — never None, never the trigger's H1 input 1.
+        sib = _stub_sub(pool, direction=1, starting_idx=4, slice_begin=2,
+                        events=[_cts_event("CTS_CONFIRMED", 6, 4)])
+        _rec(sib, pool=pool, lens="confluence", S=0, C=2, tss=0, trigger_type="first_confluence",
+             trigger_idx=3, start_idx=4, seq=0)
+        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, probe_end_idx=5)
+        pending = _fake_probe_result(
+            starting_idx=0, status="pending",
+            finalize_condition="no_cts_pending", finalize_idx=None,
+        )
+        with _patched_cts_derivation(), _patched_probe(return_value=pending) as mock_probe:
+            res = _resolve_sibling_cts_via_unified_probe(
+                trig, h1, m15, pool=pool, hi=23,
+            )
+        mock_probe.assert_called_once()
+        assert isinstance(res, ProbeFailure)
+        assert res.detail == "probe pending"
+        assert res.probe_input_idx == 6
 
     # --- (10) primitive gets kl_zones=[] + the SHARED frame + shifted copies -
     def test_primitive_called_with_empty_kl_zones_and_shared_frame(self):

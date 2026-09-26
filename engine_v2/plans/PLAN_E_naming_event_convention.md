@@ -1108,7 +1108,7 @@ the real emitter.
 - the fetch-gate N/A edge case;
 - moment-order processing (Q3);
 - the unresolved-triggers CSV `probe_input_idx` frame mix (H1 "whatever was known" for the parent-triggered
-  types vs M15) — split into `parent_input_idx` (H1) + `probe_input_idx` (M15, when a probe ran); one exported
+  types vs M15) — split into `parent_input_idx` (H1) + `probe_input_idx` (M15, when the resolver got one — §9.2); one exported
   `/compare` (user 2026-09-26: "fix later"). **TAKEN 2026-09-26 (Post-E·1, §9.2).**
 
 ### 9.1 E5 as landed
@@ -1317,6 +1317,35 @@ the real emitter.
   put the H1 25 there); geometry_failed asserts both inputs. Docs: GLOSSARY `probe_input_idx` / new
   `parent_input_idx` / `SweepTrigger` / `ResolvedStart / ProbeFailure` / `UnresolvedTrigger`; PART4 §17.7;
   `uc1_trigger.py` comment. History kept: PLAN_C §2 `UnresolvedTrigger` sketch, PLAN_E §9.1 E5·4b text.
+  **Landed `1756c30`, save `20260926_120641_1756c30`** (save `c2a569b`, trunk `f6e9fbe`).
+- **Post-E·1a landing review (2026-09-26; 2 parallel lenses ≈334k).** Conformance (≈186k): 0 BLOCKER / MAJOR;
+  every unresolved path one frame per column; every `ProbeFailure` in the three resolvers M15 or None (reversal
+  shifted by `slice_begin`); "only FC price-maps its H1 input" verified. MINOR: GLOSSARY `parent_input_idx` said
+  "from `MultiTFTrigger.meta`" (true only for `first_counter`; the others read the typed trigger's `input_idx`);
+  `uc1_trigger.py` "the CTS anchor seeds the probe input" (pre-existing, contradicts the sibling resolver); no
+  unit pin on the orchestrator's four `SweepTrigger` constructions (a wrong `subsequent_counter` source is
+  invisible even to `/compare` — no such unresolved row on the window). NIT: the `geometry_failed` row carries a
+  SUCCESSFUL resolver's input ("before it failed" was wrong ×3); PART4 §17.7's `probe_failed` list was
+  reversal-only; the §9 Post-E bullet "(M15, when a probe ran)"; GLOSSARY Naming Standard — `*_input_idx` is a
+  role name; the `cmp_save.py` positional caveat only in the README; FC end-out-of-bounds detail assert matched
+  the input branch too, the FC input-out-of-bounds branch unpinned; the FC detector comment "FC pool key".
+  Mutation (≈148k; 31 mutants on a `git archive` copy): 23 killed, 8 survived — O1–O7 (every orchestrator
+  `SweepTrigger` source → None / a wrong H1 idx: no test ran `_run_multi_tf_dual`) and SB2 (the unchanged sibling
+  "probe pending" branch → None); no defect. Pins: `test_orchestrator_sweep_triggers_carry_each_types_h1_parent_input`
+  (monkeypatches the in-function imports, captures the sweep's triggers; kills O1–O7 — O4 re-verified by the main
+  loop) and `TestResolveSiblingCts::test_pending_probe_returns_probe_failure_with_m15_input` (kills SB2). All
+  folded in (byte-identical fold-in) + `test_input_out_of_parent_bounds_returns_probe_failure_without_input`;
+  tests 939 → **942 + 1 xfail**. Kept: the predicted-table sibling stand-ins (820 / 871, disclosed).
+- **Post-E·1b sites (from the conformance lens):** writers `first_confluence_pipeline.py:45` (+ docstring :5),
+  `subsequent_confluence_pipeline.py:42` / `subsequent_counter_pipeline.py:42` (+ their docstrings :5-6 — also
+  false: the H1 input is informational there), `uc1_trigger.py:82` (+ comments); readers `entity_df_mutation.py:623`
+  (`.get` → `meta[...]`; print / detail strings :626-632 put the H1 value under the M15 name) and
+  `orchestrator.py:888` (`.get` → `meta[...]`, so a missed writer fails loudly); implicit: `_synth_reversal_trigger`
+  copies `{**source_trigger.meta}` (reversal triggers inherit the unread H1 key — decide keep / drop); tests: the
+  three pipeline tests, `test_first_trigger_migration.py` `_make_trigger` / `_fc` helpers + callers + comment,
+  the new orchestrator pin's `v2.meta`; docs: GLOSSARY `parent_input_idx` + LOH rows, PART4 §9.4 (~1830) the
+  `MultiTFTrigger` field list, memory `project_part4_progress.md` (meta-key line). Out of scope: `meta["probe_end_idx"]`
+  stays H1 while `ProbeResult.probe_end_idx` is M15 (the same name / frame split for the end bound).
 ---
 
 ## 10. Open questions for the user (recommendation first; concrete window data)

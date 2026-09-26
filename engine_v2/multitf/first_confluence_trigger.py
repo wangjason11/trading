@@ -67,7 +67,7 @@ def detect_first_confluence_triggers(
         if parent_sd == 0:
             continue
 
-        input_idx = ef.bos_anchor_idx(ev)   # the BOS anchor: the probe input / FC pool key
+        input_idx = ef.bos_anchor_idx(ev)   # the BOS anchor: the FC probe's H1 input (price-mapped to its M15 input)
         trigger_event_idx = ef.event_moment(ev)
 
         cts_conf = cts_conf_by_key.get((sid, cycle_id))
