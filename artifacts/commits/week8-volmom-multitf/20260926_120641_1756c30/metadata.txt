@@ -1,0 +1,4 @@
+commit_hash=1756c30
+timestamp=20260926_120641
+branch=week8-volmom-multitf
+commit_message=Plan E Post-E·1a: unresolved-triggers CSV splits the input into parent_input_idx (H1) + probe_input_idx (M15-only) (EXPORTED)
