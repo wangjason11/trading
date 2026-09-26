@@ -308,7 +308,8 @@ def test_record_start_floor_finalize_binds():
     (the groundtruth's sub 0). Historical fields stay raw."""
     pool = SubStructurePool()
     tables = _tables({(0, 0): (463, 2611)}, {0: +1})
-    resolve = _resolver({(CONF, 463): _rs(454, 1020, validated=96, cond="second_cts_reached")})
+    resolve = _resolver({(CONF, 463): _rs(454, 1020, validated=96, cond="second_cts_reached",
+                                          probe_input=385)})
     geom = _geom(pool, {(+1, 454): 1940, (-1, 1797): None})
     rev = _rev_resolver({(+1, 454): 1797})
     result, _ = _run(
@@ -320,7 +321,8 @@ def test_record_start_floor_finalize_binds():
     assert (rec.trigger_idx, rec.probe_finalize_idx, rec.parent_floor_idx) == (463, 1020, 463)
     assert rec.start_idx == 1020                     # max(1020, 463, 463)
     assert rec.probe_finalize_condition == "second_cts_reached"
-    assert rec.parent_bos_anchor_idx == 96
+    assert rec.parent_bos_anchor_idx == 96           # H1 (FC only)
+    assert rec.probe_input_idx == 385                # the probe's M15 input, copied from the resolver
     assert (rec.trigger_sub_sid, rec.relative_dir, rec.sub_id) == (0, CONF, s0.sub_id)
     # sub start = the first non-zero-length record's start_idx (§2.2)
     assert s0.start_idx == 1020

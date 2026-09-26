@@ -1106,7 +1106,10 @@ the real emitter.
 - the coordinate-hygiene families (IN §2.8 last row; one `/compare` each);
 - the never-established-cycle fallback POI (0 on this window since Plan F);
 - the fetch-gate N/A edge case;
-- moment-order processing (Q3).
+- moment-order processing (Q3);
+- the unresolved-triggers CSV `probe_input_idx` frame mix (H1 "whatever was known" for the parent-triggered
+  types vs M15) — split into `parent_input_idx` (H1) + `probe_input_idx` (M15, when a probe ran); one exported
+  `/compare` (user 2026-09-26: "fix later").
 
 ### 9.1 E5 as landed
 
@@ -1234,7 +1237,21 @@ the real emitter.
   `20260925_165323_6c37053`, rename map `parent_bos_anchor_idx` → `validated_parent_idx`) == prediction:** both
   triggers headers renamed only; 4 cells → empty (conf sub 6; counter subs 3 / 5 / 7); FC 96.0 / 591.0 / 826.0
   unchanged; the other 22 CSVs byte-identical; figures JSON-identical; run.log identical; fetch gate PASS. Replay
-  44.4 s. Tests 935 + 1 xfail.
+  44.4 s. Tests 935 + 1 xfail. Commit `5d149b0`; save `20260926_104311_5d149b0`.
+- **E5·4b — `TriggerRecord.probe_input_idx` → a triggers-CSV column (2026-09-26; EXPORTED, additive).** The M15
+  candle the probe started from, for every resolved type (FC: the price-mapped parent BOS anchor; siblings: the
+  sibling CTS anchor; reversal: the handoff input) — the sweep copies `ResolvedStart.probe_input_idx`, which all
+  four resolvers already set. Required field (no default), placed after `parent_bos_anchor_idx`. **User 2026-09-26:
+  name it `probe_input_idx`** (= the field it copies) and fix the unresolved CSV later: `UnresolvedTrigger
+  .probe_input_idx` is "whatever was known" — H1 for the four parent-triggered types when no probe ran (this
+  window: 689 / 728 / 761 / 826), M15 for reversal / a failed sibling probe — the same frame mix Q4 removed from
+  the triggers CSV (follow-up below). Tests: the 7 constructors pass it; pins — the sweep copies the resolver's
+  value (`test_lifecycle_sweep_unit`, FC(0,0) 385) and the export writes it (`test_sub_tables_export`); the
+  column-order pin. Docs: GLOSSARY `probe_input_idx` row (both CSVs' meanings), PART4 §17.4. **Measured (vs
+  `20260926_104311_5d149b0`) == prediction (from run.log's probe lines):** conf 385 / 1794 / 2365 / 2365 / 2609 /
+  3304 / 3760 / 4000, counter 2609 / 3621 / 4000, the column right after `parent_bos_anchor_idx`, the rest of both
+  files identical; the other 22 CSVs byte-identical; figures JSON-identical; run.log identical; fetch gate PASS.
+  Replay 44.1 s. Tests 935 + 1 xfail.
 - **Remaining E5:** ~~E5·3 = the IN §1.9 prose +
   §3 #14 + the Q12 `KLZone.source_time` documentation + the GLOSSARY Naming-Standard "Status" paragraph + from
   the E5·1 / E5·2 reviews: the `ReferenceZone` docstring (`anchor_idx` defined for every constructed source,

@@ -336,6 +336,8 @@ class _Sweep:
             probe_finalize_condition=str(res.finalize_condition),
             parent_bos_anchor_idx=(int(res.parent_bos_anchor_idx)
                                   if res.parent_bos_anchor_idx is not None else None),
+            probe_input_idx=(int(res.probe_input_idx)
+                             if res.probe_input_idx is not None else None),
             starting_idx=int(sub.starting_idx), direction=int(sub.direction), sub_tf=self.sub_tf,
             relative_dir=("confluence" if int(t.direction) == int(parent_sd) else "counter"),
             parent_floor_idx=floor,

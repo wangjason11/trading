@@ -142,7 +142,8 @@ class TriggerRecord:
     candle; native M15 for `reversal`), `probe_finalize_idx` (when THIS record's
     probe — the run keyed by (direction, initial input) — finalized; own run
     as-is, or the cached finalize on a probe-cache hit), `starting_idx` (= the
-    sub's structural anchor), `parent_bos_anchor_idx`.
+    sub's structural anchor), `parent_bos_anchor_idx` (FC only: the H1 BOS anchor),
+    `probe_input_idx` (the M15 candle the probe started from).
 
     Real-time: `start_idx = max(probe_finalize_idx, trigger_idx,
     parent_floor_idx)` — the record EXISTS from here and nothing earlier;
@@ -169,6 +170,7 @@ class TriggerRecord:
     probe_finalize_idx: int
     probe_finalize_condition: str
     parent_bos_anchor_idx: Optional[int]
+    probe_input_idx: Optional[int]   # the probe's M15 input (entity-absolute), every resolved type (PLAN_E E5·4b)
     starting_idx: int
     direction: int
     sub_tf: str

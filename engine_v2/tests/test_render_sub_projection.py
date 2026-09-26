@@ -241,6 +241,7 @@ def _record(
     trigger_idx: int = None,
     parent_bos_anchor_idx: int = None,
     trigger_end_idx: int = None,
+    probe_input_idx: int = None,
 ) -> TriggerRecord:
     """A §2.1 `TriggerRecord` appended to `sub.records` the way the sweep does.
 
@@ -262,6 +263,7 @@ def _record(
         probe_finalize_idx=start_idx,
         probe_finalize_condition="phase1_bounded",
         parent_bos_anchor_idx=parent_bos_anchor_idx,
+        probe_input_idx=probe_input_idx,
         starting_idx=sub.starting_idx,
         direction=sub.direction,
         sub_tf=sub.sub_tf,
