@@ -86,7 +86,7 @@ class SweepTrigger:
 class ResolvedStart(NamedTuple):
     """A resolver's success value (§5.2: the four-tuple + `finalize_condition`)."""
     starting_idx: int
-    validated_parent_idx: Optional[int]
+    parent_bos_anchor_idx: Optional[int]   # FC only: the H1 BOS anchor that seeded the probe (PLAN_E Q4)
     bos0_inner: Optional[float]
     finalize_idx: int
     finalize_condition: str
@@ -334,8 +334,8 @@ class _Sweep:
             trigger_type=t.trigger_type, trigger_idx=int(t.trigger_idx),
             probe_finalize_idx=finalize_idx,
             probe_finalize_condition=str(res.finalize_condition),
-            validated_parent_idx=(int(res.validated_parent_idx)
-                                  if res.validated_parent_idx is not None else None),
+            parent_bos_anchor_idx=(int(res.parent_bos_anchor_idx)
+                                  if res.parent_bos_anchor_idx is not None else None),
             starting_idx=int(sub.starting_idx), direction=int(sub.direction), sub_tf=self.sub_tf,
             relative_dir=("confluence" if int(t.direction) == int(parent_sd) else "counter"),
             parent_floor_idx=floor,

@@ -164,7 +164,7 @@ for t in trigs:
     res = captured.get("res")
     if isinstance(out, edm.ResolvedStart):
         m15_start, validated, bos0_inner, finalize_idx = (
-            out.starting_idx, out.validated_parent_idx, out.bos0_inner, out.finalize_idx,
+            out.starting_idx, out.parent_bos_anchor_idx, out.bos0_inner, out.finalize_idx,
         )
     else:  # ProbeFailure / None
         m15_start, validated, bos0_inner, finalize_idx = None, None, None, None

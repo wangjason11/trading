@@ -1219,6 +1219,22 @@ the real emitter.
     blockquote near "was then a DIFFERENT thing", LANDMINES "What was not foreseen", PRE_REFACTOR "before it
     …") WERE reworded, meaning unchanged (reviewer-checked). Lesson: a prose sweep's regex must include the
     bare-noun forms; classify EVERY `extreme` hit, not a phrase list.
+- **E5·4a — Q4 = (b): triggers CSV `validated_parent_idx` → FC-only `parent_bos_anchor_idx` (2026-09-26; EXPORTED).**
+  Measured first (user-reviewed table): the value was the H1 BOS anchor on the 3 FC rows (96 / 591 / 826) and the
+  M15 probe input on the 4 sibling rows (conf sub 6 3760; counter subs 3 / 5 / 7: 2609 / 3621 / 4000), None on
+  reversal rows — and those sibling cells were the ONLY place the CSVs exported a probe's M15 input (the subs CSV has
+  no input column; `probe_input_idx` was only in the UNRESOLVED CSV; run.log carries every input, incl. FC 385 /
+  2365 / 3304 and reversals 1794 / 2365 / 2609 / 4000). **User 2026-09-26: "(b), then add probe_input_idx"** — E5·4a
+  here, E5·4b = the new column. Change: the field on `ResolvedStart` + `TriggerRecord` (→ `_TRIGGER_COLUMNS`, auto)
+  renamed; the sibling resolver returns `None` (its M15 input stays `ResolvedStart.probe_input_idx`); FC / reversal
+  unchanged; `debug/probe_fc_finalize`; GLOSSARY row (+ the Status "pending" line removed), PART4 §17.4 row,
+  LANDMINES probe-cache note, docstrings; tests: the two sibling pins (`test_first_trigger_migration` (1) / (2),
+  its PLAN-AMBIGUITY comment resolved) now pin `None`, 41 renamed occurrences in 8 test files, the pass-through stubs
+  (sweep, export) keep non-None values with a comment naming the real rule. **Measured (vs
+  `20260925_165323_6c37053`, rename map `parent_bos_anchor_idx` → `validated_parent_idx`) == prediction:** both
+  triggers headers renamed only; 4 cells → empty (conf sub 6; counter subs 3 / 5 / 7); FC 96.0 / 591.0 / 826.0
+  unchanged; the other 22 CSVs byte-identical; figures JSON-identical; run.log identical; fetch gate PASS. Replay
+  44.4 s. Tests 935 + 1 xfail.
 - **Remaining E5:** ~~E5·3 = the IN §1.9 prose +
   §3 #14 + the Q12 `KLZone.source_time` documentation + the GLOSSARY Naming-Standard "Status" paragraph + from
   the E5·1 / E5·2 reviews: the `ReferenceZone` docstring (`anchor_idx` defined for every constructed source,

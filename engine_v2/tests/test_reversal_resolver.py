@@ -267,8 +267,8 @@ def test_happy_path_shifts_every_idx_by_slice_begin(built):
         assert slice_begin <= v < len(df)
     # A Phase-1 probe's anchor is at/after its input (resets move forward).
     assert res.probe_input_idx <= res.starting_idx <= res.finalize_idx
-    # Reversal-born: no parent probe seeded it (§2.1 validated_parent_idx None).
-    assert res.validated_parent_idx is None
+    # Reversal-born: no parent probe seeded it (§2.1 parent_bos_anchor_idx None).
+    assert res.parent_bos_anchor_idx is None
     # First probe of this key → it RAN (no hit).
     assert res.cache_hit is False
     # bos0_inner is the probe's own (iter-1 == the reference inner).
@@ -366,7 +366,7 @@ def test_second_call_is_a_cache_hit_and_skips_unified_probe(built):
     assert second.finalize_condition == first.finalize_condition
     assert second.probe_input_idx == first.probe_input_idx
     assert second.bos0_inner == pytest.approx(first.bos0_inner)
-    assert second.validated_parent_idx is None
+    assert second.parent_bos_anchor_idx is None
 
 
 @pytest.mark.parametrize("bound_delta", [0, -7], ids=["same_bound", "different_bound_APPROX"])
@@ -397,7 +397,7 @@ def test_seeded_cache_entry_is_returned_verbatim(built, bound_delta):
     assert res.finalize_condition == "end_idx_reached"
     assert res.bos0_inner == pytest.approx(0.123456)
     assert res.probe_input_idx == input_abs
-    assert res.validated_parent_idx is None
+    assert res.parent_bos_anchor_idx is None
     # The entry is untouched (first write wins; a hit writes nothing).
     assert pool.get_cached_probe(_PARENT, _TF, _PROBE_DIR, input_abs) == sentinel
 

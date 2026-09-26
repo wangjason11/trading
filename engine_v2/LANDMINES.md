@@ -2366,8 +2366,8 @@ parent_floor_idx)` absorbs it) and its own Phase-2 probe is skipped, so there
 is one fewer `[unified_probe phase2] early stop` line for an FC hit. `probe_finalize_condition`
 is the cached probe's. The sweep's `finalize_idx == trigger_idx` assert for
 non-FC types is bypassed on a hit (`ResolvedStart.cache_hit`). The record's
-`validated_parent_idx` is still its own (the H1 candle that seeded the probe;
-None only for reversal-born records).
+`parent_bos_anchor_idx` is still its own (the H1 BOS anchor that seeded an FC
+probe; None for every other type — PLAN_E Q4).
 
 **Measured on the first Plan C replay (reference window) — THREE hits:**
 

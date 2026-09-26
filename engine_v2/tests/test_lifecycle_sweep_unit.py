@@ -119,7 +119,7 @@ def _rs(
     cond: str = "stub", cache_hit: bool = False, probe_input: Optional[int] = None,
 ) -> ResolvedStart:
     return ResolvedStart(
-        starting_idx=starting_idx, validated_parent_idx=validated,
+        starting_idx=starting_idx, parent_bos_anchor_idx=validated,
         bos0_inner=bos0, finalize_idx=finalize_idx, finalize_condition=cond,
         probe_input_idx=probe_input, cache_hit=cache_hit,
     )
@@ -320,7 +320,7 @@ def test_record_start_floor_finalize_binds():
     assert (rec.trigger_idx, rec.probe_finalize_idx, rec.parent_floor_idx) == (463, 1020, 463)
     assert rec.start_idx == 1020                     # max(1020, 463, 463)
     assert rec.probe_finalize_condition == "second_cts_reached"
-    assert rec.validated_parent_idx == 96
+    assert rec.parent_bos_anchor_idx == 96
     assert (rec.trigger_sub_sid, rec.relative_dir, rec.sub_id) == (0, CONF, s0.sub_id)
     # sub start = the first non-zero-length record's start_idx (§2.2)
     assert s0.start_idx == 1020

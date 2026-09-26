@@ -192,14 +192,14 @@ def _predicted_table_projections():
       conf(0,1) FC [2611,2829] reversal -> sub window [2470,2829] reversal
       (same-candle handover at 2611: max_start=2611, 2611>2611 false -> continuous);
       nat_rev 2829; first live record (min start_idx) = the reversal-born one
-      -> validated_parent_idx None (reversal-born).
+      -> parent_bos_anchor_idx None (reversal-born).
     sub 3 = 2639/-1: conf(0,1) reversal [2829,3611] parent_end + ctr(0,1)
       first_counter [2843,3611] parent_end -> sub [2829,3611] parent_end,
       lenses both; first record = the confluence reversal at 2829.
     sub 7 = 4027/+1: ctr(1,2) subsequent_counter [4083,None] + conf(1,2)
       reversal-born [4200,None] -> sub [4083,None] open, lenses both,
       first record = subsequent_counter, trigger_idx 4083 = LOH(1020) = 4*1020+3,
-      validated_parent_idx 1020.
+      parent_bos_anchor_idx None (FC-only since PLAN_E E5·4).
     """
     return [
         _projection_result(
@@ -309,7 +309,7 @@ def test_subordinate_meta_carries_provenance():
     (§2.5). `first_record` is the sub's first live record `(lens, parent_sid,
     parent_cycle_id, trigger_type, trigger_idx, start_idx)`. (The unread
     `validated_parent_start` was deleted in Plan E E1b; the per-record value is
-    `TriggerRecord.validated_parent_idx`, exported in `_triggers.csv`.)"""
+    `TriggerRecord.parent_bos_anchor_idx`, exported in `_triggers.csv`.)"""
     out = build_sid_records_for_subordinate(_predicted_table_projections())
     for r in out:
         for k in ("natural_reversal_idx", "n_records", "first_record",

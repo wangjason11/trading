@@ -239,7 +239,7 @@ def _record(
     parent_sid: int,
     parent_cycle_id: int,
     trigger_idx: int = None,
-    validated_parent_idx: int = None,
+    parent_bos_anchor_idx: int = None,
     trigger_end_idx: int = None,
 ) -> TriggerRecord:
     """A §2.1 `TriggerRecord` appended to `sub.records` the way the sweep does.
@@ -261,7 +261,7 @@ def _record(
         trigger_idx=trigger_idx,
         probe_finalize_idx=start_idx,
         probe_finalize_condition="phase1_bounded",
-        validated_parent_idx=validated_parent_idx,
+        parent_bos_anchor_idx=parent_bos_anchor_idx,
         starting_idx=sub.starting_idx,
         direction=sub.direction,
         sub_tf=sub.sub_tf,
@@ -365,20 +365,20 @@ def _two_lens_records(pool, sub, m15_df):
           FIRST among the live records -> the first live record (R2);
       D — counter lens, start 70, live (seq 3) — created LAST.
     So `first` (B) is neither the first-created nor the last-created live
-    record. Distinct parent scopes / trigger types / validated_parent_idx so
+    record. Distinct parent scopes / trigger types / parent_bos_anchor_idx so
     the attribution reveals which record was chosen."""
     z = _record(pool, sub, m15_df, LENS_COUNTER, start_idx=_START - 2, seq=0,
                 trigger_type="first_counter", parent_sid=2, parent_cycle_id=0,
                 trigger_end_idx=_START - 2)
     a = _record(pool, sub, m15_df, LENS_COUNTER, start_idx=_START + 3, seq=1,
                 trigger_type="subsequent_counter", parent_sid=3, parent_cycle_id=2,
-                validated_parent_idx=40)
+                parent_bos_anchor_idx=40)
     b = _record(pool, sub, m15_df, LENS_CONFLUENCE, start_idx=_START, seq=2,
                 trigger_type="first_confluence", parent_sid=3, parent_cycle_id=1,
-                trigger_idx=_START - 3, validated_parent_idx=12)
+                trigger_idx=_START - 3, parent_bos_anchor_idx=12)
     d = _record(pool, sub, m15_df, LENS_COUNTER, start_idx=_START + 10, seq=3,
                 trigger_type="subsequent_counter", parent_sid=4, parent_cycle_id=0,
-                validated_parent_idx=77)
+                parent_bos_anchor_idx=77)
     assert z.is_zero_length
     assert not a.is_zero_length and not b.is_zero_length and not d.is_zero_length
     assert sub.live_records() == [a, b, d]                 # creation order; B in the middle
@@ -424,13 +424,13 @@ def test_first_live_record_tie_breaks_on_seq(geometry, m15_df):
     # first- nor the last-created live record.
     late = _record(pool, sub, m15_df, LENS_COUNTER, start_idx=_START, seq=7,
                    trigger_type="first_counter", parent_sid=5, parent_cycle_id=0,
-                   validated_parent_idx=50)
+                   parent_bos_anchor_idx=50)
     early = _record(pool, sub, m15_df, LENS_CONFLUENCE, start_idx=_START, seq=3,
                     trigger_type="subsequent_confluence", parent_sid=4, parent_cycle_id=2,
-                    validated_parent_idx=21)
+                    parent_bos_anchor_idx=21)
     tail = _record(pool, sub, m15_df, LENS_CONFLUENCE, start_idx=_START + 8, seq=9,
                    trigger_type="subsequent_confluence", parent_sid=4, parent_cycle_id=3,
-                   validated_parent_idx=99)
+                   parent_bos_anchor_idx=99)
     assert sub.live_records() == [late, early, tail]
     _set_lifecycle(sub, _START, _END, "parent_end")
 

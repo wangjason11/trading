@@ -303,7 +303,7 @@ def _rec(sub, *, lens: str, S: int, C: int, tss: int, trigger_type: str,
         trigger_type=trigger_type, trigger_idx=trigger_idx,
         probe_finalize_idx=(finalize_idx if finalize_idx is not None else trigger_idx),
         probe_finalize_condition="no_retrace",
-        validated_parent_idx=None,
+        parent_bos_anchor_idx=None,
         starting_idx=sub.starting_idx, direction=sub.direction, sub_tf=_SUB_TF,
         relative_dir=relative_dir, parent_floor_idx=parent_floor_idx,
         start_idx=start_idx,
@@ -413,7 +413,7 @@ class TestResolveFirstConfluence:
 
         assert isinstance(res, ResolvedStart)
         assert res.starting_idx == 15
-        assert res.validated_parent_idx == 3        # parent BOS extreme (H1) that seeded the probe
+        assert res.parent_bos_anchor_idx == 3        # parent BOS extreme (H1) that seeded the probe
         assert res.bos0_inner == pytest.approx(0.6020)
         assert res.finalize_idx == 20               # FC keeps the probe's own finalize, raw
         assert res.finalize_condition == "no_retrace"
@@ -552,10 +552,9 @@ class TestResolveSiblingCts:
         assert res.probe_input_idx == 6
         assert res.finalize_idx == hi
         assert res.cache_hit is False
-        # PLAN-AMBIGUITY: §2.1 calls `validated_parent_idx` "the H1 candle that
-        # seeded the probe (restores 3.2a's validated_h1_start)"; for the sibling
-        # types 3.2a's value was the sibling CTS extreme on M15 — encoded as such.
-        assert res.validated_parent_idx == 6
+        # PLAN_E Q4 (E5·4): FC-only — a sibling type has no parent BOS anchor; the
+        # sibling CTS anchor it probes from is `probe_input_idx` (asserted above).
+        assert res.parent_bos_anchor_idx is None
 
     # --- (2) subsequent_confluence reads the counter lens -------------------
     def test_subsequent_confluence_reads_counter_lens(self):
@@ -734,7 +733,7 @@ class TestResolveSiblingCts:
         assert isinstance(res, ResolvedStart)
         assert res.starting_idx == 9
         assert res.probe_input_idx == 6
-        assert res.validated_parent_idx == 6         # see PLAN-AMBIGUITY in (1)
+        assert res.parent_bos_anchor_idx is None      # FC-only (PLAN_E Q4), see (1)
 
     # --- (8) both unavailable → ProbeFailure --------------------------------
     def test_both_unavailable_returns_probe_failure(self):
@@ -920,7 +919,7 @@ class TestDispatcher:
             probe_input_idx=2, probe_end_idx=4,
         )
         fake = ResolvedStart(
-            starting_idx=77, validated_parent_idx=2, bos0_inner=0.6020,
+            starting_idx=77, parent_bos_anchor_idx=2, bos0_inner=0.6020,
             finalize_idx=80, finalize_condition="no_retrace",
         )
         with patch.object(edm, "_resolve_first_confluence_via_unified_probe",
@@ -949,7 +948,7 @@ class TestDispatcher:
         pool = SubStructurePool()
         trig = _make_trigger(use_case, lower_sd=lower_sd, probe_end_idx=3)
         fake = ResolvedStart(
-            starting_idx=99, validated_parent_idx=6, bos0_inner=0.6020,
+            starting_idx=99, parent_bos_anchor_idx=6, bos0_inner=0.6020,
             finalize_idx=15, finalize_condition="no_retrace",
         )
         with patch.object(edm, "_resolve_sibling_cts_via_unified_probe",

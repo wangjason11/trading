@@ -61,7 +61,7 @@ def _rec(
     trigger_sub_sid=None,
     relative_dir: str = "confluence",
     finalize_condition: str = "second_cts_reached",
-    validated_parent_idx=None,
+    parent_bos_anchor_idx=None,
 ) -> TriggerRecord:
     """Build a §2.1 `TriggerRecord` for `sub` and append it the way the sweep
     does (§4.3 step 5 + step 7): `trigger_sub_sid` from
@@ -99,7 +99,7 @@ def _rec(
         trigger_idx=trigger_idx,
         probe_finalize_idx=finalize,
         probe_finalize_condition=finalize_condition,
-        validated_parent_idx=validated_parent_idx,
+        parent_bos_anchor_idx=parent_bos_anchor_idx,
         starting_idx=sub.starting_idx,
         direction=sub.direction,
         sub_tf=sub.sub_tf,
@@ -182,7 +182,7 @@ def test_trigger_record_fields_in_contract_order():
         "sub_id",
         "trigger_type", "trigger_idx",
         "probe_finalize_idx", "probe_finalize_condition",
-        "validated_parent_idx",
+        "parent_bos_anchor_idx",
         "starting_idx", "direction", "sub_tf", "relative_dir",
         "parent_floor_idx",
         "start_idx",

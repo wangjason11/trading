@@ -318,9 +318,9 @@ def _make_stubs(pool: SubStructurePool, calls: Dict[str, list]):
         starting_idx, finalize_idx, cond = _PROBE[k]
         return ResolvedStart(
             starting_idx=starting_idx,
-            validated_parent_idx=trigger.trigger_event_idx,   # a stub PASS-THROUGH (the sweep copies the
-                                                             # resolver's value; the real rule — H1 BOS extreme
-                                                             # for FC, M15 sibling CTS extreme for sibling types —
+            parent_bos_anchor_idx=trigger.trigger_event_idx,   # a stub PASS-THROUGH (the sweep copies the
+                                                             # resolver's value; the real rule — the H1 BOS anchor
+                                                             # for FC, None for every other type (PLAN_E Q4) —
                                                              # is pinned in test_first_trigger_migration /
                                                              # test_reversal_resolver, not here)
             bos0_inner=_BOS0[starting_idx],
@@ -349,7 +349,7 @@ def _make_stubs(pool: SubStructurePool, calls: Dict[str, list]):
         if k not in _REVERSAL:
             raise AssertionError(f"reversal resolver reached for an unexpected (sub, R): {k}")
         return ResolvedStart(
-            starting_idx=_REVERSAL[k], validated_parent_idx=None,
+            starting_idx=_REVERSAL[k], parent_bos_anchor_idx=None,
             bos0_inner=_BOS0[_REVERSAL[k]], finalize_idx=R, finalize_condition="no_retrace",
             probe_input_idx=None, cache_hit=False,
         )
@@ -399,7 +399,7 @@ class _R(NamedTuple):
     trigger_idx: int
     finalize_idx: int
     finalize_condition: str
-    validated_parent_idx: Optional[int]
+    parent_bos_anchor_idx: Optional[int]
     relative_dir: str
     floor: int                      # parent_floor_idx
     start_idx: int
@@ -695,7 +695,7 @@ def test_records_full_predicted_table(sweep):
         assert r.trigger_idx == e.trigger_idx
         assert r.probe_finalize_idx == e.finalize_idx
         assert r.probe_finalize_condition == e.finalize_condition
-        assert r.validated_parent_idx == e.validated_parent_idx
+        assert r.parent_bos_anchor_idx == e.parent_bos_anchor_idx
         assert r.parent_floor_idx == e.floor
         # lifecycle
         assert r.trigger_end_idx == e.trigger_end_idx

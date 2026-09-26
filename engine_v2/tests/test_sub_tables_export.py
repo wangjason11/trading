@@ -105,12 +105,15 @@ def _confluence_fixture() -> Tuple[List[SidRecord], List[TriggerRecord]]:
               "trigger_type": "subsequent_counter", "trigger_idx": 4083,
               "start_idx": 4083}),
     ]
+    # `parent_bos_anchor_idx` values below are PASS-THROUGH stubs (the exporter writes what
+    # it is given). The real rule — FC-only, None for sibling / reversal types (PLAN_E Q4) —
+    # is pinned in test_first_trigger_migration / test_reversal_resolver.
     triggers = [
         TriggerRecord(
             lens="confluence", parent_sid=1, parent_cycle_id=2, trigger_sub_sid=1,
             sub_id=6, trigger_type="subsequent_confluence", trigger_idx=3819,
             probe_finalize_idx=3819, probe_finalize_condition="no_retrace",
-            validated_parent_idx=954, starting_idx=3760, direction=-1, sub_tf="M15",
+            parent_bos_anchor_idx=954, starting_idx=3760, direction=-1, sub_tf="M15",
             relative_dir="confluence", parent_floor_idx=3611, start_idx=3819,
             source_trigger=_OpaqueTrigger(),
             trigger_end_idx=4200, end_idx=4200, end_reason="reversal",
@@ -122,7 +125,7 @@ def _confluence_fixture() -> Tuple[List[SidRecord], List[TriggerRecord]]:
             lens="confluence", parent_sid=1, parent_cycle_id=2, trigger_sub_sid=2,
             sub_id=7, trigger_type="reversal", trigger_idx=4200,
             probe_finalize_idx=4200, probe_finalize_condition="reversal_handoff",
-            validated_parent_idx=None, starting_idx=4027, direction=1, sub_tf="M15",
+            parent_bos_anchor_idx=None, starting_idx=4027, direction=1, sub_tf="M15",
             relative_dir="counter", parent_floor_idx=3611, start_idx=4200,
             source_trigger=_OpaqueTrigger(),
             trigger_end_idx=None, end_idx=None, end_reason=None,
@@ -132,7 +135,7 @@ def _confluence_fixture() -> Tuple[List[SidRecord], List[TriggerRecord]]:
             lens="confluence", parent_sid=1, parent_cycle_id=2, trigger_sub_sid=3,
             sub_id=4, trigger_type="subsequent_confluence", trigger_idx=3903,
             probe_finalize_idx=3903, probe_finalize_condition="no_retrace",
-            validated_parent_idx=975, starting_idx=3304, direction=-1, sub_tf="M15",
+            parent_bos_anchor_idx=975, starting_idx=3304, direction=-1, sub_tf="M15",
             relative_dir="confluence", parent_floor_idx=3611, start_idx=3903,
             source_trigger=_OpaqueTrigger(),
             trigger_end_idx=3819, end_idx=3903, end_reason="same_dir_replacement",
@@ -334,7 +337,7 @@ def test_triggers_csv_columns_every_field_except_source_trigger_plus_is_zero_len
     # Spot-check the names the plan cares about are really there.
     for c in ("lens", "parent_sid", "parent_cycle_id", "trigger_sub_sid", "sub_id",
               "trigger_type", "trigger_idx", "probe_finalize_idx",
-              "probe_finalize_condition", "validated_parent_idx", "starting_idx",
+              "probe_finalize_condition", "parent_bos_anchor_idx", "starting_idx",
               "direction", "sub_tf", "relative_dir", "parent_floor_idx", "start_idx",
               "trigger_end_idx", "end_idx", "end_reason", "ended_by_sub_id", "seq",
               "extra_trigger_idxs"):
@@ -353,13 +356,13 @@ def test_triggers_csv_rows_values(lens_dfs, tmp_path):
     assert r6["end_reason"] == "reversal"
     assert r6["relative_dir"] == "confluence"
     assert r6["probe_finalize_condition"] == "no_retrace"
-    assert _num(r6["validated_parent_idx"]) == 954
+    assert _num(r6["parent_bos_anchor_idx"]) == 954
     assert r6["sub_tf"] == "M15"
     assert _num(r6["seq"]) == 8
 
     assert (_num(r7["sub_id"]), _num(r7["trigger_sub_sid"])) == (7, 2)
     assert r7["trigger_type"] == "reversal"
-    assert _num(r7["validated_parent_idx"]) is None          # reversal-born
+    assert _num(r7["parent_bos_anchor_idx"]) is None          # reversal-born
     assert _num(r7["trigger_end_idx"]) is None and _num(r7["end_idx"]) is None
     assert r7["end_reason"] in ("", "None")
     assert r7["relative_dir"] == "counter"
@@ -393,7 +396,7 @@ def test_lens_filter_is_the_caller_s_responsibility_rows_are_written_as_given(tm
         lens="counter", parent_sid=1, parent_cycle_id=2, trigger_sub_sid=1,
         sub_id=7, trigger_type="subsequent_counter", trigger_idx=4083,
         probe_finalize_idx=4083, probe_finalize_condition="no_retrace",
-        validated_parent_idx=1020, starting_idx=4027, direction=1, sub_tf="M15",
+        parent_bos_anchor_idx=1020, starting_idx=4027, direction=1, sub_tf="M15",
         relative_dir="counter", parent_floor_idx=3611, start_idx=4083,
         seq=9,
     )

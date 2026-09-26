@@ -614,7 +614,7 @@ def _resolve_first_confluence_via_unified_probe(
     because first_confluence's probe bound is the parent CTS anchor — the only
     variation needing the post-bound MS search (PART4 §4.4).
 
-    Returns a `ResolvedStart` (`validated_parent_idx` = the parent BOS anchor,
+    Returns a `ResolvedStart` (`parent_bos_anchor_idx` = the parent BOS anchor,
     H1, that seeded the M15 input) or a `ProbeFailure`.
     """
     from engine_v2.multitf.data_bridge import map_candle_to_lower_tf
@@ -677,7 +677,7 @@ def _resolve_first_confluence_via_unified_probe(
         print(f"[entity_compute] PENDING: unified_probe did not finalize for {label}; skipping M15 build")
         return ProbeFailure("probe pending", int(m15_input_idx))
     return ResolvedStart(
-        starting_idx=starting_idx, validated_parent_idx=parent_bos_anchor_idx,
+        starting_idx=starting_idx, parent_bos_anchor_idx=parent_bos_anchor_idx,
         bos0_inner=bos0_inner, finalize_idx=finalize_idx, finalize_condition=cond,
         probe_input_idx=int(m15_input_idx), cache_hit=cache_hit,
     )
@@ -767,7 +767,8 @@ def _resolve_sibling_cts_via_unified_probe(
     sibling lens's most recent qualifying CTS in the trigger's M15 window
     `[lo, hi]` (`hi` = this trigger's `trigger_idx`, the last M15 of its H1
     hour). `enable_phase2=False`. Returns a `ResolvedStart`
-    (`validated_parent_idx` = the sibling CTS anchor, M15) or a `ProbeFailure`.
+    (`parent_bos_anchor_idx` None — FC-only, PLAN_E Q4; the sibling CTS anchor it probes
+    from is `probe_input_idx`, M15) or a `ProbeFailure`.
     """
     label = f"{trigger.use_case} sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}"
     other_lens = _SIBLING_LENS.get(trigger.use_case)
@@ -824,7 +825,7 @@ def _resolve_sibling_cts_via_unified_probe(
             f"[entity_compute] {label}: finalize_idx={finalize_idx} != trigger_idx={hi}"
         )
     return ResolvedStart(
-        starting_idx=starting_idx, validated_parent_idx=m15_input_idx,
+        starting_idx=starting_idx, parent_bos_anchor_idx=None,   # FC-only (Q4); M15 input → probe_input_idx
         bos0_inner=bos0_inner, finalize_idx=finalize_idx, finalize_condition=cond,
         probe_input_idx=m15_input_idx, cache_hit=cache_hit,
     )
@@ -945,7 +946,7 @@ def _resolve_reversal_start(
                     f"ref_inner={float(ref_zone.inner)} cached_ref_inner={cached_ref}"
                 )
             return ResolvedStart(
-                starting_idx=int(hit.starting_idx), validated_parent_idx=None,
+                starting_idx=int(hit.starting_idx), parent_bos_anchor_idx=None,
                 bos0_inner=hit.bos0_inner, finalize_idx=int(hit.finalize_idx),
                 finalize_condition=str(hit.finalize_condition),
                 probe_input_idx=input_abs, cache_hit=True,
@@ -985,7 +986,7 @@ def _resolve_reversal_start(
             ),
         )
     return ResolvedStart(
-        starting_idx=starting_abs, validated_parent_idx=None,
+        starting_idx=starting_abs, parent_bos_anchor_idx=None,
         bos0_inner=rev_probe.bos0_inner, finalize_idx=finalize_abs,
         finalize_condition=str(rev_probe.finalize_condition),
         probe_input_idx=input_abs, cache_hit=False,
