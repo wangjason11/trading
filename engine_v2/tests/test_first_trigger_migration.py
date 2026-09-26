@@ -428,7 +428,7 @@ class TestResolveFirstConfluence:
         res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
         assert isinstance(res, ProbeFailure)
         assert res.probe_input_idx is None          # nothing was mapped yet
-        assert isinstance(res.detail, str) and res.detail
+        assert "parent_input_idx" in res.detail     # names the H1 meta key (exported in the CSV `detail`)
 
     def test_input_mapping_failure_returns_probe_failure(self):
         # parent_df has 10 hours but the M15 frame only covers the first 3 →
@@ -473,7 +473,7 @@ class TestResolveFirstConfluence:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
         mock_probe.assert_not_called()
         assert isinstance(res, ProbeFailure)
-        assert "99 out of parent bounds" in res.detail
+        assert "parent_input_idx 99 out of parent bounds" in res.detail
         assert res.probe_input_idx is None
 
     def test_end_mapping_failure_returns_probe_failure_with_m15_input(self):

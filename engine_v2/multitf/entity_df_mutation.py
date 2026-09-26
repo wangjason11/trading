@@ -688,7 +688,7 @@ def _window_extreme_idx(
     """Idx of the extreme candle in `[lo, hi]` on the `extreme_dir` side.
 
     `extreme_dir == +1` → highest high; `extreme_dir == -1` → lowest low.
-    Tie-break earliest. Used by the sibling-CTS fallback (PART4 §4.3.4 step 5)
+    Tie-break earliest. Used by the sibling-CTS fallback (PART4 §4.3.4 step 4)
     to anchor an ad-hoc BOS_0 on the own entity when the sibling has no CTS.
     Returns None for an empty / out-of-bounds window.
     """
@@ -784,7 +784,7 @@ def _resolve_sibling_cts_via_unified_probe(
         int(trigger.lower_sd), idx_window, m15_df,
     )
     if ref_zone is None:
-        # Fallback (PART4 §4.3.4 step 5) — the sibling has no qualifying CTS in
+        # Fallback (PART4 §4.3.4 step 4) — the sibling has no qualifying CTS in
         # the window. Anchor on the OWN frame: input = window extreme on the
         # `-lower_sd` side, reference = own ad-hoc BOS_0 from that candle.
         fallback_anchor_idx = _window_extreme_idx(m15_df, idx_window[0], idx_window[1], -int(trigger.lower_sd))

@@ -1644,7 +1644,7 @@ def _multi_tf_trigger(**overrides: Any) -> MultiTFTrigger:
     kwargs: Dict[str, Any] = dict(
         parent_tf="H1", parent_sid=0, parent_cycle_id=0, parent_sd=+1,
         use_case="first_confluence", lower_tf="M15", lower_sd=+1,
-        meta={"trigger_event_idx": 15, "probe_end_idx": 40},
+        meta={"trigger_event_idx": 15, "probe_end_idx": 40, "parent_input_idx": 9},
     )
     kwargs.update(overrides)
     return MultiTFTrigger(**kwargs)
@@ -1683,6 +1683,9 @@ def test_default_synth_reversal_trigger_builds_a_reversal_multi_tf_trigger():
     assert (s.parent_sid, s.parent_cycle_id, s.lower_tf) == (src.parent_sid, src.parent_cycle_id, src.lower_tf)
     assert (s.parent_tf, s.parent_sd) == (src.parent_tf, src.parent_sd)
     assert s.meta["trigger_event_idx"] == 15 and s.meta["probe_end_idx"] == 40   # inherited meta kept
+    # incl. the (unread) H1 input — the user's keep-the-full-copy decision (PLAN_E §9.2); the successor
+    # SweepTrigger itself has no parent input
+    assert s.meta["parent_input_idx"] == 9 and st.parent_input_idx is None
     # the successor record carries the synthesised source; the H1 record keeps the input object
     (recX,), (recY,) = X.records, Y.records
     assert recX.source_trigger is src and recY.source_trigger is s
@@ -1860,3 +1863,24 @@ def test_orchestrator_sweep_triggers_carry_each_types_h1_parent_input(monkeypatc
         ("subsequent_confluence", 83, 15),  # LOH(20) = 83
         ("subsequent_counter", 123, 25),    # LOH(30) = 123
     ]
+
+
+def test_uc1_trigger_writes_the_h1_parent_input_under_its_own_name():
+    """PLAN_E §9.2 (Post-E·1b): `detect_uc1_triggers` puts the first_counter trigger's H1 input — the
+    cycle's CTS ANCHOR (17), not its confirmation candle (21) — in `meta["parent_input_idx"]` (the
+    orchestrator indexes it directly) and never under the old `probe_input_idx` key (no alias).
+    (Post-E·1b landing review: no test ran `detect_uc1_triggers`; an old-key alias survived.)"""
+    from engine_v2.common.types import WVMIRecord
+    from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
+    from engine_v2.tests._event_factory import make_event
+
+    h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
+    cts = make_event("CTS_CONFIRMED", 21, structure_id=0, cycle_id=1, struct_direction=+1,
+                     cts_anchor_idx=17, confirmed_at=21)
+    rec = WVMIRecord(bos_structure_id=0, bos_cycle_id=1, zone_side="buy",
+                     meta={"triggered_by_event_idx": 24})
+    (t,) = detect_uc1_triggers([cts], h1, [rec], [])
+    assert (t.use_case, t.parent_sid, t.parent_cycle_id, t.lower_sd) == ("first_counter", 0, 1, -1)
+    assert t.meta["parent_input_idx"] == 17
+    assert t.meta["trigger_event_idx"] == 24
+    assert "probe_input_idx" not in t.meta

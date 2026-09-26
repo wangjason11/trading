@@ -781,7 +781,7 @@ registry, never from `dfx.attrs["lower_tf_results"]`.
 > reversal-born successor must exist before an H1 trigger at that candle
 > runs its sibling read). Across different idxs the heap order is the cadence.
 > A missing sibling still takes the resolver's own-frame ad-hoc BOS_0
-> fallback (`_window_extreme_idx`, PART4 §4.3.4 step 5, unchanged; logged
+> fallback (`_window_extreme_idx`, PART4 §4.3.4 step 4, unchanged; logged
 > `[entity_compute] sibling-CTS unavailable …`), and a resolver that cannot
 > build any zone returns a `ProbeFailure` → `UnresolvedTrigger(reason=
 > "probe_failed")` — no longer a silently skipped sub. No `probe_failed` row

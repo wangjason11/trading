@@ -17,10 +17,11 @@ this — the predecessor is necessarily sd.
 The parent-cycle end every record uses lives in `multitf/parent_tables.py`
 (the retired `lifecycle_end_idx` was deleted in Plan E E1b).
 
-Reference-zone resolution per spec §4.3.4 step 1-5 is descriptive only;
-the probe in `compute_structure_scenario_3` derives its own BOS_0 zone
-from the probe direction and doesn't take an explicit reference zone
-input. We carry the `prior_sd_trigger_idx` on meta for diagnostics.
+This detector names the H1 trigger and its (informational) H1 input only;
+the M15 probe input and reference zone are resolved later from the sibling
+counter lens's CTS in the pool (PART4 §4.3.4 steps 1–4,
+`entity_df_mutation._resolve_sibling_cts_via_unified_probe`). The
+`prior_sd_trigger_idx` on meta sets that sibling-read window's `lo`.
 """
 from __future__ import annotations
 

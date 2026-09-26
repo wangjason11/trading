@@ -26,7 +26,9 @@ def detect_uc1_triggers(
     For each WVMI record (implying CTS_CONFIRMED + proximity activation):
     - Look up the CTS_CONFIRMED event for (sid, cycle_id)
     - lower_sd = opposite of H1 struct_direction
-    - probe input = the CTS anchor (`CTS_CONFIRMED.meta["cts_anchor_idx"]`)
+    - parent input (meta `parent_input_idx`, H1) = the CTS anchor
+      (`CTS_CONFIRMED.meta["cts_anchor_idx"]`) — informational: the probe
+      co-sources its M15 input from the sibling confluence CTS (PART4 §4.3.3)
 
     Returns list of MultiTFTrigger.
     """

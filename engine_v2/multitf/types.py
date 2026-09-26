@@ -83,15 +83,17 @@ class SubsequentConfluenceTrigger:
 
     Per spec §4.3.4:
       Trigger:    parent CTS-zone proximity AND prior trigger was sd-zone
-      Idx input:  parent-TF candle in `[prior_sd_idx, this_cts_prox_idx]`
-                  with extreme toward parent BOS (lowest low for bullish
-                  parent, highest high for bearish)
-      Probe end:  this CTS-prox trigger candle
+      Idx input:  `input_idx` = parent-TF candle in `[prior_sd_idx,
+                  this_cts_prox_idx]` with extreme toward parent BOS (lowest
+                  low for bullish parent, highest high for bearish) — the
+                  H1 `parent_input_idx`, informational since Session 3
+      Probe end:  this CTS-prox trigger candle (its LOH = the sweep's `hi`)
       Probe sd:   +parent_sd (confluence)
 
-    Reference-zone resolution (§4.3.4 step 1-5) is documented but not
-    consumed by the probe — the probe derives its own BOS_0 internally
-    from the data. The `meta` carries the prior_sd_idx for diagnostics.
+    The M15 probe input AND reference zone are co-sourced from the sibling
+    counter lens's most recent qualifying CTS in the sub-TF window
+    (§4.3.4 steps 1–4, `_resolve_sibling_cts_via_unified_probe`); `meta`
+    carries `prior_sd_trigger_idx`, which sets that window's `lo`.
     """
     parent_tf: str
     parent_sid: int
@@ -113,21 +115,23 @@ class SubsequentCounterTrigger:
                   proximity AND the proximity trigger before that was
                   sd-zone (sequence sd → CTS → sd in the cycle's
                   alternating list)
-      Idx input:  parent-TF candle in `[prior_sd_idx, this_sd_prox_idx]`
-                  with extreme toward parent CTS (highest high for
-                  bullish parent / lowest low for bearish — Λ apex / V
-                  trough)
-      Probe end:  this sd-prox trigger candle
+      Idx input:  `input_idx` = parent-TF candle in `[prior_sd_idx,
+                  this_sd_prox_idx]` with extreme toward parent CTS
+                  (highest high for bullish parent / lowest low for
+                  bearish — Λ apex / V trough) — the H1 `parent_input_idx`,
+                  informational since Session 3
+      Probe end:  this sd-prox trigger candle (its LOH = the sweep's `hi`)
       Probe sd:   -parent_sd (counter — opposite direction to parent)
-      Reference:  active parent CTS zone (descriptive; probe derives its
-                  own BOS_0 internally)
+      Reference:  the sibling confluence lens's most recent qualifying CTS,
+                  co-sourced with the M15 probe input (§4.3.5; §4.3.4
+                  steps 1–4)
 
     By the alternation invariant in `zones/zone_proximity.py`, every sd
     trigger past the first one (index ≥ 2 in the cycle's list) satisfies
     the [sd, opp_sd, sd] window — its immediate predecessor is opp_sd
     (== CTS-prox, var 3) and the one before that is sd (var 2 or an
-    earlier var 4). `meta` carries `prior_sd_trigger_idx` and
-    `prior_cts_prox_idx` for diagnostics.
+    earlier var 4). `meta` carries `prior_cts_prox_idx` (sets the
+    sibling-read window's `lo`) and `prior_sd_trigger_idx` (diagnostic).
     """
     parent_tf: str
     parent_sid: int

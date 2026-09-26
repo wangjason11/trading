@@ -265,9 +265,13 @@ Used to find `starting_idx` for new subordinate structures.
 > **Session 3 (2026-05-31):** the probe now runs on the **structure's OWN sub
 > TF** (the `unified_probe` primitive), NOT on the parent's TF. The old
 > "probe always runs on the parent's TF, produces a parent-TF starting_idx,
-> then map down" model is retired for all four variations. Each variation's
-> `input_idx` and `probe_end_idx` are mapped to the sub TF FIRST, then a single
-> sub-TF probe runs. See §4.4 for the unified-probe mechanics.
+> then map down" model is retired for all four variations. Every probe input
+> and bound is on the sub TF before the single sub-TF probe runs: only
+> `first_confluence` maps its H1 input (price-mapped, §4.3.1; its
+> `probe_end_idx` = the price-mapped CTS anchor); the three sibling types take
+> their M15 input from the sibling CTS (§4.3.3–§4.3.5; the H1 input is
+> informational — `parent_input_idx`) and end at their trigger's LOH `hi`.
+> See §4.4 for the unified-probe mechanics.
 
 > **Naming (Plan C, 2026-09-20).** The probe's search bound is
 > **`probe_end_idx`** everywhere — `unified_probe(probe_end_idx=…)`,
@@ -1828,7 +1832,8 @@ main's proximity triggers that fire the counter/subsequent variations) it
 reads them **at trigger-detection time on H1** (`first_confluence_trigger`,
 `uc1_trigger`, `subsequent_*_trigger`) and carries what it needs on the
 `MultiTFTrigger` (`parent_sid`, `parent_cycle_id`; meta `parent_input_idx`
-(H1), `probe_end_idx`, `trigger_event_idx`, `prior_*`). The record's own `parent_sid` /
+(H1, all four types), `probe_end_idx` (FC only), `trigger_event_idx`, `prior_*`
+(subsequent_*)). The record's own `parent_sid` /
 `parent_cycle_id` scope every later cross-lens read:
 
 ```python
@@ -2816,7 +2821,7 @@ markers (Plan E E5·2). Do not unify them.
 | `trigger_end_idx` | the first end condition to fire (below), or the sub's frozen end on a post-end re-trigger. |
 | `end_idx` | REAL-TIME. `max(trigger_end_idx, start_idx)`; None while open. |
 | `end_reason` | `reversal` \| `same_dir_replacement` \| `parent_end` \| None. `ended_by_sub_id` names the replacing sub for `same_dir_replacement`. |
-| `starting_idx`, `direction`, `sub_tf`, `relative_dir`, `parent_bos_anchor_idx`, `probe_input_idx`, `probe_finalize_condition` | structural / provenance copies (denormalised for the export). `parent_bos_anchor_idx` (was `validated_parent_idx` until Plan E E5·4, 2026-09-26 — it mixed frames, PLAN_E Q4) = `first_confluence` only: the **H1** parent BOS anchor (`FirstConfluenceTrigger.input_idx`) that seeded its M15 probe input; None for the three sibling types (their input, the M15 sibling CTS anchor `ref_zone.anchor_idx`, is `probe_input_idx`) and for reversal-born records. `probe_input_idx` (Plan E E5·4b) = the M15 candle this record's probe started from, for every resolved type (FC: the price-mapped parent BOS anchor; siblings: the sibling CTS anchor, or the own-frame ad-hoc BOS_0 anchor when the sibling has none (§4.3.4 step 5); reversal: the handoff input) — copied from `ResolvedStart.probe_input_idx`. The sub-level copy `SidRecord.meta["validated_parent_start"]` was deleted in Plan E E1b (unread). Diagnostic only — no lifecycle value reads it (Plan C §2.1's "H1 candle" wording was imprecise; corrected 2026-09-20). |
+| `starting_idx`, `direction`, `sub_tf`, `relative_dir`, `parent_bos_anchor_idx`, `probe_input_idx`, `probe_finalize_condition` | structural / provenance copies (denormalised for the export). `parent_bos_anchor_idx` (was `validated_parent_idx` until Plan E E5·4, 2026-09-26 — it mixed frames, PLAN_E Q4) = `first_confluence` only: the **H1** parent BOS anchor (`FirstConfluenceTrigger.input_idx`) that seeded its M15 probe input; None for the three sibling types (their input, the M15 sibling CTS anchor `ref_zone.anchor_idx`, is `probe_input_idx`) and for reversal-born records. `probe_input_idx` (Plan E E5·4b) = the M15 candle this record's probe started from, for every resolved type (FC: the price-mapped parent BOS anchor; siblings: the sibling CTS anchor, or the own-frame ad-hoc BOS_0 anchor when the sibling has none (§4.3.4 step 4); reversal: the handoff input) — copied from `ResolvedStart.probe_input_idx`. The sub-level copy `SidRecord.meta["validated_parent_start"]` was deleted in Plan E E1b (unread). Diagnostic only — no lifecycle value reads it (Plan C §2.1's "H1 candle" wording was imprecise; corrected 2026-09-20). |
 | `extra_trigger_idxs` | later triggers in the same `(lens, parent_sid, parent_cycle_id)` that resolved to the same sub — **absorbed into this record**, no new record, `trigger_sub_sid` not consumed. The match includes a ZERO-LENGTH record (a re-trigger into a scope whose record was frozen — post-end or collision — is absorbed, not revived; acausal cases only). |
 
 **End conditions — record level ONLY** (the sub never has its own; it only

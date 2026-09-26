@@ -1109,7 +1109,7 @@ the real emitter.
 - moment-order processing (Q3);
 - the unresolved-triggers CSV `probe_input_idx` frame mix (H1 "whatever was known" for the parent-triggered
   types vs M15) — split into `parent_input_idx` (H1) + `probe_input_idx` (M15, when the resolver got one — §9.2); one exported
-  `/compare` (user 2026-09-26: "fix later"). **TAKEN 2026-09-26 (Post-E·1, §9.2).**
+  `/compare` (user 2026-09-26: "fix later"). **DONE 2026-09-26 (Post-E·1a + 1b, §9.2).**
 
 ### 9.1 E5 as landed
 
@@ -1295,8 +1295,7 @@ the real emitter.
   resolver mapped / co-sourced; empty when none was). The FC `ProbeFailure` branches pass M15 or `None` (649 →
   `None`, 652 / 657 → the mapped M15 input). **"Both, 2 commits"**: `SweepTrigger.probe_input_idx` →
   `parent_input_idx` in the exported commit (Post-E·1a); `MultiTFTrigger.meta["probe_input_idx"]` (H1) →
-  `"parent_input_idx"` in a byte-identical commit right after (Post-E·1b) — afterwards `probe_input_idx` means M15
-  everywhere. Rejected: B (mirror the triggers CSV — drops 761 / 826), C (no H1 column).
+  `"parent_input_idx"` in a byte-identical commit right after (Post-E·1b) — afterwards `probe_input_idx` names the probe's own-frame input: M15 on every multi-TF field, meta key and CSV column (its one other use, `structure_engine`'s local, is the main H1 structure's reversal probe — its own frame). Rejected: B (mirror the triggers CSV — drops 761 / 826), C (no H1 column).
 - **Prediction (vs `20260926_105208_76ad347`):** `*_M15_unresolved_triggers.csv` only — +1 header
   (`parent_input_idx`, between `direction` and `probe_input_idx`); the 4 rows (all `degenerate_parent_cycle`, no
   probe ran): `parent_input_idx` 689 / 728 / 761 / 826 (FC(1,0) BOS_0 anchor, FC(1,1) BOS_1 anchor, first_counter
@@ -1354,10 +1353,23 @@ the real emitter.
   (a missed writer now raises instead of a silent None). Tests: the helpers `_make_trigger` / `_fc` take
   `parent_input_idx=`; the three pipeline tests also assert the old key is absent (no alias). Docs: GLOSSARY
   `parent_input_idx` + LOH rows, PART4 §9.4. **Prediction:** byte-identical — 24/24 CSVs, figures, run.log (the
-  renamed print / detail strings fire only on an FC input failure: 0 on the window). After 1b `probe_input_idx`
-  names the M15 input everywhere. **Measured == prediction** (vs `20260926_120641_1756c30`): 24/24 CSVs
+  renamed print / detail strings fire only on an FC input failure: 0 on the window). After 1b `probe_input_idx` names the probe's own-frame input: M15 on every multi-TF field, meta key and CSV column (its one other use, `structure_engine`'s local, is the main H1 structure's reversal probe — its own frame). **Measured == prediction** (vs `20260926_120641_1756c30`): 24/24 CSVs
   byte-identical, figures JSON-identical, run.log only the parked `by_lens` set-order line; tests 942 + 1 xfail
-  (unchanged count — the no-alias asserts sit in the existing pipeline tests).
+  (unchanged count — the no-alias asserts sit in the existing pipeline tests). **Landed `532df17`, save
+  `20260926_122844_532df17`** (save `06b300a`, trunk `3a5481c`; reuse-mode save of the verified replay).
+- **Post-E·1b landing review (2026-09-26; 1 conformance lens ≈174k): 0 BLOCKER / MAJOR.** Verified: pure rename;
+  the orchestrator's direct index is safe (uc1 is the only `first_counter` producer, always writes the key); the
+  inherited reversal key is never read; no-alias asserts fail on an old-key alias (in-memory mutants). MINOR,
+  folded: the uc1 docstring still said "probe input"; the `subsequent_*` pipelines' "Mapping (§4.3.1 …)"
+  paragraphs (pre-existing, false — the sibling resolver never maps an H1 input); the "M15 everywhere" claim
+  (scoped: `structure_engine`'s local is the main H1 reversal probe's own-frame input); no test ran
+  `detect_uc1_triggers` (an old-key alias there survived → pin `test_uc1_trigger_writes_the_h1_parent_input…`);
+  PART4 §4.3 Session-3 note "each variation's `input_idx` … mapped to the sub TF FIRST" (pre-existing, false for
+  the sibling types). NIT, folded: the renamed detail strings pinned; GLOSSARY reversal-inheritance note + role
+  wording; PART4 §9.4 per-key scope; "§4.3.4 step 5" → step 4 (the fallback; 5 sites) and the pre-Session-3
+  `types.py` / `subsequent_confluence_trigger.py` docstrings ("the probe derives its own BOS_0 internally") —
+  rewritten to the co-sourced sibling rule; the reversal synth's inheritance of `parent_input_idx` pinned (the
+  user's keep decision). **Post-E·1 DONE.**
 ---
 
 ## 10. Open questions for the user (recommendation first; concrete window data)

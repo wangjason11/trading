@@ -8,9 +8,10 @@ Per spec §4.3.5 / §4.3.7:
                    from the sibling CTS (§4.3.4)
   Probe end_idx:   the sd-prox trigger candle
 
-Mapping (§4.3.1, unified rule `mapping_sd = -sub_sd`): for counter sub
-`lower_sd = -parent_sd`, so `mapping_sd = +parent_sd` — same as
-first_counter.
+Mapping (§4.3.1): none — the H1 input is never mapped; the resolver
+co-sources its M15 input from the sibling confluence CTS. Only the §4.3.4
+fallback uses the `-sub_sd` side: the M15 extreme on the `-lower_sd`
+(= `+parent_sd`) side of the sibling-read window `[lo, hi]`.
 
 §13.5.c.ii: `run_subsequent_counter_pipeline` deleted with
 `run_lower_tf_pipeline`. The orchestrator now translates and applies via
