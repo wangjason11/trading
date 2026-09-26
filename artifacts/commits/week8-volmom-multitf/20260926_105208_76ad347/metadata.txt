@@ -1,0 +1,4 @@
+commit_hash=76ad347
+timestamp=20260926_105208
+branch=week8-volmom-multitf
+commit_message=Plan E E5·4b: triggers CSV gains probe_input_idx (EXPORTED, additive)
