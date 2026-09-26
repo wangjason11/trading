@@ -228,17 +228,20 @@ class TriggerRecord:
 @dataclass(frozen=True)
 class UnresolvedTrigger:
     """A trigger that produced no record — logged, never built. No `sub_id`, no
-    `trigger_sub_sid`. `reason ∈ UNRESOLVED_REASONS`; `probe_input_idx` is
-    whatever was known: M15 once the resolver had an M15 input (reversal; a
-    failure after the M15 mapping; a pending FC), otherwise the trigger's own H1
-    value — a known frame mix, PLAN_E §9 Post-E."""
+    `trigger_sub_sid`. `reason ∈ UNRESOLVED_REASONS`. Two inputs, one frame each
+    (PLAN_E §9.2): `parent_input_idx` = the parent trigger's H1 input candle
+    (`SweepTrigger.parent_input_idx`; every parent-triggered type — it seeds the
+    probe only for `first_confluence`; None for `reversal`); `probe_input_idx` =
+    the M15 input the resolver had mapped / co-sourced before it failed (None when
+    it never got one — every `pending` / `degenerate_parent_cycle` row)."""
     lens: str
     parent_sid: int
     parent_cycle_id: int
     trigger_type: str
     trigger_idx: int
     direction: int
-    probe_input_idx: Optional[int]
+    parent_input_idx: Optional[int]  # H1 (the parent trigger's input candle)
+    probe_input_idx: Optional[int]   # M15, entity-absolute (the resolver's input), or None
     reason: str
     detail: str
 

@@ -75,8 +75,8 @@ class SweepTrigger:
     trigger_event_idx: int       # H1 idx (order key); == trigger_idx for reversal
     source: Any = None           # the MultiTFTrigger (opaque)
     pending: bool = False        # first_confluence with status != "finalized"
-    probe_input_idx: Optional[int] = None   # whatever was known (H1 for the four types;
-                                            # the M15 handoff input for reversal)
+    parent_input_idx: Optional[int] = None  # the parent trigger's H1 input candle (the four parent-triggered
+                                            # types; seeds the probe only for first_confluence); None for reversal
 
     @property
     def cycle(self) -> Tuple[int, int]:
@@ -96,7 +96,9 @@ class ResolvedStart(NamedTuple):
 
 
 class ProbeFailure(NamedTuple):
-    """A resolver's failure value (`None` is accepted too)."""
+    """A resolver's failure value (`None` is accepted too). `probe_input_idx` is
+    the M15 input (entity-absolute) the resolver had mapped / co-sourced before it
+    failed, or None — never an H1 value (PLAN_E §9.2)."""
     detail: str
     probe_input_idx: Optional[int] = None
 
@@ -218,11 +220,14 @@ class _Sweep:
     # --- phase 0 ---
     def _unresolved(self, t: SweepTrigger, reason: str, detail: str,
                     probe_input_idx: Optional[int] = None) -> None:
-        pii = probe_input_idx if probe_input_idx is not None else t.probe_input_idx
+        # One frame per column (PLAN_E §9.2): H1 from the trigger, M15 only from the
+        # resolver — no cross-frame fallback.
         u = UnresolvedTrigger(
             lens=t.lens, parent_sid=int(t.parent_sid), parent_cycle_id=int(t.parent_cycle_id),
             trigger_type=t.trigger_type, trigger_idx=int(t.trigger_idx), direction=int(t.direction),
-            probe_input_idx=(int(pii) if pii is not None else None), reason=reason, detail=detail,
+            parent_input_idx=(int(t.parent_input_idx) if t.parent_input_idx is not None else None),
+            probe_input_idx=(int(probe_input_idx) if probe_input_idx is not None else None),
+            reason=reason, detail=detail,
         )
         self.pool.unresolved.append(u)
         self.log(
@@ -253,7 +258,7 @@ class _Sweep:
             t = SweepTrigger(
                 lens=r.lens, parent_sid=r.parent_sid, parent_cycle_id=r.parent_cycle_id,
                 trigger_type="reversal", trigger_idx=int(R), direction=-int(sub.direction),
-                trigger_event_idx=int(R), source=src, pending=False, probe_input_idx=None,
+                trigger_event_idx=int(R), source=src, pending=False, parent_input_idx=None,
             )
             self.spawned.append(t)
             self.log(

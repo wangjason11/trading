@@ -151,15 +151,17 @@ def _unresolved_fixture() -> List[UnresolvedTrigger]:
     FC(1,0) trigger 2815 = LOH(703); FC(1,1) 2995 = LOH(748); first_counter(1,1)
     3283 = LOH(820); subsequent_confluence(1,1) 3487 = LOH(871). Directions:
     parent sd of sid 1 is -1 -> confluence types -1, first_counter +1.
-    `probe_input_idx` = the FC's H1 BOS idx (689 / 728) where known."""
+    `parent_input_idx` = the H1 input (FC(1,0) BOS_0 anchor 689, FC(1,1) BOS_1 anchor 728,
+    first_counter(1,1) cycle-1 CTS anchor 761, subsequent_confluence(1,1) window extreme 826);
+    `probe_input_idx` None — never probed (PLAN_E §9.2; the reference-window values)."""
     return [
-        UnresolvedTrigger("confluence", 1, 0, "first_confluence", 2815, -1, 689,
+        UnresolvedTrigger("confluence", 1, 0, "first_confluence", 2815, -1, 689, None,
                           "degenerate_parent_cycle", "floor 3611 >= end 3611"),
-        UnresolvedTrigger("confluence", 1, 1, "first_confluence", 2995, -1, 728,
+        UnresolvedTrigger("confluence", 1, 1, "first_confluence", 2995, -1, 728, None,
                           "degenerate_parent_cycle", "floor 3611 >= end 3611"),
-        UnresolvedTrigger("counter", 1, 1, "first_counter", 3283, 1, None,
+        UnresolvedTrigger("counter", 1, 1, "first_counter", 3283, 1, 761, None,
                           "degenerate_parent_cycle", "floor 3611 >= end 3611"),
-        UnresolvedTrigger("confluence", 1, 1, "subsequent_confluence", 3487, -1, None,
+        UnresolvedTrigger("confluence", 1, 1, "subsequent_confluence", 3487, -1, 826, None,
                           "degenerate_parent_cycle", "floor 3611 >= end 3611"),
     ]
 
@@ -256,7 +258,8 @@ def test_unresolved_file_written_once_pool_wide(lens_dfs, tmp_path):
     assert [_num(r["trigger_idx"]) for r in rows] == [2815, 2995, 3283, 3487]
     assert [r["lens"] for r in rows] == ["confluence", "confluence", "counter", "confluence"]
     assert [_num(r["direction"]) for r in rows] == [-1, -1, 1, -1]
-    assert [_num(r["probe_input_idx"]) for r in rows] == [689, 728, None, None]
+    assert [_num(r["parent_input_idx"]) for r in rows] == [689, 728, 761, 826]
+    assert [_num(r["probe_input_idx"]) for r in rows] == [None, None, None, None]
     assert all(r["reason"] == "degenerate_parent_cycle" for r in rows)
     assert all(r["detail"] == "floor 3611 >= end 3611" for r in rows)
 

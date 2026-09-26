@@ -102,14 +102,14 @@ def _tables(
 
 def _trig(
     lens: str, S: int, C: int, ttype: str, t: int, d: int,
-    *, pending: bool = False, probe_input: Optional[int] = None,
+    *, pending: bool = False, parent_input: Optional[int] = None,
 ) -> SweepTrigger:
     """A lens-tagged, LOH-mapped H1 trigger. `trigger_event_idx = t // 4` is an
-    order key only."""
+    order key only; `parent_input` = its H1 input candle (`parent_input_idx`)."""
     return SweepTrigger(
         lens=lens, parent_sid=S, parent_cycle_id=C, trigger_type=ttype,
         trigger_idx=t, direction=d, trigger_event_idx=t // 4, source=None,
-        pending=pending, probe_input_idx=probe_input,
+        pending=pending, parent_input_idx=parent_input,
     )
 
 
@@ -372,6 +372,25 @@ def test_record_copies_probe_input_idx_for_every_resolved_type():
         ("reversal", 4027, None, 4000),
         ("subsequent_confluence", 3760, None, 3750),
     ]
+
+
+def test_unresolved_reversal_row_has_no_parent_input():
+    """PLAN_E §9.2: a sweep-synthesised reversal has no parent-trigger input — its unresolved row
+    carries `parent_input_idx` None and the M15 input the handoff resolver had derived (its
+    `ProbeFailure.probe_input_idx`), never the reversing record's H1 input (96 here)."""
+    pool = SubStructurePool()
+    tables = _tables({(0, 0): (463, 2611)}, {0: +1})
+    resolve = _resolver({(CONF, 463): _rs(454, 1020, parent_bos_anchor=96, probe_input=385)})
+    geom = _geom(pool, {(+1, 454): 1940})
+    rev = _rev_resolver({(+1, 454): ProbeFailure(
+        detail="degenerate reversal probe window (1950 >= 1940)", probe_input_idx=1950)})
+    result, _ = _run(
+        [_trig(CONF, 0, 0, "first_confluence", 463, +1, parent_input=96)],
+        pool=pool, tables=tables, resolve=resolve, geom=geom, resolve_rev=rev,
+    )
+    (u,) = result.unresolved
+    assert (u.trigger_type, u.trigger_idx, u.reason) == ("reversal", 1940, "probe_failed")
+    assert (u.parent_input_idx, u.probe_input_idx) == (None, 1950)
 
 def test_record_start_floor_trigger_binds_on_cache_hit_inherited_finalize():
     """A re-trigger whose probe was a cache hit inherits the earlier finalize RAW
@@ -1249,21 +1268,24 @@ def test_post_sweep_invariants_hold_on_the_groundtruth_chains():
 # =============================================================================
 
 @pytest.mark.parametrize(
-    "fc_value, fc_pending, exp_reason, exp_detail_fragment",
+    "fc_value, fc_pending, exp_reason, exp_detail_fragment, exp_probe_input",
     [
-        (ProbeFailure(detail="no CTS reference zone", probe_input_idx=90), False, "probe_failed", "no CTS reference zone"),
-        (None, False, "probe_failed", "None"),
-        ("never-called", True, "pending", None),
+        (ProbeFailure(detail="no CTS reference zone", probe_input_idx=90), False, "probe_failed",
+         "no CTS reference zone", 90),
+        (None, False, "probe_failed", "None", None),
+        ("never-called", True, "pending", None, None),
     ],
 )
 def test_subsequent_is_processed_when_the_cycle_first_trigger_failed(
-    fc_value, fc_pending, exp_reason, exp_detail_fragment,
+    fc_value, fc_pending, exp_reason, exp_detail_fragment, exp_probe_input,
 ):
     """§4.3 "Triggers are independent": FC(0,0) t=103 fails (resolver returns
     ProbeFailure / None) or is pending (status != finalized → never probed) →
     UnresolvedTrigger with the matching reason/detail; the subsequent_confluence
     at 403 still resolves and builds its record (tss 0 — the failed FC consumed
-    no trigger_sub_sid, no sub_id).
+    no trigger_sub_sid, no sub_id). One frame per input column (PLAN_E §9.2):
+    every row carries the trigger's H1 `parent_input_idx` (25); `probe_input_idx`
+    is only the resolver's M15 value — None when it gave none, never the H1 input.
     """
     pool = SubStructurePool()
     tables = _tables({(0, 0): (103, None)}, {0: +1})
@@ -1274,7 +1296,7 @@ def test_subsequent_is_processed_when_the_cycle_first_trigger_failed(
     geom = _geom(pool, {(+1, 350): None})
     result, logs = _run(
         [
-            _trig(CONF, 0, 0, "first_confluence", 103, +1, pending=fc_pending, probe_input=90),
+            _trig(CONF, 0, 0, "first_confluence", 103, +1, pending=fc_pending, parent_input=25),
             _trig(CONF, 0, 0, "subsequent_confluence", 403, +1),
         ],
         pool=pool, tables=tables, resolve=resolve, geom=geom,
@@ -1286,7 +1308,8 @@ def test_subsequent_is_processed_when_the_cycle_first_trigger_failed(
     assert (u.lens, u.parent_sid, u.parent_cycle_id, u.trigger_type, u.trigger_idx, u.direction) == (
         CONF, 0, 0, "first_confluence", 103, +1)
     assert u.reason == exp_reason
-    assert u.probe_input_idx == 90
+    assert u.parent_input_idx == 25
+    assert u.probe_input_idx == exp_probe_input
     if exp_detail_fragment is not None:
         assert exp_detail_fragment in u.detail
     if fc_pending:
@@ -1323,8 +1346,8 @@ def test_degenerate_cycle_trigger_is_logged_and_never_probed():
     geom = _geom(pool, {(-1, 2803): None, (-1, 2915): None})
     result, logs = _run(
         [
-            _trig(CONF, 1, 0, "first_confluence", 2815, -1, probe_input=689),
-            _trig(CONF, 1, 1, "first_confluence", 2995, -1, probe_input=728),
+            _trig(CONF, 1, 0, "first_confluence", 2815, -1, parent_input=689),
+            _trig(CONF, 1, 1, "first_confluence", 2995, -1, parent_input=728),
         ],
         pool=pool, tables=tables, resolve=resolve, geom=geom,
     )
@@ -1335,7 +1358,9 @@ def test_degenerate_cycle_trigger_is_logged_and_never_probed():
     u10, u11 = result.unresolved
     assert "3611" in u10.detail and "2995" in u10.detail     # "floor 3611 >= end 2995"
     assert "3611" in u11.detail
-    assert (u10.direction, u10.trigger_type, u10.probe_input_idx) == (-1, "first_confluence", 689)
+    # never probed → the H1 input only; no M15 input (PLAN_E §9.2)
+    assert (u10.direction, u10.trigger_type, u10.parent_input_idx, u10.probe_input_idx) == (
+        -1, "first_confluence", 689, None)
     assert sum("UNRESOLVED (skipping)" in line for line in logs) == 2, logs
 
 
@@ -1349,19 +1374,21 @@ def test_geometry_failed_consumes_no_sub_id_and_later_trigger_can_build_the_key(
     pool = SubStructurePool()
     tables = _tables({(1, 2): (3611, None)}, {1: -1})
     resolve = _resolver({
-        (CONF, 3611): _rs(3304, 3621, cond="no_retrace"),
+        (CONF, 3611): _rs(3304, 3621, cond="no_retrace", probe_input=3305),
         (CONF, 3819): _rs(3304, 3819),
     })
     geom = _geom(pool, {(-1, 3304): None}, fail_once={(-1, 3304)})
     result, logs = _run(
         [
-            _trig(CONF, 1, 2, "first_confluence", 3611, -1),
+            _trig(CONF, 1, 2, "first_confluence", 3611, -1, parent_input=826),
             _trig(CONF, 1, 2, "subsequent_confluence", 3819, -1),
         ],
         pool=pool, tables=tables, resolve=resolve, geom=geom,
     )
     assert [(k.direction, k.starting_idx) for k, _b in geom.calls] == [(-1, 3304), (-1, 3304)]
-    assert [(u.trigger_idx, u.reason) for u in result.unresolved] == [(3611, "geometry_failed")]
+    # the row keeps both inputs: the trigger's H1 826 and the resolver's M15 3305 (PLAN_E §9.2)
+    assert [(u.trigger_idx, u.reason, u.parent_input_idx, u.probe_input_idx)
+            for u in result.unresolved] == [(3611, "geometry_failed", 826, 3305)]
     (S,) = pool.all()
     assert S.sub_id == 0 and S.starting_idx == 3304
     (rec,) = S.records
@@ -1587,12 +1614,13 @@ def test_pending_first_confluence_in_a_cycle_without_cts_is_logged_not_raised():
     resolve = _resolver({(CONF, 403): _rs(350, 403)})
     geom = _geom(pool, {(+1, 350): None})
     result, logs = _run(
-        [_trig(CONF, 0, 1, "first_confluence", 403, +1, pending=True, probe_input=99)],
+        [_trig(CONF, 0, 1, "first_confluence", 403, +1, pending=True, parent_input=99)],
         pool=pool, tables=tables, resolve=resolve, geom=geom,
     )
     (u,) = result.unresolved
-    assert (u.reason, u.lens, u.parent_sid, u.parent_cycle_id, u.trigger_idx, u.probe_input_idx) == (
-        "pending", CONF, 0, 1, 403, 99)
+    assert (u.reason, u.lens, u.parent_sid, u.parent_cycle_id, u.trigger_idx) == (
+        "pending", CONF, 0, 1, 403)
+    assert (u.parent_input_idx, u.probe_input_idx) == (99, None)     # never probed (PLAN_E §9.2)
     assert resolve.calls == [] and geom.calls == [] and pool.all() == []
     assert any("UNRESOLVED (skipping) reason=pending" in l for l in logs), logs
 

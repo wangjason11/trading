@@ -646,15 +646,15 @@ def _resolve_first_confluence_via_unified_probe(
     m15_input_idx = map_candle_to_lower_tf(parent_bos_anchor_time, -trigger.lower_sd, m15_df)
     if m15_input_idx is None:
         print(f"[entity_compute] WARNING: parent→M15 input mapping failed for {label}")
-        return ProbeFailure("parent→M15 input mapping failed", parent_bos_anchor_idx)
+        return ProbeFailure("parent→M15 input mapping failed", None)   # no M15 input yet
     if parent_cts_anchor_idx not in parent_df.index:
         print(f"[entity_compute] WARNING: probe_end_idx={parent_cts_anchor_idx} out of parent_df bounds for {label}")
-        return ProbeFailure(f"probe_end_idx {parent_cts_anchor_idx} out of parent bounds", parent_bos_anchor_idx)
+        return ProbeFailure(f"probe_end_idx {parent_cts_anchor_idx} out of parent bounds", int(m15_input_idx))
     parent_cts_anchor_time = pd.to_datetime(parent_df.loc[parent_cts_anchor_idx, "time"], utc=True)
     m15_probe_end_idx = map_candle_to_lower_tf(parent_cts_anchor_time, trigger.lower_sd, m15_df)
     if m15_probe_end_idx is None:
         print(f"[entity_compute] WARNING: parent→M15 end mapping failed for {label}")
-        return ProbeFailure("parent→M15 end mapping failed", parent_bos_anchor_idx)
+        return ProbeFailure("parent→M15 end mapping failed", int(m15_input_idx))
     if m15_probe_end_idx <= m15_input_idx:
         print(
             f"[entity_compute] WARNING: degenerate probe window for {label} "

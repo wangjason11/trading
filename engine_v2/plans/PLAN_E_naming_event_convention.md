@@ -1109,7 +1109,7 @@ the real emitter.
 - moment-order processing (Q3);
 - the unresolved-triggers CSV `probe_input_idx` frame mix (H1 "whatever was known" for the parent-triggered
   types vs M15) — split into `parent_input_idx` (H1) + `probe_input_idx` (M15, when a probe ran); one exported
-  `/compare` (user 2026-09-26: "fix later").
+  `/compare` (user 2026-09-26: "fix later"). **TAKEN 2026-09-26 (Post-E·1, §9.2).**
 
 ### 9.1 E5 as landed
 
@@ -1278,6 +1278,45 @@ the real emitter.
   misses the chart caller)~~ (done, above); ~~E5·4 =
   the exported Q4 change (triggers CSV `validated_parent_idx` → FC-only `parent_bos_anchor_idx`; measured table
   first).~~ (done: E5·4a / E5·4b above). **E5 is complete** — what remains is the post-E list in §9.
+
+### 9.2 Post-E·1 — the unresolved-triggers CSV input split (2026-09-26)
+
+- **Traced (HEAD `bec284e`).** `UnresolvedTrigger.probe_input_idx` mixed frames from three sources: (1) the sweep's
+  fallback to `SweepTrigger.probe_input_idx` — **H1** for the four parent-triggered types — on `pending`,
+  `degenerate_parent_cycle`, a resolver returning `None`, and a `ProbeFailure` carrying `None`; (2) the FC
+  resolver's own `ProbeFailure` passed the H1 `parent_bos_anchor_idx` on three branches
+  (`entity_df_mutation.py:649/652/657` — at 652/657 the M15 input was already mapped); (3) every other failure
+  branch passed M15. So one reason (`probe_failed`) could carry either frame.
+- **Only FC price-maps its H1 input into the probe.** For `first_counter` (H1 CTS anchor, `uc1_trigger.py`) and the
+  two `subsequent_*` types (H1 window extreme) the H1 input is informational: the sibling resolver never reads it —
+  it co-sources its M15 input from the sibling CTS (or the M15 window-extreme fallback).
+- **User 2026-09-26: shape A** — `UnresolvedTrigger` gains `parent_input_idx` (H1: the parent trigger's input
+  candle, every parent-triggered type; `None` for `reversal`) and `probe_input_idx` becomes M15-only (the input the
+  resolver mapped / co-sourced; empty when none was). The FC `ProbeFailure` branches pass M15 or `None` (649 →
+  `None`, 652 / 657 → the mapped M15 input). **"Both, 2 commits"**: `SweepTrigger.probe_input_idx` →
+  `parent_input_idx` in the exported commit (Post-E·1a); `MultiTFTrigger.meta["probe_input_idx"]` (H1) →
+  `"parent_input_idx"` in a byte-identical commit right after (Post-E·1b) — afterwards `probe_input_idx` means M15
+  everywhere. Rejected: B (mirror the triggers CSV — drops 761 / 826), C (no H1 column).
+- **Prediction (vs `20260926_105208_76ad347`):** `*_M15_unresolved_triggers.csv` only — +1 header
+  (`parent_input_idx`, between `direction` and `probe_input_idx`); the 4 rows (all `degenerate_parent_cycle`, no
+  probe ran): `parent_input_idx` 689 / 728 / 761 / 826 (FC(1,0) BOS_0 anchor, FC(1,1) BOS_1 anchor, first_counter
+  (1,1) cycle-1 CTS anchor, subsequent_confluence (1,1) window extreme = BOS_2's anchor), `probe_input_idx` 689 /
+  728 / 761 / 826 → empty. The other 23 CSVs, the 3 figures and run.log unchanged (no log line prints either
+  input).
+- **Post-E·1a measured (2026-09-26) == prediction.** 23/24 CSVs byte-identical; the unresolved CSV: header
+  `…, direction, parent_input_idx, probe_input_idx, reason, detail`, `parent_input_idx` 689 / 728 / 761 / 826,
+  `probe_input_idx` 4 cells → empty, every other column equal (keyed by column name — `cmp_save.py`'s positional
+  cell diff reports 16 "cells" because the inserted column shifts the row). Figures JSON-identical (H1 85/245,
+  counter 151/124, confluence 294/233); run.log only the parked `by_lens` set-order line; replay 45.1 s wall.
+  Code: `UnresolvedTrigger.parent_input_idx` (before `probe_input_idx`); `SweepTrigger.probe_input_idx` →
+  `parent_input_idx` (orchestrator ×4, spawn); `_Sweep._unresolved` takes H1 from the trigger and M15 only from
+  the resolver (no cross-frame fallback); FC `ProbeFailure` 649 → None, 652 / 657 → the mapped M15 input. Tests
+  936 → 939 + 1 xfail: new pins — the unresolved reversal row (`parent_input_idx` None + the handoff's M15), the
+  FC end-out-of-bounds / end-mapping-failure branches (M15 13, not H1 3; both were untested); the independence
+  parametrization now expects `probe_input_idx` None on the `None` / `pending` rows (a restored fallback would
+  put the H1 25 there); geometry_failed asserts both inputs. Docs: GLOSSARY `probe_input_idx` / new
+  `parent_input_idx` / `SweepTrigger` / `ResolvedStart / ProbeFailure` / `UnresolvedTrigger`; PART4 §17.7;
+  `uc1_trigger.py` comment. History kept: PLAN_C §2 `UnresolvedTrigger` sketch, PLAN_E §9.1 E5·4b text.
 ---
 
 ## 10. Open questions for the user (recommendation first; concrete window data)

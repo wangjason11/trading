@@ -443,11 +443,40 @@ class TestResolveFirstConfluence:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
         mock_probe.assert_not_called()
         assert isinstance(res, ProbeFailure)
-        # PLAN-AMBIGUITY: the M15 input was never derived on this branch. §2.3
-        # says `probe_input_idx` = "whatever was known (H1 or M15 per type)" —
-        # the H1 input 5 WAS known, so it is encoded here (the alternative
-        # reading, None because no M15 value exists, is not chosen).
-        assert res.probe_input_idx == 5
+        # No M15 input exists on this branch: `ProbeFailure.probe_input_idx` is M15 or None,
+        # never the H1 input 5 (PLAN_E §9.2 — the H1 value reaches an unresolved row as
+        # `parent_input_idx`, from the sweep trigger).
+        assert res.probe_input_idx is None
+
+    def test_end_out_of_parent_bounds_returns_probe_failure_with_m15_input(self):
+        h1, m15 = self._fixtures()
+        # input H1 3 → 13 is mapped BEFORE the end is checked; end H1 99 is not in parent_df.
+        trig = _make_trigger(
+            "first_confluence", parent_sd=1, lower_sd=1,
+            probe_input_idx=3, probe_end_idx=99,
+        )
+        with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
+            res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
+        mock_probe.assert_not_called()
+        assert isinstance(res, ProbeFailure)
+        assert "out of parent bounds" in res.detail
+        assert res.probe_input_idx == 13            # the mapped M15 input, not the H1 3 (PLAN_E §9.2)
+
+    def test_end_mapping_failure_returns_probe_failure_with_m15_input(self):
+        # parent_df has 10 hours, the M15 frame covers the first 5: input H1 3 → 13 maps,
+        # end H1 7's hour has no M15 candles → the end mapping fails.
+        h1 = _h1_df_uptrend(n_hours=10)
+        m15 = _m15_from_h1(_h1_df_uptrend(n_hours=5))
+        trig = _make_trigger(
+            "first_confluence", parent_sd=1, lower_sd=1,
+            probe_input_idx=3, probe_end_idx=7,
+        )
+        with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
+            res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
+        mock_probe.assert_not_called()
+        assert isinstance(res, ProbeFailure)
+        assert "end mapping failed" in res.detail
+        assert res.probe_input_idx == 13            # the mapped M15 input, not the H1 3 (PLAN_E §9.2)
 
     def test_degenerate_window_returns_probe_failure_with_m15_input(self):
         h1, m15 = self._fixtures()

@@ -214,9 +214,10 @@ def _synth_stub(source: _Src, sd: int, reversal_apply_idx: int) -> _Src:
     )
 
 
-# (trigger_type, S, C, tei, probe_input_idx) ; probe_input_idx = "whatever was
-# known" on the H1 side: the BOS extreme for FC (groundtruth BOS column), the
-# trigger event idx for the sibling-referencing types.
+# (trigger_type, S, C, tei, parent_input_idx) ; parent_input_idx = the H1 input
+# candle: the BOS anchor for FC (groundtruth BOS column); for the sibling-referencing
+# types (whose H1 input is informational — they probe from an M15 sibling CTS) a
+# stand-in, the trigger event idx.
 _H1_TRIGGER_SPECS: List[Tuple[str, int, int, int, Optional[int]]] = [
     ("first_confluence", 0, 0, 115, 96),
     ("first_confluence", 0, 1, 652, 591),
@@ -242,7 +243,7 @@ def _h1_triggers() -> List[SweepTrigger]:
     subsequent_* types) -- deliberately NOT chronological, so the sweep's own
     ordering by `trigger_idx` is exercised."""
     out: List[SweepTrigger] = []
-    for ttype, s, c, tei, probe_in in _H1_TRIGGER_SPECS:
+    for ttype, s, c, tei, parent_in in _H1_TRIGGER_SPECS:
         parent_sd = EXPECTED_PARENT_SD[s]
         lens = _LENS_OF[ttype]
         direction = parent_sd if lens == CONF else -parent_sd
@@ -254,7 +255,7 @@ def _h1_triggers() -> List[SweepTrigger]:
         out.append(SweepTrigger(
             lens=lens, parent_sid=s, parent_cycle_id=c, trigger_type=ttype,
             trigger_idx=4 * tei + 3, direction=direction, trigger_event_idx=tei,
-            source=src, pending=False, probe_input_idx=probe_in,
+            source=src, pending=False, parent_input_idx=parent_in,
         ))
     assert len(out) == 11
     return out
@@ -326,7 +327,8 @@ def _make_stubs(pool: SubStructurePool, calls: Dict[str, list]):
             bos0_inner=_BOS0[starting_idx],
             finalize_idx=finalize_idx,
             finalize_condition=cond,
-            probe_input_idx=trigger.probe_input_idx,
+            probe_input_idx=None,          # the M15 input is not modelled here (pinned in
+                                           # test_lifecycle_sweep_unit / test_first_trigger_migration)
             cache_hit=False,
         )
 
@@ -779,12 +781,12 @@ def test_unresolved_rows(sweep):
     for u in pool.unresolved:
         assert u.reason == "degenerate_parent_cycle"
         assert isinstance(u.detail, str) and u.detail
-    # "whatever was known": the degenerate trigger never reaches a resolver, so the row carries
-    # the input's own probe_input_idx.
+    # The degenerate trigger never reaches a resolver, so the row carries the input's own H1
+    # parent_input_idx and no M15 probe_input_idx (PLAN_E §9.2).
     inputs = {(t.lens, t.parent_sid, t.parent_cycle_id, t.trigger_type, t.trigger_idx): t for t in sweep["triggers"]}
     for u in pool.unresolved:
         t = inputs[(u.lens, u.parent_sid, u.parent_cycle_id, u.trigger_type, u.trigger_idx)]
-        assert u.probe_input_idx == t.probe_input_idx
+        assert (u.parent_input_idx, u.probe_input_idx) == (t.parent_input_idx, None)
     # Totals: 8 subs / 11 records / 4 unresolved.
     assert (len(pool.all()), len(pool.all_records()), len(pool.unresolved)) == (8, 11, 4)
 

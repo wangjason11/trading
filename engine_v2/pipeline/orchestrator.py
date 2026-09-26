@@ -871,7 +871,7 @@ def _run_multi_tf_dual(
             trigger_idx=_loh(v1.trigger_event_idx), direction=int(mt.lower_sd),
             trigger_event_idx=int(v1.trigger_event_idx), source=mt,
             pending=(v1.status != "finalized"),
-            probe_input_idx=int(v1.input_idx),
+            parent_input_idx=int(v1.input_idx),
         ))
     for v2 in var2_triggers:
         tei = v2.meta.get("trigger_event_idx")
@@ -885,7 +885,7 @@ def _run_multi_tf_dual(
             trigger_type="first_counter",
             trigger_idx=_loh(tei), direction=int(v2.lower_sd),
             trigger_event_idx=int(tei), source=v2,
-            probe_input_idx=v2.meta.get("probe_input_idx"),
+            parent_input_idx=v2.meta.get("probe_input_idx"),
         ))
     for v3 in var3_all:
         mt = subsequent_confluence_to_mt(v3, h1_df)
@@ -895,7 +895,7 @@ def _run_multi_tf_dual(
             trigger_type="subsequent_confluence",
             trigger_idx=_loh(v3.trigger_event_idx), direction=int(mt.lower_sd),
             trigger_event_idx=int(v3.trigger_event_idx), source=mt,
-            probe_input_idx=int(v3.input_idx),
+            parent_input_idx=int(v3.input_idx),
         ))
     for v4 in var4_all:
         mt = subsequent_counter_to_mt(v4, h1_df)
@@ -905,7 +905,7 @@ def _run_multi_tf_dual(
             trigger_type="subsequent_counter",
             trigger_idx=_loh(v4.trigger_event_idx), direction=int(mt.lower_sd),
             trigger_event_idx=int(v4.trigger_event_idx), source=mt,
-            probe_input_idx=int(v4.input_idx),
+            parent_input_idx=int(v4.input_idx),
         ))
 
     # --- 4. The sweep (§17.6) ---

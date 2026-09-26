@@ -76,7 +76,7 @@ def detect_uc1_triggers(
             lower_tf="M15",
             lower_sd=-1 * h1_sd,  # Opposite direction
             meta={
-                # Informational H1 input (the sweep trigger's `probe_input_idx`,
+                # Informational H1 input (the sweep trigger's `parent_input_idx`,
                 # exported on unresolved rows); the sibling-CTS probe co-sources
                 # its own M15 input and ends at the sweep's `hi`.
                 "probe_input_idx": cts_anchor_idx,
