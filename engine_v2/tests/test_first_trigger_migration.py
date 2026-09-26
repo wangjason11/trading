@@ -196,12 +196,12 @@ class TestMapCandleToLowerTf:
 def _make_trigger(
     use_case: str, parent_sid: int = 0, parent_cycle_id: int = 0,
     parent_sd: int = 1, lower_sd: int = -1,
-    probe_input_idx: int = 1, probe_end_idx: int = 5,
+    parent_input_idx: int = 1, probe_end_idx: int = 5,
     prior_sd_trigger_idx: Optional[int] = None,
     prior_cts_prox_idx: Optional[int] = None,
 ) -> MultiTFTrigger:
     meta = {
-        "probe_input_idx": probe_input_idx,
+        "parent_input_idx": parent_input_idx,
         "probe_end_idx": probe_end_idx,
         "trigger_event_idx": probe_end_idx,
     }
@@ -390,7 +390,7 @@ class TestResolveFirstConfluence:
         trig = _make_trigger(
             "first_confluence", parent_cycle_id=1,
             parent_sd=1, lower_sd=1,
-            probe_input_idx=3, probe_end_idx=7,
+            parent_input_idx=3, probe_end_idx=7,
         )
         fake = _fake_probe_result(
             starting_idx=15, finalize_idx=20, finalize_condition="no_retrace",
@@ -424,7 +424,7 @@ class TestResolveFirstConfluence:
     def test_missing_probe_meta_returns_probe_failure(self):
         h1, m15 = self._fixtures()
         trig = _make_trigger("first_confluence")
-        trig.meta.pop("probe_input_idx")
+        trig.meta.pop("parent_input_idx")
         res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
         assert isinstance(res, ProbeFailure)
         assert res.probe_input_idx is None          # nothing was mapped yet
@@ -437,7 +437,7 @@ class TestResolveFirstConfluence:
         m15 = _m15_from_h1(_h1_df_uptrend(n_hours=3))
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            probe_input_idx=5, probe_end_idx=7,
+            parent_input_idx=5, probe_end_idx=7,
         )
         with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
@@ -453,7 +453,7 @@ class TestResolveFirstConfluence:
         # input H1 3 → 13 is mapped BEFORE the end is checked; end H1 99 is not in parent_df.
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            probe_input_idx=3, probe_end_idx=99,
+            parent_input_idx=3, probe_end_idx=99,
         )
         with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
@@ -467,7 +467,7 @@ class TestResolveFirstConfluence:
         # H1 input 99 is not in parent_df: nothing is mapped → no M15 input (PLAN_E §9.2).
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            probe_input_idx=99, probe_end_idx=7,
+            parent_input_idx=99, probe_end_idx=7,
         )
         with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
@@ -483,7 +483,7 @@ class TestResolveFirstConfluence:
         m15 = _m15_from_h1(_h1_df_uptrend(n_hours=5))
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            probe_input_idx=3, probe_end_idx=7,
+            parent_input_idx=3, probe_end_idx=7,
         )
         with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
@@ -497,7 +497,7 @@ class TestResolveFirstConfluence:
         # input H1 3 → 13 ; end H1 3 price-mapped +1 → 12 ; 12 <= 13 → degenerate
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            probe_input_idx=3, probe_end_idx=3,
+            parent_input_idx=3, probe_end_idx=3,
         )
         with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
@@ -509,7 +509,7 @@ class TestResolveFirstConfluence:
         h1, m15 = self._fixtures()
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            probe_input_idx=3, probe_end_idx=7,
+            parent_input_idx=3, probe_end_idx=7,
         )
         with _patched_fc_ref(None), \
                 _patched_probe(return_value=_fake_probe_result()) as mock_probe:
@@ -522,7 +522,7 @@ class TestResolveFirstConfluence:
         h1, m15 = self._fixtures()
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            probe_input_idx=3, probe_end_idx=7,
+            parent_input_idx=3, probe_end_idx=7,
         )
         pending = _fake_probe_result(
             starting_idx=0, status="pending",
@@ -986,7 +986,7 @@ class TestDispatcher:
         pool = SubStructurePool()
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            probe_input_idx=2, probe_end_idx=4,
+            parent_input_idx=2, probe_end_idx=4,
         )
         fake = ResolvedStart(
             starting_idx=77, parent_bos_anchor_idx=2, bos0_inner=0.6020,
@@ -1081,10 +1081,10 @@ class TestProbeCache:
         return h1, m15
 
     @staticmethod
-    def _fc(probe_input_idx: int = 3, probe_end_idx: int = 7) -> MultiTFTrigger:
+    def _fc(parent_input_idx: int = 3, probe_end_idx: int = 7) -> MultiTFTrigger:
         return _make_trigger(
             "first_confluence", parent_cycle_id=1, parent_sd=1, lower_sd=1,
-            probe_input_idx=probe_input_idx, probe_end_idx=probe_end_idx,
+            parent_input_idx=parent_input_idx, probe_end_idx=probe_end_idx,
         )
 
     @staticmethod
@@ -1214,11 +1214,11 @@ class TestProbeCache:
         with _patched_probe(side_effect=_probe) as mock_probe:
             with _patched_fc_ref(_ref_zone("ad_hoc_bos_0", 13, inner=0.6020, outer=0.6000)):
                 ra = _resolve_first_confluence_via_unified_probe(
-                    self._fc(probe_input_idx=3), h1, m15, pool=pool,
+                    self._fc(parent_input_idx=3), h1, m15, pool=pool,
                 )
             with _patched_fc_ref(_ref_zone("ad_hoc_bos_0", 17, inner=0.6020, outer=0.6000)):
                 rb = _resolve_first_confluence_via_unified_probe(
-                    self._fc(probe_input_idx=4), h1, m15, pool=pool,
+                    self._fc(parent_input_idx=4), h1, m15, pool=pool,
                 )
             # Input 17 ≠ 13 → its OWN probe ran (the pool, not the cache, dedups the MS).
             assert mock_probe.call_count == 2

@@ -33,7 +33,8 @@ def test_to_multi_tf_trigger_bullish_parent():
     assert out.lower_sd == 1                    # confluence with bullish parent
     assert out.lower_tf == "M15"
     assert out.parent_cycle_id == 1
-    assert out.meta["probe_input_idx"] == 42
+    assert out.meta["parent_input_idx"] == 42
+    assert "probe_input_idx" not in out.meta    # renamed, no alias (PLAN_E §9.2)
     assert "probe_end_idx" not in out.meta     # unread; deleted in Plan E E1b
     assert out.meta["prior_sd_trigger_idx"] == 30
 
@@ -46,4 +47,5 @@ def test_to_multi_tf_trigger_bearish_parent():
     )
     out = to_multi_tf_trigger(trig, h1)
     assert out.lower_sd == -1
-    assert out.meta["probe_input_idx"] == 42
+    assert out.meta["parent_input_idx"] == 42
+    assert "probe_input_idx" not in out.meta    # renamed, no alias (PLAN_E §9.2)

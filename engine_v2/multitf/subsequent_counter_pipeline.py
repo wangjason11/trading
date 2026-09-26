@@ -2,8 +2,10 @@
 
 Per spec §4.3.5 / §4.3.7:
   Probe sd:        -parent_sd (counter — opposite direction to parent)
-  Probe input_idx: parent-TF window extreme toward parent CTS (Λ apex /
-                   V trough)
+  Parent input:    meta `parent_input_idx` (H1) = the parent-TF window
+                   extreme toward parent CTS (Λ apex / V trough) —
+                   informational: the resolver co-sources its M15 input
+                   from the sibling CTS (§4.3.4)
   Probe end_idx:   the sd-prox trigger candle
 
 Mapping (§4.3.1, unified rule `mapping_sd = -sub_sd`): for counter sub
@@ -39,7 +41,7 @@ def to_multi_tf_trigger(
         lower_tf="M15",
         lower_sd=-trig.parent_sd,       # counter: opposite direction to parent
         meta={
-            "probe_input_idx": trig.input_idx,
+            "parent_input_idx": trig.input_idx,
             "trigger_event_idx": trig.trigger_event_idx,
             "prior_sd_trigger_idx": trig.meta.get("prior_sd_trigger_idx"),
             "prior_cts_prox_idx": trig.meta.get("prior_cts_prox_idx"),

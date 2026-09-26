@@ -1827,8 +1827,8 @@ When a sub needs parent zones (`first_confluence`'s BOS anchor input; the
 main's proximity triggers that fire the counter/subsequent variations) it
 reads them **at trigger-detection time on H1** (`first_confluence_trigger`,
 `uc1_trigger`, `subsequent_*_trigger`) and carries what it needs on the
-`MultiTFTrigger` (`input_idx`, `probe_end_idx`, `parent_sid`,
-`parent_cycle_id`, `prior_*` meta). The record's own `parent_sid` /
+`MultiTFTrigger` (`parent_sid`, `parent_cycle_id`; meta `parent_input_idx`
+(H1), `probe_end_idx`, `trigger_event_idx`, `prior_*`). The record's own `parent_sid` /
 `parent_cycle_id` scope every later cross-lens read:
 
 ```python

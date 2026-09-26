@@ -1346,6 +1346,18 @@ the real emitter.
   the new orchestrator pin's `v2.meta`; docs: GLOSSARY `parent_input_idx` + LOH rows, PART4 §9.4 (~1830) the
   `MultiTFTrigger` field list, memory `project_part4_progress.md` (meta-key line). Out of scope: `meta["probe_end_idx"]`
   stays H1 while `ProbeResult.probe_end_idx` is M15 (the same name / frame split for the end bound).
+- **Post-E·1b — `MultiTFTrigger.meta["probe_input_idx"]` (H1) → `"parent_input_idx"` (2026-09-26; user: go ahead,
+  keep `_synth_reversal_trigger`'s full meta copy — reversal triggers inherit the unread H1 key under its new
+  name).** Writers: the three pipelines + `uc1_trigger` (+ their docstrings: the sibling types' H1 input is
+  informational); readers: the FC resolver (keeps its tested `.get` + "missing → ProbeFailure" path; its print /
+  detail strings name `parent_input_idx`), the orchestrator's `first_counter` read → `v2.meta["parent_input_idx"]`
+  (a missed writer now raises instead of a silent None). Tests: the helpers `_make_trigger` / `_fc` take
+  `parent_input_idx=`; the three pipeline tests also assert the old key is absent (no alias). Docs: GLOSSARY
+  `parent_input_idx` + LOH rows, PART4 §9.4. **Prediction:** byte-identical — 24/24 CSVs, figures, run.log (the
+  renamed print / detail strings fire only on an FC input failure: 0 on the window). After 1b `probe_input_idx`
+  names the M15 input everywhere. **Measured == prediction** (vs `20260926_120641_1756c30`): 24/24 CSVs
+  byte-identical, figures JSON-identical, run.log only the parked `by_lens` set-order line; tests 942 + 1 xfail
+  (unchanged count — the no-alias asserts sit in the existing pipeline tests).
 ---
 
 ## 10. Open questions for the user (recommendation first; concrete window data)

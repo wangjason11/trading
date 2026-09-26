@@ -620,16 +620,16 @@ def _resolve_first_confluence_via_unified_probe(
     from engine_v2.multitf.data_bridge import map_candle_to_lower_tf
 
     label = f"first_confluence sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}"
-    raw_input = trigger.meta.get("probe_input_idx")
+    raw_input = trigger.meta.get("parent_input_idx")   # H1; missing → a logged ProbeFailure (tested)
     raw_end = trigger.meta.get("probe_end_idx")
     if raw_input is None or raw_end is None:
-        print(f"[entity_compute] WARNING: missing probe_input_idx/probe_end_idx in trigger meta for {label}")
-        return ProbeFailure("missing probe_input_idx/probe_end_idx", None)
+        print(f"[entity_compute] WARNING: missing parent_input_idx/probe_end_idx in trigger meta for {label}")
+        return ProbeFailure("missing parent_input_idx/probe_end_idx", None)
     parent_bos_anchor_idx = int(raw_input)
     parent_cts_anchor_idx = int(raw_end)
     if parent_bos_anchor_idx not in parent_df.index:
-        print(f"[entity_compute] WARNING: probe_input_idx={parent_bos_anchor_idx} out of parent_df bounds for {label}")
-        return ProbeFailure(f"probe_input_idx {parent_bos_anchor_idx} out of parent bounds", None)
+        print(f"[entity_compute] WARNING: parent_input_idx={parent_bos_anchor_idx} out of parent_df bounds for {label}")
+        return ProbeFailure(f"parent_input_idx {parent_bos_anchor_idx} out of parent bounds", None)
 
     # Candle-semantics mapping rule (user spec 2026-05-31): BOS/CTS ANCHOR
     # candles are PRICE-mapped (they anchor a price level into the sub);

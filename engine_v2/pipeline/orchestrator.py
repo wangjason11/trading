@@ -885,7 +885,7 @@ def _run_multi_tf_dual(
             trigger_type="first_counter",
             trigger_idx=_loh(tei), direction=int(v2.lower_sd),
             trigger_event_idx=int(tei), source=v2,
-            parent_input_idx=v2.meta.get("probe_input_idx"),
+            parent_input_idx=v2.meta["parent_input_idx"],   # uc1 always writes it — a miss fails loudly
         ))
     for v3 in var3_all:
         mt = subsequent_confluence_to_mt(v3, h1_df)
