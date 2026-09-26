@@ -3,8 +3,8 @@
 **Status:** rev 2 — cold-reviewed (§11: 3 lenses, 1 BLOCKER + 15 MAJOR findings folded in). **All §10 questions
 DECIDED by the user 2026-09-24** (Q11 wording approved as §4.2). **Progress (2026-09-25): E1–E4 LANDED** —
 as-landed records §5.1 (E1/E1b), §6.7 (E2), §7.2 (E3), §8.1 (E4a / E4b-pre / E4b / E4c, each with its landing
-review); `ev.idx` is the moment on every CTS / BOS event. **E5 in progress** (§9.1): E5·1 internal renames
-landed (`029401f`); remaining: E5·2 dead code, E5·3 prose + Q12, E5·4 the exported Q4 change.
+review); `ev.idx` is the moment on every CTS / BOS event. **E5 COMPLETE (2026-09-26)** (§9.1): E5·1 renames,
+E5·2 dead code, E5·3 prose + Q12, E5·4a/b the exported Q4 change — each with its landing review. Post-E: §9.
 **Inputs (canonical site lists — read first):** [`PLAN_E_inputs.md`](PLAN_E_inputs.md) (the digest; §0.1 = the
 user's FINAL decisions) + the raw inventories [`plan_e_inputs/`](plan_e_inputs/README.md). This plan does NOT
 re-list every site: it schedules them, states each stage's mechanism and numeric prediction, and cites the inputs by
@@ -1241,7 +1241,7 @@ the real emitter.
 - **E5·4b — `TriggerRecord.probe_input_idx` → a triggers-CSV column (2026-09-26; EXPORTED, additive).** The M15
   candle the probe started from, for every resolved type (FC: the price-mapped parent BOS anchor; siblings: the
   sibling CTS anchor; reversal: the handoff input) — the sweep copies `ResolvedStart.probe_input_idx`, which all
-  four resolvers already set. Required field (no default), placed after `parent_bos_anchor_idx`. **User 2026-09-26:
+  three resolvers already set (four return sites). Required field (no default), placed after `parent_bos_anchor_idx`. **User 2026-09-26:
   name it `probe_input_idx`** (= the field it copies) and fix the unresolved CSV later: `UnresolvedTrigger
   .probe_input_idx` is "whatever was known" — H1 for the four parent-triggered types when no probe ran (this
   window: 689 / 728 / 761 / 826), M15 for reversal / a failed sibling probe — the same frame mix Q4 removed from
@@ -1251,16 +1251,33 @@ the real emitter.
   `20260926_104311_5d149b0`) == prediction (from run.log's probe lines):** conf 385 / 1794 / 2365 / 2365 / 2609 /
   3304 / 3760 / 4000, counter 2609 / 3621 / 4000, the column right after `parent_bos_anchor_idx`, the rest of both
   files identical; the other 22 CSVs byte-identical; figures JSON-identical; run.log identical; fetch gate PASS.
-  Replay 44.1 s. Tests 935 + 1 xfail.
+  Replay 44.1 s. Tests 935 + 1 xfail. Commit `76ad347`; save `20260926_105208_76ad347`.
+  - Landing review of E5·4a + E5·4b (2 lenses). **Conformance** (≈165k): 0 BLOCKER / 0 MAJOR; every production
+    resolver path (FC run + APPROX hit, sibling run + hit, reversal hit + miss) sets an int M15 entity-absolute
+    `probe_input_idx`; only the FC resolver writes a non-None `parent_bos_anchor_idx`; nothing reads the triggers
+    CSV by position. MINOR / NIT folded in: the GLOSSARY TriggerRecord row lacked `probe_input_idx`; "all idxs
+    entity-absolute M15" (`TriggerRecord` docstring, PART4 §17.4) now excepts `parent_bos_anchor_idx` (H1); the
+    sibling type's `probe_input_idx` can be the own-frame ad-hoc BOS_0 anchor (PART4 §4.3.4 step 5 — pinned by a
+    test, 0 on this window); the unresolved column's rule stated precisely (M15 once the resolver had an M15
+    input, else the trigger's H1 value); "this record's probe"; the PLAN_E status line + "Remaining E5"; stale
+    test wording / the `_rs(validated=)` kwarg → `parent_bos_anchor=`; `probe_fc_finalize`'s unused local; the
+    `ResolvedStart.probe_input_idx` comment (still defaulted None — test stubs rely on it; enforcing it is
+    hygiene); "three resolvers (four return sites)". **Mutation** (≈145k; 39 mutants on a `git archive` copy):
+    resolvers (FC / sibling incl. fallback / reversal hit + miss), export (omit / move / mis-source the column)
+    and the dataclass contract all killed; the "required" field is enforced by dataclass ordering (a default in
+    place fails at import; moving it to the tail is caught by the field-order pin). **3 survivors** — the sweep
+    copying `probe_input_idx` only for FC / dropping it for reversal / for sibling types (the only sweep-level
+    assertion was the FC record) → pin `test_record_copies_probe_input_idx_for_every_resolved_type` adopted
+    (verified by the lens to kill all three + M4a–f / M4k). Tests 935 → **936 + 1 xfail**.
 - **Remaining E5:** ~~E5·3 = the IN §1.9 prose +
   §3 #14 + the Q12 `KLZone.source_time` documentation + the GLOSSARY Naming-Standard "Status" paragraph + from
   the E5·1 / E5·2 reviews: the `ReferenceZone` docstring (`anchor_idx` defined for every constructed source,
   incl. `ad_hoc_bos_0`, the common case; slice-local on the reversal path, entity-absolute on the sibling path),
   the `reference_zone` module docstring + `_zone_to_reference` still describing the retired "parent BOS / CTS
   zone" design, LANDMINES "both call sites" of `map_candle_to_lower_tf` (names deleted / renamed functions;
-  misses the chart caller)~~ (done, above); E5·4 =
+  misses the chart caller)~~ (done, above); ~~E5·4 =
   the exported Q4 change (triggers CSV `validated_parent_idx` → FC-only `parent_bos_anchor_idx`; measured table
-  first).
+  first).~~ (done: E5·4a / E5·4b above). **E5 is complete** — what remains is the post-E list in §9.
 ---
 
 ## 10. Open questions for the user (recommendation first; concrete window data)

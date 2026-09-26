@@ -136,7 +136,7 @@ class TriggerRecord:
     """A triggered INSTANCE of a unique sub (§17.4) with its own lifecycle.
 
     Identity `(lens, parent_sid, parent_cycle_id, trigger_sub_sid)`; FK `sub_id`
-    (never None). All idxs entity-absolute M15.
+    (never None). All idxs entity-absolute M15, except `parent_bos_anchor_idx` (H1, FC only).
 
     Historical (never adjusted): `trigger_idx` (LOH of the parent trigger
     candle; native M15 for `reversal`), `probe_finalize_idx` (when THIS record's
@@ -229,7 +229,9 @@ class TriggerRecord:
 class UnresolvedTrigger:
     """A trigger that produced no record — logged, never built. No `sub_id`, no
     `trigger_sub_sid`. `reason ∈ UNRESOLVED_REASONS`; `probe_input_idx` is
-    whatever was known (H1 for the four named types, M15 for `reversal`)."""
+    whatever was known: M15 once the resolver had an M15 input (reversal; a
+    failure after the M15 mapping; a pending FC), otherwise the trigger's own H1
+    value — a known frame mix, PLAN_E §9 Post-E."""
     lens: str
     parent_sid: int
     parent_cycle_id: int

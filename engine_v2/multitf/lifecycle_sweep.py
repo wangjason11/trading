@@ -90,7 +90,8 @@ class ResolvedStart(NamedTuple):
     bos0_inner: Optional[float]
     finalize_idx: int
     finalize_condition: str
-    probe_input_idx: Optional[int] = None   # the probe's initial input (M15) — informational
+    probe_input_idx: Optional[int] = None   # the probe's initial input (M15, entity-absolute) — exported as
+                                            # TriggerRecord.probe_input_idx (E5·4b); every production resolver sets it
     cache_hit: bool = False
 
 

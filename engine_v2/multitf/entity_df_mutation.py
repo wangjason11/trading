@@ -767,8 +767,8 @@ def _resolve_sibling_cts_via_unified_probe(
     sibling lens's most recent qualifying CTS in the trigger's M15 window
     `[lo, hi]` (`hi` = this trigger's `trigger_idx`, the last M15 of its H1
     hour). `enable_phase2=False`. Returns a `ResolvedStart`
-    (`parent_bos_anchor_idx` None — FC-only, PLAN_E Q4; the sibling CTS anchor it probes
-    from is `probe_input_idx`, M15) or a `ProbeFailure`.
+    (`parent_bos_anchor_idx` None — FC-only, PLAN_E Q4; the M15 candle it probes from —
+    the sibling CTS anchor or the ad-hoc fallback's — is `probe_input_idx`) or a `ProbeFailure`.
     """
     label = f"{trigger.use_case} sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}"
     other_lens = _SIBLING_LENS.get(trigger.use_case)

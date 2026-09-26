@@ -367,8 +367,9 @@ def _two_lens_records(pool, sub, m15_df):
           FIRST among the live records -> the first live record (R2);
       D — counter lens, start 70, live (seq 3) — created LAST.
     So `first` (B) is neither the first-created nor the last-created live
-    record. Distinct parent scopes / trigger types / parent_bos_anchor_idx so
-    the attribution reveals which record was chosen."""
+    record. Distinct parent scopes / trigger types so the attribution reveals
+    which record was chosen (the `parent_bos_anchor_idx` values are arbitrary
+    pass-through stubs; the real rule — FC-only — is pinned elsewhere)."""
     z = _record(pool, sub, m15_df, LENS_COUNTER, start_idx=_START - 2, seq=0,
                 trigger_type="first_counter", parent_sid=2, parent_cycle_id=0,
                 trigger_end_idx=_START - 2)

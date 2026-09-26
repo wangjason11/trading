@@ -115,11 +115,12 @@ def _trig(
 
 def _rs(
     starting_idx: int, finalize_idx: int, *,
-    validated: Optional[int] = None, bos0: Optional[float] = 1.0,
+    parent_bos_anchor: Optional[int] = None, bos0: Optional[float] = 1.0,   # pass-through stub values
+    # (the real rule — FC-only — is pinned in test_first_trigger_migration)
     cond: str = "stub", cache_hit: bool = False, probe_input: Optional[int] = None,
 ) -> ResolvedStart:
     return ResolvedStart(
-        starting_idx=starting_idx, parent_bos_anchor_idx=validated,
+        starting_idx=starting_idx, parent_bos_anchor_idx=parent_bos_anchor,
         bos0_inner=bos0, finalize_idx=finalize_idx, finalize_condition=cond,
         probe_input_idx=probe_input, cache_hit=cache_hit,
     )
@@ -271,8 +272,8 @@ def _scenario_2365(pool: SubStructurePool):
         _trig(CONF, 0, 1, "first_confluence", 2611, +1),
     ]
     resolve = _resolver({
-        (CONF, 463): _rs(454, 1020, validated=96, cond="second_cts_reached"),
-        (CONF, 2611): _rs(2365, 2608, validated=591, cond="second_cts_reached"),
+        (CONF, 463): _rs(454, 1020, parent_bos_anchor=96, cond="second_cts_reached"),
+        (CONF, 2611): _rs(2365, 2608, parent_bos_anchor=591, cond="second_cts_reached"),
     })
     geom = _geom(pool, {(+1, 454): 1940, (-1, 1797): 2470, (+1, 2365): 2829, (-1, 2639): None})
     rev = _rev_resolver({(+1, 454): 1797, (-1, 1797): 2365, (+1, 2365): 2639})
@@ -291,8 +292,8 @@ def _scenario_3304(pool: SubStructurePool):
         _trig(CONF, 1, 2, "subsequent_confluence", 3819, -1),
     ]
     resolve = _resolver({
-        (CONF, 3611): _rs(3304, 3621, validated=826, cond="no_retrace"),
-        (CONF, 3819): _rs(3760, 3819, validated=954),
+        (CONF, 3611): _rs(3304, 3621, parent_bos_anchor=826, cond="no_retrace"),
+        (CONF, 3819): _rs(3760, 3819, parent_bos_anchor=954),
     })
     geom = _geom(pool, {(-1, 3304): None, (-1, 3760): 4200, (+1, 4027): None})
     rev = _rev_resolver({(-1, 3760): 4027})
@@ -308,7 +309,7 @@ def test_record_start_floor_finalize_binds():
     (the groundtruth's sub 0). Historical fields stay raw."""
     pool = SubStructurePool()
     tables = _tables({(0, 0): (463, 2611)}, {0: +1})
-    resolve = _resolver({(CONF, 463): _rs(454, 1020, validated=96, cond="second_cts_reached",
+    resolve = _resolver({(CONF, 463): _rs(454, 1020, parent_bos_anchor=96, cond="second_cts_reached",
                                           probe_input=385)})
     geom = _geom(pool, {(+1, 454): 1940, (-1, 1797): None})
     rev = _rev_resolver({(+1, 454): 1797})
@@ -335,6 +336,43 @@ def test_record_start_floor_finalize_binds():
     assert result.unresolved == []
 
 
+def test_record_copies_probe_input_idx_for_every_resolved_type():
+    """PLAN_E E5·4b: the sweep copies `ResolvedStart.probe_input_idx` into the record for EVERY
+    resolved type — FC, a sibling type, and a reversal-born successor — and
+    `parent_bos_anchor_idx` as given (the FC-only rule lives in the resolvers, pinned in
+    test_first_trigger_migration / test_reversal_resolver). The (1,2) scenario of
+    `_scenario_3304`; the inputs are synthetic and != `starting_idx` so a type-conditional copy
+    (e.g. mirroring the FC-only `parent_bos_anchor_idx` rule) or a `starting_idx` copy is caught.
+    (E5·4 landing review, mutation lens: kills the FC-only / no-reversal / no-sibling copies.)"""
+    pool = SubStructurePool()
+    tables = _tables({(1, 2): (3611, None)}, {1: -1})
+    triggers = [
+        _trig(CONF, 1, 2, "first_confluence", 3611, -1),
+        _trig(CONF, 1, 2, "subsequent_confluence", 3819, -1),
+    ]
+    resolve = _resolver({
+        (CONF, 3611): _rs(3304, 3621, parent_bos_anchor=826, cond="no_retrace", probe_input=3305),
+        (CONF, 3819): _rs(3760, 3819, probe_input=3750),     # sibling: no parent BOS anchor
+    })
+    geom = _geom(pool, {(-1, 3304): None, (-1, 3760): 4200, (+1, 4027): None})
+
+    def rev(sub: PooledStructure, R: int, probe_direction: int):
+        # (-1,3760) reverses at 4200 -> successor (+1,4027) probed from input 4000
+        if (sub.direction, sub.starting_idx) == (-1, 3760):
+            return _rs(4027, R, cond="reversal_handoff", probe_input=4000)
+        return ProbeFailure(detail="no successor stubbed", probe_input_idx=None)
+
+    _run(triggers, pool=pool, tables=tables, resolve=resolve, geom=geom, resolve_rev=rev)
+    got = sorted(
+        (r.trigger_type, r.starting_idx, r.parent_bos_anchor_idx, r.probe_input_idx)
+        for r in pool.all_records()
+    )
+    assert got == [
+        ("first_confluence", 3304, 826, 3305),
+        ("reversal", 4027, None, 4000),
+        ("subsequent_confluence", 3760, None, 3750),
+    ]
+
 def test_record_start_floor_trigger_binds_on_cache_hit_inherited_finalize():
     """A re-trigger whose probe was a cache hit inherits the earlier finalize RAW
     (§2.1): subseq_conf(1,2) trigger 3819, inherited finalize 3487, floor 3611 →
@@ -350,7 +388,7 @@ def test_record_start_floor_trigger_binds_on_cache_hit_inherited_finalize():
     pool = SubStructurePool()
     tables = _tables({(1, 2): (3611, None)}, {1: -1})
     resolve = _resolver({
-        (CONF, 3819): _rs(3760, 3487, validated=954, cond="cached", cache_hit=True),
+        (CONF, 3819): _rs(3760, 3487, parent_bos_anchor=954, cond="cached", cache_hit=True),
     })
     geom = _geom(pool, {(-1, 3760): None})
     _run(
@@ -369,7 +407,7 @@ def test_record_start_floor_parent_floor_binds():
     `probe_finalize_idx` / `trigger_idx` are NOT adjusted (historical)."""
     pool = SubStructurePool()
     tables = _tables({(1, 0): (3611, None)}, {1: -1})
-    resolve = _resolver({(CONF, 2815): _rs(2803, 2844, validated=689, cond="no_retrace")})
+    resolve = _resolver({(CONF, 2815): _rs(2803, 2844, parent_bos_anchor=689, cond="no_retrace")})
     geom = _geom(pool, {(-1, 2803): None})
     _run(
         [_trig(CONF, 1, 0, "first_confluence", 2815, -1)],

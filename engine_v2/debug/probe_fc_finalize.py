@@ -163,11 +163,9 @@ for t in trigs:
     max_ev_all = max((int(ev.idx) for ms in retained_ms for ev in ms.events), default=None)
     res = captured.get("res")
     if isinstance(out, edm.ResolvedStart):
-        m15_start, validated, bos0_inner, finalize_idx = (
-            out.starting_idx, out.parent_bos_anchor_idx, out.bos0_inner, out.finalize_idx,
-        )
+        m15_start, bos0_inner, finalize_idx = out.starting_idx, out.bos0_inner, out.finalize_idx
     else:  # ProbeFailure / None
-        m15_start, validated, bos0_inner, finalize_idx = None, None, None, None
+        m15_start, bos0_inner, finalize_idx = None, None, None
 
     cc = cts_conf.get(key)
     rows.append(dict(

@@ -414,7 +414,7 @@ class TestResolveFirstConfluence:
 
         assert isinstance(res, ResolvedStart)
         assert res.starting_idx == 15
-        assert res.parent_bos_anchor_idx == 3        # parent BOS extreme (H1) that seeded the probe
+        assert res.parent_bos_anchor_idx == 3        # the parent BOS anchor (H1) that seeded the probe
         assert res.bos0_inner == pytest.approx(0.6020)
         assert res.finalize_idx == 20               # FC keeps the probe's own finalize, raw
         assert res.finalize_condition == "no_retrace"

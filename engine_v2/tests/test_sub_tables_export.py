@@ -398,7 +398,7 @@ def test_lens_filter_is_the_caller_s_responsibility_rows_are_written_as_given(tm
         lens="counter", parent_sid=1, parent_cycle_id=2, trigger_sub_sid=1,
         sub_id=7, trigger_type="subsequent_counter", trigger_idx=4083,
         probe_finalize_idx=4083, probe_finalize_condition="no_retrace",
-        parent_bos_anchor_idx=1020, probe_input_idx=4000, starting_idx=4027, direction=1, sub_tf="M15",
+        parent_bos_anchor_idx=1020, probe_input_idx=4000, starting_idx=4027, direction=1, sub_tf="M15",   # pass-through stub
         relative_dir="counter", parent_floor_idx=3611, start_idx=4083,
         seq=9,
     )
