@@ -741,7 +741,9 @@ def _assign_sub_wvmi_per_sub(
             counts["records"] += len(recs)
             sb = res.meta.get("started_by", "?")
             counts["by_started_by"][sb] = counts["by_started_by"].get(sb, 0) + len(recs)
-            for l in lenses:
+            # sorted: `lenses` is a set, so bare iteration fixes the dict's
+            # key order per process (string hash seed) — run.log prints it.
+            for l in sorted(lenses):
                 counts["by_lens"][l] = counts["by_lens"].get(l, 0) + len(recs)
     return counts
 

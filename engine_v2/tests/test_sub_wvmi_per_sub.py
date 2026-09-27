@@ -599,6 +599,30 @@ class TestDedupAndCounts:
         assert len(_wvmi(lens_dfs[LENS_CONFLUENCE])) == 5
         assert len(_wvmi(lens_dfs[LENS_COUNTER])) == 3
 
+    def test_by_lens_key_order_is_sorted_not_set_order(
+        self, monkeypatch, sweep, lens_dfs, frames,
+    ):
+        """`by_lens` is printed in run.log, so its key order must not depend on
+        the set iteration order of the sub's lenses (per process: the string
+        hash seed). The orchestrator's `set` is swapped for one that iterates
+        REVERSE-sorted: a bare `for l in lenses` would insert counter first;
+        the rule (sorted lenses) inserts confluence first. The one sub is on
+        both lenses, so the first insertion decides the order."""
+        class _ReverseIterSet(set):
+            def __iter__(self):
+                return iter(sorted(set.__iter__(self), reverse=True))
+
+        import engine_v2.pipeline.orchestrator as orch
+        monkeypatch.setattr(orch, "set", _ReverseIterSet, raising=False)
+        sweep.n_by_sub_id.update({1: 2})
+        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
+                        lenses=(LENS_CONFLUENCE, LENS_COUNTER))
+        streams = {LENS_CONFLUENCE: [(6, "ZONE_PROXIMITY_TRIGGER")], LENS_COUNTER: []}
+        counts = _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
+
+        assert list(counts["by_lens"]) == [LENS_CONFLUENCE, LENS_COUNTER]
+        assert counts["by_lens"] == {LENS_CONFLUENCE: 2, LENS_COUNTER: 2}
+
     def test_sweep_yielding_no_records_marks_the_sub_swept_but_not_acted(
         self, sweep, lens_dfs, frames,
     ):

@@ -1124,6 +1124,14 @@ the real emitter.
   `FirstConfluenceTrigger.probe_end_idx` hold the H1 CTS anchor, `ProbeResult.probe_end_idx` / the probe cache's the
   M15 bound — the `parent_input_idx` / `probe_input_idx` pattern would give the H1 one a `parent_*` name
   (byte-identical rename; FC only).
+- the run.log `[multi_tf:dual] sub wvmi … by_lens={…}` key order — a false delta in every run.log diff ("the parked
+  `by_lens` order" in the entries above): `orchestrator._assign_sub_wvmi_per_sub` counted over the sub's lens SET, so
+  the dict's insertion order followed the per-process string hash seed. **DONE 2026-09-26:** counts over
+  `sorted(lenses)` (as the persist loop above it already did). Measured vs `20260926_122844_532df17` == prediction:
+  24/24 CSVs byte-identical, the 3 figures JSON-identical, run.log only that line, now `by_lens={'confluence': 7,
+  'counter': 6}` in every process. Pin `test_sub_wvmi_per_sub.py::test_by_lens_key_order_is_sorted_not_set_order`
+  (the orchestrator's `set` swapped for a reverse-iterating one — kills the bare `for l in lenses` deterministically,
+  not only under an unlucky hash seed). Tests 944 + 1 xfail.
 
 ### 9.1 E5 as landed
 
