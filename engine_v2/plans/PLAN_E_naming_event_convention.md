@@ -1122,8 +1122,8 @@ the real emitter.
   types vs M15) — split into `parent_input_idx` (H1) + `probe_input_idx` (M15, when the resolver got one — §9.2); one exported
   `/compare` (user 2026-09-26: "fix later"). **DONE 2026-09-26 (Post-E·1a + 1b, §9.2).**
 - the `probe_end_idx` name / frame split (found in the Post-E·1a review): `MultiTFTrigger.meta["probe_end_idx"]` /
-  `FirstConfluenceTrigger.probe_end_idx` hold the H1 CTS anchor, `ProbeResult.probe_end_idx` / the probe cache's the
-  M15 bound — the `parent_input_idx` / `probe_input_idx` pattern would give the H1 one a `parent_*` name
+  `FirstConfluenceTrigger.probe_end_idx` hold the H1 CTS anchor, `unified_probe(probe_end_idx=)` / the probe cache's
+  (`ProbeCacheEntry`) the M15 bound (`ProbeResult` has no such field — corrected in the Post-E·3 review) — the `parent_input_idx` / `probe_input_idx` pattern would give the H1 one a `parent_*` name
   (byte-identical rename; FC only). **User 2026-09-27: `parent_cts_anchor_idx`** (says what it IS — the parent
   CTS anchor, FC(0,0) = 430 vs the M15 bound 1721, (0,1) 652 / 2609, (1,2) 905 / 3621 — and matches the FC
   resolver's local of that name and its sibling `parent_bos_anchor_idx`); rejected `parent_probe_end_idx` (hides
@@ -1370,7 +1370,8 @@ the real emitter.
   three pipeline tests, `test_first_trigger_migration.py` `_make_trigger` / `_fc` helpers + callers + comment,
   the new orchestrator pin's `v2.meta`; docs: GLOSSARY `parent_input_idx` + LOH rows, PART4 §9.4 (~1830) the
   `MultiTFTrigger` field list, memory `project_part4_progress.md` (meta-key line). Out of scope: `meta["probe_end_idx"]`
-  stays H1 while `ProbeResult.probe_end_idx` is M15 (the same name / frame split for the end bound).
+  stays H1 while the probe's `probe_end_idx` (`unified_probe` / `ProbeCacheEntry`) is M15 (the same name / frame split
+  for the end bound) → **done, Post-E·3 §9.4**.
 - **Post-E·1b — `MultiTFTrigger.meta["probe_input_idx"]` (H1) → `"parent_input_idx"` (2026-09-26; user: go ahead,
   keep `_synth_reversal_trigger`'s full meta copy — reversal triggers inherit the unread H1 key under its new
   name).** Writers: the three pipelines + `uc1_trigger` (+ their docstrings: the sibling types' H1 input is
@@ -1487,10 +1488,12 @@ the real emitter.
 ### 9.4 Post-E·3 — the FC H1 `probe_end_idx` → `parent_cts_anchor_idx` (2026-09-27; byte-identical)
 
 - **Why:** `FirstConfluenceTrigger.probe_end_idx` / `MultiTFTrigger.meta["probe_end_idx"]` held the H1 parent CTS
-  ANCHOR while `ProbeResult.probe_end_idx` / the probe cache / `unified_probe(probe_end_idx=)` hold the M15 search
+  ANCHOR while `unified_probe(probe_end_idx=)` / `_probe_with_cache` / `ProbeCacheEntry.probe_end_idx` hold the M15 search
   bound — one name, two frames (found in the Post-E·1a review). Reference window: FC(0,0) 430 → 1721, (0,1) 652 →
   2609, (1,2) 905 → 3621. **User: `parent_cts_anchor_idx`** (what it IS; the FC resolver's local already had that
-  name; sibling of `parent_bos_anchor_idx`). No CSV carries it; the H1 warnings that print it never fire here.
+  name; sibling of `parent_bos_anchor_idx`). No CSV column carries it — its name and H1 value appear only in the FC
+  resolver's `probe_failed` detail text (missing / out of parent bounds) in the unresolved CSV: 0 such rows here; the H1
+  warnings that print it never fire here.
 - **Sites (the H1 carrier only):** `multitf/types.py` (field + docstring), `first_confluence_trigger.py` (local,
   constructor kw, docstrings), `first_confluence_pipeline.py` (the meta writer + module doc), the FC resolver in
   `entity_df_mutation.py` (the meta read — keeps its tested `.get` → logged-`ProbeFailure` path, as Post-E·1b did
@@ -1500,12 +1503,29 @@ the real emitter.
   assert; `test_first_confluence_pipeline.py` (constructor + meta asserts, + a no-alias assert that
   `"probe_end_idx"` is absent from the meta); `test_first_confluence_trigger.py` (5 field reads + a test name);
   `test_lifecycle_sweep_unit.py` (the inherited-meta pin + a `SimpleNamespace` FC stand-in). **Not renamed (the M15
-  / own-frame bound):** `unified_probe`, `ProbeResult`, `ProbeCacheEntry`, the `[probe_cache]` prints,
+  / own-frame bound):** `unified_probe` / `_run_phase1` / `_run_phase2`, `_probe_with_cache`, `ProbeCacheEntry`, the
+  `[probe_cache]` prints,
   `structure_engine`'s main reversal probe. Docs (every `probe_end_idx` hit classified; only the H1-carrier ones
   moved): LANDMINES "Probe `end_idx` Is the Supreme Bound" rename note + the mapper-scope paragraph, GLOSSARY (new
   `parent_cts_anchor_idx` entry; `probe_end_idx`; LOH), PART4 §4.3 (the mapping + naming notes) / §4.3.1 / §4.3.2
   (the var-1 row + the NULL paragraph) / §9.4 (the meta list) / §10.1 (the subscription matrix) / §14 / §16.6 /
-  §17.8 (the Plan C rename history).
+  §17.8 (the Plan C rename history). **Landed `f770c47`** (no save: byte-identical).
+- **Landing review (2026-09-27; 1 conformance lens ≈157k): 0 BLOCKER; 1 MAJOR.** Verified: the code rename complete
+  and correct (every remaining bare `probe_end_idx` in code / tests is the M15 or own-frame bound; the writer → reader
+  → `+lower_sd` map → M15 bound chain; pending FC triggers go `status` → `SweepTrigger.pending` → `UnresolvedTrigger`
+  without reading the name; no CSV / HTML carries it; the example values). **MAJOR (mine, propagated from this plan's
+  own §9 bullet and §9.2):** "`ProbeResult.probe_end_idx`" — `ProbeResult` has no such field (never had) → corrected in
+  LANDMINES, PART4 §4.3, GLOSSARY (which also claimed the meta key was once `end_idx` — it already was
+  `probe_end_idx`), here (§9 bullet, §9.2, §9.4); the commit message `f770c47` carries the same slip. **MINOR,
+  folded:** the `_make_trigger` fixture put the FC-only key on 18 non-FC triggers (its value was really their
+  `trigger_event_idx`) → the helper now takes `trigger_event_idx` separately and writes `parent_cts_anchor_idx` on FC
+  only (default 5 there); three `unified_probe.py` docstrings described the H1 carrier's pending NULL under the M15
+  name; the `.get` "(tested)" claim covered only the input half → a test for the missing anchor + a no-reader-alias
+  case (a meta holding only the old key is "missing"); "Not exported" → the `probe_failed` detail text is its only
+  CSV trace. NITs folded: GLOSSARY `cts_anchor_idx (parent)` cross-link, PART4 §4.3 wording + §16.6 circularity, the
+  renamed test's docstring, this §9.2 cross-link, memory `reference_key_files.md`. Fold-in `/compare` vs
+  `20260926_214932_574de2a`: 24/24 byte-identical, figures JSON-identical, run.log identical; tests 961 → **962 + 1
+  xfail**. **Post-E·3 DONE.**
 
 ## 10. Open questions for the user (recommendation first; concrete window data)
 

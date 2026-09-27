@@ -18,7 +18,7 @@ def _ev(idx: int, type_: str, sid: int, cycle: int, sd: int = 1,
         "struct_direction": sd,
     }
     # CTS_CONFIRMED carries cts_anchor_idx (the CTS extreme) distinct from
-    # idx (the confirmation candle). var-1 probe end_idx reads cts_anchor_idx.
+    # idx (the confirmation candle). var-1's parent_cts_anchor_idx reads cts_anchor_idx.
     # Default it to idx for tests that don't exercise the distinction; tests
     # that do pass an explicit (earlier) cts_anchor_idx via **extra.
     if type_ == "CTS_CONFIRMED":
@@ -62,7 +62,7 @@ def test_single_bos_with_matching_cts_finalized():
 
 
 def test_parent_cts_anchor_idx_is_the_anchor_not_the_confirmation_candle():
-    """Probe end_idx must be the CTS extreme (cts_anchor_idx), which is
+    """`parent_cts_anchor_idx` (the FC probe end, H1) must be the CTS anchor (cts_anchor_idx), which is
     earlier than the confirmation candle (CTS_CONFIRMED.idx). The confirmation
     candle only gates *when* the value is known, not the value itself (§4.3.2).
     """

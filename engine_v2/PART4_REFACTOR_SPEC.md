@@ -268,14 +268,14 @@ Used to find `starting_idx` for new subordinate structures.
 > then map down" model is retired for all four variations. Every probe input
 > and bound is on the sub TF before the single sub-TF probe runs: only
 > `first_confluence` maps its H1 input (price-mapped, §4.3.1; its
-> `probe_end_idx` = the price-mapped CTS anchor, H1 `parent_cts_anchor_idx`); the three sibling types take
+> `probe_end_idx` = the H1 CTS anchor `parent_cts_anchor_idx`, price-mapped); the three sibling types take
 > their M15 input from the sibling CTS (§4.3.3–§4.3.5; the H1 input is
 > informational — `parent_input_idx`) and end at their trigger's LOH `hi`.
 > See §4.4 for the unified-probe mechanics.
 
 > **Naming (Plan C, 2026-09-20).** The probe's search bound is
 > **`probe_end_idx`** everywhere — `unified_probe(probe_end_idx=…)`,
-> `ProbeResult`, the probe cache (the FC trigger's H1 field / meta key had the
+> `_probe_with_cache` / `ProbeCacheEntry` (the FC trigger's H1 field / meta key had the
 > same name until Plan E Post-E·3, 2026-09-27: now `parent_cts_anchor_idx`)
 > — a *compute* bound (the inclusive upper edge of the search window, like the
 > MS run cap) with no relation to the lifecycle `end_idx` of §17. The probe's
@@ -2607,8 +2607,8 @@ replaced by 1 prior one plus 3 dot-trace merges. Intermediate value after items
 
 ### 16.6 Pending subordinate display
 
-Per §14, triggers with a NULL `parent_cts_anchor_idx` (currently only
-`first_confluence` while parent CTS is unconfirmed —
+Per §14, pending triggers (currently only `first_confluence` while parent CTS
+is unconfirmed — a NULL `parent_cts_anchor_idx`,
 `FirstConfluenceTrigger.status == "pending"`) are in **pending** state.
 
 - Hide entirely. No chart elements produced — under the pool the trigger is

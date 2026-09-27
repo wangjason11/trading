@@ -25,8 +25,9 @@ DESIGN LOCKED 2026-06-07 + scan-from-start pivot) and
   This is the entire probe for non-FC callers (first_counter /
   subsequent_* / reversal).
 - **Phase 2 (`_run_phase2`, only when `enable_phase2=True`):** MS-based,
-  used by `first_confluence` (whose real probe_end_idx is NULL → it needs MS to
-  reach CTS_0_CONFIRMED → `cts_anchor` to bound the retrace). Finalized
+  used by `first_confluence` (its parent CTS anchor — H1 `parent_cts_anchor_idx`
+  — is unknown until the parent CTS confirms, so Phase 2 drives MS to the probe's
+  own CTS_0_CONFIRMED → `cts_anchor` to bound the retrace). Finalized
   alongside the MS scan-from-start change.
 - Two-condition reset (BOTH must hold to restart from the candidate):
     1. Wick extreme within X pips of `reference_zone.inner`
@@ -478,8 +479,9 @@ def _run_phase2(
     (`enforce_cts0_new_extreme=True` + the handed `bos0_inner`), so MS
     establishes cycle 0 at the shared routine's true-first-breakout. Phase
     2's job is to drive MS far enough to reach CTS_0_CONFIRMED → its
-    `cts_anchor_idx`, which bounds the retrace search (FC's real probe_end_idx is
-    NULL, so it uses this earlier signal rather than waiting) — and it stops
+    `cts_anchor_idx`, which bounds the retrace search (FC's parent CTS anchor, H1
+    `parent_cts_anchor_idx`, is unknown until the parent CTS confirms, so it uses
+    this earlier signal rather than waiting) — and it stops
     at the 2nd `CTS_ESTABLISHED` (Plan B): the double-CTS rule is an early
     stop, not a classification at exit. The MS run is handed
     `stop_after_cts_established=2` and ends at the first quiescent point (no
@@ -716,8 +718,9 @@ def unified_probe(
 
     **Phase 2 (`_run_phase2`, only when `enable_phase2=True`):** MS-based,
     invoked after the deterministic method for `first_confluence` callers
-    (whose real probe_end_idx is NULL → MS reaches CTS_0_CONFIRMED → `cts_anchor`
-    to bound the retrace).
+    (its parent CTS anchor — H1 `parent_cts_anchor_idx` — is unknown until the
+    parent CTS confirms → MS reaches CTS_0_CONFIRMED → `cts_anchor` to bound the
+    retrace).
 
     For first_counter, subsequent_*, reversal, `enable_phase2=False`
     (default) and only the deterministic method runs — no MS at all. This

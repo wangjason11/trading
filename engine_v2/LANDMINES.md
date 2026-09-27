@@ -475,8 +475,8 @@ is the sub's aggregated `end_idx`).
 
 > **Rename note (Plan C, 2026-09-20):** the probe's search bound is now spelled
 > **`probe_end_idx`** — the parameter of `unified_probe` / `_run_phase1` /
-> `_run_phase2` (`structure/unified_probe.py`), the `ProbeResult` / probe-cache
-> fields and the `[probe_cache]` log strings (the H1 value FC price-maps into
+> `_run_phase2` (`structure/unified_probe.py`), `_probe_with_cache`'s parameter,
+> `ProbeCacheEntry.probe_end_idx` and the `[probe_cache]` log strings (the H1 value FC price-maps into
 > it — `FirstConfluenceTrigger` field / `MultiTFTrigger.meta` key — carried the
 > same name until Plan E Post-E·3, 2026-09-27: now `parent_cts_anchor_idx`). It is a COMPUTE bound
 > (the inclusive upper edge of the search window, like the run cap) and has
