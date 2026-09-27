@@ -1103,7 +1103,17 @@ the real emitter.
 - Chart hover / legend text stays out of byte-identical steps.
 
 **Post-E (not Plan E):**
-- the coordinate-hygiene families (IN §2.8 last row; one `/compare` each);
+- the coordinate-hygiene families (IN §2.8 last row; one `/compare` each). **Census at HEAD (2026-09-26, save
+  `20260926_122844_532df17`; M15 rows confluence / counter; values slice-local, e.g. sub 0 `slice_begin` 404):**
+  F1 `STATE_CHANGED.effective_idx` 294 / 94 (event 458 → 54); F2 `RANGE_STARTED` `start_idx` 32 / 13, `cts_idx`
+  39 / 15, `confirm_idx` 32 / 13, `pullback_apply_idx` 7 / 2 (`proximity_apply_idx` 0); F3 `REVERSAL_WATCH_START` /
+  `REVERSAL_CANDIDATE.expires_idx` 7 + 4 / 0 (1537 next to event 1936); F4 `BOS_CONFIRMED.pb_start` 14 / 5; F5 KL
+  meta `expanded_last_idx` 4 / 0; F6 POI meta `bos_idx` / `cts_idx` 30 + 30 / 12 + 12 (50 / 380 vs the fib CSV's
+  454 / 784); F7 fib meta `activated_at` 21 / 8, `locked_at` 19 / 6, `reactivated_at` 1 / 1 (`cycle1_bos_idx` 0);
+  F8 `WaveCandleResult.meta["anchor_idx"]` (attrs only, 0 CSV cells). KL `source_event_idx` is gone (E4b-pre). Not a
+  family: WVMI `triggered_by_event_idx` (the parent trigger's H1 idx 710 / 926 / 1020 — a frame-name question).
+  Guard `tests/test_event_meta_idx_keys.py`: `KNOWN_SLICE_LOCAL` = the F1–F4 keys; `KNOWN_SLICE_LOCAL_ZONE` =
+  `bos_idx` / `cts_idx` commented "KL zone" — on this window they appear in POI meta (check); F5 / F7 not covered.
 - the never-established-cycle fallback POI (0 on this window since Plan F);
 - the fetch-gate N/A edge case;
 - moment-order processing (Q3);
