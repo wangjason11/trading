@@ -100,7 +100,10 @@ _MS_AUX_STRUCTURE_COLS = (
 )
 
 # Event-meta keys whose values are entity-df indices and need translating
-# from slice-local to entity-absolute.
+# from slice-local to entity-absolute. EVERY index-valued key the sub pipeline
+# writes belongs in one of the four lists below — an unlisted key is exported
+# slice-local on every M15 row without any error (guard:
+# tests/test_event_meta_idx_keys.py; no allow-list since Post-E·2).
 _EVENT_META_IDX_KEYS = (
     "confirmed_at",
     "apply_idx",
@@ -108,11 +111,19 @@ _EVENT_META_IDX_KEYS = (
     "confirmed_idx",
     "cts_anchor_idx",
     "bos_anchor_idx",
-    "pb_reconfirm_idx",
     "deactivated_at",
+    # Post-E·2 (2026-09-26) — slice-local in the M15 CSVs until then:
+    "effective_idx",        # STATE_CHANGED
+    "start_idx",            # RANGE_STARTED
+    "confirm_idx",          # RANGE_STARTED
+    "cts_idx",              # RANGE_STARTED (the CTS anchor; pairs with cts_price)
+    "pullback_apply_idx",   # RANGE_STARTED (pullback_created_range)
+    "proximity_apply_idx",  # RANGE_STARTED (proximity_created_range)
+    "expires_idx",          # REVERSAL_WATCH_START / REVERSAL_CANDIDATE
+    "pb_start",             # BOS_CONFIRMED (pullback_extreme; None otherwise)
 )
 
-# Zone-meta keys with entity-df indices.
+# Zone-meta keys with entity-df indices (KL and POI zones).
 _ZONE_META_IDX_KEYS = (
     "anchor_idx",
     "confirmed_idx",
@@ -122,6 +133,30 @@ _ZONE_META_IDX_KEYS = (
     "base_idx",
     "ic_idx",
     "deactivated_at",
+    # Post-E·2 (2026-09-26) — slice-local in the M15 CSVs until then:
+    "expanded_last_idx",    # KL (the last expansion's THRESHOLD_UPDATED candle)
+    "bos_idx",              # POI (the owning fib's bos_idx, copied at IC time)
+    "cts_idx",              # POI (the owning fib's cts_idx)
+    "pb_reconfirm_idx",     # KL CTS zone (CTS_RECONFIRMED upgrade; subs get BOS
+                            # zones only). Was misfiled in the EVENT list (no
+                            # event carries it) until Post-E·2.
+)
+
+# FibState meta keys with entity-df indices (the dataclass fields bos_idx /
+# cts_idx / start_idx / end_idx are shifted separately).
+_FIB_META_IDX_KEYS = (
+    "deactivated_at",
+    # Post-E·2 (2026-09-26) — slice-local in the M15 CSVs until then:
+    "activated_at",
+    "reactivated_at",
+    "locked_at",
+    "cycle1_bos_idx",       # versioned cross fibs (Scenario 3)
+)
+
+# WaveCandleResult meta keys with entity-df indices (the dataclass fields
+# first/last_wave_candle_idx are shifted separately). Attrs only — no CSV.
+_WAVE_CANDLE_META_IDX_KEYS = (
+    "anchor_idx",           # Post-E·2 (2026-09-26); the zone's KL anchor
 )
 
 
@@ -272,7 +307,7 @@ def mirror_lower_tf_result_to_entity_df(
     #    anchors. `end_reason` / `status` are not indices -> pass through.
     new_fibs = []
     for fib in result.fib_states:
-        new_meta = _shift_meta_indices(fib.meta, ("deactivated_at",), slice_begin)
+        new_meta = _shift_meta_indices(fib.meta, _FIB_META_IDX_KEYS, slice_begin)
         new_meta.update(attribution)
         new_start_idx = (
             fib.start_idx + slice_begin
@@ -294,10 +329,10 @@ def mirror_lower_tf_result_to_entity_df(
         ))
     _attrs_setdefault_list(entity_df, "fib_states").extend(new_fibs)
 
-    # 7. Wave candles — direct optional idx fields
+    # 7. Wave candles — direct optional idx fields + meta
     new_wcs = []
     for wc in result.wave_candles:
-        new_meta = dict(wc.meta)
+        new_meta = _shift_meta_indices(wc.meta, _WAVE_CANDLE_META_IDX_KEYS, slice_begin)
         new_meta.update(attribution)
         new_wcs.append(replace(
             wc,

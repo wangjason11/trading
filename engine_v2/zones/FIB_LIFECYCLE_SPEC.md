@@ -939,8 +939,9 @@ not lifecycle.
   E3a (2026-09-24; before it the anchor `CTS_ESTABLISHED.idx`); on main and subs alike a
   fib first activated on a later `CTS_UPDATED` (`meta["activated_on"] == "update"`)
   stamps that update's moment instead (e.g. on the reference window sub 3 cycle 0, on
-  both lenses: first-active 2651 — slice-local `activated_at` 62 in the fib CSV
-  meta — vs its `CTS_ESTABLISHED` 2649 (anchor = moment); it was 2650 / 61 before Plan F
+  both lenses: first-active 2651 — `activated_at` 2651 in the fib CSV meta
+  (entity-absolute since Post-E·2, 2026-09-26; slice-local 62 before) — vs its
+  `CTS_ESTABLISHED` 2649 (anchor = moment); it was 2650 (slice-local 61) before Plan F
   2026-09-24: the cycle's only sd gap, instance c2s 2650-2651, forms at 2651 (its
   first c3), so it does not count at the raw update 2650 and activates the fib at
   the next raw update 2651 — `IMBALANCE_FILL_SEMANTICS.md` "Knowability — the c3

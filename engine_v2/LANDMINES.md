@@ -55,9 +55,12 @@ Events are the communication backbone of the system. Breaking contracts causes c
 
 Rule 3 was approved by the user on 2026-09-24 (Plan E §4.2). First use: E1, the pattern-realm event key
 `anchor_idx` → `pattern_anchor_idx` on `CTS_ESTABLISHED` / `REVERSAL_CANDIDATE` / `REVERSAL_WATCH_START`.
-`tests/test_event_meta_idx_keys.py` guards the registry half: an index-valued event/zone meta key must be in
-`_EVENT_META_IDX_KEYS` / `_ZONE_META_IDX_KEYS` or in the test's explicit slice-local allow-list (since Plan E
-E2a it also scans every event-meta key `market_structure` writes, so a key the fixture never produces is covered).
+`tests/test_event_meta_idx_keys.py` guards the registry half: an index-valued event / zone / fib / wave-candle meta
+key must be in `_EVENT_META_IDX_KEYS` / `_ZONE_META_IDX_KEYS` / `_FIB_META_IDX_KEYS` / `_WAVE_CANDLE_META_IDX_KEYS` —
+no slice-local allow-list since Post-E·2 (2026-09-26, PLAN_E §9.3). It also scans every event-meta key
+`market_structure` writes (Plan E E2a) and every `meta=` key the KL / POI / fib / wave-candle emitters write
+(Post-E·2), so a key the fixture never produces is covered, and it pins the VALUES (each mirrored element == its
+slice-local source + `slice_begin`).
 Rule 4 use, Plan E E2a (2026-09-24): `CTS_ESTABLISHED.meta["cts_anchor_idx"]` and
 `BOS_CONFIRMED.meta["bos_anchor_idx"]` (documented in ARCHITECTURE "`ev.idx` convention"). Rule 3 meaning
 change, Plan E E4a (2026-09-25): `CTS_ESTABLISHED.idx` := the MOMENT (`== meta["confirmed_at"]`, asserted at
@@ -1528,8 +1531,11 @@ rendered idx.
 **Rule:** `mirror_lower_tf_result_to_entity_df` in
 `multitf/entity_df_mutation.py` shifts slice-local idx → entity-absolute
 by adding `slice_begin`. Top-level meta keys are driven by the tuple
-constants `_EVENT_META_IDX_KEYS` / `_ZONE_META_IDX_KEYS` (single source
-of truth). **Nested-dict idx fields, however, are translated by
+constants `_EVENT_META_IDX_KEYS` / `_ZONE_META_IDX_KEYS` /
+`_FIB_META_IDX_KEYS` / `_WAVE_CANDLE_META_IDX_KEYS` (single source of
+truth; since Post-E·2, 2026-09-26, EVERY index-valued top-level meta key
+is listed — until then 15 keys were exported slice-local, PLAN_E §9.3).
+**Nested-dict idx fields, however, are translated by
 per-record special-case loops that hardcode the key name string** — and
 each loop must match exactly one producer-side key.
 

@@ -1114,6 +1114,7 @@ the real emitter.
   family: WVMI `triggered_by_event_idx` (the parent trigger's H1 idx 710 / 926 / 1020 — a frame-name question).
   Guard `tests/test_event_meta_idx_keys.py`: `KNOWN_SLICE_LOCAL` = the F1–F4 keys; `KNOWN_SLICE_LOCAL_ZONE` =
   `bos_idx` / `cts_idx` commented "KL zone" — on this window they appear in POI meta (check); F5 / F7 not covered.
+  **DONE 2026-09-26 (Post-E·2, §9.3): all eight families shifted in place in one commit; the allow-lists are gone.**
 - the never-established-cycle fallback POI (0 on this window since Plan F);
 - the fetch-gate N/A edge case;
 - moment-order processing (Q3);
@@ -1392,6 +1393,60 @@ the real emitter.
   `types.py` / `subsequent_confluence_trigger.py` docstrings ("the probe derives its own BOS_0 internally") —
   rewritten to the co-sourced sibling rule; the reversal synth's inheritance of `parent_input_idx` pinned (the
   user's keep decision). **Post-E·1 DONE.**
+
+### 9.3 Post-E·2 — the coordinate-hygiene families: exported slice-local M15 meta keys (2026-09-26)
+
+- **Census re-verified from the data** (save `20260926_122844_532df17`; every family count == the §9 bullet).
+  `slice_begin` = the sub's `starting_idx − 50` (run.log `geometry built … slice_begin=`: 404 / 1747 / 2315 / 2589 /
+  3254 / 3571 / 3710 / 3977). A wider scan of EVERY int-valued meta path (nested too) in the 10 M15 lens CSVs found
+  no other unshifted candle index: the rest are shifted keys or non-indices (`cross_start_cycle`, fib `version`,
+  `proximity_pips`, WVMI's H1 `triggered_by_event_idx`).
+- **Reader inventory (grep + measurement).** No production code reads an F1–F8 key AFTER the mirror: the keys are
+  read only inside MS / FibTracker (`activated_at`, `cycle1_bos_idx`) on the slice itself, before the mirror; the
+  M15 chart reads none of them (and draws no range rectangles — `export_plotly`'s `RANGE_STARTED.start_idx` reader is
+  the H1 chart's own events); the CSV exporters dump meta verbatim; `_build_sibling_cts_ref_zone_from_pool` shares
+  `_EVENT_META_IDX_KEYS` but copies only CTS events, which carry no family key. **Variant replay** (scratch plugin
+  shifting every family at the mirror, readers untouched): 715 keys in 547 meta cells change == the census, EVERY
+  change exactly `+slice_begin` of its sub (key-level diff), no non-meta column changes, the subs / triggers /
+  unresolved / H1 CSVs byte-identical, the 3 figures JSON-identical, run.log content identical. **The full suite
+  with the variant active: 944 + 1 xfail pass** — no test depends on the slice-local values, and none pins the
+  entity-absolute ones either (F5 / F7 had no guard coverage at all) → the fix adds value-level coverage. No coupled
+  reader → no plan cold review (§ item 2 method (e)).
+- **Real examples** (before → after): conf sub 0 `STATE_CHANGED`@458 `effective_idx` 54 → 458; `RANGE_STARTED`@462
+  `start_idx` / `confirm_idx` / `cts_idx` 56 / 58 / 56 → 460 / 462 / 460; `REVERSAL_WATCH_START`@1936 `expires_idx`
+  1537 → 1941 (= 1936 + k 5); `BOS_CONFIRMED`@1020 `pb_start` 398 → 802; KL (anchor 1761) `expanded_last_idx` 1494 →
+  1898; POI ic 678 `bos_idx` / `cts_idx` 50 / 380 → 454 / 784 (the fib CSV's own columns); fib cycle 0
+  `activated_at` 54 → 458 (the EST moment), `locked_at` 398 → 802 (= that BOS's `pb_start`).
+- **User decisions (2026-09-26):** ONE commit for all families (the key-level verifier attributes every changed key,
+  so per-family `/compare`s add nothing once no reader is coupled); **shift in place** — same key names, values
+  entity-absolute (what the mirror's docstring already claimed); the Naming-Standard renames (`pb_start`, the
+  `cts_idx` / `bos_idx` anchors) stay on the Later hygiene list; **F8 fixed too** (byte-identical: attrs only), so
+  every allow-list in the guard can go.
+- **As landed (2026-09-26).** `multitf/entity_df_mutation.py`: `_EVENT_META_IDX_KEYS` += F1–F4 (`effective_idx`,
+  `start_idx`, `confirm_idx`, `cts_idx`, `pullback_apply_idx`, `proximity_apply_idx`, `expires_idx`, `pb_start`);
+  `_ZONE_META_IDX_KEYS` += F5 `expanded_last_idx`, F6 `bos_idx` / `cts_idx`; new `_FIB_META_IDX_KEYS`
+  (`deactivated_at` + F7 `activated_at` / `reactivated_at` / `locked_at` / `cycle1_bos_idx`) replaces the fib site's
+  `("deactivated_at",)` literal; new `_WAVE_CANDLE_META_IDX_KEYS` (F8 `anchor_idx`) at the wave-candle copy. **Found
+  on the way (0 cells):** `pb_reconfirm_idx` sat in the EVENT list, but no event carries it — it is KL CTS-zone meta
+  (`kl_zones_v1` CTS_RECONFIRMED upgrade; subs get BOS zones only, so it never reached an M15 row) → moved to
+  `_ZONE_META_IDX_KEYS`; the static emitter scan requires it there. And `poi_zones`' `inst.meta["armed_idx"]` /
+  `["confirmed_fill_idx"]` are ImbalanceInstance meta (the fill cache) — never mirrored, not a family.
+  **Guard** `tests/test_event_meta_idx_keys.py`: `KNOWN_SLICE_LOCAL` / `_ZONE` / `_WAVE_CANDLE` deleted (every index key
+  must be in its shift list); + fib-meta and wave-candle checks on the fixture; + a static `meta=` scan of
+  `kl_zones_v1` / `poi_zones` / `fib_tracker` / `wave_candles` (parametrized, each with a must-see set so it is not
+  vacuous — covers the keys the fixture never produces: KL `expanded_last_idx` / `pb_reconfirm_idx`, fib
+  `reactivated_at` / `cycle1_bos_idx`); + a VALUE pin pairing every mirrored element with its slice-local source
+  (listed int keys == source + `slice_begin`, the nested `bounds_steps` / `activation_history` likewise — the former
+  had no pin — every other key unchanged). My pre-review mutation loop (scratch `git archive` copy, 13 mutants: the
+  fib / wave sites reverted, each family key dropped from its list, an off-by-one in the shift): 13/13 killed.
+  **Measured vs `20260926_122844_532df17` == prediction:** 715 keys in 547 meta cells (events conf 358 / counter 114,
+  POI 30 / 12, KL 4 / 0, fib 21 / 8), every change exactly `+slice_begin` of its sub; the other 17 CSVs byte-identical;
+  the landed CSVs byte-identical to the variant's; the 3 figures JSON-identical; run.log byte-identical to the
+  `by_lens` commit's. Replay 43 s wall. Tests 944 → 950 + 1 xfail. Docs: ARCHITECTURE event table (`expires_idx` ×2,
+  `effective_idx`), LANDMINES rule-3 guard note + "Mirror Translation…" rule, FIB_LIFECYCLE_SPEC sub 3 example
+  (`activated_at` 2651), KL_ZONES_SPEC `expanded_last_idx`, POI_ZONES_SPEC `bos_idx` / `cts_idx`, an
+  IMBALANCE_FILL_SEMANTICS note (its Plan F table's values are slice-local). Saves before this commit carry the
+  slice-local values.
 ---
 
 ## 10. Open questions for the user (recommendation first; concrete window data)

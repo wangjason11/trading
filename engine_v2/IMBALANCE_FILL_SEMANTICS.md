@@ -365,6 +365,9 @@ save `20260923_172626_0a4eadc`: 19/24 CSVs byte-identical.
 | MS in-flight snapshot | none (uncut by decision; 3 inner lists would change, none is ever read) |
 | IC identification | none (uncut; retrospective) |
 
+(The M15 fib `activated_at` values in this table are slice-local — the frame the M15 fib CSVs exported until
+Post-E·2, 2026-09-26; entity-absolute = + the sub's `slice_begin`: sub 2's 54 = 2369, sub 3's 62 = 2651.)
+
 ---
 
 ## When to revisit

@@ -465,6 +465,9 @@ variant replays must differ exactly in PLAN_E §8's cells. Tool:
 `engine_v2/plans/plan_e_inputs/review_scripts/cmp_save.py BASE CUR_DEBUG CUR_CHARTS [--strip k]`
 (the CSV cell diff + this figure diff in one; the E4 variant recipe is in that folder's README). Its CSV
 diff is POSITIONAL: on a header change (an added / renamed column) diff that CSV keyed by column name.
+It counts changed CELLS; for a change to meta VALUES (one meta cell can hold several changed keys) use
+`review_scripts/cmp_meta_keys.py BASE CUR` — per-key counts, each delta checked to be `+slice_begin`
+(Post-E·2: 547 cells = 715 keys).
 
 ## Chart Count Parity (Corroborating check)
 
