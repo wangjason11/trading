@@ -106,8 +106,8 @@ def map_candle_to_lower_tf(
     - the ``first_confluence`` probe (`entity_df_mutation`): its input, the
       parent BOS anchor, with ``-lower_sd`` (spec §4.3.1: the side of the
       parent hour that anchors the OUTER of the sub's reference zone), and its
-      ``probe_end_idx``, the parent CTS anchor, with ``+lower_sd`` (the
-      structure ceiling / floor);
+      end, the parent CTS anchor (``parent_cts_anchor_idx``) with ``+lower_sd``
+      (the structure ceiling / floor) — the M15 ``probe_end_idx``;
     - the M15 chart's H1 zone-proximity markers (display): the side of the
       trigger wick (``-1`` when price approaches from above).
     A price-location mapper only — every TIMING value uses the LOH mapper

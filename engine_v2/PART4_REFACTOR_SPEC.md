@@ -268,14 +268,15 @@ Used to find `starting_idx` for new subordinate structures.
 > then map down" model is retired for all four variations. Every probe input
 > and bound is on the sub TF before the single sub-TF probe runs: only
 > `first_confluence` maps its H1 input (price-mapped, §4.3.1; its
-> `probe_end_idx` = the price-mapped CTS anchor); the three sibling types take
+> `probe_end_idx` = the price-mapped CTS anchor, H1 `parent_cts_anchor_idx`); the three sibling types take
 > their M15 input from the sibling CTS (§4.3.3–§4.3.5; the H1 input is
 > informational — `parent_input_idx`) and end at their trigger's LOH `hi`.
 > See §4.4 for the unified-probe mechanics.
 
 > **Naming (Plan C, 2026-09-20).** The probe's search bound is
 > **`probe_end_idx`** everywhere — `unified_probe(probe_end_idx=…)`,
-> `FirstConfluenceTrigger.probe_end_idx`, `MultiTFTrigger.meta["probe_end_idx"]`
+> `ProbeResult`, the probe cache (the FC trigger's H1 field / meta key had the
+> same name until Plan E Post-E·3, 2026-09-27: now `parent_cts_anchor_idx`)
 > — a *compute* bound (the inclusive upper edge of the search window, like the
 > MS run cap) with no relation to the lifecycle `end_idx` of §17. The probe's
 > **output** is `ProbeResult.starting_idx` — the structural anchor and the pool
@@ -318,8 +319,8 @@ contract:
   -lower_sd`; the parent BOS anchor maps to the M15 candle whose extreme on
   the `-lower_sd` side touches the OUTER of the sub's reference zone.
   (`map_candle_to_lower_tf` in `data_bridge.py`.) **CORRECTED 2026-09-19:**
-  `first_confluence`'s `probe_end_idx` (the parent CTS anchor,
-  `cts_anchor_idx`) is ALSO price-mapped (`+lower_sd` side) — it is a PRICE
+  `first_confluence`'s probe end (the parent CTS anchor,
+  `cts_anchor_idx`, carried as `parent_cts_anchor_idx`) is ALSO price-mapped (`+lower_sd` side) — it is a PRICE
   bound for the search, not a temporal gate (`entity_df_mutation.py`
   `_resolve_first_confluence_via_unified_probe`). This section previously said
   "every probe `end_idx`" is time-mapped; that was never true for
@@ -355,17 +356,17 @@ cycle (sid=0 of the confluence entity).
 |---|---|
 | **Trigger** | Most recent parent BOS confirmed (== CTS established for the new cycle, by definition same candle: `BOS_CONFIRMED.meta["confirmed_at"] == CTS_ESTABLISHED.meta["confirmed_at"]`) |
 | **Idx input** | Idx of the newly confirmed BOS (`FirstConfluenceTrigger.input_idx`, price-mapped to M15 on the `-lower_sd` side) |
-| **Probe `probe_end_idx`** | The confirmed CTS's **anchor** (`cts_anchor_idx` on the `CTS_CONFIRMED` event) in the same parent cycle — *not* the confirmation candle (`CTS_CONFIRMED.idx == confirmed_at`, which is later). Price-mapped to M15 on the `+lower_sd` side. NULL (`FirstConfluenceTrigger.probe_end_idx = None`, `status = "pending"`) until parent `CTS_CONFIRMED` fires. |
+| **Probe `probe_end_idx`** | The confirmed CTS's **anchor** (`cts_anchor_idx` on the `CTS_CONFIRMED` event) in the same parent cycle — *not* the confirmation candle (`CTS_CONFIRMED.idx == confirmed_at`, which is later). Price-mapped to M15 on the `+lower_sd` side. NULL (`FirstConfluenceTrigger.parent_cts_anchor_idx = None`, `status = "pending"`) until parent `CTS_CONFIRMED` fires. |
 | **Probe reference zone** | Own ad-hoc BOS_0 on the sub TF from the mapped input candle (`_build_first_confluence_ref_zone`) |
 | **Output** | `starting_idx` for the first confluence sub of the cycle (the record gets `trigger_sub_sid = 0` on the confluence lens if it is the first to resolve there) |
 
-**NULL `probe_end_idx`:** This is the **only** variation where the probe bound
+**NULL `parent_cts_anchor_idx`:** This is the **only** variation where the probe bound
 may initially be NULL. We **wait** — no first_confluence sub is built until
 parent CTS_CONFIRMED resolves it (consistent with today's "pending" handling,
 but the result is "do not produce" rather than "produce tentatively"); under
 the pool a still-pending trigger is logged as
 `UnresolvedTrigger(reason="pending")` (§17.7). When it resolves,
-`probe_end_idx` is set to the confirmed CTS's **anchor**
+`parent_cts_anchor_idx` is set to the confirmed CTS's **anchor**
 (`cts_anchor_idx`), which is *earlier* than the confirmation candle: the
 confirmation candle gates only *when* the value becomes known; the CTS anchor
 is the value that bounds the probe. Using the confirmation candle would
@@ -1832,7 +1833,7 @@ main's proximity triggers that fire the counter/subsequent variations) it
 reads them **at trigger-detection time on H1** (`first_confluence_trigger`,
 `uc1_trigger`, `subsequent_*_trigger`) and carries what it needs on the
 `MultiTFTrigger` (`parent_sid`, `parent_cycle_id`; meta `parent_input_idx`
-(H1, all four types), `probe_end_idx` (FC only), `trigger_event_idx`, `prior_*`
+(H1, all four types), `parent_cts_anchor_idx` (H1, FC only), `trigger_event_idx`, `prior_*`
 (subsequent_*)). The record's own `parent_sid` /
 `parent_cycle_id` scope every later cross-lens read:
 
@@ -1883,7 +1884,7 @@ variation, an event bus dispatches it.
 | Parent event | Subscriber |
 |---|---|
 | `BOS_CONFIRMED` | `first_confluence` (var 1) |
-| `CTS_CONFIRMED` | resolves var 1's NULL `probe_end_idx` if pending |
+| `CTS_CONFIRMED` | resolves var 1's NULL `parent_cts_anchor_idx` if pending |
 | First sd-zone proximity trigger after parent CTS | `first_counter` (var 2) + main WVMI + confluence sub WVMI initial sweep |
 | Subsequent sd-zone proximity trigger forming Λ/V | `subsequent_counter` (var 4) + confluence sub WVMI sweep |
 | CTS-zone proximity trigger after sd-prox | `subsequent_confluence` (var 3) + counter sub WVMI sweep |
@@ -2320,7 +2321,7 @@ mostly in their data source, not their decision logic.
 
 Concrete implications:
 
-- `first_confluence` with NULL `probe_end_idx` must be modeled as genuinely
+- `first_confluence` with NULL `parent_cts_anchor_idx` must be modeled as genuinely
   pending — never silently using future data (under the pool: an
   `UnresolvedTrigger(reason="pending")`, §17.7).
 - Pending subs are not visible (zones, charts, downstream consumers)
@@ -2606,14 +2607,14 @@ replaced by 1 prior one plus 3 dot-trace merges. Intermediate value after items
 
 ### 16.6 Pending subordinate display
 
-Per §14, triggers with a NULL `probe_end_idx` (currently only
+Per §14, triggers with a NULL `parent_cts_anchor_idx` (currently only
 `first_confluence` while parent CTS is unconfirmed —
 `FirstConfluenceTrigger.status == "pending"`) are in **pending** state.
 
 - Hide entirely. No chart elements produced — under the pool the trigger is
   an `UnresolvedTrigger(reason="pending")` row in
   `*_M15_unresolved_triggers.csv` (§17.7), no record, no sub.
-- When `probe_end_idx` resolves, the sub's data appears at the resolving
+- When `parent_cts_anchor_idx` resolves, the sub's data appears at the resolving
   candle's time, retroactively visible across the resolved range (its record
   still starts no earlier than `max(probe_finalize_idx, trigger_idx,
   parent_floor_idx)`).
@@ -3164,7 +3165,8 @@ key), then skips MS + downstream.
 parent's confirmed-CTS **anchor** (`cts_anchor_idx`), **price-mapped** — it is
 a price bound for the search, and changing it moves `starting_idx` = the pool
 key (§4.3.1). It is renamed **`probe_end_idx`** everywhere (the trigger meta
-already used that name): a compute bound like the run cap, unrelated to
+already used that name — the H1 trigger field / meta key became
+`parent_cts_anchor_idx` in Plan E Post-E·3, 2026-09-27): a compute bound like the run cap, unrelated to
 lifecycle `end_idx`. Likewise the probe's output `ProbeResult.start_idx` (the
 structural anchor) is renamed `starting_idx`. `probe_finalize_idx` mixes
 native-M15 and mapped values by finalize condition (§5's table) and is taken

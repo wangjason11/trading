@@ -475,9 +475,10 @@ is the sub's aggregated `end_idx`).
 
 > **Rename note (Plan C, 2026-09-20):** the probe's search bound is now spelled
 > **`probe_end_idx`** — the parameter of `unified_probe` / `_run_phase1` /
-> `_run_phase2` (`structure/unified_probe.py`), the `FirstConfluenceTrigger.probe_end_idx`
-> field (`multitf/types.py`), the `MultiTFTrigger.meta["probe_end_idx"]` key
-> (already so named) and the `[probe_cache]` log strings. It is a COMPUTE bound
+> `_run_phase2` (`structure/unified_probe.py`), the `ProbeResult` / probe-cache
+> fields and the `[probe_cache]` log strings (the H1 value FC price-maps into
+> it — `FirstConfluenceTrigger` field / `MultiTFTrigger.meta` key — carried the
+> same name until Plan E Post-E·3, 2026-09-27: now `parent_cts_anchor_idx`). It is a COMPUTE bound
 > (the inclusive upper edge of the search window, like the run cap) and has
 > nothing to do with the lifecycle `end_idx` of a `TriggerRecord` /
 > `PooledStructure` (PART4 §17.4–§17.5) — that name collision is why it was
@@ -881,7 +882,7 @@ post-2026-05-29 rename from the older `mapping_sd` / `h1_sd` parameter — same
 numeric semantics).
 
 NOT input mappings, so NOT this rule (Plan E E5·3, 2026-09-25): the same
-function's `probe_end_idx` mapping of the parent CTS ANCHOR uses `+lower_sd`
+function's mapping of the parent CTS ANCHOR (`parent_cts_anchor_idx`, H1) into the M15 `probe_end_idx` uses `+lower_sd`
 (the structure ceiling / floor), and the M15 chart's H1 zone-proximity markers
 (display) pass the trigger wick's side. Do not "unify" either to `-lower_sd`.
 

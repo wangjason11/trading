@@ -1124,7 +1124,10 @@ the real emitter.
 - the `probe_end_idx` name / frame split (found in the Post-E·1a review): `MultiTFTrigger.meta["probe_end_idx"]` /
   `FirstConfluenceTrigger.probe_end_idx` hold the H1 CTS anchor, `ProbeResult.probe_end_idx` / the probe cache's the
   M15 bound — the `parent_input_idx` / `probe_input_idx` pattern would give the H1 one a `parent_*` name
-  (byte-identical rename; FC only).
+  (byte-identical rename; FC only). **User 2026-09-27: `parent_cts_anchor_idx`** (says what it IS — the parent
+  CTS anchor, FC(0,0) = 430 vs the M15 bound 1721, (0,1) 652 / 2609, (1,2) 905 / 3621 — and matches the FC
+  resolver's local of that name and its sibling `parent_bos_anchor_idx`); rejected `parent_probe_end_idx` (hides
+  that it is the anchor). No CSV carries it. Post-E·3 (§9.4).
 - the run.log `[multi_tf:dual] sub wvmi … by_lens={…}` key order — a false delta in every run.log diff ("the parked
   `by_lens` order" in the entries above): `orchestrator._assign_sub_wvmi_per_sub` counted over the sub's lens SET, so
   the dict's insertion order followed the per-process string hash seed. **DONE 2026-09-26:** counts over
@@ -1479,8 +1482,30 @@ the real emitter.
   ints; all 715 values here are Python ints — casting at the emitters is the E2a pattern if one ever appears). The
   fold-in's own check: the 17 re-run survivors all KILLED (scratch copy). Fold-in `/compare` vs
   `20260926_214932_574de2a`: 24/24 byte-identical, figures JSON-identical, run.log identical; tests 950 → **961 + 1
-  xfail**.
----
+  xfail**. Fold-in `fa07f1d`. **Post-E·2 DONE.**
+
+### 9.4 Post-E·3 — the FC H1 `probe_end_idx` → `parent_cts_anchor_idx` (2026-09-27; byte-identical)
+
+- **Why:** `FirstConfluenceTrigger.probe_end_idx` / `MultiTFTrigger.meta["probe_end_idx"]` held the H1 parent CTS
+  ANCHOR while `ProbeResult.probe_end_idx` / the probe cache / `unified_probe(probe_end_idx=)` hold the M15 search
+  bound — one name, two frames (found in the Post-E·1a review). Reference window: FC(0,0) 430 → 1721, (0,1) 652 →
+  2609, (1,2) 905 → 3621. **User: `parent_cts_anchor_idx`** (what it IS; the FC resolver's local already had that
+  name; sibling of `parent_bos_anchor_idx`). No CSV carries it; the H1 warnings that print it never fire here.
+- **Sites (the H1 carrier only):** `multitf/types.py` (field + docstring), `first_confluence_trigger.py` (local,
+  constructor kw, docstrings), `first_confluence_pipeline.py` (the meta writer + module doc), the FC resolver in
+  `entity_df_mutation.py` (the meta read — keeps its tested `.get` → logged-`ProbeFailure` path, as Post-E·1b did
+  for `parent_input_idx` — two WARNING prints + two `ProbeFailure` detail strings), `data_bridge.py` docstring,
+  `debug/probe_fc_finalize.py` (2 reads). Tests: the `_make_trigger` / `_fc` fixture kw (29 call sites, AST-located
+  so the M15 probe-kwarg / `ProbeCacheEntry` / `unified_probe` uses stay) + the helper's meta key + a detail-string
+  assert; `test_first_confluence_pipeline.py` (constructor + meta asserts, + a no-alias assert that
+  `"probe_end_idx"` is absent from the meta); `test_first_confluence_trigger.py` (5 field reads + a test name);
+  `test_lifecycle_sweep_unit.py` (the inherited-meta pin + a `SimpleNamespace` FC stand-in). **Not renamed (the M15
+  / own-frame bound):** `unified_probe`, `ProbeResult`, `ProbeCacheEntry`, the `[probe_cache]` prints,
+  `structure_engine`'s main reversal probe. Docs (every `probe_end_idx` hit classified; only the H1-carrier ones
+  moved): LANDMINES "Probe `end_idx` Is the Supreme Bound" rename note + the mapper-scope paragraph, GLOSSARY (new
+  `parent_cts_anchor_idx` entry; `probe_end_idx`; LOH), PART4 §4.3 (the mapping + naming notes) / §4.3.1 / §4.3.2
+  (the var-1 row + the NULL paragraph) / §9.4 (the meta list) / §10.1 (the subscription matrix) / §14 / §16.6 /
+  §17.8 (the Plan C rename history).
 
 ## 10. Open questions for the user (recommendation first; concrete window data)
 

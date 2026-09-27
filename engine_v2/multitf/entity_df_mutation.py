@@ -659,10 +659,10 @@ def _resolve_first_confluence_via_unified_probe(
 
     label = f"first_confluence sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}"
     raw_input = trigger.meta.get("parent_input_idx")   # H1; missing → a logged ProbeFailure (tested)
-    raw_end = trigger.meta.get("probe_end_idx")
+    raw_end = trigger.meta.get("parent_cts_anchor_idx")   # H1; missing → a logged ProbeFailure (tested)
     if raw_input is None or raw_end is None:
-        print(f"[entity_compute] WARNING: missing parent_input_idx/probe_end_idx in trigger meta for {label}")
-        return ProbeFailure("missing parent_input_idx/probe_end_idx", None)
+        print(f"[entity_compute] WARNING: missing parent_input_idx/parent_cts_anchor_idx in trigger meta for {label}")
+        return ProbeFailure("missing parent_input_idx/parent_cts_anchor_idx", None)
     parent_bos_anchor_idx = int(raw_input)
     parent_cts_anchor_idx = int(raw_end)
     if parent_bos_anchor_idx not in parent_df.index:
@@ -675,7 +675,8 @@ def _resolve_first_confluence_via_unified_probe(
     # first_confluence's bounds are ANCHOR candles, so BOTH are price-mapped:
     #   - input = parent BOS anchor, extreme on the -lower_sd side (base of the
     #     breakout — the price the probe measures retraces from).
-    #   - probe_end_idx = parent CTS anchor, extreme on the +lower_sd side (the
+    #   - probe end = parent CTS anchor (`parent_cts_anchor_idx`, H1), extreme
+    #     on the +lower_sd side -> the M15 `probe_end_idx` (the
     #     structure ceiling/floor). NOT a temporal cutoff: "once price hit the
     #     parent CTS extreme, no NEW extreme can form, so stop probing" — a
     #     price bound for the search; changing it moves `starting_idx` = the
@@ -686,8 +687,8 @@ def _resolve_first_confluence_via_unified_probe(
         print(f"[entity_compute] WARNING: parent→M15 input mapping failed for {label}")
         return ProbeFailure("parent→M15 input mapping failed", None)   # no M15 input yet
     if parent_cts_anchor_idx not in parent_df.index:
-        print(f"[entity_compute] WARNING: probe_end_idx={parent_cts_anchor_idx} out of parent_df bounds for {label}")
-        return ProbeFailure(f"probe_end_idx {parent_cts_anchor_idx} out of parent bounds", int(m15_input_idx))
+        print(f"[entity_compute] WARNING: parent_cts_anchor_idx={parent_cts_anchor_idx} out of parent_df bounds for {label}")
+        return ProbeFailure(f"parent_cts_anchor_idx {parent_cts_anchor_idx} out of parent bounds", int(m15_input_idx))
     parent_cts_anchor_time = pd.to_datetime(parent_df.loc[parent_cts_anchor_idx, "time"], utc=True)
     m15_probe_end_idx = map_candle_to_lower_tf(parent_cts_anchor_time, trigger.lower_sd, m15_df)
     if m15_probe_end_idx is None:

@@ -32,7 +32,7 @@ def test_to_multi_tf_trigger_bullish_parent():
     h1_df = _h1_df()
     trig = FirstConfluenceTrigger(
         parent_tf="H1", parent_sid=0, parent_cycle_id=1, parent_sd=1,
-        input_idx=50, probe_end_idx=58, trigger_event_idx=52,
+        input_idx=50, parent_cts_anchor_idx=58, trigger_event_idx=52,
         status="finalized",
         meta={"bos_price": 0.6100},
     )
@@ -45,18 +45,20 @@ def test_to_multi_tf_trigger_bullish_parent():
     assert out.parent_sd == 1
     assert out.meta["parent_input_idx"] == 50
     assert "probe_input_idx" not in out.meta    # renamed, no alias (PLAN_E §9.2)
-    assert out.meta["probe_end_idx"] == 58
+    assert out.meta["parent_cts_anchor_idx"] == 58
+    assert "probe_end_idx" not in out.meta    # the H1 key's old name (Post-E·3): no alias
 
 
 def test_to_multi_tf_trigger_bearish_parent():
     h1_df = _h1_df()
     trig = FirstConfluenceTrigger(
         parent_tf="H1", parent_sid=1, parent_cycle_id=2, parent_sd=-1,
-        input_idx=50, probe_end_idx=58, trigger_event_idx=52,
+        input_idx=50, parent_cts_anchor_idx=58, trigger_event_idx=52,
         status="finalized",
     )
     out = to_multi_tf_trigger(trig, h1_df)
     assert out.lower_sd == -1                     # confluence with bearish parent
     assert out.meta["parent_input_idx"] == 50
     assert "probe_input_idx" not in out.meta    # renamed, no alias (PLAN_E §9.2)
-    assert out.meta["probe_end_idx"] == 58
+    assert out.meta["parent_cts_anchor_idx"] == 58
+    assert "probe_end_idx" not in out.meta    # the H1 key's old name (Post-E·3): no alias

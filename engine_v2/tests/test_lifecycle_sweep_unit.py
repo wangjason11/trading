@@ -1644,7 +1644,7 @@ def _multi_tf_trigger(**overrides: Any) -> MultiTFTrigger:
     kwargs: Dict[str, Any] = dict(
         parent_tf="H1", parent_sid=0, parent_cycle_id=0, parent_sd=+1,
         use_case="first_confluence", lower_tf="M15", lower_sd=+1,
-        meta={"trigger_event_idx": 15, "probe_end_idx": 40, "parent_input_idx": 9},
+        meta={"trigger_event_idx": 15, "parent_cts_anchor_idx": 40, "parent_input_idx": 9},
     )
     kwargs.update(overrides)
     return MultiTFTrigger(**kwargs)
@@ -1682,7 +1682,7 @@ def test_default_synth_reversal_trigger_builds_a_reversal_multi_tf_trigger():
     assert s.meta["reversal_apply_idx"] == 303
     assert (s.parent_sid, s.parent_cycle_id, s.lower_tf) == (src.parent_sid, src.parent_cycle_id, src.lower_tf)
     assert (s.parent_tf, s.parent_sd) == (src.parent_tf, src.parent_sd)
-    assert s.meta["trigger_event_idx"] == 15 and s.meta["probe_end_idx"] == 40   # inherited meta kept
+    assert s.meta["trigger_event_idx"] == 15 and s.meta["parent_cts_anchor_idx"] == 40   # inherited meta kept
     # incl. the (unread) H1 input — the user's keep-the-full-copy decision (PLAN_E §9.2); the successor
     # SweepTrigger itself has no parent input
     assert s.meta["parent_input_idx"] == 9 and st.parent_input_idx is None
@@ -1848,7 +1848,7 @@ def test_orchestrator_sweep_triggers_carry_each_types_h1_parent_input(monkeypatc
 
     h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
     # every H1 idx distinct, so a wrong source (trigger event / probe end) cannot pass
-    v1 = SimpleNamespace(status="finalized", trigger_event_idx=10, input_idx=3, probe_end_idx=7)
+    v1 = SimpleNamespace(status="finalized", trigger_event_idx=10, input_idx=3, parent_cts_anchor_idx=7)
     v3 = SimpleNamespace(trigger_event_idx=20, input_idx=15)
     v4 = SimpleNamespace(trigger_event_idx=30, input_idx=25)
     with pytest.raises(_Stop):

@@ -5,9 +5,11 @@ Per spec §4.3.2:
   Parent input:    meta `parent_input_idx` (H1) = the parent BOS anchor
                    (BOS_CONFIRMED.meta["bos_anchor_idx"]); the resolver
                    price-maps it into the M15 probe input (PLAN_E §9.2)
-  Probe probe_end_idx: the confirmed CTS's anchor (`cts_anchor_idx`) in the
-                   same parent cycle (resolved once parent CTS_CONFIRMED fires —
-                   not the confirmation candle)
+  Probe end:       meta `parent_cts_anchor_idx` (H1) = the confirmed CTS's
+                   anchor (`cts_anchor_idx`) in the same parent cycle (resolved
+                   once parent CTS_CONFIRMED fires — not the confirmation
+                   candle); the resolver price-maps it into the M15 probe bound
+                   `probe_end_idx` (Plan E Post-E·3 renamed the H1 key)
 
 Mapping (§4.3.1, unified rule `mapping_sd = -sub_sd`): for confluence
 sub `lower_sd = +parent_sd`, so `mapping_sd = -parent_sd` — the M15
@@ -45,7 +47,7 @@ def to_multi_tf_trigger(
         lower_sd=trig.parent_sd,        # confluence: same direction as parent
         meta={
             "parent_input_idx": trig.input_idx,
-            "probe_end_idx": trig.probe_end_idx,
+            "parent_cts_anchor_idx": trig.parent_cts_anchor_idx,
             "trigger_event_idx": trig.trigger_event_idx,
             "bos_price": trig.meta.get("bos_price"),
         },

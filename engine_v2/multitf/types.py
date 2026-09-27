@@ -147,11 +147,13 @@ class FirstConfluenceTrigger:
     """`first_confluence` (var 1) trigger — fires on parent BOS_CONFIRMED.
 
     Per spec §4.3.2: probe sd = +parent_sd, `input_idx` = parent BOS anchor,
-    `probe_end_idx` = the confirmed CTS's ANCHOR (`cts_anchor_idx`) in the
-    same parent cycle — a PRICE bound for the probe's search (renamed from
-    `end_idx` by Plan C: it is a compute bound, unrelated to the lifecycle
-    `end_idx` of PART4 §17). None (pending) until that CTS_CONFIRMED fires; a
-    pending trigger is logged as `UnresolvedTrigger(reason="pending")`.
+    `parent_cts_anchor_idx` = the confirmed CTS's ANCHOR (`cts_anchor_idx`) in
+    the same parent cycle (H1) — the FC resolver price-maps it into the probe's
+    M15 search bound `probe_end_idx` (a compute bound, unrelated to the
+    lifecycle `end_idx` of PART4 §17). Named `probe_end_idx` until Plan E
+    Post-E·3 (2026-09-27; `end_idx` before Plan C). None (pending) until that
+    CTS_CONFIRMED fires; a pending trigger is logged as
+    `UnresolvedTrigger(reason="pending")`.
 
     The parent-cycle end lives in `multitf/parent_tables.py` (one helper for
     every record).
@@ -161,7 +163,7 @@ class FirstConfluenceTrigger:
     parent_cycle_id: int               # same cycle_id as the BOS_CONFIRMED
     parent_sd: int                     # parent struct_direction at trigger time
     input_idx: int                     # the BOS anchor (BOS_CONFIRMED.meta["bos_anchor_idx"])
-    probe_end_idx: Optional[int]       # CTS anchor (cts_anchor_idx) in same cycle; None = pending
+    parent_cts_anchor_idx: Optional[int]   # H1 CTS anchor (cts_anchor_idx) in same cycle; None = pending
     trigger_event_idx: int             # BOS_CONFIRMED.confirmed_at (candle when trigger fires)
-    status: str = "finalized"          # "finalized" once probe_end_idx is known, else "pending"
+    status: str = "finalized"          # "finalized" once parent_cts_anchor_idx is known, else "pending"
     meta: Dict[str, Any] = field(default_factory=dict)

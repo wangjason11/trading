@@ -196,14 +196,14 @@ class TestMapCandleToLowerTf:
 def _make_trigger(
     use_case: str, parent_sid: int = 0, parent_cycle_id: int = 0,
     parent_sd: int = 1, lower_sd: int = -1,
-    parent_input_idx: int = 1, probe_end_idx: int = 5,
+    parent_input_idx: int = 1, parent_cts_anchor_idx: int = 5,
     prior_sd_trigger_idx: Optional[int] = None,
     prior_cts_prox_idx: Optional[int] = None,
 ) -> MultiTFTrigger:
     meta = {
         "parent_input_idx": parent_input_idx,
-        "probe_end_idx": probe_end_idx,
-        "trigger_event_idx": probe_end_idx,
+        "parent_cts_anchor_idx": parent_cts_anchor_idx,
+        "trigger_event_idx": parent_cts_anchor_idx,
     }
     if prior_sd_trigger_idx is not None:
         meta["prior_sd_trigger_idx"] = prior_sd_trigger_idx
@@ -390,7 +390,7 @@ class TestResolveFirstConfluence:
         trig = _make_trigger(
             "first_confluence", parent_cycle_id=1,
             parent_sd=1, lower_sd=1,
-            parent_input_idx=3, probe_end_idx=7,
+            parent_input_idx=3, parent_cts_anchor_idx=7,
         )
         fake = _fake_probe_result(
             starting_idx=15, finalize_idx=20, finalize_condition="no_retrace",
@@ -437,7 +437,7 @@ class TestResolveFirstConfluence:
         m15 = _m15_from_h1(_h1_df_uptrend(n_hours=3))
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            parent_input_idx=5, probe_end_idx=7,
+            parent_input_idx=5, parent_cts_anchor_idx=7,
         )
         with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
@@ -453,13 +453,13 @@ class TestResolveFirstConfluence:
         # input H1 3 → 13 is mapped BEFORE the end is checked; end H1 99 is not in parent_df.
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            parent_input_idx=3, probe_end_idx=99,
+            parent_input_idx=3, parent_cts_anchor_idx=99,
         )
         with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
         mock_probe.assert_not_called()
         assert isinstance(res, ProbeFailure)
-        assert "probe_end_idx 99 out of parent bounds" in res.detail   # the END branch, not the input's
+        assert "parent_cts_anchor_idx 99 out of parent bounds" in res.detail   # the END branch, not the input's
         assert res.probe_input_idx == 13            # the mapped M15 input, not the H1 3 (PLAN_E §9.2)
 
     def test_input_out_of_parent_bounds_returns_probe_failure_without_input(self):
@@ -467,7 +467,7 @@ class TestResolveFirstConfluence:
         # H1 input 99 is not in parent_df: nothing is mapped → no M15 input (PLAN_E §9.2).
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            parent_input_idx=99, probe_end_idx=7,
+            parent_input_idx=99, parent_cts_anchor_idx=7,
         )
         with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
@@ -483,7 +483,7 @@ class TestResolveFirstConfluence:
         m15 = _m15_from_h1(_h1_df_uptrend(n_hours=5))
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            parent_input_idx=3, probe_end_idx=7,
+            parent_input_idx=3, parent_cts_anchor_idx=7,
         )
         with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
@@ -497,7 +497,7 @@ class TestResolveFirstConfluence:
         # input H1 3 → 13 ; end H1 3 price-mapped +1 → 12 ; 12 <= 13 → degenerate
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            parent_input_idx=3, probe_end_idx=3,
+            parent_input_idx=3, parent_cts_anchor_idx=3,
         )
         with _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_first_confluence_via_unified_probe(trig, h1, m15)
@@ -509,7 +509,7 @@ class TestResolveFirstConfluence:
         h1, m15 = self._fixtures()
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            parent_input_idx=3, probe_end_idx=7,
+            parent_input_idx=3, parent_cts_anchor_idx=7,
         )
         with _patched_fc_ref(None), \
                 _patched_probe(return_value=_fake_probe_result()) as mock_probe:
@@ -522,7 +522,7 @@ class TestResolveFirstConfluence:
         h1, m15 = self._fixtures()
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            parent_input_idx=3, probe_end_idx=7,
+            parent_input_idx=3, parent_cts_anchor_idx=7,
         )
         pending = _fake_probe_result(
             starting_idx=0, status="pending",
@@ -575,7 +575,7 @@ class TestResolveSiblingCts:
 
         trig = _make_trigger(
             "first_counter", parent_cycle_id=2, parent_sd=1, lower_sd=-1,
-            probe_end_idx=5,       # trigger_event_idx 5 → hi = LOH(5) = 23
+            parent_cts_anchor_idx=5,       # trigger_event_idx 5 → hi = LOH(5) = 23
         )
         hi = 23
         fake = _fake_probe_result(starting_idx=12, source="cts_confirmed",
@@ -620,7 +620,7 @@ class TestResolveSiblingCts:
         # extreme (anchor 6) is the input.
         trig = _make_trigger(
             "subsequent_confluence", parent_cycle_id=0, parent_sd=1, lower_sd=1,
-            probe_end_idx=5, prior_sd_trigger_idx=1,
+            parent_cts_anchor_idx=5, prior_sd_trigger_idx=1,
         )
         hi = 23
         fake = _fake_probe_result(starting_idx=12, source="cts_confirmed", finalize_idx=hi)
@@ -677,7 +677,7 @@ class TestResolveSiblingCts:
         trig = _make_trigger(
             "subsequent_counter", parent_sid=1, parent_cycle_id=2,
             parent_sd=-1, lower_sd=1,
-            probe_end_idx=1020, prior_cts_prox_idx=926,
+            parent_cts_anchor_idx=1020, prior_cts_prox_idx=926,
         )
         hi = 4083
         fake = _fake_probe_result(starting_idx=4027, source="cts_updated", finalize_idx=hi)
@@ -751,7 +751,7 @@ class TestResolveSiblingCts:
     def test_no_candidates_returns_none_and_caller_falls_back(self):
         h1, m15 = self._fixtures()
         pool = SubStructurePool()           # no records at all
-        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, probe_end_idx=5)
+        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, parent_cts_anchor_idx=5)
         hi = 23
         # Pool query alone → None.
         assert _build_sibling_cts_ref_zone_from_pool(
@@ -783,7 +783,7 @@ class TestResolveSiblingCts:
     def test_both_unavailable_returns_probe_failure(self):
         h1, m15 = self._fixtures()
         pool = SubStructurePool()
-        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, probe_end_idx=5)
+        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, parent_cts_anchor_idx=5)
         with _patched_fc_ref(None), _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_sibling_cts_via_unified_probe(
                 trig, h1, m15, pool=pool, hi=23,
@@ -803,7 +803,7 @@ class TestResolveSiblingCts:
                         events=[_cts_event("CTS_CONFIRMED", 23, 23)])
         _rec(sib, pool=pool, lens="confluence", S=0, C=2, tss=0, trigger_type="first_confluence",
              trigger_idx=4, start_idx=4)
-        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, probe_end_idx=5)
+        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, parent_cts_anchor_idx=5)
         with _patched_cts_derivation(), \
                 _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_sibling_cts_via_unified_probe(
@@ -825,7 +825,7 @@ class TestResolveSiblingCts:
                         events=[_cts_event("CTS_CONFIRMED", 6, 4)])
         _rec(sib, pool=pool, lens="confluence", S=0, C=2, tss=0, trigger_type="first_confluence",
              trigger_idx=3, start_idx=4, seq=0)
-        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, probe_end_idx=5)
+        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, parent_cts_anchor_idx=5)
         pending = _fake_probe_result(
             starting_idx=0, status="pending",
             finalize_condition="no_cts_pending", finalize_idx=None,
@@ -913,8 +913,8 @@ class TestResolveSiblingCts:
                         events=[_cts_event("CTS_CONFIRMED", 8, 6)])
         _rec(sib, pool=pool, lens="confluence", S=0, C=2, tss=0, trigger_type="first_confluence",
              trigger_idx=4, start_idx=4)
-        # meta probe_end_idx 5 would map to 23; the sweep passes hi = 27.
-        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, probe_end_idx=5)
+        # meta parent_cts_anchor_idx 5 would map to 23; the sweep passes hi = 27.
+        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, parent_cts_anchor_idx=5)
         hi = 27
         fake = _fake_probe_result(starting_idx=12, source="cts_confirmed", finalize_idx=hi)
         with _patched_cts_derivation(), _patched_probe(return_value=fake) as mock_probe:
@@ -936,7 +936,7 @@ class TestSiblingCtsIdxWindow:
     def test_first_counter_lo_is_zero(self):
         h1 = _h1_df_uptrend(n_hours=5)
         m15 = _m15_from_h1(h1)
-        trig = _make_trigger("first_counter", probe_end_idx=4)
+        trig = _make_trigger("first_counter", parent_cts_anchor_idx=4)
         lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19)
         assert lo == 0
         assert hi == 19
@@ -946,7 +946,7 @@ class TestSiblingCtsIdxWindow:
         m15 = _m15_from_h1(h1)
         trig = _make_trigger(
             "subsequent_confluence", lower_sd=1,
-            probe_end_idx=4, prior_sd_trigger_idx=1,
+            parent_cts_anchor_idx=4, prior_sd_trigger_idx=1,
         )
         lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19)
         # prior_sd H1 idx 1 → last-M15-of-hour = 4*1+3 = 7
@@ -958,7 +958,7 @@ class TestSiblingCtsIdxWindow:
         m15 = _m15_from_h1(h1)
         trig = _make_trigger(
             "subsequent_counter", lower_sd=-1,
-            probe_end_idx=4, prior_cts_prox_idx=2,
+            parent_cts_anchor_idx=4, prior_cts_prox_idx=2,
         )
         lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19)
         # prior_cts H1 idx 2 → last-M15-of-hour = 4*2+3 = 11
@@ -968,7 +968,7 @@ class TestSiblingCtsIdxWindow:
     def test_missing_prior_meta_degrades_to_zero(self):
         h1 = _h1_df_uptrend(n_hours=5)
         m15 = _m15_from_h1(h1)
-        trig = _make_trigger("subsequent_confluence", lower_sd=1, probe_end_idx=4)
+        trig = _make_trigger("subsequent_confluence", lower_sd=1, parent_cts_anchor_idx=4)
         lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19)
         assert lo == 0
         assert hi == 19
@@ -986,7 +986,7 @@ class TestDispatcher:
         pool = SubStructurePool()
         trig = _make_trigger(
             "first_confluence", parent_sd=1, lower_sd=1,
-            parent_input_idx=2, probe_end_idx=4,
+            parent_input_idx=2, parent_cts_anchor_idx=4,
         )
         fake = ResolvedStart(
             starting_idx=77, parent_bos_anchor_idx=2, bos0_inner=0.6020,
@@ -1016,7 +1016,7 @@ class TestDispatcher:
         h1 = _h1_df_uptrend(n_hours=5)
         m15 = _m15_from_h1(h1)
         pool = SubStructurePool()
-        trig = _make_trigger(use_case, lower_sd=lower_sd, probe_end_idx=3)
+        trig = _make_trigger(use_case, lower_sd=lower_sd, parent_cts_anchor_idx=3)
         fake = ResolvedStart(
             starting_idx=99, parent_bos_anchor_idx=6, bos0_inner=0.6020,
             finalize_idx=15, finalize_condition="no_retrace",
@@ -1043,7 +1043,7 @@ class TestDispatcher:
     def test_unknown_use_case_raises(self):
         h1 = _h1_df_uptrend(n_hours=5)
         m15 = _m15_from_h1(h1)
-        trig = _make_trigger("not_a_use_case", probe_end_idx=3)
+        trig = _make_trigger("not_a_use_case", parent_cts_anchor_idx=3)
         # PLAN-AMBIGUITY: the plan says the legacy default is retired and an
         # unknown use_case must raise, but does not name the exception type.
         with pytest.raises((ValueError, KeyError, AssertionError)):
@@ -1052,7 +1052,7 @@ class TestDispatcher:
     def test_sibling_entity_df_kwarg_is_gone(self):
         h1 = _h1_df_uptrend(n_hours=5)
         m15 = _m15_from_h1(h1)
-        trig = _make_trigger("first_counter", probe_end_idx=3)
+        trig = _make_trigger("first_counter", parent_cts_anchor_idx=3)
         with pytest.raises(TypeError):
             _resolve_trigger_m15_start(  # type: ignore[call-arg]
                 trig, h1, m15, sibling_entity_df=m15.copy(),
@@ -1081,10 +1081,10 @@ class TestProbeCache:
         return h1, m15
 
     @staticmethod
-    def _fc(parent_input_idx: int = 3, probe_end_idx: int = 7) -> MultiTFTrigger:
+    def _fc(parent_input_idx: int = 3, parent_cts_anchor_idx: int = 7) -> MultiTFTrigger:
         return _make_trigger(
             "first_confluence", parent_cycle_id=1, parent_sd=1, lower_sd=1,
-            parent_input_idx=parent_input_idx, probe_end_idx=probe_end_idx,
+            parent_input_idx=parent_input_idx, parent_cts_anchor_idx=parent_cts_anchor_idx,
         )
 
     @staticmethod
@@ -1145,7 +1145,7 @@ class TestProbeCache:
             out_exact = capsys.readouterr().out
             # Different bound (end H1 8 → 32 ≠ cached 28) → APPROX hit.
             r3 = _resolve_first_confluence_via_unified_probe(
-                self._fc(probe_end_idx=8), h1, m15, pool=pool,
+                self._fc(parent_cts_anchor_idx=8), h1, m15, pool=pool,
             )
             out_approx = capsys.readouterr().out
             assert mock_probe.call_count == 1
@@ -1283,7 +1283,7 @@ class TestFinalizeEqualsTrigger:
         h1 = _h1_df_uptrend(n_hours=10)
         m15 = _m15_from_h1(h1)
         pool = self._pool_with_confluence_record()
-        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, probe_end_idx=5)
+        trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, parent_cts_anchor_idx=5)
         # A Phase-1 probe finalizes AT its bound by construction; a result whose
         # finalize_idx (20) != hi (23) violates §5.2 → the resolver asserts.
         fake = _fake_probe_result(starting_idx=12, source="cts_confirmed", finalize_idx=20)
@@ -1297,11 +1297,11 @@ class TestFinalizeEqualsTrigger:
         pool = self._pool_with_confluence_record()
         # First read at hi = 23 (trigger_event_idx 5): probe runs, finalize 23 == hi
         # → cached under (H1.main, M15, -1, input 6).
-        t1 = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, probe_end_idx=5)
+        t1 = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, parent_cts_anchor_idx=5)
         # Second read at hi = 27 (trigger_event_idx 6 → LOH 27): same direction,
         # same sibling input 6 → cache HIT; the inherited finalize 23 != 27 is
         # allowed (the re-trigger does not wait — §2.1), no assert.
-        t2 = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, probe_end_idx=6)
+        t2 = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, parent_cts_anchor_idx=6)
         fake = _fake_probe_result(starting_idx=12, source="cts_confirmed", finalize_idx=23)
         with _patched_cts_derivation(), _patched_probe(return_value=fake) as mock_probe:
             r1 = _resolve_sibling_cts_via_unified_probe(t1, h1, m15, pool=pool, hi=23)
