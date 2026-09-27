@@ -60,7 +60,9 @@ key must be in `_EVENT_META_IDX_KEYS` / `_ZONE_META_IDX_KEYS` / `_FIB_META_IDX_K
 no slice-local allow-list since Post-E·2 (2026-09-26, PLAN_E §9.3). It also scans every event-meta key
 `market_structure` writes (Plan E E2a) and every `meta=` key the KL / POI / fib / wave-candle emitters write
 (Post-E·2), so a key the fixture never produces is covered, and it pins the VALUES (each mirrored element == its
-slice-local source + `slice_begin`).
+slice-local source + `slice_begin`). Since the Post-E·2 landing review it also checks the lists themselves (index-like
+names only, never a known non-index, every entry emitted by its element kind), every mirror shift site on a synthetic
+result, a broad emitter scan (`**{...}` splats, attribute subscripts, `setdefault`) and every int meta value by type.
 Rule 4 use, Plan E E2a (2026-09-24): `CTS_ESTABLISHED.meta["cts_anchor_idx"]` and
 `BOS_CONFIRMED.meta["bos_anchor_idx"]` (documented in ARCHITECTURE "`ev.idx` convention"). Rule 3 meaning
 change, Plan E E4a (2026-09-25): `CTS_ESTABLISHED.idx` := the MOMENT (`== meta["confirmed_at"]`, asserted at
@@ -1545,21 +1547,28 @@ Current nested-dict idx fields and their hardcoded loop keys:
 |---|---|---|---|
 | `zones/kl_zones_v1.py` (INIT + expansion) | `meta["bounds_steps"][k]` | `"start_idx"` | `"start_idx"` |
 | `zones/poi_zones.py` `_compute_poi_activation_history` | `meta["activation_history"][k]` | `"idx"` | `"idx"` |
-| `zones/fib_tracker.py` `_log_flip` (FibState lifecycle, Session 1) | `FibState.activation_history[k]` (a top-level field, NOT meta) | `"idx"` | `"idx"` |
+| `zones/kl_zones_v1.py` `derive_kl_zones_v1` (lifecycle finalize) | `meta["activation_history"][k]` | `"idx"` | `"idx"` |
 
-**Also note (FibState, 2026-05-27):** `FibState.end_idx` is a top-level
-dataclass field (not nested), so the mirror shifts it directly in the fib
-`replace(...)` call alongside `bos_idx`/`cts_idx` — NOT via the meta tuple
-constants. `end_reason`/`status` are not indices and pass through unshifted.
-The cap in `entity_df_mutation.py` writes `end_idx = cap_idx_local`
-(slice-local) and relies on this mirror shift to make it entity-absolute,
-exactly like the sibling KL cap.
+(`FibState.activation_history` is gone — FIB_LIFECYCLE_SPEC §15.2; the row that
+listed it was removed in the Post-E·2 landing review, 2026-09-26.)
+
+**Also note (FibState):** `bos_idx` / `cts_idx` / `start_idx` / `end_idx` and each
+`cts_history` `(idx, price)` entry are top-level dataclass fields (not meta), so
+the mirror shifts them directly in the fib `replace(...)` call — NOT via the
+meta tuple constants (`cts_history` since the Post-E·2 landing review; attrs
+only). `end_reason`/`status` are not indices and pass through unshifted. The
+lifecycle cap reaches FibTracker slice-local (`lifecycle_cap`, via
+`project_to_window` → `_finalize_lifecycle_fields`), exactly like the KL / POI
+caps, and this shift makes `end_idx` entity-absolute. Every shift site is
+pinned on a synthetic result (`tests/test_event_meta_idx_keys.py::
+test_mirror_shifts_every_site_exactly_once`) — before that the fib fields,
+the wave-candle fields and `prev_bos_lines` had no test at all.
 
 **Hazard:** if the producer renames its key (or adds a new idx-bearing
 key in a nested dict), and the mirror loop isn't updated, the special
 case silently no-ops. Slice-local values get persisted as if they were
 entity-absolute. The chart consumer reads them via `_lt_time(idx)` which
-expects entity-absolute coords (`charting/export_m15_chart.py:594-598`),
+expects entity-absolute coords (`charting/export_m15_chart.py` `_lt_time`),
 and rectangles/dots land at completely wrong x-positions — but at
 internally consistent ones, so no exception fires.
 

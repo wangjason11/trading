@@ -1446,7 +1446,40 @@ the real emitter.
   `effective_idx`), LANDMINES rule-3 guard note + "Mirror Translation…" rule, FIB_LIFECYCLE_SPEC sub 3 example
   (`activated_at` 2651), KL_ZONES_SPEC `expanded_last_idx`, POI_ZONES_SPEC `bos_idx` / `cts_idx`, an
   IMBALANCE_FILL_SEMANTICS note (its Plan F table's values are slice-local). Saves before this commit carry the
-  slice-local values.
+  slice-local values. **Landed `574de2a`, save `20260926_214932_574de2a`** (save `4d1566d`, trunk `760a382`;
+  reuse-mode save of the verified replay).
+- **Rule 3's "set on every event" / "`.get` → `meta[key]`" bullets do not apply here:** a pure change of FRAME —
+  names, presence and emit paths are unchanged (the RANGE_STARTED keys stay path-specific: `start_idx` /
+  `confirm_idx` on the offline path, `pullback_apply_idx` / `proximity_apply_idx` on their own); the six
+  `export_plotly` `.get("start_idx", e.idx)` reads are H1-only with a deliberate fallback.
+- **Landing review (2026-09-26/27; 2 parallel lenses ≈465k — conformance ≈281k, mutation ≈184k; `3082aca` in
+  scope): 0 BLOCKER / MAJOR.** Conformance independently re-verified the data (715 / 547, each `+slice_begin`), the
+  semantics on the new save (RANGE_STARTED `confirm_idx == idx` 45/45, `pullback_apply_idx == idx` 9/9, `cts_idx <=
+  idx` 54/54; `effective_idx` 388/388; `expires_idx` = anchor + 5 11/11; KL `expanded_last_idx` = a THRESHOLD_UPDATED
+  idx 4/4; fib `locked_at` = a CTS_CONFIRMED idx 25/25; POI `(bos_idx, cts_idx)` = its fib row 42/42), no reader, the
+  docs, and the `by_lens` fix. Mutation: 43 mutants, 23 killed, 6 equivalent, 14 real survivors. **Found (folded in
+  one byte-identical commit):** (1) PRE-EXISTING unpinned shift sites — fib dataclass `bos_idx` / `cts_idx` /
+  `end_idx` (the M15 fib CSV columns + the fib drawing), wave-candle `first_/last_wave_candle_idx` and
+  `prev_bos_lines` (M15 chart positions), the mirror's WVMI loop → a synthetic every-site mirror test; (2) the value
+  pin is self-referential — `cycle_id` added to the event list survived → a list-validity test (index-like names
+  only, a never-listed set of known non-indices, no duplicates); (3) the static scans' blind spots (`**{...}` splats,
+  attribute subscripts, `setdefault`, unsuffixed keys) → a broad emitter AST scan with a documented `_NOT_MIRRORED`
+  set + a value-type classification of every int meta value on the fixture; (4) `_shift_meta_indices`' contract (0,
+  None, float, no in-place) → a unit test; (5) `FibState.cts_history` `(idx, price)` entries still slice-local after
+  the mirror (attrs only, no reader) → **user: shift it** (`entity_df_mutation` fib `replace`); (6) five DEAD list
+  entries (event `confirmed_idx` / `deactivated_at`, zone `start_idx` / `ic_idx` / `deactivated_at` — nothing emits
+  them) → **user: delete + an inverse guard** (every listed key is emitted by its element kind — kills
+  `pb_reconfirm_idx` misfiled again); (7) stale docs — LANDMINES "Mirror Translation…" (the removed
+  `FibState.activation_history` row, no KL `activation_history` row, a non-existent `cap_idx_local`, a stale chart
+  line ref), GOTCHAS `pb_start` ("pullback start" → the last pullback pattern's apply candle, on both BOS `source`s)
+  and the Plan F record's unlabelled slice-local 53 / 54, the POI example's "cycle 0", this rule-3 note; my own
+  mirror comment on `pb_start` ("pullback_extreme; None otherwise" — wrong). **Not taken (user):** a child-pytest
+  under an adversarial `PYTHONHASHSEED` for the `by_lens` pin (a `frozenset` rewrite escapes the monkeypatched
+  `set`; run.log order only). **Left as NIT:** `_shift_meta_indices` skips a non-Python-int value silently (numpy
+  ints; all 715 values here are Python ints — casting at the emitters is the E2a pattern if one ever appears). The
+  fold-in's own check: the 17 re-run survivors all KILLED (scratch copy). Fold-in `/compare` vs
+  `20260926_214932_574de2a`: 24/24 byte-identical, figures JSON-identical, run.log identical; tests 950 → **961 + 1
+  xfail**.
 ---
 
 ## 10. Open questions for the user (recommendation first; concrete window data)

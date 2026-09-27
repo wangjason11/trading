@@ -453,7 +453,7 @@ assumes "POI ⟹ sd direction."
   that decide anything (the env-gated `POI_LIFECYCLE_DEBUG` print only).
 - `bos_idx` / `cts_idx`: the owning fib's `bos_idx` / `cts_idx` (its BOS / CTS anchors) copied when the POI is built —
   the same values as the fib CSV's own columns. Rebased to entity-absolute on sub POIs by the mirror since Post-E·2
-  (2026-09-26; slice-local in the M15 POI CSVs before — e.g. confluence sub 0 IC 678: 50 / 380, now 454 / 784).
+  (2026-09-26; slice-local in the M15 POI CSVs before — e.g. confluence sub 0 cycle 0 IC 678: 50 / 380, now 454 / 784).
   Readers: none that decide anything (the same debug print).
 - `end_time`: When zone ends (None = extends to chart end)
 

@@ -103,15 +103,18 @@ _MS_AUX_STRUCTURE_COLS = (
 # from slice-local to entity-absolute. EVERY index-valued key the sub pipeline
 # writes belongs in one of the four lists below — an unlisted key is exported
 # slice-local on every M15 row without any error (guard:
-# tests/test_event_meta_idx_keys.py; no allow-list since Post-E·2).
+# tests/test_event_meta_idx_keys.py; no allow-list since Post-E·2). The lists
+# hold ONLY keys their element kind emits (the guard's inverse check): the
+# Post-E·2 landing review deleted five dead entries (event `confirmed_idx` /
+# `deactivated_at`, zone `start_idx` / `ic_idx` / `deactivated_at` — nothing
+# emitted them; POI `ic_idx` is a dataclass field, KL `start_idx` lives in the
+# nested `bounds_steps`).
 _EVENT_META_IDX_KEYS = (
     "confirmed_at",
     "apply_idx",
     "pattern_anchor_idx",
-    "confirmed_idx",
     "cts_anchor_idx",
     "bos_anchor_idx",
-    "deactivated_at",
     # Post-E·2 (2026-09-26) — slice-local in the M15 CSVs until then:
     "effective_idx",        # STATE_CHANGED
     "start_idx",            # RANGE_STARTED
@@ -120,7 +123,7 @@ _EVENT_META_IDX_KEYS = (
     "pullback_apply_idx",   # RANGE_STARTED (pullback_created_range)
     "proximity_apply_idx",  # RANGE_STARTED (proximity_created_range)
     "expires_idx",          # REVERSAL_WATCH_START / REVERSAL_CANDIDATE
-    "pb_start",             # BOS_CONFIRMED (pullback_extreme; None otherwise)
+    "pb_start",             # BOS_CONFIRMED (the last pullback pattern's apply candle; None before any)
 )
 
 # Zone-meta keys with entity-df indices (KL and POI zones).
@@ -128,11 +131,8 @@ _ZONE_META_IDX_KEYS = (
     "anchor_idx",
     "confirmed_idx",
     "cts_established_idx",
-    "start_idx",
     "end_idx",
     "base_idx",
-    "ic_idx",
-    "deactivated_at",
     # Post-E·2 (2026-09-26) — slice-local in the M15 CSVs until then:
     "expanded_last_idx",    # KL (the last expansion's THRESHOLD_UPDATED candle)
     "bos_idx",              # POI (the owning fib's bos_idx, copied at IC time)
@@ -304,7 +304,9 @@ def mirror_lower_tf_result_to_entity_df(
     # 6. Fib states — direct bos_idx / cts_idx + meta. The scalar lifecycle
     #    fields (FIB_LIFECYCLE_SPEC.md §15) carry slice-local indices: both
     #    `start_idx` and `end_idx` must shift by slice_begin alongside the
-    #    anchors. `end_reason` / `status` are not indices -> pass through.
+    #    anchors, and so does each `cts_history` (idx, price) entry (Post-E·2
+    #    landing review; attrs only, no reader). `end_reason` / `status` are
+    #    not indices -> pass through.
     new_fibs = []
     for fib in result.fib_states:
         new_meta = _shift_meta_indices(fib.meta, _FIB_META_IDX_KEYS, slice_begin)
@@ -325,6 +327,7 @@ def mirror_lower_tf_result_to_entity_df(
             cts_idx=fib.cts_idx + slice_begin,
             start_idx=new_start_idx,
             end_idx=new_end_idx,
+            cts_history=tuple((int(i) + slice_begin, p) for i, p in fib.cts_history),
             meta=new_meta,
         ))
     _attrs_setdefault_list(entity_df, "fib_states").extend(new_fibs)

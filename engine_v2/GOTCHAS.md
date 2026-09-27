@@ -715,7 +715,7 @@ zones.
 - `ev.meta["bos_anchor_idx"]` = the BOS anchor candle (where the BOS price level was set; Plan E E2a)
 - `ev.price` = BOS price level (the anchor's price — NOT a price of the `ev.idx` candle since E4b)
 - `ev.meta["confirmed_at"]` = confirmation candle (when the breakout was detected) — the apply candle of the breakout that established the cycle, `==` the same cycle's `CTS_ESTABLISHED.meta["confirmed_at"]`
-- `ev.meta["pb_start"]` = pullback start index
+- `ev.meta["pb_start"]` = the apply candle of the LAST pullback pattern before this BOS (`st.last_pullback_pat_apply_idx`, on both `source`s; `None` before any pullback) — not a "pullback start" (entity-absolute on sub events since Post-E·2)
 
 ---
 
@@ -1662,8 +1662,9 @@ reading the cycle-0 cache (the cache stays uncut: it is Scenario-2 cond2, judged
 at its later use). A gap whose c3 closes after the update first-activates the
 fib at a later update, not this one — measured: M15 sub 3 cycle 0
 `activated_at` 61 → 62 (slice-local, both lenses); M15 confluence sub 2 cycle 0,
-no longer activated at its lag-0 CTS_ESTABLISHED (53), now activates through
-this path at 54 (`activated_on: "update"`). IMBALANCE_FILL_SEMANTICS.md
+no longer activated at its lag-0 CTS_ESTABLISHED (53, slice-local), now activates
+through this path at 54 (slice-local; = 2369 entity-absolute, the frame the fib
+CSV exports since Post-E·2) (`activated_on: "update"`). IMBALANCE_FILL_SEMANTICS.md
 "Knowability — the c3 rule".
 
 **Surfaced by** the true-first-breakout cycle-0 work: moving CTS_0 changed which
