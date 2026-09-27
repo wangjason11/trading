@@ -1,0 +1,4 @@
+commit_hash=574de2a
+timestamp=20260926_214932
+branch=week8-volmom-multitf
+commit_message=Plan E Post-E·2: shift the coordinate-hygiene families F1–F8 slice-local -> entity-absolute at the mirror; EXPORTED (715 keys / 547 meta cells)
