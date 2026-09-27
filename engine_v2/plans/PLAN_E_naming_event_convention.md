@@ -1110,6 +1110,10 @@ the real emitter.
 - the unresolved-triggers CSV `probe_input_idx` frame mix (H1 "whatever was known" for the parent-triggered
   types vs M15) — split into `parent_input_idx` (H1) + `probe_input_idx` (M15, when the resolver got one — §9.2); one exported
   `/compare` (user 2026-09-26: "fix later"). **DONE 2026-09-26 (Post-E·1a + 1b, §9.2).**
+- the `probe_end_idx` name / frame split (found in the Post-E·1a review): `MultiTFTrigger.meta["probe_end_idx"]` /
+  `FirstConfluenceTrigger.probe_end_idx` hold the H1 CTS anchor, `ProbeResult.probe_end_idx` / the probe cache's the
+  M15 bound — the `parent_input_idx` / `probe_input_idx` pattern would give the H1 one a `parent_*` name
+  (byte-identical rename; FC only).
 
 ### 9.1 E5 as landed
 
