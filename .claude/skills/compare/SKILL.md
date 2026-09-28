@@ -86,39 +86,51 @@ data — the same guard as `/commit-save` reuse mode.
 ### 2b. Post-replay log grep (fetch gate FIRST, then the silent-skip grep)
 
 **Fetch-completeness gate: MANDATORY, and it runs before any diff is
-trusted.** `multitf/data_bridge.fetch_lower_tf_data` fetches the M15 input in
-14-day OANDA chunks and does **not** raise when a chunk fails. It prints
-`[data_bridge] ERROR fetching M15 chunk <from>-<to>: <exception>`, carries on
-with the chunks it got, and still prints `[data_bridge] Fetched N M15 candles
-for NZD_USD in K chunks`, where K counts only the chunks that returned data.
-The replay exits 0 on the truncated frame. The M15 input is not among the 24
-saved CSVs and saves carry no `run.log`, so a partial fetch shows up only as
-M15 deltas that look exactly like an engine change. This happened in a
-2026-09-22 audit run: two HTTP 504s left 2500 of 4228 M15 candles, and nothing
-failed. The H1 fetch does not have this problem: `provider_oanda.get_history`
-raises on a non-200 response and `run_replay.py` does not catch it, so a failed
-H1 fetch crashes the run.
+trusted.** The M15 input is not among the 24 saved CSVs and saves carry no
+`run.log`, so an incomplete M15 frame shows up only as M15 deltas that look
+exactly like an engine change. This happened in a 2026-09-22 audit run:
+`multitf/data_bridge.fetch_lower_tf_data` (14-day OANDA chunks) then printed a
+failed chunk and carried on, and after two HTTP 504s the replay exited 0 on
+2500 of 4228 M15 candles. **Since 2026-09-27 the fetch fails loudly:** a chunk
+that fails transiently (an HTTP error status or a `requests` network error) is
+retried twice, each retry printing `[data_bridge] RETRY k/2 M15 chunk
+<from>-<to> in 5 s: <exception>`; a chunk that still fails, or a fetch that
+returns no candles at all, raises `RuntimeError: [data_bridge] ERROR …` and
+the replay crashes (no `=== Replay Timing ===` block). The H1 fetch always
+did: `provider_oanda.get_history` raises on a non-200 response and
+`run_replay.py` does not catch it. The gate still runs: it ties the log to the
+outputs on disk and checks the exact candle count, which also catches a window
+change or a short response that raised nothing.
 
 ```bash
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
-if [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log \
-   && grep -aqF "$EXPECTED_FETCH" run.log && ! grep -aqF "[data_bridge] ERROR" run.log; then \
+if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
+    echo "FETCH GATE: FAIL (run.log is not this replay's log)"; grep -aF "[data_bridge]" run.log; \
+elif ! grep -aqF "[data_bridge]" run.log && ! grep -aqF "[multi_tf:dual]" run.log; then \
+    echo "FETCH GATE: N/A (no lower timeframe)"; \
+elif ! grep -aqF "[data_bridge]" run.log && grep -aqF "[multi_tf:dual] no triggers" run.log; then \
+    echo "FETCH GATE: N/A (no H1 triggers - no M15 fetch)"; \
+elif grep -aqF "$EXPECTED_FETCH" run.log && ! grep -aqF "[data_bridge] ERROR" run.log; then \
     echo "FETCH GATE: PASS"; \
 else \
     echo "FETCH GATE: FAIL"; grep -aF "[data_bridge]" run.log; \
 fi
 ```
 
-- **PASS needs all four conditions.** The first two are the **same-run check**:
-  `run.log` is newer than the newest `*_raw.csv` AND contains the `=== Replay
-  Timing ===` block. `run_replay.py` writes `*_raw.csv` first (before
-  `run_pipeline`) and prints the timing block last, so the log of the replay
-  whose outputs are on disk passes both. A stale `run.log` from an earlier
-  replay fails the first (a later replay run without `> run.log 2>&1` wrote a
-  newer `*_raw.csv`), and a crashed run fails the second. The last two are the
-  fetch check: the exact expected `Fetched` line is present AND there is no
-  `[data_bridge] ERROR` line. `/commit-save` Step 4b runs this same snippet.
+- **PASS needs the same-run check AND the fetch check.** The **same-run
+  check** (first branch): `run.log` is newer than the newest `*_raw.csv` AND
+  contains the `=== Replay Timing ===` block. `run_replay.py` writes
+  `*_raw.csv` first (before `run_pipeline`) and prints the timing block last,
+  so the log of the replay whose outputs are on disk passes both. A stale
+  `run.log` from an earlier replay fails the first (a later replay run without
+  `> run.log 2>&1` wrote a newer `*_raw.csv`), and a crashed run — a failed
+  fetch included — fails the second; its FAIL quotes the traceback's
+  `[data_bridge] ERROR` line. The **fetch check** (PASS branch): the exact
+  expected `Fetched` line is present AND there is no `[data_bridge] ERROR`
+  line (a backstop — a fetch error now ends the run). A `[data_bridge] RETRY`
+  line on a PASS is benign (the retry succeeded and the count is exact) —
+  mention it in the report. `/commit-save` Step 4b runs this same snippet.
 - **On FAIL, STOP.** Report a **data-fetch failure** and quote the
   `[data_bridge]` lines. If those lines look complete, the same-run check is
   what failed: the log does not belong to the outputs on disk. Either way,
@@ -129,8 +141,19 @@ fi
   being reused, and the same-run check is what stops reuse from passing on a
   stale log. If that replay was run without `> run.log 2>&1`, completeness
   cannot be checked, so run a fresh replay instead of comparing.
-- **N/A only when the run has no lower timeframe** (`config.py`
-  `lower_timeframes=()` — then no M15 CSVs exist either).
+- **N/A: the snippet decides it from the log, and only when no M15 fetch ran
+  (no `[data_bridge]` line at all).** Two cases: (a) no `[multi_tf:dual]` line
+  either — the run has no lower timeframe (`config.py` `lower_timeframes=()`);
+  (b) the no-trigger line `[multi_tf:dual] no triggers — no subs built`
+  (`orchestrator._run_multi_tf_dual`) — M15 is on but the window has no H1
+  trigger, so nothing is fetched. Either way that run writes no M15 CSVs. The
+  snippet greps only the line's ASCII prefix `[multi_tf:dual] no triggers`:
+  Python writes the redirected log in cp1252, so its `—` is byte `0x97` and a
+  UTF-8 grep for it never matches. Rewording that prefix makes a no-trigger
+  run FAIL (fails closed); a run that fetched could read N/A only if the
+  `[data_bridge]` and `[multi_tf:dual]` prefixes both vanished at once.
+  `tests/test_data_bridge_fetch.py` pins both prefixes and the `Fetched`
+  line's shape.
 - **The expected line depends on the window.** The M15 fetch spans the H1 frame
   (`orchestrator._run_multi_tf_dual`, first to last H1 candle), which is
   `config.py`'s window after `[auto_extend]` moves its start. On the reference

@@ -840,10 +840,8 @@ def _run_multi_tf_dual(
     pair = h1_df.attrs.get("pair", "NZD_USD")
     h1_start = pd.to_datetime(h1_df["time"].iloc[0], utc=True)
     h1_end = pd.to_datetime(h1_df["time"].iloc[-1], utc=True)
+    # Raises on a failed or empty fetch — never a partial frame (data_bridge).
     m15_raw = fetch_lower_tf_data(pair, "M15", h1_start, h1_end)
-    if m15_raw is None or m15_raw.empty:
-        print("[multi_tf:dual] WARNING: No M15 data available")
-        return [], []
     m15 = prepare_lower_tf_data(m15_raw)
     m15.attrs["pair"] = pair
     lens_dfs = {

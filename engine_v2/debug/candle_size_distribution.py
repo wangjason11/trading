@@ -127,10 +127,7 @@ def main() -> None:
 
     classified = [(CONFIG.timeframe, _classify_natural(df_h1, pair))]
     for tf in LOWER_TFS:
-        raw = fetch_lower_tf_data(pair, tf, tmin, tmax)
-        if raw is None:
-            print(f"[candle_size_distribution] WARNING: no {tf} data; skipping")
-            continue
+        raw = fetch_lower_tf_data(pair, tf, tmin, tmax)  # raises on a failed / empty fetch
         classified.append((tf, _classify_natural(raw, pair)))
 
     print("\n" + "=" * 30 + " DISTRIBUTION STATS (natural classification) " + "=" * 30)

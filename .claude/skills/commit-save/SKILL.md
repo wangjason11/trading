@@ -169,34 +169,45 @@ not just this skill.
 
 ### 4b. Fetch-completeness gate  *(MANDATORY in both modes, before Step 5 copies anything)*
 
-**A partial M15 fetch must never become a baseline.**
-`multitf/data_bridge.fetch_lower_tf_data` swallows a failed OANDA chunk: it
-prints `[data_bridge] ERROR fetching M15 chunk …`, keeps going, and the replay
-exits 0. The M15 input is not among the saved CSVs, so a truncated run saved
-here would make every later `/compare` diff against broken M15 outputs. The
-full rationale and the canonical expected value are in the `/compare` skill
-§2b "Fetch-completeness gate". Keep the snippet below identical to the one
-there (only the FAIL message differs), including the `EXPECTED_FETCH` value.
+**A partial M15 fetch must never become a baseline.** The M15 input is not
+among the saved CSVs, so a truncated run saved here would make every later
+`/compare` diff against broken M15 outputs. Since 2026-09-27
+`multitf/data_bridge.fetch_lower_tf_data` fails loudly (a transiently failed
+OANDA chunk is retried twice, then the fetch raises `[data_bridge] ERROR …`
+and the replay crashes — it used to print the error and exit 0 on a truncated
+frame); the gate ties the log to the outputs and checks the exact candle
+count. The full rationale, the N/A cases and the canonical expected value are
+in the `/compare` skill §2b "Fetch-completeness gate". Keep the snippet below
+identical to the one there (only the FAIL messages differ), including the
+`EXPECTED_FETCH` value.
 
 ```bash
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
-if [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log \
-   && grep -aqF "$EXPECTED_FETCH" run.log && ! grep -aqF "[data_bridge] ERROR" run.log; then \
+if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
+    echo "FETCH GATE: FAIL - do NOT save (run.log is not this replay's log)"; grep -aF "[data_bridge]" run.log; \
+elif ! grep -aqF "[data_bridge]" run.log && ! grep -aqF "[multi_tf:dual]" run.log; then \
+    echo "FETCH GATE: N/A (no lower timeframe)"; \
+elif ! grep -aqF "[data_bridge]" run.log && grep -aqF "[multi_tf:dual] no triggers" run.log; then \
+    echo "FETCH GATE: N/A (no H1 triggers - no M15 fetch)"; \
+elif grep -aqF "$EXPECTED_FETCH" run.log && ! grep -aqF "[data_bridge] ERROR" run.log; then \
     echo "FETCH GATE: PASS"; \
 else \
     echo "FETCH GATE: FAIL - do NOT save"; grep -aF "[data_bridge]" run.log; \
 fi
 ```
 
-PASS needs all four conditions. The first two are the **same-run check**: they
-tie `run.log` to the replay whose outputs will be saved. `run_replay.py` writes
-`*_raw.csv` first and prints the timing block last, so that run's log is newer
-than its `*_raw.csv` and contains its timing block. This matters in reuse mode,
-where a stale log would otherwise vouch for a later, uncaptured replay. The last
-two are the fetch check: the exact expected `Fetched` line AND no
-`[data_bridge] ERROR` line. The gate is N/A only when the run has no lower
-timeframe (`config.py` `lower_timeframes=()` — then no M15 CSVs exist either).
+PASS needs the **same-run check** AND the fetch check. The same-run check
+(first branch) ties `run.log` to the replay whose outputs will be saved:
+`run_replay.py` writes `*_raw.csv` first and prints the timing block last, so
+that run's log is newer than its `*_raw.csv` and contains its timing block.
+This matters in reuse mode, where a stale log would otherwise vouch for a
+later, uncaptured replay; a crashed run (a failed fetch included) fails it
+too. The fetch check: the exact expected `Fetched` line AND no
+`[data_bridge] ERROR` line. A `[data_bridge] RETRY` line on a PASS is benign
+(say so in the report). N/A — decided by the snippet, only when no M15 fetch
+ran: no lower timeframe, or no H1 trigger (`[multi_tf:dual] no triggers`);
+that run writes no M15 CSVs.
 
 **On FAIL, STOP and do not run Steps 5–7.** Report a data-fetch failure, quote
 the `[data_bridge]` lines, and re-run Step 4. The Step 3 folder and its

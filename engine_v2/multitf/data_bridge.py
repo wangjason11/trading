@@ -5,15 +5,22 @@ H1 candle times to M15 indices.
 """
 from __future__ import annotations
 
-from datetime import timedelta
+import time
+from datetime import datetime, timedelta
 from typing import Optional
 
 import pandas as pd
+import requests
 
 from engine_v2.data.provider_oanda import get_history
 from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.patterns.pattern_engine import detect_patterns
 from engine_v2.patterns.imbalance import compute_imbalance
+
+# A chunk whose request fails transiently is retried this many times before
+# the fetch raises (the 2026-09-22 partial fetch was two HTTP 504s).
+_FETCH_RETRIES = 2
+_FETCH_RETRY_WAIT_S = 5.0
 
 
 def fetch_lower_tf_data(
@@ -22,11 +29,19 @@ def fetch_lower_tf_data(
     start: pd.Timestamp,
     end: pd.Timestamp,
     chunk_days: int = 14,
-) -> Optional[pd.DataFrame]:
+) -> pd.DataFrame:
     """Fetch lower-TF data covering the parent TF date range.
 
     Called once per replay, not per trigger. Fetches in chunks to stay
     within OANDA's 5000 candle limit per request.
+
+    Fails loudly — a partial frame never reaches the engine (this function
+    used to print a failed chunk and carry on: one run silently got 2500 of
+    4228 M15 candles and exited 0). A chunk that fails transiently is retried
+    (`_fetch_chunk`); a chunk that still fails raises `RuntimeError`
+    ``[data_bridge] ERROR fetching …``. A window that yields no candles at all
+    raises too: the parent frame spans it, so the lower TF has data. One empty
+    chunk is not an error (it is left out of the chunk count).
     """
     chunks = []
     cur_start = start.to_pydatetime()
@@ -34,29 +49,45 @@ def fetch_lower_tf_data(
 
     while cur_start < final_end:
         cur_end = min(cur_start + timedelta(days=chunk_days), final_end)
-        try:
-            chunk = get_history(
-                pair=pair,
-                timeframe=lower_tf,
-                start=cur_start,
-                end=cur_end,
-            )
-            if not chunk.empty:
-                chunks.append(chunk)
-        except Exception as e:
-            print(f"[data_bridge] ERROR fetching {lower_tf} chunk {cur_start}-{cur_end}: {e}")
+        chunk = _fetch_chunk(pair, lower_tf, cur_start, cur_end)
+        if not chunk.empty:
+            chunks.append(chunk)
 
         cur_start = cur_end
 
     if not chunks:
-        print(f"[data_bridge] WARNING: No {lower_tf} data for {pair} {start} - {end}")
-        return None
+        raise RuntimeError(f"[data_bridge] ERROR: no {lower_tf} data for {pair} {start} - {end}")
 
     df = pd.concat(chunks, ignore_index=True)
     df = df.drop_duplicates(subset=["time"]).sort_values("time").reset_index(drop=True)
     df.attrs["pair"] = pair
     print(f"[data_bridge] Fetched {len(df)} {lower_tf} candles for {pair} in {len(chunks)} chunks")
     return df
+
+
+def _fetch_chunk(pair: str, lower_tf: str, chunk_start: datetime, chunk_end: datetime) -> pd.DataFrame:
+    """One chunk request, retried `_FETCH_RETRIES` times on a transient failure.
+
+    Transient = an HTTP error status (`get_history` raises `RuntimeError` on
+    any non-200) or a `requests` network error; each retry prints a
+    ``[data_bridge] RETRY k/N …`` line. Anything else (a missing `oanda.cfg`,
+    a malformed response) raises at once.
+    """
+    for attempt in range(_FETCH_RETRIES + 1):
+        try:
+            return get_history(pair=pair, timeframe=lower_tf, start=chunk_start, end=chunk_end)
+        except (RuntimeError, requests.RequestException) as e:
+            if attempt == _FETCH_RETRIES:
+                raise RuntimeError(
+                    f"[data_bridge] ERROR fetching {lower_tf} chunk {chunk_start}-{chunk_end} "
+                    f"after {_FETCH_RETRIES} retries: {e}"
+                ) from e
+            print(
+                f"[data_bridge] RETRY {attempt + 1}/{_FETCH_RETRIES} {lower_tf} chunk "
+                f"{chunk_start}-{chunk_end} in {_FETCH_RETRY_WAIT_S:g} s: {e}"
+            )
+            time.sleep(_FETCH_RETRY_WAIT_S)
+    raise AssertionError("unreachable")
 
 
 def prepare_lower_tf_data(

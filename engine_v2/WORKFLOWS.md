@@ -37,17 +37,26 @@ log you captured (`python -m engine_v2.run_replay > run.log 2>&1`), run two
 checks in this order.
 
 **1. Fetch-completeness gate (MANDATORY; no diff is trusted until it passes).**
-`multitf/data_bridge.fetch_lower_tf_data` also fails without raising: a failed
-OANDA chunk prints `[data_bridge] ERROR fetching M15 chunk …`, the fetch keeps
-the other chunks, and the replay exits 0 on a truncated M15 frame. The full
-rationale, the same-run check and the canonical `EXPECTED_FETCH` value live in
-the `/compare` skill §2b; `/commit-save` Step 4b runs the same snippet:
+The M15 input is not among the saved CSVs, so an incomplete M15 frame would
+fake a CSV delta. `multitf/data_bridge.fetch_lower_tf_data` fails loudly since
+2026-09-27 (a transiently failed OANDA chunk is retried twice — `[data_bridge]
+RETRY k/2 …` — then the fetch raises `[data_bridge] ERROR …` and the replay
+crashes; before, it printed the error and exited 0 on a truncated frame). The
+gate ties the log to the outputs on disk and checks the exact candle count. The
+full rationale, the same-run check, the N/A cases and the canonical
+`EXPECTED_FETCH` value live in the `/compare` skill §2b; `/commit-save` Step 4b
+runs the same snippet:
 
 ```bash
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
-if [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log \
-   && grep -aqF "$EXPECTED_FETCH" run.log && ! grep -aqF "[data_bridge] ERROR" run.log; then \
+if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
+    echo "FETCH GATE: FAIL (run.log is not this replay's log)"; grep -aF "[data_bridge]" run.log; \
+elif ! grep -aqF "[data_bridge]" run.log && ! grep -aqF "[multi_tf:dual]" run.log; then \
+    echo "FETCH GATE: N/A (no lower timeframe)"; \
+elif ! grep -aqF "[data_bridge]" run.log && grep -aqF "[multi_tf:dual] no triggers" run.log; then \
+    echo "FETCH GATE: N/A (no H1 triggers - no M15 fetch)"; \
+elif grep -aqF "$EXPECTED_FETCH" run.log && ! grep -aqF "[data_bridge] ERROR" run.log; then \
     echo "FETCH GATE: PASS"; \
 else \
     echo "FETCH GATE: FAIL"; grep -aF "[data_bridge]" run.log; \
@@ -55,11 +64,12 @@ fi
 ```
 
 **On FAIL, STOP.** Report a data-fetch failure, re-run the replay, and never
-interpret that run's diff. N/A only when the run has no lower timeframe
-(`config.py` `lower_timeframes=()` — then no M15 CSVs exist either). The
-expected line depends on the window (reference window 2025-11-15→2026-01-20:
-4228 in 5 chunks); re-baseline it in `/compare`, `/commit-save` and here in one
-commit whenever `config.py`'s window changes.
+interpret that run's diff. N/A is decided by the snippet, only when no M15
+fetch ran: no lower timeframe (`config.py` `lower_timeframes=()`), or no H1
+trigger (the `[multi_tf:dual] no triggers` line) — that run writes no M15 CSVs.
+The expected line depends on the window (reference window
+2025-11-15→2026-01-20: 4228 in 5 chunks); re-baseline it in `/compare`,
+`/commit-save` and here in one commit whenever `config.py`'s window changes.
 
 **2. Silent-skip grep.** `error` is in the pattern (case-insensitive) as a
 backstop:
