@@ -356,9 +356,9 @@ def compute_structure_scenario_3(
     proximity checking.  Phase 2 — Multi-structure continuation from the
     finalized probe (same logic as compute_structure lines 69-176).
 
-    Note: Phase 2 is currently exercised only by tests. All production
-    callers (only ``_run_h1_reverse_probe`` today) pass
-    ``run_continuation=False`` for probe-only mode. The Phase 2 path
+    Note: only tests call this function today — its last production caller,
+    ``_run_h1_reverse_probe``, is gone (grep, 2026-09-28); probe-only callers
+    pass ``run_continuation=False``. The Phase 2 path
     remains available for future features that need multi-structure
     continuation from an arbitrary validated start.
 

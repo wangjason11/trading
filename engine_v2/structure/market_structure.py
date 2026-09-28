@@ -1082,19 +1082,6 @@ class MarketStructure:
         # Breakout
         ev_b = self._bp.detect_best_for_anchor(i, self.struct_direction, breakout_th)
 
-        # Breakout Pattern Debugging Print
-        # if i in (387, 388):
-        #     omo = self._bp.one_maru_opposite(i, self.struct_direction, breakout_th, do_confirm=False)
-        #     omc = self._bp.one_maru_continuous(i, self.struct_direction, breakout_th, do_confirm=False)
-        #     dm  = self._bp.double_maru(i, self.struct_direction, breakout_th, do_confirm=False)
-        #     print(f"[DBG] i={i} breakout_th={breakout_th} "
-        #         f"OMO={None if omo is None else omo.status} "
-        #         f"OMC={None if omc is None else omc.status} "
-        #         f"DM={None if dm is None else dm.status}")
-        #     if omc is not None:
-        #         print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
-        #         print(f"[DBG] candle+1 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
-
         if ev_b is not None:
             apply_b = self._apply_idx(ev_b)
             if apply_b is not None and apply_b <= D:
@@ -1459,8 +1446,6 @@ class MarketStructure:
 
                 # Create + confirm BOS simultaneously with CTS establishment
                 if st.cts_cycle_id == 0:
-                    # bos_price = self._initial_bos_before_first_cts(cts_idx)
-                    # self._emit_bos_confirmed(apply_idx, bos_price, meta={"source": "initial_prior_extreme"})
                     bos_anchor_idx, bos_price = self._initial_bos_before_first_cts(cts_anchor_idx)
                     # `ev.idx` = the MOMENT (Plan E E4b), like the cycle's CTS_ESTABLISHED.
                     self._emit_bos_confirmed(
@@ -1474,10 +1459,8 @@ class MarketStructure:
                         },
                     )
                 else:
-                    # BOS from pullback extreme (window-based)
-                    # Uses existing helper _select_bos_price_on_breakout which references last_pullback_pat_apply_idx
-                    # bos_price = self._select_bos_price_on_breakout(apply_idx)
-                    # self._emit_bos_confirmed(apply_idx, bos_price, meta={"source": "pullback_extreme", "pb_start": st.last_pullback_pat_apply_idx})
+                    # BOS from the cycle's retracement window (pullback or proximity):
+                    # `_select_bos_on_breakout`.
                     bos_anchor_idx, bos_price = self._select_bos_on_breakout(apply_idx)
                     self._emit_bos_confirmed(
                         int(apply_idx),
@@ -1687,19 +1670,6 @@ class MarketStructure:
         cts_price = float(self.state.cts.price)
         return price > cts_price if self.struct_direction == 1 else price < cts_price
 
-    # def _initial_bos_before_first_cts(self, cts_idx: int) -> float:
-    #     """
-    #     Cycle 1 BOS: extreme prior to the first CTS.
-    #       - Uptrend: min low in [0 .. cts_idx-1]
-    #       - Downtrend: max high in [0 .. cts_idx-1]
-    #     """
-    #     if cts_idx <= 0:
-    #         return float(self.df.iloc[0]["l"]) if self.struct_direction == 1 else float(self.df.iloc[0]["h"])
-
-    #     if self.struct_direction == 1:
-    #         return float(self.df.iloc[0:cts_idx]["l"].astype(float).min())
-    #     return float(self.df.iloc[0:cts_idx]["h"].astype(float).max())
-
     def _initial_bos_before_first_cts(self, cts_anchor_idx: int) -> tuple[int, float]:
         """
         Cycle-0 BOS (BOS_0) anchor: the price extreme before the first CTS anchor.
@@ -1895,14 +1865,6 @@ class MarketStructure:
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_RECONFIRMED", price=cts_price_val, meta=meta2)
         )
-
-    # def _emit_bos_confirmed(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
-    #     self.events.append(
-    #         StructureEvent(idx=idx, category="STRUCTURE", type="BOS_CONFIRMED", price=price, meta=meta or {})
-    #     )
-    #     self.state.bos_event = "BOS_CONFIRMED"
-    #     self.state.bos_confirmed = Point(idx=idx, price=float(price))
-    #     self.state.bos_threshold = float(price)
 
     def _emit_bos_confirmed(
         self, idx: int, price: float, *, bos_anchor_idx: int, meta: Optional[dict] = None
@@ -2190,41 +2152,6 @@ class MarketStructure:
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="BOS_THRESHOLD_UPDATED", price=float(price), meta=meta2)
         )
-
-    # def _select_bos_price_on_breakout(self, breakout_apply_idx: int) -> float:
-    #     """
-    #     Part 2 (Option B): BOS price is computed at confirmation time as the pullback extreme
-    #     between the pullback apply candle and the breakout apply candle.
-
-    #     - struct_direction == +1: BOS price = min(low) over [pb_start .. breakout_apply_idx]
-    #     - struct_direction == -1: BOS price = max(high) over [pb_start .. breakout_apply_idx]
-
-    #     Fallbacks (should be rare):
-    #     - Else fall back to range pullback bound if range is active
-    #     - Else fall back to current candle extreme
-    #     """
-    #     st = self.state
-
-    #     pb_start = st.last_pullback_pat_apply_idx
-    #     if pb_start is not None:
-    #         s = int(pb_start)
-    #         e = int(breakout_apply_idx)
-    #         if e < s:
-    #             s, e = e, s
-
-    #         if self.struct_direction == 1:
-    #             return float(self.df.iloc[s : e + 1]["l"].astype(float).min())
-    #         else:
-    #             return float(self.df.iloc[s : e + 1]["h"].astype(float).max())
-
-    #     # fallback 1: range pullback side
-    #     if st.range_active and st.range_lo is not None and st.range_hi is not None:
-    #         return float(st.range_lo) if self.struct_direction == 1 else float(st.range_hi)
-
-    #     # fallback 2: current candle extreme
-    #     if self.struct_direction == 1:
-    #         return float(self.df.iloc[breakout_apply_idx]["l"])
-    #     return float(self.df.iloc[breakout_apply_idx]["h"])
 
     def _select_bos_on_breakout(self, breakout_apply_idx: int) -> tuple[int, float]:
         """

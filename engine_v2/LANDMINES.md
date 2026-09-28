@@ -572,7 +572,7 @@ main reversal probe, so it needs its own decision and `/compare`.
    - **4b) `end_idx is None`** AND probe ran past available `df` data without 2 CTS_EST → **pending**. More candles may arrive later that resolve the probe; the caller can re-invoke with the same or advanced `start_idx`.
    - The probe never returns `pending` when an explicit `end_idx` was provided — the bound itself counts as a terminal break.
    - In current UC1 backtest, `end_idx` (the first sd zone-proximity trigger candle) is always set, so the pending path is dormant. Path becomes live for callers that pass `end_idx=None` (live mode where the future trigger candle isn't known yet).
-   - Callers should treat `pending` as "skip downstream work for now" (e.g., `_run_h1_reverse_probe` returns `None` on pending so M15 isn't built).
+   - Callers should treat `pending` as "skip downstream work for now" (e.g., `_run_h1_reverse_probe` — since removed; `compute_structure_scenario_3` has only test callers now — returned `None` on pending so M15 wasn't built).
 
 ---
 

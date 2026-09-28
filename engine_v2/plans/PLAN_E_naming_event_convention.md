@@ -983,7 +983,8 @@ the real emitter.
     5 H1 ESTs lag 0). N/A: no EST location read in `first_confluence_trigger` / `kl_zones_v1`. Declared residual:
     the two M15-chart twins of P5 (`_build_sub_polylines`, `_render_h1_overlay`) read `ef.cts_anchor_idx` and are
     covered only by the figure diff (as accepted in the E2c review). Side note (pre-existing, hygiene list): the
-    `compute_structure_scenario_3` docstring still names `_run_h1_reverse_probe`, which no longer exists.
+    `compute_structure_scenario_3` docstring still names `_run_h1_reverse_probe`, which no longer exists (fixed
+    2026-09-28, hygiene 5c).
     Tests 905 → **910 + 1 xfail**. Commit `e583f8a`; save `20260925_121648_e583f8a`.
 
 - **E4b-pre (2026-09-25; Q21).** `kl_zones_v1.derive_kl_zones_v1` no longer writes the KL meta
@@ -1203,7 +1204,8 @@ the real emitter.
   `_apply_pattern_at_apply_idx` — **user: "E1b leftover only"**; the other four commented-out legacy blocks in
   `market_structure.py` (the `i in (387, 388)` debug print, the old `_initial_bos_before_first_cts(cts_idx)`, the
   old `_emit_bos_confirmed` setting the retired `st.bos_confirmed`, the old `_select_bos_price_on_breakout`) →
-  the dead-code hygiene list. **Measured (vs `20260925_145355_029401f`):** 24/24 CSVs byte-identical, the 3
+  the dead-code hygiene list (DELETED 2026-09-28, hygiene 5c, with their commented call sites; the commented old
+  `_emit_cts_established` / `_emit_cts_updated` bodies were not on that list and remain). **Measured (vs `20260925_145355_029401f`):** 24/24 CSVs byte-identical, the 3
   figures JSON-identical (incl. the 12 delegated markers, 6 per M15 chart; no empty hour, so no new
   `[data_bridge] WARNING`), fetch gate PASS; run.log only the FutureWarning line number (2648 → 2607). Replay
   46.2 s. Tests 935 + 1 xfail. Commit `9ac70ba`; save `20260925_152746_9ac70ba`.
