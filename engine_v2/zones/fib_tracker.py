@@ -1888,9 +1888,9 @@ class FibTracker:
         locked_state = replace(state, locked=True, meta={**state.meta, "locked_at": event.idx})
         self._fibs[key] = locked_state
 
-        is_cross_cycle = state.meta.get("cross_cycle", False)
-        label = "cross-cycle" if is_cross_cycle else f"cycle={cycle_id}"
-        print(f"[fib] sid={sid} {label} LOCKED: CTS idx={state.cts_idx} price={state.cts_price:.5f}")
+        # A single-key state only: every cross lives at a versioned key and locks in the branch above
+        # (the dead `cross_cycle` label here was removed 2026-09-28 — line-traced False on every reach).
+        print(f"[fib] sid={sid} cycle={cycle_id} LOCKED: CTS idx={state.cts_idx} price={state.cts_price:.5f}")
 
         return locked_state
 
