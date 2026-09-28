@@ -375,9 +375,10 @@ def derive_poi_zones(
     cts_established_by_key = {}
     for ev in structure_events:
         if ev.type == "CTS_ESTABLISHED":
-            sid = int(ev.meta.get("structure_id", 0))
-            cycle_id = int(ev.meta.get("cycle_id", 0))
-            key = (sid, cycle_id)
+            # Direct index (LANDMINES "Event Contract Rules"): the emitter always
+            # stamps both; a default 0 would silently file a stray event under
+            # (0, 0) while `compute_cycle_lifecycle` skips it (2026-09-28).
+            key = (int(ev.meta["structure_id"]), int(ev.meta["cycle_id"]))
             cts_established_by_key[key] = ev
 
     # Reversal-confirmed idx per structure_id (reversal ends ALL zones for that
