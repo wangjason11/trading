@@ -1832,7 +1832,12 @@ re-states the cycle-start/end rule of `compute_cycle_lifecycle` on H1 → M15):
   per-zone. KL/POI/fib INHERIT `end_idx` / `end_reason` from this table.
 - `compute_reversal_idx_by_sid` — the single reversal dict (the old duplicated
   `_get_reversal_confirmed_by_sid_from_events` / inline `reversal_idx_by_sid`
-  are gone).
+  are gone; since 2026-09-27 the chart's `export_plotly._get_reversal_confirmed_by_sid`
+  delegates to it, and the orchestrator's `reversal_idx_by_new_sid` — FibTracker's
+  Scenario-1 argument, its reversal terminals, the prev-BOS line END — is it shifted
+  to the new sid; it used to be the last `REVERSAL_CANDIDATE.meta["apply_idx"]`, a
+  SCHEDULED apply a watch expiry can discard, which put a phantom 'reversal' on
+  the fibs: `tests/test_orchestrator_reversal_source.py`).
 
 **Any change to end resolution or the reversal-dict construction goes in the
 helper, NOT per-zone** — the whole point of the pass-through is one source of

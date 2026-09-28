@@ -1011,7 +1011,10 @@ clamp + pass-through, reusing the **same** machinery KL/POI use:
   orchestrator computes the table once and hands KL, POI, and Fib the same one.)
 - **Clamp `start_idx`** per §15.3 (to `compute_struct_start_by_sid`, the floor);
   **feed `compute_cycle_lifecycle[...].end` into `_set_terminal`** as a candidate
-  per §15.4. The reversal terminal (`set_reversal_terminals`) and the in-tracker
+  per §15.4. The reversal terminal (`set_reversal_terminals`, fed the realised reversal
+  from `compute_reversal_idx_by_sid` — the same helper the table uses — since 2026-09-27;
+  before, the last `REVERSAL_CANDIDATE`'s scheduled apply, which a watch expiry can
+  discard) and the in-tracker
   terminals (new_cycle / Option A / scenario1_revert) are already set when finalize
   runs; set-if-absent means the table end only fills cycles with no earlier terminal
   (the open last cycle / the sub cap), which is exactly earliest-wins given the

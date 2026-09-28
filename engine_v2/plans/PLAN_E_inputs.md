@@ -281,7 +281,7 @@ E2 diff self-checking.
 | zone_proximity `bos_conf_idx_by_key` / `next_bos_idx` → `bos_confirmed_idx_by_key` / `next_bos_confirmed_idx`; comment "not BOS extreme" → "not the BOS anchor" | `zone_proximity.py:306-311` (`:310`), `:348-350` | E5 |
 | compute_cycle_lifecycle `cts_est_by_key` / loop `cts_idx` → `cts_established_idx_by_key` / `cts_established_idx` (naming_inv's `cts_moment` is superseded) | `structure_lifecycle.py:100-114`, `:118-120` (HEAD +3) | E5 |
 | wave_candles `raw_cts` (CTS_CONFIRMED idx, a moment) → `raw_cts_confirmed_idx` | `wave_candles.py:624` | E5 |
-| Reversal scope, undecided: `reversal_confirmed_by_sid` / FibTracker `reversal_confirmed_idx` hold `REVERSAL_CANDIDATE.meta["apply_idx"]`, the *scheduled* moment (proposed `reversal_apply_idx_by_sid`). `_synth_reversal_trigger` `reversal_apply_idx` holds the *confirmed* R (proposed `reversal_idx`) | `orchestrator.py:148-155`; `fib_tracker.py:352`, `:486`, `:678`, `:743`, `:804`, `:1109`; `entity_df_mutation.py:1020`, `:1036` | Q4.14 |
+| Reversal scope, undecided: `reversal_confirmed_by_sid` / FibTracker `reversal_confirmed_idx` hold `REVERSAL_CANDIDATE.meta["apply_idx"]`, the *scheduled* moment (proposed `reversal_apply_idx_by_sid`). `_synth_reversal_trigger` `reversal_apply_idx` holds the *confirmed* R (proposed `reversal_idx`) | `orchestrator.py:148-155`; `fib_tracker.py:352`, `:486`, `:678`, `:743`, `:804`, `:1109`; `entity_df_mutation.py:1020`, `:1036` | Q4.14. **The orchestrator half RESOLVED 2026-09-27 (MAIN B):** re-sourced to the realised reversal (`compute_reversal_idx_by_sid`), renamed `reversal_idx_by_new_sid`; the FibTracker name is accurate since. `_synth_reversal_trigger` open |
 
 ### 1.7 Misnomers ("ext" = extension)
 
@@ -955,7 +955,7 @@ count is 151/124.
 | 20 | **Pattern-path CTS_UPDATED sets `st.cts` unconditionally**: no new-extreme check, so it could regress the CTS. 0 observed | `market_structure.py` ~`1549-1554` (the "Update current CTS point (always)" block) | Record; decide with Q4.1. **FIXED 2026-09-27** (user: spec-strict — both paths share `_is_new_cts_extreme`; the window's one same-candle tie, conf sub 2 2470, is gone: 1 exported row) |
 | 21 | **The anchor-first offline selection can establish a cycle LATER than a live engine would, never earlier.** Continuous SUCCESS is checked before an earlier 2-candle SUCCESS (`structure_patterns.py:685-698`), and anchors inside a back-fill are never pattern-tested. Code-read only | `structure_patterns.py:685-698` | **Live-mode relevant** (Phase 3 / live driver), not Plan E |
 | 22 | The dormant `_select_bos_on_breakout` fallback passes the apply MOMENT into `_initial_bos_before_first_cts(cts_idx=)` | = #11 | E2 |
-| 23 | `reversal_confirmed_by_sid` holds `REVERSAL_CANDIDATE.meta["apply_idx"]`, a last-seen *scheduled* prediction, under a "confirmed" name, and feeds the FibTracker revert / Scenario-1 terminals | `orchestrator.py:148-155` | §1.6 / Q4.14 |
+| 23 | `reversal_confirmed_by_sid` holds `REVERSAL_CANDIDATE.meta["apply_idx"]`, a last-seen *scheduled* prediction, under a "confirmed" name, and feeds the FibTracker revert / Scenario-1 terminals | `orchestrator.py:148-155` | §1.6 / Q4.14. **FIXED 2026-09-27 (MAIN B, user option A):** the realised reversal, `reversal_idx_by_new_sid`; 0 cells on the reference window (every candidate realised at its apply); a discarded candidate had put a phantom 'reversal' terminal on the fibs |
 
 ---
 
@@ -1032,7 +1032,9 @@ count is 151/124.
     - the exact name of `continuous()`'s 3-candle extreme (keep `extreme` or `c0_c2_extreme_price`).
 14. **Reversal-scope names**: `reversal_confirmed_by_sid` / `reversal_confirmed_idx` hold the *scheduled*
     `REVERSAL_CANDIDATE.apply_idx` (→ `reversal_apply_idx_*`?), and `_synth_reversal_trigger`'s `reversal_apply_idx`
-    holds the *confirmed* R (→ `reversal_idx`?). In Plan E or separate?
+    holds the *confirmed* R (→ `reversal_idx`?). In Plan E or separate? (2026-09-27: the orchestrator map now holds
+    the realised reversal — `reversal_idx_by_new_sid` — so `reversal_confirmed_idx` is accurate; the
+    `_synth_reversal_trigger` half stays open.)
 15. **The write-only `FibRetracement.anchor_high_idx/anchor_low_idx`**: delete the unread fields, or keep them (the fib
     family stays as named)?
 16. **Accessor-module naming**: the moment accessor's name under the final moment vocabulary (feas used `moment_idx(ev)`,

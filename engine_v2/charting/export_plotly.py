@@ -34,23 +34,12 @@ def _get_reversal_confirmed_by_sid(structure_events: list) -> dict:
     Returns dict: {structure_id: last_reversal_idx}
 
     This is more reliable than df columns because market_state gets overwritten
-    by subsequent structures, but events are preserved.
+    by subsequent structures, but events are preserved. Delegates to the single
+    home `structure_lifecycle.compute_reversal_idx_by_sid` (2026-09-27; this was a
+    verbatim third copy).
     """
-    rev_by_sid = {}
-    for ev in structure_events:
-        if getattr(ev, "type", None) != "STATE_CHANGED":
-            continue
-        if ev.meta.get("to") != "reversal":
-            continue
-        sid = ev.meta.get("structure_id")
-        if sid is None:
-            continue
-        sid = int(sid)
-        idx = int(ev.idx)
-        # Keep the MAX idx for each structure_id (reversal confirmed = last reversal candle)
-        if sid not in rev_by_sid or idx > rev_by_sid[sid]:
-            rev_by_sid[sid] = idx
-    return rev_by_sid
+    from engine_v2.zones.structure_lifecycle import compute_reversal_idx_by_sid
+    return compute_reversal_idx_by_sid(structure_events)
 
 def _zone_style(side: str) -> dict:
     # side is "buy" or "sell"

@@ -434,13 +434,15 @@ class FibTracker:
         return bool(single is not None and single.active)
 
     def set_reversal_terminals(
-        self, reversal_confirmed_by_sid: Dict[int, int],
+        self, reversal_idx_by_new_sid: Dict[int, int],
     ) -> None:
         """Wire the reversal terminal (FIB_LIFECYCLE_SPEC §7 passed-through end).
 
-        `reversal_confirmed_by_sid` maps NEW sid -> reversal apply idx (the
-        reversal that birthed the new sid, ending the PREVIOUS sid =
-        new_sid - 1). For each, stamp the reversal terminal on every cycle of
+        `reversal_idx_by_new_sid` maps NEW sid -> the REALISED reversal idx
+        (`STATE_CHANGED` to=reversal via `structure_lifecycle.
+        compute_reversal_idx_by_sid`, shifted to the sid it birthed — never a
+        `REVERSAL_CANDIDATE`'s scheduled apply, which a watch expiry can discard),
+        ending the PREVIOUS sid = new_sid - 1. For each, stamp the reversal terminal on every cycle of
         the ended (prev) sid. `_set_terminal` is set-if-absent, so cycles
         already terminated by `new_cycle` keep their earlier (correct) end and
         only the sid's still-open final cycle picks up "reversal".
@@ -451,13 +453,13 @@ class FibTracker:
         structures (their open cycle is also capped by the entity_df
         lifecycle-end cap at the same slice-local idx).
         """
-        if not reversal_confirmed_by_sid:
+        if not reversal_idx_by_new_sid:
             return
         cycles_by_sid: Dict[int, set] = {}
         for key in self._fibs:
             if isinstance(key, tuple) and len(key) >= 2:
                 cycles_by_sid.setdefault(int(key[0]), set()).add(int(key[1]))
-        for new_sid, rv_idx in reversal_confirmed_by_sid.items():
+        for new_sid, rv_idx in reversal_idx_by_new_sid.items():
             prev_sid = int(new_sid) - 1
             if prev_sid < 0:
                 continue

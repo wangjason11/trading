@@ -36,8 +36,10 @@ coincidence.
 Status (Plan E E5, 2026-09-25): the code, the current specs and the tracked skills follow this standard.
 Kept by decision: frozen event names (bridged by `ARCHITECTURE.md` "`ev.idx` convention") and event-type
 tokens / legend labels; `KLZone.source_time` (a moment's time next to the anchor's `source_price`) and
-`StructureLevel.time` (the anchor's time) — PLAN_E Q12; the reversal-scope names (`reversal_confirmed_by_sid`
-…, PLAN_E Q14 — a separate pass); moment names that predate the `*_established_idx` spelling
+`StructureLevel.time` (the anchor's time) — PLAN_E Q12; the reversal-scope names (`_synth_reversal_trigger`'s
+`reversal_apply_idx` …, PLAN_E Q14 — a separate pass; the orchestrator's `reversal_confirmed_by_sid`, which held a
+SCHEDULED candidate apply, became `reversal_idx_by_new_sid` = the realised reversal on 2026-09-27, so FibTracker's
+`reversal_confirmed_idx` is now accurate); moment names that predate the `*_established_idx` spelling
 (`ParentTables.cts_moment` and its builder's local `bos_moment`, `TrueFirstBreakout.est_idx`); run.log labels (`cts0_est=`,
 `[fib] CTS idx=`); the `debug/zone_proximity_diag.py` CSV columns; `probe_input_idx` / `parent_input_idx` name a
 ROLE (the probe's M15 input / the parent trigger's H1 input), not a kind — per trigger type an MS anchor or an extreme (see their rows; Plan E Post-E·1). Dated history — landed plans, "as landed" / "history" notes, bug

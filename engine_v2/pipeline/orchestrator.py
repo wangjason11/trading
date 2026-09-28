@@ -30,6 +30,7 @@ from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
 # Week 7: POI zones
 from engine_v2.zones.poi_zones import derive_poi_zones, POIConfig
+from engine_v2.zones.structure_lifecycle import compute_reversal_idx_by_sid
 from engine_v2.patterns.imbalance import compute_imbalance
 
 # Week 8: Wave candle identification
@@ -52,11 +53,12 @@ class PipelineResult:
     meta: Dict[str, Any]
 
 
-def _prev_bos_lines(sorted_events: list, reversal_confirmed_by_sid: dict, pfx: str = "") -> list:
+def _prev_bos_lines(sorted_events: list, reversal_idx_by_new_sid: dict, pfx: str = "") -> list:
     """The previous structure's last BOS, drawn from its ANCHOR (START) to the
     ANCHOR of the first CTS of the next structure known at/after the reversal
     (END; PLAN_E Q6). Extracted from `_run_downstream_pipeline` (Plan E E2c
-    landing review) so the START / END roles are unit-pinned."""
+    landing review) so the START / END roles are unit-pinned.
+    `reversal_idx_by_new_sid`: {new sid: the realised reversal that ended sid-1}."""
     prev_bos_lines = []
     last_bos_anchor_by_sid = {}
     for ev in sorted_events:
@@ -64,7 +66,7 @@ def _prev_bos_lines(sorted_events: list, reversal_confirmed_by_sid: dict, pfx: s
             sid = ev.meta.get("structure_id", 0)
             last_bos_anchor_by_sid[sid] = (ef.bos_anchor_idx(ev), ev.price)   # the line START (location)
 
-    for sid, rv_idx in reversal_confirmed_by_sid.items():
+    for sid, rv_idx in reversal_idx_by_new_sid.items():
         prev_sid = sid - 1
         if prev_sid not in last_bos_anchor_by_sid:
             continue
@@ -197,14 +199,13 @@ def _run_downstream_pipeline(
     # LANDMINES "Event Sort Order Is a Dispatch Invariant").
     sorted_events = sorted(events, key=ef.processing_order_key)
 
-    # Find reversal_confirmed_idx per structure (from REVERSAL_CANDIDATE apply_idx)
-    reversal_confirmed_by_sid = {}  # {sid: apply_idx}
-    for ev in events:
-        if ev.type == "REVERSAL_CANDIDATE":
-            prev_sid = ev.meta.get("structure_id", 0)
-            apply_idx = ev.meta.get("apply_idx")
-            if apply_idx is not None:
-                reversal_confirmed_by_sid[prev_sid + 1] = apply_idx
+    # The REALISED reversal per NEW sid: the reversal that ended sid-1 and birthed
+    # sid, from the canonical `compute_reversal_idx_by_sid` (STATE_CHANGED
+    # to=reversal, keyed by the ENDED sid — KL / POI / the fib finalize / charts
+    # read the same helper). Never REVERSAL_CANDIDATE.meta["apply_idx"]: that is a
+    # SCHEDULED apply, and a watch expiry (run before the pending apply in the
+    # per-candle step) can discard it with the event still in the list (2026-09-27).
+    reversal_idx_by_new_sid = {sid + 1: idx for sid, idx in compute_reversal_idx_by_sid(events).items()}
 
     # 6) Fib tracking
     fib_tracker = FibTracker(
@@ -216,14 +217,6 @@ def _run_downstream_pipeline(
     )
 
     bos_anchor_by_cycle = {}  # {(sid, cycle_id): (bos_anchor_idx, bos_price)}
-
-    # Track previous structure's direction (for Scenario 1 revert check)
-    prev_sd_by_sid = {}  # {sid: prev_sd}
-    for ev in events:
-        if ev.type == "REVERSAL_CANDIDATE":
-            prev_sid = ev.meta.get("structure_id", 0)
-            prev_sd = ev.meta.get("struct_direction", 0)
-            prev_sd_by_sid[prev_sid + 1] = prev_sd
 
     def _get_prev_bos_outer(sid: int) -> tuple:
         """Get max expanded outer threshold of prev structure's last BOS zone."""
@@ -263,7 +256,7 @@ def _run_downstream_pipeline(
         elif ev.type == "CTS_ESTABLISHED":
             if key in bos_anchor_by_cycle:
                 bos_anchor_idx, bos_price = bos_anchor_by_cycle[key]
-                reversal_idx = reversal_confirmed_by_sid.get(sid)
+                reversal_idx = reversal_idx_by_new_sid.get(sid)
 
                 prev_bos_outer, prev_sd = None, None
                 # §11b: pass P_rev (prev-BOS-outer) at EVERY cycle for sid >= 1
@@ -279,7 +272,7 @@ def _run_downstream_pipeline(
                 )
 
         elif ev.type == "CTS_UPDATED":
-            reversal_idx = reversal_confirmed_by_sid.get(sid)
+            reversal_idx = reversal_idx_by_new_sid.get(sid)
             fib_tracker.on_cts_updated(ev, df, reversal_idx)
 
         elif ev.type == "CTS_CONFIRMED":
@@ -293,7 +286,7 @@ def _run_downstream_pipeline(
     # Wire the reversal terminal onto the ended sid's cycles BEFORE finalize so
     # the derived `status` reflects it (FIB_LIFECYCLE_SPEC §7 / Session 2
     # deferral). Runs for the H1 main tracker and each sub tracker.
-    fib_tracker.set_reversal_terminals(reversal_confirmed_by_sid)
+    fib_tracker.set_reversal_terminals(reversal_idx_by_new_sid)
 
     # Project the scalar lifecycle axes (start_idx/end_idx/end_reason/status)
     # onto FibState records. `active` is condition-only; terminals live in
@@ -314,7 +307,7 @@ def _run_downstream_pipeline(
     print(f"{pfx}[fib_tracker] total fibs={len(fib_states)}, active={sum(1 for f in fib_states if f.active)}")
 
     # 7) Prev BOS lines
-    prev_bos_lines = _prev_bos_lines(sorted_events, reversal_confirmed_by_sid, pfx)
+    prev_bos_lines = _prev_bos_lines(sorted_events, reversal_idx_by_new_sid, pfx)
 
     # 8) POI zones
     poi_config = POIConfig(
