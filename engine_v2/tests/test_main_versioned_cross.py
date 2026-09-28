@@ -3,7 +3,8 @@
 11a-ii relocates the main cycle-1 cross from the `_cross_cycle_data` named slot
 (`["cross_cycle"]`) + the `_fibs[(sid,1)]` mirror into the versioned key
 `(sid, 1, "cross", 0)` + `_cross_version`, retiring the `normal_cycle1` scratch
-slot (create-on-fail instead). The decision logic is unchanged (11a-i routed it
+slot (create-on-fail then; since 2026-09-28 no single at all — it was unreachable — and
+`_update_cycle1_main` asserts the invariant). The decision logic is unchanged (11a-i routed it
 through the shared routine); these tests pin the STORAGE behavior:
 
   * cross stored at the versioned key, NOT `(sid,1)`; scratch slots not written;

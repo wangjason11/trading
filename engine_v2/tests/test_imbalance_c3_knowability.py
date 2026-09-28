@@ -469,7 +469,8 @@ def test_h1_scenario2_cond1_asks_at_the_cts1_moment(confirmed_at, crosses):
 def test_h1_cycle1_cross_update_cuts_cond2():
     """`_update_cycle1_main`: cycle 1's own gap (35) fills at 42; the update at 45
     whose only other gap has c2 == 45 → cond2 False (not formed) → the cross
-    deactivates at 45 and create-on-fail finds nothing formed either."""
+    deactivates at 45; its own window (== cond2's) has nothing formed either, so the
+    create-on-fail invariant assert stays silent (the single path is deleted, 2026-09-28)."""
     tracker, df = _drive_h1_cycle1(40, [_gap(35, top=1.30, bottom=1.20),
                                         _gap(45, top=1.45, bottom=1.40)])
     df.at[42, "l"] = 1.22

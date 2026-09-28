@@ -1075,14 +1075,12 @@ class FibTracker:
 
             # §11a-ii: the cross is stored in versioned _fibs at
             # (sid, 1, "cross", 0) (retiring the _cross_cycle_data["cross_cycle"]
-            # named slot). No fallback single is created upfront — create-on-fail
-            # (see _update_cycle1_main): the normal single is materialized ONLY
-            # if the cross later fails, mirroring the subordinate path. On this
-            # window the cross wins throughout, so no single is ever created and
-            # the result is byte-identical (the old normal_cycle1 lived only in
-            # scratch and never reached _fibs/POI/chart). The BOS price for a
-            # later fallback comes from _bos_by_cycle[(sid, 1)], so meta stays
-            # exactly as before (no cycle1_bos_price key added).
+            # named slot). No fallback single is created, upfront or later: a
+            # failed cross has its own [BOS_1, CTS_1] window filled too (that
+            # window IS cond2), so the old create-on-fail single was unreachable
+            # and is deleted — `_update_cycle1_main` asserts the invariant
+            # (2026-09-28). (The old normal_cycle1 lived only in scratch and never
+            # reached _fibs/POI/chart.) Meta stays exactly as before.
             cross_fib = self._activate_fib(
                 sid=sid,
                 cycle_id=1,
@@ -1553,9 +1551,10 @@ class FibTracker:
         """
         Internal helper to update a Fib's CTS anchor and check imbalance conditions.
 
-        Single-keyed fibs only — every caller passes `(sid, cycle)`; the h1
-        cross-cycle fib lives at `(sid, 1, "cross", v)` and is re-checked in
-        `_update_cycle1_main` (its dead cross branch here was deleted 2026-09-28).
+        Single-keyed fibs only — every caller passes `(sid, cycle)`. Cross fibs live
+        at 4-tuple keys `(sid, cycle, "cross", v)` and are re-checked elsewhere: the h1
+        cycle-1 cross in `_update_cycle1_main`, the §11b / sub crosses in
+        `_m15_cross_check` (this helper's dead cross branch was deleted 2026-09-28).
         """
         state = self._fibs[key]
         if state.locked:
@@ -1695,7 +1694,7 @@ class FibTracker:
         # create-on-fail single was unreachable (deleted 2026-09-28); assert the
         # invariant it rested on. ---
         bos1 = self._bos_by_cycle.get((sid, 1))
-        if bos1 is None:
+        if bos1 is None:            # defensive: (sid, 1) is recorded at the cycle-1 EST, before any cross
             return new_cross_fib
         bos1_idx = bos1[0]
         own_has_unfilled = self._has_unfilled(
@@ -1707,8 +1706,9 @@ class FibTracker:
                 f"(cycle1_bos_idx={cycle1_bos_idx})")
         single_key = (sid, 1)
         existing = self._fibs.get(single_key)
-        # Cross dead and own imbalance also filled → keep an existing single in
-        # sync (deactivate it); otherwise nothing active (cross stays inactive).
+        # Cross dead and own imbalance also filled → nothing active (the cross stays
+        # inactive). DEFENSIVE only: a (sid, 1) single is created at the cycle-1 EST
+        # in branches that exclude the cross, so `existing` is None here today.
         if existing is not None:
             return self._update_fib_cts(single_key, cts_idx, cts_price, df)
         return new_cross_fib
