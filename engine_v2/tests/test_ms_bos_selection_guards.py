@@ -42,11 +42,11 @@ def test_bos_selection_without_any_confirmation_raises():
 
 
 def test_bos_selection_on_the_pullback_window():
-    """Positive control: the pullback window [7, 10] of the multicycle fixture -> the lowest low in it (7, the
-    pullback's own low .6088 per the fixture's docstring), never after the apply 10."""
+    """Positive control: the pullback window [7, 10] of the multicycle fixture -> its lowest low, at 7 (the
+    pullback's own candle, l .6088 — the cycle-1 BOS anchor of the unbounded run), never after the apply 10."""
     ms = _ms()
     ms.state.pullback_fired_for_cycle = True
     ms.state.last_pullback_pat_apply_idx = 7
     anchor, price = ms._select_bos_on_breakout(10)
-    assert 7 <= anchor <= 10
+    assert anchor == 7 and price == pytest.approx(0.6088)
     assert price == min(float(ms._l[k]) for k in range(7, 11))

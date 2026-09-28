@@ -283,7 +283,10 @@ breakout needs CTS_n CONFIRMED, and both paths set `cts_confirmed_idx`; 2026-09-
 the silent fallback returned the structure's BOS_0). The BOS anchor is never after
 its moment: `_emit_bos_confirmed` asserts `bos_anchor_idx <= idx` (the anchor-keyed
 processing order needs the cycle's BOS before its CTS_ESTABLISHED; on the reference
-window all 19 cycle >= 1 selections used the pullback window, none reversed).
+window all 19 cycle >= 1 selections used the pullback window, none reversed). Both
+guards — and the pattern-path `CTS_UPDATED` anchor == apply assert — fail the REPLAY,
+on H1 and on subs alike: no MS caller catches `AssertionError` (a sub's geometry build
+catches `ValueError` / `IndexError` only, LANDMINES "Lower-TF Pipeline Steps May Fail").
 
 ### Trigger threshold per timeframe
 

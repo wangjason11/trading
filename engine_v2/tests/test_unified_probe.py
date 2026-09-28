@@ -132,7 +132,8 @@ def _make_multicycle_data() -> list[dict]:
 
     Unbounded run (`compute_bounded_structure(df, 0, +1)`): CTS_ESTABLISHED cycles
     0/1/2/3 at idx 2/10/15/20 (confirmed_at == idx), CTS_CONFIRMED (pullback) at
-    7/12/17, BOS_CONFIRMED at 0/7/12/17, no reversal, no reversal watch, no
+    7/12/17, BOS_CONFIRMED anchors 0/7/12/17 (moments = the ESTs' 2/10/15/20 since Plan E
+    E4b), no reversal, no reversal watch, no
     proximity confirmation. Bodies >= 15 pips (all marus under the H1 2.2-pip floor).
     """
     rows: list[dict] = []
