@@ -96,9 +96,12 @@ def _apply_17_to_19(events):
 # --- unit level (the `test_zone_proximity` helpers: sd +1, BOS zone inner 1.40, a 5-pip wick = an sd trigger) ------
 
 def _candidate(anchor, apply_idx, sid=0):
+    """A candidate the MS could emit: its apply lies inside the watch (`expires_idx` = anchor + range_max_k 5;
+    `_schedule_reversal_from_anchor` drops a later apply)."""
+    assert anchor < apply_idx <= anchor + 5
     return StructureEvent(idx=anchor, category="STRUCTURE", type="REVERSAL_CANDIDATE", price=1.39,
                           meta={"structure_id": sid, "apply_idx": apply_idx, "pattern_anchor_idx": anchor,
-                                "expires_idx": apply_idx})
+                                "expires_idx": anchor + 5})
 
 
 def _reversal(idx, sid=0):
@@ -119,7 +122,7 @@ def _scan(events, wick_at):
 def test_the_scan_stops_before_the_realised_reversal_not_the_candidates_apply(wick_at, expected):
     """CTS confirmed at 5; the reversal realises at 10, the candidate's scheduled apply is 12. The old cap
     (12 - 1 = 11) let the scan run past the reversal: a wick at 10 or 11 fired on a dead structure."""
-    events = [_cts_confirmed(5), _candidate(6, 12), _reversal(10)]
+    events = [_cts_confirmed(5), _candidate(7, 12), _reversal(10)]
     assert _scan(events, wick_at) == expected
 
 

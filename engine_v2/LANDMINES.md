@@ -1842,7 +1842,8 @@ re-states the cycle-start/end rule of `compute_cycle_lifecycle` on H1 → M15):
   later cycle's scan: no triggers, no WVMI gate record, no M15 subs; 0 on the
   reference window) and the H1-main `SidRecord.end_event_idx` read it too
   (`tests/test_zone_proximity_reversal_cap.py`) — no timing/lifecycle reader of the
-  scheduled apply is left (the chart's candidate markers show the candidate itself).
+  scheduled apply is left (the chart's candidate markers show the candidate's anchor /
+  pattern).
 
 **Any change to end resolution or the reversal-dict construction goes in the
 helper, NOT per-zone** — the whole point of the pass-through is one source of
@@ -2089,8 +2090,8 @@ cap (`ev.idx <= cap <` its apply) and survive the clip, yielding a half-derived
 reversal — the remaining known limit in PART4 §17.12 (zero straddles on the
 reference window). Since 2026-09-27 the fib terminal and the prev-BOS line read the
 realised `STATE_CHANGED` (clipped at the cap), so a straddling candidate no longer
-stamps a fib 'reversal' past the cap (the zone-proximity scan cap and the H1-main
-SidRecord followed on 2026-09-28); only the chart's candidate markers still read it.
+stamps a fib 'reversal' past the cap; only the chart's candidate markers still read
+the candidate (its anchor / pattern, never the apply).
 See ARCHITECTURE "`ev.idx` convention".
 The rule for any new or changed clip: key each type on its moment column, never
 on `ev.idx` by default. Changing this clip is its own `/compare`.

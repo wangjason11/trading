@@ -983,8 +983,10 @@ and make itself eligible by its own action.
 
 **Hazard 2 — DataFrame column overwrite:** when a cycle's scan window
 extends past a reversal into the next structure's rows (e.g.,
-sid=0 cycle=2's scan extends up to `reversal_idx - 1`, but sid=1
-starts processing at the reversal candle itself), `df["cts_threshold"]`
+sid=0 cycle=2's scan extends up to `reversal_idx - 1`, while sid=1
+processes from its probe start `probe.starting_idx`, at or before the reversal
+candle — on the reference window sid 1's CTS_0 is established at 703, the
+reversal is at 902), `df["cts_threshold"]`
 and `df["bos_threshold"]` get nulled out / overwritten by sid=1. df
 columns are NOT safe for cross-structure reads (see LANDMINES
 "DataFrame Column Overwrite Hazard").

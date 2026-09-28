@@ -58,7 +58,7 @@ def test_main_multiple_sids_with_reversal():
     events = [
         _ev(10, "CTS_ESTABLISHED", sid=0, sd=1),
         _ev(20, "BOS_CONFIRMED", sid=0, sd=1, confirmed_at=20),
-        _ev(30, "REVERSAL_CANDIDATE", sid=0, sd=1, apply_idx=37),
+        _ev(32, "REVERSAL_CANDIDATE", sid=0, sd=1, apply_idx=37, expires_idx=37),   # P <= anchor + 5
         _ev(35, "STATE_CHANGED", sid=0, sd=1, to="reversal", category="STATE"),
         _ev(36, "CTS_ESTABLISHED", sid=1, sd=-1),
         _ev(45, "BOS_CONFIRMED", sid=1, sd=-1, confirmed_at=45),

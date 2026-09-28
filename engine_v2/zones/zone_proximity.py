@@ -188,10 +188,11 @@ def _build_cycle_threshold_timeline(
     Reading from events (not df columns) is mandatory: df-level
     `cts_threshold`/`bos_threshold` columns are OVERWRITTEN by the next
     structure once it starts processing (see LANDMINES "DataFrame
-    Column Overwrite Hazard"). A scan window can straddle a reversal —
-    e.g. sid=0 cycle=2's window extends up to reversal apply_idx − 1,
-    by which time sid=1's processing has already nulled out the
-    threshold cols for the post-reversal rows.
+    Column Overwrite Hazard"). A scan window can straddle the next
+    structure's rows — e.g. sid=0 cycle=2's window extends up to the
+    realised reversal − 1, while sid=1 processes from its probe start (at or
+    before the reversal), so its run has already overwritten the threshold
+    cols on those rows.
     """
     relevant_types = (
         "BOS_CONFIRMED",
