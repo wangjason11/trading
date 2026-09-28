@@ -448,9 +448,14 @@ assumes "POI ⟹ sd direction."
   — the activation floor's cycle term (see "Activation floor" below). **Meaning changed by Plan D (2026-09-23):**
   saves before it hold the CTS anchor (then `CTS_ESTABLISHED.idx`) under this key. Fallback when the cycle has no
   `CTS_ESTABLISHED`: `fib_state.cts_idx` — the fib's CTS anchor, NOT a moment (a known exception to the GLOSSARY
-  "Naming Standard"; the general defect stays a parked follow-up). **No live case on the reference window since
-  Plan F (2026-09-24):** the only one was the IC 3654 twin POI on the cross fib counter sub 5 PRE-CREATED at 3806
-  for a cycle 1 it never establishes (value 3806, never activated); Plan F no longer creates that fib (§2
+  "Naming Standard"). Such a cycle's fib is the pre-established cross FibTracker pre-creates for a next cycle that
+  never establishes (subordinate-only). **Since 2026-09-28 the fallback is reached only while that fib is still
+  LIVE** (an open-ended sub): a reversal or the sub's lifecycle cap ends it (FIB_LIFECYCLE_SPEC §15.4 candidates 1 /
+  3), and an ended, unlocked fib builds no POIs. On a live one the value is the fib's latest CTS candle — the
+  running extreme, near the data edge — so such a POI practically never activates (known; the user deferred a floor
+  fix, "option B"). No live case on the reference window since Plan F (2026-09-24): the only one was the IC 3654
+  twin POI on the cross fib counter sub 5 PRE-CREATED at 3806 for a cycle 1 it never establishes (value 3806, never
+  activated; sub 5 was capped, so the 2026-09-28 cap would now drop it too); Plan F no longer creates that fib (§2
   "Anchor by phase"). The sub 5 cycle-0 IC 3654 POI is a different row and unchanged.
   Rebased to entity-absolute on sub POIs by the mirror (`entity_df_mutation._ZONE_META_IDX_KEYS`). Readers: none
   that decide anything (the env-gated `POI_LIFECYCLE_DEBUG` print only).

@@ -967,6 +967,15 @@ candidates are:
    early-end (§7), `scenario1_revert` (§10), and the existing `reversal` wiring.
 2. **The cycle pass-through end** from `compute_cycle_lifecycle[(sid,cycle)].end`
    (part b) — fed in as **one more candidate**, NOT an override.
+3. **The subordinate cap for a never-established cycle** (2026-09-28, user: "cap like the
+   reversal") — a fib whose `(sid, cycle)` has no `CTS_ESTABLISHED` (the §6 pre-established
+   cross pre-created for a next cycle that never establishes) has no `compute_cycle_lifecycle`
+   row, so candidate 2 never reached it: a sub ended by its cap left it open (`end_idx` None)
+   while a reversal ended it (candidate 1). `_finalize_lifecycle_fields` now feeds
+   `lifecycle_cap` (+ `cap_reason`) for such fibs; `None` cap (main, an open-ended sub) = no
+   candidate, the fib stays live. Its POIs then follow `poi_zones`' "ended + unlocked fib →
+   no POIs" rule, as after a reversal (POI_ZONES_SPEC `cts_established_idx` fallback). 0 such
+   fibs on the reference window; pins `tests/test_fib_never_established_cap.py`.
 
 Because earliest-wins, fib's own terminals still win when they fire **before** the
 cycle end — so **Option A's early-end and `scenario1_revert` are preserved**. The

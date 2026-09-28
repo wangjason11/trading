@@ -485,7 +485,9 @@ def derive_poi_zones(
         # contract; the lookup below keys a missing one to 0, a pre-existing
         # default no emitter exercises). Fallback when the cycle has no CTS_ESTABLISHED at all: the
         # fib's CTS anchor — a location, not a moment (a known naming-standard
-        # exception; such a cycle has no lifecycle entry; PLAN_D §7.3).
+        # exception; such a cycle has no lifecycle entry; PLAN_D §7.3). Reached only for a
+        # still-LIVE pre-created cross fib (an open-ended sub): a reversal or the sub cap ends
+        # it first (FIB_LIFECYCLE_SPEC §15.4) and the filter above skips an ended, unlocked fib.
         cts_event = cts_established_by_key.get(key)
         cts_established_idx = (
             int(cts_event.meta["confirmed_at"]) if cts_event else int(fib_state.cts_idx)

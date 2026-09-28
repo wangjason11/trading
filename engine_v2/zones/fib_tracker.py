@@ -515,6 +515,17 @@ class FibTracker:
             for (s, c), (_cstart, cend, creason) in cycle_life.items():
                 if cend is not None:
                     self._set_terminal(s, c, cend, creason or cap_reason)
+            # A fib whose cycle has no CTS_ESTABLISHED has no `cycle_life` row: the
+            # pre-established cross (§6, subordinate-only) pre-created for a next cycle
+            # that never establishes. The structure's end still ends it — the reversal via
+            # `_apply_reversal_terminals`, the subordinate CAP here (§15.4 candidate 3;
+            # user 2026-09-28, "cap like the reversal"). `poi_zones` then builds no POIs
+            # on it (an ended, unlocked fib), exactly as after a reversal.
+            if lifecycle_cap is not None:
+                for s, c in {(int(k[0]), int(k[1])) for k in self._fibs
+                             if isinstance(k, tuple) and len(k) >= 2}:
+                    if (s, c) not in cycle_life:
+                        self._set_terminal(s, c, int(lifecycle_cap), cap_reason)
 
         keys_by_cycle: Dict[tuple, list] = defaultdict(list)
         for key in self._fibs:
