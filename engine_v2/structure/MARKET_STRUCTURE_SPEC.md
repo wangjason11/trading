@@ -98,6 +98,22 @@ If no valid reversal pattern appears within watch window:
 - watch clears,
 - execution rewinds to anchor_idx+1 and proceeds normally.【fileciteturn1file3】
 
+### Reversal inside a back-fill (terminal; 2026-09-28)
+A scheduled (pending) reversal is applied by the per-candle step (`_replay_step_no_patterns`), which also runs
+inside every **frozen back-fill** — the candles a step processes before (or, for a breakout's range check, after)
+the candle it acts on: `_step_anchor`'s winner back-fill `[anchor, apply)`, its no-winner range back-fill
+`[anchor, min(confirm, D))`, and `_post_apply_range_check`'s `[apply, min(confirm, D))`. A reversal applied there
+is the structure's end: **the step ends at that candle** — the rest of the back-fill, the winner's apply (a later
+candle), the range finalize and the anchor's re-step are never reached, so no event is emitted and no row is
+written after the reversal candle. Live-like: a structure reads nothing after its reversal. A reversal WINNER
+(the anchor's own reversal pattern) is unchanged — it applies at its apply candle and that candle's one per-candle
+step still runs (its range update can emit `RANGE_UPDATED` on the reversal candle).
+Before the fix the step went on: the winner applied after the reversal (state left REVERSAL; e.g. a pullback's
+`CTS_RECONFIRMED` + `STATE_CHANGED(reversal→pullback)`), a range finalized, and a later close-break could reverse
+again — two `STATE_CHANGED(to=reversal)` for one sid, the H1 hand-off taking the first (df mask `.min()`) and every
+reader the last (`compute_reversal_idx_by_sid`). 0 cases on the reference window (byte-identical); pins
+`tests/test_ms_reversal_terminal.py`.
+
 ---
 
 ## Range behavior (canonical rules)
@@ -450,7 +466,11 @@ MarketStructure includes df-level invariant checks (low-noise):
 - range_lo must not exceed range_hi while active
 - CTS_CONFIRMED coherence with phase/stage
 - BOS_CONFIRMED coherence
-- reversal is terminal (cannot leave reversal once entered)【fileciteturn1file11】
+
+Reversal is terminal (cannot leave reversal once entered) — asserted at the source (2026-09-28): `_set_state`
+raises on any transition out of REVERSAL, and a `_rewind_to` rebuild asserts it never reaches one (its seed
+restore would overwrite it). Enforced by "Reversal inside a back-fill" above. (The former df-level check ran after
+`run()`'s forward stamp of `market_state` and could never fire — deleted.)【fileciteturn1file11】
 
 ---
 

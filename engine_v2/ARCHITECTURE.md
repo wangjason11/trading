@@ -532,7 +532,7 @@ The MarketStructure engine runs lightweight df-level invariant checks:
 - range_lo <= range_hi while active
 - CTS_CONFIRMED rows coherent with stage/phase
 - BOS_CONFIRMED rows coherent
-- reversal is terminal (once reversal appears, it never leaves reversal)【fileciteturn1file11】
+- reversal is terminal (once reversal appears, it never leaves reversal) — asserted in `_set_state` since 2026-09-28, not a df check (MARKET_STRUCTURE_SPEC "Invariants" + "Reversal inside a back-fill")【fileciteturn1file11】
 
 ### Zone visualization invariants
 - Chart shows zones for most recent structure_id

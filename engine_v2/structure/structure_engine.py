@@ -221,10 +221,12 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
         # Find reversal idx for THIS structure_id (MarketStructure stops when it
         # hits reversal). The mask matches exactly ONE candle — the reversal
         # apply candle — because the run sets REVERSAL state at a single candle
-        # then breaks, and the terminal forward-stamp touches market_state only
-        # (not structure_id). So .min() == .max() by construction; we WARN (not
-        # crash) if that invariant is ever violated and proceed with the apply
-        # idx. This single value supersedes the old reversal_start/confirmed pair
+        # then breaks (every back-fill stops at the terminal candle and
+        # `_set_state` asserts nothing leaves REVERSAL — MARKET_STRUCTURE_SPEC
+        # "Reversal inside a back-fill", 2026-09-28), and the terminal forward-stamp
+        # touches market_state only (not structure_id). So .min() == .max() by
+        # construction; we WARN (not crash) if that invariant is ever violated and
+        # proceed with the apply idx. This single value supersedes the old reversal_start/confirmed pair
         # (vestigial names for the same candle — unification cleanup).
         rev_mask = (df2["market_state"].astype(str).str.lower() == "reversal") & (df2["structure_id"].astype(int) == structure_id)
         if not rev_mask.any():

@@ -1363,6 +1363,20 @@ replay `/compare`, never tests alone. See memory
 
 ---
 
+## A Back-fill Must Stop at a Reversal (FIXED 2026-09-28)
+
+**Rule:** any loop that runs `_replay_step_no_patterns` over candles ahead of the step's own candle (a frozen
+back-fill) must end the step as soon as the state is REVERSAL — the pending reversal is applied inside that call —
+and must not run a later apply / finalize / re-step. Canonical: MARKET_STRUCTURE_SPEC "Reversal inside a back-fill".
+**Why:** the run loop only checks REVERSAL between steps; inside one step the dead structure kept stepping, left
+REVERSAL through an unguarded state setter and could reverse again (two `STATE_CHANGED(to=reversal)` per sid; the
+H1 hand-off takes the first, `compute_reversal_idx_by_sid` the last). **Guard:** `_set_state` asserts nothing leaves
+REVERSAL and the `_rewind_to` rebuild asserts it never reaches one — a new setter / back-fill that forgets the stop
+crashes instead of corrupting. Measure a change here with `review_scripts/reversal_shadow.py` (every MS run: back-fill
+applies, leaves, events after the terminal). Pins `tests/test_ms_reversal_terminal.py`.
+
+---
+
 ## `MarketStructure.run()` Crashed When `start_idx >= n` — RESOLVED (Plan E E1b, 2026-09-24)
 
 **Status:** FIXED. The early return now builds the levels like the normal path

@@ -573,6 +573,10 @@ class MarketStructure:
             i = 0
             while i < jump_to:
                 nxt = self._step_anchor(i)
+                # The rebuild replays candles the run already passed without reversing;
+                # a reversal here would be silently overwritten by the seed restore below.
+                assert self.state.state != MarketState.REVERSAL, (
+                    f"[market_structure] rewind rebuild reached a reversal at step {i} (jump_to={jump_to})")
 
                 # During rebuild, ignore any jump requests
                 if self.state.jump_to_idx is not None:
@@ -1009,9 +1013,22 @@ class MarketStructure:
             # (Prevents the active range from absorbing the breakout/pullback window.)
             for k in range(i, apply_idx):
                 self._replay_step_no_patterns(k, freeze_range=True)
+                # A reversal applied inside the back-fill (the pending one, at ~664)
+                # is terminal: the structure ends at candle k, so the rest of the
+                # back-fill and the winner's apply (a later candle) are never reached
+                # (MARKET_STRUCTURE_SPEC "Reversal inside a back-fill"). The run loop
+                # ends on REVERSAL, so the returned index is never used.
+                if self.state.state == MarketState.REVERSAL:
+                    return k + 1
 
             # "live-like": we act as if apply candle just closed
             self._apply_pattern_at_apply_idx(ev, apply_idx, kind)
+
+            # A breakout's post-apply range back-fill (`_post_apply_range_check`)
+            # can apply the pending reversal too: terminal, no apply-row re-write.
+            # (A reversal WINNER keeps its re-write below — its apply candle's own row.)
+            if kind != "reversal" and self.state.state == MarketState.REVERSAL:
+                return apply_idx + 1
 
             # reversal check at apply_idx
             # self._maybe_trigger_reversal(apply_idx)
@@ -1036,6 +1053,10 @@ class MarketStructure:
                 min_d = D if confirm_idx is None else min(confirm_idx, D)
                 for k in range(i, min_d):
                     self._replay_step_no_patterns(k, freeze_range=True)
+                    # Terminal inside the range back-fill: no finalize, no re-step of i
+                    # (see the winner back-fill above).
+                    if self.state.state == MarketState.REVERSAL:
+                        return k + 1
 
                 self._finalize_range_candidate_offline(i)
 
@@ -1589,6 +1610,10 @@ class MarketStructure:
             min_d = D if confirm_idx is None else min(confirm_idx, D)
             for k in range(i, min_d):
                 self._replay_step_no_patterns(k, freeze_range=True)
+                # Terminal inside the back-fill: no finalize (`_step_anchor` then
+                # ends the step — see its winner back-fill).
+                if st.state == MarketState.REVERSAL:
+                    return
 
             self._finalize_range_candidate_offline(i)
 
@@ -2263,6 +2288,11 @@ class MarketStructure:
         m = dict(meta or {})
         m.setdefault("effective_idx", i)
 
+        # Reversal is terminal (MARKET_STRUCTURE_SPEC "Invariants"): nothing may leave it.
+        # Every back-fill stops at the terminal candle, so this is a tripwire.
+        assert not (st.state == MarketState.REVERSAL and new_state != MarketState.REVERSAL), (
+            f"[market_structure] state left reversal at {i} -> {new_state.value}")
+
         if new_state != st.state:
             self.events.append(
                 StructureEvent(
@@ -2552,15 +2582,9 @@ class MarketStructure:
                         f"[INV] bos_threshold changed during reversal watch at idx={i}: prev={bos_prev.loc[i]} now={bos.loc[i]}"
                     )
 
-        # 5) Terminal reversal: once reversal appears, all later states must be reversal
-        if "market_state" in df.columns:
-            rev = df["market_state"].astype(str) == "reversal"
-            if rev.any():
-                first = int(rev.idxmax())
-                later_nonrev = df.loc[first:, "market_state"].astype(str) != "reversal"
-                if later_nonrev.any():
-                    i = int(later_nonrev.idxmax())
-                    raise AssertionError(f"[INV] market_state left reversal after idx={first}, non-reversal at idx={i}")
+        # (Reversal is terminal: asserted at the source in `_set_state`. A df check
+        # here could never fire — `run()` forward-stamps `market_state` from the
+        # first reversal before calling this.)
 
     # ----------------------------
     # Convert events -> StructureLevel (for downstream consumers like KL zones)
