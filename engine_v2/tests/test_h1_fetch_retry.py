@@ -86,7 +86,8 @@ def test_a_transient_failure_recovers_with_one_retry_line_each(monkeypatch, caps
     monkeypatch.setattr(run_replay, "get_history", fake)
     df, _, _ = _fetch()
     assert len(df) == 3 and fake.starts == [START] * 3
-    # the M15 policy, not a copy of it
+    # the M15 policy, not a copy of it (a float literal compiled in run_replay would be a different object)
+    assert run_replay._FETCH_RETRY_WAIT_S is data_bridge._FETCH_RETRY_WAIT_S
     assert sleeps == [data_bridge._FETCH_RETRY_WAIT_S] * data_bridge._FETCH_RETRIES and sleeps[0] > 0
     out = capsys.readouterr().out.splitlines()
     assert out == [
@@ -115,10 +116,13 @@ def test_a_request_that_keeps_failing_raises_after_two_retries(monkeypatch, caps
         "[auto_extend] RETRY 1/2", "[auto_extend] RETRY 2/2"]
 
 
-def test_a_non_transient_error_is_raised_at_once(monkeypatch, capsys, sleeps, start_ok):
-    fake = _FakeHistory(FileNotFoundError("Could not find 'oanda.cfg'"))
+@pytest.mark.parametrize("error", [FileNotFoundError("Could not find 'oanda.cfg'"),   # creds
+                                   KeyError("time"), ValueError("x"), TypeError("float(None)")],  # payload
+                         ids=lambda e: type(e).__name__)
+def test_a_non_transient_error_is_raised_at_once(monkeypatch, capsys, sleeps, start_ok, error):
+    fake = _FakeHistory(error)
     monkeypatch.setattr(run_replay, "get_history", fake)
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(type(error)):
         _fetch()
     assert fake.starts == [START] and sleeps == [] and capsys.readouterr().out == ""
 

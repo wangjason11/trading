@@ -186,7 +186,7 @@ identical to the one there (only the FAIL messages differ), including the
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
 if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
-    echo "FETCH GATE: FAIL - do NOT save (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aE "^[A-Za-z_][A-Za-z0-9_.]*(Error|Exception): " run.log; tail -n 3 run.log; \
+    echo "FETCH GATE: FAIL - do NOT save (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aE "^([A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z0-9_]*(Error|Exception|Timeout)|KeyboardInterrupt|SystemExit)(: |[[:space:]]*$)" run.log; tail -n 3 run.log; \
 elif ! grep -aqF "[data_bridge]" run.log && ! grep -aqF "[multi_tf:dual]" run.log; then \
     echo "FETCH GATE: N/A (no lower timeframe)"; \
 elif ! grep -aqF "[data_bridge]" run.log && grep -aqF "[multi_tf:dual] no triggers" run.log; then \
@@ -212,7 +212,8 @@ snippet, only when no M15 fetch ran: no lower timeframe, or no H1 trigger
 that run writes no M15 CSVs.
 
 **On FAIL, STOP and do not run Steps 5–7.** Report a data-fetch failure, quote
-the `[data_bridge]` lines, and re-run Step 4. The Step 3 folder and its
+the printed exception lines (`[data_bridge] ERROR …` M15 / `[auto_extend] ERROR …`
+H1) or, on a plain FAIL, the `[data_bridge]` lines, and re-run Step 4. The Step 3 folder and its
 `.before_replay_marker` are still valid, and the re-run's outputs are newer than
 the marker. In reuse mode, switch to run mode. If the fetch keeps failing (an
 OANDA outage), remove the still-empty save folder (re-derive `FOLDER_PATH` as in

@@ -113,7 +113,7 @@ which also catches a window change or a short response that raised nothing.
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
 if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
-    echo "FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aE "^[A-Za-z_][A-Za-z0-9_.]*(Error|Exception): " run.log; tail -n 3 run.log; \
+    echo "FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aE "^([A-Za-z_][A-Za-z0-9_]*\.)*([A-Za-z0-9_]*(Error|Exception|Timeout)|KeyboardInterrupt|SystemExit)(: |[[:space:]]*$)" run.log; tail -n 3 run.log; \
 elif ! grep -aqF "[data_bridge]" run.log && ! grep -aqF "[multi_tf:dual]" run.log; then \
     echo "FETCH GATE: N/A (no lower timeframe)"; \
 elif ! grep -aqF "[data_bridge]" run.log && grep -aqF "[multi_tf:dual] no triggers" run.log; then \
@@ -133,8 +133,10 @@ fi
   `run.log` from an earlier replay fails the first (a later replay run without
   `> run.log 2>&1` wrote a newer `*_raw.csv`), and a crashed run — a failed
   fetch included — fails the second; its FAIL prints any `[data_bridge]` lines,
-  the traceback's exception lines (`<Name>Error: …` / `<Name>Exception: …`,
-  the cause's and the final one's) and the log's last 3 lines. **The last 3
+  the traceback's exception lines (a possibly dotted `…Error` / `…Exception` /
+  `…Timeout` name, `KeyboardInterrupt` or `SystemExit`, with or without a
+  message — a chained traceback's cause and final exception both print) and the
+  log's last 3 lines. **The last 3
   lines are NOT reliably the traceback** (measured 2026-09-28 on simulated H1
   and M15 fetch crashes): under `> run.log 2>&1` stdout is block-buffered and
   the lines still buffered at the crash are flushed AFTER the traceback, so the

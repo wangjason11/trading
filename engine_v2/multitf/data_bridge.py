@@ -71,9 +71,10 @@ def _fetch_chunk(pair: str, lower_tf: str, chunk_start: datetime, chunk_end: dat
 
     Retried: any non-200 status (`get_history` raises `RuntimeError`; a 4xx
     too) and any `requests.RequestException` (a network error, a non-JSON
-    body); each retry prints one ``[data_bridge] RETRY k/N …`` line. Raised at
-    once: `_load_creds` errors (FileNotFoundError / KeyError / ValueError) and
-    a JSON payload missing candle fields (KeyError / ValueError). The exception
+    body); each retry prints one ``[data_bridge] RETRY k/N …`` line. Every
+    other exception is raised at once — `_load_creds` errors (FileNotFoundError
+    / configparser errors / ValueError) and a malformed payload (KeyError /
+    ValueError / TypeError). The exception
     text is collapsed onto one line (a gateway error body is multi-line HTML),
     so every retry / error line keeps the ``[data_bridge]`` prefix.
     """

@@ -122,13 +122,15 @@ def _get_history_retrying(*, pair: str, timeframe: str, start, end):
 
     Retried: any non-200 status (`get_history` raises `RuntimeError`; a 4xx
     too) and any `requests.RequestException` (a network error, a non-JSON
-    body); each retry prints one ``[auto_extend] RETRY k/N …`` line. Raised at
-    once: `_load_creds` errors (FileNotFoundError / KeyError / ValueError) and
-    a JSON payload missing candle fields (KeyError / ValueError). A request
-    that still fails raises ``[auto_extend] ERROR fetching …``, and so does a
-    response with no complete candle (`identify_start_scenario_1` needs a
-    candle). The exception text is collapsed onto one line (a gateway error
-    body is multi-line HTML).
+    body); each retry prints one ``[auto_extend] RETRY k/N …`` line. Every
+    other exception is raised at once — `_load_creds` errors (FileNotFoundError
+    / configparser errors / ValueError) and a malformed payload (KeyError /
+    ValueError / TypeError). A request that still fails raises
+    ``[auto_extend] ERROR fetching …``; a response with no usable candle
+    (`get_history` keeps only complete candles carrying the price key) raises
+    ``[auto_extend] ERROR: no H1 data …`` without a retry
+    (`identify_start_scenario_1` needs a candle). The exception text is
+    collapsed onto one line (a gateway error body is multi-line HTML).
     """
     for attempt in range(_FETCH_RETRIES + 1):
         try:
