@@ -202,14 +202,14 @@ follow-up: delete).
 
 Each consumer tunes four knobs: the **window**, the fill horizon
 **`check_to_idx`**, the moment **`evaluated_at`**, and the **direction** (always
-`sd`). Sites are named by function; line numbers are hints.
+`sd`). Sites are named by function (their line numbers drifted with every edit and were dropped 2026-09-28 — grep the function).
 
 ### POI
 
 | Site | Window | `check_to_idx` | `evaluated_at` | Question |
 |---|---|---|---|---|
-| `poi_zones._compute_poi_activation_history` (enter `:930`) | `(ic_idx, t]` | `t` | `t` (enters at `max(inst.formed_at, first_active)`) | "Is a FORMED sd imbalance after the IC unfilled at candle t?" — the per-candle sweep, via the fill cache (below). Equals `has_unfilled_imbalance(df, ic_idx+1, t, check_to_idx=t, direction=sd, evaluated_at=t)` |
-| `poi_zones.find_ic_candidates` `:233` — caller `derive_poi_zones` | `(candidate_idx, cts_idx]` | the final fib's `cts_idx` (anchor) | `None` — retrospective IC identification; the sweep enforces WHEN the POI can go live (Plan E §2.4 item 8) | IC cond3 |
+| `poi_zones._compute_poi_activation_history` (the enter candle) | `(ic_idx, t]` | `t` | `t` (enters at `max(inst.formed_at, first_active)`) | "Is a FORMED sd imbalance after the IC unfilled at candle t?" — the per-candle sweep, via the fill cache (below). Equals `has_unfilled_imbalance(df, ic_idx+1, t, check_to_idx=t, direction=sd, evaluated_at=t)` |
+| `poi_zones.find_ic_candidates` — caller `derive_poi_zones` | `(candidate_idx, cts_idx]` | the final fib's `cts_idx` (anchor) | `None` — retrospective IC identification; the sweep enforces WHEN the POI can go live (Plan E §2.4 item 8) | IC cond3 |
 | same — caller MS in-flight `compute_poi_inners_for_cycle` | `(candidate_idx, cts_idx]` | in-flight `st.cts.idx` | `None` — read only at `i > st.cts.idx` (Knowability §"Cached values") | IC cond3 for the proximity snapshot |
 
 ### FibTracker — `evaluated_at = self._evaluated_at` = `event_moment` of the handled event
@@ -220,17 +220,17 @@ CTS_UPDATED's apply candle since Plan E E3·0).
 
 | Site | Window | `check_to_idx` | Question |
 |---|---|---|---|
-| `_on_cts_established` `:616` | `[BOS_n, CTS_n]` | the EST moment `confirmed_at` (Plan E E3a; the anchor before) | fib activation at EST (single / sid0 / sid≥1 / Scenario 1) |
-| `_handle_sid1plus_cts_established` cycle 0 `:776` | `[BOS_0, CTS_0]` | the CTS_0 EST moment (Plan E E3a′; the anchor before) | the cycle-0 liveness **cache** (cond2) — `evaluated_at=None`, uncut |
-| `_handle_cross_cycle_cts_updated` `:1288` | `[BOS_0, CTS]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a) | cross_cycle cycle-0 first activation on update |
-| `_handle_cycle0_cts_updated` `:1423` | `[BOS_0, CTS]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a′) | the cycle-0 **cache** re-snapshot — `evaluated_at=None`, uncut; on every unlocked update with anchor `>=` the cached one (an equal-anchor pattern update re-asks at its later moment, like the MS mirror — MS emits none since 2026-09-27, when a pattern-path update started to need a strict new extreme; the `>=` is defence in depth) |
-| `_handle_cycle0_cts_updated` `:1435`, `:1456` (`_c0_has_unfilled_now`) | cached `[bos_idx, cts_idx]` | the update's moment (Plan E E3a′; the cached CTS_0 anchor before) — the same horizon the CTS_0 EST decision uses | Scenario-1 cycle-0 activation on update, asked at the moment |
-| `_update_fib_cts` `:1559` | `[bos, cts]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a) | reactivate / deactivate (`all_imbalances_filled` = no FORMED unfilled imbalance) |
+| `_on_cts_established` | `[BOS_n, CTS_n]` | the EST moment `confirmed_at` (Plan E E3a; the anchor before) | fib activation at EST (single / sid0 / sid≥1 / Scenario 1) |
+| `_handle_sid1plus_cts_established` cycle 0 | `[BOS_0, CTS_0]` | the CTS_0 EST moment (Plan E E3a′; the anchor before) | the cycle-0 liveness **cache** (cond2) — `evaluated_at=None`, uncut |
+| `_handle_cross_cycle_cts_updated` | `[BOS_0, CTS]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a) | cross_cycle cycle-0 first activation on update |
+| `_handle_cycle0_cts_updated` (the cache re-snapshot) | `[BOS_0, CTS]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a′) | the cycle-0 **cache** re-snapshot — `evaluated_at=None`, uncut; on every unlocked update with anchor `>=` the cached one (an equal-anchor pattern update re-asks at its later moment, like the MS mirror — MS emits none since 2026-09-27, when a pattern-path update started to need a strict new extreme; the `>=` is defence in depth) |
+| `_handle_cycle0_cts_updated` → `_c0_has_unfilled_now` (its two calls) | cached `[bos_idx, cts_idx]` | the update's moment (Plan E E3a′; the cached CTS_0 anchor before) — the same horizon the CTS_0 EST decision uses | Scenario-1 cycle-0 activation on update, asked at the moment |
+| `_update_fib_cts` | `[bos, cts]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a) | reactivate / deactivate (`all_imbalances_filled` = no FORMED unfilled imbalance) |
 | `_update_fib_cts` cross branch | — | — | DELETED 2026-09-28 (dead: every caller passes a single `(sid, cycle)` key) |
-| `_update_cycle1_main` `:1622` (cycle 0 @CTS_0), `:1627` (cycle 1 own), `:1629` (@BOS_1) | as named | the cache's `c0["fill_horizon_idx"]` (the CTS_0 moment of its last write) / the update's moment / the BOS_1 moment (`_bos_moment_by_cycle`, == the CTS_1 EST moment) — all Plan E E3a / E3a′ | H1 cycle-1 cross update — the code's cond1/cond2 labels are the REVERSE of `select_fib_anchor_for_cycle`'s docstring; read the questions, not the labels |
+| `_update_cycle1_main` — three checks: cycle 0 @CTS_0, cycle 1 own, @BOS_1 | as named | the cache's `c0["fill_horizon_idx"]` (the CTS_0 moment of its last write) / the update's moment / the BOS_1 moment (`_bos_moment_by_cycle`, == the CTS_1 EST moment) — all Plan E E3a / E3a′ | H1 cycle-1 cross update — the code's cond1/cond2 labels are the REVERSE of `select_fib_anchor_for_cycle`'s docstring; read the questions, not the labels |
 | `_update_cycle1_main` (own-window check) | `[BOS_1, CTS_1]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a) | an invariant ASSERT since 2026-09-28: a failed cross must have its own window filled (it IS cond2's question) — the create-on-fail single it used to gate was unreachable and is deleted |
-| `select_fib_anchor_for_cycle` call `:972` | via the routine | — | H1 cycle-1 Scenario 2/3 at CTS_1 EST |
-| `_maybe_activate_main_cross` `:2074`, `_m15_cross_check` `:2253` | via the routine | — | §11b main cross peek / subordinate cross check |
+| `select_fib_anchor_for_cycle` call (`_handle_cycle1_scenarios`) | via the routine | — | H1 cycle-1 Scenario 2/3 at CTS_1 EST |
+| `_maybe_activate_main_cross`, `_m15_cross_check` | via the routine | — | §11b main cross peek / subordinate cross check |
 
 ### The shared routine — `cross_cycle_fib.resolve_cross_cycle_eligibility` (`evaluated_at` required, forwarded)
 
@@ -257,7 +257,7 @@ resolver `None`.
 
 | Site | Window | `check_to_idx` | `evaluated_at` | Question |
 |---|---|---|---|---|
-| `market_structure._update_cycle0_data` `:2083` | `[BOS_0, CTS_0]` | the refresh's moment (Plan E E3a′; the CTS_0 anchor before) | `None` (cond2 mirror; read later) | In-flight Scenario-2 cycle-0 snapshot, mirroring FibTracker's cache |
+| `market_structure._update_cycle0_data` | `[BOS_0, CTS_0]` | the refresh's moment (Plan E E3a′; the CTS_0 anchor before) | `None` (cond2 mirror; read later) | In-flight Scenario-2 cycle-0 snapshot, mirroring FibTracker's cache |
 | `market_structure._refresh_poi_inners_for_cycle` → `compute_poi_inners_for_cycle` → `select_fib_anchor_for_cycle` cond1 | `[BOS_1, CTS_1]` | `fill_horizon_idx` = the triggering event's moment (apply / processing candle; Plan E E3a, lock-step with FibTracker) | `None` | In-flight Scenario-2 cond1 |
 
 This mirror is load-bearing: the in-flight POI resolver reads
