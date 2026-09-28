@@ -313,7 +313,7 @@ pre-c3").
 - **The fill as-of on an anchor** (`check_to_idx` = CTS anchor at the EST / fib sites; retrospective IC
   identification) — Plan E E3.
 - **Never-established-cycle fallback POI** — stays parked in general.
-- Hygiene: the dead `_update_fib_cts` cross branch (`:1421-1457`) and its `.get` defaults (`:1433/:1442/:1524/
+- Hygiene: the dead `_update_fib_cts` cross branch (`:1421-1457`; DELETED 2026-09-28) and its `.get` defaults (`:1433/:1442/:1524/
   :1532`); `get_unfilled_imbalances` / `has_imbalance_in_range` and the unused import at `fib_tracker.py:25`.
 - Latent items (inputs synthesis §4): MS vs FibTracker cycle-0 snapshots can diverge on a REGRESS pattern-path update
   (closed 2026-09-27: MS emits a pattern-path update only on a strict new extreme);

@@ -669,7 +669,7 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
     `tests/test_e3a_mutation_pins.py` (lagging grid, moment = anchor + 2; mirrored sd −1 MS fixture): 39/41 killed;
     spot-re-killed here (Scenario-1 EST comparison → anchor; resolver horizon → `cts_idx`). Equivalent survivors:
     M24 — `_update_fib_cts`'s `is_cross_cycle` branch is DEAD (no single key ever holds `cross_cycle: True`; delete
-    in the dead-code hygiene pass); M32 — the h1 create-on-fail stamp is unreachable (cond2 and the normal check ask
+    in the dead-code hygiene pass — DELETED 2026-09-28, hygiene 5b); M32 — the h1 create-on-fail stamp is unreachable (cond2 and the normal check ask
     the same window at the same horizon). Tests 853 → 873 + 1 xfail; replay after the fixes == the measured E3a.
 
 - **E3a′ (2026-09-25; Q8).** Both layers, one change. FibTracker: cond3 "has BOS_1 filled cycle 0?" at the BOS_1
@@ -720,7 +720,10 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
     cross exists only if cond3 (at the CTS_1 moment m) and cond2 (at the cache horizon h) were True at EST; a
     two-stroke fill never un-fills, BOS_1 anchor <= m and `c0_cts_idx` <= h, the c0 range is frozen by then and
     `_maybe_activate_main_cross` handles cycles >= 2 only, so both reads are always True where reached (only cond2
-    decides) → dead-code hygiene list, with `_update_fib_cts`'s dead cross branch. Its mutants M1 / M2 / M5
+    decides) → dead-code hygiene list, with `_update_fib_cts`'s dead cross branch (2026-09-28, hygiene 5b: the
+    re-asks are KEPT — deleting them would change the run.log `cross-cycle check: cond1=… cond3=…` line; line-traced
+    True on every reach, 6/6 replay + 7/7 suite; the create-on-fail single they made unreachable is DELETED and its
+    invariant asserted). Its mutants M1 / M2 / M5
     (`_bos_moment_by_cycle` = the anchor) survive for that reason. Mutation 7/10 killed by the reviewer + both of mine
     re-killed here. Tests 880 → 883 + 1 xfail.
 

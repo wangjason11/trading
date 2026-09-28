@@ -1553,7 +1553,9 @@ class FibTracker:
         """
         Internal helper to update a Fib's CTS anchor and check imbalance conditions.
 
-        Used for both normal Fibs and cross-cycle Fibs.
+        Single-keyed fibs only — every caller passes `(sid, cycle)`; the h1
+        cross-cycle fib lives at `(sid, 1, "cross", v)` and is re-checked in
+        `_update_cycle1_main` (its dead cross branch here was deleted 2026-09-28).
         """
         state = self._fibs[key]
         if state.locked:
@@ -1591,41 +1593,15 @@ class FibTracker:
             cts_history=new_history,
         )
 
-        is_cross_cycle = state.meta.get("cross_cycle", False)
-        label = "cross-cycle" if is_cross_cycle else f"cycle={cycle_id}"
+        label = f"cycle={cycle_id}"
         print(f"[fib] sid={sid} {label} UPDATED: CTS idx={cts_idx} price={cts_price:.5f}")
 
-        # Check unfilled imbalance condition - can reactivate or deactivate
-        if is_cross_cycle:
-            # Cross-cycle Fib: check BOTH cycles' imbalance conditions.
-            # sd-direction filter throughout (counter-direction imbalances
-            # never produce POIs, so they don't influence cross-cycle eligibility).
-            # Condition 1: Cycle 0 has unfilled imbalance (in cycle 0's locked range)
-            c0 = self._cross_cycle_data[sid]["cycle0"]
-            c0_bos_idx = c0["bos_idx"]
-            c0_cts_idx = c0["cts_idx"]  # Locked CTS_0
-            c0_start = min(c0_bos_idx, c0_cts_idx)
-            c0_end = max(c0_bos_idx, c0_cts_idx)
-            cond1 = self._has_unfilled(df, c0_start, c0_end, c0["fill_horizon_idx"], sd)
-
-            # Condition 2: Cycle 1 has unfilled imbalance (BOS_1 to current CTS_1)
-            cycle1_bos_idx = new_state.meta["cycle1_bos_idx"]
-            c1_start = min(cycle1_bos_idx, cts_idx)
-            c1_end = max(cycle1_bos_idx, cts_idx)
-            cond2 = self._has_unfilled(df, c1_start, c1_end, self._moment(), sd)
-
-            # Condition 3: Cycle 1's BOS doesn't fill cycle 0's imbalances (static check)
-            # — asked as of BOS_1's MOMENT (Plan E E3a′, Q8).
-            cond3 = self._has_unfilled(df, c0_start, c0_end, self._bos_moment_by_cycle[(sid, 1)], sd)
-
-            has_unfilled = cond1 and cond2 and cond3
-            print(f"[fib] sid={sid} cross-cycle check: cond1={cond1} cond2={cond2} cond3={cond3}")
-        else:
-            # Normal Fib: check its own range (sd-direction; formed gaps only —
-            # "all_imbalances_filled" below means "no FORMED unfilled imbalance").
-            start_idx = min(new_state.bos_idx, new_state.cts_idx)
-            end_idx = max(new_state.bos_idx, new_state.cts_idx)
-            has_unfilled = self._has_unfilled(df, start_idx, end_idx, self._moment(), sd)
+        # Check unfilled imbalance condition - can reactivate or deactivate: the fib's
+        # own range (sd-direction; formed gaps only — "all_imbalances_filled" below
+        # means "no FORMED unfilled imbalance").
+        start_idx = min(new_state.bos_idx, new_state.cts_idx)
+        end_idx = max(new_state.bos_idx, new_state.cts_idx)
+        has_unfilled = self._has_unfilled(df, start_idx, end_idx, self._moment(), sd)
 
         if has_unfilled and not new_state.active:
             # Reactivate - unfilled imbalances now exist in expanded range
@@ -1654,13 +1630,14 @@ class FibTracker:
         its cond1/cond2/cond3 re-checked (computation identical to the prior
         named-slot path). When the cross is valid it stays the active record and
         NO single is created — byte-identical to before (the old `normal_cycle1`
-        lived only in scratch and never reached `_fibs`). Only when the cross
-        fails while the cycle-1 own imbalance is still unfilled is a single
-        materialized at ``(sid, 1)`` (create-on-fail), mirroring the subordinate
-        `cross_failed → single` fallback. In that (general-case, not exercised
-        on this window) path the deactivated cross record persists in `_fibs`
-        as a dead-version trail — a deliberate, accepted divergence from the
-        old overwrite-the-mirror behavior (§11a-ii / CROSS_CYCLE_FIB_SPEC §8).
+        lived only in scratch and never reached `_fibs`). A failed cross creates
+        no single either: the create-on-fail single (materialized when the cycle-1
+        own imbalance was still unfilled) was UNREACHABLE — cond1 / cond3 are fixed
+        across cycle-1 updates and cond2 asks the own window `[BOS_1, CTS_1]` at the
+        same horizon, so the cross only fails when the own check is filled too — and
+        was deleted 2026-09-28; the invariant is asserted instead (CROSS_CYCLE_FIB_SPEC
+        §11a-ii). The deactivated cross record persists in `_fibs` as a dead-version
+        trail (§11a-ii / CROSS_CYCLE_FIB_SPEC §8).
         """
         latest = self._get_latest_cross(sid, 1)
         if latest is None:
@@ -1713,33 +1690,23 @@ class FibTracker:
         if cross_active:
             return new_cross_fib
 
-        # --- Create-on-fail: cross invalid → materialize the cycle-1 single iff
-        # its own (BOS_1 -> CTS_1) imbalance is unfilled (the old "FALLBACK to
-        # normal cycle=1"). BOS_1 comes from _bos_by_cycle so no extra meta key
-        # is needed. ---
+        # --- Cross invalid. The own-window check (BOS_1 -> CTS_1 at the update's
+        # moment) IS cond2, so the cycle-1 own imbalance is filled too: the old
+        # create-on-fail single was unreachable (deleted 2026-09-28); assert the
+        # invariant it rested on. ---
         bos1 = self._bos_by_cycle.get((sid, 1))
         if bos1 is None:
             return new_cross_fib
-        bos1_idx, bos1_price = bos1
-        normal_start = min(bos1_idx, cts_idx)
-        normal_end = max(bos1_idx, cts_idx)
-        normal_has_unfilled = self._has_unfilled(df, normal_start, normal_end, self._moment(), sd)
+        bos1_idx = bos1[0]
+        own_has_unfilled = self._has_unfilled(
+            df, min(bos1_idx, cts_idx), max(bos1_idx, cts_idx), self._moment(), sd)
+        if own_has_unfilled:
+            raise AssertionError(
+                f"[fib] sid={sid} cycle-1 cross failed (cond1={cond1} cond2={cond2} cond3={cond3}) "
+                f"while its own window [{bos1_idx}, {cts_idx}] still has an unfilled imbalance "
+                f"(cycle1_bos_idx={cycle1_bos_idx})")
         single_key = (sid, 1)
         existing = self._fibs.get(single_key)
-        if normal_has_unfilled:
-            if existing is None or not existing.active:
-                print(f"[fib] sid={sid} FALLBACK to normal cycle=1 (create-on-fail)")
-                return self._activate_fib(
-                    sid=sid,
-                    cycle_id=1,
-                    sd=sd,
-                    bos_idx=bos1_idx,
-                    bos_price=bos1_price,
-                    cts_idx=cts_idx,
-                    cts_price=cts_price,
-                    meta={"activated_at": self._moment(), "scenario": 2, "role": "fallback"},
-                )
-            return self._update_fib_cts(single_key, cts_idx, cts_price, df)
         # Cross dead and own imbalance also filled → keep an existing single in
         # sync (deactivate it); otherwise nothing active (cross stays inactive).
         if existing is not None:

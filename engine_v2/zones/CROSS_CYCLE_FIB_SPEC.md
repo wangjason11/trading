@@ -404,7 +404,9 @@ the sole main cross (sid=1 cyc=1) wins throughout → one record, key-relocated,
 `new_cycle@902` terminal + the phantom collapse all preserved. NB the h1 FALLBACK-to-single
 path is **unreachable** (cond1/cond3 fixed across cycle-1 updates; cond2 == the normal's
 own check) — create-on-fail is dead/harmless for h1, exercised only by 11b multi-cycle
-crosses. **Landmine learned:** the shared `_activate_fib`'s new versioned-cross obsolete
+crosses. **(2026-09-28: the h1 create-on-fail in `_update_cycle1_main` is DELETED — 0 hits
+over the replay and the full suite, line-traced; the invariant it rested on is asserted
+instead: a failed cross with its own `[BOS_1, CTS_1]` window still unfilled raises.)** **Landmine learned:** the shared `_activate_fib`'s new versioned-cross obsolete
 must be gated to `fib_mode=="h1"` — ungated it flipped a sub cross's `end_reason`
 `next_cycle→new_cycle` (subs obsolete their crosses via `_m15_create_cross`).
 
