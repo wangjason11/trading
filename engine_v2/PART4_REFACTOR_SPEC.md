@@ -3382,7 +3382,9 @@ sibling dfs. `test_sub_id_is_monotonic_and_stable` must survive unchanged.
   `CTS_UPDATED` on their moment `confirmed_at` (the last two since Plan E E3b,
   2026-09-25 — closed for them); `REVERSAL_CANDIDATE` (applies at
   `meta["apply_idx"]`) still straddles and can be half-clipped at a window edge.
-  Not fixed here — note any half-clipped reversal seen during chart review.
+  Not fixed here — note any half-clipped reversal seen during chart review. (Half
+  closed 2026-09-27: the fib terminal / prev-BOS line read the realised reversal —
+  LANDMINES "Sub-Structure Pool: Run Cap ≠ Lifecycle End; Knowable-At Clip on Render".)
 - Whether subs should receive the **derived** CTS KL zone as a probe reference
   (§17.8 — the branch is dead for subs today).
 

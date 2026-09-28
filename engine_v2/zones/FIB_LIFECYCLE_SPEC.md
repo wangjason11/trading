@@ -532,7 +532,10 @@ It **reverts the Scenario 1 determination, TRUE → FALSE** (H1-main only; the
 `cross_cycle` sub path has no Scenario-1 logic).
 
 - **Scenario 1** (h1 main, sid ≥ 1): the CTS_0 event's moment `>= reversal_confirmed_idx`
-  (Plan E E3a; before it the CTS_0 anchor idx) →
+  (Plan E E3a; before it the CTS_0 anchor idx; `reversal_confirmed_idx` = the REALISED
+  reversal that ended the previous sid — `STATE_CHANGED(to=reversal).idx` via
+  `structure_lifecycle.compute_reversal_idx_by_sid`, since 2026-09-27; before, the last
+  `REVERSAL_CANDIDATE`'s scheduled apply) →
   cycle 0 is treated as a legit post-reversal structure → the **cycle-0 single
   fib** activates. If it *stays* TRUE, cycle 1 also gets a normal single fib →
   this is the **"2 single fibs, no cross"** outcome.

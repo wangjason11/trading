@@ -449,9 +449,10 @@ class FibTracker:
 
         Closes the Session-1 deferral (reversal-ended H1-main fibs previously
         kept end_idx=None). Must run BEFORE `_finalize_lifecycle_fields` so the
-        derived `status` reflects the terminal. Harmless for subordinate
-        structures (their open cycle is also capped by the entity_df
-        lifecycle-end cap at the same slice-local idx).
+        derived `status` reflects the terminal. For a sub (one sid 0, events
+        clipped at its cap) the terminal is its realised reversal R <= the
+        lifecycle cap — R == the cap when the sub's `end_reason` is reversal
+        (the finalize pass-through, FIB_LIFECYCLE_SPEC §15).
         """
         if not reversal_idx_by_new_sid:
             return

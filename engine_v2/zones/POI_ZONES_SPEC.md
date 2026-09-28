@@ -184,7 +184,10 @@ For structures after a reversal, Fib activation follows a 3-scenario system:
 
 #### Scenario 1: Normal Cycle 0 Fib
 **Condition:** the CTS_0 event's moment >= reversal_confirmed_idx (the EST
-`confirmed_at` / the update's moment — Plan E E3a; before it the CTS_0 anchor idx)
+`confirmed_at` / the update's moment — Plan E E3a; before it the CTS_0 anchor idx;
+`reversal_confirmed_idx` = the realised reversal of the previous sid,
+`STATE_CHANGED(to=reversal).idx` — the same value as the zone end below — since
+2026-09-27; before, the last `REVERSAL_CANDIDATE`'s scheduled apply)
 
 **Behavior:**
 - Cycle 0 gets normal Fib (if unfilled imbalance)

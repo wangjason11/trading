@@ -2,8 +2,9 @@
 
 `_run_downstream_pipeline` used to key `reversal_confirmed_by_sid` on the last `REVERSAL_CANDIDATE.meta["apply_idx"]`
 per structure — a SCHEDULED apply. The candidate is emitted when the reversal is scheduled and survives rewinds; a
-watch expiry (run BEFORE the pending apply in the per-candle step) discards it, and a reversal found at a step anchor
-applies without any candidate. That map fed FibTracker's Scenario-1 checks (`reversal_confirmed_idx`), the ended
+watch expiry (run BEFORE the pending apply in the per-candle step) discards it; and a reversal found at a step anchor
+under the frozen threshold (`_best_bopb_pattern_at_anchor`) applies at R, EARLIER than the watch candidate's scheduled
+apply P, which stays in the stream (the old map overshot to P). That map fed FibTracker's Scenario-1 checks (`reversal_confirmed_idx`), the ended
 sid's fib terminals (`set_reversal_terminals`) and the prev-BOS line END, while KL / POI / the fib finalize / charts
 read the realised `STATE_CHANGED(to=reversal)`. Now (user decision A) the map is the canonical
 `structure_lifecycle.compute_reversal_idx_by_sid`, shifted to the new sid: `reversal_idx_by_new_sid`.
@@ -67,15 +68,21 @@ def test_the_realised_reversal_still_ends_the_fib():
 
 
 def test_every_reader_gets_the_realised_reversal_not_the_last_candidate(monkeypatch):
-    """A reversal can realise with NO matching candidate (found at a step anchor): the stream keeps only the
-    discarded J1 candidate (apply 9) while sid 0 reverses at 17, and sid 1 (down) follows — established
+    """The candidates disagree with the realised reversal on both sides: the discarded J1 candidate (apply 9) and
+    the watch candidate at 14 with its scheduled apply 19 — while sid 0 reverses at 17, EARLIER than 19 (a
+    step-anchor reversal under the frozen threshold applies before the candidate's apply). sid 1 (down) follows —
+    established
     retroactively BEFORE the reversal (as on H1: sid 1's first ESTs 703 / 748 < sid 0's reversal 902), with raw
     updates at 14 (known before 17) and 17. Every reader of the map — FibTracker's Scenario-1 argument on sid 1's
     CTS_ESTABLISHED and CTS_UPDATED, the ended sid's terminals, the prev-BOS line END (the first sid-1 CTS known
-    at/after the reversal: the update at 17, not the EST at 13 a 9 would pick) — gets 17, never 9."""
+    at/after the reversal: the update at 17, not the EST at 13 a 9 would pick, nor none as 19 would) — gets 17,
+    never the first (9) or the last (19) candidate."""
     res = _ms(None)
-    events = [e for e in res.events if not (e.type == "REVERSAL_CANDIDATE" and e.meta["apply_idx"] == 17)]
-    assert _cands(events) == [(4, 9)] and _reversals(events) == [17]
+    events = copy.deepcopy(res.events)
+    for e in events:
+        if e.type == "REVERSAL_CANDIDATE" and e.meta["apply_idx"] == 17:
+            e.meta["apply_idx"] = 19          # the watch candidate's scheduled apply, later than the realised 17
+    assert _cands(events) == [(4, 9), (14, 19)] and _reversals(events) == [17]
     sid1 = dict(structure_id=1, cycle_id=0, struct_direction=-1)
     events += [
         make_bos_confirmed(bos_anchor_idx=11, confirmed_at=13, price=0.60720, **sid1),
@@ -106,4 +113,4 @@ def test_every_reader_gets_the_realised_reversal_not_the_last_candidate(monkeypa
     assert (1, 17) in seen["est"] and (1, 17) in seen["upd"]
     assert all(rv in (None, 17) for _s, rv in seen["est"] + seen["upd"])
     assert seen["terminals"] == [{1: 17}]
-    assert [(ln["structure_id"], ln["end_idx"]) for ln in out["prev_bos_lines"]] == [(1, 17)]   # a 9 gives 13
+    assert [(ln["structure_id"], ln["end_idx"]) for ln in out["prev_bos_lines"]] == [(1, 17)]   # 9 -> 13, 19 -> none

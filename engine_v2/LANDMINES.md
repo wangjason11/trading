@@ -1837,7 +1837,11 @@ re-states the cycle-start/end rule of `compute_cycle_lifecycle` on H1 → M15):
   Scenario-1 argument, its reversal terminals, the prev-BOS line END — is it shifted
   to the new sid; it used to be the last `REVERSAL_CANDIDATE.meta["apply_idx"]`, a
   SCHEDULED apply a watch expiry can discard, which put a phantom 'reversal' on
-  the fibs: `tests/test_orchestrator_reversal_source.py`).
+  the fibs: `tests/test_orchestrator_reversal_source.py`). Still reading the
+  scheduled apply: the zone-proximity scan cap (H1 main only — a DISCARDED candidate
+  that is a sid's last would skip every later cycle's scan: no triggers, no WVMI
+  gate record, no M15 subs; 0 on the reference window) and the H1-main
+  `SidRecord.end_event_idx` (`multitf/sid_records.py`; no production reader).
 
 **Any change to end resolution or the reversal-dict construction goes in the
 helper, NOT per-zone** — the whole point of the pass-through is one source of
@@ -2082,7 +2086,10 @@ three on `confirmed_at` (the pattern path since Plan E E3b), from the time their
 `REVERSAL_CANDIDATE` (applies at `meta["apply_idx"]`), which can still straddle a
 cap (`ev.idx <= cap <` its apply) and survive the clip, yielding a half-derived
 reversal — the remaining known limit in PART4 §17.12 (zero straddles on the
-reference window). See ARCHITECTURE "`ev.idx` convention".
+reference window). Since 2026-09-27 the fib terminal and the prev-BOS line read the
+realised `STATE_CHANGED` (clipped at the cap), so a straddling candidate no longer
+stamps a fib 'reversal' past the cap; the chart's candidate markers, the zone-proximity
+scan cap and the H1-main SidRecord still read it. See ARCHITECTURE "`ev.idx` convention".
 The rule for any new or changed clip: key each type on its moment column, never
 on `ev.idx` by default. Changing this clip is its own `/compare`.
 
