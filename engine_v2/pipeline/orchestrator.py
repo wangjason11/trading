@@ -342,7 +342,7 @@ def _run_downstream_pipeline(
         cycle_end_by_key = {
             key: end
             for key, (_start, end, _reason) in compute_cycle_lifecycle(
-                sorted_events, compute_reversal_idx_by_sid(sorted_events),
+                events, compute_reversal_idx_by_sid(events),
                 lifecycle_floor, lifecycle_cap, cap_reason,
             ).items()
             if end is not None

@@ -192,14 +192,18 @@ pullback_momentum = (LP_vol * LP_weight) / FP_vol   # recomputed each candle
 ### 3. Locked — BOS_n+1 Confirmed
 
 `on_bos_confirmed()` with cycle_id=N+1 locks WVMI for cycle_id=N:
-- Replaces temp LP with official LP from BOS_n+1's `last_wave_candle_idx`
+- Replaces temp LP with official LP from BOS_n+1's `last_wave_candle_idx` — when
+  BOS_n+1 has no last wave candle, the record locks with its existing temp LP as
+  final (`on_bos_confirmed`), i.e. the bounded one ("Temporary LP Selection")
 - Finalizes pullback_momentum
 - Sets `lp_locked=True`, `status="locked"`
 
 A record only locks when its cycle's **successor** BOS forms. A cycle that ends
 otherwise (a reversal; a sub's cap) or is still open never locks — it stays
-`created`/`updated` with a temp LP searched up to its cycle's last live candle
-(open: the data end; "Temporary LP Selection").
+`created`/`updated` with a temp LP searched up to: **main** its cycle's end − 1
+(open: the data end); **sub** the projection frame's end, inclusive (= the sub's
+end). A cycle whose end comes at or before FP + 1 (e.g. a collapsed cycle, start ≥
+end) gets no temp LP (`lp_idx=None`). Details: "Temporary LP Selection".
 
 ---
 
@@ -275,8 +279,10 @@ pullback_momentum = (LP_volume * LP_weight) / FP_volume
    reversal took its LP from the structure that superseded it — reference window H1
    (0,1) (reversal 902) had LP 988 (pullback_momentum 0.904) → now 896 (0.759);
    `tests/test_wvmi_lp_bound.py`. **Sub sweep:** no ends passed — the projection's
-   frame already stops at the sub's `end_idx` (measured 5/5), so a sub LP stays in
-   the sub; that frame end is inclusive (the end candle itself can be picked) — the
+   frame already stops at the sub's `end_idx` (guaranteed by the projection build,
+   `entity_df_mutation.render_sub_projection` slices the bounded frame to
+   `end_in_slice + 1`; measured
+   5/5), so a sub LP stays in the sub; that frame end is inclusive (the end candle itself can be picked) — the
    one-candle difference from main's half-open bound is left to the deferred WVMI
    plan (WVMI moves into the per-sub projection).
 2. Qualification: same direction AND vol_dir as FP candle (or vol_dir == 0)
@@ -297,7 +303,8 @@ pullback_momentum = (LP_volume * LP_weight) / FP_volume
 | BOS zone not found | Returns None (no record created) |
 | BOS or CTS wave candle missing required indices | Returns None |
 | FB_volume == 0 or FP_volume == 0 | Returns None (division by zero) |
-| Temp LP not found | Record created with `lp_idx=None`, `pullback_momentum=None` |
+| Temp LP not found (incl. an empty bounded search: the cycle ended at or before FP + 1) | Record created with `lp_idx=None`, `pullback_momentum=None` |
+| BOS_n+1 has no `last_wave_candle_idx` | Locks with the existing (bounded) temp LP as final |
 | Momentum is None | Charting shows "N/A" in hover |
 
 ---
@@ -321,6 +328,7 @@ WVMI runs **after POI zones** (the main-entity gate needs POI inner bounds):
 # Main (H1.main) — entity-local gate
 wave_candles → Fib tracking → POI zones → WVMI:
   0. check_zone_proximity() → first sd trigger          [gate]
+     cycle_end_by_key = compute_cycle_lifecycle(...) ends [temp-LP bound]
   1. for CTS_CONFIRMED events (gated only) →
        on_cts_confirmed() + meta update                [create]
   2. for BOS_CONFIRMED events → on_bos_confirmed()     [lock]

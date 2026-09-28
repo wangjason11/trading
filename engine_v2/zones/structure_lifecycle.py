@@ -148,6 +148,9 @@ def compute_cycle_lifecycle(
             if end_idx is None or cap < end_idx:
                 end_idx = cap
                 end_reason = cap_reason
+        # `end_idx` is EXCLUSIVE: the cycle is live on `[start, end_idx)` (POI scans to
+        # `end_idx - 1`, KL collapses a zone at `confirmed_idx >= end_idx`, WVMI's temp-LP
+        # search stops at `end_idx - 1`); None = open.
         out[(s, c)] = (start, end_idx, end_reason)
     return out
 
