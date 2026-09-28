@@ -655,7 +655,7 @@ zones.
 
 **Key boundaries:**
 - Next BOS_CONFIRMED for `(sid, cycle_id + 1)` — its moment `meta["confirmed_at"]` (`== .idx` since Plan E E4b), not its anchor `meta["bos_anchor_idx"]` (a location) → current cycle zones become inactive
-- the sid's last REVERSAL_CANDIDATE `meta["apply_idx"]` (the SCHEDULED reversal apply, a prediction; the scan cap, not the confirmed `STATE_CHANGED(to=reversal)`) → scan window ends (`zone_proximity.py`, `reversal_idx_by_sid`; the scan stops at `apply_idx - 1`)
+- the sid's REALISED reversal, the `STATE_CHANGED(to=reversal)` candle (`compute_reversal_idx_by_sid`, since 2026-09-28) → scan window ends (`zone_proximity.py`, `reversal_idx_by_sid`; the scan stops at `reversal_idx - 1`). NOT a `REVERSAL_CANDIDATE`'s `meta["apply_idx"]` (a SCHEDULED apply): the old cap took the sid's LAST candidate, so a candidate discarded by its watch expiry capped every later cycle below its own scan start (no triggers, no WVMI gate record) and a step-anchor reversal realising earlier let the scan run past it — `tests/test_zone_proximity_reversal_cap.py`
 
 **Also:** Within the scan window, only use active POI zones at each candle (check `confirmed_idx <= candle <= end_idx`). The BOS KL zone is throughout-active. The CTS KL zone (used for opp_sd triggers) is also throughout-active within this window — `CTS_(n+1)_ESTABLISHED`, which deactivates CTS_n zone, fires exactly AT `next_BOS.confirmed_at` (its moment `meta["confirmed_at"]` is the same apply candle by construction — and its `.idx` since Plan E E4a; its CTS anchor `meta["cts_anchor_idx"]` can be earlier — ARCHITECTURE.md "`ev.idx` convention"), so within `[CTS_n_conf, next_BOS.confirmed_at - 1]` the CTS_n zone is still alive.
 
@@ -983,8 +983,8 @@ and make itself eligible by its own action.
 
 **Hazard 2 — DataFrame column overwrite:** when a cycle's scan window
 extends past a reversal into the next structure's rows (e.g.,
-sid=0 cycle=2's scan extends up to `reversal_apply_idx - 1`, but sid=1
-starts processing at `reversal_apply_idx` itself), `df["cts_threshold"]`
+sid=0 cycle=2's scan extends up to `reversal_idx - 1`, but sid=1
+starts processing at the reversal candle itself), `df["cts_threshold"]`
 and `df["bos_threshold"]` get nulled out / overwritten by sid=1. df
 columns are NOT safe for cross-structure reads (see LANDMINES
 "DataFrame Column Overwrite Hazard").

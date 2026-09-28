@@ -53,10 +53,13 @@ def test_main_single_sid_no_reversal():
 
 
 def test_main_multiple_sids_with_reversal():
+    """The main end is the REALISED reversal (`STATE_CHANGED(to=reversal)`, 2026-09-28) — here a step-anchor
+    reversal at 35, EARLIER than the watch candidate's scheduled apply 37."""
     events = [
         _ev(10, "CTS_ESTABLISHED", sid=0, sd=1),
         _ev(20, "BOS_CONFIRMED", sid=0, sd=1, confirmed_at=20),
-        _ev(30, "REVERSAL_CANDIDATE", sid=0, sd=1, apply_idx=35),
+        _ev(30, "REVERSAL_CANDIDATE", sid=0, sd=1, apply_idx=37),
+        _ev(35, "STATE_CHANGED", sid=0, sd=1, to="reversal", category="STATE"),
         _ev(36, "CTS_ESTABLISHED", sid=1, sd=-1),
         _ev(45, "BOS_CONFIRMED", sid=1, sd=-1, confirmed_at=45),
     ]
@@ -74,6 +77,19 @@ def test_main_multiple_sids_with_reversal():
     assert sid1.creation_event_idx == 36
     assert sid1.end_event_idx is None
     assert sid1.end_reason is None
+
+
+def test_main_discarded_candidate_ends_nothing():
+    """A candidate whose watch expired (no `STATE_CHANGED(to=reversal)`) is not an end: the sid stays open. Before
+    2026-09-28 the record took the candidate's scheduled apply (40) and `end_reason="reversal"`."""
+    events = [
+        _ev(10, "CTS_ESTABLISHED", sid=0, sd=1),
+        _ev(20, "BOS_CONFIRMED", sid=0, sd=1, confirmed_at=20),
+        _ev(35, "REVERSAL_CANDIDATE", sid=0, sd=1, apply_idx=40),
+        _ev(50, "CTS_ESTABLISHED", sid=0, sd=1, cycle_id=1, confirmed_at=50),
+    ]
+    (rec,) = build_sid_records_for_main(events)
+    assert (rec.end_event_idx, rec.end_reason) == (None, None)
 
 
 def test_main_skips_events_without_structure_id():

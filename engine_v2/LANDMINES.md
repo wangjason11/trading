@@ -363,7 +363,7 @@ reconstructed from `BOS_CONFIRMED` + `CTS_CONFIRMED` + their respective
 DO NOT read `df["cts_threshold"]` / `df["bos_threshold"]` for this —
 those columns are overwritten by the next structure when it begins
 processing (see "DataFrame Column Overwrite Hazard" landmine). A
-cycle's scan window can extend up to `reversal_apply_idx - 1`, which
+cycle's scan window can extend up to `reversal_idx - 1`, which
 crosses the boundary into the next structure's rows — by that point
 the df cols are NaN or carry the next sid's state. Events are
 append-only and tagged with their owning `(sid, cycle_id)`, so they
@@ -391,7 +391,7 @@ against the post-Rules-1-2-3 baseline.
 1. **Zero FB/FP volume blocks WVMI creation** — division by zero guard. Ensure candle features (volume) are computed before WVMI runs.
 2. **Temp LP only locks on BOS_n+1** — do not assume `lp_locked=True` until BOS of the next cycle confirms. Until then, LP and pullback_momentum can shift every candle.
 3. **buy_momentum/sell_momentum are direction-mapped** — for buy zones: buy=breakout, sell=pullback. For sell zones: reversed. Always check `zone_side` when interpreting.
-4. **Zone proximity gate is mandatory (today)** — WVMI records are only created for cycles where the **first sd-direction zone-proximity trigger** fires (via `check_zone_proximity` in `zones/zone_proximity.py`). Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, REVERSAL_CANDIDATE.meta["apply_idx"] - 1]` (note: scan starts AT the CTS confirmation candle, not +1; the reversal term is the sid's LAST `REVERSAL_CANDIDATE` in event order — a SCHEDULED apply, i.e. a prediction that can expire, not the confirmed `STATE_CHANGED(to=reversal)`; ARCHITECTURE "`ev.idx` convention"). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Uses only active POI zones at each candle (BOS KL zone is throughout-active). The orchestrator extracts the first sd trigger per cycle as the WVMI gate (`triggered_by_event_idx` in WVMIRecord.meta — Part 4 §8.7 attribution schema). Future refactor will rewire WVMI off this gate.
+4. **Zone proximity gate is mandatory (today)** — WVMI records are only created for cycles where the **first sd-direction zone-proximity trigger** fires (via `check_zone_proximity` in `zones/zone_proximity.py`). Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, reversal_idx - 1]` (note: scan starts AT the CTS confirmation candle, not +1; the reversal term is the sid's REALISED `STATE_CHANGED(to=reversal)` candle — `compute_reversal_idx_by_sid`, since 2026-09-28 — never a `REVERSAL_CANDIDATE`'s scheduled `apply_idx`, a prediction a watch expiry can discard; GOTCHAS "Key boundaries"). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Uses only active POI zones at each candle (BOS KL zone is throughout-active). The orchestrator extracts the first sd trigger per cycle as the WVMI gate (`triggered_by_event_idx` in WVMIRecord.meta — Part 4 §8.7 attribution schema). Future refactor will rewire WVMI off this gate.
 
 ---
 
@@ -1837,11 +1837,12 @@ re-states the cycle-start/end rule of `compute_cycle_lifecycle` on H1 → M15):
   Scenario-1 argument, its reversal terminals, the prev-BOS line END — is it shifted
   to the new sid; it used to be the last `REVERSAL_CANDIDATE.meta["apply_idx"]`, a
   SCHEDULED apply a watch expiry can discard, which put a phantom 'reversal' on
-  the fibs: `tests/test_orchestrator_reversal_source.py`). Still reading the
-  scheduled apply: the zone-proximity scan cap (H1 main only — a DISCARDED candidate
-  that is a sid's last would skip every later cycle's scan: no triggers, no WVMI
-  gate record, no M15 subs; 0 on the reference window) and the H1-main
-  `SidRecord.end_event_idx` (`multitf/sid_records.py`; no production reader).
+  the fibs: `tests/test_orchestrator_reversal_source.py`). Since 2026-09-28 the
+  zone-proximity scan cap (a DISCARDED candidate that was a sid's last skipped every
+  later cycle's scan: no triggers, no WVMI gate record, no M15 subs; 0 on the
+  reference window) and the H1-main `SidRecord.end_event_idx` read it too
+  (`tests/test_zone_proximity_reversal_cap.py`) — no timing/lifecycle reader of the
+  scheduled apply is left (the chart's candidate markers show the candidate itself).
 
 **Any change to end resolution or the reversal-dict construction goes in the
 helper, NOT per-zone** — the whole point of the pass-through is one source of
@@ -2088,8 +2089,9 @@ cap (`ev.idx <= cap <` its apply) and survive the clip, yielding a half-derived
 reversal — the remaining known limit in PART4 §17.12 (zero straddles on the
 reference window). Since 2026-09-27 the fib terminal and the prev-BOS line read the
 realised `STATE_CHANGED` (clipped at the cap), so a straddling candidate no longer
-stamps a fib 'reversal' past the cap; the chart's candidate markers, the zone-proximity
-scan cap and the H1-main SidRecord still read it. See ARCHITECTURE "`ev.idx` convention".
+stamps a fib 'reversal' past the cap (the zone-proximity scan cap and the H1-main
+SidRecord followed on 2026-09-28); only the chart's candidate markers still read it.
+See ARCHITECTURE "`ev.idx` convention".
 The rule for any new or changed clip: key each type on its moment column, never
 on `ev.idx` by default. Changing this clip is its own `/compare`.
 

@@ -60,6 +60,7 @@ from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.poi_lifecycle import poi_active_as_of
 from engine_v2.zones.poi_zones import POIZone
+from engine_v2.zones.structure_lifecycle import compute_reversal_idx_by_sid
 
 
 # ---------------------------------------------------------------------------
@@ -257,8 +258,16 @@ def check_zone_proximity(
     Scan window per (sid, cycle_id):
       start = CTS_CONFIRMED.meta["confirmed_at"] (the confirmation candle)
       end   = min(next_BOS_CONFIRMED.confirmed_at - 1,
-                  REVERSAL_CANDIDATE.apply_idx - 1,
+                  reversal_idx - 1,
                   end_of_df)
+    where `reversal_idx` = the sid's REALISED reversal, the
+    `STATE_CHANGED(to="reversal")` candle (`compute_reversal_idx_by_sid`, the
+    map KL / POI / fib / the orchestrator read) — never a
+    `REVERSAL_CANDIDATE.meta["apply_idx"]`, a SCHEDULED apply: a watch expiry
+    can discard it (a discarded LAST candidate used to cap every later cycle
+    of the sid below its own scan start: no triggers, no WVMI gate record) and
+    a step-anchor reversal can realise EARLIER than it (2026-09-28;
+    `tests/test_zone_proximity_reversal_cap.py`).
 
     Parameters
     ----------
@@ -312,13 +321,8 @@ def check_zone_proximity(
             # confirmed_at = confirmation candle, not the BOS anchor
             bos_confirmed_idx_by_key[key] = ef.event_moment(ev)
 
-    reversal_idx_by_sid: Dict[int, int] = {}
-    for ev in sorted_events:
-        if ev.type == "REVERSAL_CANDIDATE":
-            sid = ev.meta.get("structure_id", 0)
-            apply_idx = ev.meta.get("apply_idx")
-            if apply_idx is not None:
-                reversal_idx_by_sid[sid] = apply_idx
+    # The realised reversal per sid, not a candidate's scheduled apply (docstring).
+    reversal_idx_by_sid: Dict[int, int] = compute_reversal_idx_by_sid(sorted_events)
 
     triggers_by_cycle: Dict[Tuple[int, int], List[ZoneProximityTrigger]] = {}
 

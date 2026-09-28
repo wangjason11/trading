@@ -13,6 +13,7 @@ from typing import List
 from engine_v2.multitf.types import LowerTFResult, SidRecord
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.zones.structure_lifecycle import compute_reversal_idx_by_sid
 
 
 def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
@@ -22,8 +23,11 @@ def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
       - creation_event_idx = min `ef.stamped_idx` among events for that sid — the
         first structural ANCHOR (BOS_0's), a historical field like the sub side's
         `starting_idx` (stays the anchor: Plan E E3f user decision 2026-09-25)
-      - end_event_idx = REVERSAL_CANDIDATE.apply_idx for that sid (None if absent)
-      - end_reason = "reversal" if reversal exists, else None
+      - end_event_idx = the sid's REALISED reversal, the `STATE_CHANGED(to="reversal")`
+        candle (`compute_reversal_idx_by_sid`; None if the sid never reverses) — not a
+        `REVERSAL_CANDIDATE`'s scheduled `apply_idx`, which a watch expiry can discard
+        (2026-09-28, with the zone-proximity scan cap)
+      - end_reason = "reversal" if that reversal exists, else None
       - starting_sd = struct_direction from any event of that sid
     """
     sids: dict[int, dict] = {}
@@ -48,11 +52,10 @@ def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
         if rec["starting_sd"] == 0 and ev.meta.get("struct_direction") is not None:
             rec["starting_sd"] = int(ev.meta["struct_direction"])
 
-        if ev.type == "REVERSAL_CANDIDATE":
-            apply_idx = ev.meta.get("apply_idx")
-            if apply_idx is not None:
-                rec["end_event_idx"] = int(apply_idx)
-                rec["end_reason"] = "reversal"
+    for sid, reversal_idx in compute_reversal_idx_by_sid(events).items():
+        if sid in sids:
+            sids[sid]["end_event_idx"] = reversal_idx
+            sids[sid]["end_reason"] = "reversal"
 
     out: List[SidRecord] = []
     for sid in sorted(sids.keys()):

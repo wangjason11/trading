@@ -1769,8 +1769,10 @@ Per-sid / per-sub attribution lives **in the df**, not on `EntityState`
 - **`df.attrs["sids"]` on `H1.main`** (`build_sid_records_for_main`): one
   `SidRecord` per `structure_id` — `sub_sid = structure_id`, `sub_id = None`,
   `starting_sd`, `creation_event_idx` (first event idx), `end_event_idx`
-  (`REVERSAL_CANDIDATE.apply_idx`), `end_reason` (`"reversal"` | None),
-  parent fields None. Chart identity = `sub_sid`. Unchanged.
+  (the realised reversal, `STATE_CHANGED(to=reversal)` via
+  `compute_reversal_idx_by_sid` — since 2026-09-28; it was the last
+  `REVERSAL_CANDIDATE.apply_idx`, a scheduled apply), `end_reason`
+  (`"reversal"` | None), parent fields None. Chart identity = `sub_sid`.
 - **`df.attrs["sids"]` on a lens df** (`build_sid_records_for_subordinate`):
   **one `SidRecord` per unique sub rendered on that lens**, in `start_idx`
   order — `sub_id` set, **`sub_sid = None`**, `parent_sid = None`,

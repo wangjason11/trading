@@ -65,7 +65,7 @@ class SidRecord:
     sub_sid: Optional[int]
     starting_sd: int                  # +1 / -1
     creation_event_idx: Optional[int] # main: first event idx; sub: starting_idx (anchor)
-    end_event_idx: Optional[int]      # main: reversal apply idx; sub: lifecycle end_idx (None = open)
+    end_event_idx: Optional[int]      # main: realised reversal idx (STATE_CHANGED to=reversal); sub: lifecycle end_idx (None = open)
     end_reason: Optional[str]         # "reversal" | "same_dir_replacement" | "parent_end" | None
     parent_sid: Optional[int] = None         # None for main AND for subs (see docstring)
     parent_cycle_id: Optional[int] = None    # None for main AND for subs
