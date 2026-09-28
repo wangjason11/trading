@@ -1426,7 +1426,6 @@ class MarketStructure:
             if establishing_new_cycle:
                 # advance CTS cycle id for the new CTS
                 st.cts_cycle_id += 1
-                # self._emit_cts_established(cts_idx, cts_price, meta={"via": ev.name})
                 assert ev.start_idx is not None, "a breakout pattern always has a first candle"
                 # `ev.idx` = the MOMENT (the apply candle; Plan E E4a); the CTS
                 # anchor rides in meta `cts_anchor_idx`, `ev.price` is its price.
