@@ -16,6 +16,7 @@ Environment:
 
 Replay (repo root):
   python -c "import sys; sys.path.insert(0, r'<this dir>'); import linetrace, runpy; runpy.run_module('engine_v2.run_replay', run_name='__main__')" > <scratch>/run_trace.log 2>&1
+  <this dir> must be a WINDOWS path under Git Bash (`cygpath -w`): a /c/... path gives ModuleNotFoundError: linetrace.
 Suite (repo root; the plugin import is what installs the tracer):
   PYTHONPATH=<this dir> python -m pytest -q -p linetrace -p no:cacheprovider
 Report:
@@ -57,7 +58,9 @@ def _local(frame, event, arg):
 
 
 def _global(frame, event, arg):
-    if frame.f_code.co_filename.replace("\\", "/").endswith(_TARGET):
+    # `not _TARGET`: at interpreter shutdown module globals are cleared to None and a late call (a logging weakref
+    # callback) used to print a harmless "TypeError: endswith first arg must be str ... NoneType" after the suite.
+    if _TARGET and frame.f_code.co_filename.replace("\\", "/").endswith(_TARGET):
         return _local
     return None
 
