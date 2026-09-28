@@ -47,8 +47,8 @@ A continuation level established within the current structure direction.
     `st.cts` unconditionally, and after a dip a lower breakout could pull the CTS back — then a candle between the
     two levels drew a spurious raw update and the pullback confirmed the wrong candle; pins
     `tests/test_ms_cts_update_no_regress.py`). Consequence: a pattern-path `CTS_UPDATED`'s anchor is always its
-    apply candle — the raw path already took any earlier extreme during the back-fill (ARCHITECTURE "`ev.idx`
-    convention").
+    apply candle — the breakout's span is `[anchor candle, apply]` and every span candle before the apply candle was raw-processed in the back-fill, so none lies beyond the current CTS (one that did became the CTS: a tie); only the apply candle, not yet raw-processed, can be a strict new extreme (asserted at the emit;
+    ARCHITECTURE "`ev.idx` convention").
   - `CTS_RECONFIRMED` (new) when a valid pullback pattern fires AFTER CTS was
     already confirmed via proximity. The original CTS_CONFIRMED stays at the
     proximity idx; the CTS zone meta is upgraded to `confirmation_method = "pullback"`

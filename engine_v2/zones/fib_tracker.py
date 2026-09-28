@@ -1475,6 +1475,8 @@ class FibTracker:
             # mirror re-snapshots on every cycle-0 refresh, and since Plan E E3a′
             # both caches are keyed on the moment, so both must re-ask here
             # (LANDMINES "Scenario 2 anchor agreement"; E3a′ landing review).
+            # MS emits no such restating update since 2026-09-27 (a pattern-path
+            # update needs a strict new extreme); `>=` stays as defence in depth.
             # The anchor itself moves only on a strictly later extreme.
             if not c0.get("locked", False) and cts_idx >= c0["cts_idx"]:
                 if cts_idx > c0["cts_idx"]:

@@ -30,7 +30,8 @@ from typing import Any, Tuple
 
 # `CTS_UPDATED.meta["via"]` of the RAW path (`_maybe_update_cts_pre_confirm`): a
 # new extreme seen on the processing candle, so `ev.idx` IS that candle. Every
-# other `via` is a breakout-pattern name, whose `ev.idx` is the CTS anchor.
+# other `via` is a breakout-pattern name, whose `ev.idx` is the pattern's apply
+# candle, the moment (Plan E E4c); its anchor is `meta["cts_anchor_idx"]`.
 CTS_UPDATED_RAW_VIA = "replay_raw"
 
 _CTS_ANCHOR_META_TYPES = ("CTS_ESTABLISHED", "CTS_CONFIRMED", "CTS_RECONFIRMED")

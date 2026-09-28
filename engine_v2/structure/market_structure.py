@@ -1520,6 +1520,11 @@ class MarketStructure:
             # nothing and leaves `st.cts` (the CTS never regresses; 2026-09-27).
             cts_moves = establishing_new_cycle or self._is_new_cts_extreme(cts_price)
             if not establishing_new_cycle and cts_moves:
+                # The span is [anchor i, apply] and the back-fill ran the raw path over
+                # [i, apply): only the apply candle can still be a strict new extreme.
+                assert int(cts_anchor_idx) == int(apply_idx), (
+                    f"pattern-path CTS_UPDATED anchor {cts_anchor_idx} != apply {apply_idx}: "
+                    f"an earlier span candle beyond the CTS escaped the raw path")
                 # `ev.idx` = the MOMENT the update became knowable, the pattern's apply
                 # candle (recorded as `confirmed_at` since Plan E E3·0; the idx since
                 # E4c); the CTS anchor (a location) rides in meta `cts_anchor_idx`

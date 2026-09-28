@@ -405,9 +405,10 @@ def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_with_their_apply():
     records its apply candle as `meta["confirmed_at"]` (Plan E E3·0) and as its
     `idx` (E4c) — the moment `event_moment` returns, never before the anchor
     `meta["cts_anchor_idx"]`. Since 2026-09-27 the two are EQUAL on every
-    pattern-path update MS emits: an extreme before the apply candle was taken by
-    the raw path in the back-fill, so the pattern ties (no event) — the fixture's
-    one_maru_opposite at 25 (extreme 24) is that tie."""
+    pattern-path update MS emits: every span candle before the apply candle was
+    raw-processed in the back-fill, so only the apply candle can be a strict new
+    extreme — the fixture's one_maru_opposite at 25 (extreme 24, the raw-updated
+    CTS) is a tie and emits nothing."""
     from engine_v2.structure.structure_engine import compute_bounded_structure
     from engine_v2.tests.test_unified_probe import _prepare_df
     with contextlib.redirect_stdout(io.StringIO()):
@@ -422,6 +423,7 @@ def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_with_their_apply():
     lagging = [(ef.cts_anchor_idx(e), e.idx, e.meta["via"]) for e in patterns
                if ef.cts_anchor_idx(e) != e.idx]
     assert lagging == []
+    assert int(res.df["last_breakout_pat_apply_idx"].iloc[25]) == 25   # precondition: the tying breakout WAS applied at 25
     assert 25 not in [e.idx for e in updates] and 24 in [e.idx for e in raw]   # the tie: raw 24 stands alone
 
 

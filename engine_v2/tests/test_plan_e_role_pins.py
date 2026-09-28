@@ -75,9 +75,10 @@ def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment(monkeypatch, fixture
     """Plan E E3a, the MS mirror: `_refresh_poi_inners_for_cycle` hands the
     resolver the triggering event's moment as `fill_horizon_idx` (lock-step with
     FibTracker), never the CTS anchor; a raw update's moment IS its candle. A
-    pattern-path update can no longer lag (2026-09-27: an earlier extreme is the
-    raw path's, so the pattern ties and emits nothing) — its case now pins that
-    the tie does not refresh at its apply candle 25 either."""
+    pattern-path update can no longer lag (2026-09-27: only its apply candle can be
+    a strict new extreme — the earlier span candles were raw-processed in the
+    back-fill) — its case now pins that the fixture's tie (extreme 24 = the
+    raw-updated CTS, apply 25) does not refresh at 25 either."""
     import engine_v2.structure.structure_engine as se
     from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_tied_pattern_breakout
     from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_anchor_data, _prepare_df
@@ -96,6 +97,7 @@ def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment(monkeypatch, fixture
     if pair is not None:
         assert pair in calls
     else:
+        assert int(res.df["last_breakout_pat_apply_idx"].iloc[25]) == 25   # precondition: the tying breakout WAS applied at 25
         assert (24, 24) in calls and not [h for _c, h in calls if h == 25]
     assert all(h >= c for c, h in calls)
     raw = [e.idx for e in res.events if e.type == "CTS_UPDATED" and e.meta["via"] == "replay_raw"]
@@ -319,7 +321,7 @@ def test_prev_bos_line_falls_through_to_a_raw_cts_update():
 
 def test_prev_bos_line_picks_the_earliest_moment_not_the_first_stamped():
     """E3d (landing review): a pattern-path CTS_UPDATED that REGRESSES the CTS
-    (zones-audit latent bug (a)) is anchored at 15 (its processing key) but known
+    (zones-audit latent bug (a);(a synthetic stream: MS emits no such update since 2026-09-27; the reader's handling is defence in depth) is anchored at 15 (its processing key) but known
     at 20 (its idx since Plan E E4c), after a raw update at 17. Reversal 17: the earliest-known qualifying CTS is the raw
     update (END 17), not the first in processing order (END 15)."""
     from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA

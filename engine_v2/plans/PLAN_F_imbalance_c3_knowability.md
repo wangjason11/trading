@@ -315,7 +315,8 @@ pre-c3").
 - **Never-established-cycle fallback POI** — stays parked in general.
 - Hygiene: the dead `_update_fib_cts` cross branch (`:1421-1457`) and its `.get` defaults (`:1433/:1442/:1524/
   :1532`); `get_unfilled_imbalances` / `has_imbalance_in_range` and the unused import at `fib_tracker.py:25`.
-- Latent items (inputs synthesis §4): MS vs FibTracker cycle-0 snapshots can diverge on a REGRESS pattern-path update;
+- Latent items (inputs synthesis §4): MS vs FibTracker cycle-0 snapshots can diverge on a REGRESS pattern-path update
+  (closed 2026-09-27: MS emits a pattern-path update only on a strict new extreme);
   `inst.meta` mutated on instances shared across projections; the chart hover picks a POI by nearest inner price;
   single-candle stretches dropped (`sx1 <= sx0`).
 

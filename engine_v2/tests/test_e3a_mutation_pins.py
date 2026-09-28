@@ -302,6 +302,7 @@ def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment_bearish(monkeypatch)
     raw = [e.idx for e in res.events if e.type == "CTS_UPDATED" and e.meta["via"] == "replay_raw"]
     assert raw                                     # the fixture exercises the bearish raw branch
     assert all((r, r) in calls for r in raw)
+    assert int(res.df["last_breakout_pat_apply_idx"].iloc[25]) == 25   # precondition: the tying breakout WAS applied at 25
     assert (24, 24) in calls and not [h for _c, h in calls if h == 25]
 
 
@@ -456,7 +457,8 @@ def test_e3ap_c0_now_on_an_equal_anchor_pattern_update():
     (>= rv) → Scenario 1 TRUE. The gap fills at 24 → asked at the moment: no
     activation (a read of an older horizon 23 would activate). The cycle-0 cache
     re-snapshots on the equal-anchor update too — horizon 25, filled — in
-    lock-step with the MS mirror, which re-snapshots on every cycle-0 refresh."""
+    lock-step with the MS mirror, which re-snapshots on every cycle-0 refresh.
+    The equal-anchor update is (a synthetic stream: MS emits no such update since 2026-09-27; the reader's handling is defence in depth)."""
     t = _t()
     df = _df(fills=[(24, 1.02)])
     assert _c0(t, df, 24) is None and t._scenario1[1] is None
@@ -494,7 +496,7 @@ def test_e3ap_c0_now_asks_at_the_moment_not_the_cache_horizon():
     """`_c0_has_unfilled_now` asks at the update's moment even when the cache was
     not re-snapshotted — the one such stream is a pattern update whose anchor
     REGRESSES below the cached one (the latent "pattern-path CTS_UPDATED
-    regressing st.cts" shape, zones-audit memory). EST 20 / 22 and raw @23 leave
+    regressing st.cts" shape, zones-audit memory;(a synthetic stream: MS emits no such update since 2026-09-27; the reader's handling is defence in depth). EST 20 / 22 and raw @23 leave
     Scenario 1 undetermined (rv 26); the pattern (anchor 21, moment 27) makes it
     TRUE; the cache keeps horizon 23, the gap fills at 24 → asked at 27: no fib."""
     t = _t()

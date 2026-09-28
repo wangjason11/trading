@@ -76,8 +76,10 @@ def _prev_bos_lines(sorted_events: list, reversal_confirmed_by_sid: dict, pfx: s
         # >= the reversal (Plan E E3d; a pattern-path CTS_UPDATED's since E3·0).
         # Picked by moment, not by processing order: a pattern-path update that
         # regresses the CTS (zones-audit latent bug (a)) is stamped before a
-        # raw update it is known after (E3c/E3d landing review). `min` is stable
-        # on ties. The line END is the winner's CTS anchor (a location, Q6).
+        # raw update it is known after (E3c/E3d landing review) — MS emits no such
+        # update since 2026-09-27 (a strict new extreme, anchor == apply); the
+        # moment pick stays as defence in depth. `min` is stable on ties. The
+        # line END is the winner's CTS anchor (a location, Q6).
         qualifying = [
             ev for ev in sorted_events
             if ev.meta.get("structure_id", 0) == sid

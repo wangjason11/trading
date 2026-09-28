@@ -329,7 +329,7 @@ def test_activation_pre_window_split_is_the_moment():
 
 def test_activation_applies_cts_events_in_moment_order():
     """Plan E E3g-1: the sweep applies CTS events in MOMENT order. A pattern-path
-    update that regresses the CTS (zones-audit latent (a): anchor 8, known at 12)
+    update that regresses the CTS (zones-audit latent (a): anchor 8, known at 12;(a synthetic stream: MS emits no such update since 2026-09-27; the reader's handling is defence in depth)
     lands after a raw update to 9 (known at 9); pre-window at first_active 13 the
     latest KNOWN CTS is anchor 8 < IC 9 → cond1 fails (in stamped order the raw
     9 would be applied last and the POI would activate at 13)."""

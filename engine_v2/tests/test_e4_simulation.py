@@ -179,6 +179,7 @@ def test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role(mode):
     from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_tied_pattern_breakout
     with contextlib.redirect_stdout(io.StringIO()):
         res = compute_bounded_structure(_prepare_df(_multicycle_with_tied_pattern_breakout()), 0, +1)
+    assert int(res.df["last_breakout_pat_apply_idx"].iloc[25]) == 25   # precondition: the tying breakout WAS applied at 25
     raw24 = next(e for e in res.events if e.type == "CTS_UPDATED" and e.idx == 24)
     assert not [e for e in res.events if e.type == "CTS_UPDATED" and e.idx == 25]   # the tie: not emitted
     lagging = copy.deepcopy(raw24)

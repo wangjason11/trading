@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import pytest
 
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests.test_unified_probe import _R, _make_multicycle_data, _prepare_df
 
@@ -152,3 +153,100 @@ def test_no_cts_move_means_no_poi_inner_refresh(monkeypatch):
     assert _breakout_applied_at(res, _PATTERN_APPLY)
     assert {2, 4, _TRUE_HIGH} <= set(moments)
     assert _PATTERN_APPLY not in moments and _POKE not in moments
+
+
+# --- landing review (2026-09-27): what a NON-moving breakout still does, and the refresh arguments ------------
+# A tie with an active range is REAL (the reference window's conf sub 2 2470 was one: a big maru breaks the range
+# during a back-fill, `freeze_range` leaves `range_hi`, the raw path takes the maru as the CTS, and the breakout's
+# extreme is that maru) — so the skipped path's range break / BREAKOUT / post-apply range check need pins.
+
+
+def _range_tie_rows(filler_closes_inside_14: bool = False) -> list[dict]:
+    """(Landing review 2026-09-27, mutation lens.) `_regress_rows` 0-12 (range 10-12 confirmed at 12, range_hi = CTS .6135, pre-confirm) +
+    13 big bull maru h .6160 (breaks the range; the raw path takes it in the back-fill, range frozen) +
+    14 small bear normal -> one_maru_opposite(+1) applied at 14, pattern extreme 13 = a TIE with the
+    raw-updated CTS -> no CTS_UPDATED, but the breakout must still break the range + set BREAKOUT.
+    `filler_closes_inside_14`: fillers close inside candle 14 -> 14 is itself a range candle (confirm 16),
+    found only by the breakout's `_post_apply_range_check(14)`."""
+    rows = _regress_rows()[:13]
+    c = 0.6127
+    rows.append(_R(c, c + 0.0033, c - 0.0002, c + 0.0031))            # 13
+    c += 0.0031
+    rows.append(_R(c - 0.0001, c + 0.0001, c - 0.0009, c - 0.0007))   # 14
+    c -= 0.0007
+    if filler_closes_inside_14:
+        rows += [_R(c, c + 0.0003, c - 0.0002, c + 0.0001)] * 4      # 15-18
+    else:
+        rows += [_R(c, c + 0.0002, c - 0.0006, c - 0.0004)] * 3      # 15-17
+    return rows
+
+
+@pytest.mark.parametrize("sd", [1, -1])
+def test_a_tied_breakout_from_a_range_still_breaks_the_range_and_sets_breakout(sd):
+    rows = _range_tie_rows() if sd == 1 else _mirror(_range_tie_rows())
+    res = _run(rows, sd)
+    ev = res.events
+    assert int(res.df["range_active"].iloc[13]) == 1                       # range active going in
+    assert int(res.df["last_breakout_pat_apply_idx"].iloc[14]) == 14       # the breakout applied at 14
+    upd = [e for e in ev if e.type == "CTS_UPDATED"]
+    assert [e.meta["via"] for e in upd if e.idx == 13] == ["replay_raw"] and not [e for e in upd if e.idx == 14]
+    assert [(e.idx, e.meta["reason"]) for e in ev if e.type == "RANGE_RESET"] == [(14, "range_breakout")]
+    sc = [(e.meta["from"], e.meta["to"], e.meta["reason"]) for e in ev if e.type == "STATE_CHANGED" and e.idx == 14]
+    assert sc == [("range", "breakout", "breakout_pattern")]
+    assert res.df["market_state"].iloc[14] == "breakout" and int(res.df["range_active"].iloc[14]) == 0
+
+
+@pytest.mark.parametrize("sd", [1, -1])
+def test_a_tied_breakout_still_runs_the_post_apply_range_check(sd):
+    rows = _range_tie_rows(True) if sd == 1 else _mirror(_range_tie_rows(True))
+    res = _run(rows, sd)
+    assert not [e for e in res.events if e.type == "CTS_UPDATED" and e.idx == 14]
+    rs = [(e.idx, e.meta["start_idx"]) for e in res.events if e.type == "RANGE_STARTED" and e.idx > 14]
+    assert rs == [(16, 14)]                    # the apply candle 14 is the range candle (post-apply check)
+
+
+@pytest.mark.parametrize("fixture", ["regress", "tied"])
+def test_every_poi_refresh_uses_the_moved_cts(monkeypatch, fixture):
+    """(Landing review.) Each CTS_UPDATED (either path) refreshes with (its CTS anchor, its moment) -- the refresh runs
+    AFTER st.cts moves. The pattern-path half lost its pin when the lagging (24, 25) update went away."""
+    import engine_v2.structure.structure_engine as se
+    from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_tied_pattern_breakout
+    calls = []
+    real = se.compute_poi_inners_for_cycle
+
+    def spy(df, bos_idx, bos_price, cts_idx, *a, **k):
+        calls.append((int(cts_idx), k["fill_horizon_idx"]))
+        return real(df, bos_idx, bos_price, cts_idx, *a, **k)
+
+    monkeypatch.setattr(se, "compute_poi_inners_for_cycle", spy)
+    rows = _regress_rows() if fixture == "regress" else _multicycle_with_tied_pattern_breakout()
+    res = _run(rows, 1)
+    pat = [e for e in res.events if e.type == "CTS_UPDATED" and e.meta["via"] != ef.CTS_UPDATED_RAW_VIA]
+    assert pat
+    for e in [e for e in res.events if e.type == "CTS_UPDATED"]:
+        assert (ef.cts_anchor_idx(e), ef.event_moment(e)) in calls, (e.idx, e.meta["via"])
+
+
+def test_ms_cycle0_snapshot_refresh_passes_the_moment_for_a_lagging_cts0(monkeypatch):
+    """(Landing review; a pre-existing gap.) `_refresh_poi_inners_for_cycle` hands `_update_cycle0_data` the MOMENT: a cycle-0
+    one_maru_opposite (big bull maru 1 = the CTS_0 anchor, small bear normal 2 = the apply) establishes
+    CTS_0 anchor 1 / moment 2. The existing E3a' pins call `_update_cycle0_data` directly, so the call-site
+    argument is unpinned."""
+    from engine_v2.structure.market_structure import MarketStructure
+    rec = []
+    orig = MarketStructure._update_cycle0_data
+
+    def spy(self, m):
+        rec.append((int(m), int(self.state.cts.idx)))
+        return orig(self, m)
+
+    monkeypatch.setattr(MarketStructure, "_update_cycle0_data", spy)
+    p = 0.6000
+    rows = [_R(p, p + 0.0022, p - 0.0002, p + 0.0020)]; p += 0.0020
+    rows.append(_R(p, p + 0.0052, p - 0.0002, p + 0.0050)); p += 0.0050
+    rows.append(_R(p - 0.0001, p + 0.0001, p - 0.0009, p - 0.0007)); p -= 0.0007
+    rows += [_R(p, p + 0.0002, p - 0.0006, p - 0.0004)] * 4
+    res = _run(rows, 1)
+    est = [e for e in res.events if e.type == "CTS_ESTABLISHED"]
+    assert [(ef.cts_anchor_idx(e), ef.event_moment(e)) for e in est] == [(1, 2)]
+    assert (2, 1) in rec and not [m for m, _c in rec if m == 1]
