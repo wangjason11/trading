@@ -26,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import io
+from types import SimpleNamespace
 
 import pytest
 
@@ -168,15 +169,26 @@ def test_emit_cts_updated_asserts_the_pattern_path_idx_is_the_moment():
 @pytest.mark.illegal_event_contract  # the clones hold the anchor (the pre-E4c shape)
 @pytest.mark.parametrize("mode", ["h1", "cross_cycle"])
 def test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role(mode):
-    """The E4a / E4b swap for pattern-path CTS_UPDATED (Plan E E4c): the lagging
-    fixture's one pattern-path update (anchor 24, moment 25) is cloned back to its
-    ANCHOR in `ev.idx`; every downstream output is identical (the raw readers
-    excepted, `_EXCLUDED`)."""
-    from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_lagging_pattern_update
+    """The E4a / E4b swap for pattern-path CTS_UPDATED (Plan E E4c): a lagging
+    pattern-path update (anchor 24, moment 25) is cloned back to its ANCHOR in
+    `ev.idx`; every downstream output is identical (the raw readers excepted,
+    `_EXCLUDED`). MS no longer emits a lagging one (2026-09-27: the fixture's
+    one_maru_opposite at 25 ties the raw-updated extreme 24 and emits nothing), so
+    the pre-fix event is INJECTED — the downstream readers stay pinned to the roles
+    (defence in depth: a future event source may lag again)."""
+    from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_tied_pattern_breakout
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(_multicycle_with_lagging_pattern_update()), 0, +1)
-    upd = [e for e in res.events if e.type == "CTS_UPDATED"]
+        res = compute_bounded_structure(_prepare_df(_multicycle_with_tied_pattern_breakout()), 0, +1)
+    raw24 = next(e for e in res.events if e.type == "CTS_UPDATED" and e.idx == 24)
+    assert not [e for e in res.events if e.type == "CTS_UPDATED" and e.idx == 25]   # the tie: not emitted
+    lagging = copy.deepcopy(raw24)
+    lagging.idx = 25
+    lagging.meta = {**raw24.meta, "via": "one_maru_opposite", "confirmed_at": 25, "cts_anchor_idx": 24}
+    events = list(res.events)
+    events.insert(events.index(raw24) + 1, lagging)     # where the pre-fix MS emitted it (pattern apply 25)
+    upd = [e for e in events if e.type == "CTS_UPDATED"]
     assert [(e.idx, ef.cts_anchor_idx(e)) for e in upd if e.idx != ef.cts_anchor_idx(e)] == [(25, 24)]
+    res = SimpleNamespace(df=res.df, events=events)
     swapped = copy.deepcopy(res.events)
     for e in swapped:
         if e.type == "CTS_UPDATED":

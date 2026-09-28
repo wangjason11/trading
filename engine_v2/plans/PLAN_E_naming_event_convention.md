@@ -708,7 +708,9 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
     re-snapshots on every unlocked update with anchor `>=` the cached one (the anchor moves only on `>`). The shadow
     run's "MS cache moved once (M15 153 → 155)" was an MS-only cache (subs run no FibTracker cycle-0 cache), so this
     window has no instance; the replay with the fix == 0 cells again. MS still re-snapshots on a REGRESSING pattern
-    anchor — the known latent "pattern-path CTS_UPDATED regressing st.cts" bug, left as is. Pins: the reviewer's
+    anchor — the known latent "pattern-path CTS_UPDATED regressing st.cts" bug, left as is (FIXED 2026-09-27: a
+    pattern-path update now needs a strict new extreme — MARKET_STRUCTURE_SPEC "CTS"; no regressing or equal anchor
+    reaches either cache). Pins: the reviewer's
     `test_e3ap_c0_now_on_an_equal_anchor_pattern_update` (horizon 25 after the equal-anchor update — kills the pre-fix
     `>`), a parity pin feeding FibTracker and MS `_update_cycle0_data` the same stream, and
     `test_e3ap_c0_now_asks_at_the_moment_not_the_cache_horizon` (the regressing-anchor stream: kills the reviewer's
@@ -777,7 +779,8 @@ After the last E3 stage, re-run both E4 variants; they must still equal §8.
   anchor 13 / moment 16, reversal 15, a later raw update at 20 → END 13; the stamped revert ends at 20 — checked).
   Tests 892 → 893 + 1 xfail.
 - **E3c + E3d landing review** (1 combined lens, ≈107k): 0 BLOCKER, 0 MAJOR. **The ordering claim above was
-  incomplete:** a pattern-path CTS_UPDATED that REGRESSES the CTS (zones-audit latent bug (a)) is stamped before a
+  incomplete:** a pattern-path CTS_UPDATED that REGRESSES the CTS (zones-audit latent bug (a); FIXED 2026-09-27 — MS no
+  longer emits one, the `min(…, key=ef.event_moment)` pick stays as defence in depth) is stamped before a
   raw update it is known after (EST 13/16, raw 17, pattern anchor 15 / moment 20, reversal 17 → first-in-order picks
   END 15, the earliest-known is 17) → `_prev_bos_lines` now takes `min(qualifying, key=ef.event_moment)` (stable;
   byte-identical wherever the orders agree; pin `test_prev_bos_line_picks_the_earliest_moment_not_the_first_stamped`

@@ -283,9 +283,10 @@ def _mirror(rows, k=1.2300):
 
 def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment_bearish(monkeypatch):
     """The sd=-1 twin of the role-pin test: the bearish raw-update branch hands
-    its processing candle, the lagging pattern update (anchor 24) its apply 25."""
+    its processing candle; the pattern tying the raw-updated CTS (extreme 24,
+    apply 25) refreshes nothing (2026-09-27: strict new extreme on both paths)."""
     import engine_v2.structure.structure_engine as se
-    from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_lagging_pattern_update
+    from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_tied_pattern_breakout
     from engine_v2.tests.test_unified_probe import _prepare_df
     calls = []
     real = se.compute_poi_inners_for_cycle
@@ -297,11 +298,11 @@ def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment_bearish(monkeypatch)
     monkeypatch.setattr(se, "compute_poi_inners_for_cycle", spy)
     with contextlib.redirect_stdout(io.StringIO()):
         res = se.compute_bounded_structure(
-            _prepare_df(_mirror(_multicycle_with_lagging_pattern_update())), 0, -1)
+            _prepare_df(_mirror(_multicycle_with_tied_pattern_breakout())), 0, -1)
     raw = [e.idx for e in res.events if e.type == "CTS_UPDATED" and e.meta["via"] == "replay_raw"]
     assert raw                                     # the fixture exercises the bearish raw branch
     assert all((r, r) in calls for r in raw)
-    assert (24, 25) in calls
+    assert (24, 24) in calls and not [h for _c, h in calls if h == 25]
 
 
 def test_compute_poi_inners_uses_its_fill_horizon(monkeypatch):

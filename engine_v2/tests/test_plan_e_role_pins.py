@@ -69,14 +69,17 @@ def test_fib_tracker_update_fill_horizon_and_stamp_are_the_moment():
 
 @pytest.mark.parametrize("fixture, pair", [
     ("second_cts", (9, 10)),          # a lagging CTS_ESTABLISHED: anchor 9, apply 10
-    ("lagging_update", (24, 25)),     # a lagging pattern-path CTS_UPDATED: anchor 24, apply 25
+    ("tied_breakout", None),          # a pattern tying the raw-updated CTS (extreme 24, apply 25): no refresh
 ])
 def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment(monkeypatch, fixture, pair):
     """Plan E E3a, the MS mirror: `_refresh_poi_inners_for_cycle` hands the
     resolver the triggering event's moment as `fill_horizon_idx` (lock-step with
-    FibTracker), never the CTS anchor; a raw update's moment IS its candle."""
+    FibTracker), never the CTS anchor; a raw update's moment IS its candle. A
+    pattern-path update can no longer lag (2026-09-27: an earlier extreme is the
+    raw path's, so the pattern ties and emits nothing) — its case now pins that
+    the tie does not refresh at its apply candle 25 either."""
     import engine_v2.structure.structure_engine as se
-    from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_lagging_pattern_update
+    from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_tied_pattern_breakout
     from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_anchor_data, _prepare_df
     calls = []
     real = se.compute_poi_inners_for_cycle
@@ -87,10 +90,13 @@ def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment(monkeypatch, fixture
 
     monkeypatch.setattr(se, "compute_poi_inners_for_cycle", spy)
     rows = (_make_second_cts_moment_after_anchor_data() if fixture == "second_cts"
-            else _multicycle_with_lagging_pattern_update())
+            else _multicycle_with_tied_pattern_breakout())
     with contextlib.redirect_stdout(io.StringIO()):
         res = se.compute_bounded_structure(_prepare_df(rows), 0, +1)
-    assert pair in calls
+    if pair is not None:
+        assert pair in calls
+    else:
+        assert (24, 24) in calls and not [h for _c, h in calls if h == 25]
     assert all(h >= c for c, h in calls)
     raw = [e.idx for e in res.events if e.type == "CTS_UPDATED" and e.meta["via"] == "replay_raw"]
     assert all((r, r) in calls for r in raw)

@@ -1511,8 +1511,15 @@ class MarketStructure:
 
                 # After consuming the pullback to create BOS for the new cycle, clear the pullback moment
                 st.last_pullback_pat_apply_idx = None
-            else:
-                # Not allowed to create a new CTS cycle yet => this breakout just updates CTS (pre-confirm)
+
+            # Not allowed to create a new CTS cycle yet => this continuation breakout
+            # updates the CTS (pre-confirm) — ONLY if its pattern extreme is a strict
+            # new extreme, the raw path's rule (`_is_new_cts_extreme`). The raw path
+            # already moved `st.cts` through the back-filled candles, so a breakout
+            # after a dip can top out at or below the current CTS; it then emits
+            # nothing and leaves `st.cts` (the CTS never regresses; 2026-09-27).
+            cts_moves = establishing_new_cycle or self._is_new_cts_extreme(cts_price)
+            if not establishing_new_cycle and cts_moves:
                 # `ev.idx` = the MOMENT the update became knowable, the pattern's apply
                 # candle (recorded as `confirmed_at` since Plan E E3·0; the idx since
                 # E4c); the CTS anchor (a location) rides in meta `cts_anchor_idx`
@@ -1523,15 +1530,19 @@ class MarketStructure:
                           "cts_anchor_idx": int(cts_anchor_idx)},
                 )
 
-            # Update current CTS point (always)
-            st.cts = Point(idx=cts_anchor_idx, price=cts_price)
+            if cts_moves:
+                st.cts = Point(idx=cts_anchor_idx, price=cts_price)
             st.cts_phase = "EST_OR_UPD"
             st.last_breakout_pat_apply_idx = apply_idx
 
             # Refresh POI inner snapshot for the cycle (Stage 2). New cycle:
             # uses fresh BOS_n + CTS_n. Continuation breakout (CTS_UPDATED):
-            # same BOS, extended CTS — POIs may shift as Fib bounds expand.
-            self._refresh_poi_inners_for_cycle(apply_idx)
+            # same BOS, extended CTS — POIs may shift as Fib bounds expand. No
+            # CTS move = no event and no refresh: FibTracker, which handles each
+            # CTS_UPDATED at its moment, skips it too — the two layers' fill
+            # horizons stay in lock-step (LANDMINES "Scenario 2 anchor agreement").
+            if cts_moves:
+                self._refresh_poi_inners_for_cycle(apply_idx)
 
             self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
             self._post_apply_range_check(apply_idx)
@@ -1655,18 +1666,21 @@ class MarketStructure:
         if st.cts_phase == "CONFIRMED":
             return
 
-        if self.struct_direction == 1:
-            new_price = float(self._h[i])
-            if new_price > float(st.cts.price):
-                self._emit_cts_updated(i, new_price, meta={"via": via})
-                st.cts = Point(idx=i, price=new_price)
-                self._refresh_poi_inners_for_cycle(i)
-        else:
-            new_price = float(self._l[i])
-            if new_price < float(st.cts.price):
-                self._emit_cts_updated(i, new_price, meta={"via": via})
-                st.cts = Point(idx=i, price=new_price)
-                self._refresh_poi_inners_for_cycle(i)
+        new_price = float(self._h[i]) if self.struct_direction == 1 else float(self._l[i])
+        if self._is_new_cts_extreme(new_price):
+            self._emit_cts_updated(i, new_price, meta={"via": via})
+            st.cts = Point(idx=i, price=new_price)
+            self._refresh_poi_inners_for_cycle(i)
+
+    def _is_new_cts_extreme(self, price: float) -> bool:
+        """True iff `price` lies strictly beyond the current CTS in the structure
+        direction — the ONE rule for a pre-confirm `CTS_UPDATED`, on both the raw
+        path (`_maybe_update_cts_pre_confirm`) and the pattern path (a
+        continuation breakout, `_apply_pattern_at_apply_idx`). A tie is not new
+        (the first occurrence keeps the anchor), so the CTS never regresses
+        (MARKET_STRUCTURE_SPEC "CTS")."""
+        cts_price = float(self.state.cts.price)
+        return price > cts_price if self.struct_direction == 1 else price < cts_price
 
     # def _initial_bos_before_first_cts(self, cts_idx: int) -> float:
     #     """

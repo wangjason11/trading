@@ -380,11 +380,14 @@ def test_event_moment_reads_the_contract_keys_directly():
         ef.event_moment(ev)
 
 
-def _multicycle_with_lagging_pattern_update():
+def _multicycle_with_tied_pattern_breakout():
     """`_make_multicycle_data` (0-23, cycle 3 established at 20, pre-confirm) +
     24 big bull maru (the new CTS extreme; a raw update at 24) + 25 small bear
-    normal → `one_maru_opposite(+1)` applied at 25: a pattern-path CTS_UPDATED
-    with anchor 24 and moment 25 (hand-verified 2026-09-24) + 26 a filler."""
+    normal → `one_maru_opposite(+1)` applied at 25, whose pattern extreme is 24
+    — the candle the raw path already took in the back-fill: a TIE, so since
+    2026-09-27 (pattern path = the raw path's strict new-extreme rule) it emits
+    NO CTS_UPDATED and does not refresh (it was a pattern-path CTS_UPDATED with
+    anchor 24 / moment 25 before, hand-verified 2026-09-24) + 26 a filler."""
     from engine_v2.tests.test_unified_probe import _R
     rows = _make_multicycle_data()
     c = rows[-1]["c"]                                              # .6299
@@ -401,11 +404,14 @@ def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_with_their_apply():
     sits on its processing candle; every other via is a breakout-pattern name and
     records its apply candle as `meta["confirmed_at"]` (Plan E E3·0) and as its
     `idx` (E4c) — the moment `event_moment` returns, never before the anchor
-    `meta["cts_anchor_idx"]`."""
+    `meta["cts_anchor_idx"]`. Since 2026-09-27 the two are EQUAL on every
+    pattern-path update MS emits: an extreme before the apply candle was taken by
+    the raw path in the back-fill, so the pattern ties (no event) — the fixture's
+    one_maru_opposite at 25 (extreme 24) is that tie."""
     from engine_v2.structure.structure_engine import compute_bounded_structure
     from engine_v2.tests.test_unified_probe import _prepare_df
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(_multicycle_with_lagging_pattern_update()), 0, +1)
+        res = compute_bounded_structure(_prepare_df(_multicycle_with_tied_pattern_breakout()), 0, +1)
     updates = [e for e in res.events if e.type == "CTS_UPDATED"]
     raw = [e for e in updates if e.meta["via"] == CTS_UPDATED_RAW_VIA]
     patterns = [e for e in updates if e.meta["via"] != CTS_UPDATED_RAW_VIA]
@@ -415,7 +421,8 @@ def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_with_their_apply():
         assert ef.event_moment(e) == e.meta["confirmed_at"] == e.idx >= e.meta["cts_anchor_idx"]
     lagging = [(ef.cts_anchor_idx(e), e.idx, e.meta["via"]) for e in patterns
                if ef.cts_anchor_idx(e) != e.idx]
-    assert lagging == [(24, 25, "one_maru_opposite")]
+    assert lagging == []
+    assert 25 not in [e.idx for e in updates] and 24 in [e.idx for e in raw]   # the tie: raw 24 stands alone
 
 
 # ===========================================================================

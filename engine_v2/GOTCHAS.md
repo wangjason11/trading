@@ -615,7 +615,7 @@ if ev.type == "CTS_ESTABLISHED":
 return ev_idx
 ```
 
-**Why only CTS_ESTABLISHED:** it is the only CTS event whose meta carries `pattern_anchor_idx` (the pattern's first candle — where the scan-back starts). A raw-path `CTS_UPDATED` (`via="replay_raw"`) is a single-candle wick extension with no pattern at all. A pattern-path `CTS_UPDATED` (a breakout while the cycle is still unconfirmed) DOES carry pattern info — the pattern name in `via` — but records no `pattern_anchor_idx` (only its apply candle `confirmed_at`, since Plan E E3·0) (37 of 426 `CTS_UPDATED` rows on the reference window are pattern-path), so there is no pattern start to scan back from.
+**Why only CTS_ESTABLISHED:** it is the only CTS event whose meta carries `pattern_anchor_idx` (the pattern's first candle — where the scan-back starts). A raw-path `CTS_UPDATED` (`via="replay_raw"`) is a single-candle wick extension with no pattern at all. A pattern-path `CTS_UPDATED` (a breakout while the cycle is still unconfirmed) DOES carry pattern info — the pattern name in `via` — but records no `pattern_anchor_idx` (only its apply candle `confirmed_at`, since Plan E E3·0) (36 of 425 `CTS_UPDATED` rows on the reference window are pattern-path since 2026-09-27; 37 of 426 before — the removed one was a same-candle tie of a raw update), so there is no pattern start to scan back from.
 
 ---
 

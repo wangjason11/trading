@@ -38,6 +38,17 @@ A continuation level established within the current structure direction.
   - `CTS_CONFIRMED` when CTS is confirmed by the first of pullback / proximity.
     `meta["confirmation_method"]` ∈ {`"pullback"`, `"sd_zone_proximity"`}.
   - `CTS_UPDATED` when the CTS anchor moves to a new extreme within the appropriate stage (rules depend on cycle stage).
+    Pre-confirm, BOTH sources apply ONE rule — a STRICT new extreme beyond the current CTS in the structure
+    direction (`MarketStructure._is_new_cts_extreme`; a tie keeps the first occurrence): the raw path (a candle's
+    wick, `via="replay_raw"`) and the pattern path (a continuation breakout while the cycle is unconfirmed, its
+    pattern extreme). A continuation breakout whose extreme does not clear the current CTS emits nothing, leaves
+    `st.cts` and skips the POI-inner refresh — it still breaks the range, sets BREAKOUT and records
+    `last_breakout_pat_apply_idx`. So the CTS never regresses (fixed 2026-09-27: the pattern path used to set
+    `st.cts` unconditionally, and after a dip a lower breakout could pull the CTS back — then a candle between the
+    two levels drew a spurious raw update and the pullback confirmed the wrong candle; pins
+    `tests/test_ms_cts_update_no_regress.py`). Consequence: a pattern-path `CTS_UPDATED`'s anchor is always its
+    apply candle — the raw path already took any earlier extreme during the back-fill (ARCHITECTURE "`ev.idx`
+    convention").
   - `CTS_RECONFIRMED` (new) when a valid pullback pattern fires AFTER CTS was
     already confirmed via proximity. The original CTS_CONFIRMED stays at the
     proximity idx; the CTS zone meta is upgraded to `confirmation_method = "pullback"`
@@ -188,7 +199,8 @@ guarantees a structurally meaningful gap.
 
 Cycle 0 therefore relies on **pullback confirmation only**. If no
 pullback pattern fires before a same-direction breakout, the breakout
-calls `_emit_cts_updated` (extending cycle 0's CTS to the new extreme),
+calls `_emit_cts_updated` (extending cycle 0's CTS to the new extreme —
+only when its pattern extreme IS a strict new extreme, see "CTS" above),
 not `_emit_cts_established` — keeping the same cycle alive rather than
 spawning a phantom cycle 1.
 

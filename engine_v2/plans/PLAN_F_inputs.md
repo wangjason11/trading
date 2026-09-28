@@ -243,7 +243,7 @@ Caveats:
   - `get_unfilled_imbalances` and `has_imbalance_in_range`;
   - the unused import at fib_tracker.py:25.
 - **The cond1/cond2 labels are swapped** between the code (:1430-1448, :1522-1538) and the docstring (:126-129) and POI_ZONES_SPEC.md:175-177.
-- **The MS and FibTracker c0 snapshots can diverge.** `_update_cycle0_data` overwrites unconditionally (market_structure.py:2054), while FibTracker only updates when cts_idx increases (fib_tracker.py:1310). They split on a pattern-path CTS_UPDATED that moves backwards (REGRESS), which is also the only anchor-timed pattern row that gets past the fib guard.
+- **The MS and FibTracker c0 snapshots can diverge.** `_update_cycle0_data` overwrites unconditionally (market_structure.py:2054), while FibTracker only updates when cts_idx increases (fib_tracker.py:1310). They split on a pattern-path CTS_UPDATED that moves backwards (REGRESS), which is also the only anchor-timed pattern row that gets past the fib guard. (Closed 2026-09-27: MS emits a pattern-path update only on a strict new extreme — no REGRESS row exists any more.)
 - **Chart and proximity oddities:**
   - The zone_proximity Rule-3 latches make downstream deltas path-dependent.
   - `poi_active_as_of` evaluates at end of candle, while the narrow gap uses start of candle (GOTCHAS:902).
