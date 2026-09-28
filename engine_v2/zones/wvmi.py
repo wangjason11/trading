@@ -167,9 +167,25 @@ class WVMITracker:
     every record this tracker emits.
     """
 
-    def __init__(self, structure_path_id: Optional[str] = None):
+    def __init__(
+        self,
+        structure_path_id: Optional[str] = None,
+        cycle_end_by_key: Optional[Dict[tuple, int]] = None,
+    ):
         self._records: Dict[tuple, WVMIRecord] = {}  # key: (sid, cycle_id)
         self._structure_path_id = structure_path_id
+        # (sid, cycle_id) -> the cycle's lifecycle END (`compute_cycle_lifecycle`,
+        # half-open `[start, end)`): the temp-LP search stops at `end - 1`. A key
+        # without an end (an open cycle) searches to the data end.
+        self._cycle_end_by_key: Dict[tuple, int] = dict(cycle_end_by_key or {})
+
+    def _lp_search_end(self, key: tuple, df: pd.DataFrame) -> int:
+        """Last candle the temp-LP search may pick: the cycle's last live candle
+        (`end - 1`) — a cycle that ended (a reversal, a cap) never takes a candle
+        of whatever superseded it — else the data end."""
+        data_end = len(df) - 1
+        end = self._cycle_end_by_key.get(key)
+        return data_end if end is None else min(data_end, int(end) - 1)
 
     def on_cts_confirmed(
         self,
@@ -232,9 +248,9 @@ class WVMITracker:
         # Breakout momentum (LOCKED)
         breakout_momentum = (lb_vol * lb_weight) / fb_vol
 
-        # Find temporary LP
+        # Find temporary LP (bounded by the cycle's lifecycle end)
         search_start = fp_idx + 1
-        search_end = len(df) - 1
+        search_end = self._lp_search_end((sid, cycle_id), df)
         lp_idx = _find_temporary_lp(df, fp_idx, bos_zone, search_start, search_end)
 
         # Compute pullback momentum if temp LP exists
@@ -296,7 +312,7 @@ class WVMITracker:
             pb_wave_dir = -1 if rec.zone_side == "buy" else 1
 
             search_start = rec.fp_idx + 1
-            search_end = len(df) - 1
+            search_end = self._lp_search_end(key, df)
             new_lp_idx = _find_temporary_lp(df, rec.fp_idx, bos_zone, search_start, search_end)
 
             if new_lp_idx == rec.lp_idx:

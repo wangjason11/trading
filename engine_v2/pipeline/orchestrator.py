@@ -30,7 +30,7 @@ from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
 # Week 7: POI zones
 from engine_v2.zones.poi_zones import derive_poi_zones, POIConfig
-from engine_v2.zones.structure_lifecycle import compute_reversal_idx_by_sid
+from engine_v2.zones.structure_lifecycle import compute_cycle_lifecycle, compute_reversal_idx_by_sid
 from engine_v2.patterns.imbalance import compute_imbalance
 
 # Week 8: Wave candle identification
@@ -336,7 +336,20 @@ def _run_downstream_pipeline(
     zone_proximity_triggers: Dict[tuple, list] = {}
 
     if not skip_wvmi:
-        wvmi_tracker = WVMITracker(structure_path_id=structure_path_id)
+        # A record's temp LP never passes its cycle's lifecycle end — the same
+        # `compute_cycle_lifecycle` table KL / POI read (2026-09-28: H1 (0,1),
+        # ended by the sid-0 reversal at 902, took a sid-1 candle 988 as its LP).
+        cycle_end_by_key = {
+            key: end
+            for key, (_start, end, _reason) in compute_cycle_lifecycle(
+                sorted_events, compute_reversal_idx_by_sid(sorted_events),
+                lifecycle_floor, lifecycle_cap, cap_reason,
+            ).items()
+            if end is not None
+        }
+        wvmi_tracker = WVMITracker(
+            structure_path_id=structure_path_id, cycle_end_by_key=cycle_end_by_key,
+        )
 
         pip_size = _pip_size_from_pair(df)
 

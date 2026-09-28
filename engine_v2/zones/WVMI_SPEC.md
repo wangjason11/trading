@@ -184,7 +184,8 @@ pullback_momentum = (LP_vol * LP_weight) / FP_vol   # recomputed each candle
 ### 2. Updated — Each Candle
 
 `update_temporary_lp()` re-scans all non-locked records:
-- Finds qualified candle (FP direction + vol_dir match) between FP and end of data
+- Finds qualified candle (FP direction + vol_dir match) between FP and the search end
+  (see "Temporary LP Selection": the cycle's last live candle, else the data end)
 - Picks candle whose close is closest to BOS zone outer bound
 - Updates LP idx, volume, weight, and pullback_momentum
 
@@ -195,9 +196,10 @@ pullback_momentum = (LP_vol * LP_weight) / FP_vol   # recomputed each candle
 - Finalizes pullback_momentum
 - Sets `lp_locked=True`, `status="locked"`
 
-A record only locks when its cycle's **successor** BOS forms. A single-cycle
-structure (no N+1 BOS) never locks — it stays `created`/`updated` forever with a
-temp LP scanned to end-of-data.
+A record only locks when its cycle's **successor** BOS forms. A cycle that ends
+otherwise (a reversal; a sub's cap) or is still open never locks — it stays
+`created`/`updated` with a temp LP searched up to its cycle's last live candle
+(open: the data end; "Temporary LP Selection").
 
 ---
 
@@ -265,7 +267,18 @@ pullback_momentum = (LP_volume * LP_weight) / FP_volume
 
 ## Temporary LP Selection (`_find_temporary_lp`)
 
-1. Search range: `[FP_idx + 1, end_of_data]`
+1. Search range: `[FP_idx + 1, search_end]`, at creation AND on every update
+   (`WVMITracker._lp_search_end`). **Main:** `search_end` = the cycle's lifecycle
+   end − 1 (`compute_cycle_lifecycle`, half-open `[start, end)` — the table KL / POI
+   read; the orchestrator passes it as `cycle_end_by_key`), the data end for an open
+   cycle. Since 2026-09-28: the search ran to the data end, so a cycle ended by a
+   reversal took its LP from the structure that superseded it — reference window H1
+   (0,1) (reversal 902) had LP 988 (pullback_momentum 0.904) → now 896 (0.759);
+   `tests/test_wvmi_lp_bound.py`. **Sub sweep:** no ends passed — the projection's
+   frame already stops at the sub's `end_idx` (measured 5/5), so a sub LP stays in
+   the sub; that frame end is inclusive (the end candle itself can be picked) — the
+   one-candle difference from main's half-open bound is left to the deferred WVMI
+   plan (WVMI moves into the per-sub projection).
 2. Qualification: same direction AND vol_dir as FP candle (or vol_dir == 0)
 3. Selection: candle whose `close` is closest to BOS zone outer bound
 
