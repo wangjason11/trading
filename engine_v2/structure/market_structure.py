@@ -1723,12 +1723,6 @@ class MarketStructure:
                 meta={"prev": None if prev is None else float(prev), "reason": "range_sync"},
             )
 
-    # def _emit_cts_established(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
-    #     self.events.append(
-    #         StructureEvent(idx=idx, category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=meta or {})
-    #     )
-    #     self.state.cts_event = "CTS_ESTABLISHED"  # written to df row via _write_df_row
-
     def _get_cts0_tfb(self):
         """Lazily compute (and cache) the cycle-0 true-first-breakout
         decision for scan-from-start mode.
@@ -1758,7 +1752,6 @@ class MarketStructure:
         self, idx: int, price: float, *, cts_anchor_idx: int, meta: Optional[dict] = None
     ) -> None:
         meta2 = dict(meta or {})
-        # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
         meta2["structure_id"] = int(self.state.structure_id)
         meta2["struct_direction"] = int(self.state.struct_direction)
@@ -1774,15 +1767,8 @@ class MarketStructure:
         )
         self.state.cts_event = "CTS_ESTABLISHED"
 
-    # def _emit_cts_updated(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
-    #     self.events.append(
-    #         StructureEvent(idx=idx, category="STRUCTURE", type="CTS_UPDATED", price=price, meta=meta or {})
-    #     )
-    #     self.state.cts_event = "CTS_UPDATED"
-
     def _emit_cts_updated(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
         meta2 = dict(meta or {})
-        # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
         meta2["structure_id"] = int(self.state.structure_id)
         meta2["struct_direction"] = int(self.state.struct_direction)
@@ -1870,7 +1856,6 @@ class MarketStructure:
         self, idx: int, price: float, *, bos_anchor_idx: int, meta: Optional[dict] = None
     ) -> None:
         meta2 = dict(meta or {})
-        # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
         meta2["structure_id"] = int(self.state.structure_id)
         meta2["struct_direction"] = int(self.state.struct_direction)
