@@ -50,6 +50,11 @@ post-reversal-fib-heavy — unify before Step 4 so Step 4 builds on settled logi
 
 ## 2. Status quo (what exists today)
 
+> **Historical (2026-06-16, the status quo this spec was written against).** §11a /
+> §11a-ii (DONE) have since changed Path A's storage: the H1 cross lives at the
+> versioned key `_fibs[(sid,1,"cross",0)]`, `_cross_cycle_data[sid]` keeps only the
+> `cycle0` dict, and there is no cross ↔ normal toggle or fallback single — see §11.
+
 Both paths live in `FibTracker` (`zones/fib_tracker.py`), selected by
 `fib_mode ∈ {"h1", "cross_cycle"}` at construction (orchestrator passes it). The
 same orchestrator event loop drives both (`orchestrator._run_downstream_pipeline`,
@@ -78,7 +83,7 @@ the branch happens *inside* each handler.
   FALSE → **Scenario 2 vs 3** via `select_fib_anchor_for_cycle` (3 static imbalance
   conds: cond1 cycle-1 unfilled, cond2 cycle-0 unfilled, cond3 BOS_1 hasn't filled
   cycle-0). All true → cross BOS_0→CTS_1 (`scenario_2_cross`); else single (Scenario 3).
-- **Storage:** named slots in `_cross_cycle_data[sid]` (`cycle0` dict,
+- **Storage (pre-§11a-ii — today: §11a-ii):** named slots in `_cross_cycle_data[sid]` (`cycle0` dict,
   `normal_cycle1` FibState, `cross_cycle` FibState); only the active winner mirrors
   to `_fibs[(sid,1)]`. **≤2 anchor candidates** (BOS_0 cross vs BOS_1 normal), no
   integer version. Update toggles cross↔normal (`_update_cycle1_fibs`).

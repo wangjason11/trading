@@ -193,13 +193,17 @@ a **behavior change**, not byte-identical under the old chart.)
 ## 5. The two subsystems (A, B) + the "project, don't unify" decision
 
 The "one cycle, multiple representations, one active" abstraction is realized
-**two different ways** in the code, and they are NOT interchangeable in storage:
+**two different ways** in the code. **B's column below is today's state** — the
+storage part of this section was superseded by CROSS_CYCLE_FIB_SPEC §8 / §11a-ii
+(2026-06-17: H1's cross relocated into versioned `_fibs`; before it B kept named
+slots `normal_cycle1` / `cross_cycle` in `_cross_cycle_data[sid]`, mirrored only the
+winner to `_fibs[(sid,1)]`, and toggled cross ↔ normal):
 
 | | **A — subordinate `cross_cycle` mode** | **B — H1 main Scenario 2** |
 |---|---|---|
-| Where reps stored | **all** versions in `_fibs` (`(sid,cyc,"cross",v)` + `(sid,cyc)` single fallback) | candidates in `_cross_cycle_data[sid]`; **only the active winner** mirrored to `_fibs[(sid,1)]`; loser stays in scratch |
-| Transition dynamics | monotonic supersede (old anchor permanently dead) | toggle (cross ↔ normal, either can re-win) |
-| Versioning mechanism | integer `_cross_version` | named slots, no integer version |
+| Where reps stored | **all** versions in `_fibs` (`(sid,cyc,"cross",v)` + `(sid,cyc)` single fallback) | the Scenario-2 cross at the versioned key `_fibs[(sid,1,"cross",0)]`, or a single at `_fibs[(sid,1)]` (Scenario 1 / 3); `_cross_cycle_data[sid]` keeps only the `cycle0` decision-input dict |
+| Transition dynamics | monotonic supersede (old anchor permanently dead) | one cross, extended in place on CTS_1 updates and re-checked (`_update_cycle1_main`); a failed cross deactivates and NOTHING replaces it (a failed H1 cross always has its own `[BOS_1, CTS_1]` window filled — asserted; the create-on-fail single was deleted 2026-09-28) |
+| Versioning mechanism | integer `_cross_version` | `_cross_version[(sid,1)] = 0` (one version); main keeps its bespoke meta (no `version` / `fib_mode` keys — relocate-only, §11a-ii; meta unification deferred to §11b) |
 | Reaches charting | all versions (dead drawn faded today) | only the active one |
 | On which structure | subordinate (M15) | **main (byte-identical zone)** |
 
@@ -209,8 +213,8 @@ The "one cycle, multiple representations, one active" abstraction is realized
 judged at its later use; a decision taken at a write event asks at that event's
 moment instead — the cut check at CTS_0 EST, `_c0_has_unfilled_now` on CTS_0
 updates — Plan F, `IMBALANCE_FILL_SEMANTICS.md` "Cached values are judged at the
-moment they are USED"); `["normal_cycle1"]` = a **FibState**;
-`["cross_cycle"]` = a **FibState**.
+moment they are USED"). (The `["normal_cycle1"]` / `["cross_cycle"]` FibState
+slots were retired by CROSS_CYCLE_FIB_SPEC §11a-ii, 2026-06-17.)
 
 **DECISION — DO NOT unify the storage (for the lifecycle migration).** Collapsing
 `_cross_cycle_data` into versioned `_fibs` entries would refactor main-structure
@@ -228,10 +232,11 @@ their storage differs, and the projection bridges them.
 > in the future if the two-subsystem split becomes a maintenance burden. See
 > Section 13's parked-items note.
 
-> The cross→single (`cross_failed`) handoff in A and the cross↔normal fallback
-> in B are treated identically at the cycle level: a **handoff / `reanchor`**, NOT
-> a cycle-level active/inactive flip (the cycle fib stays active, just changes
-> representation).
+> The cross→single (`cross_failed`) handoff in A is a **handoff / `reanchor`**,
+> NOT a cycle-level active/inactive flip (the cycle fib stays active, just changes
+> representation). B has no such handoff any more: the cross ↔ normal toggle went
+> with the named slots (§11a-ii, 2026-06-17) and the H1 create-on-fail single was
+> deleted 2026-09-28 (CROSS_CYCLE_FIB_SPEC §11a-ii).
 
 ---
 
@@ -658,7 +663,7 @@ Three sessions = the three steps, each independently `/compare`-validated.
 >   `get_fibs_for_charting` in `_run_downstream_pipeline` (covers H1 + subs).
 > - Flip/terminal sites instrumented additively: `_activate_fib` (+`flip_reason`),
 >   `_m15_create_cross` (activated/reanchor + Option-A early-end via obsolete),
->   `_update_fib_cts`, `_update_cycle1_fibs` (cross representative only),
+>   `_update_fib_cts`, `_update_cycle1_fibs` (cross representative only; since §11a-ii `_update_cycle1_main`),
 >   `_deactivate_cross` (own_imb_filled only), `_activate_or_update_single_m15`
 >   (reanchor-vs-activated), `_obsolete_prev_cycle_all_fibs` (+end_idx),
 >   `_deactivate_cycle0_fib` (+revert_idx → scenario1_revert/disappeared).
