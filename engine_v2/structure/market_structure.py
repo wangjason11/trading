@@ -1919,6 +1919,13 @@ class MarketStructure:
         meta2["bos_anchor_idx"] = int(bos_anchor_idx)
         assert int(idx) == meta2["confirmed_at"], (
             f"BOS_CONFIRMED idx {idx} != confirmed_at {meta2['confirmed_at']} (ev.idx is the moment)")
+        # The anchor is a location already SEEN at the moment (2026-09-28): an anchor
+        # after its apply (only `_select_bos_on_breakout`'s swapped window could give
+        # one) is not knowable yet, and the anchor-keyed processing order
+        # (`ef.processing_order_key`) would then run the cycle's CTS_ESTABLISHED
+        # before its BOS_CONFIRMED — FibTracker needs the BOS first.
+        assert int(bos_anchor_idx) <= int(idx), (
+            f"BOS_CONFIRMED anchor {bos_anchor_idx} after its moment {idx}")
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="BOS_CONFIRMED", price=price, meta=meta2)
         )
@@ -2229,6 +2236,10 @@ class MarketStructure:
         - Else if cycle was confirmed via sd zone proximity: use
           [cts_confirmed_idx, breakout_apply_idx] (max retracement across the
           full proximity-to-breakout window).
+        - Neither: unreachable — a cycle >= 1 breakout needs the CTS CONFIRMED,
+          and both confirmation paths set `cts_confirmed_idx`
+          (`_emit_cts_confirmed_once`); raises (2026-09-28: the silent fallback
+          to `_initial_bos_before_first_cts` returned the STRUCTURE's BOS_0).
 
         Returns (bos_anchor_idx, bos_price).
         """
@@ -2241,11 +2252,9 @@ class MarketStructure:
             # Proximity-only confirmation — search from confirmed candle onward
             window_start = st.cts_confirmed_idx
         else:
-            # Neither pullback nor proximity confirmed (shouldn't happen if
-            # we got here, but safe fallback). Dormant; note it passes a MOMENT
-            # (the breakout apply candle) where `_initial_bos_before_first_cts`
-            # expects the CTS ANCHOR (PLAN_E_inputs §3 #11).
-            return self._initial_bos_before_first_cts(breakout_apply_idx)
+            raise AssertionError(
+                f"cycle >= 1 BOS at breakout apply {breakout_apply_idx} without a pullback or a "
+                f"proximity confirmation (cts_phase={st.cts_phase!r})")
 
         s = int(window_start)
         e = int(breakout_apply_idx)

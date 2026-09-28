@@ -278,7 +278,12 @@ When transitioning to cycle n+1 via breakout pattern:
   BOS_n+1 = max retracement in `[cts_n_confirmed_idx, breakout_apply_idx]`
 
 The implementation is in `_select_bos_on_breakout` and switches based on
-`pullback_fired_for_cycle` state.
+`pullback_fired_for_cycle` state. Neither → it raises (unreachable: a cycle n+1
+breakout needs CTS_n CONFIRMED, and both paths set `cts_confirmed_idx`; 2026-09-28 —
+the silent fallback returned the structure's BOS_0). The BOS anchor is never after
+its moment: `_emit_bos_confirmed` asserts `bos_anchor_idx <= idx` (the anchor-keyed
+processing order needs the cycle's BOS before its CTS_ESTABLISHED; on the reference
+window all 19 cycle >= 1 selections used the pullback window, none reversed).
 
 ### Trigger threshold per timeframe
 

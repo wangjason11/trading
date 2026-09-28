@@ -1041,7 +1041,7 @@ the real emitter.
     `.idx` read is type-filtered away or a declared raw reader; all timing reads `ef.event_moment`, all location
     reads `ef.bos_anchor_idx`); the mirror / sibling clip shift `idx`, `confirmed_at` and `bos_anchor_idx` by one
     offset; nothing correct only by this window's data (one pre-existing latent: `_select_bos_on_breakout`'s
-    swap branch could put a BOS anchor after its apply candle → the anchor-keyed sort would run EST before BOS —
+    swap branch could put a BOS anchor after its apply candle (asserted against at the emit since 2026-09-28) → the anchor-keyed sort would run EST before BOS —
     34/34 anchors <= moment here). **MAJOR ×2 (E4a leftovers, fixed):** KL_ZONES_SPEC "Why the two definitions
     can differ" and PART4 ×2 still said the EST `ev.idx` is the extreme. **MINOR (fixed):** `stamped_idx` /
     GLOSSARY `event_moment` / LANDMINES sort-order / ARCHITECTURE "verified" note still E4a-only;
