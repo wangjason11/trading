@@ -98,16 +98,22 @@ error, a non-JSON body) is retried twice, each retry printing one line
 or payload-schema error raises at once; a chunk that still fails, or a fetch that
 returns no candles at all, raises `RuntimeError: [data_bridge] ERROR …` and
 the replay crashes (no `=== Replay Timing ===` block). The H1 fetch always
-did: `provider_oanda.get_history` raises on a non-200 response and
-`run_replay.py` does not catch it. The gate still runs: it ties the log to the
-outputs on disk and checks the exact candle count, which also catches a window
-change or a short response that raised nothing.
+raised on a non-200 response; **since 2026-09-28 it retries the same way**
+(`run_replay._get_history_retrying`, one call per auto-extend request, same
+policy constants): `[auto_extend] RETRY k/2 H1 fetch <from>-<to> in 5 s:
+<exception>`, then `RuntimeError: [auto_extend] ERROR fetching H1 …` (an empty
+H1 frame raises `[auto_extend] ERROR: no H1 data …`). The snippet has no H1
+branch on purpose: a failed H1 fetch is a crashed run (first branch), and the
+H1 lines must never carry the `[data_bridge]` / `[multi_tf:dual]` prefixes the
+N/A branches key on (`tests/test_h1_fetch_retry.py` pins that). The gate still
+runs: it ties the log to the outputs on disk and checks the exact candle count,
+which also catches a window change or a short response that raised nothing.
 
 ```bash
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
 if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
-    echo "FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; tail -n 3 run.log; \
+    echo "FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aE "^[A-Za-z_][A-Za-z0-9_.]*(Error|Exception): " run.log; tail -n 3 run.log; \
 elif ! grep -aqF "[data_bridge]" run.log && ! grep -aqF "[multi_tf:dual]" run.log; then \
     echo "FETCH GATE: N/A (no lower timeframe)"; \
 elif ! grep -aqF "[data_bridge]" run.log && grep -aqF "[multi_tf:dual] no triggers" run.log; then \
@@ -126,18 +132,26 @@ fi
   so the log of the replay whose outputs are on disk passes both. A stale
   `run.log` from an earlier replay fails the first (a later replay run without
   `> run.log 2>&1` wrote a newer `*_raw.csv`), and a crashed run — a failed
-  fetch included — fails the second; its FAIL prints any `[data_bridge]` lines
-  and the log's last 3 lines (the traceback tail). The **fetch check** (PASS branch): the exact
+  fetch included — fails the second; its FAIL prints any `[data_bridge]` lines,
+  the traceback's exception lines (`<Name>Error: …` / `<Name>Exception: …`,
+  the cause's and the final one's) and the log's last 3 lines. **The last 3
+  lines are NOT reliably the traceback** (measured 2026-09-28 on simulated H1
+  and M15 fetch crashes): under `> run.log 2>&1` stdout is block-buffered and
+  the lines still buffered at the crash are flushed AFTER the traceback, so the
+  tail shows e.g. `[multi_tf:dual] confluence var1 …` + the RETRY lines — the
+  exception grep is what names the error. The **fetch check** (PASS branch): the exact
   expected `Fetched` line is present AND there is no `[data_bridge] ERROR`
-  line (a backstop — a fetch error now ends the run). A `[data_bridge] RETRY`
-  line on a PASS is benign (the retry succeeded and the count is exact) —
+  line (a backstop — a fetch error now ends the run). A RETRY line on a PASS
+  (`[data_bridge] RETRY` M15 or `[auto_extend] RETRY` H1) is benign (the retry
+  succeeded and the count is exact) — the silent-skip grep below prints it;
   mention it in the report. `/commit-save` Step 4b runs this same snippet.
 - **On FAIL, STOP.** `FAIL (stale log or crashed run …)` = the same-run check
   failed: either the log belongs to an earlier replay (a later replay run
   without `> run.log 2>&1` wrote newer outputs), or this replay crashed — the
-  printed tail shows the traceback; a failed fetch ends in `RuntimeError:
-  [data_bridge] ERROR …` (report a **data-fetch failure**), anything else is a
-  crash to debug. Plain `FAIL` = the fetch check failed: a `Fetched` count
+  printed exception lines name it; a failed fetch raises `RuntimeError:
+  [data_bridge] ERROR …` (M15) or `RuntimeError: [auto_extend] ERROR …` (H1)
+  (report a **data-fetch failure**), anything else is a crash to debug.
+  Plain `FAIL` = the fetch check failed: a `Fetched` count
   other than `EXPECTED_FETCH` — report a data-fetch failure (or a window
   change, see below) and quote the `[data_bridge]` lines. Either way,
   re-run the replay (step 2, run mode) and check again. **Never interpret the
@@ -179,10 +193,11 @@ fi
 **Silent-skip grep.** Once the gate passes, grep the same log for
 silently-skipped work BEFORE the CSV comparison. `error` is in the pattern
 (case-insensitive) as a backstop, so a fetch error or any other error line
-cannot be missed:
+cannot be missed; `retry` prints a recovered fetch retry (M15 or H1), which
+the gate's PASS branch does not show:
 
 ```bash
-grep -iaE "error|warning|skipping|unavailable|degenerate|pending|no sid" run.log
+grep -iaE "error|warning|skipping|unavailable|degenerate|pending|no sid|retry" run.log
 ```
 
 Report the count + the lines. A non-zero count is not automatically a bug

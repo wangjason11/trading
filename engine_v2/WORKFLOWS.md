@@ -41,7 +41,9 @@ The M15 input is not among the saved CSVs, so an incomplete M15 frame would
 fake a CSV delta. `multitf/data_bridge.fetch_lower_tf_data` fails loudly since
 2026-09-27 (a failed OANDA chunk request is retried twice — `[data_bridge]
 RETRY k/2 …` — then the fetch raises `[data_bridge] ERROR …` and the replay
-crashes; before, it printed the error and exited 0 on a truncated frame). The
+crashes; before, it printed the error and exited 0 on a truncated frame); the
+H1 fetch retries the same way since 2026-09-28 (`[auto_extend] RETRY k/2 …`,
+then `[auto_extend] ERROR …` — a crashed run to the gate, no H1 branch). The
 gate ties the log to the outputs on disk and checks the exact candle count. The
 full rationale, the same-run check, the N/A cases and the canonical
 `EXPECTED_FETCH` value live in the `/compare` skill §2b; `/commit-save` Step 4b
@@ -51,7 +53,7 @@ runs the same snippet:
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
 if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
-    echo "FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; tail -n 3 run.log; \
+    echo "FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; grep -aE "^[A-Za-z_][A-Za-z0-9_.]*(Error|Exception): " run.log; tail -n 3 run.log; \
 elif ! grep -aqF "[data_bridge]" run.log && ! grep -aqF "[multi_tf:dual]" run.log; then \
     echo "FETCH GATE: N/A (no lower timeframe)"; \
 elif ! grep -aqF "[data_bridge]" run.log && grep -aqF "[multi_tf:dual] no triggers" run.log; then \
@@ -72,10 +74,11 @@ The expected line depends on the window (reference window
 `/commit-save` and here in one commit whenever `config.py`'s window changes.
 
 **2. Silent-skip grep.** `error` is in the pattern (case-insensitive) as a
-backstop:
+backstop; `retry` prints a recovered fetch retry (M15 or H1), which a gate
+PASS does not show:
 
 ```bash
-grep -iaE "error|warning|skipping|unavailable|degenerate|pending|no sid" run.log
+grep -iaE "error|warning|skipping|unavailable|degenerate|pending|no sid|retry" run.log
 ```
 
 Report the count. A non-zero count is not automatically a bug — some skips are

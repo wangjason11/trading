@@ -4,8 +4,12 @@ import time
 from pathlib import Path
 from datetime import timedelta
 from typing import Optional, Tuple
+
+import requests
+
 from engine_v2.config import CONFIG
 from engine_v2.data.provider_oanda import get_history
+from engine_v2.multitf.data_bridge import _FETCH_RETRIES, _FETCH_RETRY_WAIT_S
 from engine_v2.pipeline.orchestrator import run_pipeline
 from engine_v2.charting.export_plotly import export_chart_plotly
 from engine_v2.structure.identify_start import identify_start_scenario_1
@@ -112,6 +116,42 @@ def _timeframe_to_timedelta(tf: str) -> timedelta:
 def _floor_to_day_start(ts):
     return ts.replace(hour=0, minute=0, second=0, microsecond=0)
 
+
+def _get_history_retrying(*, pair: str, timeframe: str, start, end):
+    """One parent-TF request, retried like an M15 chunk (`data_bridge._fetch_chunk`, same policy constants).
+
+    Retried: any non-200 status (`get_history` raises `RuntimeError`; a 4xx
+    too) and any `requests.RequestException` (a network error, a non-JSON
+    body); each retry prints one ``[auto_extend] RETRY k/N …`` line. Raised at
+    once: `_load_creds` errors (FileNotFoundError / KeyError / ValueError) and
+    a JSON payload missing candle fields (KeyError / ValueError). A request
+    that still fails raises ``[auto_extend] ERROR fetching …``, and so does a
+    response with no complete candle (`identify_start_scenario_1` needs a
+    candle). The exception text is collapsed onto one line (a gateway error
+    body is multi-line HTML).
+    """
+    for attempt in range(_FETCH_RETRIES + 1):
+        try:
+            df = get_history(pair=pair, timeframe=timeframe, start=start, end=end)
+        except (RuntimeError, requests.RequestException) as e:
+            why = " ".join(str(e).split())
+            if attempt == _FETCH_RETRIES:
+                raise RuntimeError(
+                    f"[auto_extend] ERROR fetching {timeframe} {start}-{end} "
+                    f"after {_FETCH_RETRIES} retries: {why}"
+                ) from e
+            print(
+                f"[auto_extend] RETRY {attempt + 1}/{_FETCH_RETRIES} {timeframe} fetch "
+                f"{start}-{end} in {_FETCH_RETRY_WAIT_S:g} s: {why}"
+            )
+            time.sleep(_FETCH_RETRY_WAIT_S)
+            continue
+        if df.empty:
+            raise RuntimeError(f"[auto_extend] ERROR: no {timeframe} data for {pair} {start} - {end}")
+        return df
+    raise AssertionError("unreachable")
+
+
 def fetch_history_with_auto_extend(
     *,
     pair: str,
@@ -127,11 +167,15 @@ def fetch_history_with_auto_extend(
     Week 6 Part 3A requirement:
     If identify_start_scenario_1 indicates the chosen extreme is 'too early',
     extend the dataset earlier and retry until it passes (or guard trips).
+
+    Every request goes through `_get_history_retrying`: a failed request is
+    retried twice, then the fetch raises (the run ends before its timing
+    block, so the `/compare` §2b fetch gate FAILs as a crashed run).
     """
     cur_start = _floor_to_day_start(start)
     last_decision = None
     for k in range(int(max_extend_iters)):
-        df = get_history(pair=pair, timeframe=timeframe, start=cur_start, end=end)
+        df = _get_history_retrying(pair=pair, timeframe=timeframe, start=cur_start, end=end)
 
         input_idx = int(df.index.max())
         decision = identify_start_scenario_1(
@@ -154,7 +198,7 @@ def fetch_history_with_auto_extend(
         )
 
     print("[auto_extend] WARNING: hit max_extend_iters; proceeding with last fetched dataset.")
-    df = get_history(pair=pair, timeframe=timeframe, start=cur_start, end=end)
+    df = _get_history_retrying(pair=pair, timeframe=timeframe, start=cur_start, end=end)
 
     input_idx = int(df.index.max())
     last_decision = identify_start_scenario_1(
