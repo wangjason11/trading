@@ -573,8 +573,10 @@ class MarketStructure:
             i = 0
             while i < jump_to:
                 nxt = self._step_anchor(i)
-                # The rebuild replays candles the run already passed without reversing;
-                # a reversal here would be silently overwritten by the seed restore below.
+                # The rebuild re-runs candles the run already passed without reversing, but
+                # it ignores nested expiry jumps (LANDMINES "MarketStructure Deep-Couples…"
+                # 1(a)), so its path can diverge; a reversal reached here would be silently
+                # overwritten by the seed restore below — fail loudly instead (user, 2026-09-28).
                 assert self.state.state != MarketState.REVERSAL, (
                     f"[market_structure] rewind rebuild reached a reversal at step {i} (jump_to={jump_to})")
 
@@ -1026,7 +1028,9 @@ class MarketStructure:
 
             # A breakout's post-apply range back-fill (`_post_apply_range_check`)
             # can apply the pending reversal too: terminal, no apply-row re-write.
-            # (A reversal WINNER keeps its re-write below — its apply candle's own row.)
+            # (A reversal WINNER keeps its re-write below — its apply candle's own step:
+            # the range update still runs; the raw CTS update, proximity and the BOS
+            # barrier skip in REVERSAL.)
             if kind != "reversal" and self.state.state == MarketState.REVERSAL:
                 return apply_idx + 1
 
@@ -1673,6 +1677,10 @@ class MarketStructure:
         regardless of whether a breakout pattern fired.
         """
         st = self.state
+        # Reversal is terminal: no CTS move after it (a reversal WINNER's apply
+        # candle is still stepped once — see `_step_anchor`; like `_bos_barrier_step`).
+        if st.state == MarketState.REVERSAL:
+            return
         if st.cts is None:
             return
         if st.cts_phase == "CONFIRMED":
@@ -1935,6 +1943,11 @@ class MarketStructure:
         Rule 1 narrow-gap gate).
         """
         st = self.state
+        # Reversal is terminal: a reversal WINNER's apply-candle step (see
+        # `_step_anchor`) must not confirm the CTS or create a range after it
+        # (an outside-bar anchor keeps proximity gated off until that candle).
+        if st.state == MarketState.REVERSAL:
+            return
         if st.cts is None or st.bos_threshold is None:
             return
         cycle_gap_ok = (

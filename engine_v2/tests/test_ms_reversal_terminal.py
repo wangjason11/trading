@@ -12,9 +12,11 @@ forward-stamps `market_state` before it, so it could never fire.)
 
 Reference window (a shadow over every MS run — H1 main sids, both first-confluence probes' Phase 2, every sub build,
 `review_scripts/reversal_shadow.py`): 12 runs, 5 reversals, 0 applied inside a back-fill, 0 leaves — byte-identical.
-The fixtures: the winner back-fill (P1) from a random-tail search on the verified cycle-1 base; the range back-fill
-(P2) and the reversal-winner back-fill are existing `test_ms_bounded_equals_truncated` fixtures at sd=-1, found by
-the shadow over the suite.
+The fixtures: the winner back-fill (P1) and the breakout's post-apply range back-fill (P3) from random-tail searches
+on the verified cycle-1 base; the range back-fill (P2) and the reversal-winner back-fill are existing
+`test_ms_bounded_equals_truncated` fixtures at sd=-1, found by the shadow over the suite; the outside-bar reversal
+winner (landing review F1: the kept apply-candle step must not confirm the CTS / create a range after the terminal)
+was constructed by the review.
 """
 from __future__ import annotations
 
@@ -24,7 +26,8 @@ from contextlib import redirect_stdout
 import pytest
 
 from engine_v2.patterns.structure_patterns import BreakoutPatterns
-from engine_v2.structure.market_structure import MarketState
+from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
+from engine_v2.structure.market_structure import MarketState, Point
 from engine_v2.structure.structure_engine import _make_market_structure, compute_bounded_structure
 from engine_v2.tests import test_ms_bounded_equals_truncated as _bet
 from engine_v2.tests import test_ms_cts_update_no_regress as _noreg
@@ -49,8 +52,9 @@ from engine_v2.zones.structure_lifecycle import compute_reversal_idx_by_sid
 #        `one_maru_continuous(-1)` 14-15 (SUCCESS, apply 15);
 #   15   the pending reversal applies -> STATE_CHANGED(range -> reversal) @15 = the terminal.
 #   Before the fix: 16 back-filled in REVERSAL; the pullback applied at 17 (CTS_RECONFIRMED@17,
-#   STATE_CHANGED(reversal -> pullback)@17); 17 close-broke again -> watch; 18-19 two bear marus -> a SECOND
-#   reversal @19. Hand-off `reversal_idx` 15, `compute_reversal_idx_by_sid` 19.
+#   STATE_CHANGED(reversal -> pullback)@17); 17 close-broke the BOS again -> a watch whose anchor had no reversal
+#   pattern, resolved at once (BOS_THRESHOLD_UPDATED rv_anchor_failed -> l17 .60315); 18 close-broke .60315 -> watch +
+#   `double_maru(-1)` 18-19 -> a SECOND reversal @19. Hand-off `reversal_idx` 15, `compute_reversal_idx_by_sid` 19.
 #   20-21 bull fillers.
 _P1_BOS, _P1_REVERSAL, _P1_WINNER_APPLY, _P1_SECOND = 0.6088, 15, 17, 19
 
@@ -122,6 +126,88 @@ def test_a_reversal_inside_a_winner_backfill_ends_the_structure(sd):
 
 
 # ---------------------------------------------------------------------------------------------------------------
+# P3 — a breakout's post-apply range back-fill. Real data: a random-tail search on the P1 base (2026-09-28, landing
+# review). sd=+1:
+#   0-10 as P1: the one_maru_opposite(+1) breakout applies at 10 (cycle 1, BOS_1 .6088) and candle 10 is a range
+#        candle (confirm 14) -> `_post_apply_range_check(10)` back-fills [10, 14):
+#   11   bear maru: sd-zone proximity confirms CTS_1 and creates a range (RANGE);
+#   12   bear maru closing .60646 < BOS .6088 -> watch + the pending reversal `one_maru_opposite(-1)` 12-13;
+#   13   the pending reversal applies -> STATE_CHANGED(range -> reversal) @13 = the terminal.
+#   Before the fix: the range finalized (RANGE_STARTED@14 (start 10) + STATE_CHANGED(reversal -> range)@14), row 10
+#   was re-written, anchors 11.. re-ran (a pullback @12 with CTS_RECONFIRMED, a second watch @12) and it reversed
+#   again @13.
+def _p3_rows() -> list[dict]:
+    rows = list(_make_second_cts_moment_after_anchor_data()[:11])
+    rows += [
+        _R(0.61380, 0.61402, 0.61145, 0.61161),   # 11
+        _R(0.61161, 0.61182, 0.60644, 0.60646),   # 12
+        _R(0.60646, 0.60792, 0.60627, 0.60790),   # 13
+        _R(0.60790, 0.61364, 0.60775, 0.61362),   # 14
+        _R(0.61362, 0.61387, 0.61139, 0.61167),   # 15
+        _R(0.61167, 0.61185, 0.60764, 0.60791),   # 16
+        _R(0.60791, 0.60801, 0.60443, 0.60770),   # 17
+        _R(0.60770, 0.60792, 0.60654, 0.60655),   # 18
+        _R(0.60655, 0.60665, 0.60143, 0.60632),   # 19
+        _R(0.60632, 0.60641, 0.60450, 0.60459),   # 20
+        _R(0.60459, 0.60701, 0.60449, 0.60484),   # 21
+    ]
+    return rows
+
+
+@pytest.mark.parametrize("sd", [1, -1])
+def test_a_reversal_inside_a_post_apply_range_backfill_does_not_finalize_the_range(sd):
+    rows = _p3_rows() if sd == 1 else _noreg._mirror(_p3_rows())
+    df = _prepare_df(rows)
+    assert int(df["is_range"].iloc[10]) == 1 and int(df["is_range_confirm_idx"].iloc[10]) == 14   # precondition
+    res = _run(df, sd)
+    _assert_single_terminal(res, 13, "range")
+    cyc1 = [e for e in res.events if e.idx >= 10]   # after cycle 1's establishment (the base's cycle 0 ends at 9)
+    assert [(e.idx, e.meta["reason"]) for e in cyc1 if e.type == "RANGE_STARTED"] == [(11, "proximity_created_range")]
+    assert not [e for e in cyc1 if e.type == "CTS_RECONFIRMED"]
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# A reversal WINNER's own apply-candle step (landing review F1). sd=+1, the P1 base 0-10, then:
+#   11   outside bar (h .6150 > CTS .6147, close .6062 < BOS .6088): the raw path moves the CTS to 11, so the
+#        proximity gate `i > cts.idx` is shut on 11; the close-break makes the anchor-11 reversal the winner
+#        (`one_maru_continuous(-1)` 11-12, apply 12) -> STATE_CHANGED(breakout -> reversal) @12 = the terminal.
+#   12   the winner's apply-candle step: the first candle proximity may fire on.
+#   Before the fix it did (CTS_CONFIRMED + RANGE_STARTED + STATE_CHANGED(reversal -> range) @12, then a second watch
+#   and a second reversal @12); with only the `_set_state` tripwire it raised. The raw CTS update and proximity now
+#   skip in REVERSAL, like the BOS barrier.
+def _outside_bar_rows() -> list[dict]:
+    rows = list(_make_second_cts_moment_after_anchor_data()[:11])
+    rows += [
+        _R(0.61440, 0.61500, 0.60600, 0.60620),   # 11
+        _R(0.60620, 0.60640, 0.60000, 0.60020),   # 12
+        _R(0.60020, 0.60060, 0.59980, 0.60040),   # 13
+        _R(0.60040, 0.60080, 0.60010, 0.60060),   # 14
+        _R(0.60060, 0.60090, 0.60030, 0.60070),   # 15
+    ]
+    return rows
+
+
+@pytest.mark.parametrize("sd", [1, -1])
+def test_a_reversal_winners_apply_step_confirms_nothing_after_the_terminal(sd):
+    rows = _outside_bar_rows() if sd == 1 else _noreg._mirror(_outside_bar_rows())
+    res = _run(_prepare_df(rows), sd)
+    _assert_single_terminal(res, 12, "breakout")
+    raw = [e for e in res.events if e.type == "CTS_UPDATED"]
+    assert [(e.idx, e.meta["via"]) for e in raw][-1] == (11, CTS_UPDATED_RAW_VIA)   # precondition: the outside bar
+    assert not [e for e in res.events if e.idx >= 10 and e.type in ("CTS_CONFIRMED", "RANGE_STARTED")]
+
+
+@pytest.mark.parametrize("state, moves", [(MarketState.BREAKOUT, True), (MarketState.REVERSAL, False)])
+def test_the_raw_cts_update_skips_in_reversal(state, moves):
+    ms = _ms()
+    st = ms.state
+    st.cts, st.cts_phase, st.state = Point(idx=5, price=0.6000), "EST_OR_UPD", state   # candle 12's high .61374 is new
+    n = len(ms.events)
+    ms._maybe_update_cts_pre_confirm(12, via=CTS_UPDATED_RAW_VIA)
+    assert (len(ms.events) > n) is moves and (st.cts.idx == 12) is moves
+
+
+# ---------------------------------------------------------------------------------------------------------------
 # P2 — the no-winner range back-fill. `_make_l5_bos_inner_at_bound` run at sd=-1 (plain), 16 candles:
 #   7  CTS_ESTABLISHED (one_maru_continuous(-1) 6-7), BOS = h6 .6062, BREAKOUT, no range.
 #   8  no winner by D; candle 8 is a range candle (pinbar, confirm 12) -> range back-fill [8, 12):
@@ -170,7 +256,8 @@ def test_a_reversal_winner_keeps_its_own_apply_row_rewrite():
 
 
 # ---------------------------------------------------------------------------------------------------------------
-# Wiring pins: the post-apply range back-fill (no real-data case found) and the two tripwires.
+# Wiring pins: the post-apply range back-fill's stop and `_step_anchor`'s return after it (P3 above is the real-data
+# case), and the two tripwires.
 def _ms(sd: int = 1):
     with redirect_stdout(io.StringIO()):
         return _make_market_structure(_prepare_df(_p1_rows()), struct_direction=sd, start_idx=0)

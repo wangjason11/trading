@@ -100,14 +100,21 @@ If no valid reversal pattern appears within watch window:
 
 ### Reversal inside a back-fill (terminal; 2026-09-28)
 A scheduled (pending) reversal is applied by the per-candle step (`_replay_step_no_patterns`), which also runs
-inside every **frozen back-fill** — the candles a step processes before (or, for a breakout's range check, after)
-the candle it acts on: `_step_anchor`'s winner back-fill `[anchor, apply)`, its no-winner range back-fill
-`[anchor, min(confirm, D))`, and `_post_apply_range_check`'s `[apply, min(confirm, D))`. A reversal applied there
-is the structure's end: **the step ends at that candle** — the rest of the back-fill, the winner's apply (a later
-candle), the range finalize and the anchor's re-step are never reached, so no event is emitted and no row is
-written after the reversal candle. Live-like: a structure reads nothing after its reversal. A reversal WINNER
-(the anchor's own reversal pattern) is unchanged — it applies at its apply candle and that candle's one per-candle
-step still runs (its range update can emit `RANGE_UPDATED` on the reversal candle).
+inside every **frozen back-fill** — candles a step processes offline around the candle it acts on: `_step_anchor`'s
+winner back-fill `[anchor, apply)` and its no-winner range back-fill `[anchor, min(confirm, D))` (the step's
+`D = min(anchor + range_max_k, effective_end)`), and a breakout's `_post_apply_range_check` back-fill
+`[apply, min(confirm, apply + range_max_k))` — which starts AT the apply candle and runs past it. A reversal applied
+there is the structure's end: **the step ends at that candle** — the rest of the back-fill, the winner's apply (a
+later candle), the range finalize and the anchor's re-step are never reached, so the structure emits no event and
+writes no row after its reversal candle. (It may have READ past it: the look-ahead to `D` chose the winner whose
+back-fill reversed.)
+A reversal WINNER (the anchor's own reversal pattern) applies at its apply candle and that candle's one per-candle
+step still runs, but in REVERSAL the raw CTS update, the sd-zone proximity confirmation and the BOS barrier all skip
+(`_maybe_update_cts_pre_confirm` / `_maybe_confirm_cts_via_proximity` / `_bos_barrier_step`); only the range update
+still runs — it can emit `RANGE_UPDATED` (and a range-sync `CTS_THRESHOLD_UPDATED`) on the reversal candle (the
+reference window's 5 reversals each have one `RANGE_UPDATED` there). Without the proximity skip an outside-bar anchor
+(its new high moves the CTS to the anchor, so proximity first fires on the apply candle) confirmed the CTS and
+created a range after the reversal (landing review F1).
 Before the fix the step went on: the winner applied after the reversal (state left REVERSAL; e.g. a pullback's
 `CTS_RECONFIRMED` + `STATE_CHANGED(reversal→pullback)`), a range finalized, and a later close-break could reverse
 again — two `STATE_CHANGED(to=reversal)` for one sid, the H1 hand-off taking the first (df mask `.min()`) and every
@@ -468,9 +475,12 @@ MarketStructure includes df-level invariant checks (low-noise):
 - BOS_CONFIRMED coherence
 
 Reversal is terminal (cannot leave reversal once entered) — asserted at the source (2026-09-28): `_set_state`
-raises on any transition out of REVERSAL, and a `_rewind_to` rebuild asserts it never reaches one (its seed
-restore would overwrite it). Enforced by "Reversal inside a back-fill" above. (The former df-level check ran after
-`run()`'s forward stamp of `market_state` and could never fire — deleted.)【fileciteturn1file11】
+raises on any transition out of REVERSAL (a tripwire: "Reversal inside a back-fill" above stops every path that
+reached one), and a `_rewind_to` rebuild asserts it never reaches one — a KNOWN way it could: the rebuild ignores
+nested expiry jumps (LANDMINES "MarketStructure Deep-Couples…" 1(a)), so its path can diverge from the first pass
+(0 cases on the reference window and the suite; the user chose a crash over the seed restore silently overwriting
+the reversal). (The former df-level check ran after `run()`'s forward stamp of `market_state` and could never fire
+— deleted.)【fileciteturn1file11】
 
 ---
 

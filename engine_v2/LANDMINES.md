@@ -1365,14 +1365,19 @@ replay `/compare`, never tests alone. See memory
 
 ## A Back-fill Must Stop at a Reversal (FIXED 2026-09-28)
 
-**Rule:** any loop that runs `_replay_step_no_patterns` over candles ahead of the step's own candle (a frozen
-back-fill) must end the step as soon as the state is REVERSAL — the pending reversal is applied inside that call —
-and must not run a later apply / finalize / re-step. Canonical: MARKET_STRUCTURE_SPEC "Reversal inside a back-fill".
+**Rule:** any loop that runs `_replay_step_no_patterns` offline over candles other than the one the step acts on
+(a frozen back-fill — incl. `_post_apply_range_check`'s, which starts AT the apply candle) must end the step as soon
+as the state is REVERSAL — the pending reversal is applied inside that call — and must not run a later apply /
+finalize / re-step; and a per-candle emitter that can change the state or the CTS must skip in REVERSAL (the BOS
+barrier, the raw CTS update and the proximity confirmation do — a reversal WINNER's apply candle is still stepped).
+Canonical: MARKET_STRUCTURE_SPEC "Reversal inside a back-fill".
 **Why:** the run loop only checks REVERSAL between steps; inside one step the dead structure kept stepping, left
 REVERSAL through an unguarded state setter and could reverse again (two `STATE_CHANGED(to=reversal)` per sid; the
 H1 hand-off takes the first, `compute_reversal_idx_by_sid` the last). **Guard:** `_set_state` asserts nothing leaves
 REVERSAL and the `_rewind_to` rebuild asserts it never reaches one — a new setter / back-fill that forgets the stop
-crashes instead of corrupting. Measure a change here with `review_scripts/reversal_shadow.py` (every MS run: back-fill
+crashes instead of corrupting. Known trigger of the rebuild assert: the rebuild ignores nested expiry jumps
+("MarketStructure Deep-Couples…" 1(a) below), so a divergent rebuild could reverse — the user chose the crash
+(2026-09-28); neither assert is caught by the sub build's `except (ValueError, IndexError)`, so a hit ends the replay. Measure a change here with `review_scripts/reversal_shadow.py` (every MS run: back-fill
 applies, leaves, events after the terminal). Pins `tests/test_ms_reversal_terminal.py`.
 
 ---
