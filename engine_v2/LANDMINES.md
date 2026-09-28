@@ -613,9 +613,10 @@ whose `confirmed_at` differs from its cycle's `CTS_ESTABLISHED.confirmed_at`
 — those raise in `multitf/parent_tables.build_parent_tables` (see "Sub
 Lifecycle-Start Clamp" below). Nor is the shared M15 FETCH (the input of every
 sub, not one trigger): `multitf/data_bridge.fetch_lower_tf_data` retries a
-transiently failed OANDA chunk twice, then raises, and an all-empty fetch
-raises — never catch it into a skip (2026-09-27: a swallowed chunk error once
-let a replay exit 0 on 2500 of 4228 M15 candles; `/compare` skill §2b).
+failed OANDA chunk request twice, then raises, and an all-empty fetch
+raises — never catch it into a skip (fixed 2026-09-27; in the 2026-09-22
+audit a swallowed chunk error let a replay exit 0 on 2500 of 4228 M15
+candles; `/compare` skill §2b).
 
 ---
 

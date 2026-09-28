@@ -92,9 +92,10 @@ exactly like an engine change. This happened in a 2026-09-22 audit run:
 `multitf/data_bridge.fetch_lower_tf_data` (14-day OANDA chunks) then printed a
 failed chunk and carried on, and after two HTTP 504s the replay exited 0 on
 2500 of 4228 M15 candles. **Since 2026-09-27 the fetch fails loudly:** a chunk
-that fails transiently (an HTTP error status or a `requests` network error) is
-retried twice, each retry printing `[data_bridge] RETRY k/2 M15 chunk
-<from>-<to> in 5 s: <exception>`; a chunk that still fails, or a fetch that
+whose request fails (any non-200 status, or any `requests` error — a network
+error, a non-JSON body) is retried twice, each retry printing one line
+`[data_bridge] RETRY k/2 M15 chunk <from>-<to> in 5 s: <exception>`; a config
+or payload-schema error raises at once; a chunk that still fails, or a fetch that
 returns no candles at all, raises `RuntimeError: [data_bridge] ERROR …` and
 the replay crashes (no `=== Replay Timing ===` block). The H1 fetch always
 did: `provider_oanda.get_history` raises on a non-200 response and
@@ -106,7 +107,7 @@ change or a short response that raised nothing.
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
 if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
-    echo "FETCH GATE: FAIL (run.log is not this replay's log)"; grep -aF "[data_bridge]" run.log; \
+    echo "FETCH GATE: FAIL (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; tail -n 3 run.log; \
 elif ! grep -aqF "[data_bridge]" run.log && ! grep -aqF "[multi_tf:dual]" run.log; then \
     echo "FETCH GATE: N/A (no lower timeframe)"; \
 elif ! grep -aqF "[data_bridge]" run.log && grep -aqF "[multi_tf:dual] no triggers" run.log; then \
@@ -125,15 +126,20 @@ fi
   so the log of the replay whose outputs are on disk passes both. A stale
   `run.log` from an earlier replay fails the first (a later replay run without
   `> run.log 2>&1` wrote a newer `*_raw.csv`), and a crashed run — a failed
-  fetch included — fails the second; its FAIL quotes the traceback's
-  `[data_bridge] ERROR` line. The **fetch check** (PASS branch): the exact
+  fetch included — fails the second; its FAIL prints any `[data_bridge]` lines
+  and the log's last 3 lines (the traceback tail). The **fetch check** (PASS branch): the exact
   expected `Fetched` line is present AND there is no `[data_bridge] ERROR`
   line (a backstop — a fetch error now ends the run). A `[data_bridge] RETRY`
   line on a PASS is benign (the retry succeeded and the count is exact) —
   mention it in the report. `/commit-save` Step 4b runs this same snippet.
-- **On FAIL, STOP.** Report a **data-fetch failure** and quote the
-  `[data_bridge]` lines. If those lines look complete, the same-run check is
-  what failed: the log does not belong to the outputs on disk. Either way,
+- **On FAIL, STOP.** `FAIL (stale log or crashed run …)` = the same-run check
+  failed: either the log belongs to an earlier replay (a later replay run
+  without `> run.log 2>&1` wrote newer outputs), or this replay crashed — the
+  printed tail shows the traceback; a failed fetch ends in `RuntimeError:
+  [data_bridge] ERROR …` (report a **data-fetch failure**), anything else is a
+  crash to debug. Plain `FAIL` = the fetch check failed: a `Fetched` count
+  other than `EXPECTED_FETCH` — report a data-fetch failure (or a window
+  change, see below) and quote the `[data_bridge]` lines. Either way,
   re-run the replay (step 2, run mode) and check again. **Never interpret the
   diff of a run that failed the gate.** Nothing it shows is evidence about the
   code.
@@ -149,9 +155,11 @@ fi
   trigger, so nothing is fetched. Either way that run writes no M15 CSVs. The
   snippet greps only the line's ASCII prefix `[multi_tf:dual] no triggers`:
   Python writes the redirected log in cp1252, so its `—` is byte `0x97` and a
-  UTF-8 grep for it never matches. Rewording that prefix makes a no-trigger
-  run FAIL (fails closed); a run that fetched could read N/A only if the
-  `[data_bridge]` and `[multi_tf:dual]` prefixes both vanished at once.
+  UTF-8 grep for it never matches. Rewording the `no triggers` text makes a
+  no-trigger run FAIL (fails closed); renaming the `[multi_tf:dual]` tag gives
+  it N/A (a) — the right outcome under the wrong label; a run that fetched
+  could read N/A only if the `[data_bridge]` and `[multi_tf:dual]` prefixes
+  both vanished at once.
   `tests/test_data_bridge_fetch.py` pins both prefixes and the `Fetched`
   line's shape.
 - **The expected line depends on the window.** The M15 fetch spans the H1 frame

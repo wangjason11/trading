@@ -57,7 +57,8 @@ def sleeps(monkeypatch):
 
 
 def _http_504():
-    return RuntimeError("OANDA candles request failed 504: gateway timeout")
+    # a gateway error body is multi-line HTML (`get_history` embeds `resp.text[:500]`)
+    return RuntimeError("OANDA candles request failed 504: <html>\n<body>gateway timeout</body>\n</html>")
 
 
 def test_a_clean_fetch_returns_every_chunk_and_prints_the_gate_line(monkeypatch, capsys, sleeps):
@@ -77,8 +78,8 @@ def test_a_chunk_that_keeps_failing_raises_after_two_retries_and_fetches_nothing
     with pytest.raises(RuntimeError) as exc_info:
         data_bridge.fetch_lower_tf_data("NZD_USD", "M15", START, END)
     msg = str(exc_info.value)
-    assert msg.startswith("[data_bridge] ERROR fetching M15 chunk 2025-11-29 00:00:00+00:00-2025-12-13 00:00:00+00:00 "
-                          "after 2 retries: OANDA candles request failed 504")
+    assert msg == ("[data_bridge] ERROR fetching M15 chunk 2025-11-29 00:00:00+00:00-2025-12-13 00:00:00+00:00 "
+                   "after 2 retries: OANDA candles request failed 504: <html> <body>gateway timeout</body> </html>")
     assert isinstance(exc_info.value.__cause__, RuntimeError)
     assert fake.calls == [0, 1, 1, 1]          # 1 + 2 retries on chunk 1; chunk 2 never requested
     assert sleeps == [data_bridge._FETCH_RETRY_WAIT_S] * 2 and data_bridge._FETCH_RETRY_WAIT_S > 0
@@ -96,7 +97,8 @@ def test_a_transient_failure_recovers_into_the_complete_frame(monkeypatch, capsy
     assert len(df) == 9
     assert fake.calls == [0, 1, 1, 1, 2]
     out = capsys.readouterr().out.splitlines()
-    assert out[0].startswith("[data_bridge] RETRY 1/2 M15 chunk") and out[0].endswith("504: gateway timeout")
+    # one line per retry: the multi-line body is collapsed, so the gate's `[data_bridge]` grep quotes all of it
+    assert out[0].startswith("[data_bridge] RETRY 1/2 M15 chunk") and out[0].endswith("<body>gateway timeout</body> </html>")
     assert out[1].startswith("[data_bridge] RETRY 2/2 M15 chunk") and out[1].endswith(": reset")
     assert out[2] == "[data_bridge] Fetched 9 M15 candles for NZD_USD in 3 chunks"
 
@@ -131,7 +133,9 @@ def _run_dual(**triggers):
 
 
 def test_the_dual_driver_lets_a_fetch_failure_propagate(monkeypatch):
-    """No WARNING-and-return: a failed M15 fetch ends the replay (no timing block → the gate FAILs)."""
+    """No WARNING-and-return: a failed M15 fetch propagates out of the dual driver (by code reading nothing
+    above it catches it either — the orchestrator has no try/except around it, `run_replay` none around
+    `run_pipeline` and no finally — so the replay ends before its timing block and the gate FAILs)."""
     monkeypatch.setattr("engine_v2.multitf.uc1_trigger.detect_uc1_triggers", lambda *a, **k: [SimpleNamespace()])
 
     def _fail(*_a, **_k):

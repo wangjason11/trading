@@ -17,8 +17,9 @@ from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.patterns.pattern_engine import detect_patterns
 from engine_v2.patterns.imbalance import compute_imbalance
 
-# A chunk whose request fails transiently is retried this many times before
-# the fetch raises (the 2026-09-22 partial fetch was two HTTP 504s).
+# A chunk whose request fails (any non-200 or `requests` error) is retried
+# this many times before the fetch raises (the 2026-09-22 partial fetch was
+# two HTTP 504s).
 _FETCH_RETRIES = 2
 _FETCH_RETRY_WAIT_S = 5.0
 
@@ -37,7 +38,7 @@ def fetch_lower_tf_data(
 
     Fails loudly — a partial frame never reaches the engine (this function
     used to print a failed chunk and carry on: one run silently got 2500 of
-    4228 M15 candles and exited 0). A chunk that fails transiently is retried
+    4228 M15 candles and exited 0). A chunk whose request fails is retried
     (`_fetch_chunk`); a chunk that still fails raises `RuntimeError`
     ``[data_bridge] ERROR fetching …``. A window that yields no candles at all
     raises too: the parent frame spans it, so the lower TF has data. One empty
@@ -66,25 +67,29 @@ def fetch_lower_tf_data(
 
 
 def _fetch_chunk(pair: str, lower_tf: str, chunk_start: datetime, chunk_end: datetime) -> pd.DataFrame:
-    """One chunk request, retried `_FETCH_RETRIES` times on a transient failure.
+    """One chunk request, retried `_FETCH_RETRIES` times when the request fails.
 
-    Transient = an HTTP error status (`get_history` raises `RuntimeError` on
-    any non-200) or a `requests` network error; each retry prints a
-    ``[data_bridge] RETRY k/N …`` line. Anything else (a missing `oanda.cfg`,
-    a malformed response) raises at once.
+    Retried: any non-200 status (`get_history` raises `RuntimeError`; a 4xx
+    too) and any `requests.RequestException` (a network error, a non-JSON
+    body); each retry prints one ``[data_bridge] RETRY k/N …`` line. Raised at
+    once: `_load_creds` errors (FileNotFoundError / KeyError / ValueError) and
+    a JSON payload missing candle fields (KeyError / ValueError). The exception
+    text is collapsed onto one line (a gateway error body is multi-line HTML),
+    so every retry / error line keeps the ``[data_bridge]`` prefix.
     """
     for attempt in range(_FETCH_RETRIES + 1):
         try:
             return get_history(pair=pair, timeframe=lower_tf, start=chunk_start, end=chunk_end)
         except (RuntimeError, requests.RequestException) as e:
+            why = " ".join(str(e).split())
             if attempt == _FETCH_RETRIES:
                 raise RuntimeError(
                     f"[data_bridge] ERROR fetching {lower_tf} chunk {chunk_start}-{chunk_end} "
-                    f"after {_FETCH_RETRIES} retries: {e}"
+                    f"after {_FETCH_RETRIES} retries: {why}"
                 ) from e
             print(
                 f"[data_bridge] RETRY {attempt + 1}/{_FETCH_RETRIES} {lower_tf} chunk "
-                f"{chunk_start}-{chunk_end} in {_FETCH_RETRY_WAIT_S:g} s: {e}"
+                f"{chunk_start}-{chunk_end} in {_FETCH_RETRY_WAIT_S:g} s: {why}"
             )
             time.sleep(_FETCH_RETRY_WAIT_S)
     raise AssertionError("unreachable")

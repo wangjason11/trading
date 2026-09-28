@@ -1119,7 +1119,7 @@ the real emitter.
 - the fetch-gate N/A edge case; **DONE 2026-09-27 (fetch-integrity commit, with the loud fetch):** user picked
   gate-only N/A — the snippet reads N/A from the log when no M15 fetch ran (no `[data_bridge]` line): no
   `[multi_tf:dual]` line (no lower TF) or the ASCII prefix `[multi_tf:dual] no triggers` (its `—` is cp1252 `0x97`
-  in run.log). `data_bridge.fetch_lower_tf_data` retries a transient chunk failure twice, then raises; an all-empty
+  in run.log). `data_bridge.fetch_lower_tf_data` retries a failed chunk request twice, then raises; an all-empty
   fetch raises. Canonical: compare skill §2b; pins `tests/test_data_bridge_fetch.py`;
 - moment-order processing (Q3);
 - the unresolved-triggers CSV `probe_input_idx` frame mix (H1 "whatever was known" for the parent-triggered

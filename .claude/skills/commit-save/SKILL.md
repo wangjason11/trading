@@ -172,8 +172,8 @@ not just this skill.
 **A partial M15 fetch must never become a baseline.** The M15 input is not
 among the saved CSVs, so a truncated run saved here would make every later
 `/compare` diff against broken M15 outputs. Since 2026-09-27
-`multitf/data_bridge.fetch_lower_tf_data` fails loudly (a transiently failed
-OANDA chunk is retried twice, then the fetch raises `[data_bridge] ERROR …`
+`multitf/data_bridge.fetch_lower_tf_data` fails loudly (a failed OANDA chunk
+request is retried twice, then the fetch raises `[data_bridge] ERROR …`
 and the replay crashes — it used to print the error and exit 0 on a truncated
 frame); the gate ties the log to the outputs and checks the exact candle
 count. The full rationale, the N/A cases and the canonical expected value are
@@ -185,7 +185,7 @@ identical to the one there (only the FAIL messages differ), including the
 RAW=$(ls -t artifacts/debug/*_raw.csv | head -1); \
 EXPECTED_FETCH="[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks"; \
 if ! { [ run.log -nt "$RAW" ] && grep -aqF "=== Replay Timing ===" run.log; }; then \
-    echo "FETCH GATE: FAIL - do NOT save (run.log is not this replay's log)"; grep -aF "[data_bridge]" run.log; \
+    echo "FETCH GATE: FAIL - do NOT save (stale log or crashed run: not newer than *_raw.csv, or no timing block)"; grep -aF "[data_bridge]" run.log; tail -n 3 run.log; \
 elif ! grep -aqF "[data_bridge]" run.log && ! grep -aqF "[multi_tf:dual]" run.log; then \
     echo "FETCH GATE: N/A (no lower timeframe)"; \
 elif ! grep -aqF "[data_bridge]" run.log && grep -aqF "[multi_tf:dual] no triggers" run.log; then \
