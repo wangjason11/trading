@@ -1272,7 +1272,10 @@ on the entity-wide M15 df must be similarly re-derived on the slice.
    un-reset state and events (`_make_double_rewind_data`'s rebuilt
    prefix keeps the first pass's cycle 1 @8). Since the expiry stop
    ("A Step Must Stop at Its Own Watch Expiry" above) the step returns
-   at the expiry, so a rebuild no longer replays a discarded continuation;
+   at the expiry, so a rebuild no longer replays a discarded continuation
+   (`test_mechanism`'s full run: −`BOS_THRESHOLD_UPDATED@10` / `RANGE_STARTED@13`,
+   +`BOS_THRESHOLD_UPDATED@5` / `REVERSAL_WATCH_START@9`; its CTS_ESTABLISHED
+   list unchanged; pinned in `tests/test_ms_expiry_stop.py`);
    (b) the MAIN H1 path runs each sid's MS on the full df, so a
    reversal-watch expiry in sid ≥ 1 would replay from candle 0;
    (c) the rebuild constructs `MarketStructureState(struct_direction=…)`
@@ -1406,11 +1409,12 @@ away: a second expiry in the continuation OVERWROTE `jump_to_idx` + the seed (wr
 "bos_threshold changed during reversal watch"), and a `_rewind_to` rebuild replayed the continuation (a re-applied
 reversal crashed its assert). **Return the jump target, not `k + 1`:** a rebuild ignores the request but resumes at
 the returned index ("Deep-Couples…" 1(a) below); `k + 1` changed the rebuilt prefix and
-`test_ms_stop_after_cts::test_mechanism` then tripped that invariant. **Guard:** `run()` asserts a rewind is never
+`test_ms_stop_after_cts::test_mechanism` then raised `[INV] bos_threshold changed during reversal watch`. **Guard:** `run()` asserts a rewind is never
 requested in REVERSAL (an AssertionError, not caught by the sub build's `except (ValueError, IndexError)`). Measure
 with `review_scripts/reversal_shadow.py` (`expiry` / `win_past_exp` / `post_expiry` / `rewind_in_rev`). Pins
 `tests/test_ms_expiry_stop.py`. Related, OPEN (F3b): a pending reversal confirming ON the expiry candle is discarded
-as a false break — the only way an expiry is reached (MARKET_STRUCTURE_SPEC "Expiry inside a step").
+as a false break — the only way an expiry is reached — while a later anchor's reversal WINNER applying at the expiry
+is applied (MARKET_STRUCTURE_SPEC "Expiry inside a step", Open F3b).
 
 ---
 

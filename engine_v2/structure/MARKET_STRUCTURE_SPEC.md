@@ -132,23 +132,36 @@ from acting past it:
   must apply by E: `_best_bopb_pattern_at_anchor` caps it at `min(D, expires_idx)` — the scheduler's rule
   (`_schedule_reversal_from_anchor`, where it never binds: the anchor-A pattern confirms by `A + range_max_k`).
   Apply `== E` stays a winner: the winner path applies it before the apply candle's own step, whose expiry check
-  then finds the watch cleared. Live-like: at E no reversal has completed, so the watch expires; a pattern that
-  completes later re-qualifies against the post-expiry barrier after the rewind.
+  then finds the watch cleared. Live-like: when the watch expires at E no reversal has applied by E, so the false
+  break stands; a pattern that completes later re-qualifies against the post-expiry barrier after the rewind. The
+  cap can also change a step whose uncapped winner would never have applied (the pending reversal applied first
+  inside its back-fill): with no winner the pending applies in the anchor's own non-frozen step, which adds a
+  `RANGE_UPDATED` on the same reversal candle.
 - **The step ends at the expiry.** An expiry requested inside a step — in the winner back-fill, in the breakout's
   `_post_apply_range_check` (which ends too; then `_step_anchor` skips the apply-row re-write), or in the no-winner
   range back-fill — ends the step at that candle, like a terminal reversal ("Reversal inside a back-fill"): no
   apply, no finalize, no re-step. The step returns the jump target: the run loop honours it; a `_rewind_to` rebuild,
   which ignores the request, resumes there without a reset as it always did (LANDMINES "MarketStructure
-  Deep-Couples…" 1(a)).
+  Deep-Couples…" 1(a)) — but no longer after replaying the discarded continuation, so a rebuilt prefix can change:
+  `test_ms_stop_after_cts::TestRebuiltPrefixException::test_mechanism`'s full run lost the continuation's
+  `BOS_THRESHOLD_UPDATED@10` + `RANGE_STARTED@13` and gained `BOS_THRESHOLD_UPDATED@5` + `REVERSAL_WATCH_START@9`
+  (its `CTS_ESTABLISHED` list is unchanged; pinned in `tests/test_ms_expiry_stop.py`).
 Before the fix the step went on and the rewind + seed restore (a direct `state.state =`) threw the rest away: a later
 anchor's reversal winner applied after E and was discarded (F3 — `tests/test_ms_expiry_stop.py`: the watch expires
 at 9, the anchor-9 reversal applied at 10); a second expiry inside the continuation overwrote the jump target and the
 seed (the df invariant "bos_threshold changed during reversal watch" fired); a rebuild replaying the continuation
 re-applied the discarded reversal and crashed on its "never reaches a reversal" assert. `run()` now asserts a rewind
-is never requested in REVERSAL. 0 expiries on the reference window (byte-identical).
-**Open (F3b):** because the expiry precedes the pending apply, a reversal pattern that confirms ON the expiry candle
-is discarded as a false break — and that is the only way the false-break rewind is reached (every expiry in the
-suite, 42/42). LANDMINES L4 decided this for the data edge only; the general case is undecided.
+is never requested in REVERSAL. 0 expiries on the reference window (byte-identical). Side effect: with
+`stop_after_cts_established`, a discarded continuation could write a `reversal` row past the early stop, and `run()`'s
+terminal stamping then marked the stopped tail as reversal with no reversal event (found by the landing review's
+random tails); no such row is written now (no production reader affected: `unified_probe._has_reversal` is read only
+when fewer than 2 CTS were established).
+**Open (F3b) — the two paths disagree on a reversal applying exactly at E.** The expiry runs before the pending
+apply in the per-candle step, so the close-break anchor's own PENDING reversal confirming ON E is discarded as a false
+break — and that is the only way the false-break rewind is reached (every expiry in the suite, 42/42) — while a later
+anchor's reversal WINNER applying at E is applied (the winner path clears the watch first;
+`test_a_later_anchors_reversal_applying_at_the_expiry_still_wins`). LANDMINES L4 recorded the same split at the data
+edge and decided it there only. A decision must cover both paths (ruling "E = false break" flips that pin).
 
 ---
 

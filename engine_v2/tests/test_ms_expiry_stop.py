@@ -19,9 +19,12 @@ asserts a rewind is never requested in REVERSAL. Live-like: at E no reversal has
 a pattern completing later re-qualifies against the post-expiry barrier after the rewind.
 
 Reference window (`review_scripts/reversal_shadow.py` over every MS run): 12 runs, 0 expiries -> byte-identical.
-Suite: 42 expiries, 0 F3, 26 range back-fills stepping past their expiry (now stopped; no output changes).
-Random tails (12k per tree): HEAD 192 F3 winners, 200 rewinds entered in REVERSAL, 1 rebuild-assert crash; A+D 0 / 0
-/ 0. The fixtures below come from those searches (rows embedded).
+Suite: 42 expiries, 0 F3, 26 range back-fills stepping past their expiry (now stopped). The 23 first-pass ones
+change nothing (the rewind discarded the rest); the 3 inside `_rewind_to` rebuilds change the rebuilt prefix
+(`test_mechanism`'s full run — pinned below). Random tails (12k per tree): pre-fix (edeef26) 192 F3 winners, 200
+rewinds entered in REVERSAL, 1 rebuild-assert crash; A+D 0 / 0 / 0 rebuild-assert crashes (a separate, pre-existing
+df-invariant false positive on back-to-back watches remains — zones-audit "Still open"). The fixtures below come
+from those searches (rows embedded).
 """
 from __future__ import annotations
 
@@ -45,7 +48,7 @@ from engine_v2.tests.test_unified_probe import _R, _prepare_df
 #   8   cycle 1 established (first pass; inside the open watch).
 #   9   bear maru closing .5962: the expiry fires here (it precedes the pending apply 9 in the per-candle step:
 #       false break, BOS := l4 .5980, rewind to 5). Anchor 9's own reversal against the frozen .5998 applies at 10.
-#       HEAD chose it as step 9's winner (cap D = 14): its back-fill fired the expiry at 9, the reversal applied at
+#       Pre-fix (edeef26) chose it as step 9's winner (cap D = 14): its back-fill fired the expiry at 9, the reversal applied at
 #       10, the run loop rewound IN REVERSAL and the seed restore discarded it. Now: capped at E = 9 -> the step's
 #       winner is a `pullback` applying at 10, and the step ends at the expiry candle 9 (nothing at 10 runs).
 #   After the rewind (both): candle 5 probes the BOS to .5978; 9 close-breaks it -> watch 9 (E 13), pending
@@ -60,7 +63,7 @@ def _f3_rows() -> list[dict]:
     ]
 
 
-# Rebuild crash — random-tail search seed 12 trial 3597 (same base, sd=+1). HEAD: the F3 step at 9 (reversal winner
+# Rebuild crash — random-tail search seed 12 trial 3597 (same base, sd=+1). Pre-fix (edeef26): the F3 step at 9 (reversal winner
 # applying at 10) -> rewind 5 -> 9 close-breaks the new BOS .5978 -> watch 9, pending == E 14 -> expiry at 14 ->
 # rewind to 10 -> the `_rewind_to` rebuild replays 0..9 ignoring the nested jump at 9, so the discarded reversal
 # re-applies at 10 -> AssertionError "rewind rebuild reached a reversal". Now: the rebuild's step 9 has no reversal
@@ -225,6 +228,25 @@ def test_a_later_anchors_reversal_applying_at_the_expiry_still_wins(sd, trace):
     assert trace["rewinds"] == []
     assert _reversals(res.events) == [(9, "pullback_range", "one_maru_continuous", _price(0.5998, sd))]
     assert res.reversal_idx == 9
+
+
+def test_a_rebuild_no_longer_replays_a_discarded_continuation():
+    """`_make_double_rewind_data()` at `end_idx=17` (the `full` run of `test_ms_stop_after_cts::test_mechanism`): the
+    J2 rewind's rebuild (0..14) meets J1's expiry at 9 inside step 9's range back-fill. Pre-fix (edeef26) the step went
+    on (BOS_THRESHOLD_UPDATED@10, the range finalize RANGE_STARTED@13) before the rebuild followed the jump target back
+    to 5; now it ends at the expiry and the rebuild re-steps from 5 (BOS_THRESHOLD_UPDATED@5, REVERSAL_WATCH_START@9).
+    The CTS_ESTABLISHED list — what `test_mechanism` pins — is unchanged."""
+    from engine_v2.tests.test_ms_stop_after_cts import _make
+    ms = _make(_make_double_rewind_data(), end_idx=17)
+    with redirect_stdout(io.StringIO()):
+        ms.run()
+    sig = [(e.type, int(e.idx)) for e in ms.events]
+    # the rebuild's step 9 ends at J1's expiry, then it re-steps from 5 on the un-reset state (Deep-Couples 1(a))
+    assert sig[17:22] == [("BOS_THRESHOLD_UPDATED", 9), ("BOS_THRESHOLD_UPDATED", 5), ("REVERSAL_WATCH_START", 9),
+                          ("BOS_THRESHOLD_UPDATED", 9), ("RANGE_RESET", 12)]
+    assert ("RANGE_STARTED", 13) not in sig and ("BOS_THRESHOLD_UPDATED", 10) not in sig
+    assert _cycles(ms.events) == [(2, 0), (8, 1), (12, 2)]
+    assert len(sig) == 34
 
 
 # ---------------------------------------------------------------------------------------------------------------
