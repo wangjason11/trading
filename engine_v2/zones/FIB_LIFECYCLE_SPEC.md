@@ -490,8 +490,9 @@ gate, **unlocked-and-not-active records VANISH** (were faded). Three categories:
 2. **Inactive-unlocked fibs** — activated then imbalance-filled, never confirmed
    (never locked).
 3. **Ended-unlocked fibs** — capped by `lifecycle_end`/`reversal` while
-   `active and not locked` (the `entity_df_mutation.py:669-678` cap); open sub
-   crosses that never established a CTS — **common on M15/sub.**
+   `active and not locked` (then the `entity_df_mutation.py:669-678` cap; since §15.6 (b) the
+   `_finalize` pass-through, and for open sub crosses that never established a CTS §15.4
+   candidate 3) — **common on M15/sub.**
 
 **Impact distribution:** H1 **main** barely changes (main fibs almost always
 lock; only a trailing still-forming cycle whose imbalance filled could vanish).
@@ -973,7 +974,10 @@ candidates are:
    row, so candidate 2 never reached it: a sub ended by its cap left it open (`end_idx` None)
    while a reversal ended it (candidate 1). `_finalize_lifecycle_fields` now feeds
    `lifecycle_cap` (+ `cap_reason`) for such fibs; `None` cap (main, an open-ended sub) = no
-   candidate, the fib stays live. Its POIs then follow `poi_zones`' "ended + unlocked fib →
+   candidate, the fib stays live. This RESTORES a cap that §15.6 (b) dropped: the removed
+   post-hoc sub loop capped every `active and not locked` fib, these included, while the
+   pass-through only reached cycles with a table row (a regression since `559db50`,
+   2026-05-27, found by the zones audit). Its POIs then follow `poi_zones`' "ended + unlocked fib →
    no POIs" rule, as after a reversal (POI_ZONES_SPEC `cts_established_idx` fallback). 0 such
    fibs on the reference window; pins `tests/test_fib_never_established_cap.py`.
 
@@ -1043,7 +1047,9 @@ clamp + pass-through, reusing the **same** machinery KL/POI use:
   local; the mirror shifts to entity-absolute) — exactly as KL/POI's post-hoc cap
   loops were removed in B2. NB this also caps a **locked** last-cycle sub fib that
   the old `active and not locked` guard skipped — more correct, and latent in output
-  (locked fibs always chart; status feeds no sub output). The `capped_cycles`
+  (locked fibs always chart; status feeds no sub output). NB the removal also DROPPED the
+  cap for a never-established pre-created cross (no table row) — restored 2026-09-28 as
+  §15.4 candidate 3. The `capped_cycles`
   cross-version status recompute is subsumed (finalize stamps status across all
   version records of a cycle).
 

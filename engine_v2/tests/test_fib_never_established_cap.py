@@ -3,12 +3,13 @@ cycle fallback POI").
 
 `cross_cycle` fib mode (every sub variant; H1 `h1` mode has no pre-established phase) pre-creates the NEXT cycle's
 cross fib once cycle n's CTS is confirmed (FIB_LIFECYCLE_SPEC §6). If that next cycle never establishes, its fib has
-no `compute_cycle_lifecycle` row. A REVERSAL already ended it (`_apply_reversal_terminals` stamps every fib of the
+no `compute_cycle_lifecycle` row. A REVERSAL already ended it (`set_reversal_terminals` stamps every fib of the
 ended sid) and `poi_zones` then built no POIs on it (an ended, unlocked fib); the sub's lifecycle CAP did not, so the
 fib stayed open and its POIs ran to the frame edge past the sub's end, never activating (their fallback floor is the
 fib's latest CTS candle). Fix (user decision, option A "cap like the reversal"): `_finalize_lifecycle_fields` feeds
-the cap as an end candidate for such fibs (FIB_LIFECYCLE_SPEC §15.4 candidate 3). A still-LIVE pre-created fib (an
-open-ended sub) is unchanged — option B (its POIs' dead fallback floor) is deferred.
+the cap as an end candidate for such fibs (FIB_LIFECYCLE_SPEC §15.4 candidate 3) — restoring what the post-hoc sub
+fib cap loop removed in `559db50` (§15.6) had done for them. A still-LIVE pre-created fib (an open-ended sub) is
+unchanged — option B (its POIs' dead fallback floor) is deferred.
 
 Reference window: 0 never-established fib rows on either lens (counter 8/8, confluence 21/21 established) —
 byte-identical. The fixture is real engine output (a random-tail search on `_make_multicycle_data()[:9]`, 2026-09-28).
@@ -20,16 +21,18 @@ from contextlib import redirect_stdout
 
 import pytest
 
+from engine_v2.multitf.pooled_structure_build import project_to_window
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests.test_unified_probe import _R, _make_multicycle_data, _prepare_df
 
 # sd=+1, start 0, NZD_USD, run at M15 pips in `cross_cycle` mode (a sub's downstream).
-#   0-8  = `_make_multicycle_data()[:9]`: cycle 0 established at 2 (BOS .5998, CTS anchor 5 .6122), CTS_CONFIRMED at 7
-#        (the 6-7 pullback; IC 7 [.6088-.6107]), range active.
+#   0-8  = `_make_multicycle_data()[:9]`: cycle 0 established at 2 (BOS .5998; CTS anchor 2 -> 5 .6122 via the
+#        CTS_UPDATEDs at 3/4/5), CTS_CONFIRMED at 7 (the 6-7 pullback; IC 7 [.6088-.6107]), range active.
 #   9    the first range-sync CTS_THRESHOLD_UPDATED -> FibTracker pre-creates the cycle-1 cross fib (BOS .5998 -> the
 #        running high) and ends the cycle-0 fib at 9 (`new_cycle`).
-#   10-23 a climb: a threshold update on every candle, no breakout pattern -> cycle 1 never establishes.
+#   10-23 a climb: a threshold update on every candle but 15 (its high .61904 < .61917), no breakout pattern -> cycle 1
+#        never establishes.
 # Capped at 22 (a sub whose data continues to 23): before the fix the cycle-1 fib stayed open (end None) and its POI
 # on IC 7 had no end (drawn to 23), `inactive`, with the fallback floor 22.
 _CAP, _IC = 22, 7
@@ -86,6 +89,19 @@ def test_the_cap_ends_a_never_established_cycles_fib_and_builds_no_poi():
     _out, fib1, pois1 = _downstream(_rows(), end_idx=_CAP, cap=_CAP)
     assert {(f.end_idx, f.end_reason, f.status) for f in fib1} == {(_CAP, "lifecycle_end", "ended")}
     assert pois1 == []
+
+
+def test_the_production_projection_caps_it_with_the_subs_end_reason():
+    """The sub path itself (landing review F3): a natural-end run projected onto a lifecycle window by
+    `project_to_window` (knowable-at clip + the downstream with `cap_reason` = the sub's end reason). Cap 15 != the
+    fib's CTS candle 14, and `parent_end` is a real sub end reason (never the default `lifecycle_end`)."""
+    with redirect_stdout(io.StringIO()):
+        natural = compute_bounded_structure(_prepare_df(_rows()), 0, 1, timeframe="M15")
+        down = project_to_window(natural, floor=2, cap=15, cap_reason="parent_end", direction=1, timeframe="M15")
+    assert [(e.idx, e.meta["cycle_id"]) for e in down["events"] if e.type == "CTS_ESTABLISHED"] == [(2, 0)]
+    fib1 = [f for f in down["fib_states"] if (f.structure_id, f.cycle_id) == (0, 1)]
+    assert {(f.cts_idx, f.end_idx, f.end_reason, f.status) for f in fib1} == {(14, 15, "parent_end", "ended")}
+    assert not [z for z in down["poi_zones"] if z.meta["cycle_id"] == 1]
 
 
 def test_a_reversal_ends_it_the_same_way():

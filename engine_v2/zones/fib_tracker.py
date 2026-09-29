@@ -494,6 +494,9 @@ class FibTracker:
             so fib's own earlier terminals (new_cycle / Option A / scenario1_revert
             / reversal) win, and the table end only fills cycles with no earlier
             terminal (the open last cycle / the subordinate cap).
+          - a fib whose cycle has NO table row (a pre-established cross for a next
+            cycle that never establishes) gets `lifecycle_cap` as its candidate
+            (§15.4 candidate 3, 2026-09-28); `None` cap = none.
         `lifecycle_floor`/`lifecycle_cap` are the same ints KL/POI receive
         (`None` for main; slice-local for subs). When `events` is None the clamp
         and pass-through are skipped (no caller does this today).
@@ -518,9 +521,10 @@ class FibTracker:
             # A fib whose cycle has no CTS_ESTABLISHED has no `cycle_life` row: the
             # pre-established cross (§6, subordinate-only) pre-created for a next cycle
             # that never establishes. The structure's end still ends it — the reversal via
-            # `_apply_reversal_terminals`, the subordinate CAP here (§15.4 candidate 3;
-            # user 2026-09-28, "cap like the reversal"). `poi_zones` then builds no POIs
-            # on it (an ended, unlocked fib), exactly as after a reversal.
+            # `set_reversal_terminals`, the subordinate CAP here (§15.4 candidate 3;
+            # user 2026-09-28, "cap like the reversal"; restores the cap the removed
+            # post-hoc loop gave it, §15.6). `poi_zones` then builds no POIs on it (an
+            # ended, unlocked fib), exactly as after a reversal.
             if lifecycle_cap is not None:
                 for s, c in {(int(k[0]), int(k[1])) for k in self._fibs
                              if isinstance(k, tuple) and len(k) >= 2}:
