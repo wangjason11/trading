@@ -124,6 +124,7 @@ _EVENT_META_IDX_KEYS = (
     "proximity_apply_idx",  # RANGE_STARTED (proximity_created_range)
     "expires_idx",          # REVERSAL_WATCH_START / REVERSAL_CANDIDATE
     "pb_start",             # BOS_CONFIRMED (the last pullback pattern's apply candle; None before any)
+    "ended_watch_pattern_anchor_idx",  # BOS_CONFIRMED (the reversal watch a new cycle ended; 2026-09-29)
 )
 
 # Zone-meta keys with entity-df indices (KL and POI zones).

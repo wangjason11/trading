@@ -48,27 +48,31 @@ def _reversals(events):
 @pytest.mark.parametrize("end_idx", [13, 16])
 def test_a_discarded_reversal_candidate_ends_no_fib(end_idx):
     """`_make_double_rewind_data` bounded at 13 / 16: candle 4 close-breaks BOS_0 and schedules a reversal (candidate
-    anchor 4, apply 9 == its expiry); at 9 the expiry runs first, discards it and rewinds; cycle 1 is re-established
-    at 12 and nothing reverses. The cycle-1 fib must not end in a phantom 'reversal' at 9 (before its own start):
-    it ends at the run's cap, like the KL zones."""
+    anchor 4, apply 9 == its expiry); cycle 1 is established at 8 inside that watch and ends it — the candidate is
+    dropped (MARKET_STRUCTURE_SPEC "A new cycle ends an open watch"; until 2026-09-29 the expiry at 9 discarded it and
+    cycle 1 came only at 12) — cycle 2 at 12, and nothing reverses. No fib may end in a phantom 'reversal' at 9
+    (inside cycle 1, 8-12): cycle 1's ends at the next cycle, cycle 2's at the run's cap, like the KL zones."""
     res = _ms(end_idx)
     assert _cands(res.events) == [(4, 9)] and _reversals(res.events) == []          # a dead candidate
-    assert [(e.meta["cycle_id"], e.idx) for e in res.events if e.type == "CTS_ESTABLISHED"] == [(0, 2), (1, 12)]
+    assert [(e.meta["cycle_id"], e.idx) for e in res.events if e.type == "CTS_ESTABLISHED"] == [(0, 2), (1, 8), (2, 12)]
+    assert [e.meta.get("ended_watch_pattern_anchor_idx") for e in res.events if e.type == "BOS_CONFIRMED"] == [None, 4, None]
     fibs = {(f.structure_id, f.cycle_id): f for f in _downstream(res, res.events, end_idx)["fib_states"]}
-    f = fibs[(0, 1)]
-    assert (f.start_idx, f.end_idx, f.end_reason) == (12, end_idx, "lifecycle_end")
+    assert (fibs[(0, 1)].start_idx, fibs[(0, 1)].end_idx, fibs[(0, 1)].end_reason) == (8, 12, "new_cycle")
+    assert (fibs[(0, 2)].start_idx, fibs[(0, 2)].end_idx, fibs[(0, 2)].end_reason) == (12, end_idx, "lifecycle_end")
 
 
 def test_the_realised_reversal_still_ends_the_fib():
-    """Positive control, the full fixture: the J2 candidate (apply 17) realises at 17 -> 'reversal' at 17."""
+    """Positive control, the full fixture: the J2 candidate (apply 17) realises at 17 -> the last cycle's fib (cycle 2,
+    from 12) ends in 'reversal' at 17."""
     res = _ms(None)
     assert _cands(res.events) == [(4, 9), (14, 17)] and _reversals(res.events) == [17]
     fibs = {(f.structure_id, f.cycle_id): f for f in _downstream(res, res.events, None)["fib_states"]}
-    assert (fibs[(0, 1)].end_idx, fibs[(0, 1)].end_reason) == (17, "reversal")
+    assert (fibs[(0, 2)].start_idx, fibs[(0, 2)].end_idx, fibs[(0, 2)].end_reason) == (12, 17, "reversal")
 
 
 def test_every_reader_gets_the_realised_reversal_not_the_last_candidate(monkeypatch):
-    """The candidates disagree with the realised reversal on both sides: the discarded J1 candidate (apply 9) and
+    """The candidates disagree with the realised reversal on both sides: the dead candidate at 4 (apply 9; dropped
+    when cycle 1 is established at 8 inside its watch) and
     the watch candidate at 14 with its scheduled apply 19 — while sid 0 reverses at 17, EARLIER than 19 (a
     step-anchor reversal under the frozen threshold applies before the candidate's apply). sid 1 (down) follows —
     established

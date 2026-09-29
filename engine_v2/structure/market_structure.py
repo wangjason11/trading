@@ -1519,11 +1519,11 @@ class MarketStructure:
                         int(apply_idx),
                         bos_price,
                         bos_anchor_idx=bos_anchor_idx,
-                        meta={
+                        meta=self._end_watch_superseded_by_new_cycle(int(apply_idx), {  # an open watch ends here
                             "source": "pullback_extreme",
                             "confirmed_at": int(apply_idx),
                             "pb_start": self.state.last_pullback_pat_apply_idx,
-                        },
+                        }),
                     )
 
                 # New cycle => reset CTS confirmation guard & threshold
@@ -2623,6 +2623,8 @@ class MarketStructure:
                 # to anchor + 1, whose candle opens a new watch). The frozen barrier identifies the
                 # watch — a watch opened after an expiry freezes the moved BOS, strictly beyond the old
                 # frozen barrier (MARKET_STRUCTURE_SPEC "Invariants"; landing review of 52ac1e9).
+                # A pure tripwire since 2026-09-29: the one BOS write that can run during a watch (a new
+                # cycle's BOS_CONFIRMED) ends the watch (`_end_watch_superseded_by_new_cycle`).
                 frozen = df["reversal_bos_th_frozen"].astype(float)
                 frozen_prev = frozen.shift(1)
                 changed = active_b & prev_active & (frozen == frozen_prev) & (bos != bos_prev)
@@ -2636,6 +2638,33 @@ class MarketStructure:
         # (Reversal is terminal: asserted at the source in `_set_state`. A df check
         # here could never fire — `run()` forward-stamps `market_state` from the
         # first reversal before calling this.)
+
+    # ----------------------------
+    # A new cycle ends an open reversal watch (placed below the invariant checks so the pandas
+    # FutureWarning they emit keeps its line number: run.log stays byte-identical)
+    # ----------------------------
+
+    def _end_watch_superseded_by_new_cycle(self, apply_idx: int, meta: dict) -> dict:
+        """A cycle >= 1 is being established at `apply_idx` (its BOS_CONFIRMED `meta` is passed in, returned).
+
+        An open reversal watch froze the PREVIOUS cycle's BOS, which this cycle's BOS_CONFIRMED supersedes —
+        the market made a new extreme instead of reversing (user decision 2026-09-29; MARKET_STRUCTURE_SPEC
+        "A new cycle ends an open watch"). Its pending reversal confirms only after this candle (not knowable
+        here), so the watch ends and the pending is dropped; a later close beyond the NEW BOS opens a new
+        watch. Traced on the BOS_CONFIRMED: `ended_watch_pattern_anchor_idx` = the ended watch's close-break
+        candle (= its REVERSAL_WATCH_START idx; pattern realm, GLOSSARY "Naming Standard"). A pending applying
+        ON this candle keeps the watch: at an equal apply the reversal comes first (the step's priority) and
+        applies in this candle's own step. A pending before it cannot exist (it would have applied, terminal).
+        """
+        st = self.state
+        if not st.reversal_watch_active:
+            return meta
+        if st.pending_reversal_apply_idx is not None and int(st.pending_reversal_apply_idx) <= int(apply_idx):
+            return meta
+        meta["ended_watch_pattern_anchor_idx"] = int(st.reversal_watch_start_idx)
+        self._clear_pending_reversal()
+        self._clear_reversal_watch()
+        return meta
 
     # ----------------------------
     # Convert events -> StructureLevel (for downstream consumers like KL zones)

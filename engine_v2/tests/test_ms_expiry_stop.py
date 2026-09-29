@@ -25,6 +25,13 @@ change nothing (the rewind discarded the rest); the 3 inside `_rewind_to` rebuil
 rewinds entered in REVERSAL, 1 rebuild-assert crash; A+D 0 / 0 / 0 rebuild-assert crashes (a separate, pre-existing
 df-invariant false positive on back-to-back watches remained — fixed next, `test_ms_invariant_watch_identity.py`).
 The fixtures below come from those searches (rows embedded).
+
+Re-derived 2026-09-29 when a new cycle started to END an open watch (MARKET_STRUCTURE_SPEC "A new cycle ends an open
+watch"): every fixture here was `_make_double_rewind_data`-based, and its first-pass cycle 1 @8 — established inside
+the watch opened at 4 — now ends that watch, so the step-9 mechanisms no longer arose. Candle 8 is replaced by one
+closing back below CTS_0 (`_no_cycle_at_8`): the watch survives to 9 as before. Each end-to-end pin was checked in
+two scratch trees with the new rule — the F3 fix reverted (all fail) and the cap alone (the stop pins fail) — and on
+this tree (pass). The jump-overwrite case has no known instance under the new rule (see the note at its former fixture).
 """
 from __future__ import annotations
 
@@ -41,20 +48,30 @@ from engine_v2.tests.test_unified_probe import _R, _prepare_df
 
 
 # ---------------------------------------------------------------------------------------------------------------
+# Candle 8 of `_make_double_rewind_data` completes a breakout (cycle 1 @8, new high .6066) inside the watch opened at
+# 4 — which ENDS that watch since 2026-09-29. This candle closes back at .6040, below CTS_0 .6042: no cycle at 8.
+_C8 = _R(0.60540, 0.60560, 0.60380, 0.60400)
+
+
+def _no_cycle_at_8(rows: list[dict]) -> list[dict]:
+    rows = list(rows)
+    rows[8] = _C8
+    return rows
+
+
 # F3 — sd=+1, start 0, NZD_USD H1 (persisted 2026-09-28 by the landing review; `_make_double_rewind_data()[:9]` +
-# 5 candles). 0-2 cycle 0 established at 2 (CTS .6042, BOS_0 = l0 .5998).
+# 5 candles, candle 8 = `_C8` since 2026-09-29). 0-2 cycle 0 established at 2 (CTS .6042, BOS_0 = l0 .5998).
 #   4   bear maru closing .5982: pullback -> CTS_CONFIRMED@4 + range; close-breaks BOS_0 -> watch A=4, E=9; the
 #       anchor-4 reversal (`one_maru_opposite(-1)`) confirms at 9 = E -> pending apply 9.
-#   8   cycle 1 established (first pass; inside the open watch).
 #   9   bear maru closing .5962: the expiry fires here (it precedes the pending apply 9 in the per-candle step:
 #       false break, BOS := l4 .5980, rewind to 5). Anchor 9's own reversal against the frozen .5998 applies at 10.
-#       Pre-fix (edeef26) chose it as step 9's winner (cap D = 14): its back-fill fired the expiry at 9, the reversal applied at
-#       10, the run loop rewound IN REVERSAL and the seed restore discarded it. Now: capped at E = 9 -> the step's
-#       winner is a `pullback` applying at 10, and the step ends at the expiry candle 9 (nothing at 10 runs).
+#       Pre-fix chose it as step 9's winner (cap D = 14): its back-fill fired the expiry at 9, the reversal applied at
+#       10, the run loop rewound IN REVERSAL and the seed restore discarded it. Now: capped at E = 9 -> step 9 has no
+#       winner while the watch is open, and its step ends at the expiry candle 9 (nothing at 10 runs).
 #   After the rewind (both): candle 5 probes the BOS to .5978; 9 close-breaks it -> watch 9 (E 13), pending
 #   `one_maru_continuous(-1)` 9-10 -> the reversal @10 (bos_frozen .5978) — the final outcome is unchanged.
 def _f3_rows() -> list[dict]:
-    return list(_make_double_rewind_data()[:9]) + [
+    return _no_cycle_at_8(_make_double_rewind_data()[:9]) + [
         _R(0.60640, 0.60660, 0.59600, 0.59620),   # 9
         _R(0.59700, 0.59720, 0.58800, 0.58820),   # 10
         _R(0.58820, 0.58840, 0.58300, 0.58320),   # 11
@@ -63,39 +80,25 @@ def _f3_rows() -> list[dict]:
     ]
 
 
-# Rebuild crash — random-tail search seed 12 trial 3597 (same base, sd=+1). Pre-fix (edeef26): the F3 step at 9 (reversal winner
-# applying at 10) -> rewind 5 -> 9 close-breaks the new BOS .5978 -> watch 9, pending == E 14 -> expiry at 14 ->
-# rewind to 10 -> the `_rewind_to` rebuild replays 0..9 ignoring the nested jump at 9, so the discarded reversal
-# re-applies at 10 -> AssertionError "rewind rebuild reached a reversal". Now: the rebuild's step 9 has no reversal
-# winner and ends at the nested expiry (returning 5, where the rebuild resumes as before) -> no crash, no reversal.
-# (The rebuilt prefix still holds the first pass's cycle 1 @8 — the Deep-Couples 1(a) divergence, not F3.)
+# Rebuild crash — `_no_cycle_at_8(_make_double_rewind_data())` at `end_idx=17` (sd=+1; 2026-09-29, replacing seed 12
+# trial 3597, whose F3-into-a-rebuild path needed the in-watch cycle @8). Watch A=4, E=9 (pending 9). Step 7's winner
+# is a BREAKOUT applying at 11, past E: its back-fill fires the expiry at 9 (J1, rewind to 5). The post-J1 path
+# establishes cycle 1 at 11, a watch at 14 expires at the bound 17 (J2, rewind to 15), and the `_rewind_to` rebuild
+# replays 0..14 IGNORING the nested J1 jump. Without the stop the rebuild's step 7 went on past the expiry (10, 11:
+# the breakout applied, a cycle the post-J1 path never had) and that discarded continuation reached a reversal at step
+# 14 -> AssertionError "rewind rebuild reached a reversal" (the F3 fix reverted AND the cap alone both crash). Now the
+# rebuild's step 7 ends at the nested expiry and resumes at 5 (Deep-Couples 1(a): on the un-reset state).
 def _rebuild_crash_rows() -> list[dict]:
-    return list(_make_double_rewind_data()[:9]) + [
-        _R(0.60640, 0.60662, 0.59614, 0.59628), _R(0.59618, 0.59761, 0.59580, 0.59695),   # 9, 10
-        _R(0.59696, 0.59752, 0.59578, 0.59650), _R(0.59678, 0.59771, 0.59637, 0.59730),   # 11, 12
-        _R(0.59701, 0.59809, 0.59147, 0.59760), _R(0.59782, 0.59867, 0.59276, 0.59408),   # 13, 14
-        _R(0.59397, 0.59869, 0.59221, 0.59791), _R(0.59763, 0.60251, 0.59601, 0.60128),   # 15, 16
-        _R(0.60154, 0.60210, 0.60028, 0.60059), _R(0.60062, 0.60490, 0.60031, 0.60398),   # 17, 18
-        _R(0.60405, 0.60542, 0.60124, 0.60206),                                           # 19
-    ]
+    return _no_cycle_at_8(_make_double_rewind_data())
 
 
-# Jump overwrite — seed 12 trial 796, sd=-1 (0-9 = the base mirrored at 1.2; the trial's bound 12 = these 13 rows).
-# Watch A=4 (bos .6002), E=9, pending 9. Step 9's reversal winner (applying at 12) is capped; the next winner is a
-# `continuous` pullback applying at 12. With the cap ALONE its back-fill ran on past the expiry at 9: 10 and 11
-# close-broke the new barrier, a watch at 11 expired at 12 (= the edge) inside the same step and OVERWROTE the jump
-# (5 -> 12) and its seed -> the df invariant "bos_threshold changed during reversal watch" fired. Stopping at the
-# expiry keeps the one rewind to 5; then 9 close-breaks .6022 -> watch 9, pending 12 -> the reversal @12.
-def _jump_overwrite_rows() -> list[dict]:
-    return [
-        _R(0.59700, 0.60020, 0.59680, 0.60000), _R(0.60000, 0.60010, 0.59780, 0.59800),   # 0, 1
-        _R(0.59800, 0.59810, 0.59580, 0.59600), _R(0.59600, 0.59870, 0.59590, 0.59850),   # 2, 3
-        _R(0.59850, 0.60200, 0.59840, 0.60180), _R(0.60180, 0.60220, 0.60040, 0.60100),   # 4, 5
-        _R(0.60100, 0.60120, 0.59780, 0.59800), _R(0.59800, 0.59820, 0.59440, 0.59460),   # 6, 7
-        _R(0.59460, 0.59480, 0.59340, 0.59360), _R(0.59360, 0.60820, 0.59340, 0.60300),   # 8, 9
-        _R(0.60317, 0.60662, 0.60173, 0.60524), _R(0.60551, 0.61304, 0.60527, 0.61288),   # 10, 11
-        _R(0.61315, 0.61703, 0.61265, 0.61523),                                           # 12
-    ]
+# Jump overwrite (seed 12 trial 796, persisted until 2026-09-29): with the cap ALONE a step's back-fill ran on past
+# the expiry, a second watch opened there expired inside the same step and OVERWROTE the jump target + seed. That
+# fixture's step-9 pullback winner existed only in the BREAKOUT state left by the in-watch cycle @8 — which now ENDS
+# the watch — so its pin was retired. No instance is known under the new rule (0 in 56k cap-only random tails incl.
+# 20k from an open watch, 0 in a 66-variant sweep of its candles 7-8); not proven unreachable. The site it exercised
+# (the winner back-fill stops at the expiry and returns the jump target) is pinned by
+# `test_the_winner_backfill_stops_at_the_expiry` below.
 
 
 # Boundary — seed 21 trial 231 (`_make_double_rewind_data()[:6]` + 4, sd=+1): watch A=4, E=9, pending 9; anchor 8's
@@ -196,29 +199,22 @@ def test_f3_the_expiry_resolves_the_watch_not_a_later_anchors_reversal(sd, trace
 
     res = _run(_rows(_f3_rows, sd), sd)
     _assert_no_action_past_an_expiry(trace)
-    assert trace["winners"] == [(7, "breakout", 8, 9), (9, "pullback", 10, 9)]
-    assert trace["rewinds"] == [(5, "range")]
-    assert _reversals(res.events) == [(10, "range", "one_maru_continuous", _price(0.5978, sd))]
-    assert _cycles(res.events) == [(2, 0)]            # the first pass's cycle 1 @8 went with the rewind
+    assert trace["winners"] == []                     # pre-fix: (9, "reversal", 10, 9) — past E
+    assert trace["rewinds"] == [(5, "pullback")]       # pre-fix: (5, "reversal") — the reversal discarded
+    assert _reversals(res.events) == [(10, "pullback_range", "one_maru_continuous", _price(0.5978, sd))]
+    assert _cycles(res.events) == [(2, 0)]
     assert res.reversal_idx == 10
 
 
 @pytest.mark.parametrize("sd", [1, -1])
-def test_f3_feeding_a_rebuild_no_longer_crashes(sd, trace):
-    res = _run(_rows(_rebuild_crash_rows, sd), sd)
+def test_a_rebuild_no_longer_replays_a_continuation_into_a_reversal(sd, trace):
+    with redirect_stdout(io.StringIO()):
+        res = compute_bounded_structure(_prepare_df(_rows(_rebuild_crash_rows, sd)), 0, sd, end_idx=17)
     _assert_no_action_past_an_expiry(trace)
-    assert [j for j, _ in trace["rewinds"]] == [5, 10]
+    assert trace["winners"] == [(7, "breakout", 11, 9)]   # a breakout past E: the step stops at the expiry anyway
+    assert trace["rewinds"] == [(5, "pullback_range"), (15, "pullback")]
     assert _reversals(res.events) == [] and res.reversal_idx is None
-
-
-@pytest.mark.parametrize("sd", [-1, 1])
-def test_a_second_expiry_cannot_overwrite_the_rewind(sd, trace):
-    res = _run(_rows(_jump_overwrite_rows, sd, native_sd=-1), sd)
-    _assert_no_action_past_an_expiry(trace)
-    assert trace["winners"] == [(7, "breakout", 8, 9), (9, "pullback", 12, 9)]
-    assert trace["rewinds"] == [(5, "range")]         # the cap alone: a 2nd expiry at 12 rewound to 12
-    assert _reversals(res.events) == [(12, "range", "continuous", _price(0.6178, sd))]
-    assert res.reversal_idx == 12
+    assert _cycles(res.events) == [(2, 0), (11, 1)]
 
 
 @pytest.mark.parametrize("sd", [1, -1])
@@ -231,22 +227,19 @@ def test_a_later_anchors_reversal_applying_at_the_expiry_still_wins(sd, trace):
 
 
 def test_a_rebuild_no_longer_replays_a_discarded_continuation():
-    """`_make_double_rewind_data()` at `end_idx=17` (the `full` run of `test_ms_stop_after_cts::test_mechanism`): the
-    J2 rewind's rebuild (0..14) meets J1's expiry at 9 inside step 9's range back-fill. Pre-fix (edeef26) the step went
-    on (BOS_THRESHOLD_UPDATED@10, the range finalize RANGE_STARTED@13) before the rebuild followed the jump target back
-    to 5; now it ends at the expiry and the rebuild re-steps from 5 (BOS_THRESHOLD_UPDATED@5, REVERSAL_WATCH_START@9).
-    The CTS_ESTABLISHED list — what `test_mechanism` pins — is unchanged."""
+    """The rebuild-crash fixture's event list (sd +1, `end_idx=17`): the J2 rebuild (0..14) meets J1's expiry at 9
+    inside step 7's winner back-fill, ends the step there and re-steps from 5 on the un-reset state (Deep-Couples 1(a):
+    the rebuilt list runs backwards in time, 9 -> 5). Without the stop the step went on to the breakout at 11 and the
+    run crashed (above)."""
     from engine_v2.tests.test_ms_stop_after_cts import _make
-    ms = _make(_make_double_rewind_data(), end_idx=17)
+    ms = _make(_rebuild_crash_rows(), end_idx=17)
     with redirect_stdout(io.StringIO()):
         ms.run()
     sig = [(e.type, int(e.idx)) for e in ms.events]
-    # the rebuild's step 9 ends at J1's expiry, then it re-steps from 5 on the un-reset state (Deep-Couples 1(a))
-    assert sig[17:22] == [("BOS_THRESHOLD_UPDATED", 9), ("BOS_THRESHOLD_UPDATED", 5), ("REVERSAL_WATCH_START", 9),
-                          ("BOS_THRESHOLD_UPDATED", 9), ("RANGE_RESET", 12)]
-    assert ("RANGE_STARTED", 13) not in sig and ("BOS_THRESHOLD_UPDATED", 10) not in sig
-    assert _cycles(ms.events) == [(2, 0), (8, 1), (12, 2)]
-    assert len(sig) == 34
+    assert sig[9:15] == [("STATE_CHANGED", 6), ("BOS_THRESHOLD_UPDATED", 9), ("BOS_THRESHOLD_UPDATED", 5),
+                         ("REVERSAL_WATCH_START", 9), ("BOS_THRESHOLD_UPDATED", 9), ("RANGE_RESET", 11)]
+    assert _cycles(ms.events) == [(2, 0), (11, 1)]
+    assert len(sig) == 28
 
 
 # ---------------------------------------------------------------------------------------------------------------

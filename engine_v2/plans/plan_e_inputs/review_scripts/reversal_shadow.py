@@ -22,6 +22,15 @@ F3 extension (2026-09-28c; the reversal-watch expiry vs a later pattern):
   rewind_in_rev a run-loop `_rewind_to` entered while the state IS REVERSAL (the seed restore discards the reversal):
                 jump_to, the discarded reversal candle(s), the step that produced it
 
+In-watch extension (2026-09-29b; GOTCHAS "A Cycle Cannot Be Established Inside an Open Reversal Watch"):
+  in_watch_est  a cycle established (`_emit_bos_confirmed`) while a reversal watch is open: the moment, cycle id, the
+                watch's anchor / frozen barrier / expires_idx, its pending reversal (anchor, apply), the BOS before and
+                the new one, rewind flag, chain; after the run: `kept` (the final events still hold that cycle's
+                BOS_CONFIRMED at that moment), the run's reversal candle(s) + their `bos_frozen`, `pending_applied`
+                (a final reversal ON the pending apply with the old frozen barrier), `inv4` (the df invariant-4 rule
+                fires on the final rows) and the run's exception type if it raised
+  in_watch_upd  a CTS_UPDATED (raw or pattern path) emitted while a watch is open: the moment, via, watch anchor, pending
+
 Import before the code under test: replay via the `runpy` recipe (README), suite via
 `PYTHONPATH=<this dir> python -m pytest -p reversal_shadow`. Writes REVERSAL_SHADOW_OUT (default: the temp dir).
 """
@@ -74,13 +83,34 @@ def run(self):
     r = dict(_ms=self, caller=_outer_caller(), tf=self.timeframe, sid=int(self.state.structure_id),
              start=int(self.start_idx), end=int(self._effective_end), stop_n=self.stop_after_cts_established,
              scan=bool(self.enforce_cts0_new_extreme), enter=[], leave=[], bf_apply=[], rebuild=[], seed_over=[],
-             expiry=[], win_past_exp=[], post_expiry=[], rewind_in_rev=[], _steps=[], _last_step=None,
-             n_rewinds=0)
+             expiry=[], win_past_exp=[], post_expiry=[], rewind_in_rev=[], in_watch_est=[], in_watch_upd=[],
+             _steps=[], _last_step=None, n_rewinds=0, exc=None)
     _cur.append(r)
     try:
         out = _orig_run(self)
+    except BaseException as e:
+        r["exc"] = f"{type(e).__name__}: {str(e)[:120]}"
+        _finish(self, r)
+        raise
     finally:
         _cur.pop()
+    _finish(self, r)
+    return out
+MS.run = run
+
+
+def _inv4_rows(df):
+    """The df invariant-4 rule (one watch = equal frozen barrier) on the final rows -> the firing row indices."""
+    need = ("reversal_watch_active", "reversal_bos_th_frozen", "bos_threshold")
+    if not all(c in df.columns for c in need):
+        return []
+    a = df["reversal_watch_active"].astype(bool)
+    fr, bo = df["reversal_bos_th_frozen"].astype(float), df["bos_threshold"].astype(float)
+    ch = a & a.shift(1).fillna(False).astype(bool) & (fr == fr.shift(1)) & (bo != bo.shift(1))
+    return [int(x) for x in df.index[ch]]
+
+
+def _finish(self, r):
     evs = self.events
     rev_pos = [p for p, e in enumerate(evs) if e.type == "STATE_CHANGED" and e.meta.get("to") == "reversal"]
     from_rev = [p for p, e in enumerate(evs) if e.type == "STATE_CHANGED" and e.meta.get("from") == "reversal"]
@@ -94,6 +124,21 @@ def run(self):
         first = rev_pos[0]
         post = [(e.type, int(e.idx), e.meta.get("to") or e.meta.get("via") or e.meta.get("reason")) for e in evs[first + 1:]]
     r["post_ev"] = post
+    rev_bf = [evs[p].meta.get("bos_frozen") for p in rev_pos]
+    if r["in_watch_est"]:
+        try:
+            inv4 = _inv4_rows(self.df)
+        except Exception:  # noqa: BLE001 — a crashed run may have no flushed rows
+            inv4 = None
+        bos_conf = {(int(e.idx), int(e.meta.get("cycle_id", -1))) for e in evs if e.type == "BOS_CONFIRMED"}
+        for w in r["in_watch_est"]:
+            w["kept"] = (w["i"], w["cycle"]) in bos_conf
+            w["rev_idx"] = r["rev_idx"]
+            w["rev_bos_frozen"] = rev_bf
+            w["pending_applied"] = bool(w["pending"] is not None and w["pending"] in r["rev_idx"]
+                                        and w["frozen"] in rev_bf)
+            w["inv4"] = inv4
+            w["exc"] = r["exc"]
     kind = "H1" if r["tf"].upper().startswith("H") else r["tf"]
     agg[f"runs[{kind}]"] += 1
     agg["runs"] += 1
@@ -107,21 +152,28 @@ def run(self):
         agg[f"post_ev[{t}]"] += 1
     agg["reversal_sid_meta_mismatch"] += len(r["sid_meta"])
     for k in ("enter", "leave", "bf_apply", "rebuild", "seed_over", "expiry", "win_past_exp", "post_expiry",
-              "rewind_in_rev"):
+              "rewind_in_rev", "in_watch_est", "in_watch_upd"):
         agg[k] += len(r[k])
+    for w in r["in_watch_est"]:
+        agg["in_watch_est[rewind]" if w["rewind"] else "in_watch_est[run]"] += 1
+        agg["in_watch_est[kept]"] += int(w["kept"])
+        agg["in_watch_est[pending_applied]"] += int(w["pending_applied"])
+        agg["in_watch_est[inv4_fires]"] += int(bool(w["inv4"]))
+        agg["in_watch_est[run_raised]"] += int(w["exc"] is not None)
+        agg["in_watch_est[pending==moment]"] += int(w["pending"] is not None and w["pending"] == w["i"])
+    for u in r["in_watch_upd"]:
+        agg["in_watch_upd[%s]" % u["via"]] += 1
     agg["run_loop_rewinds"] += r["n_rewinds"]
     for w in r["win_past_exp"]:
         agg["win_past_exp[%s]" % w["kind"]] += 1
     agg["expiry_in_frozen_backfill"] += sum(1 for e in r["expiry"] if e["frozen"])
     interesting = r["n_rev"] > 1 or r["n_from_rev"] or post or r["leave"] or r["bf_apply"] or r["rebuild"] \
         or r["seed_over"] or r["sid_meta"] or r["expiry"] or r["win_past_exp"] or r["post_expiry"] \
-        or r["rewind_in_rev"]
+        or r["rewind_in_rev"] or r["in_watch_est"] or r["in_watch_upd"]
     all_runs.append((r["caller"][0], r["tf"], r["sid"], r["start"], r["end"], r["stop_n"], r["n_rev"]))
     del r["_ms"], r["_steps"], r["_last_step"]
     if interesting:
         runs.append(r)
-    return out
-MS.run = run
 
 
 _orig_set = MS._set_state
@@ -241,6 +293,31 @@ def _replay_step_no_patterns(self, i, *, freeze_range=False):
         r["_steps"][-1]["after_expiry"].append((int(i), bool(freeze_range)))
     return _orig_replay_step(self, i, freeze_range=freeze_range)
 MS._replay_step_no_patterns = _replay_step_no_patterns
+
+
+_orig_bos_conf = MS._emit_bos_confirmed
+def _emit_bos_confirmed(self, idx, price, *, bos_anchor_idx, meta=None):
+    r, st = _rec(self), self.state
+    if r is not None and st.reversal_watch_active:
+        r["in_watch_est"].append(dict(
+            i=int(idx), cycle=int(st.cts_cycle_id), watch_anchor=st.reversal_watch_start_idx,
+            frozen=st.reversal_bos_th_frozen, expires=st.reversal_watch_expires_idx,
+            pending=st.pending_reversal_apply_idx, pending_anchor=st.pending_reversal_pattern_anchor_idx,
+            bos_before=st.bos_threshold, bos_new=float(price), state=st.state.value,
+            rewind=bool(getattr(self, "_in_rewind", False)), chain=_chain()))
+    return _orig_bos_conf(self, idx, price, bos_anchor_idx=bos_anchor_idx, meta=meta)
+MS._emit_bos_confirmed = _emit_bos_confirmed
+
+
+_orig_cts_upd = MS._emit_cts_updated
+def _emit_cts_updated(self, idx, price, meta=None):
+    r, st = _rec(self), self.state
+    if r is not None and st.reversal_watch_active:
+        r["in_watch_upd"].append(dict(i=int(idx), via=str((meta or {}).get("via")), watch_anchor=st.reversal_watch_start_idx,
+                                      expires=st.reversal_watch_expires_idx, pending=st.pending_reversal_apply_idx,
+                                      rewind=bool(getattr(self, "_in_rewind", False))))
+    return _orig_cts_upd(self, idx, price, meta)
+MS._emit_cts_updated = _emit_cts_updated
 
 
 def _dump():

@@ -51,28 +51,35 @@ def _triggers(out):
     return {k: [(t.idx, t.direction) for t in v] for k, v in out["zone_proximity_triggers"].items()}
 
 
-_CYCLE0 = [(4, "sd"), (6, "opp_sd"), (7, "sd"), (8, "opp_sd"), (9, "sd"), (10, "opp_sd"), (11, "sd")]
+# `_make_double_rewind_data` since 2026-09-29 (MARKET_STRUCTURE_SPEC "A new cycle ends an open watch"): cycle 1 is
+# established at 8 inside the watch opened at 4 and ends it (its candidate, apply 9, dropped); CTS confirmations
+# 4 / 9 / 14, cycles 0 / 1 / 2 at 2 / 8 / 12. Until then the expiry at 9 discarded the candidate and cycle 1 came at 12.
+_CYCLE0 = [(4, "sd"), (6, "opp_sd")]
+_CYCLE1 = [(9, "sd"), (10, "opp_sd")]
 
 
 def test_a_discarded_last_candidate_no_longer_skips_the_later_cycle():
-    """Bounded at 16: candle 4 close-breaks BOS_0 and schedules a reversal (candidate apply 9); at 9 the watch expiry
-    runs first and discards it; cycle 1 is re-established at 12 and CTS-confirmed at 14; nothing ever reverses.
-    The old cap (9 - 1 = 8) cut cycle 0 to [4, 8] and skipped cycle 1 ([14, 15] with 14 > 8): no trigger, no WVMI
-    gate record for cycle 1. Now cycle 0 scans to its next BOS (12 - 1) and cycle 1 to the data end."""
+    """Bounded at 16: candle 4 close-breaks BOS_0 and schedules a reversal (candidate apply 9); cycle 1 (established
+    at 8 inside that watch) ends it and drops the candidate; cycle 2 at 12, CTS-confirmed at 14; nothing ever
+    reverses. The old cap (9 - 1 = 8) skipped cycles 1 ([9, 11]) and 2 ([14, 15]), both past 8: no trigger, no WVMI
+    gate record. Now each cycle scans to its next BOS - 1 and cycle 2 to the data end."""
     events, out = _run(16)
     assert _cands(events) == [(4, 9)] and _reversals(events) == []                 # a dead LAST candidate
-    assert [(e.meta["cycle_id"], e.idx) for e in events if e.type == "CTS_CONFIRMED"] == [(0, 4), (1, 14)]
-    assert _triggers(out) == {(0, 0): _CYCLE0, (0, 1): [(14, "sd")]}                # was (0,0)[:4], (0,1) absent
-    assert [(r.bos_structure_id, r.bos_cycle_id) for r in out["wvmi_records"]] == [(0, 0), (0, 1)]  # was [(0, 0)]
+    assert [(e.meta["cycle_id"], e.idx) for e in events if e.type == "CTS_CONFIRMED"] == [(0, 4), (1, 9), (2, 14)]
+    assert _triggers(out) == {(0, 0): _CYCLE0, (0, 1): _CYCLE1, (0, 2): [(14, "sd")]}   # old: (0,1), (0,2) absent
+    assert [(r.bos_structure_id, r.bos_cycle_id) for r in out["wvmi_records"]] == [(0, 0), (0, 1), (0, 2)]
     (rec,) = build_sid_records_for_main(events)
     assert (rec.end_event_idx, rec.end_reason) == (None, None)                     # was (9, "reversal")
 
 
-def test_a_discarded_candidate_inside_a_cycle_no_longer_cuts_it_short():
-    """Bounded at 13 (cycle 1 not yet CTS-confirmed): cycle 0 scans to its next BOS (12 - 1), not to 9 - 1."""
+def test_a_dead_candidate_at_the_last_cycles_confirmation_no_longer_skips_it():
+    """Bounded at 13 (cycle 2 not yet CTS-confirmed): the dead candidate's apply 9 is the LAST cycle's own CTS
+    confirmation; the old cap (8) skipped that cycle. Until 2026-09-29 the apply fell inside cycle 0 and the old cap cut
+    it short — on this fixture that mode is gone (the new cycle at 8 ends the watch); `test_a_dead_candidate_caps_nothing`
+    pins it at unit level."""
     events, out = _run(13)
     assert _cands(events) == [(4, 9)] and _reversals(events) == []
-    assert _triggers(out) == {(0, 0): _CYCLE0}
+    assert _triggers(out) == {(0, 0): _CYCLE0, (0, 1): _CYCLE1}
 
 
 def test_a_realised_reversal_still_caps_the_scan():
@@ -82,7 +89,7 @@ def test_a_realised_reversal_still_caps_the_scan():
     for mutate in (None, _apply_17_to_19):
         events, out = _run(None, mutate)
         assert _reversals(events) == [17]
-        assert _triggers(out) == {(0, 0): _CYCLE0, (0, 1): [(14, "sd")]}
+        assert _triggers(out) == {(0, 0): _CYCLE0, (0, 1): _CYCLE1, (0, 2): [(14, "sd")]}
         (rec,) = build_sid_records_for_main(events)
         assert (rec.end_event_idx, rec.end_reason) == (17, "reversal")
 

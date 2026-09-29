@@ -3,7 +3,7 @@
 Verified fixture bases + random candle tails, through whichever `engine_v2` tree is first on PYTHONPATH — run the
 SAME seed in two trees (the repo and a scratch `git archive` copy with a variant) and diff the outputs:
 
-  python random_tail_search.py run OUT.jsonl SEED N    # N trials -> one JSON line each
+  python random_tail_search.py run OUT.jsonl SEED N [LO HI]   # N trials -> one JSON line each
   python random_tail_search.py rows SEED T             # regenerate trial T of SEED (rows JSON + bound + sd)
   python random_tail_search.py compare A.jsonl B.jsonl # errors, counters, signature diffs (reversal candle same?)
 
@@ -13,8 +13,16 @@ MS output columns), the reversal candles, the exception if any (AssertionError i
 `exp` (expiries fired). All RNG draws happen before the run — never inside the try — so every tree sees the same
 trials (a draw inside a try is skipped on an exception and desynchronises the stream). Smoke-run a few trials in the
 foreground first: an empty background log is not "no finds" (buffered output; an import error dies silently).
+
+In-watch extension (2026-09-29b): `iwe` = cycles established (`_emit_bos_confirmed`) while a reversal watch is open,
+with `iw` (per establishment: moment, watch anchor / frozen / expires, pending apply, the new BOS, rewind flag) and the
+final reversals' `bos_frozen` (`rev_bf`); `iwu` = CTS_UPDATED emitted while a watch is open. `RTS_NOINV=1` runs with
+`debug_invariants=False` and evaluates the df invariants offline on the SAME rows (`inv` = the invariant error or
+None) — one run, the verdict and the output. `LO HI` (optional) = the tail-length range (default 4..11, the original
+stream) and switches on the WIDE mode: one extra draw per trial for an early stop (`stop_after_cts_established=2`,
+p=0.2) — a different stream from the default, so compare WIDE runs only with WIDE runs of the same LO HI.
 """
-import hashlib, json, sys, traceback
+import hashlib, json, os, sys, traceback
 from collections import Counter
 
 import numpy as np
@@ -53,6 +61,26 @@ def _exp(self, i):
     return _o_exp(self, i)
 MS._maybe_expire_reversal_watch = _exp
 
+_o_bc = MS._emit_bos_confirmed
+def _bc(self, idx, price, *, bos_anchor_idx, meta=None):
+    st = self.state
+    if st.reversal_watch_active:
+        self._rts_iw = getattr(self, "_rts_iw", []) + [dict(
+            i=int(idx), anchor=st.reversal_watch_start_idx, frozen=st.reversal_bos_th_frozen,
+            expires=st.reversal_watch_expires_idx, pending=st.pending_reversal_apply_idx, bos_new=float(price),
+            rewind=bool(getattr(self, "_in_rewind", False)))]
+    return _o_bc(self, idx, price, bos_anchor_idx=bos_anchor_idx, meta=meta)
+MS._emit_bos_confirmed = _bc
+
+_o_cu = MS._emit_cts_updated
+def _cu(self, idx, price, meta=None):
+    if self.state.reversal_watch_active:
+        self._rts_iwu = getattr(self, "_rts_iwu", 0) + 1
+    return _o_cu(self, idx, price, meta)
+MS._emit_cts_updated = _cu
+
+NOINV = os.environ.get("RTS_NOINV") == "1"
+
 BASES = {
     "dr9": _make_double_rewind_data()[:9], "dr10": _make_double_rewind_data()[:10],
     "dr14": _make_double_rewind_data()[:14], "dr15": _make_double_rewind_data()[:15],
@@ -60,6 +88,14 @@ BASES = {
     "sc11": _make_second_cts_moment_after_anchor_data()[:11], "mc9": _make_multicycle_data()[:9],
 }
 NAMES = sorted(BASES)
+# Targeted bases (opt-in `RTS_BASES=iw7,iw8,dr6`; the default stream is unchanged): the in-watch-cycle pin's prefix
+# (`test_ms_new_cycle_ends_watch._in_watch_cycle_rows`: watch 4 open, the breakout 6-7 -> cycle 1 at 7 inside
+# it) cut before / after the establishment, and the double-rewind base cut with watch 4 open (candles 6+ random).
+if os.environ.get("RTS_BASES"):
+    from engine_v2.tests.test_ms_new_cycle_ends_watch import _in_watch_cycle_rows
+    BASES.update({"iw7": _in_watch_cycle_rows()[:7], "iw8": _in_watch_cycle_rows()[:8],
+                  "dr6": _make_double_rewind_data()[:6]})
+    NAMES = os.environ["RTS_BASES"].split(",")
 PIP = 0.0001
 
 
@@ -81,14 +117,15 @@ def _mirror(rows, pivot=1.2):
              "c": round(pivot - r["c"], 5)} for r in rows]
 
 
-def trials(seed):
-    """Yield (t, base, sd, rows, end_idx) — every draw made before the caller runs anything."""
+def trials(seed, lo=None, hi=None):
+    """Yield (t, base, sd, rows, end_idx, stop_n) — every draw made before the caller runs anything."""
     rng = np.random.RandomState(int(seed))
+    wide = lo is not None
     t = 0
     while True:
         name = NAMES[rng.randint(0, len(NAMES))]
         sd = 1 if rng.rand() < 0.5 else -1
-        n_tail = rng.randint(4, 12)
+        n_tail = rng.randint(int(lo), int(hi) + 1) if wide else rng.randint(4, 12)
         base = BASES[name]
         c, tail = base[-1]["c"], []
         for _ in range(n_tail):
@@ -96,10 +133,11 @@ def trials(seed):
             tail.append(x)
             c = x["c"]
         bound_draw, bound_off = rng.rand(), rng.randint(0, n_tail)
+        stop_n = (2 if rng.rand() < 0.2 else None) if wide else None
         rows = base + tail
         if sd == -1:
             rows = _mirror(rows)
-        yield t, name, sd, rows, ((len(base) + bound_off) if bound_draw < 0.4 else None)
+        yield t, name, sd, rows, ((len(base) + bound_off) if bound_draw < 0.4 else None), stop_n
         t += 1
 
 
@@ -112,29 +150,44 @@ def _sig(ms):
     return hashlib.sha1(json.dumps([evs, df_part], default=str).encode()).hexdigest()[:16], rev
 
 
-def run(out, seed, n):
+def run(out, seed, n, lo=None, hi=None):
     with open(out, "w") as f:
-        for t, name, sd, rows, end_idx in trials(seed):
+        for t, name, sd, rows, end_idx, stop_n in trials(seed, lo, hi):
             if t >= int(n):
                 break
-            rec = dict(t=t, base=name, sd=sd, n=len(rows), end=end_idx)
+            rec = dict(t=t, base=name, sd=sd, n=len(rows), end=end_idx, stop=stop_n)
+            ms = None
             try:
                 df = _prepare_df(rows)
                 ms = _make_market_structure(df, struct_direction=sd, start_idx=0, structure_id=0, timeframe="H1",
-                                            pip_size=_pip_size_from_pair(df), end_idx=end_idx)
+                                            pip_size=_pip_size_from_pair(df), end_idx=end_idx,
+                                            stop_after_cts_established=stop_n, debug_invariants=not NOINV)
                 ms.run()
                 rec["sig"], rec["rev"] = _sig(ms)
                 rec.update(rir=getattr(ms, "_rts_rir", 0), wpe=getattr(ms, "_rts_wpe", 0), exp=getattr(ms, "_rts_exp", 0))
+                if NOINV:
+                    try:
+                        ms._check_invariants_df()
+                        rec["inv"] = None
+                    except AssertionError as e:
+                        rec["inv"] = str(e)[:160]
             except Exception as e:  # noqa: BLE001 — AssertionError included on purpose
                 rec["err"] = f"{type(e).__name__}: {str(e)[:160]}"
                 rec["tb"] = traceback.format_exc().splitlines()[-4:-1]
+            if ms is not None:
+                rec["iwe"] = len(getattr(ms, "_rts_iw", []))
+                rec["iwu"] = getattr(ms, "_rts_iwu", 0)
+                if rec["iwe"]:
+                    rec["iw"] = ms._rts_iw
+                    rec["rev_bf"] = [e.meta.get("bos_frozen") for e in ms.events
+                                     if e.type == "STATE_CHANGED" and e.meta.get("to") == "reversal"]
             f.write(json.dumps(rec) + "\n")
 
 
-def rows(seed, t_want):
-    for t, name, sd, rws, end_idx in trials(seed):
+def rows(seed, t_want, lo=None, hi=None):
+    for t, name, sd, rws, end_idx, stop_n in trials(seed, lo, hi):
         if t == int(t_want):
-            print(json.dumps(dict(base=name, sd=sd, end_idx=end_idx, rows=rws)))
+            print(json.dumps(dict(base=name, sd=sd, end_idx=end_idx, stop=stop_n, rows=rws)))
             return
 
 
@@ -144,7 +197,9 @@ def compare(a, b):
     for tag, R in (("A", A), ("B", B)):
         errs = Counter(r["err"][:80] for r in R if "err" in r)
         print(f"{tag}: n={len(R)} errors={dict(errs)} wpe={sum(1 for r in R if r.get('wpe'))} "
-              f"rir={sum(1 for r in R if r.get('rir'))} exp={sum(1 for r in R if r.get('exp'))}")
+              f"rir={sum(1 for r in R if r.get('rir'))} exp={sum(1 for r in R if r.get('exp'))} "
+              f"iwe={sum(1 for r in R if r.get('iwe'))} iwu={sum(1 for r in R if r.get('iwu'))} "
+              f"inv={sum(1 for r in R if r.get('inv'))}")
     diff, ex = Counter(), {}
     for x, y in zip(A, B):
         if "err" in x or "err" in y:

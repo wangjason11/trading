@@ -15,10 +15,12 @@ Fixtures:
   - `_make_watch_over_second_cts_data` (below, Plan B §4.1 "quiescence"): a BOS close-break
     with a pending reversal is open at the moment the 2nd CTS is established, so the stop
     must wait for the watch to resolve (crafted + independently verified 2026-09-20).
-  - `_make_double_rewind_data` (below, Plan B §1/§2 "rebuilt-prefix" exception): two
-    expiry-rewinds, one before the 2nd CTS and one after the stop point; `_rewind_to` ignores
-    the earlier jump, so the exit classification reads a prefix the machine had already
-    superseded — the one mechanism under which early stop and classify-at-exit differ.
+  - `_make_double_rewind_data` (below, Plan B §1/§2 "rebuilt-prefix" exception): until 2026-09-29
+    two expiry-rewinds, one before the 2nd CTS and one after the stop point; `_rewind_to` ignores
+    the earlier jump, so the exit classification read a prefix the machine had already
+    superseded — the one mechanism under which early stop and classify-at-exit differ. Since a new
+    cycle ENDS an open watch (MARKET_STRUCTURE_SPEC "A new cycle ends an open watch") the first
+    rewind is gone and the two agree (`TestRebuiltPrefixException`).
 """
 from __future__ import annotations
 
@@ -399,7 +401,8 @@ class TestQuiescence:
 
 # ---------------------------------------------------------------------------
 # §1/§2 rebuilt-prefix exception — the one mechanism under which early stop and
-# classify-at-exit can differ (reproduced 2026-09-20; no instance on the reference window)
+# classify-at-exit can differ (reproduced 2026-09-20; no instance on the reference window;
+# no known instance since 2026-09-29 — see `TestRebuiltPrefixException`)
 # ---------------------------------------------------------------------------
 
 def _make_double_rewind_data() -> list[dict]:
@@ -409,7 +412,10 @@ def _make_double_rewind_data() -> list[dict]:
     0-2  BOS_0 .5998; CTS_0 .6042 at 2.
     3-4  pullback -> CTS_CONFIRMED@4; candle 4 also close-breaks BOS_0 -> watch (expires 9),
          `one_maru_opposite(-1)` FAIL_NEEDS_CONFIRM, confirmed exactly at 9 == expiry.
-    6-8  breakout -> cycle 1 established at 8 (FIRST PASS).
+    6-8  breakout -> cycle 1 established at 8 (FIRST PASS) — INSIDE the open watch: since
+         2026-09-29 it ENDS the watch (MARKET_STRUCTURE_SPEC "A new cycle ends an open watch"),
+         so there is no J1: cycles at 2 / 8 / 12, the reversal at 17; the rest of this
+         docstring is the pre-2026-09-29 path (`tests/test_ms_new_cycle_ends_watch.py`).
     9    bearish normal closing <= .5978 -> apply == expiry -> J1 expiry-rewind, jump_to 5,
          seed restore puts the RANGE state on candle 5 -> after J1 cycle 1 is re-established
          only at 12 (anchor 11). Post-J1 truth: cts_est = [(2,2), (12,12)].
@@ -470,11 +476,18 @@ class TestRebuiltPrefixException:
         return [l.split("jump_to=")[1] for l in ms_debug_out.splitlines() if l.startswith("[REWIND]")]
 
     def test_mechanism(self, capsys):
-        """B=17: the full run rewinds twice (jump_to 5, then 15) and its rebuilt prefix has
-        THREE CTS_ESTABLISHED [(2,2),(8,8),(12,12)]; the stopped run rewinds once and stops at
-        13 with the post-J1 prefix [(2,2),(12,12)]. The early-stop finalize (12) is the value
-        the machine believed at the decision; the exit value (8) comes from `_rewind_to`
-        rebuilding from 0 while ignoring J1. Every other bound agrees."""
+        """B=17. Until 2026-09-29 the full run rewound twice (J1 to 5, J2 to 15) and its rebuilt
+        prefix — `_rewind_to` replaying from 0 IGNORING J1 — held THREE CTS_ESTABLISHED
+        [(2,2),(8,8),(12,12)] while the stopped run stopped at 13 on the post-J1 prefix
+        [(2,2),(12,12)]: classify-at-exit (finalize 8) != early stop (finalize 12), pinned by a
+        strict xfail. J1 existed only because cycle 1, established at 8 inside the watch opened
+        at 4, left that watch open; a new cycle now ENDS the watch (MARKET_STRUCTURE_SPEC "A new
+        cycle ends an open watch"), so the full run rewinds once (15, after the stop point), the
+        stopped run stops at 9 with [(2,2),(8,8)] — an exact prefix — and the two agree at every
+        bound (finalize 8). No instance of the exception is known under the new rule (0 in 36k
+        random tails; this fixture with candle 8 kept below the CTS, no cycle there, rewinds twice
+        but its prefixes agree); the mechanism itself (LANDMINES "MarketStructure Deep-Couples…"
+        1(a)) is unchanged — the exception is not proven unreachable."""
         raw = _make_double_rewind_data()
         full = _make(raw, end_idx=17)
         full.debug = True
@@ -484,33 +497,18 @@ class TestRebuiltPrefixException:
         stopped.debug = True
         stopped.run()
         stopped_rewinds = self._rewinds(capsys.readouterr().out)
-        assert full_rewinds == ["5", "15"]
-        assert stopped_rewinds == ["5"]
-        assert stopped.early_stop_idx == 13
+        assert full_rewinds == ["15"]
+        assert stopped_rewinds == []
+        assert stopped.early_stop_idx == 9
         assert [(int(e.idx), int(e.meta["confirmed_at"])) for e in _cts_est(full.events)] == [(2, 2), (8, 8), (12, 12)]
-        assert [(int(e.idx), int(e.meta["confirmed_at"])) for e in _cts_est(stopped.events)] == [(2, 2), (12, 12)]
-        assert _sig(full.events)[: len(stopped.events)] != _sig(stopped.events)
+        assert [(int(e.idx), int(e.meta["confirmed_at"])) for e in _cts_est(stopped.events)] == [(2, 2), (8, 8)]
+        assert _sig(full.events)[: len(stopped.events)] == _sig(stopped.events)
 
         df = _prepare_df(raw)
-        on, off = _phase2_pair(df, 17)
-        assert on.finalize_condition == off.finalize_condition == "second_cts_reached"
-        assert on.finalize_idx == 12
-        assert off.finalize_idx == 8
-        for B in (13, 16, 18):
+        for B in (13, 16, 17, 18):
             on_b, off_b = _phase2_pair(df, B)
             assert on_b == off_b, B
-            assert on_b.finalize_idx == 12
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason="Plan B §2 exception: `_rewind_to` replays from 0 ignoring earlier jumps "
-               "(LANDMINES 'MarketStructure Deep-Couples…' 1), so classify-at-exit reads a "
-               "rebuilt prefix the machine had already superseded. Passes once `_rewind_to` "
-               "honours earlier jumps — then drop the xfail and close the note in Plan B §2.",
-    )
-    def test_early_stop_equals_classify_at_exit_under_a_post_stop_rewind(self):
-        on, off = _phase2_pair(_prepare_df(_make_double_rewind_data()), 17)
-        assert on == off
+            assert (on_b.finalize_condition, on_b.finalize_idx) == ("second_cts_reached", 8), B
 
 
 def test_run_with_start_past_the_frame_returns_empty_levels():

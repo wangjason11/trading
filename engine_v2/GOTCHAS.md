@@ -1925,12 +1925,25 @@ the invariant-4 landing review built one (`_make_double_rewind_data()[:6]` + 5 c
 established at 7 inside it, reversal at 8) and found 2 in 24k random tails (vs 82 false positives): a live,
 pre-existing crash path while the question above stays open (MARKET_STRUCTURE_SPEC "Invariants";
 `tests/test_ms_invariant_watch_identity.py`).
+**Resolved 2026-09-29 (user decision): a new cycle ENDS the open watch** (MARKET_STRUCTURE_SPEC "A new cycle ends an
+open watch"; pins `tests/test_ms_new_cycle_ends_watch.py`) — its pending reversal is dropped, a later close beyond the
+new BOS opens a new watch, and the `BOS_CONFIRMED` records `ended_watch_pattern_anchor_idx`. So a cycle IS established
+inside an open watch, and that ends it; invariant 4 can no longer fire through it (a pure tripwire). The title's
+premise was the symptom: the case was common, not impossible — ~38% of random tails establish a cycle inside a watch,
+almost always one whose pattern confirms ON its expiry, so the expiry rewound the new cycle away (the double-rewind
+fixture's first-pass cycle 1 @8 was exactly this; under the new rule it stands, and that fixture's J1 rewind is gone —
+the tests built on J1 were re-derived). The reverse order above (the watch opened in the new cycle's post-apply
+back-fill) is unaffected: that watch freezes the NEW BOS.
 
 Also reproduced there: the Plan B §2 "rebuilt-prefix" exception (`_make_double_rewind_data`) — two
 expiry-rewinds, one before the 2nd CTS and one after the early stop; `_rewind_to` replays from 0
 ignoring the earlier jump (LANDMINES "MarketStructure Deep-Couples…" 1), so the exit classifier
 reads `cts_est=[2, 8, 12]` while the early stop read the post-J1 `[2, 12]`. No instance on the
-reference window (zero rewinds in any FC Phase-2 run); pinned by a strict `xfail`.
+reference window (zero rewinds in any FC Phase-2 run); pinned by a strict `xfail` until 2026-09-29 — J1 existed
+only because of the in-watch cycle @8, which now ENDS the watch: the fixture rewinds once, the early stop and
+classify-at-exit agree (finalize 8), the xfail was dropped and `TestRebuiltPrefixException::test_mechanism` pins
+the agreement. No instance known under the new rule (0 in 36k random tails; the fixture with candle 8 kept
+below the CTS rewinds twice with agreeing prefixes); the mechanism itself is unchanged.
 
 ---
 

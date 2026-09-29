@@ -94,10 +94,33 @@ During watch:
 - BOS threshold must not update.
 - Reversal candidates are detected relative to a frozen barrier and must apply by the watch's
   `expires_idx` — the frozen barrier holds only until then ("Expiry inside a step" below).
+- A breakout that establishes a NEW cycle ends the watch ("A new cycle ends an open watch" below).
 If no valid reversal pattern appears within watch window:
 - BOS threshold updates to the close-break anchor candle wick extreme,
 - watch clears,
 - execution rewinds to anchor_idx+1 and proceeds normally.【fileciteturn1file3】
+
+### A new cycle ends an open watch (2026-09-29)
+A watch freezes the CURRENT cycle's BOS. When a breakout establishes a new cycle (cycle >= 1) while a watch is open,
+the market made a new extreme instead of reversing, and the new cycle's `BOS_CONFIRMED` supersedes the barrier the
+watch froze. The watch ends at the establishing candle (`_end_watch_superseded_by_new_cycle`, called for that
+`BOS_CONFIRMED`): its pending reversal — confirming only after that candle, not knowable yet — is dropped (its
+`REVERSAL_CANDIDATE` stays in the stream unrealised, like an expiry-discarded one), no rewind, and `bos_threshold`
+is the new BOS. A later close beyond the NEW BOS opens a new watch by the normal rule. Trace: that `BOS_CONFIRMED`
+carries `meta["ended_watch_pattern_anchor_idx"]` = the ended watch's close-break candle (= its `REVERSAL_WATCH_START`
+idx; pattern realm, GLOSSARY "Naming Standard"; the key is present only when a watch was ended). Boundary: a pending
+applying ON the establishing candle keeps the watch — at an equal apply the reversal comes first (the step's
+priority) and applies in that candle's own step (0 measured). A `CTS_UPDATED` inside a watch (same cycle, same BOS)
+leaves it open. The watch was otherwise inconsistent with the cycle it guarded: the old pending applied on the
+superseded barrier, sometimes on a close that never broke the new BOS (the old pattern's confirm threshold can lie
+short of it), and invariant 4 raised (a live crash path); or the old watch's own expiry rewound the new cycle away
+(`_make_double_rewind_data`: the .6066 high at 8 became neither a cycle nor a CTS update). Measured before (user
+decision 2026-09-29): reference window 0 in-watch cycles (byte-identical); suite 38 (2 crash); random tails 0 crashes
+in 48k but ~38% of trials with an in-watch cycle (all rewound away by the old watch's expiry); 32 crashes in 12k tails
+started from an open watch. The options weighed (re-freeze the watch on the new BOS — identical to ending it on 12k
+trials, since the new BOS is the pullback low at or beyond the old anchor's wick; block the breakout until the watch
+resolves — the new extreme is lost as a CTS; keep and relax invariant 4 — a reversal without a break of the current
+BOS): memory `project_zones_timing_audit_20260922.md`. Pins `tests/test_ms_new_cycle_ends_watch.py`.
 
 ### Reversal inside a back-fill (terminal; 2026-09-28)
 A scheduled (pending) reversal is applied by the per-candle step (`_replay_step_no_patterns`), which also runs
@@ -142,15 +165,19 @@ from acting past it:
   range back-fill — ends the step at that candle, like a terminal reversal ("Reversal inside a back-fill"): no
   apply, no finalize, no re-step. The step returns the jump target: the run loop honours it; a `_rewind_to` rebuild,
   which ignores the request, resumes there without a reset as it always did (LANDMINES "MarketStructure
-  Deep-Couples…" 1(a)) — but no longer after replaying the discarded continuation, so a rebuilt prefix can change:
-  `test_ms_stop_after_cts::TestRebuiltPrefixException::test_mechanism`'s full run lost the continuation's
-  `BOS_THRESHOLD_UPDATED@10` + `RANGE_STARTED@13` and gained `BOS_THRESHOLD_UPDATED@5` + `REVERSAL_WATCH_START@9`
-  (its `CTS_ESTABLISHED` list is unchanged; pinned in `tests/test_ms_expiry_stop.py`).
+  Deep-Couples…" 1(a)) — but no longer after replaying the discarded continuation, so a rebuilt prefix can change
+  (at landing: `test_ms_stop_after_cts::TestRebuiltPrefixException::test_mechanism`'s full run lost the
+  continuation's `BOS_THRESHOLD_UPDATED@10` + `RANGE_STARTED@13` and gained `BOS_THRESHOLD_UPDATED@5` +
+  `REVERSAL_WATCH_START@9`; since "A new cycle ends an open watch" that fixture has no nested expiry — the pin moved
+  to `tests/test_ms_expiry_stop.py`'s rebuild-crash fixture, whose rebuild stops at the nested expiry at 9 and
+  re-steps from 5).
 Before the fix the step went on and the rewind + seed restore (a direct `state.state =`) threw the rest away: a later
 anchor's reversal winner applied after E and was discarded (F3 — `tests/test_ms_expiry_stop.py`: the watch expires
 at 9, the anchor-9 reversal applied at 10); a second expiry inside the continuation overwrote the jump target and the
-seed (the df invariant "bos_threshold changed during reversal watch" fired); a rebuild replaying the continuation
-re-applied the discarded reversal and crashed on its "never reaches a reversal" assert. `run()` now asserts a rewind
+seed (the df invariant "bos_threshold changed during reversal watch" fired; no instance known since "A new cycle ends
+an open watch" — its fixture needed the in-watch cycle); a rebuild replaying the continuation re-applied a discarded
+reversal and crashed on its "never reaches a reversal" assert (re-derived 2026-09-29: a BREAKOUT winner past E whose
+continuation reverses in the rebuild — the cap alone does not prevent it, the stop does). `run()` now asserts a rewind
 is never requested in REVERSAL. 0 expiries on the reference window (byte-identical). Side effect: with
 `stop_after_cts_established`, a discarded continuation could write a `reversal` row past the early stop, and `run()`'s
 terminal stamping then marked the stopped tail as reversal with no reversal event (found by the landing review's
@@ -520,9 +547,10 @@ MarketStructure includes df-level invariant checks (low-noise):
   watches: an expiry rewinds to anchor + 1 and that candle can open a new watch on the moved barrier, which is
   strictly beyond the old frozen one. Comparing every consecutive active pair made that a false positive that ended
   the run (every measured false positive was of this kind; pins `tests/test_ms_invariant_watch_identity.py`). The
-  guarded case — a BOS moving inside one watch, e.g. a cycle established while it is open (GOTCHAS "A Cycle Cannot
-  Be Established Inside an Open Reversal Watch") — is reachable on real rows and still raises (pinned; ~1 in 12k
-  random tails, a live crash path; whether it should be allowed is that GOTCHAS entry's open question).
+  guarded case — a BOS moving inside one watch — was reachable on real rows through a cycle established while a
+  watch is open (GOTCHAS "A Cycle Cannot Be Established Inside an Open Reversal Watch") until that cycle started to
+  END the watch ("A new cycle ends an open watch", 2026-09-29): the only `bos_threshold` write that can run during a
+  watch is that `BOS_CONFIRMED`, so the check is now a pure tripwire (pinned on constructed rows).
 
 Reversal is terminal (cannot leave reversal once entered) — asserted at the source (2026-09-28): `_set_state`
 raises on any transition out of REVERSAL (a tripwire: "Reversal inside a back-fill" above stops every path that

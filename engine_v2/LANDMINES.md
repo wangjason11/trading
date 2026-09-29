@@ -1269,13 +1269,16 @@ on the entity-wide M15 df must be similarly re-derived on the slice.
    Mechanism (measured 2026-09-29): it drops the REQUEST (no reset, no
    seed restore) but follows the step's returned index — the jump
    target — so it re-steps from the nested anchor + 1 on top of the
-   un-reset state and events (`_make_double_rewind_data`'s rebuilt
-   prefix keeps the first pass's cycle 1 @8). Since the expiry stop
-   ("A Step Must Stop at Its Own Watch Expiry" above) the step returns
-   at the expiry, so a rebuild no longer replays a discarded continuation
-   (`test_mechanism`'s full run: −`BOS_THRESHOLD_UPDATED@10` / `RANGE_STARTED@13`,
-   +`BOS_THRESHOLD_UPDATED@5` / `REVERSAL_WATCH_START@9`; its CTS_ESTABLISHED
-   list unchanged; pinned in `tests/test_ms_expiry_stop.py`);
+   un-reset state and events (until 2026-09-29 `_make_double_rewind_data`'s
+   rebuilt prefix kept the first pass's cycle 1 @8 — the Plan B §2
+   "rebuilt-prefix" exception; since a new cycle ENDS an open watch that
+   fixture has no nested expiry and no known instance of the exception
+   remains, 0 in 36k random tails — not proven unreachable). Since the
+   expiry stop ("A Step Must Stop at Its Own Watch Expiry" above) the step
+   returns at the expiry, so a rebuild no longer replays a discarded
+   continuation (`tests/test_ms_expiry_stop.py`'s rebuild-crash fixture:
+   the rebuild's step 7 ends at the nested expiry at 9 and re-steps from 5
+   — the rebuilt event list runs backwards in time);
    (b) the MAIN H1 path runs each sid's MS on the full df, so a
    reversal-watch expiry in sid ≥ 1 would replay from candle 0;
    (c) the rebuild constructs `MarketStructureState(struct_direction=…)`
@@ -1417,6 +1420,24 @@ compares one watch's rows only (same frozen barrier, 2026-09-29; before, they tr
 Related, OPEN (F3b): a pending reversal confirming ON the expiry candle is discarded
 as a false break — the only way an expiry is reached — while a later anchor's reversal WINNER applying at the expiry
 is applied (MARKET_STRUCTURE_SPEC "Expiry inside a step", Open F3b).
+
+---
+
+## A Watch Guards ONE BOS — a New Cycle Ends It (2026-09-29)
+
+**Rule:** a reversal watch freezes the current cycle's BOS; anything that replaces that BOS while the watch is open
+must END the watch (drop its pending reversal) — today the only such write is a new cycle's `BOS_CONFIRMED`
+(`_end_watch_superseded_by_new_cycle`, recorded as `meta["ended_watch_pattern_anchor_idx"]`). Every other
+`bos_threshold` write either skips during a watch (`_bos_barrier_step`) or clears the watch in the same call (the
+expiry, `rv_anchor_failed`, the rewind's seed restore). A new write site that moves the BOS under an open watch
+brings back what this closed.
+**Why:** a watch left open across a new cycle applied its pending reversal on the superseded barrier — sometimes on a
+close that never broke the NEW BOS — and df invariant 4 raised, ending the replay (AssertionError, not caught by the
+sub build's `except (ValueError, IndexError)`); or the old watch's expiry rewound the new cycle away. **Boundary:** a
+pending applying ON the establishing candle keeps the watch (the reversal first at an equal apply). **Guard:** df
+invariant 4 (now a pure tripwire); pins `tests/test_ms_new_cycle_ends_watch.py`; measure with
+`review_scripts/reversal_shadow.py` (`in_watch_est`) and `random_tail_search.py` (`iwe`). MARKET_STRUCTURE_SPEC
+"A new cycle ends an open watch".
 
 ---
 

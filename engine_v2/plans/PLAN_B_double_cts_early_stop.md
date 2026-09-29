@@ -155,6 +155,10 @@ bound-induced expiry-rewind J2 after the stop; `_rewind_to` replays from 0 IGNOR
 classifier reads `cts_est = [2, 8, 12]` (finalize 8) while the early stop reads the post-J1 prefix
 `[2, 12]` (finalize 12). Pinned by `TestRebuiltPrefixException` (mechanism test + a strict `xfail`
 on ON == OFF that flips when `_rewind_to` honours earlier jumps — LANDMINES "Deep-Couples" 1).
+**Status 2026-09-29:** that fixture's J1 existed only because cycle 1 was established at 8 inside the open
+watch; a new cycle now ENDS the watch (MARKET_STRUCTURE_SPEC "A new cycle ends an open watch"), so ON == OFF there
+(finalize 8) and the strict `xfail` was dropped. No instance of the exception is known under the new rule (0 in
+36k random tails); `_rewind_to` still ignores earlier jumps, so it is not proven unreachable.
 
 ---
 

@@ -30,9 +30,9 @@ from engine_v2.zones.wvmi import WVMITracker
 
 
 def _post_reversal_lure():
-    """`_make_double_rewind_data` (sd +1; sid 0 reverses at 17) with candles 18-19 replaced AFTER the reversal:
-    18 closes up at .5960, 19 closes DOWN at .5920 (direction -1, vol_dir -1 = the FP's) — 0.0002 from the cycle-1
-    BOS zone's outer .5918, nearer than the in-cycle LP candle 14 (close .5900, 0.0018)."""
+    """`_make_double_rewind_data` (sd +1; sid 0 reverses at 17; cycles at 2 / 8 / 12) with candles 18-19 replaced
+    AFTER the reversal: 18 closes up at .5960, 19 closes DOWN at .5920 (direction -1, vol_dir -1 = the FP's) — 0.0002
+    from the cycle-2 BOS zone's outer .5918, nearer than the in-cycle LP candle 14 (close .5900, 0.0018)."""
     rows = list(_make_double_rewind_data())
     rows[18] = _R(0.58800, 0.59650, 0.58780, 0.59600)
     rows[19] = _R(0.59600, 0.59620, 0.59150, 0.59200)
@@ -55,14 +55,14 @@ def test_an_ended_cycle_takes_no_lp_past_its_end():
     res, out = _run(_post_reversal_lure())
     assert _sig(res.events) == _sig(base.events)             # the lure is after the reversal: MS unchanged
     life = compute_cycle_lifecycle(res.events, compute_reversal_idx_by_sid(res.events))
-    assert life[(0, 1)][1:] == (17, "reversal")
+    assert life[(0, 2)][1:] == (17, "reversal")
     recs = {(r.bos_structure_id, r.bos_cycle_id): r for r in out["wvmi_records"]}
-    r = recs[(0, 1)]
+    r = recs[(0, 2)]
     assert (r.fp_idx, r.lp_idx, r.lp_locked) == (13, 14, False)   # unbounded: 19 (the lure), momentum 0.7
     assert r.pullback_momentum == 1.0 and r.sell_momentum == 1.0
     # the bound applies at creation too: an update-only bound would move 19 -> 14 and mark it "updated"
     assert r.status == "created"
-    assert (recs[(0, 0)].lp_idx, recs[(0, 0)].lp_locked) == (9, True)   # a locked record keeps the official LP
+    assert (recs[(0, 1)].lp_idx, recs[(0, 1)].lp_locked) == (9, True)   # a locked record keeps the official LP
 
 
 def test_the_search_end_is_the_last_live_candle_or_the_data_end():
@@ -103,14 +103,14 @@ def _captured_ends(monkeypatch, res, events, cap=None):
 
 
 def test_the_main_tracker_gets_every_cycle_end_from_the_lifecycle_table(monkeypatch):
-    """The ends the orchestrator hands the tracker ARE `compute_cycle_lifecycle`'s: the next-cycle start for (0,0),
-    the REALISED reversal for (0,1) (not the candidate's apply 19), the cap when one applies — exclusive values
+    """The ends the orchestrator hands the tracker ARE `compute_cycle_lifecycle`'s: the next-cycle start for (0,0) and
+    (0,1), the REALISED reversal for (0,2) (not the candidate's apply 19), the cap when one applies — exclusive values
     (the tracker subtracts 1). The end-to-end test above accepts any bound 14..18, so this pins the wiring."""
     with contextlib.redirect_stdout(io.StringIO()):
         res = compute_bounded_structure(_prepare_df(_post_reversal_lure()), 0, 1, end_idx=None)
     events = _late_candidate(res.events, 19)
-    assert _captured_ends(monkeypatch, res, events) == {(0, 0): 12, (0, 1): 17}
-    assert _captured_ends(monkeypatch, res, events, cap=15) == {(0, 0): 12, (0, 1): 15}
+    assert _captured_ends(monkeypatch, res, events) == {(0, 0): 8, (0, 1): 12, (0, 2): 17}
+    assert _captured_ends(monkeypatch, res, events, cap=15) == {(0, 0): 8, (0, 1): 12, (0, 2): 15}
 
 
 def test_a_cycle_ending_before_any_pullback_candidate_gets_no_lp():
