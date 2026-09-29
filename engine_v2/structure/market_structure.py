@@ -2624,7 +2624,8 @@ class MarketStructure:
                 # watch — a watch opened after an expiry freezes the moved BOS, strictly beyond the old
                 # frozen barrier (MARKET_STRUCTURE_SPEC "Invariants"; landing review of 52ac1e9).
                 # A pure tripwire since 2026-09-29: the one BOS write that can run during a watch (a new
-                # cycle's BOS_CONFIRMED) ends the watch (`_end_watch_superseded_by_new_cycle`).
+                # cycle's BOS_CONFIRMED) ends the watch (`_end_watch_superseded_by_new_cycle`); the cycle-0
+                # BOS_CONFIRMED cannot meet one (a watch needs a BOS, and there is none before cycle 0).
                 frozen = df["reversal_bos_th_frozen"].astype(float)
                 frozen_prev = frozen.shift(1)
                 changed = active_b & prev_active & (frozen == frozen_prev) & (bos != bos_prev)
@@ -2652,14 +2653,16 @@ class MarketStructure:
         "A new cycle ends an open watch"). Its pending reversal confirms only after this candle (not knowable
         here), so the watch ends and the pending is dropped; a later close beyond the NEW BOS opens a new
         watch. Traced on the BOS_CONFIRMED: `ended_watch_pattern_anchor_idx` = the ended watch's close-break
-        candle (= its REVERSAL_WATCH_START idx; pattern realm, GLOSSARY "Naming Standard"). A pending applying
-        ON this candle keeps the watch: at an equal apply the reversal comes first (the step's priority) and
-        applies in this candle's own step. A pending before it cannot exist (it would have applied, terminal).
+        candle (= its REVERSAL_WATCH_START idx; pattern realm, GLOSSARY "Naming Standard").
+        No exception (user decision 2026-09-29, landing review of 2285232): a pending that would confirm ON this
+        candle is dropped too — on that candle the new BOS (the pullback low, a window including the candle) is at
+        or beyond its close, so that reversal could never have broken the current BOS. It needs a
+        `one_maru_opposite` breakout whose small opposite candle also confirms the old pattern: a price gap, or a
+        breakout candle ~20x the range-high-to-threshold distance. A pending before this candle cannot exist (it
+        would have applied, terminal).
         """
         st = self.state
         if not st.reversal_watch_active:
-            return meta
-        if st.pending_reversal_apply_idx is not None and int(st.pending_reversal_apply_idx) <= int(apply_idx):
             return meta
         meta["ended_watch_pattern_anchor_idx"] = int(st.reversal_watch_start_idx)
         self._clear_pending_reversal()

@@ -1902,7 +1902,7 @@ question now means deriving CTS KL zones from the pool geometry on demand — it
 
 ---
 
-## A Cycle Cannot Be Established Inside an Open Reversal Watch — MS Invariant 4 (2026-09-20)
+## A Cycle Cannot Be Established Inside an Open Reversal Watch — MS Invariant 4 (2026-09-20) — RESOLVED (2026-09-29: a new cycle ENDS the watch)
 
 Found while crafting Plan B's §4.1 "quiescence" fixture (a reversal watch open at the moment the
 2nd `CTS_ESTABLISHED` fires). Establishing a cycle writes the new BOS (`_emit_bos_confirmed`,

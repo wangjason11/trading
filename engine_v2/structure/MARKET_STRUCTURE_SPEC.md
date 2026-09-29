@@ -108,9 +108,15 @@ watch froze. The watch ends at the establishing candle (`_end_watch_superseded_b
 `REVERSAL_CANDIDATE` stays in the stream unrealised, like an expiry-discarded one), no rewind, and `bos_threshold`
 is the new BOS. A later close beyond the NEW BOS opens a new watch by the normal rule. Trace: that `BOS_CONFIRMED`
 carries `meta["ended_watch_pattern_anchor_idx"]` = the ended watch's close-break candle (= its `REVERSAL_WATCH_START`
-idx; pattern realm, GLOSSARY "Naming Standard"; the key is present only when a watch was ended). Boundary: a pending
-applying ON the establishing candle keeps the watch — at an equal apply the reversal comes first (the step's
-priority) and applies in that candle's own step (0 measured). A `CTS_UPDATED` inside a watch (same cycle, same BOS)
+idx; pattern realm, GLOSSARY "Naming Standard"; the key is present only when a watch was ended). No exception: a
+pending that would confirm ON the establishing candle is dropped too (user decision after the landing review of
+`2285232`, which built the case): on that candle the new BOS — the pullback low over a window that includes it — is
+at or beyond its close, so that reversal could never have broken the current BOS (with the code as first landed the
+cycle was established and then reversed on the superseded barrier on the same candle; at the watch's expiry candle
+the expiry won instead and rewound the cycle away). It needs a `one_maru_opposite` breakout whose small opposite
+candle also confirms the old pattern — a price gap, or a breakout candle ~20x the range-high-to-threshold distance;
+0 in 20k random tails. The cycle-0 `BOS_CONFIRMED` cannot meet a watch (a watch needs a BOS; there is none before
+cycle 0). A `CTS_UPDATED` inside a watch (same cycle, same BOS)
 leaves it open. The watch was otherwise inconsistent with the cycle it guarded: the old pending applied on the
 superseded barrier, sometimes on a close that never broke the new BOS (the old pattern's confirm threshold can lie
 short of it), and invariant 4 raised (a live crash path); or the old watch's own expiry rewound the new cycle away

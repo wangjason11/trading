@@ -85,7 +85,8 @@ def _f3_rows() -> list[dict]:
 # is a BREAKOUT applying at 11, past E: its back-fill fires the expiry at 9 (J1, rewind to 5). The post-J1 path
 # establishes cycle 1 at 11, a watch at 14 expires at the bound 17 (J2, rewind to 15), and the `_rewind_to` rebuild
 # replays 0..14 IGNORING the nested J1 jump. Without the stop the rebuild's step 7 went on past the expiry (10, 11:
-# the breakout applied, a cycle the post-J1 path never had) and that discarded continuation reached a reversal at step
+# the breakout applied on the PRE-J1 state — watch 4 already expired, its BOS moved, no rewind or seed restore) and
+# that discarded continuation reached a reversal at step
 # 14 -> AssertionError "rewind rebuild reached a reversal" (the F3 fix reverted AND the cap alone both crash). Now the
 # rebuild's step 7 ends at the nested expiry and resumes at 5 (Deep-Couples 1(a): on the un-reset state).
 def _rebuild_crash_rows() -> list[dict]:

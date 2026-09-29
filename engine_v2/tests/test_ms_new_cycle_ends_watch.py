@@ -151,11 +151,40 @@ def test_a_pending_after_the_establishing_candle_is_dropped():
     assert st.pending_reversal_apply_idx is None and st.pending_reversal_ev is None
 
 
-def test_a_pending_on_the_establishing_candle_keeps_the_watch():
-    """At an equal apply the reversal comes first (the step's priority): it applies in this candle's own step."""
+def test_a_pending_on_the_establishing_candle_is_dropped_too():
+    """No equal-apply exception (user decision 2026-09-29, landing review of 2285232): on that candle the new BOS is
+    at or beyond its close, so that reversal could never have broken the current BOS."""
     ms = _ms_with_watch(pending_apply=7)
-    assert ms._end_watch_superseded_by_new_cycle(7, {"k": 1}) == {"k": 1}
-    assert ms.state.reversal_watch_active and ms.state.pending_reversal_apply_idx == 7
+    assert ms._end_watch_superseded_by_new_cycle(7, {"k": 1}) == {"k": 1, "ended_watch_pattern_anchor_idx": 4}
+    assert not ms.state.reversal_watch_active and ms.state.pending_reversal_apply_idx is None
+
+
+# The equal apply on real rows (the landing review of 2285232 built both; sd +1). Only a `one_maru_opposite`
+# breakout applies on a candle that can also confirm the old bearish pattern: its small OPPOSITE candle. That candle
+# closes in the top ~35% of the breakout maru, which needs >= 30% of its body beyond the range high — so, without a
+# price gap, the maru must be ~20x the range-high-to-threshold distance (here ~1,280 pips). Both rows use gaps.
+#   6 / 8  a gapped bull maru .5800 -> .6150 (new high .6152; BOS_1 = its low .5798);
+#   7 / 9  a gapped small bear candle closing .5977 <= min(l4, l5) = .5978: it completes the breakout AND confirms
+#          watch 4's pattern (candidate apply 7 / 9 == the establishing candle).
+# Until the decision: at 7 the cycle was established and then reversed on the superseded .5998 (a close far above
+# BOS_1); at 9 == the watch's expiry the expiry won and rewound to 5 — the .6152 high became neither a cycle nor a
+# CTS update. Now the new cycle ends the watch on both: no reversal, cycle 1 stands.
+_GAP_MARU = _R(0.58000, 0.61520, 0.57980, 0.61500)
+_GAP_BEAR = _R(0.59900, 0.59920, 0.59760, 0.59770)
+_BEAR_FILL = [_R(0.59750, 0.59800, 0.59500, 0.59550), _R(0.59550, 0.59600, 0.59400, 0.59450)]
+
+
+@pytest.mark.parametrize("sd", [1, -1])
+@pytest.mark.parametrize("apply_at", [7, 9])   # 9 == the watch's expiry
+def test_an_equal_apply_ends_the_watch_too(sd, apply_at):
+    pre = [] if apply_at == 7 else [_R(0.59900, 0.59960, 0.59880, 0.59940), _R(0.59940, 0.59990, 0.59920, 0.59970)]
+    rows = list(_make_double_rewind_data()[:6]) + pre + [_GAP_MARU, _GAP_BEAR] + _BEAR_FILL
+    res = _run(rows, sd)
+    assert [(e.idx, e.meta["apply_idx"]) for e in res.events if e.type == "REVERSAL_CANDIDATE"] == [(4, apply_at)]
+    assert _est(res) == [(0, 2), (1, apply_at)]
+    assert _bos_confirmed(res) == [(2, _p(0.5998, sd), None), (apply_at, _p(0.5798, sd), 4)]
+    assert _watches(res) == [(4, _p(0.5998, sd), 9)]
+    assert res.reversal_idx is None
 
 
 def test_no_open_watch_leaves_the_meta_alone():

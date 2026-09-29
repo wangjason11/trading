@@ -1433,8 +1433,10 @@ expiry, `rv_anchor_failed`, the rewind's seed restore). A new write site that mo
 brings back what this closed.
 **Why:** a watch left open across a new cycle applied its pending reversal on the superseded barrier — sometimes on a
 close that never broke the NEW BOS — and df invariant 4 raised, ending the replay (AssertionError, not caught by the
-sub build's `except (ValueError, IndexError)`); or the old watch's expiry rewound the new cycle away. **Boundary:** a
-pending applying ON the establishing candle keeps the watch (the reversal first at an equal apply). **Guard:** df
+sub build's `except (ValueError, IndexError)`); or the old watch's expiry rewound the new cycle away. **No exception:**
+a pending confirming ON the establishing candle is dropped too — kept, it reversed the new cycle on the superseded
+barrier on the same candle, with a close that cannot be beyond the new BOS (decided after the landing review of
+`2285232`). The cycle-0 `BOS_CONFIRMED` needs no call: a watch needs a BOS, and there is none before cycle 0. **Guard:** df
 invariant 4 (now a pure tripwire); pins `tests/test_ms_new_cycle_ends_watch.py`; measure with
 `review_scripts/reversal_shadow.py` (`in_watch_est`) and `random_tail_search.py` (`iwe`). MARKET_STRUCTURE_SPEC
 "A new cycle ends an open watch".
