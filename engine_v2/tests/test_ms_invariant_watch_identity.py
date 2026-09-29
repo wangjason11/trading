@@ -13,8 +13,8 @@ moved BOS, strictly beyond the old frozen barrier.
 Measured before the fix (the old and the new rule evaluated on the same output rows): the review fixture perturbed
 600x — 410 fires, all false positives (the frozen barrier differs and a REVERSAL_WATCH_START sits on the row); 24k
 wide random tails — 3, all false positives; suite 0 / 1899 runs; reference window 0 (no expiries) -> byte-identical.
-The new rule fired 0 times. No random sample produced a same-watch change, so the kept guard is pinned on
-constructed rows below.
+The new rule fired 0 times on those samples. The guarded case is reachable on real rows (the landing review built
+one and found 2 in 24k random tails): pinned below on real rows AND on constructed rows.
 """
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ import pytest
 
 from engine_v2.structure.structure_engine import _make_market_structure, compute_bounded_structure
 from engine_v2.tests import test_ms_cts_update_no_regress as _noreg
+from engine_v2.tests.test_ms_stop_after_cts import _make_double_rewind_data
 from engine_v2.tests.test_unified_probe import _R, _make_multicycle_data, _prepare_df
 
 
@@ -71,6 +72,32 @@ def test_back_to_back_watches_are_not_one_watch(sd):
     assert [round(float(df.loc[i, "bos_threshold"]), 5) for i in (9, 10)] == [_price(0.60207, sd), _price(0.60278, sd)]
     assert [int(e.idx) for e in res.events if e.type == "REVERSAL_WATCH_START"][-2:] == [9, 10]
     assert res.reversal_idx == 14
+
+
+# The guarded case on real rows (landing review of 062e693; sd=+1): `_make_double_rewind_data()[:6]` + 5 candles.
+#   4   close-breaks BOS_0 .5998 -> watch 4 (frozen .5998, expires 9), pending reversal applying at 8.
+#   6-7 a new high: cycle 1 established at 7 INSIDE the open watch -> BOS_CONFIRMED moves bos_threshold to .5978.
+#   8   the pending reversal applies (REVERSAL @8).
+# Rows 6 -> 7: the same watch (frozen .5998 on both), the BOS moved -> invariant 4 raises (before and after the fix).
+# Whether a cycle may be established while a watch is open is an open MS question (GOTCHAS "A Cycle Cannot Be
+# Established Inside an Open Reversal Watch"); this pin only says the check still catches it.
+def _in_watch_cycle_rows() -> list[dict]:
+    return list(_make_double_rewind_data()[:6]) + [
+        _R(0.59900, 0.60620, 0.59880, 0.60600),   # 6
+        _R(0.60600, 0.60920, 0.60580, 0.60900),   # 7
+        _R(0.60900, 0.60920, 0.59580, 0.59600),   # 8
+        _R(0.59600, 0.59620, 0.59300, 0.59320),   # 9
+        _R(0.59320, 0.59340, 0.59100, 0.59120),   # 10
+    ]
+
+
+@pytest.mark.parametrize("sd", [1, -1])
+def test_a_cycle_established_inside_an_open_watch_still_raises(sd):
+    rows = _in_watch_cycle_rows() if sd == 1 else _noreg._mirror(_in_watch_cycle_rows())
+    prev, now = (0.5998, 0.5978) if sd == 1 else (round(_noreg._MIRROR - 0.5998, 5), round(_noreg._MIRROR - 0.5978, 5))
+    with pytest.raises(AssertionError, match=rf"at idx=7: prev={prev} now={now} \(frozen {prev}\)"):
+        with redirect_stdout(io.StringIO()):
+            compute_bounded_structure(_prepare_df(rows), 0, sd)
 
 
 # Constructed rows: invariant 4 alone, on a clean run's df (no watch anywhere) with two rows set by hand.

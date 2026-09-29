@@ -519,8 +519,10 @@ MarketStructure includes df-level invariant checks (low-noise):
   consecutive rows of the SAME watch — same `reversal_bos_th_frozen` (2026-09-29). Back-to-back watches are two
   watches: an expiry rewinds to anchor + 1 and that candle can open a new watch on the moved barrier, which is
   strictly beyond the old frozen one. Comparing every consecutive active pair made that a false positive that ended
-  the run (all measured fires were of this kind; pins `tests/test_ms_invariant_watch_identity.py`). The guarded
-  case is a BOS moving inside one watch (GOTCHAS "A Cycle Cannot Be Established Inside an Open Reversal Watch").
+  the run (every measured false positive was of this kind; pins `tests/test_ms_invariant_watch_identity.py`). The
+  guarded case — a BOS moving inside one watch, e.g. a cycle established while it is open (GOTCHAS "A Cycle Cannot
+  Be Established Inside an Open Reversal Watch") — is reachable on real rows and still raises (pinned; ~1 in 12k
+  random tails, a live crash path; whether it should be allowed is that GOTCHAS entry's open question).
 
 Reversal is terminal (cannot leave reversal once entered) — asserted at the source (2026-09-28): `_set_state`
 raises on any transition out of REVERSAL (a tripwire: "Reversal inside a back-fill" above stops every path that

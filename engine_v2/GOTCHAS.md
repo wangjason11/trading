@@ -1919,8 +1919,11 @@ close-break in that back-fill opens the watch — `tests/test_ms_stop_after_cts.
 *should* forbid the first order is an open MS question, not a Plan B one — record, don't change.
 **Update 2026-09-29:** the check now compares only rows of ONE watch (same `reversal_bos_th_frozen`). Back-to-back
 watches — an expiry rewinds to anchor + 1, whose candle opens a new watch on the moved barrier — tripped it as a
-false positive (every measured fire: 410 / 600 perturbations of the F3 landing review's fixture, 3 / 24k random
-tails); the case above (a BOS moving inside one watch) still raises (MARKET_STRUCTURE_SPEC "Invariants";
+false positive (the author's samples: 410 / 600 perturbations of the F3 landing review's fixture, 3 / 24k random
+tails, all of this kind); the case above (a BOS moving inside one watch) still raises and is reachable on REAL rows —
+the invariant-4 landing review built one (`_make_double_rewind_data()[:6]` + 5 candles: watch 4, cycle 1
+established at 7 inside it, reversal at 8) and found 2 in 24k random tails (vs 82 false positives): a live,
+pre-existing crash path while the question above stays open (MARKET_STRUCTURE_SPEC "Invariants";
 `tests/test_ms_invariant_watch_identity.py`).
 
 Also reproduced there: the Plan B §2 "rebuilt-prefix" exception (`_make_double_rewind_data`) — two
