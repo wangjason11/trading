@@ -471,6 +471,14 @@ class MarketStructure:
 
             # If reversal-watch expiry requested a rewind, honor it
             if self.state.jump_to_idx is not None:
+                # A step ends at the expiry that requested the rewind ("stop at the expiry",
+                # `_step_anchor`), so nothing after it ran and the state cannot be REVERSAL
+                # here; if it were, the rewind + seed restore below would discard that
+                # reversal silently — fail loudly instead (user, 2026-09-29;
+                # MARKET_STRUCTURE_SPEC "Expiry inside a step").
+                assert self.state.state != MarketState.REVERSAL, (
+                    f"[market_structure] rewind requested in REVERSAL at step {i} "
+                    f"(jump_to={self.state.jump_to_idx})")
                 jump_to = int(self.state.jump_to_idx)
                 seed = self.state.jump_seed_state  # capture before rewind resets state
 
@@ -831,6 +839,7 @@ class MarketStructure:
         then this was a "false break" by your definition: update bos_threshold the anchor candle wick, then clear the watch.
 
         After expiry, we "rewind" execution to (anchor_idx + 1) so the next anchor starts there.
+        The step that fires it ends right there (`_step_anchor`, "stop at the expiry").
         """
         st = self.state
         if not st.reversal_watch_active:
@@ -1022,6 +1031,13 @@ class MarketStructure:
                 # ends on REVERSAL, so the returned index is never used.
                 if self.state.state == MarketState.REVERSAL:
                     return k + 1
+                # A watch expiring inside the back-fill requested a rewind to its anchor + 1:
+                # the step ends at the expiry too — the winner applies after it and would
+                # act on a structure the rewind discards (MARKET_STRUCTURE_SPEC "Expiry
+                # inside a step"). Return the jump target: the run loop honours the request;
+                # a `_rewind_to` rebuild (which ignores it) resumes there, as it always did.
+                if self.state.jump_to_idx is not None:
+                    return int(self.state.jump_to_idx)
 
             # "live-like": we act as if apply candle just closed
             self._apply_pattern_at_apply_idx(ev, apply_idx, kind)
@@ -1033,6 +1049,9 @@ class MarketStructure:
             # barrier skip in REVERSAL.)
             if kind != "reversal" and self.state.state == MarketState.REVERSAL:
                 return apply_idx + 1
+            # ... or expire the watch: stop at the expiry, no apply-row re-write.
+            if self.state.jump_to_idx is not None:
+                return int(self.state.jump_to_idx)
 
             # reversal check at apply_idx
             # self._maybe_trigger_reversal(apply_idx)
@@ -1058,9 +1077,11 @@ class MarketStructure:
                 for k in range(i, min_d):
                     self._replay_step_no_patterns(k, freeze_range=True)
                     # Terminal inside the range back-fill: no finalize, no re-step of i
-                    # (see the winner back-fill above).
+                    # (see the winner back-fill above). Same for an expiry (stop at it).
                     if self.state.state == MarketState.REVERSAL:
                         return k + 1
+                    if self.state.jump_to_idx is not None:
+                        return int(self.state.jump_to_idx)
 
                 self._finalize_range_candidate_offline(i)
 
@@ -1141,7 +1162,15 @@ class MarketStructure:
             ev_r = self._bp.detect_best_for_anchor(i, -self.struct_direction, bos_frozen_for_anchor)
             if ev_r is not None:
                 apply_r = self._apply_idx(ev_r)
-                if apply_r is not None and apply_r <= D:
+                # An open watch's frozen barrier holds only until the watch expires: a
+                # reversal applying after `reversal_watch_expires_idx` is not a candidate —
+                # the expiry resolves the watch first (the scheduler's rule,
+                # `_schedule_reversal_from_anchor`; apply == expiry stays one). A close-break
+                # AT i opens a watch expiring at D, so D is its cap already.
+                horizon = D
+                if st.reversal_watch_active and st.reversal_watch_expires_idx is not None:
+                    horizon = min(D, int(st.reversal_watch_expires_idx))
+                if apply_r is not None and apply_r <= horizon:
                     candidates.append((ev_r, apply_r, "reversal"))
 
         if not candidates:
@@ -1615,8 +1644,10 @@ class MarketStructure:
             for k in range(i, min_d):
                 self._replay_step_no_patterns(k, freeze_range=True)
                 # Terminal inside the back-fill: no finalize (`_step_anchor` then
-                # ends the step — see its winner back-fill).
+                # ends the step — see its winner back-fill). Same for an expiry.
                 if st.state == MarketState.REVERSAL:
+                    return
+                if st.jump_to_idx is not None:
                     return
 
             self._finalize_range_candidate_offline(i)

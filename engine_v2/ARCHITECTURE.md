@@ -536,6 +536,9 @@ The MarketStructure engine runs lightweight df-level invariant checks:
 Reversal is terminal (once reversal appears, it never leaves reversal) — not a df check: asserted in `_set_state`
 since 2026-09-28 (MARKET_STRUCTURE_SPEC "Invariants" + "Reversal inside a back-fill")【fileciteturn1file11】
 
+A rewind is never requested in REVERSAL — asserted in `run()` since 2026-09-29 (a step ends at its own watch expiry:
+MARKET_STRUCTURE_SPEC "Expiry inside a step").
+
 ### Zone visualization invariants
 - Chart shows zones for most recent structure_id
 - Within that structure, active zones are most recent buy and sell

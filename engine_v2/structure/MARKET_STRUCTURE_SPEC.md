@@ -92,7 +92,8 @@ A consolidation state bounded by (range_hi, range_lo).
 Starts **only** when a candle **close-breaks** the active BOS threshold.
 During watch:
 - BOS threshold must not update.
-- Reversal candidates are detected relative to a frozen barrier.
+- Reversal candidates are detected relative to a frozen barrier and must apply by the watch's
+  `expires_idx` — the frozen barrier holds only until then ("Expiry inside a step" below).
 If no valid reversal pattern appears within watch window:
 - BOS threshold updates to the close-break anchor candle wick extreme,
 - watch clears,
@@ -120,6 +121,34 @@ Before the fix the step went on: the winner applied after the reversal (state le
 again — two `STATE_CHANGED(to=reversal)` for one sid, the H1 hand-off taking the first (df mask `.min()`) and every
 reader the last (`compute_reversal_idx_by_sid`). 0 cases on the reference window (byte-identical); pins
 `tests/test_ms_reversal_terminal.py`.
+
+### Expiry inside a step (stop at the expiry; 2026-09-29)
+A close-break at anchor A opens a watch that expires at `E = min(A + range_max_k, effective_end)` with a pending
+reversal applying at `p <= E` (no pending → `rv_anchor_failed` clears the watch at once). The expiry runs before the
+pending apply in the per-candle step, so it fires exactly when `p == E` (Open F3b below) and requests a rewind to
+`A + 1` (false break: `bos_threshold` := the anchor's wick, `jump_to_idx` + a seed snapshot). Two rules keep a step
+from acting past it:
+- **The frozen barrier holds only until E.** A reversal candidate against it at a later anchor `i` (`A < i <= E`)
+  must apply by E: `_best_bopb_pattern_at_anchor` caps it at `min(D, expires_idx)` — the scheduler's rule
+  (`_schedule_reversal_from_anchor`, where it never binds: the anchor-A pattern confirms by `A + range_max_k`).
+  Apply `== E` stays a winner: the winner path applies it before the apply candle's own step, whose expiry check
+  then finds the watch cleared. Live-like: at E no reversal has completed, so the watch expires; a pattern that
+  completes later re-qualifies against the post-expiry barrier after the rewind.
+- **The step ends at the expiry.** An expiry requested inside a step — in the winner back-fill, in the breakout's
+  `_post_apply_range_check` (which ends too; then `_step_anchor` skips the apply-row re-write), or in the no-winner
+  range back-fill — ends the step at that candle, like a terminal reversal ("Reversal inside a back-fill"): no
+  apply, no finalize, no re-step. The step returns the jump target: the run loop honours it; a `_rewind_to` rebuild,
+  which ignores the request, resumes there without a reset as it always did (LANDMINES "MarketStructure
+  Deep-Couples…" 1(a)).
+Before the fix the step went on and the rewind + seed restore (a direct `state.state =`) threw the rest away: a later
+anchor's reversal winner applied after E and was discarded (F3 — `tests/test_ms_expiry_stop.py`: the watch expires
+at 9, the anchor-9 reversal applied at 10); a second expiry inside the continuation overwrote the jump target and the
+seed (the df invariant "bos_threshold changed during reversal watch" fired); a rebuild replaying the continuation
+re-applied the discarded reversal and crashed on its "never reaches a reversal" assert. `run()` now asserts a rewind
+is never requested in REVERSAL. 0 expiries on the reference window (byte-identical).
+**Open (F3b):** because the expiry precedes the pending apply, a reversal pattern that confirms ON the expiry candle
+is discarded as a false break — and that is the only way the false-break rewind is reached (every expiry in the
+suite, 42/42). LANDMINES L4 decided this for the data edge only; the general case is undecided.
 
 ---
 
@@ -478,8 +507,10 @@ Reversal is terminal (cannot leave reversal once entered) — asserted at the so
 raises on any transition out of REVERSAL (a tripwire: "Reversal inside a back-fill" above stops every path that
 reached one), and a `_rewind_to` rebuild asserts it never reaches one — a KNOWN way it could: the rebuild ignores
 nested expiry jumps (LANDMINES "MarketStructure Deep-Couples…" 1(a)), so its path can diverge from the first pass
-(0 cases on the reference window and the suite; the user chose a crash over the seed restore silently overwriting
-the reversal). (The former df-level check ran after `run()`'s forward stamp of `market_state` and could never fire
+(0 cases on the reference window and the suite; the one instance found since — F3 replayed by a rebuild — is fixed
+by "Expiry inside a step"; the user chose a crash over the seed restore silently overwriting
+the reversal). A rewind is never requested in REVERSAL — asserted in `run()` (2026-09-29; "Expiry inside a step":
+a step ends at its own expiry, so the seed restore can never discard a reversal). (The former df-level check ran after `run()`'s forward stamp of `market_state` and could never fire
 — deleted.)【fileciteturn1file11】
 
 ---

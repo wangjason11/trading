@@ -1262,18 +1262,27 @@ on the entity-wide M15 df must be similarly re-derived on the slice.
    MS would replay hundreds-to-thousands of unrelated candles, fire
    spurious patterns, and contaminate `self.df` cols.
    **Three additions (Plan A/B audits, 2026-09-19, unverified exposure):**
-   (a) the rebuild ignores jump requests (`market_structure.py:~497-500`),
+   (a) the rebuild ignores jump requests (`_rewind_to`),
    so a rebuilt prefix can differ from the first pass wherever an
    earlier watch expiry had already rewound — the final event list is
-   not necessarily a superset of what was known at an earlier candle;
+   not necessarily a superset of what was known at an earlier candle.
+   Mechanism (measured 2026-09-29): it drops the REQUEST (no reset, no
+   seed restore) but follows the step's returned index — the jump
+   target — so it re-steps from the nested anchor + 1 on top of the
+   un-reset state and events (`_make_double_rewind_data`'s rebuilt
+   prefix keeps the first pass's cycle 1 @8). Since the expiry stop
+   ("A Step Must Stop at Its Own Watch Expiry" above) the step returns
+   at the expiry, so a rebuild no longer replays a discarded continuation;
    (b) the MAIN H1 path runs each sid's MS on the full df, so a
    reversal-watch expiry in sid ≥ 1 would replay from candle 0;
    (c) the rebuild constructs `MarketStructureState(struct_direction=…)`
    (`:485`) WITHOUT the ctor's `structure_id` (set only in `__init__`,
    `:360`), so after a rewind in an H1 sid ≥ 1 every later event / row
    would be stamped `structure_id=0`. Not observed on the reference
-   window (0 expiries on H1; 15 / 3 on the M15 confluence / counter
-   streams, all on slices, sid 0). If an H1 sid ≥ 1 ever logs a
+   window (pre-pool count, 2026-09-19: 0 expiries on H1; 15 / 3 on the
+   M15 confluence / counter streams, all on slices, sid 0. The pool-era
+   replay has 0 expiries in all 12 MS runs — `reversal_shadow.py`,
+   2026-09-29). If an H1 sid ≥ 1 ever logs a
    `[RV_EXPIRE]` / `probe_no_break`, check `structure_id` on the events
    after it and rows `< start_idx` first.
    **(d) (Plan A execution, 2026-09-19, verified on the L4 fixture):** the
@@ -1377,8 +1386,31 @@ H1 hand-off takes the first, `compute_reversal_idx_by_sid` the last). **Guard:**
 REVERSAL and the `_rewind_to` rebuild asserts it never reaches one — a new setter / back-fill that forgets the stop
 crashes instead of corrupting. Known trigger of the rebuild assert: the rebuild ignores nested expiry jumps
 ("MarketStructure Deep-Couples…" 1(a) below), so a divergent rebuild could reverse — the user chose the crash
-(2026-09-28); neither assert is caught by the sub build's `except (ValueError, IndexError)`, so a hit ends the replay. Measure a change here with `review_scripts/reversal_shadow.py` (every MS run: back-fill
+(2026-09-28); the one instance found since (F3 replayed by a rebuild, 1 in 12k random tails) is fixed by "A Step
+Must Stop at Its Own Watch Expiry" below; neither assert is caught by the sub build's `except (ValueError, IndexError)`, so a hit ends the replay. Measure a change here with `review_scripts/reversal_shadow.py` (every MS run: back-fill
 applies, leaves, events after the terminal). Pins `tests/test_ms_reversal_terminal.py`.
+
+---
+
+## A Step Must Stop at Its Own Watch Expiry (FIXED 2026-09-29)
+
+**Rule:** once `_maybe_expire_reversal_watch` has requested a rewind (`jump_to_idx` set) inside a step, the step
+ends at that candle and returns the jump target — no winner apply, no range finalize, no re-step (the winner
+back-fill, after the apply, the range back-fill, `_post_apply_range_check`) — and a reversal candidate against an
+open watch's frozen barrier must apply by the watch's `expires_idx` (`_best_bopb_pattern_at_anchor` caps it like
+the scheduler; apply == `expires_idx` stays a winner). Canonical: MARKET_STRUCTURE_SPEC "Expiry inside a step".
+**Why:** the run loop honours the rewind only between steps, and the rewind + seed restore (a direct
+`state.state =`) throws away whatever the step did after the expiry — silently, a REVERSAL included (zones-audit F3;
+200 rewinds entered in REVERSAL on 12k random tails, 0 on the window and the suite). And not everything was thrown
+away: a second expiry in the continuation OVERWROTE `jump_to_idx` + the seed (wrong rewind target → df invariant
+"bos_threshold changed during reversal watch"), and a `_rewind_to` rebuild replayed the continuation (a re-applied
+reversal crashed its assert). **Return the jump target, not `k + 1`:** a rebuild ignores the request but resumes at
+the returned index ("Deep-Couples…" 1(a) below); `k + 1` changed the rebuilt prefix and
+`test_ms_stop_after_cts::test_mechanism` then tripped that invariant. **Guard:** `run()` asserts a rewind is never
+requested in REVERSAL (an AssertionError, not caught by the sub build's `except (ValueError, IndexError)`). Measure
+with `review_scripts/reversal_shadow.py` (`expiry` / `win_past_exp` / `post_expiry` / `rewind_in_rev`). Pins
+`tests/test_ms_expiry_stop.py`. Related, OPEN (F3b): a pending reversal confirming ON the expiry candle is discarded
+as a false break — the only way an expiry is reached (MARKET_STRUCTURE_SPEC "Expiry inside a step").
 
 ---
 
