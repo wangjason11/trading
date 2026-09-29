@@ -532,6 +532,8 @@ The MarketStructure engine runs lightweight df-level invariant checks:
 - range_lo <= range_hi while active
 - CTS_CONFIRMED rows coherent with stage/phase
 - BOS_CONFIRMED rows coherent
+- reversal watch: a frozen barrier on every active row; `bos_threshold` unchanged within ONE watch (same frozen
+  barrier — back-to-back watches after an expiry are two watches; MARKET_STRUCTURE_SPEC "Invariants", 2026-09-29)
 
 Reversal is terminal (once reversal appears, it never leaves reversal) — not a df check: asserted in `_set_state`
 since 2026-09-28 (MARKET_STRUCTURE_SPEC "Invariants" + "Reversal inside a back-fill")【fileciteturn1file11】

@@ -2619,11 +2619,18 @@ class MarketStructure:
                 bos_prev = bos.shift(1)
                 prev_active = active.shift(1).fillna(False).astype(bool)
                 active_b = active.astype(bool)
-                changed = active_b & prev_active & (bos != bos_prev)
+                # Only within ONE watch: consecutive active rows can be two watches (an expiry rewinds
+                # to anchor + 1, whose candle opens a new watch). The frozen barrier identifies the
+                # watch — a watch opened after an expiry freezes the moved BOS, strictly beyond the old
+                # frozen barrier (MARKET_STRUCTURE_SPEC "Invariants"; landing review of 52ac1e9).
+                frozen = df["reversal_bos_th_frozen"].astype(float)
+                frozen_prev = frozen.shift(1)
+                changed = active_b & prev_active & (frozen == frozen_prev) & (bos != bos_prev)
                 if changed.any():
                     i = int(changed.idxmax())
                     raise AssertionError(
-                        f"[INV] bos_threshold changed during reversal watch at idx={i}: prev={bos_prev.loc[i]} now={bos.loc[i]}"
+                        f"[INV] bos_threshold changed during reversal watch at idx={i}: prev={bos_prev.loc[i]} "
+                        f"now={bos.loc[i]} (frozen {frozen.loc[i]})"
                     )
 
         # (Reversal is terminal: asserted at the source in `_set_state`. A df check

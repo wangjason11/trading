@@ -1917,6 +1917,11 @@ then `_post_apply_range_check(apply_idx)` back-fills the apply candle's range wi
 close-break in that back-fill opens the watch — `tests/test_ms_stop_after_cts.py::_make_watch_over_second_cts_data`
 (2nd CTS idx 9 / moment 10, watch at 11 inside the same step, reversal at 14). Whether invariant 4
 *should* forbid the first order is an open MS question, not a Plan B one — record, don't change.
+**Update 2026-09-29:** the check now compares only rows of ONE watch (same `reversal_bos_th_frozen`). Back-to-back
+watches — an expiry rewinds to anchor + 1, whose candle opens a new watch on the moved barrier — tripped it as a
+false positive (every measured fire: 410 / 600 perturbations of the F3 landing review's fixture, 3 / 24k random
+tails); the case above (a BOS moving inside one watch) still raises (MARKET_STRUCTURE_SPEC "Invariants";
+`tests/test_ms_invariant_watch_identity.py`).
 
 Also reproduced there: the Plan B §2 "rebuilt-prefix" exception (`_make_double_rewind_data`) — two
 expiry-rewinds, one before the 2nd CTS and one after the early stop; `_rewind_to` replays from 0

@@ -515,6 +515,12 @@ MarketStructure includes df-level invariant checks (low-noise):
 - range_lo must not exceed range_hi while active
 - CTS_CONFIRMED coherence with phase/stage
 - BOS_CONFIRMED coherence
+- reversal watch (invariant 4): an active row has a frozen barrier, and `bos_threshold` does not change between two
+  consecutive rows of the SAME watch — same `reversal_bos_th_frozen` (2026-09-29). Back-to-back watches are two
+  watches: an expiry rewinds to anchor + 1 and that candle can open a new watch on the moved barrier, which is
+  strictly beyond the old frozen one. Comparing every consecutive active pair made that a false positive that ended
+  the run (all measured fires were of this kind; pins `tests/test_ms_invariant_watch_identity.py`). The guarded
+  case is a BOS moving inside one watch (GOTCHAS "A Cycle Cannot Be Established Inside an Open Reversal Watch").
 
 Reversal is terminal (cannot leave reversal once entered) — asserted at the source (2026-09-28): `_set_state`
 raises on any transition out of REVERSAL (a tripwire: "Reversal inside a back-fill" above stops every path that

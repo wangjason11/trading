@@ -23,8 +23,8 @@ Suite: 42 expiries, 0 F3, 26 range back-fills stepping past their expiry (now st
 change nothing (the rewind discarded the rest); the 3 inside `_rewind_to` rebuilds change the rebuilt prefix
 (`test_mechanism`'s full run — pinned below). Random tails (12k per tree): pre-fix (edeef26) 192 F3 winners, 200
 rewinds entered in REVERSAL, 1 rebuild-assert crash; A+D 0 / 0 / 0 rebuild-assert crashes (a separate, pre-existing
-df-invariant false positive on back-to-back watches remains — zones-audit "Still open"). The fixtures below come
-from those searches (rows embedded).
+df-invariant false positive on back-to-back watches remained — fixed next, `test_ms_invariant_watch_identity.py`).
+The fixtures below come from those searches (rows embedded).
 """
 from __future__ import annotations
 

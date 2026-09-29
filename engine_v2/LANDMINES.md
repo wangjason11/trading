@@ -1412,7 +1412,9 @@ the returned index ("Deep-Couples…" 1(a) below); `k + 1` changed the rebuilt p
 `test_ms_stop_after_cts::test_mechanism` then raised `[INV] bos_threshold changed during reversal watch`. **Guard:** `run()` asserts a rewind is never
 requested in REVERSAL (an AssertionError, not caught by the sub build's `except (ValueError, IndexError)`). Measure
 with `review_scripts/reversal_shadow.py` (`expiry` / `win_past_exp` / `post_expiry` / `rewind_in_rev`). Pins
-`tests/test_ms_expiry_stop.py`. Related, OPEN (F3b): a pending reversal confirming ON the expiry candle is discarded
+`tests/test_ms_expiry_stop.py`. Back-to-back watches (an expiry's rewind to anchor + 1 opening a new watch there) are two watches: df invariant 4
+compares one watch's rows only (same frozen barrier, 2026-09-29; before, they tripped it and ended the run).
+Related, OPEN (F3b): a pending reversal confirming ON the expiry candle is discarded
 as a false break — the only way an expiry is reached — while a later anchor's reversal WINNER applying at the expiry
 is applied (MARKET_STRUCTURE_SPEC "Expiry inside a step", Open F3b).
 
