@@ -37,8 +37,11 @@
 > subordinates; a section under a SUPERSEDED banner (the §13 migration log's
 > §13.5.c prose, the rev-1 bodies it names) is history, not a spec.
 >
-> Companion file: `PRE_REFACTOR_INVARIANTS.md` — what currently-correct
-> behavior must survive (or is explicitly being changed).
+> Former companion file `PRE_REFACTOR_INVARIANTS.md` (the pre-Part-4
+> behaviour inventory) was DELETED 2026-09-30 (§13 item 7): each item was
+> already canonical elsewhere or superseded, except the `cts_phase` values,
+> now in `MARKET_STRUCTURE_SPEC.md` "State machine overview". Git history
+> keeps the file.
 >
 > **Vision:** A multi-TF system where every structure entity (main + every
 > subordinate TF / role / parent combination) runs in its own isolated df,
@@ -2033,7 +2036,7 @@ between every step:
 > twice (redesign, then the pool); d SUBSUMED; e CLOSED (below). 6 recursive
 > depth — NOT BUILT (header). 7 — §13.7 doc finalization done IN PLACE (this
 > file stays canonical; header), and the `PRE_REFACTOR_INVARIANTS.md` merge
-> + deletion.
+> + deletion — DONE (header).
 
 1. **Stand up registry alongside today's monolithic df.** Main builds
    into `H1.main` entity. UC1 lower-TF data routed into
@@ -2389,8 +2392,9 @@ between every step:
    sections into canonical `MARKET_STRUCTURE_SPEC.md` /
    `MULTI_TF_SPEC.md`. *(2026-09-30, user: this file is NOT split — it stays
    the canonical multi-TF spec, finalized in place; the split is parked in
-   `IDEA_PARKING_LOT.md` §G. What survives of the invariants file is merged
-   into the canonical specs before it is deleted.)*
+   `IDEA_PARKING_LOT.md` §G. The invariants file was deleted the same day
+   after its one uncovered fact, `cts_phase`, moved to
+   `MARKET_STRUCTURE_SPEC.md`.)*
 
 ---
 

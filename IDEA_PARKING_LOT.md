@@ -42,13 +42,7 @@ merge `week8-volmom-multitf` → `main`. Everything in D and later stays after t
 
 ## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
 
-## C. Part 4 closure — IN WEEK 8, next session (user 2026-09-30; order: §13.5.e remainder → §13.7 docs + the
-file-naming call → merge what is still useful of the invariants file into the canonical specs, then delete it /
-retire the workflow memory). The §13.5.e remainder and §13.7 are closed (2026-09-30, "Recently closed").
-
-- **Delete `engine_v2/PRE_REFACTOR_INVARIANTS.md`** ("will be deleted post-refactor", memory `project_part4_vision.md`;
-  PART4 §13 item 7: first merge its still-useful sections into the canonical specs) and retire memory
-  `project_part4_workflow.md` ("retire when Part 4 is complete"). OPEN.
+## C. Part 4 closure — DONE 2026-09-30 (all three items in "Recently closed"; Part 4 is complete)
 
 ## D. Before Entries (Week 9 prerequisites)
 
@@ -145,6 +139,11 @@ retire the workflow memory). The §13.5.e remainder and §13.7 are closed (2026-
 
 ## Recently closed (history pointers)
 
+- **`PRE_REFACTOR_INVARIANTS.md` deleted** — 2026-09-30 (PART4 §13 item 7): every item was already canonical or
+  superseded (UC1, the three-probe family, the May checkpoints, `meta["active"]`, the 9/6/3 pips) except the
+  `cts_phase` values → `MARKET_STRUCTURE_SPEC.md` "State machine overview" (`FALSE_BREAK` declared, never assigned).
+  Memory `project_part4_workflow.md` retired; its handoff-prompt practice kept (memory
+  `feedback_session_handoff_prompt.md`).
 - **§13.7 doc finalization** — done 2026-09-30, IN PLACE (user): PART4 stays the canonical multi-TF spec (status
   header, §13 step statuses, footer); the split moved to G. The §16.10 file-naming deviation resolved as SPEC FOLLOWS
   CODE (`{basename}` + `_{TF}_{lens}` suffix, one flat folder per save — §12 / §16.10 / §16.11 rewritten), with a

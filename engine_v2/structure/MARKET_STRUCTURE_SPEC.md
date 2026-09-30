@@ -20,7 +20,14 @@ This document is meant to be the canonical behavior reference.
 MarketStructure maintains an internal state object (MarketStructureState) with:
 - `struct_direction` (+1 / -1)
 - `structure_id` (regime id)
-- CTS lifecycle: `cts_cycle_id`, `cts`, `cts_threshold`, `cts_phase_debug`, `cycle_stage`
+- CTS lifecycle: `cts_cycle_id`, `cts`, `cts_threshold`, `cts_phase` (written per row as the df column
+  `cts_phase_debug`), `cycle_stage`
+  - `cts_phase` ∈ {`NONE`, `EST_OR_UPD`, `CONFIRMED`}: `NONE` until the first CTS; `EST_OR_UPD` at each pattern-path
+    `CTS_ESTABLISHED` / `CTS_UPDATED`; `CONFIRMED` at `CTS_CONFIRMED` (pullback or sd-proximity). It is never reset to
+    `NONE` (the state object is built once per run). It gates the next breakout: a new cycle is ESTABLISHED when
+    `st.cts is None` or `cts_phase == "CONFIRMED"`, otherwise the breakout UPDATES the current CTS
+    (`market_structure.py`, `establishing_new_cycle`). The type also declares `FALSE_BREAK`, which nothing assigns
+    (measured 2026-09-30; moved here from the deleted `PRE_REFACTOR_INVARIANTS.md`).
 - BOS lifecycle: `bos` (the BOS anchor `Point(bos_anchor_idx, price)`, built from `_emit_bos_confirmed`'s `bos_anchor_idx` parameter, never from the emitted `ev.idx`; `bos_confirmed` before Plan E E2a), `bos_threshold`, `bos_event`
 - Range: `range_active`, `range_hi`, `range_lo`, `range_start_idx`, `range_confirm_idx`
 - Reversal watch: `reversal_watch_active`, `reversal_bos_th_frozen`, and pending reversal fields【fileciteturn1file3】
