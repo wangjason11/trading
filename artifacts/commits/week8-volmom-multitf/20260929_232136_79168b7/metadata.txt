@@ -1,0 +1,4 @@
+commit_hash=79168b7
+timestamp=20260929_232136
+branch=week8-volmom-multitf
+commit_message=Post-E·4 baseline: the Naming-Standard meta renames (5a5403e + review fold-in ed99914) on top of the pending-clear warm-up (bfe8178); reuse-mode save of the verified 5a5403e-code replay
