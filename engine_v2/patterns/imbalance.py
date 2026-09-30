@@ -115,14 +115,6 @@ def compute_imbalance(df: pd.DataFrame) -> pd.DataFrame:
 # Instance-based aggregation helpers
 # ---------------------------------------------------------------------------
 
-def has_imbalance_in_range(df: pd.DataFrame, start_idx: int, end_idx: int) -> bool:
-    """True if any imbalance instance overlaps [start_idx, end_idx]."""
-    return any(
-        inst.overlaps(start_idx, end_idx)
-        for inst in df.attrs.get("imbalances", [])
-    )
-
-
 def has_unfilled_imbalance(
     df: pd.DataFrame,
     start_idx: int,
@@ -178,19 +170,3 @@ def has_unfilled_imbalance(
         if not inst.is_filled(df, check_to_idx, fill_threshold):
             return True
     return False
-
-
-def get_unfilled_imbalances(
-    df: pd.DataFrame,
-    start_idx: int,
-    end_idx: int,
-    check_to_idx: int,
-    fill_threshold: float = 0.70,
-) -> List[ImbalanceInstance]:
-    """Return all unfilled imbalance instances overlapping [start_idx, end_idx]."""
-    return [
-        inst
-        for inst in df.attrs.get("imbalances", [])
-        if inst.overlaps(start_idx, end_idx)
-        and not inst.is_filled(df, check_to_idx, fill_threshold)
-    ]

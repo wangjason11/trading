@@ -1683,10 +1683,9 @@ own update.
 Scenario 2 cond1/cond2/cond3, the cross-cycle dead-cycle walks, AND
 MarketStructure's cycle-0 snapshot passes `direction=sd` (POI IC
 validation in `find_ic_candidates` is strict by design too). No production
-call is permissive: `get_unfilled_imbalances` / `has_imbalance_in_range`
-(no direction filter) have no production caller — the
-`get_unfilled_imbalances` import in `fib_tracker.py` is unused (hygiene
-follow-up, PLAN_F §7).
+call is permissive (the unfiltered `get_unfilled_imbalances` /
+`has_imbalance_in_range` were deleted 2026-09-30 — they had no production
+caller).
 
 **Why this is a landmine:** the pre-2026-05-23 design was permissive,
 with a documented rationale in POI_ZONES_SPEC §1 arguing that the

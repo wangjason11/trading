@@ -23,7 +23,7 @@ from engine_v2.features.fibonacci import (
     create_fib_retracement,
     DEFAULT_FIB_LEVELS,
 )
-from engine_v2.patterns.imbalance import has_unfilled_imbalance, get_unfilled_imbalances
+from engine_v2.patterns.imbalance import has_unfilled_imbalance
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.cross_cycle_fib import resolve_cross_cycle_eligibility

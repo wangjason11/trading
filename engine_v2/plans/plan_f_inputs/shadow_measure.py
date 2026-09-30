@@ -196,7 +196,9 @@ for mod in (imb_mod, ms_mod, fib_mod, poi_mod, ccf_mod):
         mod.has_unfilled_imbalance = shadow_has
 poi_mod._compute_poi_activation_history = shadow_sweep
 
-_orig_get = imb_mod.get_unfilled_imbalances
+# `get_unfilled_imbalances` was deleted 2026-09-30 (no production caller — the
+# 0 GET_UNFILLED calls this script measured for Plan F); shadow it only if present.
+_orig_get = getattr(imb_mod, "get_unfilled_imbalances", None)
 
 
 def shadow_get(*a, **k):
@@ -204,8 +206,9 @@ def shadow_get(*a, **k):
     return _orig_get(*a, **k)
 
 
-imb_mod.get_unfilled_imbalances = shadow_get
-fib_mod.get_unfilled_imbalances = shadow_get
+if _orig_get is not None:
+    imb_mod.get_unfilled_imbalances = shadow_get
+    fib_mod.get_unfilled_imbalances = shadow_get
 
 
 @atexit.register

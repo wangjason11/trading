@@ -6,9 +6,7 @@ import pytest
 from engine_v2.common.types import ImbalanceInstance
 from engine_v2.patterns.imbalance import (
     compute_imbalance,
-    has_imbalance_in_range,
     has_unfilled_imbalance,
-    get_unfilled_imbalances,
 )
 
 
@@ -329,8 +327,10 @@ def test_aggregation_helpers():
     out = compute_imbalance(df)
     assert out["is_imbalance"].tolist() == [0, 1, 0, 0, 0]
 
-    assert has_imbalance_in_range(out, 1, 1) is True
-    assert has_imbalance_in_range(out, 3, 4) is False
+    insts = out.attrs["imbalances"]
+    assert [(i.start_idx, i.end_idx, i.direction) for i in insts] == [(1, 1, 1)]
+    assert insts[0].overlaps(1, 1) is True
+    assert insts[0].overlaps(3, 4) is False
 
     # Instance unfilled -> has_unfilled True
     assert has_unfilled_imbalance(out, 1, 2, check_to_idx=4, evaluated_at=None) is True
@@ -339,10 +339,6 @@ def test_aggregation_helpers():
     # check_to_idx == end_idx mirrors the IC-validation call shape.
     assert has_unfilled_imbalance(out, 1, 2, check_to_idx=2, direction=-1, evaluated_at=None) is False
     assert has_unfilled_imbalance(out, 1, 2, check_to_idx=2, direction=1, evaluated_at=None) is True
-
-    unfilled = get_unfilled_imbalances(out, 1, 4, check_to_idx=4)
-    assert len(unfilled) == 1
-    assert unfilled[0].direction == 1
 
 
 # ---------- Knowability — the c3 rule (Plan F; IMBALANCE_FILL_SEMANTICS "Knowability") ----------
@@ -409,5 +405,4 @@ def test_attrs_empty_when_no_imbalances():
     out = compute_imbalance(df)
     assert out.attrs["imbalances"] == []
     assert out["is_imbalance"].sum() == 0
-    assert has_imbalance_in_range(out, 0, 2) is False
     assert has_unfilled_imbalance(out, 0, 2, check_to_idx=2, evaluated_at=None) is False

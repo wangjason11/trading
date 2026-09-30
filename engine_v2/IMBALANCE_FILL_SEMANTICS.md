@@ -190,11 +190,13 @@ In `engine_v2/patterns/imbalance.py`. For each instance in
 Returns `True` on the first unfilled survivor. `evaluated_at` is keyword-only
 and has no default: a caller that forgets its moment fails with a `TypeError`.
 
-### `get_unfilled_imbalances` / `has_imbalance_in_range`
+### `get_unfilled_imbalances` / `has_imbalance_in_range` — DELETED 2026-09-30
 
-No production caller (the import in `fib_tracker.py` is unused). Neither has a
-knowability cut — do not use them for a question asked at a moment (hygiene
-follow-up: delete).
+They had no production caller and no knowability cut (user decision: delete;
+the parked "direction filter" for `get_unfilled_imbalances` was dropped with it —
+`has_unfilled_imbalance(..., direction=sd, evaluated_at=...)` asks the
+direction-filtered question at a moment). `has_unfilled_imbalance` is the one
+wrapper.
 
 ---
 
