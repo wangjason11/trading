@@ -2,7 +2,8 @@
 
 Canonical findings summary + the Q7–Q10 decisions: `PLAN_G_wvmi_unique_sub.md` §8 (+ Q10: a pin for a lock LP past the
 cap falling back to the temp LP). This file keeps lens 3's measured test table, new pins,
-mutant list and doc-site list (read-only review at `5fa986b`; the 8 affected test files passed — 160 tests), plus lens
+mutant list and doc-site list (line numbers as of `5fa986b` — `5a4af14` later inserted 4 lines in WVMI_SPEC after
+:65 and 6 in PART4 after :3291; grep, don't trust a line number; read-only review at `5fa986b`; the 8 affected test files passed — 160 tests), plus lens
 1's exact run.log / cell numbers. Scratch scripts of the lenses: `%TEMP%/pe5/pg1..3/` (not a handoff).
 
 ## Test table (lens 3)
