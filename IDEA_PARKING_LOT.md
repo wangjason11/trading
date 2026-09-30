@@ -24,36 +24,12 @@ Status: **OPEN** (to do) · **DECIDE** (needs the user's call first) · **TRIGGE
 
 **Chart review with the user** — all items closed 2026-09-30 (see "Recently closed").
 
-**Hygiene (a Light session)** — the user's decisions of 2026-09-30 are recorded per line (DECIDED)
-- **§13.5.d leftovers** — the carve-outs are gone (subsumed by the 2026-05-25 lifecycle redesign, LANDMINES "Var 3 +
-  Var 4 Last-Per-Cycle Carve-Outs Are a Pair"), `stash@{0}` ("WIP §13.5.d") DROPPED 2026-09-30 (was `6fdb993`), but
-  two stale docstrings say "carve-out remains until §13.5.d" (`multitf/subsequent_confluence_pipeline.py:19`,
-  `multitf/subsequent_counter_pipeline.py:19`), and memory `project_part4_blocker_135d.md` still reads as a live
-  blocker. OPEN.
-- **Dead code** — `patterns/imbalance.py` `get_unfilled_imbalances` / `has_imbalance_in_range` + the unused import at
-  `zones/fib_tracker.py:26` — DECIDED 2026-09-30: delete (with their tests; `has_unfilled_imbalance(direction=...)`
-  covers direction-filtered questions, so the parked direction filter in H is dropped); the legacy
-  `compute_structure_from_start` / `compute_structure_scenario_3` / `identify_start_scenario_2_after_reversal` (no
-  production caller — tests only) — DECIDED 2026-09-30: delete in their own byte-identical commit, the
-  bounded-structure parity tests re-anchored on frozen expected events (`structure/MARKET_STRUCTURE_SPEC.md` ~:612).
-  OPEN (to implement).
-- **Stale docs found by the 2026-09-30 sweep** (claims no longer true):
-  - proximity pips — GLOSSARY (`proximity_pips`) and ARCHITECTURE ("Threshold defaults") say H1 9 / M15 6 / M5 3,
-    PART4 §4.4 (~:818) and memory `project_unified_identify_start_probe.md` (~:143) describe a pending change to
-    8/6/4 or M15 6 / M5 4 — the code (`zones/zone_proximity.py` `DEFAULT_PROXIMITY_PIPS`) is **8 / 5 / 3**;
-  - "the deferred main sid=0 cycle=0 fix (Commit 2) … not yet wired" — GOTCHAS (~:1637) and MARKET_STRUCTURE_SPEC
-    (~:81): it IS wired (`structure_engine.compute_structure` passes `enforce_cts0_new_extreme`);
-  - GOTCHAS (~:125) calls the "(c) other-zone-pattern inversion pass" deferred — DONE 2026-06-20 (its own :89);
-  - `engine_v2/README_PROJECT_OVERVIEW.md` "In progress / deferred" dates from Weeks 6–7;
-  - memory files still saying "deferred" for resolved things: `project_lifecycle_convention_klzone_fibstate.md` (the
-    KL `active` / `deactivated_by` indirection is gone from the code), `project_sub_structure_lifecycle_redesign.md`
-    "Remaining (both DEFERRED)" (FibState scalar lifecycle done; WVMI done — Plan G), `project_main_structure_debug_
-    plan.md` "open blocker before §13.5.d" (Scenario 2 mismatch — resolved by the cross-cycle fib unification),
-    `project_part4_progress.md` "Step 3 next — what's deferred". OPEN.
-- **Charting audit 2026-09-21** — 16 verified doc-staleness / style items (fold in when those files are touched) and
-  two design questions — DECIDED 2026-09-30: drop the inert M15 `fib: lines` toggle + the unused `sid_fibs` grouping and
-  correct the doc statements (M15 fibs are CSV-only); delete the no-op M15 dot-opacity tier. OPEN (to implement).
-  Detail: memory `project_charting_audit_20260921.md`.
+**Hygiene** — the 2026-09-30 pass is done (see "Recently closed"); what is left:
+- **Charting audit 2026-09-21 — the style / code items** — #7 sub-native zone outline hardcoded (no `zone.m15.poi.*`
+  key), #8 hover-label colours hardcoded, #9 the M15 zone-hover hitbox lines hardcoded (H1 reads the registry), #11 the
+  unused `structure.reversal_watch_line` key + the never-plotted `watch_y` series; plus the audit's still-unverified
+  list. Also: 8 unused locals in `charting/export_m15_chart.py` (ruff F841, pre-existing). OPEN (fold in when those
+  files are next touched). Detail: memory `project_charting_audit_20260921.md`.
 - **Naming-Standard audit of never-audited index keys** — KL `bounds_steps[*].start_idx` (the base ANCHOR on the INIT
   step, a MOMENT on expansion steps — one key, two kinds), RANGE_STARTED `confirm_idx` / `start_idx`, STATE_CHANGED
   `effective_idx`. Parked by the user ("don't start unasked"); cheap; the `bounds_steps` one should land before
@@ -161,6 +137,14 @@ Status: **OPEN** (to do) · **DECIDE** (needs the user's call first) · **TRIGGE
 
 ## Recently closed (history pointers)
 
+- **Week 8 hygiene pass** — 2026-09-30, all byte-identical (24 CSVs + figure JSON; only the `a8ed1cc` wave-candle
+  hovers differ from the save): the dead imbalance helpers `get_unfilled_imbalances` / `has_imbalance_in_range`
+  (`f630640`); the legacy MS functions `compute_structure_scenario_3` / `compute_structure_from_start` /
+  `identify_start_scenario_2_after_reversal` + their private helpers + `tests/test_scenario3.py` (`1071347`); the M15
+  chart's inert fib toggle + never-applied dot opacity tier — charting-audit #1 / #2 (`cd8eb9e`); the stale-docs sweep
+  (proximity 8/5/3 + probe-reset 4/3/2 pip values, Commit 2 wired, (c) done, the Week-6 overview, the §13.5.d
+  docstrings, charting-audit #10 + the verified doc-only items) (`45912ac`) + the stale memory notes; `stash@{0}`
+  dropped (`6fdb993`). User decisions: register "Week 8 close-out decisions" commit `ee2314e`.
 - **Syllabus Week 8 extras** (pair / TF dropdowns, a "show HTF context" checkbox, `ContextSnapshot`) — DROPPED by the
   user 2026-09-30 as superseded by Part 4: one static chart per entity / lens replaces the dropdowns + checkbox, and the
   entity registry holds every snapshot field (HTF trend = the H1.main structure; active HTF zones = the H1 zone attrs;
