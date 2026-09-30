@@ -2413,7 +2413,8 @@ Each sub chart renders:
 
 - Sub TF candles (own TF, no parent candles ever overlaid)
 - Sub structure elements: KL/POI zones, BOS/CTS markers, range bounds,
-  wave candle lines, fibs, WVMI hover overlays, connector lines
+  wave candle lines, WVMI hover overlays, connector lines (sub fibs are
+  CSV-only — no M15 fib renderer; decided 2026-09-30)
 - Sub TF volume (own TF)
 - Optional **parent overlay** (see §16.3)
 
@@ -2472,8 +2473,8 @@ display (§16.6) are governed by hardcoded rules, not user toggles.
 **M15 lens charts (`export_m15_chart.py`, rev 2).**
 
 - **Identity = `sub_id`.** The manifest is `attrs["sids"]` (one `SidRecord`
-  per unique sub on this lens, §9.2); every attrs list (events, KL, POI, fibs,
-  wave candles, WVMI, prev-BOS lines) is grouped by `meta["sub_id"]`
+  per unique sub on this lens, §9.2); every drawn attrs list (events, KL, POI,
+  wave candles, WVMI, prev-BOS lines; fibs are CSV-only) is grouped by `meta["sub_id"]`
   (`_sub_identity`); `attrs["triggers"]` supplies the record list for hover.
 - **Ownership = the sub's real-time lifecycle window, keyed per direction.**
   `_compute_owner_by_idx_dir(sid_records, edge_idx)` builds
@@ -2491,7 +2492,7 @@ display (§16.6) are governed by hardcoded rules, not user toggles.
   style, live ownership deciding only among live subs. A replaced sub stops at
   the replacement.
 - **Persisting elements draw from the anchor, active from `start_idx`:**
-  KL / POI rectangles and fibs are unchanged in mechanism — drawn from their
+  KL / POI rectangles are unchanged in mechanism (sub fibs are CSV-only) — drawn from their
   base / IC / anchor candle, filled only over their active stretch, which the
   KL/POI clamp already floors at the sub's `start_idx` and caps at its
   `end_idx` (§5). Opacity is a per-TF tier (`_m15_opacity_tier_for_zone`).
@@ -2621,9 +2622,8 @@ replaced by 1 prior one plus 3 dot-trace merges. Intermediate value after items
   `†`) from `attrs["triggers"]`; plus the first record's `parent_sid` /
   `parent_cycle_id` (informational).
 - **Tier logic** (`m15_most_recent_psid` / `recent_cycle_ids`,
-  `_compute_m15_tier_context_from_sids`) is sourced from each sub's
-  `meta["first_record"]` — semantics unchanged from the per-trigger era; it
-  must not change the H1-overlay behaviour.
+  `_compute_m15_tier_context_from_sids`) — never applied to any trace (audit
+  2026-09-21) and DELETED 2026-09-30; M15 dots render at flat opacity.
 
 | Element class | Display rule |
 |---|---|
@@ -3273,7 +3273,7 @@ record. `clip_events_to_window` deep-copies (geometry objects are shared).
   overlay on the sub charts is lifecycle-FILTERED per wave (never-live H1 waves
   not drawn, §16.5 item 5; the H1 chart unchanged); collapsed-cycle KL/POI
   zones (never active in real time) are not drawn on either chart; POI zones
-  are side-tinted. Persisting elements (KL/POI rectangles, fibs) are otherwise
+  are side-tinted. Persisting elements (KL/POI rectangles; sub fibs are CSV-only) are otherwise
   unchanged: **drawn from the anchor, active from `start_idx`** (already the
   KL/POI rule).
 - **Every lens draws the sub over the sub's window** — the same `[start_idx,
@@ -3282,8 +3282,8 @@ record. `clip_events_to_window` deep-copies (geometry objects are shared).
   direction was truly tradeable; the charts show that one.
 - Hover: `sub_id`, direction, `relative_dir` at that candle, `[start_idx,
   end_idx]` + reason, and the record list `(lens, (S,C), trigger_type,
-  trigger_idx → start_idx)`. Tier logic (`m15_most_recent_psid` /
-  `recent_cycle_ids`) keeps working from each sub's first record.
+  trigger_idx → start_idx)`. (The M15 dot tier logic was deleted
+  2026-09-30 — it was never applied.)
 
 **Exports** (decoupled from the chart loop — written even if the chart export
 raises): per lens `*_M15_{lens}_subs.csv` (one row per sub on this lens) and

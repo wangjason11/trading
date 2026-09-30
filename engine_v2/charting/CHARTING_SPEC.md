@@ -279,7 +279,7 @@ These tables are derived from `style_registry.py` + the rendering code in `expor
 A separate chart file renders M15 candles with both M15 structure and H1 overlay elements. This is NOT the same as the H1 chart — it has its own rendering logic.
 
 ### Architecture
-- **Entry:** `export_m15_chart_plotly(registry=..., path_id=..., title=..., ...)` — registry-only (§13.5.e); resolves its M15 entity + parent overlay from the registry. Reads sub data from `m15_df.attrs["events" / "kl_zones" / "poi_zones" / "fib_states" / "wave_candles" / "wvmi" / "prev_bos_lines"]` grouped by each snapshot's **`meta["sub_id"]`** (`_sub_identity`) per the `m15_df.attrs["sids"]` `SidRecord` manifest (one row per unique sub rendered on this lens; `_sid_record_identity` = `sub_id` for a sub row, `sub_sid` for a main row), with `m15_df.attrs["triggers"]` (this lens's `TriggerRecord`s) for hover attribution. (Plan C, 2026-09-20 — replaces the pre-pool identity tuple `(parent_sid, parent_cycle_id, sub_sid)`; `sub_sid` no longer exists on any sub artifact.)
+- **Entry:** `export_m15_chart_plotly(registry=..., path_id=..., title=..., ...)` — registry-only (§13.5.e); resolves its M15 entity + parent overlay from the registry. Reads sub data from `m15_df.attrs["events" / "kl_zones" / "poi_zones" / "wave_candles" / "wvmi" / "prev_bos_lines"]` (M15 fibs are CSV-only (`*_M15_{lens}_fib_lifecycle.csv`; no M15 fib renderer — the inert `fib: lines` toggle was removed 2026-09-30, user decision)) grouped by each snapshot's **`meta["sub_id"]`** (`_sub_identity`) per the `m15_df.attrs["sids"]` `SidRecord` manifest (one row per unique sub rendered on this lens; `_sid_record_identity` = `sub_id` for a sub row, `sub_sid` for a main row), with `m15_df.attrs["triggers"]` (this lens's `TriggerRecord`s) for hover attribution. (Plan C, 2026-09-20 — replaces the pre-pool identity tuple `(parent_sid, parent_cycle_id, sub_sid)`; `sub_sid` no longer exists on any sub artifact.)
 - **M15 candles** as the base OHLC
 - **M15 structure** (swing lines, CTS/BOS dots, prev BOS lines) in **royalblue**;
   where two structures draw over the same candles, the older one's segments are
@@ -316,7 +316,7 @@ A separate chart file renders M15 candles with both M15 structure and H1 overlay
 ### Opacity
 - All swing/connector lines use **flat opacity** from the style (no per-sid multiplier).
 - **Zone opacity follows the per-TF tier system** (Item 5) — see "Opacity composition tables" above. The legacy 3-tier (active/recent_inactive/prior_inactive) is the MAIN H1 chart only; sub charts use main_tf (0.2) for H1 overlays and sub_tf (0.5) for M15 native.
-- **The dot-trace opacity tier is INERT** (audit 2026-09-21; predates the pool). `_m15_opacity_tier_for_events` is called once (the prev-BOS block) and its result is discarded; `_render_m15_dots` ignores `is_active_trigger` / `most_recent_psid` / `recent_cycles`, so every M15 dot and line renders at its flat registry opacity — consistent with "flat opacity" above. `_compute_m15_tier_context_from_sids` (from each sub's FIRST record, `SidRecord.meta["first_record"]`) still feeds the hover's informational parent fields. Removing the dead path is a pending cleanup.
+- **No dot-trace opacity tier.** Every M15 dot and line renders at its flat registry opacity — consistent with "flat opacity" above. (A per-parent tier, `_m15_opacity_tier_for_events` + `_compute_m15_tier_context_from_sids`, was computed but never applied — audit 2026-09-21 — and was deleted 2026-09-30, user decision. The hover's informational parent fields come from each sub's first record via `_sid_parent`.)
 
 ### Sub ownership, identity and hover — PART4 §16.5 rev 2 (Plan C, landed 2026-09-20)
 
@@ -468,8 +468,8 @@ the end of sid 0's PB→BOS line). H1 prev-BOS lines, `bo/pb/pr/rv` labels and
 zones are unaffected. **The H1 chart itself is unchanged** — it draws every sid
 in full (prior sids at 50%) as the high-level market picture.
 
-**Persisting elements:** KL / POI rectangles and fibs render the sub's
-snapshots — drawn from the anchor (`base_idx` / `ic_idx`), active from
+**Persisting elements:** KL / POI rectangles render the sub's
+snapshots (M15 fibs are CSV-only (`*_M15_{lens}_fib_lifecycle.csv`; no M15 fib renderer — the inert `fib: lines` toggle was removed 2026-09-30, user decision)) — drawn from the anchor (`base_idx` / `ic_idx`), active from
 `start_idx` (the KL/POI first-active clamp), ended at the sub's `end_idx` (the
 projection's cap). Opacity is the per-TF tier. **Exception (chart review
 2026-09-20, option 1): collapsed-cycle zones are not drawn** — a KL zone with
@@ -511,7 +511,7 @@ Chart defaults define toggles for:
 - `range_visual`: rectangles
 - `structure`: levels, labels
 - `zones`: KL, OB, POI, wave_candles
-- `fib`: lines
+- `fib`: lines (H1 chart only; the M15 charts have no fib renderer)
 - `imbalance`: highlight
 - `volume`: bars, ema_line, spike_marker
 - `range_candle_marker`: False (disabled to avoid overlap with volume spike markers)

@@ -2,7 +2,7 @@
 
 Renders the full M15 dataset as the base candle layer, with all M15 structures
 overlaid. Data sourced from `m15_df.attrs["events"] / ["kl_zones"] /
-["poi_zones"] / ["fib_states"] / ["wave_candles"] / ["wvmi"]` grouped by each
+["poi_zones"] / ["wave_candles"] / ["wvmi"]` grouped by each
 snapshot's **`sub_id`** (PART4 §17.9 — the unique sub is the chart identity),
 with the `m15_df.attrs["sids"]` SidRecord list (one row per unique sub on this
 lens) as the manifest and `attrs["triggers"]` (this lens's TriggerRecords) for
@@ -45,7 +45,7 @@ hover attribution. Per spec §16.5 (rev 2):
     (`_zone_render.is_collapsed_cycle_zone`, shared with the H1 chart, which skips
     the collapsed retroactive cycles of a post-reversal sid the same way); they
     stay in the CSVs.
-  - Persisting events (KL zones, POI zones, fibs): render all snapshots —
+  - Persisting events (KL zones, POI zones; M15 fibs are CSV-only): render all snapshots —
     drawn from its base candle, active from `start_idx` (the KL/POI clamp);
     opacity is a per-TF tier (`_m15_opacity_tier_for_zone`).
   - Every lens draws a sub over the SAME window (the sub's), so a sub on both
@@ -82,7 +82,6 @@ from engine_v2.charting.export_plotly import (
     _rgba_from_rgb,
     _zone_style,
     _style,
-    _opacity_tier,
     _deep_merge,
     _get_reversal_confirmed_by_sid,
     ChartExportPaths,
@@ -107,7 +106,6 @@ M15_CHART_DEFAULTS = {
     "range_visual": {"rectangles": False},
     "structure": {"levels": True},
     "zones": {"KL": True, "POI": True, "wave_candles": True, "num_structures": 99},
-    "fib": {"lines": False},
     "imbalance": {"highlight": True},
     "volume": {"bars": True, "ema_line": True, "spike_marker": True},
     "range_candle_marker": False,
@@ -191,42 +189,6 @@ def _m15_opacity_tier_for_zone(
     """
     zone_tf = zone.meta.get("timeframe", primary_sub_tf)
     return select_subordinate_tf_tier(zone_tf, primary_sub_tf=primary_sub_tf)
-
-
-def _m15_opacity_tier_for_events(
-    parent_sid: int,
-    parent_cycle_id: int,
-    most_recent_parent_sid: int,
-    recent_cycle_ids: set,
-    is_active_sid: bool,
-) -> float:
-    """Compute 3-tier opacity for M15 structure elements."""
-    if is_active_sid:
-        return _opacity_tier("active")
-    if parent_sid == most_recent_parent_sid and parent_cycle_id in recent_cycle_ids:
-        return _opacity_tier("recent_inactive")
-    return _opacity_tier("prior_inactive")
-
-
-def _compute_m15_tier_context_from_sids(
-    sid_records: Iterable[SidRecord],
-) -> tuple:
-    """Compute most_recent_parent_sid and recent_cycle_ids across SidRecords.
-
-    Sourced from each sub's FIRST record (`_sid_parent`, §17.9 — parent fields
-    on a sub SidRecord are None); semantics unchanged from the per-trigger era.
-    """
-    parents = [_sid_parent(s) for s in sid_records]
-    parent_sids = [ps for (ps, _pc) in parents if ps is not None]
-    if not parent_sids:
-        return (0, set())
-    most_recent = max(parent_sids)
-    cycles_for_recent = sorted(
-        [pc for (ps, pc) in parents if ps == most_recent and pc is not None],
-        reverse=True,
-    )
-    recent_cycle_ids = set(cycles_for_recent[:2])
-    return (most_recent, recent_cycle_ids)
 
 
 def _sub_identity(meta: dict) -> Optional[int]:
@@ -723,7 +685,7 @@ def export_m15_chart_plotly(
     """Export an interactive M15 chart with H1 overlay elements.
 
     Data is read directly from `m15_df.attrs["events" / "kl_zones" /
-    "poi_zones" / "fib_states" / "wave_candles" / "wvmi"]` and grouped by each
+    "poi_zones" / "wave_candles" / "wvmi"]` and grouped by each
     snapshot's `sub_id` per the `m15_df.attrs["sids"]` SidRecord manifest
     (one row per unique sub on this lens, §17.9).
 
@@ -786,7 +748,6 @@ def export_m15_chart_plotly(
     all_events: list = list(m15_df.attrs.get("events", []))
     all_kl_zones: list = list(m15_df.attrs.get("kl_zones", []))
     all_poi_zones: list = list(m15_df.attrs.get("poi_zones", []))
-    all_fib_states: list = list(m15_df.attrs.get("fib_states", []))
     all_wave_candles: list = list(m15_df.attrs.get("wave_candles", []))
     all_wvmi_records: list = list(m15_df.attrs.get("wvmi", []))
     all_prev_bos_lines: list = list(m15_df.attrs.get("prev_bos_lines", []))
@@ -797,7 +758,6 @@ def export_m15_chart_plotly(
     events_by_sid: dict = defaultdict(list)
     kls_by_sid: dict = defaultdict(list)
     pois_by_sid: dict = defaultdict(list)
-    fibs_by_sid: dict = defaultdict(list)
     waves_by_sid: dict = defaultdict(list)
     wvmis_by_sid: dict = defaultdict(list)
     prev_bos_by_sid: dict = defaultdict(list)
@@ -813,10 +773,6 @@ def export_m15_chart_plotly(
         ident = _sub_identity(p.meta)
         if ident is not None:
             pois_by_sid[ident].append(p)
-    for f in all_fib_states:
-        ident = _sub_identity(f.meta)
-        if ident is not None:
-            fibs_by_sid[ident].append(f)
     for w in all_wave_candles:
         ident = _sub_identity(w.meta)
         if ident is not None:
@@ -835,10 +791,6 @@ def export_m15_chart_plotly(
     # fills where no same-direction sub is live.
     live_by_idx_dir = _compute_owner_by_idx_dir(sid_records, int(m15_df.index[-1]))
     forming_by_idx_dir = _compute_forming_by_idx_dir(sid_records)
-
-    # M15 opacity tier context (parent_sid + recent cycles). Same semantics
-    # as before, just sourced from SidRecord meta rather than trigger meta.
-    m15_most_recent_psid, m15_recent_cycles = _compute_m15_tier_context_from_sids(sid_records)
 
     volume_enabled = volume_cfg.get("bars", False) and COL_V in dfx.columns
     fig = go.Figure()
@@ -1127,7 +1079,6 @@ def export_m15_chart_plotly(
         sid_events = events_by_sid.get(eid, [])
         sid_kls = kls_by_sid.get(eid, [])
         sid_pois = pois_by_sid.get(eid, [])
-        sid_fibs = fibs_by_sid.get(eid, [])  # noqa: F841 — fib lines off in default cfg
         sid_waves = waves_by_sid.get(eid, [])
         sid_wvmis = wvmis_by_sid.get(eid, [])
         sid_prev_bos = prev_bos_by_sid.get(eid, [])
@@ -1159,17 +1110,6 @@ def export_m15_chart_plotly(
         # collapsed) is still drawn as an outline (pre-existing convention).
         _collapsed_sub_cycles = collapsed_cycles(sid_kls)
 
-        # Determine if this sid's structure is the "most recent active"
-        # by parent identifiers. Used downstream by `_render_m15_dots`
-        # for opacity tiering of dot trace styles.
-        last_m15_sid = (
-            max((int(e.meta.get("structure_id", 0)) for e in sid_events), default=0)
-            if sid_events else 0
-        )
-        is_active_trigger = (
-            p_sid == m15_most_recent_psid and p_cycle in m15_recent_cycles
-        )
-
         # --- Structure swing lines ---
         if struct_cfg.get("levels", False) and _ctx["poly"] is not None:
             _poly = _ctx["poly"]
@@ -1177,7 +1117,6 @@ def export_m15_chart_plotly(
             extra_cts_pts = _poly["extra_cts_pts"]
             extra_pb_pts = _poly["extra_pb_pts"]
             pb_to_bos_lines = _poly["pb_to_bos_lines"]
-            most_recent_lt_sid = _poly["most_recent_lt_sid"]
 
             # RECENT-vs-PRIOR rule (chart review 2026-09-22): a segment is drawn
             # in the dotted PRIOR style iff a structure with a higher
@@ -1234,8 +1173,7 @@ def export_m15_chart_plotly(
                         all_cts_pts.append(p)
             if all_cts_pts:
                 _render_m15_dots(fig, all_cts_pts, "CTS", p_sid, p_cycle, eid,
-                                 m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
-                                 most_recent_lt_sid, m15_to_h1,
+                                 m15_to_h1,
                                  sub_window_str, sub_records_str, _relative_dir_at, _is_live,
                                  recent_pts)
 
@@ -1247,24 +1185,21 @@ def export_m15_chart_plotly(
                         all_bos_pts.append(p)
             if all_bos_pts:
                 _render_m15_dots(fig, all_bos_pts, "BOS", p_sid, p_cycle, eid,
-                                 m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
-                                 most_recent_lt_sid, m15_to_h1,
+                                 m15_to_h1,
                                  sub_window_str, sub_records_str, _relative_dir_at, _is_live,
                                  recent_pts)
 
             # --- Unconfirmed CTS dots ---
             if extra_cts_pts:
                 _render_m15_dots(fig, extra_cts_pts, "CTS (unconf)", p_sid, p_cycle, eid,
-                                 m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
-                                 most_recent_lt_sid, m15_to_h1,
+                                 m15_to_h1,
                                  sub_window_str, sub_records_str, _relative_dir_at, _is_live,
                                  recent_pts)
 
             # --- PB dots ---
             if extra_pb_pts:
                 _render_m15_dots(fig, extra_pb_pts, "PB", p_sid, p_cycle, eid,
-                                 m15_most_recent_psid, m15_recent_cycles, is_active_trigger,
-                                 most_recent_lt_sid, m15_to_h1,
+                                 m15_to_h1,
                                  sub_window_str, sub_records_str, _relative_dir_at, _is_live,
                                  recent_pts)
 
@@ -1735,9 +1670,6 @@ def export_m15_chart_plotly(
             t0 = _lt_time(start_slice)
             t1 = _lt_time(end_slice)
             if t0 is not None and t1 is not None:
-                op_mult = _m15_opacity_tier_for_events(
-                    p_sid, p_cycle, m15_most_recent_psid, m15_recent_cycles, False,
-                )
                 line_s = _style("prev_bos_line.m15").get("line", {"width": 2, "color": "royalblue"})
                 fig.add_trace(go.Scatter(
                     x=[t0, t1], y=[price, price], mode="lines", line=line_s,
@@ -1836,9 +1768,7 @@ def export_m15_chart_plotly(
 # ---------------------------------------------------------------------------
 
 def _render_m15_dots(
-    fig, pts, kind_label, p_sid, p_cycle, sub_id,
-    most_recent_psid, recent_cycles, is_active_trigger,
-    most_recent_lt_sid, m15_to_h1,
+    fig, pts, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
     sub_window_str="", sub_records_str="", relative_dir_at=None, is_live=None,
     recent_pts=None,
 ):
