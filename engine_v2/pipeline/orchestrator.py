@@ -555,10 +555,11 @@ def run_pipeline(
     meta["prev_bos_lines"] = prev_bos_lines
     meta["zone_proximity_triggers"] = zone_proximity_triggers
 
-    # DEPRECATED (Part 4 transitional): direct df.attrs writes. Step 2
-    # routes charts through StructureRegistry; these writes are kept so
-    # code paths still reaching into df.attrs (debug exporters, ad-hoc
-    # inspection) keep working. Removed in migration plan Step 5.
+    # H1.main entity storage (PART4 §9.3): the registry entity registered
+    # below owns THIS df, and both charts read these keys through it
+    # (`registry.get("H1.main").df.attrs` / `registry.parent_of(...)`), so
+    # these writes ARE the registry's store, not a transitional copy — §13.5.e
+    # closed them as such (2026-09-30). `meta[...]` above holds the same objects.
     s_res.df.attrs["kl_zones"] = kl_zones
     s_res.df.attrs["wave_candles"] = wave_candle_results
     s_res.df.attrs["wvmi"] = wvmi_records

@@ -44,11 +44,8 @@ merge `week8-volmom-multitf` → `main`. Everything in D and later stays after t
 
 ## C. Part 4 closure — IN WEEK 8, next session (user 2026-09-30; order: §13.5.e remainder → §13.7 docs + the
 file-naming call → merge what is still useful of the invariants file into the canonical specs, then delete it /
-retire the workflow memory). §13.5.e acceptance per PART4 (~:2321): visual chart parity + event-count match —
-"per-row CSV parity may genuinely shift"; measure and predict cells before the `/compare`.
+retire the workflow memory). The §13.5.e remainder is closed (2026-09-30, "Recently closed").
 
-- **§13.5.e remainder** — delete the orchestrator's deprecated `s_res.df.attrs[...]` writes; blocked until the H1 chart
-  reads its overlays through the registry (the chart-fallback half is DONE). OPEN. Detail: PART4 §13.5.e (~:2270).
 - **§13.7 doc finalization** — incl. the §16.10 file-naming deviation (spec `H1.main__M15.confluence.html` vs the code's
   `{H1_basename}_M15_confluence.html`). OPEN. Detail: memory `project_part4_progress.md` (Step 3e note).
 - **Delete `engine_v2/PRE_REFACTOR_INVARIANTS.md`** ("will be deleted post-refactor", memory `project_part4_vision.md`;
@@ -146,6 +143,11 @@ retire the workflow memory). §13.5.e acceptance per PART4 (~:2321): visual char
 
 ## Recently closed (history pointers)
 
+- **§13.5.e remainder** — CLOSED 2026-09-30 WITHOUT deleting the `s_res.df.attrs[...]` block (user decision): measured,
+  the registry's `H1.main` entity IS `s_res.df` and an entity's artifacts live in its df's `attrs` (PART4 §9.2 / §9.3),
+  so the block is the registry's store and both charts already read it through the registry. Landed: the stale
+  "DEPRECATED" comment relabelled, 2 dead `run_replay.py` writes deleted, PART4 §9.3 / §13.5.e + LANDMINES fixed;
+  byte-identical (24 CSVs + figure JSON). PART4 §13.5.e "CLOSED" note.
 - **Week 8 hygiene pass** — 2026-09-30, all byte-identical (24 CSVs + figure JSON; only the `a8ed1cc` wave-candle
   hovers differ from the save): the dead imbalance helpers `get_unfilled_imbalances` / `has_imbalance_in_range`
   (`f630640`); the legacy MS functions `compute_structure_scenario_3` / `compute_structure_from_start` /

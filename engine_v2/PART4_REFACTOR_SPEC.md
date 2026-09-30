@@ -1850,7 +1850,7 @@ the serialised `meta`).
 | `df.attrs["sids"]` | Main: per-sid records (`sub_sid = structure_id`). Lens df: **one `SidRecord` per unique sub on this lens** (`sub_id`, `sub_sid = None`, parent fields None, `creation_event_idx = starting_idx`, `start_idx`, `end_event_idx = end_idx`, `end_reason`, `lenses`, `relative_dir_segments`) — §9.2 |
 | `df.attrs["triggers"]` (lens df only) | This lens's `TriggerRecord`s incl. zero-length (§17.4) |
 | `df.attrs["unresolved_triggers"]` (lens df only) | Pool-wide `UnresolvedTrigger` list (§17.7) |
-| `df.attrs["events"]` | Append-only events list — main: all sids with `structure_id`; lens df: every sub mirrored into this lens, clipped by knowable-at to the sub's `end_idx`, with `sub_id` + informational parent fields + `cycle_id` meta |
+| `df.attrs["events"]` (lens df) / `df.attrs["structure_events"]` (main — a different key) | Append-only events list — main: all sids with `structure_id`; lens df: every sub mirrored into this lens, clipped by knowable-at to the sub's `end_idx`, with `sub_id` + informational parent fields + `cycle_id` meta |
 | `df.attrs["kl_zones"]`, `["poi_zones"]`, `["wave_candles"]`, `["fib_states"]`, `["wvmi"]`, `["prev_bos_lines"]`, `["imbalances"]` | All entity-local; `sub_id` + cycle keyed on a lens df (lifecycle-bounded by the sub's window, no cascade). `["imbalances"]` on a lens df is the shared frame's full-window list (residual, LANDMINES) |
 | `df.attrs["zone_proximity_triggers"]` | Main's own triggers (the sub triggers consume them via the detectors) |
 
@@ -2278,8 +2278,9 @@ between every step:
        >    `export_m15_chart_plotly` and `export_chart_plotly` are both
        >    registry-only — the positional `m15_df`/`h1_df`/`df` fallbacks
        >    were removed. The OTHER §13.5.e item (delete the orchestrator's
-       >    deprecated `s_res.df.attrs[...]` writes) is NOT done — the H1
-       >    chart still reads overlays from `dfx.attrs[...]`.
+       >    "deprecated" `s_res.df.attrs[...]` writes) was CLOSED WITHOUT
+       >    DELETION on 2026-09-30 — those writes are the `H1.main` entity's
+       >    §9.3 store; see the §13.5.e bullet below.
        > 4. **Plan C (2026-09-20).** The chart key is now **`sub_id`**
        >    (`_sub_identity` / `_sid_record_identity`), grouping every attrs
        >    list by `meta["sub_id"]`; `_compute_owner_by_idx` became
@@ -2330,6 +2331,28 @@ between every step:
      same df object until this step). Acceptance criterion: visual
      chart parity + event-count match (Step 1 baseline standard), not
      byte-identical CSVs.
+
+     > **CLOSED 2026-09-30 — the positional fallback deleted earlier; the
+     > `attrs` block KEPT (user decision).** Measured before acting: the
+     > registry's `H1.main` entity is `s_res.df` itself (`entity.df is
+     > res.df`), `EntityState` holds only identity + the df (§9.2, locked),
+     > and every entity's artifacts live in its df's `attrs` (§9.3). So the
+     > block is the registry's ONLY store for `H1.main`, not a copy beside
+     > it: both charts already read it through the registry
+     > (`export_chart_plotly` → `registry.get(path_id).df`;
+     > `export_m15_chart_plotly` → `registry.parent_of(path_id).df`), and
+     > deleting it would have blanked every H1 overlay on all three charts.
+     > The task was written when the registry was expected to own a
+     > separate store; §9.2 later fixed it as identity + df. Landed instead:
+     > the stale "DEPRECATED" comment relabelled; two dead writes in
+     > `run_replay.py` deleted (`attrs["structure_levels"]` — no reader;
+     > `attrs["kl_zones"]` re-assigned to the same object); this spec's
+     > §9.3 main-events key corrected (`structure_events`). No object
+     > changed, so the replay is byte-identical (24 CSVs + figure JSON) —
+     > the "per-row CSV parity may shift" allowance was never needed.
+     > Remaining duplicate channel (accepted): `res.meta[k]` holds the SAME
+     > objects as `H1.main`'s `attrs[k]` for the 11 entity keys; the H1 CSV
+     > exporters in `run_replay.py` read `meta`, the charts read the registry.
 6. **Recursive depth.** 5M subs under 15M subs. Validate event routing
    handles nested recursion cleanly.
 7. **Delete `PRE_REFACTOR_INVARIANTS.md`.** Refactor complete; merge spec

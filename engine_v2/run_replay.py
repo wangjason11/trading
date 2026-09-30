@@ -248,9 +248,6 @@ def main() -> None:
 
     from engine_v2.debug.export_structure import export_levels
 
-    res.df.attrs["structure_levels"] = res.structure
-    res.df.attrs["kl_zones"] = res.meta.get("kl_zones", [])
-
     print("=== Replay Summary ===")
     print(f"pair={CONFIG.pair} tf={CONFIG.timeframe}")
     print(f"candles={len(res.df)}")

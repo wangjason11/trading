@@ -2,11 +2,11 @@
 
 Each ``structure_path_id`` (e.g. ``H1.main``, ``H1.main >> M15.counter``)
 maps to one ``EntityState`` that owns the candle df + downstream artifacts
-for that entity. Registry is the single source of truth once Step 2 of the
-Part 4 migration switches the chart consumer over.
+for that entity. The artifacts live in that df's ``attrs`` (``kl_zones``,
+``poi_zones``, ``fib_states``, ...; PART4 §9.3), so ``registry.get(path).df.attrs``
+IS the entity's store — both charts resolve their data this way.
 
-Spec: PART4_REFACTOR_SPEC.md §9. Step 1 stands the registry up alongside
-today's monolithic df; charts still read from ``df.attrs`` until Step 2.
+Spec: PART4_REFACTOR_SPEC.md §9.
 """
 from __future__ import annotations
 

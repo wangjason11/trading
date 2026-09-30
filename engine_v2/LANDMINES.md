@@ -707,9 +707,12 @@ relocating the inline-derivation primitives to their natural home in
 positional-fallback portion of §13.5.e is DONE. `export_chart_plotly()` (H1)
 and `export_m15_chart_plotly()` (M15) each require `registry=..., path_id=...`;
 the legacy positional `df=...` / `m15_df=...` / `h1_df=...` fallbacks were
-removed. (The *other* §13.5.e item — deleting the orchestrator's deprecated
-`s_res.df.attrs[...]` writes — is NOT done: the H1 chart still reads its
-overlays from `dfx.attrs[...]`, so those writes remain load-bearing.)
+removed. The orchestrator's `s_res.df.attrs[kl_zones / poi_zones / ...]`
+writes are **the registry's store for `H1.main`**, not a transitional copy:
+the registry entity's df IS `s_res.df`, and an entity's artifacts live in its
+df's `attrs` (PART4 §9.2 / §9.3). Never delete them "because the chart reads
+the registry" — the chart reads the registry BY reading them (§13.5.e closed
+on this finding, 2026-09-30).
 
 **Don't add new callers that pass positional df.** Use the registry path:
 
