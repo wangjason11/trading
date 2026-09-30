@@ -56,8 +56,8 @@ class POIZone:
     meta: Dict[str, Any] = field(default_factory=dict)
     # meta: the field list (confirmed_idx = the LAST activate idx, end_idx /
     # end_reason, activation_history, status, versions / current_versions,
-    # cts_established_idx = the cycle's CTS-established moment (fallback: the
-    # fib's CTS anchor when the cycle has no CTS_ESTABLISHED), ...) is
+    # cts_established_idx = the cycle's CTS-established moment (always: a cycle
+    # without CTS_ESTABLISHED builds no POI, 2026-09-29), ...) is
     # canonical in POI_ZONES_SPEC.md "Zone Data Fields".
 
 
@@ -483,15 +483,21 @@ def derive_poi_zones(
         # moment must fail loudly (compute_cycle_lifecycle above asserts it
         # first for every event carrying structure_id / cycle_id — the event
         # contract; the lookup below keys a missing one to 0, a pre-existing
-        # default no emitter exercises). Fallback when the cycle has no CTS_ESTABLISHED at all: the
-        # fib's CTS anchor — a location, not a moment (a known naming-standard
-        # exception; such a cycle has no lifecycle entry; PLAN_D §7.3). Reached only for a
-        # still-LIVE pre-created cross fib (an open-ended sub): a reversal or the sub cap ends
-        # it first (FIB_LIFECYCLE_SPEC §15.4) and the filter above skips an ended, unlocked fib.
+        # default no emitter exercises).
+        # A cycle with no CTS_ESTABLISHED builds NO POI (user decision 2026-09-29, zones-audit
+        # "fallback POI" option N): its POIs could never activate (the floor's cycle term is the
+        # establishment moment), and a reversal / the sub cap already leave its fib without POIs
+        # (FIB_LIFECYCLE_SPEC §15.4). Reached only by a still-LIVE pre-created cross fib (an
+        # open-ended sub); its POIs appear once the cycle establishes. (Until then this used the
+        # fib's CTS anchor as the "moment" — a location, the naming exception of PLAN_D §7.3.)
+        # A LOCKED fib here would break the event contract (a fib locks at its cycle's
+        # CTS_CONFIRMED, after the CTS was established): fail loudly.
         cts_event = cts_established_by_key.get(key)
-        cts_established_idx = (
-            int(cts_event.meta["confirmed_at"]) if cts_event else int(fib_state.cts_idx)
-        )
+        if cts_event is None:
+            assert not fib_state.locked, (
+                f"[poi_zones] locked fib {key} has no CTS_ESTABLISHED (event contract)")
+            continue
+        cts_established_idx = int(cts_event.meta["confirmed_at"])
 
         # end_idx + end_reason inherited from the cycle (B2 pass-through):
         # min(next-cycle clamped start, reversal, lifecycle_cap). Terminal /

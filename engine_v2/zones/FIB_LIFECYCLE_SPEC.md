@@ -978,8 +978,9 @@ candidates are:
    post-hoc sub loop capped every `active and not locked` fib, these included, while the
    pass-through only reached cycles with a table row (a regression since `559db50`,
    2026-05-27, found by the zones audit). Its POIs then follow `poi_zones`' "ended + unlocked fib →
-   no POIs" rule, as after a reversal (POI_ZONES_SPEC `cts_established_idx` fallback). 0 such
-   fibs on the reference window; pins `tests/test_fib_never_established_cap.py`.
+   no POIs" rule, as after a reversal; a still-LIVE one (no cap: an open-ended sub) builds no POIs either
+   since 2026-09-29 — a cycle without `CTS_ESTABLISHED` builds none (POI_ZONES_SPEC `cts_established_idx`).
+   0 such fibs on the reference window; pins `tests/test_fib_never_established_cap.py`.
 
 Because earliest-wins, fib's own terminals still win when they fire **before** the
 cycle end — so **Option A's early-end and `scenario1_revert` are preserved**. The

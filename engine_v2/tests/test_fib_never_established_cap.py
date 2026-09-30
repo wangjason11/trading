@@ -8,8 +8,9 @@ ended sid) and `poi_zones` then built no POIs on it (an ended, unlocked fib); th
 fib stayed open and its POIs ran to the frame edge past the sub's end, never activating (their fallback floor is the
 fib's latest CTS candle). Fix (user decision, option A "cap like the reversal"): `_finalize_lifecycle_fields` feeds
 the cap as an end candidate for such fibs (FIB_LIFECYCLE_SPEC §15.4 candidate 3) — restoring what the post-hoc sub
-fib cap loop removed in `559db50` (§15.6) had done for them. A still-LIVE pre-created fib (an open-ended sub) is
-unchanged — option B (its POIs' dead fallback floor) is deferred.
+fib cap loop removed in `559db50` (§15.6) had done for them. A still-LIVE pre-created fib (an open-ended sub) keeps
+no end; since 2026-09-29 (user decision, option B = "N": no POI until the cycle establishes) it builds no POI either —
+before, its POI got a dead fallback floor (the fib's latest CTS candle) and never activated.
 
 Reference window: 0 never-established fib rows on either lens (counter 8/8, confluence 21/21 established) —
 byte-identical. The fixture is real engine output (a random-tail search on `_make_multicycle_data()[:9]`, 2026-09-28).
@@ -111,9 +112,12 @@ def test_a_reversal_ends_it_the_same_way():
     assert pois1 == []
 
 
-def test_an_open_ended_run_keeps_the_live_fib_and_its_poi():
-    """No cap, no reversal (an open-ended sub at the data edge): the pre-created fib is still live, so it keeps no end
-    and its POI stays (end None, never activated — the deferred option B)."""
-    _out, fib1, pois1 = _downstream(_rows()[:_CAP + 1])
+def test_an_open_ended_run_keeps_the_live_fib_but_builds_no_poi():
+    """No cap, no reversal (an open-ended sub at the data edge): the pre-created fib is still live, so it keeps no end —
+    and its cycle never established, so it builds no POI (option N, 2026-09-29). Before: one POI on IC 7 (the fib's
+    61.8-80% zone at .62622 = [.60508-.60989], ~57% overlap, V30), end None, `inactive`, a fallback floor 22 = the
+    fib's CTS candle, never activated; the only POI on this sub (cycle 0's zone [.60228-.60454] misses IC 7)."""
+    out, fib1, pois1 = _downstream(_rows()[:_CAP + 1])
     assert {(f.end_idx, f.status) for f in fib1} == {(None, "active")}
-    assert [(z.ic_idx, z.meta["end_idx"], z.meta["status"]) for z in pois1] == [(_IC, None, "inactive")]
+    assert pois1 == []
+    assert out["poi_zones"] == []

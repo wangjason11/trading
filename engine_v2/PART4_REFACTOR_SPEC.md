@@ -3015,8 +3015,8 @@ guaranteed, and the one-candle lag is empirical, not a bound (`ARCHITECTURE.md`
 
 > **Resolved for POI — Plan D (`0a4eadc`), 2026-09-23.** POI's activation floor is now
 > `max(cts_established_idx, ic_idx, lifecycle_floor_idx)` with `cts_established_idx =
-> CTS_ESTABLISHED.meta["confirmed_at"]` (fallback `fib_state.cts_idx` when the cycle has no
-> `CTS_ESTABLISHED`), and the POI meta key `cts_established_idx` holds that moment (it held
+> CTS_ESTABLISHED.meta["confirmed_at"]` (a cycle with no `CTS_ESTABLISHED` builds no POI since
+> 2026-09-29 — before, the fallback `fib_state.cts_idx`), and the POI meta key `cts_established_idx` holds that moment (it held
 > `.idx`, the CTS anchor, before). Measured on the reference window: M15 confluence sub 0 cycle 2
 > IC 678 activation 1223 → 1224 and 3 `cts_established_idx` meta cells re-valued (1223 → 1224,
 > 2828 → 2829 on both lenses); the other 22 CSVs byte-identical; chart counts unchanged

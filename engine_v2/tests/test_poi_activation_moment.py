@@ -344,20 +344,22 @@ def test_activation_applies_cts_events_in_moment_order():
 
 
 # ---------------------------------------------------------------------------
-# (i) — the fallback for a cycle with no CTS_ESTABLISHED is unchanged (Plan D
-#       decision 3; the fib's CTS anchor — a known naming-standard exception)
+# (i) — a cycle with no CTS_ESTABLISHED: until 2026-09-29 its POI used the fib's CTS anchor as the "moment" (Plan D
+#       decision 3, a known naming-standard exception); since then such a cycle builds NO POI (zones-audit
+#       "fallback POI" option N — real only for a still-live pre-created cross fib, pinned in
+#       test_fib_never_established_cap.py). This constructed case — a LOCKED fib whose cycle's CTS_ESTABLISHED
+#       was deleted from the events — breaks the event contract (a fib locks at its cycle's CTS_CONFIRMED, after the
+#       CTS was established), so it fails loudly.
 # ---------------------------------------------------------------------------
 
-def test_fallback_cycle_without_cts_established_keeps_fib_anchor():
+def test_a_locked_fib_without_cts_established_fails_loudly():
     res, events, out = _run(_make_second_cts_moment_after_anchor_data())
     fib = next(f for f in out["fib_tracker"].get_fibs_for_charting()
                if (f.structure_id, f.cycle_id) == (0, 1))
     without = [e for e in events
                if not (e.type == "CTS_ESTABLISHED" and e.meta.get("structure_id") == 0
                        and e.meta.get("cycle_id") == 1)]
+    assert fib.locked
     with contextlib.redirect_stdout(io.StringIO()):
-        zones = derive_poi_zones(res.df, without, fib_tracker=out["fib_tracker"], config=POIConfig())
-    z = next(z for z in zones if (z.meta["structure_id"], z.meta["cycle_id"]) == (0, 1))
-    assert z.meta["cts_established_idx"] == int(fib.cts_idx)
-    assert z.meta["activation_history"] == []
-    assert z.meta["status"] == "inactive"
+        with pytest.raises(AssertionError, match=r"locked fib \(0, 1\) has no CTS_ESTABLISHED"):
+            derive_poi_zones(res.df, without, fib_tracker=out["fib_tracker"], config=POIConfig())

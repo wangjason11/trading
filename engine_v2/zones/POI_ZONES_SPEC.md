@@ -446,14 +446,23 @@ assumes "POI ⟹ sd direction."
   `versions` = the peak variants ever achieved
 - `cts_established_idx`: the owning cycle's CTS-established **moment** (`CTS_ESTABLISHED.meta["confirmed_at"]`)
   — the activation floor's cycle term (see "Activation floor" below). **Meaning changed by Plan D (2026-09-23):**
-  saves before it hold the CTS anchor (then `CTS_ESTABLISHED.idx`) under this key. Fallback when the cycle has no
-  `CTS_ESTABLISHED`: `fib_state.cts_idx` — the fib's CTS anchor, NOT a moment (a known exception to the GLOSSARY
-  "Naming Standard"). Such a cycle's fib is the pre-established cross FibTracker pre-creates for a next cycle that
-  never establishes (subordinate-only). **Since 2026-09-28 the fallback is reached only while that fib is still
-  LIVE** (an open-ended sub): a reversal or the sub's lifecycle cap ends it (FIB_LIFECYCLE_SPEC §15.4 candidates 1 /
-  3), and an ended, unlocked fib builds no POIs. On a live one the value is the fib's latest CTS candle — the
-  running extreme, near the data edge — so such a POI practically never activates (known; the user deferred a floor
-  fix, "option B"). No live case on the reference window since Plan F (2026-09-24): the only one was the IC 3654
+  saves before it hold the CTS anchor (then `CTS_ESTABLISHED.idx`) under this key. **A cycle with no
+  `CTS_ESTABLISHED` builds NO POI (user decision 2026-09-29, zones-audit "fallback POI" option N)** — always a moment
+  since then. Such a cycle's fib is the pre-established cross FibTracker pre-creates for a next cycle that never
+  establishes (subordinate-only; FIB_LIFECYCLE_SPEC §6): a reversal or the sub's lifecycle cap ends it (§15.4
+  candidates 1 / 3) and an ended, unlocked fib builds no POIs, so only a still-LIVE one (an open-ended sub, at the data
+  edge) reached this case — and its POIs could never activate (the floor's cycle term is the establishment moment; the
+  sweep's progression comes only from the cycle's own CTS events). Its POIs now appear once the cycle establishes,
+  exactly as for a pre-established cross that does establish (their floor is that moment either way). A LOCKED fib
+  without `CTS_ESTABLISHED` breaks the event contract (a fib locks at its cycle's `CTS_CONFIRMED`) and fails loudly.
+  Before: the fallback `fib_state.cts_idx` — the fib's CTS anchor, NOT a moment (the GLOSSARY "Naming Standard"
+  exception of PLAN_D §7.3) — the running extreme near the data edge, so such a POI was drawn inactive and never
+  activated, then vanished when the sub was capped or reversed (a repaint). Measured before: reference window 0
+  (byte-identical); suite 2 (the open-ended fixture of `tests/test_fib_never_established_cap.py` + a constructed
+  locked case). Rejected: keep the inert POI with the key set to None (visible at the live edge, but it vanishes when
+  the sub closes; the key's meaning widened); activate pre-established POIs early from the fib's pre-creation (a design
+  change — it would move 10 window fibs that were pre-established and later established). No live case on the
+  reference window since Plan F (2026-09-24): the only one was the IC 3654
   twin POI on the cross fib counter sub 5 PRE-CREATED at 3806 for a cycle 1 it never establishes (value 3806, never
   activated; sub 5 was capped, so the 2026-09-28 cap would now drop it too); Plan F no longer creates that fib (§2
   "Anchor by phase"). The sub 5 cycle-0 IC 3654 POI is a different row and unchanged.

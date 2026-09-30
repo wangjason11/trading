@@ -288,6 +288,9 @@ step 4 (`feedback_spec_writing_precision` rule 8). "2026-09-23" becomes the land
    instance (3806, 3806), not yet formed, so Plan F no longer creates the fib and the POI goes with it. Plan F already
    made the counts move: counter POI CSV 13→12, chart 153/125 → 151/124 (−2 POI hover traces, −1 outline rect). The
    general defect (the fallback to `fib_state.cts_idx`) stays parked.
+   **Status 2026-09-29: resolved** — the fallback is gone: a cycle with no `CTS_ESTABLISHED` builds no POI (user
+   decision, option N; a locked fib without one fails loudly). The naming-standard exception of decision 3 is gone with
+   it (POI_ZONES_SPEC `cts_established_idx`).
 
 **Parked (0 delta on this window; not queued):**
 - the pattern-path `CTS_UPDATED` moment field (event contract, Plan E);
