@@ -122,6 +122,8 @@ def test_est_scenario2_cross_and_scenario3_stamp_the_moment():
     _c0(t3, df3, 100)
     s3 = _c1(t3, df3, 100)
     assert s3.meta["scenario"] == 3 and s3.meta["activated_at"] == 42
+    # `cycle1_bos_anchor_idx` belongs to the Scenario-2 cross only (Post-E·5 review: a second writer path).
+    assert cross.meta["cycle1_bos_anchor_idx"] == 30 and "cycle1_bos_anchor_idx" not in s3.meta
 
 
 def test_est_scenario2_cond1_fill_horizon_is_the_moment():
@@ -364,7 +366,7 @@ def test_e3ap_scenario2_cond3_is_asked_at_the_bos1_moment():
     df = _df(fills=[(35, 1.02)])
     _c0(t, df, 100)
     fib = _c1(t, df, 100)
-    assert fib.meta["scenario"] == 3
+    assert fib.meta["scenario"] == 3 and "cycle1_bos_anchor_idx" not in fib.meta
     assert t._get_latest_cross(1, 1) is None
 
 

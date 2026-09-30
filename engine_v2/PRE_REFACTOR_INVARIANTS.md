@@ -119,8 +119,10 @@ must replace events in the list, not mutate event objects.
 - Stored in `df.attrs["kl_zones"]` as `KLZone` dataclass
 - `meta["confirmation_method"]` (CTS zones only): "pullback" / "sd_zone_proximity"
 - CTS zone may upgrade method on CTS_RECONFIRMED; `reconfirmed_idx` recorded
-- Bounds steps: list of (idx, top, bottom, event) for chart rendering of expansions; the last one is the last expansion
-  (the `expanded_last_*` copies were deleted in Post-E·5, 2026-09-30)
+- Bounds steps: list of `{start_idx, top, bottom, event}` (+ `price` on an expansion step) for chart rendering of
+  expansions, appended in event order; on an `expanded` zone the last step is the last expansion (its `start_idx` a
+  moment), on an unexpanded one the only step is INIT (`start_idx` = `base_idx`, an anchor) — the `expanded_last_*`
+  copies of the last step were deleted in Post-E·5, 2026-09-30
 - Active = the most recent of each side per structure
 
 **POI zones (`poi_zones`):**

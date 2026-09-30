@@ -205,7 +205,7 @@ Zones maintain `meta["bounds_steps"]`:
   - optional `price`
 
 When later threshold update events imply bounds extension:
-- The zone is replaced with updated top/bottom and an appended bounds_steps entry (its `start_idx` = the expanding event's candle — a moment; `price` = the new outer; `event` = the event type), and the meta flag `expanded` is set. The last expansion is `bounds_steps[-1]`: the `expanded_last_idx` / `expanded_last_price` / `expanded_last_event` copies of it were deleted in Post-E·5 (2026-09-30; PLAN_E §9.6 — saves before it carry them).【fileciteturn2file6】
+- The zone is replaced with updated top/bottom and an appended bounds_steps entry (its `start_idx` = the expanding event's candle — a moment; `price` = the new outer; `event` = the event type), and the meta flag `expanded` is set. On an `expanded` zone the last expansion is `bounds_steps[-1]` (its `event` is not `INIT`); on an unexpanded zone the only step is INIT, whose `start_idx` is `base_idx` — the base ANCHOR, a location, not a moment — so check `expanded` (or `event != "INIT"`) before reading a step as an expansion. The `expanded_last_idx` / `expanded_last_price` / `expanded_last_event` copies of the last step were deleted in Post-E·5 (2026-09-30; PLAN_E §9.6 — saves before it carry them).【fileciteturn2file6】
 
 > Note: The current system ties zone expansion to emitted threshold-update events (e.g., CTS threshold updates that come from range sync). This is deliberate to avoid incorrect expansions based on unrelated values.
 

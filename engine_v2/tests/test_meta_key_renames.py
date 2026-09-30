@@ -137,12 +137,27 @@ def test_no_production_string_carries_a_post_e5_old_key():
     assert hits == []
 
 
-def _kl_run(sd, extra_events=()):
+def _kl_run(sd, extra_events=(), *, after_threshold=(), drop_types=()):
+    """KL over the fixture's real run. `extra_events` are appended (the post-pass reads them in any order);
+    `after_threshold` go right after the run's BOS_THRESHOLD_UPDATED @9 (the main loop tracks the ACTIVE zone
+    in list order — appended at the end they would expand cycle 2's zone); `drop_types` are removed."""
     rows = _make_double_rewind_data()
     with redirect_stdout(io.StringIO()):
         res = compute_bounded_structure(_prepare_df(rows if sd == 1 else _noreg._mirror(rows)), 0, sd)
-        zones = derive_kl_zones_v1(res.df, [*res.events, *extra_events], struct_direction=sd)
+        events = []
+        for e in res.events:
+            if e.type in drop_types:
+                continue
+            events.append(e)
+            if e.type == "BOS_THRESHOLD_UPDATED" and int(e.idx) == 9:
+                events.extend(after_threshold)
+        zones = derive_kl_zones_v1(res.df, [*events, *extra_events], struct_direction=sd)
     return res, zones
+
+
+def _bos1(zones):
+    (z,) = [z for z in zones if z.source_kind == "BOS" and z.meta["cycle_id"] == 1]
+    return z
 
 
 @pytest.mark.parametrize("sd", [1, -1])
@@ -159,6 +174,61 @@ def test_kl_expansion_lives_in_bounds_steps_only(sd):
     assert (last["top"], last["bottom"]) == (z.top, z.bottom)
     assert all(bool(z.meta.get("expanded")) == (len(z.meta["bounds_steps"]) > 1) for z in zones)
     assert not [k for z in zones for k in z.meta if k.startswith("expanded_last")]
+    # Any other copy under a new name (the review's surviving `last_expansion_price`): the expansion adds exactly
+    # the `expanded` flag to the zone's keys (the same zone without the threshold event).
+    _, plain = _kl_run(sd, drop_types=("BOS_THRESHOLD_UPDATED",))
+    assert set(_bos1(zones).meta) == set(_bos1(plain).meta) | {"expanded"}
+
+
+@pytest.mark.parametrize("sd", [1, -1])
+def test_kl_a_second_expansion_is_appended_as_the_last_step(sd):
+    """`bounds_steps[-1]` is the LAST expansion only if steps are APPENDED in event order (the review's surviving
+    `insert` mutant): a more extreme BOS_THRESHOLD_UPDATED @10 after the run's @9 → steps [INIT 4, 9, 10], the last
+    one = the @10 event, and the zone's outer bound = its price."""
+    res, _ = _kl_run(sd)
+    (thr,) = [e for e in res.events if e.type == "BOS_THRESHOLD_UPDATED"]
+    price = float(thr.price) - 0.001 * sd            # a buy zone (sd +1) expands DOWN, a sell zone UP
+    second = StructureEvent(idx=10, category="STRUCTURE", type="BOS_THRESHOLD_UPDATED", price=price,
+                            meta={"prev": float(thr.price), "reason": "probe_no_break", "cycle_id": 1,
+                                  "structure_id": 0, "struct_direction": sd})
+    _, zones = _kl_run(sd, after_threshold=[second])
+    z = _bos1(zones)
+    steps = z.meta["bounds_steps"]
+    assert [s["start_idx"] for s in steps] == [4, 9, 10]
+    assert (steps[-1]["event"], steps[-1]["price"]) == ("BOS_THRESHOLD_UPDATED", price)
+    assert (z.bottom if sd == 1 else z.top) == price
+
+
+def test_exporters_write_every_meta_dict_verbatim(tmp_path, geometry, m15_df):
+    """The export layer (no exporter test existed — the Post-E·4 review's MINOR 4, the Post-E·5 review's X2 / X3: an
+    alias built from string pieces, or `bounds_steps` dropped, in an exporter survived): each CSV row's `meta` text is
+    exactly `str()` of the object's meta — KL (incl. an expansion and a reconfirm), fib and events from the fixture's
+    run, POI from a rendered sub."""
+    import csv
+    from engine_v2.debug.export_events import export_structure_events
+    from engine_v2.debug.export_fib_lifecycle import export_fib_lifecycle
+    from engine_v2.debug.export_zones import export_kl_zones, export_poi_zones
+    from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
+
+    rec = StructureEvent(idx=11, category="STRUCTURE", type="CTS_RECONFIRMED", price=None, meta={
+        "via": "synthetic", "cycle_id": 1, "structure_id": 0, "struct_direction": 1, "confirmed_at": 11,
+        "cts_anchor_idx": 8, "confirmation_method": "pullback"})
+    with redirect_stdout(io.StringIO()):
+        res = compute_bounded_structure(_prepare_df(_make_double_rewind_data()), 0, 1)
+        events = [*res.events, rec]
+        down = _run_downstream_pipeline(res.df, events, 1, skip_wvmi=True)
+    sub, _ = _render_both_lenses(geometry, m15_df)
+    assert any("reconfirmed_idx" in z.meta for z in down["kl_zones"])
+    assert any(z.meta.get("expanded") for z in down["kl_zones"]) and down["fib_states"] and sub.poi_zones
+    for name, export, objs in (("kl", export_kl_zones, down["kl_zones"]),
+                               ("fib", export_fib_lifecycle, down["fib_states"]),
+                               ("events", export_structure_events, events),
+                               ("poi", export_poi_zones, sub.poi_zones)):
+        path = tmp_path / f"{name}.csv"
+        export(objs, path)
+        with open(path, newline="", encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+        assert [r["meta"] for r in rows] == [str(o.meta) for o in objs], name
 
 
 @pytest.mark.parametrize("sd", [1, -1])

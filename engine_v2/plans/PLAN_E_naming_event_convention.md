@@ -1644,7 +1644,7 @@ the real emitter.
   confirm 13, carrying the cycle-1 anchor 8) on a range the proximity path opened at 9, listed before the breakout's
   RANGE_RESET @12 — the offline-finalize look-ahead class (zones audit (b)).
 
-### 9.6 Post-E·5 — the last three non-standard exported meta keys (2026-09-30; inventory measured, DECISION PENDING)
+### 9.6 Post-E·5 — the last three non-standard exported meta keys (2026-09-30; decided + LANDED `896ffd4`, review fold-in the same day)
 
 - **Why:** the three keys §9.5's landing review left non-standard (GLOSSARY "Naming Standard" Status; not scoped then).
 - **Inventory (at `890e764`; grep of every `.py` / current `.md` + the baseline save `20260929_232136_79168b7`; the
@@ -1697,6 +1697,30 @@ the real emitter.
   exporter alias 1. **11 die ONLY on the new pins** (K2 / K3 — non-index keys the name guard cannot see; K4–K7 and
   K10–K13 — values; X1 — the exporter alias, uncatchable before by any test); F6 only on the updated `.get` regex, F5
   only on the updated forced-divergence pin.
+- **Landing review (2026-09-30; 1 conformance lens, 212,338 tokens; worktree reset 8e32dd2 → `896ffd4` by the brief's
+  step 1; frozen outputs): CONFORMS WITH FIXES, 0 BLOCKER / MAJOR, no code wrong.** Verified independently: no missed
+  current site (every hit classified), 8 cells / 22 keys by its own raw-text script (the expected text built from BASE
+  by string edits), figures identical (UUID-normalised), run.log == through line 9030, 728 = BOS_1's anchor, the trio
+  == `bounds_steps[-1]` with NO later writer trimming either, `reconfirmed_idx` a moment, sub KL export BOS-only
+  (`project_to_window` default); `cmp_meta_rename.py` rejects 6 wrong CUR variants. Its 10 new mutants: **6 SURVIVED**
+  → folded (tests / docs / tools; byte-identical): **MINOR 1** no exporter test (X2 an alias built from string pieces,
+  X3 `bounds_steps` dropped by the KL exporter) → `test_exporters_write_every_meta_dict_verbatim` (KL with an expansion
+  + a reconfirm, fib, events from the fixture's run, POI from a rendered sub: each row's meta text == `str(obj.meta)`);
+  **MINOR 2** `bounds_steps[-1]` is now the only record of the last expansion but its ORDER (K14 `insert`) and its
+  mirror SHIFT (M1 INIT-only) were unpinned → a second, more extreme threshold @10 injected after the @9 one (steps
+  [4, 9, 10], outer = its price) + a two-step `_synthetic_result` in the mirror pin; **MINOR 3** the docs replacing the
+  trio blurred a moment with an anchor (on an unexpanded zone the last step is INIT, `start_idx` = `base_idx`) →
+  KL_ZONES_SPEC / PRE_REFACTOR_INVARIANTS state the `expanded` / `event != "INIT"` guard; **NIT 4** this heading;
+  **NIT 5** a copy under a NEW name (K15 `last_expansion_price`) → the expanded zone's key set == the same zone
+  without the threshold event + `{"expanded"}`; **NIT 6** the Scenario-3 single writing the cross-only key (F7) → two
+  Scenario-3 asserts; **NIT 7** `confirmed_idx` is clamped up to the structure's lifecycle start (`kl_zones_v1`
+  lifecycle pass) → GLOSSARY / MARKET_STRUCTURE_SPEC / the post-pass comment say so; **NIT 8** the reconfirm moment
+  read via `ef.event_moment(ev)` (same value); **NIT 9** `meta_census.py` tagged the pre-rename names SHIFTED (a
+  re-introduced old key on a current save would hide) → a PRE-RENAME tag, always printed, + KL
+  `bounds_steps[].start_idx` counted; **NIT 10** the compare skill's `cmp_meta_rename.py` line + `engine_v2/CLAUDE.md`
+  "Post-E·1–5". Tests 1084 → 1087. `mutants_post_e5.py` now holds all 34 (mine + the review's 10): **34/34 KILLED**
+  after the fold-in (M1 by the two-step mirror pin, K14 / K5–K7 by the second-expansion pin, K15 by the key-set
+  pin, F7 by the Scenario-3 asserts, X2 / X3 by the exporter test).
 
 ## 10. Open questions for the user (recommendation first; concrete window data)
 

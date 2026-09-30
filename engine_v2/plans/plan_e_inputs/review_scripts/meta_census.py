@@ -23,11 +23,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), *["..
 from engine_v2.multitf import entity_df_mutation as edm  # noqa: E402
 
 folder = sys.argv[1]
-# + the pre-rename names the mirror shifted until Post-E·4 / Post-E·5 (2026-09-29d / 30), so a save before a rename
-# does not show them as UNSHIFTED (a false "new slice-local key").
-SHIFT_EV = set(edm._EVENT_META_IDX_KEYS) | {"pb_start", "cts_idx"}
-SHIFT_Z = set(edm._ZONE_META_IDX_KEYS) | {"bos_idx", "cts_idx", "expanded_last_idx", "pb_reconfirm_idx"}
-SHIFT_FIB = set(getattr(edm, "_FIB_META_IDX_KEYS", ("deactivated_at",))) | {"cycle1_bos_idx"}  # Post-E·2 list
+SHIFT_EV = set(edm._EVENT_META_IDX_KEYS)
+SHIFT_Z = set(edm._ZONE_META_IDX_KEYS)
+SHIFT_FIB = set(getattr(edm, "_FIB_META_IDX_KEYS", ("deactivated_at",)))  # Post-E·2 list; literal before
+# The pre-rename names the mirror shifted until Post-E·4 / Post-E·5 (2026-09-29d / 30): tagged PRE-RENAME (always
+# printed) instead of UNSHIFTED — on a save before a rename they are expected, on a current save one is a
+# re-introduced old key (the Post-E·5 review: folding them into SHIFTED hid that).
+PRE_RENAME = {"structure_events": {"pb_start", "cts_idx"},
+              "kl_zones": {"expanded_last_idx", "pb_reconfirm_idx"},
+              "poi_zones": {"bos_idx", "cts_idx"},
+              "fib_lifecycle": {"cycle1_bos_idx"}}
 
 
 def _idxlike(k):
@@ -52,6 +57,11 @@ for lens in ("confluence", "counter"):
         for i, r in df.iterrows():
             m = ast.literal_eval(r["meta"]) if isinstance(r["meta"], str) else {}
             et = r["type"] if kind == "structure_events" else kind
+            # KL: the nested step starts (the mirror shifts them; since Post-E·5 an expansion step's
+            # `start_idx` is the only record of the expansion moment).
+            for st in m.get("bounds_steps", []) if kind == "kl_zones" else []:
+                if isinstance(st.get("start_idx"), int):
+                    cnt[(et, "bounds_steps[].start_idx", "SHIFTED")] += 1
             for k, v in m.items():
                 if not _idxlike(k):
                     continue
@@ -60,7 +70,7 @@ for lens in ("confluence", "counter"):
                 if not isinstance(v, int):
                     cnt[(et, k, "NONINT:" + type(v).__name__)] += 1
                     continue
-                tag = "SHIFTED" if k in shift else "UNSHIFTED"
+                tag = "SHIFTED" if k in shift else ("PRE-RENAME" if k in PRE_RENAME[kind] else "UNSHIFTED")
                 cnt[(et, k, tag)] += 1
                 if tag == "UNSHIFTED" and len(samples[(et, k)]) < 3:
                     ref = r["idx"] if kind == "structure_events" else (

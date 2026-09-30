@@ -21,7 +21,7 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 | Part 1 | Scenario 3 for start candle identification | Done |
 | Part 2 | Volume momentum indicator (WVMI + proximity gate) | Done |
 | Part 3 | Multi-timeframe analysis (subordinate structures + overlay) | Done |
-| Part 4 | Pipeline / strategy / multi-TF refactor | In progress — see `PART4_REFACTOR_SPEC.md` (§17 authoritative for subs). Done: per-entity dfs (through §13.5.c.iii); the **sub-structure pool** (§17 — `TriggerRecord` + unique sub, lifecycle sweep; Plans A/B/C, 2026-09-21) + two chart-review rounds; the **zones pass** (2026-09-22 → 29): POI activation on the CTS-established moment (Plan D), imbalance c3 knowability (Plan F), `ev.idx` = the moment on every CTS / BOS event + the candle-index Naming Standard (Plan E, Post-E·1–4), and the MS latent-bug close-out (MS never rewinds since 2026-09-29). Next: the WVMI pass (§8 / §17.10, deferred), then the strategy layer |
+| Part 4 | Pipeline / strategy / multi-TF refactor | In progress — see `PART4_REFACTOR_SPEC.md` (§17 authoritative for subs). Done: per-entity dfs (through §13.5.c.iii); the **sub-structure pool** (§17 — `TriggerRecord` + unique sub, lifecycle sweep; Plans A/B/C, 2026-09-21) + two chart-review rounds; the **zones pass** (2026-09-22 → 29): POI activation on the CTS-established moment (Plan D), imbalance c3 knowability (Plan F), `ev.idx` = the moment on every CTS / BOS event + the candle-index Naming Standard (Plan E, Post-E·1–5), and the MS latent-bug close-out (MS never rewinds since 2026-09-29). Next: the WVMI pass (§8 / §17.10, deferred), then the strategy layer |
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).
 

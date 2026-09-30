@@ -54,7 +54,8 @@ A continuation level established within the current structure direction.
     already confirmed via proximity. The original CTS_CONFIRMED stays at the
     proximity idx; the CTS zone meta is upgraded to `confirmation_method = "pullback"`
     with `reconfirmed_idx` (the CTS_RECONFIRMED moment; `pb_reconfirm_idx` until
-    Post-E·5, 2026-09-30) recorded — its `confirmed_idx` keeps the proximity moment.
+    Post-E·5, 2026-09-30) recorded — its `confirmed_idx` keeps the proximity moment
+    (clamped up to the structure's lifecycle start, like every KL `confirmed_idx`).
 
 ### Cycle-0 pre-CTS_0 scan-from-start mode (`enforce_cts0_new_extreme`)
 

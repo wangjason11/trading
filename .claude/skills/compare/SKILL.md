@@ -518,7 +518,7 @@ It counts changed CELLS; for a change to meta VALUES (one meta cell can hold sev
 (Post-E·2: 547 cells = 715 keys).
 For a meta-KEY rename (LANDMINES "Event Contract Rules" rule 3) use `review_scripts/cmp_meta_rename.py BASE CUR
 old=new …` — every CSV: BASE with only the listed keys renamed in place == CUR, compared as raw text (Post-E·4:
-150 cells = 197 keys, exit 0).
+150 cells = 197 keys, exit 0); `old=` (an empty new name) = the key is DELETED (Post-E·5: 8 cells = 22 keys).
 
 ## Chart Count Parity (Corroborating check)
 

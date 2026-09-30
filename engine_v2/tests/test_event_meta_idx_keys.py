@@ -459,7 +459,11 @@ def _synthetic_result() -> LowerTFResult:
         events=[StructureEvent(idx=_V, category="STRUCTURE", type="CTS_ESTABLISHED",
                                meta={**_all(edm._EVENT_META_IDX_KEYS), "version": _V})],
         kl_zones=[_Zone(meta={**_all(edm._ZONE_META_IDX_KEYS), "version": _V,
-                              "bounds_steps": [{"start_idx": _V, "top": 1.0}],
+                              # INIT + one expansion: since Post-E·5 the expansion step's
+                              # `start_idx` is the ONLY record of the expansion moment.
+                              "bounds_steps": [{"start_idx": _V, "top": 1.0},
+                                               {"start_idx": _V + 1, "top": 1.1,
+                                                "event": "BOS_THRESHOLD_UPDATED", "price": 1.1}],
                               "activation_history": [{"idx": _V, "active": True}]})],
         poi_zones=[_Poi(ic_idx=_V, meta={**_all(edm._ZONE_META_IDX_KEYS), "version": _V,
                                          "activation_history": [{"idx": _V, "active": True}]})],
@@ -486,7 +490,9 @@ def _check_mirrored(d: pd.DataFrame) -> None:
     assert ev.meta["version"] == _V
     (kl,) = d.attrs["kl_zones"]
     assert all(kl.meta[k] == s for k in edm._ZONE_META_IDX_KEYS) and kl.meta["version"] == _V
-    assert kl.meta["bounds_steps"] == [{"start_idx": s, "top": 1.0}]
+    assert kl.meta["bounds_steps"] == [{"start_idx": s, "top": 1.0},
+                                       {"start_idx": s + 1, "top": 1.1,
+                                        "event": "BOS_THRESHOLD_UPDATED", "price": 1.1}]
     assert kl.meta["activation_history"] == [{"idx": s, "active": True}]
     (poi,) = d.attrs["poi_zones"]
     assert poi.ic_idx == s
