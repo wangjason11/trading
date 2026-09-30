@@ -10,7 +10,7 @@ The landing review's mutation lens (2026-09-30) added 30 (N1-N30): 21 SURVIVED a
 listed at the end (not run - no output can change); the rest are appended as `N*` and all must die after the fold-in
 (the real LOH mapper on aligned frames, window edges at one candle, the first sd's gate meta, record / key order, a
 lock LP on the cap candle, exporter columns). `F*` = the fold-in's own code (the strict exporter reads, the sub_id
-assert). N22 (Int64 on `locked_by_cycle_id`) became the approved Int64 commit.
+assert). N22 (Int64 on `locked_by_cycle_id`) became the approved Int64 commit (every int column; its `I*` mutants).
 Template: `(id, relpath, old, new)`; `old` must occur exactly once in the file.
 """
 ORCH = "engine_v2/pipeline/orchestrator.py"
@@ -100,7 +100,7 @@ MUT = [
     ("X1_column_reads_lp_locked", EXP, '"cycle_collapsed": r.cycle_collapsed,', '"cycle_collapsed": r.lp_locked,'),
     ("X2_column_reads_meta", EXP, '"cycle_collapsed": r.cycle_collapsed,', '"cycle_collapsed": (r.meta or {}).get("cycle_collapsed"),'),
     ("X3_column_order", EXP, '    "lp_locked",\n    "cycle_collapsed",', '    "cycle_collapsed",\n    "lp_locked",'),
-    ("X4_no_int64", EXP, '    out["triggered_by_event_idx"] = out["triggered_by_event_idx"].astype("Int64")\n', ""),
+    ("X4_no_int64", EXP, '    for col in _INT_COLUMNS:\n        out[col] = out[col].astype("Int64")\n', ""),
     # --- the main gate, proximity, the mode ---
     ("M1_any_sd", ORCH, _GATE,
      '        if any(t.direction == "sd" for t in trigs):\n'
@@ -175,6 +175,16 @@ MUT = [
      '"triggered_by_event_idx": m.get("triggered_by_event_idx"),'),
     ("F2_exp_type_get", EXP, '"triggered_by_event_type": m["triggered_by_event_type"],',
      '"triggered_by_event_type": m.get("triggered_by_event_type"),'),
+    # --- the Int64 commit (the user's decision, 2026-09-30): every WVMI int column as nullable Int64 ---
+    ("I1_locked_by_not_int64", EXP, '"locked_by_cycle_id", "fb_idx", "lb_idx", "fp_idx", "lp_idx",',
+     '"fb_idx", "lb_idx", "fp_idx", "lp_idx",'),
+    ("I2_lp_idx_not_int64", EXP, '"locked_by_cycle_id", "fb_idx", "lb_idx", "fp_idx", "lp_idx",',
+     '"locked_by_cycle_id", "fb_idx", "lb_idx", "fp_idx",'),
+    ("I3_sub_id_not_int64", EXP, '"parent_sid", "parent_cycle_id", "sub_id", "bos_structure_id", "bos_cycle_id",',
+     '"parent_sid", "parent_cycle_id", "bos_structure_id", "bos_cycle_id",'),
+    ("I4_float_cast", EXP, '        out[col] = out[col].astype("Int64")', '        out[col] = out[col].astype("float")'),
+    ("I5_only_the_trigger_idx", EXP, "    for col in _INT_COLUMNS:\n",
+     '    for col in ("triggered_by_event_idx",):\n'),
     ("F3_sub_id_assert_dropped", ORCH, '            assert res.meta["sub_id"] not in trigger_by_sub, (',
      '            assert True or res.meta["sub_id"] not in trigger_by_sub, ('),
 ]

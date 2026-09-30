@@ -41,6 +41,15 @@ _COLUMNS = [
 ]
 
 
+# The integer columns — any of them may hold None (an H1 row has no sub identity; an
+# unlocked record no `locked_by_cycle_id`; a missing wave candle no idx), so each
+# is written as nullable `Int64`, never as a float.
+_INT_COLUMNS = (
+    "parent_sid", "parent_cycle_id", "sub_id", "bos_structure_id", "bos_cycle_id",
+    "locked_by_cycle_id", "fb_idx", "lb_idx", "fp_idx", "lp_idx", "triggered_by_event_idx",
+)
+
+
 def export_wvmi(records: list[WVMIRecord], path: str | Path) -> None:
     """Export WVMI records to CSV (main + sub entities).
 
@@ -48,8 +57,11 @@ def export_wvmi(records: list[WVMIRecord], path: str | Path) -> None:
     parent_cycle_id / started_by informational) out of `meta` into their own
     columns, keeping the full `meta` dict as the last column. Wave-candle idx
     fields are entity-df coords; `triggered_by_event_idx` is parent-df coords
-    for subs, written as pandas nullable `Int64` — a column mixing ints and
-    None would otherwise render every int as a float (`710` -> `710.0`).
+    for subs. Every integer column (`_INT_COLUMNS`) is written as pandas
+    nullable `Int64`: a column mixing ints and None would otherwise render every
+    int as a float (`710` -> `710.0`, `locked_by_cycle_id` `1` -> `1.0` on every
+    locked row); a None is an empty cell (2026-09-30, Plan G + the user's Int64
+    decision).
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -88,5 +100,6 @@ def export_wvmi(records: list[WVMIRecord], path: str | Path) -> None:
         })
 
     out = pd.DataFrame(rows, columns=_COLUMNS)
-    out["triggered_by_event_idx"] = out["triggered_by_event_idx"].astype("Int64")
+    for col in _INT_COLUMNS:
+        out[col] = out[col].astype("Int64")
     out.to_csv(path, index=False)

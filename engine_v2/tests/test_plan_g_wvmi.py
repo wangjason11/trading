@@ -411,3 +411,27 @@ def test_the_exporter_refuses_an_unstamped_record(tmp_path):
     rec.meta = {"triggered_by_event_idx": 5, "sub_id": 3}
     with pytest.raises(KeyError, match="triggered_by_event_type"):
         export_wvmi([rec], tmp_path / "w.csv")
+
+
+def test_every_int_column_is_written_as_an_int_next_to_a_none(tmp_path):
+    """(the user's Int64 decision, 2026-09-30) a column mixing ints and None printed every int as a float
+    (`locked_by_cycle_id` `1.0` on every locked row of the reference window): a record with every int = 7 next to one
+    with every nullable field None — each int column prints `7` then an empty cell, and the int columns are exactly the
+    eleven below, WRITTEN OUT here (a pin reading the exporter's own `_INT_COLUMNS` shrank with it: dropping a column
+    from the list survived)."""
+    int_columns = ("parent_sid", "parent_cycle_id", "sub_id", "bos_structure_id", "bos_cycle_id",
+                   "locked_by_cycle_id", "fb_idx", "lb_idx", "fp_idx", "lp_idx", "triggered_by_event_idx")
+    full =WVMIRecord(bos_structure_id=7, bos_cycle_id=7, zone_side="buy", structure_path_id=_SUB, fb_idx=7, lb_idx=7,
+                      fp_idx=7, lp_idx=7, lp_locked=True, status="locked", locked_by_cycle_id=7,
+                      meta={"triggered_by_event_idx": 7, "triggered_by_event_type": "ZONE_PROXIMITY_TRIGGER",
+                            "parent_path_id": "H1.main", "parent_sid": 7, "parent_cycle_id": 7, "sub_id": 7})
+    empty = WVMIRecord(bos_structure_id=None, bos_cycle_id=None, zone_side="buy", structure_path_id=_SUB,
+                       meta={"triggered_by_event_idx": None, "triggered_by_event_type": None})
+    path = tmp_path / "w.csv"
+    export_wvmi([full, empty], path)
+    with open(path, newline="", encoding="utf-8") as fh:
+        header, *rows = list(csv.reader(fh))
+    got = [dict(zip(header, r)) for r in rows]
+    assert {c for c in header if got[0][c] == "7"} == set(int_columns)
+    assert [got[1][c] for c in int_columns] == [""] * len(int_columns)
+

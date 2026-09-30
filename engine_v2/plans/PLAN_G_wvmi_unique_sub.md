@@ -281,3 +281,13 @@ lock LP, the processing order, exporter columns, distinct metas, the two asserts
 mutants joined `review_scripts/mutants_plan_g.py` (equivalents listed, not run): **73/73 KILLED** after the fold-in
 (8 min; my own F2 — the type read back to `.get` — first survived: the unstamped-record pin lacked BOTH keys, so the
 idx read raised first; pinned each key on its own). Replay after the fold-in: 24/24 CSVs byte-identical to `83c7a12`'s, figures identical.
+
+**Int64 (the user's decision at the chart pause, 2026-09-30: "sure we can apply the int64 fix"; its own commit and
+`/compare`):** `export_wvmi` writes EVERY integer column as nullable `Int64` (`_INT_COLUMNS`: `parent_sid`,
+`parent_cycle_id`, `sub_id`, `bos_structure_id`, `bos_cycle_id`, `locked_by_cycle_id`, `fb_idx` / `lb_idx` / `fp_idx` /
+`lp_idx`, `triggered_by_event_idx`). Prediction == measured: 18 cells, every locked row's `locked_by_cycle_id`
+`N.0` -> `N` (H1 1, confluence 12, counter 5); nothing else (the all-empty and all-int columns print the same); the
+other 21 CSVs + figures identical. Pin: every int column prints `7` next to a None row, the int column set WRITTEN OUT
+in the test (my first pin read the exporter's own list and shrank with it — 3 of 6 `I*` mutants survived); 6/6
+killed after the fix.
+

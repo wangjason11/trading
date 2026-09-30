@@ -354,3 +354,11 @@ step 6: _stamp_sub_wvmi_trigger_meta(results_by_lens, _wvmi_trigger_streams_by_l
 | `lp_locked` | bool | Whether LP is finalized |
 | `locked_by_cycle_id` | Optional[int] | BOS cycle that locked this record |
 | `cycle_collapsed` | bool | The record's CYCLE has an empty lifecycle window (`start >= end` in `compute_cycle_lifecycle`, e.g. a cycle confirmed before a sub's `start_idx`): exported (the column right after `lp_locked`), inert — like a collapsed cycle's zones (`_zone_render.collapsed_cycles`). A flag only, no lifecycle fields (see "Lifecycle — REMOVED"). Main and subs (Plan G G2). A record created ON its cycle's end candle (CTS_CONFIRMED moment == the cap, kept by the inclusive knowable-at clip) is not flagged — documented edge |
+
+**CSV export** (`debug/export_wvmi.py`, one `_wvmi.csv` per entity / lens): the fields above + the flattened attribution
+(`parent_sid`, `parent_cycle_id`, `sub_id`, `started_by`, `triggered_by_event_idx` / `_type`, `parent_path_id`) + the
+full `meta` text; `cycle_collapsed` right after `lp_locked`. Every integer column is written as pandas nullable
+`Int64` (`_INT_COLUMNS`; the user's decision 2026-09-30): an int column holding a None would otherwise print every
+int as a float (`locked_by_cycle_id` `1.0`, `triggered_by_event_idx` `710.0`); a None is an empty cell. The trigger
+keys are read strictly (`meta[...]`).
+

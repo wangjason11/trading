@@ -490,7 +490,8 @@ right after `lp_locked`; one row per record per lens CSV the sub is on (a dual-l
 sub's records on BOTH, like its zones), with `structure_path_id` = that lens's path
 (== `meta["structure_path_id"]`); `triggered_by_event_idx` / `_type` per lens — empty
 when the lens has no WVMI-class trigger in the sub's window — and
-`triggered_by_event_idx` written as an int (`Int64`, never `710.0`). Diff them
+every int column (`triggered_by_event_idx`, `locked_by_cycle_id`, the idx / id columns) written as an
+int (`Int64`, never `710.0` / `1.0`; saves before the Int64 commit show `locked_by_cycle_id` as `1.0`). Diff them
 KEYED, not with `cmp_save.py` (positional: a new row or a mid-row column shifts every
 later cell): `engine_v2/plans/plan_e_inputs/review_scripts/cmp_wvmi_keyed.py
 BASE_DIR CUR_DIR` — rows by `(sub_id, bos_structure_id, bos_cycle_id)`, columns by
