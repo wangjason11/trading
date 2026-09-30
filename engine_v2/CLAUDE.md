@@ -21,9 +21,13 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 | Part 1 | Scenario 3 for start candle identification | Done |
 | Part 2 | Volume momentum indicator (WVMI + proximity gate) | Done |
 | Part 3 | Multi-timeframe analysis (subordinate structures + overlay) | Done |
-| Part 4 | Pipeline / strategy / multi-TF refactor | In progress (through §13.5.c.iii — chart consumer reads entity_df.attrs directly) — see `PART4_REFACTOR_SPEC.md` |
+| Part 4 | Pipeline / strategy / multi-TF refactor | In progress — see `PART4_REFACTOR_SPEC.md` (§17 authoritative for subs). Done: per-entity dfs (through §13.5.c.iii); the **sub-structure pool** (§17 — `TriggerRecord` + unique sub, lifecycle sweep; Plans A/B/C, 2026-09-21) + two chart-review rounds; the **zones pass** (2026-09-22 → 29): POI activation on the CTS-established moment (Plan D), imbalance c3 knowability (Plan F), `ev.idx` = the moment on every CTS / BOS event + the candle-index Naming Standard (Plan E, Post-E·1–4), and the MS latent-bug close-out (MS never rewinds since 2026-09-29). Next: the WVMI pass (§8 / §17.10, deferred), then the strategy layer |
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).
+
+**Session-level status** (the latest commits, the `/compare` baseline save, test count, next priorities) lives in
+memory `MEMORY.md` "Next session priorities"; the per-stage records of the zones pass in
+`plans/PLAN_E_naming_event_convention.md` §9 and memory `project_zones_timing_audit_20260922.md`.
 
 **Note:** Original syllabus had multi-TF in Week 8. Parts 1 & 2 revisit prior-week topics to strengthen the single-TF foundation before Part 3 layers on multi-TF.
 
@@ -38,7 +42,7 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 # Capture the log: the M15 fetch gate (WORKFLOWS.md / /compare §2b) reads run.log.
 python -m engine_v2.run_replay > run.log 2>&1
 
-# Run tests
+# Run tests — from the REPO ROOT (from engine_v2/ the OANDA smoke test cannot find oanda.cfg)
 pytest
 
 # Output location
@@ -61,6 +65,8 @@ engine_v2/
 ├── pipeline/orchestrator.py         # Pipeline ordering (LOCKED)
 ├── structure/
 │   ├── market_structure.py          # CTS/BOS state machine (core; dual CTS confirmation paths)
+│   ├── event_fields.py              # Event index ROLES: ef.event_moment / ef.cts_anchor_idx / ef.bos_anchor_idx
+│   ├── unified_probe.py             # Start-candle probe (all trigger types + main reversals)
 │   ├── structure_engine.py          # Wrapper for orchestrator; wires zone-derivation resolvers
 │   └── identify_start.py            # Start candle selection
 ├── zones/kl_zones_v1.py             # KL Zone derivation from events
@@ -72,9 +78,12 @@ engine_v2/
 ├── patterns/imbalance.py            # Imbalance (FVG) pattern detection
 ├── patterns/structure_patterns.py   # Breakout pattern detection
 ├── features/candles_v2.py           # Candle classification
-├── multitf/                         # Multi-TF analysis (UC1: 15M reverse from H1 CTS)
+├── multitf/                         # Multi-TF analysis (subordinate M15 structures)
+│   ├── sub_structure_pool.py        # Pool: TriggerRecord + unique sub (PART4 §17)
+│   └── entity_df_mutation.py        # Sub build + mirror to entity-absolute (the *_META_IDX_KEYS shift lists)
 ├── charting/
-│   ├── export_plotly.py             # Chart generation
+│   ├── export_plotly.py             # Chart generation (H1)
+│   ├── export_m15_chart.py          # M15 lens charts
 │   └── style_registry.py            # Visual styling
 └── debug/                           # CSV export utilities
 ```
@@ -95,24 +104,26 @@ candle features → structure patterns → imbalance → market structure → KL
 
 | File | What's Inside |
 |------|---------------|
-| `MARKET_STRUCTURE_SPEC.md` | CTS/BOS/Range/Reversal semantics |
-| `KL_ZONES_SPEC.md` | Zone construction, thresholds, expansion |
+| `structure/MARKET_STRUCTURE_SPEC.md` | CTS/BOS/Range/Reversal semantics |
+| `zones/KL_ZONES_SPEC.md` | Zone construction, thresholds, expansion |
 | `zones/POI_ZONES_SPEC.md` | POI zones (Fib + IC) specification |
+| `zones/FIB_LIFECYCLE_SPEC.md` / `zones/CROSS_CYCLE_FIB_SPEC.md` | Fib lifecycle; the cross-cycle Fib mode |
 | `zones/WAVE_CANDLES_SPEC.md` | Wave candle identification algorithm |
 | `zones/WVMI_SPEC.md` | Wave Volume Momentum Indicator lifecycle + formulas |
-| `CHARTING_SPEC.md` | Chart overlay rules, style registry |
-| `ARCHITECTURE.md` | System design, event contracts |
-| `PROJECT_PRINCIPLES.md` | Non-negotiable guardrails |
+| `IMBALANCE_FILL_SEMANTICS.md` | Imbalance (FVG) knowability (the c3 rule) + two-stroke fill |
+| `charting/CHARTING_SPEC.md` | Chart overlay rules, style registry |
+| `ARCHITECTURE.md` | System design, event contracts, the `ev.idx` convention table |
+| `PART4_REFACTOR_SPEC.md` | Multi-TF refactor; §17 = the sub-structure pool (authoritative for subs) |
+| `../PROJECT_PRINCIPLES.md` (repo root) | Non-negotiable guardrails |
 | `WORKFLOWS.md` | Debugging checklist |
 | `GOTCHAS.md` | Debugging lessons learned |
-| `LANDMINES.md` | Critical constraints, things to avoid |
-| `GLOSSARY.md` | Domain terminology reference |
-
+| `LANDMINES.md` | Critical constraints, things to avoid (incl. "Event Contract Rules") |
+| `GLOSSARY.md` | Domain terminology; the candle-index "Naming Standard" |
 ---
 
 ## Guardrails (Summary)
 
-Full details in `PROJECT_PRINCIPLES.md`. Key points:
+Full details in `PROJECT_PRINCIPLES.md` (repo root). Key points:
 
 1. **Research engine first** — every decision traceable to events
 2. **Interfaces frozen** — contracts stable, internals can evolve
