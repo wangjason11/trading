@@ -24,8 +24,6 @@ Status: **OPEN** (to do) · **DECIDE** (needs the user's call first) · **TRIGGE
 
 **Chart review with the user** (Week 8 DoD: "HTF and LTF context aligns logically; confluence vs non-confluence is
 visually obvious")
-- **Zone-proximity candle-direction filter** — tried and reverted (the user changed their mind about the approach);
-  re-discuss first. DECIDE. Detail: memory `project_main_structure_debug_plan.md` (step 4, the revert).
 
 **Hygiene (a Light session)**
 - **§13.5.d leftovers** — the carve-outs are gone (subsumed by the 2026-05-25 lifecycle redesign, LANDMINES "Var 3 +
@@ -89,6 +87,10 @@ visually obvious")
 - **Pinbar body-pip floor calibration** — provisional values + the reclassify-to-pinbar approach itself; "revisit
   during strategy optimization". TRIGGER (strategy optimization). Detail: memory `project_pinbar_body_pip_floor.md`,
   `engine_v2/features/CANDLE_BODY_FLOOR_NOTES.md`.
+- **Candle-direction / rejection confirmation at a zone touch — as an ENTRY condition** (user 2026-09-30: not a trigger
+  filter; triggers stay structural). The May trigger filter (`47e7532`, reverted `2afd3b2`) is the reference form:
+  trigger candle body opposing the zone side. DECIDE when Entries are designed. Detail: this register's "Recently
+  closed" (the 2026-09-30 measurement).
 - **Should subs get the DERIVED CTS KL zone as their probe reference?** (today every sub reference zone is ad-hoc).
   Unscheduled follow-up. DECIDE. Detail: PART4 §17.12, GOTCHAS (the `kl_zones=[]` pool-path note).
 
@@ -164,6 +166,10 @@ visually obvious")
 
 ## Recently closed (history pointers)
 
+- **Zone-proximity candle-direction filter** — re-discussed 2026-09-30: a no-op on the reference window (all 6 H1
+  triggers + both sd-proximity CTS confirmations already point into their zone; in May it cut 48 → 26, before Rules
+  1-3); user: no trigger filter — triggers stay structural; the idea moves to D (entries). Filter + revert: `47e7532` /
+  `2afd3b2`.
 - **POI two-stroke review over the full window** — done 2026-09-30: every POI's on/off history re-derived per candle
   and consistent (`review_scripts/poi_cond3_check.py`); only 2 POIs ever deactivate (H1 s1c2, sub 7 s0c0); the charts
   already draw each active stretch; user: OK, no change. Memory `project_item_3_poi_lifecycle.md`.
