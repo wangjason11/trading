@@ -1721,6 +1721,9 @@ the real emitter.
   "Post-E·1–5". Tests 1084 → 1087. `mutants_post_e5.py` now holds all 34 (mine + the review's 10): **34/34 KILLED**
   after the fold-in (M1 by the two-step mirror pin, K14 / K5–K7 by the second-expansion pin, K15 by the key-set
   pin, F7 by the Scenario-3 asserts, X2 / X3 by the exporter test).
+- **Save `20260930_005619_5af674c`** (2026-09-30; save commit `6b95786`, trunk `153147a`; run mode at the fold-in, FETCH
+  GATE PASS, == prediction vs `20260929_232136_79168b7`: 8 cells / 22 keys, figures + run.log identical — the fold-in is
+  byte-identical) = the `/compare` baseline; the save-format boundary is recorded in memory `project_plan_e_event_convention.md`.
 
 ## 10. Open questions for the user (recommendation first; concrete window data)
 
