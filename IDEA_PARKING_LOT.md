@@ -42,15 +42,18 @@ merge `week8-volmom-multitf` → `main`. Everything in D and later stays after t
 
 ## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
 
-## C. Part 4 closure — IN WEEK 8, next session (user 2026-09-30; order: §13.5.e remainder with a byte-identical
-`/compare` → §13.7 docs + the file-naming call → delete the invariants file / retire the workflow memory)
+## C. Part 4 closure — IN WEEK 8, next session (user 2026-09-30; order: §13.5.e remainder → §13.7 docs + the
+file-naming call → merge what is still useful of the invariants file into the canonical specs, then delete it /
+retire the workflow memory). §13.5.e acceptance per PART4 (~:2321): visual chart parity + event-count match —
+"per-row CSV parity may genuinely shift"; measure and predict cells before the `/compare`.
 
 - **§13.5.e remainder** — delete the orchestrator's deprecated `s_res.df.attrs[...]` writes; blocked until the H1 chart
   reads its overlays through the registry (the chart-fallback half is DONE). OPEN. Detail: PART4 §13.5.e (~:2270).
 - **§13.7 doc finalization** — incl. the §16.10 file-naming deviation (spec `H1.main__M15.confluence.html` vs the code's
   `{H1_basename}_M15_confluence.html`). OPEN. Detail: memory `project_part4_progress.md` (Step 3e note).
-- **Delete `engine_v2/PRE_REFACTOR_INVARIANTS.md`** ("will be deleted post-refactor", memory `project_part4_vision.md`)
-  and retire memory `project_part4_workflow.md` ("retire when Part 4 is complete"). OPEN.
+- **Delete `engine_v2/PRE_REFACTOR_INVARIANTS.md`** ("will be deleted post-refactor", memory `project_part4_vision.md`;
+  PART4 §13 item 7: first merge its still-useful sections into the canonical specs) and retire memory
+  `project_part4_workflow.md` ("retire when Part 4 is complete"). OPEN.
 
 ## D. Before Entries (Week 9 prerequisites)
 
