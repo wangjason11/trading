@@ -13,10 +13,10 @@ fallback uses the `-sub_sd` side: the M15 extreme on the `-lower_sd`
 (= `-parent_sd`) side of the sibling-read window `[lo, hi]`.
 
 §13.5.c.ii: `run_subsequent_confluence_pipeline` deleted with
-`run_lower_tf_pipeline`. The orchestrator now translates and applies via
-`apply_trigger_to_entity_df`. Spec §6.1 in-place overwrite semantics now
-fire for real (cascade tags previous sid on new build); the
-`var3_last_per_cycle` carve-out remains until §13.5.d.
+`run_lower_tf_pipeline`. The per-trigger apply path
+(`apply_trigger_to_entity_df`) and the `var3_last_per_cycle` carve-out are
+gone too (the 2026-05-25 lifecycle redesign, then the sub-structure pool —
+PART4 §17): every trigger feeds the pool sweep.
 """
 from __future__ import annotations
 

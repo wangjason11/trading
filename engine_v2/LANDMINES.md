@@ -557,14 +557,14 @@ main reversal probe, so it needs its own decision and `/compare`.
 
 ## Scenario 3 Pip Tolerance Scales with Timeframe
 
-**Rule:** The BOS_0 probe exception pip tolerance must be appropriate for the timeframe. Canonical values live in `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS`:
-- **H1:** 3 pips
-- **M15:** 2.5 pips
+**Rule:** The probe reset pip tolerance must be appropriate for the timeframe. Canonical values live in `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS` (the one source; on 2026-09-30):
+- **H1:** 4 pips
+- **M15:** 3 pips
 - **M5:** 2 pips
 
-**Why:** A wide tolerance on smaller timeframes triggers false restarts because lower-TF price movements are smaller. The tolerance controls how close a candle must get to the BOS_0 zone outer bound to trigger a probe restart. The invariant `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` is asserted module-level in `zone_proximity.py` so probe-reset and proximity-trigger semantics never overlap.
+**Why:** A wide tolerance on smaller timeframes triggers false restarts because lower-TF price movements are smaller. The tolerance controls how close a candle's wick must get to the probe's reference-zone inner bound to trigger a probe restart (with the wick-size cap `DEFAULT_PROBE_RESET_WICK`, H1 16 / M15 12 / M5 8). The invariant `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` is asserted module-level in `zone_proximity.py` so probe-reset and proximity-trigger semantics never overlap.
 
-**Implementation:** `unified_probe` looks up `DEFAULT_PROBE_RESET_PIPS[timeframe]` (+ the wick cap `DEFAULT_PROBE_RESET_WICK`) for its reset condition (the deleted `compute_structure_scenario_3()` took a `pip_tolerance_pips` override). Type is `float` (not `int`) since the M15 default is fractional (2.5).
+**Implementation:** `unified_probe` looks up `DEFAULT_PROBE_RESET_PIPS[timeframe]` (+ the wick cap `DEFAULT_PROBE_RESET_WICK`) for its reset condition (the deleted `compute_structure_scenario_3()` took a `pip_tolerance_pips` override). Typed `float` (a fractional value was used before; today's values are whole pips).
 
 ---
 

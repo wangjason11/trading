@@ -1,5 +1,8 @@
 # Forex Trader Engine v2 — Project Overview (through Week 6)
 
+> **Snapshot as of Week 6 — kept for its principles and history, not current status.** Current status:
+> `engine_v2/CLAUDE.md` "Current Status"; everything deferred / planned: `IDEA_PARKING_LOT.md` (repo root).
+
 This repository is building an **explainable, visualization-first, event-driven** automated trading engine for **Forex** (initially designed around OANDA data + execution, with backtesting + replay as the primary development loop).
 
 This doc distills everything agreed/implemented so far (from the original late-Dec 2025 proposal through **Week 6** progress).
@@ -36,7 +39,7 @@ Current orchestrator ordering (Week 6): candle features → structure patterns �
 - Charting (export_plotly + style registry)
 - KL Zones v1 (event-driven zones derived from structure confirmation events)
 
-**In progress / deferred (known upcoming):**
+**In progress / deferred (known upcoming — as of Week 6; both since done: the start-candle logic became `unified_probe` + the true-first-breakout cycle-0 rule, and Weeks 7-8 added POI zones, WVMI and multi-TF):**
 - Week 6 Part 2: “Identify Market Structure start candle of analysis” has been discussed; final “starting point” logic is intentionally deferred until Zones influence it (per project decision).
 - Week 7+: Indicator overlays + additional POI/OB zones + execution layer.
 

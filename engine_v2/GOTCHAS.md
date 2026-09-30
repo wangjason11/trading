@@ -122,7 +122,7 @@ single neighbour flips it. Concrete (2026-06-07, NZD_USD M15): swing-high candle
 below 1794's low; had it qualified, 1794's zone inner would route through
 `find_base_threshold` instead of the 2-candle `"no base"` path and could shift.
 This is current/intended behavior — noted because it's surprising and relevant to
-the deferred **(c) other-zone-pattern inversion pass** (pinbar / 2-candle / star).
+the **(c) other-zone-pattern inversion pass** (pinbar / 2-candle / star) — DONE 2026-06-20 ("Follow-up (c) DONE" above).
 
 ---
 
@@ -1634,7 +1634,7 @@ together.
 - The unified probe's **deterministic method** calls this routine (no MS) to decide the start; MS's **pre-CTS_0 scan-from-start mode** (`enforce_cts0_new_extreme=True`, now REQUIRING `bos0_inner`) calls the SAME routine to re-find and establish cycle-0 via its normal path, so probe and MS agree by construction. The old partial anchor-extreme gate (`_cts0_new_extreme_passes`) and the old df.pat Phase-1 walk were REMOVED. Seed-and-resume was rejected in favor of scan-from-start.
 - Detail: [[project-true-first-breakout-cycle0]] (memory).
 
-**The deferred main sid=0|cycle=0 fix (Commit 2) uses the same scan-from-start mechanism** — pass `enforce_cts0_new_extreme=True` + `bos0_inner` at the main pipeline's structure call. Not yet wired.
+**The main sid=0|cycle=0 fix (Commit 2) uses the same scan-from-start mechanism** — `compute_structure` passes `enforce_cts0_new_extreme` + `bos0_inner` at the main pipeline's structure call. WIRED (Commit 2 `d1bd7bb`, 2026-06-16; every main reversal since Step 4, 2026-06-20).
 
 ---
 

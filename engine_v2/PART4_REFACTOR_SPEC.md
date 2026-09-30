@@ -817,9 +817,11 @@ overlap or invert. Strict `proximity > reset` is the cleanest invariant.
   `compute_structure` itself migrated off Exception 2 in Step 4, 2026-06-20)
   used `DEFAULT_PROBE_RESET_PIPS` only (single-condition) until they were
   deleted 2026-09-30.
-- **Proximity tuning deferred**: a follow-up tightens `DEFAULT_PROXIMITY_PIPS`
-  to `{H1: 8, M15: 6, M5: 4}`. Held back from Session 1 so the unified
-  probe lands byte-identical to the `804d19d` baseline.
+- **Proximity tuning** (held back from Session 1 so the unified probe landed
+  byte-identical to the `804d19d` baseline; the plan then was
+  `{H1: 8, M15: 6, M5: 4}`): the code's `DEFAULT_PROXIMITY_PIPS` is
+  `{H1: 8, M15: 5, M5: 3}` (checked 2026-09-30) — the one source; this
+  bullet is history.
 
 ---
 
@@ -2456,7 +2458,9 @@ display (§16.6) are governed by hardcoded rules, not user toggles.
 > charts.** Ownership becomes `owner_by_idx_dir[(candle, direction)]` over the
 > sub's **lifecycle window** `[start_idx, end_idx]` — not the structural anchor
 > — so a `+1` and a `−1` sub may both own a candle and pre-`start_idx` sid-tied
-> dots are hidden; chart identity is `sub_id`. Point (a) below is superseded
+> dots are hidden (later revised by the chart reviews of 2026-09-20 → 22 —
+> items 1-7 below: the FORMING layer draws the pre-`start_idx` geometry, and
+> collapsed-cycle zones are hidden on both charts); chart identity is `sub_id`. Point (a) below is superseded
 > for subs by §17.9; point (b) stands ("draw from the anchor, active from
 > `start_idx`"). The H1 chart is unchanged. **Body rewritten to rev 2 in the
 > Plan C commit (2026-09-20).**
@@ -2629,7 +2633,7 @@ replaced by 1 prior one plus 3 dot-trace merges. Intermediate value after items
 |---|---|
 | Constants — candle patterns, OHLC, candle types | Always shown; never affected by sub changes |
 | Sid-tied — CTS dots, BOS markers, swing / PB / prev-BOS lines, range bounds, market_state regions | H1: **most recent sid only** per candle (`owner_by_idx`). M15: **the owning sub per `(candle, direction)`** over its lifecycle window (`owner_by_idx_dir`). Older / ended subs' data persists in the lens df with lifecycle end meta but is hidden where not owned |
-| Persisting events — KL zones, POI zones, imbalances | All rendered. Inactive / lifecycle-ended ones use the existing opacity attenuation logic (older = more transparent); fills gated to the active window |
+| Persisting events — KL zones, POI zones, imbalances | All rendered EXCEPT collapsed-cycle KL/POI zones (item 2 above — never active in real time; they stay in the CSVs). Inactive / lifecycle-ended ones use the existing opacity attenuation logic (older = more transparent); fills gated to the active window |
 | WVMI | NOT rendered on any chart (H1 or M15: wave-candle hover only, no momentum — verified 2026-09-30); the `_wvmi.csv` exports are the surface. The planned design: locked records show final values via hover; in-progress records re-render whenever `update_temporary_lp` shifts the temp LP. M15 data: one record set per unique sub, present on every lens df the sub is on, each copy with its lens's path (§17.10, Plan G) |
 
 ### 16.6 Pending subordinate display

@@ -30,7 +30,7 @@ All visual formatting (colors, opacities, line widths, marker sizes) lives in `s
 | Reversal | `structure.reversal_watch_line`, `structure.reversal_watch_start` | Reversal candidate markers |
 | KL Zones | `zone.kl.buy`, `zone.kl.sell`, `zone.kl.hover_line` | Zone fills, confirm lines |
 | POI Zones | `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line` | POI zone fills |
-| Fibonacci | `fib.line`, `fib.label` | Fib retracement lines |
+| Fibonacci | `fib.anchor_line.active` / `.historical`, `fib.zone_rect.active` / `.historical` | Fib box (H1 chart only) |
 | Imbalance | `imbalance.bullish`, `imbalance.bearish` | Imbalance candle colors |
 | Volume | `volume.bar.up/down/neutral`, `volume.ema_line`, `volume.spike_marker` | Volume bars, EMA, spike markers |
 | Wave candles | `wave_candle.bullish`, `wave_candle.bearish` | Wave candle vertical lines |
@@ -84,6 +84,7 @@ To change any visual element:
 - **Fill (Item 5)**: only the active stretch is filled. KL has at most ONE active stretch `[confirmed_idx, end_idx]` (KL has no per-candle deactivation). Pre-activation region renders as outline only. End at `end_idx`.
 - Stepwise bounds from `meta["bounds_steps"]` still drive per-step (top, bottom) — the fill within the active stretch is intersected with each step's x-range so each step's y-bounds apply.
 - Single vertical confirm line at `confirmed_idx`.
+- **Collapsed-cycle zones (2026-09-20):** a KL zone whose cycle COLLAPSED under its structure's lifecycle floor (`status == "inactive"`, known `end_idx`, clamped `confirmed_idx >= end_idx` — `_zone_render.is_collapsed_cycle_zone`) is not drawn, on the H1 chart, the M15 charts and the H1 overlay; it existed geometrically but was never active in real time (on H1: sid 1's retroactive cycles (1,0)/(1,1), the "degenerate parent cycles"; on a sub: its forming-phase cycles). The rows stay in the CSVs. A zone inactive for any other reason is still drawn as an outline.
 - Style keys: `zone.kl.buy`, `zone.kl.sell`, `zone.kl.hover_line`
 
 ### 6) Imbalance candle highlighting (Week 7)
@@ -118,9 +119,11 @@ To change any visual element:
 - **Confirm lines (Item 5)**: ONE vertical line per `A` event in `activation_history` (replaces the prior single line at `confirmed_idx`). For zones derived before activation_history was added, falls back to a single line at `confirmed_idx`.
 - Style keys: `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line`
 
-### 8) Fibonacci lines (Week 7)
-- Horizontal dashed lines at Fib retracement levels
-- Style keys: `fib.line`, `fib.label`
+### 8) Fibonacci box (Week 7; H1 chart only — M15 fibs are CSV-only)
+- Reads the FibTracker states; a fib is drawn iff it is locked, or active with its cycle not ended (a superseded / inactive-unlocked / ended-unlocked version vanishes — FIB_LIFECYCLE_SPEC §9.2)
+- Per fib: dotted horizontal lines at 0% (BOS anchor) and 100% (CTS anchor) plus dotted verticals at both ends (`fib.anchor_line.*`), and a dotted rectangle between 61.8% and 80% (`fib.zone_rect.*`), spanning the BOS → CTS candles; invisible hover points across the zone
+- "Bright" = the live active version (`.active` keys); locked / ended versions render faded (`.historical` keys)
+- Style keys: `fib.anchor_line.active` / `.historical`, `fib.zone_rect.active` / `.historical` (`fib.label` is defined in the registry but unused)
 
 ### 9) Volume overlay (Week 7)
 - Volume bars at bottom 15% of chart (overlay approach, not subplot)
@@ -170,8 +173,10 @@ element kinds come online (counter/confluence variants are still being
 built in Part 4; new overlay kinds will be additive).
 
 **Currently rendered (when enabled):**
-- M15.counter KL zones — reads `dfx.attrs["lower_tf_results"]`, dashed
-  rectangles with lower opacity, mapped to H1 x-axis
+- M15.counter KL zones — read from the registered M15 sub-entity's
+  `df.attrs["kl_zones"]` via the registry (§13.5.c.iii; the legacy
+  `dfx.attrs["lower_tf_results"]` facade is gone), dashed rectangles with
+  lower opacity, mapped to H1 x-axis
 - Style keys: `zone.m15.kl.buy`, `zone.m15.kl.sell`
 
 **Not yet rendered on H1 (future work):** M15 POIs, M15 fibs, M15.confluence
@@ -196,7 +201,7 @@ All zone rectangles (KL + POI, both charts) follow these rules:
 
 | Element | Rule |
 |---|---|
-| Outline | Always drawn. Spans full `[base_idx, end_idx]` (or `start_time`→`end_time` for POI). For KL with `bounds_steps`, traces a stepped polygon around the outer contour of all steps (single trace, not N rect outlines). Color matches the zone's confirm-line color. Opacity = `confirm_opacity_active × tier`. |
+| Outline | Always drawn for every drawn zone (collapsed-cycle zones are skipped entirely — §5). Spans full `[base_idx, end_idx]` (or `start_time`→`end_time` for POI). For KL with `bounds_steps`, traces a stepped polygon around the outer contour of all steps (single trace, not N rect outlines). Color matches the zone's confirm-line color. Opacity = `confirm_opacity_active × tier`. |
 | Fill | ONLY on active stretches. Pre-activation, post-deactivation, and inter-stretch gaps render as outline only. |
 | KL active stretches | One: `[confirmed_idx, end_idx]`. No reactivation logic today. |
 | POI active stretches | N stretches, one per `A → next D` pair in `meta["activation_history"]`. Trailing `A` with no `D` extends to `end_idx`. |

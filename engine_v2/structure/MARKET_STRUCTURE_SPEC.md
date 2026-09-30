@@ -77,9 +77,9 @@ construction (no seed-and-resume). Cycles ≥ 1 are unaffected (subsequent
 CTSes break the prior CTS by construction).
 
 Used by `unified_probe` (deterministic method + phase 2) and by
-`compute_bounded_structure` for every M15 sub (Commit 1). The same
-mechanism is the planned wiring for the deferred main `sid=0 cycle=0` fix
-(Commit 2). The old partial-gate helper `_cts0_new_extreme_passes` was
+`compute_bounded_structure` for every M15 sub (Commit 1), and by
+`compute_structure` for the main `sid=0 cycle=0` (Commit 2 `d1bd7bb`,
+2026-06-16) and every main reversal (Step 4, 2026-06-20). The old partial-gate helper `_cts0_new_extreme_passes` was
 removed.
 
 ### BOS
@@ -638,5 +638,5 @@ iterative pass (Phase 2) for `first_confluence` only.
 - **Max iterations cap** (10) — prevents infinite loops; all iterations resetting → `max_iterations` (pending)
 - **Retrace window opens at CTS_0's established MOMENT + 1** (Phase 1 `tfb.est_idx + 1`; Phase 2 `cts0_established_idx + 1` since Plan E E3c) — after the candle that set the level, so the CTS anchor candle (the breakout span's **pattern extreme**, at or before that moment) is never read: its far wick belongs to the breakout leg away from the zone, not a return to it (GOTCHAS "Exception Check Must Exclude CTS_ESTABLISHED Candle" — learned on the deleted Scenario 3 probe)
 - **`probe_end_idx` is the supreme upper bound** for both the breakout search and the retrace window (LANDMINES "Probe `end_idx` Is the Supreme Bound")
-- **Reset tolerance scales with timeframe** — `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS` (H1=3, M15=2.5, M5=2; `float` because M15 is fractional) + the wick cap `DEFAULT_PROBE_RESET_WICK`. Invariant: `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` per TF (asserted at module load).
+- **Reset tolerance scales with timeframe** — `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS` (H1=4, M15=3, M5=2 on 2026-09-30; typed `float`) + the wick cap `DEFAULT_PROBE_RESET_WICK` (H1=16, M15=12, M5=8). Invariant: `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` per TF (asserted at module load).
 
