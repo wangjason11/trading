@@ -216,13 +216,13 @@ bounded-vs-unbounded (and slice-vs-entity) invariant mismatches hide.
 ## Multi-Structure Start Detection (Exception 1 & 2)
 
 > **⚠ Step 4 (2026-06-20) — this section + the next ("Bounded Probe + Same
-> structure_id") now describe the LEGACY path only.** `compute_structure` (H1
-> main) no longer uses Scenario 2 / Exception 1 / Exception 2 for reversals — it
-> migrated to `unified_probe` + scan-from-start (the same path subs use; see
-> MARKET_STRUCTURE_SPEC "Per-reversal continuation differs by function"). The
-> Exc1/Exc2 + bounded-probe-keep behavior below survives only in
-> `compute_structure_from_start` (no production caller) and
-> `compute_structure_scenario_3` Phase 2 (tests). Three Step-4 gotchas for the
+> structure_id") describe a DELETED path (history, kept for the lessons).**
+> `compute_structure` (H1 main) no longer uses Scenario 2 / Exception 1 /
+> Exception 2 for reversals — it migrated to `unified_probe` + scan-from-start
+> (the same path subs use; MARKET_STRUCTURE_SPEC "Per-reversal continuation").
+> The Exc1/Exc2 + bounded-probe-keep behavior below lived on only in
+> `compute_structure_from_start` and `compute_structure_scenario_3` Phase 2,
+> both deleted 2026-09-30 (no production caller). Three Step-4 gotchas for the
 > NEW main path:
 > - **`reversal_start_idx == reversal_confirmed_idx`** — the per-sid reversal
 >   mask `(market_state=="reversal") & (structure_id==sid)` matches **exactly one
@@ -736,7 +736,7 @@ exc_idx = _find_closest_candle_to_outer(df, ef.cts_anchor_idx(cts_est[0]), exc_u
 exc_idx = _find_closest_candle_to_outer(df, ef.cts_anchor_idx(cts_est[0]) + 1, exc_upper, ...)
 ```
 
-**Applies to:** Scenario 3 Phase 1 probe, Exception 2 in `compute_structure_from_start`, and Exception 2 in Scenario 3 Phase 2 (`compute_structure` no longer runs Exception 2 — MARKET_STRUCTURE_SPEC).
+**Applied to:** the Scenario 3 Phase 1 probe and the Exception 2 probes (in `compute_structure_from_start` and Scenario 3 Phase 2) — all deleted 2026-09-30; the snippet above is their historical code. **Live form:** `unified_probe`'s retrace window opens at CTS_0's established moment + 1 in both passes (MARKET_STRUCTURE_SPEC "Common probe patterns").
 
 **Lesson:** a check for price *returning* to a zone must start AFTER the candle that set the level — the CTS anchor candle is still part of the breakout leg away from the zone, so its far wick can never evidence a return. Same care as "Zone Proximity Trigger: Scan Starts AT CTS_CONFIRMED Candle" (the old WVMI proximity scan): know which phase of the cycle a candle belongs to before using it to evaluate a condition about a later phase.
 

@@ -298,7 +298,8 @@ def _collect_cts_confirmed_for_cycle(
 
 def _has_reversal(df: pd.DataFrame, structure_id: int) -> bool:
     """Detect whether `structure_id` reached the reversal state inside
-    `df`. Mirrors the predicate `compute_structure_scenario_3` uses."""
+    `df` — a structure_id row marked "reversal" (the same predicate
+    `compute_bounded_structure` uses)."""
     rev_mask = (
         (df["market_state"].astype(str).str.lower() == "reversal")
         & (df["structure_id"].astype(int) == structure_id)

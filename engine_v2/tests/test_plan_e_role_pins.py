@@ -391,37 +391,6 @@ def test_h1_chart_unconfirmed_cts_marker_sits_at_the_cts_anchor(tmp_path, monkey
     assert [x for tr in marks for x in tr.x] == [df.loc[9, "time"]]
 
 
-def test_scenario3_exception_window_opens_after_the_cts0_anchor(monkeypatch):
-    """Q10 test-only path, pinned against a raw read: scenario 3's BOS_0
-    exception window opens at CTS_0's ANCHOR + 1 (5), not at its `ev.idx`
-    (the moment 6 since Plan E E4a)."""
-    import engine_v2.structure.structure_engine as se
-    from engine_v2.tests.test_unified_probe import (
-        _make_second_cts_moment_after_anchor_data, _prepare_df)
-    df = _prepare_df(_make_second_cts_moment_after_anchor_data())
-    probe_df = df.copy()
-    probe_df["market_state"] = "pullback"
-    probe_df["structure_id"] = 0
-    est = make_cts_established(cts_anchor_idx=4, confirmed_at=6, price=1.2,
-                               structure_id=0, cycle_id=0)
-
-    class _MS:
-        debug = False
-
-        def run(self):
-            return probe_df, [est], []
-
-    lows = []
-    monkeypatch.setattr(se, "_make_market_structure", lambda *a, **k: _MS())
-    monkeypatch.setattr(se, "_get_bos0_zone_bounds", lambda *a, **k: (0.59, 0.60, "buy"))
-    monkeypatch.setattr(se, "_find_closest_candle_to_outer",
-                        lambda _df, lo, hi, *a: lows.append(lo))
-    with contextlib.redirect_stdout(io.StringIO()):
-        res = se.compute_structure_scenario_3(df, 0, +1, end_idx=15, run_continuation=False)
-    assert res.status == "finalized"
-    assert lows == [5]
-
-
 # --- E4b landing review: the charts' BOS LOCATION reads (dots + PB→BOS lines) ---------
 # A sid handoff built with LAGGING BOS events (anchor < moment == ev.idx since E4b):
 # a BOS dot / a PB→BOS line end read from the raw `ev.idx` lands on the moment.

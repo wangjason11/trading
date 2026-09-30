@@ -42,10 +42,12 @@ stateful tracker classes that internalize iteration state. Callers manage
 the small amount of state they need (e.g., the current best `start_idx`)
 externally and re-invoke the function per new candle.
 
-**Example (already in place):** `compute_structure_scenario_3` Phase 1 —
-Condition 4 splits on `end_idx`:
-- `end_idx` defined → `finalized` (caller's bound is a real terminal)
-- `end_idx is None` → `pending` (more candles may resolve later)
+**Example (already in place):** `structure/unified_probe.py` — a probe that
+cannot resolve within its bound returns a `*_pending` / `max_iterations`
+condition (the caller builds nothing for that trigger) instead of a guess;
+a defined `probe_end_idx` is a real terminal. (The original example,
+`compute_structure_scenario_3` Phase 1's `end_idx` split, was deleted
+2026-09-30 with that function.)
 
 A live caller re-invokes the probe with the same or advanced `start_idx`
 each new candle, and uses status to decide whether to start downstream
@@ -411,13 +413,15 @@ Measures BOS zone strength via volume ratios of wave candle pairs. Runs **after 
 
 Results stored in `df.attrs["wvmi"]` (list of `WVMIRecord`). See `WVMI_SPEC.md`.
 
-### Scenario 3 (`structure/structure_engine.py`)
-Arbitrary-start structure analysis with iterative BOS_0 probe. Phase 1 validates/refines `start_idx` by checking if price reaches the BOS_0 zone inner bound (within configurable pip tolerance: H1=10, M15=3, M5=1). Phase 2 continues multi-structure analysis from the finalized probe using the same logic as `compute_structure`. Returns `Scenario3Result` with status always "finalized" (probe accepts current start when bound is reached).
-
-Parameters: `end_idx` bounds the probe window (passed to MarketStructure); `run_continuation=False` skips Phase 2 for probe-only use (e.g. H1 reverse probe that only needs the validated `start_idx`).
-
-### Structure From Start (`structure/structure_engine.py`)
-`compute_structure_from_start()` runs multi-structure analysis from a known start without Scenario 1 identification or Scenario 3 probes. Same Exception 1/2 handling on reversals as `compute_structure()`. Used for lower-TF structures where the start has been pre-validated by a higher-TF probe.
+### Structure orchestrators + the start probe (`structure/structure_engine.py`, `structure/unified_probe.py`)
+`compute_structure` runs the H1 main (Scenario 1 start, each reversal's start via
+`unified_probe` + scan-from-start); `compute_bounded_structure` runs ONE structure
+from a caller-validated start and stops at its first reversal (every sub build).
+`unified_probe` is the one start probe (all trigger types + main reversals).
+Canonical: MARKET_STRUCTURE_SPEC "Compute_structure variants" + "Probes". The
+legacy `compute_structure_scenario_3` (Scenario 3 BOS_0 probe) and
+`compute_structure_from_start` (Scenario 2 / Exception 1 / Exception 2 per
+reversal) were deleted 2026-09-30 (no production caller).
 
 ### Multi-TF Analysis (`multitf/`) — the sub-structure pool (Plan C, landed 2026-09-20)
 Subordinate lower-TF (M15) structures triggered by H1 events. Canonical spec:

@@ -763,10 +763,11 @@ scan-from-start MS run — the SAME path the subs use. The old Scenario 2 + Exc1
 Exc2 chain is gone from the main loop; `/compare` byte-identical on the NZD_USD
 window (the lone main reversal reproduces the old refined start 689 → CTS_0 703,
 established by `find_true_first_breakout`, scan-on==scan-off verified). Exception 1
-is no longer reached from main but is left in
-`identify_start_scenario_2_after_reversal` (deletion deferred — still used by
-`compute_structure_from_start` [no prod caller] + `compute_structure_scenario_3`
-Phase 2 [tests]). The legacy `_resolve_via_legacy_probe` escape hatch
+is no longer reached from main; it was left in
+`identify_start_scenario_2_after_reversal` until that function and its last
+callers (`compute_structure_from_start` [no prod caller] +
+`compute_structure_scenario_3` Phase 2 [tests]) were **deleted 2026-09-30**
+(user decision; MARKET_STRUCTURE_SPEC "Compute_structure variants"). The legacy `_resolve_via_legacy_probe` escape hatch
 (`_LEGACY_PROBE_USE_CASES`, always empty) and `lower_tf_pipeline.py` were
 **deleted by Plan C** (2026-09-20): it returned `finalize_idx=None`, which the
 §17.4 non-FC assert (`finalize_idx == trigger_idx`) would have tripped.
@@ -810,11 +811,12 @@ overlap or invert. Strict `proximity > reset` is the cleanest invariant.
 - **Tables wired** as of Phase 1 Session 1 (this update). The probe
   primitive itself exists at `engine_v2/structure/unified_probe.py` but
   no caller has migrated yet — Sessions 2–6 of Phase 1 migrate per
-  trigger. The legacy probes that remain
+  trigger. The legacy probes that remained
   (`compute_structure_scenario_3` Phase 1; the Exception 2 probe in
   `compute_structure_from_start` + `compute_structure_scenario_3` Phase 2 —
   `compute_structure` itself migrated off Exception 2 in Step 4, 2026-06-20)
-  continue to use `DEFAULT_PROBE_RESET_PIPS` only (single-condition).
+  used `DEFAULT_PROBE_RESET_PIPS` only (single-condition) until they were
+  deleted 2026-09-30.
 - **Proximity tuning deferred**: a follow-up tightens `DEFAULT_PROXIMITY_PIPS`
   to `{H1: 8, M15: 6, M5: 4}`. Held back from Session 1 so the unified
   probe lands byte-identical to the `804d19d` baseline.
@@ -841,7 +843,7 @@ overlap or invert. Strict `proximity > reset` is the cleanest invariant.
 For `main` (highest TF), continue using `compute_structure`:
 
 - Initial start: `trading_open` scenario (today's `identify_start_scenario_1`).
-- On reversal: `reversal` scenario (today's `identify_start_scenario_2_after_reversal` + Exception 1/2).
+- On reversal: `reversal` scenario (then `identify_start_scenario_2_after_reversal` + Exception 1/2; since Step 4 `unified_probe` + scan-from-start — the old function was deleted 2026-09-30).
 - Loops until end of data.
 
 For `subordinate` (any lens, any TF), each **unique sub** is built **once** by
@@ -868,7 +870,7 @@ the 2026-05-25 per-sid bounded run):
   `slice_begin` makes them entity-absolute. The geometry is shared by every
   record of the sub and never mutated in place.
 
-The legacy `compute_structure_scenario_3` ad-hoc path is **removed**. Its
+The legacy `compute_structure_scenario_3` ad-hoc path is **removed** (the function itself deleted 2026-09-30). Its
 only purpose (creating WVMI when parent was in range) is now subsumed by
 per-subordinate WVMI — see §8.
 

@@ -593,152 +593,50 @@ skip the BOS barrier step for good). (The former df-level check ran after `run()
 
 ## Compute_structure variants (orchestration layer)
 
-`MarketStructure` is the underlying state-machine engine. Three orchestration
-functions wrap it for different start-identification strategies:
+`MarketStructure` is the underlying state-machine engine. Two orchestration
+functions wrap it (`structure/structure_engine.py`):
 
-| Function | Initial start source | Phase 1 BOS_0 probe | Multi-structure continuation | Use case |
-|---|---|---|---|---|
-| `compute_structure` | Scenario 1 (auto-identify via `identify_start_scenario_1`) | — | ✓ (reversal start via `unified_probe` + scan-from-start) | H1 main pipeline (orchestrator) |
-| `compute_structure_from_start` | Caller-provided | — | ✓ (legacy Scenario 2 + Exc1 + Exc2) | Legacy / tests — no production caller (subs use `compute_bounded_structure`) |
-| `compute_structure_scenario_3` | Caller-provided + Phase 1 refinement | ✓ | ✓ if `run_continuation=True` (legacy Scenario 2 + Exc1 + Exc2; gated) | Subordinate probe across all multi-TF variants (counter and confluence; `run_continuation=False`); tests |
+| Function | Start source | Multi-structure continuation | Use case |
+|---|---|---|---|
+| `compute_structure` | Scenario 1 (auto-identify via `identify_start_scenario_1`) | ✓ (each reversal's start via `unified_probe` + scan-from-start) | H1 main pipeline (orchestrator) |
+| `compute_bounded_structure` | Caller-provided (a validated `unified_probe` start) | — (ONE structure; stops at its first reversal and reports `reversal_idx`) | Every sub build (the pool's geometry) + the per-sid scan-from-start runs |
 
-**Per-reversal continuation differs by function (Step 4, 2026-06-20).**
-`compute_structure` (H1 main) now selects every post-reversal start via the
-**`unified_probe` + scan-from-start** path — the SAME primitive the
-subordinate reversals use: reference = the prior sid's most recent
-`{CONF/UPD/EST}` CTS; the probe runs in the flipped direction over
-`[prior CTS anchor, reversal apply idx]` and hands back a DECISION (start +
+**Per-reversal continuation (Step 4, 2026-06-20).** `compute_structure` (H1 main)
+selects every post-reversal start via the **`unified_probe` + scan-from-start**
+path — the SAME primitive the subordinate reversals use: reference = the prior
+sid's most recent `{CONF/UPD/EST}` CTS; the probe runs in the flipped direction
+over `[prior CTS anchor, reversal apply idx]` and hands back a DECISION (start +
 BOS_0 inner), NOT events; the reversed structure's cycle-0 CTS_0 is then
 established by a fresh **unbounded** scan-from-start MS run gated on that BOS_0
-inner (`enforce_cts0_new_extreme` + `bos0_inner`). This replaced the old
-**Scenario 2 → Exception 1 → Exception 2** chain, which now survives only in
-`compute_structure_from_start` (no production caller) and
-`compute_structure_scenario_3` Phase 2 (test-only).
-`identify_start_scenario_2_after_reversal` (incl. its Exception 1) is therefore
-no longer reached from the main pipeline; deletion is deferred until those two
-legacy callers are retired. The three functions otherwise still differ in
-**how the very first start_idx is determined**.
+inner (`enforce_cts0_new_extreme` + `bos0_inner`).
 
-### Starting-point rigor hierarchy
-
-```
-Lowest:  Caller picks start, no validation
-         → compute_structure_from_start
-Medium:  Auto-identify via Scenario 1 (lookback search)
-         → compute_structure
-Highest: Caller picks candidate + iterative probe validates/refines
-         → compute_structure_scenario_3 (Phase 1)
-```
+**Deleted 2026-09-30 (user decision; no production caller, tests only):** the
+legacy orchestrators `compute_structure_from_start` (caller-provided start +
+Scenario 2 → Exception 1 → Exception 2 per reversal) and
+`compute_structure_scenario_3` (the Scenario 3 BOS_0 probe, Phase 1, + an optional
+multi-structure continuation, Phase 2), with `identify_start_scenario_2_after_reversal`
+(Scenario 2 + its Exception 1) and their private helpers
+(`_find_closest_candle_to_outer`, `_get_bos0_zone_bounds`, `_probe_reset_pips`,
+`Scenario3Result`) and `tests/test_scenario3.py`. The Exception 2 probe and the
+Scenario 3 BOS_0 probe went with them; `unified_probe` had replaced both (PART4
+§4.4, memory `project_unified_identify_start_probe.md`). Git history keeps their
+text (e.g. this section before the deletion commit).
 
 ---
 
 ## Probes
 
-Two distinct probe mechanics exist in the structure layer. They share
-common patterns (run on `df.copy()`, iterative with max cap, scan window
-starts at `CTS_EST + 1`) but answer different questions.
-
-### Probe type 1 — Exception 2 probe
-
-**Question:** "Is the next-structure start (chosen by Exception 1) actually
-a structural start, or just a pullback candle?"
-
-**Where used:** Per reversal in the LEGACY continuation only —
-`compute_structure_from_start` (no production caller) and
-`compute_structure_scenario_3` Phase 2 (test-only). **NOT** in
-`compute_structure` (H1 main), which migrated to the `unified_probe` +
-scan-from-start reversal handoff in Step 4 (2026-06-20).
-
-**Bounds:** `[exc2_candidate, reversal_confirmed_idx]` — bounded probe.
-
-**Mechanics:** Run MarketStructure from candidate up to reversal. If a
-CTS_EST fires in the probe AND any candle between `CTS_EST + 1` and
-`reversal_confirmed_idx` reaches the prior CTS zone (within 10 pip
-tolerance), exception triggers. New candidate = the reach-back candle
-(strictly **later** than the previous candidate). Iterate up to 10 times.
-
-**Outcomes:**
-- **Exception triggered (any iter):** discard ALL probes, use settled
-  candidate as start_idx, run **unbounded** MarketStructure from there in
-  the outer loop.
-- **No exception ever:** keep first probe's data (events, levels, df),
-  continue outer loop from `reversal_confirmed_idx + 1`. Sid N+1 ends up
-  split across two MarketStructure invocations — the bounded probe
-  (pre-reversal portion) and the post-reversal continuation.
-
-No status field — outcome encoded as boolean `exc2_triggered`.
-
-### Probe type 2 — Scenario 3 BOS_0 probe (Phase 1 of `compute_structure_scenario_3`)
-
-**Question:** "Is the arbitrary candidate start a true cycle-0 point, or
-is it part of an older still-extending structure?"
-
-**Where used:** `compute_structure_scenario_3` Phase 1. In production
-invoked by `_run_subordinate_probe` (all multi-TF use cases — first/
-subsequent counter and confluence) with `run_continuation=False`.
-
-**Bounds:** `[start_idx, end_idx]` — `end_idx` optional.
-
-**Mechanics:** Run MarketStructure from candidate. After ≥1 `CTS_EST`
-fires AND the check window can be bounded (via `end_idx` or
-`ef.cts_anchor_idx(cts_est[1])`), check if any candle in
-`[ef.cts_anchor_idx(cts_est[0]) + 1, exc_upper]` reaches the BOS_0 zone inner bound
-(within `pip_tolerance_pips`). If so, restart from that reach-back
-candle (later than current). `original_bos0_bounds` captured at iteration
-0 only and preserved across iterations.
-
-**Exception check window:**
-- Lower bound: `ef.cts_anchor_idx(cts_est[0]) + 1` — excludes the CTS anchor candle, i.e. the
-  breakout span's **pattern extreme** (not a pullback candle; and the anchor, not the established
-  moment `meta["confirmed_at"]` = `ev.idx` since Plan E E4a, though the two usually coincide —
-  `ARCHITECTURE.md` "`ev.idx` convention"; a test-only path that keeps the anchor, PLAN_E Q10). That candle is still part of the breakout leg away from the zone, so its far wick
-  is not a return to it (GOTCHAS "Exception Check Must Exclude CTS_ESTABLISHED Candle")
-- Upper bound (`exc_upper`):
-  - `end_idx` when defined (supersedes `cts_est[1]` per LANDMINES "Probe
-    `end_idx` Is the Supreme Bound" — `end_idx` is a caller-defined hard
-    bound; inner rules like "2 CTS_EST" don't narrow it)
-  - else the second CTS_EST's anchor `ef.cts_anchor_idx(cts_est[1])` when ≥2 CTS_EST exist (live-mode fallback)
-  - else no upper bound → pending
-
-**Status field — conditions:**
-
-| Condition | Trigger | Status |
-|---|---|---|
-| 1 | ≥1 CTS_EST + no exception found in `[cts_est[0]+1, exc_upper]` | finalized |
-| 2 | Exception triggered (within bounded check window) | (loop continues — no status) |
-| 3 | Reversal in probe before 2nd CTS_EST | finalized |
-| 4a | No CTS_EST in probe (or no BOS_0 bounds) AND `end_idx is not None` | finalized |
-| 4b | No CTS_EST in probe (or no BOS_0 bounds) AND `end_idx is None` | **pending** |
-| 4c | 1 CTS_EST + `end_idx is None` (no way to bound check) | **pending** |
-| (max iter) | 10 iterations all triggered exception | pending |
-
-**Pending semantics:** Caller may re-invoke with same or advanced
-`start_idx` once more data arrives. `_run_subordinate_probe` returns
-`None` on pending so the sub isn't built for that trigger. Pending path
-is dormant in current backtest (all triggers pass `end_idx` definitively
-— CTS_CONFIRMED idx for first_confluence, first sd zone-proximity
-trigger candle for first_counter, etc.).
-
-### Phase 1 vs Phase 2 (Scenario 3 only)
-
-- **Phase 1** = the BOS_0 probe loop above. Validates `start_idx`.
-  Returns `Scenario3Result` with status, validated start, probe data.
-- **Phase 2** = multi-structure continuation from the validated start —
-  identical mechanics to `compute_structure`'s post-reversal handling
-  (Exception 2 probe per reversal). Gated by `status == "finalized" AND
-  run_continuation=True`.
-
-**Currently unused in production:** Phase 2 is exercised only by
-`tests/test_scenario3.py`. All production callers of
-`compute_structure_scenario_3` pass `run_continuation=False` (only
-`_run_subordinate_probe` calls it, probe-only). Worth knowing if a future
-feature needs multi-structure continuation from an arbitrary validated
-start — the path exists.
+One probe primitive: `structure/unified_probe.py` (`unified_probe`) — for every
+trigger type and the main reversals. Its contract is in the module docstring and
+PART4 §4.4: a deterministic pass (the shared `find_true_first_breakout` routine +
+the two-condition retrace reset, no MS) for every caller, plus an MS-based
+iterative pass (Phase 2) for `first_confluence` only.
 
 ### Common probe patterns
 
-- **Always on `df.copy()`** — no mutation of outer state until result accepted
-- **Max iterations cap** (10) — prevents infinite loops
-- **`CTS_EST + 1` scan window start** (`structure_engine.py` Scenario 3 Phase 1 probe, `compute_structure_from_start` and Scenario 3 Phase 2 Exception 2) — excludes the CTS anchor candle (`ef.cts_anchor_idx`; `CTS_ESTABLISHED.idx` until Plan E E4a) = the breakout span's **pattern extreme**, still part of the breakout leg away from the zone: its far wick is not a return to the zone, and including it caused false exceptions. It is not a pullback candle, and it is keyed on the extreme, not the established moment `meta["confirmed_at"]` (the two usually coincide; `ARCHITECTURE.md` "`ev.idx` convention"; GOTCHAS "Exception Check Must Exclude CTS_ESTABLISHED Candle")
-- **Pip tolerance scales with timeframe** — values from `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS` (H1=3, M15=2.5, M5=2; type is `float` because M15 is fractional). Used by `compute_structure_scenario_3` Phase 1 probe AND by the legacy Exception 2 probes (`compute_structure_from_start` + `compute_structure_scenario_3` Phase 2; `compute_structure` no longer runs Exception 2 after Step 4 — its H1-main reversal handoff uses the `unified_probe` reset tolerances from the same table). Invariant: `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` per TF (asserted at module load).【fileciteturn1file11】
+- **Always on `df.copy()`** — no mutation of outer state until the result is accepted
+- **Max iterations cap** (10) — prevents infinite loops; all iterations resetting → `max_iterations` (pending)
+- **Retrace window opens at CTS_0's established MOMENT + 1** (Phase 1 `tfb.est_idx + 1`; Phase 2 `cts0_established_idx + 1` since Plan E E3c) — after the candle that set the level, so the CTS anchor candle (the breakout span's **pattern extreme**, at or before that moment) is never read: its far wick belongs to the breakout leg away from the zone, not a return to it (GOTCHAS "Exception Check Must Exclude CTS_ESTABLISHED Candle" — learned on the deleted Scenario 3 probe)
+- **`probe_end_idx` is the supreme upper bound** for both the breakout search and the retrace window (LANDMINES "Probe `end_idx` Is the Supreme Bound")
+- **Reset tolerance scales with timeframe** — `zones/zone_proximity.py::DEFAULT_PROBE_RESET_PIPS` (H1=3, M15=2.5, M5=2; `float` because M15 is fractional) + the wick cap `DEFAULT_PROBE_RESET_WICK`. Invariant: `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` per TF (asserted at module load).
 

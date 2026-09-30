@@ -494,9 +494,10 @@ is the sub's aggregated `end_idx`).
 > in this entry as the probe bound (`probe_end_idx`) unless it names the MS
 > parameter.
 
-**Rule:** When `end_idx` is passed to a probe (`compute_structure_scenario_3`
-Phase 1, Exception 2 loops in `compute_structure` / Scenario 3 Phase 2, or any
-future similar probe), it is a HARD bound on the probe window. All inner
+**Rule:** When `end_idx` is passed to a probe (today `unified_probe`'s
+`probe_end_idx`; historically `compute_structure_scenario_3` Phase 1 and the
+Exception 2 loops — deleted 2026-09-30; or any future similar probe), it is a
+HARD bound on the probe window. All inner
 logic — termination conditions, exception-check windows, fallback paths —
 must respect `end_idx` as the upper limit. Inner rules like "stop after 2
 CTS_EST" can terminate the probe early but must NOT bypass or narrow logic
@@ -528,7 +529,8 @@ mode without an explicit terminal). (`.idx` was the CTS anchor then; the code
 reads `ef.cts_anchor_idx(...)` since Plan E E2b — an EST's `.idx` is its moment
 since E4a.)
 
-**Already-aligned locations:** Exception 2 in `compute_structure` (line
+**Already-aligned locations (history — both paths deleted / migrated; the live
+probe is `unified_probe`):** Exception 2 in `compute_structure` (line
 ~231) and in `compute_structure_scenario_3` Phase 2 (line ~517) already
 implement this principle — they use `reversal_confirmed_idx` (which IS
 what's passed as `end_idx` to the inner MS probe) as the upper bound and
@@ -562,7 +564,7 @@ main reversal probe, so it needs its own decision and `/compare`.
 
 **Why:** A wide tolerance on smaller timeframes triggers false restarts because lower-TF price movements are smaller. The tolerance controls how close a candle must get to the BOS_0 zone outer bound to trigger a probe restart. The invariant `DEFAULT_PROBE_RESET_PIPS[tf] < DEFAULT_PROXIMITY_PIPS[tf]` is asserted module-level in `zone_proximity.py` so probe-reset and proximity-trigger semantics never overlap.
 
-**Implementation:** `compute_structure_scenario_3()` accepts an optional `pip_tolerance_pips: float` override; when None, it looks up the value from `DEFAULT_PROBE_RESET_PIPS` via the caller's `timeframe`. Type is `float` (not `int`) since the M15 default is fractional (2.5).
+**Implementation:** `unified_probe` looks up `DEFAULT_PROBE_RESET_PIPS[timeframe]` (+ the wick cap `DEFAULT_PROBE_RESET_WICK`) for its reset condition (the deleted `compute_structure_scenario_3()` took a `pip_tolerance_pips` override). Type is `float` (not `int`) since the M15 default is fractional (2.5).
 
 ---
 
@@ -576,14 +578,14 @@ main reversal probe, so it needs its own decision and `/compare`.
    - **4a) `end_idx is not None`** AND probe reached it without 2 CTS_EST → **finalized**. The caller-defined boundary is treated as a real terminal point (e.g., the first sd zone-proximity trigger candle is known and definitive).
    - **4b) `end_idx is None`** AND probe ran past available `df` data without 2 CTS_EST → **pending**. More candles may arrive later that resolve the probe; the caller can re-invoke with the same or advanced `start_idx`.
    - The probe never returns `pending` when an explicit `end_idx` was provided — the bound itself counts as a terminal break.
-   - No production code calls `compute_structure_scenario_3` any more (only tests); when UC1 did, `end_idx` (the first sd zone-proximity trigger candle) was always set, so the pending path was dormant. Path becomes live for callers that pass `end_idx=None` (live mode where the future trigger candle isn't known yet).
-   - Callers should treat `pending` as "skip downstream work for now" (e.g., `_run_h1_reverse_probe` — since removed; `compute_structure_scenario_3` has only test callers now — returned `None` on pending so M15 wasn't built).
+   - `compute_structure_scenario_3` was DELETED 2026-09-30 (it had only test callers; when UC1 called it, `end_idx` was always set, so its pending path was dormant). The rule lives on in `unified_probe`: its `*_pending` / `max_iterations` conditions return no start, and the sweep records the trigger as UNRESOLVED (`reason=pending`) instead of building a sub.
+   - Callers treat `pending` as "skip downstream work for now".
 
 ---
 
 ## Lower-TF Pipeline Steps May Fail — Handle Gracefully
 
-**Rule:** Both the H1 reverse probe (`compute_structure_scenario_3()`) and the M15 plain structure (`compute_structure_from_start()`) can raise `ValueError` or `IndexError`. The lower-TF pipeline must catch these at each step and return `None` (skip that trigger), not crash.
+**Rule:** The sub start probe and the sub build can raise (`ValueError` / `IndexError`). The pool sweep must catch these per trigger and skip it, not crash — today `multitf/lifecycle_sweep.py` records an UNRESOLVED trigger (`reason=probe_failed` / `geometry_failed`) and moves on. (The functions this entry first named — the H1 reverse probe `compute_structure_scenario_3()` and the M15 `compute_structure_from_start()` — and `lower_tf_pipeline.py` are all deleted; the code sample below is that historical form.)
 
 **Why it happens:** Some WVMI-activated cycles produce triggers where the structure reverses too quickly (e.g., cycle=0 in a short-lived structure). The `identify_start` function raises `ValueError` when it can't find CTS_CONFIRMED before a reversal.
 
@@ -1106,6 +1108,9 @@ which df's index space `X` lives in and document it inline.
 > reference until the redesign lands. See
 > `memory/project_sub_structure_lifecycle_redesign.md`.
 
+(History: `apply_trigger_to_entity_df` and `compute_structure_from_start` no
+longer exist — the latter deleted 2026-09-30.)
+
 **Rule:** In `multitf/entity_df_mutation.apply_trigger_to_entity_df`, the
 slice-copy passed to `compute_structure_from_start` MUST drop every
 column listed in `_STRUCTURE_COLS` AND `_MS_AUX_STRUCTURE_COLS` before
@@ -1277,7 +1282,9 @@ on the entity-wide M15 df must be similarly re-derived on the slice.
 > `memory/project_sub_structure_lifecycle_redesign.md`.
 
 **Rule:** Do NOT pass an entity df with prior sids' state directly to
-`compute_structure_from_start`. MS owns its working df and assumes:
+MS (the entry first named `compute_structure_from_start` — deleted 2026-09-30;
+items 3-4 below describe it and `identify_start_scenario_2_after_reversal`,
+deleted with it). MS owns its working df and assumes:
 
 1. (History — REMOVED 2026-09-29.) `_rewind_to(jump_to)` replayed `from i = 0`, not from `start_idx`
    (hundreds-to-thousands of unrelated candles on an entity df), and carried four more hazards found by the

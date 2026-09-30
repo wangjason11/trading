@@ -2,9 +2,10 @@
 
 The primitive runs exactly ONE directional structure (structure_id=0) over
 [start_idx, end_idx] and stops at its first internal reversal, reporting that
-reversal idx. It must NOT roll past the reversal into structure_id>=1 the way
-compute_structure_from_start does. These tests pin that contract and anchor
-parity against the first segment of compute_structure_from_start.
+reversal idx. It must NOT roll past the reversal into structure_id>=1. These
+tests pin that contract and the first segment's exact event sequence (frozen
+2026-09-30 from the then-equal multi-structure `compute_structure_from_start`,
+deleted that day as dead code — no production caller).
 """
 from __future__ import annotations
 
@@ -14,7 +15,6 @@ import pandas as pd
 from engine_v2.structure.structure_engine import (
     BoundedStructureResult,
     compute_bounded_structure,
-    compute_structure_from_start,
 )
 from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.patterns.pattern_engine import detect_patterns
@@ -87,8 +87,8 @@ def _make_reversing_data() -> list[dict]:
     down leg that close-breaks the BOS and drives a reversal.
 
     Empirically validated to reverse at idx 52 on a 61-candle series: a single
-    MarketStructure run stops there, while compute_structure_from_start rolls
-    on into structure_id=1. That contrast is the whole point of the primitive.
+    MarketStructure run stops there (the multi-structure driver would roll on
+    into structure_id=1). That contrast is the whole point of the primitive.
     """
     rng = np.random.RandomState(7)
     rows: list[dict] = []
@@ -161,15 +161,6 @@ class TestBoundedStructureReversal:
         assert ridx == int(bounded.df.loc[rev_mask].index.min())
         assert bounded.start_idx <= ridx
 
-    def test_rolls_past_only_in_multi_structure(self):
-        """Contrast: compute_structure_from_start rolls into structure_id>=1."""
-        df = _prepare_df(_make_reversing_data())
-        bounded = compute_bounded_structure(df, start_idx=0, struct_direction=1)
-        multi = compute_structure_from_start(df, 0, 1)
-
-        assert _max_structure_id(bounded.events) == 0
-        assert _max_structure_id(multi.events) >= 1
-
     def test_end_idx_caps_before_reversal(self):
         """end_idx below the reversal apply idx → bounded out (reversal_idx None)."""
         df = _prepare_df(_make_reversing_data())
@@ -183,25 +174,78 @@ class TestBoundedStructureReversal:
 
 
 # ---------------------------------------------------------------------------
-# Parity with compute_structure_from_start's first segment
+# The first segment's exact events (frozen; was: parity with the deleted
+# compute_structure_from_start's structure_id=0 events — equal on 2026-09-30)
 # ---------------------------------------------------------------------------
+
+_FIRST_SEGMENT_EVENTS = [
+    ('CTS_ESTABLISHED', 2),
+    ('BOS_CONFIRMED', 2),
+    ('STATE_CHANGED', 2),
+    ('CTS_UPDATED', 3),
+    ('CTS_UPDATED', 4),
+    ('CTS_UPDATED', 5),
+    ('CTS_UPDATED', 10),
+    ('CTS_UPDATED', 11),
+    ('CTS_UPDATED', 12),
+    ('CTS_UPDATED', 13),
+    ('CTS_UPDATED', 14),
+    ('CTS_UPDATED', 15),
+    ('RANGE_STARTED', 18),
+    ('STATE_CHANGED', 18),
+    ('RANGE_UPDATED', 16),
+    ('RANGE_UPDATED', 17),
+    ('CTS_UPDATED', 19),
+    ('RANGE_RESET', 20),
+    ('CTS_UPDATED', 20),
+    ('STATE_CHANGED', 20),
+    ('CTS_UPDATED', 21),
+    ('CTS_UPDATED', 22),
+    ('CTS_UPDATED', 23),
+    ('CTS_UPDATED', 28),
+    ('CTS_UPDATED', 29),
+    ('CTS_UPDATED', 30),
+    ('CTS_UPDATED', 31),
+    ('CTS_UPDATED', 32),
+    ('RANGE_STARTED', 34),
+    ('CTS_CONFIRMED', 34),
+    ('STATE_CHANGED', 34),
+    ('RANGE_UPDATED', 35),
+    ('RANGE_UPDATED', 36),
+    ('RANGE_UPDATED', 37),
+    ('RANGE_UPDATED', 38),
+    ('RANGE_UPDATED', 39),
+    ('RANGE_UPDATED', 40),
+    ('RANGE_UPDATED', 41),
+    ('RANGE_UPDATED', 42),
+    ('RANGE_UPDATED', 43),
+    ('RANGE_UPDATED', 44),
+    ('RANGE_UPDATED', 45),
+    ('RANGE_UPDATED', 46),
+    ('RANGE_UPDATED', 47),
+    ('RANGE_UPDATED', 48),
+    ('RANGE_UPDATED', 49),
+    ('RANGE_UPDATED', 50),
+    ('REVERSAL_WATCH_START', 51),
+    ('REVERSAL_CANDIDATE', 51),
+    ('STATE_CHANGED', 52),
+    ('RANGE_UPDATED', 52),
+]
+
 
 class TestBoundedStructureParity:
     def test_first_segment_events_match(self):
-        """structure_id=0 events match compute_structure_from_start (identical MS run).
+        """structure_id=0 events == the frozen first segment (51 events, reversal at 52).
 
-        Events are append-only in both paths, so the multi-structure run's
-        structure_id=0 events are exactly its first segment — which must equal
-        the bounded single-structure run. (The df itself diverges because the
-        multi run overwrites rows for structure_id>=1; events do not.)
+        Frozen from `compute_structure_from_start(df, 0, 1)`'s structure_id=0 events,
+        which equalled the bounded run's (same MS run; events are append-only) when
+        that function was deleted as dead code (2026-09-30).
         """
         df = _prepare_df(_make_reversing_data())
-
         bounded = compute_bounded_structure(df, start_idx=0, struct_direction=1)
-        multi = compute_structure_from_start(df, 0, 1)
 
-        def sid0(events):
-            return [(ev.type, int(ev.idx)) for ev in events
-                    if int(ev.meta.get("structure_id", 0)) == 0]
-
-        assert sid0(bounded.events) == sid0(multi.events)
+        got = [(ev.type, int(ev.idx)) for ev in bounded.events
+               if int(ev.meta.get("structure_id", 0)) == 0]
+        assert len(_FIRST_SEGMENT_EVENTS) == 51
+        assert got == _FIRST_SEGMENT_EVENTS
+        assert bounded.reversal_idx == 52
