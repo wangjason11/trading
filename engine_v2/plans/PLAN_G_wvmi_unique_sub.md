@@ -1,6 +1,6 @@
 # Plan G — WVMI on the unique sub (lifecycle-governed, exported like zones)
 
-Status: **MEASURED + OPTIONS (2026-09-30, HEAD `896ffd4`); decisions pending; no code yet.** Heavy tier: options →
+Status: **rev 2 (2026-09-30): measured, 6 decisions, cold-reviewed (3 lenses, SOUND WITH FIXES, folded — §8); Q7–Q10 decided the same day — READY TO IMPLEMENT (next session); no code yet.** Heavy tier: options →
 user decisions → written plan with predicted per-CSV deltas → plan cold review (3–4 lenses) → implement (likely the
 next session). Memory: `project_wvmi_lifecycle_deferred.md` (the 2026-09-28 opening, the user's direction).
 
@@ -79,68 +79,148 @@ stays the computation state). Found while asking: today a dual-lens sub's counte
 - **Q4 LP end** — (A) sub search stops at the cycle's `end − 1` like the main (0 values change here; the pin is
   rewritten consciously); (B) keep the inclusive frame end.
 
-## 4. Design (as decided; for the cold review)
+## 4. Design (rev 2 — the cold review folded in, §8; Q7–Q10 decided 2026-09-30)
 
-- **G1 — sub WVMI is computed INSIDE the unique sub's projection, like KL / POI / fib.** `_run_downstream_pipeline`
-  gains `wvmi_gate: str = "first_sd_prox"` (the main, unchanged) | `"none"` (a sub: no zone-proximity check, every
-  CTS_CONFIRMED is offered to the tracker); `skip_wvmi=True` keeps meaning "no WVMI at all" (the tests that pass it).
-  `project_to_window` passes `skip_wvmi=False, wvmi_gate="none"`. The tracker loop (today duplicated in the main
-  branch and in `sub_wvmi.compute_parent_driven_sub_wvmi`) becomes ONE helper; both paths build `cycle_end_by_key`
-  from the same `compute_cycle_lifecycle` table KL / POI read (the sub's floor / cap) — **Q4: the sub LP search stops
-  at `end − 1`**. `render_sub_projection` already carries `down["wvmi_records"]` into `LowerTFResult.wvmi_records`
-  (today empty). The projection runs `bounded.df` (the natural-end frame): every record's search is bounded by its
-  cycle's end, and a capped sub's cycles all end at or before the cap; the events are knowable-at-clipped at the cap as
-  today, so locks are unchanged.
+- **G1 — sub WVMI is computed INSIDE the unique sub's projection, like KL / POI / fib.** `_run_downstream_pipeline`'s
+  `skip_wvmi: bool` becomes ONE parameter `wvmi: str` ∈ {`"first_sd_prox"` (default — the main, unchanged), `"none"`
+  (a sub: every CTS_CONFIRMED is offered to the tracker), `"off"` (no WVMI — the test callers that pass
+  `skip_wvmi=True` today)}; any other value raises (a typo must not silently gate subs). `check_zone_proximity` stays
+  on the main path exactly as today — it also feeds the var3 / var4 detectors and the §8.5 streams — and is never run
+  for a sub (`zone_proximity_triggers` stays `{}`), independent of `wvmi`. `project_to_window` passes `wvmi="none"`.
+  The tracker loop (today duplicated in the main branch and in `sub_wvmi.compute_parent_driven_sub_wvmi`) becomes ONE
+  helper in `pipeline/orchestrator.py` that builds its `WVMITracker` through the orchestrator module (the LP-bound pins
+  monkeypatch `orch.WVMITracker`), sorts by `ef.processing_order_key` (the `test_plan_e_role_pins` `_PINNED` guard
+  moves with it), keeps the main's gate, proximity-meta key order and insertion order, and builds `cycle_end_by_key`
+  from the same `compute_cycle_lifecycle` table KL / POI read — **Q4: the sub LP search stops at `end − 1`**.
+  **The tracker's FRAME is `df.iloc[:lifecycle_cap + 1]` when a cap is set** (= today's `LowerTFResult.df`, the frame
+  §2's shadow measured): the natural-end `bounded.df` bounds only the temp LP — FP (≤ CTS_CONFIRMED moment + 10), LB (≤
+  CTS anchor + 5) and the lock LP (≤ BOS_{n+1} anchor + 5) could otherwise read candles past a capped sub's end (a
+  look-ahead; 0 on the window — the closest CTS_CONFIRMED sits 43 candles before its cap). The helper asserts every
+  record key has a table end when a cap is set (today unreachable: a kept CTS_CONFIRMED implies its CTS_ESTABLISHED is
+  kept, and the cap gives every key an end). `render_sub_projection` already carries `down["wvmi_records"]` into
+  `LowerTFResult.wvmi_records` (today empty; it stays slice-local with the first lens's path and NO trigger meta — only
+  the lens copies get G3 / G4). Locks: the same knowable-at-clipped events as today. **Q10: a lock LP outside the tracker's frame (BOS_{n+1}'s last
+  wave candle past a capped sub's end, or past the main's data edge) falls back to the temp LP** (bounded ≤ end − 1 —
+  as the lock already does when BOS_{n+1} has no last wave candle); today it keeps the idx with volume / pullback
+  None. 0 on the window; pinned on a synthetic lock past the cap.
 - **G2 — `cycle_collapsed` (Q2 / Q6).** `WVMIRecord.cycle_collapsed: bool = False`, set by the helper from the same
-  table: `start >= end` (end not None) — the criterion `_zone_render.is_collapsed_cycle_zone` applies to the cycle's KL
-  zone. Main AND subs. Exported as a column right after `lp_locked`. No start / end / reason fields (the WVMI-record
-  lifecycle removed 2026-05-27 stays removed — a flag only).
-- **G3 — export like zones (Q3).** The mirror (`mirror_lower_tf_result_to_entity_df` step 8, which already copies
-  `result.wvmi_records` into EVERY lens df with that lens's attribution) persists them; it now also sets the record
-  FIELD `structure_path_id` to the lens path (today only the meta — the self-contradicting counter rows).
-  `persist_facade_wvmi_to_entity_df` and `multitf/sub_wvmi.py` (`ParentTrigger`, `compute_parent_driven_sub_wvmi`)
-  are deleted (dead; kept they would persist every record twice).
-- **G4 — trigger metadata per lens (Q1 "triggers as metadata", Q5).** `_assign_sub_wvmi_per_sub` becomes a
-  post-pass over each lens df's `attrs["wvmi"]`: for a record of sub `s` on lens `l`, the FIRST entry of lens `l`'s
-  stream (`_confluence_trigger_stream` / `_counter_trigger_stream`, LOH-mapped, unchanged) inside `[start_idx,
-  m15_end_idx]` gives `triggered_by_event_idx` (parent coords) / `triggered_by_event_type` / `parent_path_id`
-  (`"H1.main"`); no entry → all three None. Written FIRST in the meta dict (`{**trigger, **meta}`), today's key
-  order. The run.log summary line keeps its shape (`acted` = subs with >= 1 record).
-- **Unchanged:** the main's gate, records and values; every record's FB / LB / FP / LP / momentum except where
-  `end − 1` bites (0 on the window); the WVMI CSV exporter apart from the new column; charts (nothing draws WVMI —
-  the M15 chart collects `sid_wvmis` and never renders them); the UC1 main-trigger gate (reads main records only).
+  table: `start >= end` (end not None) — equal, measured on every KL row, to `_zone_render.is_collapsed_cycle_zone` on
+  the cycle's BOS zone (KL `confirmed_idx = max(BOS moment, struct start)` = the table start). Main AND subs.
+  Exported as a column right after `lp_locked`. A flag only — no start / end / reason fields (the WVMI-record
+  lifecycle removed 2026-05-27 stays removed). It describes the CYCLE: a record created ON its cycle's end candle
+  (CTS_CONFIRMED moment == cap; kept by the inclusive knowable-at clip, cycle `[s, cap)` live) is not flagged —
+  documented edge, 0 on the window.
+- **G3 — export like zones (Q3).** The mirror (`mirror_lower_tf_result_to_entity_df` step 8 — it already DEEP-COPIES
+  each record into EVERY lens df with that lens's attribution, so no aliasing across lenses) persists them and now
+  also sets the record FIELD `structure_path_id` to the lens path (today only the meta — the self-contradicting
+  counter rows); the source record stays untouched. `persist_facade_wvmi_to_entity_df` and `multitf/sub_wvmi.py`
+  (`ParentTrigger`, `compute_parent_driven_sub_wvmi`) are deleted (kept, the persister would write every record twice;
+  no other path writes `attrs["wvmi"]` — sid records, facades, the H1 overlay checked). The exporter writes
+  `triggered_by_event_idx` as pandas nullable `Int64`: once the column mixes ints and None, `to_csv` renders every int
+  as a float (`710` → `710.0` on all 7 existing confluence rows — measured by running the exporter); `Int64` keeps
+  `710` and writes None as an empty cell.
+- **G4 — trigger metadata per lens (Q1 "triggers as metadata", Q5).** The lens → stream mapping becomes one helper
+  returning `{lens: stream}` (confluence = `ZONE_PROXIMITY_TRIGGER` + `SUBSEQUENT_COUNTER_TRIGGER`; counter =
+  `SUBSEQUENT_CONFLUENCE_TRIGGER` — §8.5's cadence classes; pinned: a swap would rewrite every sub row's trigger
+  fields and only `/compare` would see it). `_assign_sub_wvmi_per_sub` becomes a post-pass over each lens df's
+  `attrs["wvmi"]`, joining each record to its sub on `meta["sub_id"]` (never position) and mutating only that lens's
+  copy: the FIRST entry of the lens's stream (LOH-mapped, unchanged) inside `[start_idx, m15_end_idx]` gives
+  `triggered_by_event_idx` (PARENT coords, int) / `triggered_by_event_type`; no entry → both PRESENT with None;
+  `parent_path_id` is ALWAYS `"H1.main"` (Q9 — the parent entity, trigger or not). The meta carries no trigger key before G4; they are written FIRST
+  (`{**trigger, **{k: v for k, v in meta.items() if k not in trigger}}`) — today's key order exactly. The records exist
+  whatever the stream says (the trigger is knowable later than the record — attribution, stamped retroactively, never
+  a gate). **Q7: the names stay `triggered_by_*`; on a sub row they mean "the lens's first WVMI-class trigger inside
+  the sub's window" (attribution) — a declared MEANING change under LANDMINES "Event Contract Rules" rule 3 (the
+  prediction in the commit; every reader — the exporter, the tests; UC1 reads main records only — and every doc in
+  it; GLOSSARY names the ROLE). Q8: the stream is §8.5's WVMI-class cadence (confirmed after the review showed it is
+  cross-class: confluence = sd-prox incl. var4, counter = var3).** The run.log summary counts per UNIQUE sub from `all_results[i].wvmi_records` with
+  `sorted(lenses)` (counting lens-df records would double the dual-lens subs: 23).
+- **Unchanged:** the main's gate, records, values and meta; every sub record's FB / LB / FP / LP / momentum / `status`
+  except where `end − 1` bites (0 on the window; today's 8 records measured identical); the charts (nothing draws WVMI
+  — the M15 chart collects `sid_wvmis` and never renders them); the UC1 main-trigger gate (reads main records only).
 
-## 5. Predicted `/compare` (vs the Post-E·5 save; every value from §2's shadow)
+## 5. Predicted `/compare` (vs the Post-E·5 save; values from §2's shadow on the capped frame = G1's frame)
+
+Diff the three WVMI CSVs KEYED by `(sub_id, bos_structure_id, bos_cycle_id)` and by column NAME (`cmp_save.py` is
+positional: the 10 inserted rows and the mid-row column would misreport every later cell); also check per row that the
+`structure_path_id` column == `meta["structure_path_id"]`, and that each key appears once per lens CSV.
 
 | CSV | Rows | Change |
 |---|---|---|
-| H1 `wvmi.csv` | 3 → 3 | + column `cycle_collapsed` (header); (1,1) `True`, (0,1) / (1,2) `False`; nothing else |
-| M15 confluence `wvmi.csv` | 7 → 17 | + column; + 10 rows (sub 0 c0 c1 c3 c4, sub 1 c0 c1 c3 c4, sub 2 c0 c1 — §2's values, `M15.confluence`, trigger fields None; flagged: sub 0 c0, sub 1 c0 + c1), in render order BEFORE sub 3's rows; the 7 existing rows unchanged except the column (sub 3 c0 `True`) |
-| M15 counter `wvmi.csv` | 6 → 6 | + column; sub 3 ×3: `structure_path_id` column `M15.confluence` → `M15.counter`, trigger 710 `ZONE_PROXIMITY_TRIGGER` → 871 `SUBSEQUENT_CONFLUENCE_TRIGGER` (column + meta), c0 `True`; sub 7 ×2: path → `M15.counter`, trigger 1020 `SUBSEQUENT_COUNTER_TRIGGER` → None (idx / type / `parent_path_id`); sub 5 unchanged except the column |
+| H1 `wvmi.csv` | 3 → 3 | + column `cycle_collapsed` after `lp_locked`; (1,1) `True`, (0,1) / (1,2) `False` ((1,2)'s end is None); nothing else |
+| M15 confluence `wvmi.csv` | 7 → 17 | + column; + 10 rows (sub 0 c0 c1 c3 c4, sub 1 c0 c1 c3 c4, sub 2 c0 c1 — §2's values, path `H1.main >> M15.confluence`, trigger idx / type None, `parent_path_id` `"H1.main"`; flagged: sub 0 c0, sub 1 c0 + c1), in render order BEFORE sub 3's rows; the 7 existing rows unchanged except the column (sub 3 c0 `True`) — `triggered_by_event_idx` stays `710` / `926` / `1020` (`Int64`) |
+| M15 counter `wvmi.csv` | 6 → 6 | + column; sub 3 ×3: path `H1.main >> M15.confluence` → `H1.main >> M15.counter` (column; the meta already said counter), trigger 710 `ZONE_PROXIMITY_TRIGGER` → 871 `SUBSEQUENT_CONFLUENCE_TRIGGER` (column + meta), c0 `True`; sub 7 ×2: path → `H1.main >> M15.counter`, trigger idx / type 1020 `SUBSEQUENT_COUNTER_TRIGGER` → None (`parent_path_id` stays `"H1.main"`); sub 5 unchanged except the column (`954` stays an int) |
 | the other 21 CSVs | — | byte-identical |
 | figures | — | identical (85/245, 151/124, 294/233) |
-| run.log | — | only `[wvmi]` lines (the 8 sub projections print `[wvmi] total=… locked=…` instead of "skipped"; sub CREATED lines 8 → 18 and LOCKED 5 → 12, now inside each projection's block) + the `[multi_tf:dual] sub wvmi …` summary (acted 5 → 8, records 8 → 18; its by_lens / by_started_by recounted) |
+| run.log | — | only `[wvmi]` lines: each sub projection prints `[wvmi] total/locked` — sub 0 4/3, sub 1 4/3, sub 2 2/1, sub 3 3/3, sub 4 1/0, sub 5 1/0, sub 6 1/0, sub 7 2/2 — instead of "skipped (parent-event-driven …)" (8 lines); today's 13 sub CREATED / LOCKED lines keep their exact text (the shorter LP range is a prefix of today's and holds its best candle), now inside each projection's block; 10 new CREATED + 7 new LOCKED lines (the CREATED lines' creation-time temp LP is not in the shadow — its content is measured at the replay); the summary `[multi_tf:dual] sub wvmi acted=8 records=18 by_started_by={'first_confluence': 5, 'reversal': 9, 'first_counter': 1, 'subsequent_confluence': 1, 'subsequent_counter': 2} by_lens={'confluence': 17, 'counter': 6}` |
 
-## 6. Blast radius (for the implementation)
+## 6. Blast radius (for the implementation; lens 3's measured test table is the checklist — §8)
 
-Code: `pipeline/orchestrator.py` (the helper, `wvmi_gate`, the G4 post-pass), `multitf/pooled_structure_build.py`
-(`project_to_window`), `multitf/entity_df_mutation.py` (mirror step 8 sets the field; delete the persister),
-`multitf/sub_wvmi.py` (delete), `common/types.py` (`WVMIRecord.cycle_collapsed`), `debug/export_wvmi.py` (column).
-Tests: `test_sub_wvmi.py` + `test_sub_wvmi_per_sub.py` (rewritten against G1 / G4), `test_wvmi_lp_bound.py`
-(`test_the_sub_sweep_passes_no_ends` → "the sub projection passes every cycle end" — Q4, on purpose),
-`test_event_meta_idx_keys.py:545` (the persister call → the mirror), `test_render_sub_projection.py`, new pins
-(values of an ungated sub, the flag on a collapsed cycle — main and sub —, per-lens trigger meta incl. the None case,
-the field == meta path on a dual-lens sub, no double persistence). Docs: WVMI_SPEC ("Sub entities", Pipeline
-Integration, Fields), PART4 §17.10 + the §8.3–8.5 notes, GOTCHAS "Sub WVMI is Trigger-Centric, Not Sid-Centric"
-(superseded), LANDMINES "WVMI Records Carry Mixed-Coordinate Meta" (still true for `triggered_by_event_idx`),
-GLOSSARY (`cycle_collapsed`), memory `project_wvmi_lifecycle_deferred.md`. Save-format boundary: the WVMI CSVs' new
-column + rows.
+Code: `pipeline/orchestrator.py` (the helper, `wvmi`, the stream-mapping helper, the G4 post-pass, docstrings /
+prints at ~129–132, 332–334, 356–359, 400, 634–638, 658–659, 679–693, 788, 981), `multitf/pooled_structure_build.py`
+(`project_to_window` + :79), `multitf/entity_df_mutation.py` (mirror step 8 sets the field; delete the persister;
+:1228, :1278), `multitf/sub_wvmi.py` (delete), `common/types.py` (`WVMIRecord.cycle_collapsed`; :305–306),
+`debug/export_wvmi.py` (column + `Int64`). Tests (lens 3's table, §8): DELETE `test_sub_wvmi.py` (port its create /
+lock / unlocked / no-CTS cases to the helper with `wvmi="none"`); REWRITE `test_sub_wvmi_per_sub.py` against G4;
+`test_wvmi_lp_bound.py` (its MODULE-LEVEL `sub_wvmi` import would fail all 6 at collection; `test_the_sub_sweep_
+passes_no_ends` → "the projection passes every cycle end" — Q4, on purpose); `test_plan_e_role_pins.py` (`_PINNED`
+lists `multitf/sub_wvmi.py`); `test_event_meta_idx_keys.py` (the persister test goes; the mirror test gains WVMI:
+the source untouched, the per-lens field, `_Wvmi` stub + `structure_path_id` / `cycle_collapsed`, the two index-key
+guards that skip WVMI today); `test_render_sub_projection.py` (the fixture's capped windows have 0 records — real
+pins use `project_to_window` on `_make_double_rewind_data` / `_post_reversal_lure`, values measured in §8);
+`test_meta_key_renames.py` (a WVMI row in the exporter test). Docs (every site that becomes false — lens 3's list, §8):
+LANDMINES "Sub WVMI is Parent-Event-Driven; `source_kinds` is a Return-Only Filter" (:919–980 — Rule 2, the gate
+table, the "Don't" Trap, :975 — INVERTED by G1; Rule 1 stands), "WVMI Constraints" #2 / #4, :394, :629,
+:1060–1062, :1847–1850, "WVMI Records Carry Mixed-Coordinate Meta" (still true; `triggered_by_event_idx` may be None);
+WVMI_SPEC (Gating :14–17, "Sub entities" :55–147, :158–165, :194–199, :268–289, :311–316 incl. `WVMITracker._records`,
+Pipeline Integration, Fields); PART4 §6.3 / §6.5 / §7 table / §8 banner / §8.1 / §8.3–8.6 / §8.7 / §10.1–10.2 /
+§17.10 / §17.12 / :1039; GOTCHAS "Sub WVMI is Trigger-Centric, Not Sid-Centric" (SUPERSEDED banner); ARCHITECTURE
+:337–344 (stale `lp_status`), :406–411, :479–480, :499–501; GLOSSARY :198 + `cycle_collapsed` / "collapsed cycle";
+`engine_v2/CLAUDE.md:24`; the compare skill's column vocabulary / save-format note; review_scripts README
+(`wvmi_shadow.py` / `wvmi_gate_shadow.py` → "pre-Plan-G code, ≤ `5fa986b`"); memory
+`project_wvmi_lifecycle_deferred.md`. Dated history stays (PART4 §13 steps + §17.11, WVMI_SPEC's 2026-09-20
+"Measured consequence" + the REMOVED-2026-05-27 box, the GOTCHAS body, LANDMINES Rule 1's 3d.iii note, PLAN_C/D/E).
+Save-format boundary: the WVMI CSVs' new column, rows and per-lens path / trigger values.
 
-## 7. Plan cold review (before implementation)
+## 7. Plan cold review (2026-09-30) — DONE, 3 lenses, 773,816 tokens (§8)
 
-3 lenses, read-only, against this file + the code at HEAD: (1) **mechanism / predictions** — re-derive §5 from §2's
-shadow and the code, hunt any row or cell the design would move that §5 does not list (mirror order, meta key order,
-the natural-end frame in the projection); (2) **design risks** — double persistence, the knowable-at clip vs the
-tracker's frame, a sub cycle with no table entry, the lock across the cap, the main path untouched; (3) **tests /
-docs** — every pin that encodes the old sweep, what the new pins must kill (value / swap / extra-key / exporter
-shapes). Estimate ≈ 150–250k tokens per lens (≈ 0.5–0.75M total) — asked before launch.
+## 8. Cold review record + open questions (2026-09-30)
+
+All three lenses: **SOUND WITH FIXES, 0 BLOCKER.** Lens 1 mechanism / predictions (203,105 tokens): §5's cells hold
+(today's 8 records' values and `status` unchanged, row order = render order, per-lens triggers match the streams,
+the `cycle_collapsed` set); MAJOR the `triggered_by_event_idx` float rendering (→ G3 `Int64`); MAJOR the shadow
+measured the capped frame, not G1's natural-end frame (→ G1 frame); MINOR the exact summary line + count source,
+`{**trigger, **meta}` letting a seeded None win (→ G4); NIT keyed diff, per-sub total/locked, full paths (→ §5).
+Lens 2 design risks (244,145 tokens): MAJOR M1 the natural-end frame bounds only the temp LP (→ G1); MAJOR M2
+`triggered_by_*` changes MEANING on sub rows (→ Q7); m3 the per-lens stream is §8.5's opposite-side cadence (→ Q8);
+m4 LANDMINES / WVMI_SPEC sites G1 inverts (→ §6); m5 `parent_path_id` None (→ Q9); m6 the cap-candle record (→ G2,
+documented); m7 `check_zone_proximity` feeds var3 / var4 (→ G1); NITs one parameter, the shadows break, join on
+`sub_id` (→ G1 / G4 / §6); checked safe: no other `attrs["wvmi"]` writer, deepcopy per lens, locks, callers, the
+main path, exceptions. Lens 3 tests / docs (326,566 tokens): MAJOR LANDMINES :919–980 inverted, `test_plan_e_role_pins`
++ `test_wvmi_lp_bound` break outright, no pin on the stream → lens mapping, the rendered-sub fixture has no capped
+WVMI record (→ §6 / G4); MINOR the None form, the source-untouched check, the `_Wvmi` stub, the two index guards,
+`/compare` tooling, the shadows, `wvmi` validation (→ G1 / G3 / G4 / §5 / §6); a measured test table, new pins with
+values (double-rewind sub projection: (0,0) (1,1,3,4) locked by 1, (0,1) (5,7,9,9) locked by 2, (0,2) (10,11,13,14)
+temp; lure data floor 5 cap 17: (0,2) LP 14 / pullback 1.0 — the no-ends mutant gives 19 / 0.7; `cycle_collapsed`
+floor 9 → [T, F, F], floor 13 → [T, T, F], geometry floor 108 → T kills an `==` mutant; main `lifecycle_floor=13` →
+[T, T, F]) and 28 mutants (G1a–e, G2a–f, G3a–d, G4a–i, X1–3, M1) — the implementation's checklist — the full test
+table, pins, mutants and doc sites: `plans/plan_g_inputs/cold_review_20260930.md`.
+
+**Asked + DECIDED 2026-09-30 (all as recommended): Q7 (A) keep the names, declared meaning change; Q8 (A) the
+WVMI-class stream; Q9 (A) `parent_path_id` always `"H1.main"`; Q10 (A) a lock LP outside the frame falls back to the
+temp LP.** The questions as asked:
+- **Q7** sub rows' `triggered_by_*`: no gate means the record exists whatever the trigger — the keys become an
+  attribution ("the lens's first class trigger inside the sub's window"), not the initiating event §8.7 / LANDMINES
+  :975 define (main rows keep the gate meaning). (A) keep the names, declared as a rule-3 MEANING change (prediction in
+  the commit, every reader + doc in it; GLOSSARY names the role, like `probe_input_idx`); (B) rename on sub rows.
+  Example: sub 3 counter c0, created at M15 2752, "triggered by" H1 871 (M15 3487) — 735 candles and two cycles later.
+- **Q8** which trigger a lens's rows name: (A) the §8.5 WVMI-class stream (as decided in Q5 — confluence = sd-prox
+  class incl. var4 `subsequent_counter`, counter = CTS-prox class = var3 `subsequent_confluence`; sub 7 counter →
+  None, sub 6 → `SUBSEQUENT_COUNTER` 1020, sub 5 → `SUBSEQUENT_CONFLUENCE` 954); (B) the lens's own first
+  TriggerRecord — the trigger that put the sub on that lens (sub 7 counter → `subsequent_counter` 1020, sub 6 →
+  `subsequent_confluence` 954, sub 5 → `first_counter` 926; never None).
+- **Q9** `parent_path_id` on a no-trigger row: (A) always `"H1.main"` (the parent entity, not the trigger); (B) None
+  with the other two.
+- **Q10** a lock LP past a capped sub's end (BOS_{n+1}'s last wave candle ≤ its anchor + 5 can pass the cap; 0 on the
+  window): (A) fall back to the temp LP (bounded ≤ end − 1 — the lock already does this when BOS_{n+1} has no last wave
+  candle); (B) today's behaviour: keep the idx, volume / pullback None.
