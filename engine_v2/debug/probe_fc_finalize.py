@@ -13,7 +13,8 @@ Also retains EVERY Phase-2 MarketStructure the probe constructs (one per Phase-2
 and reports, per cycle, `n_ms` (Phase-2 MS runs), `max_ev` = max(ev.idx) over ALL of them
 and `leak = max_ev - m15_end` (> 0 = an event stamped past the probe's bound — the MS bounds
 leak Plan A fixed; the last iteration alone would hide earlier leaks). MS debug lines other
-than the per-anchor `[POST_STEP]` flood (`[RV_EXPIRE]`, `[REWIND]`, `[RV_SCHEDULE]`, ...) are
+than the per-anchor `[POST_STEP]` flood (`[RV_SCHEDULE]`, `[RV_APPLY]`, ...; `[RV_EXPIRE]` / `[REWIND]` until
+the expiry rewind was removed 2026-09-29) are
 printed so a delta in a probe row can be named by mechanism; `[POST_STEP]` is reported as a
 count. A post-Plan-A `AssertionError` from MS (event past `effective_end`) is caught per
 cycle and shown in the row instead of aborting the other cycles.

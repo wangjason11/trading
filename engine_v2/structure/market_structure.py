@@ -240,10 +240,10 @@ class MarketStructureState:
     # While active:
     #   - bos_threshold MUST NOT update
     #   - reversal candidates use reversal_bos_th_frozen (the barrier snapshot)
-    # If no valid reversal pattern appears within watch window:
-    #   - bos_threshold updates to the ANCHOR candle wick (close-break candle)
-    #   - watch clears
-    #   - execution rewinds to (anchor_idx + 1) to reprocess subsequent candles normally
+    # A watch opens only with a pending reversal applying by `reversal_watch_expires_idx`
+    # (else `rv_anchor_failed`: bos_threshold := the close-break candle's wick, watch cleared);
+    # it ends at that reversal, or when a new cycle is established. (Until 2026-09-29 an expiry
+    # rewound to anchor_idx + 1 — unreachable since F3b, removed.)
     # -------------------------------------------------
      
     reversal_watch_active: bool = False
@@ -255,9 +255,6 @@ class MarketStructureState:
     pending_reversal_ev: Optional[PatternEvent] = None
     pending_reversal_pattern_anchor_idx: Optional[int] = None
     pending_reversal_apply_idx: Optional[int] = None
-
-    jump_to_idx: Optional[int] = None   # next anchor override
-    jump_seed_state: Optional[dict] = None
 
 
 # ---------------------------------------------------------------------
@@ -307,8 +304,8 @@ class MarketStructure:
         # hot loop. MS used to read o/h/l/c thousands of times via
         # `float(df.iloc[i][<col>])`, each of which builds a full-row Series
         # just to pull one scalar. These float arrays replace that with O(1)
-        # indexed access. Prices are immutable for the whole run (incl. rewind),
-        # so the views never go stale.
+        # indexed access. Prices are immutable for the whole run, so the views
+        # never go stale.
         #
         # INVARIANT: MS reads candles positionally (`.iloc[i]`) AND by label
         # (`.loc[candle_idx]`) with candle_idx sourced from the positional loop
@@ -371,7 +368,7 @@ class MarketStructure:
                 "mode) requires bos0_inner (the cycle-0 breakout gate threshold)."
             )
         # Opt-in early stop (Plan B): end the run at the first QUIESCENT point
-        # (no reversal watch active, no pending reversal, no pending rewind)
+        # (no reversal watch active, no pending reversal)
         # after the N-th CTS_ESTABLISHED. `early_stop_idx` records the first
         # anchor NOT processed because of it (None = no early stop happened).
         # In addition to `end_idx`, never instead of it. Used only by the
@@ -433,19 +430,21 @@ class MarketStructure:
     def run(self) -> Tuple[pd.DataFrame, List[StructureEvent], List[StructureLevel]]:
         """
         Sequentially labels market_state, CTS/BOS/range fields, and emits StructureEvents.
-        No skipping. Uses pending confirmation for patterns + internal range evaluation window (min/max lookahead) with rewind+replay.
+        No skipping. Uses pending confirmation for patterns + an internal range evaluation window
+        (min/max lookahead) back-filled offline; never rewinds (the reversal-watch expiry rewind
+        was removed 2026-09-29 — unreachable since F3b, MARKET_STRUCTURE_SPEC "A reversal
+        confirming on E applies").
 
         If `end_idx` is set the run has TRUNCATION semantics: it produces exactly the
         events and output rows an unbounded run on the frame truncated to `[0, end_idx]`
         would (nothing past `end_idx` is read; `end_idx` is the run's data edge). This is
         NOT prefix-equivalence with the natural-end run — the last `range_max_k` candles
-        before the bound may legitimately differ (pending confirmations, a reversal
-        applying exactly at the edge is a false break). See Plan A §2.
+        before the bound may legitimately differ (pending confirmations, a pattern applying
+        past the bound). See Plan A §2.
 
         With `stop_after_cts_established=N` the loop also ends at the first quiescent
-        point (no reversal watch / pending reversal / pending rewind) after the N-th
-        `CTS_ESTABLISHED`; `early_stop_idx` records it. Used by the first_confluence
-        probe (Plan B).
+        point (no reversal watch / pending reversal) after the N-th `CTS_ESTABLISHED`;
+        `early_stop_idx` records it. Used by the first_confluence probe (Plan B).
         """
         n = len(self.df)
         # i = 0
@@ -458,8 +457,8 @@ class MarketStructure:
         # Effective end index (inclusive) = the run's data edge (set in __init__).
         effective_end = self._effective_end
 
-        # Path 2b: preallocate output arrays (reused across rewinds). Placed
-        # after the start_idx>=n early returns so degenerate runs skip it.
+        # Path 2b: preallocate output arrays. Placed after the start_idx>=n
+        # early returns so degenerate runs skip it.
         self._init_output_arrays(n)
 
         while i <= effective_end:
@@ -467,37 +466,11 @@ class MarketStructure:
                 break
 
             next_i = self._step_anchor(i)
-            self._dbg(f"[POST_STEP] i={i} next_i={next_i} jump_to={self.state.jump_to_idx}")
-
-            # If reversal-watch expiry requested a rewind, honor it
-            if self.state.jump_to_idx is not None:
-                # A step ends at the expiry that requested the rewind ("stop at the expiry",
-                # `_step_anchor`), so nothing after it ran and the state cannot be REVERSAL
-                # here; if it were, the rewind + seed restore below would discard that
-                # reversal silently — fail loudly instead (user, 2026-09-29;
-                # MARKET_STRUCTURE_SPEC "Expiry inside a step").
-                assert self.state.state != MarketState.REVERSAL, (
-                    f"[market_structure] rewind requested in REVERSAL at step {i} "
-                    f"(jump_to={self.state.jump_to_idx})")
-                jump_to = int(self.state.jump_to_idx)
-                seed = self.state.jump_seed_state  # capture before rewind resets state
-
-                self._dbg(f"[REWIND] from={i} step_next={next_i} jump_to={jump_to}")
-
-                # Rebuild state up to jump_to - 1, then restore the post-expire seed snapshot
-                self._rewind_to(jump_to, seed=seed)
-
-                # clear jump request + seed after using
-                self.state.jump_to_idx = None
-                self.state.jump_seed_state = None
-
-                i = jump_to
-                continue
+            self._dbg(f"[POST_STEP] i={i} next_i={next_i}")
 
             i = next_i
-            # Plan B: opt-in early stop. Checked only once no rewind is pending
-            # (the rewind branch above `continue`s first) and only while in-bound
-            # candles remain — if `next_i` is already past the edge nothing is
+            # Plan B: opt-in early stop. Checked only while in-bound candles
+            # remain — if `next_i` is already past the edge nothing is
             # pre-empted and the run simply ends at its bound (no early stop).
             if i <= effective_end and self._should_stop_after_cts():
                 self.early_stop_idx = int(i)
@@ -538,15 +511,14 @@ class MarketStructure:
     
     def _should_stop_after_cts(self) -> bool:
         """Plan B: True iff the opt-in stop is set, the state is QUIESCENT (no reversal
-        watch active, no pending reversal — a rewind or reversal may still land otherwise)
-        and at least `stop_after_cts_established` CTS_ESTABLISHED events exist.
+        watch active, no pending reversal — a reversal may still land otherwise) and at
+        least `stop_after_cts_established` CTS_ESTABLISHED events exist.
 
         Counts the events (the same source of truth the probe's
-        `_collect_cts_established` reads) rather than trusting `st.cts_cycle_id`:
-        `_rewind_to` resets the state and rebuilds. No `structure_id` filter — one MS
-        instance runs exactly one structure, and `_rewind_to` rebuilds the state
-        without `structure_id` (it resets to 0), so a filter would be wrong after a
-        rewind for any sid != 0 caller. O(events) per step only while the option is set.
+        `_collect_cts_established` reads) rather than a state counter. No `structure_id`
+        filter — one MS instance runs exactly one structure. (Both choices date from when
+        an expiry rewind rebuilt the state with `structure_id` 0; no rewind exists since
+        2026-09-29.) O(events) per step only while the option is set.
         """
         n = self.stop_after_cts_established
         if n is None:
@@ -556,69 +528,6 @@ class MarketStructure:
             return False
         established = sum(1 for ev in self.events if ev.type == "CTS_ESTABLISHED")
         return established >= int(n)
-
-    def _rewind_to(self, jump_to: int, *, seed: Optional[dict] = None) -> None:
-        """
-        Rebuild state/events by replaying from the start up to (jump_to - 1),
-        then restore a provided seed snapshot (used for reversal-watch false-break rewinds).
-        """
-        jump_to = int(jump_to)
-        if jump_to <= 0:
-            self.state = MarketStructureState(struct_direction=self.struct_direction)
-            self.events = []
-            return
-        if jump_to > self._effective_end:
-            jump_to = self._effective_end
-
-        # Reset state + events (df price/features stay; output cols will be overwritten as we replay)
-        self.state = MarketStructureState(struct_direction=self.struct_direction)
-        self.events = []
-
-        # Replay forward up to jump_to-1.
-        # IMPORTANT: ignore any jump_to_idx requests that occur during this rebuild.
-        self._in_rewind = True
-        try:
-            i = 0
-            while i < jump_to:
-                nxt = self._step_anchor(i)
-                # The rebuild re-runs candles the run already passed without reversing, but
-                # it ignores nested expiry jumps (LANDMINES "MarketStructure Deep-Couples…"
-                # 1(a)), so its path can diverge; a reversal reached here would be silently
-                # overwritten by the seed restore below — fail loudly instead (user, 2026-09-28).
-                assert self.state.state != MarketState.REVERSAL, (
-                    f"[market_structure] rewind rebuild reached a reversal at step {i} (jump_to={jump_to})")
-
-                # During rebuild, ignore any jump requests
-                if self.state.jump_to_idx is not None:
-                    self.state.jump_to_idx = None
-                if self.state.jump_seed_state is not None:
-                    self.state.jump_seed_state = None
-
-                i = nxt
-        finally:
-            self._in_rewind = False
-
-        # Restore seed snapshot (post-expire BOS/CTS/range state)
-        if seed is not None:
-            self.state.state = seed.get("market_state", self.state.state)
-            self.state.bos_threshold = seed.get("bos_threshold", self.state.bos_threshold)
-            self.state.cts_threshold = seed.get("cts_threshold", self.state.cts_threshold)
-
-            self.state.range_active = seed.get("range_active", self.state.range_active)
-            self.state.range_hi = seed.get("range_hi", self.state.range_hi)
-            self.state.range_lo = seed.get("range_lo", self.state.range_lo)
-            self.state.range_start_idx = seed.get("range_start_idx", self.state.range_start_idx)
-            self.state.range_confirm_idx = seed.get("range_confirm_idx", self.state.range_confirm_idx)
-
-        # CRITICAL: the replay-to-(jump_to-1) may have started a reversal watch (e.g. at 105)
-        # which must NOT remain active when resuming after an expiry-based rewind.
-        self._clear_pending_reversal()
-        self._clear_reversal_watch()
-
-        # Also ensure no jump is still requested from the rebuild itself
-        self.state.jump_to_idx = None
-        self.state.jump_seed_state = None
-
 
     # ----------------------------
     # Per-candle step
@@ -680,8 +589,10 @@ class MarketStructure:
             self._write_df_row(i)
             return
 
-        # Unreachable since F3b (an open watch always holds a pending applying by its expiry).
-        self._maybe_expire_reversal_watch(i)
+        # A watch never outlives its expiry (F3b): its pending applies by E, and every clear of the
+        # pending also ends the watch. Guard — an open watch skips the BOS barrier step for good.
+        assert not (st.reversal_watch_active and int(i) >= int(st.reversal_watch_expires_idx)), (
+            f"[market_structure] reversal watch still open at its expiry {st.reversal_watch_expires_idx} (candle {i})")
         self._write_df_row(i)
 
     # ----------------------------
@@ -804,10 +715,10 @@ class MarketStructure:
         st.reversal_bos_th_frozen = float(bos_frozen)
         # Watch window clamps at the run's data edge (L4): a reversal pattern
         # applying past it is never scheduled; one applying exactly at it
-        # reverses there (the pending apply precedes the expiry; F3b).
+        # reverses there (F3b: a watch never outlives its expiry).
         st.reversal_watch_expires_idx = min(int(i) + int(self.range_max_k), self._effective_end)
 
-        # Emit REVERSAL_WATCH_START event for all close-breaks (survives rewinds)
+        # Emit REVERSAL_WATCH_START event for all close-breaks
         # This captures the moment reversal watch begins, even if no pattern is found
         self.events.append(
             StructureEvent(
@@ -832,79 +743,6 @@ class MarketStructure:
         st.reversal_watch_start_idx = None
         st.reversal_bos_th_frozen = None
         st.reversal_watch_expires_idx = None
-
-    def _maybe_expire_reversal_watch(self, i: int) -> None:
-        """
-        If reversal watch is active but no valid reversal pattern appears within the watch window,
-        then this was a "false break" by your definition: update bos_threshold the anchor candle wick, then clear the watch.
-
-        After expiry, we "rewind" execution to (anchor_idx + 1) so the next anchor starts there.
-        The step that fires it ends right there (`_step_anchor`, "stop at the expiry").
-        """
-        st = self.state
-        if not st.reversal_watch_active:
-            return
-        if st.reversal_watch_expires_idx is None:
-            return
-        if int(i) < int(st.reversal_watch_expires_idx):
-            return
-
-        # Expire: failed reversal => bos_threshold expands to ANCHOR candle wick
-        anchor = st.reversal_watch_start_idx
-        if anchor is None:
-            # defensive: shouldn't happen, but don't crash
-            self._clear_pending_reversal()
-            self._clear_reversal_watch()
-            return
-
-        anchor = int(anchor)
-        if self.struct_direction == 1:
-            # st.bos_threshold = float(self.df.iloc[anchor]["l"])
-            prev = st.bos_threshold
-            new_thr = float(self._l[anchor])
-            st.bos_threshold = new_thr
-            self._emit_bos_threshold_updated(
-                i,
-                float(new_thr),
-                meta={"prev": None if prev is None else float(prev), "reason": "probe_no_break"},
-            )
-        else:
-            # st.bos_threshold = float(self.df.iloc[anchor]["h"])
-            prev = st.bos_threshold
-            new_thr = float(self._h[anchor])
-            st.bos_threshold = new_thr
-            self._emit_bos_threshold_updated(
-                i,
-                float(new_thr),
-                meta={"prev": None if prev is None else float(prev), "reason": "probe_no_break"},
-            )
-
-        # Rewind to anchor + 1 (do NOT jump to extremes)
-        jump_to = min(anchor + 1, self._effective_end)
-        st.jump_to_idx = jump_to
-
-        # Seed snapshot: this is the state we want to be true when we resume at jump_to
-        # (because this BOS update is based on the full watch window lookahead).
-        st.jump_seed_state = {
-            "market_state": st.state,
-            "bos_threshold": st.bos_threshold,
-            "cts_threshold": st.cts_threshold,
-            "range_active": st.range_active,
-            "range_hi": st.range_hi,
-            "range_lo": st.range_lo,
-            "range_start_idx": st.range_start_idx,
-            "range_confirm_idx": st.range_confirm_idx,
-        }
-
-        self._dbg(
-            f"[RV_EXPIRE] i={i} expired_idx={st.reversal_watch_expires_idx} "
-            f"anchor={anchor} new_bos={st.bos_threshold} jump_to={jump_to} "
-            f"clearing_pending={st.pending_reversal_apply_idx is not None}"
-        )
-
-        # Pending reversal is no longer valid after watch expiry
-        self._clear_pending_reversal()
-        self._clear_reversal_watch()
 
     def _clear_pending_reversal(self) -> None:
         st = self.state
@@ -948,7 +786,7 @@ class MarketStructure:
                 f"bos_frozen={bos_frozen:.5f} expires={st.reversal_watch_expires_idx}"
             )
 
-            # Emit REVERSAL_CANDIDATE event for charting (survives rewinds)
+            # Emit REVERSAL_CANDIDATE event for charting
             self.events.append(
                 StructureEvent(
                     idx=int(anchor_idx),
@@ -1031,13 +869,6 @@ class MarketStructure:
                 # ends on REVERSAL, so the returned index is never used.
                 if self.state.state == MarketState.REVERSAL:
                     return k + 1
-                # A watch expiring inside the back-fill requested a rewind to its anchor + 1:
-                # the step ends at the expiry too — the winner applies after it and would
-                # act on a structure the rewind discards (MARKET_STRUCTURE_SPEC "Expiry
-                # inside a step"). Return the jump target: the run loop honours the request;
-                # a `_rewind_to` rebuild (which ignores it) resumes there, as it always did.
-                if self.state.jump_to_idx is not None:
-                    return int(self.state.jump_to_idx)
 
             # "live-like": we act as if apply candle just closed
             self._apply_pattern_at_apply_idx(ev, apply_idx, kind)
@@ -1049,9 +880,6 @@ class MarketStructure:
             # barrier skip in REVERSAL.)
             if kind != "reversal" and self.state.state == MarketState.REVERSAL:
                 return apply_idx + 1
-            # ... or expire the watch: stop at the expiry, no apply-row re-write.
-            if self.state.jump_to_idx is not None:
-                return int(self.state.jump_to_idx)
 
             # reversal check at apply_idx
             # self._maybe_trigger_reversal(apply_idx)
@@ -1063,10 +891,7 @@ class MarketStructure:
             # After a breakout, the next range candidate (if any) must begin at a later candle
             # (e.g. your example: breakout at 53, next range starts at 57), so we simply
             # continue sequentially from the next candle.
-            next_i = apply_idx + 1
-            if self.state.jump_to_idx is not None:
-                next_i = int(self.state.jump_to_idx)
-            return next_i
+            return apply_idx + 1
 
         # 2b) No valid pattern by D:
         if allow_range and not st.range_active:
@@ -1077,11 +902,9 @@ class MarketStructure:
                 for k in range(i, min_d):
                     self._replay_step_no_patterns(k, freeze_range=True)
                     # Terminal inside the range back-fill: no finalize, no re-step of i
-                    # (see the winner back-fill above). Same for an expiry (stop at it).
+                    # (see the winner back-fill above).
                     if self.state.state == MarketState.REVERSAL:
                         return k + 1
-                    if self.state.jump_to_idx is not None:
-                        return int(self.state.jump_to_idx)
 
                 self._finalize_range_candidate_offline(i)
 
@@ -1089,10 +912,7 @@ class MarketStructure:
         self._replay_step_no_patterns(i)
 
         # Next anchor always i+1 (the next candle after the candidate)
-        next_i = i + 1
-        if self.state.jump_to_idx is not None:
-            next_i = int(self.state.jump_to_idx)
-        return next_i
+        return i + 1
 
     def _best_bopb_pattern_at_anchor(
         self,
@@ -1644,10 +1464,8 @@ class MarketStructure:
             for k in range(i, min_d):
                 self._replay_step_no_patterns(k, freeze_range=True)
                 # Terminal inside the back-fill: no finalize (`_step_anchor` then
-                # ends the step — see its winner back-fill). Same for an expiry.
+                # ends the step — see its winner back-fill).
                 if st.state == MarketState.REVERSAL:
-                    return
-                if st.jump_to_idx is not None:
                     return
 
             self._finalize_range_candidate_offline(i)
@@ -2359,8 +2177,7 @@ class MarketStructure:
         """Path 2b: preallocate the per-column output arrays. `_write_df_row`
         writes into these per candle; `run()` bulk-assigns them to the df at
         the end (one vectorized assignment per column instead of ~27 `df.at`
-        scalar writes per candle). Created once per run and reused across
-        rewinds (which overwrite cells).
+        scalar writes per candle). Created once per run.
 
         CRITICAL — init each array FROM the existing df column, NOT from fresh
         defaults. `compute_structure` chains MULTIPLE structures through the
@@ -2619,10 +2436,9 @@ class MarketStructure:
                 bos_prev = bos.shift(1)
                 prev_active = active.shift(1).fillna(False).astype(bool)
                 active_b = active.astype(bool)
-                # Only within ONE watch: consecutive active rows can be two watches (an expiry rewinds
-                # to anchor + 1, whose candle opens a new watch). The frozen barrier identifies the
-                # watch — a watch opened after an expiry freezes the moved BOS, strictly beyond the old
-                # frozen barrier (MARKET_STRUCTURE_SPEC "Invariants"; landing review of 52ac1e9).
+                # Only within ONE watch: the frozen barrier identifies the watch (MARKET_STRUCTURE_SPEC
+                # "Invariants"; landing review of 52ac1e9 — back-to-back watches after an expiry's rewind,
+                # a shape gone since F3b removed the expiry).
                 # A pure tripwire since 2026-09-29: the one BOS write that can run during a watch (a new
                 # cycle's BOS_CONFIRMED) ends the watch (`_end_watch_superseded_by_new_cycle`); the cycle-0
                 # BOS_CONFIRMED cannot meet one (a watch needs a BOS, and there is none before cycle 0).
@@ -2713,6 +2529,6 @@ class MarketStructure:
     # Debug
     # ----------------------------
     def _dbg(self, msg: str) -> None:
-        # Print only when debug is enabled AND we're not inside a rewind rebuild
-        if bool(getattr(self, "debug", False)) and not bool(getattr(self, "_in_rewind", False)):
+        # Print only when debug is enabled
+        if bool(getattr(self, "debug", False)):
             print(msg)

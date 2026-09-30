@@ -36,12 +36,14 @@ from engine_v2.tests.test_unified_probe import (_prepare_df, _make_multicycle_da
 MS = msmod.MarketStructure
 REV = msmod.MarketState.REVERSAL
 
-_o_rw = MS._rewind_to
-def _rw(self, jump_to, *, seed=None):
-    if self.state.state == REV:
-        self._rts_rir = getattr(self, "_rts_rir", 0) + 1
-    return _o_rw(self, jump_to, seed=seed)
-MS._rewind_to = _rw
+# The expiry and `_rewind_to` were removed 2026-09-29 (F3b): wrap them only in trees that still have them.
+if hasattr(MS, "_rewind_to"):
+    _o_rw = MS._rewind_to
+    def _rw(self, jump_to, *, seed=None):
+        if self.state.state == REV:
+            self._rts_rir = getattr(self, "_rts_rir", 0) + 1
+        return _o_rw(self, jump_to, seed=seed)
+    MS._rewind_to = _rw
 
 _o_best = MS._best_bopb_pattern_at_anchor
 def _best(self, *, i, breakout_th, pullback_th, D):
@@ -53,15 +55,16 @@ def _best(self, *, i, breakout_th, pullback_th, D):
     return w
 MS._best_bopb_pattern_at_anchor = _best
 
-_o_exp = MS._maybe_expire_reversal_watch
-def _exp(self, i):
-    st = self.state
-    if st.reversal_watch_active and st.reversal_watch_expires_idx is not None and int(i) >= int(st.reversal_watch_expires_idx):
-        self._rts_exp = getattr(self, "_rts_exp", 0) + 1
-        key = "_rts_expo" if getattr(self, "_rts_own", {}).get(st.reversal_watch_start_idx) else "_rts_expb"
-        setattr(self, key, getattr(self, key, 0) + 1)
-    return _o_exp(self, i)
-MS._maybe_expire_reversal_watch = _exp
+if hasattr(MS, "_maybe_expire_reversal_watch"):
+    _o_exp = MS._maybe_expire_reversal_watch
+    def _exp(self, i):
+        st = self.state
+        if st.reversal_watch_active and st.reversal_watch_expires_idx is not None and int(i) >= int(st.reversal_watch_expires_idx):
+            self._rts_exp = getattr(self, "_rts_exp", 0) + 1
+            key = "_rts_expo" if getattr(self, "_rts_own", {}).get(st.reversal_watch_start_idx) else "_rts_expb"
+            setattr(self, key, getattr(self, key, 0) + 1)
+        return _o_exp(self, i)
+    MS._maybe_expire_reversal_watch = _exp
 
 _o_bc = MS._emit_bos_confirmed
 def _bc(self, idx, price, *, bos_anchor_idx, meta=None):

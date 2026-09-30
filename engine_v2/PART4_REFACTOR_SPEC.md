@@ -713,7 +713,7 @@ dormant** (like the `pending` finalize conditions).
   confirmed, **else `probe_end_idx`** — the common case). The double-CTS rule
   is an **early stop** (Plan B, landed 2026-09-20): Phase-2 MS is handed
   `stop_after_cts_established=2` and stops at the first quiescent point (no
-  reversal watch / pending reversal / pending rewind) after the 2nd
+  reversal watch / pending reversal; MS has no rewind since 2026-09-29) after the 2nd
   `CTS_ESTABLISHED` — in addition to the `probe_end_idx` bound, never instead
   of it (`n_cts ≤ 1` runs still reach `probe_end_idx`); finalize = that CTS's
   moment (`confirmed_at`), not its CTS anchor (`cts_anchor_idx`; `.idx` until Plan E

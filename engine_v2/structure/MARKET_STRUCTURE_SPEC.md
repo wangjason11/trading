@@ -9,7 +9,8 @@ This document is meant to be the canonical behavior reference.
 ## Core principles
 
 - **Sequential / event-driven**: process anchor `i`, decide what becomes known at or after `i`, then advance.
-- **No skipping**: the engine always moves forward in time; it may “jump” the anchor index to the post-confirm candle for live-like timing, and it may **rewind + replay** only when needed to correct thresholds (primarily range evaluation).
+- **No skipping**: the engine always moves forward in time; it may “jump” the anchor index to the post-confirm candle for live-like timing; look-ahead windows (pattern confirmation, range labels) are evaluated offline by back-filling the candles
+  before the decision candle — it never rewinds (the reversal-watch expiry's rewind was removed 2026-09-29, F3b).
 - **Structure IDs**: structure_id partitions regimes; increments on terminal reversal. Zones and charts use structure_id to filter.
 
 ---
@@ -93,13 +94,13 @@ Starts **only** when a candle **close-breaks** the active BOS threshold.
 During watch:
 - BOS threshold must not update.
 - Reversal candidates are detected relative to a frozen barrier and must apply by the watch's
-  `expires_idx` — the frozen barrier holds only until then ("Expiry inside a step" below).
+  `expires_idx` — the frozen barrier holds only until then (the later-anchor cap, "Expiry inside a step" below).
 - A breakout that establishes a NEW cycle ends the watch ("A new cycle ends an open watch" below).
 - A reversal whose pattern confirms ON the expiry candle applies ("A reversal confirming on E applies" below).
 If no reversal pattern from the close-break candle confirms within the window (`rv_anchor_failed`, decided at that
 candle): BOS threshold updates to its wick extreme and the watch clears at once. (Originally the watch ran to its
 expiry, BOS := the anchor wick, and execution rewound to anchor_idx+1【fileciteturn1file3】; since F3b, 2026-09-29, no
-watch reaches its expiry.)
+watch reaches its expiry, and the expiry + rewind were removed.)
 
 ### A new cycle ends an open watch (2026-09-29)
 A watch freezes the CURRENT cycle's BOS. When a breakout establishes a new cycle (cycle >= 1) while a watch is open,
@@ -152,46 +153,33 @@ again — two `STATE_CHANGED(to=reversal)` for one sid, the H1 hand-off taking t
 reader the last (`compute_reversal_idx_by_sid`). 0 cases on the reference window (byte-identical); pins
 `tests/test_ms_reversal_terminal.py`.
 
-### Expiry inside a step (stop at the expiry; 2026-09-29)
-A close-break at anchor A opens a watch that expires at `E = min(A + range_max_k, effective_end)` with a pending
-reversal applying at `p <= E` (no pending → `rv_anchor_failed` clears the watch at once). The expiry ran before the
-pending apply in the per-candle step, so it fired exactly when `p == E` and requested a rewind to `A + 1` (false
-break: `bos_threshold` := the anchor's wick, `jump_to_idx` + a seed snapshot). **Unreachable since F3b** (2026-09-29,
-"A reversal confirming on E applies" below: the pending now applies first, so no expiry fires; the machinery goes in
-the next commit) — this section records why it was built. Two rules keep a step
-from acting past it:
-- **The frozen barrier holds only until E.** A reversal candidate against it at a later anchor `i` (`A < i <= E`)
-  must apply by E: `_best_bopb_pattern_at_anchor` caps it at `min(D, expires_idx)` — the scheduler's rule
-  (`_schedule_reversal_from_anchor`, where it never binds: the anchor-A pattern confirms by `A + range_max_k`).
-  Apply `== E` stays a winner: the winner path applies it before the apply candle's own step, whose expiry check
-  then finds the watch cleared. Live-like: when the watch expires at E no reversal has applied by E, so the false
-  break stands; a pattern that completes later re-qualifies against the post-expiry barrier after the rewind. The
-  cap can also change a step whose uncapped winner would never have applied (the pending reversal applied first
-  inside its back-fill): with no winner the pending applies in the anchor's own non-frozen step, which adds a
-  `RANGE_UPDATED` on the same reversal candle.
-- **The step ends at the expiry.** An expiry requested inside a step — in the winner back-fill, in the breakout's
-  `_post_apply_range_check` (which ends too; then `_step_anchor` skips the apply-row re-write), or in the no-winner
-  range back-fill — ends the step at that candle, like a terminal reversal ("Reversal inside a back-fill"): no
-  apply, no finalize, no re-step. The step returns the jump target: the run loop honours it; a `_rewind_to` rebuild,
-  which ignores the request, resumes there without a reset as it always did (LANDMINES "MarketStructure
-  Deep-Couples…" 1(a)) — but no longer after replaying the discarded continuation, so a rebuilt prefix can change
-  (at landing: `test_ms_stop_after_cts::TestRebuiltPrefixException::test_mechanism`'s full run lost the
-  continuation's `BOS_THRESHOLD_UPDATED@10` + `RANGE_STARTED@13` and gained `BOS_THRESHOLD_UPDATED@5` +
-  `REVERSAL_WATCH_START@9`; since "A new cycle ends an open watch" that fixture has no nested expiry — the pin moved
-  to `tests/test_ms_expiry_stop.py`'s rebuild-crash fixture, whose rebuild stops at the nested expiry at 9 and
-  re-steps from 5).
-Before the fix the step went on and the rewind + seed restore (a direct `state.state =`) threw the rest away: a later
-anchor's reversal winner applied after E and was discarded (F3 — `tests/test_ms_expiry_stop.py`: the watch expires
-at 9, the anchor-9 reversal applied at 10); a second expiry inside the continuation overwrote the jump target and the
-seed (the df invariant "bos_threshold changed during reversal watch" fired; no instance known since "A new cycle ends
-an open watch" — its fixture needed the in-watch cycle); a rebuild replaying the continuation re-applied a discarded
-reversal and crashed on its "never reaches a reversal" assert (re-derived 2026-09-29: a BREAKOUT winner past E whose
-continuation reverses in the rebuild — the cap alone does not prevent it, the stop does). `run()` now asserts a rewind
-is never requested in REVERSAL. 0 expiries on the reference window (byte-identical). Side effect: with
-`stop_after_cts_established`, a discarded continuation could write a `reversal` row past the early stop, and `run()`'s
-terminal stamping then marked the stopped tail as reversal with no reversal event (found by the landing review's
-random tails); no such row is written now (no production reader affected: `unified_probe._has_reversal` is read only
-when fewer than 2 CTS were established).
+### Expiry inside a step — history; the later-anchor cap stays (2026-09-29)
+**The later-anchor cap (live).** A reversal candidate against an open watch's frozen barrier at a later anchor `i`
+(`A < i <= E`) must apply by the watch's E: `_best_bopb_pattern_at_anchor` caps it at `min(D, expires_idx)` — the
+scheduler's rule (`_schedule_reversal_from_anchor`, where it never binds: the anchor-A pattern confirms by
+`A + range_max_k`); apply `== E` is a winner (P2 below). Since F3b it never changes WHICH reversal lands (the watch's
+pending applies by E), but it keeps a pattern completing after the window from steering the step layout: uncapped,
+that candidate wins its step and its frozen back-fill runs straight to the pending apply, skipping the anchors in
+between (a new-cycle breakout there would never be evaluated), and the reversal lands from the back-fill's frozen
+state; capped, the step has no winner and the pending applies in the anchor's own non-frozen step, which adds a
+`RANGE_UPDATED` (and the range-side state change) on the same reversal candle. Measured 2026-09-29 (HEAD vs the cap
+removed): reference window 0 binds, byte-identical; suite: binds only in the P3 fixture (same output); 6k targeted
+random tails: 208 signatures differ, the reversal candle always the same — the cap stays. Pin
+`tests/test_ms_reversal_on_expiry.py::test_the_reversal_candidate_is_capped_at_the_open_watchs_expiry`.
+
+**History — the stop at the expiry (2026-09-29, removed the same day).** Until F3b the expiry ran before the pending
+apply and fired exactly when the pending applied ON E, requesting a rewind to `A + 1` (false break: `bos_threshold` :=
+the anchor's wick, `jump_to_idx` + a seed snapshot). The run loop honoured it only between steps, so a step that went
+on after its own expiry had its work thrown away by the rewind + seed restore (a direct `state.state =`): a later
+anchor's reversal winner applied after E and was discarded (F3), a second expiry inside the continuation overwrote the
+jump target and the seed, and a `_rewind_to` rebuild — which ignored nested jumps (LANDMINES "MarketStructure
+Deep-Couples…" point 1, history) — replayed a discarded continuation into a reversal and crashed on its assert. The
+fix `52ac1e9` capped the later-anchor candidate at E (above) and ended every step at its expiry, returning the jump
+target; `run()` asserted a rewind was never requested in REVERSAL. F3b (`c36777c`, next section) made the expiry
+unreachable; the expiry, `_rewind_to` + the seed restore, the four stop returns, the run-loop rewind branch + its
+tripwire and the rebuild assert were then removed (byte-identical). `_replay_step_no_patterns` asserts instead that a
+watch is never open at its expiry candle — a watch left open would skip the BOS barrier step for good.
+
 ### A reversal confirming on E applies (F3b; 2026-09-29)
 A close-break at A opens a watch expiring at `E = min(A + range_max_k, effective_end)`. `A + range_max_k` (5) is also
 the LAST candle a reversal pattern anchored at A may confirm on (2-candle patterns: up to 4 candles after their end;
@@ -204,7 +192,7 @@ of pattern confirming on E was
   reversal of the reference window (sid 0 @902, 2026-01-09 12:00: `continuous` 897-899, 900/901 pinbars cannot
   confirm, 902 = E confirms) is one; 3 of the window's 5 reversals are P1 at E;
 - (P2) applied when a later anchor's reversal winner applied at E (the winner path clears the watch first;
-  `test_ms_expiry_stop::test_a_later_anchors_reversal_applying_at_the_expiry_still_wins`);
+  `test_ms_reversal_on_expiry::test_p2_a_later_anchors_reversal_winner_on_the_expiry_applies`);
 - (P3) DISCARDED as a false break when the pattern never won a step — the close-break candle ran inside another
   step, or its own step chose an earlier-applying winner — so it lived only as the pending: the expiry rewound to
   `A + 1` and re-ran those candles with a barrier decided at E (events stamped before the moment they became
@@ -212,16 +200,17 @@ of pattern confirming on E was
 The outcome depended on the step layout, not the market. At E's close the watch's last candle closes and the pattern
 confirms at the same moment — nothing past E is read either way. At the data edge (LANDMINES L4) the old rule was a
 repaint: a false break at the bound B became a reversal AT B as soon as B + 1 arrived (the watch then expires later);
-the new rule is prefix-stable. Every clear of the pending also ends the watch (apply, expiry, `_rewind_to`, a new
-cycle), so an open watch always holds a pending applying by E and **no expiry fires any more** — the expiry, the
-rewind + seed restore and the "stop at the expiry" returns are unreachable. Measured before (`reversal_shadow.py` /
+the new rule is prefix-stable. Every clear of the pending also ends the watch (the apply, a new cycle — before, also
+the expiry and `_rewind_to`), so an open watch always holds a pending applying by E and **no expiry fires any more**:
+the expiry, the rewind + seed restore and the "stop at the expiry" returns were removed in the next commit (a guard
+asserts a watch is never open at its expiry candle; the later-anchor cap stays — "Expiry inside a step" above). Measured before (`reversal_shadow.py` /
 `random_tail_search.py` F3b counters, scratch variants): reference window 0 expiries → byte-identical; suite 30
 expiries (20 at the data edge); 42k random tails per tree: 813 P3 discards vs 1,179 P1 + 36 P2 applied, the rule
 changes exactly the expiry trials (mostly none → a reversal at the edge; else a reversal 1–26 candles earlier, or 3
 later where the old rewind had found a reversal retroactively), 0 errors, 0 expiries left. Rejected: "E exclusive"
 (cap every reversal at E − 1) removed the H1 main reversal — sid 0 never reversing in the window — and 3 of the
 window's 5 reversals; "a confirm on E counts as no pattern" lost the same reversals. Pins
-`tests/test_ms_reversal_on_expiry.py` (P3 ×2, P1, the edge's prefix stability).
+`tests/test_ms_reversal_on_expiry.py` (P3 ×2, P1, P2, the edge's prefix stability, the cap).
 
 ---
 
@@ -445,20 +434,15 @@ The engine advances so that after a successful evaluation:
 
 ---
 
-## Rewind + replay
+## Look-ahead windows without rewinds
 
-Range evaluation uses a lookahead window (min/max K) and may need to:
-1) mark a candle as range start candidate
-2) evaluate later candles to decide true range / breakout
-3) correct break_thresholds for pattern evaluation between candidate start and decision
-
-To do this deterministically:
-- the engine stores a seed snapshot
-- rewinds to range start
-- replays forward with corrected thresholds
-- returns to “decision point + 1”
-
-This avoids “cheating” while still allowing batch computation.
+Range evaluation uses a look-ahead window (min/max K): a candle is marked a range-start candidate, later candles
+decide range vs breakout, and the candles between the candidate and the decision are processed with the thresholds
+known at the decision. MS does this in ONE forward pass: `_step_anchor` back-fills those candles offline
+(`_replay_step_no_patterns(k, freeze_range=True)`) before acting at the decision candle, then continues sequentially
+(pattern confirmation windows work the same way). It never rewinds: the original design's "seed snapshot → rewind to
+the start → replay → resume at decision + 1" survived only as the reversal-watch expiry's rewind to `anchor + 1`,
+unreachable since F3b and removed 2026-09-29 ("Expiry inside a step" above).
 
 ---
 
@@ -482,7 +466,7 @@ What clamps at `effective_end` (never at `len(df) - 1`):
   `None` / unconfirmed, never a candidate to be dropped later — which matters
   because `detect_best_for_anchor` returns ONE pattern per anchor by priority);
 - the reversal watch: `expires_idx = min(anchor + range_max_k, effective_end)`
-  and the expiry rewind target. A reversal pattern applying past the edge is
+  (and, until its removal 2026-09-29, the expiry rewind target). A reversal pattern applying past the edge is
   never scheduled; one applying **exactly at** the edge reverses there on every
   path (the pending apply precedes the expiry; "A reversal confirming on E
   applies", F3b 2026-09-29 — before, the pending-apply path discarded it as a false
@@ -525,22 +509,21 @@ production path that runs MS on a frame longer than its bound).
 Opt-in (`MarketStructure(stop_after_cts_established=N)`, keyword-only, `N >= 1`,
 default `None`; Plan B, 2026-09-20). The main loop also ends at the first
 **quiescent** point — no reversal watch active, no pending (scheduled)
-reversal, no pending rewind — after the N-th `CTS_ESTABLISHED` in `events`
-(counted from the event list, the same source the probe classifies from;
-`_rewind_to` rebuilds it, so no state counter is trusted and no `structure_id`
-filter is applied — one instance runs one structure). `early_stop_idx` records
+reversal — after the N-th `CTS_ESTABLISHED` in `events` (counted from the
+event list, the same source the probe classifies from; no `structure_id`
+filter — one instance runs one structure. Both date from when an expiry
+rewind rebuilt the event list and reset `structure_id`; no rewind exists since
+2026-09-29). `early_stop_idx` records
 the first anchor NOT processed because of the stop (`None` = no early stop:
 the count was never reached, or the N-th CTS landed on the last in-bound step
 — then the run simply ends at its bound; "stopped early" is read from
 `early_stop_idx`, never from the count). The check runs after `_step_anchor`
-returns and after any pending rewind has been honoured (the rewind branch
-`continue`s first), so the event list handed back is never one a rewind was
-about to rewrite. Cost of "quiescent": a watch open at the N-th CTS resolves
-within its window (apply → reversal, the loop ends anyway; expiry → rewind →
-the stop lands after the next step) — a few extra candles, not asserted `<= 5`.
+returns. Cost of "quiescent": a watch open at the N-th CTS resolves within its
+window (its pending applies → reversal, the loop ends; or a new cycle ends it)
+— a few extra candles, not asserted `<= 5`.
 
 Semantics: the stopped run's events are an **ordered prefix** of the run without
-the option (exact whenever that run has no rewind after the stop point), and its
+the option (exact — until 2026-09-29 only when that run had no rewind after the stop point), and its
 output rows before `early_stop_idx` are that run's rows. The last step's range
 back-fill may have stamped events/rows up to `range_max_k` past
 `early_stop_idx` (a range candidate at the apply candle is stamped at its label
@@ -572,10 +555,11 @@ MarketStructure includes df-level invariant checks (low-noise):
 - CTS_CONFIRMED coherence with phase/stage
 - BOS_CONFIRMED coherence
 - reversal watch (invariant 4): an active row has a frozen barrier, and `bos_threshold` does not change between two
-  consecutive rows of the SAME watch — same `reversal_bos_th_frozen` (2026-09-29). Back-to-back watches are two
-  watches: an expiry rewinds to anchor + 1 and that candle can open a new watch on the moved barrier, which is
-  strictly beyond the old frozen one. Comparing every consecutive active pair made that a false positive that ended
-  the run (every measured false positive was of this kind; pins `tests/test_ms_invariant_watch_identity.py`). The
+  consecutive rows of the SAME watch — same `reversal_bos_th_frozen` (2026-09-29). Back-to-back watches were two
+  watches: an expiry rewound to anchor + 1 and that candle could open a new watch on the moved barrier, strictly
+  beyond the old frozen one; comparing every consecutive active pair made that a false positive that ended the run
+  (every measured false positive was of this kind; pins `tests/test_ms_invariant_watch_identity.py`). The shape is
+  gone with the expiry (F3b, 2026-09-29). The
   guarded case — a BOS moving inside one watch — was reachable on real rows through a cycle established while a
   watch is open (GOTCHAS "A Cycle Cannot Be Established Inside an Open Reversal Watch") until that cycle started to
   END the watch ("A new cycle ends an open watch", 2026-09-29): the only `bos_threshold` write that can run during a
@@ -583,12 +567,10 @@ MarketStructure includes df-level invariant checks (low-noise):
 
 Reversal is terminal (cannot leave reversal once entered) — asserted at the source (2026-09-28): `_set_state`
 raises on any transition out of REVERSAL (a tripwire: "Reversal inside a back-fill" above stops every path that
-reached one), and a `_rewind_to` rebuild asserts it never reaches one — a KNOWN way it could: the rebuild ignores
-nested expiry jumps (LANDMINES "MarketStructure Deep-Couples…" 1(a)), so its path can diverge from the first pass
-(0 cases on the reference window and the suite; the one instance found since — F3 replayed by a rebuild — is fixed
-by "Expiry inside a step"; the user chose a crash over the seed restore silently overwriting
-the reversal). A rewind is never requested in REVERSAL — asserted in `run()` (2026-09-29; "Expiry inside a step":
-a step ends at its own expiry, so the seed restore can never discard a reversal). (The former df-level check ran after `run()`'s forward stamp of `market_state` and could never fire
+reached one). (Until 2026-09-29 a `_rewind_to` rebuild asserted it never reached one and `run()` asserted a rewind
+was never requested in REVERSAL — both removed with the rewind, F3b.) A reversal watch is never open at its expiry
+candle — asserted in `_replay_step_no_patterns` (2026-09-29: its pending applies by then; a watch left open would
+skip the BOS barrier step for good). (The former df-level check ran after `run()`'s forward stamp of `market_state` and could never fire
 — deleted.)【fileciteturn1file11】
 
 ---

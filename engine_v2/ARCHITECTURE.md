@@ -23,9 +23,9 @@ This doc explains the “shape” of the system so a new engineer can extend it 
 - We simulate “live timing” by:
   - Computing features/patterns on the full df
   - Emitting structure events at the candle index where they would have become known
-  - Using rewinds only when thresholds are known after a lookahead window
+  - Back-filling the candles before a decision candle offline when thresholds are known only after a lookahead window
 
-The MarketStructure engine is explicitly sequential and uses internal rewind/replay logic when it must evaluate ranges with corrected thresholds.【fileciteturn1file0】
+The MarketStructure engine is explicitly sequential: look-ahead windows (pattern confirmation, range evaluation) are back-filled offline inside one forward pass. It never rewinds — the reversal-watch expiry's rewind, the last one, was removed 2026-09-29 (F3b; MARKET_STRUCTURE_SPEC "Look-ahead windows without rewinds").【fileciteturn1file0】
 
 ### 2) Live (future)
 - Same logic should be usable incrementally:
@@ -533,15 +533,17 @@ The MarketStructure engine runs lightweight df-level invariant checks:
 - CTS_CONFIRMED rows coherent with stage/phase
 - BOS_CONFIRMED rows coherent
 - reversal watch: a frozen barrier on every active row; `bos_threshold` unchanged within ONE watch (same frozen
-  barrier — back-to-back watches after an expiry are two watches; MARKET_STRUCTURE_SPEC "Invariants", 2026-09-29).
+  barrier — back-to-back watches after an expiry were two watches, a shape gone with the expiry; MARKET_STRUCTURE_SPEC
+  "Invariants", 2026-09-29).
   A pure tripwire since a new cycle ENDS an open watch (MARKET_STRUCTURE_SPEC "A new cycle ends an open watch",
   2026-09-29; the `BOS_CONFIRMED` then carries `meta["ended_watch_pattern_anchor_idx"]`)
 
 Reversal is terminal (once reversal appears, it never leaves reversal) — not a df check: asserted in `_set_state`
 since 2026-09-28 (MARKET_STRUCTURE_SPEC "Invariants" + "Reversal inside a back-fill")【fileciteturn1file11】
 
-A rewind is never requested in REVERSAL — asserted in `run()` since 2026-09-29 (a step ends at its own watch expiry:
-MARKET_STRUCTURE_SPEC "Expiry inside a step").
+A reversal watch is never open at its expiry candle — asserted in `_replay_step_no_patterns` since 2026-09-29 (F3b:
+its pending applies by then; MARKET_STRUCTURE_SPEC "A reversal confirming on E applies"). The earlier "a rewind is
+never requested in REVERSAL" assert went with the rewind.
 
 ### Zone visualization invariants
 - Chart shows zones for most recent structure_id

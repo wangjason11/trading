@@ -17,7 +17,8 @@ from engine_v2.structure.structure_engine import _make_market_structure, _pip_si
 from engine_v2.tests.test_unified_probe import _prepare_df
 MS = m.MarketStructure; REV = m.MarketState.REVERSAL
 cur = {}; steps = []
-o_best, o_step, o_exp, o_rw, o_rs = MS._best_bopb_pattern_at_anchor, MS._step_anchor, MS._maybe_expire_reversal_watch, MS._rewind_to, MS._replay_step_no_patterns
+o_best, o_step, o_rs = MS._best_bopb_pattern_at_anchor, MS._step_anchor, MS._replay_step_no_patterns
+o_exp, o_rw = getattr(MS, "_maybe_expire_reversal_watch", None), getattr(MS, "_rewind_to", None)   # removed 2026-09-29
 def best(self, *, i, breakout_th, pullback_th, D):
     w = o_best(self, i=i, breakout_th=breakout_th, pullback_th=pullback_th, D=D); st = self.state
     if w is not None and w[2] == "reversal" and st.reversal_watch_active and int(w[1]) > int(st.reversal_watch_expires_idx):
@@ -43,7 +44,9 @@ def rw(self, jump_to, *, seed=None):
     if self.state.state == REV: cur.setdefault("rir", []).append(int(jump_to))
     cur.setdefault("rewinds", []).append(int(jump_to))
     return o_rw(self, jump_to, seed=seed)
-MS._best_bopb_pattern_at_anchor, MS._step_anchor, MS._maybe_expire_reversal_watch, MS._rewind_to, MS._replay_step_no_patterns = best, step, exp, rw, rs
+MS._best_bopb_pattern_at_anchor, MS._step_anchor, MS._replay_step_no_patterns = best, step, rs
+if o_exp is not None:
+    MS._maybe_expire_reversal_watch, MS._rewind_to = exp, rw
 res = []
 for it in json.load(open(sys.argv[1])):
     cur.clear(); rec = dict(name=it["name"])

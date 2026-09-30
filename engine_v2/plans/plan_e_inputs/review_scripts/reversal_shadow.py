@@ -256,25 +256,26 @@ def _step_anchor(self, i):
 MS._step_anchor = _step_anchor
 
 
-_orig_rewind = MS._rewind_to
-def _rewind_to(self, jump_to, *, seed=None):
-    r = _rec(self)
-    if r is not None:
-        r["n_rewinds"] += 1
-        if self.state.state == REV:
-            rev = [int(e.idx) for e in self.events if e.type == "STATE_CHANGED" and e.meta.get("to") == "reversal"]
-            ls = r["_last_step"] or {}
-            r["rewind_in_rev"].append(dict(jump_to=int(jump_to), discarded_rev=rev,
-                                           seed_state=None if seed is None else str(seed.get("market_state")),
-                                           step_i=ls.get("i"), winner=ls.get("winner"),
-                                           expiry=ls.get("expiry"), after_expiry=ls.get("after_expiry")))
-    n_before = len(r["rebuild"]) if r is not None else 0
-    out = _orig_rewind(self, jump_to, seed=seed)
-    if r is not None and len(r["rebuild"]) > n_before and self.state.state != REV:
-        r["seed_over"].append(dict(jump_to=int(jump_to), state_after=self.state.state.value,
-                                   seed_state=None if seed is None else str(seed.get("market_state"))))
-    return out
-MS._rewind_to = _rewind_to
+if hasattr(MS, "_rewind_to"):   # removed 2026-09-29 (F3b); older trees only
+    _orig_rewind = MS._rewind_to
+    def _rewind_to(self, jump_to, *, seed=None):
+        r = _rec(self)
+        if r is not None:
+            r["n_rewinds"] += 1
+            if self.state.state == REV:
+                rev = [int(e.idx) for e in self.events if e.type == "STATE_CHANGED" and e.meta.get("to") == "reversal"]
+                ls = r["_last_step"] or {}
+                r["rewind_in_rev"].append(dict(jump_to=int(jump_to), discarded_rev=rev,
+                                               seed_state=None if seed is None else str(seed.get("market_state")),
+                                               step_i=ls.get("i"), winner=ls.get("winner"),
+                                               expiry=ls.get("expiry"), after_expiry=ls.get("after_expiry")))
+        n_before = len(r["rebuild"]) if r is not None else 0
+        out = _orig_rewind(self, jump_to, seed=seed)
+        if r is not None and len(r["rebuild"]) > n_before and self.state.state != REV:
+            r["seed_over"].append(dict(jump_to=int(jump_to), state_after=self.state.state.value,
+                                       seed_state=None if seed is None else str(seed.get("market_state"))))
+        return out
+    MS._rewind_to = _rewind_to
 
 
 _orig_best = MS._best_bopb_pattern_at_anchor
@@ -299,25 +300,26 @@ def _best_bopb_pattern_at_anchor(self, *, i, breakout_th, pullback_th, D):
 MS._best_bopb_pattern_at_anchor = _best_bopb_pattern_at_anchor
 
 
-_orig_expire = MS._maybe_expire_reversal_watch
-def _maybe_expire_reversal_watch(self, i):
-    st = self.state
-    fires = (st.reversal_watch_active and st.reversal_watch_expires_idx is not None
-             and int(i) >= int(st.reversal_watch_expires_idx) and st.reversal_watch_start_idx is not None)
-    info = (st.reversal_watch_start_idx, st.reversal_watch_expires_idx, st.pending_reversal_apply_idx) if fires else None
-    out = _orig_expire(self, i)
-    r = _rec(self)
-    if fires and r is not None:
-        f = sys._getframe(1)  # _replay_step_no_patterns
-        s = r["_steps"][-1] if r["_steps"] else None
-        rec = dict(i=int(i), watch_anchor=info[0], expires=info[1], pending=info[2],
-                   frozen=bool(f.f_locals.get("freeze_range", False)), step_i=None if s is None else s["i"],
-                   chain=_chain(), rewind=bool(getattr(self, "_in_rewind", False)))
-        r["expiry"].append(rec)
-        if s is not None and s["expiry"] is None:
-            s["expiry"] = rec
-    return out
-MS._maybe_expire_reversal_watch = _maybe_expire_reversal_watch
+if hasattr(MS, "_maybe_expire_reversal_watch"):   # removed 2026-09-29 (F3b); older trees only
+    _orig_expire = MS._maybe_expire_reversal_watch
+    def _maybe_expire_reversal_watch(self, i):
+        st = self.state
+        fires = (st.reversal_watch_active and st.reversal_watch_expires_idx is not None
+                 and int(i) >= int(st.reversal_watch_expires_idx) and st.reversal_watch_start_idx is not None)
+        info = (st.reversal_watch_start_idx, st.reversal_watch_expires_idx, st.pending_reversal_apply_idx) if fires else None
+        out = _orig_expire(self, i)
+        r = _rec(self)
+        if fires and r is not None:
+            f = sys._getframe(1)  # _replay_step_no_patterns
+            s = r["_steps"][-1] if r["_steps"] else None
+            rec = dict(i=int(i), watch_anchor=info[0], expires=info[1], pending=info[2],
+                       frozen=bool(f.f_locals.get("freeze_range", False)), step_i=None if s is None else s["i"],
+                       chain=_chain(), rewind=bool(getattr(self, "_in_rewind", False)))
+            r["expiry"].append(rec)
+            if s is not None and s["expiry"] is None:
+                s["expiry"] = rec
+        return out
+    MS._maybe_expire_reversal_watch = _maybe_expire_reversal_watch
 
 
 _orig_replay_step = MS._replay_step_no_patterns

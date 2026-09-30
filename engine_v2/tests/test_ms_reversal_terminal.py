@@ -6,8 +6,8 @@ no-winner range back-fill, and `_post_apply_range_check`'s. Before the fix the s
 applied at its later candle, the range finalized, the anchor was re-stepped — so the dead structure LEFT REVERSAL
 and could reverse again. Two `STATE_CHANGED(to=reversal)` for one sid: the hand-off took the FIRST (`reversal_idx`,
 the df mask's min) and every reader the LAST (`compute_reversal_idx_by_sid`, MAX). Fix (user decision, option A):
-every back-fill ends the step at the terminal candle; `_set_state` asserts nothing leaves REVERSAL; a `_rewind_to`
-rebuild asserts it never reaches one. (The df-level "later states must be reversal" check was deleted: `run()`
+every back-fill ends the step at the terminal candle; `_set_state` asserts nothing leaves REVERSAL (a `_rewind_to`
+rebuild asserted it never reached one until the rewind was removed, 2026-09-29, F3b). (The df-level "later states must be reversal" check was deleted: `run()`
 forward-stamps `market_state` before it, so it could never fire.)
 
 Reference window (a shadow over every MS run — H1 main sids, both first-confluence probes' Phase 2, every sub build,
@@ -310,15 +310,3 @@ def test_set_state_reversal_to_reversal_is_silent():
     ms._set_state(MarketState.REVERSAL, 5)
     assert len(ms.events) == n and ms.state.state == MarketState.REVERSAL
 
-
-def test_a_rewind_rebuild_never_reaches_a_reversal(monkeypatch):
-    ms = _ms()
-    ms._init_output_arrays(len(ms.df))
-
-    def step(i):
-        ms.state.state = MarketState.REVERSAL
-        return i + 1
-
-    monkeypatch.setattr(ms, "_step_anchor", step)
-    with pytest.raises(AssertionError, match="rewind rebuild reached a reversal"):
-        ms._rewind_to(3)

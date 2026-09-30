@@ -20,7 +20,8 @@ Fixtures:
     the earlier jump, so the exit classification read a prefix the machine had already
     superseded — the one mechanism under which early stop and classify-at-exit differ. Since a new
     cycle ENDS an open watch (MARKET_STRUCTURE_SPEC "A new cycle ends an open watch") the first
-    rewind is gone and the two agree (`TestRebuiltPrefixException`).
+    rewind is gone and the two agree (`TestRebuiltPrefixException`); since F3b (2026-09-29) MS never
+    rewinds at all (the expiry rewind was removed), so the exception cannot arise.
 """
 from __future__ import annotations
 
@@ -426,7 +427,8 @@ def _make_double_rewind_data() -> list[dict]:
          IGNORING J1 (LANDMINES "MarketStructure Deep-Couples…" point 1) -> the rebuilt prefix
          has cycle 1 at 8 AGAIN: cts_est = [(2,2), (8,8), (12,12)].
     With `end_idx` 13 / 16 / 18 the J2 apply is unscheduled / pending / a reversal, no second
-    rewind happens, and early stop == classify-at-exit.
+    rewind happens, and early stop == classify-at-exit. Since F3b (2026-09-29) the J2 pending
+    applies AT the bound 17 too (a reversal) — no rewind at any bound.
     """
     return [
         _R(0.60300, 0.60320, 0.59980, 0.60000),   # 0
@@ -471,11 +473,7 @@ def _phase2_pair(df, end_idx):
 
 
 class TestRebuiltPrefixException:
-    @staticmethod
-    def _rewinds(ms_debug_out: str):
-        return [l.split("jump_to=")[1] for l in ms_debug_out.splitlines() if l.startswith("[REWIND]")]
-
-    def test_mechanism(self, capsys):
+    def test_mechanism(self):
         """B=17. Until 2026-09-29 the full run rewound twice (J1 to 5, J2 to 15) and its rebuilt
         prefix — `_rewind_to` replaying from 0 IGNORING J1 — held THREE CTS_ESTABLISHED
         [(2,2),(8,8),(12,12)] while the stopped run stopped at 13 on the post-J1 prefix
@@ -486,21 +484,16 @@ class TestRebuiltPrefixException:
         stopped run stops at 9 with [(2,2),(8,8)] — an exact prefix — and the two agree at every
         bound (finalize 8). No instance of the exception is known under the new rule (0 in 36k
         random tails; this fixture with candle 8 kept below the CTS, no cycle there, rewinds twice
-        but its prefixes agree). Since F3b (2026-09-29) no expiry fires at all — a pending reversal
-        confirming ON its watch's expiry candle applies — so NO run rewinds and the exception is
-        unreachable: the full run's watch 14 (expires at the bound 17 == its pending apply) now
-        REVERSES at 17 instead of rewinding to 15; the prefixes still agree."""
+        but its prefixes agree). Since F3b (2026-09-29) no expiry fires — a pending reversal
+        confirming ON its watch's expiry candle applies — and the expiry rewind was removed, so the
+        exception is unreachable: the full run's watch 14 (expires at the bound 17 == its pending
+        apply) REVERSES at 17 (before: a rewind to 15); the prefixes agree. Kept as the
+        prefix-agreement pin."""
         raw = _make_double_rewind_data()
         full = _make(raw, end_idx=17)
-        full.debug = True
         full.run()
-        full_rewinds = self._rewinds(capsys.readouterr().out)
         stopped = _make(raw, end_idx=17, stop_after_cts_established=2)
-        stopped.debug = True
         stopped.run()
-        stopped_rewinds = self._rewinds(capsys.readouterr().out)
-        assert full_rewinds == []                          # before F3b: ["15"]
-        assert stopped_rewinds == []
         assert [int(e.idx) for e in full.events
                 if e.type == "STATE_CHANGED" and e.meta["to"] == "reversal"] == [17]
         assert stopped.early_stop_idx == 9

@@ -159,6 +159,9 @@ on ON == OFF that flips when `_rewind_to` honours earlier jumps — LANDMINES "D
 watch; a new cycle now ENDS the watch (MARKET_STRUCTURE_SPEC "A new cycle ends an open watch"), so ON == OFF there
 (finalize 8) and the strict `xfail` was dropped. No instance of the exception is known under the new rule (0 in
 36k random tails); `_rewind_to` still ignores earlier jumps, so it is not proven unreachable.
+**Status (F3b, 2026-09-29): unreachable.** A pending reversal confirming ON its watch's expiry candle now applies, so
+no expiry fires, and the expiry + `_rewind_to` were removed — MS never rewinds; "quiescent" = no watch, no pending
+reversal (MARKET_STRUCTURE_SPEC "A reversal confirming on E applies").
 
 ---
 

@@ -9,13 +9,15 @@ patterns: 4 candles after their end; `continuous`: 3), and E is inclusive for th
 the same kind of pattern confirming on E was
   P1  applied when A was its own step anchor (the pattern won step A; the H1 main reversal @902 of the reference
       window is one),
-  P2  applied when a later anchor's reversal won at E (`test_ms_expiry_stop` boundary pin),
+  P2  applied when a later anchor's reversal won at E (pinned below),
   P3  DISCARDED as a false break when the pattern never won a step — A was processed inside another step, or A's
       own step chose an earlier-applying winner — so it lived only as the pending: the expiry rewound to A + 1 and
       re-ran those candles with a barrier decided at E.
 Now the pending applies first (`_replay_step_no_patterns`): P3 reverses at E like P1 and P2. At the data edge the
 result is prefix-stable (before, the edge false break turned into a reversal at the old edge candle as soon as one more
-candle arrived). No expiry fires any more: every clear of the pending also ends the watch.
+candle arrived). No expiry fires any more — every clear of the pending also ends the watch — so the expiry, its rewind
++ seed restore and the stop-at-expiry returns were removed (2026-09-29, the commit after the rule); the per-candle
+step asserts instead that a watch is never open at its expiry candle.
 
 Measured before (review_scripts/reversal_shadow.py + random_tail_search.py F3b counters, scratch variants): reference
 window 0 expiries and 3 of its 5 reversals already P1 at E -> byte-identical; suite 30 expiries; 42k random tails per
@@ -29,8 +31,8 @@ from contextlib import redirect_stdout
 
 import pytest
 
-from engine_v2.structure.market_structure import MarketStructure
-from engine_v2.structure.structure_engine import compute_bounded_structure
+from engine_v2.structure.market_structure import MarketState, MarketStructure
+from engine_v2.structure.structure_engine import _make_market_structure, compute_bounded_structure
 from engine_v2.tests import test_ms_cts_update_no_regress as _noreg
 from engine_v2.tests.test_ms_stop_after_cts import _make_double_rewind_data
 from engine_v2.tests.test_unified_probe import _R, _prepare_df
@@ -88,6 +90,19 @@ def _p1_rows() -> list[dict]:
 # the reversal against .60207 lives only as the pending; it confirms ON 14. Before: expiry at 14 -> false break, BOS := h9 .60278, rewind to 10 -> 10
 # opened a SECOND watch on .60278 whose reversal applied at 14 (back-to-back watches). Now: one watch, REVERSAL @14 on
 # .60207.
+# P2 — sd=+1 (seed 21 trial 231, `_make_double_rewind_data()[:6]` + 4; the boundary pin of the retired
+# `test_ms_expiry_stop.py`): watch A=4 (frozen .5998), E=9, pending 9; anchor 8's reversal against the frozen barrier
+# applies exactly at 9 = E -> a winner (the scheduler's and the cap's `<= E`), applied by the winner path before the
+# apply candle's own step -> REVERSAL @9. Unchanged by F3b.
+def _p2_rows() -> list[dict]:
+    return list(_make_double_rewind_data()[:6]) + [
+        _R(0.59898, 0.60328, 0.59771, 0.60185),   # 6
+        _R(0.60186, 0.60258, 0.60137, 0.60212),   # 7
+        _R(0.60187, 0.60248, 0.59711, 0.59817),   # 8
+        _R(0.59844, 0.59852, 0.58946, 0.58962),   # 9
+    ]
+
+
 def _p3_review_rows() -> list[dict]:
     return [
         _R(0.59775, 0.60095, 0.59755, 0.60075), _R(0.60066, 0.60076, 0.59846, 0.59866),   # 0, 1
@@ -116,11 +131,10 @@ def _price(p: float, sd: int, native_sd: int = 1) -> float:
 
 @pytest.fixture
 def trace(monkeypatch):
-    """Class-level taps: step anchors, expiries fired, rewinds, and each reversal apply's path (winner / pending)."""
-    log = {"anchors": [], "winners": [], "expiries": [], "rewinds": [], "applied": []}
-    o_step, o_exp = MarketStructure._step_anchor, MarketStructure._maybe_expire_reversal_watch
-    o_best = MarketStructure._best_bopb_pattern_at_anchor
-    o_rw, o_pend = MarketStructure._rewind_to, MarketStructure._maybe_apply_pending_reversal
+    """Class-level taps: step anchors, step winners and each reversal apply's path (winner / pending)."""
+    log = {"anchors": [], "winners": [], "applied": []}
+    o_step, o_best = MarketStructure._step_anchor, MarketStructure._best_bopb_pattern_at_anchor
+    o_pend = MarketStructure._maybe_apply_pending_reversal
     o_apply = MarketStructure._apply_pattern_at_apply_idx
 
     def step(self, i):
@@ -132,16 +146,6 @@ def trace(monkeypatch):
         if w is not None:
             log["winners"].append((int(i), w[2], int(w[1])))
         return w
-
-    def exp(self, i):
-        st = self.state
-        if st.reversal_watch_active and int(i) >= int(st.reversal_watch_expires_idx):
-            log["expiries"].append(int(i))
-        return o_exp(self, i)
-
-    def rw(self, jump_to, *, seed=None):
-        log["rewinds"].append(int(jump_to))
-        return o_rw(self, jump_to, seed=seed)
 
     def pend(self, i):
         self._f3b_path = "pending"
@@ -159,8 +163,6 @@ def trace(monkeypatch):
 
     monkeypatch.setattr(MarketStructure, "_step_anchor", step)
     monkeypatch.setattr(MarketStructure, "_best_bopb_pattern_at_anchor", best)
-    monkeypatch.setattr(MarketStructure, "_maybe_expire_reversal_watch", exp)
-    monkeypatch.setattr(MarketStructure, "_rewind_to", rw)
     monkeypatch.setattr(MarketStructure, "_maybe_apply_pending_reversal", pend)
     monkeypatch.setattr(MarketStructure, "_apply_pattern_at_apply_idx", apply)
     return log
@@ -186,7 +188,6 @@ def test_p3_a_pending_reversal_confirming_on_the_expiry_applies(sd, trace):
     assert 4 not in trace["anchors"]                      # the close-break candle ran inside step 3
     assert _watches(res) == [(4, 9)]
     assert trace["applied"] == [("pending", 9, 4, 9)]     # the pending, ON its watch's expiry candle
-    assert trace["expiries"] == [] and trace["rewinds"] == []
     assert _reversals(res) == [(9, "one_maru_opposite", _price(0.5998, sd))]   # before: @10 on .5978
 
 
@@ -195,7 +196,6 @@ def test_p3_one_watch_where_an_expiry_made_two(sd, trace):
     res = _run(_rows(_p3_review_rows, sd, native_sd=-1), sd)
     assert (9, "pullback", 10) in trace["winners"]         # the close-break candle's step chose an earlier winner
     assert trace["applied"] == [("pending", 14, 9, 14)]
-    assert trace["expiries"] == [] and trace["rewinds"] == []
     assert _watches(res)[-1] == (9, 14)                   # before: a second watch (10, 15) after the expiry's rewind
     assert [r[0] for r in _reversals(res)] == [14]
     assert _reversals(res)[0][2] == _price(0.60207, sd, native_sd=-1)          # before: .60278
@@ -208,7 +208,6 @@ def test_p1_the_close_break_candles_own_winner_on_the_expiry_applies(sd, trace):
     assert (9, "reversal", 14) in trace["winners"]         # its own pattern wins step 9
     assert _watches(res)[-1] == (9, 14)
     assert trace["applied"] == [("winner", 14, 9, 14)]
-    assert trace["expiries"] == [] and trace["rewinds"] == []
     assert _reversals(res) == [(14, "continuous", _price(0.5978, sd))]
 
 
@@ -220,3 +219,53 @@ def test_a_reversal_on_the_expiry_at_the_data_edge_is_prefix_stable(sd):
     for B in (9, 10, 11, 13):
         res = _run(_rows(_p3_rows, sd), sd, end_idx=B)
         assert [r[0] for r in _reversals(res)] == [9], f"B={B}"
+
+
+@pytest.mark.parametrize("sd", [1, -1])
+def test_p2_a_later_anchors_reversal_winner_on_the_expiry_applies(sd, trace):
+    res = _run(_rows(_p2_rows, sd), sd)
+    assert (8, "reversal", 9) in trace["winners"]
+    assert trace["applied"] == [("winner", 9, 4, 9)]
+    assert _reversals(res) == [(9, "one_maru_continuous", _price(0.5998, sd))]
+
+
+# The later-anchor cap (`_best_bopb_pattern_at_anchor`): a reversal candidate against an open watch's frozen barrier
+# must apply by the watch's E, like the scheduler's. Under F3b it never changes WHICH reversal lands (the watch's
+# pending applies by E), but without it a candidate confirming past the window would win the step and its back-fill
+# would skip the anchors before the pending apply — a pattern completing after the window steering the step layout
+# (a new-cycle breakout among the skipped anchors would never be evaluated). Measured 2026-09-29 (HEAD vs the cap
+# removed): reference window 0 binds, byte-identical; the suite binds only in the P3 fixture above (same output).
+def _ms(sd: int = 1):
+    with redirect_stdout(io.StringIO()):
+        ms = _make_market_structure(_prepare_df(_p3_rows()), struct_direction=sd, start_idx=0)
+    ms._init_output_arrays(len(ms.df))
+    return ms
+
+
+@pytest.mark.parametrize("apply, kind", [(9, "reversal"), (10, None)])
+def test_the_reversal_candidate_is_capped_at_the_open_watchs_expiry(apply, kind, monkeypatch):
+    ms = _ms()
+    st = ms.state
+    st.state, st.reversal_watch_active, st.reversal_bos_th_frozen, st.reversal_watch_expires_idx = (
+        MarketState.RANGE, True, 0.5998, 9)
+    ev = object()
+    monkeypatch.setattr(ms._bp, "detect_best_for_anchor", lambda i, d, thr: ev if thr == 0.5998 else None)
+    monkeypatch.setattr(ms, "_apply_idx", lambda e: apply)
+    w = ms._best_bopb_pattern_at_anchor(i=8, breakout_th=None, pullback_th=None, D=13)
+    assert (None if w is None else w[2]) == kind
+
+
+def test_a_watch_still_open_at_its_expiry_candle_raises():
+    """The guard that replaced the expiry (removed 2026-09-29): an open watch always holds a pending applying by its E,
+    so one still open at E means some clear of the pending forgot the watch — it would skip the BOS barrier step for
+    good. Before E the step runs normally."""
+    ms = _ms()
+    st = ms.state
+    st.state, st.bos_threshold = MarketState.PULLBACK, 0.5998
+    st.reversal_watch_active, st.reversal_bos_th_frozen = True, 0.5998
+    st.reversal_watch_start_idx, st.reversal_watch_expires_idx = 4, 9
+    with redirect_stdout(io.StringIO()):
+        ms._replay_step_no_patterns(8)
+        with pytest.raises(AssertionError, match="reversal watch still open at its expiry 9"):
+            ms._replay_step_no_patterns(9)
+

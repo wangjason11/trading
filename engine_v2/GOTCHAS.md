@@ -1943,7 +1943,8 @@ reference window (zero rewinds in any FC Phase-2 run); pinned by a strict `xfail
 only because of the in-watch cycle @8, which now ENDS the watch: the fixture rewinds once, the early stop and
 classify-at-exit agree (finalize 8), the xfail was dropped and `TestRebuiltPrefixException::test_mechanism` pins
 the agreement. No instance known under the new rule (0 in 36k random tails; the fixture with candle 8 kept
-below the CTS rewinds twice with agreeing prefixes); the mechanism itself is unchanged.
+below the CTS rewinds twice with agreeing prefixes). **Unreachable since F3b (2026-09-29):** no watch expires (a
+pending confirming ON its expiry candle applies) and the expiry rewind was removed — MS never rewinds.
 
 ---
 

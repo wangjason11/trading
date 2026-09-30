@@ -561,7 +561,6 @@ def _all_index_like_keys(module) -> set:
 # mirrored element's meta (measured at 574de2a). A new entry needs a reason.
 _NOT_MIRRORED = {
     "market_structure": {
-        "range_start_idx", "range_confirm_idx",   # st.jump_seed_state (rewind seed)
         "bos_idx",                                # st.cycle0_data cache
         "last_breakout_pat_apply_idx",            # a df column (out[...] = …)
     },
