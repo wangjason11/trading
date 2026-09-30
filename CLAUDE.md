@@ -2,7 +2,9 @@
 
 **Project context lives in [`engine_v2/CLAUDE.md`](engine_v2/CLAUDE.md)** — current status, hot
 paths, the LOCKED pipeline order, guardrails, debug checklist. Read it first. Also at this root:
-`PROJECT_PRINCIPLES.md` (non-negotiables), `README.md`, `WEEKLY_DEFINITION_OF_DONE.md`.
+`PROJECT_PRINCIPLES.md` (non-negotiables), `README.md`, `WEEKLY_DEFINITION_OF_DONE.md`, and
+`IDEA_PARKING_LOT.md` — the ONE canonical register of every deferred / parked / planned-but-unbuilt item (a new
+deferral gets a line there + its detail in the owning doc).
 
 This file exists so the rule below is in context from the first turn: it is the root `CLAUDE.md`
 that loads at startup, whereas `engine_v2/CLAUDE.md` is nested and may not be.

@@ -119,6 +119,7 @@ candle features → structure patterns → imbalance → market structure → KL
 | `GOTCHAS.md` | Debugging lessons learned |
 | `LANDMINES.md` | Critical constraints, things to avoid (incl. "Event Contract Rules") |
 | `GLOSSARY.md` | Domain terminology; the candle-index "Naming Standard" |
+| `../IDEA_PARKING_LOT.md` (repo root) | The deferred-items register: every deferred / parked / planned-but-unbuilt item, by bucket (Week 8 close-out, decisions, Part 4 closure, before Entries, trigger-based, Week 10, backlog) |
 ---
 
 ## Guardrails (Summary)
