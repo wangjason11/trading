@@ -1,0 +1,6 @@
+parent_sid,parent_cycle_id,sub_sid,starting_sd,creation_event_idx,end_event_idx,end_reason,meta
+0,1,0,-1,2639,3611,lifecycle_end,"{'use_case': 'first_counter', 'validated_parent_start': 2609, 'slice_begin': 2589, 'started_by': 'first_counter', 'start_trigger_idx': 2639, 'trigger_event_idx': 710}"
+1,1,0,1,3230,3589,reversal,"{'use_case': 'first_counter', 'validated_parent_start': 3047, 'slice_begin': 3180, 'started_by': 'first_counter', 'start_trigger_idx': 3230, 'trigger_event_idx': 820}"
+1,1,1,-1,3304,3611,lifecycle_end,"{'use_case': 'reversal', 'validated_parent_start': None, 'slice_begin': 3254, 'started_by': 'reversal', 'start_trigger_idx': 3589, 'trigger_event_idx': 820}"
+1,2,0,1,3621,4083,lifecycle_end,"{'use_case': 'first_counter', 'validated_parent_start': 3621, 'slice_begin': 3571, 'started_by': 'first_counter', 'start_trigger_idx': 3621, 'trigger_event_idx': 926}"
+1,2,1,1,4027,4227,,"{'use_case': 'subsequent_counter', 'validated_parent_start': 4000, 'slice_begin': 3977, 'started_by': 'subsequent_counter', 'start_trigger_idx': 4083, 'trigger_event_idx': 1020}"

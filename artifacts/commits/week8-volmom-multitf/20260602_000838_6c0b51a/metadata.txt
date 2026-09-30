@@ -1,0 +1,4 @@
+commit_hash=6c0b51a
+timestamp=20260602_000838
+branch=week8-volmom-multitf
+commit_message=KL zone inner-edge fix: find_base_threshold bounds inner within the outer (fixes base/inside-bar zone inversion)

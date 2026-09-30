@@ -1,0 +1,4 @@
+commit_hash=f402cb0
+timestamp=20260527_101643
+branch=week8-volmom-multitf
+commit_message=Re-point sub end-cap to canonical CTS_EST.ev.idx (B2 Phase B)

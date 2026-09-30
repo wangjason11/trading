@@ -41,7 +41,7 @@ These principles are documented in detail in `PROJECT_PRINCIPLES.md`.
 Forex_Algo/
 ├── PROJECT_PRINCIPLES.md        # Core project guardrails
 ├── WEEKLY_DEFINITION_OF_DONE.md # Definition of success per week
-├── IDEA_PARKING_LOT.md          # Captured ideas (not yet implemented)
+├── IDEA_PARKING_LOT.md          # Deferred-items register: EVERY deferred / parked / planned-but-unbuilt item + ideas
 ├── STRATEGY_VERSIONING.md       # Strategy versioning convention
 ├── README.md                    # This file
 │

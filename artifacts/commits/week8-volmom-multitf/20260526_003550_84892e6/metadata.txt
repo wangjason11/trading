@@ -1,0 +1,4 @@
+commit_hash=84892e6
+timestamp=20260526_003550
+branch=week8-volmom-multitf
+commit_message=Phase 3 Commit 1: KL zone-end inheritance + convention

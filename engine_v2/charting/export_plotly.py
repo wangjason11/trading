@@ -8,9 +8,20 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from engine_v2.structure import event_fields as ef
 from engine_v2.common.types import COL_C, COL_H, COL_L, COL_O, COL_TIME, COL_V
 from engine_v2.charting.style_registry import STYLE
+from engine_v2.charting._zone_render import (
+    build_stepped_outline_xy,
+    collapsed_cycles,
+    compute_kl_active_stretches,
+    compute_poi_active_stretches,
+    is_collapsed_cycle_zone,
+    is_poi_of_collapsed_cycle,
+)
+from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
 from engine_v2.common.types import PatternStatus
+from engine_v2.multitf.registry import StructureRegistry
 
 
 def _rgba_from_rgb(rgb: str, opacity: float) -> str:
@@ -23,23 +34,12 @@ def _get_reversal_confirmed_by_sid(structure_events: list) -> dict:
     Returns dict: {structure_id: last_reversal_idx}
 
     This is more reliable than df columns because market_state gets overwritten
-    by subsequent structures, but events are preserved.
+    by subsequent structures, but events are preserved. Delegates to the single
+    home `structure_lifecycle.compute_reversal_idx_by_sid` (2026-09-27; this was a
+    verbatim third copy).
     """
-    rev_by_sid = {}
-    for ev in structure_events:
-        if getattr(ev, "type", None) != "STATE_CHANGED":
-            continue
-        if ev.meta.get("to") != "reversal":
-            continue
-        sid = ev.meta.get("structure_id")
-        if sid is None:
-            continue
-        sid = int(sid)
-        idx = int(ev.idx)
-        # Keep the MAX idx for each structure_id (reversal confirmed = last reversal candle)
-        if sid not in rev_by_sid or idx > rev_by_sid[sid]:
-            rev_by_sid[sid] = idx
-    return rev_by_sid
+    from engine_v2.zones.structure_lifecycle import compute_reversal_idx_by_sid
+    return compute_reversal_idx_by_sid(structure_events)
 
 def _zone_style(side: str) -> dict:
     # side is "buy" or "sell"
@@ -74,9 +74,10 @@ class ChartExportPaths:
 
 
 def export_chart_plotly(
-    df: pd.DataFrame,
     *,
     title: str,
+    registry: StructureRegistry,
+    path_id: str,
     structure_levels: Optional[list] = None,
     out_dir: str | Path = "artifacts/charts",
     basename: str = "chart",
@@ -86,6 +87,10 @@ def export_chart_plotly(
 ) -> ChartExportPaths:
     """
     Export an interactive HTML + PNG candlestick chart with basic overlays.
+
+    Registry-only (Part 4 §13.5.e): resolve the entity (and its M15-zone
+    overlay) via ``registry`` + ``path_id``. The legacy positional ``df``
+    fallback was removed.
 
     Expected columns (minimum):
       - time, o, h, l, c
@@ -135,6 +140,7 @@ def export_chart_plotly(
             "KL": False,
             "OB": False,
             "POI": False,  # Week 7: POI zones (Fib + IC)
+            "wave_candles": True,  # Week 8: Wave candle vertical lines
         },
         "fib": {
             "lines": True,  # Week 7: Fibonacci level lines (from FibTracker)
@@ -150,6 +156,13 @@ def export_chart_plotly(
         "range_candle_marker": False,  # Week 4: Range candle markers (orange dots) - off to avoid overlap with volume spike
     }
 
+
+    # Part 4 §13.5.e: registry is the canonical (and only) chart source.
+    # Resolve the entity by path_id and read from entity.df.
+    entity = registry.get(path_id)
+    if entity is None:
+        raise ValueError(f"StructureRegistry has no entity '{path_id}'")
+    df = entity.df
 
     cfg = _deep_merge(CHART_DEFAULTS, cfg or {})
     candle_cfg = cfg.get("candle_types", {}) or {}
@@ -202,17 +215,6 @@ def export_chart_plotly(
     def _col_or_default(name, default):
         return dfx[name] if name in dfx.columns else pd.Series([default] * len(dfx), index=dfx.index)
 
-    cycle_stage = _col_or_default("cycle_stage", "")
-    cts_phase_debug = _col_or_default("cts_phase_debug", "")
-    cts_cycle_id = _col_or_default("cts_cycle_id", 0).astype(int)
-
-    bos_th = _col_or_default("bos_threshold", float("nan")).astype(float)
-    cts_th = _col_or_default("cts_threshold", float("nan")).astype(float)
-
-    rv_watch = _col_or_default("reversal_watch_active", 0)
-    rv_bos_frozen = _col_or_default("reversal_bos_th_frozen", float("nan")).astype(float)
-    rv_extreme = _col_or_default("reversal_watch_extreme", float("nan")).astype(float)
-
     # Big flags for hover data
     is_big_normal_as0 = _col_or_default("is_big_normal_as0", False)
     is_big_maru_as0 = _col_or_default("is_big_maru_as0", False)
@@ -222,33 +224,26 @@ def export_chart_plotly(
     vol_spike_ratio = _col_or_default("vol_spike_ratio", float("nan")).astype(float)
 
     customdata = list(zip(
-        candle_idx,
-        dfx["mid_price"].astype(float),
-        dfx["body_pct"].astype(float),
-        dfx["candle_type"].astype(str),
-        dfx["body_len"].astype(float),
-        dfx["candle_len"].astype(float),
-        range_break_frac,
-        cts_cycle_id,
-        cts_phase_debug.astype(str),
-        cycle_stage.astype(str),
-        cts_th,
-        bos_th,
-        rv_watch,
-        rv_bos_frozen,
-        rv_extreme,
-        is_big_normal_as0,
-        is_big_maru_as0,
-        big_ratio_as0,
-        vol_spike_ratio,  # index 18
-        dfx[COL_TIME].astype(str),  # index 19
+        candle_idx,                       # 0
+        dfx["mid_price"].astype(float),   # 1
+        dfx["body_pct"].astype(float),    # 2
+        dfx["candle_type"].astype(str),   # 3
+        dfx["body_len"].astype(float),    # 4
+        dfx["candle_len"].astype(float),  # 5
+        range_break_frac,                 # 6
+        is_big_normal_as0,                # 7
+        is_big_maru_as0,                  # 8
+        big_ratio_as0,                    # 9
+        vol_spike_ratio,                  # 10
+        dfx[COL_TIME].astype(str),        # 11
     ))
 
 
     # Standard hover template for all candlesticks
     candle_hover = (
+        "TF=1H<br>"
         "idx=%{customdata[0]}<br>"
-        "time=%{customdata[19]}<br>"
+        "time=%{customdata[11]}<br>"
         "O=%{open}<br>"
         "H=%{high}<br>"
         "L=%{low}<br>"
@@ -258,17 +253,9 @@ def export_chart_plotly(
         "candle_len=%{customdata[5]:.5f}<br>"
         "body_pct=%{customdata[2]:.2%}<br>"
         "mid_price=%{customdata[1]:.5f}<br>"
-        "big_normal=%{customdata[15]}  big_maru=%{customdata[16]}  big_ratio=%{customdata[17]:.2f}<br>"
+        "big_normal=%{customdata[7]}  big_maru=%{customdata[8]}  big_ratio=%{customdata[9]:.2f}<br>"
         "range_break_frac=%{customdata[6]:.2%}<br>"
-        "cts_cycle_id=%{customdata[7]}<br>"
-        "cts_phase=%{customdata[8]}<br>"
-        "cycle_stage=%{customdata[9]}<br>"
-        "cts_th=%{customdata[10]:.5f}<br>"
-        "bos_th=%{customdata[11]:.5f}<br>"
-        "rv_watch=%{customdata[12]}<br>"
-        "rv_bos_frozen=%{customdata[13]:.5f}<br>"
-        "rv_extreme=%{customdata[14]:.5f}<br>"
-        "vol_spike_ratio=%{customdata[18]:.2f}"
+        "vol_spike_ratio=%{customdata[10]:.2f}"
         "<extra></extra>"
     )
 
@@ -581,6 +568,7 @@ def export_chart_plotly(
                     textposition="middle center",
                     showlegend=False,
                     hovertemplate=(
+                        "TF=1H<br>"
                         "idx=%{customdata[0]}<br>"
                         "state=%{customdata[1]}<br>"
                         "sid=%{customdata[2]}<br>"
@@ -652,6 +640,7 @@ def export_chart_plotly(
                     textposition="middle center",
                     showlegend=False,
                     hovertemplate=(
+                        "TF=1H<br>"
                         "idx=%{customdata[0]}<br>"
                         "state=%{customdata[1]}<br>"
                         "sid=%{customdata[2]}<br>"
@@ -1017,6 +1006,7 @@ def export_chart_plotly(
                     line=range_hover_line,
                     line_shape="hv",
                     hovertemplate=(
+                        "TF=1H<br>"
                         "idx=%{customdata[0]}<br>"
                         "range_start_idx=%{customdata[1]}<br>"
                         "range_hi=%{customdata[2]:.5f}<br>"
@@ -1040,6 +1030,7 @@ def export_chart_plotly(
                     line=range_hover_line,
                     line_shape="hv",
                     hovertemplate=(
+                        "TF=1H<br>"
                         "idx=%{customdata[0]}<br>"
                         "range_start_idx=%{customdata[1]}<br>"
                         "range_hi=%{customdata[2]:.5f}<br>"
@@ -1084,13 +1075,13 @@ def export_chart_plotly(
         bos_by_idx = defaultdict(list)
 
         for ev in cts_events:
-            # CTS confirmed: use cts_anchor_idx if available, else event idx
-            p_idx = int(ev.meta.get("cts_anchor_idx", ev.idx))
+            # CTS confirmed: the dot sits at its CTS anchor
+            p_idx = ef.cts_anchor_idx(ev)
             if p_idx in time_by_idx:
                 cts_by_idx[p_idx].append(ev)
 
         for ev in bos_events:
-            p_idx = ev.idx
+            p_idx = ef.bos_anchor_idx(ev)   # the BOS dot sits at its anchor
             if p_idx in time_by_idx:
                 bos_by_idx[p_idx].append(ev)
 
@@ -1101,7 +1092,8 @@ def export_chart_plotly(
             bos_by_idx[idx].sort(key=lambda e: int(e.meta.get("structure_id", 0)))
 
         # Build CTS points - no time offset, track overlap for hover positioning
-        # CTS_CONFIRMED has ev.price=None; look up cts_price from DataFrame at confirmation candle (ev.idx)
+        # CTS_CONFIRMED carries the CTS anchor's price on ev.price; df fallback
+        # remains for legacy events that may have been emitted with price=None.
         pts_cts = []
         for idx, evs in sorted(cts_by_idx.items()):
             has_overlap = len(evs) > 1
@@ -1139,6 +1131,89 @@ def export_chart_plotly(
 
                 pts_bos.append((idx, x_time, price, "BOS", sid, cycle, sd, opacity, has_overlap))
                 points.append((idx, time_by_idx[idx], price, "BOS", sid, cycle, sd))
+
+        # --- Extra points: unconfirmed CTS after final BOS, pullback after final CTS ---
+        cts_unconf_events = [ev for ev in structure_events
+                             if getattr(ev, "type", None) in ("CTS_ESTABLISHED", "CTS_UPDATED")]
+        pb_state_events = [ev for ev in structure_events
+                           if getattr(ev, "type", None) == "STATE_CHANGED"
+                           and ev.meta.get("to") == "pullback"]
+
+        extra_cts_markers = []   # unconfirmed CTS dots (same tuple format as pts_cts)
+        extra_pb_markers = []    # pullback dots (same tuple format)
+        pb_to_next_bos_lines = []  # cross-structure lines: (sid, pb_time, pb_price, bos_time, bos_price)
+
+        for sid in sorted(all_sids):
+            sid_confirmed = sorted(
+                [p for p in points if p[4] == sid],
+                key=lambda x: x[0],
+            )
+            if not sid_confirmed:
+                continue
+
+            last_confirmed = sid_confirmed[-1]
+            last_kind = last_confirmed[3]   # "CTS" or "BOS"
+            last_idx = last_confirmed[0]
+            sd_for_sid = last_confirmed[6]
+            opacity = 1.0 if sid == most_recent_sid else 0.5
+
+            # Change 1: Unconfirmed CTS after final confirmed BOS
+            if last_kind == "BOS":
+                # The marker sits at the CTS ANCHOR — a location.
+                cts_after = [ev for ev in cts_unconf_events
+                             if int(ev.meta.get("structure_id", -1)) == sid
+                             and ef.cts_anchor_idx(ev) > last_idx]
+                if cts_after:
+                    latest_cts = max(cts_after, key=ef.cts_anchor_idx)
+                    cts_idx = ef.cts_anchor_idx(latest_cts)
+                    if cts_idx in time_by_idx:
+                        cts_price = float(latest_cts.price) if latest_cts.price is not None else 0.0
+                        cts_time = time_by_idx[cts_idx]
+                        cycle = int(latest_cts.meta.get("cycle_id", 0))
+                        cts_kind_label = latest_cts.type.replace("CTS_", "").lower()
+                        points.append((cts_idx, cts_time, cts_price, "CTS", sid, cycle, sd_for_sid))
+                        extra_cts_markers.append((cts_idx, cts_time, cts_price,
+                                                  f"CTS ({cts_kind_label})", sid, cycle,
+                                                  sd_for_sid, opacity, False))
+
+            # Change 2: Pullback dot after final confirmed CTS (non-active sids only)
+            elif last_kind == "CTS" and sid != most_recent_sid:
+                # Find first BOS of next sid (upper bound for pb search)
+                next_sid = sid + 1
+                next_bos = sorted(
+                    [ev for ev in bos_events
+                     if int(ev.meta.get("structure_id", -1)) == next_sid],
+                    key=ef.event_moment,
+                )
+                # The PB search's upper bound is a TIME: the next sid's first BOS MOMENT
+                # (Plan E E3g-3, PLAN_E §7.1 T4).
+                next_bos_confirmed_idx = ef.event_moment(next_bos[0]) if next_bos else None
+
+                # Only search for pb events between last CTS and next sid's first BOS
+                pb_after = [ev for ev in pb_state_events
+                            if int(ev.meta.get("structure_id", -1)) == sid
+                            and int(ev.idx) > last_idx   # a LOCATION lower bound: PBs after the last point's anchor
+                            and (next_bos_confirmed_idx is None or int(ev.idx) < next_bos_confirmed_idx)]
+                if pb_after:
+                    latest_pb = max(pb_after, key=lambda e: int(e.idx))
+                    pb_idx = int(latest_pb.idx)
+                    if pb_idx in time_by_idx:
+                        # Extreme: uptrend pullback goes down → low; downtrend → high
+                        if sd_for_sid == 1:
+                            pb_price = float(dfx.loc[pb_idx, COL_L])
+                        else:
+                            pb_price = float(dfx.loc[pb_idx, COL_H])
+                        pb_time = time_by_idx[pb_idx]
+                        points.append((pb_idx, pb_time, pb_price, "PB", sid, 0, sd_for_sid))
+                        extra_pb_markers.append((pb_idx, pb_time, pb_price, "PB", sid, 0,
+                                                 sd_for_sid, opacity, False))
+                        if next_bos:
+                            first_bos = next_bos[0]
+                            bos_idx = ef.bos_anchor_idx(first_bos)   # the line's BOS end (location)
+                            if bos_idx in time_by_idx:
+                                bos_price = float(first_bos.price) if first_bos.price is not None else 0.0
+                                bos_time = time_by_idx[bos_idx]
+                                pb_to_next_bos_lines.append((sid, pb_time, pb_price, bos_time, bos_price))
 
         # sort by point index (time order)
         points.sort(key=lambda x: x[0])
@@ -1195,6 +1270,31 @@ def export_chart_plotly(
                     )
                 )
 
+            # Cross-structure lines: pullback dot → first BOS of next sid
+            # These lines belong to the PRIOR sid (same styling/opacity)
+            for _pb_sid, pb_t, pb_p, bos_t, bos_p in pb_to_next_bos_lines:
+                line_style = _style("structure.swing_line").copy()
+                base_opacity = float(line_style.get("opacity", 0.9))
+                opacity_mult = _opacity_tier("active") if _pb_sid == most_recent_sid else _opacity_tier("recent_inactive")
+                if "line" in line_style:
+                    line_style["line"] = dict(line_style["line"])
+                else:
+                    line_style["line"] = {}
+                line_style["opacity"] = base_opacity * opacity_mult
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=[pb_t, bos_t],
+                        y=[pb_p, bos_p],
+                        mode="lines",
+                        name=f"PB→BOS sid={_pb_sid}→{_pb_sid + 1}",
+                        hoverinfo="skip",
+                        line_shape="linear",
+                        showlegend=False,
+                        **line_style,
+                    )
+                )
+
             # Markers: confirmed CTS points (with opacity per structure)
             # pts_cts format: (idx, x_time, price, "CTS", sid, cycle, sd, opacity, has_overlap)
             if pts_cts:
@@ -1224,6 +1324,7 @@ def export_chart_plotly(
                                 name=f"CTS (confirmed){op_label}",
                                 customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
                                 hovertemplate=(
+                                    "TF=1H<br>"
                                     "idx=%{customdata[0]}<br>"
                                     "kind=%{customdata[1]}<br>"
                                     "price=%{customdata[2]:.5f}<br>"
@@ -1257,6 +1358,7 @@ def export_chart_plotly(
                                 name=f"CTS (confirmed){op_label} [overlap]",
                                 customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
                                 hovertemplate=(
+                                    "TF=1H<br>"
                                     "idx=%{customdata[0]}<br>"
                                     "kind=%{customdata[1]}<br>"
                                     "price=%{customdata[2]:.5f}<br>"
@@ -1298,6 +1400,7 @@ def export_chart_plotly(
                                 name=f"BOS (confirmed){op_label}",
                                 customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
                                 hovertemplate=(
+                                    "TF=1H<br>"
                                     "idx=%{customdata[0]}<br>"
                                     "kind=%{customdata[1]}<br>"
                                     "price=%{customdata[2]:.5f}<br>"
@@ -1331,6 +1434,7 @@ def export_chart_plotly(
                                 name=f"BOS (confirmed){op_label} [overlap]",
                                 customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
                                 hovertemplate=(
+                                    "TF=1H<br>"
                                     "idx=%{customdata[0]}<br>"
                                     "kind=%{customdata[1]}<br>"
                                     "price=%{customdata[2]:.5f}<br>"
@@ -1344,6 +1448,72 @@ def export_chart_plotly(
                                 **style,
                             )
                         )
+
+        # Markers: extra unconfirmed CTS dots (after final confirmed BOS)
+        if extra_cts_markers:
+            for pts_group, op_label in [
+                ([p for p in extra_cts_markers if p[7] == 1.0], ""),
+                ([p for p in extra_cts_markers if p[7] < 1.0], " (prior)"),
+            ]:
+                if pts_group:
+                    style = _style("structure.cts").copy()
+                    if op_label:
+                        if "marker" in style:
+                            style["marker"] = dict(style["marker"])
+                            style["marker"]["opacity"] = _opacity_tier("recent_inactive")
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[p[1] for p in pts_group],
+                            y=[p[2] for p in pts_group],
+                            mode="markers",
+                            name=f"CTS (unconfirmed){op_label}",
+                            customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts_group],
+                            hovertemplate=(
+                                "idx=%{customdata[0]}<br>"
+                                "kind=%{customdata[1]}<br>"
+                                "price=%{customdata[2]:.5f}<br>"
+                                "sid=%{customdata[3]}<br>"
+                                "cycle_id=%{customdata[4]}<br>"
+                                "struct_direction=%{customdata[5]}"
+                                "<extra></extra>"
+                            ),
+                            showlegend=False,
+                            **style,
+                        )
+                    )
+
+        # Markers: pullback dots (after final confirmed CTS, non-active sids)
+        if extra_pb_markers:
+            for pts_group, op_label in [
+                ([p for p in extra_pb_markers if p[7] == 1.0], ""),
+                ([p for p in extra_pb_markers if p[7] < 1.0], " (prior)"),
+            ]:
+                if pts_group:
+                    style = _style("structure.bos").copy()
+                    if op_label:
+                        if "marker" in style:
+                            style["marker"] = dict(style["marker"])
+                            style["marker"]["opacity"] = _opacity_tier("recent_inactive")
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[p[1] for p in pts_group],
+                            y=[p[2] for p in pts_group],
+                            mode="markers",
+                            name=f"PB (furthest){op_label}",
+                            customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts_group],
+                            hovertemplate=(
+                                "idx=%{customdata[0]}<br>"
+                                "kind=%{customdata[1]}<br>"
+                                "price=%{customdata[2]:.5f}<br>"
+                                "sid=%{customdata[3]}<br>"
+                                "cycle_id=%{customdata[4]}<br>"
+                                "struct_direction=%{customdata[5]}"
+                                "<extra></extra>"
+                            ),
+                            showlegend=False,
+                            **style,
+                        )
+                    )
 
     # -------------------------------------------------
     # Reversal watch overlay (frozen BOS barrier)
@@ -1370,15 +1540,15 @@ def export_chart_plotly(
             ev for ev in structure_events
             if getattr(ev, "type", None) == "REVERSAL_CANDIDATE"
         ]
-        # Map anchor_idx to REVERSAL_CANDIDATE event (if pattern found)
-        rc_by_anchor = {int(ev.meta.get("anchor_idx", ev.idx)): ev for ev in reversal_candidates}
+        # Map the close-break candle (meta pattern_anchor_idx) to its REVERSAL_CANDIDATE (if pattern found)
+        rc_by_anchor = {int(ev.meta["pattern_anchor_idx"]): ev for ev in reversal_candidates}
 
         if reversal_watch_starts:
             # Group events by idx to detect overlaps (multiple structures at same candle)
             from collections import defaultdict
             events_by_idx = defaultdict(list)
             for ev in reversal_watch_starts:
-                idx = int(ev.meta.get("anchor_idx", ev.idx))
+                idx = int(ev.meta["pattern_anchor_idx"])
                 if idx in dfx.index:
                     events_by_idx[idx].append(ev)
 
@@ -1429,6 +1599,7 @@ def export_chart_plotly(
                         name="reversal candidate",
                         showlegend=True,
                         hovertemplate=(
+                            "TF=1H<br>"
                             "idx=%{customdata[0]}<br>"
                             "event=reversal_candidate<br>"
                             "bos_frozen=%{customdata[1]:.5f}<br>"
@@ -1463,7 +1634,13 @@ def export_chart_plotly(
         selected_sids = set(all_sids[:num_structures])
         most_recent_sid = all_sids[0] if all_sids else 0  # Track most recent for opacity tiers
 
-        zones_cur = [z for z in zones if int(z.meta.get("structure_id", 0)) in selected_sids]
+        # Collapsed cycles (never active in real time — the retroactive cycles
+        # of a post-reversal sid) are not drawn; their rows stay in the CSVs.
+        zones_cur = [
+            z for z in zones
+            if int(z.meta.get("structure_id", 0)) in selected_sids
+            and not is_collapsed_cycle_zone(z)
+        ]
 
         print("[chart][kl] zone structures sides:", {k: sorted(list(v)) for k, v in sorted(by_struct.items())})
         print("[chart][kl] selected_structure_ids:", sorted(selected_sids))
@@ -1473,7 +1650,7 @@ def export_chart_plotly(
              z.meta.get("confirmed_idx"),
              z.meta.get("cycle_id"),
              z.meta.get("structure_id"),
-             z.meta.get("active"))
+             z.meta.get("status"))
             for z in zones_cur
         ])
 
@@ -1484,7 +1661,7 @@ def export_chart_plotly(
         # 1) inactive first (underneath), active last (on top)
         # 2) older start_time first, newer last
         def _zone_sort_key(z):
-            active = bool(z.meta.get("active", False))
+            active = (z.meta or {}).get("status") == "active"
             st = pd.to_datetime(z.start_time, utc=True)
             # active False -> 0 (draw earlier), active True -> 1 (draw later/on top)
             return (1 if active else 0, st)
@@ -1499,7 +1676,7 @@ def export_chart_plotly(
         # We'll add top/bottom transparent hv lines per zone.
         for z in zones_cur:
             side = str(z.side)
-            active = bool((z.meta or {}).get("active", False)) and (z.end_time is None)
+            active = (z.meta or {}).get("status") == "active"
             zone_sid = int(z.meta.get("structure_id", 0))
 
             stz = _zone_style(side)
@@ -1548,21 +1725,27 @@ def export_chart_plotly(
             struct_direction = int(z.meta.get("struct_direction", 0))
 
             # ------------------------------------------------------------------
-            # NEW: draw "stepwise" zone rectangles using meta["bounds_steps"]
-            # Each step begins at start_idx and applies forward until next step.
+            # Item 5 (2026-05-20): outline + active-stretch fill rendering.
+            # KL zone:
+            #   - One stepped-polygon outline tracing all bounds_steps' outer
+            #     contour (colored by side, opacity = confirm × tier).
+            #   - Filled rects ONLY on the active stretch
+            #     [confirmed_idx, render_end_idx]; intersected with each
+            #     bounds_step so each step's y-bounds apply within its x-range.
+            #   - Single vertical confirm line at confirmed_idx (KL has no
+            #     reactivation today).
+            #   - Hover transparent lines per step (preserved from prior impl).
             # ------------------------------------------------------------------
             steps = list((z.meta or {}).get("bounds_steps", []))
-
-            # Fallback: no steps -> behave like old code (single segment)
+            fallback_top = float(max(z.top, z.bottom))
+            fallback_bot = float(min(z.top, z.bottom))
             if not steps:
                 steps = [{
                     "start_idx": base_idx,
-                    "top": float(max(z.top, z.bottom)),
-                    "bottom": float(min(z.top, z.bottom)),
+                    "top": fallback_top,
+                    "bottom": fallback_bot,
                     "event": "FALLBACK",
                 }]
-
-            # Sort steps by start_idx
             steps = sorted(steps, key=lambda s: int(s.get("start_idx", -1)))
 
             def _idx_to_time(ii: int):
@@ -1570,26 +1753,32 @@ def export_chart_plotly(
                     return pd.to_datetime(dfx.loc[ii, COL_TIME], utc=True)
                 return None
 
-            # For each segment, compute x0/x1 bounds
+            # render_end_idx = last df idx within zone's lifetime
+            if z.end_time is None:
+                render_end_idx = int(dfx.index[-1])
+            else:
+                end_mask = dfx[COL_TIME] <= pd.to_datetime(z.end_time, utc=True)
+                render_end_idx = int(dfx.index[end_mask][-1]) if end_mask.any() else int(dfx.index[0])
+
+            active_stretches = compute_kl_active_stretches(z, render_end_idx)
+
+            # Per-step iteration: render fills (only where active) + hover lines.
             for k, s in enumerate(steps):
                 seg_start_idx = int(s.get("start_idx", -1))
                 seg_x0 = _idx_to_time(seg_start_idx)
                 if seg_x0 is None:
                     continue
-
-                # clamp to the zone's actual window
                 if seg_x0 < x_zone0:
                     seg_x0 = x_zone0
 
-                # segment end = next step start time, else zone end
                 if k + 1 < len(steps):
                     next_idx = int(steps[k + 1].get("start_idx", -1))
                     nxt = _idx_to_time(next_idx) or x_zone1
-                    # end *just before* the next segment start to avoid overlap
                     seg_x1 = nxt - pd.Timedelta(microseconds=1)
+                    step_end_idx = next_idx - 1
                 else:
                     seg_x1 = x_zone1
-
+                    step_end_idx = render_end_idx
                 if seg_x1 <= seg_x0:
                     seg_x1 = seg_x0
 
@@ -1598,105 +1787,486 @@ def export_chart_plotly(
                 y0 = float(min(seg_bot, seg_top))
                 y1 = float(max(seg_bot, seg_top))
 
-                # Rectangle segment (uses same fillcolor/linecolor computed above)
-                fig.add_shape(
-                    type="rect",
-                    xref="x",
-                    yref="y",
-                    x0=seg_x0,
-                    x1=seg_x1,
-                    y0=y0,
-                    y1=y1,
-                    fillcolor=fillcolor,
-                    line=dict(width=0),
-                    layer="below",
-                )
-
-                # Confirm line should appear only in the segment that contains conf_time
-                if conf_time is not None and (seg_x0 <= conf_time <= seg_x1):
+                # Active-stretch fill intersected with this step.
+                for stretch_start, stretch_end in active_stretches:
+                    isect_start = max(seg_start_idx, stretch_start)
+                    isect_end = min(step_end_idx, stretch_end)
+                    if isect_start > isect_end:
+                        continue
+                    fill_x0 = _idx_to_time(isect_start) or seg_x0
+                    if fill_x0 < seg_x0:
+                        fill_x0 = seg_x0
+                    if isect_end >= step_end_idx:
+                        fill_x1 = seg_x1
+                    else:
+                        end_time = _idx_to_time(isect_end)
+                        fill_x1 = end_time if end_time is not None else seg_x1
+                    if fill_x1 <= fill_x0:
+                        continue
                     fig.add_shape(
-                        type="line",
-                        xref="x",
-                        yref="y",
-                        x0=conf_time,
-                        x1=conf_time,
-                        y0=y0,
-                        y1=y1,
-                        line=dict(color=linecolor, width=confirm_w),
+                        type="rect", xref="x", yref="y",
+                        x0=fill_x0, x1=fill_x1, y0=y0, y1=y1,
+                        fillcolor=fillcolor,
+                        line=dict(width=0),
                         layer="below",
                     )
 
-                # Hover lines for this segment (shapes don't hover)
-                # Use multiple points (one per candle) so hover works across entire horizontal edge
+                # Hover lines per step (preserved)
                 seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= seg_x0) & (dfx[COL_TIME] <= seg_x1)]
                 if len(seg_times) == 0:
                     seg_times = pd.Series([seg_x0, seg_x1])
 
                 hover_customdata = [[
-                    side,
-                    structure_id,
-                    struct_direction,
-                    base_pattern,
-                    base_idx,
-                    conf_idx,
-                    cycle_id,
-                    y1,
-                    y0,
+                    side, structure_id, struct_direction, base_pattern,
+                    base_idx, conf_idx, cycle_id, y1, y0,
                 ]] * len(seg_times)
 
-                # Top hover line
-                fig.add_trace(
-                    go.Scatter(
-                        x=seg_times,
-                        y=[y1] * len(seg_times),
-                        mode="lines",
-                        name="KL zone" if active else "KL zone (inactive)",
-                        showlegend=hover_showlegend,
-                        line=hover_line,
-                        line_shape="hv",
-                        hovertemplate=(
-                            "KL Zone<br>"
-                            "side=%{customdata[0]}<br>"
-                            "structure_id=%{customdata[1]}<br>"
-                            "struct_direction=%{customdata[2]}<br>"
-                            "base_pattern=%{customdata[3]}<br>"
-                            "base_idx=%{customdata[4]}<br>"
-                            "confirmed_idx=%{customdata[5]}<br>"
-                            "cycle_id=%{customdata[6]}<br>"
-                            "top=%{customdata[7]:.5f}<br>"
-                            "bottom=%{customdata[8]:.5f}"
-                            "<extra></extra>"
-                        ),
-                        customdata=hover_customdata,
+                for y_edge in (y1, y0):
+                    fig.add_trace(
+                        go.Scatter(
+                            x=seg_times, y=[y_edge] * len(seg_times),
+                            mode="lines",
+                            name="KL zone" if active else "KL zone (inactive)",
+                            showlegend=hover_showlegend,
+                            line=hover_line, line_shape="hv",
+                            hovertemplate=(
+                                "TF=1H<br>"
+                                "KL Zone<br>"
+                                "side=%{customdata[0]}<br>"
+                                "structure_id=%{customdata[1]}<br>"
+                                "struct_direction=%{customdata[2]}<br>"
+                                "base_pattern=%{customdata[3]}<br>"
+                                "base_idx=%{customdata[4]}<br>"
+                                "confirmed_idx=%{customdata[5]}<br>"
+                                "cycle_id=%{customdata[6]}<br>"
+                                "top=%{customdata[7]:.5f}<br>"
+                                "bottom=%{customdata[8]:.5f}"
+                                "<extra></extra>"
+                            ),
+                            customdata=hover_customdata,
+                        )
                     )
+
+            # Stepped polygon outline (tracing the outer contour of all steps).
+            outline_xs, outline_ys = build_stepped_outline_xy(
+                steps, _idx_to_time, x_zone0, x_zone1,
+                fallback_top=fallback_top, fallback_bottom=fallback_bot,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=outline_xs, y=outline_ys, mode="lines",
+                    line=dict(color=linecolor, width=confirm_w),
+                    fill=None, hoverinfo="skip", showlegend=False,
+                    name=f"KL outline sid={structure_id} c{cycle_id}",
+                )
+            )
+
+            # Single confirm line at confirmed_idx; position via the step that
+            # contains conf_time for the correct y-bounds.
+            if conf_time is not None and x_zone0 <= conf_time <= x_zone1:
+                for k, s in enumerate(steps):
+                    seg_x0 = _idx_to_time(int(s.get("start_idx", -1)))
+                    if seg_x0 is None:
+                        continue
+                    if seg_x0 < x_zone0:
+                        seg_x0 = x_zone0
+                    if k + 1 < len(steps):
+                        nxt = _idx_to_time(int(steps[k + 1].get("start_idx", -1))) or x_zone1
+                        seg_x1 = nxt - pd.Timedelta(microseconds=1)
+                    else:
+                        seg_x1 = x_zone1
+                    if seg_x0 <= conf_time <= seg_x1:
+                        seg_top = float(s.get("top", z.top))
+                        seg_bot = float(s.get("bottom", z.bottom))
+                        fig.add_shape(
+                            type="line", xref="x", yref="y",
+                            x0=conf_time, x1=conf_time,
+                            y0=min(seg_bot, seg_top), y1=max(seg_bot, seg_top),
+                            line=dict(color=linecolor, width=confirm_w),
+                            layer="below",
+                        )
+                        break
+
+    # -------------------------------------------------
+    # Week 8: Wave Candle vertical lines
+    # Per-candle (start, end) gated by the cycle lifecycle —
+    # WAVE_CANDLES_SPEC "Chart Rendering & Lifecycle" (2026-05-28).
+    # FB start = cycle start; LB/FP/LP start = CTS_confirmed idx (clamped in
+    # compute_wave_candle_visibility to the cycle start which embeds the
+    # struct/parent floor); all share cycle end. BOS.last is attributed
+    # cross-cycle (offset −1) to cycle N−1 (the locked LP from prev cycle).
+    # `BOS_0.last` (Option C): render iff sub's cyc=0 is non-collapsed —
+    # pre-structure pullback shown for clean structure starts, hidden for
+    # retroactive-Scenario-2 phantoms. Overlap kept via `selected_sids`
+    # (most-recent-sid filter, same as KL). Uniform opacity; hover =
+    # wave-candle info only (no WVMI momentum / weighted vol).
+    # -------------------------------------------------
+    wave_candles = dfx.attrs.get("wave_candles", [])
+    if zone_cfg.get("wave_candles", True) and wave_candles and zones:
+        from engine_v2.zones.structure_lifecycle import (
+            compute_cycle_lifecycle,
+            compute_reversal_idx_by_sid,
+            compute_struct_start_by_sid,
+        )
+        from engine_v2.zones.wave_candles import (
+            _role_for_wave_candle,
+            compute_wave_candle_visibility,
+            wave_candle_hover_lines,
+        )
+
+        # `selected_sids` fallback. Reuses the variable from the KL block above
+        # when KL is on; computes fresh from wave_candle structure_ids otherwise.
+        if not zone_cfg.get("KL", False):
+            wc_sids = sorted(set(wc.structure_id for wc in wave_candles), reverse=True)
+            num_structures = int(zone_cfg.get("num_structures", 1))
+            selected_sids = set(wc_sids[:num_structures])
+
+        # Build per-cycle lifecycle from main events (no floor/cap — main entity).
+        events = dfx.attrs.get("structure_events", [])
+        rev = compute_reversal_idx_by_sid(events)
+        struct_floor = compute_struct_start_by_sid(events, rev)
+        cycle_life = compute_cycle_lifecycle(events, rev)
+        cts_conf: dict = {}
+        for ev in events:
+            if getattr(ev, "type", None) != "CTS_CONFIRMED":
+                continue
+            m = ev.meta or {}
+            s = m.get("structure_id")
+            c = m.get("cycle_id")
+            if s is None or c is None:
+                continue
+            s, c = int(s), int(c)
+            idx = int(ev.idx)
+            sfloor = struct_floor.get(s)
+            if sfloor is not None:
+                idx = max(idx, int(sfloor))
+            cts_conf[(s, c)] = idx
+        wc_visibility = compute_wave_candle_visibility(cycle_life, cts_conf)
+
+        # Price axis range for invisible hover traces
+        wc_y_min = float(dfx["l"].min())
+        wc_y_max = float(dfx["h"].max())
+
+        wc_rendered = 0
+        for wc in wave_candles:
+            # Most-recent-sid filter (same as KL zones).
+            if wc.structure_id not in selected_sids:
+                continue
+            # Render each non-None wave candle idx, gated per-candle by lifecycle.
+            for position, idx in (("last", wc.last_wave_candle_idx),
+                                  ("first", wc.first_wave_candle_idx)):
+                if idx is None or idx not in dfx.index:
+                    continue
+
+                role_info = _role_for_wave_candle(str(wc.source_kind), position)
+                if role_info is None:
+                    continue
+                role, cycle_offset = role_info
+                lookup_cycle = wc.cycle_id + cycle_offset
+                if lookup_cycle < 0:
+                    # BOS_0.last (pre-structure pullback). Option C
+                    # (2026-05-28): render iff this sub's cyc=0 is
+                    # non-collapsed — i.e., the structure starts cleanly so
+                    # showing the pullback before BOS_0 is meaningful. If
+                    # cyc=0 is collapsed (retroactive-Scenario-2 phantom),
+                    # hide. See WAVE_CANDLES_SPEC "Chart Rendering".
+                    life0 = cycle_life.get((wc.structure_id, 0))
+                    if life0 is None:
+                        continue
+                    cstart0, cend0, _r0 = life0
+                    if cstart0 is None or (cend0 is not None and cstart0 >= cend0):
+                        continue
+                    # cyc=0 non-collapsed → render the pre-structure pullback.
+                else:
+                    viz = wc_visibility.get((wc.structure_id, lookup_cycle, role))
+                    if viz is None or not viz[0]:
+                        continue
+
+                candle_dir = int(dfx.loc[idx, "direction"])
+                if candle_dir == 0:
+                    continue
+
+                # Pick style based on candle direction
+                style_key = "wave_candle.bullish" if candle_dir == 1 else "wave_candle.bearish"
+                wc_style = _style(style_key)
+                line_info = wc_style.get("line", {})
+                color_rgb = line_info.get("color_rgb", "128, 128, 128")
+                base_opacity = float(wc_style.get("opacity", 0.8))
+                line_width = int(line_info.get("width", 1))
+
+                # Uniform opacity (no 3-tier multiplier).
+                final_color = f"rgba({color_rgb}, {base_opacity})"
+                wc_time = pd.to_datetime(dfx.loc[idx, COL_TIME], utc=True)
+
+                fig.add_shape(
+                    type="line",
+                    xref="x",
+                    yref="paper",
+                    x0=wc_time,
+                    x1=wc_time,
+                    y0=0,
+                    y1=1,
+                    line=dict(color=final_color, width=line_width),
+                    layer="below",
                 )
 
-                # Bottom hover line
-                fig.add_trace(
-                    go.Scatter(
-                        x=seg_times,
-                        y=[y0] * len(seg_times),
-                        mode="lines",
-                        name="KL zone" if active else "KL zone (inactive)",
-                        showlegend=hover_showlegend,
-                        line=hover_line,
-                        line_shape="hv",
-                        hovertemplate=(
-                            "KL Zone<br>"
-                            "side=%{customdata[0]}<br>"
-                            "structure_id=%{customdata[1]}<br>"
-                            "struct_direction=%{customdata[2]}<br>"
-                            "base_pattern=%{customdata[3]}<br>"
-                            "base_idx=%{customdata[4]}<br>"
-                            "confirmed_idx=%{customdata[5]}<br>"
-                            "cycle_id=%{customdata[6]}<br>"
-                            "top=%{customdata[7]:.5f}<br>"
-                            "bottom=%{customdata[8]:.5f}"
-                            "<extra></extra>"
-                        ),
-                        customdata=hover_customdata,
-                    )
+                # --- Invisible hover overlay (wave-candle info only) ---
+                vol = float(dfx.loc[idx, "volume"])
+                hover_lines = [
+                    "TF=1H",
+                    "<b>Wave Candle</b>",
+                    f"idx={idx}",
+                    *wave_candle_hover_lines(str(wc.source_kind), position,
+                                             f"sid={wc.structure_id}", wc.cycle_id),
+                    f"Volume: {vol:.0f}",
+                ]
+
+                # Spread points along vertical line for hover detection
+                # (Plotly only detects hover near data points, not along line segments)
+                _n_pts = 12
+                _y_pts = [wc_y_min + i * (wc_y_max - wc_y_min) / (_n_pts - 1) for i in range(_n_pts)]
+                fig.add_trace(go.Scatter(
+                    x=[wc_time] * _n_pts,
+                    y=_y_pts,
+                    mode="lines",
+                    showlegend=False,
+                    line=dict(width=8, color="rgba(0,0,0,0)"),
+                    hovertemplate="<br>".join(hover_lines) + "<extra></extra>",
+                ))
+                wc_rendered += 1
+
+        if wc_rendered:
+            print(f"[chart][wave_candles] rendered {wc_rendered} vertical lines")
+
+    # -------------------------------------------------
+    # Zone-proximity-trigger markers
+    # Alternating sd/opp_sd trigger candles per cycle from
+    # `dfx.attrs["zone_proximity_triggers"]` (built by check_zone_proximity).
+    # Visual debug aid for var3/var4 detector validation.
+    # -------------------------------------------------
+    zone_proximity_triggers = dfx.attrs.get("zone_proximity_triggers", {})
+    if zone_proximity_triggers:
+        zpt_style = _style("zone_proximity.trigger")
+        zpt_marker = zpt_style.get("marker", {"size": 7, "symbol": "x", "color": "black"})
+        offset_mult = float(zpt_style.get("offset_mult", 2.5))
+
+        # struct_direction lookup by (sid, cycle_id) from CTS_CONFIRMED events
+        # (trigger struct itself doesn't carry sd; CTS_CONFIRMED.meta does).
+        structure_events = dfx.attrs.get("structure_events", [])
+        sd_by_cycle: dict = {}
+        for ev in structure_events:
+            if getattr(ev, "type", None) != "CTS_CONFIRMED":
+                continue
+            sid = ev.meta.get("structure_id")
+            cyc = ev.meta.get("cycle_id")
+            sd = ev.meta.get("struct_direction")
+            if sid is not None and cyc is not None and sd is not None:
+                sd_by_cycle[(int(sid), int(cyc))] = int(sd)
+
+        # KL zone confirmed_idx lookup by (sid, cycle_id, source_kind)
+        kl_conf_idx_by_key: dict = {}
+        for z in dfx.attrs.get("kl_zones", []):
+            sid = z.meta.get("structure_id")
+            cyc = z.meta.get("cycle_id")
+            sk = z.source_kind
+            cidx = z.meta.get("confirmed_idx")
+            if sid is not None and cyc is not None and sk is not None and cidx is not None:
+                kl_conf_idx_by_key[(int(sid), int(cyc), str(sk))] = int(cidx)
+
+        # POI zone lookup by (sid, cycle_id) — list, may need inner-price match
+        # since multiple POIs can exist per cycle (V30/V60/V90 variants).
+        poi_zones_by_cycle: dict = {}
+        for pz in dfx.attrs.get("poi_zones", []):
+            sid = pz.meta.get("structure_id")
+            cyc = pz.meta.get("cycle_id")
+            if sid is None or cyc is None:
+                continue
+            poi_zones_by_cycle.setdefault((int(sid), int(cyc)), []).append(pz)
+
+        def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int, at_idx: int) -> int:
+            """Find the POI matching `inner`; return its confirmed idx AS OF
+            `at_idx` (start of the active stretch containing `at_idx`), not the
+            collapsed-scalar `confirmed_idx` which is the LAST activate."""
+            cands = poi_zones_by_cycle.get((sid, cyc), [])
+            best = None
+            best_diff = float("inf")
+            for pz in cands:
+                pz_inner = float(pz.top) if sd == 1 else float(pz.bottom)
+                diff = abs(pz_inner - inner)
+                if diff < best_diff:
+                    best_diff = diff
+                    best = pz
+            if best is None:
+                return -1
+            cidx = poi_confirmed_idx_as_of(best, at_idx)
+            return int(cidx) if cidx is not None else -1
+
+        x_vals, y_vals, customdata = [], [], []
+        for key, trig_list in zone_proximity_triggers.items():
+            sid_c, cyc_c = key
+            sd = sd_by_cycle.get((int(sid_c), int(cyc_c)), 0)
+            for trig in trig_list:
+                idx = int(trig.idx)
+                if idx not in dfx.index:
+                    continue
+                row = dfx.loc[idx]
+                wo = float(wick_offset.loc[idx]) if idx in wick_offset.index else 0.0
+                o, c = float(row[COL_O]), float(row[COL_C])
+                # Red candle (bearish, close < open) -> marker ABOVE
+                # Green candle (bullish, close > open) -> marker BELOW
+                # Neutral (close == open) -> ABOVE by convention
+                if c < o:
+                    y = float(row[COL_H]) + wo * offset_mult
+                else:
+                    y = float(row[COL_L]) - wo * offset_mult
+
+                # type label: "sd:<zone_kind>" or "opp_sd:CTS"
+                type_label = f"{trig.direction}:{trig.zone_kind}"
+
+                # Actual wick-to-inner distance in pips that fired the trigger.
+                # Approach direction depends on (sd, trigger.direction):
+                #   approach from ABOVE -> wick = candle.low (sd-in-up, opp_sd-in-down)
+                #   approach from BELOW -> wick = candle.high (sd-in-down, opp_sd-in-up)
+                # Signed: positive = wick stopped short of inner (still outside
+                # zone); negative = wick crossed inner into the zone.
+                approach_from_above = (
+                    (sd == 1 and trig.direction == "sd")
+                    or (sd == -1 and trig.direction == "opp_sd")
                 )
+                if approach_from_above:
+                    gap = float(row[COL_L]) - float(trig.trigger_inner)
+                else:
+                    gap = float(trig.trigger_inner) - float(row[COL_H])
+                dist_pips = round(gap / float(trig.pip_size), 1)
+
+                # Triggered zone's confirmed idx
+                if trig.zone_kind == "POI":
+                    z_conf = _poi_confirmed_idx(
+                        int(trig.structure_id), int(trig.cycle_id),
+                        float(trig.trigger_inner), int(sd) if sd else 1, idx,
+                    )
+                else:
+                    z_conf = kl_conf_idx_by_key.get(
+                        (int(trig.structure_id), int(trig.cycle_id), str(trig.zone_kind)),
+                        -1,
+                    )
+
+                x_vals.append(row[COL_TIME])
+                y_vals.append(y)
+                customdata.append((
+                    str(trig.timeframe),
+                    idx,
+                    int(trig.structure_id),
+                    int(sd),
+                    int(trig.cycle_id),
+                    type_label,
+                    dist_pips,
+                    str(trig.zone_kind),
+                    int(z_conf),
+                ))
+
+        if x_vals:
+            fig.add_trace(go.Scatter(
+                x=x_vals,
+                y=y_vals,
+                mode="markers",
+                name="zone_proximity:trigger",
+                marker=zpt_marker,
+                customdata=customdata,
+                hovertemplate=(
+                    "TF=%{customdata[0]}<br>"
+                    "idx=%{customdata[1]}<br>"
+                    "sid=%{customdata[2]}<br>"
+                    "struct_direction=%{customdata[3]}<br>"
+                    "cycle_id=%{customdata[4]}<br>"
+                    "type=%{customdata[5]}<br>"
+                    "distance_pips=%{customdata[6]}<br>"
+                    "zone_kind=%{customdata[7]}<br>"
+                    "zone_confirmed_idx=%{customdata[8]}"
+                    "<extra></extra>"
+                ),
+            ))
+            print(f"[chart][zone_proximity] rendered {len(x_vals)} trigger markers")
+
+    # Subordinate-structure overlays (e.g., M15 zones rendered on the H1 chart)
+    #
+    # Gated by `zones.subordinate_overlays`, a nested dict keyed by sub-entity
+    # path ID and element kind:
+    #     zones.subordinate_overlays = {
+    #         "M15.counter":    {"KL": False, ...},
+    #         "M15.confluence": {"KL": False, ...},
+    #     }
+    # Missing keys default to off. Default chart_cfg ships with no overrides
+    # so the H1 chart stays focused on H1-native elements; users opt-in per
+    # sub entity when they want to see its overlays.
+    #
+    # Part 4 §13.5.c.iii: read M15 zones directly from each registered
+    # M15 sub-entity's `df.attrs[...]` (entity-absolute idx), via the
+    # registry. The legacy `dfx.attrs["lower_tf_results"]` facade path
+    # is gone.
+    #
+    # NOTE: subordinate structures (counter / confluence variants) are still
+    # being built in Part 4 — new element kinds may appear here as those
+    # variants mature. The dict structure is open-ended so adding a new sub
+    # entity or element kind is purely additive.
+    # -------------------------------------------------
+    sub_overlays = zone_cfg.get("subordinate_overlays", {}) or {}
+    m15_counter_kl_overlay = (
+        sub_overlays.get("M15.counter", {}).get("KL", False)
+    )
+    if zone_cfg.get("KL", False) and m15_counter_kl_overlay:
+        h1_times = pd.to_datetime(dfx[COL_TIME], utc=True)
+        t_last_h1 = h1_times.iloc[-1]
+        m15_zones_rendered = 0
+
+        # Direct children of this H1 entity that may contribute M15 zones
+        # (today: M15.counter; M15.confluence is registered but its zones
+        # are not in the historical H1 overlay — preserve that).
+        sub_path_id = f"{path_id} >> M15.counter"
+        m15_entity = registry.get(sub_path_id)
+        if m15_entity is not None:
+            m15_kl_zones = list(m15_entity.df.attrs.get("kl_zones", []))
+        else:
+            m15_kl_zones = []
+
+        for zone in m15_kl_zones:
+            side = zone.side
+            m15_style = STYLE.get(f"zone.m15.kl.{side}", {})
+            if not m15_style:
+                continue
+
+            rgb = m15_style.get("rgb", "128, 128, 128")
+            is_active = zone.meta.get("status") == "active"
+            fill_op = m15_style.get("fill_opacity_active" if is_active else "fill_opacity_inactive", 0.1)
+            line_dash = m15_style.get("line_dash", "dash")
+            line_width = m15_style.get("confirm_line_width", 1.5)
+            line_op = m15_style.get("confirm_opacity_active" if is_active else "confirm_opacity_inactive", 0.3)
+
+            # Zone start_time is already a timestamp - find nearest H1 candle
+            zone_start = pd.to_datetime(zone.start_time, utc=True)
+            zone_end = pd.to_datetime(zone.end_time, utc=True) if zone.end_time is not None else t_last_h1
+
+            # Clamp to visible H1 range
+            if zone_end < h1_times.iloc[0] or zone_start > t_last_h1:
+                continue
+
+            fig.add_shape(
+                type="rect",
+                xref="x", yref="y",
+                x0=zone_start, x1=zone_end,
+                y0=zone.bottom, y1=zone.top,
+                fillcolor=f"rgba({rgb}, {fill_op})",
+                line=dict(
+                    width=line_width,
+                    dash=line_dash,
+                    color=f"rgba({rgb}, {line_op})",
+                ),
+                layer="below",
+            )
+            m15_zones_rendered += 1
+
+        if m15_zones_rendered:
+            print(f"[chart][m15_zones] rendered {m15_zones_rendered} M15 KL zones")
 
     # -------------------------------------------------
     # Week 7: POI Zones overlays (rectangles + confirm line)
@@ -1712,8 +2282,14 @@ def export_chart_plotly(
             key = f"zone.poi.{side}"
             return STYLE.get(key, {})
 
-        # Filter out disappeared zones
-        visible_zones = [z for z in poi_zones if z.meta.get("status") != "disappeared"]
+        # Filter out disappeared zones and the POIs of collapsed cycles (never
+        # active in real time; keyed off the cycle's BOS KL zone).
+        _collapsed = collapsed_cycles(dfx.attrs.get("kl_zones", []))
+        visible_zones = [
+            z for z in poi_zones
+            if z.meta.get("status") != "disappeared"
+            and not is_poi_of_collapsed_cycle(z, _collapsed)
+        ]
 
         # Find most recent structure_id for opacity tiers
         all_poi_sids = set(int(z.meta.get("structure_id", 0)) for z in visible_zones)
@@ -1750,36 +2326,84 @@ def export_chart_plotly(
             y0 = float(min(z.top, z.bottom))
             y1 = float(max(z.top, z.bottom))
 
-            # Get confirmed_idx for vertical line
-            conf_idx = int(z.meta.get("confirmed_idx", z.ic_idx))
+            # Get confirmed_idx for vertical line. Under the lifecycle convention
+            # `confirmed_idx` can be None when the POI never activated within its
+            # lifetime — in that case skip the confirm line entirely.
+            _conf_raw = z.meta.get("confirmed_idx")
+            conf_idx = int(_conf_raw) if _conf_raw is not None else None
             conf_time = None
-            if conf_idx in dfx.index:
+            if conf_idx is not None and conf_idx in dfx.index:
                 conf_time = pd.to_datetime(dfx.loc[conf_idx, COL_TIME], utc=True)
 
-            # Draw POI zone rectangle
+            # ------------------------------------------------------------------
+            # Item 5 (2026-05-20): outline + active-stretch fill rendering.
+            # POI zone:
+            #   - One outline rect (no fill) spanning full [start_time, end_time],
+            #     colored by confirm-line styling, opacity = base × tier.
+            #   - N filled rects (no border) — one per active stretch from
+            #     activation_history.
+            #   - N vertical confirm lines — one per "A" event in activation_history.
+            # ------------------------------------------------------------------
+            # render_end_idx = last df idx within zone's lifetime.
+            if z.end_time is None:
+                _poi_render_end_idx = int(dfx.index[-1])
+            else:
+                _end_mask = dfx[COL_TIME] <= pd.to_datetime(z.end_time, utc=True)
+                _poi_render_end_idx = int(dfx.index[_end_mask][-1]) if _end_mask.any() else int(dfx.index[0])
+
+            def _poi_idx_to_time(ii: int):
+                if ii in dfx.index:
+                    return pd.to_datetime(dfx.loc[ii, COL_TIME], utc=True)
+                return None
+
+            poi_stretches = compute_poi_active_stretches(z, _poi_render_end_idx)
+
+            # Active-stretch fills (no border, color = zone fill).
+            for stretch_start, stretch_end in poi_stretches:
+                sx0 = _poi_idx_to_time(stretch_start)
+                sx1 = _poi_idx_to_time(stretch_end)
+                if sx0 is None or sx1 is None:
+                    continue
+                if sx0 < x_zone0:
+                    sx0 = x_zone0
+                if sx1 > x_zone1:
+                    sx1 = x_zone1
+                if sx1 <= sx0:
+                    continue
+                fig.add_shape(
+                    type="rect", xref="x", yref="y",
+                    x0=sx0, x1=sx1, y0=y0, y1=y1,
+                    fillcolor=fillcolor,
+                    line=dict(width=0),
+                    layer="below",
+                )
+
+            # Outline rect (no fill, brown border matching confirm line).
             fig.add_shape(
-                type="rect",
-                xref="x",
-                yref="y",
-                x0=x_zone0,
-                x1=x_zone1,
-                y0=y0,
-                y1=y1,
-                fillcolor=fillcolor,
-                line=dict(width=0),
+                type="rect", xref="x", yref="y",
+                x0=x_zone0, x1=x_zone1, y0=y0, y1=y1,
+                fillcolor="rgba(0,0,0,0)",
+                line=dict(color=linecolor, width=confirm_w),
                 layer="below",
             )
 
-            # Draw vertical confirm line at confirmed_idx
-            if conf_time is not None:
+            # Vertical confirm lines — one per "A" event in activation_history.
+            # Fallback: if no history but `confirmed_idx` is set, draw a single
+            # line (covers zones derived before activation_history existed).
+            activation_history = z.meta.get("activation_history", []) or []
+            confirm_idxs = [
+                int(ev["idx"]) for ev in activation_history
+                if ev.get("active") and int(ev["idx"]) <= _poi_render_end_idx
+            ]
+            if not confirm_idxs and conf_idx is not None:
+                confirm_idxs = [conf_idx]
+            for c_idx in confirm_idxs:
+                c_time = _poi_idx_to_time(c_idx)
+                if c_time is None or not (x_zone0 <= c_time <= x_zone1):
+                    continue
                 fig.add_shape(
-                    type="line",
-                    xref="x",
-                    yref="y",
-                    x0=conf_time,
-                    x1=conf_time,
-                    y0=y0,
-                    y1=y1,
+                    type="line", xref="x", yref="y",
+                    x0=c_time, x1=c_time, y0=y0, y1=y1,
                     line=dict(color=linecolor, width=confirm_w),
                     layer="below",
                 )
@@ -1824,6 +2448,7 @@ def export_chart_plotly(
                     line=poi_hover_line,
                     line_shape="hv",
                     hovertemplate=(
+                        "TF=1H<br>"
                         "<b>POI Zone</b><br>"
                         "side=%{customdata[0]}<br>"
                         "structure_id=%{customdata[1]}<br>"
@@ -1852,6 +2477,7 @@ def export_chart_plotly(
                     line=poi_hover_line,
                     line_shape="hv",
                     hovertemplate=(
+                        "TF=1H<br>"
                         "<b>POI Zone</b><br>"
                         "side=%{customdata[0]}<br>"
                         "structure_id=%{customdata[1]}<br>"
@@ -1884,12 +2510,33 @@ def export_chart_plotly(
         zone_rect_active = _style("fib.zone_rect.active")
         zone_rect_historical = _style("fib.zone_rect.historical")
 
+        _fib_drawn = 0
         for fib_st in fib_states:
             if fib_st.fib is None:
                 continue
 
+            # Per-record draw gate (FIB_LIFECYCLE_SPEC §9.1, Session 2). Draw a
+            # record iff it is NOT terminal-suppressed (status "disappeared")
+            # AND it is either the live condition-active version (active AND its
+            # cycle is not ended) OR locked (confirmed historical, incl.
+            # ended-locked, rendered faded). Inactive-unlocked, ended-unlocked,
+            # and superseded (dead) cross versions (active=False) all VANISH
+            # (§9.2). Uses raw per-record active/locked for version distinction;
+            # cycle-level `status` only for the ended/disappeared terminal.
+            _status = getattr(fib_st, "status", "active")
+            if _status == "disappeared":
+                continue
+            _drawable = fib_st.locked or (
+                fib_st.active and _status not in ("ended", "disappeared")
+            )
+            if not _drawable:
+                continue
+            _fib_drawn += 1
+
             fib = fib_st.fib
-            is_active = fib_st.active and not fib_st.locked
+            # "Bright" = the live active version (condition-active, cycle not
+            # ended, not yet locked). Locked / ended records render faded.
+            is_active = fib_st.active and not fib_st.locked and _status == "active"
             anchor_line = anchor_line_active if is_active else anchor_line_historical
             zone_style = zone_rect_active if is_active else zone_rect_historical
 
@@ -1977,35 +2624,39 @@ def export_chart_plotly(
                 layer="below",
             )
 
-            # Add hover trace (invisible line at midpoint of 61.8-80 zone for hover data)
+            # Add hover traces (one point per candle across the fib zone width)
+            # Plotly only detects hover near data points, not along line segments,
+            # so we need points at every candle for consistent hover detection.
             hover_y = (price_618 + price_80) / 2
-            hover_times = [x_start, x_end]
-            hover_vals = [hover_y, hover_y]
+            seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= x_start) & (dfx[COL_TIME] <= x_end)]
+            if len(seg_times) == 0:
+                seg_times = pd.Series([x_start, x_end])
 
-            hover_customdata = [
-                [
-                    fib_st.structure_id,
-                    fib_st.cycle_id,
-                    fib_st.bos_idx,
-                    f"{fib_st.bos_price:.5f}",
-                    fib_st.cts_idx,
-                    f"{fib_st.cts_price:.5f}",
-                    f"{price_618:.5f}",
-                    f"{price_80:.5f}",
-                    "active" if is_active else "locked" if fib_st.locked else "inactive",
-                ]
-                for _ in hover_times
+            hover_row = [
+                fib_st.structure_id,
+                fib_st.cycle_id,
+                fib_st.bos_idx,
+                f"{fib_st.bos_price:.5f}",
+                fib_st.cts_idx,
+                f"{fib_st.cts_price:.5f}",
+                f"{price_618:.5f}",
+                f"{price_80:.5f}",
+                # Hover label from lifecycle status + locked axis (§11).
+                f"{_status}{' (locked)' if fib_st.locked else ''}",
             ]
+            hover_customdata = [hover_row] * len(seg_times)
 
             fig.add_trace(
                 go.Scatter(
-                    x=hover_times,
-                    y=hover_vals,
+                    x=seg_times,
+                    y=[hover_y] * len(seg_times),
                     mode="lines",
                     name=f"fib:sid{fib_st.structure_id}:c{fib_st.cycle_id}",
                     showlegend=False,
                     line=dict(width=6, color="rgba(0,0,0,0)"),  # Invisible hover hitbox
+                    line_shape="hv",
                     hovertemplate=(
+                        "TF=1H<br>"
                         "<b>Fib Zone</b><br>"
                         "sid=%{customdata[0]}<br>"
                         "cycle=%{customdata[1]}<br>"
@@ -2020,7 +2671,8 @@ def export_chart_plotly(
                 )
             )
 
-        print(f"[chart][fib] rendered {len(fib_states)} fib states")
+        print(f"[chart][fib] rendered {_fib_drawn}/{len(fib_states)} fib states "
+              f"(per-record gate: active|locked, not disappeared)")
 
     # -------------------------------------------------
     # Week 7: Prev BOS Lines (black horizontal lines after reversal)
@@ -2046,6 +2698,7 @@ def export_chart_plotly(
                     name=f"Prev BOS (sid={line_info['prev_structure_id']})",
                     showlegend=True,
                     hovertemplate=(
+                        f"TF=1H<br>"
                         f"Prev BOS Line<br>"
                         f"Price: {price:.5f}<br>"
                         f"From idx: {start_idx}<br>"
@@ -2114,7 +2767,7 @@ def export_chart_plotly(
                 showlegend=False,
                 yaxis="y2",
                 customdata=list(zip(dfx.index, dfx[COL_TIME].astype(str))),
-                hovertemplate="idx=%{customdata[0]}<br>time=%{customdata[1]}<br>Volume: %{y:,.0f}<extra></extra>",
+                hovertemplate="TF=1H<br>idx=%{customdata[0]}<br>time=%{customdata[1]}<br>Volume: %{y:,.0f}<extra></extra>",
             )
         )
 
@@ -2131,7 +2784,7 @@ def export_chart_plotly(
                     showlegend=False,
                     yaxis="y2",
                     customdata=list(zip(dfx.index, dfx[COL_TIME].astype(str))),
-                    hovertemplate="idx=%{customdata[0]}<br>time=%{customdata[1]}<br>EMA(20): %{y:,.0f}<extra></extra>",
+                    hovertemplate="TF=1H<br>idx=%{customdata[0]}<br>time=%{customdata[1]}<br>EMA(20): %{y:,.0f}<extra></extra>",
                 )
             )
 

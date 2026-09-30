@@ -1,0 +1,3 @@
+commit_hash=d79f2ab
+timestamp=20260227_190040
+commit_message=M15 chart styling: color-fill H1 zones, blue M15 structure, wave candle dash swap

@@ -1,0 +1,4 @@
+commit_hash=49186fd
+timestamp=20260927_213819
+branch=week8-volmom-multitf
+commit_message=MAIN A: pattern-path CTS_UPDATED only on a strict new extreme (shared _is_new_cts_extreme); EXPORTED -1 row (conf sub 2 CTS_UPDATED 2470, the same-candle tie duplicate)

@@ -1,0 +1,4 @@
+commit_hash=481486a
+timestamp=20260620_163520
+branch=week8-volmom-multitf
+commit_message=MS perf Path 2a: numpy positional price views (byte-identical, -26% MS CPU)

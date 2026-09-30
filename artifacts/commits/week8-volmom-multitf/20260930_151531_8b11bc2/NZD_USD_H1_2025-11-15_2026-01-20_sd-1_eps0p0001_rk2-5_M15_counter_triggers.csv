@@ -1,0 +1,4 @@
+lens,parent_sid,parent_cycle_id,trigger_sub_sid,sub_id,trigger_type,trigger_idx,probe_finalize_idx,probe_finalize_condition,parent_bos_anchor_idx,probe_input_idx,starting_idx,direction,sub_tf,relative_dir,parent_floor_idx,start_idx,trigger_end_idx,end_idx,end_reason,ended_by_sub_id,seq,extra_trigger_idxs,is_zero_length
+counter,0,1,0,3,first_counter,2843,2829,no_retrace,,2609,2639,-1,M15,counter,2611,2843,3611.0,3611.0,parent_end,,5,[],False
+counter,1,2,0,5,first_counter,3707,3707,no_retrace,,3621,3621,1,M15,counter,3611,3707,4083.0,4083.0,same_dir_replacement,7.0,7,[],False
+counter,1,2,1,7,subsequent_counter,4083,4083,no_retrace,,4000,4027,1,M15,counter,3611,4083,,,,,9,[],False

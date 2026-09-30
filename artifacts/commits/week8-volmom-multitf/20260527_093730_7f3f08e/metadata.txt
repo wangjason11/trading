@@ -1,0 +1,4 @@
+commit_hash=7f3f08e
+timestamp=20260527_093730
+branch=week8-volmom-multitf
+commit_message=Unify cycle/structure END via start-passthrough (B2 Phase A)

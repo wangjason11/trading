@@ -1,0 +1,4 @@
+commit_hash=029401f
+timestamp=20260925_145355
+branch=week8-volmom-multitf
+commit_message=Plan E E5·1: internal renames (byte-identical)

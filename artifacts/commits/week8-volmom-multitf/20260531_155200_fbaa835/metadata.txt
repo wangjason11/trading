@@ -1,0 +1,4 @@
+commit_hash=fbaa835
+timestamp=20260531_155200
+branch=week8-volmom-multitf
+commit_message=Unified probe Phase 1 Session 3 Step 1: two-entity cadence driver (byte-identical no-op)

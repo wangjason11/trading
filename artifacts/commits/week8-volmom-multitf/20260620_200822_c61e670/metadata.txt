@@ -1,0 +1,4 @@
+commit_hash=c61e670
+timestamp=20260620_200822
+branch=week8-volmom-multitf
+commit_message=Probe finalize-idx floors bootstrap sub lifecycle-start

@@ -1,0 +1,4 @@
+commit_hash=ef2c6c2
+timestamp=20260531_122337
+branch=week8-volmom-multitf
+commit_message=Unified probe Phase 1 Session 2: 2-phase design + first_* migration + ref-zone pivot

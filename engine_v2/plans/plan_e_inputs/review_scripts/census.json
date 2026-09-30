@@ -1,0 +1,219 @@
+{
+ "counts": [
+  [
+   "test_cross_cycle_fib.py",
+   "CTS_ESTABLISHED",
+   true,
+   20
+  ],
+  [
+   "test_first_confluence_trigger.py",
+   "CTS_ESTABLISHED",
+   false,
+   5
+  ],
+  [
+   "test_first_confluence_trigger.py",
+   "BOS_CONFIRMED",
+   true,
+   13
+  ],
+  [
+   "test_imbalance_c3_knowability.py",
+   "CTS_ESTABLISHED",
+   true,
+   24
+  ],
+  [
+   "test_lifecycle_sweep_predicted_table.py",
+   "CTS_ESTABLISHED",
+   true,
+   10
+  ],
+  [
+   "test_lifecycle_sweep_predicted_table.py",
+   "BOS_CONFIRMED",
+   true,
+   10
+  ],
+  [
+   "test_main_versioned_cross.py",
+   "CTS_ESTABLISHED",
+   true,
+   21
+  ],
+  [
+   "test_ms_stop_after_cts.py",
+   "CTS_ESTABLISHED",
+   true,
+   5
+  ],
+  [
+   "test_parent_tables.py",
+   "BOS_CONFIRMED",
+   true,
+   24
+  ],
+  [
+   "test_parent_tables.py",
+   "CTS_ESTABLISHED",
+   true,
+   42
+  ],
+  [
+   "test_poi_activation_moment.py",
+   "CTS_ESTABLISHED",
+   true,
+   1
+  ],
+  [
+   "test_sid_records.py",
+   "CTS_ESTABLISHED",
+   false,
+   5
+  ],
+  [
+   "test_sid_records.py",
+   "BOS_CONFIRMED",
+   true,
+   4
+  ],
+  [
+   "test_structure_lifecycle_moment.py",
+   "BOS_CONFIRMED",
+   true,
+   13
+  ],
+  [
+   "test_structure_lifecycle_moment.py",
+   "CTS_ESTABLISHED",
+   true,
+   32
+  ],
+  [
+   "test_structure_lifecycle_moment.py",
+   "CTS_ESTABLISHED",
+   false,
+   1
+  ],
+  [
+   "test_sub_wvmi.py",
+   "BOS_CONFIRMED",
+   false,
+   6
+  ],
+  [
+   "test_subsequent_confluence_trigger.py",
+   "CTS_ESTABLISHED",
+   false,
+   1
+  ],
+  [
+   "test_subsequent_confluence_trigger.py",
+   "BOS_CONFIRMED",
+   true,
+   1
+  ],
+  [
+   "test_subsequent_counter_trigger.py",
+   "CTS_ESTABLISHED",
+   false,
+   1
+  ],
+  [
+   "test_subsequent_counter_trigger.py",
+   "BOS_CONFIRMED",
+   true,
+   1
+  ],
+  [
+   "test_unified_probe.py",
+   "CTS_ESTABLISHED",
+   true,
+   2
+  ],
+  [
+   "test_unified_probe.py",
+   "CTS_ESTABLISHED",
+   false,
+   2
+  ],
+  [
+   "test_wave_candles.py",
+   "CTS_ESTABLISHED",
+   false,
+   8
+  ],
+  [
+   "test_wvmi.py",
+   "BOS_CONFIRMED",
+   false,
+   4
+  ],
+  [
+   "test_zone_proximity.py",
+   "BOS_CONFIRMED",
+   true,
+   6
+  ]
+ ],
+ "sites": {
+  "test_cross_cycle_fib.py": [
+   52
+  ],
+  "test_first_confluence_trigger.py": [
+   26
+  ],
+  "test_imbalance_c3_knowability.py": [
+   68,
+   89
+  ],
+  "test_lifecycle_sweep_predicted_table.py": [
+   88,
+   597
+  ],
+  "test_main_versioned_cross.py": [
+   49
+  ],
+  "test_ms_stop_after_cts.py": [
+   243
+  ],
+  "test_parent_tables.py": [
+   45
+  ],
+  "test_poi_activation_moment.py": [
+   242
+  ],
+  "test_sid_records.py": [
+   27
+  ],
+  "test_structure_lifecycle_moment.py": [
+   41
+  ],
+  "test_sub_wvmi.py": [
+   69
+  ],
+  "test_subsequent_confluence_trigger.py": [
+   22
+  ],
+  "test_subsequent_counter_trigger.py": [
+   22
+  ],
+  "test_unified_probe.py": [
+   840,
+   842,
+   850,
+   851
+  ],
+  "test_wave_candles.py": [
+   77
+  ],
+  "test_wvmi.py": [
+   73
+  ],
+  "test_zone_proximity.py": [
+   46,
+   323
+  ]
+ }
+}

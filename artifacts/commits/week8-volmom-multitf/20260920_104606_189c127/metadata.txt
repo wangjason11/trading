@@ -1,0 +1,4 @@
+commit_hash=189c127
+timestamp=20260920_104606
+branch=week8-volmom-multitf
+commit_message=Plan B: the double-CTS rule is a true early stop in the first_confluence probe

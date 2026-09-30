@@ -1,0 +1,4 @@
+commit_hash=4325071
+timestamp=20260525_185758
+branch=week8-volmom-multitf
+commit_message=Sub-structure lifecycle redesign Phase 2: merge-and-bound sub build

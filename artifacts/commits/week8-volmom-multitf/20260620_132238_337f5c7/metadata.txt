@@ -1,0 +1,4 @@
+commit_hash=337f5c7
+timestamp=20260620_132238
+branch=week8-volmom-multitf
+commit_message=(c) pinbar zone inner-side bound — tight rule preserved + inversion guard (byte-identical)

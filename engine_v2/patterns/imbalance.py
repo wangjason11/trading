@@ -1,205 +1,119 @@
 # engine_v2/patterns/imbalance.py
 """
-Imbalance (FVG-like) pattern detection for POI Zones.
+Imbalance (FVG) pattern detection for POI Zones and Fib activation.
 
-An imbalance is a 3-candle pattern where there's a gap between
-candle 1's wick and candle 3's wick, indicating strong directional movement.
+Two concepts:
+- Imbalance candle: a c2 (middle) candle whose neighbors (c1, c3) form a gap
+  and whose own direction matches the gap direction. Flagged per-candle via
+  `is_imbalance == 1` on the dataframe (charting consumes this).
+- Imbalance instance: one or more consecutive same-direction imbalance candles
+  merged into a single entity with merged gap bounds. Stored as
+  ImbalanceInstance objects in `df.attrs["imbalances"]` (Fib/POI consume this).
 
-This module computes imbalance as DataFrame columns (pattern-style),
-not as separate events. The middle candle (c2) receives the flag.
+Detection rules:
+- Bullish FVG: c1.high < c3.low AND c2 direction == +1
+- Bearish FVG: c1.low  > c3.high AND c2 direction == -1
+- Consecutive same-direction imbalance candles form one merged instance.
+
+Merged gap bounds:
+- Bullish: gap_bottom = first c1.high, gap_top = last c3.low
+- Bearish: gap_bottom = last c3.high,  gap_top = first c1.low
 """
 from __future__ import annotations
 
+from typing import List, Optional
+
 import pandas as pd
-import numpy as np
+
+from engine_v2.common.types import ImbalanceInstance
 
 
 def compute_imbalance(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Compute imbalance pattern flags for the DataFrame.
+    Compute imbalance candles (column flag) and imbalance instances (attrs list).
 
-    Adds columns:
-    - is_imbalance: 1 if imbalance detected (middle candle), 0 otherwise
-    - imbalance_gap_size: size of the gap (0 if no imbalance)
+    Sets:
+    - df["is_imbalance"] (0/1): 1 for every c2 candle that forms an FVG with
+      matching c2 direction.
+    - df.attrs["imbalances"]: List[ImbalanceInstance] with merged bounds.
 
-    Direction is determined by the existing 'direction' column.
-
-    Standard FVG logic:
-    - Bullish: c1.high < c3.low (gap between them)
-    - Bearish: c1.low > c3.high (gap between them)
-
-    Parameters
-    ----------
-    df : DataFrame
-        OHLC data with columns: h, l, direction
-
-    Returns
-    -------
-    DataFrame with is_imbalance and imbalance_gap_size columns added
+    Requires df to already have `direction` column from candle classification.
     """
     df = df.copy()
-
-    # Initialize columns
     df["is_imbalance"] = 0
-    df["imbalance_gap_size"] = 0.0
 
-    # Need at least 3 candles
-    if len(df) < 3:
+    if len(df) < 3 or "direction" not in df.columns:
+        df.attrs["imbalances"] = []
         return df
 
-    # Get arrays for vectorized comparison
-    h = df["h"].values
-    l = df["l"].values
-
-    # c1 = idx-1, c2 = idx (middle), c3 = idx+1
-    # We check indices 1 to len-2 (so c1 and c3 are valid)
+    # ---- Pass 1: flag individual imbalance candles ----
+    h_vals = df["h"].values
+    l_vals = df["l"].values
+    dir_vals = df["direction"].values
+    is_imb_col = df.columns.get_loc("is_imbalance")
 
     for idx in range(1, len(df) - 1):
-        c1_h = h[idx - 1]
-        c1_l = l[idx - 1]
-        c3_h = h[idx + 1]
-        c3_l = l[idx + 1]
+        c1_h = h_vals[idx - 1]
+        c1_l = l_vals[idx - 1]
+        c3_h = h_vals[idx + 1]
+        c3_l = l_vals[idx + 1]
+        c2_dir = int(dir_vals[idx])
 
-        # Bullish imbalance: gap between c1.high and c3.low
-        if c1_h < c3_l:
-            gap_size = c3_l - c1_h
-            df.iloc[idx, df.columns.get_loc("is_imbalance")] = 1
-            df.iloc[idx, df.columns.get_loc("imbalance_gap_size")] = gap_size
+        # Bullish FVG + bullish c2
+        if c1_h < c3_l and c2_dir == 1:
+            df.iloc[idx, is_imb_col] = 1
+        # Bearish FVG + bearish c2
+        elif c1_l > c3_h and c2_dir == -1:
+            df.iloc[idx, is_imb_col] = 1
 
-        # Bearish imbalance: gap between c1.low and c3.high
-        elif c1_l > c3_h:
-            gap_size = c1_l - c3_h
-            df.iloc[idx, df.columns.get_loc("is_imbalance")] = 1
-            df.iloc[idx, df.columns.get_loc("imbalance_gap_size")] = gap_size
+    # ---- Pass 2: merge consecutive same-direction flags into instances ----
+    instances: List[ImbalanceInstance] = []
+    is_imb_vals = df["is_imbalance"].values
 
+    i = 1
+    while i < len(df) - 1:
+        if is_imb_vals[i] != 1:
+            i += 1
+            continue
+
+        direction = int(dir_vals[i])
+        run_start = i
+        run_end = i
+        j = i + 1
+        while (
+            j < len(df) - 1
+            and is_imb_vals[j] == 1
+            and int(dir_vals[j]) == direction
+        ):
+            run_end = j
+            j += 1
+
+        if direction == 1:
+            gap_bottom = float(h_vals[run_start - 1])  # first c1.high
+            gap_top = float(l_vals[run_end + 1])       # last c3.low
+        else:
+            gap_bottom = float(h_vals[run_end + 1])    # last c3.high
+            gap_top = float(l_vals[run_start - 1])     # first c1.low
+
+        instances.append(
+            ImbalanceInstance(
+                start_idx=run_start,
+                end_idx=run_end,
+                direction=direction,
+                gap_top=gap_top,
+                gap_bottom=gap_bottom,
+                gap_size=gap_top - gap_bottom,
+            )
+        )
+        i = j
+
+    df.attrs["imbalances"] = instances
     return df
 
 
-def has_imbalance_in_range(df: pd.DataFrame, start_idx: int, end_idx: int) -> bool:
-    """
-    Check if any imbalance exists in the given index range.
-
-    Parameters
-    ----------
-    df : DataFrame
-        Must have 'is_imbalance' column computed
-    start_idx : int
-        Start of range (inclusive)
-    end_idx : int
-        End of range (inclusive)
-
-    Returns
-    -------
-    bool
-        True if at least one imbalance exists in range
-    """
-    if "is_imbalance" not in df.columns:
-        return False
-
-    mask = (df.index >= start_idx) & (df.index <= end_idx)
-    return df.loc[mask, "is_imbalance"].sum() > 0
-
-
-def get_imbalance_gap_bounds(df: pd.DataFrame, imb_idx: int) -> tuple[float, float, int]:
-    """
-    Get the FVG gap bounds for an imbalance candle.
-
-    Parameters
-    ----------
-    df : DataFrame
-        OHLC data with h, l columns
-    imb_idx : int
-        Index of the middle candle (the one flagged as imbalance)
-
-    Returns
-    -------
-    tuple of (gap_bottom, gap_top, direction)
-        direction: 1 for bullish, -1 for bearish
-        Returns (0, 0, 0) if not a valid imbalance
-    """
-    # imb_idx is the middle candle (c2), so c1 = imb_idx-1, c3 = imb_idx+1
-    if imb_idx - 1 not in df.index or imb_idx + 1 not in df.index:
-        return (0.0, 0.0, 0)
-
-    c1_h = float(df.loc[imb_idx - 1, "h"])
-    c1_l = float(df.loc[imb_idx - 1, "l"])
-    c3_h = float(df.loc[imb_idx + 1, "h"])
-    c3_l = float(df.loc[imb_idx + 1, "l"])
-
-    # Bullish: gap between c1.high and c3.low
-    if c1_h < c3_l:
-        return (c1_h, c3_l, 1)  # gap_bottom, gap_top, bullish
-
-    # Bearish: gap between c3.high and c1.low
-    if c1_l > c3_h:
-        return (c3_h, c1_l, -1)  # gap_bottom, gap_top, bearish
-
-    return (0.0, 0.0, 0)
-
-
-def is_imbalance_filled(
-    df: pd.DataFrame,
-    imb_idx: int,
-    check_to_idx: int,
-    fill_threshold: float = 0.70,
-) -> bool:
-    """
-    Check if an imbalance at imb_idx is filled by candles from imb_idx+1 to check_to_idx.
-
-    Filled means price retraced >= fill_threshold (default 70%) into the FVG gap.
-
-    Parameters
-    ----------
-    df : DataFrame
-        OHLC data
-    imb_idx : int
-        Index of the imbalance candle (middle candle)
-    check_to_idx : int
-        End index to check (inclusive)
-    fill_threshold : float
-        Percentage of gap that must be filled (0.70 = 70%)
-
-    Returns
-    -------
-    bool
-        True if imbalance is filled, False if unfilled
-    """
-    gap_bottom, gap_top, direction = get_imbalance_gap_bounds(df, imb_idx)
-
-    if direction == 0:
-        return True  # Not a valid imbalance, treat as filled
-
-    gap_size = gap_top - gap_bottom
-    if gap_size <= 0:
-        return True  # Invalid gap
-
-    # For bullish imbalance: price needs to come DOWN into the gap
-    # Fill level = gap_top - (gap_size * fill_threshold)
-    # Filled if any candle's low <= fill level
-
-    # For bearish imbalance: price needs to go UP into the gap
-    # Fill level = gap_bottom + (gap_size * fill_threshold)
-    # Filled if any candle's high >= fill level
-
-    if direction == 1:  # Bullish
-        fill_level = gap_top - (gap_size * fill_threshold)
-        # Check if any candle from imb_idx+1 to check_to_idx has low <= fill_level
-        for idx in range(imb_idx + 1, check_to_idx + 1):
-            if idx not in df.index:
-                continue
-            if float(df.loc[idx, "l"]) <= fill_level:
-                return True
-    else:  # Bearish
-        fill_level = gap_bottom + (gap_size * fill_threshold)
-        # Check if any candle from imb_idx+1 to check_to_idx has high >= fill_level
-        for idx in range(imb_idx + 1, check_to_idx + 1):
-            if idx not in df.index:
-                continue
-            if float(df.loc[idx, "h"]) >= fill_level:
-                return True
-
-    return False
-
+# ---------------------------------------------------------------------------
+# Instance-based aggregation helpers
+# ---------------------------------------------------------------------------
 
 def has_unfilled_imbalance(
     df: pd.DataFrame,
@@ -207,139 +121,52 @@ def has_unfilled_imbalance(
     end_idx: int,
     check_to_idx: int,
     fill_threshold: float = 0.70,
+    *,
+    direction: Optional[int] = None,
+    evaluated_at: Optional[int],
 ) -> bool:
-    """
-    Check if at least one unfilled imbalance exists in the range [start_idx, end_idx].
+    """True if at least one imbalance instance overlapping `[start_idx, end_idx]`
+    is unfilled as of `check_to_idx`, counting only instances that have FORMED by
+    the moment the question is asked (`evaluated_at`).
+
+    Two as-ofs (IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule"):
+    ``check_to_idx`` is the fill horizon, ``evaluated_at`` the moment of the
+    question.
 
     Parameters
     ----------
-    df : DataFrame
-        Must have 'is_imbalance' column computed
-    start_idx : int
-        Start of imbalance search range (inclusive)
-    end_idx : int
-        End of imbalance search range (inclusive)
-    check_to_idx : int
-        Index to check fill status against (typically CTS anchor)
-    fill_threshold : float
-        Percentage threshold for fill (default 0.70 = 70%)
-
-    Returns
-    -------
-    bool
-        True if at least one imbalance in range is unfilled
+    start_idx, end_idx
+        Inclusive window in which the instance must overlap.
+    check_to_idx
+        The FILL HORIZON — `inst.is_filled` scans `(inst.end_idx, check_to_idx]`
+        for the two-stroke fill. Callers pick it for the question asked (the
+        handled event's moment, a reference event's moment such as BOS_1's, or
+        the current candle — moments on every FibTracker site since Plan E
+        E3a / E3a′); IC cond3 keeps the fib's CTS anchor by decision (T2).
+    evaluated_at
+        Keyword-only and REQUIRED. The MOMENT the question is asked. An instance
+        counts only once its first c3 has closed (`inst.formed_at <=
+        evaluated_at`), and only its formed prefix is tested against the window
+        (`inst.overlaps_formed_prefix`). The cut is keyed on the moment, never on
+        `check_to_idx` (which can be an anchor that precedes the moment).
+        ``None`` = an explicit "no knowability cut" — retrospective questions,
+        the unchanged MS in-flight resolver, cached values judged at their later
+        use — and is today's answer.
+    direction
+        Struct-direction filter; every production caller passes ``sd`` (all
+        Fib / scenario / POI checks are sd-direction strict since 2026-05-23 —
+        IMBALANCE_FILL_SEMANTICS.md). ``None`` accepts any direction.
+    fill_threshold
+        Retracement fraction (default 0.70) at which stroke 1 fires.
     """
-    if "is_imbalance" not in df.columns:
-        return False
-
-    # Find all imbalance indices in range
-    mask = (df.index >= start_idx) & (df.index <= end_idx) & (df["is_imbalance"] == 1)
-    imbalance_indices = df.index[mask].tolist()
-
-    if not imbalance_indices:
-        return False  # No imbalances in range
-
-    # Check each imbalance - return True if ANY is unfilled
-    for imb_idx in imbalance_indices:
-        if not is_imbalance_filled(df, imb_idx, check_to_idx, fill_threshold):
+    for inst in df.attrs.get("imbalances", []):
+        if direction is not None and inst.direction != direction:
+            continue
+        if evaluated_at is None:
+            if not inst.overlaps(start_idx, end_idx):
+                continue
+        elif not inst.overlaps_formed_prefix(start_idx, end_idx, evaluated_at):
+            continue
+        if not inst.is_filled(df, check_to_idx, fill_threshold):
             return True
-
-    return False  # All imbalances are filled
-
-
-def get_unfilled_imbalances(
-    df: pd.DataFrame,
-    start_idx: int,
-    end_idx: int,
-    check_to_idx: int,
-    fill_threshold: float = 0.70,
-) -> list[int]:
-    """
-    Get list of unfilled imbalance indices in the range.
-
-    Parameters
-    ----------
-    df : DataFrame
-        Must have 'is_imbalance' column computed
-    start_idx : int
-        Start of imbalance search range (inclusive)
-    end_idx : int
-        End of imbalance search range (inclusive)
-    check_to_idx : int
-        Index to check fill status against
-    fill_threshold : float
-        Percentage threshold for fill
-
-    Returns
-    -------
-    list of int
-        Indices of unfilled imbalances
-    """
-    if "is_imbalance" not in df.columns:
-        return []
-
-    mask = (df.index >= start_idx) & (df.index <= end_idx) & (df["is_imbalance"] == 1)
-    imbalance_indices = df.index[mask].tolist()
-
-    unfilled = []
-    for imb_idx in imbalance_indices:
-        if not is_imbalance_filled(df, imb_idx, check_to_idx, fill_threshold):
-            unfilled.append(imb_idx)
-
-    return unfilled
-
-
-def has_unfilled_imbalance_in_direction(
-    df: pd.DataFrame,
-    start_idx: int,
-    end_idx: int,
-    direction: int,
-    fill_threshold: float = 0.70,
-) -> bool:
-    """
-    Check if at least one unfilled imbalance in a specific direction exists in the range.
-
-    This is used for IC candidate validation - the IC requires an unfilled imbalance
-    in the struct_direction AFTER the IC candle.
-
-    Parameters
-    ----------
-    df : DataFrame
-        Must have 'is_imbalance' column computed
-    start_idx : int
-        Start of imbalance search range (inclusive)
-    end_idx : int
-        End of imbalance search range (inclusive)
-    direction : int
-        +1 for bullish imbalance, -1 for bearish imbalance
-    fill_threshold : float
-        Percentage threshold for fill (default 0.70 = 70%)
-
-    Returns
-    -------
-    bool
-        True if at least one unfilled imbalance in the specified direction exists
-    """
-    if "is_imbalance" not in df.columns:
-        return False
-
-    # Find all imbalance indices in range
-    mask = (df.index >= start_idx) & (df.index <= end_idx) & (df["is_imbalance"] == 1)
-    imbalance_indices = df.index[mask].tolist()
-
-    if not imbalance_indices:
-        return False
-
-    # Check each imbalance - return True if ANY is unfilled AND matches direction
-    for imb_idx in imbalance_indices:
-        # Get the imbalance direction
-        gap_bottom, gap_top, imb_direction = get_imbalance_gap_bounds(df, imb_idx)
-
-        if imb_direction != direction:
-            continue  # Wrong direction
-
-        # Check if this imbalance is unfilled
-        if not is_imbalance_filled(df, imb_idx, end_idx, fill_threshold):
-            return True
-
-    return False  # No unfilled imbalances in the specified direction
+    return False

@@ -1,0 +1,4 @@
+commit_hash=310c395
+timestamp=20260527_030856
+branch=week8-volmom-multitf
+commit_message=FibState lifecycle Session 2: repurpose active to condition-only + switch consumers + per-record gate + reversal terminal

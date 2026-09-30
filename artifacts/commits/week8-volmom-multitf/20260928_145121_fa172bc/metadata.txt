@@ -1,0 +1,4 @@
+commit_hash=fa172bc
+timestamp=20260928_145121
+branch=week8-volmom-multitf
+commit_message=WVMI main temp LP bounded at the cycle's lifecycle end (EXPORTED: H1 wvmi.csv (0,1) lp_idx 988->896, pullback 0.904->0.759, sell 0.9->0.76)

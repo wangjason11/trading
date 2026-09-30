@@ -1,0 +1,5 @@
+commit_hash=7640ac9
+timestamp=20260526_182511
+branch=week8-volmom-multitf
+commit_message=Remove entity_sid; sub identity is (parent_sid, parent_cycle_id, sub_sid)
+replay=reused session run (raw.csv ref); no re-run

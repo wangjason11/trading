@@ -1,6 +1,8 @@
 # CLAUDE.md — Project Context for Claude Code
 
-> This file is automatically read by Claude Code on startup.
+> Project context for the engine. The **repo-root `CLAUDE.md`** is what loads at startup (it points
+> here); this nested file comes in with work under `engine_v2/`. Keep the root file a pointer — the
+> content lives here.
 
 ## Project Overview
 
@@ -12,20 +14,22 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 
 ## Current Status
 
-**Week 7 Complete — Ready for Week 8**
+**Week 8 Done** — DoD signed off by the user 2026-09-30 (branch `week8-volmom-multitf`, merged to `main` after that day's `/commit-save`)
 
-| Week 7 Part 1 (Complete) | Week 7 Part 2 (Complete) |
-|-----------|-------------|
-| POI Zones (Fib + IC identification) | Volume features (vol_dir, vol_ema20, vol_spike_ratio, is_vol_spike) |
-| Imbalance Pattern (FVG detection + fill checking) | Volume charting (bars overlay, EMA line, spike markers) |
-| Fibonacci Levels (FibTracker lifecycle) | Dynamic y-axis auto-scaling on zoom |
-| IC Candidate/Variant selection (V30/V60/V90) | Unified chart border (price + volume) |
-| POI Zone lifecycle (active/inactive/end_time) | |
-| POI Zone charting (gold fill, dark brown confirm line) | |
-| Candle classification fixes (special_maru direction + precedence) | |
-| Pattern3 fix (allow maru or normal for c0) | |
+| Part | Focus | Status |
+|------|-------|--------|
+| Part 1 | Scenario 3 for start candle identification | Done |
+| Part 2 | Volume momentum indicator (WVMI + proximity gate) | Done |
+| Part 3 | Multi-timeframe analysis (subordinate structures + overlay) | Done |
+| Part 4 | Pipeline / strategy / multi-TF refactor | **Done** (closed 2026-09-30) — see `PART4_REFACTOR_SPEC.md`, the canonical multi-TF spec (§17 authoritative for subs). Built: per-entity dfs (through §13.5.c.iii); the **sub-structure pool** (§17 — `TriggerRecord` + unique sub, lifecycle sweep; Plans A/B/C, 2026-09-21) + two chart-review rounds; the **zones pass** (2026-09-22 → 29): POI activation on the CTS-established moment (Plan D), imbalance c3 knowability (Plan F), `ev.idx` = the moment on every CTS / BOS event + the candle-index Naming Standard (Plan E, Post-E·1–5), and the MS latent-bug close-out (MS never rewinds since 2026-09-29); and the **WVMI pass** — Plan G (`plans/PLAN_G_wvmi_unique_sub.md`, landed 2026-09-30): sub WVMI computed inside each unique sub's projection, ungated, lifecycle-bounded, exported per lens like zones, with a `cycle_collapsed` flag and per-lens trigger attribution. Week 8 close-out 2026-09-30: the chart-review items, the user's scope decisions and a hygiene pass are done (`IDEA_PARKING_LOT.md`). Part 4 closure 2026-09-30 (register §C): §13.5.e closed (the `H1.main` attrs block IS the registry's store — kept), §13.7 finalized in place (PART4 not split; §16.10 naming: the spec follows the code), `PRE_REFACTOR_INVARIANTS.md` deleted. Next (after the merge): the M5 lens, before Entries |
 
-**Note:** Original syllabus had Zones in Week 7, but we pulled it forward to Week 6. Volume indicators added in Week 7 Part 2.
+**Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).
+
+**Session-level status** (the latest commits, the `/compare` baseline save, test count, next priorities) lives in
+memory `MEMORY.md` "Next session priorities"; the per-stage records of the zones pass in
+`plans/PLAN_E_naming_event_convention.md` §9 and memory `project_zones_timing_audit_20260922.md`.
+
+**Note:** Original syllabus had multi-TF in Week 8. Parts 1 & 2 revisit prior-week topics to strengthen the single-TF foundation before Part 3 layers on multi-TF.
 
 **Note:** On any given week, we may deviate slightly from the original 10-week plan. We may also return to prior week topics for additional debugging and checking how they interact with new elements we are building.
 
@@ -34,10 +38,11 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 ## Quick Commands
 
 ```bash
-# Run replay pipeline (generates charts + CSVs)
-python -m engine_v2.run_replay
+# Run replay pipeline (generates charts + CSVs), from the repo root.
+# Capture the log: the M15 fetch gate (WORKFLOWS.md / /compare §2b) reads run.log.
+python -m engine_v2.run_replay > run.log 2>&1
 
-# Run tests
+# Run tests — from the REPO ROOT (from engine_v2/ the OANDA smoke test cannot find oanda.cfg)
 pytest
 
 # Output location
@@ -59,18 +64,26 @@ engine_v2/
 ├── config.py                        # Pair/timeframe/date config
 ├── pipeline/orchestrator.py         # Pipeline ordering (LOCKED)
 ├── structure/
-│   ├── market_structure.py          # CTS/BOS state machine (core)
-│   ├── structure_engine.py          # Wrapper for orchestrator
-│   ├── identify_start.py            # Start candle selection
-│   └── structure_v1.py              # Swing/level computation
+│   ├── market_structure.py          # CTS/BOS state machine (core; dual CTS confirmation paths)
+│   ├── event_fields.py              # Event index ROLES: ef.event_moment / ef.cts_anchor_idx / ef.bos_anchor_idx
+│   ├── unified_probe.py             # Start-candle probe (all trigger types + main reversals)
+│   ├── structure_engine.py          # Wrapper for orchestrator; wires zone-derivation resolvers
+│   └── identify_start.py            # Start candle selection
 ├── zones/kl_zones_v1.py             # KL Zone derivation from events
 ├── zones/poi_zones.py               # POI Zone derivation (Fib + IC)
 ├── zones/fib_tracker.py             # Fibonacci lifecycle management
+├── zones/wave_candles.py            # Wave candle identification
+├── zones/wvmi.py                    # Wave Volume Momentum Indicator
+├── zones/zone_proximity.py          # Zone proximity triggers (alternating sd/opp_sd)
 ├── patterns/imbalance.py            # Imbalance (FVG) pattern detection
 ├── patterns/structure_patterns.py   # Breakout pattern detection
 ├── features/candles_v2.py           # Candle classification
+├── multitf/                         # Multi-TF analysis (subordinate M15 structures)
+│   ├── sub_structure_pool.py        # Pool: TriggerRecord + unique sub (PART4 §17)
+│   └── entity_df_mutation.py        # Sub build + mirror to entity-absolute (the *_META_IDX_KEYS shift lists)
 ├── charting/
-│   ├── export_plotly.py             # Chart generation
+│   ├── export_plotly.py             # Chart generation (H1)
+│   ├── export_m15_chart.py          # M15 lens charts
 │   └── style_registry.py            # Visual styling
 └── debug/                           # CSV export utilities
 ```
@@ -80,10 +93,10 @@ engine_v2/
 ## Pipeline Ordering (LOCKED)
 
 ```
-candle features → structure patterns → base features → market structure → KL zones → POI zones → charting
+candle features → structure patterns → imbalance → market structure → KL zones → wave candles → Fib tracking → POI zones → WVMI → charting
 ```
 
-**Critical:** Base features MUST run BEFORE structure. See `LANDMINES.md` for details.
+**Critical:** Base features MUST run BEFORE structure. WVMI MUST run AFTER POI zones (depends on POI zone inner bounds for activation gate). See `LANDMINES.md` for details.
 
 ---
 
@@ -91,22 +104,27 @@ candle features → structure patterns → base features → market structure �
 
 | File | What's Inside |
 |------|---------------|
-| `MARKET_STRUCTURE_SPEC.md` | CTS/BOS/Range/Reversal semantics |
-| `KL_ZONES_SPEC.md` | Zone construction, thresholds, expansion |
+| `structure/MARKET_STRUCTURE_SPEC.md` | CTS/BOS/Range/Reversal semantics |
+| `zones/KL_ZONES_SPEC.md` | Zone construction, thresholds, expansion |
 | `zones/POI_ZONES_SPEC.md` | POI zones (Fib + IC) specification |
-| `CHARTING_SPEC.md` | Chart overlay rules, style registry |
-| `ARCHITECTURE.md` | System design, event contracts |
-| `PROJECT_PRINCIPLES.md` | Non-negotiable guardrails |
+| `zones/FIB_LIFECYCLE_SPEC.md` / `zones/CROSS_CYCLE_FIB_SPEC.md` | Fib lifecycle; the cross-cycle Fib mode |
+| `zones/WAVE_CANDLES_SPEC.md` | Wave candle identification algorithm |
+| `zones/WVMI_SPEC.md` | Wave Volume Momentum Indicator lifecycle + formulas |
+| `IMBALANCE_FILL_SEMANTICS.md` | Imbalance (FVG) knowability (the c3 rule) + two-stroke fill |
+| `charting/CHARTING_SPEC.md` | Chart overlay rules, style registry |
+| `ARCHITECTURE.md` | System design, event contracts, the `ev.idx` convention table |
+| `PART4_REFACTOR_SPEC.md` | Multi-TF refactor; §17 = the sub-structure pool (authoritative for subs) |
+| `../PROJECT_PRINCIPLES.md` (repo root) | Non-negotiable guardrails |
 | `WORKFLOWS.md` | Debugging checklist |
 | `GOTCHAS.md` | Debugging lessons learned |
-| `LANDMINES.md` | Critical constraints, things to avoid |
-| `GLOSSARY.md` | Domain terminology reference |
-
+| `LANDMINES.md` | Critical constraints, things to avoid (incl. "Event Contract Rules") |
+| `GLOSSARY.md` | Domain terminology; the candle-index "Naming Standard" |
+| `../IDEA_PARKING_LOT.md` (repo root) | The deferred-items register: every deferred / parked / planned-but-unbuilt item, by bucket (Week 8 close-out, decisions, Part 4 closure, before Entries, trigger-based, Week 10, backlog) |
 ---
 
 ## Guardrails (Summary)
 
-Full details in `PROJECT_PRINCIPLES.md`. Key points:
+Full details in `PROJECT_PRINCIPLES.md` (repo root). Key points:
 
 1. **Research engine first** — every decision traceable to events
 2. **Interfaces frozen** — contracts stable, internals can evolve
@@ -133,6 +151,19 @@ When something looks wrong:
 See `GOTCHAS.md` for detailed debugging lessons (including cascading effect examples).
 
 ---
+
+## Documentation cadence (standing rule, 2026-09-22)
+
+Capture learnings **continuously through the session**, not in one sweep at the end:
+write the nuance down when it is said (verbatim + why it matters), then **file and
+reconcile at every checkpoint** — after each landed change, at each `/compare`
+pause, and at `/commit-save`. Reconciling is the new risk that frequent writes
+create: edit existing entries **in place** rather than appending contradicting ones,
+keep one canonical home per fact, and move code + spec + skill values + memory in the
+same commit. Unresolved items go one line into `memory/_INBOX.md` (durable; drained
+at the next checkpoint). Full rule + trigger list + routing table:
+`memory/feedback_continuous_documentation.md`; procedure: the `/remember` skill's
+"Continuous mode".
 
 ## Development Workflow
 

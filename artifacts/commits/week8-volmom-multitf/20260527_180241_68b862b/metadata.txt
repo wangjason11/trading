@@ -1,0 +1,4 @@
+commit_hash=68b862b
+timestamp=20260527_180241
+branch=week8-volmom-multitf
+commit_message=WVMI lifecycle convention (data layer): lp_status rename + scalar start/end + derived status

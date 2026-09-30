@@ -1,0 +1,4 @@
+commit_hash=e64556a
+timestamp=20260528_041319
+branch=week8-volmom-multitf
+commit_message=Wave-candle chart rendering: per-candle lifecycle gating + WVMI lifecycle removal

@@ -1,0 +1,4 @@
+commit_hash=d6b8f54
+timestamp=20260617_004950
+branch=week8-volmom-multitf
+commit_message=11a-i: extract shared cross-cycle eligibility routine + reroute both fib modes (byte-identical)

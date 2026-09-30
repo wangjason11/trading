@@ -1,0 +1,7 @@
+sid,starting_sd,creation_event_idx,end_event_idx,end_reason,parent_sid,parent_cycle_id,meta
+0,1,630,2547,lifecycle_end,0,0,"{'use_case': 'first_confluence', 'validated_parent_start': 157, 'slice_begin': 580, 'trigger_event_idx': 115}"
+1,1,2403,2611,lifecycle_end,0,1,"{'use_case': 'first_confluence', 'validated_parent_start': 600, 'slice_begin': 2353, 'trigger_event_idx': 636}"
+2,1,2735,2843,lifecycle_end,0,2,"{'use_case': 'first_confluence', 'validated_parent_start': 683, 'slice_begin': 2685, 'trigger_event_idx': 652}"
+3,1,2736,2843,lifecycle_end,0,2,"{'use_case': 'subsequent_confluence', 'validated_parent_start': 684, 'slice_begin': 2686, 'trigger_event_idx': 687}"
+4,-1,2758,2995,lifecycle_end,1,0,"{'use_case': 'first_confluence', 'validated_parent_start': 689, 'slice_begin': 2708, 'trigger_event_idx': 703}"
+5,-1,2915,3363,lifecycle_end,1,1,"{'use_case': 'first_confluence', 'validated_parent_start': 728, 'slice_begin': 2865, 'trigger_event_idx': 748}"

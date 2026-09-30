@@ -1,0 +1,4 @@
+commit_hash=d1bd7bb
+timestamp=20260616_185639
+branch=week8-volmom-multitf
+commit_message=Commit 2: true-first-breakout cycle-0 for main sid=0|cycle=0 (byte-identical for this window; scan mode verified active)

@@ -1,0 +1,3 @@
+commit_hash=47e7532
+timestamp=20260511_173422
+commit_message=Main-structure fix + proximity tightening + chart markers

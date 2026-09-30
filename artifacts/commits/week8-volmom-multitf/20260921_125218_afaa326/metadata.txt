@@ -1,0 +1,4 @@
+commit_hash=afaa326
+timestamp=20260921_125218
+branch=week8-volmom-multitf
+commit_message=Plan C: TriggerRecord + unique-sub lifecycle rewrite (PART4 s17 rev 2)

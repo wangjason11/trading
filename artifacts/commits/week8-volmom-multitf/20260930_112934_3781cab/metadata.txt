@@ -1,0 +1,4 @@
+commit_hash=3781cab
+timestamp=20260930_112934
+branch=week8-volmom-multitf
+commit_message=Plan G baseline: WVMI on the unique sub (83c7a12) + landing-review fold-in (576bf6f) + Int64 export (3781cab)

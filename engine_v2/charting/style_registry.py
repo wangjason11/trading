@@ -86,6 +86,14 @@ STYLE = {
         "marker": {"size": 8, "symbol": "x", "opacity": 0.95, "color": "purple"},
     },
 
+    # Zone-proximity-trigger marker (alternating sd/opp_sd trigger candles
+    # per cycle from `meta["zone_proximity_triggers"]`). Black cross,
+    # positioned above red candles / below green candles based on candle direction.
+    "zone_proximity.trigger": {
+        "marker": {"size": 7, "symbol": "cross", "opacity": 0.85, "color": "black"},
+        "offset_mult": 2.5,  # multiple of wick_offset to clear other markers
+    },
+
     # -----------------------------
     # Week 6: KL Zones (rectangles)
     # -----------------------------
@@ -115,20 +123,24 @@ STYLE = {
     # -----------------------------
     # Week 7: POI Zones (rectangles) - Yellow for both buy/sell
     # -----------------------------
+    # POI zones are side-tinted (chart review 2026-09-20): buy = gold mixed
+    # with green (yellow-green), sell = gold mixed with red (orange), so the
+    # two sides read apart at a glance like the KL zones do. Confirm lines
+    # follow the tint (dark olive / dark brick).
     "zone.poi.buy": {
-        "rgb": "255, 215, 0",  # Gold
+        "rgb": "225, 220, 30",  # Gold + a little green -> gold-lime (more gold, 2026-09-21)
         "fill_opacity_active": 0.9,
         "fill_opacity_inactive": 0.12,
-        "confirm_line_rgb": "101, 67, 33",  # Dark Brown
+        "confirm_line_rgb": "60, 90, 20",  # Dark olive
         "confirm_line_width": 2,
         "confirm_opacity_active": 0.9,
         "confirm_opacity_inactive": 0.25,
     },
     "zone.poi.sell": {
-        "rgb": "255, 215, 0",  # Gold (same for both sides)
+        "rgb": "255, 180, 30",  # Gold + a little red -> amber (more gold, 2026-09-21)
         "fill_opacity_active": 0.9,
         "fill_opacity_inactive": 0.12,
-        "confirm_line_rgb": "101, 67, 33",  # Dark Brown
+        "confirm_line_rgb": "120, 45, 15",  # Dark brick
         "confirm_line_width": 2,
         "confirm_opacity_active": 0.9,
         "confirm_opacity_inactive": 0.25,
@@ -212,12 +224,24 @@ STYLE = {
     },
 
     # -----------------------------
-    # Global: Opacity tiers for multi-structure visibility
+    # Global: Opacity tiers for multi-structure visibility (MAIN CHART ONLY)
     # -----------------------------
+    # Used by the main H1 chart's 3-tier cascade rendering. Sub charts use
+    # the per-TF tier system below.
     "opacity_tiers": {
         "active": 1.0,           # Active elements (current cycle, not locked)
         "recent_inactive": 0.5,  # Inactive elements from most recent structure
         "prior_inactive": 0.2,   # Inactive elements from prior structures
+    },
+
+    # Sub-chart per-TF tier multipliers (zones only). Replaces the
+    # active/recent/prior 3-tier on sub charts: zones are dimmed by which TF
+    # they originate from, not by their lifecycle state. Composition is
+    # `final_opacity = base_style_opacity_active × per_tf_tier`.
+    "opacity_tiers.subordinate_chart": {
+        "main_tf":         0.2,  # Main-TF zones overlaid on a sub chart (e.g. H1 on M15)
+        "sub_tf":          0.5,  # Primary sub-TF zones (M15 native)
+        "sub_tf_smallest": 1.0,  # Reserved — only used if 3+ TFs ever rendered on one chart
     },
 
     # -----------------------------
@@ -242,10 +266,135 @@ STYLE = {
     # Volume spike marker (on candle chart)
     "volume.spike_marker": {
         "marker": {
-            "size": 8,
+            "size": 4,
             "symbol": "diamond",
             "color": "orange",
             "opacity": 0.9,
         },
+    },
+
+    # -----------------------------
+    # Week 8: M15 KL Zones (dashed, lower opacity)
+    # -----------------------------
+    "zone.m15.kl.buy": {
+        "rgb": "0, 200, 0",
+        "fill_opacity_active": 0.15,
+        "fill_opacity_inactive": 0.06,
+        "confirm_line_width": 1.5,
+        "confirm_opacity_active": 0.6,
+        "confirm_opacity_inactive": 0.2,
+        "line_dash": "dash",
+    },
+    "zone.m15.kl.sell": {
+        "rgb": "200, 0, 0",
+        "fill_opacity_active": 0.15,
+        "fill_opacity_inactive": 0.06,
+        "confirm_line_width": 1.5,
+        "confirm_opacity_active": 0.6,
+        "confirm_opacity_inactive": 0.2,
+        "line_dash": "dash",
+    },
+
+    # -----------------------------
+    # Week 8: Wave candle vertical lines
+    # -----------------------------
+    "wave_candle.bullish": {
+        "line": {"width": 1, "color_rgb": "0, 180, 0", "dash": "dash"},
+        "opacity": 0.8,
+    },
+    "wave_candle.bearish": {
+        "line": {"width": 1, "color_rgb": "220, 0, 0", "dash": "dash"},
+        "opacity": 0.8,
+    },
+
+    # -----------------------------
+    # Week 8: H1 overlay styles for M15 chart
+    # Color fill (same as standard zones), no border
+    # -----------------------------
+    "zone.h1_overlay.kl.buy": {
+        "rgb": "0, 180, 0",
+        "fill_opacity_active": 0.4,
+        "fill_opacity_inactive": 0.15,
+        "confirm_line_width": 2,
+        "confirm_opacity_active": 0.9,
+        "confirm_opacity_inactive": 0.30,
+    },
+    "zone.h1_overlay.kl.sell": {
+        "rgb": "220, 0, 0",
+        "fill_opacity_active": 0.4,
+        "fill_opacity_inactive": 0.15,
+        "confirm_line_width": 2,
+        "confirm_opacity_active": 0.9,
+        "confirm_opacity_inactive": 0.30,
+    },
+    "zone.h1_overlay.poi.buy": {
+        "rgb": "255, 215, 0",
+        "fill_opacity_active": 0.9,
+        "fill_opacity_inactive": 0.12,
+        "confirm_line_rgb": "101, 67, 33",
+        "confirm_line_width": 2,
+        "confirm_opacity_active": 0.9,
+        "confirm_opacity_inactive": 0.25,
+    },
+    "zone.h1_overlay.poi.sell": {
+        "rgb": "255, 215, 0",
+        "fill_opacity_active": 0.9,
+        "fill_opacity_inactive": 0.12,
+        "confirm_line_rgb": "101, 67, 33",
+        "confirm_line_width": 2,
+        "confirm_opacity_active": 0.9,
+        "confirm_opacity_inactive": 0.25,
+    },
+    "structure.m15.swing_line": {
+        "line": {"width": 2, "color": "royalblue"},
+        "opacity": 0.9,
+    },
+    # "PRIOR" layer (PART4 §16.5 item 6 / chart review 2026-09-22): a sub's
+    # line segment that a MORE RECENT structure (higher
+    # `(parent_sid, parent_cycle_id, sub_id)`) also draws over the same candles.
+    # The recent structure stays royalblue + solid; the prior one is dimmed and
+    # dotted so the two are legible where they overlap. A segment no other
+    # structure overlaps is always solid, whether or not it was ever live in
+    # real time (the real-time lifecycle lives in the zones and the hover
+    # `phase`). Prior = darker blue (navy), dotted, lightly dimmed (0.75) so it
+    # reads clearly against the recent royalblue; dots 20% larger than before
+    # (chart review 2026-09-20: "more visible, dots ~20% thicker").
+    # (These keys were `*_forming` while dotting meant "before `start_idx`",
+    # 2026-09-20/21 — renamed with the rule.)
+    "structure.m15.swing_line_prior": {
+        "line": {"width": 2, "color": "navy", "dash": "dot"},
+        "opacity": 0.75,
+    },
+    "structure.m15.cts": {
+        "marker": {"size": 3.6, "symbol": "circle", "opacity": 0.95, "color": "royalblue"},
+    },
+    "structure.m15.bos": {
+        "marker": {"size": 3.6, "symbol": "circle", "opacity": 0.95, "color": "royalblue"},
+    },
+    "structure.m15.cts_prior": {
+        "marker": {"size": 3.6, "symbol": "circle-open", "opacity": 0.85, "color": "navy",
+                   "line": {"width": 1.5, "color": "navy"}},
+    },
+    "structure.m15.bos_prior": {
+        "marker": {"size": 3.6, "symbol": "circle-open", "opacity": 0.85, "color": "navy",
+                   "line": {"width": 1.5, "color": "navy"}},
+    },
+    "prev_bos_line.m15": {
+        "line": {"width": 2, "color": "royalblue"},
+    },
+    "structure.h1_overlay.swing_line": {
+        "line": {"width": 1, "color": "black"},
+        "opacity": 0.9,
+    },
+    "wave_candle.h1_overlay.bullish": {
+        "line": {"width": 1, "color_rgb": "0, 180, 0"},
+        "opacity": 0.8,
+    },
+    "wave_candle.h1_overlay.bearish": {
+        "line": {"width": 1, "color_rgb": "220, 0, 0"},
+        "opacity": 0.8,
+    },
+    "prev_bos_line.h1_overlay": {
+        "line": {"width": 1, "color": "black"},
     },
 }

@@ -1,0 +1,4 @@
+commit_hash=c182eb6
+timestamp=20260925_133849
+branch=week8-volmom-multitf
+commit_message=Plan E E4c: pattern-path CTS_UPDATED.idx := the moment + meta cts_anchor_idx (rule 3)

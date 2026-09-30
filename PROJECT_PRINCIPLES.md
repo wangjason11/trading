@@ -29,6 +29,7 @@ Examples:
 - TradeIntent → entry, stop, TP, RR, provenance
 
 Interfaces are frozen early so downstream logic does not break during iteration.
+An event contract changes only by an atomic migration (LANDMINES "Event Contract Rules" rule 3).
 
 ---
 

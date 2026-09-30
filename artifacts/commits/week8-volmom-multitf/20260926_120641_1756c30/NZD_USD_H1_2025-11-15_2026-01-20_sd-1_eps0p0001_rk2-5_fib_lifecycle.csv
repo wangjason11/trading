@@ -1,0 +1,4 @@
+structure_path_id,parent_sid,parent_cycle_id,structure_id,cycle_id,version,start_idx,end_idx,end_reason,status,active,locked,bos_idx,cts_idx,fib_mode,meta
+H1.main,,,0,1,,652.0,902.0,reversal,ended,True,True,591,652,,"{'activated_at': 652, 'flow': 'simple', 'locked_at': 683}"
+H1.main,,,1,1,,,902.0,new_cycle,inactive,True,True,689,761,,"{'cross_cycle': True, 'scenario': 2, 'activated_at': 748, 'cycle1_bos_idx': 728, 'locked_at': 810, 'obsolete_reason': 'new_cycle'}"
+H1.main,,,1,2,,902.0,,,active,True,True,826,905,,"{'activated_at': 902, 'locked_at': 926}"

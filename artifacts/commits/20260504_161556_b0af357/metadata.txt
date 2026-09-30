@@ -1,0 +1,3 @@
+commit_hash=b0af357
+timestamp=20260504_161556
+commit_message=Part 4 Step 3a: per-sid records + first_confluence trigger detector

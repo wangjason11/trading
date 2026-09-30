@@ -1,0 +1,4 @@
+commit_hash=5d149b0
+timestamp=20260926_104311
+branch=week8-volmom-multitf
+commit_message=Plan E E5·4a: triggers CSV validated_parent_idx -> FC-only parent_bos_anchor_idx (Q4 (b); EXPORTED)

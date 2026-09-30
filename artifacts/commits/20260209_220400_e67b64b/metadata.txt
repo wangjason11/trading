@@ -1,0 +1,3 @@
+commit_hash=e67b64b
+timestamp=20260209_220400
+commit_message=Wave candle refinements: vol_dir filter, lookback 15/50, update docs

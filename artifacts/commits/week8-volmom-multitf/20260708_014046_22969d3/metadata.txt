@@ -1,0 +1,4 @@
+commit_hash=22969d3
+timestamp=20260708_014046
+branch=week8-volmom-multitf
+commit_message=Phase 2 Stage 3.1 pool geometry cache (byte-identical)

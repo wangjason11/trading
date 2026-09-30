@@ -1,9 +1,63 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import Optional, Tuple, List
 
+import numpy as np
+
 from engine_v2.common.types import PatternEvent, PatternStatus
+
+# Path 2c: every candle field the pattern rules read (incl. is_big_normal_as2,
+# reached ONLY via getattr — a naive attribute-grep misses it). The row view
+# below exposes all of them so the existing `c0.<attr>` access stays verbatim.
+# `default` is the value the old code saw for an absent column: 0 for the
+# getattr-defaulted big-flags; the always-present price/feature columns never
+# hit it (their absence would have AttributeError'd the old Series too).
+_ROW_FIELDS = (
+    ("o", float("nan")), ("h", float("nan")), ("l", float("nan")),
+    ("c", float("nan")), ("candle_type", ""), ("direction", 0),
+    ("candle_len", float("nan")), ("body_len", float("nan")),
+    ("mid_price", float("nan")), ("is_big_normal_as0", 0),
+    ("is_big_normal_as1", 0), ("is_big_normal_as2", 0),
+    ("is_big_maru_as0", 0), ("is_big_maru_as1", 0),
+)
+
+
+def pattern_extreme(
+    highs: np.ndarray,
+    lows: np.ndarray,
+    pat: PatternEvent,
+    direction: int,
+) -> Optional[Tuple[int, float]]:
+    """A breakout pattern's extreme over its FULL span `[start_idx ..
+    max(end_idx, confirmation_idx)]` (the confirming candle included):
+    max-high for +1, min-low for -1 (first occurrence on a tie).
+
+    Returns `(pattern_extreme_idx, pattern_extreme_price)` as POSITIONAL idx
+    into `highs` / `lows`, or None if the span is undefined or out of bounds.
+    Pattern realm; the one computation behind `find_true_first_breakout`'s
+    strict new-extreme test and `MarketStructure._cts_from_breakout_event` (the
+    only place a pattern extreme becomes a CTS anchor).
+    """
+    if pat.start_idx is None or pat.end_idx is None:
+        return None
+    s = int(pat.start_idx)
+    e = int(pat.end_idx)
+    if pat.confirmation_idx is not None:
+        e = max(e, int(pat.confirmation_idx))
+    if e < s:
+        s, e = e, s
+    if s < 0 or e >= len(highs):
+        return None
+    if direction == 1:
+        span = highs[s : e + 1]
+        k = int(span.argmax())
+    else:
+        span = lows[s : e + 1]
+        k = int(span.argmin())
+    return s + k, float(span[k])
+
 
 class BreakoutPatterns:
     """
@@ -21,8 +75,33 @@ class BreakoutPatterns:
       - direction, candle_type, o/h/l/c
     """
 
-    def __init__(self, df):
+    def __init__(self, df, end_idx: Optional[int] = None):
         self.df = df
+        # Visible length: a bounded caller (MarketStructure / unified_probe with
+        # end_idx) hands the inclusive last candle it may read; the detector
+        # treats it exactly like the end of the frame (Plan A, L3). The `_cols`
+        # arrays below stay full-length — safety rests solely on the length
+        # guards in the detectors + confirmation helpers, which all test
+        # against `n_visible`, never `len(df)`.
+        self.n_visible = len(df) if end_idx is None else min(len(df), int(end_idx) + 1)
+        # Path 2c: pre-extract the candle columns the pattern rules read into
+        # positional numpy arrays once, so `_row(idx)` can build a cheap row
+        # view instead of `df.iloc[idx]` (which constructs a full-row pandas
+        # Series per access — the dominant pattern_detect cost). The numpy
+        # scalars returned (np.float64 / np.int64 / str / np.bool_) are the
+        # SAME types `df.iloc[idx].<attr>` yields on a mixed-dtype row, so the
+        # downstream comparisons + PatternEvent fields are byte-identical.
+        self._cols = {}
+        for name, default in _ROW_FIELDS:
+            if name in df.columns:
+                self._cols[name] = df[name].to_numpy()
+            else:
+                self._cols[name] = np.full(len(df), default)
+
+    def _row(self, idx: int) -> SimpleNamespace:
+        """Lightweight per-candle row view (Path 2c) — replaces df.iloc[idx]."""
+        cols = self._cols
+        return SimpleNamespace(**{name: cols[name][idx] for name, _ in _ROW_FIELDS})
 
     # ---------- helpers ----------
     # def body_check(self, candle, threshold: Optional[float], percent: float = 0.3, direction: int = 1) -> bool:
@@ -68,17 +147,16 @@ class BreakoutPatterns:
         return candle.c > threshold if direction == 1 else candle.c < threshold
 
     def confirmation_threshold(self, i: int, direction: int) -> float:
-        c0 = self.df.iloc[i]
-        c1 = self.df.iloc[i + 1]
+        c0 = self._row(i)
+        c1 = self._row(i + 1)
         return max(c0.h, c1.h) if direction == 1 else min(c0.l, c1.l)
 
-    def _price_confirmation(self, anchor_idx: int, direction: int, threshold: float) -> Tuple[bool, Optional[int]]:
-        df = self.df
+    def _price_confirmation(self, pattern_end_idx: int, direction: int, threshold: float) -> Tuple[bool, Optional[int]]:
         for j in range(1, 5):
-            k = anchor_idx + j
-            if k >= len(df):
+            k = pattern_end_idx + j
+            if k >= self.n_visible:
                 break
-            fwd = df.iloc[k]
+            fwd = self._row(k)
             if fwd.direction != direction:
                 continue
             if fwd.candle_type not in ["normal", "maru"]:
@@ -94,7 +172,7 @@ class BreakoutPatterns:
             return event
 
         ok, conf_idx = self._price_confirmation(
-            anchor_idx=event.end_idx,
+            pattern_end_idx=event.end_idx,
             direction=event.direction,
             threshold=event.confirmation_threshold,
         )
@@ -106,29 +184,31 @@ class BreakoutPatterns:
             )
         return event
     
-    def _price_confirmation_1step(self, anchor_end_idx: int, direction: int, threshold: float) -> Tuple[bool, Optional[int]]:
+    def _price_confirmation_1step(self, pattern_end_idx: int, direction: int, threshold: float) -> Tuple[bool, Optional[int]]:
         """
         Continuous-only confirmation:
-        - Look ahead exactly 1 candle (k = anchor_end_idx + 1)
+        - Look ahead up to 3 candles from pattern_end_idx
         - Candle must be normal/maru
         - Candle direction must match `direction`
         - Close must break beyond `threshold` in the direction
+        - Returns the first qualifying candle found
         """
-        k = int(anchor_end_idx) + 1
-        if k >= len(self.df):
-            return False, None
+        for offset in range(1, 4):
+            k = int(pattern_end_idx) + offset
+            if k >= self.n_visible:
+                return False, None
 
-        fwd = self.df.iloc[k]
-        if int(fwd.direction) != int(direction):
-            return False, None
-        if str(fwd.candle_type) not in ["normal", "maru"]:
-            return False, None
+            fwd = self._row(k)
+            if int(fwd.direction) != int(direction):
+                continue
+            if str(fwd.candle_type) not in ["normal", "maru"]:
+                continue
 
-        c = float(fwd.c)
-        if direction == 1 and c >= float(threshold):
-            return True, k
-        if direction == -1 and c <= float(threshold):
-            return True, k
+            c = float(fwd.c)
+            if direction == 1 and c >= float(threshold):
+                return True, k
+            if direction == -1 and c <= float(threshold):
+                return True, k
         return False, None
 
 
@@ -140,11 +220,11 @@ class BreakoutPatterns:
         break_threshold: Optional[float] = None,
         do_confirm: bool = True,
     ) -> Optional[PatternEvent]:
-        if idx + 2 >= len(self.df):
+        if idx + 2 >= self.n_visible:
             return None
 
         df = self.df
-        c0, c1, c2 = df.iloc[idx], df.iloc[idx + 1], df.iloc[idx + 2]
+        c0, c1, c2 = self._row(idx), self._row(idx + 1), self._row(idx + 2)
 
         if not all(int(c.direction) == int(direction) for c in [c0, c1, c2]):
             return None
@@ -195,13 +275,13 @@ class BreakoutPatterns:
         # ------------------------------------------------------------
         # Variant 2 subconditions (3 conditions)
         # ------------------------------------------------------------
-        close_to_ext = (
+        c1_close_near_c0_extreme = (
             abs(float(c1.c) - float(c0.h)) <= 0.00015
             if direction == 1
             else abs(float(c1.c) - float(c0.l)) <= 0.00015
         )
         v2_c0 = (c0.candle_type == "pinbar") and (int(getattr(c0, "is_big_normal_as0", 0)) == 1)
-        v2_c1 = bool(close_to_ext)
+        v2_c1 = bool(c1_close_near_c0_extreme)
         v2_c2 = (
             (c2.candle_type == "maru")
             and (int(getattr(c2, "is_big_normal_as2", 0)) == 1)
@@ -289,7 +369,7 @@ class BreakoutPatterns:
                 return ev
 
             ok, conf_idx = self._price_confirmation_1step(
-                anchor_end_idx=ev.end_idx,
+                pattern_end_idx=ev.end_idx,
                 direction=ev.direction,
                 threshold=float(ev.confirmation_threshold),
             )
@@ -308,12 +388,12 @@ class BreakoutPatterns:
         break_threshold: Optional[float] = None,
         do_confirm: bool = True,
     ) -> Optional[PatternEvent]:
-        if idx + 1 >= len(self.df):
+        if idx + 1 >= self.n_visible:
             return None
 
         df = self.df
-        c0 = df.iloc[idx]
-        c1 = df.iloc[idx + 1]
+        c0 = self._row(idx)
+        c1 = self._row(idx + 1)
 
         if not (c0.candle_type == "maru" and (c1.candle_type == "maru" or c1.candle_type == "normal")):
             return None
@@ -324,21 +404,21 @@ class BreakoutPatterns:
         if not self.check_break(c0, break_threshold, direction):
             return None
 
-        cond1_valid = int(c0.is_big_normal_as0) == 1
-        cond2_valid = (
+        cand1_valid = int(c0.is_big_normal_as0) == 1
+        cand2_valid = (
             (c1.c > c0.c if direction == 1 else c1.c < c0.c)
             and c1.candle_len >= 0.7 * c0.candle_len
         )
 
-        cond1_valid_alt = int(c0.is_big_maru_as0) == 1
-        cond2_valid_alt = (
+        cand1_valid_alt = int(c0.is_big_maru_as0) == 1
+        cand2_valid_alt = (
             (c1.c > c0.c if direction == 1 else c1.c < c0.c)
             and c1.candle_len >= c0.candle_len
             and int(c1.is_big_maru_as1) == 1
         )
 
         if c1.candle_type == "maru":
-            if cond1_valid and cond2_valid:
+            if cand1_valid and cand2_valid:
                 return PatternEvent(
                     name="double_maru",
                     direction=direction,
@@ -349,7 +429,7 @@ class BreakoutPatterns:
                     break_threshold_used=break_threshold,
                 )
 
-            if cond1_valid ^ cond2_valid:
+            if cand1_valid ^ cand2_valid:
                 ev = PatternEvent(
                     name="double_maru",
                     direction=direction,
@@ -358,12 +438,12 @@ class BreakoutPatterns:
                     status=PatternStatus.FAIL_NEEDS_CONFIRM,
                     confirmation_threshold=self.confirmation_threshold(idx, direction),
                     break_threshold_used=break_threshold,
-                    debug={"cond1_valid": cond1_valid, "cond2_valid": cond2_valid},
+                    debug={"cand1_valid": cand1_valid, "cand2_valid": cand2_valid},
                 )
                 return self._confirm_if_needed(ev) if do_confirm else ev
         
         if c1.candle_type == "normal":
-            if cond1_valid_alt and cond2_valid_alt:
+            if cand1_valid_alt and cand2_valid_alt:
                 return PatternEvent(
                     name="double_maru",
                     direction=direction,
@@ -374,7 +454,7 @@ class BreakoutPatterns:
                     break_threshold_used=break_threshold,
                 )
 
-            if (not cond1_valid_alt) and cond2_valid_alt:
+            if (not cand1_valid_alt) and cand2_valid_alt:
                 ev = PatternEvent(
                     name="double_maru",
                     direction=direction,
@@ -383,7 +463,7 @@ class BreakoutPatterns:
                     status=PatternStatus.FAIL_NEEDS_CONFIRM,
                     confirmation_threshold=self.confirmation_threshold(idx, direction),
                     break_threshold_used=break_threshold,
-                    debug={"cond1_valid_alt": cond1_valid_alt, "cond2_valid_alt": cond2_valid_alt},
+                    debug={"cand1_valid_alt": cand1_valid_alt, "cand2_valid_alt": cand2_valid_alt},
                 )
                 return self._confirm_if_needed(ev) if do_confirm else ev
 
@@ -398,12 +478,12 @@ class BreakoutPatterns:
         small_body_tail: float = 0.5,
         do_confirm: bool = True,
     ) -> Optional[PatternEvent]:
-        if idx + 1 >= len(self.df):
+        if idx + 1 >= self.n_visible:
             return None
 
         df = self.df
-        c0 = df.iloc[idx]
-        c1 = df.iloc[idx + 1]
+        c0 = self._row(idx)
+        c1 = self._row(idx + 1)
 
         # if idx == 100 and direction == 1:
         #     print(
@@ -431,12 +511,12 @@ class BreakoutPatterns:
         if not self.check_break(c0, break_threshold, direction):
             return None
 
-        cond1_valid = (
+        cand1_valid = (
             int(c0.is_big_maru_as0) == 1
             and self.body_check(c0, break_threshold, break_percent, direction)
         )
 
-        cond1_valid_alt = int(c0.is_big_maru_as0) == 1
+        cand1_valid_alt = int(c0.is_big_maru_as0) == 1
 
         if direction == 1:
             # c1_pos_check = c1.l > (c0.l + small_body_tail * c0.candle_len)
@@ -449,10 +529,10 @@ class BreakoutPatterns:
             c1_tail_check = False if break_threshold is None else c1.h < break_threshold
             c1_close_check = c1.c < c0.l # extra close check for short side
 
-        cond2_valid = c1_pos_check
-        cond2_valid_alt = c1_tail_check and c1_close_check and c1.candle_type in ["normal", "maru"] and int(c1.is_big_normal_as1) == 1
+        cand2_valid = c1_pos_check
+        cand2_valid_alt = c1_tail_check and c1_close_check and c1.candle_type in ["normal", "maru"] and int(c1.is_big_normal_as1) == 1
 
-        if (cond1_valid and cond2_valid) or (cond1_valid_alt and cond2_valid_alt):
+        if (cand1_valid and cand2_valid) or (cand1_valid_alt and cand2_valid_alt):
             return PatternEvent(
                 name="one_maru_continuous",
                 direction=direction,
@@ -463,7 +543,7 @@ class BreakoutPatterns:
                 break_threshold_used=break_threshold,
             )
 
-        if cond1_valid ^ cond2_valid:
+        if cand1_valid ^ cand2_valid:
             ev = PatternEvent(
                 name="one_maru_continuous",
                 direction=direction,
@@ -472,7 +552,7 @@ class BreakoutPatterns:
                 status=PatternStatus.FAIL_NEEDS_CONFIRM,
                 confirmation_threshold=self.confirmation_threshold(idx, direction),
                 break_threshold_used=break_threshold,
-                debug={"cond1_valid": cond1_valid, "cond2_valid": cond2_valid},
+                debug={"cand1_valid": cand1_valid, "cand2_valid": cand2_valid},
             )
             return self._confirm_if_needed(ev) if do_confirm else ev
 
@@ -488,12 +568,12 @@ class BreakoutPatterns:
         small_body_size: float = 0.35,
         do_confirm: bool = True,
     ) -> Optional[PatternEvent]:
-        if idx + 1 >= len(self.df):
+        if idx + 1 >= self.n_visible:
             return None
 
         df = self.df
-        c0 = df.iloc[idx]
-        c1 = df.iloc[idx + 1]
+        c0 = self._row(idx)
+        c1 = self._row(idx + 1)
 
         if not c0.candle_type == "maru":
             return None
@@ -504,18 +584,23 @@ class BreakoutPatterns:
         if not self.check_break(c0, break_threshold, direction):
             return None
 
+        # Disqualify when the OPPOSING pullback c1 is itself a strong maru: a
+        # big_maru (at shift-1) OR a maru whose range >= c0's. one_maru_opposite
+        # wants a WEAK opposing pullback after the c0 breakout; a strong opposing
+        # maru is a counter-move, not a pullback. This only bites the
+        # FAIL_NEEDS_CONFIRM -> CONFIRMED branch (the SUCCESS paths already
+        # require c1 small via c1_len_check, or a pinbar via cand2_valid_alt);
+        # it stops a strong opposing maru sneaking a confirmed pattern through
+        # later-candle confirmation (the premature-pullback / BOS-BOS-CTS-CTS
+        # anomaly class).
+        if c1.candle_type == "maru" and (int(c1.is_big_maru_as1) == 1 or c1.candle_len >= c0.candle_len):
+            return None
+
         # 2 ways for valid pattern:
         # 1) main: c0 big maru & break & c1 small body + c1 low higher than c0 mid price
         # 2) alt: c0 big maru & break & c1 is pinbar & beyond break threshold (only used when there is break threshold)
         # only the main method will be eligible for confirmation
-        c1_len_check = c1.candle_len < small_body_size * c0.candle_len
-        cond1_valid = (
-            int(c0.is_big_maru_as0) == 1
-            and c1_len_check
-            and self.body_check(c0, break_threshold, break_percent, direction)
-        )
-
-        cond1_valid_alt = (
+        cand1_valid = (
             int(c0.is_big_maru_as0) == 1
             and self.body_check(c0, break_threshold, break_percent, direction)
         )
@@ -527,10 +612,11 @@ class BreakoutPatterns:
             c1_pos_check = c1.h < (c0.l + small_body_tail * c0.candle_len)
             c1_tail_check = False if break_threshold is None else c1.h < break_threshold
 
-        cond2_valid = c1_pos_check
-        cond2_valid_alt = c1_tail_check and c1.candle_type == "pinbar"
+        c1_len_check = c1.candle_len < small_body_size * c0.candle_len
+        cand2_valid = c1_pos_check and c1_len_check
+        cand2_valid_alt = c1_tail_check and c1.candle_type == "pinbar"
 
-        if (cond1_valid and cond2_valid) or (cond1_valid_alt and cond2_valid_alt):
+        if (cand1_valid and cand2_valid) or (cand1_valid and cand2_valid_alt):
             return PatternEvent(
                 name="one_maru_opposite",
                 direction=direction,
@@ -541,7 +627,7 @@ class BreakoutPatterns:
                 break_threshold_used=break_threshold,
             )
 
-        if cond1_valid ^ cond2_valid:
+        if cand1_valid ^ cand2_valid:
             ev = PatternEvent(
                 name="one_maru_opposite",
                 direction=direction,
@@ -550,7 +636,7 @@ class BreakoutPatterns:
                 status=PatternStatus.FAIL_NEEDS_CONFIRM,
                 confirmation_threshold=self.confirmation_threshold(idx, direction),
                 break_threshold_used=break_threshold,
-                debug={"cond1_valid": cond1_valid, "cond2_valid": cond2_valid},
+                debug={"cand1_valid": cand1_valid, "cand2_valid": cand2_valid},
             )
             return self._confirm_if_needed(ev) if do_confirm else ev
 
@@ -585,7 +671,7 @@ class BreakoutPatterns:
         # NEW: continuous confirm (1-step)
         if cont is not None and cont.status == PatternStatus.FAIL_NEEDS_CONFIRM:
             ok, conf_idx = self._price_confirmation_1step(
-                anchor_end_idx=cont.end_idx,
+                pattern_end_idx=cont.end_idx,
                 direction=cont.direction,
                 threshold=float(cont.confirmation_threshold),
             )
@@ -627,6 +713,9 @@ class BreakoutPatterns:
         Notes:
           - Confirmation lookahead max is 4 candles AFTER end_idx, so latest confirmation is idx+5.
           - continuous has precedence even though it needs idx+2.
+          - With `end_idx`, candles past it do not exist for this detector: a
+            SUCCESS/CONFIRMED that would need them is reported as `None` /
+            unconfirmed, never as a candidate to be dropped later.
         """
 
         # 1) Highest priority: continuous
@@ -650,7 +739,7 @@ class BreakoutPatterns:
         # NEW: continuous confirmation (priority first in confirm stage)
         if cont is not None and cont.status == PatternStatus.FAIL_NEEDS_CONFIRM and cont.confirmation_threshold is not None:
             ok, conf_idx = self._price_confirmation_1step(
-                anchor_end_idx=cont.end_idx,
+                pattern_end_idx=cont.end_idx,
                 direction=cont.direction,
                 threshold=float(cont.confirmation_threshold),
             )

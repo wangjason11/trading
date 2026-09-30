@@ -2,12 +2,138 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
 
+import numpy as np
 import pandas as pd
 
 from engine_v2.common.types import PatternEvent, PatternStatus, StructureLevel, COL_TIME, COL_O, COL_C
-from engine_v2.patterns.structure_patterns import BreakoutPatterns
+from engine_v2.patterns.imbalance import has_unfilled_imbalance
+from engine_v2.patterns.structure_patterns import BreakoutPatterns, pattern_extreme
+from engine_v2.structure import event_fields as ef
+from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
+
+
+# ---------------------------------------------------------------------
+# Path 2b: MarketStructure output-column schema for batched writes.
+#
+# `_write_df_row` writes 27 columns per candle. Instead of ~27 `df.at`
+# scalar writes per candle (slow on a wide frame), we write into
+# preallocated numpy arrays per column and bulk-assign them to the df once
+# at end of `run()`. Each group's dtype + default reproduces the EXACT final
+# dtype/value the old per-row `df.at` writes produced — VERIFIED against the
+# saved baseline CSV (2026-06-20):
+#   - int64 idx/id columns default -1 (incl. structure_id);
+#   - int64 counter/flag columns default 0 (range_active, cts_cycle_id,
+#     reversal_watch_active, struct_direction);
+#   - range_hi/range_lo are created int -1 by `_ensure_output_cols` but upcast
+#     to float64 on the first nan write, so their UNPROCESSED-row value is
+#     -1.0 (NOT nan) — load-bearing for `range_break_frac` at the first
+#     processed candle;
+#   - threshold/price columns default nan;
+#   - state/event string columns are object "" (written as empty CSV fields).
+# Nothing reads these df output columns mid-run (pattern detection + the
+# zone resolvers read only input columns), so deferring the write to
+# end-of-run is safe.
+_OUT_INT_NEG1 = (
+    "range_start_idx", "range_confirm_idx", "cts_idx", "bos_idx",
+    "pending_reversal_pattern_anchor_idx", "pending_reversal_apply_idx",
+    "last_breakout_pat_apply_idx", "structure_id",
+)
+_OUT_INT_ZERO = (
+    "range_active", "cts_cycle_id", "reversal_watch_active", "struct_direction",
+)
+_OUT_FLOAT_NEG1 = ("range_hi", "range_lo")
+_OUT_FLOAT_NAN = (
+    "breakout_th", "pullback_th", "range_break_frac", "cts_price",
+    "bos_price", "cts_threshold", "bos_threshold", "reversal_bos_th_frozen",
+)
+_OUT_OBJ_EMPTY = (
+    "market_state", "cts_event", "bos_event", "cycle_stage", "cts_phase_debug",
+)
+
+
+# Resolver protocol for the dual CTS proximity check (Part 4 §13.5.b).
+# MarketStructure does not import from zones/ — instead it consumes these
+# callables, wired by the orchestrator (`structure/structure_engine.py`)
+# from the relocated derivation primitives in `zones/kl_zones_v1.py` /
+# `zones/poi_zones.py`.
+BosInnerResolver = Callable[[pd.DataFrame, int, int], Optional[float]]
+# (df, bos_idx, struct_direction) -> inner_price | None
+
+PoiInnersResolver = Callable[..., List[float]]
+# (df, bos_idx, bos_price, cts_idx, cts_price, sd, sid, cycle_id,
+#  fill_threshold, c0_data, *, fill_horizon_idx, snapshot_horizon_idx) -> [inner prices]
+# `snapshot_horizon_idx` = the cycle's CTS_ESTABLISHED (== BOS) moment — cond3
+# (Plan E E3a′).
+# `fill_horizon_idx` = the MOMENT of the event that triggered the refresh
+# (Plan E E3a — in lock-step with FibTracker's fill horizon).
+#
+# `fill_threshold` matches the POIConfig default (0.70). Passed explicitly
+# so MarketStructure controls the value its has_unfilled checks (in
+# `_update_cycle0_data` and in the shared
+# `zones/fib_tracker.select_fib_anchor_for_cycle` utility) agree with the
+# resolver's downstream IC search.
+#
+# `c0_data` is the sid's cycle-0 snapshot tracked on MarketStructureState
+# (bos_idx/price, cts_idx/price, has_unfilled, scenario1, locked). Used by
+# `zones/poi_zones.compute_poi_inners_for_cycle` to drive the shared
+# `zones/fib_tracker.select_fib_anchor_for_cycle` Scenario 2 decision so
+# the in-flight POI snapshot agrees with FibTracker's downstream anchor
+# selection. None when MS has not yet captured cycle-0 data
+# (cts_cycle_id == -1 / cycle 0 itself / sid 0).
+
+
+# Default fallback proximity threshold for direct/test callers that don't
+# pass `proximity_pips`. Real callers go through `structure/structure_engine.py`
+# wrappers which look up the TF-keyed value from `DEFAULT_PROXIMITY_PIPS`.
+# Kept in sync with `zones/zone_proximity.py::DEFAULT_PROXIMITY_PIPS["H1"]`
+# manually (a direct import would create a cycle — zone_proximity imports
+# StructureEvent from this module).
+_FALLBACK_PROXIMITY_PIPS = 9  # matches H1 default
+
+# Default fallback narrow-cycle gap threshold for the dual CTS proximity
+# confirmation gate (Rule 1). Below this, sd-proximity cannot confirm CTS.
+# Same import-cycle reason as above — kept in sync manually with
+# `zones/zone_proximity.py::DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS["H1"]`.
+_FALLBACK_MIN_GAP_PIPS = 50  # matches H1 default
+
+
+def _check_sd_proximity_at_candle(
+    df: pd.DataFrame,
+    candle_idx: int,
+    struct_direction: int,
+    bos_inner: float,
+    threshold: float,
+    poi_inners: Optional[List[float]] = None,
+) -> Optional[Tuple[float, str]]:
+    """Check if a candle wick comes within `threshold` of the closest
+    sd-direction inner bound (BOS or POI). Returns (trigger_inner, zone_kind)
+    on hit; None otherwise.
+
+    Pure function — no zone-derivation deps. Moved into structure/ from the
+    deleted `proximity_helpers.py` in Part 4 §13.5.b.
+    """
+    if candle_idx not in df.index:
+        return None
+
+    inners: List[Tuple[float, str]] = [(float(bos_inner), "BOS")]
+    if poi_inners:
+        for v in poi_inners:
+            inners.append((float(v), "POI"))
+
+    if struct_direction == 1:
+        chosen_inner, zone_kind = max(inners, key=lambda t: t[0])
+        candle_low = float(df.loc[candle_idx, "l"])
+        if candle_low <= chosen_inner + threshold:
+            return (chosen_inner, zone_kind)
+    else:
+        chosen_inner, zone_kind = min(inners, key=lambda t: t[0])
+        candle_high = float(df.loc[candle_idx, "h"])
+        if candle_high >= chosen_inner - threshold:
+            return (chosen_inner, zone_kind)
+
+    return None
 
 
 # ---------------------------------------------------------------------
@@ -49,7 +175,7 @@ class MarketStructureState:
     # CTS lifecycle
     cts: Optional[Point] = None
     cts_phase: Literal["NONE", "EST_OR_UPD", "CONFIRMED", "FALSE_BREAK"] = "NONE"
-    cts_confirmed_for_idx: Optional[int] = None  # prevent duplicate CTS_CONFIRMED emits for same CTS
+    confirmed_cts_anchor_idx: Optional[int] = None  # prevent duplicate CTS_CONFIRMED emits for same CTS
     cts_event: str = ""  # one-candle event marker written by _write_df_row
 
     # NEW (Part 2): CTS cycles + thresholds
@@ -57,7 +183,7 @@ class MarketStructureState:
     cts_threshold: Optional[float] = None  # mirrors active range bound after CTS confirmation (debug)
 
     # BOS lifecycle
-    bos_confirmed: Optional[Point] = None
+    bos: Optional[Point] = None  # the BOS anchor (Point(bos_anchor_idx, price)), set by _emit_bos_confirmed
     bos_threshold: Optional[float] = None  # used for reversal checks when implemented
     bos_event: str = ""  # one-candle event marker written by _write_df_row
 
@@ -72,6 +198,41 @@ class MarketStructureState:
     last_breakout_pat_apply_idx: Optional[int] = None  # j
     last_pullback_pat_apply_idx: Optional[int] = None
 
+    # Zone-proximity-based CTS confirmation (per-cycle state)
+    # confirmation_method indicates HOW the current cycle's CTS got confirmed.
+    # "pullback" = via pullback pattern (existing behavior).
+    # "sd_zone_proximity" = via first sd zone proximity trigger.
+    # None = not yet confirmed.
+    cts_confirmed_method: Optional[Literal["pullback", "sd_zone_proximity"]] = None
+    # Whether a valid pullback pattern fired for the current cycle.
+    pullback_fired_for_cycle: bool = False
+    # Idx where CTS was confirmed (proximity or pullback, whichever first).
+    # Used to bound BOS_n+1 max-retracement search.
+    cts_confirmed_idx: Optional[int] = None
+    # BOS inner price (computed once when BOS_CONFIRMED fires for the new cycle)
+    # — used by the per-candle proximity check.
+    bos_inner_for_cycle: Optional[float] = None
+    # POI inner snapshot for the current cycle — refreshed at CTS_ESTABLISHED
+    # and each CTS_UPDATED. Stays empty until first refresh.
+    poi_inners_for_cycle: List[float] = field(default_factory=list)
+
+    # Cycle-0 snapshot tracked for the shared
+    # `zones.fib_tracker.select_fib_anchor_for_cycle` Scenario 2 decision.
+    # Populated at cycle-0 CTS_ESTABLISHED, refreshed on each CTS_UPDATED
+    # for cycle 0 (raw + pattern paths), locked at cycle-0 CTS_CONFIRMED so
+    # any later raw-extreme CTS_UPDATEDs don't mutate it. Stays None for
+    # cycle 1+ refreshes when sid never produced a cycle 0 (e.g. partial
+    # runs / sid 0 itself doesn't need it). Schema: see
+    # `_update_cycle0_data`. MS does not track Scenario 1; the resolver
+    # treats `scenario1=None` as "evaluate Scenario 2/3" — see the utility's
+    # docstring for the approximation contract.
+    cycle0_data: Optional[Dict[str, Any]] = None
+
+    # The current cycle's CTS_ESTABLISHED MOMENT (`confirmed_at`) == its
+    # BOS_CONFIRMED moment: the in-flight resolver's cond3 fill horizon ("has
+    # BOS_1 filled cycle 0?"), in lock-step with FibTracker (Plan E E3a′).
+    cts_established_moment_idx: Optional[int] = None
+
     # -------------------------------------------------
     # Week 5 Part 3A: BOS barrier semantics + reversal watch
     #
@@ -79,10 +240,10 @@ class MarketStructureState:
     # While active:
     #   - bos_threshold MUST NOT update
     #   - reversal candidates use reversal_bos_th_frozen (the barrier snapshot)
-    # If no valid reversal pattern appears within watch window:
-    #   - bos_threshold updates to the ANCHOR candle wick (close-break candle)
-    #   - watch clears
-    #   - execution rewinds to (anchor_idx + 1) to reprocess subsequent candles normally
+    # A watch opens only with a pending reversal applying by `reversal_watch_expires_idx`
+    # (else `rv_anchor_failed`: bos_threshold := the close-break candle's wick, watch cleared);
+    # it ends at that reversal, or when a new cycle is established. (Until 2026-09-29 an expiry
+    # rewound to anchor_idx + 1 — unreachable since F3b, removed.)
     # -------------------------------------------------
      
     reversal_watch_active: bool = False
@@ -92,11 +253,8 @@ class MarketStructureState:
 
     # Pending reversal (scheduled on BOS close-break anchor candle)
     pending_reversal_ev: Optional[PatternEvent] = None
-    pending_reversal_anchor_idx: Optional[int] = None
+    pending_reversal_pattern_anchor_idx: Optional[int] = None
     pending_reversal_apply_idx: Optional[int] = None
-
-    jump_to_idx: Optional[int] = None   # next anchor override
-    jump_seed_state: Optional[dict] = None
 
 
 # ---------------------------------------------------------------------
@@ -116,26 +274,152 @@ class MarketStructure:
       - A candle also cannot become a range starter if it participated in the original pattern window excluding the last candle (e.g., continuous: start+middle; 2-candle patterns: first candle).
     """
 
-    def __init__(self,df: pd.DataFrame, struct_direction: int, *, eps: float = 0.0001, range_min_k: int = 2, range_max_k: int = 5, debug_invariants: bool = True, start_idx: int = 0, structure_id: int = 0, end_idx: int | None = None):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        struct_direction: int,
+        *,
+        eps: float = 0.0001,
+        range_min_k: int = 2,
+        range_max_k: int = 5,
+        debug_invariants: bool = True,
+        start_idx: int = 0,
+        structure_id: int = 0,
+        end_idx: int | None = None,
+        timeframe: str = "H1",
+        proximity_pips: Optional[int] = None,
+        min_gap_pips: Optional[int] = None,
+        pip_size: float = 0.0001,
+        bos_inner_resolver: Optional[BosInnerResolver] = None,
+        poi_inners_resolver: Optional[PoiInnersResolver] = None,
+        fill_threshold: float = 0.70,
+        enforce_cts0_new_extreme: bool = False,
+        bos0_inner: Optional[float] = None,
+        stop_after_cts_established: Optional[int] = None,
+    ):
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
         self.df = df.copy()
+        # ---- Perf (Path 2a): positional numpy price views for the per-candle
+        # hot loop. MS used to read o/h/l/c thousands of times via
+        # `float(df.iloc[i][<col>])`, each of which builds a full-row Series
+        # just to pull one scalar. These float arrays replace that with O(1)
+        # indexed access. Prices are immutable for the whole run, so the views
+        # never go stale.
+        #
+        # INVARIANT: MS reads candles positionally (`.iloc[i]`) AND by label
+        # (`.loc[candle_idx]`) with candle_idx sourced from the positional loop
+        # var, so the existing code already requires a 0..n-1 RangeIndex. Assert
+        # it so positional array access is provably equivalent (and so a future
+        # caller passing a non-reset index fails loudly instead of silently
+        # corrupting).
+        if not self.df.index.equals(pd.RangeIndex(len(self.df))):
+            raise ValueError(
+                "[market_structure] requires a 0..n-1 RangeIndex df (got "
+                f"{self.df.index!r}); MS mixes positional .iloc[i] and label "
+                ".loc[candle_idx] access."
+            )
+        self._o = self.df["o"].to_numpy(dtype=float)
+        self._h = self.df["h"].to_numpy(dtype=float)
+        self._l = self.df["l"].to_numpy(dtype=float)
+        self._c = self.df["c"].to_numpy(dtype=float)
         self.struct_direction = struct_direction
         self.start_idx = int(start_idx)
         self.end_idx = int(end_idx) if end_idx is not None else None  # optional stopping point (inclusive)
+        # The run's DATA EDGE (inclusive). A bounded run reads nothing past it:
+        # it is identical to an unbounded run on the frame truncated at
+        # `end_idx` (Plan A; MARKET_STRUCTURE_SPEC "Bounded runs"). Every
+        # internal horizon — pattern applies / range back-fill (`D`), the
+        # range label's confirming close, the reversal-watch expiry, the
+        # detector's visible length and the resolvers' frame — clamps here,
+        # never to `len(self.df) - 1`. Unbounded runs: `n - 1` (identity).
+        n = len(self.df)
+        self._effective_end = n - 1 if self.end_idx is None else min(n - 1, int(self.end_idx))
+        # Lazily-built truncated view handed to the zone resolvers (L5);
+        # see `_resolver_df`.
+        self._resolver_view: Optional[pd.DataFrame] = None
         self.eps = float(eps)
         self.debug_invariants = bool(debug_invariants)
+        # Opt-in 'true first breakout' rule (see PART4_REFACTOR_SPEC §4.4
+        # / project_unified_identify_start_probe memory). When True, MS
+        # rejects a breakout pattern that would establish cycle 0 unless
+        # its anchor's extreme is the running max/min over
+        # [start_idx, cts_idx - 1]. Default False preserves existing
+        # behavior — only Phase 2 of the unified probe passes True.
+        #
+        # REPURPOSED 2026-06-07 (scan-from-start, see
+        # project_true_first_breakout_cycle0.md): when True this is the
+        # "pre-CTS_0 scan mode" switch. While cycle 0 is unestablished MS
+        # delegates the entire breakout search to the shared
+        # `find_true_first_breakout` routine (mechanism B against the
+        # handed `bos0_inner` + strict full-pattern extreme + cycle-0
+        # tie-break), establishes CTS_0 at the located winner via the
+        # normal cycle-0 path, then resumes. The probe and MS therefore
+        # agree on CTS_0 by construction (same routine, same data, same
+        # `bos0_inner`).
+        self.enforce_cts0_new_extreme = bool(enforce_cts0_new_extreme)
+        # The cycle-0 breakout gate threshold (= the BOS_0 inner the probe
+        # finalized). REQUIRED in scan mode — condition 1 (anchor close
+        # past the BOS_0 inner) is meaningless without it.
+        self.bos0_inner = float(bos0_inner) if bos0_inner is not None else None
+        if self.enforce_cts0_new_extreme and self.bos0_inner is None:
+            raise ValueError(
+                "[market_structure] enforce_cts0_new_extreme (pre-CTS_0 scan "
+                "mode) requires bos0_inner (the cycle-0 breakout gate threshold)."
+            )
+        # Opt-in early stop (Plan B): end the run at the first QUIESCENT point
+        # (no reversal watch active, no pending reversal)
+        # after the N-th CTS_ESTABLISHED. `early_stop_idx` records the first
+        # anchor NOT processed because of it (None = no early stop happened).
+        # In addition to `end_idx`, never instead of it. Used only by the
+        # first_confluence probe's Phase 2 (`unified_probe._run_phase2`).
+        self.stop_after_cts_established = (
+            int(stop_after_cts_established) if stop_after_cts_established is not None else None
+        )
+        if self.stop_after_cts_established is not None and self.stop_after_cts_established < 1:
+            raise ValueError(
+                "[market_structure] stop_after_cts_established must be >= 1 "
+                f"(got {stop_after_cts_established}); 0 would stop after the first step."
+            )
+        self.early_stop_idx: Optional[int] = None
+        # Lazily-computed cycle-0 true-first-breakout decision (scan mode).
+        self._cts0_tfb = None
+        self._cts0_tfb_computed = False
 
         self.state = MarketStructureState(struct_direction=struct_direction, structure_id=0)
         self.state.struct_direction = int(struct_direction)
         self.state.structure_id = int(structure_id)
         self.events: List[StructureEvent] = []
 
-        # Pattern detector (uses df feature columns)
-        self._bp = BreakoutPatterns(self.df)
+        # Pattern detector (uses df feature columns), bounded at the data edge
+        # so a pattern that would need candles past `end_idx` does not exist.
+        self._bp = BreakoutPatterns(self.df, end_idx=self._effective_end)
 
         self.range_min_k = int(range_min_k)
         self.range_max_k = int(range_max_k)
+
+        # Zone-proximity-based CTS confirmation config. The TF→pips lookup
+        # lives in `structure/structure_engine.py` (the orchestrator); when
+        # a direct/test caller doesn't pass proximity_pips, we fall back to
+        # the H1 default to keep the code path safe.
+        self.timeframe = str(timeframe)
+        self.proximity_pips = int(proximity_pips) if proximity_pips is not None else _FALLBACK_PROXIMITY_PIPS
+        self.min_gap_pips = int(min_gap_pips) if min_gap_pips is not None else _FALLBACK_MIN_GAP_PIPS
+        self.pip_size = float(pip_size)
+        self._proximity_threshold = self.proximity_pips * self.pip_size
+        self._min_gap_threshold = self.min_gap_pips * self.pip_size
+
+        # Dual CTS resolver protocol (Part 4 §13.5.b). When unset, the
+        # proximity check returns None — the dual CTS path is effectively
+        # disabled. All real callers wire resolvers via structure_engine.py.
+        self._bos_inner_resolver = bos_inner_resolver
+        self._poi_inners_resolver = poi_inners_resolver
+
+        # Imbalance fill threshold used by the cycle-0 snapshot's
+        # `has_unfilled` computation. Kept in sync with POIConfig default
+        # so MS-side has_unfilled matches FibTracker's view of the same
+        # imbalance instances.
+        self._fill_threshold = float(fill_threshold)
 
         self._ensure_output_cols()
 
@@ -146,9 +430,21 @@ class MarketStructure:
     def run(self) -> Tuple[pd.DataFrame, List[StructureEvent], List[StructureLevel]]:
         """
         Sequentially labels market_state, CTS/BOS/range fields, and emits StructureEvents.
-        No skipping. Uses pending confirmation for patterns + internal range evaluation window (min/max lookahead) with rewind+replay.
+        No skipping. Uses pending confirmation for patterns + an internal range evaluation window
+        (min/max lookahead) back-filled offline; never rewinds (the reversal-watch expiry rewind
+        was removed 2026-09-29 — unreachable since F3b, MARKET_STRUCTURE_SPEC "A reversal
+        confirming on E applies").
 
-        If end_idx is set, processing stops after that idx (inclusive).
+        If `end_idx` is set the run has TRUNCATION semantics: it produces exactly the
+        events and output rows an unbounded run on the frame truncated to `[0, end_idx]`
+        would (nothing past `end_idx` is read; `end_idx` is the run's data edge). This is
+        NOT prefix-equivalence with the natural-end run — the last `range_max_k` candles
+        before the bound may legitimately differ (pending confirmations, a pattern applying
+        past the bound). See Plan A §2.
+
+        With `stop_after_cts_established=N` the loop also ends at the first quiescent
+        point (no reversal watch / pending reversal) after the N-th `CTS_ESTABLISHED`;
+        `early_stop_idx` records it. Used by the first_confluence probe (Plan B).
         """
         n = len(self.df)
         # i = 0
@@ -156,38 +452,45 @@ class MarketStructure:
         if i < 0:
             i = 0
         if i >= n:
-            return self.df, self.events, self.levels
+            return self.df, self.events, self._events_to_structure_levels()
 
-        # Determine effective end index (inclusive)
-        effective_end = n - 1
-        if self.end_idx is not None and self.end_idx < effective_end:
-            effective_end = self.end_idx
+        # Effective end index (inclusive) = the run's data edge (set in __init__).
+        effective_end = self._effective_end
+
+        # Path 2b: preallocate output arrays. Placed after the start_idx>=n
+        # early returns so degenerate runs skip it.
+        self._init_output_arrays(n)
 
         while i <= effective_end:
             if self.state.state == MarketState.REVERSAL:
                 break
 
             next_i = self._step_anchor(i)
-            self._dbg(f"[POST_STEP] i={i} next_i={next_i} jump_to={self.state.jump_to_idx}")
-
-            # If reversal-watch expiry requested a rewind, honor it
-            if self.state.jump_to_idx is not None:
-                jump_to = int(self.state.jump_to_idx)
-                seed = self.state.jump_seed_state  # capture before rewind resets state
-
-                self._dbg(f"[REWIND] from={i} step_next={next_i} jump_to={jump_to}")
-
-                # Rebuild state up to jump_to - 1, then restore the post-expire seed snapshot
-                self._rewind_to(jump_to, seed=seed)
-
-                # clear jump request + seed after using
-                self.state.jump_to_idx = None
-                self.state.jump_seed_state = None
-
-                i = jump_to
-                continue
+            self._dbg(f"[POST_STEP] i={i} next_i={next_i}")
 
             i = next_i
+            # Plan B: opt-in early stop. Checked only while in-bound candles
+            # remain — if `next_i` is already past the edge nothing is
+            # pre-empted and the run simply ends at its bound (no early stop).
+            if i <= effective_end and self._should_stop_after_cts():
+                self.early_stop_idx = int(i)
+                self._dbg(f"[EARLY_STOP] i={i} cts_established>={self.stop_after_cts_established}")
+                break
+
+        # Plan A invariant: a bounded run reads nothing past its data edge, so
+        # it can stamp nothing past it either (every emit site stamps `i`, an
+        # anchor, an extreme inside a pattern span <= apply <= D, or the range
+        # label's confirm_idx — all clamped at `_effective_end`). Unconditional
+        # (O(events)); if it fires a forward read was missed — do not weaken it.
+        if self.events:
+            _max_idx = max(int(ev.idx) for ev in self.events)
+            assert _max_idx <= self._effective_end, (
+                f"[market_structure] event past effective_end: max idx {_max_idx} > {self._effective_end}")
+
+        # Path 2b: flush the batched per-candle output arrays to df columns
+        # before the terminal reversal stamping + invariant checks below
+        # (both read the df output columns).
+        self._flush_output_arrays()
 
         levels = self._events_to_structure_levels()
 
@@ -206,63 +509,25 @@ class MarketStructure:
         return self.df, self.events, levels
 
     
-    def _rewind_to(self, jump_to: int, *, seed: Optional[dict] = None) -> None:
+    def _should_stop_after_cts(self) -> bool:
+        """Plan B: True iff the opt-in stop is set, the state is QUIESCENT (no reversal
+        watch active, no pending reversal — a reversal may still land otherwise) and at
+        least `stop_after_cts_established` CTS_ESTABLISHED events exist.
+
+        Counts the events (the same source of truth the probe's
+        `_collect_cts_established` reads) rather than a state counter. No `structure_id`
+        filter — one MS instance runs exactly one structure. (Both choices date from when
+        an expiry rewind rebuilt the state with `structure_id` 0; no rewind exists since
+        2026-09-29.) O(events) per step only while the option is set.
         """
-        Rebuild state/events by replaying from the start up to (jump_to - 1),
-        then restore a provided seed snapshot (used for reversal-watch false-break rewinds).
-        """
-        jump_to = int(jump_to)
-        n = len(self.df)
-        if jump_to <= 0:
-            self.state = MarketStructureState(struct_direction=self.struct_direction)
-            self.events = []
-            return
-        if jump_to >= n:
-            jump_to = n - 1
-
-        # Reset state + events (df price/features stay; output cols will be overwritten as we replay)
-        self.state = MarketStructureState(struct_direction=self.struct_direction)
-        self.events = []
-
-        # Replay forward up to jump_to-1.
-        # IMPORTANT: ignore any jump_to_idx requests that occur during this rebuild.
-        self._in_rewind = True
-        try:
-            i = 0
-            while i < jump_to:
-                nxt = self._step_anchor(i)
-
-                # During rebuild, ignore any jump requests
-                if self.state.jump_to_idx is not None:
-                    self.state.jump_to_idx = None
-                if self.state.jump_seed_state is not None:
-                    self.state.jump_seed_state = None
-
-                i = nxt
-        finally:
-            self._in_rewind = False
-
-        # Restore seed snapshot (post-expire BOS/CTS/range state)
-        if seed is not None:
-            self.state.state = seed.get("market_state", self.state.state)
-            self.state.bos_threshold = seed.get("bos_threshold", self.state.bos_threshold)
-            self.state.cts_threshold = seed.get("cts_threshold", self.state.cts_threshold)
-
-            self.state.range_active = seed.get("range_active", self.state.range_active)
-            self.state.range_hi = seed.get("range_hi", self.state.range_hi)
-            self.state.range_lo = seed.get("range_lo", self.state.range_lo)
-            self.state.range_start_idx = seed.get("range_start_idx", self.state.range_start_idx)
-            self.state.range_confirm_idx = seed.get("range_confirm_idx", self.state.range_confirm_idx)
-
-        # CRITICAL: the replay-to-(jump_to-1) may have started a reversal watch (e.g. at 105)
-        # which must NOT remain active when resuming after an expiry-based rewind.
-        self._clear_pending_reversal()
-        self._clear_reversal_watch()
-
-        # Also ensure no jump is still requested from the rebuild itself
-        self.state.jump_to_idx = None
-        self.state.jump_seed_state = None
-
+        n = self.stop_after_cts_established
+        if n is None:
+            return False
+        st = self.state
+        if st.reversal_watch_active or st.pending_reversal_apply_idx is not None:
+            return False
+        established = sum(1 for ev in self.events if ev.type == "CTS_ESTABLISHED")
+        return established >= int(n)
 
     # ----------------------------
     # Per-candle step
@@ -284,7 +549,7 @@ class MarketStructure:
             if st.range_active:
                 prev_hi = st.range_hi
                 prev_lo = st.range_lo
-                
+
                 self._update_active_range(i)
 
                 if st.state in (MarketState.PULLBACK, MarketState.PULLBACK_RANGE):
@@ -299,7 +564,12 @@ class MarketStructure:
 
         # Option B: even when backfilling (freeze_range=True), CTS can update pre-confirm
         # based on raw new extremes in struct_direction.
-        self._maybe_update_cts_pre_confirm(i, via="replay_raw")
+        self._maybe_update_cts_pre_confirm(i, via=CTS_UPDATED_RAW_VIA)
+
+        # Per-candle CTS confirmation via sd zone proximity. Runs on every
+        # candle (anchor, back-fill, apply, fallthrough) — see LANDMINES
+        # "Dual CTS Proximity Confirmation" for the load-bearing gates.
+        self._maybe_confirm_cts_via_proximity(i)
 
         # -------------------------------------------------
         # Week 5 Part 3A: BOS barrier semantics
@@ -310,14 +580,19 @@ class MarketStructure:
         # - probe (wick cross, no close break) updates bos_threshold
         # - close break starts reversal watch and freezes barrier
         self._bos_barrier_step(i)
-        self._maybe_expire_reversal_watch(i)
 
-        # NEW: if reversal applies on this candle, it's terminal
-        if self._maybe_apply_pending_reversal(i):
+        # The pending reversal applies here, before the guard below: one confirming ON its watch's
+        # expiry candle is a reversal (E inclusive, F3b; MARKET_STRUCTURE_SPEC "A reversal confirming on E applies").
+        _is_terminal = self._maybe_apply_pending_reversal(i)
+        if _is_terminal:
             # write row after terminal apply state updates
             self._write_df_row(i)
             return
 
+        # A watch never outlives its expiry (F3b): its pending applies by E, and every clear of the
+        # pending also ends the watch. Guard — an open watch skips the BOS barrier step for good.
+        assert not (st.reversal_watch_active and int(i) >= int(st.reversal_watch_expires_idx)), (
+            f"[market_structure] reversal watch still open at its expiry {st.reversal_watch_expires_idx} (candle {i})")
         self._write_df_row(i)
 
     # ----------------------------
@@ -325,7 +600,7 @@ class MarketStructure:
     # ----------------------------
 
     def _close_breaks_bos(self, i: int, bos: float) -> bool:
-        c = float(self.df.iloc[i]["c"])
+        c = float(self._c[i])
         if self.struct_direction == 1:
             return c < bos
         else:
@@ -356,9 +631,9 @@ class MarketStructure:
             return
 
         bos = float(st.bos_threshold)
-        h = float(self.df.iloc[i]["h"])
-        l = float(self.df.iloc[i]["l"])
-        c = float(self.df.iloc[i]["c"])
+        h = float(self._h[i])
+        l = float(self._l[i])
+        c = float(self._c[i])
 
         if self.struct_direction == 1:
             # ---- close-break -> start watch (and maybe immediate false-break resolve)
@@ -438,9 +713,12 @@ class MarketStructure:
         st.reversal_watch_active = True
         st.reversal_watch_start_idx = int(i)
         st.reversal_bos_th_frozen = float(bos_frozen)
-        st.reversal_watch_expires_idx = min(int(i) + int(self.range_max_k), len(self.df) - 1)
+        # Watch window clamps at the run's data edge (L4): a reversal pattern
+        # applying past it is never scheduled; one applying exactly at it
+        # reverses there (F3b: a watch never outlives its expiry).
+        st.reversal_watch_expires_idx = min(int(i) + int(self.range_max_k), self._effective_end)
 
-        # Emit REVERSAL_WATCH_START event for all close-breaks (survives rewinds)
+        # Emit REVERSAL_WATCH_START event for all close-breaks
         # This captures the moment reversal watch begins, even if no pattern is found
         self.events.append(
             StructureEvent(
@@ -449,7 +727,7 @@ class MarketStructure:
                 type="REVERSAL_WATCH_START",
                 price=float(bos_frozen),
                 meta={
-                    "anchor_idx": int(i),
+                    "pattern_anchor_idx": int(i),
                     "bos_frozen": float(bos_frozen),
                     "expires_idx": int(st.reversal_watch_expires_idx),
                     "structure_id": int(st.structure_id),
@@ -466,82 +744,10 @@ class MarketStructure:
         st.reversal_bos_th_frozen = None
         st.reversal_watch_expires_idx = None
 
-    def _maybe_expire_reversal_watch(self, i: int) -> None:
-        """
-        If reversal watch is active but no valid reversal pattern appears within the watch window,
-        then this was a "false break" by your definition: update bos_threshold the anchor candle wick, then clear the watch.
-
-        After expiry, we "rewind" execution to (anchor_idx + 1) so the next anchor starts there.
-        """
-        st = self.state
-        if not st.reversal_watch_active:
-            return
-        if st.reversal_watch_expires_idx is None:
-            return
-        if int(i) < int(st.reversal_watch_expires_idx):
-            return
-
-        # Expire: failed reversal => bos_threshold expands to ANCHOR candle wick
-        anchor = st.reversal_watch_start_idx
-        if anchor is None:
-            # defensive: shouldn't happen, but don't crash
-            self._clear_pending_reversal()
-            self._clear_reversal_watch()
-            return
-
-        anchor = int(anchor)
-        if self.struct_direction == 1:
-            # st.bos_threshold = float(self.df.iloc[anchor]["l"])
-            prev = st.bos_threshold
-            new_thr = float(self.df.iloc[anchor]["l"])
-            st.bos_threshold = new_thr
-            self._emit_bos_threshold_updated(
-                i,
-                float(new_thr),
-                meta={"prev": None if prev is None else float(prev), "reason": "probe_no_break"},
-            )
-        else:
-            # st.bos_threshold = float(self.df.iloc[anchor]["h"])
-            prev = st.bos_threshold
-            new_thr = float(self.df.iloc[anchor]["h"])
-            st.bos_threshold = new_thr
-            self._emit_bos_threshold_updated(
-                i,
-                float(new_thr),
-                meta={"prev": None if prev is None else float(prev), "reason": "probe_no_break"},
-            )
-
-        # Rewind to anchor + 1 (do NOT jump to extremes)
-        jump_to = min(anchor + 1, len(self.df) - 1)
-        st.jump_to_idx = jump_to
-
-        # Seed snapshot: this is the state we want to be true when we resume at jump_to
-        # (because this BOS update is based on the full watch window lookahead).
-        st.jump_seed_state = {
-            "market_state": st.state,
-            "bos_threshold": st.bos_threshold,
-            "cts_threshold": st.cts_threshold,
-            "range_active": st.range_active,
-            "range_hi": st.range_hi,
-            "range_lo": st.range_lo,
-            "range_start_idx": st.range_start_idx,
-            "range_confirm_idx": st.range_confirm_idx,
-        }
-
-        self._dbg(
-            f"[RV_EXPIRE] i={i} expired_idx={st.reversal_watch_expires_idx} "
-            f"anchor={anchor} new_bos={st.bos_threshold} jump_to={jump_to} "
-            f"clearing_pending={st.pending_reversal_apply_idx is not None}"
-        )
-
-        # Pending reversal is no longer valid after watch expiry
-        self._clear_pending_reversal()
-        self._clear_reversal_watch()
-
     def _clear_pending_reversal(self) -> None:
         st = self.state
         st.pending_reversal_ev = None
-        st.pending_reversal_anchor_idx = None
+        st.pending_reversal_pattern_anchor_idx = None
         st.pending_reversal_apply_idx = None
 
     def _schedule_reversal_from_anchor(self, anchor_idx: int, *, bos_frozen: float) -> None:
@@ -570,17 +776,17 @@ class MarketStructure:
         # Keep earliest scheduled reversal apply
         if st.pending_reversal_apply_idx is None or int(apply_r) < int(st.pending_reversal_apply_idx):
             st.pending_reversal_ev = ev_r
-            st.pending_reversal_anchor_idx = int(anchor_idx)
+            st.pending_reversal_pattern_anchor_idx = int(anchor_idx)
             st.pending_reversal_apply_idx = int(apply_r)
 
             pat = getattr(ev_r, "pat", None) or getattr(ev_r, "pattern", None) or "?"
             self._dbg(
-                f"[RV_SCHEDULE] anchor={st.pending_reversal_anchor_idx} "
+                f"[RV_SCHEDULE] anchor={st.pending_reversal_pattern_anchor_idx} "
                 f"apply={st.pending_reversal_apply_idx} pat={pat} "
                 f"bos_frozen={bos_frozen:.5f} expires={st.reversal_watch_expires_idx}"
             )
 
-            # Emit REVERSAL_CANDIDATE event for charting (survives rewinds)
+            # Emit REVERSAL_CANDIDATE event for charting
             self.events.append(
                 StructureEvent(
                     idx=int(anchor_idx),
@@ -588,7 +794,7 @@ class MarketStructure:
                     type="REVERSAL_CANDIDATE",
                     price=float(bos_frozen),
                     meta={
-                        "anchor_idx": int(anchor_idx),
+                        "pattern_anchor_idx": int(anchor_idx),
                         "apply_idx": int(apply_r),
                         "pattern": pat,
                         "bos_frozen": float(bos_frozen),
@@ -612,20 +818,20 @@ class MarketStructure:
 
         pat = getattr(st.pending_reversal_ev, "pat", None) or getattr(st.pending_reversal_ev, "pattern", None) or "?"
         self._dbg(
-            f"[RV_APPLY] i={i} anchor={st.pending_reversal_anchor_idx} "
+            f"[RV_APPLY] i={i} anchor={st.pending_reversal_pattern_anchor_idx} "
             f"apply={st.pending_reversal_apply_idx} pat={pat}"
         )
 
-        # Terminal apply
+        # Terminal apply (it ends the watch and clears the pending)
         self._apply_pattern_at_apply_idx(st.pending_reversal_ev, i, "reversal")
-        self._clear_pending_reversal()
         return True
 
     # ----------------------------
 
     def _step_anchor(self, i: int) -> int:
-        n = len(self.df)
-        D = min(i + self.range_max_k, n - 1)  # range_max_k is 5 by default
+        # Horizon for pattern applies + range back-fill, clamped at the run's
+        # data edge (L1) — never at len(df) - 1.
+        D = min(i + self.range_max_k, self._effective_end)  # range_max_k is 5 by default
 
         st = self.state
 
@@ -655,9 +861,24 @@ class MarketStructure:
             # (Prevents the active range from absorbing the breakout/pullback window.)
             for k in range(i, apply_idx):
                 self._replay_step_no_patterns(k, freeze_range=True)
+                # A reversal applied inside the back-fill (the pending one, at ~664)
+                # is terminal: the structure ends at candle k, so the rest of the
+                # back-fill and the winner's apply (a later candle) are never reached
+                # (MARKET_STRUCTURE_SPEC "Reversal inside a back-fill"). The run loop
+                # ends on REVERSAL, so the returned index is never used.
+                if self.state.state == MarketState.REVERSAL:
+                    return k + 1
 
             # "live-like": we act as if apply candle just closed
             self._apply_pattern_at_apply_idx(ev, apply_idx, kind)
+
+            # A breakout's post-apply range back-fill (`_post_apply_range_check`)
+            # can apply the pending reversal too: terminal, no apply-row re-write.
+            # (A reversal WINNER keeps its re-write below — its apply candle's own step:
+            # the range update still runs; the raw CTS update, proximity, the BOS barrier
+            # skip in REVERSAL, and the winner cleared the pending: nothing re-applies.)
+            if kind != "reversal" and self.state.state == MarketState.REVERSAL:
+                return apply_idx + 1
 
             # reversal check at apply_idx
             # self._maybe_trigger_reversal(apply_idx)
@@ -669,12 +890,9 @@ class MarketStructure:
             # After a breakout, the next range candidate (if any) must begin at a later candle
             # (e.g. your example: breakout at 53, next range starts at 57), so we simply
             # continue sequentially from the next candle.
-            next_i = apply_idx + 1
-            if self.state.jump_to_idx is not None:
-                next_i = int(self.state.jump_to_idx)
-            return next_i
+            return apply_idx + 1
 
-        # 2) No valid pattern by D:
+        # 2b) No valid pattern by D:
         if allow_range and not st.range_active:
             range_confirmed, confirm_idx = self._is_range_candle_given_confirm(i)
 
@@ -682,6 +900,10 @@ class MarketStructure:
                 min_d = D if confirm_idx is None else min(confirm_idx, D)
                 for k in range(i, min_d):
                     self._replay_step_no_patterns(k, freeze_range=True)
+                    # Terminal inside the range back-fill: no finalize, no re-step of i
+                    # (see the winner back-fill above).
+                    if self.state.state == MarketState.REVERSAL:
+                        return k + 1
 
                 self._finalize_range_candidate_offline(i)
 
@@ -689,10 +911,7 @@ class MarketStructure:
         self._replay_step_no_patterns(i)
 
         # Next anchor always i+1 (the next candle after the candidate)
-        next_i = i + 1
-        if self.state.jump_to_idx is not None:
-            next_i = int(self.state.jump_to_idx)
-        return next_i
+        return i + 1
 
     def _best_bopb_pattern_at_anchor(
         self,
@@ -704,24 +923,29 @@ class MarketStructure:
     ) -> Optional[Tuple[PatternEvent, int, Literal["breakout", "pullback"]]]:
         st = self.state
 
+        # Pre-CTS_0 scan-from-start mode: while cycle 0 is unestablished,
+        # the ONLY breakout that may establish CTS_0 is the shared routine's
+        # true first breakout. Suppress every other candidate (range is
+        # already disabled at state NONE; pullback/reversal detection gate
+        # on st.cts/state, so they're dormant pre-CTS_0). MS then drives the
+        # located winner through its normal establishment path — no
+        # duplicated cycle-0 logic. See project_true_first_breakout_cycle0.
+        if self.enforce_cts0_new_extreme and st.cts is None:
+            tfb = self._get_cts0_tfb()
+            if tfb is None:
+                return None
+            if int(i) == int(tfb.pattern.start_idx):
+                # est_idx is the apply/confirm idx == MS's _apply_idx
+                # (asserted) — the candle that establishes cycle-0 CTS.
+                assert int(self._apply_idx(tfb.pattern)) == int(tfb.est_idx)
+                return (tfb.pattern, int(tfb.est_idx), "breakout")
+            return None
+
         # If state NONE: only breakout direction checks (no pullback)
         candidates = []
 
         # Breakout
         ev_b = self._bp.detect_best_for_anchor(i, self.struct_direction, breakout_th)
-
-        # Breakout Pattern Debugging Print
-        # if i in (387, 388):
-        #     omo = self._bp.one_maru_opposite(i, self.struct_direction, breakout_th, do_confirm=False)
-        #     omc = self._bp.one_maru_continuous(i, self.struct_direction, breakout_th, do_confirm=False)
-        #     dm  = self._bp.double_maru(i, self.struct_direction, breakout_th, do_confirm=False)
-        #     print(f"[DBG] i={i} breakout_th={breakout_th} "
-        #         f"OMO={None if omo is None else omo.status} "
-        #         f"OMC={None if omc is None else omc.status} "
-        #         f"DM={None if dm is None else dm.status}")
-        #     if omc is not None:
-        #         print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
-        #         print(f"[DBG] candle+1 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
 
         if ev_b is not None:
             apply_b = self._apply_idx(ev_b)
@@ -734,19 +958,6 @@ class MarketStructure:
         )
         if allow_pullback_detection:
             ev_p = self._bp.detect_best_for_anchor(i, -self.struct_direction, pullback_th)
-
-            # Pullback Pattern Debugging Print
-            if i in (102, 103):
-                omo = self._bp.one_maru_opposite(i, -self.struct_direction, pullback_th, do_confirm=False)
-                omc = self._bp.one_maru_continuous(i, -self.struct_direction, pullback_th, do_confirm=False)
-                dm  = self._bp.double_maru(i, -self.struct_direction, pullback_th, do_confirm=False)
-                print(f"[DBG] i={i} pullback_th={pullback_th} "
-                    f"OMO={None if omo is None else omo.status} "
-                    f"OMC={None if omc is None else omc.status} "
-                    f"DM={None if dm is None else dm.status}")
-                if omc is not None:
-                    print(f"[DBG] OMC start={omc.start_idx} end={omc.end_idx} conf={omc.confirmation_idx}")
-                    print(f"[DBG] candle+1 close={self.df.iloc[i+1]['c']} high={self.df.iloc[i+1]['h']}")
 
             if ev_p is not None:
                 apply_p = self._apply_idx(ev_p)
@@ -770,7 +981,15 @@ class MarketStructure:
             ev_r = self._bp.detect_best_for_anchor(i, -self.struct_direction, bos_frozen_for_anchor)
             if ev_r is not None:
                 apply_r = self._apply_idx(ev_r)
-                if apply_r is not None and apply_r <= D:
+                # An open watch's frozen barrier holds only until `reversal_watch_expires_idx`: a
+                # reversal applying later is not a candidate (the scheduler's rule; apply == E stays
+                # one). The watch's pending applies by E (F3b); an uncapped later candidate would
+                # steer the step layout — MARKET_STRUCTURE_SPEC "Expiry inside a step". A close-break
+                # AT i opens a watch expiring at D, so D is its cap already.
+                horizon = D
+                if st.reversal_watch_active and st.reversal_watch_expires_idx is not None:
+                    horizon = min(D, int(st.reversal_watch_expires_idx))
+                if apply_r is not None and apply_r <= horizon:
                     candidates.append((ev_r, apply_r, "reversal"))
 
         if not candidates:
@@ -803,7 +1022,12 @@ class MarketStructure:
             return (False, None)
 
         confirm_idx = int(self.df.iloc[i].get("is_range_confirm_idx", -1))
-        if confirm_idx < 0:
+        if confirm_idx < 0 or confirm_idx > self._effective_end:
+            # The confirming close has not happened yet (L2): the label is
+            # computed full-frame and locks the FIRST close in [i+2, i+5]
+            # inside candle i's range, so a confirm past the data edge means
+            # no close <= effective_end confirmed it — exactly what the label
+            # would say on the truncated frame.
             return (False, None)
 
         candle_i = str(self.df.iloc[i].get("candle_type", ""))
@@ -818,11 +1042,11 @@ class MarketStructure:
         # If we already have an active range, this anchor-range-candidate logic probably shouldn't run.
         # In your simplified model, range-active mode is handled by per-candle expansion instead.
 
-        lo_i = float(self.df.iloc[i]["l"])
-        hi_i = float(self.df.iloc[i]["h"])
+        lo_i = float(self._l[i])
+        hi_i = float(self._h[i])
         confirm_idx = int(self.df.iloc[i]["is_range_confirm_idx"])
 
-        # NEW: seed range bound using prior CTS extreme (if exists)
+        # NEW: seed range bound using the current CTS anchor's price (if any)
         if st.cts is not None:
             cts_price = float(st.cts.price)
             if self.struct_direction == 1:
@@ -847,7 +1071,7 @@ class MarketStructure:
                     "confirm_idx": confirm_idx,
                     "hi": hi_i,
                     "lo": lo_i,
-                    "cts_idx": None if st.cts is None else st.cts.idx,
+                    "cts_anchor_idx": None if st.cts is None else st.cts.idx,
                     "cts_price": None if st.cts is None else float(st.cts.price),
                     "structure_id": int(st.structure_id),
                     "struct_direction": int(self.struct_direction),
@@ -868,8 +1092,8 @@ class MarketStructure:
         hi0 = float(st.range_hi) if st.range_hi is not None else float("-inf")
         lo0 = float(st.range_lo) if st.range_lo is not None else float("inf")
 
-        hi1 = max(hi0, float(self.df.iloc[i]["h"]))
-        lo1 = min(lo0, float(self.df.iloc[i]["l"]))
+        hi1 = max(hi0, float(self._h[i]))
+        lo1 = min(lo0, float(self._l[i]))
 
         if hi1 != hi0 or lo1 != lo0:
             st.range_hi = hi1
@@ -887,13 +1111,6 @@ class MarketStructure:
                     },
                 )
             )
-
-            # CTS_UPDATED can happen while in range per your rule (only if in EST_OR_UPD track)
-            # if st.cts is not None and st.cts_phase == "EST_OR_UPD":
-            #     cts_ext = self._cts_price_at(i)
-            #     if self._is_new_cts_extreme(cts_ext):
-            #         self._emit_cts_updated(i, cts_ext, meta={"via": "range_expand"})
-            #         st.cts = Point(idx=i, price=cts_ext)
             
         # keep thresholds aligned whenever range is active
         self._sync_thresholds_from_range(i)
@@ -945,8 +1162,8 @@ class MarketStructure:
         end = int(pullback_ev.end_idx)
         start = max(0, end - (L - 1))
 
-        hi_c = float(self.df.iloc[start : end + 1]["h"].max())
-        lo_c = float(self.df.iloc[start : end + 1]["l"].min())
+        hi_c = float(self._h[start : end + 1].max())
+        lo_c = float(self._l[start : end + 1].min())
 
         # apply_idx = self._apply_idx(pullback_ev)  # keep for logging
 
@@ -971,7 +1188,7 @@ class MarketStructure:
                     price=None,
                     meta={
                         "reason": "pullback_created_range",
-                        "cts_idx": st.cts.idx,
+                        "cts_anchor_idx": st.cts.idx,
                         "cts_price": cts_price,
                         "pullback_apply_idx": apply_idx,
                         "hi": float(st.range_hi),
@@ -1042,7 +1259,7 @@ class MarketStructure:
         if apply_idx is None:
             return
         
-        # Reversal is terminal
+        # Reversal is terminal: the watch AND its pending end (a winner's re-stepped apply row must not re-apply it)
         if kind == "reversal":
             self._set_state(
                 MarketState.REVERSAL,
@@ -1054,56 +1271,26 @@ class MarketStructure:
                 },
             )
             self._clear_reversal_watch()
+            self._clear_pending_reversal()
             return
 
-        # if kind == "breakout":
-        #     # BOS confirmation (Part 2, Option B):
-        #     # Confirm BOS on the first breakout after CTS has been CONFIRMED (i.e., after a pullback pattern applied).
-        #     # BOS price is the pullback extreme between pullback apply and this breakout apply.
-        #     if st.cts_phase == "CONFIRMED" and st.last_pullback_pat_apply_idx is not None:
-        #         bos_price = self._select_bos_price_on_breakout(apply_idx)
-        #         self._emit_bos_confirmed(apply_idx, bos_price, meta={"via": ev.name, "pb_start": st.last_pullback_pat_apply_idx})
-
-        #         # reset pullback-cycle bookkeeping
-        #         st.bos_candidate = None
-        #         st.false_break_active = False
-        #         st.reentered_pullback_after_false_break = False
-        #         st.trend_leg_id += 1
-        #         st.last_pullback_pat_apply_idx = None
-
-
-        #     # Breakout breaks range (if active)
-        #     if st.range_active:
-        #         self._deactivate_range(apply_idx, meta={"reason": "range_breakout", "pat": ev.name})
-
-        #     # cts_price = self._cts_price_at(apply_idx)
-        #     # if st.state == MarketState.BREAKOUT:
-        #     #     self._emit_cts_updated(apply_idx, cts_price, meta={"via": ev.name})
-        #     # else:
-        #     #     self._emit_cts_established(apply_idx, cts_price, meta={"via": ev.name})
-
-        #     cts_idx, cts_price = self._cts_from_breakout_event(ev)
-
-        #     # emit CTS event using cts_idx/cts_price
-        #     if st.cts is not None:
-        #         self._emit_cts_updated(cts_idx, cts_price, meta={"via": ev.name})
-        #     else:
-        #         self._emit_cts_established(cts_idx, cts_price, meta={"via": ev.name})
-
-        #     st.cts = Point(idx=cts_idx, price=cts_price)
-        #     st.cts_phase = "EST_OR_UPD"
-        #     st.last_breakout_pat_apply_idx = apply_idx
-        #     self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
-        #     self._post_apply_range_check(apply_idx)
-        #     return
-
         if kind == "breakout":
+            # CTS anchor = the breakout's pattern extreme (`pattern_extreme`,
+            # shared with find_true_first_breakout); resolved before any state
+            # mutation.
+            cts_anchor_idx, cts_price = self._cts_from_breakout_event(ev)
+
+            # Cycle-0 scan-from-start mode (`enforce_cts0_new_extreme`):
+            # the breakout reaching this block in scan mode is ALREADY the
+            # shared routine's true-first-breakout (selected in
+            # `_best_bopb_pattern_at_anchor`), so no gate is needed here —
+            # MS establishes it through the normal cycle-0 path below.
+            # (The old partial `_cts0_new_extreme_passes` anchor-extreme
+            # gate is removed; selection-time gating replaced it.)
+
             # Breakout breaks range (if active)
             if st.range_active:
                 self._deactivate_range(apply_idx, meta={"reason": "range_breakout", "pat": ev.name})
-
-            # CTS from breakout window extreme (already correct helper)
-            cts_idx, cts_price = self._cts_from_breakout_event(ev)
 
             # Establishing a NEW CTS cycle only if:
             #   - CTS is None (first ever), OR
@@ -1113,14 +1300,18 @@ class MarketStructure:
             if establishing_new_cycle:
                 # advance CTS cycle id for the new CTS
                 st.cts_cycle_id += 1
-                # self._emit_cts_established(cts_idx, cts_price, meta={"via": ev.name})
+                assert ev.start_idx is not None, "a breakout pattern always has a first candle"
+                # `ev.idx` = the MOMENT (the apply candle; Plan E E4a); the CTS
+                # anchor rides in meta `cts_anchor_idx`, `ev.price` is its price.
                 self._emit_cts_established(
-                    cts_idx,
+                    int(apply_idx),
                     cts_price,
+                    cts_anchor_idx=cts_anchor_idx,
                     meta={
                         "via": ev.name,
-                        # NEW: required for Scenario 2 Exception #2
-                        "anchor_idx": int(ev.start_idx) if ev.start_idx is not None else int(apply_idx),
+                        # The breakout pattern's FIRST candle (pattern realm; GLOSSARY "Naming Standard").
+                        # Read by wave_candles (the BIB forward scan + CTS window start).
+                        "pattern_anchor_idx": int(ev.start_idx),
                         "pattern_name": str(ev.name),
                         "confirmed_at": int(apply_idx),  # apply candle that established CTS
                     },
@@ -1128,48 +1319,91 @@ class MarketStructure:
 
                 # Create + confirm BOS simultaneously with CTS establishment
                 if st.cts_cycle_id == 0:
-                    # bos_price = self._initial_bos_before_first_cts(cts_idx)
-                    # self._emit_bos_confirmed(apply_idx, bos_price, meta={"source": "initial_prior_extreme"})
-                    bos_idx, bos_price = self._initial_bos_before_first_cts(cts_idx)
+                    bos_anchor_idx, bos_price = self._initial_bos_before_first_cts(cts_anchor_idx)
+                    # `ev.idx` = the MOMENT (Plan E E4b), like the cycle's CTS_ESTABLISHED.
                     self._emit_bos_confirmed(
-                        bos_idx,
+                        int(apply_idx),
                         bos_price,
+                        bos_anchor_idx=bos_anchor_idx,
                         meta={
                             "source": "initial_prior_extreme",
-                            "confirmed_at": apply_idx,
-                            "pb_start": self.state.last_pullback_pat_apply_idx,
+                            "confirmed_at": int(apply_idx),
+                            "last_pullback_apply_idx": self.state.last_pullback_pat_apply_idx,
                         },
                     )
                 else:
-                    # BOS from pullback extreme (window-based)
-                    # Uses existing helper _select_bos_price_on_breakout which references last_pullback_pat_apply_idx
-                    # bos_price = self._select_bos_price_on_breakout(apply_idx)
-                    # self._emit_bos_confirmed(apply_idx, bos_price, meta={"source": "pullback_extreme", "pb_start": st.last_pullback_pat_apply_idx})
-                    bos_idx, bos_price = self._select_bos_on_breakout(apply_idx)
+                    # BOS from the cycle's retracement window (pullback or proximity):
+                    # `_select_bos_on_breakout`.
+                    bos_anchor_idx, bos_price = self._select_bos_on_breakout(apply_idx)
                     self._emit_bos_confirmed(
-                        bos_idx,
+                        int(apply_idx),
                         bos_price,
-                        meta={
+                        bos_anchor_idx=bos_anchor_idx,
+                        meta=self._end_watch_superseded_by_new_cycle(int(apply_idx), {  # an open watch ends here
                             "source": "pullback_extreme",
-                            "confirmed_at": apply_idx,
-                            "pb_start": self.state.last_pullback_pat_apply_idx,
-                        },
+                            "confirmed_at": int(apply_idx),
+                            "last_pullback_apply_idx": self.state.last_pullback_pat_apply_idx,
+                        }),
                     )
 
                 # New cycle => reset CTS confirmation guard & threshold
-                st.cts_confirmed_for_idx = None
+                st.confirmed_cts_anchor_idx = None
                 st.cts_threshold = None
 
-                # After consuming the pullback to create BOS for the new cycle, clear pullback anchor
-                st.last_pullback_pat_apply_idx = None
-            else:
-                # Not allowed to create a new CTS cycle yet => this breakout just updates CTS (pre-confirm)
-                self._emit_cts_updated(cts_idx, cts_price, meta={"via": ev.name})
+                # New cycle => reset proximity-based confirmation state
+                st.cts_confirmed_method = None
+                st.pullback_fired_for_cycle = False
+                st.cts_confirmed_idx = None
+                # Compute BOS inner for the new cycle's proximity check via
+                # the resolver wired by structure_engine.py (Part 4 §13.5.b).
+                if self._bos_inner_resolver is not None:
+                    st.bos_inner_for_cycle = self._bos_inner_resolver(
+                        self._resolver_df(),
+                        int(bos_anchor_idx),
+                        int(self.struct_direction),
+                    )
+                else:
+                    st.bos_inner_for_cycle = None
 
-            # Update current CTS point (always)
-            st.cts = Point(idx=cts_idx, price=cts_price)
+                # After consuming the pullback to create BOS for the new cycle, clear the pullback moment
+                st.last_pullback_pat_apply_idx = None
+
+            # Not allowed to create a new CTS cycle yet => this continuation breakout
+            # updates the CTS (pre-confirm) — ONLY if its pattern extreme is a strict
+            # new extreme, the raw path's rule (`_is_new_cts_extreme`). The raw path
+            # already moved `st.cts` through the back-filled candles, so a breakout
+            # after a dip can top out at or below the current CTS; it then emits
+            # nothing and leaves `st.cts` (the CTS never regresses; 2026-09-27).
+            cts_moves = establishing_new_cycle or self._is_new_cts_extreme(cts_price)
+            if not establishing_new_cycle and cts_moves:
+                # The span is [anchor i, apply] and the back-fill ran the raw path over
+                # [i, apply): only the apply candle can still be a strict new extreme.
+                assert int(cts_anchor_idx) == int(apply_idx), (
+                    f"pattern-path CTS_UPDATED anchor {cts_anchor_idx} != apply {apply_idx}: "
+                    f"an earlier span candle beyond the CTS escaped the raw path")
+                # `ev.idx` = the MOMENT the update became knowable, the pattern's apply
+                # candle (recorded as `confirmed_at` since Plan E E3·0; the idx since
+                # E4c); the CTS anchor (a location) rides in meta `cts_anchor_idx`
+                # (ARCHITECTURE "`ev.idx` convention").
+                self._emit_cts_updated(
+                    int(apply_idx), cts_price,
+                    meta={"via": ev.name, "confirmed_at": int(apply_idx),
+                          "cts_anchor_idx": int(cts_anchor_idx)},
+                )
+
+            if cts_moves:
+                st.cts = Point(idx=cts_anchor_idx, price=cts_price)
             st.cts_phase = "EST_OR_UPD"
             st.last_breakout_pat_apply_idx = apply_idx
+
+            # Refresh POI inner snapshot for the cycle (Stage 2). New cycle:
+            # uses fresh BOS_n + CTS_n. Continuation breakout (CTS_UPDATED):
+            # same BOS, extended CTS — POIs may shift as Fib bounds expand. No
+            # CTS move = no event and no refresh: FibTracker, which handles each
+            # CTS_UPDATED at its moment, skips it too — the two layers' fill
+            # horizons stay in lock-step (LANDMINES "Scenario 2 anchor agreement").
+            if cts_moves:
+                self._refresh_poi_inners_for_cycle(apply_idx)
 
             self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
             self._post_apply_range_check(apply_idx)
@@ -1178,17 +1412,34 @@ class MarketStructure:
 
         # pullback
         if kind == "pullback":
-            # Ensure range exists or expand it based on pullback pattern
+            # Mark that a pullback fired for this cycle (used for BOS_n+1 derivation)
+            st.pullback_fired_for_cycle = True
+
+            # Ensure range exists or expand it based on pullback pattern.
+            # If proximity already created the range, this expands it.
             self._ensure_range_on_pullback(apply_idx, ev)  # note: pass apply_idx (time) not anchor i
 
-            self._emit_cts_confirmed_once(apply_idx, meta={"via": ev.name})
-            st.cts_phase = "CONFIRMED"
+            if st.cts_confirmed_method == "sd_zone_proximity":
+                # CTS already confirmed via proximity. Emit CTS_RECONFIRMED to
+                # log the pullback as the "stronger" reaffirmation. Do not
+                # re-emit CTS_CONFIRMED. Phase stays CONFIRMED.
+                self._emit_cts_reconfirmed(apply_idx, meta={"via": ev.name})
+            else:
+                # Standard pullback-based confirmation (existing behavior)
+                self._emit_cts_confirmed_once(
+                    apply_idx,
+                    meta={"via": ev.name},
+                    confirmation_method="pullback",
+                )
+                st.cts_phase = "CONFIRMED"
 
-            # initialize thresholds to the confirmed CTS/BOS values at confirmation time
-            if st.cts is not None:
-                st.cts_threshold = float(st.cts.price)
-            if st.bos_confirmed is not None:
-                st.bos_threshold = float(st.bos_confirmed.price)
+                # initialize cts_threshold to the confirmed CTS value at confirmation time.
+                # NOTE: do NOT reset bos_threshold here — BOS locked at BOS_CONFIRMED and
+                # may have legitimately expanded via barrier probes in [BOS_CONFIRMED,
+                # CTS_CONFIRMED]; re-initing it to st.bos.price would discard that
+                # expansion (see GOTCHAS "bos_threshold is reset to the ORIGINAL BOS").
+                if st.cts is not None:
+                    st.cts_threshold = float(st.cts.price)
 
             st.last_pullback_pat_apply_idx = apply_idx
             self._set_state(MarketState.PULLBACK, apply_idx, meta={"reason": "pullback_pattern", "pat": ev.name})
@@ -1196,8 +1447,7 @@ class MarketStructure:
             return
 
     def _post_apply_range_check(self, i: int) -> None:
-        n = len(self.df)
-        D = min(i + self.range_max_k, n - 1)  # range_max_k is 5 by default
+        D = min(i + self.range_max_k, self._effective_end)  # range_max_k is 5 by default (L1)
 
         st = self.state
 
@@ -1213,6 +1463,10 @@ class MarketStructure:
             min_d = D if confirm_idx is None else min(confirm_idx, D)
             for k in range(i, min_d):
                 self._replay_step_no_patterns(k, freeze_range=True)
+                # Terminal inside the back-fill: no finalize (`_step_anchor` then
+                # ends the step — see its winner back-fill).
+                if st.state == MarketState.REVERSAL:
+                    return
 
             self._finalize_range_candidate_offline(i)
 
@@ -1222,111 +1476,107 @@ class MarketStructure:
 
 
     # ----------------------------
+    # Zone-resolver frame (L5)
+    # ----------------------------
+
+    def _resolver_df(self) -> pd.DataFrame:
+        """The frame a resolver may read: truncated at the run's data edge.
+
+        Main / unbounded runs (`end_idx=None`) and runs whose frame already ends
+        at the bound get `self.df` itself — no slicing, no behaviour or perf
+        change. A bounded run on a longer frame (the first_confluence probe's
+        Phase-2 MS) gets `self.df.iloc[: effective_end + 1]` — a RangeIndex
+        frame with `loc == iloc`, `len(df) == effective_end + 1` and the same
+        `attrs` (`attrs["imbalances"]` stays full-frame: the documented Plan A
+        §2 residual). Built ONCE per run and cached: the resolvers read only
+        immutable feature columns, and an `iloc` slice deep-copies `attrs`
+        (GOTCHAS "Per-cell .iloc[] on a df with heavy .attrs"), which on a
+        probe frame carrying the mirrored sub attrs is far too slow to pay per
+        CTS_UPDATED.
+        """
+        if self._effective_end >= len(self.df) - 1:
+            return self.df
+        if self._resolver_view is None:
+            self._resolver_view = self.df.iloc[: self._effective_end + 1]
+        return self._resolver_view
+
+    # ----------------------------
     # CTS/BOS helpers & emits
     # ----------------------------
 
     def _cts_from_breakout_event(self, ev: PatternEvent) -> tuple[int, float]:
         """
-        CTS for breakout = extreme of the breakout pattern candle span [start_idx..end_idx].
-        Returns (cts_idx, cts_price).
+        CTS anchor of a breakout = the pattern extreme of its full span
+        (`structure_patterns.pattern_extreme`, the same computation as
+        `find_true_first_breakout`): max high for a bullish structure, min
+        low for a bearish one, over [start_idx..max(end_idx,
+        confirmation_idx)] — the confirming candle included whenever the
+        pattern has one (CONFIRMED). The only place a pattern extreme
+        becomes a CTS anchor. Returns (cts_anchor_idx, cts_price).
         """
-        s = int(ev.start_idx)
-        e = int(ev.end_idx)
-        if e < s:
-            s, e = e, s
+        found = pattern_extreme(self._h, self._l, ev, self.struct_direction)
+        assert found is not None, f"breakout pattern span out of bounds: {ev}"
+        return found
 
-        if self.struct_direction == 1:
-            # bullish structure -> CTS is max high in pattern span
-            highs = self.df.iloc[s : e + 1]["h"].astype(float).values
-            k = int(highs.argmax())
-            cts_idx = s + k
-            cts_price = float(highs[k])
-            return cts_idx, cts_price
-        else:
-            # bearish structure -> CTS is min low in pattern span
-            lows = self.df.iloc[s : e + 1]["l"].astype(float).values
-            k = int(lows.argmin())
-            cts_idx = s + k
-            cts_price = float(lows[k])
-            return cts_idx, cts_price
-
-    def _cts_price_at(self, idx: int) -> float:
-        if self.struct_direction == 1:
-            return float(self.df.iloc[idx]["h"])
-        return float(self.df.iloc[idx]["l"])
-
-    def _is_new_cts_extreme(self, new_price: float) -> bool:
-        st = self.state
-        if st.cts is None:
-            return True
-        if self.struct_direction == 1:
-            return new_price > float(st.cts.price)
-        return new_price < float(st.cts.price)
     
-    def _maybe_update_cts_pre_confirm(self, i: int, *, via: str = "raw") -> None:
+    def _maybe_update_cts_pre_confirm(self, i: int, *, via: str) -> None:
         """
         Option B: Before the current CTS is confirmed (cts_phase != CONFIRMED),
         update CTS whenever price makes a new extreme in struct_direction,
         regardless of whether a breakout pattern fired.
         """
         st = self.state
+        # Reversal is terminal: no CTS move after it (a reversal WINNER's apply
+        # candle is still stepped once — see `_step_anchor`; like `_bos_barrier_step`).
+        if st.state == MarketState.REVERSAL:
+            return
         if st.cts is None:
             return
         if st.cts_phase == "CONFIRMED":
             return
 
-        if self.struct_direction == 1:
-            new_price = float(self.df.iloc[i]["h"])
-            if new_price > float(st.cts.price):
-                self._emit_cts_updated(i, new_price, meta={"via": via})
-                st.cts = Point(idx=i, price=new_price)
-        else:
-            new_price = float(self.df.iloc[i]["l"])
-            if new_price < float(st.cts.price):
-                self._emit_cts_updated(i, new_price, meta={"via": via})
-                st.cts = Point(idx=i, price=new_price)
+        new_price = float(self._h[i]) if self.struct_direction == 1 else float(self._l[i])
+        if self._is_new_cts_extreme(new_price):
+            self._emit_cts_updated(i, new_price, meta={"via": via})
+            st.cts = Point(idx=i, price=new_price)
+            self._refresh_poi_inners_for_cycle(i)
 
-    # def _initial_bos_before_first_cts(self, cts_idx: int) -> float:
-    #     """
-    #     Cycle 1 BOS: extreme prior to the first CTS.
-    #       - Uptrend: min low in [0 .. cts_idx-1]
-    #       - Downtrend: max high in [0 .. cts_idx-1]
-    #     """
-    #     if cts_idx <= 0:
-    #         return float(self.df.iloc[0]["l"]) if self.struct_direction == 1 else float(self.df.iloc[0]["h"])
+    def _is_new_cts_extreme(self, price: float) -> bool:
+        """True iff `price` lies strictly beyond the current CTS in the structure
+        direction — the ONE rule for a pre-confirm `CTS_UPDATED`, on both the raw
+        path (`_maybe_update_cts_pre_confirm`) and the pattern path (a
+        continuation breakout, `_apply_pattern_at_apply_idx`). A tie is not new
+        (the first occurrence keeps the anchor), so the CTS never regresses
+        (MARKET_STRUCTURE_SPEC "CTS")."""
+        cts_price = float(self.state.cts.price)
+        return price > cts_price if self.struct_direction == 1 else price < cts_price
 
-    #     if self.struct_direction == 1:
-    #         return float(self.df.iloc[0:cts_idx]["l"].astype(float).min())
-    #     return float(self.df.iloc[0:cts_idx]["h"].astype(float).max())
-
-    def _initial_bos_before_first_cts(self, cts_idx: int) -> tuple[int, float]:
+    def _initial_bos_before_first_cts(self, cts_anchor_idx: int) -> tuple[int, float]:
         """
-        Cycle 1 BOS: extreme prior to the first CTS.
-        - Uptrend: min low in [start_idx .. cts_idx-1]
-        - Downtrend: max high in [start_idx .. cts_idx-1]
-        Returns (bos_idx, bos_price) where bos_idx is a *positional* index.
+        Cycle-0 BOS (BOS_0) anchor: the price extreme before the first CTS anchor.
+        - Uptrend: min low in [start_idx .. cts_anchor_idx-1]
+        - Downtrend: max high in [start_idx .. cts_anchor_idx-1]
+        Returns (bos_anchor_idx, bos_price); bos_anchor_idx is a *positional* index.
         """
         start = self.start_idx
 
-        if cts_idx <= start:
+        if cts_anchor_idx <= start:
             bos_idx = start
-            bos_price = float(self.df.iloc[start]["l"]) if self.struct_direction == 1 else float(self.df.iloc[start]["h"])
+            bos_price = float(self._l[start]) if self.struct_direction == 1 else float(self._h[start])
             return bos_idx, bos_price
 
-        window = self.df.iloc[start:cts_idx]
-
         if self.struct_direction == 1:
-            series = window["l"].astype(float)
-            rel = int(series.values.argmin())   # position within window
+            series = self._l[start:cts_anchor_idx]
+            rel = int(series.argmin())          # position within window
             bos_idx = start + rel               # offset by start_idx
-            bos_price = float(series.values[rel])
+            bos_price = float(series[rel])
             return bos_idx, bos_price
 
         else:
-            series = window["h"].astype(float)
-            rel = int(series.values.argmax())   # position within window
+            series = self._h[start:cts_anchor_idx]
+            rel = int(series.argmax())          # position within window
             bos_idx = start + rel               # offset by start_idx
-            bos_price = float(series.values[rel])
+            bos_price = float(series[rel])
             return bos_idx, bos_price
 
     def _sync_thresholds_from_range(self, i: int) -> None:
@@ -1354,44 +1604,76 @@ class MarketStructure:
                 meta={"prev": None if prev is None else float(prev), "reason": "range_sync"},
             )
 
-    # def _emit_cts_established(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
-    #     self.events.append(
-    #         StructureEvent(idx=idx, category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=meta or {})
-    #     )
-    #     self.state.cts_event = "CTS_ESTABLISHED"  # written to df row via _write_df_row
+    def _get_cts0_tfb(self):
+        """Lazily compute (and cache) the cycle-0 true-first-breakout
+        decision for scan-from-start mode.
 
-    def _emit_cts_established(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
+        Delegates to the ONE shared `find_true_first_breakout` routine over
+        `[start_idx, effective_end]` against the handed `bos0_inner`
+        threshold — the SAME call the unified probe made, so MS re-finds
+        the identical CTS_0 by construction. Returns a `TrueFirstBreakout`
+        or None (no qualifying breakout in the window — MS then establishes
+        no cycle 0, writing NONE-state rows forward).
+        """
+        if not self._cts0_tfb_computed:
+            from engine_v2.structure.true_first_breakout import (
+                find_true_first_breakout,
+            )
+            self._cts0_tfb = find_true_first_breakout(
+                self._bp,
+                int(self.start_idx),
+                int(self._effective_end),
+                int(self.struct_direction),
+                self.bos0_inner,
+            )
+            self._cts0_tfb_computed = True
+        return self._cts0_tfb
+
+    def _emit_cts_established(
+        self, idx: int, price: float, *, cts_anchor_idx: int, meta: Optional[dict] = None
+    ) -> None:
         meta2 = dict(meta or {})
-        # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
         meta2["structure_id"] = int(self.state.structure_id)
         meta2["struct_direction"] = int(self.state.struct_direction)
+        # The CTS endpoint (a price location; `ev.price` is its price). `idx` is
+        # the MOMENT (Plan E E4a; ARCHITECTURE "`ev.idx` convention"). int():
+        # `_shift_meta_indices` shifts Python int only.
+        meta2["cts_anchor_idx"] = int(cts_anchor_idx)
+        assert int(idx) == meta2["confirmed_at"], (
+            f"CTS_ESTABLISHED idx {idx} != confirmed_at {meta2['confirmed_at']} (ev.idx is the moment)")
+        self.state.cts_established_moment_idx = int(meta2["confirmed_at"])
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=meta2)
         )
         self.state.cts_event = "CTS_ESTABLISHED"
 
-    # def _emit_cts_updated(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
-    #     self.events.append(
-    #         StructureEvent(idx=idx, category="STRUCTURE", type="CTS_UPDATED", price=price, meta=meta or {})
-    #     )
-    #     self.state.cts_event = "CTS_UPDATED"
-
     def _emit_cts_updated(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
         meta2 = dict(meta or {})
-        # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
         meta2["structure_id"] = int(self.state.structure_id)
         meta2["struct_direction"] = int(self.state.struct_direction)
+        # Raw path: `idx` = the processing candle, anchor and moment at once (no
+        # meta keys). Pattern path: `idx` = the moment (Plan E E4c), the anchor in
+        # meta `cts_anchor_idx`.
+        if meta2["via"] != CTS_UPDATED_RAW_VIA:
+            assert int(idx) == meta2["confirmed_at"] and meta2["cts_anchor_idx"] <= int(idx), (
+                f"pattern-path CTS_UPDATED idx {idx} != confirmed_at {meta2.get('confirmed_at')} "
+                f"or anchor {meta2.get('cts_anchor_idx')} past it (ev.idx is the moment)")
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_UPDATED", price=price, meta=meta2)
         )
         self.state.cts_event = "CTS_UPDATED"
 
-    def _emit_cts_confirmed_once(self, idx: int, meta: Optional[dict] = None) -> None:
+    def _emit_cts_confirmed_once(
+        self,
+        idx: int,
+        meta: Optional[dict] = None,
+        confirmation_method: str = "pullback",
+    ) -> None:
         st = self.state
         cts_anchor = st.cts.idx if st.cts is not None else None
-        if cts_anchor is not None and st.cts_confirmed_for_idx == cts_anchor:
+        if cts_anchor is not None and st.confirmed_cts_anchor_idx == cts_anchor:
             return
 
         meta2 = dict(meta or {})
@@ -1402,33 +1684,327 @@ class MarketStructure:
         # ✅ add these
         meta2["confirmed_at"] = int(idx)                 # pullback candle (confirmation candle)
         meta2["cts_anchor_idx"] = int(cts_anchor) if cts_anchor is not None else None  # CTS being confirmed
+        # confirmation_method: "pullback" (existing path) or "sd_zone_proximity" (new path)
+        meta2["confirmation_method"] = str(confirmation_method)
+
+        # Carry the CTS anchor's price on the event so chart consumers don't have
+        # to fall back to the df's cts_price column (which is NaN at the CTS-
+        # established candle's own row when confirmed_at > the CTS anchor — see the
+        # sd_zone_proximity path that can fire 1–2 candles after CTS_ESTABLISHED).
+        cts_price_val = float(st.cts.price) if st.cts is not None else None
 
         self.events.append(
-            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_CONFIRMED", price=None, meta=meta2)
+            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_CONFIRMED", price=cts_price_val, meta=meta2)
         )
-        st.cts_confirmed_for_idx = cts_anchor
+        st.confirmed_cts_anchor_idx = cts_anchor
+        st.cts_confirmed_method = confirmation_method
+        st.cts_confirmed_idx = int(idx)
         st.cts_event = "CTS_CONFIRMED"
 
-    # def _emit_bos_confirmed(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
-    #     self.events.append(
-    #         StructureEvent(idx=idx, category="STRUCTURE", type="BOS_CONFIRMED", price=price, meta=meta or {})
-    #     )
-    #     self.state.bos_event = "BOS_CONFIRMED"
-    #     self.state.bos_confirmed = Point(idx=idx, price=float(price))
-    #     self.state.bos_threshold = float(price)
+        # Lock the cycle-0 snapshot once CTS_0 is confirmed. Subsequent
+        # raw-extreme CTS_UPDATEDs (which can keep firing between CTS_0
+        # CONFIRMED and BOS_1 CONFIRMED while range is still active) must
+        # not mutate `cycle0_data`. Mirrors FibTracker's
+        # `_handle_cycle0_cts_confirmed`'s `c0["locked"] = True`.
+        if int(st.cts_cycle_id) == 0:
+            self._lock_cycle0_data()
 
-    def _emit_bos_confirmed(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
+    def _emit_cts_reconfirmed(self, idx: int, meta: Optional[dict] = None) -> None:
+        """Emit CTS_RECONFIRMED — fires when a valid pullback pattern fires
+        AFTER CTS was already confirmed via sd zone proximity. Does not change
+        the original CTS_CONFIRMED's idx or method; CTS zone metadata can use
+        this event to upgrade its confirmation_method to "pullback" and record
+        reconfirmed_idx (KL zone meta).
+        """
+        st = self.state
+        cts_anchor = st.cts.idx if st.cts is not None else None
+
         meta2 = dict(meta or {})
-        # meta2.setdefault("cycle_id", int(self.state.cts_cycle_id))
         meta2["cycle_id"] = int(self.state.cts_cycle_id)
         meta2["structure_id"] = int(self.state.structure_id)
         meta2["struct_direction"] = int(self.state.struct_direction)
+        meta2["confirmed_at"] = int(idx)
+        meta2["cts_anchor_idx"] = int(cts_anchor) if cts_anchor is not None else None
+        meta2["confirmation_method"] = "pullback"  # the upgrade method
+
+        cts_price_val = float(st.cts.price) if st.cts is not None else None
+
+        self.events.append(
+            StructureEvent(idx=idx, category="STRUCTURE", type="CTS_RECONFIRMED", price=cts_price_val, meta=meta2)
+        )
+
+    def _emit_bos_confirmed(
+        self, idx: int, price: float, *, bos_anchor_idx: int, meta: Optional[dict] = None
+    ) -> None:
+        meta2 = dict(meta or {})
+        meta2["cycle_id"] = int(self.state.cts_cycle_id)
+        meta2["structure_id"] = int(self.state.structure_id)
+        meta2["struct_direction"] = int(self.state.struct_direction)
+        # The BOS endpoint (the swing extreme; `ev.price` is its price). `idx` is
+        # the MOMENT (Plan E E4b; ARCHITECTURE "`ev.idx` convention"). int():
+        # `_shift_meta_indices` shifts Python int only, and the degenerate
+        # `_initial_bos_before_first_cts` branch passes the caller's type through.
+        meta2["bos_anchor_idx"] = int(bos_anchor_idx)
+        assert int(idx) == meta2["confirmed_at"], (
+            f"BOS_CONFIRMED idx {idx} != confirmed_at {meta2['confirmed_at']} (ev.idx is the moment)")
+        # The anchor is a location already SEEN at the moment (2026-09-28): an anchor
+        # after its apply (only `_select_bos_on_breakout`'s swapped window could give
+        # one) is not knowable yet, and the anchor-keyed processing order
+        # (`ef.processing_order_key`) would then run the cycle's CTS_ESTABLISHED
+        # before its BOS_CONFIRMED — FibTracker needs the BOS first.
+        assert int(bos_anchor_idx) <= int(idx), (
+            f"BOS_CONFIRMED anchor {bos_anchor_idx} after its moment {idx}")
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="BOS_CONFIRMED", price=price, meta=meta2)
         )
         self.state.bos_event = "BOS_CONFIRMED"
-        self.state.bos_confirmed = Point(idx=idx, price=float(price))
+        # MS state stays on the ANCHOR (PLAN_E §6.1): built from the param, not
+        # from the emitted idx, so the E4b idx flip leaves it unchanged.
+        self.state.bos = Point(idx=int(bos_anchor_idx), price=float(price))
         self.state.bos_threshold = float(price)
+
+    # ----------------------------
+    # Zone proximity (Stage 1: BOS-only)
+    # ----------------------------
+
+    def _check_proximity_at_candle(self, i: int) -> Optional[Tuple[float, str]]:
+        """Check if candle i wicks within proximity threshold of the closest
+        sd-direction inner (BOS or active POI). Returns (trigger_inner,
+        zone_kind) on hit; None otherwise."""
+        st = self.state
+        if st.bos_inner_for_cycle is None:
+            return None
+        return _check_sd_proximity_at_candle(
+            self.df,
+            candle_idx=i,
+            struct_direction=self.struct_direction,
+            bos_inner=st.bos_inner_for_cycle,
+            threshold=self._proximity_threshold,
+            poi_inners=list(st.poi_inners_for_cycle) if st.poi_inners_for_cycle else None,
+        )
+
+    def _maybe_confirm_cts_via_proximity(self, i: int) -> None:
+        """Per-candle CTS confirmation via sd zone proximity.
+
+        Called from `_replay_step_no_patterns`, so it runs on every candle
+        (anchor, back-fill, apply, fallthrough). Two gates are load-bearing —
+        see LANDMINES "Dual CTS Proximity Confirmation" (cycle-0 carve-out +
+        Rule 1 narrow-gap gate).
+        """
+        st = self.state
+        # Reversal is terminal: a reversal WINNER's apply-candle step (see
+        # `_step_anchor`) must not confirm the CTS or create a range after it
+        # (an outside-bar anchor keeps proximity gated off until that candle).
+        if st.state == MarketState.REVERSAL:
+            return
+        if st.cts is None or st.bos_threshold is None:
+            return
+        cycle_gap_ok = (
+            abs(float(st.cts.price) - float(st.bos_threshold))
+            >= self._min_gap_threshold
+        )
+        if not (
+            st.cts_phase == "EST_OR_UPD"
+            and st.cts_cycle_id > 0
+            and cycle_gap_ok
+            and st.bos_inner_for_cycle is not None
+            and i > st.cts.idx
+        ):
+            return
+        hit = self._check_proximity_at_candle(i)
+        if hit is None:
+            return
+        trigger_inner, zone_kind = hit
+        self._fire_cts_confirmation_via_proximity(i, trigger_inner, zone_kind)
+
+    def _refresh_poi_inners_for_cycle(self, moment_idx: int) -> None:
+        """Recompute the cycle's POI inner snapshot using current BOS_n + CTS_n.
+        Called at CTS_ESTABLISHED (new cycle) and each CTS_UPDATED (CTS
+        extended). Stage 2 — adds POI awareness to the proximity check.
+        Uses the resolver wired by structure_engine.py (Part 4 §13.5.b).
+
+        `moment_idx` = the triggering event's MOMENT (the pattern's apply candle,
+        or the raw update's processing candle): the resolver's fill horizon, in
+        lock-step with FibTracker (Plan E E3a; LANDMINES "Scenario 2 anchor
+        agreement")."""
+        st = self.state
+        if st.cts is None or st.bos is None or self._poi_inners_resolver is None:
+            st.poi_inners_for_cycle = []
+            return
+        # While we're on cycle 0, keep the cycle-0 snapshot in sync with
+        # the current BOS_0/CTS_0 + imbalance fill state. The snapshot is
+        # consumed when cycle 1+ POIs refresh.
+        if st.cts_cycle_id == 0:
+            self._update_cycle0_data(moment_idx)
+        st.poi_inners_for_cycle = self._poi_inners_resolver(
+            self._resolver_df(),
+            int(st.bos.idx),
+            float(st.bos.price),
+            int(st.cts.idx),
+            float(st.cts.price),
+            int(self.struct_direction),
+            int(st.structure_id),
+            int(st.cts_cycle_id),
+            float(self._fill_threshold),
+            st.cycle0_data,
+            fill_horizon_idx=int(moment_idx),
+            snapshot_horizon_idx=int(st.cts_established_moment_idx),
+        )
+
+
+    def _update_cycle0_data(self, moment_idx: int) -> None:
+        """Refresh the cycle-0 snapshot from current state. Skips when
+        cycle 0 has been locked (CTS_0 CONFIRMED already fired) or when
+        BOS_0 / CTS_0 aren't both available.
+
+        Snapshot schema (consumed by
+        :func:`zones.fib_tracker.select_fib_anchor_for_cycle`):
+
+        - ``bos_idx`` / ``bos_price`` — BOS_0 anchor (immutable once captured)
+        - ``cts_idx`` / ``cts_price`` — latest cycle-0 CTS anchor
+        - ``has_unfilled`` — at least one imbalance in [BOS_0, CTS_0]
+          remains unfilled as of ``moment_idx`` (the refresh's moment; Plan E E3a′)
+        - ``scenario1`` — always ``None`` (MS does not track Scenario 1;
+          see ``select_fib_anchor_for_cycle`` docstring for the contract)
+        - ``locked`` — flipped True by ``_lock_cycle0_data`` at CTS_0
+          CONFIRMED
+        """
+        st = self.state
+        if st.cts_cycle_id != 0 or st.cts is None or st.bos is None:
+            return
+        existing = st.cycle0_data
+        if existing is not None and existing.get("locked"):
+            return
+        bos_idx = int(st.bos.idx)
+        bos_price = float(st.bos.price)
+        cts_idx = int(st.cts.idx)
+        cts_price = float(st.cts.price)
+        c0_lo = min(bos_idx, cts_idx)
+        c0_hi = max(bos_idx, cts_idx)
+        # sd-direction filter mirrors FibTracker's cycle-0 snapshot (and the
+        # filter applied to Scenario 2 cond1/cond3 in select_fib_anchor_for_cycle).
+        # Counter-direction imbalances in [BOS_0, CTS_0] never become POIs, so
+        # they shouldn't influence the in-flight Scenario 2 decision either.
+        # No knowability cut (evaluated_at=None, Plan F): this is Scenario-2
+        # cond2, read only at a later cycle-1 refresh (> CTS_0), when every gap
+        # in [BOS_0, CTS_0] has formed — and FibTracker's cycle-0 cache is
+        # likewise stored uncut, so the two mirrors agree.
+        # Fill horizon: cond2 "@CTS_0" — the MOMENT of this refresh, in
+        # lock-step with FibTracker's cycle-0 cache (Plan E E3a′, Q8).
+        c0_fill_horizon_idx = int(moment_idx)
+        has_unfilled = has_unfilled_imbalance(
+            self.df, c0_lo, c0_hi, c0_fill_horizon_idx, self._fill_threshold,
+            direction=int(st.struct_direction), evaluated_at=None,
+        )
+        st.cycle0_data = {
+            "bos_idx": bos_idx,
+            "bos_price": bos_price,
+            "cts_idx": cts_idx,
+            "cts_price": cts_price,
+            "has_unfilled": has_unfilled,
+            "scenario1": None,
+            "locked": False,
+        }
+
+    def _lock_cycle0_data(self) -> None:
+        """Flip the cycle-0 snapshot to locked. Called by
+        ``_emit_cts_confirmed_once`` when CTS_0 CONFIRMED fires; further
+        raw-extreme CTS_UPDATEDs (which can still arrive between CTS_0
+        CONFIRMED and BOS_1 CONFIRMED) no longer mutate ``cycle0_data``,
+        matching FibTracker's behaviour."""
+        if self.state.cycle0_data is not None:
+            self.state.cycle0_data["locked"] = True
+
+    def _fire_cts_confirmation_via_proximity(
+        self,
+        candle_idx: int,
+        trigger_inner: float,
+        zone_kind: str,
+    ) -> None:
+        """Fire CTS_CONFIRMED via sd zone proximity. Mirrors the state
+        transitions of pullback-based confirmation, including range creation
+        with range_lo (sd=+1) / range_hi (sd=-1) seeded by the proximity
+        candle's wick (Option B)."""
+        st = self.state
+        if st.cts_phase == "CONFIRMED":
+            return  # already confirmed
+        if st.cts is None:
+            return  # no CTS to confirm
+
+        # Emit event with method label
+        self._emit_cts_confirmed_once(
+            candle_idx,
+            meta={
+                "via": "sd_zone_proximity",
+                "trigger_inner": float(trigger_inner),
+                "zone_kind": str(zone_kind),
+                "proximity_pips": int(self.proximity_pips),
+            },
+            confirmation_method="sd_zone_proximity",
+        )
+        st.cts_phase = "CONFIRMED"
+
+        # Create range (Option B: range_lo = proximity candle's low for sd=+1)
+        # Mirror the logic in _ensure_range_on_pullback's "create" branch.
+        cts_price = float(st.cts.price)
+        if not st.range_active:
+            st.range_active = True
+            st.range_start_idx = int(st.cts.idx)
+            st.range_confirm_idx = int(candle_idx)
+            if self.struct_direction == 1:
+                st.range_hi = cts_price
+                st.range_lo = float(self._l[candle_idx])
+            else:
+                st.range_lo = cts_price
+                st.range_hi = float(self._h[candle_idx])
+            self.events.append(
+                StructureEvent(
+                    idx=int(candle_idx),
+                    category="RANGE",
+                    type="RANGE_STARTED",
+                    price=None,
+                    meta={
+                        "reason": "proximity_created_range",
+                        "cts_anchor_idx": int(st.cts.idx),
+                        "cts_price": cts_price,
+                        "proximity_apply_idx": int(candle_idx),
+                        "hi": float(st.range_hi),
+                        "lo": float(st.range_lo),
+                        "structure_id": int(st.structure_id),
+                        "struct_direction": int(self.struct_direction),
+                    },
+                )
+            )
+            # Proximity CREATED the range (prior state is provably BREAKOUT here:
+            # gated on `not range_active`, and no pullback could have confirmed
+            # without setting cts_phase=CONFIRMED, which blocks proximity). Set a
+            # coherent RANGE state to match _finalize_range_candidate_offline and
+            # _ensure_range_on_pullback. Dispatch eligibility is UNCHANGED — line
+            # ~992 treats BREAKOUT and RANGE identically (both allow pullback +
+            # breakout detection); only the no-create branch leaves state as-is.
+            self._set_state(
+                MarketState.RANGE,
+                candle_idx,
+                meta={"reason": "proximity_created_range"},
+            )
+
+        # Initialize cts_threshold (mirrors pullback path).
+        # NOTE: do NOT reset bos_threshold here — see the matching note on the
+        # pullback path and GOTCHAS "bos_threshold is reset to the ORIGINAL BOS".
+        st.cts_threshold = cts_price
+        # Sync cts_threshold to the live range bound, mirroring the pullback
+        # path's inline _sync_thresholds_from_range(apply_idx) call. Without
+        # this the proximity path lagged one candle (relied on the next
+        # candle's _expand_range). No-op when proximity just created the range
+        # (range bound == cts_price); only fires when the range already
+        # expanded before confirmation.
+        self._sync_thresholds_from_range(candle_idx)
+
+        # Note: when proximity CREATES the range above, state is set to RANGE
+        # (coherent with the pullback / offline-finalize paths). When the range
+        # already existed, state is left unchanged. Either way pattern dispatch
+        # is preserved — both pullback and breakout patterns remain eligible for
+        # subsequent candles (line ~992 buckets BREAKOUT and RANGE together).
 
     def _emit_cts_threshold_updated(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
         meta2 = dict(meta or {})
@@ -1448,72 +2024,54 @@ class MarketStructure:
             StructureEvent(idx=idx, category="STRUCTURE", type="BOS_THRESHOLD_UPDATED", price=float(price), meta=meta2)
         )
 
-    # def _select_bos_price_on_breakout(self, breakout_apply_idx: int) -> float:
-    #     """
-    #     Part 2 (Option B): BOS price is computed at confirmation time as the pullback extreme
-    #     between the pullback apply candle and the breakout apply candle.
-
-    #     - struct_direction == +1: BOS price = min(low) over [pb_start .. breakout_apply_idx]
-    #     - struct_direction == -1: BOS price = max(high) over [pb_start .. breakout_apply_idx]
-
-    #     Fallbacks (should be rare):
-    #     - Else fall back to range pullback bound if range is active
-    #     - Else fall back to current candle extreme
-    #     """
-    #     st = self.state
-
-    #     pb_start = st.last_pullback_pat_apply_idx
-    #     if pb_start is not None:
-    #         s = int(pb_start)
-    #         e = int(breakout_apply_idx)
-    #         if e < s:
-    #             s, e = e, s
-
-    #         if self.struct_direction == 1:
-    #             return float(self.df.iloc[s : e + 1]["l"].astype(float).min())
-    #         else:
-    #             return float(self.df.iloc[s : e + 1]["h"].astype(float).max())
-
-    #     # fallback 1: range pullback side
-    #     if st.range_active and st.range_lo is not None and st.range_hi is not None:
-    #         return float(st.range_lo) if self.struct_direction == 1 else float(st.range_hi)
-
-    #     # fallback 2: current candle extreme
-    #     if self.struct_direction == 1:
-    #         return float(self.df.iloc[breakout_apply_idx]["l"])
-    #     return float(self.df.iloc[breakout_apply_idx]["h"])
-
     def _select_bos_on_breakout(self, breakout_apply_idx: int) -> tuple[int, float]:
         """
-        Cycle k>1 BOS: pullback extreme between last pullback apply idx and this breakout apply idx.
-        Returns (bos_idx, bos_price).
+        Cycle >= 1 BOS: select the BOS anchor — the price extreme of the cycle's retracement window.
+
+        Window selection:
+        - If a pullback fired for the just-completed cycle: use
+          [last_pullback_pat_apply_idx, breakout_apply_idx] (existing behavior).
+        - Else if cycle was confirmed via sd zone proximity: use
+          [cts_confirmed_idx, breakout_apply_idx] (max retracement across the
+          full proximity-to-breakout window).
+        - Neither: unreachable — a cycle >= 1 breakout needs the CTS CONFIRMED,
+          and both confirmation paths set `cts_confirmed_idx`
+          (`_emit_cts_confirmed_once`); raises (2026-09-28: the silent fallback
+          to `_initial_bos_before_first_cts` returned the STRUCTURE's BOS_0).
+
+        Returns (bos_anchor_idx, bos_price).
         """
         st = self.state
-        pb_start = st.last_pullback_pat_apply_idx
 
-        # If we somehow don't have a pullback anchor, fall back to cycle-1 rule
-        if pb_start is None:
-            return self._initial_bos_before_first_cts(breakout_apply_idx)
+        # Determine search window start
+        if st.pullback_fired_for_cycle and st.last_pullback_pat_apply_idx is not None:
+            window_start = st.last_pullback_pat_apply_idx
+        elif st.cts_confirmed_idx is not None:
+            # Proximity-only confirmation — search from confirmed candle onward
+            window_start = st.cts_confirmed_idx
+        else:
+            raise AssertionError(
+                f"cycle >= 1 BOS at breakout apply {breakout_apply_idx} without a pullback or a "
+                f"proximity confirmation (cts_phase={st.cts_phase!r})")
 
-        s = int(pb_start)
+        s = int(window_start)
         e = int(breakout_apply_idx)
         if e < s:
             s, e = e, s
 
-        window = self.df.iloc[s : e + 1]
         if self.struct_direction == 1:
-            series = window["l"].astype(float)
+            series = self._l[s : e + 1]
             # bos idx in positional coordinates
-            rel = int(series.values.argmin())
-            bos_idx = s + rel
+            rel = int(series.argmin())
+            bos_anchor_idx = s + rel
             bos_price = float(series.min())
-            return bos_idx, bos_price
+            return bos_anchor_idx, bos_price
         else:
-            series = window["h"].astype(float)
-            rel = int(series.values.argmax())
-            bos_idx = s + rel
+            series = self._h[s : e + 1]
+            rel = int(series.argmax())
+            bos_anchor_idx = s + rel
             bos_price = float(series.max())
-            return bos_idx, bos_price
+            return bos_anchor_idx, bos_price
 
     def _maybe_trigger_reversal(self, i: int) -> None:
         """
@@ -1526,9 +2084,9 @@ class MarketStructure:
             return
 
         bos = float(st.bos_threshold)
-        c = float(self.df.iloc[i]["c"])
-        h = float(self.df.iloc[i]["h"])
-        l = float(self.df.iloc[i]["l"])
+        c = float(self._c[i])
+        h = float(self._h[i])
+        l = float(self._l[i])
 
         # Conservative check uses close; you can switch to wick-based later if desired.
         if self.struct_direction == 1:
@@ -1561,8 +2119,8 @@ class MarketStructure:
         lo = st.range_lo if prev_lo is None else prev_lo
 
         if self.struct_direction == 1:
-            return float(self.df.iloc[i]["l"]) < float(lo)
-        return float(self.df.iloc[i]["h"]) > float(hi)
+            return float(self._l[i]) < float(lo)
+        return float(self._h[i]) > float(hi)
 
     # ----------------------------
     # Range threshold helpers
@@ -1592,6 +2150,11 @@ class MarketStructure:
         m = dict(meta or {})
         m.setdefault("effective_idx", i)
 
+        # Reversal is terminal (MARKET_STRUCTURE_SPEC "Invariants"): nothing may leave it.
+        # Every back-fill stops at the terminal candle, so this is a tripwire.
+        assert not (st.state == MarketState.REVERSAL and new_state != MarketState.REVERSAL), (
+            f"[market_structure] state left reversal at {i} -> {new_state.value}")
+
         if new_state != st.state:
             self.events.append(
                 StructureEvent(
@@ -1609,6 +2172,38 @@ class MarketStructure:
             )
         st.state = new_state
 
+
+    def _init_output_arrays(self, n: int) -> None:
+        """Path 2b: preallocate the per-column output arrays. `_write_df_row`
+        writes into these per candle; `run()` bulk-assigns them to the df at
+        the end (one vectorized assignment per column instead of ~27 `df.at`
+        scalar writes per candle). Created once per run.
+
+        CRITICAL — init each array FROM the existing df column, NOT from fresh
+        defaults. `compute_structure` chains MULTIPLE structures through the
+        SAME df (`df2` is reassigned to each structure's run() output and fed to
+        the next). The old per-row `df.at` writes only touched THIS structure's
+        processed rows; a whole-column flush of default-filled arrays would
+        clobber a PRIOR structure's rows back to defaults. Seeding from the df
+        means rows this structure never processes flush back unchanged. For the
+        first/only structure the df holds `_ensure_output_cols` defaults, so
+        `to_numpy(dtype)` reproduces the schema defaults exactly (the `_OUT_*`
+        dtypes match those defaults' post-write dtype — verified vs saved CSV).
+        `.copy()` so per-candle writes never mutate the df in place pre-flush."""
+        self._out: Dict[str, np.ndarray] = {}
+        for c in _OUT_INT_NEG1 + _OUT_INT_ZERO:
+            self._out[c] = self.df[c].to_numpy(dtype=np.int64).copy()
+        for c in _OUT_FLOAT_NEG1 + _OUT_FLOAT_NAN:
+            self._out[c] = self.df[c].to_numpy(dtype=np.float64).copy()
+        for c in _OUT_OBJ_EMPTY:
+            self._out[c] = self.df[c].to_numpy(dtype=object).copy()
+
+    def _flush_output_arrays(self) -> None:
+        """Path 2b: bulk-assign the per-column output arrays to df columns.
+        Runs after the processing loop, BEFORE terminal reversal stamping +
+        invariant checks (which read the df output columns)."""
+        for col, arr in self._out.items():
+            self.df[col] = arr
 
     def _ensure_output_cols(self) -> None:
         out = self.df
@@ -1643,7 +2238,7 @@ class MarketStructure:
                 else:
                     out[c] = float("nan")
         # pending reversal columns
-        for c in ("pending_reversal_anchor_idx", "pending_reversal_apply_idx"):
+        for c in ("pending_reversal_pattern_anchor_idx", "pending_reversal_apply_idx"):
             if c not in out.columns:
                 out[c] = -1
         # structure
@@ -1659,41 +2254,48 @@ class MarketStructure:
 
 
     def _write_df_row(self, i: int) -> None:
+        # Path 2b: write into the preallocated per-column output arrays at
+        # positional index `i` (bulk-assigned to df at end of run()). Mirrors
+        # the prior per-row `self.df.at[row, col] = ...` writes 1:1 — same
+        # values, same None->default handling.
         st = self.state
-        row = self.df.index[i]
-        prev_row = self.df.index[i - 1] if i > 0 else row
+        out = self._out
+        # prev_i mirrors the old `prev_row = index[i-1] if i>0 else row`: for
+        # range_break_frac we read the PREVIOUS candle's range bounds (i>0),
+        # or the just-written current row for i==0.
+        prev_i = i - 1 if i > 0 else i
 
-        self.df.at[row, "market_state"] = st.state.value
-        self.df.at[row, "range_active"] = int(st.range_active)
-        self.df.at[row, "range_hi"] = float(st.range_hi) if st.range_hi is not None else float("nan")
-        self.df.at[row, "range_lo"] = float(st.range_lo) if st.range_lo is not None else float("nan")
-        self.df.at[row, "range_start_idx"] = int(st.range_start_idx) if st.range_start_idx is not None else -1
-        self.df.at[row, "range_confirm_idx"] = int(st.range_confirm_idx) if st.range_confirm_idx is not None else -1
+        out["market_state"][i] = st.state.value
+        out["range_active"][i] = int(st.range_active)
+        out["range_hi"][i] = float(st.range_hi) if st.range_hi is not None else float("nan")
+        out["range_lo"][i] = float(st.range_lo) if st.range_lo is not None else float("nan")
+        out["range_start_idx"][i] = int(st.range_start_idx) if st.range_start_idx is not None else -1
+        out["range_confirm_idx"][i] = int(st.range_confirm_idx) if st.range_confirm_idx is not None else -1
 
         if st.range_active and st.range_hi is not None and st.range_lo is not None:
-            self.df.at[row, "breakout_th"] = self._range_breakout_threshold()
-            self.df.at[row, "pullback_th"] = self._range_pullback_threshold()
+            out["breakout_th"][i] = self._range_breakout_threshold()
+            out["pullback_th"][i] = self._range_pullback_threshold()
         else:
-            self.df.at[row, "breakout_th"] = float("nan")
-            self.df.at[row, "pullback_th"] = float("nan")
+            out["breakout_th"][i] = float("nan")
+            out["pullback_th"][i] = float("nan")
 
-        self.df.at[row, "cts_idx"] = int(st.cts.idx) if st.cts is not None else -1
-        self.df.at[row, "cts_price"] = float(st.cts.price) if st.cts is not None else float("nan")
-        self.df.at[row, "cts_event"] = st.cts_event
-        self.df.at[row, "cts_cycle_id"] = int(st.cts_cycle_id)
-        self.df.at[row, "cts_threshold"] = float(st.cts_threshold) if st.cts_threshold is not None else float("nan")
-        self.df.at[row, "bos_threshold"] = float(st.bos_threshold) if st.bos_threshold is not None else float("nan")
+        out["cts_idx"][i] = int(st.cts.idx) if st.cts is not None else -1
+        out["cts_price"][i] = float(st.cts.price) if st.cts is not None else float("nan")
+        out["cts_event"][i] = st.cts_event
+        out["cts_cycle_id"][i] = int(st.cts_cycle_id)
+        out["cts_threshold"][i] = float(st.cts_threshold) if st.cts_threshold is not None else float("nan")
+        out["bos_threshold"][i] = float(st.bos_threshold) if st.bos_threshold is not None else float("nan")
 
         # Part 3 (B/D): reversal watch debug (for chart + invariants)
-        self.df.at[row, "reversal_watch_active"] = int(st.reversal_watch_active)
-        self.df.at[row, "reversal_bos_th_frozen"] = (
+        out["reversal_watch_active"][i] = int(st.reversal_watch_active)
+        out["reversal_bos_th_frozen"][i] = (
             float(st.reversal_bos_th_frozen) if st.reversal_bos_th_frozen is not None else float("nan")
         )
 
-        self.df.at[row, "pending_reversal_anchor_idx"] = (
-            int(st.pending_reversal_anchor_idx) if st.pending_reversal_anchor_idx is not None else -1
+        out["pending_reversal_pattern_anchor_idx"][i] = (
+            int(st.pending_reversal_pattern_anchor_idx) if st.pending_reversal_pattern_anchor_idx is not None else -1
         )
-        self.df.at[row, "pending_reversal_apply_idx"] = (
+        out["pending_reversal_apply_idx"][i] = (
             int(st.pending_reversal_apply_idx) if st.pending_reversal_apply_idx is not None else -1
         )
 
@@ -1701,54 +2303,61 @@ class MarketStructure:
         # ----------------------------
         # Part 3 (C): trend progression / cycle stage
         # ----------------------------
-        self.df.at[row, "cts_phase_debug"] = str(st.cts_phase)
+        out["cts_phase_debug"][i] = str(st.cts_phase)
 
         if st.cts is None:
-            self.df.at[row, "cycle_stage"] = "NONE"
+            out["cycle_stage"][i] = "NONE"
         else:
             # If CTS is confirmed, we're in the "wait for next breakout" portion of the cycle.
             # Otherwise, we're still in the "wait for pullback confirmation" portion.
-            self.df.at[row, "cycle_stage"] = "SEEK_BREAKOUT" if st.cts_phase == "CONFIRMED" else "SEEK_PULLBACK"
+            out["cycle_stage"][i] = "SEEK_BREAKOUT" if st.cts_phase == "CONFIRMED" else "SEEK_PULLBACK"
 
-        self.df.at[row, "bos_idx"] = int(st.bos_confirmed.idx) if st.bos_confirmed is not None else -1
-        self.df.at[row, "bos_price"] = float(st.bos_confirmed.price) if st.bos_confirmed is not None else float("nan")
-        self.df.at[row, "bos_event"] = st.bos_event
+        out["bos_idx"][i] = int(st.bos.idx) if st.bos is not None else -1
+        out["bos_price"][i] = float(st.bos.price) if st.bos is not None else float("nan")
+        out["bos_event"][i] = st.bos_event
 
-        self.df.at[row, "last_breakout_pat_apply_idx"] = (
+        out["last_breakout_pat_apply_idx"][i] = (
             int(st.last_breakout_pat_apply_idx) if st.last_breakout_pat_apply_idx is not None else -1
         )
 
         # Debug: range body-break fraction on this candle (close-breaks only)
         # If candle CLOSE breaks above range_hi / below range_lo, compute the fraction of the
         # candle's real body that lies beyond the breached threshold.
+        # NOTE: the old `is not None` guard on the prev range bounds was always
+        # true (df values are never None post-_ensure_output_cols; array values
+        # are never None either), so it's dropped — body runs unconditionally,
+        # identical to before. prev bounds read from the arrays (range_hi/lo
+        # default -1.0 on an unprocessed prev row, matching the int->float
+        # upcast of the old df default).
         frac = float("nan")
-        if self.df.at[prev_row, "range_hi"] is not None and self.df.at[prev_row, "range_lo"] is not None:
-            o = float(self.df.at[row, COL_O])
-            c = float(self.df.at[row, COL_C])
-            body_low = min(o, c)
-            body_high = max(o, c)
-            body_len = body_high - body_low
+        prev_hi = out["range_hi"][prev_i]
+        prev_lo = out["range_lo"][prev_i]
+        o = float(self._o[i])
+        c = float(self._c[i])
+        body_low = min(o, c)
+        body_high = max(o, c)
+        body_len = body_high - body_low
 
-            if body_len > 0:
-                # Close-break above / below range
-                if c > float(self.df.at[prev_row, "range_hi"]):
-                    th = float(self.df.at[prev_row, "range_hi"])
-                    above = max(0.0, body_high - max(th, body_low))
-                    frac = above / body_len
-                elif c < float(self.df.at[prev_row, "range_lo"]):
-                    th = float(self.df.at[prev_row, "range_lo"])
-                    below = max(0.0, min(th, body_high) - body_low)
-                    frac = below / body_len
+        if body_len > 0:
+            # Close-break above / below range
+            if c > float(prev_hi):
+                th = float(prev_hi)
+                above = max(0.0, body_high - max(th, body_low))
+                frac = above / body_len
+            elif c < float(prev_lo):
+                th = float(prev_lo)
+                below = max(0.0, min(th, body_high) - body_low)
+                frac = below / body_len
 
-        self.df.at[row, "range_break_frac"] = frac
+        out["range_break_frac"][i] = frac
 
         # Clear one-candle event fields so they don't smear across rows
         st.cts_event = ""
         st.bos_event = ""
-    
+
         # Structure ID + direction
-        self.df.at[row, "structure_id"] = int(st.structure_id)
-        self.df.at[row, "struct_direction"] = int(st.struct_direction)
+        out["structure_id"][i] = int(st.structure_id)
+        out["struct_direction"][i] = int(st.struct_direction)
 
 
     # ----------------------------
@@ -1827,22 +2436,54 @@ class MarketStructure:
                 bos_prev = bos.shift(1)
                 prev_active = active.shift(1).fillna(False).astype(bool)
                 active_b = active.astype(bool)
-                changed = active_b & prev_active & (bos != bos_prev)
+                # Only within ONE watch: the frozen barrier identifies the watch (MARKET_STRUCTURE_SPEC
+                # "Invariants"; landing review of 52ac1e9 — back-to-back watches after an expiry's rewind,
+                # a shape gone since F3b removed the expiry).
+                # A pure tripwire since 2026-09-29: the one BOS write that can run during a watch (a new
+                # cycle's BOS_CONFIRMED) ends the watch (`_end_watch_superseded_by_new_cycle`); the cycle-0
+                # BOS_CONFIRMED cannot meet one (a watch needs a BOS, and there is none before cycle 0).
+                frozen = df["reversal_bos_th_frozen"].astype(float)
+                frozen_prev = frozen.shift(1)
+                changed = active_b & prev_active & (frozen == frozen_prev) & (bos != bos_prev)
                 if changed.any():
                     i = int(changed.idxmax())
                     raise AssertionError(
-                        f"[INV] bos_threshold changed during reversal watch at idx={i}: prev={bos_prev.loc[i]} now={bos.loc[i]}"
+                        f"[INV] bos_threshold changed during reversal watch at idx={i}: prev={bos_prev.loc[i]} "
+                        f"now={bos.loc[i]} (frozen {frozen.loc[i]})"
                     )
 
-        # 5) Terminal reversal: once reversal appears, all later states must be reversal
-        if "market_state" in df.columns:
-            rev = df["market_state"].astype(str) == "reversal"
-            if rev.any():
-                first = int(rev.idxmax())
-                later_nonrev = df.loc[first:, "market_state"].astype(str) != "reversal"
-                if later_nonrev.any():
-                    i = int(later_nonrev.idxmax())
-                    raise AssertionError(f"[INV] market_state left reversal after idx={first}, non-reversal at idx={i}")
+        # (Reversal is terminal: asserted at the source in `_set_state`. A df check
+        # here could never fire — `run()` forward-stamps `market_state` from the
+        # first reversal before calling this.)
+
+    # ----------------------------
+    # A new cycle ends an open reversal watch (placed below the invariant checks so the pandas
+    # FutureWarning they emit keeps its line number: run.log stays byte-identical)
+    # ----------------------------
+
+    def _end_watch_superseded_by_new_cycle(self, apply_idx: int, meta: dict) -> dict:
+        """A cycle >= 1 is being established at `apply_idx` (its BOS_CONFIRMED `meta` is passed in, returned).
+
+        An open reversal watch froze the PREVIOUS cycle's BOS, which this cycle's BOS_CONFIRMED supersedes —
+        the market made a new extreme instead of reversing (user decision 2026-09-29; MARKET_STRUCTURE_SPEC
+        "A new cycle ends an open watch"). Its pending reversal confirms only after this candle (not knowable
+        here), so the watch ends and the pending is dropped; a later close beyond the NEW BOS opens a new
+        watch. Traced on the BOS_CONFIRMED: `ended_watch_pattern_anchor_idx` = the ended watch's close-break
+        candle (= its REVERSAL_WATCH_START idx; pattern realm, GLOSSARY "Naming Standard").
+        No exception (user decision 2026-09-29, landing review of 2285232): a pending that would confirm ON this
+        candle is dropped too — on that candle the new BOS (the pullback low, a window including the candle) is at
+        or beyond its close, so that reversal could never have broken the current BOS. It needs a
+        `one_maru_opposite` breakout whose small opposite candle also confirms the old pattern: a price gap, or a
+        breakout candle ~20x the range-high-to-threshold distance. A pending before this candle cannot exist (it
+        would have applied, terminal).
+        """
+        st = self.state
+        if not st.reversal_watch_active:
+            return meta
+        meta["ended_watch_pattern_anchor_idx"] = int(st.reversal_watch_start_idx)
+        self._clear_pending_reversal()
+        self._clear_reversal_watch()
+        return meta
 
     # ----------------------------
     # Convert events -> StructureLevel (for downstream consumers like KL zones)
@@ -1864,7 +2505,7 @@ class MarketStructure:
             if ev.type in ("CTS_ESTABLISHED", "CTS_UPDATED") and ev.price is not None:
                 levels.append(
                     StructureLevel(
-                        time=t.iloc[ev.idx],
+                        time=t.iloc[ef.cts_anchor_idx(ev)],  # the level's location (Q12)
                         kind="CTS",
                         direction=self.struct_direction,
                         price=float(ev.price),
@@ -1874,7 +2515,7 @@ class MarketStructure:
             if ev.type == "BOS_CONFIRMED" and ev.price is not None:
                 levels.append(
                     StructureLevel(
-                        time=t.iloc[ev.idx],
+                        time=t.iloc[ef.bos_anchor_idx(ev)],  # the level's location (Q12)
                         kind="BOS",
                         direction=self.struct_direction,
                         price=float(ev.price),
@@ -1888,6 +2529,6 @@ class MarketStructure:
     # Debug
     # ----------------------------
     def _dbg(self, msg: str) -> None:
-        # Print only when debug is enabled AND we're not inside a rewind rebuild
-        if bool(getattr(self, "debug", False)) and not bool(getattr(self, "_in_rewind", False)):
+        # Print only when debug is enabled
+        if bool(getattr(self, "debug", False)):
             print(msg)

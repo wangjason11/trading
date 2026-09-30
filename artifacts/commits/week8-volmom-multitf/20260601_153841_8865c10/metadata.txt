@@ -1,0 +1,4 @@
+commit_hash=8865c10
+timestamp=20260601_153841
+branch=week8-volmom-multitf
+commit_message=Unified probe Phase 1 Session 3 Step 2: migrate subsequent_* + first_counter input to sibling-CTS unified probe (KNOWN: 1,2 confluence reversal 4179 vs 4200 = separate MS bos_threshold bug, fix pending)

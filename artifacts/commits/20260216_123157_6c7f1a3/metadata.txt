@@ -1,0 +1,3 @@
+commit_hash=6c7f1a3
+timestamp=20260216_123157
+commit_message=WVMI proximity activation gate with zone-bounded scan window

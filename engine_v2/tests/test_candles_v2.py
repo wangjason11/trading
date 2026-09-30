@@ -316,3 +316,94 @@ def test_big_flags_multiple_shifts_exist(params):
         assert f"is_big_maru_as{s}" in out.columns
         assert f"is_big_normal_as{s}" in out.columns
         assert f"prior_maru_max_len_as{s}" in out.columns
+
+
+# ---------------------------------------------------------------------------
+# pinbar_body_pip_floor: absolute body-pip floor -> pinbar (applied LAST).
+# Real-engine prices, so pip_size matters (non-JPY = 0.0001, JPY = 0.01).
+# ---------------------------------------------------------------------------
+
+def _floor_params(floor, **over):
+    # Real-ish defaults (maru=0.65, pinbar=0.40, special_maru=0.5) + the floor.
+    base = dict(
+        maru=0.65,
+        pinbar=0.40,
+        pinbar_distance=0.5,
+        big_maru_threshold=0.65,
+        big_normal_threshold=0.5,
+        lookback=5,
+        special_maru=0.5,
+        special_maru_distance=0.1,
+        pinbar_body_pip_floor=floor,
+    )
+    base.update(over)
+    return CandleParams(**base)
+
+
+def _with_pair(rows, pair="EUR_USD"):
+    df = _df(rows)
+    df.attrs["pair"] = pair
+    return df
+
+
+def test_pinbar_floor_demotes_tiny_maru():
+    """A would-be maru with body < floor is reclassified pinbar."""
+    # body = 0.00021 (2.1 pips) < 3-pip floor; body_pct ~0.84 => maru pre-floor.
+    df = _with_pair([{"time": "t", "o": 1.00000, "h": 1.00024, "l": 0.99999, "c": 1.00021}])
+    out = classify_candles(compute_candle_metrics(df), _floor_params(3.0))
+    assert out.loc[0, "candle_type"] == "pinbar"
+
+
+def test_pinbar_floor_disabled_keeps_tiny_maru():
+    """floor=0.0 -> rule dormant -> the same tiny candle stays maru."""
+    df = _with_pair([{"time": "t", "o": 1.00000, "h": 1.00024, "l": 0.99999, "c": 1.00021}])
+    out = classify_candles(compute_candle_metrics(df), _floor_params(0.0))
+    assert out.loc[0, "candle_type"] == "maru"
+
+
+def test_pinbar_floor_boundary_eps_keeps_type():
+    """Body sitting exactly at the floor (3.0 pips) is NOT demoted (strict <, EPS guard)."""
+    # body = 1.00030 - 1.00000 = 0.0003 exactly; body_pct ~0.91 => maru.
+    df = _with_pair([{"time": "t", "o": 1.00000, "h": 1.00032, "l": 0.99999, "c": 1.00030}])
+    out = classify_candles(compute_candle_metrics(df), _floor_params(3.0))
+    assert out.loc[0, "candle_type"] == "maru"
+
+
+def test_pinbar_floor_new_pinbar_gets_direction():
+    """A demoted candle is directioned by the geometry rule (reorder check)."""
+    # body=0.00018 (1.8 pips, body_pct=0.45 => normal pre-floor), body near top,
+    # large lower wick (> dist) -> up-pinbar after demotion.
+    # o=1.00001 c=1.00019 h=1.00020 l=0.99980 => len=0.0004, upper=0.00001, lower=0.00021.
+    df = _with_pair([{"time": "t", "o": 1.00001, "h": 1.00020, "l": 0.99980, "c": 1.00019}])
+    out = classify_candles(compute_candle_metrics(df), _floor_params(3.0))
+    assert out.loc[0, "candle_type"] == "pinbar"
+    assert int(out.loc[0, "pinbar_dir"]) == 1
+
+
+def test_pinbar_floor_resets_special_maru():
+    """A special-maru candle demoted by the floor has is_special_maru cleared."""
+    # body=0.00016 (1.6 pips), body_pct~0.55, tiny upper wick + dir=+1 => special-maru
+    # promotion to maru, then floor demotes to pinbar and clears the flag.
+    # o=1.00003 c=1.00019 h=1.00020 l=0.99991 => len=0.00029, upper=0.00001, lower=0.00012.
+    df = _with_pair([{"time": "t", "o": 1.00003, "h": 1.00020, "l": 0.99991, "c": 1.00019}])
+    out = classify_candles(compute_candle_metrics(df), _floor_params(3.0))
+    assert out.loc[0, "candle_type"] == "pinbar"
+    assert bool(out.loc[0, "is_special_maru"]) is False
+
+
+def test_pinbar_floor_jpy_pip_size():
+    """JPY pair resolves pip_size=0.01, so the floor is in 0.01 units."""
+    # body = 100.020 - 100.000 = 0.02 (2 pips JPY) < 3-pip floor (0.03); body_pct~0.87 => maru.
+    df = _with_pair(
+        [{"time": "t", "o": 100.000, "h": 100.022, "l": 99.999, "c": 100.020}],
+        pair="USD_JPY",
+    )
+    out = classify_candles(compute_candle_metrics(df), _floor_params(3.0))
+    assert out.loc[0, "candle_type"] == "pinbar"
+    # Sanity: as a non-JPY pair the same body (0.02 = 200 pips) would stay maru.
+    df2 = _with_pair(
+        [{"time": "t", "o": 100.000, "h": 100.022, "l": 99.999, "c": 100.020}],
+        pair="EUR_USD",
+    )
+    out2 = classify_candles(compute_candle_metrics(df2), _floor_params(3.0))
+    assert out2.loc[0, "candle_type"] == "maru"

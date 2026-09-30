@@ -1,0 +1,4 @@
+commit_hash=532df17
+timestamp=20260926_122844
+branch=week8-volmom-multitf
+commit_message=Plan E Post-E·1b: MultiTFTrigger.meta["probe_input_idx"] (H1) -> "parent_input_idx"; byte-identical

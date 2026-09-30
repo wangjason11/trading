@@ -1,0 +1,4 @@
+commit_hash=edcbd69
+timestamp=20260526_092052
+branch=week8-volmom-multitf
+commit_message=first_confluence (var 1): probe end_idx = CTS extreme, not confirmation candle

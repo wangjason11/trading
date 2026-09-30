@@ -1,0 +1,4 @@
+commit_hash=399b8f4
+timestamp=20260924_121032
+branch=week8-volmom-multitf
+commit_message=Plan F: imbalance c3 knowability — an FVG counts only once it has formed

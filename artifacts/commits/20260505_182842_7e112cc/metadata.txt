@@ -1,0 +1,3 @@
+commit_hash=7e112cc
+timestamp=20260505_182842
+commit_message=Part 4 §13.5.c.iii: chart consumer migrates to entity_df.attrs

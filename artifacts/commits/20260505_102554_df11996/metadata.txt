@@ -1,0 +1,3 @@
+commit_hash=df11996
+timestamp=20260505_102554
+commit_message=Part 4 §13.5.b: resolver injection eliminates structure→zones inversion

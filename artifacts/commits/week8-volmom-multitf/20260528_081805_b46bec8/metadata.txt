@@ -1,0 +1,4 @@
+commit_hash=b46bec8
+timestamp=20260528_081805
+branch=week8-volmom-multitf
+commit_message=Fix entity-absolute is_range_confirm_idx pollution in sub bounded structures

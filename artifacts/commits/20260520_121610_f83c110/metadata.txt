@@ -1,0 +1,3 @@
+commit_hash=f83c110
+timestamp=20260520_121610
+commit_message=Item 5 chart redesign: outline + active-stretch fill, per-TF tier

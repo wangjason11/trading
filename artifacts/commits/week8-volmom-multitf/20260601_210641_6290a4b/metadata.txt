@@ -1,0 +1,4 @@
+commit_hash=6290a4b
+timestamp=20260601_210641
+branch=week8-volmom-multitf
+commit_message=Sub-reversal probe via unified probe vs prior-CTS reference (Step 3); fix end_idx drift

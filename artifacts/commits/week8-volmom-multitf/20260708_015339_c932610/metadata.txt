@@ -1,0 +1,4 @@
+commit_hash=c932610
+timestamp=20260708_015339
+branch=week8-volmom-multitf
+commit_message=Phase 2 Stage 3.2a unified-lifecycle infra (byte-identical)

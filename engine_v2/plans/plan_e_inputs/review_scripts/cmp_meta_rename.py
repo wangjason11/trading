@@ -1,0 +1,98 @@
+"""Key-RENAME diff of every CSV in two replay folders: BASE vs CUR (same row order).
+
+usage (repo root): python cmp_meta_rename.py BASE_DIR CUR_DIR old=new [old=new ...]   (2026-09-29d)
+       `old=` (empty new name) = the key is DELETED (Post-E·5, 2026-09-30); the rest of the dict keeps its order.
+
+For a meta-key rename (LANDMINES "Event Contract Rules" rule 3): `cmp_save.py` counts changed CELLS and
+`cmp_meta_keys.py` checks VALUE shifts; this checks that CUR == BASE with ONLY the listed keys renamed:
+  - a CSV without a `meta` column must be byte-identical;
+  - a CSV with one: same header, same rows, every non-meta cell TEXT-identical, and each row's meta text equal to
+    `str()` of the BASE meta with the listed keys renamed IN PLACE (same values, same key order — the emitters
+    rename inside the dict literal; the exporters write `str(meta)`); no old key may remain in CUR. Raw text via
+    the csv module (the landing review: a pandas read let `652.0` -> `652` and `1` vs `True` pass);
+  - per (CSV, event type / level kind, old key) the renamed-key count, and the changed-cell count per CSV.
+Exit 1 on any other difference. Files present on one side only are reported (and fail).
+"""
+import ast
+import csv
+import filecmp
+import glob
+import os
+import sys
+from collections import Counter
+
+
+base, cur, *pairs = sys.argv[1:]
+RENAME = dict(p.split("=", 1) for p in pairs)
+assert RENAME, "give at least one old=new"
+DROP = {k for k, v in RENAME.items() if v == ""}
+bad, per_key, cells = [], Counter(), Counter()
+
+
+def _short(f):
+    n = os.path.basename(f)
+    return n.split("rk2-5_")[-1] if "rk2-5_" in n else n.split("2026-01-20_")[-1]
+
+
+def _meta(s):
+    return ast.literal_eval(s) if isinstance(s, str) and s.startswith("{") else None
+
+
+bfiles = {os.path.basename(f): f for f in glob.glob(os.path.join(base, "*.csv"))}
+cfiles = {os.path.basename(f): f for f in glob.glob(os.path.join(cur, "*.csv"))}
+for n in sorted(set(bfiles) ^ set(cfiles)):
+    bad.append(f"only in {'BASE' if n in bfiles else 'CUR'}: {n}")
+
+
+def _rows(f):
+    with open(f, newline="", encoding="utf-8") as fh:
+        return list(csv.reader(fh))
+
+
+for n in sorted(set(bfiles) & set(cfiles)):
+    fb, fc = bfiles[n], cfiles[n]
+    A, B = _rows(fb), _rows(fc)
+    if "meta" not in A[0]:
+        if not filecmp.cmp(fb, fc, shallow=False):
+            bad.append(f"{_short(n)}: no meta column and not byte-identical")
+        continue
+    if A[0] != B[0] or len(A) != len(B):
+        bad.append(f"{_short(n)}: header / row count differs")
+        continue
+    mi = A[0].index("meta")
+    ti = A[0].index("type") if "type" in A[0] else (A[0].index("kind") if "kind" in A[0] else None)
+    for i, (ra, rb) in enumerate(zip(A[1:], B[1:])):
+        if [x for j, x in enumerate(ra) if j != mi] != [x for j, x in enumerate(rb) if j != mi]:
+            bad.append(f"{_short(n)} row {i}: a non-meta cell differs (text)")
+            continue
+        ta, tb = ra[mi], rb[mi]
+        ma, mb = _meta(ta), _meta(tb)
+        if ma is None or mb is None:
+            if ta != tb:
+                bad.append(f"{_short(n)} row {i}: unparsed meta differs")
+            continue
+        if str(ma) != ta:
+            bad.append(f"{_short(n)} row {i}: BASE meta text does not round-trip through str() — cannot text-check")
+            continue
+        renamed = {RENAME.get(k, k): v for k, v in ma.items() if k not in DROP}
+        if len(renamed) != len(ma) - sum(k in DROP for k in ma) or str(renamed) != tb:
+            bad.append(f"{_short(n)} row {i}: meta text is not BASE's with the keys renamed")
+            continue
+        left = [k for k in mb if k in RENAME]
+        if left:
+            bad.append(f"{_short(n)} row {i}: old key(s) still present {left}")
+        hit = [k for k in ma if k in RENAME]
+        for k in hit:
+            per_key[(_short(n), ra[ti] if ti is not None else "-", k)] += 1
+        cells[_short(n)] += int(bool(hit))
+
+print("renamed keys per (CSV, type, old key):")
+for (f, t, k), v in sorted(per_key.items()):
+    print(f"  {f:45s} {str(t):22s} {k:20s} -> {RENAME[k] or '(deleted)':24s} {v:4d}")
+print(f"cells: {dict(cells)}  total cells {sum(cells.values())}  total keys {sum(per_key.values())}")
+if bad:
+    print("PROBLEMS:")
+    for b in bad[:40]:
+        print("  " + b)
+    sys.exit(1)
+print("OK: every other cell text-identical; CSVs without meta byte-identical")

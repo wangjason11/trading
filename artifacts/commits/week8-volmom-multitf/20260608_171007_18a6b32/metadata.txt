@@ -1,0 +1,4 @@
+commit_hash=18a6b32
+timestamp=20260608_171007
+branch=week8-volmom-multitf
+commit_message=Fib cycle-0 first-activation on CTS_UPDATED (cross_cycle subs)

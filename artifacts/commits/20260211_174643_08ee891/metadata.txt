@@ -1,0 +1,3 @@
+commit_hash=08ee891
+timestamp=20260211_174643
+commit_message=Widen pattern confirmation to 3 candles, CTS zone early ending, charting extras, event export

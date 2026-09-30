@@ -1,0 +1,4 @@
+commit_hash=2573990
+timestamp=20260527_072928
+branch=week8-volmom-multitf
+commit_message=Sub cycle/structure lifecycle-start: add parent_cycle_id floor (B1)

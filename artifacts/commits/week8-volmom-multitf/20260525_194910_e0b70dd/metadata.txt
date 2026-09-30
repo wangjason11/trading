@@ -1,0 +1,4 @@
+commit_hash=e0b70dd
+timestamp=20260525_194910
+branch=week8-volmom-multitf
+commit_message=Sub-structure lifecycle redesign Phase 4: remove dead cascade machinery

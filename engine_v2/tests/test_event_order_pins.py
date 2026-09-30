@@ -1,0 +1,137 @@
+"""Plan E E2b pins: the event processing order and the CTS reference pick are
+frozen against the E4 flip (PLAN_E §2 item 4, §6.4; PLAN_E_inputs §2.5 hazards
+H1–H5, risk R1).
+
+Each case is built in BOTH shapes — `ev.idx` = the anchor (the pre-E4
+contract) and `ev.idx` = the moment, `confirmed_at` (the E4 contract since Plan
+E E4a / E4b) — and must give the same answer. The anchor shape breaks the
+current contract, hence `illegal_event_contract`.
+"""
+from __future__ import annotations
+
+import pytest
+
+import engine_v2.structure.reference_zone as rz
+from engine_v2.structure import event_fields as ef
+from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established
+
+pytestmark = pytest.mark.illegal_event_contract
+
+SHAPES = ["anchor", "moment"]
+
+
+def _est(anchor, moment, shape, **kw):
+    return make_cts_established(cts_anchor_idx=anchor, confirmed_at=moment,
+                                idx=anchor if shape == "anchor" else moment, **kw)
+
+
+def _bos(anchor, moment, shape, **kw):
+    return make_bos_confirmed(bos_anchor_idx=anchor, confirmed_at=moment,
+                              idx=anchor if shape == "anchor" else moment, **kw)
+
+
+def _ev(etype, idx, category="STRUCTURE", **meta):
+    return StructureEvent(idx=idx, category=category, type=etype, price=1.0, meta=meta)
+
+
+def _order(evs):
+    return [e.type for e in sorted(evs, key=ef.processing_order_key)]
+
+
+@pytest.mark.parametrize("est_shape,bos_shape", [
+    ("anchor", "anchor"),  # pre-E4
+    ("moment", "moment"),  # after E4b (the current contract)
+    ("anchor", "moment"),  # a BOS-only flip: a raw (idx, type) sort puts EST (9) first
+    ("moment", "anchor"),  # after E4a, before E4b
+])
+def test_h1_bos_before_est_of_the_same_cycle(est_shape, bos_shape):
+    """The fib loop needs BOS(S,C) before EST(S,C); MS emits EST first. The
+    anchors keep BOS (3) before EST (9) in every flip order (E4a / E4b land in
+    either order, PLAN_E §3)."""
+    evs = [_est(9, 10, est_shape), _bos(3, 10, bos_shape)]
+    assert _order(evs) == ["BOS_CONFIRMED", "CTS_ESTABLISHED"]
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_h2_est_before_a_confirmation_on_its_moment(shape):
+    """An sd-prox CTS_CONFIRMED can land ON the EST moment; "CTS_CONFIRMED" <
+    "CTS_ESTABLISHED" would run it first and the fib would never lock."""
+    evs = [_ev("CTS_CONFIRMED", 10, cts_anchor_idx=9, confirmed_at=10), _est(9, 10, shape)]
+    assert _order(evs) == ["CTS_ESTABLISHED", "CTS_CONFIRMED"]
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_h3_prior_threshold_update_between_anchor_and_moment(shape):
+    """A CTS_THRESHOLD_UPDATED in [EST anchor, moment) stays AFTER the EST (it
+    would otherwise dispatch while the cycle is still `pre_established`)."""
+    evs = [_ev("CTS_THRESHOLD_UPDATED", 9), _est(8, 10, shape)]
+    assert _order(evs) == ["CTS_ESTABLISHED", "CTS_THRESHOLD_UPDATED"]
+
+
+@pytest.fixture
+def _stub_ad_hoc(monkeypatch):
+    """The ad-hoc zone geometry is not under test: record the base candle."""
+    seen = []
+
+    def _derive(df, cts_anchor_idx, source_sd):
+        seen.append(int(cts_anchor_idx))
+        return (1.0, 0.9, "sell")
+
+    monkeypatch.setattr(rz, "_derive_cts_zone_ad_hoc", _derive)
+    return seen
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_l1_est_winner_with_lag_feeds_the_anchor_to_the_probe(shape, _stub_ad_hoc):
+    """R1: the reference's `anchor_idx` is the probe input and the pool key.
+    An EST winner whose anchor (9) precedes its moment (10) must give 9 — in both
+    shapes (invisible on the reference window: no probe used an EST)."""
+    zone = rz.build_reference_zone_from_cts_event(
+        [_bos(3, 10, shape), _est(9, 10, shape)], [], None, sid=0, probe_direction=-1,
+    )
+    assert zone.source == "cts_established"
+    assert zone.anchor_idx == 9
+    assert _stub_ad_hoc == [9]
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_h5_reference_recency_tie_with_a_confirmation(shape, _stub_ad_hoc):
+    """H5: an EST (anchor 9, moment 10) and a CTS_CONFIRMED at 10. Before Plan E
+    E3b the recency key was the stamped idx (the EST at 9 → the CONFIRMED most
+    recent); since E3b it is the moment, a 10 / 10 tie that the CONFIRMED >
+    ESTABLISHED type order decides the same way — in both shapes."""
+    conf = _ev("CTS_CONFIRMED", 10, structure_id=0, cycle_id=0, cts_anchor_idx=9, confirmed_at=10)
+    zone = rz.build_reference_zone_from_cts_event(
+        [_est(9, 10, shape), conf], [], None, sid=0, probe_direction=-1,
+    )
+    assert zone.source == "cts_confirmed"
+    assert zone.anchor_idx == 9
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_reference_window_filters_on_the_moment_since_e3b(shape, _stub_ad_hoc):
+    """The sibling window is a TIME filter on the event's MOMENT (Plan E E3b): an
+    EST anchored at 9 with moment 12 is outside [5, 10] and inside [5, 12] — in
+    both shapes; the zone's base stays the anchor 9."""
+    zone = rz.build_reference_zone_from_cts_event(
+        [_est(9, 12, shape)], [], None, sid=0, probe_direction=-1, idx_window=(5, 10),
+    )
+    assert zone is None
+    zone = rz.build_reference_zone_from_cts_event(
+        [_est(9, 12, shape)], [], None, sid=0, probe_direction=-1, idx_window=(5, 12),
+    )
+    assert zone is not None and zone.anchor_idx == 9
+
+
+@pytest.mark.parametrize("shape", SHAPES)
+def test_reference_recency_is_the_moment_since_e3b(shape, _stub_ad_hoc):
+    """Plan E E3b: the recency pick keys on the MOMENT. An EST (anchor 9, moment 12)
+    and a raw CTS_UPDATED at 11 (moment 11): on the stamped idx the UPDATED (11 > 9)
+    would win; on the moment the EST (12 > 11) wins, so the zone is based at its
+    anchor 9."""
+    upd = _ev("CTS_UPDATED", 11, structure_id=0, cycle_id=0, via="replay_raw")
+    zone = rz.build_reference_zone_from_cts_event(
+        [_est(9, 12, shape), upd], [], None, sid=0, probe_direction=-1,
+    )
+    assert zone.anchor_idx == 9

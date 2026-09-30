@@ -1,0 +1,5 @@
+commit_hash=7fe12f7
+timestamp=20260527_020256
+branch=week8-volmom-multitf
+commit_message=FibState lifecycle Session 1: additive lifecycle fields (byte-identical)
+replay=reused session run (full window 2025-12-01..2026-01-20, M15); /compare byte-identical

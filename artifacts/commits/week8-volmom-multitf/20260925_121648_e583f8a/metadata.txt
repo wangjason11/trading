@@ -1,0 +1,4 @@
+commit_hash=e583f8a
+timestamp=20260925_121648
+branch=week8-volmom-multitf
+commit_message=Plan E E4a: CTS_ESTABLISHED.idx := the moment (contract rule 3 migration)

@@ -1,0 +1,4 @@
+commit_hash=c031972
+timestamp=20260925_112624
+branch=week8-volmom-multitf
+commit_message=Plan E E3 complete (E3b..E3g-3 + reviews + H1-overlay anchor start)

@@ -8,32 +8,18 @@ import numpy as np
 import pandas as pd
 
 from engine_v2.common.types import KLZone
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.zones.structure_lifecycle import (
+    compute_cycle_lifecycle,
+    compute_reversal_idx_by_sid,
+    compute_struct_start_by_sid,
+)
 
 
-def _get_reversal_confirmed_by_sid_from_events(events: list) -> dict:
-    """
-    Get reversal confirmed idx per structure_id from STATE_CHANGED events.
-    Returns dict: {structure_id: last_reversal_idx}
-
-    This is more reliable than df columns because market_state gets overwritten
-    by subsequent structures, but events are preserved.
-    """
-    rev_by_sid = {}
-    for ev in events:
-        if getattr(ev, "type", None) != "STATE_CHANGED":
-            continue
-        if ev.meta.get("to") != "reversal":
-            continue
-        sid = ev.meta.get("structure_id")
-        if sid is None:
-            continue
-        sid = int(sid)
-        idx = int(ev.idx)
-        # Keep the MAX idx for each structure_id (reversal confirmed = last reversal candle)
-        if sid not in rev_by_sid or idx > rev_by_sid[sid]:
-            rev_by_sid[sid] = idx
-    return rev_by_sid
+# Reversal-idx-per-sid now lives in `structure_lifecycle.compute_reversal_idx_by_sid`
+# (B2 dedup, 2026-05-27) — shared with POI; previously duplicated verbatim here
+# and in `poi_zones`.
 
 
 # -------------------------
@@ -379,47 +365,67 @@ def compute_base_window_features(
 # -------------------------
 
 def find_base_threshold(df: pd.DataFrame, idx: int, struct_direction: int, *, bos: bool = True) -> float:
-    left = max(0, int(idx) - 5)
-    right = min(len(df), int(idx) + 6)
+    """Inner threshold for a 1-candle base ("base" / "base inside bar").
 
-    neighbor_df = df.iloc[left:idx].copy()
-    neighbor_df = pd.concat([neighbor_df, df.iloc[idx + 1:right]], axis=0)
+    Built from the ±5 neighbours' INNER-EDGE body point — the body extreme on
+    the side of the zone facing the price interior — bounded so the inner can
+    never sit beyond the outer extreme established by the base candle:
 
+      - outer = base_high (BOS sd=-1 / CTS sd=+1): zone opens DOWN, inner-edge =
+        bottom of body = min(o,c); kept points must be <= base_high; inner is
+        the 2nd-highest such point (closest to the outer).
+      - outer = base_low  (BOS sd=+1 / CTS sd=-1): zone opens UP, inner-edge =
+        top of body = max(o,c); kept points must be >= base_low; inner is the
+        2nd-lowest such point.
+
+    Only the single inner-edge point is tested (not BOTH o and c): a neighbour
+    whose far-side body extreme is beyond the outer still qualifies on its near
+    side. This guarantees the base extreme stays the outer edge, the inner sits
+    within it (containing the base), and it widens the zone / avoids degenerate
+    too-narrow bases that requiring both o and c produced. All ±5 neighbours are
+    pooled and ranked by price (no pre/post precedence). Falls back to the
+    single closest qualifying neighbour, else NaN.
+    """
+    n = len(df)
+    i = int(idx)
+    sd = int(struct_direction)
+    if n == 0:
+        return float("nan")
+
+    left = max(0, i - 5)
+    right = min(n, i + 6)
+    neighbor_df = pd.concat([df.iloc[left:i], df.iloc[i + 1:right]], axis=0)
     if neighbor_df.empty:
         return float("nan")
 
-    candidates_desc = sorted(set(np.minimum(neighbor_df["o"], neighbor_df["c"])), reverse=True)
-    candidates_asc = sorted(set(np.maximum(neighbor_df["o"], neighbor_df["c"])), reverse=False)
+    o = neighbor_df["o"].astype(float)
+    c = neighbor_df["c"].astype(float)
 
-    sd = int(struct_direction)
-    result = None
+    # Outer extreme (set by the base candle) + the inner-edge body point that
+    # faces the zone interior. `use_low_outer` mirrors find_pinbar_threshold.
+    use_low_outer = (bos and sd == 1) or ((not bos) and sd == -1)
 
-    if bos:
-        levels = candidates_asc if sd == 1 else candidates_desc
-        for level in levels:
-            if sd == 1:
-                count = ((neighbor_df["o"] <= level) & (neighbor_df["c"] <= level)).sum()
-            else:
-                count = ((neighbor_df["o"] >= level) & (neighbor_df["c"] >= level)).sum()
-            if count >= 1:
-                result = float(level)
-            if count >= 2:
-                return float(level)
-        return float(result) if result is not None else float("nan")
-
+    if use_low_outer:
+        outer = float(df.loc[i, "l"])
+        sel = np.maximum(o, c)        # top of body (c of bullish, o of bearish)
+        sel = sel[sel >= outer]       # keep inner-side points (above the low)
+        levels = sorted(set(sel))     # ascending: closest to the low outer first
+        cmp = lambda lvl: int((sel <= lvl).sum())
     else:
-        levels = candidates_desc if sd == 1 else candidates_asc
-        for level in levels:
-            if sd == 1:
-                count = ((neighbor_df["o"] >= level) & (neighbor_df["c"] >= level)).sum()
-            else:
-                # fixed typo: "<=3 level" -> "<= level"
-                count = ((neighbor_df["o"] <= level) & (neighbor_df["c"] <= level)).sum()
-            if count >= 1:
-                result = float(level)
-            if count >= 2:
-                return float(level)
-        return float(result) if result is not None else float("nan")
+        outer = float(df.loc[i, "h"])
+        sel = np.minimum(o, c)        # bottom of body (o of bullish, c of bearish)
+        sel = sel[sel <= outer]       # keep inner-side points (below the high)
+        levels = sorted(set(sel), reverse=True)  # descending: closest to high first
+        cmp = lambda lvl: int((sel >= lvl).sum())
+
+    result = None
+    for level in levels:
+        count = cmp(level)
+        if count >= 1:
+            result = float(level)
+        if count >= 2:
+            return float(level)
+    return float(result) if result is not None else float("nan")
 
 def find_pinbar_threshold(
     df: pd.DataFrame,
@@ -438,6 +444,21 @@ def find_pinbar_threshold(
       - CTS, sd=+1  -> reference = HIGH
       - BOS, sd=-1  -> reference = HIGH
       - CTS, sd=-1  -> reference = LOW
+
+    (c) inner-side bound (2026-06-20): the chosen inner must sit WITHIN the
+    outer (= the base candle's own extreme `ref`), never beyond it — otherwise
+    the zone inverts (inner past the base extreme, rectangle sitting outside the
+    base). Candidates beyond the outer are dropped before the closest pick:
+    outer=LOW (use_low_ref) -> keep candidates >= ref; outer=HIGH -> keep <= ref.
+    This is the ONLY change vs the original closest-neighbour pinbar rule — it
+    preserves the tight pinbar zone (unchanged whenever the closest neighbour is
+    already within the outer, which is the normal case) and adds inversion
+    safety for the edge case. Deliberately NOT the base/inside-bar inner-edge
+    rule (no ±5 pooling, no 2nd-closest widening): pinbar zones key off the
+    pinbar's own body/tail and must stay tight (decision 2026-06-20 after the
+    inner-edge rule was found to over-widen pinbar zones). If every neighbour is
+    beyond the outer (or no neighbour exists), fall back to the base candle's
+    own body point closest to ref — itself always within the outer.
     """
     n = len(df)
     i = int(base_idx)
@@ -450,11 +471,15 @@ def find_pinbar_threshold(
     use_low_ref = (bos and sd == 1) or ((not bos) and sd == -1)
     ref = float(df.loc[i, "l"] if use_low_ref else df.loc[i, "h"])
 
-    # Need neighbors; if missing, fall back to this candle's body point closest to ref
+    # Base candle's own body point closest to ref — always within the outer
+    # (o, c lie inside [l, h]). Used as the fallback for edges / all-beyond.
+    own_o = float(df.loc[i, "o"])
+    own_c = float(df.loc[i, "c"])
+    own = own_o if abs(own_o - ref) <= abs(own_c - ref) else own_c
+
+    # Need neighbors; if missing, fall back to the base candle's body point.
     if i - 1 < 0 or i + 1 >= n:
-        o = float(df.loc[i, "o"])
-        c = float(df.loc[i, "c"])
-        return o if abs(o - ref) <= abs(c - ref) else c
+        return own
 
     candidates = [
         float(df.loc[i - 1, "o"]),
@@ -463,7 +488,18 @@ def find_pinbar_threshold(
         float(df.loc[i + 1, "c"]),
     ]
 
-    inner = min(candidates, key=lambda x: abs(x - ref))
+    # Inner-side bound: drop neighbour points that sit beyond the outer.
+    if use_low_ref:
+        bounded = [x for x in candidates if x >= ref]
+    else:
+        bounded = [x for x in candidates if x <= ref]
+
+    if not bounded:
+        # Every neighbour point is beyond the outer -> the original rule would
+        # have inverted the zone; fall back to the base body point instead.
+        return own
+
+    inner = min(bounded, key=lambda x: abs(x - ref))
     return float(inner)
 
 
@@ -667,12 +703,14 @@ Identifiers
 - cts_cycle_id: internal CTS/BOS cycle id within a structure. Starts at 0.
 
 StructureEvent indexing
-- ev.idx: the *level index* (where the BOS/CTS level is anchored; often an earlier extreme).
+- ev.idx: the raw index — the moment (BOS_CONFIRMED / CTS_ESTABLISHED since Plan E E4b / E4a;
+  the CTS_CONFIRMED confirmation candle). The BOS level (the anchor) is read from
+  meta["bos_anchor_idx"] (`ef.bos_anchor_idx`), the CTS level from meta["cts_anchor_idx"].
 - ev.meta["confirmed_at"]: the candle index where that level was confirmed (breakout/pullback timing).
 
 Zone indexing
-- meta["base_idx"]: anchor candle of the zone base pattern (where rectangle begins).
-- meta["source_event_idx"]: the StructureEvent level index used to derive the zone (ev.idx).
+- meta["base_idx"]: FIRST candle of the zone base pattern (where the rectangle begins) —
+  at or before the zone's anchor_idx; a different field (KL_ZONES_SPEC "base_idx by Pattern Type").
 - meta["confirmed_idx"]: the candle index where the zone becomes confirmed for charting:
     - BOS-derived zones: confirmed_idx = ev.meta["confirmed_at"] (breakout candle)
     - CTS-derived zones: confirmed_idx = ev.idx (pullback candle)
@@ -688,6 +726,10 @@ def derive_kl_zones_v1(
     *,
     struct_direction: int,
     length_threshold: float = 0.7,
+    source_kinds: Optional[List[str]] = None,
+    lifecycle_floor: Optional[int] = None,
+    lifecycle_cap: Optional[int] = None,
+    cap_reason: str = "lifecycle_end",
 ) -> List[KLZone]:
     """
     Event-driven KL Zones v1:
@@ -707,15 +749,17 @@ def derive_kl_zones_v1(
     current_sid: Optional[int] = None  # Track current structure for reversal detection
 
     # Pre-compute reversal confirmed indices per structure_id (for deactivating zones on reversal)
-    rev_confirmed_by_sid = _get_reversal_confirmed_by_sid_from_events(events)
+    rev_confirmed_by_sid = compute_reversal_idx_by_sid(events)
 
     # Debugging
+    # (idx, anchor, sid, cycle): the raw idx AND the anchor, so the Plan E E4
+    # flip shows as idx moving while the anchor stays (PLAN_E §6.3 B12).
     print("[kl_zones][events] BOS_CONFIRMED:", [
-        (int(ev.idx), ev.meta.get("structure_id"), ev.meta.get("cycle_id"), ev.meta.get("bos_prev"))
+        (int(ev.idx), ef.bos_anchor_idx(ev), ev.meta.get("structure_id"), ev.meta.get("cycle_id"))
         for ev in events if ev.type == "BOS_CONFIRMED"
     ])
     print("[kl_zones][events] CTS_ESTABLISHED:", [
-        (int(ev.idx), ev.meta.get("structure_id"), ev.meta.get("cycle_id"))
+        (int(ev.idx), ef.cts_anchor_idx(ev), ev.meta.get("structure_id"), ev.meta.get("cycle_id"))
         for ev in events if ev.type == "CTS_ESTABLISHED"
     ])
     print("[kl_zones][events] CTS_CONFIRMED:", [
@@ -725,6 +769,7 @@ def derive_kl_zones_v1(
 
     print("[kl_zones][events] BOS_CONFIRMED:", [
         (int(ev.idx),
+        ef.bos_anchor_idx(ev),
         (ev.meta or {}).get("confirmed_at"),
         (ev.meta or {}).get("structure_id"),
         (ev.meta or {}).get("cycle_id"),
@@ -740,8 +785,17 @@ def derive_kl_zones_v1(
         return int(dfx.loc[i, "cts_cycle_id"]) if "cts_cycle_id" in dfx.columns else 0
 
     for ev in events:
-        if ev.type not in ("BOS_CONFIRMED", "CTS_CONFIRMED", "CTS_THRESHOLD_UPDATED", "BOS_THRESHOLD_UPDATED"):
+        if ev.type not in ("BOS_CONFIRMED", "CTS_CONFIRMED", "CTS_THRESHOLD_UPDATED", "BOS_THRESHOLD_UPDATED", "CTS_ESTABLISHED"):
             continue
+
+        # source_kinds filter: skip events not matching allowed kinds
+        if source_kinds is not None:
+            if ev.type == "BOS_CONFIRMED" and "BOS" not in source_kinds:
+                continue
+            if ev.type in ("CTS_CONFIRMED", "CTS_ESTABLISHED", "CTS_THRESHOLD_UPDATED") and "CTS" not in source_kinds:
+                continue
+            if ev.type == "BOS_THRESHOLD_UPDATED" and "BOS" not in source_kinds:
+                continue
 
         # NEW: make sd/sid event-accurate for ALL event types (zones can span multiple structures now)
         sd = int((ev.meta or {}).get("struct_direction", sd))
@@ -808,26 +862,44 @@ def derive_kl_zones_v1(
                     bottom=float(bot2),
                     meta={
                         **(z0.meta or {}),
+                        # The last expansion is `bounds_steps[-1]` (its moment `start_idx`, `price`,
+                        # `event`); the `expanded_last_*` copies were deleted (Post-E·5, 2026-09-30).
                         "bounds_steps": steps,
                         "expanded": True,
-                        "expanded_last_idx": int(ev.idx),
-                        "expanded_last_price": float(price),
-                        "expanded_last_event": str(ev.type),
                     },
                 )
 
             continue
 
-        # Event idx is the BOS/CTS LEVEL index; confirmed_at is the candle that CONFIRMED it.
-        source_event_idx = int(ev.idx)
-        confirmed_idx = int((ev.meta or {}).get("confirmed_at", source_event_idx))
+        # CTS_ESTABLISHED: release the active CTS-zone tracker so the prior
+        # cycle's CTS zone is no longer the expansion target. Phase 3: the
+        # zone's end_time is owned by the cycle-end post-pass (no end-write
+        # here — the old "cts_established" early-end is subsumed by the
+        # cycle inheriting next-cycle CTS-established as its end).
+        if ev.type == "CTS_ESTABLISHED":
+            cts_side = "sell" if sd == 1 else "buy"
+            zi = active_sell_idx if cts_side == "sell" else active_buy_idx
+            if zi is not None:
+                z0 = zones[zi]
+                if (int((z0.meta or {}).get("structure_id", -999)) == sid
+                        and z0.source_kind == "CTS"):
+                    if cts_side == "sell":
+                        active_sell_idx = None
+                    else:
+                        active_buy_idx = None
+            continue
+
+        # The candle that CONFIRMED the zone: the event's moment (BOS:
+        # meta["confirmed_at"]; CTS_CONFIRMED: its idx). (The write-only meta
+        # `source_event_idx`, the raw ev.idx, was deleted in Plan E E4b-pre.)
+        confirmed_idx = ef.event_moment(ev)
         bos = (ev.type == "BOS_CONFIRMED")
 
         # Anchor for pattern identification differs by event type
         if bos:
-            anchor_idx = source_event_idx
+            anchor_idx = ef.bos_anchor_idx(ev)   # the BOS anchor: the zone's base candle
         else:
-            anchor_idx = int((ev.meta or {}).get("cts_anchor_idx", source_event_idx))
+            anchor_idx = ef.cts_anchor_idx(ev)   # CTS_CONFIRMED: the CTS anchor at confirmation
 
         # Identify base pattern (structure-aware)
         pat, base_idx = identify_base_pattern(dfx, anchor_idx, sd, bos=bos, length_threshold=length_threshold)
@@ -838,20 +910,11 @@ def derive_kl_zones_v1(
         if sid < 0 and "structure_id" in dfx.columns:
             sid = int(dfx.loc[confirmed_idx, "structure_id"])
 
-        # --- Structure change detection: deactivate ALL zones from previous structure at reversal ---
+        # --- Structure change detection: release trackers when a new structure
+        # begins after a reversal. Phase 3: per-zone reversal end-writes removed
+        # — the cycle-end post-pass caps prior-structure zones at the reversal
+        # idx via end_reason="reversal".
         if current_sid is not None and sid != current_sid and current_sid in rev_confirmed_by_sid:
-            rev_idx = int(rev_confirmed_by_sid[current_sid])
-            rev_time = _time(rev_idx)
-            # Deactivate all zones from the previous structure
-            for zi, zold in enumerate(zones):
-                old_sid = (zold.meta or {}).get("structure_id", None)
-                if old_sid == current_sid and zold.end_time is None:
-                    zones[zi] = replace(
-                        zold,
-                        end_time=rev_time,
-                        meta={**(zold.meta or {}), "active": False, "deactivated_by": "reversal"},
-                    )
-            # Reset active trackers for the new structure
             active_buy_idx = None
             active_sell_idx = None
 
@@ -865,6 +928,14 @@ def derive_kl_zones_v1(
 
         top = float(max(outer, inner))
         bottom = float(min(outer, inner))
+
+        # CTS-zone-specific: capture confirmation_method from the event
+        # ("pullback" or "sd_zone_proximity"). Will be upgraded to "pullback"
+        # by a subsequent CTS_RECONFIRMED event for the same (sid, cycle_id)
+        # — handled below outside the zone-creation switch.
+        cts_confirmation_method = None
+        if not bos:
+            cts_confirmation_method = (ev.meta or {}).get("confirmation_method", "pullback")
 
         z = KLZone(
             start_time=_time(base_idx),
@@ -883,7 +954,6 @@ def derive_kl_zones_v1(
 
                 # Zone confirmation semantics
                 "confirmed_idx": confirmed_idx,          # breakout / pullback candle
-                "source_event_idx": source_event_idx,    # BOS/CTS level candle
 
                 # Zone base
                 "anchor_idx": anchor_idx,
@@ -891,6 +961,10 @@ def derive_kl_zones_v1(
                 "base_pattern": pat,
                 "outer": float(outer),
                 "inner": float(inner),
+
+                # CTS-only: how this CTS was confirmed. May be upgraded later
+                # to "pullback" by a CTS_RECONFIRMED event for the same cycle.
+                **({"confirmation_method": cts_confirmation_method} if not bos else {}),
 
                 "bounds_steps": [
                     {
@@ -900,54 +974,175 @@ def derive_kl_zones_v1(
                         "event": "INIT",
                     }
                 ],
-
-                "active": True,
             },
         )
 
-        # Enforce 1 active per side (within same structure): deactivate previous active of same side
-        deactivate_time = _time(confirmed_idx)  # zone becomes inactive when the NEW zone confirms
-
+        # Track the most-recent zone per side (the expansion target for
+        # *_THRESHOLD_UPDATED). Phase 3: the prior same-side zone's end_time is
+        # owned by the cycle-end post-pass (no end-write on replacement).
         if side == "buy":
-            if active_buy_idx is not None:
-                prev = zones[active_buy_idx]
-                # Only deactivate if same structure (cross-structure handled above)
-                if (prev.meta or {}).get("structure_id") == sid:
-                    zones[active_buy_idx] = replace(
-                        prev,
-                        end_time=deactivate_time,
-                        meta={**prev.meta, "active": False},
-                    )
             active_buy_idx = len(zones)
         else:
-            if active_sell_idx is not None:
-                prev = zones[active_sell_idx]
-                # Only deactivate if same structure (cross-structure handled above)
-                if (prev.meta or {}).get("structure_id") == sid:
-                    zones[active_sell_idx] = replace(
-                        prev,
-                        end_time=deactivate_time,
-                        meta={**prev.meta, "active": False},
-                    )
             active_sell_idx = len(zones)
 
         zones.append(z)
 
-    # --- Terminal structure end: if reversal occurs, end any still-active zones at the reversal candle ---
-    # (This handles zones from the LAST structure if no new structure zones were created after reversal)
+    # ------------------------------------------------------------------
+    # Post-pass: process CTS_RECONFIRMED events. When CTS was first
+    # confirmed via sd zone proximity AND a valid pullback fired later,
+    # upgrade the CTS zone's confirmation_method to "pullback" and record
+    # reconfirmed_idx (the CTS_RECONFIRMED moment; `confirmed_idx` keeps the
+    # proximity moment, clamped up to the structure's lifecycle start by the
+    # pass below). The original CTS_CONFIRMED event stays immutable.
+    # ------------------------------------------------------------------
+    for ev in events:
+        if ev.type != "CTS_RECONFIRMED":
+            continue
+        ev_sid = (ev.meta or {}).get("structure_id")
+        ev_cycle = (ev.meta or {}).get("cycle_id")
+        if ev_sid is None or ev_cycle is None:
+            continue
+
+        for zi, z in enumerate(zones):
+            if z.source_kind != "CTS":
+                continue
+            zmeta = z.meta or {}
+            if zmeta.get("structure_id") != ev_sid:
+                continue
+            if zmeta.get("cycle_id") != ev_cycle:
+                continue
+            # Found the CTS zone for this (sid, cycle). Upgrade it.
+            zones[zi] = replace(
+                z,
+                meta={
+                    **zmeta,
+                    "confirmation_method": "pullback",
+                    "reconfirmed_idx": int(ef.event_moment(ev)),
+                },
+            )
+            break
+
+    # ------------------------------------------------------------------
+    # Unified lifecycle (Phase 3 2026-05-26; END pass-through B2 2026-05-27).
+    # Each zone INHERITS its owning cycle's resolved end from the shared
+    # `compute_cycle_lifecycle` table — ends are derived from starts, never
+    # computed per-zone (PART4_REFACTOR_SPEC §5 "End resolution as
+    # start-passthrough"). The zone keeps its OWN start (first-active), clamped
+    # up to the structure lifecycle-start (B1) — nothing inherits cycle start.
+    # ------------------------------------------------------------------
+    last_candle = int(dfx.index.max())
+
+    # struct_start (per sid) for the first-active clamp (B1, unchanged). The
+    # cycle lifecycle table (start, end, end_reason) for END inheritance: end =
+    # min(next-cycle clamped start, reversal, lifecycle_cap). For main cap=None;
+    # for subs the projection (`render_sub_projection`) supplies the slice-local
+    # cap (+ cap_reason) — the unique sub's lifecycle end (PART4 §17.9).
+    struct_start_by_sid = compute_struct_start_by_sid(
+        events, rev_confirmed_by_sid, lifecycle_floor,
+    )
+    cycle_life = compute_cycle_lifecycle(
+        events, rev_confirmed_by_sid, lifecycle_floor, lifecycle_cap, cap_reason,
+    )
+
     for zi, z in enumerate(zones):
-        sid = (z.meta or {}).get("structure_id", None)
-        if sid is None or sid not in rev_confirmed_by_sid:
-            continue
-        if z.end_time is not None:
-            continue
+        zmeta = z.meta or {}
+        zsid = zmeta.get("structure_id")
+        zcyc = zmeta.get("cycle_id")
+        raw_confirmed = int(zmeta.get("confirmed_idx"))
+        # Clamp first-active (the zone's OWN start) to the structure
+        # lifecycle-start (no zone may activate before its structure is alive).
+        sstart = struct_start_by_sid.get(int(zsid)) if zsid is not None else None
+        confirmed_idx = max(raw_confirmed, int(sstart)) if sstart is not None else raw_confirmed
 
-        rev_idx = int(rev_confirmed_by_sid[sid])
-        zones[zi] = replace(
-            z,
-            end_time=_time(rev_idx),
-            meta={**(z.meta or {}), "active": False, "deactivated_by": "reversal"},
-        )
+        # end_idx/end_reason inherited from the cycle (pass-through).
+        life = cycle_life.get((int(zsid), int(zcyc))) if (zsid is not None and zcyc is not None) else None
+        end_idx = life[1] if life is not None else None
+        end_reason = life[2] if life is not None else None
 
+        end_time = _time(end_idx) if end_idx is not None else None
+
+        # KL has a single active interval from confirmed_idx (no condition-state
+        # flips). Collapsed (never active) if it would start at/after end_idx.
+        if end_idx is not None and confirmed_idx >= end_idx:
+            activation_history = []
+        else:
+            activation_history = [
+                {"idx": confirmed_idx, "active": True, "reason": "confirmed"}
+            ]
+
+        # Derived 3-state status. Collapsed (no activation) is "inactive" — it
+        # never became active, so not "ended" (standardized 2026-05-27; matches
+        # the prior per-sid cap, replacing the inner derivation's "ended").
+        if not activation_history:
+            status = "inactive"
+        elif end_idx is not None and end_idx <= last_candle:
+            status = "ended"
+        else:
+            status = "active"
+
+        new_meta = {
+            k: v for k, v in zmeta.items()
+            if k not in ("active", "deactivated_by")
+        }
+        new_meta.update({
+            # confirmed_idx is the clamped first-active idx (>= structure
+            # lifecycle-start); equals the raw structural confirm when unclamped.
+            "confirmed_idx": confirmed_idx,
+            "end_idx": end_idx,
+            "end_reason": end_reason,
+            "activation_history": activation_history,
+            "status": status,
+        })
+        zones[zi] = replace(z, end_time=end_time, meta=new_meta)
 
     return zones
+
+
+# ---------------------------------------------------------------------------
+# Single-zone primitives — used by MarketStructure's dual CTS proximity check.
+#
+# Wired from `structure/structure_engine.py` as the `bos_inner_resolver` /
+# `poi_inners_resolver` callables passed to MarketStructure.__init__ (Part 4
+# §13.5.b). Defined here (rather than inside structure/) so the structure→zones
+# import inversion stays gone — structure/ never imports zones/.
+# ---------------------------------------------------------------------------
+
+def compute_bos_inner_from_event(
+    df: pd.DataFrame,
+    bos_anchor_idx: int,
+    struct_direction: int,
+    length_threshold: float = 0.7,
+) -> Optional[float]:
+    """Derive a single BOS zone's inner price for proximity checking.
+
+    Mirrors the per-zone derivation inside `derive_kl_zones_v1` (identify
+    base pattern → resolve threshold → return inner). Returns None if the
+    base pattern can't be identified, so the caller's proximity check
+    naturally falls back to no-trigger.
+    """
+    if bos_anchor_idx not in df.index:
+        return None
+
+    try:
+        zone_pattern, base_idx = identify_base_pattern(
+            df,
+            anchor_idx=int(bos_anchor_idx),
+            struct_direction=int(struct_direction),
+            bos=True,
+            length_threshold=length_threshold,
+        )
+        if base_idx is None or base_idx not in df.index:
+            return None
+
+        _outer, inner = zone_thresholds(
+            df,
+            base_idx=int(base_idx),
+            struct_direction=int(struct_direction),
+            zone_pattern=zone_pattern,
+            bos=True,
+        )
+        if inner is None:
+            return None
+        return float(inner)
+    except Exception:
+        return None

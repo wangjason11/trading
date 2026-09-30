@@ -1,0 +1,3 @@
+commit_hash=a8896d0
+timestamp=20260213_182154
+commit_message=CTS non-BIB wave candle: first candle closing within zone, window clamped by pattern anchor

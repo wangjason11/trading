@@ -1,0 +1,4 @@
+commit_hash=aadb887
+timestamp=20260922_195430
+branch=week8-volmom-multitf
+commit_message=Chart review 2026-09-21/22: recent-vs-prior segment styling, H1-overlay lifecycle filter, replacement break (chart-only; 24 CSVs byte-identical to 20260921_125218_afaa326; counts H1 85/245, counter 153/125, confluence 294/233)

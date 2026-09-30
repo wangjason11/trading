@@ -1,0 +1,4 @@
+commit_hash=7c77082
+timestamp=20260601_170426
+branch=week8-volmom-multitf
+commit_message=MS CTS-confirmation threshold/state coherence: stop discarding BOS expansion at CTS confirmation

@@ -1,0 +1,4 @@
+commit_hash=7216c9d
+timestamp=20260925_125921
+branch=week8-volmom-multitf
+commit_message=Plan E E4b: BOS_CONFIRMED.idx := the moment (contract rule 3 migration)

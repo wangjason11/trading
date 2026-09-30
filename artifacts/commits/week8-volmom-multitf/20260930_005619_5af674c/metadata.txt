@@ -1,0 +1,4 @@
+commit_hash=5af674c
+timestamp=20260930_005619
+branch=week8-volmom-multitf
+commit_message=Post-E·5 baseline: fib cycle1_bos_idx -> cycle1_bos_anchor_idx, KL pb_reconfirm_idx -> reconfirmed_idx, KL expanded_last_* deleted (896ffd4) + landing-review fold-in (5af674c, byte-identical)

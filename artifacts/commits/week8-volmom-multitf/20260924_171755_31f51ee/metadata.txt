@@ -1,0 +1,4 @@
+commit_hash=31f51ee
+timestamp=20260924_171755
+branch=week8-volmom-multitf
+commit_message=Plan E E1 (5facfe0) + E1b (31f51ee): pattern_anchor_idx rename + contract rule 3; dead-code deletions + self.levels fix
