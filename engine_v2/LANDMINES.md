@@ -1347,7 +1347,8 @@ replay `/compare`, never tests alone. See memory
 (a frozen back-fill — incl. `_post_apply_range_check`'s, which starts AT the apply candle) must end the step as soon
 as the state is REVERSAL — the pending reversal is applied inside that call — and must not run a later apply /
 finalize / re-step; and a per-candle emitter that can change the state or the CTS must skip in REVERSAL (the BOS
-barrier, the raw CTS update and the proximity confirmation do — a reversal WINNER's apply candle is still stepped).
+barrier, the raw CTS update and the proximity confirmation do — a reversal WINNER's apply candle is still stepped;
+every reversal apply clears the pending too, so that step re-applies nothing).
 Canonical: MARKET_STRUCTURE_SPEC "Reversal inside a back-fill".
 **Why:** the run loop only checks REVERSAL between steps; inside one step the dead structure kept stepping, left
 REVERSAL through an unguarded state setter and could reverse again (two `STATE_CHANGED(to=reversal)` per sid; the

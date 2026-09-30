@@ -131,7 +131,9 @@ def _price(p: float, sd: int, native_sd: int = 1) -> float:
 
 @pytest.fixture
 def trace(monkeypatch):
-    """Class-level taps: step anchors, step winners and each reversal apply's path (winner / pending)."""
+    """Class-level taps: step anchors, step winners and EVERY reversal apply's path (winner / pending) with the watch
+    open at that moment (None, None = no watch). One apply per reversal: before 2026-09-29d a WINNER left its pending
+    set, and the re-step of its apply row re-applied it (REVERSAL -> REVERSAL, no event, watch already ended)."""
     log = {"anchors": [], "winners": [], "applied": []}
     o_step, o_best = MarketStructure._step_anchor, MarketStructure._best_bopb_pattern_at_anchor
     o_pend = MarketStructure._maybe_apply_pending_reversal
@@ -155,10 +157,11 @@ def trace(monkeypatch):
             self._f3b_path = "winner"
 
     def apply(self, ev, apply_idx, kind):
-        if kind == "reversal" and self.state.reversal_watch_active:
-            st = self.state
+        if kind == "reversal":
+            st, w = self.state, self.state.reversal_watch_active
             log["applied"].append((getattr(self, "_f3b_path", "winner"), int(apply_idx),
-                                   int(st.reversal_watch_start_idx), int(st.reversal_watch_expires_idx)))
+                                   int(st.reversal_watch_start_idx) if w else None,
+                                   int(st.reversal_watch_expires_idx) if w else None))
         return o_apply(self, ev, apply_idx, kind)
 
     monkeypatch.setattr(MarketStructure, "_step_anchor", step)
@@ -227,6 +230,37 @@ def test_p2_a_later_anchors_reversal_winner_on_the_expiry_applies(sd, trace):
     assert (8, "reversal", 9) in trace["winners"]
     assert trace["applied"] == [("winner", 9, 4, 9)]
     assert _reversals(res) == [(9, "one_maru_continuous", _price(0.5998, sd))]
+
+
+# A later anchor's reversal winner applying BEFORE the watch's pending — sd=+1 (random tails seed 93 trial 3055,
+# RTS_BASES=iw7,iw8,dr6: `_make_double_rewind_data()[:6]` + 9; the mirror is trial 4157's shape): watch A=4 (4 closes
+# .5982 < BOS_0 .5998), its pending applies at 9 = E; anchor 7's `one_maru_opposite` 7-8 against the frozen .5998
+# applies at 8 -> REVERSAL @8. Before 2026-09-29d the winner left the pending set: the reversal row 8 carried
+# `pending_reversal_*` 4 / 9 (a reversal scheduled on a structure that had already reversed). 2 of 42k tails; 0 in the
+# replay and the rest of the suite.
+def _later_winner_rows() -> list[dict]:
+    return list(_make_double_rewind_data()[:6]) + [
+        _R(0.59899, 0.60318, 0.59876, 0.60312),   # 6
+        _R(0.60286, 0.60287, 0.59767, 0.59792),   # 7
+        _R(0.59813, 0.59955, 0.59316, 0.59893),   # 8
+        _R(0.59901, 0.59921, 0.58977, 0.58994),   # 9
+        _R(0.59001, 0.59551, 0.58902, 0.58933),   # 10
+        _R(0.58959, 0.58968, 0.58449, 0.58452),   # 11
+        _R(0.58457, 0.58623, 0.58393, 0.58555),   # 12
+        _R(0.58543, 0.58807, 0.58418, 0.58718),   # 13
+        _R(0.58704, 0.59279, 0.58577, 0.58654),   # 14
+    ]
+
+
+@pytest.mark.parametrize("sd", [1, -1])
+def test_a_reversal_winner_before_the_pending_leaves_no_pending_on_its_row(sd, trace):
+    res = _run(_rows(_later_winner_rows, sd), sd)
+    assert (7, "reversal", 8) in trace["winners"]
+    assert [(int(e.idx), e.meta["apply_idx"]) for e in res.events if e.type == "REVERSAL_CANDIDATE"] == [(4, 9)]
+    assert trace["applied"] == [("winner", 8, 4, 9)]
+    assert _reversals(res) == [(8, "one_maru_opposite", _price(0.5998, sd))]
+    row = res.df.loc[8]
+    assert (int(row["pending_reversal_pattern_anchor_idx"]), int(row["pending_reversal_apply_idx"])) == (-1, -1)
 
 
 # The later-anchor cap (`_best_bopb_pattern_at_anchor`): a reversal candidate against an open watch's frozen barrier

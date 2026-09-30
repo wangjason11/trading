@@ -822,9 +822,8 @@ class MarketStructure:
             f"apply={st.pending_reversal_apply_idx} pat={pat}"
         )
 
-        # Terminal apply
+        # Terminal apply (it ends the watch and clears the pending)
         self._apply_pattern_at_apply_idx(st.pending_reversal_ev, i, "reversal")
-        self._clear_pending_reversal()
         return True
 
     # ----------------------------
@@ -876,8 +875,8 @@ class MarketStructure:
             # A breakout's post-apply range back-fill (`_post_apply_range_check`)
             # can apply the pending reversal too: terminal, no apply-row re-write.
             # (A reversal WINNER keeps its re-write below — its apply candle's own step:
-            # the range update still runs; the raw CTS update, proximity and the BOS
-            # barrier skip in REVERSAL.)
+            # the range update still runs; the raw CTS update, proximity, the BOS barrier
+            # skip in REVERSAL, and the winner cleared the pending: nothing re-applies.)
             if kind != "reversal" and self.state.state == MarketState.REVERSAL:
                 return apply_idx + 1
 
@@ -1260,7 +1259,7 @@ class MarketStructure:
         if apply_idx is None:
             return
         
-        # Reversal is terminal
+        # Reversal is terminal: the watch AND its pending end (a winner's re-stepped apply row must not re-apply it)
         if kind == "reversal":
             self._set_state(
                 MarketState.REVERSAL,
@@ -1272,6 +1271,7 @@ class MarketStructure:
                 },
             )
             self._clear_reversal_watch()
+            self._clear_pending_reversal()
             return
 
         if kind == "breakout":

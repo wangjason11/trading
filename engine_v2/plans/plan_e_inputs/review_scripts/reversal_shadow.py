@@ -199,7 +199,7 @@ def _finish(self, r):
     interesting = r["n_rev"] > 1 or r["n_from_rev"] or post or r["leave"] or r["bf_apply"] or r["rebuild"] \
         or r["seed_over"] or r["sid_meta"] or r["expiry"] or r["win_past_exp"] or r["post_expiry"] \
         or r["rewind_in_rev"] or r["in_watch_est"] or r["in_watch_upd"] \
-        or any(a["at_E"] for a in r["rev_apply"])
+        or any(a["at_E"] or a.get("pending_after") is not None for a in r["rev_apply"])
     all_runs.append((r["caller"][0], r["tf"], r["sid"], r["start"], r["end"], r["stop_n"], r["n_rev"]))
     del r["_ms"], r["_steps"], r["_last_step"], r["_watch_by_anchor"]
     if interesting:
@@ -376,14 +376,36 @@ _orig_apply_at = MS._apply_pattern_at_apply_idx
 def _apply_pattern_at_apply_idx(self, ev, apply_idx, kind):
     r, st = _rec(self), self.state
     if r is not None and kind == "reversal":
-        path = "pending" if sys._getframe(1).f_code.co_name == "_maybe_apply_pending_reversal" else "winner"
+        f = sys._getframe(1)  # the first MS frame up (another tool's wrapper may sit in between)
+        while f is not None and os.path.normcase(f.f_code.co_filename) != _MS_FILE:
+            f = f.f_back
+        path = "pending" if f is not None and f.f_code.co_name == "_maybe_apply_pending_reversal" else "winner"
         s = r["_steps"][-1] if r["_steps"] else None
         A, E = st.reversal_watch_start_idx, st.reversal_watch_expires_idx
         ap = self._apply_idx(ev)
         own = None if (path == "pending" or A is None or s is None) else (s["i"] == int(A))
-        r["rev_apply"].append(dict(path=path, apply=None if ap is None else int(ap), A=A, E=E,
-                                   at_E=bool(E is not None and ap is not None and int(ap) == int(E)), own=own,
-                                   step_i=None if s is None else s["i"], rewind=bool(getattr(self, "_in_rewind", False))))
+        was_rev = st.state == REV
+        a = dict(path=path, apply=None if ap is None else int(ap), A=A, E=E,
+                 at_E=bool(E is not None and ap is not None and int(ap) == int(E)), own=own,
+                 step_i=None if s is None else s["i"], rewind=bool(getattr(self, "_in_rewind", False)))
+        r["rev_apply"].append(a)
+        out = _orig_apply_at(self, ev, apply_idx, kind)
+        # Winner-pending extension (2026-09-29d; the parked nit): what pending a WINNER leaves behind
+        # (`eq` = the apply-row re-step re-applies it: no event; `gt` = it lingers into the reversal row's
+        # pending columns and blocks `_should_stop_after_cts`), and a pending applied while already REVERSAL.
+        if path == "winner":
+            p = st.pending_reversal_apply_idx
+            cls = "none" if p is None else ("eq" if ap is not None and int(p) == int(ap) else
+                                            ("gt" if ap is not None and int(p) > int(ap) else "lt"))
+            a["pending_after"] = None if p is None else int(p)
+            n_est = sum(1 for e in self.events if e.type == "CTS_ESTABLISHED")
+            stop_n = self.stop_after_cts_established
+            a["stop_flip"] = bool(cls == "gt" and stop_n is not None and n_est >= int(stop_n))
+            agg[f"winner_pending[{cls}]"] += 1
+            agg["winner_pending[gt|stop_flip]"] += int(a["stop_flip"])
+        elif was_rev:
+            agg["pending_reapply_in_reversal"] += 1
+        return out
     return _orig_apply_at(self, ev, apply_idx, kind)
 MS._apply_pattern_at_apply_idx = _apply_pattern_at_apply_idx
 

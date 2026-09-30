@@ -147,6 +147,14 @@ still runs — it can emit `RANGE_UPDATED` (and a range-sync `CTS_THRESHOLD_UPDA
 reference window's 5 reversals each have one `RANGE_UPDATED` there). Without the proximity skip an outside-bar anchor
 (its new high moves the CTS to the anchor, so proximity first fires on the apply candle) confirmed the CTS and
 created a range after the reversal (landing review F1).
+A reversal — winner or pending — ends the watch AND clears the pending (`_apply_pattern_at_apply_idx`). Until
+2026-09-29d a WINNER cleared only the watch, so its re-stepped apply row re-applied the pending when that confirmed on
+the same candle (REVERSAL → REVERSAL, no event; the log's `[RV_APPLY]` line — every winner of the replay (5) and the
+suite), and a pending confirming LATER than a later anchor's winner stayed set in the reversal row's
+`pending_reversal_*` columns (and would have kept `_should_stop_after_cts` from seeing a quiescent point). Measured
+(`reversal_shadow.py` winner-pending counters): 30k random tails 7,656 winners — 7,654 re-applied, 2 lingering (both in
+the targeted stream; 0 with an early stop), 0 in the replay and the suite. Pins in `tests/test_ms_reversal_on_expiry.py`:
+the `trace` taps record every reversal apply (P1 / P2: one), and the lingering case (seed 93 trial 3055).
 Before the fix the step went on: the winner applied after the reversal (state left REVERSAL; e.g. a pullback's
 `CTS_RECONFIRMED` + `STATE_CHANGED(reversal→pullback)`), a range finalized, and a later close-break could reverse
 again — two `STATE_CHANGED(to=reversal)` for one sid, the H1 hand-off taking the first (df mask `.min()`) and every
