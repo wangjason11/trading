@@ -22,20 +22,21 @@ Status: **OPEN** (to do) · **DECIDE** (needs the user's call first) · **TRIGGE
 
 ## A. Week 8 close-out (next)
 
-**Chart review with the user** (Week 8 DoD: "HTF and LTF context aligns logically; confluence vs non-confluence is
-visually obvious")
+**Chart review with the user** — all items closed 2026-09-30 (see "Recently closed").
 
-**Hygiene (a Light session)**
+**Hygiene (a Light session)** — the user's decisions of 2026-09-30 are recorded per line (DECIDED)
 - **§13.5.d leftovers** — the carve-outs are gone (subsumed by the 2026-05-25 lifecycle redesign, LANDMINES "Var 3 +
-  Var 4 Last-Per-Cycle Carve-Outs Are a Pair"), but `stash@{0}` ("WIP §13.5.d") remains (drop it — user OK needed),
+  Var 4 Last-Per-Cycle Carve-Outs Are a Pair"), `stash@{0}` ("WIP §13.5.d") DROPPED 2026-09-30 (was `6fdb993`), but
   two stale docstrings say "carve-out remains until §13.5.d" (`multitf/subsequent_confluence_pipeline.py:19`,
   `multitf/subsequent_counter_pipeline.py:19`), and memory `project_part4_blocker_135d.md` still reads as a live
   blocker. OPEN.
 - **Dead code** — `patterns/imbalance.py` `get_unfilled_imbalances` / `has_imbalance_in_range` + the unused import at
-  `zones/fib_tracker.py:26` (IMBALANCE_FILL_SEMANTICS: "hygiene follow-up: delete" — but memory lists a `get_unfilled_
-  imbalances` direction filter as deferred: resolve that conflict, DECIDE); the legacy `compute_structure_from_start`
-  / `compute_structure_scenario_3` / `identify_start_scenario_2_after_reversal` (no production caller; deletion
-  deferred until their callers retire — `structure/MARKET_STRUCTURE_SPEC.md` ~:612). OPEN.
+  `zones/fib_tracker.py:26` — DECIDED 2026-09-30: delete (with their tests; `has_unfilled_imbalance(direction=...)`
+  covers direction-filtered questions, so the parked direction filter in H is dropped); the legacy
+  `compute_structure_from_start` / `compute_structure_scenario_3` / `identify_start_scenario_2_after_reversal` (no
+  production caller — tests only) — DECIDED 2026-09-30: delete in their own byte-identical commit, the
+  bounded-structure parity tests re-anchored on frozen expected events (`structure/MARKET_STRUCTURE_SPEC.md` ~:612).
+  OPEN (to implement).
 - **Stale docs found by the 2026-09-30 sweep** (claims no longer true):
   - proximity pips — GLOSSARY (`proximity_pips`) and ARCHITECTURE ("Threshold defaults") say H1 9 / M15 6 / M5 3,
     PART4 §4.4 (~:818) and memory `project_unified_identify_start_probe.md` (~:143) describe a pending change to
@@ -50,23 +51,15 @@ visually obvious")
     plan.md` "open blocker before §13.5.d" (Scenario 2 mismatch — resolved by the cross-cycle fib unification),
     `project_part4_progress.md` "Step 3 next — what's deferred". OPEN.
 - **Charting audit 2026-09-21** — 16 verified doc-staleness / style items (fold in when those files are touched) and
-  two design questions: add an M15 fib renderer or drop the inert `fib: lines` toggle; delete or document the no-op
-  M15 dot-opacity tier. OPEN / DECIDE. Detail: memory `project_charting_audit_20260921.md`.
+  two design questions — DECIDED 2026-09-30: drop the inert M15 `fib: lines` toggle + the unused `sid_fibs` grouping and
+  correct the doc statements (M15 fibs are CSV-only); delete the no-op M15 dot-opacity tier. OPEN (to implement).
+  Detail: memory `project_charting_audit_20260921.md`.
 - **Naming-Standard audit of never-audited index keys** — KL `bounds_steps[*].start_idx` (the base ANCHOR on the INIT
   step, a MOMENT on expansion steps — one key, two kinds), RANGE_STARTED `confirm_idx` / `start_idx`, STATE_CHANGED
   `effective_idx`. Parked by the user ("don't start unasked"); cheap; the `bounds_steps` one should land before
   anything reads zone expansions for entries / stops. DECIDE when. Detail: `engine_v2/GLOSSARY.md` "Naming Standard".
 
-## B. Week 8 scope — needs the user's decision
-
-- **The M5 layer** (`H1.main >> M5.counter`) — the Part 4 vision's 4th chart for the strategy (memory
-  `project_part4_vision.md`), PART4 §13.6 (recursive depth), and the syllabus's Week 8 "run pipeline on 3 TFs". The
-  pool's identity tuple is recursion-ready but M5 nesting is not built (PART4 §17.12). Related open decision: the
-  canonical encoding of a deeper path, e.g. `H1.main >> M15.counter >> M5.confluence` (PART4 ~:176 "Open (deferred)").
-  A Heavy plan, not a close-out task. DECIDE (in Week 8, or later).
-- **Syllabus Week 8 extras** — chart dropdowns (pair / TF), a "show HTF context" checkbox, and a `ContextSnapshot` (HTF
-  trend, active HTF zones, LTF candidates); none exist. Part 4's entity / registry design may supersede the snapshot.
-  DECIDE (keep or drop). Detail: `engine_v2/SYLLABUS.md` Week 8.
+## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
 
 ## C. Part 4 closure (when Part 4 is declared done)
 
@@ -79,6 +72,11 @@ visually obvious")
 
 ## D. Before Entries (Week 9 prerequisites)
 
+- **The M5 layer** (`H1.main >> M5.counter` — a third lens directly under H1.main, the Part 4 vision's 4th chart;
+  memory `project_part4_vision.md`) — DECIDED 2026-09-30: build AFTER the Week 8 merge, as its own Heavy block (plan +
+  cold review), before any Entries work that reads M5; not a Week 8 blocker. Related (only if M5 ever nests under an
+  M15 sub): the canonical encoding of a deeper path, e.g. `H1.main >> M15.counter >> M5.confluence` (PART4 ~:176
+  "Open (deferred)"; PART4 §13.6, §17.12). SCHEDULED.
 - **Zone strength scoring** — syllabus Week 7 (`strength_score` / `strength_flags`, "strong zones look strong", click a
   zone → strength + flags); `KLZone.strength` is always `0.0` (`zones/kl_zones_v1.py`). DECIDE (scope). Idea attached:
   scale strength thresholds by ATR percentile (volatility regimes).
@@ -153,19 +151,25 @@ visually obvious")
 
 ## H. Deferred indefinitely
 
-- `armed_idx` chart surfacing; consumer-specific fill predicates (IMBALANCE_FILL_SEMANTICS "When to revisit"); a
-  `get_unfilled_imbalances` direction filter (conflicts with the "delete" hygiene item in A — resolve there).
+- `armed_idx` chart surfacing; consumer-specific fill predicates (IMBALANCE_FILL_SEMANTICS "When to revisit").
 
 ## I. Needs confirmation (possibly superseded)
 
-- **"(b) the (0,0,1) start-logic update"** — a user-driven follow-up noted 2026-06-01 (memory
-  `project_unified_identify_start_probe.md` ~:188); probably absorbed by the true-first-breakout cycle-0 redesign a
-  week later (memory `project_true_first_breakout_cycle0.md`). CONFIRM.
+- (none — the last item was closed 2026-09-30; see "Recently closed")
 
 ---
 
 ## Recently closed (history pointers)
 
+- **Syllabus Week 8 extras** (pair / TF dropdowns, a "show HTF context" checkbox, `ContextSnapshot`) — DROPPED by the
+  user 2026-09-30 as superseded by Part 4: one static chart per entity / lens replaces the dropdowns + checkbox, and the
+  entity registry holds every snapshot field (HTF trend = the H1.main structure; active HTF zones = the H1 zone attrs;
+  LTF candidates = the `TriggerRecord`s / subs). `engine_v2/SYLLABUS.md` Week 8 notes it.
+- **"(b) the (0,0,1) start-logic update"** — closed 2026-09-30 on the memory's own evidence: it IS the true-first-
+  breakout cycle-0 redesign (design locked 2026-06-07, Commit 1 2026-06-08, Commit 2 2026-06-16) — memory
+  `project_unified_identify_start_probe.md` ("the (b) start-logic update is a FULL DESIGN … see
+  project-true-first-breakout-cycle0"), `project_true_first_breakout_cycle0.md`.
+- **`get_unfilled_imbalances` direction filter** (was H) — dropped 2026-09-30 with the user's "delete" decision (A).
 - **Zone-proximity candle-direction filter** — re-discussed 2026-09-30: a no-op on the reference window (all 6 H1
   triggers + both sd-proximity CTS confirmations already point into their zone; in May it cut 48 → 26, before Rules
   1-3); user: no trigger filter — triggers stay structural; the idea moves to D (entries). Filter + revert: `47e7532` /
