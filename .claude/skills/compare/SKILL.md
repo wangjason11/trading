@@ -525,7 +525,10 @@ shapes_equal" per chart; on a difference list the first differing traces
 (name + x before → after). Plan E E2 stages must be figure-identical; the E4
 variant replays must differ exactly in PLAN_E §8's cells. Tool:
 `engine_v2/plans/plan_e_inputs/review_scripts/cmp_save.py BASE CUR_DEBUG CUR_CHARTS [--strip k]`
-(the CSV cell diff + this figure diff in one; the E4 variant recipe is in that folder's README). Its CSV
+(the CSV cell diff + this figure diff in one; the E4 variant recipe is in that folder's README). It does NOT compare hover
+text or `customdata`: for a hover / label change (or to prove none), run
+`review_scripts/cmp_hover.py BASE CUR_CHARTS [--match TEXT]` — the changed `hovertemplate` count per chart, how many
+changed outside `TEXT`, and the `customdata` count (the wave-candle label fix `a8ed1cc`: 11 / 66 / 33, 0 outside). Its CSV
 diff is POSITIONAL: on a header change (an added / renamed column) diff that CSV keyed by column name.
 It counts changed CELLS; for a change to meta VALUES (one meta cell can hold several changed keys) use
 `review_scripts/cmp_meta_keys.py BASE CUR` — per-key counts, each delta checked to be `+slice_begin`

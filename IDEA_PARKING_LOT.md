@@ -28,9 +28,6 @@ visually obvious")
   `project_item_3_poi_lifecycle.md`, `engine_v2/IMBALANCE_FILL_SEMANTICS.md` (two-stroke fill).
 - **Zone-proximity candle-direction filter** — tried and reverted (the user changed their mind about the approach);
   re-discuss first. DECIDE. Detail: memory `project_main_structure_debug_plan.md` (step 4, the revert).
-- **Wave-candle hover label says "BOS zone:" on CTS wave candles too** — a visible chart bug; TODOs at
-  `charting/export_plotly.py:2018`, `charting/export_m15_chart.py:1560`, `:2485` (branch on `wc.source_kind`). OPEN.
-  Detail: `engine_v2/GOTCHAS.md` (the wave-candle hover note).
 - **Half-clipped reversal at a window edge** — `REVERSAL_CANDIDATE` straddles a sub's cap; note any seen during chart
   review. OPEN (check). Detail: `engine_v2/PART4_REFACTOR_SPEC.md` §17.12.
 
@@ -167,6 +164,9 @@ visually obvious")
 
 ## Recently closed (history pointers)
 
+- **Wave-candle hover "BOS zone:" on CTS lines** — fixed 2026-09-30 `a8ed1cc`: kind + role label from one builder
+  (`wave_candles.wave_candle_hover_lines`); 55 of 110 labels had been wrong. `engine_v2/zones/WAVE_CANDLES_SPEC.md`
+  "Rendering simplifications".
 - **WVMI pass** — Plan G landed 2026-09-30 (`83c7a12`, fold-in `576bf6f`, Int64 `3781cab`); `engine_v2/plans/PLAN_G_wvmi_unique_sub.md` §9.
 - **§13.5.d paired carve-out removal** — subsumed by the sub-structure lifecycle redesign (2026-05-25); leftovers in A.
 - **KL lifecycle convention** (`meta["active"]` / `deactivated_by` indirection) — gone from the code (Phase 3 +
