@@ -20,12 +20,12 @@ Status: **OPEN** (to do) · **DECIDE** (needs the user's call first) · **TRIGGE
 
 ---
 
-## A. Week 8 close-out (next)
+## A. Week 8 close-out — Week 8 DoD SIGNED OFF by the user 2026-09-30 (after bucket C landed); merged to `main`
 
-**Week 8 is NOT done until bucket C (Part 4 closure) lands** — user 2026-09-30: the Week 8 DoD itself ("HTF and LTF
-context aligns logically; confluence vs non-confluence is visually obvious") is met, but Part 4 is a Week 8 part, so
-its closure items (C below) are done in Week 8, NEXT SESSION, before the Week 8 DoD sign-off, `/commit-save` and the
-merge `week8-volmom-multitf` → `main`. Everything in D and later stays after the merge.
+**Week 8 is done.** The user held Week 8 open until bucket C (Part 4 closure) landed. The DoD itself ("HTF and LTF
+context aligns logically; confluence vs non-confluence is visually obvious") was already met. C landed 2026-09-30, and
+the same day the user signed off the DoD; `/commit-save` and the merge `week8-volmom-multitf` → `main` followed.
+The open lines below carry over (fold in when their files are next touched); D and later come after the merge.
 
 **Chart review with the user** — all items closed 2026-09-30 (see "Recently closed").
 

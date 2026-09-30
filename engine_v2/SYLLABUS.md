@@ -358,6 +358,10 @@ You can debug **confluence vs non-confluence** trades visually.
 > checkbox, and the entity registry holds every snapshot field (HTF trend = the H1.main structure; active HTF zones =
 > the H1 zone attrs; LTF candidates = the `TriggerRecord`s / subs). "Run pipeline on 3 TFs": H1 + M15 today; the M5
 > lens (`H1.main >> M5.counter`) is scheduled after the Week 8 merge, before Entries (`IDEA_PARKING_LOT.md` §D).
+>
+> **Week 8 DoD signed off by the user 2026-09-30** ("HTF and LTF context aligns logically; confluence vs
+> non-confluence is visually obvious"), after Part 4 closed the same day; `week8-volmom-multitf` merged to `main`
+> after that day's `/commit-save`.
 
 ---
 

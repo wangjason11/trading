@@ -528,7 +528,8 @@ variant replays must differ exactly in PLAN_E §8's cells. Tool:
 (the CSV cell diff + this figure diff in one; the E4 variant recipe is in that folder's README). It does NOT compare hover
 text or `customdata`: for a hover / label change (or to prove none), run
 `review_scripts/cmp_hover.py BASE CUR_CHARTS [--match TEXT]` — the changed `hovertemplate` count per chart, how many
-changed outside `TEXT`, and the `customdata` count (the wave-candle label fix `a8ed1cc`: 11 / 66 / 33, 0 outside). Its CSV
+changed outside `TEXT`, and the `customdata` count (the wave-candle label fix `a8ed1cc`: 11 / 66 / 33, 0 outside). For a **byte-identical** claim run `review_scripts/cmp_fig_full.py BASE` — every CSV by md5 and each
+chart's FULL figure JSON (every trace attribute + the layout), exit 1 on any difference (§13.5.e, 2026-09-30). Its CSV
 diff is POSITIONAL: on a header change (an added / renamed column) diff that CSV keyed by column name.
 It counts changed CELLS; for a change to meta VALUES (one meta cell can hold several changed keys) use
 `review_scripts/cmp_meta_keys.py BASE CUR` — per-key counts, each delta checked to be `+slice_begin`
