@@ -44,10 +44,8 @@ merge `week8-volmom-multitf` → `main`. Everything in D and later stays after t
 
 ## C. Part 4 closure — IN WEEK 8, next session (user 2026-09-30; order: §13.5.e remainder → §13.7 docs + the
 file-naming call → merge what is still useful of the invariants file into the canonical specs, then delete it /
-retire the workflow memory). The §13.5.e remainder is closed (2026-09-30, "Recently closed").
+retire the workflow memory). The §13.5.e remainder and §13.7 are closed (2026-09-30, "Recently closed").
 
-- **§13.7 doc finalization** — incl. the §16.10 file-naming deviation (spec `H1.main__M15.confluence.html` vs the code's
-  `{H1_basename}_M15_confluence.html`). OPEN. Detail: memory `project_part4_progress.md` (Step 3e note).
 - **Delete `engine_v2/PRE_REFACTOR_INVARIANTS.md`** ("will be deleted post-refactor", memory `project_part4_vision.md`;
   PART4 §13 item 7: first merge its still-useful sections into the canonical specs) and retire memory
   `project_part4_workflow.md` ("retire when Part 4 is complete"). OPEN.
@@ -130,6 +128,10 @@ retire the workflow memory). The §13.5.e remainder is closed (2026-09-30, "Rece
 - **Cascade-viz hover extras** — `current_versions` vs peak; a V90 → V60 → V30 downgrade cue. Detail: memory
   `project_item_5_cascade_viz.md`.
 - **Breadcrumb header with cross-chart navigation** — "not in v1". Detail: PART4 §16.9.
+- **Split `PART4_REFACTOR_SPEC.md` into canonical spec files** (a new `MULTI_TF_SPEC.md` + sections moved into
+  `MARKET_STRUCTURE_SPEC` / `CHARTING_SPEC` / `LANDMINES`) — the drafted §13.7 plan; PARKED as optional by the user
+  2026-09-30 (§13.7 was finalized in place instead: ~235 `PART4 §x` citations, no behaviour gained). Detail: PART4
+  header "Canonical" + footer.
 
 ## H. Deferred indefinitely
 
@@ -143,6 +145,10 @@ retire the workflow memory). The §13.5.e remainder is closed (2026-09-30, "Rece
 
 ## Recently closed (history pointers)
 
+- **§13.7 doc finalization** — done 2026-09-30, IN PLACE (user): PART4 stays the canonical multi-TF spec (status
+  header, §13 step statuses, footer); the split moved to G. The §16.10 file-naming deviation resolved as SPEC FOLLOWS
+  CODE (`{basename}` + `_{TF}_{lens}` suffix, one flat folder per save — §12 / §16.10 / §16.11 rewritten), with a
+  nesting rule for later (every path segment after `H1.main`: `_M15_counter__M5_confluence`).
 - **§13.5.e remainder** — CLOSED 2026-09-30 WITHOUT deleting the `s_res.df.attrs[...]` block (user decision): measured,
   the registry's `H1.main` entity IS `s_res.df` and an entity's artifacts live in its df's `attrs` (PART4 §9.2 / §9.3),
   so the block is the registry's store and both charts already read it through the registry. Landed: the stale

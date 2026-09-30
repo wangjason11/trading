@@ -1,7 +1,14 @@
 # Part 4 Refactor Spec — Multi-TF Structure Hierarchy
 
-> **Status:** Specs complete; entering build phase. All sections (1–16)
-> locked across sessions 2026-04-29 / 04-30 / 05-01 / 05-04.
+> **Status (2026-09-30): the refactor is built.** Migration Steps 1–5 have
+> landed (§13; §13.5.a–e closed), plus the sub-structure pool (§17, Plan C),
+> the zones pass (Plans D / E / F) and the WVMI pass (Plan G). Step 6
+> (recursive depth: M5 NESTED under an M15 sub) is not built and not planned —
+> the scheduled M5 layer is a depth-1 lens directly under `H1.main`
+> (`IDEA_PARKING_LOT.md` §D, which also carries nesting as an "only if ever"
+> note). §13.7 doc
+> finalization was done IN PLACE (see "Canonical" below). Sections 1–16 were
+> locked 2026-04-29 → 05-04; the two banners below record the later redesigns.
 >
 > **⚠ REVISED 2026-05-25 — subordinate lifecycle model.** §2, §5, §6, §7
 > were rewritten to replace the entity-wide-`entity_sid` + cascade-overwrite
@@ -21,9 +28,14 @@
 > still reads differently. Rationale: `memory/project_sub_structure_pool_architecture.md`;
 > contract: `plans/PLAN_C_lifecycle_rewrite.md`.
 >
-> **Working document.** Will be split / renamed / merged into canonical spec
-> files (`MARKET_STRUCTURE_SPEC.md`, new `MULTI_TF_SPEC.md`, etc.) once the
-> refactor lands and behavior is stable.
+> **Canonical — the multi-TF spec, finalized in place (§13.7, user decision
+> 2026-09-30).** The drafted plan to split this file into
+> `MARKET_STRUCTURE_SPEC.md` / a new `MULTI_TF_SPEC.md` / `CHARTING_SPEC.md`
+> was NOT carried out: code, tests, docs, skills and memory cite `PART4 §x`
+> ~235 times, and re-pointing them buys no behaviour. The split is parked as
+> optional (`IDEA_PARKING_LOT.md` §G). Read order: §17 is authoritative for
+> subordinates; a section under a SUPERSEDED banner (the §13 migration log's
+> §13.5.c prose, the rev-1 bodies it names) is history, not a spec.
 >
 > Companion file: `PRE_REFACTOR_INVARIANTS.md` — what currently-correct
 > behavior must survive (or is explicitly being changed).
@@ -1981,16 +1993,24 @@ level.
 
 ## 12. Replay Determinism & commit-save Under Multi-DF
 
-`commit-save` and `compare` workflows extend to per-entity dfs:
+`commit-save` and `compare` workflows extend to per-entity dfs. **As built**
+(the user kept the implemented scheme over this section's original per-entity
+folders, 2026-09-30; the canonical procedures are the `/commit-save` and
+`/compare` skills):
 
-- **commit-save** writes one CSV per entity df + chart per entity df.
-- Output folder: `artifacts/commits/{ts_sha}/{path_id_sanitized}/`
-  (e.g., `H1.main/`, `H1.main__M15.counter/`,
-  `H1.main__M15.counter__M5.confluence/`).
-- **compare** walks every entity in both snapshots and diffs row-by-row.
-  - New entity in latest run not in baseline → flagged "new entity."
-  - Entity removed → flagged "removed."
-  - Per-entity column diffs work as today.
+- **commit-save** copies every entity's CSVs + charts (HTML + PNG) of one
+  replay into ONE flat folder per save:
+  `artifacts/commits/<branch>/<timestamp>_<short-hash>/` (+ `metadata.txt`),
+  moves the per-branch pointer `artifacts/commits/LATEST_<branch>`, and
+  cherry-picks the save commit onto `artifacts-trunk` (cross-branch retention).
+  Entities are told apart by the file-name suffix (§16.10), not by folders.
+  On the reference window a save holds 24 CSVs (H1.main 9, each M15 lens 7,
+  the pool-wide unresolved-trigger table 1) + 3 charts.
+- **compare** diffs the two folders' file LISTS first — a file on one side
+  only is reported `NEW (no baseline)` / `MISSING` (a new or removed entity
+  shows up this way) — then every common CSV (md5, then cells) and the figures
+  (`cmp_save.py`: per-trace `(name, x, y)` + shapes; `cmp_hover.py` for hover
+  text). Per-entity column diffs work as for H1.
 
 **Determinism guarantee:** for the same input candle data and the same
 `trading_open` start, the registry rebuilds identically. Every entity
@@ -2004,6 +2024,16 @@ execution (no foreknowledge) so the algorithm can learn / improve.
 
 The refactor is large. Recommended incremental path, with `/compare`
 between every step:
+
+> **Step status (2026-09-30).** 1 registry — DONE. 2 chart consumer on the
+> registry — DONE (both charts registry-only). 3 confluence subs + 4
+> subsequent counter — DONE (Step 3a–3e / 3d.iv; the sub model since replaced
+> by the §17 pool). 5 cleanup — a, b DONE (`structure/proximity_helpers.py`
+> gone; `market_structure.py` imports nothing from `zones/`); c SUPERSEDED
+> twice (redesign, then the pool); d SUBSUMED; e CLOSED (below). 6 recursive
+> depth — NOT BUILT (header). 7 — §13.7 doc finalization done IN PLACE (this
+> file stays canonical; header), and the `PRE_REFACTOR_INVARIANTS.md` merge
+> + deletion.
 
 1. **Stand up registry alongside today's monolithic df.** Main builds
    into `H1.main` entity. UC1 lower-TF data routed into
@@ -2357,7 +2387,10 @@ between every step:
    handles nested recursion cleanly.
 7. **Delete `PRE_REFACTOR_INVARIANTS.md`.** Refactor complete; merge spec
    sections into canonical `MARKET_STRUCTURE_SPEC.md` /
-   `MULTI_TF_SPEC.md`.
+   `MULTI_TF_SPEC.md`. *(2026-09-30, user: this file is NOT split — it stays
+   the canonical multi-TF spec, finalized in place; the split is parked in
+   `IDEA_PARKING_LOT.md` §G. What survives of the invariants file is merged
+   into the canonical specs before it is deleted.)*
 
 ---
 
@@ -2703,27 +2736,57 @@ combinatorial growth as more roles are added.
 
 ### 16.10 File naming and on-disk layout
 
+**Decided 2026-09-30 (user): the spec follows the code.** The original draft
+(`artifacts/charts/{commit_or_session}/H1.main__M15.counter.html`, one name per
+`structure_path_id` with `>>` → `__`) was never built: since Step 3e (May 2026)
+every file carries the replay's identity in a shared prefix and the entity as
+a suffix, so one flat folder holds several replays' outputs apart and a save
+folder needs no per-entity subfolders (§12).
+
 ```
-artifacts/charts/{commit_or_session}/
-    H1.main.html
-    H1.main__M15.confluence.html
-    H1.main__M15.counter.html
-    H1.main__M5.counter.html
+artifacts/charts/ and artifacts/debug/   (flat; a replay overwrites its own basename's files — other basenames stay)
+    {basename}.html / .png                      H1.main chart
+    {basename}_M15_counter.html / .png          H1.main >> M15.counter chart
+    {basename}_M15_confluence.html / .png       H1.main >> M15.confluence chart
+    {basename}_{suffix}.csv                     H1.main CSVs (kl_zones, poi_zones, wvmi, ...)
+    {basename}_M15_counter_{suffix}.csv         that lens's CSVs (…_kl_zones, …_subs, …_triggers, ...)
+    {basename}_M15_unresolved_triggers.csv      pool-wide, one file
+    {pair}_{TF}_{start}_{end}_raw.csv / _final.csv   H1 candles (no sd/eps/rk part)
 ```
 
-Sanitization rule: replace `>>` with `__` (double underscore); strip any
-non-filesystem-safe character. Original `structure_path_id` lives in
-`df.attrs["structure_path_id"]` and the chart title.
+- **`{basename}`** = `run_replay.make_basename`:
+  `{pair}_{TF}_{start}_{end}_sd{sd}_eps{eps}_rk{min}-{max}` — e.g.
+  `NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5`. `start` is the
+  auto-extended start; `sd` is the LAST non-zero `struct_direction` of the H1
+  frame (so it can flip with the window's end state); `eps` has `.` → `p`.
+- **Entity suffix** = the path's LEAF segment with `.` → `_`
+  (`run_replay.py`: `sub_path_id.split(" >> ")[-1].replace(".", "_")`);
+  `H1.main` has none. Unique while every entity sits directly under
+  `H1.main` — including the planned M5 lens `H1.main >> M5.counter` →
+  `_M5_counter`.
+- **Nesting rule (decided now, implemented when nesting is built, §13 step
+  6):** a nested entity takes EVERY path segment after `H1.main`, joined by
+  `__` — `H1.main >> M15.counter >> M5.confluence` →
+  `_M15_counter__M5_confluence` — so it can never collide with a depth-1
+  entity of the same leaf. The leaf-only code above must change with it.
+- **The pool tables hard-code `_M15_`** (`debug/export_sub_tables.py`:
+  `{basename}_M15_{lens}_subs.csv` / `_triggers.csv`,
+  `{basename}_M15_unresolved_triggers.csv`) — the M5 lens must make that
+  TF generic.
+- The full `structure_path_id` lives in `df.attrs["structure_path_id"]` and
+  in the chart title (§16.9); the file name is not the identity.
 
 ### 16.11 commit-save / compare integration
 
-- `commit-save` copies all entity charts (and per-entity CSVs) into the
-  timestamped commit folder, mirroring the §12 layout.
-- `compare` walks both snapshots' chart sets:
-  - Common entities → diff their data CSVs row-by-row (today's mechanism
-    per chart)
-  - Entities only in latest → flagged "new entity"
-  - Entities only in baseline → flagged "removed entity"
+- `commit-save` copies all entity charts (HTML + PNG) and per-entity CSVs of
+  one replay into one flat timestamped folder (§12 as built).
+- `compare` diffs both saves' file lists first:
+  - Files present on both sides → md5, then the cell diff (CSVs) and the
+    figure diff (charts)
+  - Files only in latest → reported `NEW (no baseline)` (a new entity shows
+    up as its suffix's files)
+  - Files only in baseline → reported `MISSING` (a removed entity, or a
+    crashed chart export — the lens CSVs are written inside the chart loop)
 
 ### 16.12 Bootstrap (no annotation needed)
 
@@ -3461,14 +3524,15 @@ sibling dfs. `test_sub_id_is_monotonic_and_stable` must survive unchanged.
 
 ---
 
-**This file is transitional.** Once the refactor lands and behavior is
-stable, sections will be merged into:
-- `MARKET_STRUCTURE_SPEC.md` — start-scenario logic, compute routing
-- New `MULTI_TF_SPEC.md` — identity model, recursion, cadence, registry,
-  event routing
-- New `CHARTING_SPEC.md` updates — per-entity chart family, overlay
-  toggle, zone labels
-- Updated `LANDMINES.md` / `GOTCHAS.md` — pending-state rules,
-  `mapping_sd` rule, probe-walks-forward direction
-
-`PRE_REFACTOR_INVARIANTS.md` will be deleted at the same time.
+**This file is canonical (finalized in place, §13.7, 2026-09-30).** It was
+drafted as transitional, to be split into `MARKET_STRUCTURE_SPEC.md` (start
+scenarios, compute routing), a new `MULTI_TF_SPEC.md` (identity, recursion,
+cadence, registry, event routing), `CHARTING_SPEC.md` (per-entity chart family,
+overlay toggle, zone labels) and `LANDMINES.md` / `GOTCHAS.md` (pending state,
+the `mapping_sd` rule, the probe's forward walk). The user kept it whole
+instead; the split is parked as optional (`IDEA_PARKING_LOT.md` §G). Where
+those topics live today: the `mapping_sd` rule has its own LANDMINES entry
+("Subordinate `parent_extreme_dir` Must Use `-trigger.lower_sd`"); the probe
+bound has LANDMINES "Probe `end_idx` Is the Supreme Bound"; the pending-state
+rules live only HERE (§14, §16.6, §17.7); `CHARTING_SPEC.md` points here for
+the per-entity chart rules (§16.5).
