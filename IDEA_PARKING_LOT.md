@@ -24,12 +24,8 @@ Status: **OPEN** (to do) · **DECIDE** (needs the user's call first) · **TRIGGE
 
 **Chart review with the user** (Week 8 DoD: "HTF and LTF context aligns logically; confluence vs non-confluence is
 visually obvious")
-- **POI two-stroke review over the full window** — only checked from 2025-12-27 on. OPEN. Detail: memory
-  `project_item_3_poi_lifecycle.md`, `engine_v2/IMBALANCE_FILL_SEMANTICS.md` (two-stroke fill).
 - **Zone-proximity candle-direction filter** — tried and reverted (the user changed their mind about the approach);
   re-discuss first. DECIDE. Detail: memory `project_main_structure_debug_plan.md` (step 4, the revert).
-- **Half-clipped reversal at a window edge** — `REVERSAL_CANDIDATE` straddles a sub's cap; note any seen during chart
-  review. OPEN (check). Detail: `engine_v2/PART4_REFACTOR_SPEC.md` §17.12.
 
 **Hygiene (a Light session)**
 - **§13.5.d leftovers** — the carve-outs are gone (subsumed by the 2026-05-25 lifecycle redesign, LANDMINES "Var 3 +
@@ -111,6 +107,10 @@ visually obvious")
   `engine_v2/plans/PLAN_F_imbalance_c3_knowability.md` §7.
 - **Double RANGE_STARTED from the offline finalize** — fixture-only, 0 on the reference window. Parked by the user.
   Detail: memory `project_zones_timing_audit_20260922.md`.
+- **`REVERSAL_CANDIDATE` straddling a sub's cap** — `knowable_at_idx` keys it on `ev.idx`, not its `apply_idx`, so a
+  sub capped by something else (parent end, same-direction replacement) could keep a candidate that applies past the
+  cap. 0 on the reference window (2026-09-30). TRIGGER: a window where one is kept with `apply_idx > cap`. Detail:
+  PART4 §17.12.
 - **Performance** — TRIGGER: runtime hurts. Entity-direct MS compute (no slice + lookback; needs an MS refactor —
   LANDMINES "slice-elimination is a deferred optimization"), same-TF feature sharing by reference (PART4 §9.6),
   parallelism and the remaining pandas reads in MS (memory `project_ms_optimization_opportunity.md`).
@@ -164,6 +164,11 @@ visually obvious")
 
 ## Recently closed (history pointers)
 
+- **POI two-stroke review over the full window** — done 2026-09-30: every POI's on/off history re-derived per candle
+  and consistent (`review_scripts/poi_cond3_check.py`); only 2 POIs ever deactivate (H1 s1c2, sub 7 s0c0); the charts
+  already draw each active stretch; user: OK, no change. Memory `project_item_3_poi_lifecycle.md`.
+- **Half-clipped reversal check** — done 2026-09-30: 0 on the reference window (every kept `REVERSAL_CANDIDATE`
+  applies at its own sub's window end); the limit itself stays — bucket E. PART4 §17.12.
 - **Wave-candle hover "BOS zone:" on CTS lines** — fixed 2026-09-30 `a8ed1cc`: kind + role label from one builder
   (`wave_candles.wave_candle_hover_lines`); 55 of 110 labels had been wrong. `engine_v2/zones/WAVE_CANDLES_SPEC.md`
   "Rendering simplifications".

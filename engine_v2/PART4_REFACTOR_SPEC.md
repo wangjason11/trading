@@ -3422,6 +3422,11 @@ sibling dfs. `test_sub_id_is_monotonic_and_stable` must survive unchanged.
   Not fixed here — note any half-clipped reversal seen during chart review. (Half
   closed 2026-09-27: the fib terminal / prev-BOS line read the realised reversal —
   LANDMINES "Sub-Structure Pool: Run Cap ≠ Lifecycle End; Knowable-At Clip on Render".)
+  Measured 2026-09-30 on the reference window: **0 half-clipped** — the 4 kept
+  `REVERSAL_CANDIDATE`s (confluence subs 0 / 1 / 2 / 6) each apply at their own sub's
+  window end (the reversal that ends the sub: 1940 / 2470 / 2829 / 4200), and the
+  subs capped for another reason (3 `parent_end`, 4 and 5 `same_dir_replacement`)
+  hold none. A trigger item in the register (`IDEA_PARKING_LOT.md` §E).
 - Whether subs should receive the **derived** CTS KL zone as a probe reference
   (§17.8 — the branch is dead for subs today).
 
