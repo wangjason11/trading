@@ -516,6 +516,9 @@ diff is POSITIONAL: on a header change (an added / renamed column) diff that CSV
 It counts changed CELLS; for a change to meta VALUES (one meta cell can hold several changed keys) use
 `review_scripts/cmp_meta_keys.py BASE CUR` — per-key counts, each delta checked to be `+slice_begin`
 (Post-E·2: 547 cells = 715 keys).
+For a meta-KEY rename (LANDMINES "Event Contract Rules" rule 3) use `review_scripts/cmp_meta_rename.py BASE CUR
+old=new …` — every CSV: BASE with only the listed keys renamed in place == CUR, compared as raw text (Post-E·4:
+150 cells = 197 keys, exit 0).
 
 ## Chart Count Parity (Corroborating check)
 
