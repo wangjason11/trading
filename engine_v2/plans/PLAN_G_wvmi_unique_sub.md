@@ -257,3 +257,27 @@ survived every unit pin and die only in a stubbed-collaborator driver test
 Found on the way, not in scope (memory `_INBOX.md`): `locked_by_cycle_id` renders `1.0` in every WVMI CSV (a
 None-mixed int column, pre-existing — the save has it too); `lp_idx` / `fp_idx` would likewise the first time one is
 None.
+
+**Landing review (2026-09-30, 2 read-only lenses in the main checkout, 515,928 tokens):** conformance (284,441
+tokens) — CONFORMS WITH FIXES, 0 BLOCKER / MAJOR: MINOR the exporter still read the two trigger keys with `.get`
+although this commit declares a rule-3 meaning change on them (an unstamped sub copy would export as "no trigger");
+MINOR WAVE_CANDLES_SPEC :218 / :287 called every WVMI record sd-prox-gated; NITs an uncapped record without a
+lifecycle row raised a bare KeyError, no guard on a `sub_id` twice on a lens, stale lines in FIB_LIFECYCLE_SPEC / PART4
+(the M15 hover claim — no chart renders WVMI), the int-meta guard never sees a stamped record (covered by
+`TestMetaShape`'s exact key list — no change). Mutation (231,487 tokens) — 30 new mutants, 21 SURVIVED (6 equivalent):
+MAJOR every G4 test stubbed the LOH mapper with a lambda ignoring both frames, so `parent_df` / `m15_df` swapped (in the
+post-pass or at the call site) survived; MAJOR the main gate's meta could come from a LATER sd trigger (UC1 copies
+`triggered_by_event_idx` into first_counter's `trigger_idx`); MINOR window edges tested only 4 candles apart, the row
+order of a sub's records (render hand-off + mirror; the fixtures hold 0 / 1 record), a lock LP ON the cap candle;
+NITs the summary's key order, the creation loop's event order, exporter columns (`structure_path_id` from the field,
+`parent_path_id` without a default), per-record meta aliasing.
+
+**Fold-in (byte-identical, one commit):** the exporter reads `triggered_by_event_idx` / `_type` strictly; the helper
+asserts a lifecycle row for every record (the capped-end assert it replaces was implied by the table's cap term);
+the post-pass asserts a `sub_id` once per lens; docs (WAVE_CANDLES_SPEC, FIB_LIFECYCLE_SPEC, PART4 §6.3 / §16.5 WVMI
+row / dated §17.10 caveat, WVMI_SPEC, LANDMINES); pins for every real survivor (the REAL mapper on aligned frames — a
+unit pin and the driver pin —, one-candle window edges, the first sd's gate meta, record / key order, the cap-candle
+lock LP, the processing order, exporter columns, distinct metas, the two asserts, the strict read). The review's
+mutants joined `review_scripts/mutants_plan_g.py` (equivalents listed, not run): **73/73 KILLED** after the fold-in
+(8 min; my own F2 — the type read back to `.get` — first survived: the unstamped-record pin lacked BOTH keys, so the
+idx read raised first; pinned each key on its own). Replay after the fold-in: 24/24 CSVs byte-identical to `83c7a12`'s, figures identical.

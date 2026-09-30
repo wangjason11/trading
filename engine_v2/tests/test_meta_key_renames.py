@@ -219,8 +219,15 @@ def test_exporters_write_every_meta_dict_verbatim(tmp_path, geometry, m15_df):
         events = [*res.events, rec]
         down = _run_downstream_pipeline(res.df, events, 1)
     sub, lens_dfs = _render_both_lenses(geometry, m15_df)
+    # the lens copies as production exports them: stamped per lens (here no stream entry -> the None triple)
+    import pandas as pd
+    from engine_v2.pipeline.orchestrator import _stamp_sub_wvmi_trigger_meta
+    _stamp_sub_wvmi_trigger_meta({lens: [sub] for lens in lens_dfs}, {lens: [] for lens in lens_dfs},
+                                 parent_df=pd.DataFrame(), m15_df=pd.DataFrame(), lens_dfs=lens_dfs,
+                                 parent_path_id="H1.main")
     sub_wvmi = [w for d in lens_dfs.values() for w in d.attrs["wvmi"]]
     assert down["wvmi_records"] and sub_wvmi
+    assert {(w.meta["triggered_by_event_idx"], w.meta["parent_path_id"]) for w in sub_wvmi} == {(None, "H1.main")}
     assert any("reconfirmed_idx" in z.meta for z in down["kl_zones"])
     assert any(z.meta.get("expanded") for z in down["kl_zones"]) and down["fib_states"] and sub.poi_zones
     for name, export, objs in (("kl", export_kl_zones, down["kl_zones"]),

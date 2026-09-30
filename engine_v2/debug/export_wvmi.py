@@ -78,8 +78,11 @@ def export_wvmi(records: list[WVMIRecord], path: str | Path) -> None:
             "pullback_momentum": r.pullback_momentum,
             "buy_momentum": r.buy_momentum,
             "sell_momentum": r.sell_momentum,
-            "triggered_by_event_idx": m.get("triggered_by_event_idx"),
-            "triggered_by_event_type": m.get("triggered_by_event_type"),
+            # strict reads (LANDMINES "Event Contract Rules" rule 3, Plan G's meaning change on sub rows):
+            # every exported record carries both keys — the main's gate, a sub copy's per-lens stamp (None
+            # values when no trigger); a missing key is an unstamped record, never "no trigger".
+            "triggered_by_event_idx": m["triggered_by_event_idx"],
+            "triggered_by_event_type": m["triggered_by_event_type"],
             "parent_path_id": m.get("parent_path_id"),
             "meta": m,
         })

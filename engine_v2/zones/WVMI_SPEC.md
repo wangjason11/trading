@@ -74,8 +74,9 @@ confirmation candle.
      FP (<= CTS_CONFIRMED moment + 10), LB (<= CTS anchor + 5) or a lock LP (<= BOS_{n+1} anchor + 5) read candles
      past the sub's end — a look-ahead; 0 on the reference window);
    - the `compute_cycle_lifecycle` table for the temp-LP bound (**`end − 1`**, like the main — "Temporary LP
-     Selection") and for **`cycle_collapsed`** (`start >= end`, see "WVMIRecord Fields"); a capped record without a
-     table end fails an assert (unreachable: a kept CTS_CONFIRMED implies its CTS_ESTABLISHED);
+     Selection") and for **`cycle_collapsed`** (`start >= end`, see "WVMIRecord Fields"); a record without a table
+     row fails an assert, capped or not (unreachable: a record needs its cycle's CTS wave candle, so its
+     CTS_ESTABLISHED, which the clip keeps with its CTS_CONFIRMED; under a cap every row has an end);
    - a lock LP outside the frame falls back to the temp LP (Plan G Q10, "Locked" below).
    The projection's records (`LowerTFResult.wvmi_records`) are slice-local, carry the projection's
    `structure_path_id` (the first live record's lens) and meta `{}`.
@@ -99,7 +100,8 @@ confirmation candle.
    no entry lands in the window — and `parent_path_id` = `"H1.main"` (always: the parent entity). On a sub row
    `triggered_by_*` means **"the lens's first WVMI-class trigger inside the sub's window"** — attribution, stamped
    retroactively (a declared meaning change, LANDMINES "Event Contract Rules" rule 3; the main's rows keep the
-   gate meaning).
+   gate meaning). The exporter reads both keys strictly (`meta[...]`): a record reaching a CSV unstamped raises
+   instead of exporting as "no trigger"; a `sub_id` twice on one lens fails an assert (the join key).
 4. **run.log**: each projection prints `[wvmi] total=N, locked=M` in its own block; the summary
    `[multi_tf:dual] sub wvmi acted=… records=… by_started_by=… by_lens=…` counts per UNIQUE sub from the
    projections' own records (a dual-lens sub once; `by_lens` adds its count to each of its lenses).

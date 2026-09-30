@@ -994,7 +994,8 @@ and zone proximity also feeds the var3 / var4 detectors and the §8.5 streams (m
 **No trigger in the window is a VALUE, not a skip.** A lens with no WVMI-class trigger inside the
 sub's window writes `triggered_by_event_idx` / `_type` None (both keys present) — never "the
 cycle's first var X" or another sub's trigger. The exporter writes the idx as nullable `Int64`
-(an empty cell), so the other rows stay ints.
+(an empty cell), so the other rows stay ints, and reads both keys STRICTLY (`meta[...]`, rule 3): a
+record that reaches a CSV unstamped raises instead of passing for "no trigger".
 
 **History (dated, Plan C → Plan G):** 3d.iii made sub WVMI parent-event-driven (`skip_wvmi=True`,
 `multitf/sub_wvmi.compute_parent_driven_sub_wvmi` after the sub was built, a per-use-case gate

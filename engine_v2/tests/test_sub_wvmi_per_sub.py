@@ -14,7 +14,9 @@ sub is on. The rule pinned here, as written in PLAN_G §4 G4 (every expected val
     in the window — and `parent_path_id` = "H1.main" always (Q9); the records exist whatever the stream says;
   * counts: per UNIQUE sub from its projection's own `wvmi_records` (`acted` = subs with a record).
 
-The LOH mapper is monkeypatched on its defining module (the orchestrator imports it inside the function).
+The LOH mapper is monkeypatched on its defining module (the orchestrator imports it inside the function) with a stub
+that ignores its frames — so the pins that need the REAL mapper (which frame goes where: landing review N1 / N2)
+restore `_REAL_LOH` on aligned H1 / M15 frames, where the real mapper gives exactly 4p + 3 too.
 """
 from __future__ import annotations
 
@@ -47,6 +49,16 @@ ZPT, SCT, SCONF = "ZONE_PROXIMITY_TRIGGER", "SUBSEQUENT_COUNTER_TRIGGER", "SUBSE
 _TRIPLE = ("triggered_by_event_idx", "triggered_by_event_type", "parent_path_id")
 _ATTRIBUTION = ("structure_path_id", "use_case", "parent_sid", "parent_cycle_id", "timeframe", "parent_tf",
                 "sub_id", "started_by")
+
+
+_REAL_LOH = edm._map_parent_idx_to_m15_hour_end      # saved before the autouse stub replaces it
+
+
+def _aligned(n_h1: int = 40):
+    """An H1 frame and the M15 frame of the same hours (4 per hour, aligned at 0): the real LOH maps p -> 4p + 3."""
+    h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=n_h1, freq="h", tz="UTC")})
+    m15 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=4 * n_h1, freq="15min", tz="UTC")})
+    return h1, m15
 
 
 def _loh(p: int) -> int:
@@ -116,6 +128,30 @@ class TestWindow:
         d = _run([sub], _streams(conf=[(parent_idx, ZPT)]))
         expected = (parent_idx, ZPT, PARENT_PATH) if inside else (None, None, PARENT_PATH)
         assert _triples(d[LENS_CONFLUENCE]) == [expected]
+
+    @pytest.mark.parametrize("m15_idx, inside", [(22, False), (23, True), (39, True), (40, False)])
+    def test_window_edges_at_one_candle(self, monkeypatch, m15_idx, inside):
+        """(landing review N3-N5) the stub above spaces entries 4 apart; an identity map puts one ONE candle outside
+        each edge."""
+        monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",
+                            lambda p, _a, _b: int(p))
+        sub = _make_sub(1, start_idx=self.START, m15_end_idx=self.END, lenses=(LENS_CONFLUENCE,))
+        d = _run([sub], _streams(conf=[(m15_idx, ZPT)]))
+        expected = (m15_idx, ZPT, PARENT_PATH) if inside else (None, None, PARENT_PATH)
+        assert _triples(d[LENS_CONFLUENCE]) == [expected]
+
+    def test_the_real_mapper_gets_the_parent_frame_then_the_m15_frame(self, monkeypatch):
+        """(landing review N1) with the REAL LOH on aligned frames, H1 3 -> M15 15 lands in [14, 20]; the frames
+        swapped would look the H1 idx up as an M15 row."""
+        monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end", _REAL_LOH)
+        h1, m15 = _aligned(10)
+        assert _REAL_LOH(3, h1, m15) == 15
+        sub = _make_sub(1, start_idx=14, m15_end_idx=20, lenses=(LENS_CONFLUENCE,))
+        d = _lens_dfs()
+        edm.mirror_lower_tf_result_to_entity_df(d[LENS_CONFLUENCE], sub, structure_path_id=LENS_PATHS[LENS_CONFLUENCE])
+        _stamp_sub_wvmi_trigger_meta({LENS_CONFLUENCE: [sub], LENS_COUNTER: []}, _streams(conf=[(3, ZPT)]),
+                                     parent_df=h1, m15_df=m15, lens_dfs=d, parent_path_id=PARENT_PATH)
+        assert _triples(d[LENS_CONFLUENCE]) == [(3, ZPT, PARENT_PATH)]
 
     def test_open_sub_window_ends_at_the_edge_it_was_given(self):
         edge = _loh(12)
@@ -226,6 +262,22 @@ class TestMetaShape:
         assert [(r.meta["sub_id"], r.meta["triggered_by_event_idx"]) for r in d[LENS_CONFLUENCE].attrs["wvmi"]] == [
             (2, 12), (1, 6)]
 
+    def test_the_mirror_keeps_the_record_order_and_never_shares_a_meta(self):
+        """(landing review N17 / N27) three records of one sub keep their order on the lens, each with its own meta."""
+        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_CONFLUENCE,), n=3)
+        d = _run([sub], _streams(conf=[(6, ZPT)]))
+        recs = d[LENS_CONFLUENCE].attrs["wvmi"]
+        assert [r.bos_cycle_id for r in recs] == [0, 1, 2]
+        assert len({id(r.meta) for r in recs}) == 3
+
+    def test_a_sub_id_twice_on_a_lens_fails_loudly(self):
+        """The join key must be unique on a lens (pool `sub_id`s are): two projections claiming one id would give
+        both subs' records the second one's trigger silently."""
+        a = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_CONFLUENCE,))
+        b = _make_sub(1, start_idx=_loh(10), m15_end_idx=_loh(14), lenses=(LENS_CONFLUENCE,))
+        with pytest.raises(AssertionError, match="sub_id 1 twice"):
+            _run([a, b], _streams(conf=[(6, ZPT)]))
+
     def test_no_double_persistence(self):
         """One copy per lens per record: `len(attrs["wvmi"])` == the sum of the lens's subs' records; every
         (sub_id, sid, cycle) once per lens."""
@@ -268,6 +320,15 @@ class TestCounts:
         sub = _make_sub(1, start_idx=0, m15_end_idx=9, lenses=(LENS_CONFLUENCE, LENS_COUNTER), n=2)
         assert list(_count_sub_wvmi([sub])["by_lens"]) == [LENS_CONFLUENCE, LENS_COUNTER]
 
+    def test_the_summary_key_order_follows_the_render_order(self):
+        """(landing review N16) run.log prints the dicts: a counter-only reversal sub rendered first keeps
+        `reversal` / counter first."""
+        subs = [_make_sub(1, start_idx=0, m15_end_idx=9, lenses=(LENS_COUNTER,), n=1, started_by="reversal"),
+                _make_sub(2, start_idx=10, m15_end_idx=19, lenses=(LENS_CONFLUENCE,), n=2)]
+        c = _count_sub_wvmi(subs)
+        assert list(c["by_started_by"]) == ["reversal", "first_confluence"]
+        assert list(c["by_lens"]) == [LENS_COUNTER, LENS_CONFLUENCE]
+
     def test_a_sub_without_records_is_not_acted(self):
         sub = _make_sub(1, start_idx=0, m15_end_idx=9, lenses=(LENS_CONFLUENCE,), n=0)
         assert _count_sub_wvmi([sub]) == {"acted": 0, "records": 0, "by_started_by": {}, "by_lens": {}}
@@ -298,7 +359,9 @@ def test_the_driver_feeds_each_lens_its_stream_and_counts_each_unique_sub_once(m
     """The collaborators are stubbed on their defining modules (the driver imports them inside the function) — the
     pattern of `test_lifecycle_sweep_unit`'s wiring pin. One dual-lens sub (window [40, 100]) with two records; the
     H1 triggers: cycle (0,1) first proximity sd @11 + var 3 @20; cycle (0,2) opp_sd first + var 4 @30. The lens
-    streams handed to the post-pass, the stamped lens copies and the printed summary are pinned; step 7 is stopped."""
+    streams handed to the post-pass, the stamped lens copies and the printed summary are pinned; step 7 is stopped.
+    The REAL LOH mapper on an M15 frame aligned to the H1 one (landing review N2: the frames swapped at the call
+    site survived the stub, which ignores them)."""
     from engine_v2.multitf.sub_structure_pool import StructureKey
     from engine_v2.tests.test_render_sub_projection import _record, _set_lifecycle
 
@@ -309,8 +372,10 @@ def test_the_driver_feeds_each_lens_its_stream_and_counts_each_unique_sub_once(m
     for mod in ("first_confluence_pipeline", "subsequent_confluence_pipeline", "subsequent_counter_pipeline"):
         monkeypatch.setattr(f"engine_v2.multitf.{mod}.to_multi_tf_trigger", mt)
     monkeypatch.setattr("engine_v2.multitf.uc1_trigger.detect_uc1_triggers", lambda *a, **k: [])
+    monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end", _REAL_LOH)
     monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
-                        lambda *a, **k: pd.DataFrame({"time": range(200)}))
+                        lambda *a, **k: pd.DataFrame({"time": pd.date_range("2025-11-17", periods=200, freq="15min",
+                                                                            tz="UTC")}))
     monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
     monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables",
                         lambda *a, **k: SimpleNamespace(cycles=lambda: [(0, 1), (0, 2)]))
@@ -362,7 +427,7 @@ def test_the_driver_feeds_each_lens_its_stream_and_counts_each_unique_sub_once(m
         )
     assert streams_seen == [({LENS_CONFLUENCE: [(11, ZPT), (30, SCT)], LENS_COUNTER: [(20, SCONF)]},
                              PARENT_PATH, {LENS_CONFLUENCE: [0], LENS_COUNTER: [0]})]
-    # window [40, 100]: LOH(11) = 47 and LOH(20) = 83 inside, LOH(30) = 123 outside
+    # the real LOH on aligned frames = 4p + 3; window [40, 100]: 47 and 83 inside, 123 outside
     assert _triples(lens_dfs_seen[LENS_CONFLUENCE]) == [(11, ZPT, PARENT_PATH)] * 2
     assert _triples(lens_dfs_seen[LENS_COUNTER]) == [(20, SCONF, PARENT_PATH)] * 2
     assert ("[multi_tf:dual] sub wvmi acted=1 records=2 by_started_by={'first_confluence': 2} "

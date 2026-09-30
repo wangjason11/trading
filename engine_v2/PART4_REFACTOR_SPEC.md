@@ -1492,7 +1492,7 @@ within one run, and not a "sid+1" of the same structure:
 - WVMI (§17.10, Plan G 2026-09-30): computed inside each unique sub's
   projection, ungated, over the same floor / cap as its zones; each lens
   copy's trigger metadata names the first WVMI-class parent trigger of THAT
-  lens inside the sub's `[start_idx, end_idx]` (attribution only, None if
+  lens inside the sub's `[start_idx, end_idx]` (the data edge for an open sub; attribution only, None if
   none). There is no "current sid" any more; `started_by` on a snapshot is
   the sub's first live record's `trigger_type`.
 
@@ -2628,7 +2628,7 @@ replaced by 1 prior one plus 3 dot-trace merges. Intermediate value after items
 | Constants — candle patterns, OHLC, candle types | Always shown; never affected by sub changes |
 | Sid-tied — CTS dots, BOS markers, swing / PB / prev-BOS lines, range bounds, market_state regions | H1: **most recent sid only** per candle (`owner_by_idx`). M15: **the owning sub per `(candle, direction)`** over its lifecycle window (`owner_by_idx_dir`). Older / ended subs' data persists in the lens df with lifecycle end meta but is hidden where not owned |
 | Persisting events — KL zones, POI zones, imbalances | All rendered. Inactive / lifecycle-ended ones use the existing opacity attenuation logic (older = more transparent); fills gated to the active window |
-| WVMI | Locked records show final values via hover; in-progress records re-render whenever `update_temporary_lp` shifts the temp LP. M15: one record set per unique sub, present on every lens df the sub is on (§17.10) |
+| WVMI | NOT rendered on any chart (H1 or M15: wave-candle hover only, no momentum — verified 2026-09-30); the `_wvmi.csv` exports are the surface. The planned design: locked records show final values via hover; in-progress records re-render whenever `update_temporary_lp` shifts the temp LP. M15 data: one record set per unique sub, present on every lens df the sub is on, each copy with its lens's path (§17.10, Plan G) |
 
 ### 16.6 Pending subordinate display
 
@@ -3316,7 +3316,7 @@ confluence and counter trigger streams restricted to the sub's lenses; the
 first trigger inside the window sweeps; dedup key `sub_id`; persisted into
 every lens df the sub is on. Rev 1's "per-trigger WVMI, no dedup" is
 withdrawn but the WVMI pass may return to per-(sub, lens) sweeps — do not treat
-§17.10 as settled. WVMI record meta `sub_sid` → `sub_id`.
+§17.10 as settled [that caveat was answered by Plan G above]. WVMI record meta `sub_sid` → `sub_id`.
 
 **REVISIT (user decision 2026-09-20 — "accept for now, revisit later"):** the
 persist-into-every-lens rule puts a sub's records on BOTH lens CSVs/charts

@@ -215,8 +215,10 @@ Each rendered line maps to a `(role, cycle_offset)` for visibility lookup:
   qualified candle as new bars arrive. While temp, this candle still IS the LP and
   IS the input that WVMI momentum uses (`_find_temporary_lp` is the mechanism that
   picks which candle it currently sits on). Physical position: `WVMIRecord.lp_idx`
-  for cycles that have a WVMI record (sd-prox-gated). Rendered as a wave candle
-  line via a separate WVMI-temp-LP rendering pass.
+  for cycles that have a WVMI record (the main: sd-prox-gated; a sub: every cycle with
+  a CTS_CONFIRMED, ungated since Plan G 2026-09-30). The "separate WVMI-temp-LP
+  rendering pass" this spec planned is NOT implemented — no chart reads `lp_idx`
+  (verified 2026-09-30).
 
 A nice consequence falls out from the cross-cycle attribution combined with the
 lifecycle rules: a cycle ended without `next_cycle` (reversal / parent-end) has
@@ -284,7 +286,7 @@ Cycle N's LP is physically the `BOS_{N+1}.last_wave_candle` line, so it requires
 | Reversal / parent-end **after** `CTS_N` confirmed | ✓ locked | ✓ locked | ✓ locked | — | no `BOS_{N+1}` in same structure → LP candle physically doesn't exist (no extra gate needed) |
 | Reversal / parent-end **between** `CTS_N` est and conf | ✓ locked | — | — | — | LB/FP never activated; LP candle doesn't exist |
 | Reversal / parent-end **before** `CTS_N` established (retroactive Scenario-2, `reversal_example.png`) | — | — | — | — | collapsed; all never activated |
-| Active last cycle (no end yet) | ✓ locked | ✓ locked if `CTS_K` conf fired | ✓ locked if `CTS_K` conf fired | ✓ **temp** if WVMI-gated and `CTS_K` conf fired | LP rendered as the **temp** wave candle from `WVMIRecord.lp_idx` (separate WVMI-temp-LP rendering pass); shifts each bar in live, sits at its end-of-data position in a static chart; no `BOS_{K+1}` exists yet so no locked LP. For cycles NOT WVMI-gated, no temp LP candle is computed → not rendered. |
+| Active last cycle (no end yet) | ✓ locked | ✓ locked if `CTS_K` conf fired | ✓ locked if `CTS_K` conf fired | ✓ **temp** if the cycle has a WVMI record (main: WVMI-gated; sub: always, Plan G) and `CTS_K` conf fired | LP = the **temp** wave candle `WVMIRecord.lp_idx` (the planned separate WVMI-temp-LP rendering pass is NOT implemented — not drawn); shifts each bar in live, sits at its end-of-data position in a static chart; no `BOS_{K+1}` exists yet so no locked LP. For a main cycle NOT WVMI-gated, no temp LP candle is computed. |
 
 **Cross-cycle visual at structural points:** at the `CTS_{N+1}` ESTABLISHED
 moment two records hit the same idx — **LP_N locks** (rendered via `BOS_{N+1}.last`) and

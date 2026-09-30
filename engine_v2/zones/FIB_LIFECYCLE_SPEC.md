@@ -818,10 +818,12 @@ updated deliberately.
   narrower Plan F follow-up — re-ask a failed decision when a relevant gap's c3
   closes, so a gap forming just after an event delays rather than drops the fib
   (§8.3) — is logged in `plans/PLAN_F_imbalance_c3_knowability.md` §7.
-- **WVMI lifecycle** — still deferred / design-gated
-  (`memory/project_wvmi_lifecycle_deferred.md`). **This FibState design is the
-  precedent template** if WVMI is ever revisited (cycle identity, orthogonal
-  axes, derived status, sparse history, gate).
+- **WVMI lifecycle** — DECIDED: WVMI has no lifecycle of its own (a record
+  lifecycle was added and removed 2026-05-27); its CYCLE's `compute_cycle_lifecycle`
+  window bounds the temp LP and sets `WVMIRecord.cycle_collapsed` (Plan G,
+  2026-09-30; `zones/WVMI_SPEC.md`). This FibState design stays the precedent
+  template if a WVMI lifecycle is ever revisited (cycle identity, orthogonal axes,
+  derived status, sparse history, gate).
 
 **Cleanups:**
 - ~~Generalize `POI_ZONES_SPEC.md`'s `disappeared` definition from "IC no longer

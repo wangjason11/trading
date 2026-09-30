@@ -135,13 +135,16 @@ def test_a_capped_tracker_never_reads_past_the_cap():
     assert (rec.fp_idx, rec.lp_idx, rec.pullback_momentum) == (15, None, None)
 
 
-def test_a_capped_record_without_a_lifecycle_end_fails_loudly():
-    """Unreachable from MS output (a kept CTS_CONFIRMED implies its CTS_ESTABLISHED; a cap ends every cycle) — the
-    helper asserts instead of exporting an unbounded record."""
+@pytest.mark.parametrize("cap", [20, None], ids=["capped", "uncapped"])
+def test_a_record_without_a_lifecycle_row_fails_loudly(cap):
+    """Unreachable from MS output (a record needs its cycle's CTS wave candle, so its CTS_ESTABLISHED; the clip keeps
+    it with its CTS_CONFIRMED) — the helper asserts, capped or not, instead of exporting a record with no bound / no
+    flag (landing review NIT 1: the uncapped path used to raise a bare KeyError). Under a cap a row always has an end
+    (the table's cap term), so no separate "unbounded" assert exists."""
     df, events, wcs, zones = _basic(bos2=False)
     events = [e for e in events if e.type != "CTS_ESTABLISHED"]
-    with pytest.raises(AssertionError, match="no lifecycle end"):
-        _helper(df, events, wcs, zones, cap=20)
+    with pytest.raises(AssertionError, match="no lifecycle row"):
+        _helper(df, events, wcs, zones, cap=cap)
 
 
 def test_a_lock_lp_outside_the_frame_falls_back_to_the_temp_lp():
@@ -152,6 +155,15 @@ def test_a_lock_lp_outside_the_frame_falls_back_to_the_temp_lp():
     (rec,) = _helper(df, events, wcs, zones, cap=19, reason="parent_end")
     assert _vals([rec]) == [((0, 1), (3, 8, 10, 12), "locked", 2)]
     assert (rec.lp_volume, rec.pullback_momentum, rec.lp_locked) == (120.0, 120 * 0.7 / 150, True)
+
+
+def test_a_lock_lp_on_the_cap_candle_is_used():
+    """Q10's boundary (landing review N24): BOS_2's last wave candle ON the cap candle 19 is INSIDE the frame
+    (`iloc[:cap + 1]`) — the lock takes it (100 * 0.7 / 150), no fallback."""
+    df, events, wcs, zones = _basic(bos2_last=19)
+    (rec,) = _helper(df, events, wcs, zones, cap=19, reason="parent_end")
+    assert _vals([rec]) == [((0, 1), (3, 8, 10, 19), "locked", 2)]
+    assert (rec.lp_volume, rec.lp_weight, rec.pullback_momentum) == (100.0, 0.7, 100 * 0.7 / 150)
 
 
 def test_the_tracker_falls_back_on_a_lock_lp_past_the_data_edge():
@@ -218,6 +230,34 @@ def test_the_main_gate_reads_only_the_first_trigger_of_a_cycle(dr, monkeypatch):
     assert [(r.bos_structure_id, r.bos_cycle_id) for r in out["wvmi_records"]] == [(0, 1), (0, 2)]
 
 
+def test_the_main_gate_meta_is_the_first_triggers_even_with_a_later_sd(dr, monkeypatch):
+    """(landing review N6) sd @4 (inner .61, 7 pips), opp_sd @5, sd @6 (.55, 3): the record's attribution is the
+    FIRST trigger's — UC1 copies `triggered_by_event_idx` into the first_counter trigger (its sweep `trigger_idx`)."""
+    trig = lambda i, d, inner, pips: SimpleNamespace(idx=i, direction=d, trigger_inner=inner,  # noqa: E731
+                                                     proximity_pips=pips)
+    monkeypatch.setattr(orch, "check_zone_proximity", lambda **_kw: {
+        (0, 0): [trig(4, "sd", 0.61, 7), trig(5, "opp_sd", 0.5, 5), trig(6, "sd", 0.55, 3)],
+        (0, 1): [trig(9, "sd", 0.6, 8)], (0, 2): [trig(14, "sd", 0.6, 8)]})
+    out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, fib_mode="h1"))
+    rec = out["wvmi_records"][0]
+    assert (rec.bos_structure_id, rec.bos_cycle_id) == (0, 0)
+    assert (rec.meta["triggered_by_event_idx"], rec.meta["trigger_inner"], rec.meta["proximity_pips"]) == (4, 0.61, 7)
+
+
+def test_record_order_follows_the_processing_order_not_the_events_list(dr):
+    """(landing review N7) the helper walks `sorted_events` (`ef.processing_order_key`): handed the RAW events
+    reversed, the records still come in cycle order with the same values."""
+    from engine_v2.structure import event_fields as ef
+    down = _project(dr)
+    events = list(down["events"])
+    recs = _q(lambda: _compute_wvmi_records(
+        dr.df, list(reversed(events)), sorted(events, key=ef.processing_order_key), down["wave_candles"],
+        down["kl_zones"], gate=None, structure_path_id="x", lifecycle_floor=None, lifecycle_cap=None,
+        cap_reason="lifecycle_end"))
+    assert [(r.bos_cycle_id, r.lp_idx, r.status) for r in recs] == [(0, 4, "locked"), (1, 9, "locked"),
+                                                                     (2, 14, "created")]
+
+
 @pytest.mark.parametrize("mode", ["", "None", "gated", "first_sd", True])
 def test_an_unknown_wvmi_mode_raises(dr, mode):
     with pytest.raises(ValueError, match="wvmi="):
@@ -279,6 +319,35 @@ def test_a_record_is_not_collapsed_by_default():
 
 # --- G3: one copy per lens, no second persister -----------------------------------------------------------------------
 
+def test_render_hands_over_the_projection_records_in_order(monkeypatch):
+    """(landing review N18 / N17) `render_sub_projection` keeps the projection's record order on the result AND on
+    the lens copies (the real render fixtures hold 0 or 1 record, so no order check on them could fail)."""
+    from engine_v2.multitf import pooled_structure_build as psb
+    from engine_v2.multitf.sub_structure_pool import LENS_CONFLUENCE, SubStructurePool
+    from engine_v2.tests import test_render_sub_projection as trs
+    m15 = trs._prepare_df(trs._make_flat_prefix() + trs._make_reversing_data())
+    pool = SubStructurePool()
+    sub, _ = _q(lambda: edm.build_or_get_geometry(pool, m15, parent_path=trs._PARENT, sd=1,
+                                                  start_abs=trs._STARTING_IDX, bos0_inner=None, timeframe=trs._TF))
+    trs._record(pool, sub, m15, LENS_CONFLUENCE, start_idx=trs._START, seq=0, trigger_type="first_confluence",
+                parent_sid=3, parent_cycle_id=1)
+    trs._set_lifecycle(sub, trs._START, None, None)
+    real = psb.project_to_window
+
+    def _three(*a, **k):
+        down = real(*a, **k)
+        down["wvmi_records"] = [WVMIRecord(bos_structure_id=0, bos_cycle_id=c, zone_side="buy", fb_idx=c)
+                                for c in (0, 1, 2)]
+        return down
+
+    monkeypatch.setattr(psb, "project_to_window", _three)
+    lens_dfs = trs._lens_dfs(m15)
+    res = _q(lambda: edm.render_sub_projection(sub, m15, lens_paths=trs._LENS_PATHS, lens_dfs=lens_dfs,
+                                               timeframe=trs._TF))
+    assert [w.bos_cycle_id for w in res.wvmi_records] == [0, 1, 2]
+    assert [w.bos_cycle_id for w in lens_dfs[LENS_CONFLUENCE].attrs["wvmi"]] == [0, 1, 2]
+
+
 def test_the_sub_wvmi_module_and_the_persister_are_gone():
     assert importlib.util.find_spec("engine_v2.multitf.sub_wvmi") is None
     assert not hasattr(edm, "persist_facade_wvmi_to_entity_df")
@@ -307,6 +376,38 @@ def test_the_exporter_writes_the_flag_and_the_trigger_idx_as_int(tmp_path):
     assert [g["triggered_by_event_idx"] for g in got] == ["710", ""]
     assert [g["triggered_by_event_type"] for g in got] == ["ZONE_PROXIMITY_TRIGGER", ""]
     assert [g["meta"] for g in got] == [str(r.meta) for r in recs]
+    # the path column is the record FIELD (these metas carry no path — N20); parent_path_id the meta's
+    assert [g["structure_path_id"] for g in got] == [_SUB, _SUB]
+    assert [g["parent_path_id"] for g in got] == ["H1.main", "H1.main"]
     empty = tmp_path / "e.csv"
     export_wvmi([], empty)
     assert "cycle_collapsed" in empty.read_text(encoding="utf-8").splitlines()[0]
+
+
+def test_the_exporter_leaves_a_main_rows_parent_path_empty(tmp_path):
+    """(landing review N21) a MAIN record's meta has no `parent_path_id`: its column is empty, a sub row's is the
+    meta's (no default)."""
+    main = WVMIRecord(bos_structure_id=0, bos_cycle_id=1, zone_side="buy", structure_path_id="H1.main",
+                      meta={"triggered_by_event_idx": 4, "triggered_by_event_type": "ZONE_PROXIMITY_TRIGGER",
+                            "structure_path_id": "H1.main", "trigger_inner": 0.6, "proximity_pips": 8})
+    sub = WVMIRecord(bos_structure_id=0, bos_cycle_id=0, zone_side="buy", structure_path_id=_SUB,
+                     meta={"triggered_by_event_idx": None, "triggered_by_event_type": None,
+                           "parent_path_id": "H1.main", "structure_path_id": _SUB, "sub_id": 3})
+    path = tmp_path / "w.csv"
+    export_wvmi([main, sub], path)
+    with open(path, newline="", encoding="utf-8") as fh:
+        header, *rows = list(csv.reader(fh))
+    got = [dict(zip(header, r)) for r in rows]
+    assert [(g["structure_path_id"], g["parent_path_id"]) for g in got] == [("H1.main", ""), (_SUB, "H1.main")]
+
+
+def test_the_exporter_refuses_an_unstamped_record(tmp_path):
+    """(landing review MINOR 1, rule 3) the trigger keys are read strictly: a record without them — an unstamped sub
+    copy — raises instead of exporting as "no trigger in the window"."""
+    rec = WVMIRecord(bos_structure_id=0, bos_cycle_id=0, zone_side="buy", structure_path_id=_SUB, meta={"sub_id": 3})
+    with pytest.raises(KeyError, match="triggered_by_event_idx"):
+        export_wvmi([rec], tmp_path / "w.csv")
+    # each key on its own (the fold-in's F2 mutant: a `.get` on the type alone survived the no-key record)
+    rec.meta = {"triggered_by_event_idx": 5, "sub_id": 3}
+    with pytest.raises(KeyError, match="triggered_by_event_type"):
+        export_wvmi([rec], tmp_path / "w.csv")

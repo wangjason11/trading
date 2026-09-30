@@ -178,11 +178,11 @@ def _compute_wvmi_records(
     records = tracker.get_records()
     for rec in records:
         key = (rec.bos_structure_id, rec.bos_cycle_id)
-        # A kept CTS_CONFIRMED implies its CTS_ESTABLISHED is kept, and a cap
-        # gives every cycle an end — so an unbounded capped record is a bug.
-        assert lifecycle_cap is None or key in cycle_end_by_key, (
-            f"[wvmi] {structure_path_id} record {key} has no lifecycle end under cap {lifecycle_cap}"
-        )
+        # A record needs its cycle's CTS wave candle, so its CTS_ESTABLISHED (a
+        # table row) exists — and a kept CTS_CONFIRMED implies its CTS_ESTABLISHED
+        # is kept by the knowable-at clip. A row always has an end under a cap
+        # (the table's cap term), so a capped record is never unbounded.
+        assert key in life, f"[wvmi] {structure_path_id} record {key} has no lifecycle row (cap {lifecycle_cap})"
         start, end, _reason = life[key]
         rec.cycle_collapsed = end is not None and start >= end
     return records
@@ -790,6 +790,10 @@ def _stamp_sub_wvmi_trigger_meta(
         for res in results_by_lens[lens]:
             start, end = res.meta["start_idx"], res.meta["m15_end_idx"]
             hit = next((t for t in mapped if start <= t[0] <= end), None)
+            # the join key must be unique on the lens (a pool `sub_id` is)
+            assert res.meta["sub_id"] not in trigger_by_sub, (
+                f"[wvmi] sub_id {res.meta['sub_id']} twice on lens {lens}"
+            )
             trigger_by_sub[res.meta["sub_id"]] = {
                 "triggered_by_event_idx": hit[1] if hit is not None else None,
                 "triggered_by_event_type": hit[2] if hit is not None else None,
