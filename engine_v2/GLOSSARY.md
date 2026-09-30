@@ -27,16 +27,20 @@ coincidence.
 
 | Kind | Spelling | Meaning |
 |------|----------|---------|
-| **Moment** | past participle `*_established_idx`, `*_confirmed_idx`; `*_at` stamps (`confirmed_at`, `ImbalanceInstance.formed_at`) and parameters (`evaluated_at`); `apply_idx` | the candle at which something became knowable / took effect — real-time; the ONLY kind a timing or lifecycle read may use |
+| **Moment** | past participle `*_established_idx`, `*_confirmed_idx`; `*_at` stamps (`confirmed_at`, `ImbalanceInstance.formed_at`) and parameters (`evaluated_at`); `apply_idx` and `*_apply_idx` (`last_pullback_apply_idx`, `pullback_apply_idx`, `proximity_apply_idx`) | the candle at which something became knowable / took effect — real-time; the ONLY kind a timing or lifecycle read may use |
 | **Pattern anchor** | `pattern_anchor_idx` (first candle), `pattern_end_idx` (last candle) | *Candle-pattern realm* (breakout / pullback / reversal patterns; the MS scan candle; the reversal close-break candle): "anchor" ALWAYS means the pattern's FIRST candle |
 | **Market-structure anchor** | `*_anchor_idx` (`cts_anchor_idx`, `bos_anchor_idx`, KL-zone / fib anchors, a structure's start) | *Market-structure realm* (BOS/CTS of a cycle, zones, fibs, structures, subs): an ENDPOINT — start or end — of a structure element. Always a location, never a moment |
 | **Extreme** | `*_extreme_idx` / `*_extreme_price`; `pattern_extreme_idx` / `pattern_extreme_price` | a recorded price extreme that is NOT serving as an endpoint at that site: window / retrace searches, running extremes, "is this a new extreme" checks, lower-TF price-mapping, candle anatomy, and the extreme reached INSIDE a pattern (from its first candle through its apply candle) |
 | **Bare element idx** | `bos_idx`, `cts_idx` on a record that pairs them with a price (FibState / fib_lifecycle.csv, final.csv, cycle-0 dicts) — never an event or zone META key: those say `*_anchor_idx` (`RANGE_STARTED.meta["cts_anchor_idx"]` with `cts_price`; POI `meta["bos_anchor_idx"]` / `["cts_anchor_idx"]`, equal to the owning fib row's `bos_idx` / `cts_idx`) since Post-E·4 | that element's anchor |
 
 Status (Plan E E5, 2026-09-25): the code, the current specs and the tracked skills follow this standard. Post-E·4
-(2026-09-29d, PLAN_E §9.5) renamed the last four exported meta keys that broke it: `BOS_CONFIRMED` `pb_start` →
+(2026-09-29d, PLAN_E §9.5) renamed the four exported meta keys the user scoped: `BOS_CONFIRMED` `pb_start` →
 `last_pullback_apply_idx` (a moment: the last pullback pattern's apply candle), `RANGE_STARTED` `cts_idx` →
 `cts_anchor_idx`, POI `bos_idx` / `cts_idx` → `bos_anchor_idx` / `cts_anchor_idx` (saves before it carry the old keys).
+Still exported under a non-standard name (found by its landing review; not scoped, not decided): fib meta
+`cycle1_bos_idx` (a BOS anchor; versioned cross fibs — 1 H1 fib row on the reference window), KL meta
+`expanded_last_idx` (the last expansion's THRESHOLD_UPDATED moment — 3 H1 + 4 confluence KL rows) and
+`pb_reconfirm_idx` (a CTS_RECONFIRMED moment — 0 rows here).
 Kept by decision: frozen event names (bridged by `ARCHITECTURE.md` "`ev.idx` convention") and event-type
 tokens / legend labels; `KLZone.source_time` (a moment's time next to the anchor's `source_price`) and
 `StructureLevel.time` (the anchor's time) — PLAN_E Q12; the reversal-scope names (`_synth_reversal_trigger`'s

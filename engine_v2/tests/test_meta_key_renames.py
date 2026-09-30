@@ -20,6 +20,8 @@ import pytest
 from engine_v2.structure import market_structure
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests import test_ms_cts_update_no_regress as _noreg
+from engine_v2.tests.test_event_meta_idx_keys import _render_both_lenses
+from engine_v2.tests.test_render_sub_projection import geometry, m15_df  # noqa: F401 (fixtures)
 from engine_v2.tests.test_ms_stop_after_cts import _make_double_rewind_data
 from engine_v2.tests.test_unified_probe import _prepare_df
 from engine_v2.zones import poi_zones
@@ -82,10 +84,27 @@ def test_a_real_run_emits_only_the_new_keys(sd):
     rows = _make_double_rewind_data()
     with redirect_stdout(io.StringIO()):
         res = compute_bounded_structure(_prepare_df(rows if sd == 1 else _noreg._mirror(rows)), 0, sd)
-    rs = [e for e in res.events if e.type == "RANGE_STARTED"]
-    assert {e.meta.get("reason") for e in rs} == {None, "pullback_created_range", "proximity_created_range"}
-    assert all(type(e.meta["cts_anchor_idx"]) is int and "cts_idx" not in e.meta for e in rs)
+    # VALUES too (the landing review's surviving mutant set the proximity path's key to the candle): the CTS anchor
+    # when the range was decided — the offline one (@13, start 9) was finalized in step 9, before cycle 2 established
+    # at 12, so it carries the cycle-1 anchor 8 (a pre-existing look-ahead stamp, not this migration's).
+    rs = [(int(e.idx), e.meta.get("reason"), e.meta["cts_anchor_idx"]) for e in res.events if e.type == "RANGE_STARTED"]
+    assert rs == [(4, "pullback_created_range", 2), (9, "proximity_created_range", 8), (13, None, 8),
+                  (14, "pullback_created_range", 12)]
     bos = [(e.meta["cycle_id"], e.meta["last_pullback_apply_idx"]) for e in res.events if e.type == "BOS_CONFIRMED"]
     assert bos == [(0, None), (1, 4), (2, None)]        # cycle 2's retracement fired no pullback pattern
-    assert not any("pb_start" in e.meta for e in res.events)
-    assert all("pb_start" not in lv.meta for lv in res.levels)
+    old = {"pb_start", "cts_idx", "bos_idx"}             # on NO event or level (an extra key on any path)
+    assert not [(e.type, int(e.idx)) for e in res.events if old & set(e.meta)]
+    assert not [lv for lv in res.levels if old & set(lv.meta)]
+
+
+def test_poi_anchors_are_the_owning_fibs_anchors(geometry, m15_df):
+    """The POI pair's VALUES (the review's surviving mutant swapped them): each POI's `bos_anchor_idx` /
+    `cts_anchor_idx` are the `bos_idx` / `cts_idx` of a fib of its (structure, cycle) — slice-local source frame."""
+    res, _ = _render_both_lenses(geometry, m15_df)
+    fibs = {}
+    for f in res.fib_states:
+        fibs.setdefault((f.structure_id, f.cycle_id), set()).add((f.bos_idx, f.cts_idx))
+    assert res.poi_zones
+    for z in res.poi_zones:
+        m = z.meta
+        assert (m["bos_anchor_idx"], m["cts_anchor_idx"]) in fibs[(m["structure_id"], m["cycle_id"])], m

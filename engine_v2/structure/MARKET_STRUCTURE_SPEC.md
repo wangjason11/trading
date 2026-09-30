@@ -151,7 +151,9 @@ A reversal — winner or pending — ends the watch AND clears the pending (`_ap
 2026-09-29d a WINNER cleared only the watch, so its re-stepped apply row re-applied the pending when that confirmed on
 the same candle (REVERSAL → REVERSAL, no event; the log's `[RV_APPLY]` line — every winner of the replay (5) and the
 suite), and a pending confirming LATER than a later anchor's winner stayed set in the reversal row's
-`pending_reversal_*` columns (and would have kept `_should_stop_after_cts` from seeing a quiescent point). Measured
+`pending_reversal_*` columns and kept `_should_stop_after_cts` from seeing a quiescent point — now, with a
+`stop_after_cts_established` run past its N-th establishment, that reversal step can set `early_stop_idx` (read
+only by `unified_probe`'s `[unified_probe phase2] early stop` print; no decision). Measured
 (`reversal_shadow.py` winner-pending counters): 30k random tails 7,656 winners — 7,654 re-applied, 2 lingering (both in
 the targeted stream; 0 with an early stop), 0 in the replay and the suite. Pins in `tests/test_ms_reversal_on_expiry.py`:
 the `trace` taps record every reversal apply (P1 / P2: one), and the lingering case (seed 93 trial 3055).

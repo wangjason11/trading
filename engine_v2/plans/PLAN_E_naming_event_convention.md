@@ -1624,6 +1624,25 @@ the real emitter.
   meta column + RANGE_STARTED's key), POI_ZONES_SPEC, GOTCHAS, LANDMINES, review_scripts README (+ `cmp_meta_rename.py`,
   `meta_census.py` keeps `pb_start` for old saves). **Save-format boundary:** saves before this commit carry
   `pb_start`, RANGE_STARTED `cts_idx`, POI `bos_idx` / `cts_idx`.
+- **Landing review (2026-09-29d; 1 conformance lens, 234,242 tokens incl. the warm-up `bfe8178`): (A) CONFORMS WITH
+  FIXES, (B) CONFORMS; 0 BLOCKER.** Verified independently: no missed current site (whole-repo grep, every hit
+  classified), 150 / 197 by its own raw-text script, 22/22 + 12/12 `pb_start` semantics, 47/47 POI anchors == the fib
+  row. Its 4 mutants all SURVIVED my pins → folded: **MAJOR 1** an extra `cts_idx` in the cycle >= 1 BOS literal
+  exported slice-local with no test failing — `_ms_emitted_event_meta_keys` read only a direct `meta=` dict, not the
+  one inside `_end_watch_superseded_by_new_cycle(...)`, and my `_NOT_MIRRORED` `cts_idx` blinded the module scan →
+  both literal scans now read wrapper-call dicts (`_meta_literal_keys`) and the real-run pin forbids the old keys on
+  EVERY event and level; **MINOR 2** values unpinned (the proximity path's key set to the candle; the POI pair
+  swapped) → the RANGE_STARTED values pinned (4/2, 9/8, 13/8, 14/12) + POI anchors ∈ its (sid, cycle) fibs' pairs
+  on the rendered sub; **MINOR 3** GLOSSARY overclaimed "the last four" → "the four the user scoped" + the keys still
+  non-standard (fib `cycle1_bos_idx`, KL `expanded_last_idx` / `pb_reconfirm_idx`; not scoped, not decided); **MINOR
+  4** an alias added in an exporter is caught by no test (no exporter test exists) → the guard for the export layer
+  is `/compare` with `cmp_meta_rename.py`; **NIT 5** `cmp_meta_rename.py` compared pandas values (`652.0` → `652`,
+  `1` vs `True` passed) → raw text via the csv module + `str(meta)` round-trip (both perturbations now exit 1);
+  **NIT 6** GLOSSARY Moment row + `*_apply_idx`; **NIT 7** (B) the lingering case can now set `early_stop_idx` (the
+  probe's print only) → stated in MARKET_STRUCTURE_SPEC. Side find (pre-existing, not this migration's): in
+  `_make_double_rewind_data` the offline finalize of step 9 emits a second RANGE_STARTED (start 9, stamped at its
+  confirm 13, carrying the cycle-1 anchor 8) on a range the proximity path opened at 9, listed before the breakout's
+  RANGE_RESET @12 — the offline-finalize look-ahead class (zones audit (b)).
 
 ## 10. Open questions for the user (recommendation first; concrete window data)
 

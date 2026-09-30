@@ -239,16 +239,28 @@ def test_mirrored_index_values_are_source_plus_slice_begin(geometry, m15_df):
 
 # --- static coverage (keys the fixture never produces) --------------------------
 
+def _meta_literal_keys(node) -> set:
+    """The string keys of the dict literal(s) a `meta=` argument carries: the
+    literal itself, or the dict literal(s) passed to a wrapper call."""
+    dicts = [node] if isinstance(node, ast.Dict) else (
+        [a for a in node.args if isinstance(a, ast.Dict)] if isinstance(node, ast.Call) else [])
+    return {k.value for d in dicts for k in d.keys if isinstance(k, ast.Constant)}
+
+
 def _ms_emitted_event_meta_keys():
     """Every string key `market_structure` writes into an event meta: a dict
-    literal passed as `meta=`, or a `meta[...]` / `meta2[...]` assignment."""
+    literal passed as `meta=` — directly or through a wrapper call (the cycle
+    >= 1 BOS: `meta=self._end_watch_superseded_by_new_cycle(apply, {...})`;
+    the Post-E·4 landing review's surviving mutant hid a key there) — or a
+    `meta[...]` / `meta2[...]` assignment."""
     tree = ast.parse(Path(market_structure.__file__).read_text(encoding="utf-8"))
     keys = set()
     for n in ast.walk(tree):
         if isinstance(n, ast.Call):
             for kw in n.keywords:
-                if kw.arg == "meta" and isinstance(kw.value, ast.Dict):
-                    keys |= {k.value for k in kw.value.keys if isinstance(k, ast.Constant)}
+                if kw.arg != "meta":
+                    continue
+                keys |= _meta_literal_keys(kw.value)
         if isinstance(n, ast.Assign):
             for tg in n.targets:
                 if (isinstance(tg, ast.Subscript) and isinstance(tg.value, ast.Name)
@@ -272,7 +284,8 @@ def test_every_ms_emitted_event_meta_index_key_is_shifted():
 
 
 def _meta_kw_keys(module):
-    """Every string key in a dict literal passed as `meta=` in `module` (the
+    """Every string key in a dict literal passed as `meta=` (directly or through a
+    wrapper call) in `module` (the
     element constructors and the `replace(…, meta={**old, …})` updates). Only
     `meta=` literals: `poi_zones`' `inst.meta[...]` writes are ImbalanceInstance
     meta (the fill cache), which the mirror never copies."""
@@ -281,8 +294,8 @@ def _meta_kw_keys(module):
     for n in ast.walk(tree):
         if isinstance(n, ast.Call):
             for kw in n.keywords:
-                if kw.arg == "meta" and isinstance(kw.value, ast.Dict):
-                    keys |= {k.value for k in kw.value.keys if isinstance(k, ast.Constant)}
+                if kw.arg == "meta":
+                    keys |= _meta_literal_keys(kw.value)
     return keys
 
 
