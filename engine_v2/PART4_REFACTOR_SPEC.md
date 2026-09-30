@@ -3290,6 +3290,12 @@ counter lens; sub `4027/+1`'s two `subsequent_counter`-swept records also on
 confluence). The WVMI pass must decide whether a record belongs to the sub
 (both lenses) or to the sweeping trigger's lens only.
 
+**DECIDED 2026-09-30, NOT YET IMPLEMENTED — Plan G (`plans/PLAN_G_wvmi_unique_sub.md`, cold-reviewed):** no gate on
+subs (every rendered sub's CTS_CONFIRMED → a record, computed inside its projection), lifecycle-bounded (LP search to
+the cycle's `end − 1`, tracker frame capped at the sub's end), a `cycle_collapsed` flag, exported like zones (every
+lens the sub is on, each row stamped with that lens's own path), trigger metadata per lens (attribution, never a
+gate). §17.10 above describes the CURRENT code until Plan G lands.
+
 ### 17.11 Validation — sequencing, predicted table, `/compare`
 
 **Sequencing (one cause per `/compare`).** `git revert 9fd3143` (tree = Stage

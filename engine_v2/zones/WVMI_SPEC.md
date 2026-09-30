@@ -63,6 +63,10 @@ confirmation candle.
 > persist-into-every-lens rule puts a sub's records on BOTH lens CSVs/charts
 > (measured: sub `2639/−1`'s three records also on counter, sub `4027/+1`'s
 > two also on confluence); the WVMI pass decides sub-owned vs lens-owned.**
+> **DECIDED 2026-09-30, NOT YET IMPLEMENTED — Plan G (`plans/PLAN_G_wvmi_unique_sub.md`):** sub WVMI moves into
+> each unique sub's projection, ungated and lifecycle-bounded, exported per lens like zones (each lens's own path),
+> with a `cycle_collapsed` flag and per-lens trigger metadata. This section describes the CURRENT code until Plan G
+> lands; the plan's §6 lists every sentence here that it inverts.
 > The pre-pool text (per-parent-cycle pass `_assign_trigger_centric_sub_wvmi`
 > after `build_parent_cycle_chain`, window `[start_trigger_idx, m15_end_idx]`
 > with "`start_trigger_idx` IS the sub's lifecycle-start") is superseded by the
