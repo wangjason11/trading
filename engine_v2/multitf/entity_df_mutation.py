@@ -113,17 +113,18 @@ _EVENT_META_IDX_KEYS = (
     "confirmed_at",
     "apply_idx",
     "pattern_anchor_idx",
-    "cts_anchor_idx",
+    "cts_anchor_idx",       # CTS events + RANGE_STARTED (the CTS anchor at the range start; pairs with cts_price —
+                            # `cts_idx` until Post-E·4, 2026-09-29d)
     "bos_anchor_idx",
     # Post-E·2 (2026-09-26) — slice-local in the M15 CSVs until then:
     "effective_idx",        # STATE_CHANGED
     "start_idx",            # RANGE_STARTED
     "confirm_idx",          # RANGE_STARTED
-    "cts_idx",              # RANGE_STARTED (the CTS anchor; pairs with cts_price)
     "pullback_apply_idx",   # RANGE_STARTED (pullback_created_range)
     "proximity_apply_idx",  # RANGE_STARTED (proximity_created_range)
     "expires_idx",          # REVERSAL_WATCH_START / REVERSAL_CANDIDATE
-    "pb_start",             # BOS_CONFIRMED (the last pullback pattern's apply candle; None before any)
+    "last_pullback_apply_idx",  # BOS_CONFIRMED (the last pullback pattern's apply candle since the previous
+                                # cycle; None before any — `pb_start` until Post-E·4, 2026-09-29d)
     "ended_watch_pattern_anchor_idx",  # BOS_CONFIRMED (the reversal watch a new cycle ended; 2026-09-29)
 )
 
@@ -136,8 +137,8 @@ _ZONE_META_IDX_KEYS = (
     "base_idx",
     # Post-E·2 (2026-09-26) — slice-local in the M15 CSVs until then:
     "expanded_last_idx",    # KL (the last expansion's THRESHOLD_UPDATED candle)
-    "bos_idx",              # POI (the owning fib's bos_idx, copied at IC time)
-    "cts_idx",              # POI (the owning fib's cts_idx)
+    "bos_anchor_idx",       # POI (the owning fib's bos_idx, copied at IC time; `bos_idx` until Post-E·4)
+    "cts_anchor_idx",       # POI (the owning fib's cts_idx; `cts_idx` until Post-E·4)
     "pb_reconfirm_idx",     # KL CTS zone (CTS_RECONFIRMED upgrade; subs get BOS
                             # zones only). Was misfiled in the EVENT list (no
                             # event carries it) until Post-E·2.

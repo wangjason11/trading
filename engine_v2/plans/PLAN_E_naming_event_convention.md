@@ -1539,6 +1539,92 @@ the real emitter.
   `20260926_214932_574de2a`: 24/24 byte-identical, figures JSON-identical, run.log identical; tests 961 → **962 + 1
   xfail**. **Post-E·3 DONE.**
 
+### 9.5 Post-E·4 — the Naming-Standard meta renames (2026-09-29d; plan approved + LANDED the same day)
+
+- **Why:** the last items of the Later hygiene list (§9.3, user 2026-09-26: "the Naming-Standard renames stay Later"):
+  four exported meta keys whose names do not say which kind of candle they hold (GLOSSARY "Naming Standard"). They
+  must land before the strategy layer reads the keys. A save-format boundary.
+- **Scope (the user's list) — values unchanged, keys renamed IN PLACE in the emitting dict literal (same position):**
+
+  | Old key | Element | New key | Kind | Value (reference window, save `20260928_145121_fa172bc`) |
+  |---|---|---|---|---|
+  | `pb_start` | `BOS_CONFIRMED` meta (both emit sites) + its copy on the H1 BOS `StructureLevel` | `last_pullback_apply_idx` (proposed; §9.5 Q1) | moment (`apply_idx`) | `st.last_pullback_pat_apply_idx` = the apply candle of the LAST pullback pattern since the previous cycle was established (reset at each new cycle; also the start of `_select_bos_on_breakout`'s window). Measured: cycle 0 → None (12/12); cycle >= 1 → == the structure's last `STATE_CHANGED(to=pullback, reason=pullback_pattern)` (22/22). H1: BOS @652 (sid 0 cycle 1) 439; @748 (1, 1) 727; @902 (1, 2) 810 (pullback patterns so far 727, 810) |
+  | `cts_idx` | `RANGE_STARTED` meta (3 paths: offline finalize, `pullback_created_range`, `proximity_created_range`) | `cts_anchor_idx` | MS anchor | `st.cts.idx` when the range starts; pairs with `cts_price` (kept). H1: RANGE_STARTED @313 `cts_idx` 311 |
+  | `bos_idx` / `cts_idx` | POI zone meta | `bos_anchor_idx` / `cts_anchor_idx` | MS anchor | the owning fib's `bos_idx` / `cts_idx` copied at build. H1: IC 732 (sid 1 cycle 1) 689 / 761 (its `cts_established_idx` 748 — anchor != moment) |
+
+- **Out of scope (stay GLOSSARY "Bare element idx"; §9.5 Q2):** `FibState.bos_idx` / `cts_idx` + the fib_lifecycle.csv
+  columns (≈62 refs in `fib_tracker`, the fib drawing, the mirror, many tests), the final.csv columns `cts_idx` /
+  `bos_idx` (MS output df — read by `identify_start`, `unified_probe`, the mirror's aux list, the df invariants), the
+  cycle-0 caches (`st.cycle0_data`, FibTracker `_cross_cycle_data`), function parameters, the `zone_proximity_diag`
+  CSV (user 2026-09-25: leave the diag columns). Consequence: a POI's `bos_anchor_idx` == its fib row's `bos_idx`.
+- **Inventory (at `bfe8178`; grep of every `.py` / current `.md` + the census of the save):**
+  - Emitters: `market_structure.py` RANGE_STARTED `:1074` / `:1191` / `:1968`; BOS_CONFIRMED `:1331` (cycle 0) /
+    `:1345` (cycle >= 1); `poi_zones.py` `:616-617`. The H1 levels copy the BOS meta (`_events_to_structure_levels`).
+  - Readers: NONE that decide anything — only `poi_zones`' env-gated `POI_LIFECYCLE_DEBUG` print (`:645-646`,
+    `.get` → `meta[...]` per rule 3). No chart / hover / sweep / zone / strategy read (export_plotly, export_m15_chart,
+    debug/, multitf/, pipeline/ grepped); run.log carries none of the keys (0 lines).
+  - Registry: `entity_df_mutation._EVENT_META_IDX_KEYS` — `cts_idx` goes (RANGE_STARTED's new key is the listed
+    `cts_anchor_idx`), `pb_start` → the new name; `_ZONE_META_IDX_KEYS` — `bos_idx` / `cts_idx` → the new names; comments.
+  - Guard `tests/test_event_meta_idx_keys.py`: `EXTRA_EVENT_IDX_KEYS = {"pb_start"}` deleted (every index key is then
+    suffixed; the int-value classification test still covers unsuffixed keys); must-see sets; `_NOT_MIRRORED
+    ["market_structure"]` += `cts_idx` (the `st.cycle0_data` cache, beside `bos_idx`); the fixture's shift pin keyed by
+    event type for RANGE_STARTED (its new key is shared with the CTS events, so a key-only pin would pass vacuously).
+  - Fixtures: `test_lifecycle_sweep_predicted_table.py` (5 `pb_start=`), `_event_factory.py` docstring; no test builds a
+    POI / RANGE_STARTED meta with the old keys (the `c0 = {"bos_idx": …}` dicts are the cycle-0 cache — out of scope).
+  - Tools: `meta_census.py` / `guard.py` keep `pb_start` index-like (old saves); `hyg_variant_plugin.py` is Post-E·2
+    history; new `cmp_meta_rename.py` (every CSV: BASE with the listed keys renamed in place == CUR, else exit 1).
+  - Current docs: GLOSSARY "Naming Standard" (the Bare-element row loses "POI meta" + `RANGE_STARTED.meta["cts_idx"]`;
+    Status line), POI_ZONES_SPEC field list, GOTCHAS `pb_start` bullet, LANDMINES proximity-gate note (`pb_start: None`),
+    the mirror comments, review_scripts README. Dated records (plans, saves, commit messages) stay as written.
+- **Predicted `/compare` vs `20260928_145121_fa172bc` (`cmp_meta_rename.py … pb_start=<new> cts_idx=cts_anchor_idx
+  bos_idx=bos_anchor_idx`):**
+
+  | CSV | Renamed keys | Cells |
+  |---|---|---|
+  | H1 `structure_events` | BOS_CONFIRMED `pb_start` 5 (3 non-null) + RANGE_STARTED `cts_idx` 10 | 15 |
+  | H1 `structure_levels` | BOS `pb_start` 5 | 5 |
+  | H1 `poi_zones` | `bos_idx` 5 + `cts_idx` 5 | 5 |
+  | M15 confluence `structure_events` | `pb_start` 21 + RANGE_STARTED `cts_idx` 39 | 60 |
+  | M15 confluence `poi_zones` | `bos_idx` 30 + `cts_idx` 30 | 30 |
+  | M15 counter `structure_events` | `pb_start` 8 + RANGE_STARTED `cts_idx` 15 | 23 |
+  | M15 counter `poi_zones` | `bos_idx` 12 + `cts_idx` 12 | 12 |
+  | **total** | **197 keys** | **150 cells** |
+
+  Every value and key position unchanged; the other 17 CSVs byte-identical; the 3 figures identical (85/245,
+  151/124, 294/233); run.log identical except timing. Tests: 1073 + the new pins, all passing.
+- **Landing:** ONE atomic migration commit (LANDMINES "Event Contract Rules" rule 3: code + registry + guard + fixtures
+  + current docs; the prediction in the message; no alias) → `/compare` → chart pause → `/commit-save` = the new
+  baseline (the save-format boundary recorded in memory `project_plan_e_event_convention.md`). Landing review: my own
+  mutation loop first (each old key restored at one emitter; each new key dropped from its list; the debug print left
+  on `.get`), then 1 conformance lens (≈150–250k tokens; asked before launch).
+- **Q1 (name for `pb_start`):** (A, recommended) `last_pullback_apply_idx` — the moment kind (`apply_idx`), "last"
+  is literal; (B) `pullback_apply_idx` — the key RANGE_STARTED already uses for its creating pullback, drops "last"
+  (on the window every retracement holds exactly ONE pullback pattern — 22/22 — so "last" is the code's rule, not a
+  window fact: the state keeps the latest pullback apply until the next cycle resets it); (C) `last_pullback_pat_apply_idx` — the state
+  field's exact name. **Q2:** confirm the scope above (FibState / final.csv / caches stay).
+- **USER DECISIONS (2026-09-29d):** Q1 (A) `last_pullback_apply_idx`; Q2 the four meta keys only (FibState /
+  fib CSV / final.csv / caches stay "bare element idx"); landing review = 1 conformance lens after my mutation loop.
+- **As landed (2026-09-29d).** Code: the 5 MS emit literals + the POI meta literal renamed in place (line-neutral —
+  the FutureWarning stays `:2437`); the POI debug print reads `meta["bos_anchor_idx"]` / `["cts_anchor_idx"]`;
+  `_EVENT_META_IDX_KEYS` (`cts_idx` dropped — the listed `cts_anchor_idx` covers RANGE_STARTED; `pb_start` →
+  `last_pullback_apply_idx`) and `_ZONE_META_IDX_KEYS` (POI pair) with comments. Guard: `EXTRA_EVENT_IDX_KEYS`
+  deleted, must-see sets moved, `_NOT_MIRRORED["market_structure"]` += `cts_idx` (the cycle-0 cache), the value pin
+  keyed by type for RANGE_STARTED (the fixture has no cycle >= 1 BOS, so the BOS key's VALUE shift stays unpinned
+  there, as `pb_start`'s was). New pins `tests/test_meta_key_renames.py` (5): every RANGE_STARTED / BOS emit literal
+  (static, all 3 + 2 paths), no `pb_start` constant in MS, no `bos_idx` / `cts_idx` constant in `poi_zones`, and a
+  real run (`_make_double_rewind_data`, sd ±1: all three RANGE_STARTED paths, BOS cycles 0 / 1 / 2 → None / 4 /
+  None). **Measured == the prediction:** `cmp_meta_rename.py` exit 0 — the 13 (CSV, type, key) counts above,
+  150 cells / 197 keys, every other cell identical, the meta-less CSVs byte-identical; `cmp_save.py` 150 cells;
+  figures traces_xy_equal + shapes_equal (85/245, 151/124, 294/233); FETCH GATE PASS; run.log == the warm-up
+  replay's line for line except timing (9045 lines); replay 43.5 s. Tests 1073 → 1078. **Own mutation loop (12
+  mutants, scratch trees, full suite): 12/12 KILLED** — an old key restored at each of the 7 emit sites, each new
+  key dropped from its list (3), the debug print back on `.get`, an alias (both POI keys). Without the new file two
+  SURVIVED: `pb_start` restored at the cycle >= 1 BOS (no suffix → invisible to the name guard; the fixture's only
+  BOS is cycle 0) and the debug print. Docs: GLOSSARY (the Bare-element row, Status), ARCHITECTURE (the BOS row's
+  meta column + RANGE_STARTED's key), POI_ZONES_SPEC, GOTCHAS, LANDMINES, review_scripts README (+ `cmp_meta_rename.py`,
+  `meta_census.py` keeps `pb_start` for old saves). **Save-format boundary:** saves before this commit carry
+  `pb_start`, RANGE_STARTED `cts_idx`, POI `bos_idx` / `cts_idx`.
+
 ## 10. Open questions for the user (recommendation first; concrete window data)
 
 **User decisions 2026-09-24:** "Unless I note otherwise below, your recommendations sound good" → **ACCEPTED as

@@ -56,9 +56,6 @@ from engine_v2.tests.test_render_sub_projection import (  # noqa: F401 (fixtures
     m15_df,
 )
 
-# Index-valued event-meta keys that carry neither the `_idx` nor the `_at` suffix.
-EXTRA_EVENT_IDX_KEYS = frozenset({"pb_start"})
-
 # Nested lists the mirror shifts with their own loops: list key -> item key.
 NESTED_IDX_LISTS = {"bounds_steps": "start_idx", "activation_history": "idx"}
 
@@ -106,8 +103,7 @@ def test_every_event_meta_index_key_is_shifted(geometry, m15_df):
     events, _ = _mirrored(geometry, m15_df)
     unlisted = sorted({
         (ev.type, k) for ev in events for k in ev.meta
-        if (_is_idx_key(k) or k in EXTRA_EVENT_IDX_KEYS)
-        and k not in edm._EVENT_META_IDX_KEYS
+        if _is_idx_key(k) and k not in edm._EVENT_META_IDX_KEYS
     })
     assert unlisted == [], f"event meta index keys not in _EVENT_META_IDX_KEYS: {unlisted}"
 
@@ -223,6 +219,8 @@ def test_mirrored_index_values_are_source_plus_slice_begin(geometry, m15_df):
                     if k in keys and v is not None:
                         assert m.meta[k] == v + sb, (attr, k, v, m.meta[k])
                         shifted[(attr, k)] += 1
+                        if attr == "events":   # per type: RANGE_STARTED shares `cts_anchor_idx` with the CTS events
+                            shifted[(attr, s.type, k)] += 1
                     elif k in NESTED_IDX_LISTS and v:
                         ik = NESTED_IDX_LISTS[k]
                         assert [x[ik] for x in m.meta[k]] == [x[ik] + sb for x in v], (attr, k)
@@ -231,9 +229,9 @@ def test_mirrored_index_values_are_source_plus_slice_begin(geometry, m15_df):
                         assert m.meta[k] == v, (attr, k, v, m.meta[k])
     assert {
         ("events", "effective_idx"), ("events", "start_idx"), ("events", "confirm_idx"),
-        ("events", "cts_idx"), ("events", "pullback_apply_idx"), ("events", "expires_idx"),
+        ("events", "RANGE_STARTED", "cts_anchor_idx"), ("events", "pullback_apply_idx"), ("events", "expires_idx"),
         ("kl_zones", "anchor_idx"), ("kl_zones", "bounds_steps"),
-        ("poi_zones", "bos_idx"), ("poi_zones", "cts_idx"),
+        ("poi_zones", "bos_anchor_idx"), ("poi_zones", "cts_anchor_idx"),
         ("fib_states", "activated_at"), ("fib_states", "locked_at"),
         ("wave_candles", "anchor_idx"),
     } <= set(shifted), sorted(shifted)
@@ -262,14 +260,13 @@ def _ms_emitted_event_meta_keys():
 def test_every_ms_emitted_event_meta_index_key_is_shifted():
     """Static: covers keys the fixture never produces (e.g. RANGE_STARTED
     `proximity_apply_idx`, emitted only on the proximity-created-range path; an
-    int `pb_start`)."""
+    int `last_pullback_apply_idx`)."""
     keys = _ms_emitted_event_meta_keys()
     assert {"confirmed_at", "cts_anchor_idx", "bos_anchor_idx", "pattern_anchor_idx",
-            "proximity_apply_idx", "pb_start"} <= keys
+            "proximity_apply_idx", "last_pullback_apply_idx"} <= keys
     unlisted = sorted(
         k for k in keys
-        if (_is_idx_key(k) or k in EXTRA_EVENT_IDX_KEYS)
-        and k not in edm._EVENT_META_IDX_KEYS
+        if _is_idx_key(k) and k not in edm._EVENT_META_IDX_KEYS
     )
     assert unlisted == [], unlisted
 
@@ -291,7 +288,7 @@ def _meta_kw_keys(module):
 
 @pytest.mark.parametrize("module, list_name, must_see", [
     (kl_zones_v1, "_ZONE_META_IDX_KEYS", {"anchor_idx", "expanded_last_idx", "pb_reconfirm_idx"}),
-    (poi_zones, "_ZONE_META_IDX_KEYS", {"bos_idx", "cts_idx", "cts_established_idx"}),
+    (poi_zones, "_ZONE_META_IDX_KEYS", {"bos_anchor_idx", "cts_anchor_idx", "cts_established_idx"}),
     (fib_tracker, "_FIB_META_IDX_KEYS",
      {"activated_at", "reactivated_at", "locked_at", "deactivated_at", "cycle1_bos_idx"}),
     (wave_candles, "_WAVE_CANDLE_META_IDX_KEYS", {"anchor_idx"}),
@@ -353,8 +350,7 @@ def test_shift_lists_hold_only_index_like_keys():
     for name in _ALL_LISTS:
         keys = getattr(edm, name)
         assert len(set(keys)) == len(keys), (name, "duplicate entry: shifted twice")
-        bad = sorted(k for k in keys if not (_is_idx_key(k) or k in EXTRA_EVENT_IDX_KEYS)
-                     or k in NEVER_LISTED)
+        bad = sorted(k for k in keys if not _is_idx_key(k) or k in NEVER_LISTED)
         assert bad == [], (name, bad)
 
 
@@ -561,7 +557,7 @@ def _all_index_like_keys(module) -> set:
 # mirrored element's meta (measured at 574de2a). A new entry needs a reason.
 _NOT_MIRRORED = {
     "market_structure": {
-        "bos_idx",                                # st.cycle0_data cache
+        "bos_idx", "cts_idx",                     # st.cycle0_data cache (RANGE_STARTED `cts_idx` → `cts_anchor_idx`, Post-E·4)
         "last_breakout_pat_apply_idx",            # a df column (out[...] = …)
     },
     "poi_zones": {"armed_idx", "confirmed_fill_idx"},  # ImbalanceInstance.meta (fill cache)
@@ -590,7 +586,8 @@ def test_emitter_modules_have_no_unlisted_index_keys(module, list_name):
 
 
 def test_every_int_meta_value_is_listed_or_known_non_index(geometry, m15_df):
-    """The name guards only see `*_idx` / `*_at` (+ `pb_start`): a new UNSUFFIXED
+    """The name guards only see `*_idx` / `*_at` (the one unsuffixed index key,
+    `pb_start`, became `last_pullback_apply_idx` in Post-E·4): a new UNSUFFIXED
     index key (the mutation lens: `"watch_from": int(i)` on REVERSAL_WATCH_START)
     survived. Classify by VALUE TYPE: every Python-int meta value (top level and
     inside the nested lists) on a fixture element is under a shift-listed key, the

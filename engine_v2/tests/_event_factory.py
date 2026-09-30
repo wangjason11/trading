@@ -56,7 +56,7 @@ def make_bos_confirmed(
     idx: Optional[int] = None,
     meta: Optional[Dict[str, Any]] = None,
 ) -> StructureEvent:
-    """A BOS_CONFIRMED. `meta` adds extra keys (e.g. `source`, `pb_start`)."""
+    """A BOS_CONFIRMED. `meta` adds extra keys (e.g. `source`, `last_pullback_apply_idx`)."""
     m = _extra(meta, ("bos_anchor_idx", "confirmed_at"))
     m["confirmed_at"] = int(confirmed_at)
     _attribution(m, structure_id, cycle_id, struct_direction)

@@ -715,7 +715,7 @@ zones.
 - `ev.meta["bos_anchor_idx"]` = the BOS anchor candle (where the BOS price level was set; Plan E E2a)
 - `ev.price` = BOS price level (the anchor's price — NOT a price of the `ev.idx` candle since E4b)
 - `ev.meta["confirmed_at"]` = confirmation candle (when the breakout was detected) — the apply candle of the breakout that established the cycle, `==` the same cycle's `CTS_ESTABLISHED.meta["confirmed_at"]`
-- `ev.meta["pb_start"]` = the apply candle of the LAST pullback pattern before this BOS (`st.last_pullback_pat_apply_idx`, on both `source`s; `None` before any pullback) — not a "pullback start" (entity-absolute on sub events since Post-E·2)
+- `ev.meta["last_pullback_apply_idx"]` (`pb_start` until Post-E·4, 2026-09-29d) = the apply candle of the LAST pullback pattern since the previous cycle was established (`st.last_pullback_pat_apply_idx`, reset at each new cycle; on both `source`s; `None` on cycle 0 and before any pullback) — not a "pullback start" (entity-absolute on sub events since Post-E·2)
 
 ---
 

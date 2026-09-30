@@ -613,8 +613,8 @@ def derive_poi_zones(
                     "current_versions": current_versions,
                     "status": status,
                     "activation_history": activation_history,
-                    "bos_idx": fib_state.bos_idx,
-                    "cts_idx": fib_state.cts_idx,
+                    "bos_anchor_idx": fib_state.bos_idx,
+                    "cts_anchor_idx": fib_state.cts_idx,
                     "cts_established_idx": cts_established_idx,
                 },
             )
@@ -642,8 +642,8 @@ def derive_poi_zones(
             peak = z.meta.get("versions", [])
             cur = z.meta.get("current_versions", [])
             print(f"[poi_zones] sid={z.meta.get('structure_id')} cycle={z.meta.get('cycle_id')} "
-                  f"bos_idx={z.meta.get('bos_idx')} cts_est={z.meta.get('cts_established_idx')} "
-                  f"confirmed={z.meta.get('confirmed_idx')} ic={z.ic_idx} cts={z.meta.get('cts_idx')} "
+                  f"bos_anchor_idx={z.meta['bos_anchor_idx']} cts_est={z.meta.get('cts_established_idx')} "
+                  f"confirmed={z.meta.get('confirmed_idx')} ic={z.ic_idx} cts_anchor_idx={z.meta['cts_anchor_idx']} "
                   f"deact={deact_idx} react_after={react_after} end={z.meta.get('end_idx')} "
                   f"end_reason={z.meta.get('end_reason')} status={z.meta.get('status')} "
                   f"dir={z.meta.get('struct_direction')} peak={peak} cur={cur} hist=[{flips_summary}]")

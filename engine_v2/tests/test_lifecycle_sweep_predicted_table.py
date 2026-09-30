@@ -104,11 +104,11 @@ def _h1_events() -> List[StructureEvent]:
         _ev(115, "STRUCTURE", "CTS_ESTABLISHED", 0.56126, via="one_maru_continuous", pattern_anchor_idx=114,
             confirmed_at=115, cycle_id=0, structure_id=0, struct_direction=1),
         _ev(96, "STRUCTURE", "BOS_CONFIRMED", 0.55808, source="initial_prior_extreme",
-            confirmed_at=115, pb_start=None, cycle_id=0, structure_id=0, struct_direction=1),
+            confirmed_at=115, last_pullback_apply_idx=None, cycle_id=0, structure_id=0, struct_direction=1),
         _ev(652, "STRUCTURE", "CTS_ESTABLISHED", 0.58534, via="one_maru_opposite", pattern_anchor_idx=651,
             confirmed_at=652, cycle_id=1, structure_id=0, struct_direction=1),
         _ev(591, "STRUCTURE", "BOS_CONFIRMED", 0.5736, source="pullback_extreme",
-            confirmed_at=652, pb_start=439, cycle_id=1, structure_id=0, struct_direction=1),
+            confirmed_at=652, last_pullback_apply_idx=439, cycle_id=1, structure_id=0, struct_direction=1),
         # A prediction that could have expired -- NOT the reversal idx source.
         _ev(897, "STRUCTURE", "REVERSAL_WATCH_START", 0.5736, pattern_anchor_idx=897, bos_frozen=0.5736,
             expires_idx=902, structure_id=0, struct_direction=1),
@@ -121,15 +121,15 @@ def _h1_events() -> List[StructureEvent]:
         _ev(703, "STRUCTURE", "CTS_ESTABLISHED", 0.58195, via="double_maru", pattern_anchor_idx=702,
             confirmed_at=703, cycle_id=0, structure_id=1, struct_direction=-1),
         _ev(689, "STRUCTURE", "BOS_CONFIRMED", 0.58424, source="initial_prior_extreme",
-            confirmed_at=703, pb_start=None, cycle_id=0, structure_id=1, struct_direction=-1),
+            confirmed_at=703, last_pullback_apply_idx=None, cycle_id=0, structure_id=1, struct_direction=-1),
         _ev(748, "STRUCTURE", "CTS_ESTABLISHED", 0.57764, via="one_maru_opposite", pattern_anchor_idx=747,
             confirmed_at=748, cycle_id=1, structure_id=1, struct_direction=-1),
         _ev(728, "STRUCTURE", "BOS_CONFIRMED", 0.58196, source="pullback_extreme",
-            confirmed_at=748, pb_start=727, cycle_id=1, structure_id=1, struct_direction=-1),
+            confirmed_at=748, last_pullback_apply_idx=727, cycle_id=1, structure_id=1, struct_direction=-1),
         _ev(902, "STRUCTURE", "CTS_ESTABLISHED", 0.57228, via="continuous", pattern_anchor_idx=897,
             confirmed_at=902, cycle_id=2, structure_id=1, struct_direction=-1),
         _ev(826, "STRUCTURE", "BOS_CONFIRMED", 0.58105, source="pullback_extreme",
-            confirmed_at=902, pb_start=810, cycle_id=2, structure_id=1, struct_direction=-1),
+            confirmed_at=902, last_pullback_apply_idx=810, cycle_id=2, structure_id=1, struct_direction=-1),
     ]
     # The orchestrator's `sorted_events` order (`ef.processing_order_key`).
     return sorted(evs, key=ef.processing_order_key)

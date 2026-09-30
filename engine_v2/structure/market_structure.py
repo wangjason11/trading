@@ -1071,7 +1071,7 @@ class MarketStructure:
                     "confirm_idx": confirm_idx,
                     "hi": hi_i,
                     "lo": lo_i,
-                    "cts_idx": None if st.cts is None else st.cts.idx,
+                    "cts_anchor_idx": None if st.cts is None else st.cts.idx,
                     "cts_price": None if st.cts is None else float(st.cts.price),
                     "structure_id": int(st.structure_id),
                     "struct_direction": int(self.struct_direction),
@@ -1188,7 +1188,7 @@ class MarketStructure:
                     price=None,
                     meta={
                         "reason": "pullback_created_range",
-                        "cts_idx": st.cts.idx,
+                        "cts_anchor_idx": st.cts.idx,
                         "cts_price": cts_price,
                         "pullback_apply_idx": apply_idx,
                         "hi": float(st.range_hi),
@@ -1328,7 +1328,7 @@ class MarketStructure:
                         meta={
                             "source": "initial_prior_extreme",
                             "confirmed_at": int(apply_idx),
-                            "pb_start": self.state.last_pullback_pat_apply_idx,
+                            "last_pullback_apply_idx": self.state.last_pullback_pat_apply_idx,
                         },
                     )
                 else:
@@ -1342,7 +1342,7 @@ class MarketStructure:
                         meta=self._end_watch_superseded_by_new_cycle(int(apply_idx), {  # an open watch ends here
                             "source": "pullback_extreme",
                             "confirmed_at": int(apply_idx),
-                            "pb_start": self.state.last_pullback_pat_apply_idx,
+                            "last_pullback_apply_idx": self.state.last_pullback_pat_apply_idx,
                         }),
                     )
 
@@ -1965,7 +1965,7 @@ class MarketStructure:
                     price=None,
                     meta={
                         "reason": "proximity_created_range",
-                        "cts_idx": int(st.cts.idx),
+                        "cts_anchor_idx": int(st.cts.idx),
                         "cts_price": cts_price,
                         "proximity_apply_idx": int(candle_idx),
                         "hi": float(st.range_hi),

@@ -211,7 +211,7 @@ present design includes it.
 
 **If you must change either gate:** the spurious-cascade signature is
 two events at the breakout idx — a `BOS_CONFIRMED` with
-`source: "pullback_extreme"` and `pb_start: None` (meaning no pullback
+`source: "pullback_extreme"` and `last_pullback_apply_idx: None` (`pb_start` before Post-E·4; meaning no pullback
 fired, the BOS came from the proximity-only
 `[cts_confirmed_idx, breakout_apply_idx]` window). Grep the
 structure_events.csv for that combination to catch regressions.

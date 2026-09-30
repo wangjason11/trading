@@ -31,9 +31,12 @@ coincidence.
 | **Pattern anchor** | `pattern_anchor_idx` (first candle), `pattern_end_idx` (last candle) | *Candle-pattern realm* (breakout / pullback / reversal patterns; the MS scan candle; the reversal close-break candle): "anchor" ALWAYS means the pattern's FIRST candle |
 | **Market-structure anchor** | `*_anchor_idx` (`cts_anchor_idx`, `bos_anchor_idx`, KL-zone / fib anchors, a structure's start) | *Market-structure realm* (BOS/CTS of a cycle, zones, fibs, structures, subs): an ENDPOINT — start or end — of a structure element. Always a location, never a moment |
 | **Extreme** | `*_extreme_idx` / `*_extreme_price`; `pattern_extreme_idx` / `pattern_extreme_price` | a recorded price extreme that is NOT serving as an endpoint at that site: window / retrace searches, running extremes, "is this a new extreme" checks, lower-TF price-mapping, candle anatomy, and the extreme reached INSIDE a pattern (from its first candle through its apply candle) |
-| **Bare element idx** | `bos_idx`, `cts_idx` on a record that pairs them with a price (FibState / fib_lifecycle.csv, POI meta, final.csv, cycle-0 dicts, `RANGE_STARTED.meta["cts_idx"]` with `cts_price`) | that element's anchor |
+| **Bare element idx** | `bos_idx`, `cts_idx` on a record that pairs them with a price (FibState / fib_lifecycle.csv, final.csv, cycle-0 dicts) — never an event or zone META key: those say `*_anchor_idx` (`RANGE_STARTED.meta["cts_anchor_idx"]` with `cts_price`; POI `meta["bos_anchor_idx"]` / `["cts_anchor_idx"]`, equal to the owning fib row's `bos_idx` / `cts_idx`) since Post-E·4 | that element's anchor |
 
-Status (Plan E E5, 2026-09-25): the code, the current specs and the tracked skills follow this standard.
+Status (Plan E E5, 2026-09-25): the code, the current specs and the tracked skills follow this standard. Post-E·4
+(2026-09-29d, PLAN_E §9.5) renamed the last four exported meta keys that broke it: `BOS_CONFIRMED` `pb_start` →
+`last_pullback_apply_idx` (a moment: the last pullback pattern's apply candle), `RANGE_STARTED` `cts_idx` →
+`cts_anchor_idx`, POI `bos_idx` / `cts_idx` → `bos_anchor_idx` / `cts_anchor_idx` (saves before it carry the old keys).
 Kept by decision: frozen event names (bridged by `ARCHITECTURE.md` "`ev.idx` convention") and event-type
 tokens / legend labels; `KLZone.source_time` (a moment's time next to the anchor's `source_price`) and
 `StructureLevel.time` (the anchor's time) — PLAN_E Q12; the reversal-scope names (`_synth_reversal_trigger`'s

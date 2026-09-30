@@ -4,7 +4,8 @@ usage (repo root): python meta_census.py FOLDER [--all]
 (Post-E·2, 2026-09-26: the coordinate-hygiene census; since Post-E·2 every M15 index key is
 SHIFTED, so a non-empty UNSHIFTED table = a new slice-local key.)
 For every M15 lens CSV with a `meta` column: every meta key whose value is an
-int (or None) and whose name looks index-like (`*_idx`, `*_at`, `pb_start`) is
+int (or None) and whose name looks index-like (`*_idx`, `*_at`, `pb_start` — renamed
+`last_pullback_apply_idx` in Post-E·4; kept for saves before it) is
 classified SHIFTED (in the mirror's shift lists) or not, with its non-null cell
 count per lens. For the family keys, each value is compared with the row's
 sub `slice_begin` (= the sub's starting_idx - 50, from the subs CSV) to show
