@@ -365,7 +365,18 @@ You can debug **confluence vs non-confluence** trades visually.
 
 ---
 
-## **Week 9 — Entry Planner v1 \+ Visual Trade Intents**
+## **Week 9 — Entries & Decisions**
+
+> **Restructured by the user 2026-09-30** (was "Entry Planner v1 + Visual Trade Intents"), in three parts — a rough
+> outline; the user details each part as Week 9 reaches it:
+> - **Part 1 — Entry prerequisite items.** The list lives in ONE place: `IDEA_PARKING_LOT.md` §D (the M5 lens, zone
+>   strength scoring, the POI / IC redefinition to one POI per cycle, zone size adjustments, entry confirmation
+>   candle patterns, and the rest carried from Week 8).
+> - **Part 2 — Entry decision build & logic** — the original Week 9 plan below. The entry confirmation candle
+>   patterns may open Part 2 instead of closing Part 1.
+> - **Part 3 — Other decisions build & logic** — to be defined by the user.
+
+### **Part 2 — the original plan (Entry Planner v1 + Visual Trade Intents)**
 
 ### **Goal**
 

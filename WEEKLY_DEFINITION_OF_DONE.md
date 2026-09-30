@@ -56,9 +56,11 @@ Confluence vs non-confluence is visually obvious.
 
 ---
 
-## Week 9 – Entries
+## Week 9 – Entries & Decisions
 Planned entries, stops, and TPs make sense without explanation.
 RR enforcement behaves correctly.
+(Renamed 2026-09-30; three parts — SYLLABUS Week 9. The criteria above cover Part 2's entries; Part 3's "other
+decisions" get their criteria when the user defines that part.)
 
 ---
 

@@ -44,7 +44,32 @@ The open lines below carry over (fold in when their files are next touched); D a
 
 ## C. Part 4 closure — DONE 2026-09-30 (all three items in "Recently closed"; Part 4 is complete)
 
-## D. Before Entries (Week 9 prerequisites)
+## D. Week 9 Part 1 — Entry prerequisites (before Entries)
+
+**Week 9 = "Entries & Decisions"** (renamed by the user 2026-09-30), in three parts: **Part 1** Entry prerequisite
+items (this bucket), **Part 2** the actual Entry decision build & logic, **Part 3** Other decisions build & logic
+(SYLLABUS Week 9). User: "I agree that these items should be worked on prior to Entries"; a rough outline, details
+come from the user as Week 9 reaches each item. Order inside Part 1: not set yet, except the entry-confirmation
+candle patterns — "can go last in Part 1 or first in Part 2".
+
+**Added by the user 2026-09-30** (verbatim first, then the measured baseline / related entries):
+- **Redefine IC & POI zone logic** — "will reduce POI zones in each cycle to just 1 (vs. currently where a cycle may
+  have multiple POI zones)". Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3
+  V30 / V60 / V90 variants): H1 5 ICs over 3 cycles (2 cycles hold 2 ICs); M15 confluence 30 ICs over 19 cycles (7
+  cycles hold 2, 2 hold 3); M15 counter 12 over 7 (1 holds 2, 2 hold 3); variants per IC H1 1/2/3 = 2/2/1,
+  confluence 14/7/9, counter 7/1/4. OPEN QUESTION for the design: does "one POI" mean one IC per cycle, one variant
+  per IC, or both? Related: "Single-cycle fib POIs on subs" below (additive — MORE POIs per cycle; decide together);
+  G "Cascade-viz hover extras" (reads the variants). OPEN. Detail: `engine_v2/zones/POI_ZONES_SPEC.md`.
+- **Zone adjustments** — "currently some KL & POI zones may be very large or small in their current base form. This
+  will cover additional logic that adjust the size." Related: "Zone strength scoring" below (both reshape how a zone
+  reads); A "Naming-Standard audit" (`bounds_steps[*].start_idx` — land it before anything reads zone expansions for
+  entries / stops). OPEN. Detail: `engine_v2/zones/KL_ZONES_SPEC.md`, `POI_ZONES_SPEC.md`.
+- **Entry confirmation candle patterns** — "define new candle patterns that will be used to confirm entry (when
+  necessary). This is a prerequisite for Entry, but can go last in Part 1 or first in Part 2." Related: "Candle-
+  direction / rejection confirmation at a zone touch — as an ENTRY condition" and "Pinbar body-pip floor calibration"
+  below; the pattern engine (`patterns/structure_patterns.py`, `features/candles_v2.py`). OPEN.
+
+**Carried from the Week 8 register:**
 
 - **The M5 layer** (`H1.main >> M5.counter` — a third lens directly under H1.main, the Part 4 vision's 4th chart;
   memory `project_part4_vision.md`) — DECIDED 2026-09-30: build AFTER the Week 8 merge, as its own Heavy block (plan +
