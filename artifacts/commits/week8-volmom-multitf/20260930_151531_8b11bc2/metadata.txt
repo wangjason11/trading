@@ -1,0 +1,4 @@
+commit_hash=8b11bc2
+timestamp=20260930_151531
+branch=week8-volmom-multitf
+commit_message=Week 8 close: Part 4 closure (13.5.e closed, 13.7 in place, invariants file deleted) + Week 8 DoD signed off
