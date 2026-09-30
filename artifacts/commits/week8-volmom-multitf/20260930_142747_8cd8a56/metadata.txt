@@ -1,0 +1,4 @@
+commit_hash=8cd8a56
+timestamp=20260930_142747
+branch=week8-volmom-multitf
+commit_message=Week 8 close-out session 2026-09-30c: wave-candle hover kind+role (a8ed1cc); POI two-stroke full-window review; user decisions; hygiene (byte-identical)
