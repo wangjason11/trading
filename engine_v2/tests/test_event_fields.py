@@ -158,7 +158,7 @@ def test_emit_bos_confirmed_builds_st_bos_from_the_anchor_param():
 # --- no silent cross-kind fallback on a contract key (Plan E E2d) ----------------
 
 _FALLBACK = re.compile(
-    r"""\.get\(\s*["'](confirmed_at|cts_anchor_idx|bos_anchor_idx|pattern_anchor_idx|cycle1_bos_idx)["']\s*,"""
+    r"""\.get\(\s*["'](confirmed_at|cts_anchor_idx|bos_anchor_idx|pattern_anchor_idx|cycle1_bos_anchor_idx)["']\s*,"""
     r"""|\bc0\.get\(\s*["'](bos_idx|cts_idx)["']\s*,"""
 )
 

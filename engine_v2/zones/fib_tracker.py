@@ -1108,7 +1108,7 @@ class FibTracker:
                     "cross_cycle": True,
                     "scenario": 2,
                     "activated_at": cts_established_idx,
-                    "cycle1_bos_idx": bos_idx,
+                    "cycle1_bos_anchor_idx": bos_idx,   # BOS_1's anchor (this fib's bos_idx is BOS_0's): cond2's window
                 },
                 cross_version=0,
             )
@@ -1681,9 +1681,9 @@ class FibTracker:
         c0_end = max(c0_bos_idx, c0_cts_idx)
         cond1 = self._has_unfilled(df, c0_start, c0_end, c0["fill_horizon_idx"], sd)
 
-        cycle1_bos_idx = new_cross_fib.meta["cycle1_bos_idx"]
-        c1_start = min(cycle1_bos_idx, cts_idx)
-        c1_end = max(cycle1_bos_idx, cts_idx)
+        cycle1_bos_anchor_idx = new_cross_fib.meta["cycle1_bos_anchor_idx"]
+        c1_start = min(cycle1_bos_anchor_idx, cts_idx)
+        c1_end = max(cycle1_bos_anchor_idx, cts_idx)
         cond2 = self._has_unfilled(df, c1_start, c1_end, self._moment(), sd)
 
         cond3 = self._has_unfilled(df, c0_start, c0_end, self._bos_moment_by_cycle[(sid, 1)], sd)
@@ -1718,7 +1718,7 @@ class FibTracker:
             raise AssertionError(
                 f"[fib] sid={sid} cycle-1 cross failed (cond1={cond1} cond2={cond2} cond3={cond3}) "
                 f"while its own window [{bos1_idx}, {cts_idx}] still has an unfilled imbalance "
-                f"(cycle1_bos_idx={cycle1_bos_idx})")
+                f"(cycle1_bos_anchor_idx={cycle1_bos_anchor_idx})")
         single_key = (sid, 1)
         existing = self._fibs.get(single_key)
         # Cross dead and own imbalance also filled → nothing active (the cross stays

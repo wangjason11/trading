@@ -135,13 +135,15 @@ _ZONE_META_IDX_KEYS = (
     "cts_established_idx",
     "end_idx",
     "base_idx",
-    # Post-E·2 (2026-09-26) — slice-local in the M15 CSVs until then:
-    "expanded_last_idx",    # KL (the last expansion's THRESHOLD_UPDATED candle)
+    # Post-E·2 (2026-09-26) — slice-local in the M15 CSVs until then (KL
+    # `expanded_last_idx` too, deleted with its `_price` / `_event` copies of
+    # `bounds_steps[-1]` in Post-E·5, 2026-09-30):
     "bos_anchor_idx",       # POI (the owning fib's bos_idx, copied at IC time; `bos_idx` until Post-E·4)
     "cts_anchor_idx",       # POI (the owning fib's cts_idx; `cts_idx` until Post-E·4)
-    "pb_reconfirm_idx",     # KL CTS zone (CTS_RECONFIRMED upgrade; subs get BOS
-                            # zones only). Was misfiled in the EVENT list (no
-                            # event carries it) until Post-E·2.
+    "reconfirmed_idx",      # KL CTS zone (the CTS_RECONFIRMED moment; subs get BOS
+                            # zones only). `pb_reconfirm_idx` until Post-E·5; was
+                            # misfiled in the EVENT list (no event carries it)
+                            # until Post-E·2.
 )
 
 # FibState meta keys with entity-df indices (the dataclass fields bos_idx /
@@ -152,7 +154,8 @@ _FIB_META_IDX_KEYS = (
     "activated_at",
     "reactivated_at",
     "locked_at",
-    "cycle1_bos_idx",       # versioned cross fibs (Scenario 3)
+    "cycle1_bos_anchor_idx",  # the cycle-1 cross fib (Scenario 2): BOS_1's anchor
+                              # (`cycle1_bos_idx` until Post-E·5, 2026-09-30)
 )
 
 # WaveCandleResult meta keys with entity-df indices (the dataclass fields

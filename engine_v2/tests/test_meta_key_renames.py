@@ -7,6 +7,11 @@ keys by NAME, and only on the paths its fixture runs or its static scan cannot e
 suffix, and `cts_idx` stays a legal key of MS's cycle-0 cache, so an old key restored at ONE emit path (the proximity
 range, the cycle >= 1 BOS) would pass it. These pins read every emit literal statically and one real run whose events
 cover all three RANGE_STARTED paths and the BOS of cycles 0, 1 and 2.
+
+Post-E·5 (2026-09-30; PLAN_E §9.6): fib `cycle1_bos_idx` -> `cycle1_bos_anchor_idx` (BOS_1's anchor on the cycle-1 cross
+fib; `fib_tracker` reads it for cond2's window), KL `pb_reconfirm_idx` -> `reconfirmed_idx` (the CTS_RECONFIRMED
+moment), and the KL `expanded_last_idx` / `_price` / `_event` copies of `bounds_steps[-1]` deleted. The name guard sees
+only index-suffixed keys, so the non-index `expanded_last_price` / `_event` and every VALUE are pinned here.
 """
 from __future__ import annotations
 
@@ -17,7 +22,9 @@ from pathlib import Path
 
 import pytest
 
+import engine_v2
 from engine_v2.structure import market_structure
+from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests import test_ms_cts_update_no_regress as _noreg
 from engine_v2.tests.test_event_meta_idx_keys import _render_both_lenses
@@ -25,6 +32,7 @@ from engine_v2.tests.test_render_sub_projection import geometry, m15_df  # noqa:
 from engine_v2.tests.test_ms_stop_after_cts import _make_double_rewind_data
 from engine_v2.tests.test_unified_probe import _prepare_df
 from engine_v2.zones import poi_zones
+from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
 
 def _tree(module):
@@ -108,3 +116,70 @@ def test_poi_anchors_are_the_owning_fibs_anchors(geometry, m15_df):
     for z in res.poi_zones:
         m = z.meta
         assert (m["bos_anchor_idx"], m["cts_anchor_idx"]) in fibs[(m["structure_id"], m["cycle_id"])], m
+
+
+# --- Post-E·5 (2026-09-30) -------------------------------------------------------------------------------------------
+
+_POST_E5_OLD = ("cycle1_bos_idx", "pb_reconfirm_idx", "expanded_last_")
+
+
+def test_no_production_string_carries_a_post_e5_old_key():
+    """Every production module — an exporter alias included (no exporter test exists; Post-E·4 review MINOR 4): no
+    string constant holds an old key. Comments keep the history."""
+    root = Path(engine_v2.__file__).parent
+    hits = []
+    for path in root.rglob("*.py"):
+        if {"legacy_2025", "tests", "plans"} & set(path.parts):
+            continue
+        for n in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(n, ast.Constant) and isinstance(n.value, str):
+                hits += [(path.name, n.lineno, old) for old in _POST_E5_OLD if old in n.value]
+    assert hits == []
+
+
+def _kl_run(sd, extra_events=()):
+    rows = _make_double_rewind_data()
+    with redirect_stdout(io.StringIO()):
+        res = compute_bounded_structure(_prepare_df(rows if sd == 1 else _noreg._mirror(rows)), 0, sd)
+        zones = derive_kl_zones_v1(res.df, [*res.events, *extra_events], struct_direction=sd)
+    return res, zones
+
+
+@pytest.mark.parametrize("sd", [1, -1])
+def test_kl_expansion_lives_in_bounds_steps_only(sd):
+    """The fixture's one expansion (cycle 1's BOS zone, BOS_THRESHOLD_UPDATED @9): `bounds_steps[-1]` carries its
+    moment, price and event, the zone's bounds are that step's, `expanded` marks exactly the multi-step zones, and no
+    `expanded_last_*` copy is written."""
+    res, zones = _kl_run(sd)
+    (thr,) = [e for e in res.events if e.type == "BOS_THRESHOLD_UPDATED"]
+    (z,) = [z for z in zones if z.meta.get("expanded")]
+    last = z.meta["bounds_steps"][-1]
+    assert (z.source_kind, z.meta["cycle_id"], int(thr.idx)) == ("BOS", 1, 9)
+    assert (last["start_idx"], last["price"], last["event"]) == (9, float(thr.price), "BOS_THRESHOLD_UPDATED")
+    assert (last["top"], last["bottom"]) == (z.top, z.bottom)
+    assert all(bool(z.meta.get("expanded")) == (len(z.meta["bounds_steps"]) > 1) for z in zones)
+    assert not [k for z in zones for k in z.meta if k.startswith("expanded_last")]
+
+
+@pytest.mark.parametrize("sd", [1, -1])
+def test_kl_reconfirm_records_the_reconfirmed_moment(sd):
+    """Cycle 1's CTS was confirmed by sd-zone proximity @9 (anchor 8); a CTS_RECONFIRMED @11 (built as
+    `_emit_cts_reconfirmed` builds it — no fixture fires one) upgrades that zone only: `reconfirmed_idx` = 11 (the
+    moment — not the proximity moment 9, not the anchor 8), `confirmed_idx` keeps 9, the method becomes "pullback",
+    and nothing else in the zone changes."""
+    rec = StructureEvent(idx=11, category="STRUCTURE", type="CTS_RECONFIRMED", price=None, meta={
+        "via": "synthetic", "cycle_id": 1, "structure_id": 0, "struct_direction": sd, "confirmed_at": 11,
+        "cts_anchor_idx": 8, "confirmation_method": "pullback"})
+    _, before = _kl_run(sd)
+    _, zones = _kl_run(sd, [rec])
+    (cts1,) = [z for z in before if z.source_kind == "CTS" and z.meta["cycle_id"] == 1]
+    assert (cts1.meta["confirmed_idx"], cts1.meta["anchor_idx"], cts1.meta["confirmation_method"]) == (
+        9, 8, "sd_zone_proximity")
+    up = [z for z in zones if "reconfirmed_idx" in z.meta]
+    assert [(z.source_kind, z.meta["cycle_id"]) for z in up] == [("CTS", 1)]
+    m = up[0].meta
+    assert (m["reconfirmed_idx"], m["confirmed_idx"], m["anchor_idx"], m["confirmation_method"]) == (
+        11, 9, 8, "pullback")
+    assert {k: v for k, v in m.items() if k not in ("reconfirmed_idx", "confirmation_method")} == {
+        k: v for k, v in cts1.meta.items() if k != "confirmation_method"}
+    assert not [z for z in zones if "pb_reconfirm_idx" in z.meta]

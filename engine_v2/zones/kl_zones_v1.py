@@ -862,11 +862,10 @@ def derive_kl_zones_v1(
                     bottom=float(bot2),
                     meta={
                         **(z0.meta or {}),
+                        # The last expansion is `bounds_steps[-1]` (its moment `start_idx`, `price`,
+                        # `event`); the `expanded_last_*` copies were deleted (Post-E·5, 2026-09-30).
                         "bounds_steps": steps,
                         "expanded": True,
-                        "expanded_last_idx": int(ev.idx),
-                        "expanded_last_price": float(price),
-                        "expanded_last_event": str(ev.type),
                     },
                 )
 
@@ -992,7 +991,8 @@ def derive_kl_zones_v1(
     # Post-pass: process CTS_RECONFIRMED events. When CTS was first
     # confirmed via sd zone proximity AND a valid pullback fired later,
     # upgrade the CTS zone's confirmation_method to "pullback" and record
-    # pb_reconfirm_idx. The original CTS_CONFIRMED event stays immutable.
+    # reconfirmed_idx (the CTS_RECONFIRMED moment; `confirmed_idx` keeps the
+    # proximity moment). The original CTS_CONFIRMED event stays immutable.
     # ------------------------------------------------------------------
     for ev in events:
         if ev.type != "CTS_RECONFIRMED":
@@ -1016,7 +1016,7 @@ def derive_kl_zones_v1(
                 meta={
                     **zmeta,
                     "confirmation_method": "pullback",
-                    "pb_reconfirm_idx": int(ev.idx),
+                    "reconfirmed_idx": int(ev.idx),
                 },
             )
             break

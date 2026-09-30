@@ -98,7 +98,8 @@ def test_scenario2_cross_stored_at_versioned_key():
     # Meta preserved exactly — no version/fib_mode keys (byte-identical CSV).
     assert cross.meta.get("cross_cycle") is True
     assert cross.meta.get("scenario") == 2
-    assert cross.meta.get("cycle1_bos_idx") == 30
+    # BOS_1's anchor, NOT the fib's own bos_idx (BOS_0 = 10); Post-E·5 name, no alias left.
+    assert cross.meta["cycle1_bos_anchor_idx"] == 30 and "cycle1_bos_idx" not in cross.meta
     assert "version" not in cross.meta
     assert "fib_mode" not in cross.meta
     # Scratch fib slots retired; cycle0 decision input kept.

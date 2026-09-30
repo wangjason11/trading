@@ -50,7 +50,7 @@ candle features → structure patterns → imbalance → market structure
   sd zone proximity (BOS inner + active POI inners). First match confirms.
 - `CTS_CONFIRMED.meta["confirmation_method"]` ∈ {`"pullback"`, `"sd_zone_proximity"`}
 - `CTS_RECONFIRMED` event fires at pullback idx if proximity confirmed first
-- KL zone meta upgrades on CTS_RECONFIRMED (`pb_reconfirm_idx` recorded)
+- KL zone meta upgrades on CTS_RECONFIRMED (`reconfirmed_idx` recorded — `pb_reconfirm_idx` until Post-E·5, 2026-09-30)
 - Range under proximity-only confirmation seeded with proximity wick (Option B)
 - `BOS_n+1` derivation:
   - With pullback in cycle n: pullback's range deepest extreme (existing)
@@ -118,8 +118,9 @@ must replace events in the list, not mutate event objects.
 **KL zones (`kl_zones_v1`):**
 - Stored in `df.attrs["kl_zones"]` as `KLZone` dataclass
 - `meta["confirmation_method"]` (CTS zones only): "pullback" / "sd_zone_proximity"
-- CTS zone may upgrade method on CTS_RECONFIRMED; `pb_reconfirm_idx` recorded
-- Bounds steps: list of (idx, top, bottom, event) for chart rendering of expansions
+- CTS zone may upgrade method on CTS_RECONFIRMED; `reconfirmed_idx` recorded
+- Bounds steps: list of (idx, top, bottom, event) for chart rendering of expansions; the last one is the last expansion
+  (the `expanded_last_*` copies were deleted in Post-E·5, 2026-09-30)
 - Active = the most recent of each side per structure
 
 **POI zones (`poi_zones`):**

@@ -1644,6 +1644,60 @@ the real emitter.
   confirm 13, carrying the cycle-1 anchor 8) on a range the proximity path opened at 9, listed before the breakout's
   RANGE_RESET @12 — the offline-finalize look-ahead class (zones audit (b)).
 
+### 9.6 Post-E·5 — the last three non-standard exported meta keys (2026-09-30; inventory measured, DECISION PENDING)
+
+- **Why:** the three keys §9.5's landing review left non-standard (GLOSSARY "Naming Standard" Status; not scoped then).
+- **Inventory (at `890e764`; grep of every `.py` / current `.md` + the baseline save `20260929_232136_79168b7`; the
+  3 figures and run.log carry none of the keys):**
+
+  | Key | Writer | Value — kind | Readers | Window rows |
+  |---|---|---|---|---|
+  | `cycle1_bos_idx` | fib meta of the cycle-1 CROSS fib (`fib_tracker.py:1111`, the `scenario_2_cross` branch, `"scenario": 2` — the mirror list's "Scenario 3" comment is stale) | `_handle_cycle1_scenarios`' `bos_idx` = the cycle-1 BOS **anchor** (the cross fib's own `bos_idx` is BOS_0's anchor) — MS anchor | **production:** `_update_cycle1_main` `:1684` (cond2's window `[BOS_1, CTS_1]`) + the assert message `:1721`. Tests: `test_e3a_mutation_pins.py:523` (mutates it), `test_main_versioned_cross.py:101`, the `.get` ban regex `test_event_fields.py:161` | H1 fib, 1 row: sid 1 cycle 1 cross (`bos_idx` 689 = BOS_0, `cts_idx` 761) → **728** = BOS_CONFIRMED(1, 1) `bos_anchor_idx` (its moment 748). M15: 0 |
+  | `expanded_last_idx` (+ siblings `expanded_last_price` / `expanded_last_event`) | KL meta on a threshold expansion (`kl_zones_v1.py:867`) | the `*_THRESHOLD_UPDATED` event's `ev.idx` — a **moment** (the processing candle; ARCHITECTURE: CTS `range_sync` is "NOT a price location"). The trio is written from the same values, in the same `replace`, as the step appended to `bounds_steps` → == `bounds_steps[-1]` (`start_idx` / `price` / `event`) by construction; 7/7 on the window | none (the charts + the orchestrator read `bounds_steps`; no test reads the trio) | H1 3 CTS zones (`range_sync` @650 / 746 / 880), confluence 4 BOS zones (`probe_no_break` @1898 / 2820 / 4195, `rv_anchor_failed` @2460); counter 0. The price sits on the idx candle on all 7 (the BOS paths by construction — candle `i`'s wick; `range_sync` need not) |
+  | `pb_reconfirm_idx` | KL CTS-zone meta, the CTS_RECONFIRMED post-pass (`kl_zones_v1.py:1019`) | CTS_RECONFIRMED `ev.idx` = the late pullback's apply candle — a **moment**; the zone's `confirmed_idx` keeps the original CTS_CONFIRMED moment | none; no test pins its value | **0 exported**: subs export BOS zones only, H1 has 0 CTS_RECONFIRMED. The one window instance is internal: confluence sub 1 cycle 1 — CTS_CONFIRMED by proximity @1902, CTS_RECONFIRMED @1904 (`one_maru_opposite`), anchor 1898 |
+
+  Registry: `_FIB_META_IDX_KEYS` / `_ZONE_META_IDX_KEYS` (the mirror shifts all three). Guard: the must-see sets of
+  `test_event_meta_idx_keys.py` (`:303-306`) + docstrings. Current docs: GLOSSARY (Status + the CTS-confirmation
+  rows), KL_ZONES_SPEC `:208`, MARKET_STRUCTURE_SPEC `:56` / `:384`, PRE_REFACTOR_INVARIANTS `:53` / `:121`, the MS
+  docstring `:1717`. Dated records (plans, plan inputs, `hyg_variant_plugin.py`) stay as written.
+- **USER DECISIONS (2026-09-30), all three as recommended:** fib `cycle1_bos_idx` → **`cycle1_bos_anchor_idx`** (an
+  MS anchor, the event key's spelling); KL **delete the `expanded_last_idx` / `_price` / `_event` trio** (a duplicate of
+  `bounds_steps[-1]`, no reader — the E4b-pre `source_event_idx` precedent; the `expanded` flag stays); KL
+  `pb_reconfirm_idx` → **`reconfirmed_idx`** (the past-participle moment, beside the zone's `confirmed_idx`). Light
+  tier; landing review = 1 conformance lens after my mutation loop (asked before launch).
+- **Predicted `/compare` vs `20260929_232136_79168b7`:** H1 `fib_lifecycle` 1 cell (the key renamed, value 728 and
+  position kept); H1 `kl_zones` 3 cells + M15 confluence `kl_zones` 4 cells (the trio removed from each; `expanded`
+  and `bounds_steps` unchanged) — **8 cells**; the other 21 CSVs byte-identical; the 3 figures identical (85/245,
+  151/124, 294/233); run.log identical except timing (no key is printed; the MS docstring edit is line-neutral, so the
+  FutureWarning stays `:2437`).
+- **As landed (2026-09-30).** Code: the fib writer literal + its reader (`_update_cycle1_main`, local renamed too) +
+  the assert message; KL: the trio removed from the expansion's `replace` literal (a comment says where the last
+  expansion lives), `reconfirmed_idx` in the CTS_RECONFIRMED post-pass; the MS docstring; the mirror lists (the
+  `expanded_last_idx` entry gone, the other two renamed; the fib entry's stale "Scenario 3" → Scenario 2). Tests: the
+  guard's must-see sets; `test_main_versioned_cross` (VALUE 30 = BOS_1 vs the fib's `bos_idx` 10, no alias);
+  `test_e3a_mutation_pins` (the forced-divergence pin moves the new key, and first asserts its value 30); the
+  `.get`-fallback regex in `test_event_fields`; new pins in `tests/test_meta_key_renames.py` (5): no production string
+  constant holds an old key (every module — an exporter alias included), the fixture's expansion (cycle 1's BOS zone
+  @9: `bounds_steps[-1]` = moment / price / event, bounds, `expanded` ⇔ multi-step, no `expanded_last_*`) and the
+  reconfirm upgrade (a CTS_RECONFIRMED @11 injected into `_make_double_rewind_data`'s run: `reconfirmed_idx` 11,
+  `confirmed_idx` keeps 9, anchor 8, only the cycle-1 CTS zone, nothing else changes), sd ±1. **Measured == the
+  prediction:** `cmp_meta_rename.py` exit 0 — 8 cells / 22 keys (fib 1 rename; KL 3 + 4 rows × 3 deletions), every
+  other cell text-identical, meta-less CSVs byte-identical; `cmp_save.py` 8 cells; figures traces_xy_equal +
+  shapes_equal (85/245, 151/124, 294/233); FETCH GATE PASS; run.log == the Post-E·4 replay's line for line up to
+  timing (9030 lines); replay 43.7 s. Tests 1079 → 1084. Tools: `cmp_meta_rename.py` takes `old=` (a deletion);
+  `meta_census.py` counts the pre-rename names as shifted (an old save showed them UNSHIFTED — a false alarm since
+  Post-E·4). Docs: GLOSSARY (Status + the CTS-confirmation rows), KL_ZONES_SPEC, MARKET_STRUCTURE_SPEC (×2, + the
+  sub-internal note), PRE_REFACTOR_INVARIANTS (×2), review_scripts README. **Save-format boundary:** saves before
+  it carry fib `cycle1_bos_idx`, KL `pb_reconfirm_idx` (0 rows here) and the KL `expanded_last_*` trio.
+- **Own mutation loop** (`mutants_post_e5.py`, 24 mutants, full suite each; value / swap / extra-key / exporter-alias,
+  not only reverts — the 2026-09-29d lesson): **24/24 KILLED.** Fib 6 (revert, alias, BOS_0's anchor for BOS_1's,
+  the EST moment for the anchor, the reader on `_bos_by_cycle`, a `.get` fallback), KL expansion 7 (the trio's keys
+  back one at a time, the flag dropped, the step's price / start / event wrong), KL reconfirm 6 (revert, alias, the
+  proximity moment / the anchor for the moment, `confirmed_idx` overwritten, the CTS-kind filter dropped), lists 4,
+  exporter alias 1. **11 die ONLY on the new pins** (K2 / K3 — non-index keys the name guard cannot see; K4–K7 and
+  K10–K13 — values; X1 — the exporter alias, uncatchable before by any test); F6 only on the updated `.get` regex, F5
+  only on the updated forced-divergence pin.
+
 ## 10. Open questions for the user (recommendation first; concrete window data)
 
 **User decisions 2026-09-24:** "Unless I note otherwise below, your recommendations sound good" → **ACCEPTED as

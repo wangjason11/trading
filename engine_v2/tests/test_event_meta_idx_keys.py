@@ -300,15 +300,16 @@ def _meta_kw_keys(module):
 
 
 @pytest.mark.parametrize("module, list_name, must_see", [
-    (kl_zones_v1, "_ZONE_META_IDX_KEYS", {"anchor_idx", "expanded_last_idx", "pb_reconfirm_idx"}),
+    (kl_zones_v1, "_ZONE_META_IDX_KEYS", {"anchor_idx", "reconfirmed_idx"}),
     (poi_zones, "_ZONE_META_IDX_KEYS", {"bos_anchor_idx", "cts_anchor_idx", "cts_established_idx"}),
     (fib_tracker, "_FIB_META_IDX_KEYS",
-     {"activated_at", "reactivated_at", "locked_at", "deactivated_at", "cycle1_bos_idx"}),
+     {"activated_at", "reactivated_at", "locked_at", "deactivated_at", "cycle1_bos_anchor_idx"}),
     (wave_candles, "_WAVE_CANDLE_META_IDX_KEYS", {"anchor_idx"}),
 ], ids=["kl_zones_v1", "poi_zones", "fib_tracker", "wave_candles"])
 def test_every_element_emitter_meta_index_key_is_shifted(module, list_name, must_see):
-    """Static, Post-E·2: KL `expanded_last_idx` / `pb_reconfirm_idx` and fib
-    `reactivated_at` / `cycle1_bos_idx` are never produced by the fixture."""
+    """Static, Post-E·2: KL `reconfirmed_idx` and fib `reactivated_at` /
+    `cycle1_bos_anchor_idx` are never produced by the fixture (the keys' names
+    since Post-E·5, 2026-09-30; KL `expanded_last_idx` was deleted then)."""
     keys = _meta_kw_keys(module)
     assert must_see <= keys, sorted(must_see - keys)
     listed = getattr(edm, list_name)

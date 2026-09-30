@@ -1714,7 +1714,7 @@ class MarketStructure:
         AFTER CTS was already confirmed via sd zone proximity. Does not change
         the original CTS_CONFIRMED's idx or method; CTS zone metadata can use
         this event to upgrade its confirmation_method to "pullback" and record
-        pb_reconfirm_idx.
+        reconfirmed_idx (KL zone meta).
         """
         st = self.state
         cts_anchor = st.cts.idx if st.cts is not None else None

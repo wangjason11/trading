@@ -23,9 +23,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), *["..
 from engine_v2.multitf import entity_df_mutation as edm  # noqa: E402
 
 folder = sys.argv[1]
-SHIFT_EV = set(edm._EVENT_META_IDX_KEYS)
-SHIFT_Z = set(edm._ZONE_META_IDX_KEYS)
-SHIFT_FIB = set(getattr(edm, "_FIB_META_IDX_KEYS", ("deactivated_at",)))  # Post-E·2 list; literal before
+# + the pre-rename names the mirror shifted until Post-E·4 / Post-E·5 (2026-09-29d / 30), so a save before a rename
+# does not show them as UNSHIFTED (a false "new slice-local key").
+SHIFT_EV = set(edm._EVENT_META_IDX_KEYS) | {"pb_start", "cts_idx"}
+SHIFT_Z = set(edm._ZONE_META_IDX_KEYS) | {"bos_idx", "cts_idx", "expanded_last_idx", "pb_reconfirm_idx"}
+SHIFT_FIB = set(getattr(edm, "_FIB_META_IDX_KEYS", ("deactivated_at",))) | {"cycle1_bos_idx"}  # Post-E·2 list
 
 
 def _idxlike(k):

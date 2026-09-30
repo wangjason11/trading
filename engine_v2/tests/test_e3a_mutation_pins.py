@@ -512,7 +512,7 @@ def test_e3ap_c0_now_asks_at_the_moment_not_the_cache_horizon():
 def test_update_cycle1_main_asserts_a_failed_cross_has_its_own_window_filled():
     """`_update_cycle1_main`: cond2 asks the own window [BOS_1, CTS_1] at the update's moment, so a failed cross
     means the own window is filled too (the deleted create-on-fail single was unreachable). Forced divergence —
-    the cross meta's `cycle1_bos_idx` moved to 40 while `_bos_by_cycle` keeps 30: cond2 asks [40, 45] (no gap),
+    the cross meta's `cycle1_bos_anchor_idx` moved to 40 while `_bos_by_cycle` keeps 30: cond2 asks [40, 45] (no gap),
     the own check [30, 45] finds the gap at 35 -> the invariant assert fires (hygiene landing review's pin)."""
     from dataclasses import replace
     t = _t()
@@ -520,7 +520,8 @@ def test_update_cycle1_main_asserts_a_failed_cross_has_its_own_window_filled():
     _c0(t, df, 100); _c1(t, df, 100)
     key = (1, 1, "cross", 0)
     assert t._fibs[key].active
-    t._fibs[key] = replace(t._fibs[key], meta={**t._fibs[key].meta, "cycle1_bos_idx": 40})
+    assert t._fibs[key].meta["cycle1_bos_anchor_idx"] == 30
+    t._fibs[key] = replace(t._fibs[key], meta={**t._fibs[key].meta, "cycle1_bos_anchor_idx": 40})
     with pytest.raises(AssertionError, match="still has an unfilled imbalance"):
         _q(t.on_cts_updated, _upd(45, 1.40, 1, 1), df)
 

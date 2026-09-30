@@ -1,6 +1,7 @@
 """Key-RENAME diff of every CSV in two replay folders: BASE vs CUR (same row order).
 
 usage (repo root): python cmp_meta_rename.py BASE_DIR CUR_DIR old=new [old=new ...]   (2026-09-29d)
+       `old=` (empty new name) = the key is DELETED (Post-E·5, 2026-09-30); the rest of the dict keeps its order.
 
 For a meta-key rename (LANDMINES "Event Contract Rules" rule 3): `cmp_save.py` counts changed CELLS and
 `cmp_meta_keys.py` checks VALUE shifts; this checks that CUR == BASE with ONLY the listed keys renamed:
@@ -24,6 +25,7 @@ from collections import Counter
 base, cur, *pairs = sys.argv[1:]
 RENAME = dict(p.split("=", 1) for p in pairs)
 assert RENAME, "give at least one old=new"
+DROP = {k for k, v in RENAME.items() if v == ""}
 bad, per_key, cells = [], Counter(), Counter()
 
 
@@ -72,8 +74,8 @@ for n in sorted(set(bfiles) & set(cfiles)):
         if str(ma) != ta:
             bad.append(f"{_short(n)} row {i}: BASE meta text does not round-trip through str() — cannot text-check")
             continue
-        renamed = {RENAME.get(k, k): v for k, v in ma.items()}
-        if len(renamed) != len(ma) or str(renamed) != tb:
+        renamed = {RENAME.get(k, k): v for k, v in ma.items() if k not in DROP}
+        if len(renamed) != len(ma) - sum(k in DROP for k in ma) or str(renamed) != tb:
             bad.append(f"{_short(n)} row {i}: meta text is not BASE's with the keys renamed")
             continue
         left = [k for k in mb if k in RENAME]
@@ -86,7 +88,7 @@ for n in sorted(set(bfiles) & set(cfiles)):
 
 print("renamed keys per (CSV, type, old key):")
 for (f, t, k), v in sorted(per_key.items()):
-    print(f"  {f:45s} {str(t):22s} {k:10s} -> {RENAME[k]:24s} {v:4d}")
+    print(f"  {f:45s} {str(t):22s} {k:20s} -> {RENAME[k] or '(deleted)':24s} {v:4d}")
 print(f"cells: {dict(cells)}  total cells {sum(cells.values())}  total keys {sum(per_key.values())}")
 if bad:
     print("PROBLEMS:")

@@ -37,10 +37,10 @@ Status (Plan E E5, 2026-09-25): the code, the current specs and the tracked skil
 (2026-09-29d, PLAN_E §9.5) renamed the four exported meta keys the user scoped: `BOS_CONFIRMED` `pb_start` →
 `last_pullback_apply_idx` (a moment: the last pullback pattern's apply candle), `RANGE_STARTED` `cts_idx` →
 `cts_anchor_idx`, POI `bos_idx` / `cts_idx` → `bos_anchor_idx` / `cts_anchor_idx` (saves before it carry the old keys).
-Still exported under a non-standard name (found by its landing review; not scoped, not decided): fib meta
-`cycle1_bos_idx` (a BOS anchor; versioned cross fibs — 1 H1 fib row on the reference window), KL meta
-`expanded_last_idx` (the last expansion's THRESHOLD_UPDATED moment — 3 H1 + 4 confluence KL rows) and
-`pb_reconfirm_idx` (a CTS_RECONFIRMED moment — 0 rows here).
+Post-E·5 (2026-09-30, PLAN_E §9.6) closed the three its landing review found still non-standard: fib meta
+`cycle1_bos_idx` → `cycle1_bos_anchor_idx` (BOS_1's anchor on the cycle-1 cross fib), KL meta `pb_reconfirm_idx` →
+`reconfirmed_idx` (the CTS_RECONFIRMED moment), and KL meta `expanded_last_idx` deleted with its `_price` / `_event`
+siblings (copies of `bounds_steps[-1]`; saves before it carry all three).
 Kept by decision: frozen event names (bridged by `ARCHITECTURE.md` "`ev.idx` convention") and event-type
 tokens / legend labels; `KLZone.source_time` (a moment's time next to the anchor's `source_price`) and
 `StructureLevel.time` (the anchor's time) — PLAN_E Q12; the reversal-scope names (`_synth_reversal_trigger`'s
@@ -210,8 +210,8 @@ meta `activated_at` is a moment (the activating event's; Plan E E3a, 2026-09-24 
 | Term | Definition |
 |------|------------|
 | **confirmation_method** | How a CTS got confirmed — either `"pullback"` (valid pullback pattern fired) or `"sd_zone_proximity"` (price wick reached within proximity threshold of the BOS inner before any pullback). Stored on `CTS_CONFIRMED.meta` and propagated to the CTS KL zone. |
-| **CTS_RECONFIRMED** | Event emitted at the pullback idx when CTS was originally confirmed via sd zone proximity AND a valid pullback later fires. The original `CTS_CONFIRMED` event stays at the proximity idx (append-only). The CTS zone meta gets upgraded to `"pullback"` with `pb_reconfirm_idx` recorded. |
-| **pb_reconfirm_idx** | Idx of the pullback that re-affirmed a proximity-confirmed CTS. Logged on the CTS KL zone meta. Only present when `confirmation_method` was originally `"sd_zone_proximity"` and a pullback fired afterward. |
+| **CTS_RECONFIRMED** | Event emitted at the pullback idx when CTS was originally confirmed via sd zone proximity AND a valid pullback later fires. The original `CTS_CONFIRMED` event stays at the proximity idx (append-only). The CTS zone meta gets upgraded to `"pullback"` with `reconfirmed_idx` recorded. |
+| **reconfirmed_idx** | The CTS_RECONFIRMED moment (the late pullback's apply candle) that re-affirmed a proximity-confirmed CTS. Logged on the CTS KL zone meta, beside `confirmed_idx` (which keeps the proximity moment). Only present when `confirmation_method` was originally `"sd_zone_proximity"` and a pullback fired afterward; exported on main (H1) CTS zones only (a sub's KL export is BOS-only). `pb_reconfirm_idx` until Post-E·5 (2026-09-30). |
 | **proximity-confirmed CTS** | Shorthand for a CTS whose `confirmation_method == "sd_zone_proximity"`. Such cycles can complete WITHOUT a valid pullback pattern firing (the cycle still progresses to next BOS via breakout pattern; BOS_n+1 = max retracement in `[cts_confirmed_idx, breakout_idx]`). |
 
 ---

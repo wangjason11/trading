@@ -53,7 +53,8 @@ A continuation level established within the current structure direction.
   - `CTS_RECONFIRMED` (new) when a valid pullback pattern fires AFTER CTS was
     already confirmed via proximity. The original CTS_CONFIRMED stays at the
     proximity idx; the CTS zone meta is upgraded to `confirmation_method = "pullback"`
-    with `pb_reconfirm_idx` recorded.
+    with `reconfirmed_idx` (the CTS_RECONFIRMED moment; `pb_reconfirm_idx` until
+    Post-E·5, 2026-09-30) recorded — its `confirmed_idx` keeps the proximity moment.
 
 ### Cycle-0 pre-CTS_0 scan-from-start mode (`enforce_cts0_new_extreme`)
 
@@ -381,7 +382,9 @@ If proximity confirmed first AND a valid pullback later fires, the engine
 emits `CTS_RECONFIRMED` at the pullback idx. The original `CTS_CONFIRMED`
 event is not modified (append-only contract). KL zone derivation post-pass
 upgrades the CTS zone's `confirmation_method` to `"pullback"` and records
-`pb_reconfirm_idx`.
+`reconfirmed_idx` (the CTS_RECONFIRMED moment). Only main (H1) CTS zones are
+exported: a sub's KL export is BOS-only, so a sub's upgrade stays internal
+(the reference window's one CTS_RECONFIRMED, confluence sub 1 cycle 1 @1904).
 
 ### Range under proximity-only confirmation (Option B)
 
