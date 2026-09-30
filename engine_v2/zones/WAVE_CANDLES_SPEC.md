@@ -307,8 +307,15 @@ apples-to-apples. KL/POI/etc. unchanged.)
 
 ### Rendering simplifications
 
-- **Hover:** wave-candle info only — `idx`, `BOS zone sid/cycle`, raw `Volume`. Drop
-  the WVMI momentum block **and** `Weighted vol` (WVMI-weight-derived).
+- **Hover:** wave-candle info only — `idx`, the zone line `<BOS|CTS> zone: <owner> cycle=N`
+  (the record's own `source_kind` + `cycle_id`; owner `sid=` on H1, `sub_id=` on an M15
+  sub), a `Role:` line with the role from the line → role table above (FB / LB / FP /
+  LP — the WVMI CSV's `fb_idx` / `lb_idx` / `fp_idx` / `lp_idx`), raw `Volume`. The LP
+  line names the cycle it belongs to (`Role: LP (last pullback of cycle N−1)`;
+  `BOS_0.last` → `LP (pre-structure pullback)`). One builder for all three hover sites:
+  `wave_candles.wave_candle_hover_lines`. (Until 2026-09-30 every site hardcoded
+  "BOS zone:", mislabelling the CTS lines — 55 of 110 labels on the reference window.)
+  Drop the WVMI momentum block **and** `Weighted vol` (WVMI-weight-derived).
 - **Opacity:** uniform across all charts (drop the 3-tier active / recent /
   prior).
 - **Line style:** keep **dashed = subordinate**, **solid = main overlay**.

@@ -890,3 +890,45 @@ def test_cts_bib_walk_scan_ends_at_a_lagging_pattern_update_anchor():
         anchor_idx=10, anchor_type="CTS", zone=zone, events=events,
         structure_id=0, struct_direction=1, df=_make_df(rows))
     assert result.last_wave_candle_idx == 9
+
+
+# ---------------------------------------------------------------------------
+# Hover label: kind + role (the "BOS zone:" hover-label fix, 2026-09-30)
+# ---------------------------------------------------------------------------
+
+from engine_v2.zones.wave_candles import wave_candle_hover_lines  # noqa: E402
+
+
+@pytest.mark.parametrize("source_kind, position, cycle_id, expected", [
+    # H1 sid 0 cycle 1 on the reference window: idx 591 / 651 / 653 / 590
+    ("BOS", "first", 1, ["BOS zone: sid=0 cycle=1", "Role: FB (first breakout)"]),
+    ("CTS", "last", 1, ["CTS zone: sid=0 cycle=1", "Role: LB (last breakout)"]),
+    ("CTS", "first", 1, ["CTS zone: sid=0 cycle=1", "Role: FP (first pullback)"]),
+    ("BOS", "last", 1, ["BOS zone: sid=0 cycle=1", "Role: LP (last pullback of cycle 0)"]),
+    # the LP's owning cycle is the zone's cycle - 1 at any depth
+    ("BOS", "last", 3, ["BOS zone: sid=0 cycle=3", "Role: LP (last pullback of cycle 2)"]),
+    # BOS_0.last: the pre-structure pullback (H1 idx 109)
+    ("BOS", "last", 0, ["BOS zone: sid=0 cycle=0", "Role: LP (pre-structure pullback)"]),
+])
+def test_wave_candle_hover_lines_kind_and_role(source_kind, position, cycle_id, expected):
+    assert wave_candle_hover_lines(source_kind, position, "sid=0", cycle_id) == expected
+
+
+def test_wave_candle_hover_lines_owner_text_is_passed_through():
+    """The M15 sub site passes `sub_id=<eid>` (the user-facing identity), not the internal sid."""
+    assert wave_candle_hover_lines("CTS", "last", "sub_id=7", 0) == [
+        "CTS zone: sub_id=7 cycle=0", "Role: LB (last breakout)"]
+
+
+def test_every_wave_candle_hover_site_uses_the_label_helper():
+    """Call-site pin: the three hover sites (H1 chart; M15 sub lines + the M15 chart's H1
+    overlay) build the label through `wave_candle_hover_lines`, and no site hardcodes the
+    zone kind (the old bug: "BOS zone:" on CTS lines too)."""
+    from pathlib import Path
+    charting = Path(__file__).resolve().parents[1] / "charting"
+    counts = {}
+    for name in ("export_plotly.py", "export_m15_chart.py"):
+        src = (charting / name).read_text(encoding="utf-8")
+        assert "BOS zone: " not in src, f"{name} hardcodes the wave-candle zone kind"
+        counts[name] = src.count("*wave_candle_hover_lines(str(wc.source_kind), position,")
+    assert counts == {"export_plotly.py": 1, "export_m15_chart.py": 2}

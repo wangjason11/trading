@@ -589,10 +589,10 @@ convention"), and `CTS_ESTABLISHED.meta["pattern_anchor_idx"]` is the breakout p
 FIRST candle — not necessarily the extreme (it is when the first candle holds
 it; 0 of 34 on the reference window) — ARCHITECTURE.md "`ev.idx` convention".
 
-**Related:** the hover label for these wave candles still hardcodes
-"BOS zone:" — there's a TODO at each of the 3 hover sites
-(`export_plotly.py`, two in `export_m15_chart.py`) to branch on
-`wc.source_kind` for a correct label.
+**Related:** the hover now names the kind and role (`CTS zone: sub_id=7 cycle=0` /
+`Role: LB (last breakout)`), so a CTS line is recognisable on the chart. Until
+2026-09-30 all 3 hover sites hardcoded "BOS zone:" (55 of 110 labels wrong on the
+reference window); the one builder is `wave_candles.wave_candle_hover_lines`.
 
 ---
 

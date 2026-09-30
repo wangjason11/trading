@@ -668,3 +668,36 @@ def _role_for_wave_candle(source_kind: str, position: str) -> Optional[tuple]:
         ("CTS", "first"): ("FP", 0),
         ("CTS", "last"): ("LB", 0),
     }.get((source_kind, position))
+
+
+_ROLE_NAMES = {
+    "FB": "first breakout",
+    "LB": "last breakout",
+    "FP": "first pullback",
+}
+
+
+def wave_candle_hover_lines(source_kind: str, position: str, owner: str, cycle_id: int) -> List[str]:
+    """The two hover lines naming a drawn wave-candle line's zone and role — the ONE
+    label builder for every wave-candle hover site (H1 chart, M15 sub lines, the M15
+    chart's H1 overlay).
+
+    `owner` is the chart's identity text, e.g. `"sid=0"` or `"sub_id=3"`. The zone line
+    carries the record's own `source_kind` and `cycle_id`; the role line uses the
+    WVMI role names (FB / LB / FP / LP, the WVMI CSV's `*_idx` columns). The LP line
+    names the cycle it belongs to (`cycle_id + offset`, see `_role_for_wave_candle`),
+    and `BOS_0.last` reads "pre-structure pullback".
+
+    Example (H1 sid 0 cycle 1, idx 651): `["CTS zone: sid=0 cycle=1", "Role: LB (last breakout)"]`.
+    """
+    role, cycle_offset = _role_for_wave_candle(source_kind, position)
+    if role == "LP":
+        owner_cycle = cycle_id + cycle_offset
+        role_text = ("pre-structure pullback" if owner_cycle < 0
+                     else f"last pullback of cycle {owner_cycle}")
+    else:
+        role_text = _ROLE_NAMES[role]
+    return [
+        f"{source_kind} zone: {owner} cycle={cycle_id}",
+        f"Role: {role} ({role_text})",
+    ]

@@ -1911,6 +1911,7 @@ def export_chart_plotly(
         from engine_v2.zones.wave_candles import (
             _role_for_wave_candle,
             compute_wave_candle_visibility,
+            wave_candle_hover_lines,
         )
 
         # `selected_sids` fallback. Reuses the variable from the KL block above
@@ -2015,10 +2016,8 @@ def export_chart_plotly(
                     "TF=1H",
                     "<b>Wave Candle</b>",
                     f"idx={idx}",
-                    # TODO: label hardcodes "BOS zone:" but CTS wave candles render here too
-                    # (subs include both BOS+CTS source_kinds internally — orchestrator §5).
-                    # Cleanup: branch on wc.source_kind ∈ {"BOS","CTS"} for a correct label.
-                    f"BOS zone: sid={wc.structure_id} cycle={wc.cycle_id}",
+                    *wave_candle_hover_lines(str(wc.source_kind), position,
+                                             f"sid={wc.structure_id}", wc.cycle_id),
                     f"Volume: {vol:.0f}",
                 ]
 

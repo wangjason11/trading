@@ -1463,6 +1463,7 @@ def export_m15_chart_plotly(
             from engine_v2.zones.wave_candles import (
                 _role_for_wave_candle,
                 compute_wave_candle_visibility,
+                wave_candle_hover_lines,
             )
 
             # cycle_life per (internal sid, cycle) from this sub's KL BOS zones.
@@ -1557,11 +1558,10 @@ def export_m15_chart_plotly(
                         "TF=15M",
                         "<b>Wave Candle</b>",
                         f"idx={full_idx}  idx_1H={h1_info[1]}",
-                        # TODO: label hardcodes "BOS zone:" but CTS wave candles render here too
-                        # (subs include both BOS+CTS source_kinds internally — orchestrator §5).
                         # `wc.structure_id` is the bounded sub's internal MS sid (restarts at 0
-                        # per sub) — use sub_id for the user-facing identity instead.
-                        f"BOS zone: sub_id={eid} cycle={wc.cycle_id}",
+                        # per sub) — sub_id is the user-facing identity.
+                        *wave_candle_hover_lines(str(wc.source_kind), position,
+                                                 f"sub_id={eid}", wc.cycle_id),
                         f"first record parent_sid={p_sid} parent_cycle={p_cycle}",
                         f"sub window={sub_window_str}",
                         f"Volume: {vol:.0f}",
@@ -2399,6 +2399,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
         from engine_v2.zones.wave_candles import (
             _role_for_wave_candle,
             compute_wave_candle_visibility,
+            wave_candle_hover_lines,
         )
 
         # Per-cycle lifecycle from H1 main events (no floor/cap).
@@ -2482,8 +2483,8 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                     "TF=1H",
                     "<b>Wave Candle</b>",
                     f"idx={idx}",
-                    # TODO: label hardcodes "BOS zone:" but CTS wave candles render here too.
-                    f"BOS zone: sid={wc.structure_id} cycle={wc.cycle_id}",
+                    *wave_candle_hover_lines(str(wc.source_kind), position,
+                                             f"sid={wc.structure_id}", wc.cycle_id),
                     f"Volume: {vol:.0f}",
                 ]
                 _n_pts = 12

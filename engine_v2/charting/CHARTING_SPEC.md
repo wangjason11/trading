@@ -134,16 +134,13 @@ To change any visual element:
 
 ### 10) Wave candle vertical lines (Week 8)
 - Reads `df.attrs["wave_candles"]` (list of `WaveCandleResult`)
-- Full-height vertical lines at last pullback and first breakout candle positions
+- Full-height vertical lines at each zone's first and last wave candle — four lines per cycle: FB (`BOS.first`), LP (`BOS.last`, attributed to the previous cycle), LB (`CTS.last`), FP (`CTS.first`); the line → role table and the per-candle cycle-lifecycle visibility gate are canonical in `zones/WAVE_CANDLES_SPEC.md` "Chart Rendering & Lifecycle"
 - Green for bullish candle direction, red for bearish; neutral (dir=0) skipped
-- Uses `color_rgb` in style so opacity can be composed with tier multiplier
-- Opacity follows parent KL zone's 3-tier multiplier (active/recent_inactive/prior_inactive)
+- Uniform opacity (no 3-tier multiplier — WAVE_CANDLES_SPEC "Rendering simplifications")
 - Drawn with `yref="paper"` (y0=0, y1=1) so lines span full chart height
 - Filtered to `selected_sids` (same filter as KL zones)
 - **Hover overlay:** Invisible `go.Scatter` trace (8px wide, `rgba(0,0,0,0)`) with 12 evenly-spaced y-points per line (Plotly only detects hover near data points, not along line segments)
-  - All candles: idx, BOS zone attribution (sid + cycle), raw volume, weighted volume
-  - LB/LP only (bottom section): momentum value (Buy/Sell by candle direction), paired weighted volumes
-  - WVMI lookup built from `df.attrs["wvmi"]` mapping each idx to `(WVMIRecord, role)` where role is FB/LB/FP/LP
+  - `idx`, the zone line `<BOS|CTS> zone: sid=S cycle=N`, the `Role:` line (FB / LB / FP / LP; the LP names its owning cycle), raw volume — built by `wave_candles.wave_candle_hover_lines` (the same builder on the M15 charts). No WVMI momentum and no weighted volume (WAVE_CANDLES_SPEC "Rendering simplifications"; WVMI is CSV-only)
 - Style keys: `wave_candle.bullish`, `wave_candle.bearish`
 
 ### 11) Subordinate overlays on parent charts (Week 8 / Part 4)
