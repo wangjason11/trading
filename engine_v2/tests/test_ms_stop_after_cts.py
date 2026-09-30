@@ -2,7 +2,7 @@
 
 Contract under test (`plans/PLAN_B_double_cts_early_stop.md` §2 / §3.1; MARKET_STRUCTURE_SPEC
 "Early stop after N CTS_ESTABLISHED"): with the option set, `run()` ends at the FIRST QUIESCENT
-point (no reversal watch active, no pending reversal, no pending rewind) after the N-th
+point (no reversal watch active, no pending reversal; MS has no rewind since 2026-09-29) after the N-th
 `CTS_ESTABLISHED`, records it in `early_stop_idx` (the first anchor NOT processed) and hands
 back the event list built so far. Everything else — the `end_idx` bound, the post-run assert,
 the output rows — is unchanged. With the option unset (`None`, the default) the run is

@@ -107,7 +107,7 @@ A watch freezes the CURRENT cycle's BOS. When a breakout establishes a new cycle
 the market made a new extreme instead of reversing, and the new cycle's `BOS_CONFIRMED` supersedes the barrier the
 watch froze. The watch ends at the establishing candle (`_end_watch_superseded_by_new_cycle`, called for that
 `BOS_CONFIRMED`): its pending reversal — confirming only after that candle, not knowable yet — is dropped (its
-`REVERSAL_CANDIDATE` stays in the stream unrealised, like an expiry-discarded one), no rewind, and `bos_threshold`
+`REVERSAL_CANDIDATE` stays in the stream unrealised), no rewind, and `bos_threshold`
 is the new BOS. A later close beyond the NEW BOS opens a new watch by the normal rule. Trace: that `BOS_CONFIRMED`
 carries `meta["ended_watch_pattern_anchor_idx"]` = the ended watch's close-break candle (= its `REVERSAL_WATCH_START`
 idx; pattern realm, GLOSSARY "Naming Standard"; the key is present only when a watch was ended). No exception: a
@@ -157,14 +157,16 @@ reader the last (`compute_reversal_idx_by_sid`). 0 cases on the reference window
 **The later-anchor cap (live).** A reversal candidate against an open watch's frozen barrier at a later anchor `i`
 (`A < i <= E`) must apply by the watch's E: `_best_bopb_pattern_at_anchor` caps it at `min(D, expires_idx)` — the
 scheduler's rule (`_schedule_reversal_from_anchor`, where it never binds: the anchor-A pattern confirms by
-`A + range_max_k`); apply `== E` is a winner (P2 below). Since F3b it never changes WHICH reversal lands (the watch's
-pending applies by E), but it keeps a pattern completing after the window from steering the step layout: uncapped,
-that candidate wins its step and its frozen back-fill runs straight to the pending apply, skipping the anchors in
-between (a new-cycle breakout there would never be evaluated), and the reversal lands from the back-fill's frozen
-state; capped, the step has no winner and the pending applies in the anchor's own non-frozen step, which adds a
-`RANGE_UPDATED` (and the range-side state change) on the same reversal candle. Measured 2026-09-29 (HEAD vs the cap
-removed): reference window 0 binds, byte-identical; suite: binds only in the P3 fixture (same output); 6k targeted
-random tails: 208 signatures differ, the reversal candle always the same — the cap stays. Pin
+`A + range_max_k`); apply `== E` is a winner (P2 below). It keeps a pattern completing after the window from
+steering the step layout: uncapped, that candidate wins its step and its frozen back-fill runs straight to the watch's
+pending apply p (<= E, F3b), skipping the anchors in between, so the reversal lands at p from the back-fill's frozen
+state; capped, those anchors are stepped and the pending applies wherever p is stepped — in the P3 fixture, where the
+capped anchor IS p, in that anchor's own non-frozen step (a `RANGE_UPDATED` + the range-side state change on the
+reversal candle) — and an anchor in between could in principle carry an earlier reversal winner or a new-cycle breakout
+that ends the watch. Measured 2026-09-29 (HEAD vs the cap removed): reference window 0 binds, byte-identical; suite
+binds only in the P3 fixture (same output); 42k random tails: 376 signatures differ (208 of them in the 6k targeted
+from-an-open-watch stream), the reversal candle always the same — no different reversal found, not proven impossible
+(landing review of `221b420`). The cap stays. Pin
 `tests/test_ms_reversal_on_expiry.py::test_the_reversal_candidate_is_capped_at_the_open_watchs_expiry`.
 
 **History — the stop at the expiry (2026-09-29, removed the same day).** Until F3b the expiry ran before the pending
@@ -468,8 +470,8 @@ What clamps at `effective_end` (never at `len(df) - 1`):
 - the reversal watch: `expires_idx = min(anchor + range_max_k, effective_end)`
   (and, until its removal 2026-09-29, the expiry rewind target). A reversal pattern applying past the edge is
   never scheduled; one applying **exactly at** the edge reverses there on every
-  path (the pending apply precedes the expiry; "A reversal confirming on E
-  applies", F3b 2026-09-29 — before, the pending-apply path discarded it as a false
+  path (a watch's pending applies by its expiry, and no watch is open past it; "A
+  reversal confirming on E applies", F3b 2026-09-29 — before, the pending-apply path discarded it as a false
   break, which the next candle turned into a reversal at the old edge). Bounded ==
   truncated either way; one applying before the edge reverses as usual;
 - the zone resolvers (BOS inner at `BOS_CONFIRMED`, POI inners at

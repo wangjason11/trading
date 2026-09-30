@@ -84,12 +84,6 @@ def _p1_rows() -> list[dict]:
     ]
 
 
-# P3, native sd=-1 (the invariant-4 review fixture, pinned in `test_ms_invariant_watch_identity` until F3b). Cycle 1
-# established at 8 (BOS .60207); 9 (bull maru closing .60259) close-breaks it -> watch A=9, E=14, frozen .60207. 9 IS
-# its step's anchor, but that step's winner is a pullback (`one_maru_continuous` 9-10, applying at 10 — earlier), so
-# the reversal against .60207 lives only as the pending; it confirms ON 14. Before: expiry at 14 -> false break, BOS := h9 .60278, rewind to 10 -> 10
-# opened a SECOND watch on .60278 whose reversal applied at 14 (back-to-back watches). Now: one watch, REVERSAL @14 on
-# .60207.
 # P2 — sd=+1 (seed 21 trial 231, `_make_double_rewind_data()[:6]` + 4; the boundary pin of the retired
 # `test_ms_expiry_stop.py`): watch A=4 (frozen .5998), E=9, pending 9; anchor 8's reversal against the frozen barrier
 # applies exactly at 9 = E -> a winner (the scheduler's and the cap's `<= E`), applied by the winner path before the
@@ -103,6 +97,12 @@ def _p2_rows() -> list[dict]:
     ]
 
 
+# P3, native sd=-1 (the invariant-4 review fixture, pinned in `test_ms_invariant_watch_identity` until F3b). Cycle 1
+# established at 8 (BOS .60207); 9 (bull maru closing .60259) close-breaks it -> watch A=9, E=14, frozen .60207. 9 IS
+# its step's anchor, but that step's winner is a pullback (`one_maru_continuous` 9-10, applying at 10 — earlier), so
+# the reversal against .60207 lives only as the pending; it confirms ON 14. Before: expiry at 14 -> false break, BOS := h9 .60278, rewind to 10 -> 10
+# opened a SECOND watch on .60278 whose reversal applied at 14 (back-to-back watches). Now: one watch, REVERSAL @14 on
+# .60207.
 def _p3_review_rows() -> list[dict]:
     return [
         _R(0.59775, 0.60095, 0.59755, 0.60075), _R(0.60066, 0.60076, 0.59846, 0.59866),   # 0, 1
@@ -230,11 +230,12 @@ def test_p2_a_later_anchors_reversal_winner_on_the_expiry_applies(sd, trace):
 
 
 # The later-anchor cap (`_best_bopb_pattern_at_anchor`): a reversal candidate against an open watch's frozen barrier
-# must apply by the watch's E, like the scheduler's. Under F3b it never changes WHICH reversal lands (the watch's
-# pending applies by E), but without it a candidate confirming past the window would win the step and its back-fill
-# would skip the anchors before the pending apply — a pattern completing after the window steering the step layout
-# (a new-cycle breakout among the skipped anchors would never be evaluated). Measured 2026-09-29 (HEAD vs the cap
-# removed): reference window 0 binds, byte-identical; the suite binds only in the P3 fixture above (same output).
+# must apply by the watch's E, like the scheduler's. Without it a candidate confirming past the window would win the
+# step and its back-fill would skip the anchors before the pending apply — a pattern completing after the window
+# steering the step layout (an earlier reversal winner or a new-cycle breakout among the skipped anchors would never be
+# evaluated). Measured 2026-09-29 (HEAD vs the cap removed): reference window 0 binds, byte-identical; the suite binds
+# only in the P3 fixture above (same output); 42k random tails: 376 signatures differ, the reversal candle always the
+# same — not proven that it cannot differ.
 def _ms(sd: int = 1):
     with redirect_stdout(io.StringIO()):
         ms = _make_market_structure(_prepare_df(_p3_rows()), struct_direction=sd, start_idx=0)

@@ -581,8 +581,8 @@ class MarketStructure:
         # - close break starts reversal watch and freezes barrier
         self._bos_barrier_step(i)
 
-        # The pending reversal applies BEFORE the watch expiry: one confirming ON the expiry candle
-        # is a reversal (E inclusive, F3b; MARKET_STRUCTURE_SPEC "A reversal confirming on E applies").
+        # The pending reversal applies here, before the guard below: one confirming ON its watch's
+        # expiry candle is a reversal (E inclusive, F3b; MARKET_STRUCTURE_SPEC "A reversal confirming on E applies").
         _is_terminal = self._maybe_apply_pending_reversal(i)
         if _is_terminal:
             # write row after terminal apply state updates
@@ -982,10 +982,10 @@ class MarketStructure:
             ev_r = self._bp.detect_best_for_anchor(i, -self.struct_direction, bos_frozen_for_anchor)
             if ev_r is not None:
                 apply_r = self._apply_idx(ev_r)
-                # An open watch's frozen barrier holds only until the watch expires: a
-                # reversal applying after `reversal_watch_expires_idx` is not a candidate —
-                # the expiry resolves the watch first (the scheduler's rule,
-                # `_schedule_reversal_from_anchor`; apply == expiry stays one). A close-break
+                # An open watch's frozen barrier holds only until `reversal_watch_expires_idx`: a
+                # reversal applying later is not a candidate (the scheduler's rule; apply == E stays
+                # one). The watch's pending applies by E (F3b); an uncapped later candidate would
+                # steer the step layout — MARKET_STRUCTURE_SPEC "Expiry inside a step". A close-break
                 # AT i opens a watch expiring at D, so D is its cap already.
                 horizon = D
                 if st.reversal_watch_active and st.reversal_watch_expires_idx is not None:

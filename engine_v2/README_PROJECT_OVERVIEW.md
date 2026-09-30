@@ -51,7 +51,7 @@ Current orchestrator ordering (Week 6): candle features → structure patterns �
 3. **Visualization-first validation**
    - No “silent” logic changes; anything meaningful must show up in replay charts.
 4. **Event-driven / sequential**
-   - “No skipping”: the structure engine processes anchors sequentially and uses explicit rewinds only when required.
+   - “No skipping”: the structure engine processes anchors sequentially, back-filling look-ahead windows offline; it never rewinds (the last rewind, the reversal-watch expiry's, was removed 2026-09-29).
 5. **Scope control**
    - Build minimum viable versions first (v1), validate visually, then iterate.
 

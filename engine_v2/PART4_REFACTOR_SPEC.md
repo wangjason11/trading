@@ -1324,7 +1324,7 @@ on this data because `confirmed_at == CTS_EST.ev.idx` for all 6 H1 cycles
 > None) come from **one** helper, `multitf/parent_tables.py::build_parent_tables`,
 > on **`CTS_ESTABLISHED.meta["confirmed_at"]`** — the reversal term there is
 > `STATE_CHANGED→reversal` (`compute_reversal_idx_by_sid`), NOT
-> `REVERSAL_CANDIDATE.apply_idx` (a prediction that can expire). The identity
+> `REVERSAL_CANDIDATE.apply_idx` (a prediction that may not realise). The identity
 > `BOS_CONFIRMED.confirmed_at == CTS_ESTABLISHED.confirmed_at` is asserted per
 > cycle in `build_parent_tables` (never against `.idx`). The overlap hazard
 > Phase B guarded against cannot arise: floor and cap are the same value from
@@ -2844,7 +2844,7 @@ aggregates, §17.5). Earliest wins; write-once; at an equal idx the priority is
 3. **parent_end** — the record's OWN parent cycle ends: the next cycle's
    **clamped** lifecycle-start (`floor_h1[(S,C+1)]`, §17.6), else the sid's
    `STATE_CHANGED→reversal` idx (**not** `REVERSAL_CANDIDATE.apply_idx` — a
-   prediction that can expire), else None (open). Mapped with `LOH`. One
+   prediction that may not realise), else None (open). Mapped with `LOH`. One
    helper replaces today's three derivations (`parent_end_lookup`, the trigger
    detectors' `lifecycle_end_idx`, `_find_m15_lifecycle_end`).
 
