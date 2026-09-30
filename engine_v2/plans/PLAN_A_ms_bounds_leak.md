@@ -138,6 +138,11 @@ equivalence is unaffected; only the *description* of the edge is path-dependent.
 `self.events = []` and the rebuild stops before the expiry candle (pre-existing, §8). The rejected alternative (leave `expires_idx` at `n-1`) would keep
 a watch and a pending reversal open past the bound, making bounded ≠ truncated whenever a watch
 straddles the bound.
+**Status (F3b, 2026-09-29): the "exactly at `effective_end`" consequence is superseded** — a pending reversal
+confirming ON its watch's expiry candle (the edge included) now applies, on every path (the pending apply precedes
+the expiry; MARKET_STRUCTURE_SPEC "A reversal confirming on E applies"). The path dependence of precision (i) was the
+same split away from the edge; the edge false break was also a repaint (one more candle turned it into a reversal
+at the old edge). The truncation decision itself (`expires_idx = min(i + range_max_k, effective_end)`) stands.
 
 ---
 

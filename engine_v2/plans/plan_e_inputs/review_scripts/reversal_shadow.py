@@ -31,6 +31,15 @@ In-watch extension (2026-09-29b; GOTCHAS "A Cycle Cannot Be Established Inside a
                 fires on the final rows) and the run's exception type if it raised
   in_watch_upd  a CTS_UPDATED (raw or pattern path) emitted while a watch is open: the moment, via, watch anchor, pending
 
+F3b extension (2026-09-29c; a reversal applying exactly AT a watch's expiry E):
+  watch         every watch opened (`_schedule_reversal_from_anchor`): anchor A, E, the pending apply (None -> the
+                `rv_anchor_failed` clear), whether A was the running step's own anchor (`own_step`) or a candle inside
+                another step's back-fill / apply row, that step's winner (kind, apply), rewind flag
+  rev_apply     every reversal applied: path (`winner` = `_step_anchor`'s winner / `pending` = the scheduled pending),
+                the open watch's anchor / E at that moment, `at_E` (apply == E), `own` (winner step anchor == the
+                watch anchor; the close-break candle's own pattern) — aggregated as rev_apply[path|own/later|at_E/pre_E]
+  each `expiry` record also gets `own_step` + the step winner of its watch's opening (joined by the watch anchor)
+
 Import before the code under test: replay via the `runpy` recipe (README), suite via
 `PYTHONPATH=<this dir> python -m pytest -p reversal_shadow`. Writes REVERSAL_SHADOW_OUT (default: the temp dir).
 """
@@ -80,10 +89,12 @@ def _rec(self):
 
 _orig_run = MS.run
 def run(self):
-    r = dict(_ms=self, caller=_outer_caller(), tf=self.timeframe, sid=int(self.state.structure_id),
+    r = dict(_ms=self, caller=_outer_caller(), test=(os.environ.get("PYTEST_CURRENT_TEST") or "").split(" (")[0],
+             tf=self.timeframe, sid=int(self.state.structure_id),
              start=int(self.start_idx), end=int(self._effective_end), stop_n=self.stop_after_cts_established,
              scan=bool(self.enforce_cts0_new_extreme), enter=[], leave=[], bf_apply=[], rebuild=[], seed_over=[],
              expiry=[], win_past_exp=[], post_expiry=[], rewind_in_rev=[], in_watch_est=[], in_watch_upd=[],
+             watch=[], rev_apply=[], _watch_by_anchor={},
              _steps=[], _last_step=None, n_rewinds=0, exc=None)
     _cur.append(r)
     try:
@@ -167,11 +178,30 @@ def _finish(self, r):
     for w in r["win_past_exp"]:
         agg["win_past_exp[%s]" % w["kind"]] += 1
     agg["expiry_in_frozen_backfill"] += sum(1 for e in r["expiry"] if e["frozen"])
+    for w in r["watch"]:
+        rw = "rebuild" if w["rewind"] else "run"
+        if w["pending"] is None:
+            agg[f"watch[{rw}|no_pending]"] += 1
+        else:
+            agg[f"watch[{rw}|pending{'==E' if w['pending'] == w['E'] else '<E'}|{'own_step' if w['own_step'] else 'in_other_step'}]"] += 1
+    for a in r["rev_apply"]:
+        who = "own" if a["own"] else ("later" if a["own"] is False else "-")
+        pos = "no_watch" if a["E"] is None else ("at_E" if a["at_E"] else "pre_E")
+        agg[f"rev_apply[{a['path']}|{who}|{pos}]"] += 1
+    for e in r["expiry"]:
+        w = r["_watch_by_anchor"].get(e["watch_anchor"])
+        e["own_step"] = None if w is None else w["own_step"]
+        e["watch_step_winner"] = None if w is None else w["step_winner"]
+        e["at_edge"] = e["expires"] == r["end"]
+        agg["expiry[%s|%s|%s]" % ("rebuild" if e["rewind"] else "run",
+                                  "own_step" if e["own_step"] else "in_other_step",
+                                  "edge" if e["at_edge"] else "inside")] += 1
     interesting = r["n_rev"] > 1 or r["n_from_rev"] or post or r["leave"] or r["bf_apply"] or r["rebuild"] \
         or r["seed_over"] or r["sid_meta"] or r["expiry"] or r["win_past_exp"] or r["post_expiry"] \
-        or r["rewind_in_rev"] or r["in_watch_est"] or r["in_watch_upd"]
+        or r["rewind_in_rev"] or r["in_watch_est"] or r["in_watch_upd"] \
+        or any(a["at_E"] for a in r["rev_apply"])
     all_runs.append((r["caller"][0], r["tf"], r["sid"], r["start"], r["end"], r["stop_n"], r["n_rev"]))
-    del r["_ms"], r["_steps"], r["_last_step"]
+    del r["_ms"], r["_steps"], r["_last_step"], r["_watch_by_anchor"]
     if interesting:
         runs.append(r)
 
@@ -255,6 +285,10 @@ def _best_bopb_pattern_at_anchor(self, *, i, breakout_th, pullback_th, D):
         st = self.state
         s = r["_steps"][-1]
         s["winner"] = None if w is None else (w[2], int(w[1]))
+        if w is not None and w[2] == "reversal":
+            # F3b: the E of the watch this reversal belongs to (the open one, or the one a close-break at i opens: D)
+            E = int(st.reversal_watch_expires_idx) if st.reversal_watch_active and st.reversal_watch_expires_idx is not None else int(D)
+            agg["rev_winner_chosen[%s]" % ("at_E" if int(w[1]) == E else "pre_E")] += 1
         if (w is not None and st.reversal_watch_active and st.reversal_watch_expires_idx is not None
                 and int(w[1]) > int(st.reversal_watch_expires_idx)):
             r["win_past_exp"].append(dict(
@@ -318,6 +352,38 @@ def _emit_cts_updated(self, idx, price, meta=None):
                                       rewind=bool(getattr(self, "_in_rewind", False))))
     return _orig_cts_upd(self, idx, price, meta)
 MS._emit_cts_updated = _emit_cts_updated
+
+
+_orig_sched = MS._schedule_reversal_from_anchor
+def _schedule_reversal_from_anchor(self, anchor_idx, *, bos_frozen):
+    out = _orig_sched(self, anchor_idx, bos_frozen=bos_frozen)
+    r, st = _rec(self), self.state
+    if r is not None and st.reversal_watch_active and st.reversal_watch_start_idx == int(anchor_idx):
+        s = r["_steps"][-1] if r["_steps"] else None
+        w = dict(A=int(anchor_idx), E=st.reversal_watch_expires_idx, pending=st.pending_reversal_apply_idx,
+                 own_step=bool(s is not None and s["i"] == int(anchor_idx)),
+                 step_i=None if s is None else s["i"], step_winner=None if s is None else s["winner"],
+                 rewind=bool(getattr(self, "_in_rewind", False)))
+        r["watch"].append(w)
+        r["_watch_by_anchor"][int(anchor_idx)] = w
+    return out
+MS._schedule_reversal_from_anchor = _schedule_reversal_from_anchor
+
+
+_orig_apply_at = MS._apply_pattern_at_apply_idx
+def _apply_pattern_at_apply_idx(self, ev, apply_idx, kind):
+    r, st = _rec(self), self.state
+    if r is not None and kind == "reversal":
+        path = "pending" if sys._getframe(1).f_code.co_name == "_maybe_apply_pending_reversal" else "winner"
+        s = r["_steps"][-1] if r["_steps"] else None
+        A, E = st.reversal_watch_start_idx, st.reversal_watch_expires_idx
+        ap = self._apply_idx(ev)
+        own = None if (path == "pending" or A is None or s is None) else (s["i"] == int(A))
+        r["rev_apply"].append(dict(path=path, apply=None if ap is None else int(ap), A=A, E=E,
+                                   at_E=bool(E is not None and ap is not None and int(ap) == int(E)), own=own,
+                                   step_i=None if s is None else s["i"], rewind=bool(getattr(self, "_in_rewind", False))))
+    return _orig_apply_at(self, ev, apply_idx, kind)
+MS._apply_pattern_at_apply_idx = _apply_pattern_at_apply_idx
 
 
 def _dump():

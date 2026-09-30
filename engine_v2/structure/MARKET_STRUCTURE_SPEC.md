@@ -95,10 +95,11 @@ During watch:
 - Reversal candidates are detected relative to a frozen barrier and must apply by the watch's
   `expires_idx` — the frozen barrier holds only until then ("Expiry inside a step" below).
 - A breakout that establishes a NEW cycle ends the watch ("A new cycle ends an open watch" below).
-If no valid reversal pattern appears within watch window:
-- BOS threshold updates to the close-break anchor candle wick extreme,
-- watch clears,
-- execution rewinds to anchor_idx+1 and proceeds normally.【fileciteturn1file3】
+- A reversal whose pattern confirms ON the expiry candle applies ("A reversal confirming on E applies" below).
+If no reversal pattern from the close-break candle confirms within the window (`rv_anchor_failed`, decided at that
+candle): BOS threshold updates to its wick extreme and the watch clears at once. (Originally the watch ran to its
+expiry, BOS := the anchor wick, and execution rewound to anchor_idx+1【fileciteturn1file3】; since F3b, 2026-09-29, no
+watch reaches its expiry.)
 
 ### A new cycle ends an open watch (2026-09-29)
 A watch freezes the CURRENT cycle's BOS. When a breakout establishes a new cycle (cycle >= 1) while a watch is open,
@@ -153,9 +154,11 @@ reader the last (`compute_reversal_idx_by_sid`). 0 cases on the reference window
 
 ### Expiry inside a step (stop at the expiry; 2026-09-29)
 A close-break at anchor A opens a watch that expires at `E = min(A + range_max_k, effective_end)` with a pending
-reversal applying at `p <= E` (no pending → `rv_anchor_failed` clears the watch at once). The expiry runs before the
-pending apply in the per-candle step, so it fires exactly when `p == E` (Open F3b below) and requests a rewind to
-`A + 1` (false break: `bos_threshold` := the anchor's wick, `jump_to_idx` + a seed snapshot). Two rules keep a step
+reversal applying at `p <= E` (no pending → `rv_anchor_failed` clears the watch at once). The expiry ran before the
+pending apply in the per-candle step, so it fired exactly when `p == E` and requested a rewind to `A + 1` (false
+break: `bos_threshold` := the anchor's wick, `jump_to_idx` + a seed snapshot). **Unreachable since F3b** (2026-09-29,
+"A reversal confirming on E applies" below: the pending now applies first, so no expiry fires; the machinery goes in
+the next commit) — this section records why it was built. Two rules keep a step
 from acting past it:
 - **The frozen barrier holds only until E.** A reversal candidate against it at a later anchor `i` (`A < i <= E`)
   must apply by E: `_best_bopb_pattern_at_anchor` caps it at `min(D, expires_idx)` — the scheduler's rule
@@ -189,12 +192,36 @@ is never requested in REVERSAL. 0 expiries on the reference window (byte-identic
 terminal stamping then marked the stopped tail as reversal with no reversal event (found by the landing review's
 random tails); no such row is written now (no production reader affected: `unified_probe._has_reversal` is read only
 when fewer than 2 CTS were established).
-**Open (F3b) — the two paths disagree on a reversal applying exactly at E.** The expiry runs before the pending
-apply in the per-candle step, so the close-break anchor's own PENDING reversal confirming ON E is discarded as a false
-break — and that is the only way the false-break rewind is reached (every expiry in the suite, 42/42) — while a later
-anchor's reversal WINNER applying at E is applied (the winner path clears the watch first;
-`test_a_later_anchors_reversal_applying_at_the_expiry_still_wins`). LANDMINES L4 recorded the same split at the data
-edge and decided it there only. A decision must cover both paths (ruling "E = false break" flips that pin).
+### A reversal confirming on E applies (F3b; 2026-09-29)
+A close-break at A opens a watch expiring at `E = min(A + range_max_k, effective_end)`. `A + range_max_k` (5) is also
+the LAST candle a reversal pattern anchored at A may confirm on (2-candle patterns: up to 4 candles after their end;
+`continuous`: up to 3 — `detect_best_for_anchor`), and E is inclusive for the pattern rules, the scheduler
+(`_schedule_reversal_from_anchor` drops only `apply > E`) and the later-anchor cap. **A reversal whose pattern
+confirms ON E is a reversal, on every path:** in `_replay_step_no_patterns` the pending reversal applies BEFORE the
+watch expiry check (user decision 2026-09-29, option I "E inclusive"). Before, the expiry ran first, and the same kind
+of pattern confirming on E was
+- (P1) applied when the close-break candle was its own step's anchor and its pattern won that step — the H1 main
+  reversal of the reference window (sid 0 @902, 2026-01-09 12:00: `continuous` 897-899, 900/901 pinbars cannot
+  confirm, 902 = E confirms) is one; 3 of the window's 5 reversals are P1 at E;
+- (P2) applied when a later anchor's reversal winner applied at E (the winner path clears the watch first;
+  `test_ms_expiry_stop::test_a_later_anchors_reversal_applying_at_the_expiry_still_wins`);
+- (P3) DISCARDED as a false break when the pattern never won a step — the close-break candle ran inside another
+  step, or its own step chose an earlier-applying winner — so it lived only as the pending: the expiry rewound to
+  `A + 1` and re-ran those candles with a barrier decided at E (events stamped before the moment they became
+  knowable), often reversing a few candles later, or never.
+The outcome depended on the step layout, not the market. At E's close the watch's last candle closes and the pattern
+confirms at the same moment — nothing past E is read either way. At the data edge (LANDMINES L4) the old rule was a
+repaint: a false break at the bound B became a reversal AT B as soon as B + 1 arrived (the watch then expires later);
+the new rule is prefix-stable. Every clear of the pending also ends the watch (apply, expiry, `_rewind_to`, a new
+cycle), so an open watch always holds a pending applying by E and **no expiry fires any more** — the expiry, the
+rewind + seed restore and the "stop at the expiry" returns are unreachable. Measured before (`reversal_shadow.py` /
+`random_tail_search.py` F3b counters, scratch variants): reference window 0 expiries → byte-identical; suite 30
+expiries (20 at the data edge); 42k random tails per tree: 813 P3 discards vs 1,179 P1 + 36 P2 applied, the rule
+changes exactly the expiry trials (mostly none → a reversal at the edge; else a reversal 1–26 candles earlier, or 3
+later where the old rewind had found a reversal retroactively), 0 errors, 0 expiries left. Rejected: "E exclusive"
+(cap every reversal at E − 1) removed the H1 main reversal — sid 0 never reversing in the window — and 3 of the
+window's 5 reversals; "a confirm on E counts as no pattern" lost the same reversals. Pins
+`tests/test_ms_reversal_on_expiry.py` (P3 ×2, P1, the edge's prefix stability).
 
 ---
 
@@ -456,15 +483,11 @@ What clamps at `effective_end` (never at `len(df) - 1`):
   because `detect_best_for_anchor` returns ONE pattern per anchor by priority);
 - the reversal watch: `expires_idx = min(anchor + range_max_k, effective_end)`
   and the expiry rewind target. A reversal pattern applying past the edge is
-  never scheduled; one applying **exactly at** the edge is discarded as a false
-  break (`probe_no_break`, rewind to `anchor + 1`) because expiry runs before the
-  pending apply in the per-candle step — on the pending-apply path, i.e. when the
-  close-break candle was processed inside `_replay_step_no_patterns`; a close-break
-  candle that is itself an `_step_anchor` anchor has its reversal applied directly
-  as the anchor's winner (apply ≤ `D`). Either way bounded == truncated. Note the
-  expiry's own `BOS_THRESHOLD_UPDATED(probe_no_break)` does not survive the rewind
-  (LANDMINES "MarketStructure Deep-Couples…" 1 (d)); one applying before the edge
-  reverses as usual;
+  never scheduled; one applying **exactly at** the edge reverses there on every
+  path (the pending apply precedes the expiry; "A reversal confirming on E
+  applies", F3b 2026-09-29 — before, the pending-apply path discarded it as a false
+  break, which the next candle turned into a reversal at the old edge). Bounded ==
+  truncated either way; one applying before the edge reverses as usual;
 - the zone resolvers (BOS inner at `BOS_CONFIRMED`, POI inners at
   `CTS_ESTABLISHED` / `CTS_UPDATED`) read a view of the frame truncated at the
   edge (`_resolver_df()`, built once per run). `attrs["imbalances"]` stays

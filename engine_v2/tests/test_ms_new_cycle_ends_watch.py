@@ -93,10 +93,12 @@ def test_a_new_cycle_ends_the_open_watch_and_a_new_bos_break_reverses(sd):
 @pytest.mark.parametrize("sd", [1, -1])
 def test_the_pinned_rows_run_clean(sd):
     """The 11 pinned rows (the old raise-pin): no invariant error. The new watch 8 meets the data edge (expires 10 ==
-    its pending apply: a false break, LANDMINES L4) — no reversal."""
+    its pending apply): the reversal applies AT the edge on the NEW BOS (F3b, 2026-09-29; before: a false break)."""
     res = _run(_in_watch_cycle_rows(), sd)
     assert _bos_confirmed(res)[-1] == (7, _p(0.5978, sd), 4)
-    assert res.reversal_idx is None
+    assert res.reversal_idx == 10
+    rev = [e for e in res.events if e.type == "STATE_CHANGED" and e.meta["to"] == "reversal"]
+    assert [round(float(e.meta["bos_frozen"]), 5) for e in rev] == [_p(0.5978, sd)]
 
 
 @pytest.mark.parametrize("sd", [1, -1])

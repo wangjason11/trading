@@ -486,8 +486,10 @@ class TestRebuiltPrefixException:
         stopped run stops at 9 with [(2,2),(8,8)] — an exact prefix — and the two agree at every
         bound (finalize 8). No instance of the exception is known under the new rule (0 in 36k
         random tails; this fixture with candle 8 kept below the CTS, no cycle there, rewinds twice
-        but its prefixes agree); the mechanism itself (LANDMINES "MarketStructure Deep-Couples…"
-        1(a)) is unchanged — the exception is not proven unreachable."""
+        but its prefixes agree). Since F3b (2026-09-29) no expiry fires at all — a pending reversal
+        confirming ON its watch's expiry candle applies — so NO run rewinds and the exception is
+        unreachable: the full run's watch 14 (expires at the bound 17 == its pending apply) now
+        REVERSES at 17 instead of rewinding to 15; the prefixes still agree."""
         raw = _make_double_rewind_data()
         full = _make(raw, end_idx=17)
         full.debug = True
@@ -497,8 +499,10 @@ class TestRebuiltPrefixException:
         stopped.debug = True
         stopped.run()
         stopped_rewinds = self._rewinds(capsys.readouterr().out)
-        assert full_rewinds == ["15"]
+        assert full_rewinds == []                          # before F3b: ["15"]
         assert stopped_rewinds == []
+        assert [int(e.idx) for e in full.events
+                if e.type == "STATE_CHANGED" and e.meta["to"] == "reversal"] == [17]
         assert stopped.early_stop_idx == 9
         assert [(int(e.idx), int(e.meta["confirmed_at"])) for e in _cts_est(full.events)] == [(2, 2), (8, 8), (12, 12)]
         assert [(int(e.idx), int(e.meta["confirmed_at"])) for e in _cts_est(stopped.events)] == [(2, 2), (8, 8)]

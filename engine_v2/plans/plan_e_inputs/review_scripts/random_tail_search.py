@@ -58,6 +58,8 @@ def _exp(self, i):
     st = self.state
     if st.reversal_watch_active and st.reversal_watch_expires_idx is not None and int(i) >= int(st.reversal_watch_expires_idx):
         self._rts_exp = getattr(self, "_rts_exp", 0) + 1
+        key = "_rts_expo" if getattr(self, "_rts_own", {}).get(st.reversal_watch_start_idx) else "_rts_expb"
+        setattr(self, key, getattr(self, key, 0) + 1)
     return _o_exp(self, i)
 MS._maybe_expire_reversal_watch = _exp
 
@@ -78,6 +80,42 @@ def _cu(self, idx, price, meta=None):
         self._rts_iwu = getattr(self, "_rts_iwu", 0) + 1
     return _o_cu(self, idx, price, meta)
 MS._emit_cts_updated = _cu
+
+# F3b extension (2026-09-29c): a reversal applying exactly at a watch's expiry E, by path — `aEo` the close-break
+# candle's own pattern as its step's winner, `aEl` a later anchor's winner, `aEp` the scheduled pending (0 at HEAD:
+# the expiry runs first); `expo` / `expb` = expiries whose watch anchor was the running step's own anchor / a candle
+# inside another step (`exp` = both); `wat` = watches that survived their anchor (a pending was scheduled).
+_o_sched = MS._schedule_reversal_from_anchor
+def _sched(self, anchor_idx, *, bos_frozen):
+    out = _o_sched(self, anchor_idx, bos_frozen=bos_frozen)
+    st = self.state
+    if st.reversal_watch_active and st.pending_reversal_apply_idx is not None:
+        self._rts_wat = getattr(self, "_rts_wat", 0) + 1
+        own = getattr(self, "_rts_step", None) == int(anchor_idx)
+        self._rts_own = {**getattr(self, "_rts_own", {}), int(anchor_idx): own}
+    return out
+MS._schedule_reversal_from_anchor = _sched
+
+_o_step = MS._step_anchor
+def _stp(self, i):
+    prev, self._rts_step = getattr(self, "_rts_step", None), int(i)
+    try:
+        return _o_step(self, i)
+    finally:
+        self._rts_step = prev
+MS._step_anchor = _stp
+
+_o_apat = MS._apply_pattern_at_apply_idx
+def _apat(self, ev, apply_idx, kind):
+    st = self.state
+    if kind == "reversal" and st.reversal_watch_expires_idx is not None and self._apply_idx(ev) == st.reversal_watch_expires_idx:
+        if sys._getframe(1).f_code.co_name == "_maybe_apply_pending_reversal":
+            key = "_rts_aEp"
+        else:
+            key = "_rts_aEo" if getattr(self, "_rts_step", None) == st.reversal_watch_start_idx else "_rts_aEl"
+        setattr(self, key, getattr(self, key, 0) + 1)
+    return _o_apat(self, ev, apply_idx, kind)
+MS._apply_pattern_at_apply_idx = _apat
 
 NOINV = os.environ.get("RTS_NOINV") == "1"
 
@@ -165,6 +203,7 @@ def run(out, seed, n, lo=None, hi=None):
                 ms.run()
                 rec["sig"], rec["rev"] = _sig(ms)
                 rec.update(rir=getattr(ms, "_rts_rir", 0), wpe=getattr(ms, "_rts_wpe", 0), exp=getattr(ms, "_rts_exp", 0))
+                rec.update({k: getattr(ms, "_rts_" + k, 0) for k in ("aEo", "aEl", "aEp", "expo", "expb", "wat")})
                 if NOINV:
                     try:
                         ms._check_invariants_df()
@@ -200,6 +239,11 @@ def compare(a, b):
               f"rir={sum(1 for r in R if r.get('rir'))} exp={sum(1 for r in R if r.get('exp'))} "
               f"iwe={sum(1 for r in R if r.get('iwe'))} iwu={sum(1 for r in R if r.get('iwu'))} "
               f"inv={sum(1 for r in R if r.get('inv'))}")
+        print(f"   F3b: wat={sum(r.get('wat', 0) for r in R)} aEo={sum(r.get('aEo', 0) for r in R)} "
+              f"aEl={sum(r.get('aEl', 0) for r in R)} aEp={sum(r.get('aEp', 0) for r in R)} "
+              f"expo={sum(r.get('expo', 0) for r in R)} expb={sum(r.get('expb', 0) for r in R)} "
+              f"(trials: exp {sum(1 for r in R if r.get('exp'))}, aE* "
+              f"{sum(1 for r in R if r.get('aEo') or r.get('aEl') or r.get('aEp'))})")
     diff, ex = Counter(), {}
     for x, y in zip(A, B):
         if "err" in x or "err" in y:

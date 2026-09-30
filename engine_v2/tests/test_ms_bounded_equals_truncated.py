@@ -397,16 +397,16 @@ def test_l4_reversal_watch_clamps_at_the_bound():
     assert [(e[1], e[2]["expires_idx"]) for e in ws] == [(i, i + k - 1)]
     assert any(e[1] == i and e[2]["reason"] == "rv_anchor_failed" for e in _of_type(evs, "BOS_THRESHOLD_UPDATED"))
 
-    # B = i+k: scheduled (apply == expires_idx == B) but discarded as a false break —
-    # expiry precedes the pending apply in the per-candle step. No reversal at the edge.
+    # B = i+k: scheduled (apply == expires_idx == B) and applied AT the edge — the pending apply
+    # precedes the expiry in the per-candle step (F3b, 2026-09-29; before: discarded as a false
+    # break, and one candle later the same pending applied at i+k — a repaint). Nothing past B.
     res, evs = run(i + k)
-    assert res.reversal_idx is None
-    assert all(e[2].get("to") != "reversal" for e in _of_type(evs, "STATE_CHANGED"))
+    assert res.reversal_idx == i + k
     cands = _of_type(evs, "REVERSAL_CANDIDATE")
     assert [(e[1], e[2]["apply_idx"], e[2]["expires_idx"]) for e in cands] == [(i, i + k, i + k)]
     assert all(e[1] <= i + k for e in evs)
 
-    # B > i+k: the reversal applies at i+k as before; only the expires_idx meta clamps.
+    # B > i+k: the same reversal at i+k (prefix-stable); only the expires_idx meta clamps.
     for B in (i + k + 1, i + 5, i + 6):
         res, evs = run(B)
         assert res.reversal_idx == i + k, f"B={B}"

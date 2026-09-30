@@ -672,16 +672,16 @@ class MarketStructure:
         # - close break starts reversal watch and freezes barrier
         self._bos_barrier_step(i)
 
-        self._maybe_expire_reversal_watch(i)
-
-        # NEW: if reversal applies on this candle, it's terminal
+        # The pending reversal applies BEFORE the watch expiry: one confirming ON the expiry candle
+        # is a reversal (E inclusive, F3b; MARKET_STRUCTURE_SPEC "A reversal confirming on E applies").
         _is_terminal = self._maybe_apply_pending_reversal(i)
-
         if _is_terminal:
             # write row after terminal apply state updates
             self._write_df_row(i)
             return
 
+        # Unreachable since F3b (an open watch always holds a pending applying by its expiry).
+        self._maybe_expire_reversal_watch(i)
         self._write_df_row(i)
 
     # ----------------------------
@@ -803,8 +803,8 @@ class MarketStructure:
         st.reversal_watch_start_idx = int(i)
         st.reversal_bos_th_frozen = float(bos_frozen)
         # Watch window clamps at the run's data edge (L4): a reversal pattern
-        # applying past it is never scheduled; one applying exactly at it is a
-        # false break (expiry precedes the pending apply in the per-candle step).
+        # applying past it is never scheduled; one applying exactly at it
+        # reverses there (the pending apply precedes the expiry; F3b).
         st.reversal_watch_expires_idx = min(int(i) + int(self.range_max_k), self._effective_end)
 
         # Emit REVERSAL_WATCH_START event for all close-breaks (survives rewinds)
