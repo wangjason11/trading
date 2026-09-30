@@ -484,6 +484,19 @@ M15 structural artifact (and on the shared `export_wvmi` column — the H1
 same_dir_replacement, parent_end}` or empty (no `lifecycle_end`; `next_cycle`
 only on cycle-owned zone/fib rows).
 
+**The three `_wvmi.csv` files since Plan G (2026-09-30; save-format boundary: saves
+before it lack the column and the ungated sub rows).** A `cycle_collapsed` column
+right after `lp_locked`; one row per record per lens CSV the sub is on (a dual-lens
+sub's records on BOTH, like its zones), with `structure_path_id` = that lens's path
+(== `meta["structure_path_id"]`); `triggered_by_event_idx` / `_type` per lens — empty
+when the lens has no WVMI-class trigger in the sub's window — and
+`triggered_by_event_idx` written as an int (`Int64`, never `710.0`). Diff them
+KEYED, not with `cmp_save.py` (positional: a new row or a mid-row column shifts every
+later cell): `engine_v2/plans/plan_e_inputs/review_scripts/cmp_wvmi_keyed.py
+BASE_DIR CUR_DIR` — rows by `(sub_id, bos_structure_id, bos_cycle_id)`, columns by
+name, the meta per key; it also checks every key once per CSV and the path column ==
+the meta path (exit 1 otherwise).
+
 **Classify deltas against the plan's stated expectations.** When the change
 being compared has a plan that lists its expected deltas (per
 `memory/feedback_one_cause_per_compare.md`), the summary's EXPECTED /

@@ -302,8 +302,9 @@ class WVMIRecord:
     bos_structure_id: int
     bos_cycle_id: int
     zone_side: Literal["buy", "sell"]
-    # Entity path identifier (e.g., "H1.main", "H1.main >> M15.confluence").
-    # None on records created by code paths that haven't been migrated yet.
+    # Entity path identifier (e.g., "H1.main", "H1.main >> M15.confluence"):
+    # the tracker's entity; on a lens df's copy of a sub record, THAT lens's
+    # path (the mirror sets it — Plan G). None only on hand-built records.
     structure_path_id: Optional[str] = None
 
     # Wave candle indices
@@ -334,6 +335,12 @@ class WVMIRecord:
     status: Literal["created", "updated", "locked"] = "created"
     lp_locked: bool = False
     locked_by_cycle_id: Optional[int] = None
+
+    # The record's CYCLE is collapsed — its `compute_cycle_lifecycle` window is
+    # empty (`start >= end`, e.g. a cycle confirmed before a sub's `start_idx`):
+    # exported, inert, like a collapsed cycle's zones (Plan G G2). A flag only —
+    # WVMI has no lifecycle of its own (WVMI_SPEC "Lifecycle — REMOVED").
+    cycle_collapsed: bool = False
 
     # Metadata
     meta: Dict[str, Any] = field(default_factory=dict)

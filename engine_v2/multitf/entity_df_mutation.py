@@ -356,9 +356,12 @@ def mirror_lower_tf_result_to_entity_df(
         ))
     _attrs_setdefault_list(entity_df, "wave_candles").extend(new_wcs)
 
-    # 8. WVMI records — mutable dataclass; deepcopy then translate.
-    # `triggered_by_event_idx` in meta is the PARENT trigger idx (parent
-    # df coords, e.g. H1) — do NOT translate.
+    # 8. WVMI records (Plan G G3: persisted like zones — one copy per lens df
+    # the sub is on) — mutable dataclass; deepcopy, then translate + set THIS
+    # lens's path on the copy's FIELD as well as its meta (the source record
+    # keeps the projection's). `triggered_by_event_idx` (stamped per lens
+    # after the mirror) is the PARENT trigger idx (parent df coords, e.g. H1)
+    # — never translated.
     new_wvmis = []
     for w in result.wvmi_records:
         nw = deepcopy(w)
@@ -366,6 +369,7 @@ def mirror_lower_tf_result_to_entity_df(
             cur = getattr(nw, attr)
             if cur is not None:
                 setattr(nw, attr, cur + slice_begin)
+        nw.structure_path_id = structure_path_id
         nw.meta.update(attribution)
         new_wvmis.append(nw)
     _attrs_setdefault_list(entity_df, "wvmi").extend(new_wvmis)
@@ -387,39 +391,6 @@ def mirror_lower_tf_result_to_entity_df(
         new_ln["meta"].update(attribution)
         new_prev_bos.append(new_ln)
     _attrs_setdefault_list(entity_df, "prev_bos_lines").extend(new_prev_bos)
-
-
-def persist_facade_wvmi_to_entity_df(
-    entity_df: pd.DataFrame,
-    facade: LowerTFResult,
-    *,
-    structure_path_id: str,
-) -> None:
-    """Translate slice-local WVMI records on a facade to entity-absolute
-    idx and append to `entity_df.attrs["wvmi"]`.
-
-    Sub WVMI is parent-event-driven (§8.3 / §8.4 / §17.10), computed by the
-    orchestrator's per-sub pass AFTER the projections are mirrored. The
-    orchestrator then calls this helper once per lens df the sub is on.
-
-    Stamps the §17.9 attribution (`sub_id` + informational parent fields)
-    onto each record's meta. `triggered_by_event_idx` in record meta is parent-df
-    coords (LANDMINE "WVMI Records Carry Mixed-Coordinate Meta") — do NOT
-    translate.
-    """
-    slice_begin = int(facade.meta.get("slice_begin", 0))
-    attribution = _sub_attribution(facade, structure_path_id)
-    new_records = []
-    for w in facade.wvmi_records:
-        nw = deepcopy(w)
-        for attr in ("fb_idx", "lb_idx", "fp_idx", "lp_idx"):
-            cur = getattr(nw, attr)
-            if cur is not None:
-                setattr(nw, attr, cur + slice_begin)
-        nw.meta.update(attribution)
-        new_records.append(nw)
-    _attrs_setdefault_list(entity_df, "wvmi").extend(new_records)
-
 
 
 def _build_first_confluence_ref_zone(
@@ -1222,10 +1193,11 @@ def render_sub_projection(
 
     `project_to_window` clips the shared natural-end geometry by knowable-at
     at the sub's cap and derives the downstream elements with the sub's
-    `lifecycle_floor` / `lifecycle_cap` / `cap_reason`. The returned
+    `lifecycle_floor` / `lifecycle_cap` / `cap_reason` — WVMI included (Plan G:
+    ungated, bounded by the same lifecycle table). The returned
     `LowerTFResult.trigger` is the sub's FIRST live record's source trigger
-    (its `use_case` / parent fields are informational only — the mirror,
-    the WVMI persister and `build_sid_records_for_subordinate` read them).
+    (its `use_case` / parent fields are informational only — the mirror and
+    `build_sid_records_for_subordinate` read them).
     """
     from engine_v2.multitf.pooled_structure_build import project_to_window
 
@@ -1275,7 +1247,9 @@ def render_sub_projection(
         wave_candles=down["wave_candles"],
         fib_states=down["fib_states"],
         poi_zones=down["poi_zones"],
-        wvmi_records=down["wvmi_records"],   # empty (skip_wvmi=True)
+        # slice-local, the first lens's path, meta {} — the lens copies get
+        # their own path (the mirror) and trigger meta (the orchestrator)
+        wvmi_records=down["wvmi_records"],
         prev_bos_lines=down["prev_bos_lines"],
         status="finalized",
         meta={

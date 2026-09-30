@@ -229,7 +229,7 @@ today just **POI** and **Fib**, whose condition is the unfilled-imbalance state
 (flips as imbalances form / commit-fill; an imbalance FORMS at the close of its first c3,
 `ImbalanceInstance.formed_at` = `start_idx + 1` — IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3
 rule"). Objects with **no reversible
-condition** — **structure cycles, structures, KL zones, WVMI** — are **tier-1**:
+condition** — **structure cycles, structures, KL zones** (and WVMI through its cycle) — are **tier-1**:
 their "active" simply means **started-and-not-ended**, fully derivable from
 `start_idx`/`end_idx`. They need no stored `active` flag and no
 `activation_history`; `status` derives from start/end alone. So when adding a new
@@ -264,7 +264,7 @@ else:
 
 **Following this convention:** `POIZone` (tier-2, full `activation_history`),
 `KLZone` (tier-1, degenerate single-entry history), and `FibState` (tier-2,
-scalar — see below); `WVMI` designed (tier-1, see below). POI/KL store `end_idx` +
+scalar — see below); `WVMI` has no lifecycle of its own (its CYCLE's — see below). POI/KL store `end_idx` +
 `end_reason` + `activation_history` + derived 3-state `status` in `meta`. `KLZone` joined the convention in the Phase 3 unified-lifecycle pass
 (2026-05-25): it computes no end of its own and inherits its owning cycle's
 resolved end (reversal / next-cycle CTS-established / parent-cycle-end for
@@ -334,15 +334,14 @@ history) and wired fib onto the shared `compute_cycle_lifecycle` (clamp start to
 the structure floor; cycle-end as an earliest-wins terminal candidate). Canonical:
 `zones/FIB_LIFECYCLE_SPEC.md` (§15 is authoritative); `memory/project_fib_lifecycle_design.md`.
 
-**`WVMI` — DESIGNED, impl pending (2026-05-27).** Tier-1 (created-once/locked-once,
-no reversible condition): scalar `start_idx` (= creation `CTS_n` CONFIRMED, clamped)
-+ inherited `end_idx` + derived `status`; NO active/inactive, NO `activation_history`;
-its existing `created/updated/locked` computation axis is renamed `lp_status` so
-`status` is the lifecycle label. Canonical: `zones/WVMI_SPEC.md` "Lifecycle
-convention"; `memory/project_wvmi_lifecycle_deferred.md`.
-
-So after WVMI lands, **every** lifecycle-like object will be on the convention
-(`project_lifecycle_convention_klzone_fibstate.md` tracked the original migration).
+**`WVMI` — no lifecycle of its own (decided 2026-05-27).** A WVMI-record lifecycle
+(`lp_status` + scalar `start_idx` / `end_idx`) was briefly added and REMOVED the same
+day: WVMI is a derived momentum calc and the lifecycle belongs to its CYCLE
+(`compute_cycle_lifecycle`), which bounds the temp-LP search (`end − 1`) and, since
+Plan G (2026-09-30), sets the flag `cycle_collapsed` (the cycle's window is empty —
+exported, inert, like a collapsed cycle's zones). `status` stays the
+`created/updated/locked` computation axis. Canonical: `zones/WVMI_SPEC.md`
+"Lifecycle — REMOVED" + "WVMIRecord Fields".
 
 **Sub-structure pool objects — `TriggerRecord` + unique sub (`PooledStructure`)
 are tier-1 (Plan C, landed 2026-09-20; canonical: `PART4_REFACTOR_SPEC.md §17`,
@@ -404,11 +403,11 @@ Ordering is intentionally locked for Week 6: base features must be computed **be
 Identifies boundary candles between consecutive waves at each KL zone. For each zone, produces a `WaveCandleResult` with `last_wave_candle_idx` (end of prior wave) and `first_wave_candle_idx` (start of new wave). BIB zones use an event-driven multi-step search; non-BIB zones use a ±5 candle window. Results stored in `df.attrs["wave_candles"]`. See `WAVE_CANDLES_SPEC.md`.
 
 ### WVMI (`zones/wvmi.py`)
-Measures BOS zone strength via volume ratios of wave candle pairs. Runs **after POI zones** because it depends on POI zone inner bounds for its activation gate. Lifecycle:
-0. **Gated by first sd zone-proximity trigger** — `check_zone_proximity()` (in `zones/zone_proximity.py`) scans candles from CTS_CONFIRMED to zone deactivation (next BOS or reversal). It produces a list of alternating sd / opp_sd trigger candles per cycle. The orchestrator uses only the first sd trigger as the WVMI gate (preserves pre-refactor behavior). Threshold defaults: H1 = 9 pips, M15 = 6 pips, M5 = 3 pips (caller-overridable).
-1. **Created** at CTS_n confirmation (only if activated) — breakout momentum locked from FB/LB volumes
+Measures BOS zone strength via volume ratios of wave candle pairs. Runs **after POI zones** because the main's activation gate depends on POI zone inner bounds. One helper, `orchestrator._compute_wvmi_records`, runs the tracker for the main and every sub projection (Plan G, `_run_downstream_pipeline(wvmi=...)`): the frame `df.iloc[:cap + 1]` under a cap, the temp LP bounded to the cycle's `end − 1` and `cycle_collapsed` from the `compute_cycle_lifecycle` table. Lifecycle:
+0. **Main: gated by first sd zone-proximity trigger** (a sub is ungated) — `check_zone_proximity()` (in `zones/zone_proximity.py`) scans candles from CTS_CONFIRMED to zone deactivation (next BOS or reversal). It produces a list of alternating sd / opp_sd trigger candles per cycle. The orchestrator uses only the first sd trigger as the WVMI gate (preserves pre-refactor behavior). Threshold defaults: H1 = 9 pips, M15 = 6 pips, M5 = 3 pips (caller-overridable).
+1. **Created** at CTS_n confirmation (main: only if activated) — breakout momentum locked from FB/LB volumes
 2. **Updated** each candle — temporary LP shifts to closest qualified candle near outer bound
-3. **Locked** at BOS_n+1 confirmation — LP finalizes, pullback momentum locked
+3. **Locked** at BOS_n+1 confirmation — LP finalizes (a lock LP outside the frame → the temp LP), pullback momentum locked
 
 Results stored in `df.attrs["wvmi"]` (list of `WVMIRecord`). See `WVMI_SPEC.md`.
 
@@ -476,8 +475,10 @@ was replaced by the sweep below.
    `cap = sub.end_idx`, `cap_reason = sub.end_reason`, slice-local) mirrored into
    every lens df in `sub.lenses()` by `mirror_lower_tf_result_to_entity_df`, in
    `start_idx` order (later-live wins overlapping structure columns).
-6. Sub WVMI, one sweep per unique sub (`_assign_sub_wvmi_per_sub`, §17.10
-   minimal — not settled; `zones/WVMI_SPEC.md` "Sub entities").
+6. Sub WVMI trigger metadata per lens (`_stamp_sub_wvmi_trigger_meta`, Plan G —
+   the records themselves are computed in step 5's projection, ungated; each lens
+   copy gets its lens's first WVMI-class trigger inside the sub's window, or None;
+   `zones/WVMI_SPEC.md` "Sub entities") + the per-unique-sub run.log summary.
 7. Per lens df: `attrs["sids"]` (one `SidRecord` per unique sub on that lens,
    `sub_id` set, `sub_sid = None`), `attrs["triggers"]` (that lens's
    `TriggerRecord`s incl. zero-length), `attrs["unresolved_triggers"]`
@@ -497,7 +498,8 @@ was replaced by the sweep below.
 - KL zones are BOS-only for subs (`source_kinds=["BOS"]`); Fib uses
   `fib_mode="cross_cycle"`.
 - Attribution stamped on every mirrored event/zone/POI/fib/wave-candle/WVMI
-  record: `structure_path_id`, `timeframe`, `parent_tf`, **`sub_id`** (the
+  record (a WVMI copy also gets its lens's path in the record FIELD, Plan G):
+  `structure_path_id`, `timeframe`, `parent_tf`, **`sub_id`** (the
   identity) + informational `use_case`, `parent_sid`, `parent_cycle_id`,
   `started_by` from the sub's FIRST live record. No consumer may use the
   informational three for identity. `sub_sid` survives only on main-entity

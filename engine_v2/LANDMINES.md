@@ -21,7 +21,7 @@ candle features → structure patterns → imbalance → market structure → KL
 ```
 
 **MUST:** Base features MUST run BEFORE market structure so zone resolution is stable.
-**MUST:** WVMI MUST run AFTER POI zones — its gate (the first sd zone-proximity trigger from `check_zone_proximity`) depends on POI zone inner bounds.
+**MUST:** WVMI MUST run AFTER POI zones — the main's gate (the first sd zone-proximity trigger from `check_zone_proximity`) depends on POI zone inner bounds (a sub's WVMI is ungated since Plan G, but it runs in the same slot: it needs the KL zones and wave candles).
 
 **Why:** Market structure depends on candle classification and pattern detection from base features. The zone-proximity check examines both KL and POI zone inner bounds to find sd-direction triggers, so POI zones must exist first.
 
@@ -76,6 +76,11 @@ both since Plan E E4a / E4b); build them with
 `@pytest.mark.illegal_event_contract`. A `mutate=` hook that edits `confirmed_at` after construction bypasses
 the validator: it must move the event's `idx` with it and re-run `validate_event_contract` on the
 edited events (Plan E E4a review pins P1/P2 — a dropped `idx` move had left an illegal event nobody noticed).
+Rule 3 meaning change on a non-event record, Plan G (2026-09-30): a SUB `WVMIRecord`'s `meta["triggered_by_event_idx"]` /
+`["triggered_by_event_type"]` := the lens's first WVMI-class parent trigger inside the sub's window — attribution,
+stamped per lens after the mirror, None when none lands there (before: the one trigger whose sweep created the records,
+never None); main rows keep the gate meaning. Proof = the keyed WVMI `/compare` == PLAN_G §5 (the counter CSV's sub 3
+710 → 871 and sub 7 1020 → None; `review_scripts/cmp_wvmi_keyed.py`).
 
 **Key events and their consumers:**
 | Event Type | Primary Consumer |
@@ -389,9 +394,9 @@ against the post-Rules-1-2-3 baseline.
 ## WVMI Constraints
 
 1. **Zero FB/FP volume blocks WVMI creation** — division by zero guard. Ensure candle features (volume) are computed before WVMI runs.
-2. **Temp LP only locks on BOS_n+1** — do not assume `lp_locked=True` until BOS of the next cycle confirms. Until then, LP and pullback_momentum can shift every candle — within `[FP+1, cycle end − 1]` on main (the data end while the cycle is open; `WVMI_SPEC` "Temporary LP Selection").
+2. **Temp LP only locks on BOS_n+1** — do not assume `lp_locked=True` until BOS of the next cycle confirms. Until then, LP and pullback_momentum can shift every candle — within `[FP+1, cycle end − 1]` on main AND on every sub projection since Plan G (the data end while the cycle is open; `WVMI_SPEC` "Temporary LP Selection"). A lock LP the tracker's frame cannot read (BOS_n+1's last wave candle past a capped sub's end, or past the data edge) is never taken: the record locks with its temp LP (Plan G Q10).
 3. **buy_momentum/sell_momentum are direction-mapped** — for buy zones: buy=breakout, sell=pullback. For sell zones: reversed. Always check `zone_side` when interpreting.
-4. **Zone proximity gate is mandatory (today)** — WVMI records are only created for cycles where the **first sd-direction zone-proximity trigger** fires (via `check_zone_proximity` in `zones/zone_proximity.py`). Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, reversal_idx - 1]` (note: scan starts AT the CTS confirmation candle, not +1; the reversal term is the sid's REALISED `STATE_CHANGED(to=reversal)` candle — `compute_reversal_idx_by_sid`, since 2026-09-28 — never a `REVERSAL_CANDIDATE`'s scheduled `apply_idx`, a prediction a watch expiry can discard; GOTCHAS "Key boundaries"). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Uses only active POI zones at each candle (BOS KL zone is throughout-active). The orchestrator extracts the first sd trigger per cycle as the WVMI gate (`triggered_by_event_idx` in WVMIRecord.meta — Part 4 §8.7 attribution schema). Future refactor will rewire WVMI off this gate.
+4. **Zone proximity gate — the MAIN only** — main WVMI records are only created for cycles where the **first sd-direction zone-proximity trigger** fires (via `check_zone_proximity` in `zones/zone_proximity.py`). Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, reversal_idx - 1]` (note: scan starts AT the CTS confirmation candle, not +1; the reversal term is the sid's REALISED `STATE_CHANGED(to=reversal)` candle — `compute_reversal_idx_by_sid`, since 2026-09-28 — never a `REVERSAL_CANDIDATE`'s scheduled `apply_idx`, a prediction a watch expiry can discard; GOTCHAS "Key boundaries"). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Uses only active POI zones at each candle (BOS KL zone is throughout-active). The orchestrator extracts the first sd trigger per cycle as the WVMI gate (`_first_sd_prox_gate`; `triggered_by_event_idx` in WVMIRecord.meta — Part 4 §8.7 attribution schema). **Subs are ungated since Plan G (2026-09-30):** every CTS_CONFIRMED of a rendered sub gets a record (`_run_downstream_pipeline(wvmi="none")`), and zone proximity is never run for a sub — see "Sub WVMI Is Computed Inside the Projection" below.
 
 ---
 
@@ -626,8 +631,9 @@ candles; `/compare` skill §2b).
 `event_fields.processing_order_key` = `(ef.stamped_idx(e), e.type)` — the pre-E4
 `(e.idx, e.type)`, pinned on the ANCHORS so the Plan E E4 flip (`ev.idx` :=
 the moment on CTS_ESTABLISHED / BOS_CONFIRMED since E4a / E4b) reorders nothing (PLAN_E Q3; moment
-order + an explicit type rank is post-Plan-E). The same key sorts `sub_wvmi`'s
-loop. TIME walks sort on the MOMENT instead (`ef.event_moment`): zone_proximity's
+order + an explicit type rank is post-Plan-E). The one WVMI tracker loop
+(`_compute_wvmi_records` — the main and, since Plan G, every sub projection) walks this same
+`sorted_events`. TIME walks sort on the MOMENT instead (`ef.event_moment`): zone_proximity's
 threshold timeline (`(moment, type)`, Plan E E3g-2) and the POI sweep's CTS events
 (stable, Plan E E3g-1); the wave-candle walk sorts on
 `ef.cts_anchor_idx` (the same value on EST / UPDATED — a location walk). The alphabetical tie-break on
@@ -916,11 +922,12 @@ sub being built, never in terms of the parent.
 
 ---
 
-## Sub WVMI is Parent-Event-Driven; `source_kinds` is a Return-Only Filter
+## Sub WVMI Is Computed Inside the Projection, Ungated; `source_kinds` is a Return-Only Filter
 
-Two related load-bearing invariants in `pipeline/orchestrator._run_downstream_pipeline`,
-both established in Part 4 Step 3d.iii. They look like "cleanups that shouldn't
-change behavior" — they aren't.
+Two related load-bearing invariants in `pipeline/orchestrator._run_downstream_pipeline`:
+Rule 1 from Part 4 Step 3d.iii, Rule 2 from Plan G (2026-09-30, `plans/PLAN_G_wvmi_unique_sub.md`;
+it INVERTS the 3d.iii rule "subs pass `skip_wvmi=True`, WVMI is parent-event-driven"). They look
+like "cleanups that shouldn't change behavior" — they aren't.
 
 **Rule 1 — `source_kinds` filters the returned list, NOT the derive call.**
 
@@ -941,44 +948,59 @@ kl_zones = derive_kl_zones_v1(df, events, ..., source_kinds=source_kinds)
 **Why:** `WVMITracker.on_cts_confirmed` requires BOTH a BOS wave candle and a
 CTS wave candle for the same `(sid, cycle_id)`. CTS wave candles are derived
 PER ZONE — if there are no CTS zones in the iteration set, `_find_wave_candle(...,
-"CTS")` returns None and every sub WVMI sweep produces 0 records. This was a
+"CTS")` returns None and every sub projection's WVMI produces 0 records. This was a
 latent bug from Week 8 Part 3 (sub WVMI silently empty) — fixed in 3d.iii.
 
-**Rule 2 — Sub `_run_downstream_pipeline` calls pass `skip_wvmi=True`.**
+**Rule 2 — A sub's WVMI is computed INSIDE its projection, ungated (`wvmi="none"`).**
 
 ```python
+# multitf/pooled_structure_build.project_to_window — ONE call per unique sub
 downstream = _run_downstream_pipeline(
-    m15_result.df, m15_result.events, m15_result.struct_direction,
+    bounded.df, clipped_events, direction,
     source_kinds=["BOS"], fib_mode="cross_cycle",
-    structure_path_id=sub_path_id,
-    skip_wvmi=True,   # mandatory for subs
+    structure_path_id=first_lens_path,
+    wvmi="none",          # a sub: no gate, every CTS_CONFIRMED is offered to the tracker
+    lifecycle_floor=floor, lifecycle_cap=cap, cap_reason=reason,
 )
 ```
 
-Sub WVMI is computed AFTER the `LowerTFResult` is built, by the orchestrator
-calling `multitf/sub_wvmi.compute_parent_driven_sub_wvmi()`. The gate is parent
-events per spec §8.3 / §8.4:
+`wvmi` is ONE parameter, validated (`WVMI_MODES`; an unknown value raises — a typo must not
+silently gate or drop sub WVMI): `"first_sd_prox"` (the default: the main — `check_zone_proximity`
+runs and gates, see "WVMI Constraints" #4), `"none"` (a sub), `"off"` (tests of other stages). Every
+mode that computes WVMI goes through ONE helper, `_compute_wvmi_records`: the tracker's frame is
+`df.iloc[:cap + 1]` under a cap (the natural-end frame would let FP / LB / a lock LP read past the
+sub's end), the temp LP stops at the cycle's `end − 1` and `cycle_collapsed` = `start >= end`, both
+from the `compute_cycle_lifecycle` table KL / POI read. The mirror persists one deep copy per lens df
+the sub is on, each with THAT lens's path in the FIELD and the meta; the orchestrator's post-pass
+(`_stamp_sub_wvmi_trigger_meta`) then writes each lens copy's trigger metadata FIRST in its meta:
 
-| Sub entity | Activated by | Spec |
+| Lens | `triggered_by_event_type` stream (§8.5's WVMI class) | `triggered_by_event_idx` |
 |---|---|---|
-| `H1.main >> M15.counter` (first_counter sids) | First var 3 trigger in same parent cycle | §8.4 |
-| `H1.main >> M15.confluence` (var 1 sids) | Main first sd-prox in same parent cycle | §8.3 |
-| `H1.main >> M15.confluence` (var 3 sids) | First var 4 trigger AFTER the var 3 in same parent cycle (else skip) | §8.3 |
-| `H1.main >> M15.counter` (var 4-born sids) | First var 3 trigger AFTER the var 4 in same parent cycle (else skip) | §8.4 |
-| Var 1 re-sweep on each var 4 fire | Deferred (option B) — batch is observably a no-op since records are deterministic given sub events; live mode will exercise this | §8.3 |
+| `H1.main >> M15.confluence` | sd-prox class: the main's first sd-prox per cycle (`ZONE_PROXIMITY_TRIGGER`) + each var 4 (`SUBSEQUENT_COUNTER_TRIGGER`) | the stream's FIRST entry (LOH-mapped) inside the sub's `[start_idx, m15_end_idx]`, in PARENT coords; None if none |
+| `H1.main >> M15.counter` | CTS-prox class: each var 3 (`SUBSEQUENT_CONFLUENCE_TRIGGER`) | same rule on this lens's stream |
 
-**Trap:** "Why does the sub also do its own zone proximity scan? Let me unify
-those" — re-enabling entity-local sub WVMI inside `_run_downstream_pipeline`
-would double-gate against the parent-event gate or silently revert to
-entity-local gating. Don't.
+`parent_path_id` is always `"H1.main"` (the parent entity). On a sub row `triggered_by_*` is
+**attribution, not a gate** (a declared rule-3 meaning change, "Event Contract Rules"): the record
+exists whatever the stream says, and the trigger is often knowable only after the record (sub 3's
+counter c0: created at M15 2752, its counter trigger H1 871 = M15 3487).
 
-**"Skip when no later gate exists" is intentional, not a bug.** Var 3 / var 4
-sub sids that have no qualifying parent event AFTER them in the cycle get
-empty `wvmi_records=[]`. Don't fall back to "the cycle's first var X" or
-"some other sid's gate" — that breaks §8.7's one-trigger-per-record
-attribution and silently invents activation events that didn't fire.
-Empty here is the same outcome a proper §6.1 implementation would produce
-in cycles where the gate genuinely doesn't exist.
+**Trap:** "the sub has no parent trigger in its window — skip its WVMI" or "gate the sub on the
+first trigger again". Both restore the Plan C behaviour the user reversed (2026-09-28: "unique subs
+are where trading decisions will be made and governed by life cycle, it would make sense WVMI lives
+here as well"): a rendered sub gets WVMI like it gets zones. Equally, don't run
+`check_zone_proximity` for a sub or unify the two paths' gates: the main keeps its first-sd gate,
+and zone proximity also feeds the var3 / var4 detectors and the §8.5 streams (main only).
+
+**No trigger in the window is a VALUE, not a skip.** A lens with no WVMI-class trigger inside the
+sub's window writes `triggered_by_event_idx` / `_type` None (both keys present) — never "the
+cycle's first var X" or another sub's trigger. The exporter writes the idx as nullable `Int64`
+(an empty cell), so the other rows stay ints.
+
+**History (dated, Plan C → Plan G):** 3d.iii made sub WVMI parent-event-driven (`skip_wvmi=True`,
+`multitf/sub_wvmi.compute_parent_driven_sub_wvmi` after the sub was built, a per-use-case gate
+table); Plan C (2026-09-20) made it one trigger-gated sweep per unique sub, persisted into every
+lens with the SWEEPING lens's path on the field; Plan G (2026-09-30) deleted `sub_wvmi.py` and
+`persist_facade_wvmi_to_entity_df` and moved the computation into the projection.
 
 ---
 
@@ -1053,15 +1075,15 @@ indices:
 | Field | Coordinate space |
 |---|---|
 | `fb_idx`, `lb_idx`, `fp_idx`, `lp_idx` (direct attrs) | Entity-df coords (sub-entity, e.g. M15) |
-| `meta["triggered_by_event_idx"]` | **Parent-df coords** (e.g. H1 for an M15 sub) |
-| `meta["lp_locked_at"]` (if present) | Entity-df coords |
-| `bos_structure_id`, `bos_cycle_id` | Identity ints; coordinate-free |
+| `meta["triggered_by_event_idx"]` | **Parent-df coords** (e.g. H1 for an M15 sub); None on a sub row whose lens has no trigger in the sub's window |
+| `bos_structure_id`, `bos_cycle_id`, `locked_by_cycle_id` | Identity ints; coordinate-free |
+| `cycle_collapsed` (field) | A flag, not an index (Plan G G2) |
 
-**Why:** sub WVMI is parent-event-driven (spec §8.3 / §8.4 — see the
-"Sub WVMI is Parent-Event-Driven" landmine above). The trigger event
-(main first sd-prox, var 3, var 4) lives on the parent entity. The
-record's wave-candle indices live on the sub entity. Both fields are
-ints called "_idx", but they index different dataframes.
+**Why:** a sub record's trigger metadata is ATTRIBUTION to a parent event (Plan G G4 — see the
+"Sub WVMI Is Computed Inside the Projection" landmine above): the lens's first WVMI-class trigger
+(main first sd-prox, var 3, var 4) lives on the parent entity; the record's wave-candle indices
+live on the sub entity. Both fields are ints called "_idx", but they index different dataframes.
+(A `meta["lp_locked_at"]` row stood here until 2026-09-30 — no code has ever written that key.)
 
 **Concrete trap (Part 4 §13.5.c.ii / §13.6):** any translation pass
 that shifts WVMI indices when remapping a record between coordinate
@@ -1846,8 +1868,10 @@ cycle 0 must still floor at the parent floor. Do not add a per-cycle carve-out.
   `probe_finalize_idx`. A `/compare` showing any of those shifted is a red
   flag. (Pre-Plan C this list named `start_trigger_idx`, "the sub-WVMI gating
   window"; that field is split into `trigger_idx` / `probe_finalize_idx` /
-  `start_idx`, and the sub-WVMI window is now `[sub.start_idx, sub.end_idx or
-  edge]` — the floored lifecycle itself, §17.10.)
+  `start_idx`, and the sub-WVMI trigger-attribution window is now
+  `[sub.start_idx, sub.end_idx or edge]` — the floored lifecycle itself; since
+  Plan G the sub's WVMI itself is computed in its projection over that same
+  floor / cap, ungated.)
 - **Former graceful-degradation paths are now ASSERTS.** Before Plan C a sub
   whose `(parent_sid, parent_cycle_id)` was absent from the floor dict, or
   whose H1→M15 map returned `None`, silently lost the parent term. Now

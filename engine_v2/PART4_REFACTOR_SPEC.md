@@ -1036,8 +1036,10 @@ generalized):
       sub.start_idx`, `lifecycle_cap = sub.end_idx`, `cap_reason =
       sub.end_reason` (all slice-local — `− slice_begin`). KL / POI / fib see
       one int each; `compute_struct_start_by_sid(lifecycle_floor)` raises the
-      sub's own `struct_start` to it, and the sub-WVMI window reads the same
-      `start_idx` (`LowerTFResult.meta["start_idx"]`, §17.10).
+      sub's own `struct_start` to it; the sub's WVMI, computed in the same
+      projection since Plan G, reads the same floor / cap, and its per-lens
+      trigger-attribution window starts at the same `start_idx`
+      (`LowerTFResult.meta["start_idx"]`, §17.10).
   - **cycle (any):** `max(cts_moment, owning-structure lifecycle-start)` where
     `cts_moment = CTS_ESTABLISHED.meta["confirmed_at"]` — **the moment the cycle
     was established, never the CTS anchor (the pattern extreme; `CTS_ESTABLISHED.idx` until
@@ -1487,11 +1489,12 @@ within one run, and not a "sid+1" of the same structure:
   (sticky-per-chart, §17.3); its `relative_dir` is recomputed from its own
   direction vs the parent sid's direction (`2639/−1` under H1 sid 0 (+1):
   `relative_dir = counter` on the **confluence** chart — intended).
-- WVMI (§17.10, minimal): one sweep per unique sub over the sub's `[start_idx,
-  end_idx]`; the sweeping trigger is the first parent trigger inside that
-  window among the streams of the sub's lenses. There is no "current sid"
-  any more; `started_by` on a snapshot is the sub's first live record's
-  `trigger_type`.
+- WVMI (§17.10, Plan G 2026-09-30): computed inside each unique sub's
+  projection, ungated, over the same floor / cap as its zones; each lens
+  copy's trigger metadata names the first WVMI-class parent trigger of THAT
+  lens inside the sub's `[start_idx, end_idx]` (attribution only, None if
+  none). There is no "current sid" any more; `started_by` on a snapshot is
+  the sub's first live record's `trigger_type`.
 
 ### 6.4 Parent reversal — bootstrap rule for new parent cycle
 
@@ -1533,9 +1536,11 @@ propagates down within its sub:
 - Grandchildren (an M5 under an M15 sub) are not built (§17.12); when they
   are, the same record rule applies one level down (their `parent_end` is the
   M15 sub's record end).
-- WVMI lock semantics under the pool are deferred (§17.10); a WVMI record is
-  computed over the sub's window and persisted into every lens df the sub is
-  on.
+- WVMI under the pool (§17.10, Plan G): a record locks only at its cycle's
+  successor BOS (knowable at the cap); a cycle the cap or a reversal ends
+  stays unlocked with its temp LP bounded to the cycle's `end − 1`; a lock LP
+  past the cap falls back to the temp LP. Computed over the sub's window and
+  persisted into every lens df the sub is on, each copy with that lens's path.
 
 ---
 
@@ -1555,7 +1560,7 @@ an overlapping candle — the only overlap possible is between subs of
 | df columns (`structure_id`, `cycle_id`, `cts_phase`, `range_lo/hi`, etc.) | per-candle | Main: written once per candle by the owning sid. Lens dfs: mirrored from each sub's projection in `start_idx` order (later-live wins). |
 | Structure events (`StructureEvent` list) | `df.attrs["events"]` (append-only) | **Persist forever** with `sub_id` (identity) + informational `parent_sid` / `parent_cycle_id` / `use_case` + cycle attribution; never deleted or mutated |
 | Zones (KL, POI), Fibs, Wave candles, Imbalances | `df.attrs[...]` keyed by `sub_id` + cycle_id | Persist; `end_idx` resolved via the §5 lifecycle model (next cycle / reversal / the sub's `lifecycle_cap` with `end_reason = sub.end_reason`). No `overwritten_by` tagging, no bounds-capping. |
-| WVMI records | `df.attrs["wvmi"]` keyed by `sub_id` + cycle_id | Persist as snapshots, one sweep per unique sub, persisted into every lens df the sub is on (§17.10) |
+| WVMI records | `df.attrs["wvmi"]` keyed by `sub_id` + cycle_id | Persist as snapshots: computed in each unique sub's projection (Plan G), one copy per lens df the sub is on with that lens's path + trigger metadata; `cycle_collapsed` marks a record whose cycle's window is empty (§17.10) |
 | Zone proximity triggers | `df.attrs["zone_proximity_triggers"]` | Persist — drive children via the event bus |
 
 **Rationale:**
@@ -1579,27 +1584,24 @@ applies to *the same event*, never deletes events from other sids.
 
 ## 8. WVMI Redesign
 
-> **Plan C (2026-09-20) — sub WVMI is provisional (§17.10).** The pool
-> implements only the user's stated lean so the code runs:
-> `_assign_sub_wvmi_per_sub` runs **one sweep per unique sub** over the sub's
-> `[start_idx, m15_end_idx]` (edge for an open sub), fed by the union of the
-> §8.3 confluence stream and the §8.4 counter stream **restricted to the sub's
-> lenses**; the first parent trigger (LOH-mapped) inside the window sweeps the
-> sub once (`compute_parent_driven_sub_wvmi`), the sweeping trigger's lens
-> decides `structure_path_id`, and the records are persisted into **every**
-> lens df the sub is on (measured 2026-09-20: sub `2639/−1`'s rows now also on
-> counter, sub `4027/+1`'s rows also on confluence). Dedup key `sub_id`; WVMI
-> record meta carries `sub_id` (formerly `sub_sid`). The "current sid" / lock
-> semantics below (§8.3–§8.6) are the pre-pool design and are **deferred** to
-> a WVMI pass — do not treat §8 or §17.10 as settled for subs. Main WVMI (§8.2)
-> is unchanged.
+> **Plan G (landed 2026-09-30, `plans/PLAN_G_wvmi_unique_sub.md`) — sub WVMI lives on the unique sub, like
+> zones (§17.10).** Every rendered sub's CTS_CONFIRMED gets a record, computed inside its projection (no gate),
+> bounded by the cycle lifecycle table (temp LP to `end − 1`, `cycle_collapsed` = an empty window); the mirror
+> persists one copy per lens df the sub is on, each with that lens's path; each lens copy's
+> `triggered_by_event_idx` / `_type` name the lens's first WVMI-class trigger (§8.5's classes) inside the sub's
+> window — ATTRIBUTION, None when none lands there. §8.3 / §8.4 / §8.5's "initiate a sweep at each trigger" and
+> §8.6's lock table are superseded (dated design below); the main (§8.2) keeps its first-sd gate. Plan C
+> (2026-09-20 → 30) had one trigger-gated sweep per unique sub, persisted into every lens with the SWEEPING lens's
+> path on the field (the counter rows' column contradicted their meta).
 
 WVMI now exists per structure entity, keyed by
 `(structure_path_id, sid, cycle_id)`.
 
 ### 8.1 Removed: ad-hoc gate
 
-- The "first sd zone-proximity trigger gates WVMI creation at parent
+- **Not as written (2026-09-30):** the main KEPT its first-sd gate (§8.2,
+  `_first_sd_prox_gate`); what Plan G removed is any gate on SUB WVMI.
+  Original text: the "first sd zone-proximity trigger gates WVMI creation at parent
   CTS_CONFIRMED" pattern is removed.
 - "Cycle passed the gate" and "parent CTS_n confirmed" merge into one
   event because parent CTS_CONFIRMED can now be fired by sd-zone-proximity
@@ -1618,6 +1620,9 @@ WVMI now exists per structure entity, keyed by
 
 ### 8.3 Confluence sub WVMI
 
+> **Superseded by Plan G (§8 banner, §17.10):** no sweep is "initiated" at a trigger — every cycle of a rendered
+> sub gets its record in the projection; the triggers below are the confluence lens's ATTRIBUTION stream.
+
 - Triggered initially by main's first sd-prox after CTS (same trigger as
   main WVMI, same trigger as `first_counter` / var 2).
 - Re-triggered each time `subsequent_counter` (var 4) fires.
@@ -1634,12 +1639,18 @@ WVMI now exists per structure entity, keyed by
 
 ### 8.4 Counter sub WVMI
 
+> **Superseded by Plan G** likewise: var 3 is the counter lens's attribution stream.
+
 - Triggered each time `subsequent_confluence` (var 3) fires.
 - First counter WVMI calc happens at the first var 3 fire (= first parent
   CTS-prox after the parent first sd-prox).
 - Otherwise mirrors §8.3 with "counter" substituted.
 
 ### 8.5 Cadence summary
+
+> **Since Plan G** the right column reads "the lens whose rows this trigger ATTRIBUTES" (`_wvmi_trigger_streams_by_lens`:
+> confluence = sd-prox class, counter = CTS-prox class — Q8, confirmed after the cold review showed the class is
+> cross-lens); only the main's WVMI is still created at its trigger.
 
 | Trigger event | WVMI calcs initiated |
 |---|---|
@@ -1652,6 +1663,11 @@ WVMI fires on CTS-prox-class events. Each side's WVMI is initiated at the
 *opposite* side's trigger moment.
 
 ### 8.6 Lock semantics (per-cycle)
+
+> **Not implemented as tabled; replaced by Plan G (2026-09-30).** A record locks ONLY at its cycle's successor
+> `BOS_CONFIRMED` (`locked_by_cycle_id`, main and subs); a cycle ended by a reversal or a sub's cap is never locked
+> — it keeps its temp LP, bounded to the cycle's lifecycle `end − 1`; a lock LP outside the tracker's frame falls
+> back to the temp LP. No `locked_by` meta exists. The dated table:
 
 | Lock cause | When |
 |---|---|
@@ -1669,6 +1685,12 @@ Each of these populates `locked_by` meta on the WVMI record.
   first-sd-prox candle that initiated this sweep) and
   `triggered_by_event_type`.
 - **Carry:** `structure_path_id`, `sid`, `cycle_id` for full attribution.
+- **Plan G (2026-09-30):** on a SUB row `triggered_by_event_idx` / `_type` mean "the lens's first WVMI-class
+  trigger inside the sub's window" (attribution, stamped per lens after the mirror; both None when none — the
+  exporter writes the idx as nullable `Int64`), `parent_path_id` is always `"H1.main"`, and they are the meta's
+  FIRST keys (a declared rule-3 meaning change; main rows keep the gate meaning). The record FIELD
+  `structure_path_id` of a lens copy == its meta's. New field `cycle_collapsed` (bool): the record's cycle has an
+  empty lifecycle window — exported, inert, like a collapsed cycle's zones (main and subs).
 
 ---
 
@@ -1887,9 +1909,9 @@ variation, an event bus dispatches it.
 |---|---|
 | `BOS_CONFIRMED` | `first_confluence` (var 1) |
 | `CTS_CONFIRMED` | resolves var 1's NULL `parent_cts_anchor_idx` if pending |
-| First sd-zone proximity trigger after parent CTS | `first_counter` (var 2) + main WVMI + confluence sub WVMI initial sweep |
-| Subsequent sd-zone proximity trigger forming Λ/V | `subsequent_counter` (var 4) + confluence sub WVMI sweep |
-| CTS-zone proximity trigger after sd-prox | `subsequent_confluence` (var 3) + counter sub WVMI sweep |
+| First sd-zone proximity trigger after parent CTS | `first_counter` (var 2) + main WVMI (its gate) + the confluence lens's sub-WVMI trigger attribution (Plan G) |
+| Subsequent sd-zone proximity trigger forming Λ/V | `subsequent_counter` (var 4) + the confluence lens's sub-WVMI trigger attribution |
+| CTS-zone proximity trigger after sd-prox | `subsequent_confluence` (var 3) + the counter lens's sub-WVMI trigger attribution |
 | `REVERSAL_CONFIRMED` (`STATE_CHANGED→reversal`) | parent cycle ends → every child **record** in it ends `parent_end` (§6.5 / §17.4; the rev-1 `lifecycle_end` reason no longer exists); the child **sub** ends only through the §17.5 aggregation |
 
 ### 10.2 Within-candle ordering
@@ -1905,8 +1927,9 @@ order is:
    in backtest; live mode handles pending state per §14).
 4. Sub entities created (if first time) or have new sid appended.
 5. Sub structures process the candle (their own MarketStructure updates,
-   derive zones, fibs, POIs).
-6. WVMI sweeps run on whichever entities the trigger initiated for.
+   derive zones, fibs, POIs — and WVMI, ungated, since Plan G).
+6. WVMI: the main's gated record at its trigger; a sub's per-lens trigger
+   ATTRIBUTION is stamped onto its (already computed) records.
 7. Children of newly-emitted sub events recursively trigger their own
    grandchildren via the same bus.
 
@@ -3272,9 +3295,21 @@ replaces `{reversal, lifecycle_end}` (`next_cycle` unchanged, internal); the
 one consumer that branches on it (`wave_candles.py` LP-lock on `next_cycle`) is
 correct for the new values by construction.
 
-### 17.10 WVMI — minimal, deferred
+### 17.10 WVMI — on the unique sub, like zones (Plan G, 2026-09-30)
 
-WVMI's design under the pool is deferred to its own pass. Plan C implements
+**Settled (Plan G, `plans/PLAN_G_wvmi_unique_sub.md`; canonical rule: WVMI_SPEC "Sub entities").** No gate on
+subs: `project_to_window` passes `_run_downstream_pipeline(wvmi="none")`, so every rendered sub's CTS_CONFIRMED gets
+a record, computed in the sub's ONE projection with its floor / cap / cap reason by the helper the main uses
+(`_compute_wvmi_records`: tracker frame `df.iloc[:cap + 1]`, temp LP to the cycle's `end − 1`, `cycle_collapsed` =
+`start >= end`, a lock LP outside the frame → the temp LP). Exported like zones: the mirror deep-copies each record
+into every lens df the sub is on, each copy's field and meta `structure_path_id` = that lens's path. Trigger metadata
+per lens (`_stamp_sub_wvmi_trigger_meta`): the lens's first §8.5 WVMI-class parent trigger inside the sub's
+`[start_idx, m15_end_idx]` → `triggered_by_event_idx` (parent coords) / `_type` (None if none), `parent_path_id`
+`"H1.main"` — attribution, never a gate. `multitf/sub_wvmi.py` and `persist_facade_wvmi_to_entity_df` are deleted.
+Reference window: 18 sub records on 8 subs (was 8 on 5); the REVISIT below is answered by "like zones" (both lenses,
+each with its own path).
+
+**Dated history (Plan C, 2026-09-20 → 30):** WVMI's design under the pool is deferred to its own pass. Plan C implements
 only the stated lean so the code runs: **one sweep per unique sub** (WVMI is a
 sub property) over the sub's `[start_idx, end_idx]`, fed by the union of the
 confluence and counter trigger streams restricted to the sub's lenses; the
@@ -3289,12 +3324,6 @@ persist-into-every-lens rule puts a sub's records on BOTH lens CSVs/charts
 counter lens; sub `4027/+1`'s two `subsequent_counter`-swept records also on
 confluence). The WVMI pass must decide whether a record belongs to the sub
 (both lenses) or to the sweeping trigger's lens only.
-
-**DECIDED 2026-09-30, NOT YET IMPLEMENTED — Plan G (`plans/PLAN_G_wvmi_unique_sub.md`, cold-reviewed):** no gate on
-subs (every rendered sub's CTS_CONFIRMED → a record, computed inside its projection), lifecycle-bounded (LP search to
-the cycle's `end − 1`, tracker frame capped at the sub's end), a `cycle_collapsed` flag, exported like zones (every
-lens the sub is on, each row stamped with that lens's own path), trigger metadata per lens (attribution, never a
-gate). §17.10 above describes the CURRENT code until Plan G lands.
 
 ### 17.11 Validation — sequencing, predicted table, `/compare`
 
@@ -3383,7 +3412,7 @@ sibling dfs. `test_sub_id_is_monotonic_and_stable` must survive unchanged.
   `structure_lifecycle` — byte-identical on the reference window.
 - **Deeper nesting** (M5 under an M15 sub): the identity tuple is recursion-ready
   but M5 nesting is not built now.
-- **WVMI design** under the pool (§17.10), **live-mode pool GC** (evict when
+- **WVMI design** under the pool (§17.10) — DONE (Plan G, 2026-09-30); **live-mode pool GC** (evict when
   parent ended + no live reference), and the **Phase 3 per-candle dual-lens
   driver** (the sweep's step body is its loop body) — leave hooks.
 - `knowable_at_idx` keys `BOS_CONFIRMED`, `CTS_ESTABLISHED` and pattern-path

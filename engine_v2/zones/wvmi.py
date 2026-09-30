@@ -370,21 +370,18 @@ class WVMITracker:
 
         # Try to get LP from BOS_n+1 wave candle (last_wave_candle_idx)
         bos_wc = _find_wave_candle(wave_candles, sid, bos_cycle_id, "BOS")
-        if bos_wc is not None and bos_wc.last_wave_candle_idx is not None:
-            lp_idx = bos_wc.last_wave_candle_idx
+        lp_idx = bos_wc.last_wave_candle_idx if bos_wc is not None else None
+        if lp_idx is not None and lp_idx in df.index:
             rec.lp_idx = lp_idx
-            if lp_idx in df.index:
-                rec.lp_volume = float(df.loc[lp_idx, "volume"])
-                rec.lp_weight = _compute_last_wave_weight(df, lp_idx, pb_wave_dir)
-                if rec.fp_volume and rec.fp_volume > 0:
-                    rec.pullback_momentum = (rec.lp_volume * rec.lp_weight) / rec.fp_volume
-                else:
-                    rec.pullback_momentum = None
+            rec.lp_volume = float(df.loc[lp_idx, "volume"])
+            rec.lp_weight = _compute_last_wave_weight(df, lp_idx, pb_wave_dir)
+            if rec.fp_volume and rec.fp_volume > 0:
+                rec.pullback_momentum = (rec.lp_volume * rec.lp_weight) / rec.fp_volume
             else:
-                rec.lp_volume = None
-                rec.lp_weight = 1.0
                 rec.pullback_momentum = None
-        # else: lock with existing temp LP as final
+        # else: lock with the existing (bounded) temp LP as final — BOS_n+1 has no
+        # last wave candle, or it lies outside the frame (past a capped sub's end,
+        # or the data edge): Plan G Q10, never an LP the frame cannot read.
 
         rec.buy_momentum, rec.sell_momentum = _assign_direction_labels(
             rec.zone_side, rec.breakout_momentum, rec.pullback_momentum

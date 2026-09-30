@@ -1,6 +1,6 @@
 # Plan G — WVMI on the unique sub (lifecycle-governed, exported like zones)
 
-Status: **rev 2 (2026-09-30): measured, 6 decisions, cold-reviewed (3 lenses, SOUND WITH FIXES, folded — §8); Q7–Q10 decided the same day — READY TO IMPLEMENT (next session); no code yet.** Heavy tier: options →
+Status: **LANDED 2026-09-30 (§9)** — rev 2 (2026-09-30): measured, 6 decisions, cold-reviewed (3 lenses, SOUND WITH FIXES, folded — §8); Q7–Q10 decided the same day; implemented against §4–§6 and the checklist the same day; `/compare` == §5 in every cell. Heavy tier: options →
 user decisions → written plan with predicted per-CSV deltas → plan cold review (3–4 lenses) → implement (likely the
 next session). Memory: `project_wvmi_lifecycle_deferred.md` (the 2026-09-28 opening, the user's direction).
 
@@ -224,3 +224,36 @@ temp LP.** The questions as asked:
 - **Q10** a lock LP past a capped sub's end (BOS_{n+1}'s last wave candle ≤ its anchor + 5 can pass the cap; 0 on the
   window): (A) fall back to the temp LP (bounded ≤ end − 1 — the lock already does this when BOS_{n+1} has no last wave
   candle); (B) today's behaviour: keep the idx, volume / pullback None.
+
+## 9. Landed (2026-09-30)
+
+One atomic commit (code + tests + every §6 doc site; the §5 prediction in its message). Implemented exactly as §4:
+`_run_downstream_pipeline(wvmi=...)` validated against `WVMI_MODES`; ONE helper `_compute_wvmi_records` (main +
+every sub projection; frame `df.iloc[:cap + 1]`, ends + `cycle_collapsed` from the lifecycle table, the capped-record
+assert); `_first_sd_prox_gate`; Q10 in `WVMITracker.on_bos_confirmed` (a lock LP not in the frame → the temp LP, for
+the main's data edge too); the mirror sets the copy's FIELD path; `_wvmi_trigger_streams_by_lens` +
+`_stamp_sub_wvmi_trigger_meta` + `_count_sub_wvmi` replace `_assign_sub_wvmi_per_sub`; `multitf/sub_wvmi.py` and
+`persist_facade_wvmi_to_entity_df` deleted; the exporter's `cycle_collapsed` column + `Int64`. One interpretation
+stated before coding: `check_zone_proximity` runs iff `wvmi == "first_sd_prox"` (the main path, exactly as before —
+`skip_wvmi=True` callers skipped it too).
+
+**Verification (reference window, vs the Post-E·5 save `20260930_005619_5af674c`):** replay 45 s wall; the keyed WVMI
+diff (`review_scripts/cmp_wvmi_keyed.py`) == §5 in every cell (H1 3 rows + the column, (1,1) `True`; confluence
+7 → 17 rows with §2's values in render order, the 7 old rows unchanged but the column, `710` still an int; counter 6
+rows: sub 3 path + trigger 871 `SUBSEQUENT_CONFLUENCE_TRIGGER`, sub 7 path + trigger None, sub 5 unchanged); every row
+path column == meta path, every key once per CSV; the other 21 CSVs byte-identical; figures identical (85/245,
+151/124, 294/233); run.log: warnings identical, outside the `[wvmi]` lines only the summary line (== §5 verbatim),
+the 8 per-projection totals == §5, today's 13 sub CREATED / LOCKED lines verbatim inside their blocks, + 10 CREATED /
+7 LOCKED. Tests 1087 → 1111 (+ the OANDA smoke). My mutation loop: `review_scripts/mutants_plan_g.py` 47/47 KILLED
+(4 min).
+
+**Where the implementation differed from the checklist (re-measured on the landed code):** the lure LP pin (cap 17)
+cannot kill the no-ends mutant on the capped frame — `iloc[:18]` excludes the lure candle 19 — so it runs on an OPEN
+projection (floor 5: LP 14, the mutant 19); a new pin (an FP ON the cap candle is read) kills an `iloc[:cap]`
+off-by-one; the call-site mutants (the var3 / var4 swap, counts fed per-lens results, the parent path from a lens)
+survived every unit pin and die only in a stubbed-collaborator driver test
+(`test_sub_wvmi_per_sub::test_the_driver_feeds_each_lens_its_stream_and_counts_each_unique_sub_once`); a
+`project_to_window` == bounded-build WVMI equality pin was VACUOUS on its fixture (both empty) and was not added.
+Found on the way, not in scope (memory `_INBOX.md`): `locked_by_cycle_id` renders `1.0` in every WVMI CSV (a
+None-mixed int column, pre-existing — the save has it too); `lp_idx` / `fp_idx` would likewise the first time one is
+None.

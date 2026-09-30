@@ -76,7 +76,11 @@ def project_to_window(
     (`apply_idx`) still straddles a cap, so a mid-pair clip can yield a
     half-derived reversal.
 
-    `skip_wvmi=True` (sub WVMI is parent-event-driven, computed later, §8.3/8.4).
+    `wvmi="none"` (Plan G G1): the sub's WVMI is computed HERE, ungated, over
+    the clipped events and bounded by the same lifecycle table as KL / POI; the
+    records are slice-local, carry this call's `structure_path_id` and meta `{}`
+    (the mirror sets each lens's own path on its copies; the orchestrator then
+    stamps each lens's trigger meta onto them).
     """
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 
@@ -90,7 +94,7 @@ def project_to_window(
         log_prefix=log_prefix,
         timeframe=timeframe,
         structure_path_id=structure_path_id,
-        skip_wvmi=True,
+        wvmi="none",
         lifecycle_floor=floor,
         lifecycle_cap=cap,
         cap_reason=cap_reason,

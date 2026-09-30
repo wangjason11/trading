@@ -227,7 +227,20 @@ def test_mirrored_index_values_are_source_plus_slice_begin(geometry, m15_df):
                         shifted[(attr, k)] += 1
                     else:
                         assert m.meta[k] == v, (attr, k, v, m.meta[k])
+        # WVMI (Plan G): the shift sites are the four wave-candle FIELDS — the meta
+        # holds no index key (the projection's is `{}`; the per-lens trigger meta
+        # is stamped after the mirror, in PARENT coords).
+        mir_w = d.attrs.get("wvmi", [])
+        assert len(mir_w) == len(res.wvmi_records), "wvmi"
+        for s, m in zip(res.wvmi_records, mir_w):
+            for f in ("fb_idx", "lb_idx", "fp_idx", "lp_idx"):
+                v = getattr(s, f)
+                assert getattr(m, f) == (None if v is None else v + sb), ("wvmi", f, v, getattr(m, f))
+                if v is not None:
+                    shifted[("wvmi", f)] += 1
+            assert {k: v for k, v in m.meta.items() if k not in attribution} == s.meta
     assert {
+        ("wvmi", "fb_idx"), ("wvmi", "lb_idx"), ("wvmi", "fp_idx"), ("wvmi", "lp_idx"),
         ("events", "effective_idx"), ("events", "start_idx"), ("events", "confirm_idx"),
         ("events", "RANGE_STARTED", "cts_anchor_idx"), ("events", "pullback_apply_idx"), ("events", "expires_idx"),
         ("kl_zones", "anchor_idx"), ("kl_zones", "bounds_steps"),
@@ -442,6 +455,8 @@ class _Wvmi:
     fp_idx: Optional[int]
     lp_idx: Optional[int]
     meta: dict
+    structure_path_id: Optional[str] = None
+    cycle_collapsed: bool = False
 
 
 _V = 7      # every slice-local index value
@@ -474,7 +489,8 @@ def _synthetic_result() -> LowerTFResult:
         wave_candles=[_Wave(first_wave_candle_idx=_V, last_wave_candle_idx=_V + 1,
                             meta={**_all(edm._WAVE_CANDLE_META_IDX_KEYS), "version": _V}),
                       _Wave(first_wave_candle_idx=None, last_wave_candle_idx=None, meta={})],
-        wvmi_records=[_Wvmi(fb_idx=_V, lb_idx=_V + 1, fp_idx=None, lp_idx=_V + 2,
+        wvmi_records=[_Wvmi(fb_idx=_V, lb_idx=_V + 1, fp_idx=None, lp_idx=_V + 2, structure_path_id="src",
+                            cycle_collapsed=True,
                             meta={"triggered_by_event_idx": _V})],   # parent (H1) coords
         prev_bos_lines=[{"start_idx": _V, "end_idx": _V + 1, "price": 1.0}, "opaque"],
         status="finalized",
@@ -521,31 +537,29 @@ def test_mirror_shifts_every_site_exactly_once():
     unlisted int key untouched — mirrored into TWO lens dfs (each shifted once;
     the source untouched). The mutation lens found the fib fields (the M15 fib
     CSV's `bos_idx` / `cts_idx` / `end_idx` columns + the fib drawing), the
-    wave-candle fields and `prev_bos_lines` (M15 chart positions) unpinned."""
+    wave-candle fields and `prev_bos_lines` (M15 chart positions) unpinned.
+    Plan G G3: a WVMI copy per lens carries THAT lens's path in its FIELD as
+    well as its meta (the CSV column and the meta agree); `cycle_collapsed` is
+    carried over; the source record keeps its own path."""
     res = _synthetic_result()
     src = deepcopy(res)
     dfs = [pd.DataFrame(index=range(100)) for _ in range(2)]
     for i, d in enumerate(dfs):
         edm.mirror_lower_tf_result_to_entity_df(d, res, structure_path_id=f"p{i}")
-    for d in dfs:
+    for i, d in enumerate(dfs):
         _check_mirrored(d)
         (w,) = d.attrs["wvmi"]
         assert (w.fb_idx, w.lb_idx, w.fp_idx, w.lp_idx) == (_V + _SB, _V + 1 + _SB, None, _V + 2 + _SB)
         assert w.meta["triggered_by_event_idx"] == _V          # parent coords: never shifted
+        assert (w.structure_path_id, w.meta["structure_path_id"], w.cycle_collapsed) == (f"p{i}", f"p{i}", True)
+    (w0,), (w1,) = dfs[0].attrs["wvmi"], dfs[1].attrs["wvmi"]
+    assert w0 is not w1 and w0.meta is not w1.meta and w0 is not res.wvmi_records[0]
     assert res.events[0].idx == src.events[0].idx and res.events[0].meta == src.events[0].meta
-    for a in ("kl_zones", "poi_zones", "fib_states", "wave_candles"):
+    for a in ("kl_zones", "poi_zones", "fib_states", "wave_candles", "wvmi_records"):
         assert [x.meta for x in getattr(res, a)] == [x.meta for x in getattr(src, a)], a
+    assert res.wvmi_records == src.wvmi_records                # every field: path "src", idx slice-local
     assert res.fib_states[0].bos_idx == _V and res.fib_states[0].cts_history == src.fib_states[0].cts_history
     assert res.prev_bos_lines == src.prev_bos_lines
-
-
-def test_persist_facade_wvmi_shifts_once_and_keeps_parent_coords():
-    res = _synthetic_result()
-    d = pd.DataFrame(index=range(100))
-    edm.persist_facade_wvmi_to_entity_df(d, res, structure_path_id="p")
-    (w,) = d.attrs["wvmi"]
-    assert (w.fb_idx, w.lb_idx, w.fp_idx, w.lp_idx) == (_V + _SB, _V + 1 + _SB, None, _V + 2 + _SB)
-    assert w.meta["triggered_by_event_idx"] == _V and res.wvmi_records[0].fb_idx == _V
 
 
 def _all_index_like_keys(module) -> set:
@@ -612,13 +626,19 @@ def test_every_int_meta_value_is_listed_or_known_non_index(geometry, m15_df):
     survived. Classify by VALUE TYPE: every Python-int meta value (top level and
     inside the nested lists) on a fixture element is under a shift-listed key, the
     nested item key, or a known non-index key."""
-    res, _ = _render_both_lenses(geometry, m15_df)
+    res, lens_dfs = _render_both_lenses(geometry, m15_df)
+    assert res.wvmi_records, "the open fixture sub has a WVMI record"
     sites = (
         ("events", res.events, edm._EVENT_META_IDX_KEYS),
         ("kl_zones", res.kl_zones, edm._ZONE_META_IDX_KEYS),
         ("poi_zones", res.poi_zones, edm._ZONE_META_IDX_KEYS),
         ("fib_states", res.fib_states, edm._FIB_META_IDX_KEYS),
         ("wave_candles", res.wave_candles, edm._WAVE_CANDLE_META_IDX_KEYS),
+        # WVMI meta has no shift list (Plan G): the source's and the mirrored
+        # copies' — only `triggered_by_event_idx` (PARENT coords, NEVER_LISTED)
+        # may be an int that is neither a non-index key nor shifted.
+        ("wvmi", res.wvmi_records + [w for d in lens_dfs.values() for w in d.attrs["wvmi"]],
+         ("triggered_by_event_idx",)),
     )
     bad = set()
     for attr, elems, listed in sites:

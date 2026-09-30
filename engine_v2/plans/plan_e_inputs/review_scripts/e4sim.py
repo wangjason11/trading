@@ -22,7 +22,7 @@ for maker in (_make_second_cts_moment_after_anchor_data, _make_multicycle_data):
         buf=io.StringIO()
         with contextlib.redirect_stdout(buf):
             try:
-                o=_run_downstream_pipeline(res.df, evs, +1, fib_mode=MODE, skip_wvmi=False)
+                o=_run_downstream_pipeline(res.df, evs, +1, fib_mode=MODE, wvmi="first_sd_prox")
             except Exception as ex:
                 o={"ERR":repr(ex)}
         outs.append(o)

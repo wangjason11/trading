@@ -1,5 +1,9 @@
 # Plan G cold review (2026-09-30) — the implementation checklist
 
+> **IMPLEMENTED 2026-09-30 (PLAN_G §9).** Every pin below was re-measured on the landed code; all hold except the
+> lure pin's frame (cap 17 cannot show the no-ends mutant on the capped frame — it runs on an open projection) —
+> PLAN_G §9 lists the differences. The mutants are `review_scripts/mutants_plan_g.py` (47/47 KILLED).
+
 Canonical findings summary + the Q7–Q10 decisions: `PLAN_G_wvmi_unique_sub.md` §8 (+ Q10: a pin for a lock LP past the
 cap falling back to the temp LP). This file keeps lens 3's measured test table, new pins,
 mutant list and doc-site list (line numbers as of `5fa986b` — `5a4af14` later inserted 4 lines in WVMI_SPEC after

@@ -79,7 +79,7 @@ def _downstream(rows, *, end_idx=None, cap=None):
         res = compute_bounded_structure(_prepare_df(rows), 0, 1, timeframe="M15", end_idx=end_idx)
         events = [e for e in res.events if cap is None or int(e.idx) <= cap]
         out = _run_downstream_pipeline(res.df, events, 1, fib_mode="cross_cycle", timeframe="M15",
-                                       structure_path_id="M15.test", skip_wvmi=True, lifecycle_cap=cap)
+                                       structure_path_id="M15.test", wvmi="off", lifecycle_cap=cap)
     assert not [e for e in events if e.type == "CTS_ESTABLISHED" and e.meta["cycle_id"] == 1]
     fib1 = [f for f in out["fib_states"] if (f.structure_id, f.cycle_id) == (0, 1)]
     assert fib1 and all(f.meta.get("cross_start_cycle") == 0 for f in fib1)

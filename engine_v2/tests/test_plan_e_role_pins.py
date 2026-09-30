@@ -167,7 +167,8 @@ def test_poi_sweep_positive_control():
 
 # --- source guard: the pinned sort call sites -----------------------------------
 
-_PINNED = ("pipeline/orchestrator.py", "multitf/sub_wvmi.py", "zones/zone_proximity.py",
+# orchestrator.py holds the ONE WVMI tracker loop since Plan G (`multitf/sub_wvmi.py`'s copy is deleted).
+_PINNED = ("pipeline/orchestrator.py", "zones/zone_proximity.py",
            "zones/poi_zones.py", "zones/wave_candles.py", "structure/reference_zone.py",
            "structure/unified_probe.py")
 

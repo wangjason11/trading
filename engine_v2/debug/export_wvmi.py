@@ -20,6 +20,7 @@ _COLUMNS = [
     "zone_side",
     "status",
     "lp_locked",
+    "cycle_collapsed",   # the record's cycle has an empty lifecycle window (Plan G G2)
     "locked_by_cycle_id",
     "fb_idx",
     "lb_idx",
@@ -30,7 +31,9 @@ _COLUMNS = [
     "buy_momentum",
     "sell_momentum",
     # §8.7 attribution. triggered_by_event_idx is PARENT-df coords for subs
-    # (LANDMINE "WVMI Records Carry Mixed-Coordinate Meta") — never translated.
+    # (LANDMINE "WVMI Records Carry Mixed-Coordinate Meta") — never translated;
+    # on a sub row it is the lens's first WVMI-class trigger inside the sub's
+    # window, None (an empty cell) when none lands there (Plan G G4).
     "triggered_by_event_idx",
     "triggered_by_event_type",
     "parent_path_id",
@@ -45,7 +48,8 @@ def export_wvmi(records: list[WVMIRecord], path: str | Path) -> None:
     parent_cycle_id / started_by informational) out of `meta` into their own
     columns, keeping the full `meta` dict as the last column. Wave-candle idx
     fields are entity-df coords; `triggered_by_event_idx` is parent-df coords
-    for subs.
+    for subs, written as pandas nullable `Int64` — a column mixing ints and
+    None would otherwise render every int as a float (`710` -> `710.0`).
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -64,6 +68,7 @@ def export_wvmi(records: list[WVMIRecord], path: str | Path) -> None:
             "zone_side": r.zone_side,
             "status": r.status,
             "lp_locked": r.lp_locked,
+            "cycle_collapsed": r.cycle_collapsed,
             "locked_by_cycle_id": r.locked_by_cycle_id,
             "fb_idx": r.fb_idx,
             "lb_idx": r.lb_idx,
@@ -79,4 +84,6 @@ def export_wvmi(records: list[WVMIRecord], path: str | Path) -> None:
             "meta": m,
         })
 
-    pd.DataFrame(rows, columns=_COLUMNS).to_csv(path, index=False)
+    out = pd.DataFrame(rows, columns=_COLUMNS)
+    out["triggered_by_event_idx"] = out["triggered_by_event_idx"].astype("Int64")
+    out.to_csv(path, index=False)

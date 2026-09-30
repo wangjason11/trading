@@ -5,8 +5,9 @@ FP + 1 to the DATA end. A record locks only at the next cycle's BOS, so a cycle 
 main) kept searching into whatever superseded it: on the reference window H1 (0,1), ended by the sid-0 reversal at
 902, took candle 988 (a sid-1 candle) — pullback_momentum 0.904 instead of 0.759 (LP 896). Now the main tracker gets
 each cycle's end from `compute_cycle_lifecycle` (the table KL / POI read; half-open `[start, end)`) and searches to
-`end - 1`; an open cycle still searches to the data end. Sub sweeps pass no ends: a sub projection's frame already
-stops at the sub's end (measured 5/5) — the one-candle end-inclusive difference belongs to the deferred WVMI plan.
+`end - 1`; an open cycle still searches to the data end. Since Plan G (Q4) a sub's WVMI is computed inside its
+projection by the same helper, so a sub record gets the same `end - 1` bound (before it, the sub sweep passed no ends
+and searched to its frame end, the sub's end candle included).
 """
 from __future__ import annotations
 
@@ -14,12 +15,10 @@ import contextlib
 import copy
 import io
 
-from types import SimpleNamespace
-
 import pandas as pd
 
-import engine_v2.multitf.sub_wvmi as sub_wvmi
 import engine_v2.pipeline.orchestrator as orch
+from engine_v2.multitf.pooled_structure_build import project_to_window
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests.test_ms_stop_after_cts import _R, _make_double_rewind_data
@@ -71,7 +70,7 @@ def test_the_search_end_is_the_last_live_candle_or_the_data_end():
     assert t._lp_search_end((0, 1), df) == 16          # half-open [start, end): end - 1
     assert t._lp_search_end((0, 2), df) == 19          # an end past the data: the data end
     assert t._lp_search_end((0, 3), df) == 19          # an open cycle: the data end
-    assert WVMITracker()._lp_search_end((0, 1), df) == 19   # no ends (the sub sweep): the data end
+    assert WVMITracker()._lp_search_end((0, 1), df) == 19   # no ends given: the data end
 
 
 # --- landing-review pins (2026-09-28, mutation lens): the orchestrator wiring, an empty bound, a growing frame -------
@@ -150,9 +149,26 @@ def test_an_update_on_a_grown_frame_respects_the_bound():
     assert (rec.lp_idx, rec.status, rec.sell_momentum) == (17, "updated", round(110 * 0.7 / 150, 2))
 
 
-def test_the_sub_sweep_passes_no_ends(monkeypatch):
-    """Sub records keep the frame-end search (the frame stops at the sub's end); moving them onto the lifecycle table
-    belongs to the deferred WVMI plan — this pin makes that a conscious change."""
+def _project(res, floor=None, cap=None, reason=None):
+    with contextlib.redirect_stdout(io.StringIO()):
+        return project_to_window(res, floor=floor, cap=cap, cap_reason=reason, direction=1, fib_mode="h1")
+
+
+# --- Plan G Q4 (2026-09-30): a sub projection's temp LP stops at the cycle's end - 1 too ------------------------
+
+def test_an_open_projection_bounds_the_temp_lp_by_the_cycle_end():
+    """Q4 end to end: the lure (a nearer qualifying candle 19 after the reversal at 17) is inside an OPEN projection's
+    frame; the lifecycle table ends (0,2) at 17, so its temp LP stays 14 (pullback 1.0). The no-ends sub sweep before
+    Plan G took 19 (0.7). (A capped projection cannot show it: under cap 17 the frame already stops at 17.)"""
+    res, _ = _run(_post_reversal_lure())
+    recs = {(r.bos_structure_id, r.bos_cycle_id): r for r in _project(res, floor=5)["wvmi_records"]}
+    r = recs[(0, 2)]
+    assert (r.fp_idx, r.lp_idx, r.lp_locked, r.pullback_momentum) == (13, 14, False, 1.0)
+
+
+def test_the_projection_passes_every_cycle_end(monkeypatch):
+    """Q4 wiring (the rewritten `test_the_sub_sweep_passes_no_ends` — a conscious change): the ends the projection
+    hands the tracker ARE `compute_cycle_lifecycle`'s on the clipped events with the sub's floor / cap / reason."""
     seen = []
 
     class Capture(WVMITracker):
@@ -160,8 +176,9 @@ def test_the_sub_sweep_passes_no_ends(monkeypatch):
             super().__init__(*a, **k)
             seen.append(dict(self._cycle_end_by_key))
 
-    monkeypatch.setattr(sub_wvmi, "WVMITracker", Capture)
-    result = SimpleNamespace(events=[], df=pd.DataFrame({"c": [1.0]}), wave_candles=[], kl_zones=[])
-    trig = sub_wvmi.ParentTrigger(idx=1, event_type="ZONE_PROXIMITY_TRIGGER", parent_path_id="H1.main")
-    assert sub_wvmi.compute_parent_driven_sub_wvmi(result, "H1.main >> M15.confluence", trig) == []
-    assert seen == [{}]
+    res, _ = _run(_post_reversal_lure())
+    monkeypatch.setattr(orch, "WVMITracker", Capture)
+    down = _project(res, floor=5, cap=15, reason="parent_end")
+    table = compute_cycle_lifecycle(down["events"], compute_reversal_idx_by_sid(down["events"]), 5, 15, "parent_end")
+    assert seen == [{(0, 0): 8, (0, 1): 12, (0, 2): 15}]
+    assert seen[0] == {k: e for k, (_s, e, _r) in table.items() if e is not None}

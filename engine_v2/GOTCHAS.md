@@ -1374,7 +1374,16 @@ emitted — inspect them directly for `end_time <= start_time` (check both the
 
 ## Sub WVMI is Trigger-Centric, Not Sid-Centric
 
-**Rule:** A sub sid (M15.confluence / M15.counter) earns a WVMI record **iff a
+> **SUPERSEDED by Plan G (2026-09-30, `plans/PLAN_G_wvmi_unique_sub.md`; WVMI_SPEC "Sub entities", LANDMINES "Sub
+> WVMI Is Computed Inside the Projection").** Sub WVMI is no longer gated by any parent trigger: every rendered unique
+> sub gets a record per CTS_CONFIRMED, computed in its projection like its zones, and the parent triggers are per-lens
+> ATTRIBUTION (`triggered_by_*`, None when none lands in the window). The user reversed the "trigger-centric" model
+> (2026-09-28: "unique subs are where trading decisions will be made and governed by life cycle, it would make sense
+> WVMI lives here as well"). So "Why this is the correct model" and "Do NOT restore" below are FALSE now — a
+> reversal-born sub gets WVMI without a later trigger (the reference window's subs 1 and 2). The body is kept as the
+> dated record of the Plan C / pre-pool design and of the 2026-05-26 per-sid bug.
+
+**Rule (dated, pre-Plan-G):** A sub sid (M15.confluence / M15.counter) earns a WVMI record **iff a
 parent trigger of its entity's class lands inside its active window**
 `[start_trigger_idx, m15_end_idx]` — NOT based on how the sid was born. There is
 no `use_case` branch; `_assign_trigger_centric_sub_wvmi` (orchestrator) iterates

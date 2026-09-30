@@ -102,6 +102,92 @@ def _prev_bos_lines(sorted_events: list, reversal_idx_by_new_sid: dict, pfx: str
     return prev_bos_lines
 
 
+# `_run_downstream_pipeline(wvmi=...)` (Plan G G1): the main's first-sd gate, a
+# sub's ungated projection, or no WVMI at all.
+WVMI_MODES = ("first_sd_prox", "none", "off")
+
+
+def _first_sd_prox_gate(zone_proximity_triggers: Dict[tuple, list], structure_path_id: str) -> Dict[tuple, dict]:
+    """The main's WVMI gate: {(sid, cycle): record meta} for every cycle whose
+    FIRST zone-proximity trigger is sd (Part 4 §8.7 attribution to it)."""
+    gate: Dict[tuple, dict] = {}
+    for key, trigs in zone_proximity_triggers.items():
+        if trigs and trigs[0].direction == "sd":
+            first_sd = trigs[0]
+            gate[key] = {
+                "triggered_by_event_idx": first_sd.idx,
+                "triggered_by_event_type": "ZONE_PROXIMITY_TRIGGER",
+                "structure_path_id": structure_path_id,
+                "trigger_inner": first_sd.trigger_inner,
+                "proximity_pips": first_sd.proximity_pips,
+            }
+    return gate
+
+
+def _compute_wvmi_records(
+    df: pd.DataFrame,
+    events: list,
+    sorted_events: list,
+    wave_candle_results: list,
+    kl_zones: list,
+    *,
+    gate: Optional[Dict[tuple, dict]],
+    structure_path_id: str,
+    lifecycle_floor: Optional[int],
+    lifecycle_cap: Optional[int],
+    cap_reason: str,
+) -> list:
+    """The ONE WVMI tracker loop (Plan G G1) — the main and every sub projection.
+
+    `gate` None = ungated (a sub: every CTS_CONFIRMED is offered to the
+    tracker; the record meta stays `{}` — trigger attribution is stamped per
+    lens after the mirror, `_stamp_sub_wvmi_trigger_meta`). Otherwise only the
+    gated cycles get a record, its meta updated with the gate's dict.
+
+    Bounded by the `compute_cycle_lifecycle` table KL / POI read (the same
+    events / floor / cap / reason): a temp LP never passes its cycle's
+    `end - 1` (2026-09-28 on the main: H1 (0,1), ended by the sid-0 reversal at
+    902, took a sid-1 candle 988; Plan G Q4 on subs), and `cycle_collapsed` =
+    the cycle's window is empty (`start >= end`). With a cap the tracker's
+    frame is `df.iloc[:cap + 1]`: the natural-end frame a sub projection gets
+    would otherwise let FP (<= CTS_CONFIRMED moment + 10), LB (<= CTS anchor + 5)
+    and the lock LP (<= BOS_{n+1} anchor + 5) read candles past the sub's end.
+    Sorted by `ef.processing_order_key` (pinned, Plan E)."""
+    life = compute_cycle_lifecycle(
+        events, compute_reversal_idx_by_sid(events), lifecycle_floor, lifecycle_cap, cap_reason,
+    )
+    cycle_end_by_key = {key: end for key, (_start, end, _reason) in life.items() if end is not None}
+    frame = df.iloc[:lifecycle_cap + 1] if lifecycle_cap is not None else df
+    tracker = WVMITracker(structure_path_id=structure_path_id, cycle_end_by_key=cycle_end_by_key)
+
+    for ev in sorted_events:
+        if ev.type == "CTS_CONFIRMED":
+            key = (ev.meta.get("structure_id", 0), ev.meta.get("cycle_id", 0))
+            if gate is not None and key not in gate:
+                continue
+            rec = tracker.on_cts_confirmed(ev, frame, wave_candle_results, kl_zones)
+            if rec is not None and gate is not None:
+                rec.meta.update(gate[key])
+
+    for ev in sorted_events:
+        if ev.type == "BOS_CONFIRMED":
+            tracker.on_bos_confirmed(ev, frame, wave_candle_results)
+
+    tracker.update_temporary_lp(frame, kl_zones)
+
+    records = tracker.get_records()
+    for rec in records:
+        key = (rec.bos_structure_id, rec.bos_cycle_id)
+        # A kept CTS_CONFIRMED implies its CTS_ESTABLISHED is kept, and a cap
+        # gives every cycle an end — so an unbounded capped record is a bug.
+        assert lifecycle_cap is None or key in cycle_end_by_key, (
+            f"[wvmi] {structure_path_id} record {key} has no lifecycle end under cap {lifecycle_cap}"
+        )
+        start, end, _reason = life[key]
+        rec.cycle_collapsed = end is not None and start >= end
+    return records
+
+
 def _run_downstream_pipeline(
     df: pd.DataFrame,
     events: list,
@@ -113,7 +199,7 @@ def _run_downstream_pipeline(
     log_prefix: str = "",
     timeframe: str = "H1",
     structure_path_id: str = "H1.main",
-    skip_wvmi: bool = False,
+    wvmi: str = "first_sd_prox",
     lifecycle_floor: Optional[int] = None,
     lifecycle_cap: Optional[int] = None,
     cap_reason: str = "lifecycle_end",
@@ -123,14 +209,19 @@ def _run_downstream_pipeline(
     Extracted from run_pipeline so both H1 and lower-TF pipelines can reuse.
 
     Returns dict with keys: kl_zones, wave_candles, fib_states, fib_tracker,
-    poi_zones, wvmi, wvmi_records, prev_bos_lines, sorted_events,
+    poi_zones, wvmi_records, prev_bos_lines, sorted_events,
     zone_proximity_triggers
 
-    `skip_wvmi=True` disables the entity-local zone-proximity gate and the
-    WVMI sweep entirely. Used by sub entities (Part 4 §8.3 / §8.4): sub WVMI
-    is parent-event-driven and computed by the orchestrator after the sub's
-    LowerTFResult is built — see `multitf/sub_wvmi.py`.
+    `wvmi` (Plan G G1) — one of `WVMI_MODES`, anything else raises:
+      - `"first_sd_prox"` (the main): `check_zone_proximity` runs (it also
+        feeds the var3 / var4 detectors and the §8.5 trigger streams) and a
+        cycle gets a record only when its first zone-proximity trigger is sd;
+      - `"none"` (a sub — `project_to_window`): no gate, every CTS_CONFIRMED
+        is offered to the tracker; zone proximity is never run for a sub;
+      - `"off"`: no WVMI and no zone proximity (tests of the other stages).
     """
+    if wvmi not in WVMI_MODES:
+        raise ValueError(f"[downstream] wvmi={wvmi!r} not in {WVMI_MODES}")
     pfx = f"[{log_prefix}]" if log_prefix else ""
 
     # 5) KL zones consume structure events (not levels).
@@ -329,75 +420,39 @@ def _run_downstream_pipeline(
     )
     print(f"{pfx}[poi_zones] total=", len(poi_zones))
 
-    # 9) WVMI — entity-local proximity-gated. Skipped for sub entities
-    # (Part 4 §8.3 / §8.4: sub WVMI is parent-event-driven, computed by
-    # the orchestrator from `multitf/sub_wvmi.py` after the sub is built).
+    # 9) WVMI (Plan G G1) — the main gates on its first sd zone-proximity
+    # trigger per cycle; a sub (`wvmi="none"`) is ungated, computed here inside
+    # its projection like KL / POI / fib. Zone proximity runs on the main only.
     wvmi_records: list = []
     zone_proximity_triggers: Dict[tuple, list] = {}
 
-    if not skip_wvmi:
-        # A record's temp LP never passes its cycle's lifecycle end — the same
-        # `compute_cycle_lifecycle` table KL / POI read (2026-09-28: H1 (0,1),
-        # ended by the sid-0 reversal at 902, took a sid-1 candle 988 as its LP).
-        cycle_end_by_key = {
-            key: end
-            for key, (_start, end, _reason) in compute_cycle_lifecycle(
-                events, compute_reversal_idx_by_sid(events),
-                lifecycle_floor, lifecycle_cap, cap_reason,
-            ).items()
-            if end is not None
-        }
-        wvmi_tracker = WVMITracker(
-            structure_path_id=structure_path_id, cycle_end_by_key=cycle_end_by_key,
-        )
-
-        pip_size = _pip_size_from_pair(df)
-
-        # Zone proximity triggers — alternating sd/opp_sd per cycle.
-        # WVMI gate uses only the first sd trigger per cycle (backward-compat
-        # for main entity until §13.5 cleanup; sub gating moved to parent
-        # events in 3d.iii).
+    if wvmi == "first_sd_prox":
+        # Zone proximity triggers — alternating sd/opp_sd per cycle; the WVMI
+        # gate uses only the first sd trigger per cycle.
         zone_proximity_triggers = check_zone_proximity(
             df=df,
             sorted_events=sorted_events,
             kl_zones=kl_zones,
             poi_zones=poi_zones,
-            pip_size=pip_size,
+            pip_size=_pip_size_from_pair(df),
             timeframe=timeframe,
         )
 
-        proximity_candles: Dict[tuple, dict] = {}
-        for key, trigs in zone_proximity_triggers.items():
-            if trigs and trigs[0].direction == "sd":
-                first_sd = trigs[0]
-                proximity_candles[key] = {
-                    # Part 4 §8.7 schema: attribution to the trigger event.
-                    "triggered_by_event_idx": first_sd.idx,
-                    "triggered_by_event_type": "ZONE_PROXIMITY_TRIGGER",
-                    "structure_path_id": structure_path_id,
-                    "trigger_inner": first_sd.trigger_inner,
-                    "proximity_pips": first_sd.proximity_pips,
-                }
-
-        for ev in sorted_events:
-            if ev.type == "CTS_CONFIRMED":
-                sid = ev.meta.get("structure_id", 0)
-                cycle_id = ev.meta.get("cycle_id", 0)
-                if (sid, cycle_id) in proximity_candles:
-                    rec = wvmi_tracker.on_cts_confirmed(ev, df, wave_candle_results, kl_zones)
-                    if rec is not None:
-                        rec.meta.update(proximity_candles[(sid, cycle_id)])
-
-        for ev in sorted_events:
-            if ev.type == "BOS_CONFIRMED":
-                wvmi_tracker.on_bos_confirmed(ev, df, wave_candle_results)
-
-        wvmi_tracker.update_temporary_lp(df, kl_zones)
-
-        wvmi_records = wvmi_tracker.get_records()
+    if wvmi != "off":
+        wvmi_records = _compute_wvmi_records(
+            df, events, sorted_events, wave_candle_results, kl_zones,
+            gate=(
+                _first_sd_prox_gate(zone_proximity_triggers, structure_path_id)
+                if wvmi == "first_sd_prox" else None
+            ),
+            structure_path_id=structure_path_id,
+            lifecycle_floor=lifecycle_floor,
+            lifecycle_cap=lifecycle_cap,
+            cap_reason=cap_reason,
+        )
         print(f"{pfx}[wvmi] total={len(wvmi_records)}, locked={sum(1 for r in wvmi_records if r.lp_locked)}")
     else:
-        print(f"{pfx}[wvmi] skipped (parent-event-driven for sub entities)")
+        print(f"{pfx}[wvmi] off")
 
     return {
         "kl_zones": kl_zones,
@@ -629,13 +684,12 @@ def _confluence_trigger_stream(
     main_first_sd_by_cycle: Dict[tuple, int],
     var4_all_sorted: list,
 ) -> List[Tuple[int, str]]:
-    """Parent trigger stream for a confluence parent cycle (§8.3 / §8.5).
-
-    Confluence sub WVMI is initiated at sd-prox-class parent events: the
-    main's first sd-prox after CTS, plus each subsequent_counter (var 4) in
-    this parent cycle. Returned as `(parent_idx, event_type)` pairs in
-    parent-df coords; the caller (`_assign_sub_wvmi_per_sub`) sorts and maps
-    them to M15.
+    """The confluence lens's WVMI-class parent trigger stream for one parent
+    cycle (§8.5's cadence classes; Plan G Q8): the sd-prox class — the main's
+    first sd-prox after CTS, plus each subsequent_counter (var 4) in this
+    parent cycle. Returned as `(parent_idx, event_type)` pairs in parent-df
+    coords; `_stamp_sub_wvmi_trigger_meta` sorts and maps them to M15.
+    Attribution only (Plan G G4) — never a gate.
     """
     stream: List[Tuple[int, str]] = []
     sd_idx = main_first_sd_by_cycle.get(key)
@@ -653,10 +707,9 @@ def _counter_trigger_stream(
     key: tuple,
     var3_all_sorted: list,
 ) -> List[Tuple[int, str]]:
-    """Parent trigger stream for a counter parent cycle (§8.4 / §8.5).
-
-    Counter sub WVMI is initiated at CTS-prox-class parent events: each
-    subsequent_confluence (var 3) in this parent cycle.
+    """The counter lens's WVMI-class parent trigger stream for one parent
+    cycle (§8.5; Plan G Q8): the CTS-prox class — each subsequent_confluence
+    (var 3) in this parent cycle. Attribution only (Plan G G4).
     """
     stream: List[Tuple[int, str]] = []
     for v3 in var3_all_sorted:
@@ -667,92 +720,107 @@ def _counter_trigger_stream(
     return stream
 
 
-def _assign_sub_wvmi_per_sub(
-    sub_results: list,
+def _wvmi_trigger_streams_by_lens(
+    cycles,
+    main_zone_proximity_triggers: Optional[Dict[tuple, list]],
+    var3_all: list,
+    var4_all: list,
+) -> Dict[str, List[Tuple[int, str]]]:
+    """{lens: WVMI-class parent trigger stream} over every parent cycle (a
+    unique sub spans cycles) — §8.5's cadence classes (Plan G Q8): the
+    confluence lens reads the sd-prox class (the main's first sd-prox per
+    cycle + each var 4, `ZONE_PROXIMITY_TRIGGER` / `SUBSEQUENT_COUNTER_TRIGGER`),
+    the counter lens the CTS-prox class (each var 3,
+    `SUBSEQUENT_CONFLUENCE_TRIGGER`). The ONE place the lens -> stream mapping
+    is made (pinned: a swap would rewrite every sub row's trigger fields)."""
+    from engine_v2.multitf.sub_structure_pool import LENS_CONFLUENCE, LENS_COUNTER
+
+    main_first_sd_by_cycle: Dict[tuple, int] = {}
+    for k, trig_list in (main_zone_proximity_triggers or {}).items():
+        if trig_list and trig_list[0].direction == "sd":
+            main_first_sd_by_cycle[k] = int(trig_list[0].idx)
+    var4_all_sorted = sorted(var4_all, key=lambda t: t.trigger_event_idx)
+    var3_all_sorted = sorted(var3_all, key=lambda t: t.trigger_event_idx)
+    conf_stream: List[Tuple[int, str]] = []
+    ctr_stream: List[Tuple[int, str]] = []
+    for key in cycles:
+        conf_stream.extend(_confluence_trigger_stream(key, main_first_sd_by_cycle, var4_all_sorted))
+        ctr_stream.extend(_counter_trigger_stream(key, var3_all_sorted))
+    return {LENS_CONFLUENCE: conf_stream, LENS_COUNTER: ctr_stream}
+
+
+def _stamp_sub_wvmi_trigger_meta(
+    results_by_lens: Dict[str, list],
     streams_by_lens: Dict[str, List[Tuple[int, str]]],
     *,
     parent_df: pd.DataFrame,
     m15_df: pd.DataFrame,
     lens_dfs: Dict[str, pd.DataFrame],
-    lens_paths: Dict[str, str],
-) -> Dict[str, Any]:
-    """Trigger-centric sub WVMI, ONE sweep per unique sub (§17.10 — the user's
-    stated lean, implemented minimally so the code runs; the deferred WVMI
-    pass may return to per-(sub, lens) sweeps — do not treat as settled).
+    parent_path_id: str,
+) -> None:
+    """Plan G G4 — trigger metadata PER LENS, a post-pass over each lens df's
+    mirrored `attrs["wvmi"]` (the records exist whatever the stream says: the
+    trigger is attribution, stamped retroactively, never a gate).
 
-    For each sub projection: window = `[start_idx, m15_end_idx]` (the sub's
-    real-time lifecycle, edge for an open sub); stream = the union of the
-    confluence and the counter parent-trigger streams (over ALL parent cycles
-    — a sub spans cycles) restricted to the sub's lenses; the FIRST trigger
-    (by parent idx, LOH-mapped) inside the window sweeps the sub once
-    (`compute_parent_driven_sub_wvmi`), with the sweeping trigger's lens
-    deciding the records' `structure_path_id`; the records are persisted into
-    every lens df the sub is on. Dedup key `sub_id`. `triggered_by_event_idx`
-    stays in parent-df coords (LANDMINE "WVMI Records Carry Mixed-Coordinate
-    Meta") — never translated.
+    Per lens: the lens's stream, each entry LOH-mapped once
+    (`_map_parent_idx_to_m15_hour_end`), sorted by `(m15_idx, parent_idx)`;
+    per sub on the lens, the FIRST entry inside the sub's real-time window
+    `[meta["start_idx"], meta["m15_end_idx"]]` (the edge for an open sub).
+    Every record of that lens df is joined to its sub on `meta["sub_id"]`
+    (never position) and gets, as its FIRST meta keys:
+    `triggered_by_event_idx` (the PARENT idx — H1 coords, never translated,
+    LANDMINES "WVMI Records Carry Mixed-Coordinate Meta") /
+    `triggered_by_event_type` — both None when no entry lands in the window —
+    and `parent_path_id` (always the parent entity, Plan G Q9). On a sub row
+    `triggered_by_*` means "the lens's first WVMI-class trigger inside the
+    sub's window" (a declared meaning change, Plan G Q7); only that lens's copy
+    is touched."""
+    from engine_v2.multitf.entity_df_mutation import _map_parent_idx_to_m15_hour_end
 
-    Returns counts `{"acted", "records", "by_started_by", "by_lens"}`.
-    """
-    from engine_v2.multitf.entity_df_mutation import (
-        _map_parent_idx_to_m15_hour_end,
-        persist_facade_wvmi_to_entity_df,
-    )
-    from engine_v2.multitf.sub_wvmi import (
-        ParentTrigger,
-        compute_parent_driven_sub_wvmi,
-    )
-
-    counts: Dict[str, Any] = {
-        "acted": 0, "records": 0, "by_started_by": {}, "by_lens": {},
-    }
-    # LOH-map each stream once: (m15_idx, parent_idx, event_type, lens).
-    mapped: List[Tuple[int, int, str, str]] = []
-    for lens, stream in streams_by_lens.items():
-        for parent_idx, event_type in stream:
+    for lens, lens_df in lens_dfs.items():
+        mapped: List[Tuple[int, int, str]] = []
+        for parent_idx, event_type in streams_by_lens[lens]:
             m15_idx = _map_parent_idx_to_m15_hour_end(int(parent_idx), parent_df, m15_df)
             if m15_idx is None:
                 continue
-            mapped.append((int(m15_idx), int(parent_idx), event_type, lens))
-    mapped.sort(key=lambda t: (t[0], t[1]))
+            mapped.append((int(m15_idx), int(parent_idx), event_type))
+        mapped.sort(key=lambda t: (t[0], t[1]))
 
-    swept: set = set()
+        trigger_by_sub: Dict[int, dict] = {}
+        for res in results_by_lens[lens]:
+            start, end = res.meta["start_idx"], res.meta["m15_end_idx"]
+            hit = next((t for t in mapped if start <= t[0] <= end), None)
+            trigger_by_sub[res.meta["sub_id"]] = {
+                "triggered_by_event_idx": hit[1] if hit is not None else None,
+                "triggered_by_event_type": hit[2] if hit is not None else None,
+                "parent_path_id": parent_path_id,
+            }
+        for rec in lens_df.attrs.get("wvmi", []):
+            trigger = trigger_by_sub[rec.meta["sub_id"]]
+            rec.meta = {**trigger, **{k: v for k, v in rec.meta.items() if k not in trigger}}
+
+
+def _count_sub_wvmi(sub_results: list) -> Dict[str, Any]:
+    """The run.log summary `{"acted", "records", "by_started_by", "by_lens"}`,
+    per UNIQUE sub from its projection's own `wvmi_records` (counting the lens
+    dfs would count a dual-lens sub's records twice). `acted` = subs with at
+    least one record; `by_lens[l]` += the sub's record count for every lens it
+    is on (its records land on each)."""
+    counts: Dict[str, Any] = {
+        "acted": 0, "records": 0, "by_started_by": {}, "by_lens": {},
+    }
     for res in sub_results:
-        sub_id = res.meta.get("sub_id")
-        start = res.meta.get("start_idx")
-        end = res.meta.get("m15_end_idx")
-        lenses = set(res.meta.get("lenses") or ())
-        if sub_id is None or start is None or end is None or sub_id in swept:
+        recs = res.wvmi_records
+        if not recs:
             continue
-        hit = next(
-            (t for t in mapped if t[3] in lenses and start <= t[0] <= end), None,
-        )
-        if hit is None:
-            continue
-        _m15_idx, parent_idx, event_type, lens = hit
-        recs = compute_parent_driven_sub_wvmi(
-            res,
-            sub_path_id=lens_paths[lens],
-            parent_trigger=ParentTrigger(
-                idx=int(parent_idx),
-                event_type=event_type,
-                parent_path_id="H1.main",
-            ),
-        )
-        res.wvmi_records = recs
-        for l in sorted(lenses):
-            persist_facade_wvmi_to_entity_df(
-                lens_dfs[l], res, structure_path_id=lens_paths[l],
-            )
-        swept.add(sub_id)
-        if recs:
-            counts["acted"] += 1
-            counts["records"] += len(recs)
-            sb = res.meta.get("started_by", "?")
-            counts["by_started_by"][sb] = counts["by_started_by"].get(sb, 0) + len(recs)
-            # sorted: `lenses` is a set, so bare iteration fixes the dict's
-            # key order per process (string hash seed) — run.log prints it.
-            for l in sorted(lenses):
-                counts["by_lens"][l] = counts["by_lens"].get(l, 0) + len(recs)
+        counts["acted"] += 1
+        counts["records"] += len(recs)
+        sb = res.meta.get("started_by", "?")
+        counts["by_started_by"][sb] = counts["by_started_by"].get(sb, 0) + len(recs)
+        # sorted: bare set iteration would fix the dict's key order per process
+        # (string hash seed) — run.log prints it.
+        for l in sorted(set(res.meta.get("lenses") or ())):
+            counts["by_lens"][l] = counts["by_lens"].get(l, 0) + len(recs)
     return counts
 
 
@@ -782,10 +850,11 @@ def _run_multi_tf_dual(
       4. `run_lifecycle_sweep` (§17.6) with the real resolvers / geometry
          builder / reversal handoff injected — every unique sub + its
          TriggerRecords + the unresolved-trigger log land in the pool;
-      5. ONE projection per sub (`render_sub_projection`) mirrored into every
-         lens df it belongs to, in `start_idx` order (later-live wins
-         overlapping structure columns);
-      6. per-sub WVMI (§17.10 minimal);
+      5. ONE projection per sub (`render_sub_projection`, WVMI included —
+         ungated, Plan G) mirrored into every lens df it belongs to, in
+         `start_idx` order (later-live wins overlapping structure columns);
+      6. the WVMI trigger metadata per lens (`_stamp_sub_wvmi_trigger_meta`,
+         Plan G G4) + the per-unique-sub summary;
       7. `attrs["sids"]` (one SidRecord per sub), `attrs["triggers"]` (this
          lens's records incl. zero-length), `attrs["unresolved_triggers"]`
          (pool-wide) on each lens df + registry registration.
@@ -978,24 +1047,17 @@ def _run_multi_tf_dual(
                 f"has no live record — logged, not rendered"
             )
 
-    # --- 6. WVMI (§17.10 minimal: one sweep per unique sub) ---
-    main_zpt = main_zone_proximity_triggers or {}
-    main_first_sd_by_cycle: Dict[tuple, int] = {}
-    for k, trig_list in main_zpt.items():
-        if trig_list and trig_list[0].direction == "sd":
-            main_first_sd_by_cycle[k] = int(trig_list[0].idx)
-    var4_all_sorted = sorted(var4_all, key=lambda t: t.trigger_event_idx)
-    var3_all_sorted = sorted(var3_all, key=lambda t: t.trigger_event_idx)
-    conf_stream: List[Tuple[int, str]] = []
-    ctr_stream: List[Tuple[int, str]] = []
-    for key in tables.cycles():
-        conf_stream.extend(_confluence_trigger_stream(key, main_first_sd_by_cycle, var4_all_sorted))
-        ctr_stream.extend(_counter_trigger_stream(key, var3_all_sorted))
-    wvmi_counts = _assign_sub_wvmi_per_sub(
-        all_results,
-        {LENS_CONFLUENCE: conf_stream, LENS_COUNTER: ctr_stream},
-        parent_df=h1_df, m15_df=m15, lens_dfs=lens_dfs, lens_paths=lens_paths,
+    # --- 6. WVMI trigger attribution per lens (Plan G G4) ---
+    # The records were computed inside each projection (step 5, ungated) and
+    # mirrored into every lens df the sub is on, each copy with its lens's path.
+    _stamp_sub_wvmi_trigger_meta(
+        results_by_lens,
+        _wvmi_trigger_streams_by_lens(
+            tables.cycles(), main_zone_proximity_triggers, var3_all, var4_all,
+        ),
+        parent_df=h1_df, m15_df=m15, lens_dfs=lens_dfs, parent_path_id=parent_path,
     )
+    wvmi_counts = _count_sub_wvmi(all_results)
     print(
         f"[multi_tf:dual] sub wvmi acted={wvmi_counts['acted']} "
         f"records={wvmi_counts['records']} by_started_by={wvmi_counts['by_started_by']} "

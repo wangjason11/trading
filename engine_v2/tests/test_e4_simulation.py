@@ -64,7 +64,7 @@ def _strip_raw(out):
 
 def _run(df, events, mode):
     with contextlib.redirect_stdout(io.StringIO()):
-        return _run_downstream_pipeline(df, events, +1, fib_mode=mode, skip_wvmi=False)
+        return _run_downstream_pipeline(df, events, +1, fib_mode=mode, wvmi="first_sd_prox")
 
 
 _SECOND = _make_second_cts_moment_after_anchor_data

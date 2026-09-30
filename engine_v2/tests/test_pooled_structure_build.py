@@ -184,7 +184,7 @@ def _bounded_build(df, cap, floor, cap_reason):
     down = _run_downstream_pipeline(
         ref.df, ref.events, _SD,
         source_kinds=["BOS"], fib_mode="cross_cycle",
-        skip_wvmi=True, timeframe="M15",
+        wvmi="none", timeframe="M15",
         lifecycle_floor=floor, lifecycle_cap=cap, cap_reason=cap_reason,
     )
     down["events"] = ref.events

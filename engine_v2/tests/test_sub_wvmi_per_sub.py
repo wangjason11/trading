@@ -1,642 +1,369 @@
-"""Unit tests pinning `pipeline/orchestrator._assign_sub_wvmi_per_sub`
-(Plan C §6.4 / PART4 §17.10 minimal / WVMI_SPEC "Sub" cadence block).
+"""Plan G G4 — sub WVMI trigger metadata PER LENS (`plans/PLAN_G_wvmi_unique_sub.md`, 2026-09-30), the run.log
+counts per unique sub, the lens -> stream mapping and the driver's step-6 wiring.
 
-The rule, as written in the plan/spec (every expected value below is derived
-from it, never from what the code prints):
+Rewritten from the Plan C `_assign_sub_wvmi_per_sub` tests (one trigger-gated sweep per unique sub). Plan G computes
+a sub's records inside its projection, ungated (`test_plan_g_wvmi.py`); the mirror puts one copy on every lens df the
+sub is on. The rule pinned here, as written in PLAN_G §4 G4 (every expected value derived from it):
 
-  * one sweep per UNIQUE sub (dedup key `sub_id`);
-  * window = the sub's real-time lifecycle `[start_idx, m15_end_idx]`
-    (inclusive; `m15_end_idx` is the data edge for an open sub);
-  * stream = union of the confluence and counter parent-trigger streams,
-    each entry LOH-mapped once (`_map_parent_idx_to_m15_hour_end`) and
-    tagged with its lens, sorted by `(m15_idx, parent_idx)`, RESTRICTED to
-    the sub's lenses;
-  * the FIRST entry inside the window sweeps the sub once via
-    `compute_parent_driven_sub_wvmi(result, sub_path_id=lens_paths[lens],
-    parent_trigger=ParentTrigger(idx=parent_idx, event_type, "H1.main"))`
-    — the sweeping trigger's lens decides the records' `structure_path_id`;
-  * no entry inside the window -> no WVMI for that sub;
-  * the records are persisted into EVERY lens df the sub is on
-    (`persist_facade_wvmi_to_entity_df(lens_dfs[l], result,
-    structure_path_id=lens_paths[l])`), each stamped with the §17.9
-    attribution (`sub_id` + informational `started_by` / `use_case` /
-    `parent_sid` / `parent_cycle_id`); the four wave-candle idxs are shifted
-    slice-local -> entity-absolute by `meta["slice_begin"]`;
-    `triggered_by_event_idx` stays in parent-df coords (LANDMINE "WVMI
-    Records Carry Mixed-Coordinate Meta");
-  * counts `{"acted", "records", "by_started_by", "by_lens"}` feed the
-    greppable `[multi_tf:dual] sub wvmi acted=... records=...` log line.
+  * per lens: the lens's WVMI-class parent trigger stream (confluence = the sd-prox class `ZONE_PROXIMITY_TRIGGER` +
+    `SUBSEQUENT_COUNTER_TRIGGER`; counter = the CTS-prox class `SUBSEQUENT_CONFLUENCE_TRIGGER` — §8.5, Q8), each entry
+    LOH-mapped once (`_map_parent_idx_to_m15_hour_end`), sorted by `(m15_idx, parent_idx)`;
+  * per sub on that lens: the FIRST entry inside `[start_idx, m15_end_idx]` (inclusive; the edge for an open sub);
+  * every record of the lens df, joined to its sub on `meta["sub_id"]` (never position), gets as its FIRST meta keys
+    `triggered_by_event_idx` (the PARENT idx, a Python int) / `triggered_by_event_type` — both None when no entry lands
+    in the window — and `parent_path_id` = "H1.main" always (Q9); the records exist whatever the stream says;
+  * counts: per UNIQUE sub from its projection's own `wvmi_records` (`acted` = subs with a record).
 
-The orchestrator imports the LOH mapper and the sweep INSIDE the function,
-so both are monkeypatched on their defining modules
-(`engine_v2.multitf.entity_df_mutation` / `engine_v2.multitf.sub_wvmi`).
-`persist_facade_wvmi_to_entity_df` is the real one.
+The LOH mapper is monkeypatched on its defining module (the orchestrator imports it inside the function).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Tuple
+import contextlib
+import io
+from copy import deepcopy
+from types import SimpleNamespace
+from typing import Dict, List, Tuple
 
 import pandas as pd
 import pytest
 
+import engine_v2.pipeline.orchestrator as orch
 from engine_v2.common.types import WVMIRecord
+from engine_v2.multitf import entity_df_mutation as edm
 from engine_v2.multitf.sub_structure_pool import LENS_CONFLUENCE, LENS_COUNTER
-from engine_v2.multitf.sub_wvmi import ParentTrigger
 from engine_v2.multitf.types import LowerTFResult, MultiTFTrigger
-from engine_v2.pipeline.orchestrator import _assign_sub_wvmi_per_sub
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+from engine_v2.pipeline.orchestrator import (
+    _count_sub_wvmi,
+    _stamp_sub_wvmi_trigger_meta,
+    _wvmi_trigger_streams_by_lens,
+)
 
 LENS_PATHS = {
     LENS_CONFLUENCE: "H1.main >> M15.confluence",
     LENS_COUNTER: "H1.main >> M15.counter",
 }
 PARENT_PATH = "H1.main"
-
-# Simple LOH stand-in: parent hour p -> the LAST of its four M15 candles
-# (M15 idx 0 aligned to parent idx 0), i.e. 4p + 3.
-def _loh_4p3(p: int, parent_df: pd.DataFrame, m15_df: pd.DataFrame) -> int:
-    return 4 * int(p) + 3
+ZPT, SCT, SCONF = "ZONE_PROXIMITY_TRIGGER", "SUBSEQUENT_COUNTER_TRIGGER", "SUBSEQUENT_CONFLUENCE_TRIGGER"
+_TRIPLE = ("triggered_by_event_idx", "triggered_by_event_type", "parent_path_id")
+_ATTRIBUTION = ("structure_path_id", "use_case", "parent_sid", "parent_cycle_id", "timeframe", "parent_tf",
+                "sub_id", "started_by")
 
 
 def _loh(p: int) -> int:
-    """The expected M15 idx of parent idx `p` under `_loh_4p3` (test side)."""
-    return 4 * p + 3
+    """The stub LOH map: parent hour p -> the LAST of its four M15 candles, 4p + 3."""
+    return 4 * int(p) + 3
 
 
-def _make_trigger(
-    use_case: str = "first_confluence",
-    parent_sid: int = 0,
-    parent_cycle_id: int = 1,
-) -> MultiTFTrigger:
-    return MultiTFTrigger(
-        parent_tf="H1",
-        parent_sid=parent_sid,
-        parent_cycle_id=parent_cycle_id,
-        parent_sd=1,
-        use_case=use_case,
-        lower_tf="M15",
-        lower_sd=1,
-    )
+@pytest.fixture(autouse=True)
+def _stub_loh(monkeypatch):
+    monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",
+                        lambda p, _parent, _m15: _loh(p))
 
 
-def _make_sub(
-    sub_id: int,
-    *,
-    start_idx: int,
-    m15_end_idx: int,
-    lenses: Tuple[str, ...],
-    started_by: str = "first_confluence",
-    slice_begin: int = 0,
-    use_case: str = "first_confluence",
-    parent_sid: int = 0,
-    parent_cycle_id: int = 1,
-) -> LowerTFResult:
-    """A sub projection shaped like `render_sub_projection`'s LowerTFResult
-    (only the meta keys `_assign_sub_wvmi_per_sub` / the persister read)."""
+def _make_sub(sub_id: int, *, start_idx: int, m15_end_idx: int, lenses: Tuple[str, ...], n: int = 1,
+              started_by: str = "first_confluence") -> LowerTFResult:
+    """A projection shaped like `render_sub_projection`'s: `n` slice-local records (meta `{}` — the projection's),
+    the meta keys the mirror / the post-pass / the counts read."""
+    recs = [WVMIRecord(bos_structure_id=0, bos_cycle_id=k, zone_side="buy", structure_path_id=LENS_PATHS[lenses[0]],
+                       fb_idx=1 + 10 * k, lb_idx=2 + 10 * k, fp_idx=3 + 10 * k, lp_idx=4 + 10 * k)
+            for k in range(n)]
     return LowerTFResult(
-        trigger=_make_trigger(use_case, parent_sid, parent_cycle_id),
-        df=pd.DataFrame(),
-        events=[],
-        kl_zones=[],
-        wave_candles=[],
-        fib_states=[],
-        poi_zones=[],
-        wvmi_records=[],
-        prev_bos_lines=[],
-        status="finalized",
-        meta={
-            "sub_id": sub_id,
-            "start_idx": start_idx,
-            "m15_end_idx": m15_end_idx,
-            "lenses": tuple(sorted(lenses)),
-            "started_by": started_by,
-            "slice_begin": slice_begin,
-        },
+        trigger=MultiTFTrigger(parent_tf="H1", parent_sid=0, parent_cycle_id=1, parent_sd=1, use_case=started_by,
+                               lower_tf="M15", lower_sd=1),
+        df=pd.DataFrame(), events=[], kl_zones=[], wave_candles=[], fib_states=[], poi_zones=[],
+        wvmi_records=recs, prev_bos_lines=[], status="finalized",
+        meta={"sub_id": sub_id, "start_idx": start_idx, "m15_end_idx": m15_end_idx, "lenses": tuple(sorted(lenses)),
+              "started_by": started_by, "slice_begin": 100, "timeframe": "M15", "parent_tf": "H1"},
     )
 
 
-@dataclass
-class _Call:
-    result: LowerTFResult
-    sub_path_id: str
-    parent_trigger: ParentTrigger
+def _lens_dfs() -> Dict[str, pd.DataFrame]:
+    return {lens: pd.DataFrame(index=range(4)) for lens in LENS_PATHS}
 
 
-@dataclass
-class _RecordingSweep:
-    """Stand-in for `compute_parent_driven_sub_wvmi`: records every call and
-    returns `n_by_sub_id[sub_id]` (default 1) slice-LOCAL fake records that
-    mimic the real sweep's outputs — `structure_path_id` = the `sub_path_id`
-    it was handed, meta stamped with the ParentTrigger's three fields."""
-    n_by_sub_id: Dict[int, int] = field(default_factory=dict)
-    calls: List[_Call] = field(default_factory=list)
-
-    def __call__(self, result, sub_path_id, parent_trigger) -> List[WVMIRecord]:
-        self.calls.append(_Call(result, sub_path_id, parent_trigger))
-        n = self.n_by_sub_id.get(result.meta["sub_id"], 1)
-        recs = []
-        for k in range(n):
-            recs.append(WVMIRecord(
-                bos_structure_id=0,
-                bos_cycle_id=k + 1,
-                zone_side="buy",
-                structure_path_id=sub_path_id,
-                fb_idx=1 + 10 * k,
-                lb_idx=2 + 10 * k,
-                fp_idx=3 + 10 * k,
-                lp_idx=None if k == 0 else 4 + 10 * k,   # first record: LP not yet found
-                meta={
-                    "triggered_by_event_idx": parent_trigger.idx,
-                    "triggered_by_event_type": parent_trigger.event_type,
-                    "parent_path_id": parent_trigger.parent_path_id,
-                },
-            ))
-        return recs
+def _run(subs, streams, lens_dfs=None):
+    """Mirror each sub into its lenses (the REAL mirror: one deep copy per lens, the lens's path), then the post-pass
+    with `results_by_lens` built as the driver builds it."""
+    lens_dfs = lens_dfs or _lens_dfs()
+    results_by_lens = {lens: [] for lens in LENS_PATHS}
+    for res in subs:
+        for lens in res.meta["lenses"]:
+            edm.mirror_lower_tf_result_to_entity_df(lens_dfs[lens], res, structure_path_id=LENS_PATHS[lens])
+            results_by_lens[lens].append(res)
+    _stamp_sub_wvmi_trigger_meta(results_by_lens, streams, parent_df=pd.DataFrame(), m15_df=pd.DataFrame(),
+                                 lens_dfs=lens_dfs, parent_path_id=PARENT_PATH)
+    return lens_dfs
 
 
-@pytest.fixture
-def lens_dfs() -> Dict[str, pd.DataFrame]:
-    return {
-        LENS_CONFLUENCE: pd.DataFrame({"time": pd.date_range("2024-01-01", periods=4, freq="15min", tz="UTC")}),
-        LENS_COUNTER: pd.DataFrame({"time": pd.date_range("2024-01-01", periods=4, freq="15min", tz="UTC")}),
-    }
+def _triples(lens_df) -> List[tuple]:
+    return [tuple(r.meta[k] for k in _TRIPLE) for r in lens_df.attrs.get("wvmi", [])]
 
 
-@pytest.fixture
-def frames() -> Dict[str, pd.DataFrame]:
-    # Ignored by the stub mapper; present because the signature requires them.
-    return {
-        "parent_df": pd.DataFrame({"time": pd.date_range("2024-01-01", periods=4, freq="1h", tz="UTC")}),
-        "m15_df": pd.DataFrame({"time": pd.date_range("2024-01-01", periods=16, freq="15min", tz="UTC")}),
-    }
+def _streams(conf=(), ctr=()):
+    return {LENS_CONFLUENCE: list(conf), LENS_COUNTER: list(ctr)}
 
 
-@pytest.fixture
-def sweep(monkeypatch) -> _RecordingSweep:
-    stub = _RecordingSweep()
-    monkeypatch.setattr(
-        "engine_v2.multitf.sub_wvmi.compute_parent_driven_sub_wvmi", stub,
-    )
-    monkeypatch.setattr(
-        "engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",
-        _loh_4p3,
-    )
-    return stub
-
-
-def _run(sub_results, streams, *, lens_dfs, frames):
-    return _assign_sub_wvmi_per_sub(
-        sub_results,
-        streams,
-        parent_df=frames["parent_df"],
-        m15_df=frames["m15_df"],
-        lens_dfs=lens_dfs,
-        lens_paths=LENS_PATHS,
-    )
-
-
-def _wvmi(lens_df: pd.DataFrame) -> list:
-    return list(lens_df.attrs.get("wvmi", []))
-
-
-# ---------------------------------------------------------------------------
-# Window = [start_idx, m15_end_idx], inclusive both ends
-# ---------------------------------------------------------------------------
+# --- the window: [start_idx, m15_end_idx], inclusive both ends ---------------------------------------------------------
 
 class TestWindow:
-    # Sub window in M15 coords: start = LOH(5) = 23, end = LOH(9) = 39.
-    START, END = _loh(5), _loh(9)
+    START, END = _loh(5), _loh(9)          # 23, 39
 
-    @pytest.mark.parametrize(
-        "parent_idx, expect_swept",
-        [
-            (4, False),   # LOH(4) = 19 < 23 = start  -> outside (before)
-            (5, True),    # LOH(5) = 23 == start      -> inside (closed lower bound)
-            (9, True),    # LOH(9) = 39 == end        -> inside (closed upper bound)
-            (10, False),  # LOH(10) = 43 > 39 = end   -> outside (after)
-        ],
-    )
-    def test_window_is_inclusive_on_both_ends(
-        self, sweep, lens_dfs, frames, parent_idx, expect_swept,
-    ):
-        """§17.10: window = `[start_idx, m15_end_idx]` — a trigger whose
-        LOH-mapped M15 idx equals either bound sweeps; one candle past
-        either bound does not."""
-        sub = _make_sub(1, start_idx=self.START, m15_end_idx=self.END,
-                        lenses=(LENS_CONFLUENCE,))
-        streams = {
-            LENS_CONFLUENCE: [(parent_idx, "ZONE_PROXIMITY_TRIGGER")],
-            LENS_COUNTER: [],
-        }
-        counts = _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
+    @pytest.mark.parametrize("parent_idx, inside", [(4, False), (5, True), (9, True), (10, False)])
+    def test_window_is_inclusive_on_both_ends(self, parent_idx, inside):
+        """LOH(5) = 23 == start and LOH(9) = 39 == end are inside; one hour before / after is not. The record exists
+        either way (no gate) — only its trigger fields differ."""
+        sub = _make_sub(1, start_idx=self.START, m15_end_idx=self.END, lenses=(LENS_CONFLUENCE,))
+        d = _run([sub], _streams(conf=[(parent_idx, ZPT)]))
+        expected = (parent_idx, ZPT, PARENT_PATH) if inside else (None, None, PARENT_PATH)
+        assert _triples(d[LENS_CONFLUENCE]) == [expected]
 
-        assert len(sweep.calls) == (1 if expect_swept else 0)
-        assert counts["acted"] == (1 if expect_swept else 0)
-        assert len(_wvmi(lens_dfs[LENS_CONFLUENCE])) == (1 if expect_swept else 0)
-        if expect_swept:
-            assert sweep.calls[0].parent_trigger.idx == parent_idx
-
-    def test_open_sub_window_ends_at_the_edge_it_was_given(
-        self, sweep, lens_dfs, frames,
-    ):
-        """An open sub's `m15_end_idx` is the data edge (render_sub_projection
-        substitutes it) — the function treats it like any other closed upper
-        bound: a trigger at the edge sweeps, past it does not."""
+    def test_open_sub_window_ends_at_the_edge_it_was_given(self):
         edge = _loh(12)
-        sub = _make_sub(1, start_idx=self.START, m15_end_idx=edge,
-                        lenses=(LENS_COUNTER,))
-        streams = {
-            LENS_CONFLUENCE: [],
-            LENS_COUNTER: [(13, "SUBSEQUENT_CONFLUENCE_TRIGGER"),   # LOH(13) = 55 > edge
-                           (12, "SUBSEQUENT_CONFLUENCE_TRIGGER")],  # LOH(12) = 51 == edge
-        }
-        _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
-        assert [c.parent_trigger.idx for c in sweep.calls] == [12]
+        sub = _make_sub(1, start_idx=self.START, m15_end_idx=edge, lenses=(LENS_COUNTER,))
+        d = _run([sub], _streams(ctr=[(13, SCONF), (12, SCONF)]))      # LOH 55 > edge; LOH 51 == edge
+        assert _triples(d[LENS_COUNTER]) == [(12, SCONF, PARENT_PATH)]
 
 
-# ---------------------------------------------------------------------------
-# Stream restricted to the sub's lenses
-# ---------------------------------------------------------------------------
+# --- per lens ----------------------------------------------------------------------------------------------------------
 
-class TestLensRestriction:
-    def test_trigger_on_a_lens_the_sub_is_not_on_is_ignored(
-        self, sweep, lens_dfs, frames,
-    ):
-        """§17.10: "restricted to the sub's lenses" — a counter-stream entry
-        inside the window does NOT sweep a confluence-only sub, even though
-        it is the only entry in the window."""
-        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                        lenses=(LENS_CONFLUENCE,))
-        streams = {
-            LENS_CONFLUENCE: [],
-            LENS_COUNTER: [(7, "SUBSEQUENT_CONFLUENCE_TRIGGER")],  # LOH(7)=31 in [23,39]
-        }
-        counts = _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
+class TestPerLens:
+    def test_an_entry_of_the_other_lens_gives_none_on_this_lens(self):
+        """A counter-stream entry inside a confluence-only sub's window is NOT this lens's trigger."""
+        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_CONFLUENCE,))
+        d = _run([sub], _streams(ctr=[(7, SCONF)]))
+        assert _triples(d[LENS_CONFLUENCE]) == [(None, None, PARENT_PATH)]
+        assert "wvmi" not in d[LENS_COUNTER].attrs
 
-        assert sweep.calls == []
-        assert counts == {"acted": 0, "records": 0, "by_started_by": {}, "by_lens": {}}
-        assert _wvmi(lens_dfs[LENS_CONFLUENCE]) == []
-        assert _wvmi(lens_dfs[LENS_COUNTER]) == []
+    def test_a_dual_lens_sub_gets_each_lens_its_own_first_trigger(self):
+        """The opposite of the Plan C rule (one earliest trigger across lenses swept the sub, its lens decided the
+        path): the confluence rows name the confluence stream's first entry (8, ZPT), the counter rows the counter
+        stream's (6, SCONF) — even though 6 is earlier."""
+        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_CONFLUENCE, LENS_COUNTER), n=2)
+        d = _run([sub], _streams(conf=[(8, ZPT)], ctr=[(6, SCONF)]))
+        assert _triples(d[LENS_CONFLUENCE]) == [(8, ZPT, PARENT_PATH)] * 2
+        assert _triples(d[LENS_COUNTER]) == [(6, SCONF, PARENT_PATH)] * 2
+        for lens in LENS_PATHS:
+            assert {(r.structure_path_id, r.meta["structure_path_id"]) for r in d[lens].attrs["wvmi"]} == {
+                (LENS_PATHS[lens], LENS_PATHS[lens])}
 
-    def test_foreign_lens_entry_is_skipped_over_not_just_ignored_when_alone(
-        self, sweep, lens_dfs, frames,
-    ):
-        """The restriction is a FILTER on the sorted union, not a veto: an
-        earlier foreign-lens entry is skipped and the first OWN-lens entry
-        inside the window sweeps."""
-        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                        lenses=(LENS_COUNTER,))
-        streams = {
-            LENS_CONFLUENCE: [(6, "ZONE_PROXIMITY_TRIGGER")],        # earlier, foreign
-            LENS_COUNTER: [(8, "SUBSEQUENT_CONFLUENCE_TRIGGER")],    # later, own lens
-        }
-        _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
+    def test_only_one_lens_has_a_trigger(self):
+        """Q9: the other lens's rows carry idx / type None and `parent_path_id` "H1.main" (the parent entity)."""
+        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_CONFLUENCE, LENS_COUNTER))
+        d = _run([sub], _streams(ctr=[(6, SCONF)]))
+        assert _triples(d[LENS_CONFLUENCE]) == [(None, None, PARENT_PATH)]
+        assert _triples(d[LENS_COUNTER]) == [(6, SCONF, PARENT_PATH)]
 
-        assert len(sweep.calls) == 1
-        call = sweep.calls[0]
-        assert call.parent_trigger.idx == 8
-        assert call.parent_trigger.event_type == "SUBSEQUENT_CONFLUENCE_TRIGGER"
-        assert call.sub_path_id == LENS_PATHS[LENS_COUNTER]
+    def test_the_two_lens_copies_never_share_a_meta_dict(self):
+        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_CONFLUENCE, LENS_COUNTER))
+        d = _run([sub], _streams(conf=[(8, ZPT)], ctr=[(6, SCONF)]))
+        (c,), (k,) = d[LENS_CONFLUENCE].attrs["wvmi"], d[LENS_COUNTER].attrs["wvmi"]
+        assert c is not k and c.meta is not k.meta
+        assert sub.wvmi_records[0].meta == {}                     # the projection's record untouched
+        assert sub.wvmi_records[0].structure_path_id == LENS_PATHS[LENS_CONFLUENCE]
 
 
-# ---------------------------------------------------------------------------
-# First trigger by (LOH m15 idx, parent idx) across lenses
-# ---------------------------------------------------------------------------
+# --- the first entry: sorted, ties, unplaceable entries ----------------------------------------------------------------
 
-class TestFirstTriggerSelection:
-    def test_earliest_by_m15_idx_wins_across_lenses(
-        self, sweep, lens_dfs, frames,
-    ):
-        """§17.10: "the first trigger (by idx) inside the window sweeps" —
-        across BOTH lenses of a two-lens sub. The counter entry (parent 6,
-        LOH 27) precedes the confluence entry (parent 8, LOH 35) even though
-        the confluence stream is listed first, so the counter lens sweeps and
-        decides `sub_path_id`."""
-        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                        lenses=(LENS_CONFLUENCE, LENS_COUNTER))
-        streams = {
-            LENS_CONFLUENCE: [(8, "ZONE_PROXIMITY_TRIGGER")],
-            LENS_COUNTER: [(6, "SUBSEQUENT_CONFLUENCE_TRIGGER")],
-        }
-        _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
+class TestFirstEntry:
+    def test_an_unsorted_stream_is_sorted_before_selection(self):
+        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_CONFLUENCE,))
+        d = _run([sub], _streams(conf=[(8, SCT), (6, ZPT)]))
+        assert _triples(d[LENS_CONFLUENCE]) == [(6, ZPT, PARENT_PATH)]
 
-        assert len(sweep.calls) == 1
-        call = sweep.calls[0]
-        assert call.sub_path_id == LENS_PATHS[LENS_COUNTER]
-        assert call.parent_trigger == ParentTrigger(
-            idx=6, event_type="SUBSEQUENT_CONFLUENCE_TRIGGER", parent_path_id=PARENT_PATH,
-        )
+    def test_a_tie_on_the_m15_idx_is_broken_by_the_parent_idx(self, monkeypatch):
+        """Two parent idxs can map to one M15 candle (the real mapper falls back to the last M15 before a gap hour):
+        the lower parent idx wins — both entries on ONE lens, the later-listed one lower."""
+        monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",
+                            lambda p, _a, _b: {6: 27, 7: 27}.get(int(p), _loh(p)))
+        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_CONFLUENCE,))
+        d = _run([sub], _streams(conf=[(7, ZPT), (6, SCT)]))
+        assert _triples(d[LENS_CONFLUENCE]) == [(6, SCT, PARENT_PATH)]
 
-    def test_unsorted_stream_within_one_lens_is_sorted_before_selection(
-        self, sweep, lens_dfs, frames,
-    ):
-        """The union is sorted by (m15_idx, parent_idx) — a later entry listed
-        first in its own stream must not win."""
-        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                        lenses=(LENS_CONFLUENCE,))
-        streams = {
-            LENS_CONFLUENCE: [(8, "SUBSEQUENT_COUNTER_TRIGGER"),
-                              (6, "ZONE_PROXIMITY_TRIGGER")],
-            LENS_COUNTER: [],
-        }
-        _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
-        assert [c.parent_trigger.idx for c in sweep.calls] == [6]
-        assert sweep.calls[0].parent_trigger.event_type == "ZONE_PROXIMITY_TRIGGER"
-
-    def test_tie_on_m15_idx_is_broken_by_parent_idx(
-        self, monkeypatch, sweep, lens_dfs, frames,
-    ):
-        """Two parent idxs can LOH-map to the same M15 candle (the real
-        mapper falls back to the last M15 before a gap hour). The sort key is
-        `(m15_idx, parent_idx)`, so the LOWER parent idx wins the tie — here
-        parent 6 (counter) over parent 7 (confluence) even though the
-        confluence stream is enumerated first."""
-        def loh_with_gap(p, parent_df, m15_df):
-            return {6: 27, 7: 27}.get(int(p), 4 * int(p) + 3)
-        monkeypatch.setattr(
-            "engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",
-            loh_with_gap,
-        )
-        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                        lenses=(LENS_CONFLUENCE, LENS_COUNTER))
-        streams = {
-            LENS_CONFLUENCE: [(7, "ZONE_PROXIMITY_TRIGGER")],
-            LENS_COUNTER: [(6, "SUBSEQUENT_CONFLUENCE_TRIGGER")],
-        }
-        _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
-
-        assert len(sweep.calls) == 1
-        assert sweep.calls[0].parent_trigger.idx == 6
-        assert sweep.calls[0].sub_path_id == LENS_PATHS[LENS_COUNTER]
-
-    def test_entry_the_mapper_cannot_place_is_dropped(
-        self, monkeypatch, sweep, lens_dfs, frames,
-    ):
-        """An entry whose LOH map is None (parent idx not in the parent frame)
-        never sweeps; the next placeable entry does."""
-        def loh_partial(p, parent_df, m15_df):
-            return None if int(p) == 6 else 4 * int(p) + 3
-        monkeypatch.setattr(
-            "engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",
-            loh_partial,
-        )
-        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                        lenses=(LENS_CONFLUENCE,))
-        streams = {
-            LENS_CONFLUENCE: [(6, "ZONE_PROXIMITY_TRIGGER"),
-                              (8, "SUBSEQUENT_COUNTER_TRIGGER")],
-            LENS_COUNTER: [],
-        }
-        _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
-        assert [c.parent_trigger.idx for c in sweep.calls] == [8]
+    def test_an_entry_the_mapper_cannot_place_is_dropped(self, monkeypatch):
+        monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",
+                            lambda p, _a, _b: None if int(p) == 6 else _loh(p))
+        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_CONFLUENCE,))
+        d = _run([sub], _streams(conf=[(6, ZPT), (8, SCT)]))
+        assert _triples(d[LENS_CONFLUENCE]) == [(8, SCT, PARENT_PATH)]
 
 
-# ---------------------------------------------------------------------------
-# One sweep: call shape, persistence into every lens, attribution, shift
-# ---------------------------------------------------------------------------
+# --- the meta shape and the join -----------------------------------------------------------------------------------------
 
-class TestSweepAndPersist:
-    def test_sweep_is_called_once_with_sweeping_lens_path_and_parent_trigger(
-        self, sweep, lens_dfs, frames,
-    ):
-        """`compute_parent_driven_sub_wvmi(result, sub_path_id=lens_paths[lens],
-        parent_trigger=ParentTrigger(idx=parent_idx, event_type, "H1.main"))`
-        — exactly once, with the projection object itself."""
-        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                        lenses=(LENS_CONFLUENCE,))
-        streams = {
-            LENS_CONFLUENCE: [(6, "ZONE_PROXIMITY_TRIGGER"),
-                              (8, "SUBSEQUENT_COUNTER_TRIGGER")],   # second in window: NOT a 2nd sweep
-            LENS_COUNTER: [],
-        }
-        _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
+class TestMetaShape:
+    def test_the_triple_comes_first_then_the_attribution_and_nothing_else(self):
+        """Today's key order exactly (the Plan C sweep wrote the triple, the persister the attribution after it); the
+        idx is the PARENT idx 6 as a Python int, not the LOH 27."""
+        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_COUNTER,))
+        d = _run([sub], _streams(ctr=[(6, SCONF)]))
+        (rec,) = d[LENS_COUNTER].attrs["wvmi"]
+        assert list(rec.meta) == [*_TRIPLE, *_ATTRIBUTION]
+        assert type(rec.meta["triggered_by_event_idx"]) is int and rec.meta["triggered_by_event_idx"] == 6
 
-        assert len(sweep.calls) == 1
-        call = sweep.calls[0]
-        assert call.result is sub
-        assert call.sub_path_id == LENS_PATHS[LENS_CONFLUENCE]
-        assert call.parent_trigger == ParentTrigger(
-            idx=6, event_type="ZONE_PROXIMITY_TRIGGER", parent_path_id=PARENT_PATH,
-        )
+    def test_a_trigger_key_already_in_the_meta_is_replaced(self):
+        """The trigger wins over any seeded key (a `{**trigger, **meta}` merge would let a seeded None survive)."""
+        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_COUNTER,))
+        d = _lens_dfs()
+        edm.mirror_lower_tf_result_to_entity_df(d[LENS_COUNTER], sub, structure_path_id=LENS_PATHS[LENS_COUNTER])
+        d[LENS_COUNTER].attrs["wvmi"][0].meta["triggered_by_event_idx"] = None
+        _stamp_sub_wvmi_trigger_meta({LENS_CONFLUENCE: [], LENS_COUNTER: [sub]}, _streams(ctr=[(6, SCONF)]),
+                                     parent_df=pd.DataFrame(), m15_df=pd.DataFrame(), lens_dfs=d,
+                                     parent_path_id=PARENT_PATH)
+        (rec,) = d[LENS_COUNTER].attrs["wvmi"]
+        assert rec.meta["triggered_by_event_idx"] == 6 and list(rec.meta)[:3] == list(_TRIPLE)
 
-    def test_records_persisted_into_every_lens_df_shifted_and_attributed(
-        self, sweep, lens_dfs, frames,
-    ):
-        """§17.10: persisted into EVERY lens df the sub is on. Per lens df:
-          - one deep copy per record (distinct objects from the projection's
-            and from the other lens's);
-          - `fb/lb/fp/lp_idx` shifted by `meta["slice_begin"]` (None stays
-            None);
-          - meta `structure_path_id` = THAT lens's path (§17.9 attribution),
-            while the record's `structure_path_id` attribute = the SWEEPING
-            lens's path (the sweep's `sub_path_id`);
-          - meta `sub_id` / `started_by` / `use_case` / `parent_sid` /
-            `parent_cycle_id` / `timeframe` / `parent_tf` stamped;
-          - `triggered_by_event_idx` untouched (parent-df coords)."""
-        sweep.n_by_sub_id[1] = 2
-        slice_begin = 100
-        sub = _make_sub(
-            1, start_idx=_loh(5), m15_end_idx=_loh(9),
-            lenses=(LENS_CONFLUENCE, LENS_COUNTER),
-            started_by="first_counter", slice_begin=slice_begin,
-            use_case="first_counter", parent_sid=3, parent_cycle_id=2,
-        )
-        # Sweeping trigger = counter (parent 6 -> LOH 27, the earliest).
-        streams = {
-            LENS_CONFLUENCE: [(8, "ZONE_PROXIMITY_TRIGGER")],
-            LENS_COUNTER: [(6, "SUBSEQUENT_CONFLUENCE_TRIGGER")],
-        }
-        _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
+    def test_records_are_joined_to_their_sub_by_sub_id_not_position(self):
+        """Two subs on one lens, their records REVERSED on the lens df: each record still gets its own sub's
+        trigger."""
+        a = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_CONFLUENCE,))
+        b = _make_sub(2, start_idx=_loh(10), m15_end_idx=_loh(14), lenses=(LENS_CONFLUENCE,))
+        d = _lens_dfs()
+        for res in (a, b):
+            edm.mirror_lower_tf_result_to_entity_df(d[LENS_CONFLUENCE], res, structure_path_id="x")
+        d[LENS_CONFLUENCE].attrs["wvmi"].reverse()
+        _stamp_sub_wvmi_trigger_meta({LENS_CONFLUENCE: [a, b], LENS_COUNTER: []},
+                                     _streams(conf=[(6, ZPT), (12, SCT)]), parent_df=pd.DataFrame(),
+                                     m15_df=pd.DataFrame(), lens_dfs=d, parent_path_id=PARENT_PATH)
+        assert [(r.meta["sub_id"], r.meta["triggered_by_event_idx"]) for r in d[LENS_CONFLUENCE].attrs["wvmi"]] == [
+            (2, 12), (1, 6)]
 
-        # The projection carries the sweep's (slice-local) records as returned.
-        assert len(sub.wvmi_records) == 2
-        assert sub.wvmi_records[0].fb_idx == 1          # unshifted on the facade
-
-        for lens in (LENS_CONFLUENCE, LENS_COUNTER):
-            recs = _wvmi(lens_dfs[lens])
-            assert len(recs) == 2, lens
-            for k, rec in enumerate(recs):
-                # deep copies: not the facade's objects
-                assert all(rec is not w for w in sub.wvmi_records)
-                # shift by slice_begin: (1,2,3,None) + 100 for k=0; (11,12,13,14) + 100 for k=1
-                assert rec.fb_idx == 1 + 10 * k + slice_begin
-                assert rec.lb_idx == 2 + 10 * k + slice_begin
-                assert rec.fp_idx == 3 + 10 * k + slice_begin
-                assert rec.lp_idx == (None if k == 0 else 4 + 10 * k + slice_begin)
-                # sweeping lens decides the record's structure_path_id attr
-                assert rec.structure_path_id == LENS_PATHS[LENS_COUNTER]
-                # per-lens attribution stamped on meta
-                assert rec.meta["structure_path_id"] == LENS_PATHS[lens]
-                assert rec.meta["sub_id"] == 1
-                assert rec.meta["started_by"] == "first_counter"
-                assert rec.meta["use_case"] == "first_counter"
-                assert rec.meta["parent_sid"] == 3
-                assert rec.meta["parent_cycle_id"] == 2
-                assert rec.meta["timeframe"] == "M15"
-                assert rec.meta["parent_tf"] == "H1"
-                # parent-df coords, never translated
-                assert rec.meta["triggered_by_event_idx"] == 6
-                assert rec.meta["triggered_by_event_type"] == "SUBSEQUENT_CONFLUENCE_TRIGGER"
-                assert rec.meta["parent_path_id"] == PARENT_PATH
-
-        # the two lens dfs hold distinct copies
-        conf, ctr = _wvmi(lens_dfs[LENS_CONFLUENCE]), _wvmi(lens_dfs[LENS_COUNTER])
-        assert all(a is not b for a in conf for b in ctr)
-
-    def test_single_lens_sub_is_persisted_only_into_its_lens(
-        self, sweep, lens_dfs, frames,
-    ):
-        """"every lens df the sub is on" — and no other: a confluence-only sub
-        leaves the counter lens df untouched."""
-        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                        lenses=(LENS_CONFLUENCE,))
-        streams = {LENS_CONFLUENCE: [(6, "ZONE_PROXIMITY_TRIGGER")], LENS_COUNTER: []}
-        _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
-
-        assert len(_wvmi(lens_dfs[LENS_CONFLUENCE])) == 1
-        assert "wvmi" not in lens_dfs[LENS_COUNTER].attrs
-
-    def test_persist_appends_to_existing_lens_wvmi(
-        self, sweep, lens_dfs, frames,
-    ):
-        """Records are APPENDED to `attrs["wvmi"]` — a second sub on the same
-        lens must not overwrite the first sub's records (two subs swept ->
-        two entries on the shared lens df, in sub-list order)."""
-        sub_a = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                          lenses=(LENS_CONFLUENCE,))
-        sub_b = _make_sub(2, start_idx=_loh(10), m15_end_idx=_loh(14),
-                          lenses=(LENS_CONFLUENCE,))
-        streams = {
-            LENS_CONFLUENCE: [(6, "ZONE_PROXIMITY_TRIGGER"), (12, "ZONE_PROXIMITY_TRIGGER")],
-            LENS_COUNTER: [],
-        }
-        _run([sub_a, sub_b], streams, lens_dfs=lens_dfs, frames=frames)
-
-        recs = _wvmi(lens_dfs[LENS_CONFLUENCE])
-        assert [r.meta["sub_id"] for r in recs] == [1, 2]
-        assert [r.meta["triggered_by_event_idx"] for r in recs] == [6, 12]
+    def test_no_double_persistence(self):
+        """One copy per lens per record: `len(attrs["wvmi"])` == the sum of the lens's subs' records; every
+        (sub_id, sid, cycle) once per lens."""
+        a = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9), lenses=(LENS_CONFLUENCE, LENS_COUNTER), n=2)
+        b = _make_sub(2, start_idx=_loh(10), m15_end_idx=_loh(14), lenses=(LENS_CONFLUENCE,), n=3)
+        d = _run([a, b], _streams(conf=[(6, ZPT)]))
+        for lens, n in ((LENS_CONFLUENCE, 5), (LENS_COUNTER, 2)):
+            keys = [(r.meta["sub_id"], r.bos_structure_id, r.bos_cycle_id) for r in d[lens].attrs["wvmi"]]
+            assert len(keys) == n == len(set(keys))
 
 
-# ---------------------------------------------------------------------------
-# Dedup by sub_id, not-swept subs, counts
-# ---------------------------------------------------------------------------
+# --- the counts (run.log) -------------------------------------------------------------------------------------------------
 
-class TestDedupAndCounts:
-    def test_sub_listed_twice_is_swept_once(self, sweep, lens_dfs, frames):
-        """§17.10: dedup key `sub_id` — the same sub appearing twice in the
-        projection list (two distinct objects) is swept once, persisted once,
-        counted once."""
-        first = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                          lenses=(LENS_CONFLUENCE,))
-        again = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                          lenses=(LENS_CONFLUENCE,))
-        streams = {LENS_CONFLUENCE: [(6, "ZONE_PROXIMITY_TRIGGER")], LENS_COUNTER: []}
-        counts = _run([first, again], streams, lens_dfs=lens_dfs, frames=frames)
+class TestCounts:
+    def test_every_sub_with_records_counts_whatever_its_triggers(self):
+        """A: first_confluence, {confluence}, 2 records; B: first_counter, {confluence, counter}, 3; C: reversal,
+        {counter}, 4 (no trigger anywhere — under Plan C it was not swept) -> acted 3, records 9, by_lens
+        {confluence 2 + 3, counter 3 + 4}."""
+        subs = [_make_sub(1, start_idx=0, m15_end_idx=9, lenses=(LENS_CONFLUENCE,), n=2),
+                _make_sub(2, start_idx=10, m15_end_idx=19, lenses=(LENS_CONFLUENCE, LENS_COUNTER), n=3,
+                          started_by="first_counter"),
+                _make_sub(3, start_idx=20, m15_end_idx=29, lenses=(LENS_COUNTER,), n=4, started_by="reversal")]
+        assert _count_sub_wvmi(subs) == {"acted": 3, "records": 9,
+                                         "by_started_by": {"first_confluence": 2, "first_counter": 3, "reversal": 4},
+                                         "by_lens": {LENS_CONFLUENCE: 5, LENS_COUNTER: 7}}
 
-        assert len(sweep.calls) == 1
-        assert sweep.calls[0].result is first
-        assert len(first.wvmi_records) == 1
-        assert again.wvmi_records == []
-        assert len(_wvmi(lens_dfs[LENS_CONFLUENCE])) == 1
-        assert counts["acted"] == 1
-        assert counts["records"] == 1
+    def test_a_dual_lens_sub_is_counted_once(self):
+        sub = _make_sub(1, start_idx=0, m15_end_idx=9, lenses=(LENS_CONFLUENCE, LENS_COUNTER), n=2)
+        c = _count_sub_wvmi([sub])
+        assert (c["acted"], c["records"], c["by_lens"]) == (1, 2, {LENS_CONFLUENCE: 2, LENS_COUNTER: 2})
 
-    def test_sub_with_no_trigger_in_window_is_not_swept(
-        self, sweep, lens_dfs, frames,
-    ):
-        """§17.10: "No entry inside the window -> no WVMI for that sub" —
-        triggers on the sub's own lens exist before and after the window; no
-        sweep, no persist, zero counts."""
-        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                        lenses=(LENS_CONFLUENCE, LENS_COUNTER))
-        streams = {
-            LENS_CONFLUENCE: [(2, "ZONE_PROXIMITY_TRIGGER"),        # LOH 11 < 23
-                              (11, "SUBSEQUENT_COUNTER_TRIGGER")],  # LOH 47 > 39
-            LENS_COUNTER: [(3, "SUBSEQUENT_CONFLUENCE_TRIGGER")],   # LOH 15 < 23
-        }
-        counts = _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
-
-        assert sweep.calls == []
-        assert sub.wvmi_records == []
-        assert _wvmi(lens_dfs[LENS_CONFLUENCE]) == []
-        assert _wvmi(lens_dfs[LENS_COUNTER]) == []
-        assert counts == {"acted": 0, "records": 0, "by_started_by": {}, "by_lens": {}}
-
-    def test_counts_by_started_by_and_by_lens(self, sweep, lens_dfs, frames):
-        """Counts derived from the rule: `acted` = subs whose sweep produced
-        records; `records` = total records; `by_started_by[sb]` += the sub's
-        record count; `by_lens[l]` += the sub's record count for EVERY lens
-        the sub is on (records land on every lens df).
-
-          A: first_confluence, {confluence}, 2 records
-          B: first_counter,    {confluence, counter}, 3 records
-          C: reversal,         {counter}, no trigger in window -> not counted
-        -> acted 2, records 5, by_started_by {fc: 2, fcounter: 3},
-           by_lens {confluence: 2 + 3 = 5, counter: 3}."""
-        sweep.n_by_sub_id.update({1: 2, 2: 3, 3: 4})
-        sub_a = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                          lenses=(LENS_CONFLUENCE,), started_by="first_confluence")
-        sub_b = _make_sub(2, start_idx=_loh(10), m15_end_idx=_loh(14),
-                          lenses=(LENS_CONFLUENCE, LENS_COUNTER), started_by="first_counter")
-        sub_c = _make_sub(3, start_idx=_loh(20), m15_end_idx=_loh(24),
-                          lenses=(LENS_COUNTER,), started_by="reversal")
-        streams = {
-            LENS_CONFLUENCE: [(6, "ZONE_PROXIMITY_TRIGGER"), (12, "ZONE_PROXIMITY_TRIGGER")],
-            LENS_COUNTER: [(30, "SUBSEQUENT_CONFLUENCE_TRIGGER")],   # LOH 123 > C's end 99
-        }
-        counts = _run([sub_a, sub_b, sub_c], streams, lens_dfs=lens_dfs, frames=frames)
-
-        assert counts["acted"] == 2
-        assert counts["records"] == 5
-        assert counts["by_started_by"] == {"first_confluence": 2, "first_counter": 3}
-        assert counts["by_lens"] == {LENS_CONFLUENCE: 5, LENS_COUNTER: 3}
-        # and the lens dfs agree with by_lens
-        assert len(_wvmi(lens_dfs[LENS_CONFLUENCE])) == 5
-        assert len(_wvmi(lens_dfs[LENS_COUNTER])) == 3
-
-    def test_by_lens_key_order_is_sorted_not_set_order(
-        self, monkeypatch, sweep, lens_dfs, frames,
-    ):
-        """`by_lens` is printed in run.log, so its key order must not depend on
-        the set iteration order of the sub's lenses (per process: the string
-        hash seed). The orchestrator's `set` is swapped for one that iterates
-        REVERSE-sorted: a bare `for l in lenses` would insert counter first;
-        the rule (sorted lenses) inserts confluence first. The one sub is on
-        both lenses, so the first insertion decides the order."""
+    def test_by_lens_key_order_is_sorted_not_set_order(self, monkeypatch):
+        """`by_lens` is printed in run.log: its key order must not follow the set iteration order (per process: the
+        string hash seed). The orchestrator's `set` iterates REVERSE-sorted here."""
         class _ReverseIterSet(set):
             def __iter__(self):
                 return iter(sorted(set.__iter__(self), reverse=True))
 
-        import engine_v2.pipeline.orchestrator as orch
         monkeypatch.setattr(orch, "set", _ReverseIterSet, raising=False)
-        sweep.n_by_sub_id.update({1: 2})
-        sub = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                        lenses=(LENS_CONFLUENCE, LENS_COUNTER))
-        streams = {LENS_CONFLUENCE: [(6, "ZONE_PROXIMITY_TRIGGER")], LENS_COUNTER: []}
-        counts = _run([sub], streams, lens_dfs=lens_dfs, frames=frames)
+        sub = _make_sub(1, start_idx=0, m15_end_idx=9, lenses=(LENS_CONFLUENCE, LENS_COUNTER), n=2)
+        assert list(_count_sub_wvmi([sub])["by_lens"]) == [LENS_CONFLUENCE, LENS_COUNTER]
 
-        assert list(counts["by_lens"]) == [LENS_CONFLUENCE, LENS_COUNTER]
-        assert counts["by_lens"] == {LENS_CONFLUENCE: 2, LENS_COUNTER: 2}
+    def test_a_sub_without_records_is_not_acted(self):
+        sub = _make_sub(1, start_idx=0, m15_end_idx=9, lenses=(LENS_CONFLUENCE,), n=0)
+        assert _count_sub_wvmi([sub]) == {"acted": 0, "records": 0, "by_started_by": {}, "by_lens": {}}
 
-    def test_sweep_yielding_no_records_marks_the_sub_swept_but_not_acted(
-        self, sweep, lens_dfs, frames,
-    ):
-        """A sub whose sweep returns no records (no CTS_CONFIRMED passed the
-        wave-candle guards) is still SWEPT (dedup: a repeat listing does not
-        re-sweep it) but does not count as `acted` and adds no records."""
-        sweep.n_by_sub_id[1] = 0
-        first = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                          lenses=(LENS_CONFLUENCE,))
-        again = _make_sub(1, start_idx=_loh(5), m15_end_idx=_loh(9),
-                          lenses=(LENS_CONFLUENCE,))
-        streams = {LENS_CONFLUENCE: [(6, "ZONE_PROXIMITY_TRIGGER")], LENS_COUNTER: []}
-        counts = _run([first, again], streams, lens_dfs=lens_dfs, frames=frames)
 
-        assert len(sweep.calls) == 1
-        assert counts == {"acted": 0, "records": 0, "by_started_by": {}, "by_lens": {}}
-        assert _wvmi(lens_dfs[LENS_CONFLUENCE]) == []
+# --- the lens -> stream mapping -----------------------------------------------------------------------------------------
+
+def test_each_lens_reads_its_own_wvmi_class_stream():
+    """§8.5 / Q8: confluence = the main's first sd-prox per cycle (ZPT) + each var 4 (SUBSEQUENT_COUNTER), counter =
+    each var 3 (SUBSEQUENT_CONFLUENCE); a cycle whose first proximity trigger is opp_sd adds no ZPT; per cycle the
+    ZPT first, then its var 4s by trigger idx; cycles in the given order. A swap would rewrite every sub row's trigger
+    fields and only `/compare` would see it."""
+    t = lambda i, d: SimpleNamespace(idx=i, direction=d)                                            # noqa: E731
+    v = lambda s, c, i: SimpleNamespace(parent_sid=s, parent_cycle_id=c, trigger_event_idx=i)       # noqa: E731
+    zpt = {(0, 1): [t(11, "sd"), t(13, "opp_sd")], (0, 2): [t(15, "opp_sd"), t(16, "sd")], (1, 0): [t(40, "sd")]}
+    var3 = [v(1, 0, 44), v(0, 1, 20)]
+    var4 = [v(0, 2, 31), v(0, 1, 14), v(0, 2, 30)]
+    assert _wvmi_trigger_streams_by_lens([(0, 1), (0, 2), (1, 0)], zpt, var3, var4) == {
+        LENS_CONFLUENCE: [(11, ZPT), (14, SCT), (30, SCT), (31, SCT), (40, ZPT)],
+        LENS_COUNTER: [(20, SCONF), (44, SCONF)],
+    }
+    assert _wvmi_trigger_streams_by_lens([(0, 1)], None, [], []) == {LENS_CONFLUENCE: [], LENS_COUNTER: []}
+
+
+# --- the driver's step 6 (`_run_multi_tf_dual`): which triggers feed which lens, and the summary ---------------------
+
+def test_the_driver_feeds_each_lens_its_stream_and_counts_each_unique_sub_once(monkeypatch):
+    """The collaborators are stubbed on their defining modules (the driver imports them inside the function) — the
+    pattern of `test_lifecycle_sweep_unit`'s wiring pin. One dual-lens sub (window [40, 100]) with two records; the
+    H1 triggers: cycle (0,1) first proximity sd @11 + var 3 @20; cycle (0,2) opp_sd first + var 4 @30. The lens
+    streams handed to the post-pass, the stamped lens copies and the printed summary are pinned; step 7 is stopped."""
+    from engine_v2.multitf.sub_structure_pool import StructureKey
+    from engine_v2.tests.test_render_sub_projection import _record, _set_lifecycle
+
+    class _Stop(Exception):
+        pass
+
+    mt = lambda _v, _h1: SimpleNamespace(parent_sid=0, parent_cycle_id=1, lower_sd=+1)   # noqa: E731
+    for mod in ("first_confluence_pipeline", "subsequent_confluence_pipeline", "subsequent_counter_pipeline"):
+        monkeypatch.setattr(f"engine_v2.multitf.{mod}.to_multi_tf_trigger", mt)
+    monkeypatch.setattr("engine_v2.multitf.uc1_trigger.detect_uc1_triggers", lambda *a, **k: [])
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
+                        lambda *a, **k: pd.DataFrame({"time": range(200)}))
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
+    monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables",
+                        lambda *a, **k: SimpleNamespace(cycles=lambda: [(0, 1), (0, 2)]))
+
+    def _sweep(_triggers, *, pool, **_kw):
+        sub, _ = pool.get_or_create(StructureKey("H1.main", "M15", 1, 35))
+        _record(pool, sub, None, LENS_CONFLUENCE, start_idx=40, seq=0, trigger_type="first_confluence",
+                parent_sid=0, parent_cycle_id=1)
+        _record(pool, sub, None, LENS_COUNTER, start_idx=45, seq=1, trigger_type="subsequent_confluence",
+                parent_sid=0, parent_cycle_id=1)
+        _set_lifecycle(sub, 40, 100, "parent_end")
+        return SimpleNamespace(unresolved=[], spawned=[])
+
+    def _render(sub, _m15, *, lens_paths, lens_dfs, timeframe):
+        res = _make_sub(sub.sub_id, start_idx=sub.start_idx, m15_end_idx=sub.end_idx,
+                        lenses=tuple(sorted(sub.lenses())), n=2)
+        for lens in res.meta["lenses"]:
+            edm.mirror_lower_tf_result_to_entity_df(lens_dfs[lens], res, structure_path_id=lens_paths[lens])
+        return res
+
+    streams_seen = []
+
+    def _stamp(results_by_lens, streams_by_lens, **kw):
+        streams_seen.append((deepcopy(streams_by_lens), kw["parent_path_id"],
+                             {k: [r.meta["sub_id"] for r in v] for k, v in results_by_lens.items()}))
+        lens_dfs_seen.update(kw["lens_dfs"])
+        return _real_stamp(results_by_lens, streams_by_lens, **kw)
+
+    def _stop(*_a, **_k):
+        raise _Stop
+
+    _real_stamp = orch._stamp_sub_wvmi_trigger_meta
+    lens_dfs_seen: Dict[str, pd.DataFrame] = {}
+    monkeypatch.setattr("engine_v2.multitf.lifecycle_sweep.run_lifecycle_sweep", _sweep)
+    monkeypatch.setattr("engine_v2.multitf.entity_df_mutation.render_sub_projection", _render)
+    monkeypatch.setattr(orch, "_stamp_sub_wvmi_trigger_meta", _stamp)
+    monkeypatch.setattr(orch, "build_sid_records_for_subordinate", _stop)
+
+    t = lambda i, d: SimpleNamespace(idx=i, direction=d)                                              # noqa: E731
+    v3 = SimpleNamespace(parent_sid=0, parent_cycle_id=1, trigger_event_idx=20, input_idx=15)
+    v4 = SimpleNamespace(parent_sid=0, parent_cycle_id=2, trigger_event_idx=30, input_idx=25)
+    h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), pytest.raises(_Stop):
+        orch._run_multi_tf_dual(
+            h1, [], [], [], [], {}, None, first_confluence_triggers=[],
+            subsequent_confluence_triggers=[v3], subsequent_counter_triggers=[v4],
+            main_zone_proximity_triggers={(0, 1): [t(11, "sd")], (0, 2): [t(15, "opp_sd"), t(16, "sd")]},
+        )
+    assert streams_seen == [({LENS_CONFLUENCE: [(11, ZPT), (30, SCT)], LENS_COUNTER: [(20, SCONF)]},
+                             PARENT_PATH, {LENS_CONFLUENCE: [0], LENS_COUNTER: [0]})]
+    # window [40, 100]: LOH(11) = 47 and LOH(20) = 83 inside, LOH(30) = 123 outside
+    assert _triples(lens_dfs_seen[LENS_CONFLUENCE]) == [(11, ZPT, PARENT_PATH)] * 2
+    assert _triples(lens_dfs_seen[LENS_COUNTER]) == [(20, SCONF, PARENT_PATH)] * 2
+    assert ("[multi_tf:dual] sub wvmi acted=1 records=2 by_started_by={'first_confluence': 2} "
+            "by_lens={'confluence': 2, 'counter': 2}") in out.getvalue().splitlines()

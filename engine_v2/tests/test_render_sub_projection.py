@@ -338,6 +338,8 @@ def _element_metas(lens_df: pd.DataFrame) -> Iterable[Tuple[str, dict]]:
         yield "fib_states", f.meta
     for w in lens_df.attrs.get("wave_candles", []):
         yield "wave_candles", w.meta
+    for w in lens_df.attrs.get("wvmi", []):
+        yield "wvmi", w.meta
     for ln in lens_df.attrs.get("prev_bos_lines", []):
         yield "prev_bos_lines", ln["meta"]
 
@@ -533,7 +535,9 @@ def test_mirrored_into_both_lenses_with_per_lens_attribution(geometry, m15_df):
     assert {z.meta["structure_path_id"] for z in ctr_kl} == {_LENS_PATHS[LENS_COUNTER]}
 
 
-def test_lens_subset_only_confluence_leaves_counter_df_untouched(geometry, m15_df):
+@pytest.mark.parametrize("window", [(_END, "parent_end"), (None, None)], ids=["capped", "open"])
+def test_lens_subset_only_confluence_leaves_counter_df_untouched(geometry, m15_df, window):
+    """The open window has a WVMI record (the capped one none): it lands on the confluence lens only."""
     pool, sub = geometry
     # A zero-length COUNTER record (participates in nothing -> no counter
     # lens) + one live CONFLUENCE record -> sub.lenses() == {"confluence"}.
@@ -543,7 +547,7 @@ def test_lens_subset_only_confluence_leaves_counter_df_untouched(geometry, m15_d
     b = _record(pool, sub, m15_df, LENS_CONFLUENCE, start_idx=_START, seq=1,
                 trigger_type="first_confluence", parent_sid=3, parent_cycle_id=1)
     assert sub.lenses() == {LENS_CONFLUENCE}
-    _set_lifecycle(sub, _START, _END, "parent_end")
+    _set_lifecycle(sub, _START, *window)
     lens_dfs = _lens_dfs(m15_df)
     ctr_attrs_before = set(lens_dfs[LENS_COUNTER].attrs)
 
@@ -557,6 +561,7 @@ def test_lens_subset_only_confluence_leaves_counter_df_untouched(geometry, m15_d
     expected = _expected_attribution(LENS_CONFLUENCE, sub, b)
     for kind, meta in _element_metas(conf):
         assert {k: meta.get(k) for k in _ATTRIBUTION_KEYS} == expected, kind
+    assert len(conf.attrs.get("wvmi", [])) == len(res.wvmi_records) == (0 if window[0] is not None else 1)
     # Counter lens: NOT in sub.lenses() -> nothing mirrored, nothing painted.
     ctr = lens_dfs[LENS_COUNTER]
     for key in ("events", "kl_zones", "poi_zones", "fib_states", "wave_candles",
@@ -923,8 +928,28 @@ def test_open_sub_paints_to_edge_and_meta_end_is_none(geometry, m15_df):
             assert zn.meta["end_reason"] == "reversal"
         # Attribution on the open sub is the same contract.
         expected = _expected_attribution(lens, sub, b)
+        kinds = set()
         for kind, meta in _element_metas(ldf):
+            kinds.add(kind)
             assert {k: meta.get(k) for k in _ATTRIBUTION_KEYS} == expected, kind
+        assert "wvmi" in kinds
+        # WVMI (Plan G): computed inside the projection, ungated — the open window
+        # holds cycle (0,0)'s CTS_CONFIRMED (89; the capped window [60, 85] has
+        # none), so ONE record per lens: FB / LB / FP / LP entity-absolute, the
+        # temp LP bounded by the cycle's end (the reversal 107) - 1; the copy's
+        # FIELD path == its meta path == this lens's.
+        (w,) = ldf.attrs["wvmi"]
+        assert (w.bos_structure_id, w.bos_cycle_id, w.fb_idx, w.lb_idx, w.fp_idx, w.lp_idx) == (0, 0, 56, 86, 88, 106)
+        assert (w.status, w.lp_locked, w.cycle_collapsed) == ("created", False, False)
+        assert w.structure_path_id == w.meta["structure_path_id"] == _LENS_PATHS[lens]
+        assert set(w.meta) == set(_ATTRIBUTION_KEYS)     # no trigger meta: the orchestrator stamps it per lens
+    (wc,), (wk,) = lens_dfs[LENS_CONFLUENCE].attrs["wvmi"], lens_dfs[LENS_COUNTER].attrs["wvmi"]
+    assert wc is not wk and wc.meta is not wk.meta
+    # The projection keeps its own slice-local record: the first live record's
+    # lens path, meta {} (the lens copies are deep copies).
+    (src,) = res.wvmi_records
+    assert (src.fb_idx, src.lb_idx, src.fp_idx, src.lp_idx) == (51, 81, 83, 101)
+    assert (src.structure_path_id, src.meta) == (_LENS_PATHS[LENS_CONFLUENCE], {})
 
 
 # ---------------------------------------------------------------------------

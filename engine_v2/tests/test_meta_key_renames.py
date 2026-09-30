@@ -203,10 +203,11 @@ def test_exporters_write_every_meta_dict_verbatim(tmp_path, geometry, m15_df):
     """The export layer (no exporter test existed — the Post-E·4 review's MINOR 4, the Post-E·5 review's X2 / X3: an
     alias built from string pieces, or `bounds_steps` dropped, in an exporter survived): each CSV row's `meta` text is
     exactly `str()` of the object's meta — KL (incl. an expansion and a reconfirm), fib and events from the fixture's
-    run, POI from a rendered sub."""
+    run, POI from a rendered sub; WVMI (Plan G) the main's gated records + a rendered sub's lens copies."""
     import csv
     from engine_v2.debug.export_events import export_structure_events
     from engine_v2.debug.export_fib_lifecycle import export_fib_lifecycle
+    from engine_v2.debug.export_wvmi import export_wvmi
     from engine_v2.debug.export_zones import export_kl_zones, export_poi_zones
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 
@@ -216,14 +217,17 @@ def test_exporters_write_every_meta_dict_verbatim(tmp_path, geometry, m15_df):
     with redirect_stdout(io.StringIO()):
         res = compute_bounded_structure(_prepare_df(_make_double_rewind_data()), 0, 1)
         events = [*res.events, rec]
-        down = _run_downstream_pipeline(res.df, events, 1, skip_wvmi=True)
-    sub, _ = _render_both_lenses(geometry, m15_df)
+        down = _run_downstream_pipeline(res.df, events, 1)
+    sub, lens_dfs = _render_both_lenses(geometry, m15_df)
+    sub_wvmi = [w for d in lens_dfs.values() for w in d.attrs["wvmi"]]
+    assert down["wvmi_records"] and sub_wvmi
     assert any("reconfirmed_idx" in z.meta for z in down["kl_zones"])
     assert any(z.meta.get("expanded") for z in down["kl_zones"]) and down["fib_states"] and sub.poi_zones
     for name, export, objs in (("kl", export_kl_zones, down["kl_zones"]),
                                ("fib", export_fib_lifecycle, down["fib_states"]),
                                ("events", export_structure_events, events),
-                               ("poi", export_poi_zones, sub.poi_zones)):
+                               ("poi", export_poi_zones, sub.poi_zones),
+                               ("wvmi", export_wvmi, down["wvmi_records"] + sub_wvmi)):
         path = tmp_path / f"{name}.csv"
         export(objs, path)
         with open(path, newline="", encoding="utf-8") as fh:

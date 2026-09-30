@@ -64,7 +64,7 @@ def _run(rows, *, mutate=None, lifecycle_floor=None, lifecycle_cap=None,
             validate_event_contract(e)
     with contextlib.redirect_stdout(io.StringIO()):
         out = _run_downstream_pipeline(
-            res.df, events, +1, fib_mode="h1", skip_wvmi=True,
+            res.df, events, +1, fib_mode="h1", wvmi="off",
             lifecycle_floor=lifecycle_floor, lifecycle_cap=lifecycle_cap,
             cap_reason=cap_reason,
         )

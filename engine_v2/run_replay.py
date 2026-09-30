@@ -384,9 +384,11 @@ def main() -> None:
             # (The per-sub `_sids.csv` is gone — its role is split across
             # `_subs.csv` / `_triggers.csv` written above, §17.9.)
 
-            # Debug: export per-sub WVMI records (parent-event-driven,
-            # trigger-centric — see WVMI_SPEC "Sub entities"). Not in any other
-            # CSV, so this is the only inspectable surface besides chart hover.
+            # Debug: export this lens's sub WVMI records (computed inside each
+            # unique sub's projection, ungated; a dual-lens sub's records are on
+            # both lens CSVs, each with its lens's path + trigger — WVMI_SPEC
+            # "Sub entities", Plan G). Not in any other CSV and not drawn on the
+            # chart, so this is the only inspectable surface.
             from engine_v2.debug.export_wvmi import export_wvmi
             export_wvmi(
                 sub_entry.df.attrs.get("wvmi", []) or [],
