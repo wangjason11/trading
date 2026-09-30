@@ -22,6 +22,11 @@ Status: **OPEN** (to do) · **DECIDE** (needs the user's call first) · **TRIGGE
 
 ## A. Week 8 close-out (next)
 
+**Week 8 is NOT done until bucket C (Part 4 closure) lands** — user 2026-09-30: the Week 8 DoD itself ("HTF and LTF
+context aligns logically; confluence vs non-confluence is visually obvious") is met, but Part 4 is a Week 8 part, so
+its closure items (C below) are done in Week 8, NEXT SESSION, before the Week 8 DoD sign-off, `/commit-save` and the
+merge `week8-volmom-multitf` → `main`. Everything in D and later stays after the merge.
+
 **Chart review with the user** — all items closed 2026-09-30 (see "Recently closed").
 
 **Hygiene** — the 2026-09-30 pass is done (see "Recently closed"); what is left:
@@ -37,7 +42,8 @@ Status: **OPEN** (to do) · **DECIDE** (needs the user's call first) · **TRIGGE
 
 ## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
 
-## C. Part 4 closure (when Part 4 is declared done)
+## C. Part 4 closure — IN WEEK 8, next session (user 2026-09-30; order: §13.5.e remainder with a byte-identical
+`/compare` → §13.7 docs + the file-naming call → delete the invariants file / retire the workflow memory)
 
 - **§13.5.e remainder** — delete the orchestrator's deprecated `s_res.df.attrs[...]` writes; blocked until the H1 chart
   reads its overlays through the registry (the chart-fallback half is DONE). OPEN. Detail: PART4 §13.5.e (~:2270).
