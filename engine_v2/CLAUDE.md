@@ -24,8 +24,9 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 | Part 4 | Pipeline / strategy / multi-TF refactor | **Done** (closed 2026-09-30) — see `PART4_REFACTOR_SPEC.md`, the canonical multi-TF spec (§17 authoritative for subs). Built: per-entity dfs (through §13.5.c.iii); the **sub-structure pool** (§17 — `TriggerRecord` + unique sub, lifecycle sweep; Plans A/B/C, 2026-09-21) + two chart-review rounds; the **zones pass** (2026-09-22 → 29): POI activation on the CTS-established moment (Plan D), imbalance c3 knowability (Plan F), `ev.idx` = the moment on every CTS / BOS event + the candle-index Naming Standard (Plan E, Post-E·1–5), and the MS latent-bug close-out (MS never rewinds since 2026-09-29); and the **WVMI pass** — Plan G (`plans/PLAN_G_wvmi_unique_sub.md`, landed 2026-09-30): sub WVMI computed inside each unique sub's projection, ungated, lifecycle-bounded, exported per lens like zones, with a `cycle_collapsed` flag and per-lens trigger attribution. Week 8 close-out 2026-09-30: the chart-review items, the user's scope decisions and a hygiene pass are done (`IDEA_PARKING_LOT.md`). Part 4 closure 2026-09-30 (register §C): §13.5.e closed (the `H1.main` attrs block IS the registry's store — kept), §13.7 finalized in place (PART4 not split; §16.10 naming: the spec follows the code), `PRE_REFACTOR_INVARIANTS.md` deleted. Next: Week 9 |
 
 **Next — Week 9: Entries & Decisions** (restructured by the user 2026-09-30; `SYLLABUS.md` Week 9): Part 1 entry
-prerequisites (the list: `IDEA_PARKING_LOT.md` §D — the M5 lens, zone strength scoring, one POI per cycle, zone size
-adjustments, entry confirmation candle patterns, ...), Part 2 entry decisions, Part 3 other decisions.
+prerequisites (the list and its order: `IDEA_PARKING_LOT.md` §D — the user's order 2026-10-01, heavy items first:
+one POI per cycle, single-cycle fib POIs on subs + the sub cross-fib logic, zone size adjustments, the pinbar
+body-pip floor; then the backlog), Part 2 entry decisions, Part 3 other decisions.
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).
 

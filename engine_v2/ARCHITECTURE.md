@@ -295,9 +295,11 @@ POI activation conditions
      (computed from `bos_price` and the time-varying `cts_price_at(t)`)
      by at least 30%. Variants can downgrade (V90 → V60 → V30) or
      vanish entirely as `cts_price` extends and the zone slides.
-Scenario conditions (#4: per-scenario idx/price constraints) are gated
-at IC identification and not re-checked per candle (once the
-constraining event fires, the comparison is fixed).
+Scenario conditions (#4: the per-scenario idx/price constraints of
+`zones/POI_ZONES_SPEC.md` §3.2) are NOT implemented — IC identification
+applies only the base conditions (found 2026-09-30; Week 9 Part 1 item 1
+decides whether to build or drop them). As designed they are gated at IC
+identification, not re-checked per candle.
 
 **Activation floor (both POI and KL).** A zone's first-active is clamped to
 its owning cycle's lifecycle-start: `first_active = max(<zone-specific

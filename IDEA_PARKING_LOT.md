@@ -38,7 +38,8 @@ The open lines below carry over (fold in when their files are next touched); D a
 - **Naming-Standard audit of never-audited index keys** — KL `bounds_steps[*].start_idx` (the base ANCHOR on the INIT
   step, a MOMENT on expansion steps — one key, two kinds), RANGE_STARTED `confirm_idx` / `start_idx`, STATE_CHANGED
   `effective_idx`. Parked by the user ("don't start unasked"); cheap; the `bounds_steps` one should land before
-  anything reads zone expansions for entries / stops. DECIDE when. Detail: `engine_v2/GLOSSARY.md` "Naming Standard".
+  anything reads zone expansions for entries / stops. DECIDE when — raise it when D.1 item 3 (zone size adjustments)
+  starts. Detail: `engine_v2/GLOSSARY.md` "Naming Standard".
 
 ## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
 
@@ -49,41 +50,60 @@ The open lines below carry over (fold in when their files are next touched); D a
 **Week 9 = "Entries & Decisions"** (renamed by the user 2026-09-30), in three parts: **Part 1** Entry prerequisite
 items (this bucket), **Part 2** the actual Entry decision build & logic, **Part 3** Other decisions build & logic
 (SYLLABUS Week 9). User: "I agree that these items should be worked on prior to Entries"; a rough outline, details
-come from the user as Week 9 reaches each item. Order inside Part 1: not set yet, except the entry-confirmation
-candle patterns — "can go last in Part 1 or first in Part 2".
+come from the user as Week 9 reaches each item.
 
-**Added by the user 2026-09-30** (verbatim first, then the measured baseline / related entries):
-- **Redefine IC & POI zone logic** — "will reduce POI zones in each cycle to just 1 (vs. currently where a cycle may
-  have multiple POI zones)". Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3
-  V30 / V60 / V90 variants): H1 5 ICs over 3 cycles (2 cycles hold 2 ICs); M15 confluence 30 ICs over 19 cycles (7
-  cycles hold 2, 2 hold 3); M15 counter 12 over 7 (1 holds 2, 2 hold 3); variants per IC H1 1/2/3 = 2/2/1,
-  confluence 14/7/9, counter 7/1/4. OPEN QUESTION for the design: does "one POI" mean one IC per cycle, one variant
-  per IC, or both? Related: "Single-cycle fib POIs on subs" below (additive — MORE POIs per cycle; decide together);
-  G "Cascade-viz hover extras" (reads the variants). OPEN. Detail: `engine_v2/zones/POI_ZONES_SPEC.md`.
-- **Zone adjustments** — "currently some KL & POI zones may be very large or small in their current base form. This
-  will cover additional logic that adjust the size." Related: "Zone strength scoring" below (both reshape how a zone
-  reads); A "Naming-Standard audit" (`bounds_steps[*].start_idx` — land it before anything reads zone expansions for
-  entries / stops). OPEN. Detail: `engine_v2/zones/KL_ZONES_SPEC.md`, `POI_ZONES_SPEC.md`.
-- **Entry confirmation candle patterns** — "define new candle patterns that will be used to confirm entry (when
-  necessary). This is a prerequisite for Entry, but can go last in Part 1 or first in Part 2." Related: "Candle-
-  direction / rejection confirmation at a zone touch — as an ENTRY condition" and "Pinbar body-pip floor calibration"
-  below; the pattern engine (`patterns/structure_patterns.py`, `features/candles_v2.py`). OPEN.
+**Order — set by the user 2026-10-01: the heavy items first (D.1), the rest after (D.2).** Verbatim: "I would like
+to tackle the heavy lifting items first. These will be ones with extensive documentation, build and changes to
+structure elements that could differ a lot from our current iteration. Each of these may require separate design /
+planning and build sessions." Items 1 and 3: the user provides updated detailed specs. Items 2 and 4: "may involve
+flipping across multiple different scenarios & parameters and reviewing the output/charts to get to the final output
+we want." "The remaining items you listed we'll keep in the backlog and decide on them after the above items are
+complete." Item 1 opens the next working session.
 
-**Carried from the Week 8 register:**
+**D.1 — Ordered (the heavy items):**
+1. **One POI per cycle** (redefine the IC & POI zone logic) — NEXT. User 2026-09-30: "will reduce POI zones in each
+   cycle to just 1 (vs. currently where a cycle may have multiple POI zones)". The user provides a detailed spec.
+   Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3 V30 / V60 / V90 variants): H1
+   5 ICs over 3 cycles (2 cycles hold 2 ICs); M15 confluence 30 ICs over 19 cycles (7 cycles hold 2, 2 hold 3); M15
+   counter 12 over 7 (1 holds 2, 2 hold 3); variants per IC H1 1/2/3 = 2/2/1, confluence 14/7/9, counter 7/1/4. OPEN
+   QUESTION for the design: one IC per cycle, one variant per IC, or both? Measured 2026-09-30 (memory
+   `project_week9_part1_inputs.md`): every POI-producing cycle has ONE fib, so a second / third POI comes only from the
+   V30 / V60 / V90 picks landing on different candles; which IC is kept decides whether MS's sd-proximity CTS
+   confirmation and the zone-proximity scan change (both read only the nearest-to-price inner — H1 sid 1 cycle 2's
+   `CTS_CONFIRMED` at 926 fired on one); POI_ZONES_SPEC §3.2's scenario IC constraints were NEVER implemented — build
+   them or drop them in this item. Related: G "Cascade-viz hover extras" (reads the variants). Detail:
+   `engine_v2/zones/POI_ZONES_SPEC.md`.
+2. **Single-cycle fib POIs on subs, and revisit the overall sub cross-fib logic** — user 2026-10-01: "Single-cycle fib
+   POIs on sub, and also additionally revisit the overall sub cross-fib logic". Today a sub's single-cycle fib is only
+   a fallback (cross fails, established phase); the change lets the two coexist — additive, more POIs, so it pulls
+   against item 1, which is decided first. Iterative: scenario / parameter flips + chart review. Detail: memory
+   `project_sub_single_cycle_fib_pois.md`; `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` (§13), `POI_ZONES_SPEC.md`
+   "Cross-Cycle Mode".
+3. **Zone size adjustments** — user 2026-09-30: "currently some KL & POI zones may be very large or small in their
+   current base form. This will cover additional logic that adjust the size." The user provides a detailed spec.
+   Raise when it starts: A "Naming-Standard audit" (`bounds_steps[*].start_idx` — land it before anything reads zone
+   expansions). Related: "Zone strength scoring" (D.2). Detail: `engine_v2/zones/KL_ZONES_SPEC.md`,
+   `POI_ZONES_SPEC.md`; measured sizes: memory `project_week9_part1_inputs.md`.
+4. **Pinbar body-pip floor calibration** — scheduled here by the user 2026-10-01 (was TRIGGER: strategy optimization):
+   the provisional values (H1 2.2 / M15 1.0 / M5 0.5 pips, NZD_USD only) and the reclassify-to-pinbar approach itself.
+   Iterative: parameter flips + chart review; a candle-type change cascades (patterns → structure → zones), so every
+   flip gets a full `/compare`. Detail: memory `project_pinbar_body_pip_floor.md`,
+   `engine_v2/features/CANDLE_BODY_FLOOR_NOTES.md`.
 
+**D.2 — Backlog: decided after D.1 is complete (user 2026-10-01).**
+- **Entry confirmation candle patterns** — user 2026-09-30: "define new candle patterns that will be used to confirm
+  entry (when necessary). This is a prerequisite for Entry, but can go last in Part 1 or first in Part 2." Related:
+  "Candle-direction / rejection confirmation at a zone touch" below; D.1 item 4 (the pinbar floor); the pattern engine
+  (`patterns/structure_patterns.py`, `features/candles_v2.py`). OPEN.
 - **The M5 layer** (`H1.main >> M5.counter` — a third lens directly under H1.main, the Part 4 vision's 4th chart;
-  memory `project_part4_vision.md`) — DECIDED 2026-09-30: build AFTER the Week 8 merge, as its own Heavy block (plan +
-  cold review), before any Entries work that reads M5; not a Week 8 blocker. Related (only if M5 ever nests under an
-  M15 sub): the canonical encoding of a deeper path, e.g. `H1.main >> M15.counter >> M5.confluence` (PART4 ~:176
-  "Open (deferred)"; PART4 §13.6, §17.12). SCHEDULED.
+  memory `project_part4_vision.md`) — DECIDED 2026-09-30: its own Heavy block (plan + cold review), before any Entries
+  work that reads M5; not a Week 8 blocker. Footprint seen so far: `debug/export_sub_tables.py` hard-codes `_M15_`, and
+  `pipeline/orchestrator.py` (~:646) runs the whole multi-TF path only when `"M15"` is in `lower_timeframes`. Related
+  (only if M5 ever nests under an M15 sub): the canonical encoding of a deeper path, e.g. `H1.main >> M15.counter >>
+  M5.confluence` (PART4 ~:176 "Open (deferred)"; PART4 §13.6, §17.12). BACKLOG.
 - **Zone strength scoring** — syllabus Week 7 (`strength_score` / `strength_flags`, "strong zones look strong", click a
   zone → strength + flags); `KLZone.strength` is always `0.0` (`zones/kl_zones_v1.py`). DECIDE (scope). Idea attached:
   scale strength thresholds by ATR percentile (volatility regimes).
-- **Single-cycle fib POIs on subs** — let single-cycle fibs coexist with cross-cycle ones (additive). DECIDE. Detail:
-  memory `project_sub_single_cycle_fib_pois.md`; `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §13.
-- **Pinbar body-pip floor calibration** — provisional values + the reclassify-to-pinbar approach itself; "revisit
-  during strategy optimization". TRIGGER (strategy optimization). Detail: memory `project_pinbar_body_pip_floor.md`,
-  `engine_v2/features/CANDLE_BODY_FLOOR_NOTES.md`.
 - **Candle-direction / rejection confirmation at a zone touch — as an ENTRY condition** (user 2026-09-30: not a trigger
   filter; triggers stay structural). The May trigger filter (`47e7532`, reverted `2afd3b2`) is the reference form:
   trigger candle body opposing the zone side. DECIDE when Entries are designed. Detail: this register's "Recently

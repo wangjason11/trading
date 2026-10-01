@@ -181,7 +181,8 @@ def find_ic_candidates(
     config : POIConfig
         Configuration for POI detection
     scenario_context : dict, optional
-        Additional context for scenario-specific conditions:
+        NOT READ — the POI_ZONES_SPEC §3.2 scenario conditions are not
+        implemented and no caller passes this. Designed contents:
         - scenario: 1, 2, or 3
         - reversal_confirmed_idx: idx where reversal was confirmed
         - prev_bos_price: previous structure's last BOS price
@@ -540,9 +541,9 @@ def derive_poi_zones(
             #      Fib zone meets at least the V30 (30%) threshold. Variants
             #      can downgrade (V90 → V60 → V30) or vanish entirely as the
             #      fib extends.
-            # (Condition 4 — scenario idx/price constraints — is gated at IC
-            # identification and not re-checked per candle: once the
-            # constraining event has fired, the comparison is fixed.)
+            # (Condition 4 — the scenario idx/price constraints of
+            # POI_ZONES_SPEC §3.2 — is NOT implemented: find_ic_candidates
+            # applies the base conditions only.)
             # End-state (`end_idx`) takes precedence: once ended, `status` is
             # "ended" regardless of activation conditions.
             cts_events_for_fib = cts_events_by_key.get((int(sid), int(cycle_id)), [])

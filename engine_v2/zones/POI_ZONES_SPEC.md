@@ -328,7 +328,7 @@ After each reversal, a black horizontal line shows the Scenario 1 revert thresho
 ## 3. Institutional Candle (IC) Identification
 
 IC identification is a two-step process:
-1. **IC Candidates** — Candles that meet base + scenario conditions
+1. **IC Candidates** — Candles that meet the base conditions (§3.1; the §3.2 scenario conditions are NOT implemented)
 2. **IC Variants** — From candidates, select by overlap threshold (V30/V60/V90)
 
 No IC candidates → No IC variants → No POI zones.
@@ -345,6 +345,12 @@ No IC candidates → No IC variants → No POI zones.
 If Fib is deactivated, there are no bounds → no candidates.
 
 ### 3.2 IC Candidate Scenario Conditions
+
+> **NOT IMPLEMENTED — the code has never applied this section (found 2026-09-30; unchanged since the POI build
+> `0033c53`, Week 7).** The tables below are the designed rule only. `passes_price_constraint` has no caller,
+> `find_ic_candidates`' `scenario_context` parameter is never read, and neither `derive_poi_zones` nor the MS in-flight
+> resolver `compute_poi_inners_for_cycle` passes one: IC candidates are §3.1's base conditions only. Week 9 Part 1
+> item 1 (one POI per cycle, `IDEA_PARKING_LOT.md` §D) decides whether to build it or drop it.
 
 Additional conditions based on which Fib scenario applies:
 
@@ -614,7 +620,7 @@ cfg = {
 ```
 Fib active for cycle
     ↓
-Find IC candidates (base + scenario conditions)
+Find IC candidates (base conditions, §3.1 — §3.2 not implemented)
     ↓
 Select IC variants (30%/60%/90% overlap with 61.8-80% Fib zone)
     ↓
