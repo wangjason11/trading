@@ -1,8 +1,8 @@
 # Plan H — One POI per cycle: the institutional-pattern IC (Week 9 Part 1 item 1)
 
 **Status: SPEC DECIDED (2026-10-05, after 6 rounds); the implementation plan (§8) REVIEWED and folded (2026-10-06, §8.8 + the
-user's R1–R4) — two landings (L1); landing A BUILT 2026-10-06 (§8.3a), its `/compare` == the prediction — paused
-before its `/commit-save`.** Living document: every question, answer and decision
+user's R1–R4) — two landings (L1); landing A BUILT 2026-10-06 (§8.3a), its `/compare` == the prediction, committed
+`e1c597c` + saved `20261006_120513_e1c597c` (S_A, R4); NEXT: §8.4.** Living document: every question, answer and decision
 of the item-1 discussion is recorded here as it happens (§5 open questions, §6 decisions). Register line:
 `IDEA_PARKING_LOT.md` §D.1 item 1.
 
@@ -648,7 +648,9 @@ the code from `FibState` prices — an exact-edge touch can differ). Then the ce
   (N18) → its 16 killing tests folded + 2 of mine (R1 past the frame; a mirrored record's legs) + 3 for the fail-loud
   nits. **Tests 1219; `mutants_plan_h_a.py` 98/98 KILLED** (66 + the review's 29 + 3). Fixture sizes sit near H1's
   2.2-pip floor (a floor recalibration — item 4 — makes them fail loudly, not pass vacuously).
-- **Next:** `/commit-save` (S_A, R4) → §8.4.
+- **Saved (2026-10-06):** source `e1c597c`, save `20261006_120513_e1c597c` = S_A (save commit `6a3a81d`, trunk
+  `492e7a8`; reuse mode of the verified confirming replay — FETCH GATE PASS, the saved 27 CSVs + 3 figures md5 / JSON
+  equal to it). **Next:** §8.4.
 
 ### 8.4 Between A and B — the variant replays that write B's prediction
 
