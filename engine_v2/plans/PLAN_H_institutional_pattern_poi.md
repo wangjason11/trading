@@ -1,7 +1,8 @@
 # Plan H — One POI per cycle: the institutional-pattern IC (Week 9 Part 1 item 1)
 
 **Status: SPEC DECIDED (2026-10-05, after 6 rounds); the implementation plan (§8) REVIEWED and folded (2026-10-06, §8.8 + the
-user's R1–R4) — two landings (L1); NEXT: landing A; no code yet.** Living document: every question, answer and decision
+user's R1–R4) — two landings (L1); landing A BUILT 2026-10-06 (§8.3a), its `/compare` == the prediction — paused
+before its `/commit-save`.** Living document: every question, answer and decision
 of the item-1 discussion is recorded here as it happens (§5 open questions, §6 decisions). Register line:
 `IDEA_PARKING_LOT.md` §D.1 item 1.
 
@@ -454,6 +455,12 @@ until I can review the charts".
   its disposition; R1–R4 asked of the user (the pattern's knowability, field names, the cond5 reason name, A's save).
 - 2026-10-06 — R1–R4 answered (§6: the moment `pattern_confirmed_idx`, the four renames, `ic_not_touching_fib_zone`,
   `/commit-save` after A); §8.0–8.7 rewritten with every §8.8 row folded; §1 item 14, §2, §4; status: NEXT landing A.
+- 2026-10-06 — landing A cold-reviewed (2 lenses, 453,157 tokens; §8.3a): 0 BLOCKER; 22 test gaps + 3 fail-loud nits
+  folded (tests 1219, mutants 98/98 KILLED); two B items into §8.5 step 3 (the sub-geometry `except`, the cost).
+- 2026-10-06 — landing A BUILT (§8.3a: code, 4 deviations, 89 + 2 tests → 1198, 66/66 mutants KILLED); `/compare` vs the
+  Week 8 save == the prediction (24/24 md5, figures + hovers equal, 3 new CSVs); A's check vs the prototype: every
+  record equal but the gated-out sub 3 cyc 3; docs: POI_ZONES_SPEC §3.4, GLOSSARY, IMBALANCE_FILL_SEMANTICS, the
+  `/compare` skill + WORKFLOWS + review_scripts README (27 CSVs).
 
 ## 8. Implementation plan (2026-10-05; REVIEWED + folded 2026-10-06 — §8.8; nothing built)
 
@@ -591,6 +598,58 @@ records (607 3A.iii / 732 3A.iv / 832 3C.ii); confluence 20, counter 7 (the prot
 gated out — active, not locked, ended); every difference explained (the prototype takes the zone from candle extremes,
 the code from `FibState` prices — an exact-edge touch can differ). Then the census (§8.4) and `/commit-save` → S_A.
 
+### 8.3a Landing A — as built (2026-10-06)
+
+- **Code:** new `patterns/institutional_pattern.py` (`leg_variants` → the stacks in one classifier call →
+  `rank_variant`; `classify_ics` / `classify_ip`; `IPResult`; the rank table `SINGLE_OPP_RANK` / `MULTI_OPP_RANK`);
+  `candles_v2.agreed_direction` + `AGREED_SPLIT` + `big_ratio_flags` (factored out of `classify_big_flags`);
+  `candle_classifier.candle_params_for_timeframe` + the `attrs["timeframe"]` stamp; `imbalance.iter_unfilled_imbalances`;
+  `poi_zones`: `POIConfig.ip_leg_cap_by_tf`, `find_ic_candidates(ic_direction=)`, `fib_zone_bounds`, `ic_touches_zone`,
+  `IPCandidate` / `IPSelection` / `select_ip_ic`, `_poi_record_gate`, `IPCandidateRecord` / `derive_ip_candidates`;
+  the orchestrator (`POIConfig()`, step 8b, `downstream` / `meta` / attrs `ip_candidates`); `LowerTFResult.ip_candidates`
+  + the mirror (`_IP_CANDIDATE_IDX_FIELDS`); `export_zones.export_ip_candidates` + the 3 `run_replay` calls; the two
+  qualified copies (`wave_candles._is_qualified`, `wvmi._find_temporary_lp`) read `agreed_direction`.
+- **Deviations from §8.1 / §8.3 (my calls, recorded here):** (1) the frame stamps ONLY `attrs["timeframe"]` (a str);
+  the IP derives its params with `candle_params_for_timeframe` — one source, and a params object in attrs would be
+  deep-copied on every pandas `__finalize__` from the classification on. (2) A touch-missing candidate keeps its own
+  pattern / reason in the CSV (`touches_zone` False, never picked) instead of reason `no_touch` — the T1 review sees
+  what it would have ranked. (3) `legs` is not stored: the CSV locates it from `ic_idx` + `ip_leg_candle_counts` (the
+  legs are contiguous) — a stored index string was left slice-local by the mirror on the first replay (caught by the
+  prototype check, fixed before the formal replay); a failing candidate's counts / stacks are its first failing
+  variant's. (4) The none row's reason is `no_pattern` (candidates, none picked) or `no_candidates`.
+- **Tests:** `tests/test_institutional_pattern.py` (89) + 2 in `test_event_meta_idx_keys.py` (the new module has no
+  index-like dict keys; `render_sub_projection` mirrors the candidates to both lenses) → **1198** (1107 + 91; `pytest`
+  from the repo root incl. the OANDA smoke). **Mutation:** `plan_h_inputs/mutants_plan_h_a.py`, 66 mutants (every IP
+  rule branch, the selection / TB1 / TB2a, the gate + rows, the mirror, the wiring) — first run 62/66 KILLED; the 4
+  survivors (a true doji INSIDE the initial run, the TB1 runner-up type order, the orchestrator's `POIConfig()`, the
+  ratio rounding) got a test each → **66/66 KILLED**.
+- **`/compare` (vs the Week 8 save, named explicitly):** `cmp_fig_full` 24/24 md5-equal, the 3 charts' full figure
+  JSON equal, NEW = exactly the 3 `*_ip_candidates.csv`; `cmp_save --names-from` 0 real cells, figures equal;
+  `cmp_hover` 0 / 0 / 0 — **== the prediction**. Replay 70.8 s (multi_tf_dual 10.0 s; the window's 41–96 s band); the
+  fetch gate 4228 M15 candles; run.log's 2 WARNING lines are `parent_tables`' degenerate (1,0) / (1,1) (H1 events
+  unchanged → pre-existing).
+- **A's check vs the round-6 prototype:** H1 3 / 3 records equal (607 3A.iii, 732 3A.iv, 832 3C.ii); confluence 20 /
+  21 and counter 7 / 8 equal — the one difference on each is sub 3 cyc 3 `[3304, 3611]`, which the record gate excludes
+  (active, not locked, ended) exactly as `derive_poi_zones` does (§8.8 PR11). TB2 as measured: 1875 over 1842 (reference
+  c2 1892), 4083 over 4136 (4132). `pattern_confirmed_idx` on the R1 rows: 2383 → 2386, 2704 → 2706, 3388 → 3391.
+  Rows: H1 78 (40 touch-misses), confluence 2985 (2530; 6 none rows), counter 409 (221; 0 none rows).
+- **Landing review (2026-10-06; 2 read-only lenses, 453,157 tokens — est. ~0.5M):** (1) code conformance (233,866):
+  0 BLOCKER — every §1 / §6 rule as decided, the 4 deviations implementation-only; a 24,106-call `select_ip_ic` sweep
+  over BOS × as-of CTS (H1 + M15, both sd): 0 exceptions, the leg / touch / `pattern_confirmed_idx` invariants on ~42,800
+  patterns; no look-ahead in-flight (6,207 calls on the frame truncated at the as-of CTS: identical selections); B's
+  three frames carry the stamp, the 0-based index and the columns. Two B items (→ §8.5): a SECOND swallowing scope
+  above the resolver for sub geometries, and the cost (+7.8–11.2 ms per resolver call, ~550 calls ≈ +4–5 s). Nits
+  folded: `_check_index` = `df.index.equals(pd.RangeIndex(len(df)))`; `attrs["pair"]` read directly (no silent
+  non-JPY default); `derive_ip_candidates` asserts like `derive_poi_zones` on a locked fib without CTS_ESTABLISHED;
+  `ip_tied_count` documented (the group the DECIDING rule broke: TB1 the rank tie, TB2 the TB1 survivors); the main
+  frame's fixed "H1" stamp → register §A. (2) Test gaps (219,291): 30 new mutants — 7 killed, 22 real survivors (no
+  sd = −1 pattern test: the stacks' max-high / min-low, the sell zone; `select_ip_ic` never ran on an M15 frame; the
+  CSV columns; the mirror with several subs per lens; TB1 / TB2 internals; R1's run == cap boundary; …), 1 equivalent
+  (N18) → its 16 killing tests folded + 2 of mine (R1 past the frame; a mirrored record's legs) + 3 for the fail-loud
+  nits. **Tests 1219; `mutants_plan_h_a.py` 98/98 KILLED** (66 + the review's 29 + 3). Fixture sizes sit near H1's
+  2.2-pip floor (a floor recalibration — item 4 — makes them fail loudly, not pass vacuously).
+- **Next:** `/commit-save` (S_A, R4) → §8.4.
+
 ### 8.4 Between A and B — the variant replays that write B's prediction
 
 - **Three variants** through scratch trees (`review_scripts/replay_variant.py`: a `git archive` of A + a minimal
@@ -614,7 +673,14 @@ the code from `FibState` prices — an exact-edge touch can differ). Then the ce
    idx guard's rule); `versions` / `current_versions` removed; no alias.
 2. Activation: cond5 → `ic_touches_zone` on the as-of zone, reason `ic_not_touching_fib_zone` (R3); `first_active =
    max(CTS-established moment, ic_idx, lifecycle floor, pattern_confirmed_idx)` (R1).
-3. The MS resolver → `select_ip_ic` outside the `try` (PR1).
+3. The MS resolver → `select_ip_ic` outside the `try` (PR1) — AND the second swallowing scope above it for sub
+   geometries: `entity_df_mutation.py` ~:1135–1147 wraps `compute_bounded_structure` in `except (ValueError,
+   IndexError): return None`, so an IP ValueError / IndexError inside a sub's MS would silently drop the WHOLE sub
+   (landing review). Narrow it to its documented failure (or the IP raises only KeyError / AssertionError); pin: an IP
+   error inside a sub geometry propagates, and the resolver on an unstamped `df_probe` (the Phase-2 frame) raises.
+   Name both scopes in LANDMINES. Cost: +7.8–11.2 ms per resolver call (75 % the stacks' one `classify_candles` call;
+   ~550 calls ≈ +4–5 s on the 70.8 s replay) — V3's resolver log confirms; memoize the stack types per
+   (frame, first, last) only if needed.
 4. The mirror shift list + `test_event_meta_idx_keys` (§8.2 row).
 5. Exports (`ip_rank` …), the hover builder × 3 sites, the H1 fib hover, the debug dump, `poi_per_cycle.py`.
 6. Docs in the same commit: POI_ZONES_SPEC §3 rewritten as the IP (from §1 here) + "Zone Data Fields" + §4
@@ -630,7 +696,7 @@ CTS_CONFIRMED + 10), the `_final.csv` MS columns from 926, the trigger scan star
 939 (+ the followers); the H1 WVMI gate attributions and the confluence WVMI `triggered_by_*` cells; M15 confluence
 subs 0–3 POIs == A's picks (19 → 10 rows; 1902 survives); the counter subs and confluence subs 4 / 6 / 7 re-derived,
 keyed on (direction, `starting_idx`) since `sub_id` is creation order; the `*_poi_zones.csv` columns; the hovers;
-the replay time (from V3). Then the chart review (the no-POI cycles, the touch rule, the re-derived counter lens).
+the replay time (from V3; the landing review measured ≈ +4–5 s). Then the chart review (the no-POI cycles, the touch rule, the re-derived counter lens).
 
 ### 8.6 Tests
 

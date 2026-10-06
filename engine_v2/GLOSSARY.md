@@ -115,7 +115,7 @@ meta `activated_at` is a moment (the activating event's; Plan E E3a, 2026-09-24 
 | **wave candle** | Candle at the boundary between two waves (ending wave → starting wave) at a KL zone |
 | **last wave candle** | Final candle of the ending wave (last pullback for BOS, last breakout for CTS) |
 | **first wave candle** | Initial candle of the starting wave (first breakout for BOS, first pullback for CTS) |
-| **qualified candle** | Candle with correct direction AND vol_dir matching (vol_dir == candle dir or vol_dir == 0) |
+| **qualified candle** | Candle with correct direction AND vol_dir matching (vol_dir == candle dir or vol_dir == 0) — i.e. its candle direction AND its **agreed direction** (Pattern Terms) are both that direction; wave candles + WVMI keep this rule (PLAN_H Q-W) and read it through `candles_v2.agreed_direction` |
 | **compound first-wave** | First wave candle condition: (big_normal & (maru OR normal)) OR (big_maru & pinbar & pinbar_dir == wave_dir) |
 | **BIB (base inside bar)** | Zone base pattern requiring special forward/backward search logic for wave candles |
 
@@ -161,6 +161,12 @@ meta `activated_at` is a moment (the activating event's; Plan E E3a, 2026-09-24 
 | **long-tail** | Candle with extended tail showing price rejection |
 | **maru** | Strong-bodied candle (marubozu-like) |
 | **breakout pattern** | Multi-candle pattern signaling structure break |
+| **agreed direction** | One direction per candle from its candle `direction` (sign(c − o)) and `vol_dir` (sign(c − prev c)): ±1 with vol the same or 0 → that direction; ±1 with vol opposite → a **split candle**; 0 with vol ±1 → a **volume-only doji** (directional); 0 / 0 → a **true doji** (0). `features/candles_v2.agreed_direction` (`AGREED_SPLIT` marks a split). The institutional pattern's legs and its IC candidates read it (PLAN_H §1 item 2, V1a / VD) |
+| **split candle** | Candle and volume direction opposite — belongs to no institutional-pattern leg, breaks every leg run, never an IC |
+| **volume-only doji** | A doji (o == c) whose close moved (vol ±1): an ordinary directional candle for the legs — it can be the IC (type `pinbar`, body 0) |
+| **true doji** | A doji with vol 0 (agreed 0): never breaks a leg run, a full member (cap + multi) of the leg it is assigned to; never the pattern's first or last candle (E1) |
+| **institutional pattern (IP)** | Initial leg (agreed sd) · opp leg (agreed −sd; the IC = its last candle) · continuation leg (agreed sd, a big maru with a body strictly greater than the opp leg's), ranked 1A–3D + shape i–iv (`ip_rank`, e.g. "2A.i"); ONE IC per fib = the best pattern among the §3.1 candidates touching the 61.8–80 zone (TB1 / TB2a). Canonical: `plans/PLAN_H_institutional_pattern_poi.md` §1; code `patterns/institutional_pattern.py` + `zones/poi_zones.select_ip_ic`. Exported, not yet drawn (landing A, 2026-10-06) |
+| **`pattern_confirmed_idx`** | The MOMENT an institutional pattern's continuation leg is known complete: its last candle when the leg reached the cap, else the next candle (the one that shows it ended). vs `pattern_end_idx` = the leg's last candle, a location (PLAN_H R1) |
 
 ---
 

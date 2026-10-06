@@ -190,6 +190,13 @@ In `engine_v2/patterns/imbalance.py`. For each instance in
 Returns `True` on the first unfilled survivor. `evaluated_at` is keyword-only
 and has no default: a caller that forgets its moment fails with a `TypeError`.
 
+**`iter_unfilled_imbalances`** (same arguments, PLAN_H landing A 2026-10-06)
+yields those survivors lazily in `df.attrs["imbalances"]` order;
+`has_unfilled_imbalance` IS `any(iter_unfilled_imbalances(...))` (it stops at
+the same instance). The institutional pattern's TB2a reads its reference
+imbalance (the earliest unfilled sd gap after the oldest tied IC) from it, so
+that "unfilled" is IC condition 3's own test.
+
 ### `get_unfilled_imbalances` / `has_imbalance_in_range` — DELETED 2026-09-30
 
 They had no production caller and no knowability cut (user decision: delete;

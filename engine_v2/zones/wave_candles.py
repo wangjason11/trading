@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Literal, Optional
 import pandas as pd
 
 from engine_v2.common.types import KLZone
+from engine_v2.features.candles_v2 import agreed_direction
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 
@@ -39,13 +40,16 @@ class WaveCandleResult:
 # ---------------------------------------------------------------------------
 
 def _is_qualified(df: pd.DataFrame, idx: int, required_dir: int) -> bool:
-    """Candle direction == required_dir AND vol_dir in (required_dir, 0)."""
+    """Candle direction == required_dir AND vol_dir in (required_dir, 0) — i.e.
+    the candle's direction and its agreed direction are both required_dir
+    (GLOSSARY "Qualified candle"; `candles_v2.agreed_direction`)."""
     if idx not in df.index:
         return False
-    if int(df.loc[idx, "direction"]) != required_dir:
+    direction = int(df.loc[idx, "direction"])
+    if direction != required_dir:
         return False
     vol_dir = int(df.loc[idx, "vol_dir"]) if "vol_dir" in df.columns else 0
-    return vol_dir == required_dir or vol_dir == 0
+    return int(agreed_direction(direction, vol_dir)) == required_dir
 
 
 def _touches_zone(df: pd.DataFrame, idx: int, zone: KLZone) -> bool:

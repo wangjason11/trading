@@ -47,7 +47,7 @@ def _run_one(k, mut, out, pytest_args, keep):
         shutil.rmtree(dst)
     try:
         shutil.copytree(os.path.join(REPO, "engine_v2"), os.path.join(dst, "engine_v2"),
-                        ignore=shutil.ignore_patterns("__pycache__", "plans"))
+                        ignore=shutil.ignore_patterns("__pycache__", "plans", ".ruff_cache"))
         p = os.path.join(dst, rel)
         s = open(p, encoding="utf-8").read()
         if s.count(old) != 1:

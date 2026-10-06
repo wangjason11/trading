@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
 from engine_v2.common.types import KLZone, WVMIRecord
+from engine_v2.features.candles_v2 import agreed_direction
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.poi_zones import POIZone
 from engine_v2.zones.wave_candles import WaveCandleResult
@@ -86,9 +87,10 @@ def _find_temporary_lp(
         if int(df.loc[i, "direction"]) != fp_dir:
             continue
 
-        # Must match FP vol_dir (or candle's vol_dir == 0)
+        # Must match FP vol_dir (or candle's vol_dir == 0): the agreed direction
+        # is fp_dir too (GLOSSARY "Qualified candle"; candles_v2.agreed_direction)
         candle_vol_dir = int(df.loc[i, "vol_dir"]) if "vol_dir" in df.columns else 0
-        if candle_vol_dir != fp_dir and candle_vol_dir != 0:
+        if int(agreed_direction(fp_dir, candle_vol_dir)) != fp_dir:
             continue
 
         c = float(df.loc[i, "c"])

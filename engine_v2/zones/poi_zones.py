@@ -24,8 +24,11 @@ import numpy as np
 import pandas as pd
 
 from engine_v2.common.types import ImbalanceInstance
-from engine_v2.features.fibonacci import FibRetracement
-from engine_v2.patterns.imbalance import has_unfilled_imbalance
+from engine_v2.features.candle_classifier import candle_params_for_timeframe
+from engine_v2.features.candles_v2 import agreed_direction
+from engine_v2.features.fibonacci import FibRetracement, calculate_fib_price
+from engine_v2.patterns.imbalance import has_unfilled_imbalance, iter_unfilled_imbalances
+from engine_v2.patterns.institutional_pattern import IC_TYPE_PREFERENCE, IPResult, classify_ics
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.fib_tracker import FibTracker, FibState, select_fib_anchor_for_cycle
@@ -76,6 +79,11 @@ class POIConfig:
 
     # Imbalance detection
     fill_threshold: float = 0.70  # 70% = filled
+
+    # Institutional-pattern leg cap per timeframe (PLAN_H §1 item 6: the initial leg = its run's most recent `cap`
+    # candles, the continuation = its first `cap`; H1 decision; M5 2 arrives with the M5 lens). An unknown TF
+    # raises (KeyError) — no default cap.
+    ip_leg_cap_by_tf: Dict[str, int] = field(default_factory=lambda: {"H1": 3, "M15": 3})
 
 
 def calculate_candle_overlap_pct(
@@ -163,6 +171,7 @@ def find_ic_candidates(
     fib_state: FibState,
     config: POIConfig,
     scenario_context: Optional[Dict] = None,
+    ic_direction: Optional[pd.Series] = None,
 ) -> List[int]:
     """
     Find IC candidates that meet base conditions.
@@ -189,6 +198,11 @@ def find_ic_candidates(
         - cts_established_idx: idx where CTS was established
         - prev_cts_price: CTS_N-1 price (for cycle 1+)
         - cross_cycle: bool (True if this is a cross-cycle Fib)
+    ic_direction : Series, optional
+        The direction condition 2 compares with `-struct_direction`, indexed
+        like `df`. None = the candle `direction` (the V30 / V60 / V90 path);
+        the institutional pattern passes the AGREED direction (PLAN_H VD — a
+        volume-only doji can be an IC, a split candle cannot).
 
     Returns
     -------
@@ -208,6 +222,7 @@ def find_ic_candidates(
     # Ensure we have the direction column
     if "direction" not in df.columns:
         return []
+    dir_col = df["direction"] if ic_direction is None else ic_direction
 
     # Search all candles within Fib bounds (inclusive)
     for idx in range(bos_idx, cts_idx + 1):
@@ -217,7 +232,7 @@ def find_ic_candidates(
         # Condition 1: Already satisfied by range
 
         # Condition 2: Opposite direction of struct_direction
-        candle_dir = int(df.loc[idx, "direction"])
+        candle_dir = int(dir_col.loc[idx])
         if candle_dir != -sd:
             continue
 
@@ -322,6 +337,136 @@ def select_ic_variants(
         ic_versions[idx].sort()
 
     return dict(ic_versions)
+
+
+def fib_zone_bounds(
+    anchor_high: float,
+    anchor_low: float,
+    sd: int,
+    config: POIConfig,
+) -> Tuple[float, float]:
+    """The IC zone `(zone_lo, zone_hi)` = the fib's `ic_fib_min`–`ic_fib_max`
+    (61.8–80) band, from its anchors (`features.fibonacci.calculate_fib_price` —
+    `FibRetracement.price_at_pct`'s formula). ONE helper for the institutional
+    pattern's touch and (PLAN_H §8.5) its as-of re-check."""
+    a = calculate_fib_price(anchor_high, anchor_low, config.ic_fib_min, sd)
+    b = calculate_fib_price(anchor_high, anchor_low, config.ic_fib_max, sd)
+    return min(a, b), max(a, b)
+
+
+def ic_touches_zone(high: float, low: float, zone_lo: float, zone_hi: float) -> bool:
+    """The IC touches the zone — inclusive at both edges (PLAN_H §1 item 1)."""
+    return high >= zone_lo and low <= zone_hi
+
+
+@dataclass(frozen=True)
+class IPCandidate:
+    """One §3.1 candidate of a fib record with its institutional pattern."""
+    ip: IPResult
+    touches_zone: bool
+
+
+@dataclass(frozen=True)
+class IPSelection:
+    """`select_ip_ic`'s answer for one fib: `candidates` (index order; with
+    `classify_misses` also the §3.1 candidates that miss the touch), `pick` (the
+    one IC, or None — no pattern, no POI), `tiebreak` = `(rule, runner_up_ic_idx,
+    tied_count, imbalance_first_c2_idx)` when TB1 / TB2 decided, else None —
+    `tied_count` = the size of the group the DECIDING rule broke (TB1: the
+    candidates tied on (rank, shape); TB2: the TB1 survivors)."""
+    candidates: Tuple[IPCandidate, ...]
+    pick: Optional[IPResult]
+    tiebreak: Optional[Tuple[str, int, int, Optional[int]]]
+
+
+def select_ip_ic(
+    df: pd.DataFrame,
+    fib_state: FibState,
+    config: POIConfig,
+    *,
+    classify_misses: bool = False,
+) -> IPSelection:
+    """ONE IC per fib, chosen by the institutional pattern (PLAN_H §1; D2: the
+    drawn POI and MS's in-flight read call this same function).
+
+    §3.1 candidates (`find_ic_candidates` with the AGREED direction) → the touch
+    of the 61.8–80 zone (inclusive) → each candidate's pattern
+    (`patterns.institutional_pattern.classify_ics`) → the best (rank, shape) →
+    TB1 (the IC's candle type, maru > normal > pinbar) → TB2a (the reference =
+    the earliest unfilled sd imbalance after the OLDEST tied IC — IC condition
+    3's own test, `iter_unfilled_imbalances`, `evaluated_at=None`; the pick = the
+    most recent tied IC before the reference's first c2 — an IC may be its c1).
+    TB1's runner-up = the most recent IC of the best type among its losers; TB2's
+    = the most recent other TB1 survivor.
+
+    The candle params come from the FRAME (`df.attrs["timeframe"]` →
+    `candle_params_for_timeframe`; a KeyError when unstamped — fail loudly), as
+    does the leg cap (`config.ip_leg_cap_by_tf`, KeyError on an unknown TF).
+    `classify_misses` (the debug CSV only) also classifies the candidates that
+    miss the touch — never picked.
+    """
+    timeframe = df.attrs["timeframe"]
+    params = candle_params_for_timeframe(timeframe)
+    cap = config.ip_leg_cap_by_tf[timeframe]
+    fib = fib_state.fib
+    if fib is None or not (fib_state.active or fib_state.locked):
+        return IPSelection((), None, None)
+    sd = int(fib_state.struct_direction)
+    agreed = agreed_direction(df["direction"].to_numpy(), df["vol_dir"].to_numpy())
+    candidates = find_ic_candidates(df, fib_state, config, ic_direction=pd.Series(agreed, index=df.index))
+    zone_lo, zone_hi = fib_zone_bounds(fib.anchor_high, fib.anchor_low, sd, config)
+    touches = {
+        i: ic_touches_zone(float(df.loc[i, "h"]), float(df.loc[i, "l"]), zone_lo, zone_hi) for i in candidates
+    }
+    to_classify = [i for i in candidates if classify_misses or touches[i]]
+    results = classify_ics(
+        df, to_classify, sd,
+        bos_anchor_idx=fib_state.bos_idx, cts_anchor_idx=fib_state.cts_idx,
+        agreed=agreed, cap=cap, params=params,
+    )
+    cands = tuple(IPCandidate(ip=r, touches_zone=touches[r.ic_idx]) for r in results)
+
+    patterns = [c.ip for c in cands if c.touches_zone and c.ip.rank is not None]
+    if not patterns:
+        return IPSelection(cands, None, None)
+    best_key = min(r.order_key for r in patterns)
+    tied = [r for r in patterns if r.order_key == best_key]
+    if len(tied) == 1:
+        return IPSelection(cands, tied[0], None)
+
+    def _type_rank(r: IPResult) -> int:
+        return IC_TYPE_PREFERENCE.index(str(df.loc[r.ic_idx, "candle_type"]))
+
+    best_type = min(_type_rank(r) for r in tied)
+    tb1 = [r for r in tied if _type_rank(r) == best_type]
+    if len(tb1) == 1:
+        losers = [r for r in tied if r is not tb1[0]]
+        runner_type = min(_type_rank(r) for r in losers)
+        runner_up = max(r.ic_idx for r in losers if _type_rank(r) == runner_type)
+        return IPSelection(cands, tb1[0], ("TB1", int(runner_up), len(tied), None))
+
+    oldest = min(r.ic_idx for r in tb1)
+    reference = min(
+        iter_unfilled_imbalances(
+            df, oldest + 1, fib_state.cts_idx, fib_state.cts_idx, config.fill_threshold,
+            direction=sd, evaluated_at=None,
+        ),
+        key=lambda inst: inst.start_idx,
+    )
+    # Structural: a c2's candle direction is sd (`compute_imbalance`) and a merged run is contiguous, while an IC's
+    # candle direction is -sd or 0 — no reference gap can straddle the oldest tied IC (PLAN_H §8.8 PR13).
+    assert reference.start_idx > oldest, (
+        f"[poi_zones] TB2 reference imbalance {reference.start_idx} not after the oldest tied IC {oldest}")
+    pick = max((r for r in tb1 if r.ic_idx < reference.start_idx), key=lambda r: r.ic_idx)
+    runner_up = max(r.ic_idx for r in tb1 if r is not pick)
+    return IPSelection(cands, pick, ("TB2", int(runner_up), len(tb1), int(reference.start_idx)))
+
+
+def _poi_record_gate(fib_state: FibState) -> bool:
+    """The per-record lifecycle gate of `derive_poi_zones` (FIB_LIFECYCLE_SPEC §11): the
+    live condition-active version (active AND its cycle not ended) OR a locked
+    record. The institutional-pattern pass reads the same gate."""
+    return bool((fib_state.active and fib_state.end_idx is None) or fib_state.locked)
 
 
 def derive_poi_zones(
@@ -454,7 +599,7 @@ def derive_poi_zones(
         # condition-only post-Session-2, so we add `end_idx is None` (cycle not
         # ended) to reproduce today's behavior (today's `active` was also False
         # once a cycle ended).
-        if not ((fib_state.active and fib_state.end_idx is None) or fib_state.locked):
+        if not _poi_record_gate(fib_state):
             continue
 
         sid = fib_state.structure_id
@@ -672,6 +817,116 @@ def derive_poi_zones(
                       f"confirmed={inst.meta.get('confirmed_fill_idx')}")
 
     return zones
+
+
+@dataclass(frozen=True)
+class IPCandidateRecord:
+    """One row of the institutional-pattern debug export (`*_ip_candidates.csv`,
+    PLAN_H §8.3 landing A — computed, NOT yet drawn): a §3.1 candidate of a gated
+    fib record, or the record's `IP: none` row (`ic_idx` None) when it has no
+    pattern. Every index field is a dataclass field (the sub mirror shifts
+    `entity_df_mutation._IP_CANDIDATE_IDX_FIELDS`); `meta` = the attribution
+    (`structure_path_id`; a sub's mirror adds `sub_id` and the rest). The
+    tiebreak fields sit on the picked row."""
+    structure_id: int
+    cycle_id: int
+    struct_direction: int
+    bos_anchor_idx: int
+    cts_anchor_idx: int
+    ic_idx: Optional[int]
+    candle_type: Optional[str]
+    agreed_dir: Optional[int]
+    touches_zone: Optional[bool]
+    ip_rank: Optional[str]
+    reason: Optional[str]
+    pattern_anchor_idx: Optional[int]
+    opp_leg_first_idx: Optional[int]
+    pattern_end_idx: Optional[int]
+    pattern_confirmed_idx: Optional[int]
+    ip_leg_candle_counts: Optional[str]
+    picked: bool
+    ip_tiebreak: Optional[str] = None
+    ip_tb_runner_up_ic_idx: Optional[int] = None
+    ip_tied_count: Optional[int] = None
+    ip_tb_imbalance_first_c2_idx: Optional[int] = None
+    detail: Dict[str, Any] = field(default_factory=dict)
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+    def __deepcopy__(self, memo):
+        """Shared, never copied: these records sit in `df.attrs["ip_candidates"]`,
+        which pandas deep-copies on every `__finalize__` (the
+        `ImbalanceInstance.__deepcopy__` reasoning). Nothing mutates one in place
+        — the mirror builds shifted copies with `dataclasses.replace`."""
+        return self
+
+
+def derive_ip_candidates(
+    df: pd.DataFrame,
+    structure_events: List[StructureEvent],
+    fib_tracker: Optional[FibTracker],
+    config: POIConfig,
+    *,
+    structure_path_id: str,
+) -> List[IPCandidateRecord]:
+    """The institutional-pattern selection of every fib record `derive_poi_zones`
+    builds POIs from — its per-record gate (`_poi_record_gate`) and its "no
+    CTS_ESTABLISHED → no POI" skip — as debug records (PLAN_H §8.3: landing A
+    computes and exports the selection, switching nothing). One record per §3.1
+    candidate, the ones missing the touch included (`select_ip_ic(...,
+    classify_misses=True)`), + one `IP: none` record per fib record without a pick.
+    """
+    if fib_tracker is None:
+        return []
+    established = set()
+    for ev in structure_events:
+        if ev.type == "CTS_ESTABLISHED":
+            established.add((int(ev.meta["structure_id"]), int(ev.meta["cycle_id"])))
+    out: List[IPCandidateRecord] = []
+    for fib_state in fib_tracker.get_fibs_for_charting():
+        if not _poi_record_gate(fib_state):
+            continue
+        sid, cycle_id = int(fib_state.structure_id), int(fib_state.cycle_id)
+        if (sid, cycle_id) not in established:
+            # as `derive_poi_zones`: a locked fib always has its CTS_ESTABLISHED (event contract)
+            assert not fib_state.locked, f"[poi_zones] locked fib {(sid, cycle_id)} has no CTS_ESTABLISHED"
+            continue
+        sel = select_ip_ic(df, fib_state, config, classify_misses=True)
+        base = (sid, cycle_id, int(fib_state.struct_direction), int(fib_state.bos_idx), int(fib_state.cts_idx))
+        for c in sel.candidates:
+            r = c.ip
+            picked = sel.pick is not None and r.ic_idx == sel.pick.ic_idx
+            tb = sel.tiebreak if picked and sel.tiebreak is not None else (None, None, None, None)
+            out.append(IPCandidateRecord(
+                *base,
+                ic_idx=int(r.ic_idx),
+                candle_type=str(df.loc[r.ic_idx, "candle_type"]),
+                agreed_dir=int(agreed_direction(df.loc[r.ic_idx, "direction"], df.loc[r.ic_idx, "vol_dir"])),
+                touches_zone=bool(c.touches_zone),
+                ip_rank=r.ip_rank,
+                reason=r.reason,
+                pattern_anchor_idx=r.pattern_anchor_idx,
+                opp_leg_first_idx=r.opp_leg_first_idx,
+                pattern_end_idx=r.pattern_end_idx,
+                pattern_confirmed_idx=r.pattern_confirmed_idx,
+                ip_leg_candle_counts=r.ip_leg_candle_counts,
+                picked=picked,
+                ip_tiebreak=tb[0],
+                ip_tb_runner_up_ic_idx=tb[1],
+                ip_tied_count=tb[2],
+                ip_tb_imbalance_first_c2_idx=tb[3],
+                detail=dict(r.detail),
+                meta={"structure_path_id": structure_path_id},
+            ))
+        if sel.pick is None:
+            out.append(IPCandidateRecord(
+                *base,
+                ic_idx=None, candle_type=None, agreed_dir=None, touches_zone=None, ip_rank=None,
+                reason="no_pattern" if sel.candidates else "no_candidates",
+                pattern_anchor_idx=None, opp_leg_first_idx=None, pattern_end_idx=None,
+                pattern_confirmed_idx=None, ip_leg_candle_counts=None, picked=False,
+                meta={"structure_path_id": structure_path_id},
+            ))
+    return out
 
 
 def _compute_fill_idx_cache(

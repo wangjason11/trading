@@ -63,6 +63,11 @@ no slice-local allow-list since Post-E·2 (2026-09-26, PLAN_E §9.3). It also sc
 slice-local source + `slice_begin`). Since the Post-E·2 landing review it also checks the lists themselves (index-like
 names only, never a known non-index, every entry emitted by its element kind), every mirror shift site on a synthetic
 result, a broad emitter scan (`**{...}` splats, attribute subscripts, `setdefault`) and every int meta value by type.
+**The guard sees only KEYS and INT values — never an index inside a string or a derived value.** PLAN_H landing A
+(2026-10-06): an IP record carried `detail["legs"] = "279..281|282..283|284..286"` (slice-local positions as text);
+the mirror shifted every index FIELD and left the string, so the M15 CSV showed sub-slice positions for IC 687 (the
+prototype check caught it, before the formal replay). Keep candle indices in shift-listed fields only and DERIVE any
+display text from them at export time (`export_zones._ip_legs`: from `ic_idx` + the leg counts).
 Rule 4 use, Plan E E2a (2026-09-24): `CTS_ESTABLISHED.meta["cts_anchor_idx"]` and
 `BOS_CONFIRMED.meta["bos_anchor_idx"]` (documented in ARCHITECTURE "`ev.idx` convention"). Rule 3 meaning
 change, Plan E E4a (2026-09-25): `CTS_ESTABLISHED.idx` := the MOMENT (`== meta["confirmed_at"]`, asserted at

@@ -21,7 +21,7 @@ Merged gap bounds:
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Iterator, List, Optional
 
 import pandas as pd
 
@@ -159,6 +159,29 @@ def has_unfilled_imbalance(
     fill_threshold
         Retracement fraction (default 0.70) at which stroke 1 fires.
     """
+    return any(iter_unfilled_imbalances(
+        df, start_idx, end_idx, check_to_idx, fill_threshold,
+        direction=direction, evaluated_at=evaluated_at,
+    ))
+
+
+def iter_unfilled_imbalances(
+    df: pd.DataFrame,
+    start_idx: int,
+    end_idx: int,
+    check_to_idx: int,
+    fill_threshold: float = 0.70,
+    *,
+    direction: Optional[int] = None,
+    evaluated_at: Optional[int],
+) -> Iterator[ImbalanceInstance]:
+    """The instances `has_unfilled_imbalance` answers about, in
+    `df.attrs["imbalances"]` order — every instance overlapping `[start_idx,
+    end_idx]` (its formed prefix as of `evaluated_at`), of `direction`, and not
+    two-stroke-filled as of `check_to_idx`. Same arguments and filters, lazily:
+    `has_unfilled_imbalance` == `any(...)`, stopping at the same instance. The
+    institutional pattern's TB2a reads its reference imbalance here, so its
+    "unfilled" IS IC condition 3's test (PLAN_H §1 item 10)."""
     for inst in df.attrs.get("imbalances", []):
         if direction is not None and inst.direction != direction:
             continue
@@ -168,5 +191,4 @@ def has_unfilled_imbalance(
         elif not inst.overlaps_formed_prefix(start_idx, end_idx, evaluated_at):
             continue
         if not inst.is_filled(df, check_to_idx, fill_threshold):
-            return True
-    return False
+            yield inst

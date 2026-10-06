@@ -378,6 +378,14 @@ def main() -> None:
                 f"artifacts/debug/{basename}_{leaf_label}_poi_zones.csv",
             )
 
+            # Debug: this lens's institutional-pattern selection (PLAN_H §8.3 —
+            # computed, not yet drawn; one copy per lens like the POIs).
+            from engine_v2.debug.export_zones import export_ip_candidates
+            export_ip_candidates(
+                sub_entry.df.attrs.get("ip_candidates", []) or [],
+                f"artifacts/debug/{basename}_{leaf_label}_ip_candidates.csv",
+            )
+
             # (The per-sub `_sids.csv` is gone — its role is split across
             # `_subs.csv` / `_triggers.csv` written above, §17.9.)
 
@@ -418,6 +426,8 @@ def main() -> None:
     from engine_v2.debug.export_zones import export_kl_zones, export_poi_zones
     export_kl_zones(res.meta.get("kl_zones", []), f"artifacts/debug/{basename}_kl_zones.csv")
     export_poi_zones(res.meta.get("poi_zones", []) or [], f"artifacts/debug/{basename}_poi_zones.csv")
+    from engine_v2.debug.export_zones import export_ip_candidates
+    export_ip_candidates(res.meta.get("ip_candidates", []) or [], f"artifacts/debug/{basename}_ip_candidates.csv")
 
     from engine_v2.debug.export_wvmi import export_wvmi
     export_wvmi(res.meta.get("wvmi", []) or [], f"artifacts/debug/{basename}_wvmi.csv")

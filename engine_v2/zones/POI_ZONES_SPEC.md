@@ -330,7 +330,8 @@ After each reversal, a black horizontal line shows the Scenario 1 revert thresho
 > **PENDING REDEFINITION — Week 9 Part 1 item 1 (spec decided 2026-10-05, `../plans/PLAN_H_institutional_pattern_poi.md`;
 > register `IDEA_PARKING_LOT.md` §D.1 item 1).** ONE IC per cycle, chosen by the *institutional pattern* among the §3.1
 > candidates (with the agreed direction) that touch the 61.8–80 zone, replaces §3.3's V30 / V60 / V90 selection (its
-> code is kept, unwired). Until that lands (PLAN_H landing B), this section describes the CURRENT code.
+> code is kept, unwired). Until that lands (PLAN_H landing B), this section describes the CURRENT code. **Landing A
+> (2026-10-06)** computes the selection on the same fib records and EXPORTS it — §3.4 — without drawing it.
 
 IC identification is a two-step process:
 1. **IC Candidates** — Candles that meet the base conditions (§3.1; the §3.2 scenario conditions are NOT implemented)
@@ -415,6 +416,32 @@ def calculate_candle_overlap_pct(candle_high, candle_low, fib_zone_top, fib_zone
 **Storage:** Group by unique IC candle, store qualifying versions as metadata.
 - Example: IC at idx 150 with 95% overlap → `versions: ["V30", "V60", "V90"]`
 - Example: IC at idx 150 (40%), IC at idx 140 (95%) → Two ICs, idx 150 has `["V30"]`, idx 140 has `["V60", "V90"]`
+
+### 3.4 The institutional-pattern selection — computed and exported, NOT yet drawn (PLAN_H landing A, 2026-10-06)
+
+`poi_zones.derive_ip_candidates` runs `select_ip_ic` (the canonical rules: `../plans/PLAN_H_institutional_pattern_poi.md`
+§1; the pattern itself: `patterns/institutional_pattern.py`) on every fib record `derive_poi_zones` builds POIs from —
+the same per-record gate (`_poi_record_gate`) and the same "no CTS_ESTABLISHED → no POI" skip — in every downstream
+run (the main, every sub projection). Nothing reads the records but the exporter; the drawn POIs and MS's in-flight
+read still use §3.3 until landing B.
+
+- **Where:** `downstream["ip_candidates"]` → the main's `meta` / `df.attrs["ip_candidates"]`; a sub's
+  `LowerTFResult.ip_candidates`, mirrored (shifted by `entity_df_mutation._IP_CANDIDATE_IDX_FIELDS`, the lens's
+  attribution on `meta`) onto each lens df like the POIs.
+- **Export:** `debug/export_zones.export_ip_candidates` → `*_ip_candidates.csv` (H1) and `*_M15_{lens}_ip_candidates.csv`
+  (one copy per lens). One row per §3.1 candidate of each record — **with the agreed direction**, so a volume-only doji
+  is listed and a split candle is not — including the candidates that MISS the touch (`touches_zone` False: classified
+  for the record, never picked), + one `IP: none` row (`ic_idx` empty, `reason` `no_pattern` / `no_candidates`) per
+  record without a pick. Columns: the attribution (`structure_path_id`, `sub_id`, `parent_sid`, `parent_cycle_id`),
+  the record (`structure_id`, `cycle_id`, `bos_anchor_idx`, `cts_anchor_idx`, `sd`), the candidate (`ic_idx`,
+  `candle_type`, `agreed_dir`, `touches_zone`), the pattern (`ip_rank` e.g. "1A.iv", `reason` = the first failing rule
+  when there is none, `pattern_anchor_idx`, `opp_leg_first_idx`, `pattern_end_idx`, `pattern_confirmed_idx` — the
+  moment the continuation leg is known complete, R1 —, `ip_leg_candle_counts` "a-b-c", `legs` "first..last" per leg,
+  located from `ic_idx` + the counts), each leg stack's `*_type` / `*_ratio` (vs the 5 marus before the pattern's first
+  candle) / `*_body_pips`, and `picked` + the tiebreak (`ip_tiebreak` TB1 / TB2, `ip_tb_runner_up_ic_idx`,
+  `ip_tied_count` — the size of the group the DECIDING rule broke: TB1 the (rank, shape) tie, TB2 the TB1 survivors —,
+  `ip_tb_imbalance_first_c2_idx`) on the picked row. A failing candidate's `ip_leg_candle_counts` /
+  stacks are its first failing variant's.
 
 ---
 
@@ -650,7 +677,8 @@ Charting renders zones + Fib lines + imbalance highlighting
 | `patterns/imbalance.py` | Imbalance (FVG) pattern detection + fill checking |
 | `features/fibonacci.py` | Fib level calculation |
 | `zones/fib_tracker.py` | FibTracker lifecycle (activation/update/lock) |
-| `zones/poi_zones.py` | POI zone derivation (3 variants) |
+| `zones/poi_zones.py` | POI zone derivation (3 variants); the IP selection (`select_ip_ic`, `derive_ip_candidates`, §3.4) |
+| `patterns/institutional_pattern.py` | The institutional pattern of one IC candidate (legs, stacks, ranks — PLAN_H §1) |
 | `charting/export_plotly.py` | Rendering (Fib lines + zones) |
 | `charting/style_registry.py` | Visual styles |
 

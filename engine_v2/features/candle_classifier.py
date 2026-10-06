@@ -37,6 +37,18 @@ DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF: dict[str, float] = {
 }
 
 
+def candle_params_for_timeframe(timeframe: str):
+    """The candle params a frame of `timeframe` is classified with — the ONE
+    reader of `DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF`. Unknown TFs degrade to no
+    floor (candle_type purely body_pct-driven). `apply_candle_classification`
+    classifies with it and stamps `df.attrs["timeframe"]`, so a later reader
+    (the institutional pattern's stacked legs, PLAN_H §8.1) re-derives exactly
+    the params of that frame's single candles."""
+    from engine_v2.features.candle_params import CandleParams
+
+    return CandleParams(pinbar_body_pip_floor=DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF.get(str(timeframe), 0.0))
+
+
 @dataclass
 class CandleClassifierResult:
     df: pd.DataFrame
@@ -57,18 +69,21 @@ def apply_candle_classification(
     reclassification (see `DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF`). Unknown TFs
     degrade to no floor (candle_type purely body_pct-driven). Default "H1"
     matches the H1-main call site which doesn't pass it.
+
+    Stamps `df.attrs["timeframe"]` (a str — never the params object: attrs are
+    deep-copied on every pandas `__finalize__`); readers get the params via
+    `candle_params_for_timeframe(df.attrs["timeframe"])`.
     """
     _validate_input(df)
 
     # --- LEGACY HOOK (edit this block only) -----------------------
     #
-    from engine_v2.features.candle_params import CandleParams
     from engine_v2.features.candles_v2 import compute_candle_features
 
-    body_pip_floor = DEFAULT_PINBAR_BODY_PIP_FLOOR_BY_TF.get(str(timeframe), 0.0)
-    params = CandleParams(pinbar_body_pip_floor=body_pip_floor)
+    params = candle_params_for_timeframe(timeframe)
 
     df = compute_candle_features(df, params, anchor_shifts=(0,1,2))
+    df.attrs["timeframe"] = str(timeframe)
     notes = "Candle features computed via features.candles_v2"
     # --------------------------------------------------------------
 

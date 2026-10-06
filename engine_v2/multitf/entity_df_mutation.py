@@ -158,6 +158,21 @@ _FIB_META_IDX_KEYS = (
                               # (`cycle1_bos_idx` until Post-E·5, 2026-09-30)
 )
 
+# IPCandidateRecord DATACLASS FIELDS with entity-df indices (PLAN_H §8.3, the
+# institutional-pattern debug records; their `meta` holds only the
+# attribution). Each may be None (an `IP: none` row, a failed pattern).
+_IP_CANDIDATE_IDX_FIELDS = (
+    "bos_anchor_idx",
+    "cts_anchor_idx",
+    "ic_idx",
+    "pattern_anchor_idx",
+    "opp_leg_first_idx",
+    "pattern_end_idx",
+    "pattern_confirmed_idx",
+    "ip_tb_runner_up_ic_idx",
+    "ip_tb_imbalance_first_c2_idx",
+)
+
 # WaveCandleResult meta keys with entity-df indices (the dataclass fields
 # first/last_wave_candle_idx are shifted separately). Attrs only — no CSV.
 _WAVE_CANDLE_META_IDX_KEYS = (
@@ -305,6 +320,17 @@ def mirror_lower_tf_result_to_entity_df(
         new_meta.update(attribution)
         new_poi.append(replace(z, ic_idx=z.ic_idx + slice_begin, meta=new_meta))
     _attrs_setdefault_list(entity_df, "poi_zones").extend(new_poi)
+
+    # 5b. Institutional-pattern debug records (PLAN_H §8.3) — index FIELDS
+    #     shifted (None stays None), the attribution on a new meta per lens.
+    new_ip = []
+    for r in result.ip_candidates:
+        shifted = {
+            f: int(getattr(r, f)) + slice_begin
+            for f in _IP_CANDIDATE_IDX_FIELDS if getattr(r, f) is not None
+        }
+        new_ip.append(replace(r, meta={**r.meta, **attribution}, **shifted))
+    _attrs_setdefault_list(entity_df, "ip_candidates").extend(new_ip)
 
     # 6. Fib states — direct bos_idx / cts_idx + meta. The scalar lifecycle
     #    fields (FIB_LIFECYCLE_SPEC.md §15) carry slice-local indices: both
@@ -1247,6 +1273,7 @@ def render_sub_projection(
         wave_candles=down["wave_candles"],
         fib_states=down["fib_states"],
         poi_zones=down["poi_zones"],
+        ip_candidates=down["ip_candidates"],
         # slice-local, the first lens's path, meta {} — the lens copies get
         # their own path (the mirror) and trigger meta (the orchestrator)
         wvmi_records=down["wvmi_records"],

@@ -86,7 +86,7 @@ data — the same guard as `/commit-save` reuse mode.
 ### 2b. Post-replay log grep (fetch gate FIRST, then the silent-skip grep)
 
 **Fetch-completeness gate: MANDATORY, and it runs before any diff is
-trusted.** The M15 input is not among the 24 saved CSVs and saves carry no
+trusted.** The M15 input is not among the 27 saved CSVs and saves carry no
 `run.log`, so an incomplete M15 frame shows up only as M15 deltas that look
 exactly like an engine change. This happened in a 2026-09-22 audit run:
 `multitf/data_bridge.fetch_lower_tf_data` (14-day OANDA chunks) then printed a
@@ -420,7 +420,7 @@ All changes are causally linked to the root change.
 Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 **M15.confluence**. Compare every file md5 by entity:
 
-**H1.main** (9 files):
+**H1.main** (10 files):
 
 | File pattern |
 |--|
@@ -429,12 +429,13 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_structure_levels.csv` |
 | `*_kl_zones.csv` |
 | `*_poi_zones.csv` |
+| `*_ip_candidates.csv` — the institutional-pattern selection (PLAN_H landing A; computed, not yet drawn) |
 | `*_structure_events.csv` |
 | `*_imbalance_instances.csv` |
 | `*_fib_lifecycle.csv` |
 | `*_wvmi.csv` |
 
-**M15.counter** and **M15.confluence** (7 files each — 5 per-lens debug CSVs
+**M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
 `*_M15_confluence_`, plus the two per-lens pool tables):
 
@@ -443,6 +444,7 @@ with the same filename suffixes prefixed `*_M15_counter_` /
 | `*_M15_{lens}_structure_events.csv` | chart loop (`run_replay.py`) |
 | `*_M15_{lens}_kl_zones.csv` | chart loop |
 | `*_M15_{lens}_poi_zones.csv` | chart loop |
+| `*_M15_{lens}_ip_candidates.csv` | chart loop |
 | `*_M15_{lens}_fib_lifecycle.csv` | chart loop |
 | `*_M15_{lens}_wvmi.csv` | chart loop |
 | `*_M15_{lens}_subs.csv` — one row per unique sub on this lens | `debug/export_sub_tables.py`, BEFORE the chart loop |
@@ -451,8 +453,11 @@ with the same filename suffixes prefixed `*_M15_counter_` /
 **Pool-wide** (1 file): `*_M15_unresolved_triggers.csv` — one row per
 `UnresolvedTrigger` (`debug/export_sub_tables.py`, written once).
 
-Total: **9 + 2×7 + 1 = 24 CSVs** per replay (POI-zones CSVs added 2026-06-08;
-pool tables added by Plan C 2026-09-20). `*_M15_{lens}_sids.csv` is **GONE**
+Total: **10 + 2×8 + 1 = 27 CSVs** per replay (POI-zones CSVs added 2026-06-08;
+pool tables added by Plan C 2026-09-20; the three `*_ip_candidates.csv` by PLAN_H
+landing A 2026-10-06 — a save before it has 24, so against one `cmp_fig_full.py`
+lists exactly those three as `NEW (no baseline)` and exits 1, and `cmp_save.py`
+never lists a current-only file). `*_M15_{lens}_sids.csv` is **GONE**
 since Plan C — its role is split across `_subs.csv` / `_triggers.csv`. **Delete
 stale `*_sids.csv` copies from `artifacts/debug/` before comparing**: the replay
 no longer writes them, so a leftover from a pre-Plan-C run is never overwritten
@@ -585,7 +590,7 @@ fib shows only in `_fib_lifecycle.csv`. H1 and confluence counts were unchanged.
 These print as `DEBUG traces:` / `DEBUG shapes:` (H1) and `[m15_chart] traces:
 N, shapes: M` (each M15 entity) at the end of `python -m engine_v2.run_replay`.
 
-A run with all 24 CSVs byte-identical but shifted chart counts means a
+A run with all CSVs byte-identical (27; 24 before 2026-10-06) but shifted chart counts means a
 purely rendering-side change (e.g. style registry tweak). A run with
 matching chart counts but mismatched CSVs means a logic change. Both
 matrices clean = full parity.

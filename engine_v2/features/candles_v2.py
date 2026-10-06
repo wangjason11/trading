@@ -9,6 +9,42 @@ from engine_v2.features.candle_params import CandleParams
 
 EPS = 1e-12
 
+# The agreed direction's split-candle value (`agreed_direction`): a candle whose
+# candle direction and volume direction are opposite belongs to no leg.
+AGREED_SPLIT = 2
+
+
+def agreed_direction(direction, vol_dir) -> np.ndarray:
+    """The AGREED direction of each candle (PLAN_H §1 item 2, V1a — GLOSSARY
+    "Agreed direction"): candle `direction` (sign(c - o)) and `vol_dir`
+    (sign(c - prev c), `compute_volume_features`) together.
+
+      direction ±1, vol_dir the same or 0 -> the candle's direction
+      direction ±1, vol_dir the opposite  -> `AGREED_SPLIT` (a split candle)
+      direction 0,  vol_dir ±1            -> vol_dir (a volume-only doji)
+      direction 0,  vol_dir 0             -> 0 (a true doji)
+
+    Element-wise on arrays; a scalar pair gives a 0-d array (`int(...)` it).
+    For d = ±1, "qualified in d" (GLOSSARY "Qualified candle": direction == d
+    and vol_dir in (d, 0)) == `direction == d and agreed == d`.
+    """
+    d = np.asarray(direction).astype(int)
+    v = np.asarray(vol_dir).astype(int)
+    return np.where(d == 0, v, np.where((v == 0) | (v == d), d, AGREED_SPLIT))
+
+
+def big_ratio_flags(length: float, prior_max: float, params: CandleParams):
+    """The single-candle big-flag rule: `(ratio, big_maru_ratio, big_normal_ratio)`
+    of a candle (or a stacked leg) of range `length` against the max range of the
+    prior `lookback` marus (`prior_max`), or None when there is no prior maru
+    (`prior_max <= EPS` -> no flag). Ratio-only — the type gate (big_maru needs
+    a maru, big_normal a normal) is the caller's. `classify_big_flags` and the
+    institutional pattern's stacks read this one rule."""
+    if prior_max <= EPS:
+        return None
+    ratio = round(length / prior_max, 2)
+    return ratio, ratio >= params.big_maru_threshold, ratio >= params.big_normal_threshold
+
 
 def compute_candle_metrics(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -228,10 +264,11 @@ def classify_big_flags(
             prior_max = _prior_maru_max_len(out, idx=i, lookback=params.lookback, anchor_shift=s)
             out.loc[i, f"prior_maru_max_len_as{s}"] = prior_max
 
-            if prior_max <= EPS:
+            flags = big_ratio_flags(lengths[i], prior_max, params)
+            if flags is None:
                 continue
 
-            ratio = round(lengths[i] / prior_max, 2)
+            ratio, is_big_maru, is_big_normal = flags
             out.loc[i, f"big_ratio_as{s}"] = ratio
 
             # big_maru / big_normal are ratio-only (current candle_len vs the
@@ -241,10 +278,10 @@ def classify_big_flags(
             # (params.pinbar_body_pip_floor), so they can never be maru — nor
             # enter the prior-maru pool — in the first place. The floor that
             # used to live here now lives at the type-assignment layer.
-            if ratio >= params.big_maru_threshold:
+            if is_big_maru:
                 out.loc[i, f"is_big_maru_as{s}"] = True
 
-            if ratio >= params.big_normal_threshold:
+            if is_big_normal:
                 out.loc[i, f"is_big_normal_as{s}"] = True
 
     return out

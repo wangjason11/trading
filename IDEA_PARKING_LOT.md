@@ -39,6 +39,11 @@ The open lines below carry over (fold in when their files are next touched); D a
   (`pipeline/orchestrator.py` ~:837; fold into item 1's landing B, which touches the orchestrator's `POIConfig`);
   `wvmi._find_temporary_lp` computes `fp_vol_dir` and never reads it (fold into "The agreed direction for wave candles
   + WVMI", D.2). OPEN.
+- **The H1-main frame is classified and stamped "H1" whatever the config timeframe** — `orchestrator.run_pipeline`
+  calls `apply_candle_classification(df)` with its default (`timeframe="H1"`), so a re-enabled M15-main window
+  (`config.py` keeps them commented out) would get H1's pinbar floor AND the institutional pattern's H1 cap / params
+  through the frame's `attrs["timeframe"]` (PLAN_H landing review, 2026-10-06). Pass `CONFIG.timeframe` (or assert H1)
+  when such a window comes back. OPEN; not reachable on the current config.
 - **Naming-Standard audit of never-audited index keys** — KL `bounds_steps[*].start_idx` (the base ANCHOR on the INIT
   step, a MOMENT on expansion steps — one key, two kinds), RANGE_STARTED `confirm_idx` / `start_idx`, STATE_CHANGED
   `effective_idx`. Parked by the user ("don't start unasked"); cheap; the `bounds_steps` one should land before
@@ -71,7 +76,8 @@ complete." Item 1 opens the next working session.
    continuation legs, ranks 1A–3D, tiebreakers) among the §3.1 candidates touching the 61.8–80 zone; no pattern → no
    POI. Canonical: `engine_v2/plans/PLAN_H_institutional_pattern_poi.md` (+ `plans/plan_h_inputs/`: the spec copy,
    figures, prototypes). Implementation plan PLAN_H §8 REVIEWED + folded 2026-10-06 (3 lenses, §8.8; the user's R1–R4 in §6);
-   next: two landings — A the selector + debug CSVs, nothing switched (then `/commit-save`); B the switch. The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
+   landing A (the selector + debug CSVs `*_ip_candidates.csv`, nothing switched) BUILT 2026-10-06, `/compare` == its
+   prediction (PLAN_H §8.3a); next: its `/commit-save`, the variant replays (§8.4), landing B (the switch). The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
    (D4). Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3 variants): H1 5 ICs over
    3 cycles; M15 confluence 30 over 19; counter 12 over 7. **What moves when the POIs move** (the user accepted it, D2 /
    C3 — "We won't be able to judge whether those changes are appropriate or correct until I can review the charts";

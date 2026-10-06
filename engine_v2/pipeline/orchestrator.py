@@ -29,7 +29,7 @@ from engine_v2.multitf.subsequent_counter_trigger import (
 from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
 # Week 7: POI zones
-from engine_v2.zones.poi_zones import derive_poi_zones, POIConfig
+from engine_v2.zones.poi_zones import derive_ip_candidates, derive_poi_zones, POIConfig
 from engine_v2.zones.structure_lifecycle import compute_cycle_lifecycle, compute_reversal_idx_by_sid
 from engine_v2.patterns.imbalance import compute_imbalance
 
@@ -209,7 +209,7 @@ def _run_downstream_pipeline(
     Extracted from run_pipeline so both H1 and lower-TF pipelines can reuse.
 
     Returns dict with keys: kl_zones, wave_candles, fib_states, fib_tracker,
-    poi_zones, wvmi_records, prev_bos_lines, sorted_events,
+    poi_zones, ip_candidates, wvmi_records, prev_bos_lines, sorted_events,
     zone_proximity_triggers
 
     `wvmi` (Plan G G1) — one of `WVMI_MODES`, anything else raises:
@@ -400,15 +400,9 @@ def _run_downstream_pipeline(
     # 7) Prev BOS lines
     prev_bos_lines = _prev_bos_lines(sorted_events, reversal_idx_by_new_sid, pfx)
 
-    # 8) POI zones
-    poi_config = POIConfig(
-        ic_fib_min=61.8,
-        ic_fib_max=80.0,
-        v30_threshold=0.30,
-        v60_threshold=0.60,
-        v90_threshold=0.90,
-        fill_threshold=0.70,
-    )
+    # 8) POI zones — ONE parameter source: the POIConfig defaults (PLAN_H §8.1;
+    # the MS in-flight resolver reads them too, with MS's own fill threshold).
+    poi_config = POIConfig()
     poi_zones = derive_poi_zones(
         df,
         events,
@@ -419,6 +413,17 @@ def _run_downstream_pipeline(
         cap_reason=cap_reason,
     )
     print(f"{pfx}[poi_zones] total=", len(poi_zones))
+
+    # 8b) The institutional-pattern selection (PLAN_H §8.3, landing A): computed
+    # on the same gated fib records and EXPORTED (`*_ip_candidates.csv`), not yet
+    # drawn — nothing reads it but the exporter.
+    ip_candidates = derive_ip_candidates(
+        df, events, fib_tracker, poi_config, structure_path_id=structure_path_id,
+    )
+    print(
+        f"{pfx}[ip] fib records={len({(r.structure_id, r.cycle_id, r.bos_anchor_idx, r.cts_anchor_idx) for r in ip_candidates})}, "
+        f"picks={sum(1 for r in ip_candidates if r.picked)}, rows={len(ip_candidates)}"
+    )
 
     # 9) WVMI (Plan G G1) — the main gates on its first sd zone-proximity
     # trigger per cycle; a sub (`wvmi="none"`) is ungated, computed here inside
@@ -460,6 +465,7 @@ def _run_downstream_pipeline(
         "fib_states": fib_states,
         "fib_tracker": fib_tracker,
         "poi_zones": poi_zones,
+        "ip_candidates": ip_candidates,
         "wvmi_records": wvmi_records,
         "prev_bos_lines": prev_bos_lines,
         "sorted_events": sorted_events,
@@ -550,6 +556,7 @@ def run_pipeline(
     meta["wave_candles"] = wave_candle_results
     meta["fib_states"] = fib_states
     meta["poi_zones"] = poi_zones
+    meta["ip_candidates"] = downstream["ip_candidates"]
     meta["fib_tracker"] = downstream["fib_tracker"]
     meta["wvmi"] = wvmi_records
     meta["prev_bos_lines"] = prev_bos_lines
@@ -564,6 +571,7 @@ def run_pipeline(
     s_res.df.attrs["wave_candles"] = wave_candle_results
     s_res.df.attrs["wvmi"] = wvmi_records
     s_res.df.attrs["poi_zones"] = poi_zones
+    s_res.df.attrs["ip_candidates"] = downstream["ip_candidates"]
     s_res.df.attrs["zone_proximity_triggers"] = zone_proximity_triggers
     s_res.df.attrs["structure_events"] = s_res.events
     s_res.df.attrs["fib_states"] = fib_states
