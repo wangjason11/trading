@@ -462,7 +462,7 @@ until I can review the charts".
   record equal but the gated-out sub 3 cyc 3; docs: POI_ZONES_SPEC §3.4, GLOSSARY, IMBALANCE_FILL_SEMANTICS, the
   `/compare` skill + WORKFLOWS + review_scripts README (27 CSVs).
 
-## 8. Implementation plan (2026-10-05; REVIEWED + folded 2026-10-06 — §8.8; nothing built)
+## 8. Implementation plan (2026-10-05; REVIEWED + folded 2026-10-06 — §8.8; A built + saved §8.3a; §8.4 measured §8.4a)
 
 ### 8.0 Shape
 
@@ -666,6 +666,88 @@ the code from `FibState` prices — an exact-edge touch can differ). Then the ce
   appear in V3, or the difference is explained before B.
 - **The test census** (a pytest plugin, `census_plugin.py`'s recipe) on A's suite with the V3 patch: per test the
   POIs built, the resolver's inners, the IP pick or none → every moved pin listed as re-pin / re-derive / retire (PR7).
+
+### 8.4a Between A and B — as measured (2026-10-06)
+
+**Tools** (`plan_h_inputs/`): `variant_patch.py TREE V1|V2|V3` (the minimal behaviour patches on a `git archive` of
+A — V1 7 edits / V2 1; no meta migration: `versions` = `[ip_rank]`, activation entries carry `["touch"]`);
+`replay_variant_h.py TREE A_POI_ZONES LOG.json [--nolog]` (the real replay through the tree, cwd = a short work dir
+with `oanda.cfg` — `%TEMP%/ph/<v>`: under the session scratchpad the M15 CSV names exceed MAX_PATH; logs every
+resolver call (caller from the stack, as-of anchors, A's inners for the same arguments, both times, the IP pick),
+every other `select_ip_ic` call (drawn / CSV), `select_ip_ic` errors before they propagate, and per drawn POI its
+history with cond5 forced (A's sweep at a 0 % threshold) and without the R1 floor); `variant_report.py BASE CUR`
+(keyed: md5, POIs per lens keyed by the sub's (direction, `starting_idx`), events, triggers, subs, `_final.csv`);
+`resolver_log_report.py LOG`; `census_h_plugin.py` + `census_h_diff.py` (per test: POIs, direct activation histories,
+resolver answers, picks, outcome — A's tree vs V3's).
+
+**V1 (the drawn POI only) vs S_A:** H1 POIs 5 → 3 (607 3A.iii / 732 3A.iv / 832 3C.ii); H1 events unchanged; the
+zone-proximity scan reads the new POIs → counter triggers 2843 → 2995 (H1 710 → 748), 3707 → 3759 (926 → 939: the
+scan re-reads the drawn IC 832 from 926 on), the follower `subsequent_counter` 4083 → 4159 (H1 1020 → 1039); 14 CSVs
+differ. **V2 (the resolver only):** H1 `CTS_CONFIRMED` (1,2) 926 → 939 (`sd_zone_proximity`, `trigger_inner` 0.5772
+IC 865 → 0.57866 IC 832 — the hand cross-check's "≥ 939": exactly 939) → the counter `first_counter` 3707 → 3759
+(the scan starts at CTS_CONFIRMED); conf sub 1 cyc 1's `CTS_CONFIRMED` 1902 survives (`trigger_inner` 0.5809 IC 1889 →
+0.58074 IC 1875); no M15 event moves; 12 CSVs. **V3 (both) = the union** on every keyed cell: 19 CSVs differ, the 8
+equal = `_raw`, `imbalance_instances`, `structure_levels`, the 3 `*_ip_candidates.csv`, `M15_unresolved_triggers`,
+`M15_counter_structure_events`. The hand cross-check holds: POIs 5 → 3, triggers 710 → 748 and 926 → 939. **D2
+holds on the final fib:** V3's drawn POIs == A's picks on every record (H1 3 / 3, confluence 14 / 14 + 6 no-pattern
+records, counter 7 / 7).
+
+**The plan's predicted list vs V3:** WVMI (1,2) `fp_idx` + momentums do NOT move (the FP search to CTS_CONFIRMED + 10
+finds the same FP; only `triggered_by_event_idx` / `trigger_inner` move); NEW: conf + counter sub 7 cyc 0
+`cycle_collapsed` False → True (sub 7 now starts at 4159 = its cycle 1's start → cycle 0 collapsed: its fib record
+`start_idx` → empty / `inactive`, its KL zone ends at 4159, its POI 4035 never active).
+
+**The activation attribution (V3, 18 drawn POIs):** the 4 never-active POIs are all COLLAPSED cycles (lifecycle
+floor > scan end — not the IP): H1 732 (as in A), conf 1875 (A's 1889 / 1890 also never active), 2704 (A's 2702 /
+2706 too), 4035 (sub 7's cycle 0, above). **R1's floor binds nowhere** on the window (history == without it). **The
+as-of touch (T1) delays 2:** sub 3 cyc 2 IC 2837 2992 → 3047 and sub 7 cyc 2 IC 4083 4179 → 4222 (cond1 + cond3 hold
+from the first date; the IC touches only a later as-of zone) — chart-review items. No POI deactivates on cond5.
+
+**The resolver log (V3, 450 calls, 0 `select_ip_ic` errors, no call failed inside the kept `try`):**
+
+| caller | calls | IP = A | IP ∈ A | IP ∉ A | IP none, A some | IP some, A none | both empty | ms / call IP vs A |
+|---|---|---|---|---|---|---|---|---|
+| main (H1) | 58 | 1 | 2 | 14 | 36 | 0 | 5 | 5.5 vs 2.1 |
+| sub geometry | 313 | 35 | 21 | 182 | 42 | 2 | 31 | 6.3 vs 2.3 |
+| probe Phase 2 | 79 | 0 | 3 | 48 | 22 | 0 | 6 | 9.4 vs 5.2 |
+
+PR12: the as-of picks differ from the final drawn pick in 185 of 450 calls (main sid 1 cyc 1: 4 of 7; most on subs,
+where MS reads the INTRA fib and the drawn POI the cross fib — D5, item 2); 146 calls have no drawn record on their
+frame (probe Phase 2). Only one MS outcome moves (H1 926 → 939). **Cost (PR8):** +1.8 s of resolver time per replay
+(+3.4 / +4.0 / +4.2 ms per call; under load, 3 replays in parallel) — below the review's +4–5 s; no memoization.
+Wall clock is not separable: 4 sequential runs A 87.0 / 61.6 s, V3 78.0 / 38.7 s (machine noise).
+
+**The census (A's suite, A's tree vs V3's; 1219 tests):** 18 FAIL, 99 MOVED-SILENT (pass, but their POIs / resolver
+answers / direct histories moved), 174 touch the POI layer unmoved, 927 never touch it.
+
+| Group | Tests | B action |
+|---|---|---|
+| F-a `KeyError: 'timeframe'` — a hand-built frame calls the resolver directly (PR1 as designed) | `test_e3a_mutation_pins` `test_compute_poi_inners_uses_its_fill_horizon`, `test_e3ap_compute_poi_inners_uses_its_snapshot_horizon`; `test_imbalance_c3_knowability` `test_guard_ms_inflight_select_call_is_uncut`, `test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib` | re-fixture: stamp the frames (the 3 spies then pass unchanged); M1 (`inners == [1.13]` on a lone candle) → a pattern around its IC, re-derived |
+| F-b the MS outcome moves | `test_ms_reversal_terminal` P3 `test_a_reversal_inside_a_post_apply_range_backfill_does_not_finalize_the_range[±1]` (`RANGE_STARTED` 11 → 12: the fixture's POI inner is gone, only the BOS inner is left) | re-derive the pin (12) and re-check it still kills the fix's revert — or re-fixture so the IC has a pattern |
+| F-c the fixture's IC has no pattern (PR7) | `test_poi_activation_moment` ×10 + `test_imbalance_c3_knowability::test_multicycle_poi_full_history` (`_make_second_cts_moment_after_anchor_data` IC 7, `_make_multicycle_data` IC 12) | a new fixture with anchor ≠ moment AND a pattern; pins re-derived |
+| F-d ORDER | `test_poi_activation_moment::test_a_locked_fib_without_cts_established_fails_loudly` (V3 selects before the no-CTS_ESTABLISHED assert → no pick → `continue`) | B: ONE record gate for `derive_poi_zones` + `derive_ip_candidates` — the lifecycle gate, then the CTS_ESTABLISHED skip / assert, THEN the selection (also skips the IP on skipped records) |
+| S-1 POIs vanish (A 1–2 → 0), the test still passes — its POI part goes vacuous | `test_e4_simulation` ×9 (`test_downstream_outputs_do_not_depend_on_the_idx_role` ×7, `…_pattern_update_idx_role` ×2), `test_institutional_pattern` ×2 (`test_downstream_pipeline_*`), `test_orchestrator_reversal_source` ×1, `test_plan_e_role_pins::test_lagging_est_fib_lifecycle_is_timed_at_the_moment[h1]`, `test_poi_activation_moment` ×2 (`…raises_on_cts_established_without_confirmed_at`, `test_poi_lookup_reads_confirmed_at_without_fallback`) | the new fixture where POIs are the point; a non-empty assert before every POI equality |
+| S-2 POIs kept, values moved | `test_event_meta_idx_keys` ×13, `test_render_sub_projection` ×6, `test_plan_g_wvmi` ×4, `test_pooled_structure_build` ×2 (`_poi_sig` reads `versions`), `test_meta_key_renames` ×2 | the new keys in `must_see`; `_poi_sig` + `ip_rank` |
+| S-3 resolver answers moved, MS outcomes not | 59 MS / probe / chart tests (`test_ms_bounded_equals_truncated`, `test_ms_stop_after_cts`, `test_unified_probe`, `test_e4_simulation` emitters, …) | none (they compare runs or pin arguments); B adds the resolver pins (V ≠ IP fixture, a non-V pick, the unstamped frame) |
+| S-4 direct `_compute_poi_activation_history` calls (`versions` / reason moved) | 8 (`test_plan_e_role_pins` ×3, `test_poi_activation_moment` ×3, `test_imbalance_c3_knowability` ×2) | the new signature (no `variant_thresholds`); the explicit `versions` pins (`test_poi_activation_moment` :110 / :268, `test_zone_proximity` :127 fixture meta) re-pinned |
+
+**B's `/compare` prediction (written 2026-10-06, before B is built) = V3 + the format deltas.** Kept for the check:
+V3's outputs in `%TEMP%/ph/V3/artifacts/`.
+1. **B vs V3:** the 24 CSVs other than the 3 `*_poi_zones.csv` md5-EQUAL; every figure attribute equal except the
+   POI hover traces' `hovertemplate` + `customdata` (H1 3 POIs × 2 lines; per M15 chart the sub POIs + the H1
+   overlay POIs × 2) — trace / shape counts equal (H1 81 / 235, counter 129 / 90, confluence 258 / 178).
+2. **The format deltas** (the `*_poi_zones.csv`, keyed by column): `versions` → `ip_rank` (the same position), values =
+   the pick's rank (H1 `3A.iii`, `3A.iv`, `3C.ii`); meta: `versions` / `current_versions` replaced IN PLACE by
+   `ip_rank`, `ip_leg_candle_counts`, `pattern_anchor_idx`, `opp_leg_first_idx`, `pattern_end_idx`,
+   `pattern_confirmed_idx`, `ip_tiebreak`, `ip_tb_runner_up_ic_idx`, `ip_tied_count`, `ip_tb_imbalance_first_c2_idx` ==
+   S_A's picked `*_ip_candidates.csv` rows (sub indices entity-absolute — the mirror shifts the 6 index keys; TB2 on
+   conf sub 1 cyc 1 1875 over 1842 / c2 1892 and sub 7 cyc 2 4083 over 4136 / c2 4132); activation entries
+   `{idx, active, reason}` (no `versions`); every other cell == V3's. Hover: `versions=…` → `IP <rank> · legs a-b-c
+   (initial | opp | continuation)` (+ the TB line on the two TB2 POIs); the H1 fib hovers unchanged (no H1 record
+   without a pattern).
+3. **Hence B vs S_A:** the 8 CSVs above md5-equal; `*_ip_candidates.csv` ×3 unchanged; everything in §8.4a's V3 rows.
+4. Tests: 1219 − the census's retired + B's new, all pass; run.log: the same 2 `parent_tables` WARNING lines; time:
+   +≈ 2 s of resolver time (not separable from the wall-clock noise).
 
 ### 8.5 Landing B — the switch + the rule-3 migration (one commit)
 

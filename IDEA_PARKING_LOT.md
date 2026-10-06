@@ -77,7 +77,9 @@ complete." Item 1 opens the next working session.
    POI. Canonical: `engine_v2/plans/PLAN_H_institutional_pattern_poi.md` (+ `plans/plan_h_inputs/`: the spec copy,
    figures, prototypes). Implementation plan PLAN_H §8 REVIEWED + folded 2026-10-06 (3 lenses, §8.8; the user's R1–R4 in §6);
    landing A (the selector + debug CSVs `*_ip_candidates.csv`, nothing switched) BUILT 2026-10-06, `/compare` == its
-   prediction (PLAN_H §8.3a), saved `20261006_120513_e1c597c`; next: the variant replays (§8.4), landing B (the switch). The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
+   prediction (PLAN_H §8.3a), saved `20261006_120513_e1c597c`; the variant replays V1 / V2 / V3 + the test census
+   MEASURED 2026-10-06 and B's prediction written (§8.4a: V3 == the hand cross-check; the 4 never-active POIs are
+   collapsed cycles; T1 delays 2 activations; the census 18 FAIL / 99 moved-silent); next: landing B (the switch). The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
    (D4). Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3 variants): H1 5 ICs over
    3 cycles; M15 confluence 30 over 19; counter 12 over 7. **What moves when the POIs move** (the user accepted it, D2 /
    C3 — "We won't be able to judge whether those changes are appropriate or correct until I can review the charts";
