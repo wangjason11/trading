@@ -2,7 +2,9 @@
 
 **Status: SPEC DECIDED (2026-10-05, after 6 rounds); the implementation plan (§8) REVIEWED and folded (2026-10-06, §8.8 + the
 user's R1–R4) — two landings (L1); landing A BUILT 2026-10-06 (§8.3a), its `/compare` == the prediction, committed
-`e1c597c` + saved `20261006_120513_e1c597c` (S_A, R4); NEXT: §8.4.** Living document: every question, answer and decision
+`e1c597c` + saved `20261006_120513_e1c597c` (S_A, R4); §8.4 measured (§8.4a); landing B BUILT 2026-10-06 (§8.5a), its
+`/compare` == the prediction, committed `e54f509` + saved `20261006_151106_e54f509` (S_B); chart-reviewed → NEXT: the
+chart-debugging session (§8.5b), then B's deferred landing review.** Living document: every question, answer and decision
 of the item-1 discussion is recorded here as it happens (§5 open questions, §6 decisions). Register line:
 `IDEA_PARKING_LOT.md` §D.1 item 1.
 
@@ -462,7 +464,7 @@ until I can review the charts".
   record equal but the gated-out sub 3 cyc 3; docs: POI_ZONES_SPEC §3.4, GLOSSARY, IMBALANCE_FILL_SEMANTICS, the
   `/compare` skill + WORKFLOWS + review_scripts README (27 CSVs).
 
-## 8. Implementation plan (2026-10-05; REVIEWED + folded 2026-10-06 — §8.8; A built + saved §8.3a; §8.4 measured §8.4a; B built §8.5a, chart-review points §8.5b)
+## 8. Implementation plan (2026-10-05; REVIEWED + folded 2026-10-06 — §8.8; A built + saved §8.3a; §8.4 measured §8.4a; B built + saved §8.5a, chart-review points §8.5b)
 
 ### 8.0 Shape
 
@@ -835,8 +837,10 @@ the replay time (from V3; the landing review measured ≈ +4–5 s). Then the ch
   review (2 read-only lenses, ~0.55M: code vs plan — the resolver's fail-loud scope, the mirror shift, the hovers —
   and test gaps, incl. the M15 sub-POI hover pinned only by a source check) runs after those rules settle, over B +
   the changes. Saving first is safe: B == V3 (an independent route), 32 / 32 mutants, and no reader of `versions` /
-  `current_versions` is left (grep, 2026-10-06: only the review tools that read both formats). Then the commit +
-  `/commit-save` (S_B — recorded after the save).
+  `current_versions` is left (grep, 2026-10-06: only the review tools that read both formats).
+- **Committed + saved (2026-10-06):** source `e54f509`, save `20261006_151106_e54f509` = **S_B** (save commit `b0556fc`,
+  trunk `0d96c12`; reuse mode of the verified replay, FETCH GATE PASS; 27 CSVs) = this branch's `/compare` baseline
+  (`LATEST_week9-entries-decisions`). S_A stays the pre-IP reference: name it explicitly (`cmp_save.py` positional).
 
 ### 8.5b Landing B — the chart-review reference points (2026-10-06)
 
@@ -845,7 +849,7 @@ The points raised at B's chart review, kept as the reference for the debugging s
 S_A's CSVs — not copied from the chat. **Conventions:** indices entity-absolute; times UTC as the charts show them
 (M15 `i` = H1 candle `i // 4` + 15 min × `i % 4`; both frames start 2025-11-16 22:00); "A drew" = S_A's POIs, the
 V30 / V60 / V90 picks the pre-IP charts show (S_A's charts: `artifacts/commits/week9-entries-decisions/
-20261006_120513_e1c597c/*.html`); a sub is named by `sub_id` (creation order) with its stable key (direction,
+20261006_120513_e1c597c/*.html`; B's = S_B's: `…/20261006_151106_e54f509/*.html`); a sub is named by `sub_id` (creation order) with its stable key (direction,
 `starting_idx`); "both lenses" = the unique sub appears in the counter AND the confluence chart.
 
 **1. Cycles that lost their POI (C2) — confluence lens only.** Every one is `no_pattern` in B's
