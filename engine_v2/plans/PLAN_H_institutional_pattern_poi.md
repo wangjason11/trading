@@ -3,8 +3,8 @@
 **Status: SPEC DECIDED (2026-10-05, after 6 rounds); the implementation plan (§8) REVIEWED and folded (2026-10-06, §8.8 + the
 user's R1–R4) — two landings (L1); landing A BUILT 2026-10-06 (§8.3a), its `/compare` == the prediction, committed
 `e1c597c` + saved `20261006_120513_e1c597c` (S_A, R4); §8.4 measured (§8.4a); landing B BUILT 2026-10-06 (§8.5a), its
-`/compare` == the prediction, committed `e54f509` + saved `20261006_151106_e54f509` (S_B); chart-reviewed → NEXT: the
-chart-debugging session (§8.5b), then B's deferred landing review.** Living document: every question, answer and decision
+`/compare` == the prediction, committed `e54f509` + saved `20261006_151106_e54f509` (S_B); chart-reviewed → the
+chart-debugging session IN PROGRESS (§8.9: F1 the M15 fib layer), then B's deferred landing review.** Living document: every question, answer and decision
 of the item-1 discussion is recorded here as it happens (§5 open questions, §6 decisions). Register line:
 `IDEA_PARKING_LOT.md` §D.1 item 1.
 
@@ -328,6 +328,17 @@ until I can review the charts".
 
 ## 6. Decisions
 
+**2026-10-06 (the chart-debugging session, §8.9)**
+
+| ID | Decision | Why / the user's words |
+|---|---|---|
+| F1a | The M15 lens charts draw each sub's fib records (they were CSV-only) + the fib hover's `IP: none (<reason>)` — a chart aid, its own commit | "Add the IP: none reason to the M15 fib hover first … currently are also not charting the fibs on the sub charts (I think currently they are set to hidden) … could we also add the charting of the Fibs on the M15 subs so it helps with debugging and reviewing?" |
+| F1b | The fib draw gate: not collapsed AND (locked OR active), ended or not — a collapsed cycle's fib is hidden like its KL / POI; EVERY ended never-locked record is drawn (any end reason; on the window only sub 3 cyc 3, `parent_end`); `active` False (a superseded cross version, a fib invalidated by an imbalance fill) still vanishes | "we do not need to chart any degenerate Fibs … these degenerate fibs really don't provide value because they cannot be traded in live scenario. We do chart the locked, or active with cycle not ended. In addition, I would also like to chart the never-locked records that were ended by parent_end" → "Every ended record"; the `active` False reading: "Yes, they vanish" |
+| F1c | "Collapsed" = what the user calls degenerate: ONE test (a cycle whose clamped lifecycle start ≥ its end — never live) under two code names — "collapsed" on the zone / chart side (any structure), "degenerate parent cycle" in `ParentTables` (H1 parent cycles, M15 coordinates; triggers inside are rejected). On H1 the same two cycles (1,0) / (1,1). The code's names kept; a note for the parked Naming-Standard audit | the user asked "what do you mean by collapsed fib? … does that mean these 2 are not the same idea? How are you defining degenerate then?" — answered: the same idea, two names (my first answer had overstated the difference) |
+| F1d | The H1 chart follows the same gate: its collapsed fib sid 1 cyc 1 (689 → 761) is hidden | "Hide it on H1 too" |
+| F1e | One legend toggle "M15 fib" per lens chart | "One toggle" (two — collapsed separately — were moot once collapsed fibs are hidden) |
+| F1f | Fib hover extras on both charts (one builder): the pick `IP <rank> · IC <idx>` and the lifecycle `life=[start, end] reason` | "The pick, The lifecycle" |
+
 **2026-10-06 (the plan review's questions, §8.8 — each answered with the recommended option)**
 
 | ID | Decision | Why / the user's words |
@@ -463,6 +474,8 @@ until I can review the charts".
   Week 8 save == the prediction (24/24 md5, figures + hovers equal, 3 new CSVs); A's check vs the prototype: every
   record equal but the gated-out sub 3 cyc 3; docs: POI_ZONES_SPEC §3.4, GLOSSARY, IMBALANCE_FILL_SEMANTICS, the
   `/compare` skill + WORKFLOWS + review_scripts README (27 CSVs).
+- 2026-10-06 — the chart-debugging session opened (§8.9; decisions §6 F1a–F1f): F1 the M15 fib layer + the fib
+  hover's lifecycle / IP outcome on both charts (a chart aid; the 27 CSVs byte-identical to S_B).
 
 ## 8. Implementation plan (2026-10-05; REVIEWED + folded 2026-10-06 — §8.8; A built + saved §8.3a; §8.4 measured §8.4a; B built + saved §8.5a, chart-review points §8.5b)
 
@@ -855,7 +868,10 @@ V30 / V60 / V90 picks the pre-IP charts show (S_A's charts: `artifacts/commits/w
 **1. Cycles that lost their POI (C2) — confluence lens only.** Every one is `no_pattern` in B's
 `*_M15_confluence_ip_candidates.csv` (candidates exist; none forms a pattern whose IC touches the zone). Their fib
 is drawn as before; the M15 fib hover does NOT say why there is no POI (only the H1 fib hover carries `IP: none
-(<reason>)`, and no H1 record lacks a pick) — a candidate chart aid.
+(<reason>)`, and no H1 record lacks a pick) — a candidate chart aid. **Corrected 2026-10-06 (§8.9 F1):** the M15
+charts drew NO fib at all (the renderer was H1-only); the M15 fib layer with that hover landed as the first chart
+aid. Sub 0 cyc 0 and sub 1 cyc 0 are COLLAPSED cycles (ended before their sub went live) — hidden, like their KL /
+POI (F1b).
 
 | Sub (dir, starting) | Cycle · fib BOS → CTS anchor | A drew (A's activation) | Why A's IC is no pattern | Candidates · touching · patterns (none touching) |
 |---|---|---|---|---|
@@ -995,3 +1011,66 @@ no writes, no replay, no pytest. Claims re-checked by me before filing (marked �
 | R2 | Names: `ip_leg_sizes` ("size" = a price distance here), `opp_leg_start_idx` (`start_idx` / `end_idx` = lifecycle), `ip_tb_reference_imbalance_idx` (which candle?), `ip_tb_runner_up_idx` | user: renamed — `ip_leg_candle_counts`, `opp_leg_first_idx`, `ip_tb_imbalance_first_c2_idx`, `ip_tb_runner_up_ic_idx` (§6 R2) |
 | R3 | B's cond5 reason `ic_outside_fib_zone` (D1a) sits beside cond1's `ic_out_of_fib_bounds` (`poi_zones.py:1012`) | user: `ic_not_touching_fib_zone` (§6 R3) |
 | R4 | B's `/compare` against the Week 8 save cannot see B's changes to the IP CSVs (they do not exist there) | user: A ends with `/commit-save` (S_A, local); B's `/compare` against S_A (§6 R4) |
+
+### 8.9 The chart-debugging session — log (2026-10-06 →)
+
+The session the user planned at B's chart review (§8.5a): questions about B's changes, chart aids that make the
+differences reviewable (each its own commit, the 27 CSVs byte-identical), then rule experiments one cause at a time —
+every output compared against S_B (`20261006_151106_e54f509`) and S_A (`20261006_120513_e1c597c`). The user's
+decisions: §6 (the debugging-session block); measurements here.
+
+**F1 — the M15 fib layer + the fib hover (chart aid; F1a–F1f).**
+- Found at the cold start: the M15 lens charts drew NO fib (CHARTING_SPEC §8 "H1 chart only — M15 fibs are
+  CSV-only"); §8.5b point 1 corrected.
+- Census (B's `*_fib_lifecycle.csv`; every record `active` True): confluence 21 records — the old H1 gate (locked, or
+  active with the cycle not ended) would draw 20 (not sub 3 cyc 3: 3304 → 3611, ended by `parent_end`, never locked),
+  5 of them COLLAPSED: sub 0 c0 (454 → 784), sub 1 c0 (1797 → 1816), sub 1 c1 (1837 → 1898), sub 3 c0 (2639 → 2736),
+  sub 7 c0 (4027 → 4086); counter 8 → 7, collapsed sub 3 c0 / sub 7 c0. `IP: none` (all `no_pattern`): confluence
+  sub 0 c0 / c1 / c2, sub 1 c0, sub 1 c2, sub 6 c0; counter none. H1: 3 records; sid 1 cyc 1 (689 → 761) collapsed
+  (= the degenerate parent cycle (1,1); (1,0) has no fib record). The decided gate (F1b) draws confluence 16, counter
+  6, H1 2.
+- Built: `_zone_render.fib_record_drawn` (the gate) / `fib_is_bright` / `ip_rows_by_fib_record` (the IP outcome per
+  record; sub-keyed on a lens) / `fib_hover_status_text` (the status cell); `export_plotly._add_fib_box` (the one
+  drawer); the H1 call site switched; the M15 per-sub block (one legend group `m15_fib`; `fib.lines` default on).
+  Docs: CHARTING_SPEC §8 + the M15 sections, FIB_LIFECYCLE_SPEC §9.1 (refined) / §9.2, the M15 module docstring.
+- Prediction == the `/compare` vs S_B: 27 / 27 CSVs md5-equal; H1 traces 81 → 80, shapes 235 → 230 (sid 1 cyc 1's
+  5 shapes + hover), the two kept fib hovers differ in `customdata` only — `ended (locked)<br>life=[652, 902]
+  reversal<br>IP 3A.iii · IC 607` and `active (locked)<br>life=[902, open]<br>IP 3C.ii · IC 832` —, the rest of the
+  figure equal; confluence traces / shapes 258 / 178 → 274 / 258, counter 129 / 90 → 135 / 120, each lens == S_B
+  exactly once the `m15_fib` group is removed (`plan_h_inputs/fib_aid_check.py <save>`, keyed — `cmp_fig_full` is
+  positional), one legend entry
+  "M15 fib" per lens. Replay 45.7 s wall. The confluence hovers (status · life · IP; counter = the same cells for
+  sub 3 c1–c3, sub 5 c0 `3C.iv · IC 3654`, sub 7 c1–c2):
+
+  | Sub · cyc | BOS → CTS | Status · life | IP |
+  |---|---|---|---|
+  | 0 · 1 | 454 → 1020 | ended (locked) · [1020, 1169] new_cycle | none (no_pattern) |
+  | 0 · 2 | 454 → 1245 | ended (locked) · [1169, 1288] new_cycle | none (no_pattern) |
+  | 0 · 3 | 454 → 1721 | ended (locked) · [1288, 1791] new_cycle | 3C.iv · IC 687 |
+  | 0 · 4 | 454 → 1794 | ended (locked) · [1791, 1940] reversal | 3C.iv · IC 687 |
+  | 1 · 2 | 1934 → 1945 | ended (locked) · [1940, 2231] new_cycle | none (no_pattern) |
+  | 1 · 3 | 2078 → 2231 | ended (locked) · [2231, 2343] new_cycle | 1B.iii · IC 2106 |
+  | 1 · 4 | 2270 → 2365 | ended (locked) · [2343, 2470] reversal | 2A.iv · IC 2320 |
+  | 2 · 0 | 2365 → 2557 | ended (locked) · [2470, 2600] new_cycle | 3A.iv · IC 2383 |
+  | 2 · 1 | 2365 → 2609 | ended (locked) · [2600, 2829] reversal | 2A.ii · IC 2442 |
+  | 3 · 1 | 2758 → 2842 | ended (locked) · [2829, 2967] new_cycle | 2B.iii · IC 2798 |
+  | 3 · 2 | 2758 → 3047 | ended (locked) · [2967, 3589] next_cycle | 1A.iv · IC 2837 |
+  | 3 · 3 | 3304 → 3611 | ended · [3589, 3611] parent_end | not evaluated (no POI record) |
+  | 4 · 0 | 3304 → 3621 | ended (locked) · [3621, 3819] same_dir_replacement | 1A.iii · IC 3388 |
+  | 6 · 0 | 3760 → 4000 | ended (locked) · [3819, 4200] reversal | none (no_pattern) |
+  | 7 · 1 | 4027 → 4157 | ended (locked) · [4159, 4177] new_cycle | 2A.iv · IC 4051 |
+  | 7 · 2 | 4027 → 4222 | active · [4177, open] (the one bright box) | 1A.iv · IC 4083 |
+
+- Tests: `tests/test_fib_chart_render.py` (21) — the gate (7 cases + the collapsed key), bright, the IP lookup (pick /
+  none / the sub key / the duplicate and the unattributed row fail loudly), the status cell (5), the H1 chart (3
+  records drawn; a collapsed (0,1) → its 5 shapes + hover gone), a RENDERED M15 lens chart (2 subs: collapsed hidden,
+  ended never-locked drawn as "not evaluated", a dead version vanishes, the same anchors on 2 subs keyed apart, one
+  legend entry, 15 shapes in the group, only the live version bright — the first test that renders a lens chart from
+  sub data) and the toggle off. Suite 1279, all pass. Mutants `plan_h_inputs/mutants_plan_h_f1.py` (19: the gate's
+  four terms, bright, the lookup, the status cell, the drawer, both call sites): **19 / 19 KILLED** (5 min).
+- **Open — for the rule experiments (not changed):** sub 3 cyc 3 (CTS_ESTABLISHED 3589 → ended 3611 by `parent_end`,
+  never locked) was live 22 candles but has NO POI record: the POI record gate (`poi_zones._poi_record_gate`: locked,
+  or active with the cycle not ended) skips an ended never-locked record — S_A the same. Whether such a cycle should
+  get a POI is a rule question.
+- Naming (the parked Naming-Standard audit, register §A): "collapsed" and "degenerate parent cycle" are one test
+  under two names (F1c).

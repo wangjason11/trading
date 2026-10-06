@@ -48,7 +48,8 @@ The open lines below carry over (fold in when their files are next touched); D a
   step, a MOMENT on expansion steps — one key, two kinds), RANGE_STARTED `confirm_idx` / `start_idx`, STATE_CHANGED
   `effective_idx`. Parked by the user ("don't start unasked"); cheap; the `bounds_steps` one should land before
   anything reads zone expansions for entries / stops. DECIDE when — raise it when D.1 item 3 (zone size adjustments)
-  starts. Detail: `engine_v2/GLOSSARY.md` "Naming Standard".
+  starts. Detail: `engine_v2/GLOSSARY.md` "Naming Standard". + one test, two names: "collapsed" (zones / charts) and
+  "degenerate parent cycle" (`ParentTables`) — PLAN_H §8.9 F1c (2026-10-06).
 
 ## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
 
@@ -83,8 +84,9 @@ complete." Item 1 opens the next working session.
    (the switch: one POI per fib record = the pick, MS reads the same selector, the rule-3 meta migration, HV hovers;
    PLAN_H §8.5a): `/compare` vs S_A == the prediction; tests 1258; mutants 32 / 32 killed; chart-reviewed 2026-10-06 — the
    user will DEBUG the charts in a new session (questions, chart aids, rule experiments; each compared against S_B and
-   S_A), the points raised are PLAN_H §8.5b; committed `e54f509`, saved S_B `20261006_151106_e54f509`; next: that
-   debugging session;
+   S_A), the points raised are PLAN_H §8.5b; committed `e54f509`, saved S_B `20261006_151106_e54f509`; that
+   debugging session IN PROGRESS (2026-10-06, PLAN_H §8.9): chart aid F1 = the M15 fib layer + the fib hover's
+   lifecycle / IP outcome on both charts (the fib draw gate: collapsed hidden, ended never-locked drawn);
    B's landing review DEFERRED (user 2026-10-06) until the debugging session's rule changes settle (PLAN_H §8.5a). The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
    (D4). Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3 variants): H1 5 ICs over
    3 cycles; M15 confluence 30 over 19; counter 12 over 7. **What moves when the POIs move** (the user accepted it, D2 /

@@ -30,7 +30,7 @@ All visual formatting (colors, opacities, line widths, marker sizes) lives in `s
 | Reversal | `structure.reversal_watch_line`, `structure.reversal_watch_start` | Reversal candidate markers |
 | KL Zones | `zone.kl.buy`, `zone.kl.sell`, `zone.kl.hover_line` | Zone fills, confirm lines |
 | POI Zones | `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line` | POI zone fills |
-| Fibonacci | `fib.anchor_line.active` / `.historical`, `fib.zone_rect.active` / `.historical` | Fib box (H1 chart only) |
+| Fibonacci | `fib.anchor_line.active` / `.historical`, `fib.zone_rect.active` / `.historical` | Fib box (H1 chart + the M15 lens charts) |
 | Imbalance | `imbalance.bullish`, `imbalance.bearish` | Imbalance candle colors |
 | Volume | `volume.bar.up/down/neutral`, `volume.ema_line`, `volume.spike_marker` | Volume bars, EMA, spike markers |
 | Wave candles | `wave_candle.bullish`, `wave_candle.bearish` | Wave candle vertical lines |
@@ -124,13 +124,26 @@ To change any visual element:
   The builder asserts the leg counts match the leg indices (a mirror that shifted one but not the other fails at render).
 - Style keys: `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line`
 
-### 8) Fibonacci box (Week 7; H1 chart only — M15 fibs are CSV-only)
-- Reads the FibTracker states; a fib is drawn iff it is locked, or active with its cycle not ended (a superseded / inactive-unlocked / ended-unlocked version vanishes — FIB_LIFECYCLE_SPEC §9.2)
-- Per fib: dotted horizontal lines at 0% (BOS anchor) and 100% (CTS anchor) plus dotted verticals at both ends (`fib.anchor_line.*`), and a dotted rectangle between 61.8% and 80% (`fib.zone_rect.*`), spanning the BOS → CTS candles; invisible hover points across the zone
-- "Bright" = the live active version (`.active` keys); locked / ended versions render faded (`.historical` keys)
-- Hover: sid, cycle, the BOS / CTS anchors + prices, the 61.8 / 80 levels, the status — + `IP: none (<reason>)` on a
-  record without an institutional pattern, i.e. without a POI (PLAN_H C1; read from `attrs["ip_candidates"]`' none
-  rows, keyed by (sid, cycle, BOS anchor, CTS anchor))
+### 8) Fibonacci box (Week 7; H1 chart — and the M15 lens charts since 2026-10-06, PLAN_H §8.9 F1)
+- Reads the FibTracker states (`attrs["fib_states"]`; on an M15 lens grouped by `meta["sub_id"]`). ONE draw gate for
+  both charts (`_zone_render.fib_record_drawn`; the user, 2026-10-06): a record is drawn iff it is not `disappeared`,
+  its cycle is not COLLAPSED (`collapsed_cycles(kl_zones)`: the cycle ended before its structure was live, so its KL /
+  POI are hidden too — on H1 the degenerate parent cycles (1,0) / (1,1), on a sub its forming-phase cycles) and it is
+  locked OR condition-active, ended or not — an ended never-locked record (e.g. a sub's last cycle ended by
+  `parent_end`) is drawn; `active` False (a superseded cross version, a fib invalidated by an imbalance fill) vanishes
+  (FIB_LIFECYCLE_SPEC §9.1 / §9.3)
+- Per fib (`export_plotly._add_fib_box`, the one drawer): dotted horizontal lines at 0% (BOS anchor) and 100% (CTS anchor) plus dotted verticals at both ends (`fib.anchor_line.*`), and a dotted rectangle between 61.8% and 80% (`fib.zone_rect.*`), spanning the BOS → CTS candles; invisible hover points across the zone
+- "Bright" = the live active version (`.active` keys; `_zone_render.fib_is_bright`); every other drawn record renders faded (`.historical` keys)
+- Hover: H1 sid + cycle (M15: `sub_id` + the first record's parent, the sub window, its records, the cycle), the BOS /
+  CTS anchors + prices, the 61.8 / 80 levels, and the status cell (`_zone_render.fib_hover_status_text`, one builder):
+  the status (+ ` (locked)`), `life=[start_idx, end_idx] end_reason` (`–` = never started, `open` = not ended) and the
+  cycle's IP outcome from `attrs["ip_candidates"]` (`ip_rows_by_fib_record`: keyed by (sid, cycle, BOS anchor, CTS
+  anchor), prefixed with `sub_id` on a lens — a sub's sid restarts at 0): `IP <rank> · IC <idx>` (the pick = the drawn
+  POI), `IP: none (<reason>)` (no pattern, no POI — PLAN_H C1), or `IP: not evaluated (no POI record)` (the POI record
+  gate skipped it: ended before locking, or no CTS_ESTABLISHED)
+- M15 lens charts: every box (its 5 shapes) and its hover share ONE legend group (`m15_fib`); the first box's rectangle
+  is the legend entry "M15 fib" — one click toggles every fib on the chart. No owner filter (a persisting element, like
+  the zones). Toggle `fib.lines` (default on, both charts)
 - Style keys: `fib.anchor_line.active` / `.historical`, `fib.zone_rect.active` / `.historical` (`fib.label` is defined in the registry but unused)
 
 ### 9) Volume overlay (Week 7)
@@ -292,7 +305,7 @@ These tables are derived from `style_registry.py` + the rendering code in `expor
 A separate chart file renders M15 candles with both M15 structure and H1 overlay elements. This is NOT the same as the H1 chart — it has its own rendering logic.
 
 ### Architecture
-- **Entry:** `export_m15_chart_plotly(registry=..., path_id=..., title=..., ...)` — registry-only (§13.5.e); resolves its M15 entity + parent overlay from the registry. Reads sub data from `m15_df.attrs["events" / "kl_zones" / "poi_zones" / "wave_candles" / "wvmi" / "prev_bos_lines"]` (M15 fibs are CSV-only (`*_M15_{lens}_fib_lifecycle.csv`; no M15 fib renderer — the inert `fib: lines` toggle was removed 2026-09-30, user decision)) grouped by each snapshot's **`meta["sub_id"]`** (`_sub_identity`) per the `m15_df.attrs["sids"]` `SidRecord` manifest (one row per unique sub rendered on this lens; `_sid_record_identity` = `sub_id` for a sub row, `sub_sid` for a main row), with `m15_df.attrs["triggers"]` (this lens's `TriggerRecord`s) for hover attribution. (Plan C, 2026-09-20 — replaces the pre-pool identity tuple `(parent_sid, parent_cycle_id, sub_sid)`; `sub_sid` no longer exists on any sub artifact.)
+- **Entry:** `export_m15_chart_plotly(registry=..., path_id=..., title=..., ...)` — registry-only (§13.5.e); resolves its M15 entity + parent overlay from the registry. Reads sub data from `m15_df.attrs["events" / "kl_zones" / "poi_zones" / "wave_candles" / "wvmi" / "prev_bos_lines"]` + `"fib_states"` (each sub's fib records, drawn since 2026-10-06 — §8 / PLAN_H §8.9 F1; also `*_M15_{lens}_fib_lifecycle.csv`) and `"ip_candidates"` (the fib hover's IP line), grouped by each snapshot's **`meta["sub_id"]`** (`_sub_identity`) per the `m15_df.attrs["sids"]` `SidRecord` manifest (one row per unique sub rendered on this lens; `_sid_record_identity` = `sub_id` for a sub row, `sub_sid` for a main row), with `m15_df.attrs["triggers"]` (this lens's `TriggerRecord`s) for hover attribution. (Plan C, 2026-09-20 — replaces the pre-pool identity tuple `(parent_sid, parent_cycle_id, sub_sid)`; `sub_sid` no longer exists on any sub artifact.)
 - **M15 candles** as the base OHLC
 - **M15 structure** (swing lines, CTS/BOS dots, prev BOS lines) in **royalblue**;
   where two structures draw over the same candles, the older one's segments are
@@ -482,7 +495,7 @@ zones are unaffected. **The H1 chart itself is unchanged** — it draws every si
 in full (prior sids at 50%) as the high-level market picture.
 
 **Persisting elements:** KL / POI rectangles render the sub's
-snapshots (M15 fibs are CSV-only (`*_M15_{lens}_fib_lifecycle.csv`; no M15 fib renderer — the inert `fib: lines` toggle was removed 2026-09-30, user decision)) — drawn from the anchor (`base_idx` / `ic_idx`), active from
+snapshots (and the sub's fib boxes since 2026-10-06 — §8: the H1 chart's gate, one "M15 fib" legend toggle) — drawn from the anchor (`base_idx` / `ic_idx`), active from
 `start_idx` (the KL/POI first-active clamp), ended at the sub's `end_idx` (the
 projection's cap). Opacity is the per-TF tier. **Exception (chart review
 2026-09-20, option 1): collapsed-cycle zones are not drawn** — a KL zone with
@@ -491,7 +504,7 @@ projection's cap). Opacity is the per-TF tier. **Exception (chart review
 ended at/before `start_idx`) and the POIs of those cycles
 (`collapsed_cycles(sid_kls)` / `is_poi_of_collapsed_cycle`). They existed
 geometrically but were never tradeable; the forming dots/lines already show
-that geometry. Their rows stay in the KL/POI CSVs. A POI that is inactive
+that geometry; their fibs are not drawn either (2026-10-06, §8). Their rows stay in the KL/POI/fib CSVs. A POI that is inactive
 because it never met its activation conditions inside a live cycle (cycle not
 collapsed) is still drawn as an outline. The same predicate governs the H1
 chart and the H1 overlay (below).
@@ -524,7 +537,7 @@ Chart defaults define toggles for:
 - `range_visual`: rectangles
 - `structure`: levels, labels
 - `zones`: KL, OB, POI, wave_candles
-- `fib`: lines (H1 chart only; the M15 charts have no fib renderer)
+- `fib`: lines (both charts; the M15 renderer since 2026-10-06 — §8)
 - `imbalance`: highlight
 - `volume`: bars, ema_line, spike_marker
 - `range_candle_marker`: False (disabled to avoid overlap with volume spike markers)

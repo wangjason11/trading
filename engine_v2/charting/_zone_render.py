@@ -162,6 +162,74 @@ def poi_ip_hover_text(meta: dict, ic_idx: int) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Fib records: the draw gate + the hover status cell (both charts)
+# ---------------------------------------------------------------------------
+
+def fib_record_drawn(fib_st: Any, collapsed: set) -> bool:
+    """The fib draw gate — ONE rule for the H1 chart and the M15 lens charts
+    (PLAN_H §8.9 F1, the user 2026-10-06; refines FIB_LIFECYCLE_SPEC §9.1).
+    Draw a record iff it is not `disappeared`, its cycle is not COLLAPSED
+    (`collapsed` = `collapsed_cycles(...)` of the record's structure: the cycle
+    ended before its structure was live — never tradeable, its KL / POI are
+    hidden too), and it is locked OR condition-active, ended or not (an ended
+    never-locked record was live until its end, e.g. a sub's last cycle ended
+    by `parent_end`). `active` False — a superseded cross version, a fib
+    invalidated by an imbalance fill — still vanishes (§9.3)."""
+    if getattr(fib_st, "status", "active") == "disappeared":
+        return False
+    if (int(fib_st.structure_id), int(fib_st.cycle_id)) in collapsed:
+        return False
+    return bool(fib_st.locked or fib_st.active)
+
+
+def fib_is_bright(fib_st: Any) -> bool:
+    """The live version — condition-active, not locked, cycle not ended —
+    takes the `fib.*.active` style keys; every other drawn record renders
+    faded (`fib.*.historical`)."""
+    return bool(fib_st.active and not fib_st.locked
+                and getattr(fib_st, "status", "active") == "active")
+
+
+def ip_rows_by_fib_record(ip_candidates: Sequence[Any], *, by_sub: bool) -> dict:
+    """The `attrs["ip_candidates"]` row holding each fib record's IP outcome —
+    its picked row or its `IP: none` row (`ic_idx` None) — keyed by
+    `(structure_id, cycle_id, bos_anchor_idx, cts_anchor_idx)`, prefixed with
+    `meta["sub_id"]` when `by_sub` (an M15 lens: a sub's structure_id restarts
+    at 0 in every sub). A record the POI record gate skipped has no row."""
+    out: dict = {}
+    for r in ip_candidates:
+        if not (r.picked or r.ic_idx is None):
+            continue
+        key = (int(r.structure_id), int(r.cycle_id), int(r.bos_anchor_idx), int(r.cts_anchor_idx))
+        if by_sub:
+            key = (int(r.meta["sub_id"]),) + key
+        assert key not in out, f"[chart] two IP outcome rows for fib record {key}"
+        out[key] = r
+    return out
+
+
+def fib_hover_status_text(fib_st: Any, ip_row: Optional[Any]) -> str:
+    """The fib hover's status cell — ONE builder for both charts (PLAN_H §8.9
+    F1): the lifecycle status (+ ` (locked)`), `life=[start_idx, end_idx]
+    end_reason` (`–` = never started, `open` = not ended), and the cycle's IP
+    outcome (`ip_rows_by_fib_record`): `IP <rank> · IC <idx>` (the pick = the
+    drawn POI), `IP: none (<reason>)` (no pattern → no POI, PLAN_H C1), or
+    `IP: not evaluated (no POI record)` (no row: the POI record gate skipped
+    the record — ended before locking, or no CTS_ESTABLISHED)."""
+    start = "–" if fib_st.start_idx is None else int(fib_st.start_idx)
+    end = "open" if fib_st.end_idx is None else int(fib_st.end_idx)
+    life = f"life=[{start}, {end}]" + (f" {fib_st.end_reason}" if fib_st.end_reason else "")
+    if ip_row is None:
+        ip = "IP: not evaluated (no POI record)"
+    elif ip_row.ic_idx is None:
+        ip = f"IP: none ({ip_row.reason})"
+    else:
+        ip = f"IP {ip_row.ip_rank} · IC {int(ip_row.ic_idx)}"
+    status = getattr(fib_st, "status", "active")
+    return f"{status}{' (locked)' if fib_st.locked else ''}<br>{life}<br>{ip}"
+
+
+# ---------------------------------------------------------------------------
 # Stepped polygon outline (KL zone with bounds_steps)
 # ---------------------------------------------------------------------------
 

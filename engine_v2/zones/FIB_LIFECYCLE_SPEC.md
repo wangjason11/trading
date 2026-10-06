@@ -451,6 +451,14 @@ live/locked version from dead ones *within* a cycle — and the cycle-identity
 a status-keyed gate would draw every version, dead ones included). So the gate is
 **primarily per-record**:
 
+> **Refined 2026-10-06 (PLAN_H §8.9 F1, the user) — ONE gate for the H1 chart and the M15 lens charts,
+> `_zone_render.fib_record_drawn`:** `status != "disappeared" AND the cycle is not COLLAPSED AND (record.locked OR
+> record.active)`. Two changes to the Session-2 gate below: (1) the `status not in {ended}` term is gone — an ended
+> never-locked record (§9.2 category 3, e.g. a sub's last cycle ended by `parent_end`) is DRAWN, faded: it was live
+> until its end; (2) a collapsed cycle's fib (the cycle ended before its structure was live —
+> `_zone_render.collapsed_cycles`, the predicate that hides its KL / POI) is HIDDEN even when locked. `active=False`
+> records (§9.2 categories 1–2) still vanish (§9.3). The rest of §9.1 is the Session-2 history.
+
 > **Draw a record iff (as IMPLEMENTED, Session 2 — `export_plotly.py`):**
 > `status != "disappeared" AND ( record.locked OR (record.active AND status not in {"ended","disappeared"}) )`
 
@@ -492,7 +500,7 @@ gate, **unlocked-and-not-active records VANISH** (were faded). Three categories:
 3. **Ended-unlocked fibs** — capped by `lifecycle_end`/`reversal` while
    `active and not locked` (then the `entity_df_mutation.py:669-678` cap; since §15.6 (b) the
    `_finalize` pass-through, and for open sub crosses that never established a CTS §15.4
-   candidate 3) — **common on M15/sub.**
+   candidate 3) — **common on M15/sub.** DRAWN again since 2026-10-06 (the §9.1 refinement).
 
 **Impact distribution:** H1 **main** barely changes (main fibs almost always
 lock; only a trailing still-forming cycle whose imbalance filled could vanish).

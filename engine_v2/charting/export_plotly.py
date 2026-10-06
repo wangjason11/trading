@@ -16,6 +16,10 @@ from engine_v2.charting._zone_render import (
     collapsed_cycles,
     compute_kl_active_stretches,
     compute_poi_active_stretches,
+    fib_hover_status_text,
+    fib_is_bright,
+    fib_record_drawn,
+    ip_rows_by_fib_record,
     is_collapsed_cycle_zone,
     is_poi_of_collapsed_cycle,
     poi_ip_hover_text,
@@ -27,6 +31,44 @@ from engine_v2.multitf.registry import StructureRegistry
 
 def _rgba_from_rgb(rgb: str, opacity: float) -> str:
     return f"rgba({rgb}, {opacity})"
+
+
+def _add_fib_box(fig, fib_st, x_start, x_end, *, legendgroup=None, legend_name=None):
+    """Draw one fib record's box — ONE drawer for the H1 chart and the M15 lens
+    charts (CHARTING_SPEC §8; PLAN_H §8.9 F1): dotted horizontals at 0 % (BOS
+    anchor) and 100 % (CTS anchor), dotted verticals at both ends, and a dotted
+    rectangle between 61.8 % and 80 %, over `x_start` → `x_end`. Bright
+    (`fib.*.active`) iff `fib_is_bright`, else faded (`fib.*.historical`).
+    `legendgroup` puts every shape in that legend group (the M15 toggle; the H1
+    chart passes none); `legend_name` also shows the rectangle as the group's
+    legend entry. Returns `(price_618, price_80)`."""
+    fib = fib_st.fib
+    tier = "active" if fib_is_bright(fib_st) else "historical"
+    anchor_line = _style(f"fib.anchor_line.{tier}").get(
+        "line", {"width": 1, "dash": "dot",
+                 "color": "rgba(0,0,139,0.8)" if tier == "active" else "rgba(0,0,139,0.4)"})
+    zone_style = _style(f"fib.zone_rect.{tier}")
+    price_0 = fib.price_at_pct(0.0)      # BOS anchor
+    price_100 = fib.price_at_pct(100.0)  # CTS anchor
+    price_618 = fib.price_at_pct(61.8)
+    price_80 = fib.price_at_pct(80.0)
+    group = {"legendgroup": legendgroup} if legendgroup is not None else {}
+
+    for x0, x1, y0, y1 in ((x_start, x_end, price_0, price_0),        # 0 % line
+                           (x_start, x_end, price_100, price_100),    # 100 % line
+                           (x_start, x_start, price_0, price_100),    # start vertical
+                           (x_end, x_end, price_0, price_100)):       # end vertical
+        fig.add_shape(type="line", xref="x", yref="y", x0=x0, x1=x1, y0=y0, y1=y1,
+                      line=anchor_line, layer="below", **group)
+
+    legend = {"showlegend": True, "name": legend_name} if legend_name is not None else {}
+    fig.add_shape(
+        type="rect", xref="x", yref="y", x0=x_start, x1=x_end, y0=price_618, y1=price_80,
+        line=zone_style.get("line", {"width": 1, "dash": "dot", "color": "rgba(0,0,139,0.6)"}),
+        fillcolor=zone_style.get("fillcolor", "rgba(0,0,139,0.0)"),
+        layer="below", **group, **legend,
+    )
+    return price_618, price_80
 
 
 def _get_reversal_confirmed_by_sid(structure_events: list) -> dict:
@@ -2506,49 +2548,22 @@ def export_chart_plotly(
     fib_states = dfx.attrs.get("fib_states", [])
 
     if fib_cfg.get("lines", True) and fib_states:
-        # Get styles for active vs historical
-        anchor_line_active = _style("fib.anchor_line.active").get("line", {"width": 1, "dash": "dot", "color": "rgba(0,0,139,0.8)"})
-        anchor_line_historical = _style("fib.anchor_line.historical").get("line", {"width": 1, "dash": "dot", "color": "rgba(0,0,139,0.4)"})
-        zone_rect_active = _style("fib.zone_rect.active")
-        zone_rect_historical = _style("fib.zone_rect.historical")
-
-        # The fib records whose cycle has NO institutional pattern -> no POI
-        # (PLAN_H C1 / HV): their hover gets an "IP: none" line (the reason from
-        # the record's `IP: none` row of `*_ip_candidates.csv`).
-        _ip_none = {
-            (r.structure_id, r.cycle_id, r.bos_anchor_idx, r.cts_anchor_idx): r.reason
-            for r in dfx.attrs.get("ip_candidates", []) if r.ic_idx is None
-        }
+        # The draw gate, the box and the hover status cell are shared with the
+        # M15 lens charts (`_zone_render.fib_record_drawn` /
+        # `fib_hover_status_text`, `_add_fib_box`; PLAN_H §8.9 F1): a collapsed
+        # cycle's fib is hidden like its KL / POI; the hover carries the
+        # lifecycle and the cycle's IP outcome (the pick, `IP: none (<reason>)`
+        # — PLAN_H C1 —, or not evaluated).
+        _collapsed = collapsed_cycles(dfx.attrs.get("kl_zones", []))
+        _ip_rows = ip_rows_by_fib_record(dfx.attrs.get("ip_candidates", []), by_sub=False)
 
         _fib_drawn = 0
         for fib_st in fib_states:
             if fib_st.fib is None:
                 continue
-
-            # Per-record draw gate (FIB_LIFECYCLE_SPEC §9.1, Session 2). Draw a
-            # record iff it is NOT terminal-suppressed (status "disappeared")
-            # AND it is either the live condition-active version (active AND its
-            # cycle is not ended) OR locked (confirmed historical, incl.
-            # ended-locked, rendered faded). Inactive-unlocked, ended-unlocked,
-            # and superseded (dead) cross versions (active=False) all VANISH
-            # (§9.2). Uses raw per-record active/locked for version distinction;
-            # cycle-level `status` only for the ended/disappeared terminal.
-            _status = getattr(fib_st, "status", "active")
-            if _status == "disappeared":
-                continue
-            _drawable = fib_st.locked or (
-                fib_st.active and _status not in ("ended", "disappeared")
-            )
-            if not _drawable:
+            if not fib_record_drawn(fib_st, _collapsed):
                 continue
             _fib_drawn += 1
-
-            fib = fib_st.fib
-            # "Bright" = the live active version (condition-active, cycle not
-            # ended, not yet locked). Locked / ended records render faded.
-            is_active = fib_st.active and not fib_st.locked and _status == "active"
-            anchor_line = anchor_line_active if is_active else anchor_line_historical
-            zone_style = zone_rect_active if is_active else zone_rect_historical
 
             # Get time range: from BOS idx to CTS idx
             bos_idx = fib_st.bos_idx
@@ -2559,80 +2574,7 @@ def export_chart_plotly(
 
             x_start = pd.to_datetime(dfx.loc[min(bos_idx, cts_idx), COL_TIME], utc=True)
             x_end = pd.to_datetime(dfx.loc[max(bos_idx, cts_idx), COL_TIME], utc=True)
-
-            # Get prices at key levels
-            price_0 = fib.price_at_pct(0.0)      # BOS anchor
-            price_100 = fib.price_at_pct(100.0)  # CTS anchor
-            price_618 = fib.price_at_pct(61.8)
-            price_80 = fib.price_at_pct(80.0)
-
-            # Draw dotted line at 0% (BOS anchor)
-            fig.add_shape(
-                type="line",
-                xref="x",
-                yref="y",
-                x0=x_start,
-                x1=x_end,
-                y0=price_0,
-                y1=price_0,
-                line=anchor_line,
-                layer="below",
-            )
-
-            # Draw dotted line at 100% (CTS anchor)
-            fig.add_shape(
-                type="line",
-                xref="x",
-                yref="y",
-                x0=x_start,
-                x1=x_end,
-                y0=price_100,
-                y1=price_100,
-                line=anchor_line,
-                layer="below",
-            )
-
-            # Draw vertical dotted line at start (from 0% to 100%)
-            fig.add_shape(
-                type="line",
-                xref="x",
-                yref="y",
-                x0=x_start,
-                x1=x_start,
-                y0=price_0,
-                y1=price_100,
-                line=anchor_line,
-                layer="below",
-            )
-
-            # Draw vertical dotted line at end (from 0% to 100%)
-            fig.add_shape(
-                type="line",
-                xref="x",
-                yref="y",
-                x0=x_end,
-                x1=x_end,
-                y0=price_0,
-                y1=price_100,
-                line=anchor_line,
-                layer="below",
-            )
-
-            # Draw dotted rectangle between 61.8% and 80%
-            zone_line = zone_style.get("line", {"width": 1, "dash": "dot", "color": "rgba(0,0,139,0.6)"})
-            zone_fill = zone_style.get("fillcolor", "rgba(0,0,139,0.0)")
-            fig.add_shape(
-                type="rect",
-                xref="x",
-                yref="y",
-                x0=x_start,
-                x1=x_end,
-                y0=price_618,
-                y1=price_80,
-                line=zone_line,
-                fillcolor=zone_fill,
-                layer="below",
-            )
+            price_618, price_80 = _add_fib_box(fig, fib_st, x_start, x_end)
 
             # Add hover traces (one point per candle across the fib zone width)
             # Plotly only detects hover near data points, not along line segments,
@@ -2651,12 +2593,11 @@ def export_chart_plotly(
                 f"{fib_st.cts_price:.5f}",
                 f"{price_618:.5f}",
                 f"{price_80:.5f}",
-                # Hover label from lifecycle status + locked axis (§11), + the
-                # "IP: none" line of a no-pattern record (empty otherwise).
-                f"{_status}{' (locked)' if fib_st.locked else ''}"
-                + (f"<br>IP: none ({_ip_none[_ip_key]})"
-                   if (_ip_key := (int(fib_st.structure_id), int(fib_st.cycle_id), int(fib_st.bos_idx),
-                                   int(fib_st.cts_idx))) in _ip_none else ""),
+                # The status cell: lifecycle status + locked axis (§11), the
+                # lifecycle, the cycle's IP outcome.
+                fib_hover_status_text(fib_st, _ip_rows.get((
+                    int(fib_st.structure_id), int(fib_st.cycle_id),
+                    int(fib_st.bos_idx), int(fib_st.cts_idx)))),
             ]
             hover_customdata = [hover_row] * len(seg_times)
 
@@ -2686,7 +2627,7 @@ def export_chart_plotly(
             )
 
         print(f"[chart][fib] rendered {_fib_drawn}/{len(fib_states)} fib states "
-              f"(per-record gate: active|locked, not disappeared)")
+              f"(per-record gate: active|locked, not collapsed / disappeared)")
 
     # -------------------------------------------------
     # Week 7: Prev BOS Lines (black horizontal lines after reversal)

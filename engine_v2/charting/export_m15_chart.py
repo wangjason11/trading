@@ -2,7 +2,7 @@
 
 Renders the full M15 dataset as the base candle layer, with all M15 structures
 overlaid. Data sourced from `m15_df.attrs["events"] / ["kl_zones"] /
-["poi_zones"] / ["wave_candles"] / ["wvmi"]` grouped by each
+["poi_zones"] / ["wave_candles"] / ["wvmi"] / ["fib_states"]` grouped by each
 snapshot's **`sub_id`** (PART4 §17.9 — the unique sub is the chart identity),
 with the `m15_df.attrs["sids"]` SidRecord list (one row per unique sub on this
 lens) as the manifest and `attrs["triggers"]` (this lens's TriggerRecords) for
@@ -41,11 +41,12 @@ hover attribution. Per spec §16.5 (rev 2):
     OVERLAY's structure lines are lifecycle-FILTERED per wave instead
     (`_render_h1_overlay`: waves never live are not drawn — the H1 chart itself
     is unchanged). Forming-phase ZONES (a KL/POI whose cycle ended at/before
-    the sub's `start_idx`, collapsed to `status="inactive"`) are NOT drawn
+    the sub's `start_idx`, collapsed to `status="inactive"`) are NOT drawn, nor their fibs
     (`_zone_render.is_collapsed_cycle_zone`, shared with the H1 chart, which skips
     the collapsed retroactive cycles of a post-reversal sid the same way); they
     stay in the CSVs.
-  - Persisting events (KL zones, POI zones; M15 fibs are CSV-only): render all snapshots —
+  - Persisting events (KL zones, POI zones, fib boxes — the fibs since 2026-10-06,
+    PLAN_H §8.9 F1: the H1 chart's gate, one "M15 fib" legend toggle): render all snapshots —
     drawn from its base candle, active from `start_idx` (the KL/POI clamp);
     opacity is a per-TF tier (`_m15_opacity_tier_for_zone`).
   - Every lens draws a sub over the SAME window (the sub's), so a sub on both
@@ -70,6 +71,9 @@ from engine_v2.charting._zone_render import (
     compute_kl_active_stretches,
     compute_poi_active_stretches,
     is_collapsed_cycle_zone,
+    fib_hover_status_text,
+    fib_record_drawn,
+    ip_rows_by_fib_record,
     is_poi_of_collapsed_cycle,
     poi_ip_hover_text,
     select_subordinate_tf_tier,
@@ -80,6 +84,7 @@ from engine_v2.zones.structure_lifecycle import (
     compute_struct_start_by_sid,
 )
 from engine_v2.charting.export_plotly import (
+    _add_fib_box,
     _rgba_from_rgb,
     _zone_style,
     _style,
@@ -107,6 +112,7 @@ M15_CHART_DEFAULTS = {
     "range_visual": {"rectangles": False},
     "structure": {"levels": True},
     "zones": {"KL": True, "POI": True, "wave_candles": True, "num_structures": 99},
+    "fib": {"lines": True},
     "imbalance": {"highlight": True},
     "volume": {"bars": True, "ema_line": True, "spike_marker": True},
     "range_candle_marker": False,
@@ -686,7 +692,7 @@ def export_m15_chart_plotly(
     """Export an interactive M15 chart with H1 overlay elements.
 
     Data is read directly from `m15_df.attrs["events" / "kl_zones" /
-    "poi_zones" / "wave_candles" / "wvmi"]` and grouped by each
+    "poi_zones" / "wave_candles" / "wvmi" / "fib_states"]` and grouped by each
     snapshot's `sub_id` per the `m15_df.attrs["sids"]` SidRecord manifest
     (one row per unique sub on this lens, §17.9).
 
@@ -713,6 +719,7 @@ def export_m15_chart_plotly(
     imbalance_cfg = cfg.get("imbalance", {}) or {}
     volume_cfg = cfg.get("volume", {}) or {}
     state_cfg = cfg.get("struct_state", {}) or {}
+    fib_cfg = cfg.get("fib", {}) or {}
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -752,6 +759,10 @@ def export_m15_chart_plotly(
     all_wave_candles: list = list(m15_df.attrs.get("wave_candles", []))
     all_wvmi_records: list = list(m15_df.attrs.get("wvmi", []))
     all_prev_bos_lines: list = list(m15_df.attrs.get("prev_bos_lines", []))
+    all_fib_states: list = list(m15_df.attrs.get("fib_states", []))
+    # Each fib record's IP outcome (the pick / `IP: none` row), keyed by sub_id
+    # + (structure_id, cycle_id, BOS anchor, CTS anchor) — PLAN_H §8.9 F1.
+    ip_rows_by_fib = ip_rows_by_fib_record(m15_df.attrs.get("ip_candidates", []), by_sub=True)
 
     # Group by sub_id. Snapshots without a sub_id attribution are ignored —
     # they belong to no sub-build (defensive; the mirror always stamps it,
@@ -762,6 +773,7 @@ def export_m15_chart_plotly(
     waves_by_sid: dict = defaultdict(list)
     wvmis_by_sid: dict = defaultdict(list)
     prev_bos_by_sid: dict = defaultdict(list)
+    fibs_by_sid: dict = defaultdict(list)
     for ev in all_events:
         ident = _sub_identity(ev.meta)
         if ident is not None:
@@ -786,6 +798,10 @@ def export_m15_chart_plotly(
         ident = _sub_identity(ln.get("meta") or {}) if isinstance(ln, dict) else None
         if ident is not None:
             prev_bos_by_sid[ident].append(ln)
+    for fs in all_fib_states:
+        ident = _sub_identity(fs.meta)
+        if ident is not None:
+            fibs_by_sid[ident].append(fs)
 
     # §16.5 sid-tied filter: owner (sub_id) per (candle, direction) — the LIVE
     # layer (lifecycle window) wins; the FORMING layer (anchor → start_idx)
@@ -1048,6 +1064,7 @@ def export_m15_chart_plotly(
             _segments_by_sub[_eid] = (_recency_key(_rec), _segments_of(_poly))
         sub_ctx[_eid] = {"is_live": _is_live_fn, "owned_here": _owned_fn, "poly": _poly}
     prior_segs = _prior_line_segments(_segments_by_sub)
+    fib_drawn = 0   # M15 fib boxes drawn so far (the first carries the legend entry)
 
     for sid_rec in sid_records:
         # Each SidRecord (one unique sub) drives one rendering pass. Idx
@@ -1083,6 +1100,7 @@ def export_m15_chart_plotly(
         sid_waves = waves_by_sid.get(eid, [])
         sid_wvmis = wvmis_by_sid.get(eid, [])
         sid_prev_bos = prev_bos_by_sid.get(eid, [])
+        sid_fibs = fibs_by_sid.get(eid, [])
 
         p_sid, p_cycle = _sid_parent(sid_rec)   # informational (first record)
 
@@ -1656,6 +1674,62 @@ def export_m15_chart_plotly(
                         ),
                         customdata=poi_cd,
                     ))
+
+        # --- Fib boxes + hover (PLAN_H §8.9 F1, the user 2026-10-06) ---
+        # The H1 chart's drawer, draw gate and hover status cell (`_add_fib_box`,
+        # `fib_record_drawn`, `fib_hover_status_text`): a collapsed cycle's fib is
+        # hidden like its KL / POI; an ended never-locked record (e.g. the sub's
+        # last cycle ended by `parent_end`) is drawn. No owner filter — a
+        # persisting element, like the zones. Every box + hover shares ONE legend
+        # group: the "M15 fib" entry (the first box drawn) toggles them all.
+        if fib_cfg.get("lines", True) and sid_fibs:
+            for fib_st in sid_fibs:
+                if fib_st.fib is None or not fib_record_drawn(fib_st, _collapsed_sub_cycles):
+                    continue
+                bos_idx, cts_idx = int(fib_st.bos_idx), int(fib_st.cts_idx)
+                if bos_idx not in lt_df.index or cts_idx not in lt_df.index:
+                    continue
+                fx0 = pd.to_datetime(lt_df.loc[min(bos_idx, cts_idx), COL_TIME], utc=True)
+                fx1 = pd.to_datetime(lt_df.loc[max(bos_idx, cts_idx), COL_TIME], utc=True)
+                price_618, price_80 = _add_fib_box(
+                    fig, fib_st, fx0, fx1, legendgroup="m15_fib",
+                    legend_name=None if fib_drawn else "M15 fib")
+                fib_drawn += 1
+
+                seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= fx0) & (dfx[COL_TIME] <= fx1)]
+                if len(seg_times) == 0:
+                    seg_times = pd.Series([fx0, fx1])
+                ip_row = ip_rows_by_fib.get(
+                    (eid, int(fib_st.structure_id), int(fib_st.cycle_id), bos_idx, cts_idx))
+                # `fib_st.structure_id` is the bounded sub's internal MS sid
+                # (restarts at 0 per sub) — the hover names the sub by sub_id.
+                fib_cd = [[
+                    eid, p_sid, p_cycle, sub_window_str, sub_records_str, fib_st.cycle_id,
+                    bos_idx, f"{fib_st.bos_price:.5f}", cts_idx, f"{fib_st.cts_price:.5f}",
+                    f"{price_618:.5f}", f"{price_80:.5f}",
+                    fib_hover_status_text(fib_st, ip_row),
+                ]] * len(seg_times)
+                fig.add_trace(go.Scatter(
+                    x=seg_times, y=[(price_618 + price_80) / 2] * len(seg_times),
+                    mode="lines", name="M15 fib", showlegend=False, legendgroup="m15_fib",
+                    line=dict(width=6, color="rgba(0,0,0,0)"),  # invisible hover hitbox
+                    line_shape="hv",
+                    hovertemplate=(
+                        "TF=15M<br>"
+                        "<b>Fib Zone</b><br>"
+                        "sub_id=%{customdata[0]} | first record parent_sid=%{customdata[1]} parent_cycle_id=%{customdata[2]}<br>"
+                        "sub window=%{customdata[3]}<br>"
+                        "records: %{customdata[4]}<br>"
+                        "cycle_id=%{customdata[5]}<br>"
+                        "BOS: idx=%{customdata[6]} price=%{customdata[7]}<br>"
+                        "CTS: idx=%{customdata[8]} price=%{customdata[9]}<br>"
+                        "61.8%%=%{customdata[10]}<br>"
+                        "80%%=%{customdata[11]}<br>"
+                        "status=%{customdata[12]}"
+                        "<extra></extra>"
+                    ),
+                    customdata=fib_cd,
+                ))
 
         # --- Prev BOS lines ---
         for line_info in sid_prev_bos:
