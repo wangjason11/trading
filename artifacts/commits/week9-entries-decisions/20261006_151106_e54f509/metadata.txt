@@ -1,0 +1,4 @@
+commit_hash=e54f509
+timestamp=20261006_151106
+branch=week9-entries-decisions
+commit_message=PLAN_H landing B (Week 9 Part 1 item 1): one POI per fib record = the institutional-pattern pick; MS reads the same selector; rule-3 meta migration; HV hovers
