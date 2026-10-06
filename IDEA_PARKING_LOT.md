@@ -70,8 +70,8 @@ complete." Item 1 opens the next working session.
    spec, six rounds of questions): ONE IC per cycle, chosen by the *institutional pattern* (initial / opp /
    continuation legs, ranks 1A–3D, tiebreakers) among the §3.1 candidates touching the 61.8–80 zone; no pattern → no
    POI. Canonical: `engine_v2/plans/PLAN_H_institutional_pattern_poi.md` (+ `plans/plan_h_inputs/`: the spec copy,
-   figures, prototypes). Next: its implementation plan (PLAN_H §8), then two landings — A the selector + debug CSVs,
-   nothing switched; B the switch. The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
+   figures, prototypes). Implementation plan PLAN_H §8 REVIEWED + folded 2026-10-06 (3 lenses, §8.8; the user's R1–R4 in §6);
+   next: two landings — A the selector + debug CSVs, nothing switched (then `/commit-save`); B the switch. The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
    (D4). Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3 variants): H1 5 ICs over
    3 cycles; M15 confluence 30 over 19; counter 12 over 7. **What moves when the POIs move** (the user accepted it, D2 /
    C3 — "We won't be able to judge whether those changes are appropriate or correct until I can review the charts";
