@@ -35,6 +35,10 @@ The open lines below carry over (fold in when their files are next touched); D a
   unused `structure.reversal_watch_line` key + the never-plotted `watch_y` series; plus the audit's still-unverified
   list. Also: 8 unused locals in `charting/export_m15_chart.py` (ruff F841, pre-existing). OPEN (fold in when those
   files are next touched). Detail: memory `project_charting_audit_20260921.md`.
+- **Two dead reads found by the Week 9 /prepare + item-1 talk** — `_run_multi_tf_dual(poi_zones=...)` is never read
+  (`pipeline/orchestrator.py` ~:837; fold into item 1's landing B, which touches the orchestrator's `POIConfig`);
+  `wvmi._find_temporary_lp` computes `fp_vol_dir` and never reads it (fold into "The agreed direction for wave candles
+  + WVMI", D.2). OPEN.
 - **Naming-Standard audit of never-audited index keys** — KL `bounds_steps[*].start_idx` (the base ANCHOR on the INIT
   step, a MOMENT on expansion steps — one key, two kinds), RANGE_STARTED `confirm_idx` / `start_idx`, STATE_CHANGED
   `effective_idx`. Parked by the user ("don't start unasked"); cheap; the `bounds_steps` one should land before
@@ -62,21 +66,28 @@ complete." Item 1 opens the next working session.
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — NEXT. User 2026-09-30: "will reduce POI zones in each
-   cycle to just 1 (vs. currently where a cycle may have multiple POI zones)". The user provides a detailed spec.
-   Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3 V30 / V60 / V90 variants): H1
-   5 ICs over 3 cycles (2 cycles hold 2 ICs); M15 confluence 30 ICs over 19 cycles (7 cycles hold 2, 2 hold 3); M15
-   counter 12 over 7 (1 holds 2, 2 hold 3); variants per IC H1 1/2/3 = 2/2/1, confluence 14/7/9, counter 7/1/4. OPEN
-   QUESTION for the design: one IC per cycle, one variant per IC, or both? Measured 2026-09-30 (memory
-   `project_week9_part1_inputs.md`): every POI-producing cycle has ONE fib, so a second / third POI comes only from the
-   V30 / V60 / V90 picks landing on different candles; which IC is kept decides whether MS's sd-proximity CTS
-   confirmation and the zone-proximity scan change (both read only the nearest-to-price inner — H1 sid 1 cycle 2's
-   `CTS_CONFIRMED` at 926 fired on one); POI_ZONES_SPEC §3.2's scenario IC constraints were NEVER implemented — build
-   them or drop them in this item. Related: G "Cascade-viz hover extras" (reads the variants). Detail:
-   `engine_v2/zones/POI_ZONES_SPEC.md`.
+   cycle to just 1 (vs. currently where a cycle may have multiple POI zones)". **SPEC DECIDED 2026-10-05** (the user's
+   spec, six rounds of questions): ONE IC per cycle, chosen by the *institutional pattern* (initial / opp /
+   continuation legs, ranks 1A–3D, tiebreakers) among the §3.1 candidates touching the 61.8–80 zone; no pattern → no
+   POI. Canonical: `engine_v2/plans/PLAN_H_institutional_pattern_poi.md` (+ `plans/plan_h_inputs/`: the spec copy,
+   figures, prototypes). Next: its implementation plan (PLAN_H §8), then two landings — A the selector + debug CSVs,
+   nothing switched; B the switch. The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
+   (D4). Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3 variants): H1 5 ICs over
+   3 cycles; M15 confluence 30 over 19; counter 12 over 7. **What moves when the POIs move** (the user accepted it, D2 /
+   C3 — "We won't be able to judge whether those changes are appropriate or correct until I can review the charts";
+   PLAN_H §3): H1 sid 1 cycle 2's sd-proximity `CTS_CONFIRMED` at 926 (IC 865 → 832: ≥ 939 or pullback); M15
+   confluence sub 1 cycle 1's at 1902 (IC 1889 → 1875: likely survives); the zone-proximity sd triggers H1 sid 0
+   cycle 1 710 → 748 and sid 1 cycle 2 926 → 939 — the H1 WVMI gates and counter subs 3 / 5's triggers → 6 of the 11
+   trigger records re-derived. Related: G "Cascade-viz hover extras" (obsolete once the variants go).
 2. **Single-cycle fib POIs on subs, and revisit the overall sub cross-fib logic** — user 2026-10-01: "Single-cycle fib
    POIs on sub, and also additionally revisit the overall sub cross-fib logic". Today a sub's single-cycle fib is only
    a fallback (cross fails, established phase); the change lets the two coexist — additive, more POIs, so it pulls
-   against item 1, which is decided first. Iterative: scenario / parameter flips + chart review. Detail: memory
+   against item 1, which is decided first. Iterative: scenario / parameter flips + chart review. **Also fix here
+   (user 2026-10-02, PLAN_H D5): the sub MS snapshot's fib** — a sub's in-flight POI snapshot (sd-proximity CTS
+   confirmation) always uses the INTRA-cycle fib (`select_fib_anchor_for_cycle` → `"intra"` for sid 0, every sub)
+   while the drawn sub POIs come from the cross fibs: they differ on 8 unique sub cycles (e.g. confluence sub 0 cyc 2:
+   drawn POI IC 678 vs MS's fib zone ~100 pips away); no outcome diverged on the window. "I think this IS something we
+   do need to fix, but we can do that as item 2." Detail: memory
    `project_sub_single_cycle_fib_pois.md`; `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` (§13), `POI_ZONES_SPEC.md`
    "Cross-Cycle Mode".
 3. **Zone size adjustments** — user 2026-09-30: "currently some KL & POI zones may be very large or small in their
@@ -110,6 +121,21 @@ complete." Item 1 opens the next working session.
   closed" (the 2026-09-30 measurement).
 - **Should subs get the DERIVED CTS KL zone as their probe reference?** (today every sub reference zone is ad-hoc).
   Unscheduled follow-up. DECIDE. Detail: PART4 §17.12, GOTCHAS (the `kl_zones=[]` pool-path note).
+- **No-pattern cycles — a fallback POI** (after D.1 item 1; today: no POI, PLAN_H D7): (a) search the lower TF for the
+  same institutional pattern (the user's spec: "in future iterations we will build an additional process where we
+  would go into a lower TF"; why the leg cap is 3 on H1 / M15 and likely 2 on M5; PLAN_H H2); (b) the kept V30 / V60 /
+  V90 selection (PLAN_H X1: "There is still a chance that I use those as fallbacks … we might still delete in the
+  future"). DECIDE (after the item-1 chart review — "we will need to come back and understand if losing their POIs in
+  these cycles is appropriate").
+- **Test the POI_ZONES_SPEC §3.2 scenario IC filters** — never implemented; kept in the spec, unapplied (PLAN_H D4:
+  "I still want to keep these and test into them in the future"). Any IC filter stays OUTSIDE the institutional pattern
+  and is applied first. DECIDE.
+- **The agreed direction for wave candles + WVMI** (PLAN_H Q-W) — item 1 gives the IP legs the *agreed direction*
+  (candle and volume direction agree; one at 0 → the other decides; both 0 = a true doji). Wave candles and WVMI keep
+  GLOSSARY "qualified candle" (no volume-only-doji row) for now — user 2026-10-05: "we likely will also make the change
+  for wave candles & WVMI, but we'll come back to that later". "Qualified" is implemented twice
+  (`wave_candles._is_qualified`, inline in `wvmi._find_temporary_lp`) → one helper first; outputs change → its own
+  `/compare`. DECIDE (when).
 
 ## E. Trigger-based (only when the trigger fires)
 
@@ -164,7 +190,8 @@ complete." Item 1 opens the next working session.
   may revisit". Detail: `engine_v2/zones/FIB_LIFECYCLE_SPEC.md` §13.
 - **Uniform 3-tier chart opacity** (brightest = cycle not ended, mid = sid not ended, faded = sid ended; one
   `opacity_for(sid, cycle)` helper for every element) — its own session. Detail: FIB_LIFECYCLE_SPEC §9.4 + §13.
-- **Cascade-viz hover extras** — `current_versions` vs peak; a V90 → V60 → V30 downgrade cue. Detail: memory
+- **Cascade-viz hover extras** — `current_versions` vs peak; a V90 → V60 → V30 downgrade cue (OBSOLETE once D.1 item 1's
+  landing B removes the variants from the POIs — close it there). Detail: memory
   `project_item_5_cascade_viz.md`.
 - **Breadcrumb header with cross-chart navigation** — "not in v1". Detail: PART4 §16.9.
 - **Split `PART4_REFACTOR_SPEC.md` into canonical spec files** (a new `MULTI_TF_SPEC.md` + sections moved into

@@ -532,6 +532,11 @@ actual main multi-cycle cross (and Part B), expand the config window to find one
   diverge in-flight vs downstream.
 - **Single-cycle fibs coexisting with cross** (`project_sub_single_cycle_fib_pois.md`)
   — separate, additive, still deferred; not part of this unification.
+- **The SUB in-flight POI snapshot reads the intra-cycle fib, not the cross fib it draws** (found 2026-10-01) —
+  `select_fib_anchor_for_cycle` returns `"intra"` for every sub (sid 0), so on the 8 unique sub cycles whose POIs
+  come from a cross fib MS's sd-proximity reads other ICs than the drawn ones (no outcome diverged on the window).
+  Scheduled with register §D.1 item 2 (user 2026-10-02: "this IS something we do need to fix, but we can do that as
+  item 2"). Detail: MARKET_STRUCTURE_SPEC "Snapshot fib on SUBS"; PLAN_H §3 (D5).
 
 ---
 

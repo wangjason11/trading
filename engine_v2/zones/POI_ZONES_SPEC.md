@@ -327,6 +327,11 @@ After each reversal, a black horizontal line shows the Scenario 1 revert thresho
 
 ## 3. Institutional Candle (IC) Identification
 
+> **PENDING REDEFINITION — Week 9 Part 1 item 1 (spec decided 2026-10-05, `../plans/PLAN_H_institutional_pattern_poi.md`;
+> register `IDEA_PARKING_LOT.md` §D.1 item 1).** ONE IC per cycle, chosen by the *institutional pattern* among the §3.1
+> candidates (with the agreed direction) that touch the 61.8–80 zone, replaces §3.3's V30 / V60 / V90 selection (its
+> code is kept, unwired). Until that lands (PLAN_H landing B), this section describes the CURRENT code.
+
 IC identification is a two-step process:
 1. **IC Candidates** — Candles that meet the base conditions (§3.1; the §3.2 scenario conditions are NOT implemented)
 2. **IC Variants** — From candidates, select by overlap threshold (V30/V60/V90)
@@ -349,8 +354,9 @@ If Fib is deactivated, there are no bounds → no candidates.
 > **NOT IMPLEMENTED — the code has never applied this section (found 2026-09-30; unchanged since the POI build
 > `0033c53`, Week 7).** The tables below are the designed rule only. `passes_price_constraint` has no caller,
 > `find_ic_candidates`' `scenario_context` parameter is never read, and neither `derive_poi_zones` nor the MS in-flight
-> resolver `compute_poi_inners_for_cycle` passes one: IC candidates are §3.1's base conditions only. Week 9 Part 1
-> item 1 (one POI per cycle, `IDEA_PARKING_LOT.md` §D) decides whether to build it or drop it.
+> resolver `compute_poi_inners_for_cycle` passes one: IC candidates are §3.1's base conditions only. Decided by the
+> user 2026-10-02 (PLAN_H D4): KEPT here, unapplied, for future testing (register §D.2); any IC filter stays outside
+> the institutional pattern and is applied before it.
 
 Additional conditions based on which Fib scenario applies:
 
@@ -444,12 +450,16 @@ assumes "POI ⟹ sd direction."
 - `ic_idx`: Index of the IC candle (rectangle start)
 - `confirmed_idx`: **LAST** activate idx (lossy scalar — `poi_zones.py` overwrites it on every activation and never clears it on deactivation). A POI can flap active/inactive within a cycle, so this scalar does NOT bound the active interval. To ask "is the POI active as of candle X?" use `zones/poi_lifecycle.py::poi_active_as_of` (walks `activation_history`), never `confirmed_idx`. See GOTCHAS "POI `confirmed_idx` Is a Lossy Scalar".
 - `top`, `bottom`: IC high/low
-- `versions`: List of qualifying variants ["V30", "V60", "V90"]
+- `versions`: the variant PICKS this IC won on the final fib (`select_ic_variants`: each of V30 / V60 / V90 is won by
+  the most recent candidate meeting it) — NOT every threshold the IC meets (corrected 2026-10-05; found by the
+  2026-10-01 /prepare)
 - `status`: "active" | "inactive" | "ended" (+ "disappeared" — a reserved terminal-invalidation status; see Zone States). Charting note (2026-09-20): a POI whose CYCLE collapsed (its BOS KL zone is `inactive` with clamped `confirmed_idx >= end_idx`) is not drawn on any chart (`charting/_zone_render.collapsed_cycles` / `is_poi_of_collapsed_cycle`); an `"inactive"` POI whose cycle is live (never met its activation conditions) is still drawn as an outline. POI fills are side-tinted since 2026-09-21 (buy gold-lime, sell amber — CHARTING_SPEC §7).
 - `end_idx` / `end_reason`: terminal axis inherited from the owning cycle (`compute_cycle_lifecycle`): `"reversal"` | `"next_cycle"` (the next cycle's clamped lifecycle-start = the CTS-established **moment** `meta["confirmed_at"]`, Plan C 2026-09-20) | for subs the sub's `cap_reason` — `"reversal"` | `"same_dir_replacement"` | `"parent_end"` — when the unique sub's `end_idx` capped the cycle (`"lifecycle_end"` is no longer emitted) | `None`
 - `activation_history`: per-candle activate/deactivate flips (condition axis)
-- `current_versions`: the variants live at the last activate event (empty while the POI is deactivated) — vs
-  `versions` = the peak variants ever achieved
+- `current_versions`: every threshold this IC's OWN overlap meets at its last activate event (empty while the POI is
+  deactivated) — so it can hold a variant `versions` lacks: H1 sid 0 cycle 1 IC 607 has `versions` [V60, V90] and
+  `current_versions` [V30, V60, V90] (it meets 30 % but lost the V30 pick to the more recent IC 611). Both keys are
+  replaced by item 1 (a rule-3 migration, PLAN_H D6)
 - `cts_established_idx`: the owning cycle's CTS-established **moment** (`CTS_ESTABLISHED.meta["confirmed_at"]`)
   — the activation floor's cycle term (see "Activation floor" below). **Meaning changed by Plan D (2026-09-23):**
   saves before it hold the CTS anchor (then `CTS_ESTABLISHED.idx`) under this key. **A cycle with no

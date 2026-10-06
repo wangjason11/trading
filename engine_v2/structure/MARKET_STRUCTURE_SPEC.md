@@ -360,6 +360,13 @@ at CTS_ESTABLISHED time and don't shift much during the cycle. The
 performance cost of full per-candle recomputation (Fib + IC scan + variant
 selection) is substantial. The major refactor may revisit this.
 
+**Snapshot fib on SUBS ≠ the drawn sub fib (found 2026-10-01; fix scheduled in `IDEA_PARKING_LOT.md` §D.1 item 2,
+user 2026-10-02):** the resolver's fib choice (`select_fib_anchor_for_cycle`) returns `"intra"` for `sid == 0`, and
+every sub is sid 0 — so a sub's snapshot always reads the INTRA-cycle fib (BOS_n → CTS_n), while its drawn POIs come
+from the cross-cycle fib. They differ on 8 unique sub cycles of the reference window (e.g. confluence sub 0 cycle 2:
+drawn POI IC 678 at 0.56234–0.56268 vs the snapshot fib's zone 0.57244–0.57364); no outcome diverged there. Detail:
+`plans/PLAN_H_institutional_pattern_poi.md` §3 ("Drawn POI vs MS snapshot", D5).
+
 **Snapshot vs per-candle — imbalance knowability is bounded by the consumer
 gate, no refresh-time cut (Plan F, 2026-09-24):** MS's in-flight imbalance
 reads — IC cond3 in `find_ic_candidates` over `(candidate, st.cts.idx]` and
