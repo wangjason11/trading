@@ -1,0 +1,4 @@
+commit_hash=e1c597c
+timestamp=20261006_120513
+branch=week9-entries-decisions
+commit_message=Week 9 Part 1 item 1 landing A: the institutional-pattern IC selector, exported (*_ip_candidates.csv), nothing switched

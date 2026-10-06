@@ -1,0 +1,9 @@
+lens,parent_sid,parent_cycle_id,trigger_sub_sid,sub_id,trigger_type,trigger_idx,probe_finalize_idx,probe_finalize_condition,parent_bos_anchor_idx,probe_input_idx,starting_idx,direction,sub_tf,relative_dir,parent_floor_idx,start_idx,trigger_end_idx,end_idx,end_reason,ended_by_sub_id,seq,extra_trigger_idxs,is_zero_length
+confluence,0,0,0,0,first_confluence,463,1020,second_cts_reached,96.0,385,454,1,M15,confluence,463,1020,1940.0,1940.0,reversal,,0,[],False
+confluence,0,0,1,1,reversal,1940,1940,no_retrace,,1794,1797,-1,M15,counter,463,1940,2470.0,2470.0,reversal,,1,[],False
+confluence,0,0,2,2,reversal,2470,2470,no_retrace,,2365,2365,1,M15,confluence,463,2470,2611.0,2611.0,parent_end,,2,[],False
+confluence,0,1,0,2,first_confluence,2611,2470,no_retrace,591.0,2365,2365,1,M15,confluence,2611,2611,2829.0,2829.0,reversal,,3,[],False
+confluence,0,1,1,3,reversal,2829,2829,no_retrace,,2609,2639,-1,M15,counter,2611,2829,3611.0,3611.0,parent_end,,4,[],False
+confluence,1,2,0,4,first_confluence,3611,3621,no_retrace,826.0,3304,3304,-1,M15,confluence,3611,3621,3819.0,3819.0,same_dir_replacement,6.0,6,[],False
+confluence,1,2,1,6,subsequent_confluence,3819,3819,no_retrace,,3760,3760,-1,M15,confluence,3611,3819,4200.0,4200.0,reversal,,8,[],False
+confluence,1,2,2,7,reversal,4200,4083,no_retrace,,4000,4027,1,M15,counter,3611,4200,,,,,10,[],False
