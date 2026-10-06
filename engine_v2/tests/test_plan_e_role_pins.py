@@ -20,6 +20,7 @@ import pytest
 
 import engine_v2
 import engine_v2.zones.poi_zones as poi_zones
+from engine_v2.zones.poi_zones import POIConfig
 from engine_v2.common.types import ImbalanceInstance
 from engine_v2.tests._event_factory import make_cts_established
 from engine_v2.tests.test_cross_cycle_fib_routine import _BOS, _CTS, _INST0, _INST1
@@ -145,9 +146,8 @@ def _poi_history(anchor, moment=7, floor=None):
     cts = make_cts_established(cts_anchor_idx=anchor, confirmed_at=moment, idx=moment,
                                price=0.6100, struct_direction=None)
     return poi_zones._compute_poi_activation_history(
-        df, ic_idx=6, cts_established_idx=moment, sd=1, scan_end=12, fill_threshold=0.70,
-        bos_price=0.6000, cts_events=[cts], fib_min_pct=61.8, fib_max_pct=80.0,
-        variant_thresholds={"V30": 0.3, "V60": 0.6, "V90": 0.9},
+        df, ic_idx=6, cts_established_idx=moment, sd=1, scan_end=12, bos_price=0.6000, cts_events=[cts],
+        config=POIConfig(), pattern_confirmed_idx=6,  # R1 floor never binds (<= first_active)
         imbalances=[imb], fill_idx_cache={id(imb): (None, None)}, lifecycle_floor_idx=floor,
     )
 
@@ -697,8 +697,7 @@ def _e4c_poi_history(cts_events, established_moment):
                             gap_top=0.6090, gap_bottom=0.6080, gap_size=0.0010)
     return poi_zones._compute_poi_activation_history(
         df, ic_idx=6, cts_established_idx=established_moment, sd=1, scan_end=12,
-        fill_threshold=0.70, bos_price=0.6000, cts_events=cts_events, fib_min_pct=61.8,
-        fib_max_pct=80.0, variant_thresholds={"V30": 0.3, "V60": 0.6, "V90": 0.9},
+        bos_price=0.6000, cts_events=cts_events, config=POIConfig(), pattern_confirmed_idx=6,  # R1 floor never binds (<= first_active)
         imbalances=[imb], fill_idx_cache={id(imb): (None, None)}, lifecycle_floor_idx=None,
     )
 

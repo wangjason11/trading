@@ -117,12 +117,20 @@ To change any visual element:
 - **Outline (Item 5)**: single rect outline (no fill) spanning `[start_time, end_time]`. Color matches the side's confirm line (`confirm_line_rgb`: dark olive `60,90,20` buy / dark brick `120,45,15` sell since the 2026-09-21 side tints; the `101,67,33` brown in the code is only a `.get` fallback), width = `confirm_line_width` (=2). Opacity = `confirm_opacity_active × tier`.
 - **Fill (Item 5)**: ONE filled rect per active stretch in `meta["activation_history"]` — each `A` event paired with the next `D` (or `end_idx` for trailing activate). Inactive stretches render as outline only.
 - **Confirm lines (Item 5)**: ONE vertical line per `A` event in `activation_history` (replaces the prior single line at `confirmed_idx`). For zones derived before activation_history was added, falls back to a single line at `confirmed_idx`.
+- **Hover (PLAN_H HV, landing B 2026-10-06; `versions=` until then)**: the pattern line(s) from ONE builder,
+  `_zone_render.poi_ip_hover_text`, on all three POI hover sites (the H1 chart, the M15 lens charts' sub POIs and
+  their H1 overlay): `IP <rank> · legs a-b-c (initial | opp | continuation)` — each leg `first–last`, one candle its
+  index — + `TB1 over <IC> (IC candle type)` / `TB2 over <IC> (reference imbalance <c2>)` when a tiebreaker decided.
+  The builder asserts the leg counts match the leg indices (a mirror that shifted one but not the other fails at render).
 - Style keys: `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line`
 
 ### 8) Fibonacci box (Week 7; H1 chart only — M15 fibs are CSV-only)
 - Reads the FibTracker states; a fib is drawn iff it is locked, or active with its cycle not ended (a superseded / inactive-unlocked / ended-unlocked version vanishes — FIB_LIFECYCLE_SPEC §9.2)
 - Per fib: dotted horizontal lines at 0% (BOS anchor) and 100% (CTS anchor) plus dotted verticals at both ends (`fib.anchor_line.*`), and a dotted rectangle between 61.8% and 80% (`fib.zone_rect.*`), spanning the BOS → CTS candles; invisible hover points across the zone
 - "Bright" = the live active version (`.active` keys); locked / ended versions render faded (`.historical` keys)
+- Hover: sid, cycle, the BOS / CTS anchors + prices, the 61.8 / 80 levels, the status — + `IP: none (<reason>)` on a
+  record without an institutional pattern, i.e. without a POI (PLAN_H C1; read from `attrs["ip_candidates"]`' none
+  rows, keyed by (sid, cycle, BOS anchor, CTS anchor))
 - Style keys: `fib.anchor_line.active` / `.historical`, `fib.zone_rect.active` / `.historical` (`fib.label` is defined in the registry but unused)
 
 ### 9) Volume overlay (Week 7)

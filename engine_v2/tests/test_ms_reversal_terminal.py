@@ -130,8 +130,10 @@ def test_a_reversal_inside_a_winner_backfill_ends_the_structure(sd):
 # review). sd=+1:
 #   0-10 as P1: the one_maru_opposite(+1) breakout applies at 10 (cycle 1, BOS_1 .6088) and candle 10 is a range
 #        candle (confirm 14) -> `_post_apply_range_check(10)` back-fills [10, 14):
-#   11   bear maru: sd-zone proximity confirms CTS_1 and creates a range (RANGE);
-#   12   bear maru closing .60646 < BOS .6088 -> watch + the pending reversal `one_maru_opposite(-1)` 12-13;
+#   11   bear maru (no POI inner since PLAN_H landing B: cycle 1's only IC candidate is the BOS anchor 7, which has
+#        no institutional pattern — until then the V30 POI's inner confirmed CTS_1 here);
+#   12   bear maru closing .60646 < BOS .6088: sd-zone proximity (the BOS inner) confirms CTS_1 and creates a range
+#        (RANGE) + watch + the pending reversal `one_maru_opposite(-1)` 12-13;
 #   13   the pending reversal applies -> STATE_CHANGED(range -> reversal) @13 = the terminal.
 #   Before the fix: the range finalized (RANGE_STARTED@14 (start 10) + STATE_CHANGED(reversal -> range)@14), row 10
 #   was re-written, anchors 11.. re-ran (a pullback @12 with CTS_RECONFIRMED, a second watch @12) and it reversed
@@ -162,7 +164,7 @@ def test_a_reversal_inside_a_post_apply_range_backfill_does_not_finalize_the_ran
     res = _run(df, sd)
     _assert_single_terminal(res, 13, "range")
     cyc1 = [e for e in res.events if e.idx >= 10]   # after cycle 1's establishment (the base's cycle 0 ends at 9)
-    assert [(e.idx, e.meta["reason"]) for e in cyc1 if e.type == "RANGE_STARTED"] == [(11, "proximity_created_range")]
+    assert [(e.idx, e.meta["reason"]) for e in cyc1 if e.type == "RANGE_STARTED"] == [(12, "proximity_created_range")]
     assert not [e for e in cyc1 if e.type == "CTS_RECONFIRMED"]
 
 

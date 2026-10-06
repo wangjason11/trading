@@ -75,7 +75,8 @@ def poi_rows(d, lens, sfx):
                int(r.ic_idx))
         flips = ",".join(f"{e['idx']}{'A' if e['active'] else 'D'}" for e in m.get("activation_history", []))
         reasons = sorted({e.get("reason") for e in m.get("activation_history", []) if not e["active"]})
-        out[key] = (r.confirmed_idx if pd.notna(r.confirmed_idx) else None, r.status, r.versions, flips,
+        rank = r.ip_rank if hasattr(r, "ip_rank") else r.versions   # `versions` until PLAN_H landing B
+        out[key] = (r.confirmed_idx if pd.notna(r.confirmed_idx) else None, r.status, rank, flips,
                     "/".join(reasons))
     return out
 

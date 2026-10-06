@@ -26,13 +26,14 @@ import pandas as pd
 import pytest
 
 import engine_v2.zones.poi_zones as poi_zones
+from engine_v2.zones.poi_zones import POIConfig
 from engine_v2.common.types import ImbalanceInstance
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.tests._event_factory import make_cts_established, make_cts_updated
 from engine_v2.tests.test_poi_activation_moment import _only_poi, _run
-from engine_v2.tests.test_unified_probe import _make_multicycle_data
+from engine_v2.tests.test_unified_probe import _make_ip_multicycle_data, _make_multicycle_data
 from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig, select_fib_anchor_for_cycle
 
 
@@ -48,6 +49,19 @@ def _df(n, instances):
     })
     df.attrs["imbalances"] = list(instances)
     return df
+
+
+def _ip_ready(df):
+    """`_df`'s frame through the real candle classifier: the columns + stamps the
+    institutional pattern reads (`candle_type`, `prior_maru_max_len_as0`,
+    `vol_dir`, `attrs["timeframe"]`, `attrs["pair"]`). The MS resolver runs
+    `select_ip_ic` OUTSIDE its graceful `try` since PLAN_H landing B — an unready
+    frame raises `IPSelectionError`."""
+    from engine_v2.features.candle_classifier import apply_candle_classification
+    out = apply_candle_classification(df).df
+    out.attrs["imbalances"] = df.attrs["imbalances"]
+    out.attrs["pair"] = "NZD_USD"
+    return out
 
 
 def _gap(start, end=None, top=1.10, bottom=1.00):
@@ -98,9 +112,8 @@ def _sweep(imbalances, *, first_active=6, scan_end=12):
                                struct_direction=None)
     return poi_zones._compute_poi_activation_history(
         df, ic_idx=2, cts_established_idx=first_active, sd=1, scan_end=scan_end,
-        fill_threshold=0.70, bos_price=0.6000, cts_events=[cts],
-        fib_min_pct=61.8, fib_max_pct=80.0,
-        variant_thresholds={"V30": 0.3, "V60": 0.6, "V90": 0.9},
+        bos_price=0.6000, cts_events=[cts],
+        config=POIConfig(), pattern_confirmed_idx=2,  # R1 floor never binds (<= first_active)
         imbalances=imbalances,
         fill_idx_cache={id(i): (None, None) for i in imbalances},
         lifecycle_floor_idx=None,
@@ -129,15 +142,18 @@ def test_sweep_enters_a_merged_run_at_its_first_c3_not_its_last():
 
 
 def test_multicycle_poi_full_history():
-    """`_make_multicycle_data` POI (0,2) IC 12 (supersedes Plan D's first-only pin).
+    """`_make_ip_multicycle_data` POI (0,2) IC 14 (supersedes Plan D's first-only pin;
+    re-pointed from `_make_multicycle_data`'s IC 12 at PLAN_H landing B — that cycle
+    has no institutional pattern, so no POI; the same instances, shifted by 2).
 
-    Instance (14,14) commit-fills at 19; the run (19,22) forms only at 20 — past
-    this POI's scan end 19 (its cycle ends at 20) — so the POI deactivates at 19.
-    Pre-Plan-F the run entered at its c2 = 19, the same candle, masking the fill."""
-    _, _, out = _run(_make_multicycle_data())
+    Instance (15,16) commit-fills at 21; the run (21,24) forms only at 22 — past
+    this POI's scan end 21 (its cycle ends at 22) — so the POI deactivates at 21.
+    Pre-Plan-F the run entered at its c2 = 21, the same candle, masking the fill."""
+    _, _, out = _run(_make_ip_multicycle_data())
     z = _only_poi(out, 0, 2)
+    assert z.ic_idx == 14
     assert [(e["idx"], e["active"], e["reason"]) for e in z.meta["activation_history"]] == [
-        (15, True, "initial"), (19, False, "imbalance_filled"),
+        (17, True, "initial"), (21, False, "imbalance_filled"),
     ]
 
 
@@ -337,8 +353,18 @@ def test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib():
     cutting at the event, never creates the fib. Flips when the "re-ask when the
     gap forms" follow-up lands."""
     df = _df(60, [_gap(40, top=1.30, bottom=1.20)])
-    # IC candidate at 32: bearish, inside the 61.8-80% band of (BOS 1.00 → CTS 1.35).
-    df.loc[32, ["o", "h", "l", "c", "direction"]] = [1.12, 1.13, 1.08, 1.09, -1]
+    # The big-flag reference: 5 marus (.0200 bodies) before the pattern.
+    for i, base in zip(range(25, 30), (1.00, 1.02, 1.04, 1.06, 1.08)):
+        df.loc[i, ["o", "h", "l", "c"]] = [base, base + 0.021, base - 0.001, base + 0.02]
+    # IC candidate at 32: bearish, inside the 61.8-80% band of (BOS 1.00 → CTS 1.35),
+    # with an institutional pattern (since PLAN_H landing B the resolver returns the
+    # pick's inner only): initial 31 (maru), the IC 32 (normal), continuation 33
+    # (big maru) -> `2A.i`.
+    df.loc[31, ["o", "h", "l", "c"]] = [1.10, 1.121, 1.099, 1.12]
+    df.loc[32, ["o", "h", "l", "c"]] = [1.12, 1.13, 1.08, 1.09]
+    df.loc[33, ["o", "h", "l", "c"]] = [1.09, 1.201, 1.089, 1.20]
+    df = _ip_ready(df)
+    assert int(df.loc[32, "direction"]) == -1
     inners = poi_zones.compute_poi_inners_for_cycle(
         df, 30, 1.00, 40, 1.35, 1, structure_id=0, cycle_id=1, fill_horizon_idx=40, snapshot_horizon_idx=40,
     )
@@ -507,7 +533,7 @@ def test_guard_ms_inflight_select_call_is_uncut(monkeypatch):
         return real(*a, **k)
 
     monkeypatch.setattr(poi_zones, "select_fib_anchor_for_cycle", spy)
-    df = _df(60, [_gap(15), _gap(40, top=1.30, bottom=1.20)])
+    df = _ip_ready(_df(60, [_gap(15), _gap(40, top=1.30, bottom=1.20)]))
     poi_zones.compute_poi_inners_for_cycle(df, 30, 1.2, 40, 1.35, 1,
                                            structure_id=1, cycle_id=1, c0_data=_c0(),
                                            fill_horizon_idx=40, snapshot_horizon_idx=40)

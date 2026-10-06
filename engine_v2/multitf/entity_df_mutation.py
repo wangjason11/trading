@@ -144,6 +144,14 @@ _ZONE_META_IDX_KEYS = (
                             # zones only). `pb_reconfirm_idx` until Post-E·5; was
                             # misfiled in the EVENT list (no event carries it)
                             # until Post-E·2.
+    # PLAN_H landing B (2026-10-06) — the POI's institutional pattern (the
+    # `IPCandidateRecord` index fields of the pick; `ip_tied_count` is a count):
+    "pattern_anchor_idx",   # POI (the initial leg's first candle)
+    "opp_leg_first_idx",    # POI
+    "pattern_end_idx",      # POI (the continuation leg's last candle)
+    "pattern_confirmed_idx",  # POI (a MOMENT: the continuation leg known complete — R1)
+    "ip_tb_runner_up_ic_idx",       # POI (None unless TB1 / TB2 decided)
+    "ip_tb_imbalance_first_c2_idx",  # POI (TB2 only)
 )
 
 # FibState meta keys with entity-df indices (the dataclass fields bos_idx /
@@ -1144,6 +1152,11 @@ def _build_geometry(
             bos0_inner=bos0_inner,
         )
     except (ValueError, IndexError):
+        # The documented geometry failure (LANDMINES "Lower-TF Pipeline Steps May
+        # Fail" -> `geometry_failed`). It must stay this narrow: the MS run inside
+        # calls the POI resolver, whose institutional-pattern errors arrive as
+        # `poi_zones.IPSelectionError` (a RuntimeError) and propagate — a swallowed
+        # one would drop the WHOLE sub (PLAN_H §8.5 step 3).
         return None
 
     bounded.df.attrs["imbalances"] = trigger_df.attrs.get("imbalances", [])

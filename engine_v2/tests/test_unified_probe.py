@@ -251,6 +251,58 @@ def _make_second_cts_moment_after_anchor_data() -> list[dict]:
     return rows
 
 
+def _make_ip_moment_after_anchor_data() -> list[dict]:
+    """`_make_second_cts_moment_after_anchor_data` with an INSTITUTIONAL PATTERN in cycle 1 (PLAN_H landing B,
+    2026-10-06): there the only IC candidate is the BOS anchor itself (7 — no initial leg can follow the BOS
+    anchor, B1), so the cycle has NO POI under the one-POI rule. Here three candles are inserted after the BOS
+    anchor; crafted + verified by running the live MS 2026-10-06. sd=+1, start 0, 21 H1 candles, NZD_USD.
+
+    0-7   = the base's (cycle 0: established 2, CTS_CONFIRMED 7, range hi .6122 / lo .6088; BOS_1 = l7 .6088).
+    8     up maru inside the range           = the initial leg (single)
+    9     down maru                          = the IC (single opp leg; touches the final fib's 61.8-80 zone)
+    10-11 up marus inside the range          } the continuation leg = 10-12 (it hits the cap 3 -> its
+    12    big bull maru closing ABOVE range_hi } `pattern_confirmed_idx` = 12): `one_maru_opposite(+1)` c0, the
+                                               cycle-1 CTS EXTREME (the CTS anchor 12)
+    13-20 = the base's 10-17: 13 small bear normal -> OMO success, apply 13 -> CTS_ESTABLISHED (0,1) anchor 12,
+          MOMENT 13; 14 big bear maru -> CTS_CONFIRMED (sd-zone proximity) 14 + the reversal watch; the reversal
+          applies at 17.
+    Pick: IC 9 `1A.iii` (legs 1-1-3). Its POI: active at 13 (the moment, NOT the anchor 12 — the R1 floor 12 does
+    not mask it), deactivated at 15 (`imbalance_filled`), ends at 17 (reversal)."""
+    base = _make_second_cts_moment_after_anchor_data()
+    return list(base[:8]) + [
+        _R(0.60900, 0.61070, 0.60890, 0.61050),   # 8
+        _R(0.61050, 0.61060, 0.60980, 0.60990),   # 9  (the IC)
+        _R(0.60990, 0.61090, 0.60980, 0.61080),   # 10
+        _R(0.61080, 0.61170, 0.61070, 0.61160),   # 11
+        _R(0.61160, 0.61470, 0.61150, 0.61450),   # 12 (the CTS anchor)
+    ] + list(base[10:])
+
+
+def _make_ip_multicycle_data() -> list[dict]:
+    """`_make_multicycle_data` with an INSTITUTIONAL PATTERN in cycle 2 (PLAN_H landing B, 2026-10-06): there every
+    cycle's only IC candidate is its BOS anchor (no POI under the one-POI rule). Here cycle 2 gets an initial /
+    opp / continuation after its BOS anchor (12); crafted + verified by running the live MS 2026-10-06. sd=+1,
+    start 0, 26 H1 candles, NZD_USD.
+
+    0-12  = the base's (cycle 1 established 10, CTS_CONFIRMED 12; BOS_2 = l12 .6113; range hi .6167).
+    13    up maru inside the range           = the initial leg
+    14    down maru                          = the IC
+    15    up maru inside the range           } the continuation leg = 15-17 (the cap -> `pattern_confirmed_idx`
+    16    big bull maru closing above range_hi } 17)
+    17    follow-through maru -> `one_maru_continuous(+1)` -> CTS_ESTABLISHED (0,2) anchor == MOMENT 17
+    18-25 = the base's 16-23 (pullback -> CTS_CONFIRMED 19; cycle 3 established 22).
+    Picks: cycle 2 IC 14 `1A.iii` (cycles 1 / 3: the BOS-anchor IC only -> no POI). Its POI: active at 17,
+    deactivated at 21 (`imbalance_filled`), ends at 22 (next cycle)."""
+    mc = _make_multicycle_data()
+    return list(mc[:13]) + [
+        _R(0.61150, 0.61370, 0.61140, 0.61350),   # 13
+        _R(0.61350, 0.61360, 0.61270, 0.61280),   # 14 (the IC)
+        _R(0.61280, 0.61470, 0.61270, 0.61450),   # 15
+        _R(0.61450, 0.61870, 0.61430, 0.61850),   # 16
+        _R(0.61850, 0.62070, 0.61830, 0.62050),   # 17 (the CTS anchor == the moment)
+    ] + list(mc[16:])
+
+
 def _make_cycle0_reversal_data() -> list[dict]:
     """A structure that REVERSES inside cycle 0 (the `reversal_in_probe` row: reversal
     with < 2 CTS_ESTABLISHED). sd=+1, start 0, 13 H1 candles, NZD_USD; verified by running

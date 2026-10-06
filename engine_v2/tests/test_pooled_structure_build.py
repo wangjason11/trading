@@ -80,10 +80,13 @@ def _poi_sig(zones):
             # cover when a POI goes live, not only its geometry and end.
             z.meta.get("confirmed_idx"), z.meta.get("cts_established_idx"),
             tuple(
-                (e["idx"], e["active"], e.get("reason"), tuple(e.get("versions", ())))
+                (e["idx"], e["active"], e.get("reason"))
                 for e in z.meta.get("activation_history") or []
             ),
-            tuple(z.meta.get("current_versions") or ()),
+            # The institutional pattern (PLAN_H landing B; `versions` /
+            # `current_versions` until then): the pick and its legs.
+            z.meta["ip_rank"], z.meta["ip_leg_candle_counts"], z.meta["pattern_anchor_idx"],
+            z.meta["pattern_confirmed_idx"], z.meta["ip_tiebreak"],
         )
         for z in zones
     )

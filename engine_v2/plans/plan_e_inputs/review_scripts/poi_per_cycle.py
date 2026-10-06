@@ -35,7 +35,8 @@ for path in paths:
         "cyc": m.apply(lambda x: x["cycle_id"]),
         "sd": m.apply(lambda x: x["struct_direction"]),
         "ic": d["ic_idx"],
-        "ver": m.apply(lambda x: "/".join(v[1:] for v in x["versions"])),
+        # the pick's rank since PLAN_H landing B (2026-10-06); older saves: the V variants
+        "ver": m.apply(lambda x: x["ip_rank"] if "ip_rank" in x else "/".join(v[1:] for v in x["versions"])),
         "inner": [r.top if x["struct_direction"] == 1 else r.bottom for r, x in zip(d.itertuples(), m)],
         "pips": ((d["top"] - d["bottom"]) * 1e4).round(1),
         "bos": m.apply(lambda x: x["bos_anchor_idx"]),

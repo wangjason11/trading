@@ -684,30 +684,43 @@ def test_mirror_shifts_every_index_field_once_per_lens():
 
 
 def test_downstream_pipeline_reads_the_poi_config_defaults(monkeypatch):
-    """PLAN_H §8.1 one parameter source: the drawn POIs and the IP pass both get `POIConfig()` (the re-typed
-    literals are gone; the leg cap is the default table)."""
+    """PLAN_H §8.1 one parameter source: the selection, the drawn POIs and the debug CSV all get `POIConfig()`
+    (the re-typed literals are gone; the leg cap is the default table) — and (landing B, §8.5) the selection is
+    computed ONCE: the SAME `select_ip_records` list is handed to both readers."""
     import engine_v2.pipeline.orchestrator as orch
     from engine_v2.structure.structure_engine import compute_bounded_structure
-    from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_df
+    from engine_v2.tests.test_unified_probe import _make_ip_multicycle_data, _prepare_df
     seen = []
-    real_poi, real_ip = orch.derive_poi_zones, orch.derive_ip_candidates
-    monkeypatch.setattr(orch, "derive_poi_zones", lambda *a, **k: seen.append(("poi", k["config"])) or real_poi(*a, **k))
-    monkeypatch.setattr(orch, "derive_ip_candidates", lambda *a, **k: seen.append(("ip", a[3])) or real_ip(*a, **k))
-    df = _prepare_df(_make_multicycle_data())
+    real_sel, real_poi, real_ip = orch.select_ip_records, orch.derive_poi_zones, orch.derive_ip_candidates
+
+    def sel(*a, **k):
+        out = real_sel(*a, **k)
+        seen.append(("sel", a[3], out))
+        return out
+
+    monkeypatch.setattr(orch, "select_ip_records", sel)
+    monkeypatch.setattr(orch, "derive_poi_zones",
+                        lambda *a, **k: seen.append(("poi", k["config"], k["ip_records"])) or real_poi(*a, **k))
+    monkeypatch.setattr(orch, "derive_ip_candidates",
+                        lambda *a, **k: seen.append(("ip", a[3], k["ip_records"])) or real_ip(*a, **k))
+    df = _prepare_df(_make_ip_multicycle_data())
     res = compute_bounded_structure(df, 0, +1)
     with contextlib.redirect_stdout(io.StringIO()):
-        orch._run_downstream_pipeline(res.df, res.events, res.struct_direction, wvmi="off")
-    assert [k for k, _ in seen] == ["poi", "ip"]
-    assert all(cfg == POIConfig() for _, cfg in seen)
+        out = orch._run_downstream_pipeline(res.df, res.events, res.struct_direction, wvmi="off")
+    assert out["poi_zones"], "the fixture draws a POI"
+    assert [k for k, _, _ in seen] == ["sel", "poi", "ip"]
+    assert all(cfg == POIConfig() for _, cfg, _ in seen)
+    assert seen[1][2] is seen[0][2] and seen[2][2] is seen[0][2]
 
 
 def test_downstream_pipeline_returns_the_selection_of_its_own_fibs():
     """The pipeline call site (the real collaborator): `_run_downstream_pipeline` hands back exactly
-    `derive_ip_candidates` over its own fib tracker — one or more rows per gated record."""
+    `derive_ip_candidates` over its own fib tracker — one or more rows per gated record — and (landing B, D2)
+    draws exactly the picked rows: one POI per picked row, the same IC / rank / legs / tiebreak."""
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
     from engine_v2.structure.structure_engine import compute_bounded_structure
-    from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_df
-    df = _prepare_df(_make_multicycle_data())
+    from engine_v2.tests.test_unified_probe import _make_ip_multicycle_data, _prepare_df
+    df = _prepare_df(_make_ip_multicycle_data())
     res = compute_bounded_structure(df, 0, +1)
     with contextlib.redirect_stdout(io.StringIO()):
         out = _run_downstream_pipeline(res.df, res.events, res.struct_direction, wvmi="off")
@@ -715,6 +728,15 @@ def test_downstream_pipeline_returns_the_selection_of_its_own_fibs():
     again = derive_ip_candidates(res.df, res.events, out["fib_tracker"], POIConfig(), structure_path_id="H1.main")
     assert [dataclasses.astuple(r) for r in out["ip_candidates"]] == [dataclasses.astuple(r) for r in again]
     assert {r.meta["structure_path_id"] for r in out["ip_candidates"]} == {"H1.main"}
+    picked = [r for r in out["ip_candidates"] if r.picked]
+    assert picked, "the fixture has a pick"
+    assert len([r for r in out["ip_candidates"] if r.ic_idx is None]) == 2   # cycles 1 / 3: no pattern, no POI
+    drawn = [(z.meta["structure_id"], z.meta["cycle_id"], z.ic_idx, z.meta["ip_rank"], z.meta["ip_leg_candle_counts"],
+              z.meta["pattern_anchor_idx"], z.meta["opp_leg_first_idx"], z.meta["pattern_end_idx"],
+              z.meta["pattern_confirmed_idx"], z.meta["ip_tiebreak"]) for z in out["poi_zones"]]
+    assert drawn == [(r.structure_id, r.cycle_id, r.ic_idx, r.ip_rank, r.ip_leg_candle_counts, r.pattern_anchor_idx,
+                      r.opp_leg_first_idx, r.pattern_end_idx, r.pattern_confirmed_idx, r.ip_tiebreak)
+                     for r in picked]
 
 # ---------------------------------------------------------------------------
 # the landing review's test-gap lens (2026-10-06): each kills a mutant the first suite let survive

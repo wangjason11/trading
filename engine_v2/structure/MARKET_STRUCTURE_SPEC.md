@@ -342,7 +342,13 @@ spawning a phantom cycle 1.
 The proximity check picks the closest-to-current-price sd inner across
 BOS and POIs. POI inners are refreshed at `CTS_ESTABLISHED` (new cycle)
 and at each `CTS_UPDATED` (CTS extended → Fib bounds expand → IC
-candidates may shift). The snapshot is per-cycle in
+candidates may shift). Since PLAN_H landing B (2026-10-06) the snapshot
+holds 0 or 1 POI inner: the institutional-pattern pick of the AS-OF fib
+(`poi_zones.compute_poi_inners_for_cycle` → `select_ip_ic`, the drawn
+POI's own selector — D2; before it, the inners of the 1–3 V30 / V60 / V90
+picks). No pattern → the BOS inner alone. An IP error is NOT swallowed
+(LANDMINES "The POI Resolver Fails Loudly"): only the anchor selection +
+the fib construction keep the resolver's graceful `[]`. The snapshot is per-cycle in
 `MarketStructureState.poi_inners_for_cycle`. Both refreshes still run
 on cycle 0 (cheap; the cycle-0 POI refresh also keeps `cycle0_data` —
 the Scenario-2 cond2 mirror — in sync via `_update_cycle0_data`), but

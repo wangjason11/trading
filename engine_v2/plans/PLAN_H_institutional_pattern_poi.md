@@ -462,7 +462,7 @@ until I can review the charts".
   record equal but the gated-out sub 3 cyc 3; docs: POI_ZONES_SPEC §3.4, GLOSSARY, IMBALANCE_FILL_SEMANTICS, the
   `/compare` skill + WORKFLOWS + review_scripts README (27 CSVs).
 
-## 8. Implementation plan (2026-10-05; REVIEWED + folded 2026-10-06 — §8.8; A built + saved §8.3a; §8.4 measured §8.4a)
+## 8. Implementation plan (2026-10-05; REVIEWED + folded 2026-10-06 — §8.8; A built + saved §8.3a; §8.4 measured §8.4a; B built §8.5a, chart-review points §8.5b)
 
 ### 8.0 Shape
 
@@ -781,6 +781,133 @@ CTS_CONFIRMED + 10), the `_final.csv` MS columns from 926, the trigger scan star
 subs 0–3 POIs == A's picks (19 → 10 rows; 1902 survives); the counter subs and confluence subs 4 / 6 / 7 re-derived,
 keyed on (direction, `starting_idx`) since `sub_id` is creation order; the `*_poi_zones.csv` columns; the hovers;
 the replay time (from V3; the landing review measured ≈ +4–5 s). Then the chart review (the no-POI cycles, the touch rule, the re-derived counter lens).
+
+### 8.5a Landing B — as built (2026-10-06)
+
+- **Code:** `poi_zones`: `IPRecordSelection` + `select_ip_records` (the lifecycle gate → the cycle's CTS_ESTABLISHED
+  skip / locked-fib assert → `select_ip_ic(classify_misses=True)`, computed ONCE per pipeline run; the orchestrator
+  hands the same list to `derive_poi_zones` and `derive_ip_candidates` via `ip_records=`); `derive_poi_zones` draws the
+  pick (0–1 POI per record) with the IP meta in place of `versions` / `current_versions`; `_compute_poi_activation_history`
+  cond5 = `ic_touches_zone` on the as-of `fib_zone_bounds`, reason `ic_not_touching_fib_zone`, `first_active` +
+  `pattern_confirmed_idx`; the resolver runs `select_ip_ic` after its `try` and re-raises any IP error as
+  `IPSelectionError`; `select_ic_variants` marked UNWIRED (X1). `entity_df_mutation._ZONE_META_IDX_KEYS` + the 6 IP
+  index keys; the geometry scope's comment. `export_poi_zones` `versions` → `ip_rank`. `_zone_render.poi_ip_hover_text`
+  (HV) at the 3 POI hover sites; the H1 fib hover's `IP: none (<reason>)`. `poi_per_cycle.py` reads both formats.
+- **Deviations from §8.5 (my calls):** (1) the sub-geometry scope (step 3): neither "narrow it to its documented
+  failure" nor "the IP raises only KeyError / AssertionError" — the resolver re-raises ANY `select_ip_ic` error as
+  `IPSelectionError` (a RuntimeError, chained), so no narrow `except` above it matches, today or later; the geometry
+  scope stays as documented (`geometry_failed` never occurs on the window). (2) ONE record list (`select_ip_records`)
+  for the drawn POIs and the CSV, with the CTS_ESTABLISHED assert BEFORE the selection (the census F-d: V3 selected
+  first). (3) The activation takes `config: POIConfig` in place of `fill_threshold` (unused in the sweep) /
+  `fib_min_pct` / `fib_max_pct` / `variant_thresholds`; `pattern_confirmed_idx` is required. (4) "IP: none" is appended
+  to the fib hover's status cell (template unchanged — no H1 fib hover moves on the window: every H1 record has a pick).
+- **Tests (the §8.4a census, actioned):** F-a the hand-built frames go through the real classifier (`_ip_ready`); M1
+  gets a real pattern around IC 32 (`2A.i`, `inners == [1.13]` kept). F-b P3's range 11 → 12 (re-derived; the pin
+  still kills the reverted back-fill guard, both sd). F-c new fixtures `test_unified_probe._make_ip_moment_after_anchor_data`
+  (CTS_ESTABLISHED (0,1) anchor 12 / moment 13; IC 9 `1A.iii`, `pattern_confirmed_idx` 12 — the R1 floor sits before
+  the moment, so it never masks the moment rule) and `_make_ip_multicycle_data` (cycle 2 anchor == moment 17; IC 14
+  `1A.iii`; the same Plan F fill-at-scan-end case shifted by 2) — `test_poi_activation_moment` re-pinned on them, the
+  c3 full-history pin re-pointed. F-d passes by (2). S-1 `test_e4_simulation` + 5 IP params × 2 modes with a non-empty
+  POI assert (`_IP_SECOND` in cross_cycle draws none: its cross fib's zone lies far below the IC — stated in the test);
+  the pattern-update variant stays POI-empty (its cycle 3 has no pattern; the reader is pinned at sweep level). S-2 the
+  idx guard's `must_see` + `ip_tied_count`, `_poi_sig` + the IP fields, the zone-proximity fixture meta. S-4 the 6
+  direct sweep calls on the new signature. New `tests/test_plan_h_landing_b.py` (27): the as-of touch both ways + its
+  reason, both edges inclusive, the R1 floor (4 cases incl. past the frame), the resolver where V (36) and IP (32)
+  disagree, no pattern → `[]`, the unstamped frame / a re-raised ValueError / an IP error inside `_build_geometry` / an
+  unstamped MS run, D2 on the real collaborator (both fixtures + the sd = −1 mirror), the meta key order, the tiebreak
+  copy, no POI without a pattern, the hover builder (4) + the H1 chart + the H1 overlay sites, the exporter columns,
+  the R1 floor through `derive_poi_zones` (an injected pick confirmed at 14), and a SOURCE pin of the M15 sub-POI hover
+  call (no test renders a lens chart with sub POIs — a gap for the landing review; the replay checks the text).
+  **Tests 1258** (1219 + 39; `pytest` from the repo root incl. the OANDA smoke), all pass.
+- **`/compare` vs S_A == §8.4a's prediction:** FETCH GATE PASS; run.log = the 2 `parent_tables` WARNING lines + the 4
+  UNRESOLVED `degenerate_parent_cycle` rows (unchanged); vs V3: 24 / 27 CSVs md5-equal, the 3 `*_poi_zones.csv` ==
+  V3 + exactly the format delta (`cmp_poi_b.py`, IP values == S_A's picked rows, 3 TB2 POIs), figures equal but 44
+  POI hover traces (`customdata` + `hovertemplate` only: H1 4, M15 sub POIs 32, H1 overlays 8); trace / shape counts
+  H1 81 / 235, counter 129 / 90, confluence 258 / 178; the keyed B-vs-S_A report == V3's line for line. Replay 81.4 s
+  wall (machine noise; §8.4a: ≈ +2 s of resolver time).
+- **Mutation:** `plan_h_inputs/mutants_plan_h_b.py` (32: every rule + call site of B) — first run 29 / 32 KILLED; the
+  3 survivors (B08 the call site's R1 term, B11 the meta's `pattern_confirmed_idx` — R1 never binds on the fixture —,
+  B31 the M15 sub-POI hover call) got a test each → **32 / 32 KILLED**.
+- **Chart review (2026-10-06):** the user reviewed B's charts and chose to **debug them in a NEW session**: questions
+  about the changes, chart elements updated to make the differences reviewable, and rule experiments — each output
+  compared against S_B (this landing's save) AND S_A (the pre-IP iteration). The points raised: §8.5b.
+- **The landing review — DEFERRED (the user, 2026-10-06):** the debugging session will change B's own rules, so ONE
+  review (2 read-only lenses, ~0.55M: code vs plan — the resolver's fail-loud scope, the mirror shift, the hovers —
+  and test gaps, incl. the M15 sub-POI hover pinned only by a source check) runs after those rules settle, over B +
+  the changes. Saving first is safe: B == V3 (an independent route), 32 / 32 mutants, and no reader of `versions` /
+  `current_versions` is left (grep, 2026-10-06: only the review tools that read both formats). Then the commit +
+  `/commit-save` (S_B — recorded after the save).
+
+### 8.5b Landing B — the chart-review reference points (2026-10-06)
+
+The points raised at B's chart review, kept as the reference for the debugging session (the user, 2026-10-06:
+"document … so I can reference those points later in our debugging session"). Re-derived from B's replay outputs and
+S_A's CSVs — not copied from the chat. **Conventions:** indices entity-absolute; times UTC as the charts show them
+(M15 `i` = H1 candle `i // 4` + 15 min × `i % 4`; both frames start 2025-11-16 22:00); "A drew" = S_A's POIs, the
+V30 / V60 / V90 picks the pre-IP charts show (S_A's charts: `artifacts/commits/week9-entries-decisions/
+20261006_120513_e1c597c/*.html`); a sub is named by `sub_id` (creation order) with its stable key (direction,
+`starting_idx`); "both lenses" = the unique sub appears in the counter AND the confluence chart.
+
+**1. Cycles that lost their POI (C2) — confluence lens only.** Every one is `no_pattern` in B's
+`*_M15_confluence_ip_candidates.csv` (candidates exist; none forms a pattern whose IC touches the zone). Their fib
+is drawn as before; the M15 fib hover does NOT say why there is no POI (only the H1 fib hover carries `IP: none
+(<reason>)`, and no H1 record lacks a pick) — a candidate chart aid.
+
+| Sub (dir, starting) | Cycle · fib BOS → CTS anchor | A drew (A's activation) | Why A's IC is no pattern | Candidates · touching · patterns (none touching) |
+|---|---|---|---|---|
+| sub 0 (buy, 454) | 0 · 454 (11-21 15:30) → 784 (11-27 02:00) | 678 (11-25 23:30) V30/V60/V90 (never active) | 678 maru: `continuation_not_big_maru` (legs 676 · 677–678 · 679–681) | 146 · 13 · 8 — best off-zone 778 / 782 1A.iv (11-27 00:30 / 01:30) |
+| sub 0 | 1 · 454 → 1020 (12-01 13:00) | 678 V30/V60/V90 (active from 1020) | the same | 261 · 10 · 18 — 778 / 782 1A.iv, 996 1B.iii |
+| sub 0 | 2 · 454 → 1245 (12-03 21:15) | 678 V30 (active from 1224) | the same | 362 · 4 · 25 — 778 / 782 / 1117 1A.iv |
+| sub 1 (sell, 1797) | 0 · 1797 (12-11 15:15) → 1816 (12-11 20:00) | 1810 (12-11 18:30) V30 + 1808 (12-11 18:00) V60/V90 (never active) | 1810 pinbar (1809 · 1810 · 1811–1812) and 1808 normal (1805–1807 · 1808 · 1809): both `continuation_not_big_maru` | 8 · 7 · 1 — 1813 2B.iv (12-11 19:15) |
+| sub 6 (sell, 3760) | 0 · 3760 (01-13 02:00) → 4000 (01-15 14:00) | 3809 (01-13 14:15) V30/V60 + 3808 (01-13 14:00) V90 (active from 3819) | 3809 maru: `initial_fails_multi_opp` (3807 · 3808–3809 · 3810–3812); 3808 pinbar: `ic_not_last_opp` (3809 follows in its opp leg) | 109 · 9 · 10 — 3899 1A.i (01-14 12:45), 3815 1A.iv (01-13 15:45) |
+
+Also no POI, in A as in B: sub 1 cyc 2 (1934 → 1945; 3 candidates, none touching). Sub 0's later cycles 3 / 4 pick
+687 3C.iv (11-26 01:45) — off-zone for cycles 0–2, whose zone is measured to different CTS anchors.
+
+**2. The touch rule (T1).**
+- **(a) The as-of touch delays activation** (cond5 = the IC touches the 61.8–80 zone as of each CTS event; §8.4a —
+  "without the touch" = A's sweep on the same pick):
+
+  | Sub (both lenses) | Cycle · fib | B's IC | Active without the touch | Active in B | A drew (active from) |
+  |---|---|---|---|---|---|
+  | sub 3 (sell, 2639) | 2 · 2758 (12-26 15:30) → 3047 (12-31 15:45) | 2837 1A.iv (12-29 11:15) | 2992 (12-31 02:00) | 3047 (12-31 15:45) | 2961 (12-30 18:15), from 3047 |
+  | sub 7 (buy, 4027) | 2 · 4027 (01-15 20:45) → 4222 (01-19 21:30) | 4083 1A.iv (01-16 10:45; TB2 over 4136) | 4179 (01-19 10:45) | 4222 (01-19 21:30) | 4127 V90 from 4179, 4136 V60 from 4195, 4145 V30 from 4222 |
+
+- **(b) A pattern whose IC misses the zone while an earlier opp candle touches it** (§3 round 4; decided T1: no
+  pattern): 2375 3C.iii (12-19 15:45; conf sub 2 cyc 0 / 1) and 4048 3C.iv (01-16 02:00; sub 7 cyc 2). Both are
+  outranked anyway — no pick changes. 4048 is also A's POI for sub 7 cyc 0 (B picks 4035 2C.iii there).
+- In general a pattern off the zone is common: the CSV rows with `ip_rank` set and `touches_zone` False (sub 0's
+  records alone hold 8–25 each).
+
+**3. The re-derived counter lens (C3)** — the zone-proximity scan reads the new H1 POIs (V1) and the moved H1
+`CTS_CONFIRMED` (1,2) (V2); each M15 trigger is the last M15 candle of its H1 trigger hour:
+
+| Counter record → sub | S_A trigger | B trigger | Cause |
+|---|---|---|---|
+| (0,1) `first_counter` → sub 3 (sell, 2639) | 2843 (12-29 12:45) = H1 710 | 2995 (12-31 02:45) = H1 748 | H1 (0,1)'s nearest inner 611 0.57850 → 607 0.57712 (deeper) |
+| (1,2) `first_counter` → sub 5 (buy, 3621) | 3707 (01-12 12:45) = H1 926 | 3759 (01-13 01:45) = H1 939 | the scan starts at H1 (1,2)'s `CTS_CONFIRMED`, 926 → 939 |
+| (1,2) `subsequent_counter` → sub 7 (buy, 4027) | 4083 (01-16 10:45) = H1 1020 | 4159 (01-19 05:45) = H1 1039 | the drawn IC 865 → 832 (V1) |
+
+- Sub 3's counter record starts at 2995; the sub itself still starts at 2829 (its confluence `reversal` record).
+- Sub 5: 3707 → 3759 … 4083 → 4159 (`same_dir_replacement` by sub 7).
+- Sub 7 starts 4083 → 4159 (both lenses), its cycle 1's start → **cycle 0 collapsed** (`cycle_collapsed` True: fib
+  record inactive, KL zone ends 4159, POI 4035 2C.iii never active; A's 4048 was active 4083–4104 and from 4119).
+
+**4. H1.**
+
+| Cycle (fib) | A drew | B (IP) | Activation |
+|---|---|---|---|
+| sid 0 cyc 1 buy (591 → 652) | 611 V30 (12-22 09:00), 607 V60/V90 | 607 3A.iii (12-22 05:00): 606 · 607 · 608–610 | 652, unchanged |
+| sid 1 cyc 1 sell (689 → 761) | 732 | 732 3A.iv (12-30 10:00): 729–731 · 732 · 733–735 | never — a collapsed cycle, hidden as in A |
+| sid 1 cyc 2 sell (826 → 905) | 865 V30/V60 (01-07 23:00), 860 V90 (01-07 18:00) | 832 3C.ii (01-06 14:00): 828–830 · 831–832 · 833 | from 902 (off 952, on 954, off 992, on 998) — A's 860 history |
+
+H1 `CTS_CONFIRMED` (1,2) 926 (01-12 12:00; `sd_zone_proximity`, IC 865's inner 0.5772) → **939** (01-13 01:00;
+IC 832's inner 0.57866), and everything keyed on it (§8.4a); the H1 triggers 710 (12-29 12:00) → 748 (12-31 02:00)
+and 926 → 939 (01-13 01:00).
+
+**5. The new hovers (HV).** H1 `IP 3A.iii · legs 1-1-3 (606 | 607 | 608–610)`, `IP 3C.ii · legs 3-2-1 (828–830 |
+831–832 | 833)`; M15 sub 7 cyc 2 `IP 1A.iv · legs 2-1-2 (4081–4082 | 4083 | 4084–4085)<br>TB2 over 4136 (reference
+imbalance 4132)`; conf sub 1 cyc 1 1875 3C.iv TB2 over 1842 (c2 1892).
 
 ### 8.6 Tests
 

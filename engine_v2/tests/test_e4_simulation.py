@@ -34,6 +34,8 @@ from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests.test_unified_probe import (
+    _make_ip_moment_after_anchor_data,
+    _make_ip_multicycle_data,
     _make_multicycle_data,
     _make_second_cts_moment_after_anchor_data,
     _prepare_df,
@@ -69,6 +71,10 @@ def _run(df, events, mode):
 
 _SECOND = _make_second_cts_moment_after_anchor_data
 _MULTI = _make_multicycle_data
+# PLAN_H landing B: the two fixtures above draw NO POI (each cycle's only IC candidate is its BOS anchor — no
+# institutional pattern), so their downstream equality says nothing about POIs; these variants draw one.
+_IP_SECOND = _make_ip_moment_after_anchor_data
+_IP_MULTI = _make_ip_multicycle_data
 
 
 @pytest.mark.parametrize("etype,maker,lagging", [
@@ -126,18 +132,28 @@ def test_emit_bos_confirmed_asserts_idx_is_the_moment():
     ("bos", _MULTI),     # 4 lagging BOS
     ("both", _SECOND),
     ("both", _MULTI),
+    ("est", _IP_SECOND),     # a lagging EST (12 → 13) + a POI
+    ("bos", _IP_SECOND),
+    ("both", _IP_SECOND),
+    ("bos", _IP_MULTI),
+    ("both", _IP_MULTI),
 ])
 def test_downstream_outputs_do_not_depend_on_the_idx_role(swap, maker, mode):
     res = compute_bounded_structure(_prepare_df(maker()), 0, +1)
     types = _SWAP_TYPES[swap]
     assert {t for t, _, _ in _swappable(res.events, types)} >= (
-        set(types) if maker is _SECOND else {"BOS_CONFIRMED"}
+        set(types) if maker in (_SECOND, _IP_SECOND) else {"BOS_CONFIRMED"}
     ), "the fixture must carry a lagging event of every swapped type"
     swapped = copy.deepcopy(res.events)
     for e in swapped:
         if e.type in types:
             e.idx = int(_OTHER_ROLE[e.type](e))
-    a = _strip_raw(_run(res.df, res.events, mode))
+    out_a = _run(res.df, res.events, mode)
+    # The IP fixtures draw a POI — except `_IP_SECOND` in cross_cycle: its cycle-1 fib is the CROSS fib
+    # (BOS_0 .5998 -> CTS_1 .6147, the 61.8-80 zone ~.6028-.6055), far below the pattern's IC 9 -> no POI.
+    if maker is _IP_MULTI or (maker is _IP_SECOND and mode == "h1"):
+        assert out_a["poi_zones"], "the IP fixture draws a POI"
+    a = _strip_raw(out_a)
     b = _strip_raw(_run(res.df, swapped, mode))
     assert a.keys() == b.keys()
     assert [k for k in a if a[k] != b[k]] == []
@@ -175,7 +191,10 @@ def test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role(mode):
     `_EXCLUDED`). MS no longer emits a lagging one (2026-09-27: the fixture's
     one_maru_opposite at 25 ties the raw-updated extreme 24 and emits nothing), so
     the pre-fix event is INJECTED — the downstream readers stay pinned to the roles
-    (defence in depth: a future event source may lag again)."""
+    (defence in depth: a future event source may lag again). No POI is drawn on this fixture since PLAN_H
+    landing B (its cycles' only IC candidates are their BOS anchors); the POI sweep's reading of a pattern-path
+    update is pinned at the sweep level (`test_plan_e_role_pins::test_poi_sweep_in_window_cond1_reads_a_pattern_
+    update_anchor`, `test_poi_activation_moment::test_activation_cts_update_applies_at_its_moment_not_its_anchor`)."""
     from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_tied_pattern_breakout
     with contextlib.redirect_stdout(io.StringIO()):
         res = compute_bounded_structure(_prepare_df(_multicycle_with_tied_pattern_breakout()), 0, +1)

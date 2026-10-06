@@ -39,6 +39,18 @@ def _df(n=80, insts=None, fills=()):
     return df
 
 
+def _ip_ready(df):
+    """`_df`'s frame through the real candle classifier (the columns + stamps the
+    institutional pattern reads): the MS resolver runs `select_ip_ic` OUTSIDE its
+    graceful `try` since PLAN_H landing B — an unready frame raises
+    `IPSelectionError`."""
+    from engine_v2.features.candle_classifier import apply_candle_classification
+    out = apply_candle_classification(df).df
+    out.attrs["imbalances"] = df.attrs["imbalances"]
+    out.attrs["pair"] = "NZD_USD"
+    return out
+
+
 def _est(anchor, price, sid, cyc):
     return make_cts_established(cts_anchor_idx=anchor, confirmed_at=anchor + LAG, price=price,
                                 structure_id=sid, cycle_id=cyc, struct_direction=1)
@@ -322,8 +334,8 @@ def test_compute_poi_inners_uses_its_fill_horizon(monkeypatch):
         return out
 
     monkeypatch.setattr(poi_zones, "select_fib_anchor_for_cycle", spy)
-    df = _df(60, [ImbalanceInstance(15, 15, 1, 1.10, 1.00, 0.10),
-                  ImbalanceInstance(40, 40, 1, 1.30, 1.20, 0.10)], fills=[(41, 1.22)])
+    df = _ip_ready(_df(60, [ImbalanceInstance(15, 15, 1, 1.10, 1.00, 0.10),
+                            ImbalanceInstance(40, 40, 1, 1.30, 1.20, 0.10)], fills=[(41, 1.22)]))
     c0 = {"bos_idx": 10, "bos_price": 1.0, "cts_idx": 20, "cts_price": 1.15,
           "has_unfilled": True, "scenario1": None}
     poi_zones.compute_poi_inners_for_cycle(df, 30, 1.2, 40, 1.35, 1, structure_id=1, cycle_id=1,
@@ -410,8 +422,8 @@ def test_e3ap_compute_poi_inners_uses_its_snapshot_horizon(monkeypatch):
         return out
 
     monkeypatch.setattr(poi_zones, "select_fib_anchor_for_cycle", spy)
-    df = _df(60, [ImbalanceInstance(15, 15, 1, 1.10, 1.00, 0.10),
-                  ImbalanceInstance(35, 35, 1, 1.30, 1.20, 0.10)], fills=[(35, 1.02)])
+    df = _ip_ready(_df(60, [ImbalanceInstance(15, 15, 1, 1.10, 1.00, 0.10),
+                            ImbalanceInstance(35, 35, 1, 1.30, 1.20, 0.10)], fills=[(35, 1.02)]))
     c0 = {"bos_idx": 10, "bos_price": 1.0, "cts_idx": 20, "cts_price": 1.15,
           "has_unfilled": True, "scenario1": None}
     poi_zones.compute_poi_inners_for_cycle(df, 30, 1.2, 40, 1.35, 1, structure_id=1, cycle_id=1,

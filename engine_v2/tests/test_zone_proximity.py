@@ -124,7 +124,7 @@ def _poi_zone(sid: int, cycle_id: int, sd: int, top: float, bottom: float,
         meta={
             "structure_id": sid, "cycle_id": cycle_id,
             "confirmed_idx": confirmed_idx, "end_idx": end_idx,
-            "versions": ["V60"],
+            "ip_rank": "1A.i",
             "activation_history": activation_history,
         },
     )

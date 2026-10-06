@@ -126,6 +126,42 @@ def compute_poi_active_stretches(
 
 
 # ---------------------------------------------------------------------------
+# POI hover: the institutional pattern (PLAN_H HV)
+# ---------------------------------------------------------------------------
+
+def poi_ip_hover_text(meta: dict, ic_idx: int) -> str:
+    """The POI hover's pattern line(s) — ONE builder for the three POI hover
+    sites (the H1 chart, the M15 lens charts' sub POIs and their H1 overlay;
+    PLAN_H HV): `IP <rank> · legs a-b-c (initial | opp | continuation)` with
+    each leg as `first–last` (one candle: its index), + `<br>TB1 over <IC>
+    (IC candle type)` / `<br>TB2 over <IC> (reference imbalance <c2>)` when a
+    tiebreaker decided. Indices are the POI's own (entity-absolute on a
+    mirrored sub POI); the counts must match the leg indices (asserted — a
+    missed mirror shift would break it)."""
+    n_init, n_opp, n_cont = (int(x) for x in meta["ip_leg_candle_counts"].split("-"))
+    anchor, opp_first, end = (int(meta["pattern_anchor_idx"]), int(meta["opp_leg_first_idx"]),
+                              int(meta["pattern_end_idx"]))
+    ic = int(ic_idx)
+    assert (opp_first - anchor, ic - opp_first + 1, end - ic) == (n_init, n_opp, n_cont), (
+        f"[chart] POI {ic} legs {meta['ip_leg_candle_counts']} vs indices {anchor}/{opp_first}/{end}")
+
+    def _rng(lo: int, hi: int) -> str:
+        return f"{lo}" if lo == hi else f"{lo}–{hi}"
+
+    text = (f"IP {meta['ip_rank']} · legs {n_init}-{n_opp}-{n_cont} "
+            f"({_rng(anchor, opp_first - 1)} | {_rng(opp_first, ic)} | {_rng(ic + 1, end)})")
+    tb = meta["ip_tiebreak"]
+    if tb == "TB1":
+        text += f"<br>TB1 over {meta['ip_tb_runner_up_ic_idx']} (IC candle type)"
+    elif tb == "TB2":
+        text += (f"<br>TB2 over {meta['ip_tb_runner_up_ic_idx']} "
+                 f"(reference imbalance {meta['ip_tb_imbalance_first_c2_idx']})")
+    else:
+        assert tb is None, f"[chart] POI {ic} unknown ip_tiebreak {tb!r}"
+    return text
+
+
+# ---------------------------------------------------------------------------
 # Stepped polygon outline (KL zone with bounds_steps)
 # ---------------------------------------------------------------------------
 

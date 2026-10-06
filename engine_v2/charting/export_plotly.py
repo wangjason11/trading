@@ -18,6 +18,7 @@ from engine_v2.charting._zone_render import (
     compute_poi_active_stretches,
     is_collapsed_cycle_zone,
     is_poi_of_collapsed_cycle,
+    poi_ip_hover_text,
 )
 from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
 from engine_v2.common.types import PatternStatus
@@ -2073,8 +2074,10 @@ def export_chart_plotly(
             if sid is not None and cyc is not None and sk is not None and cidx is not None:
                 kl_conf_idx_by_key[(int(sid), int(cyc), str(sk))] = int(cidx)
 
-        # POI zone lookup by (sid, cycle_id) — list, may need inner-price match
-        # since multiple POIs can exist per cycle (V30/V60/V90 variants).
+        # POI zone lookup by (sid, cycle_id) — a list matched by inner price: one
+        # POI per fib record since PLAN_H landing B (the institutional-pattern
+        # pick; before it up to 3 — the V30 / V60 / V90 variants), and a cycle has
+        # one fib record on the reference window — the match stays general.
         poi_zones_by_cycle: dict = {}
         for pz in dfx.attrs.get("poi_zones", []):
             sid = pz.meta.get("structure_id")
@@ -2413,9 +2416,8 @@ def export_chart_plotly(
             if len(seg_times) == 0:
                 seg_times = pd.Series([x_zone0, x_zone1])
 
-            # Get versions list as string
-            versions = z.meta.get("versions", [])
-            versions_str = ", ".join(versions) if versions else "none"
+            # The institutional pattern line(s) (PLAN_H HV; one builder for the 3 POI hover sites)
+            ip_str = poi_ip_hover_text(z.meta, z.ic_idx)
             cycle_id = z.meta.get("cycle_id", 0)
 
             poi_customdata = [[
@@ -2425,7 +2427,7 @@ def export_chart_plotly(
                 z.ic_idx,
                 conf_idx,
                 cycle_id,
-                versions_str,
+                ip_str,
                 y1,
                 y0,
                 zone_status,
@@ -2456,7 +2458,7 @@ def export_chart_plotly(
                         "ic_idx=%{customdata[3]}<br>"
                         "confirmed_idx=%{customdata[4]}<br>"
                         "cycle_id=%{customdata[5]}<br>"
-                        "versions=%{customdata[6]}<br>"
+                        "%{customdata[6]}<br>"
                         "top=%{customdata[7]:.5f}<br>"
                         "bottom=%{customdata[8]:.5f}<br>"
                         "status=%{customdata[9]}"
@@ -2485,7 +2487,7 @@ def export_chart_plotly(
                         "ic_idx=%{customdata[3]}<br>"
                         "confirmed_idx=%{customdata[4]}<br>"
                         "cycle_id=%{customdata[5]}<br>"
-                        "versions=%{customdata[6]}<br>"
+                        "%{customdata[6]}<br>"
                         "top=%{customdata[7]:.5f}<br>"
                         "bottom=%{customdata[8]:.5f}<br>"
                         "status=%{customdata[9]}"
@@ -2509,6 +2511,14 @@ def export_chart_plotly(
         anchor_line_historical = _style("fib.anchor_line.historical").get("line", {"width": 1, "dash": "dot", "color": "rgba(0,0,139,0.4)"})
         zone_rect_active = _style("fib.zone_rect.active")
         zone_rect_historical = _style("fib.zone_rect.historical")
+
+        # The fib records whose cycle has NO institutional pattern -> no POI
+        # (PLAN_H C1 / HV): their hover gets an "IP: none" line (the reason from
+        # the record's `IP: none` row of `*_ip_candidates.csv`).
+        _ip_none = {
+            (r.structure_id, r.cycle_id, r.bos_anchor_idx, r.cts_anchor_idx): r.reason
+            for r in dfx.attrs.get("ip_candidates", []) if r.ic_idx is None
+        }
 
         _fib_drawn = 0
         for fib_st in fib_states:
@@ -2641,8 +2651,12 @@ def export_chart_plotly(
                 f"{fib_st.cts_price:.5f}",
                 f"{price_618:.5f}",
                 f"{price_80:.5f}",
-                # Hover label from lifecycle status + locked axis (§11).
-                f"{_status}{' (locked)' if fib_st.locked else ''}",
+                # Hover label from lifecycle status + locked axis (§11), + the
+                # "IP: none" line of a no-pattern record (empty otherwise).
+                f"{_status}{' (locked)' if fib_st.locked else ''}"
+                + (f"<br>IP: none ({_ip_none[_ip_key]})"
+                   if (_ip_key := (int(fib_st.structure_id), int(fib_st.cycle_id), int(fib_st.bos_idx),
+                                   int(fib_st.cts_idx))) in _ip_none else ""),
             ]
             hover_customdata = [hover_row] * len(seg_times)
 

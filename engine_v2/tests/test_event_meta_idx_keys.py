@@ -315,7 +315,11 @@ def _meta_kw_keys(module):
 
 @pytest.mark.parametrize("module, list_name, must_see", [
     (kl_zones_v1, "_ZONE_META_IDX_KEYS", {"anchor_idx", "reconfirmed_idx"}),
-    (poi_zones, "_ZONE_META_IDX_KEYS", {"bos_anchor_idx", "cts_anchor_idx", "cts_established_idx"}),
+    (poi_zones, "_ZONE_META_IDX_KEYS", {"bos_anchor_idx", "cts_anchor_idx", "cts_established_idx",
+                                        # the POI's institutional pattern (PLAN_H landing B)
+                                        "pattern_anchor_idx", "opp_leg_first_idx", "pattern_end_idx",
+                                        "pattern_confirmed_idx", "ip_tb_runner_up_ic_idx",
+                                        "ip_tb_imbalance_first_c2_idx"}),
     (fib_tracker, "_FIB_META_IDX_KEYS",
      {"activated_at", "reactivated_at", "locked_at", "deactivated_at", "cycle1_bos_anchor_idx"}),
     (wave_candles, "_WAVE_CANDLE_META_IDX_KEYS", {"anchor_idx"}),
@@ -364,6 +368,7 @@ NON_INDEX_INT_META_KEYS = frozenset({
     "structure_id", "cycle_id", "struct_direction",
     "parent_sid", "parent_cycle_id", "sub_id",
     "version", "scenario", "cross_start_cycle", "proximity_pips",
+    "ip_tied_count",        # POI (PLAN_H landing B): the tied group's size, set only when TB1 / TB2 decided
 })
 NEVER_LISTED = NON_INDEX_INT_META_KEYS | {"triggered_by_event_idx"}
 
@@ -655,6 +660,7 @@ def test_every_int_meta_value_is_listed_or_known_non_index(geometry, m15_df):
     nested item key, or a known non-index key."""
     res, lens_dfs = _render_both_lenses(geometry, m15_df)
     assert res.wvmi_records, "the open fixture sub has a WVMI record"
+    assert res.poi_zones, "the fixture sub has a POI (its institutional-pattern meta is classified too)"
     sites = (
         ("events", res.events, edm._EVENT_META_IDX_KEYS),
         ("kl_zones", res.kl_zones, edm._ZONE_META_IDX_KEYS),

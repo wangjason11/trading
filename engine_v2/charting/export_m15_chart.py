@@ -71,6 +71,7 @@ from engine_v2.charting._zone_render import (
     compute_poi_active_stretches,
     is_collapsed_cycle_zone,
     is_poi_of_collapsed_cycle,
+    poi_ip_hover_text,
     select_subordinate_tf_tier,
 )
 from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
@@ -1620,14 +1621,13 @@ def export_m15_chart_plotly(
                 if len(seg_times) == 0:
                     seg_times = pd.Series([x0, x1])
 
-                versions = poi.meta.get("versions", [])
-                versions_str = ", ".join(versions) if versions else "none"
+                ip_str = poi_ip_hover_text(poi.meta, poi.ic_idx)   # PLAN_H HV
                 # `poi.meta["structure_id"]` is the bounded sub's internal MS
                 # sid (restarts at 0 per sub) — use sub_id for user-facing identity.
                 poi_cd = [[
                     side, eid, poi.meta.get("struct_direction", 0),
                     poi.ic_idx, conf_idx, poi.meta.get("cycle_id", 0),
-                    versions_str, y1, y0, zone_status, p_sid, p_cycle,
+                    ip_str, y1, y0, zone_status, p_sid, p_cycle,
                     sub_window_str, sub_records_str,
                 ]] * len(seg_times)
 
@@ -1648,7 +1648,7 @@ def export_m15_chart_plotly(
                             "struct_direction=%{customdata[2]}<br>"
                             "ic_idx=%{customdata[3]}<br>"
                             "confirmed_idx=%{customdata[4]}<br>"
-                            "versions=%{customdata[6]}<br>"
+                            "%{customdata[6]}<br>"
                             "top=%{customdata[7]:.5f}<br>"
                             "bottom=%{customdata[8]:.5f}<br>"
                             "status=%{customdata[9]}"
@@ -2528,12 +2528,11 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             if len(seg_times) == 0:
                 seg_times = pd.Series([x0, x1])
 
-            versions = poi.meta.get("versions", [])
-            versions_str = ", ".join(versions) if versions else "none"
+            ip_str = poi_ip_hover_text(poi.meta, poi.ic_idx)   # PLAN_H HV
             poi_cd = [[
                 side, poi.meta.get("structure_id", -1), poi.meta.get("struct_direction", 0),
                 poi.ic_idx, conf_idx, poi.meta.get("cycle_id", 0),
-                versions_str, y1, y0, zone_status,
+                ip_str, y1, y0, zone_status,
             ]] * len(seg_times)
 
             h1_hover_line = {"width": 6, "color": "rgba(0,0,0,0)"}
@@ -2551,7 +2550,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                         "ic_idx=%{customdata[3]}<br>"
                         "confirmed_idx=%{customdata[4]}<br>"
                         "cycle_id=%{customdata[5]}<br>"
-                        "versions=%{customdata[6]}<br>"
+                        "%{customdata[6]}<br>"
                         "top=%{customdata[7]:.5f}<br>"
                         "bottom=%{customdata[8]:.5f}<br>"
                         "status=%{customdata[9]}"

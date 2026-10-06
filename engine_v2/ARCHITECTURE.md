@@ -291,15 +291,23 @@ POI activation conditions
      candle (`_compute_fill_idx_cache`). See `IMBALANCE_FILL_SEMANTICS.md`
      ("Knowability — the c3 rule" + the predicate). Flips as imbalances
      form / commit-fill.
-  5. Variant ≥ V30 — IC candle overlaps the 61.8-80% fib zone
-     (computed from `bos_price` and the time-varying `cts_price_at(t)`)
-     by at least 30%. Variants can downgrade (V90 → V60 → V30) or
-     vanish entirely as `cts_price` extends and the zone slides.
-Scenario conditions (#4: the per-scenario idx/price constraints of
-`zones/POI_ZONES_SPEC.md` §3.2) are NOT implemented — IC identification
-applies only the base conditions (found 2026-09-30; Week 9 Part 1 item 1
-decides whether to build or drop them). As designed they are gated at IC
-identification, not re-checked per candle.
+  5. The touch — the IC candle touches the 61.8-80% zone of the fib AS OF
+     t (from `bos_price` and the time-varying `cts_price_at(t)`; inclusive
+     edges; the selection's own `fib_zone_bounds` + `ic_touches_zone`) —
+     it can be lost or gained as `cts_price` extends and the zone slides
+     (reason `ic_not_touching_fib_zone`). Until PLAN_H landing B
+     (2026-10-06) cond5 was "the V30 overlap" (≥ 30 % of the IC inside the
+     zone; reason `variant_below_v30`).
+  The scan starts at `first_active = max(CTS-established moment, ic_idx,
+  lifecycle floor, pattern_confirmed_idx)` — the last term (PLAN_H R1) the
+  moment the IC's institutional pattern is known complete.
+The IC itself is ONE per fib record since landing B: the institutional-
+pattern pick (`select_ip_ic`, POI_ZONES_SPEC §3.4) — the same selector MS's
+in-flight sd-proximity read uses (D2). Scenario conditions (#4: the
+per-scenario idx/price constraints of `zones/POI_ZONES_SPEC.md` §3.2) are NOT
+implemented — IC identification applies only the base conditions (found
+2026-09-30; kept unapplied for future testing, PLAN_H D4). As designed they
+are gated at IC identification, not re-checked per candle.
 
 **Activation floor (both POI and KL).** A zone's first-active is clamped to
 its owning cycle's lifecycle-start: `first_active = max(<zone-specific

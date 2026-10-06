@@ -5,7 +5,8 @@ from engine_v2.common.types import KLZone
 
 
 def export_poi_zones(zones: list, path: str | Path) -> None:
-    """Export POI zones (one row per IC; variants listed in `versions`).
+    """Export POI zones (one row per POI = the institutional-pattern pick of its
+    fib record; its rank in `ip_rank`, the legs / tiebreak in `meta` — PLAN_H B).
 
     POI zones are otherwise chart-only — this is the inspectable surface for
     `/compare` + debugging (mirrors `export_kl_zones`). Key meta fields are
@@ -29,14 +30,14 @@ def export_poi_zones(zones: list, path: str | Path) -> None:
             "parent_sid": m.get("parent_sid"),
             "parent_cycle_id": m.get("parent_cycle_id"),
             "confirmed_idx": m.get("confirmed_idx"),
-            "versions": m.get("versions"),
+            "ip_rank": m["ip_rank"],
             "status": m.get("status"),
             "meta": m,
         })
     cols = [
         "ic_idx", "start_time", "end_time", "side", "top", "bottom",
         "structure_id", "cycle_id", "parent_sid", "parent_cycle_id",
-        "confirmed_idx", "versions", "status", "meta",
+        "confirmed_idx", "ip_rank", "status", "meta",
     ]
     pd.DataFrame(rows, columns=cols).to_csv(path, index=False)
 

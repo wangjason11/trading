@@ -2,15 +2,22 @@
 """
 POI Zone derivation using Fibonacci retracement and Institutional Candle identification.
 
-POI Zones are created when:
-1. A Fib is active for a cycle (from FibTracker)
-2. IC candidates are identified (base + scenario conditions)
-3. IC variants are selected based on overlap thresholds (V30/V60/V90)
-4. POI zones are created from unique ICs with their high/low as bounds
+ONE POI per fib record (PLAN_H, Week 9 Part 1 item 1):
+1. A fib record passes the lifecycle gate and its cycle has a CTS_ESTABLISHED
+   (`select_ip_records`)
+2. The IC candidates are identified (the base conditions below, with the AGREED
+   direction)
+3. The ONE IC = the institutional-pattern pick among the candidates touching the
+   61.8-80 zone (`select_ip_ic`); no pattern -> no POI
+4. The POI = the IC's high / low; it is active while the activation sweep's
+   conditions hold (`_compute_poi_activation_history`)
+The MS in-flight resolver (`compute_poi_inners_for_cycle`) reads the same
+`select_ip_ic` (PLAN_H D2). The V30 / V60 / V90 selection (`select_ic_variants`)
+is kept unwired (PLAN_H X1).
 
 IC Candidate Base Conditions (ALL required):
 1. Within Fib bounds (inclusive): BOS_idx <= candle_idx <= CTS_idx
-2. Opposite direction of struct_direction: candle.direction == -struct_direction
+2. Opposite direction of struct_direction: direction == -struct_direction
 3. Unfilled imbalance (in sd direction) AFTER candidate, up to CTS idx
 """
 from __future__ import annotations
@@ -44,7 +51,8 @@ class POIZone:
     """
     Point of Interest Zone derived from Fibonacci + Institutional Candle.
 
-    One zone per unique IC (not per variant). Variants are stored in meta.
+    At most one zone per fib record: the institutional-pattern pick (its rank,
+    legs and tiebreak in meta).
     """
     start_time: "pd.Timestamp"
     end_time: Optional["pd.Timestamp"]  # None = extends to end of chart
@@ -58,7 +66,9 @@ class POIZone:
     # Metadata
     meta: Dict[str, Any] = field(default_factory=dict)
     # meta: the field list (confirmed_idx = the LAST activate idx, end_idx /
-    # end_reason, activation_history, status, versions / current_versions,
+    # end_reason, activation_history, status, the institutional pattern —
+    # ip_rank, ip_leg_candle_counts, pattern_anchor_idx, opp_leg_first_idx,
+    # pattern_end_idx, pattern_confirmed_idx, the ip_tb_* tiebreak —,
     # cts_established_idx = the cycle's CTS-established moment (always: a cycle
     # without CTS_ESTABLISHED builds no POI, 2026-09-29), ...) is
     # canonical in POI_ZONES_SPEC.md "Zone Data Fields".
@@ -275,6 +285,10 @@ def select_ic_variants(
     """
     From IC candidates, find the most recent candle for each variant threshold.
 
+    UNWIRED since PLAN_H landing B (2026-10-06): the one POI per record is the
+    institutional-pattern pick (`select_ip_ic`). Kept with its tests as a
+    possible no-pattern fallback (PLAN_H X1; register D.2).
+
     For each variant (V30/V60/V90), scan candidates from most recent (highest idx)
     and pick the first that meets the threshold.
 
@@ -463,10 +477,84 @@ def select_ip_ic(
 
 
 def _poi_record_gate(fib_state: FibState) -> bool:
-    """The per-record lifecycle gate of `derive_poi_zones` (FIB_LIFECYCLE_SPEC §11): the
+    """The per-record lifecycle gate of the POI records (FIB_LIFECYCLE_SPEC §11): the
     live condition-active version (active AND its cycle not ended) OR a locked
-    record. The institutional-pattern pass reads the same gate."""
+    record.
+
+    This is the byte-identical-PRESERVING per-record form, NOT the cycle-level
+    `status == "active" OR locked`: `status` is shared by all version records of
+    a live cycle, so a status-keyed gate would wrongly process superseded (dead)
+    cross versions of a still-live cycle (same reason the chart gate, §9.1, uses
+    raw per-record flags). `active` is condition-only post-Session-2, so
+    `end_idx is None` (cycle not ended) is added (the pre-Session-2 `active` was
+    also False once a cycle ended). Locked records — confirmed historical ones,
+    ended-locked included — always pass; `disappeared` records never reach here
+    (filtered by `get_fibs_for_charting`)."""
     return bool((fib_state.active and fib_state.end_idx is None) or fib_state.locked)
+
+
+@dataclass(frozen=True)
+class IPRecordSelection:
+    """One POI record (`select_ip_records`): a gated fib record, its cycle's
+    CTS-established MOMENT and its institutional-pattern selection — the ONE
+    input of the drawn POIs (`derive_poi_zones`) and of the debug CSV
+    (`derive_ip_candidates`)."""
+    fib_state: FibState
+    cts_established_idx: int
+    selection: IPSelection
+
+
+def select_ip_records(
+    df: pd.DataFrame,
+    structure_events: List[StructureEvent],
+    fib_tracker: Optional[FibTracker],
+    config: POIConfig,
+) -> List[IPRecordSelection]:
+    """The POI records in `get_fibs_for_charting` order, each with its selection
+    (PLAN_H §8.5: computed ONCE per pipeline run, handed to `derive_poi_zones` and
+    `derive_ip_candidates`). Per record, in this order:
+
+    1. the lifecycle gate (`_poi_record_gate`);
+    2. the cycle's CTS_ESTABLISHED: its MOMENT (`meta["confirmed_at"]`, the
+       canonical cycle lifecycle-start — `structure_lifecycle.compute_cycle_lifecycle`)
+       is the activation floor's cycle term and the exported
+       `cts_established_idx`, NOT the CTS anchor (Plan D, 2026-09-23). Direct
+       index, no `.get` fallback: a missing moment fails loudly. A cycle with no
+       CTS_ESTABLISHED gets NO record (user decision 2026-09-29, zones-audit
+       "fallback POI" option N: its POIs could never activate) — reached only by
+       a still-LIVE pre-created cross fib (an open-ended sub). A LOCKED fib there
+       breaks the event contract (a fib locks at its cycle's CTS_CONFIRMED, after
+       the establishment): AssertionError — checked BEFORE the selection, so it
+       fires whatever the pattern;
+    3. `select_ip_ic(..., classify_misses=True)` — the CSV's candidates; the pick
+       is the one without `classify_misses` (a candidate missing the touch is
+       never picked).
+    """
+    if fib_tracker is None:
+        return []
+    cts_established_by_key: Dict[Tuple[int, int], StructureEvent] = {}
+    for ev in structure_events:
+        if ev.type == "CTS_ESTABLISHED":
+            # Direct index (LANDMINES "Event Contract Rules"): the emitter always
+            # stamps both; a default 0 would silently file a stray event under
+            # (0, 0) while `compute_cycle_lifecycle` skips it (2026-09-28).
+            cts_established_by_key[(int(ev.meta["structure_id"]), int(ev.meta["cycle_id"]))] = ev
+    out: List[IPRecordSelection] = []
+    for fib_state in fib_tracker.get_fibs_for_charting():
+        if not _poi_record_gate(fib_state):
+            continue
+        key = (int(fib_state.structure_id), int(fib_state.cycle_id))
+        cts_event = cts_established_by_key.get(key)
+        if cts_event is None:
+            assert not fib_state.locked, (
+                f"[poi_zones] locked fib {key} has no CTS_ESTABLISHED (event contract)")
+            continue
+        out.append(IPRecordSelection(
+            fib_state=fib_state,
+            cts_established_idx=int(cts_event.meta["confirmed_at"]),
+            selection=select_ip_ic(df, fib_state, config, classify_misses=True),
+        ))
+    return out
 
 
 def derive_poi_zones(
@@ -477,9 +565,11 @@ def derive_poi_zones(
     lifecycle_floor: Optional[int] = None,
     lifecycle_cap: Optional[int] = None,
     cap_reason: str = "lifecycle_end",
+    ip_records: Optional[List[IPRecordSelection]] = None,
 ) -> List[POIZone]:
     """
-    Derive POI Zones from Fib states and IC identification.
+    Derive the POI zones: at most ONE per fib record — the institutional-pattern
+    pick (PLAN_H; no pattern -> no POI, D7) — with its activation history.
 
     This is the main entry point for POI Zone detection.
 
@@ -493,6 +583,9 @@ def derive_poi_zones(
         FibTracker with active Fib states
     config : POIConfig, optional
         Configuration for POI detection
+    ip_records : list of IPRecordSelection, optional
+        The records with their selections (`select_ip_records`), computed once
+        by the pipeline and shared with the debug CSV; None = selected here.
 
     Returns
     -------
@@ -511,21 +604,6 @@ def derive_poi_zones(
         if i in df.index:
             return pd.to_datetime(df.loc[i, "time"], utc=True)
         return None
-
-    # Get all Fib states from tracker (for charting)
-    fib_states = fib_tracker.get_fibs_for_charting()
-
-    # Build lookup for CTS_ESTABLISHED events: each cycle's establishment moment
-    # (`meta["confirmed_at"]`) is the activation floor's cycle term and the
-    # exported `meta["cts_established_idx"]`. Key: (sid, cycle_id) -> event
-    cts_established_by_key = {}
-    for ev in structure_events:
-        if ev.type == "CTS_ESTABLISHED":
-            # Direct index (LANDMINES "Event Contract Rules"): the emitter always
-            # stamps both; a default 0 would silently file a stray event under
-            # (0, 0) while `compute_cycle_lifecycle` skips it (2026-09-28).
-            key = (int(ev.meta["structure_id"]), int(ev.meta["cycle_id"]))
-            cts_established_by_key[key] = ev
 
     # Reversal-confirmed idx per structure_id (reversal ends ALL zones for that
     # structure). Shared helper (B2 dedup, 2026-05-27) — was duplicated verbatim
@@ -576,74 +654,21 @@ def derive_poi_zones(
     imbalances: List[ImbalanceInstance] = df.attrs.get("imbalances", [])
     fill_idx_cache = _compute_fill_idx_cache(df, imbalances, config.fill_threshold)
 
-    # Variant thresholds are constant across POIs.
-    variant_thresholds = {
-        "V30": config.v30_threshold,
-        "V60": config.v60_threshold,
-        "V90": config.v90_threshold,
-    }
+    if ip_records is None:
+        ip_records = select_ip_records(df, structure_events, fib_tracker, config)
 
-    # Process each Fib state
-    for fib_state in fib_states:
-        # Lifecycle gate (FIB_LIFECYCLE_SPEC §11, Session 2). Process a fib iff
-        # it is the live condition-active version (active AND its cycle has not
-        # ended) OR it is locked (a confirmed historical record — still feeds IC
-        # detection, including ended-locked fibs). `disappeared` records never
-        # reach here (filtered by get_fibs_for_charting).
-        #
-        # This is the byte-identical-PRESERVING per-record form, NOT the
-        # cycle-level `status == "active" OR locked`: `status` is shared by all
-        # version records of a live cycle, so a status-keyed gate would wrongly
-        # process superseded (dead) cross versions of a still-live cycle (same
-        # reason the chart gate, §9.1, uses raw per-record flags). `active` is
-        # condition-only post-Session-2, so we add `end_idx is None` (cycle not
-        # ended) to reproduce today's behavior (today's `active` was also False
-        # once a cycle ended).
-        if not _poi_record_gate(fib_state):
+    # One record = one fib record that passed the gate and has a CTS_ESTABLISHED
+    # (`select_ip_records`); its pick (or None — no pattern, no POI: PLAN_H D7).
+    for rec in ip_records:
+        fib_state = rec.fib_state
+        pick = rec.selection.pick
+        if pick is None:
             continue
 
         sid = fib_state.structure_id
         cycle_id = fib_state.cycle_id
         sd = fib_state.struct_direction
-        key = (sid, cycle_id)
-
-        # Find IC candidates
-        candidates = find_ic_candidates(df, fib_state, config)
-
-        if not candidates:
-            continue
-
-        # Select IC variants
-        ic_variants = select_ic_variants(candidates, df, fib_state, config)
-
-        if not ic_variants:
-            continue
-
-        # The activation floor's cycle term: the cycle's CTS-established MOMENT
-        # (`CTS_ESTABLISHED.meta["confirmed_at"]`, the canonical cycle
-        # lifecycle-start — structure_lifecycle.compute_cycle_lifecycle), NOT
-        # the CTS anchor (`meta["cts_anchor_idx"]`, `CTS_ESTABLISHED.idx` until
-        # Plan E E4a: the pattern's extreme candle, retro-stamped, which can
-        # precede the moment — Plan D, zones pass 2026-09-23). Direct index, no
-        # `.get(...)` fallback: a missing
-        # moment must fail loudly (compute_cycle_lifecycle above asserts it
-        # first for every event carrying structure_id / cycle_id — the event
-        # contract; the lookup below keys a missing one to 0, a pre-existing
-        # default no emitter exercises).
-        # A cycle with no CTS_ESTABLISHED builds NO POI (user decision 2026-09-29, zones-audit
-        # "fallback POI" option N): its POIs could never activate (the floor's cycle term is the
-        # establishment moment), and a reversal / the sub cap already leave its fib without POIs
-        # (FIB_LIFECYCLE_SPEC §15.4). Reached only by a still-LIVE pre-created cross fib (an
-        # open-ended sub); its POIs appear once the cycle establishes. (Until then this used the
-        # fib's CTS anchor as the "moment" — a location, the naming exception of PLAN_D §7.3.)
-        # A LOCKED fib here would break the event contract (a fib locks at its cycle's
-        # CTS_CONFIRMED, after the CTS was established): fail loudly.
-        cts_event = cts_established_by_key.get(key)
-        if cts_event is None:
-            assert not fib_state.locked, (
-                f"[poi_zones] locked fib {key} has no CTS_ESTABLISHED (event contract)")
-            continue
-        cts_established_idx = int(cts_event.meta["confirmed_at"])
+        cts_established_idx = rec.cts_established_idx
 
         # end_idx + end_reason inherited from the cycle (B2 pass-through):
         # min(next-cycle clamped start, reversal, lifecycle_cap). Terminal /
@@ -657,114 +682,109 @@ def derive_poi_zones(
         last_candle = int(df.index.max())
         scan_end = min(end_idx - 1, last_candle) if end_idx is not None else last_candle
 
-        # Create a zone for each unique IC
-        for ic_idx, versions in ic_variants.items():
-            ic_time = _time(ic_idx)
-            if ic_time is None:
-                continue
+        ic_idx = int(pick.ic_idx)
+        ic_time = _time(ic_idx)
+        assert ic_time is not None, f"[poi_zones] IP pick {ic_idx} is not a row of the frame"
+        ic_high = float(df.loc[ic_idx, "h"])
+        ic_low = float(df.loc[ic_idx, "l"])
 
-            ic_high = float(df.loc[ic_idx, "h"])
-            ic_low = float(df.loc[ic_idx, "l"])
+        # Per-POI activation lifecycle. POI is "active" at candle t iff
+        # ALL these condition-state requirements hold simultaneously (the
+        # IC's identification conditions, re-evaluated dynamically against
+        # the fib's time-varying state):
+        #   1. fib's `cts_at(t)` has extended to >= ic_idx — i.e., IC lies
+        #      within the fib's bounds at t. The fib's cts only grows, so
+        #      becomes monotonic once reached.
+        #   2. ic_idx <= t  (the IC candle exists in data — implied by t
+        #      starting at first_active = max(cts_established_idx, ic_idx,
+        #      lifecycle floor, pattern_confirmed_idx)).
+        #   3. `has_unfilled_imbalance(df, ic_idx+1, t, check_to_idx=t,
+        #      direction=sd, evaluated_at=t)` — POI-specific sd-direction
+        #      imbalance check, counting only gaps FORMED by t (Plan F: an
+        #      instance exists from its first c3, `inst.formed_at`),
+        #      decoupled from Fib's `active` flag.
+        #   5. The touch: the IC candle touches the AS-OF 61.8-80% zone of the
+        #      fib's bounds [bos_price, cts_price_at(t)] (`fib_zone_bounds` +
+        #      `ic_touches_zone`, the selection's own helpers — PLAN_H D1a / R3).
+        # (Condition 4 — the scenario idx/price constraints of
+        # POI_ZONES_SPEC §3.2 — is NOT implemented: find_ic_candidates
+        # applies the base conditions only, PLAN_H D4.)
+        # End-state (`end_idx`) takes precedence: once ended, `status` is
+        # "ended" regardless of activation conditions.
+        cts_events_for_fib = cts_events_by_key.get((int(sid), int(cycle_id)), [])
+        activation_history = _compute_poi_activation_history(
+            df=df,
+            ic_idx=ic_idx,
+            cts_established_idx=cts_established_idx,
+            sd=int(sd),
+            scan_end=scan_end,
+            bos_price=float(fib_state.bos_price),
+            cts_events=cts_events_for_fib,
+            config=config,
+            imbalances=imbalances,
+            fill_idx_cache=fill_idx_cache,
+            lifecycle_floor_idx=struct_start_by_sid.get(int(sid)),
+            pattern_confirmed_idx=int(pick.pattern_confirmed_idx),
+        )
 
-            # Per-POI activation lifecycle. POI is "active" at candle t iff
-            # ALL these condition-state requirements hold simultaneously (the
-            # IC's identification conditions, re-evaluated dynamically against
-            # the fib's time-varying state):
-            #   1. fib's `cts_at(t)` has extended to >= ic_idx — i.e., IC lies
-            #      within the fib's bounds at t. The fib's cts only grows, so
-            #      becomes monotonic once reached.
-            #   2. ic_idx <= t  (the IC candle exists in data — implied by t
-            #      starting at first_active = max(cts_established_idx, ic_idx,
-            #      lifecycle floor)).
-            #   3. `has_unfilled_imbalance(df, ic_idx+1, t, check_to_idx=t,
-            #      direction=sd, evaluated_at=t)` — POI-specific sd-direction
-            #      imbalance check, counting only gaps FORMED by t (Plan F: an
-            #      instance exists from its first c3, `inst.formed_at`),
-            #      decoupled from Fib's `active` flag.
-            #   5. Variant qualification: at the fib's bounds [bos_price,
-            #      cts_price_at(t)], the IC candle's overlap with the 61.8-80%
-            #      Fib zone meets at least the V30 (30%) threshold. Variants
-            #      can downgrade (V90 → V60 → V30) or vanish entirely as the
-            #      fib extends.
-            # (Condition 4 — the scenario idx/price constraints of
-            # POI_ZONES_SPEC §3.2 — is NOT implemented: find_ic_candidates
-            # applies the base conditions only.)
-            # End-state (`end_idx`) takes precedence: once ended, `status` is
-            # "ended" regardless of activation conditions.
-            cts_events_for_fib = cts_events_by_key.get((int(sid), int(cycle_id)), [])
-            activation_history = _compute_poi_activation_history(
-                df=df,
-                ic_idx=int(ic_idx),
-                cts_established_idx=cts_established_idx,
-                sd=int(sd),
-                scan_end=scan_end,
-                fill_threshold=config.fill_threshold,
-                bos_price=float(fib_state.bos_price),
-                cts_events=cts_events_for_fib,
-                fib_min_pct=config.ic_fib_min,
-                fib_max_pct=config.ic_fib_max,
-                variant_thresholds=variant_thresholds,
-                imbalances=imbalances,
-                fill_idx_cache=fill_idx_cache,
-                lifecycle_floor_idx=struct_start_by_sid.get(int(sid)),
-            )
-
-            # confirmed_idx = idx of the most recent ACTIVATE event (if any).
-            # current_versions = variants recorded at that activate event (or
-            # empty if POI is currently deactivated). With per-candle variant
-            # re-check, the active variant tier can downgrade (V90 -> V60 ->
-            # V30) or vanish as the fib's `cts_price` shifts.
-            confirmed_idx: Optional[int] = None
-            current_versions: List[str] = []
-            currently_active = False
-            for ev in activation_history:
-                if ev["active"]:
-                    confirmed_idx = ev["idx"]
-                    current_versions = list(ev.get("versions", []))
-                    currently_active = True
-                else:
-                    current_versions = []
-                    currently_active = False
-
-            # Derived 3-state status. Mirrors KL: a POI that never activated
-            # (empty activation_history — e.g. a collapsed cycle) is "inactive",
-            # not "ended" (it never began). Standardized 2026-05-27.
-            if not activation_history:
-                status = "inactive"
-            elif end_idx is not None and end_idx <= last_candle:
-                status = "ended"
-            elif currently_active:
-                status = "active"
+        # confirmed_idx = idx of the most recent ACTIVATE event (if any).
+        confirmed_idx: Optional[int] = None
+        currently_active = False
+        for ev in activation_history:
+            if ev["active"]:
+                confirmed_idx = ev["idx"]
+                currently_active = True
             else:
-                status = "inactive"
+                currently_active = False
 
-            zone = POIZone(
-                start_time=ic_time,
-                end_time=end_time,
-                side="buy" if sd == 1 else "sell",
-                top=ic_high,
-                bottom=ic_low,
-                ic_idx=ic_idx,
-                meta={
-                    "structure_id": sid,
-                    "struct_direction": sd,
-                    "cycle_id": cycle_id,
-                    "confirmed_idx": confirmed_idx,
-                    "end_idx": end_idx,
-                    "end_reason": end_reason,
-                    # `versions` = peak variants ever achieved (snapshot from
-                    # `select_ic_variants` using final fib state). For the
-                    # live state at end of scan, see `current_versions`.
-                    "versions": versions,
-                    "current_versions": current_versions,
-                    "status": status,
-                    "activation_history": activation_history,
-                    "bos_anchor_idx": fib_state.bos_idx,
-                    "cts_anchor_idx": fib_state.cts_idx,
-                    "cts_established_idx": cts_established_idx,
-                },
-            )
-            zones.append(zone)
+        # Derived 3-state status. Mirrors KL: a POI that never activated
+        # (empty activation_history — e.g. a collapsed cycle) is "inactive",
+        # not "ended" (it never began). Standardized 2026-05-27.
+        if not activation_history:
+            status = "inactive"
+        elif end_idx is not None and end_idx <= last_candle:
+            status = "ended"
+        elif currently_active:
+            status = "active"
+        else:
+            status = "inactive"
+
+        tb = rec.selection.tiebreak or (None, None, None, None)
+        zone = POIZone(
+            start_time=ic_time,
+            end_time=end_time,
+            side="buy" if sd == 1 else "sell",
+            top=ic_high,
+            bottom=ic_low,
+            ic_idx=ic_idx,
+            meta={
+                "structure_id": sid,
+                "struct_direction": sd,
+                "cycle_id": cycle_id,
+                "confirmed_idx": confirmed_idx,
+                "end_idx": end_idx,
+                "end_reason": end_reason,
+                # The institutional pattern of the IC (PLAN_H D6 / HV): flat
+                # str / int / None — the index keys are in the mirror's
+                # `_ZONE_META_IDX_KEYS`, `ip_tied_count` is a count.
+                "ip_rank": pick.ip_rank,
+                "ip_leg_candle_counts": pick.ip_leg_candle_counts,
+                "pattern_anchor_idx": int(pick.pattern_anchor_idx),
+                "opp_leg_first_idx": int(pick.opp_leg_first_idx),
+                "pattern_end_idx": int(pick.pattern_end_idx),
+                "pattern_confirmed_idx": int(pick.pattern_confirmed_idx),
+                "ip_tiebreak": tb[0],
+                "ip_tb_runner_up_ic_idx": tb[1],
+                "ip_tied_count": tb[2],
+                "ip_tb_imbalance_first_c2_idx": tb[3],
+                "status": status,
+                "activation_history": activation_history,
+                "bos_anchor_idx": fib_state.bos_idx,
+                "cts_anchor_idx": fib_state.cts_idx,
+                "cts_established_idx": cts_established_idx,
+            },
+        )
+        zones.append(zone)
 
     # Per-POI lifecycle dump, opt-in via env var (silent by default).
     # Re-enable when reconstructing the per-POI table — see
@@ -785,14 +805,13 @@ def derive_poi_zones(
                     react_after = None
                 elif deact_idx is not None and react_after is None:
                     react_after = e["idx"]
-            peak = z.meta.get("versions", [])
-            cur = z.meta.get("current_versions", [])
             print(f"[poi_zones] sid={z.meta.get('structure_id')} cycle={z.meta.get('cycle_id')} "
                   f"bos_anchor_idx={z.meta['bos_anchor_idx']} cts_est={z.meta.get('cts_established_idx')} "
                   f"confirmed={z.meta.get('confirmed_idx')} ic={z.ic_idx} cts_anchor_idx={z.meta['cts_anchor_idx']} "
                   f"deact={deact_idx} react_after={react_after} end={z.meta.get('end_idx')} "
                   f"end_reason={z.meta.get('end_reason')} status={z.meta.get('status')} "
-                  f"dir={z.meta.get('struct_direction')} peak={peak} cur={cur} hist=[{flips_summary}]")
+                  f"dir={z.meta.get('struct_direction')} ip_rank={z.meta['ip_rank']} "
+                  f"pattern_confirmed={z.meta['pattern_confirmed_idx']} hist=[{flips_summary}]")
 
             # Per-relevant-imbalance armed/confirmed dump. Same filter shape
             # as the activation sweep so the printed set matches what drove
@@ -822,9 +841,9 @@ def derive_poi_zones(
 @dataclass(frozen=True)
 class IPCandidateRecord:
     """One row of the institutional-pattern debug export (`*_ip_candidates.csv`,
-    PLAN_H §8.3 landing A — computed, NOT yet drawn): a §3.1 candidate of a gated
-    fib record, or the record's `IP: none` row (`ic_idx` None) when it has no
-    pattern. Every index field is a dataclass field (the sub mirror shifts
+    PLAN_H §8.3; the picked rows are the drawn POIs since landing B): a §3.1
+    candidate of a POI record, or the record's `IP: none` row (`ic_idx` None)
+    when it has no pattern. Every index field is a dataclass field (the sub mirror shifts
     `entity_df_mutation._IP_CANDIDATE_IDX_FIELDS`); `meta` = the attribution
     (`structure_path_id`; a sub's mirror adds `sub_id` and the rest). The
     tiebreak fields sit on the picked row."""
@@ -867,30 +886,20 @@ def derive_ip_candidates(
     config: POIConfig,
     *,
     structure_path_id: str,
+    ip_records: Optional[List[IPRecordSelection]] = None,
 ) -> List[IPCandidateRecord]:
-    """The institutional-pattern selection of every fib record `derive_poi_zones`
-    builds POIs from — its per-record gate (`_poi_record_gate`) and its "no
-    CTS_ESTABLISHED → no POI" skip — as debug records (PLAN_H §8.3: landing A
-    computes and exports the selection, switching nothing). One record per §3.1
-    candidate, the ones missing the touch included (`select_ip_ic(...,
-    classify_misses=True)`), + one `IP: none` record per fib record without a pick.
+    """The institutional-pattern selection of every POI record (`select_ip_records`
+    — the records and selections `derive_poi_zones` draws from) as debug records
+    (PLAN_H §8.3). One record per §3.1 candidate, the ones missing the touch
+    included (`select_ip_ic(..., classify_misses=True)`), + one `IP: none` record
+    per fib record without a pick. `ip_records` None = selected here.
     """
-    if fib_tracker is None:
-        return []
-    established = set()
-    for ev in structure_events:
-        if ev.type == "CTS_ESTABLISHED":
-            established.add((int(ev.meta["structure_id"]), int(ev.meta["cycle_id"])))
+    if ip_records is None:
+        ip_records = select_ip_records(df, structure_events, fib_tracker, config)
     out: List[IPCandidateRecord] = []
-    for fib_state in fib_tracker.get_fibs_for_charting():
-        if not _poi_record_gate(fib_state):
-            continue
+    for rec in ip_records:
+        fib_state, sel = rec.fib_state, rec.selection
         sid, cycle_id = int(fib_state.structure_id), int(fib_state.cycle_id)
-        if (sid, cycle_id) not in established:
-            # as `derive_poi_zones`: a locked fib always has its CTS_ESTABLISHED (event contract)
-            assert not fib_state.locked, f"[poi_zones] locked fib {(sid, cycle_id)} has no CTS_ESTABLISHED"
-            continue
-        sel = select_ip_ic(df, fib_state, config, classify_misses=True)
         base = (sid, cycle_id, int(fib_state.struct_direction), int(fib_state.bos_idx), int(fib_state.cts_idx))
         for c in sel.candidates:
             r = c.ip
@@ -1058,15 +1067,13 @@ def _compute_poi_activation_history(
     cts_established_idx: int,
     sd: int,
     scan_end: int,
-    fill_threshold: float,
     bos_price: float,
     cts_events: List[StructureEvent],
-    fib_min_pct: float,
-    fib_max_pct: float,
-    variant_thresholds: Dict[str, float],
+    config: POIConfig,
     imbalances: List[ImbalanceInstance],
     fill_idx_cache: Dict[int, Tuple[Optional[int], Optional[int]]],
     lifecycle_floor_idx: Optional[int] = None,
+    pattern_confirmed_idx: int,
 ) -> List[Dict[str, Any]]:
     """Produce the POI's activation history via an event-driven sweep.
 
@@ -1076,19 +1083,21 @@ def _compute_poi_activation_history(
       Condition 1 — `cts_at(t) >= ic_idx`. The fib's `cts_idx` only grows
                     via CTS_UPDATED events, so once met, monotonic.
       Condition 2 — `ic_idx <= t` (implicit: scan starts at first_active
-                    = max(cts_established_idx, ic_idx, lifecycle_floor_idx),
-                    with `cts_established_idx` = the cycle's CTS-established
-                    moment — or, for a cycle with no CTS_ESTABLISHED, the fib's
-                    CTS anchor (see derive_poi_zones) — POI_ZONES_SPEC.md §4
-                    "Activation floor").
+                    = max(cts_established_idx, ic_idx, lifecycle_floor_idx,
+                    pattern_confirmed_idx), with `cts_established_idx` = the
+                    cycle's CTS-established moment and `pattern_confirmed_idx`
+                    = the moment the IC's continuation leg is known complete
+                    (PLAN_H R1) — POI_ZONES_SPEC.md §4 "Activation floor").
       Condition 3 — an sd-direction imbalance FORMED by t (its first c3 has
                     closed: `inst.formed_at <= t` — Plan F) overlaps
                     `(ic_idx, t]` and is not yet committed-filled (two-stroke:
                     stroke 1 = 70% retrace, stroke 2 = close past gap outer).
                     Flips as imbalances form / commit-fill.
-      Condition 5 — Variant qualification: the IC candle overlaps the
-                    61.8-80% Fib zone (computed from `bos_price` and the
-                    time-varying `cts_price_at(t)`) by at least V30.
+      Condition 5 — The touch: the IC candle touches the 61.8-80% zone
+                    (inclusive edges) of the fib AS OF t — from `bos_price` and
+                    the time-varying `cts_price_at(t)` (`fib_zone_bounds` +
+                    `ic_touches_zone`, the selection's helpers; PLAN_H D1a).
+                    Deactivation reason `ic_not_touching_fib_zone` (R3).
 
     Why event-driven: state can change only at three kinds of idx —
     imbalance "enter unfilled set" (`inst.formed_at`, the first c3), imbalance "leave
@@ -1097,22 +1106,23 @@ def _compute_poi_activation_history(
     Between these idx state is constant, so the per-candle loop over
     `[first_active, scan_end]` is wasted work. Transitions are enumerated,
     sorted, and swept once; the unfilled-count is maintained by +1/−1 at
-    enter/leave events, and current_versions is recomputed only at CTS
-    transitions.
+    enter/leave events, and the touch is recomputed only at CTS transitions.
 
     `fill_idx_cache` entries are `(armed_idx, confirmed_fill_idx)` tuples;
     the sweep uses ``confirmed_fill_idx`` exclusively for the leave event.
     ``armed_idx`` is informational (stashed on `inst.meta` by the cache
     builder for debug exporters).
 
-    Returns `[{"idx", "active", "reason", "versions"?}, ...]`. Empty list
-    means POI never activated in the window.
+    Returns `[{"idx", "active", "reason"}, ...]`. Empty list means POI never
+    activated in the window.
     """
     # First-active = max(the cycle's established moment, the IC candle, the
-    # structure lifecycle-start floor): a POI cannot activate before its cycle
-    # is knowable (Plan D) nor before its structure is alive (post-reversal
-    # cycle-0 / sub case, Phase 3 Commit 2).
-    first_active = max(cts_established_idx, ic_idx)
+    # structure lifecycle-start floor, the pattern's confirmation moment): a POI
+    # cannot activate before its cycle is knowable (Plan D), before its structure
+    # is alive (post-reversal cycle-0 / sub case, Phase 3 Commit 2), nor before its
+    # institutional pattern is known complete (PLAN_H R1 — may lie past the frame:
+    # then never active).
+    first_active = max(cts_established_idx, ic_idx, int(pattern_confirmed_idx))
     if lifecycle_floor_idx is not None:
         first_active = max(first_active, int(lifecycle_floor_idx))
     if first_active > scan_end or ic_idx not in df.index:
@@ -1127,35 +1137,27 @@ def _compute_poi_activation_history(
     cts_anchor_idx_at_t = -1
     cts_price_at_t = 0.0
     unfilled_count = 0
-    current_versions: List[str] = []
+    touching = False
 
-    def _compute_versions() -> List[str]:
-        # Retracement math is direction-aware (mirrors
-        # `features.fibonacci.calculate_fib_price`).
+    def _touches() -> bool:
+        # The as-of fib (anchors from `bos_price` + `cts_price_at_t`, direction-
+        # aware like `features.fibonacci.calculate_fib_price`); no fib yet / a
+        # CTS before the IC / a degenerate range -> no touch.
         if cts_anchor_idx_at_t < ic_idx or cts_price_at_t <= 0:
-            return []
+            return False
         if sd == 1:
             anchor_high = cts_price_at_t
             anchor_low = bos_price
         else:
             anchor_high = bos_price
             anchor_low = cts_price_at_t
-        range_size = anchor_high - anchor_low
-        if range_size <= 0:
-            return []
-        if sd == 1:
-            fib_level_min = anchor_high - range_size * (fib_min_pct / 100.0)
-            fib_level_max = anchor_high - range_size * (fib_max_pct / 100.0)
-        else:
-            fib_level_min = anchor_low + range_size * (fib_min_pct / 100.0)
-            fib_level_max = anchor_low + range_size * (fib_max_pct / 100.0)
-        overlap = calculate_candle_overlap_pct(
-            ic_high, ic_low, fib_level_min, fib_level_max,
-        )
-        return sorted(v for v, th in variant_thresholds.items() if overlap >= th)
+        if anchor_high - anchor_low <= 0:
+            return False
+        zone_lo, zone_hi = fib_zone_bounds(anchor_high, anchor_low, sd, config)
+        return ic_touches_zone(ic_high, ic_low, zone_lo, zone_hi)
 
     # --- Pre-window state: apply CTS events KNOWN strictly before first_active
-    # (their moment < first_active) so current_versions (and condition 1) reflect
+    # (their moment < first_active) so the touch (and condition 1) reflect
     # the entering state at first_active; events known in [first_active,
     # scan_end] are in-window transitions AT their moment (Plan E E3g-1, PLAN_E
     # §7.1 T1 — before it both keyed on the stamped idx, the CTS anchor for
@@ -1178,7 +1180,7 @@ def _compute_poi_activation_history(
                 pass
         elif ev_moment_idx <= scan_end:
             in_window_cts.append(ev)
-    current_versions = _compute_versions()
+    touching = _touches()
 
     # --- Transitions inside the window.
     # Each is (idx, priority, kind, payload). Priority disambiguates within
@@ -1240,7 +1242,7 @@ def _compute_poi_activation_history(
                 cts_changed = True
             i += 1
         if cts_changed:
-            current_versions = _compute_versions()
+            touching = _touches()
 
         # Evaluate is_active at cur_idx. Skip rows not present in df.index
         # (defensive — entity dfs are contiguous, but mirror writes can
@@ -1250,7 +1252,7 @@ def _compute_poi_activation_history(
 
         cond1 = cts_anchor_idx_at_t >= ic_idx
         cond3 = unfilled_count > 0
-        cond5 = len(current_versions) > 0
+        cond5 = touching
         is_active = cond1 and cond3 and cond5
 
         if is_active and not was_active:
@@ -1258,7 +1260,6 @@ def _compute_poi_activation_history(
                 "idx": cur_idx,
                 "active": True,
                 "reason": "initial" if not history else "conditions_re-met",
-                "versions": list(current_versions),
             })
             was_active = True
         elif not is_active and was_active:
@@ -1268,7 +1269,7 @@ def _compute_poi_activation_history(
             if not cond3:
                 reasons.append("imbalance_filled")
             if not cond5:
-                reasons.append("variant_below_v30")
+                reasons.append("ic_not_touching_fib_zone")
             history.append({
                 "idx": cur_idx,
                 "active": False,
@@ -1286,6 +1287,12 @@ def _compute_poi_activation_history(
 # §13.5.b). Defined here so structure/ never imports zones/.
 # ---------------------------------------------------------------------------
 
+class IPSelectionError(RuntimeError):
+    """An error inside `select_ip_ic` during the MS in-flight read, re-raised so
+    no narrow `except (ValueError, IndexError)` above the MS run can swallow it
+    (PLAN_H §8.5 step 3)."""
+
+
 def compute_poi_inners_for_cycle(
     df: pd.DataFrame,
     bos_idx: int,
@@ -1301,16 +1308,26 @@ def compute_poi_inners_for_cycle(
     fill_horizon_idx: int,
     snapshot_horizon_idx: int,
 ) -> List[float]:
-    """Derive POI zone inner prices for the cycle's current Fib state.
+    """Derive the POI zone inner price for the cycle's current (as-of) Fib state:
+    0 or 1 inner — the institutional-pattern pick's (PLAN_H D2: the SAME
+    `select_ip_ic` as the drawn POI; no pattern -> [] and the proximity check
+    reads the BOS inner only).
 
     Picks anchors via the shared
     :func:`zones.fib_tracker.select_fib_anchor_for_cycle` decision utility
     so this in-flight resolver agrees with FibTracker's downstream
     Scenario 2 cross-cycle decision. Constructs the FibState from the
-    chosen anchors, runs IC candidate scan + variant selection, returns
-    inner prices (top of IC for buy zones, bottom for sell). POIs are
-    always sd-direction by Fib construction. Returns [] gracefully on any
-    error so the proximity check falls back to BOS-only without crashing.
+    chosen anchors, runs `select_ip_ic` on it, returns the pick's inner price
+    (top of the IC for a buy zone, bottom for a sell). POIs are always
+    sd-direction by Fib construction.
+
+    Failure scopes (PLAN_H §8.8 PR1, LANDMINES "The POI Resolver Fails Loudly"):
+    ONLY the anchor selection + the fib construction keep the graceful `[]` on an
+    error. `select_ip_ic` runs OUTSIDE that `try`, and any error of it is
+    re-raised as `IPSelectionError` (a RuntimeError) — so neither this function
+    nor a caller's narrow `except` (the sub geometry's `except (ValueError,
+    IndexError)` in `entity_df_mutation._build_geometry`, which drops the whole
+    sub) can turn an IP bug / an unstamped frame into a legitimate "no pattern".
 
     Knowability (Plan F): no c3 cut here — the snapshot is built at the CTS
     refresh candle and may count a gap whose c3 is the next candle, but its
@@ -1403,22 +1420,19 @@ def compute_poi_inners_for_cycle(
             fib=fib,
         )
 
-        config = POIConfig(fill_threshold=fill_threshold)
-        candidates = find_ic_candidates(df, fib_state, config)
-        if not candidates:
-            return []
-        ic_variants = select_ic_variants(candidates, df, fib_state, config)
-        if not ic_variants:
-            return []
-
-        inners: List[float] = []
-        for ic_idx in ic_variants.keys():
-            if ic_idx not in df.index:
-                continue
-            if sd == 1:
-                inners.append(float(df.loc[ic_idx, "h"]))  # buy POI inner = IC top
-            else:
-                inners.append(float(df.loc[ic_idx, "l"]))  # sell POI inner = IC bottom
-        return inners
     except Exception:
         return []
+
+    # The pick — OUTSIDE the try (fail loudly; MS's own fill threshold).
+    config = POIConfig(fill_threshold=fill_threshold)
+    try:
+        sel = select_ip_ic(df, fib_state, config)
+    except Exception as exc:
+        raise IPSelectionError(
+            f"[poi_zones] select_ip_ic failed in the MS resolver (sid {structure_id}, cycle {cycle_id}, "
+            f"fib {fib_state.bos_idx}..{fib_state.cts_idx}): {exc!r}") from exc
+    if sel.pick is None:
+        return []
+    ic_idx = int(sel.pick.ic_idx)
+    # buy POI inner = the IC's top; sell POI inner = its bottom
+    return [float(df.loc[ic_idx, "h"]) if sd == 1 else float(df.loc[ic_idx, "l"])]

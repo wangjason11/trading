@@ -6,7 +6,9 @@ usage (repo root):
 
 MUTANTS.py defines `MUT = [(id, relpath, old, new), ...]`: `relpath` from the repo root (e.g.
 "engine_v2/structure/market_structure.py"); `old` must occur EXACTLY ONCE in the working-tree file (else the mutant is
-reported BAD — the site moved); it is replaced by `new`. Each mutant gets a fresh copy of the working tree's
+reported BAD — the site moved); it is replaced by `new`. The file is read in TEXT mode (universal newlines), so a
+multi-line `old` / `new` uses LF line ends, never CRLF — a CRLF anchor never matches the CRLF working tree (BAD;
+PLAN_H landing B's first run, 2026-10-06). Each mutant gets a fresh copy of the working tree's
 `engine_v2/` (without `__pycache__` / `plans`, so a test must not import from `engine_v2.plans`) under a SHORT directory
 name (Windows path length: a long mutant id as the folder name broke `copytree` on the first run), runs
 `python -m pytest engine_v2/tests -q -p no:cacheprovider` with the OANDA smoke test deselected (it needs `oanda.cfg`)

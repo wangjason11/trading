@@ -615,7 +615,8 @@ deleted):** the same two seams survive as the sweep's two failure reasons
 `_resolve_reversal_start` in `multitf/entity_df_mutation.py`) returns a
 `ProbeFailure` instead of raising → the trigger is logged as
 `UnresolvedTrigger(reason="probe_failed")`. The MS side: `_build_geometry`
-wraps `compute_bounded_structure` in `try/except (ValueError, IndexError)` and
+wraps `compute_bounded_structure` in `try/except (ValueError, IndexError)` (kept narrow: the POI
+resolver's IP errors arrive as `IPSelectionError` and propagate — "The POI Resolver Fails Loudly" below) and
 returns `None` → `build_or_get_geometry` creates NO pool entry (no `sub_id`
 consumed) and the trigger is logged as `reason="geometry_failed"`. Both go
 through `lifecycle_sweep._Sweep._unresolved` → the `[sweep] UNRESOLVED
@@ -629,6 +630,38 @@ failed OANDA chunk request twice, then raises, and an all-empty fetch
 raises — never catch it into a skip (fixed 2026-09-27; in the 2026-09-22
 audit a swallowed chunk error let a replay exit 0 on 2500 of 4228 M15
 candles; `/compare` skill §2b).
+
+---
+
+## The POI Resolver Fails Loudly — One Selector for MS and the Drawn POI (PLAN_H landing B, 2026-10-06)
+
+**Rule:** the drawn POI (`poi_zones.derive_poi_zones`, the FINAL fib record) and MarketStructure's in-flight
+sd-proximity read (`poi_zones.compute_poi_inners_for_cycle`, the AS-OF fib at each CTS_ESTABLISHED / CTS_UPDATED)
+pick the IC with the SAME function, `select_ip_ic` (PLAN_H D2). Never give one of them its own selection — a second
+copy would let MS confirm a CTS on a POI that is never drawn (or the reverse). And an error inside `select_ip_ic` must
+reach the caller: it is NEVER a legitimate "no pattern" (D7: no POI, the BOS inner only).
+
+**Two swallowing scopes sit above the resolver:**
+1. **The resolver's own** `try: ... except Exception: return []` (`compute_poi_inners_for_cycle`) — it keeps ONLY the
+   anchor selection (`select_fib_anchor_for_cycle`) + the fib construction (their documented graceful fallback: BOS
+   inner only). `select_ip_ic` runs AFTER the `try`.
+2. **The sub geometry's** `except (ValueError, IndexError): return None` around `compute_bounded_structure`
+   (`multitf/entity_df_mutation._build_geometry`, the documented `geometry_failed` seam — "Lower-TF Pipeline Steps May
+   Fail" above). A ValueError / IndexError from the IP inside a sub's MS would silently drop the WHOLE sub. So the
+   resolver re-raises ANY `select_ip_ic` error as `poi_zones.IPSelectionError` (a RuntimeError, chained `from` the
+   original) — no narrow `except` above it matches. Keep that scope narrow; never widen it to `Exception`.
+
+**Why it matters:** the IP reads the frame's stamp (`df.attrs["timeframe"]` — the candle params + the leg cap) and
+`attrs["pair"]`, plus the classifier columns (`candle_type`, `prior_maru_max_len_as0`, `vol_dir`); an unstamped frame
+(a hand-built test frame, a future frame builder) raises. Swallowed, that would look exactly like "this cycle has no
+pattern" — every sd-proximity confirmation on the BOS inner, invisible to a `/compare` against a save made the same
+way (PLAN_H §8.8 PR1, found by all three review lenses).
+
+**Pins:** `tests/test_plan_h_landing_b.py` — the unstamped frame raises (`KeyError('timeframe')` chained), a
+ValueError inside the IP arrives as `IPSelectionError`, an IP error inside `_build_geometry` propagates, an unstamped
+MS run raises, and the drawn POI == the resolver's pick on the final fib (the real collaborator). Measured on the
+reference window (V3, PLAN_H §8.4a): 450 resolver calls (main 58, sub geometry 313, probe Phase 2 79), 0 IP errors,
+no call failed inside the kept `try`.
 
 ---
 

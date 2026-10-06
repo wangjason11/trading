@@ -79,14 +79,19 @@ complete." Item 1 opens the next working session.
    landing A (the selector + debug CSVs `*_ip_candidates.csv`, nothing switched) BUILT 2026-10-06, `/compare` == its
    prediction (PLAN_H §8.3a), saved `20261006_120513_e1c597c`; the variant replays V1 / V2 / V3 + the test census
    MEASURED 2026-10-06 and B's prediction written (§8.4a: V3 == the hand cross-check; the 4 never-active POIs are
-   collapsed cycles; T1 delays 2 activations; the census 18 FAIL / 99 moved-silent); next: landing B (the switch). The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
+   collapsed cycles; T1 delays 2 activations; the census 18 FAIL / 99 moved-silent). **Landing B BUILT 2026-10-06**
+   (the switch: one POI per fib record = the pick, MS reads the same selector, the rule-3 meta migration, HV hovers;
+   PLAN_H §8.5a): `/compare` vs S_A == the prediction; tests 1258; mutants 32 / 32 killed; chart-reviewed 2026-10-06 — the
+   user will DEBUG the charts in a new session (questions, chart aids, rule experiments; each compared against S_B and
+   S_A), the points raised are PLAN_H §8.5b; next: the commit + `/commit-save` (S_B), then that debugging session;
+   B's landing review DEFERRED (user 2026-10-06) until the debugging session's rule changes settle (PLAN_H §8.5a). The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
    (D4). Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3 variants): H1 5 ICs over
    3 cycles; M15 confluence 30 over 19; counter 12 over 7. **What moves when the POIs move** (the user accepted it, D2 /
    C3 — "We won't be able to judge whether those changes are appropriate or correct until I can review the charts";
    PLAN_H §3): H1 sid 1 cycle 2's sd-proximity `CTS_CONFIRMED` at 926 (IC 865 → 832: ≥ 939 or pullback); M15
    confluence sub 1 cycle 1's at 1902 (IC 1889 → 1875: likely survives); the zone-proximity sd triggers H1 sid 0
    cycle 1 710 → 748 and sid 1 cycle 2 926 → 939 — the H1 WVMI gates and counter subs 3 / 5's triggers → 6 of the 11
-   trigger records re-derived. Related: G "Cascade-viz hover extras" (obsolete once the variants go).
+   trigger records re-derived. Related: "Cascade-viz hover extras" — closed by landing B ("Recently closed").
 2. **Single-cycle fib POIs on subs, and revisit the overall sub cross-fib logic** — user 2026-10-01: "Single-cycle fib
    POIs on sub, and also additionally revisit the overall sub cross-fib logic". Today a sub's single-cycle fib is only
    a fallback (cross fails, established phase); the change lets the two coexist — additive, more POIs, so it pulls
@@ -198,9 +203,6 @@ complete." Item 1 opens the next working session.
   may revisit". Detail: `engine_v2/zones/FIB_LIFECYCLE_SPEC.md` §13.
 - **Uniform 3-tier chart opacity** (brightest = cycle not ended, mid = sid not ended, faded = sid ended; one
   `opacity_for(sid, cycle)` helper for every element) — its own session. Detail: FIB_LIFECYCLE_SPEC §9.4 + §13.
-- **Cascade-viz hover extras** — `current_versions` vs peak; a V90 → V60 → V30 downgrade cue (OBSOLETE once D.1 item 1's
-  landing B removes the variants from the POIs — close it there). Detail: memory
-  `project_item_5_cascade_viz.md`.
 - **Breadcrumb header with cross-chart navigation** — "not in v1". Detail: PART4 §16.9.
 - **Split `PART4_REFACTOR_SPEC.md` into canonical spec files** (a new `MULTI_TF_SPEC.md` + sections moved into
   `MARKET_STRUCTURE_SPEC` / `CHARTING_SPEC` / `LANDMINES`) — the drafted §13.7 plan; PARKED as optional by the user
@@ -219,6 +221,9 @@ complete." Item 1 opens the next working session.
 
 ## Recently closed (history pointers)
 
+- **Cascade-viz hover extras** (G: `current_versions` vs peak; a V90 → V60 → V30 downgrade cue) — CLOSED 2026-10-06 as
+  obsolete: PLAN_H landing B removed the variants (and `versions` / `current_versions`) from the POIs; the POI hover
+  shows the institutional pattern instead (HV). Detail: memory `project_item_5_cascade_viz.md` (historical).
 - **`PRE_REFACTOR_INVARIANTS.md` deleted** — 2026-09-30 (PART4 §13 item 7): every item was already canonical or
   superseded (UC1, the three-probe family, the May checkpoints, `meta["active"]`, the 9/6/3 pips) except the
   `cts_phase` values → `MARKET_STRUCTURE_SPEC.md` "State machine overview" (`FALSE_BREAK` declared, never assigned).

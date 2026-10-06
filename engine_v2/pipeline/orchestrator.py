@@ -29,7 +29,7 @@ from engine_v2.multitf.subsequent_counter_trigger import (
 from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
 # Week 7: POI zones
-from engine_v2.zones.poi_zones import derive_ip_candidates, derive_poi_zones, POIConfig
+from engine_v2.zones.poi_zones import derive_ip_candidates, derive_poi_zones, POIConfig, select_ip_records
 from engine_v2.zones.structure_lifecycle import compute_cycle_lifecycle, compute_reversal_idx_by_sid
 from engine_v2.patterns.imbalance import compute_imbalance
 
@@ -402,7 +402,11 @@ def _run_downstream_pipeline(
 
     # 8) POI zones — ONE parameter source: the POIConfig defaults (PLAN_H §8.1;
     # the MS in-flight resolver reads them too, with MS's own fill threshold).
+    # The institutional-pattern selection is computed ONCE per POI record
+    # (`select_ip_records`) and handed to both readers: the drawn POIs (one per
+    # record — the pick, PLAN_H landing B) and the debug CSV (`*_ip_candidates.csv`).
     poi_config = POIConfig()
+    ip_records = select_ip_records(df, events, fib_tracker, poi_config)
     poi_zones = derive_poi_zones(
         df,
         events,
@@ -411,14 +415,14 @@ def _run_downstream_pipeline(
         lifecycle_floor=lifecycle_floor,
         lifecycle_cap=lifecycle_cap,
         cap_reason=cap_reason,
+        ip_records=ip_records,
     )
     print(f"{pfx}[poi_zones] total=", len(poi_zones))
 
-    # 8b) The institutional-pattern selection (PLAN_H §8.3, landing A): computed
-    # on the same gated fib records and EXPORTED (`*_ip_candidates.csv`), not yet
-    # drawn — nothing reads it but the exporter.
+    # 8b) The same selection as debug records (`*_ip_candidates.csv`): every
+    # candidate with its pattern or failure reason + an `IP: none` row per record.
     ip_candidates = derive_ip_candidates(
-        df, events, fib_tracker, poi_config, structure_path_id=structure_path_id,
+        df, events, fib_tracker, poi_config, structure_path_id=structure_path_id, ip_records=ip_records,
     )
     print(
         f"{pfx}[ip] fib records={len({(r.structure_id, r.cycle_id, r.bos_anchor_idx, r.cts_anchor_idx) for r in ip_candidates})}, "
