@@ -734,7 +734,7 @@ answers / direct histories moved), 174 touch the POI layer unmoved, 927 never to
 | S-4 direct `_compute_poi_activation_history` calls (`versions` / reason moved) | 8 (`test_plan_e_role_pins` ×3, `test_poi_activation_moment` ×3, `test_imbalance_c3_knowability` ×2) | the new signature (no `variant_thresholds`); the explicit `versions` pins (`test_poi_activation_moment` :110 / :268, `test_zone_proximity` :127 fixture meta) re-pinned |
 
 **B's `/compare` prediction (written 2026-10-06, before B is built) = V3 + the format deltas.** Kept for the check:
-V3's outputs in `%TEMP%/ph/V3/artifacts/`.
+V3's outputs in `%TEMP%/ph/V3/artifacts/` (deleted 2026-10-06 after B's check; rebuild with `variant_patch.py`).
 1. **B vs V3:** the 24 CSVs other than the 3 `*_poi_zones.csv` md5-EQUAL; every figure attribute equal except the
    POI hover traces' `hovertemplate` + `customdata` (H1 3 POIs × 2 lines; per M15 chart the sub POIs + the H1
    overlay POIs × 2) — trace / shape counts equal (H1 81 / 235, counter 129 / 90, confluence 258 / 178).
