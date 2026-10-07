@@ -107,7 +107,13 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    This update will likely be the final logic we use for cross-cycle & single-cycle fibs." A NEW session: it opens
    with B's landing review (item 1), then decides whether planning and build are separate sessions; the user brings
    the rules. **Split DECIDED 2026-10-06c (PLAN_H §6 LR3): THREE sessions** — (1) the user's rules → the spec (+ cheap
-   status-quo measurements), (2) the implementation plan from a fresh code audit + a cold review, (3) the build. Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
+   status-quo measurements), (2) the implementation plan from a fresh code audit + a cold review, (3) the build.
+   **The user's rules received 2026-10-07** → canonical `engine_v2/plans/PLAN_I_cross_cycle_fib_revamp.md` (living
+   doc; the verbatim text `plans/plan_i_inputs/cross_cycle_fib_spec.md`): a cross LIMIT for main and sub — crosses up
+   to the first cycle whose CTS anchor is beyond a reference price set by the structure's starting trigger; rounds 1
+   to 5 ANSWERED 2026-10-07 (PLAN_I §6 Q1–Q8, R2-0…R2-5, R3-1…R3-6, R4-1…R4-7, R5-1…R5-3; the rule as decided:
+   PLAN_I §1.2 + §1.4; unique subs numbered at their lifecycle START, R4-2; SPEC AGREED, no open question; session 1 CLOSED
+   2026-10-07; NEXT: session 2, the implementation plan — PLAN_I §8). Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
    charts add the M15 fib layer). Likely inputs (to confirm with the
    user): the 2026-10-01 item and D5 below, and §E "Cross-cycle fib bundled follow-up" with its parked open
    questions (`engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §13).
