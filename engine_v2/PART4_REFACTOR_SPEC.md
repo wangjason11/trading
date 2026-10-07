@@ -2475,8 +2475,10 @@ Each sub chart renders:
 
 - Sub TF candles (own TF, no parent candles ever overlaid)
 - Sub structure elements: KL/POI zones, BOS/CTS markers, range bounds,
-  wave candle lines, WVMI hover overlays, connector lines (sub fibs are
-  CSV-only — no M15 fib renderer; decided 2026-09-30)
+  wave candle lines, WVMI hover overlays, connector lines, and the sub fibs
+  (since PLAN_H §8.9 F1, 2026-10-06: one "M15 fib" legend group per lens, the
+  shared draw gate `_zone_render.fib_record_drawn`; CSV-only from 2026-09-30
+  until then — CHARTING_SPEC §8)
 - Sub TF volume (own TF)
 - Optional **parent overlay** (see §16.3)
 
@@ -2538,7 +2540,7 @@ display (§16.6) are governed by hardcoded rules, not user toggles.
 
 - **Identity = `sub_id`.** The manifest is `attrs["sids"]` (one `SidRecord`
   per unique sub on this lens, §9.2); every drawn attrs list (events, KL, POI,
-  wave candles, WVMI, prev-BOS lines; fibs are CSV-only) is grouped by `meta["sub_id"]`
+  wave candles, WVMI, prev-BOS lines; fibs since PLAN_H §8.9 F1) is grouped by `meta["sub_id"]`
   (`_sub_identity`); `attrs["triggers"]` supplies the record list for hover.
 - **Ownership = the sub's real-time lifecycle window, keyed per direction.**
   `_compute_owner_by_idx_dir(sid_records, edge_idx)` builds
@@ -2556,7 +2558,8 @@ display (§16.6) are governed by hardcoded rules, not user toggles.
   style, live ownership deciding only among live subs. A replaced sub stops at
   the replacement.
 - **Persisting elements draw from the anchor, active from `start_idx`:**
-  KL / POI rectangles are unchanged in mechanism (sub fibs are CSV-only) — drawn from their
+  KL / POI rectangles are unchanged in mechanism (sub fibs: drawn BOS → CTS anchor by the fib gate,
+  PLAN_H §8.9 F1) — drawn from their
   base / IC / anchor candle, filled only over their active stretch, which the
   KL/POI clamp already floors at the sub's `start_idx` and caps at its
   `end_idx` (§5). Opacity is a per-TF tier (`_m15_opacity_tier_for_zone`).
@@ -3367,7 +3370,7 @@ record. `clip_events_to_window` deep-copies (geometry objects are shared).
   overlay on the sub charts is lifecycle-FILTERED per wave (never-live H1 waves
   not drawn, §16.5 item 5; the H1 chart unchanged); collapsed-cycle KL/POI
   zones (never active in real time) are not drawn on either chart; POI zones
-  are side-tinted. Persisting elements (KL/POI rectangles; sub fibs are CSV-only) are otherwise
+  are side-tinted. Persisting elements (KL/POI rectangles; sub fibs since PLAN_H §8.9 F1, by their own gate) are otherwise
   unchanged: **drawn from the anchor, active from `start_idx`** (already the
   KL/POI rule).
 - **Every lens draws the sub over the sub's window** — the same `[start_idx,

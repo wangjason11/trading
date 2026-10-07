@@ -2563,7 +2563,6 @@ def export_chart_plotly(
                 continue
             if not fib_record_drawn(fib_st, _collapsed):
                 continue
-            _fib_drawn += 1
 
             # Get time range: from BOS idx to CTS idx
             bos_idx = fib_st.bos_idx
@@ -2571,6 +2570,7 @@ def export_chart_plotly(
 
             if bos_idx not in dfx.index or cts_idx not in dfx.index:
                 continue
+            _fib_drawn += 1
 
             x_start = pd.to_datetime(dfx.loc[min(bos_idx, cts_idx), COL_TIME], utc=True)
             x_end = pd.to_datetime(dfx.loc[max(bos_idx, cts_idx), COL_TIME], utc=True)

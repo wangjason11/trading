@@ -8,12 +8,16 @@ Pinned here (PLAN_H §8.6 "B", the census of §8.4a): the activation's cond5 = t
 returns the PICK's inner where the V30 / V60 / V90 selection disagrees; its fail-loud scopes (PR1: an unstamped
 frame raises; an IP error inside a sub geometry is not swallowed by its `except (ValueError, IndexError)`); D2 on
 the real collaborator; the POI meta key order; the ONE hover builder (HV) and the H1 fib hover's "IP: none" (C1);
-the exporter's `ip_rank` column.
+the exporter's `ip_rank` column. The landing review (PLAN_H §8.5c) added: the sell-side touch, the resolver's
+graceful anchor scope, the candidate rows read from the handed records, the asymmetric leg order, and the RENDERED
+hovers at all three POI sites (`_rendered`: what the template shows, not only what `customdata` holds).
 """
 from __future__ import annotations
 
 import contextlib
 import io
+import re
+import traceback
 
 import pandas as pd
 import pytest
@@ -87,6 +91,27 @@ def test_sweep_touch_is_inclusive_at_both_edges(edge):
     assert _hist(_sweep(ic=ic)) == [(9, True, "initial")]
     miss = (lo - 1e-9, lo - 0.0005) if edge == "high_at_zone_lo" else (hi + 0.0005, hi + 1e-9)
     assert _sweep(ic=miss) == []
+
+
+@pytest.mark.parametrize("ic, expected", [
+    ((0.6075, 0.6065), [(9, True, "initial")]),       # inside [.60618, .6080]
+    ((0.6095, 0.6085), []),                           # above the zone (toward the BOS): no touch
+])
+def test_sweep_sell_side_touch(ic, expected):
+    """The sd = -1 branch of the as-of fib (BOS .6100 above, CTS .6000 below -> zone [.60618, .6080]); a sell FVG
+    formed at 9 (landing review A01: swapped sell anchors made every sell POI never active, unseen by the buy-only
+    tests)."""
+    t0 = pd.Timestamp("2024-01-01", tz="UTC")
+    df = pd.DataFrame([{"time": t0 + pd.Timedelta(hours=i), "o": 0.6060, "h": 0.6065, "l": 0.6055, "c": 0.6060}
+                       for i in range(16)])
+    df.loc[4, ["o", "h", "l", "c"]] = [ic[1], ic[0], ic[1], ic[0]]
+    imb = ImbalanceInstance(start_idx=8, end_idx=8, direction=-1, gap_top=0.6020, gap_bottom=0.6010, gap_size=0.0010)
+    est = make_cts_established(cts_anchor_idx=5, confirmed_at=6, price=0.6000, struct_direction=None)
+    hist = poi_zones._compute_poi_activation_history(
+        df, ic_idx=4, cts_established_idx=6, sd=-1, scan_end=15, bos_price=0.6100, cts_events=[est],
+        config=POIConfig(), imbalances=[imb], fill_idx_cache={id(imb): (None, None)}, lifecycle_floor_idx=None,
+        pattern_confirmed_idx=4)
+    assert _hist(hist) == expected
 
 
 @pytest.mark.parametrize("pattern_confirmed_idx, expected", [
@@ -169,6 +194,16 @@ def test_resolver_reraises_any_ip_error_past_a_narrow_except(monkeypatch):
     assert isinstance(exc.value.__cause__, ValueError)
 
 
+def test_resolver_anchor_selection_error_stays_graceful(monkeypatch):
+    """The OTHER half of PR1: the anchor selection + fib construction keep their documented graceful fallback
+    (`[]` = the BOS inner only) — only the IP is outside the `try` (landing review R04)."""
+    def boom(*a, **k):
+        raise ValueError("anchor")
+
+    monkeypatch.setattr(poi_zones, "select_fib_anchor_for_cycle", boom)
+    assert _resolve(_m1_frame()) == []
+
+
 def test_an_ip_error_inside_a_sub_geometry_propagates(monkeypatch):
     """The SECOND swallowing scope (PLAN_H §8.5 step 3): `_build_geometry` wraps the sub's MS run in `except
     (ValueError, IndexError): return None` — the whole sub would vanish (`geometry_failed`). An IP error inside
@@ -201,6 +236,29 @@ def test_ms_on_an_unstamped_frame_raises():
     del df.attrs["timeframe"]
     with contextlib.redirect_stdout(io.StringIO()), pytest.raises(IPSelectionError):
         compute_bounded_structure(df, 0, +1)
+
+
+def test_probe_phase2_on_an_unstamped_frame_raises(monkeypatch):
+    """PLAN_H §8.5 step 3's pin, through the probe itself (landing review C2): `unified_probe`'s Phase-2 MS
+    (`_make_market_structure` on `df_probe`) reads the resolver, and an unstamped frame fails the probe — no
+    scope between them swallows `IPSelectionError`."""
+    from engine_v2.structure.unified_probe import unified_probe
+    from engine_v2.tests.test_unified_probe import _make_multicycle_data, _ref_zone_uptrend
+    import engine_v2.structure.structure_engine as se
+
+    calls = []
+    real = se.compute_poi_inners_for_cycle
+    monkeypatch.setattr(se, "compute_poi_inners_for_cycle", lambda *a, **k: calls.append(1) or real(*a, **k))
+    df = _prepare_df(_make_multicycle_data())
+    with contextlib.redirect_stdout(io.StringIO()):
+        unified_probe(df, 0, 1, _ref_zone_uptrend(), 14, "H1", enable_phase2=True)
+    assert calls, "the fixture's Phase-2 MS reads the resolver"
+
+    df = _prepare_df(_make_multicycle_data())
+    del df.attrs["timeframe"]
+    with contextlib.redirect_stdout(io.StringIO()), pytest.raises(IPSelectionError) as exc:
+        unified_probe(df, 0, 1, _ref_zone_uptrend(), 14, "H1", enable_phase2=True)
+    assert "_run_phase2" in [f.name for f in traceback.extract_tb(exc.tb)]
 
 
 # ---------------------------------------------------------------------------
@@ -278,9 +336,29 @@ def test_a_record_without_a_pattern_draws_no_poi():
     assert none_rows == [(1, "no_pattern"), (3, "no_pattern")]
 
 
+def test_ip_candidates_read_the_records_they_are_handed():
+    """ONE selection per pipeline run (§8.5a deviation 2): `derive_ip_candidates` builds its rows from the
+    `ip_records` it is handed, never re-selects (landing review D01)."""
+    res, out, _ = _pipeline(_make_ip_moment_after_anchor_data)
+    assert out["ip_candidates"]
+    assert poi_zones.derive_ip_candidates(res.df, res.events, out["fib_tracker"], POIConfig(),
+                                          structure_path_id="H1.main", ip_records=[]) == []
+
+
 # ---------------------------------------------------------------------------
 # HV: the one hover builder; C1: the H1 fib hover's "IP: none"
 # ---------------------------------------------------------------------------
+
+_CUSTOMDATA_REF = re.compile(r"%\{customdata\[(\d+)\](?::[^}]*)?\}")
+
+
+def _rendered(tr, k=0):
+    """A trace's hover as Plotly shows it: every `%{customdata[i]}` substituted with row `k`'s cell (Plotly's hover
+    template has no `%%` escape — PLAN_H §8.9 F1·1). Pins what the TEMPLATE displays, not only what `customdata`
+    holds (landing review P01 / M01 / M09)."""
+    row = tr.customdata[k]
+    return _CUSTOMDATA_REF.sub(lambda m: str(row[int(m.group(1))]), tr.hovertemplate)
+
 
 def _meta(rank, counts, anchor, opp_first, end, tb=None, runner=None, c2=None):
     return {"ip_rank": rank, "ip_leg_candle_counts": counts, "pattern_anchor_idx": anchor,
@@ -290,6 +368,11 @@ def _meta(rank, counts, anchor, opp_first, end, tb=None, runner=None, c2=None):
 
 def test_hover_single_legs_print_one_index_each():
     assert poi_ip_hover_text(_meta("1A.i", "1-1-1", 2703, 2704, 2705), 2704) == "IP 1A.i · legs 1-1-1 (2703 | 2704 | 2705)"
+
+
+def test_hover_asymmetric_legs_keep_their_order():
+    """initial | opp | continuation, never reordered (landing review H01: every other case is symmetric)."""
+    assert poi_ip_hover_text(_meta("1A.iii", "1-1-3", 8, 9, 12), 9) == "IP 1A.iii · legs 1-1-3 (8 | 9 | 10–12)"
 
 
 def test_hover_multi_legs_print_ranges():
@@ -338,11 +421,17 @@ def test_h1_chart_hovers_show_the_pattern_and_ip_none(tmp_path, monkeypatch):
     poi = out["poi_zones"][0]
     poi_tr = [tr for tr in fig.data if (tr.name or "").startswith("POI zone")]
     assert len(poi_tr) == 2
-    assert all(c[6] == poi_ip_hover_text(poi.meta, poi.ic_idx) for tr in poi_tr for c in tr.customdata)
+    ip = poi_ip_hover_text(poi.meta, poi.ic_idx)
+    assert all(c[6] == ip for tr in poi_tr for c in tr.customdata)
+    assert all(f"<br>{ip}<br>top=" in _rendered(tr) for tr in poi_tr)          # the template shows it
     assert all("versions=" not in tr.hovertemplate for tr in poi_tr)
-    fib_status = {tr.name: tr.customdata[0][8] for tr in fig.data if (tr.name or "").startswith("fib:")}
+    fib_tr = [tr for tr in fig.data if (tr.name or "").startswith("fib:")]
+    fib_status = {tr.name: tr.customdata[0][8] for tr in fib_tr}
     assert fib_status["fib:sid0:c1"].endswith("<br>IP: none (no_pattern)")
     assert "IP: none" not in fib_status["fib:sid0:c2"]
+    # F1·1: a literal `%` (Plotly has no `%%` escape)
+    assert all("<br>61.8%=" in _rendered(tr) and "<br>80%=" in _rendered(tr) and "%%" not in tr.hovertemplate
+               for tr in fib_tr)
 
 
 def test_poi_meta_copies_the_selections_tiebreak():
@@ -380,15 +469,23 @@ def test_drawn_poi_activation_and_meta_take_the_picks_confirmation_moment():
     assert (poi.meta["pattern_confirmed_idx"], poi.meta["pattern_end_idx"]) == (14, 12)
 
 
-def test_m15_sub_poi_hover_site_calls_the_builder():
-    """The third POI hover site (the M15 lens chart's sub POIs) sits inside `export_m15_chart_plotly`, which no test
-    renders with sub POIs: pin the call itself (the replay `/compare` checks the rendered text — PLAN_H §8.5a)."""
-    import inspect
-    from engine_v2.charting import export_m15_chart
-    src = inspect.getsource(export_m15_chart.export_m15_chart_plotly)
-    assert "ip_str = poi_ip_hover_text(poi.meta, poi.ic_idx)" in src
-    assert "ip_str, y1, y0, zone_status, p_sid, p_cycle," in src
-    assert "versions" not in src
+def test_m15_lens_sub_poi_hover_is_rendered(tmp_path, monkeypatch):
+    """The third POI hover site: a lens chart RENDERED with a sub POI (landing review M01 / M02 — it replaces a
+    source pin that passed with the whole sub-POI block skipped)."""
+    from engine_v2.tests import test_fib_chart_render as F
+    from engine_v2.zones.poi_zones import POIZone
+    meta = {"sub_id": 5, "structure_id": 0, "cycle_id": 1, "struct_direction": 1, "status": "active",
+            "confirmed_idx": 22, "end_idx": None, "activation_history": [{"idx": 22, "active": True, "reason": "initial"}],
+            **_meta("1A.iii", "1-1-3", 17, 18, 21)}
+    poi = POIZone(start_time=F._ohlc(48, "15min").loc[18, "time"], end_time=None, side="buy", top=0.6010,
+                  bottom=0.6000, ic_idx=18, meta=meta)
+    fig = F._render_m15(monkeypatch, tmp_path, {"zones": {"KL": False, "POI": True, "wave_candles": False}},
+                        poi_zones=[poi])
+    poi_tr = [tr for tr in fig.data if tr.name == "M15 POI zone"]
+    ip = poi_ip_hover_text(meta, 18)
+    assert ip == "IP 1A.iii · legs 1-1-3 (17 | 18 | 19–21)"
+    assert len(poi_tr) == 2 and all(f"<br>{ip}<br>top=" in _rendered(tr) for tr in poi_tr)
+    assert all("versions" not in tr.hovertemplate for tr in poi_tr)
 
 
 def test_h1_overlay_poi_hover_uses_the_builder():
@@ -405,7 +502,9 @@ def test_h1_overlay_poi_hover_uses_the_builder():
     poi, = out["poi_zones"]
     trs = [t for t in fig.data if t.name == "H1 POI zone (overlay)"]
     assert len(trs) == 2
-    assert all(c[6] == poi_ip_hover_text(poi.meta, poi.ic_idx) for t in trs for c in t.customdata)
+    ip = poi_ip_hover_text(poi.meta, poi.ic_idx)
+    assert all(c[6] == ip for t in trs for c in t.customdata)
+    assert all(f"<br>{ip}<br>top=" in _rendered(t) for t in trs)
     assert all("versions=" not in t.hovertemplate for t in trs)
 
 

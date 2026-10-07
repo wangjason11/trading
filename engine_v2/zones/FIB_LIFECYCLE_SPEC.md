@@ -507,9 +507,10 @@ lock; only a trailing still-forming cycle whose imbalance filled could vanish).
 **M15/sub** changes substantially. `scenario1_revert` is **not** a change — it
 was already hidden, just via a different mechanism now (Section 10).
 
-What still shows: **active** fibs (bright) and **locked** fibs of any cycle
-(shown, faded-by-tier — the confirmed historical records, incl. locked-then-
-`ended`).
+What still shows (the §9.1 refined gate, 2026-10-06): **active** fibs (bright only as the live version — active,
+unlocked, cycle not ended: `_zone_render.fib_is_bright`), **locked**
+fibs (shown, faded-by-tier — the confirmed historical records, incl. locked-then-`ended`) and **ended never-locked**
+records (category 3, faded) — except a **collapsed** cycle's, hidden even when locked.
 
 ### 9.3 NO stretch fills for fib
 

@@ -5,8 +5,9 @@ user's R1–R4) — two landings (L1); landing A BUILT 2026-10-06 (§8.3a), its 
 `e1c597c` + saved `20261006_120513_e1c597c` (S_A, R4); §8.4 measured (§8.4a); landing B BUILT 2026-10-06 (§8.5a), its
 `/compare` == the prediction, committed `e54f509` + saved `20261006_151106_e54f509` (S_B); chart-reviewed → the
 chart-debugging session (§8.9: F1 the M15 fib layer + F1·1) PAUSED 2026-10-06 for the cross-cycle fib revamp
-(register §D.1 item 2; §6 F2a–F2e) and saved `20261006_224610_42c137c` (S_F1, the revamp's baseline): B's landing
-review opens the revamp session, the debugging resumes after it.** Living document: every question, answer and decision
+(register §D.1 item 2; §6 F2a–F2e) and saved `20261006_224610_42c137c` (S_F1, the revamp's baseline); B's landing
+review RAN at the revamp session's start (2026-10-06c, §8.5c: no BLOCKER / MAJOR; the fix-up commit byte-identical
+to S_F1); the debugging resumes after the revamp.** Living document: every question, answer and decision
 of the item-1 discussion is recorded here as it happens (§5 open questions, §6 decisions). Register line:
 `IDEA_PARKING_LOT.md` §D.1 item 1.
 
@@ -329,6 +330,14 @@ through the moved triggers (§3 round 5) — "We won't be able to judge whether 
 until I can review the charts".
 
 ## 6. Decisions
+
+**2026-10-06c (the revamp session opens with B's landing review — §8.5c)**
+
+| ID | Decision | Why / the user's words |
+|---|---|---|
+| LR1 | Every landing-review finding fixed in ONE fix-up commit: the lens's 8 killing tests (the vacuous M15 sub-POI source pin replaced by a rendered lens test), a `unified_probe` unstamped-frame test (C2), the doc fixes C1 / C3–C9, the C10 log counter, a review mutants file re-run to all-killed (B29 repaired); `/compare` vs S_F1, predicted byte-identical, no save | AskUserQuestion: "Fix all, one commit (Recommended)" |
+| LR2 | C1 guarded by a STATIC test, not only by docs: no `except` clause in the engine modules catches `RuntimeError` / `Exception` / bare, except an allowlist; the docs name `RuntimeError` | "Static guard test (Recommended)" |
+| LR3 | The cross-cycle fib revamp (register §D.1 item 2) runs as THREE sessions: this one = the user's rules → the spec (+ cheap status-quo measurements); the next = the implementation plan from a fresh code audit + a cold review; then the build | "Three sessions (Recommended)" — closes F2c |
 
 **2026-10-06 (the chart-debugging session PAUSED — the cross-cycle fib revamp next)**
 
@@ -825,8 +834,10 @@ the replay time (from V3; the landing review measured ≈ +4–5 s). Then the ch
   (HV) at the 3 POI hover sites; the H1 fib hover's `IP: none (<reason>)`. `poi_per_cycle.py` reads both formats.
 - **Deviations from §8.5 (my calls):** (1) the sub-geometry scope (step 3): neither "narrow it to its documented
   failure" nor "the IP raises only KeyError / AssertionError" — the resolver re-raises ANY `select_ip_ic` error as
-  `IPSelectionError` (a RuntimeError, chained), so no narrow `except` above it matches, today or later; the geometry
-  scope stays as documented (`geometry_failed` never occurs on the window). (2) ONE record list (`select_ip_records`)
+  `IPSelectionError` (a RuntimeError, chained), so no ValueError / IndexError / LookupError scope above it matches;
+  the geometry scope stays as documented (`geometry_failed` never occurs on the window). (Corrected §8.5c C1: "today
+  or later" overclaimed — an `except RuntimeError` / `Exception` WOULD swallow it; none encloses an IP path today,
+  and `tests/test_exception_scopes.py` now fails on any new one — LR2.) (2) ONE record list (`select_ip_records`)
   for the drawn POIs and the CSV, with the CTS_ESTABLISHED assert BEFORE the selection (the census F-d: V3 selected
   first). (3) The activation takes `config: POIConfig` in place of `fill_threshold` (unused in the sweep) /
   `fib_min_pct` / `fib_max_pct` / `variant_thresholds`; `pattern_confirmed_idx` is required. (4) "IP: none" is appended
@@ -865,7 +876,9 @@ the replay time (from V3; the landing review measured ≈ +4–5 s). Then the ch
   review (2 read-only lenses, ~0.55M: code vs plan — the resolver's fail-loud scope, the mirror shift, the hovers —
   and test gaps, incl. the M15 sub-POI hover pinned only by a source check) runs after those rules settle, over B +
   the changes. Saving first is safe: B == V3 (an independent route), 32 / 32 mutants, and no reader of `versions` /
-  `current_versions` is left (grep, 2026-10-06: only the review tools that read both formats).
+  `current_versions` is left (grep, 2026-10-06: only the review tools that read both formats — and, §8.5c C9, two
+  older measurement tools, `plan_f_inputs/shadow_measure.py` and `plan_h_inputs/census_h_plugin.py`, whose
+  `.get("versions", [])` reads an empty list on post-B saves; kept as history). **Ran 2026-10-06c: §8.5c.**
 - **Committed + saved (2026-10-06):** source `e54f509`, save `20261006_151106_e54f509` = **S_B** (save commit `b0556fc`,
   trunk `0d96c12`; reuse mode of the verified replay, FETCH GATE PASS; 27 CSVs) = this branch's `/compare` baseline
   (`LATEST_week9-entries-decisions`). S_A stays the pre-IP reference: name it explicitly (`cmp_save.py` positional).
@@ -943,6 +956,51 @@ and 926 → 939 (01-13 01:00).
 **5. The new hovers (HV).** H1 `IP 3A.iii · legs 1-1-3 (606 | 607 | 608–610)`, `IP 3C.ii · legs 3-2-1 (828–830 |
 831–832 | 833)`; M15 sub 7 cyc 2 `IP 1A.iv · legs 2-1-2 (4081–4082 | 4083 | 4084–4085)<br>TB2 over 4136 (reference
 imbalance 4132)`; conf sub 1 cyc 1 1875 3C.iv TB2 over 1842 (c2 1892).
+
+### 8.5c Landing review — B + F1 + F1·1 (2026-10-06c; §6 LR1–LR2)
+
+Two read-only Agent-tool lenses in the main checkout (no worktree, no replay): **520,963 subagent tokens** (est.
+~0.55M) — conformance 288,122 (told not to mutate), tests + mutation 232,841 (27 new mutants + 1 control on scratch
+copies, 190 s). Claims re-checked by me before filing. No BLOCKER / MAJOR: no exception scope on any path to
+`select_ip_ic` swallows `IPSelectionError` today (the lens traced the 4 call paths and all 15 try/except scopes in
+engine code; the replay crashes on an IP error, as intended); the mirror shift, the rule-3 migration, the hovers and
+F1's draw gate match the spec.
+
+| ID | Finding | Disposition (LR1 / LR2) |
+|---|---|---|
+| A01 | REAL survivor, the most serious: the activation sweep's sell branch (`_touches`, anchors by `sd`) — swapped, every sell POI never activates; every activation test is buy-side (the replay would show it: H1 832 is a sell POI) | a sell `_sweep` test |
+| R04 / G02 / D01 | survivors: the resolver's graceful anchor scope (`[]`) unpinned; "the locked-fib assert BEFORE the selection" unpinned; `derive_ip_candidates` reading the handed `ip_records` unpinned (output-equal, the D2 contract) | a test each |
+| H01 / P01 / M01 / M09 | survivors: asymmetric leg order; the hover TEMPLATE at the 3 POI sites (the tests pinned `customdata`, not the displayed text; self-referential vs the builder) | rendered-hover tests |
+| M02 | survivor: no test renders a lens chart WITH a sub POI — `test_m15_sub_poi_hover_site_calls_the_builder` is vacuous (passes with the block skipped) | a rendered lens test replaces it |
+| P02 / M03 / P03 / P04 / M04 / M05 | survivors: F1·1 shipped untested; F1's box price levels, its bright / dim rectangle, the M15 fib hover cells 1 / 2 / 10 / 11 | asserts in the rendered lens + H1 tests |
+| B29 | the old B mutant is BAD at HEAD (F1 replaced its anchor; F06 / F08 + `test_hover_status_cell` cover it) | re-anchored |
+| C1 | §8.5a deviation (1) "no narrow except above it matches, today or later" overclaims "later": `IPSelectionError(RuntimeError)` is caught by any `except RuntimeError` / `Exception`; LANDMINES forbids only `Exception` | docs name `RuntimeError` + a static guard test (LR2) |
+| C2 | §8.5 step 3's pin "the resolver on an unstamped `df_probe` (the Phase-2 frame) raises" was built as an MS-level test (`compute_bounded_structure`), undeclared | a `unified_probe` test |
+| C3–C9 | stale docs: LANDMINES "Chart gate" line (pre-F1); POI_ZONES_SPEC "M15 fibs are CSV-only" + a false "falls back to `fib_state.cts_idx`" (pre-existing, since 2026-09-29); PART4 ×4 "sub fibs are CSV-only"; FIB_LIFECYCLE_SPEC §9.2's "what still shows"; the `poi_zones` docstring's candle direction (the IP uses the agreed one); §8.5a's "no reader of `versions` left" (2 old review tools `.get` it → empty on new saves) | fixed in place |
+| C10 | `export_plotly`'s "[chart][fib] rendered N" counter bumped before the index-membership skip (log line only; equal on the window) | moved after the skip |
+
+**The fix-up (LR1, 2026-10-06c) — as built.** Tests (+9 → 1288): `test_plan_h_landing_b.py` — the sell-side touch
+(2 params: inside the zone / above it), the resolver's graceful anchor scope, the candidate rows read from the handed
+records, the asymmetric leg order, `_rendered` (a trace's hover as Plotly shows it) asserted at the H1 POI + fib
+hovers (incl. F1·1's `%`) and the H1-overlay POI hover, the probe Phase 2 on an unstamped frame (`unified_probe`; the
+traceback passes `_run_phase2`), and `test_m15_lens_sub_poi_hover_is_rendered` (a lens chart rendered WITH a sub POI)
+in place of the source pin; `test_fib_chart_render.py` — the lens test asserts the fib hover cells 1 / 2 / 10 / 11,
+the rendered 61.8 / 80 line, the box's price levels and the one bright rectangle (`_render_m15` takes `poi_zones=`);
+`test_institutional_pattern.py` — the locked-fib assert before the selection; new `test_exception_scopes.py` (LR2:
+every `RuntimeError` / `Exception` / `BaseException` / bare handler in the engine modules == an allowlist of 8
+(module, function) sites — the resolver's 2, the 2 OANDA retries, `run_replay.main`'s export scope, 4 leaf helpers;
+none encloses an MS run or the IP selector — + the scan's own self-test). Docs C1 / C3–C9 fixed in place (LANDMINES
+×2, POI_ZONES_SPEC ×2, PART4 ×4, FIB_LIFECYCLE_SPEC §9.2, the `poi_zones` docstring, §8.5a ×2); C10 moved.
+Mutation (full suite per mutant, `mutant_runner.py`): `mutants_plan_h_review.py` (the lens's 26 + control C00 + my
+X01 / X02 — a `RuntimeError` scope at the sub geometry / around the Phase-2 MS run) **28 / 29 KILLED, C00 SURVIVED as
+required** (its copy: 1286 passed, 1 skipped); `mutants_plan_h_b.py` **32 / 32** (B29 re-anchored to
+`fib_hover_status_text`); `mutants_plan_h_f1.py` **19 / 19**. Prediction for the replay (written before it): 27 / 27
+CSVs md5-equal to S_F1; every figure equal (no renderer output changed — C10 is a stdout count, equal on the
+window); FETCH GATE PASS; run.log = the 2 `parent_tables` WARNING lines + the 4 `degenerate_parent_cycle` rows, as
+before. No save if it holds. **`/compare` vs S_F1 == the prediction:** tests 1288 (OANDA smoke incl.); replay 57.8 s
+wall; FETCH GATE PASS; the grep = the 2 WARNING lines + the 4 UNRESOLVED rows + pandas FutureWarnings, `[chart][fib]
+rendered 2/3` as before; `cmp_fig_full` 27 / 27 CSVs md5-equal, H1 80 / confluence 274 / counter 135 traces with 0
+differing (all attributes), every layout equal; `cmp_hover` 0 changed. Not saved (outputs == S_F1).
 
 ### 8.6 Tests
 

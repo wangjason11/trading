@@ -93,9 +93,11 @@ MUT = [
      "    assert True or (opp_first - anchor, ic - opp_first + 1, end - ic) == (n_init, n_opp, n_cont), ("),
     ("B28 H1 chart site: no IP text", H1C, "            ip_str = poi_ip_hover_text(z.meta, z.ic_idx)\n",
      '            ip_str = ""\n'),
-    ("B29 H1 fib hover: IP none on picked records", H1C,
-     '            for r in dfx.attrs.get("ip_candidates", []) if r.ic_idx is None\n',
-     '            for r in dfx.attrs.get("ip_candidates", []) if r.ic_idx is not None\n'),
+    # B29 re-anchored 2026-10-06c (PLAN_H §8.5c): F1 replaced the H1 fib hover's inline `ip_candidates` loop by
+    # `_zone_render.fib_hover_status_text` — the same bend (a picked record reads "IP: none") at its new site.
+    ("B29 fib hover: IP none on picked records", ZR,
+     "    elif ip_row.ic_idx is None:\n",
+     "    elif ip_row.ic_idx is not None:\n"),
     ("B30 M15 overlay site: no IP text", M15C,
      "            ip_str = poi_ip_hover_text(poi.meta, poi.ic_idx)   # PLAN_H HV\n            poi_cd = [[",
      '            ip_str = ""\n            poi_cd = [['),

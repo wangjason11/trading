@@ -17,7 +17,9 @@ is kept unwired (PLAN_H X1).
 
 IC Candidate Base Conditions (ALL required):
 1. Within Fib bounds (inclusive): BOS_idx <= candle_idx <= CTS_idx
-2. Opposite direction of struct_direction: direction == -struct_direction
+2. Opposite direction of struct_direction: direction == -struct_direction (the
+   IP path passes the AGREED direction, `ic_direction=`; the candle direction is
+   the default)
 3. Unfilled imbalance (in sd direction) AFTER candidate, up to CTS idx
 """
 from __future__ import annotations

@@ -49,6 +49,7 @@ from engine_v2.zones.poi_zones import (
     ic_touches_zone,
     select_ic_variants,
     select_ip_ic,
+    select_ip_records,
 )
 
 U, D, Z, S = 1, -1, 0, AGREED_SPLIT
@@ -985,3 +986,14 @@ def test_a_locked_fib_without_its_cts_established_fails_loudly():
     locked = dataclasses.replace(_fib_over(df, 6, 12, 0.5, 0.7), active=False, locked=True)
     with pytest.raises(AssertionError, match="has no CTS_ESTABLISHED"):
         derive_ip_candidates(df, [], _Tracker([locked]), POIConfig(), structure_path_id="H1.main")
+
+
+def test_the_locked_fib_assert_runs_before_the_selection():
+    """`select_ip_records` checks the event contract BEFORE it selects (PLAN_H §8.5a deviation 2): on an unstamped
+    frame the selection would raise KeyError first (landing review G02)."""
+    df = _tb2_frame()
+    df.attrs["imbalances"] = [_far_gap(12)]
+    locked = dataclasses.replace(_fib_over(df, 6, 12, 0.5, 0.7), active=False, locked=True)
+    del df.attrs["timeframe"]
+    with pytest.raises(AssertionError, match="has no CTS_ESTABLISHED"):
+        select_ip_records(df, [], _Tracker([locked]), POIConfig())

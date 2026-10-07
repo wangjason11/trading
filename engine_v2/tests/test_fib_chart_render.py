@@ -213,12 +213,12 @@ _M15_IP = [
 ]
 
 
-def _render_m15(monkeypatch, tmp_path, cfg_extra=None):
+def _render_m15(monkeypatch, tmp_path, cfg_extra=None, poi_zones=()):
     go = pytest.importorskip("plotly.graph_objects")
     from engine_v2.charting.export_m15_chart import export_m15_chart_plotly
     from engine_v2.multitf.registry import StructureRegistry
     h1, m15 = _ohlc(12, "1h"), _ohlc(48, "15min")
-    m15.attrs.update(sids=[_sub_rec(5, 12), _sub_rec(6, 30)], triggers=[], events=[], poi_zones=[],
+    m15.attrs.update(sids=[_sub_rec(5, 12), _sub_rec(6, 30)], triggers=[], events=[], poi_zones=list(poi_zones),
                      wave_candles=[], wvmi=[], prev_bos_lines=[], kl_zones=[_collapsed_kl(0, 0, sub_id=5)],
                      fib_states=list(_M15_FIBS.values()), ip_candidates=list(_M15_IP))
     reg = StructureRegistry()
@@ -264,6 +264,18 @@ def test_m15_chart_draws_each_subs_fibs_in_one_legend_group(tmp_path, monkeypatc
     assert len(legend) == 1 and legend[0].name == "M15 fib" and legend[0].type == "rect"
     bright = STYLE["fib.anchor_line.active"]["line"]["color"]
     assert sum(s.line.color == bright for s in shapes if s.type == "line") == 4      # only sub 6's live version
+
+    # The box and the hover cells (landing review P03 / P04 / M03 / M04 / M05). Every fixture fib is a buy over
+    # .61 / .60: 61.8 % = .60382, 80 % = .60200; both subs sit under parent (0, 1).
+    from engine_v2.tests.test_plan_h_landing_b import _rendered
+    for tr in fib_tr:
+        c = tr.customdata[0]
+        assert (c[1], c[2], c[10], c[11]) == (0, 1, "0.60382", "0.60200")
+        assert "<br>61.8%=0.60382<br>80%=0.60200<br>" in _rendered(tr) and "%%" not in tr.hovertemplate
+    rects = [s for s in shapes if s.type == "rect"]
+    assert {(round(s.y0, 5), round(s.y1, 5)) for s in rects} == {(0.60382, 0.602)}
+    zone_bright = STYLE["fib.zone_rect.active"]["line"]["color"]
+    assert [s.line.color for s in rects].count(zone_bright) == 1                     # the live version's box only
 
 
 def test_m15_fib_lines_toggle_off_draws_nothing(tmp_path, monkeypatch):

@@ -649,7 +649,15 @@ reach the caller: it is NEVER a legitimate "no pattern" (D7: no POI, the BOS inn
    (`multitf/entity_df_mutation._build_geometry`, the documented `geometry_failed` seam — "Lower-TF Pipeline Steps May
    Fail" above). A ValueError / IndexError from the IP inside a sub's MS would silently drop the WHOLE sub. So the
    resolver re-raises ANY `select_ip_ic` error as `poi_zones.IPSelectionError` (a RuntimeError, chained `from` the
-   original) — no narrow `except` above it matches. Keep that scope narrow; never widen it to `Exception`.
+   original) — no ValueError / IndexError / LookupError scope above it matches. Keep that scope narrow; never widen
+   it to `Exception` NOR `RuntimeError` — either WOULD swallow `IPSelectionError` (PLAN_H §8.5c C1).
+
+**Guard (PLAN_H §8.5c LR2, 2026-10-06c):** `tests/test_exception_scopes.py` lists every `except` in the engine modules
+that catches `RuntimeError` / `Exception` / `BaseException` / everything (bare) against an allowlist — today the
+resolver's two (the graceful anchor scope + the re-raise), the two OANDA `get_history` retries (`RuntimeError`),
+`run_replay`'s `export_sub_tables` scope and four leaf helpers; none encloses an MS run or the IP selector (the landing
+review traced all 4 call paths to `select_ip_ic` — the drawn POIs, the main MS, the sub geometry, the probe Phase 2).
+A new broad handler fails the test: check it against those paths before adding it to the allowlist.
 
 **Why it matters:** the IP reads the frame's stamp (`df.attrs["timeframe"]` — the candle params + the leg cap) and
 `attrs["pair"]`, plus the classifier columns (`candle_type`, `prior_maru_max_len_as0`, `vol_dir`); an unstamped frame
@@ -658,8 +666,9 @@ pattern" — every sd-proximity confirmation on the BOS inner, invisible to a `/
 way (PLAN_H §8.8 PR1, found by all three review lenses).
 
 **Pins:** `tests/test_plan_h_landing_b.py` — the unstamped frame raises (`KeyError('timeframe')` chained), a
-ValueError inside the IP arrives as `IPSelectionError`, an IP error inside `_build_geometry` propagates, an unstamped
-MS run raises, and the drawn POI == the resolver's pick on the final fib (the real collaborator). Measured on the
+ValueError inside the IP arrives as `IPSelectionError`, the anchor selection keeps its graceful `[]`, an IP error
+inside `_build_geometry` propagates, an unstamped MS run raises, an unstamped probe Phase 2 (`unified_probe`) raises,
+and the drawn POI == the resolver's pick on the final fib (the real collaborator). Measured on the
 reference window (V3, PLAN_H §8.4a): 450 resolver calls (main 58, sub geometry 313, probe Phase 2 79), 0 IP errors,
 no call failed inside the kept `try`.
 
@@ -1831,7 +1840,11 @@ shared by every version record of a cycle. The consumer gates therefore use
 `end_idx`) ONLY for the cycle-level ended/disappeared terminal:
 
 - **POI gate** (`zones/poi_zones.py`): `(fib.active AND fib.end_idx is None) OR fib.locked`
-- **Chart gate** (`charting/export_plotly.py`): `status != "disappeared" AND ( locked OR (active AND status not in {"ended","disappeared"}) )`
+- **Chart gate** (`charting/_zone_render.fib_record_drawn`, the H1 chart AND the M15 lens charts since PLAN_H §8.9 F1,
+  2026-10-06): `status != "disappeared" AND the cycle is not collapsed AND (locked OR active)` — an ended never-locked
+  record is drawn (faded), a collapsed cycle's is hidden even when locked; canonical `FIB_LIFECYCLE_SPEC.md` §9.1
+  (refined). Was (Session 2, `export_plotly.py`): `status != "disappeared" AND ( locked OR (active AND status not in
+  {"ended","disappeared"}) )`
 
 **Do NOT "simplify" the POI gate to `status == "active" OR locked`.** It looks
 equivalent and the spec's first draft proposed it, but it is a **silent

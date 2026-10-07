@@ -91,7 +91,9 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    lifecycle / IP outcome on both charts (the fib draw gate: collapsed hidden, ended never-locked drawn);
    + F1·1 (the fib hovers' literal `%%`); the debugging PAUSED 2026-10-06 (user, PLAN_H §6 F2a) for item 2 — it
    resumes after item 2 with every logged point (PLAN_H §8.5b, §8.9); B's landing review (+ F1) moved to the start
-   of the item-2 session, before its plan (F2e; was: deferred until the debugging rules settle). The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
+   of the item-2 session, before its plan (F2e; was: deferred until the debugging rules settle) — RAN 2026-10-06c
+   (PLAN_H §8.5c, 2 lenses, 520,963 tokens): no BLOCKER / MAJOR; 15 test survivors (worst: the sell-side activation
+   touch) + stale docs → ONE fix-up commit (LR1), a static guard on broad `except` scopes (LR2). The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
    (D4). Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3 variants): H1 5 ICs over
    3 cycles; M15 confluence 30 over 19; counter 12 over 7. **What moves when the POIs move** (the user accepted it, D2 /
    C3 — "We won't be able to judge whether those changes are appropriate or correct until I can review the charts";
@@ -104,7 +106,8 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    instead revamp the cross cycle fib rules. Furthermore, my hope is that we can unify the logic across main and sub.
    This update will likely be the final logic we use for cross-cycle & single-cycle fibs." A NEW session: it opens
    with B's landing review (item 1), then decides whether planning and build are separate sessions; the user brings
-   the rules. Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
+   the rules. **Split DECIDED 2026-10-06c (PLAN_H §6 LR3): THREE sessions** — (1) the user's rules → the spec (+ cheap
+   status-quo measurements), (2) the implementation plan from a fresh code audit + a cold review, (3) the build. Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
    charts add the M15 fib layer). Likely inputs (to confirm with the
    user): the 2026-10-01 item and D5 below, and §E "Cross-cycle fib bundled follow-up" with its parked open
    questions (`engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §13).

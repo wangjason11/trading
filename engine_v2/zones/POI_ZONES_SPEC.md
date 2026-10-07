@@ -624,8 +624,8 @@ term clamps **post-reversal cycle-0 POIs** (and sub analogues) whose
 the anchor historically).
 
 `max(cts_established_idx, lifecycle_floor_idx)` equals the cycle's clamped lifecycle-start
-(`compute_cycle_lifecycle`) whenever the cycle has a `CTS_ESTABLISHED`; with none, the cycle term falls back to
-`fib_state.cts_idx` (see the field list). The lookup indexes `meta["confirmed_at"]` directly — no fallback to
+(`compute_cycle_lifecycle`); a cycle without a `CTS_ESTABLISHED` builds no POI (2026-09-29 — see the field list;
+before it the cycle term fell back to `fib_state.cts_idx`). The lookup indexes `meta["confirmed_at"]` directly — no fallback to
 `ev.idx`; `compute_cycle_lifecycle` asserts the key first for every event carrying `structure_id`/`cycle_id`.
 
 > **Resolved (Plan D, 2026-09-23).** Until Plan D the cycle term was `CTS_ESTABLISHED.idx` — then the CTS
@@ -683,8 +683,10 @@ cfg = {
   `TB2 over <IC> (reference imbalance <c2>)` when a tiebreaker decided — ONE builder for the three POI hover sites
   (`charting/_zone_render.poi_ip_hover_text`)
 - Top/bottom bounds
-- The H1 chart's fib hover: `IP: none (<reason>)` on a record without a pattern (no POI; PLAN_H C1); M15 fibs are
-  CSV-only
+- The fib hover (the H1 chart AND the M15 lens charts since PLAN_H §8.9 F1, 2026-10-06): its status cell =
+  status · `life=[start, end] reason` · the IP outcome (`IP <rank> · IC <idx>`, `IP: none (<reason>)` on a record
+  without a pattern — no POI, PLAN_H C1 —, or `IP: not evaluated (no POI record)`;
+  `charting/_zone_render.fib_hover_status_text`). Canonical: `charting/CHARTING_SPEC.md` §8
 
 ### Style Keys (style_registry.py)
 ```python
