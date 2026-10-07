@@ -4,7 +4,8 @@
 user's R1–R4) — two landings (L1); landing A BUILT 2026-10-06 (§8.3a), its `/compare` == the prediction, committed
 `e1c597c` + saved `20261006_120513_e1c597c` (S_A, R4); §8.4 measured (§8.4a); landing B BUILT 2026-10-06 (§8.5a), its
 `/compare` == the prediction, committed `e54f509` + saved `20261006_151106_e54f509` (S_B); chart-reviewed → the
-chart-debugging session IN PROGRESS (§8.9: F1 the M15 fib layer), then B's deferred landing review.** Living document: every question, answer and decision
+chart-debugging session (§8.9: F1 the M15 fib layer + F1·1) PAUSED 2026-10-06 for the cross-cycle fib revamp
+(register §D.1 item 2; §6 F2a–F2e): B's landing review opens the revamp session, the debugging resumes after it.** Living document: every question, answer and decision
 of the item-1 discussion is recorded here as it happens (§5 open questions, §6 decisions). Register line:
 `IDEA_PARKING_LOT.md` §D.1 item 1.
 
@@ -328,6 +329,16 @@ until I can review the charts".
 
 ## 6. Decisions
 
+**2026-10-06 (the chart-debugging session PAUSED — the cross-cycle fib revamp next)**
+
+| ID | Decision | Why / the user's words |
+|---|---|---|
+| F2a | The IP / IC / POI debugging is PAUSED; every logged point stays as it is (§8.5b C2 / T1 / C3 / H1 / HV, the §8.9 open item sub 3 cyc 3) and is picked up after the cross-cycle fib revamp, compared against S_B and S_A as planned | "After looking at the Fib levels and chart outputs, I would like to put additional debugging on IP, IC & POI on hold for now." … "we can park the debugging and come back to it after the cross-cycle fib update. Any items we've logged regarding debugging we will come back to later." |
+| F2b | NEXT: the user revamps the cross-cycle fib rules — one logic for main and sub, meant as the final cross-cycle + single-cycle fib logic. It replaces register §D.1 item 2's open decision (single-cycle fib POIs on subs) and runs before item 1's debugging resumes | "since we are now reviewing Fib levels, it would be a good time to work on the parked "Decide together with the parked "single-cycle fib POIs on subs." But instead of deciding on this, I will instead revamp the cross cycle fib rules. Furthermore, my hope is that we can unify the logic across main and sub. This update will likely be the final logic we use for cross-cycle & single-cycle fibs." |
+| F2c | The revamp runs in a NEW session, which also decides whether planning and build become separate sessions | "For the cross-cycle fib update, I think it's probably better we start a new session. In the new session, we can also decide if we need to separate planning and build sessions." |
+| F2d | `/commit-save` now, after the F1·1 hover fix — the baseline the revamp is compared against | "I think we can do a commit-save here so we have a comparison with the next iteration … The commit-save now will also help us compare the updated fib logic vs. what we have now."; the `%%` fix: "Fix before the save" |
+| F2e | B's landing review (B `e54f509` + F1, ~0.55M, 2 read-only lenses) runs FIRST in the revamp session, before its plan — was: deferred until the debugging rules settle (§8.5a). The branch stays local | "Next session, first"; push: "Keep it local" |
+
 **2026-10-06 (the chart-debugging session, §8.9)**
 
 | ID | Decision | Why / the user's words |
@@ -477,6 +488,8 @@ until I can review the charts".
 - 2026-10-06 — the chart-debugging session opened (§8.9; decisions §6 F1a–F1f): F1 the M15 fib layer + the fib
   hover's lifecycle / IP outcome on both charts (a chart aid; the 27 CSVs byte-identical to S_B).
 - 2026-10-06 — F1·1 (§8.9): the fib hovers' literal `61.8%%` / `80%%` → `%` on both charts (CSVs byte-identical).
+- 2026-10-06 — the debugging session PAUSED (§6 F2a–F2e): the cross-cycle fib revamp next (register §D.1 item 2, a
+  new session opened by B's landing review); `/commit-save` = the revamp's baseline.
 
 ## 8. Implementation plan (2026-10-05; REVIEWED + folded 2026-10-06 — §8.8; A built + saved §8.3a; §8.4 measured §8.4a; B built + saved §8.5a, chart-review points §8.5b)
 
@@ -1082,3 +1095,7 @@ escape (the bundled plotly.js: `TEMPLATE_STRING_REGEX = /%{([^\s%{}:]*)([:|\|][^
 since Week 7 (`8c228a4`); F1 copied it to M15. Fixed to `%` (4 labels: `export_plotly.py`, `export_m15_chart.py`).
 Prediction == the replay: 27 / 27 CSVs md5-equal to S_B; vs the F1 charts only the fib hover traces' `hovertemplate`
 changed — H1 2, confluence 16, counter 6 — the layout (every shape) and every other trace equal. Replay 45.2 s wall.
+
+**PAUSED 2026-10-06 (§6 F2a–F2e).** The debugging stops here for the cross-cycle fib revamp (register §D.1 item 2,
+a new session). It resumes after the revamp with every point above and in §8.5b as logged, each rule experiment
+compared against S_B and S_A (named explicitly). B's landing review (+ F1) opens the revamp session.

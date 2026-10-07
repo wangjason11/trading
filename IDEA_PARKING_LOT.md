@@ -68,10 +68,12 @@ structure elements that could differ a lot from our current iteration. Each of t
 planning and build sessions." Items 1 and 3: the user provides updated detailed specs. Items 2 and 4: "may involve
 flipping across multiple different scenarios & parameters and reviewing the output/charts to get to the final output
 we want." "The remaining items you listed we'll keep in the backlog and decide on them after the above items are
-complete." Item 1 opens the next working session.
+complete." Item 1 opens the next working session. **Re-ordered by the user 2026-10-06:** item 1's chart debugging
+PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging resumes after it (PLAN_H §6 F2a–F2b).
 
 **D.1 — Ordered (the heavy items):**
-1. **One POI per cycle** (redefine the IC & POI zone logic) — NEXT. User 2026-09-30: "will reduce POI zones in each
+1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
+   2026-10-06). User 2026-09-30: "will reduce POI zones in each
    cycle to just 1 (vs. currently where a cycle may have multiple POI zones)". **SPEC DECIDED 2026-10-05** (the user's
    spec, six rounds of questions): ONE IC per cycle, chosen by the *institutional pattern* (initial / opp /
    continuation legs, ranks 1A–3D, tiebreakers) among the §3.1 candidates touching the 61.8–80 zone; no pattern → no
@@ -85,9 +87,11 @@ complete." Item 1 opens the next working session.
    PLAN_H §8.5a): `/compare` vs S_A == the prediction; tests 1258; mutants 32 / 32 killed; chart-reviewed 2026-10-06 — the
    user will DEBUG the charts in a new session (questions, chart aids, rule experiments; each compared against S_B and
    S_A), the points raised are PLAN_H §8.5b; committed `e54f509`, saved S_B `20261006_151106_e54f509`; that
-   debugging session IN PROGRESS (2026-10-06, PLAN_H §8.9): chart aid F1 = the M15 fib layer + the fib hover's
+   debugging session (2026-10-06, PLAN_H §8.9): chart aid F1 = the M15 fib layer + the fib hover's
    lifecycle / IP outcome on both charts (the fib draw gate: collapsed hidden, ended never-locked drawn);
-   B's landing review DEFERRED (user 2026-10-06) until the debugging session's rule changes settle (PLAN_H §8.5a). The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
+   + F1·1 (the fib hovers' literal `%%`); the debugging PAUSED 2026-10-06 (user, PLAN_H §6 F2a) for item 2 — it
+   resumes after item 2 with every logged point (PLAN_H §8.5b, §8.9); B's landing review (+ F1) moved to the start
+   of the item-2 session, before its plan (F2e; was: deferred until the debugging rules settle). The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
    (D4). Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3 variants): H1 5 ICs over
    3 cycles; M15 confluence 30 over 19; counter 12 over 7. **What moves when the POIs move** (the user accepted it, D2 /
    C3 — "We won't be able to judge whether those changes are appropriate or correct until I can review the charts";
@@ -95,7 +99,15 @@ complete." Item 1 opens the next working session.
    confluence sub 1 cycle 1's at 1902 (IC 1889 → 1875: likely survives); the zone-proximity sd triggers H1 sid 0
    cycle 1 710 → 748 and sid 1 cycle 2 926 → 939 — the H1 WVMI gates and counter subs 3 / 5's triggers → 6 of the 11
    trigger records re-derived. Related: "Cascade-viz hover extras" — closed by landing B ("Recently closed").
-2. **Single-cycle fib POIs on subs, and revisit the overall sub cross-fib logic** — user 2026-10-01: "Single-cycle fib
+2. **The cross-cycle fib revamp — one logic for main and sub, the final cross-cycle + single-cycle fib rules** — NEXT
+   (user 2026-10-06, PLAN_H §6 F2b–F2e; it replaces the open decision below): "instead of deciding on this, I will
+   instead revamp the cross cycle fib rules. Furthermore, my hope is that we can unify the logic across main and sub.
+   This update will likely be the final logic we use for cross-cycle & single-cycle fibs." A NEW session: it opens
+   with B's landing review (item 1), then decides whether planning and build are separate sessions; the user brings
+   the rules. Baseline: the save after F1·1 (`LATEST_week9-entries-decisions`). Likely inputs (to confirm with the
+   user): the 2026-10-01 item and D5 below, and §E "Cross-cycle fib bundled follow-up" with its parked open
+   questions (`engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §13).
+   Was: **Single-cycle fib POIs on subs, and revisit the overall sub cross-fib logic** — user 2026-10-01: "Single-cycle fib
    POIs on sub, and also additionally revisit the overall sub cross-fib logic". Today a sub's single-cycle fib is only
    a fallback (cross fails, established phase); the change lets the two coexist — additive, more POIs, so it pulls
    against item 1, which is decided first. Iterative: scenario / parameter flips + chart review. **Also fix here
@@ -161,6 +173,7 @@ complete." Item 1 opens the next working session.
   chart-review + `/compare` it. Parked with it (open questions): fill-as-of convergence main → "current"; the
   Scenario-1/revert ↔ ceiling merge; `M = 0` behaviour; the deeper-walk fill-as-of decision. Detail:
   `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §11b + §13, memory `project_cross_cycle_fib_unification.md`.
+  2026-10-06: likely absorbed by §D.1 item 2 (the cross-cycle fib revamp, main + sub one logic).
 - **Plan F §7 follow-ups** — re-ask a failed fib decision when a relevant gap's c3 closes ("dropped" → "one candle
   later"); the MS vs FibTracker activation divergence (measure first); latent: `inst.meta` mutated on imbalance
   instances shared across projections, the chart hover picks a POI by nearest inner price, single-candle stretches

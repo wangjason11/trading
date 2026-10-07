@@ -517,6 +517,10 @@ actual main multi-cycle cross (and Part B), expand the config window to find one
 
 ## 13. Open items / deferred
 
+> **2026-10-06: the user will revamp the cross-cycle fib rules — one logic for main and sub, meant as the final
+> cross-cycle + single-cycle fib logic (register `IDEA_PARKING_LOT.md` §D.1 item 2, the next session; PLAN_H §6
+> F2b).** The open items below are its likely inputs; this spec changes with it.
+
 - ~~§8 storage depth~~ — **DECIDED 2026-06-16: full versioned `_fibs` unification.**
 - ~~§3.1 fill-as-of (11a)~~ — **DECIDED 2026-06-16: parameterize (snapshot-preserving),
   11a byte-identical.**

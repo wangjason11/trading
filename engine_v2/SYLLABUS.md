@@ -371,7 +371,8 @@ You can debug **confluence vs non-confluence** trades visually.
 > outline; the user details each part as Week 9 reaches it:
 > - **Part 1 — Entry prerequisite items.** The list and its order live in ONE place: `IDEA_PARKING_LOT.md` §D. Order
 >   set by the user 2026-10-01, the heavy items first: (1) one POI per cycle, (2) single-cycle fib POIs on subs +
->   the overall sub cross-fib logic, (3) zone size adjustments, (4) pinbar body-pip floor calibration; the rest (entry
+>   the overall sub cross-fib logic (2026-10-06: the cross-cycle fib revamp — one logic for main and sub — NEXT,
+>   item 1's chart debugging paused until after it), (3) zone size adjustments, (4) pinbar body-pip floor calibration; the rest (entry
 >   confirmation candle patterns, the M5 lens, zone strength scoring, ...) is decided after those four.
 > - **Part 2 — Entry decision build & logic** — the original Week 9 plan below. The entry confirmation candle
 >   patterns may open Part 2 instead of closing Part 1.
