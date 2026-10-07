@@ -2617,8 +2617,8 @@ def export_chart_plotly(
                         "cycle=%{customdata[1]}<br>"
                         "BOS: idx=%{customdata[2]} price=%{customdata[3]}<br>"
                         "CTS: idx=%{customdata[4]} price=%{customdata[5]}<br>"
-                        "61.8%%=%{customdata[6]}<br>"
-                        "80%%=%{customdata[7]}<br>"
+                        "61.8%=%{customdata[6]}<br>"
+                        "80%=%{customdata[7]}<br>"
                         "status=%{customdata[8]}"
                         "<extra></extra>"
                     ),

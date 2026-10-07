@@ -1723,8 +1723,8 @@ def export_m15_chart_plotly(
                         "cycle_id=%{customdata[5]}<br>"
                         "BOS: idx=%{customdata[6]} price=%{customdata[7]}<br>"
                         "CTS: idx=%{customdata[8]} price=%{customdata[9]}<br>"
-                        "61.8%%=%{customdata[10]}<br>"
-                        "80%%=%{customdata[11]}<br>"
+                        "61.8%=%{customdata[10]}<br>"
+                        "80%=%{customdata[11]}<br>"
                         "status=%{customdata[12]}"
                         "<extra></extra>"
                     ),

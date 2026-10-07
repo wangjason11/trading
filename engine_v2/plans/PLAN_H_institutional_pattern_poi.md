@@ -476,6 +476,7 @@ until I can review the charts".
   `/compare` skill + WORKFLOWS + review_scripts README (27 CSVs).
 - 2026-10-06 — the chart-debugging session opened (§8.9; decisions §6 F1a–F1f): F1 the M15 fib layer + the fib
   hover's lifecycle / IP outcome on both charts (a chart aid; the 27 CSVs byte-identical to S_B).
+- 2026-10-06 — F1·1 (§8.9): the fib hovers' literal `61.8%%` / `80%%` → `%` on both charts (CSVs byte-identical).
 
 ## 8. Implementation plan (2026-10-05; REVIEWED + folded 2026-10-06 — §8.8; A built + saved §8.3a; §8.4 measured §8.4a; B built + saved §8.5a, chart-review points §8.5b)
 
@@ -1074,3 +1075,10 @@ decisions: §6 (the debugging-session block); measurements here.
   get a POI is a rule question.
 - Naming (the parked Naming-Standard audit, register §A): "collapsed" and "degenerate parent cycle" are one test
   under two names (F1c).
+
+**F1·1 — the fib hover's `%%` (chart-aid fix-up, 2026-10-06; the user: "Fix before the save").** Both fib hover
+templates printed `61.8%%=` / `80%%=` literally: Plotly's hover template substitutes only `%{…}` and has no `%%`
+escape (the bundled plotly.js: `TEMPLATE_STRING_REGEX = /%{([^\s%{}:]*)([:|\|][^}]*)?}/g`). The H1 template had it
+since Week 7 (`8c228a4`); F1 copied it to M15. Fixed to `%` (4 labels: `export_plotly.py`, `export_m15_chart.py`).
+Prediction == the replay: 27 / 27 CSVs md5-equal to S_B; vs the F1 charts only the fib hover traces' `hovertemplate`
+changed — H1 2, confluence 16, counter 6 — the layout (every shape) and every other trace equal. Replay 45.2 s wall.
