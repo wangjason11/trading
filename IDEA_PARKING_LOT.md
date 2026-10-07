@@ -104,7 +104,8 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    instead revamp the cross cycle fib rules. Furthermore, my hope is that we can unify the logic across main and sub.
    This update will likely be the final logic we use for cross-cycle & single-cycle fibs." A NEW session: it opens
    with B's landing review (item 1), then decides whether planning and build are separate sessions; the user brings
-   the rules. Baseline: the save after F1·1 (`LATEST_week9-entries-decisions`). Likely inputs (to confirm with the
+   the rules. Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
+   charts add the M15 fib layer). Likely inputs (to confirm with the
    user): the 2026-10-01 item and D5 below, and §E "Cross-cycle fib bundled follow-up" with its parked open
    questions (`engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §13).
    Was: **Single-cycle fib POIs on subs, and revisit the overall sub cross-fib logic** — user 2026-10-01: "Single-cycle fib

@@ -5,7 +5,8 @@ user's R1–R4) — two landings (L1); landing A BUILT 2026-10-06 (§8.3a), its 
 `e1c597c` + saved `20261006_120513_e1c597c` (S_A, R4); §8.4 measured (§8.4a); landing B BUILT 2026-10-06 (§8.5a), its
 `/compare` == the prediction, committed `e54f509` + saved `20261006_151106_e54f509` (S_B); chart-reviewed → the
 chart-debugging session (§8.9: F1 the M15 fib layer + F1·1) PAUSED 2026-10-06 for the cross-cycle fib revamp
-(register §D.1 item 2; §6 F2a–F2e): B's landing review opens the revamp session, the debugging resumes after it.** Living document: every question, answer and decision
+(register §D.1 item 2; §6 F2a–F2e) and saved `20261006_224610_42c137c` (S_F1, the revamp's baseline): B's landing
+review opens the revamp session, the debugging resumes after it.** Living document: every question, answer and decision
 of the item-1 discussion is recorded here as it happens (§5 open questions, §6 decisions). Register line:
 `IDEA_PARKING_LOT.md` §D.1 item 1.
 
@@ -1099,3 +1100,7 @@ changed — H1 2, confluence 16, counter 6 — the layout (every shape) and ever
 **PAUSED 2026-10-06 (§6 F2a–F2e).** The debugging stops here for the cross-cycle fib revamp (register §D.1 item 2,
 a new session). It resumes after the revamp with every point above and in §8.5b as logged, each rule experiment
 compared against S_B and S_A (named explicitly). B's landing review (+ F1) opens the revamp session.
+Saved (F2d): `20261006_224610_42c137c` = **S_F1** — source `42c137c` (F1 `73e82ed` + F1·1 `811e742` + these docs),
+save commit `455241d`, trunk `05b3c1d`; reuse mode of the 45.2 s F1·1 replay, FETCH GATE PASS; its 27 CSVs ==
+S_B (only the charts differ: the M15 fib layer, the fib hovers). = `LATEST_week9-entries-decisions`, the revamp's
+`/compare` default.
