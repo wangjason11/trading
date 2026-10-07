@@ -1,0 +1,4 @@
+commit_hash=42c137c
+timestamp=20261006_224610
+branch=week9-entries-decisions
+commit_message=PLAN_H §6 F2a–F2e: item 1's chart debugging PAUSED; the cross-cycle fib revamp next; docs only
