@@ -134,7 +134,11 @@ the branch happens *inside* each handler.
   keyed by **start anchor**: new cross = v0; CTS extend = same version in place; start-anchor shrink (`earliest_x`
   moved up) = `cross_shortened` + v+1; same-anchor revival = in-place reactivate;
   `earliest_x == target` (no eligible prior) = `cross_failed`, established-phase falls
-  back to single.
+  back to single. That single re-checks its own window on every update like every single (PLAN_I S3b, F5,
+  2026-10-08): when a CTS_UPDATED finds the cycle's own window filled (the cross check's early return), the single
+  extends to the new anchor and DEACTIVATES (`all_imbalances_filled`) — before S3b it stayed active on its older
+  CTS. A fib starting after its cycle's establishment ends the previous cycle at that establishment
+  (`FIB_LIFECYCLE_SPEC.md` §7, S3b).
 - **Storage:** ALL versions in `_fibs` as `(sid,cycle,"cross",v)` + a `(sid,cycle)`
   single fallback. Integer `_cross_version`. Monotonic supersede. Up to **N** versions.
 - **Cycle 0:** single fib only, no cross, no pre-established. Late-activate on

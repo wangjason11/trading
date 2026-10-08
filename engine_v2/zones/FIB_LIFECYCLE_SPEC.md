@@ -289,6 +289,14 @@ cycle `n`. So:
 > (whether the previous was single OR cross), at the **pre-established cross
 > creation idx**.
 
+**A fib that starts AFTER its cycle's establishment (PLAN_I S3b, F15 / F18, R6-1b (ii) / R8-3, 2026-10-08).** The
+mirror case: cycle `n+1`'s own window holds no unfilled imbalance at its CTS_ESTABLISHED `e`, and its fib (a single,
+or a cross the walk creates) first starts at a later CTS_UPDATED `u`. The previous cycle's fib ends at `e` — never
+later than the next cycle's establishment (a cycle's fib cannot outlive its cycle); before S3b it ended at `u`. The
+late fib's own `start_idx` stays `u` (it is drawn from its activation). One helper decides the end for both kinds:
+`FibTracker._prev_cycle_end_at` = min(activation / creation, the cycle's establishment moment); a pre-established
+cross (created before `e`, no establishment yet) keeps Option A's creation idx. 0 on the reference window.
+
 Consequences (accepted):
 - Cycle `n`'s fib end is **earlier** than the zone end for cycle `n` (zones end
   at the next cycle's clamped lifecycle-start — since Plan C 2026-09-20 the

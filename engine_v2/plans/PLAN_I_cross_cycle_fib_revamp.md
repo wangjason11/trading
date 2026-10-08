@@ -384,7 +384,7 @@ and the S_F1 triggers CSVs:
 
 ## 5. Open questions
 
-### Round 8 (2026-10-08, session 4 — the F14 random-tail search, §9.2 F16 / F17, §9.10) — ANSWERED 2026-10-08 (§6 R8-1, R8-2)
+### Round 8 (2026-10-08, session 4 — the F14 random-tail search, §9.2 F16 / F17, §9.10) — ANSWERED 2026-10-08 (§6 R8-1, R8-2, R8-3)
 
 - **R8-1 What to do with F16** (MS confirms a CTS with an anchor after its confirmation candle; emission order ≠
   `processing_order_key` order; today's downstream draws the fib at the earlier anchor). The S2 tripwire's own shape
@@ -406,6 +406,11 @@ and the S_F1 triggers CSVs:
   (c) **fix MS before S3** — its own plan (a new cycle's CTS strictly beyond the previous cycle's / its BOS before its
   CTS); the revamp waits; (d) **re-order the dispatch** — hold a CTS_ESTABLISHED until its BOS_CONFIRMED arrives
   (changes the pinned processing order, LANDMINES "Event Sort Order Is a Dispatch Invariant"). Recommended: (b).
+- **R8-3 S3b's scope — F15's cross twin (§9.2 F18)?** A cross CREATED late on a CTS_UPDATED (cycle T's own window
+  empty at its establishment e, an update at u finds a gap and the walk crosses) ends cycle T−1 at u, not e — the
+  mechanism R6-1b (ii) fixes for the single. Candidates: (a) include it — one rule: a fib activated or created after its
+  cycle's establishment ends the previous cycle at that establishment (the pre-established cross, created BEFORE e —
+  Option A — unchanged); (b) singles only, the twin a register line; (c) both to S4. Recommended: (a).
 
 ### Round 7 (2026-10-07, session 2 — four follow-ups to round 6) — ANSWERED 2026-10-07 (§6 R7-1 … R7-4)
 
@@ -667,6 +672,7 @@ The commit of these spec docs waits for the session's end (the user: "Let’s ho
 | ID | Decision | The user's words |
 |---|---|---|
 | R8-1 | (a): F16 is PARKED to the S5 session — recorded here + the register; S3 → S3b → S4 built as planned (none touches MS or the event order); F16 opens the S5 session's first round (an MS fix vs which order wins) | "(a) Park to S5 (Recommended)" |
+| R8-3 | (a): S3b's F15 fix covers the late-created cross too (F18): a fib activated / created after its cycle's establishment ends the previous cycle at that establishment; the pre-established cross (Option A) unchanged. 0 on the window (no cycle ≥ 1 fib activates after its establishment) | "(a) Include crosses (Recommended)" |
 | R8-2 | (b): the downstream dispatch RAISES `FibEventOrderError` on a CTS_ESTABLISHED whose cycle's BOS_CONFIRMED was not handled first (it dropped it silently) — stage S2b, its own commit + byte-identical `/compare` before S3 (§9.4); the MS side of F17 (a cycle established on the previous cycle's CTS candle; a BOS after its CTS) goes to the S5 round with F16 | "(b) Make the skip loud (Recommended)" |
 
 **Corrected reading (round 1, for the record):** the user's I1 note — "in order for the first confluence of parent
@@ -731,6 +737,7 @@ The rule ("parent cycle 0 → no reference") covers the case either way.
   BOS sorts after it (§9.2 F17) → R8-2 opened; answered (b) → **S2b LANDED** (§9.10): the skip raises
   `FibEventOrderError`, byte-identical. **S3 LANDED** (§9.10): the limit applied to subs, `/compare` = §9.5 b + the
   `via` label on the 11 predicted rows; the landing review's m1 (the confirmed anchor wins) folded, byte-identical.
+  R8-3 answered (a) (F18, the late-created cross, joins S3b) → **S3b LANDED** (§9.10): byte-identical to S3.
 
 ## 8. Handoff to session 2 — the implementation plan (from a fresh code audit + a cold review)
 
@@ -920,6 +927,12 @@ convention); M15 indices entity-absolute unless a sub's slice-local frame is nam
   is fed only at finalize, 518–520). When cycle T's single activates late (on a CTS_UPDATED at u > T's EST), cycle
   T−1's fib ends at u although cycle T−1 ended at T's EST. Today reachable through the `cross_failed` single; S3 / S4
   make it reachable for every single past the limit. Window: 0.
+- **F18 — F15's cross twin (session 4, 2026-10-08) (→ R8-3).** `_m15_create_cross` ends every earlier cycle at the
+  creation candle (`_obsolete_prev_cycle_all_fibs(end_idx=current_candle)`) — right for the pre-established cross
+  (Option A: created BEFORE cycle T's establishment e), late for a cross created at a CTS_UPDATED u > e (cycle T's own
+  window empty at e, the update finds a gap): cycle T−1 then ends at u. Constructed: cycle 1 established at 40 with no
+  gap in [30, 40], an update to 48 finds the gap 44 → cross 0→1 created at 48 → cycle 0 ends at 48. Window: 0 (no
+  cycle ≥ 1 fib activated or created after its establishment, measured on S3).
 - **F16 — MS confirms a CTS with an anchor AFTER its confirmation candle (the range back-fill look-ahead; found by the
   session-4 F14 search, 2026-10-08, §9.10; LATENT — 0 on the window) (→ R8-1).** `_step_anchor`'s no-winner branch
   confirms a range candidate at `i` (confirm `c`), back-fills `[i, min(c, D))` — the raw CTS update included
@@ -1405,3 +1418,19 @@ Tools: `plan_i_inputs/f14_order_effect.py` (a trial's fib records in processing 
   fires only on F17 (BOS and EST share their moment, every clip keeps or drops both). **B** mutation (160,663) — 64
   mutants on the full suite: 55 killed, 3 equivalent (T05, I07 / I08 — the I8 gate is redundant on today's h1 paths;
   S4 removes it), 6 gaps (A13 per-sid, U05, U09, T03, I04 / I05) → its drafted pins folded, re-run 6 / 6 KILLED.
+
+**S3b — the single's latent quirks (F5, F15 + its cross twin F18 — R6-1b, R8-3) — LANDED** (its own commit; local).
+- Code (`zones/fib_tracker.py`): F5 — `_m15_cross_check`'s own-window-filled return now re-checks the cycle's
+  existing single (`_update_fib_cts`: extend + deactivate) outside the pre-established phase; F15 / F18 — one helper
+  `_prev_cycle_end_at(sid, cycle, at)` = min(at, the cycle's establishment moment `_bos_moment_by_cycle`), used by
+  `_activate_fib` (both prev-cycle terminal stamps) and `_m15_create_cross` (`_obsolete_prev_cycle_all_fibs`); a
+  pre-established cross (no establishment yet) keeps Option A. NOTE for S4: `_bos_moment_by_cycle` (listed h1-only in
+  §9.1) is now read by the one path — S4 KEEPS it.
+- `/compare` vs S3's replay (`%TEMP%/pi/S3pre`, `cmp_fig_full.py`): **byte-identical** — 27 / 27 CSVs md5, every figure
+  (full JSON) = the prediction "0 cells" (measured on S3 first: no cycle ≥ 1 fib activated or created after its
+  establishment; no `cross_failed` single ever deactivated); fetch gate PASS (76.2 s wall); the log grep as before.
+- Tests 1400 → 1408 (+8, `test_plan_i_s3b_single_quirks.py`, sd ±1): F5 the `cross_failed` single deactivates when
+  its own window fills at an update; F15 a late-activated single and F18 a late-created cross end cycle 0 at cycle 1's
+  establishment (40, not 48), the late fib's own start stays 48; Option A unchanged. All 8 FAIL on S3's tracker.
+  Docs: FIB_LIFECYCLE_SPEC §7, CROSS_CYCLE_FIB_SPEC §2.2. No separate landing review (a ~20-line change, 0 cells):
+  folded into S4's.

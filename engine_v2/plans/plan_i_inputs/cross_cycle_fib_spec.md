@@ -228,3 +228,8 @@ R8-1: (a) Park to S5 (Recommended)
 > (d) re-order the dispatch). The user's answer (a multiple-choice selection):
 
 R8-2: (b) Make the skip loud (Recommended)
+
+> Then R8-3 (S3b's scope — F15's cross twin F18: a cross created late on an update ends the previous cycle at the
+> update; the options: (a) include crosses, (b) singles only, (c) defer both to S4). The user's answer (a selection):
+
+R8-3: (a) Include crosses (Recommended)

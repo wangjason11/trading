@@ -1322,6 +1322,7 @@ class FibTracker:
         )
 
         activated_at = int(meta["activated_at"])
+        prev_end = self._prev_cycle_end_at(sid, cycle_id, activated_at)
 
         # Mark previous cycle's Fib as obsolete (if exists)
         prev_cycle = self._current_cycle.get(sid)
@@ -1335,8 +1336,9 @@ class FibTracker:
                 # untouched. The obsolete_reason meta is kept for debugging.
                 obsolete = replace(old_fib, meta={**old_fib.meta, "obsolete_reason": "new_cycle"})
                 self._fibs[prev_key] = obsolete
-                # Lifecycle: prev cycle ends when this cycle activates.
-                self._set_terminal(sid, prev_cycle, activated_at, "new_cycle")
+                # Lifecycle: prev cycle ends when this cycle activates — at this cycle's establishment at the
+                # latest (a late activation, PLAN_I S3b F15).
+                self._set_terminal(sid, prev_cycle, prev_end, "new_cycle")
             # §11a-ii: the prev cycle's fib may be a VERSIONED cross (H1-main
             # Scenario-2 cross now lives at (sid, prev, "cross", v), which the
             # single-key check above misses). Obsolete it the same way so the
@@ -1351,7 +1353,7 @@ class FibTracker:
                 latest_prev_cross = self._get_latest_cross(sid, prev_cycle)
                 if latest_prev_cross is not None:
                     cross_key, cross_state = latest_prev_cross
-                    self._set_terminal(sid, prev_cycle, activated_at, "new_cycle")
+                    self._set_terminal(sid, prev_cycle, prev_end, "new_cycle")
                     if cross_state.meta.get("obsolete_reason") != "new_cycle":
                         self._fibs[cross_key] = replace(
                             cross_state,
@@ -2267,6 +2269,15 @@ class FibTracker:
     # activation and every cross creation / revival. The sub path only until S4 (main's h1 handlers keep their
     # own cycle-1 bookkeeping until they are deleted). A superseded (inactive) record of the other kind may remain:
     # the `cross_failed` fallback deactivates the cross, then activates the single.
+    def _prev_cycle_end_at(self, sid: int, cycle_id: int, at: int) -> int:
+        """Where a fib of `cycle_id` activated / created at `at` ends the earlier cycles (PLAN_I S3b, F15 / F18,
+        R6-1b (ii) / R8-3): at `at`, but never later than `cycle_id`'s own establishment — a cycle's fib cannot
+        outlive its cycle, so a single activated late on a CTS_UPDATED, or a cross created late, ends the previous
+        cycle at this cycle's CTS_ESTABLISHED moment. A pre-established cross (created BEFORE the establishment —
+        Option A) still ends it at its creation (`_bos_moment_by_cycle` has no entry for the cycle yet)."""
+        est = self._bos_moment_by_cycle.get((int(sid), int(cycle_id)))
+        return int(at) if est is None else min(int(at), int(est))
+
     def _assert_no_active_cross(self, sid: int, cycle_id: int) -> None:
         if self.fib_mode != "cross_cycle":
             return
@@ -2481,8 +2492,13 @@ class FibTracker:
 
         if not elig.own_has:
             self._deactivate_active_cross(sid, target_cycle, current_candle, "own_imb_filled")
-            # Pre-established: no fallback. Established: existing single fib
-            # (if any) is managed by _update_fib_cts elsewhere — nothing to do here.
+            # Pre-established: no fallback. Established: this cycle's existing single (the
+            # `cross_failed` fallback) re-checks its own window like every single on every update
+            # (PLAN_I S3b, F5) — the larger own window just tested has no unfilled imbalance, so
+            # the single's cannot have one either: it deactivates instead of staying active on
+            # its older CTS.
+            if phase != "pre_established" and (sid, target_cycle) in self._fibs:
+                self._update_fib_cts((sid, target_cycle), anchor_idx, anchor_price, df)
             return
 
         earliest_x = elig.earliest_x
@@ -2616,8 +2632,10 @@ class FibTracker:
 
         # Obsolete all prior-cycle fibs (single + cross versions). The creation
         # idx is the obsoleted cycles' terminal (Option A early-end via
-        # set-if-absent).
-        self._obsolete_prev_cycle_all_fibs(sid, target_cycle, end_idx=current_candle)
+        # set-if-absent) — at the target's establishment at the latest: a cross
+        # created late on a CTS_UPDATED ends them there (PLAN_I S3b, F18).
+        self._obsolete_prev_cycle_all_fibs(
+            sid, target_cycle, end_idx=self._prev_cycle_end_at(sid, target_cycle, current_candle))
 
         # Lifecycle: record the cycle's sticky first-active idx (§15.3). v0 sets
         # it; a later version (shrink/revival) is a handoff that keeps the cycle
