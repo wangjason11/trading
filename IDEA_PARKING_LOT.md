@@ -113,7 +113,10 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    to the first cycle whose CTS anchor is beyond a reference price set by the structure's starting trigger; rounds 1
    to 5 ANSWERED 2026-10-07 (PLAN_I §6 Q1–Q8, R2-0…R2-5, R3-1…R3-6, R4-1…R4-7, R5-1…R5-3; the rule as decided:
    PLAN_I §1.2 + §1.4; unique subs numbered at their lifecycle START, R4-2; SPEC AGREED, no open question; session 1 CLOSED
-   2026-10-07; NEXT: session 2, the implementation plan — PLAN_I §8). Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
+   2026-10-07; session 2 (2026-10-07): the implementation plan DRAFTED — PLAN_I §9, stages S1–S5 (incl. S3b, the single's two latent quirks, R6-1b / R7-1) predicted by variant
+   replays, cold-reviewed (PLAN_I §9.8); rounds 6–7 ANSWERED (PLAN_I §6 R6-1 … R7-4); the plan APPROVED 2026-10-07; after the build: S6 retires the
+   `fib_mode` meta key (R7-2); session 3 = the
+   build). Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
    charts add the M15 fib layer). Likely inputs (to confirm with the
    user): the 2026-10-01 item and D5 below, and §E "Cross-cycle fib bundled follow-up" with its parked open
    questions (`engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §13).

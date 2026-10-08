@@ -8,7 +8,8 @@
 > **Amended 2026-10-07 (round 1):** the bracketed [Q1]–[Q8] notes below = the decisions of PLAN_I §6; the
 > user's words are untouched. **Round 2 (2026-10-07):** the user's feedback is part 3 (verbatim, at the end); its
 > previous-sub rule supersedes [Q1] (bracket below marked). **Rounds 3–5 (2026-10-07):** parts 4–6
-> (verbatim, at the end).
+> (verbatim, at the end). **Round 6 (2026-10-07, session 2 — the questions the code audit raised):** part 7. **Round 7 (the four
+> follow-ups; the plan approved):** part 8.
 
 ---
 
@@ -30,7 +31,7 @@ When we run MS very first time on main to start trading: no reference price. For
 Reversal: the most recent bos_threshold that a valid pattern broke out of that triggered the reversal. The reversal logic should be a unified change that applies to both main and sub the same. For main, it should be relatively straightforward.
 
 Sub
-For subs, to be consistent with our other implementation, everything around fibs & cross-fibs should be on the unique sub level. However, given our updated pooled structure, the entire unique sub’s structure we will accept based on its first trigger. Any retriggers assumes already existing sub structure created by the first trigger. So mirroring that, the unique sub’s reference threshold price for cross fibs will be set depending on the very first trigger (in actual realtime) mapped / assigned to the unique sub.
+For subs, to be consistent with our other implementation, everything around fibs & cross-fibs should be on the unique sub level. However, given our updated pooled structure, the entire unique sub’s structure we will accept based on its first trigger. Any retriggers assumes already existing sub structure created by the first trigger. So mirroring that, the unique sub’s reference threshold price for cross fibs will be set depending on the very first trigger (in actual realtime) mapped / assigned to the unique sub. [R6-2: computed when the sub's MS runs — its first trigger's fire, from that trigger at its record's start — and re-checked against the sub's actual start after the sweep, a WARNING on any mismatch]
 
 Sub Reversal
 So same as main, if unique sub’s first trigger is reversal, we use the most recent bos_threshold that a valid pattern broke out of that triggered the sub reversal. 
@@ -170,3 +171,33 @@ R4-6. Yes, when I said “ending” it is for situations where the x-1 structure
 But yes both defaults are fine.
 
 Does everything else look good? Any last items we should talk about?
+
+---
+
+## Part 7 — round 6: the user's answers to the session-2 questions (2026-10-07, VERBATIM)
+
+> Decision IDs: `../PLAN_I_cross_cycle_fib_revamp.md` §6 R6-1 … R6-7 (the questions: §5 "Round 6"). Every answer takes
+> the recommendation offered.
+
+R6-1. ok sounds good
+R6-2. ok
+R6-3. your recs sounds good
+R6-4. your rec sounds good
+R6-5. yes
+R6-6. your rec sounds good
+R6-7. ok
+
+Anything else you need or want to bring up?
+
+---
+
+## Part 8 — round 7: the user's answers to the four follow-ups (2026-10-07, VERBATIM)
+
+> Decision IDs: `../PLAN_I_cross_cycle_fib_revamp.md` §6 R7-1 … R7-4 (the questions: §5 "Round 7").
+
+1. yes
+2. sounds good on both
+3. neutral sounds good
+4. sounds good.
+
+Anything else you want to bring up on your end? Are we ready to start the build? Is ultracode needed? If everything's all set we can commit
