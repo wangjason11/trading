@@ -31,6 +31,54 @@ import pandas as pd
 from engine_v2.patterns.imbalance import has_unfilled_imbalance
 
 
+# --- The cross-fib LIMIT (PLAN_I §1.2 / §4 N-a / §9.3 D1) --------------------------------------------------
+
+# `cross_fib_limit_source` values (§4 N-a + R6-3 (vi)): the rule that produced `P`.
+CROSS_FIB_LIMIT_SOURCES = frozenset({
+    "none",                     # main start trading; a sub's first_confluence on parent cycle 0; no previous sub
+    "reversal_bos_frozen",      # main or sub reversal: the applied reversal's frozen BOS barrier
+    "parent_cts_threshold",     # first_confluence on parent cycle c >= 1: the parent's (S, c) `cts_frozen`
+    "prev_sub_cts_threshold",   # x−1 same direction: its most recent confirmed cycle's `cts_threshold` (R2-1)
+    "prev_sub_bos_threshold",   # x−1 opposite: its `bos_threshold` (R2-1)
+    "prev_sub_starting_price",  # x−1 opposite, no `bos_threshold` yet: its starting candle's extreme (R2-2)
+    "prev_sub_latest_cts",      # x−1 same, no confirmed CTS yet: its latest CTS anchor price (R2-b / R3-5)
+    "prev_sub_no_cts",          # x−1 same, no CTS anchor at all: no `P` (R6-3 (vi))
+})
+_NO_PRICE_SOURCES = frozenset({"none", "prev_sub_no_cts"})
+
+
+@dataclass(frozen=True)
+class CrossFibLimit:
+    """A structure's cross-fib LIMIT: the reference price `P` its STARTING trigger fixes once, at the
+    structure's start (R2-4), and the rule that produced it.
+
+    - `price` (`cross_fib_limit_price`): `P`; None = no reference → no cross on any cycle (every cycle single);
+    - `source` (`cross_fib_limit_source`, one of `CROSS_FIB_LIMIT_SOURCES`);
+    - `from_pool_idx` (sweep-time) / `from_sub_id` (the final, start-numbered id, set once the sweep has
+      numbered the subs — PLAN_I D2 / D4): the sub that supplied `P` (x−1, or the reversing sub), else None;
+    - `started_by`: main only (`start_trading` | `reversal`, §4 N-c); a sub's comes from its mirror.
+
+    `M` (`cross_fib_limit_cycle`) is not here — it follows the structure's cycles (`FibTracker`).
+    """
+    price: Optional[float]
+    source: str
+    from_pool_idx: Optional[int] = None
+    from_sub_id: Optional[int] = None
+    started_by: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        assert self.source in CROSS_FIB_LIMIT_SOURCES, f"unknown cross_fib_limit_source {self.source!r}"
+        assert (self.price is None) == (self.source in _NO_PRICE_SOURCES), (
+            f"cross_fib_limit price {self.price!r} does not fit source {self.source!r}")
+
+
+def beyond(price: float, ref: float, sd: int) -> bool:
+    """`price` STRICTLY past `ref` in the structure's direction (Q2 / §4 N-b): sd = +1 `price > ref`, sd = −1
+    `price < ref` — reaching the price is not beyond."""
+    assert int(sd) in (1, -1), f"beyond: sd must be +1 / -1, got {sd!r}"
+    return float(price) > float(ref) if int(sd) == 1 else float(price) < float(ref)
+
+
 @dataclass(frozen=True)
 class CrossEligibility:
     """Pure cross-cycle eligibility decision for a single ``target_cycle``.

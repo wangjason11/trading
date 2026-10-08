@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Mapping, Optional, Tuple
 
 import pandas as pd
 
@@ -30,7 +30,9 @@ from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
 # Week 7: POI zones
 from engine_v2.zones.poi_zones import derive_ip_candidates, derive_poi_zones, POIConfig, select_ip_records
-from engine_v2.zones.structure_lifecycle import compute_cycle_lifecycle, compute_reversal_idx_by_sid
+from engine_v2.zones.structure_lifecycle import (
+    compute_cycle_lifecycle, compute_main_cross_fib_limits, compute_reversal_idx_by_sid,
+)
 from engine_v2.patterns.imbalance import compute_imbalance
 
 # Week 8: Wave candle identification
@@ -203,6 +205,7 @@ def _run_downstream_pipeline(
     lifecycle_floor: Optional[int] = None,
     lifecycle_cap: Optional[int] = None,
     cap_reason: str = "lifecycle_end",
+    cross_fib_limits: Optional[Mapping[int, Any]] = None,
 ) -> Dict[str, Any]:
     """Run downstream pipeline (KL zones -> wave candles -> Fib -> POI -> WVMI).
 
@@ -219,6 +222,11 @@ def _run_downstream_pipeline(
       - `"none"` (a sub — `project_to_window`): no gate, every CTS_CONFIRMED
         is offered to the tracker; zone proximity is never run for a sub;
       - `"off"`: no WVMI and no zone proximity (tests of the other stages).
+
+    `cross_fib_limits` — `{sid: CrossFibLimit}` for the FibTracker (PLAN_I §9.3
+    D1 / D2): the main's from `compute_main_cross_fib_limits`, a sub's `{0: P}`
+    from the pool. S2: stamped onto every fib record (`cross_fib_limit_*`, main
+    `started_by`), not applied; None = no stamp (tests).
     """
     if wvmi not in WVMI_MODES:
         raise ValueError(f"[downstream] wvmi={wvmi!r} not in {WVMI_MODES}")
@@ -305,6 +313,7 @@ def _run_downstream_pipeline(
             fill_threshold=0.70,
         ),
         fib_mode=fib_mode,
+        cross_fib_limits=cross_fib_limits,
     )
 
     bos_anchor_by_cycle = {}  # {(sid, cycle_id): (bos_anchor_idx, bos_price)}
@@ -544,6 +553,7 @@ def run_pipeline(
         s_res.df,
         s_res.events,
         s_res.struct_direction,
+        cross_fib_limits=compute_main_cross_fib_limits(s_res.events),
     )
     timing["downstream"] = time.perf_counter() - _t0
 
@@ -899,6 +909,9 @@ def _run_multi_tf_dual(
         build_or_get_geometry,
         render_sub_projection,
     )
+    from engine_v2.multitf.cross_fib_limit import (
+        PREV_SUB_TYPES, check_cross_fib_limits, cross_fib_limit_for, prev_sub_at_fire,
+    )
     from engine_v2.multitf.lifecycle_sweep import SweepTrigger, run_lifecycle_sweep
     from engine_v2.multitf.parent_tables import build_parent_tables
     from engine_v2.multitf.sub_structure_pool import (
@@ -1010,10 +1023,20 @@ def _run_multi_tf_dual(
             t.source, h1_df, m15, pool=sub_pool, hi=hi, parent_path=parent_path,
         )
 
-    def _build_geometry(key, bos0_inner):
+    def _build_geometry(key, bos0_inner, cross_fib_limit):
         return build_or_get_geometry(
             sub_pool, m15, parent_path=key.parent_path, sd=key.direction,
-            start_abs=key.starting_idx, bos0_inner=bos0_inner, timeframe=key.sub_tf,
+            start_abs=key.starting_idx, bos0_inner=bos0_inner,
+            cross_fib_limit=cross_fib_limit, timeframe=key.sub_tf,
+        )
+
+    def _resolve_cross_fib_limit(t: SweepTrigger, record_start: int, reversing_sub):
+        # PLAN_I R6-2 (a): at the fire, x−1 = the latest sub KNOWN to start by the record's start.
+        prev = (prev_sub_at_fire(sub_pool.all(), record_start)
+                if t.trigger_type in PREV_SUB_TYPES else None)
+        return cross_fib_limit_for(
+            t.trigger_type, t.cycle, int(t.direction), int(record_start),
+            h1_events=sorted_events, reversing_sub=reversing_sub, prev_sub=prev,
         )
 
     def _resolve_reversal(sub, R, probe_direction):
@@ -1024,8 +1047,11 @@ def _run_multi_tf_dual(
     sweep = run_lifecycle_sweep(
         sweep_triggers, pool=sub_pool, tables=tables,
         resolve_start=_resolve_start, build_geometry=_build_geometry,
-        resolve_reversal=_resolve_reversal, parent_path=parent_path, sub_tf="M15",
+        resolve_reversal=_resolve_reversal, resolve_cross_fib_limit=_resolve_cross_fib_limit,
+        parent_path=parent_path, sub_tf="M15",
     )
+    # The R6-2 tripwire: P re-derived the §1.2 way at each sub's start (a mismatch WARNs, the stored P stays).
+    check_cross_fib_limits(sub_pool, sorted_events)
     n_records = len(sub_pool.all_records())
     print(
         f"[pool] unique subs={len(sub_pool.all())} records={n_records} "

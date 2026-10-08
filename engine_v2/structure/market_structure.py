@@ -256,6 +256,11 @@ class MarketStructureState:
     pending_reversal_pattern_anchor_idx: Optional[int] = None
     pending_reversal_apply_idx: Optional[int] = None
 
+    # The winning BREAKOUT's detection threshold (`_step_anchor`'s `breakout_th`, None when no range was
+    # active), carried from the winner's selection to its apply and cleared there — the comparand of the
+    # `cts_frozen` WARNING (PLAN_I §9.3 D3). None for a pullback / reversal winner.
+    winner_break_th: Optional[float] = None
+
 
 # ---------------------------------------------------------------------
 # Engine
@@ -855,6 +860,7 @@ class MarketStructure:
 
         if winner is not None:
             ev, apply_idx, kind = winner  # kind in {"breakout","pullback", "reversal"}
+            st.winner_break_th = (None if breakout_th is None else float(breakout_th)) if kind == "breakout" else None
 
             # Back-fill candles from anchor up to (but not including) apply candle.
             # Back-fill candles before the apply candle WITHOUT expanding range bounds.
@@ -1314,8 +1320,24 @@ class MarketStructure:
                         "pattern_anchor_idx": int(ev.start_idx),
                         "pattern_name": str(ev.name),
                         "confirmed_at": int(apply_idx),  # apply candle that established CTS
+                        # The `cts_threshold` MS holds as it establishes the cycle = cycle c−1's frozen
+                        # threshold the breakout broke (None on cycle 0); read once, before the reset
+                        # below (PLAN_I R3-1 / R4-1, §9.3 D3). A price, so in no *_META_IDX_KEYS list.
+                        "cts_frozen": (None if st.cts_threshold is None else float(st.cts_threshold)),
                     },
                 )
+                ce = self.events[-1]
+                if int(ce.meta["cycle_id"]) >= 1 and (
+                        st.winner_break_th is None or ce.meta["cts_frozen"] != st.winner_break_th):
+                    # Equal at every cycle >= 1 establishment on the window (§9.2 F12, 19 / 19) but not by
+                    # construction: a proximity confirmation inside the back-fill re-inits `cts_threshold`
+                    # (F14), and a breakout from no active range has no detection threshold.
+                    print(
+                        f"WARNING [ms] cts_frozen {ce.meta['cts_frozen']} != the breakout's detection threshold "
+                        f"{st.winner_break_th} at CTS_ESTABLISHED sid={ce.meta['structure_id']} "
+                        f"cycle={ce.meta['cycle_id']} idx={int(ce.idx)} ({self.timeframe})"
+                    )
+                st.winner_break_th = None
 
                 # Create + confirm BOS simultaneously with CTS establishment
                 if st.cts_cycle_id == 0:

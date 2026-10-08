@@ -1171,6 +1171,7 @@ def build_or_get_geometry(
     sd: int,
     start_abs: int,
     bos0_inner: Optional[float],
+    cross_fib_limit: Any,
     timeframe: str = "M15",
 ) -> Optional[Tuple[PooledStructure, bool]]:
     """Build — or reuse from the pool — the natural-end geometry for a unique sub
@@ -1182,6 +1183,8 @@ def build_or_get_geometry(
     miss it runs MS FIRST and creates the pool entry only on success (a failed
     build → None, no `pool_idx` consumed); on a hit it returns the existing sub.
     `bos0_inner` is not in the key: the sweep WARNING-logs a mismatch.
+    `cross_fib_limit` (a `CrossFibLimit`, computed by the sweep on a miss) is
+    stored on a NEW sub; a hit passes None and keeps the sub's own (PLAN_I D2).
 
     Returns `(sub, created)` or None. The attached geometry is SHARED across
     records — callers must not mutate `bounded.events` / `bounded.df` in
@@ -1190,7 +1193,9 @@ def build_or_get_geometry(
     key = StructureKey(parent_path, timeframe, int(sd), int(start_abs))
     cached = pool.get(key)
     if cached is not None and cached.geometry is not None:
+        assert cross_fib_limit is None, f"[entity_compute] a cross-fib limit handed in on a pool hit {tuple(key)}"
         return cached, False
+    assert cross_fib_limit is not None, f"[entity_compute] no cross-fib limit for the new sub {tuple(key)}"
     assert cached is None, f"[entity_compute] pool entry {tuple(key)} without geometry"
 
     geom = _build_geometry(
@@ -1211,6 +1216,7 @@ def build_or_get_geometry(
         int(bounded.reversal_idx) + slice_begin if bounded.reversal_idx is not None else None
     )
     sub.bos0_inner = bos0_inner
+    sub.cross_fib_limit = cross_fib_limit
     print(
         f"[entity_compute] geometry built pool#{sub.pool_idx} key={tuple(key)} "
         f"slice_begin={slice_begin} run_cap={len(m15_df) - 1} "
@@ -1245,6 +1251,8 @@ def render_sub_projection(
         f"[entity_compute] pool#{sub.pool_idx} has no sub_id — the subs are numbered at the sweep's end"
     )
     assert sub.geometry is not None, f"[entity_compute] sub {sub.sub_id} has no geometry"
+    lim = sub.cross_fib_limit
+    assert lim is not None, f"[entity_compute] sub {sub.sub_id} has no cross-fib limit"
     bounded, slice_begin = sub.geometry
     slice_begin = int(slice_begin)
     n_slice = len(bounded.df)
@@ -1271,6 +1279,7 @@ def render_sub_projection(
         timeframe=timeframe,
         log_prefix=f"M15_sub{sub.sub_id}_{first.trigger_type}",
         structure_path_id=first_path,
+        cross_fib_limits={0: lim},
     )
     end_in_slice = cap_local if cap_local is not None else n_slice - 1
     first_record = {

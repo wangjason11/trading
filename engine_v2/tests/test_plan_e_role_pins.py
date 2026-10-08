@@ -43,6 +43,9 @@ def test_fib_tracker_est_reads_the_anchor_for_the_fib_and_the_moment_for_activat
     df = _df(40, [_gap(15)])
     # sid 0 cycle 1 (h1 simple flow activates at cycle >= 1); cross_cycle cycle 0.
     cyc = 1 if mode == "h1" else 0
+    if cyc == 1:
+        # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
+        _quiet(tracker.on_cts_confirmed, _ev("CTS_CONFIRMED", 6, 0.95, 0, 0, cts_anchor_idx=5))
     fib = _quiet(tracker.on_cts_established, _e4_est(structure_id=0, cycle_id=cyc), df,
                  bos_idx=10, bos_price=0.9)
     assert fib is not None and fib.active
@@ -58,6 +61,8 @@ def test_fib_tracker_update_fill_horizon_and_stamp_are_the_moment():
     tracker = _tracker("h1")
     df = _df(40, [_gap(15)])
     df.at[31, "l"] = 0.99
+    # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
+    _quiet(tracker.on_cts_confirmed, _ev("CTS_CONFIRMED", 6, 0.95, 0, 0, cts_anchor_idx=5))
     fib = _quiet(tracker.on_cts_established, _e4_est(anchor=20, moment=20, structure_id=0, cycle_id=1),
                  df, bos_idx=10, bos_price=0.9)
     assert fib.active

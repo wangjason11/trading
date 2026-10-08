@@ -369,6 +369,8 @@ NON_INDEX_INT_META_KEYS = frozenset({
     "parent_sid", "parent_cycle_id", "sub_id",
     "version", "scenario", "cross_start_cycle", "proximity_pips",
     "ip_tied_count",        # POI (PLAN_H landing B): the tied group's size, set only when TB1 / TB2 decided
+    # fib (PLAN_I S2): the structure's `M` (a cycle id) and the start-numbered sub that supplied `P` (a sub id)
+    "cross_fib_limit_cycle", "cross_fib_limit_from_sub_id",
 })
 NEVER_LISTED = NON_INDEX_INT_META_KEYS | {"triggered_by_event_idx"}
 

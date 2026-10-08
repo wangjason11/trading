@@ -119,6 +119,8 @@ def test_est_scenario1_revert_terminal_is_the_moment():
 
 def test_est_cycle1_without_cycle0_data_stamps_the_moment():
     t = _t()
+    # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
+    _q(t.on_cts_confirmed, _conf(25, 20, 1.15, 1, 0))
     fib = _q(t.on_cts_established, _est(40, 1.35, 1, 1), _df(), bos_idx=30, bos_price=1.2,
              reversal_confirmed_idx=100)
     assert (fib.cts_idx, fib.meta["activated_at"]) == (40, 42)
@@ -155,6 +157,8 @@ def test_est_gate_fill_horizon_is_the_moment():
     df = _df(insts=[ImbalanceInstance(15, 15, 1, 1.10, 1.00, 0.10)], fills=[(21, 1.02)])
     ev = make_cts_established(cts_anchor_idx=20, confirmed_at=22, price=1.2, structure_id=0,
                               cycle_id=1, struct_direction=1)
+    # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
+    _q(t.on_cts_confirmed, _conf(6, 5, 0.95, 0, 0))
     assert _q(t.on_cts_established, ev, df, bos_idx=10, bos_price=0.9) is None
 
 
@@ -255,6 +259,8 @@ def test_update_fib_cts_reactivation_stamps_the_moment():
                     ImbalanceInstance(33, 33, 1, 1.40, 1.30, 0.10)], fills=[(31, 0.99)])
     ev = make_cts_established(cts_anchor_idx=20, confirmed_at=22, price=1.2, structure_id=0,
                               cycle_id=1, struct_direction=1)
+    # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
+    _q(t.on_cts_confirmed, _conf(6, 5, 0.95, 0, 0))
     assert _q(t.on_cts_established, ev, df, bos_idx=10, bos_price=0.9).active
     assert not _q(t.on_cts_updated, _upd(30, 1.3, 0, 1), df).active
     re = _q(t.on_cts_updated, _upd(35, 1.45, 0, 1), df)

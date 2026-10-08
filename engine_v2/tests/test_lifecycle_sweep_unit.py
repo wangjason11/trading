@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 import pytest
 
+from engine_v2.multitf.cross_fib_limit import NO_LIMIT
 from engine_v2.multitf.parent_tables import ParentTables
 from engine_v2.multitf.types import MultiTFTrigger
 from engine_v2.multitf.lifecycle_sweep import (
@@ -148,15 +149,16 @@ def _geom(
     nat_rev: Dict[Tuple[int, int], Optional[int]],
     *, fail_once: Optional[set] = None,
 ):
-    """`build_geometry(key, bos0_inner)` stub — the §5.4 builder: on a miss the
-    pool entry is created (here: only when the build "succeeds") with the stubbed
-    `natural_reversal_idx` from `nat_rev[(direction, starting_idx)]`; keys in
-    `fail_once` return None ONCE (no pool entry, no pool_idx consumed), then build.
-    Records every call on `.calls` as `(key, bos0_inner)`."""
+    """`build_geometry(key, bos0_inner, cross_fib_limit)` stub — the §5.4 builder:
+    on a miss the pool entry is created (here: only when the build "succeeds") with
+    the stubbed `natural_reversal_idx` from `nat_rev[(direction, starting_idx)]` and
+    the handed cross-fib limit (PLAN_I S2); keys in `fail_once` return None ONCE (no
+    pool entry, no pool_idx consumed), then build. Records every call on `.calls` as
+    `(key, bos0_inner)`."""
     calls: List[Tuple[StructureKey, Optional[float]]] = []
     failing = set(fail_once or ())
 
-    def build_geometry(key: StructureKey, bos0_inner: Optional[float]):
+    def build_geometry(key: StructureKey, bos0_inner: Optional[float], cross_fib_limit):
         calls.append((key, bos0_inner))
         dk = (key.direction, key.starting_idx)
         if dk in failing:
@@ -166,6 +168,7 @@ def _geom(
         if created:
             sub.natural_reversal_idx = nat_rev.get(dk)
             sub.bos0_inner = bos0_inner
+            sub.cross_fib_limit = cross_fib_limit
             sub.geometry = ("stub-geometry", 0)     # (bounded, slice_begin) shape
         return sub, created
 
@@ -201,9 +204,15 @@ def _synth_stub(source_trigger: Any, sd: int, R: int) -> Any:
     return ("synth-reversal", source_trigger, int(sd), int(R))
 
 
+def _no_limit(trigger: SweepTrigger, record_start: int, reversing_sub) -> Any:
+    """`resolve_cross_fib_limit` stub: no reference price (PLAN_I S2 — the rule
+    itself is pinned in test_plan_i_s2_cross_fib_limit)."""
+    return NO_LIMIT
+
+
 def _run(
     triggers: List[SweepTrigger], *, pool: SubStructurePool, tables: ParentTables,
-    resolve=None, geom=None, resolve_rev=None,
+    resolve=None, geom=None, resolve_rev=None, resolve_limit=None,
 ):
     """Run the sweep with stubs + a capturing `log`; returns `(result, logs)`."""
     logs: List[str] = []
@@ -218,6 +227,7 @@ def _run(
         resolve_start=resolve if resolve is not None else _resolver({}),
         build_geometry=geom if geom is not None else _geom(pool, {}),
         resolve_reversal=resolve_rev if resolve_rev is not None else _rev_resolver({}),
+        resolve_cross_fib_limit=resolve_limit if resolve_limit is not None else _no_limit,
         synth_reversal_trigger=_synth_stub,
         parent_path=PARENT,
         sub_tf=SUB_TF,
@@ -1687,6 +1697,7 @@ def test_default_synth_reversal_trigger_builds_a_reversal_multi_tf_trigger():
         resolve_start=_resolver({(CONF, 63): _rs(100, 120)}),
         build_geometry=_geom(pool, {(+1, 100): 303, (-1, 280): None}),
         resolve_reversal=_rev_resolver({(+1, 100): 280}),
+        resolve_cross_fib_limit=_no_limit,
         parent_path=PARENT, sub_tf=SUB_TF, log=logs.append,       # no synth_reversal_trigger → default
     )
     X, Y = _sub(pool, +1, 100), _sub(pool, -1, 280)

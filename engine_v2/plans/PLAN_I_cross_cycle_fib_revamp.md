@@ -7,7 +7,7 @@ code (R5-1). Session 1 CLOSED 2026-10-07 (docs-only commit). Session 2 (2026-10-
 COLD-REVIEWED — §9 (audit, design, stages S1–S5 incl. S3b (R6-1b / R7-1) + S6 after the build (R7-2), predictions by variant
 replays, test census, §9.8 the review); round 6
 ANSWERED (§6 R6-1 … R6-7) + round 7 (R7-1 … R7-4); the plan APPROVED by the user 2026-10-07 (R7-4); session 3 = the
-build.** Three sessions (PLAN_H §6 LR3): the user's rules → this spec;
+build: S1 + S2 LANDED (§9.10).** Three sessions (PLAN_H §6 LR3): the user's rules → this spec;
 then the implementation plan from a fresh code audit + a cold review; then the build). Living document: every
 question, answer and decision is recorded here as it happens (§5 open questions, §6 decisions); measurements in §3.
 Register line: `IDEA_PARKING_LOT.md` §D.1 item 2. No engine code changed in sessions 1–2 (session 2's measurement
@@ -58,7 +58,7 @@ ceiling `M` (built 2026-06-17, §11b Part A, dormant on the window), §3.1 the f
    |---|---|
    | main: the first MS run ("start trading", sid 0) | none → no cross fibs |
    | main: reversal | "the most recent bos_threshold that a valid pattern broke out of that triggered the reversal" → the APPLIED reversal's `bos_frozen` (`REVERSAL_CANDIDATE.meta["bos_frozen"]` of the reversing sid — in the code read off the same reversal's
-`STATE_CHANGED(to=reversal).meta["bos_frozen"]`, equal by the watch, asserted [session 2, §9.3 D2]; the MS barrier the reversal pattern broke — an earlier failed close-break `rv_anchor_failed` moved the threshold, not this) |
+`STATE_CHANGED(to=reversal).meta["bos_frozen"]`, equal by the watch, asserted [session 2, §9.3 D2; the assert compares the OPEN WATCH's frozen barrier — S2's landing review: a later anchor's reversal winner can apply with no candidate at the realised apply]; the MS barrier the reversal pattern broke — an earlier failed close-break `rv_anchor_failed` moved the threshold, not this) |
    | sub: reversal | the same, from the REVERSING sub's applied `REVERSAL_CANDIDATE` |
    | sub: first_confluence on parent cycle 0 | none → no cross fibs |
    | sub: first_confluence on parent cycle c ≥ 1 | "the most recent CTS_threshold that a valid pattern broke from to result in CTS established" → the PARENT's cycle c−1 `cts_threshold` as of parent (S, c)'s `CTS_ESTABLISHED` — c−1's confirmed CTS price, moved by its `CTS_THRESHOLD_UPDATED` range syncs [Q3]. No `cts_frozen` VARIABLE exists, but the process mirrors the reversal [R3-1, §3.3]: the new cycle's breakout must CLOSE beyond the threshold, the threshold is FROZEN while the detected pattern is pending (anchor → apply) and a failed break moves it (`range_sync`) — so this is the frozen threshold the breakout broke (H1 (1,2): 0.57376, anchor 897 → apply 902) |
@@ -628,7 +628,7 @@ The commit of these spec docs waits for the session's end (the user: "Let’s ho
 | R6-4 | Q7's consequences stated (the M1 divergence and the never-created / deactivated fib go with it); the order tripwire RAISES a named error (`FibEventOrderError`) — the replay stops and the shape becomes a new round | "R6-4. your rec sounds good" |
 | R6-5 | S4 is ONE stage; its `/compare` is checked cell by cell against the per-cause lines of §9.5 c | "R6-5. yes" |
 | R6-6 | (a): the exported `cross_fib_limit_cycle` is the structure's FINAL `M` on every fib record (§4 N-a amended) | "R6-6. your rec sounds good" |
-| R6-7 | The hover gains one line in S2 (e.g. "limit 0.57827 · prev_sub_bos_threshold (sub 6) · M=2"), rendered for the user's review before S2 lands | "R6-7. ok" |
+| R6-7 | The hover gains one line in S2 (e.g. "limit 0.57827 · prev_sub_bos_threshold (sub 6) · M=2"), rendered for the user's review before S2 lands. **Rendered 2026-10-08** (the last line of the status cell, below PLAN_H's `IP <rank> · IC <idx>` line; 24 drawn fib hovers) and **APPROVED as is** — `.5f` price, the order kept (§9.10 S2; spec copy part 9) | "R6-7. ok"; 2026-10-08: "(a) approve as is, commit S2" |
 
 **2026-10-07 (round 7 — the four follow-ups, §5; verbatim in the spec copy, part 8)**
 
@@ -691,6 +691,9 @@ The rule ("parent cycle 0 → no reference") covers the case either way.
   APPROVED** — session 3 = the build (S1 + S2 first).
 - 2026-10-07 — session 3: **S1 LANDED** (§9.10): `sub_id` numbered at the lifecycle start, byte-identical to S_F1;
   2-lens landing review folded; one latent sweep quirk parked (register D.2).
+- 2026-10-08 — session 3: **S2 LANDED** (§9.10): the cross-fib limit fields stamped, not applied — format-only = §9.5 a
+  (27 / 27 CSVs == V2; 24 fib hovers + the limit line); the hover APPROVED as rendered (§6 R6-7; spec copy part 9);
+  the landing review's M1 → D2 / §1.2 amended (main's cross-check reads the OPEN WATCH, not the applied candidate).
 
 ## 8. Handoff to session 2 — the implementation plan (from a fresh code audit + a cold review)
 
@@ -734,7 +737,7 @@ re-open it; a question the code raises goes to the user as a new round, recorded
 ## 9. The implementation plan (session 2, 2026-10-07)
 
 **Status: cold-reviewed (§9.8); round 6 ANSWERED (§6 R6-1 … R6-7, every recommendation taken) + round 7 (R7-1 …
-R7-4); APPROVED by the user 2026-10-07 (R7-4); session 3 = the build: **S1 LANDED** 2026-10-07 (§9.10).** Written from a fresh code audit of HEAD `e63c3ea` + variant replays on S_F1. The rule is §1.2 + §1.4 (not
+R7-4); APPROVED by the user 2026-10-07 (R7-4); session 3 = the build: **S1 LANDED** 2026-10-07, **S2 LANDED** 2026-10-08 (§9.10).** Written from a fresh code audit of HEAD `e63c3ea` + variant replays on S_F1. The rule is §1.2 + §1.4 (not
 re-opened). The plan's AUTHOR'S RESOLUTIONS went to the user as round 6 and were all taken (§6). Times UTC (H1 i from the window's `_raw.csv`; M15 i = H1 i // 4 + 15 min × i % 4, the census
 convention); M15 indices entity-absolute unless a sub's slice-local frame is named. "Window" = 2025-11-15 → 2026-01-20.
 
@@ -920,8 +923,14 @@ sid 0); `fib_mode` and every h1-only handler / state / helper in §9.1 go (S4).
 - main: `compute_main_cross_fib_limits(events)` (`structure_lifecycle.py`): per sid, `started_by` first — "reversal"
   iff the previous sid's `STATE_CHANGED(to=reversal)` exists, else "start_trading" (I1: the variation attaches to the
   trigger, not the sid number); "start_trading" → `CrossFibLimit(None, "none")`; "reversal" → that event's
-  `bos_frozen` (asserted not None, ≤ 1 per sid, and == the applied `REVERSAL_CANDIDATE`'s — the one whose `apply_idx`
-  is the realised reversal; §1.2 amended: the watch makes them equal), source `"reversal_bos_frozen"`.
+  `bos_frozen` (asserted not None, ≤ 1 per sid, and == the OPEN WATCH's frozen barrier — the sid's last
+  `REVERSAL_WATCH_START` at or before the reversal; §1.2 amended: the watch makes them equal), source
+  `"reversal_bos_frozen"`. [S2 landing review, lens A M1: the plan first named "the applied `REVERSAL_CANDIDATE` —
+  the one whose `apply_idx` is the realised reversal", but a later anchor's reversal WINNER can apply BEFORE the
+  watch's pending candidate (MARKET_STRUCTURE_SPEC's later-winner case; `test_ms_reversal_on_expiry`'s
+  `_later_winner_rows`: reversal at 8, the only candidate applies at 9) — no candidate sits at the realised apply and
+  the assert would have stopped the replay. The watch is always emitted (`REVERSAL_WATCH_START`) and its frozen
+  barrier IS the reversal's `bos_frozen`: equal on that fixture (sd ±1) and on the window (watch 897, 0.5736).]
 - sub, `multitf/cross_fib_limit.py` (= `plan_i_inputs/cross_fib_limit_proto.py`, cleaned): the sweep's
   `_resolve_and_record` computes the record start `max(finalize, trigger_idx, floor)` ONCE, before step 3 (one formula
   for P and the record), and on a geometry MISS (`pool.get(key) is None`) calls an INJECTED
@@ -1152,7 +1161,7 @@ single 1107 → 1245 — gains a POI (IC 1117, 12-02 13:15), cycle 1 — now the
 example) moves 2837 → 2969; sub 2 cycle 1 loses its POI (2442 → none). Sub 3 cycle 3 (no POI record) is unchanged by
 the revamp (a single before and after). PLAN_H §8.9 resumes on the S5 save (S6, format-only — the `fib_mode` column — moves no debugging point).
 
-### 9.10 Build record (session 3, 2026-10-07)
+### 9.10 Build record (session 3, 2026-10-07 → 08)
 
 **S1 — `sub_id` numbered at the lifecycle start (D4) — LANDED** (its own commit; local, not pushed).
 - Code: `sub_structure_pool` — `pool_idx` (the creation index) on `PooledStructure` and `TriggerRecord` + the
@@ -1192,3 +1201,62 @@ the revamp (a single before and after). PLAN_H §8.9 resumes on the S5 save (S6,
   MAJOR: phase 1's "frozen while pending" `ended_by` copy was reached only with a `parent_end`; S18 the WARNING — and
   the collision test's `in {A.sub_id, B.sub_id}` had weakened to accept None; E02 the sibling read by `pool_idx`; E03
   the render assert) — re-run: 5 / 5 KILLED.
+
+**S2 — the fields stamped, not applied (D2, D3, D1's stamping + the order tripwire) — LANDED** (its own commit; local,
+not pushed). The hover (R6-7) rendered and APPROVED by the user 2026-10-08: "(a) approve as is, commit S2" (§6 R6-7;
+spec copy part 9). One clarifying question first: the options named "the IP line" — PLAN_H's `IP <rank> · IC <idx>` /
+`IP: none (…)` / `IP: not evaluated (…)` line, the status cell's line directly above the new limit line (the full
+hover shown, e.g. H1 sid 0 cycle 1: `… life=[652, 902] reversal` / `IP 3A.iii · IC 607` / `limit: none
+(start_trading)`). Re-checked before the commit: tests 1359 pass, fetch gate PASS on the replay of the final code.
+- Code: `zones/cross_cycle_fib.py` `CrossFibLimit` (frozen; `price` / `source` ∈ `CROSS_FIB_LIMIT_SOURCES` /
+  `from_pool_idx` / `from_sub_id` / `started_by`; price None ⟺ source `none` / `prev_sub_no_cts`) + `beyond`;
+  `zones/structure_lifecycle.py` `compute_main_started_by` + `compute_main_cross_fib_limits` (the open-watch
+  cross-check — D2 amended, lens A M1); MS `cts_frozen` on every CTS_ESTABLISHED (after `confirmed_at`, always present)
+  + the carrier `MarketStructureState.winner_break_th` (set with the `_step_anchor` winner, cleared at the
+  establishment) + `WARNING [ms] cts_frozen …`; NEW `multitf/cross_fib_limit.py` (`known_start`, `prev_sub_at_fire`,
+  `read_prev_sub`, `reversal_limit`, `parent_cts_limit`, `cross_fib_limit_for` = the one formula, `check_cross_fib_limits`
+  = the R6-2 tripwire — warn-only: an ambiguous reversing sub WARNs, never asserts); the sweep computes the record start
+  ONCE and, on a geometry MISS, P via the injected `resolve_cross_fib_limit(trigger, record_start, reversing_sub)`
+  (REQUIRED) handed to `build_geometry(key, bos0_inner, cross_fib_limit)` → `build_or_get_geometry(cross_fib_limit=)`
+  (REQUIRED; a limit on a miss, None on a hit — asserted) → `PooledStructure.cross_fib_limit`; `_after_sweep` remaps
+  `from_sub_id` (a never-started supplier → None + WARNING); `render_sub_projection` → `project_to_window(
+  cross_fib_limits={0: P})` → `_run_downstream_pipeline(cross_fib_limits=)` → `FibTracker(cross_fib_limits=)`; the H1
+  call passes `compute_main_cross_fib_limits(s_res.events)`; FibTracker `_latest_anchor` (EST / every UPD / CONF, both
+  modes), `cross_fib_limit_cycle` (M, strict, FINAL), the stamp at `_finalize_lifecycle_fields` (`{**meta,
+  price, source, cycle, from_sub_id[, started_by]}` — V2's key order), `FibEventOrderError` at a cycle ≥ 1
+  CTS_ESTABLISHED without its cycle T−1's CTS_CONFIRMED (both modes); main SidRecord `meta["started_by"]`; the hover's
+  limit line `_zone_render.fib_hover_limit_text`, the status cell's last line. S2 does NOT construct the MS-side
+  chain (`_build_geometry` → `compute_bounded_structure`): S5.
+- `/compare` vs S_F1: **every one of the 27 CSVs md5-equal to the session-2 variant V2** (`%TEMP%/pi/V2`); vs S_F1 exactly
+  the 7 predicted, format-only (`variant_report_i.py`): §9.5 a's counts and per-structure values, all equal (H1 sid 0
+  none; sid 1 0.5736 reversal_bos_frozen M 2; sub 0 none; subs 1 / 2 / 3 reversal_bos_frozen 0.57877 / 0.57926 /
+  0.58156 from 0 / 1 / 2, M 2 / 0 / 1; sub 4 parent_cts_threshold 0.57376 M 0; subs 5 / 6 / 7 prev_sub_bos_threshold
+  0.58105 / 0.57112 / 0.57827 from 4 / 5 / 6, M None / None / 2). Figures: trace counts + layouts equal; only the
+  customdata of the 24 drawn fib traces (H1 2, confluence 16, counter 6) — each exactly one appended limit line
+  (`cmp_hover.py` + a per-cell check). run.log: 8 `[sweep] cross_fib_limit pool#k …` + `[cross_fib_limit] tripwire:
+  3 subs re-derived at their start, 0 mismatches`; no `WARNING [ms] cts_frozen`, no `FibEventOrderError`.
+- Tests 1298 → 1359 (+61 in `test_plan_i_s2_cross_fib_limit.py`). Moved: the sweep / builder stubs and fixtures (the
+  two new REQUIRED arguments — §9.6 named the sweep stubs; the builder fixtures were not censused); `NON_INDEX_INT_META_KEYS`
+  + `cross_fib_limit_cycle` / `_from_sub_id`; and 7 h1-mode unit tests (test_e3a_mutation_pins ×3,
+  test_imbalance_c3_knowability ×2, test_plan_e_role_pins ×2) that fed cycle 1's CTS_ESTABLISHED with no cycle-0
+  CTS_CONFIRMED — an order MS never emits, caught by the new order tripwire, NOT in the census: each now feeds that
+  CTS_CONFIRMED first, every original assertion unchanged (lens A: sound — the h1 handlers treat it as a no-op for
+  those paths).
+- Landing review, 2 read-only lenses, **613,095 tokens**: **A** code audit (335,832) — 0 BLOCKER / 1 MAJOR / 4 MINOR /
+  NITs. **M1**: main's cross-check against "the applied `REVERSAL_CANDIDATE` at the realised apply" (D2's literal text)
+  CRASHES on a legitimate stream — a later anchor's reversal winner applies before the watch's pending candidate
+  (`test_ms_reversal_on_expiry._later_winner_rows`: reversal 8, the only candidate applies at 9) → the check now reads
+  the OPEN WATCH (`REVERSAL_WATCH_START`), D2 / §1.2 amended, pinned sd ±1. m1 missing tests (R6-2 lag, the reversal
+  lookup, R5-3) → added; m2 the hover's "why" reads the first LIVE record while P comes from the creating trigger →
+  documented as a known limit (CHARTING_SPEC; the R6-2 tripwire WARNs wherever the two rules differ; 0 on the window);
+  m3 an assert inside the warn-only tripwire → a WARNING; m4 docs (WORKFLOWS, POI_ZONES_SPEC, a FibTracker docstring,
+  this record); nits folded (incl. the S1 GLOSSARY rows that ride in this commit). Verified: every P source = §1.2;
+  behaviour-neutral (`_latest_anchor` / `_limits` / `cts_frozen` / the carrier are read only by the stamp / the
+  WARNING); the order tripwire keys on `_cts_by_cycle` (written only at CTS_CONFIRMED), ties sort CONFIRMED first,
+  the cap clip keeps CONFIRMED(T−1) whenever EST(T) is kept. **B** mutation (277,263) — 73 mutants on the full suite:
+  49 killed, 4 equivalent (S04 / S05 / S07 the carrier, C01 `ev.idx` = the moment), 20 gaps (MAJOR: the end-to-end
+  wiring E01 / O01; the tripwire's distinctions T01 / T04 / T06 / T07; the handlers' sd capture F05 / F06) → 15 tests
+  (+ the watch versions of M05–M07); re-run with 6 new mutants on the watch check / the ambiguity count: 23 / 23
+  KILLED. Fixture realism notes folded as comments (synthetic shapes named).
+- Open (beyond S2): the order tripwire now RAISES in the downstream on any window with the F14 shape — the planned
+  random-tail search for it (D5: "before S5") matters from S2 on; proposed for the start of the S3 session.

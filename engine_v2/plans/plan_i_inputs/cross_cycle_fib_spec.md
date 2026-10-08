@@ -9,7 +9,7 @@
 > user's words are untouched. **Round 2 (2026-10-07):** the user's feedback is part 3 (verbatim, at the end); its
 > previous-sub rule supersedes [Q1] (bracket below marked). **Rounds 3–5 (2026-10-07):** parts 4–6
 > (verbatim, at the end). **Round 6 (2026-10-07, session 2 — the questions the code audit raised):** part 7. **Round 7 (the four
-> follow-ups; the plan approved):** part 8.
+> follow-ups; the plan approved):** part 8. **Session 3 (2026-10-08, the build — the S2 hover, R6-7):** part 9.
 
 ---
 
@@ -201,3 +201,13 @@ Anything else you need or want to bring up?
 4. sounds good.
 
 Anything else you want to bring up on your end? Are we ready to start the build? Is ultracode needed? If everything's all set we can commit
+
+---
+
+## Part 9 — session 3: the S2 hover line, rendered (2026-10-08, VERBATIM)
+
+> Decision ID: `../PLAN_I_cross_cycle_fib_revamp.md` §6 R6-7 (the options: (a) approve as is, (b) 4 decimals, (c) the
+> limit line above the IP line, (d) something else). The user first asked what "the IP line" was (answered with a
+> full rendered hover: PLAN_H's IP line sits directly above the new limit line), then:
+
+Sounds good no more other questions. (a) approve as is, commit S2

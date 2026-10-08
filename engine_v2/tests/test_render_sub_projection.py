@@ -60,6 +60,7 @@ import pandas as pd
 import pytest
 
 from engine_v2.multitf import entity_df_mutation as edm
+from engine_v2.multitf.cross_fib_limit import NO_LIMIT
 from engine_v2.structure import event_fields as ef
 from engine_v2.multitf.sub_structure_pool import (
     LENS_CONFLUENCE,
@@ -196,7 +197,7 @@ def geometry(m15_df) -> Tuple[SubStructurePool, PooledStructure]:
     pool = SubStructurePool()
     out = edm.build_or_get_geometry(
         pool, m15_df, parent_path=_PARENT, sd=1, start_abs=_STARTING_IDX,
-        bos0_inner=None, timeframe=_TF,
+        bos0_inner=None, cross_fib_limit=NO_LIMIT, timeframe=_TF,
     )
     assert out is not None, "geometry build must succeed on the reversing fixture"
     sub, created = out
@@ -868,6 +869,7 @@ def test_later_live_wins_over_an_earlier_sub_when_mirrored_in_start_order(geomet
             trigger_type="first_confluence", parent_sid=3, parent_cycle_id=1)
     _set_lifecycle(sub_x, _START, _END, "same_dir_replacement")
     sub_y = PooledStructure(key=sub_x.key, pool_idx=sub_x.pool_idx + 1, geometry=sub_x.geometry,
+                            cross_fib_limit=NO_LIMIT,
                             natural_reversal_idx=sub_x.natural_reversal_idx)
     y_start = _END - 5                                           # 80
     _record(pool, sub_y, m15_df, LENS_CONFLUENCE, start_idx=y_start, seq=1,

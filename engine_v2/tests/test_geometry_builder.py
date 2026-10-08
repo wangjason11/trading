@@ -33,6 +33,7 @@ import pandas as pd
 import pytest
 
 from engine_v2.multitf import entity_df_mutation as edm
+from engine_v2.multitf.cross_fib_limit import NO_LIMIT
 from engine_v2.multitf.sub_structure_pool import StructureKey, SubStructurePool
 from engine_v2.structure import structure_engine
 from engine_v2.structure.structure_engine import (
@@ -161,9 +162,11 @@ def shifted_reversing_df() -> pd.DataFrame:
 
 
 def _build(pool, df, *, sd=1, start_abs=0, bos0_inner=None):
+    # The sweep hands a cross-fib limit on a MISS only (PLAN_I S2): NO_LIMIT for a new key, None on a hit.
+    hit = pool.get(StructureKey(_PARENT, _TF, int(sd), int(start_abs))) is not None
     return edm.build_or_get_geometry(
         pool, df, parent_path=_PARENT, sd=sd, start_abs=start_abs,
-        bos0_inner=bos0_inner, timeframe=_TF,
+        bos0_inner=bos0_inner, cross_fib_limit=None if hit else NO_LIMIT, timeframe=_TF,
     )
 
 

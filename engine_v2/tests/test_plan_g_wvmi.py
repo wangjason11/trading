@@ -298,7 +298,8 @@ def test_collapse_is_start_at_or_past_the_end(floor_abs, expected):
     from engine_v2.multitf.sub_structure_pool import SubStructurePool
     m15 = trs._prepare_df(trs._make_flat_prefix() + trs._make_reversing_data())
     sub, _ = _q(lambda: edm.build_or_get_geometry(SubStructurePool(), m15, parent_path=trs._PARENT, sd=1,
-                                                  start_abs=trs._STARTING_IDX, bos0_inner=None, timeframe=trs._TF))
+                                                  start_abs=trs._STARTING_IDX, bos0_inner=None,
+                                                  cross_fib_limit=trs.NO_LIMIT, timeframe=trs._TF))
     bounded, sb = sub.geometry
     down = _q(lambda: project_to_window(bounded, floor=floor_abs - sb, cap=None, cap_reason=None, direction=1))
     (rec,) = down["wvmi_records"]
@@ -328,7 +329,8 @@ def test_render_hands_over_the_projection_records_in_order(monkeypatch):
     m15 = trs._prepare_df(trs._make_flat_prefix() + trs._make_reversing_data())
     pool = SubStructurePool()
     sub, _ = _q(lambda: edm.build_or_get_geometry(pool, m15, parent_path=trs._PARENT, sd=1,
-                                                  start_abs=trs._STARTING_IDX, bos0_inner=None, timeframe=trs._TF))
+                                                  start_abs=trs._STARTING_IDX, bos0_inner=None,
+                                                  cross_fib_limit=trs.NO_LIMIT, timeframe=trs._TF))
     trs._record(pool, sub, m15, LENS_CONFLUENCE, start_idx=trs._START, seq=0, trigger_type="first_confluence",
                 parent_sid=3, parent_cycle_id=1)
     trs._set_lifecycle(sub, trs._START, None, None)

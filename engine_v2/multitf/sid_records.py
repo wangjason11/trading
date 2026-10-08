@@ -13,7 +13,7 @@ from typing import List
 from engine_v2.multitf.types import LowerTFResult, SidRecord
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
-from engine_v2.zones.structure_lifecycle import compute_reversal_idx_by_sid
+from engine_v2.zones.structure_lifecycle import compute_main_started_by, compute_reversal_idx_by_sid
 
 
 def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
@@ -29,6 +29,8 @@ def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
         (2026-09-28, with the zone-proximity scan cap)
       - end_reason = "reversal" if that reversal exists, else None
       - starting_sd = struct_direction from any event of that sid
+      - meta["started_by"] = `start_trading` | `reversal` (PLAN_I §4 N-c, R6-3 (iii);
+        `compute_main_started_by` — attrs only, no main structure table is exported)
     """
     sids: dict[int, dict] = {}
 
@@ -57,6 +59,7 @@ def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
             sids[sid]["end_event_idx"] = reversal_idx
             sids[sid]["end_reason"] = "reversal"
 
+    started_by = compute_main_started_by(events)
     out: List[SidRecord] = []
     for sid in sorted(sids.keys()):
         rec = sids[sid]
@@ -70,6 +73,7 @@ def build_sid_records_for_main(events: List[StructureEvent]) -> List[SidRecord]:
             end_reason=rec["end_reason"],
             parent_sid=None,
             parent_cycle_id=None,
+            meta={"started_by": started_by[sid]},
         ))
     return out
 

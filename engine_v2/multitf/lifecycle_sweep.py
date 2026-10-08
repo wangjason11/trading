@@ -50,7 +50,7 @@ Logging (stdout, greppable — the `/compare` skill greps
 from __future__ import annotations
 
 import heapq
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set, Tuple
 
 from engine_v2.multitf.parent_tables import ParentTables
@@ -147,8 +147,9 @@ class _Sweep:
         pool: SubStructurePool,
         tables: ParentTables,
         resolve_start: Callable[[SweepTrigger, int], Any],
-        build_geometry: Callable[[StructureKey, Optional[float]], Optional[Tuple[PooledStructure, bool]]],
+        build_geometry: Callable[[StructureKey, Optional[float], Any], Optional[Tuple[PooledStructure, bool]]],
         resolve_reversal: Callable[[PooledStructure, int, int], Any],
+        resolve_cross_fib_limit: Callable[[SweepTrigger, int, Optional[PooledStructure]], Any],
         synth_reversal_trigger: Callable[[Any, int, int], Any],
         parent_path: str,
         sub_tf: str,
@@ -159,6 +160,7 @@ class _Sweep:
         self.resolve_start = resolve_start
         self.build_geometry = build_geometry
         self.resolve_reversal = resolve_reversal
+        self.resolve_cross_fib_limit = resolve_cross_fib_limit
         self.synth_reversal_trigger = synth_reversal_trigger
         self.parent_path = parent_path
         self.sub_tf = sub_tf
@@ -308,14 +310,29 @@ class _Sweep:
             assert finalize_idx == int(t.trigger_idx), (
                 f"[sweep] {t.trigger_type} finalize_idx={finalize_idx} != trigger_idx={t.trigger_idx}"
             )
-        # 3. geometry — build first, pool entry only on success.
+        # The record's real-time start — ONE formula for the record (step 5) and the sub's cross-fib limit.
+        floor = int(self.tables.floor(S, C))
+        record_start = max(finalize_idx, int(t.trigger_idx), floor)
+        # 3. geometry — build first, pool entry only on success. On a MISS the sub's cross-fib limit `P` is
+        #    computed first, from THIS trigger at its record's start (PLAN_I R6-2 (a)): the sub's MS run
+        #    happens here, at its first trigger's fire.
         key = StructureKey(self.parent_path, self.sub_tf, int(t.direction), int(res.starting_idx))
-        built = self.build_geometry(key, res.bos0_inner)
+        limit = (self.resolve_cross_fib_limit(t, record_start, reversing_sub)
+                 if self.pool.get(key) is None else None)
+        built = self.build_geometry(key, res.bos0_inner, limit)
         if built is None:
             self._unresolved(t, "geometry_failed", f"no geometry for key {tuple(key)}",
                              res.probe_input_idx)
             return
         sub, created = built
+        if created:
+            assert sub.cross_fib_limit is limit and limit is not None, (
+                f"[sweep] pool#{sub.pool_idx} built without its cross-fib limit")
+            self.log(
+                f"[sweep] cross_fib_limit pool#{sub.pool_idx} P={limit.price} source={limit.source} "
+                f"from=" + (f"pool#{limit.from_pool_idx}" if limit.from_pool_idx is not None else "None")
+                + f" (trigger {t.trigger_type}@{t.trigger_idx}, record start {record_start})"
+            )
         if created and sub.natural_reversal_idx is not None:
             R = int(sub.natural_reversal_idx)
             if R > int(idx):
@@ -337,7 +354,6 @@ class _Sweep:
             )
             return
         # 5. the record.
-        floor = int(self.tables.floor(S, C))
         parent_sd = self.tables.parent_sd.get(S)
         assert parent_sd is not None, f"[sweep] no parent_sd for sid {S}"
         rec = TriggerRecord(
@@ -354,7 +370,7 @@ class _Sweep:
             starting_idx=int(sub.starting_idx), direction=int(sub.direction), sub_tf=self.sub_tf,
             relative_dir=("confluence" if int(t.direction) == int(parent_sd) else "counter"),
             parent_floor_idx=floor,
-            start_idx=max(finalize_idx, int(t.trigger_idx), floor),
+            start_idx=record_start,
             source_trigger=t.source,
             seq=self.pool.next_seq(),
         )
@@ -523,6 +539,18 @@ class _Sweep:
                 f"[sweep] number pool#{pool_idx} -> sub_id={sub_id} start_idx={sub.start_idx}"
                 + ("" if sub_id is not None else " (never started)")
             )
+        # Each sub's cross-fib limit names its supplier by FINAL id (PLAN_I §9.3 D2), before any projection.
+        for sub in self.pool.all():
+            lim = sub.cross_fib_limit
+            if lim is None or lim.from_pool_idx is None:
+                continue
+            from_id = self.pool.get_by_pool_idx(lim.from_pool_idx).sub_id
+            sub.cross_fib_limit = replace(lim, from_sub_id=from_id)
+            if from_id is None:
+                self.log(
+                    f"WARNING [sweep] pool#{sub.pool_idx}'s cross-fib limit came from pool#{lim.from_pool_idx}, "
+                    f"which never started — from_sub_id None"
+                )
         for r in self.pool.all_records():
             if r.ended_by_pool_idx is not None and r.ended_by_sub_id is None:
                 self.log(
@@ -608,8 +636,9 @@ def run_lifecycle_sweep(
     pool: SubStructurePool,
     tables: ParentTables,
     resolve_start: Callable[[SweepTrigger, int], Any],
-    build_geometry: Callable[[StructureKey, Optional[float]], Optional[Tuple[PooledStructure, bool]]],
+    build_geometry: Callable[[StructureKey, Optional[float], Any], Optional[Tuple[PooledStructure, bool]]],
     resolve_reversal: Callable[[PooledStructure, int, int], Any],
+    resolve_cross_fib_limit: Callable[[SweepTrigger, int, Optional[PooledStructure]], Any],
     synth_reversal_trigger: Optional[Callable[[Any, int, int], Any]] = None,
     parent_path: str = "H1.main",
     sub_tf: str = "M15",
@@ -620,8 +649,12 @@ def run_lifecycle_sweep(
     - `resolve_start(trigger, hi)` → `ResolvedStart` | `ProbeFailure` | None for
       the four H1 types (`hi` = the trigger's `trigger_idx`, the sibling window's
       inclusive upper edge).
-    - `build_geometry(key, bos0_inner)` → `(sub, created)` or None (the §5.4
-      builder: MS first, pool entry only on success).
+    - `build_geometry(key, bos0_inner, cross_fib_limit)` → `(sub, created)` or
+      None (the §5.4 builder: MS first, pool entry only on success; on a
+      creation it stores `cross_fib_limit` on the sub — None on a hit).
+    - `resolve_cross_fib_limit(trigger, record_start, reversing_sub)` → the
+      sub's `CrossFibLimit`, called on a geometry MISS before the build (PLAN_I
+      R6-2 (a); `multitf/cross_fib_limit.py`).
     - `resolve_reversal(sub, R, probe_direction)` → the reversal handoff over
       `sub`'s geometry, entity-absolute.
     - `synth_reversal_trigger(source_trigger, sd, R)` → the successor's
@@ -632,7 +665,8 @@ def run_lifecycle_sweep(
         synth_reversal_trigger = _synth_reversal_trigger
     sweep = _Sweep(
         pool=pool, tables=tables, resolve_start=resolve_start, build_geometry=build_geometry,
-        resolve_reversal=resolve_reversal, synth_reversal_trigger=synth_reversal_trigger,
+        resolve_reversal=resolve_reversal, resolve_cross_fib_limit=resolve_cross_fib_limit,
+        synth_reversal_trigger=synth_reversal_trigger,
         parent_path=parent_path, sub_tf=sub_tf, log=log,
     )
     sweep.run(list(triggers))

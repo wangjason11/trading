@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from typing import List, Optional, Dict, Any
+from typing import List, Mapping, Optional, Dict, Any
 
 import pandas as pd
 
@@ -26,7 +26,7 @@ from engine_v2.features.fibonacci import (
 from engine_v2.patterns.imbalance import has_unfilled_imbalance
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
-from engine_v2.zones.cross_cycle_fib import resolve_cross_cycle_eligibility
+from engine_v2.zones.cross_cycle_fib import CrossFibLimit, beyond, resolve_cross_cycle_eligibility
 from engine_v2.zones.structure_lifecycle import (
     compute_cycle_lifecycle,
     compute_reversal_idx_by_sid,
@@ -38,6 +38,15 @@ from engine_v2.zones.structure_lifecycle import (
 # A cycle whose terminal carries one of these derives status="disappeared"
 # (terminal AND suppressed). Today only Scenario 1 revert qualifies.
 _INVALIDATION_END_REASONS = frozenset({"scenario1_revert"})
+
+
+class FibEventOrderError(RuntimeError):
+    """The tracker was fed cycle T's CTS_ESTABLISHED (T >= 1) before cycle T−1's CTS_CONFIRMED (PLAN_I §9.2
+    F14 (1), R6-4 — the order tripwire RAISES so the shape is seen). MS establishes cycle T only after T−1's
+    confirmation in EMISSION order; the downstream consumes `processing_order_key` order (CTS_ESTABLISHED at its
+    ANCHOR), so a T−1 confirmation inside T's [anchor, moment) inverts them — the cross walk would miss T−1 and
+    its confirmation would reset T's phase. 0 / 34 on the reference window. A `RuntimeError`, so a sub
+    geometry's `except (ValueError, IndexError)` never swallows it."""
 
 
 @dataclass(frozen=True)
@@ -236,7 +245,13 @@ class FibTracker:
     Only 1 active Fib per structure at a time (new cycle obsoletes previous).
     """
 
-    def __init__(self, config: Optional[FibTrackerConfig] = None, fib_mode: str = "h1"):
+    def __init__(
+        self,
+        config: Optional[FibTrackerConfig] = None,
+        fib_mode: str = "h1",
+        *,
+        cross_fib_limits: Optional[Mapping[int, CrossFibLimit]] = None,
+    ):
         self.config = config or FibTrackerConfig()
         self.fib_mode = fib_mode  # "h1" (default) or "cross_cycle"
         # "cross_cycle" enables generalized cross-cycle fibs + pre_established
@@ -339,6 +354,49 @@ class FibTracker:
         # inside one on a pattern-path CTS_UPDATED).
         self._evaluated_at: Optional[int] = None
         self._in_event = False
+
+        # The cross-fib LIMIT per structure (PLAN_I §9.3 D1 / D2): `{sid: CrossFibLimit}` — `P` + its source
+        # (+ the sub that supplied it, + main's `started_by`), fixed at the structure's start. PLAN_I S2: stamped
+        # onto every fib record at finalize, NOT applied yet (S3 applies it to subs, S4 to main). A sid without an
+        # entry gets no `cross_fib_limit_*` keys.
+        self._limits: Dict[int, CrossFibLimit] = dict(cross_fib_limits or {})
+        # (sid, cycle_id) -> (idx, price, sd): the cycle's LATEST CTS anchor (§4 N-f) — written at its
+        # CTS_ESTABLISHED, every CTS_UPDATED and its CTS_CONFIRMED (the confirmed anchor wins). `M` reads it.
+        self._latest_anchor: Dict[tuple, tuple] = {}
+
+    # ------------------------------------------------------------------
+    # The cross-fib limit (PLAN_I §9.3 D1): M and the record stamp.
+    # ------------------------------------------------------------------
+    def cross_fib_limit_cycle(self, sid: int) -> Optional[int]:
+        """`M` (`cross_fib_limit_cycle`, §4 N-a): the first cycle whose latest CTS anchor is STRICTLY beyond the
+        structure's `P` (`beyond`, Q2) = the last cycle a cross may target; None without `P` or while no cycle
+        has gone beyond. Read off the latest anchors as they stand — after the stream, the structure's FINAL `M`
+        (R6-6; a CTS anchor never regresses, so the first cycle beyond stays the first)."""
+        lim = self._limits.get(int(sid))
+        if lim is None or lim.price is None:
+            return None
+        for c in sorted(c for (s, c) in self._latest_anchor if s == int(sid)):
+            _idx, price, sd = self._latest_anchor[(int(sid), c)]
+            if beyond(price, lim.price, sd):
+                return c
+        return None
+
+    def _cross_fib_limit_meta(self, sid: int) -> Dict[str, Any]:
+        """The keys every fib record of `sid` carries (PLAN_I S2, §9.3 D1): `cross_fib_limit_price` /
+        `_source` / `_cycle` (the FINAL `M`, R6-6) / `_from_sub_id` (the start-numbered sub that supplied `P`),
+        and main's `started_by` (a sub's comes from the mirror). Empty for a sid without a limit entry."""
+        lim = self._limits.get(int(sid))
+        if lim is None:
+            return {}
+        out: Dict[str, Any] = {
+            "cross_fib_limit_price": lim.price,
+            "cross_fib_limit_source": lim.source,
+            "cross_fib_limit_cycle": self.cross_fib_limit_cycle(int(sid)),
+            "cross_fib_limit_from_sub_id": lim.from_sub_id,
+        }
+        if lim.started_by is not None:
+            out["started_by"] = lim.started_by
+        return out
 
     # ------------------------------------------------------------------
     # Knowability (Plan F): the moment an imbalance question is asked.
@@ -480,8 +538,9 @@ class FibTracker:
         `start_idx`, the terminal `end_idx`/`end_reason`, and the derived
         `status`. `status` is a CYCLE-level label shared by all version records
         of the cycle (spec §3.3 / §9.1 / §15.5). Only the lifecycle fields are
-        written (via dataclasses.replace) — `active`/`locked`/`meta`/`fib`/
-        anchors are untouched, so consumers see no change.
+        written (via dataclasses.replace) — `active`/`locked`/`fib`/anchors are
+        untouched — plus, since PLAN_I S2, the structure's `cross_fib_limit_*`
+        keys (+ main `started_by`) appended to `meta` (`_cross_fib_limit_meta`).
 
         When `events` is supplied (§15.6, part b), fib is put on the shared
         `structure_lifecycle` helper exactly like KL/POI:
@@ -570,6 +629,7 @@ class FibTracker:
             else:
                 status = "inactive"
 
+            limit_meta = self._cross_fib_limit_meta(int(sid))
             for key in keys:
                 fib = self._fibs[key]
                 self._fibs[key] = replace(
@@ -578,6 +638,7 @@ class FibTracker:
                     end_idx=end_idx,
                     end_reason=end_reason,
                     status=status,
+                    meta={**fib.meta, **limit_meta},
                 )
 
     def on_cts_established(
@@ -653,6 +714,14 @@ class FibTracker:
                 cts_price = float(df.loc[cts_idx, "h"])
             else:
                 cts_price = float(df.loc[cts_idx, "l"])
+
+        # The order tripwire (PLAN_I §9.2 F14 (1), R6-4): cycle T's establishment needs T−1 confirmed FIRST.
+        if cycle_id >= 1 and (sid, cycle_id - 1) not in self._cts_by_cycle:
+            raise FibEventOrderError(
+                f"[fib] sid={sid} cycle={cycle_id} CTS_ESTABLISHED (anchor {cts_idx}, moment "
+                f"{cts_established_idx}) handled before cycle {cycle_id - 1}'s CTS_CONFIRMED"
+            )
+        self._latest_anchor[(sid, cycle_id)] = (int(cts_idx), float(cts_price), int(sd))
 
         # Check for unfilled imbalance between BOS and CTS, counting only gaps
         # formed by the moment (Plan F). sd-direction filter: Fibs only ever
@@ -1316,6 +1385,8 @@ class FibTracker:
             else:
                 cts_price = float(df.loc[cts_idx, "l"])
 
+        self._latest_anchor[(sid, cycle_id)] = (int(cts_idx), float(cts_price), int(sd))
+
         # ============================================================
         # BRANCH: fib_mode → cross_cycle / sid=0 / sid≥1
         # ============================================================
@@ -1774,6 +1845,8 @@ class FibTracker:
         cts_anchor_idx = ef.cts_anchor_idx(event)
         cts_price_val = float(event.price) if event.price else 0.0
         self._cts_by_cycle[(sid, cycle_id)] = (cts_anchor_idx, cts_price_val)
+        self._latest_anchor[(sid, cycle_id)] = (
+            int(cts_anchor_idx), float(cts_price_val), int(event.meta["struct_direction"]))
         # Record confirmation candle (used to bound prospective-BOS search for n+1)
         self._cts_confirmed_idx[(sid, cycle_id)] = int(event.idx)
 

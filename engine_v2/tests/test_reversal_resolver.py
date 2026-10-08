@@ -47,6 +47,7 @@ import pytest
 
 from engine_v2.structure import event_fields as ef
 from engine_v2.multitf import entity_df_mutation as edm
+from engine_v2.multitf.cross_fib_limit import NO_LIMIT
 from engine_v2.multitf.lifecycle_sweep import ProbeFailure, ResolvedStart
 from engine_v2.multitf.sub_structure_pool import (
     PooledStructure,
@@ -162,7 +163,7 @@ def built(shifted_df):
     pool = SubStructurePool()
     out = edm.build_or_get_geometry(
         pool, shifted_df, parent_path=_PARENT, sd=_SD, start_abs=_PREFIX_N,
-        bos0_inner=None, timeframe=_TF,
+        bos0_inner=None, cross_fib_limit=NO_LIMIT, timeframe=_TF,
     )
     assert out is not None, "fixture must build"
     sub, created = out

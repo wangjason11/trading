@@ -140,7 +140,14 @@ To change any visual element:
   cycle's IP outcome from `attrs["ip_candidates"]` (`ip_rows_by_fib_record`: keyed by (sid, cycle, BOS anchor, CTS
   anchor), prefixed with `sub_id` on a lens — a sub's sid restarts at 0): `IP <rank> · IC <idx>` (the pick = the drawn
   POI), `IP: none (<reason>)` (no pattern, no POI — PLAN_H C1), or `IP: not evaluated (no POI record)` (the POI record
-  gate skipped it: ended before locking, or no CTS_ESTABLISHED)
+  gate skipped it: ended before locking, or no CTS_ESTABLISHED); then the structure's cross-fib LIMIT line
+  (`_zone_render.fib_hover_limit_text`, PLAN_I R6-7, S2): `limit <P> · <source> [(sub <from>)] · M=<M | none>` (e.g.
+  `limit 0.57827 · prev_sub_bos_threshold (sub 6) · M=2`), or without `P` `limit: none (<why>)` — `start_trading`,
+  `first_confluence on parent cycle 0`, `no previous sub`, `prev_sub_no_cts (sub <from>)`; no line on a record
+  without the `cross_fib_limit_*` meta. Known limit: the reason reads the record's `started_by` / `parent_cycle_id`
+  (the sub's first LIVE record) while `P` came from its CREATING trigger (R6-2 (a)); they differ only when the
+  creating record is zero-length, and wherever their two rules give a different `P` the R6-2 tripwire WARNs (0 on the
+  reference window)
 - M15 lens charts: every box (its 5 shapes) and its hover share ONE legend group (`m15_fib`); the first box's rectangle
   is the legend entry "M15 fib" — one click toggles every fib on the chart. No owner filter (a persisting element, like
   the zones). Toggle `fib.lines` (default on, both charts)

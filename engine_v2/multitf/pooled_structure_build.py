@@ -23,7 +23,7 @@ Live caller: `entity_df_mutation.render_sub_projection` (Plan C).
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from engine_v2.structure import event_fields as ef
 from engine_v2.multitf.sub_structure_pool import knowable_at_idx
@@ -62,6 +62,7 @@ def project_to_window(
     fib_mode: str = "cross_cycle",
     structure_path_id: str = "H1.main >> M15",
     log_prefix: str = "",
+    cross_fib_limits: Optional[Mapping[int, Any]] = None,
 ) -> Dict[str, Any]:
     """Derive the render snapshots for ONE lifecycle window over a natural-end run.
 
@@ -81,6 +82,9 @@ def project_to_window(
     records are slice-local, carry this call's `structure_path_id` and meta `{}`
     (the mirror sets each lens's own path on its copies; the orchestrator then
     stamps each lens's trigger meta onto them).
+
+    `cross_fib_limits` = `{0: the sub's CrossFibLimit}` (PLAN_I §9.3 D2) — handed
+    to the downstream FibTracker (S2: stamped on every fib record, not applied).
     """
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 
@@ -98,6 +102,7 @@ def project_to_window(
         lifecycle_floor=floor,
         lifecycle_cap=cap,
         cap_reason=cap_reason,
+        cross_fib_limits=cross_fib_limits,
     )
     downstream["events"] = events
     return downstream

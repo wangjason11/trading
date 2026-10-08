@@ -101,7 +101,14 @@ and `[probe_cache] REF-ZONE DIFFERS …` (the accepted-approximation tripwire �
 a probe skipped because an earlier same-direction, same-input probe already
 finalized) and `WARNING [sweep] bos0_inner mismatch` / `same-idx start
 collision` / `record … ended by pool#k, which never started` (a same-candle
-replacement chain — register D.2; PLAN_I S1).
+replacement chain — register D.2; PLAN_I S1). Since PLAN_I S2: `WARNING [ms]
+cts_frozen …` (a breakout established against a threshold other than the one MS
+froze — 0 on the reference window), `WARNING [cross_fib_limit] sub k: stored P …`
+(the R6-2 tripwire; its summary line `[cross_fib_limit] tripwire: N subs
+re-derived at their start, M mismatches` — reference window: 3 / 0) ,
+`WARNING [cross_fib_limit] x-1 pool#k … no CTS anchor` (`prev_sub_no_cts`) and
+`WARNING [sweep] pool#k's cross-fib limit came from pool#j, which never started`
+(its `from_sub_id` stays None).
 
 > **Why this exists:** Session 3 Step 2 (2026-05-31) dropped 5 sub sids because
 > every `subsequent_*` trigger hit "sibling-CTS reference zone unavailable" —

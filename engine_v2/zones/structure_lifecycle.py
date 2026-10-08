@@ -6,9 +6,11 @@ derivations (`kl_zones_v1`, `poi_zones`). Previously each recomputed this block
 verbatim; this is the start-side unification of the pass-through lifecycle model
 (`PART4_REFACTOR_SPEC.md §5`, plan "B1", 2026-05-27).
 
-Pure leaf: imports nothing from `zones/`, `charting/`, or `structure/` — it only
-reads duck-typed structure events (`ev.meta`, `ev.idx`). Both callers depend on
-it without a cycle.
+Pure leaf: imports nothing from `charting/`, nothing from `structure/` but the
+`event_fields` accessors, and from `zones/` only the `CrossFibLimit` value type
+(`cross_cycle_fib`, itself free of `zones/` imports) — it only reads duck-typed
+structure events (`ev.meta`, `ev.idx`). Both callers depend on it without a
+cycle.
 
 Start AND end resolution live here (B1 + B2, 2026-05-27): the per-cycle
 lifecycle (`compute_cycle_lifecycle`) starts at the CTS-established MOMENT
@@ -23,6 +25,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 
 from engine_v2.structure import event_fields as ef
+from engine_v2.zones.cross_cycle_fib import CrossFibLimit
 
 
 def compute_reversal_idx_by_sid(events: List) -> Dict[int, int]:
@@ -52,6 +55,55 @@ def compute_reversal_idx_by_sid(events: List) -> Dict[int, int]:
         if sid not in rev_by_sid or idx > rev_by_sid[sid]:
             rev_by_sid[sid] = idx
     return rev_by_sid
+
+
+def compute_main_started_by(events: List) -> Dict[int, str]:
+    """`started_by` of every MAIN structure (PLAN_I §4 N-c, I1 — the variation
+    attaches to the starting trigger, not the sid number): `"reversal"` iff the
+    previous sid's `STATE_CHANGED(to=reversal)` exists, else `"start_trading"`
+    (the first MS run). Keyed by every `structure_id` the events carry."""
+    sids = sorted({int(ev.meta["structure_id"]) for ev in events
+                   if (ev.meta or {}).get("structure_id") is not None})
+    reversed_sids = set(compute_reversal_idx_by_sid(events))
+    return {s: ("reversal" if (s - 1) in reversed_sids else "start_trading") for s in sids}
+
+
+def compute_main_cross_fib_limits(events: List) -> Dict[int, CrossFibLimit]:
+    """The cross-fib LIMIT of every main structure (PLAN_I §1.2 / §9.3 D2), by its
+    starting trigger (`compute_main_started_by`): `start_trading` → no `P`
+    (source `none`); `reversal` → the applied reversal's frozen BOS barrier = the
+    previous sid's `STATE_CHANGED(to=reversal)` `meta["bos_frozen"]` (source
+    `reversal_bos_frozen`) — asserted: not None, one such event per sid, and
+    equal to the OPEN WATCH's frozen barrier (the sid's last
+    `REVERSAL_WATCH_START` at or before the reversal; §1.2 amended: the watch
+    makes them equal). Not a `REVERSAL_CANDIDATE` at the realised apply: a later
+    anchor's reversal winner can apply before the watch's pending candidate, so
+    none may sit there (PLAN_I S2 landing review; `test_ms_reversal_on_expiry`'s
+    later-winner fixture). Main structures carry `started_by` on the limit (a
+    sub's comes from its mirror)."""
+    rev_events: Dict[int, object] = {}
+    for ev in events:
+        meta = ev.meta or {}
+        if getattr(ev, "type", None) == "STATE_CHANGED" and meta.get("to") == "reversal":
+            s = int(meta["structure_id"])
+            assert s not in rev_events, f"[cross_fib_limit] two reversals for main sid {s}"
+            rev_events[s] = ev
+    out: Dict[int, CrossFibLimit] = {}
+    for s, started_by in compute_main_started_by(events).items():
+        if started_by == "start_trading":
+            out[s] = CrossFibLimit(None, "none", started_by=started_by)
+            continue
+        rev = rev_events[s - 1]
+        frozen = rev.meta["bos_frozen"]
+        assert frozen is not None, f"[cross_fib_limit] sid {s - 1}'s reversal has no bos_frozen"
+        watches = [ev for ev in events
+                   if getattr(ev, "type", None) == "REVERSAL_WATCH_START"
+                   and int(ev.meta["structure_id"]) == s - 1 and int(ev.idx) <= int(rev.idx)]
+        assert watches and float(watches[-1].meta["bos_frozen"]) == float(frozen), (
+            f"[cross_fib_limit] sid {s - 1}'s reversal at {int(rev.idx)}: bos_frozen {frozen} != the open watch's "
+            f"{[(int(w.idx), float(w.meta['bos_frozen'])) for w in watches[-1:]]}")
+        out[s] = CrossFibLimit(float(frozen), "reversal_bos_frozen", started_by=started_by)
+    return out
 
 
 def compute_cycle_lifecycle(

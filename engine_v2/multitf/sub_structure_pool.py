@@ -302,6 +302,11 @@ class PooledStructure:
     geometry: Any = None
     natural_reversal_idx: Optional[int] = None
     bos0_inner: Optional[float] = None
+    # The sub's cross-fib LIMIT (`zones.cross_cycle_fib.CrossFibLimit`, untyped here like `geometry`): computed
+    # at the creating trigger's fire, before the geometry is built (PLAN_I R6-2 (a), §9.3 D2); its `from_sub_id`
+    # is filled when the sweep numbers the subs. Set by the geometry builder on creation — never left None for
+    # a built sub (`render_sub_projection` asserts it).
+    cross_fib_limit: Any = None
     records: List[TriggerRecord] = field(default_factory=list)
     # lifecycle (real-time; set once)
     start_idx: Optional[int] = None

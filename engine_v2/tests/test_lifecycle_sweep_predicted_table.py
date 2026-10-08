@@ -39,6 +39,7 @@ from engine_v2.multitf.sub_structure_pool import (
     TriggerRecord,
     UnresolvedTrigger,
 )
+from engine_v2.multitf.cross_fib_limit import NO_LIMIT
 from engine_v2.multitf.parent_tables import ParentTables, build_parent_tables
 from engine_v2.multitf.lifecycle_sweep import (
     ProbeFailure,  # noqa: F401  (part of the pinned API surface; unused by the stubs here)
@@ -333,7 +334,7 @@ def _make_stubs(pool: SubStructurePool, calls: Dict[str, list]):
             cache_hit=False,
         )
 
-    def build_geometry(key: StructureKey, bos0_inner: Optional[float]):
+    def build_geometry(key: StructureKey, bos0_inner: Optional[float], cross_fib_limit):
         calls["build_geometry"].append((key, bos0_inner))
         assert key.parent_path == PARENT and key.sub_tf == SUB_TF, key
         if key.starting_idx not in _NAT_REV or key.starting_idx in (2803, 2915, 3230):
@@ -343,6 +344,7 @@ def _make_stubs(pool: SubStructurePool, calls: Dict[str, list]):
             sub.geometry = ("stub-geometry", 0)          # (bounded, slice_begin) shape
             sub.natural_reversal_idx = _NAT_REV[key.starting_idx]
             sub.bos0_inner = bos0_inner
+            sub.cross_fib_limit = cross_fib_limit
         return sub, created
 
     def resolve_reversal(sub: PooledStructure, R: int, probe_direction: int):
@@ -546,6 +548,7 @@ def sweep(tables) -> Dict[str, Any]:
         triggers, pool=pool, tables=t,
         resolve_start=resolve_start, build_geometry=build_geometry,
         resolve_reversal=resolve_reversal, synth_reversal_trigger=_synth_stub,
+        resolve_cross_fib_limit=lambda t, s, r: NO_LIMIT,
         parent_path=PARENT, sub_tf=SUB_TF, log=lines.append,
     )
     assert isinstance(result, SweepResult)
@@ -1014,6 +1017,7 @@ def sweep_cache_hit(tables) -> Dict[str, Any]:
         triggers, pool=pool, tables=t,
         resolve_start=resolve_start, build_geometry=build_geometry,
         resolve_reversal=resolve_reversal, synth_reversal_trigger=_synth_stub,
+        resolve_cross_fib_limit=lambda t, s, r: NO_LIMIT,
         parent_path=PARENT, sub_tf=SUB_TF, log=lines.append,
     )
     assert isinstance(result, SweepResult) and result.pool is pool

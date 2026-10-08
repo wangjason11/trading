@@ -171,6 +171,8 @@ def test_cross_cycle_cycle0_lag0_est_gap_at_the_moment_no_fib():
 def test_h1_sid0_cycle1_lag0_est_gap_at_the_moment_no_fib():
     tracker = _tracker("h1")
     df = _df(60, [_gap(40)])
+    # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
+    _quiet(tracker.on_cts_confirmed, _ev("CTS_CONFIRMED", 6, 0.95, 0, 0, cts_anchor_idx=5))
     res = _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 40, 1.35, 0, 1), df,
                  bos_idx=30, bos_price=1.2)
     assert res is None
@@ -370,6 +372,8 @@ def test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib():
     )
     assert inners == [1.13]
     tracker = _tracker("h1")
+    # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
+    _quiet(tracker.on_cts_confirmed, _ev("CTS_CONFIRMED", 6, 0.95, 0, 0, cts_anchor_idx=5))
     _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 40, 1.35, 0, 1), df,
            bos_idx=30, bos_price=1.00)
     assert (0, 1) not in tracker._fibs

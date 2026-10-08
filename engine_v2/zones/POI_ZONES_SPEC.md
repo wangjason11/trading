@@ -686,7 +686,8 @@ cfg = {
 - The fib hover (the H1 chart AND the M15 lens charts since PLAN_H §8.9 F1, 2026-10-06): its status cell =
   status · `life=[start, end] reason` · the IP outcome (`IP <rank> · IC <idx>`, `IP: none (<reason>)` on a record
   without a pattern — no POI, PLAN_H C1 —, or `IP: not evaluated (no POI record)`;
-  `charting/_zone_render.fib_hover_status_text`). Canonical: `charting/CHARTING_SPEC.md` §8
+  `charting/_zone_render.fib_hover_status_text`) · since PLAN_I S2 the structure's cross-fib limit line
+  (`fib_hover_limit_text`). Canonical: `charting/CHARTING_SPEC.md` §8
 
 ### Style Keys (style_registry.py)
 ```python
