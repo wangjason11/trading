@@ -79,7 +79,7 @@ def _downstream(rows, *, end_idx=None, cap=None):
     with redirect_stdout(io.StringIO()):
         res = compute_bounded_structure(_prepare_df(rows), 0, 1, timeframe="M15", end_idx=end_idx)
         events = [e for e in res.events if cap is None or int(e.idx) <= cap]
-        out = _run_downstream_pipeline(res.df, events, 1, fib_mode="cross_cycle", timeframe="M15",
+        out = _run_downstream_pipeline(res.df, events, 1, timeframe="M15",
                                        structure_path_id="M15.test", wvmi="off", lifecycle_cap=cap,
                                        cross_fib_limits={0: unreached(1)})   # PLAN_I S3: within the limit
     assert not [e for e in events if e.type == "CTS_ESTABLISHED" and e.meta["cycle_id"] == 1]

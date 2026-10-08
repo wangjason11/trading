@@ -1,7 +1,7 @@
 """Unit tests for the shared cross-cycle eligibility routine.
 
 `resolve_cross_cycle_eligibility` (zones/cross_cycle_fib.py) is the §11a
-"extract": the body of FibTracker._m15_cross_check steps 1-3, parameterized so
+"extract": the body of FibTracker._cross_check steps 1-3, parameterized so
 both fib modes route through it. These tests pin it directly (no FibTracker):
 
   * "current" fill-as-of  = subordinate semantics (each prior cycle to the

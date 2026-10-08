@@ -24,6 +24,8 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
+from engine_v2.tests._cross_fib_limits import main_limits
+
 import engine_v2.pipeline.orchestrator as orch
 from engine_v2.charting import _zone_render
 from engine_v2.common.types import WVMIRecord
@@ -185,7 +187,8 @@ def dr():
 
 
 def _project(res, floor=None, cap=None, reason=None):
-    return _q(lambda: project_to_window(res, floor=floor, cap=cap, cap_reason=reason, direction=1, fib_mode="h1"))
+    return _q(lambda: project_to_window(res, floor=floor, cap=cap, cap_reason=reason, direction=1,
+                                       cross_fib_limits=main_limits(res.events)))
 
 
 _DR_VALUES = [((0, 0), (1, 1, 3, 4), "locked", 1), ((0, 1), (5, 7, 9, 9), "locked", 2),
@@ -206,12 +209,12 @@ def test_a_sub_projection_computes_its_own_ungated_wvmi(dr, monkeypatch):
     assert [r.meta for r in down["wvmi_records"]] == [{}, {}, {}]
     assert down["zone_proximity_triggers"] == {}
     monkeypatch.setattr(orch, "check_zone_proximity", lambda **_kw: {})
-    main = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, fib_mode="h1"))
+    main = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, cross_fib_limits=main_limits(dr.events)))
     assert main["wvmi_records"] == []
 
 
 def test_the_main_keeps_its_gate_values_and_meta_key_order(dr):
-    out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, fib_mode="h1"))
+    out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, cross_fib_limits=main_limits(dr.events)))
     assert _vals(out["wvmi_records"]) == _DR_VALUES
     assert [list(r.meta.items()) for r in out["wvmi_records"]] == [
         [("triggered_by_event_idx", t), ("triggered_by_event_type", "ZONE_PROXIMITY_TRIGGER"),
@@ -226,7 +229,7 @@ def test_the_main_gate_reads_only_the_first_trigger_of_a_cycle(dr, monkeypatch):
     trig = lambda i, d: SimpleNamespace(idx=i, direction=d, trigger_inner=0.6, proximity_pips=8)   # noqa: E731
     monkeypatch.setattr(orch, "check_zone_proximity", lambda **_kw: {
         (0, 0): [trig(4, "opp_sd"), trig(6, "sd")], (0, 1): [trig(9, "sd")], (0, 2): [trig(14, "sd")]})
-    out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, fib_mode="h1"))
+    out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, cross_fib_limits=main_limits(dr.events)))
     assert [(r.bos_structure_id, r.bos_cycle_id) for r in out["wvmi_records"]] == [(0, 1), (0, 2)]
 
 
@@ -238,7 +241,7 @@ def test_the_main_gate_meta_is_the_first_triggers_even_with_a_later_sd(dr, monke
     monkeypatch.setattr(orch, "check_zone_proximity", lambda **_kw: {
         (0, 0): [trig(4, "sd", 0.61, 7), trig(5, "opp_sd", 0.5, 5), trig(6, "sd", 0.55, 3)],
         (0, 1): [trig(9, "sd", 0.6, 8)], (0, 2): [trig(14, "sd", 0.6, 8)]})
-    out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, fib_mode="h1"))
+    out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, cross_fib_limits=main_limits(dr.events)))
     rec = out["wvmi_records"][0]
     assert (rec.bos_structure_id, rec.bos_cycle_id) == (0, 0)
     assert (rec.meta["triggered_by_event_idx"], rec.meta["trigger_inner"], rec.meta["proximity_pips"]) == (4, 0.61, 7)
@@ -266,7 +269,8 @@ def test_an_unknown_wvmi_mode_raises(dr, mode):
 
 def test_off_computes_nothing(dr, monkeypatch):
     monkeypatch.setattr(orch, "check_zone_proximity", lambda **_kw: (_ for _ in ()).throw(AssertionError))
-    out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, wvmi="off"))
+    out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, wvmi="off",
+                                              cross_fib_limits=main_limits(dr.events)))
     assert out["wvmi_records"] == [] and out["zone_proximity_triggers"] == {}
 
 
@@ -309,7 +313,7 @@ def test_collapse_is_start_at_or_past_the_end(floor_abs, expected):
 
 @pytest.mark.parametrize("floor, expected", [(None, [False] * 3), (13, [True, True, False])])
 def test_the_main_flags_its_collapsed_cycles_too(dr, floor, expected):
-    out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, fib_mode="h1",
+    out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, cross_fib_limits=main_limits(dr.events),
                                               lifecycle_floor=floor))
     assert _vals(out["wvmi_records"]) == _DR_VALUES and _flags(out["wvmi_records"]) == expected
 

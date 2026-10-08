@@ -121,7 +121,9 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    confirmation candle (a range back-fill look-ahead; emission ≠ processing order; today's drawn fib locks at the
    earlier anchor; D5's S5 order tripwire would raise) — found by the session-4 random-tail search, 0 on the window;
    and F17's MS side (R8-2): a cycle established on the previous cycle's CTS candle / a BOS anchor after its CTS anchor
-   (the downstream's silent skip of such an establishment is made LOUD now — S2b, `FibEventOrderError`). Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
+   (the downstream's silent skip of such an establishment is made LOUD now — S2b, `FibEventOrderError`).
+   **Also parked (S4 landing review, 2026-10-08):** PLAN_I §9.2 F19 — a fib outlives its cycle when the next cycle
+   gets no fib (`_current_cycle` + set-if-absent terminals; latent, 0 on the window) — DECIDE (fix candidates there). Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
    charts add the M15 fib layer). Likely inputs (to confirm with the
    user): the 2026-10-01 item and D5 below, and §E "Cross-cycle fib bundled follow-up" with its parked open
    questions (`engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §13).

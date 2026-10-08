@@ -78,9 +78,10 @@ PoiInnersResolver = Callable[..., List[float]]
 # `c0_data` is the sid's cycle-0 snapshot tracked on MarketStructureState
 # (bos_idx/price, cts_idx/price, has_unfilled, scenario1, locked). Used by
 # `zones/poi_zones.compute_poi_inners_for_cycle` to drive the shared
-# `zones/fib_tracker.select_fib_anchor_for_cycle` Scenario 2 decision so
-# the in-flight POI snapshot agrees with FibTracker's downstream anchor
-# selection. None when MS has not yet captured cycle-0 data
+# `zones/fib_tracker.select_fib_anchor_for_cycle` Scenario 2 decision — the
+# retired H1-main selector: since PLAN_I S4 FibTracker runs the one logic, so
+# this snapshot no longer matches the drawn fib wherever a cross or the limit
+# decides (CROSS_CYCLE_FIB_SPEC.md §8; PLAN_I S5 replaces this read). None when MS has not yet captured cycle-0 data
 # (cts_cycle_id == -1 / cycle 0 itself / sid 0).
 
 
@@ -1726,8 +1727,8 @@ class MarketStructure:
         # Lock the cycle-0 snapshot once CTS_0 is confirmed. Subsequent
         # raw-extreme CTS_UPDATEDs (which can keep firing between CTS_0
         # CONFIRMED and BOS_1 CONFIRMED while range is still active) must
-        # not mutate `cycle0_data`. Mirrors FibTracker's
-        # `_handle_cycle0_cts_confirmed`'s `c0["locked"] = True`.
+        # not mutate `cycle0_data`. (Mirrored FibTracker's retired
+        # `_handle_cycle0_cts_confirmed` lock until PLAN_I S4.)
         if int(st.cts_cycle_id) == 0:
             self._lock_cycle0_data()
 
@@ -1847,9 +1848,9 @@ class MarketStructure:
         Uses the resolver wired by structure_engine.py (Part 4 §13.5.b).
 
         `moment_idx` = the triggering event's MOMENT (the pattern's apply candle,
-        or the raw update's processing candle): the resolver's fill horizon, in
-        lock-step with FibTracker (Plan E E3a; LANDMINES "Scenario 2 anchor
-        agreement")."""
+        or the raw update's processing candle): the resolver's fill horizon (Plan
+        E E3a; the lock-step with FibTracker's Scenario 2 ended with PLAN_I S4 —
+        LANDMINES "Scenario 2 anchor agreement")."""
         st = self.state
         if st.cts is None or st.bos is None or self._poi_inners_resolver is None:
             st.poi_inners_for_cycle = []

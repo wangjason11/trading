@@ -164,21 +164,25 @@ CTS_CONFIRMED
 Fib LOCKED (anchor 2 stops updating)
 ```
 
-**Key behaviors:**
-- **For sid=0:** Cycle 0 never has its own Fib — only stored for cross-cycle check
-- **For sid 1+:** See Scenario Logic below (cycle 0 may have Fib in Scenario 1)
+**Key behaviors** (since PLAN_I S4, 2026-10-08, ONE logic for main and sub — `CROSS_CYCLE_FIB_SPEC.md`):
+- **Every structure's cycle 0** gets its single Fib (main's sid 0 had none before S4 — Q6)
+- **A cycle ≥ 1** gets a cross within the structure's cross-fib limit, else a single (the Scenario Logic below is
+  RETIRED — kept as the pre-S4 record)
 - **Deactivation/Reactivation:** Fib can toggle active state based on imbalance conditions at each CTS update
 - **Each check is asked at the handled event's MOMENT** (Plan F, 2026-09-24),
   `event_fields.event_moment(ev)` — per-event values in ARCHITECTURE
   "`ev.idx` convention" (a pattern-path CTS_UPDATED: its apply candle, since Plan E E3·0).
   FibTracker re-asks only at CTS events, so a
   gap whose c3 closes after an event counts only if a later event re-asks — none
-  does for an H1 cycle ≥ 1 fib that failed at EST (activation is one-shot there),
-  so such a fib is dropped, not delayed (IMBALANCE_FILL_SEMANTICS "Decided at the
-  event")
+  re-asks a cycle ≥ 1 cross that failed its own test at EST until a CTS_UPDATED (the single re-asks on every update;
+  until PLAN_I S4 an H1 cycle ≥ 1 fib was one-shot at EST — dropped, not delayed; IMBALANCE_FILL_SEMANTICS "Decided
+  at the event")
 - **Obsolescence:** When new cycle forms, previous cycle's Fib becomes obsolete
 
-### Scenario Logic (Post-Reversal, sid 1+)
+### Scenario Logic (Post-Reversal, sid 1+) — RETIRED (PLAN_I S4, 2026-10-08)
+
+> The H1-main rule below no longer runs: main follows the one logic (`CROSS_CYCLE_FIB_SPEC.md`; this rule's own
+> record is its Appendix A). Kept as the pre-S4 description.
 
 For structures after a reversal, Fib activation follows a 3-scenario system:
 
@@ -225,7 +229,7 @@ anchor agreement").
 - No cycle 0 Fib
 - Cycle 1 gets normal Fib (if unfilled imbalance)
 
-### Cross-Cycle Mode (`fib_mode="cross_cycle"`)
+### Cross-Cycle Mode (every structure since PLAN_I S4; was `fib_mode="cross_cycle"`, subs only)
 
 > Formerly named `m15_reverse`. Renamed when subordinate structures grew
 > beyond M15 + counter direction to include confluence variants (same
@@ -238,7 +242,7 @@ and confluence subordinate variants regardless of direction. **Since PLAN_I S3
 (2026-10-08) a cross is bounded by the sub's cross-fib LIMIT:** a cycle past it
 (or any cycle >= 1 of a sub without a reference price) gets a single fib
 (`via: "cross_fib_limit"`) and no pre-established cross — canonical
-`CROSS_CYCLE_FIB_SPEC.md` §2.2.
+`CROSS_CYCLE_FIB_SPEC.md` §2 / §3.
 
 #### Phase state per (sid, cycle_id)
 - `pre_established` — cycle's CTS not yet established. Only cross fib checks
@@ -303,7 +307,8 @@ inactive snapshots so the chart can render them with faded styling.
 
 ### Prev BOS Line (Visualization Helper)
 
-After each reversal, a black horizontal line shows the Scenario 1 revert threshold:
+After each reversal, a black horizontal line shows the previous structure's last BOS (the Scenario 1 revert
+threshold until PLAN_I S4 retired the revert; the line is still drawn):
 - **Start idx:** the previous structure's last BOS anchor (`ef.bos_anchor_idx`)
 - **End idx:** the CTS anchor of the new sid's earliest-moment CTS_ESTABLISHED / CTS_UPDATED whose moment is
   at or after reversal_confirmed_idx (Plan E E3d; the END is a location, Q6)
@@ -370,6 +375,8 @@ If Fib is deactivated, there are no bounds → no candidates.
 > the institutional pattern and is applied before it.
 
 Additional conditions based on which Fib scenario applies:
+
+(The scenario-specific constraints below are the pre-PLAN_I-S4 record — Scenario 1 / 2 / 3 no longer run.)
 
 **Scenario 1: cycle 0 normal fib, cycle 1+ normal fib**
 
@@ -568,7 +575,7 @@ produce (the planned FibState lifecycle work will produce it for
 | `active` | Condition holds at end-of-data (IC qualifies + unfilled imbalance, per the activation conditions) | Rendered fully (bright tier) |
 | `inactive` | Alive but condition currently off (reversible — e.g. imbalance filled; can reactivate) | Rendered faded |
 | `ended` | Terminal — cycle/structure ended (`reversal` \| `next_cycle` (next cycle's clamped start on the CTS-established moment) \| the sub's window end: `reversal` / `same_dir_replacement` / `parent_end`). Irreversible | Rendered faded |
-| `disappeared` | Terminal **+ suppressed** (invalidation). Reserved; produced only by the planned FibState work (`scenario1_revert`), not by POI today | NOT rendered (kept in list for history) |
+| `disappeared` | Terminal **+ suppressed** (invalidation). Reserved; no producer since PLAN_I S4 retired `scenario1_revert` (a FibState hook — FIB_LIFECYCLE_SPEC §10), not by POI | NOT rendered (kept in list for history) |
 
 ### Zone End Time (Priority Order)
 1. **Reversal:** `end_time = reversal_confirmed_idx` (all zones end immediately)

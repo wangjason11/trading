@@ -22,6 +22,8 @@ from pathlib import Path
 
 import pytest
 
+from engine_v2.tests._cross_fib_limits import main_limits
+
 import engine_v2
 from engine_v2.structure import market_structure
 from engine_v2.structure.market_structure import StructureEvent
@@ -137,6 +139,26 @@ def test_no_production_string_carries_a_post_e5_old_key():
     assert hits == []
 
 
+# --- PLAN_I S4 (2026-10-08): the H1-main fib logic retired — its meta keys with it (a rule-3 migration) ---------------
+
+_PLAN_I_S4_RETIRED = frozenset({"cycle1_bos_anchor_idx", "scenario", "flow", "scenario1_revert"})
+
+
+def test_no_production_string_is_a_plan_i_s4_retired_fib_key():
+    """The H1-main Scenario-2 cross's `cycle1_bos_anchor_idx` (an index key — it left `_FIB_META_IDX_KEYS` in the
+    same commit), the `scenario` / `flow` labels and the `scenario1_revert` end reason are emitted by nothing: no
+    production string constant EQUALS one (exact match — MS's S5-bound `scenario1` cache key is another key)."""
+    root = Path(engine_v2.__file__).parent
+    hits = []
+    for path in root.rglob("*.py"):
+        if {"legacy_2025", "tests", "plans"} & set(path.parts):
+            continue
+        for n in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in _PLAN_I_S4_RETIRED:
+                hits.append((path.name, n.lineno, n.value))
+    assert hits == []
+
+
 def _kl_run(sd, extra_events=(), *, after_threshold=(), drop_types=()):
     """KL over the fixture's real run. `extra_events` are appended (the post-pass reads them in any order);
     `after_threshold` go right after the run's BOS_THRESHOLD_UPDATED @9 (the main loop tracks the ACTIVE zone
@@ -217,7 +239,7 @@ def test_exporters_write_every_meta_dict_verbatim(tmp_path, geometry, m15_df):
     with redirect_stdout(io.StringIO()):
         res = compute_bounded_structure(_prepare_df(_make_double_rewind_data()), 0, 1)
         events = [*res.events, rec]
-        down = _run_downstream_pipeline(res.df, events, 1)
+        down = _run_downstream_pipeline(res.df, events, 1, cross_fib_limits=main_limits(events))
     sub, lens_dfs = _render_both_lenses(geometry, m15_df)
     # the lens copies as production exports them: stamped per lens (here no stream entry -> the None triple)
     import pandas as pd

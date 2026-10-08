@@ -1,22 +1,13 @@
 # engine_v2/zones/cross_cycle_fib.py
-"""Shared cross-cycle Fib eligibility decision (CROSS_CYCLE_FIB_SPEC.md §3, §9).
+"""Shared cross-cycle Fib eligibility decision (CROSS_CYCLE_FIB_SPEC.md §4, §7) + the cross-fib limit's
+`CrossFibLimit` / `beyond` (§3).
 
-ONE pure routine both fib modes call to decide whether a cross-cycle Fib is
-eligible at a given target cycle, and from which earliest cycle it spans. The
-storage / version-transition application stays in the caller (subordinate
-`cross_cycle` mode keeps its versioned ``_fibs`` machinery; H1-main keeps its
-named-slot ``_cross_cycle_data`` until §11a-ii migrates it).
-
-This module is the §11a "extract" — it is the body of the subordinate
-``FibTracker._m15_cross_check`` steps 1–3 (own-imbalance test + dead-cycle
-backward walk + ``earliest_x``), generalized so the H1-main single-step
-Scenario-2 decision (cond1/cond2/cond3 at ``target=1``) routes through it too,
-via ``select_fib_anchor_for_cycle`` (the thin wrapper in ``fib_tracker.py``).
-
-The only mode difference is the *fill-as-of* point for prior-cycle liveness
-(CROSS_CYCLE_FIB_SPEC.md §3.1): subs check "current"; main checks the frozen
-snapshot (cond2 @CTS_0 cached + cond3 @BOS_1). Parameterizing it is what keeps
-§11a byte-identical for both modes.
+ONE pure routine deciding whether a cross-cycle Fib is eligible at a given target cycle, and from which earliest
+cycle it spans: the body of ``FibTracker._cross_check`` steps 1–3 (own-imbalance test + dead-cycle backward walk +
+``earliest_x``); the storage / version transitions stay in FibTracker. FibTracker (every structure since PLAN_I S4)
+calls it with ``fill_as_of="current"``. The ``"snapshot"`` policy (+ ``prior_cached_liveness``) serves only the retired
+H1-main Scenario-2 selector ``select_fib_anchor_for_cycle``, still read by MarketStructure's in-flight POI resolver
+until PLAN_I S5 (which deletes them; the old design: CROSS_CYCLE_FIB_SPEC.md Appendix A, old §3.1 / §11a).
 
 Kept dependency-free of ``zones`` (imports only ``patterns.imbalance``) so
 ``fib_tracker`` can import it without an import cycle.
@@ -123,7 +114,7 @@ def resolve_cross_cycle_eligibility(
 ) -> CrossEligibility:
     """Decide cross-cycle eligibility at ``target_cycle`` (pure).
 
-    Reproduces ``FibTracker._m15_cross_check`` steps 1–3 exactly:
+    Reproduces ``FibTracker._cross_check`` steps 1–3 exactly:
 
     1. **Own-imbalance test** — sd-direction unfilled imbalance over
        ``[own_imb_start, own_window_end_idx]`` as of ``fill_horizon_idx``. None ⇒
@@ -142,14 +133,14 @@ def resolve_cross_cycle_eligibility(
         ``{cycle_id: (idx, price)}`` for this structure (caller slices to sid).
         Only cycles ``0 … target_cycle-1`` are consulted by the walk.
     dead_cycles : set
-        Mutable, sid-scoped. Pass the real cache (subs) or a throwaway set
-        (the single-step main wrapper, which never caches).
+        Mutable, sid-scoped. Pass the real cache (FibTracker) or a throwaway set
+        (the single-step selector `select_fib_anchor_for_cycle`, which never caches).
     fill_as_of : {"current", "snapshot"}
-        Per-cycle liveness fill point (CROSS_CYCLE_FIB_SPEC.md §3.1):
+        Per-cycle liveness fill point (CROSS_CYCLE_FIB_SPEC.md Appendix A, old §3.1):
 
-        - ``"current"`` (subs) — each prior cycle's ``[BOS_k, CTS_k]`` checked
+        - ``"current"`` (FibTracker, every structure) — each prior cycle's ``[BOS_k, CTS_k]`` checked
           as of ``fill_horizon_idx``.
-        - ``"snapshot"`` (H1-main single step) — checked as of ``snapshot_horizon_idx``
+        - ``"snapshot"`` (the retired H1-main single step; MS's in-flight resolver until S5) — checked as of ``snapshot_horizon_idx``
           (= cond3 @BOS_target) AND-ed with ``prior_cached_liveness[k]``
           (= cond2, the cached cycle-0 @CTS_0 liveness). Defined only for the
           ``target=1`` single step in §11a; deeper-walk snapshot semantics are
@@ -158,7 +149,7 @@ def resolve_cross_cycle_eligibility(
         ``{cycle_id: bool}`` used only by the snapshot policy. A missing cycle
         defaults to ``True`` (no extra constraint).
     target_ceiling : int, optional
-        Reserved for §11b (the main-only ``M`` cap). **Ignored in §11a.**
+        Reserved, ignored, no caller (the retired main-only ``M`` cap); S5 deletes it.
     own_window_end_idx, own_imb_start : int
         The target cycle's own-test window ``[own_imb_start, own_window_end_idx]``
         (LOCATIONS: the cycle's BOS and its CTS anchor / running extreme).

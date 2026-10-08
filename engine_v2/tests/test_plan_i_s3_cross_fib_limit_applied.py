@@ -56,7 +56,7 @@ def _lim(p, sd):
 
 def _tracker(limit):
     limits = None if limit is ... else {0: limit}
-    return FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode="cross_cycle", cross_fib_limits=limits)
+    return FibTracker(FibTrackerConfig(fill_threshold=0.70), cross_fib_limits=limits)
 
 
 def _q(fn, *a, **k):
@@ -219,7 +219,7 @@ def _pre_established(p, sd):
         df.at[27, "h"] = _m(1.45, -1)
     _q(t.on_cts_established, _est(20, 1.2, 0, sd), df, bos_idx=10, bos_price=_m(0.9, sd))
     _q(t.on_cts_confirmed, _conf(25, 1.2, 0, sd, 20))
-    assert t._m15_phase[(0, 1)] == "pre_established"
+    assert t._phase[(0, 1)] == "pre_established"
     _q(t.on_cts_threshold_updated, _ev("CTS_THRESHOLD_UPDATED", 30, 1.52, 0, sd), df)
     return t
 
@@ -249,7 +249,7 @@ def test_i8_a_cross_is_never_created_over_an_active_single():
     t = _three_cycles(None, 1, upto=1)                                   # cycle 1: the single active
     assert _kind(t, 1) == "single cross_fib_limit"
     with pytest.raises(AssertionError, match="I8: sid=0 cycle=1 cross created / revived while the single"):
-        _q(t._m15_create_cross, 0, 1, 1, (10, 1.0), 40, 1.35, 0, 40)
+        _q(t._create_cross, 0, 1, 1, (10, 1.0), 40, 1.35, 0, 40)
 
 
 def test_i8_the_cross_failed_fallback_supersedes_the_cross_first():
@@ -299,7 +299,7 @@ def test_i8_a_cross_is_never_revived_over_an_active_single():
     t = _three_cycles(None, 1, upto=1)                                     # cycle 1: the single active
     assert _kind(t, 1) == "single cross_fib_limit"
     with pytest.raises(AssertionError, match="I8: sid=0 cycle=1 cross created / revived while the single"):
-        _q(t._m15_reactivate_cross_in_place, (0, 1, "cross", 0), t._fibs[(0, 1)], 40, 1.35, 41)
+        _q(t._reactivate_cross_in_place, (0, 1, "cross", 0), t._fibs[(0, 1)], 40, 1.35, 41)
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -309,7 +309,7 @@ def test_i8_a_cross_is_never_revived_over_an_active_single():
 def test_i8_an_inactive_single_does_not_block_a_cross():
     t = _three_cycles(None, 1, upto=1)
     t._fibs[(0, 1)] = replace(t._fibs[(0, 1)], active=False)
-    _q(t._m15_create_cross, 0, 1, 1, (10, 1.0), 40, 1.35, 0, 40)
+    _q(t._create_cross, 0, 1, 1, (10, 1.0), 40, 1.35, 0, 40)
     latest = t._get_latest_cross(0, 1)
     assert latest is not None and latest[1].active
 
@@ -319,10 +319,10 @@ def test_i8_an_inactive_single_does_not_block_a_cross():
 # ---------------------------------------------------------------------------------------------------------------------
 
 def test_the_limit_is_read_per_structure():
-    t = FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode="cross_cycle",
+    t = FibTracker(FibTrackerConfig(fill_threshold=0.70),
                    cross_fib_limits={0: _lim(9.0, 1), 1: _lim(None, 1)})
     assert t._cross_allowed(0, 1) and not t._cross_allowed(1, 1)
-    only0 = FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode="cross_cycle",
+    only0 = FibTracker(FibTrackerConfig(fill_threshold=0.70),
                        cross_fib_limits={0: _lim(9.0, 1)})
     with pytest.raises(CrossFibLimitError, match="sid=1 cycle=1: no cross_fib_limit entry"):
         only0._cross_allowed(1, 1)
@@ -339,7 +339,7 @@ def test_cycle_0_updates_and_an_out_of_phase_threshold_never_consult_the_limit()
     df = _frame(1)
     _q(t.on_cts_established, _est(20, 1.15, 0, 1), df, bos_idx=10, bos_price=1.0)
     _q(t.on_cts_updated, _ev("CTS_UPDATED", 22, 1.17, 0, 1, via=CTS_UPDATED_RAW_VIA), df)          # U08
-    assert t._m15_phase.get((0, 1)) is None
+    assert t._phase.get((0, 1)) is None
     _q(t.on_cts_threshold_updated, _ev("CTS_THRESHOLD_UPDATED", 23, 1.2, 0, 1), df)                # T03
     assert t._fibs[(0, 0)].cts_idx == 22
 

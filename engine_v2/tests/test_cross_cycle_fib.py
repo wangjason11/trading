@@ -59,8 +59,7 @@ def _ev(ev_type: str, idx: int, price: float, sid: int, cycle_id: int, sd: int,
 def _make_tracker() -> FibTracker:
     # PLAN_I S3: the limit is required; `unreached` keeps every cross these tests exercise allowed.
     from engine_v2.tests._cross_fib_limits import unreached
-    return FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode="cross_cycle",
-                      cross_fib_limits={0: unreached(1)})
+    return FibTracker(FibTrackerConfig(fill_threshold=0.70), cross_fib_limits={0: unreached(1)})
 
 
 # ---------- Cycle 0 behaves as simple single (no cross) ----------
@@ -82,7 +81,7 @@ def test_cycle_0_single_activates_with_unfilled_imbalance():
     assert result.active is True
     assert "cross_cycle" not in result.meta  # single fib, not cross
     # Phase set to "established"
-    assert tracker._m15_phase.get((0, 0)) == "established"
+    assert tracker._phase.get((0, 0)) == "established"
 
 
 def test_cycle_0_no_fib_without_imbalance():
@@ -157,8 +156,8 @@ def test_cross_activation_cycle_1():
     tracker.on_cts_confirmed(ev0_conf)
 
     # Phase setup: (0, 0) confirmed, (0, 1) pre_established
-    assert tracker._m15_phase[(0, 0)] == "confirmed"
-    assert tracker._m15_phase[(0, 1)] == "pre_established"
+    assert tracker._phase[(0, 0)] == "confirmed"
+    assert tracker._phase[(0, 1)] == "pre_established"
 
     # Cycle 1 CTS_ESTABLISHED (BOS_1 at idx 30, CTS_1 at idx 40)
     ev1_est = _ev("CTS_ESTABLISHED", 40, 1.35, sid=0, cycle_id=1, sd=1)
@@ -172,7 +171,7 @@ def test_cross_activation_cycle_1():
     assert result.bos_idx == 10
     assert result.cts_idx == 40
     # Phase flipped
-    assert tracker._m15_phase[(0, 1)] == "established"
+    assert tracker._phase[(0, 1)] == "established"
 
 
 # ---------- Cross activation spanning multiple cycles: (0→2) ----------
@@ -371,20 +370,6 @@ def test_threshold_updated_noop_outside_pre_established():
     assert len(tracker._fibs) == 0
 
 
-# ---------- H1 mode ignores CTS_THRESHOLD_UPDATED ----------
-
-def test_h1_mode_ignores_threshold_updated():
-    tracker = FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode="h1")
-    df = _make_df_with_imbalances(30, [])
-    ev = StructureEvent(
-        idx=25, category="STRUCTURE", type="CTS_THRESHOLD_UPDATED",
-        price=1.15,
-        meta={"structure_id": 0, "cycle_id": 0, "struct_direction": 1},
-    )
-    tracker.on_cts_threshold_updated(ev, df)
-    assert len(tracker._fibs) == 0
-
-
 # ---------- Lock on CTS_n+1 CONFIRMED ----------
 
 def test_cycle_1_confirmed_locks_cross_and_transitions_phase():
@@ -410,5 +395,5 @@ def test_cycle_1_confirmed_locks_cross_and_transitions_phase():
     assert latest_after is not None
     assert latest_after[1].locked
     # Phase transitions
-    assert tracker._m15_phase[(0, 1)] == "confirmed"
-    assert tracker._m15_phase[(0, 2)] == "pre_established"
+    assert tracker._phase[(0, 1)] == "confirmed"
+    assert tracker._phase[(0, 2)] == "pre_established"

@@ -161,11 +161,12 @@ def test_h1_chart_hides_a_collapsed_cycles_fib_and_hovers_the_lifecycle_and_ip(t
                     ip_candidates=out["ip_candidates"], kl_zones=list(out["kl_zones"]))
     rows = ip_rows_by_fib_record(out["ip_candidates"], by_sub=False)
     recs = {(f.structure_id, f.cycle_id): f for f in out["fib_states"]}
-    assert set(recs) == {(0, 1), (0, 2), (0, 3)}      # c1 / c2 locked + ended, c3 live (unlocked, open)
+    # c0 (main's single since PLAN_I S4, Q6) / c1 / c2 locked + ended, c3 live (unlocked, open)
+    assert set(recs) == {(0, 0), (0, 1), (0, 2), (0, 3)}
 
     fig = _render_h1(df, monkeypatch, tmp_path)
     fib_tr = {tr.name: tr for tr in fig.data if (tr.name or "").startswith("fib:")}
-    assert sorted(fib_tr) == ["fib:sid0:c1", "fib:sid0:c2", "fib:sid0:c3"]
+    assert sorted(fib_tr) == ["fib:sid0:c0", "fib:sid0:c1", "fib:sid0:c2", "fib:sid0:c3"]
     for (sid, cyc), rec in recs.items():
         cell = fib_tr[f"fib:sid{sid}:c{cyc}"].customdata[0][8]
         assert cell == fib_hover_status_text(rec, rows.get((sid, cyc, rec.bos_idx, rec.cts_idx)))
@@ -174,7 +175,8 @@ def test_h1_chart_hides_a_collapsed_cycles_fib_and_hovers_the_lifecycle_and_ip(t
 
     df.attrs["kl_zones"] = list(out["kl_zones"]) + [_collapsed_kl(0, 1)]       # (0, 1) collapsed
     fig = _render_h1(df, monkeypatch, tmp_path)
-    assert sorted(tr.name for tr in fig.data if (tr.name or "").startswith("fib:")) == ["fib:sid0:c2", "fib:sid0:c3"]
+    assert sorted(tr.name for tr in fig.data if (tr.name or "").startswith("fib:")) == [
+        "fib:sid0:c0", "fib:sid0:c2", "fib:sid0:c3"]
     assert len(fig.layout.shapes) == n_shapes - 5
 
 

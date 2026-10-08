@@ -1315,10 +1315,10 @@ def compute_poi_inners_for_cycle(
     `select_ip_ic` as the drawn POI; no pattern -> [] and the proximity check
     reads the BOS inner only).
 
-    Picks anchors via the shared
-    :func:`zones.fib_tracker.select_fib_anchor_for_cycle` decision utility
-    so this in-flight resolver agrees with FibTracker's downstream
-    Scenario 2 cross-cycle decision. Constructs the FibState from the
+    Picks anchors via :func:`zones.fib_tracker.select_fib_anchor_for_cycle` —
+    the retired H1-main Scenario-2 selector (FibTracker runs the one logic since
+    PLAN_I S4, so the two differ wherever a cross or the limit decides;
+    CROSS_CYCLE_FIB_SPEC.md §8 — PLAN_I S5 replaces this read). Constructs the FibState from the
     chosen anchors, runs `select_ip_ic` on it, returns the pick's inner price
     (top of the IC for a buy zone, bottom for a sell). POIs are always
     sd-direction by Fib construction.
@@ -1383,11 +1383,11 @@ def compute_poi_inners_for_cycle(
                 struct_direction=sd,
                 # No knowability cut (Plan F): this snapshot is read only at
                 # candles after the CTS (market_structure `i > st.cts.idx`),
-                # where every gap it counts has formed. FibTracker asks cond1 at
-                # the CTS_1 moment instead — the accepted M1 divergence.
+                # where every gap it counts has formed (the M1 divergence with
+                # FibTracker's retired Scenario 2, PLAN_I S4).
                 evaluated_at=None,
-                # The fill horizons, in lock-step with FibTracker (moments since
-                # Plan E E3a / E3a′; LANDMINES "Scenario 2 anchor agreement").
+                # The fill horizons (moments since Plan E E3a / E3a′; LANDMINES
+                # "Scenario 2 anchor agreement").
                 fill_horizon_idx=int(fill_horizon_idx),
                 snapshot_horizon_idx=int(snapshot_horizon_idx),
             )

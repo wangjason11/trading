@@ -11,6 +11,8 @@ and searched to its frame end, the sub's end candle included).
 """
 from __future__ import annotations
 
+from engine_v2.tests._cross_fib_limits import main_limits
+
 import contextlib
 import copy
 import io
@@ -41,7 +43,7 @@ def _post_reversal_lure():
 def _run(rows):
     with contextlib.redirect_stdout(io.StringIO()):
         res = compute_bounded_structure(_prepare_df(rows), 0, 1, end_idx=None)
-        out = _run_downstream_pipeline(res.df, copy.deepcopy(res.events), 1, fib_mode="h1")
+        out = _run_downstream_pipeline(res.df, copy.deepcopy(res.events), 1, cross_fib_limits=main_limits(res.events))
     return res, out
 
 
@@ -96,7 +98,8 @@ def _captured_ends(monkeypatch, res, events, cap=None):
 
     monkeypatch.setattr(orch, "WVMITracker", Capture)
     with contextlib.redirect_stdout(io.StringIO()):
-        orch._run_downstream_pipeline(res.df, copy.deepcopy(events), 1, fib_mode="h1", lifecycle_cap=cap)
+        orch._run_downstream_pipeline(res.df, copy.deepcopy(events), 1, lifecycle_cap=cap,
+                                      cross_fib_limits=main_limits(events))
     assert len(seen) == 1
     return seen[0]
 
@@ -151,7 +154,8 @@ def test_an_update_on_a_grown_frame_respects_the_bound():
 
 def _project(res, floor=None, cap=None, reason=None):
     with contextlib.redirect_stdout(io.StringIO()):
-        return project_to_window(res, floor=floor, cap=cap, cap_reason=reason, direction=1, fib_mode="h1")
+        return project_to_window(res, floor=floor, cap=cap, cap_reason=reason, direction=1,
+                                 cross_fib_limits=main_limits(res.events))
 
 
 # --- Plan G Q4 (2026-09-30): a sub projection's temp LP stops at the cycle's end - 1 too ------------------------

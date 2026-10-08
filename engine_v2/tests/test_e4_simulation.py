@@ -66,10 +66,10 @@ def _strip_raw(out):
 
 def _run(df, events, mode):
     # PLAN_I S3: the cross_cycle downstream needs its limits; `unreached_for` keeps every cross allowed.
-    from engine_v2.tests._cross_fib_limits import unreached_for
+    from engine_v2.tests._cross_fib_limits import main_limits, unreached_for
     with contextlib.redirect_stdout(io.StringIO()):
-        return _run_downstream_pipeline(df, events, +1, fib_mode=mode, wvmi="first_sd_prox",
-                                        cross_fib_limits=unreached_for(events) if mode == "cross_cycle" else None)
+        return _run_downstream_pipeline(df, events, +1, wvmi="first_sd_prox",
+                                        cross_fib_limits=main_limits(events) if mode == "main" else unreached_for(events))
 
 
 _SECOND = _make_second_cts_moment_after_anchor_data
@@ -128,7 +128,7 @@ def test_emit_bos_confirmed_asserts_idx_is_the_moment():
 
 
 @pytest.mark.illegal_event_contract  # the clones hold the anchor (the pre-E4 shape)
-@pytest.mark.parametrize("mode", ["h1", "cross_cycle"])
+@pytest.mark.parametrize("mode", ["main", "sub"])
 @pytest.mark.parametrize("swap,maker", [
     ("est", _SECOND),    # the only fixture with a lagging EST (9 → 10)
     ("bos", _SECOND),
@@ -154,7 +154,7 @@ def test_downstream_outputs_do_not_depend_on_the_idx_role(swap, maker, mode):
     out_a = _run(res.df, res.events, mode)
     # The IP fixtures draw a POI — except `_IP_SECOND` in cross_cycle: its cycle-1 fib is the CROSS fib
     # (BOS_0 .5998 -> CTS_1 .6147, the 61.8-80 zone ~.6028-.6055), far below the pattern's IC 9 -> no POI.
-    if maker is _IP_MULTI or (maker is _IP_SECOND and mode == "h1"):
+    if maker is _IP_MULTI or (maker is _IP_SECOND and mode == "main"):
         assert out_a["poi_zones"], "the IP fixture draws a POI"
     a = _strip_raw(out_a)
     b = _strip_raw(_run(res.df, swapped, mode))
@@ -186,7 +186,7 @@ def test_emit_cts_updated_asserts_the_pattern_path_idx_is_the_moment():
 
 
 @pytest.mark.illegal_event_contract  # the clones hold the anchor (the pre-E4c shape)
-@pytest.mark.parametrize("mode", ["h1", "cross_cycle"])
+@pytest.mark.parametrize("mode", ["main", "sub"])
 def test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role(mode):
     """The E4a / E4b swap for pattern-path CTS_UPDATED (Plan E E4c): a lagging
     pattern-path update (anchor 24, moment 25) is cloned back to its ANCHOR in

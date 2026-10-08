@@ -37,10 +37,11 @@ def build(stream, seed, t_want):
 
 
 def feed(df, events, mode):
-    # Since PLAN_I S3 a cross_cycle tracker needs its limit: `unreached_for` = never beyond (the pre-limit rules).
-    from engine_v2.tests._cross_fib_limits import unreached_for
-    trk = FibTracker(FibTrackerConfig(fib_levels=[30.0, 50.0, 61.8, 80.0], fill_threshold=0.70), fib_mode=mode,
-                     cross_fib_limits=unreached_for(events) if mode == "cross_cycle" else None)
+    """`mode` picks the LIMITS (one FibTracker logic since PLAN_I S4): "main" = production's main limits (sid 0: no P →
+    singles), "sub" = `unreached_for` (never beyond → every cross the walk allows)."""
+    from engine_v2.tests._cross_fib_limits import main_limits, unreached_for
+    trk = FibTracker(FibTrackerConfig(fib_levels=[30.0, 50.0, 61.8, 80.0], fill_threshold=0.70),
+                     cross_fib_limits=main_limits(events) if mode == "main" else unreached_for(events))
     bos = {}
     for e in events:
         if e.type == "BOS_CONFIRMED":
@@ -50,9 +51,9 @@ def feed(df, events, mode):
         k = (int(e.meta.get("structure_id", 0)), int(e.meta.get("cycle_id", 0)))
         try:
             if e.type == "CTS_ESTABLISHED" and k in bos:
-                trk.on_cts_established(e, df, bos[k][0], bos[k][1], None, None, None)
+                trk.on_cts_established(e, df, bos[k][0], bos[k][1])
             elif e.type == "CTS_UPDATED":
-                trk.on_cts_updated(e, df, None)
+                trk.on_cts_updated(e, df)
             elif e.type == "CTS_CONFIRMED":
                 trk.on_cts_confirmed(e)
             elif e.type == "CTS_THRESHOLD_UPDATED":
@@ -74,7 +75,7 @@ if __name__ == "__main__":
     df, events = build(stream, seed, t)
     emission = list(events)
     processing = sorted(events, key=ef.processing_order_key)
-    for mode in ("h1", "cross_cycle"):
+    for mode in ("main", "sub"):
         a, la = feed(df, processing, mode)
         b, lb = feed(df, emission, mode)
         if isinstance(la, str) or isinstance(lb, str):

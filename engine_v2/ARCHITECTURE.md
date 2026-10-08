@@ -511,8 +511,9 @@ was replaced by the sweep below.
 - Geometry is cap-free (one MS run to the data edge, slice-local events/df +
   `slice_begin`; the M15 slice keeps the 50-candle lookback and re-runs
   `compute_imbalance` + the `is_range_*` re-derivation after `reset_index`).
-- KL zones are BOS-only for subs (`source_kinds=["BOS"]`); Fib uses
-  `fib_mode="cross_cycle"`.
+- KL zones are BOS-only for subs (`source_kinds=["BOS"]`); Fib runs the ONE
+  FibTracker logic (no mode since PLAN_I S4 — `zones/CROSS_CYCLE_FIB_SPEC.md`)
+  with the sub's cross-fib limit `{0: sub.cross_fib_limit}`.
 - Attribution stamped on every mirrored event/zone/POI/fib/wave-candle/WVMI
   record (a WVMI copy also gets its lens's path in the record FIELD, Plan G):
   `structure_path_id`, `timeframe`, `parent_tf`, **`sub_id`** (the

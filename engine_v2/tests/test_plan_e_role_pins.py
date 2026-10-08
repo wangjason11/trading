@@ -37,12 +37,12 @@ def _e4_est(anchor=20, moment=22, **kw):
 
 # --- FibTracker EST: location vs time -------------------------------------------
 
-@pytest.mark.parametrize("mode", ["h1", "cross_cycle"])
-def test_fib_tracker_est_reads_the_anchor_for_the_fib_and_the_moment_for_activated_at(mode):
-    tracker = _tracker(mode)
+@pytest.mark.parametrize("cyc", [1, 0])
+def test_fib_tracker_est_reads_the_anchor_for_the_fib_and_the_moment_for_activated_at(cyc):
+    """Cycle 0's single, and cycle 1's (no cycle-0 establishment fed → the walk finds nothing → the `cross_failed`
+    single) — PLAN_I S4 re-pin of the retired h1 / cross_cycle pair."""
+    tracker = _tracker()
     df = _df(40, [_gap(15)])
-    # sid 0 cycle 1 (h1 simple flow activates at cycle >= 1); cross_cycle cycle 0.
-    cyc = 1 if mode == "h1" else 0
     if cyc == 1:
         # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
         _quiet(tracker.on_cts_confirmed, _ev("CTS_CONFIRMED", 6, 0.95, 0, 0, cts_anchor_idx=5))
@@ -58,7 +58,7 @@ def test_fib_tracker_update_fill_horizon_and_stamp_are_the_moment():
     at 31. A pattern-path update with anchor 30 / moment 32 asks the fill at
     32 → filled → deactivated, stamped 32. Asked at the anchor 30 it would stay
     active; stamped at the anchor it would read 30."""
-    tracker = _tracker("h1")
+    tracker = _tracker()
     df = _df(40, [_gap(15)])
     df.at[31, "l"] = 0.99
     # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
@@ -276,12 +276,12 @@ def test_prev_bos_line_filter_is_the_moment():
     assert [(ln["start_idx"], ln["end_idx"]) for ln in lines] == [(7, 13)]
 
 
-@pytest.mark.parametrize("mode", ["h1", "cross_cycle"])
+@pytest.mark.parametrize("mode", ["main", "sub"])
 def test_lagging_est_fib_lifecycle_is_timed_at_the_moment(mode):
     """PLAN_E §7 E3a unit: the 2nd CTS_ESTABLISHED has anchor 9 / moment 10.
     Through the downstream pipeline the cycle-1 fib starts (and is stamped
-    `activated_at`) at 10, and in cross_cycle the cycle-0 fib's `new_cycle`
-    terminal is 10 — the moment, not the anchor 9."""
+    `activated_at`) at 10, and the cycle-0 fib's `new_cycle` terminal is 10 — the moment, not the anchor 9 (with
+    main's limits a single, with a sub's `unreached` a cross — one logic since PLAN_I S4)."""
     from engine_v2.structure.structure_engine import compute_bounded_structure
     from engine_v2.tests.test_e4_simulation import _run
     from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_anchor_data, _prepare_df
@@ -290,8 +290,7 @@ def test_lagging_est_fib_lifecycle_is_timed_at_the_moment(mode):
     fibs = {(f.structure_id, f.cycle_id): f for f in _run(res.df, res.events, mode)["fib_states"]}
     c1 = fibs[(0, 1)]
     assert (c1.cts_idx, c1.start_idx, c1.meta["activated_at"]) == (9, 10, 10)
-    if mode == "cross_cycle":
-        assert (fibs[(0, 0)].end_idx, fibs[(0, 0)].end_reason) == (10, "new_cycle")
+    assert (fibs[(0, 0)].end_idx, fibs[(0, 0)].end_reason) == (10, "new_cycle")
 
 
 def _prev_bos_pairs(evs, rv):

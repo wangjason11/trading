@@ -367,7 +367,7 @@ performance cost of full per-candle recomputation (Fib + IC scan + variant
 selection) is substantial. The major refactor may revisit this.
 
 **Snapshot fib on SUBS ≠ the drawn sub fib (found 2026-10-01; fix scheduled in `IDEA_PARKING_LOT.md` §D.1 item 2,
-user 2026-10-02):** the resolver's fib choice (`select_fib_anchor_for_cycle`) returns `"intra"` for `sid == 0`, and
+user 2026-10-02 — PLAN_I S5; since PLAN_I S4 the same holds for main, whose drawn fib also runs the one logic):** the resolver's fib choice (`select_fib_anchor_for_cycle`) returns `"intra"` for `sid == 0`, and
 every sub is sid 0 — so a sub's snapshot always reads the INTRA-cycle fib (BOS_n → CTS_n), while its drawn POIs come
 from the cross-cycle fib. They differ on 8 unique sub cycles of the reference window (e.g. confluence sub 0 cycle 2:
 drawn POI IC 678 at 0.56234–0.56268 vs the snapshot fib's zone 0.57244–0.57364); no outcome diverged there. Detail:
@@ -389,8 +389,8 @@ window ends at or before `st.cts.idx`, so every gap it counts (c2 ≤
 it is used on; `cycle0_data["has_unfilled"]` is read only at a later cycle-1
 refresh (> CTS_0). **Do NOT add a refresh-time cut:** it would drop a gap that
 is formed at every candle the snapshot is read on (and the snapshot stays fixed
-until the next refresh), and it would break cond2 agreement with FibTracker's
-equally uncut cycle-0 cache. FibTracker, which decides once per event, does cut
+until the next refresh), and it would have broken cond2 agreement with FibTracker's
+equally uncut cycle-0 cache (retired in PLAN_I S4). FibTracker, which decides once per event, does cut
 at the event's moment — the accepted MS/FibTracker divergence that follows (M1)
 is documented in LANDMINES "Scenario 2 anchor agreement".
 

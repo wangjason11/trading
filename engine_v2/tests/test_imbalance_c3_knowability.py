@@ -90,11 +90,10 @@ def _ev(etype, idx, price, sid, cyc, *, confirmed_at=None, via=CTS_UPDATED_RAW_V
     return StructureEvent(idx=idx, category="STRUCTURE", type=etype, price=price, meta=meta)
 
 
-def _tracker(mode):
-    # PLAN_I S3: a cross_cycle tracker needs its limit; `unreached` keeps every cross allowed.
+def _tracker():
+    # The ONE FibTracker logic (PLAN_I S4; the h1 mode is gone) with `unreached` limits: every cross the walk allows.
     from engine_v2.tests._cross_fib_limits import unreached
-    return FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode=mode,
-                      cross_fib_limits={0: unreached(1)} if mode == "cross_cycle" else None)
+    return FibTracker(FibTrackerConfig(fill_threshold=0.70), cross_fib_limits={0: unreached(1), 1: unreached(1)})
 
 
 def _quiet(fn, *a, **k):
@@ -163,7 +162,7 @@ def test_multicycle_poi_full_history():
 def test_cross_cycle_cycle0_lag0_est_gap_at_the_moment_no_fib():
     """Lag-0 CTS_ESTABLISHED (anchor == moment == 20) whose only sd gap has
     c2 == 20: nothing has formed at 20 → no fib."""
-    tracker = _tracker("cross_cycle")
+    tracker = _tracker()
     df = _df(40, [_gap(20)])
     res = _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0), df,
                  bos_idx=10, bos_price=0.9)
@@ -171,8 +170,8 @@ def test_cross_cycle_cycle0_lag0_est_gap_at_the_moment_no_fib():
     assert (0, 0) not in tracker._fibs
 
 
-def test_h1_sid0_cycle1_lag0_est_gap_at_the_moment_no_fib():
-    tracker = _tracker("h1")
+def test_sid0_cycle1_lag0_est_gap_at_the_moment_no_fib():
+    tracker = _tracker()
     df = _df(60, [_gap(40)])
     # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
     _quiet(tracker.on_cts_confirmed, _ev("CTS_CONFIRMED", 6, 0.95, 0, 0, cts_anchor_idx=5))
@@ -186,7 +185,7 @@ def test_raw_update_gap_at_the_candle_activates_one_update_later():
     """cross_cycle cycle-0 first activation on a raw CTS_UPDATED (fib_tracker
     `_handle_cross_cycle_cts_updated`): at 25 the gap (c2 25) has not formed; at
     the next raw update (26) it has."""
-    tracker = _tracker("cross_cycle")
+    tracker = _tracker()
     df = _df(40, [_gap(25)])
     assert _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0), df,
                   bos_idx=10, bos_price=0.9) is None
@@ -203,7 +202,7 @@ def test_update_fib_cts_deactivates_until_the_new_gap_forms():
     25 whose only unfilled gap has c2 == 25 → no FORMED unfilled imbalance →
     deactivated at 25 (reason all_imbalances_filled); the next raw update (26)
     reactivates it."""
-    tracker = _tracker("cross_cycle")
+    tracker = _tracker()
     df = _df(40, [_gap(15), _gap(25)])
     df.at[22, "l"] = 1.02                       # stroke 1 (<= 1.03); close 1.5 >= 1.10 = stroke 2
     est = _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0), df,
@@ -222,13 +221,13 @@ def _pre_established_cycle1(own_gap_start):
     """cross_cycle: cycle 0 (gap 15, unfilled) established at 20 and confirmed
     at 25 → cycle 1 pre_established; a dip at 27 makes 27 the prospective BOS_1,
     so a CTS_THRESHOLD_UPDATED at 30 asks for an own gap in [27, 30]."""
-    tracker = _tracker("cross_cycle")
+    tracker = _tracker()
     df = _df(40, [_gap(15), _gap(own_gap_start, top=1.40, bottom=1.30)])
     df.at[27, "l"] = 1.45
     _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0), df,
            bos_idx=10, bos_price=0.9)
     _quiet(tracker.on_cts_confirmed, _ev("CTS_CONFIRMED", 25, 1.2, 0, 0, cts_anchor_idx=20))
-    assert tracker._m15_phase[(0, 1)] == "pre_established"
+    assert tracker._phase[(0, 1)] == "pre_established"
     _quiet(tracker.on_cts_threshold_updated, _ev("CTS_THRESHOLD_UPDATED", 30, 1.52, 0, 0), df)
     return tracker
 
@@ -240,31 +239,6 @@ def test_threshold_update_own_gap_at_the_candle_creates_no_cross():
     assert tracker._get_latest_cross(0, 1) is None
 
 
-def test_h1_cycle0_scenario1_est_gap_at_the_moment_no_activation():
-    """sid >= 1, h1: Scenario 1 TRUE at a lag-0 cycle-0 EST whose only gap has
-    c2 == CTS_0 → no cycle-0 activation at the EST."""
-    tracker = _tracker("h1")
-    df = _df(40, [_gap(20)])
-    res = _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 1, 0), df,
-                 bos_idx=10, bos_price=0.9, reversal_confirmed_idx=15)
-    assert res is None
-    assert (1, 0) not in tracker._fibs
-
-
-def test_h1_cycle0_scenario1_on_update_reads_the_cache_at_the_moment():
-    """The cycle-0 cache re-snapshot on a raw update writes the UNCUT value, but
-    the Scenario-1 activation at that update asks at its moment: the gap (c2 25)
-    has not formed at 25 → no activation."""
-    tracker = _tracker("h1")
-    df = _df(40, [_gap(25)])
-    _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 1, 0), df,
-           bos_idx=10, bos_price=0.9, reversal_confirmed_idx=25)
-    res = _quiet(tracker.on_cts_updated, _ev("CTS_UPDATED", 25, 1.25, 1, 0), df, 25)
-    assert res is None
-    assert (1, 0) not in tracker._fibs
-    assert tracker._cross_cycle_data[1]["cycle0"]["has_unfilled"] is True   # uncut cache
-
-
 # ===========================================================================
 # GUARD PINS — pass on the pre-Plan-F code; each catches a named wrong variant
 # ===========================================================================
@@ -272,7 +246,7 @@ def test_h1_cycle0_scenario1_on_update_reads_the_cache_at_the_moment():
 def test_guard_lag1_est_gap_at_the_anchor_still_activates():
     """Anchor 20, moment 21, gap c2 20: formed at 21 == the moment → counted.
     Catches a cut keyed on check_to_idx (the anchor)."""
-    tracker = _tracker("cross_cycle")
+    tracker = _tracker()
     df = _df(40, [_gap(20)])
     res = _quiet(tracker.on_cts_established,
                  _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0, confirmed_at=21), df,
@@ -286,7 +260,7 @@ def test_pattern_path_update_is_cut_at_its_apply_not_its_anchor():
     Anchor 25, apply 26. Gap c2 25 → formed at 26 == the apply → counted (a cut
     at the anchor 25 would drop it). The activation stamp is the moment
     too (Plan E E3a)."""
-    tracker = _tracker("cross_cycle")
+    tracker = _tracker()
     df = _df(40, [_gap(25)])
     _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0), df,
            bos_idx=10, bos_price=0.9)
@@ -301,7 +275,7 @@ def test_pattern_path_update_gap_at_its_apply_waits_one_update():
     after the moment → not counted (uncut — before E3·0 — it activated here).
     The next pattern update (anchor = apply = 26) counts it. Landing review:
     only this shape changes the answer between cut and uncut."""
-    tracker = _tracker("cross_cycle")
+    tracker = _tracker()
     df = _df(40, [_gap(25)])
     _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0), df,
            bos_idx=10, bos_price=0.9)
@@ -312,16 +286,6 @@ def test_pattern_path_update_gap_at_its_apply_waits_one_update():
                  _ev("CTS_UPDATED", 26, 1.26, 0, 0, via="one_maru_continuous", confirmed_at=26), df)
     assert upd is not None and upd.active
     assert upd.meta["activated_at"] == 26
-
-
-def test_guard_cycle0_cache_stays_uncut():
-    """The cycle-0 liveness cache is Scenario-2 cond2, used at CTS_1 EST when
-    every gap in [BOS_0, CTS_0] has formed → it stays uncut. Catches a cut cache."""
-    tracker = _tracker("h1")
-    df = _df(40, [_gap(20)])
-    _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 1, 0), df,
-           bos_idx=10, bos_price=0.9, reversal_confirmed_idx=15)
-    assert tracker._cross_cycle_data[1]["cycle0"]["has_unfilled"] is True
 
 
 def test_guard_threshold_update_own_gap_formed_at_the_candle_creates_the_cross():
@@ -374,7 +338,7 @@ def test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib():
         df, 30, 1.00, 40, 1.35, 1, structure_id=0, cycle_id=1, fill_horizon_idx=40, snapshot_horizon_idx=40,
     )
     assert inners == [1.13]
-    tracker = _tracker("h1")
+    tracker = _tracker()
     # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
     _quiet(tracker.on_cts_confirmed, _ev("CTS_CONFIRMED", 6, 0.95, 0, 0, cts_anchor_idx=5))
     _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 40, 1.35, 0, 1), df,
@@ -464,56 +428,6 @@ def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_with_their_apply():
 # Landing cold review (2026-09-24): pins for the remaining cut / uncut sites
 # ===========================================================================
 
-def test_h1_cycle0_scenario1_true_activation_on_update_waits_for_the_gap():
-    """Scenario 1 already TRUE, no cycle-0 fib yet: the activation-on-update read
-    (`_c0_has_unfilled_now`) asks at the update's moment — gap c2 25 has not formed
-    at 25, has at 26."""
-    tracker = _tracker("h1")
-    df = _df(40, [_gap(25)])
-    _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 1, 0), df,
-           bos_idx=10, bos_price=0.9, reversal_confirmed_idx=15)
-    assert _quiet(tracker.on_cts_updated, _ev("CTS_UPDATED", 25, 1.25, 1, 0), df, 15) is None
-    upd = _quiet(tracker.on_cts_updated, _ev("CTS_UPDATED", 26, 1.26, 1, 0), df, 15)
-    assert upd.meta["activated_at"] == 26
-
-
-def _drive_h1_cycle1(confirmed_at, extra_gaps=()):
-    """sid 1, h1: cycle 0 (gap 15; Scenario 1 FALSE, rv 100) → CTS_1 EST at 40."""
-    tracker = _tracker("h1")
-    df = _df(80, [_gap(15), *extra_gaps])
-    _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.15, 1, 0), df,
-           bos_idx=10, bos_price=1.0, reversal_confirmed_idx=100)
-    _quiet(tracker.on_cts_confirmed, _ev("CTS_CONFIRMED", 25, 1.15, 1, 0, cts_anchor_idx=20))
-    _quiet(tracker.on_cts_established,
-           _ev("CTS_ESTABLISHED", 40, 1.35, 1, 1, confirmed_at=confirmed_at), df,
-           bos_idx=30, bos_price=1.2, reversal_confirmed_idx=100)
-    return tracker, df
-
-
-@pytest.mark.parametrize("confirmed_at, crosses", [(40, False), (41, True)])
-def test_h1_scenario2_cond1_asks_at_the_cts1_moment(confirmed_at, crosses):
-    """Scenario-2 cond1 (`select_fib_anchor_for_cycle` from FibTracker): cycle 1's
-    only own gap has c2 == CTS_1 anchor 40 — not formed at a lag-0 moment (no
-    cross), formed at a lag-1 moment 41 (cross)."""
-    tracker, _ = _drive_h1_cycle1(confirmed_at, [_gap(40, top=1.30, bottom=1.20)])
-    assert (tracker._get_latest_cross(1, 1) is not None) is crosses
-
-
-def test_h1_cycle1_cross_update_cuts_cond2():
-    """`_update_cycle1_main`: cycle 1's own gap (35) fills at 42; the update at 45
-    whose only other gap has c2 == 45 → cond2 False (not formed) → the cross
-    deactivates at 45; its own window (== cond2's) has nothing formed either, so the
-    create-on-fail invariant assert stays silent (the single path is deleted, 2026-09-28)."""
-    tracker, df = _drive_h1_cycle1(40, [_gap(35, top=1.30, bottom=1.20),
-                                        _gap(45, top=1.45, bottom=1.40)])
-    df.at[42, "l"] = 1.22
-    assert tracker._get_latest_cross(1, 1)[1].active
-    _quiet(tracker.on_cts_updated, _ev("CTS_UPDATED", 45, 1.46, 1, 1), df, 100)
-    cross = tracker._get_latest_cross(1, 1)[1]
-    assert cross.active is False and cross.meta["deactivated_at"] == 45
-    assert (1, 1) not in tracker._fibs
-
-
 def _c0():
     return {"bos_idx": 10, "bos_price": 1.0, "cts_idx": 20, "cts_price": 1.15,
             "has_unfilled": True, "scenario1": None}
@@ -562,7 +476,7 @@ def test_guard_ms_cycle0_snapshot_is_uncut():
 
 
 def test_event_scope_is_restored_after_every_handler():
-    tracker = _tracker("cross_cycle")
+    tracker = _tracker()
     df = _df(40, [_gap(15)])
     _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 20, 1.2, 0, 0), df,
            bos_idx=10, bos_price=0.9)
@@ -577,11 +491,11 @@ def test_event_scope_is_restored_after_every_handler():
 
 def test_a_malformed_event_does_not_wedge_the_tracker():
     """event_moment raising (missing `via`) must not leave the scope flag set."""
-    tracker = _tracker("h1")
+    tracker = _tracker()
     df = _df(40, [_gap(25)])
     bad = _ev("CTS_UPDATED", 25, 1.25, 1, 0)
     del bad.meta["via"]
     with pytest.raises(KeyError):
-        _quiet(tracker.on_cts_updated, bad, df, 15)
-    _quiet(tracker.on_cts_updated, _ev("CTS_UPDATED", 26, 1.26, 1, 0), df, 15)
+        _quiet(tracker.on_cts_updated, bad, df)
+    _quiet(tracker.on_cts_updated, _ev("CTS_UPDATED", 26, 1.26, 1, 0), df)
     assert tracker._evaluated_at is None and tracker._in_event is False

@@ -162,8 +162,9 @@ _FIB_META_IDX_KEYS = (
     "activated_at",
     "reactivated_at",
     "locked_at",
-    "cycle1_bos_anchor_idx",  # the cycle-1 cross fib (Scenario 2): BOS_1's anchor
-                              # (`cycle1_bos_idx` until Post-E·5, 2026-09-30)
+    # `cycle1_bos_anchor_idx` (the H1-main Scenario-2 cross's BOS_1 anchor) retired with
+    # its emitter in PLAN_I S4 (2026-10-08; a rule-3 migration — LANDMINES "Event
+    # Contract Rules"): no fib record carries it any more.
 )
 
 # IPCandidateRecord DATACLASS FIELDS with entity-df indices (PLAN_H §8.3, the

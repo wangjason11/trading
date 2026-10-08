@@ -18,6 +18,8 @@ import io
 
 import pytest
 
+from engine_v2.tests._cross_fib_limits import main_limits
+
 from engine_v2.multitf.sid_records import build_sid_records_for_main
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 from engine_v2.structure.market_structure import StructureEvent
@@ -35,7 +37,7 @@ def _run(end_idx, mutate=None):
         events = copy.deepcopy(res.events)
         if mutate:
             mutate(events)
-        out = _run_downstream_pipeline(res.df, events, 1, fib_mode="h1", lifecycle_cap=end_idx)
+        out = _run_downstream_pipeline(res.df, events, 1, lifecycle_cap=end_idx, cross_fib_limits=main_limits(events))
     return events, out
 
 

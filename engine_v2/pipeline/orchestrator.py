@@ -196,7 +196,6 @@ def _run_downstream_pipeline(
     struct_direction: int,
     *,
     source_kinds: Optional[List[str]] = None,
-    fib_mode: str = "h1",
     length_threshold: float = 0.7,
     log_prefix: str = "",
     timeframe: str = "H1",
@@ -226,9 +225,9 @@ def _run_downstream_pipeline(
     `cross_fib_limits` — `{sid: CrossFibLimit}` for the FibTracker (PLAN_I §9.3
     D1 / D2): the main's from `compute_main_cross_fib_limits`, a sub's `{0: P}`
     from the pool. Stamped onto every fib record (`cross_fib_limit_*`, main
-    `started_by`, S2); APPLIED in `cross_cycle` mode since S3 (the sub path — a
-    tracker consulted for a cycle >= 1 without an entry raises
-    `CrossFibLimitError`); main's h1 mode only stamps until S4. None = no stamp.
+    `started_by`, S2) and APPLIED — the cross limit (subs since S3, main since S4:
+    ONE FibTracker logic, `CROSS_CYCLE_FIB_SPEC.md`); a tracker consulted for a
+    cycle >= 1 without an entry raises `CrossFibLimitError`. None = no stamp.
     """
     if wvmi not in WVMI_MODES:
         raise ValueError(f"[downstream] wvmi={wvmi!r} not in {WVMI_MODES}")
@@ -314,38 +313,10 @@ def _run_downstream_pipeline(
             fib_levels=[30.0, 50.0, 61.8, 80.0],
             fill_threshold=0.70,
         ),
-        fib_mode=fib_mode,
         cross_fib_limits=cross_fib_limits,
     )
 
     bos_anchor_by_cycle = {}  # {(sid, cycle_id): (bos_anchor_idx, bos_price)}
-
-    def _get_prev_bos_outer(sid: int) -> tuple:
-        """Get max expanded outer threshold of prev structure's last BOS zone."""
-        prev_sid = sid - 1
-        if prev_sid < 0:
-            return None, None
-
-        prev_bos_zones = [
-            z for z in kl_zones
-            if z.meta.get("structure_id") == prev_sid and z.source_kind == "BOS"
-        ]
-        if not prev_bos_zones:
-            return None, None
-
-        last_bos_zone = max(prev_bos_zones, key=lambda z: z.meta.get("cycle_id", 0))
-        prev_sd = 1 if last_bos_zone.side == "buy" else -1
-
-        bounds_steps = last_bos_zone.meta.get("bounds_steps", [])
-        if not bounds_steps:
-            return last_bos_zone.meta.get("outer"), prev_sd
-
-        if prev_sd == 1:
-            max_expanded_outer = min(step["bottom"] for step in bounds_steps)
-        else:
-            max_expanded_outer = max(step["top"] for step in bounds_steps)
-
-        return max_expanded_outer, prev_sd
 
     for ev in sorted_events:
         sid = ev.meta.get("structure_id", 0)
@@ -366,31 +337,16 @@ def _run_downstream_pipeline(
                     f"{int(ev.idx)}) handled before its cycle's BOS_CONFIRMED"
                 )
             bos_anchor_idx, bos_price = bos_anchor_by_cycle[key]
-            reversal_idx = reversal_idx_by_new_sid.get(sid)
-
-            prev_bos_outer, prev_sd = None, None
-            # §11b: pass P_rev (prev-BOS-outer) at EVERY cycle for sid >= 1
-            # (was cycle 1 only). FibTracker stashes it set-once for the
-            # multi-cycle cross target ceiling M. Cycle 1 still uses it for
-            # the Scenario-1 revert check exactly as before.
-            if sid >= 1:
-                prev_bos_outer, prev_sd = _get_prev_bos_outer(sid)
-
-            fib_tracker.on_cts_established(
-                ev, df, bos_anchor_idx, bos_price, reversal_idx,
-                prev_bos_outer, prev_sd
-            )
+            fib_tracker.on_cts_established(ev, df, bos_anchor_idx, bos_price)
 
         elif ev.type == "CTS_UPDATED":
-            reversal_idx = reversal_idx_by_new_sid.get(sid)
-            fib_tracker.on_cts_updated(ev, df, reversal_idx)
+            fib_tracker.on_cts_updated(ev, df)
 
         elif ev.type == "CTS_CONFIRMED":
             fib_tracker.on_cts_confirmed(ev)
 
         elif ev.type == "CTS_THRESHOLD_UPDATED":
-            # Used by cross_cycle mode to trigger pre-established cross-fib
-            # checks. No-op in h1 mode.
+            # Drives the pre-established cross-fib checks (the next cycle's phase).
             fib_tracker.on_cts_threshold_updated(ev, df)
 
     # Wire the reversal terminal onto the ended sid's cycles BEFORE finalize so

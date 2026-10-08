@@ -738,6 +738,8 @@ The rule ("parent cycle 0 → no reference") covers the case either way.
   `FibEventOrderError`, byte-identical. **S3 LANDED** (§9.10): the limit applied to subs, `/compare` = §9.5 b + the
   `via` label on the 11 predicted rows; the landing review's m1 (the confirmed anchor wins) folded, byte-identical.
   R8-3 answered (a) (F18, the late-created cross, joins S3b) → **S3b LANDED** (§9.10): byte-identical to S3.
+  **S4 LANDED** (§9.10): step A (the H1 call flipped) = §9.5 c cell by cell; step B (the h1 mode + 19 methods deleted,
+  the `cycle1_bos_anchor_idx` rule-3 migration) byte-identical to step A; CROSS_CYCLE_FIB_SPEC rewritten + Appendix A.
 
 ## 8. Handoff to session 2 — the implementation plan (from a fresh code audit + a cold review)
 
@@ -933,6 +935,16 @@ convention); M15 indices entity-absolute unless a sub's slice-local frame is nam
   window empty at e, the update finds a gap): cycle T−1 then ends at u. Constructed: cycle 1 established at 40 with no
   gap in [30, 40], an update to 48 finds the gap 44 → cross 0→1 created at 48 → cycle 0 ends at 48. Window: 0 (no
   cycle ≥ 1 fib activated or created after its establishment, measured on S3).
+- **F19 — a fib outlives its cycle when the cycle after it gets NO fib (S4 landing review, lens A m3, 2026-10-08;
+  LATENT — 0 on the reference window; parked for a decision).** `_activate_fib` / `_create_cross` end the structure's
+  LAST cycle that has a fib (`_current_cycle[sid]`), and the stream terminal is set-if-absent, so it beats finalize's
+  pass-through end: cycle 0 with a fib, cycle 1 established with no unfilled own imbalance (no fib), cycle 2 activates
+  at its establishment 60 → cycle 0's fib ends at 60 instead of 40 (its own cycle's end, cycle 1's establishment) —
+  constructed by lens A, sd ±1, with and without `P`. Existed before S3b in both modes; since S4 it also reaches main
+  (the new (0,0) included). S3b's "a cycle's fib cannot outlive its cycle" holds only for the adjacent cycle. Fix
+  candidates (each a behaviour change to measure): `_prev_cycle_end_at` uses the establishment of `prev_cycle + 1`, or
+  `_set_terminal` takes the true minimum of the candidates. Docs state the limitation (CROSS_CYCLE_FIB_SPEC §2,
+  FIB_LIFECYCLE_SPEC §7); register D.1 item 2.
 - **F16 — MS confirms a CTS with an anchor AFTER its confirmation candle (the range back-fill look-ahead; found by the
   session-4 F14 search, 2026-10-08, §9.10; LATENT — 0 on the window) (→ R8-1).** `_step_anchor`'s no-winner branch
   confirms a range candidate at `i` (confirm `c`), back-fills `[i, min(c, D))` — the raw CTS update included
@@ -951,6 +963,10 @@ convention); M15 indices entity-absolute unless a sub's slice-local frame is nam
   fib locks at 13:00 (0.5723) in processing order, at 13:45 (0.57191) in emission order. Every search hit (6) is this
   mechanism: a pullback `CTS_CONFIRMED` at `k` inside a `RANGE_STARTED`'s `[start_idx, confirm_idx)` whose CTS
   anchor is the range's `cts_anchor_idx` > `k`. Window: 0 (the 30 exported CTS_CONFIRMED rows; V5's sequence check).
+  Since S4 the same divergence reaches main (`plan_i_inputs/f14_order_effect.py` on the 2025-03-24 example: the main
+  limits differ too); and the single path of `_handle_cross_cycle_cts_updated` (cycle 0, past the limit) has no phase
+  check, so a post-confirmation update in this order can still extend / late-activate an UNLOCKED single (S4 landing
+  review, lens A nit) — inputs to the S5 round.
 - **F17 — the downstream SILENTLY SKIPS a CTS_ESTABLISHED whose cycle's BOS anchor lies after its CTS anchor — and that
   hides the F14 (1) shape from the S2 tripwire (found by the session-4 60k WAVES run, 2026-10-08, §9.10; LATENT — 0 / 34
   on the window, 0 / 4,800 REAL slices) (→ R8-2).** The orchestrator loop hands a CTS_ESTABLISHED to the tracker only
@@ -1434,3 +1450,63 @@ Tools: `plan_i_inputs/f14_order_effect.py` (a trial's fib records in processing 
   establishment (40, not 48), the late fib's own start stays 48; Option A unchanged. All 8 FAIL on S3's tracker.
   Docs: FIB_LIFECYCLE_SPEC §7, CROSS_CYCLE_FIB_SPEC §2.2. No separate landing review (a ~20-line change, 0 cells):
   folded into S4's.
+
+**S4 — main joins the one path (R6-5: Q4, Q5, Q6, I2, I5, Q8, main's P = `bos_frozen`) — LANDED** (its own commit,
+a rule-3 migration; local, not pushed). Built in two steps, each replayed:
+- **Step A — the behaviour alone:** the H1 call's FibTracker flipped to the sub mode (one line). `/compare` vs S3b =
+  **§9.5 c cell by cell**: only the H1 fib CSV (3 → 5 rows), the H1 IP-candidate CSV (78 → 236) and the H1 figure moved;
+  both M15 lenses equal. Q6 → + (0,0) single 96 → 430, start 115, end 652 `new_cycle`, ended, locked, `IP: none
+  (no_pattern)` (151 IC candidates, 11 ranked, 3 touching the zone, none both — F2); Q4 → + (1,0) single 689 → 710, collapsed (end 741); I2 → (1,1) cross v0 activated 741 (was 748),
+  (1,0) ended there; the h1-gated obsolete's deletion → (1,1) `new_cycle` → `next_cycle`, still collapsed; I5 → (1,2)
+  `via: cross_failed`, same anchors 826 → 905; Q8 → (1,1) loses `scenario` / `cycle1_bos_anchor_idx` /
+  `obsolete_reason`, gains `version` 0 (cell '' → `0.0`) / `fib_mode` / `cross_start_cycle` 0; (0,1) `flow` → `fib_mode`
+  + `via: "cross_fib_limit"` (R7-3's rule — the one cell no variant measured); H1 figure 80 → 81 traces (+
+  `fib:sid0:c0`, hover "ended (locked) / life=[115, 652] new_cycle / IP: none (no_pattern) / limit: none
+  (start_trading)"), shapes 230 → 235 (+5). vs the session-2 variant V4: the fib CSVs differ only by the `via` labels
+  (the 11 M15 rows + H1 (0,1)); the IP candidates md5-equal.
+- **Step B — the deletion (behaviour-neutral):** `zones/fib_tracker.py` loses `fib_mode` and 19 h1-only methods (920
+  lines) + `_cross_cycle_data` / `_scenario1` / `_prev_bos_outer`; `_activate_fib` singles-only (the h1-gated
+  versioned-cross obsolete deleted); signatures `on_cts_established(event, df, bos_idx, bos_price)` /
+  `on_cts_updated(event, df)`; `_INVALIDATION_END_REASONS = frozenset()`; the I8 gate removed; the `m15_` names gone
+  (R6-3 (vii)); `_bos_moment_by_cycle` KEPT (S3b's `_prev_cycle_end_at` reads it); `select_fib_anchor_for_cycle` kept
+  for MS's resolver until S5. `orchestrator` loses `fib_mode` + `_get_prev_bos_outer`; `project_to_window` loses
+  `fib_mode`. The rule-3 migration (LANDMINES "Event Contract Rules"), this one commit: `cycle1_bos_anchor_idx`'s emitter
+  deleted, out of `entity_df_mutation._FIB_META_IDX_KEYS`, the guards (`test_event_meta_idx_keys` `must_see`,
+  `test_event_fields` fallback regex) updated + a new static guard (`test_meta_key_renames`: no production string EQUALS
+  `cycle1_bos_anchor_idx` / `scenario` / `flow` / `scenario1_revert`). `/compare` vs step A: **byte-identical** — 27 / 27
+  CSVs md5, 3 / 3 figures (full JSON); fetch gate PASS (75.7 s wall); the log grep as before.
+- Tests 1408 → 1373 (→ 1385 with the review pins). Census S4 (111): **71 kept** — re-pinned (the `fib_mode` keyword → `cross_fib_limits=main_limits(
+  events)` (production's `compute_main_cross_fib_limits`, new in `tests/_cross_fib_limits.py`) or `unreached`; the
+  h1 / cross_cycle parametrizations collapsed), assertions re-derived where main's new (0,0) single or its limit line
+  changed them (test_institutional_pattern, test_plan_h_landing_b ×2, test_fib_chart_render, test_plan_e_role_pins,
+  test_orchestrator_reversal_source — its FibTracker Scenario-1 reader retired —, test_e3a ×2); **38 retired** (the
+  deleted mechanisms: Scenario 1 / 2 / 3, the revert, the §11b peek / ceiling, the cycle-0 cache, `_update_cycle1_main`,
+  h1 versioned storage — `test_main_versioned_cross.py` deleted —, the h1 mode); **2 re-derived under new names**
+  (`test_est_cycle1_own_window_fill_horizon_is_the_moment`, `test_est_the_walk_asks_at_the_moment`). New:
+  `test_plan_i_s4_main_one_path.py` (4: main's cycle-0 single and labelled singles; R2-5 — a retroactively established
+  sid 1's pre-established cross clamped to the floor, its cycle-0 single collapsed; sd ±1), the static guard. The
+  S2 order-tripwire tests and the e4 / role pins collapsed from (h1, cross_cycle) to the one path (main vs sub limits).
+- Docs: `zones/CROSS_CYCLE_FIB_SPEC.md` REWRITTEN (the one logic; Appendix A = the retired sections VERBATIM from
+  `0846441`, R2-3); FIB_LIFECYCLE_SPEC (S4 banner + the renames, §5 resolved, §6 main's pre-established + R2-5, §10 no
+  producer, §15.3 / §15.4); LANDMINES (Scenario 2 anchor agreement — FibTracker side retired, the entry retires in S5;
+  "A Single's Activation Never Stamps the Previous Cycle's CROSS" replaces the h1-only obsolete; `_phase`; the sd-strict
+  site list; the terminal lists); ARCHITECTURE (subs' fib); IMBALANCE_FILL_SEMANTICS (the FibTracker call-site matrix);
+  GLOSSARY (retired fib terms); POI_ZONES_SPEC (key behaviours, Scenario Logic RETIRED, the prev-BOS line, Cross-Cycle
+  Mode); GOTCHAS (the revert lesson marked retired); PART4 (one line).
+- Landing review of S3b + S4, 2 read-only lenses, **666,170 tokens**: **A** code + docs audit (425,661) — 0 BLOCKER /
+  1 MAJOR / 8 MINOR / NITs, all folded: M1 the new spec named two limit sources the code does not emit
+  (`prev_sub_latest_cts` / `prev_sub_starting_price` are the real ones); m1 the cross revival's moment stamp had lost its
+  only pin with the retirement → re-derived (`test_update_cross_revival_stamps_the_moment`); m2 the stale
+  `_NOT_MIRRORED` fib entry; m3 → **F19** (§9.2; docs reworded, parked); m4 `f14_order_effect.py` (the S5 input) moved
+  onto the one path; m5 production comments / docstrings naming retired code (`cross_cycle_fib`, `fib_tracker`'s
+  selector body, `market_structure`, `poi_zones`); m6 stale passages (FIB_LIFECYCLE_SPEC §6 / §15, IMBALANCE_FILL_SEMANTICS
+  M1, MARKET_STRUCTURE_SPEC, LANDMINES, POI_ZONES_SPEC); m7 broken § references after the renumbering; m8 the spec's
+  own-window wording on the threshold path, the inactive-moved-start branch, `target_ceiling` (no caller); nits (test
+  names / comments, a tautological S3b pin made real — cycle 1 now established). Verified: the deletion complete (no
+  production reader of a retired name / state / meta key), main loses nothing beyond §9.5 c, `compute_main_cross_fib_limits`
+  covers every main sid (sid ≥ 2 traced), the rule-3 migration complete, Appendix A verbatim (difflib), S3b on every
+  path incl. main's pre-established Option A and a post-establishment shrink. **B** mutation (240,509) — 66 mutants on
+  the full suite: 54 killed, 5 equivalent (P04, F03, F05 — unreachable orders; N02, G01 — no producer), 7 gaps → its 7
+  drafted pins adopted as `test_plan_i_s4_landing_review_pins.py` (MAJOR D08: main's CTS_THRESHOLD_UPDATED dispatch —
+  I2 — was pinned only on the bare tracker; H03 every main sid's limit; A05 / A06; I02 / I05 I8 on the reactivation
+  and on a main sid; W01 an update after the confirmation never moves the locked cross); re-run 7 / 7 KILLED.

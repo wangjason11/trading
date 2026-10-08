@@ -226,7 +226,12 @@ fired, the BOS came from the proximity-only
 `[cts_confirmed_idx, breakout_apply_idx]` window). Grep the
 structure_events.csv for that combination to catch regressions.
 
-**Scenario 2 anchor agreement (closed 2026-05-13):**
+**Scenario 2 anchor agreement (closed 2026-05-13) — FibTracker side RETIRED by PLAN_I S4 (2026-10-08); the whole
+entry retires with MS's in-flight resolver in S5.** Since S4 FibTracker no longer calls `select_fib_anchor_for_cycle`
+(main runs the one logic, `zones/CROSS_CYCLE_FIB_SPEC.md`; its Scenario 1 / revert / cycle-0 cache are gone): only
+MS's in-flight resolver still reads that selector, so MS's read and the drawn fib differ wherever a cross or the limit
+decides (PLAN_I §9.2 F9 — 20 / 371 refreshes on the reference window, 0 / 475 proximity answers changed). The
+paragraphs below describe the pre-S4 pairing (FibTracker's sentences are history):
 MarketStructure's in-flight POI snapshot
 (`zones/poi_zones.py::compute_poi_inners_for_cycle`) and FibTracker's
 downstream POI derivation both pick Fib anchors via the shared pure
@@ -301,23 +306,20 @@ compare against `df.attrs["poi_zones"]`.
 
 ---
 
-## `_activate_fib`'s Versioned-Cross Obsolete Is H1-Only
+## A Single's Activation Never Stamps the Previous Cycle's CROSS
 
-**Rule:** The §11a-ii addition in `FibTracker._activate_fib` that obsoletes a
-**prev-cycle versioned cross** (so the next cycle's activation sets the
-`new_cycle` terminal on the now-versioned H1-main cross) is gated to
-`self.fib_mode == "h1"` and MUST stay gated.
+(Was "`_activate_fib`'s Versioned-Cross Obsolete Is H1-Only" — the h1-gated block it guarded is DELETED with the h1
+mode in PLAN_I S4, 2026-10-08.)
 
-**Why:** `_activate_fib` is shared by both modes. Subordinate (`cross_cycle`)
-crosses are obsoleted by `_m15_create_cross` → `_obsolete_prev_cycle_all_fibs`
-at the *next cross's creation*. A sub `cross_failed` single also reaches
-`_activate_fib`; if the versioned-cross obsolete ran there too, it would stamp
-`obsolete_reason`/`_set_terminal(...,"new_cycle")` on the prior sub cross,
-flipping its `end_reason` from `next_cycle` (the finalize pass-through) to
-`new_cycle`. Caught by `/compare` as a 1-row diff in
-`M15_{counter,confluence}_fib_lifecycle.csv` (`end_reason: next_cycle→new_cycle`).
-Only the H1-main cross needs this hook (subs handle their own), so the `"h1"`
-gate is both necessary and sufficient.
+**Rule:** `FibTracker._activate_fib` (singles only since S4) obsoletes and ends only the previous cycle's SINGLE. A
+previous cycle's cross is ended by the next cross's creation (`_create_cross` → `_obsolete_prev_cycle_all_fibs`) or,
+when the next cycle gets a single, by finalize's pass-through end (`next_cycle`).
+
+**Why:** a `cross_failed` / past-the-limit single reaching `_activate_fib` that also stamped the prior cross would
+flip its `end_reason` from `next_cycle` to `new_cycle` — caught once by `/compare` as a 1-row diff in
+`M15_{counter,confluence}_fib_lifecycle.csv` (2026-06-17), when the then main-only block first ran without its
+`"h1"` gate. Main's own cross
+now follows the rule too: S4 moved the reference window's (1,1) from `new_cycle` to `next_cycle` (PLAN_I §9.5 c).
 
 ---
 
@@ -446,8 +448,8 @@ lifecycle_cap)`. KL / POI / fib records INHERIT that `end_idx` / `end_reason`
 Shared" below); the KL derivation drops any legacy `active` / `deactivated_by`
 keys from zone meta (`kl_zones_v1`, the lifecycle block), and no derivation
 writes `deactivated_by` for a LIFECYCLE end (`fib_tracker` still writes it for
-its version-internal `cross_failed` / `cross_shortened` / `scenario1_revert`
-supersedes — a different mechanism, see "FibState Lifecycle Gate Is
+its version-internal `cross_failed` / `cross_shortened`
+supersedes (and, until PLAN_I S4, `scenario1_revert`) — a different mechanism, see "FibState Lifecycle Gate Is
 Per-Record"). An open sub (`end_idx is None`) passes `lifecycle_cap=None`
 and its elements stay open to the data edge, exactly like main.
 
@@ -696,7 +698,7 @@ after the EST).
 At a candle where both `CTS_ESTABLISHED` (cycle n+1) AND
 `CTS_THRESHOLD_UPDATED` (cycle n) fire, the alphabetical order processes
 `CTS_ESTABLISHED` FIRST (C_E < C_T). The `cross_cycle` phase gate depends on this:
-1. CTS_ESTABLISHED flips `_m15_phase[(sid, n+1)]` from `pre_established` to
+1. CTS_ESTABLISHED flips `_phase[(sid, n+1)]` (`_m15_phase` until PLAN_I S4) from `pre_established` to
    `established`
 2. Subsequent CTS_THRESHOLD_UPDATED sees phase != `pre_established` and
    becomes a no-op — as intended (cycle n+1 is now in established mode)
@@ -1021,7 +1023,7 @@ latent bug from Week 8 Part 3 (sub WVMI silently empty) — fixed in 3d.iii.
 # multitf/pooled_structure_build.project_to_window — ONE call per unique sub
 downstream = _run_downstream_pipeline(
     bounded.df, clipped_events, direction,
-    source_kinds=["BOS"], fib_mode="cross_cycle",
+    source_kinds=["BOS"],
     structure_path_id=first_lens_path,
     wvmi="none",          # a sub: no gate, every CTS_CONFIRMED is offered to the tracker
     lifecycle_floor=floor, lifecycle_cap=cap, cap_reason=reason,
@@ -1776,18 +1778,15 @@ failure unless someone has written a direction-mismatch test.
 window / `check_to_idx` / `evaluated_at`: IMBALANCE_FILL_SEMANTICS.md
 "Consumer call-site matrix"):
 - `zones/fib_tracker.py` — the `FibTracker._has_unfilled` helper (every
-  decision read: `_on_cts_established`, the cross_cycle cycle-0 first
-  activation on update, `_c0_has_unfilled_now`, `_update_fib_cts`,
-  `_update_cycle1_main`) + the two uncut cycle-0 cache writes
-  (`_handle_sid1plus_cts_established`, `_handle_cycle0_cts_updated`)
+  decision read: `_on_cts_established`, the single's late activation on update,
+  `_update_fib_cts`; the h1 Scenario-1 / cycle-0-cache sites were deleted in PLAN_I S4)
 - `zones/cross_cycle_fib.py::resolve_cross_cycle_eligibility` — the own test
   + both dead-cycle walks (`direction = sd` when `sd ∈ {+1, -1}`); reached via
-  `select_fib_anchor_for_cycle`, `_maybe_activate_main_cross`, `_m15_cross_check`
+  `_cross_check` (FibTracker) and `select_fib_anchor_for_cycle` (MS's in-flight resolver, until S5)
 - `structure/market_structure.py::_update_cycle0_data`
 
 Plus `select_fib_anchor_for_cycle` takes `struct_direction` as a
-parameter; the two callers (`compute_poi_inners_for_cycle` and
-FibTracker's internal use) must pass it. Default value of 0 falls
+parameter; its one caller since PLAN_I S4 (`compute_poi_inners_for_cycle`) must pass it. Default value of 0 falls
 back to permissive — kept for backward compat but no production caller
 should hit it.
 
@@ -1797,8 +1796,8 @@ also pass the MOMENT of the question. `has_unfilled_imbalance`,
 keyword-only and REQUIRED, so a forgotten moment is a `TypeError`, never a
 silent default; `evaluated_at=None` is an explicit, justified no-cut
 (FibTracker's decisions pass the handled event's moment, `event_moment(ev)` —
-the apply candle `confirmed_at` on a pattern-path CTS_UPDATED since Plan E E3·0; its two cycle-0 cache
-writes, `_update_cycle0_data` and `compute_poi_inners_for_cycle` pass `None`).
+the apply candle `confirmed_at` on a pattern-path CTS_UPDATED since Plan E E3·0; MS's `_update_cycle0_data` and
+`compute_poi_inners_for_cycle` pass `None` — FibTracker's own two cycle-0 cache writes retired in PLAN_I S4).
 Rule: IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
 
 **See also:** `engine_v2/IMBALANCE_FILL_SEMANTICS.md` for the
@@ -1869,8 +1868,8 @@ leaks only into rendered sub POI zones. Same reason the chart gate (§9.1) is
 per-record.
 
 **Do NOT make `_deactivate_cross` (`cross_failed`/`cross_shortened`) stop setting
-`active=False`.** Unlike the cycle TERMINALS (new_cycle / scenario1_revert /
-reversal / lifecycle_end — which now set `end_idx`/`end_reason` and leave
+`active=False`.** Unlike the cycle TERMINALS (new_cycle / reversal / lifecycle_end — and, until PLAN_I S4,
+scenario1_revert — which now set `end_idx`/`end_reason` and leave
 `active` alone; under Plan C the cap-produced terminal carries the sub's
 `end_reason` — `parent_end` / `same_dir_replacement` / `reversal` — in place
 of `lifecycle_end`, same path), these are **version-internal supersedes**: the cycle stays
@@ -1979,8 +1978,8 @@ re-states the cycle-start/end rule of `compute_cycle_lifecycle` on H1 → M15):
 - `compute_reversal_idx_by_sid` — the single reversal dict (the old duplicated
   `_get_reversal_confirmed_by_sid_from_events` / inline `reversal_idx_by_sid`
   are gone; since 2026-09-27 the chart's `export_plotly._get_reversal_confirmed_by_sid`
-  delegates to it, and the orchestrator's `reversal_idx_by_new_sid` — FibTracker's
-  Scenario-1 argument, its reversal terminals, the prev-BOS line END — is it shifted
+  delegates to it, and the orchestrator's `reversal_idx_by_new_sid` — FibTracker's reversal terminals, the prev-BOS line END (and, until
+  PLAN_I S4, FibTracker's Scenario-1 argument) — is it shifted
   to the new sid; it used to be the last `REVERSAL_CANDIDATE.meta["apply_idx"]`, a
   SCHEDULED apply that may never realise (then, a watch expiry could discard it), which put a phantom 'reversal' on
   the fibs: `tests/test_orchestrator_reversal_source.py`). Since 2026-09-28 the

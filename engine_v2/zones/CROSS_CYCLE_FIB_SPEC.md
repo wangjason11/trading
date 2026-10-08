@@ -1,67 +1,196 @@
-# Cross-Cycle Fib Unification — Design & Implementation Plan
+# Cross-Cycle Fib — ONE logic for every structure
 
-> **Status:** DESIGN (started 2026-06-16) — **not yet implemented.** This is the
-> first canonical spec for the cross-cycle Fib *decision logic* (anchor selection,
-> dead-cycle walk, versioning). Until now the only description was the memory entry
-> `project_cross_cycle_fib_mode.md` (Path B) + scattered docstrings. When this lands
-> it **absorbs** that memory entry as ground truth.
+> **Status: CANONICAL since PLAN_I S4 (2026-10-08).** Every structure — an H1 sid or a unique sub (its sid 0) — runs
+> the same FibTracker logic (`zones/fib_tracker.py`); the H1-main logic it replaced (Scenario 1 / 2 / 3, the revert, the
+> ceiling `M` on the previous BOS zone's outer `P_rev`, main's snapshot fill-as-of, the `fib_mode` parameter) is kept
+> VERBATIM in **Appendix A** — the last commit that ran it is `0846441` (PLAN_I S3b). The rules are the user's
+> (`plans/PLAN_I_cross_cycle_fib_revamp.md` §1.2 + §1.4; decisions §6, verbatim in `plans/plan_i_inputs/
+> cross_cycle_fib_spec.md`); the build record is PLAN_I §9.10.
 >
-> **Companion spec:** `FIB_LIFECYCLE_SPEC.md` covers the orthogonal *lifecycle* axes
-> (active/ended/status, `start_idx`/`end_idx`, the §15 scalar model). This spec is
-> about WHICH ANCHORS a cross fib uses and HOW FAR it spans — not its lifecycle
-> projection. The two compose; neither replaces the other.
+> **Companion spec:** `FIB_LIFECYCLE_SPEC.md` (the lifecycle axes: start / end / status, Option A, the floor clamp).
+> This spec is about WHICH fib a cycle gets and its anchors.
 >
-> **Line numbers** are 2026-06-16 hints; anchor on method/field names (stable).
+> **Still to come (PLAN_I §9.4):** S5 — MarketStructure's in-flight POI read uses this same decision (§8 below; until
+> then MS reads the retired Scenario-2 selector); S6 — the `fib_mode` meta key / CSV column is retired.
 
 ---
 
 ## 0. One-sentence summary
 
-Two implementations compute the same conceptual thing — "a fib whose anchor reaches
-back across one or more prior cycles when those cycles still hold unfilled
-sd-imbalances" — and have drifted apart: **Path A** (H1 main, post-reversal
-Scenario 1/2/3) does a fixed **cycle-0→cycle-1** cross via three static imbalance
-conditions; **Path B** (subordinate `cross_cycle` mode) does a **generalized
-earliest_x→target** cross via a dead-cycle backward walk with integer versioning.
-This spec **unifies the decision logic onto one shared pure routine** and, on that
-unified base, **extends main's cross beyond cycle 1** up to a bounded ceiling.
+Cycle 0 gets a single fib; a cycle T ≥ 1 gets a CROSS fib back across its live, contiguous prior cycles when the
+structure's cross-fib LIMIT allows it (a reference price `P` fixed by the structure's starting trigger, and no earlier
+cycle's CTS anchor strictly beyond `P`), else a single — main and sub alike.
 
 ---
 
-## 1. Why this exists
+## 1. Where it runs
 
-Divergent dual implementations of one decision are a known latent-bug class here
-(see `feedback_in_flight_vs_downstream_resolver`, `feedback_single_source_of_truth`).
-Every fib-touching change deepens the A/B split. Two coupled goals:
-
-1. **Unify** the cross-cycle *requirements* logic (unfilled-imbalance test,
-   deepest-retrace / running-extreme anchor, the cross-cycle / dead-cycle walk, and
-   versioning/logging) into ONE shared routine both modes call — extending the
-   existing partial-share `select_fib_anchor_for_cycle`.
-2. **Update** the post-reversal (main) cross to **extend beyond cycle 1** — a
-   *bounded* multi-cycle cross — landed ON the unified base (the update folds into
-   the unification, not a separate copy that gets re-touched).
-
-**Prerequisite for true-first-breakout Step 4** (main reversals, H1 sid≥1), which is
-post-reversal-fib-heavy — unify before Step 4 so Step 4 builds on settled logic. See
-`project_true_first_breakout_cycle0.md`, `project_cross_cycle_fib_unification.md`.
+- **One tracker per downstream run:** `orchestrator._run_downstream_pipeline` builds `FibTracker(FibTrackerConfig(…),
+  cross_fib_limits=…)` — the H1 main with `compute_main_cross_fib_limits(events)` (`zones/structure_lifecycle.py`), a
+  sub's projection (`pooled_structure_build.project_to_window`) with `{0: sub.cross_fib_limit}`.
+- **Dispatch order:** events sorted by `event_fields.processing_order_key` (CTS_ESTABLISHED / BOS_CONFIRMED / a
+  pattern-path CTS_UPDATED at their ANCHOR; LANDMINES "Event Sort Order Is a Dispatch Invariant"). Handlers:
+  `on_cts_established(event, df, bos_idx, bos_price)`, `on_cts_updated(event, df)`, `on_cts_confirmed(event)`,
+  `on_cts_threshold_updated(event, df)`; then `set_reversal_terminals` and `_finalize_lifecycle_fields`.
+- **Two order tripwires (`FibEventOrderError`, a `RuntimeError`):** the tracker raises when cycle T's CTS_ESTABLISHED
+  arrives before cycle T−1's CTS_CONFIRMED (PLAN_I F14, S2); the dispatch raises when a CTS_ESTABLISHED arrives before
+  its own cycle's BOS_CONFIRMED (F17, S2b — it used to be dropped silently). 0 on the reference window; both shapes
+  come from MS (PLAN_I §9.2 F14 / F16 / F17 — the MS side is parked to the S5 round).
+- **Every TIME half is the handled event's MOMENT** (`ef.event_moment`; Plan E E3a): activation / deactivation /
+  reactivation stamps, fill horizons, the knowability cut (`evaluated_at`, Plan F — `IMBALANCE_FILL_SEMANTICS.md`).
 
 ---
 
-## 2. Status quo (what exists today)
+## 2. The rule per cycle
 
-> **Historical (2026-06-16, the status quo this spec was written against).** §11a /
-> §11a-ii (DONE) have since changed Path A's storage: the H1 cross lives at the
-> versioned key `_fibs[(sid,1,"cross",0)]`, `_cross_cycle_data[sid]` keeps only the
-> `cycle0` dict, and there is no cross ↔ normal toggle or fallback single — see §11.
+| Cycle | Limit (`_cross_allowed`, §3) | Fib |
+|---|---|---|
+| 0 | never consulted | **single** (§5) |
+| T ≥ 1 | allowed | the **cross machinery** (§4) — a cross `BOS_x → CTS_T` over the live run, else the `cross_failed` single |
+| T ≥ 1 | not allowed (no `P`, or a cycle k < T beyond `P`) | **single** (§5), `via: "cross_fib_limit"`; no pre-established cross |
 
-Both paths live in `FibTracker` (`zones/fib_tracker.py`), selected by
-`fib_mode ∈ {"h1", "cross_cycle"}` at construction (orchestrator passes it). The
-same orchestrator event loop drives both (`orchestrator._run_downstream_pipeline`,
-`on_cts_established / on_cts_updated / on_cts_confirmed / on_cts_threshold_updated`);
-the branch happens *inside* each handler.
+**I8 — a single and a cross are never both ACTIVE on one cycle** (the user's "no coexistence"): asserted at every single
+activation / reactivation (`_assert_no_active_cross`) and every cross creation / revival (`_assert_no_active_single`).
+A superseded (inactive) record of the other kind may remain — the `cross_failed` fallback deactivates the cross first.
 
-### 2.1 Path A — H1 main, post-reversal (Scenario 1/2/3)
+**A fib that starts after its cycle's establishment** (a single activated late on a CTS_UPDATED, or a cross created
+late) ends the previous fib at that establishment, not at the late start (`_prev_cycle_end_at`, PLAN_I S3b F15 /
+F18); the pre-established cross (created before the establishment) ends it at its creation (Option A,
+`FIB_LIFECYCLE_SPEC.md` §7). "The previous fib" is the structure's LAST cycle that has one (`_current_cycle`): when a
+cycle in between got no fib, the earlier fib ends at this later establishment, not at its own cycle's end (the stream
+terminal is set-if-absent, so it beats finalize's pass-through end) — PLAN_I §9.2 F19, latent (0 on the reference
+window), parked for a decision.
+
+---
+
+## 3. The cross-fib LIMIT
+
+- **`P` (`cross_fib_limit_price`) — fixed once, at the structure's start, by its STARTING trigger** (PLAN_I §1.2, I1:
+  the variation attaches to the trigger, not to the sid number). `CrossFibLimit(price, source, from_pool_idx /
+  from_sub_id, started_by)` (`zones/cross_cycle_fib.py`):
+
+  | Started by | `P` | `cross_fib_limit_source` |
+  |---|---|---|
+  | main, start trading (sid 0) | none | `none` |
+  | main, a reversal (sid N) | the realised reversal's `bos_frozen` (`STATE_CHANGED(to=reversal)`, == the open watch's frozen barrier) | `reversal_bos_frozen` |
+  | sub, reversal | the reversing sub's reversal `bos_frozen` | `reversal_bos_frozen` |
+  | sub, first_confluence on parent cycle 0 | none | `none` |
+  | sub, first_confluence on parent cycle c ≥ 1 | the parent's CTS_ESTABLISHED(c) `cts_frozen` | `parent_cts_threshold` |
+  | sub, first_counter / subsequent_* | the previous sub x−1 at the record start: same direction → its confirmed `cts_threshold`, else its latest CTS anchor; opposite → its BOS threshold, else its starting extreme; no x−1 → none | `prev_sub_cts_threshold` / `prev_sub_latest_cts` / `prev_sub_bos_threshold` / `prev_sub_starting_price` / `none`; a same-direction x−1 with no CTS → `prev_sub_no_cts` (no `P`, a WARNING) — the set: `cross_cycle_fib.CROSS_FIB_LIMIT_SOURCES` |
+
+  The sub formula: `multitf/cross_fib_limit.py` (`cross_fib_limit_for`), computed at the sub's first trigger's fire
+  and re-derived at its start by the R6-2 tripwire (`check_cross_fib_limits`, warn-only). The values on the reference
+  window: PLAN_I §9.5 a.
+- **`beyond(p, P, sd)`** — STRICT: sd = +1 `p > P`, sd = −1 `p < P`; reaching `P` is not beyond.
+- **`M` (`cross_fib_limit_cycle`)** = the first cycle whose LATEST CTS anchor (`_latest_anchor`: written at its
+  CTS_ESTABLISHED, every CTS_UPDATED until its confirmation, and its CTS_CONFIRMED — the confirmed anchor wins) is
+  beyond `P` = the LAST cycle a cross may target. `_cross_allowed(sid, T)` ⟺ `P` set and (`M` is None or T ≤ M). The
+  cycles k < T are confirmed before T exists (the S2 tripwire) and a confirmed anchor never moves, so the answer is
+  fixed for T's whole life.
+- **REQUIRED:** a tracker consulted for a cycle ≥ 1 of a structure with no limit entry raises `CrossFibLimitError` (a
+  `RuntimeError`, never swallowed by a sub geometry's `except (ValueError, IndexError)`).
+- **Exported:** every fib record's meta carries `cross_fib_limit_price` / `_source` / `_cycle` (the structure's FINAL
+  `M`) / `_from_sub_id` (+ main's `started_by`), stamped at finalize; the fib hover's last line
+  (`_zone_render.fib_hover_limit_text`, CHARTING_SPEC).
+
+---
+
+## 4. The cross machinery (a cycle T ≥ 1 within the limit)
+
+- **Phase machine** `_phase[(sid, cycle)] ∈ {pre_established, established, confirmed}`: `pre_established` from
+  CTS_{T−1} CONFIRMED, `established` at CTS_T ESTABLISHED, `confirmed` at CTS_T CONFIRMED. Cycle 0 has none.
+- **Pre-established cross** (on CTS_THRESHOLD_UPDATED of cycle T−1, target T in `pre_established` and within the
+  limit): anchor = the running extreme past CTS_{T−1}'s confirmation (`_running_extreme_anchor`), own-imbalance start =
+  the prospective BOS_T (`_find_prospective_bos`, the deepest pullback since then). Main has it too since S4 (PLAN_I
+  I2; on the reference window main's (1,1) cross is created at 741 instead of 748).
+- **The cross check** (`_cross_check`, at CTS_ESTABLISHED, every CTS_UPDATED and the threshold path):
+  (1) the target's OWN window — `[BOS_T, CTS anchor]` at the establishment / an update, `[prospective BOS, the
+  processing candle]` on the threshold path — must hold an unfilled sd imbalance formed by the moment — else the active cross deactivates (`own_imb_filled`) and the cycle's existing single re-checks its own
+  window (S3b F5: it extends and deactivates); (2) the **dead-cycle walk** from T−1 down to 0
+  (`resolve_cross_cycle_eligibility`, `fill_as_of="current"`): cycle k is dead when `[BOS_k, CTS_k]` holds no unfilled
+  sd imbalance filled to the current candle (cached in `_dead_cycles[sid]`, dead stays dead); the walk stops at the
+  first dead cycle → `earliest_x`; (3) the version transition, keyed by the START anchor: no version → create v0;
+  same start → extend the CTS anchor in place; start moved up (`cross_shortened`) → v+1; an inactive version with the
+  same start → revive in place, with a moved start → a new version v+1; `earliest_x == T` (no eligible prior) → `cross_failed`: deactivate the cross and, in
+  the established phase, activate the single (`via: "cross_failed"`).
+- **CTS_CONFIRMED** locks the active cross and the active single of the cycle and moves T+1 to `pre_established`.
+
+---
+
+## 5. The single
+
+`_activate_fib` stores it at `(sid, cycle)`: activated at the cycle's CTS_ESTABLISHED when its own `[BOS, CTS]` holds
+an unfilled sd imbalance formed by the moment, else at the first CTS_UPDATED that finds one (`activated_on:
+"update"`); every update re-checks it (`_update_fib_cts`: extend, then deactivate when all its imbalances are filled /
+reactivate when one appears); CTS_CONFIRMED locks it. Labels (`meta["via"]`): none on cycle 0; `cross_fib_limit` past
+the limit; `cross_failed` for the fallback of an allowed cycle.
+
+---
+
+## 6. Storage and meta
+
+- Keys in `_fibs`: `(sid, cycle)` the single; `(sid, cycle, "cross", v)` the cross versions (`_cross_version`).
+- Meta = the sub path's for every structure (Q8): a cross carries `fib_mode` / `cross_cycle` / `cross_start_cycle` /
+  `version` / `activated_at` (+ `locked_at` / `deactivated_*` / `reactivated_at`); a single `activated_at` / `fib_mode`
+  (+ `via`, `activated_on`, …); `obsolete_reason: "new_cycle"` on a record a next cycle ended; the cross-fib limit keys
+  (§3). `fib_mode` is always `"cross_cycle"` until S6 retires it. Retired with main's old logic (a rule-3 migration,
+  S4): `cycle1_bos_anchor_idx` (also out of `entity_df_mutation._FIB_META_IDX_KEYS`), `scenario`, `flow`, the
+  `scenario1_revert` end reason (`_INVALIDATION_END_REASONS` is empty — the `disappeared` status stays as a hook).
+- One fill constant: `fill_threshold = 0.70` (`FibTrackerConfig`).
+
+---
+
+## 7. The shared routine
+
+`zones/cross_cycle_fib.py` `resolve_cross_cycle_eligibility` — pure: the own test + the dead-cycle walk → `earliest_x`
+/ `crosses` (+ the resolved anchors). FibTracker calls it with `fill_as_of="current"`, `evaluated_at` = the moment.
+Its `fill_as_of="snapshot"` / `prior_cached_liveness` parameters serve only the retired Scenario-2 selector
+`select_fib_anchor_for_cycle`, still read by MarketStructure's in-flight POI resolver until S5; `target_ceiling` is
+reserved and has no caller. S5 deletes all three (PLAN_I §9.1).
+
+---
+
+## 8. MarketStructure's in-flight read (until PLAN_I S5)
+
+MS's sd-zone-proximity CTS confirmation reads POI inners through `poi_zones.compute_poi_inners_for_cycle`, which still
+selects the anchor with the retired Scenario-2 rule (`select_fib_anchor_for_cycle`: "intra" for sid 0 — every sub —
+and every cycle ≠ 1) and `evaluated_at=None` (the M1 divergence, LANDMINES "Scenario 2 anchor agreement"). The drawn
+fib and MS's read therefore differ where a cross or the limit decides (PLAN_I §9.2 F9: 20 / 371 refreshes on the window,
+0 / 475 proximity answers changed). S5 replaces it with an embedded tracker running THIS logic (PLAN_I §9.3 D5); the
+appendix then gains MS's retired read.
+
+---
+
+## 9. Open items
+
+- **The S5 round (parked, PLAN_I R8-1 / R8-2):** F16 — MS can confirm a CTS with an anchor after its confirmation
+  candle (a range back-fill look-ahead; emission order ≠ `processing_order_key` order; the drawn fib locks at the
+  earlier anchor); F17's MS side — a cycle established on the previous cycle's CTS candle / a BOS anchor after its CTS
+  anchor (the downstream now raises on it). Register `IDEA_PARKING_LOT.md` §D.1 item 2.
+- The old §13 items, reconciled: main's fill-as-of converged on "current" (S4); the deeper-walk fill-as-of is
+  "current"; `M = 0` → no cross (pinned, S3); the Scenario-1 / revert ↔ ceiling merge is moot (both retired); `sid 0`
+  has no `P` → singles, cycle 0 included (Q6); the in-flight resolver generalization and the sub snapshot's intra fib
+  are S5; single + cross coexistence is ruled out (I8).
+
+---
+
+## 10. Decision log
+
+The decisions are PLAN_I §6 (Q1–Q8, R0 … R8-3); the ones that shaped this spec: R0 / R0a (the limit, set by the
+starting trigger), I1 (attach to triggers), I2 (main gets the pre-established cross), I5 (main's post-reversal handling
+= the reversal-started sub's), I8 (no coexistence), I-lean (unify on the sub's logic), Q6 (cycle 0 single everywhere),
+Q8 (the sub's meta format), R6-1 (d) + R7-3 (the past-limit single, labelled), R6-1b + R8-3 (S3b), R6-5 (S4 one stage),
+R2-3 (this appendix). The 2026-06-16 design decisions of the replaced spec are in Appendix A ("14. Decision log").
+
+---
+
+## Appendix A — Retired logic (history)
+
+> Moved VERBATIM from this spec as it stood at `0846441` (PLAN_I S3b, 2026-10-08) — the last commit whose FibTracker
+> ran the H1-main logic below (PLAN_I R2-3). Section numbers are the old ones; their cross-references point into the
+> old document (`git show 0846441:engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md`). Nothing here describes the current code.
+
+#### 2.1 Path A — H1 main, post-reversal (Scenario 1/2/3)
 
 - **Scope:** `sid ≥ 1` only, and **only the cycle-0 → cycle-1 cross**. `sid == 0`
   never crosses ("simple flow"). Cycles 2+ get plain single fibs.
@@ -95,60 +224,7 @@ the branch happens *inside* each handler.
   cond1: FibTracker passes `evaluated_at` = the CTS_1 moment, the in-flight resolver
   `None` — the accepted M1 divergence, LANDMINES "Scenario 2 anchor agreement".)
 
-### 2.2 Path B — subordinate `cross_cycle` mode
-
-- **Scope:** all subordinate variants, every cycle, generalized cross — up to the cross-fib LIMIT (next bullet).
-- **The cross-fib LIMIT (PLAN_I S3, 2026-10-08; `FibTracker._cross_allowed`).** A cross may target cycle T ≥ 1 only
-  if the sub has a reference price `P` (`PooledStructure.cross_fib_limit`, fixed by its STARTING trigger — PLAN_I
-  §1.2, D2) and no cycle k < T has a latest CTS anchor strictly beyond `P` (`cross_cycle_fib.beyond`): the first
-  cycle beyond (`M`, the exported `cross_fib_limit_cycle`) is the LAST cycle a cross may target. A cycle past it —
-  and every cycle ≥ 1 of a sub without `P` — gets the cycle-0 single: activated at its CTS_ESTABLISHED if its own
-  `[BOS, CTS]` holds an unfilled sd imbalance formed by the moment, else on the first CTS_UPDATED that finds one;
-  every update re-checks; labelled `via: "cross_fib_limit"` (the cycle-0 single carries no `via`); no pre-established
-  cross (`on_cts_threshold_updated` skips a target past the limit). The cycles k < T are confirmed before T exists
-  and a confirmed cycle's latest anchor never moves again (an update of a confirmed cycle — the PLAN_I F16 order — is
-  not written), so the answer is fixed for T's whole life. A `cross_cycle` tracker consulted for a cycle ≥ 1 of a structure with no
-  limit entry raises `CrossFibLimitError` (a `RuntimeError`; the limit is REQUIRED). I8: a single and a cross are
-  never both ACTIVE on one cycle — asserted at every single activation / reactivation and every cross creation /
-  revival (the `cross_failed` fallback deactivates the cross first). Reference window: 6 crosses became singles (confluence sub 0
-  cycles 1–4 — no `P`; sub 2 cycle 1 — M = 0; sub 3 cycle 2 — M = 1, both lenses) and 3 `cross_failed` singles past
-  the limit relabelled (sub 1 cycles 3–4, sub 3 cycle 3 — on both lenses: 9 confluence + 2 counter rows). Main (h1 mode) is unchanged until S4, which rewrites this
-  spec. Canonical: `plans/PLAN_I_cross_cycle_fib_revamp.md` §1.4, §9.3 D1, §9.5 b.
-- **Phase machine** `_m15_phase[(sid,cycle)] ∈ {pre_established, established, confirmed}`.
-  `pre_established` (entered at CTS_{n-1} CONFIRMED) is driven by
-  `CTS_THRESHOLD_UPDATED` (`on_cts_threshold_updated`): anchor = running extreme
-  past CTS_n (`_running_extreme_anchor`), own-imbalance start = prospective
-  BOS_{n+1} (`_find_prospective_bos`, deepest pullback since CTS_n CONFIRMED).
-- **Cross check** (`_m15_cross_check`): (1) target cycle's own imbalance — since
-  Plan F (2026-09-24) only a gap **formed** by the handled event's moment counts (§3
-  item 1); if none, deactivate cross (no pre-established fallback). An own gap whose
-  c2 is the `CTS_THRESHOLD_UPDATED` candle itself has not formed there, and with no
-  later re-check the pre-established cross is never created (reference window: the
-  cross fib counter sub 5 used to pre-create at 3806 for a cycle 1 that never
-  establishes — sub 5 only ever establishes cycle 0 — and its IC 3654 twin POI no
-  longer exist; `IMBALANCE_FILL_SEMANTICS.md` "Decided at the event"). (2) **dead-cycle
-  backward walk** from target-1 to 0 using `_dead_cycles[sid]` cache (Interpretation
-  B: cycle k dead when `[BOS_k,CTS_k]` has no unfilled sd-imbalance with fill checked
-  **to the current candle**; each walked window ends at `CTS_k`, before the moment, so
-  the knowability cut cannot change it); finds `earliest_x`. (3) version transition
-  keyed by **start anchor**: new cross = v0; CTS extend = same version in place; start-anchor shrink (`earliest_x`
-  moved up) = `cross_shortened` + v+1; same-anchor revival = in-place reactivate;
-  `earliest_x == target` (no eligible prior) = `cross_failed`, established-phase falls
-  back to single. That single re-checks its own window on every update like every single (PLAN_I S3b, F5,
-  2026-10-08): when a CTS_UPDATED finds the cycle's own window filled (the cross check's early return), the single
-  extends to the new anchor and DEACTIVATES (`all_imbalances_filled`) — before S3b it stayed active on its older
-  CTS. A fib starting after its cycle's establishment ends the previous cycle at that establishment
-  (`FIB_LIFECYCLE_SPEC.md` §7, S3b).
-- **Storage:** ALL versions in `_fibs` as `(sid,cycle,"cross",v)` + a `(sid,cycle)`
-  single fallback. Integer `_cross_version`. Monotonic supersede. Up to **N** versions.
-- **Cycle 0:** single fib only, no cross, no pre-established. Late-activate on
-  CTS_UPDATED (`18a6b32`, `_handle_cross_cycle_cts_updated`) — since Plan F asked
-  at the update's moment (a raw update's `idx`; a pattern-path update's apply candle
-  `confirmed_at`, since Plan E E3·0), so when the only gap has its c2 at the moment of an EST or raw update, the
-  fib can first activate at the next raw update instead (reference window: conf sub 2
-  and sub 3, cycle 0, one candle later).
-
-### 2.3 Divergence map
+#### 2.3 Divergence map
 
 | Dimension | A — h1 post-reversal | B — `cross_cycle` |
 |---|---|---|
@@ -166,46 +242,7 @@ target=1) specialization of B's dead-cycle walk. A's Scenario-1/revert are a
 genuinely main-only OUTER GATE. B's pre-established has no analog in A and main does
 NOT adopt it.
 
----
-
-## 3. Unified model — one shared cross-requirements routine
-
-Extract the cross-cycle *requirements computation* from Path B's `_m15_cross_check`
-into ONE pure routine both modes call (extends the `select_fib_anchor_for_cycle`
-pattern). The routine computes, for a given target cycle, the cross anchor decision
-from the per-cycle BOS/CTS geometry + imbalance state. The four unified ingredients
-(the user's stated scope):
-
-1. **Unfilled-imbalance test** — sd-direction `has_unfilled_imbalance` over a cycle's
-   `[BOS_k, CTS_k]` range with fill checked to the current candle (Interpretation B),
-   counting only gaps **formed** by the moment of the decision. Two as-ofs (Plan F,
-   2026-09-24; canonical: `IMBALANCE_FILL_SEMANTICS.md` "Knowability — the c3 rule"):
-   the **fill horizon** (`fill_horizon_idx`; the snapshot walk's
-   `snapshot_horizon_idx` — split from the window ends `own_window_end_idx` /
-   `own_imb_start` in Plan E E2b) is the handled event's moment since Plan E E3a
-   (2026-09-24; before it the CTS anchor on `CTS_ESTABLISHED` / a pattern-path
-   `CTS_UPDATED`; `snapshot_horizon_idx` = the BOS_1 moment since E3a′); the **moment** is the routine's
-   keyword-only, required `evaluated_at` (FibTracker: `event_moment` of the handled
-   event; the MS in-flight resolver: `None` = no cut). Plan E E3a keeps ONE moment
-   parameter (`evaluated_at`).
-2. **Deepest-retrace / running-extreme anchor** — the CTS-side anchor (running
-   extreme) and, for pre-established only (sub), the prospective-BOS start.
-3. **Cross-cycle (dead-cycle) walk** — backward from `target-1` to 0, stopping at the
-   first dead cycle, yielding `earliest_x` (the cross start cycle).
-4. **Versioning / logging** — the start-anchor-keyed version identity (v0 / extend /
-   shrink / revive) and its lifecycle logging.
-
-**The shared routine is mode-agnostic for ingredients 1-3.** Mode differences become
-*parameters*, not separate code paths:
-
-| Parameter | h1 (main) | cross_cycle (sub) |
-|---|---|---|
-| `target_ceiling` (§4) | `M` (first cycle clearing prev-BOS-outer) | `None` here — since PLAN_I S3 the sub's cross-fib LIMIT bounds the target in FibTracker (`_cross_allowed`, §2.2), outside the routine |
-| `fill_as_of` policy (§3.1) | **snapshot** (per-cycle frozen point) | **current** (running candle) |
-| pre-established eval | OFF (no `CTS_THRESHOLD_UPDATED` cross) | ON |
-| outer gate | Scenario-1 + revert (§5) | none |
-
-### 3.1 The fill-as-of difference — A and B are NOT identical at `target=1` (decided 2026-06-16)
+#### 3.1 The fill-as-of difference — A and B are NOT identical at `target=1` (decided 2026-06-16)
 
 A's cond1/cond2/cond3 are **structurally** B's single-step walk (`earliest_x∈{0,1}`,
 `target=1`): A's "Scenario-2 cross" == B's `earliest_x=0`; A's "Scenario-3 single" ==
@@ -235,14 +272,12 @@ diff** question (§13) — NOT folded into the refactor.
 parameters (`target=1`, `fill_as_of=snapshot`) MUST reproduce today's Scenario-2/3
 decision **byte-identically** — including the frozen-snapshot superset behavior above.
 
----
-
-## 4. Main-only — the target-cycle CEILING `M`
+### 4. Main-only — the target-cycle CEILING `M`
 
 This is the **new capability** (the "update" task): main's cross may target cycles
 **1 … M** instead of only cycle 1.
 
-### 4.1 Definitions
+#### 4.1 Definitions
 - `P_rev` = the previous structure's (sid−1) **last BOS zone max-expanded OUTER** —
   the SAME value `_get_prev_bos_outer` (`orchestrator._run_downstream_pipeline`) computes today for the
   Scenario-1 revert check. (Single source of truth — reuse it, do not re-derive.)
@@ -252,7 +287,7 @@ This is the **new capability** (the "update" task): main's cross may target cycl
   `[0, T−1]`, all of which are completed → use each prior cycle's **locked/confirmed
   CTS anchor** (`_cts_by_cycle`), not a still-updating running extreme.
 
-### 4.2 Rule
+#### 4.2 Rule
 - The post-reversal cross target cycle ranges **1 … M**. Cycle `M` gets the
   final/largest cross; cycles **> M** fall back to normal single fibs.
 - **Start anchor is the UNCHANGED dead-cycle walk** (`earliest_x` can be 0, 1, …).
@@ -270,12 +305,12 @@ sees is the *currently active* cross's **target advancing** cycle-by-cycle while
 target `M+1` forms no cross (normal single fib). The integer-version axis (§8) tracks
 **start-anchor** (`earliest_x`) shifts within a target, NOT the target advance.
 
-### 4.3 Within the cap, the requirements still gate (do NOT bypass)
+#### 4.3 Within the cap, the requirements still gate (do NOT bypass)
 For a target T ≤ M, the cross still forms ONLY if the §3 dead-cycle walk + own-imbalance
 conditions hold (exactly Path B). `M` adds a ceiling; it never manufactures a cross
 the imbalance logic wouldn't otherwise produce.
 
-### 4.4 Edge cases / invariants
+#### 4.4 Edge cases / invariants
 - **`M = 0`** (CTS_0 already clears `P_rev`): no room for a cross (a cross needs span
   ≥ 2 cycles) → cycle 0 stays single-only, no cross ever forms = today's behavior.
   **REVISIT AT IMPLEMENTATION** + check what the code currently does for an immediate
@@ -288,9 +323,7 @@ the imbalance logic wouldn't otherwise produce.
 - **`sid == 0`** (no previous structure): `P_rev` undefined → no ceiling concept; sid=0
   retains "simple flow" (no cross at all) unless/until a future decision changes it.
 
----
-
-## 5. Main-only — the Scenario-1 / revert outer gate (retained, INDEPENDENT)
+### 5. Main-only — the Scenario-1 / revert outer gate (retained, INDEPENDENT)
 
 Scenario 1 (CTS_0 ≥ reversal idx → cycle-0 legit post-reversal) + the revert (BOS_1
 touches prev-BOS-outer → S1 FALSE, kill cycle-0 fib) are **kept as-is** and treated as
@@ -304,9 +337,7 @@ the *same* `P_rev` value but with different anchors (revert tests `BOS_1` touchi
 independent. Revert still kills the cycle-0 fib + routes to S2/S3 exactly as today; the
 ceiling only governs how far the resulting cross extends. (May revisit a merge later.)
 
----
-
-## 6. What main does NOT adopt — the pre-established phase
+### 6. What main does NOT adopt — the pre-established phase
 
 Path B's `pre_established` cross (created during cycle n's tail on
 `CTS_THRESHOLD_UPDATED`, anchored on the prospective BOS_{n+1}) is **subordinate-only
@@ -315,97 +346,12 @@ events (as Path A does today). The shared routine's pre-established ingredient i
 OFF for `fib_mode == "h1"`. (This is also why main fibs have no §6-lifecycle-spec
 early start — see `FIB_LIFECYCLE_SPEC §6`.)
 
----
-
-## 7. Subordinate (Path B) retained behavior
-
-Subs keep: a generalized target up to their cross-fib LIMIT (PLAN_I S3, §2.2 — unbounded until 2026-10-08),
-the pre-established phase (within the limit),
-integer versioning in `_fibs`, dead-cycle cache, cycle-0 single + late-activate. The
-unification must leave sub output **byte-identical** (the refactor extracts the routine
-subs already use; subs are the reference implementation).
-
----
-
-## 8. Storage & versioning unification depth — DECIDED: full unification (user 2026-06-16)
-
-**DECISION (user 2026-06-16): Option (1) — FULL storage unification.** Main adopts
-Path B's integer-versioned `_fibs` storage (`(sid,cyc,"cross",v)` + single fallback)
-and **retires `_cross_cycle_data`'s named slots.** One storage model; versioning +
-lifecycle logging genuinely uniform; main gets multi-version crosses — which the
-multi-cycle ceiling (§4) needs anyway (a 0→M cross shrinks/extends across versions
-like a sub's). This **supersedes `FIB_LIFECYCLE_SPEC §5`'s "project, don't unify"**
-(which §5 itself flagged as "not closed — may revisit"); this arc IS that revisit.
-
-**Consequence — accepted:** it refactors main-structure fib SELECTION, the
-byte-identical-risk zone §5 avoided. Managed by staging it as a **byte-identical
-extract + reroute first** (§11a — the named-slot ↔ `v0` mapping is 1:1 at `target=1`),
-then the behavioral multi-cycle extension (§11b), each its own `/compare` + sign-off.
-
-The rejected Option (2) (keep named slots, share decision-only) was declined because
-named slots (≤2 candidates) cannot represent a 0→M multi-version cross, so it would
-have had to grow into Option (1) to support §4 regardless.
-
----
-
-## 9. Proposed shared routine (signature sketch — full unification per §8)
-
-A pure function (new module `zones/cross_cycle_fib.py`, or extend
-`select_fib_anchor_for_cycle`), taking the per-cycle geometry + imbalance df + the
-mode parameters, returning the cross decision. The `_dead_cycles` cache and the
-`_bos_by_cycle`/`_cts_by_cycle` maps are FibTracker instance state → passed in as
-arguments to keep the routine pure (mirrors how `select_fib_anchor_for_cycle` takes
-`c0_data` rather than reading tracker state).
-
-```
-resolve_cross_cycle_anchor(
-    df, sid, target_cycle, sd,
-    bos_by_cycle, cts_by_cycle,        # per-cycle anchors (caller-supplied maps)
-    dead_cycles,                       # mutable cache set (walk updates it)
-    own_imb_start, current_candle,
-    anchor_idx, anchor_price,          # CTS-side running extreme
-    fill_threshold,
-    target_ceiling=None,               # main: M; sub: None  (§4)
-    fill_as_of="current",              # sub: "current"; main: per-cycle snapshot policy (§3.1)
-) -> CrossDecision   # {earliest_x, action ∈ {none, create_v0, extend, shrink, fail},
-                     #  anchor geometry, version}
-```
-
-`_m15_cross_check` becomes a thin wrapper that calls this + applies the version
-transition to `_fibs`. Path A's `_handle_cycle1_scenarios` S1-FALSE branch calls the
-same, passing `target_ceiling=M`. (Exact shape to be finalized with the §8 decision.
-As landed, §11a-i: `resolve_cross_cycle_eligibility`, which since Plan F also takes a
-keyword-only, required `evaluated_at` — §3 item 1.)
-
----
-
-## 10. Edge cases & invariants (consolidated)
-
-1. Imbalance/dead-cycle conditions still gate within the ceiling (§4.3).
-2. `M` always defined for a reversing structure; not-yet-reached for an open one (§4.4).
-3. `M = 0` → no cross (§4.4) — **revisit at implementation + check current behavior.**
-4. Scenario-1/revert independent of the ceiling (§5).
-5. Sub output byte-identical (§7).
-6. Main `target=1` reproduces today's S2/S3 byte-identically (§3 sanity floor).
-7. **In-flight POI resolver agreement (`MarketStructure._refresh_poi_inners_for_cycle`).** The MS in-flight
-   resolver shares `select_fib_anchor_for_cycle`, which is **cycle-1-only** today. For
-   §11a (byte-identical, `target=1`, snapshot fill-as-of) agreement is automatic
-   (since Plan F on cond2 / cond3 only — cond1 is cut at the CTS_1 moment downstream,
-   not in-flight: the accepted M1 divergence, §2.1). But
-   **§11b is bigger than "pass M":** extending main to target ≥ 2 means the in-flight
-   resolver needs the **whole generalized walk** (with the snapshot fill-as-of), not
-   just the `M` value — else the in-flight POI snapshot and the downstream fib diverge
-   for cycles ≥ 2. Treat the in-flight resolver generalization as a first-class 11b
-   sub-task, not an afterthought.
-
----
-
-## 11. Implementation staging
+### 11. Implementation staging
 
 Two steps, each its own `/compare` + sign-off (project norm: one step per session,
 preserve config windows, show replay timing).
 
-### 11a — Extract + reroute, BYTE-IDENTICAL
+#### 11a — Extract + reroute, BYTE-IDENTICAL
 Split into two sub-commits, each its own byte-identical `/compare`:
 
 **11a-i — decision extract (DONE 2026-06-17, `d6b8f54`).** Lift §3's cross-requirements
@@ -436,7 +382,7 @@ instead: a failed cross with its own `[BOS_1, CTS_1]` window still unfilled rais
 must be gated to `fib_mode=="h1"` — ungated it flipped a sub cross's `end_reason`
 `next_cycle→new_cycle` (subs obsolete their crosses via `_m15_create_cross`).
 
-### 11b Part A — Bounded multi-cycle cross capability on main (DONE 2026-06-17, byte-identical)
+#### 11b Part A — Bounded multi-cycle cross capability on main (DONE 2026-06-17, byte-identical)
 Wire `P_rev` (from `_get_prev_bos_outer`, now passed at EVERY sid≥1 cycle) → the
 target ceiling `M` into FibTracker; route main cycles **1…M** through the shared cross
 machinery, cycles **>M** to plain single. Implemented:
@@ -459,7 +405,7 @@ walk still gates; M never manufactures a cross). The capability is correct + uni
 **dormant on this window**. Mirrors true-first-breakout Commit 2 (byte-identical,
 capability live but output unchanged).
 
-### 11b Part B — in-flight POI resolver generalization (§10.7) — DEFERRED 2026-06-17
+#### 11b Part B — in-flight POI resolver generalization (§10.7) — DEFERRED 2026-06-17
 The MS in-flight resolver (`compute_poi_inners_for_cycle`, cycle-1-only) must generalize
 to the full walk so MS's proximity-based CTS confirmation agrees with the downstream
 cross for cycles ≥2. **Deferred because no main cycle≥2 cross forms on the current
@@ -470,21 +416,7 @@ CTS confirms via POI proximity — neither happens here. Revisit when a window (
 incremental config-window expansion) produces a main multi-cycle cross; then implement +
 `/compare`-validate Parts A and B together.
 
----
-
-## 12. Validation
-
-- Unit tests for the shared routine: single-step (= A's cond1/2/3) vs multi-cycle (= B's
-  walk); ceiling `M` (target capped, `M=0`, not-yet-reached); imbalance-still-gates.
-- `test_cross_cycle_fib.py` must stay green or be updated deliberately.
-- `/compare`: 11a byte-identical (all 21 CSVs); 11b main POI/fib shifts only where a
-  multi-cycle cross forms, subs unchanged. Pause for chart review (post-reversal cross
-  is hard to eyeball — verify on the H1 chart).
-- Fib state is mostly latent (no fib CSV; M15 fib lines off) — the surfacing path is
-  **POI** (`FIB_LIFECYCLE_SPEC §15.8`). For 11b, validate via POI CSVs/charts AND a
-  temporary fib-record dump (`debug/export_fib_lifecycle.py`).
-
-### 12.1 Worked validation case — the `M = 2` anchor (11b ground truth)
+#### 12.1 Worked validation case — the `M = 2` anchor (11b ground truth)
 
 Verified against baseline `20260616_185639_d1bd7bb` (config window
 `2025-11-15 → 2026-01-20`, NZD_USD H1). This is the **concrete expected outcome
@@ -534,38 +466,7 @@ actual main multi-cycle cross (and Part B), expand the config window to find one
   (`M = 0` — CTS_0 already clears — is NOT exercised by this window; define +
   unit-test it separately in 11b, no real-data anchor here.)
 
----
-
-## 13. Open items / deferred
-
-> **2026-10-06: the user will revamp the cross-cycle fib rules — one logic for main and sub, meant as the final
-> cross-cycle + single-cycle fib logic (register `IDEA_PARKING_LOT.md` §D.1 item 2, the next session; PLAN_H §6
-> F2b).** The open items below are its likely inputs; this spec changes with it.
-
-- ~~§8 storage depth~~ — **DECIDED 2026-06-16: full versioned `_fibs` unification.**
-- ~~§3.1 fill-as-of (11a)~~ — **DECIDED 2026-06-16: parameterize (snapshot-preserving),
-  11a byte-identical.**
-- **Fill-as-of convergence (main → "current" like sub)** — DEFERRED open question, its
-  own intentional-diff step if ever taken (§3.1); not decided, not in scope now.
-- **Deeper-walk fill-as-of (11b)** — A defines snapshot only for target=1; the
-  intermediate cycles in a target ≥ 2 walk need a decision (recommend "current"; §11b).
-- **`M=0` behavior** — confirm + check current code at implementation (§4.4).
-- **Scenario-1/revert ↔ ceiling merge** — kept independent now; may revisit (§5).
-- **`sid==0` cross** — out of scope; simple-flow retained (§4.4).
-- **In-flight POI resolver generalization** (§10.7) — 11b must generalize the MS-side
-  `select_fib_anchor_for_cycle` caller to the full walk (not just `M`), else cycles ≥ 2
-  diverge in-flight vs downstream.
-- **Single-cycle fibs coexisting with cross** (`project_sub_single_cycle_fib_pois.md`)
-  — separate, additive, still deferred; not part of this unification.
-- **The SUB in-flight POI snapshot reads the intra-cycle fib, not the cross fib it draws** (found 2026-10-01) —
-  `select_fib_anchor_for_cycle` returns `"intra"` for every sub (sid 0), so on the 8 unique sub cycles whose POIs
-  come from a cross fib MS's sd-proximity reads other ICs than the drawn ones (no outcome diverged on the window).
-  Scheduled with register §D.1 item 2 (user 2026-10-02: "this IS something we do need to fix, but we can do that as
-  item 2"). Detail: MARKET_STRUCTURE_SPEC "Snapshot fib on SUBS"; PLAN_H §3 (D5).
-
----
-
-## 14. Decision log
+### 14. Decision log
 
 1. Unify the cross-cycle **decision logic** (requirements + walk + versioning) into one
    shared pure routine; mode differences are parameters, not separate paths.

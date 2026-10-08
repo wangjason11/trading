@@ -22,6 +22,8 @@ import traceback
 import pandas as pd
 import pytest
 
+from engine_v2.tests._cross_fib_limits import main_limits
+
 import engine_v2.zones.poi_zones as poi_zones
 from engine_v2.charting._zone_render import poi_ip_hover_text
 from engine_v2.common.types import ImbalanceInstance
@@ -275,7 +277,7 @@ def _sell(maker):
     return rows
 
 
-def _pipeline(maker, *, mode="h1", spy=None, sd=+1):
+def _pipeline(maker, *, spy=None, sd=+1):
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
     import engine_v2.structure.structure_engine as se
     df = _prepare_df(maker())
@@ -291,7 +293,7 @@ def _pipeline(maker, *, mode="h1", spy=None, sd=+1):
         spy.setattr(se, "compute_poi_inners_for_cycle", _spy)
     with contextlib.redirect_stdout(io.StringIO()):
         res = compute_bounded_structure(df, 0, sd)
-        out = _run_downstream_pipeline(res.df, res.events, sd, fib_mode=mode, wvmi="off")
+        out = _run_downstream_pipeline(res.df, res.events, sd, wvmi="off", cross_fib_limits=main_limits(res.events))
     return res, out, calls
 
 
@@ -333,7 +335,8 @@ def test_a_record_without_a_pattern_draws_no_poi():
     _, out, _ = _pipeline(_make_ip_multicycle_data)
     assert [(z.meta["structure_id"], z.meta["cycle_id"]) for z in out["poi_zones"]] == [(0, 2)]
     none_rows = [(r.cycle_id, r.reason) for r in out["ip_candidates"] if r.ic_idx is None]
-    assert none_rows == [(1, "no_pattern"), (3, "no_pattern")]
+    # + cycle 0: main's single since PLAN_I S4 (Q6), no candidates
+    assert none_rows == [(0, "no_candidates"), (1, "no_pattern"), (3, "no_pattern")]
 
 
 def test_ip_candidates_read_the_records_they_are_handed():
@@ -427,7 +430,8 @@ def test_h1_chart_hovers_show_the_pattern_and_ip_none(tmp_path, monkeypatch):
     assert all("versions=" not in tr.hovertemplate for tr in poi_tr)
     fib_tr = [tr for tr in fig.data if (tr.name or "").startswith("fib:")]
     fib_status = {tr.name: tr.customdata[0][8] for tr in fib_tr}
-    assert fib_status["fib:sid0:c1"].endswith("<br>IP: none (no_pattern)")
+    # the IP line, then S2's limit line (main's limits since PLAN_I S4: sid 0 started by start trading)
+    assert fib_status["fib:sid0:c1"].endswith("<br>IP: none (no_pattern)<br>limit: none (start_trading)")
     assert "IP: none" not in fib_status["fib:sid0:c2"]
     # F1·1: a literal `%` (Plotly has no `%%` escape)
     assert all("<br>61.8%=" in _rendered(tr) and "<br>80%=" in _rendered(tr) and "%%" not in tr.hovertemplate

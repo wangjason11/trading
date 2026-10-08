@@ -1,5 +1,5 @@
-"""Cross-fib limits for tests of the cross machinery itself (PLAN_I S3: a `cross_cycle` tracker consulted for a
-cycle >= 1 of a structure with no limit entry raises `CrossFibLimitError` — the limit is REQUIRED, D1).
+"""Cross-fib limits for tests (PLAN_I S3 / S4: a FibTracker consulted for a cycle >= 1 of a structure with no limit
+entry raises `CrossFibLimitError` — the limit is REQUIRED, D1).
 
 `unreached(sd)` is a reference price `P` no CTS anchor can go beyond (+inf for a buy structure, -inf for a sell one):
 `M` is never set, so every cross the pre-limit rules allow stays allowed — the limit's no-op. The tests that predate
@@ -20,6 +20,14 @@ from engine_v2.zones.cross_cycle_fib import CrossFibLimit
 def unreached(sd: int) -> CrossFibLimit:
     assert int(sd) in (1, -1), sd
     return CrossFibLimit(math.inf if int(sd) == 1 else -math.inf, "parent_cts_threshold")
+
+
+def main_limits(events: Iterable) -> Dict[int, CrossFibLimit]:
+    """The H1 main's limits, exactly as production derives them (`compute_main_cross_fib_limits`): sid 0 none
+    (start_trading), sid N the realised reversal's `bos_frozen`. The replacement of the retired `fib_mode="h1"`
+    for a test of a main-style run (PLAN_I S4)."""
+    from engine_v2.zones.structure_lifecycle import compute_main_cross_fib_limits
+    return compute_main_cross_fib_limits(list(events))
 
 
 def unreached_for(events: Iterable) -> Dict[int, CrossFibLimit]:

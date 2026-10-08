@@ -30,6 +30,8 @@ import io
 import pandas as pd
 import pytest
 
+from engine_v2.tests._cross_fib_limits import main_limits
+
 import engine_v2.zones.poi_zones as poi_zones
 from engine_v2.structure import event_fields as ef
 from engine_v2.common.types import ImbalanceInstance
@@ -69,7 +71,7 @@ def _run(rows, *, mutate=None, lifecycle_floor=None, lifecycle_cap=None,
             validate_event_contract(e)
     with contextlib.redirect_stdout(io.StringIO()):
         out = _run_downstream_pipeline(
-            res.df, events, +1, fib_mode="h1", wvmi="off",
+            res.df, events, +1, wvmi="off", cross_fib_limits=main_limits(events),
             lifecycle_floor=lifecycle_floor, lifecycle_cap=lifecycle_cap,
             cap_reason=cap_reason,
         )

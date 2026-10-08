@@ -18,6 +18,8 @@ import io
 
 import pytest
 
+from engine_v2.tests._cross_fib_limits import main_limits
+
 import engine_v2.zones.fib_tracker as ft
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
@@ -34,7 +36,7 @@ def _ms(end_idx):
 
 def _downstream(res, events, cap):
     with contextlib.redirect_stdout(io.StringIO()):
-        return _run_downstream_pipeline(res.df, events, 1, fib_mode="h1", lifecycle_cap=cap)
+        return _run_downstream_pipeline(res.df, events, 1, lifecycle_cap=cap, cross_fib_limits=main_limits(events))
 
 
 def _cands(events):
@@ -77,10 +79,10 @@ def test_every_reader_gets_the_realised_reversal_not_the_last_candidate(monkeypa
     step-anchor reversal under the frozen threshold applies before the candidate's apply). sid 1 (down) follows —
     established
     retroactively BEFORE the reversal (as on H1: sid 1's first ESTs 703 / 748 < sid 0's reversal 902), with raw
-    updates at 14 (known before 17) and 17. Every reader of the map — FibTracker's Scenario-1 argument on sid 1's
-    CTS_ESTABLISHED and CTS_UPDATED, the ended sid's terminals, the prev-BOS line END (the first sid-1 CTS known
-    at/after the reversal: the update at 17, not the EST at 13 a 9 would pick, nor none as 19 would) — gets 17,
-    never the first (9) or the last (19) candidate."""
+    updates at 14 (known before 17) and 17. Every reader of the map — the ended sid's terminals and the prev-BOS
+    line END (the first sid-1 CTS known at/after the reversal: the update at 17, not the EST at 13 a 9 would pick,
+    nor none as 19 would) — gets 17, never the first (9) or the last (19) candidate. (FibTracker's Scenario-1
+    argument, the third reader, is retired with the H1-main logic — PLAN_I S4.)"""
     res = _ms(None)
     events = copy.deepcopy(res.events)
     for e in events:
@@ -94,27 +96,14 @@ def test_every_reader_gets_the_realised_reversal_not_the_last_candidate(monkeypa
         make_cts_updated(cts_anchor_idx=14, via=CTS_UPDATED_RAW_VIA, price=0.58980, meta=dict(sid1)),
         make_cts_updated(cts_anchor_idx=17, via=CTS_UPDATED_RAW_VIA, price=0.58780, meta=dict(sid1)),
     ]
-    seen = {"est": [], "upd": [], "terminals": []}
-    real_est, real_upd, real_term = (ft.FibTracker.on_cts_established, ft.FibTracker.on_cts_updated,
-                                     ft.FibTracker.set_reversal_terminals)
-
-    def est(self, ev, df, bos_idx, bos_price, reversal_confirmed_idx=None, *a, **k):
-        seen["est"].append((ev.meta["structure_id"], reversal_confirmed_idx))
-        return real_est(self, ev, df, bos_idx, bos_price, reversal_confirmed_idx, *a, **k)
-
-    def upd(self, ev, df, reversal_confirmed_idx=None):
-        seen["upd"].append((ev.meta["structure_id"], reversal_confirmed_idx))
-        return real_upd(self, ev, df, reversal_confirmed_idx)
+    seen = {"terminals": []}
+    real_term = ft.FibTracker.set_reversal_terminals
 
     def term(self, m):
         seen["terminals"].append(dict(m))
         return real_term(self, m)
 
-    monkeypatch.setattr(ft.FibTracker, "on_cts_established", est)
-    monkeypatch.setattr(ft.FibTracker, "on_cts_updated", upd)
     monkeypatch.setattr(ft.FibTracker, "set_reversal_terminals", term)
     out = _downstream(res, copy.deepcopy(events), None)
-    assert (1, 17) in seen["est"] and (1, 17) in seen["upd"]
-    assert all(rv in (None, 17) for _s, rv in seen["est"] + seen["upd"])
     assert seen["terminals"] == [{1: 17}]
     assert [(ln["structure_id"], ln["end_idx"]) for ln in out["prev_bos_lines"]] == [(1, 17)]   # 9 -> 13, 19 -> none

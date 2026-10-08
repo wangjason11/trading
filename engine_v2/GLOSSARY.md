@@ -38,7 +38,8 @@ Status (Plan E E5, 2026-09-25): the code, the current specs and the tracked skil
 `last_pullback_apply_idx` (a moment: the last pullback pattern's apply candle), `RANGE_STARTED` `cts_idx` →
 `cts_anchor_idx`, POI `bos_idx` / `cts_idx` → `bos_anchor_idx` / `cts_anchor_idx` (saves before it carry the old keys).
 Post-E·5 (2026-09-30, PLAN_E §9.6) closed the three its landing review found still non-standard: fib meta
-`cycle1_bos_idx` → `cycle1_bos_anchor_idx` (BOS_1's anchor on the cycle-1 cross fib), KL meta `pb_reconfirm_idx` →
+`cycle1_bos_idx` → `cycle1_bos_anchor_idx` (BOS_1's anchor on the cycle-1 cross fib; retired with its emitter in
+PLAN_I S4), KL meta `pb_reconfirm_idx` →
 `reconfirmed_idx` (the CTS_RECONFIRMED moment), and KL meta `expanded_last_idx` deleted with its `_price` / `_event`
 siblings (copies of `bounds_steps[-1]`; saves before it carry all three).
 Kept by decision: frozen event names (bridged by `ARCHITECTURE.md` "`ev.idx` convention") and event-type
@@ -296,7 +297,8 @@ used as one.
 
 | Term | Definition |
 |------|------------|
-| **cross fib limit** | The rule (PLAN_I §1.1): a cross fib may target cycle T iff the structure has a reference price `P` and no cycle k < T has a latest CTS anchor **beyond** `P`; every later cycle is single; no `P` → no cross. S2 stamps the fields below on every fib record; S3 applies the rule to subs (`FibTracker._cross_allowed`: a cycle past the limit gets the single, `via: "cross_fib_limit"`, no pre-established cross; no limit entry → `CrossFibLimitError`), S4 to main. |
+| **cross fib limit** | The rule (PLAN_I §1.1): a cross fib may target cycle T iff the structure has a reference price `P` and no cycle k < T has a latest CTS anchor **beyond** `P`; every later cycle is single; no `P` → no cross. S2 stamps the fields below on every fib record; S3 applies the rule to subs (`FibTracker._cross_allowed`: a cycle past the limit gets the single, `via: "cross_fib_limit"`, no pre-established cross; no limit entry → `CrossFibLimitError`), S4 to main — ONE FibTracker logic since S4 (`zones/CROSS_CYCLE_FIB_SPEC.md`). |
+| **Retired fib terms (PLAN_I S4, 2026-10-08)** | Scenario 1 / 2 / 3 (the H1-main post-reversal fib rule — not the start-identification "Scenario 3" above), the Scenario-1 revert (`scenario1_revert`), `P_rev` (the previous BOS zone's outer) and the ceiling `M` on it, sid 0's "simple flow" (no cycle-0 fib), main's snapshot fill-as-of, `fib_mode` (the `"h1"` / `"cross_cycle"` parameter — the meta key / CSV column stays until S6), `cycle1_bos_anchor_idx`. History: `zones/CROSS_CYCLE_FIB_SPEC.md` Appendix A. |
 | **cross_fib_limit_price** (`P`) | The structure's reference price, fixed ONCE at its start by its STARTING trigger (§1.2): main `start_trading` → none, main / sub `reversal` → the applied reversal's `bos_frozen`, a sub's `first_confluence` → none on parent cycle 0 / the parent's `cts_frozen` on c ≥ 1, `first_counter` / `subsequent_*` → the previous unique sub x−1 (`multitf/cross_fib_limit.read_prev_sub`). Value type `zones.cross_cycle_fib.CrossFibLimit`; main's from `structure_lifecycle.compute_main_cross_fib_limits`, a sub's computed at its creating trigger's fire (R6-2 (a)) and stored on `PooledStructure.cross_fib_limit`. |
 | **cross_fib_limit_source** | Which rule produced `P`: `none`, `reversal_bos_frozen`, `parent_cts_threshold`, `prev_sub_cts_threshold`, `prev_sub_bos_threshold`, `prev_sub_starting_price`, `prev_sub_latest_cts`, `prev_sub_no_cts` (`CROSS_FIB_LIMIT_SOURCES`). |
 | **cross_fib_limit_cycle** (`M`) | The first cycle whose latest CTS anchor is strictly beyond `P` = the LAST cycle a cross may target; None without `P` or while none has gone beyond. Set in real time; each fib record carries the structure's FINAL `M` (R6-6). `FibTracker.cross_fib_limit_cycle`. |

@@ -84,8 +84,12 @@ def test_f18_a_late_created_cross_ends_the_previous_cycle_at_its_establishment(s
 
 @pytest.mark.parametrize("sd", [1, -1])
 def test_the_pre_established_cross_still_ends_the_previous_cycle_at_its_creation(sd):
-    """Option A unchanged: the cross for cycle 1 created by the threshold update at 30 (before cycle 1 exists) ends
-    cycle 0 at 30; cycle 1's establishment later never moves it."""
+    """Option A unchanged: the cross for cycle 1 created by the threshold update at 30 (before cycle 1 exists — no
+    establishment moment yet) ends cycle 0 at 30; cycle 1's establishment at 35 then keeps the cross (extended) and
+    never moves that end."""
     t = _pre_established(9.0, sd)
+    assert t._terminal[(0, 0)] == (30, "new_cycle") and (0, 1) not in t._bos_moment_by_cycle
+    df = _df(40, [_gap(15, sd, 1.10, 1.00), _gap(29, sd, 1.40, 1.30)])
+    _q(t.on_cts_established, _est(35, 1.55, 1, sd), df, bos_idx=27, bos_price=_m(1.45, sd))
+    assert _kind(t, 1) == "cross 0->1" and t._get_latest_cross(0, 1)[1].meta["activated_at"] == 30
     assert t._terminal[(0, 0)] == (30, "new_cycle")
-    assert t._prev_cycle_end_at(0, 1, 30) == 30                       # no establishment yet → the creation candle

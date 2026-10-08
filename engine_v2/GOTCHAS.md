@@ -352,6 +352,9 @@ self._fibs: Dict[tuple, FibState] = {}  # {(structure_id, cycle_id): state}
 
 ## Scenario 1 Revert: Zone Touch Direction
 
+> RETIRED with the H1-main fib logic (PLAN_I S4, 2026-10-08 — `zones/CROSS_CYCLE_FIB_SPEC.md` Appendix A). Kept as a
+> lesson.
+
 **Problem:** When checking if BOS_1 "touches" the prev BOS zone, the comparison direction depends on zone type.
 
 **Gotcha:** For a buy zone (bullish prev structure), the outer threshold is the BOTTOM. "Touching" the zone means price is AT OR ABOVE the outer (crossing into the zone from below).

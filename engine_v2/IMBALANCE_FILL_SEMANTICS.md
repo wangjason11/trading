@@ -86,12 +86,11 @@ moment, not the write:
   (`_maybe_confirm_cts_via_proximity`) is gated `i > st.cts.idx`, so every gap it
   counts has formed by the candle it is used on. No cut (see
   MARKET_STRUCTURE_SPEC "Snapshot vs per-candle").
-- **The cycle-0 liveness cache** (FibTracker `_cross_cycle_data[sid]["cycle0"]
-  ["has_unfilled"]` and its MS mirror `cycle0_data["has_unfilled"]`) is Scenario-2
-  cond2, read at CTS_1 ESTABLISHED (> CTS_0) when every gap in `[BOS_0, CTS_0]` has
-  formed → stored UNCUT. A decision taken at the write event (the Scenario-1
-  cycle-0 activation) re-asks it at that event's moment
-  (`FibTracker._c0_has_unfilled_now`).
+- **The cycle-0 liveness cache** (MS `cycle0_data["has_unfilled"]`; FibTracker's
+  twin `_cross_cycle_data[sid]["cycle0"]` was retired with the H1-main logic in
+  PLAN_I S4, 2026-10-08) is Scenario-2 cond2, read at each cycle-1 refresh (> CTS_0)
+  when every gap in `[BOS_0, CTS_0]` has formed → stored UNCUT. MS's in-flight
+  resolver is its last reader; PLAN_I S5 retires it.
 
 ### Decided at the event — and the accepted divergence
 
@@ -102,7 +101,9 @@ cycle 1 — and its IC 3654 twin POI no longer exist). That is the outcome the
 engine already gives when a gap forms one candle after an event. "Re-ask when the
 gap's c3 closes" is a logged follow-up (PLAN_F §7).
 
-**M1 divergence (accepted, 2026-09-24):** the MS in-flight resolver is uncut and
+**M1 divergence (accepted, 2026-09-24; FibTracker's side changed in PLAN_I S4 — main runs the one logic, a cycle
+≥ 1 cross that fails its own test at EST re-asks on the next CTS_UPDATED, and FibTracker no longer has the cycle-0
+cache; the whole MS read is replaced in S5):** the MS in-flight resolver is uncut and
 builds its fib as always-active, FibTracker cuts at the event. In the drop case
 (the ONLY sd gap of a lag-0 CTS_ESTABLISHED or raw CTS_UPDATED has c2 == the event
 candle) MS keeps a POI inner for a fib FibTracker never creates — permanent on H1
@@ -229,17 +230,16 @@ CTS_UPDATED's apply candle since Plan E E3·0).
 
 | Site | Window | `check_to_idx` | Question |
 |---|---|---|---|
-| `_on_cts_established` | `[BOS_n, CTS_n]` | the EST moment `confirmed_at` (Plan E E3a; the anchor before) | fib activation at EST (single / sid0 / sid≥1 / Scenario 1) |
-| `_handle_sid1plus_cts_established` cycle 0 | `[BOS_0, CTS_0]` | the CTS_0 EST moment (Plan E E3a′; the anchor before) | the cycle-0 liveness **cache** (cond2) — `evaluated_at=None`, uncut |
-| `_handle_cross_cycle_cts_updated` | `[BOS_0, CTS]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a) | cross_cycle cycle-0 first activation on update |
-| `_handle_cycle0_cts_updated` (the cache re-snapshot) | `[BOS_0, CTS]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a′) | the cycle-0 **cache** re-snapshot — `evaluated_at=None`, uncut; on every unlocked update with anchor `>=` the cached one (an equal-anchor pattern update re-asks at its later moment, like the MS mirror — MS emits none since 2026-09-27, when a pattern-path update started to need a strict new extreme; the `>=` is defence in depth) |
-| `_handle_cycle0_cts_updated` → `_c0_has_unfilled_now` (its two calls) | cached `[bos_idx, cts_idx]` | the update's moment (Plan E E3a′; the cached CTS_0 anchor before) — the same horizon the CTS_0 EST decision uses | Scenario-1 cycle-0 activation on update, asked at the moment |
+| `_on_cts_established` | `[BOS_n, CTS_n]` | the EST moment `confirmed_at` (Plan E E3a; the anchor before) | a single's activation at EST (cycle 0; a cycle past the cross-fib limit) — a cycle within the limit asks in `_cross_check` |
+| `_handle_cross_cycle_cts_updated` | `[BOS_n, CTS]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a) | a single's first activation on update (cycle 0; past the limit — PLAN_I S3) |
 | `_update_fib_cts` | `[bos, cts]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a) | reactivate / deactivate (`all_imbalances_filled` = no FORMED unfilled imbalance) |
 | `_update_fib_cts` cross branch | — | — | DELETED 2026-09-28 (dead: every caller passes a single `(sid, cycle)` key) |
-| `_update_cycle1_main` — three checks: cycle 0 @CTS_0, cycle 1 own, @BOS_1 | as named | the cache's `c0["fill_horizon_idx"]` (the CTS_0 moment of its last write) / the update's moment / the BOS_1 moment (`_bos_moment_by_cycle`, == the CTS_1 EST moment) — all Plan E E3a / E3a′ | H1 cycle-1 cross update — the code's cond1/cond2 labels are the REVERSE of `select_fib_anchor_for_cycle`'s docstring; read the questions, not the labels |
-| `_update_cycle1_main` (own-window check) | `[BOS_1, CTS_1]` | the update's moment (raw `idx` / pattern `confirmed_at`; Plan E E3a) | an invariant ASSERT since 2026-09-28: a failed cross must have its own window filled (it IS cond2's question) — the create-on-fail single it used to gate was unreachable and is deleted |
-| `select_fib_anchor_for_cycle` call (`_handle_cycle1_scenarios`) | via the routine | — | H1 cycle-1 Scenario 2/3 at CTS_1 EST |
-| `_maybe_activate_main_cross`, `_m15_cross_check` | via the routine | — | §11b main cross peek / subordinate cross check |
+| `_cross_check` | via the routine | — | every structure's cross check (EST / UPDATED / the pre-established threshold path) |
+
+Retired with the H1-main logic (PLAN_I S4, 2026-10-08; rows in `git show 0846441:engine_v2/IMBALANCE_FILL_SEMANTICS.md`):
+`_handle_sid1plus_cts_established`'s cycle-0 cache write, `_handle_cycle0_cts_updated` (the cache re-snapshot +
+`_c0_has_unfilled_now`), `_update_cycle1_main` (its three checks + the own-window assert), the cycle-1
+`select_fib_anchor_for_cycle` call (`_handle_cycle1_scenarios`), the §11b peek `_maybe_activate_main_cross`.
 
 ### The shared routine — `cross_cycle_fib.resolve_cross_cycle_eligibility` (`evaluated_at` required, forwarded)
 

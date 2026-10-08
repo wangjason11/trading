@@ -321,13 +321,13 @@ def _meta_kw_keys(module):
                                         "pattern_confirmed_idx", "ip_tb_runner_up_ic_idx",
                                         "ip_tb_imbalance_first_c2_idx"}),
     (fib_tracker, "_FIB_META_IDX_KEYS",
-     {"activated_at", "reactivated_at", "locked_at", "deactivated_at", "cycle1_bos_anchor_idx"}),
+     {"activated_at", "reactivated_at", "locked_at", "deactivated_at"}),
     (wave_candles, "_WAVE_CANDLE_META_IDX_KEYS", {"anchor_idx"}),
 ], ids=["kl_zones_v1", "poi_zones", "fib_tracker", "wave_candles"])
 def test_every_element_emitter_meta_index_key_is_shifted(module, list_name, must_see):
-    """Static, Post-E·2: KL `reconfirmed_idx` and fib `reactivated_at` /
-    `cycle1_bos_anchor_idx` are never produced by the fixture (the keys' names
-    since Post-E·5, 2026-09-30; KL `expanded_last_idx` was deleted then)."""
+    """Static, Post-E·2: KL `reconfirmed_idx` and fib `reactivated_at` are never
+    produced by the fixture (KL `expanded_last_idx` was deleted Post-E·5, 2026-09-30;
+    fib `cycle1_bos_anchor_idx` retired with its emitter in PLAN_I S4, 2026-10-08)."""
     keys = _meta_kw_keys(module)
     assert must_see <= keys, sorted(must_see - keys)
     listed = getattr(edm, list_name)
@@ -603,7 +603,7 @@ _NOT_MIRRORED = {
         "last_breakout_pat_apply_idx",            # a df column (out[...] = …)
     },
     "poi_zones": {"armed_idx", "confirmed_fill_idx"},  # ImbalanceInstance.meta (fill cache)
-    "fib_tracker": {"bos_idx", "cts_idx", "fill_horizon_idx"},  # _cross_cycle_data cache
+    "fib_tracker": set(),                         # (its `_cross_cycle_data` cache keys retired in PLAN_I S4)
     "kl_zones_v1": {"start_idx"},                 # bounds_steps items (the nested loop)
     "wave_candles": set(),
 }

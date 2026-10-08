@@ -187,7 +187,7 @@ def _bounded_build(df, cap, floor, cap_reason):
     ref.df.attrs["imbalances"] = df.attrs.get("imbalances", [])
     down = _run_downstream_pipeline(
         ref.df, ref.events, _SD,
-        source_kinds=["BOS"], fib_mode="cross_cycle",
+        source_kinds=["BOS"],
         wvmi="none", timeframe="M15",
         lifecycle_floor=floor, lifecycle_cap=cap, cap_reason=cap_reason,
     )

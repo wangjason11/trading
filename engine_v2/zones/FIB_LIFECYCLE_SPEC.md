@@ -1,5 +1,14 @@
 # FibState Lifecycle Spec — Design & Implementation Plan
 
+> **PLAN_I S4 (2026-10-08) — ONE FibTracker logic for every structure.** The H1-main subsystem this spec calls
+> "B" (Scenario 1 / 2 / 3, `_cross_cycle_data`, the revert, `fib_mode == "h1"`) is RETIRED: main now runs the
+> subordinate path ("A" below) — `zones/CROSS_CYCLE_FIB_SPEC.md` (its Appendix A keeps the retired logic). Read
+> every "B / H1-main" passage below as history; the lifecycle model (§3, §7 Option A, §15) applies to every structure
+> unchanged. Renames in S4: `_m15_phase` → `_phase`, `_m15_cross_check` → `_cross_check`, `_m15_create_cross` →
+> `_create_cross`, `_m15_extend_cross_anchor` → `_extend_cross_anchor`, `_m15_reactivate_cross_in_place` →
+> `_reactivate_cross_in_place`, `_activate_or_update_single_m15` → `_activate_or_update_single` (line numbers below
+> are pre-S4 hints). `scenario1_revert` has no producer any more (§10: `disappeared` stays as a hook).
+
 > **Status:** Design complete (2026-05-27). **Sessions 1 & 2 IMPLEMENTED
 > (2026-05-27) — Session 3 OPTIONAL/deferred.** This document is
 > the cold-readable, canonical design produced from a full design session. It is
@@ -192,9 +201,13 @@ a **behavior change**, not byte-identical under the old chart.)
 
 ## 5. The two subsystems (A, B) + the "project, don't unify" decision
 
+> **RESOLVED by PLAN_I S4 (2026-10-08): ONE subsystem.** Main runs A; B (and its `_cross_cycle_data`) is deleted, so
+> the storage IS unified — every structure stores its versions in `_fibs` with A's meta. The section below is the
+> pre-S4 record.
+
 The "one cycle, multiple representations, one active" abstraction is realized
 **two different ways** in the code. **B's column below is today's state** — the
-storage part of this section was superseded by CROSS_CYCLE_FIB_SPEC §8 / §11a-ii
+storage part of this section was superseded by CROSS_CYCLE_FIB_SPEC (Appendix A) old §8 / §11a-ii
 (2026-06-17: H1's cross relocated into versioned `_fibs`; before it B kept named
 slots `normal_cycle1` / `cross_cycle` in `_cross_cycle_data[sid]`, mirrored only the
 winner to `_fibs[(sid,1)]`, and toggled cross ↔ normal):
@@ -248,12 +261,12 @@ that is the cycle's lifecycle-start (the CTS-established floor, as zones use).
 activating event — `CTS_ESTABLISHED.meta["confirmed_at"]`, as zones use, since
 Plan E E3a 2026-09-24 (before it the anchor `CTS_ESTABLISHED.idx`); a fib first
 activated on a later `CTS_UPDATED` (`meta["activated_on"] == "update"`,
-`fib_tracker.py` `_handle_cross_cycle_cts_updated` / `_handle_cycle0_cts_updated`)
+`fib_tracker.py` `_handle_cross_cycle_cts_updated`; until PLAN_I S4 also main's `_handle_cycle0_cts_updated`)
 stamps that update's moment. See §15.3.)
 
-**The one exception — pre-established cross (SUBORDINATE-ONLY; within the sub's cross-fib limit since PLAN_I
-S3 — past it the cycle is a single and no pre-established cross forms, `CROSS_CYCLE_FIB_SPEC.md` §2.2).** In
-`cross_cycle` mode a cross fib for cycle `n+1` is created during cycle `n`'s **tail**
+**The one exception — pre-established cross (every structure since PLAN_I S4 — subordinate-only before; within
+the structure's cross-fib limit since S3 / S4 — past it the cycle is a single and no pre-established cross forms,
+`CROSS_CYCLE_FIB_SPEC.md` §2 / §4).** A cross fib for cycle `n+1` is created during cycle `n`'s **tail**
 (pre-established phase: after `CTS_n` CONFIRMED, before `CTS_{n+1}` ESTABLISHED,
 on `CTS_THRESHOLD_UPDATED`). At that point the cycle-`n+1` fib is **valid and
 active**, so its `start_idx` legitimately **precedes its own cycle's CTS-
@@ -265,11 +278,11 @@ Corollaries:
 - The `cross_failed` → single handoff **keeps the early start** — a single that
   descends from a cross lineage inherits the identity's early start (start
   belongs to the identity, not to a version).
-- **Main (h1) has no pre-established phase** (`_m15_phase` is never set on the
-  main path; the Scenario-2 cross is created at `CTS_1` ESTABLISHED). So main
-  fibs start at their `activated_at` (the established moment since Plan E E3a), which equals
-  cycle-start wherever there was no update-activation (all H1 fibs on the reference window) — the pre-established early start is subordinate-only. This is
-  why the start-anchor change **does not** touch H1-main fib timing.
+- **Main has the pre-established phase since PLAN_I S4** (I2; until then main had none and its fibs started at
+  their `activated_at`). A main structure established retroactively (sid N's cycles before sid N−1's reversal
+  applies) has its pre-established cross's start CLAMPED to the structure floor at finalize (R2-5, unchanged): on the
+  reference window main's (1,1) cross is created at 741 and collapses with (1,0) before the floor 902 (PLAN_I §9.5 c;
+  pinned `tests/test_plan_i_s4_main_one_path.py`).
 - Implementation: the value already exists as `meta["activated_at"]` on the
   first version (`_m15_create_cross:1818`); take it from the **earliest** version
   and never overwrite it on later version creation.
@@ -291,8 +304,10 @@ cycle `n`. So:
 
 **A fib that starts AFTER its cycle's establishment (PLAN_I S3b, F15 / F18, R6-1b (ii) / R8-3, 2026-10-08).** The
 mirror case: cycle `n+1`'s own window holds no unfilled imbalance at its CTS_ESTABLISHED `e`, and its fib (a single,
-or a cross the walk creates) first starts at a later CTS_UPDATED `u`. The previous cycle's fib ends at `e` — never
-later than the next cycle's establishment (a cycle's fib cannot outlive its cycle); before S3b it ended at `u`. The
+or a cross the walk creates) first starts at a later CTS_UPDATED `u`. The previous fib ends at `e`, not at `u` (as
+before S3b). "The previous fib" is the structure's LAST cycle with a fib (`_current_cycle`): when a cycle in between
+got none, that earlier fib ends at this later establishment, not at its own cycle's end — the stream terminal is
+set-if-absent and beats the pass-through candidate (§15.4); PLAN_I §9.2 F19, latent, parked for a decision. The
 late fib's own `start_idx` stays `u` (it is drawn from its activation). One helper decides the end for both kinds:
 `FibTracker._prev_cycle_end_at` = min(activation / creation, the cycle's establishment moment); a pre-established
 cross (created before `e`, no establishment yet) keeps Option A's creation idx. 0 on the reference window.
@@ -328,7 +343,8 @@ Consequences (accepted):
 3. **Cycle `n+1`'s fib start = its first-active = cycle start.** Zone-consistent.
 
 **Scope of Option A's early-end:** same-sid next-cycle progression only — which,
-because pre-established is subordinate-only, is a **subordinate phenomenon**. For
+because pre-established was subordinate-only until PLAN_I S4, was a **subordinate phenomenon** (every structure
+has it since S4). For
 **every other terminal** — reversal (`sid → sid+1`), the subordinate window
 cap (historically "parent-cycle change / parent reversal = `lifecycle_end`";
 since Plan C 2026-09-20 the unique sub's `end_idx` with `end_reason` ∈
@@ -549,6 +565,10 @@ members. A 3-tier split (recent-locked vs prior-locked) is a pure aesthetic and 
 ---
 
 ## 10. `scenario1_revert` → `disappeared` (the one "hide entirely" case)
+
+> **No producer since PLAN_I S4 (2026-10-08):** the Scenario-1 revert is retired with the H1-main logic, and
+> `_INVALIDATION_END_REASONS` is empty. The `disappeared` status, the chart / POI filters on it and this section stay
+> as a generic hook for a future invalidation-class terminal (PLAN_I R6-3 (v)); the text below is the pre-S4 record.
 
 ### 10.1 What `scenario1_revert` is
 
@@ -962,8 +982,8 @@ not lifecycle.
   own cycle's CTS-established, so clamping up to CTS-established would wrongly erase
   that early start. Clamping only to the structure/parent floor raises a start *only*
   when it precedes the parent floor (the B1 gap — a sub active before its parent
-  cycle) while leaving the §6 early start intact (it sits after the floor). For
-  H1-main there is no pre-established phase, so first-active = the tracker's
+  cycle) while leaving the §6 early start intact (it sits after the floor). Until
+  PLAN_I S4 H1-main had no pre-established phase, so first-active = the tracker's
   `activated_at` — the `CTS_ESTABLISHED` **moment** `meta["confirmed_at"]` since Plan E
   E3a (2026-09-24; before it the anchor `CTS_ESTABLISHED.idx`); on main and subs alike a
   fib first activated on a later `CTS_UPDATED` (`meta["activated_on"] == "update"`)
@@ -976,7 +996,9 @@ not lifecycle.
   the next raw update 2651 — `IMBALANCE_FILL_SEMANTICS.md` "Knowability — the c3
   rule"). The two clamps therefore coincide wherever the fib's first-active equals
   the established moment — i.e. no update-activation — the common case,
-  incl. all three H1 fibs on the reference window. **Collapsed** (clamped start ≥
+  incl. every H1 fib record on the reference window (5 since PLAN_I S4: the 4 singles activate at their
+  establishment; the (1,1) cross is pre-established at 741, before its establishment 748, and collapses with (1,0) at
+  the floor 902). **Collapsed** (clamped start ≥
   resolved end) → `start_idx = None`, `status = "inactive"` — the same collapse rule KL/POI use.
 
 ### 15.4 `end_idx` — pass-through is a *candidate*, earliest wins
@@ -985,7 +1007,7 @@ not lifecycle.
 candidates are:
 
 1. **Fib's own terminals** — `new_cycle`, the **Option A** `n+1` pre-established
-   early-end (§7), `scenario1_revert` (§10), and the existing `reversal` wiring.
+   early-end (§7), `scenario1_revert` (§10; no producer since PLAN_I S4), and the existing `reversal` wiring.
 2. **The cycle pass-through end** from `compute_cycle_lifecycle[(sid,cycle)].end`
    (part b) — fed in as **one more candidate**, NOT an override.
 3. **The subordinate cap for a never-established cycle** (2026-09-28, user: "cap like the

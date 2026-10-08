@@ -18,6 +18,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from engine_v2.tests._cross_fib_limits import main_limits
+
 from engine_v2.common.types import ImbalanceInstance
 from engine_v2.features.candle_classifier import (
     apply_candle_classification,
@@ -707,7 +709,8 @@ def test_downstream_pipeline_reads_the_poi_config_defaults(monkeypatch):
     df = _prepare_df(_make_ip_multicycle_data())
     res = compute_bounded_structure(df, 0, +1)
     with contextlib.redirect_stdout(io.StringIO()):
-        out = orch._run_downstream_pipeline(res.df, res.events, res.struct_direction, wvmi="off")
+        out = orch._run_downstream_pipeline(res.df, res.events, res.struct_direction, wvmi="off",
+                                            cross_fib_limits=main_limits(res.events))
     assert out["poi_zones"], "the fixture draws a POI"
     assert [k for k, _, _ in seen] == ["sel", "poi", "ip"]
     assert all(cfg == POIConfig() for _, cfg, _ in seen)
@@ -724,14 +727,17 @@ def test_downstream_pipeline_returns_the_selection_of_its_own_fibs():
     df = _prepare_df(_make_ip_multicycle_data())
     res = compute_bounded_structure(df, 0, +1)
     with contextlib.redirect_stdout(io.StringIO()):
-        out = _run_downstream_pipeline(res.df, res.events, res.struct_direction, wvmi="off")
+        out = _run_downstream_pipeline(res.df, res.events, res.struct_direction, wvmi="off",
+                                       cross_fib_limits=main_limits(res.events))
     assert out["ip_candidates"], "the fixture has gated fib records"
     again = derive_ip_candidates(res.df, res.events, out["fib_tracker"], POIConfig(), structure_path_id="H1.main")
     assert [dataclasses.astuple(r) for r in out["ip_candidates"]] == [dataclasses.astuple(r) for r in again]
     assert {r.meta["structure_path_id"] for r in out["ip_candidates"]} == {"H1.main"}
     picked = [r for r in out["ip_candidates"] if r.picked]
     assert picked, "the fixture has a pick"
-    assert len([r for r in out["ip_candidates"] if r.ic_idx is None]) == 2   # cycles 1 / 3: no pattern, no POI
+    # cycles 1 / 3: no pattern; cycle 0 (main's single since PLAN_I S4, Q6): no candidates — no POI for any
+    assert [(r.cycle_id, r.reason) for r in out["ip_candidates"] if r.ic_idx is None] == [
+        (0, "no_candidates"), (1, "no_pattern"), (3, "no_pattern")]
     drawn = [(z.meta["structure_id"], z.meta["cycle_id"], z.ic_idx, z.meta["ip_rank"], z.meta["ip_leg_candle_counts"],
               z.meta["pattern_anchor_idx"], z.meta["opp_leg_first_idx"], z.meta["pattern_end_idx"],
               z.meta["pattern_confirmed_idx"], z.meta["ip_tiebreak"]) for z in out["poi_zones"]]
