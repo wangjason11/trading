@@ -35,10 +35,17 @@ TRIGGER_FIRE at the same idx (the successor must exist before an H1 trigger at
 that candle runs its sibling read); every other moment orders by record `seq`.
 The heap is idx-monotone: a moment is never queued in the past (asserted).
 
+Ids (PLAN_I §9.3 D4): DURING the sweep a sub is keyed by its creation index
+`pool_idx` (every order key, record FK, replacement link and log line —
+`pool#k`); after the last moment `_after_sweep` numbers the subs by lifecycle
+START (`SubStructurePool.number_subs_by_start` — `(start_idx, pool_idx)` → 0,
+1, …; a never-started sub gets no `sub_id`) before any assert, so every
+`SweepResult` consumer sees the final ids.
+
 Logging (stdout, greppable — the `/compare` skill greps
 `warning|skipping|unavailable|degenerate|pending|no sid`): `[sweep] fire …`,
 `[sweep] record …`, `[sweep] replace …`, `[sweep] spawn …`, `[sweep] sub_end …`,
-`[sweep] UNRESOLVED (skipping) reason=…`.
+`[sweep] UNRESOLVED (skipping) reason=…`, `[sweep] number pool#k -> sub_id=…`.
 """
 from __future__ import annotations
 
@@ -161,7 +168,7 @@ class _Sweep:
         self._cur_idx: Optional[int] = None
         self._cur_phase: int = -1
         self._active: Set[int] = set()              # record seqs currently active
-        self._touched: Set[int] = set()             # sub_ids touched at the current idx
+        self._touched: Set[int] = set()             # pool_idxs touched at the current idx
         self.spawned: List[SweepTrigger] = []
         self._by_seq: Dict[int, TriggerRecord] = {}
 
@@ -250,7 +257,7 @@ class _Sweep:
         live = [r for r in sub.records if r.is_live_at_reversal(R)]
         if not live:
             self.log(
-                f"[sweep] spawn sub_id={sub.sub_id} R={R}: no live record at R — reversal inert"
+                f"[sweep] spawn pool#{sub.pool_idx} R={R}: no live record at R — reversal inert"
             )
             return
         for r in live:
@@ -262,7 +269,7 @@ class _Sweep:
             )
             self.spawned.append(t)
             self.log(
-                f"[sweep] spawn sub_id={sub.sub_id} R={R} from record {r.identity} "
+                f"[sweep] spawn pool#{sub.pool_idx} R={R} from record {r.identity} "
                 f"-> reversal trigger lens={t.lens} dir={t.direction}"
             )
             self._resolve_and_record(t, R, reversing_sub=sub)
@@ -312,17 +319,17 @@ class _Sweep:
         if created and sub.natural_reversal_idx is not None:
             R = int(sub.natural_reversal_idx)
             if R > int(idx):
-                self._push(R, _PHASE_FIRE, (_KIND_REVERSAL_SPAWN, sub.sub_id), ("spawn", sub))
+                self._push(R, _PHASE_FIRE, (_KIND_REVERSAL_SPAWN, sub.pool_idx), ("spawn", sub))
             # R <= idx: reversed before this trigger — nothing to spawn (no record
             # can be live at R); step 6 makes this record zero-length.
         if (not created and res.bos0_inner is not None and sub.bos0_inner is not None
                 and abs(float(sub.bos0_inner) - float(res.bos0_inner)) > 1e-9):
             self.log(
-                f"WARNING [sweep] bos0_inner mismatch on sub_id={sub.sub_id} key={tuple(key)}: "
+                f"WARNING [sweep] bos0_inner mismatch on pool#{sub.pool_idx} key={tuple(key)}: "
                 f"pool={sub.bos0_inner} probe={res.bos0_inner} (keeping the first)"
             )
         # 4. same (lens, parent) → same record: absorb.
-        existing = [r for r in self.pool.records_for(t.lens, S, C) if r.sub_id == sub.sub_id]
+        existing = [r for r in self.pool.records_for(t.lens, S, C) if r.pool_idx == sub.pool_idx]
         if existing:
             existing[0].extra_trigger_idxs.append(int(t.trigger_idx))
             self.log(
@@ -336,7 +343,7 @@ class _Sweep:
         rec = TriggerRecord(
             lens=t.lens, parent_sid=S, parent_cycle_id=C,
             trigger_sub_sid=self.pool.next_trigger_sub_sid(t.lens, S, C),
-            sub_id=sub.sub_id,
+            sub_id=None, pool_idx=sub.pool_idx,      # sub_id: numbered after the sweep (D4)
             trigger_type=t.trigger_type, trigger_idx=int(t.trigger_idx),
             probe_finalize_idx=finalize_idx,
             probe_finalize_condition=str(res.finalize_condition),
@@ -359,7 +366,7 @@ class _Sweep:
             rec.end_reason = sub.end_reason
             ender = next((r for r in sub.records if r.end_idx == sub.end_idx
                           and r.end_reason == sub.end_reason), None)
-            rec.ended_by_sub_id = ender.ended_by_sub_id if ender is not None else None
+            rec.ended_by_pool_idx = ender.ended_by_pool_idx if ender is not None else None
         else:
             cands: List[Tuple[int, str]] = []
             if sub.natural_reversal_idx is not None:
@@ -377,7 +384,7 @@ class _Sweep:
         # 7. register + queue the start.
         self.pool.add_record(rec)
         self.log(
-            f"[sweep] record {rec.identity} sub_id={rec.sub_id} type={rec.trigger_type} "
+            f"[sweep] record {rec.identity} pool#{rec.pool_idx} type={rec.trigger_type} "
             f"trigger_idx={rec.trigger_idx} finalize={rec.probe_finalize_idx} floor={floor} "
             f"start_idx={rec.start_idx} known_end={rec.trigger_end_idx}/{rec.end_reason} "
             f"relative_dir={rec.relative_dir} zero_length={rec.is_zero_length}"
@@ -387,7 +394,7 @@ class _Sweep:
 
     # --- phase 1 ---
     def _phase1_record_start(self, rec: TriggerRecord, t: int) -> None:
-        sub = self.pool.get_by_id(rec.sub_id)
+        sub = self.pool.get_by_pool_idx(rec.pool_idx)
         assert rec.trigger_end_idx is None or rec.trigger_end_idx > t, (
             f"[sweep] record {rec.identity} reached RECORD_START at {t} already ended "
             f"at {rec.trigger_end_idx}"
@@ -400,13 +407,13 @@ class _Sweep:
             rec.end_idx = max(rec.trigger_end_idx, rec.start_idx)
             ender = next((r for r in sub.records if r is not rec and r.end_idx == sub.end_idx
                           and r.end_reason == sub.end_reason), None)
-            rec.ended_by_sub_id = ender.ended_by_sub_id if ender is not None else None
+            rec.ended_by_pool_idx = ender.ended_by_pool_idx if ender is not None else None
             self.log(
-                f"[sweep] record {rec.identity} start {t} after sub_id={sub.sub_id} ended "
+                f"[sweep] record {rec.identity} start {t} after pool#{sub.pool_idx} ended "
                 f"{sub.end_idx}/{sub.end_reason} -> frozen zero-length"
             )
             return
-        self._touched.add(sub.sub_id)
+        self._touched.add(sub.pool_idx)
         # The incumbent = the record of this (lens, S, C, direction) that has
         # STARTED (its RECORD_START ran — `_active`) and not ended. The interval
         # rule alone would also see a same-idx record whose start moment is
@@ -429,7 +436,7 @@ class _Sweep:
             )
         self._active.add(rec.seq)
         for inc in incs:
-            if inc.sub_id == rec.sub_id or inc.trigger_end_idx is not None:
+            if inc.pool_idx == rec.pool_idx or inc.trigger_end_idx is not None:
                 continue
             if inc.start_idx == rec.start_idx:
                 # Acausal case (§4.2): the later seq replaces the earlier. The
@@ -439,31 +446,31 @@ class _Sweep:
                 # live for one moment.
                 self.log(
                     f"WARNING [sweep] same-idx start collision at {t}: {inc.identity} "
-                    f"(sub {inc.sub_id}) replaced by {rec.identity} (sub {rec.sub_id})"
+                    f"(pool#{inc.pool_idx}) replaced by {rec.identity} (pool#{rec.pool_idx})"
                 )
                 inc.trigger_end_idx = int(t)
                 inc.end_reason = "same_dir_replacement"
-                inc.ended_by_sub_id = rec.sub_id
+                inc.ended_by_pool_idx = rec.pool_idx
                 inc.end_idx = max(int(t), inc.start_idx)
                 self._active.discard(inc.seq)
             else:
                 self.log(
-                    f"[sweep] replace {inc.identity} sub_id={inc.sub_id} by sub_id={rec.sub_id} at {t}"
+                    f"[sweep] replace {inc.identity} pool#{inc.pool_idx} by pool#{rec.pool_idx} at {t}"
                 )
                 self._push(t, _PHASE_RECORD_END, (inc.seq,),
-                           ("record_end", inc, "same_dir_replacement", rec.sub_id))
+                           ("record_end", inc, "same_dir_replacement", rec.pool_idx))
         self._push(t, _PHASE_SUB_START, (rec.seq,), ("sub_start", rec))
         # A live record STARTED here → the sub is re-evaluated in phase 4 (a no-op
         # by monotonicity — a start only shrinks the candidate set — kept for
         # fidelity with §4.4).
-        self._push(t, _PHASE_SUB_END, (sub.sub_id,), ("sub_end", sub.sub_id))
+        self._push(t, _PHASE_SUB_END, (sub.pool_idx,), ("sub_end", sub.pool_idx))
 
     # --- phase 2 ---
     def _phase2_sub_start(self, rec: TriggerRecord, t: int) -> None:
-        sub = self.pool.get_by_id(rec.sub_id)
+        sub = self.pool.get_by_pool_idx(rec.pool_idx)
         if sub.start_idx is None and not rec.is_zero_length and rec.start_idx == t:
             sub.start_idx = int(t)
-            self.log(f"[sweep] sub_start sub_id={sub.sub_id} start_idx={t} via {rec.identity}")
+            self.log(f"[sweep] sub_start pool#{sub.pool_idx} start_idx={t} via {rec.identity}")
 
     # --- phase 3 ---
     def _phase3_record_end(self, rec: TriggerRecord, t: int,
@@ -473,19 +480,20 @@ class _Sweep:
         best = min(entries, key=lambda e: _END_REASON_PRIORITY.get(e[1], 99))
         rec.trigger_end_idx = int(t)
         rec.end_reason = best[1]
-        rec.ended_by_sub_id = best[2]
+        rec.ended_by_pool_idx = best[2]
         rec.end_idx = max(int(t), rec.start_idx)
         self._active.discard(rec.seq)
-        self._touched.add(rec.sub_id)
+        self._touched.add(rec.pool_idx)
+        ended_by = f"pool#{rec.ended_by_pool_idx}" if rec.ended_by_pool_idx is not None else None
         self.log(
-            f"[sweep] record_end {rec.identity} sub_id={rec.sub_id} at {t} "
-            f"reason={rec.end_reason} ended_by={rec.ended_by_sub_id}"
+            f"[sweep] record_end {rec.identity} pool#{rec.pool_idx} at {t} "
+            f"reason={rec.end_reason} ended_by={ended_by}"
         )
-        self._push(t, _PHASE_SUB_END, (rec.sub_id,), ("sub_end", rec.sub_id))
+        self._push(t, _PHASE_SUB_END, (rec.pool_idx,), ("sub_end", rec.pool_idx))
 
     # --- phase 4 ---
-    def _phase4_sub_end(self, sub_id: int, t: int) -> None:
-        sub = self.pool.get_by_id(sub_id)
+    def _phase4_sub_end(self, pool_idx: int, t: int) -> None:
+        sub = self.pool.get_by_pool_idx(pool_idx)
         if sub.end_idx is not None:
             return
         live = [r for r in sub.records if not r.is_zero_length and r.start_idx <= t]
@@ -502,17 +510,36 @@ class _Sweep:
         sub.end_idx = int(e)
         sub.end_reason = r.end_reason
         self.log(
-            f"[sweep] sub_end sub_id={sub.sub_id} end_idx={sub.end_idx} reason={sub.end_reason} "
+            f"[sweep] sub_end pool#{sub.pool_idx} end_idx={sub.end_idx} reason={sub.end_reason} "
             f"via {r.identity} (max_start={max_start})"
         )
 
     # --- after ---
     def _after_sweep(self) -> None:
+        # The final ids FIRST (PLAN_I §9.3 D4): every SweepResult consumer sees them.
+        for pool_idx, sub_id in self.pool.number_subs_by_start():
+            sub = self.pool.get_by_pool_idx(pool_idx)
+            self.log(
+                f"[sweep] number pool#{pool_idx} -> sub_id={sub_id} start_idx={sub.start_idx}"
+                + ("" if sub_id is not None else " (never started)")
+            )
+        for r in self.pool.all_records():
+            if r.ended_by_pool_idx is not None and r.ended_by_sub_id is None:
+                self.log(
+                    f"WARNING [sweep] record {r.identity} ended by pool#{r.ended_by_pool_idx}, "
+                    f"which never started — ended_by_sub_id None"
+                )
         for sub in self.pool.all():
             sub.relative_dir_segments = _relative_dir_segments(sub)
             for r in sub.records:
+                assert r.pool_idx == sub.pool_idx, (
+                    f"[sweep] record {r.identity} pool#{r.pool_idx} filed under pool#{sub.pool_idx}"
+                )
                 if r.is_zero_length:
                     continue
+                assert r.sub_id is not None and self.pool.get_by_id(r.sub_id) is sub, (
+                    f"[sweep] live record {r.identity} sub_id={r.sub_id} does not resolve to its sub"
+                )
                 assert r.end_idx is None or r.start_idx < r.end_idx, (
                     f"[sweep] live record {r.identity} has start {r.start_idx} >= end {r.end_idx}"
                 )
@@ -526,7 +553,7 @@ class _Sweep:
                 )
             else:
                 assert not sub.live_records(), (
-                    f"[sweep] sub {sub.sub_id} has live records but no start_idx"
+                    f"[sweep] pool#{sub.pool_idx} has live records but no start_idx"
                 )
         # Per (lens, S, C, direction): live windows non-overlapping as half-open intervals.
         by_scope: Dict[Tuple[str, int, int, int], List[TriggerRecord]] = {}

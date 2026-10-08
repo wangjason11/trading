@@ -160,6 +160,13 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
   filter; triggers stay structural). The May trigger filter (`47e7532`, reverted `2afd3b2`) is the reference form:
   trigger candle body opposing the zone side. DECIDE when Entries are designed. Detail: this register's "Recently
   closed" (the 2026-09-30 measurement).
+- **A same-candle replacement chain names a replacer that never starts** (PLAN_I S1's landing review, 2026-10-07;
+  latent since Plan C, 0 on the window): when two records start on the same candle and the later one replaces both
+  the incumbent and its co-starter, the sweep's phase 3 takes the FIRST equal-priority end entry, so the incumbent's
+  `ended_by` names the co-starter that was itself replaced — a sub that never starts. Before S1 the triggers CSV
+  carried that sub's creation id (a sub no chart draws); since S1 the cell is empty and the sweep logs `WARNING
+  [sweep] record … ended by pool#k, which never started`. Candidate fix: `ended_by` = the replacer that survives.
+  Pinned: `test_lifecycle_sweep_unit.py::test_a_replacer_that_never_starts_leaves_ended_by_empty_and_warns`. DECIDE.
 - **Should subs get the DERIVED CTS KL zone as their probe reference?** (today every sub reference zone is ad-hoc).
   Unscheduled follow-up. DECIDE. Detail: PART4 §17.12, GOTCHAS (the `kl_zones=[]` pool-path note).
 - **No-pattern cycles — a fallback POI** (after D.1 item 1; today: no POI, PLAN_H D7): (a) search the lower TF for the

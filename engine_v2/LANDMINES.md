@@ -816,7 +816,8 @@ registry, never from `dfx.attrs["lower_tf_results"]`.
 >   A record that exists but has not started (an FC record between its
 >   `trigger_idx` and its `start_idx`) is excluded by `start_idx <= hi`.
 > - each candidate's CTS events (`_CTS_EVENT_TYPES`) come from its sub's
->   geometry (`pool.get_by_id(r.sub_id).geometry` = `(bounded, slice_begin)`,
+>   geometry (`pool.get_by_pool_idx(r.pool_idx).geometry` = `(bounded, slice_begin)` — the read runs
+>   DURING the sweep, before any sub has its `sub_id` [PLAN_I S1],
 >   SLICE-LOCAL → shifted by `slice_begin`, deep-copied), **clipped to the
 >   record's own live window ∩ `[lo, hi]`**: `r_lo = max(lo, r.start_idx)`,
 >   `r_hi = min(hi, r.trigger_end_idx or hi)`. This clip is what reproduces
@@ -2044,9 +2045,10 @@ Cycles" below).
 >
 > - **Identity — unchanged.** A unique sub (`PooledStructure`) is
 >   `StructureKey(parent_path, sub_tf, direction, starting_idx)` with ABSOLUTE
->   `direction`; `sub_id` is global creation order (§17.3). A `TriggerRecord`
+>   `direction`; `sub_id` is global creation order (§17.3) [PLAN_I S1, 2026-10-07: lifecycle-START
+>   order, numbered at the sweep's end; the sweep keys on the creation index `pool_idx`]. A `TriggerRecord`
 >   is `(lens, parent_sid, parent_cycle_id, trigger_sub_sid)` with FK `sub_id`
->   (never None); `trigger_sub_sid` starts at 0 per `(lens, parent_sid,
+>   (never None) [since S1: None only on a never-started sub's zero-length records]; `trigger_sub_sid` starts at 0 per `(lens, parent_sid,
 >   parent_cycle_id)` and is CREATION-ordered (§17.4). `sub_sid` no longer
 >   exists on any structural artifact (only main `SidRecord`s keep
 >   `sub_sid = structure_id`); the chart identity of a sub is `sub_id`.

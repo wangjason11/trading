@@ -689,6 +689,8 @@ The rule ("parent cycle 0 → no reference") covers the case either way.
 - 2026-10-07 — session 2: round 7 ANSWERED (§6 R7-1 … R7-4; the spec copy, part 8): R6-1b confirmed (S3b), `fib_mode`
   retired after the build (S6), the float `sub_id` rendering accepted, the label `via: "cross_fib_limit"`; **the plan
   APPROVED** — session 3 = the build (S1 + S2 first).
+- 2026-10-07 — session 3: **S1 LANDED** (§9.10): `sub_id` numbered at the lifecycle start, byte-identical to S_F1;
+  2-lens landing review folded; one latent sweep quirk parked (register D.2).
 
 ## 8. Handoff to session 2 — the implementation plan (from a fresh code audit + a cold review)
 
@@ -732,7 +734,7 @@ re-open it; a question the code raises goes to the user as a new round, recorded
 ## 9. The implementation plan (session 2, 2026-10-07)
 
 **Status: cold-reviewed (§9.8); round 6 ANSWERED (§6 R6-1 … R6-7, every recommendation taken) + round 7 (R7-1 …
-R7-4); APPROVED by the user 2026-10-07 (R7-4); nothing built — session 3 = the build, starting with S1 + S2.** Written from a fresh code audit of HEAD `e63c3ea` + variant replays on S_F1. The rule is §1.2 + §1.4 (not
+R7-4); APPROVED by the user 2026-10-07 (R7-4); session 3 = the build: **S1 LANDED** 2026-10-07 (§9.10).** Written from a fresh code audit of HEAD `e63c3ea` + variant replays on S_F1. The rule is §1.2 + §1.4 (not
 re-opened). The plan's AUTHOR'S RESOLUTIONS went to the user as round 6 and were all taken (§6). Times UTC (H1 i from the window's `_raw.csv`; M15 i = H1 i // 4 + 15 min × i % 4, the census
 convention); M15 indices entity-absolute unless a sub's slice-local frame is named. "Window" = 2025-11-15 → 2026-01-20.
 
@@ -1149,3 +1151,44 @@ single 1107 → 1245 — gains a POI (IC 1117, 12-02 13:15), cycle 1 — now the
 0 is unchanged (collapsed); sub 0 cycles 3 and 4 move their POI (687 → 1604, 687 → 1772); sub 3 cycle 2 (the T1
 example) moves 2837 → 2969; sub 2 cycle 1 loses its POI (2442 → none). Sub 3 cycle 3 (no POI record) is unchanged by
 the revamp (a single before and after). PLAN_H §8.9 resumes on the S5 save (S6, format-only — the `fib_mode` column — moves no debugging point).
+
+### 9.10 Build record (session 3, 2026-10-07)
+
+**S1 — `sub_id` numbered at the lifecycle start (D4) — LANDED** (its own commit; local, not pushed).
+- Code: `sub_structure_pool` — `pool_idx` (the creation index) on `PooledStructure` and `TriggerRecord` + the
+  record's `ended_by_pool_idx`; `get_by_pool_idx`; `number_subs_by_start()` (started subs by `(start_idx,
+  pool_idx)` → 0, 1, …; never started → None, its records too; `ended_by_sub_id` from `ended_by_pool_idx`; runs once;
+  a NEW `get_or_create` after it asserts); `all()` in `pool_idx` order. `lifecycle_sweep` — every sweep-time order
+  key / FK / replacement link / log line on `pool_idx` (`pool#k`; every key's VALUE equals HEAD's old `sub_id` —
+  lens A); `_after_sweep` numbers FIRST (`[sweep] number pool#k -> sub_id=j start_idx=…`), WARNs on a replacer that
+  never started, asserts every live record resolves to its sub. `entity_df_mutation` — the sibling read
+  `get_by_pool_idx(r.pool_idx)`; the reversal resolver's label and the geometry log `pool#k`;
+  `render_sub_projection` asserts a `sub_id`. `export_sub_tables._TRIGGER_NOT_EXPORTED` (`source_trigger`,
+  `pool_idx`, `ended_by_pool_idx`); `export_m15_chart` skips a record whose `sub_id` is None; the orchestrator's
+  never-started print and `pool#k` on the `[pool] sub_id=` line.
+- `/compare` vs S_F1 (`cmp_fig_full.py`): **byte-identical** — 27 / 27 CSVs md5-equal, 3 / 3 figures (full JSON)
+  equal = §9.5's S1 prediction (twice: before and after the review fixes; replays 88.1 s / 46.6 s wall, fetch gate
+  PASS, the log grep = the 4 unresolved + 2 degenerate-cycle lines as before). run.log: the sweep / geometry /
+  probe-cache lines name `pool#k`, + 8 `[sweep] number pool#k -> sub_id=k` lines (creation == start order, 8 / 8),
+  the `[pool] sub_id=` lines gain `pool#k`.
+- Tests 1288 → 1298 (+10): the numbering (start ≠ creation order, a tie, a never-started sub, the `ended_by` remap,
+  run-once / create-after guards — pool level; through the sweep with a replacement whose ender's `pool_idx` ≠ its
+  id), the triggers-CSV header pinned literally + the float `sub_id` cell of a never-started sub (R7-2), the M15
+  chart skipping a None-`sub_id` record, and the review's four (below). ~80 fixture updates (constructed records /
+  subs take `pool_idx`; `_set_lifecycle` numbers as the sweep would) and re-pins: `test_sub_id_is_monotonic_and_stable`
+  → `test_pool_idx_is_monotonic_and_stable` (PART4 §17.11 annotated); `get_by_id` → `get_by_pool_idx` + `get_by_id`
+  after numbering; the field-order pin gains the two FKs; the geometry builder's "no index consumed" pins → `pool_idx`;
+  the predicted table's id test → start order; the stubs / log greps that run mid-sweep → `pool_idx` / `pool#`; the
+  two-chain invariants test → one pool per sweep (numbering runs once per pool).
+- Landing review, 2 read-only lenses, **439,114 tokens**: **A** code audit (231,808) — 0 BLOCKER / 0 MAJOR / 4 MINOR /
+  4 NIT, all folded: the never-started-replacer WARNING IS reachable — a same-candle chain where the incumbent's
+  first equal-priority end entry names a co-starter that was itself replaced (latent since Plan C; HEAD exported that
+  sub's creation id; register D.2, DECIDE; pinned); 3 stale lines in memory `project_sub_structure_pool_architecture`;
+  the predicted table's id test; the invariant helper's `ended_by` remap; nits (an assert message, the synthetic
+  fixtures' docstrings, `_recency_key` / CHARTING_SPEC wording, `pool#` on the pool print). Verified: no sweep-time
+  `sub_id` read left; every post-sweep reader tolerates None; on a window where creation ≠ start order the deltas
+  are ids / labels + the float column, as D4 intends. **B** mutation (207,306) — 41 mutants on the full suite: 31
+  killed, 5 equivalent (N04, N11, S02, S03, S15 — `_touched` is dead state, pre-S1), 5 gaps → 4 tests (S13 / S14
+  MAJOR: phase 1's "frozen while pending" `ended_by` copy was reached only with a `parent_end`; S18 the WARNING — and
+  the collision test's `in {A.sub_id, B.sub_id}` had weakened to accept None; E02 the sibling read by `pool_idx`; E03
+  the render assert) — re-run: 5 / 5 KILLED.

@@ -8,7 +8,8 @@ predicted table from `memory/reference_pool_redesign_groundtruth.md` -- every
 record's identity + lifecycle, every sub's lifecycle + lenses, the 4 unresolved
 rows and the 4 sweep-spawned reversal triggers -- keyed by
 `(direction, starting_idx)` (the memory table's "sub 7/8/9/10" labels are the
-BASELINE's numbering; under Plan C `sub_id` is 0..7 in creation order).
+BASELINE's numbering; under Plan C `sub_id` is 0..7 in creation order; since PLAN_I S1
+in lifecycle-START order, which equals the creation order on this window).
 
 Contract: `plans/PLAN_C_lifecycle_rewrite.md` sections 2-4 + 9.2; PART4 section
 17.4-17.7. Pure logic -- no pandas frames, no MS, no probe: the resolvers are
@@ -386,7 +387,8 @@ def _make_stubs(pool: SubStructurePool, calls: Dict[str, list]):
 #   4083 subseq_ctr(1,2)    -> R9 ; sub 4027/+1 created, nat_rev None
 #   4200 spawn from 3760    -> R10; sub 4027/+1 dedup hit
 #
-# => sub_id 0..7 in creation order: 454, 1797, 2365, 2639, 3304, 3621, 3760, 4027.
+# => pool_idx 0..7 in creation order: 454, 1797, 2365, 2639, 3304, 3621, 3760, 4027 — and
+#    sub_id 0..7 in START order (PLAN_I S1), the same order on this window.
 EXPECTED_SUB_ORDER: List[Tuple[int, int]] = [
     (1, 454), (-1, 1797), (1, 2365), (-1, 2639), (-1, 3304), (1, 3621), (-1, 3760), (1, 4027),
 ]
@@ -643,11 +645,16 @@ def test_parent_tables_from_saved_h1_csv_match_synthetic(tables):
 # Section 9.2 -- the predicted table
 # =============================================================================
 
-def test_sub_ids_follow_creation_order(sweep):
+def test_pool_idx_follows_creation_and_sub_id_follows_start(sweep):
+    """`pool.all()` = creation (`pool_idx`) order; `sub_id` = lifecycle-START order
+    `(start_idx, pool_idx)` (PLAN_I S1, R4-2). The two coincide on this window."""
     pool: SubStructurePool = sweep["pool"]
     subs = pool.all()
     assert [(s.direction, s.starting_idx) for s in subs] == EXPECTED_SUB_ORDER
-    assert [s.sub_id for s in subs] == list(range(8))
+    assert [s.pool_idx for s in subs] == list(range(8))
+    by_start = sorted(subs, key=lambda s: (s.start_idx, s.pool_idx))
+    assert [s.sub_id for s in by_start] == list(range(8))
+    assert [s.sub_id for s in subs] == list(range(8))           # == creation order HERE
     for s in subs:
         assert pool.get_by_id(s.sub_id) is s
         assert s.key == _key(s.direction, s.starting_idx)

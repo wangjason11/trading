@@ -151,7 +151,7 @@ def _geom(
     """`build_geometry(key, bos0_inner)` stub — the §5.4 builder: on a miss the
     pool entry is created (here: only when the build "succeeds") with the stubbed
     `natural_reversal_idx` from `nat_rev[(direction, starting_idx)]`; keys in
-    `fail_once` return None ONCE (no pool entry, no sub_id consumed), then build.
+    `fail_once` return None ONCE (no pool entry, no pool_idx consumed), then build.
     Records every call on `.calls` as `(key, bos0_inner)`."""
     calls: List[Tuple[StructureKey, Optional[float]]] = []
     failing = set(fail_once or ())
@@ -178,11 +178,12 @@ def _rev_resolver(mapping: Dict[Tuple[int, int], Any]):
     sub's `(direction, starting_idx)` → successor `starting_idx` (or a
     `ProbeFailure`). Success = `ResolvedStart(finalize_idx=R)` — the handoff's
     finalize is R by construction (§4.3 spawn: start = max(R, R, floor) = R).
-    Unknown subs → `ProbeFailure`. Records `(sub_id, R, probe_direction)`."""
+    Unknown subs → `ProbeFailure`. Records `(pool_idx, R, probe_direction)` — the
+    call happens DURING the sweep, before any sub has its `sub_id` (PLAN_I S1)."""
     calls: List[Tuple[int, int, int]] = []
 
     def resolve_reversal(sub: PooledStructure, R: int, probe_direction: int):
-        calls.append((sub.sub_id, R, probe_direction))
+        calls.append((sub.pool_idx, R, probe_direction))
         v = mapping.get((sub.direction, sub.starting_idx))
         if v is None:
             return ProbeFailure(detail="no successor stubbed", probe_input_idx=R)
@@ -243,6 +244,18 @@ def _assert_sweep_invariants(pool: SubStructurePool) -> None:
                 assert r.end_idx is None or r.start_idx < r.end_idx, r
         if sub.start_idx is not None:
             assert sub.end_idx is None or sub.end_idx > sub.start_idx, sub
+    # PLAN_I R4-2: `sub_id` order == `start_idx` order (a tie → creation order); a
+    # never-started sub has no id, and its records carry none.
+    started = sorted((s for s in pool.all() if s.start_idx is not None), key=lambda s: s.sub_id)
+    assert [s.sub_id for s in started] == list(range(len(started)))
+    assert [(s.start_idx, s.pool_idx) for s in started] == sorted((s.start_idx, s.pool_idx) for s in started)
+    for sub in pool.all():
+        assert all(r.sub_id == sub.sub_id for r in sub.records)
+        if sub.start_idx is None:
+            assert sub.sub_id is None
+    for r in pool.all_records():                     # ended_by = the ender's FINAL id
+        assert r.ended_by_sub_id == (pool.get_by_pool_idx(r.ended_by_pool_idx).sub_id
+                                     if r.ended_by_pool_idx is not None else None), r
     groups: Dict[Tuple[str, int, int, int], list] = defaultdict(list)
     for r in pool.all_records():
         if not r.is_zero_length:
@@ -906,7 +919,7 @@ def test_reversal_spawn_record_whose_parent_ends_at_R_is_still_live():
     )
     W = _sub(pool, +1, 100)
     assert W.start_idx == 120 and W.end_idx == 503
-    assert rev.calls == [(W.sub_id, 503, -1)]
+    assert rev.calls == [(W.pool_idx, 503, -1)]
     assert [(t.lens, t.trigger_idx, t.direction) for t in result.spawned] == [(CONF, 503, -1)]
     Y = _sub(pool, -1, 480)
     (recY,) = Y.records
@@ -1229,6 +1242,7 @@ def test_sub_with_only_zero_length_records_has_no_start_and_no_lens():
     assert rec.is_zero_length and (rec.start_idx, rec.trigger_end_idx, rec.end_reason) == (
         303, 280, "reversal")
     assert S.start_idx is None and S.end_idx is None and S.end_reason is None
+    assert S.sub_id is None and rec.sub_id is None          # never started → no id (PLAN_I R4-4)
     assert S.lenses() == set() and S.live_records() == []
     assert rev.calls == [] and result.spawned == []
     assert result.unresolved == []
@@ -1244,23 +1258,27 @@ def test_post_sweep_invariants_hold_on_the_groundtruth_chains():
     None; every started sub has end_idx None or > start_idx; per
     (lens,S,C,direction) the live windows are non-overlapping half-open
     intervals — a handover shares the boundary candle (rec7 [3621,3819) /
-    rec9 [3819,4200)). Checked on both groundtruth chains in one pool.
+    rec9 [3819,4200)). Checked on both groundtruth chains — one pool per sweep
+    (PLAN_I S1: a pool is numbered once, at its sweep's end; the two chains
+    shared one pool until then).
     """
-    pool = SubStructurePool()
-    _scenario_2365(pool)
-    _scenario_3304(pool)
-    assert len(pool.all()) == 7                      # 454, 1797, 2365, 2639, 3304, 3760, 4027
-    assert len(pool.all_records()) == 8
-    assert all(not r.is_zero_length for r in pool.all_records())
-    _assert_sweep_invariants(pool)
+    pool_a, pool_b = SubStructurePool(), SubStructurePool()
+    _scenario_2365(pool_a)
+    _scenario_3304(pool_b)
+    # 454, 1797, 2365, 2639 | 3304, 3760, 4027
+    assert len(pool_a.all()) + len(pool_b.all()) == 7
+    assert len(pool_a.all_records()) + len(pool_b.all_records()) == 8
+    for pool in (pool_a, pool_b):
+        assert all(not r.is_zero_length for r in pool.all_records())
+        _assert_sweep_invariants(pool)
+        # seq is global creation order
+        seqs = [r.seq for r in pool.all_records()]
+        assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)
     # the shared boundary candle, explicitly
-    (rec7,), (rec9,) = _sub(pool, -1, 3304).records, _sub(pool, -1, 3760).records
+    (rec7,), (rec9,) = _sub(pool_b, -1, 3304).records, _sub(pool_b, -1, 3760).records
     assert rec7.end_idx == rec9.start_idx == 3819
     assert rec7.is_active_at(3818) and not rec7.is_active_at(3819)
     assert rec9.is_active_at(3819)
-    # seq is global creation order
-    seqs = [r.seq for r in pool.all_records()]
-    assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs)
 
 
 # =============================================================================
@@ -1364,11 +1382,11 @@ def test_degenerate_cycle_trigger_is_logged_and_never_probed():
     assert sum("UNRESOLVED (skipping)" in line for line in logs) == 2, logs
 
 
-def test_geometry_failed_consumes_no_sub_id_and_later_trigger_can_build_the_key():
+def test_geometry_failed_consumes_no_pool_idx_and_later_trigger_can_build_the_key():
     """§4.3 step 3 / §5.4: FC(1,2) t=3611 → (−1,3304) but the geometry build
     fails → UnresolvedTrigger(reason=geometry_failed), NO pool entry (pool.all()
-    unchanged), no sub_id consumed. A later subseq_conf(1,2) t=3819 resolving to
-    the same key builds it fresh: sub_id 0, one record (tss 0, trigger 3819) —
+    unchanged), no pool_idx consumed. A later subseq_conf(1,2) t=3819 resolving to
+    the same key builds it fresh: pool_idx 0 / sub_id 0, one record (tss 0, trigger 3819) —
     no false cache hit on a geometry-less entry.
     """
     pool = SubStructurePool()
@@ -1390,7 +1408,7 @@ def test_geometry_failed_consumes_no_sub_id_and_later_trigger_can_build_the_key(
     assert [(u.trigger_idx, u.reason, u.parent_input_idx, u.probe_input_idx)
             for u in result.unresolved] == [(3611, "geometry_failed", 826, 3305)]
     (S,) = pool.all()
-    assert S.sub_id == 0 and S.starting_idx == 3304
+    assert S.pool_idx == 0 and S.sub_id == 0 and S.starting_idx == 3304
     (rec,) = S.records
     assert (rec.trigger_type, rec.trigger_idx, rec.trigger_sub_sid, rec.start_idx) == (
         "subsequent_confluence", 3819, 0, 3819)
@@ -1456,7 +1474,7 @@ def test_reversal_spawn_sorts_before_trigger_fire_at_the_same_idx():
     assert snapshots[(CTR, "first_counter")] == [(+1, 100), (-1, 280)]
     assert snapshots[(CONF, "first_confluence")] == []            # nothing before the FC
     # log order at 303: the spawn line precedes the counter trigger's fire line
-    i_spawn = next(i for i, l in enumerate(logs) if l.startswith("[sweep] spawn sub_id=") and "R=303" in l)
+    i_spawn = next(i for i, l in enumerate(logs) if l.startswith("[sweep] spawn pool#") and "R=303" in l)
     i_fire = next(i for i, l in enumerate(logs)
                   if l.startswith("[sweep] fire lens=counter") and "type=first_counter" in l)
     assert i_spawn < i_fire, logs
@@ -1579,7 +1597,7 @@ def test_bos0_inner_mismatch_on_dedup_hit_warns_and_keeps_the_first(first_bos0, 
     warn = [l for l in logs if "WARNING [sweep] bos0_inner mismatch" in l]
     assert len(warn) == (1 if expect_warn else 0), logs
     if expect_warn:
-        assert f"sub_id={S.sub_id}" in warn[0] and "keeping the first" in warn[0]
+        assert f"pool#{S.pool_idx}" in warn[0] and "keeping the first" in warn[0]
     # never raised; the second trigger was absorbed as usual
     (rec,) = S.records
     assert rec.extra_trigger_idxs == [303]
@@ -1735,7 +1753,7 @@ def test_reversal_spawns_from_a_record_that_outlives_its_ended_sub():
     assert _window(B) == (203, 803, "reversal")                      # ... while its counter record ran on
     assert _window(Y) == (503, None, None)
     # exactly one spawn, from B (counter lens), at R
-    assert rev.calls == [(X.sub_id, 803, -1)]
+    assert rev.calls == [(X.pool_idx, 803, -1)]
     assert [(t.lens, t.parent_sid, t.parent_cycle_id, t.trigger_idx, t.direction) for t in result.spawned] == [
         (CTR, 0, 0, 803, -1)]
     (recZ,) = Z.records
@@ -1743,7 +1761,7 @@ def test_reversal_spawns_from_a_record_that_outlives_its_ended_sub():
         CTR, "reversal", 803, 803, -1)
     assert recZ.trigger_sub_sid == 1                                # (ctr,0,0): B took 0
     assert _window(Z) == (803, None, None) and Z.lenses() == {CTR}
-    assert sum(l.startswith("[sweep] spawn sub_id=") for l in logs) == 1
+    assert sum(l.startswith("[sweep] spawn pool#") for l in logs) == 1
     assert result.unresolved == []
     _assert_sweep_invariants(pool)
 
@@ -1789,7 +1807,13 @@ def test_incumbent_plus_two_same_idx_starters_degrades_with_warning_not_raise():
     assert (recI.trigger_sub_sid, recA.trigger_sub_sid, recB.trigger_sub_sid) == (0, 1, 2)
     # I: replaced at 503
     assert _window(recI) == (150, 503, "same_dir_replacement")
-    assert recI.ended_by_sub_id in {A.sub_id, B.sub_id}
+    # The tie between A's and B's replacement entries is unpinned; A never starts (B replaces it on the same
+    # candle), so if A's entry won, `ended_by` names a sub with no id and the sweep WARNs (PLAN_I S1).
+    if recI.ended_by_pool_idx == A.pool_idx:
+        assert recI.ended_by_sub_id is None
+        assert any(f"pool#{A.pool_idx}, which never started" in l for l in logs), logs
+    else:
+        assert (recI.ended_by_pool_idx, recI.ended_by_sub_id) == (B.pool_idx, B.sub_id)
     assert _window(I) == (150, 503, "same_dir_replacement")
     # A: frozen zero-length, ended by B (the later seq replaces the earlier)
     assert recA.is_zero_length
@@ -1884,3 +1908,121 @@ def test_uc1_trigger_writes_the_h1_parent_input_under_its_own_name():
     assert t.meta["parent_input_idx"] == 17
     assert t.meta["trigger_event_idx"] == 24
     assert "probe_input_idx" not in t.meta
+
+
+# =============================================================================
+# PLAN_I S1 — `sub_id` numbered by lifecycle START at the sweep's end (R4-2, D4)
+# =============================================================================
+
+def test_sub_ids_follow_lifecycle_start_not_creation_and_ended_by_is_remapped():
+    """Creation order ≠ start order — a SYNTHETIC shape (inside one parent
+    cycle production cannot produce it: a first_counter cannot start before its
+    cycle's first_confluence sub, R5-1; the real cases are a never-started sub and
+    the round-5 cross-reversal): FC(0,0) fires first at 103 but its probe
+    finalizes at 600 → pool#0 starts LAST; first_counter(0,0) fires 203 → pool#1 starts
+    203; subsequent_counter(0,0) fires 303 → pool#2 starts 303 and REPLACES
+    pool#1's record (same lens / parent / direction). Final ids by start:
+    pool#1 → 0, pool#2 → 1, pool#0 → 2; pool#1's record is ended by sub 1 (pool#2
+    — not 2). During the sweep every log line names `pool#k`; the numbering
+    lines map them."""
+    pool = SubStructurePool()
+    tables = _tables({(0, 0): (100, None)}, {0: +1})
+    resolve = _resolver({
+        (CONF, 103): _rs(90, 600),
+        (CTR, 203): _rs(150, 203),
+        (CTR, 303): _rs(250, 303),
+    })
+    geom = _geom(pool, {(+1, 90): None, (-1, 150): None, (-1, 250): None})
+    result, logs = _run(
+        [
+            _trig(CONF, 0, 0, "first_confluence", 103, +1),
+            _trig(CTR, 0, 0, "first_counter", 203, -1),
+            _trig(CTR, 0, 0, "subsequent_counter", 303, -1),
+        ],
+        pool=pool, tables=tables, resolve=resolve, geom=geom,
+    )
+    fc, ctr1, ctr2 = _sub(pool, +1, 90), _sub(pool, -1, 150), _sub(pool, -1, 250)
+    assert [(s.pool_idx, s.start_idx, s.sub_id) for s in pool.all()] == [
+        (0, 600, 2), (1, 203, 0), (2, 303, 1)]
+    assert [s.pool_idx for s in (fc, ctr1, ctr2)] == [0, 1, 2]
+    assert [r.sub_id for s in (fc, ctr1, ctr2) for r in s.records] == [2, 0, 1]
+    (r1,) = ctr1.records
+    assert (r1.end_idx, r1.end_reason, r1.ended_by_pool_idx, r1.ended_by_sub_id) == (
+        303, "same_dir_replacement", 2, 1)
+    assert [pool.get_by_id(i) for i in (0, 1, 2)] == [ctr1, ctr2, fc]
+    numbering = [l for l in logs if l.startswith("[sweep] number ")]
+    assert numbering == [
+        "[sweep] number pool#0 -> sub_id=2 start_idx=600",
+        "[sweep] number pool#1 -> sub_id=0 start_idx=203",
+        "[sweep] number pool#2 -> sub_id=1 start_idx=303",
+    ]
+    # every line before the numbering names subs by pool#, never by sub_id
+    i0 = logs.index(numbering[0])
+    assert not any("sub_id=" in l for l in logs[:i0]), [l for l in logs[:i0] if "sub_id=" in l]
+    assert result.unresolved == []
+    _assert_sweep_invariants(pool)
+
+
+def test_a_replacer_that_never_starts_leaves_ended_by_empty_and_warns():
+    """PLAN_I S1 landing review (lens A finding 1; the latent quirk is parked in the register, D.2): record A
+    (pool#0) is live from 200; B (pool#1, fired 300, lagged to 400) and C (pool#2, fired 400) both start at 400 —
+    C (the later seq) replaces both, so B never starts. Phase 3 takes the FIRST equal-priority end entry for A: B.
+    A's `ended_by` therefore names a sub with no `sub_id`: the cell is None and the sweep WARNs."""
+    pool = SubStructurePool()
+    tables = _tables({(1, 0): (100, None)}, {1: -1})
+    resolve = _resolver({
+        (CONF, 200): _rs(150, 200),
+        (CONF, 300): _rs(250, 400),
+        (CONF, 400): _rs(350, 400),
+    })
+    geom = _geom(pool, {(-1, 150): None, (-1, 250): None, (-1, 350): None})
+    _result, logs = _run(
+        [
+            _trig(CONF, 1, 0, "first_confluence", 200, -1),
+            _trig(CONF, 1, 0, "first_confluence", 300, -1),
+            _trig(CONF, 1, 0, "subsequent_confluence", 400, -1),
+        ],
+        pool=pool, tables=tables, resolve=resolve, geom=geom,
+    )
+    A, B, C = _sub(pool, -1, 150), _sub(pool, -1, 250), _sub(pool, -1, 350)
+    assert [(s.pool_idx, s.start_idx, s.sub_id) for s in (A, B, C)] == [(0, 200, 0), (1, None, None), (2, 400, 1)]
+    (ra,) = A.records
+    assert (ra.end_idx, ra.end_reason, ra.ended_by_pool_idx, ra.ended_by_sub_id) == (
+        400, "same_dir_replacement", 1, None)
+    warn = [l for l in logs if "which never started" in l]
+    assert warn == [f"WARNING [sweep] record {ra.identity} ended by pool#1, which never started — ended_by_sub_id None"]
+    _assert_sweep_invariants(pool)
+
+
+def test_record_frozen_at_its_start_copies_ended_by_from_a_replacement_end():
+    """Phase 1's "the sub froze while this record was pending" branch copies `ended_by` from the ENDING record
+    (PLAN_I S1 landing review, lens B — the branch was reached only with a `parent_end`, whose `ended_by` is None).
+    S=(+1,150): A = FC(0,0) t=103 → [150, …). B = FC(0,1) t=350 converges on S; the (0,1) floor 500 binds → start
+    500, created while S is live. R=(+1,300): subseq(0,0) t=400 replaces A at 400 → S ends 400
+    (same_dir_replacement). At 500 B's RECORD_START finds S frozen → B zero-length, `ended_by` = R (A's ender)."""
+    pool = SubStructurePool()
+    tables = _tables({(0, 0): (103, 500), (0, 1): (500, None)}, {0: +1})
+    resolve = _resolver({
+        (CONF, 103): _rs(150, 150),
+        (CONF, 350): _rs(150, 350),
+        (CONF, 400): _rs(300, 400),
+    })
+    geom = _geom(pool, {(+1, 150): None, (+1, 300): None})
+    result, logs = _run(
+        [
+            _trig(CONF, 0, 0, "first_confluence", 103, +1),
+            _trig(CONF, 0, 1, "first_confluence", 350, +1),
+            _trig(CONF, 0, 0, "subsequent_confluence", 400, +1),
+        ],
+        pool=pool, tables=tables, resolve=resolve, geom=geom,
+    )
+    S, R = _sub(pool, +1, 150), _sub(pool, +1, 300)
+    A, B = S.records
+    assert _window(S) == (150, 400, "same_dir_replacement")
+    assert (A.ended_by_pool_idx, A.ended_by_sub_id) == (R.pool_idx, R.sub_id)
+    assert B.is_zero_length and B.start_idx == 500
+    assert (B.trigger_end_idx, B.end_reason, B.ended_by_pool_idx, B.ended_by_sub_id) == (
+        400, "same_dir_replacement", R.pool_idx, R.sub_id)
+    assert any("-> frozen zero-length" in l for l in logs), logs
+    assert result.unresolved == []
+    _assert_sweep_invariants(pool)

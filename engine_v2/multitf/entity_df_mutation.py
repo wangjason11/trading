@@ -518,7 +518,7 @@ def _build_sibling_cts_ref_zone_from_pool(
 
     events: List[Any] = []
     for r in recs:
-        sub = pool.get_by_id(r.sub_id)
+        sub = pool.get_by_pool_idx(r.pool_idx)   # runs DURING the sweep — no sub_id yet
         if sub.geometry is None:
             continue
         bounded, slice_begin = sub.geometry
@@ -946,7 +946,7 @@ def _resolve_reversal_start(
     """
     from engine_v2.structure.reference_zone import build_reference_zone_from_cts_event
 
-    label = f"reversal sub_id={sub.sub_id} R={reversal_idx}"
+    label = f"reversal pool#{sub.pool_idx} R={reversal_idx}"
     assert sub.geometry is not None, f"[entity_compute] {label}: no geometry"
     bounded, slice_begin = sub.geometry
     slice_begin = int(slice_begin)
@@ -1180,7 +1180,7 @@ def build_or_get_geometry(
     Run cap = the DATA EDGE (`len(m15_df) - 1`) for every sub — a compute bound
     only (a record cannot outlive its parent structure; a unique sub can). On a
     miss it runs MS FIRST and creates the pool entry only on success (a failed
-    build → None, no `sub_id` consumed); on a hit it returns the existing sub.
+    build → None, no `pool_idx` consumed); on a hit it returns the existing sub.
     `bos0_inner` is not in the key: the sweep WARNING-logs a mismatch.
 
     Returns `(sub, created)` or None. The attached geometry is SHARED across
@@ -1212,7 +1212,7 @@ def build_or_get_geometry(
     )
     sub.bos0_inner = bos0_inner
     print(
-        f"[entity_compute] geometry built sub_id={sub.sub_id} key={tuple(key)} "
+        f"[entity_compute] geometry built pool#{sub.pool_idx} key={tuple(key)} "
         f"slice_begin={slice_begin} run_cap={len(m15_df) - 1} "
         f"natural_reversal_idx={sub.natural_reversal_idx} events={len(bounded.events)}"
     )
@@ -1240,7 +1240,10 @@ def render_sub_projection(
     """
     from engine_v2.multitf.pooled_structure_build import project_to_window
 
-    assert sub.start_idx is not None, f"[entity_compute] sub {sub.sub_id} has no start_idx"
+    assert sub.start_idx is not None, f"[entity_compute] pool#{sub.pool_idx} has no start_idx"
+    assert sub.sub_id is not None, (
+        f"[entity_compute] pool#{sub.pool_idx} has no sub_id — the subs are numbered at the sweep's end"
+    )
     assert sub.geometry is not None, f"[entity_compute] sub {sub.sub_id} has no geometry"
     bounded, slice_begin = sub.geometry
     slice_begin = int(slice_begin)

@@ -258,6 +258,7 @@ def _record(
         parent_cycle_id=parent_cycle_id,
         trigger_sub_sid=pool.next_trigger_sub_sid(lens, parent_sid, parent_cycle_id),
         sub_id=sub.sub_id,
+        pool_idx=sub.pool_idx,
         trigger_type=trigger_type,
         trigger_idx=trigger_idx,
         probe_finalize_idx=start_idx,
@@ -283,11 +284,16 @@ def _record(
 
 
 def _set_lifecycle(sub: PooledStructure, start_idx: int, end_idx, end_reason) -> None:
-    """The sub's real-time window, as the sweep would have set it (§4.4/§4.5)."""
+    """The sub's real-time window, as the sweep would have set it (§4.4/§4.5),
+    and its final `sub_id` as the sweep's numbering would (PLAN_I S1: start
+    order — == creation order in every fixture here, so `sub_id = pool_idx`)."""
     sub.start_idx = start_idx
     sub.end_idx = end_idx
     sub.end_reason = end_reason
     sub.relative_dir_segments = [(start_idx, "confluence")]
+    sub.sub_id = sub.pool_idx
+    for r in sub.records:
+        r.sub_id = sub.sub_id
 
 
 def _lens_dfs(m15_df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
@@ -861,7 +867,7 @@ def test_later_live_wins_over_an_earlier_sub_when_mirrored_in_start_order(geomet
     _record(pool, sub_x, m15_df, LENS_CONFLUENCE, start_idx=_START, seq=0,
             trigger_type="first_confluence", parent_sid=3, parent_cycle_id=1)
     _set_lifecycle(sub_x, _START, _END, "same_dir_replacement")
-    sub_y = PooledStructure(key=sub_x.key, sub_id=sub_x.sub_id + 1, geometry=sub_x.geometry,
+    sub_y = PooledStructure(key=sub_x.key, pool_idx=sub_x.pool_idx + 1, geometry=sub_x.geometry,
                             natural_reversal_idx=sub_x.natural_reversal_idx)
     y_start = _END - 5                                           # 80
     _record(pool, sub_y, m15_df, LENS_CONFLUENCE, start_idx=y_start, seq=1,
@@ -974,3 +980,20 @@ def test_sub_with_no_live_record_raises_and_touches_nothing(geometry, m15_df):
     for ldf in lens_dfs.values():
         assert "events" not in ldf.attrs and "kl_zones" not in ldf.attrs
         assert (ldf["structure_id"] == _SENTINEL_SID).all()
+
+
+def test_a_started_but_unnumbered_sub_is_refused_before_any_projection(geometry, m15_df):
+    """PLAN_I S1: `sub_id` exists only once the sweep has numbered the subs. A sub whose lifecycle is set but
+    which was never numbered fails up front (AssertionError "no sub_id"), not later at `int(None)` after the
+    projection ran, and touches no lens df."""
+    pool, sub = geometry
+    _record(pool, sub, m15_df, LENS_CONFLUENCE, start_idx=_START, seq=0,
+            trigger_type="first_confluence", parent_sid=3, parent_cycle_id=1)
+    sub.start_idx, sub.end_idx, sub.end_reason = _START, _END, "same_dir_replacement"
+    sub.relative_dir_segments = [(_START, "confluence")]          # set by hand: never numbered
+    assert sub.sub_id is None
+    lens_dfs = _lens_dfs(m15_df)
+    with pytest.raises(AssertionError, match="no sub_id"):
+        _render(sub, m15_df, lens_dfs)
+    for ldf in lens_dfs.values():
+        assert "events" not in ldf.attrs and "kl_zones" not in ldf.attrs

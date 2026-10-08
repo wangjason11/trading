@@ -7,7 +7,7 @@ renamed) is the SINGLE owner of pool lookup + MS run + `natural_reversal_idx` +
   * run cap = the DATA EDGE (`run_cap_abs = len(m15) - 1`, always) — geometry is
     computed once per unique sub and projected per lifecycle later;
   * ordering on a miss: MS runs FIRST, the pool entry is created only on
-    success (a failed build returns None and consumes NO `sub_id` — rev 1's
+    success (a failed build returns None and consumes NO `pool_idx` [`sub_id` until PLAN_I S1] — rev 1's
     `get_or_create`-first order left a geometry-less entry that made every
     later trigger to that key a false hit);
   * the return is `(sub, created)` (or None), with `sub.geometry ==
@@ -190,7 +190,7 @@ def test_miss_builds_and_creates_pool_entry(reversing_df):
     assert created is True
     assert sub.key == StructureKey(_PARENT, _TF, 1, 0)
     assert pool.get(sub.key) is sub
-    assert pool.all() == [sub] and sub.sub_id == 0
+    assert pool.all() == [sub] and sub.pool_idx == 0 and sub.sub_id is None   # numbered after the sweep
 
     # geometry = (bounded, slice_begin); slice_begin = max(0, 0 - 50) = 0.
     bounded, slice_begin = sub.geometry
@@ -248,14 +248,14 @@ def test_hit_returns_same_sub_without_second_ms_run(reversing_df, monkeypatch):
     assert sub2 is first[0]
     assert created2 is False
     assert len(calls) == 1                                # NO second MS run
-    assert pool.all() == [first[0]]                       # no new sub_id
+    assert pool.all() == [first[0]]                       # no new pool_idx
     assert sub2.geometry is first[0].geometry             # the shared object
 
     # A different key (same direction, start 5) is a miss: a second run, a
-    # second sub_id — the pool dedups on the full key, not on the frame.
+    # second pool_idx — the pool dedups on the full key, not on the frame.
     third = _build(pool, reversing_df, sd=1, start_abs=5)
     assert third is not None
-    assert third[1] is True and third[0].sub_id == 1
+    assert third[1] is True and third[0].pool_idx == 1
     assert third[0] is not first[0]
     assert len(calls) == 2
 
@@ -291,7 +291,7 @@ def test_run_cap_is_the_data_edge(uptrend_df, reversing_df):
 
 
 # ---------------------------------------------------------------------------
-# (4) start past end of data → None, no entry, no sub_id consumed
+# (4) start past end of data → None, no entry, no pool_idx consumed
 # ---------------------------------------------------------------------------
 
 def test_start_past_end_of_data_returns_none_and_no_entry(uptrend_df):
@@ -302,9 +302,9 @@ def test_start_past_end_of_data_returns_none_and_no_entry(uptrend_df):
     assert _build(pool, uptrend_df, sd=1, start_abs=n - 1) is None    # start == run cap (79)
     assert pool.all() == []                               # NO pool entry
     assert pool.get(StructureKey(_PARENT, _TF, 1, n)) is None
-    # No sub_id was consumed: the next successful build is sub_id 0.
+    # No pool_idx was consumed: the next successful build is pool_idx 0.
     ok = _build(pool, uptrend_df, sd=1, start_abs=0)
-    assert ok is not None and ok[0].sub_id == 0 and ok[1] is True
+    assert ok is not None and ok[0].pool_idx == 0 and ok[1] is True
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +323,7 @@ def test_short_tail_returns_none(uptrend_df):
     ok = _build(pool, uptrend_df, sd=1, start_abs=n - 5)
     assert ok is not None and ok[1] is True
     assert ok[0].geometry[1] == n - 5 - 50                # 25
-    assert ok[0].sub_id == 0                              # the failed ones consumed nothing
+    assert ok[0].pool_idx == 0                            # the failed ones consumed nothing
 
 
 # ---------------------------------------------------------------------------
@@ -341,10 +341,10 @@ def test_ms_value_error_returns_none_and_no_entry(reversing_df, monkeypatch):
     assert pool.get(StructureKey(_PARENT, _TF, 1, 0)) is None
 
     # Recovery: with MS restored, the same key is a MISS (no false hit on a
-    # geometry-less entry) and gets sub_id 0.
+    # geometry-less entry) and gets pool_idx 0.
     monkeypatch.undo()
     ok = _build(pool, reversing_df, sd=1, start_abs=0)
-    assert ok is not None and ok[1] is True and ok[0].sub_id == 0
+    assert ok is not None and ok[1] is True and ok[0].pool_idx == 0
     assert ok[0].geometry is not None
 
 

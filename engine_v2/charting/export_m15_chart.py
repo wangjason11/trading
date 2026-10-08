@@ -356,9 +356,10 @@ def _recency_key(rec: SidRecord) -> tuple:
     structures drawing over the same candles the later one always has the
     higher tuple. The first two components come from the sub's FIRST record
     (`_sid_parent`, informational) and the last is the canonical monotonic
-    identity, so the tuple orders exactly like `sub_id` whenever the parents
-    agree — which they do on every window measured (triggers fire in
-    parent-cycle order). Missing parents sort first (`-1`)."""
+    identity (lifecycle-START order since PLAN_I S1), so the tuple orders
+    exactly like `sub_id` whenever the parents agree — which they do on every
+    window measured (a later-starting sub hangs under the same or a later parent
+    cycle). Missing parents sort first (`-1`)."""
     ps, pc = _sid_parent(rec)
     return (
         int(ps) if ps is not None else -1,
@@ -752,6 +753,8 @@ def export_m15_chart_plotly(
     trigger_records: list = list(m15_df.attrs.get("triggers", []))
     records_by_sub: dict = defaultdict(list)
     for tr in trigger_records:
+        if tr.sub_id is None:
+            continue        # a never-started sub's zero-length record — drawn nowhere (PLAN_I R4-4)
         records_by_sub[int(tr.sub_id)].append(tr)
     all_events: list = list(m15_df.attrs.get("events", []))
     all_kl_zones: list = list(m15_df.attrs.get("kl_zones", []))

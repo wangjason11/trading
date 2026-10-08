@@ -96,8 +96,10 @@ spans within a sid. Main's `SidRecord` keeps `sub_sid = structure_id` and
 `sub_id = None` (§9.2); nothing below changes main.
 
 **Subordinate — the unique sub (Plan C, §17.2–§17.3).** A sub structure is
-identified by **`sub_id`**, the global monotonic creation index of a
-**unique sub** (`PooledStructure`) whose key is
+identified by **`sub_id`** — numbered by lifecycle START once the sweep has run
+(the started subs sorted by `(start_idx, creation)` → 0, 1, …; a sub that never starts gets
+none — PLAN_I R4-2 / R4-4, §9.3 D4; the sweep itself keys on the creation index `pool_idx`) —
+of a **unique sub** (`PooledStructure`) whose key is
 
 ```
 StructureKey = (parent_path, sub_tf, direction, starting_idx)
@@ -2878,8 +2880,8 @@ attribution all agree.
 
 | Object | Role | Identity | Cardinality |
 |---|---|---|---|
-| **`PooledStructure`** (= **unique sub**) | one MS run + its cap-free derived geometry (KL/POI/fib/wave-candle bounds & anchors), computed **once**, run cap = **data edge**; carries ONE real-time lifecycle aggregated from its records. **This is what we trade on.** | `(parent_path, sub_TF, direction, starting_idx)`; `sub_id` global monotonic (creation order) | one per unique tuple |
-| **`TriggerRecord`** | a triggered **instance** of a unique sub, with its **own parent-bound lifecycle**; carries provenance (trigger, probe) and the chart lens | `(lens, parent_sid, parent_cycle_id, trigger_sub_sid)`; FK `sub_id` (**never None**) | N ≥ 1 per built sub; two triggers in the same `(lens, parent_sid, parent_cycle_id)` resolving to the same sub share ONE record |
+| **`PooledStructure`** (= **unique sub**) | one MS run + its cap-free derived geometry (KL/POI/fib/wave-candle bounds & anchors), computed **once**, run cap = **data edge**; carries ONE real-time lifecycle aggregated from its records. **This is what we trade on.** | `(parent_path, sub_TF, direction, starting_idx)`; `pool_idx` = creation order (the sweep's key, never exported); `sub_id` = lifecycle-START order, numbered at the sweep's end (PLAN_I §9.3 D4; None if the sub never starts) | one per unique tuple |
+| **`TriggerRecord`** | a triggered **instance** of a unique sub, with its **own parent-bound lifecycle**; carries provenance (trigger, probe) and the chart lens | `(lens, parent_sid, parent_cycle_id, trigger_sub_sid)`; FK `pool_idx` during the sweep, `sub_id` after it (None only on the zero-length records of a sub that never starts) | N ≥ 1 per built sub; two triggers in the same `(lens, parent_sid, parent_cycle_id)` resolving to the same sub share ONE record |
 | **`UnresolvedTrigger`** | a trigger that produced no record: `pending` (FC probe not finalized), `degenerate_parent_cycle`, `probe_failed`, `geometry_failed` (§17.7) | — (log row; no `sub_id`, no `trigger_sub_sid`) | one per unresolved trigger |
 
 `PooledStructure` stores its elements in slice-local coords + `slice_begin`;
@@ -2937,7 +2939,7 @@ markers (Plan E E5·2). Do not unify them.
 | Field | Rule |
 |---|---|
 | `lens`, `parent_sid`, `parent_cycle_id`, `trigger_sub_sid` | identity. `trigger_sub_sid` starts at **0** per `(lens, parent_sid, parent_cycle_id)` and increments each time a trigger in that scope resolves to a **new** unique sub. It is **creation-ordered**, not `start_idx`-ordered (an FC record is created at its `trigger_idx` and may start hundreds of candles later). |
-| `sub_id` | FK → unique sub. Never None. |
+| `sub_id` | FK → unique sub: its FINAL, start-numbered id, written when the sweep numbers the subs (`SubStructurePool.number_subs_by_start`, PLAN_I S1). None only on the zero-length records of a sub that never starts (R4-4). The sweep-time FK is `pool_idx` (the creation index; NOT exported — nor is `ended_by_pool_idx`). |
 | `trigger_type` | `first_confluence` \| `subsequent_confluence` \| `first_counter` \| `subsequent_counter` \| `reversal` |
 | `trigger_idx` | HISTORICAL. The candle the trigger fired: `LOH(trigger_event_idx)` for the four H1 types (`first_counter`'s event idx is `WVMIRecord.meta["triggered_by_event_idx"]`); the native M15 reversal idx for `reversal`. |
 | `probe_finalize_idx` | HISTORICAL. When **this record's probe** finalized, where "this record's probe" is the run keyed by `(direction, initial input)` (§17.8). Probe **ran** → its own `ProbeResult.finalize_idx`, raw (may precede `trigger_idx`: FC(0,1) finalized 2608 < trigger 2611 — logged as is). Probe **skipped** (cache hit) → the cached finalize, inherited raw (that run already finished; the re-trigger does not wait). A different-input probe that *converges* on a known structure keeps its **own** finalize — it could not know it mapped there until it finished. Non-FC types whose probe RAN: `finalize == trigger_idx` by construction (asserted in `_resolve_sibling_cts_via_unified_probe` and in the sweep); a cache-hit record is exempt — it inherits the earlier finalize, which is normally below its own `trigger_idx` (measured: `first_counter`(0,1) 2829 < 2843). |
@@ -2945,7 +2947,7 @@ markers (Plan E E5·2). Do not unify them.
 | **`start_idx`** | **REAL-TIME. `max(probe_finalize_idx, trigger_idx, parent_floor_idx)`. The record EXISTS from here** and nothing earlier. All three terms are load-bearing, each for a distinct case: `probe_finalize_idx` when the probe finished after the trigger (FC(0,0): trigger 463 → start 1020); `trigger_idx` when the structure was already known before this trigger fired (a cache-hit record inheriting an earlier finalize 3487 with its own trigger at 3611 → 3611); `parent_floor_idx` when the parent structure was not alive yet (an FC finalize 2844 under a floor of 3611 → 3611). The last two are illustrative — on the reference window the cache-hit pair never meets and the floor-bound record sits in a degenerate cycle (§17.7), so the floor binds only in a tie with `trigger_idx` there — but each term is what makes the corresponding case start honestly. Historical fields are never adjusted; only `start_idx` is. |
 | `trigger_end_idx` | the first end condition to fire (below), or the sub's frozen end on a post-end re-trigger. |
 | `end_idx` | REAL-TIME. `max(trigger_end_idx, start_idx)`; None while open. |
-| `end_reason` | `reversal` \| `same_dir_replacement` \| `parent_end` \| None. `ended_by_sub_id` names the replacing sub for `same_dir_replacement`. |
+| `end_reason` | `reversal` \| `same_dir_replacement` \| `parent_end` \| None. `ended_by_sub_id` names the replacing sub for `same_dir_replacement` (its final id; the sweep links by `ended_by_pool_idx`). |
 | `starting_idx`, `direction`, `sub_tf`, `relative_dir`, `parent_bos_anchor_idx`, `probe_input_idx`, `probe_finalize_condition` | structural / provenance copies (denormalised for the export). `parent_bos_anchor_idx` (was `validated_parent_idx` until Plan E E5·4, 2026-09-26 — it mixed frames, PLAN_E Q4) = `first_confluence` only: the **H1** parent BOS anchor (`FirstConfluenceTrigger.input_idx`) that seeded its M15 probe input; None for the three sibling types (their input, the M15 sibling CTS anchor `ref_zone.anchor_idx`, is `probe_input_idx`) and for reversal-born records. `probe_input_idx` (Plan E E5·4b) = the M15 candle this record's probe started from, for every resolved type (FC: the price-mapped parent BOS anchor; siblings: the sibling CTS anchor, or the own-frame ad-hoc BOS_0 anchor when the sibling has none (§4.3.4 step 4); reversal: the handoff input) — copied from `ResolvedStart.probe_input_idx`. The sub-level copy `SidRecord.meta["validated_parent_start"]` was deleted in Plan E E1b (unread). Diagnostic only — no lifecycle value reads it (Plan C §2.1's "H1 candle" wording was imprecise; corrected 2026-09-20). |
 | `extra_trigger_idxs` | later triggers in the same `(lens, parent_sid, parent_cycle_id)` that resolved to the same sub — **absorbed into this record**, no new record, `trigger_sub_sid` not consumed. The match includes a ZERO-LENGTH record (a re-trigger into a scope whose record was frozen — post-end or collision — is absorbed, not revived; acausal cases only). |
 
@@ -2973,7 +2975,7 @@ aggregates, §17.5). Earliest wins; write-once; at an equal idx the priority is
 **Zero-length records.** `is_zero_length = trigger_end_idx is not None and
 trigger_end_idx <= start_idx` (defined on `trigger_end_idx`, not `end_idx`, so
 it is already decidable before `end_idx` is written). A zero-length record has
-a `sub_id` but **participates in nothing** — not the sub's start, not
+a `sub_id` (None when its sub never starts) but **participates in nothing** — not the sub's start, not
 `max_start`, not an end candidate, not an incumbent, not lens membership, not
 rendering. It is logged only. Two sources: a **post-end re-trigger** (the sub
 had already ended before this record's `start_idx` → the record freezes with
@@ -2999,7 +3001,7 @@ window on every lens** it belongs to.
 | `end_idx` | at each candle `t`, over the sub's non-zero-length records that **exist at `t`** (`start_idx <= t` — a record does not exist before its `start_idx`): `max_start = max(start_idx)`; candidates = non-null record `end_idx`s **strictly `> max_start`**; `end_idx = min(candidates)`. Set once, frozen. Equal-idx ties between candidates break by the record end-reason priority. |
 | `end_reason` | the winning candidate's reason. |
 | `relative_dir_segments` | the step function of §17.3. |
-| lenses | union over the sub's non-zero-length records' `lens`. A sub with **no** live record has no lens: it is logged on stdout (`[pool] sub_id=… has no live record — logged, not rendered`) and **not rendered**; being on no lens, it appears in no per-lens `_subs.csv` (its zero-length records do appear in the lens `_triggers.csv`). |
+| lenses | union over the sub's non-zero-length records' `lens`. A sub with **no** live record has no lens: it is logged on stdout (`[pool] pool#… has no live record — no sub_id, logged, not rendered`) and **not rendered**; being on no lens, it appears in no per-lens `_subs.csv` (its zero-length records do appear in the lens `_triggers.csv`). |
 | `natural_reversal_idx`, `bos0_inner` | from the build (§17.8). |
 
 **Why strict `>` and why records must exist only from `start_idx`.** Two
@@ -3502,7 +3504,8 @@ a confluence-lens successor does not end a counter-lens record), the
 semantics), `test_two_cycles_sub_sid_resets` (→ `trigger_sub_sid` resets per
 (lens, parent)), the `finalize_lifecycles` / `select_lifecycle_end` tests, the
 14 `test_sub_chain.py` chain tests, and the sibling-read tests that build
-sibling dfs. `test_sub_id_is_monotonic_and_stable` must survive unchanged.
+sibling dfs. `test_sub_id_is_monotonic_and_stable` must survive unchanged. [PLAN_I S1, 2026-10-07: it became
+`test_pool_idx_is_monotonic_and_stable` — `sub_id` is numbered by lifecycle start at the sweep's end.]
 
 ### 17.12 Out of scope (v1)
 

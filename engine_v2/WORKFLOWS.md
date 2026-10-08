@@ -100,7 +100,8 @@ non-grep lines worth reading in the same pass: `[probe_cache] hit|APPROX hit`
 and `[probe_cache] REF-ZONE DIFFERS …` (the accepted-approximation tripwire —
 a probe skipped because an earlier same-direction, same-input probe already
 finalized) and `WARNING [sweep] bos0_inner mismatch` / `same-idx start
-collision`.
+collision` / `record … ended by pool#k, which never started` (a same-candle
+replacement chain — register D.2; PLAN_I S1).
 
 > **Why this exists:** Session 3 Step 2 (2026-05-31) dropped 5 sub sids because
 > every `subsequent_*` trigger hit "sibling-CTS reference zone unavailable" —

@@ -207,7 +207,7 @@ def test_build_or_get_geometry_creates_pool_entry_with_natural_end(
     assert created is True
     assert sub.key == StructureKey(_PARENT_PATH, "M15", _SD, _START)
     assert pool.get(sub.key) is sub
-    assert pool.get_by_id(sub.sub_id) is sub
+    assert pool.get_by_pool_idx(sub.pool_idx) is sub      # sweep-time lookup (PLAN_I S1)
 
     bounded, slice_begin = sub.geometry
     assert slice_begin == 0
@@ -216,7 +216,7 @@ def test_build_or_get_geometry_creates_pool_entry_with_natural_end(
     assert sub.bos0_inner is None                          # the probe's inner, none given
 
     # A second call for the same key is a pool HIT: same object, created=False,
-    # no new sub_id consumed.
+    # no new pool_idx consumed.
     again = build_or_get_geometry(
         pool, reversing_df,
         parent_path=_PARENT_PATH, sd=_SD, start_abs=_START,

@@ -448,7 +448,7 @@ def test_wrong_reversal_idx_is_an_assertion(built, delta):
 
 def test_sub_without_geometry_is_an_assertion(built):
     pool, sub, df = built
-    bare = PooledStructure(key=sub.key, sub_id=sub.sub_id, geometry=None,
+    bare = PooledStructure(key=sub.key, pool_idx=sub.pool_idx, geometry=None,
                            natural_reversal_idx=sub.natural_reversal_idx)
     with pytest.raises(AssertionError):
         _resolve(pool, bare, sub.natural_reversal_idx, df)
@@ -492,7 +492,7 @@ def test_no_cts_event_is_a_probe_failure(built):
     bounded, slice_begin = sub.geometry
     R = sub.natural_reversal_idx
     fake = PooledStructure(
-        key=sub.key, sub_id=sub.sub_id,
+        key=sub.key, pool_idx=sub.pool_idx,
         geometry=(SimpleNamespace(events=[], df=bounded.df,
                                   reversal_idx=R - slice_begin), slice_begin),
         natural_reversal_idx=R,
@@ -518,7 +518,7 @@ def test_non_cts_events_only_is_a_probe_failure(built):
                if e.type not in ("CTS_CONFIRMED", "CTS_UPDATED", "CTS_ESTABLISHED")]
     assert non_cts
     fake = PooledStructure(
-        key=sub.key, sub_id=sub.sub_id,
+        key=sub.key, pool_idx=sub.pool_idx,
         geometry=(SimpleNamespace(events=non_cts, df=bounded.df,
                                   reversal_idx=R - slice_begin), slice_begin),
         natural_reversal_idx=R,
@@ -540,7 +540,7 @@ def test_input_at_or_past_reversal_is_a_probe_failure(built):
     fake_rev_local = input_local
     R_prime = fake_rev_local + slice_begin
     fake = PooledStructure(
-        key=sub.key, sub_id=sub.sub_id,
+        key=sub.key, pool_idx=sub.pool_idx,
         geometry=(SimpleNamespace(events=bounded.events, df=bounded.df,
                                   reversal_idx=fake_rev_local), slice_begin),
         natural_reversal_idx=R_prime,

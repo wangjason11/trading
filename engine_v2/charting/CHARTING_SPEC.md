@@ -405,7 +405,7 @@ segments over the same candles, the **most recent** structure is solid and the
 
 - **Recency** = `_recency_key` = the hierarchical `(parent_sid,
   parent_cycle_id, sub_id)` tuple (the first two from the sub's first record,
-  informational; `sub_id` is the canonical monotonic identity). The structure
+  informational; `sub_id` is the canonical identity, numbered by lifecycle start since PLAN_I S1). The structure
   that occupies a candle span later always has the higher tuple; on every
   window measured the tuple orders exactly like `sub_id`.
 - **Overlap** = `lo_a < hi_b and lo_b < hi_a` — MORE THAN ONE shared candle.

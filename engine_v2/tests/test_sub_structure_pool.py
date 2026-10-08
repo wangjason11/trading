@@ -14,7 +14,9 @@ API contract (session scratchpad `PLAN_C_API_CONTRACT.md`).
 
 Survivors (pass at the Plan-B base — they pin API the plan keeps unchanged):
 `test_get_or_create_dedups_on_key`, `test_sub_id_is_monotonic_and_stable`
-(§9.1: "expected to SURVIVE unchanged"), `test_direction_is_part_of_identity`,
+(§9.1: "expected to SURVIVE unchanged" — PLAN_I S1 2026-10-07 made it
+`test_pool_idx_is_monotonic_and_stable`: the creation index is `pool_idx`, and
+`sub_id` is numbered by lifecycle start, `number_subs_by_start`), `test_direction_is_part_of_identity`,
 `test_resolve_lens_named_triggers`, `test_resolve_lens_reversal_is_sticky`.
 The NEW names are reached through the module object (`ssp.ProbeCacheEntry`)
 rather than a module-level `from … import` so the survivors still collect and
@@ -96,6 +98,7 @@ def _rec(
         parent_cycle_id=pcyc,
         trigger_sub_sid=trigger_sub_sid,
         sub_id=sub.sub_id,
+        pool_idx=sub.pool_idx,
         trigger_type=trigger_type,
         trigger_idx=trigger_idx,
         probe_finalize_idx=finalize,
@@ -137,15 +140,19 @@ def test_get_or_create_dedups_on_key():
     assert pool.get(k) is s1
 
 
-def test_sub_id_is_monotonic_and_stable():
+def test_pool_idx_is_monotonic_and_stable():
+    """The creation index (`pool_idx`, PLAN_I S1 — was `sub_id` until then):
+    0, 1, 2 in `get_or_create` order; a dedup hit consumes nothing. `sub_id` is
+    not assigned at creation (None until `number_subs_by_start`)."""
     pool = SubStructurePool()
     a, _ = pool.get_or_create(_key(-1, 3304))
     b, _ = pool.get_or_create(_key(1, 4027))
     _again, created = pool.get_or_create(_key(-1, 3304))
-    assert (a.sub_id, b.sub_id) == (0, 1)
+    assert (a.pool_idx, b.pool_idx) == (0, 1)
     assert created is False             # dedup does NOT bump the counter
     c, _ = pool.get_or_create(_key(1, 2365))
-    assert c.sub_id == 2
+    assert c.pool_idx == 2
+    assert (a.sub_id, b.sub_id, c.sub_id) == (None, None, None)
 
 
 def test_direction_is_part_of_identity():
@@ -181,7 +188,7 @@ def test_trigger_record_fields_in_contract_order():
     names = [f.name for f in fields(TriggerRecord)]
     assert names == [
         "lens", "parent_sid", "parent_cycle_id", "trigger_sub_sid",
-        "sub_id",
+        "sub_id", "pool_idx",
         "trigger_type", "trigger_idx",
         "probe_finalize_idx", "probe_finalize_condition",
         "parent_bos_anchor_idx", "probe_input_idx",
@@ -191,7 +198,11 @@ def test_trigger_record_fields_in_contract_order():
         "source_trigger",
         "trigger_end_idx", "end_idx", "end_reason", "ended_by_sub_id",
         "seq", "extra_trigger_idxs",
+        "ended_by_pool_idx",
     ]
+    # The two sweep-time FKs are NOT columns (PLAN_I S1) — the CSV is unchanged.
+    from engine_v2.debug.export_sub_tables import _TRIGGER_COLUMNS
+    assert "pool_idx" not in _TRIGGER_COLUMNS and "ended_by_pool_idx" not in _TRIGGER_COLUMNS
     # The rev-1 names are gone (`_dt` → `_idx`; `meta` deleted — §7).
     assert "trigger_dt" not in names
     assert "meta" not in names
@@ -210,7 +221,8 @@ def test_trigger_record_defaults_and_mutability():
     )
     assert rec.source_trigger is None
     assert rec.extra_trigger_idxs == []
-    assert rec.sub_id == s.sub_id and rec.starting_idx == 454 and rec.direction == 1
+    assert rec.pool_idx == s.pool_idx and rec.sub_id is None    # numbered after the sweep
+    assert rec.starting_idx == 454 and rec.direction == 1
     assert rec.sub_tf == "M15"
     assert rec.is_zero_length is False
     # Distinct list objects per record (default_factory, not a shared default).
@@ -353,14 +365,23 @@ def test_unresolved_trigger_is_frozen_and_pool_list_starts_empty():
 
 # --- §2.4 pool queries -------------------------------------------------------------
 
-def test_get_by_id_hit_and_keyerror():
+def test_get_by_pool_idx_and_get_by_id_hit_and_keyerror():
+    """`get_by_pool_idx` answers from creation; `get_by_id` only after the
+    numbering (PLAN_I S1) and only for a sub that started."""
     pool = SubStructurePool()
-    a, _ = pool.get_or_create(_key(-1, 3304))       # sub_id 0
-    b, _ = pool.get_or_create(_key(1, 4027))        # sub_id 1
-    assert pool.get_by_id(0) is a
-    assert pool.get_by_id(1) is b
+    a, _ = pool.get_or_create(_key(-1, 3304))       # pool_idx 0
+    b, _ = pool.get_or_create(_key(1, 4027))        # pool_idx 1
+    assert pool.get_by_pool_idx(0) is a
+    assert pool.get_by_pool_idx(1) is b
     with pytest.raises(KeyError):
-        pool.get_by_id(2)
+        pool.get_by_pool_idx(2)
+    with pytest.raises(KeyError):
+        pool.get_by_id(0)                           # not numbered yet
+    b.start_idx = 4100                              # only b started
+    pool.number_subs_by_start()
+    assert pool.get_by_id(0) is b
+    with pytest.raises(KeyError):
+        pool.get_by_id(1)                           # a never started → no id
 
 
 def test_next_seq_is_strictly_increasing():
@@ -570,3 +591,73 @@ def test_deleted_lifecycle_api_is_gone():
     assert ssp.knowable_at_idx(make_event("CTS_UPDATED", 10, via="continuous", confirmed_at=14)) == 14
     assert ssp.knowable_at_idx(make_event("CTS_UPDATED", 10, via="replay_raw")) == 10
     assert ssp.knowable_at_idx(make_event("REVERSAL_CANDIDATE", 10, apply_idx=14)) == 10
+
+
+# --- PLAN_I S1: `sub_id` numbered by lifecycle START (R4-2 / R4-4, §9.3 D4) --------
+
+def test_number_subs_by_start_orders_by_start_then_creation_and_skips_never_started():
+    """Started subs sorted by `(start_idx, pool_idx)` get 0, 1, 2; a never-started
+    sub gets None and so do its (zero-length) records. Fixture (creation order ≠
+    start order — SYNTHETIC: inside one parent cycle production cannot produce it,
+    R5-1): pool#0 = a lagged first_confluence (start 1020), pool#1 and pool#2 both
+    start at 500 (the tie → creation order), pool#3 has only a zero-length record."""
+    pool = SubStructurePool()
+    a, _ = pool.get_or_create(_key(1, 454))
+    b, _ = pool.get_or_create(_key(-1, 480))
+    c, _ = pool.get_or_create(_key(1, 490))
+    d, _ = pool.get_or_create(_key(-1, 495))
+    ra = _rec(pool, a, LENS_CONFLUENCE, 0, 0, start_idx=1020, trigger_idx=463, finalize=1020, floor=463)
+    rb = _rec(pool, b, LENS_COUNTER, 0, 0, start_idx=500, relative_dir="counter")
+    rc = _rec(pool, c, LENS_CONFLUENCE, 0, 1, start_idx=500)
+    rd = _rec(pool, d, LENS_COUNTER, 0, 1, start_idx=600, relative_dir="counter")
+    rd.trigger_end_idx = 600                                  # zero-length → d never starts
+    a.start_idx, b.start_idx, c.start_idx = 1020, 500, 500
+
+    out = pool.number_subs_by_start()
+
+    assert out == [(0, 2), (1, 0), (2, 1), (3, None)]         # [(pool_idx, sub_id)] in pool_idx order
+    assert (a.sub_id, b.sub_id, c.sub_id, d.sub_id) == (2, 0, 1, None)
+    assert (ra.sub_id, rb.sub_id, rc.sub_id, rd.sub_id) == (2, 0, 1, None)
+    assert (ra.pool_idx, rb.pool_idx, rc.pool_idx, rd.pool_idx) == (0, 1, 2, 3)   # untouched
+    assert [pool.get_by_id(i) for i in (0, 1, 2)] == [b, c, a]
+    with pytest.raises(KeyError):
+        pool.get_by_id(3)
+    assert pool.all() == [a, b, c, d]                          # all() stays in creation order
+
+
+def test_number_subs_by_start_remaps_ended_by_to_the_final_id():
+    """`ended_by_sub_id` = the final id of the sub `ended_by_pool_idx` names; a
+    replacer that never started gives None; a record with no replacer stays None."""
+    pool = SubStructurePool()
+    x, _ = pool.get_or_create(_key(1, 100))                   # pool#0, starts 300 → sub 1
+    y, _ = pool.get_or_create(_key(1, 150))                   # pool#1, starts 200 → sub 0
+    z, _ = pool.get_or_create(_key(1, 170))                   # pool#2, never starts
+    rx = _rec(pool, x, LENS_CONFLUENCE, 0, 0, start_idx=300)
+    ry = _rec(pool, y, LENS_CONFLUENCE, 0, 1, start_idx=200)
+    rz = _rec(pool, z, LENS_CONFLUENCE, 0, 2, start_idx=250)
+    rz.trigger_end_idx = 250
+    _end(rx, 400, "same_dir_replacement")
+    rx.ended_by_pool_idx = y.pool_idx                          # x replaced by y
+    _end(ry, 350, "same_dir_replacement")
+    ry.ended_by_pool_idx = z.pool_idx                          # y "replaced" by a never-started sub
+    x.start_idx, y.start_idx = 300, 200
+
+    pool.number_subs_by_start()
+
+    assert (x.sub_id, y.sub_id, z.sub_id) == (1, 0, None)
+    assert rx.ended_by_sub_id == 0                             # y's FINAL id, not its pool_idx 1
+    assert ry.ended_by_sub_id is None
+    assert rz.ended_by_sub_id is None and rz.ended_by_pool_idx is None
+
+
+def test_number_subs_by_start_runs_once_and_freezes_creation():
+    pool = SubStructurePool()
+    s, _ = pool.get_or_create(_key(1, 100))
+    s.start_idx = 120
+    pool.number_subs_by_start()
+    with pytest.raises(AssertionError):
+        pool.number_subs_by_start()                            # one sweep, one numbering
+    again, created = pool.get_or_create(_key(1, 100))          # a dedup hit is still fine …
+    assert again is s and created is False
+    with pytest.raises(AssertionError):
+        pool.get_or_create(_key(-1, 100))                      # … a new sub after numbering is not

@@ -1439,7 +1439,7 @@ independently gated.
 **Rule (Plan C, 2026-09-20 — was `sub_sid` before the pool):** to match a
 subordinate WVMI record to its KL / POI / fib record (e.g. in a `/compare`
 validation), join on **`sub_id` + `cycle_id`** — and read `sub_id` from **both**
-artifacts. `sub_id` is the unique sub's global creation index (PART4 §17.9) and
+artifacts. `sub_id` is the unique sub's id, numbered by lifecycle start (PART4 §17.9; PLAN_I S1) and
 is stamped by the mirror (`entity_df_mutation._sub_attribution`) into every
 structural artifact on a lens df: event meta, KL / POI / fib / wave-candle /
 WVMI record meta, `prev_bos_lines[*]["meta"]`, `SidRecord.sub_id`, and the

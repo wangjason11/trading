@@ -310,7 +310,7 @@ def _rec(sub, *, lens: str, S: int, C: int, tss: int, trigger_type: str,
     defaults to `trigger_idx` (non-FC types: finalize == trigger, §5.2)."""
     rec = TriggerRecord(
         lens=lens, parent_sid=S, parent_cycle_id=C, trigger_sub_sid=tss,
-        sub_id=sub.sub_id,
+        sub_id=sub.sub_id, pool_idx=sub.pool_idx,
         trigger_type=trigger_type, trigger_idx=trigger_idx,
         probe_finalize_idx=(finalize_idx if finalize_idx is not None else trigger_idx),
         probe_finalize_condition="no_retrace",
@@ -1406,3 +1406,27 @@ class TestSiblingClipOnTheMoment:
         with _patched_cts_derivation():
             zone = _build_sibling_cts_ref_zone_from_pool(pool, "confluence", 0, 2, -1, (5, 30), None)
         assert zone is not None and zone.anchor_idx == 20   # anchor 17 + slice_begin 3
+
+
+def test_sibling_read_looks_records_up_by_pool_idx_not_another_int(big_frames):
+    """PLAN_I S1 (landing review, lens B): the sibling read runs DURING the sweep and finds a record's sub by
+    `pool_idx`. The §5.1 replaced-record case again, with a record-less decoy sub created first (A = pool#1,
+    B = pool#2) and `seq` 7 / 8, so `pool_idx`, `seq` and `trigger_sub_sid` all differ — a lookup by any other
+    int reads the wrong geometry. The read must still pick B's CTS@3850."""
+    h1, m15 = big_frames
+    pool = SubStructurePool()
+    _stub_sub(pool, direction=1, starting_idx=3000, slice_begin=2950, events=[])          # pool#0, no record
+    sub_a = _stub_sub(pool, direction=-1, starting_idx=3304, slice_begin=3254, events=[
+        _cts_event("CTS_CONFIRMED", 3750 - 3254, 3740 - 3254, struct_direction=-1),
+        _cts_event("CTS_UPDATED", 3900 - 3254, cycle_id=1, struct_direction=-1)])          # pool#1
+    sub_b = _stub_sub(pool, direction=-1, starting_idx=3760, slice_begin=3710, events=[
+        _cts_event("CTS_UPDATED", 3850 - 3710, struct_direction=-1)])                      # pool#2
+    assert (sub_a.pool_idx, sub_b.pool_idx) == (1, 2)
+    _rec(sub_a, pool=pool, lens="confluence", S=1, C=2, tss=0, trigger_type="first_confluence",
+         trigger_idx=3611, finalize_idx=3621, start_idx=3621, trigger_end_idx=3819,
+         end_reason="same_dir_replacement", parent_floor_idx=3611, seq=7)
+    _rec(sub_b, pool=pool, lens="confluence", S=1, C=2, tss=1, trigger_type="subsequent_confluence",
+         trigger_idx=3819, start_idx=3819, parent_floor_idx=3611, seq=8)
+    with _patched_cts_derivation():
+        ref = _build_sibling_cts_ref_zone_from_pool(pool, "confluence", 1, 2, +1, (3707, 4083), m15)
+    assert ref is not None and ref.anchor_idx == 3850

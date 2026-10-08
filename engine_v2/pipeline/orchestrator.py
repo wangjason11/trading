@@ -1033,7 +1033,7 @@ def _run_multi_tf_dual(
     )
     for _s in sub_pool.all():
         print(
-            f"[pool] sub_id={_s.sub_id} key=(M15,{_s.direction},{_s.starting_idx}) "
+            f"[pool] sub_id={_s.sub_id} pool#{_s.pool_idx} key=(M15,{_s.direction},{_s.starting_idx}) "
             f"start={_s.start_idx} end={_s.end_idx} reason={_s.end_reason} "
             f"lenses={sorted(_s.lenses())} nat_rev={_s.natural_reversal_idx} "
             f"relative_dir={_s.relative_dir_segments} "
@@ -1046,6 +1046,7 @@ def _run_multi_tf_dual(
         )
 
     # --- 5. One projection per sub, mirrored per lens, in start_idx order ---
+    # (= `sub_id` order: the sweep numbers the subs by (start_idx, creation), PLAN_I D4)
     rendered = [s for s in sub_pool.all() if s.start_idx is not None]
     rendered.sort(key=lambda s: (s.start_idx, s.sub_id))
     results_by_lens: Dict[str, list] = {LENS_CONFLUENCE: [], LENS_COUNTER: []}
@@ -1060,8 +1061,8 @@ def _run_multi_tf_dual(
     for sub in sub_pool.all():
         if sub.start_idx is None:
             print(
-                f"[pool] sub_id={sub.sub_id} key=(M15,{sub.direction},{sub.starting_idx}) "
-                f"has no live record — logged, not rendered"
+                f"[pool] pool#{sub.pool_idx} key=(M15,{sub.direction},{sub.starting_idx}) "
+                f"has no live record — no sub_id, logged, not rendered"
             )
 
     # --- 6. WVMI trigger attribution per lens (Plan G G4) ---

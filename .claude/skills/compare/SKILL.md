@@ -473,8 +473,8 @@ C, 2026-09-20) replaced the per-lens `*_sids.csv` with `*_subs.csv` +
 no baseline and the old file disappeared — both were called out, and the
 new tables are validated against the plan's **predicted table**
 (`memory/reference_pool_redesign_groundtruth.md`, matched by
-`(direction, starting_idx)` — `sub_id`s are 0–7 in creation order on the
-reference window) rather than a prior save; from the next `/commit-save` on
+`(direction, starting_idx)` — `sub_id`s are 0–7 on the reference window: start order since
+PLAN_I S1, which equals the creation order there) rather than a prior save; from the next `/commit-save` on
 they have a baseline like any other CSV. The three pool tables are written
 **before** the chart loop, decoupled from it (`export_sub_tables` in its own
 try/except — a chart-export exception cannot lose them), so a MISSING pool

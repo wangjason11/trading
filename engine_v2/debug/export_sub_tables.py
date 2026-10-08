@@ -14,7 +14,10 @@ Files (per replay basename):
 
 A header row is always written, even for an empty table. `lenses`,
 `relative_dir_segments` and `extra_trigger_idxs` are serialised as their
-Python `repr` strings; `source_trigger` is never exported.
+Python `repr` strings; `source_trigger` and the sweep-time `pool_idx` /
+`ended_by_pool_idx` are never exported. A never-started sub's zero-length
+records carry an empty `sub_id` cell (PLAN_I R4-4; pandas then writes the
+column's integers as floats, `3.0` — accepted, R7-2).
 """
 from __future__ import annotations
 
@@ -33,7 +36,10 @@ _SUBS_COLUMNS = [
     "first_record_lens", "first_record_parent_sid", "first_record_parent_cycle_id",
     "first_record_trigger_type", "first_record_trigger_idx",
 ]
-_TRIGGER_COLUMNS = [f.name for f in fields(TriggerRecord) if f.name != "source_trigger"] + ["is_zero_length"]
+# Never exported: the opaque source trigger and the sweep-time FKs (`pool_idx` /
+# `ended_by_pool_idx` — the creation index; the CSV carries the final `sub_id`, PLAN_I §9.3 D4).
+_TRIGGER_NOT_EXPORTED = frozenset({"source_trigger", "pool_idx", "ended_by_pool_idx"})
+_TRIGGER_COLUMNS = [f.name for f in fields(TriggerRecord) if f.name not in _TRIGGER_NOT_EXPORTED] + ["is_zero_length"]
 _UNRESOLVED_COLUMNS = [f.name for f in fields(UnresolvedTrigger)]
 
 

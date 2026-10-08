@@ -213,12 +213,13 @@ _M15_IP = [
 ]
 
 
-def _render_m15(monkeypatch, tmp_path, cfg_extra=None, poi_zones=()):
+def _render_m15(monkeypatch, tmp_path, cfg_extra=None, poi_zones=(), triggers=()):
     go = pytest.importorskip("plotly.graph_objects")
     from engine_v2.charting.export_m15_chart import export_m15_chart_plotly
     from engine_v2.multitf.registry import StructureRegistry
     h1, m15 = _ohlc(12, "1h"), _ohlc(48, "15min")
-    m15.attrs.update(sids=[_sub_rec(5, 12), _sub_rec(6, 30)], triggers=[], events=[], poi_zones=list(poi_zones),
+    m15.attrs.update(sids=[_sub_rec(5, 12), _sub_rec(6, 30)], triggers=list(triggers), events=[],
+                     poi_zones=list(poi_zones),
                      wave_candles=[], wvmi=[], prev_bos_lines=[], kl_zones=[_collapsed_kl(0, 0, sub_id=5)],
                      fib_states=list(_M15_FIBS.values()), ip_candidates=list(_M15_IP))
     reg = StructureRegistry()
@@ -282,3 +283,22 @@ def test_m15_fib_lines_toggle_off_draws_nothing(tmp_path, monkeypatch):
     fig = _render_m15(monkeypatch, tmp_path, {"fib": {"lines": False}})
     assert not [tr for tr in fig.data if tr.name == "M15 fib"]
     assert not [s for s in fig.layout.shapes if s.legendgroup == "m15_fib"]
+
+
+def test_m15_chart_skips_a_never_started_subs_record(tmp_path, monkeypatch):
+    """PLAN_I R4-4: a never-started sub's zero-length record carries `sub_id` None —
+    the chart groups records by `sub_id` and must skip it (drawn nowhere), not
+    `int(None)`. The figure equals the one without that record."""
+    from engine_v2.multitf.sub_structure_pool import TriggerRecord
+    orphan = TriggerRecord(
+        lens="confluence", parent_sid=0, parent_cycle_id=0, trigger_sub_sid=0,
+        sub_id=None, pool_idx=3, trigger_type="subsequent_confluence", trigger_idx=20,
+        probe_finalize_idx=20, probe_finalize_condition="no_retrace",
+        parent_bos_anchor_idx=None, probe_input_idx=18, starting_idx=18, direction=1, sub_tf="M15",
+        relative_dir="confluence", parent_floor_idx=20, start_idx=20,
+        trigger_end_idx=20, end_idx=20, end_reason="parent_end", seq=0,
+    )
+    assert orphan.is_zero_length
+    base = _render_m15(monkeypatch, tmp_path)
+    got = _render_m15(monkeypatch, tmp_path, triggers=[orphan])
+    assert got.to_json() == base.to_json()

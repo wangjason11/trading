@@ -42,7 +42,18 @@ _SUBS_COLUMNS = [
 
 # `_triggers.csv` = every TriggerRecord field in declaration order except the
 # opaque `source_trigger`, plus the derived `is_zero_length`.
-_TRIGGER_FIELDS = [f.name for f in _dc_fields(TriggerRecord) if f.name != "source_trigger"]
+# The `_triggers.csv` header (minus the appended `is_zero_length`) — the S_F1 save's, pinned
+# literally: PLAN_I S1 added two sweep-time FKs (`pool_idx`, `ended_by_pool_idx`) to
+# TriggerRecord that must NOT become columns (the S1 replay is byte-identical).
+_TRIGGER_FIELDS = [
+    "lens", "parent_sid", "parent_cycle_id", "trigger_sub_sid", "sub_id", "trigger_type",
+    "trigger_idx", "probe_finalize_idx", "probe_finalize_condition", "parent_bos_anchor_idx",
+    "probe_input_idx", "starting_idx", "direction", "sub_tf", "relative_dir", "parent_floor_idx",
+    "start_idx", "trigger_end_idx", "end_idx", "end_reason", "ended_by_sub_id", "seq",
+    "extra_trigger_idxs",
+]
+assert _TRIGGER_FIELDS == [f.name for f in _dc_fields(TriggerRecord)
+                           if f.name not in ("source_trigger", "pool_idx", "ended_by_pool_idx")]
 _UNRESOLVED_FIELDS = [f.name for f in _dc_fields(UnresolvedTrigger)]
 
 
@@ -111,7 +122,7 @@ def _confluence_fixture() -> Tuple[List[SidRecord], List[TriggerRecord]]:
     triggers = [
         TriggerRecord(
             lens="confluence", parent_sid=1, parent_cycle_id=2, trigger_sub_sid=1,
-            sub_id=6, trigger_type="subsequent_confluence", trigger_idx=3819,
+            sub_id=6, pool_idx=6, trigger_type="subsequent_confluence", trigger_idx=3819,
             probe_finalize_idx=3819, probe_finalize_condition="no_retrace",
             parent_bos_anchor_idx=954, probe_input_idx=3760, starting_idx=3760, direction=-1, sub_tf="M15",
             relative_dir="confluence", parent_floor_idx=3611, start_idx=3819,
@@ -123,7 +134,7 @@ def _confluence_fixture() -> Tuple[List[SidRecord], List[TriggerRecord]]:
         ),
         TriggerRecord(
             lens="confluence", parent_sid=1, parent_cycle_id=2, trigger_sub_sid=2,
-            sub_id=7, trigger_type="reversal", trigger_idx=4200,
+            sub_id=7, pool_idx=7, trigger_type="reversal", trigger_idx=4200,
             probe_finalize_idx=4200, probe_finalize_condition="reversal_handoff",
             parent_bos_anchor_idx=None, probe_input_idx=4000, starting_idx=4027, direction=1, sub_tf="M15",
             relative_dir="counter", parent_floor_idx=3611, start_idx=4200,
@@ -133,7 +144,7 @@ def _confluence_fixture() -> Tuple[List[SidRecord], List[TriggerRecord]]:
         ),
         TriggerRecord(
             lens="confluence", parent_sid=1, parent_cycle_id=2, trigger_sub_sid=3,
-            sub_id=4, trigger_type="subsequent_confluence", trigger_idx=3903,
+            sub_id=4, pool_idx=4, trigger_type="subsequent_confluence", trigger_idx=3903,
             probe_finalize_idx=3903, probe_finalize_condition="no_retrace",
             parent_bos_anchor_idx=975, probe_input_idx=3304, starting_idx=3304, direction=-1, sub_tf="M15",
             relative_dir="confluence", parent_floor_idx=3611, start_idx=3903,
@@ -399,7 +410,7 @@ def test_lens_filter_is_the_caller_s_responsibility_rows_are_written_as_given(tm
     sids, triggers = _confluence_fixture()
     ctr_rec = TriggerRecord(
         lens="counter", parent_sid=1, parent_cycle_id=2, trigger_sub_sid=1,
-        sub_id=7, trigger_type="subsequent_counter", trigger_idx=4083,
+        sub_id=7, pool_idx=7, trigger_type="subsequent_counter", trigger_idx=4083,
         probe_finalize_idx=4083, probe_finalize_condition="no_retrace",
         parent_bos_anchor_idx=1020, probe_input_idx=4000, starting_idx=4027, direction=1, sub_tf="M15",   # pass-through stub
         relative_dir="counter", parent_floor_idx=3611, start_idx=4083,
@@ -437,3 +448,24 @@ def test_run_replay_calls_export_sub_tables_before_the_m15_chart_loop():
         "export_sub_tables( must be called before the M15 chart loop "
         f"(found at {i_tables} vs chart call at {i_chart})"
     )
+
+
+def test_a_never_started_subs_record_has_an_empty_sub_id_cell(tmp_path):
+    """PLAN_I R4-4 / R7-2: a never-started sub has no `sub_id`, so its zero-length
+    record's cell is EMPTY and pandas writes the rest of the column as floats
+    (`6.0`) — the accepted rendering (as `parent_bos_anchor_idx` already does).
+    The sweep-time `pool_idx` never reaches the CSV."""
+    sids, triggers = _confluence_fixture()
+    orphan = TriggerRecord(
+        lens="confluence", parent_sid=1, parent_cycle_id=2, trigger_sub_sid=4,
+        sub_id=None, pool_idx=9, trigger_type="subsequent_confluence", trigger_idx=3950,
+        probe_finalize_idx=3950, probe_finalize_condition="no_retrace",
+        parent_bos_anchor_idx=None, probe_input_idx=3940, starting_idx=3940, direction=-1, sub_tf="M15",
+        relative_dir="confluence", parent_floor_idx=3611, start_idx=3950,
+        trigger_end_idx=3950, end_idx=3950, end_reason="parent_end", seq=12,
+    )
+    assert orphan.is_zero_length
+    export_sub_tables({"confluence": _lens_df(sids, triggers + [orphan], [])}, "base", tmp_path)
+    header, rows = _read(tmp_path / "base_M15_confluence_triggers.csv")
+    assert "pool_idx" not in header and "ended_by_pool_idx" not in header
+    assert [r["sub_id"] for r in rows] == ["6.0", "7.0", "4.0", ""]      # seq order 8, 10, 11, 12

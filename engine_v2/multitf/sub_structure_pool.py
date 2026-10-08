@@ -4,13 +4,17 @@ The pool holds the two objects of the sub-structure model (§17.2):
 
 - **`PooledStructure` = the unique sub** — one MS run + its cap-free geometry,
   identified by `(parent_path, sub_TF, direction, starting_idx)` with ABSOLUTE
-  direction (§17.3), `sub_id` global monotonic (creation order). NOT bound to a
-  parent: it spans parent cycles and parent sids, and carries ONE real-time
-  lifecycle `[start_idx, end_idx]` aggregated from its records (§17.5). This is
-  what we trade on.
+  direction (§17.3). Two numbers: `pool_idx` = the creation index (the sweep's
+  internal FK, never exported) and `sub_id` = the user-facing id, numbered by
+  lifecycle START once the sweep has run (`number_subs_by_start`; PLAN_I R4-2 /
+  R4-4 — None for a sub that never starts). NOT bound to a parent: it spans
+  parent cycles and parent sids, and carries ONE real-time lifecycle
+  `[start_idx, end_idx]` aggregated from its records (§17.5). This is what we
+  trade on.
 - **`TriggerRecord` = a triggered instance** of a unique sub — identity
-  `(lens, parent_sid, parent_cycle_id, trigger_sub_sid)`, FK `sub_id` (never
-  None), its OWN parent-bound lifecycle (§17.4) and the chart lens.
+  `(lens, parent_sid, parent_cycle_id, trigger_sub_sid)`, FK `pool_idx` during
+  the sweep and `sub_id` after it (None only on a never-started sub's
+  zero-length records), its OWN parent-bound lifecycle (§17.4) and the chart lens.
 - **`UnresolvedTrigger`** — a trigger that produced no record (§17.7).
 
 This module is the pure data model. It is deliberately free of pandas / MS /
@@ -135,8 +139,13 @@ def resolve_lens(use_case: str, *, reversed_from_lens: Optional[str] = None) -> 
 class TriggerRecord:
     """A triggered INSTANCE of a unique sub (§17.4) with its own lifecycle.
 
-    Identity `(lens, parent_sid, parent_cycle_id, trigger_sub_sid)`; FK `sub_id`
-    (never None). All idxs entity-absolute M15, except `parent_bos_anchor_idx` (H1, FC only).
+    Identity `(lens, parent_sid, parent_cycle_id, trigger_sub_sid)`; FK
+    `pool_idx` (the sub's creation index — the sweep's key; never exported) and
+    `sub_id` (the sub's final, start-numbered id — None until
+    `SubStructurePool.number_subs_by_start` runs at the sweep's end, and for good
+    on a never-started sub's zero-length records, PLAN_I R4-4). Likewise
+    `ended_by_pool_idx` (sweep-time) → `ended_by_sub_id` (final). All idxs
+    entity-absolute M15, except `parent_bos_anchor_idx` (H1, FC only).
 
     Historical (never adjusted): `trigger_idx` (LOH of the parent trigger
     candle; native M15 for `reversal`), `probe_finalize_idx` (when THIS record's
@@ -161,8 +170,9 @@ class TriggerRecord:
     parent_sid: int
     parent_cycle_id: int
     trigger_sub_sid: int             # per (lens, parent_sid, parent_cycle_id); creation-ordered
-    # foreign key
-    sub_id: int
+    # foreign keys
+    sub_id: Optional[int]            # final (start-numbered) id; None until the sweep numbers the subs
+    pool_idx: int                    # the sub's creation index — the sweep-time FK (NOT exported)
     # provenance (historical)
     trigger_type: str                # first_confluence | subsequent_confluence | first_counter
                                      # | subsequent_counter | reversal
@@ -182,10 +192,11 @@ class TriggerRecord:
     trigger_end_idx: Optional[int] = None
     end_idx: Optional[int] = None
     end_reason: Optional[str] = None  # "reversal" | "same_dir_replacement" | "parent_end" | None
-    ended_by_sub_id: Optional[int] = None
+    ended_by_sub_id: Optional[int] = None    # final id of the replacer (set at numbering)
     # bookkeeping
     seq: int = 0                     # creation order (deterministic tie-break; never identity)
     extra_trigger_idxs: List[int] = field(default_factory=list)
+    ended_by_pool_idx: Optional[int] = None  # the replacer's pool_idx — sweep-time (NOT exported)
 
     @property
     def is_zero_length(self) -> bool:
@@ -269,7 +280,11 @@ class ProbeCacheEntry:
 @dataclass
 class PooledStructure:
     """A unique sub structure (§17.2/§17.5). Computed once; many records point
-    at it. Identity is `key`; `sub_id` is the global creation index.
+    at it. Identity is `key`; `pool_idx` is the global creation index (the
+    sweep's key — log lines say `pool#k`); `sub_id` is the user-facing id,
+    numbered by `(start_idx, pool_idx)` after the sweep — so sub x−1 has always
+    started by sub x's start (PLAN_I R4-2) — and None for a sub that never
+    starts (R4-4).
 
     `geometry` = `(bounded, slice_begin)` attached by the geometry builder
     (`entity_df_mutation.build_or_get_geometry`) — the natural-end MS run with
@@ -282,7 +297,8 @@ class PooledStructure:
     at `t`); `relative_dir_segments` = the §17.3 step function.
     """
     key: StructureKey
-    sub_id: int
+    pool_idx: int
+    sub_id: Optional[int] = None         # set by `SubStructurePool.number_subs_by_start`
     geometry: Any = None
     natural_reversal_idx: Optional[int] = None
     bos0_inner: Optional[float] = None
@@ -345,13 +361,19 @@ class SubStructurePool:
     Single-entity storage: one pool holds every sub across both lenses and all
     parent cycles. `get_or_create` is the dedup interception point — the
     geometry builder calls it ONLY after a successful MS run (§17.7: a failed
-    build creates no entry and consumes no `sub_id`).
+    build creates no entry and consumes no `pool_idx`).
+
+    Two id spaces (PLAN_I §9.3 D4): `pool_idx` (creation order) keys everything
+    DURING the sweep (`get_by_pool_idx`); `sub_id` exists only after
+    `number_subs_by_start` (`get_by_id`).
     """
 
     def __init__(self) -> None:
         self._by_key: Dict[StructureKey, PooledStructure] = {}
-        self._by_id: Dict[int, PooledStructure] = {}
-        self._next_sub_id = 0
+        self._by_pool_idx: Dict[int, PooledStructure] = {}
+        self._by_id: Dict[int, PooledStructure] = {}     # filled by number_subs_by_start
+        self._next_pool_idx = 0
+        self._numbered = False
         self._next_tss: Dict[Tuple[str, int, int], int] = defaultdict(int)
         self._seq = 0
         self.unresolved: List[UnresolvedTrigger] = []
@@ -367,19 +389,52 @@ class SubStructurePool:
         existing = self._by_key.get(key)
         if existing is not None:
             return existing, False
-        s = PooledStructure(key=key, sub_id=self._next_sub_id)
-        self._next_sub_id += 1
+        assert not self._numbered, f"[pool] get_or_create({tuple(key)}) after the subs were numbered"
+        s = PooledStructure(key=key, pool_idx=self._next_pool_idx)
+        self._next_pool_idx += 1
         self._by_key[key] = s
-        self._by_id[s.sub_id] = s
+        self._by_pool_idx[s.pool_idx] = s
         return s, True
 
+    def get_by_pool_idx(self, pool_idx: int) -> PooledStructure:
+        """The sub created `pool_idx`-th (KeyError if absent) — the sweep's lookup."""
+        return self._by_pool_idx[int(pool_idx)]
+
     def get_by_id(self, sub_id: int) -> PooledStructure:
-        """The sub with `sub_id` (KeyError if absent)."""
+        """The sub with the FINAL `sub_id` (KeyError if absent, if the subs are
+        not numbered yet, or for a never-started sub — it has none)."""
         return self._by_id[int(sub_id)]
 
     def all(self) -> List[PooledStructure]:
-        """Structures in creation order (deterministic → stable `sub_id`)."""
-        return sorted(self._by_key.values(), key=lambda s: s.sub_id)
+        """Structures in creation (`pool_idx`) order (deterministic)."""
+        return sorted(self._by_key.values(), key=lambda s: s.pool_idx)
+
+    def number_subs_by_start(self) -> List[Tuple[int, Optional[int]]]:
+        """Give every sub its final `sub_id` (PLAN_I R4-2 / R4-4, §9.3 D4): the
+        subs that STARTED (`start_idx` set), sorted by `(start_idx, pool_idx)`,
+        get 0, 1, …; a never-started sub gets None. Every record takes its sub's
+        id; `ended_by_sub_id` = the final id of the sub `ended_by_pool_idx`
+        names (None if that sub never started). Runs ONCE, after the sweep's
+        last moment. Returns `[(pool_idx, sub_id)]` in `pool_idx` order."""
+        assert not self._numbered, "[pool] number_subs_by_start ran twice"
+        started = sorted(
+            (s for s in self._by_key.values() if s.start_idx is not None),
+            key=lambda s: (int(s.start_idx), s.pool_idx),
+        )
+        final_by_pool_idx: Dict[int, int] = {}
+        for i, s in enumerate(started):
+            s.sub_id = i
+            final_by_pool_idx[s.pool_idx] = i
+        for s in self._by_key.values():
+            if s.start_idx is None:
+                s.sub_id = None
+            for r in s.records:
+                r.sub_id = s.sub_id
+                r.ended_by_sub_id = (final_by_pool_idx.get(r.ended_by_pool_idx)
+                                     if r.ended_by_pool_idx is not None else None)
+        self._by_id = {s.sub_id: s for s in started}
+        self._numbered = True
+        return [(s.pool_idx, s.sub_id) for s in self.all()]
 
     # --- records ---
     def next_seq(self) -> int:
@@ -399,7 +454,7 @@ class SubStructurePool:
     def add_record(self, rec: TriggerRecord) -> None:
         """Append a record to its sub (`sub.records` is the ONLY store — the
         scope queries below read through it, §4.3 step 7)."""
-        self.get_by_id(rec.sub_id).records.append(rec)
+        self.get_by_pool_idx(rec.pool_idx).records.append(rec)
 
     def records_for(self, lens: str, parent_sid: int, parent_cycle_id: int) -> List[TriggerRecord]:
         """Every record in the `(lens, parent_sid, parent_cycle_id)` scope,
@@ -430,7 +485,7 @@ class SubStructurePool:
         assert len(cands) <= 1, (
             f"[pool] >1 active record for ({lens},{parent_sid},{parent_cycle_id},"
             f"dir={direction}) at {at_idx}: "
-            f"{[(r.identity, r.sub_id, r.start_idx, r.trigger_end_idx) for r in cands]}"
+            f"{[(r.identity, f'pool#{r.pool_idx}', r.start_idx, r.trigger_end_idx) for r in cands]}"
         )
         return cands[0] if cands else None
 
