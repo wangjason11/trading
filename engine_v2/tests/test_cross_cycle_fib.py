@@ -57,7 +57,10 @@ def _ev(ev_type: str, idx: int, price: float, sid: int, cycle_id: int, sd: int,
 
 
 def _make_tracker() -> FibTracker:
-    return FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode="cross_cycle")
+    # PLAN_I S3: the limit is required; `unreached` keeps every cross these tests exercise allowed.
+    from engine_v2.tests._cross_fib_limits import unreached
+    return FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode="cross_cycle",
+                      cross_fib_limits={0: unreached(1)})
 
 
 # ---------- Cycle 0 behaves as simple single (no cross) ----------

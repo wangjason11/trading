@@ -65,8 +65,11 @@ def _strip_raw(out):
 
 
 def _run(df, events, mode):
+    # PLAN_I S3: the cross_cycle downstream needs its limits; `unreached_for` keeps every cross allowed.
+    from engine_v2.tests._cross_fib_limits import unreached_for
     with contextlib.redirect_stdout(io.StringIO()):
-        return _run_downstream_pipeline(df, events, +1, fib_mode=mode, wvmi="first_sd_prox")
+        return _run_downstream_pipeline(df, events, +1, fib_mode=mode, wvmi="first_sd_prox",
+                                        cross_fib_limits=unreached_for(events) if mode == "cross_cycle" else None)
 
 
 _SECOND = _make_second_cts_moment_after_anchor_data

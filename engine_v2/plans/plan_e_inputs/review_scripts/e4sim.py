@@ -22,7 +22,7 @@ for maker in (_make_second_cts_moment_after_anchor_data, _make_multicycle_data):
         buf=io.StringIO()
         with contextlib.redirect_stdout(buf):
             try:
-                o=_run_downstream_pipeline(res.df, evs, +1, fib_mode=MODE, wvmi="first_sd_prox")
+                o=_run_downstream_pipeline(res.df, evs, +1, fib_mode=MODE, wvmi="first_sd_prox", cross_fib_limits=__import__("engine_v2.tests._cross_fib_limits", fromlist=["x"]).unreached_for(evs) if MODE == "cross_cycle" else None)
             except Exception as ex:
                 o={"ERR":repr(ex)}
         outs.append(o)

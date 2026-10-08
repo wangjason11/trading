@@ -91,7 +91,10 @@ def _ev(etype, idx, price, sid, cyc, *, confirmed_at=None, via=CTS_UPDATED_RAW_V
 
 
 def _tracker(mode):
-    return FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode=mode)
+    # PLAN_I S3: a cross_cycle tracker needs its limit; `unreached` keeps every cross allowed.
+    from engine_v2.tests._cross_fib_limits import unreached
+    return FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode=mode,
+                      cross_fib_limits={0: unreached(1)} if mode == "cross_cycle" else None)
 
 
 def _quiet(fn, *a, **k):

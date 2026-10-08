@@ -1771,9 +1771,10 @@ class MarketStructure:
             f"BOS_CONFIRMED idx {idx} != confirmed_at {meta2['confirmed_at']} (ev.idx is the moment)")
         # The anchor is a location already SEEN at the moment (2026-09-28): an anchor
         # after its apply (only `_select_bos_on_breakout`'s swapped window could give
-        # one) is not knowable yet, and the anchor-keyed processing order
-        # (`ef.processing_order_key`) would then run the cycle's CTS_ESTABLISHED
-        # before its BOS_CONFIRMED — FibTracker needs the BOS first.
+        # one) is not knowable yet. This guard does NOT keep the BOS before the cycle's
+        # CTS_ESTABLISHED in the anchor-keyed processing order (`ef.processing_order_key`):
+        # a BOS anchor after the CTS anchor (both <= the moment) still sorts after it —
+        # PLAN_I §9.2 F17; the downstream dispatch raises `FibEventOrderError` then (S2b).
         assert int(bos_anchor_idx) <= int(idx), (
             f"BOS_CONFIRMED anchor {bos_anchor_idx} after its moment {idx}")
         self.events.append(

@@ -18,6 +18,7 @@ import pytest
 import engine_v2.structure.event_fields as ef
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 from engine_v2.structure.structure_engine import _make_market_structure, _pip_size_from_pair
+from engine_v2.tests._cross_fib_limits import unreached_for
 from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established
 from engine_v2.tests.test_orchestrator_reversal_source import _ms
 from engine_v2.tests.test_unified_probe import _prepare_df
@@ -118,4 +119,5 @@ def test_the_f14_1_shape_from_a_real_ms_run_now_stops_the_downstream():
     for mode in ("h1", "cross_cycle"):
         with pytest.raises(FibEventOrderError, match=r"sid=0 cycle=2 CTS_ESTABLISHED \(anchor 46, moment 49\)"):
             with contextlib.redirect_stdout(io.StringIO()):
-                _run_downstream_pipeline(df2, ms.events, -1, fib_mode=mode)
+                _run_downstream_pipeline(df2, ms.events, -1, fib_mode=mode,
+                                         cross_fib_limits=unreached_for(ms.events))

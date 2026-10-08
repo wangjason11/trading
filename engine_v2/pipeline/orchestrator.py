@@ -225,8 +225,10 @@ def _run_downstream_pipeline(
 
     `cross_fib_limits` — `{sid: CrossFibLimit}` for the FibTracker (PLAN_I §9.3
     D1 / D2): the main's from `compute_main_cross_fib_limits`, a sub's `{0: P}`
-    from the pool. S2: stamped onto every fib record (`cross_fib_limit_*`, main
-    `started_by`), not applied; None = no stamp (tests).
+    from the pool. Stamped onto every fib record (`cross_fib_limit_*`, main
+    `started_by`, S2); APPLIED in `cross_cycle` mode since S3 (the sub path — a
+    tracker consulted for a cycle >= 1 without an entry raises
+    `CrossFibLimitError`); main's h1 mode only stamps until S4. None = no stamp.
     """
     if wvmi not in WVMI_MODES:
         raise ValueError(f"[downstream] wvmi={wvmi!r} not in {WVMI_MODES}")

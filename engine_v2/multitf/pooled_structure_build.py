@@ -84,7 +84,7 @@ def project_to_window(
     stamps each lens's trigger meta onto them).
 
     `cross_fib_limits` = `{0: the sub's CrossFibLimit}` (PLAN_I §9.3 D2) — handed
-    to the downstream FibTracker (S2: stamped on every fib record, not applied).
+    to the downstream FibTracker: stamped on every fib record (S2) and, since S3, APPLIED — the cross limit.
     """
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 

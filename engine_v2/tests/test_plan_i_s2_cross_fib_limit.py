@@ -34,6 +34,7 @@ from engine_v2.multitf.sub_structure_pool import (
 )
 from engine_v2.structure.market_structure import MarketStructure, StructureEvent
 from engine_v2.structure.structure_engine import compute_bounded_structure
+from engine_v2.tests._cross_fib_limits import unreached
 from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established, make_cts_updated
 from engine_v2.tests.test_imbalance_c3_knowability import _df as _c3_df, _gap
 from engine_v2.tests.test_render_sub_projection import (  # noqa: F401 (pytest fixtures: geometry, m15_df)
@@ -486,6 +487,10 @@ def _tracker(limits=None, mode="cross_cycle"):
     return FibTracker(FibTrackerConfig(fill_threshold=0.70), fib_mode=mode, cross_fib_limits=limits)
 
 
+# PLAN_I S3: a cross_cycle tracker consults its limit at a cycle >= 1 — the order tripwire tests stay within it.
+_WITHIN = {0: unreached(1), 1: unreached(1)}
+
+
 @pytest.mark.parametrize("sd", [1, -1])
 def test_m_is_the_first_cycle_strictly_beyond_p(sd):
     def anchors(*prices):
@@ -557,15 +562,15 @@ def test_cycle_t_established_before_t_minus_1_confirmed_raises(mode):
     df = _c3_df(60, [_gap(15), _gap(35)])
     est1 = make_cts_established(cts_anchor_idx=40, confirmed_at=42, price=1.4, structure_id=0, cycle_id=1,
                                 struct_direction=1)
-    t = _tracker(mode=mode)
+    t = _tracker(_WITHIN, mode=mode)
     with pytest.raises(FibEventOrderError, match="before cycle 0's CTS_CONFIRMED"):
         _q(t.on_cts_established, est1, df, bos_idx=30, bos_price=1.2)
     assert issubclass(FibEventOrderError, RuntimeError) and not issubclass(FibEventOrderError, ValueError)
-    t2 = _tracker(mode=mode)
+    t2 = _tracker(_WITHIN, mode=mode)
     _q(t2.on_cts_confirmed, _ev("CTS_CONFIRMED", 25, 1.2, structure_id=0, cycle_id=0, struct_direction=1,
                                 cts_anchor_idx=20))
     _q(t2.on_cts_established, est1, df, bos_idx=30, bos_price=1.2)            # no raise
-    t3 = _tracker(mode=mode)
+    t3 = _tracker(_WITHIN, mode=mode)
     _q(t3.on_cts_confirmed, _ev("CTS_CONFIRMED", 25, 1.2, structure_id=1, cycle_id=0, struct_direction=1,
                                 cts_anchor_idx=20))
     with pytest.raises(FibEventOrderError):                                     # ANOTHER sid's cycle 0
@@ -819,7 +824,7 @@ def test_the_latest_anchor_keeps_a_sells_direction_through_every_handler():
 @pytest.mark.parametrize("mode", ["h1", "cross_cycle"])
 def test_the_order_tripwire_reads_the_events_own_sid(mode):
     df = _c3_df(60, [_gap(15), _gap(35)])
-    t = _tracker(mode=mode)
+    t = _tracker(_WITHIN, mode=mode)
     _q(t.on_cts_confirmed, _ev("CTS_CONFIRMED", 25, 1.2, structure_id=1, cycle_id=0, struct_direction=1,
                                cts_anchor_idx=20))
     est1 = make_cts_established(cts_anchor_idx=40, confirmed_at=42, price=1.4, structure_id=1, cycle_id=1,
@@ -827,7 +832,8 @@ def test_the_order_tripwire_reads_the_events_own_sid(mode):
     _q(t.on_cts_established, est1, df, bos_idx=30, bos_price=1.2, reversal_confirmed_idx=10)   # no raise
     assert (1, 1) in t._latest_anchor
     with pytest.raises(FibEventOrderError):
-        _q(_tracker(mode=mode).on_cts_established, est1, df, bos_idx=30, bos_price=1.2, reversal_confirmed_idx=10)
+        _q(_tracker(_WITHIN, mode=mode).on_cts_established, est1, df, bos_idx=30, bos_price=1.2,
+           reversal_confirmed_idx=10)
 
 
 def test_the_driver_wires_the_fire_time_rule_and_the_tripwire(monkeypatch):

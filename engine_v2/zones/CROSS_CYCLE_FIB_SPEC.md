@@ -97,7 +97,23 @@ the branch happens *inside* each handler.
 
 ### 2.2 Path B — subordinate `cross_cycle` mode
 
-- **Scope:** all subordinate variants, every cycle, generalized cross.
+- **Scope:** all subordinate variants, every cycle, generalized cross — up to the cross-fib LIMIT (next bullet).
+- **The cross-fib LIMIT (PLAN_I S3, 2026-10-08; `FibTracker._cross_allowed`).** A cross may target cycle T ≥ 1 only
+  if the sub has a reference price `P` (`PooledStructure.cross_fib_limit`, fixed by its STARTING trigger — PLAN_I
+  §1.2, D2) and no cycle k < T has a latest CTS anchor strictly beyond `P` (`cross_cycle_fib.beyond`): the first
+  cycle beyond (`M`, the exported `cross_fib_limit_cycle`) is the LAST cycle a cross may target. A cycle past it —
+  and every cycle ≥ 1 of a sub without `P` — gets the cycle-0 single: activated at its CTS_ESTABLISHED if its own
+  `[BOS, CTS]` holds an unfilled sd imbalance formed by the moment, else on the first CTS_UPDATED that finds one;
+  every update re-checks; labelled `via: "cross_fib_limit"` (the cycle-0 single carries no `via`); no pre-established
+  cross (`on_cts_threshold_updated` skips a target past the limit). The cycles k < T are confirmed before T exists
+  and a confirmed cycle's latest anchor never moves again (an update of a confirmed cycle — the PLAN_I F16 order — is
+  not written), so the answer is fixed for T's whole life. A `cross_cycle` tracker consulted for a cycle ≥ 1 of a structure with no
+  limit entry raises `CrossFibLimitError` (a `RuntimeError`; the limit is REQUIRED). I8: a single and a cross are
+  never both ACTIVE on one cycle — asserted at every single activation / reactivation and every cross creation /
+  revival (the `cross_failed` fallback deactivates the cross first). Reference window: 6 crosses became singles (confluence sub 0
+  cycles 1–4 — no `P`; sub 2 cycle 1 — M = 0; sub 3 cycle 2 — M = 1, both lenses) and 3 `cross_failed` singles past
+  the limit relabelled (sub 1 cycles 3–4, sub 3 cycle 3 — on both lenses: 9 confluence + 2 counter rows). Main (h1 mode) is unchanged until S4, which rewrites this
+  spec. Canonical: `plans/PLAN_I_cross_cycle_fib_revamp.md` §1.4, §9.3 D1, §9.5 b.
 - **Phase machine** `_m15_phase[(sid,cycle)] ∈ {pre_established, established, confirmed}`.
   `pre_established` (entered at CTS_{n-1} CONFIRMED) is driven by
   `CTS_THRESHOLD_UPDATED` (`on_cts_threshold_updated`): anchor = running extreme
@@ -180,7 +196,7 @@ from the per-cycle BOS/CTS geometry + imbalance state. The four unified ingredie
 
 | Parameter | h1 (main) | cross_cycle (sub) |
 |---|---|---|
-| `target_ceiling` (§4) | `M` (first cycle clearing prev-BOS-outer) | `None` (unbounded) |
+| `target_ceiling` (§4) | `M` (first cycle clearing prev-BOS-outer) | `None` here — since PLAN_I S3 the sub's cross-fib LIMIT bounds the target in FibTracker (`_cross_allowed`, §2.2), outside the routine |
 | `fill_as_of` policy (§3.1) | **snapshot** (per-cycle frozen point) | **current** (running candle) |
 | pre-established eval | OFF (no `CTS_THRESHOLD_UPDATED` cross) | ON |
 | outer gate | Scenario-1 + revert (§5) | none |
@@ -299,7 +315,8 @@ early start — see `FIB_LIFECYCLE_SPEC §6`.)
 
 ## 7. Subordinate (Path B) retained behavior
 
-Subs keep: generalized unbounded target (no `M` ceiling), the pre-established phase,
+Subs keep: a generalized target up to their cross-fib LIMIT (PLAN_I S3, §2.2 — unbounded until 2026-10-08),
+the pre-established phase (within the limit),
 integer versioning in `_fibs`, dead-cycle cache, cycle-0 single + late-activate. The
 unification must leave sub output **byte-identical** (the refactor extracts the routine
 subs already use; subs are the reference implementation).
@@ -564,3 +581,7 @@ actual main multi-cycle cross (and Part B), expand the config window to find one
     @CTS_0/BOS_1, B @current; A is a superset). **Parameterize `fill_as_of`** to
     preserve both → 11a byte-identical. Converging main onto "current" is a deferred,
     separate intentional-diff step, NOT part of the refactor.
+11. **PLAN_I S3 (2026-10-08):** the sub path's crosses are bounded by the structure's cross-fib LIMIT (§2.2; the
+    user's rule, `plans/PLAN_I_cross_cycle_fib_revamp.md` §1.4); a cycle past it is a labelled single. PLAN_I S4
+    moves main onto the sub path and rewrites this spec (the Scenario 1 / 2 / 3 logic, the revert and the ceiling
+    on `P_rev` into a "Retired logic (history)" appendix).

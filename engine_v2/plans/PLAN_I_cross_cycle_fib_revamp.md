@@ -729,7 +729,8 @@ The rule ("parent cycle 0 → no reference") covers the case either way.
   round 8 opened (§5 R8-1). R8-1 answered (a): F16 parked to the S5 session (register D.1 item 2). A 60k WAVES run
   then found the F14 (1) shape (6 trials) — hidden from the S2 tripwire because the dispatch silently skips an EST whose
   BOS sorts after it (§9.2 F17) → R8-2 opened; answered (b) → **S2b LANDED** (§9.10): the skip raises
-  `FibEventOrderError`, byte-identical.
+  `FibEventOrderError`, byte-identical. **S3 LANDED** (§9.10): the limit applied to subs, `/compare` = §9.5 b + the
+  `via` label on the 11 predicted rows; the landing review's m1 (the confirmed anchor wins) folded, byte-identical.
 
 ## 8. Handoff to session 2 — the implementation plan (from a fresh code audit + a cold review)
 
@@ -1367,3 +1368,40 @@ Tools: `plan_i_inputs/f14_order_effect.py` (a trial's fib records in processing 
   both modes raise). The full suite passed with the raise before the new tests (1359): no fixture fed an
   establishment before its BOS. Mutant (the raise → the old silent skip): 2 / 2 relevant pins fail. No separate
   landing review (a ~10-line change): folded into S3's.
+
+**S3 — the limit APPLIED to subs (D1) — LANDED** (its own commit; local, not pushed).
+- Code (`zones/fib_tracker.py`): `CrossFibLimitError(RuntimeError)`; `_cross_allowed(sid, T)` (no entry → raise; no
+  `P` → False; else `M` (`cross_fib_limit_cycle`) is None or T ≤ M — one source for M); consulted by
+  `_handle_cross_cycle_cts_established` / `_handle_cross_cycle_cts_updated` (cycle 0 OR past the limit → the cycle-0
+  single, key `(sid, cycle)`, `via: "cross_fib_limit"` for cycle ≥ 1, at the establishment or late on an update) and
+  `_on_cts_threshold_updated` (no pre-established cross past the limit; after the phase check); I8 asserts (sub
+  mode until S4) at every single activation / reactivation and every cross creation / revival. Landing-review
+  fix m1: an update of an already-CONFIRMED cycle no longer writes `_latest_anchor` (the F16 order could move `M`
+  back inside a later cycle's life and trip I8 — lens A's constructed stream; not found in MS output).
+- `/compare`: vs the session-2 variant V3 — the 25 other CSVs md5-equal, the two M15 fib CSVs differ ONLY by `via:
+  "cross_fib_limit"` on the 11 predicted rows (confluence sub 0 c1–c4, sub 1 c3–c4, sub 2 c1, sub 3 c2–c3; counter
+  sub 3 c2–c3; `plan_i_inputs/fib_meta_diff.py`, equal with `--ignore-meta via`); vs S2 = §9.5 b cell by cell: 6
+  crosses → 6 singles, the kept rows' ends 934 → 1020, 2600 → 2608, 2967 → 2992, POIs 1117 / 1604 / 1772 / 2442 →
+  none / 2837 → 2969 (both lenses), IP-candidate rows 2985 → 1283 and 409 → 332; events, triggers, subs, KL, WVMI
+  and every H1 CSV equal; figures (`plan_i_inputs/fig_multiset.py`, by name): H1 equal; confluence 274 traces,
+  shapes 258 → 264 (−42 / +48), fib traces replaced 8 (6 by x / y + 2 whose hover life end moved), POI 8; counter
+  135, shapes 120 (−8 / +8), fib 2 (1 + 1), POI 2. Fetch gate PASS (replays 43.1 s and, after the review fixes,
+  57.6 s wall — byte-identical to the first; one recovered M15 fetch RETRY (HTTP 504) on the second); the log grep =
+  the 4 unresolved + 2 degenerate-cycle lines.
+- Tests 1364 → 1400 (+36, `test_plan_i_s3_cross_fib_limit_applied.py`: the rule per cycle at M = 0 / 1 / 2 / not
+  reached / no P / P AT a CTS (strict), sd ±1; the latest anchor; per-sid limits; the raise on the EST and the
+  threshold paths and never on cycle 0; the past-limit single late-activated and extended; the cycle at M keeps its
+  cross on an update; the pre-established cross refused; I8 in both orders + the revival + an inactive record; cycle
+  0's late activation unlabelled; the F16 order (m1)). Moved: 29 — census_S3's 26 exactly + 3 S2 / S2b tests written
+  after the census — all for the one designed reason (`CrossFibLimitError`), RE-PINNED with
+  `tests/_cross_fib_limits.unreached` (P = ±∞, never beyond: the pre-limit rules), assertions unchanged.
+- Landing review, 2 read-only lenses, **480,293 tokens**: **A** code audit (319,630) — 0 BLOCKER / 0 MAJOR / 4 MINOR /
+  5 NIT, all folded (m1 the anchor regression; m2 4 surviving mutants → pins; m3 stale docs — CROSS_CYCLE_FIB_SPEC §3
+  table, POI_ZONES_SPEC "Cross-Cycle Mode", FIB_LIFECYCLE_SPEC §6's exception, the threshold docstring, I8 at the
+  reactivation; m4 the review tools `f14_order_effect.py` / `e4sim.py` given limits; nits: the MS BOS-anchor comment
+  (F17), the `random_tail_search` line, the buy-only helpers documented, the 9 + 2 rows; n3 key order and n4 the lazy
+  requirement left as they are — production always passes `{0: P}`, asserted). Verified: production builds one tracker
+  (`orchestrator`), the sub path always passes its limit, no probe / geometry / chart path builds one; the S2b raise
+  fires only on F17 (BOS and EST share their moment, every clip keeps or drops both). **B** mutation (160,663) — 64
+  mutants on the full suite: 55 killed, 3 equivalent (T05, I07 / I08 — the I8 gate is redundant on today's h1 paths;
+  S4 removes it), 6 gaps (A13 per-sid, U05, U09, T03, I04 / I05) → its drafted pins folded, re-run 6 / 6 KILLED.

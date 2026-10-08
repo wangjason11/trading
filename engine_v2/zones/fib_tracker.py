@@ -54,6 +54,12 @@ class FibEventOrderError(RuntimeError):
     check that sees that shape through the dispatch."""
 
 
+class CrossFibLimitError(RuntimeError):
+    """A `cross_cycle` tracker was asked whether a cross may target a cycle ≥ 1 of a structure it holds no
+    cross-fib limit for (PLAN_I §9.3 D1: the limit is REQUIRED from S3 — there is no silent "no P"). A
+    `RuntimeError`, so a sub geometry's `except (ValueError, IndexError)` never swallows it."""
+
+
 @dataclass(frozen=True)
 class FibState:
     """
@@ -361,9 +367,10 @@ class FibTracker:
         self._in_event = False
 
         # The cross-fib LIMIT per structure (PLAN_I §9.3 D1 / D2): `{sid: CrossFibLimit}` — `P` + its source
-        # (+ the sub that supplied it, + main's `started_by`), fixed at the structure's start. PLAN_I S2: stamped
-        # onto every fib record at finalize, NOT applied yet (S3 applies it to subs, S4 to main). A sid without an
-        # entry gets no `cross_fib_limit_*` keys.
+        # (+ the sub that supplied it, + main's `started_by`), fixed at the structure's start. Stamped onto every
+        # fib record at finalize (S2); APPLIED by `_cross_allowed` in `cross_cycle` mode (S3; main's h1 mode only
+        # stamps until S4). A sid without an entry gets no `cross_fib_limit_*` keys — and raises
+        # `CrossFibLimitError` when a cross_cycle cycle >= 1 consults it.
         self._limits: Dict[int, CrossFibLimit] = dict(cross_fib_limits or {})
         # (sid, cycle_id) -> (idx, price, sd): the cycle's LATEST CTS anchor (§4 N-f) — written at its
         # CTS_ESTABLISHED, every CTS_UPDATED and its CTS_CONFIRMED (the confirmed anchor wins). `M` reads it.
@@ -385,6 +392,22 @@ class FibTracker:
             if beyond(price, lim.price, sd):
                 return c
         return None
+
+    def _cross_allowed(self, sid: int, target_cycle: int) -> bool:
+        """May a cross target `target_cycle` (≥ 1) of `sid`? (PLAN_I §9.3 D1, §1.4.) Only with a reference price
+        `P`, and only up to `M` — the first cycle whose latest CTS anchor is strictly beyond `P` is the LAST cycle a
+        cross may target: allowed ⟺ `P` set and no cycle k < `target_cycle` is beyond (M is None or target ≤ M).
+        A cycle past it — and every cycle ≥ 1 of a structure without `P` — gets the single (`via:
+        "cross_fib_limit"`). The cycles k < target are confirmed before the target exists (MS order; the S2
+        tripwire), so the answer is fixed for the target's whole life. No limit entry → `CrossFibLimitError`."""
+        lim = self._limits.get(int(sid))
+        if lim is None:
+            raise CrossFibLimitError(
+                f"[fib] sid={sid} cycle={target_cycle}: no cross_fib_limit entry (PLAN_I D1: required from S3)")
+        if lim.price is None:
+            return False
+        m = self.cross_fib_limit_cycle(int(sid))
+        return m is None or int(target_cycle) <= m
 
     def _cross_fib_limit_meta(self, sid: int) -> Dict[str, Any]:
         """The keys every fib record of `sid` carries (PLAN_I S2, §9.3 D1): `cross_fib_limit_price` /
@@ -786,27 +809,34 @@ class FibTracker:
         """Handle CTS_ESTABLISHED for M15 reverse structure.
 
         - Cycle 0: single-fib only (no cross possible, no pre-established phase).
-        - Cycle ≥1: phase flips pre_established → established. Run cross-fib
+        - Cycle ≥1 past the cross-fib limit (`_cross_allowed` False — no `P`, or a cycle before it beyond `P`;
+          PLAN_I D1, R6-1 (d)): the cycle-0 single, labelled `via: "cross_fib_limit"` (R7-3).
+        - Cycle ≥1 within the limit: phase flips pre_established → established. Run cross-fib
           check with anchor = CTS_n. If cross fails, fall back to single.
         """
         # Flip phase to established
         self._m15_phase[(sid, cycle_id)] = "established"
 
-        if cycle_id == 0:
-            # Cycle 0: no cross possible. Simple single-fib activation.
+        if cycle_id == 0 or not self._cross_allowed(sid, cycle_id):
+            # Cycle 0 — and a cycle past the limit — no cross: the single, activated now if its own
+            # [BOS, CTS] holds an unfilled sd imbalance, else late on a CTS_UPDATED that finds one.
+            meta = {"activated_at": cts_established_idx, "fib_mode": "cross_cycle"}
+            if cycle_id >= 1:
+                meta["via"] = "cross_fib_limit"
             if not has_unfilled:
-                print(f"[fib] cross_cycle sid={sid} cycle=0 NO FIB: no unfilled imbalance (evaluated_at={self._evaluated_at})")
+                print(f"[fib] cross_cycle sid={sid} cycle={cycle_id} NO FIB: no unfilled imbalance "
+                      f"(evaluated_at={self._evaluated_at})")
                 return None
-            print(f"[fib] cross_cycle sid={sid} cycle=0 ACTIVATED (single, no cross)")
+            print(f"[fib] cross_cycle sid={sid} cycle={cycle_id} ACTIVATED (single, no cross)")
             return self._activate_fib(
                 sid=sid,
-                cycle_id=0,
+                cycle_id=cycle_id,
                 sd=sd,
                 bos_idx=bos_idx,
                 bos_price=bos_price,
                 cts_idx=cts_idx,
                 cts_price=cts_price,
-                meta={"activated_at": cts_established_idx, "fib_mode": "cross_cycle"},
+                meta=meta,
             )
 
         # Cycle ≥1: run cross-fib check with CTS_n as anchor
@@ -1259,6 +1289,8 @@ class FibTracker:
         single key ``(sid, cycle_id)``. The FibState content (anchors, meta,
         lifecycle) is identical either way — only the storage key differs.
         """
+        if cross_version is None:
+            self._assert_no_active_cross(sid, cycle_id)
         if sd == 1:  # Bullish
             anchor_high = cts_price
             anchor_low = bos_price
@@ -1390,7 +1422,12 @@ class FibTracker:
             else:
                 cts_price = float(df.loc[cts_idx, "l"])
 
-        self._latest_anchor[(sid, cycle_id)] = (int(cts_idx), float(cts_price), int(sd))
+        # The confirmed anchor wins: an update of an already-confirmed cycle (PLAN_I §9.2 F16 — MS can confirm a
+        # CTS with an anchor AFTER its confirmation candle, so that cycle's earlier raw updates sort after the
+        # confirmation) must not move it back, or `M` — and `_cross_allowed` — would change inside a later
+        # cycle's life (S3 landing review m1). 0 on the reference window.
+        if (sid, cycle_id) not in self._cts_by_cycle:
+            self._latest_anchor[(sid, cycle_id)] = (int(cts_idx), float(cts_price), int(sd))
 
         # ============================================================
         # BRANCH: fib_mode → cross_cycle / sid=0 / sid≥1
@@ -1415,10 +1452,11 @@ class FibTracker:
         df: pd.DataFrame,
     ) -> Optional[FibState]:
         """Handle CTS_UPDATED for cross_cycle. Re-run cross check with the
-        extended CTS anchor. Cycle 0 uses simple single-fib update."""
-        if cycle_id == 0:
-            # Cycle 0: no cross logic. Single-fib update.
-            key = (sid, 0)
+        extended CTS anchor. Cycle 0 — and a cycle past the cross-fib limit (PLAN_I D1) — uses the simple
+        single-fib update (late activation included)."""
+        if cycle_id == 0 or not self._cross_allowed(sid, cycle_id):
+            # Cycle 0 / past the limit: no cross logic. Single-fib update.
+            key = (sid, cycle_id)
             if key in self._fibs:
                 return self._update_fib_cts(key, cts_idx, cts_price, df)
             # First-activation on a later CTS_UPDATED (2026-06-08): the cycle-0
@@ -1428,7 +1466,8 @@ class FibTracker:
             # activate now if present — mirrors the Scenario-1 main path
             # (_handle_cycle0_cts_updated). Fixes the cross_cycle cycle-0
             # one-shot asymmetry (subs were one-shot; main already re-checks).
-            bos = self._bos_by_cycle.get((sid, 0))
+            # The same for a past-the-limit cycle's single (PLAN_I D1).
+            bos = self._bos_by_cycle.get((sid, cycle_id))
             if bos is None:
                 return None
             bos_idx, bos_price = bos
@@ -1436,22 +1475,21 @@ class FibTracker:
             end_idx = max(bos_idx, cts_idx)
             if not self._has_unfilled(df, start_idx, end_idx, self._moment(), sd):
                 return None
-            print(f"[fib] cross_cycle sid={sid} cycle=0 ACTIVATED on update "
+            print(f"[fib] cross_cycle sid={sid} cycle={cycle_id} ACTIVATED on update "
                   f"(unfilled imbalance found post-EST): BOS idx={bos_idx} -> "
                   f"CTS idx={cts_idx}")
+            meta = {"activated_at": self._moment(), "fib_mode": "cross_cycle", "activated_on": "update"}
+            if cycle_id >= 1:
+                meta["via"] = "cross_fib_limit"
             return self._activate_fib(
                 sid=sid,
-                cycle_id=0,
+                cycle_id=cycle_id,
                 sd=sd,
                 bos_idx=bos_idx,
                 bos_price=bos_price,
                 cts_idx=cts_idx,
                 cts_price=cts_price,
-                meta={
-                    "activated_at": self._moment(),
-                    "fib_mode": "cross_cycle",
-                    "activated_on": "update",
-                },
+                meta=meta,
             )
 
         # Cycle ≥1: should be in established phase. Re-run cross check.
@@ -1695,6 +1733,7 @@ class FibTracker:
 
         if has_unfilled and not new_state.active:
             # Reactivate - unfilled imbalances now exist in expanded range
+            self._assert_no_active_cross(sid, cycle_id)
             new_state = replace(new_state, active=True, meta={**new_state.meta, "reactivated_at": self._moment()})
             print(f"[fib] sid={sid} {label} REACTIVATED: unfilled imbalance found at idx={cts_idx}")
         elif not has_unfilled and new_state.active:
@@ -2224,6 +2263,24 @@ class FibTracker:
             sid, target_cycle, sd, cts_idx, cts_price, df, current_candle=cts_established_idx,
         )
 
+    # I8 (PLAN_I §9.3 D1): a single and a cross are never both ACTIVE on one cycle — checked at every single
+    # activation and every cross creation / revival. The sub path only until S4 (main's h1 handlers keep their
+    # own cycle-1 bookkeeping until they are deleted). A superseded (inactive) record of the other kind may remain:
+    # the `cross_failed` fallback deactivates the cross, then activates the single.
+    def _assert_no_active_cross(self, sid: int, cycle_id: int) -> None:
+        if self.fib_mode != "cross_cycle":
+            return
+        latest = self._get_latest_cross(sid, cycle_id)
+        assert latest is None or not latest[1].active, (
+            f"[fib] I8: sid={sid} cycle={cycle_id} single activated while cross {latest[0]} is active")
+
+    def _assert_no_active_single(self, sid: int, cycle_id: int) -> None:
+        if self.fib_mode != "cross_cycle":
+            return
+        single = self._fibs.get((sid, cycle_id))
+        assert single is None or not single.active, (
+            f"[fib] I8: sid={sid} cycle={cycle_id} cross created / revived while the single is active")
+
     def _get_latest_cross(self, sid: int, cycle_id: int) -> Optional[tuple]:
         """Return (key, FibState) for the highest-version cross fib at
         (sid, cycle_id), or None."""
@@ -2293,8 +2350,10 @@ class FibTracker:
         """Dispatch CTS_THRESHOLD_UPDATED for cross_cycle mode.
 
         Triggers a cross-fib check for the target cycle (= event.cycle_id + 1)
-        ONLY when that target is in pre-established phase. In all other cases
-        (h1 mode, or target not pre-established), this is a no-op.
+        ONLY when that target is in pre-established phase AND within the
+        structure's cross-fib limit (`_cross_allowed`, PLAN_I S3). In all other
+        cases (h1 mode, target not pre-established, target past the limit),
+        this is a no-op.
 
         The anchor is the running extreme past CTS_n; own_imb_start is the
         prospective BOS_{n+1} (the deepest pullback since CTS_n CONFIRMED).
@@ -2309,6 +2368,9 @@ class FibTracker:
         phase = self._m15_phase.get((sid, target_cycle))
         if phase != "pre_established":
             # Not in pre-established for the expected target: skip.
+            return
+        if not self._cross_allowed(sid, target_cycle):
+            # Past the cross-fib limit (PLAN_I D1): no pre-established cross — the target is a single.
             return
 
         sd = int(event.meta.get("struct_direction", 0))
@@ -2508,6 +2570,7 @@ class FibTracker:
         current_candle: int,
     ) -> None:
         """Create a new cross fib at (sid, target_cycle, 'cross', version)."""
+        self._assert_no_active_single(sid, target_cycle)
         bos_x_idx, bos_x_price = bos_x
         version = self._cross_version.get((sid, target_cycle), -1) + 1
         key = (sid, target_cycle, "cross", version)
@@ -2619,6 +2682,7 @@ class FibTracker:
         cycle's sticky `start_idx` is unchanged (§15.3) — only per-record
         `active` flips back to True.
         """
+        self._assert_no_active_single(state.structure_id, state.cycle_id)
         sd = state.struct_direction
         advanced = new_anchor_idx > state.cts_idx
         anchor_idx = new_anchor_idx if advanced else state.cts_idx

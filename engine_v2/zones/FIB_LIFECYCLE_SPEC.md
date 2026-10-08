@@ -251,8 +251,9 @@ activated on a later `CTS_UPDATED` (`meta["activated_on"] == "update"`,
 `fib_tracker.py` `_handle_cross_cycle_cts_updated` / `_handle_cycle0_cts_updated`)
 stamps that update's moment. See §15.3.)
 
-**The one exception — pre-established cross (SUBORDINATE-ONLY).** In `cross_cycle`
-mode a cross fib for cycle `n+1` is created during cycle `n`'s **tail**
+**The one exception — pre-established cross (SUBORDINATE-ONLY; within the sub's cross-fib limit since PLAN_I
+S3 — past it the cycle is a single and no pre-established cross forms, `CROSS_CYCLE_FIB_SPEC.md` §2.2).** In
+`cross_cycle` mode a cross fib for cycle `n+1` is created during cycle `n`'s **tail**
 (pre-established phase: after `CTS_n` CONFIRMED, before `CTS_{n+1}` ESTABLISHED,
 on `CTS_THRESHOLD_UPDATED`). At that point the cycle-`n+1` fib is **valid and
 active**, so its `start_idx` legitimately **precedes its own cycle's CTS-

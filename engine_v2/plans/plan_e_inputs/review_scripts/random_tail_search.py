@@ -233,7 +233,7 @@ def _f14(events):
         elif e.type == "CTS_CONFIRMED":
             conf[key] = int(e.idx)
         elif e.type == "CTS_ESTABLISHED" and key not in bos_seen:
-            # the orchestrator loop SKIPS it (`if key in bos_anchor_by_cycle`): no fib, no tripwire (PLAN_I F17)
+            # the orchestrator loop used to SKIP it silently (PLAN_I F17); since S2b it raises FibEventOrderError
             b = [ef.bos_anchor_idx(x) for x in evs if x.type == "BOS_CONFIRMED"
                  and (int(x.meta.get("structure_id", 0)), int(x.meta.get("cycle_id", 0))) == key]
             skip.append([key[1], ef.cts_anchor_idx(e), b[0] if b else None, int(e.idx),

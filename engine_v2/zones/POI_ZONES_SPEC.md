@@ -234,7 +234,11 @@ anchor agreement").
 Subordinate-structure pipelines use a Fib model that generalizes the
 cross-cycle concept to **any** cycle (not just cycle 1) AND allows cross
 fibs to form **before** a cycle's CTS is established. Used by both counter
-and confluence subordinate variants regardless of direction.
+and confluence subordinate variants regardless of direction. **Since PLAN_I S3
+(2026-10-08) a cross is bounded by the sub's cross-fib LIMIT:** a cycle past it
+(or any cycle >= 1 of a sub without a reference price) gets a single fib
+(`via: "cross_fib_limit"`) and no pre-established cross — canonical
+`CROSS_CYCLE_FIB_SPEC.md` §2.2.
 
 #### Phase state per (sid, cycle_id)
 - `pre_established` — cycle's CTS not yet established. Only cross fib checks

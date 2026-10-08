@@ -24,6 +24,7 @@ import pytest
 
 from engine_v2.multitf.pooled_structure_build import project_to_window
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
+from engine_v2.tests._cross_fib_limits import unreached
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests.test_unified_probe import _R, _make_multicycle_data, _prepare_df
 
@@ -79,7 +80,8 @@ def _downstream(rows, *, end_idx=None, cap=None):
         res = compute_bounded_structure(_prepare_df(rows), 0, 1, timeframe="M15", end_idx=end_idx)
         events = [e for e in res.events if cap is None or int(e.idx) <= cap]
         out = _run_downstream_pipeline(res.df, events, 1, fib_mode="cross_cycle", timeframe="M15",
-                                       structure_path_id="M15.test", wvmi="off", lifecycle_cap=cap)
+                                       structure_path_id="M15.test", wvmi="off", lifecycle_cap=cap,
+                                       cross_fib_limits={0: unreached(1)})   # PLAN_I S3: within the limit
     assert not [e for e in events if e.type == "CTS_ESTABLISHED" and e.meta["cycle_id"] == 1]
     fib1 = [f for f in out["fib_states"] if (f.structure_id, f.cycle_id) == (0, 1)]
     assert fib1 and all(f.meta.get("cross_start_cycle") == 0 for f in fib1)
@@ -98,7 +100,8 @@ def test_the_production_projection_caps_it_with_the_subs_end_reason():
     fib's CTS candle 14, and `parent_end` is a real sub end reason (never the default `lifecycle_end`)."""
     with redirect_stdout(io.StringIO()):
         natural = compute_bounded_structure(_prepare_df(_rows()), 0, 1, timeframe="M15")
-        down = project_to_window(natural, floor=2, cap=15, cap_reason="parent_end", direction=1, timeframe="M15")
+        down = project_to_window(natural, floor=2, cap=15, cap_reason="parent_end", direction=1, timeframe="M15",
+                                 cross_fib_limits={0: unreached(1)})   # PLAN_I S3: within the limit
     assert [(e.idx, e.meta["cycle_id"]) for e in down["events"] if e.type == "CTS_ESTABLISHED"] == [(2, 0)]
     fib1 = [f for f in down["fib_states"] if (f.structure_id, f.cycle_id) == (0, 1)]
     assert {(f.cts_idx, f.end_idx, f.end_reason, f.status) for f in fib1} == {(14, 15, "parent_end", "ended")}

@@ -37,7 +37,10 @@ def build(stream, seed, t_want):
 
 
 def feed(df, events, mode):
-    trk = FibTracker(FibTrackerConfig(fib_levels=[30.0, 50.0, 61.8, 80.0], fill_threshold=0.70), fib_mode=mode)
+    # Since PLAN_I S3 a cross_cycle tracker needs its limit: `unreached_for` = never beyond (the pre-limit rules).
+    from engine_v2.tests._cross_fib_limits import unreached_for
+    trk = FibTracker(FibTrackerConfig(fib_levels=[30.0, 50.0, 61.8, 80.0], fill_threshold=0.70), fib_mode=mode,
+                     cross_fib_limits=unreached_for(events) if mode == "cross_cycle" else None)
     bos = {}
     for e in events:
         if e.type == "BOS_CONFIRMED":
