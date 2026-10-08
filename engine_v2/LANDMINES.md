@@ -711,6 +711,17 @@ state-machine effects, ensure the state-flipping event sorts first. The
 current alphabetical ordering happens to give us this for free; don't
 regress it.
 
+**A cycle's BOS must reach the dispatch before its establishment (PLAN_I §9.2 F17, R8-2, 2026-10-08).** The sort
+places `BOS_CONFIRMED` at its BOS anchor and `CTS_ESTABLISHED` at its CTS anchor, so a cycle whose BOS anchor lies
+AFTER its CTS anchor arrives establishment-first. The loop used to DROP such an establishment silently (no fib for the
+cycle, the FibTracker order tripwire never reached); it now raises `FibEventOrderError` — the replay stops and the
+shape becomes a decision. MS can emit it (synthetic tails, PLAN_I §9.10: the F14 (1) shape — a cycle established on
+the previous cycle's CTS candle, its BOS the proximity candle that confirmed that cycle — and a breakout whose deepest
+pullback follows its extreme); 0 / 34 on the reference window. MS's own guard only asserts BOS anchor <= its moment
+(`_emit_bos_confirmed`); the MS side is parked to PLAN_I's S5 round (register D.1 item 2), with F16 (a CTS confirmed
+with an anchor after its confirmation candle — emission order != this sort; the drawn fib locks at the earlier
+anchor). Pins `tests/test_plan_i_s2b_dispatch_order.py`.
+
 ---
 
 ## MarketStructure Must Not Import From zones/

@@ -44,7 +44,7 @@ from engine_v2.zones.zone_proximity import check_zone_proximity
 from engine_v2.structure.structure_engine import _pip_size_from_pair
 
 # Week 7: Fib tracking
-from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig
+from engine_v2.zones.fib_tracker import FibEventOrderError, FibTracker, FibTrackerConfig
 
 
 @dataclass
@@ -354,22 +354,30 @@ def _run_downstream_pipeline(
             bos_anchor_by_cycle[key] = (ef.bos_anchor_idx(ev), ev.price)   # the fib's BOS point (location)
 
         elif ev.type == "CTS_ESTABLISHED":
-            if key in bos_anchor_by_cycle:
-                bos_anchor_idx, bos_price = bos_anchor_by_cycle[key]
-                reversal_idx = reversal_idx_by_new_sid.get(sid)
-
-                prev_bos_outer, prev_sd = None, None
-                # §11b: pass P_rev (prev-BOS-outer) at EVERY cycle for sid >= 1
-                # (was cycle 1 only). FibTracker stashes it set-once for the
-                # multi-cycle cross target ceiling M. Cycle 1 still uses it for
-                # the Scenario-1 revert check exactly as before.
-                if sid >= 1:
-                    prev_bos_outer, prev_sd = _get_prev_bos_outer(sid)
-
-                fib_tracker.on_cts_established(
-                    ev, df, bos_anchor_idx, bos_price, reversal_idx,
-                    prev_bos_outer, prev_sd
+            # The cycle's BOS must be handled first (PLAN_I §9.2 F17, R8-2): this used to drop the
+            # establishment silently — no fib for the cycle, and the tracker's order tripwire never reached.
+            # A cycle whose BOS anchor lies AFTER its CTS anchor sorts that way (0 / 34 on the reference
+            # window; synthetic tails: the F14 (1) shape and a breakout whose deepest pullback follows its extreme).
+            if key not in bos_anchor_by_cycle:
+                raise FibEventOrderError(
+                    f"[fib] sid={sid} cycle={cycle_id} CTS_ESTABLISHED (anchor {ef.cts_anchor_idx(ev)}, moment "
+                    f"{int(ev.idx)}) handled before its cycle's BOS_CONFIRMED"
                 )
+            bos_anchor_idx, bos_price = bos_anchor_by_cycle[key]
+            reversal_idx = reversal_idx_by_new_sid.get(sid)
+
+            prev_bos_outer, prev_sd = None, None
+            # §11b: pass P_rev (prev-BOS-outer) at EVERY cycle for sid >= 1
+            # (was cycle 1 only). FibTracker stashes it set-once for the
+            # multi-cycle cross target ceiling M. Cycle 1 still uses it for
+            # the Scenario-1 revert check exactly as before.
+            if sid >= 1:
+                prev_bos_outer, prev_sd = _get_prev_bos_outer(sid)
+
+            fib_tracker.on_cts_established(
+                ev, df, bos_anchor_idx, bos_price, reversal_idx,
+                prev_bos_outer, prev_sd
+            )
 
         elif ev.type == "CTS_UPDATED":
             reversal_idx = reversal_idx_by_new_sid.get(sid)

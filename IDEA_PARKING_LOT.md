@@ -116,7 +116,12 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    2026-10-07; session 2 (2026-10-07): the implementation plan DRAFTED — PLAN_I §9, stages S1–S5 (incl. S3b, the single's two latent quirks, R6-1b / R7-1) predicted by variant
    replays, cold-reviewed (PLAN_I §9.8); rounds 6–7 ANSWERED (PLAN_I §6 R6-1 … R7-4); the plan APPROVED 2026-10-07; after the build: S6 retires the
    `fib_mode` meta key (R7-2); session 3 = the
-   build: S1 + S2 LANDED 2026-10-07 / 08, PLAN_I §9.10; next S3 + S3b + S4, then S5, then S6). Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
+   build: S1 + S2 LANDED 2026-10-07 / 08, PLAN_I §9.10; next S3 + S3b + S4, then S5, then S6). **Parked to the S5
+   session's first round (R8-1, 2026-10-08):** PLAN_I §9.2 F16 — MS can confirm a CTS with an anchor AFTER its
+   confirmation candle (a range back-fill look-ahead; emission ≠ processing order; today's drawn fib locks at the
+   earlier anchor; D5's S5 order tripwire would raise) — found by the session-4 random-tail search, 0 on the window;
+   and F17's MS side (R8-2): a cycle established on the previous cycle's CTS candle / a BOS anchor after its CTS anchor
+   (the downstream's silent skip of such an establishment is made LOUD now — S2b, `FibEventOrderError`). Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
    charts add the M15 fib layer). Likely inputs (to confirm with the
    user): the 2026-10-01 item and D5 below, and §E "Cross-cycle fib bundled follow-up" with its parked open
    questions (`engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §13).

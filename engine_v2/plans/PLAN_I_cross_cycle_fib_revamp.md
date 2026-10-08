@@ -384,6 +384,29 @@ and the S_F1 triggers CSVs:
 
 ## 5. Open questions
 
+### Round 8 (2026-10-08, session 4 — the F14 random-tail search, §9.2 F16 / F17, §9.10) — ANSWERED 2026-10-08 (§6 R8-1, R8-2)
+
+- **R8-1 What to do with F16** (MS confirms a CTS with an anchor after its confirmation candle; emission order ≠
+  `processing_order_key` order; today's downstream draws the fib at the earlier anchor). The S2 tripwire's own shape
+  (F14 (1)) — 0 hits. Candidates: (a) **park it to S5** — record it (here + the register), build S3 → S3b → S4 as
+  planned (none of them touches MS or the event order; the latent divergence is the same before and after), and open
+  it as the first round of the S5 session (an MS fix vs which order wins), where D5's tripwire would raise on it;
+  (b) **fix MS before S3** — its own plan (e.g., a pattern applied inside an already back-filled range never confirms a
+  CTS anchored after its apply candle); the revamp waits; (c) **decide now: emission order canonical** for the fib
+  consumers (S5's at-emit tracker becomes the reference; the downstream's dispatch invariant, LANDMINES "Event Sort
+  Order Is a Dispatch Invariant", changes); (d) **decide now: processing order canonical** (D5 as written) and S5's
+  tripwire downgraded to a WARNING for this shape. Recommended: (a).
+- **R8-2 What to do with F17** (the downstream silently skips a CTS_ESTABLISHED whose BOS anchor lies after its CTS
+  anchor; the F14 (1) shape exists — 6 / 60,000 synthetic, 0 real, 0 window — and is hidden from the S2 tripwire this
+  way). Candidates: (a) **park it with F16 to S5** — build S3 → S3b → S4; the skip stays silent; (b) **make the skip
+  loud now** — the dispatch raises a named `RuntimeError` (`FibEventOrderError`) on a CTS_ESTABLISHED whose cycle's
+  BOS_CONFIRMED was not handled first, instead of dropping it: behaviour-neutral on the window (0 / 34), R6-4's rule
+  ("the order tripwire raises so the shape is seen"), its own small commit + byte-identical `/compare` before S3; the
+  MS side (a cycle established on the previous cycle's CTS candle; a BOS after its CTS) goes to the S5 round with F16;
+  (c) **fix MS before S3** — its own plan (a new cycle's CTS strictly beyond the previous cycle's / its BOS before its
+  CTS); the revamp waits; (d) **re-order the dispatch** — hold a CTS_ESTABLISHED until its BOS_CONFIRMED arrives
+  (changes the pinned processing order, LANDMINES "Event Sort Order Is a Dispatch Invariant"). Recommended: (b).
+
 ### Round 7 (2026-10-07, session 2 — four follow-ups to round 6) — ANSWERED 2026-10-07 (§6 R7-1 … R7-4)
 
 - **R7-1** R6-1b was a sub-item of R6-1 — does R6-1's "ok" cover it (fix both latent single quirks in S3b)?
@@ -639,6 +662,13 @@ The commit of these spec docs waits for the session's end (the user: "Let’s ho
 | R7-3 | The label of a single the limit forces is `via: "cross_fib_limit"` (one neutral value; `cross_fib_limit_source` / `_cycle` say which case) | "3. neutral sounds good" |
 | R7-4 | PLAN_I §9 APPROVED for the build (session 3 starts with S1 + S2) | "4. sounds good." |
 
+**2026-10-08 (round 8 — the session-4 F14 random-tail search, §5; verbatim in the spec copy, part 10)**
+
+| ID | Decision | The user's words |
+|---|---|---|
+| R8-1 | (a): F16 is PARKED to the S5 session — recorded here + the register; S3 → S3b → S4 built as planned (none touches MS or the event order); F16 opens the S5 session's first round (an MS fix vs which order wins) | "(a) Park to S5 (Recommended)" |
+| R8-2 | (b): the downstream dispatch RAISES `FibEventOrderError` on a CTS_ESTABLISHED whose cycle's BOS_CONFIRMED was not handled first (it dropped it silently) — stage S2b, its own commit + byte-identical `/compare` before S3 (§9.4); the MS side of F17 (a cycle established on the previous cycle's CTS candle; a BOS after its CTS) goes to the S5 round with F16 | "(b) Make the skip loud (Recommended)" |
+
 **Corrected reading (round 1, for the record):** the user's I1 note — "in order for the first confluence of parent
 cycle 0 to trigger, the reversal needs to have happened first. Thus the unique sub for any parent cycle id 0 first
 confluence trigger will not be that unique sub’s first trigger" — no M15 trigger comes from an H1 (main) reversal: a
@@ -694,6 +724,12 @@ The rule ("parent cycle 0 → no reference") covers the case either way.
 - 2026-10-08 — session 3: **S2 LANDED** (§9.10): the cross-fib limit fields stamped, not applied — format-only = §9.5 a
   (27 / 27 CSVs == V2; 24 fib hovers + the limit line); the hover APPROVED as rendered (§6 R6-7; spec copy part 9);
   the landing review's M1 → D2 / §1.2 amended (main's cross-check reads the OPEN WATCH, not the applied candidate).
+- 2026-10-08 — session 4: the F14 random-tail search (§9.10): the S2 tripwire's shape 0 hits; a new MS mechanism
+  found (§9.2 F16 — a CTS confirmed with an anchor after its confirmation candle; emission ≠ processing order) →
+  round 8 opened (§5 R8-1). R8-1 answered (a): F16 parked to the S5 session (register D.1 item 2). A 60k WAVES run
+  then found the F14 (1) shape (6 trials) — hidden from the S2 tripwire because the dispatch silently skips an EST whose
+  BOS sorts after it (§9.2 F17) → R8-2 opened; answered (b) → **S2b LANDED** (§9.10): the skip raises
+  `FibEventOrderError`, byte-identical.
 
 ## 8. Handoff to session 2 — the implementation plan (from a fresh code audit + a cold review)
 
@@ -883,6 +919,41 @@ convention); M15 indices entity-absolute unless a sub's slice-local frame is nam
   is fed only at finalize, 518–520). When cycle T's single activates late (on a CTS_UPDATED at u > T's EST), cycle
   T−1's fib ends at u although cycle T−1 ended at T's EST. Today reachable through the `cross_failed` single; S3 / S4
   make it reachable for every single past the limit. Window: 0.
+- **F16 — MS confirms a CTS with an anchor AFTER its confirmation candle (the range back-fill look-ahead; found by the
+  session-4 F14 search, 2026-10-08, §9.10; LATENT — 0 on the window) (→ R8-1).** `_step_anchor`'s no-winner branch
+  confirms a range candidate at `i` (confirm `c`), back-fills `[i, min(c, D))` — the raw CTS update included
+  (`freeze_range` freezes only the range) — and returns `i + 1`: the next anchors re-step those candles with the state
+  already advanced to `c − 1`. A pullback pattern applying at `k` inside that window confirms the CTS MS holds, whose
+  anchor `a` (raw-updated in the back-fill) can lie in `(k, c)`. MS emits `CTS_UPDATED`(raw, `a`) BEFORE
+  `CTS_CONFIRMED`(idx `k`, anchor `a`); `processing_order_key` puts the confirmation first (`k < a`). Consequences:
+  (i) TODAY's downstream locks the fib at the CTS known at `k` and drops the later update — the drawn fib's 100 % sits
+  at an earlier candle than MS's confirmed CTS (the CTS_CONFIRMED price the KL CTS zone and the next cycle's cross
+  walk `_cts_by_cycle` read); cycle ≥ 1 in both modes, cycle 0 in the sub mode (h1 mode draws no sid-0 cycle-0 fib);
+  (ii) S5 (D5): the at-emit tracker sees the update first, and D5's end-of-run order tripwire (handled sequence ==
+  `processing_order_key` order) RAISES. NOT shape (1): the S2 tripwire (`FibEventOrderError`) never fires on it.
+  Real-candle example (NZD_USD M15, exact candles, a bearish run from 2025-03-24 10:30 UTC, BOS 0.5748): the range
+  candidate 12:45 confirmed at 14:00; its back-fill raw-updated the CTS to 13:45 (low 0.57191); a later re-stepped
+  anchor's pullback (`one_maru_continuous`) applied at 13:30 and confirmed the CTS with anchor 13:45; the cross_cycle
+  fib locks at 13:00 (0.5723) in processing order, at 13:45 (0.57191) in emission order. Every search hit (6) is this
+  mechanism: a pullback `CTS_CONFIRMED` at `k` inside a `RANGE_STARTED`'s `[start_idx, confirm_idx)` whose CTS
+  anchor is the range's `cts_anchor_idx` > `k`. Window: 0 (the 30 exported CTS_CONFIRMED rows; V5's sequence check).
+- **F17 — the downstream SILENTLY SKIPS a CTS_ESTABLISHED whose cycle's BOS anchor lies after its CTS anchor — and that
+  hides the F14 (1) shape from the S2 tripwire (found by the session-4 60k WAVES run, 2026-10-08, §9.10; LATENT — 0 / 34
+  on the window, 0 / 4,800 REAL slices) (→ R8-2).** The orchestrator loop hands a CTS_ESTABLISHED to the tracker only
+  if its cycle's BOS_CONFIRMED was handled first (`if key in bos_anchor_by_cycle`, `orchestrator.py`), else drops it
+  without a trace; `processing_order_key` puts BOS_CONFIRMED at its BOS anchor and CTS_ESTABLISHED at its CTS anchor,
+  so a cycle whose BOS anchor is AFTER its CTS anchor loses its establishment — no fib record for that cycle at all
+  (verified both modes, trial WAVES 413 / 1074), and the order tripwire behind it is never reached. MS's guard only
+  asserts BOS anchor ≤ its moment (`_emit_bos_confirmed`). Two sources measured: (i) the F14 (1) shape itself — cycle
+  T−1 confirmed by proximity at the back-fill candle `k` of cycle T's breakout, the breakout's pattern extreme = cycle
+  T−1's own CTS candle `a < k` (no candle of the span goes beyond it: cycle T is established on the PREVIOUS cycle's
+  CTS candle; no active range — the `cts_frozen` WARNING "detection threshold None" fired on each), and cycle T's BOS
+  = the proximity candle `k`; 6 / 60,000 (e.g. WAVES 413 / 1074, M15, sd −1: cycle 1's CTS raw-updated to 46,
+  cycle 2's breakout pattern 44 → 49, cycle 1 confirmed by proximity at 47, cycle 2 established at 49 with CTS
+  anchor 46, BOS anchor 47 0.5785); (ii) a breakout span whose deepest pullback candle (the new BOS) comes after its
+  extreme (e.g. WAVES 301 / 572, H1, sd −1: cycle 1 established at 45, CTS anchor 43 low 0.57645, BOS anchor 44 high
+  0.60401 — a synthetic 250-pip wick); 8 ESTs (3 / 7,200 + 5 / 60,000). Every shape-(1) case the search produced was
+  hidden this way (BOS(T) at `k` > `a`), so the S2 tripwire has not fired through the dispatch on any trial.
 
 ### 9.3 Design
 
@@ -1026,6 +1097,7 @@ id ever re-used mid-sweep) — R6-3 (viii).
 |---|---|---|---|
 | **S1** | `sub_id` numbered at the lifecycle start (R4-2, R4-4) — contract | D4 | **byte-identical**: 27 / 27 CSVs, the 3 figures equal (`cmp_fig_full.py`); only run.log's sweep lines change |
 | **S2** | the new fields, NOT applied (`cts_frozen`; `cross_fib_limit_*` + main `started_by` on fib meta; the hover line, R6-7 — rendered for the user's review before S2 lands) + the behaviour-neutral tripwires (F14 order, D3 WARNING) | D2, D3, D1's stamping | §9.5 a |
+| **S2b** (R8-2) | the dispatch's silent skip made loud (F17): a CTS_ESTABLISHED before its cycle's BOS_CONFIRMED raises `FibEventOrderError` | `orchestrator._run_downstream_pipeline`'s loop | **byte-identical** (0 / 34 ESTs on the window sort before their BOS): 27 / 27 CSVs == S2's, 3 / 3 figures |
 | **S3** | the limit APPLIED to subs (drawn fib; MS unchanged) | D1's `_cross_allowed` + the past-limit single in the sub handlers; limits REQUIRED | §9.5 b |
 | **S3b** (R6-1b) | the single's two latent quirks fixed (F5, F15) | `_m15_cross_check` 2342–2346; `_activate_fib`'s prev-cycle terminal | 0 cells on the window (F5 / F15: 0 occurrences) |
 | **S4** | main joins the one path (R6-5: Q4, Q5, Q6, I2, I5, Q8, main's P = `bos_frozen`) | D1 (h1 deleted), the H1 call, the rule-3 migration | §9.5 c |
@@ -1260,3 +1332,38 @@ hover shown, e.g. H1 sid 0 cycle 1: `… life=[652, 902] reversal` / `IP 3A.iii 
   KILLED. Fixture realism notes folded as comments (synthetic shapes named).
 - Open (beyond S2): the order tripwire now RAISES in the downstream on any window with the F14 shape — the planned
   random-tail search for it (D5: "before S5") matters from S2 on; proposed for the start of the S3 session.
+
+**Session 4 (2026-10-08) — the F14 random-tail search** (`plan_e_inputs/review_scripts/random_tail_search.py`,
+extended: an `f14` record on every trial of every stream — shape (1) = the S2 tripwire replayed on
+`processing_order_key` order, shape (2) = fib-handled events whose emission order ≠ that order, the shape-(1)
+precondition = a proximity CTS_CONFIRMED inside the next cycle's breakout back-fill; two new streams: WAVES (synthetic
+impulse / pullback / chop legs, pullbacks often ending in a zone-touching wick; H1 / M15) and REAL (random 150–900
+candle slices of a year of NZD_USD H1 / M15 — `%TEMP%/pi/f14/NZD_USD_<tf>_2025.csv`, fetched 2025-01-01 →
+2026-01-20 — from the slice's sd-side extreme in its first 1–29 candles, half with a ≤ 1-pip jitter)). Results: 0
+errors; **shape (1) 0** (WAVES 7,200: cycles ≥ 2 in 753 trials, 1,198 proximity confirmations, the precondition 9 ×
+— each EST's anchor its apply candle, after the confirmation; REAL 4,800: cycles ≥ 2 in 614, 443 proximity
+confirmations, the precondition 0); **shape (2) 5** (WAVES 2, REAL 3) + 1 in the 690-trial yield runs = **F16**
+(§9.2; one mechanism, all 6). → round 8 (R8-1), OPEN; S3 not started. R8-1 answered (a) — F16 parked to S5.
+A further 60,000 WAVES trials (seeds 401–424 × 2,500): 0 errors; cycles ≥ 2 in 5,940; 9,598 proximity confirmations;
+the shape-(1) precondition 121 × in 118 trials; shape (2) 42 trials (36 the F16 kind — 38 pairs) — and the other 6 the F14 (1)
+shape itself (CTS_CONFIRMED(T−1) emitted before an EST(T) whose anchor precedes it), which the tripwire replay did NOT
+flag: the dispatch had skipped those ESTs (their BOS sorts after them) → **F17** (§9.2). With a `skip` counter (an
+EST whose cycle's BOS has not been handled — the orchestrator drops it) all three streams re-run (deterministic, the
+same counts): REAL 0 / 4,800; WAVES 3 ESTs / 7,200; WAVES-B 11 ESTs in 10 trials / 60,000 (6 the hidden shape 1). →
+R8-2, OPEN → answered (b) (§6).
+Tools: `plan_i_inputs/f14_order_effect.py` (a trial's fib records in processing vs emission order, both modes) and
+`plan_i_inputs/f14_slice.py` (MS on an exact real slice, the F16 example's times) — inputs to the S5 round.
+
+**S2b — the dispatch's silent skip made loud (F17, R8-2) — LANDED** (its own commit; local, not pushed).
+- Code: `orchestrator._run_downstream_pipeline` — a CTS_ESTABLISHED whose cycle's BOS_CONFIRMED has not been handled
+  raises `FibEventOrderError` ("… handled before its cycle's BOS_CONFIRMED") instead of being dropped; the error's
+  docstring, GLOSSARY, LANDMINES "Event Sort Order Is a Dispatch Invariant" (+ the parked MS side).
+- `/compare` vs S2's outputs (`%TEMP%/pi/S2`, `cmp_fig_full.py`): **byte-identical** — 27 / 27 CSVs md5, 3 / 3 figures
+  (full JSON) = the prediction; fetch gate PASS; replay 44.5 s wall; the log grep = the 4 unresolved + 2
+  degenerate-cycle lines as before.
+- Tests 1359 → 1364 (+5, `test_plan_i_s2b_dispatch_order.py`): the raise on a constructed BOS-after-CTS stream (and its
+  processing order), the BOS-first tie / before cases pass, the `RuntimeError` class, and the F14 (1) stream of a REAL
+  MS run (WAVES 413 / 1074's 50 synthetic candles: cycle 2 on cycle 1's CTS candle 46, BOS 47, confirmation 47 —
+  both modes raise). The full suite passed with the raise before the new tests (1359): no fixture fed an
+  establishment before its BOS. Mutant (the raise → the old silent skip): 2 / 2 relevant pins fail. No separate
+  landing review (a ~10-line change): folded into S3's.

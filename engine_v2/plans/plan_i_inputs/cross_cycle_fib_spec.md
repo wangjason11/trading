@@ -10,6 +10,7 @@
 > previous-sub rule supersedes [Q1] (bracket below marked). **Rounds 3–5 (2026-10-07):** parts 4–6
 > (verbatim, at the end). **Round 6 (2026-10-07, session 2 — the questions the code audit raised):** part 7. **Round 7 (the four
 > follow-ups; the plan approved):** part 8. **Session 3 (2026-10-08, the build — the S2 hover, R6-7):** part 9.
+> **Session 4 (2026-10-08, the F14 random-tail search — round 8):** part 10.
 
 ---
 
@@ -211,3 +212,19 @@ Anything else you want to bring up on your end? Are we ready to start the build?
 > full rendered hover: PLAN_H's IP line sits directly above the new limit line), then:
 
 Sounds good no more other questions. (a) approve as is, commit S2
+
+---
+
+## Part 10 — session 4: round 8, the F14 random-tail search (2026-10-08, VERBATIM)
+
+> Decision IDs: `../PLAN_I_cross_cycle_fib_revamp.md` §6 R8-1 (F16 — MS confirms a CTS with an anchor after its
+> confirmation candle; the options: (a) park to S5, (b) fix MS first, (c) emission order wins, (d) processing order
+> wins). The user's answer (a multiple-choice selection):
+
+R8-1: (a) Park to S5 (Recommended)
+
+> Then R8-2 (F17 — the downstream silently skips a CTS_ESTABLISHED whose BOS anchor lies after its CTS anchor, hiding
+> the F14 (1) shape from the S2 tripwire; the options: (a) park with F16, (b) make the skip loud, (c) fix MS first,
+> (d) re-order the dispatch). The user's answer (a multiple-choice selection):
+
+R8-2: (b) Make the skip loud (Recommended)

@@ -46,7 +46,12 @@ class FibEventOrderError(RuntimeError):
     confirmation in EMISSION order; the downstream consumes `processing_order_key` order (CTS_ESTABLISHED at its
     ANCHOR), so a T−1 confirmation inside T's [anchor, moment) inverts them — the cross walk would miss T−1 and
     its confirmation would reset T's phase. 0 / 34 on the reference window. A `RuntimeError`, so a sub
-    geometry's `except (ValueError, IndexError)` never swallows it."""
+    geometry's `except (ValueError, IndexError)` never swallows it.
+
+    Also raised by the downstream dispatch (`orchestrator._run_downstream_pipeline`) for a CTS_ESTABLISHED handled
+    before its own cycle's BOS_CONFIRMED (PLAN_I §9.2 F17, R8-2; it used to be dropped silently): a cycle whose BOS
+    anchor lies after its CTS anchor — which every F14 (1) case found by the random-tail search was, so this is the
+    check that sees that shape through the dispatch."""
 
 
 @dataclass(frozen=True)
