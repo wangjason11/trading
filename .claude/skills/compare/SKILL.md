@@ -434,7 +434,7 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_imbalance_instances.csv` |
 | `*_fib_lifecycle.csv` — no `fib_mode` column since PLAN_I S6 (2026-10-09): against an older save (S_J `20261009_013718_708a8d9` and before) diff the 3 fib CSVs with `engine_v2/plans/plan_i_inputs/cmp_s6_fib_mode.py BASE CUR` (positional `cmp_save.py` shifts the `meta` cell); the `ic_ref_*` meta keys since PLAN_K landing A |
 
-**Save-format boundary — PLAN_K landing A (2026-10-09; S_K_A is the first save with it):** a save up to S_S6
+**Save-format boundary — PLAN_K landing A (2026-10-09; S_K_A `20261009_112137_02e9381` is the first save with it):** a save up to S_S6
 `20261009_020650_5f6bae3` lacks the IP CSVs' `ic_ref_reason` column, the fib meta's `ic_ref_price` / `ic_ref_source` /
 `ic_ref_break_pattern_anchor_idx` / `ic_ref_break_confirmed_idx` and the reversal `STATE_CHANGED`'s
 `pattern_anchor_idx` — up to 9 CSVs (the 3 structure-events, 3 fib-lifecycle, 3 ip-candidates; 8 on the reference

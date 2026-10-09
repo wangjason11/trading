@@ -199,7 +199,8 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
   broke it (+ a new cross-limit breakout watch). Rule DECIDED; its plan `engine_v2/plans/PLAN_K_ic_reference_condition.md`
   (cold-reviewed, K-Q1…K-Q8 answered); **landing A BUILT 2026-10-09** — computed + exported (the IP CSVs'
   `ic_ref_reason`, the fib meta `ic_ref_*` + hover), the pick unchanged (`poi_zones._IC_REFERENCE_FILTER = False`);
-  POI_ZONES_SPEC §3.2 rewritten (the old tables → its Appendix A). Next: the variant replay V, then landing B (the
+  POI_ZONES_SPEC §3.2 rewritten (the old tables → its Appendix A); saved S_K_A `20261009_112137_02e9381`. Next: the
+  landing review, the variant replay V, then landing B (the
   switch).
 - **The agreed direction for wave candles + WVMI** (PLAN_H Q-W) — item 1 gives the IP legs the *agreed direction*
   (candle and volume direction agree; one at 0 → the other decides; both 0 = a true doji). Wave candles and WVMI keep

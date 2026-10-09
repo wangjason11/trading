@@ -3,7 +3,8 @@
 **Status: DRAFTED 2026-10-09; COLD-REVIEWED 2026-10-09 (§9: 2 read-only lenses, 526,601 subagent tokens — no
 BLOCKER on fidelity, 5 MAJOR on the code paths, every finding folded below); the user's questions §8 (K-Q1 … K-Q8)
 — ALL ANSWERED 2026-10-09 (§8); landing A BUILT 2026-10-09 (§11.1: `/compare` vs S_S6 == §5, the §6 tests, the
-mutation run, the docs); next: S_K_A, then the variant replay V and landing B.** The rule is the user's and is DECIDED: canonical text `PLAN_H_institutional_pattern_poi.md` §8.9
+mutation run, the docs; source commit `02e9381`); **S_K_A SAVED** `artifacts/commits/week9-entries-decisions/20261009_112137_02e9381` (= `LATEST_<branch>`, save
+commit `dc116b0`) — B's baseline; next: the landing review (2 lenses), the variant replay V, landing B.** The rule is the user's and is DECIDED: canonical text `PLAN_H_institutional_pattern_poi.md` §8.9
 "RX1" (the rule as decided) + §6 RX1-B, RX1-1 … RX1-4, RX1-T, RX1-W1 … W3, RX1-C1, RX1-E; the user's write-up verbatim
 `plan_h_inputs/ic_reference_conditions_spec.md`. This file is HOW it is built: the code audit, the design, two
 landings with exact predictions, the tests, the cost. Baseline: **S_S6**
@@ -338,7 +339,7 @@ by me before filing (✓).
 
 ## 11. Build record
 
-### 11.1 Landing A — code + the migration (2026-10-09; uncommitted at this point)
+### 11.1 Landing A — code + the migration (2026-10-09; committed `02e9381`, saved S_K_A `20261009_112137_02e9381`)
 
 - **Built as planned** (A1–A20): `event_fields.pattern_anchor_idx` reads the `STATE_CHANGED(to=reversal)` key (any
   other STATE_CHANGED still raises); MS stamps `pattern_anchor_idx = ev.start_idx` at `_apply_pattern_at_apply_idx`'s
@@ -410,6 +411,10 @@ by me before filing (✓).
   reference built at the read's moment), H3 (the hover on a cross — cycle `a−1` of the START cycle), F07 (`T` = the
   target, not the cross's start — unreachable in production, pinned on a probe as the rule's definition). Final: 87
   KILLED + 2 equivalent.
+- **The save:** `/commit-save` → S_K_A `artifacts/commits/week9-entries-decisions/20261009_112137_02e9381` (save commit `dc116b0`, cherry-picked onto
+  `artifacts-trunk`); a fresh replay (47 s wall), FETCH GATE PASS, the grep unchanged (the 2 `parent_tables` WARNINGs,
+  the 4 UNRESOLVED `degenerate_parent_cycle` rows; pandas' `FutureWarning` at `market_structure.py` `fillna` — untouched
+  code, in the September logs too), `cmp_k_landing_a.py` vs S_S6 on it: OK.
 - **Docs (landing A):** POI_ZONES_SPEC §3 intro / §3.2 rewritten (the Week-7 tables → its new Appendix A) / §3.4 /
   §3.5 / data flow / files / status; CROSS_CYCLE_FIB_SPEC §3 (the inputs: the anchor table, the reversal break +
   `localized`, the watch, the exports) / §6 / §8; MARKET_STRUCTURE_SPEC (the reversal event's key; the refresh's
