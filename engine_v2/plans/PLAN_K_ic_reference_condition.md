@@ -428,3 +428,5 @@ by me before filing (✓).
 - 2026-10-09 — drafted from the code audit (HEAD `2a013d4`) + the decided-rule census.
 - 2026-10-09 — cold-reviewed (§9, 526,601 tokens): every finding folded (A4 / A11 / A14 / A16 rewritten, A19 / A20
   added; §3.3–§3.6; §5 counts; §6 tests; §7 resized); K-Q1 rewritten, K-Q5 … K-Q8 added.
+- 2026-10-09 — landing A built (`02e9381`; `/compare` vs S_S6 == §5; 62 tests; mutation 87 + 2 equivalent) and saved
+  S_K_A `20261009_112137_02e9381` on the user's "yes commit and commit-save" (§11.1). Next: A's landing review, V, B.
