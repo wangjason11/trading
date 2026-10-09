@@ -926,12 +926,20 @@ class MarketStructure:
 
             if range_confirmed:
                 min_d = D if confirm_idx is None else min(confirm_idx, D)
+                # The frozen look-ahead over [i, min_d) decides one thing: whether a reversal ends the structure
+                # inside it (terminal, kept). Otherwise its effects are UNDONE before the range starts (PLAN_J J1,
+                # F16): the step returns i + 1 and those candles are stepped again as anchors — each must read the
+                # state as of itself (the CTS, a confirmation, the BOS barrier / a watch, the range's bounds), not
+                # the state the look-ahead reached. The range confirmed at `confirm_idx` is active from `i` (the
+                # documented look-ahead of the range label) but starts from the state as of `i`.
+                look_ahead = self._snapshot_state(i, min_d)
                 for k in range(i, min_d):
                     self._replay_step_no_patterns(k, freeze_range=True)
                     # Terminal inside the range back-fill: no finalize, no re-step of i
                     # (see the winner back-fill above).
                     if self.state.state == MarketState.REVERSAL:
                         return k + 1
+                self._restore_state(look_ahead)
 
                 self._finalize_range_candidate_offline(i)
 
@@ -1530,12 +1538,16 @@ class MarketStructure:
             saved_cts_event = st.cts_event
 
             min_d = D if confirm_idx is None else min(confirm_idx, D)
+            # As `_step_anchor`'s no-winner range back-fill (PLAN_J J1, F16): kept only when a reversal ends the
+            # structure inside it; else undone — `_step_anchor` returns i + 1 and those candles are stepped again.
+            look_ahead = self._snapshot_state(i, min_d)
             for k in range(i, min_d):
                 self._replay_step_no_patterns(k, freeze_range=True)
                 # Terminal inside the back-fill: no finalize (`_step_anchor` then
                 # ends the step — see its winner back-fill).
                 if st.state == MarketState.REVERSAL:
                     return
+            self._restore_state(look_ahead)
 
             self._finalize_range_candidate_offline(i)
 

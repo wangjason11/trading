@@ -244,7 +244,7 @@ the downstream's one logic (CROSS_CYCLE_FIB_SPEC §8) — read at each refresh a
    "none")`); one fill constant (`FIB_FILL_THRESHOLD`) for both trackers and the IP pick.
 4. **The end-of-run order tripwire stays a raise.** `check_processing_order()` (the last step of `run()`) raises
    `FibEventOrderError` when the emission order the tracker saw is not `processing_order_key` order — the F16 shape
-   (a CTS confirmed with an anchor at or after its confirmation candle) and the F17 (i) / F14 (1) shape (a cycle
+   (a CTS confirmed with an anchor at or after its confirmation candle — MS no longer produces it since PLAN_J J1) and the F17 (i) / F14 (1) shape (a cycle
    established with an anchor before the previous cycle's confirmation — MS no longer produces it since PLAN_J J2); F17 (ii) (a BOS anchor after its own CTS
    anchor) does not trip MS — only the downstream dispatch (MS no longer produces it since PLAN_J J3 — the BOS window ends at the CTS anchor). 0 on the reference window and on 400 random real slices
    (S5 landing review). It runs in EVERY MS run with a tracker — main, sub geometry AND the probe's Phase 2 (whose
@@ -686,7 +686,8 @@ the swapped window) went with PLAN_J J2 (2026-10-09: a breakout must break the p
 apply, else it is VOID). The MS side was decided in PLAN_I's S5 round (R9-1 / R9-2, register D.1 item 2):
 the MS fix plan `plans/PLAN_J_ms_restep_state_and_new_cycle_break.md`, with F16 (a CTS confirmed with an anchor after its confirmation candle — emission order != this sort;
 the drawn fib locks at the earlier anchor); until it lands, MS's own end-of-run order tripwire (S5, "MS's POI inner IS
-the drawn fib's decision" above) stops an F16 / F17 (i) run before the dispatch sees it. Pins
+the drawn fib's decision" above) stops an F16 / F17 (i) run before the dispatch sees it — none since PLAN_J
+(J1 / J2 / J3 landed 2026-10-09; 0 trips, 0 skips in its 72,000-trial corpus). Pins
 `tests/test_plan_i_s2b_dispatch_order.py`, `tests/test_plan_i_s5_ms_reads_the_fib.py`.
 
 ---
@@ -1400,6 +1401,20 @@ replay `/compare`, never tests alone. See memory
 `project_ms_optimization_opportunity.md` UPDATE 2026-06-20c.
 
 ---
+
+## A Range Back-fill's Look-ahead Is Undone — Snapshot Everything the Frozen Step Mutates (PLAN_J J1, 2026-10-09)
+
+**Rule:** the candles of a non-terminal RANGE back-fill (`_step_anchor`'s no-winner branch, `_post_apply_range_check`)
+are stepped again as anchors, so the back-fill's effects must not reach them: `_snapshot_state` before, `_restore_state`
+after (the state IN PLACE — callers alias `self.state` —, the events truncated, the embedded FibTracker in place with
+its handled events kept BY IDENTITY, the output rows). A void breakout winner (PLAN_J J2) uses the same pair. **Any
+NEW mutable MarketStructure attribute that `_replay_step_no_patterns` (or anything it calls) writes must be added to
+`_snapshot_state`** — an attribute outside `self.state` / `self.events` / the tracker / `self._out` would silently leak
+the look-ahead again (F16: a pullback re-stepped at 13:30 confirmed a CTS anchored at 13:45 — emission order !=
+processing order; S5's tripwire raised). The terminal case is the exception: a reversal inside the back-fill ends the
+structure, the back-fill's state stays ("A Back-fill Must Stop at a Reversal" below). Pins
+`tests/test_plan_i_s5_ms_reads_the_fib.py::test_the_f16_candles_confirm_the_cts_known_at_the_confirmation`,
+`tests/test_ms_stop_after_cts.py::TestQuiescence`, `tests/test_plan_j_j2_new_cycle_break.py` (the round trip).
 
 ## A Back-fill Must Stop at a Reversal (FIXED 2026-09-28)
 

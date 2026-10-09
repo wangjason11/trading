@@ -191,9 +191,9 @@ _FIRST_SEGMENT_EVENTS = [
     ('CTS_UPDATED', 12),
     ('CTS_UPDATED', 13),
     ('CTS_UPDATED', 14),
-    ('CTS_UPDATED', 15),
     ('RANGE_STARTED', 18),
     ('STATE_CHANGED', 18),
+    ('CTS_UPDATED', 15),   # PLAN_J J1: emitted by 15's own step, after the range candidate 15 (confirmed 18) started
     ('RANGE_UPDATED', 16),
     ('RANGE_UPDATED', 17),
     ('CTS_UPDATED', 19),

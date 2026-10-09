@@ -381,9 +381,10 @@ reader is that check (`_maybe_confirm_cts_via_proximity` →
 `_check_proximity_at_candle`). At the end of every run MS calls the tracker's
 `check_processing_order()`: it raises `FibEventOrderError` when the emission
 order it was fed is not the downstream's `processing_order_key` order (the F16
-and F17 (i) shapes, PLAN_I §9.2 — F17 (ii) trips only the downstream dispatch, and is no longer produced since
-PLAN_J J3 ("BOS_n+1 derivation rule"); 0
-on the reference window; the MS fix follows S5, PLAN_I R9-1 / R9-2). It runs in
+and F17 (i) shapes, PLAN_I §9.2 — F17 (ii) trips only the downstream dispatch). MS produces none of them since
+PLAN_J (J1 "Look-ahead windows without rewinds", J2 "A new cycle must break the threshold at its apply", J3
+"BOS_n+1 derivation rule"; 0 trips / 0 dispatch skips in its 72,000-trial random-tail corpus) — the tripwires stay
+as guards; 0 on the reference window. It runs in
 the probe's Phase-2 MS too (CROSS_CYCLE_FIB_SPEC §8). Canonical: `zones/CROSS_CYCLE_FIB_SPEC.md` §8; the read
 MS ran until S5 (the Scenario-2 selector, the cycle-0 snapshot, the M1
 divergence) is that spec's Appendix A, part 2.
@@ -514,11 +515,24 @@ The engine advances so that after a successful evaluation:
 
 ## Look-ahead windows without rewinds
 
-Range evaluation uses a look-ahead window (min/max K): a candle is marked a range-start candidate, later candles
-decide range vs breakout, and the candles between the candidate and the decision are processed with the thresholds
-known at the decision. MS does this in ONE forward pass: `_step_anchor` back-fills those candles offline
-(`_replay_step_no_patterns(k, freeze_range=True)`) before acting at the decision candle, then continues sequentially
-(pattern confirmation windows work the same way). It never rewinds: the original design's "seed snapshot → rewind to
+Range evaluation uses a look-ahead window (min/max K): a candle `i` is marked a range-start candidate, a later candle
+`c` decides range vs breakout (the label's `confirm_idx`), and the range confirmed at `c` is active from `i` — the
+range label's look-ahead. MS does this in ONE forward pass: `_step_anchor` back-fills `[i, min(c, D))` offline
+(`_replay_step_no_patterns(k, freeze_range=True)`) before starting the range, then continues at `i + 1` — those candles
+are stepped AGAIN as anchors (pattern confirmation windows work the same way; a winner's back-fill is NOT re-stepped).
+**Since PLAN_J J1 (2026-10-09; PLAN_I R9-1, F16) a range back-fill's effects are undone** (both sites — this one and
+`_post_apply_range_check`'s `[apply, …)`): MS snapshots the state, the events, the embedded FibTracker and the
+output rows before it (`_snapshot_state`) and restores them after it (`_restore_state`) unless a reversal ended the
+structure inside it (terminal, kept — "Reversal inside a back-fill"). So a re-stepped candle reads the state AS OF
+ITSELF — the CTS, a confirmation, the BOS barrier / a watch, and the range's bounds: the range starts with the CTS as
+of `i` and each re-stepped candle widens it (user decision PLAN_J J1-Q1 (a)). Until J1 the re-steps read the state the
+look-ahead had reached: a pullback re-stepped at `k` confirmed a CTS anchored at a candle after `k` (F16: NZD_USD M15
+2025-03-24 — the pullback at 13:30 confirmed the 13:45 low; now the 13:00 CTS, 0.5723), a proximity confirmation /
+a watch inside the window reached earlier candles, and the range's sd-side bound was seeded with the CTS the
+look-ahead reached (H1 2025-12-03 20:00: the range top 0.57774 = the 21:00 high; now 0.57766 until 21:00). Reference
+window: 4 CSVs (the range events: `RANGE_STARTED`'s meta CTS, + `RANGE_UPDATED`s, one sub range break at M15
+2026-01-13 16:15; the H1 per-row CTS / range columns; event ROW ORDER — a raw `CTS_UPDATED` is now emitted by its own
+candle's step, after the range's `RANGE_STARTED`) and the H1 range band; KL / POI / fib / WVMI unchanged (PLAN_J §2). It never rewinds: the original design's "seed snapshot → rewind to
 the start → replay → resume at decision + 1" survived only as the reversal-watch expiry's rewind to `anchor + 1`,
 unreachable since F3b and removed 2026-09-29 ("Expiry inside a step" above). A VOID breakout winner (PLAN_J J2, "A new
 cycle must break the threshold at its apply") undoes its own frozen back-fill (`_snapshot_state` / `_restore_state`)
@@ -598,7 +612,9 @@ the first anchor NOT processed because of the stop (`None` = no early stop:
 the count was never reached, or the N-th CTS landed on the last in-bound step
 — then the run simply ends at its bound; "stopped early" is read from
 `early_stop_idx`, never from the count). The check runs after `_step_anchor`
-returns. Cost of "quiescent": a watch open at the N-th CTS resolves within its
+returns, on the state as of the last stepped candle (since PLAN_J J1 a range back-fill's look-ahead is undone before
+the check — the probe fixture `_make_watch_over_second_cts_data` now stops at 11, before candle 11's watch; 0 waits
+of the gate in 3,300 random tails with the option, PLAN_J §9). Cost of "quiescent": a watch open at the N-th CTS resolves within its
 window (its pending applies → reversal, the loop ends; or a new cycle ends it)
 — a few extra candles, not asserted `<= 5`.
 
@@ -608,8 +624,8 @@ output rows before `early_stop_idx` are that run's rows. The last step's range
 back-fill may have stamped events/rows up to `range_max_k` past
 `early_stop_idx` (a range candidate at the apply candle is stamped at its label
 `confirm_idx`, exactly as in the unbounded run — FC(0,0) on the reference
-window stops at 1021 with `RANGE_STARTED@1022`); rows from
-`early_stop_idx + range_max_k` on are never written. The `end_idx` bound and
+window stops at 1021 with `RANGE_STARTED@1022`); since PLAN_J J1 the back-fill's
+own rows are undone, so rows from `early_stop_idx` on are never written. The `end_idx` bound and
 its post-run assert apply unchanged — the stop is in addition to the bound.
 Only consumer: `unified_probe._run_phase2` (the first_confluence probe,
 `N = 2`: the double-CTS rule is an early stop, finalize = the 2nd CTS's

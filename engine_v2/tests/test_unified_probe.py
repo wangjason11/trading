@@ -1120,7 +1120,18 @@ class TestFinalizeIdxTable:
         # Plan E E1 value pin: the pattern-realm anchor is the OMO's FIRST candle 9 (c0) —
         # not its end / apply candle 10 — and the reversal close-break candle is 11.
         assert cts_est[1].meta["pattern_anchor_idx"] == 9
-        rv = [(e.type, e.meta["pattern_anchor_idx"]) for e in retained[-1].events
+        # Since PLAN_J J1 the Phase-2 MS stops at 11 with the state as of 10 — candle 11's watch does not exist yet
+        # (it used to: the post-apply range back-fill had stepped 11 before the stop check).
+        assert retained[-1].early_stop_idx == 11
+        assert not [e for e in retained[-1].events if e.type in ("REVERSAL_WATCH_START", "REVERSAL_CANDIDATE")]
+        import contextlib
+        import io
+        from engine_v2.structure.structure_engine import _make_market_structure, _pip_size_from_pair
+        full = _make_market_structure(df.copy(), cross_fib_limit=NO_P, struct_direction=1, start_idx=0, structure_id=0,
+                                      timeframe="H1", pip_size=_pip_size_from_pair(df))
+        with contextlib.redirect_stdout(io.StringIO()):
+            full.run()
+        rv = [(e.type, e.meta["pattern_anchor_idx"]) for e in full.events
               if e.type in ("REVERSAL_WATCH_START", "REVERSAL_CANDIDATE")]
         assert rv == [("REVERSAL_WATCH_START", 11), ("REVERSAL_CANDIDATE", 11)]
         assert res.finalize_idx == int(cts_est[1].meta["confirmed_at"]) == 10

@@ -1037,7 +1037,8 @@ convention); M15 indices entity-absolute unless a sub's slice-local frame is nam
   of 08-05 13:15 (cycle 1, no fib, established); the POI is unaffected (it ends at the cycle table's end) — round 9,
   R9-3.
 - **F16 — MS confirms a CTS with an anchor AFTER its confirmation candle (the range back-fill look-ahead; found by the
-  session-4 F14 search, 2026-10-08, §9.10; LATENT — 0 on the window) (→ R8-1).** `_step_anchor`'s no-winner branch
+  session-4 F14 search, 2026-10-08, §9.10; LATENT — 0 on the window) (→ R8-1) — FIXED by PLAN_J J1 (2026-10-09: the
+  range back-fill's look-ahead is undone; the real slice confirms CTS 21 at 13:30).** `_step_anchor`'s no-winner branch
   confirms a range candidate at `i` (confirm `c`), back-fills `[i, min(c, D))` — the raw CTS update included
   (`freeze_range` freezes only the range) — and returns `i + 1`: the next anchors re-step those candles with the state
   already advanced to `c − 1`. A pullback pattern applying at `k` inside that window confirms the CTS MS holds, whose

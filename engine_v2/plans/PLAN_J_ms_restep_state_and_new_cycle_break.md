@@ -1,6 +1,6 @@
 # Plan J — MarketStructure: a re-stepped candle sees the state as of itself; a new cycle must break its threshold; the BOS window ends at the CTS anchor
 
-**Status: round 1 ANSWERED 2026-10-09 (§7: J1a, J2b; J3 per R9-2) — the build next (§6). No engine code changed yet.** Opened 2026-10-08 (session 6 of the cross-cycle fib
+**Status: BUILT 2026-10-09 — J3, J2, J1 landed (§9), each its own local commit; round 1 answered (§7: J1a, J2b; J3 per R9-2).** Opened 2026-10-08 (session 6 of the cross-cycle fib
 revamp) from PLAN_I's round 9: R9-1 (b) — "an MS fix for F16 as its own plan (a back-filled candle's re-step sees the
 state as of that candle — the pullback at 13:30 confirms the CTS known at 13:30)"; R9-2 (a) — "(i) a breakout
 establishing cycle T must break cycle T−1's confirmed `cts_threshold` as it stands at the apply (R3-1); (ii) the
@@ -195,7 +195,7 @@ dispatch raises on it since S2b — F17 (i) and (ii)); `sig` = every event in em
 | J1c | 0 | 6 / 0 / 0 | 10 / 3 / 0 | 32,063 / 3,847 / 3,597 | 0 |
 | J1b | **3** | **1,067 / 134** / 0 (NEW inversions: the back-fill still confirms while the CTS waits for the re-steps) | 10 / 3 / 0 | 30,214 / 3,629 / 3,548 | 12 / 0 / 2 |
 | J2b | 0 | 36 / 2 / 3 | 4 / 3 / 0 | 104 / 8 / 0 (the same 112 trials; 119 voids — a rescan can void again) | 2 / 0 / 0 |
-| J1a + J2 + J2b + J3 (the decided set) | (running — appended when in) | | | | |
+| **J1a + J2 + J2b + J3 (the decided set = the build)** | 0 | **0 / 0 / 0** | **0 / 0 / 0** | 32,094 / 3,850 / 3,597 | 5 / 0 / 2 — 119 voids, **0 J3 swaps**, 0 `cts_frozen` WARNINGs |
 
 **A structural signature** (`core_sig.py` + `core_report.py`: CTS_ESTABLISHED / BOS_CONFIRMED / CTS_CONFIRMED with
 their anchors and prices + the reversal, order-free; and the order-free multiset of every event) on a subset — WAVES-B
@@ -367,3 +367,40 @@ commit).
 - Docs: MARKET_STRUCTURE_SPEC ("A new cycle must break the threshold at its apply" — new; the `cts_phase` gate; "Look-
   ahead windows without rewinds"), LANDMINES (the dispatch entry, tripwire rule 4), GLOSSARY (FibEventOrderError),
   CROSS_CYCLE_FIB_SPEC (§1, §9), PLAN_I §9.2 F17.
+
+**J1 — a range back-fill's look-ahead is undone; a re-stepped candle reads the state as of itself (PLAN_I R9-1, F16;
+round 1 J1-Q1 (a) "J1a") — LANDED** (its own local commit).
+- Code: both range back-fill sites — `_step_anchor`'s no-winner branch and `_post_apply_range_check` — snapshot before
+  the frozen back-fill (`_snapshot_state(i, min_d)`, J2's helper) and restore after a NON-terminal one, before the
+  range's finalize (which therefore seeds the range with the CTS as of its candidate candle). A reversal inside the
+  back-fill keeps today's terminal path.
+- Prediction: the decided-set variant tree replayed on the window == the J1a-only replay (27 / 27 CSVs; 0 voids, 0
+  swaps) — so the J1a variant's cells (§2). `/compare` vs the J1a variant (`%TEMP%/pj/J1a_flat`): **27 / 27 CSVs md5,
+  3 / 3 figures (full JSON) — byte-identical = the prediction**; vs S5b: the 4 CSVs + the H1 sid-0 range band (2
+  traces + layout shapes) of §2; fetch gate PASS. Real slices: F16 — no tripwire, CONFIRMED anchor 21 at 13:30; F19 —
+  unchanged (`life=[22, 38] next_cycle`).
+- Rendered for review (`%TEMP%/pj/review/h1_range_before_S5b.png` / `h1_range_after_J1.png`, H1 2025-12-03 14:00 →
+  12-04 04:00): over the 20:00 candle the band's top is 0.57766 (was 0.57774 — 21:00's high), 0.8 pip, one candle;
+  from 21:00 on identical.
+- Corpus (the decided set, §3): 0 errors, 0 trips, 0 skips in 72,000 trials.
+- Tests 1440 (count unchanged): 9 re-derived from measured J1 runs — the F16 pin (raise → `test_the_f16_candles_confirm_the_cts_
+  known_at_the_confirmation`: CONF 23 / anchor 21 / 0.5723, no raw update after 23, thresholds 24 → 0.57191 and 25 →
+  0.57182, the range's meta CTS 19, the feed in processing order); bounded parity (the same 51 events; `CTS_UPDATED` 15
+  after the range candidate 15's `RANGE_STARTED` / `STATE_CHANGED` 18); the meta-key real run ×2 (no proximity range at
+  9 — the range candidate 9 is active when 9's own step confirms); `TestQuiescence` ×4 → 4 (the step at 9 returns 11
+  quiescent; the stop lands at 11 in every bound — the old bounded-window test merged in —, its events a prefix, row 11
+  untouched; the naive stop agrees; + the gate pinned directly); the probe's Phase 2 (stops at 11 with no watch; the watch 11 pinned on the unbounded run).
+  Quiescence-gate reachability: 0 waits in 3,300 random tails with `stop_after_cts_established=2` (and 0 in 1,500 on
+  the base tree — only the crafted fixture's look-ahead made it wait).
+- Mutation (solo, full suite): 5 + a no-op control — the no-winner restore removed / the post-apply restore removed /
+  the post-apply snapshot without rows: KILLED; the no-winner snapshot without rows: EQUIVALENT on every exercised path
+  (every candle of that window is re-stepped and its row rewritten; kept as the guard for a stop / reversal cutting
+  the re-steps short); a missing snapshot: KILLED (crash).
+- Docs: MARKET_STRUCTURE_SPEC ("Look-ahead windows without rewinds" rewritten, the early stop's check + rows, the
+  tripwire paragraph), LANDMINES (new "A Range Back-fill's Look-ahead Is Undone — Snapshot Everything the Frozen Step
+  Mutates"; the tripwire rule + the dispatch entry), GLOSSARY (FibEventOrderError), CROSS_CYCLE_FIB_SPEC (§1, §8, §9
+  DONE), PLAN_I §9.2 F16, register D.1 item 2.
+
+**Open after the build (not done unasked):** J3's swap (a CTS anchor before the BOS window's start) is unreached with
+J2 in (0 / 72,000) — it could become a raise (behaviour-neutral, its own small commit); an idle-machine timing of MS
+with the snapshots (the replays ran under the corpus load); S6 (retire `fib_mode`) on request.

@@ -42,8 +42,8 @@ cycle's CTS anchor strictly beyond `P`), else a single — main and sub alike.
   at the end of every run whose embedded tracker (§8) saw an EMISSION order other than `processing_order_key` order
   (`check_processing_order`, S5 — the F16 and F17 (i) shapes (MS no longer produces F17 (i) since PLAN_J J2);
   F17 (ii) trips only the dispatch (MS no longer produces it since PLAN_J J3 — the BOS window ends at the CTS anchor)). 0 on the reference
-  window; every shape comes from MS (PLAN_I §9.2 F14 / F16 / F17) and stays loud until the MS fix planned after S5
-  (PLAN_I R9-1 / R9-2).
+  window; every shape came from MS (PLAN_I §9.2 F14 / F16 / F17), and MS produces none since PLAN_J (J1 / J2 / J3,
+  2026-10-09; 0 trips, 0 dispatch skips in its 72,000-trial random-tail corpus) — the tripwires stay as guards.
 - **Every TIME half is the handled event's MOMENT** (`ef.event_moment`; Plan E E3a): activation / deactivation /
   reactivation stamps, fill horizons, the knowability cut (`evaluated_at`, Plan F — `IMBALANCE_FILL_SEMANTICS.md`).
 
@@ -195,8 +195,9 @@ CTS_ESTABLISHED / CTS_UPDATED. Since S5 that inner comes from THIS logic:
   `FibEventOrderError` on a difference (the run is complete when it raises — `ms.events` / `ms.df` are whole) — in
   the main run, a sub geometry AND the probe's Phase 2 (kept, S5 landing review m1: the probe's result never depends
   on the read, F7, but an F16 / F17 (i) shape inside a probe iteration stops the replay too, even for a start never
-  built). 0 on the reference window and on 400 random real slices (lens A); PLAN_I R9-1 / R9-2: the MS fix comes
-  after S5 as its own plan.
+  built). 0 on the reference window and on 400 random real slices (lens A). Since PLAN_J (J1: a range back-fill's
+  look-ahead is undone, so a re-stepped candle reads the state as of itself; J2; J3) MS emits in processing order —
+  0 in the PLAN_J corpus.
 - **Measured (PLAN_I §9.10, S5 step A, `plan_i_inputs/s5_agreement.py`):** the embedded tracker's handled sequence ==
   the downstream's (H1 sid 0 52 / 52, sid 1 24 / 24; each of the 8 subs' downstream sequence an exact prefix of its
   geometry's); the inner differs from the retired resolver's at 20 / 371 refreshes; 0 / 475 proximity answers change.
@@ -205,12 +206,10 @@ CTS_ESTABLISHED / CTS_UPDATED. Since S5 that inner comes from THIS logic:
 
 ## 9. Open items
 
-- **The MS fix (PLAN_I R9-1 / R9-2, after S5 — its own plan):** F16 — MS can confirm a CTS with an anchor after its
-  confirmation candle (a range back-fill look-ahead; the drawn fib locks at the earlier anchor; MS's end-of-run
-  tripwire now raises on it); F17's MS side — a cycle established on the previous cycle's CTS candle / a BOS anchor
-  after its CTS anchor (a breakout establishing cycle T must break T−1's confirmed `cts_threshold` at its apply; the
-  BOS window ends at the CTS anchor — both DONE, PLAN_J J2 / J3). The plan: `plans/PLAN_J_ms_restep_state_and_new_cycle_break.md`
-  (stages J3 → J2 → J1). Register `IDEA_PARKING_LOT.md` §D.1 item 2.
+- **The MS fix (PLAN_I R9-1 / R9-2) — DONE 2026-10-09** (`plans/PLAN_J_ms_restep_state_and_new_cycle_break.md`):
+  F16 — a range back-fill's look-ahead is undone, a re-stepped candle reads the state as of itself (J1); F17's MS
+  side — a breakout establishing cycle T must break T−1's `cts_threshold` at its apply, else VOID + rescan (J2), and
+  the BOS window ends at the CTS anchor (J3). Register `IDEA_PARKING_LOT.md` §D.1 item 2.
 - The old §13 items, reconciled: main's fill-as-of converged on "current" (S4); the deeper-walk fill-as-of is
   "current"; `M = 0` → no cross (pinned, S3); the Scenario-1 / revert ↔ ceiling merge is moot (both retired); `sid 0`
   has no `P` → singles, cycle 0 included (Q6); the in-flight resolver generalization and the sub snapshot's intra fib

@@ -97,10 +97,13 @@ def test_a_real_run_emits_only_the_new_keys(sd):
         res = compute_bounded_structure(_prepare_df(rows if sd == 1 else _noreg._mirror(rows)), 0, sd, cross_fib_limit=NO_P)
     # VALUES too (the landing review's surviving mutant set the proximity path's key to the candle): the CTS anchor
     # when the range was decided — the offline one (@13, start 9) was finalized in step 9, before cycle 2 established
-    # at 12, so it carries the cycle-1 anchor 8 (a pre-existing look-ahead stamp, not this migration's).
+    # at 12, so it carries the cycle-1 anchor 8. Since PLAN_J J1 the proximity confirmation at 9 happens in candle 9's
+    # own step, with that range (start 9, confirmed 13) already active — it creates no range of its own (it used to,
+    # inside the range back-fill's look-ahead: `(9, "proximity_created_range", 8)`).
     rs = [(int(e.idx), e.meta.get("reason"), e.meta["cts_anchor_idx"]) for e in res.events if e.type == "RANGE_STARTED"]
-    assert rs == [(4, "pullback_created_range", 2), (9, "proximity_created_range", 8), (13, None, 8),
-                  (14, "pullback_created_range", 12)]
+    assert rs == [(4, "pullback_created_range", 2), (13, None, 8), (14, "pullback_created_range", 12)]
+    conf = [(e.meta["cycle_id"], int(e.idx), e.meta["confirmation_method"]) for e in res.events if e.type == "CTS_CONFIRMED"]
+    assert conf == [(0, 4, "pullback"), (1, 9, "sd_zone_proximity"), (2, 14, "pullback")]
     bos = [(e.meta["cycle_id"], e.meta["last_pullback_apply_idx"]) for e in res.events if e.type == "BOS_CONFIRMED"]
     assert bos == [(0, None), (1, 4), (2, None)]        # cycle 2's retracement fired no pullback pattern
     old = {"pb_start", "cts_idx", "bos_idx"}             # on NO event or level (an extra key on any path)

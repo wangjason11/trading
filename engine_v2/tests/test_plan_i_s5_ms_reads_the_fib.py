@@ -128,8 +128,11 @@ def test_no_tracker_means_the_bos_inner_only():
 
 # PLAN_I §9.2 F16 / §5 R9-1: NZD_USD M15, 2025-03-24 07:45 → 15:00 UTC (rows 5515-5544 of the session-4 REAL source;
 # exact candles, no jitter), a bearish run started at row 11 (10:30). The range candidate 20 (12:45, confirmed 25)
-# back-fills the raw CTS to 24 (13:45, low 0.57191); the re-stepped pullback anchored 22 applies at 23 (13:30) and
-# confirms the CTS with anchor 24 — emission UPD(24), CONF(23); processing order CONF(23), UPD(24).
+# back-filled the raw CTS to 24 (13:45, low 0.57191); the re-stepped pullback anchored 22 applied at 23 (13:30) and
+# confirmed the CTS with anchor 24 — emission UPD(24), CONF(23); processing order CONF(23), UPD(24): S5's end-of-run
+# tripwire raised. Since PLAN_J J1 the range back-fill's look-ahead is undone: the re-steps read the state as of
+# themselves, so the pullback at 13:30 confirms the CTS known at 13:30 (21, 13:00, 0.5723) and 24 is a
+# post-confirmation candle.
 _F16_ROWS = [
     (0.57314, 0.57334, 0.57304, 0.57331), (0.57333, 0.57376, 0.57332, 0.57362), (0.57364, 0.57401, 0.57354, 0.57394),
     (0.57393, 0.57398, 0.57334, 0.57364), (0.57366, 0.57374, 0.57324, 0.57332), (0.57335, 0.57364, 0.57322, 0.5736),
@@ -150,21 +153,26 @@ def _f16_ms():
                                      pip_size=se._pip_size_from_pair(df), cross_fib_limit=NO_P)
 
 
-def test_the_f16_shape_raises_at_the_end_of_the_run():
+def test_the_f16_candles_confirm_the_cts_known_at_the_confirmation():
+    """PLAN_J J1 (was `test_the_f16_shape_raises_at_the_end_of_the_run`): the run completes (no order tripwire);
+    the pullback applying at 23 (13:30) confirms CTS 21 (13:00, 0.5723); candle 24 (13:45, low 0.57191) is a
+    post-confirmation candle — its low widens the range and moves the threshold AT 24, no raw CTS update; the range
+    (candidate 20, confirmed 25) starts with the CTS as of 20 (19, 12:30)."""
     ms = _f16_ms()
-    with pytest.raises(FibEventOrderError, match=r"fed CTS_UPDATED \(cycle 0, idx 24.*CTS_CONFIRMED \(cycle 0, idx 23"):
-        _quiet(ms.run)
-    # The run is complete when it raises (the tripwire is its last step): the F16 shape, measured on its events.
+    _quiet(ms.run)
     conf, = [e for e in ms.events if e.type == "CTS_CONFIRMED"]
-    assert (int(conf.idx), ef.cts_anchor_idx(conf), conf.price, conf.meta["via"]) == (23, 24, 0.57191, "one_maru_continuous")
-    emitted = [(e.type, ef.stamped_idx(e)) for e in ms.events if e.type in ("CTS_UPDATED", "CTS_CONFIRMED")]
-    assert emitted.index(("CTS_UPDATED", 24)) < emitted.index(("CTS_CONFIRMED", 23))
+    assert (int(conf.idx), ef.cts_anchor_idx(conf), conf.price, conf.meta["via"]) == (23, 21, 0.5723, "one_maru_continuous")
+    assert not [e for e in ms.events if e.type == "CTS_UPDATED" and ef.stamped_idx(e) > 23]
+    thr = [(int(e.idx), e.price) for e in ms.events if e.type == "CTS_THRESHOLD_UPDATED"]
+    assert thr[:2] == [(24, 0.57191), (25, 0.57182)]
     rng, = [e for e in ms.events if e.type == "RANGE_STARTED"]
-    assert (rng.meta["start_idx"], rng.meta["confirm_idx"], rng.meta["cts_anchor_idx"]) == (20, 25, 24)
-    # The feed is complete and in emission order (landing review lens A M1 (b)) — a CTS_THRESHOLD_UPDATED at 25 included.
+    assert (rng.meta["start_idx"], rng.meta["confirm_idx"], rng.meta["cts_anchor_idx"]) == (20, 25, 19)
+    # The feed is complete and in emission order (landing review lens A M1 (b)) — CTS_THRESHOLD_UPDATEDs included —
+    # and that order IS the processing order now.
     fed = [e for e in ms.events if e.type in _FED]
     assert any(e.type == "CTS_THRESHOLD_UPDATED" for e in fed)
     assert [id(e) for e in ms._fib_tracker._handled] == [id(e) for e in fed]
+    assert [id(e) for e in sorted(fed, key=ef.processing_order_key)] == [id(e) for e in fed]
     assert "market_state" in ms.df.columns and (ms.df["market_state"].iloc[11:] != "").all()
 
 

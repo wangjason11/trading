@@ -318,10 +318,17 @@ def _make_watch_over_second_cts_data() -> list[dict]:
 
 
 class TestQuiescence:
-    def test_fixture_precondition_watch_spans_the_second_cts(self):
-        """Unbounded run: the 2nd CTS (idx 9, moment 10) is emitted by the step anchored at 9,
-        which returns with the watch open (started 11, expires 16) and a pending reversal at
-        14; the reversal applies at 14; no rewind."""
+    """`_make_watch_over_second_cts_data` (sd +1): the 2nd CTS (anchor 9, moment 10) is established by the step
+    anchored at 9; candle 10 is a range candidate confirmed at 12, so the breakout's `_post_apply_range_check`
+    back-fills [10, 12) — candle 11 close-breaks the new BOS 0.6088 there (a watch expiring 16, the reversal pending
+    at 14). Until PLAN_J J1 that back-fill's state stayed: the step returned 11 with the watch already OPEN, and the
+    quiescence gate made a `stop_after_cts_established=2` run wait for the reversal (stop at 15). Since J1 the
+    look-ahead is undone — the step returns 11 with the state as of 10 (no watch), the stop lands at 11, and the watch
+    opens in candle 11's own step (unbounded: the reversal still applies at 14). The gate itself is unchanged and
+    pinned directly (`test_the_gate_holds_the_stop_while_a_watch_is_open`); PLAN_J measured 0 waits in 3,300 random
+    tails with the option (and 0 in 1,500 before J1 — only this crafted look-ahead made it wait)."""
+
+    def test_fixture_the_watch_opens_after_the_second_cts_step(self):
         full, log = _run_logged(_make_watch_over_second_cts_data())
         assert [(ef.cts_anchor_idx(e), int(e.meta["confirmed_at"])) for e in _cts_est(full.events)] == [(2, 2), (9, 10)]
         ws = [(int(e.idx), int(e.meta["expires_idx"])) for e in full.events if e.type == "REVERSAL_WATCH_START"]
@@ -330,62 +337,53 @@ class TestQuiescence:
         assert cands == [(11, 14)]
         rev = full.df.index[full.df["market_state"].astype(str) == "reversal"]
         assert int(rev.min()) == 14
-        # The step that emitted the 2nd CTS returned NON-quiescent.
+        # The step that emitted the 2nd CTS returns QUIESCENT (the state as of 10); the step anchored at 11 opens the
+        # watch and applies the reversal at 14 (it returns 15, the watch ended by the reversal).
         second = next(entry for entry in log if entry[2] == 2)
-        assert second == (9, 11, 2, True, 14)
+        assert second == (9, 11, 2, False, None)
+        assert log[-1] == (11, 15, 2, False, None)
         assert full.early_stop_idx is None
 
-    def test_stop_waits_for_the_watch_to_resolve(self):
-        """With the option: no stop at 11 (watch open + pending reversal); the reversal
-        applies at 14; the stop lands at 15 >= the resolution candle. The event list equals
-        the unbounded run's (which itself ends at the reversal) — the assertions are on
-        `early_stop_idx` and the watch-start ordering, not on a shorter list."""
+    def test_the_stop_reads_the_state_as_of_its_candle(self):
+        """With the option the run stops at 11 — before candle 11 is stepped: no watch event, the events a prefix of
+        the unbounded run's (in every bound: unbounded, `end_idx` 13 and 14)."""
         raw = _make_watch_over_second_cts_data()
         full = _run(raw)
         stopped, log = _run_logged(raw, stop_after_cts_established=2)
-        assert [e[:2] for e in log] == [(0, 3), (3, 5), (5, 6), (6, 8), (8, 9), (9, 11), (11, 15)]
-        assert stopped.early_stop_idx == 15
-        assert stopped.early_stop_idx > 11            # the immediate (non-quiescent) point
-        assert stopped.early_stop_idx >= 14           # the watch's resolution candle (apply)
-        assert any(e.type == "REVERSAL_WATCH_START" and int(e.idx) < stopped.early_stop_idx
-                   for e in stopped.events)
-        assert _sig(stopped.events) == _sig(full.events)
-        assert int(stopped.df.index[stopped.df["market_state"].astype(str) == "reversal"].min()) == 14
-        # Bounded past the resolution: same stop.
-        assert _run(raw, end_idx=17, stop_after_cts_established=2).early_stop_idx == 15
+        assert [e[:2] for e in log] == [(0, 3), (3, 5), (5, 6), (6, 8), (8, 9), (9, 11)]
+        assert stopped.early_stop_idx == 11
+        assert not [e for e in stopped.events if e.type in ("REVERSAL_WATCH_START", "REVERSAL_CANDIDATE")]
+        assert _sig(full.events)[: len(stopped.events)] == _sig(stopped.events)
+        # Row 11 was never stepped: the post-apply back-fill's write of it (the watch) is undone with its state.
+        assert stopped.df["market_state"].iloc[11] == "" and int(stopped.df["reversal_watch_active"].iloc[11]) == 0
+        for b in (13, 14):
+            bounded = _run(raw, end_idx=b, stop_after_cts_established=2)
+            assert bounded.early_stop_idx == 11
+            assert _sig(_run(raw, end_idx=b).events)[: len(bounded.events)] == _sig(bounded.events)
 
-    def test_naive_stop_would_have_stopped_inside_the_open_watch(self):
-        """The control: ignoring the quiescence gate stops at 11 with the watch still open and
-        a reversal pending — the event list a pending rewind/reversal was about to change."""
+    def test_the_naive_stop_now_agrees(self):
+        """The control: ignoring the quiescence gate stops at the same 11 — nothing was open at the stop."""
         ms = _make(_make_watch_over_second_cts_data(), stop_after_cts_established=2)
         ms._should_stop_after_cts = lambda: sum(1 for e in ms.events if e.type == "CTS_ESTABLISHED") >= 2
         ms.run()
         assert ms.early_stop_idx == 11
-        assert ms.state.reversal_watch_active is True
-        assert ms.state.pending_reversal_apply_idx == 14
-        assert not (ms.df["market_state"].astype(str) == "reversal").any()
+        assert ms.state.reversal_watch_active is False and ms.state.pending_reversal_apply_idx is None
 
-    def test_bound_inside_the_watch_window(self):
-        """`end_idx=13`: the reversal would apply at 14 > the clamped expiry 13, so it is never
-        scheduled — the anchor fails at once (`rv_anchor_failed`), the state is quiescent when
-        the 2nd-CTS step returns, and the stop lands at 11 (a prefix of the plain bounded run).
-        `end_idx=14`: anchor 11 is processed as an ANCHOR (the stop rightly did not fire at
-        11), so the reversal is applied as the anchor's winner at the edge (LANDMINES L4: the
-        false-break discard applies only on the pending-apply path) — next_i 15 > 14, nothing
-        pre-empted, `early_stop_idx` None, identical to the plain bounded run."""
-        raw = _make_watch_over_second_cts_data()
-        b13 = _run(raw, end_idx=13, stop_after_cts_established=2)
-        assert b13.early_stop_idx == 11
-        assert [int(e.meta["expires_idx"]) for e in b13.events if e.type == "REVERSAL_WATCH_START"] == [13]
-        assert [e for e in b13.events if e.type == "REVERSAL_CANDIDATE"] == []
-        assert not (b13.df["market_state"].astype(str) == "reversal").any()
-        plain13 = _run(raw, end_idx=13)
-        assert _sig(plain13.events)[: len(b13.events)] == _sig(b13.events)
-
-        b14 = _run(raw, end_idx=14, stop_after_cts_established=2)
-        assert b14.early_stop_idx is None
-        assert int(b14.df.index[b14.df["market_state"].astype(str) == "reversal"].min()) == 14
-        assert _sig(b14.events) == _sig(_run(raw, end_idx=14).events)
+    def test_the_gate_holds_the_stop_while_a_watch_is_open(self):
+        """`_should_stop_after_cts` itself: with N establishments it stops only when no watch is open and no
+        reversal is pending."""
+        ms = _make(_make_watch_over_second_cts_data(), stop_after_cts_established=2)
+        ms.run()
+        st = ms.state
+        assert ms._should_stop_after_cts() is True
+        st.reversal_watch_active = True
+        assert ms._should_stop_after_cts() is False
+        st.reversal_watch_active = False
+        st.pending_reversal_apply_idx = 14
+        assert ms._should_stop_after_cts() is False
+        st.pending_reversal_apply_idx = None
+        ms.stop_after_cts_established = 3
+        assert ms._should_stop_after_cts() is False
 
     def test_phase2_probe_finalizes_at_the_moment_not_the_anchor(self):
         """End-to-end Plan B §4.3 on a natural fixture: the 2nd CTS has idx 9 but moment 10;
