@@ -402,5 +402,10 @@ round 1 J1-Q1 (a) "J1a") — LANDED** (its own local commit).
   DONE), PLAN_I §9.2 F16, register D.1 item 2.
 
 **Open after the build (not done unasked):** J3's swap (a CTS anchor before the BOS window's start) is unreached with
-J2 in (0 / 72,000) — it could become a raise (behaviour-neutral, its own small commit); an idle-machine timing of MS
-with the snapshots (the replays ran under the corpus load); S6 (retire `fib_mode`) on request.
+J2 in (0 / 72,000) — it could become a raise (behaviour-neutral, its own small commit); S6 (retire `fib_mode`) on
+request. A new `/commit-save` baseline (LATEST is still S_F1 `20261006_224610_42c137c`; HEAD's replay outputs are in
+`%TEMP%/pj/HEAD_e276ed6`).
+
+**Timing (idle machine, after the build):** MS on the same 150 REAL corpus trials — base tree 51.1 / 50.7 s, HEAD
+51.6 / 51.8 s (≈ +1.6 %: the snapshots); the replay on HEAD 43.1 s wall (multi_tf_dual 8.9 s, the three charts
+31.6 s), outputs == the J1a variant (27 / 27, 3 / 3), fetch gate PASS.
