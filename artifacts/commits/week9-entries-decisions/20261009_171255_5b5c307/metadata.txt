@@ -1,0 +1,4 @@
+commit_hash=5b5c307
+timestamp=20261009_171255
+branch=week9-entries-decisions
+commit_message=IP tiebreaker update (09f056a: a new first tiebreaker, the immediate unfilled imbalance; descriptive tiebreak names) + the pre-save doc reconcile (5b5c307); reuse of the 44.3 s replay, FETCH GATE PASS
