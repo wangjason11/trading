@@ -1,0 +1,4 @@
+commit_hash=02e9381
+timestamp=20261009_112137
+branch=week9-entries-decisions
+commit_message=PLAN_K landing A: the IC reference condition computed + exported (filter OFF, pick unchanged); S_K_A
