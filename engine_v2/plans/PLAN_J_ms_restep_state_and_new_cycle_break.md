@@ -8,7 +8,8 @@ cycle-T BOS window ends at the CTS anchor; the S2 / S2b raises stay as guards". 
 Register: `IDEA_PARKING_LOT.md` §D.1 item 2.
 
 **Baseline:** HEAD `515c449` (PLAN_I S5b). Its replay outputs == `%TEMP%/pi/S5` (27 CSVs + 3 figures + run.log; S5b
-is byte-identical to S5). Save: S_F1 `20261006_224610_42c137c` (= `LATEST_<branch>`; no save since).
+is byte-identical to S5). Save: S_F1 `20261006_224610_42c137c` (the last save before the build); after it **S_J**
+`20261009_013718_708a8d9` (= `LATEST_<branch>`, §9).
 **Tools (`plan_j_inputs/`):** `variant_patch_j.py` (the variant patches on a `git archive` of `515c449`),
 `replay_variant_j.py` (the window replay through a tree; dumps `PJ_LOG`), `search_tree.sh` + `search_report.py` (the
 session-4 random-tail corpus through a tree, summarised against the base tree), `trial_detail.py` (one search trial,
@@ -403,8 +404,11 @@ round 1 J1-Q1 (a) "J1a") — LANDED** (its own local commit).
 
 **Open after the build (not done unasked):** J3's swap (a CTS anchor before the BOS window's start) is unreached with
 J2 in (0 / 72,000) — it could become a raise (behaviour-neutral, its own small commit); S6 (retire `fib_mode`) on
-request. A new `/commit-save` baseline (LATEST is still S_F1 `20261006_224610_42c137c`; HEAD's replay outputs are in
-`%TEMP%/pj/HEAD_e276ed6`).
+request.
+
+**Saved 2026-10-09 — S_J `20261009_013718_708a8d9`** (= `LATEST_<branch>`; source `708a8d9`, save commit `a62371e`,
+`artifacts-trunk` `09e4088`): a fresh replay of HEAD reproduced `%TEMP%/pj/HEAD_e276ed6` — 27 / 27 CSVs md5-equal, 3 / 3
+figures (`cmp_save.py`: 0 real cells, traces + shapes equal); fetch gate PASS (no RETRY); 43.5 s wall.
 
 **Timing (idle machine, after the build):** MS on the same 150 REAL corpus trials — base tree 51.1 / 50.7 s, HEAD
 51.6 / 51.8 s (≈ +1.6 %: the snapshots); the replay on HEAD 43.1 s wall (multi_tf_dual 8.9 s, the three charts

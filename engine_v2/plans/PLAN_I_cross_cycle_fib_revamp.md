@@ -19,7 +19,8 @@ tools live in `plan_i_inputs/`).
 answers to the 8 inputs), canonical, amended in place only as decisions land (each amendment cites its decision ID).
 §1 below is the precise engineering reading.
 
-**Baseline:** S_F1 `artifacts/commits/week9-entries-decisions/20261006_224610_42c137c` (= `LATEST_<branch>`).
+**Baseline:** S_F1 `artifacts/commits/week9-entries-decisions/20261006_224610_42c137c` (the build's `/compare` base; LATEST
+until 2026-10-09). After S5b + PLAN_J: **S_J** `20261009_013718_708a8d9` (= `LATEST_<branch>`, PLAN_J §9).
 **Measurement scripts (read-only):** `plan_i_inputs/ref_census.py <save>` (the reference-price census, §3.1);
 `plan_i_inputs/prev_sub_census.py <save>` (round 2: the previous-sub rule, the new-cycle threshold check, §3.3).
 

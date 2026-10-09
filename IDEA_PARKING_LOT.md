@@ -130,8 +130,8 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    `/compare`, NEXT after S5 (+ S5b); R9-3 (a) — F19 fixed in stage **S5b** (the cycle-table end caps a fib's end) — **S5b LANDED 2026-10-08**
    (byte-identical on the window, PLAN_I §9.10); next the MS fix plan = **`engine_v2/plans/PLAN_J_ms_restep_state_and_new_cycle_break.md`**
    (round 1 answered 2026-10-09: J1a, J2b) — **J3, J2, J1 LANDED 2026-10-09** (local; PLAN_J §9). Open follow-ups
-   there: J3's swap is unreached with J2 in (0 / 72,000) — a raise is an option; S6 on request. Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
-   charts add the M15 fib layer). Likely inputs (to confirm with the
+   there: J3's swap is unreached with J2 in (0 / 72,000) — a raise is an option; S6 on request. Baseline: **S_J** `20261009_013718_708a8d9` (saved 2026-10-09,
+   = `LATEST_week9-entries-decisions`, == HEAD `708a8d9`'s replay; before it S_F1 `20261006_224610_42c137c`). Likely inputs (to confirm with the
    user): the 2026-10-01 item and D5 below, and §E "Cross-cycle fib bundled follow-up" with its parked open
    questions (`engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §13).
    Was: **Single-cycle fib POIs on subs, and revisit the overall sub cross-fib logic** — user 2026-10-01: "Single-cycle fib
