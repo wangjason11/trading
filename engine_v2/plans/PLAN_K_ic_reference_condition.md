@@ -3,14 +3,14 @@
 **Status: DRAFTED 2026-10-09; COLD-REVIEWED 2026-10-09 (§9: 2 read-only lenses, 526,601 subagent tokens — no
 BLOCKER on fidelity, 5 MAJOR on the code paths, every finding folded below); the user's questions §8 (K-Q1 … K-Q8)
 — ALL ANSWERED 2026-10-09 (§8); landing A BUILT 2026-10-09 (§11.1: `/compare` vs S_S6 == §5, the §6 tests, the
-mutation run, the docs; source commit `02e9381`); **S_K_A SAVED** `artifacts/commits/week9-entries-decisions/20261009_112137_02e9381` (= `LATEST_<branch>`, save
+mutation run, the docs; source commit `02e9381`); **S_K_A SAVED** `artifacts/commits/week9-entries-decisions/20261009_112137_02e9381` (`LATEST_<branch>` until S_K_B, save
 commit `dc116b0`) — B's baseline; landing A's REVIEW 2026-10-09 (§11.2: 2 lenses, 651,669 tokens; LA1 — the final
 reference read on a frame cut at the cap, K6's rejected reading — FIXED, 9 test gaps pinned; the fix-up's `/compare`
 vs S_K_A byte-identical); the variant replay V MEASURED (§11.3: one pick moves, sub 0 cyc 3 1604 → 1447; sub 3
 cyc 2's TB1 tie dissolves; no MS cascade); **landing B BUILT 2026-10-09** (§11.4: the filter ON + the `IP: none` reason
 `no_ic_candidate`, the user's RX1-F / RX1-N; `/compare` vs S_K_A == V + sub 1 cyc 2's relabel; 8 / 8 mutants; suite
 1527; chart-reviewed + committed `e2bb77a` 2026-10-09 — the user: "looks good go ahead"); **RX1 COMPLETE — saved S_K_B
-`20261009_140048_97795bd` (source `97795bd` = B + the close-out docs; save commit `5d8a9ce`, trunk `213b6a3`; = `LATEST_<branch>`)** — the
+`20261009_140048_97795bd` (source `97795bd` = B + the close-out docs; save commit `5d8a9ce`, trunk `213b6a3`; `LATEST_<branch>` until S_TBU `20261009_171255_5b5c307`, the IP tiebreaker update — PLAN_H §8.9)** — the
 user's final save ("commit-save as a final iteration of the full set of IC candidate conditions, and that completes
 this particular new rule experimentation").** The rule is the user's and is DECIDED: canonical text `PLAN_H_institutional_pattern_poi.md` §8.9
 "RX1" (the rule as decided) + §6 RX1-B, RX1-1 … RX1-4, RX1-T, RX1-W1 … W3, RX1-C1, RX1-E; the user's write-up verbatim

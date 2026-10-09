@@ -1362,6 +1362,8 @@ dump `tb_imb_dump.py`; lens indices = sub-local + the sub's slice offset: sub 0 
   where the fib hovers sit (an invisible line at the 61.8–80 midpoint, one point per candle from the BOS to the CTS
   anchor — e.g. sid 1 cyc 2 at 0.57816 over 80 candles; the default "closest" hover mode then masks candle hovers in
   that band) → no change now, noted for the chart revamp (register §G).
+- **Saved S_TBU `20261009_171255_5b5c307`** (source `5b5c307` = `09f056a` + the close-out docs; save commit `0047646`, trunk `2abc143`; reuse of the 44.3 s replay, FETCH GATE PASS) = `LATEST_week9-entries-decisions` — the IC identification revamp's `/compare` baseline (a save-format
+  boundary: the `/compare` skill).
 
 **PAUSED 2026-10-06 (§6 F2a–F2e).** The debugging stops here for the cross-cycle fib revamp (register §D.1 item 2,
 a new session). It resumes after the revamp with every point above and in §8.5b as logged, each rule experiment

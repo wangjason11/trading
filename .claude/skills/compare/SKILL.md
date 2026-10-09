@@ -445,13 +445,13 @@ reading those files' diffs as engine changes.
 pick, and the `IP: none` row's `reason` is `no_pattern` (IC candidates, none patterned) or `no_ic_candidate` (no
 candle passes every IC condition; replaces `no_candidates`). Against S_K_A: `engine_v2/plans/plan_h_inputs/
 cmp_k_landing_b.py BASE` (PLAN_K §11.3's V + the sub 1 cyc 2 relabel, exit 1 on anything else). S_K_B
-`20261009_140048_97795bd` is the first save with it (= `LATEST_<branch>` from 2026-10-09).
+`20261009_140048_97795bd` is the first save with it (`LATEST_<branch>` until S_TBU, below).
 **The IP tiebreaker update (2026-10-09, PLAN_H §6 TBU) — a BEHAVIOUR + FORMAT change:** a new first tiebreaker (the
 immediate unfilled imbalance) and descriptive `ip_tiebreak` values — `"TB1"` → `"ic_candle_type"`, `"TB2"` →
 `"most_recent_before_imbalance"`, new `"immediate_unfilled_imbalance"` (POI meta → `*_poi_zones.csv` `meta`, the IP
 CSVs, the POI hover) — and the IP CSVs' new column `immediate_imbalance_first_c2_idx` after `ic_ref_reason`. Against
 S_K_B or older: `engine_v2/plans/plan_h_inputs/cmp_tbu.py BASE` (the predicted pick move + the relabels + the new
-column, exit 1 on anything else) instead of reading those diffs as engine changes.
+column, exit 1 on anything else) instead of reading those diffs as engine changes. S_TBU `20261009_171255_5b5c307` is the first save with it (= `LATEST_<branch>` from 2026-10-09).
 | `*_wvmi.csv` |
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
