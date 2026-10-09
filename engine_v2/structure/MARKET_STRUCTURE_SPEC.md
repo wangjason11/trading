@@ -466,8 +466,9 @@ J3 it ended at `breakout_apply_idx`, and a breakout whose extreme is not its app
 pullback candle AFTER its extreme (synthetic WAVES 301 / 572: BOS 44 after CTS 43 — the anchor-keyed processing order
 then handed the cycle's CTS_ESTABLISHED to the downstream before its BOS, which raises since PLAN_I S2b). 0 on the
 reference window (byte-identical); the session-4 random-tail corpus 7 trials → 0. A CTS anchor BEFORE the window start
-(the F17 (i) shape — a cycle established on the previous cycle's CTS candle, before that cycle's confirmation) keeps
-the old swap: the window is `[cts_anchor_idx, start]`. Pins `tests/test_plan_j_j3_bos_window.py`,
+(the F17 (i) shape — a cycle established on the previous cycle's CTS candle, before that cycle's confirmation)
+RAISES (2026-10-09: unreached since PLAN_J J2 — 0 on the window, 0 in its 72,000-trial corpus; until then the window
+was swapped to `[cts_anchor_idx, start]`); a CTS anchor AT the window start is the one-candle window. Pins `tests/test_plan_j_j3_bos_window.py`,
 `tests/test_ms_bos_selection_guards.py`.
 
 The implementation is in `_select_bos_on_breakout` and switches based on

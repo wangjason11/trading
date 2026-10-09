@@ -5,8 +5,8 @@
 anchor-keyed processing order would then run the cycle's CTS_ESTABLISHED before its BOS_CONFIRMED (FibTracker needs
 the BOS first). Reference window: 19 cycle >= 1 selections, all on the pullback window, 0 swapped, 0 anchors after
 the apply (shadow over every MS run, 2026-09-28). Since PLAN_J J3 (F17 (ii)) the window ENDS at the new cycle's CTS
-anchor (<= the apply), so the BOS never lies after its CTS either — except a swapped window (a CTS anchor before the
-window start, the F17 (i) shape).
+anchor (<= the apply), so the BOS never lies after its CTS either; a CTS anchor before the window start (the F17 (i)
+shape) raises since 2026-10-09 (unreached since PLAN_J J2; until then the window was swapped).
 (c) `_select_bos_on_breakout` with neither a pullback nor a proximity confirmation raises (user decision): it is
 unreachable — a cycle >= 1 breakout needs the CTS CONFIRMED and both confirmation paths set `cts_confirmed_idx` —
 and its old silent fallback, `_initial_bos_before_first_cts(breakout_apply_idx)`, returned the STRUCTURE's BOS_0.
@@ -66,12 +66,22 @@ def test_the_bos_window_ends_at_the_cts_anchor():
     assert ms._select_bos_on_breakout(10, 10) == (10, pytest.approx(0.6000))
 
 
-def test_a_cts_anchor_before_the_window_start_swaps_the_window():
+def test_a_cts_anchor_before_the_window_start_raises():
     """The F17 (i) shape (a cycle established on the previous cycle's CTS candle, before its confirmation): the CTS
-    anchor 5 precedes the window start 7 — the window is [5, 7] (the old swap, kept): candle 5 made the deepest
-    (l .6000) wins; a window clamped to the start ([7, 7]) would give 7."""
+    anchor 5 precedes the window start 7 — it raises (unreached since PLAN_J J2: 0 in the 72,000-trial corpus). Until
+    2026-10-09 the window was swapped to [5, 7]."""
+    ms = _ms()
+    ms.state.pullback_fired_for_cycle = True
+    ms.state.last_pullback_pat_apply_idx = 7
+    with pytest.raises(AssertionError, match="the new CTS anchor 5 precedes the BOS window start 7"):
+        ms._select_bos_on_breakout(10, 5)
+
+
+def test_a_cts_anchor_at_the_window_start_is_a_one_candle_window():
+    """The boundary of the raise: the CTS anchor 7 == the window start 7 is the window [7, 7] — the BOS is candle 7
+    (l .6088), even with an earlier candle 5 made deeper (l .6000)."""
     ms = _ms()
     ms.state.pullback_fired_for_cycle = True
     ms.state.last_pullback_pat_apply_idx = 7
     ms._l[5] = 0.6000
-    assert ms._select_bos_on_breakout(10, 5) == (5, pytest.approx(0.6000))
+    assert ms._select_bos_on_breakout(10, 7) == (7, pytest.approx(0.6088))

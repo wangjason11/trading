@@ -683,7 +683,8 @@ pullback follows its extreme); 0 / 34 on the reference window. MS's own guard on
 new CTS anchor (MARKET_STRUCTURE_SPEC "BOS_n+1 derivation rule"), so a breakout whose deepest pullback follows its
 extreme no longer gives a BOS after its CTS; the (i) source (a cycle established on the previous cycle's CTS candle —
 the swapped window) went with PLAN_J J2 (2026-10-09: a breakout must break the previous cycle's threshold at its
-apply, else it is VOID). The MS side was decided in PLAN_I's S5 round (R9-1 / R9-2, register D.1 item 2):
+apply, else it is VOID; the swap itself RAISES since 2026-10-09 — a CTS anchor before the window start, unreached
+since J2). The MS side was decided in PLAN_I's S5 round (R9-1 / R9-2, register D.1 item 2):
 the MS fix plan `plans/PLAN_J_ms_restep_state_and_new_cycle_break.md`, with F16 (a CTS confirmed with an anchor after its confirmation candle — emission order != this sort;
 the drawn fib locks at the earlier anchor); until it lands, MS's own end-of-run order tripwire (S5, "MS's POI inner IS
 the drawn fib's decision" above) stops an F16 / F17 (i) run before the dispatch sees it — none since PLAN_J

@@ -2056,7 +2056,9 @@ class MarketStructure:
         processing order needs the cycle's BOS first). Until J3 the end was `breakout_apply_idx`: a breakout whose
         extreme is not its apply candle could take a deeper pullback candle after the extreme (WAVES 301 / 572:
         BOS 44 after CTS 43). A CTS anchor BEFORE the window start (the F17 (i) shape — a cycle established on the
-        previous cycle's CTS candle) keeps the old swap: the window is then `[cts_anchor_idx, start]`.
+        previous cycle's CTS candle) raises: unreached since PLAN_J J2 (a new cycle must break the previous cycle's
+        threshold at its apply; 0 in the 72,000-trial corpus). Until 2026-10-09 the window was swapped to
+        `[cts_anchor_idx, start]`. A CTS anchor AT the window start is the one-candle window `[start, start]`.
 
         Returns (bos_anchor_idx, bos_price).
         """
@@ -2076,7 +2078,9 @@ class MarketStructure:
         s = int(window_start)
         e = int(cts_anchor_idx)
         if e < s:
-            s, e = e, s
+            raise AssertionError(
+                f"cycle >= 1 BOS at breakout apply {breakout_apply_idx}: the new CTS anchor {e} precedes the BOS "
+                f"window start {s} (the F17 (i) shape, unreached since PLAN_J J2)")
 
         if self.struct_direction == 1:
             series = self._l[s : e + 1]

@@ -402,9 +402,29 @@ round 1 J1-Q1 (a) "J1a") — LANDED** (its own local commit).
   Mutates"; the tripwire rule + the dispatch entry), GLOSSARY (FibEventOrderError), CROSS_CYCLE_FIB_SPEC (§1, §8, §9
   DONE), PLAN_I §9.2 F16, register D.1 item 2.
 
-**Open after the build (not done unasked):** J3's swap (a CTS anchor before the BOS window's start) is unreached with
-J2 in (0 / 72,000) — it could become a raise (behaviour-neutral, its own small commit); S6 (retire `fib_mode`) on
-request.
+**J3 follow-up — the swap → a raise (session 7, 2026-10-09; the user's pick from "Open after the build") — LANDED**
+(its own local commit).
+- Code: `_select_bos_on_breakout` — a CTS anchor before the window start (`e < s`, the F17 (i) shape) raises
+  `AssertionError` ("the new CTS anchor … precedes the BOS window start …") instead of swapping the window to
+  `[cts_anchor_idx, start]`. Nothing catches it: the sub geometry's `except` is `(ValueError, IndexError)` and MS's two
+  broad `except`s (`_feed_fib_tracker`, `_check_invariants_df`) wrap neither path — an H1 or M15 run stops.
+- Prediction: byte-identical (the decided set: 0 swaps on the window, 0 / 72,000 in the corpus); the suite with the
+  raise and the old swap test: exactly that 1 test fails — MEASURED 1 failed / 1439 passed.
+- `/compare` vs S_J: **byte-identical** — 27 / 27 CSVs md5, 3 / 3 figures (full JSON, `cmp_fig_full.py`); run.log
+  (9,100 lines) == but the timings and the `FutureWarning` line number (`market_structure.py:2456` → `2460`, the 4 added
+  lines); fetch gate PASS; 42.4 s wall. = the prediction.
+- Tests 1440 → 1441: `test_ms_bos_selection_guards.py` — the swap test → `test_a_cts_anchor_before_the_window_start_
+  raises` (anchor 5 before the start 7); + `test_a_cts_anchor_at_the_window_start_is_a_one_candle_window` (anchor 7 ==
+  start 7 → (7, 0.6088), with candle 5 made deeper).
+- Mutation (solo, full suite): 5 + a no-op control — the swap restored / the guard removed / a clamp to the start:
+  KILLED by the raise test; `e <= s`: KILLED only by the new boundary pin (no real run in the suite reaches a CTS anchor
+  AT the window start); the window ending at the apply again: KILLED (4 tests). The control SURVIVED.
+- Docs: MARKET_STRUCTURE_SPEC "BOS_n+1 derivation rule", ARCHITECTURE (the `BOS_CONFIRMED` row), LANDMINES (the dispatch
+  entry), register D.1 item 2.
+
+**Open after the build (not done unasked):** J3's swap (a CTS anchor before the BOS window's start), unreached with
+J2 in (0 / 72,000) → a raise: DONE in session 7 ("J3 follow-up" above); S6 (retire `fib_mode`, PLAN_I §9.4) — the
+user's pick for session 7, next.
 
 **Saved 2026-10-09 — S_J `20261009_013718_708a8d9`** (= `LATEST_<branch>`; source `708a8d9`, save commit `a62371e`,
 `artifacts-trunk` `09e4088`): a fresh replay of HEAD reproduced `%TEMP%/pj/HEAD_e276ed6` — 27 / 27 CSVs md5-equal, 3 / 3
