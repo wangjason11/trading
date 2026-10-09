@@ -610,7 +610,7 @@ class _Tracker:
     def get_fibs_for_charting(self):
         return list(self.fibs)
 
-    def ic_reference(self, fib_state, df, *, evaluated_at, end_idx=None):
+    def ic_reference(self, fib_state, df, *, evaluated_at):
         return ICReference.NONE                    # PLAN_K A3 / A20 e: no IC reference — the condition passes
 
 

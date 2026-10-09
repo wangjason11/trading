@@ -6,6 +6,9 @@ Expected equivalent (noted in PLAN_K §6 / §11): W01 (the detector's own `check
 pattern spans >= 2 candles — a later anchor cannot confirm earlier; build deviation (3)).
 Result 2026-10-09 (PLAN_K §11.1): first pass 77 / 89 KILLED; 10 gaps closed by tests (re-run 10 / 10 KILLED); final
 87 KILLED + the 2 equivalent.
+HISTORY: the anchors are those of `02e9381`. From the review fix-up `8cad324` (`ic_reference` lost `end_idx`) and
+landing B `e2bb77a` (the switch removed) the end_idx / switch / reason anchors report BAD — the current loops are
+`mutants_k_landing_a_review.py` and `mutants_k_landing_b.py`.
 """
 W = "engine_v2/patterns/cross_limit_watch.py"
 PZ = "engine_v2/zones/poi_zones.py"

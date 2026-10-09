@@ -101,8 +101,26 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    confluence sub 1 cycle 1's at 1902 (IC 1889 → 1875: likely survives); the zone-proximity sd triggers H1 sid 0
    cycle 1 710 → 748 and sid 1 cycle 2 926 → 939 — the H1 WVMI gates and counter subs 3 / 5's triggers → 6 of the 11
    trigger records re-derived. Related: "Cascade-viz hover extras" — closed by landing B ("Recently closed").
+   **Item 1's rule experiment RX1 (the IC reference condition, PLAN_K) COMPLETE 2026-10-09** (D.2 below). **NEXT — the
+   IC identification revamp (user 2026-10-09, the first of the two "immediate future" sessions):** "Additional
+   updates around our IC rules and processes. I will provide the longer holistic write-up of the full identifying IC
+   process, along with the remaining steps and rules that we have not discussed yet. We can make all the remaining
+   updates in 1 go, or we can split them into smaller parts. All that we can discuss. But once all the necessary
+   changes / updates are made, we will be done with our identifying IC revamp & update (for now, though there may be
+   deferred items we revisit in the future)." Inputs already decided: the IC flow (PLAN_H §6 RX1-F — find IC
+   candidates, the conditions filtering together > the IP > fallbacks) and the reasons (RX1-N); waiting on that
+   write-up: POI_ZONES_SPEC §3's step structure, the code's "candidates" names (`find_ic_candidates`,
+   `*_ip_candidates.csv`), the fallbacks (D.2 "No-pattern cycles"). Still open from the debugging log: sub 3 cyc 3
+   has no POI record (PLAN_H §8.9).
 2. **The cross-cycle fib revamp — one logic for main and sub, the final cross-cycle + single-cycle fib rules** —
-   **COMPLETE 2026-10-09** (PLAN_I S1–S6 + PLAN_J; item 1's debugging resumes next). Was NEXT (user 2026-10-06, PLAN_H §6 F2b–F2e; it replaces the open decision below): "instead of deciding on this, I will
+   **COMPLETE 2026-10-09** (PLAN_I S1–S6 + PLAN_J; item 1's debugging resumes next). **OPEN — a cross-limit price
+   DEBUGGING task (user 2026-10-09, the second "immediate future" session, after item 1's IC revamp):** "Updates to
+   the new cross cycle fib rules we've established using cross limit prices. This is actually an important debugging
+   task that is currently causing some subs to have lower cross limit prices than they should, which may affect
+   61.8-80 Fib Zone placement and IC candidates. I will provide more details when we get there and on the fix."
+   Its reach since PLAN_K: `P` sets the cross window `M` (which cycles a cross may span — the fib's anchors, so the
+   61.8–80 zone) AND the IC reference's structure side (the anchor behind `P`, the cross-limit breakout watch's
+   break, `T ≤ M`) — a changed `P` moves both. Canonical rules: CROSS_CYCLE_FIB_SPEC §3; PLAN_I §1.2 / §1.4. Was NEXT (user 2026-10-06, PLAN_H §6 F2b–F2e; it replaces the open decision below): "instead of deciding on this, I will
    instead revamp the cross cycle fib rules. Furthermore, my hope is that we can unify the logic across main and sub.
    This update will likely be the final logic we use for cross-cycle & single-cycle fibs." A NEW session: it opens
    with B's landing review (item 1), then decides whether planning and build are separate sessions; the user brings
@@ -194,7 +212,7 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
   V90 selection (PLAN_H X1: "There is still a chance that I use those as fallbacks … we might still delete in the
   future"). DECIDE (after the item-1 chart review — "we will need to come back and understand if losing their POIs in
   these cycles is appropriate").
-- **Test the POI_ZONES_SPEC §3.2 scenario IC filters** — never implemented; kept in the spec, unapplied (PLAN_H D4:
+- **Test the POI_ZONES_SPEC §3.2 scenario IC filters — COMPLETE 2026-10-09 (RX1 = PLAN_K landings A + B, the user's final save at B)** — never implemented; kept in the spec, unapplied (PLAN_H D4:
   "I still want to keep these and test into them in the future"). Any IC filter stays OUTSIDE the institutional pattern
   and is applied first. **TAKEN UP 2026-10-09 as item 1's first rule experiment, RE-SPECIFIED by the user for today's
   fibs** (PLAN_H §8.9 RX1, decisions §6 RX1-*; verbatim `plans/plan_h_inputs/ic_reference_conditions_spec.md`): one

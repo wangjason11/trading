@@ -416,12 +416,14 @@ ONE bundled condition (RX1-B) per §3.1 candidate `i` of a fib record — struct
    `FibTracker.stamp_ic_references` exports; PLAN_K §11.2 LA1); MS's in-flight read
    with its embedded tracker AT the fed event's moment (`poi_inner_for_fib(..., tracker=, evaluated_at=)`, built
    inside the read's re-raising scope — LANDMINES "The POI Resolver Fails Loudly"). Not in the activation sweep; `M`,
-   the legs, the touch, the pattern and TB1 / TB2 are unchanged (from B, TB2 runs over the surviving tied ICs).
+   the legs, the touch, the pattern and TB1 / TB2 are unchanged (since B, TB2 runs over the surviving tied ICs).
 
 On the reference window (PLAN_K §5 / §11, S_K_A): every one of the 26 POI records' values; e.g. sub 0 cycle 3 (a buy):
-`prev_cycle_cts` 0.57774 (CTS_2), bound 1720 — 209 candidates, 85 pass; its pick 1604 (high 0.57880) is past the
-reference: reported, still drawn until B. `ic_not_before_break` cuts no candidate there (the price side already cuts
-every one the bound would).
+`prev_cycle_cts` 0.57774 (CTS_2), bound 1720 — 209 candidates, 85 pass; its landing-A pick 1604 (high 0.57880) is
+past the reference, so since landing B the pick is 1447 1A.iv (high 0.57768; TB2 over 1660). The only other
+change: sub 3 cycle 2 keeps 2969 but loses its TB1 tie (2988 cut); no structure event moves (PLAN_K §11.3 /
+§11.4). `ic_not_before_break` cuts no candidate on the window (the price side already cuts every one the bound
+would).
 
 ### 3.3 IC Variants — UNWIRED since PLAN_H landing B (2026-10-06)
 
@@ -722,7 +724,7 @@ cfg = {
 - Top/bottom bounds
 - The fib hover (the H1 chart AND the M15 lens charts since PLAN_H §8.9 F1, 2026-10-06): its status cell =
   status · `life=[start, end] reason` · the IP outcome (`IP <rank> · IC <idx>`, `IP: none (<reason>)` on a record
-  without a pattern — no POI, PLAN_H C1 —, or `IP: not evaluated (no POI record)`;
+  without a pick — `no_ic_candidate` / `no_pattern` (§3.5, PLAN_H §6 RX1-N), no POI, PLAN_H C1 —, or `IP: not evaluated (no POI record)`;
   `charting/_zone_render.fib_hover_status_text`) · since PLAN_I S2 the structure's cross-fib limit line
   (`fib_hover_limit_text`). Canonical: `charting/CHARTING_SPEC.md` §8
 

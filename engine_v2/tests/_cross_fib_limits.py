@@ -63,7 +63,7 @@ class _NoRefTracker:
     """A stand-in tracker for a direct `poi_zones.poi_inner_for_fib` call on a hand-built FibState (PLAN_K A4 / A20
     d): no IC reference (`ICReference.NONE` — the condition passes)."""
 
-    def ic_reference(self, fib_state, df, *, evaluated_at, end_idx=None):
+    def ic_reference(self, fib_state, df, *, evaluated_at):
         from engine_v2.zones.cross_cycle_fib import ICReference
         return ICReference.NONE
 

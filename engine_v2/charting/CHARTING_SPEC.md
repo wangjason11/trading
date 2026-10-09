@@ -139,7 +139,8 @@ To change any visual element:
   the status (+ ` (locked)`), `life=[start_idx, end_idx] end_reason` (`–` = never started, `open` = not ended) and the
   cycle's IP outcome from `attrs["ip_candidates"]` (`ip_rows_by_fib_record`: keyed by (sid, cycle, BOS anchor, CTS
   anchor), prefixed with `sub_id` on a lens — a sub's sid restarts at 0): `IP <rank> · IC <idx>` (the pick = the drawn
-  POI), `IP: none (<reason>)` (no pattern, no POI — PLAN_H C1), or `IP: not evaluated (no POI record)` (the POI record
+  POI), `IP: none (<reason>)` (no pick, no POI — PLAN_H C1; the reason `no_ic_candidate` or `no_pattern`, PLAN_H §6
+  RX1-N), or `IP: not evaluated (no POI record)` (the POI record
   gate skipped it: ended before locking, or no CTS_ESTABLISHED); then the record's IC REFERENCE line
   (`_zone_render.fib_hover_ic_ref_text`, PLAN_K A17, 2026-10-09 — POI_ZONES_SPEC §3.2; from the fib meta `ic_ref_*`):
   `IC ref <price> (<source>[, cycle <a−1>]) · break <idx>` (e.g. `IC ref 0.57774 (prev_cycle_cts, cycle 2) · break
