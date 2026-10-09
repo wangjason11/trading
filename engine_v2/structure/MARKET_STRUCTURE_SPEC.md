@@ -427,7 +427,8 @@ embedded tracker asks every imbalance question with `evaluated_at` =
 (IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule"); the retired
 resolver's uncut Scenario-2 read and the M1 divergence it caused are gone. The
 IP pick's own imbalance reads inside `select_ip_ic` — IC cond3 in
-`find_ic_candidates` over `(candidate, fib CTS anchor]` and the TB2 reference —
+`find_ic_candidates` over `(candidate, fib CTS anchor]` and the tiebreakers' imbalance reads (the immediate
+unfilled imbalance, the most-recent-before-imbalance reference) —
 stay uncut (`evaluated_at=None`; the drawn POI's own reads, PLAN_H). A refresh on
 `st.cts.idx` itself (a lag-0 `CTS_ESTABLISHED`, a raw `CTS_UPDATED`) can
 therefore count, in the pick, a gap whose c2 is the refresh candle — one that

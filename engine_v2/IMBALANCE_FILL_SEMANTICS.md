@@ -84,7 +84,7 @@ moment, not the write:
   CTS_ESTABLISHED / CTS_UPDATED; since PLAN_I S5 the embedded FibTracker's
   representative fib → `poi_inner_for_fib`): its FIB is decided at the fed event's
   moment like the drawn fib's (FibTracker below); the IP pick on it
-  (`select_ip_ic`'s IC cond3 / TB2) is built at the refresh candle and may count a
+  (`select_ip_ic`'s IC cond3 / its tiebreakers' imbalance reads) is built at the refresh candle and may count a
   gap whose c3 is the NEXT candle — but the snapshot's only reader
   (`_maybe_confirm_cts_via_proximity`) is gated `i > st.cts.idx`, so every gap it
   counts has formed by the candle it is used on. No cut on the pick (see
@@ -192,9 +192,10 @@ and has no default: a caller that forgets its moment fails with a `TypeError`.
 **`iter_unfilled_imbalances`** (same arguments, PLAN_H landing A 2026-10-06)
 yields those survivors lazily in `df.attrs["imbalances"]` order;
 `has_unfilled_imbalance` IS `any(iter_unfilled_imbalances(...))` (it stops at
-the same instance). The institutional pattern's TB2a reads its reference
-imbalance (the earliest unfilled sd gap after the oldest tied IC) from it, so
-that "unfilled" is IC condition 3's own test.
+the same instance). The institutional pattern's tiebreakers read from it — the
+immediate unfilled imbalance (IC + 1 … IC + 2) and the most-recent-before-imbalance
+reference (the earliest unfilled sd gap after the oldest IC in play) — so that
+"unfilled" is IC condition 3's own test (POI_ZONES_SPEC §3.4).
 
 ### `get_unfilled_imbalances` / `has_imbalance_in_range` — DELETED 2026-09-30
 
@@ -219,6 +220,8 @@ Each consumer tunes four knobs: the **window**, the fill horizon
 | `poi_zones._compute_poi_activation_history` (the enter candle) | `(ic_idx, t]` | `t` | `t` (enters at `max(inst.formed_at, first_active)`) | "Is a FORMED sd imbalance after the IC unfilled at candle t?" — the per-candle sweep, via the fill cache (below). Equals `has_unfilled_imbalance(df, ic_idx+1, t, check_to_idx=t, direction=sd, evaluated_at=t)` |
 | `poi_zones.find_ic_candidates` — caller `derive_poi_zones` | `(candidate_idx, cts_idx]` | the final fib's `cts_idx` (anchor) | `None` — retrospective IC identification; the sweep enforces WHEN the POI can go live (Plan E §2.4 item 8) | IC cond3 |
 | same — caller MS in-flight `poi_inner_for_fib` (PLAN_I S5; was `compute_poi_inners_for_cycle`) | `(candidate_idx, cts_idx]` | the representative fib's `cts_idx` (anchor, ≤ `st.cts.idx`) | `None` — read only at `i > st.cts.idx` (Knowability §"Cached values") | IC cond3 for the proximity snapshot |
+| `poi_zones.immediate_unfilled_imbalance_first_c2_idx` — `select_ip_ic`, both callers (the IP tiebreaker update, 2026-10-09) | `(ic_idx, min(ic_idx + 2, cts_idx)]` | the fib's `cts_idx` (anchor) | `None` — as IC cond3 | "Is there an unfilled sd imbalance immediately after the IC?" — the first tiebreaker + the IP CSV column |
+| `poi_zones.select_ip_ic` — the most-recent-before-imbalance reference | `(oldest_ic_idx, cts_idx]` | the fib's `cts_idx` (anchor) | `None` — as IC cond3 | "The earliest unfilled sd imbalance after the oldest IC in play?" — the last tiebreaker |
 
 ### FibTracker — `evaluated_at = self._evaluated_at` = `event_moment` of the handled event
 

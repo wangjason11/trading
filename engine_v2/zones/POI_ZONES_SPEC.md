@@ -354,7 +354,7 @@ IC identification, per fib record (BOS anchor `b`, CTS anchor `c`, direction `sd
    section's step structure below waits for the user's write-up of the whole IC & POI process
 2. **The touch** — the candidate touches the fib's 61.8–80 zone (inclusive: `h >= zone_lo and l <= zone_hi`)
 3. **The institutional pattern** (§3.4) — the ONE IC = the best pattern among the touching candidates (rank → shape →
-   TB1 → TB2)
+   the tiebreakers: the immediate unfilled imbalance → the IC's candle type → the most recent before the imbalance)
 
 No IC candidate / no pattern → no IC → **no POI** for that record (PLAN_H D7; the `IP: none` reasons `no_ic_candidate`
 / `no_pattern`, §3.5 — RX1-N): MS's sd-proximity and the zone-proximity
@@ -416,12 +416,15 @@ ONE bundled condition (RX1-B) per §3.1 candidate `i` of a fib record — struct
    `FibTracker.stamp_ic_references` exports; PLAN_K §11.2 LA1); MS's in-flight read
    with its embedded tracker AT the fed event's moment (`poi_inner_for_fib(..., tracker=, evaluated_at=)`, built
    inside the read's re-raising scope — LANDMINES "The POI Resolver Fails Loudly"). Not in the activation sweep; `M`,
-   the legs, the touch, the pattern and TB1 / TB2 are unchanged (since B, TB2 runs over the surviving tied ICs).
+   the legs, the touch, the pattern and the tiebreakers are unchanged (since B, the tiebreakers run over the surviving
+   tied ICs).
 
 On the reference window (PLAN_K §5 / §11, S_K_A): every one of the 26 POI records' values; e.g. sub 0 cycle 3 (a buy):
 `prev_cycle_cts` 0.57774 (CTS_2), bound 1720 — 209 candidates, 85 pass; its landing-A pick 1604 (high 0.57880) is
-past the reference, so since landing B the pick is 1447 1A.iv (high 0.57768; TB2 over 1660). The only other
-change: sub 3 cycle 2 keeps 2969 but loses its TB1 tie (2988 cut); no structure event moves (PLAN_K §11.3 /
+past the reference, so from landing B the pick was 1447 1A.iv (high 0.57768; over 1660 by the most recent before the
+imbalance) — and since the IP tiebreaker update (2026-10-09, §3.4) it is 1660, whose immediate gap 1662 is unfilled
+while 1447's (1448) filled at 1480. The only other change: sub 3 cycle 2 keeps 2969 but loses its candle-type tie
+(2988 cut); no structure event moves (PLAN_K §11.3 /
 §11.4). `ic_not_before_break` cuts no candidate on the window (the price side already cuts every one the bound
 would).
 
@@ -465,9 +468,27 @@ Around an IC candidate, read with the agreed direction (PLAN_H §1 items 2–9):
   3D a SINGLE big_normal (cap 1, evaluated next to the cap-`cap` initial)·MULTI opp — the IC's `candle_type` is the
   opp type of a single opp leg; then the **shape** i–iv (single / multi initial × single / multi continuation; 3D i–ii);
   unlisted combinations → no pattern. The table is ONE data constant (`SINGLE_OPP_RANK` / `MULTI_OPP_RANK`);
-- **tiebreakers** among the best (rank, shape): **TB1** the IC's candle type maru > normal > pinbar; **TB2** the most
-  recent tied IC before the earliest unfilled sd imbalance after the OLDEST tied IC (§3.1's own test; an IC may be the
-  gap's c1).
+- **tiebreakers** among the best (rank, shape), in this order — each over the ICs the previous one left in play, the
+  first to leave exactly one deciding; `ip_tiebreak` = the deciding one's name (the IP tiebreaker update, 2026-10-09,
+  PLAN_H §6 TBU-1 … TBU-5, the user's text `../plans/plan_h_inputs/ip_tiebreaker_update_spec.md`; before it only the
+  last two ran, as "TB1" / "TB2"):
+  1. **the immediate unfilled imbalance** (`immediate_unfilled_imbalance`) — a filter: the ICs with an unfilled sd
+     imbalance whose first gap candle (its c2; a merged imbalance's first) is at IC + 1 or IC + 2
+     (`POIConfig.ip_immediate_imbalance_candles`) — raw candle offsets (a true doji takes a slot), the IC may be the
+     gap's c1, the gap's c3 never counts; the window ends at the CTS anchor. "Unfilled" = §3.1 condition 3's own test
+     (sd, the two-stroke fill through the fib's CTS anchor — a gap that fills only after the anchor, e.g. on the
+     retrace into the POI, counts as unfilled; no knowability cut). Exactly one passes → it is the IC; two or more →
+     only they go on; none → all go on (`immediate_unfilled_imbalance_first_c2_idx`). The user's reasoning: a
+     stronger form of condition 3 — an immediate, large move away from the IC — but weaker than the pattern itself;
+  2. **the IC's candle type** (`ic_candle_type`) maru > normal > pinbar — it separates only multi-opp ranks (a single
+     opp leg's type is in its rank);
+  3. **the most recent before the imbalance** (`most_recent_before_imbalance`) — the most recent IC in play before the
+     earliest unfilled sd imbalance after the OLDEST IC in play (§3.1's own test; an IC may be the gap's c1). When the
+     ICs in play all passed (1) it is their oldest (TBU-4: an IC is the last candle of its opp leg, so no other IC
+     sits before the oldest one's immediate gap).
+  On the reference window (PLAN_H §8.9 "The IP tiebreaker update"): three tied records; confluence sub 0 cycle 3
+  moves 1447 → 1660 (the immediate unfilled imbalance); sub 1 cycle 1 (1875) and sub 7 cycle 2 (4083) keep their
+  picks (no IC passes it).
 
 The pick's **`pattern_confirmed_idx`** (R1, a MOMENT) = when its continuation leg is known complete: the leg's last
 candle when its run (before the E1 trim) reached the cap, else the next candle; it floors the POI's activation (§4).
@@ -500,12 +521,18 @@ sub projection); the picked rows ARE the drawn POIs since landing B.
   the record (`structure_id`, `cycle_id`, `bos_anchor_idx`, `cts_anchor_idx`, `sd`), the candidate (`ic_idx`,
   `candle_type`, `agreed_dir`, `touches_zone`, `ic_ref_reason` — §3.2's outcome: empty = passes or no reference,
   `ic_past_reference`, `ic_not_before_break`; empty on the `IP: none` row; since PLAN_K landing A — a save before
-  S_K_A lacks the column), the pattern (`ip_rank` e.g. "1A.iv", `reason` = the first failing rule
+  S_K_A lacks the column), `immediate_imbalance_first_c2_idx` (the first gap candle of the candidate's unfilled sd
+  imbalance immediately after it — §3.4's first tiebreaker; empty = none, and on the `IP: none` row; since the IP
+  tiebreaker update — a save before it lacks the column), the pattern (`ip_rank` e.g. "1A.iv", `reason` = the first failing rule
   when there is none, `pattern_anchor_idx`, `opp_leg_first_idx`, `pattern_end_idx`, `pattern_confirmed_idx`,
   `ip_leg_candle_counts` "a-b-c", `legs` "first..last" per leg, located from `ic_idx` + the counts), each leg stack's
   `*_type` / `*_ratio` (vs the 5 marus before the pattern's first candle) / `*_body_pips`, and `picked` + the tiebreak
-  (`ip_tiebreak` TB1 / TB2, `ip_tb_runner_up_ic_idx`, `ip_tied_count` — the size of the group the DECIDING rule broke:
-  TB1 the (rank, shape) tie, TB2 the TB1 survivors —, `ip_tb_imbalance_first_c2_idx`) on the picked row. A failing
+  (`ip_tiebreak` = the deciding tiebreaker's name, §3.4; `ip_tb_runner_up_ic_idx` — the immediate unfilled
+  imbalance: the most recent tied IC failing it, the candle type: the most recent IC of the best losing type, the
+  most recent before the imbalance: the most recent other IC in play; `ip_tied_count` — the size of the group the
+  DECIDING rule broke: the (rank, shape) tie / the ICs the first left in play / the candle type's survivors;
+  `ip_tb_imbalance_first_c2_idx` — the pick's immediate imbalance / the reference imbalance, empty for the candle
+  type) on the picked row. A failing
   candidate's `ip_leg_candle_counts` / stacks are its first failing variant's.
 
 ---
@@ -549,8 +576,10 @@ assumes "POI ⟹ sd direction."
   - `pattern_anchor_idx` (the initial leg's first candle), `opp_leg_first_idx`, `pattern_end_idx` (the continuation
     leg's last candle): the legs are contiguous around `ic_idx` (the opp leg's last candle)
   - `pattern_confirmed_idx`: a MOMENT — the continuation leg known complete (R1); a term of the activation floor
-  - `ip_tiebreak` (`None` / `"TB1"` / `"TB2"`), `ip_tb_runner_up_ic_idx`, `ip_tied_count` (a count),
-    `ip_tb_imbalance_first_c2_idx` (TB2 only): set only when a tiebreaker decided
+  - `ip_tiebreak` (`None` / `"immediate_unfilled_imbalance"` / `"ic_candle_type"` / `"most_recent_before_imbalance"`
+    — §3.4; `"TB1"` / `"TB2"` = the candle type / the most recent before the imbalance until the IP tiebreaker update,
+    2026-10-09), `ip_tb_runner_up_ic_idx`, `ip_tied_count` (a count), `ip_tb_imbalance_first_c2_idx` (the immediate
+    unfilled imbalance / the most recent before the imbalance): set only when a tiebreaker decided
   - every index key is in the mirror's `entity_df_mutation._ZONE_META_IDX_KEYS` (entity-absolute on sub POIs)
 - `status`: "active" | "inactive" | "ended" (+ "disappeared" — a reserved terminal-invalidation status; see Zone States). Charting note (2026-09-20): a POI whose CYCLE collapsed (its BOS KL zone is `inactive` with clamped `confirmed_idx >= end_idx`) is not drawn on any chart (`charting/_zone_render.collapsed_cycles` / `is_poi_of_collapsed_cycle`); an `"inactive"` POI whose cycle is live (never met its activation conditions) is still drawn as an outline. POI fills are side-tinted since 2026-09-21 (buy gold-lime, sell amber — CHARTING_SPEC §7).
 - `end_idx` / `end_reason`: terminal axis inherited from the owning cycle (`compute_cycle_lifecycle`): `"reversal"` | `"next_cycle"` (the next cycle's clamped lifecycle-start = the CTS-established **moment** `meta["confirmed_at"]`, Plan C 2026-09-20) | for subs the sub's `cap_reason` — `"reversal"` | `"same_dir_replacement"` | `"parent_end"` — when the unique sub's `end_idx` capped the cycle (`"lifecycle_end"` is no longer emitted) | `None`
@@ -718,8 +747,9 @@ cfg = {
 - Side, structure_id, cycle_id
 - IC_idx, confirmed_idx
 - The institutional pattern (PLAN_H HV, landing B — `versions=` until then): `IP <rank> · legs a-b-c (initial |
-  opp | continuation)`, each leg `first–last` (one candle: its index), + `TB1 over <IC> (IC candle type)` /
-  `TB2 over <IC> (reference imbalance <c2>)` when a tiebreaker decided — ONE builder for the three POI hover sites
+  opp | continuation)`, each leg `first–last` (one candle: its index), + `Tiebreak over <IC>: immediate unfilled
+  imbalance <c2>` / `…: IC candle type` / `…: most recent before imbalance <c2>` when a tiebreaker decided (§3.4) —
+  ONE builder for the three POI hover sites
   (`charting/_zone_render.poi_ip_hover_text`)
 - Top/bottom bounds
 - The fib hover (the H1 chart AND the M15 lens charts since PLAN_H §8.9 F1, 2026-10-06): its status cell =

@@ -429,7 +429,7 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_structure_levels.csv` |
 | `*_kl_zones.csv` |
 | `*_poi_zones.csv` |
-| `*_ip_candidates.csv` — the institutional-pattern selection (PLAN_H landing A; the picked rows = the drawn POIs since landing B); + the column `ic_ref_reason` after `touches_zone` since PLAN_K landing A (2026-10-09) |
+| `*_ip_candidates.csv` — the institutional-pattern selection (PLAN_H landing A; the picked rows = the drawn POIs since landing B); + the column `ic_ref_reason` after `touches_zone` since PLAN_K landing A (2026-10-09); + `immediate_imbalance_first_c2_idx` after `ic_ref_reason` since the IP tiebreaker update (2026-10-09) |
 | `*_structure_events.csv` — `STATE_CHANGED(to=reversal)` carries `meta["pattern_anchor_idx"]` since PLAN_K landing A |
 | `*_imbalance_instances.csv` |
 | `*_fib_lifecycle.csv` — no `fib_mode` column since PLAN_I S6 (2026-10-09): against an older save (S_J `20261009_013718_708a8d9` and before) diff the 3 fib CSVs with `engine_v2/plans/plan_i_inputs/cmp_s6_fib_mode.py BASE CUR` (positional `cmp_save.py` shifts the `meta` cell); the `ic_ref_*` meta keys since PLAN_K landing A |
@@ -446,6 +446,12 @@ pick, and the `IP: none` row's `reason` is `no_pattern` (IC candidates, none pat
 candle passes every IC condition; replaces `no_candidates`). Against S_K_A: `engine_v2/plans/plan_h_inputs/
 cmp_k_landing_b.py BASE` (PLAN_K §11.3's V + the sub 1 cyc 2 relabel, exit 1 on anything else). S_K_B
 `20261009_140048_97795bd` is the first save with it (= `LATEST_<branch>` from 2026-10-09).
+**The IP tiebreaker update (2026-10-09, PLAN_H §6 TBU) — a BEHAVIOUR + FORMAT change:** a new first tiebreaker (the
+immediate unfilled imbalance) and descriptive `ip_tiebreak` values — `"TB1"` → `"ic_candle_type"`, `"TB2"` →
+`"most_recent_before_imbalance"`, new `"immediate_unfilled_imbalance"` (POI meta → `*_poi_zones.csv` `meta`, the IP
+CSVs, the POI hover) — and the IP CSVs' new column `immediate_imbalance_first_c2_idx` after `ic_ref_reason`. Against
+S_K_B or older: `engine_v2/plans/plan_h_inputs/cmp_tbu.py BASE` (the predicted pick move + the relabels + the new
+column, exit 1 on anything else) instead of reading those diffs as engine changes.
 | `*_wvmi.csv` |
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs

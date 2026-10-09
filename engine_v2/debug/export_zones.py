@@ -45,7 +45,8 @@ def export_poi_zones(zones: list, path: str | Path) -> None:
 IP_CANDIDATE_COLUMNS = [
     "structure_path_id", "sub_id", "parent_sid", "parent_cycle_id", "structure_id", "cycle_id",
     "bos_anchor_idx", "cts_anchor_idx", "sd",
-    "ic_idx", "candle_type", "agreed_dir", "touches_zone", "ic_ref_reason", "ip_rank", "reason",
+    "ic_idx", "candle_type", "agreed_dir", "touches_zone", "ic_ref_reason", "immediate_imbalance_first_c2_idx",
+    "ip_rank", "reason",
     "pattern_anchor_idx", "opp_leg_first_idx", "pattern_end_idx", "pattern_confirmed_idx", "ip_leg_candle_counts",
     "legs",
     "initial_type", "initial_ratio", "initial_body_pips",
@@ -100,6 +101,7 @@ def export_ip_candidates(records: list, path: str | Path) -> None:
             "agreed_dir": r.agreed_dir,
             "touches_zone": r.touches_zone,
             "ic_ref_reason": r.ic_ref_reason,
+            "immediate_imbalance_first_c2_idx": r.immediate_imbalance_first_c2_idx,
             "ip_rank": r.ip_rank,
             "reason": r.reason,
             "pattern_anchor_idx": r.pattern_anchor_idx,

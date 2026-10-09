@@ -150,8 +150,8 @@ _ZONE_META_IDX_KEYS = (
     "opp_leg_first_idx",    # POI
     "pattern_end_idx",      # POI (the continuation leg's last candle)
     "pattern_confirmed_idx",  # POI (a MOMENT: the continuation leg known complete — R1)
-    "ip_tb_runner_up_ic_idx",       # POI (None unless TB1 / TB2 decided)
-    "ip_tb_imbalance_first_c2_idx",  # POI (TB2 only)
+    "ip_tb_runner_up_ic_idx",       # POI (None unless a tiebreaker decided)
+    "ip_tb_imbalance_first_c2_idx",  # POI (the immediate-imbalance / most-recent-before-imbalance tiebreakers)
 )
 
 # FibState meta keys with entity-df indices (the dataclass fields bos_idx /
@@ -183,6 +183,7 @@ _IP_CANDIDATE_IDX_FIELDS = (
     "pattern_confirmed_idx",
     "ip_tb_runner_up_ic_idx",
     "ip_tb_imbalance_first_c2_idx",
+    "immediate_imbalance_first_c2_idx",
 )
 
 # WaveCandleResult meta keys with entity-df indices (the dataclass fields

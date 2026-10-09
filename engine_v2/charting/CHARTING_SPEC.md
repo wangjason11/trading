@@ -120,7 +120,8 @@ To change any visual element:
 - **Hover (PLAN_H HV, landing B 2026-10-06; `versions=` until then)**: the pattern line(s) from ONE builder,
   `_zone_render.poi_ip_hover_text`, on all three POI hover sites (the H1 chart, the M15 lens charts' sub POIs and
   their H1 overlay): `IP <rank> · legs a-b-c (initial | opp | continuation)` — each leg `first–last`, one candle its
-  index — + `TB1 over <IC> (IC candle type)` / `TB2 over <IC> (reference imbalance <c2>)` when a tiebreaker decided.
+  index — + `Tiebreak over <IC>: immediate unfilled imbalance <c2>` / `…: IC candle type` / `…: most recent before
+  imbalance <c2>` when a tiebreaker decided (POI_ZONES_SPEC §3.4; `TB1 over …` / `TB2 over …` until 2026-10-09).
   The builder asserts the leg counts match the leg indices (a mirror that shifted one but not the other fails at render).
 - Style keys: `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line`
 

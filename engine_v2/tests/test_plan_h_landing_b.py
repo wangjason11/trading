@@ -388,10 +388,16 @@ def test_hover_multi_legs_print_ranges():
 
 
 def test_hover_tiebreak_lines():
-    assert poi_ip_hover_text(_meta("1A.iv", "2-1-2", 4081, 4083, 4085, "TB2", 4136, 4132), 4083) == (
-        "IP 1A.iv · legs 2-1-2 (4081–4082 | 4083 | 4084–4085)<br>TB2 over 4136 (reference imbalance 4132)")
-    assert poi_ip_hover_text(_meta("2A.i", "1-1-1", 9, 10, 11, "TB1", 14), 10) == (
-        "IP 2A.i · legs 1-1-1 (9 | 10 | 11)<br>TB1 over 14 (IC candle type)")
+    assert poi_ip_hover_text(_meta("1A.iv", "2-1-2", 4081, 4083, 4085, "most_recent_before_imbalance", 4136, 4132),
+                             4083) == ("IP 1A.iv · legs 2-1-2 (4081–4082 | 4083 | 4084–4085)"
+                                       "<br>Tiebreak over 4136: most recent before imbalance 4132")
+    assert poi_ip_hover_text(_meta("2A.i", "1-1-1", 9, 10, 11, "ic_candle_type", 14), 10) == (
+        "IP 2A.i · legs 1-1-1 (9 | 10 | 11)<br>Tiebreak over 14: IC candle type")
+    assert poi_ip_hover_text(_meta("1A.iv", "3-1-3", 1657, 1660, 1663, "immediate_unfilled_imbalance", 1447, 1662),
+                             1660) == ("IP 1A.iv · legs 3-1-3 (1657–1659 | 1660 | 1661–1663)"
+                                       "<br>Tiebreak over 1447: immediate unfilled imbalance 1662")
+    with pytest.raises(AssertionError, match="unknown ip_tiebreak 'TB1'"):     # the pre-TBU-3 values are gone
+        poi_ip_hover_text(_meta("2A.i", "1-1-1", 9, 10, 11, "TB1", 14), 10)
 
 
 def test_hover_rejects_legs_that_do_not_match_their_indices():
@@ -446,18 +452,19 @@ def test_h1_chart_hovers_show_the_pattern_and_ip_none(tmp_path, monkeypatch):
 
 def test_poi_meta_copies_the_selections_tiebreak():
     """`derive_poi_zones` copies the record's tiebreak tuple into the POI meta (rule, runner-up IC, tied count,
-    the reference imbalance's first c2) — the reference window's TB2 POIs (conf 1875 / 4083) go through it."""
+    the imbalance's first c2) — the reference window's tied POIs (conf 1660 / 1875 / 4083) go through it."""
     import dataclasses
     res, out, _ = _pipeline(_make_ip_moment_after_anchor_data)
     recs = poi_zones.select_ip_records(res.df, res.events, out["fib_tracker"], POIConfig())
     assert [r.selection.pick.ic_idx for r in recs if r.selection.pick is not None] == [9]
-    recs = [dataclasses.replace(r, selection=dataclasses.replace(r.selection, tiebreak=("TB2", 7, 2, 11)))
+    recs = [dataclasses.replace(r, selection=dataclasses.replace(
+        r.selection, tiebreak=("most_recent_before_imbalance", 7, 2, 11)))
             for r in recs]
     with contextlib.redirect_stdout(io.StringIO()):
         poi, = poi_zones.derive_poi_zones(res.df, res.events, fib_tracker=out["fib_tracker"], config=POIConfig(),
                                           ip_records=recs)
     assert (poi.meta["ip_tiebreak"], poi.meta["ip_tb_runner_up_ic_idx"], poi.meta["ip_tied_count"],
-            poi.meta["ip_tb_imbalance_first_c2_idx"]) == ("TB2", 7, 2, 11)
+            poi.meta["ip_tb_imbalance_first_c2_idx"]) == ("most_recent_before_imbalance", 7, 2, 11)
 
 
 def test_drawn_poi_activation_and_meta_take_the_picks_confirmation_moment():

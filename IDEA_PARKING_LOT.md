@@ -111,7 +111,11 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    candidates, the conditions filtering together > the IP > fallbacks) and the reasons (RX1-N); waiting on that
    write-up: POI_ZONES_SPEC §3's step structure, the code's "candidates" names (`find_ic_candidates`,
    `*_ip_candidates.csv`), the fallbacks (D.2 "No-pattern cycles"). Still open from the debugging log: sub 3 cyc 3
-   has no POI record (PLAN_H §8.9).
+   has no POI record (PLAN_H §8.9). **First, the IP tiebreaker update (user 2026-10-09, before the write-up — "with
+   it, I think we would wrap up the Institutional Pattern process"): BUILT 2026-10-09** — a new first tiebreaker, the
+   immediate unfilled imbalance (an unfilled sd gap whose first gap candle is at IC + 1 / IC + 2; a filter), then the
+   IC's candle type, then the most recent before the imbalance; descriptive `ip_tiebreak` names (no more TB1 / TB2);
+   on the window one pick moves (confluence sub 0 cyc 3 1447 → 1660). PLAN_H §6 TBU-1 … TBU-5, §8.9.
 2. **The cross-cycle fib revamp — one logic for main and sub, the final cross-cycle + single-cycle fib rules** —
    **COMPLETE 2026-10-09** (PLAN_I S1–S6 + PLAN_J; item 1's debugging resumes next). **OPEN — a cross-limit price
    DEBUGGING task (user 2026-10-09, the second "immediate future" session, after item 1's IC revamp):** "Updates to
@@ -290,6 +294,14 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
 
 - **Fib storage unification** (`_cross_cycle_data` → versioned `_fibs`) — "DEFERRED, not closed (user 2026-05-27):
   may revisit". Detail: `engine_v2/zones/FIB_LIFECYCLE_SPEC.md` §13.
+- **Overall chart revamp & improvements** (the user, 2026-10-09: "we can make a note of it and come back to it later
+  when we do the overall chart revamp & improvements") — no slot yet; collect chart items here. (1) **The fib hover
+  masks candle hovers:** each drawn fib (H1 and M15) carries an invisible hover line at the midpoint of its 61.8–80
+  band with one point per candle from the BOS anchor to the CTS anchor (`export_plotly` ~:2579 / `export_m15_chart`
+  ~:1700, PLAN_H §8.9 F1); the layout keeps Plotly's default "closest" hover mode, so a candle crossing that price
+  inside the span shows the fib instead (H1 sid 1 cyc 2: 0.57816 over 80 candles, through the 832–866 IC area).
+  Options raised: hover points only at the band's two ends (recommended), one point at the CTS end, a legend toggle.
+  Related: "Uniform 3-tier chart opacity" below; register §A's charting-audit style items.
 - **Uniform 3-tier chart opacity** (brightest = cycle not ended, mid = sid not ended, faded = sid ended; one
   `opacity_for(sid, cycle)` helper for every element) — its own session. Detail: FIB_LIFECYCLE_SPEC §9.4 + §13.
 - **Breadcrumb header with cross-chart navigation** — "not in v1". Detail: PART4 §16.9.

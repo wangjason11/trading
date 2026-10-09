@@ -19,6 +19,11 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple
 
 from engine_v2.charting.style_registry import STYLE
 from engine_v2.zones.poi_lifecycle import active_stretches_from_history
+from engine_v2.zones.poi_zones import (
+    TIEBREAK_IC_CANDLE_TYPE,
+    TIEBREAK_IMMEDIATE_UNFILLED_IMBALANCE,
+    TIEBREAK_MOST_RECENT_BEFORE_IMBALANCE,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -133,9 +138,9 @@ def poi_ip_hover_text(meta: dict, ic_idx: int) -> str:
     """The POI hover's pattern line(s) — ONE builder for the three POI hover
     sites (the H1 chart, the M15 lens charts' sub POIs and their H1 overlay;
     PLAN_H HV): `IP <rank> · legs a-b-c (initial | opp | continuation)` with
-    each leg as `first–last` (one candle: its index), + `<br>TB1 over <IC>
-    (IC candle type)` / `<br>TB2 over <IC> (reference imbalance <c2>)` when a
-    tiebreaker decided. Indices are the POI's own (entity-absolute on a
+    each leg as `first–last` (one candle: its index), + `<br>Tiebreak over <IC>:
+    immediate unfilled imbalance <c2>` / `…: IC candle type` / `…: most recent
+    before imbalance <c2>` when a tiebreaker decided (`poi_zones.TIEBREAK_*`). Indices are the POI's own (entity-absolute on a
     mirrored sub POI); the counts must match the leg indices (asserted — a
     missed mirror shift would break it)."""
     n_init, n_opp, n_cont = (int(x) for x in meta["ip_leg_candle_counts"].split("-"))
@@ -151,11 +156,14 @@ def poi_ip_hover_text(meta: dict, ic_idx: int) -> str:
     text = (f"IP {meta['ip_rank']} · legs {n_init}-{n_opp}-{n_cont} "
             f"({_rng(anchor, opp_first - 1)} | {_rng(opp_first, ic)} | {_rng(ic + 1, end)})")
     tb = meta["ip_tiebreak"]
-    if tb == "TB1":
-        text += f"<br>TB1 over {meta['ip_tb_runner_up_ic_idx']} (IC candle type)"
-    elif tb == "TB2":
-        text += (f"<br>TB2 over {meta['ip_tb_runner_up_ic_idx']} "
-                 f"(reference imbalance {meta['ip_tb_imbalance_first_c2_idx']})")
+    if tb == TIEBREAK_IMMEDIATE_UNFILLED_IMBALANCE:
+        text += (f"<br>Tiebreak over {meta['ip_tb_runner_up_ic_idx']}: "
+                 f"immediate unfilled imbalance {meta['ip_tb_imbalance_first_c2_idx']}")
+    elif tb == TIEBREAK_IC_CANDLE_TYPE:
+        text += f"<br>Tiebreak over {meta['ip_tb_runner_up_ic_idx']}: IC candle type"
+    elif tb == TIEBREAK_MOST_RECENT_BEFORE_IMBALANCE:
+        text += (f"<br>Tiebreak over {meta['ip_tb_runner_up_ic_idx']}: "
+                 f"most recent before imbalance {meta['ip_tb_imbalance_first_c2_idx']}")
     else:
         assert tb is None, f"[chart] POI {ic} unknown ip_tiebreak {tb!r}"
     return text

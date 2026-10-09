@@ -118,8 +118,11 @@ Per fib (BOS anchor `b`, CTS anchor `c`, direction `sd`):
    at the junction is not an opp candle: it is placed (J1) — big_normal · ⊖ · ↓(IC) · ↑ big_maru: ⊖ → initial may
    stack to a maru and keep the opp leg single (1B / 2A / 3A), ⊖ → opp gives 3D.i; the better wins. Unlisted
    combinations → no pattern (P8).
-10. **Tiebreakers among patterns of the same rank + shape (TB, round 4, 2026-10-02 — supersedes the round-3 list and
-    R4 / R6):** TB1 IC type maru > normal > pinbar (the IC candle itself; only separates 3C / 3D) → TB2 the most recent
+10. **Tiebreakers among patterns of the same rank + shape — UPDATED 2026-10-09 (§6 TBU-1 … TBU-5, §8.9 "The IP
+    tiebreaker update"): a NEW first one, the immediate unfilled imbalance (an unfilled sd imbalance whose first gap
+    candle is at IC + 1 / IC + 2 — a filter: one passing → final, none → all go on), then the two below, renamed
+    `ic_candle_type` (TB1) and `most_recent_before_imbalance` (TB2); canonical POI_ZONES_SPEC §3.4.** As decided
+    in round 4 (TB, 2026-10-02 — supersedes the round-3 list and R4 / R6): TB1 IC type maru > normal > pinbar (the IC candle itself; only separates 3C / 3D) → TB2 the most recent
     IC before the OLDEST unfilled sd imbalance. TB2 always ends it (distinct idx). No tie params (the 80 % bands are
     gone). **TB2a (decided 2026-10-05):** the reference = the earliest unfilled sd imbalance AFTER the oldest tied IC
     (its first c2 > that IC; one always exists — every candidate has one); the pick = the most recent tied IC before
@@ -332,6 +335,19 @@ through the moved triggers (§3 round 5) — "We won't be able to judge whether 
 until I can review the charts".
 
 ## 6. Decisions
+
+**2026-10-09 (the IP tiebreaker update, before the user's holistic IC write-up — the spec verbatim
+`plan_h_inputs/ip_tiebreaker_update_spec.md`; measured on `2d199fd` with `plan_h_inputs/tb_imb_measure.py` /
+`tb_imb_dump.py`, §8.9 "The IP tiebreaker update")**
+
+| ID | Decision | Why / the user's words |
+|---|---|---|
+| TBU-1 | A NEW first tiebreaker among the ICs tied on the best (rank, shape): **an unfilled sd imbalance immediately after the IC** — a filter: exactly one IC passes → it is final; two or more pass → only they go on; none → all go on. Then the IC's candle type (maru > normal > pinbar; was TB1), then the most recent IC before the earliest unfilled imbalance after the oldest IC still in play (was TB2). The type tiebreaker still runs between the two; in the user's example it changed nothing | "Prefer IC immediately followed by unfilled imbalance, "immediately" here means within 2 candles after the IC candidate (<= IC_idx + 2). This is essentially a filtering condition (true/false). All true IC candidates move onto tiebreaker 2 to be further narrowed down. If no trues, then all candidates move onto 2. If only 1 true, then that's the final IC & and we skip the rest." Why first: "a stronger & more stringent version of one of the 4 conditions … indicates immediate and large movement away from the IC … but ultimately, this by itself is not as strong of a signal as the institutional pattern, which is why it is applied as a tiebreaker after IP" |
+| TBU-2 | "Within 2 candles" counts the imbalance's GAP candle — its c2; for a merged multi-candle imbalance its FIRST gap candle — at IC + 1 or IC + 2 (so the gap's c1 is the IC or the next candle), never the 3-candle pattern's c3. Consecutive sd gap candles merge, so at most ONE imbalance can sit in that window | "Q1 (a) is correct. It is always the gap itself instead of the 3 candle pattern this also applies for multi candle imbalances which would be the first gap candle" |
+| TBU-3 | Descriptive names, not numbers, for the tiebreakers wherever they persist — code, the `ip_tiebreak` value, the CSV, the hover, the canonical spec; "TB1 / TB2 / TB3" stay planning shorthand (here and in the user's spec). The general rule: memory `feedback_naming_discussions.md` | "(ii) in general I want to move away from using nondescriptive naming with iterative numbers like TB2 or Scenario3 since when we come back to it far in the future, they don't provide any descriptive details. When I provide specs and discussion around logic, it helps to use these naming for organizational purposes … So their usage is strictly to help with understanding the ideas and plan our build". The names (agreed): `immediate_unfilled_imbalance` / `ic_candle_type` / `most_recent_before_imbalance`; the CSV column `immediate_imbalance_first_c2_idx`. No sweep of existing names; ordinal VALUES (the ranks 1A–3D, the shapes i–iv) stay: "there are places where its usage is appropriate like with the tier & ranks. The difference here is that these represent "values" of a variable. We should generally refrain from using them to "name" ideas, concepts, variables, etc." |
+| TBU-4 | When two or more ICs pass the new tiebreaker (and the type tiebreaker leaves two or more), the last tiebreaker picks the OLDEST of them — exactly, by the pattern's structure: the IC is the last candle of its opp leg, so another tied IC can never sit before the oldest one's immediate gap | "TB3 oldest is intended" |
+| TBU-5 | Accepted defaults: the tie = the same rank AND shape (e.g. both 1A.iv), as today; the debug CSV gets a per-candidate column = the first gap candle of its unfilled imbalance within IC + 2 (empty = none); when the new tiebreaker decides, the runner-up = the most recent tied IC that failed it, the imbalance column = the pick's gap, plus a hover line. Clarified + DECIDED: "unfilled" = condition 3's test, judged through the fib's CTS ANCHOR (the drawn POI: the final fib's; MS's read: its as-of fib's) — a gap before the anchor that fills only after it (e.g. 1662, filled at 1940 on the retrace into 1660's range) counts as UNFILLED, and a gap candle after the anchor is not in the window (the window = IC + 1 … min(IC + 2, the CTS anchor)); "2 candles" = RAW candle offsets, a true doji takes a slot (IC at t, a true doji at t+1, the gap candle at t+3 → fails) | "Everything else looks good to me." → "Ok sounds good on what you said on gap filled after the CTS does not count. true dojis included: yes raw counting is correct" |
+| TBU-6 | The tiebreakers run ONLY among patterns tied on the best (rank, shape) — kept as built after the chart review: H1 sid 1 cyc 2 keeps 832 (3C.ii), its ONLY patterned IC candidate, although 832's immediate gap 833 (832 its c1) filled at 858 — no tie, so no tiebreaker runs. The user had expected 860: an IC candidate with an unfilled immediate gap (861–862, filled at 944, after the CTS anchor 905) but NO pattern — its continuation 861–863 is a maru of 9.3 pips with big ratio 0.63 < 0.65 (`continuation_not_big_maru`). Not adopted: the immediate imbalance as a fifth IC condition (832 cut → no other candidate with an immediate gap patterns → `IP: none`, no POI — not 860); revisiting the big_maru threshold | "Ok sounds good. Let's Keep it as built and we can commit." |
 
 **2026-10-09 (RX1 round 1 — the IC reference conditions, §8.9 RX1; the spec `plan_h_inputs/ic_reference_conditions_spec.md`)**
 
@@ -1305,6 +1321,47 @@ structure; past M the BOS drops out.
   FYI items raised: structurally IC-less fibs (a zone entirely past its reference — 0 on the window; a short
   BOS-to-bound window — sub 1 cyc 2: 1934–1935 only, already no POI) → no POI (D7); the census sees final picks only —
   MS's as-of reads can move where the final pick holds → a variant replay before the switch (as §8.4).
+
+**The IP tiebreaker update (2026-10-09, after RX1; decisions §6 TBU-1 … TBU-5; the spec verbatim
+`plan_h_inputs/ip_tiebreaker_update_spec.md`).** Measured on `2d199fd` (= S_K_B's code) by a read-only in-process
+pipeline run that wraps `select_ip_ic` — every tie BOTH consumers meet (`plan_h_inputs/tb_imb_measure.py`; the candle
+dump `tb_imb_dump.py`; lens indices = sub-local + the sub's slice offset: sub 0 +404, sub 1 +1747, sub 7 +3977):
+- **H1: no ties.** M15: three tied records (sub 7's on both lenses); MS's in-flight reads meet the same ties (sub 1
+  cyc 1 also on three earlier CTS anchors, local 147 / 148 / 149, the same group), none differs from the drawn read.
+- **Confluence sub 0 cyc 3 (a buy; BOS 1310, CTS anchor 1721) — the one record that moves, and the user's
+  IC2 / IC3 case.** Tied 1A.iv, both marus: 1447 (h 0.57768) — its gap candle 1448 (the IC is the gap's c1; gap
+  0.57768–0.57784) FILLED at 1480 — and 1660 (h 0.57738) — its gap candle 1662 (c1 1661; gap 0.57731–0.57749)
+  unfilled through the CTS anchor. Today's last tiebreaker picks 1447 via the far gap 1658 (0.57696–0.57720,
+  unfilled). The new tiebreaker: 1447 fails, 1660 alone passes → **1660** (with TBU-2's gap-candle reading; with "the
+  whole gap done by IC + 2" 1660 would fail too and nothing would move). After the CTS anchor: 1662 first fills at
+  1940 (2025-12-15 03:00) — the first candle back into 1660's range — and 1658 at 1946.
+- **Unchanged (no IC passes the new tiebreaker):** confluence sub 1 cyc 1 (a sell): 1842 maru (no sd gap within 3),
+  1871 normal (gap 1873 filled at 1877), 1875 maru (gap 1877 filled at 1880) → the type tiebreaker cuts 1871 → the
+  last picks 1875, as today; sub 7 cyc 2 (both lenses): 4083 (no sd gap within 3), 4136 (gap 4138 filled at 4145)
+  → 4083, as today.
+- **Watch at the landing:** MS's sd-proximity read for sub 0 cyc 3 moves with the pick (1660's zone sits ~3 pips under
+  1447's) — compare MS's POI reads before touching MS if a structure event moves.
+- **BUILT 2026-10-09 (one landing, uncommitted until the chart review):** `poi_zones.immediate_unfilled_imbalance_
+  first_c2_idx` (the helper — `iter_unfilled_imbalances` over IC + 1 … min(IC + `POIConfig.ip_immediate_imbalance_
+  candles` = 2, the CTS anchor), condition 3's test; it now carries the no-straddle assert the last tiebreaker had) on
+  every classified candidate (`IPCandidate` / `IPCandidateRecord.immediate_imbalance_first_c2_idx`, the CSV column
+  after `ic_ref_reason`, the mirror's `_IP_CANDIDATE_IDX_FIELDS`); `select_ip_ic`'s chain + the `TIEBREAK_*` names;
+  the hover `Tiebreak over <IC>: …`. Tests 1536 → 1537 (10 new pins, 10 rewritten to their purpose under the new
+  order — e.g. the candle-type test now gives every IC an immediate gap). **`/compare` vs S_K_B (reuse of the
+  44.3 s replay, FETCH GATE PASS) == the prediction** — `plan_h_inputs/cmp_tbu.py` RESULT OK: 22 / 27 CSVs
+  md5-equal (every structure-events / KL / fib / WVMI / trigger CSV — MS's read moved nothing); confluence sub 0
+  cyc 3 1447 → 1660 (1A.iv, legs 2-1-3 = 1658–1659 | 1660 | 1661–1663, over 1447, its gap 1662, zone 0.57710–0.57738;
+  the lifecycle unchanged: active from 1721, ended 1793 `next_cycle`); the relabels on 1875 (never activated — not
+  drawn) and 4083 (both lenses); the new column on 120 candidate rows. Charts: counts equal (81 / 236, 135 / 120,
+  274 / 264); H1 figure-identical; confluence: the one POI's trace + rect; hovers: that POI, its fib's IP line, 4083.
+  Mutation (`plan_h_inputs/mutants_tbu.py`, full suite each): 24 / 24 KILLED — the window bounds, the CTS clamp, the
+  fill horizon, the sd filter (also killed by an MS fixture), the assert, the helper's call site, every chain branch /
+  runner-up / count / label, the CSV column, the mirror shift, the hover.
+- **Chart review (the user, 2026-10-09):** asked why H1 sid 1 cyc 2 did not move from 832 to 860 → no tie there (832 the
+  only pattern; 860 `continuation_not_big_maru`, ratio 0.63 vs 0.65) → "Keep it as built" (§6 TBU-6). Also asked
+  where the fib hovers sit (an invisible line at the 61.8–80 midpoint, one point per candle from the BOS to the CTS
+  anchor — e.g. sid 1 cyc 2 at 0.57816 over 80 candles; the default "closest" hover mode then masks candle hovers in
+  that band) → no change now, noted for the chart revamp (register §G).
 
 **PAUSED 2026-10-06 (§6 F2a–F2e).** The debugging stops here for the cross-cycle fib revamp (register §D.1 item 2,
 a new session). It resumes after the revamp with every point above and in §8.5b as logged, each rule experiment

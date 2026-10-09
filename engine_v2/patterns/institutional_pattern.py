@@ -64,7 +64,7 @@ SINGLE_OPP_RANK: Dict[Tuple[str, str], str] = {
 # A MULTI opp leg (no type requirement on it — P8a): 3C from any maru initial; 3D from a single big_normal initial.
 MULTI_OPP_RANK: Dict[str, str] = {"big_maru": "3C", "maru": "3C", "big_normal": "3D"}
 
-# TB1: the IC's candle type, best first.
+# The IC-candle-type tiebreaker (`poi_zones.TIEBREAK_IC_CANDLE_TYPE`): the IC's candle type, best first.
 IC_TYPE_PREFERENCE: Tuple[str, ...] = ("maru", "normal", "pinbar")
 
 

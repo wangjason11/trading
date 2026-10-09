@@ -2,7 +2,7 @@
 
 An IC candidate passes every IC condition together — the §3.1 ones, the touch, the IC reference (`is_ic_candidate`);
 the IP is looked for among IC candidates only, in BOTH consumers (`select_ip_ic`: the drawn POI and MS's read):
-- the reference cuts the pick -> the next IC candidate is picked; TB2 runs over the SURVIVING tied ones;
+- the reference cuts the pick -> the next IC candidate is picked; the tiebreakers run over the SURVIVING tied ones;
 - the before-the-break side cuts too;
 - no IC candidate -> no POI, the none row `no_ic_candidate`; IC candidates without a pattern -> `no_pattern`;
 - MS's in-flight read is filtered (a real MS run: the 302 / 167 J2 fixture's proximity confirmation disappears).
@@ -22,11 +22,13 @@ from engine_v2.zones.poi_zones import (
     IC_REF_NOT_BEFORE_BREAK as NOT_BEFORE,
     IC_REF_PAST_REFERENCE as PAST,
     POIConfig,
+    TIEBREAK_IMMEDIATE_UNFILLED_IMBALANCE,
+    TIEBREAK_MOST_RECENT_BEFORE_IMBALANCE,
     derive_ip_candidates,
     is_ic_candidate,
 )
 
-_GAPS = (10, 12)        # the TB2 frame's reference imbalances (first c2 10): unreferenced pick 9, TB2 over 11 (3 tied)
+_GAPS = (10, 12)        # the `_tb2_frame` gaps: 7 has none immediately after it; unreferenced pick 9 over 11 (2 in play)
 
 
 def _tb2(ref):
@@ -44,15 +46,15 @@ def test_the_frame_ics_and_the_unreferenced_pick():
     df = _tb2_frame()
     assert [round(float(df.loc[i, "h"]), 5) for i in (7, 9, 11)] == [0.60093, 0.60129, 0.60165]
     sel = _tb2(ICReference.NONE)
-    assert sel.pick.ic_idx == 9 and sel.tiebreak == ("TB2", 11, 3, 10)
+    assert sel.pick.ic_idx == 9 and sel.tiebreak == (TIEBREAK_MOST_RECENT_BEFORE_IMBALANCE, 11, 2, 10)
 
 
-def test_tb2_runs_over_the_surviving_tied_ics_only():
-    """A reference at 0.60130 cuts 11 (high 0.60165): TB2 over {7, 9} — the same reference imbalance, the runner-up
-    7, 2 tied (not 11 / 3)."""
+def test_the_tiebreakers_run_over_the_surviving_tied_ics_only():
+    """A reference at 0.60130 cuts 11 (high 0.60165, its immediate gap 12): over {7, 9} only 9 has an immediate
+    unfilled gap → 9 by the immediate-unfilled-imbalance tiebreaker, runner-up 7, 2 tied (not 11 / 3)."""
     sel = _tb2(ICReference(0.60130, "prev_cycle_cts"))
     assert {c.ip.ic_idx: c.ic_ref_reason for c in sel.candidates} == {7: None, 9: None, 11: PAST}
-    assert sel.pick.ic_idx == 9 and sel.tiebreak == ("TB2", 7, 2, 10)
+    assert sel.pick.ic_idx == 9 and sel.tiebreak == (TIEBREAK_IMMEDIATE_UNFILLED_IMBALANCE, 7, 2, 10)
 
 
 def test_the_reference_cutting_the_pick_moves_it_to_the_next_ic_candidate():

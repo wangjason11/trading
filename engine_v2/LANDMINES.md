@@ -1787,7 +1787,7 @@ forgotten moment is a `TypeError`, never a silent default; `evaluated_at=None`
 is an explicit, justified no-cut (FibTracker's decisions — the drawn fib's and,
 since PLAN_I S5, MS's in-flight one — pass the handled event's moment,
 `event_moment(ev)`, the apply candle `confirmed_at` on a pattern-path CTS_UPDATED
-since Plan E E3·0; the IP pick's IC cond3 / TB2 pass `None`, MARKET_STRUCTURE_SPEC
+since Plan E E3·0; the IP pick's IC cond3 and its tiebreakers' imbalance reads pass `None`, MARKET_STRUCTURE_SPEC
 "Snapshot vs per-candle").
 Rule: IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
 
@@ -2391,7 +2391,7 @@ exists only because `c3 = B+1` was seen, and a merged run ending at `B-1` gets
 its bounds from `B+1` (`imbalance.py`). The MS consumers — since PLAN_I S5 the
 embedded FibTracker (cut at each fed event's moment `<= B`) and
 `_refresh_poi_inners_for_cycle` → `poi_inner_for_fib` → `select_ip_ic`
-(`find_ic_candidates` IC cond3, the TB2 reference) — ask the pick's questions
+(`find_ic_candidates` IC cond3, the tiebreakers' immediate imbalance and reference) — ask the pick's questions
 with `evaluated_at=None`: as-of for *fills* (`check_to_idx <=` the fib's CTS anchor
 `<= st.cts.idx <= B`), no existence cut, by decision (MARKET_STRUCTURE_SPEC
 "Snapshot vs per-candle"). (Until S5 the retired `_update_cycle0_data` /

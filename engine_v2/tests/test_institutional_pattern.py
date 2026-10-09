@@ -43,12 +43,16 @@ from engine_v2.patterns.institutional_pattern import (
 )
 from engine_v2.zones.fib_tracker import FibState
 from engine_v2.zones.poi_zones import (
+    TIEBREAK_IC_CANDLE_TYPE as CANDLE_TYPE,
+    TIEBREAK_IMMEDIATE_UNFILLED_IMBALANCE as IMMEDIATE,
+    TIEBREAK_MOST_RECENT_BEFORE_IMBALANCE as MOST_RECENT,
     IPCandidateRecord,
     POIConfig,
     derive_ip_candidates,
     fib_zone_bounds,
     find_ic_candidates,
     ic_touches_zone,
+    immediate_unfilled_imbalance_first_c2_idx,
     select_ic_variants,
     select_ip_ic,
     select_ip_records,
@@ -542,49 +546,144 @@ def test_volume_only_doji_is_a_candidate_and_a_split_candle_is_not():
 
 
 def _tb2_frame():
-    # ICs 7, 9, 11 — all 1A.i with maru ICs (a full rank + TB1 tie)
+    # ICs 7, 9, 11 — all 1A.i with maru ICs (a full rank + candle-type tie); each IC's continuation is ONE candle, so a
+    # gap candle at 8 / 10 / 12 is IMMEDIATELY after the IC before it (the immediate-unfilled-imbalance tiebreaker)
     return _frame([("M", U, 10), ("M", D, 6), ("M", U, 10), ("M", D, 6), ("M", U, 10), ("M", D, 6), ("M", U, 10)])
 
 
-def test_tb2a_most_recent_tied_ic_before_the_reference_ic_may_be_c1():
+def test_most_recent_before_imbalance_ic_may_be_the_reference_c1():
+    """7 has no gap immediately after it (8, 9 empty) → out; 9 and 11 stay in play; the reference = the earliest
+    unfilled gap after 9 (first c2 10, IC 9 is its c1) → 9."""
     df = _tb2_frame()
-    sel = _select(df, 6, 12, [_far_gap(10), _far_gap(12)])     # reference c2 10: IC 9 is its c1
+    sel = _select(df, 6, 12, [_far_gap(10), _far_gap(12)])
     assert [c.ip.ip_rank for c in sel.candidates] == ["1A.i"] * 3
-    assert sel.pick.ic_idx == 9 and sel.tiebreak == ("TB2", 11, 3, 10)
+    assert [c.immediate_imbalance_first_c2_idx for c in sel.candidates] == [None, 10, 12]
+    assert sel.pick.ic_idx == 9 and sel.tiebreak == (MOST_RECENT, 11, 2, 10)
 
 
-def test_tb2a_excludes_ics_at_or_after_the_reference_first_c2():
+def test_most_recent_before_imbalance_excludes_ics_at_or_after_the_reference_first_c2():
     df = _tb2_frame()
     sel = _select(df, 6, 12, [_far_gap(11), _far_gap(12)])
-    assert sel.pick.ic_idx == 9 and sel.tiebreak == ("TB2", 11, 3, 11)
+    assert sel.pick.ic_idx == 9 and sel.tiebreak == (MOST_RECENT, 11, 2, 11)
 
 
-def test_tb2a_skips_a_filled_gap_as_the_reference():
+def test_a_filled_gap_is_neither_immediate_nor_the_reference():
     df = _tb2_frame()
     sel = _select(df, 6, 12, [_filled_gap(df, 8, 10), _far_gap(10), _far_gap(12)])
-    assert sel.pick.ic_idx == 9 and sel.tiebreak[3] == 10
+    assert [c.immediate_imbalance_first_c2_idx for c in sel.candidates] == [None, 10, 12]   # 7's gap 8 filled
+    assert sel.pick.ic_idx == 9 and sel.tiebreak == (MOST_RECENT, 11, 2, 10)
     unfilled = _select(_tb2_frame(), 6, 12, [_far_gap(8), _far_gap(10), _far_gap(12)])
-    assert unfilled.pick.ic_idx == 7 and unfilled.tiebreak[3] == 8
+    assert unfilled.pick.ic_idx == 7 and unfilled.tiebreak == (MOST_RECENT, 11, 3, 8)        # all three pass → oldest
 
 
-def test_tb2a_reference_never_straddles_the_oldest_tied_ic():
-    """Structural (an IC is never an sd c2): a hand-built instance that would straddle it fails loudly."""
+def test_no_gap_straddles_an_ic():
+    """Structural (an IC is never an sd c2): a hand-built instance that would straddle one fails loudly."""
     df = _tb2_frame()
-    with pytest.raises(AssertionError, match="TB2 reference"):
+    with pytest.raises(AssertionError, match="straddles the IC 7"):
         _select(df, 6, 12, [_far_gap(7, 8), _far_gap(12)])
 
 
-def test_tb1_ic_type_maru_over_normal_over_pinbar():
-    """Three 3C.i patterns (the IC type does not change a multi-opp rank): the maru IC wins although it is the
-    OLDEST; the runner-up = the most recent IC of the best LOSING type — the normal (14), not the pinbar (11)."""
-    df = _frame([("M", U, 10), ("M", D, 3), ("M", D, 3),
-                 ("M", U, 10), ("M", D, 3), ("P", D, 5),
-                 ("M", U, 10), ("M", D, 3), ("N", D, 5), ("M", U, 10)])
-    sel = _select(df, 6, 15, [_far_gap(15)])
+def _type_frame():
+    # three 3C.i patterns (the IC type does not change a multi-opp rank): ICs 8 maru, 11 pinbar, 14 normal
+    return _frame([("M", U, 10), ("M", D, 3), ("M", D, 3),
+                   ("M", U, 10), ("M", D, 3), ("P", D, 5),
+                   ("M", U, 10), ("M", D, 3), ("N", D, 5), ("M", U, 10)])
+
+
+def test_ic_candle_type_maru_over_normal_over_pinbar():
+    """Every IC has an unfilled gap immediately after it (9 / 12 / 15): the maru IC wins although it is the OLDEST;
+    the runner-up = the most recent IC of the best LOSING type — the normal (14), not the pinbar (11)."""
+    df = _type_frame()
+    sel = _select(df, 6, 15, [_far_gap(9), _far_gap(12), _far_gap(15)])
     picks = [(c.ip.ic_idx, c.ip.ip_rank) for c in sel.candidates if c.ip.ip_rank]
     assert picks == [(8, "3C.i"), (11, "3C.i"), (14, "3C.i")]
     assert [str(df.loc[i, "candle_type"]) for i, _ in picks] == ["maru", "pinbar", "normal"]
-    assert sel.pick.ic_idx == 8 and sel.tiebreak == ("TB1", 14, 3, None)
+    assert sel.pick.ic_idx == 8 and sel.tiebreak == (CANDLE_TYPE, 14, 3, None)
+
+
+# ---------------------------------------------------------------------------
+# the immediate-unfilled-imbalance tiebreaker (PLAN_H §6 TBU-1 … TBU-5)
+# ---------------------------------------------------------------------------
+
+def test_a_sole_immediate_imbalance_ic_is_final_before_the_candle_type():
+    """Only 14 (a normal) has an unfilled gap immediately after it (15): it is final — the maru 8 never reaches the
+    candle-type tiebreaker. Runner-up = the most recent tied IC that fails it (11)."""
+    sel = _select(_type_frame(), 6, 15, [_far_gap(15)])
+    assert sel.pick.ic_idx == 14 and sel.tiebreak == (IMMEDIATE, 11, 3, 15)
+
+
+def test_the_candle_type_runs_over_the_immediate_passers_only():
+    """11 (pinbar) and 14 (normal) pass, 8 (maru) does not: the candle type picks 14 over 11 — a candle type run
+    first would pick the maru 8."""
+    sel = _select(_type_frame(), 6, 15, [_far_gap(12), _far_gap(15)])
+    assert sel.pick.ic_idx == 14 and sel.tiebreak == (CANDLE_TYPE, 11, 2, None)
+
+
+def _wide_frame():
+    # ICs 9 / 13 / 17 — all 1A.iv maru, each with a 3-candle initial and continuation: IC + 1, IC + 2 are its
+    # immediate window, IC + 3 is outside it (and before the next IC)
+    return _frame([("M", U, 10)] * 3 + [("M", D, 6)] + [("M", U, 10)] * 3 + [("M", D, 6)] + [("M", U, 10)] * 3
+                  + [("M", D, 6)] + [("M", U, 10)] * 3)
+
+
+def test_the_users_sequence_imbalance1_ic1_ic2_imbalance2_imbalance3_ic3_imbalance4():
+    """The user's example (`plans/plan_h_inputs/ip_tiebreaker_update_spec.md`): imbalance1 7, IC1 9, IC2 13,
+    imbalance2 14, imbalance3 16, IC3 17, imbalance4 18. All unfilled: IC1 has no immediate gap → out; IC2 / IC3 stay;
+    the oldest in play is IC2, the earliest unfilled gap after it imbalance2 → IC2. Imbalance2 filled: IC3 alone has
+    an immediate unfilled gap → IC3 (the old order — candle type, then the most recent before the imbalance — kept
+    IC2 through imbalance3)."""
+    sel = _select(_wide_frame(), 6, 20, [_far_gap(7), _far_gap(14), _far_gap(16), _far_gap(18)])
+    assert [(c.ip.ic_idx, c.ip.ip_rank) for c in sel.candidates] == [(9, "1A.iv"), (13, "1A.iv"), (17, "1A.iv")]
+    assert sel.pick.ic_idx == 13 and sel.tiebreak == (MOST_RECENT, 17, 2, 14)
+    df = _wide_frame()
+    filled = _select(df, 6, 20, [_far_gap(7), _filled_gap(df, 14, 15), _far_gap(16), _far_gap(18)])
+    assert filled.pick.ic_idx == 17 and filled.tiebreak == (IMMEDIATE, 13, 3, 18)
+
+
+def test_no_immediate_gap_leaves_every_tied_ic_in_play():
+    """No IC has a gap at IC + 1 / IC + 2 (12 / 16 / 20 are each IC + 3): all three go on; the reference after the
+    oldest is 12 → 9, 3 tied."""
+    sel = _select(_wide_frame(), 6, 20, [_far_gap(12), _far_gap(16), _far_gap(20)])
+    assert [c.immediate_imbalance_first_c2_idx for c in sel.candidates] == [None, None, None]
+    assert sel.pick.ic_idx == 9 and sel.tiebreak == (MOST_RECENT, 17, 3, 12)
+
+
+@pytest.mark.parametrize("gap, want", [
+    ((10, 10), 10),          # the gap candle at IC + 1 (the IC is the gap's c1)
+    ((11, 12), 11),          # a merged gap whose FIRST gap candle is IC + 2 (its c3 is IC + 4) — TBU-2
+    ((12, 12), None),        # the gap candle at IC + 3 (its c1 at IC + 2) — outside
+])
+def test_immediate_window_counts_the_first_gap_candle(gap, want):
+    df = _wide_frame()
+    df.attrs["imbalances"] = [_far_gap(*gap)]
+    assert immediate_unfilled_imbalance_first_c2_idx(df, 9, _fib_over(df, 6, 20, 0.5, 0.7), POIConfig()) == want
+
+
+def test_immediate_window_stops_at_the_cts_anchor():
+    df = _wide_frame()
+    df.attrs["imbalances"] = [_far_gap(11)]
+    assert immediate_unfilled_imbalance_first_c2_idx(df, 9, _fib_over(df, 6, 10, 0.5, 0.7), POIConfig()) is None
+    assert immediate_unfilled_imbalance_first_c2_idx(df, 9, _fib_over(df, 6, 11, 0.5, 0.7), POIConfig()) == 11
+
+
+def test_immediate_window_counts_raw_candles_a_true_doji_takes_a_slot():
+    """IC 7, a true doji at 8 (candle AND volume direction 0): the gap candle at 9 (IC + 2) counts, at 10 (IC + 3)
+    it does not — no skipping the doji (TBU-5)."""
+    df = _frame([("M", U, 10), ("M", D, 6), ("Z", 0, 2), ("M", U, 10), ("M", U, 10)])
+    assert (int(df.loc[8, "direction"]), int(df.loc[8, "vol_dir"])) == (0, 0)
+    fib = _fib_over(df, 6, 10, 0.5, 0.7)
+    for gap, want in ((9, 9), (10, None)):
+        df.attrs["imbalances"] = [_far_gap(gap)]
+        assert immediate_unfilled_imbalance_first_c2_idx(df, 7, fib, POIConfig()) == want
+
+
+def test_immediate_window_counts_only_sd_gaps():
+    """A sell gap (never filled, far above every price) at IC + 1 is no immediate imbalance for a buy fib — IC
+    condition 3's sd-strict test."""
+    df = _wide_frame()
+    df.attrs["imbalances"] = [ImbalanceInstance(start_idx=10, end_idx=10, direction=-1, gap_top=0.7010,
+                                                gap_bottom=0.7000, gap_size=0.0010)]
+    assert immediate_unfilled_imbalance_first_c2_idx(df, 9, _fib_over(df, 6, 20, 0.5, 0.7), POIConfig()) is None
 
 
 def test_v_path_characterization():
@@ -635,8 +734,10 @@ def test_records_gate_none_rows_and_tiebreak_on_the_pick():
         (1, None, None, False, "no_ic_candidate")]          # nothing touches: no IC candidate (PLAN_H RX1-N)
     pick = recs[1]
     assert (pick.ip_tiebreak, pick.ip_tb_runner_up_ic_idx, pick.ip_tied_count, pick.ip_tb_imbalance_first_c2_idx) \
-        == ("TB2", 11, 3, 10)
+        == (MOST_RECENT, 11, 2, 10)
     assert all(r.ip_tiebreak is None for r in recs if not r.picked)
+    # the per-candidate immediate gap, on every candidate row (misses too), none on the IP: none row
+    assert [r.immediate_imbalance_first_c2_idx for r in recs] == [None, 10, 12, None, 10, 12, None]
     assert pick.meta == {"structure_path_id": "H1.main"} and pick.pattern_confirmed_idx == 11   # 10 + the next candle
 
 
@@ -658,7 +759,9 @@ def test_export_header_none_row_and_legs(tmp_path):
     assert got.ic_idx.isna().tolist() == [False] * 6 + [True]                        # the IP: none row last
     assert got.loc[6, "reason"] == "no_ic_candidate" and not got.loc[3:5, "touches_zone"].any()
     assert got.loc[1, "legs"] == "8..8|9..9|10..10" and got.loc[1, "ip_rank"] == "1A.i"
-    assert bool(got.loc[1, "picked"]) and got.loc[1, "ip_tiebreak"] == "TB2"
+    assert bool(got.loc[1, "picked"]) and got.loc[1, "ip_tiebreak"] == MOST_RECENT
+    assert got.immediate_imbalance_first_c2_idx.isna().tolist() == [True, False, False, True, False, False, True]
+    assert got.immediate_imbalance_first_c2_idx.dropna().tolist() == [10, 12, 10, 12]
 
 
 def test_mirror_shifts_every_index_field_once_per_lens():
@@ -806,8 +909,9 @@ def test_first_failing_variant_is_reported():
     assert (res.reason, res.ip_leg_candle_counts) == ("initial_fails", "2-1-1")
 
 
-# N15 — TB1 runs over the RANK TIE only: a worse-ranked pattern with a maru IC never joins it
-def test_tb1_group_is_the_rank_tie():
+# N15 — the tiebreakers run over the RANK TIE only: a worse-ranked pattern never joins it — neither the maru IC 16
+# for the candle type nor its immediate gap 17 for the immediate-unfilled-imbalance tiebreaker (16 alone has one)
+def test_tiebreak_group_is_the_rank_tie():
     df = _frame([("M", U, 10), ("M", D, 3), ("M", D, 3),          # 6..8: IC 8 maru, 3C.i
                  ("M", U, 10), ("M", D, 3), ("P", D, 5),          # 9..11: IC 11 pinbar, 3C.i
                  ("M", U, 10), ("M", D, 3, 5),                    # 12 cont; 13 a split candle (breaks the run)
@@ -816,17 +920,20 @@ def test_tb1_group_is_the_rank_tie():
     sel = _select(df, 6, 17, [_far_gap(17)])
     ranks = {c.ip.ic_idx: c.ip.ip_rank for c in sel.candidates}
     assert ranks[8] == "3C.i" and ranks[11] == "3C.i" and ranks[16] == "3D.i", ranks
-    assert sel.pick.ic_idx == 8 and sel.tiebreak == ("TB1", 11, 2, None)
+    assert {c.ip.ic_idx: c.immediate_imbalance_first_c2_idx for c in sel.candidates}[16] == 17
+    assert sel.pick.ic_idx == 8 and sel.tiebreak == (CANDLE_TYPE, 11, 2, None)
 
 
-# N16 — the TB2 reference may be the gap whose c2 IS the CTS anchor (fill / formed test as of no moment)
-def test_tb2_reference_may_sit_at_the_cts_anchor():
+# N16 — the immediate gap may be the one whose first gap candle IS the CTS anchor (the window ends there, inclusive;
+# fill / formed test as of no moment)
+def test_the_immediate_gap_may_sit_at_the_cts_anchor():
     sel = _select(_tb2_frame(), 6, 12, [_far_gap(12)])
-    assert sel.pick.ic_idx == 11 and sel.tiebreak == ("TB2", 9, 3, 12)
+    assert sel.pick.ic_idx == 11 and sel.tiebreak == (IMMEDIATE, 9, 3, 12)
 
 
-# N17 — TB2's fill horizon is the CTS anchor: a gap filled only AFTER the CTS is still the reference
-def test_tb2_fill_horizon_is_the_cts_anchor():
+# N17 — the fill horizon is the CTS anchor: gap 10 fills only AFTER the CTS (at 14) — still IC 9's immediate unfilled
+# gap (a horizon at 14 would leave 11 alone) and the reference
+def test_the_fill_horizon_is_the_cts_anchor():
     specs = [("M", U, 10), ("M", D, 6), ("M", U, 10), ("M", D, 6), ("M", U, 10), ("M", D, 6), ("M", U, 10),
              ("M", D, 40), ("M", U, 40)]
     df = _frame(specs)
@@ -835,17 +942,18 @@ def test_tb2_fill_horizon_is_the_cts_anchor():
                             gap_bottom=c11 - 8 * PIP, gap_size=3 * PIP)
     assert not gap.is_filled(df, 12, 0.70) and gap.is_filled(df, 14, 0.70)
     sel = _select(df, 6, 12, [gap, _far_gap(12)])
-    assert sel.pick.ic_idx == 9 and sel.tiebreak == ("TB2", 11, 3, 10)
+    assert [c.immediate_imbalance_first_c2_idx for c in sel.candidates] == [None, 10, 12]
+    assert sel.pick.ic_idx == 9 and sel.tiebreak == (MOST_RECENT, 11, 2, 10)
 
 
-# N19 — after TB1 removes a type, TB2's tied count is the TB1 survivors
-def test_tb2_count_is_the_tb1_survivors():
+# N19 — after the candle type removes a type, the last tiebreaker's tied count is the candle type's survivors
+def test_most_recent_before_imbalance_count_is_the_candle_type_survivors():
     df = _frame([("M", U, 10), ("M", D, 3), ("M", D, 3),
                  ("M", U, 10), ("M", D, 3), ("P", D, 5),
                  ("M", U, 10), ("M", D, 3), ("M", D, 3), ("M", U, 10)])
-    sel = _select(df, 6, 15, [_far_gap(15)])
+    sel = _select(df, 6, 15, [_far_gap(9), _far_gap(12), _far_gap(15)])       # every IC passes the immediate one
     assert [str(df.loc[i, "candle_type"]) for i in (8, 11, 14)] == ["maru", "pinbar", "maru"]
-    assert sel.pick.ic_idx == 14 and sel.tiebreak == ("TB2", 8, 2, 15)
+    assert sel.pick.ic_idx == 8 and sel.tiebreak == (MOST_RECENT, 14, 2, 9)
 
 
 # N20 — a gated record with no §3.1 candidate gets the `no_ic_candidate` none row (was `no_candidates` until PLAN_K
