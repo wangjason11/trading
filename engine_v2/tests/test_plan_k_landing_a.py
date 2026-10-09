@@ -395,8 +395,40 @@ def test_a_cross_limit_anchor_reference_breaks_where_the_watch_finds_p_broken(sd
     assert ref(evaluated_at=None) == ICReference(_m(1.05, sd), "cross_limit_anchor", 12, 13)
     assert ref(evaluated_at=12) == ICReference(_m(1.05, sd), "cross_limit_anchor")          # not confirmed yet
     assert ref(evaluated_at=13) == ref(evaluated_at=None)
-    assert ref(evaluated_at=None, end_idx=12) == ICReference(_m(1.05, sd), "cross_limit_anchor")   # the cap
-    assert ref(evaluated_at=None, end_idx=13) == ref(evaluated_at=None)
+
+
+def _flip_watch_frame(sd):
+    """The s3 frame + `_flip_frame`'s candles 1–5 at 12–16 (a = 12; P = 1.10): on the WHOLE frame anchor 12's
+    double_maru confirms at 15 and anchor 13's `continuous` succeeds at 15; on a frame CUT at 14, anchor 13's
+    `one_maru_continuous` succeeds at 14."""
+    df = _watch_frame(sd, pair_at=())
+    flip = _flip_frame()
+    for j in range(1, 6):
+        r = flip.iloc[j]
+        flags = {f: 1 for f in _FLAGS if int(r[f])}
+        for col, v in _mk(*(float(r[k]) for k in ("o", "h", "l", "c")), str(r["candle_type"]), sd, **flags).items():
+            df.loc[11 + j, col] = v
+    return df
+
+
+@pytest.mark.parametrize("sd", [1, -1])
+def test_the_final_reference_is_the_as_of_reference_at_the_cap_on_the_whole_frame(sd):
+    """PLAN_K §11.2 LA1 (RX1-K6): the FINAL reference (the stamp, the drawn selection) = the reference as of the
+    structure's lifecycle cap with the watch's detector on the WHOLE frame — MS's convention — never a frame cut at
+    the cap. Cap 14: the cut frame would export (13, 14); as of 14 on the whole frame nothing has confirmed."""
+    df = _flip_watch_frame(sd)
+    p = _m(P, sd)
+    assert find_cross_limit_break(df, p, sd, 10, end_idx=14) == (13, 14)        # the rejected reading (the fixture)
+    assert find_cross_limit_break(df, p, sd, 10, known_at=14) is None
+    assert find_cross_limit_break(df, p, sd, 10) == (12, 15)                    # the tie at 15 -> the earlier anchor
+    t, _ = _tracker_with(CrossFibLimit(p, "parent_cts_threshold", ref_anchor_price=_m(1.05, sd)), sd, upto=0, df=df)
+    t.stamp_ic_references(df, lifecycle_cap=14)
+    m = t._fibs[(0, 0)].meta
+    assert (m["ic_ref_price"], m["ic_ref_source"]) == (_m(1.05, sd), "cross_limit_anchor")
+    assert "ic_ref_break_pattern_anchor_idx" not in m and "ic_ref_break_confirmed_idx" not in m
+    t.stamp_ic_references(df, lifecycle_cap=15)
+    m = t._fibs[(0, 0)].meta
+    assert (m["ic_ref_break_pattern_anchor_idx"], m["ic_ref_break_confirmed_idx"]) == (12, 15)
 
 
 @pytest.mark.parametrize("sd", [1, -1])
@@ -529,7 +561,7 @@ def test_every_exported_reason_is_the_condition_on_the_records_reference(monkeyp
     """`derive_ip_candidates` hands each candidate's own outcome through (A5) — recomputed from the tracker's final
     reference for its record; the `IP: none` rows carry none. The fixture's real references cut nothing, so the
     builder is replaced by one cutting every candidate of the odd cycles (sd +1: no high lies below −inf)."""
-    def by_cycle(self, f, df, *, evaluated_at, end_idx=None):
+    def by_cycle(self, f, df, *, evaluated_at):
         return ICReference(-math.inf, "prev_cycle_cts") if f.cycle_id % 2 else ICReference.NONE
 
     monkeypatch.setattr(FibTracker, "ic_reference", by_cycle)
@@ -571,8 +603,9 @@ def test_the_hover_names_the_cross_start_cycles_previous_cts():
 
 def test_every_retrospective_reference_reads_to_the_lifecycle_cap(monkeypatch):
     """A3 / §3.4: the stamp, the drawn selection and the CSV's selection (+ both `ip_records=None` fallbacks) build the
-    FINAL reference with the watch read to the structure's lifecycle cap — the drawn pick and the exported meta are
-    one value. (Behaviour under a cap: `test_a_cross_limit_anchor_reference_breaks_where_the_watch_finds_p_broken`.)"""
+    FINAL reference as of the structure's lifecycle cap (`evaluated_at=lifecycle_cap`, PLAN_K §11.2 LA1) — the drawn
+    pick and the exported meta are one value. (Behaviour at a cap:
+    `test_the_final_reference_is_the_as_of_reference_at_the_cap_on_the_whole_frame`.)"""
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
     from engine_v2.tests._cross_fib_limits import main_limits
     from engine_v2.tests.test_unified_probe import _make_ip_multicycle_data, _prepare_df
@@ -580,10 +613,9 @@ def test_every_retrospective_reference_reads_to_the_lifecycle_cap(monkeypatch):
     ends = []
     real = FibTracker.ic_reference
 
-    def spy(self, f, df, *, evaluated_at, end_idx=None):
-        assert evaluated_at is None                                    # no MS run below: retrospective reads only
-        ends.append(end_idx)
-        return real(self, f, df, evaluated_at=evaluated_at, end_idx=end_idx)
+    def spy(self, f, df, *, evaluated_at):
+        ends.append(evaluated_at)                                      # no MS run below: final reads only
+        return real(self, f, df, evaluated_at=evaluated_at)
 
     monkeypatch.setattr(FibTracker, "ic_reference", spy)
     cap = len(res.df) - 2
@@ -698,9 +730,9 @@ def test_the_read_takes_the_fed_events_moment_on_both_paths(monkeypatch, fixture
         seen.append((kw["evaluated_at"], ef.event_moment(last), last.type, last.meta.get("via"), anchor, fib))
         return real(df, fib, ft, **kw)
 
-    def ref_spy(self, f, df, *, evaluated_at, end_idx=None):
+    def ref_spy(self, f, df, *, evaluated_at):
         refs.append(evaluated_at)
-        return real_ref(self, f, df, evaluated_at=evaluated_at, end_idx=end_idx)
+        return real_ref(self, f, df, evaluated_at=evaluated_at)
 
     monkeypatch.setattr(se, "poi_inner_for_fib", spy)
     monkeypatch.setattr(FibTracker, "ic_reference", ref_spy)

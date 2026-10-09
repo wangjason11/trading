@@ -140,11 +140,15 @@ then end together. 0 on the reference window (0 / 27 fib cycles move); one real 
     the EARLIEST confirmation wins, a tie → the earlier anchor (K1); detection by MS's convention — the frame up to
     `end_idx` (look-ahead, `continuous` first), a break counting at moment `t` iff its confirmation ≤ `t` (K6: the
     as-of answer is the final one cut by time; the bound never moves). `start_idx` = the structure's BOS_0 anchor (a
-    sub's lifecycle start can lie after its break — sub 4: start 3621, break 3588); `end_idx` = MS's resolver frame's
-    end (in flight) / the structure's lifecycle cap (the retrospective stamp and the drawn POI). Pure: no MS state, no
-    event. On the reference window: sub 4 → 3588 (confirmed 3589), sub 7 → 4188 (4189), subs 5 / 6 → none.
+    sub's lifecycle start can lie after its break — sub 4: start 3621, break 3588); the detector always reads the
+    WHOLE frame it is handed (`end_idx` None in every engine call: MS's resolver frame, or the projection's slice —
+    the same rows, to the data edge); `t` = the fed event's moment in flight, the structure's lifecycle cap for the
+    final reference (the stamp and the drawn POI; None = main / an open sub). A frame CUT at the cap would be the
+    rejected live view (K6) — PLAN_K §11.2 LA1, fixed in the review fix-up. Pure: no MS state, no event. On the
+    reference window: sub 4 → 3588 (confirmed 3589), sub 7 → 4188 (4189), subs 5 / 6 → none.
   - **Exported** (`FibTracker.stamp_ic_references(df, lifecycle_cap)`, a finalize step after
-    `_finalize_lifecycle_fields`; the FINAL reference — `evaluated_at=None`): fib meta `ic_ref_price`, `ic_ref_source`
+    `_finalize_lifecycle_fields`; the FINAL reference — `evaluated_at=lifecycle_cap`, the reference as of the
+    structure's end): fib meta `ic_ref_price`, `ic_ref_source`
     (`prev_cycle_cts` | `prev_structure_bos` | `cross_limit_anchor`; absent = no reference),
     `ic_ref_break_pattern_anchor_idx`, `ic_ref_break_confirmed_idx` (absent = no known break), placed BEFORE the limit
     keys; the fib hover's line before the limit line (`_zone_render.fib_hover_ic_ref_text`: `IC ref 0.57774

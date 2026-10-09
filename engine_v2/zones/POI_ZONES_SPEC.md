@@ -406,8 +406,9 @@ ONE bundled condition (RX1-B) per §3.1 candidate `i` of a fib record — struct
    else `ic_not_before_break`. Both failing → `ic_past_reference` (the price side is reported first, K-Q2). An IC can
    never BE the bound candle (a breakout / reversal pattern's first candle has the structure's candle direction).
 4. **Where:** `poi_zones.ic_reference_reason`, called by `select_ip_ic` per §3.1 candidate BEFORE the touch and the
-   pattern (RX1-E) — both consumers: the drawn POI with the record's FINAL reference (`evaluated_at=None`, the watch
-   read to the structure's lifecycle cap — the same call `FibTracker.stamp_ic_references` exports); MS's in-flight read
+   pattern (RX1-E) — both consumers: the drawn POI with the record's FINAL reference (as of the structure's end,
+   `evaluated_at=lifecycle_cap`, the watch's detector on the whole frame — the same call
+   `FibTracker.stamp_ic_references` exports; PLAN_K §11.2 LA1); MS's in-flight read
    with its embedded tracker AT the fed event's moment (`poi_inner_for_fib(..., tracker=, evaluated_at=)`, built
    inside the read's re-raising scope — LANDMINES "The POI Resolver Fails Loudly"). Not in the activation sweep; `M`,
    the legs, the touch, the pattern and TB1 / TB2 are unchanged (from B, TB2 runs over the surviving tied ICs).
@@ -468,7 +469,7 @@ candle when its run (before the E1 trim) reached the cap, else the next candle; 
 MarketStructure's in-flight read (`poi_inner_for_fib`, on its embedded FibTracker's AS-OF representative fib at each
 CTS_ESTABLISHED / CTS_UPDATED — PLAN_I S5, the drawn fib's own decision; its pick can differ from the final one while
 the CTS still extends) call the same `select_ip_ic`, each with the record's IC reference (§3.2) from the same builder
-at its own moment (PLAN_K D2). The
+at its own moment (PLAN_H D2; PLAN_K §3.1). The
 candle params and the leg cap come from the FRAME (`df.attrs["timeframe"]`, stamped by
 `apply_candle_classification`; a missing stamp raises). The selection is computed once per pipeline run
 (`select_ip_records`: the lifecycle gate, then the cycle's CTS_ESTABLISHED, then `select_ip_ic`) and handed to both
@@ -791,8 +792,8 @@ Charting renders zones + Fib lines + imbalance highlighting
 ## Appendix A — the per-scenario IC conditions as designed (Week 7; never implemented)
 
 History. Designed with the POI build (`0033c53`, Week 7) and never applied by the code (found 2026-09-30:
-`passes_price_constraint` had no caller, `find_ic_candidates`' `scenario_context` was never read — retired by PLAN_K
-landing A); kept unapplied by the user's decision 2026-10-02 (PLAN_H D4); re-specified by the user 2026-10-09 as §3.2's
+`passes_price_constraint` had no caller — REUSED by PLAN_K landing A as §3.2's price side —, `find_ic_candidates`'
+`scenario_context` was never read — retired by PLAN_K landing A); kept unapplied by the user's decision 2026-10-02 (PLAN_H D4); re-specified by the user 2026-10-09 as §3.2's
 ONE bundled condition for today's one-logic fibs (the Scenario 1 / 2 / 3 fib logic itself retired with PLAN_I S4,
 CROSS_CYCLE_FIB_SPEC Appendix A). The tables as they stood:
 

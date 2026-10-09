@@ -71,7 +71,7 @@ BosInnerResolver = Callable[[pd.DataFrame, int, int], Optional[float]]
 # `poi_inner_for_fib(df, fib, fill_threshold, *, tracker, evaluated_at)` — PLAN_K A4 / A14: the IC reference is built
 # by `tracker.ic_reference(...)` INSIDE the read's re-raising scope, at `evaluated_at` (the fed event's moment).
 PoiInnerForFib = Callable[..., Optional[float]]
-# (df, representative fib or None, fill_threshold) -> the pick's inner | None
+# (df, representative fib or None, fill_threshold, *, tracker, evaluated_at) -> the pick's inner | None
 
 
 class EmbeddedFibTrackerError(RuntimeError):

@@ -4,7 +4,10 @@
 BLOCKER on fidelity, 5 MAJOR on the code paths, every finding folded below); the user's questions §8 (K-Q1 … K-Q8)
 — ALL ANSWERED 2026-10-09 (§8); landing A BUILT 2026-10-09 (§11.1: `/compare` vs S_S6 == §5, the §6 tests, the
 mutation run, the docs; source commit `02e9381`); **S_K_A SAVED** `artifacts/commits/week9-entries-decisions/20261009_112137_02e9381` (= `LATEST_<branch>`, save
-commit `dc116b0`) — B's baseline; next: the landing review (2 lenses), the variant replay V, landing B.** The rule is the user's and is DECIDED: canonical text `PLAN_H_institutional_pattern_poi.md` §8.9
+commit `dc116b0`) — B's baseline; landing A's REVIEW 2026-10-09 (§11.2: 2 lenses, 651,669 tokens; LA1 — the final
+reference read on a frame cut at the cap, K6's rejected reading — FIXED, 9 test gaps pinned; the fix-up's `/compare`
+vs S_K_A byte-identical); the variant replay V MEASURED (§11.3: one pick moves, sub 0 cyc 3 1604 → 1447; sub 3
+cyc 2's TB1 tie dissolves; no MS cascade); next: the user's chart review of V, then landing B.** The rule is the user's and is DECIDED: canonical text `PLAN_H_institutional_pattern_poi.md` §8.9
 "RX1" (the rule as decided) + §6 RX1-B, RX1-1 … RX1-4, RX1-T, RX1-W1 … W3, RX1-C1, RX1-E; the user's write-up verbatim
 `plan_h_inputs/ic_reference_conditions_spec.md`. This file is HOW it is built: the code audit, the design, two
 landings with exact predictions, the tests, the cost. Baseline: **S_S6**
@@ -121,8 +124,10 @@ cut by time and the bound never moves.
   `start_idx`: sub 4's lifecycle starts at 3621, after its break at 3588 (the W1 example "sub 4 → 3588" holds only on
   this reading; from 3621 nothing closes past `P` before its end 3819) — §9 F02 / C12, written down, pinned.
 - `end_idx`: MS's read → its resolver frame's end (`self._resolver_df()`, the bounded run's truncation — no candle past
-  `end_idx` is read); the retrospective stamp → the structure's lifecycle cap (`lifecycle_cap`; the frame end when
-  open), so no break after the structure ended is exported (§9 F05 / C12).
+  `end_idx` is read); ~~the retrospective stamp → the structure's lifecycle cap~~ — SUPERSEDED by the review (§11.2
+  LA1: a frame cut at the cap is K6's rejected reading): the final reference reads the WHOLE frame too and is cut
+  by TIME — `evaluated_at = lifecycle_cap` (None when open / main) — so no break confirmed after the structure ended
+  is exported (§9 F05 / C12's intent) and the final answer == the in-flight answer at the cap.
 - Pure: no MS state, no structure event (the cross limit is not an MS key level — RX1-2b's own words).
 - Prototype (`plan_h_inputs/icref_census.py`, `xlimit_watch_proto.py`): sub 7 → anchor 4188 (`one_maru_opposite`,
   confirmed 4189; closes past from 4183, the patterns at 4183–4187 fail); sub 4 → 3588 (`one_maru_continuous`, 3589);
@@ -423,6 +428,80 @@ by me before filing (✓).
   CHARTING_SPEC (the hover line); the `/compare` skill (the columns + the save-format boundary, `cmp_k_landing_a.py`);
   register §D.2; PLAN_H RX1's status line.
 
+### 11.2 Landing A's review (2026-10-09) — 2 read-only lenses, fresh agents, main checkout
+
+Fidelity (lens A) 292,004 tokens: every RX1 row implemented as decided, K5 included (`fib_tracker.ic_reference`'s
+`(price, 0 if structure else 1)` key, both sd; the pin asserts the structure's OWN bound); all 34 saved fib rows ==
+its own derivation from the events CSVs (M recomputed independently == the stamped M on all 34); `ic_ref_reason`
+recomputed from the candles: 0 mismatches; the 5 §11.1 deviations faithful ((3) exact: `detect_best_for_anchor`
+returns SUCCESS ≥ A+1 or CONFIRMED ≥ A+2, `structure_patterns.py:699–767`). Code paths + mutation (lens B) 359,665
+tokens: no BLOCKER / MAJOR on its lens; coordinates OK (`localized` once per entry point, N19–N22 / N41 KILLED; every
+exported break anchor closes past its threshold — sub 4 3588 0.57354 < P 0.57376, sub 7 4188 0.57866 > 0.57827);
+the stamp == the drawn selection (all 1843 IP rows re-derived from the exported fib meta + h / l: 0 mismatches); MS's
+read (both moments, `_resolver_df()`, the reference inside `except Exception` → `IPSelectionError`, `_est_pattern_
+anchor` inside the deep-copied tracker); the claims VERIFIED — W01 equivalent (every pattern's `check_break(c0)`
+first, `structure_patterns.py:233 / 404 / 511 / 584`), W11 equivalent (an anchor applies ≥ A+1), C15 (A+5: the 2-candle
+confirmations A+2…A+5, `continuous`'s A+3…A+5), F07 unreachable (a cross targets T only while `_cross_allowed(T)`; M
+never regresses below an existing target; on S_K_A the T-test == the a-test on all 34 rows); 32 new mutants, 22
+KILLED, 1 equivalent (N34 — the stamp before `_finalize_lifecycle_fields`: finalize appends the limit keys after
+existing ones, same order), 9 real gaps. Review total **651,669** tokens (est. ~0.55M). Claims re-checked by me
+before filing (✓).
+
+| ID | Sev | Finding | Disposition |
+|---|---|---|---|
+| LA1 ✓ | MAJOR | The RETROSPECTIVE watch cuts the detector's frame at the lifecycle cap (`stamp_ic_references` / `select_ip_records` → `ic_reference(..., evaluated_at=None, end_idx=lifecycle_cap)`) — the cut-frame reading K6 rejected, at `t` = the cap: a `continuous` whose A+2 lies past the cap is invisible, so a 2-candle pattern confirming ≤ the cap can be exported as the break, while MS's in-flight read (the geometry frame runs to the DATA EDGE, `build_or_get_geometry` `run_cap_abs = len(m15_df) − 1`) never counts it. Falsifies CROSS_CYCLE_FIB_SPEC §3 / GLOSSARY / LANDMINES "the as-of answer is the final one cut by time" and D2 at the cap edge. 0 on the window (sub 4's break 3588 ≪ its cap 3819; subs 5 / 6 never close past `P`; sub 7 open; main never runs the watch). Lens A's demo on the test's own `_flip_frame`: cap 3 → `end_idx=cap` gives (2, 3), `known_at=cap` gives None. = lens B's B1 (independently; measured: no watch sub's cap−1 candle closes past `P`) | **FIXED** (the fix-up commit): the final reference = the reference AS OF the cap — `stamp_ic_references` / `select_ip_records` call `ic_reference(..., evaluated_at=lifecycle_cap)`; `ic_reference` loses its `end_idx` (the watch's detector always reads the whole frame handed in). The `prev_cycle_cts` side cannot move (the projection's events are clipped to the cap by moment, so every establishment moment ≤ cap); the reversal side is whole-run. Pin `test_the_final_reference_is_the_as_of_reference_at_the_cap_on_the_whole_frame` (both sd; cap 14 → no break, the cut frame's (13, 14) rejected; cap 15 → (12, 15)). Docs: CROSS_CYCLE_FIB_SPEC §3, POI_ZONES_SPEC §3.2, GLOSSARY, LANDMINES, §3.4 above. Predicted: byte-identical on the window |
+| LA2 ✓ | MINOR | `derive_poi_zones`' comment "(Condition 4 — … POI_ZONES_SPEC §3.2 — is NOT implemented …, PLAN_H D4)" is stale (`poi_zones.py:746–748`) | reword |
+| LA3 ✓ | NIT | `passes_price_constraint`'s docstring "the scenario price constraint" (`poi_zones.py:150`); MS's alias comment still gives the 3-positional signature (`market_structure.py:74`) | reword |
+| LA4 ✓ | NIT | POI_ZONES_SPEC §3.4 cites "(PLAN_K D2)" — D2 is PLAN_H's | "PLAN_H D2" |
+| LA5 ✓ | NIT | POI_ZONES_SPEC Appendix A reads as if `passes_price_constraint` was retired too — it was REUSED as the price side | reword |
+| LA6 | NIT | IDEA_PARKING_LOT §D.1 item 1's "POI_ZONES_SPEC §3.2 stays unapplied (D4)" — history, still true until B | added "(re-specified … PLAN_K)" |
+| B2 | MINOR | The watch's early-stop BOUND unpinned (removing the stop is equivalent, W11; stopping 2 early survived — N04) | pin (adopted from lens B) |
+| B3 | MINOR | Nothing pinned that MS's read hands the builder its WHOLE frame (N11: a cut at the moment, moved to the caller) | pin: the fake tracker records `d is df` and the moment |
+| B4 | MINOR | The sub `reversal_limit`'s "most recent BOS by MOMENT" unpinned (one BOS in its fixture; N23 first, N25 last-in-list) | pin: two BOSes, both list orders |
+| B5 | NIT | "By the reversal moment" inclusive (`<=`) unpinned in both builders (N24, N28). Whether MS can confirm a BOS on the reversal's own apply candle (its threshold would not be `P`) is UNVERIFIED — 0 on the window | the coded inclusive reading pinned; reachability OPEN (one line, register §D.2) |
+| B6 | MINOR | The R6-2 tripwire's comparison of the break fields unpinned (N27) | pin: a mismatched stored break anchor → 1 re-derived |
+| B7 | NIT | `ic_ref_reason` on a candidate that misses the touch (the CSV's rows) unpinned (N10) | pin |
+| B8 | NIT | The hover's ", cycle a−1" suffix pinned only for `prev_cycle_cts` (N17) | pin: a structure reference shows no cycle |
+| B9 | NIT | Landing-B readiness: when the filter cuts EVERY touching pattern the none row says `no_pattern` (`poi_zones.py:973`) and the hover `IP: none (no_pattern)` — the cause misreported; 0 such records in V | a landing-B question for the user (a distinct reason or not) |
+| B10 | NIT | The watch scans anchors to the frame end even when `known_at` is set (an anchor ≥ `known_at` can never count) | not adopted: equivalent, no measured cost (V replay 45 s) |
+| B11 | NIT | `derive_ip_candidates(..., ip_records=None)` defaults `lifecycle_cap=None` — a future fallback caller could disagree with the stamp | not adopted: main's cap IS None (a None check cannot tell), a required keyword only churns ~10 test calls; the orchestrator's one path is pinned (A3 / O2 / O3) |
+
+**The fix-up** (one commit): LA1 + LA2–LA6 + the 7 pins (`tests/test_plan_k_landing_a_review_pins.py`, lens B's,
+validated by it on `02e9381`; B3 re-expressed for the new signature) + the 2 LA1 pins. Suite 1515. Mutants
+`plan_h_inputs/mutants_k_landing_a_review.py` (lens B's 9 survivors, N11 re-expressed as a frame cut at the moment, +
+4 on the fix: F1 the watch's frame cut at the moment, F2 / F3 the stamp / the drawn read retrospective, F4 the watch
+ignoring the moment): **13 / 13 KILLED** (full suite each, 13 in parallel).
+
+### 11.3 Variant V — A + the filter ON, as measured (2026-10-09; the tree = HEAD `f074e0c` = `02e9381`'s code)
+
+- **Run:** `git archive HEAD engine_v2` into a SHORT `%TEMP%\kV\tree` (the session scratchpad's path pushes the CSV
+  names past MAX_PATH — the first run crashed writing `*_structure_levels.csv`), `poi_zones._IC_REFERENCE_FILTER =
+  True`, `plan_i_inputs/replay_variant_i.py` from `%TEMP%\kV\work`; 45 s wall; FETCH GATE PASS; the grep = the 2
+  `parent_tables` WARNINGs + the 4 UNRESOLVED `degenerate_parent_cycle` rows (unchanged).
+- **vs S_K_A** (`plan_h_inputs/variant_report.py` + `plan_i_inputs/variant_report_i.py`, keyed): 23 / 27 CSVs
+  md5-equal — every structure-events CSV (H1 329, confluence 1346, counter 481 rows: no event added / removed / moved),
+  KL, WVMI, triggers, unresolved, subs, imbalances, levels, `_final.csv`. **MS's in-flight reads cascade NOWHERE on
+  this window.** Changed: the confluence + counter `*_poi_zones.csv` and `*_ip_candidates.csv`; H1 nothing.
+  1. **The census's one pick — confluence sub 0 cyc 3** (buy, BOS 1310 → CTS 1721; ref `prev_cycle_cts` 0.57774 =
+     CTS_2 1245's high, bound 1720): 1604 1A.i (12-09 15:00, high 0.57880) cut `ic_past_reference` → **1447 1A.iv**
+     (12-07 23:45, H 0.57768 / L 0.57744 — 0.6 pip under the reference), legs 2-1-3 (1445–1446 | 1447 | 1448–1450),
+     **TB2 over 1660** (1A.iv, high 0.57738; the reference imbalance's first c2 = 1658, so 1660 is after it); the
+     zone 0.57734–0.57880 → 0.57744–0.57768; confirmed 1721, status ended, the activation shapes' times unchanged
+     (12-10 20:15 → 12-11 14:15). Of its 17 touching patterned candidates 10 are cut (all `ic_past_reference`; 1412 … 1718).
+  2. **NOT in the census floor — sub 3 cyc 2, both lenses** (sell, BOS 2915 → CTS 3047; ref `prev_cycle_cts` 0.57902,
+     bound 2991): the pick 2969 3C.iv is UNCHANGED, but its TB1 tie is gone — the runner-up 2988 (3C.iv, low 0.57844)
+     is cut `ic_past_reference`, so 2969 (low 0.57926) wins alone: the POI meta `ip_tiebreak` TB1 → None,
+     `ip_tb_runner_up_ic_idx` 2988 → None, `ip_tied_count` 2 → None, and the hover line "TB1 over 2988 (IC candle
+     type)" disappears (the census recomputes no tie-break — its "TB2 not recomputed" caveat also hides TB1 groups).
+  3. The census's two TB2 groups hold: sub 1 cyc 1 1875 over 1842 (reference imbalance 1892), sub 7 cyc 2 4083 over
+     4136 (4132) — no candidate of theirs is cut.
+  - IP CSVs: only `picked` / the 4 tie-break columns change (3 confluence rows, 1 counter row); H1 none.
+  - Charts (keyed, full JSON multisets): H1 equal (81 / 236); confluence 274 / 264 — 5 traces swapped (sub 0 cyc 3's
+    2 POI hover traces + its fib hover `IP 1A.i · IC 1604` → `IP 1A.iv · IC 1447`; sub 3 cyc 2's 2 POI hover traces
+    lose the TB1 line) and sub 0 cyc 3's 3 POI shapes (fill, outline, activation line) re-priced; counter 135 / 120 —
+    sub 3 cyc 2's 2 POI hover traces lose the TB1 line, every shape equal.
+- **Landing B's prediction = V** (`/compare` vs S_K_A must reproduce items 1–3 exactly, nothing else).
+
 ## 10. Change log
 
 - 2026-10-09 — drafted from the code audit (HEAD `2a013d4`) + the decided-rule census.
@@ -430,3 +509,6 @@ by me before filing (✓).
   added; §3.3–§3.6; §5 counts; §6 tests; §7 resized); K-Q1 rewritten, K-Q5 … K-Q8 added.
 - 2026-10-09 — landing A built (`02e9381`; `/compare` vs S_S6 == §5; 62 tests; mutation 87 + 2 equivalent) and saved
   S_K_A `20261009_112137_02e9381` on the user's "yes commit and commit-save" (§11.1). Next: A's landing review, V, B.
+- 2026-10-09 — landing A reviewed (§11.2, 651,669 tokens): the fix-up commit (LA1 fixed — the final reference = as of
+  the lifecycle cap on the whole frame; LA2–LA6; 9 pins; 13 / 13 mutants KILLED; suite 1515; replay 93 s wall, FETCH
+  GATE PASS, `/compare` vs S_K_A 27 / 27 CSVs + the 3 charts identical, == the prediction); V measured (§11.3).

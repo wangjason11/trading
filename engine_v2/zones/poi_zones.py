@@ -147,7 +147,8 @@ def passes_price_constraint(
     reference_price: float,
 ) -> bool:
     """
-    Check if candle passes the scenario price constraint.
+    Check if candle passes the price side of the IC reference condition (POI_ZONES_SPEC §3.2; PLAN_K —
+    `ic_reference_reason`; written for the retired Week-7 scenario constraint, Appendix A).
 
     For sd=+1 (bullish): Entire candle (HIGH) must be BELOW reference price
     For sd=-1 (bearish): Entire candle (LOW) must be ABOVE reference price
@@ -560,9 +561,10 @@ def select_ip_records(
        fires whatever the pattern;
     3. `select_ip_ic(..., classify_misses=True)` — the CSV's candidates; the pick
        is the one without `classify_misses` (a candidate missing the touch is
-       never picked) — with the record's FINAL IC reference
-       (`fib_tracker.ic_reference(..., evaluated_at=None, end_idx=lifecycle_cap)`, the call
-       `FibTracker.stamp_ic_references` makes: the drawn pick and the exported meta are one value, PLAN_K A3).
+       never picked) — with the record's FINAL IC reference, as of the structure's end
+       (`fib_tracker.ic_reference(..., evaluated_at=lifecycle_cap)`, the call
+       `FibTracker.stamp_ic_references` makes: the drawn pick and the exported meta are one value, PLAN_K A3;
+       the watch on the whole frame, never cut at the cap — §11.2 LA1).
     """
     if fib_tracker is None:
         return []
@@ -588,7 +590,7 @@ def select_ip_records(
             cts_established_idx=int(cts_event.meta["confirmed_at"]),
             selection=select_ip_ic(
                 df, fib_state, config, classify_misses=True,
-                ic_reference=fib_tracker.ic_reference(fib_state, df, evaluated_at=None, end_idx=lifecycle_cap),
+                ic_reference=fib_tracker.ic_reference(fib_state, df, evaluated_at=lifecycle_cap),
             ),
         ))
     return out
@@ -743,9 +745,10 @@ def derive_poi_zones(
         #   5. The touch: the IC candle touches the AS-OF 61.8-80% zone of the
         #      fib's bounds [bos_price, cts_price_at(t)] (`fib_zone_bounds` +
         #      `ic_touches_zone`, the selection's own helpers — PLAN_H D1a / R3).
-        # (Condition 4 — the scenario idx/price constraints of
-        # POI_ZONES_SPEC §3.2 — is NOT implemented: find_ic_candidates
-        # applies the base conditions only, PLAN_H D4.)
+        # (Condition 4 — the IC reference condition of POI_ZONES_SPEC §3.2,
+        # PLAN_K — is evaluated at IC SELECTION only (`select_ip_ic`), never in
+        # this sweep (PLAN_H RX1-E): computed + exported since PLAN_K landing A,
+        # the pick filtered by it from landing B.)
         # End-state (`end_idx`) takes precedence: once ended, `status` is
         # "ended" regardless of activation conditions.
         cts_events_for_fib = cts_events_by_key.get((int(sid), int(cycle_id)), [])

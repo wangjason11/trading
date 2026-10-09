@@ -373,7 +373,6 @@ class FibTracker:
         df: pd.DataFrame,
         *,
         evaluated_at: Optional[int],
-        end_idx: Optional[int] = None,
     ) -> ICReference:
         """The fib record's IC reference (PLAN_K §1; the ONE builder — the drawn POI and MS's in-flight read both
         hand its value to `poi_zones.select_ip_ic`, D2):
@@ -389,9 +388,12 @@ class FibTracker:
         - both → the one further opposite the structure (sd +1 the lower price, sd −1 the higher; RX1-3); EQUAL →
           the structure reference (RX1-K5); none → `ICReference.NONE` (the condition passes, RX1-B).
 
-        `evaluated_at` = the reading moment (MS: the fed event's; None = retrospective, the drawn POI and the stamp);
-        `end_idx` = the last candle the watch's detector may read (None = the frame's last: MS hands its resolver
-        frame; the drawn POI / the stamp hand the structure's lifecycle cap)."""
+        `evaluated_at` = the reading moment: MS's read → the fed event's; the drawn POI and the stamp → the
+        structure's lifecycle cap (the FINAL reference = the reference as of the structure's end; None = an open
+        sub / main: every confirmation). The watch's detector always reads the WHOLE frame handed in (MS's resolver
+        frame; the projection's slice — the same rows, to the data edge) and a break counts once its confirmation ≤
+        `evaluated_at` — MS's convention (RX1-K6), so the final answer is the in-flight answer at the cap (PLAN_K
+        §11.2 LA1: never a frame cut at the cap)."""
         sid = int(fib_state.structure_id)
         target = int(fib_state.cycle_id)
         sd = int(fib_state.struct_direction)
@@ -413,7 +415,7 @@ class FibTracker:
                 refs.append((True, float(lim.ref_anchor_price), "prev_structure_bos", brk))
             else:
                 start = int(self._bos_by_cycle[(sid, 0)][0])
-                brk = find_cross_limit_break(df, float(lim.price), sd, start, end_idx=end_idx, known_at=evaluated_at)
+                brk = find_cross_limit_break(df, float(lim.price), sd, start, known_at=evaluated_at)
                 refs.append((True, float(lim.ref_anchor_price), "cross_limit_anchor", brk))
         if not refs:
             return ICReference.NONE
@@ -429,13 +431,15 @@ class FibTracker:
     def stamp_ic_references(self, df: pd.DataFrame, lifecycle_cap: Optional[int] = None) -> None:
         """Stamp every fib record's FINAL IC reference into its meta (PLAN_K A11 / §3.6) — `ic_ref_price`,
         `ic_ref_source` (absent = no reference), `ic_ref_break_pattern_anchor_idx`, `ic_ref_break_confirmed_idx`
-        (absent = no known break) — placed BEFORE the `cross_fib_limit_*` keys (pinned last). Retrospective
-        (`evaluated_at=None`), the watch read to `lifecycle_cap` (the structure's end; None = the frame's last), the
-        SAME call the drawn POI's selection makes (`poi_zones.select_ip_records`). A separate step after
-        `_finalize_lifecycle_fields` (which takes no frame); idempotent."""
+        (absent = no known break) — placed BEFORE the `cross_fib_limit_*` keys (pinned last). The FINAL reference =
+        as of the structure's end (`evaluated_at=lifecycle_cap`; None = the frame's last — main, an open sub): a
+        break confirmed after the end is not exported, and the watch's detector reads the whole frame (MS's
+        convention, RX1-K6 — PLAN_K §11.2 LA1). The SAME call the drawn POI's selection makes
+        (`poi_zones.select_ip_records`). A separate step after `_finalize_lifecycle_fields` (which takes no frame);
+        idempotent."""
         ic_keys = ("ic_ref_price", "ic_ref_source", "ic_ref_break_pattern_anchor_idx", "ic_ref_break_confirmed_idx")
         for key, fib in list(self._fibs.items()):
-            ref = self.ic_reference(fib, df, evaluated_at=None, end_idx=lifecycle_cap)
+            ref = self.ic_reference(fib, df, evaluated_at=lifecycle_cap)
             tail_keys = list(self._cross_fib_limit_meta(int(fib.structure_id)))
             head = {k: v for k, v in fib.meta.items() if k not in ic_keys and k not in tail_keys}
             tail = {k: fib.meta[k] for k in tail_keys if k in fib.meta}

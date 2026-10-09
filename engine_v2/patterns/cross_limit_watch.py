@@ -39,9 +39,11 @@ def find_cross_limit_break(
     """`(pattern_anchor_idx, confirmed_idx)` of the break of `threshold` (= the cross limit `P`), or None.
 
     `start_idx` = the structure's first candle (its BOS_0 anchor — a sub's lifecycle start can lie after its break:
-    sub 4, start 3621, break 3588); `end_idx` = the last candle the detector may read (None = the frame's last:
-    MS hands its resolver frame, already cut at the run's data edge; the retrospective stamp hands the structure's
-    lifecycle cap); `known_at` = the evaluation moment (None = retrospective: every confirmation up to `end_idx`).
+    sub 4, start 3621, break 3588); `end_idx` = the last candle the detector may read (None = the frame's last —
+    what every engine caller passes: `FibTracker.ic_reference` hands MS's resolver frame or the projection's slice,
+    both already cut at the run's data edge; a cut at a structure's END would be the frame-cut reading K-Q6 rejected,
+    PLAN_K §11.2 LA1); `known_at` = the evaluation moment (MS: the fed event's; the final reference: the structure's
+    lifecycle cap; None = every confirmation up to `end_idx`).
     """
     sd = int(sd)
     assert sd in (1, -1), f"find_cross_limit_break: sd must be +1 / -1, got {sd!r}"

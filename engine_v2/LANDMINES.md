@@ -638,7 +638,10 @@ without a fib (PLAN_I S5) —, a ValueError inside the IP arrives as `IPSelectio
 drawn POI == the read's pick on the final fib (the real collaborator); `tests/test_plan_i_s5_ms_reads_the_fib.py` — a
 tracker error inside `_build_geometry` propagates (`EmbeddedFibTrackerError`, a tracker `RuntimeError` unchanged);
 `tests/test_plan_k_landing_a.py` — a ValueError inside the IC reference during a sub geometry arrives as
-`IPSelectionError` (C01), and both consumers hand the same reference on the final fib.
+`IPSelectionError` (C01), and both consumers hand the same reference on the final fib (3 records, a fixture with no
+watch); `test_the_final_reference_is_the_as_of_reference_at_the_cap_on_the_whole_frame` — the final reference is
+the in-flight one AS OF the structure's end, its watch on the whole frame, never a frame cut at the cap (PLAN_K
+§11.2 LA1, found by both review lenses).
 (The anchor selection's graceful `[]` pin retired with it.) Measured on the reference window (V3, PLAN_H §8.4a, the
 retired resolver): 450 resolver calls (main 58, sub geometry 313, probe Phase 2 79), 0 IP errors.
 

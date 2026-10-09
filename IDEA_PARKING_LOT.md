@@ -94,7 +94,7 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    of the item-2 session, before its plan (F2e; was: deferred until the debugging rules settle) — RAN 2026-10-06c
    (PLAN_H §8.5c, 2 lenses, 520,963 tokens): no BLOCKER / MAJOR; 15 test survivors (worst: the sell-side activation
    touch) + stale docs → ONE fix-up commit (LR1), a static guard on broad `except` scopes (LR2). The V30 / V60 / V90 code is KEPT unwired (X1); POI_ZONES_SPEC §3.2 stays unapplied
-   (D4). Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3 variants): H1 5 ICs over
+   (D4; re-specified by the user 2026-10-09 as the IC reference condition — PLAN_K, D.2 below). Baseline (Week 8 save `20260930_151531_8b11bc2`; one POI row = one IC, carrying 1–3 variants): H1 5 ICs over
    3 cycles; M15 confluence 30 over 19; counter 12 over 7. **What moves when the POIs move** (the user accepted it, D2 /
    C3 — "We won't be able to judge whether those changes are appropriate or correct until I can review the charts";
    PLAN_H §3): H1 sid 1 cycle 2's sd-proximity `CTS_CONFIRMED` at 926 (IC 865 → 832: ≥ 939 or pullback); M15
@@ -199,9 +199,12 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
   broke it (+ a new cross-limit breakout watch). Rule DECIDED; its plan `engine_v2/plans/PLAN_K_ic_reference_condition.md`
   (cold-reviewed, K-Q1…K-Q8 answered); **landing A BUILT 2026-10-09** — computed + exported (the IP CSVs'
   `ic_ref_reason`, the fib meta `ic_ref_*` + hover), the pick unchanged (`poi_zones._IC_REFERENCE_FILTER = False`);
-  POI_ZONES_SPEC §3.2 rewritten (the old tables → its Appendix A); saved S_K_A `20261009_112137_02e9381`. Next: the
-  landing review, the variant replay V, then landing B (the
-  switch).
+  POI_ZONES_SPEC §3.2 rewritten (the old tables → its Appendix A); saved S_K_A `20261009_112137_02e9381`. Landing
+  review 2026-10-09 (PLAN_K §11.2, 651,669 tokens): LA1 FIXED (the final reference = as of the lifecycle cap, the
+  watch on the whole frame), 9 test gaps pinned; the variant replay V measured (PLAN_K §11.3). Next: landing B (the
+  switch). OPEN (latent, 0 on the window; PLAN_K §11.2 B5): can MS confirm a BOS on a reversal's own apply candle?
+  Both reversal builders take the most recent BOS_CONFIRMED with moment ≤ the reversal (inclusive, pinned) — such a
+  BOS's threshold would not be `P`, so its anchor would not be "the anchor behind `P`". DECIDE only if reachable.
 - **The agreed direction for wave candles + WVMI** (PLAN_H Q-W) — item 1 gives the IP legs the *agreed direction*
   (candle and volume direction agree; one at 0 → the other decides; both 0 = a true doji). Wave candles and WVMI keep
   GLOSSARY "qualified candle" (no volume-only-doji row) for now — user 2026-10-05: "we likely will also make the change
