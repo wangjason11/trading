@@ -1223,7 +1223,7 @@ RX1-4, RX1-T, RX1-W1 … W3; the rule DECIDED, below; the implementation plan = 
 (drafted + cold-reviewed 2026-10-09; K-Q1 … K-Q8 answered; landing A BUILT 2026-10-09 — computed + exported, the
 pick unchanged; saved S_K_A `20261009_112137_02e9381`; reviewed + one fix-up (byte-identical); the variant replay V
 measured; landing B committed `e2bb77a` — APPLIED + the `IP: none` reason `no_ic_candidate`, §6 RX1-F / RX1-N;
-RX1 COMPLETE 2026-10-09 with the user's final save — PLAN_K §11)).** The user:
+RX1 COMPLETE 2026-10-09 — saved S_K_B `20261009_140048_97795bd` — PLAN_K §11)).** The user:
 add IC candidate requirements alongside §3.1, BEFORE the IP ("these new requirements may change the candidates that
 make it to the IP check"); found for it (asked "2 or 3 … not wired in"): POI_ZONES_SPEC §3.2's price constraint
 (`passes_price_constraint`, no caller, no test) and idx constraint (never coded), both written per the retired

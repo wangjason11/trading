@@ -212,7 +212,7 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
   V90 selection (PLAN_H X1: "There is still a chance that I use those as fallbacks … we might still delete in the
   future"). DECIDE (after the item-1 chart review — "we will need to come back and understand if losing their POIs in
   these cycles is appropriate").
-- **Test the POI_ZONES_SPEC §3.2 scenario IC filters — COMPLETE 2026-10-09 (RX1 = PLAN_K landings A + B, the user's final save at B)** — never implemented; kept in the spec, unapplied (PLAN_H D4:
+- **Test the POI_ZONES_SPEC §3.2 scenario IC filters — COMPLETE 2026-10-09 (RX1 = PLAN_K landings A + B; the final save S_K_B `20261009_140048_97795bd` = `LATEST_<branch>`)** — never implemented; kept in the spec, unapplied (PLAN_H D4:
   "I still want to keep these and test into them in the future"). Any IC filter stays OUTSIDE the institutional pattern
   and is applied first. **TAKEN UP 2026-10-09 as item 1's first rule experiment, RE-SPECIFIED by the user for today's
   fibs** (PLAN_H §8.9 RX1, decisions §6 RX1-*; verbatim `plans/plan_h_inputs/ic_reference_conditions_spec.md`): one

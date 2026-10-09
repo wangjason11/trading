@@ -9,7 +9,8 @@ reference read on a frame cut at the cap, K6's rejected reading — FIXED, 9 tes
 vs S_K_A byte-identical); the variant replay V MEASURED (§11.3: one pick moves, sub 0 cyc 3 1604 → 1447; sub 3
 cyc 2's TB1 tie dissolves; no MS cascade); **landing B BUILT 2026-10-09** (§11.4: the filter ON + the `IP: none` reason
 `no_ic_candidate`, the user's RX1-F / RX1-N; `/compare` vs S_K_A == V + sub 1 cyc 2's relabel; 8 / 8 mutants; suite
-1527; chart-reviewed + committed `e2bb77a` 2026-10-09 — the user: "looks good go ahead"); **RX1 COMPLETE** with the
+1527; chart-reviewed + committed `e2bb77a` 2026-10-09 — the user: "looks good go ahead"); **RX1 COMPLETE — saved S_K_B
+`20261009_140048_97795bd` (source `97795bd` = B + the close-out docs; save commit `5d8a9ce`, trunk `213b6a3`; = `LATEST_<branch>`)** — the
 user's final save ("commit-save as a final iteration of the full set of IC candidate conditions, and that completes
 this particular new rule experimentation").** The rule is the user's and is DECIDED: canonical text `PLAN_H_institutional_pattern_poi.md` §8.9
 "RX1" (the rule as decided) + §6 RX1-B, RX1-1 … RX1-4, RX1-T, RX1-W1 … W3, RX1-C1, RX1-E; the user's write-up verbatim
@@ -563,4 +564,5 @@ ignoring the moment): **13 / 13 KILLED** (full suite each, 13 in parallel).
   particular new rule experimentation"): POI_ZONES_SPEC §3.2's window paragraph + the `IP: none` wording
   (POI_ZONES_SPEC, CHARTING_SPEC) to B; 2 stale `end_idx` test fakes; GOTCHAS (a POI rule moves MS through the
   sd-proximity read); the register (RX1 complete; the user's next two sessions — the IC identification revamp, the
-  cross-limit price debugging); then the final save.
+  cross-limit price debugging); then the final save: **S_K_B** `20261009_140048_97795bd` (fresh replay 48 s wall, FETCH GATE
+  PASS, no retry; `cmp_k_landing_b.py` vs S_K_A on it: OK).
