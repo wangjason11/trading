@@ -40,7 +40,7 @@ cycle's CTS anchor strictly beyond `P`), else a single — main and sub alike.
   CTS_ESTABLISHED arrives before cycle T−1's CTS_CONFIRMED (PLAN_I F14, S2); the dispatch raises when a CTS_ESTABLISHED
   arrives before its own cycle's BOS_CONFIRMED (F17, S2b — it used to be dropped silently); and MarketStructure raises
   at the end of every run whose embedded tracker (§8) saw an EMISSION order other than `processing_order_key` order
-  (`check_processing_order`, S5 — the F16 and F17 (i) shapes; F17 (ii) trips only the dispatch). 0 on the reference
+  (`check_processing_order`, S5 — the F16 and F17 (i) shapes; F17 (ii) trips only the dispatch (MS no longer produces it since PLAN_J J3 — the BOS window ends at the CTS anchor)). 0 on the reference
   window; every shape comes from MS (PLAN_I §9.2 F14 / F16 / F17) and stays loud until the MS fix planned after S5
   (PLAN_I R9-1 / R9-2).
 - **Every TIME half is the handled event's MOMENT** (`ef.event_moment`; Plan E E3a): activation / deactivation /
@@ -190,7 +190,7 @@ CTS_ESTABLISHED / CTS_UPDATED. Since S5 that inner comes from THIS logic:
   [anchor, moment) (F14; F17 (i)) or a CTS is confirmed with an anchor AT OR after its confirmation candle (F16 — at
   an equal idx `processing_order_key` sorts the confirmation first). F17 (ii) — a cycle whose BOS anchor follows its
   CTS anchor — keeps the order (the establishment and its BOS share their moment): MS completes, only the downstream
-  dispatch raises. At the end of every MS run `check_processing_order()` compares them and raises
+  dispatch raises (MS no longer produces it since PLAN_J J3 — the BOS window ends at the CTS anchor). At the end of every MS run `check_processing_order()` compares them and raises
   `FibEventOrderError` on a difference (the run is complete when it raises — `ms.events` / `ms.df` are whole) — in
   the main run, a sub geometry AND the probe's Phase 2 (kept, S5 landing review m1: the probe's result never depends
   on the read, F7, but an F16 / F17 (i) shape inside a probe iteration stops the replay too, even for a start never
@@ -208,7 +208,8 @@ CTS_ESTABLISHED / CTS_UPDATED. Since S5 that inner comes from THIS logic:
   confirmation candle (a range back-fill look-ahead; the drawn fib locks at the earlier anchor; MS's end-of-run
   tripwire now raises on it); F17's MS side — a cycle established on the previous cycle's CTS candle / a BOS anchor
   after its CTS anchor (a breakout establishing cycle T must break T−1's confirmed `cts_threshold` at its apply; the
-  BOS window ends at the CTS anchor). Register `IDEA_PARKING_LOT.md` §D.1 item 2.
+  BOS window ends at the CTS anchor — DONE, PLAN_J J3). The plan: `plans/PLAN_J_ms_restep_state_and_new_cycle_break.md`
+  (stages J3 → J2 → J1). Register `IDEA_PARKING_LOT.md` §D.1 item 2.
 - The old §13 items, reconciled: main's fill-as-of converged on "current" (S4); the deeper-walk fill-as-of is
   "current"; `M = 0` → no cross (pinned, S3); the Scenario-1 / revert ↔ ceiling merge is moot (both retired); `sid 0`
   has no `P` → singles, cycle 0 included (Q6); the in-flight resolver generalization and the sub snapshot's intra fib

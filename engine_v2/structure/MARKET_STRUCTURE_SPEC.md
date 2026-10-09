@@ -362,7 +362,8 @@ reader is that check (`_maybe_confirm_cts_via_proximity` →
 `_check_proximity_at_candle`). At the end of every run MS calls the tracker's
 `check_processing_order()`: it raises `FibEventOrderError` when the emission
 order it was fed is not the downstream's `processing_order_key` order (the F16
-and F17 (i) shapes, PLAN_I §9.2 — F17 (ii) trips only the downstream dispatch; 0
+and F17 (i) shapes, PLAN_I §9.2 — F17 (ii) trips only the downstream dispatch, and is no longer produced since
+PLAN_J J3 ("BOS_n+1 derivation rule"); 0
 on the reference window; the MS fix follows S5, PLAN_I R9-1 / R9-2). It runs in
 the probe's Phase-2 MS too (CROSS_CYCLE_FIB_SPEC §8). Canonical: `zones/CROSS_CYCLE_FIB_SPEC.md` §8; the read
 MS ran until S5 (the Scenario-2 selector, the cycle-0 snapshot, the M1
@@ -435,9 +436,19 @@ range as usual via `_ensure_range_on_pullback`.
 
 When transitioning to cycle n+1 via breakout pattern:
 - **If cycle n had a pullback** (existing behavior):
-  BOS_n+1 = pullback's deepest extreme in `[last_pullback_pat_apply_idx, breakout_apply_idx]`
+  BOS_n+1 = pullback's deepest extreme in `[last_pullback_pat_apply_idx, cts_anchor_idx_n+1]`
 - **If cycle n was proximity-only** (no pullback fired):
-  BOS_n+1 = max retracement in `[cts_n_confirmed_idx, breakout_apply_idx]`
+  BOS_n+1 = max retracement in `[cts_n_confirmed_idx, cts_anchor_idx_n+1]`
+
+The window ENDS at the new cycle's CTS anchor (the breakout's pattern extreme; PLAN_J J3, 2026-10-09 — PLAN_I R9-2
+(ii), F17 (ii)): the retracement before the extreme the breakout reached, so the BOS never lies after its CTS. Until
+J3 it ended at `breakout_apply_idx`, and a breakout whose extreme is not its apply candle could take a deeper
+pullback candle AFTER its extreme (synthetic WAVES 301 / 572: BOS 44 after CTS 43 — the anchor-keyed processing order
+then handed the cycle's CTS_ESTABLISHED to the downstream before its BOS, which raises since PLAN_I S2b). 0 on the
+reference window (byte-identical); the session-4 random-tail corpus 7 trials → 0. A CTS anchor BEFORE the window start
+(the F17 (i) shape — a cycle established on the previous cycle's CTS candle, before that cycle's confirmation) keeps
+the old swap: the window is `[cts_anchor_idx, start]`. Pins `tests/test_plan_j_j3_bos_window.py`,
+`tests/test_ms_bos_selection_guards.py`.
 
 The implementation is in `_select_bos_on_breakout` and switches based on
 `pullback_fired_for_cycle` state. Neither → it raises (unreachable: a cycle n+1

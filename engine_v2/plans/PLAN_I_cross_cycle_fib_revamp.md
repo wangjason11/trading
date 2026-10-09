@@ -1059,7 +1059,8 @@ convention); M15 indices entity-absolute unless a sub's slice-local frame is nam
   check, so a post-confirmation update in this order can still extend / late-activate an UNLOCKED single (S4 landing
   review, lens A nit) — inputs to the S5 round.
 - **F17 — the downstream SILENTLY SKIPS a CTS_ESTABLISHED whose cycle's BOS anchor lies after its CTS anchor — and that
-  hides the F14 (1) shape from the S2 tripwire (found by the session-4 60k WAVES run, 2026-10-08, §9.10; LATENT — 0 / 34
+  hides the F14 (1) shape from the S2 tripwire [the MS side: PLAN_J — source (ii) FIXED by J3 (the BOS window ends at
+  the CTS anchor), source (i) by J2] (found by the session-4 60k WAVES run, 2026-10-08, §9.10; LATENT — 0 / 34
   on the window, 0 / 4,800 REAL slices) (→ R8-2).** The orchestrator loop hands a CTS_ESTABLISHED to the tracker only
   if its cycle's BOS_CONFIRMED was handled first (`if key in bos_anchor_by_cycle`, `orchestrator.py`), else drops it
   without a trace; `processing_order_key` puts BOS_CONFIRMED at its BOS anchor and CTS_ESTABLISHED at its CTS anchor,

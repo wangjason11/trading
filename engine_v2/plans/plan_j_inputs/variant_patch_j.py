@@ -213,6 +213,7 @@ def j3():
         e = int(cts_anchor_idx)   # PLAN_J J3 (F17 (ii)): the window ends at the new cycle's CTS anchor
         if e < s:
             PJ_LOG.append({"kind": "J3_swap", "tf": self.timeframe, "s": s, "e": e, "apply": int(breakout_apply_idx)})
+            print(f"[PJ J3] SWAP window start {s} > CTS anchor {e} (apply {int(breakout_apply_idx)}, {self.timeframe})")
             s, e = e, s
 """)
 

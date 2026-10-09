@@ -1338,9 +1338,9 @@ class MarketStructure:
                         },
                     )
                 else:
-                    # BOS from the cycle's retracement window (pullback or proximity):
-                    # `_select_bos_on_breakout`.
-                    bos_anchor_idx, bos_price = self._select_bos_on_breakout(apply_idx)
+                    # BOS from the cycle's retracement window (pullback or proximity), ending at
+                    # the new CTS anchor (PLAN_J J3): `_select_bos_on_breakout`.
+                    bos_anchor_idx, bos_price = self._select_bos_on_breakout(apply_idx, cts_anchor_idx)
                     self._emit_bos_confirmed(
                         int(apply_idx),
                         bos_price,
@@ -1750,11 +1750,13 @@ class MarketStructure:
         assert int(idx) == meta2["confirmed_at"], (
             f"BOS_CONFIRMED idx {idx} != confirmed_at {meta2['confirmed_at']} (ev.idx is the moment)")
         # The anchor is a location already SEEN at the moment (2026-09-28): an anchor
-        # after its apply (only `_select_bos_on_breakout`'s swapped window could give
-        # one) is not knowable yet. This guard does NOT keep the BOS before the cycle's
-        # CTS_ESTABLISHED in the anchor-keyed processing order (`ef.processing_order_key`):
-        # a BOS anchor after the CTS anchor (both <= the moment) still sorts after it —
-        # PLAN_I §9.2 F17; the downstream dispatch raises `FibEventOrderError` then (S2b).
+        # after its apply is not knowable yet (since PLAN_J J3 the cycle >= 1 window ends
+        # at the CTS anchor <= the apply, its swap included, so no path is known to give one).
+        # This guard does NOT keep the BOS before the cycle's CTS_ESTABLISHED in the anchor-keyed
+        # processing order (`ef.processing_order_key`): a BOS anchor after the CTS anchor (both
+        # <= the moment) still sorts after it — PLAN_I §9.2 F17; J3 removes the (ii) source, a
+        # swapped window (the (i) shape) can still give one; the downstream dispatch raises
+        # `FibEventOrderError` then (S2b).
         assert int(bos_anchor_idx) <= int(idx), (
             f"BOS_CONFIRMED anchor {bos_anchor_idx} after its moment {idx}")
         self.events.append(
@@ -1965,20 +1967,24 @@ class MarketStructure:
             StructureEvent(idx=idx, category="STRUCTURE", type="BOS_THRESHOLD_UPDATED", price=float(price), meta=meta2)
         )
 
-    def _select_bos_on_breakout(self, breakout_apply_idx: int) -> tuple[int, float]:
+    def _select_bos_on_breakout(self, breakout_apply_idx: int, cts_anchor_idx: int) -> tuple[int, float]:
         """
         Cycle >= 1 BOS: select the BOS anchor — the price extreme of the cycle's retracement window.
 
-        Window selection:
-        - If a pullback fired for the just-completed cycle: use
-          [last_pullback_pat_apply_idx, breakout_apply_idx] (existing behavior).
-        - Else if cycle was confirmed via sd zone proximity: use
-          [cts_confirmed_idx, breakout_apply_idx] (max retracement across the
-          full proximity-to-breakout window).
+        Window selection — the start:
+        - If a pullback fired for the just-completed cycle: last_pullback_pat_apply_idx.
+        - Else if cycle was confirmed via sd zone proximity: cts_confirmed_idx (max
+          retracement from the proximity candle on).
         - Neither: unreachable — a cycle >= 1 breakout needs the CTS CONFIRMED,
           and both confirmation paths set `cts_confirmed_idx`
           (`_emit_cts_confirmed_once`); raises (2026-09-28: the silent fallback
           to `_initial_bos_before_first_cts` returned the STRUCTURE's BOS_0).
+        The end: the new cycle's CTS anchor `cts_anchor_idx` (PLAN_J J3, PLAN_I R9-2 (ii), F17 (ii)) — the
+        retracement BEFORE the extreme the breakout reached, so the BOS never lies after its CTS (the anchor-keyed
+        processing order needs the cycle's BOS first). Until J3 the end was `breakout_apply_idx`: a breakout whose
+        extreme is not its apply candle could take a deeper pullback candle after the extreme (WAVES 301 / 572:
+        BOS 44 after CTS 43). A CTS anchor BEFORE the window start (the F17 (i) shape — a cycle established on the
+        previous cycle's CTS candle) keeps the old swap: the window is then `[cts_anchor_idx, start]`.
 
         Returns (bos_anchor_idx, bos_price).
         """
@@ -1996,7 +2002,7 @@ class MarketStructure:
                 f"proximity confirmation (cts_phase={st.cts_phase!r})")
 
         s = int(window_start)
-        e = int(breakout_apply_idx)
+        e = int(cts_anchor_idx)
         if e < s:
             s, e = e, s
 

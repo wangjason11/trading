@@ -312,3 +312,25 @@ J3 was decided by PLAN_I R9-2 (ii). The stage order of §6 (J3 → J2 → J1) wa
 - 2026-10-08 → 09 — the corpus (base reproduces session 4; J1a / J2 / J3 / J1a + J2 + J3 — the combination 0 errors,
   0 trips, 0 skips over 72,000 trials), the structural signature subset, J2's 112 voids (104 with the apply candle
   closing beyond), J2b (the rescan); the suite census per tree. Round 1 asked and ANSWERED (§7): J1a, J2b.
+
+## 9. Build record
+
+**J3 — the cycle >= 1 BOS window ends at the new CTS anchor (PLAN_I R9-2 (ii), F17 (ii)) — LANDED** (its own local
+commit).
+- Code: `MarketStructure._select_bos_on_breakout(breakout_apply_idx, cts_anchor_idx)` — the window `[pullback apply |
+  proximity confirmation, cts_anchor_idx]` (was `…, breakout_apply_idx]`); the swap of a window whose end precedes its
+  start kept (the F17 (i) shape — J2's); the call site passes the breakout's CTS anchor; the emitter's comment.
+- `/compare` vs S5b (= `%TEMP%/pi/S5`): **byte-identical** — 27 / 27 CSVs md5, 3 / 3 figures (full JSON); run.log
+  9,101 lines == but the timings; fetch gate PASS. = the prediction (the J3 variant: 0 window-order swaps; the
+  session-4 corpus: F17 (ii) skips W 3 → 0, WB 10 → 6 — the 6 the (i) shape).
+- Tests 1427 → 1431: `test_plan_j_j3_bos_window.py` (2 — the real MS run on WAVES 301 / 572's candles: cycle 1's BOS
+  39 (0.59943) ≤ its CTS 43, the window's start 7; the downstream dispatch takes it — both fail on the base tree);
+  `test_ms_bos_selection_guards.py` — the two direct callers pass the CTS anchor, + the window ends at the CTS anchor
+  (candle 10 made the deepest: excluded with the CTS anchor at 9), + the swap (CTS anchor 5 before the start 7 →
+  `[5, 7]`).
+- Docs: MARKET_STRUCTURE_SPEC "BOS_n+1 derivation rule" (+ the tripwire paragraph), GLOSSARY ("proximity-confirmed
+  CTS", FibEventOrderError), LANDMINES (the proximity-cascade signature, the dispatch entry, the tripwire rule),
+  ARCHITECTURE (the `BOS_CONFIRMED` row), CROSS_CYCLE_FIB_SPEC (§1, §8, §9), PLAN_I §9.2 F17.
+- Mutation (solo, `mutant_runner.py`, full suite per mutant): 4 + a no-op control — all 4 KILLED (the window ends at
+  the apply again; the swap removed — also caught by S2b's F14 (1) real run, which goes through the swap; the call
+  site passes the apply; the end at the CTS anchor − 1), the control SURVIVED.
