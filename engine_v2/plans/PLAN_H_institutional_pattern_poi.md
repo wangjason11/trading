@@ -7,7 +7,9 @@ user's R1–R4) — two landings (L1); landing A BUILT 2026-10-06 (§8.3a), its 
 chart-debugging session (§8.9: F1 the M15 fib layer + F1·1) PAUSED 2026-10-06 for the cross-cycle fib revamp
 (register §D.1 item 2; §6 F2a–F2e) and saved `20261006_224610_42c137c` (S_F1, the revamp's baseline); B's landing
 review RAN at the revamp session's start (2026-10-06c, §8.5c: no BLOCKER / MAJOR; the fix-up commit byte-identical
-to S_F1); the debugging resumes after the revamp.** Living document: every question, answer and decision
+to S_F1); the debugging resumes after the revamp — the revamp COMPLETE 2026-10-09 (PLAN_I S1–S6 + PLAN_J): re-derive
+the logged points first (PLAN_I §9.9), each experiment vs **S_S6** `20261009_020650_5f6bae3` (the new baseline; S_B / S_A
+stay named references — their fib CSVs carry the pre-S6 `fib_mode` column, the `/compare` skill's fib row).** Living document: every question, answer and decision
 of the item-1 discussion is recorded here as it happens (§5 open questions, §6 decisions). Register line:
 `IDEA_PARKING_LOT.md` §D.1 item 1.
 

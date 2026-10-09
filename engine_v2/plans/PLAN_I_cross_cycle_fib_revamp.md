@@ -20,7 +20,8 @@ answers to the 8 inputs), canonical, amended in place only as decisions land (ea
 §1 below is the precise engineering reading.
 
 **Baseline:** S_F1 `artifacts/commits/week9-entries-decisions/20261006_224610_42c137c` (the build's `/compare` base; LATEST
-until 2026-10-09). After S5b + PLAN_J: **S_J** `20261009_013718_708a8d9` (= `LATEST_<branch>`, PLAN_J §9).
+until 2026-10-09). After S5b + PLAN_J: **S_J** `20261009_013718_708a8d9` (PLAN_J §9); after S6: **S_S6**
+`20261009_020650_5f6bae3` (= `LATEST_<branch>`, §9.10 S6).
 **Measurement scripts (read-only):** `plan_i_inputs/ref_census.py <save>` (the reference-price census, §3.1);
 `plan_i_inputs/prev_sub_census.py <save>` (round 2: the previous-sub rule, the new-cycle threshold check, §3.3).
 
@@ -831,7 +832,7 @@ The rule ("parent cycle 0 → no reference") covers the case either way.
   answered (J1a — a re-stepped candle reads everything as of itself, the range bounds included; J2b — re-test the
   breakout against the apply-time threshold, void + rescan). F16 / F17 are fixed there, not here.
 - 2026-10-09 — session 7 (the wrap-up; the user picked: a baseline save, PLAN_J's J3 swap → a raise, S6): S_J saved
-  (`20261009_013718_708a8d9`); **S6 LANDED** (§9.10) — the build is complete.
+  (`20261009_013718_708a8d9`); **S6 LANDED** (§9.10) — the build is complete; saved S_S6 `20261009_020650_5f6bae3`.
 
 ## 8. Handoff to session 2 — the implementation plan (from a fresh code audit + a cold review)
 
@@ -1761,5 +1762,8 @@ not pushed). A rule-3 migration (LANDMINES "Event Contract Rules" — a key DELE
   SURVIVED.
 - **Save-format boundary:** a save before S6 (S_J and older — S_B / S_A included) has the column + the key; diff its fib
   CSVs with `cmp_s6_fib_mode.py` (the `/compare` skill's fib row says so).
+- **Saved S_S6 `20261009_020650_5f6bae3`** (= `LATEST_<branch>`; source `5f6bae3`, save commit `7b8171d`,
+  `artifacts-trunk` `06ab7a0`; `/commit-save --reuse-replay` of the compared replay, fetch gate PASS): 27 CSVs + 3 / 3
+  charts + PNGs; `cmp_s6_fib_mode.py` S_J → S_S6: OK. The baseline for item 1's resumed debugging (PLAN_H header).
 - Docs: CROSS_CYCLE_FIB_SPEC (status, §6), GLOSSARY (the retired fib terms), the `/compare` skill (the fib CSV row),
   register D.1 item 2, PLAN_J §9 ("Open after the build").
