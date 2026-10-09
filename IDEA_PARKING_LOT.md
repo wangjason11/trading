@@ -128,7 +128,8 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    back-filled candle's re-step sees the state as of that candle; + R9-2 (a), F17's MS side: a breakout must break
    cycle T−1's confirmed `cts_threshold` at its apply, the BOS window ends at the CTS anchor) — its own plan and
    `/compare`, NEXT after S5 (+ S5b); R9-3 (a) — F19 fixed in stage **S5b** (the cycle-table end caps a fib's end) — **S5b LANDED 2026-10-08**
-   (byte-identical on the window, PLAN_I §9.10); next the MS fix plan, S6 on request. Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
+   (byte-identical on the window, PLAN_I §9.10); next the MS fix plan = **`engine_v2/plans/PLAN_J_ms_restep_state_and_new_cycle_break.md`**
+   (round 1 answered 2026-10-09: J1a, J2b; stages J3 → J2 → J1), S6 on request. Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
    charts add the M15 fib layer). Likely inputs (to confirm with the
    user): the 2026-10-01 item and D5 below, and §E "Cross-cycle fib bundled follow-up" with its parked open
    questions (`engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §13).

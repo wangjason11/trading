@@ -824,6 +824,10 @@ The rule ("parent cycle 0 → no reference") covers the case either way.
 - 2026-10-08 — session 6: **S5b LANDED** (§9.10): the cycle-table end caps a fib's end (F19, R9-3 (a)); predicted by a
   finalize shadow on the S5 code (0 / 27 fib cycles move), `/compare` vs S5 byte-identical (27 / 27, 3 / 3); the real
   F19 instance now ends at 08-05 13:15; 8 mutants on the full suite all killed; tests 1427.
+- 2026-10-08 → 09 — session 6: the MS fix plan (R9-1 / R9-2) opened as **`plans/PLAN_J_ms_restep_state_and_new_cycle_break.md`**
+  (J1 = F16, J2 = F17 (i), J3 = F17 (ii); variants on the window + the session-4 random-tail corpus); its round 1
+  answered (J1a — a re-stepped candle reads everything as of itself, the range bounds included; J2b — re-test the
+  breakout against the apply-time threshold, void + rescan). F16 / F17 are fixed there, not here.
 
 ## 8. Handoff to session 2 — the implementation plan (from a fresh code audit + a cold review)
 
