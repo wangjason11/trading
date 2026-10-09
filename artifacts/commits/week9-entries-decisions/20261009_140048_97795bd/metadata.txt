@@ -1,0 +1,4 @@
+commit_hash=97795bd
+timestamp=20261009_140048
+branch=week9-entries-decisions
+commit_message=PLAN_K RX1 close-out: the final iteration of the full set of IC candidate conditions (landing B e2bb77a + the close-out docs)
