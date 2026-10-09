@@ -24,7 +24,8 @@ MarketStructure maintains an internal state object (MarketStructureState) with:
   `cts_phase_debug`), `cycle_stage`
   - `cts_phase` ∈ {`NONE`, `EST_OR_UPD`, `CONFIRMED`}: `NONE` until the first CTS; `EST_OR_UPD` at each pattern-path
     `CTS_ESTABLISHED` / `CTS_UPDATED`; `CONFIRMED` at `CTS_CONFIRMED` (pullback or sd-proximity). It is never reset to
-    `NONE` (the state object is built once per run). It gates the next breakout: a new cycle is ESTABLISHED when
+    `NONE` (the state object is built once per run). It gates the next breakout (and the breakout must break the
+    threshold — "A new cycle must break the threshold at its apply" below): a new cycle is ESTABLISHED when
     `st.cts is None` or `cts_phase == "CONFIRMED"`, otherwise the breakout UPDATES the current CTS
     (`market_structure.py`, `establishing_new_cycle`). The type also declares `FALSE_BREAK`, which nothing assigns
     (measured 2026-09-30; moved here from the deleted `PRE_REFACTOR_INVARIANTS.md`).
@@ -138,6 +139,24 @@ started from an open watch. The options weighed (re-freeze the watch on the new 
 trials, since the new BOS is the pullback low at or beyond the old anchor's wick; block the breakout until the watch
 resolves — the new extreme is lost as a CTS; keep and relax invariant 4 — a reversal without a break of the current
 BOS): memory `project_zones_timing_audit_20260922.md`. Pins `tests/test_ms_new_cycle_ends_watch.py`.
+
+### A new cycle must break the threshold at its apply (PLAN_J J2, 2026-10-09)
+A breakout that would ESTABLISH cycle T >= 1 must break cycle T−1's `cts_threshold` as it stands at its apply — the
+mirror of the reversal's frozen BOS barrier (PLAN_I R3-1 / R9-2 (i)). The winner is picked at its anchor against the
+detection threshold of that moment (`winner_break_th` — the range's breakout bound, None when no range is active, and
+`check_break` then passes anything); its frozen back-fill can CONFIRM the cycle in between (a proximity hit) and set the
+threshold. At the apply, when the two differ, the pattern is re-detected at its anchor against `cts_threshold`; unless
+the same pattern (name, apply) qualifies, the breakout is **VOID** (`_apply_pattern_at_apply_idx` returns True; the log
+line `[ms] breakout VOID: …`): nothing is applied — no event, no range reset — and `_step_anchor` undoes the winner's
+back-fill (`_restore_state`, the snapshot it took before it), steps the anchor candle and continues at anchor + 1, so
+the anchors the void winner skipped are scanned, each with the state as of itself (user decision PLAN_J J2-Q1 (a),
+"J2b"). Before J2 the breakout established cycle T anyway — on the previous cycle's own CTS candle in the F17 (i) shape
+(synthetic WAVES 413 / 1074: CTS anchor 46, BOS the proximity candle 47 — the order tripwires raised), or one
+candle-pattern late (WAVES 302 / 167: cycle 2 at 32 from a pattern whose first candle never closed above the
+threshold; J2: cycle 2 at 36 from the pattern anchored at 32). 0 on the reference window (byte-identical: every
+establishment there detects against the threshold it lands on, PLAN_I §9.2 F12); 112 voids in the PLAN_J corpus
+(72,000 trials), each detected with no range. The `cts_frozen` WARNING (PLAN_I D3) now prints only for a mismatched
+breakout that qualified. Pins `tests/test_plan_j_j2_new_cycle_break.py`, `tests/test_plan_i_s2b_dispatch_order.py`.
 
 ### Reversal inside a back-fill (terminal; 2026-09-28)
 A scheduled (pending) reversal is applied by the per-candle step (`_replay_step_no_patterns`), which also runs
@@ -501,7 +520,9 @@ known at the decision. MS does this in ONE forward pass: `_step_anchor` back-fil
 (`_replay_step_no_patterns(k, freeze_range=True)`) before acting at the decision candle, then continues sequentially
 (pattern confirmation windows work the same way). It never rewinds: the original design's "seed snapshot → rewind to
 the start → replay → resume at decision + 1" survived only as the reversal-watch expiry's rewind to `anchor + 1`,
-unreachable since F3b and removed 2026-09-29 ("Expiry inside a step" above).
+unreachable since F3b and removed 2026-09-29 ("Expiry inside a step" above). A VOID breakout winner (PLAN_J J2, "A new
+cycle must break the threshold at its apply") undoes its own frozen back-fill (`_snapshot_state` / `_restore_state`)
+and the step continues at anchor + 1 — the candles are then stepped once, in order; nothing is re-read past them.
 
 ---
 

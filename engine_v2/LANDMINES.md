@@ -245,7 +245,7 @@ the downstream's one logic (CROSS_CYCLE_FIB_SPEC §8) — read at each refresh a
 4. **The end-of-run order tripwire stays a raise.** `check_processing_order()` (the last step of `run()`) raises
    `FibEventOrderError` when the emission order the tracker saw is not `processing_order_key` order — the F16 shape
    (a CTS confirmed with an anchor at or after its confirmation candle) and the F17 (i) / F14 (1) shape (a cycle
-   established with an anchor before the previous cycle's confirmation); F17 (ii) (a BOS anchor after its own CTS
+   established with an anchor before the previous cycle's confirmation — MS no longer produces it since PLAN_J J2); F17 (ii) (a BOS anchor after its own CTS
    anchor) does not trip MS — only the downstream dispatch (MS no longer produces it since PLAN_J J3 — the BOS window ends at the CTS anchor). 0 on the reference window and on 400 random real slices
    (S5 landing review). It runs in EVERY MS run with a tracker — main, sub geometry AND the probe's Phase 2 (whose
    result never depends on the read, F7, but whose run still raises: a probe iteration on such a shape stops the
@@ -682,7 +682,8 @@ pullback follows its extreme); 0 / 34 on the reference window. MS's own guard on
 (`_emit_bos_confirmed`). **PLAN_J J3 (2026-10-09) removed the (ii) source:** the cycle >= 1 BOS window ends at the
 new CTS anchor (MARKET_STRUCTURE_SPEC "BOS_n+1 derivation rule"), so a breakout whose deepest pullback follows its
 extreme no longer gives a BOS after its CTS; the (i) source (a cycle established on the previous cycle's CTS candle —
-the swapped window) is PLAN_J J2's. The MS side was decided in PLAN_I's S5 round (R9-1 / R9-2, register D.1 item 2):
+the swapped window) went with PLAN_J J2 (2026-10-09: a breakout must break the previous cycle's threshold at its
+apply, else it is VOID). The MS side was decided in PLAN_I's S5 round (R9-1 / R9-2, register D.1 item 2):
 the MS fix plan `plans/PLAN_J_ms_restep_state_and_new_cycle_break.md`, with F16 (a CTS confirmed with an anchor after its confirmation candle — emission order != this sort;
 the drawn fib locks at the earlier anchor); until it lands, MS's own end-of-run order tripwire (S5, "MS's POI inner IS
 the drawn fib's decision" above) stops an F16 / F17 (i) run before the dispatch sees it. Pins

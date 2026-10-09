@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
@@ -585,6 +586,34 @@ class MarketStructure:
         self._write_df_row(i)
 
     # ----------------------------
+    # PLAN_J: undo a frozen look-ahead
+    # ----------------------------
+
+    def _snapshot_state(self, lo: int, hi: int) -> tuple:
+        """Everything a frozen look-ahead over candles `[lo, hi)` can change: the state, the events it emits, the
+        embedded FibTracker it feeds and the output rows it writes (PLAN_J). The tracker is deep-copied with MS's
+        events kept BY IDENTITY (its order tripwire, `check_processing_order`, compares identities). `_restore_state`
+        puts it all back."""
+        memo = {id(e): e for e in self.events}
+        memo[id(self.df)] = self.df
+        tracker = None if self._fib_tracker is None else copy.deepcopy(self._fib_tracker.__dict__, memo)
+        rows = {c: a[lo:hi].copy() for c, a in self._out.items()}
+        return copy.deepcopy(self.state.__dict__, memo), len(self.events), tracker, lo, hi, rows
+
+    def _restore_state(self, snap: tuple) -> None:
+        """Undo everything since `_snapshot_state` — IN PLACE: callers hold aliases of `self.state` (`st = self.state`)
+        and the tracker object is shared with whoever built it."""
+        state, n_events, tracker, lo, hi, rows = snap
+        self.state.__dict__.clear()
+        self.state.__dict__.update(state)
+        del self.events[n_events:]
+        if tracker is not None:
+            self._fib_tracker.__dict__.clear()
+            self._fib_tracker.__dict__.update(tracker)
+        for c, a in rows.items():
+            self._out[c][lo:hi] = a
+
+    # ----------------------------
     # Week 5 Part 3A: BOS barrier + reversal watch helpers
     # ----------------------------
 
@@ -844,6 +873,9 @@ class MarketStructure:
 
         if winner is not None:
             ev, apply_idx, kind = winner  # kind in {"breakout","pullback", "reversal"}
+            # A breakout winner can be VOID at its apply (PLAN_J J2): it must break the threshold as it stands there.
+            # The state before its back-fill is kept so a void can be undone and the anchors it skipped scanned.
+            void_snapshot = self._snapshot_state(i, apply_idx + 1) if kind == "breakout" else None
             st.winner_break_th = (None if breakout_th is None else float(breakout_th)) if kind == "breakout" else None
 
             # Back-fill candles from anchor up to (but not including) apply candle.
@@ -860,7 +892,13 @@ class MarketStructure:
                     return k + 1
 
             # "live-like": we act as if apply candle just closed
-            self._apply_pattern_at_apply_idx(ev, apply_idx, kind)
+            if self._apply_pattern_at_apply_idx(ev, apply_idx, kind):
+                # VOID (PLAN_J J2): nothing was applied. Undo the back-fill, step the anchor candle itself (as the
+                # no-winner path does) and scan from the next anchor — the candles the void winner skipped are
+                # stepped as anchors, each with the state as of itself.
+                self._restore_state(void_snapshot)
+                self._replay_step_no_patterns(i)
+                return i + 1
 
             # A breakout's post-apply range back-fill (`_post_apply_range_check`)
             # can apply the pending reversal too: terminal, no apply-row re-write.
@@ -1240,14 +1278,16 @@ class MarketStructure:
             return ev.confirmation_idx
         return ev.end_idx
     
-    def _apply_pattern_at_apply_idx(self, ev: PatternEvent, apply_idx: int, kind: str) -> None:
+    def _apply_pattern_at_apply_idx(self, ev: PatternEvent, apply_idx: int, kind: str) -> bool:
+        """Apply the winner at its apply candle. Returns True iff a breakout was VOID (PLAN_J J2: nothing applied; the
+        caller undoes its back-fill), False otherwise."""
         st = self.state
 
         # Record pattern ownership/disqualification if you keep it (you said you want to drop most of it)
         # You can keep ONLY apply-candle ownership if desired.
         apply_idx = self._apply_idx(ev)
         if apply_idx is None:
-            return
+            return False
         
         # Reversal is terminal: the watch AND its pending end (a winner's re-stepped apply row must not re-apply it)
         if kind == "reversal":
@@ -1262,7 +1302,7 @@ class MarketStructure:
             )
             self._clear_reversal_watch()
             self._clear_pending_reversal()
-            return
+            return False
 
         if kind == "breakout":
             # CTS anchor = the breakout's pattern extreme (`pattern_extreme`,
@@ -1277,6 +1317,23 @@ class MarketStructure:
             # MS establishes it through the normal cycle-0 path below.
             # (The old partial `_cts0_new_extreme_passes` anchor-extreme
             # gate is removed; selection-time gating replaced it.)
+
+            # A breakout establishing cycle T >= 1 must break cycle T-1's `cts_threshold` AS IT STANDS AT THE APPLY
+            # (PLAN_J J2, PLAN_I R9-2 (i) / R3-1 — the mirror of the reversal's frozen barrier). The winner was
+            # picked at its anchor against the detection threshold of THAT moment (`winner_break_th`: the range's
+            # breakout bound, None with no range active — `check_break` then passes anything); its back-fill can
+            # have confirmed the cycle since (a proximity hit) and set the threshold. Then the pattern is re-detected
+            # at its anchor against that threshold; unless the same pattern (name, apply) qualifies, it is VOID —
+            # nothing applied, no event, no range reset (F17 (i): it used to establish cycle T on cycle T-1's own
+            # CTS candle). 0 on the reference window (every establishment detects against the threshold it lands on).
+            if st.cts is not None and st.cts_phase == "CONFIRMED" and st.winner_break_th != st.cts_threshold:
+                again = self._bp.detect_best_for_anchor(int(ev.start_idx), self.struct_direction, st.cts_threshold)
+                if again is None or again.name != ev.name or self._apply_idx(again) != int(apply_idx):
+                    print(f"[ms] breakout VOID: {ev.name} anchor {int(ev.start_idx)} apply {int(apply_idx)} does not "
+                          f"break cts_threshold {st.cts_threshold} (detected against {st.winner_break_th}) "
+                          f"sid={int(st.structure_id)} cycle={int(st.cts_cycle_id)} ({self.timeframe})")
+                    st.winner_break_th = None
+                    return True
 
             # Breakout breaks range (if active)
             if st.range_active:
@@ -1315,7 +1372,9 @@ class MarketStructure:
                         st.winner_break_th is None or ce.meta["cts_frozen"] != st.winner_break_th):
                     # Equal at every cycle >= 1 establishment on the window (§9.2 F12, 19 / 19) but not by
                     # construction: a proximity confirmation inside the back-fill re-inits `cts_threshold`
-                    # (F14), and a breakout from no active range has no detection threshold.
+                    # (F14), and a breakout from no active range has no detection threshold. Since PLAN_J J2 such
+                    # a breakout is re-detected against the threshold above and VOID unless it qualifies — this
+                    # WARNING now prints only for one that qualified (0 in the PLAN_J corpus).
                     print(
                         f"WARNING [ms] cts_frozen {ce.meta['cts_frozen']} != the breakout's detection threshold "
                         f"{st.winner_break_th} at CTS_ESTABLISHED sid={ce.meta['structure_id']} "
@@ -1416,7 +1475,7 @@ class MarketStructure:
 
             self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
             self._post_apply_range_check(apply_idx)
-            return
+            return False
 
 
         # pullback
@@ -1453,7 +1512,8 @@ class MarketStructure:
             st.last_pullback_pat_apply_idx = apply_idx
             self._set_state(MarketState.PULLBACK, apply_idx, meta={"reason": "pullback_pattern", "pat": ev.name})
             self._sync_thresholds_from_range(apply_idx)
-            return
+            return False
+        return False
 
     def _post_apply_range_check(self, i: int) -> None:
         D = min(i + self.range_max_k, self._effective_end)  # range_max_k is 5 by default (L1)

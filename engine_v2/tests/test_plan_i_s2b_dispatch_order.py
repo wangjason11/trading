@@ -5,7 +5,9 @@ BOS_CONFIRMED — it used to drop it silently (no fib for the cycle; the tracker
 anchor lies AFTER its CTS anchor reaches the dispatch establishment-first. 0 / 34 on the reference window; the
 session-4 random-tail search produced it from real MS runs (synthetic candles) in two ways — the F14 (1) shape (a cycle
 established on the previous cycle's CTS candle, its BOS the proximity candle that confirmed that cycle) and a breakout
-whose deepest pullback follows its extreme.
+whose deepest pullback follows its extreme. MS produces neither since PLAN_J (J2: the first breakout is VOID — it never
+broke the confirmed threshold; J3: the BOS window ends at the CTS anchor); the dispatch raise stays as the guard,
+pinned here on constructed events.
 """
 from __future__ import annotations
 
@@ -70,6 +72,7 @@ def test_a_bos_at_or_before_the_cts_anchor_is_handled_first(bos_anchor_idx):
 # makes candle 47's 164-pip upper wick): cycle 1's CTS raw-updated to 46 inside cycle 2's breakout window 44 -> 49,
 # cycle 1 confirmed by sd-zone proximity at 47, cycle 2 established at 49 ON cycle 1's CTS candle 46 with its BOS at
 # the proximity candle 47 (0.5785). Before S2b the dispatch dropped cycle 2's establishment: no cycle-2 fib record.
+# Since PLAN_J J2 MS voids that breakout (candle 44 closed 0.56338, not below cycle 1's confirmed threshold 0.55791).
 _F14_1_ROWS = [
     (0.60015, 0.6006, 0.59737, 0.59838), (0.59825, 0.5984, 0.59574, 0.59591), (0.59572, 0.59709, 0.59487, 0.59681),
     (0.59672, 0.59747, 0.59461, 0.59568), (0.59561, 0.59582, 0.59521, 0.59534), (0.59521, 0.5954, 0.59364, 0.59367),
@@ -92,37 +95,30 @@ _F14_1_ROWS = [
 
 
 def _f14_1_run():
-    """MS on the F14 (1) stream. Since PLAN_I S5 the run itself stops first: its embedded tracker saw the EMISSION
-    order (cycle 1 confirmed at 47, then cycle 2 established with anchor 46), the end-of-run order tripwire compares
-    it with `processing_order_key` order and raises (R9-1) — after the run is complete, so `ms.events` / `ms.df`
-    are what the downstream would have been handed."""
+    """MS on the F14 (1) stream (since PLAN_J J2 it completes: the breakout that made the shape is VOID)."""
     rows = [dict(o=o, h=h, l=l, c=c) for o, h, l, c in _F14_1_ROWS]
-    with contextlib.redirect_stdout(io.StringIO()):
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
         df = _prepare_df(rows)
         ms = _make_market_structure(df, struct_direction=-1, start_idx=0, structure_id=0, timeframe="M15",
                                     pip_size=_pip_size_from_pair(df), cross_fib_limit=NO_P)
-        with pytest.raises(FibEventOrderError, match="emission order != processing order"):
-            ms.run()
-    return ms, ms.df
+        ms.run()
+    return ms, ms.df, out.getvalue()
 
 
-def test_the_f14_1_shape_from_a_real_ms_run_now_stops_the_downstream():
-    ms, df2 = _f14_1_run()
+def test_the_f14_1_stream_no_longer_makes_the_shape():
+    """Until PLAN_J J2 this run established cycle 2 at 49 on cycle 1's CTS candle 46 with its BOS at the proximity
+    candle 47 (0.5785) — MS's own order tripwire raised (S5) and the dispatch would have (S2b). The breakout (a
+    `one_maru_continuous` anchored at 44 with no range active, applying at 49) never broke cycle 1's confirmed
+    threshold: VOID. Cycle 1 stays confirmed by proximity at 47; no cycle 2; the downstream takes the run."""
+    ms, df2, log = _f14_1_run()
+    assert "[ms] breakout VOID: one_maru_continuous anchor 44 apply 49 does not break cts_threshold 0.55791 " \
+           "(detected against None)" in log
     by = {(e.type, e.meta.get("cycle_id")): e for e in ms.events
           if e.type in ("CTS_ESTABLISHED", "BOS_CONFIRMED", "CTS_CONFIRMED")}
-    est2, bos2, conf1 = by[("CTS_ESTABLISHED", 2)], by[("BOS_CONFIRMED", 2)], by[("CTS_CONFIRMED", 1)]
-    # The shape (all measured on this run): cycle 2 on cycle 1's CTS candle; its BOS = the proximity candle.
-    assert (ef.cts_anchor_idx(est2), int(est2.idx), est2.meta["pattern_anchor_idx"]) == (46, 49, 44)
+    conf1 = by[("CTS_CONFIRMED", 1)]
     assert (int(conf1.idx), ef.cts_anchor_idx(conf1), conf1.meta["via"]) == (47, 46, "sd_zone_proximity")
-    assert (ef.bos_anchor_idx(bos2), bos2.price) == (47, 0.5785)
-    # MS emits cycle 1's confirmation BEFORE cycle 2's establishment; the processing order inverts them AND puts the
-    # establishment before its own BOS.
-    emitted = [(e.type, e.meta.get("cycle_id")) for e in ms.events]
-    assert emitted.index(("CTS_CONFIRMED", 1)) < emitted.index(("CTS_ESTABLISHED", 2))
-    processed = [(e.type, e.meta.get("cycle_id")) for e in sorted(ms.events, key=ef.processing_order_key)]
-    assert processed.index(("CTS_ESTABLISHED", 2)) < processed.index(("BOS_CONFIRMED", 2))
-    assert processed.index(("CTS_ESTABLISHED", 2)) < processed.index(("CTS_CONFIRMED", 1))
+    assert ("CTS_ESTABLISHED", 2) not in by and ("BOS_CONFIRMED", 2) not in by
     for limits in (main_limits, unreached_for):
-        with pytest.raises(FibEventOrderError, match=r"sid=0 cycle=2 CTS_ESTABLISHED \(anchor 46, moment 49\)"):
-            with contextlib.redirect_stdout(io.StringIO()):
-                _run_downstream_pipeline(df2, ms.events, -1, cross_fib_limits=limits(ms.events))
+        with contextlib.redirect_stdout(io.StringIO()):
+            _run_downstream_pipeline(df2, ms.events, -1, cross_fib_limits=limits(ms.events))

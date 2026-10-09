@@ -192,7 +192,10 @@ dispatch raises on it since S2b — F17 (i) and (ii)); `sig` = every event in em
 | J2 | 0 | 36 / 2 / 3 | **4** / 3 / 0 | 104 / 8 / 0 (= the 112 voids) | 2 / 0 / 0 |
 | J3 | 0 | 42 / 2 / 3 | 6 / **0** / 0 | 5 / 3 / 0 | 0 |
 | **J1a + J2 + J3** | 0 | **0 / 0 / 0** | **0 / 0 / 0** | 32,094 / 3,850 / 3,597 | 5 / 0 / 2 |
-| J1c, J1b, J2b | (running — appended when in) | | | | |
+| J1c | 0 | 6 / 0 / 0 | 10 / 3 / 0 | 32,063 / 3,847 / 3,597 | 0 |
+| J1b | **3** | **1,067 / 134** / 0 (NEW inversions: the back-fill still confirms while the CTS waits for the re-steps) | 10 / 3 / 0 | 30,214 / 3,629 / 3,548 | 12 / 0 / 2 |
+| J2b | 0 | 36 / 2 / 3 | 4 / 3 / 0 | 104 / 8 / 0 (the same 112 trials; 119 voids — a rescan can void again) | 2 / 0 / 0 |
+| J1a + J2 + J2b + J3 (the decided set) | (running — appended when in) | | | | |
 
 **A structural signature** (`core_sig.py` + `core_report.py`: CTS_ESTABLISHED / BOS_CONFIRMED / CTS_CONFIRMED with
 their anchors and prices + the reversal, order-free; and the order-free multiset of every event) on a subset — WAVES-B
@@ -334,3 +337,33 @@ commit).
 - Mutation (solo, `mutant_runner.py`, full suite per mutant): 4 + a no-op control — all 4 KILLED (the window ends at
   the apply again; the swap removed — also caught by S2b's F14 (1) real run, which goes through the swap; the call
   site passes the apply; the end at the CTS anchor − 1), the control SURVIVED.
+
+**J2 — a breakout establishing cycle T >= 1 must break T−1's `cts_threshold` at its apply; else VOID + rescan
+(PLAN_I R9-2 (i), F17 (i); round 1 J2-Q1 (a) "J2b") — LANDED** (its own local commit).
+- Code: `_apply_pattern_at_apply_idx` returns True on a VOID (False otherwise): a breakout with `st.cts` set,
+  `cts_phase == "CONFIRMED"` and `winner_break_th != cts_threshold` is re-detected at its anchor against
+  `cts_threshold` (`detect_best_for_anchor`); unless the same pattern (name, apply) qualifies — the log line
+  `[ms] breakout VOID: …`, nothing applied. `_step_anchor` snapshots before a BREAKOUT winner's back-fill
+  (`_snapshot_state(i, apply + 1)`) and on a void restores it, steps the anchor candle and returns `i + 1`. The
+  shared helpers `_snapshot_state` / `_restore_state` (the state in place, the events truncated, the embedded tracker
+  in place with its handled events kept by identity, the output rows) — J1 reuses them. The `cts_frozen` WARNING's
+  comment.
+- `/compare` vs S5b: **byte-identical** — 27 / 27 CSVs md5, 3 / 3 figures (full JSON); 0 voids; run.log == but the
+  timings; fetch gate PASS. = the prediction. (Replay 114 s wall vs S5's 78 s — the machine ran the corpus at the
+  same time; J3's replay under the same load also took 114 s. An idle-machine timing comes with J1.)
+- Corpus (variant J2b, §3): 0 errors; F17 (i) trips and skips gone (WB trips 42 → 36 = the F16 ones, skips 10 → 4 =
+  the (ii) ones J3 removes); 112 trials change; 0 `cts_frozen` WARNINGs (base 113).
+- Tests 1431 → 1440: `test_plan_j_j2_new_cycle_break.py` (9 — 302 / 167: the void line, nothing at 32, cycle 2 at 36
+  via the pattern anchored at 32, `cts_frozen` 0.62883, no WARNING; 410 / 230: the scan finds the
+  `one_maru_continuous` 25 → 26 the void winner (a `continuous` applying at 28) had pre-empted; both runs whole + the
+  downstream takes them; the snapshot / restore round trip). Re-derived: `test_plan_i_s2b_dispatch_order` — the F14 (1)
+  real run no longer makes the shape (the void line; cycle 1 confirmed at 47; no cycle 2; the downstream takes it);
+  the dispatch raise stays pinned on the constructed events.
+- Mutation (solo, full suite): 12 + a no-op control — 7 killed at first; 5 survivors → 4 pins (the re-test made to
+  return the winner renamed / applying later is still VOID — m3 / m4; the anchors a void winner skipped see
+  cycle 1 UNCONFIRMED before its proximity candle 30 — m5, no restore; 410 / 230's continuation breakout 63 → 64,
+  detected against the range bound 0.64832 with `cts_threshold` None, is never re-tested — m8, no `CONFIRMED`
+  gate), all 4 KILLED on re-run; m12 (the snapshot from `i + 1`) EQUIVALENT — the void path rewrites row `i`.
+- Docs: MARKET_STRUCTURE_SPEC ("A new cycle must break the threshold at its apply" — new; the `cts_phase` gate; "Look-
+  ahead windows without rewinds"), LANDMINES (the dispatch entry, tripwire rule 4), GLOSSARY (FibEventOrderError),
+  CROSS_CYCLE_FIB_SPEC (§1, §9), PLAN_I §9.2 F17.
