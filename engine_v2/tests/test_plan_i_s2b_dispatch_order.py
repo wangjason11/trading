@@ -23,6 +23,7 @@ from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_establis
 from engine_v2.tests.test_orchestrator_reversal_source import _ms
 from engine_v2.tests.test_unified_probe import _prepare_df
 from engine_v2.zones.fib_tracker import FibEventOrderError
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 def _downstream(df, events, sd):
@@ -91,13 +92,18 @@ _F14_1_ROWS = [
 
 
 def _f14_1_run():
+    """MS on the F14 (1) stream. Since PLAN_I S5 the run itself stops first: its embedded tracker saw the EMISSION
+    order (cycle 1 confirmed at 47, then cycle 2 established with anchor 46), the end-of-run order tripwire compares
+    it with `processing_order_key` order and raises (R9-1) — after the run is complete, so `ms.events` / `ms.df`
+    are what the downstream would have been handed."""
     rows = [dict(o=o, h=h, l=l, c=c) for o, h, l, c in _F14_1_ROWS]
     with contextlib.redirect_stdout(io.StringIO()):
         df = _prepare_df(rows)
         ms = _make_market_structure(df, struct_direction=-1, start_idx=0, structure_id=0, timeframe="M15",
-                                    pip_size=_pip_size_from_pair(df))
-        df2, _events, _levels = ms.run()
-    return ms, df2
+                                    pip_size=_pip_size_from_pair(df), cross_fib_limit=NO_P)
+        with pytest.raises(FibEventOrderError, match="emission order != processing order"):
+            ms.run()
+    return ms, ms.df
 
 
 def test_the_f14_1_shape_from_a_real_ms_run_now_stops_the_downstream():

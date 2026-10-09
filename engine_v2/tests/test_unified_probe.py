@@ -54,6 +54,7 @@ from engine_v2.zones.zone_proximity import (
     DEFAULT_PROBE_RESET_PIPS,
     DEFAULT_PROBE_RESET_WICK,
 )
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 # ---------------------------------------------------------------------------
@@ -739,7 +740,7 @@ class TestPhase2MultiCycle:
     def test_fixture_establishes_four_cts_cycles(self):
         from engine_v2.structure.structure_engine import compute_bounded_structure
 
-        res = compute_bounded_structure(_prepare_df(_make_multicycle_data()), 0, 1)
+        res = compute_bounded_structure(_prepare_df(_make_multicycle_data()), 0, 1, cross_fib_limit=NO_P)
         est = [(int(e.idx), int(e.meta["cycle_id"]), int(e.meta["confirmed_at"]))
                for e in res.events if e.type == "CTS_ESTABLISHED"]
         conf = [(int(e.idx), int(e.meta["cycle_id"])) for e in res.events if e.type == "CTS_CONFIRMED"]

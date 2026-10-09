@@ -14,6 +14,7 @@ from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 from engine_v2.tests.test_plan_i_s3_cross_fib_limit_applied import (
     _conf, _df, _est, _ev, _gap, _kind, _lim, _m, _q, _three_cycles, _tracker,
 )
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 def _upd(idx, price, cyc, sd):
@@ -127,7 +128,7 @@ def test_the_h1_downstream_drives_the_pre_established_cross():
     from engine_v2.tests.test_unified_probe import _prepare_df
 
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(_rows()[:_CAP + 1]), 0, 1, timeframe="M15")
+        res = compute_bounded_structure(_prepare_df(_rows()[:_CAP + 1]), 0, 1, timeframe="M15", cross_fib_limit=NO_P)
         out = _run_downstream_pipeline(res.df, res.events, 1, wvmi="off", cross_fib_limits={0: unreached(1)})
     assert [e for e in res.events if e.type == "CTS_THRESHOLD_UPDATED"]
     fib1 = [f for f in out["fib_states"] if (f.structure_id, f.cycle_id) == (0, 1)]

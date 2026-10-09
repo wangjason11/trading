@@ -19,6 +19,7 @@ from engine_v2.structure.structure_engine import (
 from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.patterns.pattern_engine import detect_patterns
 from engine_v2.patterns.imbalance import compute_imbalance
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 # ---------------------------------------------------------------------------
@@ -115,7 +116,7 @@ def _max_structure_id(events) -> int:
 class TestBoundedStructureContract:
     def test_returns_bounded_structure_result(self):
         df = _prepare_df(_make_uptrend_data(n=80))
-        res = compute_bounded_structure(df, start_idx=0, struct_direction=1)
+        res = compute_bounded_structure(df, start_idx=0, struct_direction=1, cross_fib_limit=NO_P)
         assert isinstance(res, BoundedStructureResult)
         assert res.struct_direction == 1
         assert res.start_idx == 0
@@ -125,7 +126,7 @@ class TestBoundedStructureContract:
     def test_no_reversal_returns_none(self):
         """A pure uptrend never reverses → reversal_idx is None."""
         df = _prepare_df(_make_uptrend_data(n=80))
-        res = compute_bounded_structure(df, start_idx=0, struct_direction=1)
+        res = compute_bounded_structure(df, start_idx=0, struct_direction=1, cross_fib_limit=NO_P)
         assert res.reversal_idx is None
         rev_rows = ((res.df["market_state"].astype(str).str.lower() == "reversal")
                     & (res.df["structure_id"].astype(int) == 0))
@@ -140,7 +141,7 @@ class TestBoundedStructureReversal:
     def test_single_structure_stops_at_reversal(self):
         """Primitive reverses, reports the idx, and stays at structure_id=0."""
         df = _prepare_df(_make_reversing_data())
-        bounded = compute_bounded_structure(df, start_idx=0, struct_direction=1)
+        bounded = compute_bounded_structure(df, start_idx=0, struct_direction=1, cross_fib_limit=NO_P)
 
         assert bounded.reversal_idx is not None
         assert _max_structure_id(bounded.events) == 0   # never rolls past the reversal
@@ -148,7 +149,7 @@ class TestBoundedStructureReversal:
     def test_reversal_idx_is_first_sid0_reversal_row(self):
         """reversal_idx is the first structure_id=0 reversal-marked candle."""
         df = _prepare_df(_make_reversing_data())
-        bounded = compute_bounded_structure(df, start_idx=0, struct_direction=1)
+        bounded = compute_bounded_structure(df, start_idx=0, struct_direction=1, cross_fib_limit=NO_P)
         ridx = bounded.reversal_idx
         assert ridx is not None
 
@@ -164,11 +165,11 @@ class TestBoundedStructureReversal:
     def test_end_idx_caps_before_reversal(self):
         """end_idx below the reversal apply idx → bounded out (reversal_idx None)."""
         df = _prepare_df(_make_reversing_data())
-        ridx = compute_bounded_structure(df, 0, 1).reversal_idx
+        ridx = compute_bounded_structure(df, 0, 1, cross_fib_limit=NO_P).reversal_idx
         assert ridx is not None and ridx > 10
 
         cap = ridx - 5
-        bounded = compute_bounded_structure(df, start_idx=0, struct_direction=1, end_idx=cap)
+        bounded = compute_bounded_structure(df, start_idx=0, struct_direction=1, end_idx=cap, cross_fib_limit=NO_P)
         assert bounded.reversal_idx is None
         assert all(int(ev.idx) <= cap for ev in bounded.events)
 
@@ -242,7 +243,7 @@ class TestBoundedStructureParity:
         that function was deleted as dead code (2026-09-30).
         """
         df = _prepare_df(_make_reversing_data())
-        bounded = compute_bounded_structure(df, start_idx=0, struct_direction=1)
+        bounded = compute_bounded_structure(df, start_idx=0, struct_direction=1, cross_fib_limit=NO_P)
 
         got = [(ev.type, int(ev.idx)) for ev in bounded.events
                if int(ev.meta.get("structure_id", 0)) == 0]

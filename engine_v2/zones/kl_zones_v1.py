@@ -1101,8 +1101,8 @@ def derive_kl_zones_v1(
 # ---------------------------------------------------------------------------
 # Single-zone primitives — used by MarketStructure's dual CTS proximity check.
 #
-# Wired from `structure/structure_engine.py` as the `bos_inner_resolver` /
-# `poi_inners_resolver` callables passed to MarketStructure.__init__ (Part 4
+# Wired from `structure/structure_engine.py` as the `bos_inner_resolver`
+# callable passed to MarketStructure.__init__ (Part 4
 # §13.5.b). Defined here (rather than inside structure/) so the structure→zones
 # import inversion stays gone — structure/ never imports zones/.
 # ---------------------------------------------------------------------------

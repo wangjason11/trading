@@ -67,9 +67,11 @@ the run.
   `IMBALANCE_FILL_SEMANTICS.md` "Knowability — the c3 rule".
 
 ### All Fib + scenario + POI imbalance checks are sd-direction strict
-Every consumer of `has_unfilled_imbalance` — Fib activation, Scenario 2
-cond1/cond2/cond3, MarketStructure's in-flight cycle-0 snapshot, the cross-
-cycle dead-cycle walks, AND POI IC validation — passes `direction=sd`. The
+Every consumer of `has_unfilled_imbalance` — Fib activation (the downstream
+FibTracker and, since PLAN_I S5, MarketStructure's embedded one), the cross-
+cycle own test + dead-cycle walk, AND POI IC validation — passes `direction=sd`
+(the Scenario 2 cond1/cond2/cond3 and MS's cycle-0 snapshot were retired in
+PLAN_I S4 / S5). The
 rationale is uniform: **Fibs only ever produce sd-direction POIs by
 construction** (POIs are sd-direction — see §4 "POIs are always sd-direction"),
 so a counter-direction imbalance inside a structural span cannot influence
@@ -95,9 +97,10 @@ as-ofs** (Plan F, 2026-09-24):
 - **`evaluated_at` — the moment the question is asked** (keyword-only,
   REQUIRED): only instances formed by then count. FibTracker passes the handled
   CTS event's moment (`event_fields.event_moment`); POI IC validation passes
-  `evaluated_at=None`, an explicit "no cut" (§3.1 condition 3) — as do
-  FibTracker's two cycle-0 cache writes and MarketStructure's in-flight reads
-  (IMBALANCE_FILL_SEMANTICS call-site matrix). The cut is keyed on the moment,
+  `evaluated_at=None`, an explicit "no cut" (§3.1 condition 3) — in the drawn
+  POI and in MarketStructure's in-flight pick (whose FIB, since PLAN_I S5, is its
+  embedded FibTracker's, cut at the moment) (IMBALANCE_FILL_SEMANTICS call-site
+  matrix). The cut is keyed on the moment,
   never on `check_to_idx`.
 
 ### Fill Check (per instance) — two-stroke state machine
@@ -215,7 +218,8 @@ gaps only); cond2 reads the cycle-0 liveness cache, stored UNCUT (every gap in
 moment. MarketStructure's in-flight resolver asks all three uncut, so the layers
 agree on cond2 / cond3 and can differ on cond1 — the accepted M1 divergence
 (IMBALANCE_FILL_SEMANTICS "Knowability — the c3 rule"; LANDMINES "Scenario 2
-anchor agreement").
+anchor agreement"). [MS's side retired too, PLAN_I S5: MS reads its embedded
+FibTracker's decision — CROSS_CYCLE_FIB_SPEC §8.]
 
 **Behavior:**
 - No cycle 0 Fib
@@ -369,8 +373,8 @@ If Fib is deactivated, there are no bounds → no candidates.
 
 > **NOT IMPLEMENTED — the code has never applied this section (found 2026-09-30; unchanged since the POI build
 > `0033c53`, Week 7).** The tables below are the designed rule only. `passes_price_constraint` has no caller,
-> `find_ic_candidates`' `scenario_context` parameter is never read, and neither `derive_poi_zones` nor the MS in-flight
-> resolver `compute_poi_inners_for_cycle` passes one: IC candidates are §3.1's base conditions only. Decided by the
+> `find_ic_candidates`' `scenario_context` parameter is never read, and neither `derive_poi_zones` nor MS's in-flight
+> read (`poi_inner_for_fib`; `compute_poi_inners_for_cycle` until PLAN_I S5) passes one: IC candidates are §3.1's base conditions only. Decided by the
 > user 2026-10-02 (PLAN_H D4): KEPT here, unapplied, for future testing (register §D.2); any IC filter stays outside
 > the institutional pattern and is applied before it.
 
@@ -451,12 +455,13 @@ The pick's **`pattern_confirmed_idx`** (R1, a MOMENT) = when its continuation le
 candle when its run (before the E1 trim) reached the cap, else the next candle; it floors the POI's activation (§4).
 
 **ONE selector, two consumers (PLAN_H D2):** the drawn POI (`derive_poi_zones`, on the FINAL fib record) and
-MarketStructure's in-flight read (`compute_poi_inners_for_cycle`, on the AS-OF fib at each CTS_ESTABLISHED /
-CTS_UPDATED — its pick can differ from the final one while the CTS still extends) call the same `select_ip_ic`. The
+MarketStructure's in-flight read (`poi_inner_for_fib`, on its embedded FibTracker's AS-OF representative fib at each
+CTS_ESTABLISHED / CTS_UPDATED — PLAN_I S5, the drawn fib's own decision; its pick can differ from the final one while
+the CTS still extends) call the same `select_ip_ic`. The
 candle params and the leg cap come from the FRAME (`df.attrs["timeframe"]`, stamped by
 `apply_candle_classification`; a missing stamp raises). The selection is computed once per pipeline run
 (`select_ip_records`: the lifecycle gate, then the cycle's CTS_ESTABLISHED, then `select_ip_ic`) and handed to both
-the drawn POIs and the debug CSV (§3.5). The resolver's fail-loud scope: LANDMINES "The POI Resolver Fails Loudly".
+the drawn POIs and the debug CSV (§3.5). The read's fail-loud scope: LANDMINES "The POI Resolver Fails Loudly".
 
 ### 3.5 The debug export `*_ip_candidates.csv` (PLAN_H landing A, 2026-10-06)
 
@@ -737,7 +742,7 @@ Charting renders zones + Fib lines + imbalance highlighting
 | `patterns/imbalance.py` | Imbalance (FVG) pattern detection + fill checking |
 | `features/fibonacci.py` | Fib level calculation |
 | `zones/fib_tracker.py` | FibTracker lifecycle (activation/update/lock) |
-| `zones/poi_zones.py` | POI zone derivation (one per fib record); the IP selection (`select_ip_ic`, `select_ip_records`, `derive_ip_candidates`, §3.4–3.5); the MS in-flight resolver |
+| `zones/poi_zones.py` | POI zone derivation (one per fib record); the IP selection (`select_ip_ic`, `select_ip_records`, `derive_ip_candidates`, §3.4–3.5); MS's in-flight read `poi_inner_for_fib` (PLAN_I S5) |
 | `patterns/institutional_pattern.py` | The institutional pattern of one IC candidate (legs, stacks, ranks — PLAN_H §1) |
 | `charting/export_plotly.py` | Rendering (Fib lines + zones) |
 | `charting/style_registry.py` | Visual styles |

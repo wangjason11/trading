@@ -41,6 +41,7 @@ from engine_v2.structure.structure_engine import (
 from engine_v2.structure.true_first_breakout import find_true_first_breakout
 from engine_v2.structure.unified_probe import unified_probe
 from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 # ---------------------------------------------------------------------------
@@ -151,7 +152,7 @@ class TestMainReversalProbe:
         bounded0 = compute_bounded_structure(
             df, int(d0.start_idx), int(d0.struct_direction),
             enforce_cts0_new_extreme=ref0 is not None,
-            bos0_inner=ref0.inner if ref0 is not None else None,
+            bos0_inner=ref0.inner if ref0 is not None else None, cross_fib_limit=NO_P,
         )
         rev_mask = (
             (bounded0.df["market_state"].astype(str).str.lower() == "reversal")
@@ -179,7 +180,7 @@ class TestMainReversalProbe:
         bounded0 = compute_bounded_structure(
             df, s0, sd,
             enforce_cts0_new_extreme=ref0 is not None,
-            bos0_inner=ref0.inner if ref0 is not None else None,
+            bos0_inner=ref0.inner if ref0 is not None else None, cross_fib_limit=NO_P,
         )
         assert bounded0.reversal_idx is not None, "fixture did not reverse sid=0"
         rev_apply = int(bounded0.reversal_idx)

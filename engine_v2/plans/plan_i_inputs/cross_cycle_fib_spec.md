@@ -233,3 +233,31 @@ R8-2: (b) Make the skip loud (Recommended)
 > update; the options: (a) include crosses, (b) singles only, (c) defer both to S4). The user's answer (a selection):
 
 R8-3: (a) Include crosses (Recommended)
+
+---
+
+## Part 11 — session 5: round 9, the S5 round (2026-10-08, VERBATIM)
+
+> Decision IDs: `../PLAN_I_cross_cycle_fib_revamp.md` §6 R9-1 (F16 — MS confirms a CTS at 13:30 using the 13:45
+> candle; the options: (a) fix MS first, (b) S5 first then the MS fix, (c) emission order canonical, (d) processing
+> order + a WARNING, (e) the tracker honours the confirmation's anchor). The user's answer (a multiple-choice selection):
+
+R9-1: (b) S5 first, MS fix after (Recommended)
+
+> Then R9-2 (F17's MS side — a cycle established on the previous cycle's CTS candle; a BOS after its CTS; the options:
+> (a) fix in the MS plan, (b) no MS change, (c) re-order the dispatch). The user's answer (a selection):
+
+R9-2: (a) Fix in the MS plan (Recommended)
+
+> Then R9-3 (F19 — cycle 0's fib ends 41 h late because cycle 1 had no fib; the options: (a) the cycle end caps the
+> fib end, (b) `_set_terminal` true minimum, (c) the previous fib ends at its next EST, (d) every EST ends older fibs,
+> (e) leave it). The user's answer (free text):
+
+R9-3: I need to know a bit more about this to make a decision. What is the current logic doing?
+
+> The current logic explained (PLAN_I §5 R9-3: `_set_terminal` is set-if-absent; the stream ends the LAST cycle that
+> has a fib at the next fib's start; finalize's cycle-table end only fills an empty slot; a step-by-step table of the
+> 2025-08-05 instance; only the fib CSV and the hover's life text are affected — the POI already ends at 13:15). The
+> user's answer (a selection):
+
+R9-3: (a) Cycle end caps fib end (Recommended)

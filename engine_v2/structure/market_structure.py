@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 
 from engine_v2.common.types import PatternEvent, PatternStatus, StructureLevel, COL_TIME, COL_O, COL_C
-from engine_v2.patterns.imbalance import has_unfilled_imbalance
 from engine_v2.patterns.structure_patterns import BreakoutPatterns, pattern_extreme
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
@@ -61,28 +60,22 @@ _OUT_OBJ_EMPTY = (
 BosInnerResolver = Callable[[pd.DataFrame, int, int], Optional[float]]
 # (df, bos_idx, struct_direction) -> inner_price | None
 
-PoiInnersResolver = Callable[..., List[float]]
-# (df, bos_idx, bos_price, cts_idx, cts_price, sd, sid, cycle_id,
-#  fill_threshold, c0_data, *, fill_horizon_idx, snapshot_horizon_idx) -> [inner prices]
-# `snapshot_horizon_idx` = the cycle's CTS_ESTABLISHED (== BOS) moment — cond3
-# (Plan E E3a′).
-# `fill_horizon_idx` = the MOMENT of the event that triggered the refresh
-# (Plan E E3a — in lock-step with FibTracker's fill horizon).
-#
-# `fill_threshold` matches the POIConfig default (0.70). Passed explicitly
-# so MarketStructure controls the value its has_unfilled checks (in
-# `_update_cycle0_data` and in the shared
-# `zones/fib_tracker.select_fib_anchor_for_cycle` utility) agree with the
-# resolver's downstream IC search.
-#
-# `c0_data` is the sid's cycle-0 snapshot tracked on MarketStructureState
-# (bos_idx/price, cts_idx/price, has_unfilled, scenario1, locked). Used by
-# `zones/poi_zones.compute_poi_inners_for_cycle` to drive the shared
-# `zones/fib_tracker.select_fib_anchor_for_cycle` Scenario 2 decision — the
-# retired H1-main selector: since PLAN_I S4 FibTracker runs the one logic, so
-# this snapshot no longer matches the drawn fib wherever a cross or the limit
-# decides (CROSS_CYCLE_FIB_SPEC.md §8; PLAN_I S5 replaces this read). None when MS has not yet captured cycle-0 data
-# (cts_cycle_id == -1 / cycle 0 itself / sid 0).
+# PLAN_I S5 (D5, Q7): MS's in-flight POI read is the SAME fib decision as the drawn fib — an EMBEDDED
+# `zones.fib_tracker.FibTracker` (duck-typed here: MS imports nothing from zones/), built and injected by
+# `structure/structure_engine._make_market_structure` with the structure's cross-fib limit. MS feeds it each CTS
+# event as it is emitted (`_feed_fib_tracker`: CTS_ESTABLISHED after its cycle's BOS_CONFIRMED, every CTS_UPDATED,
+# CTS_CONFIRMED, CTS_THRESHOLD_UPDATED), reads `representative_fib(sid, cycle)` at every POI refresh and hands it to
+# the injected `poi_inner_for_fib` (`zones.poi_zones`: the institutional-pattern pick's inner, or None), and calls
+# `check_processing_order()` at the end of every run (the order tripwire, PLAN_I §9.2 F16 / F17 (i)).
+PoiInnerForFib = Callable[[pd.DataFrame, Any, float], Optional[float]]
+# (df, representative fib or None, fill_threshold) -> the pick's inner | None
+
+
+class EmbeddedFibTrackerError(RuntimeError):
+    """An error inside MarketStructure's embedded FibTracker (PLAN_I S5 / D5), re-raised as a RuntimeError so the
+    sub geometry's narrow `except (ValueError, IndexError)` (`entity_df_mutation._build_geometry`) cannot drop the
+    sub (as `poi_zones.IPSelectionError` does for the IP read). The tracker's own RuntimeErrors
+    (`FibEventOrderError`, `CrossFibLimitError`) pass through unchanged."""
 
 
 # Default fallback proximity threshold for direct/test callers that don't
@@ -217,23 +210,6 @@ class MarketStructureState:
     # and each CTS_UPDATED. Stays empty until first refresh.
     poi_inners_for_cycle: List[float] = field(default_factory=list)
 
-    # Cycle-0 snapshot tracked for the shared
-    # `zones.fib_tracker.select_fib_anchor_for_cycle` Scenario 2 decision.
-    # Populated at cycle-0 CTS_ESTABLISHED, refreshed on each CTS_UPDATED
-    # for cycle 0 (raw + pattern paths), locked at cycle-0 CTS_CONFIRMED so
-    # any later raw-extreme CTS_UPDATEDs don't mutate it. Stays None for
-    # cycle 1+ refreshes when sid never produced a cycle 0 (e.g. partial
-    # runs / sid 0 itself doesn't need it). Schema: see
-    # `_update_cycle0_data`. MS does not track Scenario 1; the resolver
-    # treats `scenario1=None` as "evaluate Scenario 2/3" — see the utility's
-    # docstring for the approximation contract.
-    cycle0_data: Optional[Dict[str, Any]] = None
-
-    # The current cycle's CTS_ESTABLISHED MOMENT (`confirmed_at`) == its
-    # BOS_CONFIRMED moment: the in-flight resolver's cond3 fill horizon ("has
-    # BOS_1 filled cycle 0?"), in lock-step with FibTracker (Plan E E3a′).
-    cts_established_moment_idx: Optional[int] = None
-
     # -------------------------------------------------
     # Week 5 Part 3A: BOS barrier semantics + reversal watch
     #
@@ -297,11 +273,11 @@ class MarketStructure:
         min_gap_pips: Optional[int] = None,
         pip_size: float = 0.0001,
         bos_inner_resolver: Optional[BosInnerResolver] = None,
-        poi_inners_resolver: Optional[PoiInnersResolver] = None,
-        fill_threshold: float = 0.70,
         enforce_cts0_new_extreme: bool = False,
         bos0_inner: Optional[float] = None,
         stop_after_cts_established: Optional[int] = None,
+        fib_tracker: Optional[Any] = None,
+        poi_inner_for_fib: Optional[PoiInnerForFib] = None,
     ):
         if struct_direction not in (1, -1):
             raise ValueError(f"[market_structure] struct_direction must be 1 or -1, got {struct_direction}")
@@ -419,13 +395,13 @@ class MarketStructure:
         # proximity check returns None — the dual CTS path is effectively
         # disabled. All real callers wire resolvers via structure_engine.py.
         self._bos_inner_resolver = bos_inner_resolver
-        self._poi_inners_resolver = poi_inners_resolver
 
-        # Imbalance fill threshold used by the cycle-0 snapshot's
-        # `has_unfilled` computation. Kept in sync with POIConfig default
-        # so MS-side has_unfilled matches FibTracker's view of the same
-        # imbalance instances.
-        self._fill_threshold = float(fill_threshold)
+        # The embedded FibTracker + the IP read (PLAN_I S5 / D5): both or neither. None (direct construction, the
+        # unit tests) = the proximity check reads the BOS inner only.
+        assert (fib_tracker is None) == (poi_inner_for_fib is None), (
+            "[market_structure] fib_tracker and poi_inner_for_fib come together (PLAN_I D5)")
+        self._fib_tracker = fib_tracker
+        self._poi_inner_for_fib = poi_inner_for_fib
 
         self._ensure_output_cols()
 
@@ -511,6 +487,13 @@ class MarketStructure:
 
         if self.debug_invariants:
             self._check_invariants_df()
+
+        # The order tripwire (PLAN_I §9.3 D5, R9-1), last — `self.events` / `self.df` are complete when it raises:
+        # the embedded tracker saw MS's EMISSION order, the drawn fib is decided in `processing_order_key` order,
+        # and they must be the same sequence (0 on the reference window; the F16 / F17 (i) shapes raise
+        # `FibEventOrderError` until the MS fix planned after S5, PLAN_I R9-1 / R9-2).
+        if self._fib_tracker is not None:
+            self._fib_tracker.check_processing_order()
 
         return self.df, self.events, levels
 
@@ -1369,6 +1352,11 @@ class MarketStructure:
                         }),
                     )
 
+                # The embedded tracker gets the establishment now that its cycle's BOS is known (PLAN_I D5;
+                # the downstream pairs them the same way, `orchestrator._run_downstream_pipeline`).
+                self._feed_fib_tracker("on_cts_established", ce, self._resolver_df(), int(st.bos.idx),
+                                       float(st.bos.price))
+
                 # New cycle => reset CTS confirmation guard & threshold
                 st.confirmed_cts_anchor_idx = None
                 st.cts_threshold = None
@@ -1422,11 +1410,9 @@ class MarketStructure:
             # Refresh POI inner snapshot for the cycle (Stage 2). New cycle:
             # uses fresh BOS_n + CTS_n. Continuation breakout (CTS_UPDATED):
             # same BOS, extended CTS — POIs may shift as Fib bounds expand. No
-            # CTS move = no event and no refresh: FibTracker, which handles each
-            # CTS_UPDATED at its moment, skips it too — the two layers' fill
-            # horizons stay in lock-step (LANDMINES "Scenario 2 anchor agreement").
+            # CTS move = no event, nothing fed to the embedded tracker, no refresh.
             if cts_moves:
-                self._refresh_poi_inners_for_cycle(apply_idx)
+                self._refresh_poi_inners_for_cycle()
 
             self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
             self._post_apply_range_check(apply_idx)
@@ -1562,7 +1548,7 @@ class MarketStructure:
         if self._is_new_cts_extreme(new_price):
             self._emit_cts_updated(i, new_price, meta={"via": via})
             st.cts = Point(idx=i, price=new_price)
-            self._refresh_poi_inners_for_cycle(i)
+            self._refresh_poi_inners_for_cycle()
 
     def _is_new_cts_extreme(self, price: float) -> bool:
         """True iff `price` lies strictly beyond the current CTS in the structure
@@ -1665,7 +1651,6 @@ class MarketStructure:
         meta2["cts_anchor_idx"] = int(cts_anchor_idx)
         assert int(idx) == meta2["confirmed_at"], (
             f"CTS_ESTABLISHED idx {idx} != confirmed_at {meta2['confirmed_at']} (ev.idx is the moment)")
-        self.state.cts_established_moment_idx = int(meta2["confirmed_at"])
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_ESTABLISHED", price=price, meta=meta2)
         )
@@ -1687,6 +1672,7 @@ class MarketStructure:
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_UPDATED", price=price, meta=meta2)
         )
         self.state.cts_event = "CTS_UPDATED"
+        self._feed_fib_tracker("on_cts_updated", self.events[-1], self._resolver_df())
 
     def _emit_cts_confirmed_once(
         self,
@@ -1723,14 +1709,7 @@ class MarketStructure:
         st.cts_confirmed_method = confirmation_method
         st.cts_confirmed_idx = int(idx)
         st.cts_event = "CTS_CONFIRMED"
-
-        # Lock the cycle-0 snapshot once CTS_0 is confirmed. Subsequent
-        # raw-extreme CTS_UPDATEDs (which can keep firing between CTS_0
-        # CONFIRMED and BOS_1 CONFIRMED while range is still active) must
-        # not mutate `cycle0_data`. (Mirrored FibTracker's retired
-        # `_handle_cycle0_cts_confirmed` lock until PLAN_I S4.)
-        if int(st.cts_cycle_id) == 0:
-            self._lock_cycle0_data()
+        self._feed_fib_tracker("on_cts_confirmed", self.events[-1])
 
     def _emit_cts_reconfirmed(self, idx: int, meta: Optional[dict] = None) -> None:
         """Emit CTS_RECONFIRMED — fires when a valid pullback pattern fires
@@ -1787,6 +1766,22 @@ class MarketStructure:
         self.state.bos = Point(idx=int(bos_anchor_idx), price=float(price))
         self.state.bos_threshold = float(price)
 
+    def _feed_fib_tracker(self, handler: str, *args: Any) -> None:
+        """Feed the embedded FibTracker one event as it is emitted (PLAN_I S5 / D5). Its RuntimeErrors pass through;
+        any other error is re-raised as `EmbeddedFibTrackerError` (a RuntimeError — never swallowed by a sub
+        geometry's narrow `except`)."""
+        if self._fib_tracker is None:
+            return
+        try:
+            getattr(self._fib_tracker, handler)(*args)
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            ev = args[0]
+            raise EmbeddedFibTrackerError(
+                f"[market_structure] the embedded FibTracker failed on {ev.type} idx {int(ev.idx)} "
+                f"(sid {ev.meta.get('structure_id')}, cycle {ev.meta.get('cycle_id')}): {exc!r}") from exc
+
     # ----------------------------
     # Zone proximity (Stage 1: BOS-only)
     # ----------------------------
@@ -1841,103 +1836,24 @@ class MarketStructure:
         trigger_inner, zone_kind = hit
         self._fire_cts_confirmation_via_proximity(i, trigger_inner, zone_kind)
 
-    def _refresh_poi_inners_for_cycle(self, moment_idx: int) -> None:
-        """Recompute the cycle's POI inner snapshot using current BOS_n + CTS_n.
-        Called at CTS_ESTABLISHED (new cycle) and each CTS_UPDATED (CTS
-        extended). Stage 2 — adds POI awareness to the proximity check.
-        Uses the resolver wired by structure_engine.py (Part 4 §13.5.b).
+    def _refresh_poi_inners_for_cycle(self) -> None:
+        """Recompute the cycle's POI inner snapshot (Stage 2 — POI awareness of the proximity check). Called at
+        CTS_ESTABLISHED (new cycle) and each CTS_UPDATED (CTS extended), after the event was fed to the embedded
+        tracker.
 
-        `moment_idx` = the triggering event's MOMENT (the pattern's apply candle,
-        or the raw update's processing candle): the resolver's fill horizon (Plan
-        E E3a; the lock-step with FibTracker's Scenario 2 ended with PLAN_I S4 —
-        LANDMINES "Scenario 2 anchor agreement")."""
+        PLAN_I S5 (D5, Q7): the SAME fib decision as the drawn fib — the embedded tracker's representative fib of
+        this cycle (`FibTracker.representative_fib`: the active latest cross, else the active single, else None),
+        its institutional-pattern pick's inner (`poi_inner_for_fib`, which also reads the frame's candle stamp on
+        every call, a no-fib refresh included — PLAN_H PR1). Its imbalance questions were asked at the fed event's
+        MOMENT (the tracker's knowability cut, Plan F). No tracker (direct construction) = no POI inner — the
+        proximity check reads the BOS inner only."""
         st = self.state
-        if st.cts is None or st.bos is None or self._poi_inners_resolver is None:
+        if self._fib_tracker is None:
             st.poi_inners_for_cycle = []
             return
-        # While we're on cycle 0, keep the cycle-0 snapshot in sync with
-        # the current BOS_0/CTS_0 + imbalance fill state. The snapshot is
-        # consumed when cycle 1+ POIs refresh.
-        if st.cts_cycle_id == 0:
-            self._update_cycle0_data(moment_idx)
-        st.poi_inners_for_cycle = self._poi_inners_resolver(
-            self._resolver_df(),
-            int(st.bos.idx),
-            float(st.bos.price),
-            int(st.cts.idx),
-            float(st.cts.price),
-            int(self.struct_direction),
-            int(st.structure_id),
-            int(st.cts_cycle_id),
-            float(self._fill_threshold),
-            st.cycle0_data,
-            fill_horizon_idx=int(moment_idx),
-            snapshot_horizon_idx=int(st.cts_established_moment_idx),
-        )
-
-
-    def _update_cycle0_data(self, moment_idx: int) -> None:
-        """Refresh the cycle-0 snapshot from current state. Skips when
-        cycle 0 has been locked (CTS_0 CONFIRMED already fired) or when
-        BOS_0 / CTS_0 aren't both available.
-
-        Snapshot schema (consumed by
-        :func:`zones.fib_tracker.select_fib_anchor_for_cycle`):
-
-        - ``bos_idx`` / ``bos_price`` — BOS_0 anchor (immutable once captured)
-        - ``cts_idx`` / ``cts_price`` — latest cycle-0 CTS anchor
-        - ``has_unfilled`` — at least one imbalance in [BOS_0, CTS_0]
-          remains unfilled as of ``moment_idx`` (the refresh's moment; Plan E E3a′)
-        - ``scenario1`` — always ``None`` (MS does not track Scenario 1;
-          see ``select_fib_anchor_for_cycle`` docstring for the contract)
-        - ``locked`` — flipped True by ``_lock_cycle0_data`` at CTS_0
-          CONFIRMED
-        """
-        st = self.state
-        if st.cts_cycle_id != 0 or st.cts is None or st.bos is None:
-            return
-        existing = st.cycle0_data
-        if existing is not None and existing.get("locked"):
-            return
-        bos_idx = int(st.bos.idx)
-        bos_price = float(st.bos.price)
-        cts_idx = int(st.cts.idx)
-        cts_price = float(st.cts.price)
-        c0_lo = min(bos_idx, cts_idx)
-        c0_hi = max(bos_idx, cts_idx)
-        # sd-direction filter mirrors FibTracker's cycle-0 snapshot (and the
-        # filter applied to Scenario 2 cond1/cond3 in select_fib_anchor_for_cycle).
-        # Counter-direction imbalances in [BOS_0, CTS_0] never become POIs, so
-        # they shouldn't influence the in-flight Scenario 2 decision either.
-        # No knowability cut (evaluated_at=None, Plan F): this is Scenario-2
-        # cond2, read only at a later cycle-1 refresh (> CTS_0), when every gap
-        # in [BOS_0, CTS_0] has formed — and FibTracker's cycle-0 cache is
-        # likewise stored uncut, so the two mirrors agree.
-        # Fill horizon: cond2 "@CTS_0" — the MOMENT of this refresh, in
-        # lock-step with FibTracker's cycle-0 cache (Plan E E3a′, Q8).
-        c0_fill_horizon_idx = int(moment_idx)
-        has_unfilled = has_unfilled_imbalance(
-            self.df, c0_lo, c0_hi, c0_fill_horizon_idx, self._fill_threshold,
-            direction=int(st.struct_direction), evaluated_at=None,
-        )
-        st.cycle0_data = {
-            "bos_idx": bos_idx,
-            "bos_price": bos_price,
-            "cts_idx": cts_idx,
-            "cts_price": cts_price,
-            "has_unfilled": has_unfilled,
-            "scenario1": None,
-            "locked": False,
-        }
-
-    def _lock_cycle0_data(self) -> None:
-        """Flip the cycle-0 snapshot to locked. Called by
-        ``_emit_cts_confirmed_once`` when CTS_0 CONFIRMED fires; further
-        raw-extreme CTS_UPDATEDs (which can still arrive between CTS_0
-        CONFIRMED and BOS_1 CONFIRMED) no longer mutate ``cycle0_data``,
-        matching FibTracker's behaviour."""
-        if self.state.cycle0_data is not None:
-            self.state.cycle0_data["locked"] = True
+        fib = self._fib_tracker.representative_fib(int(st.structure_id), int(st.cts_cycle_id))
+        inner = self._poi_inner_for_fib(self._resolver_df(), fib, float(self._fib_tracker.config.fill_threshold))
+        st.poi_inners_for_cycle = [] if inner is None else [float(inner)]
 
     def _fire_cts_confirmation_via_proximity(
         self,
@@ -2038,6 +1954,7 @@ class MarketStructure:
         self.events.append(
             StructureEvent(idx=idx, category="STRUCTURE", type="CTS_THRESHOLD_UPDATED", price=float(price), meta=meta2)
         )
+        self._feed_fib_tracker("on_cts_threshold_updated", self.events[-1], self._resolver_df())
 
     def _emit_bos_threshold_updated(self, idx: int, price: float, meta: Optional[dict] = None) -> None:
         meta2 = dict(meta or {})

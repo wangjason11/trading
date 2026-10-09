@@ -36,6 +36,7 @@ from engine_v2.structure.structure_engine import _make_market_structure, compute
 from engine_v2.tests import test_ms_cts_update_no_regress as _noreg
 from engine_v2.tests.test_ms_stop_after_cts import _make_double_rewind_data
 from engine_v2.tests.test_unified_probe import _R, _prepare_df
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 # Candle 8 of `_make_double_rewind_data` completes a breakout (cycle 1 @8) inside the watch opened at 4 — which ENDS that
@@ -173,7 +174,7 @@ def trace(monkeypatch):
 
 def _run(rows, sd: int, end_idx=None):
     with redirect_stdout(io.StringIO()):
-        return compute_bounded_structure(_prepare_df(rows), 0, sd, end_idx=end_idx)
+        return compute_bounded_structure(_prepare_df(rows), 0, sd, end_idx=end_idx, cross_fib_limit=NO_P)
 
 
 def _reversals(res):
@@ -272,7 +273,7 @@ def test_a_reversal_winner_before_the_pending_leaves_no_pending_on_its_row(sd, t
 # same — not proven that it cannot differ.
 def _ms(sd: int = 1):
     with redirect_stdout(io.StringIO()):
-        ms = _make_market_structure(_prepare_df(_p3_rows()), struct_direction=sd, start_idx=0)
+        ms = _make_market_structure(_prepare_df(_p3_rows()), struct_direction=sd, start_idx=0, cross_fib_limit=NO_P)
     ms._init_output_arrays(len(ms.df))
     return ms
 

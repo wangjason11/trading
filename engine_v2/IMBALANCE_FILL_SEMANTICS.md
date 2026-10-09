@@ -80,17 +80,18 @@ Canonical `ev.idx` table: ARCHITECTURE.md "`ev.idx` convention".
 A value computed at one candle and read at a later one needs the cut at the READ
 moment, not the write:
 
-- **MarketStructure's in-flight POI-inner snapshot** (`compute_poi_inners_for_cycle`,
-  refreshed at each CTS_ESTABLISHED / CTS_UPDATED) is built at the refresh candle
-  and may count a gap whose c3 is the NEXT candle — but its only reader
+- **MarketStructure's in-flight POI-inner snapshot** (refreshed at each
+  CTS_ESTABLISHED / CTS_UPDATED; since PLAN_I S5 the embedded FibTracker's
+  representative fib → `poi_inner_for_fib`): its FIB is decided at the fed event's
+  moment like the drawn fib's (FibTracker below); the IP pick on it
+  (`select_ip_ic`'s IC cond3 / TB2) is built at the refresh candle and may count a
+  gap whose c3 is the NEXT candle — but the snapshot's only reader
   (`_maybe_confirm_cts_via_proximity`) is gated `i > st.cts.idx`, so every gap it
-  counts has formed by the candle it is used on. No cut (see
+  counts has formed by the candle it is used on. No cut on the pick (see
   MARKET_STRUCTURE_SPEC "Snapshot vs per-candle").
-- **The cycle-0 liveness cache** (MS `cycle0_data["has_unfilled"]`; FibTracker's
-  twin `_cross_cycle_data[sid]["cycle0"]` was retired with the H1-main logic in
-  PLAN_I S4, 2026-10-08) is Scenario-2 cond2, read at each cycle-1 refresh (> CTS_0)
-  when every gap in `[BOS_0, CTS_0]` has formed → stored UNCUT. MS's in-flight
-  resolver is its last reader; PLAN_I S5 retires it.
+- (The cycle-0 liveness caches — MS's `cycle0_data["has_unfilled"]` and FibTracker's
+  twin, both Scenario-2 cond2 stored UNCUT — are retired: FibTracker's with the
+  H1-main logic in PLAN_I S4, MS's with its resolver in S5.)
 
 ### Decided at the event — and the accepted divergence
 
@@ -101,15 +102,12 @@ cycle 1 — and its IC 3654 twin POI no longer exist). That is the outcome the
 engine already gives when a gap forms one candle after an event. "Re-ask when the
 gap's c3 closes" is a logged follow-up (PLAN_F §7).
 
-**M1 divergence (accepted, 2026-09-24; FibTracker's side changed in PLAN_I S4 — main runs the one logic, a cycle
-≥ 1 cross that fails its own test at EST re-asks on the next CTS_UPDATED, and FibTracker no longer has the cycle-0
-cache; the whole MS read is replaced in S5):** the MS in-flight resolver is uncut and
-builds its fib as always-active, FibTracker cuts at the event. In the drop case
-(the ONLY sd gap of a lag-0 CTS_ESTABLISHED or raw CTS_UPDATED has c2 == the event
-candle) MS keeps a POI inner for a fib FibTracker never creates — permanent on H1
-cycle ≥ 1 (one-shot EST activation). 0 cases on the reference window; the same
-class already exists for gaps that form after an H1 cycle-≥1 EST. Cond2 and cond3
-still agree between the layers (LANDMINES "Scenario 2 anchor agreement").
+**M1 divergence (accepted 2026-09-24) — RETIRED by PLAN_I S5 (2026-10-08):** the retired MS in-flight resolver
+was uncut and built its fib as always-active while FibTracker cut at the event, so in the drop case (the ONLY sd gap of
+a lag-0 CTS_ESTABLISHED or raw CTS_UPDATED has c2 == the event candle) MS kept a POI inner for a fib FibTracker never
+created (0 cases on the reference window). Since S5 MS reads its embedded FibTracker's decision — the same cut, the
+same fib (pinned: `test_imbalance_c3_knowability.py::test_m1_retired_ms_reads_no_inner_where_fibtracker_creates_no_fib`).
+The old text: `zones/CROSS_CYCLE_FIB_SPEC.md` Appendix A, part 2.
 
 ---
 
@@ -220,13 +218,15 @@ Each consumer tunes four knobs: the **window**, the fill horizon
 |---|---|---|---|---|
 | `poi_zones._compute_poi_activation_history` (the enter candle) | `(ic_idx, t]` | `t` | `t` (enters at `max(inst.formed_at, first_active)`) | "Is a FORMED sd imbalance after the IC unfilled at candle t?" — the per-candle sweep, via the fill cache (below). Equals `has_unfilled_imbalance(df, ic_idx+1, t, check_to_idx=t, direction=sd, evaluated_at=t)` |
 | `poi_zones.find_ic_candidates` — caller `derive_poi_zones` | `(candidate_idx, cts_idx]` | the final fib's `cts_idx` (anchor) | `None` — retrospective IC identification; the sweep enforces WHEN the POI can go live (Plan E §2.4 item 8) | IC cond3 |
-| same — caller MS in-flight `compute_poi_inners_for_cycle` | `(candidate_idx, cts_idx]` | in-flight `st.cts.idx` | `None` — read only at `i > st.cts.idx` (Knowability §"Cached values") | IC cond3 for the proximity snapshot |
+| same — caller MS in-flight `poi_inner_for_fib` (PLAN_I S5; was `compute_poi_inners_for_cycle`) | `(candidate_idx, cts_idx]` | the representative fib's `cts_idx` (anchor, ≤ `st.cts.idx`) | `None` — read only at `i > st.cts.idx` (Knowability §"Cached values") | IC cond3 for the proximity snapshot |
 
 ### FibTracker — `evaluated_at = self._evaluated_at` = `event_moment` of the handled event
 
 `on_cts_established` / `on_cts_updated` / `on_cts_threshold_updated` run under
 `_evaluating(event)`; `_has_unfilled(...)` passes the moment (a pattern-path
-CTS_UPDATED's apply candle since Plan E E3·0).
+CTS_UPDATED's apply candle since Plan E E3·0). Two instances run the same rows: the
+downstream's (the drawn fib) and, since PLAN_I S5, MarketStructure's embedded one
+(MS's in-flight read), each fed the same events.
 
 | Site | Window | `check_to_idx` | Question |
 |---|---|---|---|
@@ -246,34 +246,24 @@ Retired with the H1-main logic (PLAN_I S4, 2026-10-08; rows in `git show 0846441
 | Site | Window | `check_to_idx` | Question |
 |---|---|---|---|
 | own test | `[own_imb_start, own_window_end_idx]` | `fill_horizon_idx` | "Does the target cycle have its own FORMED unfilled imbalance?" — the site the cut can change (the window ends AT `own_window_end_idx`) |
-| snapshot walk | `[BOS_0, CTS_0]` | `snapshot_horizon_idx` (= the BOS_1 moment == the CTS_1 EST moment, Plan E E3a′) | cond3 — already bounded (window ends before the moment) |
-| current walk | `[BOS_k, CTS_k]` | `fill_horizon_idx` | prior-cycle liveness — already bounded (`CTS_k < conf_k <=` the moment) |
+| walk | `[BOS_k, CTS_k]` | `fill_horizon_idx` | prior-cycle liveness — already bounded (`CTS_k < conf_k <=` the moment) |
 
 Plan E E2b split the old `current_candle` / `own_imb_start` into their LOCATION role
 (`own_window_end_idx`, `own_imb_start`: the window) and their TIME role
-(`fill_horizon_idx`, `snapshot_horizon_idx`: keyword-only, required). `fill_horizon_idx`
-is the handled event's moment since Plan E E3a (2026-09-24; before it the CTS anchor
-on CTS_ESTABLISHED / pattern-path CTS_UPDATED); `snapshot_horizon_idx` is the BOS_1
-MOMENT (== the CTS_1 ESTABLISHED moment) since Plan E E3a′ (2026-09-25; before it the
-BOS_1 anchor). The MS in-flight resolver passes the triggering event's moment as
-`fill_horizon_idx` and the cycle's CTS_ESTABLISHED moment as `snapshot_horizon_idx`
-(lock-step). The moment of the question stays ONE parameter
-(`evaluated_at`). `select_fib_anchor_for_cycle` also
-requires `evaluated_at`: FibTracker passes the CTS_1 moment, the MS in-flight
-resolver `None`.
+(`fill_horizon_idx`: keyword-only, required). `fill_horizon_idx` is the handled
+event's moment since Plan E E3a (2026-09-24; before it the CTS anchor on
+CTS_ESTABLISHED / pattern-path CTS_UPDATED). The moment of the question stays ONE
+parameter (`evaluated_at`); FibTracker, the only caller since PLAN_I S5, passes the
+same value for both. (The "snapshot" walk of the retired Scenario-2 selector — cond3
+at `snapshot_horizon_idx`, the BOS_1 moment — and `select_fib_anchor_for_cycle`
+itself were deleted in PLAN_I S5.)
 
-### MarketStructure — uncut by decision
+### MarketStructure — no imbalance read of its own (PLAN_I S5)
 
-| Site | Window | `check_to_idx` | `evaluated_at` | Question |
-|---|---|---|---|---|
-| `market_structure._update_cycle0_data` | `[BOS_0, CTS_0]` | the refresh's moment (Plan E E3a′; the CTS_0 anchor before) | `None` (cond2 mirror; read later) | In-flight Scenario-2 cycle-0 snapshot, mirroring FibTracker's cache |
-| `market_structure._refresh_poi_inners_for_cycle` → `compute_poi_inners_for_cycle` → `select_fib_anchor_for_cycle` cond1 | `[BOS_1, CTS_1]` | `fill_horizon_idx` = the triggering event's moment (apply / processing candle; Plan E E3a, lock-step with FibTracker) | `None` | In-flight Scenario-2 cond1 |
-
-This mirror is load-bearing: the in-flight POI resolver reads
-`cycle0_data["has_unfilled"]` to make the same Scenario 2 decision as
-FibTracker's downstream layer. Both use the same direction filter AND both stay
-uncut, or anchor selection diverges (see `LANDMINES.md` "Scenario 2 anchor
-agreement").
+MS's in-flight POI read asks its imbalance questions through its embedded FibTracker (the rows above, cut at each
+fed event's moment) and the IP pick (`poi_inner_for_fib` → `select_ip_ic`: the IC cond3 row of the POI table, uncut).
+Its own uncut mirrors — `_update_cycle0_data` (the Scenario-2 cond2 cycle-0 snapshot) and the resolver's
+`select_fib_anchor_for_cycle` cond1 — were deleted in S5 (rows in `git show 0de98ca:engine_v2/IMBALANCE_FILL_SEMANTICS.md`).
 
 ---
 
@@ -371,7 +361,7 @@ save `20260923_172626_0a4eadc`: 19/24 CSVs byte-identical.
 | FibTracker CTS_ESTABLISHED (lag 0) | M15 conf sub 2 cyc 0 activates on the next raw update (`activated_at` 53→54, `activated_on: update`) |
 | FibTracker raw CTS_UPDATED | M15 sub 3 cyc 0 `activated_at` 61→62 (both lenses) |
 | Cross-check at CTS_THRESHOLD_UPDATED | counter sub 5's pre-created cycle-1 cross fib and its IC 3654 twin POI no longer exist; sub 5 cyc 0 fib ends at 4083 (`same_dir_replacement`) instead of 3806 (`new_cycle`); counter chart 153/125 → 151/124 |
-| MS in-flight snapshot | none (uncut by decision; 3 inner lists would change, none is ever read) |
+| MS in-flight snapshot | none (uncut by decision then; 3 inner lists would change, none is ever read — the read is the embedded FibTracker's since PLAN_I S5) |
 | IC identification | none (uncut; retrospective) |
 
 (The M15 fib `activated_at` values in this table are slice-local — the frame the M15 fib CSVs exported until
@@ -398,4 +388,5 @@ that would justify a future redesign:
   state machine would need new naming for the additional state.
 - **Re-ask when a gap forms** (PLAN_F §7): FibTracker re-evaluating a failed
   decision at the candle a relevant gap's c3 closes would turn "dropped" into
-  "one candle later" and close the M1 divergence.
+  "one candle later" (the M1 divergence it was also to close is retired since
+  PLAN_I S5 — MS reads FibTracker's decision).

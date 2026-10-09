@@ -30,6 +30,7 @@ import pytest
 
 from engine_v2.structure.structure_engine import _make_market_structure
 from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_df
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 # The review fixture (back-to-back watches: an expiry's rewind to anchor + 1 opening a new watch there, rows 9 and 10
@@ -42,7 +43,7 @@ from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_d
 # Constructed rows: invariant 4 alone, on a clean run's df (no watch anywhere) with two rows set by hand.
 def _clean_ms():
     with redirect_stdout(io.StringIO()):
-        ms = _make_market_structure(_prepare_df(_make_multicycle_data()), struct_direction=1, start_idx=0)
+        ms = _make_market_structure(_prepare_df(_make_multicycle_data()), struct_direction=1, start_idx=0, cross_fib_limit=NO_P)
         ms.run()
     assert not ms.df["reversal_watch_active"].astype(bool).any()
     return ms

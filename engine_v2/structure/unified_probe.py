@@ -69,6 +69,7 @@ from engine_v2.structure.structure_engine import (
     _make_market_structure,
     _pip_size_from_pair,
 )
+from engine_v2.zones.cross_cycle_fib import CrossFibLimit
 from engine_v2.zones.zone_proximity import (
     DEFAULT_PROBE_RESET_PIPS,
     DEFAULT_PROBE_RESET_WICK,
@@ -546,6 +547,10 @@ def _run_phase2(
             enforce_cts0_new_extreme=True,
             bos0_inner=cur_bos0_inner,
             stop_after_cts_established=2,
+            # No reference price, explicitly (PLAN_I §9.2 F7 / D5): the probe's result reads two
+            # CTS_ESTABLISHED, cycle 0's CTS_CONFIRMED and a reversal — never a proximity confirmation —
+            # so its POI read never decides anything; every cycle >= 1 fib of it is a single.
+            cross_fib_limit=CrossFibLimit(None, "none"),
         )
         ms.debug = True
         df_probe, probe_events, _ = ms.run()

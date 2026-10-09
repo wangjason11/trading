@@ -20,6 +20,7 @@ import pytest
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests.test_unified_probe import _R, _make_multicycle_data, _prepare_df
+from engine_v2.tests._cross_fib_limits import NO_P
 
 # sd=+1, cycle 0 (pullback-only confirmation: sd-zone proximity is gated off on cycle 0).
 #   0-4  bull marus -> CTS_ESTABLISHED at 2 (anchor 2), pattern-path CTS_UPDATED at 4 (a real new extreme)
@@ -64,7 +65,7 @@ def _mirror(rows: list[dict]) -> list[dict]:
 
 
 def _run(rows: list[dict], sd: int):
-    return compute_bounded_structure(_prepare_df(rows), 0, sd)
+    return compute_bounded_structure(_prepare_df(rows), 0, sd, cross_fib_limit=NO_P)
 
 
 def _breakout_applied_at(res, idx: int) -> bool:
@@ -135,20 +136,28 @@ def test_every_cts_updated_is_a_strict_new_extreme_of_its_cycle(rows, sd):
     assert n_upd >= 3
 
 
-def test_no_cts_move_means_no_poi_inner_refresh(monkeypatch):
-    """The skipped breakout does not refresh MS's POI-inner snapshot either: it emits no CTS_UPDATED, so
-    FibTracker does not advance its fill horizon there, and the two layers stay in lock-step (LANDMINES
-    "Scenario 2 anchor agreement"). The real new extremes (4 pattern, 5 raw) still refresh."""
+def _refresh_spy(monkeypatch, record):
+    """Spy MS's POI refresh (PLAN_I S5: no argument — it reads the embedded tracker, which was just fed the
+    triggering event): `record(self, the fed event)` at each refresh. The last event the tracker handled IS the
+    refresh's trigger (an establishment or an update — nothing is fed between it and the refresh)."""
     from engine_v2.structure.market_structure import MarketStructure
-
-    moments = []
     orig = MarketStructure._refresh_poi_inners_for_cycle
 
-    def _spy(self, moment_idx):
-        moments.append(int(moment_idx))
-        return orig(self, moment_idx)
-
+    def _spy(self):
+        ev = self._fib_tracker._handled[-1]
+        assert ev.type in ("CTS_ESTABLISHED", "CTS_UPDATED"), ev.type
+        record(self, ev)
+        return orig(self)
     monkeypatch.setattr(MarketStructure, "_refresh_poi_inners_for_cycle", _spy)
+
+
+def test_no_cts_move_means_no_poi_inner_refresh(monkeypatch):
+    """The skipped breakout does not refresh MS's POI-inner snapshot either: it emits no CTS_UPDATED, so nothing
+    is fed to MS's embedded tracker (PLAN_I S5) — nor to the downstream's. The real new extremes (4 pattern,
+    5 raw) still refresh."""
+    moments = []
+
+    _refresh_spy(monkeypatch, lambda ms, ev: moments.append(int(ef.event_moment(ev))))
     res = _run(_regress_rows(), 1)
     assert _breakout_applied_at(res, _PATTERN_APPLY)
     assert {2, 4, _TRUE_HIGH} <= set(moments)
@@ -207,18 +216,12 @@ def test_a_tied_breakout_still_runs_the_post_apply_range_check(sd):
 
 @pytest.mark.parametrize("fixture", ["regress", "tied"])
 def test_every_poi_refresh_uses_the_moved_cts(monkeypatch, fixture):
-    """(Landing review.) Each CTS_UPDATED (either path) refreshes with (its CTS anchor, its moment) -- the refresh runs
-    AFTER st.cts moves. The pattern-path half lost its pin when the lagging (24, 25) update went away."""
-    import engine_v2.structure.structure_engine as se
+    """(Landing review; re-derived PLAN_I S5.) Each CTS_UPDATED (either path) refreshes with (its CTS anchor, its
+    moment) -- the refresh runs AFTER st.cts moves and after the update was fed to the embedded tracker. The
+    pattern-path half lost its pin when the lagging (24, 25) update went away."""
     from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_tied_pattern_breakout
     calls = []
-    real = se.compute_poi_inners_for_cycle
-
-    def spy(df, bos_idx, bos_price, cts_idx, *a, **k):
-        calls.append((int(cts_idx), k["fill_horizon_idx"]))
-        return real(df, bos_idx, bos_price, cts_idx, *a, **k)
-
-    monkeypatch.setattr(se, "compute_poi_inners_for_cycle", spy)
+    _refresh_spy(monkeypatch, lambda ms, ev: calls.append((int(ms.state.cts.idx), int(ef.event_moment(ev)))))
     rows = _regress_rows() if fixture == "regress" else _multicycle_with_tied_pattern_breakout()
     res = _run(rows, 1)
     pat = [e for e in res.events if e.type == "CTS_UPDATED" and e.meta["via"] != ef.CTS_UPDATED_RAW_VIA]
@@ -227,26 +230,7 @@ def test_every_poi_refresh_uses_the_moved_cts(monkeypatch, fixture):
         assert (ef.cts_anchor_idx(e), ef.event_moment(e)) in calls, (e.idx, e.meta["via"])
 
 
-def test_ms_cycle0_snapshot_refresh_passes_the_moment_for_a_lagging_cts0(monkeypatch):
-    """(Landing review; a pre-existing gap.) `_refresh_poi_inners_for_cycle` hands `_update_cycle0_data` the MOMENT: a cycle-0
-    one_maru_opposite (big bull maru 1 = the CTS_0 anchor, small bear normal 2 = the apply) establishes
-    CTS_0 anchor 1 / moment 2. The existing E3a' pins call `_update_cycle0_data` directly, so the call-site
-    argument is unpinned."""
-    from engine_v2.structure.market_structure import MarketStructure
-    rec = []
-    orig = MarketStructure._update_cycle0_data
-
-    def spy(self, m):
-        rec.append((int(m), int(self.state.cts.idx)))
-        return orig(self, m)
-
-    monkeypatch.setattr(MarketStructure, "_update_cycle0_data", spy)
-    p = 0.6000
-    rows = [_R(p, p + 0.0022, p - 0.0002, p + 0.0020)]; p += 0.0020
-    rows.append(_R(p, p + 0.0052, p - 0.0002, p + 0.0050)); p += 0.0050
-    rows.append(_R(p - 0.0001, p + 0.0001, p - 0.0009, p - 0.0007)); p -= 0.0007
-    rows += [_R(p, p + 0.0002, p - 0.0006, p - 0.0004)] * 4
-    res = _run(rows, 1)
-    est = [e for e in res.events if e.type == "CTS_ESTABLISHED"]
-    assert [(ef.cts_anchor_idx(e), ef.event_moment(e)) for e in est] == [(1, 2)]
-    assert (2, 1) in rec and not [m for m, _c in rec if m == 1]
+# (`test_ms_cycle0_snapshot_refresh_passes_the_moment_for_a_lagging_cts0` retired with MS's cycle-0 snapshot,
+# PLAN_I S5: MS hands the embedded tracker the establishment EVENT, whose moment the tracker reads itself
+# (`ef.event_moment`) — a lagging establishment's feed is pinned by test_plan_e_role_pins
+# `test_ms_inflight_poi_refresh_fill_horizon_is_the_moment` (second_cts: anchor 9, moment 10).)

@@ -384,6 +384,69 @@ and the S_F1 triggers CSVs:
 
 ## 5. Open questions
 
+### Round 9 (2026-10-08, session 5 — the S5 round: F16, F17's MS side, F19; §9.2) — ANSWERED 2026-10-08 (§6 R9-1, R9-2, R9-3)
+
+- **R9-1 What to do with F16.** Real example (NZD_USD M15, exact candles, a bearish structure from 2025-03-24 10:30
+  UTC, BOS 0.5748; `f14_slice.py M15 5515 173 11 -1`; slice candle i = 10:30 + 15 min × (i − 11)):
+
+  | candle | UTC | low | MS |
+  |---|---|---|---|
+  | 21 | 13:00 | 0.57230 | raw CTS update — the last CTS printed by 13:30 |
+  | 22 | 13:15 | 0.57240 | the pullback pattern's first candle (a bull maru) |
+  | 23 | 13:30 | 0.57268 | `one_maru_continuous` applies → `CTS_CONFIRMED` idx 23, **anchor 24**, 0.57191 |
+  | 24 | 13:45 | 0.57191 | raw CTS update, written by the range back-fill BEFORE the re-step reached 23 |
+  | 25 | 14:00 | 0.57182 | `RANGE_STARTED` (candidate 20 = 12:45, confirmed 25); `CTS_THRESHOLD_UPDATED` 0.57182 |
+
+  Mechanism: `_step_anchor`'s no-winner branch back-fills [20, 25) (the raw CTS update included), returns 21, and the
+  re-stepped anchor 22 applies its pullback at 23 with MS's state already at 24. Emission: UPD(24), CONF(23);
+  processing order: CONF(23), UPD(24). Measured on `0de98ca` (`plan_i_inputs/f16_orders.py`, main and unreached
+  limits alike): the cycle-0 single locks at 21 (13:00, 0.57230) in processing order — today's drawn fib — and at 24
+  (13:45, 0.57191) in emission order — what S5's at-emit tracker would hold; the `CTS_CONFIRMED` price, MS's
+  `cts_threshold`, the KL CTS zone and the next cycle's walk (`_cts_by_cycle`) all say 24. In real time at 13:30 the
+  CTS is 21; 24 has not printed. Candidates: (a) **fix MS first** (its own plan, the revamp waits): a back-filled
+  candle's re-step sees the state as of that candle (e.g. the no-winner range back-fill stops moving the CTS; the
+  re-steps raw-update it in candle order) → the pullback at 23 confirms the CTS known at 23 (21) and 24 is a
+  post-confirmation candle (expected; the plan measures it); (b) **S5 first per D5, then that MS fix** as its own plan
+  (with R9-2): S5's end-of-run order tripwire RAISES on the shape meanwhile, as S2b does on F17 — 0 on the window, so
+  §9.5 d holds; (c) **emission order canonical for the fib**: the downstream feeds FibTracker in emission order → the
+  drawn fib = MS's at-emit fib by construction (locks at 24 = the confirmed CTS price); LANDMINES "Event Sort Order Is
+  a Dispatch Invariant" changes for the fib dispatch; byte-identical on the window (V5: emission == processing for
+  every fib-handled event); MS's look-ahead stays; (d) **processing order canonical** (D5 as written), the tripwire a
+  WARNING for this shape: MS's in-flight fib (24) ≠ the drawn fib (21), accepted; (e) **the tracker honours the
+  confirmation's anchor**: `on_cts_confirmed` extends the fib to the event's CTS anchor before locking → 24 in both
+  orders; the tripwire compares records, not sequences; the extend runs at moment 23 over a window ending at 24 (its
+  fill horizon differs from the emission order's update at 24). Recommended: (b).
+- **R9-2 F17's MS side** (synthetic only: 0 on the window, 0 / 4,800 real slices; the downstream raises since S2b).
+  (i) WAVES 413 / 1074 (M15, sd −1, candles 43–49): cycle 1 established at 43 (CTS 0.56461), raw-updated to 46 (low
+  0.55791); a breakout `one_maru_continuous` anchored at 44 with no active range (detection threshold None) applies at
+  49; cycle 1 is confirmed by proximity at 47 (anchor 46) in between → at 49 MS establishes cycle 2 with CTS anchor
+  46 — cycle 1's own CTS candle (`cts_frozen` 0.55791 = its price; 49's low 0.55799 and close 0.55809 never went below
+  it) — and BOS anchor 47 (the high 0.5785 of the window [47, 49]) AFTER that CTS anchor. (ii) WAVES 301 / 572 (H1,
+  sd −1): a breakout anchored at 40 applies at 45, CTS anchor 43 (low 0.57645); the BOS window `[last pullback apply,
+  45]` takes candle 44's synthetic 250-pip wick (high 0.60401, a BOS-barrier probe) → BOS anchor 44 after CTS anchor
+  43. Candidates: (a) **fix MS in R9-1's plan**: (i) a breakout establishing cycle T must break cycle T−1's confirmed
+  `cts_threshold` as it stands at the apply (R3-1: "a pattern closes beyond `cts_threshold`") → no cycle 2 at 49;
+  (ii) the cycle-T BOS window ends at the CTS anchor (`[pullback apply | proximity confirmation, CTS anchor]`) → BOS
+  ≤ CTS anchor by construction; the S2 / S2b raises stay as guards; (b) **no MS change**: the S2b raise stays, a
+  register line; (c) **re-order the dispatch** (hold a CTS_ESTABLISHED until its BOS — R8-2 (d)): a fib is drawn on a
+  BOS-after-CTS swing. Recommended: (a).
+- **R9-3 F19 — DECIDE.** Real instance (found this session: `plan_i_inputs/f19_search.py` + `f19_detail.py`, 1 hit /
+  2,400 exact real slices; NZD_USD M15, a bullish structure from 2025-08-05 08:45 UTC, slice 14715 len 333 start 20,
+  i = 08:45 + 15 min × (i − 20)): cycle 0 — BOS 08:45 0.58840, established 09:15, confirmed 11:30 (anchor 10:00, 0.58960), a locked
+  single; cycle 1 — BOS 11:30 0.58813, established 13:15 (CTS 0.59008), confirmed 13:45, **no fib** (no unfilled
+  imbalance); cycle 2 — BOS 14:30 0.58862, established 08-07 06:30 (CTS 0.59592), a single. Cycle 0's fib life =
+  [09:15, **08-07 06:30**] `new_cycle` — ended by cycle 2's activation, ~41 h after its cycle ended (08-05 13:15,
+  cycle 1's establishment). POIs are NOT affected (`poi_zones` ends a POI at the cycle table's end, 13:15): the fib
+  CSV and the drawn fib only — the fib and its POI disagree. Candidates: (a) **the cycle's end is a ceiling on its
+  fib's end**: at finalize, end = min(the stream terminal, `compute_cycle_lifecycle`'s end — the helper KL / POI end
+  on); the reason then the table's (`next_cycle`); (b) `_set_terminal` takes the true minimum of every candidate in
+  any arrival order — the same result here, a semantic change of the shared helper; (c) `_prev_cycle_end_at` ends the
+  previous fib at the establishment of ITS next cycle (`prev_cycle + 1`; `_obsolete_prev_cycle_all_fibs` per earlier
+  cycle k at k + 1's), reason `new_cycle`; (d) every CTS_ESTABLISHED ends every earlier cycle's open fib at its moment,
+  whether or not the new cycle gets one (subsumes S3b's helper); (e) leave it (documented). (a)–(d): 0 cells
+  expected on the window (F19 0 there; a variant verifies). Its own stage (a FibTracker change, independent of MS's
+  read): S5b, after S5, before S6. Recommended: (a).
+
 ### Round 8 (2026-10-08, session 4 — the F14 random-tail search, §9.2 F16 / F17, §9.10) — ANSWERED 2026-10-08 (§6 R8-1, R8-2, R8-3)
 
 - **R8-1 What to do with F16** (MS confirms a CTS with an anchor after its confirmation candle; emission order ≠
@@ -675,6 +738,14 @@ The commit of these spec docs waits for the session's end (the user: "Let’s ho
 | R8-3 | (a): S3b's F15 fix covers the late-created cross too (F18): a fib activated / created after its cycle's establishment ends the previous cycle at that establishment; the pre-established cross (Option A) unchanged. 0 on the window (no cycle ≥ 1 fib activates after its establishment) | "(a) Include crosses (Recommended)" |
 | R8-2 | (b): the downstream dispatch RAISES `FibEventOrderError` on a CTS_ESTABLISHED whose cycle's BOS_CONFIRMED was not handled first (it dropped it silently) — stage S2b, its own commit + byte-identical `/compare` before S3 (§9.4); the MS side of F17 (a cycle established on the previous cycle's CTS candle; a BOS after its CTS) goes to the S5 round with F16 | "(b) Make the skip loud (Recommended)" |
 
+**2026-10-08 (round 9 — the S5 round, §5: F16, F17's MS side, F19)**
+
+| ID | Decision | The user's words |
+|---|---|---|
+| R9-1 | (b): S5 lands per D5 FIRST — its end-of-run order tripwire RAISES on the F16 shape (0 on the window; §9.5 d unchanged); THEN an MS fix for F16 as its own plan (a back-filled candle's re-step sees the state as of that candle — the pullback at 13:30 confirms the CTS known at 13:30), together with R9-2 | "(b) S5 first, MS fix after (Recommended)" |
+| R9-2 | (a): F17's MS side is fixed in R9-1's MS plan — (i) a breakout establishing cycle T must break cycle T−1's confirmed `cts_threshold` as it stands at the apply (R3-1); (ii) the cycle-T BOS window ends at the CTS anchor; the S2 / S2b raises stay as guards | "(a) Fix in the MS plan (Recommended)" |
+| R9-3 | (a): a cycle's lifecycle end CAPS its fib's end — at finalize, a fib's end = min(its stream terminal, the cycle-table end `compute_cycle_lifecycle` — the end KL / POI take), the reason then the table's (`next_cycle`); the fib and its POI agree. Its own stage **S5b** (after S5, before S6); 0 cells expected on the window (F19 0 there — a variant verifies). Asked first what the current logic does (explained: set-if-absent terminals, the stream ends the LAST cycle with a fib, finalize only fills an empty slot; effects = the fib CSV + the hover's life text) | "I need to know a bit more about this to make a decision. What is the current logic doing?" → "(a) Cycle end caps fib end (Recommended)" |
+
 **Corrected reading (round 1, for the record):** the user's I1 note — "in order for the first confluence of parent
 cycle 0 to trigger, the reversal needs to have happened first. Thus the unique sub for any parent cycle id 0 first
 confluence trigger will not be that unique sub’s first trigger" — no M15 trigger comes from an H1 (main) reversal: a
@@ -740,6 +811,15 @@ The rule ("parent cycle 0 → no reference") covers the case either way.
   R8-3 answered (a) (F18, the late-created cross, joins S3b) → **S3b LANDED** (§9.10): byte-identical to S3.
   **S4 LANDED** (§9.10): step A (the H1 call flipped) = §9.5 c cell by cell; step B (the h1 mode + 19 methods deleted,
   the `cycle1_bos_anchor_idx` rule-3 migration) byte-identical to step A; CROSS_CYCLE_FIB_SPEC rewritten + Appendix A.
+- 2026-10-08 — session 5: round 9 opened (§5: F16, F17's MS side, F19 — concrete examples re-measured on `0de98ca`;
+  a REAL F19 instance found, 1 / 2,400 exact real slices, `plan_i_inputs/f19_search.py`). R9-1 answered (b) — S5
+  first, the MS fix after as its own plan; R9-2 answered (a) — F17's MS side in that plan (§6). R9-3 (F19): the user
+  asked what the current logic does; explained (set-if-absent terminals; the stream ends the last cycle WITH a fib);
+  answered (a) — the cycle-table end caps the fib's end, stage S5b. **S5 LANDED** (§9.10): MS's embedded FibTracker;
+  step A (the read) and step B (the old resolver deleted) each byte-identical to S4 (27 / 27, 3 / 3); §9.5 d's evidence
+  re-measured on the built code (52 / 52, 24 / 24, 8 prefixes, 20 / 371 inners, 0 / 475 answers); landing review
+  668,982 tokens (A: 1 MAJOR = B's two unpinned wiring paths, the F17 (ii) doc claim corrected, the probe tripwire kept
+  + documented; B: 72 mutants, 19 gaps → 15 pins, all killed); tests 1414.
 
 ## 8. Handoff to session 2 — the implementation plan (from a fresh code audit + a cold review)
 
@@ -944,7 +1024,10 @@ convention); M15 indices entity-absolute unless a sub's slice-local frame is nam
   (the new (0,0) included). S3b's "a cycle's fib cannot outlive its cycle" holds only for the adjacent cycle. Fix
   candidates (each a behaviour change to measure): `_prev_cycle_end_at` uses the establishment of `prev_cycle + 1`, or
   `_set_terminal` takes the true minimum of the candidates. Docs state the limitation (CROSS_CYCLE_FIB_SPEC §2,
-  FIB_LIFECYCLE_SPEC §7); register D.1 item 2.
+  FIB_LIFECYCLE_SPEC §7); register D.1 item 2. **A real instance (session 5, 2026-10-08; 1 / 2,400 exact real
+  slices):** NZD_USD M15 from 2025-08-05 — cycle 0's locked single ends at 08-07 06:30 (cycle 2's activation) instead
+  of 08-05 13:15 (cycle 1, no fib, established); the POI is unaffected (it ends at the cycle table's end) — round 9,
+  R9-3.
 - **F16 — MS confirms a CTS with an anchor AFTER its confirmation candle (the range back-fill look-ahead; found by the
   session-4 F14 search, 2026-10-08, §9.10; LATENT — 0 on the window) (→ R8-1).** `_step_anchor`'s no-winner branch
   confirms a range candidate at `i` (confirm `c`), back-fills `[i, min(c, D))` — the raw CTS update included
@@ -1131,7 +1214,8 @@ id ever re-used mid-sweep) — R6-3 (viii).
 | **S3** | the limit APPLIED to subs (drawn fib; MS unchanged) | D1's `_cross_allowed` + the past-limit single in the sub handlers; limits REQUIRED | §9.5 b |
 | **S3b** (R6-1b) | the single's two latent quirks fixed (F5, F15) | `_m15_cross_check` 2342–2346; `_activate_fib`'s prev-cycle terminal | 0 cells on the window (F5 / F15: 0 occurrences) |
 | **S4** | main joins the one path (R6-5: Q4, Q5, Q6, I2, I5, Q8, main's P = `bos_frozen`) | D1 (h1 deleted), the H1 call, the rule-3 migration | §9.5 c |
-| **S5** | MS reads the same fib decision (Q7) | D5 | §9.5 d: 0 cells, 0 traces |
+| **S5** — LANDED (§9.10) | MS reads the same fib decision (Q7) | D5 | §9.5 d: 0 cells, 0 traces |
+| **S5b** (R9-3) | F19: the cycle-table end caps a fib's end (finalize: min(stream terminal, `compute_cycle_lifecycle` end)) | `FibTracker._finalize_lifecycle_fields` | 0 cells on the window (F19: 0 occurrences) — a variant verifies before the build |
 | **S6** (after the build, R7-2) | retire the `fib_mode` meta key (no other mode remains) — a rule-3 migration | the stamps (sub path), `export_fib_lifecycle.py`'s column, its readers / guards / docs | FORMAT-ONLY: every fib row of the 3 fib CSVs loses `fib_mode` (meta key + column; H1 5, confluence 21, counter 8 rows after S4) |
 
 Docs move with their stage (code + spec + skill + memory in one commit):
@@ -1510,3 +1594,97 @@ a rule-3 migration; local, not pushed). Built in two steps, each replayed:
   drafted pins adopted as `test_plan_i_s4_landing_review_pins.py` (MAJOR D08: main's CTS_THRESHOLD_UPDATED dispatch —
   I2 — was pinned only on the bare tracker; H03 every main sid's limit; A05 / A06; I02 / I05 I8 on the reactivation
   and on a main sid; W01 an update after the confirmation never moves the locked cross); re-run 7 / 7 KILLED.
+
+**Session 5 (2026-10-08) — round 9, then S5.** Round 9 (§5, §6 R9-1 … R9-3; concrete examples re-measured on
+`0de98ca`, the real F16 slice and a real F19 instance — `plan_i_inputs/f16_orders.py`, `f19_search.py`, `f19_detail.py`):
+F16 → S5 first, then an MS fix plan; F17's MS side → that plan; F19 → stage S5b.
+
+**S5 — MS reads the same fib decision (D5, Q7; R9-1) — LANDED** (its own commit; local, not pushed). Built in two
+steps, each replayed:
+- **Step A — the behaviour:** `structure_engine._make_market_structure` builds MS's EMBEDDED `FibTracker`
+  (`DEFAULT_FIB_LEVELS`, `FIB_FILL_THRESHOLD` = 0.70 — the one constant, also the downstream's; `quiet=True`;
+  `{structure_id: cross_fib_limit}`) and injects it with `poi_zones.poi_inner_for_fib`; MS feeds CTS_ESTABLISHED (after
+  its cycle's BOS_CONFIRMED, with `st.bos`), every CTS_UPDATED, CTS_CONFIRMED and CTS_THRESHOLD_UPDATED at emit
+  (`_feed_fib_tracker`: the tracker's `RuntimeError`s pass through, anything else → `EmbeddedFibTrackerError`), reads
+  `FibTracker.representative_fib(sid, cycle)` at every POI refresh, and calls `FibTracker.check_processing_order()` as
+  the last step of every run (the D5 tripwire: the fed sequence == its `processing_order_key` sort, else
+  `FibEventOrderError` naming the first event out of place). The limit is REQUIRED through `_make_market_structure`,
+  `compute_structure` (main sid N ← `structure_lifecycle.compute_main_cross_fib_limit(events so far, N)`, the new
+  per-sid helper `compute_main_cross_fib_limits` now maps), `compute_bounded_structure`, `entity_df_mutation.
+  _build_geometry` (the pool's `P`, from `build_or_get_geometry`) and the probe (an explicit `CrossFibLimit(None,
+  "none")`). `/compare` vs S4A (`cmp_fig_full.py`): **27 / 27 CSVs md5, 3 / 3 figures (full JSON)** = §9.5 d; run.log
+  = S4's (9,101 lines, 426 `[fib]` lines — the embedded trackers quiet) modulo the FutureWarning's MS line number;
+  fetch gate PASS; 88.2 s wall. **The evidence of §9.5 d re-measured on the built step A** (`plan_i_inputs/
+  s5_agreement.py`, in-process instrumentation in a separate work dir; V5's numbers came from the pre-revamp code):
+  the embedded tracker's handled sequence == the downstream's for H1 sid 0 (52 / 52) and sid 1 (24 / 24); each sub's
+  downstream sequence an exact prefix of its geometry's (MS / downstream: sub 0 76 / 76, 1 26 / 26, 2 61 / 61, 3 77 /
+  73, 4 47 / 47, 5 40 / 29, 6 20 / 20, 7 40 / 40); the inner differs from the retired resolver's at **20 / 371**
+  refreshes (main (0,0) ×2 at 163 / 171; geometry cycle 0 ×1, cycle 1 ×5, cycle 2 ×12 — slice-local moments, the
+  per-cycle counts = F9's); **0 / 475** proximity answers change.
+- **Step B — the deletion (behaviour-neutral):** MS loses `poi_inners_resolver`, `fill_threshold`, the
+  `PoiInnersResolver` protocol, `cycle0_data`, `cts_established_moment_idx`, `_update_cycle0_data`, `_lock_cycle0_data`,
+  the refresh's moment argument and its `has_unfilled_imbalance` import; `poi_zones` loses `compute_poi_inners_for_cycle`;
+  `fib_tracker` loses `select_fib_anchor_for_cycle`; `cross_cycle_fib.resolve_cross_cycle_eligibility` loses
+  `fill_as_of` / `prior_cached_liveness` / `target_ceiling` / `snapshot_horizon_idx`. `/compare` vs S4A:
+  **byte-identical** (27 / 27, 3 / 3, run.log as step A). The final code (the tripwire moved to `run()`'s last step, so
+  `ms.events` / `ms.df` are whole when it raises): byte-identical again, fetch gate PASS, 84 s wall.
+- **The tripwire on real data:** the F16 slice (30 exact candles, NZD_USD M15 2025-03-24 07:45 → 15:00 UTC) raises
+  `FibEventOrderError` at handled event #6 (fed CTS_UPDATED idx 24 where processing order has CTS_CONFIRMED idx 23);
+  the S2b F14 (1) stream (WAVES 413 / 1074) now raises in MS itself, before the dispatch.
+- Tests 1385 → 1390 (→ **1414** with the landing review's pins). Census S5 (22): 10 retired (the selector's three cond1 cut pins + its MS-resolver guard; the
+  e3a resolver / snapshot horizon pins ×3; MS's cycle-0 snapshot pin for a lagging CTS_0; the role pin of the
+  selector's cond3; the resolver's graceful anchor scope) and 12 re-pinned / re-derived (the MS fill-horizon role pins
+  ×3 now pin the FEED — the event MS hands its tracker, whose moment the tracker reads; the refresh pins ×2 via the
+  fed event; the PR1 resolver tests on `poi_inner_for_fib`, + its no-fib unstamped case (F11); the geometry / probe
+  spies re-targeted). Beyond the census (static / signature): 6 retired (MS's cycle-0 snapshot guards ×2 — one uncut,
+  one at the refresh moment; the routine's snapshot truth table ×4), re-derived the M1 test
+  (`test_m1_retired_ms_reads_no_inner_where_fibtracker_creates_no_fib`), the routine's superset case (its current
+  half), the no-CTS-move refresh pin, the S2b F14 (1) run (MS raises first; the dispatch assertions on its complete
+  events), the e4 emitter pin (one retired field line); 72 call sites in the existing test files pass
+  `cross_fib_limit=NO_P` (`tests/_cross_fib_limits.NO_P`; an AST count, 2 of them `**{…}` splats);
+  `test_exception_scopes` allowlists `poi_inner_for_fib` and `_feed_fib_tracker`.
+  New: `test_plan_i_s5_ms_reads_the_fib.py` (17 — the MS ↔ downstream agreement on a cross fixture sd ±1 and without
+  `P`; the read takes the representative fib; no tracker = BOS inner only; the F16 real candles; the tripwire unit;
+  the handlers record; tracker errors in a geometry (re-typed / unchanged); the probe's explicit no-`P` and its
+  independence from the read (F7); the quiet tracker's wiring; the limit required / typed; one fill threshold; main
+  sid N's limit = the downstream's) + the routine's retired-parameter guard (4).
+- Research tools moved to the REQUIRED limit (`random_tail_search` records MS's tripwire per trial as `trip`;
+  `f14_order_effect` / `f14_slice` / `f16_orders` / `f19_*` keep working on the F16 / F17 shapes; `e4sim.py`, broken
+  since S4's `fib_mode` removal, migrated too).
+- **Landing review, 2 read-only lenses, 668,982 tokens.** **A** code + docs audit (392,608) — 0 BLOCKER / 1 MAJOR /
+  4 MINOR / NITs, all folded: **M1** two wiring paths survived the full suite as mutants (the threshold feed removed;
+  the sub geometry's `P` replaced by no `P`) → pinned (lens B's pins below); **m1** the probe's Phase-2 MS carries the
+  tripwire too (a probe iteration on an F16 / F17 (i) shape stops the replay, even for a start never built) — KEPT as
+  designed (D5: the probe gets an explicit no-`P` tracker; R9-1's "loud"), documented as a tripwire surface (CROSS_CYCLE
+  _FIB_SPEC §8, LANDMINES rule 4; the alternative — `fib_tracker=None` in the probe, behaviour-neutral by F7 — noted
+  for the user); **m2** a garbled duplicate in ARCHITECTURE; **m3** CCF §4's stale `fill_as_of`; **m4** the docs and
+  docstrings claimed MS trips on "F16 / F17" — measured on WAVES 301 / 572, F17 (ii) (a BOS anchor after its own CTS
+  anchor) does NOT trip MS (only the dispatch) → "F16 and F17 (i)" everywhere, and F16 includes an anchor AT the
+  confirmation candle (a tie sorts the confirmation first); the regression-signature line said
+  `_check_proximity_at_candle` logs (it does not) → "instrument it"; nits: the error class docstring (its third
+  raiser), a stale orchestrator comment, an unused import, `_make_market_structure` built a tracker even when one was
+  passed (now built only when absent), `test_every_public_handler_records_its_event` covers all four handlers, the F16
+  test asserts the whole feed (a CTS_THRESHOLD_UPDATED at 25 included). Verified by A: feed completeness (5 emitters, the
+  establishment fed once after its BOS in both branches, nothing fed between emission and feed); no stale read (the
+  proximity check runs only pre-confirmation, when no threshold event can arrive); the limits equal the downstream's by
+  construction; the tripwire's stable sort / identity compare / placement after every loop exit; nothing swallows the
+  three errors; Appendix A part 2 verbatim (difflib); **HEAD MS vs S5 MS on 400 random real NZD_USD slices (200 M15 +
+  200 H1, 900 candles, both sd, no `P`): events identical 400 / 400, 0 trips; S5 not slower** (M15 52.6 s vs 57.6 s,
+  H1 41.9 s vs 46.3 s for the 400 runs). **B** mutation (276,374) — 72 mutants on the full suite (+ a no-op control):
+  49 killed, 4 equivalent (refresh-on-no-move — nothing fed; single-before-cross — I8; `!=` vs identity — same first
+  mismatch; the walk's cut — windows end before the moment), **19 gaps** → 15 pins (24 cases), each verified one
+  mutant at a time → `tests/test_plan_i_s5_landing_review_pins.py`: the threshold feed (`test_fib_never_established_cap`'s
+  climb: ≥ 10 CTS_THRESHOLD_UPDATEDs, the pre-created cycle-1 cross; MS == downstream), the read's inner reaching the
+  proximity check (a spy + an sd ±1 behavioural twin), the run's own `structure_id`, a no-fib refresh reading the stamp
+  at MS's call site, the geometry's `P` handoff (both hops), `representative_fib`'s 8 cases, the idx tie broken by type,
+  the downstream tracker still logging, the read's fill threshold, the downstream config, the per-sid / map reversal
+  asserts, a watch on the reversal candle, and a bounded run's truncated frame for the read and the feed.
+- Docs: CROSS_CYCLE_FIB_SPEC (status, §1's three tripwires, §2's F19 decision, §7, §8 rewritten, §9, §10, **Appendix A,
+  part 2** = MS's retired read VERBATIM from `0de98ca`: the old §8, MARKET_STRUCTURE_SPEC's refresh paragraph + "Snapshot
+  fib on SUBS" + "Snapshot vs per-candle — imbalance knowability", LANDMINES "Scenario 2 anchor agreement");
+  MARKET_STRUCTURE_SPEC (the refresh, both snapshot sections, the bounded-run residual); LANDMINES (the agreement entry
+  → "MS's POI inner IS the drawn fib's decision", four rules; "The POI Resolver Fails Loudly" re-pointed; the dispatch
+  entry's MS side decided; "MarketStructure Must Not Import From zones/"; the sd-strict sites; the bounded-run residual);
+  IMBALANCE_FILL_SEMANTICS (the cached-values note, M1 retired, the matrix); POI_ZONES_SPEC; ARCHITECTURE; GLOSSARY
+  (`evaluated_at`, FibEventOrderError, + embedded FibTracker, representative fib); PART4 §13.5.b (one note); GOTCHAS (two
+  closure notes); register (D.1 item 2's PLAN_H D5 fix DONE; §E's bundled follow-up CLOSED).

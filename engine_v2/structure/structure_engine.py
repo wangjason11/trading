@@ -16,7 +16,11 @@ from engine_v2.zones.kl_zones_v1 import (
     compute_bos_inner_from_event,
     derive_kl_zones_v1,
 )
-from engine_v2.zones.poi_zones import compute_poi_inners_for_cycle
+from engine_v2.features.fibonacci import DEFAULT_FIB_LEVELS
+from engine_v2.zones.cross_cycle_fib import CrossFibLimit
+from engine_v2.zones.fib_tracker import FIB_FILL_THRESHOLD, FibTracker, FibTrackerConfig
+from engine_v2.zones.poi_zones import poi_inner_for_fib
+from engine_v2.zones.structure_lifecycle import compute_main_cross_fib_limit
 from engine_v2.zones.zone_proximity import (
     DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS,
     DEFAULT_PROXIMITY_PIPS,
@@ -45,12 +49,22 @@ def _make_market_structure(
     struct_direction: int,
     *,
     timeframe: str = "H1",
+    cross_fib_limit: CrossFibLimit,
     **kwargs,
 ) -> MarketStructure:
     """Construct MarketStructure with proximity resolvers + TF-defaulted
     proximity_pips wired in. Per Part 4 §13.5.b, MarketStructure does not
     import from zones/; resolvers are passed at construction so the
     structure→zones import inversion stays gone.
+
+    The in-flight POI read (PLAN_I S5 / D5, Q7): an EMBEDDED `FibTracker` — the
+    downstream's logic and fill threshold (`FIB_FILL_THRESHOLD`), quiet, with
+    `cross_fib_limit` (REQUIRED: there is no silent "no P") for this run's
+    `structure_id` — and `poi_zones.poi_inner_for_fib`. The callers: main sid N
+    (`compute_structure`: `compute_main_cross_fib_limit`), a sub's geometry
+    (`compute_bounded_structure` ← the pool's `P`), the probe's Phase 2
+    (`unified_probe`: an explicit `CrossFibLimit(None, "none")` — PLAN_I F7, the
+    probe's result does not depend on the read).
 
     Parity carve-out (matches Step 1 baseline): probe-only call sites
     historically constructed MarketStructure without `timeframe`, falling
@@ -64,7 +78,15 @@ def _make_market_structure(
     kwargs.setdefault("proximity_pips", _proximity_pips(timeframe))
     kwargs.setdefault("min_gap_pips", _min_gap_pips(timeframe))
     kwargs.setdefault("bos_inner_resolver", compute_bos_inner_from_event)
-    kwargs.setdefault("poi_inners_resolver", compute_poi_inners_for_cycle)
+    assert isinstance(cross_fib_limit, CrossFibLimit), (
+        f"[structure_engine] cross_fib_limit must be a CrossFibLimit, got {cross_fib_limit!r}")
+    if "fib_tracker" not in kwargs:
+        kwargs["fib_tracker"] = FibTracker(
+            FibTrackerConfig(fib_levels=list(DEFAULT_FIB_LEVELS), fill_threshold=FIB_FILL_THRESHOLD),
+            cross_fib_limits={int(kwargs.get("structure_id", 0)): cross_fib_limit},
+            quiet=True,
+        )
+    kwargs.setdefault("poi_inner_for_fib", poi_inner_for_fib)
     return MarketStructure(
         df,
         struct_direction=struct_direction,
@@ -178,6 +200,9 @@ def compute_structure(df: pd.DataFrame, *, timeframe: str = "H1") -> StructureEn
             structure_id=structure_id, timeframe=timeframe, pip_size=pip_size,
             enforce_cts0_new_extreme=_use_cts0_scan,
             bos0_inner=cur_bos0_inner if _use_cts0_scan else None,
+            # This sid's cross-fib limit from the sids before it (sid 0: start trading, no `P`; sid N: sid N−1's
+            # reversal `bos_frozen`) — the same helper the downstream's `compute_main_cross_fib_limits` maps.
+            cross_fib_limit=compute_main_cross_fib_limit(all_events, structure_id),
         )
         ms.debug = True
         df2, ms_events, levels = ms.run()
@@ -316,6 +341,7 @@ def compute_bounded_structure(
     end_idx: Optional[int] = None,
     enforce_cts0_new_extreme: bool = False,
     bos0_inner: Optional[float] = None,
+    cross_fib_limit: CrossFibLimit,
 ) -> BoundedStructureResult:
     """Run a bounded SINGLE directional structure and stop at its first reversal.
 
@@ -343,6 +369,10 @@ def compute_bounded_structure(
         +1 or -1. The single structure's direction for its whole run.
     timeframe : str
         TF for proximity-pips lookup (H1/M15/M5).
+    cross_fib_limit : CrossFibLimit (keyword-only, REQUIRED)
+        The structure's cross-fib limit for MarketStructure's embedded fib
+        tracker (PLAN_I S5 / D5): a sub's geometry passes the pool's `P`
+        (`entity_df_mutation._build_geometry`).
     end_idx : int, optional
         Inclusive upper bound on the run (parent-cycle-end or next subsequent
         trigger). The run is identical to an unbounded run on the frame
@@ -372,6 +402,7 @@ def compute_bounded_structure(
         end_idx=end_idx,
         enforce_cts0_new_extreme=enforce_cts0_new_extreme,
         bos0_inner=bos0_inner,
+        cross_fib_limit=cross_fib_limit,
     )
     ms.debug = True
     df2, events, levels = ms.run()

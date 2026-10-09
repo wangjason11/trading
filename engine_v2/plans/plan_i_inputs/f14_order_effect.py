@@ -30,9 +30,11 @@ def build(stream, seed, t_want):
         t, sd, tf, base, rows, nw = tr
         start = 0
     df = rts._prepare_df(rows)
-    ms = rts._make_market_structure(df, struct_direction=sd, start_idx=start, structure_id=0, timeframe=tf,
-                                    pip_size=rts._pip_size_from_pair(df))
-    ms.run()
+    ms = rts._make_market_structure(df, cross_fib_limit=rts._NO_P, struct_direction=sd, start_idx=start,
+                                    structure_id=0, timeframe=tf, pip_size=rts._pip_size_from_pair(df))
+    rts._ms_run(ms)   # PLAN_I S5: MS's own order tripwire (recorded, not raised) — the run is complete
+    if getattr(ms, "_rts_tripwire", None):
+        print("MS order tripwire:", ms._rts_tripwire)
     return df, ms.events
 
 

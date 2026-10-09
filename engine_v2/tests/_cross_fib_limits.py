@@ -38,3 +38,9 @@ def unreached_for(events: Iterable) -> Dict[int, CrossFibLimit]:
         if sd in (1, -1):
             out.setdefault(int(e.meta.get("structure_id", 0)), unreached(sd))
     return out
+
+
+# No reference price (PLAN_I S5 / D5): every cycle >= 1 a single — what the probe passes, and the default for a
+# test's own `compute_bounded_structure` / `_make_market_structure` run (MarketStructure's embedded tracker needs a
+# limit; the argument is REQUIRED).
+NO_P = CrossFibLimit(None, "none")

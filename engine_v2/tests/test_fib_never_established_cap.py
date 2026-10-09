@@ -27,6 +27,7 @@ from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 from engine_v2.tests._cross_fib_limits import unreached
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests.test_unified_probe import _R, _make_multicycle_data, _prepare_df
+from engine_v2.tests._cross_fib_limits import NO_P
 
 # sd=+1, start 0, NZD_USD, run at M15 pips in `cross_cycle` mode (a sub's downstream).
 #   0-8  = `_make_multicycle_data()[:9]`: cycle 0 established at 2 (BOS .5998; CTS anchor 2 -> 5 .6122 via the
@@ -77,7 +78,7 @@ def _downstream(rows, *, end_idx=None, cap=None):
     """A sub-style build: bounded MS at the cap, events clipped to it, the cross_cycle downstream with the cap.
     Asserts the path's precondition: cycle 1 has no CTS_ESTABLISHED and a pre-created cycle-1 cross fib exists."""
     with redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(rows), 0, 1, timeframe="M15", end_idx=end_idx)
+        res = compute_bounded_structure(_prepare_df(rows), 0, 1, timeframe="M15", end_idx=end_idx, cross_fib_limit=NO_P)
         events = [e for e in res.events if cap is None or int(e.idx) <= cap]
         out = _run_downstream_pipeline(res.df, events, 1, timeframe="M15",
                                        structure_path_id="M15.test", wvmi="off", lifecycle_cap=cap,
@@ -99,7 +100,7 @@ def test_the_production_projection_caps_it_with_the_subs_end_reason():
     `project_to_window` (knowable-at clip + the downstream with `cap_reason` = the sub's end reason). Cap 15 != the
     fib's CTS candle 14, and `parent_end` is a real sub end reason (never the default `lifecycle_end`)."""
     with redirect_stdout(io.StringIO()):
-        natural = compute_bounded_structure(_prepare_df(_rows()), 0, 1, timeframe="M15")
+        natural = compute_bounded_structure(_prepare_df(_rows()), 0, 1, timeframe="M15", cross_fib_limit=NO_P)
         down = project_to_window(natural, floor=2, cap=15, cap_reason="parent_end", direction=1, timeframe="M15",
                                  cross_fib_limits={0: unreached(1)})   # PLAN_I S3: within the limit
     assert [(e.idx, e.meta["cycle_id"]) for e in down["events"] if e.type == "CTS_ESTABLISHED"] == [(2, 0)]

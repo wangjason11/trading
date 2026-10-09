@@ -45,6 +45,7 @@ from engine_v2.tests.test_bounded_structure import (
     _make_reversing_data,
     _prepare_df,
 )
+from engine_v2.tests._cross_fib_limits import NO_P
 
 _SD = 1
 _START = 0
@@ -100,7 +101,7 @@ def reversing_df():
 
 @pytest.fixture(scope="module")
 def natural_reversal_idx(reversing_df):
-    r = compute_bounded_structure(reversing_df, _START, _SD).reversal_idx
+    r = compute_bounded_structure(reversing_df, _START, _SD, cross_fib_limit=NO_P).reversal_idx
     assert r is not None and r > 10, "fixture must reverse mid-series"
     return int(r)
 
@@ -129,8 +130,8 @@ def test_events_knowable_at_are_causal_in_end_idx(reversing_df, natural_reversal
     natural reversal R > B. This is the core render-path claim (§17.9)."""
     R = natural_reversal_idx
     cap = R - 6                       # safely inside the pre-reversal region
-    full = compute_bounded_structure(reversing_df, _START, _SD)          # to R
-    capped = compute_bounded_structure(reversing_df, _START, _SD, end_idx=cap)
+    full = compute_bounded_structure(reversing_df, _START, _SD, cross_fib_limit=NO_P)          # to R
+    capped = compute_bounded_structure(reversing_df, _START, _SD, end_idx=cap, cross_fib_limit=NO_P)
 
     full_clipped = clip_events_to_window(full.events, cap)
     assert _ev_sig(full_clipped) == _ev_sig(capped.events)
@@ -140,7 +141,7 @@ def test_events_knowable_at_are_causal_in_end_idx(reversing_df, natural_reversal
 
 def test_capped_run_emits_nothing_past_cap(reversing_df, natural_reversal_idx):
     cap = natural_reversal_idx - 6
-    capped = compute_bounded_structure(reversing_df, _START, _SD, end_idx=cap)
+    capped = compute_bounded_structure(reversing_df, _START, _SD, end_idx=cap, cross_fib_limit=NO_P)
     for ev in capped.events:
         assert knowable_at_idx(ev) <= cap
         # Plan A: a bounded run stamps NO event past its bound — `ev.idx` included
@@ -168,8 +169,8 @@ def test_structure_columns_causal_over_window(reversing_df, natural_reversal_idx
     the render path, and the df-column mirror is itself window-clipped."""
     R = natural_reversal_idx
     cap = R - 6
-    full = compute_bounded_structure(reversing_df, _START, _SD)
-    capped = compute_bounded_structure(reversing_df, _START, _SD, end_idx=cap)
+    full = compute_bounded_structure(reversing_df, _START, _SD, cross_fib_limit=NO_P)
+    capped = compute_bounded_structure(reversing_df, _START, _SD, end_idx=cap, cross_fib_limit=NO_P)
     # Real MS output column names (no bare `cycle_id` / `cts_phase`).
     cols = ["structure_id", "cts_cycle_id", "market_state", "range_lo", "range_hi"]
     for col in cols:
@@ -183,7 +184,7 @@ def test_structure_columns_causal_over_window(reversing_df, natural_reversal_idx
 def _bounded_build(df, cap, floor, cap_reason):
     """A Phase-1-style window-bounded build (MS bounded to cap + downstream with
     floor/cap) — the reference the pool must match."""
-    ref = compute_bounded_structure(df, _START, _SD, end_idx=cap)
+    ref = compute_bounded_structure(df, _START, _SD, end_idx=cap, cross_fib_limit=NO_P)
     ref.df.attrs["imbalances"] = df.attrs.get("imbalances", [])
     down = _run_downstream_pipeline(
         ref.df, ref.events, _SD,
@@ -283,7 +284,7 @@ def test_clip_events_to_window_returns_deep_copies(reversing_df, natural_reversa
     """§6.1: `clip_events_to_window` must DEEPCOPY before returning — geometry
     objects are shared across every lens / record that reads them, and the
     mirror stamps attribution into `ev.meta`."""
-    full = compute_bounded_structure(reversing_df, _START, _SD)
+    full = compute_bounded_structure(reversing_df, _START, _SD, cross_fib_limit=NO_P)
     cap = natural_reversal_idx - 6
     clipped = clip_events_to_window(full.events, cap)
     _assert_clip_returns_deep_copies(full.events, clipped)
@@ -292,7 +293,7 @@ def test_clip_events_to_window_returns_deep_copies(reversing_df, natural_reversa
 def test_clip_events_open_window_returns_deep_copies(reversing_df):
     """The `cap=None` branch (no clip) must deep-copy too — it hands out the
     whole shared stream otherwise."""
-    full = compute_bounded_structure(reversing_df, _START, _SD)
+    full = compute_bounded_structure(reversing_df, _START, _SD, cross_fib_limit=NO_P)
     clipped = clip_events_to_window(full.events, None)
     assert len(clipped) == len(full.events)
     _assert_clip_returns_deep_copies(full.events, clipped)

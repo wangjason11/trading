@@ -27,6 +27,7 @@ from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests import test_ms_cts_update_no_regress as _noreg
 from engine_v2.tests.test_ms_stop_after_cts import _make_double_rewind_data
 from engine_v2.tests.test_unified_probe import _R, _make_multicycle_data, _prepare_df
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 # The real-rows fixture the invariant-4 landing review built (sd=+1): `_make_double_rewind_data()[:6]` + 5 candles.
@@ -49,7 +50,7 @@ def _in_watch_cycle_rows() -> list[dict]:
 def _run(rows, sd):
     rows = rows if sd == 1 else _noreg._mirror(rows)
     with redirect_stdout(io.StringIO()):
-        return compute_bounded_structure(_prepare_df(rows), 0, sd)   # debug_invariants on (the default)
+        return compute_bounded_structure(_prepare_df(rows), 0, sd, cross_fib_limit=NO_P)   # debug_invariants on (the default)
 
 
 def _p(price, sd):

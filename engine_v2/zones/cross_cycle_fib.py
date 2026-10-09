@@ -4,10 +4,10 @@
 
 ONE pure routine deciding whether a cross-cycle Fib is eligible at a given target cycle, and from which earliest
 cycle it spans: the body of ``FibTracker._cross_check`` steps 1–3 (own-imbalance test + dead-cycle backward walk +
-``earliest_x``); the storage / version transitions stay in FibTracker. FibTracker (every structure since PLAN_I S4)
-calls it with ``fill_as_of="current"``. The ``"snapshot"`` policy (+ ``prior_cached_liveness``) serves only the retired
-H1-main Scenario-2 selector ``select_fib_anchor_for_cycle``, still read by MarketStructure's in-flight POI resolver
-until PLAN_I S5 (which deletes them; the old design: CROSS_CYCLE_FIB_SPEC.md Appendix A, old §3.1 / §11a).
+``earliest_x``); the storage / version transitions stay in FibTracker — its only caller (every structure since PLAN_I
+S4; MarketStructure reads the same decision through its embedded tracker since S5). The ``"snapshot"`` fill-as-of
+policy of the retired H1-main Scenario-2 selector was deleted with it in PLAN_I S5 (CROSS_CYCLE_FIB_SPEC.md Appendix
+A, old §3.1 / §11a).
 
 Kept dependency-free of ``zones`` (imports only ``patterns.imbalance``) so
 ``fib_tracker`` can import it without an import cycle.
@@ -104,13 +104,9 @@ def resolve_cross_cycle_eligibility(
     cts_by_cycle: Dict[int, tuple],
     dead_cycles: set,
     fill_threshold: float = 0.70,
-    fill_as_of: str = "current",
-    prior_cached_liveness: Optional[Dict[int, bool]] = None,
-    target_ceiling: Optional[int] = None,
     *,
     evaluated_at: Optional[int],
     fill_horizon_idx: int,
-    snapshot_horizon_idx: Optional[int],
 ) -> CrossEligibility:
     """Decide cross-cycle eligibility at ``target_cycle`` (pure).
 
@@ -121,7 +117,8 @@ def resolve_cross_cycle_eligibility(
        ``own_has=False`` (caller deactivates any active cross; no cross).
     2. **Dead-cycle backward walk** ``k = target-1 … 0``, stopping at the first
        cycle already in ``dead_cycles`` / missing data / dead. A cycle is *live*
-       per the ``fill_as_of`` policy (below); a dead cycle is added to
+       when ``[BOS_k, CTS_k]`` holds an unfilled sd imbalance as of
+       ``fill_horizon_idx`` (the current candle); a dead cycle is added to
        ``dead_cycles`` (mutated in place — the caller passes its sid-scoped
        cache so the walk's memo persists, exactly as today).
     3. ``earliest_x`` = smallest live cycle in the contiguous run ending at
@@ -133,54 +130,29 @@ def resolve_cross_cycle_eligibility(
         ``{cycle_id: (idx, price)}`` for this structure (caller slices to sid).
         Only cycles ``0 … target_cycle-1`` are consulted by the walk.
     dead_cycles : set
-        Mutable, sid-scoped. Pass the real cache (FibTracker) or a throwaway set
-        (the single-step selector `select_fib_anchor_for_cycle`, which never caches).
-    fill_as_of : {"current", "snapshot"}
-        Per-cycle liveness fill point (CROSS_CYCLE_FIB_SPEC.md Appendix A, old §3.1):
-
-        - ``"current"`` (FibTracker, every structure) — each prior cycle's ``[BOS_k, CTS_k]`` checked
-          as of ``fill_horizon_idx``.
-        - ``"snapshot"`` (the retired H1-main single step; MS's in-flight resolver until S5) — checked as of ``snapshot_horizon_idx``
-          (= cond3 @BOS_target) AND-ed with ``prior_cached_liveness[k]``
-          (= cond2, the cached cycle-0 @CTS_0 liveness). Defined only for the
-          ``target=1`` single step in §11a; deeper-walk snapshot semantics are
-          an §11b open item.
-    prior_cached_liveness : dict, optional
-        ``{cycle_id: bool}`` used only by the snapshot policy. A missing cycle
-        defaults to ``True`` (no extra constraint).
-    target_ceiling : int, optional
-        Reserved, ignored, no caller (the retired main-only ``M`` cap); S5 deletes it.
+        Mutable, sid-scoped: FibTracker's cache (``_dead_cycles[sid]``).
     own_window_end_idx, own_imb_start : int
         The target cycle's own-test window ``[own_imb_start, own_window_end_idx]``
         (LOCATIONS: the cycle's BOS and its CTS anchor / running extreme).
     fill_horizon_idx : int
         Keyword-only, REQUIRED: the fill horizon of the own test and of the
-        ``"current"`` walk (a TIME; Plan E E2b split it from the window end; the handled
+        walk (a TIME; Plan E E2b split it from the window end; the handled
         event's moment since Plan E E3a).
-    snapshot_horizon_idx : int or None
-        Keyword-only, REQUIRED: the ``"snapshot"`` walk's fill horizon (cond3,
-        "has BOS_target filled the prior cycle?"); None only with
-        ``fill_as_of="current"``.
     evaluated_at : int or None
         Keyword-only, REQUIRED: the MOMENT the decision is taken (Plan F;
         IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule"). Every
         imbalance question below counts only instances formed by then. The
         step-1 own test is the one it can change (its window ends AT
         ``own_window_end_idx``); the prior-cycle walks end at ``CTS_k`` < the moment
-        (already bounded) and get it for uniformity. ``prior_cached_liveness``
-        (cond2) is a cached value judged at its use, so it is not re-cut here.
-        ``None`` = no cut: the unchanged MS in-flight resolver. FibTracker passes
-        the same value as ``fill_horizon_idx`` on every path since Plan E E3a;
-        they stay two parameters because the MS in-flight resolver passes a
-        horizon (its refresh moment) with no cut.
+        (already bounded) and get it for uniformity. ``None`` = no cut (no
+        production caller since PLAN_I S5 retired MS's resolver). FibTracker passes
+        the same value as ``fill_horizon_idx`` on every path since Plan E E3a.
 
     Returns
     -------
     CrossEligibility
     """
     direction = sd if sd in (1, -1) else None
-    if fill_as_of == "snapshot" and snapshot_horizon_idx is None:
-        raise ValueError("fill_as_of='snapshot' needs snapshot_horizon_idx")
 
     # Step 1: target cycle's own imbalance.
     own_has = has_unfilled_imbalance(
@@ -215,18 +187,10 @@ def resolve_cross_cycle_eligibility(
             break
         range_start = min(bos_k[0], cts_k[0])
         range_end = max(bos_k[0], cts_k[0])
-        if fill_as_of == "snapshot":
-            live = has_unfilled_imbalance(
-                df, range_start, range_end, snapshot_horizon_idx, fill_threshold,
-                direction=direction, evaluated_at=evaluated_at,
-            )
-            if prior_cached_liveness is not None:
-                live = live and bool(prior_cached_liveness.get(k, True))
-        else:  # "current"
-            live = has_unfilled_imbalance(
-                df, range_start, range_end, fill_horizon_idx, fill_threshold,
-                direction=direction, evaluated_at=evaluated_at,
-            )
+        live = has_unfilled_imbalance(
+            df, range_start, range_end, fill_horizon_idx, fill_threshold,
+            direction=direction, evaluated_at=evaluated_at,
+        )
         if not live:
             dead_cycles.add(k)
             break

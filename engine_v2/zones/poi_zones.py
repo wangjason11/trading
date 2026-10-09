@@ -11,8 +11,9 @@ ONE POI per fib record (PLAN_H, Week 9 Part 1 item 1):
    61.8-80 zone (`select_ip_ic`); no pattern -> no POI
 4. The POI = the IC's high / low; it is active while the activation sweep's
    conditions hold (`_compute_poi_activation_history`)
-The MS in-flight resolver (`compute_poi_inners_for_cycle`) reads the same
-`select_ip_ic` (PLAN_H D2). The V30 / V60 / V90 selection (`select_ic_variants`)
+MarketStructure's in-flight read (`poi_inner_for_fib`, on its embedded
+FibTracker's representative fib — PLAN_I S5) calls the same `select_ip_ic`
+(PLAN_H D2). The V30 / V60 / V90 selection (`select_ic_variants`)
 is kept unwired (PLAN_H X1).
 
 IC Candidate Base Conditions (ALL required):
@@ -40,7 +41,7 @@ from engine_v2.patterns.imbalance import has_unfilled_imbalance, iter_unfilled_i
 from engine_v2.patterns.institutional_pattern import IC_TYPE_PREFERENCE, IPResult, classify_ics
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
-from engine_v2.zones.fib_tracker import FibTracker, FibState, select_fib_anchor_for_cycle
+from engine_v2.zones.fib_tracker import FibTracker, FibState
 from engine_v2.zones.structure_lifecycle import (
     compute_cycle_lifecycle,
     compute_reversal_idx_by_sid,
@@ -257,8 +258,9 @@ def find_ic_candidates(
         # evaluated_at=None (no knowability cut, Plan F) for both callers:
         # derive_poi_zones identifies ICs retrospectively on the final fib (the
         # activation SWEEP enforces when a POI can go live; Plan E §2.4 item 8),
-        # and the MS in-flight resolver's snapshot is read only at candles after
-        # the CTS, where every gap it counts has formed (MARKET_STRUCTURE_SPEC).
+        # and MS's in-flight read (`poi_inner_for_fib`, PLAN_I S5) is used only at
+        # candles after the CTS, where every gap it counts has formed
+        # (MARKET_STRUCTURE_SPEC "Snapshot vs per-candle").
         has_unfilled_after = has_unfilled_imbalance(
             df,
             start_idx=idx + 1,        # strictly after
@@ -1283,10 +1285,10 @@ def _compute_poi_activation_history(
 
 
 # ---------------------------------------------------------------------------
-# Single-cycle POI primitives — used by MarketStructure's dual CTS proximity
-# check (Stage 2). Wired from `structure/structure_engine.py` as the
-# `poi_inners_resolver` callable passed to MarketStructure.__init__ (Part 4
-# §13.5.b). Defined here so structure/ never imports zones/.
+# MarketStructure's in-flight POI read (the dual CTS proximity check, Stage 2):
+# `poi_inner_for_fib`, wired from `structure/structure_engine.py` with the
+# embedded FibTracker (PLAN_I S5 / D5; Part 4 §13.5.b — structure/ never
+# imports zones/).
 # ---------------------------------------------------------------------------
 
 class IPSelectionError(RuntimeError):
@@ -1295,146 +1297,34 @@ class IPSelectionError(RuntimeError):
     (PLAN_H §8.5 step 3)."""
 
 
-def compute_poi_inners_for_cycle(
+def poi_inner_for_fib(
     df: pd.DataFrame,
-    bos_idx: int,
-    bos_price: float,
-    cts_idx: int,
-    cts_price: float,
-    struct_direction: int,
-    structure_id: int = 0,
-    cycle_id: int = 0,
-    fill_threshold: float = 0.70,
-    c0_data: Optional[Dict[str, Any]] = None,
-    *,
-    fill_horizon_idx: int,
-    snapshot_horizon_idx: int,
-) -> List[float]:
-    """Derive the POI zone inner price for the cycle's current (as-of) Fib state:
-    0 or 1 inner — the institutional-pattern pick's (PLAN_H D2: the SAME
-    `select_ip_ic` as the drawn POI; no pattern -> [] and the proximity check
-    reads the BOS inner only).
+    fib_state: Optional[FibState],
+    fill_threshold: float,
+) -> Optional[float]:
+    """MarketStructure's in-flight POI inner (PLAN_I S5 / D5, Q7): the institutional-pattern pick
+    (`select_ip_ic` — the SAME function as the drawn POI, PLAN_H D2) on `fib_state`, the cycle's
+    `FibTracker.representative_fib` of MS's embedded tracker — one fib decision for the drawn POI and MS.
+    Returns the pick's inner (a buy POI's top = the IC's high, a sell POI's bottom = its low), or None — no fib,
+    or no pattern (D7): the proximity check then reads the BOS inner only. Wired by `structure_engine` (MS
+    imports nothing from `zones/`).
 
-    Picks anchors via :func:`zones.fib_tracker.select_fib_anchor_for_cycle` —
-    the retired H1-main Scenario-2 selector (FibTracker runs the one logic since
-    PLAN_I S4, so the two differ wherever a cross or the limit decides;
-    CROSS_CYCLE_FIB_SPEC.md §8 — PLAN_I S5 replaces this read). Constructs the FibState from the
-    chosen anchors, runs `select_ip_ic` on it, returns the pick's inner price
-    (top of the IC for a buy zone, bottom for a sell). POIs are always
-    sd-direction by Fib construction.
-
-    Failure scopes (PLAN_H §8.8 PR1, LANDMINES "The POI Resolver Fails Loudly"):
-    ONLY the anchor selection + the fib construction keep the graceful `[]` on an
-    error. `select_ip_ic` runs OUTSIDE that `try`, and any error of it is
-    re-raised as `IPSelectionError` (a RuntimeError) — so neither this function
-    nor a caller's narrow `except` (the sub geometry's `except (ValueError,
-    IndexError)` in `entity_df_mutation._build_geometry`, which drops the whole
-    sub) can turn an IP bug / an unstamped frame into a legitimate "no pattern".
-
-    Knowability (Plan F): no c3 cut here — the snapshot is built at the CTS
-    refresh candle and may count a gap whose c3 is the next candle, but its
-    only reader (`MarketStructure._maybe_confirm_cts_via_proximity`) is gated
-    `i > st.cts.idx`, so no decision uses a gap before it forms
-    (MARKET_STRUCTURE_SPEC "Snapshot vs per-candle"). FibTracker cuts at the
-    event, so in the drop case (the only sd gap formed one candle after a
-    lag-0 EST / raw UPDATED) this resolver keeps an inner for a fib FibTracker
-    never creates — the accepted M1 divergence (LANDMINES "Scenario 2 anchor
-    agreement").
-
-    Parameters
-    ----------
-    fill_horizon_idx : int (keyword-only, required)
-        The fill horizon of the cycle-1 own-imbalance check (cond1 / the
-        Scenario-2 decision): the MOMENT of the event that triggered the MS
-        refresh — in lock-step with FibTracker's EST / update fill horizon
-        (Plan E E3a).
-    snapshot_horizon_idx : int (keyword-only, required)
-        cond3's fill horizon ("has BOS_1 filled cycle 0?"): the BOS_1 MOMENT
-        (== the cycle's CTS_ESTABLISHED moment; Plan E E3a′).
-    c0_data : optional dict
-        Cycle-0 snapshot for the structure_id. When provided and the
-        utility selects Scenario 2 (cross-cycle), the Fib anchors flip
-        to ``(BOS_0, CTS_1)`` instead of ``(BOS_1, CTS_1)``. When None,
-        the utility falls back to intra-cycle anchors regardless of
-        cycle_id, matching the pre-Scenario-2-aware behaviour.
-    """
-    from engine_v2.features.fibonacci import (
-        DEFAULT_FIB_LEVELS,
-        create_fib_retracement,
-    )
-
-    if cts_idx <= bos_idx:
-        return []
-
+    Fails loudly (PLAN_H §8.8 PR1, LANDMINES "The POI Resolver Fails Loudly"; PLAN_I §9.2 F11): the frame's
+    candle stamp `df.attrs["timeframe"]` is read FIRST on every call — a refresh with no fib included — and any
+    error of the stamp read or the pick is re-raised as `IPSelectionError` (a RuntimeError), so neither a missing
+    stamp nor an IP bug can pass as "no pattern", and the sub geometry's narrow `except (ValueError,
+    IndexError)` (`entity_df_mutation._build_geometry`) cannot drop the sub. `fill_threshold` = the tracker's
+    (`FIB_FILL_THRESHOLD`; the drawn POI's `POIConfig` default is the same value — pinned)."""
     try:
-        sd = int(struct_direction)
-
-        anchor_bos_idx, anchor_bos_price, anchor_cts_idx, anchor_cts_price, _label = (
-            select_fib_anchor_for_cycle(
-                df,
-                int(structure_id),
-                int(cycle_id),
-                int(bos_idx),
-                float(bos_price),
-                int(cts_idx),
-                float(cts_price),
-                c0_data,
-                float(fill_threshold),
-                struct_direction=sd,
-                # No knowability cut (Plan F): this snapshot is read only at
-                # candles after the CTS (market_structure `i > st.cts.idx`),
-                # where every gap it counts has formed (the M1 divergence with
-                # FibTracker's retired Scenario 2, PLAN_I S4).
-                evaluated_at=None,
-                # The fill horizons (moments since Plan E E3a / E3a′; LANDMINES
-                # "Scenario 2 anchor agreement").
-                fill_horizon_idx=int(fill_horizon_idx),
-                snapshot_horizon_idx=int(snapshot_horizon_idx),
-            )
-        )
-        if anchor_cts_idx <= anchor_bos_idx:
-            return []
-
-        if sd == 1:
-            anchor_high = anchor_cts_price
-            anchor_low = anchor_bos_price
-        else:
-            anchor_high = anchor_bos_price
-            anchor_low = anchor_cts_price
-
-        fib = create_fib_retracement(
-            anchor_high=anchor_high,
-            anchor_low=anchor_low,
-            direction=sd,
-            levels=DEFAULT_FIB_LEVELS,
-            meta={"structure_id": structure_id, "cycle_id": cycle_id},
-        )
-        fib_state = FibState(
-            structure_id=structure_id,
-            cycle_id=cycle_id,
-            struct_direction=sd,
-            bos_idx=int(anchor_bos_idx),
-            bos_price=float(anchor_bos_price),
-            cts_idx=int(anchor_cts_idx),
-            cts_price=float(anchor_cts_price),
-            active=True,
-            locked=False,
-            fib=fib,
-        )
-
-    except Exception:
-        return []
-
-    # The pick — OUTSIDE the try (fail loudly; MS's own fill threshold).
-    config = POIConfig(fill_threshold=fill_threshold)
-    try:
-        sel = select_ip_ic(df, fib_state, config)
+        df.attrs["timeframe"]
+        if fib_state is None:
+            return None
+        sel = select_ip_ic(df, fib_state, POIConfig(fill_threshold=fill_threshold))
     except Exception as exc:
-        raise IPSelectionError(
-            f"[poi_zones] select_ip_ic failed in the MS resolver (sid {structure_id}, cycle {cycle_id}, "
-            f"fib {fib_state.bos_idx}..{fib_state.cts_idx}): {exc!r}") from exc
+        where = ("no fib" if fib_state is None else
+                 f"sid {fib_state.structure_id}, cycle {fib_state.cycle_id}, fib {fib_state.bos_idx}..{fib_state.cts_idx}")
+        raise IPSelectionError(f"[poi_zones] the MS in-flight IP read failed ({where}): {exc!r}") from exc
     if sel.pick is None:
-        return []
+        return None
     ic_idx = int(sel.pick.ic_idx)
-    # buy POI inner = the IC's top; sell POI inner = its bottom
-    return [float(df.loc[ic_idx, "h"]) if sd == 1 else float(df.loc[ic_idx, "l"])]
+    return float(df.loc[ic_idx, "h"]) if int(fib_state.struct_direction) == 1 else float(df.loc[ic_idx, "l"])

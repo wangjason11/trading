@@ -123,7 +123,11 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    and F17's MS side (R8-2): a cycle established on the previous cycle's CTS candle / a BOS anchor after its CTS anchor
    (the downstream's silent skip of such an establishment is made LOUD now — S2b, `FibEventOrderError`).
    **Also parked (S4 landing review, 2026-10-08):** PLAN_I §9.2 F19 — a fib outlives its cycle when the next cycle
-   gets no fib (`_current_cycle` + set-if-absent terminals; latent, 0 on the window) — DECIDE (fix candidates there). Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
+   gets no fib (`_current_cycle` + set-if-absent terminals; latent, 0 on the window). **DECIDED 2026-10-08 (round 9,
+   PLAN_I §6):** R9-1 (b) — S5 lands first (its order tripwire raises on F16), THEN an **MS fix plan** (F16: a
+   back-filled candle's re-step sees the state as of that candle; + R9-2 (a), F17's MS side: a breakout must break
+   cycle T−1's confirmed `cts_threshold` at its apply, the BOS window ends at the CTS anchor) — its own plan and
+   `/compare`, NEXT after S5 (+ S5b); R9-3 (a) — F19 fixed in stage **S5b** (the cycle-table end caps a fib's end). Baseline: S_F1 `20261006_224610_42c137c` (= `LATEST_week9-entries-decisions`; CSVs == S_B, the
    charts add the M15 fib layer). Likely inputs (to confirm with the
    user): the 2026-10-01 item and D5 below, and §E "Cross-cycle fib bundled follow-up" with its parked open
    questions (`engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §13).
@@ -131,7 +135,8 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    POIs on sub, and also additionally revisit the overall sub cross-fib logic". Today a sub's single-cycle fib is only
    a fallback (cross fails, established phase); the change lets the two coexist — additive, more POIs, so it pulls
    against item 1, which is decided first. Iterative: scenario / parameter flips + chart review. **Also fix here
-   (user 2026-10-02, PLAN_H D5): the sub MS snapshot's fib** — a sub's in-flight POI snapshot (sd-proximity CTS
+   (user 2026-10-02, PLAN_H D5): the sub MS snapshot's fib — DONE by PLAN_I S5 (2026-10-08: MS reads its embedded
+   FibTracker's decision, CROSS_CYCLE_FIB_SPEC §8)** — a sub's in-flight POI snapshot (sd-proximity CTS
    confirmation) always uses the INTRA-cycle fib (`select_fib_anchor_for_cycle` → `"intra"` for sid 0, every sub)
    while the drawn sub POIs come from the cross fibs: they differ on 8 unique sub cycles (e.g. confluence sub 0 cyc 2:
    drawn POI IC 678 vs MS's fib zone ~100 pips away); no outcome diverged on the window. "I think this IS something we
@@ -194,7 +199,10 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
 
 ## E. Trigger-based (only when the trigger fires)
 
-- **Cross-cycle fib bundled follow-up** — TRIGGER: a window that produces a MAIN cycle ≥ 2 cross. Then together:
+- **Cross-cycle fib bundled follow-up — CLOSED by PLAN_I (S4 + S5, 2026-10-08):** main runs the one FibTracker logic
+  (every cycle, the full walk, fill-as-of "current"; the bespoke main meta migrated, Q8), MS reads the same decision
+  through its embedded tracker (S5 — the cycle-1-only resolver retired), the Scenario-1 / revert ↔ ceiling merge is
+  moot, `M = 0` is pinned (CROSS_CYCLE_FIB_SPEC §9). Was — TRIGGER: a window that produces a MAIN cycle ≥ 2 cross. Then together:
   generalize the MS in-flight POI resolver (`compute_poi_inners_for_cycle`, cycle-1-only) to the full walk ("11b
   Part B"); reconcile the main cross's bespoke meta; widen the config window incrementally to FIND such a window and
   chart-review + `/compare` it. Parked with it (open questions): fill-as-of convergence main → "current"; the

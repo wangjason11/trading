@@ -44,6 +44,7 @@ from engine_v2.tests.test_unified_probe import _prepare_df
 from engine_v2.zones.cross_cycle_fib import CROSS_FIB_LIMIT_SOURCES, CrossFibLimit, beyond
 from engine_v2.zones.fib_tracker import FibEventOrderError, FibTracker, FibTrackerConfig
 from engine_v2.zones.structure_lifecycle import compute_main_cross_fib_limits, compute_main_started_by
+from engine_v2.tests._cross_fib_limits import NO_P
 
 PARENT, TF = "H1.main", "M15"
 
@@ -170,7 +171,7 @@ def _ms_run(sd, *, force_break_th=None):
         from engine_v2.tests import test_ms_cts_update_no_regress as _noreg
         from engine_v2.tests.test_unified_probe import _prepare_df
         from engine_v2.structure.structure_engine import compute_bounded_structure
-        res = compute_bounded_structure(_prepare_df(rows if sd == 1 else _noreg._mirror(rows)), 0, sd)
+        res = compute_bounded_structure(_prepare_df(rows if sd == 1 else _noreg._mirror(rows)), 0, sd, cross_fib_limit=NO_P)
     return res, seen, out.getvalue()
 
 
@@ -629,7 +630,7 @@ def test_main_limit_holds_when_a_later_anchors_reversal_winner_applies_first(sd,
     candidate (apply 9) — no REVERSAL_CANDIDATE sits at the realised reversal, yet the limit is the open watch's
     frozen barrier (MARKET_STRUCTURE_SPEC's later-winner case; `test_ms_reversal_on_expiry`)."""
     from engine_v2.tests import test_ms_reversal_on_expiry as RV
-    res = _q(compute_bounded_structure, _prepare_df(RV._rows(RV._later_winner_rows, sd)), 0, sd)
+    res = _q(compute_bounded_structure, _prepare_df(RV._rows(RV._later_winner_rows, sd)), 0, sd, cross_fib_limit=NO_P)
     assert [int(e.idx) for e in res.events if e.type == "STATE_CHANGED" and e.meta.get("to") == "reversal"] == [8]
     assert [int(e.meta["apply_idx"]) for e in res.events if e.type == "REVERSAL_CANDIDATE"] == [9]
     lim = compute_main_cross_fib_limits(list(res.events) + [_est(20, 0.6, 1, 0, -sd)])

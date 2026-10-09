@@ -912,7 +912,8 @@ The hindsight has two halves:
   then — and only their **formed prefix** — count. The cut is keyed on the
   moment, never on `check_to_idx` (the fill horizon, which can be a CTS anchor
   that precedes the moment). Where it is applied and where it is deliberately
-  not (the MS in-flight snapshot, IC identification, the cycle-0 caches):
+  not (IC identification — in the drawn POI and in MS's in-flight pick; until PLAN_I S5 also the MS in-flight
+  resolver and the cycle-0 caches):
   IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
 - **Merged bounds — harmless except degenerate gaps.** While the run is still
   growing (`formed_at` … `end_idx`), testing the formed prefix against the
@@ -1152,7 +1153,9 @@ the in-flight resolver does not cut, so when a lag-0 CTS_ESTABLISHED / raw
 CTS_UPDATED's only sd gap forms one candle later, MS keeps a POI inner for a fib
 FibTracker never creates; 0 cases on the reference window. The two layers still
 agree on cond2 / cond3. IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3
-rule".)
+rule".) (PLAN_I S5, 2026-10-08: the resolver, the shared selector and the M1 divergence are RETIRED — MS reads its
+embedded FibTracker's decision, fed at every CTS emit; the lesson above now reads "every emit path of a CTS event must
+feed the tracker", LANDMINES "MS's POI inner IS the drawn fib's decision".)
 
 ---
 
@@ -1196,6 +1199,9 @@ overhead is acceptable.
 ---
 
 ## Pitfall: Positional resolver args drift when the protocol grows
+
+(The `PoiInnersResolver` protocol is retired since PLAN_I S5 — MS takes an embedded FibTracker + a 3-argument
+`poi_inner_for_fib`, and no graceful scope is left to hide an error; the lesson stands for any callable protocol.)
 
 **Problem:** The `PoiInnersResolver` protocol in `market_structure.py`
 grew from 8 → 10 positional args when c0_data + fill_threshold were

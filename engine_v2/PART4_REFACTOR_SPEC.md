@@ -2102,6 +2102,9 @@ between every step:
        constructs MarketStructure with closures that bind to the
        relocated `zones/` functions. This is the only place the resolver
        wiring lives.
+     - (PLAN_I S5, 2026-10-08: `poi_inners_resolver` / `compute_poi_inners_for_cycle`
+       retired — MS takes an embedded `FibTracker` + `poi_zones.poi_inner_for_fib`,
+       wired in the same helper; CROSS_CYCLE_FIB_SPEC §8.)
      - After §13.5.b, `structure/market_structure.py` has zero imports
        from `zones/`. The structure→zones inversion is gone.
      - LANDMINES "Backward Dependency: structure/ → zones/

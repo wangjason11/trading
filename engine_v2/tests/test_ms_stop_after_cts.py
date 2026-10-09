@@ -44,6 +44,7 @@ from engine_v2.tests.test_unified_probe import (
     _ref_zone_uptrend,
 )
 from engine_v2.zones.zone_proximity import DEFAULT_PROBE_RESET_PIPS, DEFAULT_PROBE_RESET_WICK
+from engine_v2.tests._cross_fib_limits import NO_P
 
 _START = 0
 _SD = 1
@@ -61,7 +62,7 @@ def _make(raw, *, end_idx=None, **kw):
         timeframe="H1",
         pip_size=_pip_size_from_pair(df),
         end_idx=end_idx,
-        **kw,
+        **{"cross_fib_limit": NO_P, **kw},
     )
 
 
@@ -175,7 +176,7 @@ class TestStopAfterCtsEstablished:
         raw = _make_multicycle_data()
         omitted = _run(raw)
         explicit = _run(raw, stop_after_cts_established=None)
-        prim = compute_bounded_structure(_prepare_df(raw), _START, _SD)
+        prim = compute_bounded_structure(_prepare_df(raw), _START, _SD, cross_fib_limit=NO_P)
         assert omitted.early_stop_idx is None
         assert explicit.early_stop_idx is None
         assert _sig(omitted.events) == _sig(explicit.events) == _sig(prim.events)
@@ -217,7 +218,7 @@ class TestStopAfterCtsEstablished:
         df = _prepare_df(raw)
         ms = _make_market_structure(
             df, struct_direction=_SD, start_idx=_START, structure_id=0, timeframe="H1",
-            pip_size=_pip_size_from_pair(df), stop_after_cts_established=2,
+            pip_size=_pip_size_from_pair(df), stop_after_cts_established=2, cross_fib_limit=NO_P,
         )
         ms.debug = True
         ms.run()

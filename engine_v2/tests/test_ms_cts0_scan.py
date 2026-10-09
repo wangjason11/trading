@@ -21,6 +21,7 @@ from engine_v2.tests.test_unified_probe import (
     _make_uptrend_data,
     _prepare_df,
 )
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 def _first_cts_established(events, structure_id=0, cycle_id=0):
@@ -61,7 +62,7 @@ def test_ms_scan_mode_agrees_with_shared_routine(make_data, direction, bos0_inne
         end_idx=None,
         timeframe="H1",
         enforce_cts0_new_extreme=True,
-        bos0_inner=bos0_inner,
+        bos0_inner=bos0_inner, cross_fib_limit=NO_P,
     )
     ms.debug = True
     _df2, events, _levels = ms.run()
@@ -88,6 +89,7 @@ def test_scan_mode_requires_bos0_inner():
             structure_id=0,
             timeframe="H1",
             enforce_cts0_new_extreme=True,
+            cross_fib_limit=NO_P,
             # bos0_inner omitted on purpose
         )
 
@@ -105,7 +107,7 @@ def test_no_breakout_in_window_establishes_no_cycle0():
         end_idx=None,
         timeframe="H1",
         enforce_cts0_new_extreme=True,
-        bos0_inner=high_inner,
+        bos0_inner=high_inner, cross_fib_limit=NO_P,
     )
     ms.debug = True
     _df2, events, _levels = ms.run()

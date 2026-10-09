@@ -43,6 +43,7 @@ from engine_v2.structure.structure_engine import (
 from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.patterns.pattern_engine import detect_patterns
 from engine_v2.patterns.imbalance import compute_imbalance
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 # ---------------------------------------------------------------------------
@@ -395,7 +396,7 @@ def test_build_geometry_core_matches_pool_builder(reversing_df, uptrend_df):
     inner = float(build_ad_hoc_bos0_reference_zone(reversing_df, 0, 1).inner)
     core = edm._build_geometry(
         reversing_df, sd=1, start_abs=0, run_cap_abs=len(reversing_df) - 1,
-        bos0_inner=inner, timeframe=_TF,
+        bos0_inner=inner, timeframe=_TF, cross_fib_limit=NO_P,
     )
     assert core is not None
     bounded, slice_begin = core
@@ -417,7 +418,7 @@ def test_build_geometry_core_matches_pool_builder(reversing_df, uptrend_df):
     # Same values with a non-zero slice_begin (uptrend, start 60 → 10, cap 69).
     core2 = edm._build_geometry(
         uptrend_df, sd=1, start_abs=60, run_cap_abs=len(uptrend_df) - 1,
-        bos0_inner=None, timeframe=_TF,
+        bos0_inner=None, timeframe=_TF, cross_fib_limit=NO_P,
     )
     assert core2 is not None
     b2, sb2 = core2
@@ -426,9 +427,9 @@ def test_build_geometry_core_matches_pool_builder(reversing_df, uptrend_df):
     # The core has the same guards and creates nothing (no pool to create in).
     assert edm._build_geometry(
         uptrend_df, sd=1, start_abs=len(uptrend_df), run_cap_abs=len(uptrend_df) - 1,
-        bos0_inner=None, timeframe=_TF,
+        bos0_inner=None, timeframe=_TF, cross_fib_limit=NO_P,
     ) is None
     assert edm._build_geometry(
         uptrend_df, sd=1, start_abs=len(uptrend_df) - 4, run_cap_abs=len(uptrend_df) - 1,
-        bos0_inner=None, timeframe=_TF,
+        bos0_inner=None, timeframe=_TF, cross_fib_limit=NO_P,
     ) is None

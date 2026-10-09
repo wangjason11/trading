@@ -19,6 +19,7 @@ from engine_v2.common.types import ImbalanceInstance
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.tests._event_factory import make_cts_established
 from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig
+from engine_v2.tests._cross_fib_limits import NO_P
 
 LAG = 2
 
@@ -224,23 +225,26 @@ def _mirror(rows, k=1.2300):
 
 
 def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment_bearish(monkeypatch):
-    """The sd=-1 twin of the role-pin test: the bearish raw-update branch hands
-    its processing candle; the pattern tying the raw-updated CTS (extreme 24,
-    apply 25) refreshes nothing (2026-09-27: strict new extreme on both paths)."""
+    """The sd=-1 twin of the role-pin test, re-derived at the FEED (PLAN_I S5: MS's read is its embedded tracker's
+    decision, asked at the fed event's moment): the bearish raw-update branch feeds its processing candle as the
+    moment; the pattern tying the raw-updated CTS (extreme 24, apply 25) feeds nothing (2026-09-27: strict new
+    extreme on both paths)."""
     import engine_v2.structure.structure_engine as se
+    from engine_v2.structure import event_fields as _ef
     from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_tied_pattern_breakout
     from engine_v2.tests.test_unified_probe import _prepare_df
     calls = []
-    real = se.compute_poi_inners_for_cycle
+    real = FibTracker.on_cts_updated
 
-    def spy(df, bos_idx, bos_price, cts_idx, *a, **k):
-        calls.append((int(cts_idx), k["fill_horizon_idx"]))
-        return real(df, bos_idx, bos_price, cts_idx, *a, **k)
+    def spy(self, ev, *a, **k):
+        if self._quiet:                           # MS's embedded tracker
+            calls.append((int(_ef.cts_anchor_idx(ev)), int(_ef.event_moment(ev))))
+        return real(self, ev, *a, **k)
 
-    monkeypatch.setattr(se, "compute_poi_inners_for_cycle", spy)
+    monkeypatch.setattr(FibTracker, "on_cts_updated", spy)
     with contextlib.redirect_stdout(io.StringIO()):
         res = se.compute_bounded_structure(
-            _prepare_df(_mirror(_multicycle_with_tied_pattern_breakout())), 0, -1)
+            _prepare_df(_mirror(_multicycle_with_tied_pattern_breakout())), 0, -1, cross_fib_limit=NO_P)
     raw = [e.idx for e in res.events if e.type == "CTS_UPDATED" and e.meta["via"] == "replay_raw"]
     assert raw                                     # the fixture exercises the bearish raw branch
     assert all((r, r) in calls for r in raw)
@@ -248,88 +252,10 @@ def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment_bearish(monkeypatch)
     assert (24, 24) in calls and not [h for _c, h in calls if h == 25]
 
 
-def test_compute_poi_inners_uses_its_fill_horizon(monkeypatch):
-    """`compute_poi_inners_for_cycle` forwards `fill_horizon_idx` (not `cts_idx`)
-    as the Scenario-2 cond1 horizon: gap @40 fills at 41 → with the horizon 42
-    cond1 is false → scenario_3."""
-    import engine_v2.zones.poi_zones as poi_zones
-    seen = []
-    real = poi_zones.select_fib_anchor_for_cycle
-
-    def spy(*a, **k):
-        out = real(*a, **k)
-        seen.append((k["fill_horizon_idx"], out[-1]))
-        return out
-
-    monkeypatch.setattr(poi_zones, "select_fib_anchor_for_cycle", spy)
-    df = _ip_ready(_df(60, [ImbalanceInstance(15, 15, 1, 1.10, 1.00, 0.10),
-                            ImbalanceInstance(40, 40, 1, 1.30, 1.20, 0.10)], fills=[(41, 1.22)]))
-    c0 = {"bos_idx": 10, "bos_price": 1.0, "cts_idx": 20, "cts_price": 1.15,
-          "has_unfilled": True, "scenario1": None}
-    poi_zones.compute_poi_inners_for_cycle(df, 30, 1.2, 40, 1.35, 1, structure_id=1, cycle_id=1,
-                                           c0_data=c0, fill_horizon_idx=42,
-                                           snapshot_horizon_idx=42)
-    assert seen == [(42, "scenario_3")]
-
-
-# --- Plan E E3a′: MS's cycle-0 snapshot (FibTracker's twin cache retired with the H1-main logic, PLAN_I S4) ---
-
-def test_e3ap_ms_cycle0_snapshot_is_asked_at_the_refresh_moment():
-    """The MS mirror: CTS_0 anchor 20, refresh moment 22, the gap fills at 21 →
-    filled (lock-step with FibTracker's cache)."""
-    from types import SimpleNamespace
-    from engine_v2.structure.market_structure import MarketStructure
-    ms = MarketStructure.__new__(MarketStructure)
-    ms.df = _df(fills=[(21, 1.02)])
-    ms._fill_threshold = 0.70
-    ms.state = SimpleNamespace(cts_cycle_id=0, cts=SimpleNamespace(idx=20, price=1.15),
-                               bos=SimpleNamespace(idx=10, price=1.0),
-                               struct_direction=1, cycle0_data=None)
-    ms._update_cycle0_data(22)
-    assert ms.state.cycle0_data["has_unfilled"] is False
-
-
-def test_e3ap_compute_poi_inners_uses_its_snapshot_horizon(monkeypatch):
-    """`compute_poi_inners_for_cycle` forwards `snapshot_horizon_idx` (not
-    `bos_idx`) as cond3's horizon: the cycle-0 gap fills at 35 → asked at 42 →
-    scenario_3 (at the BOS anchor 30 it would be a cross)."""
-    import engine_v2.zones.poi_zones as poi_zones
-    seen = []
-    real = poi_zones.select_fib_anchor_for_cycle
-
-    def spy(*a, **k):
-        out = real(*a, **k)
-        seen.append((k["snapshot_horizon_idx"], out[-1]))
-        return out
-
-    monkeypatch.setattr(poi_zones, "select_fib_anchor_for_cycle", spy)
-    df = _ip_ready(_df(60, [ImbalanceInstance(15, 15, 1, 1.10, 1.00, 0.10),
-                            ImbalanceInstance(35, 35, 1, 1.30, 1.20, 0.10)], fills=[(35, 1.02)]))
-    c0 = {"bos_idx": 10, "bos_price": 1.0, "cts_idx": 20, "cts_price": 1.15,
-          "has_unfilled": True, "scenario1": None}
-    poi_zones.compute_poi_inners_for_cycle(df, 30, 1.2, 40, 1.35, 1, structure_id=1, cycle_id=1,
-                                           c0_data=c0, fill_horizon_idx=42, snapshot_horizon_idx=42)
-    assert seen == [(42, "scenario_3")]
-
-
-def test_e3ap_ms_refresh_snapshot_horizon_is_the_cycle_established_moment(monkeypatch):
-    """MS passes the current cycle's CTS_ESTABLISHED moment as the snapshot
-    horizon: on the lagging-EST fixture (anchor 9, moment 10) every cycle-1
-    refresh carries 10."""
-    import engine_v2.structure.structure_engine as se
-    from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_anchor_data, _prepare_df
-    calls = []
-    real = se.compute_poi_inners_for_cycle
-
-    def spy(df, bos_idx, bos_price, cts_idx, cts_price, sd, sid, cycle_id, *a, **k):
-        calls.append((cycle_id, k["snapshot_horizon_idx"]))
-        return real(df, bos_idx, bos_price, cts_idx, cts_price, sd, sid, cycle_id, *a, **k)
-
-    monkeypatch.setattr(se, "compute_poi_inners_for_cycle", spy)
-    with contextlib.redirect_stdout(io.StringIO()):
-        se.compute_bounded_structure(_prepare_df(_make_second_cts_moment_after_anchor_data()), 0, +1)
-    assert (1, 10) in calls
-    assert all(h == 10 for c, h in calls if c == 1)
+# PLAN_I S5 retired MS's resolver (`compute_poi_inners_for_cycle` → the Scenario-2 selector) and its cycle-0
+# snapshot: `test_compute_poi_inners_uses_its_fill_horizon`, `test_e3ap_ms_cycle0_snapshot_is_asked_at_the_refresh_
+# moment`, `test_e3ap_compute_poi_inners_uses_its_snapshot_horizon` and `test_e3ap_ms_refresh_snapshot_horizon_is_the_
+# cycle_established_moment` went with them (the feed's moments: the role pins above and in test_plan_e_role_pins).
 
 
 def _raw_upd(i, price, sid, cyc):

@@ -10,8 +10,11 @@
 > **Companion spec:** `FIB_LIFECYCLE_SPEC.md` (the lifecycle axes: start / end / status, Option A, the floor clamp).
 > This spec is about WHICH fib a cycle gets and its anchors.
 >
-> **Still to come (PLAN_I §9.4):** S5 — MarketStructure's in-flight POI read uses this same decision (§8 below; until
-> then MS reads the retired Scenario-2 selector); S6 — the `fib_mode` meta key / CSV column is retired.
+> **MarketStructure reads this same decision since PLAN_I S5 (2026-10-08):** an embedded FibTracker (§8); MS's retired
+> Scenario-2 in-flight read is in **Appendix A, part 2** (verbatim; the last commit that ran it is `0de98ca`, PLAN_I S4).
+>
+> **Still to come (PLAN_I §9.4):** S5b — a cycle's lifecycle end caps its fib's end (PLAN_I R9-3, F19); S6 — the
+> `fib_mode` meta key / CSV column is retired.
 
 ---
 
@@ -32,10 +35,13 @@ cycle's CTS anchor strictly beyond `P`), else a single — main and sub alike.
   pattern-path CTS_UPDATED at their ANCHOR; LANDMINES "Event Sort Order Is a Dispatch Invariant"). Handlers:
   `on_cts_established(event, df, bos_idx, bos_price)`, `on_cts_updated(event, df)`, `on_cts_confirmed(event)`,
   `on_cts_threshold_updated(event, df)`; then `set_reversal_terminals` and `_finalize_lifecycle_fields`.
-- **Two order tripwires (`FibEventOrderError`, a `RuntimeError`):** the tracker raises when cycle T's CTS_ESTABLISHED
-  arrives before cycle T−1's CTS_CONFIRMED (PLAN_I F14, S2); the dispatch raises when a CTS_ESTABLISHED arrives before
-  its own cycle's BOS_CONFIRMED (F17, S2b — it used to be dropped silently). 0 on the reference window; both shapes
-  come from MS (PLAN_I §9.2 F14 / F16 / F17 — the MS side is parked to the S5 round).
+- **Three order tripwires (`FibEventOrderError`, a `RuntimeError`):** the tracker raises when cycle T's
+  CTS_ESTABLISHED arrives before cycle T−1's CTS_CONFIRMED (PLAN_I F14, S2); the dispatch raises when a CTS_ESTABLISHED
+  arrives before its own cycle's BOS_CONFIRMED (F17, S2b — it used to be dropped silently); and MarketStructure raises
+  at the end of every run whose embedded tracker (§8) saw an EMISSION order other than `processing_order_key` order
+  (`check_processing_order`, S5 — the F16 and F17 (i) shapes; F17 (ii) trips only the dispatch). 0 on the reference
+  window; every shape comes from MS (PLAN_I §9.2 F14 / F16 / F17) and stays loud until the MS fix planned after S5
+  (PLAN_I R9-1 / R9-2).
 - **Every TIME half is the handled event's MOMENT** (`ef.event_moment`; Plan E E3a): activation / deactivation /
   reactivation stamps, fill horizons, the knowability cut (`evaluated_at`, Plan F — `IMBALANCE_FILL_SEMANTICS.md`).
 
@@ -59,7 +65,8 @@ F18); the pre-established cross (created before the establishment) ends it at it
 `FIB_LIFECYCLE_SPEC.md` §7). "The previous fib" is the structure's LAST cycle that has one (`_current_cycle`): when a
 cycle in between got no fib, the earlier fib ends at this later establishment, not at its own cycle's end (the stream
 terminal is set-if-absent, so it beats finalize's pass-through end) — PLAN_I §9.2 F19, latent (0 on the reference
-window), parked for a decision.
+window; one real instance in 2,400 exact real slices). Decided (R9-3): the cycle's lifecycle end will CAP the fib's
+end — stage S5b.
 
 ---
 
@@ -107,7 +114,7 @@ window), parked for a decision.
   (1) the target's OWN window — `[BOS_T, CTS anchor]` at the establishment / an update, `[prospective BOS, the
   processing candle]` on the threshold path — must hold an unfilled sd imbalance formed by the moment — else the active cross deactivates (`own_imb_filled`) and the cycle's existing single re-checks its own
   window (S3b F5: it extends and deactivates); (2) the **dead-cycle walk** from T−1 down to 0
-  (`resolve_cross_cycle_eligibility`, `fill_as_of="current"`): cycle k is dead when `[BOS_k, CTS_k]` holds no unfilled
+  (`resolve_cross_cycle_eligibility`): cycle k is dead when `[BOS_k, CTS_k]` holds no unfilled
   sd imbalance filled to the current candle (cached in `_dead_cycles[sid]`, dead stays dead); the walk stops at the
   first dead cycle → `earliest_x`; (3) the version transition, keyed by the START anchor: no version → create v0;
   same start → extend the CTS anchor in place; start moved up (`cross_shortened`) → v+1; an inactive version with the
@@ -143,34 +150,65 @@ the limit; `cross_failed` for the fallback of an allowed cycle.
 ## 7. The shared routine
 
 `zones/cross_cycle_fib.py` `resolve_cross_cycle_eligibility` — pure: the own test + the dead-cycle walk → `earliest_x`
-/ `crosses` (+ the resolved anchors). FibTracker calls it with `fill_as_of="current"`, `evaluated_at` = the moment.
-Its `fill_as_of="snapshot"` / `prior_cached_liveness` parameters serve only the retired Scenario-2 selector
-`select_fib_anchor_for_cycle`, still read by MarketStructure's in-flight POI resolver until S5; `target_ceiling` is
-reserved and has no caller. S5 deletes all three (PLAN_I §9.1).
+/ `crosses` (+ the resolved anchors), each prior cycle checked to the current candle; FibTracker is its only caller
+(`fill_horizon_idx` = `evaluated_at` = the handled event's moment). The retired Scenario-2 selector's "snapshot"
+fill-as-of policy (`fill_as_of` / `prior_cached_liveness` / `snapshot_horizon_idx`) and the reserved `target_ceiling`
+were deleted in S5 with MS's resolver, their last reader (Appendix A, part 2).
 
 ---
 
-## 8. MarketStructure's in-flight read (until PLAN_I S5)
+## 8. MarketStructure's in-flight read — the same decision (PLAN_I S5, D5)
 
-MS's sd-zone-proximity CTS confirmation reads POI inners through `poi_zones.compute_poi_inners_for_cycle`, which still
-selects the anchor with the retired Scenario-2 rule (`select_fib_anchor_for_cycle`: "intra" for sid 0 — every sub —
-and every cycle ≠ 1) and `evaluated_at=None` (the M1 divergence, LANDMINES "Scenario 2 anchor agreement"). The drawn
-fib and MS's read therefore differ where a cross or the limit decides (PLAN_I §9.2 F9: 20 / 371 refreshes on the window,
-0 / 475 proximity answers changed). S5 replaces it with an embedded tracker running THIS logic (PLAN_I §9.3 D5); the
-appendix then gains MS's retired read.
+MS's sd-zone-proximity CTS confirmation (`_maybe_confirm_cts_via_proximity`) reads a POI inner refreshed at every
+CTS_ESTABLISHED / CTS_UPDATED. Since S5 that inner comes from THIS logic:
+
+- **The embedded tracker.** `structure_engine._make_market_structure` builds a `FibTracker` — the downstream's config
+  (`DEFAULT_FIB_LEVELS`, `FIB_FILL_THRESHOLD` = 0.70), `quiet=True` (no `[fib]` lines from every geometry / probe MS),
+  the run's REQUIRED `cross_fib_limit` keyed by its `structure_id` — and injects it with `poi_zones.poi_inner_for_fib`
+  (MS imports nothing from `zones/`). The limit: main sid N ← `compute_main_cross_fib_limit(events of sids < N, N)`
+  (the helper `compute_main_cross_fib_limits` maps for the downstream — equal by construction); a sub's geometry ←
+  the pool's `P` (§3, computed at the fire; `_build_geometry` → `compute_bounded_structure`); the probe's Phase 2 ←
+  `CrossFibLimit(None, "none")` explicitly (PLAN_I F7: its result never depends on the read).
+- **Fed at emit.** MS hands the tracker each CTS event as it is emitted: CTS_ESTABLISHED after its cycle's
+  BOS_CONFIRMED (with `st.bos`, the pairing the downstream dispatch makes), every CTS_UPDATED (raw and pattern path),
+  CTS_CONFIRMED, CTS_THRESHOLD_UPDATED (`MarketStructure._feed_fib_tracker`). The tracker's own `RuntimeError`s pass
+  through; any other error is re-raised as `EmbeddedFibTrackerError` (a `RuntimeError` — the sub geometry's `except
+  (ValueError, IndexError)` cannot drop the sub).
+- **The read.** At each refresh: `FibTracker.representative_fib(sid, cycle)` — the cycle's ACTIVE latest cross, else
+  its ACTIVE single, else None — handed to `poi_inner_for_fib(df, fib, fill_threshold)`, which reads the frame's
+  `attrs["timeframe"]` first on EVERY call (a no-fib refresh included; PLAN_H PR1, PLAN_I F11) and returns the
+  institutional-pattern pick's inner (`select_ip_ic`, the drawn POI's selector), or None → the BOS inner only. Every
+  imbalance question of the fib decision is asked at the fed event's moment (Plan F), so the M1 divergence and the
+  fib the tracker never creates / has deactivated are gone (PLAN_I §9.2 F9).
+- **The order.** The drawn fib is decided in `processing_order_key` order, MS's in EMISSION order; the two are the same
+  sequence unless a fib-handled event of a structure has its stamped idx in one of its CTS_ESTABLISHED's
+  [anchor, moment) (F14; F17 (i)) or a CTS is confirmed with an anchor AT OR after its confirmation candle (F16 — at
+  an equal idx `processing_order_key` sorts the confirmation first). F17 (ii) — a cycle whose BOS anchor follows its
+  CTS anchor — keeps the order (the establishment and its BOS share their moment): MS completes, only the downstream
+  dispatch raises. At the end of every MS run `check_processing_order()` compares them and raises
+  `FibEventOrderError` on a difference (the run is complete when it raises — `ms.events` / `ms.df` are whole) — in
+  the main run, a sub geometry AND the probe's Phase 2 (kept, S5 landing review m1: the probe's result never depends
+  on the read, F7, but an F16 / F17 (i) shape inside a probe iteration stops the replay too, even for a start never
+  built). 0 on the reference window and on 400 random real slices (lens A); PLAN_I R9-1 / R9-2: the MS fix comes
+  after S5 as its own plan.
+- **Measured (PLAN_I §9.10, S5 step A, `plan_i_inputs/s5_agreement.py`):** the embedded tracker's handled sequence ==
+  the downstream's (H1 sid 0 52 / 52, sid 1 24 / 24; each of the 8 subs' downstream sequence an exact prefix of its
+  geometry's); the inner differs from the retired resolver's at 20 / 371 refreshes; 0 / 475 proximity answers change.
 
 ---
 
 ## 9. Open items
 
-- **The S5 round (parked, PLAN_I R8-1 / R8-2):** F16 — MS can confirm a CTS with an anchor after its confirmation
-  candle (a range back-fill look-ahead; emission order ≠ `processing_order_key` order; the drawn fib locks at the
-  earlier anchor); F17's MS side — a cycle established on the previous cycle's CTS candle / a BOS anchor after its CTS
-  anchor (the downstream now raises on it). Register `IDEA_PARKING_LOT.md` §D.1 item 2.
+- **The MS fix (PLAN_I R9-1 / R9-2, after S5 — its own plan):** F16 — MS can confirm a CTS with an anchor after its
+  confirmation candle (a range back-fill look-ahead; the drawn fib locks at the earlier anchor; MS's end-of-run
+  tripwire now raises on it); F17's MS side — a cycle established on the previous cycle's CTS candle / a BOS anchor
+  after its CTS anchor (a breakout establishing cycle T must break T−1's confirmed `cts_threshold` at its apply; the
+  BOS window ends at the CTS anchor). Register `IDEA_PARKING_LOT.md` §D.1 item 2.
+- **S5b (PLAN_I R9-3):** F19 — the cycle's lifecycle end caps its fib's end (§2).
 - The old §13 items, reconciled: main's fill-as-of converged on "current" (S4); the deeper-walk fill-as-of is
   "current"; `M = 0` → no cross (pinned, S3); the Scenario-1 / revert ↔ ceiling merge is moot (both retired); `sid 0`
   has no `P` → singles, cycle 0 included (Q6); the in-flight resolver generalization and the sub snapshot's intra fib
-  are S5; single + cross coexistence is ruled out (I8).
+  are resolved by S5 (§8); single + cross coexistence is ruled out (I8).
 
 ---
 
@@ -180,7 +218,8 @@ The decisions are PLAN_I §6 (Q1–Q8, R0 … R8-3); the ones that shaped this s
 starting trigger), I1 (attach to triggers), I2 (main gets the pre-established cross), I5 (main's post-reversal handling
 = the reversal-started sub's), I8 (no coexistence), I-lean (unify on the sub's logic), Q6 (cycle 0 single everywhere),
 Q8 (the sub's meta format), R6-1 (d) + R7-3 (the past-limit single, labelled), R6-1b + R8-3 (S3b), R6-5 (S4 one stage),
-R2-3 (this appendix). The 2026-06-16 design decisions of the replaced spec are in Appendix A ("14. Decision log").
+R2-3 (this appendix), Q7 + R6-4 (S5: MS reads the same decision; the order tripwire raises), R9-1 / R9-2 (the MS fix
+after S5), R9-3 (S5b). The 2026-06-16 design decisions of the replaced spec are in Appendix A ("14. Decision log").
 
 ---
 
@@ -490,3 +529,150 @@ actual main multi-cycle cross (and Part B), expand the config window to find one
     user's rule, `plans/PLAN_I_cross_cycle_fib_revamp.md` §1.4); a cycle past it is a labelled single. PLAN_I S4
     moves main onto the sub path and rewrites this spec (the Scenario 1 / 2 / 3 logic, the revert and the ceiling
     on `P_rev` into a "Retired logic (history)" appendix).
+
+---
+
+## Appendix A, part 2 — MarketStructure's retired in-flight read (history)
+
+> Moved VERBATIM by PLAN_I S5 (2026-10-08) from the docs as they stood at `0de98ca` (PLAN_I S4) — the last commit whose
+> MarketStructure ran this read (`MarketStructure._refresh_poi_inners_for_cycle` → `poi_zones.compute_poi_inners_for_cycle`
+> → `fib_tracker.select_fib_anchor_for_cycle`, with MS's cycle-0 snapshot `cycle0_data` / `_update_cycle0_data` and
+> the routine's "snapshot" fill-as-of policy; `git show 0de98ca:<path>`). Cross-references point into those old
+> documents; headings demoted. Nothing here describes the current code (§8).
+
+### From `zones/CROSS_CYCLE_FIB_SPEC.md` (§8 at `0de98ca`)
+
+#### 8. MarketStructure's in-flight read (until PLAN_I S5)
+
+MS's sd-zone-proximity CTS confirmation reads POI inners through `poi_zones.compute_poi_inners_for_cycle`, which still
+selects the anchor with the retired Scenario-2 rule (`select_fib_anchor_for_cycle`: "intra" for sid 0 — every sub —
+and every cycle ≠ 1) and `evaluated_at=None` (the M1 divergence, LANDMINES "Scenario 2 anchor agreement"). The drawn
+fib and MS's read therefore differ where a cross or the limit decides (PLAN_I §9.2 F9: 20 / 371 refreshes on the window,
+0 / 475 proximity answers changed). S5 replaces it with an embedded tracker running THIS logic (PLAN_I §9.3 D5); the
+appendix then gains MS's retired read.
+
+### From `structure/MARKET_STRUCTURE_SPEC.md` (the POI-inner refresh, "Snapshot fib on SUBS", "Snapshot vs per-candle — imbalance knowability" at `0de98ca`)
+
+The proximity check picks the closest-to-current-price sd inner across
+BOS and POIs. POI inners are refreshed at `CTS_ESTABLISHED` (new cycle)
+and at each `CTS_UPDATED` (CTS extended → Fib bounds expand → IC
+candidates may shift). Since PLAN_H landing B (2026-10-06) the snapshot
+holds 0 or 1 POI inner: the institutional-pattern pick of the AS-OF fib
+(`poi_zones.compute_poi_inners_for_cycle` → `select_ip_ic`, the drawn
+POI's own selector — D2; before it, the inners of the 1–3 V30 / V60 / V90
+picks). No pattern → the BOS inner alone. An IP error is NOT swallowed
+(LANDMINES "The POI Resolver Fails Loudly"): only the anchor selection +
+the fib construction keep the resolver's graceful `[]`. The snapshot is per-cycle in
+`MarketStructureState.poi_inners_for_cycle`. Both refreshes still run
+on cycle 0 (cheap; the cycle-0 POI refresh also keeps `cycle0_data` —
+the Scenario-2 cond2 mirror — in sync via `_update_cycle0_data`), but
+the per-candle check is gated off. The snapshot's ONLY reader is that
+check (`_maybe_confirm_cts_via_proximity` → `_check_proximity_at_candle`).
+
+**Snapshot fib on SUBS ≠ the drawn sub fib (found 2026-10-01; fix scheduled in `IDEA_PARKING_LOT.md` §D.1 item 2,
+user 2026-10-02 — PLAN_I S5; since PLAN_I S4 the same holds for main, whose drawn fib also runs the one logic):** the resolver's fib choice (`select_fib_anchor_for_cycle`) returns `"intra"` for `sid == 0`, and
+every sub is sid 0 — so a sub's snapshot always reads the INTRA-cycle fib (BOS_n → CTS_n), while its drawn POIs come
+from the cross-cycle fib. They differ on 8 unique sub cycles of the reference window (e.g. confluence sub 0 cycle 2:
+drawn POI IC 678 at 0.56234–0.56268 vs the snapshot fib's zone 0.57244–0.57364); no outcome diverged there. Detail:
+`plans/PLAN_H_institutional_pattern_poi.md` §3 ("Drawn POI vs MS snapshot", D5).
+
+**Snapshot vs per-candle — imbalance knowability is bounded by the consumer
+gate, no refresh-time cut (Plan F, 2026-09-24):** MS's in-flight imbalance
+reads — IC cond3 in `find_ic_candidates` over `(candidate, st.cts.idx]` and
+Scenario-2 cond1 / cond3 in `select_fib_anchor_for_cycle` over `[BOS_1, CTS_1]`
+/ `[BOS_0, CTS_0]` (both inside the resolver `compute_poi_inners_for_cycle`),
+plus the cycle-0 mirror `_update_cycle0_data` over `[BOS_0, CTS_0]` — pass
+`evaluated_at=None`: no c3 cut (IMBALANCE_FILL_SEMANTICS.md "Knowability — the
+c3 rule"). Refreshed on `st.cts.idx` itself (a lag-0 `CTS_ESTABLISHED`, a raw
+`CTS_UPDATED`), the snapshot can therefore count a gap whose c2 is the refresh
+candle — one that forms only at the NEXT candle. The consumer gate makes that
+safe: `_maybe_confirm_cts_via_proximity` is gated `i > st.cts.idx` and every
+window ends at or before `st.cts.idx`, so every gap it counts (c2 ≤
+`st.cts.idx`) has formed (`formed_at` ≤ `st.cts.idx + 1` ≤ `i`) by the candle
+it is used on; `cycle0_data["has_unfilled"]` is read only at a later cycle-1
+refresh (> CTS_0). **Do NOT add a refresh-time cut:** it would drop a gap that
+is formed at every candle the snapshot is read on (and the snapshot stays fixed
+until the next refresh), and it would have broken cond2 agreement with FibTracker's
+equally uncut cycle-0 cache (retired in PLAN_I S4). FibTracker, which decides once per event, does cut
+at the event's moment — the accepted MS/FibTracker divergence that follows (M1)
+is documented in LANDMINES "Scenario 2 anchor agreement".
+
+### From `LANDMINES.md` ("Scenario 2 anchor agreement" at `0de98ca`)
+
+**Scenario 2 anchor agreement (closed 2026-05-13) — FibTracker side RETIRED by PLAN_I S4 (2026-10-08); the whole
+entry retires with MS's in-flight resolver in S5.** Since S4 FibTracker no longer calls `select_fib_anchor_for_cycle`
+(main runs the one logic, `zones/CROSS_CYCLE_FIB_SPEC.md`; its Scenario 1 / revert / cycle-0 cache are gone): only
+MS's in-flight resolver still reads that selector, so MS's read and the drawn fib differ wherever a cross or the limit
+decides (PLAN_I §9.2 F9 — 20 / 371 refreshes on the reference window, 0 / 475 proximity answers changed). The
+paragraphs below describe the pre-S4 pairing (FibTracker's sentences are history):
+MarketStructure's in-flight POI snapshot
+(`zones/poi_zones.py::compute_poi_inners_for_cycle`) and FibTracker's
+downstream POI derivation both pick Fib anchors via the shared pure
+utility `zones/fib_tracker.py::select_fib_anchor_for_cycle`. The Scenario 2
+cross-cycle cond1/cond2/cond3 check is, since §11a (2026-06-17), DELEGATED to
+the shared pure routine `zones/cross_cycle_fib.py::resolve_cross_cycle_eligibility`
+(single-step `target=1`, `fill_as_of="snapshot"`). Fill horizons are in lock-step
+too: cond1's is the triggering event's MOMENT in both layers (FibTracker: the
+handled event's; MS: `_refresh_poi_inners_for_cycle(moment_idx)` — Plan E E3a),
+cond2 (the cycle-0 caches: the moment of their last write) and cond3
+(`snapshot_horizon_idx` = the BOS_1 moment == the CTS_1 ESTABLISHED moment) since
+Plan E E3a′ — any change moves both layers in the same change.
+`select_fib_anchor_for_cycle`
+is now a thin wrapper applying only the main-only Scenario-1 outer gate around
+it. So for `sid >= 1, cycle_id == 1` cases both layers agree on whether to
+anchor at `(BOS_0, CTS_1)` (Scenario 2) or `(BOS_n, CTS_n)` (Scenario 3 / intra)
+— except the knowability divergence (M1) below.
+MS tracks the cycle-0 snapshot (`MarketStructureState.cycle0_data`)
+populated at cycle-0 CTS_ESTABLISHED, refreshed on each CTS_UPDATED, and
+locked at CTS_0 CONFIRMED — threaded into the resolver via the
+`PoiInnersResolver` protocol's `c0_data` slot. Its `has_unfilled` and
+FibTracker's cycle-0 cache (`_cross_cycle_data[sid]["cycle0"]["has_unfilled"]`)
+are both Scenario-2 **cond2** and both stored **UNCUT** (`evaluated_at=None`,
+Plan F): their only reader is `select_fib_anchor_for_cycle`
+(`prior_cached_liveness`) at cycle 1 only (sid ≥ 1) — FibTracker at CTS_1 ESTABLISHED, MS
+at each cycle-1 refresh — i.e. after CTS_0, when every gap in `[BOS_0, CTS_0]`
+has formed. Keep BOTH uncut or cond2 diverges. A FibTracker decision taken
+at a write event itself — the Scenario-1 cycle-0 activation — uses the value
+cut at that event's moment (at CTS_0 ESTABLISHED `_on_cts_established`'s own
+`has_unfilled`; on update `FibTracker._c0_has_unfilled_now`), never the cache.
+
+**Documented exception — the knowability divergence (M1, accepted
+2026-09-24, Plan F):** FibTracker asks every decision read at the handled
+event's moment (`evaluated_at` = `event_fields.event_moment(ev)`; its two
+cycle-0 cache writes stay uncut); the MS
+in-flight resolver passes `evaluated_at=None` (its snapshot is read only at
+`i > st.cts.idx` — MARKET_STRUCTURE_SPEC "Snapshot vs per-candle"). cond2
+(cached, uncut in both) and cond3 (its window ends at CTS_0, before any moment)
+still agree; **cond1 and the fib's existence can diverge**. Drop case: the ONLY
+sd gap of a lag-0 CTS_ESTABLISHED or a raw CTS_UPDATED has c2 == the event
+candle → FibTracker creates no fib at that event, while MS — which builds its
+fib as always-active in `compute_poi_inners_for_cycle` — keeps a POI inner,
+usable for sd-proximity CTS confirmation from the next candle. Permanent on H1
+cycle ≥ 1 (fib activation is one-shot at EST); on subs until a later
+CTS_UPDATED re-asks. **0 cases on the reference window.** The same class
+already existed: a gap that forms after an H1 cycle-≥1 EST enters the MS inners
+at the next CTS refresh but never activates the downstream fib (not measured).
+Pinned by `tests/test_imbalance_c3_knowability.py::test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib`
+(flips when the "re-ask when the gap's c3 closes" follow-up lands, PLAN_F §7).
+Canonical: IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
+
+**Documented approximation:** MS does NOT track Scenario 1 (TRUE / revert
+to FALSE on BOS_1 touching prev BOS zone outer). It passes
+`scenario1=None` in c0_data, which routes the utility into the Scenario
+2/3 evaluation path. FibTracker passes the post-revert `scenario1` value
+through. When Scenario 1 is TRUE in FibTracker's view (rare — requires
+the CTS_0 event's moment >= reversal_confirmed_idx) AND Scenario 2 cond1/cond2/cond3 all
+match (also rare), MS would pick cross-cycle anchors where FibTracker
+picks intra. To plug that gap, thread the parent reversal_confirmed_idx
+and prev BOS outer/sd through `structure_engine._make_market_structure`,
+mirror the Scenario 1 resolution + revert logic on MarketStructureState,
+and set `c0_data["scenario1"]` accordingly before each resolver call.
+
+**Concrete signature of regression (keep for future debugging):** a
+CTS_CONFIRMED dot whose `confirmation_method == "sd_zone_proximity"` BUT
+the candle is visually nowhere near any rendered POI zone for that cycle
+— suspect either the resolver has gone out of sync with FibTracker's
+anchor selection, or `c0_data` isn't being threaded correctly through
+`_refresh_poi_inners_for_cycle`. Trace by instrumenting
+`_check_proximity_at_candle` to log the active `poi_inners_for_cycle` and
+compare against `df.attrs["poi_zones"]`.

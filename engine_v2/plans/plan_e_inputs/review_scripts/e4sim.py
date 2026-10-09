@@ -3,12 +3,16 @@ sys.path.insert(0, r"C:\Users\wangj\OneDrive\Documents\codingproj\Project Retire
 from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_anchor_data, _make_multicycle_data, _prepare_df
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
+from engine_v2.zones.cross_cycle_fib import CrossFibLimit
+from engine_v2.tests._cross_fib_limits import main_limits, unreached_for
+# PLAN_I S4 retired `fib_mode` (one FibTracker logic): MODE now picks the downstream LIMITS — "h1" = production's main
+# limits (no P on sid 0), "cross_cycle" = unreached (every cross the walk allows). S5: MS's limit is REQUIRED (no P).
 
 import os
 MODE=os.environ.get("MODE","h1")
 for maker in (_make_second_cts_moment_after_anchor_data, _make_multicycle_data):
     df = _prepare_df(maker())
-    res = compute_bounded_structure(df, 0, +1)
+    res = compute_bounded_structure(df, 0, +1, cross_fib_limit=CrossFibLimit(None, "none"))
     print("==", maker.__name__, "n=", len(df))
     for e in res.events:
         if e.type in ("CTS_ESTABLISHED","BOS_CONFIRMED","CTS_CONFIRMED","CTS_UPDATED","REVERSAL_CANDIDATE"):
@@ -22,7 +26,7 @@ for maker in (_make_second_cts_moment_after_anchor_data, _make_multicycle_data):
         buf=io.StringIO()
         with contextlib.redirect_stdout(buf):
             try:
-                o=_run_downstream_pipeline(res.df, evs, +1, fib_mode=MODE, wvmi="first_sd_prox", cross_fib_limits=__import__("engine_v2.tests._cross_fib_limits", fromlist=["x"]).unreached_for(evs) if MODE == "cross_cycle" else None)
+                o=_run_downstream_pipeline(res.df, evs, +1, wvmi="first_sd_prox", cross_fib_limits=unreached_for(evs) if MODE == "cross_cycle" else main_limits(evs))
             except Exception as ex:
                 o={"ERR":repr(ex)}
         outs.append(o)

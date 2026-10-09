@@ -38,6 +38,7 @@ from engine_v2.tests.test_unified_probe import (
     _prepare_df,
 )
 from engine_v2.zones.structure_lifecycle import compute_reversal_idx_by_sid
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -93,7 +94,7 @@ def _p1_df(sd: int):
 
 def _run(df, sd: int, **kw):
     with redirect_stdout(io.StringIO()):
-        return compute_bounded_structure(df, 0, sd, **kw)
+        return compute_bounded_structure(df, 0, sd, **{"cross_fib_limit": NO_P, **kw})
 
 
 def _reversals(events):
@@ -262,7 +263,7 @@ def test_a_reversal_winner_keeps_its_own_apply_row_rewrite():
 # case), and the two tripwires.
 def _ms(sd: int = 1):
     with redirect_stdout(io.StringIO()):
-        return _make_market_structure(_prepare_df(_p1_rows()), struct_direction=sd, start_idx=0)
+        return _make_market_structure(_prepare_df(_p1_rows()), struct_direction=sd, start_idx=0, cross_fib_limit=NO_P)
 
 
 def test_post_apply_range_backfill_stops_at_the_terminal(monkeypatch):

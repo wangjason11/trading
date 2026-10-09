@@ -44,7 +44,8 @@ from engine_v2.zones.zone_proximity import check_zone_proximity
 from engine_v2.structure.structure_engine import _pip_size_from_pair
 
 # Week 7: Fib tracking
-from engine_v2.zones.fib_tracker import FibEventOrderError, FibTracker, FibTrackerConfig
+from engine_v2.features.fibonacci import DEFAULT_FIB_LEVELS
+from engine_v2.zones.fib_tracker import FIB_FILL_THRESHOLD, FibEventOrderError, FibTracker, FibTrackerConfig
 
 
 @dataclass
@@ -310,8 +311,8 @@ def _run_downstream_pipeline(
     # 6) Fib tracking
     fib_tracker = FibTracker(
         FibTrackerConfig(
-            fib_levels=[30.0, 50.0, 61.8, 80.0],
-            fill_threshold=0.70,
+            fib_levels=list(DEFAULT_FIB_LEVELS),
+            fill_threshold=FIB_FILL_THRESHOLD,     # == MarketStructure's embedded tracker's (PLAN_I D5)
         ),
         cross_fib_limits=cross_fib_limits,
     )
@@ -376,7 +377,8 @@ def _run_downstream_pipeline(
     prev_bos_lines = _prev_bos_lines(sorted_events, reversal_idx_by_new_sid, pfx)
 
     # 8) POI zones — ONE parameter source: the POIConfig defaults (PLAN_H §8.1;
-    # the MS in-flight resolver reads them too, with MS's own fill threshold).
+    # MS's in-flight read `poi_inner_for_fib` runs the same pick with the embedded
+    # tracker's fill threshold, the same value — PLAN_I S5).
     # The institutional-pattern selection is computed ONCE per POI record
     # (`select_ip_records`) and handed to both readers: the drawn POIs (one per
     # record — the pick, PLAN_H landing B) and the debug CSV (`*_ip_candidates.csv`).

@@ -81,29 +81,35 @@ def compute_main_cross_fib_limits(events: List) -> Dict[int, CrossFibLimit]:
     none may sit there (PLAN_I S2 landing review; `test_ms_reversal_on_expiry`'s
     later-winner fixture). Main structures carry `started_by` on the limit (a
     sub's comes from its mirror)."""
-    rev_events: Dict[int, object] = {}
-    for ev in events:
-        meta = ev.meta or {}
-        if getattr(ev, "type", None) == "STATE_CHANGED" and meta.get("to") == "reversal":
-            s = int(meta["structure_id"])
-            assert s not in rev_events, f"[cross_fib_limit] two reversals for main sid {s}"
-            rev_events[s] = ev
-    out: Dict[int, CrossFibLimit] = {}
-    for s, started_by in compute_main_started_by(events).items():
-        if started_by == "start_trading":
-            out[s] = CrossFibLimit(None, "none", started_by=started_by)
-            continue
-        rev = rev_events[s - 1]
-        frozen = rev.meta["bos_frozen"]
-        assert frozen is not None, f"[cross_fib_limit] sid {s - 1}'s reversal has no bos_frozen"
-        watches = [ev for ev in events
-                   if getattr(ev, "type", None) == "REVERSAL_WATCH_START"
-                   and int(ev.meta["structure_id"]) == s - 1 and int(ev.idx) <= int(rev.idx)]
-        assert watches and float(watches[-1].meta["bos_frozen"]) == float(frozen), (
-            f"[cross_fib_limit] sid {s - 1}'s reversal at {int(rev.idx)}: bos_frozen {frozen} != the open watch's "
-            f"{[(int(w.idx), float(w.meta['bos_frozen'])) for w in watches[-1:]]}")
-        out[s] = CrossFibLimit(float(frozen), "reversal_bos_frozen", started_by=started_by)
-    return out
+    reversed_sids = [int(ev.meta["structure_id"]) for ev in events
+                     if getattr(ev, "type", None) == "STATE_CHANGED" and (ev.meta or {}).get("to") == "reversal"]
+    assert len(reversed_sids) == len(set(reversed_sids)), (
+        f"[cross_fib_limit] two reversals for one main sid: {sorted(reversed_sids)}")
+    return {s: compute_main_cross_fib_limit(events, s) for s in compute_main_started_by(events)}
+
+
+def compute_main_cross_fib_limit(events: List, sid: int) -> CrossFibLimit:
+    """ONE main structure's cross-fib limit (`compute_main_cross_fib_limits`' rule) from the events of the sids
+    BEFORE it — so MarketStructure's embedded tracker gets it before sid `sid` runs (`structure_engine.
+    compute_structure`, PLAN_I S5 / D5) and the downstream the same value after: sid `sid` was started by a
+    reversal iff sid `sid` − 1 has a `STATE_CHANGED(to=reversal)` (else start trading, no `P`)."""
+    sid = int(sid)
+    revs = [ev for ev in events
+            if getattr(ev, "type", None) == "STATE_CHANGED" and (ev.meta or {}).get("to") == "reversal"
+            and int(ev.meta["structure_id"]) == sid - 1]
+    if not revs:
+        return CrossFibLimit(None, "none", started_by="start_trading")
+    assert len(revs) == 1, f"[cross_fib_limit] two reversals for main sid {sid - 1}"
+    rev = revs[0]
+    frozen = rev.meta["bos_frozen"]
+    assert frozen is not None, f"[cross_fib_limit] sid {sid - 1}'s reversal has no bos_frozen"
+    watches = [ev for ev in events
+               if getattr(ev, "type", None) == "REVERSAL_WATCH_START"
+               and int(ev.meta["structure_id"]) == sid - 1 and int(ev.idx) <= int(rev.idx)]
+    assert watches and float(watches[-1].meta["bos_frozen"]) == float(frozen), (
+        f"[cross_fib_limit] sid {sid - 1}'s reversal at {int(rev.idx)}: bos_frozen {frozen} != the open watch's "
+        f"{[(int(w.idx), float(w.meta['bos_frozen'])) for w in watches[-1:]]}")
+    return CrossFibLimit(float(frozen), "reversal_bos_frozen", started_by="reversal")
 
 
 def compute_cycle_lifecycle(

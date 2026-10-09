@@ -28,6 +28,7 @@ from engine_v2.tests.test_unified_probe import _prepare_df
 from engine_v2.tests import test_wvmi as tw   # module import: importing its Test class would re-collect it here
 from engine_v2.zones.structure_lifecycle import compute_cycle_lifecycle, compute_reversal_idx_by_sid
 from engine_v2.zones.wvmi import WVMITracker
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 def _post_reversal_lure():
@@ -42,7 +43,7 @@ def _post_reversal_lure():
 
 def _run(rows):
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(rows), 0, 1, end_idx=None)
+        res = compute_bounded_structure(_prepare_df(rows), 0, 1, end_idx=None, cross_fib_limit=NO_P)
         out = _run_downstream_pipeline(res.df, copy.deepcopy(res.events), 1, cross_fib_limits=main_limits(res.events))
     return res, out
 
@@ -109,7 +110,7 @@ def test_the_main_tracker_gets_every_cycle_end_from_the_lifecycle_table(monkeypa
     (0,1), the REALISED reversal for (0,2) (not the candidate's apply 19), the cap when one applies — exclusive values
     (the tracker subtracts 1). The end-to-end test above accepts any bound 14..18, so this pins the wiring."""
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(_post_reversal_lure()), 0, 1, end_idx=None)
+        res = compute_bounded_structure(_prepare_df(_post_reversal_lure()), 0, 1, end_idx=None, cross_fib_limit=NO_P)
     events = _late_candidate(res.events, 19)
     assert _captured_ends(monkeypatch, res, events) == {(0, 0): 8, (0, 1): 12, (0, 2): 17}
     assert _captured_ends(monkeypatch, res, events, cap=15) == {(0, 0): 8, (0, 1): 12, (0, 2): 15}

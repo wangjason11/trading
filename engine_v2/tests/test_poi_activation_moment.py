@@ -49,6 +49,7 @@ from engine_v2.zones.structure_lifecycle import (
     compute_cycle_lifecycle,
     compute_reversal_idx_by_sid,
 )
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +60,7 @@ def _run(rows, *, mutate=None, lifecycle_floor=None, lifecycle_cap=None,
          cap_reason="parent_end"):
     """Live MS on the fixture, then the main downstream pipeline (h1 fibs)."""
     df = _prepare_df(rows)
-    res = compute_bounded_structure(df, 0, +1)
+    res = compute_bounded_structure(df, 0, +1, cross_fib_limit=NO_P)
     events = res.events
     if mutate is not None:
         events = copy.deepcopy(events)

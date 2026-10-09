@@ -27,7 +27,7 @@ from engine_v2.tests.test_cross_cycle_fib_routine import _BOS, _CTS, _INST0, _IN
 from engine_v2.tests.test_cross_cycle_fib_routine import _df as _routine_df
 from engine_v2.tests.test_imbalance_c3_knowability import _df, _ev, _gap, _quiet, _tracker
 from engine_v2.zones.cross_cycle_fib import resolve_cross_cycle_eligibility
-from engine_v2.zones.fib_tracker import select_fib_anchor_for_cycle
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 def _e4_est(anchor=20, moment=22, **kw):
@@ -78,28 +78,30 @@ def test_fib_tracker_update_fill_horizon_and_stamp_are_the_moment():
     ("tied_breakout", None),          # a pattern tying the raw-updated CTS (extreme 24, apply 25): no refresh
 ])
 def test_ms_inflight_poi_refresh_fill_horizon_is_the_moment(monkeypatch, fixture, pair):
-    """Plan E E3a, the MS mirror: `_refresh_poi_inners_for_cycle` hands the
-    resolver the triggering event's moment as `fill_horizon_idx` (lock-step with
-    FibTracker), never the CTS anchor; a raw update's moment IS its candle. A
-    pattern-path update can no longer lag (2026-09-27: only its apply candle can be
-    a strict new extreme — the earlier span candles were raw-processed in the
-    back-fill) — its case now pins that the fixture's tie (extreme 24 = the
-    raw-updated CTS, apply 25) does not refresh at 25 either."""
+    """Plan E E3a, the MS mirror — re-derived at the FEED (PLAN_I S5: MS's read is its embedded FibTracker's
+    decision, whose every imbalance question is asked at the fed event's moment `ef.event_moment`): MS feeds each CTS
+    event with its (anchor, moment), never the anchor as the moment; a raw update's moment IS its candle. A
+    pattern-path update can no longer lag (2026-09-27: only its apply candle can be a strict new extreme — the
+    earlier span candles were raw-processed in the back-fill) — its case pins that the fixture's tie (extreme 24 =
+    the raw-updated CTS, apply 25) feeds nothing at 25 either."""
     import engine_v2.structure.structure_engine as se
+    from engine_v2.structure import event_fields as _ef
     from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_tied_pattern_breakout
     from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_anchor_data, _prepare_df
+    from engine_v2.zones.fib_tracker import FibTracker
     calls = []
-    real = se.compute_poi_inners_for_cycle
+    for name in ("on_cts_established", "on_cts_updated"):
+        real = getattr(FibTracker, name)
 
-    def spy(df, bos_idx, bos_price, cts_idx, *a, **k):
-        calls.append((int(cts_idx), k["fill_horizon_idx"]))
-        return real(df, bos_idx, bos_price, cts_idx, *a, **k)
-
-    monkeypatch.setattr(se, "compute_poi_inners_for_cycle", spy)
+        def spy(self, ev, *a, _real=real, **k):
+            if self._quiet:                       # MS's embedded tracker
+                calls.append((int(_ef.cts_anchor_idx(ev)), int(_ef.event_moment(ev))))
+            return _real(self, ev, *a, **k)
+        monkeypatch.setattr(FibTracker, name, spy)
     rows = (_make_second_cts_moment_after_anchor_data() if fixture == "second_cts"
             else _multicycle_with_tied_pattern_breakout())
     with contextlib.redirect_stdout(io.StringIO()):
-        res = se.compute_bounded_structure(_prepare_df(rows), 0, +1)
+        res = se.compute_bounded_structure(_prepare_df(rows), 0, +1, cross_fib_limit=NO_P)
     if pair is not None:
         assert pair in calls
     else:
@@ -120,20 +122,11 @@ def test_routine_own_window_end_and_fill_horizon_are_independent():
     e = resolve_cross_cycle_eligibility(
         df=df, target_cycle=1, sd=1, own_window_end_idx=40, fill_horizon_idx=38, own_imb_start=30,
         anchor_idx=40, anchor_price=1.35, bos_by_cycle={0: _BOS[0]}, cts_by_cycle={0: _CTS[0]},
-        dead_cycles=set(), fill_threshold=0.70, fill_as_of="snapshot",
-        prior_cached_liveness={0: True}, evaluated_at=None, snapshot_horizon_idx=30)
+        dead_cycles=set(), fill_threshold=0.70, evaluated_at=None)
     assert e.own_has is True
 
 
-def test_anchor_selector_asks_cond3_at_the_snapshot_horizon():
-    """Cycle 0's gap fills at 33: after BOS_1 (30), before CTS_1 (40). cond3 is
-    asked at the snapshot horizon (BOS_1) → not yet filled → the cross forms."""
-    df = _routine_df(60, [_INST0, _INST1])
-    df.at[33, "l"] = 1.02
-    c0 = {"bos_idx": 10, "bos_price": 1.0, "cts_idx": 20, "cts_price": 1.15, "has_unfilled": True}
-    r = select_fib_anchor_for_cycle(df, 1, 1, 30, 1.2, 40, 1.35, c0, 0.70, struct_direction=1,
-                                    evaluated_at=None, fill_horizon_idx=40, snapshot_horizon_idx=30)
-    assert r[0] == 10 and r[-1] == "scenario_2_cross"
+# (`test_anchor_selector_asks_cond3_at_the_snapshot_horizon` retired with the selector, PLAN_I S5.)
 
 
 # --- POI sweep: cond1 is a location -----------------------------------------------
@@ -286,7 +279,7 @@ def test_lagging_est_fib_lifecycle_is_timed_at_the_moment(mode):
     from engine_v2.tests.test_e4_simulation import _run
     from engine_v2.tests.test_unified_probe import _make_second_cts_moment_after_anchor_data, _prepare_df
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(_make_second_cts_moment_after_anchor_data()), 0, +1)
+        res = compute_bounded_structure(_prepare_df(_make_second_cts_moment_after_anchor_data()), 0, +1, cross_fib_limit=NO_P)
     fibs = {(f.structure_id, f.cycle_id): f for f in _run(res.df, res.events, mode)["fib_states"]}
     c1 = fibs[(0, 1)]
     assert (c1.cts_idx, c1.start_idx, c1.meta["activated_at"]) == (9, 10, 10)
@@ -369,7 +362,7 @@ def test_h1_chart_unconfirmed_cts_marker_sits_at_the_cts_anchor(tmp_path, monkey
 
     with contextlib.redirect_stdout(io.StringIO()):
         res = compute_bounded_structure(
-            _prepare_df(_make_second_cts_moment_after_anchor_data()), 0, +1)
+            _prepare_df(_make_second_cts_moment_after_anchor_data()), 0, +1, cross_fib_limit=NO_P)
     # Stop the stream before CTS_CONFIRMED(0,1) @ 11: sid 0's last confirmed
     # point is BOS(0,1) @ anchor 7; CTS(0,1) is established (anchor 9,
     # moment 10) but unconfirmed.
@@ -500,7 +493,7 @@ def _e4b_h1_chart_fig(tmp_path, monkeypatch):
     from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_df
 
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(_make_multicycle_data()), 0, +1)
+        res = compute_bounded_structure(_prepare_df(_make_multicycle_data()), 0, +1, cross_fib_limit=NO_P)
     df = res.df.copy()
     df.attrs["structure_events"] = _e4b_handoff_events()   # the chart reads events only
     reg = StructureRegistry()
@@ -639,7 +632,7 @@ def test_h1_chart_unconfirmed_cts_marker_sits_at_the_update_anchor(tmp_path, mon
     from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_df
 
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(_make_multicycle_data()), 0, +1)
+        res = compute_bounded_structure(_prepare_df(_make_multicycle_data()), 0, +1, cross_fib_limit=NO_P)
     df = res.df.copy()
     df.attrs["structure_events"] = _e4c_unconf_events()   # the chart reads events only
     reg = StructureRegistry()

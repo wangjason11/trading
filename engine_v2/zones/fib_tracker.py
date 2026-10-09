@@ -53,7 +53,13 @@ class FibEventOrderError(RuntimeError):
     Also raised by the downstream dispatch (`orchestrator._run_downstream_pipeline`) for a CTS_ESTABLISHED handled
     before its own cycle's BOS_CONFIRMED (PLAN_I §9.2 F17, R8-2; it used to be dropped silently): a cycle whose BOS
     anchor lies after its CTS anchor — which every F14 (1) case found by the random-tail search was, so this is the
-    check that sees that shape through the dispatch."""
+    check that sees that shape through the dispatch.
+
+    And raised by `FibTracker.check_processing_order` at the end of every MarketStructure run (PLAN_I S5, R9-1): MS's
+    embedded tracker saw an EMISSION order other than `processing_order_key` order — the F16 shape (a CTS confirmed
+    with an anchor at or after its confirmation candle) and the F17 (i) / F14 (1) shape (a cycle established with an
+    anchor before the previous cycle's confirmation). F17 (ii) — a BOS anchor after its own CTS anchor — does NOT trip
+    MS (both events share their moment); only the dispatch raises on it. 0 on the reference window."""
 
 
 class CrossFibLimitError(RuntimeError):
@@ -114,130 +120,18 @@ class FibState:
     status: str = "active"
 
 
+# The ONE imbalance fill threshold of the fib decision (70 % = filled): the downstream tracker
+# (`orchestrator._run_downstream_pipeline`) and MarketStructure's embedded tracker
+# (`structure_engine._make_market_structure`, PLAN_I S5 / D5) both build their config with it, and MS's in-flight
+# IP pick reads the tracker's value (`poi_zones.poi_inner_for_fib`).
+FIB_FILL_THRESHOLD = 0.70
+
+
 @dataclass
 class FibTrackerConfig:
     """Configuration for FibTracker."""
     fib_levels: List[float] = field(default_factory=lambda: DEFAULT_FIB_LEVELS.copy())
-    fill_threshold: float = 0.70  # 70% = filled
-
-
-def select_fib_anchor_for_cycle(
-    df: pd.DataFrame,
-    sid: int,
-    cycle_id: int,
-    bos_idx: int,
-    bos_price: float,
-    cts_idx: int,
-    cts_price: float,
-    c0_data: Optional[Dict[str, Any]],
-    fill_threshold: float = 0.70,
-    struct_direction: int = 0,
-    *,
-    evaluated_at: Optional[int],
-    fill_horizon_idx: int,
-    snapshot_horizon_idx: int,
-) -> tuple:
-    """Pick the Fib anchor for a cycle. Pure function — no FibTracker state.
-
-    Returns ``(anchor_bos_idx, anchor_bos_price, anchor_cts_idx,
-    anchor_cts_price, scenario_label)``. Cross-cycle returns are signalled
-    by an anchor_bos_idx that differs from the input bos_idx.
-
-    Decision tree (the H1-main cycle-1 Scenario 1 / 2 / 3 rule FibTracker ran until PLAN_I S4 — its last
-    reader is MarketStructure's in-flight POI resolver, retired with it in S5):
-
-    - ``sid == 0`` or ``cycle_id != 1`` or ``c0_data is None`` →
-      intra-cycle, label ``"intra"``.
-    - ``c0_data["scenario1"] is True`` → intra-cycle (cycle 1 stays normal),
-      label ``"scenario_1"``.
-    - Otherwise evaluate Scenario 2 conditions over the imbalance set:
-
-        cond1 — cycle 1 has unfilled sd-direction imbalance in [BOS_1, CTS_1]
-                as of ``fill_horizon_idx``, counting only gaps formed by ``evaluated_at``
-        cond2 — cycle 0 has unfilled sd-direction imbalance (cached on
-                ``c0_data``; caller computed with the same direction filter)
-        cond3 — BOS_1 has not filled cycle 0's sd-direction imbalances
-
-      All three true → cross-cycle, label ``"scenario_2_cross"`` (anchor
-      becomes BOS_0 → CTS_1). Else → intra-cycle, label ``"scenario_3"``.
-
-    ``evaluated_at`` (keyword-only, REQUIRED) is the moment the decision is
-    taken (Plan F; IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule"):
-    FibTracker passed the CTS_1 ESTABLISHED moment until PLAN_I S4; the MS in-flight resolver
-    passes ``None`` (no cut — its snapshot is only read at candles after the
-    CTS, where every gap it counts has formed). The two layers therefore agree
-    on cond2 / cond3 but not always on cond1 — the accepted M1 divergence
-    (LANDMINES "Scenario 2 anchor agreement").
-
-    ``fill_horizon_idx`` / ``snapshot_horizon_idx`` (keyword-only, REQUIRED;
-    Plan E E2b) are the fill horizons of cond1 (the CTS_1 moment since Plan E
-    E3a; the MS in-flight caller passes its refresh moment) and of cond3 (the
-    BOS_1 MOMENT == the CTS_1 ESTABLISHED moment, since Plan E E3a′) — TIMES,
-    split from the ``bos_idx`` /
-    ``cts_idx`` locations.
-
-    ``struct_direction`` is the sd of the structure being evaluated (+1 / -1).
-    Threads into cond1 / cond3 as the imbalance direction filter — counter-
-    direction imbalances never become POIs, so they shouldn't influence the
-    Scenario 2 decision. cond2 inherits this filter through whatever upstream
-    computed ``c0_data["has_unfilled"]``. ``struct_direction == 0`` (the
-    default) preserves legacy permissive behaviour if a caller hasn't
-    migrated yet.
-
-    Approximation (intentional; the FibTracker side is retired since PLAN_I S4): Scenario 1 REVERT — FibTracker reverted
-    Scenario 1 from TRUE to FALSE if BOS_1 touches the prev structure's BOS
-    zone outer, then evaluates Scenario 2/3. This utility cannot detect
-    that itself because ``prev_bos_outer`` / ``prev_sd`` aren't inputs. A
-    caller that tracks the revert state should flip ``c0_data["scenario1"]``
-    from True to False/None BEFORE invoking this function and let the
-    Scenario 2/3 path take over. MarketStructure's in-flight POI snapshot
-    intentionally leaves ``scenario1`` as None (it doesn't track Scenario 1
-    at all), so the utility always falls into the Scenario 2/3 evaluation
-    path for cycle 1 — matching FibTracker's behavior whenever Scenario 1
-    is False (the common case).
-    """
-    if sid < 1 or cycle_id != 1 or c0_data is None:
-        return (int(bos_idx), float(bos_price), int(cts_idx), float(cts_price), "intra")
-
-    if c0_data.get("scenario1") is True:
-        return (int(bos_idx), float(bos_price), int(cts_idx), float(cts_price), "scenario_1")
-
-    # Delegate the Scenario-2 cond1/cond2/cond3 decision to the shared routine
-    # (CROSS_CYCLE_FIB_SPEC.md Appendix A, old §11a). This is a single-step (target=1) cross
-    # with the H1-main "snapshot" fill-as-of policy: the cycle-0 liveness is
-    # cond3 (re-checked as of BOS_1's moment, `snapshot_horizon_idx`) AND cond2 (the cached
-    # cycle-0 @CTS_0 liveness in c0_data["has_unfilled"]). cond1 is the routine's
-    # own-imbalance test over [BOS_1, CTS_1] as of `fill_horizon_idx` (the CTS_1 moment).
-    # The Scenario-1 outer gate (above) is main-only and stays here. A fresh
-    # throwaway dead_cycles set is used — the wrapper never caches.
-    elig = resolve_cross_cycle_eligibility(
-        df=df,
-        target_cycle=1,
-        sd=int(struct_direction),
-        own_window_end_idx=int(cts_idx),
-        own_imb_start=int(bos_idx),
-        anchor_idx=int(cts_idx),
-        anchor_price=float(cts_price),
-        bos_by_cycle={0: (int(c0_data["bos_idx"]), float(c0_data["bos_price"]))},
-        cts_by_cycle={0: (int(c0_data["cts_idx"]), float(c0_data["cts_price"]))},
-        dead_cycles=set(),
-        fill_threshold=fill_threshold,
-        fill_as_of="snapshot",
-        prior_cached_liveness={0: bool(c0_data.get("has_unfilled", False))},
-        evaluated_at=evaluated_at,
-        fill_horizon_idx=int(fill_horizon_idx),
-        snapshot_horizon_idx=int(snapshot_horizon_idx),
-    )
-
-    if elig.crosses:
-        return (
-            elig.bos_idx,
-            elig.bos_price,
-            int(cts_idx),
-            float(cts_price),
-            "scenario_2_cross",
-        )
-    return (int(bos_idx), float(bos_price), int(cts_idx), float(cts_price), "scenario_3")
+    fill_threshold: float = FIB_FILL_THRESHOLD  # 70% = filled
 
 
 class FibTracker:
@@ -256,6 +150,12 @@ class FibTracker:
     cycle past the limit a single (`via: "cross_fib_limit"`).
 
     Only 1 active Fib per structure at a time (new cycle obsoletes previous).
+
+    Two instances run per structure (PLAN_I S5 / D5): the downstream's (`orchestrator._run_downstream_pipeline`,
+    fed in `processing_order_key` order — the drawn fib) and MarketStructure's EMBEDDED one
+    (`structure_engine._make_market_structure`, `quiet=True`), fed each CTS event as MS emits it; MS's in-flight
+    POI read takes its `representative_fib`, and `check_processing_order` (called at the end of every MS run) raises
+    when the emission order it saw is not the processing order (PLAN_I §9.2 F14 / F16 — the two then agree).
     """
 
     def __init__(
@@ -263,8 +163,14 @@ class FibTracker:
         config: Optional[FibTrackerConfig] = None,
         *,
         cross_fib_limits: Optional[Mapping[int, CrossFibLimit]] = None,
+        quiet: bool = False,
     ):
         self.config = config or FibTrackerConfig()
+        # No `[fib]` log lines (MarketStructure's embedded tracker, PLAN_I D5: every geometry / probe MS would flood
+        # run.log with them; the downstream tracker logs the same decisions).
+        self._quiet = bool(quiet)
+        # Every event a public handler was fed, in feed order — `check_processing_order`'s input.
+        self._handled: List[StructureEvent] = []
 
         # Fib states per key. Two key shapes coexist in this dict:
         #   - (sid, cycle_id)                          → single fib
@@ -352,6 +258,45 @@ class FibTracker:
         # (sid, cycle_id) -> (idx, price, sd): the cycle's LATEST CTS anchor (§4 N-f) — written at its
         # CTS_ESTABLISHED, every CTS_UPDATED and its CTS_CONFIRMED (the confirmed anchor wins). `M` reads it.
         self._latest_anchor: Dict[tuple, tuple] = {}
+
+    def _log(self, msg: str) -> None:
+        if not self._quiet:
+            print(msg)
+
+    # ------------------------------------------------------------------
+    # MarketStructure's in-flight read (PLAN_I S5 / D5, Q7).
+    # ------------------------------------------------------------------
+    def representative_fib(self, sid: int, cycle_id: int) -> Optional[FibState]:
+        """The fib MS's in-flight POI read uses for `(sid, cycle_id)`: the cycle's ACTIVE latest cross version,
+        else its ACTIVE single, else None (no fib → the proximity check reads the BOS inner only). The same
+        decision the drawn fib records (one tracker logic, fed the same events)."""
+        latest = self._get_latest_cross(int(sid), int(cycle_id))
+        if latest is not None and latest[1].active:
+            return latest[1]
+        single = self._fibs.get((int(sid), int(cycle_id)))
+        if single is not None and single.active:
+            return single
+        return None
+
+    def check_processing_order(self) -> None:
+        """The end-of-run order tripwire (PLAN_I §9.3 D5, R6-4, R9-1): the events this tracker was fed, in feed
+        order, must be in `processing_order_key` order — the order the downstream tracker (the drawn fib) handles
+        them in. MarketStructure feeds its embedded tracker in EMISSION order and calls this at the end of every
+        run; the two orders differ on the F16 shape (a CTS confirmed with an anchor at or after its confirmation
+        candle — a tie sorts the confirmation first) and the F17 (i) / F14 (1) shape (a cycle's establishment whose
+        anchor precedes the previous cycle's confirmation); F17 (ii) — a BOS anchor after its own CTS anchor — does
+        not trip it (only the downstream dispatch raises). 0 on the reference window, and on 400 random real slices
+        (S5 landing review). Raises `FibEventOrderError` naming the first event out of place."""
+        handled = self._handled
+        expected = sorted(handled, key=ef.processing_order_key)
+        for k, (got, want) in enumerate(zip(handled, expected)):
+            if got is not want:
+                raise FibEventOrderError(
+                    f"[fib] emission order != processing order at handled event #{k}: fed {got.type} "
+                    f"(cycle {got.meta.get('cycle_id')}, idx {int(got.idx)}, sort key {ef.processing_order_key(got)})"
+                    f" where processing order has {want.type} (cycle {want.meta.get('cycle_id')}, idx "
+                    f"{int(want.idx)}, sort key {ef.processing_order_key(want)}) — PLAN_I §9.2 F16 / F17 (i); the MS "
+                    f"fix is planned (R9-1 / R9-2)")
 
     # ------------------------------------------------------------------
     # The cross-fib limit (PLAN_I §9.3 D1): M and the record stamp.
@@ -644,6 +589,7 @@ class FibTracker:
     ) -> Optional[FibState]:
         """Handle CTS_ESTABLISHED (body: `_on_cts_established`). Its imbalance
         questions are asked at the event's moment, `meta["confirmed_at"]`."""
+        self._handled.append(event)
         with self._evaluating(event):
             return self._on_cts_established(event, df, bos_idx, bos_price)
 
@@ -751,10 +697,10 @@ class FibTracker:
             if cycle_id >= 1:
                 meta["via"] = "cross_fib_limit"
             if not has_unfilled:
-                print(f"[fib] cross_cycle sid={sid} cycle={cycle_id} NO FIB: no unfilled imbalance "
+                self._log(f"[fib] cross_cycle sid={sid} cycle={cycle_id} NO FIB: no unfilled imbalance "
                       f"(evaluated_at={self._evaluated_at})")
                 return None
-            print(f"[fib] cross_cycle sid={sid} cycle={cycle_id} ACTIVATED (single, no cross)")
+            self._log(f"[fib] cross_cycle sid={sid} cycle={cycle_id} ACTIVATED (single, no cross)")
             return self._activate_fib(
                 sid=sid,
                 cycle_id=cycle_id,
@@ -768,7 +714,7 @@ class FibTracker:
 
         # Cycle ≥1: run cross-fib check with CTS_n as anchor
         # own_imb_start = BOS_n (just-confirmed BOS for this cycle)
-        print(f"[fib] cross_cycle sid={sid} cycle={cycle_id} CTS_ESTABLISHED: "
+        self._log(f"[fib] cross_cycle sid={sid} cycle={cycle_id} CTS_ESTABLISHED: "
               f"running cross check (anchor=CTS_n)")
         self._cross_check(
             sid=sid,
@@ -870,7 +816,7 @@ class FibTracker:
         # Lifecycle: record the cycle's sticky first-active idx (§15.3).
         self._mark_first_active(sid, cycle_id, activated_at)
 
-        print(f"[fib] sid={sid} cycle={cycle_id} ACTIVATED: BOS idx={bos_idx} price={bos_price:.5f} -> CTS idx={cts_idx} price={cts_price:.5f}")
+        self._log(f"[fib] sid={sid} cycle={cycle_id} ACTIVATED: BOS idx={bos_idx} price={bos_price:.5f} -> CTS idx={cts_idx} price={cts_price:.5f}")
 
         return state
 
@@ -882,6 +828,7 @@ class FibTracker:
         """Handle CTS_UPDATED (body: `_on_cts_updated`). Its imbalance questions
         are asked at the event's moment: `ev.idx` on the raw path; the apply candle
         `meta["confirmed_at"]` on the pattern path (Plan E E3·0)."""
+        self._handled.append(event)
         with self._evaluating(event):
             return self._on_cts_updated(event, df)
 
@@ -962,7 +909,7 @@ class FibTracker:
             end_idx = max(bos_idx, cts_idx)
             if not self._has_unfilled(df, start_idx, end_idx, self._moment(), sd):
                 return None
-            print(f"[fib] cross_cycle sid={sid} cycle={cycle_id} ACTIVATED on update "
+            self._log(f"[fib] cross_cycle sid={sid} cycle={cycle_id} ACTIVATED on update "
                   f"(unfilled imbalance found post-EST): BOS idx={bos_idx} -> "
                   f"CTS idx={cts_idx}")
             meta = {"activated_at": self._moment(), "fib_mode": "cross_cycle", "activated_on": "update"}
@@ -983,7 +930,7 @@ class FibTracker:
         phase = self._phase.get((sid, cycle_id))
         if phase != "established":
             # Shouldn't happen — CTS_UPDATED implies ESTABLISHED has already fired
-            print(f"[fib][cross_cycle][warn] CTS_UPDATED for sid={sid} cycle={cycle_id} "
+            self._log(f"[fib][cross_cycle][warn] CTS_UPDATED for sid={sid} cycle={cycle_id} "
                   f"in unexpected phase={phase}")
             return None
 
@@ -1061,7 +1008,7 @@ class FibTracker:
         )
 
         label = f"cycle={cycle_id}"
-        print(f"[fib] sid={sid} {label} UPDATED: CTS idx={cts_idx} price={cts_price:.5f}")
+        self._log(f"[fib] sid={sid} {label} UPDATED: CTS idx={cts_idx} price={cts_price:.5f}")
 
         # Check unfilled imbalance condition - can reactivate or deactivate: the fib's
         # own range (sd-direction; formed gaps only — "all_imbalances_filled" below
@@ -1074,11 +1021,11 @@ class FibTracker:
             # Reactivate - unfilled imbalances now exist in expanded range
             self._assert_no_active_cross(sid, cycle_id)
             new_state = replace(new_state, active=True, meta={**new_state.meta, "reactivated_at": self._moment()})
-            print(f"[fib] sid={sid} {label} REACTIVATED: unfilled imbalance found at idx={cts_idx}")
+            self._log(f"[fib] sid={sid} {label} REACTIVATED: unfilled imbalance found at idx={cts_idx}")
         elif not has_unfilled and new_state.active:
             # Deactivate - all imbalances filled
             new_state = replace(new_state, active=False, meta={**new_state.meta, "deactivated_at": self._moment(), "reason": "all_imbalances_filled"})
-            print(f"[fib] sid={sid} {label} DEACTIVATED: all imbalances filled at idx={cts_idx} "
+            self._log(f"[fib] sid={sid} {label} DEACTIVATED: all imbalances filled at idx={cts_idx} "
                   f"(evaluated_at={self._evaluated_at})")
 
         self._fibs[key] = new_state
@@ -1100,6 +1047,7 @@ class FibTracker:
         FibState or None
             Locked FibState, or None if no active Fib
         """
+        self._handled.append(event)
         sid = int(event.meta.get("structure_id", 0))
         cycle_id = int(event.meta.get("cycle_id", 0))
 
@@ -1134,7 +1082,7 @@ class FibTracker:
             )
             self._fibs[key] = locked
             v = state.meta.get("version", 0)
-            print(f"[fib] cross_cycle sid={sid} cycle={cycle_id} CROSS v{v} LOCKED")
+            self._log(f"[fib] cross_cycle sid={sid} cycle={cycle_id} CROSS v{v} LOCKED")
 
         # Lock active single fib if present
         single_key = (sid, cycle_id)
@@ -1146,7 +1094,7 @@ class FibTracker:
                     meta={**state.meta, "locked_at": event.idx},
                 )
                 self._fibs[single_key] = locked
-                print(f"[fib] cross_cycle sid={sid} cycle={cycle_id} SINGLE LOCKED")
+                self._log(f"[fib] cross_cycle sid={sid} cycle={cycle_id} SINGLE LOCKED")
 
         # Phase transitions
         self._phase[(sid, cycle_id)] = "confirmed"
@@ -1306,6 +1254,7 @@ class FibTracker:
         """Handle CTS_THRESHOLD_UPDATED (body: `_on_cts_threshold_updated`). Its
         imbalance questions are asked at the event's moment, `ev.idx` (the
         processing candle)."""
+        self._handled.append(event)
         with self._evaluating(event):
             self._on_cts_threshold_updated(event, df)
 
@@ -1411,9 +1360,8 @@ class FibTracker:
         phase = self._phase.get((sid, target_cycle))
 
         # Steps 1–2 (own-imbalance test + dead-cycle backward walk) are the
-        # shared routine (CROSS_CYCLE_FIB_SPEC.md §7). `fill_as_of="current"`
-        # (each prior cycle checked to the current
-        # candle, Interpretation B). The dead_cycles cache is passed by
+        # shared routine (CROSS_CYCLE_FIB_SPEC.md §7): each prior cycle checked
+        # to the current candle (Interpretation B). The dead_cycles cache is passed by
         # reference so the walk's memo persists across candles exactly as
         # before. `bos_by_cycle`/`cts_by_cycle` are sliced to this sid over the
         # walk range [0, target_cycle).
@@ -1437,10 +1385,8 @@ class FibTracker:
             },
             dead_cycles=self._dead_cycles.setdefault(sid, set()),
             fill_threshold=self.config.fill_threshold,
-            fill_as_of="current",
             evaluated_at=self._evaluated_at,
             fill_horizon_idx=current_candle,
-            snapshot_horizon_idx=None,
         )
 
         if not elig.own_has:
@@ -1524,7 +1470,7 @@ class FibTracker:
             )
         else:
             # earliest_x < active_x — shouldn't happen (dead cycles monotonic)
-            print(f"[fib][cross_cycle][warn] unexpected earliest_x={earliest_x} "
+            self._log(f"[fib][cross_cycle][warn] unexpected earliest_x={earliest_x} "
                   f"< active_x={active_x} for sid={sid} cycle={target_cycle}")
 
     def _create_cross(
@@ -1595,7 +1541,7 @@ class FibTracker:
         # alive — set-if-absent keeps v0's earlier start.
         self._mark_first_active(sid, target_cycle, current_candle)
 
-        print(f"[fib] cross_cycle sid={sid} CROSS ({earliest_x}->{target_cycle}) "
+        self._log(f"[fib] cross_cycle sid={sid} CROSS ({earliest_x}->{target_cycle}) "
               f"v{version} ACTIVATED: bos_x_idx={bos_x_idx} -> anchor_idx={anchor_idx}")
 
     def _extend_cross_anchor(
@@ -1633,7 +1579,7 @@ class FibTracker:
             cts_history=new_history,
         )
         v = state.meta.get("version", 0)
-        print(f"[fib] cross_cycle sid={state.structure_id} CROSS v{v} EXTENDED: "
+        self._log(f"[fib] cross_cycle sid={state.structure_id} CROSS v{v} EXTENDED: "
               f"cts idx={new_anchor_idx}")
 
     def _reactivate_cross_in_place(
@@ -1690,7 +1636,7 @@ class FibTracker:
         v = state.meta.get("version", 0)
         # Reactivation does NOT move start_idx (sticky, §15.3) — the cycle's
         # first-active was recorded at creation.
-        print(f"[fib] cross_cycle sid={state.structure_id} cycle={state.cycle_id} "
+        self._log(f"[fib] cross_cycle sid={state.structure_id} cycle={state.cycle_id} "
               f"CROSS v{v} REACTIVATED in place: cts idx={anchor_idx}")
 
     def _deactivate_cross(self, key: tuple, current_candle: int, reason: str) -> None:
@@ -1726,7 +1672,7 @@ class FibTracker:
         # Per-record `active=False` is the only state change here (it drives the
         # per-record chart gate / version distinction — §9.1). None of these
         # reasons moves the cycle's sticky start_idx.
-        print(f"[fib] cross_cycle sid={state.structure_id} cycle={state.cycle_id} "
+        self._log(f"[fib] cross_cycle sid={state.structure_id} cycle={state.cycle_id} "
               f"CROSS v{v} DEACTIVATED: {reason}")
 
     def _deactivate_active_cross(

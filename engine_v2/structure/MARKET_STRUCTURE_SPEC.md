@@ -342,23 +342,38 @@ spawning a phantom cycle 1.
 The proximity check picks the closest-to-current-price sd inner across
 BOS and POIs. POI inners are refreshed at `CTS_ESTABLISHED` (new cycle)
 and at each `CTS_UPDATED` (CTS extended → Fib bounds expand → IC
-candidates may shift). Since PLAN_H landing B (2026-10-06) the snapshot
-holds 0 or 1 POI inner: the institutional-pattern pick of the AS-OF fib
-(`poi_zones.compute_poi_inners_for_cycle` → `select_ip_ic`, the drawn
-POI's own selector — D2; before it, the inners of the 1–3 V30 / V60 / V90
-picks). No pattern → the BOS inner alone. An IP error is NOT swallowed
-(LANDMINES "The POI Resolver Fails Loudly"): only the anchor selection +
-the fib construction keep the resolver's graceful `[]`. The snapshot is per-cycle in
-`MarketStructureState.poi_inners_for_cycle`. Both refreshes still run
-on cycle 0 (cheap; the cycle-0 POI refresh also keeps `cycle0_data` —
-the Scenario-2 cond2 mirror — in sync via `_update_cycle0_data`), but
-the per-candle check is gated off. The snapshot's ONLY reader is that
-check (`_maybe_confirm_cts_via_proximity` → `_check_proximity_at_candle`).
+candidates may shift). **Since PLAN_I S5 (2026-10-08) the POI inner is the
+drawn fib's own decision:** MS carries an EMBEDDED `FibTracker` (built and
+injected by `structure_engine._make_market_structure` with the structure's
+REQUIRED cross-fib limit — MS imports nothing from `zones/`) and feeds it each
+CTS event as it is emitted (`_feed_fib_tracker`: CTS_ESTABLISHED after its
+cycle's BOS_CONFIRMED, every CTS_UPDATED, CTS_CONFIRMED, CTS_THRESHOLD_UPDATED);
+a refresh reads the tracker's `representative_fib(sid, cycle)` (the active
+latest cross, else the active single, else none) and hands it to
+`poi_zones.poi_inner_for_fib` → `select_ip_ic` (the drawn POI's selector,
+PLAN_H D2): 0 or 1 inner, the pick's. No fib or no pattern → the BOS inner
+alone. Errors are NOT swallowed (LANDMINES "The POI Resolver Fails Loudly"):
+the read takes the frame's candle stamp first on every refresh and re-raises
+anything as `IPSelectionError`; a tracker error arrives as
+`EmbeddedFibTrackerError` (both `RuntimeError`s). The snapshot is per-cycle in
+`MarketStructureState.poi_inners_for_cycle`. Both refreshes still run on
+cycle 0 (cheap), but the per-candle check is gated off. The snapshot's ONLY
+reader is that check (`_maybe_confirm_cts_via_proximity` →
+`_check_proximity_at_candle`). At the end of every run MS calls the tracker's
+`check_processing_order()`: it raises `FibEventOrderError` when the emission
+order it was fed is not the downstream's `processing_order_key` order (the F16
+and F17 (i) shapes, PLAN_I §9.2 — F17 (ii) trips only the downstream dispatch; 0
+on the reference window; the MS fix follows S5, PLAN_I R9-1 / R9-2). It runs in
+the probe's Phase-2 MS too (CROSS_CYCLE_FIB_SPEC §8). Canonical: `zones/CROSS_CYCLE_FIB_SPEC.md` §8; the read
+MS ran until S5 (the Scenario-2 selector, the cycle-0 snapshot, the M1
+divergence) is that spec's Appendix A, part 2.
 
 **Snapshot vs per-candle — deliberate approximation:** The proximity
 check uses a per-cycle POI snapshot, NOT a full per-candle activity check.
 Refresh points are CTS_ESTABLISHED and CTS_UPDATED only — between those,
-POI inners stay fixed. Trade-off: a POI whose IC qualification changes
+POI inners stay fixed (the embedded tracker's state can still move at a
+CTS_CONFIRMED / CTS_THRESHOLD_UPDATED, but the check is gated off once the
+cycle's CTS is confirmed). Trade-off: a POI whose IC qualification changes
 between two CTS_UPDATED events (e.g., an imbalance fill mid-cycle that
 disqualifies an IC candidate) is not reflected immediately by the
 snapshot. In practice the deviation is small — POIs typically materialize
@@ -366,33 +381,30 @@ at CTS_ESTABLISHED time and don't shift much during the cycle. The
 performance cost of full per-candle recomputation (Fib + IC scan + variant
 selection) is substantial. The major refactor may revisit this.
 
-**Snapshot fib on SUBS ≠ the drawn sub fib (found 2026-10-01; fix scheduled in `IDEA_PARKING_LOT.md` §D.1 item 2,
-user 2026-10-02 — PLAN_I S5; since PLAN_I S4 the same holds for main, whose drawn fib also runs the one logic):** the resolver's fib choice (`select_fib_anchor_for_cycle`) returns `"intra"` for `sid == 0`, and
-every sub is sid 0 — so a sub's snapshot always reads the INTRA-cycle fib (BOS_n → CTS_n), while its drawn POIs come
-from the cross-cycle fib. They differ on 8 unique sub cycles of the reference window (e.g. confluence sub 0 cycle 2:
-drawn POI IC 678 at 0.56234–0.56268 vs the snapshot fib's zone 0.57244–0.57364); no outcome diverged there. Detail:
-`plans/PLAN_H_institutional_pattern_poi.md` §3 ("Drawn POI vs MS snapshot", D5).
+**Snapshot fib on SUBS ≠ the drawn sub fib — RESOLVED by PLAN_I S5 (2026-10-08; found 2026-10-01, user
+2026-10-02):** the retired resolver read the INTRA-cycle fib for every sub (and, after PLAN_I S4, for main wherever a
+cross or the limit decided); the snapshot now reads the embedded tracker's representative fib — the drawn fib's
+decision. Measured (PLAN_I §9.10): the inner moved at 20 / 371 refreshes of the reference window, 0 / 475 proximity
+answers changed. The old text: `zones/CROSS_CYCLE_FIB_SPEC.md` Appendix A, part 2.
 
-**Snapshot vs per-candle — imbalance knowability is bounded by the consumer
-gate, no refresh-time cut (Plan F, 2026-09-24):** MS's in-flight imbalance
-reads — IC cond3 in `find_ic_candidates` over `(candidate, st.cts.idx]` and
-Scenario-2 cond1 / cond3 in `select_fib_anchor_for_cycle` over `[BOS_1, CTS_1]`
-/ `[BOS_0, CTS_0]` (both inside the resolver `compute_poi_inners_for_cycle`),
-plus the cycle-0 mirror `_update_cycle0_data` over `[BOS_0, CTS_0]` — pass
-`evaluated_at=None`: no c3 cut (IMBALANCE_FILL_SEMANTICS.md "Knowability — the
-c3 rule"). Refreshed on `st.cts.idx` itself (a lag-0 `CTS_ESTABLISHED`, a raw
-`CTS_UPDATED`), the snapshot can therefore count a gap whose c2 is the refresh
-candle — one that forms only at the NEXT candle. The consumer gate makes that
-safe: `_maybe_confirm_cts_via_proximity` is gated `i > st.cts.idx` and every
-window ends at or before `st.cts.idx`, so every gap it counts (c2 ≤
-`st.cts.idx`) has formed (`formed_at` ≤ `st.cts.idx + 1` ≤ `i`) by the candle
-it is used on; `cycle0_data["has_unfilled"]` is read only at a later cycle-1
-refresh (> CTS_0). **Do NOT add a refresh-time cut:** it would drop a gap that
-is formed at every candle the snapshot is read on (and the snapshot stays fixed
-until the next refresh), and it would have broken cond2 agreement with FibTracker's
-equally uncut cycle-0 cache (retired in PLAN_I S4). FibTracker, which decides once per event, does cut
-at the event's moment — the accepted MS/FibTracker divergence that follows (M1)
-is documented in LANDMINES "Scenario 2 anchor agreement".
+**Snapshot vs per-candle — imbalance knowability (Plan F, 2026-09-24; PLAN_I S5):**
+the FIB decision behind the snapshot is cut at each fed event's MOMENT — the
+embedded tracker asks every imbalance question with `evaluated_at` =
+`event_fields.event_moment(ev)`, exactly as the drawn fib's tracker does
+(IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule"); the retired
+resolver's uncut Scenario-2 read and the M1 divergence it caused are gone. The
+IP pick's own imbalance reads inside `select_ip_ic` — IC cond3 in
+`find_ic_candidates` over `(candidate, fib CTS anchor]` and the TB2 reference —
+stay uncut (`evaluated_at=None`; the drawn POI's own reads, PLAN_H). A refresh on
+`st.cts.idx` itself (a lag-0 `CTS_ESTABLISHED`, a raw `CTS_UPDATED`) can
+therefore count, in the pick, a gap whose c2 is the refresh candle — one that
+forms only at the NEXT candle. The consumer gate makes that safe:
+`_maybe_confirm_cts_via_proximity` is gated `i > st.cts.idx` and every window
+ends at or before the fib's CTS anchor (≤ `st.cts.idx`), so every gap it counts
+(c2 ≤ `st.cts.idx`) has formed (`formed_at` ≤ `st.cts.idx + 1` ≤ `i`) by the
+candle it is used on. **Do NOT add a refresh-time cut to the pick:** it would drop
+a gap that is formed at every candle the snapshot is read on (and the snapshot
+stays fixed until the next refresh).
 
 Whichever fires first confirms the CTS at that candle's idx:
 - `CTS_CONFIRMED.meta["confirmation_method"] = "pullback"` if pullback won
@@ -514,9 +526,9 @@ What clamps at `effective_end` (never at `len(df) - 1`):
   full-frame — a documented residual (instance existence / merged bounds at the
   edge). Its **existence** half is unobservable (Plan F): a full-frame-only gap
   (c3 past the edge) is inside a resolver window only when its c2 == the edge ==
-  `st.cts.idx`, and the snapshot is read only at `i > st.cts.idx`,
-  `cycle0_data` only at a later cycle-1 refresh ("Snapshot vs per-candle"
-  above) — candles the run never processes. The **merged-bounds**
+  `st.cts.idx`, and the snapshot is read only at `i > st.cts.idx`
+  ("Snapshot vs per-candle" above) — candles the run never processes; the
+  embedded tracker cuts at each event's moment ≤ the edge anyway (PLAN_I S5). The **merged-bounds**
   half matters only where a prefix and its merged run differ in degeneracy (the
   c3 rule's caveat) — LANDMINES "Bounded MS Runs Must Not Read Past `end_idx`",
   Known residual.

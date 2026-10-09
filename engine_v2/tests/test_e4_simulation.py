@@ -40,6 +40,7 @@ from engine_v2.tests.test_unified_probe import (
     _make_second_cts_moment_after_anchor_data,
     _prepare_df,
 )
+from engine_v2.tests._cross_fib_limits import NO_P
 
 _SWAP_TYPES = {
     "est": ("CTS_ESTABLISHED",),
@@ -89,7 +90,7 @@ _IP_MULTI = _make_ip_multicycle_data
 def test_real_emitter_stamps_the_moment(etype, maker, lagging):
     """Plan E E4a / E4b: `ev.idx` of every CTS_ESTABLISHED / BOS_CONFIRMED IS its
     moment; the lagging ones keep their (anchor, moment) apart."""
-    res = compute_bounded_structure(_prepare_df(maker()), 0, +1)
+    res = compute_bounded_structure(_prepare_df(maker()), 0, +1, cross_fib_limit=NO_P)
     evs = [e for e in res.events if e.type == etype]
     assert evs
     assert all(e.idx == e.meta["confirmed_at"] for e in evs)
@@ -109,7 +110,7 @@ def test_emit_cts_established_asserts_idx_is_the_moment():
     ms._emit_cts_established(10, 1.0, cts_anchor_idx=9, meta={"confirmed_at": 10})
     ev = ms.events[-1]
     assert (ev.idx, ev.meta["cts_anchor_idx"], ev.meta["confirmed_at"]) == (10, 9, 10)
-    assert ms.state.cts_established_moment_idx == 10
+    # (`ms.state.cts_established_moment_idx` — the retired resolver's cond3 horizon — went with it, PLAN_I S5.)
 
 
 @pytest.mark.skipif(not __debug__, reason="the emitter's check is an assert (stripped under -O)")
@@ -142,7 +143,7 @@ def test_emit_bos_confirmed_asserts_idx_is_the_moment():
     ("both", _IP_MULTI),
 ])
 def test_downstream_outputs_do_not_depend_on_the_idx_role(swap, maker, mode):
-    res = compute_bounded_structure(_prepare_df(maker()), 0, +1)
+    res = compute_bounded_structure(_prepare_df(maker()), 0, +1, cross_fib_limit=NO_P)
     types = _SWAP_TYPES[swap]
     assert {t for t, _, _ in _swappable(res.events, types)} >= (
         set(types) if maker in (_SECOND, _IP_SECOND) else {"BOS_CONFIRMED"}
@@ -200,7 +201,7 @@ def test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role(mode):
     update_anchor`, `test_poi_activation_moment::test_activation_cts_update_applies_at_its_moment_not_its_anchor`)."""
     from engine_v2.tests.test_imbalance_c3_knowability import _multicycle_with_tied_pattern_breakout
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(_multicycle_with_tied_pattern_breakout()), 0, +1)
+        res = compute_bounded_structure(_prepare_df(_multicycle_with_tied_pattern_breakout()), 0, +1, cross_fib_limit=NO_P)
     assert int(res.df["last_breakout_pat_apply_idx"].iloc[25]) == 25   # precondition: the tying breakout WAS applied at 25
     raw24 = next(e for e in res.events if e.type == "CTS_UPDATED" and e.idx == 24)
     assert not [e for e in res.events if e.type == "CTS_UPDATED" and e.idx == 25]   # the tie: not emitted

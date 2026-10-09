@@ -599,7 +599,7 @@ def _all_index_like_keys(module) -> set:
 # mirrored element's meta (measured at 574de2a). A new entry needs a reason.
 _NOT_MIRRORED = {
     "market_structure": {
-        "bos_idx", "cts_idx",                     # st.cycle0_data cache (RANGE_STARTED `cts_idx` → `cts_anchor_idx`, Post-E·4)
+        "bos_idx", "cts_idx",                     # df columns (out[...]; the invariant checks) — also st.cycle0_data's keys until PLAN_I S5 (RANGE_STARTED `cts_idx` → `cts_anchor_idx`, Post-E·4)
         "last_breakout_pat_apply_idx",            # a df column (out[...] = …)
     },
     "poi_zones": {"armed_idx", "confirmed_fill_idx"},  # ImbalanceInstance.meta (fill cache)

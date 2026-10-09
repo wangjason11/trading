@@ -12,6 +12,7 @@ from contextlib import redirect_stdout
 spec = importlib.util.spec_from_file_location("rts", os.path.join(os.path.dirname(os.path.abspath(__file__)), "random_tail_search.py"))
 rts = importlib.util.module_from_spec(spec); spec.loader.exec_module(rts)
 from engine_v2.structure.structure_engine import _make_market_structure, _pip_size_from_pair
+from engine_v2.zones.cross_cycle_fib import CrossFibLimit  # noqa: E402  (PLAN_I S5: MS's limit is REQUIRED)
 from engine_v2.tests.test_unified_probe import _prepare_df
 out, seed, n = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
 lo, hi = (sys.argv[4], sys.argv[5]) if len(sys.argv) > 5 else (None, None)
@@ -25,8 +26,8 @@ with open(out, "w") as f:
             df = _prepare_df(rows)
             kw = dict(struct_direction=sd, start_idx=0, structure_id=0, timeframe="H1", pip_size=_pip_size_from_pair(df), end_idx=end_idx)
             with redirect_stdout(io.StringIO()):
-                full = _make_market_structure(df, **kw); full.run()
-                st = _make_market_structure(df, stop_after_cts_established=2, **kw); st.run()
+                full = _make_market_structure(df, cross_fib_limit=CrossFibLimit(None, "none"), **kw); full.run()
+                st = _make_market_structure(df, cross_fib_limit=CrossFibLimit(None, "none"), stop_after_cts_established=2, **kw); st.run()
         except Exception as e:  # noqa
             continue
         if st.early_stop_idx is not None and est(full)[:2] != est(st)[:2]:

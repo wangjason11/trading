@@ -35,6 +35,7 @@ from engine_v2.tests.test_ms_stop_after_cts import _make_double_rewind_data
 from engine_v2.tests.test_unified_probe import _prepare_df
 from engine_v2.zones import poi_zones
 from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 def _tree(module):
@@ -93,7 +94,7 @@ def test_poi_meta_says_anchor_and_no_old_key_is_left():
 def test_a_real_run_emits_only_the_new_keys(sd):
     rows = _make_double_rewind_data()
     with redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(rows if sd == 1 else _noreg._mirror(rows)), 0, sd)
+        res = compute_bounded_structure(_prepare_df(rows if sd == 1 else _noreg._mirror(rows)), 0, sd, cross_fib_limit=NO_P)
     # VALUES too (the landing review's surviving mutant set the proximity path's key to the candle): the CTS anchor
     # when the range was decided — the offline one (@13, start 9) was finalized in step 9, before cycle 2 established
     # at 12, so it carries the cycle-1 anchor 8 (a pre-existing look-ahead stamp, not this migration's).
@@ -165,7 +166,7 @@ def _kl_run(sd, extra_events=(), *, after_threshold=(), drop_types=()):
     in list order — appended at the end they would expand cycle 2's zone); `drop_types` are removed."""
     rows = _make_double_rewind_data()
     with redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(rows if sd == 1 else _noreg._mirror(rows)), 0, sd)
+        res = compute_bounded_structure(_prepare_df(rows if sd == 1 else _noreg._mirror(rows)), 0, sd, cross_fib_limit=NO_P)
         events = []
         for e in res.events:
             if e.type in drop_types:
@@ -237,7 +238,7 @@ def test_exporters_write_every_meta_dict_verbatim(tmp_path, geometry, m15_df):
         "via": "synthetic", "cycle_id": 1, "structure_id": 0, "struct_direction": 1, "confirmed_at": 11,
         "cts_anchor_idx": 8, "confirmation_method": "pullback"})
     with redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(_make_double_rewind_data()), 0, 1)
+        res = compute_bounded_structure(_prepare_df(_make_double_rewind_data()), 0, 1, cross_fib_limit=NO_P)
         events = [*res.events, rec]
         down = _run_downstream_pipeline(res.df, events, 1, cross_fib_limits=main_limits(events))
     sub, lens_dfs = _render_both_lenses(geometry, m15_df)

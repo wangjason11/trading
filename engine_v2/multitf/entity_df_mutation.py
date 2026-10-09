@@ -1101,6 +1101,7 @@ def _build_geometry(
     run_cap_abs: int,
     bos0_inner: Optional[float],
     timeframe: str,
+    cross_fib_limit: Any,
 ) -> Optional[Tuple[Any, int]]:
     """Pool-free core of the geometry build: slice `[start-50, run_cap]`,
     preprocess (compute_imbalance + drop inherited structure cols + re-derive
@@ -1108,6 +1109,8 @@ def _build_geometry(
     bounded to `run_cap` (the sub's NATURAL end — it stops at its first
     reversal regardless). Returns `(bounded, slice_begin)` or None on a
     degenerate / failed run. `bounded.events` / `bounded.df` are SLICE-LOCAL.
+    `cross_fib_limit` (REQUIRED) = the sub's `P` for MarketStructure's embedded
+    fib tracker (PLAN_I S5 / D5) — the one the sweep computed at the fire.
     """
     n = len(m15_df)
     if start_abs >= n or start_abs >= run_cap_abs:
@@ -1151,13 +1154,15 @@ def _build_geometry(
             timeframe=timeframe,
             enforce_cts0_new_extreme=(bos0_inner is not None),
             bos0_inner=bos0_inner,
+            cross_fib_limit=cross_fib_limit,
         )
     except (ValueError, IndexError):
         # The documented geometry failure (LANDMINES "Lower-TF Pipeline Steps May
         # Fail" -> `geometry_failed`). It must stay this narrow: the MS run inside
         # calls the POI resolver, whose institutional-pattern errors arrive as
         # `poi_zones.IPSelectionError` (a RuntimeError) and propagate — a swallowed
-        # one would drop the WHOLE sub (PLAN_H §8.5 step 3).
+        # one would drop the WHOLE sub (PLAN_H §8.5 step 3); so do the embedded fib tracker's errors
+        # (`FibEventOrderError` / `CrossFibLimitError` / `EmbeddedFibTrackerError`, PLAN_I S5).
         return None
 
     bounded.df.attrs["imbalances"] = trigger_df.attrs.get("imbalances", [])
@@ -1201,7 +1206,7 @@ def build_or_get_geometry(
 
     geom = _build_geometry(
         m15_df, sd=int(sd), start_abs=int(start_abs), run_cap_abs=len(m15_df) - 1,
-        bos0_inner=bos0_inner, timeframe=timeframe,
+        bos0_inner=bos0_inner, timeframe=timeframe, cross_fib_limit=cross_fib_limit,
     )
     if geom is None:
         print(

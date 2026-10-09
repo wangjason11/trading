@@ -27,11 +27,12 @@ from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established, make_cts_updated
 from engine_v2.tests.test_ms_stop_after_cts import _make_double_rewind_data
 from engine_v2.tests.test_unified_probe import _prepare_df
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 def _ms(end_idx):
     with contextlib.redirect_stdout(io.StringIO()):
-        return compute_bounded_structure(_prepare_df(_make_double_rewind_data()), 0, 1, end_idx=end_idx)
+        return compute_bounded_structure(_prepare_df(_make_double_rewind_data()), 0, 1, end_idx=end_idx, cross_fib_limit=NO_P)
 
 
 def _downstream(res, events, cap):

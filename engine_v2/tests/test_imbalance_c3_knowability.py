@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -34,7 +33,8 @@ from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.tests._event_factory import make_cts_established, make_cts_updated
 from engine_v2.tests.test_poi_activation_moment import _only_poi, _run
 from engine_v2.tests.test_unified_probe import _make_ip_multicycle_data, _make_multicycle_data
-from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig, select_fib_anchor_for_cycle
+from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 # ---------------------------------------------------------------------------
@@ -298,29 +298,29 @@ def test_guard_threshold_update_own_gap_formed_at_the_candle_creates_the_cross()
 
 
 def test_guard_routine_evaluated_at_none_is_uncut():
-    """`evaluated_at=None` = no knowability cut (today's answer) on the routine
-    the unchanged MS in-flight resolver uses."""
+    """`evaluated_at=None` = no knowability cut on the routine (its parameter's meaning; no production caller passes
+    None since PLAN_I S5 retired MS's resolver — FibTracker passes the moment)."""
     from engine_v2.zones.cross_cycle_fib import resolve_cross_cycle_eligibility
     df = _df(40, [_gap(30)])
     elig = resolve_cross_cycle_eligibility(
         df=df, target_cycle=1, sd=1, own_window_end_idx=30, fill_horizon_idx=30, own_imb_start=27,
         anchor_idx=30, anchor_price=1.5, bos_by_cycle={}, cts_by_cycle={},
-        dead_cycles=set(), fill_threshold=0.70, fill_as_of="current", evaluated_at=None,
-        snapshot_horizon_idx=None,
+        dead_cycles=set(), fill_threshold=0.70, evaluated_at=None,
     )
     assert elig.own_has is True                 # the not-yet-formed gap still counts, uncut
 
 
 # ===========================================================================
-# THE ACCEPTED DIVERGENCE (Plan F §2, cold review M1) — the MS half passes on
-# the pre-Plan-F code, the FibTracker half is behaviour
+# THE M1 DIVERGENCE (Plan F §2, cold review M1) — RETIRED by PLAN_I S5: MS's in-flight read is the embedded
+# FibTracker's decision, so where FibTracker creates no fib MS reads no POI inner either
 # ===========================================================================
 
-def test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib():
-    """The unchanged MS in-flight resolver still counts a gap formed one candle
-    after the refresh (its only reader is gated i > cts.idx), while FibTracker,
-    cutting at the event, never creates the fib. Flips when the "re-ask when the
-    gap forms" follow-up lands."""
+def test_m1_retired_ms_reads_no_inner_where_fibtracker_creates_no_fib():
+    """Re-derived (PLAN_I S5; was `test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib`): the only sd gap
+    of [BOS 30, CTS 40] forms one candle after the establishment (c2 40, c3 41) → FibTracker, cutting at the event,
+    creates no fib → `representative_fib` is None → MS's read (`poi_inner_for_fib`) returns no inner. The retired
+    resolver returned [1.13] here (the IC 32 pick) — the same pick a fib on those anchors WOULD give (asserted
+    below, so the None is not vacuous)."""
     df = _df(60, [_gap(40, top=1.30, bottom=1.20)])
     # The big-flag reference: 5 marus (.0200 bodies) before the pattern.
     for i, base in zip(range(25, 30), (1.00, 1.02, 1.04, 1.06, 1.08)):
@@ -334,16 +334,20 @@ def test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib():
     df.loc[33, ["o", "h", "l", "c"]] = [1.09, 1.201, 1.089, 1.20]
     df = _ip_ready(df)
     assert int(df.loc[32, "direction"]) == -1
-    inners = poi_zones.compute_poi_inners_for_cycle(
-        df, 30, 1.00, 40, 1.35, 1, structure_id=0, cycle_id=1, fill_horizon_idx=40, snapshot_horizon_idx=40,
-    )
-    assert inners == [1.13]
+    from engine_v2.features.fibonacci import DEFAULT_FIB_LEVELS, create_fib_retracement
+    would_be = poi_zones.FibState(
+        structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.00, cts_idx=40, cts_price=1.35,
+        active=True, locked=False,
+        fib=create_fib_retracement(anchor_high=1.35, anchor_low=1.00, direction=1, levels=DEFAULT_FIB_LEVELS))
+    assert poi_zones.poi_inner_for_fib(df, would_be, 0.70) == 1.13
     tracker = _tracker()
     # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
     _quiet(tracker.on_cts_confirmed, _ev("CTS_CONFIRMED", 6, 0.95, 0, 0, cts_anchor_idx=5))
     _quiet(tracker.on_cts_established, _ev("CTS_ESTABLISHED", 40, 1.35, 0, 1), df,
            bos_idx=30, bos_price=1.00)
     assert (0, 1) not in tracker._fibs
+    assert tracker.representative_fib(0, 1) is None
+    assert poi_zones.poi_inner_for_fib(df, tracker.representative_fib(0, 1), 0.70) is None
 
 
 # ===========================================================================
@@ -409,7 +413,7 @@ def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_with_their_apply():
     from engine_v2.structure.structure_engine import compute_bounded_structure
     from engine_v2.tests.test_unified_probe import _prepare_df
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(_multicycle_with_tied_pattern_breakout()), 0, +1)
+        res = compute_bounded_structure(_prepare_df(_multicycle_with_tied_pattern_breakout()), 0, +1, cross_fib_limit=NO_P)
     updates = [e for e in res.events if e.type == "CTS_UPDATED"]
     raw = [e for e in updates if e.meta["via"] == CTS_UPDATED_RAW_VIA]
     patterns = [e for e in updates if e.meta["via"] != CTS_UPDATED_RAW_VIA]
@@ -428,51 +432,9 @@ def test_ms_emits_raw_updates_with_the_raw_via_and_patterns_with_their_apply():
 # Landing cold review (2026-09-24): pins for the remaining cut / uncut sites
 # ===========================================================================
 
-def _c0():
-    return {"bos_idx": 10, "bos_price": 1.0, "cts_idx": 20, "cts_price": 1.15,
-            "has_unfilled": True, "scenario1": None}
-
-
-@pytest.mark.parametrize("evaluated_at, label", [
-    (None, "scenario_2_cross"), (40, "scenario_3"), (41, "scenario_2_cross"),
-])
-def test_select_fib_anchor_cond1_at_the_moment(evaluated_at, label):
-    df = _df(60, [_gap(15), _gap(40, top=1.30, bottom=1.20)])
-    out = select_fib_anchor_for_cycle(df, 1, 1, 30, 1.2, 40, 1.35, _c0(), 0.70,
-                                      struct_direction=1, evaluated_at=evaluated_at,
-                                      fill_horizon_idx=40, snapshot_horizon_idx=30)
-    assert out[-1] == label
-
-
-def test_guard_ms_inflight_select_call_is_uncut(monkeypatch):
-    """The MS in-flight resolver passes evaluated_at=None (Plan F §2 decision)."""
-    seen = []
-    real = poi_zones.select_fib_anchor_for_cycle
-
-    def spy(*a, **k):
-        seen.append(k["evaluated_at"])
-        return real(*a, **k)
-
-    monkeypatch.setattr(poi_zones, "select_fib_anchor_for_cycle", spy)
-    df = _ip_ready(_df(60, [_gap(15), _gap(40, top=1.30, bottom=1.20)]))
-    poi_zones.compute_poi_inners_for_cycle(df, 30, 1.2, 40, 1.35, 1,
-                                           structure_id=1, cycle_id=1, c0_data=_c0(),
-                                           fill_horizon_idx=40, snapshot_horizon_idx=40)
-    assert seen == [None]
-
-
-def test_guard_ms_cycle0_snapshot_is_uncut():
-    """`MarketStructure._update_cycle0_data` (Scenario-2 cond2 mirror) stays uncut:
-    a gap with c2 == CTS_0 counts (it has formed by any later cycle-1 read)."""
-    from engine_v2.structure.market_structure import MarketStructure
-    ms = MarketStructure.__new__(MarketStructure)
-    ms.df = _df(40, [_gap(20)])
-    ms._fill_threshold = 0.70
-    ms.state = SimpleNamespace(cts_cycle_id=0, cts=SimpleNamespace(idx=20, price=1.2),
-                               bos=SimpleNamespace(idx=10, price=0.9),
-                               struct_direction=1, cycle0_data=None)
-    ms._update_cycle0_data(20)
-    assert ms.state.cycle0_data["has_unfilled"] is True
+# PLAN_I S5 retired the selector `select_fib_anchor_for_cycle` (its cond1 cut pins, three), the MS resolver's
+# uncut call into it and MS's uncut cycle-0 snapshot: MS's in-flight read is the embedded FibTracker's decision,
+# cut at each event's moment like the drawn fib (`test_plan_i_s5_ms_reads_the_fib.py`).
 
 
 def test_event_scope_is_restored_after_every_handler():

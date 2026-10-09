@@ -47,6 +47,7 @@ from engine_v2.tests.test_bounded_structure import (
     _prepare_df,
 )
 from engine_v2.tests.test_unified_probe import _make_multicycle_data
+from engine_v2.tests._cross_fib_limits import NO_P
 
 OUT_COLS = list(_OUT_INT_NEG1 + _OUT_INT_ZERO + _OUT_FLOAT_NEG1 + _OUT_FLOAT_NAN + _OUT_OBJ_EMPTY)
 assert len(OUT_COLS) == 27
@@ -264,7 +265,7 @@ _FIXTURES = {
 
 def _events(raw, B, sd=1, **kw):
     """Bounded run at B -> list of (type, idx, meta)."""
-    res = compute_bounded_structure(_prepare_df(raw), _START, sd, end_idx=B, **kw)
+    res = compute_bounded_structure(_prepare_df(raw), _START, sd, end_idx=B, cross_fib_limit=NO_P, **kw)
     return [(ev.type, int(ev.idx), ev.meta) for ev in res.events]
 
 
@@ -299,8 +300,8 @@ def _check_all_bounds(raw, sd: int, mode: str):
     kw = _mode_kwargs(mode, full, sd)
     failures = []
     for B in range(_START + 3, len(raw) - 1):
-        bounded = compute_bounded_structure(full, _START, sd, end_idx=B, **kw)
-        truncated = compute_bounded_structure(_prepare_df(raw[: B + 1]), _START, sd, end_idx=None, **kw)
+        bounded = compute_bounded_structure(full, _START, sd, end_idx=B, cross_fib_limit=NO_P, **kw)
+        truncated = compute_bounded_structure(_prepare_df(raw[: B + 1]), _START, sd, end_idx=None, cross_fib_limit=NO_P, **kw)
 
         problems = []
         if _ev_sig(bounded.events) != _ev_sig(truncated.events):
@@ -384,7 +385,7 @@ def test_l4_reversal_watch_clamps_at_the_bound():
     i, k = 4, 2
 
     def run(B):
-        res = compute_bounded_structure(_prepare_df(raw), _START, 1, end_idx=B)
+        res = compute_bounded_structure(_prepare_df(raw), _START, 1, end_idx=B, cross_fib_limit=NO_P)
         evs = [(ev.type, int(ev.idx), ev.meta) for ev in res.events]
         return res, evs
 
@@ -470,4 +471,4 @@ def test_post_run_assert_catches_a_reintroduced_l2_leak(monkeypatch, raw, B):
 
     monkeypatch.setattr(MarketStructure, "_is_range_candle_given_confirm", _raw_label_range_test)
     with pytest.raises(AssertionError, match=r"event past effective_end"):
-        compute_bounded_structure(_prepare_df(raw), _START, 1, end_idx=B)
+        compute_bounded_structure(_prepare_df(raw), _START, 1, end_idx=B, cross_fib_limit=NO_P)

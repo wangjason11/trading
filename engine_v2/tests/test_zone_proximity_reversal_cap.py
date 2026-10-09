@@ -28,12 +28,13 @@ from engine_v2.tests.test_ms_stop_after_cts import _make_double_rewind_data
 from engine_v2.tests.test_unified_probe import _prepare_df
 from engine_v2.tests.test_zone_proximity import _bos_zone, _cts_confirmed, _make_df
 from engine_v2.zones.zone_proximity import check_zone_proximity
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 def _run(end_idx, mutate=None):
     """The real MS on `_make_double_rewind_data` (sd +1) bounded at `end_idx`, then the H1 downstream pipeline."""
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(_prepare_df(_make_double_rewind_data()), 0, 1, end_idx=end_idx)
+        res = compute_bounded_structure(_prepare_df(_make_double_rewind_data()), 0, 1, end_idx=end_idx, cross_fib_limit=NO_P)
         events = copy.deepcopy(res.events)
         if mutate:
             mutate(events)

@@ -191,15 +191,15 @@ imbalance reads are on the moment since Plan E E3a, 2026-09-24 — the cycle-0 c
 (the pool's `knowable_at_idx`, the sibling clip and the reference-zone window / recency key on the moment since
 Plan E E3b, 2026-09-25 — `REVERSAL_CANDIDATE` still on `ev.idx`, PART4 §17.12; `unified_probe` Phase 2's retrace-window start `check_lo` is the first CTS's moment + 1 since
 Plan E E3c, like Phase 1's `tfb.est_idx + 1`;) the MS
-in-flight POI-inner resolver, which evaluates fills as-of `st.cts.idx` — the processing candle after a raw
-`CTS_UPDATED`, the CTS anchor after a `CTS_ESTABLISHED` or a pattern-path update (except Scenario-2 cond1, whose
-fill horizon is the triggering event's moment since Plan E E3a, in lock-step with FibTracker) — `_refresh_poi_inners_for_cycle` →
-`compute_poi_inners_for_cycle` / `select_fib_anchor_for_cycle`, and `_update_cycle0_data`, and feeds the
-sd-zone-proximity CTS confirmation: its imbalance-EXISTENCE half is settled — no c3 cut, by decision, because the
-POI-inner snapshot's only reader is gated `i > st.cts.idx` and the cycle-0 mirror is read only at a later cycle-1
-refresh, so no decision uses a gap before it forms (Plan F, measured 24/24 CSVs identical with a cut;
-`structure/MARKET_STRUCTURE_SPEC.md` "Snapshot vs per-candle"; the one accepted MS/FibTracker activation divergence
-this leaves: IMBALANCE_FILL_SEMANTICS.md "Decided at the event") — its fill-horizon half: Scenario-2 cond1's horizon is the triggering event's moment since Plan E E3a (measured 0 cells
+in-flight POI-inner read — since PLAN_I S5 the embedded FibTracker (cut at each fed event's moment, like the drawn
+fib) → `representative_fib` → `poi_inner_for_fib` → `select_ip_ic` (the IP pick evaluates fills as-of the fib's CTS
+anchor ≤ `st.cts.idx`; until S5 `_refresh_poi_inners_for_cycle` called the retired `compute_poi_inners_for_cycle` /
+`select_fib_anchor_for_cycle` + `_update_cycle0_data`, CROSS_CYCLE_FIB_SPEC Appendix A, part 2) — which feeds the
+sd-zone-proximity CTS confirmation: the pick's imbalance-EXISTENCE half is settled — no c3 cut, by decision, because
+the POI-inner snapshot's only reader is gated `i > st.cts.idx`, so no decision uses a gap before it forms (Plan F, measured 24/24 CSVs identical with a cut;
+`structure/MARKET_STRUCTURE_SPEC.md` "Snapshot vs per-candle"; the MS/FibTracker activation divergence (M1) it left
+until S5 is retired: IMBALANCE_FILL_SEMANTICS.md "Decided at the event") — its fill-horizon half (until S5, the
+retired resolver's): Scenario-2 cond1's horizon was the triggering event's moment since Plan E E3a (measured 0 cells
 through the mirror), and cond2 (the cycle-0 mirror) / cond3 on theirs since E3a′ (0 cells; 0 answer flips at the
 16 cond3 and 1 cycle-0 calls whose horizon moved); IC cond3 stays on the anchor by decision (T2)). Site lists + staging: `plans/PLAN_E_inputs.md`.
 
@@ -303,7 +303,8 @@ POI activation conditions
   moment the IC's institutional pattern is known complete.
 The IC itself is ONE per fib record since landing B: the institutional-
 pattern pick (`select_ip_ic`, POI_ZONES_SPEC §3.4) — the same selector MS's
-in-flight sd-proximity read uses (D2). Scenario conditions (#4: the
+in-flight sd-proximity read uses (D2), on the same fib decision since PLAN_I S5
+(MS's embedded FibTracker, CROSS_CYCLE_FIB_SPEC §8). Scenario conditions (#4: the
 per-scenario idx/price constraints of `zones/POI_ZONES_SPEC.md` §3.2) are NOT
 implemented — IC identification applies only the base conditions (found
 2026-09-30; kept unapplied for future testing, PLAN_H D4). As designed they

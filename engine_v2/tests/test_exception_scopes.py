@@ -18,8 +18,11 @@ BROAD = {"RuntimeError", "Exception", "BaseException", "IPSelectionError"}
 # (module, enclosing function) -> the exact names each of its broad handlers catches. None of them encloses an MS run
 # or the IP selector (checked 2026-10-06c against the landing review's 4 call paths to `select_ip_ic`).
 ALLOWED = {
-    # the resolver: the graceful anchor scope (anchor selection + fib construction only), then the re-raise
-    ("zones/poi_zones.py", "compute_poi_inners_for_cycle"): [("Exception",), ("Exception",)],
+    # MS's in-flight IP read (PLAN_I S5): every error of the stamp read / the pick re-raised as IPSelectionError
+    ("zones/poi_zones.py", "poi_inner_for_fib"): [("Exception",)],
+    # MS's feed of its embedded FibTracker (PLAN_I S5): the tracker's RuntimeErrors re-raised as they are, any
+    # other error re-raised as EmbeddedFibTrackerError (a RuntimeError) — it never swallows, it only re-types
+    ("structure/market_structure.py", "_feed_fib_tracker"): [("RuntimeError",), ("Exception",)],
     # the OANDA fetch retries — they wrap `get_history` only
     ("multitf/data_bridge.py", "_fetch_chunk"): [("RuntimeError", "requests.RequestException")],
     ("run_replay.py", "_get_history_retrying"): [("RuntimeError", "requests.RequestException")],

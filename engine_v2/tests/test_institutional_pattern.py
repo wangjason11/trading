@@ -53,6 +53,7 @@ from engine_v2.zones.poi_zones import (
     select_ip_ic,
     select_ip_records,
 )
+from engine_v2.tests._cross_fib_limits import NO_P
 
 U, D, Z, S = 1, -1, 0, AGREED_SPLIT
 PIP = 0.0001
@@ -707,7 +708,7 @@ def test_downstream_pipeline_reads_the_poi_config_defaults(monkeypatch):
     monkeypatch.setattr(orch, "derive_ip_candidates",
                         lambda *a, **k: seen.append(("ip", a[3], k["ip_records"])) or real_ip(*a, **k))
     df = _prepare_df(_make_ip_multicycle_data())
-    res = compute_bounded_structure(df, 0, +1)
+    res = compute_bounded_structure(df, 0, +1, cross_fib_limit=NO_P)
     with contextlib.redirect_stdout(io.StringIO()):
         out = orch._run_downstream_pipeline(res.df, res.events, res.struct_direction, wvmi="off",
                                             cross_fib_limits=main_limits(res.events))
@@ -725,7 +726,7 @@ def test_downstream_pipeline_returns_the_selection_of_its_own_fibs():
     from engine_v2.structure.structure_engine import compute_bounded_structure
     from engine_v2.tests.test_unified_probe import _make_ip_multicycle_data, _prepare_df
     df = _prepare_df(_make_ip_multicycle_data())
-    res = compute_bounded_structure(df, 0, +1)
+    res = compute_bounded_structure(df, 0, +1, cross_fib_limit=NO_P)
     with contextlib.redirect_stdout(io.StringIO()):
         out = _run_downstream_pipeline(res.df, res.events, res.struct_direction, wvmi="off",
                                        cross_fib_limits=main_limits(res.events))

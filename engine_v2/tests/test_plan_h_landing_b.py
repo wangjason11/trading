@@ -1,6 +1,6 @@
 """PLAN_H landing B (Week 9 Part 1 item 1, 2026-10-06): the institutional-pattern pick is SWITCHED ON — the drawn
-POI (one per fib record, `derive_poi_zones`) and MS's in-flight read (`compute_poi_inners_for_cycle`) use the same
-`select_ip_ic` (D2) — with the rule-3 migration of the POI meta (`versions` / `current_versions` -> `ip_rank` + the
+POI (one per fib record, `derive_poi_zones`) and MS's in-flight read (`poi_inner_for_fib` since PLAN_I S5; was
+`compute_poi_inners_for_cycle`) use the same `select_ip_ic` (D2) — with the rule-3 migration of the POI meta (`versions` / `current_versions` -> `ip_rank` + the
 legs / tiebreak / `pattern_confirmed_idx`).
 
 Pinned here (PLAN_H §8.6 "B", the census of §8.4a): the activation's cond5 = the touch of the AS-OF 61.8-80 zone
@@ -9,7 +9,7 @@ returns the PICK's inner where the V30 / V60 / V90 selection disagrees; its fail
 frame raises; an IP error inside a sub geometry is not swallowed by its `except (ValueError, IndexError)`); D2 on
 the real collaborator; the POI meta key order; the ONE hover builder (HV) and the H1 fib hover's "IP: none" (C1);
 the exporter's `ip_rank` column. The landing review (PLAN_H §8.5c) added: the sell-side touch, the resolver's
-graceful anchor scope, the candidate rows read from the handed records, the asymmetric leg order, and the RENDERED
+graceful anchor scope (retired with it, PLAN_I S5), the candidate rows read from the handed records, the asymmetric leg order, and the RENDERED
 hovers at all three POI sites (`_rendered`: what the template shows, not only what `customdata` holds).
 """
 from __future__ import annotations
@@ -37,6 +37,7 @@ from engine_v2.tests.test_unified_probe import (
     _prepare_df,
 )
 from engine_v2.zones.poi_zones import IPSelectionError, POIConfig, fib_zone_bounds
+from engine_v2.tests._cross_fib_limits import NO_P
 
 
 # ---------------------------------------------------------------------------
@@ -145,8 +146,11 @@ def _m1_frame(*, extra_v_pick=True):
 
 
 def _resolve(df):
-    return poi_zones.compute_poi_inners_for_cycle(
-        df, 30, 1.00, 40, 1.35, 1, structure_id=0, cycle_id=1, fill_horizon_idx=40, snapshot_horizon_idx=40)
+    """MS's in-flight read on the M1 frame's fib (BOS 30 → CTS 40, sd +1) — since PLAN_I S5 `poi_inner_for_fib`
+    on the embedded tracker's representative fib (was the retired `compute_poi_inners_for_cycle`)."""
+    fs = poi_zones.FibState(structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.0, cts_idx=40,
+                            cts_price=1.35, active=True, locked=False, fib=_fib(1.35, 1.0))
+    return poi_zones.poi_inner_for_fib(df, fs, 0.70)
 
 
 def test_resolver_returns_the_pick_where_the_variants_disagree():
@@ -158,7 +162,7 @@ def test_resolver_returns_the_pick_where_the_variants_disagree():
     assert poi_zones.select_ic_variants(cands, df, fs, POIConfig()) == {36: ["V30", "V60", "V90"]}   # V: 36
     pick = poi_zones.select_ip_ic(df, fs, POIConfig()).pick
     assert pick is not None and (pick.ic_idx, pick.ip_rank) == (32, "2A.i")                         # IP: 32
-    assert _resolve(df) == [1.13]          # the pick's inner (IC 32's high), not 36's 1.125
+    assert _resolve(df) == 1.13            # the pick's inner (IC 32's high), not 36's 1.125
 
 
 def _fib(high, low):
@@ -170,16 +174,19 @@ def test_resolver_returns_nothing_when_no_candidate_has_a_pattern():
     df = _m1_frame()
     df.loc[33, ["o", "h", "l", "c"]] = [1.09, 1.10, 1.089, 1.095]       # a small continuation: not big_maru
     df = _ip_ready(df)
-    assert _resolve(df) == []
+    assert _resolve(df) is None
 
 
 def test_resolver_on_an_unstamped_frame_raises():
-    """PR1: `select_ip_ic` runs OUTSIDE the resolver's graceful `try` — a frame without the candle stamp is an
-    error, never D7's legitimate "no pattern"."""
+    """PR1: a frame without the candle stamp is an error, never D7's legitimate "no pattern" — and since PLAN_I S5
+    (§9.2 F11) also on a refresh with NO fib (the read takes the stamp first on every call)."""
     df = _m1_frame()
     del df.attrs["timeframe"]
     with pytest.raises(IPSelectionError) as exc:
         _resolve(df)
+    assert isinstance(exc.value.__cause__, KeyError) and exc.value.__cause__.args == ("timeframe",)
+    with pytest.raises(IPSelectionError) as exc:
+        poi_zones.poi_inner_for_fib(df, None, 0.70)
     assert isinstance(exc.value.__cause__, KeyError) and exc.value.__cause__.args == ("timeframe",)
 
 
@@ -196,14 +203,9 @@ def test_resolver_reraises_any_ip_error_past_a_narrow_except(monkeypatch):
     assert isinstance(exc.value.__cause__, ValueError)
 
 
-def test_resolver_anchor_selection_error_stays_graceful(monkeypatch):
-    """The OTHER half of PR1: the anchor selection + fib construction keep their documented graceful fallback
-    (`[]` = the BOS inner only) — only the IP is outside the `try` (landing review R04)."""
-    def boom(*a, **k):
-        raise ValueError("anchor")
-
-    monkeypatch.setattr(poi_zones, "select_fib_anchor_for_cycle", boom)
-    assert _resolve(_m1_frame()) == []
+# (`test_resolver_anchor_selection_error_stays_graceful` retired, PLAN_I S5: the read selects no anchors — the
+# fib is the embedded tracker's — so no graceful scope is left; a tracker error propagates,
+# `test_plan_i_s5_ms_reads_the_fib.py`.)
 
 
 def test_an_ip_error_inside_a_sub_geometry_propagates(monkeypatch):
@@ -221,7 +223,7 @@ def test_an_ip_error_inside_a_sub_geometry_propagates(monkeypatch):
     monkeypatch.setattr(poi_zones, "select_ip_ic", lambda *a, **k: calls.append(1) or real(*a, **k))
     with contextlib.redirect_stdout(io.StringIO()):
         assert edm._build_geometry(df, sd=1, start_abs=0, run_cap_abs=len(df) - 1, bos0_inner=inner,
-                                   timeframe="M15") is not None
+                                   timeframe="M15", cross_fib_limit=NO_P) is not None
     assert calls, "the fixture's MS run reads the resolver"
 
     def boom(*a, **k):
@@ -229,7 +231,7 @@ def test_an_ip_error_inside_a_sub_geometry_propagates(monkeypatch):
 
     monkeypatch.setattr(poi_zones, "select_ip_ic", boom)
     with contextlib.redirect_stdout(io.StringIO()), pytest.raises(IPSelectionError):
-        edm._build_geometry(df, sd=1, start_abs=0, run_cap_abs=len(df) - 1, bos0_inner=inner, timeframe="M15")
+        edm._build_geometry(df, sd=1, start_abs=0, run_cap_abs=len(df) - 1, bos0_inner=inner, timeframe="M15", cross_fib_limit=NO_P)
 
 
 def test_ms_on_an_unstamped_frame_raises():
@@ -237,7 +239,7 @@ def test_ms_on_an_unstamped_frame_raises():
     df = _prepare_df(_make_ip_moment_after_anchor_data())
     del df.attrs["timeframe"]
     with contextlib.redirect_stdout(io.StringIO()), pytest.raises(IPSelectionError):
-        compute_bounded_structure(df, 0, +1)
+        compute_bounded_structure(df, 0, +1, cross_fib_limit=NO_P)
 
 
 def test_probe_phase2_on_an_unstamped_frame_raises(monkeypatch):
@@ -249,8 +251,8 @@ def test_probe_phase2_on_an_unstamped_frame_raises(monkeypatch):
     import engine_v2.structure.structure_engine as se
 
     calls = []
-    real = se.compute_poi_inners_for_cycle
-    monkeypatch.setattr(se, "compute_poi_inners_for_cycle", lambda *a, **k: calls.append(1) or real(*a, **k))
+    real = se.poi_inner_for_fib
+    monkeypatch.setattr(se, "poi_inner_for_fib", lambda *a, **k: calls.append(1) or real(*a, **k))
     df = _prepare_df(_make_multicycle_data())
     with contextlib.redirect_stdout(io.StringIO()):
         unified_probe(df, 0, 1, _ref_zone_uptrend(), 14, "H1", enable_phase2=True)
@@ -281,18 +283,19 @@ def _pipeline(maker, *, spy=None, sd=+1):
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
     import engine_v2.structure.structure_engine as se
     df = _prepare_df(maker())
-    real = se.compute_poi_inners_for_cycle
+    real = se.poi_inner_for_fib
     calls = []
 
-    def _spy(*a, **k):
-        out = real(*a, **k)
-        calls.append((int(a[6]), int(a[7]), int(a[1]), int(a[3]), list(out)))
+    def _spy(df, fib, fill_threshold):
+        out = real(df, fib, fill_threshold)
+        if fib is not None:
+            calls.append((int(fib.structure_id), int(fib.cycle_id), int(fib.bos_idx), int(fib.cts_idx), out))
         return out
 
     if spy is not None:
-        spy.setattr(se, "compute_poi_inners_for_cycle", _spy)
+        spy.setattr(se, "poi_inner_for_fib", _spy)
     with contextlib.redirect_stdout(io.StringIO()):
-        res = compute_bounded_structure(df, 0, sd)
+        res = compute_bounded_structure(df, 0, sd, cross_fib_limit=NO_P)
         out = _run_downstream_pipeline(res.df, res.events, sd, wvmi="off", cross_fib_limits=main_limits(res.events))
     return res, out, calls
 
@@ -308,7 +311,7 @@ def test_drawn_poi_is_the_ms_resolvers_pick_on_the_final_fib(monkeypatch, maker,
                                                                          poi.meta["cts_anchor_idx"])]
     assert final, "MS read the resolver on the final fib's anchors"
     # the inner: a buy POI's top, a sell POI's bottom (the IC's high / low)
-    assert final[-1][4] == [float(poi.top) if sd == 1 else float(poi.bottom)]
+    assert final[-1][4] == (float(poi.top) if sd == 1 else float(poi.bottom))
 
 
 def test_poi_meta_carries_the_pick_in_place_of_the_variants():

@@ -55,6 +55,21 @@ import numpy as np
 import engine_v2.structure.event_fields as ef
 import engine_v2.structure.market_structure as msmod
 from engine_v2.structure.structure_engine import _make_market_structure, _pip_size_from_pair
+from engine_v2.zones.cross_cycle_fib import CrossFibLimit
+from engine_v2.zones.fib_tracker import FibEventOrderError
+
+# PLAN_I S5: MarketStructure carries an embedded FibTracker (REQUIRED limit; no reference price here) and raises
+# `FibEventOrderError` at the END of a run whose emission order is not the processing order — the F16 / F17 shapes
+# this search hunts. `_ms_run` records it on the instance (`_rts_tripwire`) instead of failing the trial; the run
+# is complete when it raises (events, df, invariants).
+_NO_P = CrossFibLimit(None, "none")
+
+
+def _ms_run(ms):
+    try:
+        ms.run()
+    except FibEventOrderError as e:
+        ms._rts_tripwire = str(e)[:240]
 from engine_v2.tests.test_ms_stop_after_cts import _make_double_rewind_data, _make_watch_over_second_cts_data
 from engine_v2.tests.test_unified_probe import (_prepare_df, _make_multicycle_data,
                                                 _make_second_cts_moment_after_anchor_data)
@@ -272,10 +287,11 @@ def run(out, seed, n, lo=None, hi=None):
             ms = None
             try:
                 df = _prepare_df(rows)
-                ms = _make_market_structure(df, struct_direction=sd, start_idx=0, structure_id=0, timeframe="H1",
+                ms = _make_market_structure(df, cross_fib_limit=_NO_P, struct_direction=sd, start_idx=0, structure_id=0, timeframe="H1",
                                             pip_size=_pip_size_from_pair(df), end_idx=end_idx,
                                             stop_after_cts_established=stop_n, debug_invariants=not NOINV)
-                ms.run()
+                _ms_run(ms)
+                rec["trip"] = getattr(ms, "_rts_tripwire", None)
                 rec["sig"], rec["rev"] = _sig(ms)
                 rec["f14"] = _f14(ms.events)
                 rec.update(rir=getattr(ms, "_rts_rir", 0), wpe=getattr(ms, "_rts_wpe", 0), exp=getattr(ms, "_rts_exp", 0))
@@ -369,9 +385,10 @@ def waves(out, seed, n):
             rec = dict(t=t, sd=sd, tf=tf, base=base, n=len(rows_), w=n_waves)
             try:
                 df = _prepare_df(rows_)
-                ms = _make_market_structure(df, struct_direction=sd, start_idx=0, structure_id=0, timeframe=tf,
+                ms = _make_market_structure(df, cross_fib_limit=_NO_P, struct_direction=sd, start_idx=0, structure_id=0, timeframe=tf,
                                             pip_size=_pip_size_from_pair(df), debug_invariants=not NOINV)
-                ms.run()
+                _ms_run(ms)
+                rec["trip"] = getattr(ms, "_rts_tripwire", None)
                 rec["sig"], rec["rev"] = _sig(ms)
                 rec["f14"] = _f14(ms.events)
             except Exception as e:  # noqa: BLE001 — AssertionError included on purpose
@@ -427,9 +444,10 @@ def real(out, seed, n):
             rec = dict(t=t, sd=sd, tf=tf, off=off, start=start, n=length, jit=jit)
             try:
                 df = _prepare_df(rows_)
-                ms = _make_market_structure(df, struct_direction=sd, start_idx=start, structure_id=0, timeframe=tf,
+                ms = _make_market_structure(df, cross_fib_limit=_NO_P, struct_direction=sd, start_idx=start, structure_id=0, timeframe=tf,
                                             pip_size=_pip_size_from_pair(df), debug_invariants=not NOINV)
-                ms.run()
+                _ms_run(ms)
+                rec["trip"] = getattr(ms, "_rts_tripwire", None)
                 rec["sig"], rec["rev"] = _sig(ms)
                 rec["f14"] = _f14(ms.events)
             except Exception as e:  # noqa: BLE001 — AssertionError included on purpose

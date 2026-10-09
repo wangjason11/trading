@@ -39,6 +39,7 @@ from engine_v2.tests.test_ms_stop_after_cts import _make_double_rewind_data
 from engine_v2.tests.test_unified_probe import _prepare_df
 from engine_v2.zones.structure_lifecycle import compute_cycle_lifecycle, compute_reversal_idx_by_sid
 from engine_v2.zones.wvmi import WVMITracker
+from engine_v2.tests._cross_fib_limits import NO_P
 
 _SUB = "H1.main >> M15.confluence"
 
@@ -183,7 +184,7 @@ def test_the_tracker_falls_back_on_a_lock_lp_past_the_data_edge():
 def dr():
     """`_make_double_rewind_data` (sd +1): cycles established at 2 / 8 / 12, CTS_CONFIRMED at 4 / 9 / 14, sid 0
     reverses at 17; lifecycle {(0,0): [2, 8), (0,1): [8, 12), (0,2): [12, 17)}."""
-    return _q(lambda: compute_bounded_structure(_prepare_df(_make_double_rewind_data()), 0, 1))
+    return _q(lambda: compute_bounded_structure(_prepare_df(_make_double_rewind_data()), 0, 1, cross_fib_limit=NO_P))
 
 
 def _project(res, floor=None, cap=None, reason=None):
