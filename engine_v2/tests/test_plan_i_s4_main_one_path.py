@@ -51,7 +51,7 @@ def test_main_sid0_gets_the_cycle0_single_and_labelled_singles_after_it(sd):
     t = _main_tracker(9.0, sd)
     df = _df(80, [_gap(15, sd, 1.10, 1.00), _gap(35, sd, 1.30, 1.20)])
     c0 = _q(t.on_cts_established, _est(20, 1.15, 0, 0, sd), df, 10, _m(1.0, sd))
-    assert c0 is t._fibs[(0, 0)] and c0.active and c0.meta == {"activated_at": 20, "fib_mode": "cross_cycle"}  # Q6
+    assert c0 is t._fibs[(0, 0)] and c0.active and c0.meta == {"activated_at": 20}  # Q6
     _q(t.on_cts_confirmed, _ev("CTS_CONFIRMED", 25, 1.15, 0, 0, sd, cts_anchor_idx=20))
     c1 = _q(t.on_cts_established, _est(40, 1.35, 0, 1, sd), df, 30, _m(1.2, sd))
     assert c1 is t._fibs[(0, 1)] and c1.meta["via"] == "cross_fib_limit"          # sid 0: no P → no cross

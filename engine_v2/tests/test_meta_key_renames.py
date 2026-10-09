@@ -163,6 +163,57 @@ def test_no_production_string_is_a_plan_i_s4_retired_fib_key():
     assert hits == []
 
 
+# --- PLAN_I S6 (2026-10-09): the `fib_mode` meta key and the fib CSV's column retired (a rule-3 migration) ------------
+
+def test_no_production_string_is_the_plan_i_s6_retired_fib_mode():
+    """`fib_mode` was `"cross_cycle"` on every fib record since S4 (one logic, no other mode): the four FibTracker stamps
+    and the fib CSV's column are gone — no production string constant EQUALS it."""
+    root = Path(engine_v2.__file__).parent
+    hits = []
+    for path in root.rglob("*.py"):
+        if {"legacy_2025", "tests", "plans"} & set(path.parts):
+            continue
+        for n in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(n, ast.Constant) and n.value == "fib_mode":
+                hits.append((path.name, n.lineno))
+    assert hits == []
+
+
+def test_no_fib_record_carries_fib_mode_and_the_fib_csv_has_no_column(tmp_path):
+    """A key built from string pieces passes the static scan, so every record-creating site runs for real (S3's
+    fixtures, `sd = +1`): the cycle-0 single at its establishment, the cross 0 -> 1 and the `cross_failed` single it
+    falls back to at an update (the I8 scenario), the past-limit single activated late on an update; the exported
+    fib CSV's header has no `fib_mode` column."""
+    import csv
+    from engine_v2.debug.export_fib_lifecycle import export_fib_lifecycle
+    from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
+    from engine_v2.tests import test_plan_i_s3_cross_fib_limit_applied as s3
+
+    t = s3._tracker(s3._lim(9.0, 1))
+    df = s3._df(80, [s3._gap(15, 1, 1.48, 1.44), s3._gap(35, 1, 1.30, 1.20)])
+    s3._q(t.on_cts_established, s3._est(20, 1.15, 0, 1), df, bos_idx=10, bos_price=1.0)
+    s3._q(t.on_cts_confirmed, s3._conf(25, 1.15, 0, 1, 20))
+    s3._q(t.on_cts_established, s3._est(40, 1.35, 1, 1), df, bos_idx=30, bos_price=1.2)
+    df.loc[41:, "l"] = 1.43                                              # fills cycle 0's gap only
+    s3._q(t.on_cts_updated, s3._ev("CTS_UPDATED", 42, 1.37, 1, 1, via=CTS_UPDATED_RAW_VIA), df)
+    late = s3._tracker(s3._lim(None, 1))
+    df2 = s3._df(80, [s3._gap(15, 1, 1.10, 1.00), s3._gap(44, 1, 1.30, 1.20)])
+    s3._q(late.on_cts_established, s3._est(20, 1.15, 0, 1), df2, bos_idx=10, bos_price=1.0)
+    s3._q(late.on_cts_confirmed, s3._conf(25, 1.15, 0, 1, 20))
+    s3._q(late.on_cts_established, s3._est(40, 1.35, 1, 1), df2, bos_idx=30, bos_price=1.2)
+    s3._q(late.on_cts_updated, s3._ev("CTS_UPDATED", 48, 1.40, 1, 1, via=CTS_UPDATED_RAW_VIA), df2)
+    records = [*t._fibs.values(), *late._fibs.values()]
+    kinds = {(f.meta.get("cross_cycle", False), f.meta.get("via"), f.meta.get("activated_on")) for f in records}
+    assert kinds == {(False, None, None), (True, None, None), (False, "cross_failed", None),
+                     (False, "cross_fib_limit", "update")}
+    assert [f.meta for f in records if "fib_mode" in f.meta] == []
+    export_fib_lifecycle(records, tmp_path / "fib.csv")
+    with open(tmp_path / "fib.csv", newline="", encoding="utf-8") as fh:
+        header = next(csv.reader(fh))
+    assert header == ["structure_path_id", "parent_sid", "parent_cycle_id", "structure_id", "cycle_id", "version",
+                      "start_idx", "end_idx", "end_reason", "status", "active", "locked", "bos_idx", "cts_idx", "meta"]
+
+
 def _kl_run(sd, extra_events=(), *, after_threshold=(), drop_types=()):
     """KL over the fixture's real run. `extra_events` are appended (the post-pass reads them in any order);
     `after_threshold` go right after the run's BOS_THRESHOLD_UPDATED @9 (the main loop tracks the ACTIVE zone

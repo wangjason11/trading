@@ -8,8 +8,8 @@ COLD-REVIEWED — §9 (audit, design, stages S1–S5 incl. S3b (R6-1b / R7-1) + 
 replays, test census, §9.8 the review); round 6
 ANSWERED (§6 R6-1 … R6-7) + round 7 (R7-1 … R7-4); the plan APPROVED by the user 2026-10-07 (R7-4); sessions 3–6 = the
 build: S1, S2, S2b, S3, S3b, S4, S5, S5b LANDED (§9.10; rounds 8–9 on the way); the MS fix (R9-1 / R9-2) BUILT as
-its own plan, `plans/PLAN_J_ms_restep_state_and_new_cycle_break.md` (2026-10-09). Remaining: S6, only when the user
-asks.** Three sessions (PLAN_H §6 LR3): the user's rules → this spec;
+its own plan, `plans/PLAN_J_ms_restep_state_and_new_cycle_break.md` (2026-10-09); session 7 (2026-10-09): **S6 LANDED
+(§9.10) — the build is COMPLETE.** Three sessions (PLAN_H §6 LR3): the user's rules → this spec;
 then the implementation plan from a fresh code audit + a cold review; then the build). Living document: every
 question, answer and decision is recorded here as it happens (§5 open questions, §6 decisions); measurements in §3.
 Register line: `IDEA_PARKING_LOT.md` §D.1 item 2. No engine code changed in sessions 1–2 (session 2's measurement
@@ -830,6 +830,8 @@ The rule ("parent cycle 0 → no reference") covers the case either way.
   (J1 = F16, J2 = F17 (i), J3 = F17 (ii); variants on the window + the session-4 random-tail corpus); its round 1
   answered (J1a — a re-stepped candle reads everything as of itself, the range bounds included; J2b — re-test the
   breakout against the apply-time threshold, void + rescan). F16 / F17 are fixed there, not here.
+- 2026-10-09 — session 7 (the wrap-up; the user picked: a baseline save, PLAN_J's J3 swap → a raise, S6): S_J saved
+  (`20261009_013718_708a8d9`); **S6 LANDED** (§9.10) — the build is complete.
 
 ## 8. Handoff to session 2 — the implementation plan (from a fresh code audit + a cold review)
 
@@ -1229,7 +1231,7 @@ id ever re-used mid-sweep) — R6-3 (viii).
 | **S4** | main joins the one path (R6-5: Q4, Q5, Q6, I2, I5, Q8, main's P = `bos_frozen`) | D1 (h1 deleted), the H1 call, the rule-3 migration | §9.5 c |
 | **S5** — LANDED (§9.10) | MS reads the same fib decision (Q7) | D5 | §9.5 d: 0 cells, 0 traces |
 | **S5b** (R9-3) — LANDED (§9.10) | F19: the cycle-table end caps a fib's end (finalize: min(stream terminal, `compute_cycle_lifecycle` end)) | `FibTracker._finalize_lifecycle_fields` | 0 cells on the window (F19: 0 occurrences) — verified BEFORE the build by a finalize shadow on the S5 code (0 / 27 fib cycles later than the table) |
-| **S6** (after the build, R7-2) | retire the `fib_mode` meta key (no other mode remains) — a rule-3 migration | the stamps (sub path), `export_fib_lifecycle.py`'s column, its readers / guards / docs | FORMAT-ONLY: every fib row of the 3 fib CSVs loses `fib_mode` (meta key + column; H1 5, confluence 21, counter 8 rows after S4) |
+| **S6** (after the build, R7-2) — LANDED (§9.10) | retire the `fib_mode` meta key (no other mode remains) — a rule-3 migration | the stamps (sub path), `export_fib_lifecycle.py`'s column, its readers / guards / docs | FORMAT-ONLY: every fib row of the 3 fib CSVs loses `fib_mode` (meta key + column; H1 5, confluence 21, counter 8 rows after S4) |
 
 Docs move with their stage (code + spec + skill + memory in one commit):
 - **S1:** PART4 §17 (identity, numbering); ARCHITECTURE 370 (FK `sub_id`); LANDMINES 819 (`pool.get_by_id(r.sub_id).geometry`); `.claude/skills/compare/SKILL.md:476` ("`sub_id`s are 0–7 in creation order"); GLOSSARY.
@@ -1309,7 +1311,7 @@ them), plus a grep pass for the static guards that method cannot see:
 | S4 (h1 retired) | 111 — test_e3a_mutation_pins 25, test_poi_activation_moment 13, test_imbalance_c3_knowability 11, test_plan_h_landing_b 11, test_plan_g_wvmi 11, test_e4_simulation 11, test_main_versioned_cross 10, test_orchestrator_reversal_source 4, test_wvmi_lp_bound 4, test_zone_proximity_reversal_cap 3, test_plan_e_role_pins 3, test_institutional_pattern 2, test_meta_key_renames 1, test_cross_cycle_fib 1, test_fib_chart_render 1 | `test_event_meta_idx_keys` `must_see` 322–324 + inverse guard 390; `test_event_fields.py:161`; `test_meta_key_renames`; the `_m15_*` renames (test_cross_cycle_fib 6, test_imbalance_c3_knowability 1, test_cross_cycle_fib_routine 1); the handler signatures; stale `_NOT_MIRRORED` comments |
 | S5 (old resolver retired) | 22 — test_plan_h_landing_b 8 (incl. the 3 PR1 tests, F11), test_imbalance_c3_knowability 4, test_e3a_mutation_pins 4, test_ms_cts_update_no_regress 3, test_plan_e_role_pins 3 | `test_cross_cycle_fib_routine` snapshot tests 61–133 / 205–265; `test_exception_scopes.py:22` |
 | S3b | — (0 on the window) | the two constructed pins (below) |
-| S6 | — (grep: no test reads the `fib_mode` meta key or CSV column; the `fib_mode=` parameter's tests move in S4) | `export_fib_lifecycle.py`'s column list |
+| S6 | — (grep: no test reads the `fib_mode` meta key or CSV column; the `fib_mode=` parameter's tests move in S4). MEASURED at the build: 6 — three whole-meta-dict pins written by S3 / S4 after this census (test_plan_i_s3 ×2, test_plan_i_s4 ×1), each × sd ±1 | `export_fib_lifecycle.py`'s column list |
 
 The lists: `plan_i_inputs/census/census_S3.txt` / `_S4` / `_S5` (26 / 111 / 22 test ids). Each moved test is classified at the build as re-pin /
 re-derive / retire (memory `feedback_cold_review_plans`: re-derive a pin in a tree with the old rule when the change
@@ -1735,3 +1737,29 @@ steps, each replayed:
   passed).
 - Docs: CROSS_CYCLE_FIB_SPEC (status, §2 "A fib never outlives its cycle", §9); FIB_LIFECYCLE_SPEC (§7, §15.2's row,
   §15.4 candidate 2 = a CEILING + the window counts, §15.6); ARCHITECTURE (the FibState line); register D.1 item 2.
+
+**S6 — the `fib_mode` meta key and fib CSV column retired (R7-2) — LANDED** (session 7, 2026-10-09; its own commit; local,
+not pushed). A rule-3 migration (LANDMINES "Event Contract Rules" — a key DELETED, as Post-E·5's), FORMAT-ONLY.
+- Code: the four FibTracker stamps (`fib_mode: "cross_cycle"` on the single at its establishment, the single activated
+  on an update, the cross, the `cross_failed` single) and `export_fib_lifecycle.py`'s column (header list + row). No
+  production reader existed (the exporter's `.get` was the only one).
+- Prediction (measured on S_J `20261009_013718_708a8d9`: "fib_mode" in no CSV but the 3 fib CSVs and in no chart): the
+  3 fib CSVs lose the column (16 → 15) and the meta key on every row — H1 5, confluence 21, counter 8 (34 + 34 cells,
+  the §9.4 counts); the other 24 CSVs md5-equal; 3 / 3 figures; run.log == but the timings. The suite with the code
+  only: 6 instances fail (the census row above) — MEASURED 6 failed / 1435 passed.
+- **`/compare` vs S_J: == the prediction** — `plan_i_inputs/cmp_s6_fib_mode.py` (new; CUR == BASE minus the column
+  and the key, raw text; every other CSV md5): 5 / 21 / 8 rows, 0 other differences; `cmp_fig_full.py`: 24 / 27 md5,
+  the 3 fib CSVs the only DIFF, 3 / 3 figures (full JSON, 81 / 274 / 135 traces); run.log == the J3 replay's but the
+  timings; fetch gate PASS. Wall 83.7 s (every stage ~2× the J3 replay's 42.4 s — transient load, no process left).
+- Tests 1441 → 1443: the 3 whole-dict pins lose the key; `test_meta_key_renames.py` + the static guard (no production
+  string constant equals `"fib_mode"`) + a real-run pin (S3's fixtures reach all four stamp sites — `kinds` asserted —
+  no record carries the key; the exported header is the 15 columns).
+- Mutation (solo, full suite): 12 + a no-op control — the key re-added at each site, literally (static guard) and built
+  from pieces `"fib_" + "mode"` (only the real-run pin sees it), and the column re-added to the header: 11 KILLED; the
+  piece-built key in the exporter's ROW dict only SURVIVED = EQUIVALENT (`pd.DataFrame(rows, columns=_COLUMNS)` drops a
+  key not in the header; the CSV is identical — its literal twin is killed only by the static scan); the control
+  SURVIVED.
+- **Save-format boundary:** a save before S6 (S_J and older — S_B / S_A included) has the column + the key; diff its fib
+  CSVs with `cmp_s6_fib_mode.py` (the `/compare` skill's fib row says so).
+- Docs: CROSS_CYCLE_FIB_SPEC (status, §6), GLOSSARY (the retired fib terms), the `/compare` skill (the fib CSV row),
+  register D.1 item 2, PLAN_J §9 ("Open after the build").

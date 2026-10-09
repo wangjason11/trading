@@ -423,8 +423,8 @@ round 1 J1-Q1 (a) "J1a") — LANDED** (its own local commit).
   entry), register D.1 item 2.
 
 **Open after the build (not done unasked):** J3's swap (a CTS anchor before the BOS window's start), unreached with
-J2 in (0 / 72,000) → a raise: DONE in session 7 ("J3 follow-up" above); S6 (retire `fib_mode`, PLAN_I §9.4) — the
-user's pick for session 7, next.
+J2 in (0 / 72,000) → a raise: DONE in session 7 ("J3 follow-up" above); S6 (retire `fib_mode`, PLAN_I §9.4) — LANDED
+in session 7 (PLAN_I §9.10).
 
 **Saved 2026-10-09 — S_J `20261009_013718_708a8d9`** (= `LATEST_<branch>`; source `708a8d9`, save commit `a62371e`,
 `artifacts-trunk` `09e4088`): a fresh replay of HEAD reproduced `%TEMP%/pj/HEAD_e276ed6` — 27 / 27 CSVs md5-equal, 3 / 3

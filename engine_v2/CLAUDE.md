@@ -27,7 +27,7 @@ This is an **explainable, visualization-first, event-driven** automated trading 
 prerequisites (the list and its order: `IDEA_PARKING_LOT.md` §D — the user's order 2026-10-01, heavy items first:
 one POI per cycle, single-cycle fib POIs on subs + the sub cross-fib logic, zone size adjustments, the pinbar
 body-pip floor; then the backlog — re-ordered 2026-10-06: item 2 became the cross-cycle fib revamp (one logic for
-main and sub) and runs NEXT, item 1's chart debugging paused until after it), Part 2 entry decisions, Part 3 other
+main and sub; COMPLETE 2026-10-09) and item 1's chart debugging, paused for it, resumes next), Part 2 entry decisions, Part 3 other
 decisions.
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).

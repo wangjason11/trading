@@ -704,7 +704,7 @@ class FibTracker:
         if cycle_id == 0 or not self._cross_allowed(sid, cycle_id):
             # Cycle 0 — and a cycle past the limit — no cross: the single, activated now if its own
             # [BOS, CTS] holds an unfilled sd imbalance, else late on a CTS_UPDATED that finds one.
-            meta = {"activated_at": cts_established_idx, "fib_mode": "cross_cycle"}
+            meta = {"activated_at": cts_established_idx}
             if cycle_id >= 1:
                 meta["via"] = "cross_fib_limit"
             if not has_unfilled:
@@ -923,7 +923,7 @@ class FibTracker:
             self._log(f"[fib] cross_cycle sid={sid} cycle={cycle_id} ACTIVATED on update "
                   f"(unfilled imbalance found post-EST): BOS idx={bos_idx} -> "
                   f"CTS idx={cts_idx}")
-            meta = {"activated_at": self._moment(), "fib_mode": "cross_cycle", "activated_on": "update"}
+            meta = {"activated_at": self._moment(), "activated_on": "update"}
             if cycle_id >= 1:
                 meta["via"] = "cross_fib_limit"
             return self._activate_fib(
@@ -1528,7 +1528,6 @@ class FibTracker:
             locked=False,
             fib=fib,
             meta={
-                "fib_mode": "cross_cycle",
                 "cross_cycle": True,
                 "cross_start_cycle": earliest_x,
                 "version": version,
@@ -1728,7 +1727,6 @@ class FibTracker:
                 cts_idx=anchor_idx,
                 cts_price=anchor_price,
                 meta={
-                    "fib_mode": "cross_cycle",
                     "via": "cross_failed",
                     "activated_at": current_candle,
                 },

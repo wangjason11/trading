@@ -23,7 +23,6 @@ _COLUMNS = [
     "locked",
     "bos_idx",
     "cts_idx",
-    "fib_mode",
     "meta",
 ]
 
@@ -57,7 +56,6 @@ def export_fib_lifecycle(records, path, structure_path_id=None) -> None:
             "locked": f.locked,
             "bos_idx": f.bos_idx,
             "cts_idx": f.cts_idx,
-            "fib_mode": m.get("fib_mode"),
             "meta": m,
         })
 

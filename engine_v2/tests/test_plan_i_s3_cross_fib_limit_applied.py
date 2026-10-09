@@ -185,8 +185,7 @@ def test_the_past_limit_single_activates_late_on_an_update(sd):
     out = _q(t.on_cts_updated, _ev("CTS_UPDATED", 48, 1.40, 1, sd, via=CTS_UPDATED_RAW_VIA), df)
     assert out is t._fibs[(0, 1)] and out.active
     assert (out.bos_idx, out.cts_idx, out.cts_price) == (30, 48, _m(1.40, sd))
-    assert out.meta == {"activated_at": 48, "fib_mode": "cross_cycle", "activated_on": "update",
-                        "via": "cross_fib_limit"}
+    assert out.meta == {"activated_at": 48, "activated_on": "update", "via": "cross_fib_limit"}
     assert t._get_latest_cross(0, 1) is None
 
 
@@ -357,7 +356,7 @@ def test_a_cycle_0_late_activation_is_never_labelled(sd):
     assert _q(t.on_cts_established, _est(20, 1.15, 0, sd), df, bos_idx=10, bos_price=_m(1.0, sd)) is None
     out = _q(t.on_cts_updated, _ev("CTS_UPDATED", 26, 1.20, 0, sd, via=CTS_UPDATED_RAW_VIA), df)
     assert out is t._fibs[(0, 0)] and out.active
-    assert out.meta == {"activated_at": 26, "fib_mode": "cross_cycle", "activated_on": "update"}
+    assert out.meta == {"activated_at": 26, "activated_on": "update"}
 
 
 @pytest.mark.parametrize("sd", [1, -1])

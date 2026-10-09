@@ -101,8 +101,8 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    confluence sub 1 cycle 1's at 1902 (IC 1889 → 1875: likely survives); the zone-proximity sd triggers H1 sid 0
    cycle 1 710 → 748 and sid 1 cycle 2 926 → 939 — the H1 WVMI gates and counter subs 3 / 5's triggers → 6 of the 11
    trigger records re-derived. Related: "Cascade-viz hover extras" — closed by landing B ("Recently closed").
-2. **The cross-cycle fib revamp — one logic for main and sub, the final cross-cycle + single-cycle fib rules** — NEXT
-   (user 2026-10-06, PLAN_H §6 F2b–F2e; it replaces the open decision below): "instead of deciding on this, I will
+2. **The cross-cycle fib revamp — one logic for main and sub, the final cross-cycle + single-cycle fib rules** —
+   **COMPLETE 2026-10-09** (PLAN_I S1–S6 + PLAN_J; item 1's debugging resumes next). Was NEXT (user 2026-10-06, PLAN_H §6 F2b–F2e; it replaces the open decision below): "instead of deciding on this, I will
    instead revamp the cross cycle fib rules. Furthermore, my hope is that we can unify the logic across main and sub.
    This update will likely be the final logic we use for cross-cycle & single-cycle fibs." A NEW session: it opens
    with B's landing review (item 1), then decides whether planning and build are separate sessions; the user brings
@@ -115,7 +115,7 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    PLAN_I §1.2 + §1.4; unique subs numbered at their lifecycle START, R4-2; SPEC AGREED, no open question; session 1 CLOSED
    2026-10-07; session 2 (2026-10-07): the implementation plan DRAFTED — PLAN_I §9, stages S1–S5 (incl. S3b, the single's two latent quirks, R6-1b / R7-1) predicted by variant
    replays, cold-reviewed (PLAN_I §9.8); rounds 6–7 ANSWERED (PLAN_I §6 R6-1 … R7-4); the plan APPROVED 2026-10-07; after the build: S6 retires the
-   `fib_mode` meta key (R7-2); session 3 = the
+   `fib_mode` meta key (R7-2) — LANDED 2026-10-09 (session 7); session 3 = the
    build: S1 + S2 LANDED 2026-10-07 / 08, PLAN_I §9.10; next S3 + S3b + S4, then S5, then S6). **Parked to the S5
    session's first round (R8-1, 2026-10-08):** PLAN_I §9.2 F16 — MS can confirm a CTS with an anchor AFTER its
    confirmation candle (a range back-fill look-ahead; emission ≠ processing order; today's drawn fib locks at the
@@ -130,7 +130,8 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    `/compare`, NEXT after S5 (+ S5b); R9-3 (a) — F19 fixed in stage **S5b** (the cycle-table end caps a fib's end) — **S5b LANDED 2026-10-08**
    (byte-identical on the window, PLAN_I §9.10); next the MS fix plan = **`engine_v2/plans/PLAN_J_ms_restep_state_and_new_cycle_break.md`**
    (round 1 answered 2026-10-09: J1a, J2b) — **J3, J2, J1 LANDED 2026-10-09** (local; PLAN_J §9). Open follow-ups
-   there: J3's swap → a raise LANDED 2026-10-09 (session 7; byte-identical, PLAN_J §9); S6 next (the user's pick). Baseline: **S_J** `20261009_013718_708a8d9` (saved 2026-10-09,
+   there: J3's swap → a raise LANDED 2026-10-09 (session 7; byte-identical, PLAN_J §9); **S6 LANDED 2026-10-09** (session
+   7; the `fib_mode` meta key / fib CSV column retired, format-only, PLAN_I §9.10) — **the revamp is COMPLETE**. Baseline: **S_J** `20261009_013718_708a8d9` (saved 2026-10-09,
    = `LATEST_week9-entries-decisions`, == HEAD `708a8d9`'s replay; before it S_F1 `20261006_224610_42c137c`). Likely inputs (to confirm with the
    user): the 2026-10-01 item and D5 below, and §E "Cross-cycle fib bundled follow-up" with its parked open
    questions (`engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §13).

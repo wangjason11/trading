@@ -15,7 +15,8 @@
 >
 > **A cycle's lifecycle end caps its fib's end since PLAN_I S5b (2026-10-08; R9-3, F19 — §2).**
 >
-> **Still to come (PLAN_I §9.4):** S6 — the `fib_mode` meta key / CSV column is retired.
+> **The `fib_mode` meta key / fib CSV column retired since PLAN_I S6 (2026-10-09)** — it was `"cross_cycle"` on every
+> record since S4 (§6).
 
 ---
 
@@ -143,10 +144,11 @@ the limit; `cross_failed` for the fallback of an allowed cycle.
 ## 6. Storage and meta
 
 - Keys in `_fibs`: `(sid, cycle)` the single; `(sid, cycle, "cross", v)` the cross versions (`_cross_version`).
-- Meta = the sub path's for every structure (Q8): a cross carries `fib_mode` / `cross_cycle` / `cross_start_cycle` /
-  `version` / `activated_at` (+ `locked_at` / `deactivated_*` / `reactivated_at`); a single `activated_at` / `fib_mode`
-  (+ `via`, `activated_on`, …); `obsolete_reason: "new_cycle"` on a record a next cycle ended; the cross-fib limit keys
-  (§3). `fib_mode` is always `"cross_cycle"` until S6 retires it. Retired with main's old logic (a rule-3 migration,
+- Meta = the sub path's for every structure (Q8): a cross carries `cross_cycle` / `cross_start_cycle` / `version` /
+  `activated_at` (+ `locked_at` / `deactivated_*` / `reactivated_at`); a single `activated_at` (+ `via`, `activated_on`,
+  …); `obsolete_reason: "new_cycle"` on a record a next cycle ended; the cross-fib limit keys (§3). `fib_mode` (always
+  `"cross_cycle"` since S4) is retired by S6 (2026-10-09, a rule-3 migration: the four FibTracker stamps and the fib
+  CSV's column; guard `tests/test_meta_key_renames.py`). Retired with main's old logic (a rule-3 migration,
   S4): `cycle1_bos_anchor_idx` (also out of `entity_df_mutation._FIB_META_IDX_KEYS`), `scenario`, `flow`, the
   `scenario1_revert` end reason (`_INVALIDATION_END_REASONS` is empty — the `disappeared` status stays as a hook).
 - One fill constant: `fill_threshold = 0.70` (`FibTrackerConfig`).

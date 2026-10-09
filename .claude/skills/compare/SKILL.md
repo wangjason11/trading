@@ -432,7 +432,7 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_ip_candidates.csv` — the institutional-pattern selection (PLAN_H landing A; computed, not yet drawn) |
 | `*_structure_events.csv` |
 | `*_imbalance_instances.csv` |
-| `*_fib_lifecycle.csv` |
+| `*_fib_lifecycle.csv` — no `fib_mode` column since PLAN_I S6 (2026-10-09): against an older save (S_J `20261009_013718_708a8d9` and before) diff the 3 fib CSVs with `engine_v2/plans/plan_i_inputs/cmp_s6_fib_mode.py BASE CUR` (positional `cmp_save.py` shifts the `meta` cell) |
 | `*_wvmi.csv` |
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
