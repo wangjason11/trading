@@ -347,6 +347,10 @@ until I can review the charts".
 | RX1-W1 | The cross-limit breakout watch tests `P` (the cross-limit value — the moved threshold), not the anchor behind it: sub 7 → 0.57827 → the break is 4188 (4178 closes at 0.57820, short of it); sub 4 → 0.57376 → 3588. Same shape as a reversal, whose pattern breaks the threshold (sub 1: 0.57926) while the price side uses the anchor (0.57884) | first "I'm confused here what's the difference between these 2?" — explained with sub 7 (anchor 0.57806 = sub 6's BOS candle 3760; P 0.57827 = sub 6's threshold after the wick at 3806) → "P — the moved threshold (Recommended)" |
 | RX1-W2 | A cross-limit breakout watch OPENS on a candle that CLOSES past its threshold in the structure's direction (like the reversal watch — never on an approach); the breakout pattern is anchored at that candle and must confirm within 5 candles | AskUserQuestion: "A close past the threshold (Recommended)" |
 | RX1-W3 | A failed watch leaves the threshold FIXED; every later candle that closes past it opens a new watch until one confirms (sub 7 with P: 4183–4187 fail, 4188 confirms) — not the reversal watch's move-to-the-wick, not one watch only | "Threshold fixed, next close re-arms (Recommended)" |
+| RX1-K1 | Two cross-limit breakout watches both confirming → the break = the EARLIEST CONFIRMATION (ties → the earlier anchor): the bound never moves once set (PLAN_K K-Q1) | AskUserQuestion: "Earliest confirmation (Recommended)" — over "the first anchor whose pattern confirms" (the bound could move later) |
+| RX1-K5 | The two references at EXACTLY the same price → the STRUCTURE reference applies (its bound: the reversal pattern / the cross-limit watch's break) (PLAN_K K-Q5) | "Structure reference" — over the previous cycle's CTS (recommended: its pattern broke that price first, the stricter bound) |
+| RX1-K6 | The watch detects patterns by MS's own convention — its look-ahead, `continuous` first — and a break counts once its confirmation has happened; the in-flight answer = the final answer cut by time, the bound never moves (PLAN_K K-Q6) | "MS's convention (Recommended)" — over a strict live view (a frame cut at the moment; the break's anchor could move) |
+| RX1-K7 | A reversal-started structure's reversal pattern (the bound) is known for its WHOLE MS run — like `P` and the reference price (the structure exists only from its reversal; its earlier cycles are retroactive) (PLAN_K K-Q7) | "Whole run, like P (Recommended)" |
 | RX1-C1 | Chart aid for reviewing RX1: the fib HOVER + the CSVs only (no reference line, no break marker) — the hover gives the reference price, its source and the break; `*_ip_candidates.csv` gives the cut candidates their reasons | AskUserQuestion: "Hover + CSV only" (over a dotted reference line + a break marker, recommended) |
 | RX1-E | The condition is evaluated at IC SELECTION only (like §3.1), on the final fib for the drawn POI — not re-checked in the activation sweep (it cannot flip: the references are fixed per fib record; before its break it passes, after it the pick is already before it); MS's in-flight read evaluates it on its as-of fib at each read | "At IC selection only (Recommended)" |
 | RX1-4 | No reference at all (H1 sid 0's and sub 0's cycle 0 — no cross limit, no previous cycle) → auto-pass (RX1-B) | "In cases where neither reference prices (prev cycle CTS or prev struct BOS / equivalent) are available, then we count these requirements as auto pass" (Q4: "I explained this in detail in a previous response") |
@@ -1213,7 +1217,8 @@ per-record diff of the fib / POI / IP CSVs (`is_collapsed_cycle_zone` on the KL 
 code's helpers.
 
 **RX1 — the IC reference conditions (rule experiment 1, OPENED 2026-10-09; rounds 1–2 ANSWERED — §6 RX1-B, RX1-1 …
-RX1-4, RX1-T, RX1-W1 … W3; the rule DECIDED, below; next: the implementation plan).** The user:
+RX1-4, RX1-T, RX1-W1 … W3; the rule DECIDED, below; the implementation plan = **`plans/PLAN_K_ic_reference_condition.md`**
+(drafted + cold-reviewed 2026-10-09, awaiting the user's K-Q1 … K-Q8)).** The user:
 add IC candidate requirements alongside §3.1, BEFORE the IP ("these new requirements may change the candidates that
 make it to the IP check"); found for it (asked "2 or 3 … not wired in"): POI_ZONES_SPEC §3.2's price constraint
 (`passes_price_constraint`, no caller, no test) and idx constraint (never coded), both written per the retired
@@ -1229,8 +1234,8 @@ structure; past M the BOS drops out.
   (1,2)'s CTS_ESTABLISHED pattern anchor; the 1–2 cross hypothetical's bound = (1,1)'s establishment pattern 747 (its
   BOS 728 → candidates 728–746).
 - **The census** (`plan_h_inputs/icref_census.py <save> [price]`, the reading in its docstring — refs per fib record,
-  the further-opposite choice, the bound, then the best surviving touching pattern; TB2 not recomputed): of the 27 POI
-  records 1 pick changes — sub 0 cyc 3 (buy, ref CTS_2 0.57774 = 1245's confirmed anchor): 1604 1A.i (high
+  the further-opposite choice, the bound, then the best surviving touching pattern; TB2 not recomputed): of the 26 distinct POI
+  records (32 lens rows — corrected 2026-10-09 by PLAN_K's review, was "27") 1 pick changes — sub 0 cyc 3 (buy, ref CTS_2 0.57774 = 1245's confirmed anchor): 1604 1A.i (high
   0.57880) is cut by the PRICE; the next best 1447 / 1660, both 1A.iv maru → TB2 decides. The idx bound changes no pick
   (price-only == both). Candidates cut, e.g. sub 0 cyc 3 209 → 85, sub 0 cyc 1 50 → 14, sub 7 cyc 2 90 → 69. No fib
   whose 61.8–80 zone lies entirely beyond its reference (structurally IC-less) — sub 0 cyc 3's zone straddles it.

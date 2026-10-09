@@ -6,12 +6,13 @@ Reading used here (to be confirmed with the user):
           STRUCT = the anchor counterpart of the structure's cross-fib limit P (only while T <= M, or M None and P set):
             reversal_bos_frozen / prev_sub_bos_threshold -> the previous structure's / sub's latest BOS_CONFIRMED price
             at the structure start; parent_cts_threshold -> the parent's CTS_CONFIRMED price of cycle c-1; none -> no ref;
-  - chosen = the one further opposite (sd +1: the LOWER, sd -1: the HIGHER);
-  - idx bound: chosen CTS_{a-1} -> cycle a's CTS_ESTABLISHED pattern_anchor_idx; chosen STRUCT -> the FIRST CTS event
-    of the structure strictly beyond P (the frozen threshold that sets M): its pattern_anchor_idx, else (a raw
-    CTS_UPDATED) its own candle; None when never beyond (== the realised reversal pattern on all 4 reversal cases of the
-    reference window: H1 897, sub 1 1936, sub 2 2465, sub 3 2824). (A first reading used cycle M's CTS_ESTABLISHED
-    pattern: wrong for M = 0 — sub 2 2367, sub 4 3305 wipe every candidate.)
+  - chosen = the one further opposite (sd +1: the LOWER, sd -1: the HIGHER); equal -> STRUCT (RX1-K5);
+  - idx bound (DECIDED, PLAN_H RX1-1 / RX1-2b / W1-W3): chosen CTS_{a-1} -> cycle a's CTS_ESTABLISHED
+    pattern_anchor_idx; chosen STRUCT, a reversal start -> the realised reversal pattern's anchor (the reversing
+    structure's REVERSAL_CANDIDATE whose apply == its STATE_CHANGED(to=reversal) idx); a non-reversal start -> the
+    cross-limit breakout watch on P (every candle closing past P opens a watch: detect_best_for_anchor(A, sd, P)
+    confirming within 5; the earliest confirmation wins, ties -> the earlier anchor); none -> the bound passes.
+    (Earlier readings: cycle M's establishment pattern — wrong at M = 0; "the first CTS event past P" — sub 7 4178.)
   - pass: price sd +1 h < ref, sd -1 l > ref (strict); idx < bound (strict).
 Usage (repo root): python engine_v2/plans/plan_h_inputs/icref_census.py <save> [price]
   price = the price condition only (no idx bound)
@@ -108,16 +109,75 @@ def struct_ref(lens, key, meta):
     return None, f"{src}: NOT MAPPED"
 
 
+_FEAT = {}
+
+
+def _m15_features():
+    if "df" not in _FEAT:
+        from engine_v2.features.candles_v2 import compute_candle_features
+        from engine_v2.features.candle_params import CandleParams
+        from engine_v2.patterns.structure_patterns import BreakoutPatterns
+        keep = sys.argv
+        sys.argv = [sys.argv[0]]
+        from engine_v2.debug.chart_census import load_fig
+        sys.argv = keep
+        traces, _ = load_fig(f"{SAVE}/{P}_M15_confluence.html")
+
+        def arr(a):
+            if isinstance(a, dict) and "bdata" in a:
+                return np.frombuffer(base64.b64decode(a["bdata"]), dtype=np.dtype(a["dtype"]))
+            return np.asarray(a)
+        parts = [pd.DataFrame({"time": arr(t["x"]), "o": arr(t["open"]).astype(float),
+                               "h": arr(t["high"]).astype(float), "l": arr(t["low"]).astype(float),
+                               "c": arr(t["close"]).astype(float)})
+                 for t in traces if t.get("type") == "candlestick"]
+        raw = pd.concat(parts).drop_duplicates("time").sort_values("time").reset_index(drop=True)
+        raw["volume"] = 1.0
+        raw.attrs["pair"] = "NZD_USD"
+        _FEAT["df"] = compute_candle_features(raw, CandleParams(pinbar_body_pip_floor=1.0))
+        _FEAT["bp"] = BreakoutPatterns(_FEAT["df"])
+    return _FEAT["df"], _FEAT["bp"]
+
+
+def watch_break(start, sd, thr):
+    """The cross-limit breakout watch on `thr` from `start`: (anchor, confirmed) of the earliest confirmation."""
+    from engine_v2.patterns.structure_patterns import PatternStatus
+    df, bp = _m15_features()
+    best = None
+    for A in range(int(start), len(df)):
+        c = float(df.loc[A, "c"])
+        if not (c > thr if sd == 1 else c < thr):
+            continue
+        ev = bp.detect_best_for_anchor(A, sd, thr)
+        if ev is None:
+            continue
+        ap = ev.confirmation_idx if ev.status == PatternStatus.CONFIRMED else ev.end_idx
+        if ap is None or ap > A + 5:
+            continue
+        if best is None or (ap, A) < (best[1], best[0]):
+            best = (A, int(ap))
+        if best is not None and A > best[1]:
+            break
+    return best
+
+
 def break_idx(lens, key, meta, sd):
-    pr = meta.get("cross_fib_limit_price")
-    ev = H1_EV if lens == "H1" else M15_EV
-    e = ev[(ev["key"] == key) & ev["type"].isin(["CTS_ESTABLISHED", "CTS_UPDATED"])
-           & ((ev["price"] > pr) if sd == 1 else (ev["price"] < pr))].sort_values("idx")
-    if e.empty:
-        return None
-    r = e.iloc[0]
-    pa = r["m"].get("pattern_anchor_idx")
-    return int(pa) if pa is not None else int(r["idx"])
+    src_ = meta.get("cross_fib_limit_source")
+    if src_ == "reversal_bos_frozen":
+        ev = H1_EV if lens == "H1" else M15_EV
+        rk = key - 1 if lens == "H1" else meta.get("cross_fib_limit_from_sub_id")
+        sc = ev[(ev["key"] == rk) & (ev["type"] == "STATE_CHANGED")
+                & (ev["m"].apply(lambda m: m.get("to")) == "reversal")]
+        assert len(sc) == 1, (lens, key, len(sc))
+        apply_ = int(sc.iloc[0]["idx"])
+        rc = ev[(ev["key"] == rk) & (ev["type"] == "REVERSAL_CANDIDATE")
+                & (ev["m"].apply(lambda m: m.get("apply_idx")) == apply_)]
+        assert len(rc) == 1, (lens, key, apply_, len(rc))
+        return int(rc.iloc[0]["m"]["pattern_anchor_idx"])
+    assert lens != "H1", (lens, key, src_)
+    start = int(subs.loc[key, "starting_idx"])
+    b = watch_break(start, sd, float(meta["cross_fib_limit_price"]))
+    return None if b is None else b[0]
 
 
 def run(lens):
@@ -152,7 +212,11 @@ def run(lens):
             bound = break_idx(lens, key, m, sd)
             refs.append(("STRUCT", sp, sdesc, bound))
         if refs:
-            kind, ref, desc, bound = (min if sd == 1 else max)(refs, key=lambda x: x[1])
+            # further opposite; EQUAL prices -> the STRUCTURE reference (PLAN_H RX1-K5 / PLAN_K K-Q5)
+            if sd == 1:
+                kind, ref, desc, bound = min(refs, key=lambda x: (x[1], 0 if x[0] == "STRUCT" else 1))
+            else:
+                kind, ref, desc, bound = max(refs, key=lambda x: (x[1], 1 if x[0] == "STRUCT" else 0))
         else:
             kind = ref = desc = bound = None
         # the zone vs the reference (structural impossibility)
