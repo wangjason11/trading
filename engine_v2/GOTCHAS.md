@@ -2043,3 +2043,17 @@ log came back EMPTY); the cause was one POI read.
 touching MS. If the fixture pins MS logic, neutralize the POI rule in THAT harness (here `neutral_ic_reference=True`)
 and pin the cascade itself as the rule's own MS test (`test_plan_k_landing_b.py`). A window `/compare` with no MS
 delta does not prove the rule leaves MS alone — the variant replay only sees the window's data.
+
+## "Why didn't the new tiebreaker move this POI?" — the tiebreakers run ONLY inside a (rank, shape) tie (IP tiebreaker update, 2026-10-09)
+
+The institutional pattern picks the best (rank, shape) first; the tiebreakers (immediate unfilled imbalance → IC
+candle type → most recent before the imbalance, POI_ZONES_SPEC §3.4) only choose among ICs TIED on it. A pick that
+fails a tiebreaker's criterion is still the IC when it is the record's only best pattern. The user's chart review:
+H1 sid 1 cyc 2 kept 832 (3C.ii) although its immediate gap 833 filled at 858 — 832 is the record's ONLY patterned
+candidate; the expected 860 has an unfilled immediate gap but no pattern (continuation big ratio 0.63 < 0.65).
+
+**Check, in the `*_ip_candidates.csv` rows of the record:** how many IC candidates (`touches_zone` True, empty
+`ic_ref_reason`) carry the best `ip_rank` — rank + shape, e.g. "3C.ii" (one → no tie, no
+tiebreaker ran — `ip_tiebreak` empty on the picked row); a non-picked candidate with an empty `ip_rank` has no pattern
+(`reason` = the first failing rule). When reporting a tiebreak change, also list the records where its criterion
+disagrees with the pick but no tie exists — the user reviews the charts by the rule's intent (PLAN_H §6 TBU-6).

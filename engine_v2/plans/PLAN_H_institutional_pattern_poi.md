@@ -1341,7 +1341,7 @@ dump `tb_imb_dump.py`; lens indices = sub-local + the sub's slice offset: sub 0 
   → 4083, as today.
 - **Watch at the landing:** MS's sd-proximity read for sub 0 cyc 3 moves with the pick (1660's zone sits ~3 pips under
   1447's) — compare MS's POI reads before touching MS if a structure event moves.
-- **BUILT 2026-10-09 (one landing, uncommitted until the chart review):** `poi_zones.immediate_unfilled_imbalance_
+- **COMMITTED `09f056a` 2026-10-09 (one landing, after the chart review):** `poi_zones.immediate_unfilled_imbalance_
   first_c2_idx` (the helper — `iter_unfilled_imbalances` over IC + 1 … min(IC + `POIConfig.ip_immediate_imbalance_
   candles` = 2, the CTS anchor), condition 3's test; it now carries the no-straddle assert the last tiebreaker had) on
   every classified candidate (`IPCandidate` / `IPCandidateRecord.immediate_imbalance_first_c2_idx`, the CSV column

@@ -573,15 +573,20 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (H1 and confluence set by the 2026-09-22 chart review round 2,
-`aadb887`; counter by Plan F, 2026-09-24; all three last verified 2026-09-24 at
-the Plan F `/compare`; config window 2025-12-01→2026-01-20, auto-extended to
-2025-11-15. Window-dependent, re-baseline when the config window or chart
-rendering changes; older values in **History** below):
+counts are (verified 2026-10-09 on S_K_B `20261009_140048_97795bd` and again on
+`09f056a`, the IP tiebreaker update — the figure diff: 81/81, 135/135, 274/274
+traces; config window 2025-12-01→2026-01-20, auto-extended to 2025-11-15.
+Window-dependent, re-baseline when the config window or chart rendering changes;
+older values in **History** below):
 
-- `H1` chart: traces=85, shapes=245
-- `M15.counter` chart: traces=151, shapes=124
-- `M15.confluence` chart: traces=294, shapes=233
+- `H1` chart: traces=81, shapes=236
+- `M15.counter` chart: traces=135, shapes=120
+- `M15.confluence` chart: traces=274, shapes=264
+
+(Until this re-baseline the block still listed the 2026-09-24 Plan F values — H1
+85/245, counter 151/124, confluence 294/233; landings since then moved them — not
+re-attributed per landing here — and each `/compare` checked its baseline save's
+counts, not this block.)
 
 **History:** on 2026-05-29 the counts were H1 125/261, counter 216/169, confluence
 359/280. Pre-Plan C (through the Plan B save 2026-09-20) they were H1

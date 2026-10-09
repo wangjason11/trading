@@ -112,7 +112,7 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    write-up: POI_ZONES_SPEC §3's step structure, the code's "candidates" names (`find_ic_candidates`,
    `*_ip_candidates.csv`), the fallbacks (D.2 "No-pattern cycles"). Still open from the debugging log: sub 3 cyc 3
    has no POI record (PLAN_H §8.9). **First, the IP tiebreaker update (user 2026-10-09, before the write-up — "with
-   it, I think we would wrap up the Institutional Pattern process"): BUILT 2026-10-09** — a new first tiebreaker, the
+   it, I think we would wrap up the Institutional Pattern process"): COMMITTED `09f056a` 2026-10-09** — a new first tiebreaker, the
    immediate unfilled imbalance (an unfilled sd gap whose first gap candle is at IC + 1 / IC + 2; a filter), then the
    IC's candle type, then the most recent before the imbalance; descriptive `ip_tiebreak` names (no more TB1 / TB2);
    on the window one pick moves (confluence sub 0 cyc 3 1447 → 1660). PLAN_H §6 TBU-1 … TBU-5, §8.9.
