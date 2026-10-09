@@ -491,8 +491,8 @@ class MarketStructure:
 
         # The order tripwire (PLAN_I §9.3 D5, R9-1), last — `self.events` / `self.df` are complete when it raises:
         # the embedded tracker saw MS's EMISSION order, the drawn fib is decided in `processing_order_key` order,
-        # and they must be the same sequence (0 on the reference window; the F16 / F17 (i) shapes raise
-        # `FibEventOrderError` until the MS fix planned after S5, PLAN_I R9-1 / R9-2).
+        # and they must be the same sequence (0 on the reference window; the F16 / F17 (i) shapes raised
+        # `FibEventOrderError` until PLAN_J J1 / J2 removed them — 0 in its 72,000-trial corpus; a guard now).
         if self._fib_tracker is not None:
             self._fib_tracker.check_processing_order()
 

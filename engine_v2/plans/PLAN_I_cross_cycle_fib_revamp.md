@@ -7,8 +7,9 @@ code (R5-1). Session 1 CLOSED 2026-10-07 (docs-only commit). Session 2 (2026-10-
 COLD-REVIEWED — §9 (audit, design, stages S1–S5 incl. S3b (R6-1b / R7-1) + S6 after the build (R7-2), predictions by variant
 replays, test census, §9.8 the review); round 6
 ANSWERED (§6 R6-1 … R6-7) + round 7 (R7-1 … R7-4); the plan APPROVED by the user 2026-10-07 (R7-4); sessions 3–6 = the
-build: S1, S2, S2b, S3, S3b, S4, S5, S5b LANDED (§9.10; rounds 8–9 on the way). Next: the MS fix plan (R9-1 / R9-2,
-its own plan doc); S6 only when the user asks.** Three sessions (PLAN_H §6 LR3): the user's rules → this spec;
+build: S1, S2, S2b, S3, S3b, S4, S5, S5b LANDED (§9.10; rounds 8–9 on the way); the MS fix (R9-1 / R9-2) BUILT as
+its own plan, `plans/PLAN_J_ms_restep_state_and_new_cycle_break.md` (2026-10-09). Remaining: S6, only when the user
+asks.** Three sessions (PLAN_H §6 LR3): the user's rules → this spec;
 then the implementation plan from a fresh code audit + a cold review; then the build). Living document: every
 question, answer and decision is recorded here as it happens (§5 open questions, §6 decisions); measurements in §3.
 Register line: `IDEA_PARKING_LOT.md` §D.1 item 2. No engine code changed in sessions 1–2 (session 2's measurement

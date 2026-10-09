@@ -4,8 +4,8 @@
 quiet, the structure's REQUIRED cross-fib limit) and `poi_zones.poi_inner_for_fib`; MS feeds the tracker each CTS
 event as it is emitted (CTS_ESTABLISHED after its cycle's BOS_CONFIRMED, every CTS_UPDATED, CTS_CONFIRMED,
 CTS_THRESHOLD_UPDATED), reads `representative_fib(sid, cycle)` at every POI refresh, and calls
-`check_processing_order()` at the end of every run — the order tripwire (R9-1: it RAISES on the F16 / F17 shapes
-until the MS fix planned after S5).
+`check_processing_order()` at the end of every run — the order tripwire (R9-1: it RAISES on the F16 / F17 (i)
+shapes; MS produces neither since PLAN_J J1 / J2 — the tripwire is a guard, its unit pinned here).
 
 Pinned here: the agreement with the downstream tracker (the V5 sequence check, on a fixture with a cross, sd ±1);
 the read takes the representative fib (the cross where the limit allows one, the single where it does not); the
