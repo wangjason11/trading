@@ -1765,5 +1765,7 @@ not pushed). A rule-3 migration (LANDMINES "Event Contract Rules" — a key DELE
 - **Saved S_S6 `20261009_020650_5f6bae3`** (= `LATEST_<branch>`; source `5f6bae3`, save commit `7b8171d`,
   `artifacts-trunk` `06ab7a0`; `/commit-save --reuse-replay` of the compared replay, fetch gate PASS): 27 CSVs + 3 / 3
   charts + PNGs; `cmp_s6_fib_mode.py` S_J → S_S6: OK. The baseline for item 1's resumed debugging (PLAN_H header).
+- Chart-reviewed by the user 2026-10-09 (the J3 follow-up + S6 charts, == S_J's): "I've reviewed the charts and they
+  look good."
 - Docs: CROSS_CYCLE_FIB_SPEC (status, §6), GLOSSARY (the retired fib terms), the `/compare` skill (the fib CSV row),
   register D.1 item 2, PLAN_J §9 ("Open after the build").

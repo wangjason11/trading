@@ -212,7 +212,7 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
   chart-review + `/compare` it. Parked with it (open questions): fill-as-of convergence main → "current"; the
   Scenario-1/revert ↔ ceiling merge; `M = 0` behaviour; the deeper-walk fill-as-of decision. Detail:
   `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` §11b + §13, memory `project_cross_cycle_fib_unification.md`.
-  2026-10-06: likely absorbed by §D.1 item 2 (the cross-cycle fib revamp, main + sub one logic).
+  2026-10-06: likely absorbed by §D.1 item 2 — CONFIRMED (the revamp COMPLETE 2026-10-09: PLAN_I S1–S6 + PLAN_J).
 - **Plan F §7 follow-ups** — re-ask a failed fib decision when a relevant gap's c3 closes ("dropped" → "one candle
   later"); the MS vs FibTracker activation divergence (measure first); latent: `inst.meta` mutated on imbalance
   instances shared across projections, the chart hover picks a POI by nearest inner price, single-candle stretches
@@ -276,6 +276,9 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
 
 ## Recently closed (history pointers)
 
+- **§D.1 item 2 — the cross-cycle fib revamp (one logic for main and sub)** — COMPLETE 2026-10-09: PLAN_I S1–S6 +
+  PLAN_J (J1 / J2 / J3 + J3's swap → a raise); saved S_S6 `20261009_020650_5f6bae3`; charts reviewed by the user
+  ("they look good"). The record stays in §D.1 item 2; canonical spec `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md`.
 - **Cascade-viz hover extras** (G: `current_versions` vs peak; a V90 → V60 → V30 downgrade cue) — CLOSED 2026-10-06 as
   obsolete: PLAN_H landing B removed the variants (and `versions` / `current_versions`) from the POIs; the POI hover
   shows the institutional pattern instead (HV). Detail: memory `project_item_5_cascade_viz.md` (historical).

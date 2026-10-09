@@ -421,6 +421,7 @@ round 1 J1-Q1 (a) "J1a") — LANDED** (its own local commit).
   AT the window start); the window ending at the apply again: KILLED (4 tests). The control SURVIVED.
 - Docs: MARKET_STRUCTURE_SPEC "BOS_n+1 derivation rule", ARCHITECTURE (the `BOS_CONFIRMED` row), LANDMINES (the dispatch
   entry), register D.1 item 2.
+- Chart-reviewed by the user 2026-10-09 (with S6's): "I've reviewed the charts and they look good."
 
 **Open after the build (not done unasked):** J3's swap (a CTS anchor before the BOS window's start), unreached with
 J2 in (0 / 72,000) → a raise: DONE in session 7 ("J3 follow-up" above); S6 (retire `fib_mode`, PLAN_I §9.4) — LANDED
