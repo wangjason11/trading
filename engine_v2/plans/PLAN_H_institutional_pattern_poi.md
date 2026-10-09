@@ -333,6 +333,24 @@ until I can review the charts".
 
 ## 6. Decisions
 
+**2026-10-09 (RX1 round 1 — the IC reference conditions, §8.9 RX1; the spec `plan_h_inputs/ic_reference_conditions_spec.md`)**
+
+| ID | Decision | Why / the user's words |
+|---|---|---|
+| RX1-B | The two requirements are ONE bundled condition (the price side + the before-the-break side), both keyed on the chosen reference price: no reference → the whole condition passes | "even though these originally were 2 separate conditions … I'd like to think of them more as bundled together as 1 condition / requirement. The reason is because they both depend on the reference price, so when there is no reference price, they both would pass" |
+| RX1-1 | The bound for the previous structure's BOS (a reversal-started structure) = the valid, confirmed reversal pattern that caused the reversal (its anchor = the close-break candle: H1 897, sub 1 1936, sub 2 2465, sub 3 2824) — not cycle M's establishment pattern (wrong at M = 0: sub 2 2367) | "The pattern that broke the previous structure's BOS should be the valid / confirmed reversal pattern that caused the reversal" |
+| RX1-2 | A structure started by a NON-reversal trigger that has a cross limit uses it as its previous-structure-BOS EQUIVALENT — the anchor behind `P` (sub 4: the parent's CTS_1 anchor 0.57400; subs 5 / 6 / 7: the previous sub's BOS anchor); every non-reversal trigger; no cross limit → no such price | "Yes anchor behind P is correct. Each time a structure starts without a reversal, IF cross limit exists, then the cross limit will effectively be used as the prev structure's BOS price. This should be applied to all non-reversal triggers. If a trigger does not have a cross limit, then there will be no "prev structure BOS"-equivalent price to reference" |
+| RX1-2a | No break pattern reached (yet, or ever) → the before-the-break side passes ("every candle is considered before a break pattern") | "there may be cases where the price never breaks this reference price … If we have not reached a valid break pattern yet, then every candle is considered "before" a break pattern" |
+| RX1-2b | The cross-limit level is not an MS key level, so MS has no break check on it: a NEW cross-limit BREAKOUT WATCH — the cross limit taken as a break threshold, a breakout pattern checked whenever price approaches / crosses it, like the reversal watch but on the BREAKOUT wave (the reversal watch is on the pullback wave). Reversals and new cycles already have their confirmed patterns in MS — reference those | "it's not a true MS key level, but just an arbitrary marker … So what I propose is that whenever we have a struct using cross limit as prev struct BOS-equivalent, we assume the cross limit as a break threshold, and we check for breakout pattern whenever price approach/crosses it. The idea would be similar to reversal watch when the price comes close to BOS threshold. However, in this case instead of the reversal watch happening on the pullback wave, the cross limit breakout watch is on the breakout wave." — details → round 2 |
+| RX1-3 | Both references available → always the one further opposite the structure, even when the previous cycle's CTS already went past the BOS anchor price (inside the cross window — P further than the anchor, a BOS threshold expanded after its confirmation): sub 3 cyc 1 → 0.58198, sub 1 cyc 2 → 0.57882 | "the new conditions reference price should still be just the one further opposite the structure. In this case, that should be the BOS anchor price"; expected rare ("only … after BOS was confirmed, BOS threshold got expanded") — measured: 5 of the window's 8 limits are further than their anchor, 2 cycles in the gap |
+| RX1-T | Terminology: "break" = a valid PATTERN crossing a threshold; a price that only crosses = "goes past" / "surpasses" (GLOSSARY "break vs go past") | "break implies not only the price surpassing a threshold, but a valid pattern that breaks a threshold. So here, when you refer to a cycle's CTS breaking the BOS anchor price, it has to mean just that the CTS went past the price" |
+| RX1-W1 | The cross-limit breakout watch tests `P` (the cross-limit value — the moved threshold), not the anchor behind it: sub 7 → 0.57827 → the break is 4188 (4178 closes at 0.57820, short of it); sub 4 → 0.57376 → 3588. Same shape as a reversal, whose pattern breaks the threshold (sub 1: 0.57926) while the price side uses the anchor (0.57884) | first "I'm confused here what's the difference between these 2?" — explained with sub 7 (anchor 0.57806 = sub 6's BOS candle 3760; P 0.57827 = sub 6's threshold after the wick at 3806) → "P — the moved threshold (Recommended)" |
+| RX1-W2 | A cross-limit breakout watch OPENS on a candle that CLOSES past its threshold in the structure's direction (like the reversal watch — never on an approach); the breakout pattern is anchored at that candle and must confirm within 5 candles | AskUserQuestion: "A close past the threshold (Recommended)" |
+| RX1-W3 | A failed watch leaves the threshold FIXED; every later candle that closes past it opens a new watch until one confirms (sub 7 with P: 4183–4187 fail, 4188 confirms) — not the reversal watch's move-to-the-wick, not one watch only | "Threshold fixed, next close re-arms (Recommended)" |
+| RX1-C1 | Chart aid for reviewing RX1: the fib HOVER + the CSVs only (no reference line, no break marker) — the hover gives the reference price, its source and the break; `*_ip_candidates.csv` gives the cut candidates their reasons | AskUserQuestion: "Hover + CSV only" (over a dotted reference line + a break marker, recommended) |
+| RX1-E | The condition is evaluated at IC SELECTION only (like §3.1), on the final fib for the drawn POI — not re-checked in the activation sweep (it cannot flip: the references are fixed per fib record; before its break it passes, after it the pick is already before it); MS's in-flight read evaluates it on its as-of fib at each read | "At IC selection only (Recommended)" |
+| RX1-4 | No reference at all (H1 sid 0's and sub 0's cycle 0 — no cross limit, no previous cycle) → auto-pass (RX1-B) | "In cases where neither reference prices (prev cycle CTS or prev struct BOS / equivalent) are available, then we count these requirements as auto pass" (Q4: "I explained this in detail in a previous response") |
+
 **2026-10-06c (the revamp session opens with B's landing review — §8.5c)**
 
 | ID | Decision | Why / the user's words |
@@ -502,6 +520,9 @@ until I can review the charts".
 - 2026-10-06 — F1·1 (§8.9): the fib hovers' literal `61.8%%` / `80%%` → `%` on both charts (CSVs byte-identical).
 - 2026-10-06 — the debugging session PAUSED (§6 F2a–F2e): the cross-cycle fib revamp next (register §D.1 item 2, a
   new session opened by B's landing review); `/commit-save` = the revamp's baseline.
+- 2026-10-09 — the debugging session RESUMED after the revamp (PLAN_I S1–S6 + PLAN_J): §8.9 R0 = every logged point
+  re-derived on S_S6 (PLAN_I §9.9 confirmed; C3 + the H1 points unchanged; sub 0 cyc 2 gains a POI, sub 2 cyc 1 and the
+  new H1 (0,0) have none; sub 3 cyc 2's pick 2969 TB1, touch-delayed to 3044).
 
 ## 8. Implementation plan (2026-10-05; REVIEWED + folded 2026-10-06 — §8.8; A built + saved §8.3a; §8.4 measured §8.4a; B built + saved §8.5a, chart-review points §8.5b)
 
@@ -887,7 +908,8 @@ the replay time (from V3; the landing review measured ≈ +4–5 s). Then the ch
 
 ### 8.5b Landing B — the chart-review reference points (2026-10-06)
 
-The points raised at B's chart review, kept as the reference for the debugging session (the user, 2026-10-06:
+**Re-derived on S_S6 (2026-10-09): §8.9 R0** — what moved after the cross-cycle fib revamp; the tables below are
+B's record. The points raised at B's chart review, kept as the reference for the debugging session (the user, 2026-10-06:
 "document … so I can reference those points later in our debugging session"). Re-derived from B's replay outputs and
 S_A's CSVs — not copied from the chat. **Conventions:** indices entity-absolute; times UTC as the charts show them
 (M15 `i` = H1 candle `i // 4` + 15 min × `i % 4`; both frames start 2025-11-16 22:00); "A drew" = S_A's POIs, the
@@ -1156,6 +1178,123 @@ escape (the bundled plotly.js: `TEMPLATE_STRING_REGEX = /%{([^\s%{}:]*)([:|\|][^
 since Week 7 (`8c228a4`); F1 copied it to M15. Fixed to `%` (4 labels: `export_plotly.py`, `export_m15_chart.py`).
 Prediction == the replay: 27 / 27 CSVs md5-equal to S_B; vs the F1 charts only the fib hover traces' `hovertemplate`
 changed — H1 2, confluence 16, counter 6 — the layout (every shape) and every other trace equal. Replay 45.2 s wall.
+
+**R0 — the logged points re-derived on S_S6 (2026-10-09, the resumed session's first step; the kickoff: "measure,
+don't copy").** S_B `20261006_151106_e54f509` vs **S_S6** `20261009_020650_5f6bae3`, every fib record keyed (sub_id,
+structure_id, cycle_id) — the sub ids are stable (both lenses' `*_subs.csv` byte-equal). PLAN_I §9.9 (measured on its
+V3) is CONFIRMED on S_S6, every line. Byte-equal S_B → S_S6: the triggers (both lenses + unresolved), subs, every KL
+zone CSV, every WVMI CSV, the H1 imbalance instances — so **§8.5b point 3 (the counter lens, C3) and the H1 trigger
+moves 710 → 748 / 926 → 939 stand unchanged**, and H1 `CTS_CONFIRMED` (1,2) stays at 939. The structure-event diffs
+are the revamp's own (PLAN_J J1's back-fill event order, the new `cts_frozen` key), none an item-1 point. Every fib
+hover gains the limit line (PLAN_I R6-7) and many records a `via` change — format, not a move.
+
+| Point (§8.5b / §8.9) | S_B | S_S6 |
+|---|---|---|
+| C2 · sub 0 cyc 0 (collapsed) | 454 → 784, IP none | unchanged (hidden) |
+| C2 · sub 0 cyc 1 | cross 454 → 1020, IP none (261 · 10 · 18) | single 917 (11-28 11:15) → 1020, life [1020, 1224]: **still none** (50 candidates · 2 touching · 7 patterns, none touching): 929 `ic_not_last_opp`, 930 `continuation_not_big_maru` (926–928 · 929–930 · 931–933, continuation normal); best off-zone 996 1B.iii, 963 2B.i, 1012 3A.iii |
+| C2 · sub 0 cyc 2 | cross 454 → 1245, IP none | single 1107 (12-02 10:45) → 1245, life [1224, 1721]: **gains a POI** — 1117 1A.iv (12-02 13:15), legs 3-1-3 (1114–1116 \| 1117 \| 1118–1120), active from 1224 (12-03 16:00) |
+| sub 0 cyc 3 / 4 | cross from 454: 687 3C.iv (active 1721 / 1793) | single 1310 (12-04 13:30) → 1721, life [1721, 1793]: 1604 1A.i (12-09 15:00), legs 1-1-1, active 1721 · single 1761 (12-11 06:15) → 1794, life [1793, 1940]: 1772 2B.iv (12-11 09:00), legs 2-1-3 (1770–1771 \| 1772 \| 1773–1775), active from 1793, off / on by imbalance fills at 1860 / 1885, 1888 / 1901, 1921 / 1932 |
+| C2 · sub 1 cyc 0 (collapsed), sub 1 cyc 2, sub 6 cyc 0 | IP none | unchanged (sub 1 cyc 2: 3 candidates, none touching; sub 6 cyc 0: 109 · 9 · 10, none touching) |
+| **C2 NEW · sub 2 cyc 1** | cross 2365 → 2609: 2442 2A.ii, active from 2608 | single 2561 (12-23 14:15) → 2609 (12-24 02:15), life [2608, 2829]: **IP none** (21 · 6 · 2, none touching): 2565 / 2569 / 2571 / 2575 / 2578 `continuation_not_big_maru`, 2574 `ic_not_last_opp`; best off-zone 2595 3A.iii, 2604 3C.iii |
+| **C2 NEW · H1 sid 0 cyc 0** (PLAN_I Q6) | no fib record | single 96 (11-20 22:00) → 430 (12-10 20:00), life [115, 652], DRAWN: **IP none** (150 · 3 · 11, none touching): 177 / 180 / 183 all `continuation_not_big_maru`; best off-zone 206 1A.iii, 386 2A.iii, 131 2B.iv — the first H1 fib hover with `IP: none (no_pattern)` (+ `limit: none (start_trading)`); §8.5a deviation (4)'s "every H1 record has a pick" no longer holds |
+| H1 sid 1 cyc 0 (PLAN_I Q4) | no fib record | single 689 → 710, collapsed (hidden), IP none (6 · 5 · 0) |
+| T1 (a) · sub 3 cyc 2 (both lenses) | cross 2758 → 3047: 2837 1A.iv, active 3047; without the touch 2992 | single 2915 (12-30 06:45) → 3047, life [2992, 3589] `new_cycle` (was `next_cycle`): **2969 3C.iv** (12-30 20:15), legs 2-2-2 (2966–2967 \| 2968–2969 \| 2970–2971), **TB1 over 2988** (2969 normal > 2988 pinbar; 2 tied), active from **3044** (12-31 15:00). The as-of touch (`fib_zone_bounds` / `ic_touches_zone`, BOS 0.58196, IC 0.57926–0.57944) is False at all 14 CTS events 2992–3043 and first True at 3044 (the `double_maru` CTS update to 0.57500: zone [0.57930, 0.58057]) — the touch still delays it, from at earliest 2992 (12-31 02:00, the CTS-established moment) to 3044 |
+| T1 (a) · sub 7 cyc 2 | 4083 1A.iv, TB2 over 4136, active 4222 | unchanged |
+| T1 (b) · 2375 3C.iii | sub 2 cyc 0 / 1 | cyc 0 only (2371 / 2372 touch, 2373–2375 miss; outranked by 2383 3A.iv); cyc 1's single 2561 → 2609 no longer contains it |
+| T1 (b) · 4048 3C.iv | sub 7 cyc 2 | unchanged (4046 / 4047 touch, 4048 misses) |
+| H1 (§8.5b point 4) | 607 · 732 · 832 | unchanged (sid 1 cyc 1's fib `end_reason` `new_cycle` → `next_cycle`) |
+| HV (point 5) | — | unchanged; NEW hover lines: `TB1 over 2988 (IC candle type)` (sub 3 cyc 2, both lenses); sub 1 cyc 1's `TB2 over 1842` is CSV-only (a collapsed cycle — its POI is hidden), as in S_B |
+| Lifecycle-only moves (pick unchanged) | sub 2 cyc 0 [2470, 2600]; sub 3 cyc 1 [2829, 2967] | [2470, 2608]; [2829, 2992] (both lenses) |
+| §8.9 open · sub 3 cyc 3 | no POI record | unchanged (3304 → 3611, life [3589, 3611] `parent_end`, never locked) |
+
+Net on the drawn (non-collapsed) records: confluence no-POI 4 → 4 (sub 0 cyc 2 gains, sub 2 cyc 1 loses; sub 0 cyc 1,
+sub 1 cyc 2, sub 6 cyc 0 stay), counter 0 → 0, H1 0 → 1 (the new (0,0)). Tools (scratch, not kept): a keyed
+per-record diff of the fib / POI / IP CSVs (`is_collapsed_cycle_zone` on the KL CSV meta) + the as-of touch via the
+code's helpers.
+
+**RX1 — the IC reference conditions (rule experiment 1, OPENED 2026-10-09; rounds 1–2 ANSWERED — §6 RX1-B, RX1-1 …
+RX1-4, RX1-T, RX1-W1 … W3; the rule DECIDED, below; next: the implementation plan).** The user:
+add IC candidate requirements alongside §3.1, BEFORE the IP ("these new requirements may change the candidates that
+make it to the IP check"); found for it (asked "2 or 3 … not wired in"): POI_ZONES_SPEC §3.2's price constraint
+(`passes_price_constraint`, no caller, no test) and idx constraint (never coded), both written per the retired
+Scenarios 1/2/3 (+ the unwired V30/V60/V90, not chosen). The user chose §3.2's two, re-specified for today's fibs —
+verbatim: `plan_h_inputs/ic_reference_conditions_spec.md`. In one line: the IC lies entirely on the near side of the
+level the cycle broke out of (sd +1: below), and before the anchor of the pattern that broke it; the level = the
+previous cycle's confirmed CTS ANCHOR price (never `cts_threshold`) and, after a reversal for cycles 0…M (the cross
+window), also the previous structure's most recent BOS anchor price — when both, the one further opposite the
+structure; past M the BOS drops out.
+- **The user's H1 example, measured (S_S6):** sid 0's BOS 591 = 0.5736 (== the reversal `bos_frozen` here); sid 1's
+  CTS_0 = the CTS_CONFIRMED price 0.57902 (anchor 710; established 0.58195 at 703; thresholds 0.57899 → 0.57856 —
+  not used), CTS_1 = 0.57400 (761; threshold 0.57376); M = 2; the reversal pattern (REVERSAL_CANDIDATE) anchor 897 ==
+  (1,2)'s CTS_ESTABLISHED pattern anchor; the 1–2 cross hypothetical's bound = (1,1)'s establishment pattern 747 (its
+  BOS 728 → candidates 728–746).
+- **The census** (`plan_h_inputs/icref_census.py <save> [price]`, the reading in its docstring — refs per fib record,
+  the further-opposite choice, the bound, then the best surviving touching pattern; TB2 not recomputed): of the 27 POI
+  records 1 pick changes — sub 0 cyc 3 (buy, ref CTS_2 0.57774 = 1245's confirmed anchor): 1604 1A.i (high
+  0.57880) is cut by the PRICE; the next best 1447 / 1660, both 1A.iv maru → TB2 decides. The idx bound changes no pick
+  (price-only == both). Candidates cut, e.g. sub 0 cyc 3 209 → 85, sub 0 cyc 1 50 → 14, sub 7 cyc 2 90 → 69. No fib
+  whose 61.8–80 zone lies entirely beyond its reference (structurally IC-less) — sub 0 cyc 3's zone straddles it.
+- **Found while measuring (the open questions):** (Q1) the bound for the BOS reference — "cycle M's establishment
+  pattern" is WRONG for M = 0: sub 2 (buy, 2365 → 2557) was established at 2368 (pattern 2367) far below the level and
+  crossed sub 1's frozen threshold 0.57926 by raw CTS updates at 2465 = sub 1's reversal pattern anchor; the 2367
+  reading wipes every candidate (2383 lost), the "first CTS event beyond P" reading gives 2465 (2383 kept) and equals
+  the reversal pattern on all 4 reversal cases (H1 897, sub 1 1936, sub 2 2465, sub 3 2824). (Q2) structures with a
+  cross limit but no reversal: sub 4 (`parent_cts_threshold`, P = the parent's CTS_1 threshold 0.57376; anchor 0.57400
+  — first wicked at 3521, closed at 3566; P crossed at 3588 by a RAW update, no pattern; = the first M15 candle of the
+  parent's H1 breakout 897) and subs 5 / 6 / 7 (`prev_sub_bos_threshold`; sub 7's level, sub 6's BOS 3760 = 0.57806, is
+  broken by its cycle-2 establishment pattern 4178). (Q3) P ≠ the anchor on 5 of the 8 limited structures (sub 1
+  0.57877 / 0.57882, sub 2 0.57926 / 0.57884, sub 3 0.58156 / 0.58198, sub 4 0.57376 / 0.57400, sub 7 0.57827 /
+  0.57806): a previous CTS can sit in the gap — inside the cross window yet past the BOS anchor — sub 3 cyc 1's CTS_0
+  0.5818 (2736) already WENT PAST sub 2's BOS anchor 0.58198 (at 2733; not a break — RX1-T), and as written the higher
+  (0.58198) is chosen;
+  sub 1 cyc 2 the same (0.57877 vs 0.57882); picks unchanged either way. (Q4) cycle 0 with no reference at all (H1
+  sid 0, sub 0 — no P): unconstrained or no POI (both have no POI today). (Q5) strict edges (high < ref; ic < anchor —
+  the old helper is strict), the IC candle only (legs unchanged), both consumers (drawn + MS's read, D2).
+- **The cross-limit breakout watch (RX1-2b), prototyped** (scratch, the M15 frame rebuilt from the S_S6 lens chart):
+  the reversal watch's own detector, `BreakoutPatterns.detect_best_for_anchor(A, sd, threshold)`, at every candle A
+  whose CLOSE is past the threshold in the structure's direction (the reversal watch opens on such a close-break); the
+  first A whose pattern confirms within 5 candles = the break, anchor A. Sub 7 (buy): threshold P 0.57827 → closes
+  past from 4183, the patterns at 4183–4187 fail, **4188** `one_maru_opposite` (apply 4189); threshold = the anchor
+  0.57806 → **4178** `one_maru_continuous` (apply 4179 — = its cycle-2 establishment). Sub 4 (sell): P 0.57376 →
+  **3588** (apply 3589); the anchor 0.57400 → **3587** (apply 3588; 3566 / 3584 close past without a pattern). Subs 5
+  / 6: no close past P → no break → the bound passes (RX1-2a). No pick moves under either threshold (sub 7 keeps 4083,
+  sub 4 keeps 3388). Round 2 decided W1 = P, W2 = a close past, W3 = fixed, re-armed (sub 7 → 4188; the
+  move-to-the-wick variant → 4195, one watch only → none).
+- **The rule as DECIDED (2026-10-09)** — ONE bundled condition per §3.1 candidate, applied before the touch / IP, in
+  BOTH consumers (the drawn POI and MS's in-flight read, D2), on the fib record (BOS anchor in cycle `a`, target cycle
+  `T`, direction `sd`):
+  1. **References.** (i) The previous cycle's CTS — when `a ≥ 1`: cycle `a−1`'s CTS_CONFIRMED price (the confirmed
+     anchor; never a `cts_threshold`). (ii) The previous structure's BOS or its equivalent — when the structure has a
+     cross limit `P` AND `T ≤ M` (or `M` None): a reversal start → the reversing structure's most recent BOS anchor
+     price (its BOS_CONFIRMED price); a non-reversal start → the anchor behind `P` (RX1-2: the parent's CTS_{c−1}
+     anchor for `parent_cts_threshold`, the previous sub's BOS anchor for `prev_sub_bos_threshold`, …); no `P` → none.
+  2. **Choice.** Both → the one further opposite the structure (sd +1 the lower, sd −1 the higher; RX1-3); one → it;
+     none → the condition PASSES (RX1-B / RX1-4).
+  3. **Price side.** The IC candle lies entirely on the near side: sd +1 `high < ref`, sd −1 `low > ref` (strict).
+  4. **Before-the-break side.** The IC idx < the anchor of the pattern that BROKE the chosen reference (RX1-T): (i) →
+     cycle `a`'s CTS_ESTABLISHED `pattern_anchor_idx`; (ii) reversal start → the realised reversal pattern's anchor
+     (RX1-1); (ii) non-reversal start → the cross-limit breakout watch's break (RX1-2b, W1–W3: a candle closing past
+     `P` in direction sd opens a watch; `detect_best_for_anchor(A, sd, P)` confirming within 5 candles = the break,
+     anchor A; `P` fixed, every close past re-arms; from the structure start; MS's breakout / reversal pattern set). No
+     break reached (yet, or ever) → this side passes (RX1-2a); MS's read sees a break only once its pattern confirmed.
+  5. **Unchanged:** the cross window `M` (price going past `P`), the legs, the touch, the IP, TB1 / TB2.
+  Assumed defaults (stated to the user 2026-10-09, not objected): strict edges; the IC candle only; the watch a pure
+  detector over the structure's frame (no MS state, no structure event) evaluated as of each reader's moment.
+  **The anchor behind `P`, per source** (RX1-2 covers every non-reversal start; proposed 2026-10-09, not objected):
+  `reversal_bos_frozen` → the reversing structure's most recent BOS_CONFIRMED price; `parent_cts_threshold` → the
+  parent cycle c−1's CTS_CONFIRMED price; `prev_sub_bos_threshold` → x−1's latest BOS_CONFIRMED price;
+  `prev_sub_cts_threshold` → x−1's confirmed cycle's CTS_CONFIRMED price; `prev_sub_latest_cts` /
+  `prev_sub_starting_price` → `P` itself (already an anchor); `none` / `prev_sub_no_cts` → no structure reference.
+  The last three of the non-reversal sources do not occur on the reference window (unit tests only); main never has
+  a non-reversal start with a `P`, so the cross-limit breakout watch runs on subs only today.
+  **Proposed names** (2026-10-09, for the plan): fib record meta `ic_ref_price`, `ic_ref_source` ∈ {`prev_cycle_cts`,
+  `prev_structure_bos`, `cross_limit_anchor`} (absent = no reference), `ic_ref_break_pattern_anchor_idx` (the bound),
+  `ic_ref_break_confirmed_idx`; candidate reasons `ic_past_reference` (price side) / `ic_not_before_break`; the
+  mechanism "cross-limit breakout watch". Housekeeping: POI_ZONES_SPEC §3.2's tables → a history appendix;
+  `passes_price_constraint` becomes the price side; `find_ic_candidates`' unread `scenario_context` retired.
+  FYI items raised: structurally IC-less fibs (a zone entirely past its reference — 0 on the window; a short
+  BOS-to-bound window — sub 1 cyc 2: 1934–1935 only, already no POI) → no POI (D7); the census sees final picks only —
+  MS's as-of reads can move where the final pick holds → a variant replay before the switch (as §8.4).
 
 **PAUSED 2026-10-06 (§6 F2a–F2e).** The debugging stops here for the cross-cycle fib revamp (register §D.1 item 2,
 a new session). It resumes after the revamp with every point above and in §8.5b as logged, each rule experiment

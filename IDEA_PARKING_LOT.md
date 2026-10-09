@@ -193,7 +193,10 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
   these cycles is appropriate").
 - **Test the POI_ZONES_SPEC §3.2 scenario IC filters** — never implemented; kept in the spec, unapplied (PLAN_H D4:
   "I still want to keep these and test into them in the future"). Any IC filter stays OUTSIDE the institutional pattern
-  and is applied first. DECIDE.
+  and is applied first. **TAKEN UP 2026-10-09 as item 1's first rule experiment, RE-SPECIFIED by the user for today's
+  fibs** (PLAN_H §8.9 RX1, decisions §6 RX1-*; verbatim `plans/plan_h_inputs/ic_reference_conditions_spec.md`): one
+  bundled condition — the IC entirely on the near side of the level the cycle broke out of, and before the pattern that
+  broke it (+ a new cross-limit breakout watch). Rule DECIDED; next its implementation plan.
 - **The agreed direction for wave candles + WVMI** (PLAN_H Q-W) — item 1 gives the IP legs the *agreed direction*
   (candle and volume direction agree; one at 0 → the other decides; both 0 = a true doji). Wave candles and WVMI keep
   GLOSSARY "qualified candle" (no volume-only-doji row) for now — user 2026-10-05: "we likely will also make the change

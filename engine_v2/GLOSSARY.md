@@ -162,6 +162,7 @@ meta `activated_at` is a moment (the activating event's; Plan E E3a, 2026-09-24 
 | **long-tail** | Candle with extended tail showing price rejection |
 | **maru** | Strong-bodied candle (marubozu-like) |
 | **breakout pattern** | Multi-candle pattern signaling structure break |
+| **break vs go past** | A **break** = a valid PATTERN crossing a threshold (a breakout, pullback or reversal pattern — `detect_best_for_anchor` with `check_break`: the close beyond the threshold); a price that merely crosses a level **goes past** / surpasses it (a wick, a raw CTS update). Say "the CTS went past the BOS anchor price", never "broke", unless a pattern did (the user, 2026-10-09, PLAN_H §6 RX1-T) |
 | **agreed direction** | One direction per candle from its candle `direction` (sign(c − o)) and `vol_dir` (sign(c − prev c)): ±1 with vol the same or 0 → that direction; ±1 with vol opposite → a **split candle**; 0 with vol ±1 → a **volume-only doji** (directional); 0 / 0 → a **true doji** (0). `features/candles_v2.agreed_direction` (`AGREED_SPLIT` marks a split). The institutional pattern's legs and its IC candidates read it (PLAN_H §1 item 2, V1a / VD) |
 | **split candle** | Candle and volume direction opposite — belongs to no institutional-pattern leg, breaks every leg run, never an IC |
 | **volume-only doji** | A doji (o == c) whose close moved (vol ±1): an ordinary directional candle for the legs — it can be the IC (type `pinbar`, body 0) |

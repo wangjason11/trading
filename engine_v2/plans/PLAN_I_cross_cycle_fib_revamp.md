@@ -1362,6 +1362,8 @@ single 1107 → 1245 — gains a POI (IC 1117, 12-02 13:15), cycle 1 — now the
 0 is unchanged (collapsed); sub 0 cycles 3 and 4 move their POI (687 → 1604, 687 → 1772); sub 3 cycle 2 (the T1
 example) moves 2837 → 2969; sub 2 cycle 1 loses its POI (2442 → none). Sub 3 cycle 3 (no POI record) is unchanged by
 the revamp (a single before and after). PLAN_H §8.9 resumes on the S5 save (S6, format-only — the `fib_mode` column — moves no debugging point).
+**Confirmed on S_S6 (2026-10-09), every line: PLAN_H §8.9 R0** (+ what §9.9 did not list: the new H1 (0,0) is a drawn
+no-POI record; sub 3 cycle 2's new pick 2969 is TB1-decided and still touch-delayed, active 3044).
 
 ### 9.10 Build record (session 3, 2026-10-07 → 08)
 

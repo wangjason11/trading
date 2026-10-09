@@ -377,6 +377,12 @@ If Fib is deactivated, there are no bounds → no candidates.
 > read (`poi_inner_for_fib`; `compute_poi_inners_for_cycle` until PLAN_I S5) passes one: IC candidates are §3.1's base conditions only. Decided by the
 > user 2026-10-02 (PLAN_H D4): KEPT here, unapplied, for future testing (register §D.2); any IC filter stays outside
 > the institutional pattern and is applied before it.
+>
+> **Re-specified 2026-10-09 (PLAN_H §8.9 RX1, decided; NOT BUILT yet):** the user replaced these per-scenario tables
+> with ONE bundled condition for today's one-logic fibs — the reference = the previous cycle's confirmed CTS anchor
+> and / or (after a reversal, or a non-reversal start with a cross limit, for cycles ≤ `M`) the previous structure's
+> BOS anchor or its equivalent, the further opposite; the IC entirely on its near side AND before the pattern that
+> broke it. This section is rewritten when RX1 lands; until then the tables below are history.
 
 Additional conditions based on which Fib scenario applies:
 
