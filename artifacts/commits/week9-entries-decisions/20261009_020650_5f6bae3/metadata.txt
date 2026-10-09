@@ -1,0 +1,4 @@
+commit_hash=5f6bae3
+timestamp=20261009_020650
+branch=week9-entries-decisions
+commit_message=PLAN_I S6: the fib_mode meta key and fib CSV column retired (a rule-3 migration, format-only) - the cross-cycle fib revamp is COMPLETE
