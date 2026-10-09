@@ -1,0 +1,4 @@
+commit_hash=708a8d9
+timestamp=20261009_013718
+branch=week9-entries-decisions
+commit_message=PLAN_J close-out: the last 'until the MS fix' status lines (PLAN_I header, run() comment, S5 test docstring)
