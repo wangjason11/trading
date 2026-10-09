@@ -112,6 +112,13 @@ candle): BOS threshold updates to its wick extreme and the watch clears at once.
 expiry, BOS := the anchor wick, and execution rewound to anchor_idx+1【fileciteturn1file3】; since F3b, 2026-09-29, no
 watch reaches its expiry, and the expiry + rewind were removed.)
 
+The reversal's `STATE_CHANGED(to=reversal)` (emitted by `_apply_pattern_at_apply_idx`, the ONE live reversal entry,
+reached by the winner AND the pending path) carries `reason` `reversal_pattern`, `pat`, `bos_frozen` and, since PLAN_K
+A13 (2026-10-09), `pattern_anchor_idx` = the REALISED reversal pattern's first candle (pattern realm; read through
+`ef.pattern_anchor_idx`, which accepts a `STATE_CHANGED` only when `to` is `reversal`). It is the bound of a
+reversal-started structure's IC reference (POI_ZONES_SPEC §3.2, via `CrossFibLimit.break_pattern_anchor_idx`): a later
+anchor's winner can apply with no `REVERSAL_CANDIDATE` at the apply, so the candidate is not a robust source.
+
 ### A new cycle ends an open watch (2026-09-29)
 A watch freezes the CURRENT cycle's BOS. When a breakout establishes a new cycle (cycle >= 1) while a watch is open,
 the market made a new extreme instead of reversing, and the new cycle's `BOS_CONFIRMED` supersedes the barrier the
@@ -370,7 +377,12 @@ cycle's BOS_CONFIRMED, every CTS_UPDATED, CTS_CONFIRMED, CTS_THRESHOLD_UPDATED);
 a refresh reads the tracker's `representative_fib(sid, cycle)` (the active
 latest cross, else the active single, else none) and hands it to
 `poi_zones.poi_inner_for_fib` → `select_ip_ic` (the drawn POI's selector,
-PLAN_H D2): 0 or 1 inner, the pick's. No fib or no pattern → the BOS inner
+PLAN_H D2): 0 or 1 inner, the pick's. Since PLAN_K A14 (2026-10-09) the
+refresh also hands the tracker and the fed event's MOMENT
+(`_refresh_poi_inners_for_cycle(moment)`: the pattern path's apply candle,
+the raw path's re-stepped candle = `ef.event_moment` of the event just fed);
+the read builds the fib's IC reference from the tracker at that moment,
+inside its re-raising scope (POI_ZONES_SPEC §3.2). No fib or no pattern → the BOS inner
 alone. Errors are NOT swallowed (LANDMINES "The POI Resolver Fails Loudly"):
 the read takes the frame's candle stamp first on every refresh and re-raises
 anything as `IPSelectionError`; a tracker error arrives as

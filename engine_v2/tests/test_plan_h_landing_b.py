@@ -37,7 +37,8 @@ from engine_v2.tests.test_unified_probe import (
     _prepare_df,
 )
 from engine_v2.zones.poi_zones import IPSelectionError, POIConfig, fib_zone_bounds
-from engine_v2.tests._cross_fib_limits import NO_P
+from engine_v2.tests._cross_fib_limits import NO_P, NO_REF_TRACKER
+from engine_v2.zones.cross_cycle_fib import ICReference
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +151,7 @@ def _resolve(df):
     on the embedded tracker's representative fib (was the retired `compute_poi_inners_for_cycle`)."""
     fs = poi_zones.FibState(structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.0, cts_idx=40,
                             cts_price=1.35, active=True, locked=False, fib=_fib(1.35, 1.0))
-    return poi_zones.poi_inner_for_fib(df, fs, 0.70)
+    return poi_zones.poi_inner_for_fib(df, fs, 0.70, tracker=NO_REF_TRACKER, evaluated_at=40)
 
 
 def test_resolver_returns_the_pick_where_the_variants_disagree():
@@ -160,7 +161,7 @@ def test_resolver_returns_the_pick_where_the_variants_disagree():
     cands = poi_zones.find_ic_candidates(df, fs, POIConfig())
     assert cands == [32, 36]
     assert poi_zones.select_ic_variants(cands, df, fs, POIConfig()) == {36: ["V30", "V60", "V90"]}   # V: 36
-    pick = poi_zones.select_ip_ic(df, fs, POIConfig()).pick
+    pick = poi_zones.select_ip_ic(df, fs, POIConfig(), ic_reference=ICReference.NONE).pick
     assert pick is not None and (pick.ic_idx, pick.ip_rank) == (32, "2A.i")                         # IP: 32
     assert _resolve(df) == 1.13            # the pick's inner (IC 32's high), not 36's 1.125
 
@@ -186,7 +187,7 @@ def test_resolver_on_an_unstamped_frame_raises():
         _resolve(df)
     assert isinstance(exc.value.__cause__, KeyError) and exc.value.__cause__.args == ("timeframe",)
     with pytest.raises(IPSelectionError) as exc:
-        poi_zones.poi_inner_for_fib(df, None, 0.70)
+        poi_zones.poi_inner_for_fib(df, None, 0.70, tracker=NO_REF_TRACKER, evaluated_at=0)
     assert isinstance(exc.value.__cause__, KeyError) and exc.value.__cause__.args == ("timeframe",)
 
 
@@ -286,8 +287,8 @@ def _pipeline(maker, *, spy=None, sd=+1):
     real = se.poi_inner_for_fib
     calls = []
 
-    def _spy(df, fib, fill_threshold):
-        out = real(df, fib, fill_threshold)
+    def _spy(df, fib, fill_threshold, **kw):
+        out = real(df, fib, fill_threshold, **kw)
         if fib is not None:
             calls.append((int(fib.structure_id), int(fib.cycle_id), int(fib.bos_idx), int(fib.cts_idx), out))
         return out
@@ -434,7 +435,9 @@ def test_h1_chart_hovers_show_the_pattern_and_ip_none(tmp_path, monkeypatch):
     fib_tr = [tr for tr in fig.data if (tr.name or "").startswith("fib:")]
     fib_status = {tr.name: tr.customdata[0][8] for tr in fib_tr}
     # the IP line, then S2's limit line (main's limits since PLAN_I S4: sid 0 started by start trading)
-    assert fib_status["fib:sid0:c1"].endswith("<br>IP: none (no_pattern)<br>limit: none (start_trading)")
+    lines = fib_status["fib:sid0:c1"].split("<br>")
+    assert lines[2:] == ["IP: none (no_pattern)", lines[3], "limit: none (start_trading)"]
+    assert lines[3].startswith("IC ref ") and "(prev_cycle_cts, cycle 0)" in lines[3]   # PLAN_K A17
     assert "IP: none" not in fib_status["fib:sid0:c2"]
     # F1·1: a literal `%` (Plotly has no `%%` escape)
     assert all("<br>61.8%=" in _rendered(tr) and "<br>80%=" in _rendered(tr) and "%%" not in tr.hovertemplate

@@ -611,6 +611,13 @@ error of the stamp read or the pick as `IPSelectionError`. **The swallowing scop
    `MarketStructure._feed_fib_tracker` — PLAN_I S5). Keep that scope narrow; never widen it to `Exception` NOR
    `RuntimeError` — either WOULD swallow them (PLAN_H §8.5c C1).
 
+**Everything the pick needs is built INSIDE the re-raising scope (PLAN_K A4, §9 C01, 2026-10-09).** The fib's IC
+reference (POI_ZONES_SPEC §3.2) comes from the tracker (`tracker.ic_reference(fib, df, evaluated_at=)` — the watch's
+pattern detector, the tracker's maps): `poi_inner_for_fib` builds it inside its `try`, so a ValueError / IndexError
+there arrives as `IPSelectionError`. Had MS called `ic_reference` itself before the read (the plan's first draft), the
+error would have reached `_build_geometry`'s narrow `except` and dropped the sub. Any new input to `select_ip_ic` that
+MS's read computes goes inside that `try` too.
+
 **Guard (PLAN_H §8.5c LR2, 2026-10-06c):** `tests/test_exception_scopes.py` lists every `except` in the engine modules
 that catches `RuntimeError` / `Exception` / `BaseException` / everything (bare) against an allowlist — today the
 read's re-raise (`poi_inner_for_fib`), MS's tracker feed (`_feed_fib_tracker`: re-raise / re-type, never swallow —
@@ -629,7 +636,9 @@ way (PLAN_H §8.8 PR1, found by all three review lenses).
 without a fib (PLAN_I S5) —, a ValueError inside the IP arrives as `IPSelectionError`, an IP error inside
 `_build_geometry` propagates, an unstamped MS run raises, an unstamped probe Phase 2 (`unified_probe`) raises, and the
 drawn POI == the read's pick on the final fib (the real collaborator); `tests/test_plan_i_s5_ms_reads_the_fib.py` — a
-tracker error inside `_build_geometry` propagates (`EmbeddedFibTrackerError`, a tracker `RuntimeError` unchanged).
+tracker error inside `_build_geometry` propagates (`EmbeddedFibTrackerError`, a tracker `RuntimeError` unchanged);
+`tests/test_plan_k_landing_a.py` — a ValueError inside the IC reference during a sub geometry arrives as
+`IPSelectionError` (C01), and both consumers hand the same reference on the final fib.
 (The anchor selection's graceful `[]` pin retired with it.) Measured on the reference window (V3, PLAN_H §8.4a, the
 retired resolver): 450 resolver calls (main 58, sub geometry 313, probe Phase 2 79), 0 IP errors.
 

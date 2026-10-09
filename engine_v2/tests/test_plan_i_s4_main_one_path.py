@@ -19,6 +19,7 @@ import pytest
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.tests._event_factory import make_cts_established
 from engine_v2.tests.test_plan_i_s3_cross_fib_limit_applied import _df, _gap, _m
+from engine_v2.tests._cross_fib_limits import limit
 from engine_v2.zones.cross_cycle_fib import CrossFibLimit
 from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig
 
@@ -43,7 +44,7 @@ def _main_tracker(p1, sd):
     `bos_frozen` (`p1`)."""
     return FibTracker(FibTrackerConfig(fill_threshold=0.70), cross_fib_limits={
         0: CrossFibLimit(None, "none", started_by="start_trading"),
-        1: CrossFibLimit(_m(p1, sd), "reversal_bos_frozen", started_by="reversal")})
+        1: limit(_m(p1, sd), "reversal_bos_frozen", started_by="reversal")})
 
 
 @pytest.mark.parametrize("sd", [1, -1])

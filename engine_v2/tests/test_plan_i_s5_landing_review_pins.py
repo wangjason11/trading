@@ -10,7 +10,7 @@ import io
 import pytest
 
 import engine_v2.structure.structure_engine as se
-from engine_v2.tests._cross_fib_limits import NO_P, unreached
+from engine_v2.tests._cross_fib_limits import NO_P, NO_REF_TRACKER, unreached
 from engine_v2.tests.test_plan_i_s5_ms_reads_the_fib import (
     _ev_conf, _ev_upd, _geometry, _quiet, _reversing, _rows, embedded,  # noqa: F401  (embedded = fixture)
 )
@@ -23,9 +23,9 @@ def test_the_read_asks_for_this_runs_sid(monkeypatch):
     seen = []
     real = se.poi_inner_for_fib
 
-    def spy(df, fib, ft):
+    def spy(df, fib, ft, **kw):
         seen.append(fib)
-        return real(df, fib, ft)
+        return real(df, fib, ft, **kw)
 
     monkeypatch.setattr(se, "poi_inner_for_fib", spy)
     ms = se._make_market_structure(_prepare_df(_rows(1)), 1, structure_id=3, cross_fib_limit=NO_P)
@@ -87,10 +87,11 @@ def test_the_read_runs_the_pick_at_its_fill_threshold(monkeypatch):
     from engine_v2.tests.test_plan_h_landing_b import _fib, _m1_frame
     got = []
     real = poi_zones.select_ip_ic
-    monkeypatch.setattr(poi_zones, "select_ip_ic", lambda df, fs, cfg: got.append(cfg.fill_threshold) or real(df, fs, cfg))
+    monkeypatch.setattr(poi_zones, "select_ip_ic",
+                        lambda df, fs, cfg, **kw: got.append(cfg.fill_threshold) or real(df, fs, cfg, **kw))
     fs = poi_zones.FibState(structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.0, cts_idx=40,
                             cts_price=1.35, active=True, locked=False, fib=_fib(1.35, 1.0))
-    poi_zones.poi_inner_for_fib(_m1_frame(), fs, 0.42)
+    poi_zones.poi_inner_for_fib(_m1_frame(), fs, 0.42, tracker=NO_REF_TRACKER, evaluated_at=40)
     assert got == [0.42]
 
 
@@ -116,8 +117,13 @@ def test_the_map_asserts_one_reversal_of_the_last_sid():
 def test_a_watch_on_the_reversal_candle_is_the_open_watch():
     from engine_v2.tests.test_plan_i_s2_cross_fib_limit import _ev, _est, _watch
     from engine_v2.zones.structure_lifecycle import compute_main_cross_fib_limit
-    evs = [_est(115, 0.6, 0, 0, -1), _watch(880, 0.5701), _watch(902, 0.5736),
-           _ev("STATE_CHANGED", 902, None, structure_id=0, to="reversal", bos_frozen=0.5736), _est(903, 0.58, 1, 0, 1)]
+    from engine_v2.tests._event_factory import make_bos_confirmed
+    evs = [_est(115, 0.6, 0, 0, -1),
+           make_bos_confirmed(bos_anchor_idx=96, confirmed_at=115, price=0.61, structure_id=0, cycle_id=0,
+                              struct_direction=-1),                      # PLAN_K A9: a reversal needs a BOS
+           _watch(880, 0.5701), _watch(902, 0.5736),
+           _ev("STATE_CHANGED", 902, None, structure_id=0, to="reversal", pattern_anchor_idx=900, bos_frozen=0.5736),
+           _est(903, 0.58, 1, 0, 1)]
     assert compute_main_cross_fib_limit(evs, 1).price == 0.5736
 
 
@@ -174,7 +180,7 @@ def test_the_read_inner_reaches_the_proximity_check(monkeypatch):
         return real(*a, **k)
 
     monkeypatch.setattr(msm, "_check_sd_proximity_at_candle", spy)
-    monkeypatch.setattr(se, "poi_inner_for_fib", lambda df, fib, ft: None if fib is None else 0.4242)
+    monkeypatch.setattr(se, "poi_inner_for_fib", lambda df, fib, ft, **kw: None if fib is None else 0.4242)
     _quiet(se.compute_bounded_structure, _prepare_df(_rows(1)), 0, 1, cross_fib_limit=NO_P)
     assert [0.4242] in seen
 
@@ -193,7 +199,8 @@ def test_the_downstream_tracker_uses_the_one_config():
 def test_a_bounded_runs_read_and_feed_get_the_truncated_frame(monkeypatch):
     lens = []
     real_read = se.poi_inner_for_fib
-    monkeypatch.setattr(se, "poi_inner_for_fib", lambda d, f, t: lens.append(("read", len(d))) or real_read(d, f, t))
+    monkeypatch.setattr(se, "poi_inner_for_fib",
+                        lambda d, f, t, **kw: lens.append(("read", len(d))) or real_read(d, f, t, **kw))
     for h in ("on_cts_established", "on_cts_updated", "on_cts_threshold_updated"):
         real_h = getattr(FibTracker, h)
         monkeypatch.setattr(FibTracker, h, lambda self, ev, df, *a, _h=h, _r=real_h: lens.append((_h, len(df))) or _r(self, ev, df, *a))
@@ -210,6 +217,6 @@ def test_a_reached_poi_inner_confirms_the_cts(monkeypatch, sd):
     """Behavioural twin of the above: an inner every candle reaches (+inf for a buy POI's top, -inf for a sell POI's
     bottom) wins over the BOS inner and confirms a cycle >= 1 CTS via proximity with `zone_kind` "POI"."""
     import math
-    monkeypatch.setattr(se, "poi_inner_for_fib", lambda df, fib, ft: None if fib is None else sd * math.inf)
+    monkeypatch.setattr(se, "poi_inner_for_fib", lambda df, fib, ft, **kw: None if fib is None else sd * math.inf)
     res = _quiet(se.compute_bounded_structure, _prepare_df(_rows(sd)), 0, sd, cross_fib_limit=NO_P)
     assert any(e.type == "CTS_CONFIRMED" and e.meta.get("zone_kind") == "POI" for e in res.events)

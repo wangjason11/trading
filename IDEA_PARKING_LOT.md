@@ -196,7 +196,11 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
   and is applied first. **TAKEN UP 2026-10-09 as item 1's first rule experiment, RE-SPECIFIED by the user for today's
   fibs** (PLAN_H §8.9 RX1, decisions §6 RX1-*; verbatim `plans/plan_h_inputs/ic_reference_conditions_spec.md`): one
   bundled condition — the IC entirely on the near side of the level the cycle broke out of, and before the pattern that
-  broke it (+ a new cross-limit breakout watch). Rule DECIDED; next its implementation plan.
+  broke it (+ a new cross-limit breakout watch). Rule DECIDED; its plan `engine_v2/plans/PLAN_K_ic_reference_condition.md`
+  (cold-reviewed, K-Q1…K-Q8 answered); **landing A BUILT 2026-10-09** — computed + exported (the IP CSVs'
+  `ic_ref_reason`, the fib meta `ic_ref_*` + hover), the pick unchanged (`poi_zones._IC_REFERENCE_FILTER = False`);
+  POI_ZONES_SPEC §3.2 rewritten (the old tables → its Appendix A). Next: the variant replay V, then landing B (the
+  switch).
 - **The agreed direction for wave candles + WVMI** (PLAN_H Q-W) — item 1 gives the IP legs the *agreed direction*
   (candle and volume direction agree; one at 0 → the other decides; both 0 = a true doji). Wave candles and WVMI keep
   GLOSSARY "qualified candle" (no volume-only-doji row) for now — user 2026-10-05: "we likely will also make the change

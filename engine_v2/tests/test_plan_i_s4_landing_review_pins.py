@@ -168,4 +168,5 @@ def test_run_pipeline_hands_every_main_sid_its_limit(monkeypatch):
         orch.run_pipeline(RSP._make_raw_df(RSP._make_flat_prefix() + RSP._make_reversing_data()))
     assert seen["lim"] == compute_main_cross_fib_limits(seen["events"])
     assert set(seen["lim"]) == {0, 1, 2}
-    assert seen["lim"][1] == CrossFibLimit(0.5736, "reversal_bos_frozen", started_by="reversal")
+    assert seen["lim"][1] == CrossFibLimit(0.5736, "reversal_bos_frozen", started_by="reversal",
+                                           ref_anchor_price=0.5731, break_pattern_anchor_idx=897, break_confirmed_idx=902)

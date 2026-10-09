@@ -140,7 +140,12 @@ To change any visual element:
   cycle's IP outcome from `attrs["ip_candidates"]` (`ip_rows_by_fib_record`: keyed by (sid, cycle, BOS anchor, CTS
   anchor), prefixed with `sub_id` on a lens — a sub's sid restarts at 0): `IP <rank> · IC <idx>` (the pick = the drawn
   POI), `IP: none (<reason>)` (no pattern, no POI — PLAN_H C1), or `IP: not evaluated (no POI record)` (the POI record
-  gate skipped it: ended before locking, or no CTS_ESTABLISHED); then the structure's cross-fib LIMIT line
+  gate skipped it: ended before locking, or no CTS_ESTABLISHED); then the record's IC REFERENCE line
+  (`_zone_render.fib_hover_ic_ref_text`, PLAN_K A17, 2026-10-09 — POI_ZONES_SPEC §3.2; from the fib meta `ic_ref_*`):
+  `IC ref <price> (<source>[, cycle <a−1>]) · break <idx>` (e.g. `IC ref 0.57774 (prev_cycle_cts, cycle 2) · break
+  1720`; the cycle only for `prev_cycle_cts`), `… · break: none` (a reference with no known break — subs 5 / 6 on the
+  reference window), or `IC ref: none` (no reference — the condition passes); no line on a record without the
+  `cross_fib_limit_*` meta; then the structure's cross-fib LIMIT line
   (`_zone_render.fib_hover_limit_text`, PLAN_I R6-7, S2): `limit <P> · <source> [(sub <from>)] · M=<M | none>` (e.g.
   `limit 0.57827 · prev_sub_bos_threshold (sub 6) · M=2`), or without `P` `limit: none (<why>)` — `start_trading`,
   `first_confluence on parent cycle 0`, `no previous sub`, `prev_sub_no_cts (sub <from>)`; no line on a record

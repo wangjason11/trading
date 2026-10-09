@@ -162,6 +162,9 @@ _FIB_META_IDX_KEYS = (
     "activated_at",
     "reactivated_at",
     "locked_at",
+    # PLAN_K A15 (2026-10-09): the IC reference's break (slice-local in a sub's projection tracker)
+    "ic_ref_break_pattern_anchor_idx",
+    "ic_ref_break_confirmed_idx",
     # `cycle1_bos_anchor_idx` (the H1-main Scenario-2 cross's BOS_1 anchor) retired with
     # its emitter in PLAN_I S4 (2026-10-08; a rule-3 migration — LANDMINES "Event
     # Contract Rules"): no fib record carries it any more.
@@ -1154,7 +1157,8 @@ def _build_geometry(
             timeframe=timeframe,
             enforce_cts0_new_extreme=(bos0_inner is not None),
             bos0_inner=bos0_inner,
-            cross_fib_limit=cross_fib_limit,
+            # entity-absolute → the slice's coordinates: the limit's break indices (PLAN_K §3.5)
+            cross_fib_limit=cross_fib_limit.localized(slice_begin),
         )
     except (ValueError, IndexError):
         # The documented geometry failure (LANDMINES "Lower-TF Pipeline Steps May
@@ -1285,7 +1289,9 @@ def render_sub_projection(
         timeframe=timeframe,
         log_prefix=f"M15_sub{sub.sub_id}_{first.trigger_type}",
         structure_path_id=first_path,
-        cross_fib_limits={0: lim},
+        # entity-absolute → the slice's coordinates: the limit's break indices (PLAN_K §3.5); the fib meta's
+        # `ic_ref_break_*_idx` return to entity-absolute through `_FIB_META_IDX_KEYS` in the mirror
+        cross_fib_limits={0: lim.localized(slice_begin)},
     )
     end_in_slice = cap_local if cap_local is not None else n_slice - 1
     first_record = {

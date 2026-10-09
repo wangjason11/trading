@@ -70,8 +70,12 @@ def bos_anchor_idx(ev: Any) -> int:
 def pattern_anchor_idx(ev: Any) -> int:
     """The breakout pattern's FIRST candle (pattern realm):
     `meta["pattern_anchor_idx"]` on CTS_ESTABLISHED / REVERSAL_CANDIDATE /
-    REVERSAL_WATCH_START. Any other type raises."""
+    REVERSAL_WATCH_START, and on the `STATE_CHANGED(to=reversal)` — the
+    REALISED reversal pattern's first candle (PLAN_K A13 / A19, 2026-10-09).
+    Any other type — and any other `STATE_CHANGED` — raises."""
     if ev.type in _PATTERN_ANCHOR_TYPES:
+        return int(ev.meta["pattern_anchor_idx"])
+    if ev.type == "STATE_CHANGED" and ev.meta["to"] == "reversal":
         return int(ev.meta["pattern_anchor_idx"])
     raise ValueError(f"pattern_anchor_idx: no pattern anchor on {ev.type}")
 

@@ -369,6 +369,9 @@ def _run_downstream_pipeline(
         lifecycle_cap=lifecycle_cap,
         cap_reason=cap_reason,
     )
+    # Every fib record's FINAL IC reference into its meta (PLAN_K A11 / §3.6): a separate step — the finalize above
+    # takes no frame; the watch reads to the structure's lifecycle cap (None = the frame's last, the H1 main).
+    fib_tracker.stamp_ic_references(df, lifecycle_cap)
 
     fib_states = fib_tracker.get_fibs_for_charting()
     print(f"{pfx}[fib_tracker] total fibs={len(fib_states)}, active={sum(1 for f in fib_states if f.active)}")
@@ -383,7 +386,7 @@ def _run_downstream_pipeline(
     # (`select_ip_records`) and handed to both readers: the drawn POIs (one per
     # record — the pick, PLAN_H landing B) and the debug CSV (`*_ip_candidates.csv`).
     poi_config = POIConfig()
-    ip_records = select_ip_records(df, events, fib_tracker, poi_config)
+    ip_records = select_ip_records(df, events, fib_tracker, poi_config, lifecycle_cap=lifecycle_cap)
     poi_zones = derive_poi_zones(
         df,
         events,

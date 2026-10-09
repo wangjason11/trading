@@ -74,9 +74,9 @@ def _conf(idx, anchor, price, sid, cyc):
 
 def _t(p=None):
     """`p` = sid 1's reference price (None: `unreached` — every cross the walk allows); sid 0 `unreached` too."""
-    from engine_v2.tests._cross_fib_limits import unreached
+    from engine_v2.tests._cross_fib_limits import limit, unreached
     from engine_v2.zones.cross_cycle_fib import CrossFibLimit
-    lim1 = unreached(1) if p is None else CrossFibLimit(p, "reversal_bos_frozen")
+    lim1 = unreached(1) if p is None else limit(p, "reversal_bos_frozen")
     return FibTracker(FibTrackerConfig(fill_threshold=0.70), cross_fib_limits={0: unreached(1), 1: lim1})
 
 

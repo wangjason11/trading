@@ -321,7 +321,9 @@ def _meta_kw_keys(module):
                                         "pattern_confirmed_idx", "ip_tb_runner_up_ic_idx",
                                         "ip_tb_imbalance_first_c2_idx"}),
     (fib_tracker, "_FIB_META_IDX_KEYS",
-     {"activated_at", "reactivated_at", "locked_at", "deactivated_at"}),
+     {"activated_at", "reactivated_at", "locked_at", "deactivated_at",
+      # the IC reference's break (PLAN_K A15)
+      "ic_ref_break_pattern_anchor_idx", "ic_ref_break_confirmed_idx"}),
     (wave_candles, "_WAVE_CANDLE_META_IDX_KEYS", {"anchor_idx"}),
 ], ids=["kl_zones_v1", "poi_zones", "fib_tracker", "wave_candles"])
 def test_every_element_emitter_meta_index_key_is_shifted(module, list_name, must_see):

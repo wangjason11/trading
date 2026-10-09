@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Any, Callable, Iterable, List, Optional, Tuple
 
 from engine_v2.multitf.sub_structure_pool import PooledStructure, knowable_at_idx
+from engine_v2.structure import event_fields as ef
 from engine_v2.zones.cross_cycle_fib import CrossFibLimit
 
 # x−1 types (§1.2): the previous unique sub supplies P.
@@ -74,44 +75,57 @@ def read_prev_sub(prev: PooledStructure, s: int, x_direction: int,
     `CTS_CONFIRMED` price, moved by its `CTS_THRESHOLD_UPDATED`), else its latest CTS anchor price (EST / UPD /
     CONF), else no P (`prev_sub_no_cts`, a WARNING); opposite → its latest `BOS_CONFIRMED` /
     `BOS_THRESHOLD_UPDATED` price, else its starting candle's extreme (the high of a sell sub, the low of a buy
-    sub = its BOS_0 price)."""
+    sub = its BOS_0 price).
+
+    The anchor behind `P` (`ref_anchor_price`, PLAN_K §3.3, RX1-2), read in the SAME read: the confirmed cycle's
+    `CTS_CONFIRMED` price (before its `CTS_THRESHOLD_UPDATED`s); `P` itself for the latest CTS anchor and the
+    starting extreme (already anchor prices); the latest `BOS_CONFIRMED` price — the BOS whose threshold `P` is —
+    for the BOS threshold."""
     until = int(s) if (prev.end_idx is None or int(prev.end_idx) >= int(s)) else int(prev.end_idx)
     evs = _events_by_moment_until(prev, until)
     from_pool = int(prev.pool_idx)
     if int(prev.direction) == int(x_direction):
-        conf_cycle, thr = None, None
+        conf_cycle, thr, conf_price = None, None, None
         for e in evs:
             if e.type == "CTS_CONFIRMED":
-                conf_cycle, thr = int(e.meta["cycle_id"]), float(e.price)
+                conf_cycle, thr, conf_price = int(e.meta["cycle_id"]), float(e.price), float(e.price)
             elif (e.type == "CTS_THRESHOLD_UPDATED" and conf_cycle is not None
                   and int(e.meta["cycle_id"]) == conf_cycle):
                 thr = float(e.price)
         if thr is not None:
-            return CrossFibLimit(thr, "prev_sub_cts_threshold", from_pool_idx=from_pool)
+            return CrossFibLimit(thr, "prev_sub_cts_threshold", from_pool_idx=from_pool, ref_anchor_price=conf_price)
         latest = None
         for e in evs:
             if e.type in ("CTS_ESTABLISHED", "CTS_UPDATED", "CTS_CONFIRMED"):
                 latest = float(e.price)
         if latest is not None:
-            return CrossFibLimit(latest, "prev_sub_latest_cts", from_pool_idx=from_pool)
+            return CrossFibLimit(latest, "prev_sub_latest_cts", from_pool_idx=from_pool, ref_anchor_price=latest)
         log(f"WARNING [cross_fib_limit] x-1 pool#{from_pool} (same direction {int(x_direction)}) has no CTS "
             f"anchor by {until} -> no P (prev_sub_no_cts)")
         return CrossFibLimit(None, "prev_sub_no_cts", from_pool_idx=from_pool)
-    thr = None
+    thr, bos_price = None, None
     for e in evs:
         if e.type in ("BOS_CONFIRMED", "BOS_THRESHOLD_UPDATED"):
             thr = float(e.price)
+        if e.type == "BOS_CONFIRMED":
+            bos_price = float(e.price)
     if thr is not None:
-        return CrossFibLimit(thr, "prev_sub_bos_threshold", from_pool_idx=from_pool)
+        assert bos_price is not None, f"[cross_fib_limit] x-1 pool#{from_pool}: a BOS threshold with no BOS_CONFIRMED"
+        return CrossFibLimit(thr, "prev_sub_bos_threshold", from_pool_idx=from_pool, ref_anchor_price=bos_price)
     bounded, slice_begin = prev.geometry
     loc = int(prev.starting_idx) - int(slice_begin)
     col = "h" if int(prev.direction) == -1 else "l"
-    return CrossFibLimit(float(bounded.df[col].iloc[loc]), "prev_sub_starting_price", from_pool_idx=from_pool)
+    start_price = float(bounded.df[col].iloc[loc])
+    return CrossFibLimit(start_price, "prev_sub_starting_price", from_pool_idx=from_pool, ref_anchor_price=start_price)
 
 
 def reversal_limit(reversing_sub: PooledStructure) -> CrossFibLimit:
     """A `reversal`-started sub: the REVERSING sub's applied `bos_frozen` (§1.2) — its geometry's one
-    `STATE_CHANGED(to=reversal)`, which must sit at its `natural_reversal_idx`."""
+    `STATE_CHANGED(to=reversal)`, which must sit at its `natural_reversal_idx`. + the IC reference's inputs
+    (PLAN_K A10): `ref_anchor_price` = the reversing sub's most recent `BOS_CONFIRMED` price by the reversal's
+    moment, and the break = the REALISED reversal pattern (`ef.pattern_anchor_idx` on that `STATE_CHANGED`, and its
+    idx), ENTITY-ABSOLUTE (+ the reversing geometry's `slice_begin`) — `CrossFibLimit.localized` moves it into a
+    sub's slice at each entry point (PLAN_K §3.5)."""
     bounded, slice_begin = reversing_sub.geometry
     sc = [e for e in bounded.events if e.type == "STATE_CHANGED" and e.meta.get("to") == "reversal"]
     assert len(sc) == 1, f"[cross_fib_limit] reversing pool#{reversing_sub.pool_idx}: {len(sc)} reversals"
@@ -120,18 +134,32 @@ def reversal_limit(reversing_sub: PooledStructure) -> CrossFibLimit:
         f"{int(sc[0].idx) + int(slice_begin)} != natural_reversal_idx {reversing_sub.natural_reversal_idx}")
     frozen = sc[0].meta["bos_frozen"]
     assert frozen is not None, f"[cross_fib_limit] reversing pool#{reversing_sub.pool_idx}: bos_frozen None"
-    return CrossFibLimit(float(frozen), "reversal_bos_frozen", from_pool_idx=int(reversing_sub.pool_idx))
+    boses = [e for e in bounded.events if e.type == "BOS_CONFIRMED" and ef.event_moment(e) <= int(sc[0].idx)]
+    assert boses, f"[cross_fib_limit] reversing pool#{reversing_sub.pool_idx}: no BOS_CONFIRMED before its reversal"
+    last_bos = max(boses, key=ef.event_moment)
+    sb = int(slice_begin)
+    return CrossFibLimit(float(frozen), "reversal_bos_frozen", from_pool_idx=int(reversing_sub.pool_idx),
+                         ref_anchor_price=float(last_bos.price),
+                         break_pattern_anchor_idx=ef.pattern_anchor_idx(sc[0]) + sb,
+                         break_confirmed_idx=int(sc[0].idx) + sb)
 
 
 def parent_cts_limit(h1_events: Iterable[Any], parent_sid: int, parent_cycle_id: int) -> CrossFibLimit:
     """A `first_confluence` on parent cycle c >= 1: the parent's `CTS_ESTABLISHED` (S, c) `cts_frozen` (Q3) —
-    cycle c−1's frozen `cts_threshold` the breakout broke."""
+    cycle c−1's frozen `cts_threshold` the breakout broke; the anchor behind it (`ref_anchor_price`, PLAN_K §3.3) =
+    the parent cycle c−1's `CTS_CONFIRMED` price."""
+    h1_events = list(h1_events)
     est = [e for e in h1_events if e.type == "CTS_ESTABLISHED"
            and int(e.meta["structure_id"]) == int(parent_sid) and int(e.meta["cycle_id"]) == int(parent_cycle_id)]
     assert len(est) == 1, f"[cross_fib_limit] parent ({parent_sid},{parent_cycle_id}): {len(est)} CTS_ESTABLISHED"
     frozen = est[0].meta["cts_frozen"]
     assert frozen is not None, f"[cross_fib_limit] parent ({parent_sid},{parent_cycle_id}): cts_frozen None"
-    return CrossFibLimit(float(frozen), "parent_cts_threshold")
+    conf = [e for e in h1_events if e.type == "CTS_CONFIRMED"
+            and int(e.meta["structure_id"]) == int(parent_sid)
+            and int(e.meta["cycle_id"]) == int(parent_cycle_id) - 1]
+    assert len(conf) == 1, (
+        f"[cross_fib_limit] parent ({parent_sid},{int(parent_cycle_id) - 1}): {len(conf)} CTS_CONFIRMED")
+    return CrossFibLimit(float(frozen), "parent_cts_threshold", ref_anchor_price=float(conf[0].price))
 
 
 def cross_fib_limit_for(
@@ -199,7 +227,10 @@ def check_cross_fib_limits(pool: Any, h1_events: Iterable[Any], *, log: Callable
         )
         got_from = None if got.from_pool_idx is None else pool.get_by_pool_idx(got.from_pool_idx).sub_id
         stored = sub.cross_fib_limit
-        if (got.price, got.source, got_from) != (stored.price, stored.source, stored.from_sub_id):
+        if ((got.price, got.source, got_from, got.ref_anchor_price, got.break_pattern_anchor_idx,
+             got.break_confirmed_idx)
+                != (stored.price, stored.source, stored.from_sub_id, stored.ref_anchor_price,
+                    stored.break_pattern_anchor_idx, stored.break_confirmed_idx)):
             mismatched += 1
             log(f"WARNING [cross_fib_limit] sub {sub_id}: stored P={stored.price} {stored.source} "
                 f"from sub {stored.from_sub_id} != re-derived at its start {sub.start_idx} from its started_by "

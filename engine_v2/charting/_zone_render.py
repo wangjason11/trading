@@ -237,6 +237,27 @@ def fib_hover_limit_text(fib_st: Any) -> Optional[str]:
     return f"limit {float(price):.5f} · {source}{sub} · M={'none' if M is None else int(M)}"
 
 
+def fib_hover_ic_ref_text(fib_st: Any) -> Optional[str]:
+    """The fib hover's IC reference line (PLAN_K A17; RX1-C1 — hover + CSV only) from the record's `ic_ref_*` meta
+    (`FibTracker.stamp_ic_references`): `IC ref <price> (<source>[, cycle <a−1>]) · break <idx>`, `… · break: none`
+    (a reference with no known break), or `IC ref: none` (no reference — the condition passes). None for a record
+    the finalize never stamped (no `cross_fib_limit_*` keys — a fixture), like `fib_hover_limit_text`. Example
+    (sub 0 cyc 3): `IC ref 0.57774 (prev_cycle_cts, cycle 2) · break 1720`."""
+    m = getattr(fib_st, "meta", None) or {}
+    if "cross_fib_limit_source" not in m:
+        return None
+    if "ic_ref_source" not in m:
+        return "IC ref: none"
+    source = m["ic_ref_source"]
+    cycle = ""
+    if source == "prev_cycle_cts":
+        start_cycle = int(m["cross_start_cycle"]) if m.get("cross_cycle") else int(fib_st.cycle_id)
+        cycle = f", cycle {start_cycle - 1}"
+    brk = m.get("ic_ref_break_pattern_anchor_idx")
+    btxt = "break: none" if brk is None else f"break {int(brk)}"
+    return f"IC ref {float(m['ic_ref_price']):.5f} ({source}{cycle}) · {btxt}"
+
+
 def fib_hover_status_text(fib_st: Any, ip_row: Optional[Any]) -> str:
     """The fib hover's status cell — ONE builder for both charts (PLAN_H §8.9
     F1): the lifecycle status (+ ` (locked)`), `life=[start_idx, end_idx]
@@ -244,8 +265,9 @@ def fib_hover_status_text(fib_st: Any, ip_row: Optional[Any]) -> str:
     outcome (`ip_rows_by_fib_record`): `IP <rank> · IC <idx>` (the pick = the
     drawn POI), `IP: none (<reason>)` (no pattern → no POI, PLAN_H C1), or
     `IP: not evaluated (no POI record)` (no row: the POI record gate skipped
-    the record — ended before locking, or no CTS_ESTABLISHED), and the
-    structure's cross-fib limit (`fib_hover_limit_text`, PLAN_I R6-7)."""
+    the record — ended before locking, or no CTS_ESTABLISHED), the record's IC
+    reference (`fib_hover_ic_ref_text`, PLAN_K A17), and the structure's
+    cross-fib limit (`fib_hover_limit_text`, PLAN_I R6-7)."""
     start = "–" if fib_st.start_idx is None else int(fib_st.start_idx)
     end = "open" if fib_st.end_idx is None else int(fib_st.end_idx)
     life = f"life=[{start}, {end}]" + (f" {fib_st.end_reason}" if fib_st.end_reason else "")
@@ -257,6 +279,9 @@ def fib_hover_status_text(fib_st: Any, ip_row: Optional[Any]) -> str:
         ip = f"IP {ip_row.ip_rank} · IC {int(ip_row.ic_idx)}"
     status = getattr(fib_st, "status", "active")
     text = f"{status}{' (locked)' if fib_st.locked else ''}<br>{life}<br>{ip}"
+    ic_ref = fib_hover_ic_ref_text(fib_st)
+    if ic_ref is not None:
+        text = f"{text}<br>{ic_ref}"
     limit = fib_hover_limit_text(fib_st)
     return text if limit is None else f"{text}<br>{limit}"
 

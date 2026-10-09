@@ -106,6 +106,49 @@ then end together. 0 on the reference window (0 / 27 fib cycles move); one real 
 - **Exported:** every fib record's meta carries `cross_fib_limit_price` / `_source` / `_cycle` (the structure's FINAL
   `M`) / `_from_sub_id` (+ main's `started_by`), stamped at finalize; the fib hover's last line
   (`_zone_render.fib_hover_limit_text`, CHARTING_SPEC).
+- **The IC reference's inputs (PLAN_K A8–A12, 2026-10-09; the condition itself: POI_ZONES_SPEC §3.2).** The limit also
+  carries what the structure reference of a fib's IC reference needs — a cycle `T` uses it while `T ≤ M` (or `M` None),
+  the same test as `_cross_allowed` but evaluated WITHOUT it (`FibTracker._structure_reference_limit`: no limit entry or
+  `P` None → no structure reference, nothing raises):
+  - **`ref_anchor_price`** — the ANCHOR price behind `P` (`P` can be a threshold that moved; the IC reference never uses
+    a threshold), read in the same read as `P`; None ⟺ `P` None (asserted):
+
+    | `cross_fib_limit_source` | `ref_anchor_price` |
+    |---|---|
+    | `reversal_bos_frozen` (main + sub) | the reversing structure's most recent `BOS_CONFIRMED` price by its reversal moment (asserted to exist) |
+    | `parent_cts_threshold` | the parent cycle c−1's `CTS_CONFIRMED` price (asserted: exactly one) |
+    | `prev_sub_cts_threshold` | x−1's confirmed cycle's `CTS_CONFIRMED` price (before its `CTS_THRESHOLD_UPDATED`s) |
+    | `prev_sub_bos_threshold` | x−1's latest `BOS_CONFIRMED` price — the BOS whose threshold `P` is (asserted to exist) |
+    | `prev_sub_latest_cts` / `prev_sub_starting_price` | `P` itself (already an anchor price) |
+    | `none` / `prev_sub_no_cts` | None |
+
+  - **`break_pattern_anchor_idx` / `break_confirmed_idx`** (set ⟺ `reversal_bos_frozen`, asserted; anchor ≤ apply) —
+    the REALISED reversal pattern's first candle (`ef.pattern_anchor_idx` on the `STATE_CHANGED(to=reversal)`, whose
+    meta carries it since PLAN_K A13 — a later anchor's winner can apply with no `REVERSAL_CANDIDATE` at the apply)
+    and its apply (that event's idx). Coordinates: main the H1 frame; a sub ENTITY-ABSOLUTE at the pool (the reversing
+    geometry's index + ITS `slice_begin`), moved into a sub's slice ONCE per entry point by `CrossFibLimit.localized(
+    slice_begin)` — at `entity_df_mutation._build_geometry` (the geometry MS's embedded tracker) and at
+    `render_sub_projection` (the downstream); the fib meta's break keys return to entity-absolute through
+    `_FIB_META_IDX_KEYS` in the mirror. The R6-2 tripwire compares the three new fields too.
+  - **The cross-limit breakout watch** (`patterns/cross_limit_watch.find_cross_limit_break(df, P, sd, start_idx, *,
+    end_idx, known_at)` — every other source with a `P`; RX1-2b / W1–W3 / K1 / K6): `P` is not an MS key level (MS
+    never tests a breakout against it), so the pattern that BROKE it is found here, the way the reversal watch finds a
+    reversal against its frozen BOS, but on the breakout wave. A candle whose CLOSE is past `P` in the structure's
+    direction opens a watch (W2); the breakout pattern is anchored at it — `BreakoutPatterns.detect_best_for_anchor(A,
+    sd, P)`, the reversal watch's own detector and pattern set, `P` the break threshold (W1; its latest confirmation is
+    the detector's own `A + 5`); `P` never moves and every later close past it re-arms (W3); two watches confirming →
+    the EARLIEST confirmation wins, a tie → the earlier anchor (K1); detection by MS's convention — the frame up to
+    `end_idx` (look-ahead, `continuous` first), a break counting at moment `t` iff its confirmation ≤ `t` (K6: the
+    as-of answer is the final one cut by time; the bound never moves). `start_idx` = the structure's BOS_0 anchor (a
+    sub's lifecycle start can lie after its break — sub 4: start 3621, break 3588); `end_idx` = MS's resolver frame's
+    end (in flight) / the structure's lifecycle cap (the retrospective stamp and the drawn POI). Pure: no MS state, no
+    event. On the reference window: sub 4 → 3588 (confirmed 3589), sub 7 → 4188 (4189), subs 5 / 6 → none.
+  - **Exported** (`FibTracker.stamp_ic_references(df, lifecycle_cap)`, a finalize step after
+    `_finalize_lifecycle_fields`; the FINAL reference — `evaluated_at=None`): fib meta `ic_ref_price`, `ic_ref_source`
+    (`prev_cycle_cts` | `prev_structure_bos` | `cross_limit_anchor`; absent = no reference),
+    `ic_ref_break_pattern_anchor_idx`, `ic_ref_break_confirmed_idx` (absent = no known break), placed BEFORE the limit
+    keys; the fib hover's line before the limit line (`_zone_render.fib_hover_ic_ref_text`: `IC ref 0.57774
+    (prev_cycle_cts, cycle 2) · break 1720` / `… · break: none` / `IC ref: none`).
 
 ---
 
@@ -146,7 +189,8 @@ the limit; `cross_failed` for the fallback of an allowed cycle.
 - Keys in `_fibs`: `(sid, cycle)` the single; `(sid, cycle, "cross", v)` the cross versions (`_cross_version`).
 - Meta = the sub path's for every structure (Q8): a cross carries `cross_cycle` / `cross_start_cycle` / `version` /
   `activated_at` (+ `locked_at` / `deactivated_*` / `reactivated_at`); a single `activated_at` (+ `via`, `activated_on`,
-  …); `obsolete_reason: "new_cycle"` on a record a next cycle ended; the cross-fib limit keys (§3). `fib_mode` (always
+  …); `obsolete_reason: "new_cycle"` on a record a next cycle ended; the IC reference keys (`ic_ref_*`, §3, PLAN_K) and
+  the cross-fib limit keys (§3), in that order, last. `fib_mode` (always
   `"cross_cycle"` since S4) is retired by S6 (2026-10-09, a rule-3 migration: the four FibTracker stamps and the fib
   CSV's column; guard `tests/test_meta_key_renames.py`). Retired with main's old logic (a rule-3 migration,
   S4): `cycle1_bos_anchor_idx` (also out of `entity_df_mutation._FIB_META_IDX_KEYS`), `scenario`, `flow`, the
@@ -183,9 +227,12 @@ CTS_ESTABLISHED / CTS_UPDATED. Since S5 that inner comes from THIS logic:
   through; any other error is re-raised as `EmbeddedFibTrackerError` (a `RuntimeError` — the sub geometry's `except
   (ValueError, IndexError)` cannot drop the sub).
 - **The read.** At each refresh: `FibTracker.representative_fib(sid, cycle)` — the cycle's ACTIVE latest cross, else
-  its ACTIVE single, else None — handed to `poi_inner_for_fib(df, fib, fill_threshold)`, which reads the frame's
-  `attrs["timeframe"]` first on EVERY call (a no-fib refresh included; PLAN_H PR1, PLAN_I F11) and returns the
-  institutional-pattern pick's inner (`select_ip_ic`, the drawn POI's selector), or None → the BOS inner only. Every
+  its ACTIVE single, else None — handed to `poi_inner_for_fib(df, fib, fill_threshold, *, tracker, evaluated_at)`,
+  which reads the frame's `attrs["timeframe"]` first on EVERY call (a no-fib refresh included; PLAN_H PR1, PLAN_I
+  F11), builds the fib's IC reference from the tracker AT `evaluated_at` = the fed event's moment (the pattern path's
+  apply candle, the raw path's re-stepped candle; PLAN_K A4 / A14 — inside the read's re-raising scope, §9 C01) and
+  returns the institutional-pattern pick's inner (`select_ip_ic`, the drawn POI's selector, with that reference —
+  POI_ZONES_SPEC §3.2), or None → the BOS inner only. Every
   imbalance question of the fib decision is asked at the fed event's moment (Plan F), so the M1 divergence and the
   fib the tracker never creates / has deactivated are gone (PLAN_I §9.2 F9).
 - **The order.** The drawn fib is decided in `processing_order_key` order, MS's in EMISSION order; the two are the same

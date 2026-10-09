@@ -115,7 +115,7 @@ reference window (zones-pass audit, 2026-09-22; the `CTS_THRESHOLD_UPDATED` row 
 | `CTS_THRESHOLD_UPDATED` | NOT a price location: the processing candle whose range sync moved the CTS threshold — emitted only by `_sync_thresholds_from_range(i)` (active-range upkeep `_update_active_range(i)`, a pullback's apply candle, the sd-proximity confirmation candle) | `ev.idx` | — | the new threshold (the range breakout bound) | — (`meta["prev"]` is a price) |
 | `REVERSAL_CANDIDATE` | the reversal pattern's first candle — its pattern-realm anchor (`meta["pattern_anchor_idx"]`, same value; = the close-break candle) | `meta["apply_idx"]` = the SCHEDULED apply — a prediction, unrealised when a new cycle ends the watch or an earlier reversal lands (until 2026-09-29 a watch expiry could also discard it); the confirmed reversal is `STATE_CHANGED(to=reversal)` at its `ev.idx` (KL / POI / the fib finalize / charts, the orchestrator's FibTracker / terminal / prev-BOS map since 2026-09-27, and the zone-proximity scan cap (GOTCHAS "Key boundaries") + the H1-main `SidRecord.end_event_idx` since 2026-09-28 take that one, via `structure_lifecycle.compute_reversal_idx_by_sid`; no production reader of the scheduled apply is left — the chart's candidate markers show the candidate's anchor / pattern) | — (pattern realm only) | the BOS threshold frozen at the close-break (`meta["bos_frozen"]`) | `meta["expires_idx"]` — entity-absolute in the M15 lens CSVs since Post-E·2 (2026-09-26; slice-local before) |
 | `REVERSAL_WATCH_START` | the close-break candle MS processed when it emitted it (`_bos_barrier_step`) | `ev.idx` | — (pattern realm only) | the frozen BOS threshold (as above) | `meta["pattern_anchor_idx"]` = that same close-break candle; `meta["expires_idx"]` (entity-absolute in the M15 lens CSVs since Post-E·2) |
-| `STATE_CHANGED` | the candle at which the state change takes effect: the processed candle, a pattern's apply candle, or a range's confirm candle | `ev.idx` | — | none | `meta["effective_idx"]` defaults to `ev.idx` but is the range-start anchor for `to=range` (`reason="range_confirmed"`); entity-absolute in the M15 lens CSVs since Post-E·2 (2026-09-26; slice-local before) |
+| `STATE_CHANGED` | the candle at which the state change takes effect: the processed candle, a pattern's apply candle, or a range's confirm candle | `ev.idx` | — | none | `meta["effective_idx"]` defaults to `ev.idx` but is the range-start anchor for `to=range` (`reason="range_confirmed"`); entity-absolute in the M15 lens CSVs since Post-E·2 (2026-09-26; slice-local before). On `to=reversal` only, `meta["pattern_anchor_idx"]` (PLAN_K A13, 2026-10-09; `ef.pattern_anchor_idx`) = the REALISED reversal pattern's first candle — pattern realm, the bound of a reversal-started structure's IC reference (POI_ZONES_SPEC §3.2); shifted by the mirror like every `pattern_anchor_idx` (`_EVENT_META_IDX_KEYS`); a save before S_K_A lacks it |
 
 Not audited in this table: `RANGE_*` and `BOS_THRESHOLD_UPDATED` (`RANGE_STARTED` from
 `_finalize_range_candidate_offline` is stamped at the `is_range_confirm_idx` label — see LANDMINES "Bounded MS
@@ -134,7 +134,8 @@ callers import the MODULE and call it qualified (`from engine_v2.structure impor
   its event's moment here). Why it matters: IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
 - `ef.cts_anchor_idx(ev)` — `meta["cts_anchor_idx"]` on `CTS_ESTABLISHED` / `CTS_CONFIRMED` / `CTS_RECONFIRMED`
   and pattern-path `CTS_UPDATED` (since E4c), `ev.idx` on raw-path `CTS_UPDATED`; `ef.bos_anchor_idx(ev)` — `BOS_CONFIRMED.meta["bos_anchor_idx"]`;
-  `ef.pattern_anchor_idx(ev)`; `ef.processing_order_key(ev)` — the pre-E4 event processing order `(ev.idx,
+  `ef.pattern_anchor_idx(ev)` (`CTS_ESTABLISHED` / `REVERSAL_CANDIDATE` / `REVERSAL_WATCH_START`, and a
+  `STATE_CHANGED` with `to=reversal` since PLAN_K A13 — any other `STATE_CHANGED` raises); `ef.processing_order_key(ev)` — the pre-E4 event processing order `(ev.idx,
   ev.type)` frozen on the anchors (PLAN_E §6.2): the flip reorders nothing. Other types raise.
 - `ef.stamped_idx(ev)` — the index `ev.idx` held before the Plan E E4 flip, frozen against it (the anchor for
   `CTS_ESTABLISHED` / `BOS_CONFIRMED` / `CTS_UPDATED` — whose `ev.idx` is the moment since E4a / E4b / E4c on
@@ -169,7 +170,8 @@ short of the threshold, prints the lowest low) vs 2829. All five H1 cycles have 
 candle pattern's FIRST candle, event meta `pattern_anchor_idx` (Plan E E1, 2026-09-24; was the bare
 `anchor_idx`): `CTS_ESTABLISHED.meta["pattern_anchor_idx"]` (the breakout pattern) and `REVERSAL_CANDIDATE` /
 `REVERSAL_WATCH_START.meta["pattern_anchor_idx"]` (the close-break candle = the first candle of the reversal
-pattern searched from it). *Market-structure realm* — an ENDPOINT
+pattern searched from it), `STATE_CHANGED(to=reversal).meta["pattern_anchor_idx"]` (the REALISED reversal pattern —
+not always the watch's candidate: a later anchor's winner can apply first; PLAN_K A13). *Market-structure realm* — an ENDPOINT
 (start or end) of a structure element: `CTS_CONFIRMED.meta["cts_anchor_idx"]` (the CTS anchor at
 confirmation), `CTS_ESTABLISHED.meta["cts_anchor_idx"]` / `BOS_CONFIRMED.meta["bos_anchor_idx"]` (Plan E E2a), KL-zone `meta["anchor_idx"]` (the BOS anchor for a BOS zone, the CTS anchor for a CTS
 zone — the candle its base pattern is found around, `zones/KL_ZONES_SPEC.md`), the fib anchors.
@@ -304,11 +306,15 @@ POI activation conditions
 The IC itself is ONE per fib record since landing B: the institutional-
 pattern pick (`select_ip_ic`, POI_ZONES_SPEC §3.4) — the same selector MS's
 in-flight sd-proximity read uses (D2), on the same fib decision since PLAN_I S5
-(MS's embedded FibTracker, CROSS_CYCLE_FIB_SPEC §8). Scenario conditions (#4: the
-per-scenario idx/price constraints of `zones/POI_ZONES_SPEC.md` §3.2) are NOT
-implemented — IC identification applies only the base conditions (found
-2026-09-30; kept unapplied for future testing, PLAN_H D4). As designed they
-are gated at IC identification, not re-checked per candle.
+(MS's embedded FibTracker, CROSS_CYCLE_FIB_SPEC §8). Condition #4 — the IC
+reference condition (`zones/POI_ZONES_SPEC.md` §3.2; the user's 2026-10-09
+re-specification, PLAN_H RX1, of the per-scenario idx/price constraints designed
+in Week 7 and never implemented, now that spec's Appendix A) — is computed and
+exported since PLAN_K landing A (2026-10-09; `IPCandidate.ic_ref_reason`, the
+`*_ip_candidates.csv` column, the fib meta `ic_ref_*` + hover) but NOT applied
+yet (`poi_zones._IC_REFERENCE_FILTER = False`; landing B applies it in both
+consumers). It is gated at IC selection (`select_ip_ic`, per §3.1 candidate,
+before the touch and the pattern), not re-checked per candle.
 
 **Activation floor (both POI and KL).** A zone's first-active is clamped to
 its owning cycle's lifecycle-start: `first_active = max(<zone-specific

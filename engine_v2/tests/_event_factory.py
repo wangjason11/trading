@@ -32,10 +32,11 @@ def make_cts_established(
     meta: Optional[Dict[str, Any]] = None,
 ) -> StructureEvent:
     """A CTS_ESTABLISHED. `meta` adds extra keys (e.g. `via`); it may not carry
-    the keys this factory owns. An attribution argument set to None omits its key."""
+    the keys this factory owns. An attribution argument set to None omits its key.
+    `pattern_anchor_idx` defaults to the CTS anchor: MS's one emitter always stamps
+    it and FibTracker reads it by direct index (PLAN_K A11 / A20 b)."""
     m = _extra(meta, ("cts_anchor_idx", "confirmed_at", "pattern_anchor_idx"))
-    if pattern_anchor_idx is not None:
-        m["pattern_anchor_idx"] = int(pattern_anchor_idx)
+    m["pattern_anchor_idx"] = int(cts_anchor_idx if pattern_anchor_idx is None else pattern_anchor_idx)
     m["confirmed_at"] = int(confirmed_at)
     _attribution(m, structure_id, cycle_id, struct_direction)
     m["cts_anchor_idx"] = int(cts_anchor_idx)

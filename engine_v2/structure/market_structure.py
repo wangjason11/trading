@@ -68,7 +68,9 @@ BosInnerResolver = Callable[[pd.DataFrame, int, int], Optional[float]]
 # CTS_CONFIRMED, CTS_THRESHOLD_UPDATED), reads `representative_fib(sid, cycle)` at every POI refresh and hands it to
 # the injected `poi_inner_for_fib` (`zones.poi_zones`: the institutional-pattern pick's inner, or None), and calls
 # `check_processing_order()` at the end of every run (the order tripwire, PLAN_I §9.2 F16 / F17 (i)).
-PoiInnerForFib = Callable[[pd.DataFrame, Any, float], Optional[float]]
+# `poi_inner_for_fib(df, fib, fill_threshold, *, tracker, evaluated_at)` — PLAN_K A4 / A14: the IC reference is built
+# by `tracker.ic_reference(...)` INSIDE the read's re-raising scope, at `evaluated_at` (the fed event's moment).
+PoiInnerForFib = Callable[..., Optional[float]]
 # (df, representative fib or None, fill_threshold) -> the pick's inner | None
 
 
@@ -1305,6 +1307,10 @@ class MarketStructure:
                 meta={
                     "reason": "reversal_pattern",
                     "pat": ev.name,
+                    # The REALISED reversal pattern's first candle (pattern realm) — the ONE source of the bound of
+                    # a reversal-started structure's IC reference (PLAN_K A13, RX1-1): a later anchor's winner can
+                    # apply with no REVERSAL_CANDIDATE at the apply, so the candidate is not a robust source.
+                    "pattern_anchor_idx": int(ev.start_idx),
                     "bos_frozen": None if st.reversal_bos_th_frozen is None else float(st.reversal_bos_th_frozen),
                 },
             )
@@ -1479,7 +1485,7 @@ class MarketStructure:
             # same BOS, extended CTS — POIs may shift as Fib bounds expand. No
             # CTS move = no event, nothing fed to the embedded tracker, no refresh.
             if cts_moves:
-                self._refresh_poi_inners_for_cycle()
+                self._refresh_poi_inners_for_cycle(int(apply_idx))
 
             self._set_state(MarketState.BREAKOUT, apply_idx, meta={"reason": "breakout_pattern", "pat": ev.name})
             self._post_apply_range_check(apply_idx)
@@ -1620,7 +1626,7 @@ class MarketStructure:
         if self._is_new_cts_extreme(new_price):
             self._emit_cts_updated(i, new_price, meta={"via": via})
             st.cts = Point(idx=i, price=new_price)
-            self._refresh_poi_inners_for_cycle()
+            self._refresh_poi_inners_for_cycle(int(i))
 
     def _is_new_cts_extreme(self, price: float) -> bool:
         """True iff `price` lies strictly beyond the current CTS in the structure
@@ -1910,7 +1916,7 @@ class MarketStructure:
         trigger_inner, zone_kind = hit
         self._fire_cts_confirmation_via_proximity(i, trigger_inner, zone_kind)
 
-    def _refresh_poi_inners_for_cycle(self) -> None:
+    def _refresh_poi_inners_for_cycle(self, moment: int) -> None:
         """Recompute the cycle's POI inner snapshot (Stage 2 — POI awareness of the proximity check). Called at
         CTS_ESTABLISHED (new cycle) and each CTS_UPDATED (CTS extended), after the event was fed to the embedded
         tracker.
@@ -1920,13 +1926,18 @@ class MarketStructure:
         its institutional-pattern pick's inner (`poi_inner_for_fib`, which also reads the frame's candle stamp on
         every call, a no-fib refresh included — PLAN_H PR1). Its imbalance questions were asked at the fed event's
         MOMENT (the tracker's knowability cut, Plan F). No tracker (direct construction) = no POI inner — the
-        proximity check reads the BOS inner only."""
+        proximity check reads the BOS inner only.
+
+        `moment` = the fed event's MOMENT (`ef.event_moment`): the pattern path's apply candle, the raw path's
+        re-stepped candle (PLAN_K A14). The read builds the fib's IC reference from the tracker AT that moment
+        (`poi_zones.poi_inner_for_fib`, inside its re-raising scope — PLAN_K A4 / §9 C01)."""
         st = self.state
         if self._fib_tracker is None:
             st.poi_inners_for_cycle = []
             return
         fib = self._fib_tracker.representative_fib(int(st.structure_id), int(st.cts_cycle_id))
-        inner = self._poi_inner_for_fib(self._resolver_df(), fib, float(self._fib_tracker.config.fill_threshold))
+        inner = self._poi_inner_for_fib(self._resolver_df(), fib, float(self._fib_tracker.config.fill_threshold),
+                                        tracker=self._fib_tracker, evaluated_at=int(moment))
         st.poi_inners_for_cycle = [] if inner is None else [float(inner)]
 
     def _fire_cts_confirmation_via_proximity(

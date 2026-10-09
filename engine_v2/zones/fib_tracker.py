@@ -24,10 +24,11 @@ from engine_v2.features.fibonacci import (
     create_fib_retracement,
     DEFAULT_FIB_LEVELS,
 )
+from engine_v2.patterns.cross_limit_watch import find_cross_limit_break
 from engine_v2.patterns.imbalance import has_unfilled_imbalance
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
-from engine_v2.zones.cross_cycle_fib import CrossFibLimit, beyond, resolve_cross_cycle_eligibility
+from engine_v2.zones.cross_cycle_fib import CrossFibLimit, ICReference, beyond, resolve_cross_cycle_eligibility
 from engine_v2.zones.structure_lifecycle import (
     compute_cycle_lifecycle,
     compute_reversal_idx_by_sid,
@@ -259,6 +260,10 @@ class FibTracker:
         # (sid, cycle_id) -> (idx, price, sd): the cycle's LATEST CTS anchor (§4 N-f) — written at its
         # CTS_ESTABLISHED, every CTS_UPDATED and its CTS_CONFIRMED (the confirmed anchor wins). `M` reads it.
         self._latest_anchor: Dict[tuple, tuple] = {}
+        # (sid, cycle_id) -> the first candle of the breakout pattern that ESTABLISHED the cycle (its
+        # CTS_ESTABLISHED `pattern_anchor_idx`): the pattern that broke CTS_{cycle−1} — the bound of a fib's
+        # `prev_cycle_cts` IC reference (PLAN_K A11). Plain ints (the tracker is deep-copied at every MS snapshot).
+        self._est_pattern_anchor: Dict[tuple, int] = {}
 
     def _log(self, msg: str) -> None:
         if not self._quiet:
@@ -348,6 +353,106 @@ class FibTracker:
         if lim.started_by is not None:
             out["started_by"] = lim.started_by
         return out
+
+    # ------------------------------------------------------------------
+    # The IC reference (PLAN_K §1 / §3.1; PLAN_H §8.9 RX1, §6 RX1-*).
+    # ------------------------------------------------------------------
+    def _structure_reference_limit(self, sid: int, target_cycle: int) -> Optional[CrossFibLimit]:
+        """The structure's limit when its STRUCTURE reference applies to `target_cycle` — `P` set and (`M` None or
+        `target_cycle` ≤ `M`), cycle 0 included — else None. `_cross_allowed`'s test WITHOUT calling it: a structure
+        with no limit entry (or `P` None) has no structure reference, and nothing raises (PLAN_K §9 C03)."""
+        lim = self._limits.get(int(sid))
+        if lim is None or lim.price is None:
+            return None
+        m = self.cross_fib_limit_cycle(int(sid))
+        return lim if (m is None or int(target_cycle) <= m) else None
+
+    def ic_reference(
+        self,
+        fib_state: FibState,
+        df: pd.DataFrame,
+        *,
+        evaluated_at: Optional[int],
+        end_idx: Optional[int] = None,
+    ) -> ICReference:
+        """The fib record's IC reference (PLAN_K §1; the ONE builder — the drawn POI and MS's in-flight read both
+        hand its value to `poi_zones.select_ip_ic`, D2):
+
+        - `prev_cycle_cts` when the fib's BOS lies in cycle a ≥ 1 (a single: its cycle; a cross: `cross_start_cycle`):
+          cycle a−1's CTS_CONFIRMED price (`_cts_by_cycle` — the confirmed anchor, never a threshold); its break =
+          the pattern that established cycle a (`_est_pattern_anchor`, known from cycle a's establishment moment);
+        - the structure reference while `_structure_reference_limit` applies: `prev_structure_bos` (a reversal start
+          — `ref_anchor_price`, the break = the realised reversal pattern, known for the structure's WHOLE run like
+          `P`, RX1-K7) or `cross_limit_anchor` (a non-reversal start — `ref_anchor_price`, the break =
+          `find_cross_limit_break` on `P` from the structure's first candle, its BOS_0 anchor; RX1-2b / W1–W3 / K1 /
+          K6 — counted once its confirmation ≤ `evaluated_at`);
+        - both → the one further opposite the structure (sd +1 the lower price, sd −1 the higher; RX1-3); EQUAL →
+          the structure reference (RX1-K5); none → `ICReference.NONE` (the condition passes, RX1-B).
+
+        `evaluated_at` = the reading moment (MS: the fed event's; None = retrospective, the drawn POI and the stamp);
+        `end_idx` = the last candle the watch's detector may read (None = the frame's last: MS hands its resolver
+        frame; the drawn POI / the stamp hand the structure's lifecycle cap)."""
+        sid = int(fib_state.structure_id)
+        target = int(fib_state.cycle_id)
+        sd = int(fib_state.struct_direction)
+        start_cycle = int(fib_state.meta["cross_start_cycle"]) if fib_state.meta.get("cross_cycle") else target
+        refs = []  # (is_structure, price, source, break)
+        if start_cycle >= 1:
+            cts = self._cts_by_cycle.get((sid, start_cycle - 1))
+            assert cts is not None, (
+                f"[fib] sid={sid} cycle={start_cycle}: a fib from cycle {start_cycle} with cycle {start_cycle - 1} "
+                f"unconfirmed (the S2 order tripwire guarantees it)")
+            anchor = self._est_pattern_anchor[(sid, start_cycle)]
+            known = self._bos_moment_by_cycle[(sid, start_cycle)]
+            brk = (anchor, known) if (evaluated_at is None or known <= int(evaluated_at)) else None
+            refs.append((False, float(cts[1]), "prev_cycle_cts", brk))
+        lim = self._structure_reference_limit(sid, target)
+        if lim is not None:
+            if lim.source == "reversal_bos_frozen":
+                brk = (int(lim.break_pattern_anchor_idx), int(lim.break_confirmed_idx))
+                refs.append((True, float(lim.ref_anchor_price), "prev_structure_bos", brk))
+            else:
+                start = int(self._bos_by_cycle[(sid, 0)][0])
+                brk = find_cross_limit_break(df, float(lim.price), sd, start, end_idx=end_idx, known_at=evaluated_at)
+                refs.append((True, float(lim.ref_anchor_price), "cross_limit_anchor", brk))
+        if not refs:
+            return ICReference.NONE
+        if sd == 1:
+            chosen = min(refs, key=lambda r: (r[1], 0 if r[0] else 1))
+        else:
+            chosen = min(refs, key=lambda r: (-r[1], 0 if r[0] else 1))
+        _is_structure, price, source, brk = chosen
+        if brk is None:
+            return ICReference(price, source)
+        return ICReference(price, source, int(brk[0]), int(brk[1]))
+
+    def stamp_ic_references(self, df: pd.DataFrame, lifecycle_cap: Optional[int] = None) -> None:
+        """Stamp every fib record's FINAL IC reference into its meta (PLAN_K A11 / §3.6) — `ic_ref_price`,
+        `ic_ref_source` (absent = no reference), `ic_ref_break_pattern_anchor_idx`, `ic_ref_break_confirmed_idx`
+        (absent = no known break) — placed BEFORE the `cross_fib_limit_*` keys (pinned last). Retrospective
+        (`evaluated_at=None`), the watch read to `lifecycle_cap` (the structure's end; None = the frame's last), the
+        SAME call the drawn POI's selection makes (`poi_zones.select_ip_records`). A separate step after
+        `_finalize_lifecycle_fields` (which takes no frame); idempotent."""
+        ic_keys = ("ic_ref_price", "ic_ref_source", "ic_ref_break_pattern_anchor_idx", "ic_ref_break_confirmed_idx")
+        for key, fib in list(self._fibs.items()):
+            ref = self.ic_reference(fib, df, evaluated_at=None, end_idx=lifecycle_cap)
+            tail_keys = list(self._cross_fib_limit_meta(int(fib.structure_id)))
+            head = {k: v for k, v in fib.meta.items() if k not in ic_keys and k not in tail_keys}
+            tail = {k: fib.meta[k] for k in tail_keys if k in fib.meta}
+            if ref.break_pattern_anchor_idx is not None:
+                self._fibs[key] = replace(fib, meta={
+                    **head,
+                    "ic_ref_price": ref.price,
+                    "ic_ref_source": ref.source,
+                    "ic_ref_break_pattern_anchor_idx": int(ref.break_pattern_anchor_idx),
+                    "ic_ref_break_confirmed_idx": int(ref.break_confirmed_idx),
+                    **tail,
+                })
+            elif ref.price is not None:
+                self._fibs[key] = replace(fib, meta={
+                    **head, "ic_ref_price": ref.price, "ic_ref_source": ref.source, **tail})
+            else:
+                self._fibs[key] = replace(fib, meta={**head, **tail})
 
     # ------------------------------------------------------------------
     # Knowability (Plan F): the moment an imbalance question is asked.
@@ -655,6 +760,8 @@ class FibTracker:
                 f"{cts_established_idx}) handled before cycle {cycle_id - 1}'s CTS_CONFIRMED"
             )
         self._latest_anchor[(sid, cycle_id)] = (int(cts_idx), float(cts_price), int(sd))
+        # Direct index (the event contract: MS's one CTS_ESTABLISHED emitter always stamps it).
+        self._est_pattern_anchor[(sid, cycle_id)] = ef.pattern_anchor_idx(event)
 
         # Check for unfilled imbalance between BOS and CTS, counting only gaps
         # formed by the moment (Plan F). sd-direction filter: Fibs only ever

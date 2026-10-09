@@ -92,7 +92,12 @@ def compute_main_cross_fib_limit(events: List, sid: int) -> CrossFibLimit:
     """ONE main structure's cross-fib limit (`compute_main_cross_fib_limits`' rule) from the events of the sids
     BEFORE it — so MarketStructure's embedded tracker gets it before sid `sid` runs (`structure_engine.
     compute_structure`, PLAN_I S5 / D5) and the downstream the same value after: sid `sid` was started by a
-    reversal iff sid `sid` − 1 has a `STATE_CHANGED(to=reversal)` (else start trading, no `P`)."""
+    reversal iff sid `sid` − 1 has a `STATE_CHANGED(to=reversal)` (else start trading, no `P`).
+
+    A reversal start also carries the IC reference's inputs (PLAN_K A9, RX1-1 / RX1-2): `ref_anchor_price` = sid
+    `sid` − 1's most recent `BOS_CONFIRMED` price by the reversal's moment (the BOS anchor, not its threshold), and
+    the break = the REALISED reversal pattern's first candle (`ef.pattern_anchor_idx` on the `STATE_CHANGED`) and
+    its apply (that event's idx)."""
     sid = int(sid)
     revs = [ev for ev in events
             if getattr(ev, "type", None) == "STATE_CHANGED" and (ev.meta or {}).get("to") == "reversal"
@@ -109,7 +114,14 @@ def compute_main_cross_fib_limit(events: List, sid: int) -> CrossFibLimit:
     assert watches and float(watches[-1].meta["bos_frozen"]) == float(frozen), (
         f"[cross_fib_limit] sid {sid - 1}'s reversal at {int(rev.idx)}: bos_frozen {frozen} != the open watch's "
         f"{[(int(w.idx), float(w.meta['bos_frozen'])) for w in watches[-1:]]}")
-    return CrossFibLimit(float(frozen), "reversal_bos_frozen", started_by="reversal")
+    boses = [ev for ev in events
+             if getattr(ev, "type", None) == "BOS_CONFIRMED" and int(ev.meta["structure_id"]) == sid - 1
+             and ef.event_moment(ev) <= int(rev.idx)]
+    assert boses, f"[cross_fib_limit] sid {sid - 1} reversed at {int(rev.idx)} with no BOS_CONFIRMED before it"
+    last_bos = max(boses, key=ef.event_moment)
+    return CrossFibLimit(float(frozen), "reversal_bos_frozen", started_by="reversal",
+                         ref_anchor_price=float(last_bos.price),
+                         break_pattern_anchor_idx=ef.pattern_anchor_idx(rev), break_confirmed_idx=int(rev.idx))
 
 
 def compute_cycle_lifecycle(

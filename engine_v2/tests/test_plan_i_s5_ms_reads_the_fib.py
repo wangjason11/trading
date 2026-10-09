@@ -25,7 +25,7 @@ import engine_v2.structure.event_fields as ef
 import engine_v2.structure.structure_engine as se
 from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 from engine_v2.structure.market_structure import EmbeddedFibTrackerError
-from engine_v2.tests._cross_fib_limits import NO_P, unreached
+from engine_v2.tests._cross_fib_limits import NO_P, limit, unreached
 from engine_v2.tests._event_factory import make_cts_updated, make_event
 from engine_v2.tests.test_ms_cts_update_no_regress import _mirror
 from engine_v2.tests.test_unified_probe import _make_ip_multicycle_data, _prepare_df
@@ -94,10 +94,10 @@ def test_the_read_takes_the_representative_fib(monkeypatch, embedded, sd):
     seen = []
     real = se.poi_inner_for_fib
 
-    def spy(df, fib, ft):
+    def spy(df, fib, ft, **kw):
         seen.append(None if fib is None else (fib.cycle_id, fib.meta.get("cross_cycle") is not None, fib.bos_idx))
         assert ft == FIB_FILL_THRESHOLD
-        return real(df, fib, ft)
+        return real(df, fib, ft, **kw)
 
     monkeypatch.setattr(se, "poi_inner_for_fib", spy)
     for lim, cross in ((unreached(sd), True), (NO_P, False)):
@@ -289,7 +289,7 @@ def test_the_probe_passes_no_p_and_does_not_depend_on_the_read(monkeypatch):
     assert limits and set(limits) == {CrossFibLimit(None, "none")}
     reads = []
 
-    def always_hit(df, fib, ft):           # an inner every candle's low reaches: proximity would confirm anything
+    def always_hit(df, fib, ft, **kw):           # an inner every candle's low reaches: proximity would confirm anything
         reads.append(1)
         return math.inf
 
@@ -306,7 +306,7 @@ def test_the_probe_passes_no_p_and_does_not_depend_on_the_read(monkeypatch):
 
 def test_make_market_structure_builds_a_quiet_tracker_with_the_limit(embedded):
     df = _prepare_df(_rows(1))
-    lim = CrossFibLimit(0.61, "parent_cts_threshold")
+    lim = limit(0.61, "parent_cts_threshold")
     ms = se._make_market_structure(df, 1, structure_id=3, cross_fib_limit=lim)
     t, = embedded
     assert ms._fib_tracker is t and ms._poi_inner_for_fib is se.poi_inner_for_fib

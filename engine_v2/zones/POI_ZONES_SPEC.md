@@ -346,7 +346,8 @@ threshold until PLAN_I S4 retired the revert; the line is still drawn):
 > code is kept, unwired — PLAN_H X1).
 
 IC identification, per fib record (BOS anchor `b`, CTS anchor `c`, direction `sd`):
-1. **IC Candidates** — the candles meeting the base conditions (§3.1; the §3.2 scenario conditions are NOT implemented)
+1. **IC Candidates** — the candles meeting the base conditions (§3.1), each with the IC reference condition's outcome
+   (§3.2 — computed and exported since PLAN_K landing A, 2026-10-09; the pick ignores it until landing B)
 2. **The touch** — the candidate touches the fib's 61.8–80 zone (inclusive: `h >= zone_lo and l <= zone_hi`)
 3. **The institutional pattern** (§3.4) — the ONE IC = the best pattern among the touching candidates (rank → shape →
    TB1 → TB2)
@@ -369,49 +370,52 @@ scan then read the BOS inner only for that cycle.
 
 If Fib is deactivated, there are no bounds → no candidates.
 
-### 3.2 IC Candidate Scenario Conditions
+### 3.2 The IC reference condition (PLAN_K — computed + exported since landing A, 2026-10-09; applied from landing B)
 
-> **NOT IMPLEMENTED — the code has never applied this section (found 2026-09-30; unchanged since the POI build
-> `0033c53`, Week 7).** The tables below are the designed rule only. `passes_price_constraint` has no caller,
-> `find_ic_candidates`' `scenario_context` parameter is never read, and neither `derive_poi_zones` nor MS's in-flight
-> read (`poi_inner_for_fib`; `compute_poi_inners_for_cycle` until PLAN_I S5) passes one: IC candidates are §3.1's base conditions only. Decided by the
-> user 2026-10-02 (PLAN_H D4): KEPT here, unapplied, for future testing (register §D.2); any IC filter stays outside
-> the institutional pattern and is applied before it.
->
-> **Re-specified 2026-10-09 (PLAN_H §8.9 RX1, decided; NOT BUILT yet):** the user replaced these per-scenario tables
-> with ONE bundled condition for today's one-logic fibs — the reference = the previous cycle's confirmed CTS anchor
-> and / or (after a reversal, or a non-reversal start with a cross limit, for cycles ≤ `M`) the previous structure's
-> BOS anchor or its equivalent, the further opposite; the IC entirely on its near side AND before the pattern that
-> broke it. This section is rewritten when RX1 lands; until then the tables below are history.
+> The user's rule (2026-10-09; PLAN_H §8.9 "RX1" + §6 RX1-*, the write-up verbatim
+> `../plans/plan_h_inputs/ic_reference_conditions_spec.md`), built by `../plans/PLAN_K_ic_reference_condition.md`. It
+> replaces the per-scenario conditions designed in Week 7 and never implemented (Appendix A). **Landing A** computes it
+> for every §3.1 candidate and exports it (`IPCandidate.ic_ref_reason`, the CSV column §3.5, the fib meta + hover) with
+> the switch `poi_zones._IC_REFERENCE_FILTER = False`: the pick is UNCHANGED. **Landing B** applies it in both
+> consumers and removes the switch. Any IC filter stays outside the institutional pattern and runs before it (PLAN_H
+> D4).
 
-Additional conditions based on which Fib scenario applies:
+ONE bundled condition (RX1-B) per §3.1 candidate `i` of a fib record — structure `sid`, direction `sd`, target cycle
+`T`, its BOS in cycle `a` (a single: `a = T`; a cross: `meta["cross_start_cycle"]`):
 
-(The scenario-specific constraints below are the pre-PLAN_I-S4 record — Scenario 1 / 2 / 3 no longer run.)
+1. **The references** — built by ONE method, `FibTracker.ic_reference` → `ICReference(price, source,
+   break_pattern_anchor_idx, break_confirmed_idx)` (`zones/cross_cycle_fib.py`; `ICReference.NONE` = no reference):
+   - **`prev_cycle_cts`** (when `a ≥ 1`): cycle `a−1`'s `CTS_CONFIRMED` price — the confirmed anchor, never a
+     `cts_threshold`. Its bound = the first candle of the pattern that ESTABLISHED cycle `a` (that `CTS_ESTABLISHED`'s
+     `pattern_anchor_idx` — the pattern that broke `CTS_{a−1}`), known from that event's moment.
+   - **The structure reference** (when the structure has a cross-fib limit `P` and `M` is None or `T ≤ M`, cycle 0
+     included — CROSS_CYCLE_FIB_SPEC §3; no limit entry or `P` None → none):
+     - **`prev_structure_bos`** (a reversal start, `P` = `reversal_bos_frozen`): the reversing structure's most recent
+       `BOS_CONFIRMED` price by its reversal (`CrossFibLimit.ref_anchor_price`); its bound = the REALISED reversal
+       pattern's first candle (`STATE_CHANGED(to=reversal).meta["pattern_anchor_idx"]`), known for the structure's
+       whole run, like `P` (RX1-K7);
+     - **`cross_limit_anchor`** (every other source with a `P`, RX1-2): the anchor behind `P` (`ref_anchor_price`,
+       CROSS_CYCLE_FIB_SPEC §3's table); its bound = the cross-limit breakout watch's break of `P`
+       (CROSS_CYCLE_FIB_SPEC §3), counted once its confirmation ≤ the reading moment — none → no bound.
+   - **The choice:** both → the one further opposite the structure (sd +1 the lower price, sd −1 the higher — also when
+     the previous CTS already went past the BOS anchor, RX1-3); EQUAL prices → the structure reference and its bound
+     (RX1-K5); neither → the condition PASSES (RX1-B / RX1-4).
+2. **The price side:** sd +1 the candle's HIGH strictly below the reference, sd −1 its LOW strictly above
+   (`passes_price_constraint`); else `ic_past_reference`.
+3. **The before-the-break side:** `i` strictly before the bound when one is known (no known bound → passes, RX1-2a);
+   else `ic_not_before_break`. Both failing → `ic_past_reference` (the price side is reported first, K-Q2). An IC can
+   never BE the bound candle (a breakout / reversal pattern's first candle has the structure's candle direction).
+4. **Where:** `poi_zones.ic_reference_reason`, called by `select_ip_ic` per §3.1 candidate BEFORE the touch and the
+   pattern (RX1-E) — both consumers: the drawn POI with the record's FINAL reference (`evaluated_at=None`, the watch
+   read to the structure's lifecycle cap — the same call `FibTracker.stamp_ic_references` exports); MS's in-flight read
+   with its embedded tracker AT the fed event's moment (`poi_inner_for_fib(..., tracker=, evaluated_at=)`, built
+   inside the read's re-raising scope — LANDMINES "The POI Resolver Fails Loudly"). Not in the activation sweep; `M`,
+   the legs, the touch, the pattern and TB1 / TB2 are unchanged (from B, TB2 runs over the surviving tied ICs).
 
-**Scenario 1: cycle 0 normal fib, cycle 1+ normal fib**
-
-| Cycle | Idx Constraint | Price Constraint |
-|-------|----------------|------------------|
-| 0 | `idx < reversal_confirmed_idx` | Entire candle below (sd=+1) or above (sd=-1) prev structure's last BOS price |
-| 1+ | `idx < CTS_N_established_idx` | Entire candle below (sd=+1) or above (sd=-1) CTS_N-1 price |
-
-**Scenario 2: no cycle 0 fib, cycle 1 cross-cycle fib, cycle 2+ normal fib**
-
-| Cycle | Sub-condition | Idx Constraint | Price Constraint |
-|-------|---------------|----------------|------------------|
-| 1 (cross) | CTS_0 < reversal_idx | `idx < CTS_1_established_idx` | Entire candle below/above CTS_0 price |
-| 1 (cross) | CTS_0 >= reversal_idx | `idx < reversal_confirmed_idx` | Entire candle below/above prev structure's last BOS price |
-| 2+ | — | `idx < CTS_N_established_idx` | Entire candle below/above CTS_N-1 price |
-
-**Scenario 3: no cycle 0 fib, cycle 1+ normal fib**
-
-| Cycle | Idx Constraint | Price Constraint |
-|-------|----------------|------------------|
-| 1+ | `idx < CTS_N_established_idx` | Entire candle below (sd=+1) or above (sd=-1) CTS_N-1 price |
-
-**Price Constraint Definition:**
-- sd=+1 (bullish): Entire candle (HIGH) must be BELOW reference price
-- sd=-1 (bearish): Entire candle (LOW) must be ABOVE reference price
+On the reference window (PLAN_K §5 / §11, S_K_A): every one of the 26 POI records' values; e.g. sub 0 cycle 3 (a buy):
+`prev_cycle_cts` 0.57774 (CTS_2), bound 1720 — 209 candidates, 85 pass; its pick 1604 (high 0.57880) is past the
+reference: reported, still drawn until B. `ic_not_before_break` cuts no candidate there (the price side already cuts
+every one the bound would).
 
 ### 3.3 IC Variants — UNWIRED since PLAN_H landing B (2026-10-06)
 
@@ -463,7 +467,8 @@ candle when its run (before the E1 trim) reached the cap, else the next candle; 
 **ONE selector, two consumers (PLAN_H D2):** the drawn POI (`derive_poi_zones`, on the FINAL fib record) and
 MarketStructure's in-flight read (`poi_inner_for_fib`, on its embedded FibTracker's AS-OF representative fib at each
 CTS_ESTABLISHED / CTS_UPDATED — PLAN_I S5, the drawn fib's own decision; its pick can differ from the final one while
-the CTS still extends) call the same `select_ip_ic`. The
+the CTS still extends) call the same `select_ip_ic`, each with the record's IC reference (§3.2) from the same builder
+at its own moment (PLAN_K D2). The
 candle params and the leg cap come from the FRAME (`df.attrs["timeframe"]`, stamped by
 `apply_candle_classification`; a missing stamp raises). The selection is computed once per pipeline run
 (`select_ip_records`: the lifecycle gate, then the cycle's CTS_ESTABLISHED, then `select_ip_ic`) and handed to both
@@ -483,7 +488,9 @@ sub projection); the picked rows ARE the drawn POIs since landing B.
   for the record, never picked), + one `IP: none` row (`ic_idx` empty, `reason` `no_pattern` / `no_candidates`) per
   record without a pick. Columns: the attribution (`structure_path_id`, `sub_id`, `parent_sid`, `parent_cycle_id`),
   the record (`structure_id`, `cycle_id`, `bos_anchor_idx`, `cts_anchor_idx`, `sd`), the candidate (`ic_idx`,
-  `candle_type`, `agreed_dir`, `touches_zone`), the pattern (`ip_rank` e.g. "1A.iv", `reason` = the first failing rule
+  `candle_type`, `agreed_dir`, `touches_zone`, `ic_ref_reason` — §3.2's outcome: empty = passes or no reference,
+  `ic_past_reference`, `ic_not_before_break`; empty on the `IP: none` row; since PLAN_K landing A — a save before
+  S_K_A lacks the column), the pattern (`ip_rank` e.g. "1A.iv", `reason` = the first failing rule
   when there is none, `pattern_anchor_idx`, `opp_leg_first_idx`, `pattern_end_idx`, `pattern_confirmed_idx`,
   `ip_leg_candle_counts` "a-b-c", `legs` "first..last" per leg, located from `ic_idx` + the counts), each leg stack's
   `*_type` / `*_ratio` (vs the 5 marus before the pattern's first candle) / `*_body_pips`, and `picked` + the tiebreak
@@ -728,7 +735,8 @@ cfg = {
 ```
 Fib active for cycle
     ↓
-Find IC candidates (base conditions with the agreed direction, §3.1 — §3.2 not implemented)
+Find IC candidates (base conditions with the agreed direction, §3.1) + each one's IC reference outcome (§3.2 —
+reported since PLAN_K landing A, applied from landing B)
     ↓
 Keep those touching the 61.8-80% zone; pick the best institutional pattern (§3.4) — none -> no POI
     ↓
@@ -750,6 +758,8 @@ Charting renders zones + Fib lines + imbalance highlighting
 | `zones/fib_tracker.py` | FibTracker lifecycle (activation/update/lock) |
 | `zones/poi_zones.py` | POI zone derivation (one per fib record); the IP selection (`select_ip_ic`, `select_ip_records`, `derive_ip_candidates`, §3.4–3.5); MS's in-flight read `poi_inner_for_fib` (PLAN_I S5) |
 | `patterns/institutional_pattern.py` | The institutional pattern of one IC candidate (legs, stacks, ranks — PLAN_H §1) |
+| `zones/cross_cycle_fib.py` | `ICReference` + `CrossFibLimit.ref_anchor_price` / the reversal break (§3.2, PLAN_K) |
+| `patterns/cross_limit_watch.py` | The cross-limit breakout watch (`find_cross_limit_break`, §3.2 / CROSS_CYCLE_FIB_SPEC §3) |
 | `charting/export_plotly.py` | Rendering (Fib lines + zones) |
 | `charting/style_registry.py` | Visual styles |
 
@@ -769,8 +779,45 @@ Charting renders zones + Fib lines + imbalance highlighting
 | IC candidate identification | Done |
 | IC variant selection (V30/V60/V90) | Done; UNWIRED since PLAN_H landing B (kept, X1) |
 | The institutional-pattern IC (one POI per fib record) | Done (PLAN_H landing B, 2026-10-06) |
+| The IC reference condition (§3.2) | Computed + exported (PLAN_K landing A, 2026-10-09); applied from landing B |
 | POI zone creation | Done |
 | POI zone lifecycle management | Done |
 | POI zone charting (yellow rectangles) | Done |
 
 **Status:** Complete. Ready for Week 7 Part 2 (Volume Patterns & Indicators).
+
+---
+
+## Appendix A — the per-scenario IC conditions as designed (Week 7; never implemented)
+
+History. Designed with the POI build (`0033c53`, Week 7) and never applied by the code (found 2026-09-30:
+`passes_price_constraint` had no caller, `find_ic_candidates`' `scenario_context` was never read — retired by PLAN_K
+landing A); kept unapplied by the user's decision 2026-10-02 (PLAN_H D4); re-specified by the user 2026-10-09 as §3.2's
+ONE bundled condition for today's one-logic fibs (the Scenario 1 / 2 / 3 fib logic itself retired with PLAN_I S4,
+CROSS_CYCLE_FIB_SPEC Appendix A). The tables as they stood:
+
+**Scenario 1: cycle 0 normal fib, cycle 1+ normal fib**
+
+| Cycle | Idx Constraint | Price Constraint |
+|-------|----------------|------------------|
+| 0 | `idx < reversal_confirmed_idx` | Entire candle below (sd=+1) or above (sd=-1) prev structure's last BOS price |
+| 1+ | `idx < CTS_N_established_idx` | Entire candle below (sd=+1) or above (sd=-1) CTS_N-1 price |
+
+**Scenario 2: no cycle 0 fib, cycle 1 cross-cycle fib, cycle 2+ normal fib**
+
+| Cycle | Sub-condition | Idx Constraint | Price Constraint |
+|-------|---------------|----------------|------------------|
+| 1 (cross) | CTS_0 < reversal_idx | `idx < CTS_1_established_idx` | Entire candle below/above CTS_0 price |
+| 1 (cross) | CTS_0 >= reversal_idx | `idx < reversal_confirmed_idx` | Entire candle below/above prev structure's last BOS price |
+| 2+ | — | `idx < CTS_N_established_idx` | Entire candle below/above CTS_N-1 price |
+
+**Scenario 3: no cycle 0 fib, cycle 1+ normal fib**
+
+| Cycle | Idx Constraint | Price Constraint |
+|-------|----------------|------------------|
+| 1+ | `idx < CTS_N_established_idx` | Entire candle below (sd=+1) or above (sd=-1) CTS_N-1 price |
+
+**Price Constraint Definition:**
+- sd=+1 (bullish): Entire candle (HIGH) must be BELOW reference price
+- sd=-1 (bearish): Entire candle (LOW) must be ABOVE reference price
+

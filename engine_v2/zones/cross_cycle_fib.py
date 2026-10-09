@@ -14,7 +14,7 @@ Kept dependency-free of ``zones`` (imports only ``patterns.imbalance``) so
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Dict, Optional
 
 import pandas as pd
@@ -47,7 +47,17 @@ class CrossFibLimit:
     - `source` (`cross_fib_limit_source`, one of `CROSS_FIB_LIMIT_SOURCES`);
     - `from_pool_idx` (sweep-time) / `from_sub_id` (the final, start-numbered id, set once the sweep has
       numbered the subs — PLAN_I D2 / D4): the sub that supplied `P` (x−1, or the reversing sub), else None;
-    - `started_by`: main only (`start_trading` | `reversal`, §4 N-c); a sub's comes from its mirror.
+    - `started_by`: main only (`start_trading` | `reversal`, §4 N-c); a sub's comes from its mirror;
+    - `ref_anchor_price` (PLAN_K A8, RX1-2): the ANCHOR price behind `P` — the IC reference's price side for the
+      structure's cycles ≤ `M` (`P` is a threshold that may have moved; the IC reference never uses a threshold):
+      the reversing structure's most recent `BOS_CONFIRMED` price, the parent cycle c−1's `CTS_CONFIRMED` price,
+      x−1's `BOS_CONFIRMED` / confirmed `CTS_CONFIRMED` price, or `P` itself where `P` already is an anchor price
+      (`prev_sub_latest_cts`, `prev_sub_starting_price`); None ⟺ `price` None;
+    - `break_pattern_anchor_idx` / `break_confirmed_idx` (PLAN_K A8, RX1-1): a `reversal_bos_frozen` structure's
+      REALISED reversal pattern — its first candle and its apply (the `STATE_CHANGED(to=reversal)` moment), in the
+      coordinates of the frame the limit is used on (main: the H1 frame; a sub: entity-absolute at the pool,
+      `localized` to the sub's slice at each entry point — PLAN_K §3.5); set ⟺ `reversal_bos_frozen`. Every other
+      source's break comes from the cross-limit breakout watch (`patterns.cross_limit_watch`).
 
     `M` (`cross_fib_limit_cycle`) is not here — it follows the structure's cycles (`FibTracker`).
     """
@@ -56,11 +66,67 @@ class CrossFibLimit:
     from_pool_idx: Optional[int] = None
     from_sub_id: Optional[int] = None
     started_by: Optional[str] = None
+    ref_anchor_price: Optional[float] = None
+    break_pattern_anchor_idx: Optional[int] = None
+    break_confirmed_idx: Optional[int] = None
 
     def __post_init__(self) -> None:
         assert self.source in CROSS_FIB_LIMIT_SOURCES, f"unknown cross_fib_limit_source {self.source!r}"
         assert (self.price is None) == (self.source in _NO_PRICE_SOURCES), (
             f"cross_fib_limit price {self.price!r} does not fit source {self.source!r}")
+        assert (self.ref_anchor_price is None) == (self.price is None), (
+            f"cross_fib_limit ref_anchor_price {self.ref_anchor_price!r} does not fit price {self.price!r} "
+            f"(source {self.source!r}; PLAN_K A8)")
+        has_break = self.break_pattern_anchor_idx is not None
+        assert has_break == (self.break_confirmed_idx is not None), (
+            f"cross_fib_limit break fields set apart: {self.break_pattern_anchor_idx!r} / {self.break_confirmed_idx!r}")
+        assert has_break == (self.source == "reversal_bos_frozen"), (
+            f"cross_fib_limit break {self.break_pattern_anchor_idx!r} does not fit source {self.source!r} (PLAN_K A8)")
+        if has_break:
+            assert int(self.break_pattern_anchor_idx) <= int(self.break_confirmed_idx), (
+                f"cross_fib_limit break anchor {self.break_pattern_anchor_idx} after its apply {self.break_confirmed_idx}")
+
+    def localized(self, offset: int) -> "CrossFibLimit":
+        """This limit with its break indices moved by −`offset` (PLAN_K §3.5): the pool computes a sub's limit in
+        entity-absolute M15 indices, while its geometry MS and its projection run on the sub's slice starting at
+        `offset` (`slice_begin`). Prices / identity unchanged; a limit without a break is returned as is."""
+        if self.break_pattern_anchor_idx is None:
+            return self
+        return replace(self, break_pattern_anchor_idx=int(self.break_pattern_anchor_idx) - int(offset),
+                       break_confirmed_idx=int(self.break_confirmed_idx) - int(offset))
+
+
+# The IC reference's `source` values (PLAN_K §1, the fib meta `ic_ref_source`; PLAN_H RX1).
+IC_REF_SOURCES = frozenset({
+    "prev_cycle_cts",       # cycle a−1's CTS_CONFIRMED price (the fib's BOS in cycle a ≥ 1)
+    "prev_structure_bos",   # a reversal start: the reversing structure's most recent BOS_CONFIRMED price
+    "cross_limit_anchor",   # a non-reversal start with a cross limit: the anchor behind P
+})
+
+
+@dataclass(frozen=True)
+class ICReference:
+    """A fib record's IC reference (PLAN_K §3.1; PLAN_H §8.9 RX1): the price an IC candidate must lie entirely on the
+    near side of (sd +1: below), and the first candle of the pattern that BROKE that price — the IC must come before
+    it. Built ONLY by `FibTracker.ic_reference` (both consumers hand it to `poi_zones.select_ip_ic`); `NONE` = no
+    reference (the condition passes, RX1-B). A reference without a known break checks the price side only
+    (RX1-2a)."""
+    price: Optional[float]
+    source: Optional[str]
+    break_pattern_anchor_idx: Optional[int] = None
+    break_confirmed_idx: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        assert (self.price is None) == (self.source is None), (
+            f"ICReference price {self.price!r} / source {self.source!r} set apart")
+        assert self.source is None or self.source in IC_REF_SOURCES, f"unknown IC reference source {self.source!r}"
+        has_break = self.break_pattern_anchor_idx is not None
+        assert has_break == (self.break_confirmed_idx is not None), (
+            f"ICReference break fields set apart: {self.break_pattern_anchor_idx!r} / {self.break_confirmed_idx!r}")
+        assert not has_break or self.price is not None, "ICReference: a break without a reference price"
+
+
+ICReference.NONE = ICReference(None, None)
 
 
 def beyond(price: float, ref: float, sd: int) -> bool:

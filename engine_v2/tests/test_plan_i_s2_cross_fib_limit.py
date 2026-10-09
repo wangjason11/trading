@@ -34,7 +34,7 @@ from engine_v2.multitf.sub_structure_pool import (
 )
 from engine_v2.structure.market_structure import MarketStructure, StructureEvent
 from engine_v2.structure.structure_engine import compute_bounded_structure
-from engine_v2.tests._cross_fib_limits import unreached
+from engine_v2.tests._cross_fib_limits import limit, unreached
 from engine_v2.tests._event_factory import make_bos_confirmed, make_cts_established, make_cts_updated
 from engine_v2.tests.test_imbalance_c3_knowability import _df as _c3_df, _gap
 from engine_v2.tests.test_render_sub_projection import (  # noqa: F401 (pytest fixtures: geometry, m15_df)
@@ -80,10 +80,23 @@ def test_cross_fib_limit_validates_its_source_and_price():
         "prev_sub_bos_threshold", "prev_sub_starting_price", "prev_sub_latest_cts", "prev_sub_no_cts"}
     CrossFibLimit(None, "none")
     CrossFibLimit(None, "prev_sub_no_cts", from_pool_idx=3)
-    CrossFibLimit(0.5736, "reversal_bos_frozen", started_by="reversal")
+    CrossFibLimit(0.5736, "reversal_bos_frozen", started_by="reversal", ref_anchor_price=0.5731,
+                  break_pattern_anchor_idx=897, break_confirmed_idx=902)
     for bad in [(None, "reversal_bos_frozen"), (0.57, "none"), (0.57, "prev_sub_no_cts"), (0.57, "bos")]:
         with pytest.raises(AssertionError):
             CrossFibLimit(*bad)
+    # PLAN_K A8: the anchor behind P iff P; the break iff a reversal source, both fields, anchor <= apply.
+    for kw in [dict(price=0.57, source="parent_cts_threshold"),                                    # no anchor
+               dict(price=None, source="none", ref_anchor_price=0.57),                            # anchor, no P
+               dict(price=0.57, source="reversal_bos_frozen", ref_anchor_price=0.57),             # no break
+               dict(price=0.57, source="parent_cts_threshold", ref_anchor_price=0.57,
+                    break_pattern_anchor_idx=5, break_confirmed_idx=6),                           # break, not a reversal
+               dict(price=0.57, source="reversal_bos_frozen", ref_anchor_price=0.57,
+                    break_pattern_anchor_idx=5),                                                  # fields apart
+               dict(price=0.57, source="reversal_bos_frozen", ref_anchor_price=0.57,
+                    break_pattern_anchor_idx=7, break_confirmed_idx=6)]:                          # anchor after apply
+        with pytest.raises(AssertionError):
+            CrossFibLimit(**kw)
 
 
 # =============================================================================
@@ -100,20 +113,33 @@ def _main_events(*, watch_frozen=0.5736, rev_frozen=0.5736, second_reversal=Fals
     `REVERSAL_WATCH_START` at or before the reversal. Decoys (each one breaks a selector mutant): an earlier watch
     (880, another barrier), a later-sid watch (899, sid 1 — synthetic timing) and a watch after the reversal (960 —
     synthetic: MS stops at its reversal). sid 2 starts without a reversal of sid 1 — unreachable on main, it pins
-    I1 (`started_by` attaches to the trigger) on a synthetic shape."""
+    I1 (`started_by` attaches to the trigger) on a synthetic shape.
+
+    PLAN_K A9: sid 0's most recent BOS_CONFIRMED by 902 is cycle 1's (moment 652, 0.5731 — the anchor, below its
+    expanded threshold 0.5736); decoys: cycle 0's (115), sid 1's (905) and one after the reversal (950, synthetic)."""
     evs = [
         _est(115, 0.6, 0, 0, -1),
+        make_bos_confirmed(bos_anchor_idx=96, confirmed_at=115, price=0.6100, structure_id=0, cycle_id=0,
+                           struct_direction=-1),
+        make_bos_confirmed(bos_anchor_idx=591, confirmed_at=652, price=0.5731, structure_id=0, cycle_id=1,
+                           struct_direction=-1),
+        make_bos_confirmed(bos_anchor_idx=900, confirmed_at=950, price=0.5600, structure_id=0, cycle_id=2,
+                           struct_direction=-1),
+        make_bos_confirmed(bos_anchor_idx=890, confirmed_at=905, price=0.5900, structure_id=1, cycle_id=0,
+                           struct_direction=1),
         _watch(880, 0.5701),
         *([_watch(897, watch_frozen)] if open_watch else []),
         _ev("REVERSAL_CANDIDATE", 897, watch_frozen, structure_id=0, apply_idx=902, bos_frozen=watch_frozen),
         _watch(899, 0.5900, sid=1),
-        _ev("STATE_CHANGED", 902, None, structure_id=0, to="reversal", bos_frozen=rev_frozen),
+        _ev("STATE_CHANGED", 902, None, structure_id=0, to="reversal", pattern_anchor_idx=897,
+            bos_frozen=rev_frozen),
         _est(903, 0.58, 1, 0, 1),
         _watch(960, 0.5800),
         _est(990, 0.59, 2, 0, -1),
     ]
     if second_reversal:
-        evs.append(_ev("STATE_CHANGED", 950, None, structure_id=0, to="reversal", bos_frozen=0.5736))
+        evs.append(_ev("STATE_CHANGED", 950, None, structure_id=0, to="reversal", pattern_anchor_idx=945,
+                       bos_frozen=0.5736))
     return evs
 
 
@@ -125,8 +151,18 @@ def test_main_started_by_attaches_to_the_starting_trigger_not_the_sid():
 def test_main_limits_read_the_applied_reversals_bos_frozen():
     lim = compute_main_cross_fib_limits(_main_events())
     assert lim[0] == CrossFibLimit(None, "none", started_by="start_trading")
-    assert lim[1] == CrossFibLimit(0.5736, "reversal_bos_frozen", started_by="reversal")
+    assert lim[1] == CrossFibLimit(0.5736, "reversal_bos_frozen", started_by="reversal", ref_anchor_price=0.5731,
+                                   break_pattern_anchor_idx=897, break_confirmed_idx=902)
     assert lim[2] == CrossFibLimit(None, "none", started_by="start_trading")
+
+
+def test_main_limit_needs_a_bos_before_its_reversal():
+    """PLAN_K A9: a reversal with no BOS_CONFIRMED of the reversing sid by its moment fails loudly (MS's reversal
+    watch needs a BOS threshold — unreachable)."""
+    evs = [e for e in _main_events() if not (e.type == "BOS_CONFIRMED" and e.meta["structure_id"] == 0
+                                             and int(e.meta["confirmed_at"]) <= 902)]
+    with pytest.raises(AssertionError, match="no BOS_CONFIRMED before it"):
+        compute_main_cross_fib_limits(evs)
 
 
 def test_main_limit_asserts_the_open_watch_agrees_and_one_reversal_per_sid():
@@ -328,7 +364,8 @@ def test_prev_sub_opposite_direction_reads_its_bos_threshold_by_moment_later_emi
         _bos("BOS_THRESHOLD_UPDATED", 12, 0.584),         # emitted last, but an EARLIER moment
     ]
     prev = _geo_sub(2, -1, 0, evs, start_idx=1)
-    assert cfl.read_prev_sub(prev, 20, 1) == CrossFibLimit(0.587, "prev_sub_bos_threshold", from_pool_idx=2)
+    assert cfl.read_prev_sub(prev, 20, 1) == CrossFibLimit(0.587, "prev_sub_bos_threshold", from_pool_idx=2,
+                                                           ref_anchor_price=0.585)   # the BOS, not its threshold
     assert cfl.read_prev_sub(prev, 13, 1).price == 0.584
     assert cfl.read_prev_sub(prev, 11, 1).price == 0.585
 
@@ -340,14 +377,23 @@ def test_prev_sub_opposite_without_a_bos_threshold_reads_its_starting_extreme(pr
     highs[7], lows[7] = 0.6123, 0.5432                   # starting_idx 57 - slice_begin 50 = local 7
     prev = _geo_sub(1, prev_dir, 57, [], slice_begin=50, start_idx=60, highs=highs, lows=lows)
     got = cfl.read_prev_sub(prev, 70, -prev_dir)
-    assert (got.price, got.source) == (col_value, "prev_sub_starting_price")
+    assert (got.price, got.source, got.ref_anchor_price) == (col_value, "prev_sub_starting_price", col_value)
 
 
 def test_reversal_limit_is_the_reversing_subs_applied_bos_frozen():
-    sc = _ev("STATE_CHANGED", 40, None, to="reversal", bos_frozen=0.58156, structure_id=0)
-    rev = _geo_sub(2, 1, 120, [sc], slice_begin=100)
+    """+ PLAN_K A10: the reversing sub's most recent BOS_CONFIRMED by the reversal (moment 25, 0.58198 — not the
+    later 45, synthetic) and the realised reversal pattern (37 → 40) ENTITY-ABSOLUTE (+ slice_begin 100)."""
+    sc = _ev("STATE_CHANGED", 40, None, to="reversal", pattern_anchor_idx=37, bos_frozen=0.58156, structure_id=0)
+    boses = [_bos("BOS_CONFIRMED", 20, 0.58198, moment=25), _bos("BOS_CONFIRMED", 44, 0.5810, moment=45)]
+    rev = _geo_sub(2, 1, 120, [*boses, sc], slice_begin=100)
     rev.natural_reversal_idx = 140
-    assert cfl.reversal_limit(rev) == CrossFibLimit(0.58156, "reversal_bos_frozen", from_pool_idx=2)
+    assert cfl.reversal_limit(rev) == CrossFibLimit(0.58156, "reversal_bos_frozen", from_pool_idx=2,
+                                                    ref_anchor_price=0.58198, break_pattern_anchor_idx=137,
+                                                    break_confirmed_idx=140)
+    no_bos = _geo_sub(2, 1, 120, [sc], slice_begin=100)
+    no_bos.natural_reversal_idx = 140
+    with pytest.raises(AssertionError, match="no BOS_CONFIRMED before its reversal"):
+        cfl.reversal_limit(no_bos)
     rev.natural_reversal_idx = 141
     with pytest.raises(AssertionError):
         cfl.reversal_limit(rev)
@@ -357,9 +403,21 @@ def test_reversal_limit_is_the_reversing_subs_applied_bos_frozen():
         cfl.reversal_limit(two)
 
 
+def _cts_conf(idx, price, sid, cyc, sd=-1, anchor=None):
+    return _ev("CTS_CONFIRMED", idx, price, structure_id=sid, cycle_id=cyc, struct_direction=sd,
+               cts_anchor_idx=idx - 1 if anchor is None else anchor)
+
+
 def test_parent_cts_limit_reads_the_parents_cts_frozen():
-    h1 = [_est(902, 0.57, 1, 2, -1, cts_frozen=0.57376), _est(748, 0.58, 1, 1, -1, cts_frozen=None)]
-    assert cfl.parent_cts_limit(h1, 1, 2) == CrossFibLimit(0.57376, "parent_cts_threshold")
+    """+ PLAN_K A10: the anchor behind P = the parent cycle c−1's CTS_CONFIRMED price (0.574 — not its moved
+    threshold 0.57376); decoys: the parent's cycle 0 and another sid's cycle 1."""
+    h1 = [_est(902, 0.57, 1, 2, -1, cts_frozen=0.57376), _est(748, 0.58, 1, 1, -1, cts_frozen=None),
+          _cts_conf(727, 0.57902, 1, 0, anchor=710), _cts_conf(810, 0.574, 1, 1, anchor=761),
+          _cts_conf(500, 0.590, 0, 1, anchor=480)]
+    assert cfl.parent_cts_limit(h1, 1, 2) == CrossFibLimit(0.57376, "parent_cts_threshold", ref_anchor_price=0.574)
+    with pytest.raises(AssertionError, match="0 CTS_CONFIRMED"):
+        cfl.parent_cts_limit([e for e in h1 if not (e.type == "CTS_CONFIRMED" and e.meta["cycle_id"] == 1
+                                                    and e.meta["structure_id"] == 1)], 1, 2)
     with pytest.raises(AssertionError, match="cts_frozen None"):
         cfl.parent_cts_limit(h1, 1, 1)
     with pytest.raises(AssertionError, match="0 CTS_ESTABLISHED"):
@@ -367,7 +425,7 @@ def test_parent_cts_limit_reads_the_parents_cts_frozen():
 
 
 def test_the_rule_dispatches_on_the_starting_trigger():
-    h1 = [_est(902, 0.57, 1, 2, -1, cts_frozen=0.57376)]
+    h1 = [_est(902, 0.57, 1, 2, -1, cts_frozen=0.57376), _cts_conf(810, 0.574, 1, 1, anchor=761)]
     kw = dict(h1_events=h1, reversing_sub=None, prev_sub=None)
     assert cfl.cross_fib_limit_for("first_confluence", (0, 0), 1, 500, **kw) == NO_LIMIT
     assert cfl.cross_fib_limit_for("first_confluence", (1, 2), -1, 3621, **kw).source == "parent_cts_threshold"
@@ -375,7 +433,7 @@ def test_the_rule_dispatches_on_the_starting_trigger():
         assert cfl.cross_fib_limit_for(tt, (1, 2), 1, 3759, **kw) == NO_LIMIT       # no x−1
     prev = _geo_sub(4, -1, 0, [_bos("BOS_CONFIRMED", 5, 0.58105, moment=10)], start_idx=1)
     got = cfl.cross_fib_limit_for("first_counter", (1, 2), 1, 20, h1_events=h1, reversing_sub=None, prev_sub=prev)
-    assert got == CrossFibLimit(0.58105, "prev_sub_bos_threshold", from_pool_idx=4)
+    assert got == CrossFibLimit(0.58105, "prev_sub_bos_threshold", from_pool_idx=4, ref_anchor_price=0.58105)
     with pytest.raises(AssertionError):
         cfl.cross_fib_limit_for("reversal", (0, 0), 1, 20, **kw)
     with pytest.raises(AssertionError):
@@ -406,7 +464,7 @@ def test_the_sweep_computes_p_on_a_miss_from_the_record_start_and_remaps_from_su
     def resolve_limit(t, record_start, reversing_sub):
         calls.append((t.trigger_type, t.trigger_idx, record_start, reversing_sub))
         if t.trigger_idx == 303:
-            return CrossFibLimit(0.5, "prev_sub_bos_threshold", from_pool_idx=0)
+            return limit(0.5, "prev_sub_bos_threshold", from_pool_idx=0)
         return NO_LIMIT
 
     _result, logs = T._run(
@@ -419,7 +477,7 @@ def test_the_sweep_computes_p_on_a_miss_from_the_record_start_and_remaps_from_su
     fc, c1, c2 = T._sub(pool, +1, 90), T._sub(pool, -1, 150), T._sub(pool, -1, 250)
     assert (fc.sub_id, c1.sub_id, c2.sub_id) == (2, 0, 1)
     assert fc.cross_fib_limit is NO_LIMIT and c1.cross_fib_limit is NO_LIMIT
-    assert c2.cross_fib_limit == CrossFibLimit(0.5, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=2)
+    assert c2.cross_fib_limit == limit(0.5, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=2)
     assert any(l.startswith("[sweep] cross_fib_limit pool#2 P=0.5 source=prev_sub_bos_threshold from=pool#0")
                for l in logs)
 
@@ -431,7 +489,7 @@ def test_a_limit_from_a_sub_that_never_starts_has_no_from_sub_id_and_warns():
     resolve = T._resolver({(CONF, 200): T._rs(150, 200), (CONF, 300): T._rs(250, 400),
                            (CONF, 400): T._rs(350, 400)})
     geom = T._geom(pool, {(-1, 150): None, (-1, 250): None, (-1, 350): None})
-    lim = {400: CrossFibLimit(0.5, "prev_sub_bos_threshold", from_pool_idx=1)}   # pool#1 never starts
+    lim = {400: limit(0.5, "prev_sub_bos_threshold", from_pool_idx=1)}   # pool#1 never starts
     _result, logs = T._run(
         [T._trig(CONF, 1, 0, "first_confluence", 200, -1), T._trig(CONF, 1, 0, "first_confluence", 300, -1),
          T._trig(CONF, 1, 0, "subsequent_confluence", 400, -1)],
@@ -467,13 +525,15 @@ def _numbered_pool_for_tripwire(stored):
 
 
 def test_the_r6_2_tripwire_re_derives_p_at_the_start_and_warns_on_a_mismatch():
-    good = CrossFibLimit(0.58105, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=0)
+    good = limit(0.58105, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=0)
     logs = []
     assert cfl.check_cross_fib_limits(_numbered_pool_for_tripwire(good), [], log=logs.append) == 0
     assert logs == ["[cross_fib_limit] tripwire: 1 subs re-derived at their start, 0 mismatches"]
-    for bad in (CrossFibLimit(0.58, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=0),
-                CrossFibLimit(0.58105, "prev_sub_cts_threshold", from_pool_idx=0, from_sub_id=0),
-                CrossFibLimit(0.58105, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=7)):
+    for bad in (limit(0.58, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=0),
+                limit(0.58105, "prev_sub_cts_threshold", from_pool_idx=0, from_sub_id=0),
+                limit(0.58105, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=7),
+                # PLAN_K A10: the tripwire compares the anchor behind P too
+                limit(0.58105, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=0, ref_anchor_price=0.581)):
         logs = []
         assert cfl.check_cross_fib_limits(_numbered_pool_for_tripwire(bad), [], log=logs.append) == 1
         assert logs[0].startswith("WARNING [cross_fib_limit] sub 1: stored P=")
@@ -498,7 +558,7 @@ def test_m_is_the_first_cycle_strictly_beyond_p(sd):
         return {(0, c): (10 * c, p if sd == 1 else 2 - p, sd) for c, p in enumerate(prices)}
 
     def m(p, *prices):
-        t = _tracker({0: CrossFibLimit(p if sd == 1 else 2 - p, "parent_cts_threshold")})
+        t = _tracker({0: limit(p if sd == 1 else 2 - p, "parent_cts_threshold")})
         t._latest_anchor = anchors(*prices)
         return t.cross_fib_limit_cycle(0)
 
@@ -533,10 +593,11 @@ def test_every_fib_record_is_stamped_at_finalize_with_the_final_m():
     df = _c3_df(60, [_gap(15)])
     est = make_cts_established(cts_anchor_idx=20, confirmed_at=22, price=1.20, structure_id=0, cycle_id=0,
                                struct_direction=1)
-    t = _tracker({0: CrossFibLimit(1.17, "prev_sub_bos_threshold", from_pool_idx=4, from_sub_id=5)})
+    t = _tracker({0: limit(1.17, "prev_sub_bos_threshold", from_pool_idx=4, from_sub_id=5)})
     fib = _q(t.on_cts_established, est, df, bos_idx=10, bos_price=1.0)
     assert fib is not None and "cross_fib_limit_price" not in fib.meta        # stamped only at finalize
     _q(t._finalize_lifecycle_fields)
+    t.stamp_ic_references(df)            # PLAN_K A11: the IC reference keys go BEFORE the limit keys (still last)
     (rec,) = t.get_all_fibs()
     keys = list(rec.meta)
     assert keys[-4:] == ["cross_fib_limit_price", "cross_fib_limit_source", "cross_fib_limit_cycle",
@@ -546,6 +607,7 @@ def test_every_fib_record_is_stamped_at_finalize_with_the_final_m():
     main = _tracker({0: CrossFibLimit(None, "none", started_by="start_trading")})
     _q(main.on_cts_established, est, df, bos_idx=10, bos_price=1.0)
     _q(main._finalize_lifecycle_fields)
+    main.stamp_ic_references(df)
     (mrec,) = main.get_all_fibs()
     assert {k: mrec.meta[k] for k in list(mrec.meta)[-5:]} == {
         "cross_fib_limit_price": None, "cross_fib_limit_source": "none", "cross_fib_limit_cycle": None,
@@ -553,7 +615,9 @@ def test_every_fib_record_is_stamped_at_finalize_with_the_final_m():
     bare = _tracker()
     _q(bare.on_cts_established, est, df, bos_idx=10, bos_price=1.0)
     _q(bare._finalize_lifecycle_fields)
+    bare.stamp_ic_references(df)         # no limit entry: no structure reference, and NO raise (PLAN_K §9 C03)
     assert not any(k.startswith("cross_fib_limit") for k in bare.get_all_fibs()[0].meta)
+    assert not any(k.startswith("ic_ref") for k in bare.get_all_fibs()[0].meta)   # cycle 0, no reference
 
 
 def test_cycle_t_established_before_t_minus_1_confirmed_raises():
@@ -610,6 +674,7 @@ def test_the_limit_line_is_the_hovers_last_line_and_absent_without_the_keys():
     with_lim = fib_hover_status_text(_fib(**_lim(0.57827, "prev_sub_bos_threshold", 2, 6)), None)
     assert with_lim.split("<br>") == [
         "active", "life=[10, open]", "IP: not evaluated (no POI record)",
+        "IC ref: none",                                        # PLAN_K A17: a stamped record with no reference
         "limit 0.57827 · prev_sub_bos_threshold (sub 6) · M=2"]
     assert fib_hover_limit_text(_fib()) is None
     assert fib_hover_status_text(_fib(), None).count("<br>") == 2
@@ -634,7 +699,15 @@ def test_main_limit_holds_when_a_later_anchors_reversal_winner_applies_first(sd,
     assert [int(e.idx) for e in res.events if e.type == "STATE_CHANGED" and e.meta.get("to") == "reversal"] == [8]
     assert [int(e.meta["apply_idx"]) for e in res.events if e.type == "REVERSAL_CANDIDATE"] == [9]
     lim = compute_main_cross_fib_limits(list(res.events) + [_est(20, 0.6, 1, 0, -sd)])
-    assert lim[1] == CrossFibLimit(frozen, "reversal_bos_frozen", started_by="reversal")
+    (sc,) = [e for e in res.events if e.type == "STATE_CHANGED" and e.meta.get("to") == "reversal"]
+    (cand,) = [e for e in res.events if e.type == "REVERSAL_CANDIDATE"]
+    last_bos = max((e for e in res.events if e.type == "BOS_CONFIRMED" and int(e.meta["confirmed_at"]) <= 8),
+                   key=lambda e: int(e.meta["confirmed_at"]))
+    assert lim[1] == CrossFibLimit(frozen, "reversal_bos_frozen", started_by="reversal",
+                                   ref_anchor_price=float(last_bos.price),
+                                   break_pattern_anchor_idx=int(sc.meta["pattern_anchor_idx"]), break_confirmed_idx=8)
+    # PLAN_K A13: the STATE_CHANGED's pattern is the later anchor's WINNER, not the pending candidate's
+    assert int(sc.meta["pattern_anchor_idx"]) != int(cand.meta["pattern_anchor_idx"])
 
 
 # --- S2 landing review, lens B: the tests that kill its 20 surviving mutants ---------------------------------
@@ -677,7 +750,8 @@ def test_a_prev_sub_ended_by_its_reversal_yields_the_frozen_barrier():
         _bos("BOS_THRESHOLD_UPDATED", 25, 0.590),
     ]
     prev = _geo_sub(4, -1, 0, evs, start_idx=1, end_idx=20)
-    assert cfl.read_prev_sub(prev, 30, 1) == CrossFibLimit(0.586, "prev_sub_bos_threshold", from_pool_idx=4)
+    assert cfl.read_prev_sub(prev, 30, 1) == CrossFibLimit(0.586, "prev_sub_bos_threshold", from_pool_idx=4,
+                                                           ref_anchor_price=0.585)
 
 
 def test_known_start_is_the_earliest_live_record():
@@ -687,12 +761,13 @@ def test_known_start_is_the_earliest_live_record():
 
 def test_first_confluence_reads_the_parent_cycle_not_the_sid():
     """sid 0 cycle 2 has a P; sid 1 cycle 0 has none; another sid's (S', c) is never read."""
-    h1 = [_est(500, 0.57, 0, 2, -1, cts_frozen=0.5740), _est(902, 0.57, 1, 2, -1, cts_frozen=0.57376)]
+    h1 = [_est(500, 0.57, 0, 2, -1, cts_frozen=0.5740), _est(902, 0.57, 1, 2, -1, cts_frozen=0.57376),
+          _cts_conf(470, 0.5745, 0, 1), _cts_conf(810, 0.574, 1, 1, anchor=761)]
     kw = dict(h1_events=h1, reversing_sub=None, prev_sub=None)
     assert cfl.cross_fib_limit_for("first_confluence", (0, 2), -1, 600, **kw) == CrossFibLimit(
-        0.5740, "parent_cts_threshold")
+        0.5740, "parent_cts_threshold", ref_anchor_price=0.5745)
     assert cfl.cross_fib_limit_for("first_confluence", (1, 2), -1, 950, **kw) == CrossFibLimit(
-        0.57376, "parent_cts_threshold")
+        0.57376, "parent_cts_threshold", ref_anchor_price=0.574)
     assert cfl.cross_fib_limit_for("first_confluence", (1, 0), -1, 950, **kw) == NO_LIMIT
 
 
@@ -738,7 +813,8 @@ def test_the_tripwire_re_derives_from_the_started_by_record_at_the_start():
     pool.number_subs_by_start()
     assert (a.sub_id, b.sub_id) == (0, 1)
     a.cross_fib_limit = NO_LIMIT
-    b.cross_fib_limit = CrossFibLimit(0.5815, "prev_sub_bos_threshold", from_pool_idx=1, from_sub_id=0)
+    b.cross_fib_limit = limit(0.5815, "prev_sub_bos_threshold", from_pool_idx=1, from_sub_id=0,
+                              ref_anchor_price=0.58105)
     logs = []
     assert cfl.check_cross_fib_limits(pool, [], log=logs.append) == 0, logs
     assert logs == ["[cross_fib_limit] tripwire: 1 subs re-derived at their start, 0 mismatches"]
@@ -752,8 +828,10 @@ def test_the_tripwire_finds_the_one_opposite_live_reversing_sub():
 
     def mk(d, k, recs, nat=None, sc_idx=None, frozen=0.58):
         s, _ = pool.get_or_create(StructureKey(PARENT, TF, d, k))
-        evs = [] if sc_idx is None else [_ev("STATE_CHANGED", sc_idx, None, to="reversal", bos_frozen=frozen,
-                                             structure_id=0)]
+        evs = [] if sc_idx is None else [
+            _bos("BOS_CONFIRMED", sc_idx - 20, frozen, moment=sc_idx - 10),
+            _ev("STATE_CHANGED", sc_idx, None, to="reversal", pattern_anchor_idx=sc_idx - 3, bos_frozen=frozen,
+                structure_id=0)]
         s.geometry = (SimpleNamespace(events=evs, df=_df400()), 0)
         s.natural_reversal_idx = nat
         s.records.extend(recs)
@@ -770,7 +848,8 @@ def test_the_tripwire_finds_the_one_opposite_live_reversing_sub():
     pool.number_subs_by_start()
     for s in (X, Z, W):
         s.cross_fib_limit = NO_LIMIT
-    Y.cross_fib_limit = CrossFibLimit(0.58, "reversal_bos_frozen", from_pool_idx=X.pool_idx, from_sub_id=X.sub_id)
+    Y.cross_fib_limit = CrossFibLimit(0.58, "reversal_bos_frozen", from_pool_idx=X.pool_idx, from_sub_id=X.sub_id,
+                                      ref_anchor_price=0.58, break_pattern_anchor_idx=297, break_confirmed_idx=300)
     logs = []
     assert cfl.check_cross_fib_limits(pool, [], log=logs.append) == 0, logs
     assert logs[-1] == "[cross_fib_limit] tripwire: 1 subs re-derived at their start, 0 mismatches"
@@ -783,7 +862,7 @@ def test_the_tripwire_finds_the_one_opposite_live_reversing_sub():
 
 def test_a_rendered_subs_fib_records_carry_its_limit(geometry, m15_df):
     pool, sub = geometry
-    sub.cross_fib_limit = CrossFibLimit(0.5, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=3)
+    sub.cross_fib_limit = limit(0.5, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=3)
     _two_lens_records(pool, sub, m15_df)
     _set_lifecycle(sub, _START, None, None)
     res = _render(sub, m15_df, _lens_dfs(m15_df))
@@ -808,7 +887,7 @@ def test_run_pipeline_hands_main_its_cross_fib_limits(monkeypatch):
 
 
 def test_the_latest_anchor_keeps_a_sells_direction_through_every_handler():
-    t = _tracker({0: CrossFibLimit(0.78, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=0)})
+    t = _tracker({0: limit(0.78, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=0)})
     df = _c3_df(60, [_gap(15)])
     _q(t.on_cts_established, make_cts_established(cts_anchor_idx=20, confirmed_at=22, price=0.80, structure_id=0,
                                                   cycle_id=0, struct_direction=-1), df, bos_idx=10, bos_price=1.0)
@@ -876,14 +955,14 @@ def test_the_driver_wires_the_fire_time_rule_and_the_tripwire(monkeypatch):
         _q(_run_multi_tf_dual, h1, [], [], [], [], {}, None, first_confluence_triggers=[],
            subsequent_confluence_triggers=[SimpleNamespace(trigger_event_idx=20, input_idx=15)],
            subsequent_counter_triggers=[])
-    assert got["lim"] == CrossFibLimit(0.58105, "prev_sub_bos_threshold", from_pool_idx=0)
+    assert got["lim"] == CrossFibLimit(0.58105, "prev_sub_bos_threshold", from_pool_idx=0, ref_anchor_price=0.58105)
     assert got["checked"][0] is got["pool"]
 
 
 def test_m_reads_only_its_own_sids_anchors():
     """A main tracker holds every sid; sid 1's M must not walk sid 0's cycles."""
     t = _tracker({0: CrossFibLimit(None, "none", started_by="start_trading"),
-                  1: CrossFibLimit(0.58, "reversal_bos_frozen", started_by="reversal")})
+                  1: limit(0.58, "reversal_bos_frozen", started_by="reversal")})
     t._latest_anchor = {(0, 0): (5, 0.70, 1), (0, 1): (9, 0.72, 1), (0, 2): (12, 0.74, 1), (1, 0): (20, 0.59, -1),
                         (1, 1): (30, 0.585, -1)}
     assert (t.cross_fib_limit_cycle(0), t.cross_fib_limit_cycle(1)) == (None, None)   # sid 1 never beyond 0.58

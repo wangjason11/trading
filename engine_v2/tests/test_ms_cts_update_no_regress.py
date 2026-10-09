@@ -143,11 +143,13 @@ def _refresh_spy(monkeypatch, record):
     from engine_v2.structure.market_structure import MarketStructure
     orig = MarketStructure._refresh_poi_inners_for_cycle
 
-    def _spy(self):
+    def _spy(self, moment):
         ev = self._fib_tracker._handled[-1]
         assert ev.type in ("CTS_ESTABLISHED", "CTS_UPDATED"), ev.type
+        # PLAN_K A14 / §9 C06: the refresh reads the IC reference AT the fed event's moment (pattern + raw paths)
+        assert int(moment) == int(ef.event_moment(ev)), (moment, ev.type, ef.event_moment(ev))
         record(self, ev)
-        return orig(self)
+        return orig(self, moment)
     monkeypatch.setattr(MarketStructure, "_refresh_poi_inners_for_cycle", _spy)
 
 

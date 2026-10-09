@@ -2,7 +2,8 @@
 
 **Status: DRAFTED 2026-10-09; COLD-REVIEWED 2026-10-09 (§9: 2 read-only lenses, 526,601 subagent tokens — no
 BLOCKER on fidelity, 5 MAJOR on the code paths, every finding folded below); the user's questions §8 (K-Q1 … K-Q8)
-— ALL ANSWERED 2026-10-09 (§8); next: landing A's build, on the user's go.** The rule is the user's and is DECIDED: canonical text `PLAN_H_institutional_pattern_poi.md` §8.9
+— ALL ANSWERED 2026-10-09 (§8); landing A BUILT 2026-10-09 (§11.1: `/compare` vs S_S6 == §5, the §6 tests, the
+mutation run, the docs); next: S_K_A, then the variant replay V and landing B.** The rule is the user's and is DECIDED: canonical text `PLAN_H_institutional_pattern_poi.md` §8.9
 "RX1" (the rule as decided) + §6 RX1-B, RX1-1 … RX1-4, RX1-T, RX1-W1 … W3, RX1-C1, RX1-E; the user's write-up verbatim
 `plan_h_inputs/ic_reference_conditions_spec.md`. This file is HOW it is built: the code audit, the design, two
 landings with exact predictions, the tests, the cost. Baseline: **S_S6**
@@ -334,6 +335,88 @@ by me before filing (✓).
 | F09 | NIT | A13's "revived patternless reversal passes" is an assumption | A13 marked |
 | F10 | NIT | The hover lacks the "reference, no known break" case | A17: `break: none` |
 | F11 | NIT | The prototype's frame is rebuilt from the chart, not the engine slice | §3.4 caveat; landing A's check |
+
+## 11. Build record
+
+### 11.1 Landing A — code + the migration (2026-10-09; uncommitted at this point)
+
+- **Built as planned** (A1–A20): `event_fields.pattern_anchor_idx` reads the `STATE_CHANGED(to=reversal)` key (any
+  other STATE_CHANGED still raises); MS stamps `pattern_anchor_idx = ev.start_idx` at `_apply_pattern_at_apply_idx`'s
+  reversal branch; `CrossFibLimit` + `ref_anchor_price` / `break_*` / `localized` and `ICReference` (+ `IC_REF_SOURCES`)
+  in `zones/cross_cycle_fib.py`; the main and sub limit builders (+ the R6-2 tripwire on the new fields);
+  `patterns/cross_limit_watch.find_cross_limit_break`; `FibTracker._est_pattern_anchor` / `ic_reference` /
+  `stamp_ic_references`; `poi_zones.ic_reference_reason` + `select_ip_ic(ic_reference=)` + `IPCandidate.ic_ref_reason`
+  + `select_ip_records(lifecycle_cap=)` + `poi_inner_for_fib(tracker=, evaluated_at=)`; MS's refresh takes the fed
+  event's moment from both call sites; the orchestrator's stamp step + the cap into the selection; `localized` at
+  `_build_geometry` and `render_sub_projection`; `_FIB_META_IDX_KEYS` + the 2 break keys; the CSV column; the hover line.
+- **Deviations (my calls):** (1) `ic_reference_reason(df, i, ref, sd)` takes no moment — the `ICReference` is already
+  as of its reader's moment; (2) landing A's "filter OFF" is a module switch `poi_zones._IC_REFERENCE_FILTER = False`
+  (V flips it in the scratch tree; B turns it on and removes it); (3) the watch stops scanning once an anchor reaches
+  the best confirmation (every pattern spans ≥ 2 candles — a later anchor cannot confirm earlier); (4) the hover's
+  `IC ref: none` is shown for a record carrying the `cross_fib_limit_*` keys (every production record) and none of
+  the `ic_ref_*` keys — a fixture record without the limit keys gets no line (`fib_hover_limit_text`'s rule);
+  (5) the stamp writes the keys as `meta=` literals in three branches (the inverse index-key guard scans them, C10).
+- **The migration (A20), as done:** `tests/_cross_fib_limits.limit()` (anchor = P, a reversal's break at `FAR`) for
+  the fixtures that pin the limit's own rules; `unreached()` with a ±inf anchor; `NO_REF_TRACKER` for direct reads on
+  hand-built fibs; the event factory's `pattern_anchor_idx` default (the CTS anchor); 3 wave-candle tests build an
+  event WITHOUT the key (`_no_pattern_anchor`); the builder pins STRENGTHENED with real values — the main limit (BOS
+  0.5731 vs threshold 0.5736, decoy BOSes), `reversal_limit` (0.58198, 137 / 140 entity-absolute), `parent_cts_limit`
+  (0.574 vs 0.57376), `read_prev_sub` (the BOS 0.585 vs its threshold 0.587; the starting extreme), the tripwire (+ a
+  mismatched anchor), the later-anchor-winner fixture (the stamped anchor is the WINNER's, ≠ the pending candidate's);
+  the spies forward the new keywords; MS's refresh spy asserts the refresh moment == the fed event's moment (C06,
+  both paths). New pins: "a reversal needs a BOS" (main + sub), "a first_confluence parent needs its c−1 CTS_CONFIRMED".
+  **Tests 1444** (1443 + 1), all pass — before the §6 list (next).
+- **Replay + `/compare` vs S_S6 == §5's prediction** (`plan_h_inputs/cmp_k_landing_a.py BASE`, exit 0): replay 72 s
+  wall; FETCH GATE PASS; the grep = the 2 `parent_tables` WARNING lines + the 4 UNRESOLVED `degenerate_parent_cycle`
+  rows (unchanged); 19 / 27 CSVs md5-equal; the structure events gain `pattern_anchor_idx` on exactly the 5
+  reversals (H1 902 → 897; sub 0 1940 → 1936, sub 1 2470 → 2465, sub 2 2829 → 2824, sub 6 4200 → 4196), each == the
+  REVERSAL_CANDIDATE anchor at that apply; the fib CSVs gain the `ic_ref_*` keys, every value == the §5 table (the
+  engine's watch on the real sub slices == the prototype: sub 4 3588 / 3589, sub 7 4188 / 4189, subs 5 / 6 none —
+  F11 settled); the IP CSVs gain `ic_ref_reason` only (cut counts == the census: 209 → 85, 50 → 14, 90 → 69,
+  151 → 134); charts: traces / shapes H1 81 / 236, counter 135 / 120, confluence 274 / 264 (== S_S6), only the fib
+  hover traces' `customdata` differ (H1 3, confluence 16, counter 6), every layout equal. **Measured:**
+  `ic_not_before_break` is 0 on every record — the price side already cuts every candidate the bound would (the
+  census's "price-only == both"), so the before-the-break side is exercised by unit tests only on this window.
+- **The §6 tests — `tests/test_plan_k_landing_a.py`, 62 tests (suite 1506, all pass).**
+  The watch on HAND-BUILT candles (explicit candle features — the detector reads only `_ROW_FIELDS` — each fixture
+  asserting the detector's answer first): close vs wick, `P` not the anchor (sub 7's 4178 shape), re-arm, the earliest
+  confirmation over the first anchor (anchor 1 confirms at 6, anchor 2 succeeds at 3 → 2), the cold review's
+  anchor-flip case (K-Q6: none as of a+2, `(a, a+3)` from a+3 — the tie to the earlier anchor; the cut-frame reading
+  would say `(a+1, a+2)` then flip), the bounded detector. The reference on the s3 flat frame with events fed (each
+  cycle's establishment pattern anchor ≠ its CTS anchor): the start cycle's CTS + bound (cross 1 → 2, pre-established),
+  as-of (59 vs 60), the reversal bound for the whole run, the choice (lower / higher / EQUAL → the structure and its
+  bound, both sd), `T = M` keeps / `T > M` drops, no limit entry no raise; the watch inside the reference (BOS_0 start
+  with a decoy before it, `P` vs the anchor, as-of, the cap). The prev-sub anchors (`prev_sub_cts_threshold` incl. a
+  moved threshold and two confirmed cycles; `prev_sub_latest_cts`). The stamp (values, re-stamped in place under a
+  cap, no keys without a reference), the pipeline record (the 4 keys right before the limit keys + `started_by`, the
+  values == the events), the selection (reported, the pick unchanged; the switch ON → no pick), the CSV column, the
+  reason pass-through (a builder cutting the odd cycles — the fixture's own references cut nothing), the hover on the
+  H1 chart and on a lens chart (`break: none`). Plumbing: `ICReference` asserts, `localized`, `ef.pattern_anchor_idx`
+  on a non-reversal `STATE_CHANGED` raises, C01 (a ValueError in the reference during a sub geometry →
+  `IPSelectionError`), the C04 geometry spy (slice_begin 10: the embedded tracker holds 90 / 95 for 100 / 105), the
+  read's moment == the fed event's on both paths, D2 with the reference (3 records compared), the projection round
+  trip (58 / 59 → 53 / 54 local → 58 / 59 mirrored), the reversal key on the winner (anchors 9 / 8 / 7) and the
+  pending path (4 == its candidate's).
+- **The mutation run** (`plan_h_inputs/mutants_k_landing_a.py`, 89 mutants, the full suite each, 24 in parallel ~13
+  min): every branch of the watch / the condition / the selection / the reference / the stamp / the limit builders /
+  the coordinates / MS / the exports, and the call sites (A3, A4 incl. C01's outside-the-`try`, A14 ×2 + the read's
+  moment, A16, `_build_geometry`'s `localized`, the stamp, the orchestrator). First pass 77 / 89 KILLED; the 12
+  survivors: 2 EQUIVALENT — W01 (the close gate: every pattern's `check_break` tests c0's close itself) and W11 (the
+  early stop: every pattern spans ≥ 2 candles); 10 GAPS, each closed by a test and re-run KILLED: W09 (the detector
+  without `P` — `test_the_break_threshold_reaches_the_detector`: < 30 % of the body past `P` fails `body_check`), A3
+  ×3 + O2 + O3 (the lifecycle cap's plumbing into the stamp, the drawn selection and both `ip_records=None` fallbacks —
+  `test_every_retrospective_reference_reads_to_the_lifecycle_cap`), A4 retrospective + MS4 (the read's moment: the
+  regress fixture's CTS anchors equal their moments; + `anchor_before_moment`, anchor 9 / moment 10, and the
+  reference built at the read's moment), H3 (the hover on a cross — cycle `a−1` of the START cycle), F07 (`T` = the
+  target, not the cross's start — unreachable in production, pinned on a probe as the rule's definition). Final: 87
+  KILLED + 2 equivalent.
+- **Docs (landing A):** POI_ZONES_SPEC §3 intro / §3.2 rewritten (the Week-7 tables → its new Appendix A) / §3.4 /
+  §3.5 / data flow / files / status; CROSS_CYCLE_FIB_SPEC §3 (the inputs: the anchor table, the reversal break +
+  `localized`, the watch, the exports) / §6 / §8; MARKET_STRUCTURE_SPEC (the reversal event's key; the refresh's
+  moment); ARCHITECTURE (condition #4; the `STATE_CHANGED` row; the accessor; the pattern realm); GLOSSARY ("IC
+  reference", "cross-limit breakout watch"); LANDMINES "The POI Resolver Fails Loudly" (+ C01's trap, + pins);
+  CHARTING_SPEC (the hover line); the `/compare` skill (the columns + the save-format boundary, `cmp_k_landing_a.py`);
+  register §D.2; PLAN_H RX1's status line.
 
 ## 10. Change log
 

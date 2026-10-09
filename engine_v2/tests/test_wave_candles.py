@@ -90,6 +90,13 @@ def _make_event(etype: str, idx: int, price: float = None, meta: dict | None = N
     )
 
 
+def _no_pattern_anchor(ev: StructureEvent) -> StructureEvent:
+    """A CTS_ESTABLISHED WITHOUT `pattern_anchor_idx` — the factory stamps a default since PLAN_K A20 (b); the
+    reader's direct index must still raise on a missing key."""
+    del ev.meta["pattern_anchor_idx"]
+    return ev
+
+
 # ---------------------------------------------------------------------------
 # Helper function tests
 # ---------------------------------------------------------------------------
@@ -754,7 +761,7 @@ class TestPatternAnchorIdxDirectIndex:
         rows, zone_meta = _cts_bib_setup()
         rows[10] = dict(_BULL_IN_ZONE)
         zone = _make_zone("sell", top=1.1, bottom=1.0, source_kind="CTS", meta=zone_meta)
-        events = [_make_event("CTS_ESTABLISHED", 10, 1.08, {"structure_id": 0, "cycle_id": 1})]
+        events = [_no_pattern_anchor(_make_event("CTS_ESTABLISHED", 10, 1.08, {"structure_id": 0, "cycle_id": 1}))]
         with pytest.raises(KeyError, match="pattern_anchor_idx"):
             identify_wave_candles(
                 anchor_idx=10, anchor_type="CTS", zone=zone, events=events,
@@ -803,7 +810,7 @@ class TestPatternAnchorIdxDirectIndex:
         rows, zone_meta = _cts_bib_setup()
         zone_meta["base_pattern"] = "no base"
         zone = _make_zone("sell", top=1.1, bottom=1.0, source_kind="CTS", meta=zone_meta)
-        events = [_make_event("CTS_ESTABLISHED", 10, 1.08, {"structure_id": 0, "cycle_id": 1})]
+        events = [_no_pattern_anchor(_make_event("CTS_ESTABLISHED", 10, 1.08, {"structure_id": 0, "cycle_id": 1}))]
         with pytest.raises(KeyError, match="pattern_anchor_idx"):
             identify_wave_candles(
                 anchor_idx=10, anchor_type="CTS", zone=zone, events=events,
@@ -813,7 +820,7 @@ class TestPatternAnchorIdxDirectIndex:
         rows, _ = _cts_bib_setup()
         zone = _make_zone("buy", top=1.0, bottom=0.9, source_kind="BOS", meta={
             "cycle_id": 1, "anchor_idx": 5, "base_pattern": "base inside bar", "outer": 0.9})
-        events = [_make_event("CTS_ESTABLISHED", 10, 1.08, {"structure_id": 0, "cycle_id": 1})]
+        events = [_no_pattern_anchor(_make_event("CTS_ESTABLISHED", 10, 1.08, {"structure_id": 0, "cycle_id": 1}))]
         with pytest.raises(KeyError, match="pattern_anchor_idx"):
             identify_wave_candles(
                 anchor_idx=5, anchor_type="BOS", zone=zone, events=events,

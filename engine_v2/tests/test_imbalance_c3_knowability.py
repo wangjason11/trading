@@ -34,7 +34,7 @@ from engine_v2.tests._event_factory import make_cts_established, make_cts_update
 from engine_v2.tests.test_poi_activation_moment import _only_poi, _run
 from engine_v2.tests.test_unified_probe import _make_ip_multicycle_data, _make_multicycle_data
 from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig
-from engine_v2.tests._cross_fib_limits import NO_P
+from engine_v2.tests._cross_fib_limits import NO_P, NO_REF_TRACKER
 
 
 # ---------------------------------------------------------------------------
@@ -339,7 +339,7 @@ def test_m1_retired_ms_reads_no_inner_where_fibtracker_creates_no_fib():
         structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.00, cts_idx=40, cts_price=1.35,
         active=True, locked=False,
         fib=create_fib_retracement(anchor_high=1.35, anchor_low=1.00, direction=1, levels=DEFAULT_FIB_LEVELS))
-    assert poi_zones.poi_inner_for_fib(df, would_be, 0.70) == 1.13
+    assert poi_zones.poi_inner_for_fib(df, would_be, 0.70, tracker=NO_REF_TRACKER, evaluated_at=40) == 1.13
     tracker = _tracker()
     # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
     _quiet(tracker.on_cts_confirmed, _ev("CTS_CONFIRMED", 6, 0.95, 0, 0, cts_anchor_idx=5))
@@ -347,7 +347,8 @@ def test_m1_retired_ms_reads_no_inner_where_fibtracker_creates_no_fib():
            bos_idx=30, bos_price=1.00)
     assert (0, 1) not in tracker._fibs
     assert tracker.representative_fib(0, 1) is None
-    assert poi_zones.poi_inner_for_fib(df, tracker.representative_fib(0, 1), 0.70) is None
+    assert poi_zones.poi_inner_for_fib(df, tracker.representative_fib(0, 1), 0.70, tracker=tracker,
+                                       evaluated_at=40) is None
 
 
 # ===========================================================================

@@ -54,6 +54,7 @@ from engine_v2.zones.poi_zones import (
     select_ip_records,
 )
 from engine_v2.tests._cross_fib_limits import NO_P
+from engine_v2.zones.cross_cycle_fib import ICReference
 
 U, D, Z, S = 1, -1, 0, AGREED_SPLIT
 PIP = 0.0001
@@ -152,6 +153,7 @@ def _filled_gap(df, start, fill_idx):
 
 def _select(df, bos, cts, imbalances, *, zone=(0.5, 0.7), **kw):
     df.attrs["imbalances"] = imbalances
+    kw.setdefault("ic_reference", ICReference.NONE)
     return select_ip_ic(df, _fib_over(df, bos, cts, *zone), POIConfig(), **kw)
 
 
@@ -534,7 +536,7 @@ def test_volume_only_doji_is_a_candidate_and_a_split_candle_is_not():
     df.attrs["imbalances"] = [_far_gap(10)]
     fib = _fib_over(df, 6, 10, 0.5, 0.7)
     assert find_ic_candidates(df, fib, POIConfig()) == [9]            # the V path: candle direction
-    sel = select_ip_ic(df, fib, POIConfig(), classify_misses=True)
+    sel = select_ip_ic(df, fib, POIConfig(), classify_misses=True, ic_reference=ICReference.NONE)
     assert [c.ip.ic_idx for c in sel.candidates] == [7]               # VD: the agreed direction
     assert sel.pick.ic_idx == 7 and sel.pick.ip_rank == "3A.i"        # a doji IC is a pinbar
 
@@ -607,6 +609,9 @@ class _Tracker:
 
     def get_fibs_for_charting(self):
         return list(self.fibs)
+
+    def ic_reference(self, fib_state, df, *, evaluated_at, end_idx=None):
+        return ICReference.NONE                    # PLAN_K A3 / A20 e: no IC reference — the condition passes
 
 
 def _est(sid, cycle):

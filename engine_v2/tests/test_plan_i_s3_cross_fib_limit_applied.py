@@ -24,6 +24,7 @@ from engine_v2.common.types import ImbalanceInstance
 from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.tests._event_factory import make_cts_established
+from engine_v2.tests._cross_fib_limits import limit
 from engine_v2.zones.cross_cycle_fib import CrossFibLimit
 from engine_v2.zones.fib_tracker import CrossFibLimitError, FibTracker, FibTrackerConfig
 
@@ -51,7 +52,7 @@ def _df(n, gaps):
 
 
 def _lim(p, sd):
-    return CrossFibLimit(None, "none") if p is None else CrossFibLimit(_m(p, sd), "parent_cts_threshold")
+    return CrossFibLimit(None, "none") if p is None else limit(_m(p, sd), "parent_cts_threshold")
 
 
 def _tracker(limit):

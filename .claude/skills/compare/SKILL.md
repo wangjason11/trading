@@ -429,10 +429,18 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_structure_levels.csv` |
 | `*_kl_zones.csv` |
 | `*_poi_zones.csv` |
-| `*_ip_candidates.csv` — the institutional-pattern selection (PLAN_H landing A; computed, not yet drawn) |
-| `*_structure_events.csv` |
+| `*_ip_candidates.csv` — the institutional-pattern selection (PLAN_H landing A; the picked rows = the drawn POIs since landing B); + the column `ic_ref_reason` after `touches_zone` since PLAN_K landing A (2026-10-09) |
+| `*_structure_events.csv` — `STATE_CHANGED(to=reversal)` carries `meta["pattern_anchor_idx"]` since PLAN_K landing A |
 | `*_imbalance_instances.csv` |
-| `*_fib_lifecycle.csv` — no `fib_mode` column since PLAN_I S6 (2026-10-09): against an older save (S_J `20261009_013718_708a8d9` and before) diff the 3 fib CSVs with `engine_v2/plans/plan_i_inputs/cmp_s6_fib_mode.py BASE CUR` (positional `cmp_save.py` shifts the `meta` cell) |
+| `*_fib_lifecycle.csv` — no `fib_mode` column since PLAN_I S6 (2026-10-09): against an older save (S_J `20261009_013718_708a8d9` and before) diff the 3 fib CSVs with `engine_v2/plans/plan_i_inputs/cmp_s6_fib_mode.py BASE CUR` (positional `cmp_save.py` shifts the `meta` cell); the `ic_ref_*` meta keys since PLAN_K landing A |
+
+**Save-format boundary — PLAN_K landing A (2026-10-09; S_K_A is the first save with it):** a save up to S_S6
+`20261009_020650_5f6bae3` lacks the IP CSVs' `ic_ref_reason` column, the fib meta's `ic_ref_price` / `ic_ref_source` /
+`ic_ref_break_pattern_anchor_idx` / `ic_ref_break_confirmed_idx` and the reversal `STATE_CHANGED`'s
+`pattern_anchor_idx` — up to 9 CSVs (the 3 structure-events, 3 fib-lifecycle, 3 ip-candidates; 8 on the reference
+window, whose counter-lens structure events hold no reversal) plus the fib hover `customdata`. Against such a save run
+`engine_v2/plans/plan_h_inputs/cmp_k_landing_a.py BASE` (format deltas only, exit 1 on anything else) instead of
+reading those files' diffs as engine changes.
 | `*_wvmi.csv` |
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs

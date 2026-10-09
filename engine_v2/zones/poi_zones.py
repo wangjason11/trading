@@ -41,6 +41,7 @@ from engine_v2.patterns.imbalance import has_unfilled_imbalance, iter_unfilled_i
 from engine_v2.patterns.institutional_pattern import IC_TYPE_PREFERENCE, IPResult, classify_ics
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.zones.cross_cycle_fib import ICReference
 from engine_v2.zones.fib_tracker import FibTracker, FibState
 from engine_v2.zones.structure_lifecycle import (
     compute_cycle_lifecycle,
@@ -179,11 +180,35 @@ def passes_price_constraint(
         return candle_low > reference_price
 
 
+# The IC reference condition (PLAN_K; PLAN_H §8.9 RX1) — landing A computes and EXPORTS it (`IPCandidate.
+# ic_ref_reason`, the CSV column) with the filter OFF: the pick ignores it. Landing B turns it on (and removes this
+# switch); the variant replay V between them = A with this True (PLAN_K §4).
+_IC_REFERENCE_FILTER = False
+
+IC_REF_PAST_REFERENCE = "ic_past_reference"
+IC_REF_NOT_BEFORE_BREAK = "ic_not_before_break"
+
+
+def ic_reference_reason(df: pd.DataFrame, candle_idx: int, ref: ICReference, struct_direction: int) -> Optional[str]:
+    """The IC reference condition on one §3.1 candidate (PLAN_K §3.2; PLAN_H RX1 — ONE bundled condition, RX1-B):
+    None = passes; `ic_past_reference` = the price side fails (sd +1: the candle's high is not strictly below the
+    reference; sd −1: its low not strictly above — `passes_price_constraint`), reported FIRST when both fail;
+    `ic_not_before_break` = the candle is not strictly before the break pattern's first candle. No reference
+    (`ICReference.NONE`) → passes (RX1-4); a reference with no known break → the price side only (RX1-2a). `ref` is
+    already AS OF its reader's moment (`FibTracker.ic_reference`)."""
+    if ref.price is None:
+        return None
+    if not passes_price_constraint(int(candle_idx), df, int(struct_direction), float(ref.price)):
+        return IC_REF_PAST_REFERENCE
+    if ref.break_pattern_anchor_idx is not None and int(candle_idx) >= int(ref.break_pattern_anchor_idx):
+        return IC_REF_NOT_BEFORE_BREAK
+    return None
+
+
 def find_ic_candidates(
     df: pd.DataFrame,
     fib_state: FibState,
     config: POIConfig,
-    scenario_context: Optional[Dict] = None,
     ic_direction: Optional[pd.Series] = None,
 ) -> List[int]:
     """
@@ -202,15 +227,6 @@ def find_ic_candidates(
         The active Fib state for this cycle
     config : POIConfig
         Configuration for POI detection
-    scenario_context : dict, optional
-        NOT READ — the POI_ZONES_SPEC §3.2 scenario conditions are not
-        implemented and no caller passes this. Designed contents:
-        - scenario: 1, 2, or 3
-        - reversal_confirmed_idx: idx where reversal was confirmed
-        - prev_bos_price: previous structure's last BOS price
-        - cts_established_idx: idx where CTS was established
-        - prev_cts_price: CTS_N-1 price (for cycle 1+)
-        - cross_cycle: bool (True if this is a cross-cycle Fib)
     ic_direction : Series, optional
         The direction condition 2 compares with `-struct_direction`, indexed
         like `df`. None = the candle `direction` (the V30 / V60 / V90 path);
@@ -379,9 +395,11 @@ def ic_touches_zone(high: float, low: float, zone_lo: float, zone_hi: float) -> 
 
 @dataclass(frozen=True)
 class IPCandidate:
-    """One §3.1 candidate of a fib record with its institutional pattern."""
+    """One §3.1 candidate of a fib record with its institutional pattern; `ic_ref_reason` = the IC reference
+    condition's outcome (`ic_reference_reason`; None = passes — PLAN_K A2)."""
     ip: IPResult
     touches_zone: bool
+    ic_ref_reason: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -402,6 +420,7 @@ def select_ip_ic(
     fib_state: FibState,
     config: POIConfig,
     *,
+    ic_reference: ICReference,
     classify_misses: bool = False,
 ) -> IPSelection:
     """ONE IC per fib, chosen by the institutional pattern (PLAN_H §1; D2: the
@@ -422,6 +441,10 @@ def select_ip_ic(
     does the leg cap (`config.ip_leg_cap_by_tf`, KeyError on an unknown TF).
     `classify_misses` (the debug CSV only) also classifies the candidates that
     miss the touch — never picked.
+
+    `ic_reference` (REQUIRED — PLAN_K A1; built by `FibTracker.ic_reference` as of the reader's moment): the IC
+    reference condition, applied per §3.1 candidate BEFORE the touch and the pattern (RX1-E); each candidate carries
+    its outcome (`IPCandidate.ic_ref_reason`). While `_IC_REFERENCE_FILTER` is off (landing A) it is reported only.
     """
     timeframe = df.attrs["timeframe"]
     params = candle_params_for_timeframe(timeframe)
@@ -436,15 +459,18 @@ def select_ip_ic(
     touches = {
         i: ic_touches_zone(float(df.loc[i, "h"]), float(df.loc[i, "l"]), zone_lo, zone_hi) for i in candidates
     }
-    to_classify = [i for i in candidates if classify_misses or touches[i]]
+    ref_reasons = {i: ic_reference_reason(df, i, ic_reference, sd) for i in candidates}
+    eligible = {i: touches[i] and (ref_reasons[i] is None or not _IC_REFERENCE_FILTER) for i in candidates}
+    to_classify = [i for i in candidates if classify_misses or eligible[i]]
     results = classify_ics(
         df, to_classify, sd,
         bos_anchor_idx=fib_state.bos_idx, cts_anchor_idx=fib_state.cts_idx,
         agreed=agreed, cap=cap, params=params,
     )
-    cands = tuple(IPCandidate(ip=r, touches_zone=touches[r.ic_idx]) for r in results)
+    cands = tuple(IPCandidate(ip=r, touches_zone=touches[r.ic_idx], ic_ref_reason=ref_reasons[r.ic_idx])
+                  for r in results)
 
-    patterns = [c.ip for c in cands if c.touches_zone and c.ip.rank is not None]
+    patterns = [c.ip for c in cands if eligible[c.ip.ic_idx] and c.ip.rank is not None]
     if not patterns:
         return IPSelection(cands, None, None)
     best_key = min(r.order_key for r in patterns)
@@ -513,6 +539,8 @@ def select_ip_records(
     structure_events: List[StructureEvent],
     fib_tracker: Optional[FibTracker],
     config: POIConfig,
+    *,
+    lifecycle_cap: Optional[int] = None,
 ) -> List[IPRecordSelection]:
     """The POI records in `get_fibs_for_charting` order, each with its selection
     (PLAN_H §8.5: computed ONCE per pipeline run, handed to `derive_poi_zones` and
@@ -532,7 +560,9 @@ def select_ip_records(
        fires whatever the pattern;
     3. `select_ip_ic(..., classify_misses=True)` — the CSV's candidates; the pick
        is the one without `classify_misses` (a candidate missing the touch is
-       never picked).
+       never picked) — with the record's FINAL IC reference
+       (`fib_tracker.ic_reference(..., evaluated_at=None, end_idx=lifecycle_cap)`, the call
+       `FibTracker.stamp_ic_references` makes: the drawn pick and the exported meta are one value, PLAN_K A3).
     """
     if fib_tracker is None:
         return []
@@ -556,7 +586,10 @@ def select_ip_records(
         out.append(IPRecordSelection(
             fib_state=fib_state,
             cts_established_idx=int(cts_event.meta["confirmed_at"]),
-            selection=select_ip_ic(df, fib_state, config, classify_misses=True),
+            selection=select_ip_ic(
+                df, fib_state, config, classify_misses=True,
+                ic_reference=fib_tracker.ic_reference(fib_state, df, evaluated_at=None, end_idx=lifecycle_cap),
+            ),
         ))
     return out
 
@@ -659,7 +692,7 @@ def derive_poi_zones(
     fill_idx_cache = _compute_fill_idx_cache(df, imbalances, config.fill_threshold)
 
     if ip_records is None:
-        ip_records = select_ip_records(df, structure_events, fib_tracker, config)
+        ip_records = select_ip_records(df, structure_events, fib_tracker, config, lifecycle_cap=lifecycle_cap)
 
     # One record = one fib record that passed the gate and has a CTS_ESTABLISHED
     # (`select_ip_records`); its pick (or None — no pattern, no POI: PLAN_H D7).
@@ -872,6 +905,7 @@ class IPCandidateRecord:
     ip_tb_runner_up_ic_idx: Optional[int] = None
     ip_tied_count: Optional[int] = None
     ip_tb_imbalance_first_c2_idx: Optional[int] = None
+    ic_ref_reason: Optional[str] = None
     detail: Dict[str, Any] = field(default_factory=dict)
     meta: Dict[str, Any] = field(default_factory=dict)
 
@@ -891,6 +925,7 @@ def derive_ip_candidates(
     *,
     structure_path_id: str,
     ip_records: Optional[List[IPRecordSelection]] = None,
+    lifecycle_cap: Optional[int] = None,
 ) -> List[IPCandidateRecord]:
     """The institutional-pattern selection of every POI record (`select_ip_records`
     — the records and selections `derive_poi_zones` draws from) as debug records
@@ -899,7 +934,7 @@ def derive_ip_candidates(
     per fib record without a pick. `ip_records` None = selected here.
     """
     if ip_records is None:
-        ip_records = select_ip_records(df, structure_events, fib_tracker, config)
+        ip_records = select_ip_records(df, structure_events, fib_tracker, config, lifecycle_cap=lifecycle_cap)
     out: List[IPCandidateRecord] = []
     for rec in ip_records:
         fib_state, sel = rec.fib_state, rec.selection
@@ -927,6 +962,7 @@ def derive_ip_candidates(
                 ip_tb_runner_up_ic_idx=tb[1],
                 ip_tied_count=tb[2],
                 ip_tb_imbalance_first_c2_idx=tb[3],
+                ic_ref_reason=c.ic_ref_reason,
                 detail=dict(r.detail),
                 meta={"structure_path_id": structure_path_id},
             ))
@@ -1301,6 +1337,9 @@ def poi_inner_for_fib(
     df: pd.DataFrame,
     fib_state: Optional[FibState],
     fill_threshold: float,
+    *,
+    tracker: FibTracker,
+    evaluated_at: int,
 ) -> Optional[float]:
     """MarketStructure's in-flight POI inner (PLAN_I S5 / D5, Q7): the institutional-pattern pick
     (`select_ip_ic` — the SAME function as the drawn POI, PLAN_H D2) on `fib_state`, the cycle's
@@ -1314,12 +1353,18 @@ def poi_inner_for_fib(
     error of the stamp read or the pick is re-raised as `IPSelectionError` (a RuntimeError), so neither a missing
     stamp nor an IP bug can pass as "no pattern", and the sub geometry's narrow `except (ValueError,
     IndexError)` (`entity_df_mutation._build_geometry`) cannot drop the sub. `fill_threshold` = the tracker's
-    (`FIB_FILL_THRESHOLD`; the drawn POI's `POIConfig` default is the same value — pinned)."""
+    (`FIB_FILL_THRESHOLD`; the drawn POI's `POIConfig` default is the same value — pinned).
+
+    The fib's IC reference is built HERE, inside the re-raising `try` (PLAN_K A4, §9 C01): `tracker.ic_reference(
+    fib_state, df, evaluated_at=evaluated_at)` — MS's embedded tracker at the fed event's moment, the frame = MS's
+    resolver frame (already cut at the run's data edge) — so an error there surfaces as `IPSelectionError` and never
+    reaches the sub geometry's narrow `except (ValueError, IndexError)`. A None fib returns before the call."""
     try:
         df.attrs["timeframe"]
         if fib_state is None:
             return None
-        sel = select_ip_ic(df, fib_state, POIConfig(fill_threshold=fill_threshold))
+        ref = tracker.ic_reference(fib_state, df, evaluated_at=int(evaluated_at))
+        sel = select_ip_ic(df, fib_state, POIConfig(fill_threshold=fill_threshold), ic_reference=ref)
     except Exception as exc:
         where = ("no fib" if fib_state is None else
                  f"sid {fib_state.structure_id}, cycle {fib_state.cycle_id}, fib {fib_state.bos_idx}..{fib_state.cts_idx}")
