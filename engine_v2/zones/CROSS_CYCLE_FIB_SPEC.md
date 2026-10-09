@@ -13,8 +13,9 @@
 > **MarketStructure reads this same decision since PLAN_I S5 (2026-10-08):** an embedded FibTracker (§8); MS's retired
 > Scenario-2 in-flight read is in **Appendix A, part 2** (verbatim; the last commit that ran it is `0de98ca`, PLAN_I S4).
 >
-> **Still to come (PLAN_I §9.4):** S5b — a cycle's lifecycle end caps its fib's end (PLAN_I R9-3, F19); S6 — the
-> `fib_mode` meta key / CSV column is retired.
+> **A cycle's lifecycle end caps its fib's end since PLAN_I S5b (2026-10-08; R9-3, F19 — §2).**
+>
+> **Still to come (PLAN_I §9.4):** S6 — the `fib_mode` meta key / CSV column is retired.
 
 ---
 
@@ -62,11 +63,15 @@ A superseded (inactive) record of the other kind may remain — the `cross_faile
 **A fib that starts after its cycle's establishment** (a single activated late on a CTS_UPDATED, or a cross created
 late) ends the previous fib at that establishment, not at the late start (`_prev_cycle_end_at`, PLAN_I S3b F15 /
 F18); the pre-established cross (created before the establishment) ends it at its creation (Option A,
-`FIB_LIFECYCLE_SPEC.md` §7). "The previous fib" is the structure's LAST cycle that has one (`_current_cycle`): when a
-cycle in between got no fib, the earlier fib ends at this later establishment, not at its own cycle's end (the stream
-terminal is set-if-absent, so it beats finalize's pass-through end) — PLAN_I §9.2 F19, latent (0 on the reference
-window; one real instance in 2,400 exact real slices). Decided (R9-3): the cycle's lifecycle end will CAP the fib's
-end — stage S5b.
+`FIB_LIFECYCLE_SPEC.md` §7).
+
+**A fib never outlives its cycle (PLAN_I S5b, R9-3, F19).** The stream ends the structure's LAST cycle that has a fib
+(`_current_cycle`), set-if-absent: when a cycle in between got no fib, the earlier fib's stream end is this later
+fib's start (or the reversal). At finalize the cycle's lifecycle end (`compute_cycle_lifecycle`, the end KL / POI
+take) CAPS it: end = min(the stream terminal, the table end), the table's reason (`next_cycle`) when the table is
+strictly earlier, the stream's on a tie; Option A's earlier end stays (FIB_LIFECYCLE_SPEC §15.4). The fib and its POI
+then end together. 0 on the reference window (0 / 27 fib cycles move); one real instance in 2,400 exact real slices
+(NZD_USD M15 from 2025-08-05: cycle 0's single ends at 08-05 13:15, cycle 1's establishment, not 08-07 06:30).
 
 ---
 
@@ -204,7 +209,6 @@ CTS_ESTABLISHED / CTS_UPDATED. Since S5 that inner comes from THIS logic:
   tripwire now raises on it); F17's MS side — a cycle established on the previous cycle's CTS candle / a BOS anchor
   after its CTS anchor (a breakout establishing cycle T must break T−1's confirmed `cts_threshold` at its apply; the
   BOS window ends at the CTS anchor). Register `IDEA_PARKING_LOT.md` §D.1 item 2.
-- **S5b (PLAN_I R9-3):** F19 — the cycle's lifecycle end caps its fib's end (§2).
 - The old §13 items, reconciled: main's fill-as-of converged on "current" (S4); the deeper-walk fill-as-of is
   "current"; `M = 0` → no cross (pinned, S3); the Scenario-1 / revert ↔ ceiling merge is moot (both retired); `sid 0`
   has no `P` → singles, cycle 0 included (Q6); the in-flight resolver generalization and the sub snapshot's intra fib

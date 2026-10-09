@@ -344,7 +344,8 @@ cross-fib versioning is handled by making the **cycle the lifecycle identity**
 with versions an internal sub-axis. The **§15 simplification** then DROPPED
 `activation_history` for a sticky scalar `start_idx` (no fib consumer walked the
 history) and wired fib onto the shared `compute_cycle_lifecycle` (clamp start to
-the structure floor; cycle-end as an earliest-wins terminal candidate). Canonical:
+the structure floor; cycle-end as an earliest-wins terminal candidate — since PLAN_I S5b a CEILING: a fib never
+outlives its cycle). Canonical:
 `zones/FIB_LIFECYCLE_SPEC.md` (§15 is authoritative); `memory/project_fib_lifecycle_design.md`.
 
 **`WVMI` — no lifecycle of its own (decided 2026-05-27).** A WVMI-record lifecycle

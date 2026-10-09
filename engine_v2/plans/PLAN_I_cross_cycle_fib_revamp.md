@@ -6,8 +6,9 @@ accepted, an ended x−1 yielding its FROZEN thresholds (R5-3); R4-7 withdrawn �
 code (R5-1). Session 1 CLOSED 2026-10-07 (docs-only commit). Session 2 (2026-10-07): the implementation plan DRAFTED and
 COLD-REVIEWED — §9 (audit, design, stages S1–S5 incl. S3b (R6-1b / R7-1) + S6 after the build (R7-2), predictions by variant
 replays, test census, §9.8 the review); round 6
-ANSWERED (§6 R6-1 … R6-7) + round 7 (R7-1 … R7-4); the plan APPROVED by the user 2026-10-07 (R7-4); session 3 = the
-build: S1 + S2 LANDED (§9.10).** Three sessions (PLAN_H §6 LR3): the user's rules → this spec;
+ANSWERED (§6 R6-1 … R6-7) + round 7 (R7-1 … R7-4); the plan APPROVED by the user 2026-10-07 (R7-4); sessions 3–6 = the
+build: S1, S2, S2b, S3, S3b, S4, S5, S5b LANDED (§9.10; rounds 8–9 on the way). Next: the MS fix plan (R9-1 / R9-2,
+its own plan doc); S6 only when the user asks.** Three sessions (PLAN_H §6 LR3): the user's rules → this spec;
 then the implementation plan from a fresh code audit + a cold review; then the build). Living document: every
 question, answer and decision is recorded here as it happens (§5 open questions, §6 decisions); measurements in §3.
 Register line: `IDEA_PARKING_LOT.md` §D.1 item 2. No engine code changed in sessions 1–2 (session 2's measurement
@@ -820,6 +821,9 @@ The rule ("parent cycle 0 → no reference") covers the case either way.
   re-measured on the built code (52 / 52, 24 / 24, 8 prefixes, 20 / 371 inners, 0 / 475 answers); landing review
   668,982 tokens (A: 1 MAJOR = B's two unpinned wiring paths, the F17 (ii) doc claim corrected, the probe tripwire kept
   + documented; B: 72 mutants, 19 gaps → 15 pins, all killed); tests 1414.
+- 2026-10-08 — session 6: **S5b LANDED** (§9.10): the cycle-table end caps a fib's end (F19, R9-3 (a)); predicted by a
+  finalize shadow on the S5 code (0 / 27 fib cycles move), `/compare` vs S5 byte-identical (27 / 27, 3 / 3); the real
+  F19 instance now ends at 08-05 13:15; 8 mutants on the full suite all killed; tests 1427.
 
 ## 8. Handoff to session 2 — the implementation plan (from a fresh code audit + a cold review)
 
@@ -1016,7 +1020,7 @@ convention); M15 indices entity-absolute unless a sub's slice-local frame is nam
   gap in [30, 40], an update to 48 finds the gap 44 → cross 0→1 created at 48 → cycle 0 ends at 48. Window: 0 (no
   cycle ≥ 1 fib activated or created after its establishment, measured on S3).
 - **F19 — a fib outlives its cycle when the cycle after it gets NO fib (S4 landing review, lens A m3, 2026-10-08;
-  LATENT — 0 on the reference window; parked for a decision).** `_activate_fib` / `_create_cross` end the structure's
+  LATENT — 0 on the reference window) — FIXED by S5b (R9-3 (a), §9.10: the cycle-table end caps the fib's end).** `_activate_fib` / `_create_cross` end the structure's
   LAST cycle that has a fib (`_current_cycle[sid]`), and the stream terminal is set-if-absent, so it beats finalize's
   pass-through end: cycle 0 with a fib, cycle 1 established with no unfilled own imbalance (no fib), cycle 2 activates
   at its establishment 60 → cycle 0's fib ends at 60 instead of 40 (its own cycle's end, cycle 1's establishment) —
@@ -1215,7 +1219,7 @@ id ever re-used mid-sweep) — R6-3 (viii).
 | **S3b** (R6-1b) | the single's two latent quirks fixed (F5, F15) | `_m15_cross_check` 2342–2346; `_activate_fib`'s prev-cycle terminal | 0 cells on the window (F5 / F15: 0 occurrences) |
 | **S4** | main joins the one path (R6-5: Q4, Q5, Q6, I2, I5, Q8, main's P = `bos_frozen`) | D1 (h1 deleted), the H1 call, the rule-3 migration | §9.5 c |
 | **S5** — LANDED (§9.10) | MS reads the same fib decision (Q7) | D5 | §9.5 d: 0 cells, 0 traces |
-| **S5b** (R9-3) | F19: the cycle-table end caps a fib's end (finalize: min(stream terminal, `compute_cycle_lifecycle` end)) | `FibTracker._finalize_lifecycle_fields` | 0 cells on the window (F19: 0 occurrences) — a variant verifies before the build |
+| **S5b** (R9-3) — LANDED (§9.10) | F19: the cycle-table end caps a fib's end (finalize: min(stream terminal, `compute_cycle_lifecycle` end)) | `FibTracker._finalize_lifecycle_fields` | 0 cells on the window (F19: 0 occurrences) — verified BEFORE the build by a finalize shadow on the S5 code (0 / 27 fib cycles later than the table) |
 | **S6** (after the build, R7-2) | retire the `fib_mode` meta key (no other mode remains) — a rule-3 migration | the stamps (sub path), `export_fib_lifecycle.py`'s column, its readers / guards / docs | FORMAT-ONLY: every fib row of the 3 fib CSVs loses `fib_mode` (meta key + column; H1 5, confluence 21, counter 8 rows after S4) |
 
 Docs move with their stage (code + spec + skill + memory in one commit):
@@ -1688,3 +1692,37 @@ steps, each replayed:
   IMBALANCE_FILL_SEMANTICS (the cached-values note, M1 retired, the matrix); POI_ZONES_SPEC; ARCHITECTURE; GLOSSARY
   (`evaluated_at`, FibEventOrderError, + embedded FibTracker, representative fib); PART4 §13.5.b (one note); GOTCHAS (two
   closure notes); register (D.1 item 2's PLAN_H D5 fix DONE; §E's bundled follow-up CLOSED).
+
+**Session 6 (2026-10-08) — S5b.**
+
+**S5b — the cycle-table end caps a fib's end (F19, R9-3 (a)) — LANDED** (its own commit; local, not pushed).
+- **Predicted BEFORE the build, measured — not guessed** (`plan_i_inputs/s5b_shadow.py`: the S5 code's
+  `_finalize_lifecycle_fields` wrapped in a full replay; before it runs, every fib cycle's stream terminal vs its
+  cycle-table end, the same arguments finalize gets): 9 finalize calls (H1 main + the 8 unique subs), 27 fib cycles —
+  **0 with the table end strictly earlier** (the only rows S5b changes); 17 ties (12 stream `new_cycle` == table
+  `next_cycle`, 5 `reversal` both — so the cap must be STRICT: a `<=` renames 12 end reasons); 4 earlier on the
+  stream (3 Option A: H1 (1,0) at 741 vs 902, sub 7 cycle 0 at slice 163 vs 182, cycle 1 at 200 vs 202; 1 the floor
+  clamp: sub 1 cycle 0 at 147 — cycle 1 established at 147, the sub's floor 193 clamps the table); 6 without a stream
+  terminal (the table fills, as before). The shadow replay itself == S5 (27 / 27 CSVs). Prediction: byte-identical.
+- **Code:** `FibTracker._finalize_lifecycle_fields` — per table row with an end: no terminal → the table's; a stream
+  terminal STRICTLY later → replaced by the table's end and reason; else kept (`_set_terminal` stays set-if-absent,
+  R9-3 rejected (b)). The never-established cap (§15.4 candidate 3), the reversal wiring, the clamp and the collapse
+  rule are unchanged (the collapse now judges the capped end). Docstrings: `FibState.end_idx`, finalize, the
+  orchestrator's call comment.
+- **`/compare` vs S5 (`%TEMP%/pi/S5`, `cmp_fig_full.py`): byte-identical — 27 / 27 CSVs md5, 3 / 3 figures (full
+  JSON: 81 / 274 / 135 traces, layouts equal); run.log 9,101 lines == S5's but the timings; fetch gate PASS; 68.1 s
+  wall.** = the prediction.
+- **The real instance** (`f19_detail.py M15 14715 333 20 1`, NZD_USD M15 from 2025-08-05): cycle 0's locked single
+  `life=[22, 38] next_cycle` (08-05 09:15 → 13:15, cycle 1's establishment) — was `[22, 203] new_cycle` (→ 08-07
+  06:30, cycle 2's activation). `f19_search.py`'s flag (end > the next establishment) cannot fire any more (the capped
+  end ≤ the next cycle's clamped start) — not re-run.
+- **Tests 1414 → 1427:** `tests/test_plan_i_s5b_fib_end_capped.py` (13): F19 constructed with and without `P` (cycle 2
+  a `cross_fib_limit` / `cross_failed` single; the stream end 60 → 40 `next_cycle`; the lock untouched), sd ±1; a tie
+  keeps the stream's reason; Option A's earlier end kept; F19 through the reversal terminal (70 → 40); the collapse
+  rule on the capped end (floor 45 → start None, `inactive`); idempotence. No existing test moved.
+- **Mutation (solo, `mutant_runner.py`, full suite per mutant; no review agent — ~10 lines, the window measured):**
+  8 mutants + a no-op control — all 8 KILLED (`<=`; set-if-absent = the old code; the table always wins; `max`; keep
+  the stream's reason; the cap reason only; via `_set_terminal`; the None guard dropped), the control SURVIVED (1425
+  passed).
+- Docs: CROSS_CYCLE_FIB_SPEC (status, §2 "A fib never outlives its cycle", §9); FIB_LIFECYCLE_SPEC (§7, §15.2's row,
+  §15.4 candidate 2 = a CEILING + the window counts, §15.6); ARCHITECTURE (the FibState line); register D.1 item 2.

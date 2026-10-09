@@ -112,8 +112,9 @@ class FibState:
     # `activation_history`'s "ever active" signal (§15.3).
     start_idx: Optional[int] = None
     # Terminal axis (irreversible). None until the cycle ends. Earliest end among
-    # candidates wins (set-if-absent); the cycle pass-through end is one candidate
-    # alongside fib's own terminals (new_cycle / Option A early-end) — §15.4.
+    # candidates wins: fib's own terminals (new_cycle / Option A early-end /
+    # reversal) are set-if-absent during the stream; at finalize the cycle
+    # pass-through end CAPS them (min; PLAN_I S5b, F19) — §15.4.
     end_idx: Optional[int] = None
     end_reason: Optional[str] = None
     # Derived cycle-identity label in {active, inactive, ended, disappeared} (§15.5).
@@ -488,10 +489,13 @@ class FibTracker:
             cycle's `start_idx` up to the structure/parent floor (§15.3). NB the
             clamp is to the STRUCTURE floor, not the full cycle-start, so the §6
             pre-established early start survives.
-          - the cycle pass-through end (`compute_cycle_lifecycle`) is fed into
-            `_set_terminal` as an earliest-wins candidate (§15.4): set-if-absent,
-            so fib's own earlier terminals (new_cycle / Option A / reversal) win, and the table end only fills cycles with no earlier
-            terminal (the open last cycle / the subordinate cap).
+          - the cycle pass-through end (`compute_cycle_lifecycle`) CAPS each
+            cycle's terminal (§15.4; PLAN_I S5b, F19): end = min(the stream
+            terminal, the table end) — fib's own earlier terminals (new_cycle /
+            Option A / reversal) win, a tie keeps the stream's reason, the table
+            end fills cycles with no terminal (the open last cycle / the
+            subordinate cap) and replaces a LATER stream terminal (a fib whose
+            next cycle got no fib) with the table's reason.
           - a fib whose cycle has NO table row (a pre-established cross for a next
             cycle that never establishes) gets `lifecycle_cap` as its candidate
             (§15.4 candidate 3, 2026-09-28); `None` cap = none.
@@ -512,10 +516,17 @@ class FibTracker:
             cycle_life = compute_cycle_lifecycle(
                 events, rev, lifecycle_floor, lifecycle_cap, cap_reason,
             )
-            # Feed the cycle pass-through end as an earliest-wins candidate.
+            # The cycle pass-through end CAPS the fib's end (PLAN_I S5b, R9-3, F19): end = min(the stream terminal,
+            # the table end) — it fills an empty slot, and replaces a stream terminal only when STRICTLY earlier
+            # (with the table's reason). A tie keeps the stream's reason (`new_cycle` / `reversal`). The stream ends
+            # the LAST cycle that has a fib (`_current_cycle`), so without the cap a fib whose next cycle got none
+            # would outlive its own cycle until a later cycle's fib starts (or the reversal).
             for (s, c), (_cstart, cend, creason) in cycle_life.items():
-                if cend is not None:
-                    self._set_terminal(s, c, cend, creason or cap_reason)
+                if cend is None:
+                    continue
+                term = self._terminal.get((s, c))
+                if term is None or int(cend) < term[0]:
+                    self._terminal[(s, c)] = (int(cend), creason or cap_reason)
             # A fib whose cycle has no CTS_ESTABLISHED has no `cycle_life` row: the
             # pre-established cross (FIB_LIFECYCLE_SPEC §6; every structure since PLAN_I S4) pre-created for a next cycle
             # that never establishes. The structure's end still ends it — the reversal via

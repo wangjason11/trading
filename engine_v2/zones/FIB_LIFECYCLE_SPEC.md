@@ -306,8 +306,8 @@ cycle `n`. So:
 mirror case: cycle `n+1`'s own window holds no unfilled imbalance at its CTS_ESTABLISHED `e`, and its fib (a single,
 or a cross the walk creates) first starts at a later CTS_UPDATED `u`. The previous fib ends at `e`, not at `u` (as
 before S3b). "The previous fib" is the structure's LAST cycle with a fib (`_current_cycle`): when a cycle in between
-got none, that earlier fib ends at this later establishment, not at its own cycle's end — the stream terminal is
-set-if-absent and beats the pass-through candidate (§15.4); PLAN_I §9.2 F19, latent, parked for a decision. The
+got none, the stream ends that earlier fib at this later establishment — and since PLAN_I S5b (R9-3, F19) finalize's
+cycle-table end CAPS it back to its own cycle's end (`next_cycle`; §15.4). The
 late fib's own `start_idx` stays `u` (it is drawn from its activation). One helper decides the end for both kinds:
 `FibTracker._prev_cycle_end_at` = min(activation / creation, the cycle's establishment moment); a pre-established
 cross (created before `e`, no establishment yet) keeps Option A's creation idx. 0 on the reference window.
@@ -949,7 +949,7 @@ So the "kept for cheap debug/parity + self-contained `confirmed_idx`" rationale
 |---|---|---|---|
 | `active: bool` | condition | reversible; **current value** (last flip) | no — flips with imbalance fill/reform |
 | `start_idx: Optional[int]` | lifecycle start | **sticky** first-active idx; `None` ⟺ never active | **yes** — set at first activation, never re-stamped |
-| `end_idx: Optional[int]` | terminal | **earliest** end among candidates | **yes** — set-if-absent (earliest wins) |
+| `end_idx: Optional[int]` | terminal | **earliest** end among candidates | **yes** — set-if-absent during the stream (earliest wins); the cycle-table end caps it at finalize (min, PLAN_I S5b) |
 | `end_reason: Optional[str]` | terminal | which candidate won | with `end_idx` |
 | `locked: bool` | computation | CTS_CONFIRMED froze geometry (§ "how locked is computed") | yes (guarded) |
 | `status: str` | derived | `{active, inactive, ended, disappeared}` | derived in `_finalize` |
@@ -1009,7 +1009,13 @@ candidates are:
 1. **Fib's own terminals** — `new_cycle`, the **Option A** `n+1` pre-established
    early-end (§7), `scenario1_revert` (§10; no producer since PLAN_I S4), and the existing `reversal` wiring.
 2. **The cycle pass-through end** from `compute_cycle_lifecycle[(sid,cycle)].end`
-   (part b) — fed in as **one more candidate**, NOT an override.
+   (part b) — **a CEILING since PLAN_I S5b** (R9-3, F19, 2026-10-08): at finalize the end is
+   min(the stream terminal, the table end) — it fills an empty slot, and replaces a stream
+   terminal only when STRICTLY earlier, taking the table's reason; a tie keeps the stream's
+   reason. Before S5b it only filled an empty slot (set-if-absent), so a fib whose next
+   cycle got no fib kept the stream's later end — the next fib's start, or the reversal
+   (`set_reversal_terminals` stamps every cycle of the ended sid) — and outlived its cycle
+   and its POI. Never an override of an EARLIER terminal.
 3. **The subordinate cap for a never-established cycle** (2026-09-28, user: "cap like the
    reversal") — a fib whose `(sid, cycle)` has no `CTS_ESTABLISHED` (the §6 pre-established
    cross pre-created for a next cycle that never establishes) has no `compute_cycle_lifecycle`
@@ -1026,10 +1032,15 @@ candidates are:
 
 Because earliest-wins, fib's own terminals still win when they fire **before** the
 cycle end — so **Option A's early-end and `scenario1_revert` are preserved**. The
-cycle end only takes effect when no earlier fib terminal exists (the common
-reversal / parent-cap case, where it matches KL/POI). This is the precise meaning
-of "end passed through from cycle" (user-confirmed): a candidate in the
-earliest-wins set, never a blind replacement.
+cycle end takes effect when no fib terminal exists (the common reversal /
+parent-cap case, where it matches KL/POI) or when the fib terminal is LATER than
+it (F19, since S5b). This is the precise meaning of "end passed through from cycle"
+(user-confirmed): a candidate in the earliest-wins set, never a blind replacement.
+Reference window (the S5b shadow on the S5 code, `plans/plan_i_inputs/s5b_shadow.py`):
+of 27 fib cycles, 17 tie (12 a stream `new_cycle` == the table's `next_cycle` — the
+reason stays `new_cycle`; 5 `reversal` on both sides), 4 end earlier on the stream (3
+Option A; 1 a next cycle established before the sub's floor, its table start clamped
+up), 6 have no stream terminal, **0 are later** — S5b is byte-identical there.
 
 ### 15.5 `status` derivation (folds `start_idx`)
 
@@ -1080,9 +1091,9 @@ clamp + pass-through, reusing the **same** machinery KL/POI use:
   before, the last `REVERSAL_CANDIDATE`'s scheduled apply, which a watch expiry can
   discard) and the in-tracker
   terminals (new_cycle / Option A / scenario1_revert) are already set when finalize
-  runs; set-if-absent means the table end only fills cycles with no earlier terminal
-  (the open last cycle / the sub cap), which is exactly earliest-wins given the
-  in-tracker terminals are set in idx order.
+  runs; the table end fills cycles with no terminal (the open last cycle / the sub
+  cap) and, since PLAN_I S5b, caps a LATER one (min — F19: the stream ends only the
+  last cycle that has a fib, so its end can lie past the cycle's own end).
 - **Remove the redundant `entity_df_mutation` post-hoc fib cap loop.** Before (b),
   open sub fibs were capped there (its comment: "the fib lifecycle track is not yet
   on the helper"). With the sub already passing `lifecycle_cap` into

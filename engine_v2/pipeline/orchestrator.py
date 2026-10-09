@@ -361,7 +361,7 @@ def _run_downstream_pipeline(
     # Passing events + floor/cap (the same ints KL/POI get) puts fib on the
     # shared structure_lifecycle helper (FIB_LIFECYCLE_SPEC §15.6, part b):
     # start_idx clamps to the structure/parent floor and the cycle pass-through
-    # end is fed as an earliest-wins terminal candidate. Runs for the H1 main
+    # end CAPS the terminal (min; PLAN_I S5b, F19). Runs for the H1 main
     # tracker (floor/cap None) and each sub (slice-local floor/cap).
     fib_tracker._finalize_lifecycle_fields(
         events=events,
