@@ -347,12 +347,17 @@ threshold until PLAN_I S4 retired the revert; the line is still drawn):
 
 IC identification, per fib record (BOS anchor `b`, CTS anchor `c`, direction `sd`):
 1. **IC Candidates** — the candles meeting the base conditions (§3.1), each with the IC reference condition's outcome
-   (§3.2 — computed and exported since PLAN_K landing A, 2026-10-09; the pick ignores it until landing B)
+   (§3.2 — computed and exported since PLAN_K landing A, APPLIED since landing B, 2026-10-09: a candidate failing
+   it is no IC candidate). The user's IC flow (PLAN_H §6 RX1-F): find IC candidates — every IC condition (opposite
+   direction, the reference, the unfilled imbalance after, the touch) applied TOGETHER, inside the fib's BOS → CTS
+   window (the scope, not a condition) — then the IP among them, then fallbacks when either step fails; the
+   section's step structure below waits for the user's write-up of the whole IC & POI process
 2. **The touch** — the candidate touches the fib's 61.8–80 zone (inclusive: `h >= zone_lo and l <= zone_hi`)
 3. **The institutional pattern** (§3.4) — the ONE IC = the best pattern among the touching candidates (rank → shape →
    TB1 → TB2)
 
-No candidate / no pattern → no IC → **no POI** for that record (PLAN_H D7): MS's sd-proximity and the zone-proximity
+No IC candidate / no pattern → no IC → **no POI** for that record (PLAN_H D7; the `IP: none` reasons `no_ic_candidate`
+/ `no_pattern`, §3.5 — RX1-N): MS's sd-proximity and the zone-proximity
 scan then read the BOS inner only for that cycle.
 
 ### 3.1 IC Candidate Base Conditions (ALL required)
@@ -370,14 +375,14 @@ scan then read the BOS inner only for that cycle.
 
 If Fib is deactivated, there are no bounds → no candidates.
 
-### 3.2 The IC reference condition (PLAN_K — computed + exported since landing A, 2026-10-09; applied from landing B)
+### 3.2 The IC reference condition (PLAN_K — computed + exported since landing A, applied since landing B, 2026-10-09)
 
 > The user's rule (2026-10-09; PLAN_H §8.9 "RX1" + §6 RX1-*, the write-up verbatim
 > `../plans/plan_h_inputs/ic_reference_conditions_spec.md`), built by `../plans/PLAN_K_ic_reference_condition.md`. It
 > replaces the per-scenario conditions designed in Week 7 and never implemented (Appendix A). **Landing A** computes it
 > for every §3.1 candidate and exports it (`IPCandidate.ic_ref_reason`, the CSV column §3.5, the fib meta + hover) with
-> the switch `poi_zones._IC_REFERENCE_FILTER = False`: the pick is UNCHANGED. **Landing B** applies it in both
-> consumers and removes the switch. Any IC filter stays outside the institutional pattern and runs before it (PLAN_H
+> the switch `poi_zones._IC_REFERENCE_FILTER = False`: the pick is UNCHANGED. **Landing B** (2026-10-09) applies it
+> in both consumers (`poi_zones.is_ic_candidate`: the touch AND the reference; the switch removed). Any IC filter stays outside the institutional pattern and runs before it (PLAN_H
 > D4).
 
 ONE bundled condition (RX1-B) per §3.1 candidate `i` of a fib record — structure `sid`, direction `sd`, target cycle
@@ -486,7 +491,9 @@ sub projection); the picked rows ARE the drawn POIs since landing B.
 - **Export:** `debug/export_zones.export_ip_candidates` → `*_ip_candidates.csv` (H1) and `*_M15_{lens}_ip_candidates.csv`
   (one copy per lens). One row per §3.1 candidate of each record — **with the agreed direction**, so a volume-only doji
   is listed and a split candle is not — including the candidates that MISS the touch (`touches_zone` False: classified
-  for the record, never picked), + one `IP: none` row (`ic_idx` empty, `reason` `no_pattern` / `no_candidates`) per
+  for the record, never picked), + one `IP: none` row (`ic_idx` empty, `reason` `no_pattern` — IC candidates, none
+  patterned — / `no_ic_candidate` — no candle passes every IC condition, never attributed to one condition; was
+  `no_candidates` for "no §3.1 candidate" until PLAN_K landing B, PLAN_H §6 RX1-N) per
   record without a pick. Columns: the attribution (`structure_path_id`, `sub_id`, `parent_sid`, `parent_cycle_id`),
   the record (`structure_id`, `cycle_id`, `bos_anchor_idx`, `cts_anchor_idx`, `sd`), the candidate (`ic_idx`,
   `candle_type`, `agreed_dir`, `touches_zone`, `ic_ref_reason` — §3.2's outcome: empty = passes or no reference,
@@ -737,7 +744,7 @@ cfg = {
 Fib active for cycle
     ↓
 Find IC candidates (base conditions with the agreed direction, §3.1) + each one's IC reference outcome (§3.2 —
-reported since PLAN_K landing A, applied from landing B)
+reported since PLAN_K landing A, applied since landing B)
     ↓
 Keep those touching the 61.8-80% zone; pick the best institutional pattern (§3.4) — none -> no POI
     ↓
@@ -780,7 +787,7 @@ Charting renders zones + Fib lines + imbalance highlighting
 | IC candidate identification | Done |
 | IC variant selection (V30/V60/V90) | Done; UNWIRED since PLAN_H landing B (kept, X1) |
 | The institutional-pattern IC (one POI per fib record) | Done (PLAN_H landing B, 2026-10-06) |
-| The IC reference condition (§3.2) | Computed + exported (PLAN_K landing A, 2026-10-09); applied from landing B |
+| The IC reference condition (§3.2) | Done — computed + exported (PLAN_K landing A), applied (landing B), 2026-10-09 |
 | POI zone creation | Done |
 | POI zone lifecycle management | Done |
 | POI zone charting (yellow rectangles) | Done |

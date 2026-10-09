@@ -441,6 +441,10 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 window, whose counter-lens structure events hold no reversal) plus the fib hover `customdata`. Against such a save run
 `engine_v2/plans/plan_h_inputs/cmp_k_landing_a.py BASE` (format deltas only, exit 1 on anything else) instead of
 reading those files' diffs as engine changes.
+**PLAN_K landing B (2026-10-09) — a BEHAVIOUR change, not a format one:** the IC reference condition filters the
+pick, and the `IP: none` row's `reason` is `no_pattern` (IC candidates, none patterned) or `no_ic_candidate` (no
+candle passes every IC condition; replaces `no_candidates`). Against S_K_A: `engine_v2/plans/plan_h_inputs/
+cmp_k_landing_b.py BASE` (PLAN_K §11.3's V + the sub 1 cyc 2 relabel, exit 1 on anything else).
 | `*_wvmi.csv` |
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs

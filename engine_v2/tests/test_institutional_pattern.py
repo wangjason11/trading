@@ -632,7 +632,7 @@ def test_records_gate_none_rows_and_tiebreak_on_the_pick():
     assert [(r.cycle_id, r.ic_idx, r.touches_zone, r.picked, r.reason) for r in recs] == [
         (0, 7, True, False, None), (0, 9, True, True, None), (0, 11, True, False, None),
         (1, 7, False, False, None), (1, 9, False, False, None), (1, 11, False, False, None),   # misses: never picked
-        (1, None, None, False, "no_pattern")]
+        (1, None, None, False, "no_ic_candidate")]          # nothing touches: no IC candidate (PLAN_H RX1-N)
     pick = recs[1]
     assert (pick.ip_tiebreak, pick.ip_tb_runner_up_ic_idx, pick.ip_tied_count, pick.ip_tb_imbalance_first_c2_idx) \
         == ("TB2", 11, 3, 10)
@@ -656,7 +656,7 @@ def test_export_header_none_row_and_legs(tmp_path):
     got = pd.read_csv(out)
     assert len(got) == 7 and list(got.cycle_id) == [0, 0, 0, 1, 1, 1, 1]
     assert got.ic_idx.isna().tolist() == [False] * 6 + [True]                        # the IP: none row last
-    assert got.loc[6, "reason"] == "no_pattern" and not got.loc[3:5, "touches_zone"].any()
+    assert got.loc[6, "reason"] == "no_ic_candidate" and not got.loc[3:5, "touches_zone"].any()
     assert got.loc[1, "legs"] == "8..8|9..9|10..10" and got.loc[1, "ip_rank"] == "1A.i"
     assert bool(got.loc[1, "picked"]) and got.loc[1, "ip_tiebreak"] == "TB2"
 
@@ -741,9 +741,9 @@ def test_downstream_pipeline_returns_the_selection_of_its_own_fibs():
     assert {r.meta["structure_path_id"] for r in out["ip_candidates"]} == {"H1.main"}
     picked = [r for r in out["ip_candidates"] if r.picked]
     assert picked, "the fixture has a pick"
-    # cycles 1 / 3: no pattern; cycle 0 (main's single since PLAN_I S4, Q6): no candidates — no POI for any
+    # cycles 1 / 3: IC candidates, no pattern; cycle 0 (main's single since PLAN_I S4, Q6): no IC candidate — no POI
     assert [(r.cycle_id, r.reason) for r in out["ip_candidates"] if r.ic_idx is None] == [
-        (0, "no_candidates"), (1, "no_pattern"), (3, "no_pattern")]
+        (0, "no_ic_candidate"), (1, "no_pattern"), (3, "no_pattern")]
     drawn = [(z.meta["structure_id"], z.meta["cycle_id"], z.ic_idx, z.meta["ip_rank"], z.meta["ip_leg_candle_counts"],
               z.meta["pattern_anchor_idx"], z.meta["opp_leg_first_idx"], z.meta["pattern_end_idx"],
               z.meta["pattern_confirmed_idx"], z.meta["ip_tiebreak"]) for z in out["poi_zones"]]
@@ -848,13 +848,14 @@ def test_tb2_count_is_the_tb1_survivors():
     assert sel.pick.ic_idx == 14 and sel.tiebreak == ("TB2", 8, 2, 15)
 
 
-# N20 — a gated record with no §3.1 candidate gets the `no_candidates` none row
+# N20 — a gated record with no §3.1 candidate gets the `no_ic_candidate` none row (was `no_candidates` until PLAN_K
+# landing B — PLAN_H §6 RX1-N: one reason for "no candle passes every IC condition")
 def test_no_candidates_row():
     df = _tb2_frame()
     df.attrs["imbalances"] = []
     recs = derive_ip_candidates(df, [_est(0, 0)], _Tracker([_fib_over(df, 6, 12, 0.5, 0.7)]), POIConfig(),
                                 structure_path_id="H1.main")
-    assert [(r.ic_idx, r.picked, r.reason) for r in recs] == [(None, False, "no_candidates")]
+    assert [(r.ic_idx, r.picked, r.reason) for r in recs] == [(None, False, "no_ic_candidate")]
 
 
 # N22 — every gated record is its own selection (two records of one cycle → both)

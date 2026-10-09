@@ -7,7 +7,9 @@ mutation run, the docs; source commit `02e9381`); **S_K_A SAVED** `artifacts/com
 commit `dc116b0`) — B's baseline; landing A's REVIEW 2026-10-09 (§11.2: 2 lenses, 651,669 tokens; LA1 — the final
 reference read on a frame cut at the cap, K6's rejected reading — FIXED, 9 test gaps pinned; the fix-up's `/compare`
 vs S_K_A byte-identical); the variant replay V MEASURED (§11.3: one pick moves, sub 0 cyc 3 1604 → 1447; sub 3
-cyc 2's TB1 tie dissolves; no MS cascade); next: the user's chart review of V, then landing B.** The rule is the user's and is DECIDED: canonical text `PLAN_H_institutional_pattern_poi.md` §8.9
+cyc 2's TB1 tie dissolves; no MS cascade); **landing B BUILT 2026-10-09** (§11.4: the filter ON + the `IP: none` reason
+`no_ic_candidate`, the user's RX1-F / RX1-N; `/compare` vs S_K_A == V + sub 1 cyc 2's relabel; 8 / 8 mutants; suite
+1527; chart-reviewed + committed 2026-10-09 — the user: "looks good go ahead") — next: the save only on the user's word.** The rule is the user's and is DECIDED: canonical text `PLAN_H_institutional_pattern_poi.md` §8.9
 "RX1" (the rule as decided) + §6 RX1-B, RX1-1 … RX1-4, RX1-T, RX1-W1 … W3, RX1-C1, RX1-E; the user's write-up verbatim
 `plan_h_inputs/ic_reference_conditions_spec.md`. This file is HOW it is built: the code audit, the design, two
 landings with exact predictions, the tests, the cost. Baseline: **S_S6**
@@ -462,7 +464,7 @@ before filing (✓).
 | B6 | MINOR | The R6-2 tripwire's comparison of the break fields unpinned (N27) | pin: a mismatched stored break anchor → 1 re-derived |
 | B7 | NIT | `ic_ref_reason` on a candidate that misses the touch (the CSV's rows) unpinned (N10) | pin |
 | B8 | NIT | The hover's ", cycle a−1" suffix pinned only for `prev_cycle_cts` (N17) | pin: a structure reference shows no cycle |
-| B9 | NIT | Landing-B readiness: when the filter cuts EVERY touching pattern the none row says `no_pattern` (`poi_zones.py:973`) and the hover `IP: none (no_pattern)` — the cause misreported; 0 such records in V | a landing-B question for the user (a distinct reason or not) |
+| B9 | NIT | Landing-B readiness: when the filter cuts EVERY touching pattern the none row says `no_pattern` (`poi_zones.py:973`) and the hover `IP: none (no_pattern)` — the cause misreported; 0 such records in V | **the user 2026-10-09 (PLAN_H §6 RX1-F / RX1-N): my framing was wrong** — the four IC conditions (opposite direction, the reference, the unfilled imbalance after, the touch) filter TOGETHER, so "no IC candidates" is never one condition's doing; the new reason is **`no_ic_candidate`** (no candle passes all four) vs `no_pattern` (IC candidates, none patterned). Measured: confluence sub 1 cyc 2 (3 candles pass 1 + 3, none touches) is mislabelled `no_pattern` TODAY (S_K_A and V alike) → `no_ic_candidate`; follow-ups asked (`no_candidates`, the landing order, the terminology) |
 | B10 | NIT | The watch scans anchors to the frame end even when `known_at` is set (an anchor ≥ `known_at` can never count) | not adopted: equivalent, no measured cost (V replay 45 s) |
 | B11 | NIT | `derive_ip_candidates(..., ip_records=None)` defaults `lifecycle_cap=None` — a future fallback caller could disagree with the stamp | not adopted: main's cap IS None (a None check cannot tell), a required keyword only churns ~10 test calls; the orchestrator's one path is pinned (A3 / O2 / O3) |
 
@@ -500,7 +502,46 @@ ignoring the moment): **13 / 13 KILLED** (full suite each, 13 in parallel).
     2 POI hover traces + its fib hover `IP 1A.i · IC 1604` → `IP 1A.iv · IC 1447`; sub 3 cyc 2's 2 POI hover traces
     lose the TB1 line) and sub 0 cyc 3's 3 POI shapes (fill, outline, activation line) re-priced; counter 135 / 120 —
     sub 3 cyc 2's 2 POI hover traces lose the TB1 line, every shape equal.
-- **Landing B's prediction = V** (`/compare` vs S_K_A must reproduce items 1–3 exactly, nothing else).
+- **Re-run on the review fix-up `8cad324`** (`%TEMP%\kV2`, 77 s wall, FETCH GATE PASS): 27 / 27 CSVs md5-equal to
+  the first V and the 3 charts identical (as constructed: the fix-up moves no exported reference on the window, and
+  MS's reads never passed a frame cut).
+- **Landing B's prediction = V** (`/compare` vs S_K_A must reproduce items 1–3 exactly, nothing else) — the keyed
+  check `plan_h_inputs/cmp_k_landing_b.py` (written from V; OK on V, and S_K_A vs itself fails it).
+
+### 11.4 Landing B — the switch + `no_ic_candidate` (2026-10-09; chart-reviewed — the user: "looks good go ahead" — and committed)
+
+- **The user's framing (PLAN_H §6 RX1-F / RX1-N, answering §11.2 B9):** the IC conditions — opposite direction, the
+  reference, the unfilled imbalance after, the touch — filter TOGETHER ("find IC candidates"), then the IP among
+  them, then fallbacks; "no IC candidates" is never one condition's doing. The new `IP: none` reason
+  `no_ic_candidate` (no candle passes every IC condition; replaces `no_candidates`) vs `no_pattern` (IC candidates,
+  none patterned). Follow-ups: the relabel lands IN B ("Both in landing B"); the docs' step structure and the code's
+  "candidates" names WAIT for the user's write-up of the whole IC & POI process (only the label + the "applied"
+  wording change now); the fib's BOS → CTS window = the scope, not a condition.
+- **Code:** `poi_zones._IC_REFERENCE_FILTER` removed; `poi_zones.is_ic_candidate(touches_zone, ic_ref_reason)` = the
+  ONE predicate of the pick (`select_ip_ic`'s `eligible`, both consumers) and of the none reason
+  (`derive_ip_candidates`: `no_pattern` iff any classified candidate is an IC candidate, else `no_ic_candidate`).
+- **A cascade the window cannot show, found by the suite:** `test_plan_j_j2_new_cycle_break`'s 302 / 167 fixture
+  (H1 buy) — cycle 1's fib references CTS_0's confirmed price 0.6122; MS's read at 27 / 28 used to pick an IC with
+  high 0.6166 (past it) and confirm cycle 1 by proximity at 30, which set up the J2 void breakout those tests pin.
+  With the filter that IC is no IC candidate: the read finds none, cycle 1 confirms at 40 (`continuous`), no void.
+  The J2 tests now run that fixture with the reference neutralized (`neutral_ic_reference=True` — they pin J2, not
+  the IC conditions); the cascade itself is B's "MS's read is filtered too" pin.
+- **Tests:** `tests/test_plan_k_landing_b.py` (12): the predicate's truth table; the TB2 frame (ICs 7 / 9 / 11, highs
+  0.60093 / 0.60129 / 0.60165) — a reference at 0.60130 → TB2 over the survivors {7, 9} (runner-up 7, 2 tied, was
+  11 / 3), 0.60100 → the pick moves 9 → 7, a break at 9 → 7 (`ic_not_before_break`), 0.60090 → no POI,
+  `no_ic_candidate`; the M1 frame — 1.128 → `no_pattern` (36 is an IC candidate without a pattern), 1.12 →
+  `no_ic_candidate`; MS's read (the real 302 / 167 run, production vs neutralized). Migrated: 5 reason pins
+  (`no_candidates` → `no_ic_candidate`; 2 records whose zone nothing touches were pinned `no_pattern` — exactly the
+  mislabel RX1-N removes), landing A's switch test → `test_the_reason_is_reported_and_a_cut_candidate_is_never_picked`.
+  Suite **1527**. Mutants `plan_h_inputs/mutants_k_landing_b.py`: **8 / 8 KILLED** (the predicate ×2, the pick's call
+  site, the patterns' eligibility, the reason ×4).
+- **Replay + `/compare` vs S_K_A == V + the relabel** (`cmp_k_landing_b.py`, exit 0): 46 s wall; FETCH GATE PASS; the
+  grep unchanged (2 WARNINGs, 4 UNRESOLVED); 23 / 27 CSVs md5-equal; the 3 V items exactly + confluence sub 1 cyc 2's
+  none row `no_pattern` → `no_ic_candidate`. Against V itself: only that IP row and sub 1 cyc 2's fib hover (`IP:
+  none (no_pattern)` → `IP: none (no_ic_candidate)`) differ.
+- **Docs:** POI_ZONES_SPEC §3 (the applied wording, a pointer to RX1-F, the reasons in §3.5, the data flow, status),
+  ARCHITECTURE condition #4 (applied), GLOSSARY "IC reference", the `/compare` skill (B's behaviour change + its
+  check), register §D.2.
 
 ## 10. Change log
 
@@ -512,3 +553,6 @@ ignoring the moment): **13 / 13 KILLED** (full suite each, 13 in parallel).
 - 2026-10-09 — landing A reviewed (§11.2, 651,669 tokens): the fix-up commit (LA1 fixed — the final reference = as of
   the lifecycle cap on the whole frame; LA2–LA6; 9 pins; 13 / 13 mutants KILLED; suite 1515; replay 93 s wall, FETCH
   GATE PASS, `/compare` vs S_K_A 27 / 27 CSVs + the 3 charts identical, == the prediction); V measured (§11.3).
+- 2026-10-09 — landing B (§11.4): the filter ON + `no_ic_candidate` (the user's PLAN_H §6 RX1-F / RX1-N, answering
+  B9); `/compare` vs S_K_A == V + the sub 1 cyc 2 relabel; suite 1527; 8 / 8 mutants; chart-reviewed ("looks good go
+  ahead") and committed. Not saved.

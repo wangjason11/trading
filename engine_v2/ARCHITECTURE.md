@@ -311,9 +311,9 @@ reference condition (`zones/POI_ZONES_SPEC.md` §3.2; the user's 2026-10-09
 re-specification, PLAN_H RX1, of the per-scenario idx/price constraints designed
 in Week 7 and never implemented, now that spec's Appendix A) — is computed and
 exported since PLAN_K landing A (2026-10-09; `IPCandidate.ic_ref_reason`, the
-`*_ip_candidates.csv` column, the fib meta `ic_ref_*` + hover) but NOT applied
-yet (`poi_zones._IC_REFERENCE_FILTER = False`; landing B applies it in both
-consumers). It is gated at IC selection (`select_ip_ic`, per §3.1 candidate,
+`*_ip_candidates.csv` column, the fib meta `ic_ref_*` + hover) and APPLIED
+since landing B (2026-10-09) in both consumers: an IC candidate passes every
+IC condition together (`poi_zones.is_ic_candidate`, PLAN_H §6 RX1-F). It is gated at IC selection (`select_ip_ic`, per §3.1 candidate,
 before the touch and the pattern), not re-checked per candle.
 
 **Activation floor (both POI and KL).** A zone's first-active is clamped to

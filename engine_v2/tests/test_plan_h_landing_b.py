@@ -340,7 +340,7 @@ def test_a_record_without_a_pattern_draws_no_poi():
     assert [(z.meta["structure_id"], z.meta["cycle_id"]) for z in out["poi_zones"]] == [(0, 2)]
     none_rows = [(r.cycle_id, r.reason) for r in out["ip_candidates"] if r.ic_idx is None]
     # + cycle 0: main's single since PLAN_I S4 (Q6), no candidates
-    assert none_rows == [(0, "no_candidates"), (1, "no_pattern"), (3, "no_pattern")]
+    assert none_rows == [(0, "no_ic_candidate"), (1, "no_pattern"), (3, "no_pattern")]
 
 
 def test_ip_candidates_read_the_records_they_are_handed():

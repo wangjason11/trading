@@ -525,22 +525,19 @@ def test_a_pipeline_record_carries_its_reference_before_the_limit_keys():
     assert seen
 
 
-def test_landing_a_reports_the_reason_and_the_pick_ignores_it(monkeypatch):
-    """`test_plan_h_landing_b`'s M1 frame: candidates 32 (2A.i, the pick; high 1.13) and 36 (no pattern; high
-    1.125). A reference at 1.128 cuts 32 only — reported, the pick unchanged while the switch is off; ON (landing V /
-    B) 32 is not eligible and 36 has no pattern -> no pick, 32 still classified for the CSV."""
+def test_the_reason_is_reported_and_a_cut_candidate_is_never_picked():
+    """`test_plan_h_landing_b`'s M1 frame: candidates 32 (2A.i, the pick without a reference; high 1.13) and 36 (no
+    pattern; high 1.125). A reference at 1.128 cuts 32 only: reported, and since landing B (the filter on) 32 is no
+    IC candidate and 36 has no pattern -> no pick; 32 is still classified for the CSV."""
     from engine_v2.tests.test_plan_h_landing_b import _fib, _m1_frame
     df = _m1_frame()
     fs = poi_zones.FibState(structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.0, cts_idx=40,
                             cts_price=1.35, active=True, locked=False, fib=_fib(1.35, 1.0))
     ref = ICReference(1.128, "prev_cycle_cts")
-    assert poi_zones._IC_REFERENCE_FILTER is False
     sel = poi_zones.select_ip_ic(df, fs, POIConfig(), ic_reference=ref, classify_misses=True)
     assert {c.ip.ic_idx: c.ic_ref_reason for c in sel.candidates} == {32: PAST, 36: None}
-    assert sel.pick.ic_idx == 32
-    monkeypatch.setattr(poi_zones, "_IC_REFERENCE_FILTER", True)
-    on = poi_zones.select_ip_ic(df, fs, POIConfig(), ic_reference=ref, classify_misses=True)
-    assert on.pick is None and {c.ip.ic_idx: c.ic_ref_reason for c in on.candidates} == {32: PAST, 36: None}
+    assert sel.pick is None and next(c for c in sel.candidates if c.ip.ic_idx == 32).ip.rank is not None
+    assert poi_zones.select_ip_ic(df, fs, POIConfig(), ic_reference=ref).pick is None
     assert poi_zones.select_ip_ic(df, fs, POIConfig(), ic_reference=ICReference.NONE).pick.ic_idx == 32
 
 

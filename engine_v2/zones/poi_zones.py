@@ -181,13 +181,18 @@ def passes_price_constraint(
         return candle_low > reference_price
 
 
-# The IC reference condition (PLAN_K; PLAN_H §8.9 RX1) — landing A computes and EXPORTS it (`IPCandidate.
-# ic_ref_reason`, the CSV column) with the filter OFF: the pick ignores it. Landing B turns it on (and removes this
-# switch); the variant replay V between them = A with this True (PLAN_K §4).
-_IC_REFERENCE_FILTER = False
-
+# The IC reference condition (PLAN_K; PLAN_H §8.9 RX1) — one of the IC conditions since landing B (computed and
+# exported since landing A): a candidate failing it is not an IC candidate (`select_ip_ic`).
 IC_REF_PAST_REFERENCE = "ic_past_reference"
 IC_REF_NOT_BEFORE_BREAK = "ic_not_before_break"
+
+
+def is_ic_candidate(touches_zone: bool, ic_ref_reason: Optional[str]) -> bool:
+    """A §3.1 candidate (`find_ic_candidates`: inside the fib, the agreed opposite direction, an unfilled imbalance
+    after) is an IC CANDIDATE iff it also touches the 61.8–80 zone and passes the IC reference condition — every IC
+    condition, applied TOGETHER (PLAN_H §6 RX1-F); the IP is looked for among IC candidates only. The ONE predicate
+    of the pick (`select_ip_ic`) and of the `IP: none` reason (`derive_ip_candidates`)."""
+    return bool(touches_zone) and ic_ref_reason is None
 
 
 def ic_reference_reason(df: pd.DataFrame, candle_idx: int, ref: ICReference, struct_direction: int) -> Optional[str]:
@@ -444,8 +449,10 @@ def select_ip_ic(
     miss the touch — never picked.
 
     `ic_reference` (REQUIRED — PLAN_K A1; built by `FibTracker.ic_reference` as of the reader's moment): the IC
-    reference condition, applied per §3.1 candidate BEFORE the touch and the pattern (RX1-E); each candidate carries
-    its outcome (`IPCandidate.ic_ref_reason`). While `_IC_REFERENCE_FILTER` is off (landing A) it is reported only.
+    reference condition, evaluated per §3.1 candidate at IC selection (RX1-E); each candidate carries its outcome
+    (`IPCandidate.ic_ref_reason`). Since PLAN_K landing B it filters: an IC candidate passes ALL the IC conditions
+    together — the §3.1 ones, the touch and the reference (PLAN_H §6 RX1-F) — and only IC candidates are picked
+    (TB1 / TB2 over the surviving tied ones); `classify_misses` still classifies the rest for the CSV.
     """
     timeframe = df.attrs["timeframe"]
     params = candle_params_for_timeframe(timeframe)
@@ -461,7 +468,7 @@ def select_ip_ic(
         i: ic_touches_zone(float(df.loc[i, "h"]), float(df.loc[i, "l"]), zone_lo, zone_hi) for i in candidates
     }
     ref_reasons = {i: ic_reference_reason(df, i, ic_reference, sd) for i in candidates}
-    eligible = {i: touches[i] and (ref_reasons[i] is None or not _IC_REFERENCE_FILTER) for i in candidates}
+    eligible = {i: is_ic_candidate(touches[i], ref_reasons[i]) for i in candidates}
     to_classify = [i for i in candidates if classify_misses or eligible[i]]
     results = classify_ics(
         df, to_classify, sd,
@@ -748,7 +755,7 @@ def derive_poi_zones(
         # (Condition 4 — the IC reference condition of POI_ZONES_SPEC §3.2,
         # PLAN_K — is evaluated at IC SELECTION only (`select_ip_ic`), never in
         # this sweep (PLAN_H RX1-E): computed + exported since PLAN_K landing A,
-        # the pick filtered by it from landing B.)
+        # the pick filtered by it since landing B.)
         # End-state (`end_idx`) takes precedence: once ended, `status` is
         # "ended" regardless of activation conditions.
         cts_events_for_fib = cts_events_by_key.get((int(sid), int(cycle_id)), [])
@@ -932,9 +939,11 @@ def derive_ip_candidates(
 ) -> List[IPCandidateRecord]:
     """The institutional-pattern selection of every POI record (`select_ip_records`
     — the records and selections `derive_poi_zones` draws from) as debug records
-    (PLAN_H §8.3). One record per §3.1 candidate, the ones missing the touch
-    included (`select_ip_ic(..., classify_misses=True)`), + one `IP: none` record
-    per fib record without a pick. `ip_records` None = selected here.
+    (PLAN_H §8.3). One record per §3.1 candidate, the ones failing the touch or
+    the IC reference included (`select_ip_ic(..., classify_misses=True)`), + one
+    `IP: none` record per fib record without a pick: `no_pattern` (IC candidates,
+    none patterned) or `no_ic_candidate` (no candle passes every IC condition —
+    `is_ic_candidate`; PLAN_H §6 RX1-N). `ip_records` None = selected here.
     """
     if ip_records is None:
         ip_records = select_ip_records(df, structure_events, fib_tracker, config, lifecycle_cap=lifecycle_cap)
@@ -973,7 +982,10 @@ def derive_ip_candidates(
             out.append(IPCandidateRecord(
                 *base,
                 ic_idx=None, candle_type=None, agreed_dir=None, touches_zone=None, ip_rank=None,
-                reason="no_pattern" if sel.candidates else "no_candidates",
+                # PLAN_H §6 RX1-N: IC candidates but none patterned vs no candle passing every IC condition (never
+                # attributed to one condition — they filter together, RX1-F)
+                reason=("no_pattern" if any(is_ic_candidate(c.touches_zone, c.ic_ref_reason) for c in sel.candidates)
+                        else "no_ic_candidate"),
                 pattern_anchor_idx=None, opp_leg_first_idx=None, pattern_end_idx=None,
                 pattern_confirmed_idx=None, ip_leg_candle_counts=None, picked=False,
                 meta={"structure_path_id": structure_path_id},

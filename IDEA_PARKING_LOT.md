@@ -185,7 +185,10 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
   Pinned: `test_lifecycle_sweep_unit.py::test_a_replacer_that_never_starts_leaves_ended_by_empty_and_warns`. DECIDE.
 - **Should subs get the DERIVED CTS KL zone as their probe reference?** (today every sub reference zone is ad-hoc).
   Unscheduled follow-up. DECIDE. Detail: PART4 §17.12, GOTCHAS (the `kl_zones=[]` pool-path note).
-- **No-pattern cycles — a fallback POI** (after D.1 item 1; today: no POI, PLAN_H D7): (a) search the lower TF for the
+- **No-pattern cycles — a fallback POI** (after D.1 item 1; today: no POI, PLAN_H D7). The user 2026-10-09 (PLAN_H §6
+  RX1-F): the IC flow is "Find IC candidates > Find IP amongst IC candidates > Additional fallbacks when EITHER
+  previous step fails" — so a fallback covers `no_ic_candidate` records as well as `no_pattern` ones (RX1-N); the
+  user will give "more detailed thoughts around how the holistic IC & POI process works". Candidates: (a) search the lower TF for the
   same institutional pattern (the user's spec: "in future iterations we will build an additional process where we
   would go into a lower TF"; why the leg cap is 3 on H1 / M15 and likely 2 on M5; PLAN_H H2); (b) the kept V30 / V60 /
   V90 selection (PLAN_H X1: "There is still a chance that I use those as fallbacks … we might still delete in the
@@ -201,8 +204,10 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
   `ic_ref_reason`, the fib meta `ic_ref_*` + hover), the pick unchanged (`poi_zones._IC_REFERENCE_FILTER = False`);
   POI_ZONES_SPEC §3.2 rewritten (the old tables → its Appendix A); saved S_K_A `20261009_112137_02e9381`. Landing
   review 2026-10-09 (PLAN_K §11.2, 651,669 tokens): LA1 FIXED (the final reference = as of the lifecycle cap, the
-  watch on the whole frame), 9 test gaps pinned; the variant replay V measured (PLAN_K §11.3). Next: landing B (the
-  switch). OPEN (latent, 0 on the window; PLAN_K §11.2 B5): can MS confirm a BOS on a reversal's own apply candle?
+  watch on the whole frame), 9 test gaps pinned; the variant replay V measured (PLAN_K §11.3). **Landing B BUILT
+  2026-10-09** (PLAN_K §11.4: applied in both consumers + the `IP: none` reason `no_ic_candidate`, the user's PLAN_H
+  §6 RX1-F / RX1-N; `/compare` vs S_K_A == V + the sub 1 cyc 2 relabel) — chart-reviewed + committed 2026-10-09
+  (not saved). OPEN (latent, 0 on the window; PLAN_K §11.2 B5): can MS confirm a BOS on a reversal's own apply candle?
   Both reversal builders take the most recent BOS_CONFIRMED with moment ≤ the reversal (inclusive, pinned) — such a
   BOS's threshold would not be `P`, so its anchor would not be "the anchor behind `P`". DECIDE only if reachable.
 - **The agreed direction for wave candles + WVMI** (PLAN_H Q-W) — item 1 gives the IP legs the *agreed direction*

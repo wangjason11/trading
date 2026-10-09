@@ -16,6 +16,11 @@ Real MS runs on synthetic WAVES candles (H1, sd +1; `random_tail_search.py wrows
 - 410 / 230: cycle 1 CONFIRMED by proximity at 24 (CTS 23, 0.62592); a `continuous` anchored at 24 — picked before
   candle 24's own step confirmed cycle 1, with no range active — applied at 28 and established cycle 2 there. VOID; the scan finds a `one_maru_continuous` anchored at 25 that applies at 26 — EARLIER
   than the void winner: today's winner pre-empted it.
+
+302 / 167's J2 tests run with the IC REFERENCE NEUTRALIZED (`neutral_ic_reference=True`, PLAN_K landing B): its cycle-1
+proximity confirmation at 30 rides on MS's POI read picking an IC whose high 0.6166 lies past CTS_0's confirmed price
+0.6122 — since landing B that IC fails the IC reference condition, cycle 1 is not confirmed at 30 and the void never
+forms (that cascade is pinned in `test_plan_k_landing_b.py`). These tests pin J2, not the IC conditions.
 """
 from __future__ import annotations
 
@@ -24,6 +29,7 @@ import copy
 import dataclasses
 import io
 import sys
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -33,6 +39,8 @@ from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
 from engine_v2.structure.structure_engine import _make_market_structure, _pip_size_from_pair
 from engine_v2.tests._cross_fib_limits import NO_P, main_limits
 from engine_v2.tests.test_unified_probe import _make_multicycle_data, _prepare_df
+from engine_v2.zones.cross_cycle_fib import ICReference
+from engine_v2.zones.fib_tracker import FibTracker
 
 _ROWS_302_167 = [
     (0.6, 0.6022, 0.5998, 0.602), (0.602, 0.6042, 0.6018, 0.604), (0.604, 0.6062, 0.6038, 0.606),
@@ -93,14 +101,20 @@ _ROWS_410_230 = [
 ]
 
 
-def _run(rows, sd, tf="H1", hook=None):
+def _no_ic_reference(self, fib_state, df, *, evaluated_at):
+    return ICReference.NONE
+
+
+def _run(rows, sd, tf="H1", hook=None, *, neutral_ic_reference=False):
     df = _prepare_df([dict(o=o, h=h, l=l, c=c) for o, h, l, c in rows])
     ms = _make_market_structure(df, cross_fib_limit=NO_P, struct_direction=sd, start_idx=0, structure_id=0,
                                 timeframe=tf, pip_size=_pip_size_from_pair(df))
     if hook is not None:
         hook(ms)
     out = io.StringIO()
-    with contextlib.redirect_stdout(out):
+    neutral = (mock.patch.object(FibTracker, "ic_reference", _no_ic_reference) if neutral_ic_reference
+               else contextlib.nullcontext())
+    with contextlib.redirect_stdout(out), neutral:
         ms.run()
     return ms, out.getvalue()
 
@@ -114,7 +128,7 @@ def _bos(ms):
 
 
 def test_302_167_the_void_breakout_and_the_one_the_scan_finds():
-    ms, log = _run(_ROWS_302_167, 1)
+    ms, log = _run(_ROWS_302_167, 1, neutral_ic_reference=True)
     assert "[ms] breakout VOID: one_maru_continuous anchor 27 apply 32 does not break cts_threshold 0.62883 " \
            "(detected against None)" in log
     est, bos = _est(ms), _bos(ms)
@@ -223,7 +237,7 @@ def test_a_retest_that_finds_another_pattern_or_apply_is_void(change):
                 return dataclasses.replace(won, confirmation_idx=int(won.confirmation_idx) + 1)
             return orig(idx, direction, break_threshold)
         ms._bp.detect_best_for_anchor = fake
-    ms, log = _run(_ROWS_302_167, 1, hook=hook)
+    ms, log = _run(_ROWS_302_167, 1, hook=hook, neutral_ic_reference=True)
     assert "[ms] breakout VOID: one_maru_continuous anchor 27 apply 32" in log
     assert int(_est(ms)[2].idx) == 36
 
@@ -240,7 +254,7 @@ def test_the_anchors_a_void_winner_skipped_see_the_state_as_of_themselves():
             seen.append((int(i), ms.state.cts_confirmed_idx, ms.state.cts_phase))
             return orig(i)
         ms._step_anchor = step
-    _run(_ROWS_302_167, 1, hook=hook)
+    _run(_ROWS_302_167, 1, hook=hook, neutral_ic_reference=True)
     after_void = [x for x in seen if 27 < x[0] < 30]
     assert after_void and after_void[0][0] == 28
     assert all(c is None and phase == "EST_OR_UPD" for _, c, phase in after_void)
