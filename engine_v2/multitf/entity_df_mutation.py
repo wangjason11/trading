@@ -152,6 +152,9 @@ _ZONE_META_IDX_KEYS = (
     "pattern_confirmed_idx",  # POI (a MOMENT: the continuation leg known complete — R1)
     "ip_tb_runner_up_ic_idx",       # POI (None unless a tiebreaker decided)
     "ip_tb_imbalance_first_c2_idx",  # POI (the immediate-imbalance / most-recent-before-imbalance tiebreakers)
+    # PLAN_L landing 2 (2026-10-10) — a ranked IC's ranking (`ranking_in_play_count` is a count):
+    "ranking_runner_up_ic_idx",       # POI (None unless a ranking rule 2–4 decided)
+    "ranking_imbalance_first_c2_idx",  # POI (the immediate-imbalance / most-recent-before-imbalance ranking rules)
 )
 
 # FibState meta keys with entity-df indices (the dataclass fields bos_idx /
@@ -172,7 +175,7 @@ _FIB_META_IDX_KEYS = (
 
 # ICCandidateRecord DATACLASS FIELDS with entity-df indices (PLAN_H §8.3, the
 # institutional-pattern debug records; their `meta` holds only the
-# attribution). Each may be None (an `IP: none` row, a failed pattern).
+# attribution). Each may be None (a no-IC row, a failed pattern, no tiebreak / ranking).
 _IC_CANDIDATE_IDX_FIELDS = (
     "bos_anchor_idx",
     "cts_anchor_idx",
@@ -184,6 +187,8 @@ _IC_CANDIDATE_IDX_FIELDS = (
     "ip_tb_runner_up_ic_idx",
     "ip_tb_imbalance_first_c2_idx",
     "immediate_imbalance_first_c2_idx",
+    "ranking_runner_up_ic_idx",         # PLAN_L landing 2
+    "ranking_imbalance_first_c2_idx",
 )
 
 # WaveCandleResult meta keys with entity-df indices (the dataclass fields

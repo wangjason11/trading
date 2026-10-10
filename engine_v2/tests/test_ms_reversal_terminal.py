@@ -131,8 +131,11 @@ def test_a_reversal_inside_a_winner_backfill_ends_the_structure(sd):
 # review). sd=+1:
 #   0-10 as P1: the one_maru_opposite(+1) breakout applies at 10 (cycle 1, BOS_1 .6088) and candle 10 is a range
 #        candle (confirm 14) -> `_post_apply_range_check(10)` back-fills [10, 14):
-#   11   bear maru (no POI inner since PLAN_H landing B: cycle 1's only IC candidate is the BOS anchor 7, which has
-#        no institutional pattern — until then the V30 POI's inner confirmed CTS_1 here);
+#   11   bear maru (NO POI inner — the fixture's MS read is stubbed to "no POI" since PLAN_L landing 2, so the
+#        subject does not depend on the IC rules: cycle 1's only IC candidate is the BOS anchor 7, with no
+#        institutional pattern — no POI from PLAN_H landing B to L1; from L2 the ranking rules make it a ranked IC
+#        whose inner 0.6107 would start the sd-proximity range at 11, not 12 (one MS read differs, at 10 — PLAN_L
+#        §4.4); until landing B the V30 POI's inner confirmed CTS_1 here);
 #   12   bear maru closing .60646 < BOS .6088: sd-zone proximity (the BOS inner) confirms CTS_1 and creates a range
 #        (RANGE) + watch + the pending reversal `one_maru_opposite(-1)` 12-13;
 #   13   the pending reversal applies -> STATE_CHANGED(range -> reversal) @13 = the terminal.
@@ -158,7 +161,9 @@ def _p3_rows() -> list[dict]:
 
 
 @pytest.mark.parametrize("sd", [1, -1])
-def test_a_reversal_inside_a_post_apply_range_backfill_does_not_finalize_the_range(sd):
+def test_a_reversal_inside_a_post_apply_range_backfill_does_not_finalize_the_range(sd, monkeypatch):
+    import engine_v2.structure.structure_engine as se
+    monkeypatch.setattr(se, "poi_inner_for_fib", lambda df, fib, ft, **kw: None)   # no POI: the BOS inner only
     rows = _p3_rows() if sd == 1 else _noreg._mirror(_p3_rows())
     df = _prepare_df(rows)
     assert int(df["is_range"].iloc[10]) == 1 and int(df["is_range_confirm_idx"].iloc[10]) == 14   # precondition

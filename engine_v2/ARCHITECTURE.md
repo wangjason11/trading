@@ -301,10 +301,12 @@ POI activation conditions
      (2026-10-06) cond5 was "the V30 overlap" (≥ 30 % of the IC inside the
      zone; reason `variant_below_v30`).
   The scan starts at `first_active = max(CTS-established moment, ic_idx,
-  lifecycle floor, pattern_confirmed_idx)` — the last term (PLAN_H R1) the
-  moment the IC's institutional pattern is known complete.
-The IC itself is ONE per fib record since landing B: the institutional-
-pattern pick (`select_ic`, POI_ZONES_SPEC §3.4) — the same selector MS's
+  lifecycle floor[, pattern_confirmed_idx])` — the last term (PLAN_H R1) the
+  moment the IC's institutional pattern is known complete, a pattern's IC only
+  (a ranked IC has no pattern term — PLAN_H §6 ICR-2, PLAN_L L2).
+The IC itself is ONE per fib record since landing B: `select_ic`'s pick — the
+institutional pattern's IC (POI_ZONES_SPEC §3.4) or, with no pattern, a ranked
+IC (§3.6, PLAN_L L2, 2026-10-10) — the same selector MS's
 in-flight sd-proximity read uses (D2), on the same fib decision since PLAN_I S5
 (MS's embedded FibTracker, CROSS_CYCLE_FIB_SPEC §8). The IC reference
 condition (IC condition 2 in POI_ZONES_SPEC §3.1's numbering; the activation

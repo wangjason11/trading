@@ -2030,8 +2030,8 @@ for a lost change — and one showing MORE is still a regression.
 
 ## An IC / POI Rule Change Can Move MS Outcomes in a Fixture — Through the sd-Proximity Read (PLAN_K landing B, 2026-10-09)
 
-MS confirms a CTS by sd-proximity against the cycle's POI inner, and that inner comes from the SAME institutional-
-pattern pick as the drawn POI (`poi_inner_for_fib` → `select_ic`, PLAN_H D2). So a change to which candles are IC
+MS confirms a CTS by sd-proximity against the cycle's POI inner, and that inner comes from the SAME IC pick as
+the drawn POI (`poi_inner_for_fib` → `select_ic`, PLAN_H D2 — a pattern's IC or, since PLAN_L L2, a ranked one). So a change to which candles are IC
 candidates is also an MS change. Landing B (the IC reference condition applied) moved NOTHING in MS on the reference
 window, yet broke 4 MS tests in `test_plan_j_j2_new_cycle_break.py`: their 302 / 167 fixture (H1 buy) confirmed cycle
 1 by proximity at 30 on a POI whose IC (high 0.6166) lies past CTS_0's confirmed price 0.6122 — cut now, so cycle 1
@@ -2042,7 +2042,12 @@ log came back EMPTY); the cause was one POI read.
 `structure_engine.poi_inner_for_fib`: moment, fib, the reference, the inner — on the old and the new tree) before
 touching MS. If the fixture pins MS logic, neutralize the POI rule in THAT harness (here `neutral_ic_reference=True`)
 and pin the cascade itself as the rule's own MS test (`test_plan_k_landing_b.py`). A window `/compare` with no MS
-delta does not prove the rule leaves MS alone — the variant replay only sees the window's data.
+delta does not prove the rule leaves MS alone — the variant replay only sees the window's data. Second case, PLAN_L L2
+(2026-10-10, the ranking rules): `test_ms_reversal_terminal`'s P3 fixture — cycle 1's only IC candidate (the BOS anchor
+7, no pattern) became a ranked IC, its inner 0.6107 moved the sd-proximity range start 12 → 11 (one MS read, at 10);
+the fixture pins the terminal, not the IC rule, so its MS read is stubbed to "no POI" (`monkeypatch.setattr(
+structure_engine, "poi_inner_for_fib", lambda df, fib, ft, **kw: None)` — `compute_bounded_structure` takes no
+resolver argument; `structure_engine` reads the module global at call time).
 
 ## "Why didn't the new tiebreaker move this POI?" — the tiebreakers run ONLY inside a (rank, shape) tie (IP tiebreaker update, 2026-10-09)
 

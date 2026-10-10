@@ -123,6 +123,12 @@ To change any visual element:
   index — + `Tiebreak over <IC>: immediate unfilled imbalance <c2>` / `…: IC candle type` / `…: most recent before
   imbalance <c2>` when a tiebreaker decided (POI_ZONES_SPEC §3.4; `TB1 over …` / `TB2 over …` until 2026-10-09).
   The builder asserts the leg counts match the leg indices (a mirror that shifted one but not the other fails at render).
+  A RANKED IC (`ip_outcome` `no_pattern` — POI_ZONES_SPEC §3.6, PLAN_L L2, 2026-10-10): `No pattern · ranking rule
+  <rule>` + ` over <runner-up>` + ` (gap <c2>)` when the deciding rule has them (`exclude_pinbar` neither,
+  `ic_candle_type` no gap), or `No pattern · only IC candidate` (one IC candidate — nothing ranked) — "No pattern" in
+  the place of `IP <rank>`, and NO `IC <idx>` (the hover's own `ic_idx=` line names the IC — PLAN_H §6 ICR-15); the
+  builder asserts a ranked POI's pattern meta is all None and its ranking values match its rule. No new visual style
+  (hover + CSV only, ICR-7).
 - Style keys: `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line`
 
 ### 8) Fibonacci box (Week 7; H1 chart — and the M15 lens charts since 2026-10-06, PLAN_H §8.9 F1)
@@ -138,11 +144,13 @@ To change any visual element:
 - Hover: H1 sid + cycle (M15: `sub_id` + the first record's parent, the sub window, its records, the cycle), the BOS /
   CTS anchors + prices, the 61.8 / 80 levels, and the status cell (`_zone_render.fib_hover_status_text`, one builder):
   the status (+ ` (locked)`), `life=[start_idx, end_idx] end_reason` (`–` = never started, `open` = not ended) and the
-  cycle's IP outcome from `attrs["ic_candidates"]` (`ic_rows_by_fib_record`: keyed by (sid, cycle, BOS anchor, CTS
-  anchor), prefixed with `sub_id` on a lens — a sub's sid restarts at 0): `IP <rank> · IC <idx>` (the pick = the drawn
-  POI), `IP: none (<reason>)` (no pick, no POI — PLAN_H C1; the reason `no_ic_candidate` or `no_pattern`, PLAN_H §6
-  RX1-N), or `IP: not evaluated (no POI record)` (the POI record
-  gate skipped it: ended before locking, or no CTS_ESTABLISHED); then the record's IC REFERENCE line
+  cycle's IC outcome from `attrs["ic_candidates"]` (`ic_rows_by_fib_record`: keyed by (sid, cycle, BOS anchor, CTS
+  anchor), prefixed with `sub_id` on a lens — a sub's sid restarts at 0; since PLAN_L L2, 2026-10-10): `IP <rank> · IC <idx>` (a pattern's IC = the drawn POI), `No pattern · IC <idx> · ranking rule <rule>`
+  / `No pattern · IC <idx> · only IC candidate` (a ranked IC — the IC index KEPT here: the fib box's only pointer to
+  its IC, PLAN_H §6 ICR-15), `IC: none (<reason>)` (no IC, no POI — PLAN_H C1; the reason `no_ic_candidate` or
+  `all_ic_candidates_pinbar`, POI_ZONES_SPEC §3.5), or `IC: not evaluated (no POI record)` (the POI record
+  gate skipped it: ended before locking, or no CTS_ESTABLISHED; `IP: none (…)` / `IP: not evaluated (…)` and the
+  reason `no_pattern` until PLAN_L L2); then the record's IC REFERENCE line
   (`_zone_render.fib_hover_ic_ref_text`, PLAN_K A17, 2026-10-09 — POI_ZONES_SPEC §3.2; from the fib meta `ic_ref_*`):
   `IC ref <price> (<source>[, cycle <a−1>]) · break <idx>` (e.g. `IC ref 0.57774 (prev_cycle_cts, cycle 2) · break
   1720`; the cycle only for `prev_cycle_cts`), `… · break: none` (a reference with no known break — subs 5 / 6 on the

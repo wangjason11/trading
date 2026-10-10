@@ -4,7 +4,8 @@ An IC candidate passes every IC condition together — the §3.1 ones, the touch
 the IP is looked for among IC candidates only, in BOTH consumers (`select_ic`: the drawn POI and MS's read):
 - the reference cuts the pick -> the next IC candidate is picked; the tiebreakers run over the SURVIVING tied ones;
 - the before-the-break side cuts too;
-- no IC candidate -> no POI, the none row `no_ic_candidate`; IC candidates without a pattern -> `no_pattern`;
+- no IC candidate -> no POI, the none row `no_ic_candidate`; IC candidates without a pattern -> `no_pattern` (since
+  PLAN_L L2 Step 2's `ip_outcome`, and the ranking rules pick among them);
 - MS's in-flight read is filtered (a real MS run: the 302 / 167 J2 fixture's proximity confirmation disappears).
 """
 from __future__ import annotations
@@ -99,9 +100,11 @@ def test_no_ic_candidate_means_no_poi_and_the_none_row_says_so():
     assert _none_rows(ICReference.NONE)[1][:2] == (9, True)
 
 
-def test_ic_candidates_without_a_pattern_stay_no_pattern():
+def test_ic_candidates_without_a_pattern_are_no_pattern_and_ranked():
     """The M1 frame (`test_plan_h_landing_b`): 32 (2A.i, high 1.13) is cut by 1.128; 36 (high 1.125) is an IC
-    candidate with no pattern -> `no_pattern`; 1.12 cuts both -> `no_ic_candidate`."""
+    candidate with no pattern -> `ip_outcome` `no_pattern` on every row and (PLAN_L L2) 36 is the ranked pick (the
+    only IC candidate: no ranking rule) — no no-IC row; its row keeps the pattern diagnostics (`no_continuation`,
+    ICR-15); 1.12 cuts both -> `no_ic_candidate` (Step 2 never ran: `ip_outcome` empty)."""
     from engine_v2.tests._event_factory import make_cts_established
     from engine_v2.tests.test_plan_h_landing_b import _fib, _m1_frame
     from engine_v2.zones.fib_tracker import FibState
@@ -112,12 +115,14 @@ def test_ic_candidates_without_a_pattern_stay_no_pattern():
 
     def rows(ref):
         recs = derive_ic_candidates(df, [est], _RefTracker([fs], ref), POIConfig(), structure_path_id="H1.main")
-        return [(r.ic_idx, r.touches_zone, r.ic_ref_reason, r.reason) for r in recs]
+        return [(r.ic_idx, r.touches_zone, r.ic_ref_reason, r.reason, r.ip_outcome, r.picked, r.ranking_rule)
+                for r in recs]
 
     assert rows(ICReference(1.128, "prev_cycle_cts")) == [
-        (32, True, PAST, None), (36, True, None, "no_continuation"), (None, None, None, "no_pattern")]
+        (32, True, PAST, None, "no_pattern", False, None), (36, True, None, "no_continuation", "no_pattern", True, None)]
     assert rows(ICReference(1.12, "prev_cycle_cts")) == [
-        (32, True, PAST, None), (36, True, PAST, "no_continuation"), (None, None, None, "no_ic_candidate")]
+        (32, True, PAST, None, None, False, None), (36, True, PAST, "no_continuation", None, False, None),
+        (None, None, None, "no_ic_candidate", None, False, None)]
 
 
 # ---- MS's in-flight read is filtered too (a real MS run) ------------------------------------------------------------

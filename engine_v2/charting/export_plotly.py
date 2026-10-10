@@ -2552,8 +2552,9 @@ def export_chart_plotly(
         # M15 lens charts (`_zone_render.fib_record_drawn` /
         # `fib_hover_status_text`, `_add_fib_box`; PLAN_H §8.9 F1): a collapsed
         # cycle's fib is hidden like its KL / POI; the hover carries the
-        # lifecycle and the cycle's IP outcome (the pick, `IP: none (<reason>)`
-        # — PLAN_H C1 —, or not evaluated).
+        # lifecycle and the cycle's IC outcome (the pick — a pattern's IC or a
+        # ranked one —, `IC: none (<reason>)` — PLAN_H C1, PLAN_L L2 —, or not
+        # evaluated).
         _collapsed = collapsed_cycles(dfx.attrs.get("kl_zones", []))
         _ic_rows = ic_rows_by_fib_record(dfx.attrs.get("ic_candidates", []), by_sub=False)
 
@@ -2594,7 +2595,7 @@ def export_chart_plotly(
                 f"{price_618:.5f}",
                 f"{price_80:.5f}",
                 # The status cell: lifecycle status + locked axis (§11), the
-                # lifecycle, the cycle's IP outcome.
+                # lifecycle, the cycle's IC outcome.
                 fib_hover_status_text(fib_st, _ic_rows.get((
                     int(fib_st.structure_id), int(fib_st.cycle_id),
                     int(fib_st.bos_idx), int(fib_st.cts_idx)))),

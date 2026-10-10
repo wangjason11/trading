@@ -2,8 +2,9 @@
 
 ONE draw gate (`_zone_render.fib_record_drawn`: not collapsed, not disappeared,
 locked OR active — ended or not), ONE hover status cell (`fib_hover_status_text`:
-the status, `life=[start, end] reason`, the cycle's IP outcome from
-`ic_rows_by_fib_record`) and ONE box drawer (`export_plotly._add_fib_box`), used
+the status, `life=[start, end] reason`, the cycle's IC outcome from
+`ic_rows_by_fib_record` — `IC: …` / a ranked IC's `No pattern · IC <idx> · …`
+since PLAN_L L2) and ONE box drawer (`export_plotly._add_fib_box`), used
 by the H1 chart and the M15 lens charts. The M15 charts draw each sub's fib
 records (they were CSV-only) in one legend group, "M15 fib".
 """
@@ -40,12 +41,16 @@ def _fib(sid=0, cyc=1, *, active=True, locked=False, status="active", start=None
     )
 
 
-def _ip(sid=0, cyc=1, *, bos=10, cts=20, ic=None, rank=None, reason=None, picked=False, sub_id=None):
+def _ip(sid=0, cyc=1, *, bos=10, cts=20, ic=None, rank=None, reason=None, picked=False, sub_id=None,
+        outcome=None, ranking_rule=None):
+    """A row of `*_ic_candidates.csv`; `outcome` = `ip_outcome` — defaults to "pattern" on a row with a rank (PLAN_L
+    L2: Step 2's outcome sits on every row of a record)."""
     return ICCandidateRecord(
         structure_id=sid, cycle_id=cyc, struct_direction=1, bos_anchor_idx=bos, cts_anchor_idx=cts,
         ic_idx=ic, candle_type=None, agreed_dir=None, touches_zone=None, ip_rank=rank, reason=reason,
         pattern_anchor_idx=None, opp_leg_first_idx=None, pattern_end_idx=None, pattern_confirmed_idx=None,
         ip_leg_candle_counts=None, picked=picked, meta={} if sub_id is None else {"sub_id": sub_id},
+        ip_outcome=outcome if outcome is not None or rank is None else "pattern", ranking_rule=ranking_rule,
     )
 
 
@@ -92,23 +97,23 @@ def test_bright_only_for_the_live_version(rec, bright):
 
 
 # ---------------------------------------------------------------------------
-# The IP outcome lookup + the hover status cell
+# The IC outcome lookup + the hover status cell
 # ---------------------------------------------------------------------------
 
 def test_ic_rows_keep_only_the_pick_and_the_none_row_keyed_per_sub():
     rows = [
         _ip(ic=14, rank="2A.i", picked=False, sub_id=5),                    # a losing candidate: skipped
         _ip(ic=18, rank="1A.iv", picked=True, sub_id=5),
-        _ip(reason="no_pattern", sub_id=6),                                 # same (sid, cyc, bos, cts), other sub
+        _ip(reason="no_ic_candidate", sub_id=6),                            # same (sid, cyc, bos, cts), other sub
     ]
     got = ic_rows_by_fib_record(rows, by_sub=True)
     assert got == {(5, 0, 1, 10, 20): rows[1], (6, 0, 1, 10, 20): rows[2]}
-    with pytest.raises(AssertionError, match="two IP outcome rows"):
+    with pytest.raises(AssertionError, match="two IC outcome rows"):
         ic_rows_by_fib_record(rows, by_sub=False)                            # without sub_id the keys collide
     with pytest.raises(KeyError):
-        ic_rows_by_fib_record([_ip(reason="no_pattern")], by_sub=True)      # an unattributed row fails loudly
-    assert ic_rows_by_fib_record([_ip(reason="no_pattern", cyc=2)], by_sub=False) == {
-        (0, 2, 10, 20): _ip(reason="no_pattern", cyc=2)}
+        ic_rows_by_fib_record([_ip(reason="no_ic_candidate")], by_sub=True)  # an unattributed row fails loudly
+    assert ic_rows_by_fib_record([_ip(reason="no_ic_candidate", cyc=2)], by_sub=False) == {
+        (0, 2, 10, 20): _ip(reason="no_ic_candidate", cyc=2)}
 
 
 @pytest.mark.parametrize("rec, row, text", [
@@ -116,17 +121,31 @@ def test_ic_rows_keep_only_the_pick_and_the_none_row_keyed_per_sub():
      _ip(ic=607, rank="3A.iii", picked=True),
      "ended (locked)<br>life=[652, 902] reversal<br>IP 3A.iii · IC 607"),
     (_fib(locked=True, status="ended", start=1020, end=1169, end_reason="new_cycle"),
-     _ip(reason="no_pattern"),
-     "ended (locked)<br>life=[1020, 1169] new_cycle<br>IP: none (no_pattern)"),
+     _ip(reason="no_ic_candidate"),
+     "ended (locked)<br>life=[1020, 1169] new_cycle<br>IC: none (no_ic_candidate)"),
     (_fib(status="ended", start=3589, end=3611, end_reason="parent_end"), None,
-     "ended<br>life=[3589, 3611] parent_end<br>IP: not evaluated (no POI record)"),
+     "ended<br>life=[3589, 3611] parent_end<br>IC: not evaluated (no POI record)"),
     (_fib(status="active", start=4177), _ip(ic=4083, rank="1A.iv", picked=True),
      "active<br>life=[4177, open]<br>IP 1A.iv · IC 4083"),
-    (_fib(locked=True, status="inactive", end=934, end_reason="new_cycle"), _ip(reason="no_pattern"),
-     "inactive (locked)<br>life=[–, 934] new_cycle<br>IP: none (no_pattern)"),
+    (_fib(locked=True, status="inactive", end=934, end_reason="new_cycle"),
+     _ip(reason="all_ic_candidates_pinbar", outcome="no_pattern"),
+     "inactive (locked)<br>life=[–, 934] new_cycle<br>IC: none (all_ic_candidates_pinbar)"),
+    # a ranked IC (PLAN_L L2; PLAN_H §6 ICR-15): the fib hover KEEPS `IC <idx>` — the fib box's only pointer to it
+    (_fib(locked=True, status="ended", start=1020, end=1224, end_reason="next_cycle"),
+     _ip(ic=929, picked=True, outcome="no_pattern", ranking_rule="exclude_pinbar"),
+     "ended (locked)<br>life=[1020, 1224] next_cycle<br>No pattern · IC 929 · ranking rule exclude_pinbar"),
+    (_fib(status="active", start=30), _ip(ic=36, picked=True, outcome="no_pattern"),
+     "active<br>life=[30, open]<br>No pattern · IC 36 · only IC candidate"),
 ])
 def test_hover_status_cell(rec, row, text):
     assert fib_hover_status_text(rec, row) == text
+
+
+def test_hover_status_cell_rejects_a_picked_row_without_its_outcome():
+    """A picked row is a pattern's IC or a ranked one — `ip_outcome` None on a pick is impossible (no IC candidate
+    → no pick) and fails loudly rather than reading as a pattern."""
+    with pytest.raises(AssertionError, match="ip_outcome None"):
+        fib_hover_status_text(_fib(), _ip(ic=18, picked=True))
 
 
 # ---------------------------------------------------------------------------
@@ -172,12 +191,22 @@ def test_h1_chart_hides_a_collapsed_cycles_fib_and_hovers_the_lifecycle_and_ip(t
         assert cell == fib_hover_status_text(rec, rows.get((sid, cyc, rec.bos_idx, rec.cts_idx)))
         assert "<br>life=[" in cell
     n_shapes = len(fig.layout.shapes)
+    # (0, 1)'s POI (a ranked IC since PLAN_L L2 — its only IC candidate) and its shapes, measured by leaving it out
+    assert [(z.meta["cycle_id"], z.meta["ip_outcome"]) for z in out["poi_zones"]] == [
+        (1, "no_pattern"), (2, "pattern"), (3, "no_pattern")]
+    df.attrs["poi_zones"] = [z for z in out["poi_zones"] if z.meta["cycle_id"] != 1]
+    n_poi_c1 = n_shapes - len(_render_h1(df, monkeypatch, tmp_path).layout.shapes)
+    # its outline + one fill per active stretch (10–15, 16–17) + one confirm line per activation (10, 16)
+    assert [(e["idx"], e["active"]) for e in out["poi_zones"][0].meta["activation_history"]] == [
+        (10, True), (15, False), (16, True)]
+    assert n_poi_c1 == 5
+    df.attrs["poi_zones"] = out["poi_zones"]
 
     df.attrs["kl_zones"] = list(out["kl_zones"]) + [_collapsed_kl(0, 1)]       # (0, 1) collapsed
     fig = _render_h1(df, monkeypatch, tmp_path)
     assert sorted(tr.name for tr in fig.data if (tr.name or "").startswith("fib:")) == [
         "fib:sid0:c0", "fib:sid0:c2", "fib:sid0:c3"]
-    assert len(fig.layout.shapes) == n_shapes - 5
+    assert len(fig.layout.shapes) == n_shapes - 5 - n_poi_c1      # its fib's 5 shapes and its POI hidden
 
 
 # ---------------------------------------------------------------------------
@@ -198,8 +227,8 @@ def _ohlc(n, freq):
     return pd.DataFrame({"time": t, "o": c, "h": [x + 0.0003 for x in c], "l": [x - 0.0003 for x in c], "c": c})
 
 
-# sub 5: (0,0) collapsed; (0,1) locked + picked; (0,2) ended never-locked by parent_end (no IP row) and its
-# dead superseded version; sub 6: (0,1) the live version with the SAME (sid, cyc, anchors) as sub 5's, IP none.
+# sub 5: (0,0) collapsed; (0,1) locked + picked; (0,2) ended never-locked by parent_end (no IC row) and its
+# dead superseded version; sub 6: (0,1) the live version with the SAME (sid, cyc, anchors) as sub 5's, IC none.
 _M15_FIBS = {
     "s5c0": _fib(0, 0, locked=True, status="inactive", end=12, end_reason="new_cycle", bos=2, cts=8, sub_id=5),
     "s5c1": _fib(0, 1, locked=True, status="ended", start=12, end=25, end_reason="new_cycle", sub_id=5),
@@ -211,7 +240,7 @@ _M15_FIBS = {
 _M15_IP = [
     _ip(ic=18, rank="1A.iv", picked=True, sub_id=5),
     _ip(ic=14, rank="2A.i", picked=False, sub_id=5),
-    _ip(reason="no_pattern", sub_id=6),
+    _ip(reason="no_ic_candidate", sub_id=6),
 ]
 
 
@@ -257,7 +286,7 @@ def test_m15_chart_draws_each_subs_fibs_in_one_legend_group(tmp_path, monkeypatc
         (6, 1, 10, 20, _cell("s6c1", 6)),
     ]
     assert [g[4].rsplit("<br>", 1)[1] for g in got] == [
-        "IP 1A.iv · IC 18", "IP: not evaluated (no POI record)", "IP: none (no_pattern)"]
+        "IP 1A.iv · IC 18", "IC: not evaluated (no POI record)", "IC: none (no_ic_candidate)"]
     assert all(tr.legendgroup == "m15_fib" and tr.showlegend is False for tr in fib_tr)
     assert all("sub_id=%{customdata[0]}" in tr.hovertemplate for tr in fib_tr)
 

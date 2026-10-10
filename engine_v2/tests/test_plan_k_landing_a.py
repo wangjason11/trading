@@ -528,7 +528,8 @@ def test_a_pipeline_record_carries_its_reference_before_the_limit_keys():
 def test_the_reason_is_reported_and_a_cut_candidate_is_never_picked():
     """`test_plan_h_landing_b`'s M1 frame: candidates 32 (2A.i, the pick without a reference; high 1.13) and 36 (no
     pattern; high 1.125). A reference at 1.128 cuts 32 only: reported, and since landing B (the filter on) 32 is no
-    IC candidate and 36 has no pattern -> no pick; 32 is still classified for the CSV."""
+    IC candidate; 36, the only IC candidate, has no pattern -> since PLAN_L L2 it is the RANKED pick (no ranking rule
+    — nothing to rank, ICR-10; was no pick); the cut 32 is never picked and still classified for the CSV."""
     from engine_v2.tests.test_plan_h_landing_b import _fib, _m1_frame
     df = _m1_frame()
     fs = poi_zones.FibState(structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.0, cts_idx=40,
@@ -536,8 +537,10 @@ def test_the_reason_is_reported_and_a_cut_candidate_is_never_picked():
     ref = ICReference(1.128, "prev_cycle_cts")
     sel = poi_zones.select_ic(df, fs, POIConfig(), ic_reference=ref, classify_all=True)
     assert {c.ic_idx: c.ic_ref_reason for c in sel.checks} == {32: PAST, 36: None}
-    assert sel.pick is None and next(c for c in sel.checks if c.ic_idx == 32).pattern.rank is not None
-    assert poi_zones.select_ic(df, fs, POIConfig(), ic_reference=ref).pick is None
+    assert next(c for c in sel.checks if c.ic_idx == 32).pattern.rank is not None
+    assert (sel.pick.ic_idx, sel.ip_outcome, sel.ranking, sel.no_ic_reason) == (36, "no_pattern", None, None)
+    ms = poi_zones.select_ic(df, fs, POIConfig(), ic_reference=ref)
+    assert (ms.pick.ic_idx, ms.ip_outcome, ms.ranking) == (36, "no_pattern", None)
     assert poi_zones.select_ic(df, fs, POIConfig(), ic_reference=ICReference.NONE).pick.ic_idx == 32
 
 
@@ -546,17 +549,17 @@ def test_the_csv_carries_the_reason_after_the_touch(tmp_path):
     from engine_v2.tests.test_fib_chart_render import _ip
     i = IC_CANDIDATE_COLUMNS.index("touches_zone")
     assert IC_CANDIDATE_COLUMNS[i + 1] == "ic_ref_reason"
-    recs = [dataclasses.replace(_ip(ic=14, rank="2A.i"), ic_ref_reason=PAST), _ip(reason="no_pattern")]
+    recs = [dataclasses.replace(_ip(ic=14, rank="2A.i"), ic_ref_reason=PAST), _ip(reason="no_ic_candidate")]
     out = tmp_path / "ip.csv"
     export_ic_candidates(recs, out)
     got = pd.read_csv(out)
     assert list(got.columns) == IC_CANDIDATE_COLUMNS
-    assert got["ic_ref_reason"].tolist()[0] == PAST and pd.isna(got["ic_ref_reason"].tolist()[1])   # IP: none row
+    assert got["ic_ref_reason"].tolist()[0] == PAST and pd.isna(got["ic_ref_reason"].tolist()[1])   # the no-IC row
 
 
 def test_every_exported_reason_is_the_condition_on_the_records_reference(monkeypatch):
     """`derive_ic_candidates` hands each candidate's own outcome through (A5) — recomputed from the tracker's final
-    reference for its record; the `IP: none` rows carry none. The fixture's real references cut nothing, so the
+    reference for its record; the no-IC rows carry none. The fixture's real references cut nothing, so the
     builder is replaced by one cutting every candidate of the odd cycles (sd +1: no high lies below −inf)."""
     def by_cycle(self, f, df, *, evaluated_at):
         return ICReference(-math.inf, "prev_cycle_cts") if f.cycle_id % 2 else ICReference.NONE

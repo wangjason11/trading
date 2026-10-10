@@ -372,7 +372,7 @@ def main() -> None:
             )
 
             # Debug: per-sub POI zones (chart-only otherwise) — one row per POI
-            # (the IP pick, `ip_rank`). The inspectable surface for POI /compare.
+            # (the IC pick, `ip_rank` / `ip_outcome`). The inspectable surface for POI /compare.
             export_poi_zones(
                 sub_entry.df.attrs.get("poi_zones", []) or [],
                 f"artifacts/debug/{basename}_{leaf_label}_poi_zones.csv",

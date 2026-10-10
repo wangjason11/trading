@@ -736,7 +736,7 @@ def test_records_gate_none_rows_and_tiebreak_on_the_pick():
     assert (pick.ip_tiebreak, pick.ip_tb_runner_up_ic_idx, pick.ip_tied_count, pick.ip_tb_imbalance_first_c2_idx) \
         == (MOST_RECENT, 11, 2, 10)
     assert all(r.ip_tiebreak is None for r in recs if not r.picked)
-    # the per-candidate immediate gap, on every candidate row (misses too), none on the IP: none row
+    # the per-candidate immediate gap, on every candidate row (misses too), none on the no-IC row
     assert [r.immediate_imbalance_first_c2_idx for r in recs] == [None, 10, 12, None, 10, 12, None]
     assert pick.meta == {"structure_path_id": "H1.main"} and pick.pattern_confirmed_idx == 11   # 10 + the next candle
 
@@ -756,7 +756,7 @@ def test_export_header_none_row_and_legs(tmp_path):
     export_ic_candidates(recs, out)
     got = pd.read_csv(out)
     assert len(got) == 7 and list(got.cycle_id) == [0, 0, 0, 1, 1, 1, 1]
-    assert got.ic_idx.isna().tolist() == [False] * 6 + [True]                        # the IP: none row last
+    assert got.ic_idx.isna().tolist() == [False] * 6 + [True]                        # the no-IC row last
     assert got.loc[6, "reason"] == "no_ic_candidate" and not got.loc[3:5, "touches_zone"].any()
     assert got.loc[1, "legs"] == "8..8|9..9|10..10" and got.loc[1, "ip_rank"] == "1A.i"
     assert bool(got.loc[1, "picked"]) and got.loc[1, "ip_tiebreak"] == MOST_RECENT
@@ -829,7 +829,8 @@ def test_downstream_pipeline_reads_the_poi_config_defaults(monkeypatch):
 def test_downstream_pipeline_returns_the_selection_of_its_own_fibs():
     """The pipeline call site (the real collaborator): `_run_downstream_pipeline` hands back exactly
     `derive_ic_candidates` over its own fib tracker — one or more rows per gated record — and (landing B, D2)
-    draws exactly the picked rows: one POI per picked row, the same IC / rank / legs / tiebreak."""
+    draws exactly the picked rows: one POI per picked row, the same IC; a PATTERN pick's rank / legs / tiebreak equal
+    its row's, a RANKED pick's (PLAN_L L2) are None on the POI while its row keeps the pattern diagnostics (ICR-15)."""
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
     from engine_v2.structure.structure_engine import compute_bounded_structure
     from engine_v2.tests.test_unified_probe import _make_ip_multicycle_data, _prepare_df
@@ -844,15 +845,24 @@ def test_downstream_pipeline_returns_the_selection_of_its_own_fibs():
     assert {r.meta["structure_path_id"] for r in out["ic_candidates"]} == {"H1.main"}
     picked = [r for r in out["ic_candidates"] if r.picked]
     assert picked, "the fixture has a pick"
-    # cycles 1 / 3: IC candidates, no pattern; cycle 0 (main's single since PLAN_I S4, Q6): no IC candidate — no POI
-    assert [(r.cycle_id, r.reason) for r in out["ic_candidates"] if r.ic_idx is None] == [
-        (0, "no_ic_candidate"), (1, "no_pattern"), (3, "no_pattern")]
-    drawn = [(z.meta["structure_id"], z.meta["cycle_id"], z.ic_idx, z.meta["ip_rank"], z.meta["ip_leg_candle_counts"],
-              z.meta["pattern_anchor_idx"], z.meta["opp_leg_first_idx"], z.meta["pattern_end_idx"],
-              z.meta["pattern_confirmed_idx"], z.meta["ip_tiebreak"]) for z in out["poi_zones"]]
-    assert drawn == [(r.structure_id, r.cycle_id, r.ic_idx, r.ip_rank, r.ip_leg_candle_counts, r.pattern_anchor_idx,
-                      r.opp_leg_first_idx, r.pattern_end_idx, r.pattern_confirmed_idx, r.ip_tiebreak)
-                     for r in picked]
+    # cycle 0 (main's single since PLAN_I S4, Q6): no IC candidate — no POI; cycles 1 / 3: IC candidates, no pattern
+    # -> ranked (PLAN_L L2; one candidate each — no ranking rule)
+    assert [(r.cycle_id, r.reason) for r in out["ic_candidates"] if r.ic_idx is None] == [(0, "no_ic_candidate")]
+    assert [(r.cycle_id, r.ic_idx, r.ip_outcome, r.ranking_rule) for r in picked] == [
+        (1, 7, "no_pattern", None), (2, 14, "pattern", None), (3, 19, "no_pattern", None)]
+    assert {r.ip_outcome for r in out["ic_candidates"] if r.cycle_id == 2} == {"pattern"}   # every row of the record
+    assert [z.ic_idx for z in out["poi_zones"]] == [r.ic_idx for r in picked]
+    for z, r in zip(out["poi_zones"], picked):
+        assert (z.meta["structure_id"], z.meta["cycle_id"], z.meta["ip_outcome"], z.meta["ranking_rule"]) == (
+            r.structure_id, r.cycle_id, r.ip_outcome, r.ranking_rule)
+        pattern = (z.meta["ip_rank"], z.meta["ip_leg_candle_counts"], z.meta["pattern_anchor_idx"],
+                   z.meta["opp_leg_first_idx"], z.meta["pattern_end_idx"], z.meta["pattern_confirmed_idx"],
+                   z.meta["ip_tiebreak"])
+        if r.ip_outcome == "pattern":       # the drawn == picked-row check: pattern picks only
+            assert pattern == (r.ip_rank, r.ip_leg_candle_counts, r.pattern_anchor_idx, r.opp_leg_first_idx,
+                               r.pattern_end_idx, r.pattern_confirmed_idx, r.ip_tiebreak)
+        else:                               # a ranked pick: no pattern on the POI; its row keeps the diagnostics
+            assert pattern == (None,) * 7 and r.reason is not None
 
 # ---------------------------------------------------------------------------
 # the landing review's test-gap lens (2026-10-06): each kills a mutant the first suite let survive

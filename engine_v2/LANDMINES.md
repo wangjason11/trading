@@ -596,7 +596,8 @@ sd-proximity read (`poi_zones.poi_inner_for_fib` on its embedded tracker's AS-OF
 CTS_ESTABLISHED / CTS_UPDATED — PLAN_I S5; was `compute_poi_inners_for_cycle`) pick the IC with the SAME function,
 `select_ic` (PLAN_H D2). Never give one of them its own selection — a second
 copy would let MS confirm a CTS on a POI that is never drawn (or the reverse). And an error inside `select_ic` must
-reach the caller: it is NEVER a legitimate "no pattern" (D7: no POI, the BOS inner only).
+reach the caller: it is NEVER a legitimate "no IC" (D7: no IC candidate / every one a pinbar → no POI, the BOS
+inner only; "no pattern" until PLAN_L L2).
 
 **The read keeps no graceful scope** (PLAN_I S5: the retired resolver's `try: ... except Exception: return []`
 around its anchor selection + fib construction went with it — the fib is the tracker's now): `poi_inner_for_fib`
@@ -1787,7 +1788,7 @@ forgotten moment is a `TypeError`, never a silent default; `evaluated_at=None`
 is an explicit, justified no-cut (FibTracker's decisions — the drawn fib's and,
 since PLAN_I S5, MS's in-flight one — pass the handled event's moment,
 `event_moment(ev)`, the apply candle `confirmed_at` on a pattern-path CTS_UPDATED
-since Plan E E3·0; the IP pick's IC cond3 and its tiebreakers' imbalance reads pass `None`, MARKET_STRUCTURE_SPEC
+since Plan E E3·0; the IC pick's IC cond3 and its tiebreak / ranking rules' imbalance reads pass `None`, MARKET_STRUCTURE_SPEC
 "Snapshot vs per-candle").
 Rule: IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
 
@@ -2391,7 +2392,7 @@ exists only because `c3 = B+1` was seen, and a merged run ending at `B-1` gets
 its bounds from `B+1` (`imbalance.py`). The MS consumers — since PLAN_I S5 the
 embedded FibTracker (cut at each fed event's moment `<= B`) and
 `_refresh_poi_inners_for_cycle` → `poi_inner_for_fib` → `select_ic`
-(IC cond3 in `check_ic_conditions`, the tiebreak rules' immediate imbalance and reference) — ask the pick's questions
+(IC cond3 in `check_ic_conditions`, the tiebreak and ranking rules' immediate imbalance and reference) — ask the pick's questions
 with `evaluated_at=None`: as-of for *fills* (`check_to_idx <=` the fib's CTS anchor
 `<= st.cts.idx <= B`), no existence cut, by decision (MARKET_STRUCTURE_SPEC
 "Snapshot vs per-candle"). (Until S5 the retired `_update_cycle0_data` /

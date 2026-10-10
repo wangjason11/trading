@@ -1,7 +1,8 @@
 # Plan L — IC identification in steps: the restructure + the ranking rules (Week 9 Part 1 item 1)
 
-**Status: L1 COMMITTED `b5c3613` + SAVED S_L1 `20261010_114846_b5c3613` (2026-10-10, §9); L2 NEXT (a new session) — every
-label decided (§8.2; PLAN_H §6 ICR-15).** §6 names APPROVED, §4.1 runner-ups settled (PLAN_H §6
+**Status: L1 COMMITTED `b5c3613` + SAVED S_L1 `20261010_114846_b5c3613` (2026-10-10, §9); L2 BUILT 2026-10-10 (uncommitted;
+§10 — `/compare` vs S_L1 == §4.3; landing-reviewed 506,850 tok, all folded; suite 1609, mutants 56 / 56) — every label decided (§8.2;
+PLAN_H §6 ICR-15).** §6 names APPROVED, §4.1 runner-ups settled (PLAN_H §6
 ICR-13 / ICR-14); the cold review RAN (§8: 0 BLOCKER, 4 MAJOR, 17 MINOR — all folded below). The IC
 identification revamp: the user's write-up verbatim `plan_h_inputs/ic_identification_revamp_spec.md`; every decision
 PLAN_H §6 ICR-S, ICR-1 … ICR-15 (2026-10-09 → 10); the reading, the shadow measurement and the TRIAL replay
@@ -425,3 +426,88 @@ amended; PLAN_H §6 ICR-15.
   32.8 s), FETCH GATE PASS; re-checked before the copy: `cmp_fig_full.py` vs S_TBU 24 / 24 md5-equal + 3 MISSING +
   3 NEW, every figure equal; `cmp_l1.py` RESULT OK. = `LATEST_<branch>`, L2's baseline. Local, NOT pushed.
 
+
+## 10. Landing 2 — as built (2026-10-10, in progress)
+
+- **The flip census re-measured on the L1 code** (step 1 of the session order): `plan_h_inputs/l2_flip_census_patch.py`
+  (the ranking rules' behaviour only, no format / names) on a `git archive` of `d6e7db2`, the full suite: **9 failed /
+  1544 passed (124 s)** — exactly §4.4's 9 (the trial's, at `92b8b61`); the MS fixture's failure is the same cause
+  (`RANGE_STARTED` at 11, not 12). The format pins (§4.4 "Not flipped by the trial"), located on the L1 code:
+  `test_plan_h_landing_b.py:321-327` (the POI meta key order), `test_fib_chart_render.py:119-126, :260` and
+  `test_plan_i_s2_cross_fib_limit.py:676` (the `IP: none` / `IP: not evaluated` texts); plus fixtures that build a
+  no-IC row with `reason="no_pattern"` (`test_fib_chart_render.py:102-111, :214`, `test_plan_k_landing_a.py:549`) —
+  they pass, but `no_pattern` is no longer a no-IC reason, so they move to the real reasons.
+- **Code** (§4.1): `poi_zones.apply_ranking_rules` (the checks in; rule 1 a filter on `candle_type`, then the shared
+  helpers on its own list; `ranking` None when nothing was ranked — ICR-10); `ICSelection` += `ip_outcome` / `ranking`
+  / `no_ic_reason` (keyword-required, no defaults) + a `__post_init__` that asserts their consistency (a pick ⇔ no
+  reason; a tiebreak only with a pattern; a ranking only on a ranked pick; `no_ic_candidate` ⇔ Step 2 never ran);
+  the constants `RANKING_*` (their own, the tiebreak words for rules 2–4 — ICR-S), `IP_OUTCOME_*`, `NO_IC_CANDIDATE`,
+  `ALL_IC_CANDIDATES_PINBAR`; `select_ic` runs Step 3 on no pattern; `derive_poi_zones` — the ⇔ assert, the pattern
+  meta nulled on a ranked IC, the 5 new keys (`ip_outcome` before `ip_rank`, the `ranking_*` after
+  `ip_tb_imbalance_first_c2_idx`), `pattern_confirmed_idx=None` for a ranked IC; `_compute_poi_activation_history`'s
+  `pattern_confirmed_idx: Optional[int]` (keyword-required, no default); `ICCandidateRecord` += the 5 fields,
+  `derive_ic_candidates` (the no-IC row's `reason` = `no_ic_reason`, `ip_outcome` on every row);
+  `entity_df_mutation` (the two `*_idx` in `_ZONE_META_IDX_KEYS` + `_IC_CANDIDATE_IDX_FIELDS`); `export_zones` (the
+  columns); `_zone_render` (both hovers; the comments in `export_plotly` / `export_m15_chart`).
+- **The ranked POI hover's exact format** (§4.1 named the parts, not the punctuation): `No pattern · ranking rule
+  <rule>` + ` over <runner-up>` + ` (gap <c2>)` — `exclude_pinbar` neither, `ic_candle_type` the runner-up only — or
+  `No pattern · only IC candidate` (ICR-3's example `… immediate_unfilled_imbalance (gap 2577)` + §4.1's "over
+  <runner-up>"); to confirm at the chart review.
+- **Tests**: the 9 flips rewritten to their L2 meaning (the M1 frame → the ranked 36 / all pinbars → None; the
+  multicycle fixture's cycles 1 / 3 → ranked "only IC candidate"; the hover texts; the drawn == picked-row check on
+  pattern picks only); the MS fixture made independent of the IC rules by stubbing `se.poi_inner_for_fib` to "no POI"
+  (`monkeypatch` — the suite's precedent, `test_plan_i_s5_landing_review_pins.py:183`; `compute_bounded_structure` has
+  no `poi_inner_for_fib` kwarg, so §4.4's `_run(..., poi_inner_for_fib=…)` was not available); the format pins; the
+  fixtures that built a no-IC row with `no_pattern` moved to the real reasons, a picked row now needs `ip_outcome`;
+  `test_event_meta_idx_keys` (`must_see` + `NON_INDEX_INT_META_KEYS`). New `tests/test_plan_l_landing_2.py` (46 pins on
+  real classified frames, + 2 after the mutant run = 48: each ranking rule deciding + passing through, ICR-1 / ICR-8 / ICR-10, all pinbars, the H1
+  sid 0 cyc 0 shape vs the tiebreak order, Step 3 not called with a pattern, rule 3's runner-up, rule 4 over rule 3's
+  survivors, a non-candidate unseen, the helpers' input lists, MS's ranked inner, the floor, the meta nulling + types,
+  the ⇔ assert, the mirror, the CSV, the hovers, `ICSelection`'s asserts; + rule 2's runner-up over three candidates
+  after the mutant run). **Suite 1553 → 1605, all pass.**
+- **Mutants** (`plan_h_inputs/mutants_l2.py`, full suite each; the equivalent ones listed in its docstring): 51 / 52
+  KILLED on the first run; the survivor N09 (rule 2's runner-up `max` → `min`) was a test gap — every rule-2 fixture
+  had two candidates in play — pinned with `one_immediate_of_three` → **52 / 52 KILLED**.
+- **Replay + `/compare` vs S_L1 == §4.3 exactly** (2026-10-10): replay 74.4 s wall (multi_tf_dual 11.9 s, the charts
+  57.3 s), FETCH GATE PASS (4228 M15 candles), the silent-skip grep = the window's 4 known unresolved triggers; `[ic]`
+  H1 5 records / 5 picks / 239 rows. `plan_h_inputs/cmp_l2.py` (+ `--trial`) RESULT OK: the 21 other CSVs md5-equal;
+  the POI CSVs' old rows equal but the 5 new meta keys; the 7 new POIs — H1 180 (`exclude_pinbar`, 3 in play; live
+  430 → 652 `next_cycle`), 694 (`most_recent_before_imbalance` over 691, 2 in play, gap 702; never live); confluence 670
+  (`most_recent_before_imbalance` over 678, 4, gap 673; never live), 929 (`exclude_pinbar`, 2; 1020 → 1224), 1804
+  (`most_recent_before_imbalance` over 1802, 2, gap 1815; never live), 2575 (`immediate_unfilled_imbalance` over 2574,
+  2, gap 2577; 2608 → 2829 `reversal`), 3809 (`immediate_unfilled_imbalance` over 3806, 5, gap 3810; 3819 → 4200
+  `reversal`); the IC CSVs H1 241 → 239, confluence 1324 → 1319 (the 7 records' no-IC `no_pattern` rows gone, each record's
+  ranked candidate row now its picked row),
+  counter 363 = 363 (format only), sub 1 cyc 2 keeps `no_ic_candidate`; the trial's picks / rules identical; figures H1
+  81 → 83 / 236 → 239, confluence 274 → 282 / 264 → 276, counter 135 → 137 / 120 → 123, the layouts equal but the
+  shapes, the keyed trace diff only POI / fib-hover traces (the 3 never-live POIs are collapsed cycles — hidden, their
+  fibs too). The changed hover texts (`plan_h_inputs/l2_hover_diff.py`): POI `No pattern · ranking rule
+  exclude_pinbar` (180, 929), `… immediate_unfilled_imbalance over 2574 (gap 2577)` (2575), `… over 3806 (gap 3810)`
+  (3809); fib `No pattern · IC 180 · ranking rule exclude_pinbar` (and 929 / 2575 / 3809), `IC: none
+  (no_ic_candidate)` (conf sub 1 cyc 2), `IC: not evaluated (no POI record)` (sub 3 cyc 3, both lenses).
+- **Landing review (2026-10-10; 2 read-only lenses, 506,850 tokens, est. ~0.5M): 0 BLOCKER, 2 MAJOR (docs), 10 MINOR,
+  7 NIT — all folded.** Code + tests (260,433): the rules vs every ICR row verified by reading; a differential fuzz of
+  `apply_ranking_rules` vs the trial's `_trial_ranking` (6,300 random classified frames, 3,442 Step-3 comparisons —
+  every rule deciding — 0 mismatches on the pick and the rule; the ranking tuple vs an oracle from ICR-14, 0
+  mismatches; both classify modes identical on all 6,300); the 7 POIs re-derived from the CSVs; 10 / 12 ad-hoc mutants
+  killed — MINOR: the 2 survivors were runner-up gaps (rule 2's runner-up taken from every candidate, a pinbar
+  included; rule 3's losers from every non-pinbar, a rule-2 failer included — every fixture had no pinbar candidate and
+  no rule-2 filtering before rule 3) → 2 fixtures (`runner_up_not_a_pinbar`, `runner_up_still_in_play`) + mutants N53 /
+  N54; MINOR: `ICSelection.__post_init__` accepted three inconsistent states (MS's read never passes `derive_poi_zones`'
+  assert) → asserts "a pattern pick has a rank" / "a ranked pick none" + cases (N56 / N57; the third, "all pinbars ⇒
+  no_pattern", is implied by those — its assert + mutant N55 dropped as equivalent); MINOR: stale "IP pick" / `IP: none`
+  code comments (`poi_zones`, `market_structure`, `fib_tracker`, `orchestrator`, `run_replay`); NIT: the resolver pin
+  asserts the `exclude_pinbar` ranking its comment claimed; the collapsed-cycle chart pin's POI shapes pinned exactly
+  (5: outline + 2 fills + 2 confirm lines). Docs vs code (246,417): MAJOR — ARCHITECTURE's floor formula and "the IC =
+  the institutional-pattern pick"; CROSS_CYCLE_FIB_SPEC §8's MS read (a ranked inner too); MINOR — the `/compare` skill's
+  "the figures differ by the 7 POIs" (4 are drawn: 694 / 670 / 1804 sit on collapsed cycles) and "`no_pattern` rows
+  become picked rows" (they are removed; a candidate row becomes the pick — also here, above); IMBALANCE_FILL_SEMANTICS'
+  read table (+ LANDMINES ×2) without the ranking rules; LANDMINES' "no pattern" (D7) wording (+ a test docstring); the
+  GLOSSARY's ambiguous ICR-10 condition; the PLAN_L / register status lines; the memory code map's first clause; NIT —
+  `IP: none` → no-IC row (POI_ZONES_SPEC ×2, test comments ×2), CHARTING_SPEC's doubled "IP / IC outcome", POI_ZONES_SPEC
+  "set only when a ranking rule decided" → per §3.6, this section's test count.
+- **Chart review (2026-10-10): APPROVED** — the user, on the 7 ranked POIs, the hovers and the ranked POI line's
+  format (`… ranking rule <rule> over <runner-up> (gap <c2>)`, the parts per rule): "this looks good let's proceed".
+- **After the folds**: suite **1609**, all pass; `mutants_l2.py` **56 / 56 KILLED** on the final code (the 52 + N53,
+  N54, N56, N57); a fresh replay (201.3 s wall — run alongside the mutant runner), FETCH GATE PASS; `cmp_l2.py`
+  (+ `--trial`) RESULT OK.

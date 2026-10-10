@@ -400,7 +400,8 @@ def _run_downstream_pipeline(
     print(f"{pfx}[poi_zones] total=", len(poi_zones))
 
     # 8b) The same selection as debug records (`*_ic_candidates.csv`): every
-    # candidate with its pattern or failure reason + an `IP: none` row per record.
+    # Step 1 check with its pattern or failure reason + a no-IC row per record
+    # without an IC.
     ic_candidates = derive_ic_candidates(
         df, events, fib_tracker, poi_config, structure_path_id=structure_path_id, ic_records=ic_records,
     )

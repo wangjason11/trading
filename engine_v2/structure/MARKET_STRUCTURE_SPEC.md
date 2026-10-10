@@ -382,8 +382,9 @@ refresh also hands the tracker and the fed event's MOMENT
 (`_refresh_poi_inners_for_cycle(moment)`: the pattern path's apply candle,
 the raw path's re-stepped candle = `ef.event_moment` of the event just fed);
 the read builds the fib's IC reference from the tracker at that moment,
-inside its re-raising scope (POI_ZONES_SPEC §3.2). No fib or no pattern → the BOS inner
-alone. Errors are NOT swallowed (LANDMINES "The POI Resolver Fails Loudly"):
+inside its re-raising scope (POI_ZONES_SPEC §3.2). The pick is a pattern's IC or, with
+no pattern, a ranked one (POI_ZONES_SPEC §3.6, PLAN_L L2 — the same selector, ICR-12); no
+fib or no IC (no IC candidate / every candidate a pinbar) → the BOS inner alone. Errors are NOT swallowed (LANDMINES "The POI Resolver Fails Loudly"):
 the read takes the frame's candle stamp first on every refresh and re-raises
 anything as `ICSelectionError`; a tracker error arrives as
 `EmbeddedFibTrackerError` (both `RuntimeError`s). The snapshot is per-cycle in
@@ -427,8 +428,9 @@ embedded tracker asks every imbalance question with `evaluated_at` =
 (IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule"); the retired
 resolver's uncut Scenario-2 read and the M1 divergence it caused are gone. The
 IP pick's own imbalance reads inside `select_ic` — IC cond3 in
-`check_ic_conditions` over `(candidate, fib CTS anchor]` and the tiebreak rules' imbalance reads (the immediate
-unfilled imbalance, the most-recent-before-imbalance reference) —
+`check_ic_conditions` over `(candidate, fib CTS anchor]`, the tiebreak rules' imbalance reads (the immediate
+unfilled imbalance, the most-recent-before-imbalance reference) and, since PLAN_L L2, the ranking rules' (the SAME
+two helpers on their own list — POI_ZONES_SPEC §3.6) —
 stay uncut (`evaluated_at=None`; the drawn POI's own reads, PLAN_H). A refresh on
 `st.cts.idx` itself (a lag-0 `CTS_ESTABLISHED`, a raw `CTS_UPDATED`) can
 therefore count, in the pick, a gap whose c2 is the refresh candle — one that

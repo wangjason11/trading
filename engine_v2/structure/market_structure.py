@@ -66,7 +66,8 @@ BosInnerResolver = Callable[[pd.DataFrame, int, int], Optional[float]]
 # `structure/structure_engine._make_market_structure` with the structure's cross-fib limit. MS feeds it each CTS
 # event as it is emitted (`_feed_fib_tracker`: CTS_ESTABLISHED after its cycle's BOS_CONFIRMED, every CTS_UPDATED,
 # CTS_CONFIRMED, CTS_THRESHOLD_UPDATED), reads `representative_fib(sid, cycle)` at every POI refresh and hands it to
-# the injected `poi_inner_for_fib` (`zones.poi_zones`: the institutional-pattern pick's inner, or None), and calls
+# the injected `poi_inner_for_fib` (`zones.poi_zones`: the IC pick's inner — a pattern's IC or, since PLAN_L L2, a
+# ranked one — or None), and calls
 # `check_processing_order()` at the end of every run (the order tripwire, PLAN_I §9.2 F16 / F17 (i)).
 # `poi_inner_for_fib(df, fib, fill_threshold, *, tracker, evaluated_at)` — PLAN_K A4 / A14: the IC reference is built
 # by `tracker.ic_reference(...)` INSIDE the read's re-raising scope, at `evaluated_at` (the fed event's moment).
@@ -1923,7 +1924,7 @@ class MarketStructure:
 
         PLAN_I S5 (D5, Q7): the SAME fib decision as the drawn fib — the embedded tracker's representative fib of
         this cycle (`FibTracker.representative_fib`: the active latest cross, else the active single, else None),
-        its institutional-pattern pick's inner (`poi_inner_for_fib`, which also reads the frame's candle stamp on
+        its IC pick's inner (a pattern's IC or a ranked one; `poi_inner_for_fib`, which also reads the frame's candle stamp on
         every call, a no-fib refresh included — PLAN_H PR1). Its imbalance questions were asked at the fed event's
         MOMENT (the tracker's knowability cut, Plan F). No tracker (direct construction) = no POI inner — the
         proximity check reads the BOS inner only.

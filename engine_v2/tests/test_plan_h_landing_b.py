@@ -7,8 +7,9 @@ Pinned here (PLAN_H §8.6 "B", the census of §8.4a): the activation's cond5 = t
 (reason `ic_not_touching_fib_zone`, R3; inclusive edges); the `pattern_confirmed_idx` floor (R1); the resolver
 returns the PICK's inner where the V30 / V60 / V90 selection disagrees; its fail-loud scopes (PR1: an unstamped
 frame raises; an IP error inside a sub geometry is not swallowed by its `except (ValueError, IndexError)`); D2 on
-the real collaborator; the POI meta key order; the ONE hover builder (HV) and the H1 fib hover's "IP: none" (C1);
-the exporter's `ip_rank` column. The landing review (PLAN_H §8.5c) added: the sell-side touch, the resolver's
+the real collaborator; the POI meta key order; the ONE hover builder (HV) and the H1 fib hover's "IP: none" (C1;
+"IC: none" since PLAN_L L2); the exporter's `ip_rank` column. PLAN_L L2 (the ranking rules) rewrote the no-pattern
+pins: a record without a pattern draws its RANKED IC, MS's read returns the ranked inner, all pinbars -> none. The landing review (PLAN_H §8.5c) added: the sell-side touch, the resolver's
 graceful anchor scope (retired with it, PLAN_I S5), the candidate rows read from the handed records, the asymmetric leg order, and the RENDERED
 hovers at all three POI sites (`_rendered`: what the template shows, not only what `customdata` holds).
 """
@@ -171,15 +172,39 @@ def _fib(high, low):
     return create_fib_retracement(anchor_high=high, anchor_low=low, direction=1, levels=DEFAULT_FIB_LEVELS)
 
 
-def test_resolver_returns_nothing_when_no_candidate_has_a_pattern():
+def _no_pattern_frame(*, pinbar_32=False, pinbar_36=False):
+    """The M1 frame with a small continuation (33 not big_maru): neither IC candidate (32, 36 — both normal, no
+    immediate gap) has a pattern; `pinbar_*` shrinks a candidate's body (same range) to a pinbar."""
     df = _m1_frame()
     df.loc[33, ["o", "h", "l", "c"]] = [1.09, 1.10, 1.089, 1.095]       # a small continuation: not big_maru
-    df = _ip_ready(df)
+    if pinbar_32:
+        df.loc[32, ["o", "h", "l", "c"]] = [1.095, 1.13, 1.08, 1.09]
+    if pinbar_36:
+        df.loc[36, ["o", "h", "l", "c"]] = [1.101, 1.125, 1.09, 1.098]
+    return _ip_ready(df)
+
+
+def test_resolver_returns_the_ranked_ic_when_no_candidate_has_a_pattern():
+    """PLAN_L L2 (ICR-12 — one selector): no pattern -> MS reads the RANKED IC's inner. 32 and 36 both normal, no
+    immediate gap -> ranking rule 4: the reference = the earliest unfilled gap after the oldest in play (32) = 40 ->
+    the most recent before it, 36 (high 1.125). (Was None until L2: no pattern -> no POI.)"""
+    assert _resolve(_no_pattern_frame()) == 1.125
+    assert _resolve(_no_pattern_frame(pinbar_36=True)) == 1.13        # ranking rule 1 excludes 36 -> 32
+    fs = poi_zones.FibState(structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.0, cts_idx=40,
+                            cts_price=1.35, active=True, locked=False, fib=_fib(1.35, 1.0))
+    sel = poi_zones.select_ic(_no_pattern_frame(pinbar_36=True), fs, POIConfig(), ic_reference=ICReference.NONE)
+    assert (sel.pick.ic_idx, sel.ranking) == (32, ("exclude_pinbar", None, 2, None))
+
+
+def test_resolver_returns_nothing_when_every_ic_candidate_is_a_pinbar():
+    """No pattern and every IC candidate a pinbar -> no IC (`all_ic_candidates_pinbar`): the BOS inner only."""
+    df = _no_pattern_frame(pinbar_32=True, pinbar_36=True)
+    assert [str(df.loc[i, "candle_type"]) for i in (32, 36)] == ["pinbar", "pinbar"]
     assert _resolve(df) is None
 
 
 def test_resolver_on_an_unstamped_frame_raises():
-    """PR1: a frame without the candle stamp is an error, never D7's legitimate "no pattern" — and since PLAN_I S5
+    """PR1: a frame without the candle stamp is an error, never D7's legitimate "no IC" — and since PLAN_I S5
     (§9.2 F11) also on a refresh with NO fib (the read takes the stamp first on every call)."""
     df = _m1_frame()
     del df.attrs["timeframe"]
@@ -320,11 +345,15 @@ def test_poi_meta_carries_the_pick_in_place_of_the_variants():
     poi, = out["poi_zones"]
     assert list(poi.meta) == [
         "structure_id", "struct_direction", "cycle_id", "confirmed_idx", "end_idx", "end_reason",
-        "ip_rank", "ip_leg_candle_counts", "pattern_anchor_idx", "opp_leg_first_idx", "pattern_end_idx",
+        "ip_outcome", "ip_rank", "ip_leg_candle_counts", "pattern_anchor_idx", "opp_leg_first_idx", "pattern_end_idx",
         "pattern_confirmed_idx", "ip_tiebreak", "ip_tb_runner_up_ic_idx", "ip_tied_count",
-        "ip_tb_imbalance_first_c2_idx", "status", "activation_history", "bos_anchor_idx", "cts_anchor_idx",
+        "ip_tb_imbalance_first_c2_idx", "ranking_rule", "ranking_runner_up_ic_idx", "ranking_in_play_count",
+        "ranking_imbalance_first_c2_idx", "status", "activation_history", "bos_anchor_idx", "cts_anchor_idx",
         "cts_established_idx",
     ]
+    assert poi.meta["ip_outcome"] == "pattern"                                       # PLAN_L L2
+    assert (poi.meta["ranking_rule"], poi.meta["ranking_runner_up_ic_idx"], poi.meta["ranking_in_play_count"],
+            poi.meta["ranking_imbalance_first_c2_idx"]) == (None, None, None, None)
     assert (poi.ic_idx, poi.meta["ip_rank"], poi.meta["ip_leg_candle_counts"]) == (9, "1A.iii", "1-1-3")
     assert (poi.meta["pattern_anchor_idx"], poi.meta["opp_leg_first_idx"], poi.meta["pattern_end_idx"],
             poi.meta["pattern_confirmed_idx"]) == (8, 9, 12, 12)
@@ -335,12 +364,22 @@ def test_poi_meta_carries_the_pick_in_place_of_the_variants():
     assert all(set(e) == {"idx", "active", "reason"} for e in poi.meta["activation_history"])
 
 
-def test_a_record_without_a_pattern_draws_no_poi():
+def test_a_record_without_a_pattern_draws_its_ranked_ic():
+    """PLAN_L L2 (was `test_a_record_without_a_pattern_draws_no_poi`): cycles 1 and 3 have no pattern -> the ranking
+    rules; each has exactly ONE IC candidate, a maru (7 / 19) -> drawn with `ranking_rule` None (ICR-10 — "only IC
+    candidate"), their pattern meta all None; cycle 0 has no IC candidate -> no POI, the no-IC row."""
     _, out, _ = _pipeline(_make_ip_multicycle_data)
-    assert [(z.meta["structure_id"], z.meta["cycle_id"]) for z in out["poi_zones"]] == [(0, 2)]
-    none_rows = [(r.cycle_id, r.reason) for r in out["ic_candidates"] if r.ic_idx is None]
-    # + cycle 0: main's single since PLAN_I S4 (Q6), no candidates
-    assert none_rows == [(0, "no_ic_candidate"), (1, "no_pattern"), (3, "no_pattern")]
+    got = [(z.meta["cycle_id"], z.ic_idx, z.meta["ip_outcome"], z.meta["ip_rank"], z.meta["ranking_rule"])
+           for z in out["poi_zones"]]
+    assert got == [(1, 7, "no_pattern", None, None), (2, 14, "pattern", "1A.iii", None),
+                   (3, 19, "no_pattern", None, None)]
+    for z in out["poi_zones"]:
+        if z.meta["ip_outcome"] == "no_pattern":
+            assert [z.meta[k] for k in ("ip_leg_candle_counts", "pattern_anchor_idx", "opp_leg_first_idx",
+                                        "pattern_end_idx", "pattern_confirmed_idx")] == [None] * 5
+    none_rows = [(r.cycle_id, r.reason, r.ip_outcome) for r in out["ic_candidates"] if r.ic_idx is None]
+    # cycle 0: main's single since PLAN_I S4 (Q6), no candidates — Step 2 never ran
+    assert none_rows == [(0, "no_ic_candidate", None)]
 
 
 def test_ic_candidates_read_the_records_they_are_handed():
@@ -353,7 +392,7 @@ def test_ic_candidates_read_the_records_they_are_handed():
 
 
 # ---------------------------------------------------------------------------
-# HV: the one hover builder; C1: the H1 fib hover's "IP: none"
+# HV: the one hover builder; C1: the H1 fib hover's "IP: none" ("IC: none" since PLAN_L L2)
 # ---------------------------------------------------------------------------
 
 _CUSTOMDATA_REF = re.compile(r"%\{customdata\[(\d+)\](?::[^}]*)?\}")
@@ -368,9 +407,10 @@ def _rendered(tr, k=0):
 
 
 def _meta(rank, counts, anchor, opp_first, end, tb=None, runner=None, c2=None):
-    return {"ip_rank": rank, "ip_leg_candle_counts": counts, "pattern_anchor_idx": anchor,
+    """A pattern IC's POI meta (the hover's keys; `ip_outcome` "pattern", no ranking — PLAN_L L2)."""
+    return {"ip_outcome": "pattern", "ip_rank": rank, "ip_leg_candle_counts": counts, "pattern_anchor_idx": anchor,
             "opp_leg_first_idx": opp_first, "pattern_end_idx": end, "ip_tiebreak": tb,
-            "ip_tb_runner_up_ic_idx": runner, "ip_tb_imbalance_first_c2_idx": c2}
+            "ip_tb_runner_up_ic_idx": runner, "ip_tb_imbalance_first_c2_idx": c2, "ranking_rule": None}
 
 
 def test_hover_single_legs_print_one_index_each():
@@ -408,9 +448,11 @@ def test_hover_rejects_legs_that_do_not_match_their_indices():
         poi_ic_hover_text(_meta("1A.i", "1-1-1", 2703, 2704, 2705, "TB3"), 2704)
 
 
-def test_h1_chart_hovers_show_the_pattern_and_ip_none(tmp_path, monkeypatch):
-    """The H1 chart: the POI hover lines carry the builder's text; a no-pattern record's fib hover ends in
-    "IP: none (no_pattern)", a picked record's does not."""
+def test_h1_chart_hovers_show_the_pattern_the_ranking_and_ic_none(tmp_path, monkeypatch):
+    """The H1 chart: the POI hover lines carry the builder's text — the pattern's (cycle 2) and, since PLAN_L L2, a
+    ranked IC's `No pattern · only IC candidate` (cycles 1 / 3, no `IC <idx>` — ICR-15); the fib hovers: the
+    pattern pick `IP <rank> · IC <idx>`, a ranked pick `No pattern · IC <idx> · only IC candidate` (the index kept),
+    the record without an IC candidate `IC: none (no_ic_candidate)` (was `IP: none (no_pattern)` on cycle 1)."""
     go = pytest.importorskip("plotly.graph_objects")
     from engine_v2.charting.export_plotly import export_chart_plotly
     from engine_v2.multitf.registry import StructureRegistry
@@ -431,20 +473,28 @@ def test_h1_chart_hovers_show_the_pattern_and_ip_none(tmp_path, monkeypatch):
     with contextlib.redirect_stdout(io.StringIO()):
         export_chart_plotly(title="t", registry=reg, path_id="H1", out_dir=tmp_path, cfg=cfg)
     fig, = figs
-    poi = out["poi_zones"][0]
+    by_ic = {z.ic_idx: z for z in out["poi_zones"]}
+    assert sorted(by_ic) == [7, 14, 19]
     poi_tr = [tr for tr in fig.data if (tr.name or "").startswith("POI zone")]
-    assert len(poi_tr) == 2
-    ip = poi_ic_hover_text(poi.meta, poi.ic_idx)
-    assert all(c[6] == ip for tr in poi_tr for c in tr.customdata)
-    assert all(f"<br>{ip}<br>top=" in _rendered(tr) for tr in poi_tr)          # the template shows it
-    assert all("versions=" not in tr.hovertemplate for tr in poi_tr)
+    assert len(poi_tr) == 2 * len(by_ic) and {tr.customdata[0][3] for tr in poi_tr} == set(by_ic)
+    for tr in poi_tr:
+        z = by_ic[tr.customdata[0][3]]
+        ip = poi_ic_hover_text(z.meta, z.ic_idx)
+        assert all(c[6] == ip for c in tr.customdata)
+        assert f"<br>{ip}<br>top=" in _rendered(tr)                               # the template shows it
+        assert "versions=" not in tr.hovertemplate
+    assert poi_ic_hover_text(by_ic[7].meta, 7) == "No pattern · only IC candidate"
+    assert poi_ic_hover_text(by_ic[14].meta, 14).startswith("IP 1A.iii · legs ")
     fib_tr = [tr for tr in fig.data if (tr.name or "").startswith("fib:")]
     fib_status = {tr.name: tr.customdata[0][8] for tr in fib_tr}
-    # the IP line, then S2's limit line (main's limits since PLAN_I S4: sid 0 started by start trading)
+    # the IC line, then the IC reference, then S2's limit line (main's limits since PLAN_I S4: sid 0 started by
+    # start trading)
     lines = fib_status["fib:sid0:c1"].split("<br>")
-    assert lines[2:] == ["IP: none (no_pattern)", lines[3], "limit: none (start_trading)"]
+    assert lines[2:] == ["No pattern · IC 7 · only IC candidate", lines[3], "limit: none (start_trading)"]
     assert lines[3].startswith("IC ref ") and "(prev_cycle_cts, cycle 0)" in lines[3]   # PLAN_K A17
-    assert "IP: none" not in fib_status["fib:sid0:c2"]
+    assert fib_status["fib:sid0:c2"].split("<br>")[2] == "IP 1A.iii · IC 14"
+    assert fib_status["fib:sid0:c0"].split("<br>")[2] == "IC: none (no_ic_candidate)"
+    assert not any("IP: none" in v or "IP: not evaluated" in v for v in fib_status.values())
     # F1·1: a literal `%` (Plotly has no `%%` escape)
     assert all("<br>61.8%=" in _rendered(tr) and "<br>80%=" in _rendered(tr) and "%%" not in tr.hovertemplate
                for tr in fib_tr)
@@ -459,7 +509,7 @@ def test_poi_meta_copies_the_selections_tiebreak():
     assert [r.selection.pick.ic_idx for r in recs if r.selection.pick is not None] == [9]
     recs = [dataclasses.replace(r, selection=dataclasses.replace(
         r.selection, tiebreak=("most_recent_before_imbalance", 7, 2, 11)))
-            for r in recs]
+            if r.selection.pick is not None else r for r in recs]     # a tiebreak needs a pattern pick (PLAN_L L2)
     with contextlib.redirect_stdout(io.StringIO()):
         poi, = poi_zones.derive_poi_zones(res.df, res.events, fib_tracker=out["fib_tracker"], config=POIConfig(),
                                           ic_records=recs)

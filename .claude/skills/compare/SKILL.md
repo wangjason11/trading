@@ -429,7 +429,7 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_structure_levels.csv` |
 | `*_kl_zones.csv` |
 | `*_poi_zones.csv` |
-| `*_ic_candidates.csv` — the IC selection (`*_ip_candidates.csv` until PLAN_L landing 1, 2026-10-09; PLAN_H landing A; the picked rows = the drawn POIs since landing B); + the column `ic_ref_reason` after `touches_zone` since PLAN_K landing A (2026-10-09); + `immediate_imbalance_first_c2_idx` after `ic_ref_reason` since the IP tiebreaker update (2026-10-09); + `has_unfilled_imbalance_after`, `is_ic_candidate` after it and one row per agreed-opposite candle of the window since PLAN_L landing 1 |
+| `*_ic_candidates.csv` — the IC selection (`*_ip_candidates.csv` until PLAN_L landing 1, 2026-10-09; PLAN_H landing A; the picked rows = the drawn POIs since landing B); + the column `ic_ref_reason` after `touches_zone` since PLAN_K landing A (2026-10-09); + `immediate_imbalance_first_c2_idx` after `ic_ref_reason` since the IP tiebreaker update (2026-10-09); + `has_unfilled_imbalance_after`, `is_ic_candidate` after it and one row per agreed-opposite candle of the window since PLAN_L landing 1; + `ip_outcome` after `is_ic_candidate` and the 4 `ranking_*` columns at the end since PLAN_L landing 2 (2026-10-10) |
 | `*_structure_events.csv` — `STATE_CHANGED(to=reversal)` carries `meta["pattern_anchor_idx"]` since PLAN_K landing A |
 | `*_imbalance_instances.csv` |
 | `*_fib_lifecycle.csv` — no `fib_mode` column since PLAN_I S6 (2026-10-09): against an older save (S_J `20261009_013718_708a8d9` and before) diff the 3 fib CSVs with `engine_v2/plans/plan_i_inputs/cmp_s6_fib_mode.py BASE CUR` (positional `cmp_save.py` shifts the `meta` cell); the `ic_ref_*` meta keys since PLAN_K landing A |
@@ -464,6 +464,22 @@ first** (no replay overwrites them — `cmp_save --names-from` an older save wou
 `*_sids.csv` trap below). The older boundary scripts (`cmp_tbu.py`, `cmp_k_landing_a/b.py`) read
 `*_ip_candidates.csv`: run them with CUR = S_TBU, then `cmp_l1.py` S_TBU → current. S_L1 `20261010_114846_b5c3613` is the first
 save with it (= `LATEST_<branch>` from 2026-10-10).
+**PLAN_L landing 2 (2026-10-10, Step 3 — the ranking rules) — a BEHAVIOUR + FORMAT change:** a fib record with IC
+candidates but no institutional pattern now gets a RANKED IC (POI_ZONES_SPEC §3.6) — on the reference window 7 new
+POIs (H1 180, 694; confluence 670, 929, 1804, 2575, 3809), no structure / trigger / sub / WVMI change; the POI meta
+gains 5 keys (`ip_outcome` before `ip_rank`, the 4 `ranking_*` after `ip_tb_imbalance_first_c2_idx` — every POI row's
+`meta` cell differs) and a ranked POI's pattern keys are None (`ip_rank` column empty); the IC CSVs gain `ip_outcome`
+(after `is_ic_candidate`) and the 4 `ranking_*` columns (at the end); the no-IC row's reasons are `no_ic_candidate` /
+`all_ic_candidates_pinbar` (`no_pattern` is Step 2's `ip_outcome` now — the 7 records' no-IC `no_pattern` rows are
+gone: H1 241 → 239, confluence 1324 → 1319 — and each record's ranked candidate row becomes its picked row); the hovers: a ranked POI's `No pattern · ranking rule …` / `No pattern · only IC candidate`, the fib
+hover's `IC: none (…)` / `IC: not evaluated (…)` (were `IP: …`) and `No pattern · IC <idx> · …`. Exactly 6 CSVs differ
+(the 3 POI + 3 IC CSVs); the figures differ by the 4 DRAWN new POIs — H1 180 (+ its H1-overlay copy on both
+lenses), confluence 929 / 2575 / 3809; 694 / 670 / 1804 sit on collapsed cycles and are hidden like their fibs — and
+the hover texts. Against S_L1:
+`engine_v2/plans/plan_h_inputs/cmp_l2.py BASE [CUR_DEBUG CUR_CHARTS]` (keyed: the 21 other CSVs md5, the POI rows per
+key with the meta per key, the IC CSV columns by name, the figure counts; exit 1 on anything else) — a positional
+`cmp_save.py` breaks on the POI `meta` cell and the new columns. Older saves: chain through S_L1 (`cmp_l1.py`, then
+`cmp_l2.py`). The first save with it: S_L2 (set at its `/commit-save`).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -566,7 +582,11 @@ text or `customdata`: for a hover / label change (or to prove none), run
 `review_scripts/cmp_hover.py BASE CUR_CHARTS [--match TEXT]` — the changed `hovertemplate` count per chart, how many
 changed outside `TEXT`, and the `customdata` count (the wave-candle label fix `a8ed1cc`: 11 / 66 / 33, 0 outside). For a **byte-identical** claim run `review_scripts/cmp_fig_full.py BASE` — every CSV by md5 and each
 chart's FULL figure JSON (every trace attribute + the layout), exit 1 on any difference (§13.5.e, 2026-09-30). Its CSV
-diff is POSITIONAL: on a header change (an added / renamed column) diff that CSV keyed by column name.
+diff is POSITIONAL: on a header change (an added / renamed column) diff that CSV keyed by column name. Its TRACE diff is
+positional too: one inserted trace (a new POI's hover lines) shifts every later index, so every later trace reads as
+"differing" (PLAN_L L2: 233 of 282 confluence traces) — for a change that adds or removes traces, diff the traces /
+shapes as MULTISETS of their full JSON, summarised by trace name (`plan_h_inputs/cmp_l2.py` §4,
+`plan_h_inputs/l2_hover_diff.py` for the changed hover texts).
 It counts changed CELLS; for a change to meta VALUES (one meta cell can hold several changed keys) use
 `review_scripts/cmp_meta_keys.py BASE CUR` — per-key counts, each delta checked to be `+slice_begin`
 (Post-E·2: 547 cells = 715 keys).

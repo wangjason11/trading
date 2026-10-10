@@ -20,6 +20,12 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple
 from engine_v2.charting.style_registry import STYLE
 from engine_v2.zones.poi_lifecycle import active_stretches_from_history
 from engine_v2.zones.poi_zones import (
+    IP_OUTCOME_NO_PATTERN,
+    IP_OUTCOME_PATTERN,
+    RANKING_EXCLUDE_PINBAR,
+    RANKING_IC_CANDLE_TYPE,
+    RANKING_IMMEDIATE_UNFILLED_IMBALANCE,
+    RANKING_MOST_RECENT_BEFORE_IMBALANCE,
     TIEBREAK_IC_CANDLE_TYPE,
     TIEBREAK_IMMEDIATE_UNFILLED_IMBALANCE,
     TIEBREAK_MOST_RECENT_BEFORE_IMBALANCE,
@@ -131,8 +137,44 @@ def compute_poi_active_stretches(
 
 
 # ---------------------------------------------------------------------------
-# POI hover: the institutional pattern (PLAN_H HV)
+# POI hover: the institutional pattern (PLAN_H HV) or the ranking (PLAN_L L2)
 # ---------------------------------------------------------------------------
+
+# The ranking rules' runner-up / gap per deciding rule (PLAN_L §4.1, ICR-14): which values the hover line carries.
+_RANKING_HOVER_PARTS = {
+    RANKING_EXCLUDE_PINBAR: (False, False),
+    RANKING_IMMEDIATE_UNFILLED_IMBALANCE: (True, True),
+    RANKING_IC_CANDLE_TYPE: (True, False),
+    RANKING_MOST_RECENT_BEFORE_IMBALANCE: (True, True),
+}
+
+
+def _poi_ranking_hover_text(meta: dict, ic_idx: int) -> str:
+    """A ranked IC's POI hover line (PLAN_L §4.1; PLAN_H §6 ICR-7 / ICR-15): `No pattern · ranking rule <rule>` +
+    ` over <runner-up>` + ` (gap <c2>)` when the deciding rule has them (`exclude_pinbar` neither, `ic_candle_type`
+    no gap), or `No pattern · only IC candidate` (nothing was ranked — ICR-10). NO `IC <idx>`: the POI hover's own
+    `ic_idx=` line names the IC. The pattern meta must be all None (asserted)."""
+    ic = int(ic_idx)
+    pattern = [meta[k] for k in ("ip_rank", "ip_leg_candle_counts", "pattern_anchor_idx", "opp_leg_first_idx",
+                                 "pattern_end_idx", "pattern_confirmed_idx", "ip_tiebreak")]
+    assert pattern == [None] * len(pattern), f"[chart] ranked POI {ic} carries pattern meta {pattern}"
+    rule = meta["ranking_rule"]
+    if rule is None:
+        assert meta["ranking_runner_up_ic_idx"] is None and meta["ranking_imbalance_first_c2_idx"] is None, (
+            f"[chart] POI {ic}: a ranking value without a ranking rule")
+        return "No pattern · only IC candidate"
+    assert rule in _RANKING_HOVER_PARTS, f"[chart] POI {ic} unknown ranking_rule {rule!r}"
+    has_runner_up, has_gap = _RANKING_HOVER_PARTS[rule]
+    runner_up, gap = meta["ranking_runner_up_ic_idx"], meta["ranking_imbalance_first_c2_idx"]
+    assert (runner_up is not None, gap is not None) == (has_runner_up, has_gap), (
+        f"[chart] POI {ic} ranking {rule}: runner-up {runner_up}, gap {gap}")
+    text = f"No pattern · ranking rule {rule}"
+    if has_runner_up:
+        text += f" over {int(runner_up)}"
+    if has_gap:
+        text += f" (gap {int(gap)})"
+    return text
+
 
 def poi_ic_hover_text(meta: dict, ic_idx: int) -> str:
     """The POI hover's pattern line(s) — ONE builder for the three POI hover
@@ -142,7 +184,12 @@ def poi_ic_hover_text(meta: dict, ic_idx: int) -> str:
     immediate unfilled imbalance <c2>` / `…: IC candle type` / `…: most recent
     before imbalance <c2>` when a tiebreaker decided (`poi_zones.TIEBREAK_*`). Indices are the POI's own (entity-absolute on a
     mirrored sub POI); the counts must match the leg indices (asserted — a
-    missed mirror shift would break it)."""
+    missed mirror shift would break it). A ranked IC (`ip_outcome`
+    "no_pattern", PLAN_L L2): its ranking line instead (`_poi_ranking_hover_text`)."""
+    if meta["ip_outcome"] == IP_OUTCOME_NO_PATTERN:
+        return _poi_ranking_hover_text(meta, ic_idx)
+    assert meta["ip_outcome"] == IP_OUTCOME_PATTERN, f"[chart] POI {ic_idx} ip_outcome {meta['ip_outcome']!r}"
+    assert meta["ranking_rule"] is None, f"[chart] pattern POI {ic_idx} carries ranking_rule {meta['ranking_rule']!r}"
     n_init, n_opp, n_cont = (int(x) for x in meta["ip_leg_candle_counts"].split("-"))
     anchor, opp_first, end = (int(meta["pattern_anchor_idx"]), int(meta["opp_leg_first_idx"]),
                               int(meta["pattern_end_idx"]))
@@ -199,8 +246,8 @@ def fib_is_bright(fib_st: Any) -> bool:
 
 
 def ic_rows_by_fib_record(ic_candidates: Sequence[Any], *, by_sub: bool) -> dict:
-    """The `attrs["ic_candidates"]` row holding each fib record's IP outcome —
-    its picked row or its `IP: none` row (`ic_idx` None) — keyed by
+    """The `attrs["ic_candidates"]` row holding each fib record's IC outcome —
+    its picked row or its no-IC row (`ic_idx` None) — keyed by
     `(structure_id, cycle_id, bos_anchor_idx, cts_anchor_idx)`, prefixed with
     `meta["sub_id"]` when `by_sub` (an M15 lens: a sub's structure_id restarts
     at 0 in every sub). A record the POI record gate skipped has no row."""
@@ -211,7 +258,7 @@ def ic_rows_by_fib_record(ic_candidates: Sequence[Any], *, by_sub: bool) -> dict
         key = (int(r.structure_id), int(r.cycle_id), int(r.bos_anchor_idx), int(r.cts_anchor_idx))
         if by_sub:
             key = (int(r.meta["sub_id"]),) + key
-        assert key not in out, f"[chart] two IP outcome rows for fib record {key}"
+        assert key not in out, f"[chart] two IC outcome rows for fib record {key}"
         out[key] = r
     return out
 
@@ -269,10 +316,13 @@ def fib_hover_ic_ref_text(fib_st: Any) -> Optional[str]:
 def fib_hover_status_text(fib_st: Any, ic_row: Optional[Any]) -> str:
     """The fib hover's status cell — ONE builder for both charts (PLAN_H §8.9
     F1): the lifecycle status (+ ` (locked)`), `life=[start_idx, end_idx]
-    end_reason` (`–` = never started, `open` = not ended), the cycle's IP
-    outcome (`ic_rows_by_fib_record`): `IP <rank> · IC <idx>` (the pick = the
-    drawn POI), `IP: none (<reason>)` (no pattern → no POI, PLAN_H C1), or
-    `IP: not evaluated (no POI record)` (no row: the POI record gate skipped
+    end_reason` (`–` = never started, `open` = not ended), the cycle's IC
+    outcome (`ic_rows_by_fib_record`; the pick = the drawn POI): `IP <rank> ·
+    IC <idx>` (a pattern's IC), `No pattern · IC <idx> · ranking rule <rule>` /
+    `No pattern · IC <idx> · only IC candidate` (a ranked IC, PLAN_L L2 — the IC
+    index KEPT: the fib box's only pointer to its IC, ICR-15), `IC: none
+    (<reason>)` (no IC → no POI: `no_ic_candidate` / `all_ic_candidates_pinbar`),
+    or `IC: not evaluated (no POI record)` (no row: the POI record gate skipped
     the record — ended before locking, or no CTS_ESTABLISHED), the record's IC
     reference (`fib_hover_ic_ref_text`, PLAN_K A17), and the structure's
     cross-fib limit (`fib_hover_limit_text`, PLAN_I R6-7)."""
@@ -280,10 +330,15 @@ def fib_hover_status_text(fib_st: Any, ic_row: Optional[Any]) -> str:
     end = "open" if fib_st.end_idx is None else int(fib_st.end_idx)
     life = f"life=[{start}, {end}]" + (f" {fib_st.end_reason}" if fib_st.end_reason else "")
     if ic_row is None:
-        ip = "IP: not evaluated (no POI record)"
+        ip = "IC: not evaluated (no POI record)"
     elif ic_row.ic_idx is None:
-        ip = f"IP: none ({ic_row.reason})"
+        ip = f"IC: none ({ic_row.reason})"
+    elif ic_row.ip_outcome == IP_OUTCOME_NO_PATTERN:
+        how = "only IC candidate" if ic_row.ranking_rule is None else f"ranking rule {ic_row.ranking_rule}"
+        ip = f"No pattern · IC {int(ic_row.ic_idx)} · {how}"
     else:
+        assert ic_row.ip_outcome == IP_OUTCOME_PATTERN, (
+            f"[chart] picked row {ic_row.ic_idx} ip_outcome {ic_row.ip_outcome!r}")
         ip = f"IP {ic_row.ip_rank} · IC {int(ic_row.ic_idx)}"
     status = getattr(fib_st, "status", "active")
     text = f"{status}{' (locked)' if fib_st.locked else ''}<br>{life}<br>{ip}"

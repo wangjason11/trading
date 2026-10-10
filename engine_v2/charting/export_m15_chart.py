@@ -763,7 +763,7 @@ def export_m15_chart_plotly(
     all_wvmi_records: list = list(m15_df.attrs.get("wvmi", []))
     all_prev_bos_lines: list = list(m15_df.attrs.get("prev_bos_lines", []))
     all_fib_states: list = list(m15_df.attrs.get("fib_states", []))
-    # Each fib record's IP outcome (the pick / `IP: none` row), keyed by sub_id
+    # Each fib record's IC outcome (the picked / no-IC row), keyed by sub_id
     # + (structure_id, cycle_id, BOS anchor, CTS anchor) — PLAN_H §8.9 F1.
     ic_rows_by_fib = ic_rows_by_fib_record(m15_df.attrs.get("ic_candidates", []), by_sub=True)
 

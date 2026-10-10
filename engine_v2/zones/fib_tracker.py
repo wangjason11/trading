@@ -125,7 +125,7 @@ class FibState:
 # The ONE imbalance fill threshold of the fib decision (70 % = filled): the downstream tracker
 # (`orchestrator._run_downstream_pipeline`) and MarketStructure's embedded tracker
 # (`structure_engine._make_market_structure`, PLAN_I S5 / D5) both build their config with it, and MS's in-flight
-# IP pick reads the tracker's value (`poi_zones.poi_inner_for_fib`).
+# IC pick reads the tracker's value (`poi_zones.poi_inner_for_fib`).
 FIB_FILL_THRESHOLD = 0.70
 
 

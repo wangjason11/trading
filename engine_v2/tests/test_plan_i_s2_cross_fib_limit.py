@@ -673,7 +673,7 @@ def test_the_limit_hover_line(meta, text):
 def test_the_limit_line_is_the_hovers_last_line_and_absent_without_the_keys():
     with_lim = fib_hover_status_text(_fib(**_lim(0.57827, "prev_sub_bos_threshold", 2, 6)), None)
     assert with_lim.split("<br>") == [
-        "active", "life=[10, open]", "IP: not evaluated (no POI record)",
+        "active", "life=[10, open]", "IC: not evaluated (no POI record)",
         "IC ref: none",                                        # PLAN_K A17: a stamped record with no reference
         "limit 0.57827 · prev_sub_bos_threshold (sub 6) · M=2"]
     assert fib_hover_limit_text(_fib()) is None

@@ -347,8 +347,8 @@ threshold until PLAN_I S4 retired the revert; the line is still drawn):
 
 IC identification, per fib record (BOS anchor `b`, CTS anchor `c`, direction `sd`), in the user's STEPS — each step,
 and each rule set inside it, runs in order (the flow PLAN_H §6 RX1-F; the holistic write-up
-`../plans/plan_h_inputs/ic_identification_revamp_spec.md`, decisions PLAN_H §6 ICR-S, ICR-1 … ICR-14; built by
-`../plans/PLAN_L_ic_identification_steps.md`, landing 1 = this structure, 2026-10-09):
+`../plans/plan_h_inputs/ic_identification_revamp_spec.md`, decisions PLAN_H §6 ICR-S, ICR-1 … ICR-15; built by
+`../plans/PLAN_L_ic_identification_steps.md`, landing 1 = this structure, 2026-10-09; landing 2 = Step 3, 2026-10-10):
 
 1. **Step 1 — the IC candidates** (§3.1, `check_ic_conditions` / `find_ic_candidates`): every candle of the fib's
    `b … c` window (the scope, not a condition) whose agreed direction is −sd (condition 1) is checked against the
@@ -357,17 +357,21 @@ and each rule set inside it, runs in order (the flow PLAN_H §6 RX1-F; the holis
    None → no IC (`no_ic_candidate` — never attributed to one condition; Step 4 would run).
 2. **Step 2 — the institutional pattern** (§3.4, `select_institutional_pattern`) among the IC candidates: the best
    (rank, shape); patterns tied on it → the **tiebreak rules** (`apply_tiebreak_rules`: the immediate unfilled
-   imbalance → the IC's candle type → the most recent before the imbalance). No pattern → `no_pattern`.
-3. **Step 3 — the ranking rules — PLAN_L landing 2, NOT BUILT YET** (today: no pattern → no IC): when no pattern
-   exists, over the UNFILTERED Step 1 list — exclude pinbars → the immediate unfilled imbalance → maru > normal → the
-   most recent before the imbalance (after the oldest candidate still in play); a rule set of its OWN, separate from
-   the tiebreak rules (ICR-S; one helper per rule the two sets share, each given its own input list — ICR-9).
+   imbalance → the IC's candle type → the most recent before the imbalance). A pattern → the IC, **`ip_outcome`
+   `pattern`**; none → `ip_outcome` **`no_pattern`** → Step 3.
+3. **Step 3 — the ranking rules** (§3.6, `apply_ranking_rules`; PLAN_L landing 2, 2026-10-10) over the UNFILTERED
+   Step 1 list — exclude pinbars → the immediate unfilled imbalance → maru > normal → the most recent before the
+   imbalance (after the oldest candidate still in play); a rule set of its OWN, separate from the tiebreak rules
+   (ICR-S; one helper per rule the two sets share, each given its own input list — ICR-9). Every IC candidate a
+   pinbar → no IC (`all_ic_candidates_pinbar`).
 4. **Step 4 — the lower-TF fallback: DEFERRED, possibly never** (register `IDEA_PARKING_LOT.md` §D.2): Steps 1–3 on
-   the lower TF when no IC candidate remains.
+   the lower TF when no IC candidate remains (`no_ic_candidate` / `all_ic_candidates_pinbar`).
 
-`select_ic` runs the steps. No IC → **no POI** for that record (PLAN_H D7; the `IP: none` reasons `no_ic_candidate`
-/ `no_pattern`, §3.5 — RX1-N): MS's sd-proximity and the zone-proximity scan then read the BOS inner only for that
-cycle.
+`select_ic` runs the steps → `ICSelection` (`pick`, Step 2's `tiebreak`, `ip_outcome`, Step 3's `ranking`,
+`no_ic_reason`). No IC → **no POI** for that record (PLAN_H D7; the no-IC reasons `no_ic_candidate` /
+`all_ic_candidates_pinbar`, §3.5 — RX1-N, ICR-3): MS's sd-proximity and the zone-proximity scan then read the BOS
+inner only for that cycle. A pattern's IC and a ranked IC are drawn and read alike (one POI, one inner — PLAN_H D2,
+ICR-12); they differ only in the activation floor's pattern term (§4) and in the hover / CSV fields.
 
 ### 3.1 Step 1 — the IC conditions, applied together
 
@@ -449,8 +453,8 @@ would).
 
 > Kept in the code (`select_ic_variants`, `POIConfig.v30 / v60 / v90`) with its tests as a possible no-pattern
 > fallback (PLAN_H X1: "There is still a chance that I use those as fallbacks … we might still delete in the future").
-> The user's IC identification write-up (2026-10-09) gave the no-pattern role to Step 3, the ranking rules (PLAN_L L2),
-> and kept this code unwired ("Keep it for now", PLAN_H §6 ICR-5); the remaining fallback is register §D.2 "Step 4 of
+> The user's IC identification write-up (2026-10-09) gave the no-pattern role to Step 3, the ranking rules (§3.6,
+> PLAN_L L2), and kept this code unwired ("Keep it for now", PLAN_H §6 ICR-5); the remaining fallback is register §D.2 "Step 4 of
 > IC identification". Nothing calls it. The rule as it was:
 
 From IC candidates, find the **most recent candle** meeting each overlap threshold:
@@ -538,17 +542,21 @@ sub projection); the picked rows ARE the drawn POIs since PLAN_H landing B. Name
   (one copy per lens). One row per Step 1 CHECK of each record — every candle of the window **with the agreed
   direction** −sd (so a volume-only doji is listed and a split candle is not), whatever its other conditions (since
   PLAN_L L1, PLAN_H §6 ICR-4; before it only the candles passing condition 3 were listed), each with its pattern
-  classified (ICR-11 — debug only: only an IC candidate is ever picked), + one `IP: none` row (`ic_idx` empty, `reason` `no_pattern` — IC candidates, none
-  patterned — / `no_ic_candidate` — no candle passes every IC condition, never attributed to one condition; was
-  `no_candidates` for "no §3.1 candidate" until PLAN_K landing B, PLAN_H §6 RX1-N) per
-  record without a pick. Columns: the attribution (`structure_path_id`, `sub_id`, `parent_sid`, `parent_cycle_id`),
+  classified (ICR-11 — debug only: only an IC candidate is ever picked), + one **no-IC row** (`ic_idx` empty, the
+  `IP: none` row until PLAN_L L2) per record without a pick, `reason` = `no_ic_candidate` (no candle passes every IC
+  condition, never attributed to one condition; was `no_candidates` for "no §3.1 candidate" until PLAN_K landing B,
+  PLAN_H §6 RX1-N) or `all_ic_candidates_pinbar` (no pattern and every IC candidate a pinbar — §3.6; since PLAN_L L2).
+  Until PLAN_L L2 a third reason, `no_pattern` (IC candidates, none patterned), sat there — such a record now has a
+  RANKED pick, and `no_pattern` is Step 2's `ip_outcome`. Columns: the attribution (`structure_path_id`, `sub_id`, `parent_sid`, `parent_cycle_id`),
   the record (`structure_id`, `cycle_id`, `bos_anchor_idx`, `cts_anchor_idx`, `sd`), the candidate (`ic_idx`,
   `candle_type`, `agreed_dir`, `touches_zone`, `ic_ref_reason` — §3.2's outcome: empty = passes or no reference,
-  `ic_past_reference`, `ic_not_before_break`; empty on the `IP: none` row; since PLAN_K landing A — a save before
+  `ic_past_reference`, `ic_not_before_break`; empty on the no-IC row; since PLAN_K landing A — a save before
   S_K_A lacks the column), `immediate_imbalance_first_c2_idx` (the first gap candle of the candidate's unfilled sd
-  imbalance immediately after it — §3.4's first tiebreak rule; empty = none, and on the `IP: none` row; since the IP
+  imbalance immediately after it — §3.4's first tiebreak rule; empty = none, and on the no-IC row; since the IP
   tiebreaker update — a save before it lacks the column), `has_unfilled_imbalance_after` (condition 3) and
-  `is_ic_candidate` (all four conditions pass) — both empty on the `IP: none` row; since PLAN_L L1 —, the pattern (`ip_rank` e.g. "1A.iv", `reason` = the first failing rule
+  `is_ic_candidate` (all four conditions pass) — both empty on the no-IC row; since PLAN_L L1 —, **`ip_outcome`**
+  (Step 2's outcome on EVERY row of the record: `pattern` / `no_pattern`, empty when Step 2 never ran — no IC
+  candidate; since PLAN_L L2), the pattern (`ip_rank` e.g. "1A.iv", `reason` = the first failing rule
   when there is none, `pattern_anchor_idx`, `opp_leg_first_idx`, `pattern_end_idx`, `pattern_confirmed_idx`,
   `ip_leg_candle_counts` "a-b-c", `legs` "first..last" per leg, located from `ic_idx` + the counts), each leg stack's
   `*_type` / `*_ratio` (vs the 5 marus before the pattern's first candle) / `*_body_pips`, and `picked` + the tiebreak
@@ -557,8 +565,54 @@ sub projection); the picked rows ARE the drawn POIs since PLAN_H landing B. Name
   most recent before the imbalance: the most recent other IC in play; `ip_tied_count` — the size of the group the
   DECIDING rule broke: the (rank, shape) tie / the ICs the first left in play / the candle type's survivors;
   `ip_tb_imbalance_first_c2_idx` — the pick's immediate imbalance / the reference imbalance, empty for the candle
-  type) on the picked row. A failing
-  candidate's `ip_leg_candle_counts` / stacks are its first failing variant's.
+  type) on the picked row, then Step 3's own **`ranking_rule`**, **`ranking_runner_up_ic_idx`**,
+  **`ranking_in_play_count`**, **`ranking_imbalance_first_c2_idx`** (§3.6) on a RANKED pick's row (since PLAN_L L2).
+  A failing candidate's `ip_leg_candle_counts` / stacks are its first failing variant's — a ranked pick's row too: it
+  keeps its pattern DIAGNOSTICS (`reason` = the first failing pattern rule, the counts, `legs`, the stacks) like every
+  failing row; `ip_outcome` `no_pattern` + `ranking_rule` say why it was picked (PLAN_H §6 ICR-15 (c)).
+
+### 3.6 Step 3 — the ranking rules (`apply_ranking_rules`; PLAN_L landing 2, 2026-10-10)
+
+> The user's write-up `../plans/plan_h_inputs/ic_identification_revamp_spec.md` (Step 3, "general rankings"); the
+> decisions PLAN_H §6 ICR-S, ICR-1, ICR-2, ICR-3, ICR-8 … ICR-10, ICR-12, ICR-14, ICR-15; built by PLAN_L §4.
+
+Run by `select_ic` ONLY when Step 2 found no pattern (`ip_outcome` `no_pattern`), over the UNFILTERED IC candidates
+(every Step 1 candidate — not the patterns' ICs), their CHECKS (the candle type from the frame, the immediate gap
+from the check — nothing re-derived). Its own rule set (ICR-S): each rule over the candidates the previous one left
+in play, the first to leave exactly one deciding (`ranking_rule`):
+
+1. **exclude pinbars** (`exclude_pinbar`; `candle_type` "pinbar") — none left → **no IC** (`all_ic_candidates_pinbar`;
+   Step 4 would run — deferred); one left of two or more → it (rules 2–4 never run: no runner-up, ICR-14);
+2. **the immediate unfilled imbalance** (`immediate_unfilled_imbalance`) — a filter, the SAME rule as tiebreak rule 1
+   (`filter_immediate_unfilled_imbalance`, the window `POIConfig.immediate_imbalance_candles`, ICR-9) on THIS list:
+   exactly one passes → it; two or more → only they go on; none → all go on;
+3. **the candle type** maru > normal (`ic_candle_type`; `prefer_candle_type(include_pinbar=False)` — rule 1 already
+   removed the pinbars);
+4. **the most recent before the imbalance** (`most_recent_before_imbalance`, the SAME helper as tiebreak rule 3): the
+   reference = the earliest unfilled sd imbalance after the OLDEST candidate STILL IN PLAY after rules 1–3 (ICR-8 —
+   not the oldest Step 1 candidate); the pick = the most recent candidate in play before the reference's first gap
+   candle; a candidate may be the gap's c1 — of two neighbours sharing one gap, the one closer to it (ICR-1: "The
+   IC candidate closer to the imbalance is better"). It always decides when reached (the oldest in play passed IC
+   condition 3).
+
+Step 1 found exactly ONE IC candidate and it is not a pinbar → it is the IC with `ranking_rule` EMPTY (nothing was
+ranked, ICR-10; a single PINBAR candidate → no IC). The order matters: H1 sid 0 cycle 0 (IC candidates 177 pinbar,
+180 maru, 183 pinbar — only 183 has an immediate gap) → rule 1 excludes 183 first → **180**, where the tiebreak rules'
+order would take 183.
+
+**The fields** (`ICSelection.ranking` → the POI meta and the CSV's picked row, §3.5 / §4): `ranking_rule`;
+`ranking_runner_up_ic_idx` — rule 2: the most recent candidate in play failing it; rule 3: the most recent normal;
+rule 4: the most recent other candidate in play; rule 1: EMPTY; `ranking_in_play_count` — the candidates entering the
+deciding rule (rule 1: the Step 1 count); `ranking_imbalance_first_c2_idx` — rule 2: the pick's immediate gap; rule
+4: the reference gap; else empty. All four empty with no ranking rule. Every value an `int` / `str` (the sub mirror
+shifts only Python ints — `entity_df_mutation._ZONE_META_IDX_KEYS` / `_IC_CANDIDATE_IDX_FIELDS` hold the two `*_idx`).
+
+**The consumers** — ONE selector (PLAN_H D2, ICR-12): the drawn POI (its activation floor has no pattern term — §4,
+ICR-2) and MS's in-flight read (`poi_inner_for_fib` returns a ranked pick's inner like a pattern pick's). The
+ranking rules' imbalance reads have no knowability cut, like the tiebreak rules' (MARKET_STRUCTURE_SPEC "Snapshot vs
+per-candle"). **On the reference window** (PLAN_L §4.3, the S_L1 → L2 compare): 7 records gain an IC — H1 180
+(`exclude_pinbar`), 694 (`most_recent_before_imbalance`); confluence 670, 1804 (`most_recent_before_imbalance`), 929
+(`exclude_pinbar`), 2575, 3809 (`immediate_unfilled_imbalance`); no structure event, trigger, sub or WVMI moves.
 
 ---
 
@@ -586,7 +640,8 @@ assumes "POI ⟹ sd direction."
 ### Zone Boundaries
 - **Top:** IC candle high
 - **Bottom:** IC candle low
-- **At most one zone per fib record** — the institutional-pattern pick (§3.4); none without a pattern
+- **At most one zone per fib record** — the IC: the institutional-pattern pick (§3.4) or, with no pattern, the
+  ranked one (§3.6); none without an IC
 
 ### Zone Data Fields
 - `side`: "buy" if sd=+1, "sell" if sd=-1
@@ -594,8 +649,12 @@ assumes "POI ⟹ sd direction."
 - `ic_idx`: Index of the IC candle (rectangle start)
 - `confirmed_idx`: **LAST** activate idx (lossy scalar — `poi_zones.py` overwrites it on every activation and never clears it on deactivation). A POI can flap active/inactive within a cycle, so this scalar does NOT bound the active interval. To ask "is the POI active as of candle X?" use `zones/poi_lifecycle.py::poi_active_as_of` (walks `activation_history`), never `confirmed_idx`. See GOTCHAS "POI `confirmed_idx` Is a Lossy Scalar".
 - `top`, `bottom`: IC high/low
+- `ip_outcome` (PLAN_L L2, 2026-10-10): `"pattern"` (a pattern's IC, §3.4) / `"no_pattern"` (a ranked IC, §3.6) —
+  the `*_poi_zones.csv` `ip_rank` column is empty on a ranked IC
 - **The institutional pattern** (PLAN_H D6 / landing B, 2026-10-06 — a rule-3 migration: `versions` /
-  `current_versions` were removed in the same commit, no alias; the `*_poi_zones.csv` column `versions` → `ip_rank`):
+  `current_versions` were removed in the same commit, no alias; the `*_poi_zones.csv` column `versions` → `ip_rank`)
+  — **ALL None on a ranked IC** (`classify_ics` leaves a no-pattern candidate its first failing variant's counts;
+  `derive_poi_zones` nulls them explicitly, PLAN_L A1):
   - `ip_rank`: the pick's rank + shape, e.g. `"1A.iii"` (§3.4)
   - `ip_leg_candle_counts`: `"a-b-c"` = the initial / opp / continuation legs' candle counts
   - `pattern_anchor_idx` (the initial leg's first candle), `opp_leg_first_idx`, `pattern_end_idx` (the continuation
@@ -606,6 +665,10 @@ assumes "POI ⟹ sd direction."
     2026-10-09), `ip_tb_runner_up_ic_idx`, `ip_tied_count` (a count), `ip_tb_imbalance_first_c2_idx` (the immediate
     unfilled imbalance / the most recent before the imbalance): set only when a tiebreaker decided
   - every index key is in the mirror's `entity_df_mutation._ZONE_META_IDX_KEYS` (entity-absolute on sub POIs)
+- **The ranking** (PLAN_L L2, §3.6): `ranking_rule` (`None` / `"exclude_pinbar"` / `"immediate_unfilled_imbalance"` /
+  `"ic_candle_type"` / `"most_recent_before_imbalance"`), `ranking_runner_up_ic_idx`, `ranking_in_play_count` (a
+  count), `ranking_imbalance_first_c2_idx`: set only when a ranking rule decided — each per §3.6 "The fields" (rule 1
+  `exclude_pinbar` sets no runner-up / gap; a ranked IC with ONE IC candidate carries all four None); the two `*_idx` keys in `_ZONE_META_IDX_KEYS`
 - `status`: "active" | "inactive" | "ended" (+ "disappeared" — a reserved terminal-invalidation status; see Zone States). Charting note (2026-09-20): a POI whose CYCLE collapsed (its BOS KL zone is `inactive` with clamped `confirmed_idx >= end_idx`) is not drawn on any chart (`charting/_zone_render.collapsed_cycles` / `is_poi_of_collapsed_cycle`); an `"inactive"` POI whose cycle is live (never met its activation conditions) is still drawn as an outline. POI fills are side-tinted since 2026-09-21 (buy gold-lime, sell amber — CHARTING_SPEC §7).
 - `end_idx` / `end_reason`: terminal axis inherited from the owning cycle (`compute_cycle_lifecycle`): `"reversal"` | `"next_cycle"` (the next cycle's clamped lifecycle-start = the CTS-established **moment** `meta["confirmed_at"]`, Plan C 2026-09-20) | for subs the sub's `cap_reason` — `"reversal"` | `"same_dir_replacement"` | `"parent_end"` — when the unique sub's `end_idx` capped the cycle (`"lifecycle_end"` is no longer emitted) | `None`
 - `activation_history`: per-candle activate/deactivate flips (condition axis) — `[{"idx", "active", "reason"}]`
@@ -691,14 +754,19 @@ lifecycle-start. The activation scan begins at
 (`poi_zones._compute_poi_activation_history`):
 
 ```
-first_active = max(cts_established_idx, ic_idx, lifecycle_floor_idx, pattern_confirmed_idx)
+first_active = max(cts_established_idx, ic_idx, lifecycle_floor_idx[, pattern_confirmed_idx])
 cts_established_idx = CTS_ESTABLISHED(sid, cycle).meta["confirmed_at"]   # the cycle's established MOMENT
-pattern_confirmed_idx = the IC's continuation leg known complete            # PLAN_H R1 (landing B), a MOMENT
+pattern_confirmed_idx = the IC's continuation leg known complete            # PLAN_H R1 (landing B), a MOMENT —
+                                                                            # a pattern's IC only
 ```
 
 `pattern_confirmed_idx` (2026-10-06): a pattern is knowable only once its continuation leg has ended — its last
 candle when the leg hit the cap, else the next candle; past the frame's last candle the POI never activates. On the
-reference window it binds nowhere (PLAN_H §8.4a).
+reference window it binds nowhere (PLAN_H §8.4a). **A ranked IC (§3.6) has no pattern term** (PLAN_H §6 ICR-2 — "For
+Step 3, we simply apply the new Rule 1-4 to the Step 1 candidates"): `_compute_poi_activation_history(...,
+pattern_confirmed_idx=None)` → `max(cts_established_idx, ic_idx, lifecycle_floor_idx)` under the unchanged live
+conditions. The parameter is keyword-required with no default (an IP caller cannot drop the term silently, PLAN_L A7),
+and `derive_poi_zones` asserts `pattern_confirmed_idx is None` ⇔ `ip_outcome == "no_pattern"`.
 
 where `lifecycle_floor_idx = struct_start_by_sid[sid]` =
 `compute_struct_start_by_sid(events, reversal_idx_by_sid, lifecycle_floor)` —
@@ -773,14 +841,19 @@ cfg = {
 - IC_idx, confirmed_idx
 - The institutional pattern (PLAN_H HV, landing B — `versions=` until then): `IP <rank> · legs a-b-c (initial |
   opp | continuation)`, each leg `first–last` (one candle: its index), + `Tiebreak over <IC>: immediate unfilled
-  imbalance <c2>` / `…: IC candle type` / `…: most recent before imbalance <c2>` when a tiebreaker decided (§3.4) —
-  ONE builder for the three POI hover sites
+  imbalance <c2>` / `…: IC candle type` / `…: most recent before imbalance <c2>` when a tiebreaker decided (§3.4);
+  a RANKED IC (§3.6, PLAN_L L2): `No pattern · ranking rule <rule>` + ` over <runner-up>` + ` (gap <c2>)` when the
+  deciding rule has them (e.g. confluence sub 2 cycle 1's IC 2575: `No pattern · ranking rule
+  immediate_unfilled_imbalance over 2574 (gap 2577)`), or `No pattern · only IC candidate` — NO `IC <idx>` there (the hover's own `ic_idx=` line names the IC; PLAN_H §6
+  ICR-15) — ONE builder for the three POI hover sites
   (`charting/_zone_render.poi_ic_hover_text`)
 - Top/bottom bounds
 - The fib hover (the H1 chart AND the M15 lens charts since PLAN_H §8.9 F1, 2026-10-06): its status cell =
-  status · `life=[start, end] reason` · the IP outcome (`IP <rank> · IC <idx>`, `IP: none (<reason>)` on a record
-  without a pick — `no_ic_candidate` / `no_pattern` (§3.5, PLAN_H §6 RX1-N), no POI, PLAN_H C1 —, or `IP: not evaluated (no POI record)`;
-  `charting/_zone_render.fib_hover_status_text`) · since PLAN_I S2 the structure's cross-fib limit line
+  status · `life=[start, end] reason` · the IC outcome (`IP <rank> · IC <idx>` — a pattern's IC; `No pattern · IC
+  <idx> · ranking rule <rule>` / `No pattern · IC <idx> · only IC candidate` — a ranked IC, the IC index KEPT: the fib
+  box's only pointer to its IC; `IC: none (<reason>)` on a record without an IC — `no_ic_candidate` /
+  `all_ic_candidates_pinbar` (§3.5), no POI, PLAN_H C1 —; or `IC: not evaluated (no POI record)`; `IP: none` / `IP: not
+  evaluated` until PLAN_L L2; `charting/_zone_render.fib_hover_status_text`) · since PLAN_I S2 the structure's cross-fib limit line
   (`fib_hover_limit_text`). Canonical: `charting/CHARTING_SPEC.md` §8
 
 ### Style Keys (style_registry.py)
@@ -803,8 +876,9 @@ Fib active for cycle
 Step 1 — check every agreed −sd candle of the window against the IC conditions (§3.1: the IC reference §3.2,
 an unfilled imbalance after, the touch of the 61.8-80% zone) → the IC candidates; none → no POI
     ↓
-Step 2 — the best institutional pattern among them + the tiebreak rules (§3.4); none → no POI (Step 3, the ranking
-rules: PLAN_L L2; Step 4 deferred)
+Step 2 — the best institutional pattern among them + the tiebreak rules (§3.4); none →
+    ↓
+Step 3 — the ranking rules over the same IC candidates (§3.6); every one a pinbar → no POI (Step 4 deferred)
     ↓
 Create the POI zone (at most one per fib record, bounds = IC high/low)
     ↓
@@ -822,7 +896,7 @@ Charting renders zones + Fib lines + imbalance highlighting
 | `patterns/imbalance.py` | Imbalance (FVG) pattern detection + fill checking |
 | `features/fibonacci.py` | Fib level calculation |
 | `zones/fib_tracker.py` | FibTracker lifecycle (activation/update/lock) |
-| `zones/poi_zones.py` | POI zone derivation (one per fib record); the IC selection in steps (`select_ic` — `check_ic_conditions` / `find_ic_candidates`, `select_institutional_pattern` / `apply_tiebreak_rules` and the shared rule helpers —, `select_ic_records`, `derive_ic_candidates`, §3–3.5); MS's in-flight read `poi_inner_for_fib` (PLAN_I S5) |
+| `zones/poi_zones.py` | POI zone derivation (one per fib record); the IC selection in steps (`select_ic` — `check_ic_conditions` / `find_ic_candidates`, `select_institutional_pattern` / `apply_tiebreak_rules`, `apply_ranking_rules` and the shared rule helpers —, `select_ic_records`, `derive_ic_candidates`, §3–3.6); MS's in-flight read `poi_inner_for_fib` (PLAN_I S5) |
 | `patterns/institutional_pattern.py` | The institutional pattern of one IC candidate (legs, stacks, ranks — PLAN_H §1) |
 | `zones/cross_cycle_fib.py` | `ICReference` + `CrossFibLimit.ref_anchor_price` / the reversal break (§3.2, PLAN_K) |
 | `patterns/cross_limit_watch.py` | The cross-limit breakout watch (`find_cross_limit_break`, §3.2 / CROSS_CYCLE_FIB_SPEC §3) |
@@ -846,6 +920,7 @@ Charting renders zones + Fib lines + imbalance highlighting
 | IC variant selection (V30/V60/V90) | Done; UNWIRED since PLAN_H landing B (kept, X1) |
 | The institutional-pattern IC (one POI per fib record) | Done (PLAN_H landing B, 2026-10-06) |
 | The IC reference condition (§3.2) | Done — computed + exported (PLAN_K landing A), applied (landing B), 2026-10-09 |
+| The IC identification in steps (§3) | Done — Steps 1–2 restructured (PLAN_L landing 1, 2026-10-09); Step 3 the ranking rules (§3.6, landing 2, 2026-10-10); Step 4 deferred |
 | POI zone creation | Done |
 | POI zone lifecycle management | Done |
 | POI zone charting (yellow rectangles) | Done |
