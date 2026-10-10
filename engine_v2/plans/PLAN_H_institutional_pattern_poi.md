@@ -1442,7 +1442,8 @@ sub-local + the slice offset: sub 0 +404, sub 1 +1747, sub 2 +2315, sub 6 +3710)
 - **The plan: `PLAN_L_ic_identification_steps.md`** (two landings — L1 the restructure + names, the selection identical;
   L2 the ranking rules), cold-reviewed 2026-10-09 (2 lenses, 501,249 tokens, 0 BLOCKER — PLAN_L §8); the trial suite
   run (9 pins flip, incl. one MS fixture whose single changed POI read was traced — PLAN_L §4.4). Landing 1's record:
-  PLAN_L §9.
+  PLAN_L §9; landing 2's (the ranking rules — `6d8cc67`, S_L2 `20261010_155816_6d8cc67`; the 7 new POIs, the user's chart review "this
+  looks good let's proceed"): PLAN_L §10. The revamp is COMPLETE but Step 4 (deferred, register §D.2).
 
 **PAUSED 2026-10-06 (§6 F2a–F2e).** The debugging stops here for the cross-cycle fib revamp (register §D.1 item 2,
 a new session). It resumes after the revamp with every point above and in §8.5b as logged, each rule experiment

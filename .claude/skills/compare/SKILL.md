@@ -463,7 +463,7 @@ per-lens new-row counts are the reference window's). **Delete the 3 stale `artif
 first** (no replay overwrites them — `cmp_save --names-from` an older save would compare them as equal, the
 `*_sids.csv` trap below). The older boundary scripts (`cmp_tbu.py`, `cmp_k_landing_a/b.py`) read
 `*_ip_candidates.csv`: run them with CUR = S_TBU, then `cmp_l1.py` S_TBU → current. S_L1 `20261010_114846_b5c3613` is the first
-save with it (= `LATEST_<branch>` from 2026-10-10).
+save with it (`LATEST_<branch>` until S_L2, below).
 **PLAN_L landing 2 (2026-10-10, Step 3 — the ranking rules) — a BEHAVIOUR + FORMAT change:** a fib record with IC
 candidates but no institutional pattern now gets a RANKED IC (POI_ZONES_SPEC §3.6) — on the reference window 7 new
 POIs (H1 180, 694; confluence 670, 929, 1804, 2575, 3809), no structure / trigger / sub / WVMI change; the POI meta
@@ -479,7 +479,7 @@ the hover texts. Against S_L1:
 `engine_v2/plans/plan_h_inputs/cmp_l2.py BASE [CUR_DEBUG CUR_CHARTS]` (keyed: the 21 other CSVs md5, the POI rows per
 key with the meta per key, the IC CSV columns by name, the figure counts; exit 1 on anything else) — a positional
 `cmp_save.py` breaks on the POI `meta` cell and the new columns. Older saves: chain through S_L1 (`cmp_l1.py`, then
-`cmp_l2.py`). The first save with it: S_L2 (set at its `/commit-save`).
+`cmp_l2.py`). S_L2 `20261010_155816_6d8cc67` is the first save with it (source `6d8cc67`; = `LATEST_<branch>` from 2026-10-10).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

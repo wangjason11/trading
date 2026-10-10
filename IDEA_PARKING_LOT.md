@@ -122,8 +122,9 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    0 BLOCKER) — two landings: **L1 the restructure + names COMMITTED `b5c3613` + SAVED S_L1 `20261010_114846_b5c3613` 2026-10-10**
    (save `09dffad`, trunk `02a40a7`; = `LATEST_<branch>`, L2's baseline; the user's steps in code + POI_ZONES_SPEC §3,
    the renames, the CSV listing every agreed-opposite candle + 2 columns; the selection identical — `/compare` vs
-   S_TBU == the prediction, 31 / 31 mutants killed, suite 1553; PLAN_L §9), **L2 the ranking rules BUILT 2026-10-10**
-   (uncommitted; `/compare` vs S_L1 == the prediction — 7 new POIs, no structure / trigger / sub / WVMI change; suite
+   S_TBU == the prediction, 31 / 31 mutants killed, suite 1553; PLAN_L §9), **L2 the ranking rules COMMITTED `6d8cc67` + SAVED
+   S_L2 `20261010_155816_6d8cc67` 2026-10-10** (save `8aa4f80`, trunk `48ad744`; = `LATEST_<branch>`; the user's chart review "this looks good
+   let's proceed"; `/compare` vs S_L1 == the prediction — 7 new POIs, no structure / trigger / sub / WVMI change; suite
    1609, mutants 56 / 56, landing-reviewed, all folded; PLAN_L §10; every label decided 2026-10-10 — PLAN_L §8.2, PLAN_H §6 ICR-15). **First, the IP tiebreaker update (user 2026-10-09, before the write-up — "with
    it, I think we would wrap up the Institutional Pattern process"): COMMITTED `09f056a` 2026-10-09** — a new first tiebreaker, the
    immediate unfilled imbalance (an unfilled sd gap whose first gap candle is at IC + 1 / IC + 2; a filter), then the

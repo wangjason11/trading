@@ -1,13 +1,13 @@
 # Plan L — IC identification in steps: the restructure + the ranking rules (Week 9 Part 1 item 1)
 
-**Status: L1 COMMITTED `b5c3613` + SAVED S_L1 `20261010_114846_b5c3613` (2026-10-10, §9); L2 BUILT 2026-10-10 (uncommitted;
-§10 — `/compare` vs S_L1 == §4.3; landing-reviewed 506,850 tok, all folded; suite 1609, mutants 56 / 56) — every label decided (§8.2;
-PLAN_H §6 ICR-15).** §6 names APPROVED, §4.1 runner-ups settled (PLAN_H §6
+**Status: L1 COMMITTED `b5c3613` + SAVED S_L1 `20261010_114846_b5c3613` (2026-10-10, §9); L2 COMMITTED `6d8cc67` + SAVED S_L2 `20261010_155816_6d8cc67`
+(2026-10-10, §10 — `/compare` vs S_L1 == §4.3; landing-reviewed 506,850 tok, all folded; suite 1609, mutants 56 / 56; the
+chart review approved). PLAN_L COMPLETE — the IC identification revamp done but Step 4 (deferred, register §D.2).** §6 names APPROVED, §4.1 runner-ups settled (PLAN_H §6
 ICR-13 / ICR-14); the cold review RAN (§8: 0 BLOCKER, 4 MAJOR, 17 MINOR — all folded below). The IC
 identification revamp: the user's write-up verbatim `plan_h_inputs/ic_identification_revamp_spec.md`; every decision
 PLAN_H §6 ICR-S, ICR-1 … ICR-15 (2026-10-09 → 10); the reading, the shadow measurement and the TRIAL replay
 PLAN_H §8.9 "The IC identification revamp". Baselines: L1 vs **S_TBU** `20261009_171255_5b5c307` (code `92b8b61`);
-L2 vs **S_L1** `20261010_114846_b5c3613` (= `LATEST_<branch>` from 2026-10-10; code `b5c3613`). Register `IDEA_PARKING_LOT.md` §D.1 item 1; Step 4 → §D.2 (deferred).
+L2 vs **S_L1** `20261010_114846_b5c3613` (code `b5c3613`); after L2: **S_L2 `20261010_155816_6d8cc67`** (= `LATEST_<branch>` from 2026-10-10). Register `IDEA_PARKING_LOT.md` §D.1 item 1; Step 4 → §D.2 (deferred).
 
 Planning shorthand: L1 / L2 = the two landings; ICR-* = PLAN_H §6 rows (each has a descriptive title there).
 
@@ -511,3 +511,6 @@ amended; PLAN_H §6 ICR-15.
 - **After the folds**: suite **1609**, all pass; `mutants_l2.py` **56 / 56 KILLED** on the final code (the 52 + N53,
   N54, N56, N57); a fresh replay (201.3 s wall — run alongside the mutant runner), FETCH GATE PASS; `cmp_l2.py`
   (+ `--trial`) RESULT OK.
+- **COMMITTED `6d8cc67` + SAVED S_L2 `20261010_155816_6d8cc67` (2026-10-10, the user's go: "this looks good let's proceed")** — save commit
+  `8aa4f80`, trunk `48ad744`; a run-mode replay 85.4 s wall (multi_tf_dual 18.4 s, charts 61.8 s), FETCH GATE PASS;
+  re-checked before the copy: `cmp_l2.py` vs S_L1 RESULT OK. = `LATEST_<branch>`. Local, NOT pushed.
