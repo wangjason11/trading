@@ -429,10 +429,11 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_structure_levels.csv` |
 | `*_kl_zones.csv` |
 | `*_poi_zones.csv` |
-| `*_ip_candidates.csv` — the institutional-pattern selection (PLAN_H landing A; the picked rows = the drawn POIs since landing B); + the column `ic_ref_reason` after `touches_zone` since PLAN_K landing A (2026-10-09); + `immediate_imbalance_first_c2_idx` after `ic_ref_reason` since the IP tiebreaker update (2026-10-09) |
+| `*_ic_candidates.csv` — the IC selection (`*_ip_candidates.csv` until PLAN_L landing 1, 2026-10-09; PLAN_H landing A; the picked rows = the drawn POIs since landing B); + the column `ic_ref_reason` after `touches_zone` since PLAN_K landing A (2026-10-09); + `immediate_imbalance_first_c2_idx` after `ic_ref_reason` since the IP tiebreaker update (2026-10-09); + `has_unfilled_imbalance_after`, `is_ic_candidate` after it and one row per agreed-opposite candle of the window since PLAN_L landing 1 |
 | `*_structure_events.csv` — `STATE_CHANGED(to=reversal)` carries `meta["pattern_anchor_idx"]` since PLAN_K landing A |
 | `*_imbalance_instances.csv` |
 | `*_fib_lifecycle.csv` — no `fib_mode` column since PLAN_I S6 (2026-10-09): against an older save (S_J `20261009_013718_708a8d9` and before) diff the 3 fib CSVs with `engine_v2/plans/plan_i_inputs/cmp_s6_fib_mode.py BASE CUR` (positional `cmp_save.py` shifts the `meta` cell); the `ic_ref_*` meta keys since PLAN_K landing A |
+| `*_wvmi.csv` |
 
 **Save-format boundary — PLAN_K landing A (2026-10-09; S_K_A `20261009_112137_02e9381` is the first save with it):** a save up to S_S6
 `20261009_020650_5f6bae3` lacks the IP CSVs' `ic_ref_reason` column, the fib meta's `ic_ref_price` / `ic_ref_source` /
@@ -452,7 +453,17 @@ immediate unfilled imbalance) and descriptive `ip_tiebreak` values — `"TB1"` �
 CSVs, the POI hover) — and the IP CSVs' new column `immediate_imbalance_first_c2_idx` after `ic_ref_reason`. Against
 S_K_B or older: `engine_v2/plans/plan_h_inputs/cmp_tbu.py BASE` (the predicted pick move + the relabels + the new
 column, exit 1 on anything else) instead of reading those diffs as engine changes. S_TBU `20261009_171255_5b5c307` is the first save with it (= `LATEST_<branch>` from 2026-10-09).
-| `*_wvmi.csv` |
+**PLAN_L landing 1 (2026-10-09, the IC identification in steps) — a FORMAT change, the selection identical:** the three
+IP CSVs are RENAMED `*_ip_candidates.csv` → `*_ic_candidates.csv`, list every agreed-opposite candle of each fib's
+window (the candles failing IC condition 3 are new rows — on the reference window H1 +5, confluence +41, counter +31)
+and carry two new columns `has_unfilled_imbalance_after`, `is_ic_candidate` after `immediate_imbalance_first_c2_idx`.
+Every other CSV and every figure byte-identical. Against a save from PLAN_H landing A up to S_TBU: `cmp_fig_full.py`
+lists exactly the 3 renamed files as MISSING + NEW (before PLAN_H landing A: 3 NEW only); compare them with `engine_v2/plans/plan_h_inputs/cmp_l1.py BASE CUR_DEBUG` (keyed; the
+per-lens new-row counts are the reference window's). **Delete the 3 stale `artifacts/debug/*_ip_candidates.csv`
+first** (no replay overwrites them — `cmp_save --names-from` an older save would compare them as equal, the
+`*_sids.csv` trap below). The older boundary scripts (`cmp_tbu.py`, `cmp_k_landing_a/b.py`) read
+`*_ip_candidates.csv`: run them with CUR = S_TBU, then `cmp_l1.py` S_TBU → current. S_L1 (saved after the landing) is
+the first save with it.
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -463,7 +474,7 @@ with the same filename suffixes prefixed `*_M15_counter_` /
 | `*_M15_{lens}_structure_events.csv` | chart loop (`run_replay.py`) |
 | `*_M15_{lens}_kl_zones.csv` | chart loop |
 | `*_M15_{lens}_poi_zones.csv` | chart loop |
-| `*_M15_{lens}_ip_candidates.csv` | chart loop |
+| `*_M15_{lens}_ic_candidates.csv` (`_ip_` until PLAN_L landing 1) | chart loop |
 | `*_M15_{lens}_fib_lifecycle.csv` | chart loop |
 | `*_M15_{lens}_wvmi.csv` | chart loop |
 | `*_M15_{lens}_subs.csv` — one row per unique sub on this lens | `debug/export_sub_tables.py`, BEFORE the chart loop |
@@ -474,8 +485,9 @@ with the same filename suffixes prefixed `*_M15_counter_` /
 
 Total: **10 + 2×8 + 1 = 27 CSVs** per replay (POI-zones CSVs added 2026-06-08;
 pool tables added by Plan C 2026-09-20; the three `*_ip_candidates.csv` by PLAN_H
-landing A 2026-10-06 — a save before it has 24, so against one `cmp_fig_full.py`
-lists exactly those three as `NEW (no baseline)` and exits 1, and `cmp_save.py`
+landing A 2026-10-06, renamed `*_ic_candidates.csv` by PLAN_L landing 1. A save before PLAN_H landing A has 24, so against
+one `cmp_fig_full.py` lists the three as `NEW (no baseline)` and exits 1; a save from PLAN_H landing A up to S_TBU has 27
+with the old names (3 MISSING + 3 NEW — the boundary "PLAN_L landing 1" above), and `cmp_save.py`
 never lists a current-only file). `*_M15_{lens}_sids.csv` is **GONE**
 since Plan C — its role is split across `_subs.csv` / `_triggers.csv`. **Delete
 stale `*_sids.csv` copies from `artifacts/debug/` before comparing**: the replay

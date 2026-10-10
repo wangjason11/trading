@@ -572,7 +572,7 @@ deleted):** the same two seams survive as the sweep's two failure reasons
 `ProbeFailure` instead of raising → the trigger is logged as
 `UnresolvedTrigger(reason="probe_failed")`. The MS side: `_build_geometry`
 wraps `compute_bounded_structure` in `try/except (ValueError, IndexError)` (kept narrow: the POI
-resolver's IP errors arrive as `IPSelectionError` and propagate — "The POI Resolver Fails Loudly" below) and
+resolver's IP errors arrive as `ICSelectionError` and propagate — "The POI Resolver Fails Loudly" below) and
 returns `None` → `build_or_get_geometry` creates NO pool entry (no `sub_id`
 consumed) and the trigger is logged as `reason="geometry_failed"`. Both go
 through `lifecycle_sweep._Sweep._unresolved` → the `[sweep] UNRESOLVED
@@ -594,18 +594,18 @@ candles; `/compare` skill §2b).
 **Rule:** the drawn POI (`poi_zones.derive_poi_zones`, the FINAL fib record) and MarketStructure's in-flight
 sd-proximity read (`poi_zones.poi_inner_for_fib` on its embedded tracker's AS-OF representative fib at each
 CTS_ESTABLISHED / CTS_UPDATED — PLAN_I S5; was `compute_poi_inners_for_cycle`) pick the IC with the SAME function,
-`select_ip_ic` (PLAN_H D2). Never give one of them its own selection — a second
-copy would let MS confirm a CTS on a POI that is never drawn (or the reverse). And an error inside `select_ip_ic` must
+`select_ic` (PLAN_H D2). Never give one of them its own selection — a second
+copy would let MS confirm a CTS on a POI that is never drawn (or the reverse). And an error inside `select_ic` must
 reach the caller: it is NEVER a legitimate "no pattern" (D7: no POI, the BOS inner only).
 
 **The read keeps no graceful scope** (PLAN_I S5: the retired resolver's `try: ... except Exception: return []`
 around its anchor selection + fib construction went with it — the fib is the tracker's now): `poi_inner_for_fib`
 reads the frame's candle stamp FIRST on every call (a refresh with no fib included, PLAN_I F11) and re-raises ANY
-error of the stamp read or the pick as `IPSelectionError`. **The swallowing scope above it** —
+error of the stamp read or the pick as `ICSelectionError`. **The swallowing scope above it** —
 **the sub geometry's** `except (ValueError, IndexError): return None` around `compute_bounded_structure`
    (`multitf/entity_df_mutation._build_geometry`, the documented `geometry_failed` seam — "Lower-TF Pipeline Steps May
    Fail" above). A ValueError / IndexError from the IP inside a sub's MS would silently drop the WHOLE sub. So the
-   resolver re-raises ANY `select_ip_ic` error as `poi_zones.IPSelectionError` (a RuntimeError, chained `from` the
+   resolver re-raises ANY `select_ic` error as `poi_zones.ICSelectionError` (a RuntimeError, chained `from` the
    original) — no ValueError / IndexError / LookupError scope above it matches; so is every error of MS's embedded
    FibTracker (its own `FibEventOrderError` / `CrossFibLimitError`, anything else re-typed `EmbeddedFibTrackerError` by
    `MarketStructure._feed_fib_tracker` — PLAN_I S5). Keep that scope narrow; never widen it to `Exception` NOR
@@ -614,8 +614,8 @@ error of the stamp read or the pick as `IPSelectionError`. **The swallowing scop
 **Everything the pick needs is built INSIDE the re-raising scope (PLAN_K A4, §9 C01, 2026-10-09).** The fib's IC
 reference (POI_ZONES_SPEC §3.2) comes from the tracker (`tracker.ic_reference(fib, df, evaluated_at=)` — the watch's
 pattern detector, the tracker's maps): `poi_inner_for_fib` builds it inside its `try`, so a ValueError / IndexError
-there arrives as `IPSelectionError`. Had MS called `ic_reference` itself before the read (the plan's first draft), the
-error would have reached `_build_geometry`'s narrow `except` and dropped the sub. Any new input to `select_ip_ic` that
+there arrives as `ICSelectionError`. Had MS called `ic_reference` itself before the read (the plan's first draft), the
+error would have reached `_build_geometry`'s narrow `except` and dropped the sub. Any new input to `select_ic` that
 MS's read computes goes inside that `try` too.
 
 **Guard (PLAN_H §8.5c LR2, 2026-10-06c):** `tests/test_exception_scopes.py` lists every `except` in the engine modules
@@ -623,7 +623,7 @@ that catches `RuntimeError` / `Exception` / `BaseException` / everything (bare) 
 read's re-raise (`poi_inner_for_fib`), MS's tracker feed (`_feed_fib_tracker`: re-raise / re-type, never swallow —
 PLAN_I S5), the two OANDA `get_history` retries (`RuntimeError`),
 `run_replay`'s `export_sub_tables` scope and four leaf helpers; none encloses an MS run or the IP selector (the landing
-review traced all 4 call paths to `select_ip_ic` — the drawn POIs, the main MS, the sub geometry, the probe Phase 2).
+review traced all 4 call paths to `select_ic` — the drawn POIs, the main MS, the sub geometry, the probe Phase 2).
 A new broad handler fails the test: check it against those paths before adding it to the allowlist.
 
 **Why it matters:** the IP reads the frame's stamp (`df.attrs["timeframe"]` — the candle params + the leg cap) and
@@ -633,12 +633,12 @@ pattern" — every sd-proximity confirmation on the BOS inner, invisible to a `/
 way (PLAN_H §8.8 PR1, found by all three review lenses).
 
 **Pins:** `tests/test_plan_h_landing_b.py` — the unstamped frame raises (`KeyError('timeframe')` chained) — with and
-without a fib (PLAN_I S5) —, a ValueError inside the IP arrives as `IPSelectionError`, an IP error inside
+without a fib (PLAN_I S5) —, a ValueError inside the IP arrives as `ICSelectionError`, an IP error inside
 `_build_geometry` propagates, an unstamped MS run raises, an unstamped probe Phase 2 (`unified_probe`) raises, and the
 drawn POI == the read's pick on the final fib (the real collaborator); `tests/test_plan_i_s5_ms_reads_the_fib.py` — a
 tracker error inside `_build_geometry` propagates (`EmbeddedFibTrackerError`, a tracker `RuntimeError` unchanged);
 `tests/test_plan_k_landing_a.py` — a ValueError inside the IC reference during a sub geometry arrives as
-`IPSelectionError` (C01), and both consumers hand the same reference on the final fib (3 records, a fixture with no
+`ICSelectionError` (C01), and both consumers hand the same reference on the final fib (3 records, a fixture with no
 watch); `test_the_final_reference_is_the_as_of_reference_at_the_cap_on_the_whole_frame` — the final reference is
 the in-flight one AS OF the structure's end, its watch on the whole frame, never a frame cut at the cap (PLAN_K
 §11.2 LA1, found by both review lenses).
@@ -1747,7 +1747,7 @@ own update.
 **Rule:** Every `has_unfilled_imbalance` call inside Fib activation,
 Scenario 2 cond1/cond2/cond3, the cross-cycle dead-cycle walks, AND
 MarketStructure's cycle-0 snapshot passes `direction=sd` (POI IC
-validation in `find_ic_candidates` is strict by design too). No production
+validation — IC condition 3, `_has_unfilled_imbalance_after` (was `find_ic_candidates` until PLAN_L L1) — is strict by design too). No production
 call is permissive (the unfiltered `get_unfilled_imbalances` /
 `has_imbalance_in_range` were deleted 2026-09-30 — they had no production
 caller).
@@ -2390,8 +2390,8 @@ was already equivalent (`est > hi` drop) — H1 byte-identical.
 exists only because `c3 = B+1` was seen, and a merged run ending at `B-1` gets
 its bounds from `B+1` (`imbalance.py`). The MS consumers — since PLAN_I S5 the
 embedded FibTracker (cut at each fed event's moment `<= B`) and
-`_refresh_poi_inners_for_cycle` → `poi_inner_for_fib` → `select_ip_ic`
-(`find_ic_candidates` IC cond3, the tiebreakers' immediate imbalance and reference) — ask the pick's questions
+`_refresh_poi_inners_for_cycle` → `poi_inner_for_fib` → `select_ic`
+(IC cond3 in `check_ic_conditions`, the tiebreak rules' immediate imbalance and reference) — ask the pick's questions
 with `evaluated_at=None`: as-of for *fills* (`check_to_idx <=` the fib's CTS anchor
 `<= st.cts.idx <= B`), no existence cut, by decision (MARKET_STRUCTURE_SPEC
 "Snapshot vs per-candle"). (Until S5 the retired `_update_cycle0_data` /

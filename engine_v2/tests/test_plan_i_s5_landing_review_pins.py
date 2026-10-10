@@ -52,11 +52,11 @@ def test_the_geometry_hands_its_limit_to_the_embedded_tracker(embedded, via):
 
 # --- ms_refresh_skip_read_no_fib: a refresh with NO fib still calls the read (the stamp, F11) ---
 def test_a_no_fib_refresh_still_reads_the_stamp(monkeypatch):
-    from engine_v2.zones.poi_zones import IPSelectionError
+    from engine_v2.zones.poi_zones import ICSelectionError
     monkeypatch.setattr(FibTracker, "representative_fib", lambda self, sid, cycle: None)
     df = _prepare_df(_rows(1))
     del df.attrs["timeframe"]
-    with pytest.raises(IPSelectionError) as exc:
+    with pytest.raises(ICSelectionError) as exc:
         _quiet(se.compute_bounded_structure, df, 0, 1, cross_fib_limit=NO_P)
     assert isinstance(exc.value.__cause__, KeyError)
 
@@ -86,8 +86,8 @@ def test_the_read_runs_the_pick_at_its_fill_threshold(monkeypatch):
     import engine_v2.zones.poi_zones as poi_zones
     from engine_v2.tests.test_plan_h_landing_b import _fib, _m1_frame
     got = []
-    real = poi_zones.select_ip_ic
-    monkeypatch.setattr(poi_zones, "select_ip_ic",
+    real = poi_zones.select_ic
+    monkeypatch.setattr(poi_zones, "select_ic",
                         lambda df, fs, cfg, **kw: got.append(cfg.fill_threshold) or real(df, fs, cfg, **kw))
     fs = poi_zones.FibState(structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.0, cts_idx=40,
                             cts_price=1.35, active=True, locked=False, fib=_fib(1.35, 1.0))

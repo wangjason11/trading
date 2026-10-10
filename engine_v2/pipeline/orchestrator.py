@@ -29,7 +29,7 @@ from engine_v2.multitf.subsequent_counter_trigger import (
 from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
 
 # Week 7: POI zones
-from engine_v2.zones.poi_zones import derive_ip_candidates, derive_poi_zones, POIConfig, select_ip_records
+from engine_v2.zones.poi_zones import derive_ic_candidates, derive_poi_zones, POIConfig, select_ic_records
 from engine_v2.zones.structure_lifecycle import (
     compute_cycle_lifecycle, compute_main_cross_fib_limits, compute_reversal_idx_by_sid,
 )
@@ -212,7 +212,7 @@ def _run_downstream_pipeline(
     Extracted from run_pipeline so both H1 and lower-TF pipelines can reuse.
 
     Returns dict with keys: kl_zones, wave_candles, fib_states, fib_tracker,
-    poi_zones, ip_candidates, wvmi_records, prev_bos_lines, sorted_events,
+    poi_zones, ic_candidates, wvmi_records, prev_bos_lines, sorted_events,
     zone_proximity_triggers
 
     `wvmi` (Plan G G1) — one of `WVMI_MODES`, anything else raises:
@@ -383,10 +383,10 @@ def _run_downstream_pipeline(
     # MS's in-flight read `poi_inner_for_fib` runs the same pick with the embedded
     # tracker's fill threshold, the same value — PLAN_I S5).
     # The institutional-pattern selection is computed ONCE per POI record
-    # (`select_ip_records`) and handed to both readers: the drawn POIs (one per
-    # record — the pick, PLAN_H landing B) and the debug CSV (`*_ip_candidates.csv`).
+    # (`select_ic_records`) and handed to both readers: the drawn POIs (one per
+    # record — the pick, PLAN_H landing B) and the debug CSV (`*_ic_candidates.csv`).
     poi_config = POIConfig()
-    ip_records = select_ip_records(df, events, fib_tracker, poi_config, lifecycle_cap=lifecycle_cap)
+    ic_records = select_ic_records(df, events, fib_tracker, poi_config, lifecycle_cap=lifecycle_cap)
     poi_zones = derive_poi_zones(
         df,
         events,
@@ -395,18 +395,18 @@ def _run_downstream_pipeline(
         lifecycle_floor=lifecycle_floor,
         lifecycle_cap=lifecycle_cap,
         cap_reason=cap_reason,
-        ip_records=ip_records,
+        ic_records=ic_records,
     )
     print(f"{pfx}[poi_zones] total=", len(poi_zones))
 
-    # 8b) The same selection as debug records (`*_ip_candidates.csv`): every
+    # 8b) The same selection as debug records (`*_ic_candidates.csv`): every
     # candidate with its pattern or failure reason + an `IP: none` row per record.
-    ip_candidates = derive_ip_candidates(
-        df, events, fib_tracker, poi_config, structure_path_id=structure_path_id, ip_records=ip_records,
+    ic_candidates = derive_ic_candidates(
+        df, events, fib_tracker, poi_config, structure_path_id=structure_path_id, ic_records=ic_records,
     )
     print(
-        f"{pfx}[ip] fib records={len({(r.structure_id, r.cycle_id, r.bos_anchor_idx, r.cts_anchor_idx) for r in ip_candidates})}, "
-        f"picks={sum(1 for r in ip_candidates if r.picked)}, rows={len(ip_candidates)}"
+        f"{pfx}[ic] fib records={len({(r.structure_id, r.cycle_id, r.bos_anchor_idx, r.cts_anchor_idx) for r in ic_candidates})}, "
+        f"picks={sum(1 for r in ic_candidates if r.picked)}, rows={len(ic_candidates)}"
     )
 
     # 9) WVMI (Plan G G1) — the main gates on its first sd zone-proximity
@@ -449,7 +449,7 @@ def _run_downstream_pipeline(
         "fib_states": fib_states,
         "fib_tracker": fib_tracker,
         "poi_zones": poi_zones,
-        "ip_candidates": ip_candidates,
+        "ic_candidates": ic_candidates,
         "wvmi_records": wvmi_records,
         "prev_bos_lines": prev_bos_lines,
         "sorted_events": sorted_events,
@@ -541,7 +541,7 @@ def run_pipeline(
     meta["wave_candles"] = wave_candle_results
     meta["fib_states"] = fib_states
     meta["poi_zones"] = poi_zones
-    meta["ip_candidates"] = downstream["ip_candidates"]
+    meta["ic_candidates"] = downstream["ic_candidates"]
     meta["fib_tracker"] = downstream["fib_tracker"]
     meta["wvmi"] = wvmi_records
     meta["prev_bos_lines"] = prev_bos_lines
@@ -556,7 +556,7 @@ def run_pipeline(
     s_res.df.attrs["wave_candles"] = wave_candle_results
     s_res.df.attrs["wvmi"] = wvmi_records
     s_res.df.attrs["poi_zones"] = poi_zones
-    s_res.df.attrs["ip_candidates"] = downstream["ip_candidates"]
+    s_res.df.attrs["ic_candidates"] = downstream["ic_candidates"]
     s_res.df.attrs["zone_proximity_triggers"] = zone_proximity_triggers
     s_res.df.attrs["structure_events"] = s_res.events
     s_res.df.attrs["fib_states"] = fib_states

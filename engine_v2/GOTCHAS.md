@@ -2031,7 +2031,7 @@ for a lost change — and one showing MORE is still a regression.
 ## An IC / POI Rule Change Can Move MS Outcomes in a Fixture — Through the sd-Proximity Read (PLAN_K landing B, 2026-10-09)
 
 MS confirms a CTS by sd-proximity against the cycle's POI inner, and that inner comes from the SAME institutional-
-pattern pick as the drawn POI (`poi_inner_for_fib` → `select_ip_ic`, PLAN_H D2). So a change to which candles are IC
+pattern pick as the drawn POI (`poi_inner_for_fib` → `select_ic`, PLAN_H D2). So a change to which candles are IC
 candidates is also an MS change. Landing B (the IC reference condition applied) moved NOTHING in MS on the reference
 window, yet broke 4 MS tests in `test_plan_j_j2_new_cycle_break.py`: their 302 / 167 fixture (H1 buy) confirmed cycle
 1 by proximity at 30 on a POI whose IC (high 0.6166) lies past CTS_0's confirmed price 0.6122 — cut now, so cycle 1
@@ -2052,7 +2052,7 @@ fails a tiebreaker's criterion is still the IC when it is the record's only best
 H1 sid 1 cyc 2 kept 832 (3C.ii) although its immediate gap 833 filled at 858 — 832 is the record's ONLY patterned
 candidate; the expected 860 has an unfilled immediate gap but no pattern (continuation big ratio 0.63 < 0.65).
 
-**Check, in the `*_ip_candidates.csv` rows of the record:** how many IC candidates (`touches_zone` True, empty
+**Check, in the `*_ic_candidates.csv` rows of the record (`*_ip_candidates.csv` before PLAN_L L1):** how many IC candidates (`is_ic_candidate` True — before L1: `touches_zone` True, empty
 `ic_ref_reason`) carry the best `ip_rank` — rank + shape, e.g. "3C.ii" (one → no tie, no
 tiebreaker ran — `ip_tiebreak` empty on the picked row); a non-picked candidate with an empty `ip_rank` has no pattern
 (`reason` = the first failing rule). When reporting a tiebreak change, also list the records where its criterion

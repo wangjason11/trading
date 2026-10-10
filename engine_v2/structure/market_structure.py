@@ -77,7 +77,7 @@ PoiInnerForFib = Callable[..., Optional[float]]
 class EmbeddedFibTrackerError(RuntimeError):
     """An error inside MarketStructure's embedded FibTracker (PLAN_I S5 / D5), re-raised as a RuntimeError so the
     sub geometry's narrow `except (ValueError, IndexError)` (`entity_df_mutation._build_geometry`) cannot drop the
-    sub (as `poi_zones.IPSelectionError` does for the IP read). The tracker's own RuntimeErrors
+    sub (as `poi_zones.ICSelectionError` does for the IP read). The tracker's own RuntimeErrors
     (`FibEventOrderError`, `CrossFibLimitError`) pass through unchanged."""
 
 

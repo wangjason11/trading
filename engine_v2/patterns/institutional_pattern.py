@@ -4,8 +4,8 @@ Institutional pattern (IP) — the leg classification of ONE IC candidate.
 
 Canonical reading: `engine_v2/plans/PLAN_H_institutional_pattern_poi.md` §1 items 2–10 (the user's spec:
 `plans/plan_h_inputs/institutional_pattern_spec.md`; every decision in PLAN_H §6). This module is the PATTERN only —
-no fib, no candidate rules: `zones.poi_zones.select_ip_ic` applies the IC conditions (POI_ZONES_SPEC §3.1 + the
-61.8–80 touch) first and this last (D4).
+no fib, no candidate rules: `zones.poi_zones.select_ic` applies the IC conditions (POI_ZONES_SPEC §3 Step 1 — §3.1,
+the 61.8–80 touch among them) first and this last (D4).
 
 Around an IC (an agreed −sd candle), in struct direction `sd`:
 
@@ -64,7 +64,8 @@ SINGLE_OPP_RANK: Dict[Tuple[str, str], str] = {
 # A MULTI opp leg (no type requirement on it — P8a): 3C from any maru initial; 3D from a single big_normal initial.
 MULTI_OPP_RANK: Dict[str, str] = {"big_maru": "3C", "maru": "3C", "big_normal": "3D"}
 
-# The IC-candle-type tiebreaker (`poi_zones.TIEBREAK_IC_CANDLE_TYPE`): the IC's candle type, best first.
+# The IC's candle type, best first — read by the shared candle-type rule `poi_zones.prefer_candle_type` (the tiebreak
+# rules' `TIEBREAK_IC_CANDLE_TYPE` with the pinbar; the ranking rules, PLAN_L L2, without it).
 IC_TYPE_PREFERENCE: Tuple[str, ...] = ("maru", "normal", "pinbar")
 
 

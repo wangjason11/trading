@@ -42,9 +42,9 @@ def _df(n=80, insts=None, fills=()):
 
 def _ip_ready(df):
     """`_df`'s frame through the real candle classifier (the columns + stamps the
-    institutional pattern reads): the MS resolver runs `select_ip_ic` OUTSIDE its
+    institutional pattern reads): the MS resolver runs `select_ic` OUTSIDE its
     graceful `try` since PLAN_H landing B — an unready frame raises
-    `IPSelectionError`."""
+    `ICSelectionError`."""
     from engine_v2.features.candle_classifier import apply_candle_classification
     out = apply_candle_classification(df).df
     out.attrs["imbalances"] = df.attrs["imbalances"]

@@ -109,9 +109,19 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    changes / updates are made, we will be done with our identifying IC revamp & update (for now, though there may be
    deferred items we revisit in the future)." Inputs already decided: the IC flow (PLAN_H §6 RX1-F — find IC
    candidates, the conditions filtering together > the IP > fallbacks) and the reasons (RX1-N); waiting on that
-   write-up: POI_ZONES_SPEC §3's step structure, the code's "candidates" names (`find_ic_candidates`,
-   `*_ip_candidates.csv`), the fallbacks (D.2 "No-pattern cycles"). Still open from the debugging log: sub 3 cyc 3
-   has no POI record (PLAN_H §8.9). **First, the IP tiebreaker update (user 2026-10-09, before the write-up — "with
+   write-up (all DONE by PLAN_L L1 + the decisions below): POI_ZONES_SPEC §3's step structure, the code's
+   "candidates" names (`find_ic_candidates`, `*_ip_candidates.csv` → `*_ic_candidates.csv`), the fallbacks (Step 3
+   the ranking rules, L2; Step 4 — D.2 "Step 4 of IC identification", deferred). Still open from the debugging log: sub 3 cyc 3
+   has no POI record (PLAN_H §8.9). **The write-up RECEIVED 2026-10-09** (verbatim
+   `engine_v2/plans/plan_h_inputs/ic_identification_revamp_spec.md`; the reading + the measurement: PLAN_H §8.9 "The
+   IC identification revamp"): Step 1 the IC candidates, Step 2 the IP (both as built), **Step 3 NEW — the general
+   ranking when no pattern exists** (its own four ranking rules over the unfiltered Step 1 list — a separate rule set
+   from Step 2's tiebreak rules, PLAN_H §6 ICR-S), **Step 4 DEFERRED — the
+   lower-TF fallback** when no IC candidate remains (D.2, rewritten). Decisions PLAN_H §6 ICR-S, ICR-1 … ICR-14 (2026-10-09);
+   trial replay measured (PLAN_H §8.9); **the plan `engine_v2/plans/PLAN_L_ic_identification_steps.md`** (cold-reviewed,
+   0 BLOCKER) — two landings: **L1 the restructure + names BUILT 2026-10-09** (the user's steps in code + POI_ZONES_SPEC
+   §3, the renames, the CSV listing every agreed-opposite candle + 2 columns; the selection identical — `/compare` vs
+   S_TBU == the prediction, 28 / 28 mutants killed, suite 1551; PLAN_L §9), L2 the ranking rules NEXT. **First, the IP tiebreaker update (user 2026-10-09, before the write-up — "with
    it, I think we would wrap up the Institutional Pattern process"): COMMITTED `09f056a` 2026-10-09** — a new first tiebreaker, the
    immediate unfilled imbalance (an unfilled sd gap whose first gap candle is at IC + 1 / IC + 2; a filter), then the
    IC's candle type, then the most recent before the imbalance; descriptive `ip_tiebreak` names (no more TB1 / TB2);
@@ -207,15 +217,18 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
   Pinned: `test_lifecycle_sweep_unit.py::test_a_replacer_that_never_starts_leaves_ended_by_empty_and_warns`. DECIDE.
 - **Should subs get the DERIVED CTS KL zone as their probe reference?** (today every sub reference zone is ad-hoc).
   Unscheduled follow-up. DECIDE. Detail: PART4 §17.12, GOTCHAS (the `kl_zones=[]` pool-path note).
-- **No-pattern cycles — a fallback POI** (after D.1 item 1; today: no POI, PLAN_H D7). The user 2026-10-09 (PLAN_H §6
-  RX1-F): the IC flow is "Find IC candidates > Find IP amongst IC candidates > Additional fallbacks when EITHER
-  previous step fails" — so a fallback covers `no_ic_candidate` records as well as `no_pattern` ones (RX1-N); the
-  user will give "more detailed thoughts around how the holistic IC & POI process works". Candidates: (a) search the lower TF for the
-  same institutional pattern (the user's spec: "in future iterations we will build an additional process where we
-  would go into a lower TF"; why the leg cap is 3 on H1 / M15 and likely 2 on M5; PLAN_H H2); (b) the kept V30 / V60 /
-  V90 selection (PLAN_H X1: "There is still a chance that I use those as fallbacks … we might still delete in the
-  future"). DECIDE (after the item-1 chart review — "we will need to come back and understand if losing their POIs in
-  these cycles is appropriate").
+- **Step 4 of IC identification — the lower-TF fallback — DEFERRED, possibly never built** (was "No-pattern cycles —
+  a fallback POI"; DECIDED by the user's IC identification write-up 2026-10-09, `engine_v2/plans/plan_h_inputs/
+  ic_identification_revamp_spec.md`, PLAN_H §6 ICR-*). A no-pattern record WILL get its IC from Step 3, the ranking
+  rules (D.1 item 1, PLAN_L L2 — today no pattern → no IC). What remains: when NO IC candidate is left — Step 1 finds none (`no_ic_candidate`)
+  or ranking rule 1 removes every candidate as a pinbar (`all_ic_candidates_pinbar`) — run Steps 1–3 on the lower TF's
+  data (the user's spec: "in future iterations we will build an additional process where we would go into a lower TF";
+  why the leg cap is 3 on H1 / M15 and likely 2 on M5; PLAN_H H2). The user: "This is actually something I want to
+  defer for now because it could become quite complex, but may not give us much benefit if most of our cycles are able
+  to find an IC using Steps 1-3 … We may also ultimately choose to skip Step 4 entirely and decide that not every cycle
+  MUST have an IC & POI zone." Until then: no IC → no POI. The kept V30 / V60 / V90 selection (PLAN_H X1) was the
+  other fallback candidate; Step 3 takes that role (L2), the code stays unwired ("Keep it for now", PLAN_H §6 ICR-5).
+  On S_TBU: 1 record would reach Step 4 (sub 1 cyc 2, `no_ic_candidate`). DECIDE (whether to build it at all).
 - **Test the POI_ZONES_SPEC §3.2 scenario IC filters — COMPLETE 2026-10-09 (RX1 = PLAN_K landings A + B; the final save S_K_B `20261009_140048_97795bd`, `LATEST_<branch>` until S_TBU `20261009_171255_5b5c307`)** — never implemented; kept in the spec, unapplied (PLAN_H D4:
   "I still want to keep these and test into them in the future"). Any IC filter stays OUTSIDE the institutional pattern
   and is applied first. **TAKEN UP 2026-10-09 as item 1's first rule experiment, RE-SPECIFIED by the user for today's

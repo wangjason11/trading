@@ -18,7 +18,7 @@ The rule is the user's (PLAN_H §8.9 RX1 + §6 RX1-*); PLAN_K §1 reads it, §6 
 - the stamp (meta keys before the limit keys; the cap; re-stamped in place), the exports (CSV column, hover lines on
   the H1 and a lens chart), the selection (reported, the pick unchanged; the switch's ON path);
 - the plumbing: `ICReference` / `localized`; C01 (an error inside the reference during a sub geometry surfaces as
-  `IPSelectionError`); the C04 spies (the geometry's limit is slice-local; the read's moment at both refresh paths);
+  `ICSelectionError`); the C04 spies (the geometry's limit is slice-local; the read's moment at both refresh paths);
   D2 with the reference (both consumers hand the same value); the projection round trip; `STATE_CHANGED(to=reversal)`
   `pattern_anchor_idx` on the winner AND the pending path.
 
@@ -52,7 +52,7 @@ from engine_v2.zones.fib_tracker import FibState, FibTracker, FibTrackerConfig
 from engine_v2.zones.poi_zones import (
     IC_REF_NOT_BEFORE_BREAK as NOT_BEFORE,
     IC_REF_PAST_REFERENCE as PAST,
-    IPSelectionError,
+    ICSelectionError,
     POIConfig,
     ic_reference_reason,
 )
@@ -534,28 +534,28 @@ def test_the_reason_is_reported_and_a_cut_candidate_is_never_picked():
     fs = poi_zones.FibState(structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.0, cts_idx=40,
                             cts_price=1.35, active=True, locked=False, fib=_fib(1.35, 1.0))
     ref = ICReference(1.128, "prev_cycle_cts")
-    sel = poi_zones.select_ip_ic(df, fs, POIConfig(), ic_reference=ref, classify_misses=True)
-    assert {c.ip.ic_idx: c.ic_ref_reason for c in sel.candidates} == {32: PAST, 36: None}
-    assert sel.pick is None and next(c for c in sel.candidates if c.ip.ic_idx == 32).ip.rank is not None
-    assert poi_zones.select_ip_ic(df, fs, POIConfig(), ic_reference=ref).pick is None
-    assert poi_zones.select_ip_ic(df, fs, POIConfig(), ic_reference=ICReference.NONE).pick.ic_idx == 32
+    sel = poi_zones.select_ic(df, fs, POIConfig(), ic_reference=ref, classify_all=True)
+    assert {c.ic_idx: c.ic_ref_reason for c in sel.checks} == {32: PAST, 36: None}
+    assert sel.pick is None and next(c for c in sel.checks if c.ic_idx == 32).pattern.rank is not None
+    assert poi_zones.select_ic(df, fs, POIConfig(), ic_reference=ref).pick is None
+    assert poi_zones.select_ic(df, fs, POIConfig(), ic_reference=ICReference.NONE).pick.ic_idx == 32
 
 
 def test_the_csv_carries_the_reason_after_the_touch(tmp_path):
-    from engine_v2.debug.export_zones import IP_CANDIDATE_COLUMNS, export_ip_candidates
+    from engine_v2.debug.export_zones import IC_CANDIDATE_COLUMNS, export_ic_candidates
     from engine_v2.tests.test_fib_chart_render import _ip
-    i = IP_CANDIDATE_COLUMNS.index("touches_zone")
-    assert IP_CANDIDATE_COLUMNS[i + 1] == "ic_ref_reason"
+    i = IC_CANDIDATE_COLUMNS.index("touches_zone")
+    assert IC_CANDIDATE_COLUMNS[i + 1] == "ic_ref_reason"
     recs = [dataclasses.replace(_ip(ic=14, rank="2A.i"), ic_ref_reason=PAST), _ip(reason="no_pattern")]
     out = tmp_path / "ip.csv"
-    export_ip_candidates(recs, out)
+    export_ic_candidates(recs, out)
     got = pd.read_csv(out)
-    assert list(got.columns) == IP_CANDIDATE_COLUMNS
+    assert list(got.columns) == IC_CANDIDATE_COLUMNS
     assert got["ic_ref_reason"].tolist()[0] == PAST and pd.isna(got["ic_ref_reason"].tolist()[1])   # IP: none row
 
 
 def test_every_exported_reason_is_the_condition_on_the_records_reference(monkeypatch):
-    """`derive_ip_candidates` hands each candidate's own outcome through (A5) — recomputed from the tracker's final
+    """`derive_ic_candidates` hands each candidate's own outcome through (A5) — recomputed from the tracker's final
     reference for its record; the `IP: none` rows carry none. The fixture's real references cut nothing, so the
     builder is replaced by one cutting every candidate of the odd cycles (sd +1: no high lies below −inf)."""
     def by_cycle(self, f, df, *, evaluated_at):
@@ -564,13 +564,13 @@ def test_every_exported_reason_is_the_condition_on_the_records_reference(monkeyp
     monkeypatch.setattr(FibTracker, "ic_reference", by_cycle)
     res, out, _ = _multicycle_pipeline()
     fibs = {(f.structure_id, f.cycle_id, f.bos_idx, f.cts_idx): f for f in out["fib_states"]}
-    rows = [r for r in out["ip_candidates"] if r.ic_idx is not None]
+    rows = [r for r in out["ic_candidates"] if r.ic_idx is not None]
     assert {r.ic_ref_reason for r in rows} == {PAST, None}
     for r in rows:
         f = fibs[(r.structure_id, r.cycle_id, r.bos_anchor_idx, r.cts_anchor_idx)]
         assert r.ic_ref_reason == ic_reference_reason(res.df, r.ic_idx, by_cycle(None, f, res.df, evaluated_at=None),
                                                       r.struct_direction)
-    assert all(r.ic_ref_reason is None for r in out["ip_candidates"] if r.ic_idx is None)
+    assert all(r.ic_ref_reason is None for r in out["ic_candidates"] if r.ic_idx is None)
 
 
 def test_the_h1_chart_renders_the_ic_reference_line(tmp_path, monkeypatch):
@@ -578,7 +578,7 @@ def test_the_h1_chart_renders_the_ic_reference_line(tmp_path, monkeypatch):
     res, out, _ = _multicycle_pipeline()
     df = res.df.copy()
     df.attrs.update(structure_events=res.events, fib_states=out["fib_states"], poi_zones=out["poi_zones"],
-                    ip_candidates=out["ip_candidates"], kl_zones=list(out["kl_zones"]))
+                    ic_candidates=out["ic_candidates"], kl_zones=list(out["kl_zones"]))
     fig = _render_h1(df, monkeypatch, tmp_path)
     cells = {tr.name: tr.customdata[0][8].split("<br>") for tr in fig.data if (tr.name or "").startswith("fib:")}
     conf0 = next(e for e in res.events if e.type == "CTS_CONFIRMED" and e.meta["cycle_id"] == 0)
@@ -599,7 +599,7 @@ def test_the_hover_names_the_cross_start_cycles_previous_cts():
 
 
 def test_every_retrospective_reference_reads_to_the_lifecycle_cap(monkeypatch):
-    """A3 / §3.4: the stamp, the drawn selection and the CSV's selection (+ both `ip_records=None` fallbacks) build the
+    """A3 / §3.4: the stamp, the drawn selection and the CSV's selection (+ both `ic_records=None` fallbacks) build the
     FINAL reference as of the structure's lifecycle cap (`evaluated_at=lifecycle_cap`, PLAN_K §11.2 LA1) — the drawn
     pick and the exported meta are one value. (Behaviour at a cap:
     `test_the_final_reference_is_the_as_of_reference_at_the_cap_on_the_whole_frame`.)"""
@@ -622,7 +622,7 @@ def test_every_retrospective_reference_reads_to_the_lifecycle_cap(monkeypatch):
     ends.clear()
     t = out["fib_tracker"]
     _quiet(poi_zones.derive_poi_zones, res.df, res.events, t, POIConfig(), lifecycle_cap=cap)
-    _quiet(poi_zones.derive_ip_candidates, res.df, res.events, t, POIConfig(), structure_path_id="H1.main",
+    _quiet(poi_zones.derive_ic_candidates, res.df, res.events, t, POIConfig(), structure_path_id="H1.main",
            lifecycle_cap=cap)
     assert ends and set(ends) == {cap}
 
@@ -677,7 +677,7 @@ def test_the_reversal_event_key_reads_only_on_a_reversal():
 
 def test_an_error_inside_the_reference_during_a_sub_geometry_surfaces(monkeypatch):
     """§9 C01: MS builds the reference INSIDE `poi_inner_for_fib`'s re-raising scope — a ValueError there arrives as
-    `IPSelectionError` (a RuntimeError) instead of reaching `_build_geometry`'s `except (ValueError, IndexError)`,
+    `ICSelectionError` (a RuntimeError) instead of reaching `_build_geometry`'s `except (ValueError, IndexError)`,
     which would drop the whole sub."""
     from engine_v2.tests.test_plan_i_s5_ms_reads_the_fib import _geometry, _reversing
     df, inner = _reversing()
@@ -690,7 +690,7 @@ def test_an_error_inside_the_reference_during_a_sub_geometry_surfaces(monkeypatc
         raise ValueError("boom")
 
     monkeypatch.setattr(FibTracker, "ic_reference", boom)
-    with pytest.raises(IPSelectionError) as exc:
+    with pytest.raises(ICSelectionError) as exc:
         _geometry(df, inner)
     assert isinstance(exc.value.__cause__, ValueError)
 
@@ -748,17 +748,17 @@ def test_the_read_takes_the_fed_events_moment_on_both_paths(monkeypatch, fixture
 
 
 def test_both_consumers_hand_the_same_reference_on_the_final_fib(monkeypatch):
-    """D2 with the reference (PLAN_K §6): the drawn record's selection (`classify_misses=True`) and MS's last read on
+    """D2 with the reference (PLAN_K §6): the drawn record's selection (`classify_all=True`) and MS's last read on
     the same anchors receive the same `ICReference` — one builder, two moments, one value on the final fib."""
     got = []
-    real = poi_zones.select_ip_ic
+    real = poi_zones.select_ic
 
     def spy(df, fs, cfg, **kw):
-        got.append(((fs.structure_id, fs.cycle_id, fs.bos_idx, fs.cts_idx), kw.get("classify_misses", False),
+        got.append(((fs.structure_id, fs.cycle_id, fs.bos_idx, fs.cts_idx), kw.get("classify_all", False),
                     kw["ic_reference"]))
         return real(df, fs, cfg, **kw)
 
-    monkeypatch.setattr(poi_zones, "select_ip_ic", spy)
+    monkeypatch.setattr(poi_zones, "select_ic", spy)
     _multicycle_pipeline()
     drawn = [(k, r) for k, cm, r in got if cm]
     compared = 0

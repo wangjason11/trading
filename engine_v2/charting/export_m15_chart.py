@@ -73,9 +73,9 @@ from engine_v2.charting._zone_render import (
     is_collapsed_cycle_zone,
     fib_hover_status_text,
     fib_record_drawn,
-    ip_rows_by_fib_record,
+    ic_rows_by_fib_record,
     is_poi_of_collapsed_cycle,
-    poi_ip_hover_text,
+    poi_ic_hover_text,
     select_subordinate_tf_tier,
 )
 from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
@@ -765,7 +765,7 @@ def export_m15_chart_plotly(
     all_fib_states: list = list(m15_df.attrs.get("fib_states", []))
     # Each fib record's IP outcome (the pick / `IP: none` row), keyed by sub_id
     # + (structure_id, cycle_id, BOS anchor, CTS anchor) — PLAN_H §8.9 F1.
-    ip_rows_by_fib = ip_rows_by_fib_record(m15_df.attrs.get("ip_candidates", []), by_sub=True)
+    ic_rows_by_fib = ic_rows_by_fib_record(m15_df.attrs.get("ic_candidates", []), by_sub=True)
 
     # Group by sub_id. Snapshots without a sub_id attribution are ignored —
     # they belong to no sub-build (defensive; the mirror always stamps it,
@@ -1642,7 +1642,7 @@ def export_m15_chart_plotly(
                 if len(seg_times) == 0:
                     seg_times = pd.Series([x0, x1])
 
-                ip_str = poi_ip_hover_text(poi.meta, poi.ic_idx)   # PLAN_H HV
+                ip_str = poi_ic_hover_text(poi.meta, poi.ic_idx)   # PLAN_H HV
                 # `poi.meta["structure_id"]` is the bounded sub's internal MS
                 # sid (restarts at 0 per sub) — use sub_id for user-facing identity.
                 poi_cd = [[
@@ -1702,7 +1702,7 @@ def export_m15_chart_plotly(
                 seg_times = dfx[COL_TIME][(dfx[COL_TIME] >= fx0) & (dfx[COL_TIME] <= fx1)]
                 if len(seg_times) == 0:
                     seg_times = pd.Series([fx0, fx1])
-                ip_row = ip_rows_by_fib.get(
+                ic_row = ic_rows_by_fib.get(
                     (eid, int(fib_st.structure_id), int(fib_st.cycle_id), bos_idx, cts_idx))
                 # `fib_st.structure_id` is the bounded sub's internal MS sid
                 # (restarts at 0 per sub) — the hover names the sub by sub_id.
@@ -1710,7 +1710,7 @@ def export_m15_chart_plotly(
                     eid, p_sid, p_cycle, sub_window_str, sub_records_str, fib_st.cycle_id,
                     bos_idx, f"{fib_st.bos_price:.5f}", cts_idx, f"{fib_st.cts_price:.5f}",
                     f"{price_618:.5f}", f"{price_80:.5f}",
-                    fib_hover_status_text(fib_st, ip_row),
+                    fib_hover_status_text(fib_st, ic_row),
                 ]] * len(seg_times)
                 fig.add_trace(go.Scatter(
                     x=seg_times, y=[(price_618 + price_80) / 2] * len(seg_times),
@@ -2605,7 +2605,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             if len(seg_times) == 0:
                 seg_times = pd.Series([x0, x1])
 
-            ip_str = poi_ip_hover_text(poi.meta, poi.ic_idx)   # PLAN_H HV
+            ip_str = poi_ic_hover_text(poi.meta, poi.ic_idx)   # PLAN_H HV
             poi_cd = [[
                 side, poi.meta.get("structure_id", -1), poi.meta.get("struct_direction", 0),
                 poi.ic_idx, conf_idx, poi.meta.get("cycle_id", 0),

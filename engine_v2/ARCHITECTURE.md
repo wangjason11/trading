@@ -194,7 +194,7 @@ imbalance reads are on the moment since Plan E E3a, 2026-09-24 — the cycle-0 c
 Plan E E3b, 2026-09-25 — `REVERSAL_CANDIDATE` still on `ev.idx`, PART4 §17.12; `unified_probe` Phase 2's retrace-window start `check_lo` is the first CTS's moment + 1 since
 Plan E E3c, like Phase 1's `tfb.est_idx + 1`;) the MS
 in-flight POI-inner read — since PLAN_I S5 the embedded FibTracker (cut at each fed event's moment, like the drawn
-fib) → `representative_fib` → `poi_inner_for_fib` → `select_ip_ic` (the IP pick evaluates fills as-of the fib's CTS
+fib) → `representative_fib` → `poi_inner_for_fib` → `select_ic` (the IP pick evaluates fills as-of the fib's CTS
 anchor ≤ `st.cts.idx`; until S5 `_refresh_poi_inners_for_cycle` called the retired `compute_poi_inners_for_cycle` /
 `select_fib_anchor_for_cycle` + `_update_cycle0_data`, CROSS_CYCLE_FIB_SPEC Appendix A, part 2) — which feeds the
 sd-zone-proximity CTS confirmation: the pick's imbalance-EXISTENCE half is settled — no c3 cut, by decision, because
@@ -304,17 +304,18 @@ POI activation conditions
   lifecycle floor, pattern_confirmed_idx)` — the last term (PLAN_H R1) the
   moment the IC's institutional pattern is known complete.
 The IC itself is ONE per fib record since landing B: the institutional-
-pattern pick (`select_ip_ic`, POI_ZONES_SPEC §3.4) — the same selector MS's
+pattern pick (`select_ic`, POI_ZONES_SPEC §3.4) — the same selector MS's
 in-flight sd-proximity read uses (D2), on the same fib decision since PLAN_I S5
-(MS's embedded FibTracker, CROSS_CYCLE_FIB_SPEC §8). Condition #4 — the IC
-reference condition (`zones/POI_ZONES_SPEC.md` §3.2; the user's 2026-10-09
+(MS's embedded FibTracker, CROSS_CYCLE_FIB_SPEC §8). The IC reference
+condition (IC condition 2 in POI_ZONES_SPEC §3.1's numbering; the activation
+sweep's own condition list skips its #4 slot for it) (`zones/POI_ZONES_SPEC.md` §3.2; the user's 2026-10-09
 re-specification, PLAN_H RX1, of the per-scenario idx/price constraints designed
 in Week 7 and never implemented, now that spec's Appendix A) — is computed and
-exported since PLAN_K landing A (2026-10-09; `IPCandidate.ic_ref_reason`, the
-`*_ip_candidates.csv` column, the fib meta `ic_ref_*` + hover) and APPLIED
+exported since PLAN_K landing A (2026-10-09; `ICCandleCheck.ic_ref_reason`, the
+`*_ic_candidates.csv` column, the fib meta `ic_ref_*` + hover) and APPLIED
 since landing B (2026-10-09) in both consumers: an IC candidate passes every
-IC condition together (`poi_zones.is_ic_candidate`, PLAN_H §6 RX1-F). It is gated at IC selection (`select_ip_ic`, per §3.1 candidate,
-before the touch and the pattern), not re-checked per candle.
+IC condition together (`ICCandleCheck.is_ic_candidate`, PLAN_H §6 RX1-F). It is gated at IC selection (`select_ic` → `check_ic_conditions`, per checked candle,
+with the other IC conditions — Step 1 — and before the pattern), not re-checked per candle.
 
 **Activation floor (both POI and KL).** A zone's first-active is clamped to
 its owning cycle's lifecycle-start: `first_active = max(<zone-specific

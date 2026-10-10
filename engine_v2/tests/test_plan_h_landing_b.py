@@ -1,6 +1,6 @@
 """PLAN_H landing B (Week 9 Part 1 item 1, 2026-10-06): the institutional-pattern pick is SWITCHED ON — the drawn
 POI (one per fib record, `derive_poi_zones`) and MS's in-flight read (`poi_inner_for_fib` since PLAN_I S5; was
-`compute_poi_inners_for_cycle`) use the same `select_ip_ic` (D2) — with the rule-3 migration of the POI meta (`versions` / `current_versions` -> `ip_rank` + the
+`compute_poi_inners_for_cycle`) use the same `select_ic` (D2) — with the rule-3 migration of the POI meta (`versions` / `current_versions` -> `ip_rank` + the
 legs / tiebreak / `pattern_confirmed_idx`).
 
 Pinned here (PLAN_H §8.6 "B", the census of §8.4a): the activation's cond5 = the touch of the AS-OF 61.8-80 zone
@@ -25,7 +25,7 @@ import pytest
 from engine_v2.tests._cross_fib_limits import main_limits
 
 import engine_v2.zones.poi_zones as poi_zones
-from engine_v2.charting._zone_render import poi_ip_hover_text
+from engine_v2.charting._zone_render import poi_ic_hover_text
 from engine_v2.common.types import ImbalanceInstance
 from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 from engine_v2.structure.structure_engine import compute_bounded_structure
@@ -36,7 +36,7 @@ from engine_v2.tests.test_unified_probe import (
     _make_ip_multicycle_data,
     _prepare_df,
 )
-from engine_v2.zones.poi_zones import IPSelectionError, POIConfig, fib_zone_bounds
+from engine_v2.zones.poi_zones import ICSelectionError, POIConfig, fib_zone_bounds
 from engine_v2.tests._cross_fib_limits import NO_P, NO_REF_TRACKER
 from engine_v2.zones.cross_cycle_fib import ICReference
 
@@ -158,10 +158,10 @@ def test_resolver_returns_the_pick_where_the_variants_disagree():
     df = _m1_frame()
     fs = poi_zones.FibState(structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.0, cts_idx=40,
                             cts_price=1.35, active=True, locked=False, fib=_fib(1.35, 1.0))
-    cands = poi_zones.find_ic_candidates(df, fs, POIConfig())
+    cands = poi_zones.find_ic_variant_candidates(df, fs, POIConfig())
     assert cands == [32, 36]
     assert poi_zones.select_ic_variants(cands, df, fs, POIConfig()) == {36: ["V30", "V60", "V90"]}   # V: 36
-    pick = poi_zones.select_ip_ic(df, fs, POIConfig(), ic_reference=ICReference.NONE).pick
+    pick = poi_zones.select_ic(df, fs, POIConfig(), ic_reference=ICReference.NONE).pick
     assert pick is not None and (pick.ic_idx, pick.ip_rank) == (32, "2A.i")                         # IP: 32
     assert _resolve(df) == 1.13            # the pick's inner (IC 32's high), not 36's 1.125
 
@@ -183,22 +183,22 @@ def test_resolver_on_an_unstamped_frame_raises():
     (§9.2 F11) also on a refresh with NO fib (the read takes the stamp first on every call)."""
     df = _m1_frame()
     del df.attrs["timeframe"]
-    with pytest.raises(IPSelectionError) as exc:
+    with pytest.raises(ICSelectionError) as exc:
         _resolve(df)
     assert isinstance(exc.value.__cause__, KeyError) and exc.value.__cause__.args == ("timeframe",)
-    with pytest.raises(IPSelectionError) as exc:
+    with pytest.raises(ICSelectionError) as exc:
         poi_zones.poi_inner_for_fib(df, None, 0.70, tracker=NO_REF_TRACKER, evaluated_at=0)
     assert isinstance(exc.value.__cause__, KeyError) and exc.value.__cause__.args == ("timeframe",)
 
 
 def test_resolver_reraises_any_ip_error_past_a_narrow_except(monkeypatch):
-    """A ValueError inside the IP arrives as `IPSelectionError` (a RuntimeError) — not a ValueError / IndexError
+    """A ValueError inside the IP arrives as `ICSelectionError` (a RuntimeError) — not a ValueError / IndexError
     that a caller's narrow `except` would read as a legitimate failure."""
     def boom(*a, **k):
         raise ValueError("boom")
 
-    monkeypatch.setattr(poi_zones, "select_ip_ic", boom)
-    with pytest.raises(IPSelectionError) as exc:
+    monkeypatch.setattr(poi_zones, "select_ic", boom)
+    with pytest.raises(ICSelectionError) as exc:
         _resolve(_m1_frame())
     assert not isinstance(exc.value, (ValueError, IndexError))
     assert isinstance(exc.value.__cause__, ValueError)
@@ -220,8 +220,8 @@ def test_an_ip_error_inside_a_sub_geometry_propagates(monkeypatch):
     df = _prepare_df(_make_reversing_data())
     inner = float(build_ad_hoc_bos0_reference_zone(df, 0, 1).inner)
     calls = []
-    real = poi_zones.select_ip_ic
-    monkeypatch.setattr(poi_zones, "select_ip_ic", lambda *a, **k: calls.append(1) or real(*a, **k))
+    real = poi_zones.select_ic
+    monkeypatch.setattr(poi_zones, "select_ic", lambda *a, **k: calls.append(1) or real(*a, **k))
     with contextlib.redirect_stdout(io.StringIO()):
         assert edm._build_geometry(df, sd=1, start_abs=0, run_cap_abs=len(df) - 1, bos0_inner=inner,
                                    timeframe="M15", cross_fib_limit=NO_P) is not None
@@ -230,8 +230,8 @@ def test_an_ip_error_inside_a_sub_geometry_propagates(monkeypatch):
     def boom(*a, **k):
         raise IndexError("boom")
 
-    monkeypatch.setattr(poi_zones, "select_ip_ic", boom)
-    with contextlib.redirect_stdout(io.StringIO()), pytest.raises(IPSelectionError):
+    monkeypatch.setattr(poi_zones, "select_ic", boom)
+    with contextlib.redirect_stdout(io.StringIO()), pytest.raises(ICSelectionError):
         edm._build_geometry(df, sd=1, start_abs=0, run_cap_abs=len(df) - 1, bos0_inner=inner, timeframe="M15", cross_fib_limit=NO_P)
 
 
@@ -239,14 +239,14 @@ def test_ms_on_an_unstamped_frame_raises():
     """Every MS run (main, sub geometry, probe Phase 2) reads the resolver: an unstamped frame fails the run."""
     df = _prepare_df(_make_ip_moment_after_anchor_data())
     del df.attrs["timeframe"]
-    with contextlib.redirect_stdout(io.StringIO()), pytest.raises(IPSelectionError):
+    with contextlib.redirect_stdout(io.StringIO()), pytest.raises(ICSelectionError):
         compute_bounded_structure(df, 0, +1, cross_fib_limit=NO_P)
 
 
 def test_probe_phase2_on_an_unstamped_frame_raises(monkeypatch):
     """PLAN_H §8.5 step 3's pin, through the probe itself (landing review C2): `unified_probe`'s Phase-2 MS
     (`_make_market_structure` on `df_probe`) reads the resolver, and an unstamped frame fails the probe — no
-    scope between them swallows `IPSelectionError`."""
+    scope between them swallows `ICSelectionError`."""
     from engine_v2.structure.unified_probe import unified_probe
     from engine_v2.tests.test_unified_probe import _make_multicycle_data, _ref_zone_uptrend
     import engine_v2.structure.structure_engine as se
@@ -261,7 +261,7 @@ def test_probe_phase2_on_an_unstamped_frame_raises(monkeypatch):
 
     df = _prepare_df(_make_multicycle_data())
     del df.attrs["timeframe"]
-    with contextlib.redirect_stdout(io.StringIO()), pytest.raises(IPSelectionError) as exc:
+    with contextlib.redirect_stdout(io.StringIO()), pytest.raises(ICSelectionError) as exc:
         unified_probe(df, 0, 1, _ref_zone_uptrend(), 14, "H1", enable_phase2=True)
     assert "_run_phase2" in [f.name for f in traceback.extract_tb(exc.tb)]
 
@@ -338,18 +338,18 @@ def test_poi_meta_carries_the_pick_in_place_of_the_variants():
 def test_a_record_without_a_pattern_draws_no_poi():
     _, out, _ = _pipeline(_make_ip_multicycle_data)
     assert [(z.meta["structure_id"], z.meta["cycle_id"]) for z in out["poi_zones"]] == [(0, 2)]
-    none_rows = [(r.cycle_id, r.reason) for r in out["ip_candidates"] if r.ic_idx is None]
+    none_rows = [(r.cycle_id, r.reason) for r in out["ic_candidates"] if r.ic_idx is None]
     # + cycle 0: main's single since PLAN_I S4 (Q6), no candidates
     assert none_rows == [(0, "no_ic_candidate"), (1, "no_pattern"), (3, "no_pattern")]
 
 
-def test_ip_candidates_read_the_records_they_are_handed():
-    """ONE selection per pipeline run (§8.5a deviation 2): `derive_ip_candidates` builds its rows from the
-    `ip_records` it is handed, never re-selects (landing review D01)."""
+def test_ic_candidates_read_the_records_they_are_handed():
+    """ONE selection per pipeline run (§8.5a deviation 2): `derive_ic_candidates` builds its rows from the
+    `ic_records` it is handed, never re-selects (landing review D01)."""
     res, out, _ = _pipeline(_make_ip_moment_after_anchor_data)
-    assert out["ip_candidates"]
-    assert poi_zones.derive_ip_candidates(res.df, res.events, out["fib_tracker"], POIConfig(),
-                                          structure_path_id="H1.main", ip_records=[]) == []
+    assert out["ic_candidates"]
+    assert poi_zones.derive_ic_candidates(res.df, res.events, out["fib_tracker"], POIConfig(),
+                                          structure_path_id="H1.main", ic_records=[]) == []
 
 
 # ---------------------------------------------------------------------------
@@ -374,38 +374,38 @@ def _meta(rank, counts, anchor, opp_first, end, tb=None, runner=None, c2=None):
 
 
 def test_hover_single_legs_print_one_index_each():
-    assert poi_ip_hover_text(_meta("1A.i", "1-1-1", 2703, 2704, 2705), 2704) == "IP 1A.i · legs 1-1-1 (2703 | 2704 | 2705)"
+    assert poi_ic_hover_text(_meta("1A.i", "1-1-1", 2703, 2704, 2705), 2704) == "IP 1A.i · legs 1-1-1 (2703 | 2704 | 2705)"
 
 
 def test_hover_asymmetric_legs_keep_their_order():
     """initial | opp | continuation, never reordered (landing review H01: every other case is symmetric)."""
-    assert poi_ip_hover_text(_meta("1A.iii", "1-1-3", 8, 9, 12), 9) == "IP 1A.iii · legs 1-1-3 (8 | 9 | 10–12)"
+    assert poi_ic_hover_text(_meta("1A.iii", "1-1-3", 8, 9, 12), 9) == "IP 1A.iii · legs 1-1-3 (8 | 9 | 10–12)"
 
 
 def test_hover_multi_legs_print_ranges():
-    assert poi_ip_hover_text(_meta("3C.iv", "3-2-3", 683, 686, 690), 687) == (
+    assert poi_ic_hover_text(_meta("3C.iv", "3-2-3", 683, 686, 690), 687) == (
         "IP 3C.iv · legs 3-2-3 (683–685 | 686–687 | 688–690)")
 
 
 def test_hover_tiebreak_lines():
-    assert poi_ip_hover_text(_meta("1A.iv", "2-1-2", 4081, 4083, 4085, "most_recent_before_imbalance", 4136, 4132),
+    assert poi_ic_hover_text(_meta("1A.iv", "2-1-2", 4081, 4083, 4085, "most_recent_before_imbalance", 4136, 4132),
                              4083) == ("IP 1A.iv · legs 2-1-2 (4081–4082 | 4083 | 4084–4085)"
                                        "<br>Tiebreak over 4136: most recent before imbalance 4132")
-    assert poi_ip_hover_text(_meta("2A.i", "1-1-1", 9, 10, 11, "ic_candle_type", 14), 10) == (
+    assert poi_ic_hover_text(_meta("2A.i", "1-1-1", 9, 10, 11, "ic_candle_type", 14), 10) == (
         "IP 2A.i · legs 1-1-1 (9 | 10 | 11)<br>Tiebreak over 14: IC candle type")
-    assert poi_ip_hover_text(_meta("1A.iv", "3-1-3", 1657, 1660, 1663, "immediate_unfilled_imbalance", 1447, 1662),
+    assert poi_ic_hover_text(_meta("1A.iv", "3-1-3", 1657, 1660, 1663, "immediate_unfilled_imbalance", 1447, 1662),
                              1660) == ("IP 1A.iv · legs 3-1-3 (1657–1659 | 1660 | 1661–1663)"
                                        "<br>Tiebreak over 1447: immediate unfilled imbalance 1662")
     with pytest.raises(AssertionError, match="unknown ip_tiebreak 'TB1'"):     # the pre-TBU-3 values are gone
-        poi_ip_hover_text(_meta("2A.i", "1-1-1", 9, 10, 11, "TB1", 14), 10)
+        poi_ic_hover_text(_meta("2A.i", "1-1-1", 9, 10, 11, "TB1", 14), 10)
 
 
 def test_hover_rejects_legs_that_do_not_match_their_indices():
     """A mirror that shifted the IC but not a leg index (or vice versa) is caught at render."""
     with pytest.raises(AssertionError):
-        poi_ip_hover_text(_meta("1A.i", "1-1-1", 2703, 2704, 2705), 2704 + 50)
+        poi_ic_hover_text(_meta("1A.i", "1-1-1", 2703, 2704, 2705), 2704 + 50)
     with pytest.raises(AssertionError):
-        poi_ip_hover_text(_meta("1A.i", "1-1-1", 2703, 2704, 2705, "TB3"), 2704)
+        poi_ic_hover_text(_meta("1A.i", "1-1-1", 2703, 2704, 2705, "TB3"), 2704)
 
 
 def test_h1_chart_hovers_show_the_pattern_and_ip_none(tmp_path, monkeypatch):
@@ -418,7 +418,7 @@ def test_h1_chart_hovers_show_the_pattern_and_ip_none(tmp_path, monkeypatch):
     res, out, _ = _pipeline(_make_ip_multicycle_data)
     df = res.df.copy()
     df.attrs.update(structure_events=res.events, fib_states=out["fib_states"], poi_zones=out["poi_zones"],
-                    ip_candidates=out["ip_candidates"], kl_zones=out["kl_zones"])
+                    ic_candidates=out["ic_candidates"], kl_zones=out["kl_zones"])
     reg = StructureRegistry()
     reg.register("H1", df=df, timeframe="H1", role="main")
     figs = []
@@ -434,7 +434,7 @@ def test_h1_chart_hovers_show_the_pattern_and_ip_none(tmp_path, monkeypatch):
     poi = out["poi_zones"][0]
     poi_tr = [tr for tr in fig.data if (tr.name or "").startswith("POI zone")]
     assert len(poi_tr) == 2
-    ip = poi_ip_hover_text(poi.meta, poi.ic_idx)
+    ip = poi_ic_hover_text(poi.meta, poi.ic_idx)
     assert all(c[6] == ip for tr in poi_tr for c in tr.customdata)
     assert all(f"<br>{ip}<br>top=" in _rendered(tr) for tr in poi_tr)          # the template shows it
     assert all("versions=" not in tr.hovertemplate for tr in poi_tr)
@@ -455,14 +455,14 @@ def test_poi_meta_copies_the_selections_tiebreak():
     the imbalance's first c2) — the reference window's tied POIs (conf 1660 / 1875 / 4083) go through it."""
     import dataclasses
     res, out, _ = _pipeline(_make_ip_moment_after_anchor_data)
-    recs = poi_zones.select_ip_records(res.df, res.events, out["fib_tracker"], POIConfig())
+    recs = poi_zones.select_ic_records(res.df, res.events, out["fib_tracker"], POIConfig())
     assert [r.selection.pick.ic_idx for r in recs if r.selection.pick is not None] == [9]
     recs = [dataclasses.replace(r, selection=dataclasses.replace(
         r.selection, tiebreak=("most_recent_before_imbalance", 7, 2, 11)))
             for r in recs]
     with contextlib.redirect_stdout(io.StringIO()):
         poi, = poi_zones.derive_poi_zones(res.df, res.events, fib_tracker=out["fib_tracker"], config=POIConfig(),
-                                          ip_records=recs)
+                                          ic_records=recs)
     assert (poi.meta["ip_tiebreak"], poi.meta["ip_tb_runner_up_ic_idx"], poi.meta["ip_tied_count"],
             poi.meta["ip_tb_imbalance_first_c2_idx"]) == ("most_recent_before_imbalance", 7, 2, 11)
 
@@ -473,7 +473,7 @@ def test_drawn_poi_activation_and_meta_take_the_picks_confirmation_moment():
     and be exported as such (not the IC, not `pattern_end_idx` 12)."""
     import dataclasses
     res, out, _ = _pipeline(_make_ip_moment_after_anchor_data)
-    recs = poi_zones.select_ip_records(res.df, res.events, out["fib_tracker"], POIConfig())
+    recs = poi_zones.select_ic_records(res.df, res.events, out["fib_tracker"], POIConfig())
     pick = next(r.selection.pick for r in recs if r.selection.pick is not None)
     assert (pick.ic_idx, pick.pattern_end_idx, pick.pattern_confirmed_idx) == (9, 12, 12)
     late = dataclasses.replace(pick, pattern_confirmed_idx=14)
@@ -481,7 +481,7 @@ def test_drawn_poi_activation_and_meta_take_the_picks_confirmation_moment():
             if r.selection.pick is not None else r for r in recs]
     with contextlib.redirect_stdout(io.StringIO()):
         poi, = poi_zones.derive_poi_zones(res.df, res.events, fib_tracker=out["fib_tracker"], config=POIConfig(),
-                                          ip_records=recs)
+                                          ic_records=recs)
     assert _hist(poi.meta["activation_history"]) == [(14, True, "initial"), (15, False, "imbalance_filled")]
     assert (poi.meta["pattern_confirmed_idx"], poi.meta["pattern_end_idx"]) == (14, 12)
 
@@ -499,7 +499,7 @@ def test_m15_lens_sub_poi_hover_is_rendered(tmp_path, monkeypatch):
     fig = F._render_m15(monkeypatch, tmp_path, {"zones": {"KL": False, "POI": True, "wave_candles": False}},
                         poi_zones=[poi])
     poi_tr = [tr for tr in fig.data if tr.name == "M15 POI zone"]
-    ip = poi_ip_hover_text(meta, 18)
+    ip = poi_ic_hover_text(meta, 18)
     assert ip == "IP 1A.iii · legs 1-1-3 (17 | 18 | 19–21)"
     assert len(poi_tr) == 2 and all(f"<br>{ip}<br>top=" in _rendered(tr) for tr in poi_tr)
     assert all("versions" not in tr.hovertemplate for tr in poi_tr)
@@ -519,7 +519,7 @@ def test_h1_overlay_poi_hover_uses_the_builder():
     poi, = out["poi_zones"]
     trs = [t for t in fig.data if t.name == "H1 POI zone (overlay)"]
     assert len(trs) == 2
-    ip = poi_ip_hover_text(poi.meta, poi.ic_idx)
+    ip = poi_ic_hover_text(poi.meta, poi.ic_idx)
     assert all(c[6] == ip for t in trs for c in t.customdata)
     assert all(f"<br>{ip}<br>top=" in _rendered(t) for t in trs)
     assert all("versions=" not in t.hovertemplate for t in trs)

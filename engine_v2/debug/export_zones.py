@@ -42,10 +42,11 @@ def export_poi_zones(zones: list, path: str | Path) -> None:
     pd.DataFrame(rows, columns=cols).to_csv(path, index=False)
 
 
-IP_CANDIDATE_COLUMNS = [
+IC_CANDIDATE_COLUMNS = [
     "structure_path_id", "sub_id", "parent_sid", "parent_cycle_id", "structure_id", "cycle_id",
     "bos_anchor_idx", "cts_anchor_idx", "sd",
     "ic_idx", "candle_type", "agreed_dir", "touches_zone", "ic_ref_reason", "immediate_imbalance_first_c2_idx",
+    "has_unfilled_imbalance_after", "is_ic_candidate",
     "ip_rank", "reason",
     "pattern_anchor_idx", "opp_leg_first_idx", "pattern_end_idx", "pattern_confirmed_idx", "ip_leg_candle_counts",
     "legs",
@@ -70,12 +71,13 @@ def _ip_legs(ic_idx, counts):
     return f"{opp_first - n_init}..{opp_first - 1}|{opp_first}..{ic_idx}|{ic_idx + 1}..{ic_idx + n_cont}"
 
 
-def export_ip_candidates(records: list, path: str | Path) -> None:
-    """Export the institutional-pattern selection (`poi_zones.IPCandidateRecord`,
-    PLAN_H §8.3 landing A — computed, not yet drawn): one row per §3.1 candidate
-    of each gated fib record (`touches_zone` False rows are classified for the
-    record only, never picked) + one `IP: none` row (`ic_idx` empty) per record
-    without a pick. `legs` = `initial first..last|opp first..last|continuation
+def export_ic_candidates(records: list, path: str | Path) -> None:
+    """Export the IC selection (`poi_zones.ICCandidateRecord`; PLAN_H §8.3, PLAN_L
+    L1): one row per Step 1 check of each gated fib record — every agreed-opposite
+    candle of the fib's window with its condition outcomes (`touches_zone`,
+    `ic_ref_reason`, `has_unfilled_imbalance_after`, `is_ic_candidate`) and its
+    pattern (classified for every row; only an IC candidate is ever picked) — +
+    one `IP: none` row (`ic_idx` empty) per record without a pick. `legs` = `initial first..last|opp first..last|continuation
     first..last`, located from `ic_idx` + `ip_leg_candle_counts` (the legs are
     contiguous around the IC) — the pattern's, or the first failing variant's
     when `ip_rank` is empty; the stacks' type / big ratio / body pips per leg.
@@ -102,6 +104,8 @@ def export_ip_candidates(records: list, path: str | Path) -> None:
             "touches_zone": r.touches_zone,
             "ic_ref_reason": r.ic_ref_reason,
             "immediate_imbalance_first_c2_idx": r.immediate_imbalance_first_c2_idx,
+            "has_unfilled_imbalance_after": r.has_unfilled_imbalance_after,
+            "is_ic_candidate": r.is_ic_candidate,
             "ip_rank": r.ip_rank,
             "reason": r.reason,
             "pattern_anchor_idx": r.pattern_anchor_idx,
@@ -120,7 +124,7 @@ def export_ip_candidates(records: list, path: str | Path) -> None:
             row[k] = r.detail.get(k)
         rows.append(row)
     # dtype=object keeps ints as ints next to None (no 607.0)
-    pd.DataFrame(rows, columns=IP_CANDIDATE_COLUMNS, dtype=object).to_csv(path, index=False)
+    pd.DataFrame(rows, columns=IC_CANDIDATE_COLUMNS, dtype=object).to_csv(path, index=False)
 
 
 def export_kl_zones(zones: list[KLZone], path: str | Path) -> None:

@@ -118,7 +118,7 @@ To change any visual element:
 - **Fill (Item 5)**: ONE filled rect per active stretch in `meta["activation_history"]` — each `A` event paired with the next `D` (or `end_idx` for trailing activate). Inactive stretches render as outline only.
 - **Confirm lines (Item 5)**: ONE vertical line per `A` event in `activation_history` (replaces the prior single line at `confirmed_idx`). For zones derived before activation_history was added, falls back to a single line at `confirmed_idx`.
 - **Hover (PLAN_H HV, landing B 2026-10-06; `versions=` until then)**: the pattern line(s) from ONE builder,
-  `_zone_render.poi_ip_hover_text`, on all three POI hover sites (the H1 chart, the M15 lens charts' sub POIs and
+  `_zone_render.poi_ic_hover_text`, on all three POI hover sites (the H1 chart, the M15 lens charts' sub POIs and
   their H1 overlay): `IP <rank> · legs a-b-c (initial | opp | continuation)` — each leg `first–last`, one candle its
   index — + `Tiebreak over <IC>: immediate unfilled imbalance <c2>` / `…: IC candle type` / `…: most recent before
   imbalance <c2>` when a tiebreaker decided (POI_ZONES_SPEC §3.4; `TB1 over …` / `TB2 over …` until 2026-10-09).
@@ -138,7 +138,7 @@ To change any visual element:
 - Hover: H1 sid + cycle (M15: `sub_id` + the first record's parent, the sub window, its records, the cycle), the BOS /
   CTS anchors + prices, the 61.8 / 80 levels, and the status cell (`_zone_render.fib_hover_status_text`, one builder):
   the status (+ ` (locked)`), `life=[start_idx, end_idx] end_reason` (`–` = never started, `open` = not ended) and the
-  cycle's IP outcome from `attrs["ip_candidates"]` (`ip_rows_by_fib_record`: keyed by (sid, cycle, BOS anchor, CTS
+  cycle's IP outcome from `attrs["ic_candidates"]` (`ic_rows_by_fib_record`: keyed by (sid, cycle, BOS anchor, CTS
   anchor), prefixed with `sub_id` on a lens — a sub's sid restarts at 0): `IP <rank> · IC <idx>` (the pick = the drawn
   POI), `IP: none (<reason>)` (no pick, no POI — PLAN_H C1; the reason `no_ic_candidate` or `no_pattern`, PLAN_H §6
   RX1-N), or `IP: not evaluated (no POI record)` (the POI record
@@ -319,7 +319,7 @@ These tables are derived from `style_registry.py` + the rendering code in `expor
 A separate chart file renders M15 candles with both M15 structure and H1 overlay elements. This is NOT the same as the H1 chart — it has its own rendering logic.
 
 ### Architecture
-- **Entry:** `export_m15_chart_plotly(registry=..., path_id=..., title=..., ...)` — registry-only (§13.5.e); resolves its M15 entity + parent overlay from the registry. Reads sub data from `m15_df.attrs["events" / "kl_zones" / "poi_zones" / "wave_candles" / "wvmi" / "prev_bos_lines"]` + `"fib_states"` (each sub's fib records, drawn since 2026-10-06 — §8 / PLAN_H §8.9 F1; also `*_M15_{lens}_fib_lifecycle.csv`) and `"ip_candidates"` (the fib hover's IP line), grouped by each snapshot's **`meta["sub_id"]`** (`_sub_identity`) per the `m15_df.attrs["sids"]` `SidRecord` manifest (one row per unique sub rendered on this lens; `_sid_record_identity` = `sub_id` for a sub row, `sub_sid` for a main row), with `m15_df.attrs["triggers"]` (this lens's `TriggerRecord`s) for hover attribution. (Plan C, 2026-09-20 — replaces the pre-pool identity tuple `(parent_sid, parent_cycle_id, sub_sid)`; `sub_sid` no longer exists on any sub artifact.)
+- **Entry:** `export_m15_chart_plotly(registry=..., path_id=..., title=..., ...)` — registry-only (§13.5.e); resolves its M15 entity + parent overlay from the registry. Reads sub data from `m15_df.attrs["events" / "kl_zones" / "poi_zones" / "wave_candles" / "wvmi" / "prev_bos_lines"]` + `"fib_states"` (each sub's fib records, drawn since 2026-10-06 — §8 / PLAN_H §8.9 F1; also `*_M15_{lens}_fib_lifecycle.csv`) and `"ic_candidates"` (the fib hover's IP line), grouped by each snapshot's **`meta["sub_id"]`** (`_sub_identity`) per the `m15_df.attrs["sids"]` `SidRecord` manifest (one row per unique sub rendered on this lens; `_sid_record_identity` = `sub_id` for a sub row, `sub_sid` for a main row), with `m15_df.attrs["triggers"]` (this lens's `TriggerRecord`s) for hover attribution. (Plan C, 2026-09-20 — replaces the pre-pool identity tuple `(parent_sid, parent_cycle_id, sub_sid)`; `sub_sid` no longer exists on any sub artifact.)
 - **M15 candles** as the base OHLC
 - **M15 structure** (swing lines, CTS/BOS dots, prev BOS lines) in **royalblue**;
   where two structures draw over the same candles, the older one's segments are

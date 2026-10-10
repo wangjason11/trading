@@ -134,7 +134,7 @@ def compute_poi_active_stretches(
 # POI hover: the institutional pattern (PLAN_H HV)
 # ---------------------------------------------------------------------------
 
-def poi_ip_hover_text(meta: dict, ic_idx: int) -> str:
+def poi_ic_hover_text(meta: dict, ic_idx: int) -> str:
     """The POI hover's pattern line(s) — ONE builder for the three POI hover
     sites (the H1 chart, the M15 lens charts' sub POIs and their H1 overlay;
     PLAN_H HV): `IP <rank> · legs a-b-c (initial | opp | continuation)` with
@@ -198,14 +198,14 @@ def fib_is_bright(fib_st: Any) -> bool:
                 and getattr(fib_st, "status", "active") == "active")
 
 
-def ip_rows_by_fib_record(ip_candidates: Sequence[Any], *, by_sub: bool) -> dict:
-    """The `attrs["ip_candidates"]` row holding each fib record's IP outcome —
+def ic_rows_by_fib_record(ic_candidates: Sequence[Any], *, by_sub: bool) -> dict:
+    """The `attrs["ic_candidates"]` row holding each fib record's IP outcome —
     its picked row or its `IP: none` row (`ic_idx` None) — keyed by
     `(structure_id, cycle_id, bos_anchor_idx, cts_anchor_idx)`, prefixed with
     `meta["sub_id"]` when `by_sub` (an M15 lens: a sub's structure_id restarts
     at 0 in every sub). A record the POI record gate skipped has no row."""
     out: dict = {}
-    for r in ip_candidates:
+    for r in ic_candidates:
         if not (r.picked or r.ic_idx is None):
             continue
         key = (int(r.structure_id), int(r.cycle_id), int(r.bos_anchor_idx), int(r.cts_anchor_idx))
@@ -266,11 +266,11 @@ def fib_hover_ic_ref_text(fib_st: Any) -> Optional[str]:
     return f"IC ref {float(m['ic_ref_price']):.5f} ({source}{cycle}) · {btxt}"
 
 
-def fib_hover_status_text(fib_st: Any, ip_row: Optional[Any]) -> str:
+def fib_hover_status_text(fib_st: Any, ic_row: Optional[Any]) -> str:
     """The fib hover's status cell — ONE builder for both charts (PLAN_H §8.9
     F1): the lifecycle status (+ ` (locked)`), `life=[start_idx, end_idx]
     end_reason` (`–` = never started, `open` = not ended), the cycle's IP
-    outcome (`ip_rows_by_fib_record`): `IP <rank> · IC <idx>` (the pick = the
+    outcome (`ic_rows_by_fib_record`): `IP <rank> · IC <idx>` (the pick = the
     drawn POI), `IP: none (<reason>)` (no pattern → no POI, PLAN_H C1), or
     `IP: not evaluated (no POI record)` (no row: the POI record gate skipped
     the record — ended before locking, or no CTS_ESTABLISHED), the record's IC
@@ -279,12 +279,12 @@ def fib_hover_status_text(fib_st: Any, ip_row: Optional[Any]) -> str:
     start = "–" if fib_st.start_idx is None else int(fib_st.start_idx)
     end = "open" if fib_st.end_idx is None else int(fib_st.end_idx)
     life = f"life=[{start}, {end}]" + (f" {fib_st.end_reason}" if fib_st.end_reason else "")
-    if ip_row is None:
+    if ic_row is None:
         ip = "IP: not evaluated (no POI record)"
-    elif ip_row.ic_idx is None:
-        ip = f"IP: none ({ip_row.reason})"
+    elif ic_row.ic_idx is None:
+        ip = f"IP: none ({ic_row.reason})"
     else:
-        ip = f"IP {ip_row.ip_rank} · IC {int(ip_row.ic_idx)}"
+        ip = f"IP {ic_row.ip_rank} · IC {int(ic_row.ic_idx)}"
     status = getattr(fib_st, "status", "active")
     text = f"{status}{' (locked)' if fib_st.locked else ''}<br>{life}<br>{ip}"
     ic_ref = fib_hover_ic_ref_text(fib_st)

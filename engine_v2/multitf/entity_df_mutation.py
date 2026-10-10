@@ -145,7 +145,7 @@ _ZONE_META_IDX_KEYS = (
                             # misfiled in the EVENT list (no event carries it)
                             # until Post-E·2.
     # PLAN_H landing B (2026-10-06) — the POI's institutional pattern (the
-    # `IPCandidateRecord` index fields of the pick; `ip_tied_count` is a count):
+    # `ICCandidateRecord` index fields of the pick; `ip_tied_count` is a count):
     "pattern_anchor_idx",   # POI (the initial leg's first candle)
     "opp_leg_first_idx",    # POI
     "pattern_end_idx",      # POI (the continuation leg's last candle)
@@ -170,10 +170,10 @@ _FIB_META_IDX_KEYS = (
     # Contract Rules"): no fib record carries it any more.
 )
 
-# IPCandidateRecord DATACLASS FIELDS with entity-df indices (PLAN_H §8.3, the
+# ICCandidateRecord DATACLASS FIELDS with entity-df indices (PLAN_H §8.3, the
 # institutional-pattern debug records; their `meta` holds only the
 # attribution). Each may be None (an `IP: none` row, a failed pattern).
-_IP_CANDIDATE_IDX_FIELDS = (
+_IC_CANDIDATE_IDX_FIELDS = (
     "bos_anchor_idx",
     "cts_anchor_idx",
     "ic_idx",
@@ -336,14 +336,14 @@ def mirror_lower_tf_result_to_entity_df(
 
     # 5b. Institutional-pattern debug records (PLAN_H §8.3) — index FIELDS
     #     shifted (None stays None), the attribution on a new meta per lens.
-    new_ip = []
-    for r in result.ip_candidates:
+    new_ic = []
+    for r in result.ic_candidates:
         shifted = {
             f: int(getattr(r, f)) + slice_begin
-            for f in _IP_CANDIDATE_IDX_FIELDS if getattr(r, f) is not None
+            for f in _IC_CANDIDATE_IDX_FIELDS if getattr(r, f) is not None
         }
-        new_ip.append(replace(r, meta={**r.meta, **attribution}, **shifted))
-    _attrs_setdefault_list(entity_df, "ip_candidates").extend(new_ip)
+        new_ic.append(replace(r, meta={**r.meta, **attribution}, **shifted))
+    _attrs_setdefault_list(entity_df, "ic_candidates").extend(new_ic)
 
     # 6. Fib states — direct bos_idx / cts_idx + meta. The scalar lifecycle
     #    fields (FIB_LIFECYCLE_SPEC.md §15) carry slice-local indices: both
@@ -1165,7 +1165,7 @@ def _build_geometry(
         # The documented geometry failure (LANDMINES "Lower-TF Pipeline Steps May
         # Fail" -> `geometry_failed`). It must stay this narrow: the MS run inside
         # calls the POI resolver, whose institutional-pattern errors arrive as
-        # `poi_zones.IPSelectionError` (a RuntimeError) and propagate — a swallowed
+        # `poi_zones.ICSelectionError` (a RuntimeError) and propagate — a swallowed
         # one would drop the WHOLE sub (PLAN_H §8.5 step 3); so do the embedded fib tracker's errors
         # (`FibEventOrderError` / `CrossFibLimitError` / `EmbeddedFibTrackerError`, PLAN_I S5).
         return None
@@ -1311,7 +1311,7 @@ def render_sub_projection(
         wave_candles=down["wave_candles"],
         fib_states=down["fib_states"],
         poi_zones=down["poi_zones"],
-        ip_candidates=down["ip_candidates"],
+        ic_candidates=down["ic_candidates"],
         # slice-local, the first lens's path, meta {} — the lens copies get
         # their own path (the mirror) and trigger meta (the orchestrator)
         wvmi_records=down["wvmi_records"],

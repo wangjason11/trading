@@ -196,7 +196,7 @@ The `/compare` command:
    the previous commit
 2. Runs a replay on the current code (or reuses this session's replay of the exact same code) and applies the M15
    fetch gate before trusting any diff
-3. Compares the 27 CSVs (24 before PLAN_H landing A, 2026-10-06 — the three `*_ip_candidates.csv`) + chart counts (structure events incl. `confirmed_at`, zones, candle patterns, Fib states,
+3. Compares the 27 CSVs (24 before PLAN_H landing A, 2026-10-06 — the three IC-candidate CSVs, `*_ip_candidates.csv`, renamed `*_ic_candidates.csv` by PLAN_L L1) + chart counts (structure events incl. `confirmed_at`, zones, candle patterns, Fib states,
    pool tables)
 4. Reports what stayed the same vs what changed
 5. Flags changes outside the plan's expected deltas for investigation

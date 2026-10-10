@@ -629,27 +629,27 @@ def test_emitter_modules_have_no_unlisted_index_keys(module, list_name):
     assert unlisted == [], f"{short}: index keys neither in {list_name} nor _NOT_MIRRORED: {unlisted}"
 
 
-def test_render_mirrors_the_ip_candidates_to_both_lenses(geometry, m15_df):
+def test_render_mirrors_the_ic_candidates_to_both_lenses(geometry, m15_df):
     """PLAN_H §8.3 (landing A): the projection hands its institutional-pattern
     records to the result and the mirror puts a shifted, lens-attributed copy on
     EACH lens df (the call site — `render_sub_projection` passes
-    `down["ip_candidates"]`)."""
+    `down["ic_candidates"]`)."""
     res, lens_dfs = _render_both_lenses(geometry, m15_df)
-    assert res.ip_candidates, "the fixture sub's fib records have IP candidates"
-    assert any(r.picked for r in res.ip_candidates), "… and a pick"
+    assert res.ic_candidates, "the fixture sub's fib records have IP candidates"
+    assert any(r.picked for r in res.ic_candidates), "… and a pick"
     begin = int(res.meta["slice_begin"])
     for path, d in zip(sorted(lens_dfs), (lens_dfs[k] for k in sorted(lens_dfs))):
-        got = d.attrs["ip_candidates"]
+        got = d.attrs["ic_candidates"]
         assert [(r.ic_idx, r.picked) for r in got] == [
-            (None if r.ic_idx is None else r.ic_idx + begin, r.picked) for r in res.ip_candidates]
+            (None if r.ic_idx is None else r.ic_idx + begin, r.picked) for r in res.ic_candidates]
         assert {r.meta["sub_id"] for r in got} == {res.meta["sub_id"]}
         assert len({r.meta["structure_path_id"] for r in got}) == 1
 
 
 def test_institutional_pattern_module_emits_no_index_keys():
     """PLAN_H §8.3 (landing A): the institutional pattern carries every index in
-    DATACLASS FIELDS (`IPResult`; the exported `poi_zones.IPCandidateRecord`,
-    shifted by `edm._IP_CANDIDATE_IDX_FIELDS`), never in a dict — so the dict-key
+    DATACLASS FIELDS (`IPResult`; the exported `poi_zones.ICCandidateRecord`,
+    shifted by `edm._IC_CANDIDATE_IDX_FIELDS`), never in a dict — so the dict-key
     scans above have nothing to see in it, and a dict index key added later must
     first get a shift list (its `detail` dict holds stack types / ratios / pips)."""
     assert _all_index_like_keys(institutional_pattern) == set()

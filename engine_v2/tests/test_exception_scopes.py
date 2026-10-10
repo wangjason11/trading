@@ -1,6 +1,6 @@
 """The broad exception scopes in the engine — a static guard (PLAN_H §8.5c, landing review C1 / LR2, 2026-10-06c).
 
-The MS resolver re-raises ANY institutional-pattern error as `poi_zones.IPSelectionError`, a `RuntimeError`, so the
+The MS resolver re-raises ANY institutional-pattern error as `poi_zones.ICSelectionError`, a `RuntimeError`, so the
 narrow `except (ValueError, IndexError)` scopes above it (`entity_df_mutation._build_geometry`) cannot swallow it
 (LANDMINES "the resolver's fail-loud scope"). That holds only while no scope on an MS / IP path catches
 `RuntimeError`, `Exception`, `BaseException` or everything (bare). This test lists every such handler in the engine
@@ -13,12 +13,12 @@ import ast
 import pathlib
 
 ENGINE = pathlib.Path(__file__).resolve().parents[1]
-BROAD = {"RuntimeError", "Exception", "BaseException", "IPSelectionError"}
+BROAD = {"RuntimeError", "Exception", "BaseException", "ICSelectionError"}
 
 # (module, enclosing function) -> the exact names each of its broad handlers catches. None of them encloses an MS run
-# or the IP selector (checked 2026-10-06c against the landing review's 4 call paths to `select_ip_ic`).
+# or the IP selector (checked 2026-10-06c against the landing review's 4 call paths to `select_ic`).
 ALLOWED = {
-    # MS's in-flight IP read (PLAN_I S5): every error of the stamp read / the pick re-raised as IPSelectionError
+    # MS's in-flight IP read (PLAN_I S5): every error of the stamp read / the pick re-raised as ICSelectionError
     ("zones/poi_zones.py", "poi_inner_for_fib"): [("Exception",)],
     # MS's feed of its embedded FibTracker (PLAN_I S5): the tracker's RuntimeErrors re-raised as they are, any
     # other error re-raised as EmbeddedFibTrackerError (a RuntimeError) — it never swallows, it only re-types

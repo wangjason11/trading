@@ -39,9 +39,9 @@ class LowerTFResult:
     prev_bos_lines: list              # Previous BOS lines from downstream pipeline
     status: str                       # "finalized" or "pending"
     meta: Dict[str, Any] = field(default_factory=dict)
-    # The institutional-pattern debug records (`poi_zones.IPCandidateRecord`,
-    # PLAN_H §8.3) — slice-local; the mirror shifts `_IP_CANDIDATE_IDX_FIELDS`.
-    ip_candidates: list = field(default_factory=list)
+    # The institutional-pattern debug records (`poi_zones.ICCandidateRecord`,
+    # PLAN_H §8.3) — slice-local; the mirror shifts `_IC_CANDIDATE_IDX_FIELDS`.
+    ic_candidates: list = field(default_factory=list)
 
 
 @dataclass(frozen=True)

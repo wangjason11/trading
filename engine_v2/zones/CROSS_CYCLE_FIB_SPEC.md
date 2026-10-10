@@ -235,7 +235,7 @@ CTS_ESTABLISHED / CTS_UPDATED. Since S5 that inner comes from THIS logic:
   which reads the frame's `attrs["timeframe"]` first on EVERY call (a no-fib refresh included; PLAN_H PR1, PLAN_I
   F11), builds the fib's IC reference from the tracker AT `evaluated_at` = the fed event's moment (the pattern path's
   apply candle, the raw path's re-stepped candle; PLAN_K A4 / A14 — inside the read's re-raising scope, §9 C01) and
-  returns the institutional-pattern pick's inner (`select_ip_ic`, the drawn POI's selector, with that reference —
+  returns the institutional-pattern pick's inner (`select_ic`, the drawn POI's selector, with that reference —
   POI_ZONES_SPEC §3.2), or None → the BOS inner only. Every
   imbalance question of the fib decision is asked at the fed event's moment (Plan F), so the M1 divergence and the
   fib the tracker never creates / has deactivated are gone (PLAN_I §9.2 F9).

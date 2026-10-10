@@ -375,7 +375,7 @@ class FibTracker:
         evaluated_at: Optional[int],
     ) -> ICReference:
         """The fib record's IC reference (PLAN_K §1; the ONE builder — the drawn POI and MS's in-flight read both
-        hand its value to `poi_zones.select_ip_ic`, D2):
+        hand its value to `poi_zones.select_ic`, D2):
 
         - `prev_cycle_cts` when the fib's BOS lies in cycle a ≥ 1 (a single: its cycle; a cross: `cross_start_cycle`):
           cycle a−1's CTS_CONFIRMED price (`_cts_by_cycle` — the confirmed anchor, never a threshold); its break =
@@ -435,7 +435,7 @@ class FibTracker:
         as of the structure's end (`evaluated_at=lifecycle_cap`; None = the frame's last — main, an open sub): a
         break confirmed after the end is not exported, and the watch's detector reads the whole frame (MS's
         convention, RX1-K6 — PLAN_K §11.2 LA1). The SAME call the drawn POI's selection makes
-        (`poi_zones.select_ip_records`). A separate step after `_finalize_lifecycle_fields` (which takes no frame);
+        (`poi_zones.select_ic_records`). A separate step after `_finalize_lifecycle_fields` (which takes no frame);
         idempotent."""
         ic_keys = ("ic_ref_price", "ic_ref_source", "ic_ref_break_pattern_anchor_idx", "ic_ref_break_confirmed_idx")
         for key, fib in list(self._fibs.items()):

@@ -376,7 +376,7 @@ CTS event as it is emitted (`_feed_fib_tracker`: CTS_ESTABLISHED after its
 cycle's BOS_CONFIRMED, every CTS_UPDATED, CTS_CONFIRMED, CTS_THRESHOLD_UPDATED);
 a refresh reads the tracker's `representative_fib(sid, cycle)` (the active
 latest cross, else the active single, else none) and hands it to
-`poi_zones.poi_inner_for_fib` → `select_ip_ic` (the drawn POI's selector,
+`poi_zones.poi_inner_for_fib` → `select_ic` (the drawn POI's selector,
 PLAN_H D2): 0 or 1 inner, the pick's. Since PLAN_K A14 (2026-10-09) the
 refresh also hands the tracker and the fed event's MOMENT
 (`_refresh_poi_inners_for_cycle(moment)`: the pattern path's apply candle,
@@ -385,7 +385,7 @@ the read builds the fib's IC reference from the tracker at that moment,
 inside its re-raising scope (POI_ZONES_SPEC §3.2). No fib or no pattern → the BOS inner
 alone. Errors are NOT swallowed (LANDMINES "The POI Resolver Fails Loudly"):
 the read takes the frame's candle stamp first on every refresh and re-raises
-anything as `IPSelectionError`; a tracker error arrives as
+anything as `ICSelectionError`; a tracker error arrives as
 `EmbeddedFibTrackerError` (both `RuntimeError`s). The snapshot is per-cycle in
 `MarketStructureState.poi_inners_for_cycle`. Both refreshes still run on
 cycle 0 (cheap), but the per-candle check is gated off. The snapshot's ONLY
@@ -426,8 +426,8 @@ embedded tracker asks every imbalance question with `evaluated_at` =
 `event_fields.event_moment(ev)`, exactly as the drawn fib's tracker does
 (IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule"); the retired
 resolver's uncut Scenario-2 read and the M1 divergence it caused are gone. The
-IP pick's own imbalance reads inside `select_ip_ic` — IC cond3 in
-`find_ic_candidates` over `(candidate, fib CTS anchor]` and the tiebreakers' imbalance reads (the immediate
+IP pick's own imbalance reads inside `select_ic` — IC cond3 in
+`check_ic_conditions` over `(candidate, fib CTS anchor]` and the tiebreak rules' imbalance reads (the immediate
 unfilled imbalance, the most-recent-before-imbalance reference) —
 stay uncut (`evaluated_at=None`; the drawn POI's own reads, PLAN_H). A refresh on
 `st.cts.idx` itself (a lag-0 `CTS_ESTABLISHED`, a raw `CTS_UPDATED`) can

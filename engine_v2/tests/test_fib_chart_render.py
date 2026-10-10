@@ -3,7 +3,7 @@
 ONE draw gate (`_zone_render.fib_record_drawn`: not collapsed, not disappeared,
 locked OR active — ended or not), ONE hover status cell (`fib_hover_status_text`:
 the status, `life=[start, end] reason`, the cycle's IP outcome from
-`ip_rows_by_fib_record`) and ONE box drawer (`export_plotly._add_fib_box`), used
+`ic_rows_by_fib_record`) and ONE box drawer (`export_plotly._add_fib_box`), used
 by the H1 chart and the M15 lens charts. The M15 charts draw each sub's fib
 records (they were CSV-only) in one legend group, "M15 fib".
 """
@@ -20,12 +20,12 @@ from engine_v2.charting._zone_render import (
     fib_hover_status_text,
     fib_is_bright,
     fib_record_drawn,
-    ip_rows_by_fib_record,
+    ic_rows_by_fib_record,
 )
 from engine_v2.charting.style_registry import STYLE
 from engine_v2.features.fibonacci import FibRetracement
 from engine_v2.zones.fib_tracker import FibState
-from engine_v2.zones.poi_zones import IPCandidateRecord
+from engine_v2.zones.poi_zones import ICCandidateRecord
 
 
 def _fib(sid=0, cyc=1, *, active=True, locked=False, status="active", start=None, end=None,
@@ -41,7 +41,7 @@ def _fib(sid=0, cyc=1, *, active=True, locked=False, status="active", start=None
 
 
 def _ip(sid=0, cyc=1, *, bos=10, cts=20, ic=None, rank=None, reason=None, picked=False, sub_id=None):
-    return IPCandidateRecord(
+    return ICCandidateRecord(
         structure_id=sid, cycle_id=cyc, struct_direction=1, bos_anchor_idx=bos, cts_anchor_idx=cts,
         ic_idx=ic, candle_type=None, agreed_dir=None, touches_zone=None, ip_rank=rank, reason=reason,
         pattern_anchor_idx=None, opp_leg_first_idx=None, pattern_end_idx=None, pattern_confirmed_idx=None,
@@ -95,19 +95,19 @@ def test_bright_only_for_the_live_version(rec, bright):
 # The IP outcome lookup + the hover status cell
 # ---------------------------------------------------------------------------
 
-def test_ip_rows_keep_only_the_pick_and_the_none_row_keyed_per_sub():
+def test_ic_rows_keep_only_the_pick_and_the_none_row_keyed_per_sub():
     rows = [
         _ip(ic=14, rank="2A.i", picked=False, sub_id=5),                    # a losing candidate: skipped
         _ip(ic=18, rank="1A.iv", picked=True, sub_id=5),
         _ip(reason="no_pattern", sub_id=6),                                 # same (sid, cyc, bos, cts), other sub
     ]
-    got = ip_rows_by_fib_record(rows, by_sub=True)
+    got = ic_rows_by_fib_record(rows, by_sub=True)
     assert got == {(5, 0, 1, 10, 20): rows[1], (6, 0, 1, 10, 20): rows[2]}
     with pytest.raises(AssertionError, match="two IP outcome rows"):
-        ip_rows_by_fib_record(rows, by_sub=False)                            # without sub_id the keys collide
+        ic_rows_by_fib_record(rows, by_sub=False)                            # without sub_id the keys collide
     with pytest.raises(KeyError):
-        ip_rows_by_fib_record([_ip(reason="no_pattern")], by_sub=True)      # an unattributed row fails loudly
-    assert ip_rows_by_fib_record([_ip(reason="no_pattern", cyc=2)], by_sub=False) == {
+        ic_rows_by_fib_record([_ip(reason="no_pattern")], by_sub=True)      # an unattributed row fails loudly
+    assert ic_rows_by_fib_record([_ip(reason="no_pattern", cyc=2)], by_sub=False) == {
         (0, 2, 10, 20): _ip(reason="no_pattern", cyc=2)}
 
 
@@ -158,8 +158,8 @@ def test_h1_chart_hides_a_collapsed_cycles_fib_and_hovers_the_lifecycle_and_ip(t
     res, out, _ = _pipeline(_make_ip_multicycle_data)
     df = res.df.copy()
     df.attrs.update(structure_events=res.events, fib_states=out["fib_states"], poi_zones=out["poi_zones"],
-                    ip_candidates=out["ip_candidates"], kl_zones=list(out["kl_zones"]))
-    rows = ip_rows_by_fib_record(out["ip_candidates"], by_sub=False)
+                    ic_candidates=out["ic_candidates"], kl_zones=list(out["kl_zones"]))
+    rows = ic_rows_by_fib_record(out["ic_candidates"], by_sub=False)
     recs = {(f.structure_id, f.cycle_id): f for f in out["fib_states"]}
     # c0 (main's single since PLAN_I S4, Q6) / c1 / c2 locked + ended, c3 live (unlocked, open)
     assert set(recs) == {(0, 0), (0, 1), (0, 2), (0, 3)}
@@ -223,7 +223,7 @@ def _render_m15(monkeypatch, tmp_path, cfg_extra=None, poi_zones=(), triggers=()
     m15.attrs.update(sids=[_sub_rec(5, 12), _sub_rec(6, 30)], triggers=list(triggers), events=[],
                      poi_zones=list(poi_zones),
                      wave_candles=[], wvmi=[], prev_bos_lines=[], kl_zones=[_collapsed_kl(0, 0, sub_id=5)],
-                     fib_states=list(_M15_FIBS.values()), ip_candidates=list(_M15_IP))
+                     fib_states=list(_M15_FIBS.values()), ic_candidates=list(_M15_IP))
     reg = StructureRegistry()
     reg.register("H1.main", df=h1, timeframe="H1", role="main")
     reg.register("H1.main >> M15.confluence", df=m15, timeframe="M15", role="subordinate",
@@ -245,7 +245,7 @@ def test_m15_chart_draws_each_subs_fibs_in_one_legend_group(tmp_path, monkeypatc
     fig = _render_m15(monkeypatch, tmp_path)
     fib_tr = [tr for tr in fig.data if tr.name == "M15 fib"]
     got = sorted((c[0], c[5], c[6], c[8], c[12]) for c in (tr.customdata[0] for tr in fib_tr))
-    rows = ip_rows_by_fib_record(_M15_IP, by_sub=True)
+    rows = ic_rows_by_fib_record(_M15_IP, by_sub=True)
 
     def _cell(key, sub):
         rec = _M15_FIBS[key]

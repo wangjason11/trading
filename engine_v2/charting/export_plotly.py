@@ -19,10 +19,10 @@ from engine_v2.charting._zone_render import (
     fib_hover_status_text,
     fib_is_bright,
     fib_record_drawn,
-    ip_rows_by_fib_record,
+    ic_rows_by_fib_record,
     is_collapsed_cycle_zone,
     is_poi_of_collapsed_cycle,
-    poi_ip_hover_text,
+    poi_ic_hover_text,
 )
 from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
 from engine_v2.common.types import PatternStatus
@@ -2459,7 +2459,7 @@ def export_chart_plotly(
                 seg_times = pd.Series([x_zone0, x_zone1])
 
             # The institutional pattern line(s) (PLAN_H HV; one builder for the 3 POI hover sites)
-            ip_str = poi_ip_hover_text(z.meta, z.ic_idx)
+            ip_str = poi_ic_hover_text(z.meta, z.ic_idx)
             cycle_id = z.meta.get("cycle_id", 0)
 
             poi_customdata = [[
@@ -2555,7 +2555,7 @@ def export_chart_plotly(
         # lifecycle and the cycle's IP outcome (the pick, `IP: none (<reason>)`
         # — PLAN_H C1 —, or not evaluated).
         _collapsed = collapsed_cycles(dfx.attrs.get("kl_zones", []))
-        _ip_rows = ip_rows_by_fib_record(dfx.attrs.get("ip_candidates", []), by_sub=False)
+        _ic_rows = ic_rows_by_fib_record(dfx.attrs.get("ic_candidates", []), by_sub=False)
 
         _fib_drawn = 0
         for fib_st in fib_states:
@@ -2595,7 +2595,7 @@ def export_chart_plotly(
                 f"{price_80:.5f}",
                 # The status cell: lifecycle status + locked axis (§11), the
                 # lifecycle, the cycle's IP outcome.
-                fib_hover_status_text(fib_st, _ip_rows.get((
+                fib_hover_status_text(fib_st, _ic_rows.get((
                     int(fib_st.structure_id), int(fib_st.cycle_id),
                     int(fib_st.bos_idx), int(fib_st.cts_idx)))),
             ]

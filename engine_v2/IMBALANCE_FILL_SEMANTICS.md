@@ -84,7 +84,7 @@ moment, not the write:
   CTS_ESTABLISHED / CTS_UPDATED; since PLAN_I S5 the embedded FibTracker's
   representative fib → `poi_inner_for_fib`): its FIB is decided at the fed event's
   moment like the drawn fib's (FibTracker below); the IP pick on it
-  (`select_ip_ic`'s IC cond3 / its tiebreakers' imbalance reads) is built at the refresh candle and may count a
+  (`select_ic`'s IC cond3 / its tiebreakers' imbalance reads) is built at the refresh candle and may count a
   gap whose c3 is the NEXT candle — but the snapshot's only reader
   (`_maybe_confirm_cts_via_proximity`) is gated `i > st.cts.idx`, so every gap it
   counts has formed by the candle it is used on. No cut on the pick (see
@@ -218,10 +218,10 @@ Each consumer tunes four knobs: the **window**, the fill horizon
 | Site | Window | `check_to_idx` | `evaluated_at` | Question |
 |---|---|---|---|---|
 | `poi_zones._compute_poi_activation_history` (the enter candle) | `(ic_idx, t]` | `t` | `t` (enters at `max(inst.formed_at, first_active)`) | "Is a FORMED sd imbalance after the IC unfilled at candle t?" — the per-candle sweep, via the fill cache (below). Equals `has_unfilled_imbalance(df, ic_idx+1, t, check_to_idx=t, direction=sd, evaluated_at=t)` |
-| `poi_zones.find_ic_candidates` — caller `derive_poi_zones` | `(candidate_idx, cts_idx]` | the final fib's `cts_idx` (anchor) | `None` — retrospective IC identification; the sweep enforces WHEN the POI can go live (Plan E §2.4 item 8) | IC cond3 |
+| `poi_zones._has_unfilled_imbalance_after` (IC condition 3; `check_ic_conditions`, was `find_ic_candidates` until PLAN_L L1) — caller `derive_poi_zones` | `(candidate_idx, cts_idx]` | the final fib's `cts_idx` (anchor) | `None` — retrospective IC identification; the sweep enforces WHEN the POI can go live (Plan E §2.4 item 8) | IC cond3 |
 | same — caller MS in-flight `poi_inner_for_fib` (PLAN_I S5; was `compute_poi_inners_for_cycle`) | `(candidate_idx, cts_idx]` | the representative fib's `cts_idx` (anchor, ≤ `st.cts.idx`) | `None` — read only at `i > st.cts.idx` (Knowability §"Cached values") | IC cond3 for the proximity snapshot |
-| `poi_zones.immediate_unfilled_imbalance_first_c2_idx` — `select_ip_ic`, both callers (the IP tiebreaker update, 2026-10-09) | `(ic_idx, min(ic_idx + 2, cts_idx)]` | the fib's `cts_idx` (anchor) | `None` — as IC cond3 | "Is there an unfilled sd imbalance immediately after the IC?" — the first tiebreaker + the IP CSV column |
-| `poi_zones.select_ip_ic` — the most-recent-before-imbalance reference | `(oldest_ic_idx, cts_idx]` | the fib's `cts_idx` (anchor) | `None` — as IC cond3 | "The earliest unfilled sd imbalance after the oldest IC in play?" — the last tiebreaker |
+| `poi_zones.immediate_unfilled_imbalance_first_c2_idx` — `select_ic`, both callers (the IP tiebreaker update, 2026-10-09) | `(ic_idx, min(ic_idx + 2, cts_idx)]` | the fib's `cts_idx` (anchor) | `None` — as IC cond3 | "Is there an unfilled sd imbalance immediately after the IC?" — the first tiebreaker + the IP CSV column |
+| `poi_zones.most_recent_before_imbalance` (the shared rule helper; called by `apply_tiebreak_rules`) — the most-recent-before-imbalance reference | `(oldest_ic_idx, cts_idx]` | the fib's `cts_idx` (anchor) | `None` — as IC cond3 | "The earliest unfilled sd imbalance after the oldest IC in play?" — the last tiebreaker |
 
 ### FibTracker — `evaluated_at = self._evaluated_at` = `event_moment` of the handled event
 
@@ -264,7 +264,7 @@ itself were deleted in PLAN_I S5.)
 ### MarketStructure — no imbalance read of its own (PLAN_I S5)
 
 MS's in-flight POI read asks its imbalance questions through its embedded FibTracker (the rows above, cut at each
-fed event's moment) and the IP pick (`poi_inner_for_fib` → `select_ip_ic`: the IC cond3 row of the POI table, uncut).
+fed event's moment) and the IP pick (`poi_inner_for_fib` → `select_ic`: the IC cond3 row of the POI table, uncut).
 Its own uncut mirrors — `_update_cycle0_data` (the Scenario-2 cond2 cycle-0 snapshot) and the resolver's
 `select_fib_anchor_for_cycle` cond1 — were deleted in S5 (rows in `git show 0de98ca:engine_v2/IMBALANCE_FILL_SEMANTICS.md`).
 
@@ -286,7 +286,7 @@ disconnect between cause (counter-direction unfilled imbalance) and
 effect (sd-direction POI). The strict filter aligns each consumer's input
 with what it can actually influence downstream.
 
-POI IC validation (`find_ic_candidates`) was already strict — it asks a
+POI IC validation (IC condition 3 — then `find_ic_candidates`, since PLAN_L L1 `_has_unfilled_imbalance_after`) was already strict — it asks a
 slightly different question ("did an institutional candle produce a
 same-direction continuation push after the candidate?") which has always
 required directional alignment. The asymmetry that used to exist between

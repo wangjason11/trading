@@ -55,8 +55,8 @@ def _ip_ready(df):
     """`_df`'s frame through the real candle classifier: the columns + stamps the
     institutional pattern reads (`candle_type`, `prior_maru_max_len_as0`,
     `vol_dir`, `attrs["timeframe"]`, `attrs["pair"]`). The MS resolver runs
-    `select_ip_ic` OUTSIDE its graceful `try` since PLAN_H landing B — an unready
-    frame raises `IPSelectionError`."""
+    `select_ic` OUTSIDE its graceful `try` since PLAN_H landing B — an unready
+    frame raises `ICSelectionError`."""
     from engine_v2.features.candle_classifier import apply_candle_classification
     out = apply_candle_classification(df).df
     out.attrs["imbalances"] = df.attrs["imbalances"]

@@ -6,7 +6,7 @@ Each test pins ONE rule and names the mutant it kills. Structural rules run on
 `leg_variants` over a bare agreed-direction array (U = sd, D = opp, Z = a true
 doji, S = a split candle); ranking rules on synthetic candle frames classified by
 the real `apply_candle_classification` (H1 params); selection rules through
-`select_ip_ic` with a hand-built fib and hand-built imbalance instances.
+`select_ic` with a hand-built fib and hand-built imbalance instances.
 """
 from __future__ import annotations
 
@@ -46,16 +46,16 @@ from engine_v2.zones.poi_zones import (
     TIEBREAK_IC_CANDLE_TYPE as CANDLE_TYPE,
     TIEBREAK_IMMEDIATE_UNFILLED_IMBALANCE as IMMEDIATE,
     TIEBREAK_MOST_RECENT_BEFORE_IMBALANCE as MOST_RECENT,
-    IPCandidateRecord,
+    ICCandidateRecord,
     POIConfig,
-    derive_ip_candidates,
+    derive_ic_candidates,
     fib_zone_bounds,
-    find_ic_candidates,
+    find_ic_variant_candidates,
     ic_touches_zone,
     immediate_unfilled_imbalance_first_c2_idx,
     select_ic_variants,
-    select_ip_ic,
-    select_ip_records,
+    select_ic,
+    select_ic_records,
 )
 from engine_v2.tests._cross_fib_limits import NO_P
 from engine_v2.zones.cross_cycle_fib import ICReference
@@ -158,7 +158,7 @@ def _filled_gap(df, start, fill_idx):
 def _select(df, bos, cts, imbalances, *, zone=(0.5, 0.7), **kw):
     df.attrs["imbalances"] = imbalances
     kw.setdefault("ic_reference", ICReference.NONE)
-    return select_ip_ic(df, _fib_over(df, bos, cts, *zone), POIConfig(), **kw)
+    return select_ic(df, _fib_over(df, bos, cts, *zone), POIConfig(), **kw)
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +212,7 @@ def test_prepare_lower_tf_data_stamps_m15():
     assert prepare_lower_tf_data(raw).attrs["timeframe"] == "M15"
 
 
-def test_select_ip_ic_fails_loudly_on_an_unstamped_frame():
+def test_select_ic_fails_loudly_on_an_unstamped_frame():
     df = _frame([("M", U, 10), ("M", D, 6), ("M", U, 10)])
     del df.attrs["timeframe"]
     with pytest.raises(KeyError):
@@ -479,7 +479,7 @@ def test_classify_ics_batches_and_keeps_order():
 
 
 # ---------------------------------------------------------------------------
-# selection (select_ip_ic)
+# selection (select_ic)
 # ---------------------------------------------------------------------------
 
 def test_fib_zone_bounds_is_the_fib_price_formula():
@@ -505,7 +505,7 @@ def test_touch_is_inclusive_at_both_edges(h, l, touches):
 def test_best_rank_wins_over_three_candidates():
     df = _frame([("M", U, 10), ("P", D, 6), ("M", U, 10), ("M", D, 6), ("M", U, 10), ("N", D, 6), ("M", U, 10)])
     sel = _select(df, 6, 12, [_far_gap(12)])
-    assert [(c.ip.ic_idx, c.ip.ip_rank) for c in sel.candidates] == [(7, "3A.i"), (9, "1A.i"), (11, "2A.i")]
+    assert [(c.ic_idx, c.pattern.ip_rank) for c in sel.ic_candidates] == [(7, "3A.i"), (9, "1A.i"), (11, "2A.i")]
     assert sel.pick.ic_idx == 9 and sel.tiebreak is None
 
 
@@ -515,7 +515,7 @@ def test_shape_breaks_a_rank_tie_before_any_tiebreaker():
     df = _frame([("M", U, 10), ("M", D, 6), ("M", U, 10), ("M", D, 6), ("M", U, 6), ("M", U, 6), ("M", D, 6),
                  ("M", U, 10)])
     sel = _select(df, 6, 13, [_far_gap(13)])
-    assert [(c.ip.ic_idx, c.ip.ip_rank) for c in sel.candidates] == [(7, "1A.i"), (9, "1A.iii"), (12, "1A.ii")]
+    assert [(c.ic_idx, c.pattern.ip_rank) for c in sel.ic_candidates] == [(7, "1A.i"), (9, "1A.iii"), (12, "1A.ii")]
     assert sel.pick.ic_idx == 7 and sel.tiebreak is None
 
 
@@ -525,9 +525,9 @@ def test_touch_filters_the_pick_and_misses_are_listed_only_on_request():
     hi = float(df.loc[9, "h"])
     assert float(df.loc[9, "l"]) <= hi
     sel = _select(df, 6, 10, [_far_gap(10)], zone=(lo, hi))
-    assert [c.ip.ic_idx for c in sel.candidates] == [9] and sel.pick.ic_idx == 9
-    full = _select(df, 6, 10, [_far_gap(10)], zone=(lo, hi), classify_misses=True)
-    assert [(c.ip.ic_idx, c.touches_zone, c.ip.ip_rank) for c in full.candidates] == [
+    assert [c.ic_idx for c in sel.ic_candidates] == [9] and sel.pick.ic_idx == 9
+    full = _select(df, 6, 10, [_far_gap(10)], zone=(lo, hi), classify_all=True)
+    assert [(c.ic_idx, c.touches_zone, c.pattern.ip_rank) for c in full.checks] == [
         (7, False, "1A.i"), (9, True, "2A.i")]
     assert full.pick.ic_idx == 9
 
@@ -539,9 +539,9 @@ def test_volume_only_doji_is_a_candidate_and_a_split_candle_is_not():
     assert (int(df.loc[9, "direction"]), int(df.loc[9, "vol_dir"])) == (-1, 1)
     df.attrs["imbalances"] = [_far_gap(10)]
     fib = _fib_over(df, 6, 10, 0.5, 0.7)
-    assert find_ic_candidates(df, fib, POIConfig()) == [9]            # the V path: candle direction
-    sel = select_ip_ic(df, fib, POIConfig(), classify_misses=True, ic_reference=ICReference.NONE)
-    assert [c.ip.ic_idx for c in sel.candidates] == [7]               # VD: the agreed direction
+    assert find_ic_variant_candidates(df, fib, POIConfig()) == [9]    # the V path: candle direction
+    sel = select_ic(df, fib, POIConfig(), classify_all=True, ic_reference=ICReference.NONE)
+    assert [c.ic_idx for c in sel.checks] == [7]                   # VD: the agreed direction
     assert sel.pick.ic_idx == 7 and sel.pick.ip_rank == "3A.i"        # a doji IC is a pinbar
 
 
@@ -556,8 +556,8 @@ def test_most_recent_before_imbalance_ic_may_be_the_reference_c1():
     unfilled gap after 9 (first c2 10, IC 9 is its c1) → 9."""
     df = _tb2_frame()
     sel = _select(df, 6, 12, [_far_gap(10), _far_gap(12)])
-    assert [c.ip.ip_rank for c in sel.candidates] == ["1A.i"] * 3
-    assert [c.immediate_imbalance_first_c2_idx for c in sel.candidates] == [None, 10, 12]
+    assert [c.pattern.ip_rank for c in sel.ic_candidates] == ["1A.i"] * 3
+    assert [c.immediate_imbalance_first_c2_idx for c in sel.ic_candidates] == [None, 10, 12]
     assert sel.pick.ic_idx == 9 and sel.tiebreak == (MOST_RECENT, 11, 2, 10)
 
 
@@ -570,7 +570,7 @@ def test_most_recent_before_imbalance_excludes_ics_at_or_after_the_reference_fir
 def test_a_filled_gap_is_neither_immediate_nor_the_reference():
     df = _tb2_frame()
     sel = _select(df, 6, 12, [_filled_gap(df, 8, 10), _far_gap(10), _far_gap(12)])
-    assert [c.immediate_imbalance_first_c2_idx for c in sel.candidates] == [None, 10, 12]   # 7's gap 8 filled
+    assert [c.immediate_imbalance_first_c2_idx for c in sel.ic_candidates] == [None, 10, 12]   # 7's gap 8 filled
     assert sel.pick.ic_idx == 9 and sel.tiebreak == (MOST_RECENT, 11, 2, 10)
     unfilled = _select(_tb2_frame(), 6, 12, [_far_gap(8), _far_gap(10), _far_gap(12)])
     assert unfilled.pick.ic_idx == 7 and unfilled.tiebreak == (MOST_RECENT, 11, 3, 8)        # all three pass → oldest
@@ -595,7 +595,7 @@ def test_ic_candle_type_maru_over_normal_over_pinbar():
     the runner-up = the most recent IC of the best LOSING type — the normal (14), not the pinbar (11)."""
     df = _type_frame()
     sel = _select(df, 6, 15, [_far_gap(9), _far_gap(12), _far_gap(15)])
-    picks = [(c.ip.ic_idx, c.ip.ip_rank) for c in sel.candidates if c.ip.ip_rank]
+    picks = [(c.ic_idx, c.pattern.ip_rank) for c in sel.ic_candidates if c.pattern.ip_rank]
     assert picks == [(8, "3C.i"), (11, "3C.i"), (14, "3C.i")]
     assert [str(df.loc[i, "candle_type"]) for i, _ in picks] == ["maru", "pinbar", "normal"]
     assert sel.pick.ic_idx == 8 and sel.tiebreak == (CANDLE_TYPE, 14, 3, None)
@@ -633,7 +633,7 @@ def test_the_users_sequence_imbalance1_ic1_ic2_imbalance2_imbalance3_ic3_imbalan
     an immediate unfilled gap → IC3 (the old order — candle type, then the most recent before the imbalance — kept
     IC2 through imbalance3)."""
     sel = _select(_wide_frame(), 6, 20, [_far_gap(7), _far_gap(14), _far_gap(16), _far_gap(18)])
-    assert [(c.ip.ic_idx, c.ip.ip_rank) for c in sel.candidates] == [(9, "1A.iv"), (13, "1A.iv"), (17, "1A.iv")]
+    assert [(c.ic_idx, c.pattern.ip_rank) for c in sel.ic_candidates] == [(9, "1A.iv"), (13, "1A.iv"), (17, "1A.iv")]
     assert sel.pick.ic_idx == 13 and sel.tiebreak == (MOST_RECENT, 17, 2, 14)
     df = _wide_frame()
     filled = _select(df, 6, 20, [_far_gap(7), _filled_gap(df, 14, 15), _far_gap(16), _far_gap(18)])
@@ -644,7 +644,7 @@ def test_no_immediate_gap_leaves_every_tied_ic_in_play():
     """No IC has a gap at IC + 1 / IC + 2 (12 / 16 / 20 are each IC + 3): all three go on; the reference after the
     oldest is 12 → 9, 3 tied."""
     sel = _select(_wide_frame(), 6, 20, [_far_gap(12), _far_gap(16), _far_gap(20)])
-    assert [c.immediate_imbalance_first_c2_idx for c in sel.candidates] == [None, None, None]
+    assert [c.immediate_imbalance_first_c2_idx for c in sel.ic_candidates] == [None, None, None]
     assert sel.pick.ic_idx == 9 and sel.tiebreak == (MOST_RECENT, 17, 3, 12)
 
 
@@ -692,7 +692,7 @@ def test_v_path_characterization():
     df = _tb2_frame()
     df.attrs["imbalances"] = [_far_gap(10), _far_gap(12)]
     fib = _fib_over(df, 6, 12, float(df.loc[9, "l"]), float(df.loc[9, "h"]))
-    cands = find_ic_candidates(df, fib, POIConfig())
+    cands = find_ic_variant_candidates(df, fib, POIConfig())
     assert cands == [7, 9, 11]
     # V30 = the MOST RECENT candidate overlapping >= 30 % (11); V60 / V90 the most recent at those (9)
     assert select_ic_variants(cands, df, fib, POIConfig()) == {9: ["V60", "V90"], 11: ["V30"]}
@@ -725,7 +725,7 @@ def test_records_gate_none_rows_and_tiebreak_on_the_pick():
     no_touch = dataclasses.replace(_fib_over(df, 6, 12, 0.70, 0.71), cycle_id=1)  # a zone above every IC
     ended = dataclasses.replace(live, cycle_id=2, end_idx=12)                    # active but ended → gated out
     no_est = dataclasses.replace(live, cycle_id=3)                               # no CTS_ESTABLISHED → skipped
-    recs = derive_ip_candidates(df, [_est(0, 0), _est(0, 1), _est(0, 2)], _Tracker([live, no_touch, ended, no_est]),
+    recs = derive_ic_candidates(df, [_est(0, 0), _est(0, 1), _est(0, 2)], _Tracker([live, no_touch, ended, no_est]),
                                 POIConfig(), structure_path_id="H1.main")
     assert recs, "the gate kept the live records"
     assert [(r.cycle_id, r.ic_idx, r.touches_zone, r.picked, r.reason) for r in recs] == [
@@ -742,18 +742,18 @@ def test_records_gate_none_rows_and_tiebreak_on_the_pick():
 
 
 def test_export_header_none_row_and_legs(tmp_path):
-    from engine_v2.debug.export_zones import IP_CANDIDATE_COLUMNS, export_ip_candidates
+    from engine_v2.debug.export_zones import IC_CANDIDATE_COLUMNS, export_ic_candidates
     empty = tmp_path / "empty.csv"
-    export_ip_candidates([], empty)
-    assert list(pd.read_csv(empty).columns) == IP_CANDIDATE_COLUMNS
+    export_ic_candidates([], empty)
+    assert list(pd.read_csv(empty).columns) == IC_CANDIDATE_COLUMNS
     df = _tb2_frame()
     df.attrs["imbalances"] = [_far_gap(10), _far_gap(12)]
     live = _fib_over(df, 6, 12, 0.5, 0.7)
-    recs = derive_ip_candidates(df, [_est(0, 0), _est(0, 1)],
+    recs = derive_ic_candidates(df, [_est(0, 0), _est(0, 1)],
                                 _Tracker([live, dataclasses.replace(_fib_over(df, 6, 12, 0.70, 0.71), cycle_id=1)]),
                                 POIConfig(), structure_path_id="H1.main")
     out = tmp_path / "ip.csv"
-    export_ip_candidates(recs, out)
+    export_ic_candidates(recs, out)
     got = pd.read_csv(out)
     assert len(got) == 7 and list(got.cycle_id) == [0, 0, 0, 1, 1, 1, 1]
     assert got.ic_idx.isna().tolist() == [False] * 6 + [True]                        # the IP: none row last
@@ -767,10 +767,10 @@ def test_export_header_none_row_and_legs(tmp_path):
 def test_mirror_shifts_every_index_field_once_per_lens():
     from engine_v2.multitf import entity_df_mutation as edm
     from engine_v2.multitf.types import LowerTFResult, MultiTFTrigger
-    idx_fields = [f.name for f in dataclasses.fields(IPCandidateRecord) if f.name.endswith("_idx")]
-    assert sorted(idx_fields) == sorted(edm._IP_CANDIDATE_IDX_FIELDS)
+    idx_fields = [f.name for f in dataclasses.fields(ICCandidateRecord) if f.name.endswith("_idx")]
+    assert sorted(idx_fields) == sorted(edm._IC_CANDIDATE_IDX_FIELDS)
     vals = {f: 10 + k for k, f in enumerate(idx_fields)}
-    rec = IPCandidateRecord(structure_id=0, cycle_id=1, struct_direction=1, candle_type="maru", agreed_dir=-1,
+    rec = ICCandidateRecord(structure_id=0, cycle_id=1, struct_direction=1, candle_type="maru", agreed_dir=-1,
                             touches_zone=True, ip_rank="1A.i", reason=None, ip_leg_candle_counts="1-1-1",
                             picked=True, ip_tiebreak="TB2", ip_tied_count=2, meta={"structure_path_id": "src"},
                             **vals)
@@ -779,42 +779,42 @@ def test_mirror_shifts_every_index_field_once_per_lens():
                           lower_tf="M15", lower_sd=-1)
     res = LowerTFResult(trigger=trig, df=pd.DataFrame({"o": [0.0]}), events=[], kl_zones=[], wave_candles=[],
                         fib_states=[], poi_zones=[], wvmi_records=[], prev_bos_lines=[], status="finalized",
-                        meta={"slice_begin": 100, "sub_id": 7}, ip_candidates=[rec, none_row])
+                        meta={"slice_begin": 100, "sub_id": 7}, ic_candidates=[rec, none_row])
     lenses = {"H1.main >> M15.counter": pd.DataFrame({"o": [0.0] * 200}),
               "H1.main >> M15.confluence": pd.DataFrame({"o": [0.0] * 200})}
     for path, lens_df in lenses.items():
         edm.mirror_lower_tf_result_to_entity_df(lens_df, res, structure_path_id=path)
     for path, lens_df in lenses.items():
-        got, got_none = lens_df.attrs["ip_candidates"]
+        got, got_none = lens_df.attrs["ic_candidates"]
         assert {f: getattr(got, f) for f in idx_fields} == {f: v + 100 for f, v in vals.items()}
         assert got_none.ic_idx is None and got_none.pattern_anchor_idx is None and got_none.pattern_end_idx == \
             vals["pattern_end_idx"] + 100
         assert got.meta["structure_path_id"] == path and got.meta["sub_id"] == 7
     assert rec.ic_idx == vals["ic_idx"] and rec.meta == {"structure_path_id": "src"}     # the source untouched
-    a, b = (d.attrs["ip_candidates"][0] for d in lenses.values())
+    a, b = (d.attrs["ic_candidates"][0] for d in lenses.values())
     assert a is not b and a.meta is not b.meta
 
 
 def test_downstream_pipeline_reads_the_poi_config_defaults(monkeypatch):
     """PLAN_H §8.1 one parameter source: the selection, the drawn POIs and the debug CSV all get `POIConfig()`
     (the re-typed literals are gone; the leg cap is the default table) — and (landing B, §8.5) the selection is
-    computed ONCE: the SAME `select_ip_records` list is handed to both readers."""
+    computed ONCE: the SAME `select_ic_records` list is handed to both readers."""
     import engine_v2.pipeline.orchestrator as orch
     from engine_v2.structure.structure_engine import compute_bounded_structure
     from engine_v2.tests.test_unified_probe import _make_ip_multicycle_data, _prepare_df
     seen = []
-    real_sel, real_poi, real_ip = orch.select_ip_records, orch.derive_poi_zones, orch.derive_ip_candidates
+    real_sel, real_poi, real_ip = orch.select_ic_records, orch.derive_poi_zones, orch.derive_ic_candidates
 
     def sel(*a, **k):
         out = real_sel(*a, **k)
         seen.append(("sel", a[3], out))
         return out
 
-    monkeypatch.setattr(orch, "select_ip_records", sel)
+    monkeypatch.setattr(orch, "select_ic_records", sel)
     monkeypatch.setattr(orch, "derive_poi_zones",
-                        lambda *a, **k: seen.append(("poi", k["config"], k["ip_records"])) or real_poi(*a, **k))
-    monkeypatch.setattr(orch, "derive_ip_candidates",
-                        lambda *a, **k: seen.append(("ip", a[3], k["ip_records"])) or real_ip(*a, **k))
+                        lambda *a, **k: seen.append(("poi", k["config"], k["ic_records"])) or real_poi(*a, **k))
+    monkeypatch.setattr(orch, "derive_ic_candidates",
+                        lambda *a, **k: seen.append(("ip", a[3], k["ic_records"])) or real_ip(*a, **k))
     df = _prepare_df(_make_ip_multicycle_data())
     res = compute_bounded_structure(df, 0, +1, cross_fib_limit=NO_P)
     with contextlib.redirect_stdout(io.StringIO()):
@@ -828,7 +828,7 @@ def test_downstream_pipeline_reads_the_poi_config_defaults(monkeypatch):
 
 def test_downstream_pipeline_returns_the_selection_of_its_own_fibs():
     """The pipeline call site (the real collaborator): `_run_downstream_pipeline` hands back exactly
-    `derive_ip_candidates` over its own fib tracker — one or more rows per gated record — and (landing B, D2)
+    `derive_ic_candidates` over its own fib tracker — one or more rows per gated record — and (landing B, D2)
     draws exactly the picked rows: one POI per picked row, the same IC / rank / legs / tiebreak."""
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
     from engine_v2.structure.structure_engine import compute_bounded_structure
@@ -838,14 +838,14 @@ def test_downstream_pipeline_returns_the_selection_of_its_own_fibs():
     with contextlib.redirect_stdout(io.StringIO()):
         out = _run_downstream_pipeline(res.df, res.events, res.struct_direction, wvmi="off",
                                        cross_fib_limits=main_limits(res.events))
-    assert out["ip_candidates"], "the fixture has gated fib records"
-    again = derive_ip_candidates(res.df, res.events, out["fib_tracker"], POIConfig(), structure_path_id="H1.main")
-    assert [dataclasses.astuple(r) for r in out["ip_candidates"]] == [dataclasses.astuple(r) for r in again]
-    assert {r.meta["structure_path_id"] for r in out["ip_candidates"]} == {"H1.main"}
-    picked = [r for r in out["ip_candidates"] if r.picked]
+    assert out["ic_candidates"], "the fixture has gated fib records"
+    again = derive_ic_candidates(res.df, res.events, out["fib_tracker"], POIConfig(), structure_path_id="H1.main")
+    assert [dataclasses.astuple(r) for r in out["ic_candidates"]] == [dataclasses.astuple(r) for r in again]
+    assert {r.meta["structure_path_id"] for r in out["ic_candidates"]} == {"H1.main"}
+    picked = [r for r in out["ic_candidates"] if r.picked]
     assert picked, "the fixture has a pick"
     # cycles 1 / 3: IC candidates, no pattern; cycle 0 (main's single since PLAN_I S4, Q6): no IC candidate — no POI
-    assert [(r.cycle_id, r.reason) for r in out["ip_candidates"] if r.ic_idx is None] == [
+    assert [(r.cycle_id, r.reason) for r in out["ic_candidates"] if r.ic_idx is None] == [
         (0, "no_ic_candidate"), (1, "no_pattern"), (3, "no_pattern")]
     drawn = [(z.meta["structure_id"], z.meta["cycle_id"], z.ic_idx, z.meta["ip_rank"], z.meta["ip_leg_candle_counts"],
               z.meta["pattern_anchor_idx"], z.meta["opp_leg_first_idx"], z.meta["pattern_end_idx"],
@@ -918,9 +918,9 @@ def test_tiebreak_group_is_the_rank_tie():
                  ("N", U, 10), ("M", D, 3), ("M", D, 3), ("M", U, 10)])  # 14..17: IC 16 maru, 3D.i
     assert (int(df.loc[13, "direction"]), int(df.loc[13, "vol_dir"])) == (-1, 1)
     sel = _select(df, 6, 17, [_far_gap(17)])
-    ranks = {c.ip.ic_idx: c.ip.ip_rank for c in sel.candidates}
+    ranks = {c.ic_idx: c.pattern.ip_rank for c in sel.ic_candidates}
     assert ranks[8] == "3C.i" and ranks[11] == "3C.i" and ranks[16] == "3D.i", ranks
-    assert {c.ip.ic_idx: c.immediate_imbalance_first_c2_idx for c in sel.candidates}[16] == 17
+    assert {c.ic_idx: c.immediate_imbalance_first_c2_idx for c in sel.ic_candidates}[16] == 17
     assert sel.pick.ic_idx == 8 and sel.tiebreak == (CANDLE_TYPE, 11, 2, None)
 
 
@@ -942,7 +942,7 @@ def test_the_fill_horizon_is_the_cts_anchor():
                             gap_bottom=c11 - 8 * PIP, gap_size=3 * PIP)
     assert not gap.is_filled(df, 12, 0.70) and gap.is_filled(df, 14, 0.70)
     sel = _select(df, 6, 12, [gap, _far_gap(12)])
-    assert [c.immediate_imbalance_first_c2_idx for c in sel.candidates] == [None, 10, 12]
+    assert [c.immediate_imbalance_first_c2_idx for c in sel.ic_candidates] == [None, 10, 12]
     assert sel.pick.ic_idx == 9 and sel.tiebreak == (MOST_RECENT, 11, 2, 10)
 
 
@@ -956,14 +956,21 @@ def test_most_recent_before_imbalance_count_is_the_candle_type_survivors():
     assert sel.pick.ic_idx == 8 and sel.tiebreak == (MOST_RECENT, 14, 2, 9)
 
 
-# N20 — a gated record with no §3.1 candidate gets the `no_ic_candidate` none row (was `no_candidates` until PLAN_K
-# landing B — PLAN_H §6 RX1-N: one reason for "no candle passes every IC condition")
+# N20 — a gated record with no IC candidate gets the `no_ic_candidate` none row (was `no_candidates` until PLAN_K
+# landing B — PLAN_H §6 RX1-N: one reason for "no candle passes every IC condition"). Since PLAN_L L1 every
+# agreed-opposite candle of the window is listed with its condition outcomes (PLAN_H §6 ICR-4 / ICR-11): here
+# 7 / 9 / 11, each failing condition 3 (no imbalance at all) — not IC candidates, classified, never picked.
 def test_no_candidates_row():
     df = _tb2_frame()
     df.attrs["imbalances"] = []
-    recs = derive_ip_candidates(df, [_est(0, 0)], _Tracker([_fib_over(df, 6, 12, 0.5, 0.7)]), POIConfig(),
+    recs = derive_ic_candidates(df, [_est(0, 0)], _Tracker([_fib_over(df, 6, 12, 0.5, 0.7)]), POIConfig(),
                                 structure_path_id="H1.main")
-    assert [(r.ic_idx, r.picked, r.reason) for r in recs] == [(None, False, "no_ic_candidate")]
+    assert [(r.ic_idx, r.picked, r.reason is None and r.ip_rank is not None, r.has_unfilled_imbalance_after,
+             r.is_ic_candidate) for r in recs[:-1]] == [(i, False, True, False, False) for i in (7, 9, 11)]
+    assert [r.immediate_imbalance_first_c2_idx for r in recs[:-1]] == [None, None, None]
+    none = recs[-1]
+    assert (none.ic_idx, none.picked, none.reason, none.has_unfilled_imbalance_after, none.is_ic_candidate) == (
+        None, False, "no_ic_candidate", None, None)
 
 
 # N22 — every gated record is its own selection (two records of one cycle → both)
@@ -972,7 +979,7 @@ def test_two_gated_records_of_one_cycle_are_both_selected():
     df.attrs["imbalances"] = [_far_gap(10), _far_gap(12)]
     live = _fib_over(df, 6, 12, 0.5, 0.7)
     other = dataclasses.replace(live, bos_idx=8, active=False, locked=True)
-    recs = derive_ip_candidates(df, [_est(0, 0)], _Tracker([live, other]), POIConfig(), structure_path_id="H1.main")
+    recs = derive_ic_candidates(df, [_est(0, 0)], _Tracker([live, other]), POIConfig(), structure_path_id="H1.main")
     assert sorted({r.bos_anchor_idx for r in recs}) == [6, 8]
 
 
@@ -980,7 +987,7 @@ def test_two_gated_records_of_one_cycle_are_both_selected():
 def test_record_index_fields_and_agreed_dir():
     df = _frame([("M", U, 10), ("Z", 0, 2, -3), ("M", U, 10), ("M", D, 3, 5), ("M", U, 10)])
     df.attrs["imbalances"] = [_far_gap(10)]
-    recs = derive_ip_candidates(df, [_est(0, 0)], _Tracker([_fib_over(df, 6, 10, 0.5, 0.7)]), POIConfig(),
+    recs = derive_ic_candidates(df, [_est(0, 0)], _Tracker([_fib_over(df, 6, 10, 0.5, 0.7)]), POIConfig(),
                                 structure_path_id="H1.main")
     (pick,) = [r for r in recs if r.picked]
     assert (pick.ic_idx, pick.bos_anchor_idx, pick.cts_anchor_idx) == (7, 6, 10)
@@ -990,17 +997,17 @@ def test_record_index_fields_and_agreed_dir():
 
 # N26 / N27 / N28 / N30 — the CSV equals the records, column by column, as RAW text
 def test_export_round_trip_raw_text(tmp_path):
-    from engine_v2.debug.export_zones import export_ip_candidates
+    from engine_v2.debug.export_zones import export_ic_candidates
     df = _frame([("M", U, 10), ("M", D, 6), ("M", U, 10), ("M", D, 6), ("M", U, 6), ("M", U, 6), ("M", D, 6),
                  ("M", U, 10)])
     df.attrs["imbalances"] = [_far_gap(13)]
     live = _fib_over(df, 6, 13, 0.5, 0.7)
     miss = dataclasses.replace(_fib_over(df, 6, 13, 0.70, 0.71), cycle_id=1)
-    recs = derive_ip_candidates(df, [_est(0, 0), _est(0, 1)], _Tracker([live, miss]), POIConfig(),
+    recs = derive_ic_candidates(df, [_est(0, 0), _est(0, 1)], _Tracker([live, miss]), POIConfig(),
                                 structure_path_id="H1.main")
     assert len(recs) >= 3 and any(r.ic_idx is None for r in recs)
     out = tmp_path / "ip.csv"
-    export_ip_candidates(recs, out)
+    export_ic_candidates(recs, out)
     lines = out.read_text().splitlines()
     head = lines[0].split(",")
     rows = [dict(zip(head, l.split(","))) for l in lines[1:]]
@@ -1016,24 +1023,24 @@ def test_export_round_trip_raw_text(tmp_path):
 def test_mirror_extends_across_subs_of_one_lens():
     from engine_v2.multitf import entity_df_mutation as edm
     from engine_v2.multitf.types import LowerTFResult, MultiTFTrigger
-    from engine_v2.zones.poi_zones import IPCandidateRecord
+    from engine_v2.zones.poi_zones import ICCandidateRecord
     trig = MultiTFTrigger(parent_tf="H1", parent_sid=0, parent_cycle_id=1, parent_sd=1, use_case="first_counter",
                           lower_tf="M15", lower_sd=-1)
     lens = pd.DataFrame({"o": [0.0] * 300})
     for sub_id, begin in ((7, 100), (8, 150), (9, 200)):
-        rec = IPCandidateRecord(structure_id=0, cycle_id=1, struct_direction=1, bos_anchor_idx=1, cts_anchor_idx=5,
+        rec = ICCandidateRecord(structure_id=0, cycle_id=1, struct_direction=1, bos_anchor_idx=1, cts_anchor_idx=5,
                                 ic_idx=3, candle_type="maru", agreed_dir=-1, touches_zone=True, ip_rank="1A.i",
                                 reason=None, pattern_anchor_idx=2, opp_leg_first_idx=3, pattern_end_idx=4,
                                 pattern_confirmed_idx=5, ip_leg_candle_counts="1-1-1", picked=True,
                                 meta={"structure_path_id": "src"})
         res = LowerTFResult(trigger=trig, df=pd.DataFrame({"o": [0.0]}), events=[], kl_zones=[], wave_candles=[],
                             fib_states=[], poi_zones=[], wvmi_records=[], prev_bos_lines=[], status="finalized",
-                            meta={"slice_begin": begin, "sub_id": sub_id}, ip_candidates=[rec])
+                            meta={"slice_begin": begin, "sub_id": sub_id}, ic_candidates=[rec])
         edm.mirror_lower_tf_result_to_entity_df(lens, res, structure_path_id="H1.main >> M15.counter")
-    assert [(r.meta["sub_id"], r.ic_idx) for r in lens.attrs["ip_candidates"]] == [(7, 103), (8, 153), (9, 203)]
+    assert [(r.meta["sub_id"], r.ic_idx) for r in lens.attrs["ic_candidates"]] == [(7, 103), (8, 153), (9, 203)]
 
 
-# N32 — select_ip_ic classifies stacks with the FRAME's timeframe params (M15 floor 1.0, not H1's 2.2)
+# N32 — select_ic classifies stacks with the FRAME's timeframe params (M15 floor 1.0, not H1's 2.2)
 def test_select_uses_the_frame_timeframe_params():
     small = tuple(("M", U if k % 2 == 0 else D, 2.5) for k in range(6))
     df = _frame([("M", U, 2.5), ("P", D, 1), ("M", U, 1.2), ("M", U, 1.2)], prefix=small, timeframe="M15")
@@ -1058,12 +1065,12 @@ def test_pattern_confirmed_past_the_frame_when_the_data_ends_below_the_cap():
 def test_a_mirrored_record_exports_entity_absolute_legs(tmp_path):
     """§8.3a deviation 3: `legs` is located from the SHIFTED `ic_idx` + the counts — a mirrored sub record (slice
     begin 100) exports entity-absolute legs (the first replay had a stored slice-local legs string)."""
-    from engine_v2.debug.export_zones import export_ip_candidates
+    from engine_v2.debug.export_zones import export_ic_candidates
     from engine_v2.multitf import entity_df_mutation as edm
     from engine_v2.multitf.types import LowerTFResult, MultiTFTrigger
     trig = MultiTFTrigger(parent_tf="H1", parent_sid=0, parent_cycle_id=1, parent_sd=1, use_case="first_counter",
                           lower_tf="M15", lower_sd=-1)
-    rec = IPCandidateRecord(structure_id=0, cycle_id=1, struct_direction=1, bos_anchor_idx=1, cts_anchor_idx=5,
+    rec = ICCandidateRecord(structure_id=0, cycle_id=1, struct_direction=1, bos_anchor_idx=1, cts_anchor_idx=5,
                             ic_idx=3, candle_type="maru", agreed_dir=-1, touches_zone=True, ip_rank="1A.i",
                             reason=None, pattern_anchor_idx=2, opp_leg_first_idx=3, pattern_end_idx=4,
                             pattern_confirmed_idx=5, ip_leg_candle_counts="1-1-1", picked=True,
@@ -1072,10 +1079,10 @@ def test_a_mirrored_record_exports_entity_absolute_legs(tmp_path):
     edm.mirror_lower_tf_result_to_entity_df(
         lens, LowerTFResult(trigger=trig, df=pd.DataFrame({"o": [0.0]}), events=[], kl_zones=[], wave_candles=[],
                             fib_states=[], poi_zones=[], wvmi_records=[], prev_bos_lines=[], status="finalized",
-                            meta={"slice_begin": 100, "sub_id": 7}, ip_candidates=[rec]),
+                            meta={"slice_begin": 100, "sub_id": 7}, ic_candidates=[rec]),
         structure_path_id="H1.main >> M15.counter")
     out = tmp_path / "ip.csv"
-    export_ip_candidates(lens.attrs["ip_candidates"], out)
+    export_ic_candidates(lens.attrs["ic_candidates"], out)
     assert pd.read_csv(out).loc[0, "legs"] == "102..102|103..103|104..104"
 
 
@@ -1106,15 +1113,15 @@ def test_a_locked_fib_without_its_cts_established_fails_loudly():
     df.attrs["imbalances"] = [_far_gap(12)]
     locked = dataclasses.replace(_fib_over(df, 6, 12, 0.5, 0.7), active=False, locked=True)
     with pytest.raises(AssertionError, match="has no CTS_ESTABLISHED"):
-        derive_ip_candidates(df, [], _Tracker([locked]), POIConfig(), structure_path_id="H1.main")
+        derive_ic_candidates(df, [], _Tracker([locked]), POIConfig(), structure_path_id="H1.main")
 
 
 def test_the_locked_fib_assert_runs_before_the_selection():
-    """`select_ip_records` checks the event contract BEFORE it selects (PLAN_H §8.5a deviation 2): on an unstamped
+    """`select_ic_records` checks the event contract BEFORE it selects (PLAN_H §8.5a deviation 2): on an unstamped
     frame the selection would raise KeyError first (landing review G02)."""
     df = _tb2_frame()
     df.attrs["imbalances"] = [_far_gap(12)]
     locked = dataclasses.replace(_fib_over(df, 6, 12, 0.5, 0.7), active=False, locked=True)
     del df.attrs["timeframe"]
     with pytest.raises(AssertionError, match="has no CTS_ESTABLISHED"):
-        select_ip_records(df, [], _Tracker([locked]), POIConfig())
+        select_ic_records(df, [], _Tracker([locked]), POIConfig())

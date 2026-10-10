@@ -108,7 +108,7 @@ IC_REF_SOURCES = frozenset({
 class ICReference:
     """A fib record's IC reference (PLAN_K §3.1; PLAN_H §8.9 RX1): the price an IC candidate must lie entirely on the
     near side of (sd +1: below), and the first candle of the pattern that BROKE that price — the IC must come before
-    it. Built ONLY by `FibTracker.ic_reference` (both consumers hand it to `poi_zones.select_ip_ic`); `NONE` = no
+    it. Built ONLY by `FibTracker.ic_reference` (both consumers hand it to `poi_zones.select_ic`); `NONE` = no
     reference (the condition passes, RX1-B). A reference without a known break checks the price side only
     (RX1-2a)."""
     price: Optional[float]

@@ -140,7 +140,7 @@ def test_the_tripwire_warns_on_a_mismatched_reversal_break():
 # ---- B7 (N10): every classified candidate carries its reason, a touch miss included ---------------------------------
 
 def test_a_candidate_missing_the_touch_still_carries_its_reason():
-    """`*_ip_candidates.csv` reports `ic_ref_reason` on every row (PLAN_K §3.6; the census's cand -> pass counts
+    """`*_ic_candidates.csv` reports `ic_ref_reason` on every row (PLAN_K §3.6; the census's cand -> pass counts
     include touch misses). The M1 frame with a fib whose zone neither candidate touches (cts 1.20)."""
     import engine_v2.zones.poi_zones as poi_zones
     from engine_v2.tests.test_plan_h_landing_b import _fib, _m1_frame
@@ -148,7 +148,7 @@ def test_a_candidate_missing_the_touch_still_carries_its_reason():
     df = _m1_frame()
     fs = poi_zones.FibState(structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.0, cts_idx=40,
                             cts_price=1.2, active=True, locked=False, fib=_fib(1.2, 1.0))
-    sel = poi_zones.select_ip_ic(df, fs, POIConfig(), ic_reference=ICReference(1.128, "prev_cycle_cts"),
-                                 classify_misses=True)
-    assert {c.ip.ic_idx: (c.touches_zone, c.ic_ref_reason) for c in sel.candidates} == {
+    sel = poi_zones.select_ic(df, fs, POIConfig(), ic_reference=ICReference(1.128, "prev_cycle_cts"),
+                                 classify_all=True)
+    assert {c.ic_idx: (c.touches_zone, c.ic_ref_reason) for c in sel.checks} == {
         32: (False, PAST), 36: (False, None)}
