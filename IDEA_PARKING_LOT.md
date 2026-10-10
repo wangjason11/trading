@@ -117,13 +117,13 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    IC identification revamp"): Step 1 the IC candidates, Step 2 the IP (both as built), **Step 3 NEW — the general
    ranking when no pattern exists** (its own four ranking rules over the unfiltered Step 1 list — a separate rule set
    from Step 2's tiebreak rules, PLAN_H §6 ICR-S), **Step 4 DEFERRED — the
-   lower-TF fallback** when no IC candidate remains (D.2, rewritten). Decisions PLAN_H §6 ICR-S, ICR-1 … ICR-14 (2026-10-09);
+   lower-TF fallback** when no IC candidate remains (D.2, rewritten). Decisions PLAN_H §6 ICR-S, ICR-1 … ICR-15 (2026-10-09 → 10);
    trial replay measured (PLAN_H §8.9); **the plan `engine_v2/plans/PLAN_L_ic_identification_steps.md`** (cold-reviewed,
    0 BLOCKER) — two landings: **L1 the restructure + names COMMITTED `b5c3613` + SAVED S_L1 `20261010_114846_b5c3613` 2026-10-10**
    (save `09dffad`, trunk `02a40a7`; = `LATEST_<branch>`, L2's baseline; the user's steps in code + POI_ZONES_SPEC §3,
    the renames, the CSV listing every agreed-opposite candle + 2 columns; the selection identical — `/compare` vs
-   S_TBU == the prediction, 31 / 31 mutants killed, suite 1553; PLAN_L §9), L2 the ranking rules NEXT (the labels
-   decided 2026-10-10 but one — whether the hovers repeat the IC index, PLAN_L §8.2). **First, the IP tiebreaker update (user 2026-10-09, before the write-up — "with
+   S_TBU == the prediction, 31 / 31 mutants killed, suite 1553; PLAN_L §9), L2 the ranking rules NEXT (a new
+   session; every label decided 2026-10-10 — PLAN_L §8.2, PLAN_H §6 ICR-15). **First, the IP tiebreaker update (user 2026-10-09, before the write-up — "with
    it, I think we would wrap up the Institutional Pattern process"): COMMITTED `09f056a` 2026-10-09** — a new first tiebreaker, the
    immediate unfilled imbalance (an unfilled sd gap whose first gap candle is at IC + 1 / IC + 2; a filter), then the
    IC's candle type, then the most recent before the imbalance; descriptive `ip_tiebreak` names (no more TB1 / TB2);

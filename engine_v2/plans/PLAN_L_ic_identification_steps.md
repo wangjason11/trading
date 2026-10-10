@@ -1,10 +1,10 @@
 # Plan L — IC identification in steps: the restructure + the ranking rules (Week 9 Part 1 item 1)
 
-**Status: L1 COMMITTED `b5c3613` + SAVED S_L1 `20261010_114846_b5c3613` (2026-10-10, §9); L2 NEXT — the labels decided but
-one (§8.2: whether the hovers repeat the IC index, OPEN).** §6 names APPROVED, §4.1 runner-ups settled (PLAN_H §6
+**Status: L1 COMMITTED `b5c3613` + SAVED S_L1 `20261010_114846_b5c3613` (2026-10-10, §9); L2 NEXT (a new session) — every
+label decided (§8.2; PLAN_H §6 ICR-15).** §6 names APPROVED, §4.1 runner-ups settled (PLAN_H §6
 ICR-13 / ICR-14); the cold review RAN (§8: 0 BLOCKER, 4 MAJOR, 17 MINOR — all folded below). The IC
 identification revamp: the user's write-up verbatim `plan_h_inputs/ic_identification_revamp_spec.md`; every decision
-PLAN_H §6 ICR-S, ICR-1 … ICR-12 (2026-10-09, three rounds); the reading, the shadow measurement and the TRIAL replay
+PLAN_H §6 ICR-S, ICR-1 … ICR-15 (2026-10-09 → 10); the reading, the shadow measurement and the TRIAL replay
 PLAN_H §8.9 "The IC identification revamp". Baselines: L1 vs **S_TBU** `20261009_171255_5b5c307` (code `92b8b61`);
 L2 vs **S_L1** `20261010_114846_b5c3613` (= `LATEST_<branch>` from 2026-10-10; code `b5c3613`). Register `IDEA_PARKING_LOT.md` §D.1 item 1; Step 4 → §D.2 (deferred).
 
@@ -207,11 +207,13 @@ helper's input list at its two call sites (Step 2's only, in L1), the CSV column
   picked row keeps its pattern DIAGNOSTICS like every other failing row (`reason` = the first failing pattern rule,
   `legs`, the stacks) — §8.2 (c); the drawn == picked-row check (`test_institutional_pattern.py:850-855`) applies to
   pattern picks only.
-- **Hovers (ICR-7)** (`poi_ic_hover_text`, `fib_hover_status_text`): the POI hover of a ranked IC `No pattern · IC
-  <idx> · ranking rule <rule>` (+ ` over <runner-up>` and the gap when the rule has them) — with `ranking_rule` None
-  (one candidate): `No pattern · IC <idx> · only IC candidate` (§8.2 (a)); the fib hover's outcome line `IC: none
-  (<reason>)` (was `IP: none`), `IC: not evaluated (no POI record)` (was `IP: not evaluated …`, §8.2 (b)), a ranked
-  pick `No pattern · IC <idx> · <rule | only IC candidate>`; an IP pick unchanged (`IP <rank> · IC <idx>`).
+- **Hovers (ICR-7, ICR-15)** (`poi_ic_hover_text`, `fib_hover_status_text`): the POI hover of a ranked IC `No
+  pattern · ranking rule <rule>` (+ ` over <runner-up>` and the gap when the rule has them) — with `ranking_rule`
+  None (one candidate): `No pattern · only IC candidate` (§8.2 (a)); NO `IC <idx>` on the POI hover's pattern line —
+  its own `ic_idx=` line names the IC (§8.2, 2026-10-10); the fib hover's outcome line `IC: none (<reason>)` (was
+  `IP: none`), `IC: not evaluated (no POI record)` (was `IP: not evaluated …`, §8.2 (b)), a ranked pick `No pattern
+  · IC <idx> · <ranking rule <rule> | only IC candidate>` (the IC index KEPT — the fib box's only pointer to its
+  IC); an IP pick unchanged (`IP <rank> · IC <idx>`).
 - **MS**: `poi_inner_for_fib` returns a ranked pick's inner like a pattern pick's (one selector).
 
 ### 4.2 Audit (L2) — `poi_zones` (`select_ic`, `apply_ranking_rules`, `derive_poi_zones` meta + activation call,
@@ -361,15 +363,17 @@ None-safe and its test enforces the idx-field list; no other consumer reads the 
   was picked; the alternative: blank them on that row.
 
 **Decided 2026-10-10** (the user: "Ok for a) … everything else sounds good"): (b) and (c) as proposed; (a) the
-`only IC candidate` wording as proposed. **OPEN — whether the hovers repeat the IC index** (the user: "I'm assuming
+`only IC candidate` wording as proposed. **The IC index on the hovers** (the user: "I'm assuming
 the final IC idx is logged elsewhere? In that case I don't think it's useful to log IC <idx> for when the idx is
 selected via IP, instead IP <rank> is more information, unless that's now being logged elsewhere?"). Measured on the
 L1 code: every POI hover has its own `ic_idx=` line (the 4 POI hover templates, `export_plotly.py:2500,2529`,
 `export_m15_chart.py:1670,2627`) and its pattern line (`poi_ic_hover_text`, `IP <rank> · legs …`) carries no
 `IC <idx>`; the fib hover's status cell `IP <rank> · IC <idx>` is the only place the fib box names its IC (the fib
 box and the POI box are separate hovers); both CSVs carry `ic_idx` (the POI CSV's first column; the IC CSV with
-`picked`) and `ip_rank`. So the planned POI-hover line `No pattern · IC <idx> · …` repeats the `ic_idx=` line —
-proposed: drop `IC <idx>` there (`No pattern · <ranking rule … | only IC candidate>`); the fib hover: the user's call.
+`picked`) and `ip_rank`. **Decided** (the user: "Option 1, keep it on the fib hover."): the POI hover's ranked line
+drops `IC <idx>` (`No pattern · <ranking rule … | only IC candidate>` — "No pattern" in the place of `IP <rank>`);
+the fib hover keeps it for both pick kinds (`IP <rank> · IC <idx>` unchanged, `No pattern · IC <idx> · …`). §4.1
+amended; PLAN_H §6 ICR-15.
 
 ## 9. Landing 1 — as built (2026-10-09, uncommitted until the user's go)
 
