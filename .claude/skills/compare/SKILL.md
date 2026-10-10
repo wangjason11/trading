@@ -452,7 +452,7 @@ immediate unfilled imbalance) and descriptive `ip_tiebreak` values — `"TB1"` �
 `"most_recent_before_imbalance"`, new `"immediate_unfilled_imbalance"` (POI meta → `*_poi_zones.csv` `meta`, the IP
 CSVs, the POI hover) — and the IP CSVs' new column `immediate_imbalance_first_c2_idx` after `ic_ref_reason`. Against
 S_K_B or older: `engine_v2/plans/plan_h_inputs/cmp_tbu.py BASE` (the predicted pick move + the relabels + the new
-column, exit 1 on anything else) instead of reading those diffs as engine changes. S_TBU `20261009_171255_5b5c307` is the first save with it (= `LATEST_<branch>` from 2026-10-09).
+column, exit 1 on anything else) instead of reading those diffs as engine changes. S_TBU `20261009_171255_5b5c307` is the first save with it (`LATEST_<branch>` until S_L1, below).
 **PLAN_L landing 1 (2026-10-09, the IC identification in steps) — a FORMAT change, the selection identical:** the three
 IP CSVs are RENAMED `*_ip_candidates.csv` → `*_ic_candidates.csv`, list every agreed-opposite candle of each fib's
 window (the candles failing IC condition 3 are new rows — on the reference window H1 +5, confluence +41, counter +31)
@@ -462,8 +462,8 @@ lists exactly the 3 renamed files as MISSING + NEW (before PLAN_H landing A: 3 N
 per-lens new-row counts are the reference window's). **Delete the 3 stale `artifacts/debug/*_ip_candidates.csv`
 first** (no replay overwrites them — `cmp_save --names-from` an older save would compare them as equal, the
 `*_sids.csv` trap below). The older boundary scripts (`cmp_tbu.py`, `cmp_k_landing_a/b.py`) read
-`*_ip_candidates.csv`: run them with CUR = S_TBU, then `cmp_l1.py` S_TBU → current. S_L1 (saved after the landing) is
-the first save with it.
+`*_ip_candidates.csv`: run them with CUR = S_TBU, then `cmp_l1.py` S_TBU → current. S_L1 `20261010_114846_b5c3613` is the first
+save with it (= `LATEST_<branch>` from 2026-10-10).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

@@ -1,11 +1,12 @@
 # Plan L — IC identification in steps: the restructure + the ranking rules (Week 9 Part 1 item 1)
 
-**Status: DRAFT 2026-10-09 — §6 names APPROVED, §4.1 runner-ups settled (PLAN_H §6 ICR-13 / ICR-14); the cold review
-RAN (§8: 0 BLOCKER, 4 MAJOR, 17 MINOR — all folded below); three labels for the user (§8.2).** The IC
+**Status: L1 COMMITTED `b5c3613` + SAVED S_L1 `20261010_114846_b5c3613` (2026-10-10, §9); L2 NEXT — the labels decided but
+one (§8.2: whether the hovers repeat the IC index, OPEN).** §6 names APPROVED, §4.1 runner-ups settled (PLAN_H §6
+ICR-13 / ICR-14); the cold review RAN (§8: 0 BLOCKER, 4 MAJOR, 17 MINOR — all folded below). The IC
 identification revamp: the user's write-up verbatim `plan_h_inputs/ic_identification_revamp_spec.md`; every decision
 PLAN_H §6 ICR-S, ICR-1 … ICR-12 (2026-10-09, three rounds); the reading, the shadow measurement and the TRIAL replay
-PLAN_H §8.9 "The IC identification revamp". Baseline **S_TBU** `20261009_171255_5b5c307` (= `LATEST_<branch>`;
-code = `92b8b61`). Register `IDEA_PARKING_LOT.md` §D.1 item 1; Step 4 → §D.2 (deferred).
+PLAN_H §8.9 "The IC identification revamp". Baselines: L1 vs **S_TBU** `20261009_171255_5b5c307` (code `92b8b61`);
+L2 vs **S_L1** `20261010_114846_b5c3613` (= `LATEST_<branch>` from 2026-10-10; code `b5c3613`). Register `IDEA_PARKING_LOT.md` §D.1 item 1; Step 4 → §D.2 (deferred).
 
 Planning shorthand: L1 / L2 = the two landings; ICR-* = PLAN_H §6 rows (each has a descriptive title there).
 
@@ -414,6 +415,9 @@ proposed: drop `IC <idx>` there (`No pattern · <ranking rule … | only IC cand
   PLAN_L §3.1's fields — each fixed. Memory: the Plan E file's boundary list gets S_L1 at `/commit-save`.
 - **After the folds**: suite **1553**, all pass; `mutants_l1.py` **31 / 31 KILLED** (+ R08, R10, R02; L14 re-run);
   a fresh replay of the final code (94.0 s wall — run alongside the mutant runner) — FETCH GATE PASS; `cmp_fig_full.py`
-  24 / 24 md5-equal + 3 MISSING + 3 NEW, every figure equal; `cmp_l1.py` RESULT OK. **Ready for `/commit-save`
-  (S_L1) on the user's go.**
+  24 / 24 md5-equal + 3 MISSING + 3 NEW, every figure equal; `cmp_l1.py` RESULT OK.
+- **COMMITTED `b5c3613` + SAVED S_L1 `20261010_114846_b5c3613` (2026-10-10, the user's go: "everything else sounds
+  good")** — save commit `09dffad`, trunk `02a40a7`; a run-mode replay 45.2 s wall (multi_tf_dual 8.8 s, charts
+  32.8 s), FETCH GATE PASS; re-checked before the copy: `cmp_fig_full.py` vs S_TBU 24 / 24 md5-equal + 3 MISSING +
+  3 NEW, every figure equal; `cmp_l1.py` RESULT OK. = `LATEST_<branch>`, L2's baseline. Local, NOT pushed.
 

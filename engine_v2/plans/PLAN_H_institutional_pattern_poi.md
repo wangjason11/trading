@@ -1386,8 +1386,8 @@ dump `tb_imb_dump.py`; lens indices = sub-local + the sub's slice offset: sub 0 
   where the fib hovers sit (an invisible line at the 61.8–80 midpoint, one point per candle from the BOS to the CTS
   anchor — e.g. sid 1 cyc 2 at 0.57816 over 80 candles; the default "closest" hover mode then masks candle hovers in
   that band) → no change now, noted for the chart revamp (register §G).
-- **Saved S_TBU `20261009_171255_5b5c307`** (source `5b5c307` = `09f056a` + the close-out docs; save commit `0047646`, trunk `2abc143`; reuse of the 44.3 s replay, FETCH GATE PASS) = `LATEST_week9-entries-decisions` — the IC identification revamp's `/compare` baseline (a save-format
-  boundary: the `/compare` skill).
+- **Saved S_TBU `20261009_171255_5b5c307`** (source `5b5c307` = `09f056a` + the close-out docs; save commit `0047646`, trunk `2abc143`; reuse of the 44.3 s replay, FETCH GATE PASS) — PLAN_L L1's `/compare` baseline (a save-format boundary: the `/compare` skill); `LATEST_week9-entries-decisions`
+  until S_L1 `20261010_114846_b5c3613` (PLAN_L landing 1, PLAN_L §9).
 
 **The IC identification revamp (OPENED 2026-10-09, after the IP tiebreaker update; the user's write-up verbatim
 `plan_h_inputs/ic_identification_revamp_spec.md`; decisions → §6 as they land).** The whole flow in four steps:

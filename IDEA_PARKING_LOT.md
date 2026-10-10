@@ -119,13 +119,15 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    from Step 2's tiebreak rules, PLAN_H §6 ICR-S), **Step 4 DEFERRED — the
    lower-TF fallback** when no IC candidate remains (D.2, rewritten). Decisions PLAN_H §6 ICR-S, ICR-1 … ICR-14 (2026-10-09);
    trial replay measured (PLAN_H §8.9); **the plan `engine_v2/plans/PLAN_L_ic_identification_steps.md`** (cold-reviewed,
-   0 BLOCKER) — two landings: **L1 the restructure + names BUILT 2026-10-09** (the user's steps in code + POI_ZONES_SPEC
-   §3, the renames, the CSV listing every agreed-opposite candle + 2 columns; the selection identical — `/compare` vs
-   S_TBU == the prediction, 28 / 28 mutants killed, suite 1551; PLAN_L §9), L2 the ranking rules NEXT. **First, the IP tiebreaker update (user 2026-10-09, before the write-up — "with
+   0 BLOCKER) — two landings: **L1 the restructure + names COMMITTED `b5c3613` + SAVED S_L1 `20261010_114846_b5c3613` 2026-10-10**
+   (save `09dffad`, trunk `02a40a7`; = `LATEST_<branch>`, L2's baseline; the user's steps in code + POI_ZONES_SPEC §3,
+   the renames, the CSV listing every agreed-opposite candle + 2 columns; the selection identical — `/compare` vs
+   S_TBU == the prediction, 31 / 31 mutants killed, suite 1553; PLAN_L §9), L2 the ranking rules NEXT (the labels
+   decided 2026-10-10 but one — whether the hovers repeat the IC index, PLAN_L §8.2). **First, the IP tiebreaker update (user 2026-10-09, before the write-up — "with
    it, I think we would wrap up the Institutional Pattern process"): COMMITTED `09f056a` 2026-10-09** — a new first tiebreaker, the
    immediate unfilled imbalance (an unfilled sd gap whose first gap candle is at IC + 1 / IC + 2; a filter), then the
    IC's candle type, then the most recent before the imbalance; descriptive `ip_tiebreak` names (no more TB1 / TB2);
-   on the window one pick moves (confluence sub 0 cyc 3 1447 → 1660). PLAN_H §6 TBU-1 … TBU-6, §8.9. **Saved S_TBU `20261009_171255_5b5c307`** (source `5b5c307` = `09f056a` + the close-out docs; save commit `0047646`, trunk `2abc143`; reuse of the 44.3 s replay, FETCH GATE PASS) = `LATEST_<branch>` — the IC identification revamp's baseline.
+   on the window one pick moves (confluence sub 0 cyc 3 1447 → 1660). PLAN_H §6 TBU-1 … TBU-6, §8.9. **Saved S_TBU `20261009_171255_5b5c307`** (source `5b5c307` = `09f056a` + the close-out docs; save commit `0047646`, trunk `2abc143`; reuse of the 44.3 s replay, FETCH GATE PASS) — PLAN_L L1's baseline (`LATEST_<branch>` until S_L1).
 2. **The cross-cycle fib revamp — one logic for main and sub, the final cross-cycle + single-cycle fib rules** —
    **COMPLETE 2026-10-09** (PLAN_I S1–S6 + PLAN_J; item 1's debugging resumes next). **OPEN — a cross-limit price
    DEBUGGING task (user 2026-10-09, the second "immediate future" session, after item 1's IC revamp):** "Updates to
