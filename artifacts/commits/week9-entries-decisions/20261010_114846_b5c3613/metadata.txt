@@ -1,0 +1,4 @@
+commit_hash=b5c3613
+timestamp=20261010_114846
+branch=week9-entries-decisions
+commit_message=PLAN_L landing 1: the IC identification in steps (Step 1 IC candidates, Step 2 IP + tiebreak rules) + the IC renames; selection identical (S_L1)
