@@ -9,7 +9,7 @@ S_M1 `20261011_204047_86d4f7b` (save `8bdcc8a`, trunk `a442e91`) = `LATEST_<bran
 = the trial's outputs exactly, the census PINNED table 14 / 14, 0 knock-on, suite 1691, mutants 25 / 25 + the
 review's 6 / 6; review 437,943 tok, 0 BLOCKER / MAJOR, all folded); the user's chart review (2026-10-12): "charts look
 good. go ahead" → COMMITTED `10e4c6f` + SAVED S_M2 `20261012_023137_10e4c6f` (§16). PLAN_M COMPLETE; the parked
-follow-up: CL-8 (register §D.1 item 2).** Living document:
+follow-up CL-8 CLOSED 2026-10-12 with no change (the user: "keep it", §17).** Living document:
 every question, answer and decision is recorded here as it happens. Register line: `IDEA_PARKING_LOT.md` §D.1 item 2
 (the cross-limit price debugging, opened by the user 2026-10-09).
 
@@ -23,7 +23,8 @@ save `3ebe857`, trunk `475bbf9`; = `LATEST_<branch>`, §16).
 **Tools (`plan_m_inputs/`, read-only):** `limit_table.py <save>` (every structure's `P` / source / `M` / fib records /
 IC reference), `struct_events.py <save> H1:<sid> sub:<id> [--all-updates]` (CTS / BOS / state events with times),
 `trial_diff.py BASE CUR_DEBUG [CUR_CHARTS]` (a keyed diff of a replay vs a save), `fig_hash.py CHARTS_DIR` (full-figure
-fingerprints), `census_patch.py` / `census_run.py` / `census_report.py` (the live-`P` census on other windows, §6).
+fingerprints), `census_patch.py` / `census_run.py` / `census_report.py` (the live-`P` census on other windows, §6),
+`cl8_candles.py` (the CL-8 case's M15 / H1 candles off S_M2, §17).
 **The trial's outputs, persisted** (§4, §8): `trial_md5.txt`, `trial_fig_hash.txt`, `trial_csvs/` (the 6 changed CSVs).
 
 ---
@@ -166,7 +167,8 @@ effectively no constraint, as sid 1's cycle 0 has today). The trial replay (§4)
   so it was not a break.
 - **CL-8 — the residual IC difference** (sub 3 cycle 2's IC 2821 vs sid 1 cycle 1's 732, §4): (a) PARKED as its own
   register item, looked at after this plan lands (one cause per `/compare`) — `IDEA_PARKING_LOT.md` §D.1 item 2's
-  follow-up line.
+  follow-up line. **Looked at 2026-10-12 → CLOSED, no change** (the user: "1, keep it — close CL-8 with no change";
+  §17).
 
 ### Readings the cold review made explicit (2026-10-11 — shown to the user; §11)
 
@@ -777,3 +779,34 @@ save commit `3ebe857`, trunk `475bbf9`; `LATEST_<branch>` = S_M2. Local, NOT pus
 
 **What remains of register §D.1 item 2:** the PARKED follow-up CL-8 — sub 3 cycle 2's IC (2821) vs H1 sid 1 cycle 1's
 (732), a residual of sub 3's extra cycle 0 (§4), "looked at after this plan lands" (the user, 2026-10-11).
+
+## 17. The CL-8 follow-up — measured on S_M2 (2026-10-12, session 2) — CLOSED, no change
+
+**The user's read (2026-10-12): "1, keep it — close CL-8 with no change".** The difference is correct: sub 3 really
+tracked a cycle (BOS 2639 → CTS 2736, 12-24 → 12-26) that the retroactive H1 sid 1 starts after, and the user's IC
+reference rule (`ic_reference_conditions_spec.md`: a cross from cycle 1 takes CTS_0 as a reference, the further-opposite
+one wins) applies to it as written. The candidates shown (the user picked 1): (1) keep; (2) a dead previous cycle gives no
+CTS reference; (3) a cross inside the window takes the structure reference only; (4) align sub 3's structure (no extra
+cycle 0); (5) another rule. Why it closes cheaply: no reference change would reproduce H1's 732 anyway (the shadow below
+— the M15 ranks pick 2837). No code, no replay.
+
+Every value extracted from S_M2 (the fib lifecycle + IC candidates CSVs; the M15 candles from the confluence chart's
+candlestick trace, the H1 from `_raw.csv`; `plan_m_inputs/cl8_candles.py`). 61.8–80 zone of the shared fib
+(0.58424 → 0.574) ≈ 0.58033–0.58219.
+
+- **The same fib, two references.** Both records span BOS 0.58424 (sub 3: 2758, 12-26 15:30; H1: 689, 12-26 15:00) →
+  CTS 0.574 (sub 3: 3047, 12-31 15:45; H1: 761, 12-31 15:00). H1 sid 1 cycle 1 = a cross from cycle 0 → no previous
+  cycle → the structure reference only (`prev_structure_bos` 0.5736, bound 897) → 12 IC candidates (712–739), one with a
+  pattern: **732** (12-30 10:00, 3A.iv, h 0.58118 l 0.58068). Sub 3 cycle 2 = a cross from cycle 1 (cycle 0 was dead
+  at cycle 1's establishment → cycle 1 `cross_failed`; the walk for cycle 2 stops at dead cycle 0) → both references:
+  `prev_cycle_cts` = CTS_0 0.5818 (2736, 12-26 10:00; bound 2824, 12-29 08:00) and `cross_limit_anchor` 0.5736 (bound
+  3588); a sell takes the higher → 0.5818. 130 rows, ONE candidate: **2821** (12-29 07:15, l 0.58182 > 0.5818, before
+  2824; no pattern).
+- **The 0.5818 low exists on H1 too:** H1 684 (12-26 10:00) low 0.58180 — five hours BEFORE sid 1's BOS_0 689, so it
+  is no cycle of sid 1 (the user's write-up: a cross from cycle 0 has no previous-cycle CTS reference).
+- **The reference sits INSIDE the zone:** 0.5818 ≈ the 76% retracement of the shared fib — only an IC entirely in the
+  zone's top ~4 pips AND before 2824 can pass on sub 3.
+- **Shadow (not a replay) — what aligning the reference would pick:** the zone-touching rows of sub 3 cycle 2 that fail
+  ONLY the IC reference and carry a pattern: 2817 (2A.ii), **2837** (12-29 11:15, **1A.iv**), 2919 (2A.iv), 2930
+  (12-30 10:30, 3C.iv — the M15 counterpart of H1 732, a 3A.iv on H1). By rank (1A first) the pick would be **2837,
+  not 2930**: no reference change reproduces 732 — the M15 patterns rank differently from the H1 ones.

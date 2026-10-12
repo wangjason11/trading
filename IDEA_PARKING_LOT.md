@@ -153,10 +153,13 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    trial's outputs, the census pinned table 14 / 14, 0 knock-on, suite 1691; review 437,943 tok, all folded); the
    user's chart review "charts look good. go ahead" (2026-10-12) → **COMMITTED `10e4c6f` + SAVED S_M2
    `20261012_023137_10e4c6f`** (save `3ebe857`, trunk `475bbf9`) = `LATEST_<branch>`. **PLAN_M COMPLETE 2026-10-12.**
-   **Follow-up, PARKED until PLAN_M lands — now LANDED, so it is next on this item (user 2026-10-11, PLAN_M §3 CL-8):**
+   **Follow-up CL-8 — CLOSED 2026-10-12 with NO change** (the user: "1, keep it — close CL-8 with no change"; the
+   difference is correct — sub 3 really tracked a cycle the retroactive sid 1 starts after, and the IC reference rule
+   applies as written; PLAN_M §17). **Item 2 has no open work left.** The case, as parked (user 2026-10-11, PLAN_M §3 CL-8):
    sub 3 cycle 2's IC (2821) still differs from H1 sid 1 cycle 1's (732) — sub 3 has one extra cycle before sid 1's
    first, so its cross starts at its own cycle 1 and its IC reference is cycle 0's CTS (0.5818, bound 2824), which cuts
-   732's M15 period; sid 1's cross starts at cycle 0 → the far structure side. Detail: PLAN_M §4.
+   732's M15 period; sid 1's cross starts at cycle 0 → the far structure side. Detail: PLAN_M §4; measured on S_M2
+   (2026-10-12): PLAN_M §17 (no reference change would reproduce 732 — the M15 ranks pick 2837, 1A.iv).
    Its reach since PLAN_K: `P` sets the cross window `M` (which cycles a cross may span — the fib's anchors, so the
    61.8–80 zone) AND the IC reference's structure side (the anchor behind `P`, the cross-limit breakout watch's
    break, `T ≤ M`) — a changed `P` moves both. Canonical rules: CROSS_CYCLE_FIB_SPEC §3; PLAN_I §1.2 / §1.4. Was NEXT (user 2026-10-06, PLAN_H §6 F2b–F2e; it replaces the open decision below): "instead of deciding on this, I will
@@ -204,7 +207,8 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    do need to fix, but we can do that as item 2." Detail: memory
    `project_sub_single_cycle_fib_pois.md`; `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` (§13), `POI_ZONES_SPEC.md`
    "Cross-Cycle Mode".
-3. **Zone size adjustments** — user 2026-09-30: "currently some KL & POI zones may be very large or small in their
+3. **Zone size adjustments** — **NEXT, in a new session (user 2026-10-12, after items 1–2 closed).** User 2026-09-30:
+   "currently some KL & POI zones may be very large or small in their
    current base form. This will cover additional logic that adjust the size." The user provides a detailed spec.
    Raise when it starts: A "Naming-Standard audit" (`bounds_steps[*].start_idx` — land it before anything reads zone
    expansions). Related: "Zone strength scoring" (D.2). Detail: `engine_v2/zones/KL_ZONES_SPEC.md`,
@@ -360,6 +364,9 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
 
 ## Recently closed (history pointers)
 
+- **§D.1 item 2 — the cross-limit price debugging (PLAN_M) + its follow-up CL-8** — PLAN_M COMPLETE 2026-10-12 (S_M2
+  `20261012_023137_10e4c6f`); CL-8 (sub 3 cycle 2's IC 2821 vs H1 sid 1 cycle 1's 732) CLOSED 2026-10-12 with no change
+  — the user: "1, keep it — close CL-8 with no change" (PLAN_M §17). Item 2 has no open work left.
 - **§D.1 item 2 — the cross-cycle fib revamp (one logic for main and sub)** — COMPLETE 2026-10-09: PLAN_I S1–S6 +
   PLAN_J (J1 / J2 / J3 + J3's swap → a raise); saved S_S6 `20261009_020650_5f6bae3`; charts reviewed by the user
   ("they look good"). The record stays in §D.1 item 2; canonical spec `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md`.
