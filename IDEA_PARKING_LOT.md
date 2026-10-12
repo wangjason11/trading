@@ -147,9 +147,9 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    inside 5 of 14 counter subs' lives; one cycle's permission changes) and the design + two landings drafted
    (PLAN_M §7–§10); cold-reviewed 2026-10-11 (760,821 tok; every finding folded — PLAN_M §11; the export reads `P`
    as of the structure's end, PLAN_M §3 "readings" — DECIDED (a) by the user 2026-10-11); landing 1 (the live-`P`
-   plumbing) BUILT + landing-reviewed 2026-10-11, uncommitted (PLAN_M §12–§13: byte-identical vs S_L2, the census
-   unchanged, suite 1657; review 451,068 tok, 0 BLOCKER / MAJOR, all folded); next: the user's go to commit (S_M1),
-   then landing 2. **Follow-up, PARKED until PLAN_M lands (user 2026-10-11, PLAN_M §3 CL-8):**
+   plumbing) BUILT + landing-reviewed + COMMITTED `86d4f7b` 2026-10-11 (PLAN_M §12–§13: byte-identical vs S_L2, the
+   census unchanged, suite 1657; review 451,068 tok, 0 BLOCKER / MAJOR, all folded); SAVED S_M1
+   `20261011_204047_86d4f7b` = `LATEST_<branch>`; next: landing 2 (the counter-sub source, PLAN_M §7.3). **Follow-up, PARKED until PLAN_M lands (user 2026-10-11, PLAN_M §3 CL-8):**
    sub 3 cycle 2's IC (2821) still differs from H1 sid 1 cycle 1's (732) — sub 3 has one extra cycle before sid 1's
    first, so its cross starts at its own cycle 1 and its IC reference is cycle 0's CTS (0.5818, bound 2824), which cuts
    732's M15 period; sid 1's cross starts at cycle 0 → the far structure side. Detail: PLAN_M §4.

@@ -4,15 +4,17 @@
 design + stages (§7–§10) COLD-REVIEWED (760,821 tok, 0 BLOCKER on the design, every finding folded — §11); the
 export's "final" decided (a) = as of the structure's end (§3); LANDING 1 BUILT + LANDING-REVIEWED (§12, §13: byte-identical
 vs S_L2, the census unchanged, suite 1657, mutants 25 / 26 + 1 equivalent + the review's 4 / 4; review 451,068 tok,
-0 BLOCKER / MAJOR, every finding folded) — next: the user's go to commit (save S_M1), then landing 2.** Living document:
+0 BLOCKER / MAJOR, every finding folded); the user's go "sounds good go ahead" → COMMITTED `86d4f7b`, SAVED
+S_M1 `20261011_204047_86d4f7b` (save `8bdcc8a`, trunk `a442e91`) = `LATEST_<branch>` — next: landing 2 (§7.3).** Living document:
 every question, answer and decision is recorded here as it happens. Register line: `IDEA_PARKING_LOT.md` §D.1 item 2
 (the cross-limit price debugging, opened by the user 2026-10-09).
 
 **Input (the user's write-up, VERBATIM, canonical):** `plan_m_inputs/counter_sub_cross_limit_writeup.md` (2026-10-10).
 **Amends:** PLAN_I's rule that `P` is fixed once, at the structure's start (PLAN_I §1.2 / §1.4, decision R2-4), for the
 subs this plan names; CROSS_CYCLE_FIB_SPEC §3 (the limit, its sources, the IC reference's inputs) changes with the code.
-**Baseline:** S_L2 `artifacts/commits/week9-entries-decisions/20261010_155816_6d8cc67` (= `LATEST_<branch>`; source
-`6d8cc67`, save `8aa4f80`).
+**Baseline:** S_L2 `artifacts/commits/week9-entries-decisions/20261010_155816_6d8cc67` (source `6d8cc67`, save
+`8aa4f80`) — the design's; since landing 1 **S_M1** `20261011_204047_86d4f7b` (source `86d4f7b`, save `8bdcc8a`,
+trunk `a442e91`; = `LATEST_<branch>`; byte-identical to S_L2, §12).
 **Tools (`plan_m_inputs/`, read-only):** `limit_table.py <save>` (every structure's `P` / source / `M` / fib records /
 IC reference), `struct_events.py <save> H1:<sid> sub:<id> [--all-updates]` (CTS / BOS / state events with times),
 `trial_diff.py BASE CUR_DEBUG [CUR_CHARTS]` (a keyed diff of a replay vs a save), `fig_hash.py CHARTS_DIR` (full-figure
@@ -588,7 +590,7 @@ answers over the full suite); the snapshot copy; LOH(BOS) ≤ `s`; no threshold 
 barrier order); the coordinates of every `evaluated_at` vs the localized moves; MS-parity; every §2 / §4 / §6
 number against the input files; L2 = the trial on the reference window.
 
-## 12. Landing 1 — as built (2026-10-11, session 1; uncommitted until the user's go)
+## 12. Landing 1 — as built (2026-10-11, session 1; COMMITTED `86d4f7b`, saved S_M1 `20261011_204047_86d4f7b`)
 
 The user (2026-10-11): **"a, go ahead with landing 1"** (§3 "readings": the export's "final" = as of the structure's
 end). Built on `27ab6da` (= S_L2's engine + docs).
@@ -671,3 +673,8 @@ fetch gate PASS, `cmp_fig_full.py` 27 / 27 md5-equal + the three figures identic
 = S_L2's; the census re-run on the six windows — every `[census]` line equal, no raise (`census_l1_run.txt`); the
 review mutants `mutants_m1_review.py` **4 / 4 KILLED** (X01, X02, X04, M25). Review tokens: **451,068** (A 260,854,
 B 190,214; estimated 350–500K).
+
+**Committed** on the user's go (2026-10-11, "sounds good go ahead"): source `86d4f7b`; `/commit-save` run mode —
+replay 47.5 s wall (multi_tf_dual 9.02 s; charts 6.38 / 7.62 / 20.72 s), FETCH GATE PASS; the save S_M1
+`20261011_204047_86d4f7b` (27 CSVs + 3 charts; `cmp_fig_full.py` vs S_L2: 27 / 27 md5-equal, the figures identical);
+save commit `8bdcc8a`, trunk `a442e91`; `LATEST_<branch>` = S_M1. Local, NOT pushed.

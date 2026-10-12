@@ -479,7 +479,13 @@ the hover texts. Against S_L1:
 `engine_v2/plans/plan_h_inputs/cmp_l2.py BASE [CUR_DEBUG CUR_CHARTS]` (keyed: the 21 other CSVs md5, the POI rows per
 key with the meta per key, the IC CSV columns by name, the figure counts; exit 1 on anything else) — a positional
 `cmp_save.py` breaks on the POI `meta` cell and the new columns. Older saves: chain through S_L1 (`cmp_l1.py`, then
-`cmp_l2.py`). S_L2 `20261010_155816_6d8cc67` is the first save with it (source `6d8cc67`; = `LATEST_<branch>` from 2026-10-10).
+`cmp_l2.py`). S_L2 `20261010_155816_6d8cc67` is the first save with it (source `6d8cc67`; `LATEST_<branch>` until S_M1, below).
+**PLAN_M landing 1 (2026-10-11, the live-`P` plumbing) — NO format or behaviour change on the reference window:** a
+cross-fib limit may now MOVE (CROSS_CYCLE_FIB_SPEC §3 "A moving `P`"), but no producer makes one move until landing 2,
+so every CSV and figure is byte-identical to S_L2 (`cmp_fig_full.py` 27 / 27 md5, figures identical; `fig_hash.py`
+equal). The fib meta gains two keys ONLY on a structure whose `P` moved by its end (`cross_fib_limit_price_at_start`,
+`cross_fib_limit_move_count`, right after `cross_fib_limit_from_sub_id`) and the hover a `(moved N× from …)` suffix —
+none on this window. S_M1 `20261011_204047_86d4f7b` (source `86d4f7b`; = `LATEST_<branch>` from 2026-10-11).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
