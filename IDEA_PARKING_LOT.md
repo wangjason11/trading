@@ -49,17 +49,6 @@ The open lines below carry over (fold in when their files are next touched); D a
   `range_anchor_idx` (MS's range start on every path; the H1 range box starts there) / `confirmed_at`;
   `effective_idx` == `ev.idx` always; "collapsed parent cycle" (one test, one name). Charts byte-identical on the
   window. Move to "Recently closed" at the next register sweep.
-- ~~**H1 range hover lines snapshot every structure**~~ — **LANDED 2026-10-12 (commit pending the user's go), widened
-  by the user to option B: the hover line = the box, candle for candle** (each event snapshotted at its REPLAY candle —
-  a `RANGE_STARTED` at its anchor — not at its idx). The snapshot at the idx had two symptoms: another structure frozen
-  as of a STARTED's anchor (sid 0's hover at H1 750 showed its 747 state), and a label range's confirm candle (+ the
-  candles forward-filled from it) showing its anchor-time state, before its back-filled updates (16 candles on 7 label
-  ranges; e.g. sid 1 on H1 716–723: hi 0.58002 under a box drawn at 0.58108). `/compare` vs S_N = the prediction: 4 H1
-  hover traces, 28 candle points; CSVs / M15 / shapes identical; chart review: the user "looks good go ahead". Detail:
-  `engine_v2/plans/plan_n_inputs/followup_hover_per_structure.md` "The landing decision". Move to "Recently closed"
-  with the commit.
-- ~~**Dead code in the H1 range hover-line builder**~~ — **DELETED 2026-10-12 with the hover fix above** (the user: in
-  the same change); the builder is one replay pass now. No output effect.
 
 ## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
 
@@ -86,7 +75,7 @@ very next session, I want to land the H1 range-hover follow-up first. Then the s
 to the current IC identification and cross cycle fib logic to ask some questions and make some edits. After that, the
 next session will focus on some changes & edits on zone proximity triggers, more specifically the current opposite
 direction / CTS zone proximity trigger. Finally, after that we will start zone size adjustments."
-1. ~~**The H1 range-hover follow-up**~~ — **LANDED 2026-10-12** (session 1; commit pending the user's go): widened by
+1. ~~**The H1 range-hover follow-up**~~ — **LANDED 2026-10-12** (session 1; `9f9406d`, S_N_hover): widened by
    the user to option B (the hover line = the box, candle for candle) + the dead passes deleted; `/compare` vs S_N = the
    prediction (4 H1 hover traces, 28 candle points). Register §A; `engine_v2/plans/plan_n_inputs/
    followup_hover_per_structure.md` "The landing decision".
@@ -400,6 +389,14 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
 
 ## Recently closed (history pointers)
 
+- **H1 range hover lines snapshot every structure** (§A) — CLOSED 2026-10-12, committed `9f9406d`, saved S_N_hover
+  `20261012_194022_9f9406d` (save `cc3d3ff`, trunk `efd95b9`): widened by the user to option B — the hover line = the
+  box, candle for candle (snapshot at each event's replay candle); it also fixed a second, same-structure symptom (a
+  label range's confirm candle showed its anchor-time state: 16 candles). `/compare` vs S_N = the prediction (4 H1
+  traces, 28 candle points); the user "looks good go ahead". Detail: `engine_v2/plans/plan_n_inputs/
+  followup_hover_per_structure.md` "The landing decision".
+- **Dead code in the H1 range hover-line builder** (§A hygiene) — CLOSED 2026-10-12 in `9f9406d` (deleted with the
+  hover fix, the user: in the same change; no output effect).
 - **§D.1 item 2 — the cross-limit price debugging (PLAN_M) + its follow-up CL-8** — PLAN_M COMPLETE 2026-10-12 (S_M2
   `20261012_023137_10e4c6f`); CL-8 (sub 3 cycle 2's IC 2821 vs H1 sid 1 cycle 1's 732) CLOSED 2026-10-12 with no change
   — the user: "1, keep it — close CL-8 with no change" (PLAN_M §17). Item 2 has no open work left.

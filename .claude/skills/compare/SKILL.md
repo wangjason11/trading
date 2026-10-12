@@ -505,7 +505,16 @@ start); the unresolved reason `degenerate_parent_cycle` → `collapsed_parent_cy
 table: 164 cells — and no figure. Against S_M2 (or older, chaining through it): `engine_v2/plans/plan_n_inputs/
 cmp_plan_n.py BASE CUR_DEBUG --expect-cells 164` (applies the transform to BASE, requires text equality; exit 1 on
 anything else); positional `cmp_save.py` would report the 164 cells as engine deltas. S_N
-`20261012_165925_1b2f24c` (source `1b2f24c`, save `81a0d46`, trunk `7869a24`; = `LATEST_<branch>` from 2026-10-12).
+`20261012_165925_1b2f24c` (source `1b2f24c`, save `81a0d46`, trunk `7869a24`; `LATEST_<branch>` until S_N_hover, below).
+**The PLAN_N hover follow-up (2026-10-12, option B: the H1 range hover line = the box, candle for candle) — a FIGURE
+change only:** the H1 range hover lines snapshot at each event's replay candle (a `RANGE_STARTED` at its anchor). Vs
+S_N exactly 4 H1 traces differ — `range:top/bottom:sid0` 773 → 780 points, `range:top/bottom:sid1` 341 → 345; 28
+candle points (a label range's line now starts at its anchor; the stale confirm-candle states corrected) — while every
+CSV is md5-equal and the M15 figures and the H1 shapes / layout are identical. Against S_N (or older): `fig_hash.py`
+(both M15 hashes equal) + the keyed `PYTHONPATH=. python engine_v2/plans/plan_n_inputs/h1_trace_diff.py diff BASE
+CUR_H1_DIR` (a dir holding ONE H1 html; expected output `plan_n_inputs/followup_h1_diff_vs_SN.txt`) instead of reading
+those hover points as engine deltas. S_N_hover `20261012_194022_9f9406d` (source `9f9406d`, save `cc3d3ff`, trunk
+`efd95b9`; = `LATEST_<branch>` from 2026-10-12).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

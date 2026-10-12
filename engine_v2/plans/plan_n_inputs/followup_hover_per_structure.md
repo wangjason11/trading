@@ -1,7 +1,8 @@
 # PLAN_N follow-up — the H1 range hover lines snapshot EVERY structure (found by PLAN_N's landing review, 2026-10-12)
 
-**Status: WIDENED to option B by the user at the landing session (2026-10-12) — see "The landing decision" below;
-the per-structure fix of the next sections is the dated record of what was built first (= option A).** Split out of
+**Status: LANDED 2026-10-12 as option B (the user widened it at the landing session) — committed `9f9406d`, saved
+S_N_hover `20261012_194022_9f9406d` (save `cc3d3ff`, trunk `efd95b9`); see "The landing decision" below. The
+per-structure fix of the next sections is the dated record of what was built first (= option A).** Split out of
 PLAN_N so that landing stays one cause (byte-identical figures).
 Register: `IDEA_PARKING_LOT.md` §A "H1 range hover lines snapshot every structure".
 
