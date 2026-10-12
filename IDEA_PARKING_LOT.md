@@ -54,7 +54,8 @@ The open lines below carry over (fold in when their files are next touched); D a
   (pre-existing on label ranges; on the reference window sid 0's hover at H1 750 shows its 747 state, sid 1's line has a
   point at its anchor 748; PLAN_N N5 extends the exposure to pullback / proximity ranges). Found by PLAN_N's landing
   review. The fix is BUILT and measured (4 H1 hover traces change, nothing else):
-  `engine_v2/plans/plan_n_inputs/followup_hover_per_structure.md`. OPEN — land as its own `/compare` on the user's go.
+  `engine_v2/plans/plan_n_inputs/followup_hover_per_structure.md`. OPEN — the NEXT session lands it (the user,
+  2026-10-12; §D "SESSION ORDER" 1), as its own `/compare`.
 - **Dead code in the H1 range hover-line builder** — its first two replay passes (`export_plotly.py`, the
   `hover_data` / `open_ranges` loops before the per-structure snapshot pass) build state nothing reads; only the third
   pass reaches the figure (PLAN_N §10, found by its mutants). Delete when the range chart is next touched. OPEN; no
@@ -79,6 +80,30 @@ flipping across multiple different scenarios & parameters and reviewing the outp
 we want." "The remaining items you listed we'll keep in the backlog and decide on them after the above items are
 complete." Item 1 opens the next working session. **Re-ordered by the user 2026-10-06:** item 1's chart debugging
 PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging resumes after it (PLAN_H §6 F2a–F2b).
+
+**SESSION ORDER — set by the user 2026-10-12 (after PLAN_N landed; supersedes "item 3 next").** Verbatim: "For the
+very next session, I want to land the H1 range-hover follow-up first. Then the session after that, I want to go back
+to the current IC identification and cross cycle fib logic to ask some questions and make some edits. After that, the
+next session will focus on some changes & edits on zone proximity triggers, more specifically the current opposite
+direction / CTS zone proximity trigger. Finally, after that we will start zone size adjustments."
+1. **The H1 range-hover follow-up** — land it (register §A "H1 range hover lines snapshot every structure"; built +
+   measured: `engine_v2/plans/plan_n_inputs/followup_hover_per_structure.md` — the code, the pin, the mutant, the
+   prediction = exactly 4 H1 hover traces; then `/compare`, chart review, commit on the user's go).
+2. **The IC identification + the cross-cycle fib logic — the user's questions and edits** (re-opens D.1 items 1 / 2 —
+   both had no open work since 2026-10-12; the user brings the questions). Current logic, canonical:
+   `engine_v2/zones/POI_ZONES_SPEC.md` §3 (Step 1 the IC conditions, §3.2 the IC reference, Step 2 the institutional
+   pattern + its tiebreak rules, Step 3 the ranking rules; Step 4 deferred), `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md`
+   (§3 the cross-fib limit incl. a counter sub's `parent_bos_threshold`, §8 MS's read); plans PLAN_H / K / L, PLAN_I / J /
+   M. Each edit = its own plan / `/compare`.
+3. **Zone proximity triggers — changes and edits to the opposite-direction (CTS-zone) trigger** (the user brings the
+   details). Today: `engine_v2/zones/zone_proximity.py` — per (sid, cycle) with a `CTS_CONFIRMED`, triggers alternate
+   sd (BOS / POI zone) → opp_sd (the CTS zone's inner bound) → sd …, at H1 8 / M15 5 / M5 3 pips; narrow cycles: Rules
+   1–3 (LANDMINES "Narrow-Cycle Rules 1+2+3 Are a Triple"). The opp_sd (CTS-prox, "var 3") entry is what
+   `multitf/subsequent_confluence_trigger.py` fires on (one `subsequent_confluence` per opp_sd entry preceded by an sd),
+   and `multitf/subsequent_counter_trigger.py` requires it inside the [sd, opp_sd, sd] window of a `subsequent_counter`
+   (var 4) — so an opp_sd change reaches BOTH lenses' subs. Re-read the code + PART4 §4.3.4 / §4.3.5 at the session
+   start.
+4. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -216,7 +241,8 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    do need to fix, but we can do that as item 2." Detail: memory
    `project_sub_single_cycle_fib_pois.md`; `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` (§13), `POI_ZONES_SPEC.md`
    "Cross-Cycle Mode".
-3. **Zone size adjustments** — **NEXT, in a new session (user 2026-10-12, after items 1–2 closed).** User 2026-09-30:
+3. **Zone size adjustments** — **4th in the SESSION ORDER above (user 2026-10-12: after the hover follow-up, the IC /
+   cross-fib questions and the opp_sd proximity-trigger edits).** User 2026-09-30:
    "currently some KL & POI zones may be very large or small in their
    current base form. This will cover additional logic that adjust the size." The user provides a detailed spec.
    The Naming-Standard audit landed first (PLAN_N, 2026-10-12: a KL step's index is `base_idx` on INIT, `expanded_idx`
