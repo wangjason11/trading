@@ -34,7 +34,7 @@ from engine_v2.tests.test_render_sub_projection import geometry, m15_df  # noqa:
 from engine_v2.tests.test_ms_stop_after_cts import _make_double_rewind_data
 from engine_v2.tests.test_unified_probe import _prepare_df
 from engine_v2.zones import poi_zones
-from engine_v2.zones.kl_zones_v1 import derive_kl_zones_v1
+from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx, derive_kl_zones_v1
 from engine_v2.tests._cross_fib_limits import NO_P
 
 
@@ -247,7 +247,7 @@ def test_kl_expansion_lives_in_bounds_steps_only(sd):
     (z,) = [z for z in zones if z.meta.get("expanded")]
     last = z.meta["bounds_steps"][-1]
     assert (z.source_kind, z.meta["cycle_id"], int(thr.idx)) == ("BOS", 1, 9)
-    assert (last["start_idx"], last["price"], last["event"]) == (9, float(thr.price), "BOS_THRESHOLD_UPDATED")
+    assert (last["expanded_idx"], last["price"], last["event"]) == (9, float(thr.price), "BOS_THRESHOLD_UPDATED")
     assert (last["top"], last["bottom"]) == (z.top, z.bottom)
     assert all(bool(z.meta.get("expanded")) == (len(z.meta["bounds_steps"]) > 1) for z in zones)
     assert not [k for z in zones for k in z.meta if k.startswith("expanded_last")]
@@ -271,7 +271,8 @@ def test_kl_a_second_expansion_is_appended_as_the_last_step(sd):
     _, zones = _kl_run(sd, after_threshold=[second])
     z = _bos1(zones)
     steps = z.meta["bounds_steps"]
-    assert [s["start_idx"] for s in steps] == [4, 9, 10]
+    assert [(s["event"], bounds_step_draw_idx(s)) for s in steps] == [
+        ("INIT", 4), ("BOS_THRESHOLD_UPDATED", 9), ("BOS_THRESHOLD_UPDATED", 10)]
     assert (steps[-1]["event"], steps[-1]["price"]) == ("BOS_THRESHOLD_UPDATED", price)
     assert (z.bottom if sd == 1 else z.top) == price
 

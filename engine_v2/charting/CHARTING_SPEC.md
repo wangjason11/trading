@@ -61,6 +61,24 @@ To change any visual element:
 - Style keys: `structure.swing_line`, `structure.cts`, `structure.bos`
 
 ### 2) Range rectangles
+- Built from the range events (`RANGE_STARTED` / `RANGE_UPDATED` / `RANGE_RESET`), one open range per structure
+- A range's box (and its hover line's `range_start_idx=`) starts at `RANGE_STARTED.meta["range_anchor_idx"]` — MS's
+  own range start on every path: the range-label candle, or the CTS anchor on a pullback- / proximity-created range
+  (PLAN_N N5, 2026-10-12; those two paths started at the event's idx until then — 0 such ranges on the H1 reference
+  window)
+- Replay order (`export_plotly._range_events_chart_order`, shared by the box and hover-line builders): a
+  `RANGE_STARTED` sorts at its anchor — so the `RANGE_UPDATED`s back-filled between a label range's anchor and its
+  confirm candle split its box — but never before `R`, the latest same-structure `RANGE_RESET` emitted before it,
+  if `R <= ev.idx` (a pullback range's CTS anchor can precede the breakout that reset the previous range; the reset
+  then closes the OLD box at `R` first, and the new box is still drawn from its anchor — so the two boxes of one
+  structure OVERLAP on `[anchor, R]`, which is the data's truth: MS says the new range starts at the anchor); other
+  events at their idx; ties RESET < STARTED < UPDATED. Keyed by `structure_id` (H1 only)
+- The hover line starts at the structure's first replayed event candle (a label range: its first back-filled update;
+  a pullback- / proximity-created range: its moment `ev.idx`), not at the box's left edge; its `range_start_idx=`
+  shows the anchor. **Known defect (register §A "H1 range hover lines snapshot every structure"):** the hover pass
+  snapshots EVERY structure at each event's idx while replaying a STARTED at its anchor, so another structure can be
+  frozen as of that anchor (on the reference window: sid 0's hover at H1 750 shows its 747 state, and sid 1's line has
+  a point at its anchor 748). The fix is built: `plans/plan_n_inputs/followup_hover_per_structure.md`
 - Segmented whenever bounds change while `range_active==1`
 - Ends on range deactivation or reversal state
 - Style key: `range.rect`
@@ -82,9 +100,9 @@ To change any visual element:
 - **3-tier opacity (MAIN H1 chart only)**: active=100%, non-active+recent_sid=50%, non-active+prior_sid=20%. Sub charts use the per-TF tier system (see "Sub-chart per-TF tier" below).
 - **Outline (Item 5)**: every zone now has a stepped-polygon outline tracing the outer contour of all `bounds_steps` (single trace per zone, not N rect outlines). Outline color matches the confirm-line color (green/red by side), width matches `confirm_line_width` (=2). Opacity = `confirm_opacity_active × tier`.
 - **Fill (Item 5)**: only the active stretch is filled. KL has at most ONE active stretch `[confirmed_idx, end_idx]` (KL has no per-candle deactivation). Pre-activation region renders as outline only. End at `end_idx`.
-- Stepwise bounds from `meta["bounds_steps"]` still drive per-step (top, bottom) — the fill within the active stretch is intersected with each step's x-range so each step's y-bounds apply.
+- Stepwise bounds from `meta["bounds_steps"]` still drive per-step (top, bottom) — the fill within the active stretch is intersected with each step's x-range so each step's y-bounds apply. A step's x is `kl_zones_v1.bounds_step_draw_idx(step)`: the INIT step's `base_idx`, an expansion's `expanded_idx` (PLAN_N N1; `start_idx` on both until then).
 - Single vertical confirm line at `confirmed_idx`.
-- **Collapsed-cycle zones (2026-09-20):** a KL zone whose cycle COLLAPSED under its structure's lifecycle floor (`status == "inactive"`, known `end_idx`, clamped `confirmed_idx >= end_idx` — `_zone_render.is_collapsed_cycle_zone`) is not drawn, on the H1 chart, the M15 charts and the H1 overlay; it existed geometrically but was never active in real time (on H1: sid 1's retroactive cycles (1,0)/(1,1), the "degenerate parent cycles"; on a sub: its forming-phase cycles). The rows stay in the CSVs. A zone inactive for any other reason is still drawn as an outline.
+- **Collapsed-cycle zones (2026-09-20):** a KL zone whose cycle COLLAPSED under its structure's lifecycle floor (`status == "inactive"`, known `end_idx`, clamped `confirmed_idx >= end_idx` — `_zone_render.is_collapsed_cycle_zone`) is not drawn, on the H1 chart, the M15 charts and the H1 overlay; it existed geometrically but was never active in real time (on H1: sid 1's retroactive cycles (1,0)/(1,1), the "collapsed parent cycles" of `ParentTables`; on a sub: its forming-phase cycles). The rows stay in the CSVs. A zone inactive for any other reason is still drawn as an outline.
 - Style keys: `zone.kl.buy`, `zone.kl.sell`, `zone.kl.hover_line`
 
 ### 6) Imbalance candle highlighting (Week 7)
@@ -112,7 +130,7 @@ To change any visual element:
 - **Collapsed-cycle skip (2026-09-20):** POIs whose cycle's BOS KL zone is collapsed
   (`_zone_render.collapsed_cycles`) are not drawn on the H1 chart, the M15 charts or
   the H1 overlay — on H1 that is sid 1's retroactive cycles (1,0)/(1,1) (the
-  "degenerate parent cycles"); see "Collapsed-cycle zones" under the KL section.
+  "collapsed parent cycles"); see "Collapsed-cycle zones" under the KL section.
 - **3-tier opacity (MAIN H1 chart only)**: tier picked by `meta["status"]` (3-state lifecycle convention). Sub charts use per-TF tier.
 - **Outline (Item 5)**: single rect outline (no fill) spanning `[start_time, end_time]`. Color matches the side's confirm line (`confirm_line_rgb`: dark olive `60,90,20` buy / dark brick `120,45,15` sell since the 2026-09-21 side tints; the `101,67,33` brown in the code is only a `.get` fallback), width = `confirm_line_width` (=2). Opacity = `confirm_opacity_active × tier`.
 - **Fill (Item 5)**: ONE filled rect per active stretch in `meta["activation_history"]` — each `A` event paired with the next `D` (or `end_idx` for trailing activate). Inactive stretches render as outline only.
@@ -135,7 +153,7 @@ To change any visual element:
 - Reads the FibTracker states (`attrs["fib_states"]`; on an M15 lens grouped by `meta["sub_id"]`). ONE draw gate for
   both charts (`_zone_render.fib_record_drawn`; the user, 2026-10-06): a record is drawn iff it is not `disappeared`,
   its cycle is not COLLAPSED (`collapsed_cycles(kl_zones)`: the cycle ended before its structure was live, so its KL /
-  POI are hidden too — on H1 the degenerate parent cycles (1,0) / (1,1), on a sub its forming-phase cycles) and it is
+  POI are hidden too — on H1 the collapsed parent cycles (1,0) / (1,1), on a sub its forming-phase cycles) and it is
   locked OR condition-active, ended or not — an ended never-locked record (e.g. a sub's last cycle ended by
   `parent_end`) is drawn; `active` False (a superseded cross version, a fib invalidated by an imbalance fill) vanishes
   (FIB_LIFECYCLE_SPEC §9.1 / §9.3)

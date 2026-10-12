@@ -199,7 +199,7 @@ cannot be missed; `retry` prints a recovered fetch retry (M15 or H1), which
 the gate's PASS branch does not show:
 
 ```bash
-grep -iaE "error|warning|skipping|unavailable|degenerate|pending|no sid|retry" run.log
+grep -iaE "error|warning|skipping|unavailable|degenerate|collapsed|pending|no sid|retry" run.log
 ```
 
 Report the count + the lines. A non-zero count is not automatically a bug
@@ -217,13 +217,14 @@ itself:
 
 - `[sweep] UNRESOLVED (skipping) reason=… lens=… parent=(S,C) type=…
   trigger_idx=… detail=…` — one per trigger that produced no record (`pending`
-  / `degenerate_parent_cycle` / `probe_failed` / `geometry_failed`); the same
-  rows land in `*_M15_unresolved_triggers.csv`. Compare the set against the
-  plan's expectation (reference window, measured on the first Plan C replay:
-  4 rows, all `degenerate_parent_cycle`).
-- `WARNING [parent_tables] degenerate parent cycle (S,C): floor=… end=…` —
+  / `collapsed_parent_cycle` — `degenerate_parent_cycle` until PLAN_N N4, 2026-10-12 — / `probe_failed` /
+  `geometry_failed`); the same rows land in `*_M15_unresolved_triggers.csv`. Compare the set against the
+  plan's expectation (reference window, measured on the first Plan C replay: 4 rows, all the collapsed reason).
+- `WARNING [parent_tables] collapsed parent cycle (S,C): floor=… end=…` —
   one per parent cycle whose lifecycle floor ≥ its end (`PART4 §17.7`;
-  expected on the reference window: (1,0) and (1,1)).
+  expected on the reference window: (1,0) and (1,1)). `collapsed` joined the grep with PLAN_N (`degenerate` stays
+  for the probe-window warnings); it also matches the informational `[chart][fib] rendered … not collapsed /
+  disappeared` line — the grep count on the reference window is 22 since PLAN_N (21 before).
 
 Also read (not caught by the grep) `[probe_cache] hit|APPROX hit …` and
 `[probe_cache] REF-ZONE DIFFERS …` — a probe skipped because an earlier

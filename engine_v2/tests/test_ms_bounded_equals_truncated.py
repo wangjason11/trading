@@ -363,7 +363,7 @@ def test_l2_range_confirmed_past_the_bound_is_not_started():
     for B in (i + 3, i + 4, i + 5):
         rs = _of_type(_events(raw, B), "RANGE_STARTED")
         assert [e[1] for e in rs] == [i + 3], f"B={B}"
-        assert rs[0][2]["start_idx"] == i and rs[0][2]["confirm_idx"] == i + 3
+        assert rs[0][2]["range_anchor_idx"] == i and rs[0][2]["confirmed_at"] == i + 3
 
 
 def test_l3_two_candle_pattern_wins_when_continuous_needs_the_future():

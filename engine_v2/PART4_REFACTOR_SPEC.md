@@ -515,7 +515,7 @@ completion before the next:
 
 | phase | moment | action |
 |---|---|---|
-| 0 | `TRIGGER_FIRE` (an H1 trigger at its `trigger_idx`) / `REVERSAL_SPAWN` (a built sub's `natural_reversal_idx`) | resolve: degenerate-cycle check (§17.7) → probe (behind the cache, §17.8) → `build_or_get_geometry` → create the `TriggerRecord` (or absorb into the existing record of the same `(lens, S, C)` → same sub) → queue its `RECORD_START` and any end already known |
+| 0 | `TRIGGER_FIRE` (an H1 trigger at its `trigger_idx`) / `REVERSAL_SPAWN` (a built sub's `natural_reversal_idx`) | resolve: collapsed-cycle check (§17.7) → probe (behind the cache, §17.8) → `build_or_get_geometry` → create the `TriggerRecord` (or absorb into the existing record of the same `(lens, S, C)` → same sub) → queue its `RECORD_START` and any end already known |
 | 1 | `RECORD_START` | if the sub already ended **before** this idx → freeze the record zero-length; else mark active and queue a `same_dir_replacement` `RECORD_END` for the same-lens, same-`(S, C, direction)` incumbent of a *different* sub at this idx |
 | 2 | `SUB_START` | set `sub.start_idx` if unset and a live record started here |
 | 3 | `RECORD_END` | for a record not yet ended: apply the highest-priority end entry at this idx (`reversal > parent_end > same_dir_replacement`); entries for an already-ended record are stale and dropped |
@@ -739,7 +739,7 @@ dormant** (like the `pending` finalize conditions).
   for 2608; `.idx == confirmed_at` for both). Two different "anchor"s here:
   the parent's `cts_anchor_idx` (H1, the probe bound) vs the probe's own M15
   `cts0_anchor` (from Phase-2 MS) — see GLOSSARY. Under the pool the FC probe
-  runs only for a trigger whose parent cycle is not degenerate and whose key
+  runs only for a trigger whose parent cycle is not collapsed and whose key
   is not already in the probe cache (§17.7/§17.8 — measured 2026-09-20:
   FC(0,1)'s Phase-2 probe was skipped on a cache hit, §17.8).
 - **main sid0|cyc0** (`trading_open`): arbitrary ad-hoc BOS_0 at the
@@ -1387,7 +1387,7 @@ cycle's `subsequent_*` triggers do not build" rule. Under the pool:
 1. **Triggers are independent.** Every H1 trigger of every parent cycle
    (`first_confluence`, `first_counter`, `subsequent_confluence`,
    `subsequent_counter`) is resolved on its own at its `trigger_idx` (sweep
-   phase 0, §4.3.6): degenerate-cycle check (§17.7) → probe → geometry. A
+   phase 0, §4.3.6): collapsed-cycle check (§17.7) → probe → geometry. A
    `subsequent_*` trigger is processed even when its cycle's `first_*` trigger
    was unresolved or produced a zero-length record — `subsequent_confluence`
    reads the *counter* sibling, not its own bootstrap.
@@ -1417,7 +1417,7 @@ parent_cycle_id, direction)` (asserted). Old subs' events / zones / POIs /
 fibs / WVMI persist append-only with `sub_id` attribution; their ends are the
 resolved lifecycle ends, not a cascade-imposed cap.
 
-**Degenerate / short-lived triggers.** A trigger in a **degenerate parent
+**Collapsed / short-lived triggers.** A trigger in a **collapsed parent
 cycle** (floor ≥ end, §17.7) is logged as `UnresolvedTrigger` and builds
 nothing (no probe, no MS, no `sub_id`). A trigger in a live cycle whose record
 would be empty (its end condition ≤ its `start_idx`) becomes a **zero-length
@@ -1530,9 +1530,9 @@ When parent reverses (`STATE_CHANGED→reversal` of parent sid `S` at idx
   handoff), so every cycle of `S+1` established **before** that idx has
   `floor_h1 = max(struct_start, cts_moment) = struct_start` — retroactive
   cycles. Where the next cycle's floor equals this floor the cycle is
-  **degenerate** (floor ≥ end, §17.7: on the reference window (1,0) and (1,1),
+  **collapsed** (floor ≥ end, §17.7: on the reference window (1,0) and (1,1),
   established 703 / 748 under `struct_start = 902`); its triggers are logged
-  `degenerate_parent_cycle` and nothing is built. Only the cycle in progress
+  `collapsed_parent_cycle` and nothing is built. Only the cycle in progress
   at the reversal (and later cycles) is real.
 - No retroactive building for past cycles of the new parent's sid — by
   construction of the floor, not by a special case.
@@ -2600,7 +2600,7 @@ three refinements of the rules above; the CSVs are untouched by all three:**
    A KL/POI zone whose cycle collapsed under its structure's lifecycle floor
    (`status="inactive"` with clamped `confirmed_idx >= end_idx`; on a sub the
    forming-phase cycles ended at/before `start_idx`, on H1 the retroactive
-   cycles (1,0)/(1,1) of the post-reversal sid — the degenerate parent cycles)
+   cycles (1,0)/(1,1) of the post-reversal sid — the collapsed parent cycles)
    existed geometrically but was never active in real time; the forming
    dots/lines already show that geometry. Shared predicate
    `_zone_render.is_collapsed_cycle_zone`; POIs are skipped via their cycle's
@@ -2885,7 +2885,7 @@ attribution all agree.
 |---|---|---|---|
 | **`PooledStructure`** (= **unique sub**) | one MS run + its cap-free derived geometry (KL/POI/fib/wave-candle bounds & anchors), computed **once**, run cap = **data edge**; carries ONE real-time lifecycle aggregated from its records. **This is what we trade on.** | `(parent_path, sub_TF, direction, starting_idx)`; `pool_idx` = creation order (the sweep's key, never exported); `sub_id` = lifecycle-START order, numbered at the sweep's end (PLAN_I §9.3 D4; None if the sub never starts) | one per unique tuple |
 | **`TriggerRecord`** | a triggered **instance** of a unique sub, with its **own parent-bound lifecycle**; carries provenance (trigger, probe) and the chart lens | `(lens, parent_sid, parent_cycle_id, trigger_sub_sid)`; FK `pool_idx` during the sweep, `sub_id` after it (None only on the zero-length records of a sub that never starts) | N ≥ 1 per built sub; two triggers in the same `(lens, parent_sid, parent_cycle_id)` resolving to the same sub share ONE record |
-| **`UnresolvedTrigger`** | a trigger that produced no record: `pending` (FC probe not finalized), `degenerate_parent_cycle`, `probe_failed`, `geometry_failed` (§17.7) | — (log row; no `sub_id`, no `trigger_sub_sid`) | one per unresolved trigger |
+| **`UnresolvedTrigger`** | a trigger that produced no record: `pending` (FC probe not finalized), `collapsed_parent_cycle`, `probe_failed`, `geometry_failed` (§17.7) | — (log row; no `sub_id`, no `trigger_sub_sid`) | one per unresolved trigger |
 
 `PooledStructure` stores its elements in slice-local coords + `slice_begin`;
 the one shared M15 feature frame is the store (§17.9). Geometry is
@@ -2947,7 +2947,7 @@ markers (Plan E E5·2). Do not unify them.
 | `trigger_idx` | HISTORICAL. The candle the trigger fired: `LOH(trigger_event_idx)` for the four H1 types (`first_counter`'s event idx is `WVMIRecord.meta["triggered_by_event_idx"]`); the native M15 reversal idx for `reversal`. |
 | `probe_finalize_idx` | HISTORICAL. When **this record's probe** finalized, where "this record's probe" is the run keyed by `(direction, initial input)` (§17.8). Probe **ran** → its own `ProbeResult.finalize_idx`, raw (may precede `trigger_idx`: FC(0,1) finalized 2608 < trigger 2611 — logged as is). Probe **skipped** (cache hit) → the cached finalize, inherited raw (that run already finished; the re-trigger does not wait). A different-input probe that *converges* on a known structure keeps its **own** finalize — it could not know it mapped there until it finished. Non-FC types whose probe RAN: `finalize == trigger_idx` by construction (asserted in `_resolve_sibling_cts_via_unified_probe` and in the sweep); a cache-hit record is exempt — it inherits the earlier finalize, which is normally below its own `trigger_idx` (measured: `first_counter`(0,1) 2829 < 2843). |
 | `parent_floor_idx` | `LOH(max(struct_start[S], cts_moment[(S,C)]))` — the parent cycle's **clamped lifecycle-start**, on the CTS-established **moment** (§17.6). Diagnostic copy of the floor that was applied. |
-| **`start_idx`** | **REAL-TIME. `max(probe_finalize_idx, trigger_idx, parent_floor_idx)`. The record EXISTS from here** and nothing earlier. All three terms are load-bearing, each for a distinct case: `probe_finalize_idx` when the probe finished after the trigger (FC(0,0): trigger 463 → start 1020); `trigger_idx` when the structure was already known before this trigger fired (a cache-hit record inheriting an earlier finalize 3487 with its own trigger at 3611 → 3611); `parent_floor_idx` when the parent structure was not alive yet (an FC finalize 2844 under a floor of 3611 → 3611). The last two are illustrative — on the reference window the cache-hit pair never meets and the floor-bound record sits in a degenerate cycle (§17.7), so the floor binds only in a tie with `trigger_idx` there — but each term is what makes the corresponding case start honestly. Historical fields are never adjusted; only `start_idx` is. |
+| **`start_idx`** | **REAL-TIME. `max(probe_finalize_idx, trigger_idx, parent_floor_idx)`. The record EXISTS from here** and nothing earlier. All three terms are load-bearing, each for a distinct case: `probe_finalize_idx` when the probe finished after the trigger (FC(0,0): trigger 463 → start 1020); `trigger_idx` when the structure was already known before this trigger fired (a cache-hit record inheriting an earlier finalize 3487 with its own trigger at 3611 → 3611); `parent_floor_idx` when the parent structure was not alive yet (an FC finalize 2844 under a floor of 3611 → 3611). The last two are illustrative — on the reference window the cache-hit pair never meets and the floor-bound record sits in a collapsed cycle (§17.7), so the floor binds only in a tie with `trigger_idx` there — but each term is what makes the corresponding case start honestly. Historical fields are never adjusted; only `start_idx` is. |
 | `trigger_end_idx` | the first end condition to fire (below), or the sub's frozen end on a post-end re-trigger. |
 | `end_idx` | REAL-TIME. `max(trigger_end_idx, start_idx)`; None while open. |
 | `end_reason` | `reversal` \| `same_dir_replacement` \| `parent_end` \| None. `ended_by_sub_id` names the replacing sub for `same_dir_replacement` (its final id; the sweep links by `ended_by_pool_idx`). |
@@ -3072,7 +3072,7 @@ completion before the next:
 
 | phase | moment | action |
 |---|---|---|
-| 0 | `TRIGGER_FIRE` (an H1 trigger at its `trigger_idx`) / `REVERSAL_SPAWN` (a sub's natural reversal, inserted when its geometry is built) | resolve (§17.7 degenerate check → probe → geometry) → create the record → queue its `RECORD_START` and any end already known |
+| 0 | `TRIGGER_FIRE` (an H1 trigger at its `trigger_idx`) / `REVERSAL_SPAWN` (a sub's natural reversal, inserted when its geometry is built) | resolve (§17.7 collapsed check → probe → geometry) → create the record → queue its `RECORD_START` and any end already known |
 | 1 | `RECORD_START` | if the sub already ended **before** this idx → freeze the record zero-length; else mark active and queue a `same_dir_replacement` candidate for the same-lens incumbent (if any, and of a different sub) at this idx |
 | 2 | `SUB_START` | set `sub.start_idx` if unset and a live record started here |
 | 3 | `RECORD_END` | for a record not yet ended: apply the highest-priority end entry at this idx; entries for an already-ended record are stale and dropped |
@@ -3116,7 +3116,7 @@ parent_sd[S]      = CTS_ESTABLISHED.meta["struct_direction"]
 floor_h1[(S,C)]   = max(struct_start[S], cts_moment[(S,C)])      # == the cycle's CLAMPED lifecycle-start
 end_h1[(S,C)]     = floor_h1[(S,C+1)] if it exists, else rev_by_sid[S], else None
 floor_m15 / end_m15 = LOH(...)                                   # every map must succeed (assert)
-degenerate[(S,C)] = end_m15 is not None and floor_m15 >= end_m15
+collapsed[(S,C)] = end_m15 is not None and floor_m15 >= end_m15
 bos_threshold_steps[(S,C)] = ((h1_known_at, LOH(h1_known_at), price, type), ...)   # PLAN_M (2026-10-11): every
                                                                  #   BOS_CONFIRMED / BOS_THRESHOLD_UPDATED of (S,C) in
                                                                  #   processing order — a COUNTER sub's moving
@@ -3182,30 +3182,33 @@ the anchor keys of the two anchor realms, for every structural event) is canonic
 in `ARCHITECTURE.md` "`ev.idx` convention".
 
 Reference window values: floors `(0,0)=463 (0,1)=2611 (1,x)=3611`; ends
-`2611 / 3611 / 3611 / 3611 / None`; degenerate `{(1,0), (1,1)}`.
+`2611 / 3611 / 3611 / 3611 / None`; collapsed `{(1,0), (1,1)}`.
 
-### 17.7 Degenerate parent cycles, unresolved triggers
+### 17.7 Collapsed parent cycles, unresolved triggers
 
-- **Degenerate parent cycle** = lifecycle floor ≥ lifecycle end (zero or
+("Degenerate parent cycles" / `degenerate_parent_cycle` until PLAN_N N4, 2026-10-12 — the zones' / charts' "collapsed
+cycle" test in M15 coordinates; one test, one name.)
+
+- **Collapsed parent cycle** = lifecycle floor ≥ lifecycle end (zero or
   inverted length). Cause: the reversal handoff on a **retroactive** parent —
   H1 sid 1's `struct_start = reversal(sid 0) = 902`, so cycles (1,0)
   (established 703) and (1,1) (established 748) have floor 902 ≥ their ends;
-  only (1,2) is real. Any record in a degenerate cycle is provably zero-length.
-- **Rule: log, don't build.** A trigger in a degenerate cycle produces an
-  `UnresolvedTrigger(reason="degenerate_parent_cycle")` — **no probe, no MS,
+  only (1,2) is real. Any record in a collapsed cycle is provably zero-length.
+- **Rule: log, don't build.** A trigger in a collapsed cycle produces an
+  `UnresolvedTrigger(reason="collapsed_parent_cycle")` — **no probe, no MS,
   no downstream, no `sub_id`**. Reason not to probe: sibling-referencing probes
   would read siblings that were never built → phantom `starting_idx`s. A
-  degenerate trigger is not an instance; it records "the rebuilt structure
-  would have looked like this". Reversal-born successors inside a degenerate
+  collapsed trigger is not an instance; it records "the rebuilt structure
+  would have looked like this". Reversal-born successors inside a collapsed
   cycle never fire (the reversal is inert too). One `WARNING [parent_tables]
-  degenerate parent cycle` per cycle.
+  collapsed parent cycle` per cycle.
 - **Unresolved-trigger log** (`_unresolved_triggers.csv`; separate from records):
-  `reason ∈ {pending, degenerate_parent_cycle, probe_failed, geometry_failed}`
+  `reason ∈ {pending, collapsed_parent_cycle, probe_failed, geometry_failed}`
   with the trigger's identity, `trigger_idx`, direction, the parent trigger's
   H1 input (`parent_input_idx`; None for `reversal`), the M15 probe input the
   resolver had reached (`probe_input_idx` — a `ProbeFailure`'s, or the
   successful `ResolvedStart`'s on a `geometry_failed` row; empty when it never
-  got one — every `pending` / `degenerate_parent_cycle` row) — one frame per
+  got one — every `pending` / `collapsed_parent_cycle` row) — one frame per
   column since Plan E Post-E·1 (2026-09-26, PLAN_E §9.2) — and free-text
   detail. `probe_failed` covers every resolver `ProbeFailure` (a missing /
   unmappable / out-of-bounds input or end, no reference zone, a degenerate

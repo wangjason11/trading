@@ -44,6 +44,7 @@ import pandas as pd
 from engine_v2.common.types import KLZone
 from engine_v2.multitf.lifecycle_sweep import ProbeFailure, ResolvedStart
 from engine_v2.structure import event_fields as ef
+from engine_v2.zones.kl_zones_v1 import bounds_step_idx_key
 from engine_v2.multitf.sub_structure_pool import (
     LENS_CONFLUENCE,
     LENS_COUNTER,
@@ -107,19 +108,20 @@ _MS_AUX_STRUCTURE_COLS = (
 # hold ONLY keys their element kind emits (the guard's inverse check): the
 # Post-E·2 landing review deleted five dead entries (event `confirmed_idx` /
 # `deactivated_at`, zone `start_idx` / `ic_idx` / `deactivated_at` — nothing
-# emitted them; POI `ic_idx` is a dataclass field, KL `start_idx` lives in the
-# nested `bounds_steps`).
+# emitted them; POI `ic_idx` is a dataclass field, KL steps carry their own index
+# key in the nested `bounds_steps` — `base_idx` on INIT, `expanded_idx` on an
+# expansion since PLAN_N N1, `start_idx` on both before).
 _EVENT_META_IDX_KEYS = (
-    "confirmed_at",
+    "confirmed_at",         # CTS / BOS events; RANGE_STARTED since PLAN_N N2 (`confirm_idx` until then)
     "apply_idx",
     "pattern_anchor_idx",
     "cts_anchor_idx",       # CTS events + RANGE_STARTED (the CTS anchor at the range start; pairs with cts_price —
                             # `cts_idx` until Post-E·4, 2026-09-29d)
     "bos_anchor_idx",
     # Post-E·2 (2026-09-26) — slice-local in the M15 CSVs until then:
-    "effective_idx",        # STATE_CHANGED
-    "start_idx",            # RANGE_STARTED
-    "confirm_idx",          # RANGE_STARTED
+    "effective_idx",        # STATE_CHANGED (== ev.idx on every row since PLAN_N N3)
+    "range_anchor_idx",     # RANGE_STARTED (MS's range start, every path — `start_idx` until PLAN_N N2 / N5; its
+                            # `confirm_idx` became `confirmed_at`, listed above)
     "pullback_apply_idx",   # RANGE_STARTED (pullback_created_range)
     "proximity_apply_idx",  # RANGE_STARTED (proximity_created_range)
     "expires_idx",          # REVERSAL_WATCH_START / REVERSAL_CANDIDATE
@@ -301,7 +303,8 @@ def mirror_lower_tf_result_to_entity_df(
         new_events.append(new_ev)
     _attrs_setdefault_list(entity_df, "events").extend(new_events)
 
-    # 4. KL zones — idx only in meta (bounds_steps[*]["start_idx"] +
+    # 4. KL zones — idx only in meta (each bounds_steps entry's one index key —
+    #    `bounds_step_idx_key`: INIT `base_idx`, expansion `expanded_idx` — +
     #    activation_history[*]["idx"] under the Phase 3 convention)
     new_kl = []
     for z in result.kl_zones:
@@ -310,8 +313,8 @@ def mirror_lower_tf_result_to_entity_df(
             steps = []
             for step in new_meta["bounds_steps"]:
                 new_step = dict(step)
-                if isinstance(new_step.get("start_idx"), int):
-                    new_step["start_idx"] = new_step["start_idx"] + slice_begin
+                k = bounds_step_idx_key(new_step)
+                new_step[k] = int(new_step[k]) + slice_begin
                 steps.append(new_step)
             new_meta["bounds_steps"] = steps
         ah = new_meta.get("activation_history")

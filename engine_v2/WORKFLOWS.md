@@ -29,7 +29,7 @@ This doc explains how we work on this repo so changes remain safe and explainabl
 ## Post-replay log grep (fetch gate + silent skips, BEFORE /compare or chart review)
 
 The engine emits `WARNING` lines and skips work — a trigger that can't resolve,
-a reference zone that's unavailable, a degenerate window, a pending probe —
+a reference zone that's unavailable, a degenerate probe window, a pending probe —
 **without raising**. The run exits 0 and the only trace is a log line. A
 behavioral change that *accidentally* drops sids/zones looks identical to one
 that *correctly* prunes them until you read those lines. After any replay whose
@@ -78,7 +78,7 @@ backstop; `retry` prints a recovered fetch retry (M15 or H1), which a gate
 PASS does not show:
 
 ```bash
-grep -iaE "error|warning|skipping|unavailable|degenerate|pending|no sid|retry" run.log
+grep -iaE "error|warning|skipping|unavailable|degenerate|collapsed|pending|no sid|retry" run.log
 ```
 
 Report the count. A non-zero count is not automatically a bug — some skips are
@@ -89,13 +89,15 @@ matching skip-warning usually names the exact cause — read it before theorizin
 Since the sub-structure pool (Plan C, 2026-09-20) the grep also catches, by
 design, `[sweep] UNRESOLVED (skipping) reason=… lens=… parent=(S,C) type=…
 trigger_idx=… detail=…` (one per trigger that produced no record: `pending` /
-`degenerate_parent_cycle` / `probe_failed` / `geometry_failed` — the same rows
-as `*_M15_unresolved_triggers.csv`) and `WARNING [parent_tables] degenerate
+`collapsed_parent_cycle` / `probe_failed` / `geometry_failed` — the same rows
+as `*_M15_unresolved_triggers.csv`) and `WARNING [parent_tables] collapsed
 parent cycle (S,C): floor=… end=…` (one per parent cycle whose lifecycle floor
 ≥ its end). Each is a finding to explain against `PART4_REFACTOR_SPEC.md §17.7`
 (reference window — measured on the first Plan C replay: 4 unresolved rows, all
-`degenerate_parent_cycle`; expected per §17.6: the degenerate cycles are (1,0)
-and (1,1)), not a bug by itself. Related
+`degenerate_parent_cycle` — the reason is `collapsed_parent_cycle` since PLAN_N N4, 2026-10-12; expected per
+§17.6: the collapsed cycles are (1,0) and (1,1)), not a bug by itself. `collapsed` joined the pattern with PLAN_N
+(`degenerate` stays: the probe-window warnings still say it); it also matches the informational
+`[chart][fib] rendered … not collapsed / disappeared` line — 22 lines on the reference window since PLAN_N (21 before). Related
 non-grep lines worth reading in the same pass: `[probe_cache] hit|APPROX hit`
 and `[probe_cache] REF-ZONE DIFFERS …` (the accepted-approximation tripwire —
 a probe skipped because an earlier same-direction, same-input probe already

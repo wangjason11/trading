@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Any, Callable, List, Optional, Sequence, Tuple
 
 from engine_v2.charting.style_registry import STYLE
+from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
 from engine_v2.zones.poi_lifecycle import active_stretches_from_history
 from engine_v2.zones.poi_zones import (
     IP_OUTCOME_NO_PATTERN,
@@ -43,7 +44,8 @@ def is_collapsed_cycle_zone(zone: Any) -> bool:
     >= cycle end → empty activation_history → "inactive"). Such a zone existed
     geometrically but was never active in real time — on H1 the retroactive
     cycles of a post-reversal sid (sid 1's (1,0)/(1,1) on the reference
-    window, the "degenerate parent cycles"); on a sub its forming-phase cycles
+    window — the same test as `ParentTables`' "collapsed parent cycles",
+    in M15 coordinates); on a sub its forming-phase cycles
     (ended at/before the sub's `start_idx`). Both charts skip them; the rows
     stay in the CSVs. A zone that is inactive for any OTHER reason (a POI that
     never met its activation conditions inside a live window: `end_idx` None
@@ -388,23 +390,23 @@ def build_stepped_outline_xy(
     or all steps fall outside the zone's x-range — degenerate to a single
     rect with those bounds and the full `[x_start, x_end]`.
 
+    Each step's x is `bounds_step_draw_idx(step)` (the INIT step's `base_idx`, an
+    expansion's `expanded_idx` — PLAN_N N1).
+
     Returns `(xs, ys)` lists ready to feed to `go.Scatter(mode='lines')`.
     """
     # Build per-step effective (x0, x1, top, bottom) tuples, clamped to zone range.
-    sorted_steps = sorted(
-        (s for s in bounds_steps),
-        key=lambda s: int(s.get("start_idx", -1)),
-    )
+    # (Steps are appended in index order, so the sort is a defence, not a reorder — PLAN_N P6.)
+    sorted_steps = sorted(bounds_steps, key=bounds_step_draw_idx)
     effective: List[Tuple[Any, Any, float, float]] = []
     for k, s in enumerate(sorted_steps):
-        step_start_idx = int(s.get("start_idx", -1))
-        step_x0 = x_resolver(step_start_idx)
+        step_x0 = x_resolver(bounds_step_draw_idx(s))
         if step_x0 is None:
             continue
         if step_x0 < x_start:
             step_x0 = x_start
         if k + 1 < len(sorted_steps):
-            nxt_x0 = x_resolver(int(sorted_steps[k + 1].get("start_idx", -1)))
+            nxt_x0 = x_resolver(bounds_step_draw_idx(sorted_steps[k + 1]))
             step_x1 = nxt_x0 if nxt_x0 is not None else x_end
         else:
             step_x1 = x_end

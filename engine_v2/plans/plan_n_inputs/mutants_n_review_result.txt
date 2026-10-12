@@ -1,0 +1,9 @@
+KILLED    LR1_hover_order_back_on_an_idx_sort 1 failing: test_p4_the_range_boxes_start_at_the_anchor_in_guarded_order
+KILLED    LR2_guard_not_per_structure        1 failing: test_p4_the_reset_guard_is_per_structure_and_only_for_an_ear
+KILLED    LR3_guard_takes_a_later_reset      1 failing: test_p4_the_reset_guard_is_per_structure_and_only_for_an_ear
+KILLED    H1_hover_snapshot_of_every_structure_restored 1 failing: test_p4_each_structures_hover_line_ignores_the_others_replay
+4/4 KILLED  (results: C:/Users/wangj/AppData/Local/Temp/mr\results.json)
+KILLED    LR1_hover_order_back_on_an_idx_sort 1 failing: test_p4_the_range_boxes_start_at_the_anchor_in_guarded_order
+KILLED    LR2_guard_not_per_structure        1 failing: test_p4_the_reset_guard_is_per_structure_and_only_for_an_ear
+KILLED    LR3_guard_takes_a_later_reset      1 failing: test_p4_the_reset_guard_is_per_structure_and_only_for_an_ear
+3/3 KILLED  (results: C:/Users/wangj/AppData/Local/Temp/mr2\results.json)

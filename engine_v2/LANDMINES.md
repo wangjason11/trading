@@ -156,7 +156,7 @@ Common sources of off-by-one bugs:
 | `df.iloc[start:end]` | `end` is exclusive — double-check you're including the right candle |
 | `range(start, end)` | Same — `end` is exclusive |
 | `df.loc[start:end]` | `end` is **inclusive** — different from iloc! |
-| Using confirm_idx vs start_idx | RANGE_STARTED has both — use start_idx for sort order, confirm_idx for timing |
+| `RANGE_STARTED` anchor vs moment | `meta["range_anchor_idx"]` (the range's start — the chart's sort key and box edge) vs `meta["confirmed_at"]` == `ev.idx` (the moment — every timing read); `start_idx` / `confirm_idx` until PLAN_N N2 |
 
 ---
 
@@ -1683,13 +1683,15 @@ truth; since Post-E·2, 2026-09-26, EVERY index-valued top-level meta key
 is listed — until then 15 keys were exported slice-local, PLAN_E §9.3).
 **Nested-dict idx fields, however, are translated by
 per-record special-case loops that hardcode the key name string** — and
-each loop must match exactly one producer-side key.
+each loop must match the producer-side key of every item it shifts (a KL
+step's key depends on its kind since PLAN_N N1: the loop reads it through
+`kl_zones_v1.bounds_step_idx_key`).
 
 Current nested-dict idx fields and their hardcoded loop keys:
 
 | Producer site | Nested dict | Key in producer | Mirror loop key |
 |---|---|---|---|
-| `zones/kl_zones_v1.py` (INIT + expansion) | `meta["bounds_steps"][k]` | `"start_idx"` | `"start_idx"` |
+| `zones/kl_zones_v1.py` (INIT + expansion) | `meta["bounds_steps"][k]` | INIT `"base_idx"`, expansion `"expanded_idx"` (`"start_idx"` on both until PLAN_N N1) | `bounds_step_idx_key(step)` |
 | `zones/poi_zones.py` `_compute_poi_activation_history` | `meta["activation_history"][k]` | `"idx"` | `"idx"` |
 | `zones/kl_zones_v1.py` `derive_kl_zones_v1` (lifecycle finalize) | `meta["activation_history"][k]` | `"idx"` | `"idx"` |
 
@@ -1737,7 +1739,9 @@ with one expansion at entity 1898 rendered the second rect at M15 row
 
 **Rule of thumb:** whenever adding or renaming a nested-dict idx field
 in zones/POIs/fibs/etc., grep `entity_df_mutation.py` for the old key
-name AND audit the per-record block of the touched type. The
+name AND audit the per-record block of the touched type (and, when the key
+depends on the item's kind, route producer, mirror and readers through ONE
+key function, as `bounds_step_idx_key` does). The
 top-level tuple constants do NOT cover nested dicts — those need their
 own update.
 
@@ -2026,8 +2030,8 @@ Collapsed cycles (clamped `start >= end`) are
 uniformly `status="inactive"` with empty `activation_history` (outline-only) —
 this replaced the prior split
 where the inner KL derivation said `"ended"` and the cap said `"inactive"`.
-Under Plan C a DEGENERATE parent cycle (`floor_m15 >= end_m15`) never reaches
-the zone layer at all — its triggers are unresolved (see "Degenerate Parent
+Under Plan C a COLLAPSED parent cycle (`floor_m15 >= end_m15`) never reaches
+the zone layer at all — its triggers are unresolved (see "Collapsed Parent
 Cycles" below).
 
 ---
@@ -2443,14 +2447,17 @@ classified). Reproduce / re-measure with `debug/probe_fc_finalize.py`.
 
 ---
 
-## Degenerate Parent Cycles: Log the Trigger, Don't Build the Sub (2026-09-19)
+## Collapsed Parent Cycles: Log the Trigger, Don't Build the Sub (2026-09-19)
+
+("Degenerate parent cycles" until PLAN_N N4, 2026-10-12 — the zones' / charts' "collapsed cycle" test in M15
+coordinates; one test, one name.)
 
 **Rule:** A parent cycle whose lifecycle **floor ≥ lifecycle end** (zero or
-negative length) is *degenerate*. Every sub trigger inside it is provably
+negative length) is *collapsed*. Every sub trigger inside it is provably
 inert — its record's `start_idx = max(finalize, floor) ≥ floor ≥ end ≥
 trigger_end`, so `end_idx == start_idx` no matter what the probe returns. For
 such triggers: **write an unresolved-trigger log row (`reason =
-degenerate_parent_cycle`, no `sub_id`), and do NOT run the probe, MS, or
+collapsed_parent_cycle`, no `sub_id`), and do NOT run the probe, MS, or
 downstream.**
 
 **Why they exist:** the reversal handoff makes a post-reversal parent's
@@ -2463,31 +2470,31 @@ motivated the pool redesign traces to those two cycles.
 
 **Why not probe anyway (to link the record to a unique sub):** three of the
 five trigger types resolve their probe input from the *sibling's* CTS events;
-if the sibling in a degenerate cycle was never built, the probe falls back to
+if the sibling in a collapsed cycle was never built, the probe falls back to
 the ad-hoc BOS_0 and returns a **different `starting_idx`** — a phantom pool
 key that never gets geometry. Post-end re-triggers in a LIVE cycle are the
 opposite case: probe normally, link to the frozen sub, skip MS (zero-length
 `TriggerRecord`, has `sub_id`, participates in nothing but the log).
 
-**Consequences to accept:** memberships from degenerate cycles vanish from live
+**Consequences to accept:** memberships from collapsed cycles vanish from live
 subs (e.g. sub `3304/-1` loses its (1,1) records and its counter-lens
-presence); reversal-born successors inside a degenerate cycle never fire (the
-reversal is equally inert). **Log a WARNING per degenerate parent cycle** — it
+presence); reversal-born successors inside a collapsed cycle never fire (the
+reversal is equally inert). **Log a WARNING per collapsed parent cycle** — it
 is the clearest signal of a retroactive parent, and nothing surfaces it today.
 Under 3.2a these subs rendered as outline-only `status="inactive"` zones; under
 3.2b (`9fd3143`, superseded) they were wrongly LIVE because the parent floor was
 dropped on the render path.
 
 **Implemented by Plan C (2026-09-20).** `multitf/parent_tables.build_parent_tables`
-computes `degenerate[(S,C)] = end_m15 is not None and floor_m15 >= end_m15`
+computes `collapsed[(S,C)] = end_m15 is not None and floor_m15 >= end_m15`
 (with `end_h1[(S,C)] = floor_h1[(S,C+1)]`, the next cycle's CLAMPED start —
-so (1,0)'s end is 3611, not the raw 2995; degenerate either way) and logs one
-`WARNING [parent_tables] degenerate parent cycle (S,C): floor=… end=…` per
+so (1,0)'s end is 3611, not the raw 2995; collapsed either way) and logs one
+`WARNING [parent_tables] collapsed parent cycle (S,C): floor=… end=…` per
 cycle. `lifecycle_sweep._Sweep._resolve_and_record` step 1 checks
-`tables.is_degenerate(S, C)` BEFORE the probe and appends
-`UnresolvedTrigger(reason="degenerate_parent_cycle", detail="floor F >= end
+`tables.is_collapsed(S, C)` BEFORE the probe and appends
+`UnresolvedTrigger(reason="collapsed_parent_cycle", detail="floor F >= end
 E")` to `pool.unresolved` (`[sweep] UNRESOLVED (skipping) …`; exported to
-`*_M15_unresolved_triggers.csv`). A reversal-born spawn inside a degenerate
+`*_M15_unresolved_triggers.csv`). A reversal-born spawn inside a collapsed
 cycle takes the same path (it is resolved through `_resolve_and_record` too),
 so it is inert as specified. Measured on the first Plan C replay (reference
 window): exactly the four (1,0) / (1,1) triggers are unresolved — FC(1,0),

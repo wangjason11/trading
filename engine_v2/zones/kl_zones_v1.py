@@ -23,6 +23,24 @@ from engine_v2.zones.structure_lifecycle import (
 
 
 # -------------------------
+# bounds_steps — one index key per step KIND (PLAN_N N1, 2026-10-12)
+# -------------------------
+
+def bounds_step_idx_key(step: dict) -> str:
+    """The index key a `meta["bounds_steps"]` entry carries: `"base_idx"` on the INIT step (the base pattern's
+    first candle, = the zone's `meta["base_idx"]` — a location), `"expanded_idx"` on an expansion step (the
+    moment its threshold-update event grew the zone). One key per kind (GLOSSARY "Naming Standard"); until
+    PLAN_N both were `"start_idx"`."""
+    return "base_idx" if step["event"] == "INIT" else "expanded_idx"
+
+
+def bounds_step_draw_idx(step: dict) -> int:
+    """The candle a step's segment is drawn from (a chart ROLE over the two kinds): the base candle on INIT,
+    the expansion's moment otherwise."""
+    return int(step[bounds_step_idx_key(step)])
+
+
+# -------------------------
 # Pattern Identification Functions (structure-aware)
 # -------------------------
 
@@ -849,7 +867,7 @@ def derive_kl_zones_v1(
             if top2 != top or bot2 != bot:
                 steps = list((z0.meta or {}).get("bounds_steps", []))
                 steps.append({
-                    "start_idx": int(ev.idx),       # expansion happens HERE
+                    "expanded_idx": ef.event_moment(ev),  # the expansion's MOMENT (the update's processing candle)
                     "top": float(top2),
                     "bottom": float(bot2),
                     "event": str(ev.type),
@@ -862,7 +880,7 @@ def derive_kl_zones_v1(
                     bottom=float(bot2),
                     meta={
                         **(z0.meta or {}),
-                        # The last expansion is `bounds_steps[-1]` (its moment `start_idx`, `price`,
+                        # The last expansion is `bounds_steps[-1]` (its moment `expanded_idx`, `price`,
                         # `event`); the `expanded_last_*` copies were deleted (Post-E·5, 2026-09-30).
                         "bounds_steps": steps,
                         "expanded": True,
@@ -968,7 +986,7 @@ def derive_kl_zones_v1(
 
                 "bounds_steps": [
                     {
-                        "start_idx": int(base_idx),   # segment begins at base anchor candle
+                        "base_idx": int(base_idx),   # the segment begins at the base pattern's first candle
                         "top": float(top),
                         "bottom": float(bottom),
                         "event": "INIT",

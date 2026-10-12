@@ -10,7 +10,7 @@ session API contract (`PLAN_C_API_CONTRACT.md`):
     floor_h1[(S,C)]    = max(struct_start[S], cts_moment[(S,C)])   # the CLAMPED cycle start
     end_h1[(S,C)]      = floor_h1[(S,C+1)] if (S,C+1) exists else rev_by_sid.get(S) else None
     floor_m15 / end_m15 = LOH(...)                                 # every map must succeed (assert)
-    degenerate[(S,C)]  = end_m15 is not None and floor_m15 >= end_m15
+    collapsed[(S,C)]  = end_m15 is not None and floor_m15 >= end_m15
 
 Asserts (raise, do not degrade): BOS_CONFIRMED(S,C).confirmed_at == CTS_ESTABLISHED(S,C).confirmed_at
 (on the MOMENT, never on the CTS anchor -- the extreme); a BOS_CONFIRMED without a matching
@@ -124,12 +124,12 @@ def test_cts_moment_is_confirmed_at_not_the_anchor():
     assert t.floor_h1[(0, 0)] == 11
     assert t.floor_m15[(0, 0)] == 4 * 11 + 3 == 47
     assert t.floor(0, 0) == 47
-    # single open cycle: no next cycle, no reversal -> end None; never degenerate
+    # single open cycle: no next cycle, no reversal -> end None; never collapsed
     assert t.end_h1[(0, 0)] is None
     assert t.end_m15[(0, 0)] is None
     assert t.end(0, 0) is None
-    assert t.degenerate[(0, 0)] is False
-    assert t.is_degenerate(0, 0) is False
+    assert t.collapsed[(0, 0)] is False
+    assert t.is_collapsed(0, 0) is False
     assert t.rev_by_sid == {}
     assert t.parent_sd == {0: 1}
 
@@ -172,10 +172,10 @@ def test_reversal_handoff_produces_zero_inverted_and_real_cycles():
     # LOH = 4p+3: floors 43/163/163/183; ends 163/163/143/None
     assert t.floor_m15 == {(0, 0): 43, (1, 0): 163, (1, 1): 163, (2, 0): 183}
     assert t.end_m15 == {(0, 0): 163, (1, 0): 163, (1, 1): 143, (2, 0): None}
-    # degenerate = end_m15 is not None and floor_m15 >= end_m15:
+    # collapsed = end_m15 is not None and floor_m15 >= end_m15:
     #   (0,0) 43 >= 163 F (real); (1,0) 163 >= 163 T (ZERO); (1,1) 163 >= 143 T (INVERTED);
-    #   (2,0) end None -> F (real, open) -- the real cycle after the two degenerate ones
-    assert t.degenerate == {(0, 0): False, (1, 0): True, (1, 1): True, (2, 0): False}
+    #   (2,0) end None -> F (real, open) -- the real cycle after the two collapsed ones
+    assert t.collapsed == {(0, 0): False, (1, 0): True, (1, 1): True, (2, 0): False}
     # PLAN-AMBIGUITY: with end_h1 = the NEXT cycle's CLAMPED start, an inverted (floor > end) cycle can
     # only come from the reversal-end branch (end = rev_by_sid[S] < floor); the groundtruth memory's
     # "inverted (1,0): floor 3611 vs end 2995" refers to the RAW next-CTS end that Plan C no longer uses
@@ -194,12 +194,12 @@ def test_end_is_the_next_cycles_clamped_start_not_its_raw_moment():
     assert t.end_h1[(1, 0)] == 902                       # end = clamped next start (NOT the raw 748)
     assert t.end_h1[(1, 0)] != 748
     assert t.end_m15[(1, 0)] == 4 * 902 + 3 == 3611
-    # (1,0) floor = max(902, 703) = 902 == end 902 -> zero-length -> degenerate
+    # (1,0) floor = max(902, 703) = 902 == end 902 -> zero-length -> collapsed
     assert t.floor_h1[(1, 0)] == 902
-    assert t.degenerate[(1, 0)] is True
+    assert t.collapsed[(1, 0)] is True
     # (1,1) is the open last cycle of sid 1 (no (1,2), sid 1 never reverses)
     assert t.end_h1[(1, 1)] is None
-    assert t.degenerate[(1, 1)] is False
+    assert t.collapsed[(1, 1)] is False
 
 
 # --- end fallbacks -------------------------------------------------------------
@@ -216,41 +216,41 @@ def test_end_falls_back_to_state_changed_reversal_not_reversal_candidate_apply_i
     assert t.end_h1[(0, 0)] not in (37, 42)
     assert t.end_m15[(0, 0)] == 4 * 40 + 3 == 163
     # floor = max(10, 10) = 10 -> 43 < 163 -> real
-    assert t.degenerate[(0, 0)] is False
+    assert t.collapsed[(0, 0)] is False
     # The candidate event must not create a cycle of its own.
     assert set(t.cycles()) == {(0, 0)}
 
 
-def test_open_last_cycle_has_no_end_and_is_never_degenerate():
-    # No reversal, no next cycle -> end None on both TFs; degenerate requires end_m15 is not None.
+def test_open_last_cycle_has_no_end_and_is_never_collapsed():
+    # No reversal, no next cycle -> end None on both TFs; collapsed requires end_m15 is not None.
     t = _build([_cts_est(10, 0, 0, 10), _cts_est(30, 0, 1, 30)])
     assert t.end_h1[(0, 0)] == 30 and t.end_m15[(0, 0)] == 123    # (0,0) closed by (0,1): 4*30+3
     assert t.end_h1[(0, 1)] is None and t.end_m15[(0, 1)] is None  # (0,1) open
-    assert t.degenerate[(0, 1)] is False
+    assert t.collapsed[(0, 1)] is False
     # A reversal of a DIFFERENT sid does not close it either.
     t2 = _build([_cts_est(10, 0, 0, 10), _reversal(40, 0),
                  _cts_est(50, 1, 0, 50, sd=-1)])
     assert t2.end_h1[(1, 0)] is None
-    assert t2.degenerate[(1, 0)] is False
+    assert t2.collapsed[(1, 0)] is False
 
 
-# --- degenerate is evaluated on the M15 values --------------------------------
+# --- collapsed is evaluated on the M15 values --------------------------------
 
-def test_degenerate_is_evaluated_on_m15_values():
+def test_collapsed_is_evaluated_on_m15_values():
     # floor_h1 10 < end_h1 11 on H1, but an LOH map that collapses both hours onto the same M15 candle
-    # gives floor_m15 == end_m15 -> degenerate (the rule is `floor_m15 >= end_m15`, not on H1).
+    # gives floor_m15 == end_m15 -> collapsed (the rule is `floor_m15 >= end_m15`, not on H1).
     def collapsing_loh(p: int, h1: Any, m15: Any) -> Optional[int]:
         return (int(p) // 2) * 8 + 7          # 10 -> 47, 11 -> 47
 
     t = _build([_cts_est(10, 0, 0, 10), _cts_est(11, 0, 1, 11)], loh=collapsing_loh)
-    assert t.floor_h1[(0, 0)] == 10 and t.end_h1[(0, 0)] == 11     # not degenerate on H1 ...
+    assert t.floor_h1[(0, 0)] == 10 and t.end_h1[(0, 0)] == 11     # not collapsed on H1 ...
     assert t.floor_m15[(0, 0)] == 47 and t.end_m15[(0, 0)] == 47   # ... but equal on M15
-    assert t.degenerate[(0, 0)] is True
-    assert t.is_degenerate(0, 0) is True
+    assert t.collapsed[(0, 0)] is True
+    assert t.is_collapsed(0, 0) is True
     # and with the monotone map the same events are a real cycle: 43 < 47
     t2 = _build([_cts_est(10, 0, 0, 10), _cts_est(11, 0, 1, 11)])
     assert (t2.floor_m15[(0, 0)], t2.end_m15[(0, 0)]) == (43, 47)
-    assert t2.degenerate[(0, 0)] is False
+    assert t2.collapsed[(0, 0)] is False
 
 
 # --- asserts (raise, do not degrade) -----------------------------------------
@@ -298,14 +298,14 @@ def test_loh_returning_none_raises():
 
 # --- logging -------------------------------------------------------------------
 
-def test_log_lines_one_per_cycle_and_one_warning_per_degenerate_cycle():
+def test_log_lines_one_per_cycle_and_one_warning_per_collapsed_cycle():
     lines: List[str] = []
     _build(_reference_window_events(), log=lines.append)
     per_cycle = [s for s in lines if s.startswith("[parent_tables]")
-                 and "degenerate parent cycle" not in s]
-    warnings = [s for s in lines if "WARNING [parent_tables] degenerate parent cycle" in s]
+                 and "collapsed parent cycle" not in s]
+    warnings = [s for s in lines if "WARNING [parent_tables] collapsed parent cycle" in s]
     assert len(per_cycle) == 5                    # five parent cycles: (0,0) (0,1) (1,0) (1,1) (1,2)
-    assert len(warnings) == 2                     # degenerate = {(1,0), (1,1)}
+    assert len(warnings) == 2                     # collapsed = {(1,0), (1,1)}
     # each warning names its cycle and carries floor=.. end=.. (both 3611 on this window)
     assert any(re.search(r"\(1,\s*0\)", s) for s in warnings)
     assert any(re.search(r"\(1,\s*1\)", s) for s in warnings)
@@ -316,11 +316,11 @@ def test_log_lines_one_per_cycle_and_one_warning_per_degenerate_cycle():
         assert any(re.search(r"\(%d,\s*%d\)" % (s, c), ln) for ln in per_cycle), (s, c)
 
 
-def test_no_warning_when_nothing_is_degenerate():
+def test_no_warning_when_nothing_is_collapsed():
     lines: List[str] = []
     _build([_cts_est(10, 0, 0, 10), _cts_est(30, 0, 1, 30)], log=lines.append)
     assert len([s for s in lines if s.startswith("[parent_tables]")
-                and "degenerate parent cycle" not in s]) == 2
+                and "collapsed parent cycle" not in s]) == 2
     assert not [s for s in lines if "WARNING" in s]
 
 
@@ -328,7 +328,7 @@ def test_no_warning_when_nothing_is_degenerate():
 
 def test_reference_window_tables():
     """Plan C section 3: floors 463/2611/3611/3611/3611, ends 2611/3611/3611/3611/None,
-    degenerate {(1,0), (1,1)} -- from synthetic events reproducing the H1 facts."""
+    collapsed {(1,0), (1,1)} -- from synthetic events reproducing the H1 facts."""
     t = _build(_reference_window_events())
     assert t.rev_by_sid == {0: 902}
     # struct_start: sid 0 = the (0,0) CTS_ESTABLISHED moment 115 (Plan E E3f; was the BOS anchor 96);
@@ -345,14 +345,14 @@ def test_reference_window_tables():
     # LOH = 4p+3: 115->463, 652->2611, 902->3611
     assert t.floor_m15 == {(0, 0): 463, (0, 1): 2611, (1, 0): 3611, (1, 1): 3611, (1, 2): 3611}
     assert t.end_m15 == {(0, 0): 2611, (0, 1): 3611, (1, 0): 3611, (1, 1): 3611, (1, 2): None}
-    # degenerate: (0,0) 463>=2611 F; (0,1) 2611>=3611 F; (1,0) 3611>=3611 T; (1,1) 3611>=3611 T; (1,2) open F
-    assert t.degenerate == {(0, 0): False, (0, 1): False, (1, 0): True, (1, 1): True, (1, 2): False}
-    assert {k for k, v in t.degenerate.items() if v} == {(1, 0), (1, 1)}
+    # collapsed: (0,0) 463>=2611 F; (0,1) 2611>=3611 F; (1,0) 3611>=3611 T; (1,1) 3611>=3611 T; (1,2) open F
+    assert t.collapsed == {(0, 0): False, (0, 1): False, (1, 0): True, (1, 1): True, (1, 2): False}
+    assert {k for k, v in t.collapsed.items() if v} == {(1, 0), (1, 1)}
     # accessors
     assert t.cycles() == [(0, 0), (0, 1), (1, 0), (1, 1), (1, 2)]
     assert [t.floor(s, c) for (s, c) in t.cycles()] == [463, 2611, 3611, 3611, 3611]
     assert [t.end(s, c) for (s, c) in t.cycles()] == [2611, 3611, 3611, 3611, None]
-    assert [t.is_degenerate(s, c) for (s, c) in t.cycles()] == [False, False, True, True, False]
+    assert [t.is_collapsed(s, c) for (s, c) in t.cycles()] == [False, False, True, True, False]
     # a cycle with no CTS_ESTABLISHED -> KeyError (callers assert first)
     with pytest.raises(KeyError):
         t.floor(1, 3)
@@ -371,4 +371,4 @@ def test_reference_window_is_insensitive_to_event_order():
     evs = _reference_window_events()
     a = build_parent_tables(_sorted(evs), None, None, loh=_loh, log=lambda s: None)
     b = build_parent_tables(list(reversed(_sorted(evs))), None, None, loh=_loh, log=lambda s: None)
-    assert a.floor_m15 == b.floor_m15 and a.end_m15 == b.end_m15 and a.degenerate == b.degenerate
+    assert a.floor_m15 == b.floor_m15 and a.end_m15 == b.end_m15 and a.collapsed == b.collapsed

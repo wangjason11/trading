@@ -197,15 +197,27 @@ outer could become the inner → an **inverted** zone sitting outside the base
 
 ## Zone expansion
 
-Zones maintain `meta["bounds_steps"]`:
-- Each step has:
-  - `start_idx`: where the segment begins (INIT = base_idx; expansions begin at event idx where expansion happens)
-  - `top`, `bottom`
-  - `event` (INIT / CTS_THRESHOLD_UPDATED / BOS_THRESHOLD_UPDATED / etc)
-  - optional `price`
+Zones maintain `meta["bounds_steps"]` — one entry per boundary state, appended in index order. Each step carries ONE
+index key, and its KIND depends on the step (PLAN_N N1, 2026-10-12 — until then both kinds were `start_idx`):
+- the **INIT** step: `base_idx` = the zone's `meta["base_idx"]` (the base pattern's first candle — a LOCATION, where the
+  rectangle begins), `top`, `bottom`, `event = "INIT"`;
+- an **expansion** step: `expanded_idx` = the expanding threshold-update event's MOMENT (`ef.event_moment(ev)` — the
+  `CTS_THRESHOLD_UPDATED` / `BOS_THRESHOLD_UPDATED` processing candle), `top`, `bottom`, `event` (the event type),
+  `price` (the new outer).
+
+Read a step's index through `kl_zones_v1.bounds_step_idx_key(step)` (the key its kind carries) or
+`bounds_step_draw_idx(step)` (the candle its segment is drawn from — a chart ROLE over the two keys); every renderer
+(`_zone_render.build_stepped_outline_xy`, the H1 KL renderer, the two M15 KL renderers) and the M15 mirror
+(`entity_df_mutation`, which shifts each step's own key) do.
 
 When later threshold update events imply bounds extension:
-- The zone is replaced with updated top/bottom and an appended bounds_steps entry (its `start_idx` = the expanding event's candle — a moment; `price` = the new outer; `event` = the event type), and the meta flag `expanded` is set. On an `expanded` zone the last expansion is `bounds_steps[-1]` (its `event` is not `INIT`); on an unexpanded zone the only step is INIT, whose `start_idx` is `base_idx` — the base ANCHOR, a location, not a moment — so check `expanded` (or `event != "INIT"`) before reading a step as an expansion. The `expanded_last_idx` / `expanded_last_price` / `expanded_last_event` copies of the last step were deleted in Post-E·5 (2026-09-30; PLAN_E §9.6 — saves before it carry them).【fileciteturn2file6】
+- The zone is replaced with updated top/bottom and an appended expansion step, and the meta flag `expanded` is set. On
+  an `expanded` zone the last expansion is `bounds_steps[-1]`; on an unexpanded zone the only step is INIT. The
+  `expanded_last_idx` / `expanded_last_price` / `expanded_last_event` copies of the last step were deleted in Post-E·5
+  (2026-09-30; PLAN_E §9.6 — saves before it carry them).
+- An expansion is a moment of the STRUCTURE, not of the zone's active life: it can precede the zone's clamped
+  `confirmed_idx` (5 of the 31 expansion steps on the reference window — the collapsed H1 sid 1 cycles, and a sub
+  whose lifecycle floor clamped its first-active; PLAN_N §2).
 
 > Note: The current system ties zone expansion to emitted threshold-update events (e.g., CTS threshold updates that come from range sync). This is deliberate to avoid incorrect expansions based on unrelated values.
 

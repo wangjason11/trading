@@ -78,6 +78,7 @@ from engine_v2.charting._zone_render import (
     poi_ic_hover_text,
     select_subordinate_tf_tier,
 )
+from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
 from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
 from engine_v2.zones.structure_lifecycle import (
     compute_reversal_idx_by_sid,
@@ -1264,9 +1265,9 @@ def export_m15_chart_plotly(
 
                 steps = list((zone.meta or {}).get("bounds_steps", []))
                 if not steps:
-                    steps = [{"start_idx": int(zone.meta.get("base_idx", 0)),
-                              "top": y1, "bottom": y0, "event": "FALLBACK"}]
-                steps = sorted(steps, key=lambda s: int(s.get("start_idx", -1)))
+                    steps = [{"base_idx": int(zone.meta.get("base_idx", 0)),
+                              "top": y1, "bottom": y0, "event": "INIT"}]
+                steps = sorted(steps, key=bounds_step_draw_idx)   # a defence: steps are appended in index order
 
                 # render_end_idx for active-stretch computation.
                 if zone.end_time is None:
@@ -1285,7 +1286,7 @@ def export_m15_chart_plotly(
 
                 # Per-step iteration: fills (only where active) + hover lines.
                 for k, s in enumerate(steps):
-                    seg_start_slice = int(s.get("start_idx", -1))
+                    seg_start_slice = bounds_step_draw_idx(s)
                     seg_x0 = _lt_time(seg_start_slice)
                     if seg_x0 is None:
                         continue
@@ -1293,7 +1294,7 @@ def export_m15_chart_plotly(
                         seg_x0 = x0
 
                     if k + 1 < len(steps):
-                        next_step_idx = int(steps[k + 1].get("start_idx", -1))
+                        next_step_idx = bounds_step_draw_idx(steps[k + 1])
                         nxt = _lt_time(next_step_idx) or x1
                         seg_x1 = nxt - pd.Timedelta(microseconds=1)
                         step_end_idx = next_step_idx - 1
@@ -1384,13 +1385,13 @@ def export_m15_chart_plotly(
                 # Single confirm line at confirmed_idx (KL has no reactivation).
                 if conf_time is not None and x0 <= conf_time <= x1:
                     for k, s in enumerate(steps):
-                        seg_x0 = _lt_time(int(s.get("start_idx", -1)))
+                        seg_x0 = _lt_time(bounds_step_draw_idx(s))
                         if seg_x0 is None:
                             continue
                         if seg_x0 < x0:
                             seg_x0 = x0
                         if k + 1 < len(steps):
-                            nxt = _lt_time(int(steps[k + 1].get("start_idx", -1))) or x1
+                            nxt = _lt_time(bounds_step_draw_idx(steps[k + 1])) or x1
                             seg_x1 = nxt - pd.Timedelta(microseconds=1)
                         else:
                             seg_x1 = x1
@@ -2264,11 +2265,11 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             fallback_top = float(max(z.top, z.bottom))
             fallback_bot = float(min(z.top, z.bottom))
             if not steps:
-                steps = [{"start_idx": int(z.meta.get("base_idx", 0)),
+                steps = [{"base_idx": int(z.meta.get("base_idx", 0)),
                           "top": fallback_top,
                           "bottom": fallback_bot,
-                          "event": "FALLBACK"}]
-            steps = sorted(steps, key=lambda s: int(s.get("start_idx", -1)))
+                          "event": "INIT"}]
+            steps = sorted(steps, key=bounds_step_draw_idx)   # a defence: steps are appended in index order
 
             # render_end_idx in H1 idx space.
             if z.end_time is None:
@@ -2281,7 +2282,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
 
             # Per-step iteration: fills (only active stretch) + hover lines.
             for k, s in enumerate(steps):
-                seg_start_h1 = int(s.get("start_idx", -1))
+                seg_start_h1 = bounds_step_draw_idx(s)
                 seg_x0 = _h1_idx_to_m15_time(seg_start_h1)
                 if seg_x0 is None:
                     continue
@@ -2289,7 +2290,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                     seg_x0 = x0
 
                 if k + 1 < len(steps):
-                    next_h1 = int(steps[k + 1].get("start_idx", -1))
+                    next_h1 = bounds_step_draw_idx(steps[k + 1])
                     nxt = _h1_idx_to_m15_time(next_h1) or x1
                     seg_x1 = nxt - pd.Timedelta(microseconds=1)
                     step_end_h1 = next_h1 - 1
@@ -2377,13 +2378,13 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             # Single confirm line at confirmed_idx — position in step containing it.
             if conf_time is not None and x0 <= conf_time <= x1:
                 for k, s in enumerate(steps):
-                    seg_x0 = _h1_idx_to_m15_time(int(s.get("start_idx", -1)))
+                    seg_x0 = _h1_idx_to_m15_time(bounds_step_draw_idx(s))
                     if seg_x0 is None:
                         continue
                     if seg_x0 < x0:
                         seg_x0 = x0
                     if k + 1 < len(steps):
-                        nxt = _h1_idx_to_m15_time(int(steps[k + 1].get("start_idx", -1))) or x1
+                        nxt = _h1_idx_to_m15_time(bounds_step_draw_idx(steps[k + 1])) or x1
                         seg_x1 = nxt - pd.Timedelta(microseconds=1)
                     else:
                         seg_x1 = x1

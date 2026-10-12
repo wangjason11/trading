@@ -17,7 +17,7 @@ filter of §17.5):
 
 | phase | moment            | action                                                        |
 |-------|-------------------|---------------------------------------------------------------|
-| 0     | TRIGGER_FIRE /    | resolve (degenerate check → probe → geometry) → create record |
+| 0     | TRIGGER_FIRE /    | resolve (collapsed check → probe → geometry) → create record |
 |       | REVERSAL_SPAWN    | → queue its RECORD_START and any end already known            |
 | 1     | RECORD_START      | freeze zero-length if the sub already ended BEFORE this idx;  |
 |       |                   | else mark active + queue a same_dir_replacement candidate     |
@@ -43,7 +43,7 @@ START (`SubStructurePool.number_subs_by_start` — `(start_idx, pool_idx)` → 0
 `SweepResult` consumer sees the final ids.
 
 Logging (stdout, greppable — the `/compare` skill greps
-`warning|skipping|unavailable|degenerate|pending|no sid`): `[sweep] fire …`,
+`warning|skipping|unavailable|degenerate|collapsed|pending|no sid`): `[sweep] fire …`,
 `[sweep] record …`, `[sweep] replace …`, `[sweep] spawn …`, `[sweep] sub_end …`,
 `[sweep] UNRESOLVED (skipping) reason=…`, `[sweep] number pool#k -> sub_id=…`.
 """
@@ -279,13 +279,13 @@ class _Sweep:
     def _resolve_and_record(self, t: SweepTrigger, idx: int,
                             reversing_sub: Optional[PooledStructure] = None) -> None:
         S, C = t.cycle
-        # 1. degenerate parent cycle → log, don't build (no probe, no MS).
+        # 1. collapsed parent cycle → log, don't build (no probe, no MS).
         assert self.tables.has_cycle(S, C), (
             f"[sweep] trigger {t.trigger_type} in ({S},{C}) has no parent CTS_ESTABLISHED"
         )
-        if self.tables.is_degenerate(S, C):
+        if self.tables.is_collapsed(S, C):
             self._unresolved(
-                t, "degenerate_parent_cycle",
+                t, "collapsed_parent_cycle",
                 f"floor {self.tables.floor(S, C)} >= end {self.tables.end(S, C)}",
             )
             return

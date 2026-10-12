@@ -150,7 +150,7 @@ def _h1_events() -> List[StructureEvent]:
 #                  (1,1)=floor(1,2)=902 (1,2)=rev.get(1)=None
 #   floor_m15    = LOH: 115->463  652->2611  902->3611 (x3)
 #   end_m15      = LOH: 652->2611  902->3611  902->3611  902->3611  None
-#   degenerate   = end is not None and floor >= end:
+#   collapsed   = end is not None and floor >= end:
 #                  (0,0) 463>=2611 F  (0,1) 2611>=3611 F  (1,0) 3611>=3611 T
 #                  (1,1) 3611>=3611 T  (1,2) end None -> F
 EXPECTED_REV_BY_SID = {0: 902}
@@ -161,7 +161,7 @@ EXPECTED_FLOOR_H1 = {(0, 0): 115, (0, 1): 652, (1, 0): 902, (1, 1): 902, (1, 2):
 EXPECTED_END_H1 = {(0, 0): 652, (0, 1): 902, (1, 0): 902, (1, 1): 902, (1, 2): None}
 EXPECTED_FLOOR_M15 = {(0, 0): 463, (0, 1): 2611, (1, 0): 3611, (1, 1): 3611, (1, 2): 3611}
 EXPECTED_END_M15 = {(0, 0): 2611, (0, 1): 3611, (1, 0): 3611, (1, 1): 3611, (1, 2): None}
-EXPECTED_DEGENERATE = {(0, 0): False, (0, 1): False, (1, 0): True, (1, 1): True, (1, 2): False}
+EXPECTED_COLLAPSED = {(0, 0): False, (0, 1): False, (1, 0): True, (1, 1): True, (1, 2): False}
 
 
 # =============================================================================
@@ -180,13 +180,13 @@ EXPECTED_DEGENERATE = {(0, 0): False, (0, 1): False, (1, 0): True, (1, 1): True,
 #   type                  (S,C)  tei   trigger_idx           dir
 #   first_confluence      (0,0)  115   4*115+3  =  463       +1
 #   first_confluence      (0,1)  652   4*652+3  = 2611       +1
-#   first_confluence      (1,0)  703   4*703+3  = 2815       -1   degenerate cycle
-#   first_confluence      (1,1)  748   4*748+3  = 2995       -1   degenerate cycle
+#   first_confluence      (1,0)  703   4*703+3  = 2815       -1   collapsed cycle
+#   first_confluence      (1,1)  748   4*748+3  = 2995       -1   collapsed cycle
 #   first_confluence      (1,2)  902   4*902+3  = 3611       -1
 #   first_counter         (0,1)  710   4*710+3  = 2843       -1
-#   first_counter         (1,1)  820   4*820+3  = 3283       +1   degenerate cycle
+#   first_counter         (1,1)  820   4*820+3  = 3283       +1   collapsed cycle
 #   first_counter         (1,2)  926   4*926+3  = 3707       +1
-#   subsequent_confluence (1,1)  871   4*871+3  = 3487       -1   degenerate cycle
+#   subsequent_confluence (1,1)  871   4*871+3  = 3487       -1   collapsed cycle
 #   subsequent_confluence (1,2)  954   4*954+3  = 3819       -1
 #   subsequent_counter    (1,2) 1020   4*1020+3 = 4083       +1
 
@@ -291,7 +291,7 @@ _REVERSAL: Dict[Tuple[int, int], int] = {
 
 # starting_idx -> natural_reversal_idx (groundtruth: 1940, 2470, 2829, None, None,
 # None, 3589, None, None, 4200, None for the baseline's 11 subs; 3589 belongs to
-# 3230/+1 which is NEVER built under Plan C -- its (1,1) trigger is degenerate).
+# 3230/+1 which is NEVER built under Plan C -- its (1,1) trigger is collapsed).
 _NAT_REV: Dict[int, Optional[int]] = {
     454: 1940, 1797: 2470, 2365: 2829, 2639: None,
     3304: None, 3621: None, 3760: 4200, 4027: None,
@@ -315,7 +315,7 @@ def _make_stubs(pool: SubStructurePool, calls: Dict[str, list]):
         k = (trigger.trigger_type, trigger.parent_sid, trigger.parent_cycle_id)
         calls["resolve_start"].append((k, trigger.trigger_idx, hi))
         if k not in _PROBE:
-            # (1,0)/(1,1) triggers are degenerate -> must NEVER reach the resolver.
+            # (1,0)/(1,1) triggers are collapsed -> must NEVER reach the resolver.
             raise AssertionError(f"resolver reached for a trigger that must be unresolved: {k}")
         assert hi == trigger.trigger_idx, (hi, trigger.trigger_idx)   # sibling window hi = t
         starting_idx, finalize_idx, cond = _PROBE[k]
@@ -377,12 +377,12 @@ def _make_stubs(pool: SubStructurePool, calls: Dict[str, list]):
 #   1940 spawn from 454     -> R1 ; sub 1797/-1 created, nat_rev 2470 -> spawn @2470
 #   2470 spawn from 1797    -> R2 ; sub 2365/+1 created, nat_rev 2829 -> spawn @2829
 #   2611 FC(0,1)            -> R3 ; sub 2365/+1 dedup hit (no spawn)
-#   2815 FC(1,0)            -> UNRESOLVED degenerate (1,0)
+#   2815 FC(1,0)            -> UNRESOLVED collapsed (1,0)
 #   2829 spawn from 2365    -> R4 ; sub 2639/-1 created, nat_rev None
 #   2843 first_counter(0,1) -> R5 ; sub 2639/-1 dedup hit
-#   2995 FC(1,1)            -> UNRESOLVED degenerate (1,1)
-#   3283 first_counter(1,1) -> UNRESOLVED degenerate (1,1)
-#   3487 subseq_conf(1,1)   -> UNRESOLVED degenerate (1,1)
+#   2995 FC(1,1)            -> UNRESOLVED collapsed (1,1)
+#   3283 first_counter(1,1) -> UNRESOLVED collapsed (1,1)
+#   3487 subseq_conf(1,1)   -> UNRESOLVED collapsed (1,1)
 #   3611 FC(1,2)            -> R6 ; sub 3304/-1 created, nat_rev None
 #   3707 first_counter(1,2) -> R7 ; sub 3621/+1 created, nat_rev None
 #   3819 subseq_conf(1,2)   -> R8 ; sub 3760/-1 created, nat_rev 4200 -> spawn @4200
@@ -505,7 +505,7 @@ EXPECTED_SUBS: List[_S] = [
     _S((1, 4027), 4083, None, None, frozenset({CONF, CTR}), None, 2),
 ]
 
-# (lens, S, C, trigger_type, trigger_idx, direction) of the 4 degenerate-cycle triggers.
+# (lens, S, C, trigger_type, trigger_idx, direction) of the 4 collapsed-cycle triggers.
 EXPECTED_UNRESOLVED = [
     (CONF, 1, 0, "first_confluence", 2815, -1),
     (CONF, 1, 1, "first_confluence", 2995, -1),
@@ -580,18 +580,18 @@ def test_parent_tables_reference_window(tables):
     assert t.end_h1 == EXPECTED_END_H1
     assert t.floor_m15 == EXPECTED_FLOOR_M15
     assert t.end_m15 == EXPECTED_END_M15
-    assert t.degenerate == EXPECTED_DEGENERATE
-    assert {k for k, v in t.degenerate.items() if v} == {(1, 0), (1, 1)}
+    assert t.collapsed == EXPECTED_COLLAPSED
+    assert {k for k, v in t.collapsed.items() if v} == {(1, 0), (1, 1)}
     # Accessors.
     assert t.cycles() == [(0, 0), (0, 1), (1, 0), (1, 1), (1, 2)]
     assert [t.floor(s, c) for (s, c) in t.cycles()] == [463, 2611, 3611, 3611, 3611]
     assert [t.end(s, c) for (s, c) in t.cycles()] == [2611, 3611, 3611, 3611, None]
-    assert [t.is_degenerate(s, c) for (s, c) in t.cycles()] == [False, False, True, True, False]
+    assert [t.is_collapsed(s, c) for (s, c) in t.cycles()] == [False, False, True, True, False]
 
 
-def test_parent_tables_logs_one_warning_per_degenerate_cycle(tables):
+def test_parent_tables_logs_one_warning_per_collapsed_cycle(tables):
     _, lines = tables
-    warnings = [ln for ln in lines if ln.startswith("WARNING [parent_tables] degenerate parent cycle")]
+    warnings = [ln for ln in lines if ln.startswith("WARNING [parent_tables] collapsed parent cycle")]
     assert len(warnings) == 2, lines
     norm = [w.replace(" ", "") for w in warnings]
     assert any("(1,0)" in w for w in norm), warnings
@@ -640,7 +640,7 @@ def test_parent_tables_from_saved_h1_csv_match_synthetic(tables):
     t_syn, _ = tables
     t_csv = build_parent_tables(_events_from_csv(_H1_EVENTS_CSV), None, None, loh=_loh, log=lambda s: None)
     for name in ("rev_by_sid", "struct_start", "cts_moment", "parent_sd",
-                 "floor_h1", "end_h1", "floor_m15", "end_m15", "degenerate"):
+                 "floor_h1", "end_h1", "floor_m15", "end_m15", "collapsed"):
         assert getattr(t_csv, name) == getattr(t_syn, name), name
 
 
@@ -664,14 +664,14 @@ def test_pool_idx_follows_creation_and_sub_id_follows_start(sweep):
         assert s.parent_path == PARENT and s.sub_tf == SUB_TF
 
 
-def test_degenerate_subs_never_exist(sweep):
+def test_collapsed_subs_never_exist(sweep):
     pool: SubStructurePool = sweep["pool"]
-    # The baseline's subs 4/5/6 (2803/-1, 2915/-1, 3230/+1) sit in degenerate cycles:
+    # The baseline's subs 4/5/6 (2803/-1, 2915/-1, 3230/+1) sit in collapsed cycles:
     # never probed, never built -- and 3230's reversal at 3589 therefore never fires.
     for dir_start in ((-1, 2803), (-1, 2915), (1, 3230)):
         assert pool.get(_key(*dir_start)) is None, dir_start
     assert not any(s.starting_idx in (2803, 2915, 3230) for s in pool.all())
-    # No record in the degenerate cycles, on either lens.
+    # No record in the collapsed cycles, on either lens.
     for lens in (CONF, CTR):
         assert pool.records_for(lens, 1, 0) == []
         assert pool.records_for(lens, 1, 1) == []
@@ -789,9 +789,9 @@ def test_unresolved_rows(sweep):
                  for u in pool.unresolved)
     assert got == sorted(EXPECTED_UNRESOLVED)
     for u in pool.unresolved:
-        assert u.reason == "degenerate_parent_cycle"
+        assert u.reason == "collapsed_parent_cycle"
         assert isinstance(u.detail, str) and u.detail
-    # The degenerate trigger never reaches a resolver, so the row carries the input's own H1
+    # The collapsed trigger never reaches a resolver, so the row carries the input's own H1
     # parent_input_idx and no M15 probe_input_idx (PLAN_E §9.2).
     inputs = {(t.lens, t.parent_sid, t.parent_cycle_id, t.trigger_type, t.trigger_idx): t for t in sweep["triggers"]}
     for u in pool.unresolved:
@@ -807,7 +807,7 @@ def test_unresolved_are_logged_with_skipping(sweep):
     lines: List[str] = sweep["lines"]
     unresolved_lines = [ln for ln in lines if "UNRESOLVED (skipping)" in ln]
     assert len(unresolved_lines) == 4, lines
-    assert all("degenerate_parent_cycle" in ln for ln in unresolved_lines)
+    assert all("collapsed_parent_cycle" in ln for ln in unresolved_lines)
 
 
 def test_spawned_reversal_triggers(sweep):
@@ -823,7 +823,7 @@ def test_spawned_reversal_triggers(sweep):
 
 def test_resolver_and_geometry_call_pattern(sweep):
     calls = sweep["calls"]
-    # resolve_start: exactly the 7 non-degenerate H1 triggers, in fire order, hi == trigger_idx.
+    # resolve_start: exactly the 7 non-collapsed H1 triggers, in fire order, hi == trigger_idx.
     assert [(k, ti) for (k, ti, _hi) in calls["resolve_start"]] == [
         (("first_confluence", 0, 0), 463),
         (("first_confluence", 0, 1), 2611),

@@ -309,22 +309,21 @@ rev_by_sid = {ev.meta["structure_id"]: ev.idx for ev in rev_events}
 ## Range Event Sort Order for Charting
 
 **Problem:** Range events must be sorted carefully for correct rendering:
-1. RANGE_STARTED has `confirm_idx` (when event fires) but also `start_idx` (logical start)
-2. RANGE_UPDATED events may occur between `start_idx` and `confirm_idx`
-3. RANGE_RESET at idx N may coincide with RANGE_STARTED with `start_idx=N`
+1. RANGE_STARTED's `ev.idx` / `meta["confirmed_at"]` is its MOMENT, `meta["range_anchor_idx"]` its logical start (MS's
+   range start — `start_idx` / `confirm_idx` until PLAN_N N2)
+2. RANGE_UPDATED events may occur between the anchor and the moment (the label path's back-fill, emitted after it)
+3. RANGE_RESET at idx N may coincide with a RANGE_STARTED anchored at N — or FOLLOW the anchor: a pullback- /
+   proximity-created range is anchored at the CTS anchor, which can precede the breakout that reset the previous range
+   (PLAN_N N5)
 
-**Solution:** Custom sort key with correct priorities:
+**Solution:** `export_plotly._range_events_chart_order` (one helper for the box and hover-line builders):
 ```python
 # Priority: RANGE_RESET=0, RANGE_STARTED=1, RANGE_UPDATED=2
-# RANGE_RESET must come BEFORE RANGE_STARTED at same idx (close old before open new)
-# RANGE_STARTED sorts by start_idx (not confirm_idx) to process before RANGE_UPDATED in its window
-
-def sort_key(e):
-    if e.type == "RANGE_STARTED":
-        return (e.meta.get("start_idx", e.idx), 1)  # Use start_idx
-    if e.type == "RANGE_RESET":
-        return (e.idx, 0)  # Highest priority
-    return (e.idx, 2)  # RANGE_UPDATED
+# RANGE_RESET must come BEFORE RANGE_STARTED at the same key (close old before open new)
+# RANGE_STARTED sorts at its anchor (to process before the RANGE_UPDATEDs in its window), but never before R —
+# the latest same-structure RANGE_RESET emitted before it with R <= ev.idx
+key = range_anchor_idx if R is None else max(range_anchor_idx, R)     # RANGE_STARTED
+key = ev.idx                                                          # RANGE_RESET / RANGE_UPDATED
 ```
 
 **Why this matters:** Without correct sort order, a new range may be immediately closed by a RANGE_RESET that should have closed the *previous* range.
@@ -1816,7 +1815,7 @@ stored value; nothing re-derives it. `build_one_sid`, `_floor_abs`,
 `render_unique_sub` and `TriggerRecord.trigger_dt` are gone. Measured on the
 first Plan C replay: the four (1,0)/(1,1) triggers — the source of every
 "suddenly live" zone in that diff — are unresolved (`degenerate_parent_cycle`,
-LANDMINES "Degenerate Parent Cycles"), and every record's `start_idx` equals
+LANDMINES "Collapsed Parent Cycles" — the reason is `collapsed_parent_cycle` since PLAN_N N4), and every record's `start_idx` equals
 the predicted table. The spec side of the lesson was applied too: PART4 §17.4
 states the floor on the record and restates the §5 clamp it refines.
 

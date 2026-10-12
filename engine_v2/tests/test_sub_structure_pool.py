@@ -349,7 +349,7 @@ def test_unresolved_trigger_is_frozen_and_pool_list_starts_empty():
     u = ssp.UnresolvedTrigger(
         lens=LENS_CONFLUENCE, parent_sid=1, parent_cycle_id=0,
         trigger_type="first_confluence", trigger_idx=2815, direction=-1,
-        parent_input_idx=689, probe_input_idx=None, reason="degenerate_parent_cycle",
+        parent_input_idx=689, probe_input_idx=None, reason="collapsed_parent_cycle",
         detail="floor 3611 >= end 3611",
     )
     pool.unresolved.append(u)

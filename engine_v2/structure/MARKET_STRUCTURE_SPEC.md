@@ -280,6 +280,22 @@ If a valid pullback pattern occurs and no range is active, it *creates* a range:
 
 If a range exists, pullback expands it to include the pullback pattern window extremes (does not reset).【fileciteturn2file5】
 
+### The `RANGE_STARTED` event (PLAN_N N2 / N5, 2026-10-12)
+Three paths create a range, each emitting one `RANGE_STARTED`; every one carries the same index keys:
+
+| Path | `ev.idx` = `meta["confirmed_at"]` (the MOMENT) | `meta["range_anchor_idx"]` (MS's range start `st.range_start_idx` — an ANCHOR) | Path-specific |
+|---|---|---|---|
+| range label (`_finalize_range_candidate_offline`; no `reason`) | the `is_range_confirm_idx` label | the range-label candle `i` (2–5 candles earlier on the reference window); the range is back-filled from it | `hi`, `lo` |
+| `pullback_created_range` | the pullback's apply candle (== `pullback_apply_idx`) | the CTS anchor (`st.cts.idx` — "range starts from the confirmed CTS index", above) | `pullback_apply_idx`, `pat`, `hi`, `lo` |
+| `proximity_created_range` | the sd-proximity confirmation candle (== `proximity_apply_idx`) | the CTS anchor | `proximity_apply_idx`, `hi`, `lo` |
+
+Every path also carries `cts_anchor_idx` / `cts_price` (the CTS anchor when the range starts — on the pullback /
+proximity paths the same candle as `range_anchor_idx`), `structure_id`, `struct_direction`. The paired
+`STATE_CHANGED(to=range)` carries `effective_idx` == its `ev.idx` like every `STATE_CHANGED` (`_set_state` asserts it is
+never overridden). The H1 chart draws the range box from `range_anchor_idx` (CHARTING_SPEC). Until PLAN_N the label path
+carried `start_idx` / `confirm_idx`, the other two paths neither, and the range-confirmed `STATE_CHANGED` carried the
+range start as its `effective_idx`.
+
 ### Threshold syncing from range
 When a range is active:
 - `cts_threshold` mirrors the breakout bound:

@@ -44,12 +44,21 @@ The open lines below carry over (fold in when their files are next touched); D a
   (`config.py` keeps them commented out) would get H1's pinbar floor AND the institutional pattern's H1 cap / params
   through the frame's `attrs["timeframe"]` (PLAN_H landing review, 2026-10-06). Pass `CONFIG.timeframe` (or assert H1)
   when such a window comes back. OPEN; not reachable on the current config.
-- **Naming-Standard audit of never-audited index keys** — KL `bounds_steps[*].start_idx` (the base ANCHOR on the INIT
-  step, a MOMENT on expansion steps — one key, two kinds), RANGE_STARTED `confirm_idx` / `start_idx`, STATE_CHANGED
-  `effective_idx`. Parked by the user ("don't start unasked"); cheap; the `bounds_steps` one should land before
-  anything reads zone expansions for entries / stops. DECIDE when — raise it when D.1 item 3 (zone size adjustments)
-  starts. Detail: `engine_v2/GLOSSARY.md` "Naming Standard". + one test, two names: "collapsed" (zones / charts) and
-  "degenerate parent cycle" (`ParentTables`) — PLAN_H §8.9 F1c (2026-10-06).
+- ~~**Naming-Standard audit of never-audited index keys**~~ — **LANDED 2026-10-12 by PLAN_N** (`engine_v2/plans/
+  PLAN_N_naming_audit.md`; the commit + its save: PLAN_N §12): KL steps `base_idx` / `expanded_idx`; RANGE_STARTED
+  `range_anchor_idx` (MS's range start on every path; the H1 range box starts there) / `confirmed_at`;
+  `effective_idx` == `ev.idx` always; "collapsed parent cycle" (one test, one name). Charts byte-identical on the
+  window. Move to "Recently closed" at the next register sweep.
+- **H1 range hover lines snapshot every structure** — the hover builder's third pass replays a `RANGE_STARTED` at its
+  anchor but snapshots EVERY structure at each event's idx, so another structure can be frozen as of that anchor
+  (pre-existing on label ranges; on the reference window sid 0's hover at H1 750 shows its 747 state, sid 1's line has a
+  point at its anchor 748; PLAN_N N5 extends the exposure to pullback / proximity ranges). Found by PLAN_N's landing
+  review. The fix is BUILT and measured (4 H1 hover traces change, nothing else):
+  `engine_v2/plans/plan_n_inputs/followup_hover_per_structure.md`. OPEN — land as its own `/compare` on the user's go.
+- **Dead code in the H1 range hover-line builder** — its first two replay passes (`export_plotly.py`, the
+  `hover_data` / `open_ranges` loops before the per-structure snapshot pass) build state nothing reads; only the third
+  pass reaches the figure (PLAN_N §10, found by its mutants). Delete when the range chart is next touched. OPEN; no
+  output effect.
 
 ## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
 
@@ -210,8 +219,8 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
 3. **Zone size adjustments** — **NEXT, in a new session (user 2026-10-12, after items 1–2 closed).** User 2026-09-30:
    "currently some KL & POI zones may be very large or small in their
    current base form. This will cover additional logic that adjust the size." The user provides a detailed spec.
-   Raise when it starts: A "Naming-Standard audit" (`bounds_steps[*].start_idx` — land it before anything reads zone
-   expansions). Related: "Zone strength scoring" (D.2). Detail: `engine_v2/zones/KL_ZONES_SPEC.md`,
+   The Naming-Standard audit landed first (PLAN_N, 2026-10-12: a KL step's index is `base_idx` on INIT, `expanded_idx`
+   on an expansion — read via `kl_zones_v1.bounds_step_draw_idx`). Related: "Zone strength scoring" (D.2). Detail: `engine_v2/zones/KL_ZONES_SPEC.md`,
    `POI_ZONES_SPEC.md`; measured sizes: memory `project_week9_part1_inputs.md`.
 4. **Pinbar body-pip floor calibration** — scheduled here by the user 2026-10-01 (was TRIGGER: strategy optimization):
    the provisional values (H1 2.2 / M15 1.0 / M5 0.5 pips, NZD_USD only) and the reclassify-to-pinbar approach itself.

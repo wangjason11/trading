@@ -83,7 +83,7 @@ _END_REASON_PRIORITY = {
 
 # The unresolved-trigger reasons (§17.7).
 UNRESOLVED_REASONS = frozenset(
-    {"pending", "degenerate_parent_cycle", "probe_failed", "geometry_failed"}
+    {"pending", "collapsed_parent_cycle", "probe_failed", "geometry_failed"}
 )
 
 
@@ -245,7 +245,7 @@ class UnresolvedTrigger:
     probe only for `first_confluence`; None for `reversal`); `probe_input_idx` =
     the M15 input the resolver had mapped / co-sourced — a `ProbeFailure`'s, or the
     successful `ResolvedStart`'s on a `geometry_failed` row (None when it never got
-    one — every `pending` / `degenerate_parent_cycle` row)."""
+    one — every `pending` / `collapsed_parent_cycle` row)."""
     lens: str
     parent_sid: int
     parent_cycle_id: int

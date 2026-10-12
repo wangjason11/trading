@@ -18,7 +18,8 @@ floor_h1[(S,C)]    = max(struct_start[S], cts_moment[(S,C)])   # == the cycle's 
 end_h1[(S,C)]      = floor_h1[(S,C+1)] if it exists            # next cycle's CLAMPED start (same rule as
                      else rev_by_sid[S], else None             #   compute_cycle_lifecycle)
 floor_m15 / end_m15 = LOH(...)                                 # every map must succeed (assert)
-degenerate[(S,C)]  = end_m15 is not None and floor_m15 >= end_m15
+collapsed[(S,C)]   = end_m15 is not None and floor_m15 >= end_m15   # the zones' / charts' "collapsed" test
+                     # (`_zone_render.is_collapsed_cycle_zone`) in M15 coordinates — "degenerate" until PLAN_N N4
 bos_threshold_steps[(S,C)] = ((h1_known_at, m15_known_at, price, event_type), ...)
                      every BOS_CONFIRMED / BOS_THRESHOLD_UPDATED of (S,C) in PROCESSING order; h1_known_at = the
                      event's moment (`ef.event_moment`), m15_known_at = LOH(h1_known_at) — None when that hour lies
@@ -65,7 +66,7 @@ class ParentTables:
     end_h1: Dict[Cycle, Optional[int]]
     floor_m15: Dict[Cycle, int]
     end_m15: Dict[Cycle, Optional[int]]
-    degenerate: Dict[Cycle, bool]
+    collapsed: Dict[Cycle, bool]
     # PLAN_M §7.3 — defaulted (a direct constructor without the H1 stream keeps working).
     bos_threshold_steps: Dict[Cycle, Tuple[ThresholdStep, ...]] = field(default_factory=dict)
 
@@ -77,8 +78,8 @@ class ParentTables:
     def end(self, parent_sid: int, parent_cycle_id: int) -> Optional[int]:
         return self.end_m15[(int(parent_sid), int(parent_cycle_id))]
 
-    def is_degenerate(self, parent_sid: int, parent_cycle_id: int) -> bool:
-        return self.degenerate[(int(parent_sid), int(parent_cycle_id))]
+    def is_collapsed(self, parent_sid: int, parent_cycle_id: int) -> bool:
+        return self.collapsed[(int(parent_sid), int(parent_cycle_id))]
 
     def has_cycle(self, parent_sid: int, parent_cycle_id: int) -> bool:
         return (int(parent_sid), int(parent_cycle_id)) in self.cts_moment
@@ -105,7 +106,7 @@ def build_parent_tables(
     `loh(parent_idx, h1_df, m15_df) -> Optional[int]` defaults to
     `_map_parent_idx_to_m15_hour_end` (injectable for unit tests with
     synthetic frames). Logs one `[parent_tables]` line per cycle and one
-    `WARNING [parent_tables] degenerate parent cycle` per degenerate cycle.
+    `WARNING [parent_tables] collapsed parent cycle` per collapsed cycle.
     """
     loh_fn = loh if loh is not None else _default_loh
 
@@ -181,7 +182,7 @@ def build_parent_tables(
 
     floor_m15: Dict[Cycle, int] = {}
     end_m15: Dict[Cycle, Optional[int]] = {}
-    degenerate: Dict[Cycle, bool] = {}
+    collapsed: Dict[Cycle, bool] = {}
     for key in sorted(cts_moment):
         fm = loh_fn(floor_h1[key], h1_df, m15_df)
         assert fm is not None, (
@@ -197,15 +198,15 @@ def build_parent_tables(
                 f"[parent_tables] LOH map failed for end_h1{key}={eh}"
             )
             end_m15[key] = int(em)
-        degenerate[key] = end_m15[key] is not None and floor_m15[key] >= end_m15[key]
+        collapsed[key] = end_m15[key] is not None and floor_m15[key] >= end_m15[key]
         log(
             f"[parent_tables] {key} floor_h1={floor_h1[key]} end_h1={end_h1[key]} "
             f"floor_m15={floor_m15[key]} end_m15={end_m15[key]} "
-            f"degenerate={degenerate[key]}"
+            f"collapsed={collapsed[key]}"
         )
-        if degenerate[key]:
+        if collapsed[key]:
             log(
-                f"WARNING [parent_tables] degenerate parent cycle {key}: "
+                f"WARNING [parent_tables] collapsed parent cycle {key}: "
                 f"floor={floor_m15[key]} end={end_m15[key]}"
             )
 
@@ -218,6 +219,6 @@ def build_parent_tables(
         end_h1=end_h1,
         floor_m15=floor_m15,
         end_m15=end_m15,
-        degenerate=degenerate,
+        collapsed=collapsed,
         bos_threshold_steps={k: tuple(v) for k, v in steps.items()},
     )

@@ -15,7 +15,7 @@ entries through `pool.get_or_create(key)` and set `natural_reversal_idx`.
 
 Conventions
 - `_tables(...)` builds a `ParentTables` from M15 floors/ends; the sweep reads
-  only `floor_m15` / `end_m15` / `degenerate` / `parent_sd`.
+  only `floor_m15` / `end_m15` / `collapsed` / `parent_sd`.
 - `trigger_event_idx` is an ORDER KEY only (`trigger_idx // 4`); the sweep has
   no df and cannot check LOH consistency.
 - Trigger-type ↔ direction semantics (which detector fires for which
@@ -64,10 +64,10 @@ def _tables(
 ) -> ParentTables:
     """`ParentTables` from M15 values: `cycles = {(S, C): (floor_m15, end_m15|None)}`.
 
-    `degenerate[(S,C)] = end_m15 is not None and floor_m15 >= end_m15` (§3).
+    `collapsed[(S,C)] = end_m15 is not None and floor_m15 >= end_m15` (§3).
     The H1-side dicts are derived with the inverse of LOH(h) = 4h + 3 (exact for
     values ≡ 3 mod 4, floor-divided otherwise) and are provenance only — the
-    sweep reads `floor_m15` / `end_m15` / `degenerate` / `parent_sd`
+    sweep reads `floor_m15` / `end_m15` / `collapsed` / `parent_sd`
     (`ParentTables.floor()/end()` are the M15 accessors per the contract).
     `cts_moment` = `floor_h1` (struct_start <= moment assumed); `struct_start[S]`
     = the sid's earliest floor; `rev_by_sid[S]` = the sid's last cycle end.
@@ -85,7 +85,7 @@ def _tables(
         e = end_h1[(S, last_c)]
         if e is not None:
             rev_by_sid[S] = e
-    degenerate = {
+    collapsed = {
         k: (end_m15[k] is not None and floor_m15[k] >= end_m15[k]) for k in cycles
     }
     return ParentTables(
@@ -97,7 +97,7 @@ def _tables(
         end_h1=end_h1,
         floor_m15=floor_m15,
         end_m15=end_m15,
-        degenerate=degenerate,
+        collapsed=collapsed,
     )
 
 
@@ -444,7 +444,7 @@ def test_record_start_floor_trigger_binds_on_cache_hit_inherited_finalize():
 
 
 def test_record_start_floor_parent_floor_binds():
-    """FC on a retroactive parent (the FC(1,0) shape, non-degenerate here): trigger
+    """FC on a retroactive parent (the FC(1,0) shape, non-collapsed here): trigger
     2815, finalize 2844, floor 3611 → start = max(2844, 2815, 3611) = 3611.
     `probe_finalize_idx` / `trigger_idx` are NOT adjusted (historical)."""
     pool = SubStructurePool()
@@ -1354,19 +1354,19 @@ def test_subsequent_is_processed_when_the_cycle_first_trigger_failed(
 
 
 # =============================================================================
-# 14. Degenerate parent cycle; geometry_failed
+# 14. Collapsed parent cycle; geometry_failed
 # =============================================================================
 
-def test_degenerate_cycle_trigger_is_logged_and_never_probed():
+def test_collapsed_cycle_trigger_is_logged_and_never_probed():
     """§4.3 step 1 / §17.7: (1,0) floor 3611 vs end 2995 (inverted) and (1,1)
-    floor 3611 vs end 3611 (zero) are degenerate → their FC triggers become
-    UnresolvedTrigger(reason=degenerate_parent_cycle) whose detail names the
+    floor 3611 vs end 3611 (zero) are collapsed → their FC triggers become
+    UnresolvedTrigger(reason=collapsed_parent_cycle) whose detail names the
     floor/end; the resolver and the geometry builder are never called; the pool
     stays empty (no sub_id consumed). (1,2) is real but has no trigger here.
     """
     pool = SubStructurePool()
     tables = _tables({(1, 0): (3611, 2995), (1, 1): (3611, 3611), (1, 2): (3611, None)}, {1: -1})
-    assert tables.degenerate == {(1, 0): True, (1, 1): True, (1, 2): False}
+    assert tables.collapsed == {(1, 0): True, (1, 1): True, (1, 2): False}
     resolve = _resolver({
         (CONF, 2815): _rs(2803, 2844),
         (CONF, 2995): _rs(2915, 3047),
@@ -1382,7 +1382,7 @@ def test_degenerate_cycle_trigger_is_logged_and_never_probed():
     assert resolve.calls == [] and geom.calls == []
     assert pool.all() == []
     assert [(u.parent_sid, u.parent_cycle_id, u.trigger_idx, u.reason) for u in result.unresolved] == [
-        (1, 0, 2815, "degenerate_parent_cycle"), (1, 1, 2995, "degenerate_parent_cycle")]
+        (1, 0, 2815, "collapsed_parent_cycle"), (1, 1, 2995, "collapsed_parent_cycle")]
     u10, u11 = result.unresolved
     assert "3611" in u10.detail and "2995" in u10.detail     # "floor 3611 >= end 2995"
     assert "3611" in u11.detail
@@ -1659,7 +1659,7 @@ def test_missing_parent_sd_for_a_sid_raises():
     Tables built for (0,0) then stripped of `parent_sd` (frozen → `replace`)."""
     pool = SubStructurePool()
     tables = _dc_replace(_tables({(0, 0): (103, None)}, {0: +1}), parent_sd={})
-    assert tables.has_cycle(0, 0) and not tables.is_degenerate(0, 0)
+    assert tables.has_cycle(0, 0) and not tables.is_collapsed(0, 0)
     resolve = _resolver({(CONF, 103): _rs(150, 150)})
     geom = _geom(pool, {(+1, 150): None})
     with pytest.raises(AssertionError, match=r"no parent_sd for sid 0"):

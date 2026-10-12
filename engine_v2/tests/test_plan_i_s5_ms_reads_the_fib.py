@@ -166,7 +166,7 @@ def test_the_f16_candles_confirm_the_cts_known_at_the_confirmation():
     thr = [(int(e.idx), e.price) for e in ms.events if e.type == "CTS_THRESHOLD_UPDATED"]
     assert thr[:2] == [(24, 0.57191), (25, 0.57182)]
     rng, = [e for e in ms.events if e.type == "RANGE_STARTED"]
-    assert (rng.meta["start_idx"], rng.meta["confirm_idx"], rng.meta["cts_anchor_idx"]) == (20, 25, 19)
+    assert (rng.meta["range_anchor_idx"], rng.meta["confirmed_at"], rng.meta["cts_anchor_idx"]) == (20, 25, 19)
     # The feed is complete and in emission order (landing review lens A M1 (b)) — CTS_THRESHOLD_UPDATEDs included —
     # and that order IS the processing order now.
     fed = [e for e in ms.events if e.type in _FED]

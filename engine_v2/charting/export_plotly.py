@@ -24,6 +24,7 @@ from engine_v2.charting._zone_render import (
     is_poi_of_collapsed_cycle,
     poi_ic_hover_text,
 )
+from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
 from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
 from engine_v2.common.types import PatternStatus
 from engine_v2.multitf.registry import StructureRegistry
@@ -69,6 +70,53 @@ def _add_fib_box(fig, fib_st, x_start, x_end, *, legendgroup=None, legend_name=N
         layer="below", **group, **legend,
     )
     return price_618, price_80
+
+
+_RANGE_TYPE_PRIORITY = {"RANGE_RESET": 0, "RANGE_STARTED": 1, "RANGE_UPDATED": 2}
+
+
+def _range_left_idx(ev) -> int:
+    """The candle a `RANGE_STARTED`'s box / hover line starts at: its `range_anchor_idx` — MS's own range start on
+    every path (the range-label candle; the CTS anchor on a pullback- / proximity-created range — PLAN_N N2 / N5;
+    until PLAN_N those two paths fell back to `ev.idx`)."""
+    return int(ev.meta["range_anchor_idx"])
+
+
+def _range_events_chart_order(structure_events: list) -> list:
+    """The range events (`RANGE_RESET` / `_STARTED` / `_UPDATED`) in the order both range builders replay them.
+
+    Sort key `(candle, priority)`, ties RESET 0 < STARTED 1 < UPDATED 2 (a reset at the same candle closes the
+    previous range first). A `RANGE_STARTED` sorts at its anchor, so the `RANGE_UPDATED`s back-filled between a
+    label range's anchor and its confirm candle (emitted after it, stamped earlier) apply to it — but never
+    before `R`, the idx of the latest same-structure `RANGE_RESET` emitted before it in the stream, if `R <= ev.idx`
+    (none on the reference window has `R > ev.idx`; such a reset would be ignored): a
+    pullback- / proximity-created range is anchored at the CTS anchor, which can precede the breakout candle that
+    reset the previous range (the anchor-lag cycles); sorted at the bare anchor, that reset would delete the NEW
+    range. With the guard the reset closes the old range at `R`, then the new one opens, still drawn from its
+    anchor (PLAN_N N5; 0 instances on the reference window). A stable sort over the stream keeps every tie in
+    stream order, as before. Structures are keyed by `structure_id` alone, like the builders' `open_ranges`: the
+    range builders are H1-only (every M15 sub's events carry `structure_id` 0; the M15 charts draw no range boxes).
+    """
+    last_reset: dict = {}
+    keyed = []
+    for ev in structure_events:
+        t = getattr(ev, "type", None)
+        if t not in _RANGE_TYPE_PRIORITY:
+            continue
+        sid = int(ev.meta.get("structure_id", 0))
+        idx = int(ev.idx)
+        if t == "RANGE_STARTED":
+            key = _range_left_idx(ev)
+            r = last_reset.get(sid)
+            if r is not None and r <= idx:
+                key = max(key, r)
+        else:
+            key = idx
+            if t == "RANGE_RESET":
+                last_reset[sid] = idx
+        keyed.append(((key, _RANGE_TYPE_PRIORITY[t]), ev))
+    keyed.sort(key=lambda kv: kv[0])
+    return [ev for _, ev in keyed]
 
 
 def _get_reversal_confirmed_by_sid(structure_events: list) -> dict:
@@ -719,25 +767,9 @@ def export_chart_plotly(
                 all_sids.add(int(sid))
         most_recent_sid = max(all_sids) if all_sids else 0
 
-        # Collect all range events, sort by (idx, type priority)
-        # Priority: RANGE_RESET=0, RANGE_STARTED=1, RANGE_UPDATED=2
-        # RANGE_RESET must come before RANGE_STARTED at same idx so closing previous range
-        # happens before opening new range (e.g., RANGE_RESET at 748, RANGE_STARTED with start_idx=748)
-        # For RANGE_STARTED, use start_idx (from meta) for sorting so it's processed
-        # before any RANGE_UPDATED events that fall within its [start_idx, confirm_idx] window
-        type_priority = {"RANGE_RESET": 0, "RANGE_STARTED": 1, "RANGE_UPDATED": 2}
-        all_range_events = []
-        for ev in range_started + range_updated + range_reset:
-            all_range_events.append(ev)
-
-        def _range_event_sort_key(e):
-            if e.type == "RANGE_STARTED":
-                # Use start_idx so RANGE_STARTED is processed before RANGE_UPDATED
-                # events that occur between start_idx and confirm_idx
-                return (e.meta.get("start_idx", e.idx), type_priority.get(e.type, 99))
-            return (e.idx, type_priority.get(e.type, 99))
-
-        all_range_events.sort(key=_range_event_sort_key)
+        # All range events in replay order — a RANGE_STARTED at its anchor (`range_anchor_idx`, guarded by the
+        # previous range's reset), the rest at their idx; ties RESET < STARTED < UPDATED (`_range_events_chart_order`).
+        all_range_events = _range_events_chart_order(structure_events)
 
         # Build segments per structure_id
         # Segment: (start_idx, end_idx, hi, lo, structure_id, struct_direction)
@@ -759,9 +791,9 @@ def export_chart_plotly(
                     range_segments.append((
                         seg["start_idx"], idx, seg["hi"], seg["lo"], sid, seg["struct_direction"]
                     ))
-                # Start new range
+                # Start new range — drawn from its anchor
                 open_ranges[sid] = {
-                    "start_idx": ev.meta.get("start_idx", idx),
+                    "start_idx": _range_left_idx(ev),
                     "hi": float(ev.meta.get("hi", 0)),
                     "lo": float(ev.meta.get("lo", 0)),
                     "struct_direction": sd,
@@ -877,15 +909,7 @@ def export_chart_plotly(
                 all_sids.add(int(sid))
         most_recent_sid = max(all_sids) if all_sids else 0
 
-        type_priority = {"RANGE_RESET": 0, "RANGE_STARTED": 1, "RANGE_UPDATED": 2}
-        all_range_events = range_started + range_updated + range_reset
-
-        def _range_event_sort_key_hover(e):
-            if e.type == "RANGE_STARTED":
-                return (e.meta.get("start_idx", e.idx), type_priority.get(e.type, 99))
-            return (e.idx, type_priority.get(e.type, 99))
-
-        all_range_events.sort(key=_range_event_sort_key_hover)
+        all_range_events = _range_events_chart_order(structure_events)   # the box builder's order
 
         # Build reversal confirmed idx per structure_id (ranges end at reversal)
         # Use events instead of df columns (df columns get overwritten by subsequent structures)
@@ -902,7 +926,7 @@ def export_chart_plotly(
             idx = int(ev.idx)
 
             if ev.type == "RANGE_STARTED":
-                start_idx = ev.meta.get("start_idx", idx)
+                start_idx = _range_left_idx(ev)
                 hi = float(ev.meta.get("hi", 0))
                 lo = float(ev.meta.get("lo", 0))
                 open_ranges[sid] = {
@@ -935,7 +959,7 @@ def export_chart_plotly(
             idx = int(ev.idx)
 
             if ev.type == "RANGE_STARTED":
-                start_idx = ev.meta.get("start_idx", idx)
+                start_idx = _range_left_idx(ev)
                 hi = float(ev.meta.get("hi", 0))
                 lo = float(ev.meta.get("lo", 0))
                 open_ranges[sid] = {
@@ -964,6 +988,9 @@ def export_chart_plotly(
         # For simplicity, build hover lines per structure_id by iterating through
         # visible candles and checking which ranges are active at each candle
         # Reset and rebuild properly
+        # (Known defect, PLAN_N landing review: a RANGE_STARTED is replayed at its anchor, so the snapshot of EVERY
+        # structure taken at its idx can freeze another structure as of the anchor — register "H1 range hover lines
+        # snapshot every structure"; the fix is `plans/plan_n_inputs/followup_hover_per_structure.md`.)
         open_ranges = {}
         range_by_candle = {}  # {idx: {sid: {hi, lo, start_idx, last_update_idx, sd}}}
 
@@ -973,7 +1000,7 @@ def export_chart_plotly(
             idx = int(ev.idx)
 
             if ev.type == "RANGE_STARTED":
-                start_idx = int(ev.meta.get("start_idx", idx))
+                start_idx = _range_left_idx(ev)
                 open_ranges[sid] = {
                     "start_idx": start_idx,
                     "hi": float(ev.meta.get("hi", 0)),
@@ -1784,12 +1811,14 @@ def export_chart_plotly(
             fallback_bot = float(min(z.top, z.bottom))
             if not steps:
                 steps = [{
-                    "start_idx": base_idx,
+                    "base_idx": base_idx,
                     "top": fallback_top,
                     "bottom": fallback_bot,
-                    "event": "FALLBACK",
+                    "event": "INIT",
                 }]
-            steps = sorted(steps, key=lambda s: int(s.get("start_idx", -1)))
+            # Each step's x = `bounds_step_draw_idx` (INIT `base_idx`, expansion `expanded_idx` — PLAN_N N1);
+            # steps are appended in index order, so the sort is a defence, not a reorder.
+            steps = sorted(steps, key=bounds_step_draw_idx)
 
             def _idx_to_time(ii: int):
                 if ii in dfx.index:
@@ -1807,7 +1836,7 @@ def export_chart_plotly(
 
             # Per-step iteration: render fills (only where active) + hover lines.
             for k, s in enumerate(steps):
-                seg_start_idx = int(s.get("start_idx", -1))
+                seg_start_idx = bounds_step_draw_idx(s)
                 seg_x0 = _idx_to_time(seg_start_idx)
                 if seg_x0 is None:
                     continue
@@ -1815,7 +1844,7 @@ def export_chart_plotly(
                     seg_x0 = x_zone0
 
                 if k + 1 < len(steps):
-                    next_idx = int(steps[k + 1].get("start_idx", -1))
+                    next_idx = bounds_step_draw_idx(steps[k + 1])
                     nxt = _idx_to_time(next_idx) or x_zone1
                     seg_x1 = nxt - pd.Timedelta(microseconds=1)
                     step_end_idx = next_idx - 1
@@ -1908,13 +1937,13 @@ def export_chart_plotly(
             # contains conf_time for the correct y-bounds.
             if conf_time is not None and x_zone0 <= conf_time <= x_zone1:
                 for k, s in enumerate(steps):
-                    seg_x0 = _idx_to_time(int(s.get("start_idx", -1)))
+                    seg_x0 = _idx_to_time(bounds_step_draw_idx(s))
                     if seg_x0 is None:
                         continue
                     if seg_x0 < x_zone0:
                         seg_x0 = x_zone0
                     if k + 1 < len(steps):
-                        nxt = _idx_to_time(int(steps[k + 1].get("start_idx", -1))) or x_zone1
+                        nxt = _idx_to_time(bounds_step_draw_idx(steps[k + 1])) or x_zone1
                         seg_x1 = nxt - pd.Timedelta(microseconds=1)
                     else:
                         seg_x1 = x_zone1

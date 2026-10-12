@@ -1,0 +1,33 @@
+KILLED    N3a_assert_dropped                 1 failing: test_p2_effective_idx_cannot_be_overridden
+KILLED    N3b_range_start_restored           2 failing: test_p1_effective_idx_is_the_state_change_idx_on_every_row[-, test_p1_effective_idx_is_the_state_change_idx_on_every_row[1
+KILLED    N2a_label_anchor_is_the_confirm    8 failing: test_l2_range_confirmed_past_the_bound_is_not_started, test_a_tied_breakout_still_runs_the_post_apply_range_check[-, test_a_tied_breakout_still_runs_the_post_apply_range_check[1, test_the_f16_candles_confirm_the_cts_known_at_the_confirmati
+KILLED    N2b_label_confirmed_at_is_the_start 4 failing: test_l2_range_confirmed_past_the_bound_is_not_started, test_the_f16_candles_confirm_the_cts_known_at_the_confirmati, test_p3_label_and_pullback_ranges_carry_ms_own_range_start[-, test_p3_label_and_pullback_ranges_carry_ms_own_range_start[1
+KILLED    N5a_pullback_anchor_is_the_apply   2 failing: test_p3_label_and_pullback_ranges_carry_ms_own_range_start[-, test_p3_label_and_pullback_ranges_carry_ms_own_range_start[1
+KILLED    N5b_proximity_anchor_is_the_candle 2 failing: test_p3_a_proximity_range_carries_the_cts_anchor[-1], test_p3_a_proximity_range_carries_the_cts_anchor[1]
+KILLED    N2c_registry_drops_range_anchor    5 failing: test_emitter_modules_have_no_unlisted_index_keys[market_stru, test_every_event_meta_index_key_is_shifted, test_every_int_meta_value_is_listed_or_known_non_index, test_every_ms_emitted_event_meta_index_key_is_shifted
+KILLED    C1_sort_at_the_event_idx           1 failing: test_p4_the_range_boxes_start_at_the_anchor_in_guarded_order
+KILLED    C2_left_edge_is_the_event_idx      1 failing: test_p4_the_range_boxes_start_at_the_anchor_in_guarded_order
+KILLED    C3_no_reset_guard                  1 failing: test_p4_the_range_boxes_start_at_the_anchor_in_guarded_order
+KILLED    C4_box_site_reads_the_event_idx    1 failing: test_p4_the_range_boxes_start_at_the_anchor_in_guarded_order
+KILLED    C5_hover_pass3_reads_the_event_idx 1 failing: test_p4_the_range_boxes_start_at_the_anchor_in_guarded_order
+KILLED    K1_init_writes_the_confirm         4 failing: test_kl_a_second_expansion_is_appended_as_the_last_step[-1], test_kl_a_second_expansion_is_appended_as_the_last_step[1], test_p5_kl_steps_carry_one_key_per_kind[-1], test_p5_kl_steps_carry_one_key_per_kind[1]
+KILLED    K2_expansion_writes_the_anchor     6 failing: test_kl_a_second_expansion_is_appended_as_the_last_step[-1], test_kl_a_second_expansion_is_appended_as_the_last_step[1], test_kl_expansion_lives_in_bounds_steps_only[-1], test_kl_expansion_lives_in_bounds_steps_only[1]
+KILLED    K3_helper_keys_swapped             45 failing: test_anchor_keys_are_int_and_idx_is_the_contract_index, test_every_event_meta_index_key_is_shifted, test_every_fib_meta_index_key_is_shifted, test_every_int_meta_value_is_listed_or_known_non_index
+KILLED    K4_mirror_shifts_only_init         1 failing: test_mirror_shifts_every_site_exactly_once
+KILLED    R01_outline_step_x0                2 failing: test_p6_the_h1_kl_renderer_reads_each_steps_own_key, test_p6_the_stepped_outline_reads_each_steps_own_key
+KILLED    R02_outline_next_x0                1 failing: test_p6_the_stepped_outline_reads_each_steps_own_key
+KILLED    R03_h1_seg_start                   1 failing: test_p6_the_h1_kl_renderer_reads_each_steps_own_key
+KILLED    R04_h1_next_idx                    1 failing: test_p6_the_h1_kl_renderer_reads_each_steps_own_key
+KILLED    R05_h1_confirm_seg_x0              1 failing: test_p6_the_h1_kl_renderer_reads_each_steps_own_key
+KILLED    R06_h1_confirm_next                1 failing: test_p6_the_h1_kl_renderer_reads_each_steps_own_key
+KILLED    R07_m15sub_seg_start               1 failing: test_p6_the_m15_sub_kl_renderer_reads_each_steps_own_key
+KILLED    R08_m15sub_next_idx                1 failing: test_p6_the_m15_sub_kl_renderer_reads_each_steps_own_key
+KILLED    R09_m15sub_confirm_seg_x0          1 failing: test_p6_the_m15_sub_kl_renderer_reads_each_steps_own_key
+KILLED    R10_m15sub_confirm_next            1 failing: test_p6_the_m15_sub_kl_renderer_reads_each_steps_own_key
+KILLED    R11_m15h1_seg_start                1 failing: test_p6_the_m15_h1_overlay_kl_renderer_reads_each_steps_own_
+KILLED    R12_m15h1_next_idx                 1 failing: test_p6_the_m15_h1_overlay_kl_renderer_reads_each_steps_own_
+KILLED    R13_m15h1_confirm_seg_x0           1 failing: test_p6_the_m15_h1_overlay_kl_renderer_reads_each_steps_own_
+KILLED    R14_m15h1_confirm_next             1 failing: test_p6_the_m15_h1_overlay_kl_renderer_reads_each_steps_own_
+KILLED    D1_sweep_reason_reverted           4 failing: test_unresolved_are_logged_with_skipping, test_unresolved_rows, test_collapsed_cycle_trigger_is_logged_and_never_probed, test_p7_no_production_code_says_degenerate_for_the_collapsed
+KILLED    D2_warning_text_reverted           2 failing: test_parent_tables_logs_one_warning_per_collapsed_cycle, test_log_lines_one_per_cycle_and_one_warning_per_collapsed_c
+32/32 KILLED  (results: C:/Users/wangj/AppData/Local/Temp/mn\results.json)

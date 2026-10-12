@@ -115,12 +115,17 @@ reference window (zones-pass audit, 2026-09-22; the `CTS_THRESHOLD_UPDATED` row 
 | `CTS_THRESHOLD_UPDATED` | NOT a price location: the processing candle whose range sync moved the CTS threshold — emitted only by `_sync_thresholds_from_range(i)` (active-range upkeep `_update_active_range(i)`, a pullback's apply candle, the sd-proximity confirmation candle) | `ev.idx` | — | the new threshold (the range breakout bound) | — (`meta["prev"]` is a price) |
 | `REVERSAL_CANDIDATE` | the reversal pattern's first candle — its pattern-realm anchor (`meta["pattern_anchor_idx"]`, same value; = the close-break candle) | `meta["apply_idx"]` = the SCHEDULED apply — a prediction, unrealised when a new cycle ends the watch or an earlier reversal lands (until 2026-09-29 a watch expiry could also discard it); the confirmed reversal is `STATE_CHANGED(to=reversal)` at its `ev.idx` (KL / POI / the fib finalize / charts, the orchestrator's FibTracker / terminal / prev-BOS map since 2026-09-27, and the zone-proximity scan cap (GOTCHAS "Key boundaries") + the H1-main `SidRecord.end_event_idx` since 2026-09-28 take that one, via `structure_lifecycle.compute_reversal_idx_by_sid`; no production reader of the scheduled apply is left — the chart's candidate markers show the candidate's anchor / pattern) | — (pattern realm only) | the BOS threshold frozen at the close-break (`meta["bos_frozen"]`) | `meta["expires_idx"]` — entity-absolute in the M15 lens CSVs since Post-E·2 (2026-09-26; slice-local before) |
 | `REVERSAL_WATCH_START` | the close-break candle MS processed when it emitted it (`_bos_barrier_step`) | `ev.idx` | — (pattern realm only) | the frozen BOS threshold (as above) | `meta["pattern_anchor_idx"]` = that same close-break candle; `meta["expires_idx"]` (entity-absolute in the M15 lens CSVs since Post-E·2) |
-| `STATE_CHANGED` | the candle at which the state change takes effect: the processed candle, a pattern's apply candle, or a range's confirm candle | `ev.idx` | — | none | `meta["effective_idx"]` defaults to `ev.idx` but is the range-start anchor for `to=range` (`reason="range_confirmed"`); entity-absolute in the M15 lens CSVs since Post-E·2 (2026-09-26; slice-local before). On `to=reversal` only, `meta["pattern_anchor_idx"]` (PLAN_K A13, 2026-10-09; `ef.pattern_anchor_idx`) = the REALISED reversal pattern's first candle — pattern realm, the bound of a reversal-started structure's IC reference (POI_ZONES_SPEC §3.2); shifted by the mirror like every `pattern_anchor_idx` (`_EVENT_META_IDX_KEYS`); a save before S_K_A lacks it |
+| `STATE_CHANGED` | the candle at which the state change takes effect: the processed candle, a pattern's apply candle, or a range's confirm candle | `ev.idx` | — | none | `meta["effective_idx"]` == `ev.idx` on EVERY row since PLAN_N N3 (2026-10-12; `_set_state` asserts it is never overridden — until then a `to=range` / `reason="range_confirmed"` row carried the range-start anchor there, now `RANGE_STARTED.meta["range_anchor_idx"]`); entity-absolute in the M15 lens CSVs since Post-E·2 (2026-09-26; slice-local before). On `to=reversal` only, `meta["pattern_anchor_idx"]` (PLAN_K A13, 2026-10-09; `ef.pattern_anchor_idx`) = the REALISED reversal pattern's first candle — pattern realm, the bound of a reversal-started structure's IC reference (POI_ZONES_SPEC §3.2); shifted by the mirror like every `pattern_anchor_idx` (`_EVENT_META_IDX_KEYS`); a save before S_K_A lacks it |
 
-Not audited in this table: `RANGE_*` and `BOS_THRESHOLD_UPDATED` (`RANGE_STARTED` from
-`_finalize_range_candidate_offline` is stamped at the `is_range_confirm_idx` label — see LANDMINES "Bounded MS
-Runs Must Not Read Past `end_idx`"; pullback- / proximity-created ranges are stamped at the pullback apply /
-proximity candle). Its `meta["cts_anchor_idx"]` (`cts_idx` until Post-E·4, 2026-09-29d) = the CTS anchor `st.cts.idx` when the range starts, paired with `meta["cts_price"]`.
+`RANGE_STARTED` (audited by PLAN_N N2 / N5, 2026-10-12): `ev.idx` = its moment = `meta["confirmed_at"]` (`confirm_idx`
+on the label path until PLAN_N) — the range-label path (`_finalize_range_candidate_offline`) is stamped at the
+`is_range_confirm_idx` label (see LANDMINES "Bounded MS Runs Must Not Read Past `end_idx`"), pullback- /
+proximity-created ranges at the pullback apply / proximity candle. Its anchor `meta["range_anchor_idx"]` = MS's range
+start `st.range_start_idx` on every path: the range-label candle (2–5 candles before the moment; `start_idx` until
+PLAN_N), the CTS anchor on the pullback / proximity paths (absent there until PLAN_N). Its `meta["cts_anchor_idx"]`
+(`cts_idx` until Post-E·4, 2026-09-29d) = the CTS anchor `st.cts.idx` when the range starts, paired with
+`meta["cts_price"]`. Not audited in this table: the other `RANGE_*` events and `BOS_THRESHOLD_UPDATED` (its `ev.idx`
+is the processing candle — `ef.event_moment`).
 
 **In code — `structure/event_fields.py` (Plan E E2a, 2026-09-24).** The module names each index's role;
 callers import the MODULE and call it qualified (`from engine_v2.structure import event_fields as ef`;
@@ -472,15 +477,15 @@ was replaced by the sweep below.
    static parent tables from the H1 events: `cts_moment[(S,C)] =
    CTS_ESTABLISHED.meta["confirmed_at"]`, `floor_h1 = max(struct_start[S],
    cts_moment)`, `end_h1 = floor_h1[(S,C+1)]` else `rev_by_sid[S]` else None,
-   `floor_m15` / `end_m15` = `LOH(...)`, `degenerate = end_m15 is not None and
-   floor_m15 >= end_m15`. Asserts (never degrades): every LOH map succeeds;
+   `floor_m15` / `end_m15` = `LOH(...)`, `collapsed = end_m15 is not None and
+   floor_m15 >= end_m15` (`degenerate` until PLAN_N N4). Asserts (never degrades): every LOH map succeeds;
    `BOS_CONFIRMED(S,C).confirmed_at == CTS_ESTABLISHED(S,C).confirmed_at`.
 4. `multitf/lifecycle_sweep.run_lifecycle_sweep` — a priority-queue sweep over
    moments, phases at one idx in the order `TRIGGER_FIRE`/`REVERSAL_SPAWN` (0) →
    `RECORD_START` (1) → `SUB_START` (2) → `RECORD_END` (3) → `SUB_END` (4), each
    to completion; start-before-end at the same idx is load-bearing (a same-candle
-   handover keeps a sub continuous). Phase 0 resolves a trigger: degenerate
-   parent cycle → `UnresolvedTrigger(reason="degenerate_parent_cycle")` (no probe,
+   handover keeps a sub continuous). Phase 0 resolves a trigger: collapsed
+   parent cycle → `UnresolvedTrigger(reason="collapsed_parent_cycle")` (no probe,
    no MS, no `sub_id`); else probe via the injected resolver
    (`_resolve_trigger_m15_start` for the four H1 types — `first_confluence` on its
    own ad-hoc BOS_0 with Phase 2, the sibling types on the OTHER lens's most

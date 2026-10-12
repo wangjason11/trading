@@ -1106,8 +1106,8 @@ class MarketStructure:
                 category="RANGE",
                 type="RANGE_STARTED",
                 meta={
-                    "start_idx": i,
-                    "confirm_idx": confirm_idx,
+                    "range_anchor_idx": int(st.range_start_idx),   # MS's range start (= i; PLAN_N N2)
+                    "confirmed_at": int(confirm_idx),              # the moment (== ev.idx)
                     "hi": hi_i,
                     "lo": lo_i,
                     "cts_anchor_idx": None if st.cts is None else st.cts.idx,
@@ -1117,7 +1117,7 @@ class MarketStructure:
                 },
             )
         )
-        self._set_state(MarketState.RANGE, confirm_idx, meta={"reason": "range_confirmed", "effective_idx": i})
+        self._set_state(MarketState.RANGE, confirm_idx, meta={"reason": "range_confirmed"})
 
     def _update_active_range(self, i: int) -> None:
         """
@@ -1226,6 +1226,9 @@ class MarketStructure:
                     type="RANGE_STARTED",
                     price=None,
                     meta={
+                        # MS's range start = the CTS anchor (PLAN_N N5); the moment (== ev.idx)
+                        "range_anchor_idx": int(st.range_start_idx),
+                        "confirmed_at": int(i),
                         "reason": "pullback_created_range",
                         "cts_anchor_idx": st.cts.idx,
                         "cts_price": cts_price,
@@ -1990,6 +1993,9 @@ class MarketStructure:
                     type="RANGE_STARTED",
                     price=None,
                     meta={
+                        # MS's range start = the CTS anchor (PLAN_N N5); the moment (== ev.idx)
+                        "range_anchor_idx": int(st.range_start_idx),
+                        "confirmed_at": int(candle_idx),
                         "reason": "proximity_created_range",
                         "cts_anchor_idx": int(st.cts.idx),
                         "cts_price": cts_price,
@@ -2180,10 +2186,12 @@ class MarketStructure:
     def _set_state(self, new_state: MarketState, i: int, meta: Optional[dict] = None) -> None:
         st = self.state
 
-        # Uniform schema: always include effective_idx.
-        # idx=i is the observed candle; effective_idx defaults to i unless overridden.
+        # Uniform schema: always include effective_idx == idx (the candle the state change takes effect —
+        # a moment on EVERY row since PLAN_N N3; until then a range confirmation overrode it with the range's
+        # start, a location — that start is RANGE_STARTED's `range_anchor_idx`). Never overridden.
         m = dict(meta or {})
-        m.setdefault("effective_idx", i)
+        assert "effective_idx" not in m, f"[market_structure] effective_idx is always the state-change idx ({i})"
+        m["effective_idx"] = i
 
         # Reversal is terminal (MARKET_STRUCTURE_SPEC "Invariants"): nothing may leave it.
         # Every back-fill stops at the terminal candle, so this is a tripwire.

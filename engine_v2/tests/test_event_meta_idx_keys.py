@@ -42,6 +42,7 @@ import pytest
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure import market_structure
 from engine_v2.zones import fib_tracker, kl_zones_v1, poi_zones, wave_candles
+from engine_v2.zones.kl_zones_v1 import bounds_step_idx_key
 from engine_v2.patterns import institutional_pattern
 
 from engine_v2.multitf import entity_df_mutation as edm
@@ -57,8 +58,9 @@ from engine_v2.tests.test_render_sub_projection import (  # noqa: F401 (fixtures
     m15_df,
 )
 
-# Nested lists the mirror shifts with their own loops: list key -> item key.
-NESTED_IDX_LISTS = {"bounds_steps": "start_idx", "activation_history": "idx"}
+# Nested lists the mirror shifts with their own loops: list key -> the item's index key (a KL step's depends on
+# its kind — INIT `base_idx`, expansion `expanded_idx` — PLAN_N N1; `start_idx` on both before).
+NESTED_IDX_LISTS = {"bounds_steps": bounds_step_idx_key, "activation_history": lambda item: "idx"}
 
 
 def _is_idx_key(key: str) -> bool:
@@ -192,7 +194,7 @@ def test_mirrored_index_values_are_source_plus_slice_begin(geometry, m15_df):
     """Post-E·2 VALUE pin, per shift site: pair every mirrored element (each lens
     df holds only this sub, in emission order) with its slice-local source in the
     rendered result. A listed key holding an int is exactly `+ slice_begin`; the
-    nested `bounds_steps[*].start_idx` / `activation_history[*].idx` likewise;
+    nested KL step index (`base_idx` / `expanded_idx`) / `activation_history[*].idx` likewise;
     every other key (attribution aside) is unchanged. The last assert names the
     family keys the fixture produces, so a site that stops shifting one fails."""
     res, lens_dfs = _render_both_lenses(geometry, m15_df)
@@ -224,7 +226,7 @@ def test_mirrored_index_values_are_source_plus_slice_begin(geometry, m15_df):
                             shifted[(attr, s.type, k)] += 1
                     elif k in NESTED_IDX_LISTS and v:
                         ik = NESTED_IDX_LISTS[k]
-                        assert [x[ik] for x in m.meta[k]] == [x[ik] + sb for x in v], (attr, k)
+                        assert [x[ik(x)] for x in m.meta[k]] == [x[ik(x)] + sb for x in v], (attr, k)
                         shifted[(attr, k)] += 1
                     else:
                         assert m.meta[k] == v, (attr, k, v, m.meta[k])
@@ -242,7 +244,8 @@ def test_mirrored_index_values_are_source_plus_slice_begin(geometry, m15_df):
             assert {k: v for k, v in m.meta.items() if k not in attribution} == s.meta
     assert {
         ("wvmi", "fb_idx"), ("wvmi", "lb_idx"), ("wvmi", "fp_idx"), ("wvmi", "lp_idx"),
-        ("events", "effective_idx"), ("events", "start_idx"), ("events", "confirm_idx"),
+        ("events", "effective_idx"), ("events", "RANGE_STARTED", "range_anchor_idx"),
+        ("events", "RANGE_STARTED", "confirmed_at"),
         ("events", "RANGE_STARTED", "cts_anchor_idx"), ("events", "pullback_apply_idx"), ("events", "expires_idx"),
         ("kl_zones", "anchor_idx"), ("kl_zones", "bounds_steps"),
         ("poi_zones", "bos_anchor_idx"), ("poi_zones", "cts_anchor_idx"),
@@ -490,9 +493,9 @@ def _synthetic_result() -> LowerTFResult:
                                meta={**_all(edm._EVENT_META_IDX_KEYS), "version": _V})],
         kl_zones=[_Zone(meta={**_all(edm._ZONE_META_IDX_KEYS), "version": _V,
                               # INIT + one expansion: since Post-E·5 the expansion step's
-                              # `start_idx` is the ONLY record of the expansion moment.
-                              "bounds_steps": [{"start_idx": _V, "top": 1.0},
-                                               {"start_idx": _V + 1, "top": 1.1,
+                              # `expanded_idx` (`start_idx` until PLAN_N N1) is the ONLY record of the expansion moment.
+                              "bounds_steps": [{"base_idx": _V, "top": 1.0, "event": "INIT"},
+                                               {"expanded_idx": _V + 1, "top": 1.1,
                                                 "event": "BOS_THRESHOLD_UPDATED", "price": 1.1}],
                               "activation_history": [{"idx": _V, "active": True}]})],
         poi_zones=[_Poi(ic_idx=_V, meta={**_all(edm._ZONE_META_IDX_KEYS), "version": _V,
@@ -521,8 +524,8 @@ def _check_mirrored(d: pd.DataFrame) -> None:
     assert ev.meta["version"] == _V
     (kl,) = d.attrs["kl_zones"]
     assert all(kl.meta[k] == s for k in edm._ZONE_META_IDX_KEYS) and kl.meta["version"] == _V
-    assert kl.meta["bounds_steps"] == [{"start_idx": s, "top": 1.0},
-                                       {"start_idx": s + 1, "top": 1.1,
+    assert kl.meta["bounds_steps"] == [{"base_idx": s, "top": 1.0, "event": "INIT"},
+                                       {"expanded_idx": s + 1, "top": 1.1,
                                         "event": "BOS_THRESHOLD_UPDATED", "price": 1.1}]
     assert kl.meta["activation_history"] == [{"idx": s, "active": True}]
     (poi,) = d.attrs["poi_zones"]
@@ -611,7 +614,7 @@ _NOT_MIRRORED = {
     },
     "poi_zones": {"armed_idx", "confirmed_fill_idx"},  # ImbalanceInstance.meta (fill cache)
     "fib_tracker": set(),                         # (its `_cross_cycle_data` cache keys retired in PLAN_I S4)
-    "kl_zones_v1": {"start_idx"},                 # bounds_steps items (the nested loop)
+    "kl_zones_v1": {"expanded_idx"},              # bounds_steps expansion items (the nested loop; INIT's `base_idx` is listed)
     "wave_candles": set(),
 }
 
@@ -691,6 +694,6 @@ def test_every_int_meta_value_is_listed_or_known_non_index(geometry, m15_df):
                 if k in NESTED_IDX_LISTS and v:
                     for item in v:
                         for ik, iv in item.items():
-                            if type(iv) is int and ik != NESTED_IDX_LISTS[k]:
+                            if type(iv) is int and ik != NESTED_IDX_LISTS[k](item):
                                 bad.add((attr, k, ik))
     assert bad == set(), sorted(bad)

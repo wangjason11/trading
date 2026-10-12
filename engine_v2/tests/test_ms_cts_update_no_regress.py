@@ -212,7 +212,7 @@ def test_a_tied_breakout_still_runs_the_post_apply_range_check(sd):
     rows = _range_tie_rows(True) if sd == 1 else _mirror(_range_tie_rows(True))
     res = _run(rows, sd)
     assert not [e for e in res.events if e.type == "CTS_UPDATED" and e.idx == 14]
-    rs = [(e.idx, e.meta["start_idx"]) for e in res.events if e.type == "RANGE_STARTED" and e.idx > 14]
+    rs = [(e.idx, e.meta["range_anchor_idx"]) for e in res.events if e.type == "RANGE_STARTED" and e.idx > 14]
     assert rs == [(16, 14)]                    # the apply candle 14 is the range candle (post-apply check)
 
 
