@@ -2,8 +2,8 @@
 
 **Status (2026-10-12, session 3): BUILT, `/compare`d (= the prediction exactly, §11 / §13), LANDING-REVIEWED (240,968 tok;
 0 BLOCKER, 3 MAJOR, 5 MINOR — folded, §12; its hover finding split out as a ready follow-up), mutants 32 / 32 + 3 / 3;
-suite 1708; the user's go: "go ahead once review is in" → COMMITTED + SAVED S_N (the commit / save: the session
-log).** Living document: every
+suite 1708; the user's go: "go ahead once review is in" → COMMITTED `1b2f24c` + SAVED S_N `20261012_165925_1b2f24c`
+(save `81a0d46`, trunk `7869a24`) = `LATEST_<branch>`. PLAN_N COMPLETE; the hover follow-up waits for the user's go.** Living document: every
 question, answer and decision is recorded here as it happens. Register line: `IDEA_PARKING_LOT.md` §A
 "Naming-Standard audit of never-audited index keys" (parked since Plan E; raised at item 3's start, as the register said).
 

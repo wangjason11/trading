@@ -495,7 +495,17 @@ IC-reference moves on subs 1 / 3 / 7; the limit keys of every record of the four
 sub / WVMI / H1 change; trace / shape COUNTS unchanged, the changed hovers + sub 3's fib / POI traces differ. Against
 S_M1 (or S_L2): `engine_v2/plans/plan_m_inputs/trial_diff.py BASE CUR_DEBUG CUR_CHARTS` (keyed) — S_M2's output is
 `plan_m_inputs/trial_diff_vs_S_L2.txt`; the exact outputs: `trial_md5.txt` / `trial_fig_hash.txt`. S_M2
-`20261012_023137_10e4c6f` (source `10e4c6f`; = `LATEST_<branch>` from 2026-10-12).
+`20261012_023137_10e4c6f` (source `10e4c6f`; `LATEST_<branch>` until S_N, below).
+**PLAN_N (2026-10-12, the Naming-Standard audit) — a FORMAT change (meta keys + one meaning), figures identical:** KL
+`bounds_steps` step `start_idx` → `base_idx` (INIT) / `expanded_idx` (expansion); `RANGE_STARTED` `start_idx` /
+`confirm_idx` → `range_anchor_idx` / `confirmed_at` (and the pullback / proximity rows GAIN both — the anchor = their
+`cts_anchor_idx`); `STATE_CHANGED` `effective_idx` = the row's `idx` on the `range_confirmed` rows (was the range
+start); the unresolved reason `degenerate_parent_cycle` → `collapsed_parent_cycle` (+ the `run.log` WARNING /
+`[parent_tables] … collapsed=` lines). Exactly 7 CSVs differ vs S_M2 — the 3 KL, 3 structure-events, the unresolved
+table: 164 cells — and no figure. Against S_M2 (or older, chaining through it): `engine_v2/plans/plan_n_inputs/
+cmp_plan_n.py BASE CUR_DEBUG --expect-cells 164` (applies the transform to BASE, requires text equality; exit 1 on
+anything else); positional `cmp_save.py` would report the 164 cells as engine deltas. S_N
+`20261012_165925_1b2f24c` (source `1b2f24c`, save `81a0d46`, trunk `7869a24`; = `LATEST_<branch>` from 2026-10-12).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

@@ -45,7 +45,7 @@ The open lines below carry over (fold in when their files are next touched); D a
   through the frame's `attrs["timeframe"]` (PLAN_H landing review, 2026-10-06). Pass `CONFIG.timeframe` (or assert H1)
   when such a window comes back. OPEN; not reachable on the current config.
 - ~~**Naming-Standard audit of never-audited index keys**~~ — **LANDED 2026-10-12 by PLAN_N** (`engine_v2/plans/
-  PLAN_N_naming_audit.md`; the commit + its save: PLAN_N §12): KL steps `base_idx` / `expanded_idx`; RANGE_STARTED
+  PLAN_N_naming_audit.md`; committed `1b2f24c`, saved S_N `20261012_165925_1b2f24c`): KL steps `base_idx` / `expanded_idx`; RANGE_STARTED
   `range_anchor_idx` (MS's range start on every path; the H1 range box starts there) / `confirmed_at`;
   `effective_idx` == `ev.idx` always; "collapsed parent cycle" (one test, one name). Charts byte-identical on the
   window. Move to "Recently closed" at the next register sweep.
