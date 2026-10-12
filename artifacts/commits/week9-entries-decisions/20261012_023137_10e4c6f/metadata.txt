@@ -1,0 +1,4 @@
+commit_hash=10e4c6f
+timestamp=20261012_023137
+branch=week9-entries-decisions
+commit_message=PLAN_M landing 2: a counter sub's cross limit = its parent cycle's BOS threshold, read live (S_M2)
