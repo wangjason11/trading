@@ -149,7 +149,8 @@ class FibTracker:
     ONE logic for every structure (PLAN_I S4; `CROSS_CYCLE_FIB_SPEC.md`): cycle 0 a single; a cycle >= 1 within
     the structure's cross-fib limit (`_cross_allowed`) a cross over the live prior cycles (the dead-cycle walk,
     versioning, the pre-established phase on CTS_THRESHOLD_UPDATED), falling back to a single (`cross_failed`); a
-    cycle past the limit a single (`via: "cross_fib_limit"`).
+    cycle past the limit a single (`via: "cross_fib_limit"`). A cycle's cross permission is read live until its
+    CTS_ESTABLISHED and fixed from then on (PLAN_M CL-1 — it differs from a re-read only on a moving limit).
 
     Only 1 active Fib per structure at a time (new cycle obsoletes previous).
 
@@ -253,10 +254,16 @@ class FibTracker:
         self._in_event = False
 
         # The cross-fib LIMIT per structure (PLAN_I §9.3 D1 / D2): `{sid: CrossFibLimit}` — `P` + its source
-        # (+ the sub that supplied it, + main's `started_by`), fixed at the structure's start. Stamped onto every
-        # fib record at finalize (S2); APPLIED by `_cross_allowed` (subs since S3, main since S4). A sid without
-        # an entry gets no `cross_fib_limit_*` keys — and raises `CrossFibLimitError` when a cycle >= 1 consults it.
+        # (+ the sub that supplied it, + main's `started_by`), fixed at the structure's start — except a counter
+        # sub's, which MOVES (PLAN_M: every reader takes `P` as of its moment, `CrossFibLimit.price_at`). Stamped
+        # onto every fib record at finalize (S2); APPLIED by `_cross_allowed` (subs since S3, main since S4). A sid
+        # without an entry gets no `cross_fib_limit_*` keys — and raises `CrossFibLimitError` when a cycle >= 1
+        # consults it.
         self._limits: Dict[int, CrossFibLimit] = dict(cross_fib_limits or {})
+        # (sid, cycle_id) -> bool: a cycle's cross permission, FIXED at its CTS_ESTABLISHED (PLAN_M CL-1 — read live
+        # before, never re-read after: no single <-> cross swap mid-cycle). Plain bools (the tracker is deep-copied
+        # at every MS snapshot, so a restore undoes a fix with everything else).
+        self._cross_permission: Dict[tuple, bool] = {}
         # (sid, cycle_id) -> (idx, price, sd): the cycle's LATEST CTS anchor (§4 N-f) — written at its
         # CTS_ESTABLISHED, every CTS_UPDATED and its CTS_CONFIRMED (the confirmed anchor wins). `M` reads it.
         self._latest_anchor: Dict[tuple, tuple] = {}
@@ -307,19 +314,37 @@ class FibTracker:
     # ------------------------------------------------------------------
     # The cross-fib limit (PLAN_I §9.3 D1): M and the record stamp.
     # ------------------------------------------------------------------
-    def cross_fib_limit_cycle(self, sid: int) -> Optional[int]:
-        """`M` (`cross_fib_limit_cycle`, §4 N-a): the first cycle whose latest CTS anchor is STRICTLY beyond the
-        structure's `P` (`beyond`, Q2) = the last cycle a cross may target; None without `P` or while no cycle
-        has gone beyond. Read off the latest anchors as they stand — after the stream, the structure's FINAL `M`
-        (R6-6; a CTS anchor never regresses, so the first cycle beyond stays the first)."""
-        lim = self._limits.get(int(sid))
-        if lim is None or lim.price is None:
+    def _limit_cycle_at(self, sid: int, price: Optional[float]) -> Optional[int]:
+        """`M` for the reference price `price`: the first cycle whose latest CTS anchor is STRICTLY beyond it
+        (`beyond`, Q2); None for no price or while no cycle has gone beyond."""
+        if price is None:
             return None
         for c in sorted(c for (s, c) in self._latest_anchor if s == int(sid)):
-            _idx, price, sd = self._latest_anchor[(int(sid), c)]
-            if beyond(price, lim.price, sd):
+            _idx, anchor_price, sd = self._latest_anchor[(int(sid), c)]
+            if beyond(anchor_price, price, sd):
                 return c
         return None
+
+    def cross_fib_limit_cycle(self, sid: int, at: Optional[int] = None) -> Optional[int]:
+        """`M` (`cross_fib_limit_cycle`, §4 N-a): the first cycle whose latest CTS anchor is STRICTLY beyond the
+        structure's `P` as of candle `at` (`CrossFibLimit.price_at`; None = its last `P` — the two differ only on a
+        moving limit, PLAN_M) = the last cycle a cross may target; None without `P` or while no cycle has gone
+        beyond. Read off the latest anchors as they stand — after the stream, the structure's FINAL `M` (R6-6; a
+        CTS anchor never regresses, so the first cycle beyond stays the first)."""
+        lim = self._limits.get(int(sid))
+        if lim is None:
+            return None
+        return self._limit_cycle_at(int(sid), lim.price_at(at))
+
+    def _limit_reaches(self, sid: int, target_cycle: int, at: Optional[int]) -> bool:
+        """`P` as of candle `at` is set and reaches `target_cycle`: `M` at that `P` is None or `target_cycle` ≤ `M`
+        (cycle 0 always, with a `P`). The LIVE test — `_cross_allowed` and `_structure_reference_limit` read it until
+        the cycle's permission is fixed."""
+        price = self._limits[int(sid)].price_at(at)
+        if price is None:
+            return False
+        m = self._limit_cycle_at(int(sid), price)
+        return m is None or int(target_cycle) <= m
 
     def _cross_allowed(self, sid: int, target_cycle: int) -> bool:
         """May a cross target `target_cycle` (≥ 1) of `sid`? (PLAN_I §9.3 D1, §1.4.) Only with a reference price
@@ -327,29 +352,67 @@ class FibTracker:
         cross may target: allowed ⟺ `P` set and no cycle k < `target_cycle` is beyond (M is None or target ≤ M).
         A cycle past it — and every cycle ≥ 1 of a structure without `P` — gets the single (`via:
         "cross_fib_limit"`). The cycles k < target are confirmed before the target exists (MS order; the S2
-        tripwire), so the answer is fixed for the target's whole life. No limit entry → `CrossFibLimitError`."""
+        tripwire), so with a FIXED `P` the answer is constant over the target's life. A MOVING `P` (PLAN_M CL-1) is
+        read as of the handled event's moment until the target is established, and the answer FIXED from then on
+        (`_fix_cross_permission`); an UNFIXED target of a moving limit read outside a handler (no moment) raises (a
+        fixed target returns its answer first). No limit entry → `CrossFibLimitError`."""
         lim = self._limits.get(int(sid))
         if lim is None:
             raise CrossFibLimitError(
                 f"[fib] sid={sid} cycle={target_cycle}: no cross_fib_limit entry (PLAN_I D1: required from S3)")
-        if lim.price is None:
-            return False
-        m = self.cross_fib_limit_cycle(int(sid))
-        return m is None or int(target_cycle) <= m
+        fixed = self._cross_permission.get((int(sid), int(target_cycle)))
+        if fixed is not None:
+            return fixed
+        if lim.price_moves and self._evaluated_at is None:
+            raise CrossFibLimitError(
+                f"[fib] sid={sid} cycle={target_cycle}: a moving cross_fib_limit ({lim.source}) read with no "
+                f"moment (PLAN_M CL-1: a live limit needs the reading moment)")
+        return self._limit_reaches(int(sid), int(target_cycle), self._evaluated_at)
 
-    def _cross_fib_limit_meta(self, sid: int) -> Dict[str, Any]:
+    def _fix_cross_permission(self, sid: int, cycle_id: int) -> bool:
+        """At cycle `cycle_id`'s CTS_ESTABLISHED: its cross permission (`_cross_allowed`, read live at the
+        establishment moment) FIXED for the cycle's life (PLAN_M CL-1), and returned. A cycle fixed twice raises —
+        MS establishes each (sid, cycle) once per run and a snapshot restore undoes a fix with the rest of the
+        tracker (PLAN_M §7.2: 0 double establishments over the full suite). A cycle REFUSED here while its
+        pre-established cross is active raises too: the threshold path read the same live test earlier, and with `P`
+        moving only further (CL-2; asserted by the producer) a permission can only turn False → True — never the
+        reverse (PLAN_M §13, landing review A NOTE-8)."""
+        key = (int(sid), int(cycle_id))
+        if key in self._cross_permission:
+            raise CrossFibLimitError(
+                f"[fib] sid={sid} cycle={cycle_id}: cross permission fixed twice (a second CTS_ESTABLISHED of the "
+                f"cycle — PLAN_M §7.2)")
+        allowed = self._cross_allowed(int(sid), int(cycle_id))
+        latest = self._get_latest_cross(int(sid), int(cycle_id))
+        if not allowed and latest is not None and latest[1].active:
+            raise CrossFibLimitError(
+                f"[fib] sid={sid} cycle={cycle_id}: refused at its establishment while its pre-established cross is "
+                f"active (a limit that moved NEARER — PLAN_M CL-2)")
+        self._cross_permission[key] = allowed
+        return allowed
+
+    def _cross_fib_limit_meta(self, sid: int, at: Optional[int]) -> Dict[str, Any]:
         """The keys every fib record of `sid` carries (PLAN_I S2, §9.3 D1): `cross_fib_limit_price` /
         `_source` / `_cycle` (the FINAL `M`, R6-6) / `_from_sub_id` (the start-numbered sub that supplied `P`),
-        and main's `started_by` (a sub's comes from the mirror). Empty for a sid without a limit entry."""
+        and main's `started_by` (a sub's comes from the mirror). Empty for a sid without a limit entry.
+        The FINAL `P` = `P` as of the structure's END (`at` = its lifecycle cap; None = the limit's last — main, an
+        open sub), never a move after it (PLAN_M CL-6, the IC reference's convention); `M` at that `P`. `at` is
+        REQUIRED (no default): None reads every move, a look-ahead on a moving limit, so a caller must say so. When `P`
+        moved by then, two keys right after `_from_sub_id`: `cross_fib_limit_price_at_start` and
+        `cross_fib_limit_move_count` (the moves after the start, up to `at`)."""
         lim = self._limits.get(int(sid))
         if lim is None:
             return {}
         out: Dict[str, Any] = {
-            "cross_fib_limit_price": lim.price,
+            "cross_fib_limit_price": lim.price_at(at),
             "cross_fib_limit_source": lim.source,
-            "cross_fib_limit_cycle": self.cross_fib_limit_cycle(int(sid)),
+            "cross_fib_limit_cycle": self.cross_fib_limit_cycle(int(sid), at),
             "cross_fib_limit_from_sub_id": lim.from_sub_id,
         }
+        moves = lim.moves_until(at)
+        if moves:
+            out["cross_fib_limit_price_at_start"] = lim.price_at_start
+            out["cross_fib_limit_move_count"] = len(moves)
         if lim.started_by is not None:
             out["started_by"] = lim.started_by
         return out
@@ -357,15 +420,20 @@ class FibTracker:
     # ------------------------------------------------------------------
     # The IC reference (PLAN_K §1 / §3.1; PLAN_H §8.9 RX1, §6 RX1-*).
     # ------------------------------------------------------------------
-    def _structure_reference_limit(self, sid: int, target_cycle: int) -> Optional[CrossFibLimit]:
+    def _structure_reference_limit(
+        self, sid: int, target_cycle: int, at: Optional[int],
+    ) -> Optional[CrossFibLimit]:
         """The structure's limit when its STRUCTURE reference applies to `target_cycle` — `P` set and (`M` None or
         `target_cycle` ≤ `M`), cycle 0 included — else None. `_cross_allowed`'s test WITHOUT calling it: a structure
-        with no limit entry (or `P` None) has no structure reference, and nothing raises (PLAN_K §9 C03)."""
+        with no limit entry (or `P` None) has no structure reference, and nothing raises (PLAN_K §9 C03). A cycle
+        whose cross permission is fixed (PLAN_M CL-1) takes that answer — the structure side applies exactly where
+        a cross is allowed (PLAN_K); else the live test at candle `at` (REQUIRED; None = the limit's last `P`)."""
         lim = self._limits.get(int(sid))
         if lim is None or lim.price is None:
             return None
-        m = self.cross_fib_limit_cycle(int(sid))
-        return lim if (m is None or int(target_cycle) <= m) else None
+        fixed = self._cross_permission.get((int(sid), int(target_cycle)))
+        reaches = fixed if fixed is not None else self._limit_reaches(int(sid), int(target_cycle), at)
+        return lim if reaches else None
 
     def ic_reference(
         self,
@@ -383,8 +451,8 @@ class FibTracker:
         - the structure reference while `_structure_reference_limit` applies: `prev_structure_bos` (a reversal start
           — `ref_anchor_price`, the break = the realised reversal pattern, known for the structure's WHOLE run like
           `P`, RX1-K7) or `cross_limit_anchor` (a non-reversal start — `ref_anchor_price`, the break =
-          `find_cross_limit_break` on `P` from the structure's first candle, its BOS_0 anchor; RX1-2b / W1–W3 / K1 /
-          K6 — counted once its confirmation ≤ `evaluated_at`);
+          `find_cross_limit_break` on `P` as of `evaluated_at` (PLAN_M CL-7 — a moving limit's) from the structure's
+          first candle, its BOS_0 anchor; RX1-2b / W1–W3 / K1 / K6 — counted once its confirmation ≤ `evaluated_at`);
         - both → the one further opposite the structure (sd +1 the lower price, sd −1 the higher; RX1-3); EQUAL →
           the structure reference (RX1-K5); none → `ICReference.NONE` (the condition passes, RX1-B).
 
@@ -408,14 +476,16 @@ class FibTracker:
             known = self._bos_moment_by_cycle[(sid, start_cycle)]
             brk = (anchor, known) if (evaluated_at is None or known <= int(evaluated_at)) else None
             refs.append((False, float(cts[1]), "prev_cycle_cts", brk))
-        lim = self._structure_reference_limit(sid, target)
+        lim = self._structure_reference_limit(sid, target, evaluated_at)
         if lim is not None:
             if lim.source == "reversal_bos_frozen":
                 brk = (int(lim.break_pattern_anchor_idx), int(lim.break_confirmed_idx))
                 refs.append((True, float(lim.ref_anchor_price), "prev_structure_bos", brk))
             else:
+                # The watch on `P` as of the reading moment (PLAN_M CL-7): a break of a `P` the parent later moved
+                # past stops counting.
                 start = int(self._bos_by_cycle[(sid, 0)][0])
-                brk = find_cross_limit_break(df, float(lim.price), sd, start, known_at=evaluated_at)
+                brk = find_cross_limit_break(df, float(lim.price_at(evaluated_at)), sd, start, known_at=evaluated_at)
                 refs.append((True, float(lim.ref_anchor_price), "cross_limit_anchor", brk))
         if not refs:
             return ICReference.NONE
@@ -440,7 +510,7 @@ class FibTracker:
         ic_keys = ("ic_ref_price", "ic_ref_source", "ic_ref_break_pattern_anchor_idx", "ic_ref_break_confirmed_idx")
         for key, fib in list(self._fibs.items()):
             ref = self.ic_reference(fib, df, evaluated_at=lifecycle_cap)
-            tail_keys = list(self._cross_fib_limit_meta(int(fib.structure_id)))
+            tail_keys = list(self._cross_fib_limit_meta(int(fib.structure_id), lifecycle_cap))
             head = {k: v for k, v in fib.meta.items() if k not in ic_keys and k not in tail_keys}
             tail = {k: fib.meta[k] for k in tail_keys if k in fib.meta}
             if ref.break_pattern_anchor_idx is not None:
@@ -688,7 +758,7 @@ class FibTracker:
             else:
                 status = "inactive"
 
-            limit_meta = self._cross_fib_limit_meta(int(sid))
+            limit_meta = self._cross_fib_limit_meta(int(sid), lifecycle_cap)
             for key in keys:
                 fib = self._fibs[key]
                 self._fibs[key] = replace(
@@ -812,7 +882,8 @@ class FibTracker:
         # Flip phase to established
         self._phase[(sid, cycle_id)] = "established"
 
-        if cycle_id == 0 or not self._cross_allowed(sid, cycle_id):
+        # The cycle's cross permission is FIXED here, at its establishment (PLAN_M CL-1).
+        if cycle_id == 0 or not self._fix_cross_permission(sid, cycle_id):
             # Cycle 0 — and a cycle past the limit — no cross: the single, activated now if its own
             # [BOS, CTS] holds an unfilled sd imbalance, else late on a CTS_UPDATED that finds one.
             meta = {"activated_at": cts_established_idx}

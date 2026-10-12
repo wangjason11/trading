@@ -1,0 +1,39 @@
+overlay: engine_v2/charting/_zone_render.py
+engine_v2/patterns/cross_limit_watch.py
+engine_v2/zones/cross_cycle_fib.py
+engine_v2/zones/fib_tracker.py
+[census_patch] C:\Users\wangj\AppData\Local\Temp\pm\l1c0: window 2025-12-01 -> 2026-01-20
+window 0 2025-12-01 2026-01-20: [census_run] done in 11.4 s exit 0 
+[census_patch] C:\Users\wangj\AppData\Local\Temp\pm\l1c1: window 2025-02-01 -> 2025-03-22
+window 1 2025-02-01 2025-03-22: [census_run] done in 11.1 s exit 0 
+[census_patch] C:\Users\wangj\AppData\Local\Temp\pm\l1c2: window 2025-04-01 -> 2025-05-20
+window 2 2025-04-01 2025-05-20: [census_run] done in 6.5 s exit 0 
+[census_patch] C:\Users\wangj\AppData\Local\Temp\pm\l1c3: window 2025-06-01 -> 2025-07-20
+window 3 2025-06-01 2025-07-20: [census_run] done in 5.2 s exit 0 
+[census_patch] C:\Users\wangj\AppData\Local\Temp\pm\l1c4: window 2025-08-01 -> 2025-09-20
+window 4 2025-08-01 2025-09-20: [census_run] done in 7.7 s exit 0 
+[census_patch] C:\Users\wangj\AppData\Local\Temp\pm\l1c5: window 2025-10-01 -> 2025-11-20
+window 5 2025-10-01 2025-11-20: [census_run] done in 9.0 s exit 0 
+done
+
+# [census] lines: the pre-build run (a git archive of 27ab6da) vs L1 (HEAD 27ab6da + the working tree's engine files)
+window 0: pre-build 15abc7772434  L1 15abc7772434  lines 9  EQUAL
+window 1: pre-build 996613aaf05a  L1 996613aaf05a  lines 9  EQUAL
+window 2: pre-build 4b1dfa3fe852  L1 4b1dfa3fe852  lines 6  EQUAL
+window 3: pre-build 895064f7ade4  L1 895064f7ade4  lines 4  EQUAL
+window 4: pre-build bd4db4906322  L1 bd4db4906322  lines 7  EQUAL
+window 5: pre-build 464551fd1173  L1 464551fd1173  lines 7  EQUAL
+
+# Re-run on the FINAL L1 code (after the landing review's fix-up; overlay + entity_df_mutation.py comments)
+window 0 2025-12-01 2026-01-20: [census_run] done in 32.0 s exit 0 
+window 1 2025-02-01 2025-03-22: [census_run] done in 31.6 s exit 0 
+window 2 2025-04-01 2025-05-20: [census_run] done in 17.9 s exit 0 
+window 3 2025-06-01 2025-07-20: [census_run] done in 14.8 s exit 0 
+window 4 2025-08-01 2025-09-20: [census_run] done in 22.4 s exit 0 
+window 5 2025-10-01 2025-11-20: [census_run] done in 25.4 s exit 0 
+window 0: pre-build 15abc7772434  L1-final 15abc7772434  EQUAL
+window 1: pre-build 996613aaf05a  L1-final 996613aaf05a  EQUAL
+window 2: pre-build 4b1dfa3fe852  L1-final 4b1dfa3fe852  EQUAL
+window 3: pre-build 895064f7ade4  L1-final 895064f7ade4  EQUAL
+window 4: pre-build bd4db4906322  L1-final bd4db4906322  EQUAL
+window 5: pre-build 464551fd1173  L1-final 464551fd1173  EQUAL

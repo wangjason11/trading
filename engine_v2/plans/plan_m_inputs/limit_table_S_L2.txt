@@ -1,0 +1,47 @@
+
+H1 0: P=None source=none M=None from_sub=None started_by=start_trading
+   cyc 0 single                 via=                 BOS 96 (11-20 22:00) CTS 430 (12-10 20:00) | ended    start 11-21 17:00 end 12-24 02:00 | IC ref: none
+   cyc 1 single                 via=cross_fib_limit  BOS 591 (12-19 13:00) CTS 652 (12-24 02:00) | ended    start 12-24 02:00 end 01-09 12:00 | IC ref 0.58246 (prev_cycle_cts) break 651
+
+H1 1: P=0.5736 source=reversal_bos_frozen M=2 from_sub=None started_by=reversal
+   cyc 0 single                 via=                 BOS 689 (12-26 15:00) CTS 710 (12-29 12:00) | inactive start - end 12-30 19:00 | IC ref 0.5736 (prev_structure_bos) break 897
+   cyc 1 cross v0 from cyc 0    via=                 BOS 689 (12-26 15:00) CTS 761 (12-31 15:00) | inactive start - end 01-09 12:00 | IC ref 0.5736 (prev_structure_bos) break 897
+   cyc 2 single                 via=cross_failed     BOS 826 (01-06 08:00) CTS 905 (01-09 15:00) | active   start 01-09 12:00 end - | IC ref 0.574 (prev_cycle_cts) break 897
+
+sub 0: P=None source=none M=None from_sub=None started_by=first_confluence
+   cyc 0 single                 via=                 BOS 454 (11-21 15:30) CTS 784 (11-27 02:00) | inactive start - end 12-01 13:00 | IC ref: none
+   cyc 1 single                 via=cross_fib_limit  BOS 917 (11-28 11:15) CTS 1020 (12-01 13:00) | ended    start 12-01 13:00 end 12-03 16:00 | IC ref 0.5732 (prev_cycle_cts) break 1019
+   cyc 2 single                 via=cross_fib_limit  BOS 1107 (12-02 10:45) CTS 1245 (12-03 21:15) | ended    start 12-03 16:00 end 12-10 20:15 | IC ref 0.5752 (prev_cycle_cts) break 1221
+   cyc 3 single                 via=cross_fib_limit  BOS 1310 (12-04 13:30) CTS 1721 (12-10 20:15) | ended    start 12-10 20:15 end 12-11 14:15 | IC ref 0.57774 (prev_cycle_cts) break 1720
+   cyc 4 single                 via=cross_fib_limit  BOS 1761 (12-11 06:15) CTS 1794 (12-11 14:30) | ended    start 12-11 14:15 end 12-15 03:00 | IC ref 0.58246 (prev_cycle_cts) break 1792
+
+sub 1: P=0.57877 source=reversal_bos_frozen M=2 from_sub=0 started_by=reversal
+   cyc 0 single                 via=                 BOS 1797 (12-11 15:15) CTS 1816 (12-11 20:00) | inactive start - end 12-12 15:30 | IC ref 0.57882 (prev_structure_bos) break 1936
+   cyc 1 single                 via=cross_failed     BOS 1837 (12-12 01:15) CTS 1898 (12-12 16:30) | inactive start - end 12-15 03:00 | IC ref 0.58051 (prev_cycle_cts) break 1893
+   cyc 2 single                 via=cross_failed     BOS 1934 (12-15 01:30) CTS 1945 (12-15 04:15) | ended    start 12-15 03:00 end 12-18 03:45 | IC ref 0.57882 (prev_structure_bos) break 1936
+   cyc 3 single                 via=cross_fib_limit  BOS 2078 (12-16 13:30) CTS 2231 (12-18 03:45) | ended    start 12-18 03:45 end 12-19 07:45 | IC ref 0.57656 (prev_cycle_cts) break 2230
+   cyc 4 single                 via=cross_fib_limit  BOS 2270 (12-18 13:30) CTS 2365 (12-19 13:15) | ended    start 12-19 07:45 end 12-22 15:30 | IC ref 0.57546 (prev_cycle_cts) break 2342
+
+sub 2: P=0.57926 source=reversal_bos_frozen M=0 from_sub=1 started_by=reversal
+   cyc 0 single                 via=                 BOS 2365 (12-19 13:15) CTS 2557 (12-23 13:15) | ended    start 12-22 15:30 end 12-24 02:00 | IC ref 0.57884 (prev_structure_bos) break 2465
+   cyc 1 single                 via=cross_fib_limit  BOS 2561 (12-23 14:15) CTS 2609 (12-24 02:15) | ended    start 12-24 02:00 end 12-29 09:15 | IC ref 0.58434 (prev_cycle_cts) break 2607
+
+sub 3: P=0.58156 source=reversal_bos_frozen M=1 from_sub=2 started_by=reversal
+   cyc 0 single                 via=                 BOS 2639 (12-24 09:45) CTS 2736 (12-26 10:00) | inactive start - end 12-29 09:15 | IC ref 0.58198 (prev_structure_bos) break 2824
+   cyc 1 single                 via=cross_failed     BOS 2758 (12-26 15:30) CTS 2842 (12-29 12:30) | ended    start 12-29 09:15 end 12-31 02:00 | IC ref 0.58198 (prev_structure_bos) break 2824
+   cyc 2 single                 via=cross_fib_limit  BOS 2915 (12-30 06:45) CTS 3047 (12-31 15:45) | ended    start 12-31 02:00 end 01-09 07:15 | IC ref 0.57902 (prev_cycle_cts) break 2991
+   cyc 3 single                 via=cross_fib_limit  BOS 3304 (01-06 08:00) CTS 3611 (01-09 12:45) | ended    start 01-09 07:15 end 01-09 12:45 | IC ref 0.574 (prev_cycle_cts) break 3588
+
+sub 4: P=0.57376 source=parent_cts_threshold M=0 from_sub=None started_by=first_confluence
+   cyc 0 single                 via=                 BOS 3304 (01-06 08:00) CTS 3621 (01-09 15:15) | ended    start 01-09 15:15 end 01-13 16:45 | IC ref 0.574 (cross_limit_anchor) break 3588
+
+sub 5: P=0.58105 source=prev_sub_bos_threshold M=None from_sub=4 started_by=first_counter
+   cyc 0 single                 via=                 BOS 3621 (01-09 15:15) CTS 3760 (01-13 02:00) | ended    start 01-13 01:45 end 01-19 05:45 | IC ref 0.58105 (cross_limit_anchor) break none
+
+sub 6: P=0.57112 source=prev_sub_bos_threshold M=None from_sub=5 started_by=subsequent_confluence
+   cyc 0 single                 via=                 BOS 3760 (01-13 02:00) CTS 4000 (01-15 14:00) | ended    start 01-13 16:45 end 01-19 16:00 | IC ref 0.57112 (cross_limit_anchor) break none
+
+sub 7: P=0.57827 source=prev_sub_bos_threshold M=2 from_sub=6 started_by=subsequent_counter
+   cyc 0 single                 via=                 BOS 4027 (01-15 20:45) CTS 4086 (01-16 11:30) | inactive start - end 01-19 01:00 | IC ref 0.57806 (cross_limit_anchor) break 4188
+   cyc 1 cross v0 from cyc 0    via=                 BOS 4027 (01-15 20:45) CTS 4157 (01-19 05:15) | ended    start 01-19 05:45 end 01-19 10:15 | IC ref 0.57806 (cross_limit_anchor) break 4188
+   cyc 2 cross v0 from cyc 0    via=                 BOS 4027 (01-15 20:45) CTS 4222 (01-19 21:30) | active   start 01-19 10:15 end - | IC ref 0.57806 (cross_limit_anchor) break 4188

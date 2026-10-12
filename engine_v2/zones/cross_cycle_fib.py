@@ -15,7 +15,7 @@ Kept dependency-free of ``zones`` (imports only ``patterns.imbalance``) so
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import pandas as pd
 
@@ -34,16 +34,26 @@ CROSS_FIB_LIMIT_SOURCES = frozenset({
     "prev_sub_starting_price",  # x−1 opposite, no `bos_threshold` yet: its starting candle's extreme (R2-2)
     "prev_sub_latest_cts",      # x−1 same, no confirmed CTS yet: its latest CTS anchor price (R2-b / R3-5)
     "prev_sub_no_cts",          # x−1 same, no CTS anchor at all: no `P` (R6-3 (vi))
+    "parent_bos_threshold",     # a COUNTER sub: its first record's parent cycle's BOS threshold, read live (PLAN_M CL-5)
 })
 _NO_PRICE_SOURCES = frozenset({"none", "prev_sub_no_cts"})
+# The only source whose `P` may MOVE during the structure's life (PLAN_M §7.1): the parent's BOS threshold moves
+# further with each `BOS_THRESHOLD_UPDATED`; every other source's `P` is fixed at the structure's start (R2-4).
+_LIVE_SOURCES = frozenset({"parent_bos_threshold"})
 
 
 @dataclass(frozen=True)
 class CrossFibLimit:
-    """A structure's cross-fib LIMIT: the reference price `P` its STARTING trigger fixes once, at the
-    structure's start (R2-4), and the rule that produced it.
+    """A structure's cross-fib LIMIT: the reference price `P` its STARTING trigger fixes at the structure's start
+    (R2-4), and the rule that produced it. ONE source moves after the start — `parent_bos_threshold` (a counter sub,
+    PLAN_M): `P` follows the parent's BOS threshold, each move known from its own candle (`price_moves`); every
+    reader takes `P` as of its moment (`price_at`).
 
-    - `price` (`cross_fib_limit_price`): `P`; None = no reference → no cross on any cycle (every cycle single);
+    - `price` (`cross_fib_limit_price`): `P` — the LAST move's price when it moved (up to the parent cycle's end),
+      else the start's; None = no reference → no cross on any cycle (every cycle single);
+    - `price_at_start` / `price_moves` (PLAN_M §7.1; set ⟺ `P` moved, live sources only): `P` as of the structure's
+      start, and each move `(known_at, price)` after it — `known_at` the candle from which the move is KNOWN, in the
+      coordinates of the frame the limit is used on (as the break fields), strictly increasing;
     - `source` (`cross_fib_limit_source`, one of `CROSS_FIB_LIMIT_SOURCES`);
     - `from_pool_idx` (sweep-time) / `from_sub_id` (the final, start-numbered id, set once the sweep has
       numbered the subs — PLAN_I D2 / D4): the sub that supplied `P` (x−1, or the reversing sub), else None;
@@ -69,6 +79,8 @@ class CrossFibLimit:
     ref_anchor_price: Optional[float] = None
     break_pattern_anchor_idx: Optional[int] = None
     break_confirmed_idx: Optional[int] = None
+    price_at_start: Optional[float] = None
+    price_moves: Tuple[Tuple[int, float], ...] = ()
 
     def __post_init__(self) -> None:
         assert self.source in CROSS_FIB_LIMIT_SOURCES, f"unknown cross_fib_limit_source {self.source!r}"
@@ -85,15 +97,48 @@ class CrossFibLimit:
         if has_break:
             assert int(self.break_pattern_anchor_idx) <= int(self.break_confirmed_idx), (
                 f"cross_fib_limit break anchor {self.break_pattern_anchor_idx} after its apply {self.break_confirmed_idx}")
+        moved = bool(self.price_moves)
+        assert moved == (self.price_at_start is not None), (
+            f"cross_fib_limit price_at_start {self.price_at_start!r} without moves, or moves without it (PLAN_M §7.1)")
+        if moved:
+            assert self.source in _LIVE_SOURCES and self.price is not None, (
+                f"cross_fib_limit moves on a fixed source {self.source!r} (PLAN_M §7.1)")
+            known = [int(k) for k, _p in self.price_moves]
+            assert all(a < b for a, b in zip(known, known[1:])), (
+                f"cross_fib_limit move moments not strictly increasing: {known}")
+            assert float(self.price) == float(self.price_moves[-1][1]), (
+                f"cross_fib_limit price {self.price!r} is not its last move's {self.price_moves[-1][1]!r}")
+
+    def price_at(self, moment: Optional[int]) -> Optional[float]:
+        """`P` as of candle `moment` (PLAN_M §7.1): the price of the last move KNOWN at or before it (inclusive — a
+        move is known AT its candle), else `P` at the start; `moment` None → the last `P` (`price`)."""
+        if moment is None or not self.price_moves:
+            return self.price
+        p = self.price_at_start
+        for known_at, price in self.price_moves:
+            if int(known_at) > int(moment):
+                break
+            p = price
+        return p
+
+    def moves_until(self, moment: Optional[int]) -> Tuple[Tuple[int, float], ...]:
+        """The moves known at or before candle `moment` (None → every move) — the export's count (PLAN_M §7.2)."""
+        if moment is None:
+            return self.price_moves
+        return tuple(mv for mv in self.price_moves if int(mv[0]) <= int(moment))
 
     def localized(self, offset: int) -> "CrossFibLimit":
-        """This limit with its break indices moved by −`offset` (PLAN_K §3.5): the pool computes a sub's limit in
-        entity-absolute M15 indices, while its geometry MS and its projection run on the sub's slice starting at
-        `offset` (`slice_begin`). Prices / identity unchanged; a limit without a break is returned as is."""
-        if self.break_pattern_anchor_idx is None:
-            return self
-        return replace(self, break_pattern_anchor_idx=int(self.break_pattern_anchor_idx) - int(offset),
-                       break_confirmed_idx=int(self.break_confirmed_idx) - int(offset))
+        """This limit with its candle indices — the break's, each move's `known_at` — moved by −`offset` (PLAN_K
+        §3.5, PLAN_M §7.1): the pool computes a sub's limit in entity-absolute M15 indices, while its geometry MS and
+        its projection run on the sub's slice starting at `offset` (`slice_begin`). Prices / identity unchanged; a
+        limit with neither a break nor a move is returned as is."""
+        changes = {}
+        if self.break_pattern_anchor_idx is not None:
+            changes["break_pattern_anchor_idx"] = int(self.break_pattern_anchor_idx) - int(offset)
+            changes["break_confirmed_idx"] = int(self.break_confirmed_idx) - int(offset)
+        if self.price_moves:
+            changes["price_moves"] = tuple((int(k) - int(offset), p) for k, p in self.price_moves)
+        return replace(self, **changes) if changes else self
 
 
 # The IC reference's `source` values (PLAN_K §1, the fib meta `ic_ref_source`; PLAN_H RX1).

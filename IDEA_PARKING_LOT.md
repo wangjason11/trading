@@ -136,6 +136,23 @@ PAUSED; item 2 — now the cross-cycle fib revamp — NEXT; item 1's debugging r
    the new cross cycle fib rules we've established using cross limit prices. This is actually an important debugging
    task that is currently causing some subs to have lower cross limit prices than they should, which may affect
    61.8-80 Fib Zone placement and IC candidates. I will provide more details when we get there and on the fix."
+   **Details received 2026-10-10 → `engine_v2/plans/PLAN_M_counter_sub_cross_limit.md`** (the write-up verbatim:
+   `plans/plan_m_inputs/counter_sub_cross_limit_writeup.md`): a COUNTER sub (its direction opposite its first record's
+   parent) takes `P` = that parent cycle's BOS threshold, read live (frozen at that parent cycle's end; a cycle's cross
+   permission fixed at its establishment); every other trigger unchanged. Round 1 DECIDED (PLAN_M §3); the trial
+   replay = the window's prediction (PLAN_M §4: sub 3 cyc 2 becomes a cross from cyc 1, as H1 sid 1's; its POI's IC
+   2969 → 2821; no structure / trigger / sub change); round 2 DECIDED 2026-10-11 (PLAN_M §3 CL-5…CL-8: the source
+   `parent_bos_threshold`; the export = the final `P` + start-`P` / move-count keys; the IC bound reads `P` as of each
+   moment; the residual below parked); the live-`P` census on 6 windows (PLAN_M §6: the parent's threshold moves
+   inside 5 of 14 counter subs' lives; one cycle's permission changes) and the design + two landings drafted
+   (PLAN_M §7–§10); cold-reviewed 2026-10-11 (760,821 tok; every finding folded — PLAN_M §11; the export reads `P`
+   as of the structure's end, PLAN_M §3 "readings" — DECIDED (a) by the user 2026-10-11); landing 1 (the live-`P`
+   plumbing) BUILT + landing-reviewed 2026-10-11, uncommitted (PLAN_M §12–§13: byte-identical vs S_L2, the census
+   unchanged, suite 1657; review 451,068 tok, 0 BLOCKER / MAJOR, all folded); next: the user's go to commit (S_M1),
+   then landing 2. **Follow-up, PARKED until PLAN_M lands (user 2026-10-11, PLAN_M §3 CL-8):**
+   sub 3 cycle 2's IC (2821) still differs from H1 sid 1 cycle 1's (732) — sub 3 has one extra cycle before sid 1's
+   first, so its cross starts at its own cycle 1 and its IC reference is cycle 0's CTS (0.5818, bound 2824), which cuts
+   732's M15 period; sid 1's cross starts at cycle 0 → the far structure side. Detail: PLAN_M §4.
    Its reach since PLAN_K: `P` sets the cross window `M` (which cycles a cross may span — the fib's anchors, so the
    61.8–80 zone) AND the IC reference's structure side (the anchor behind `P`, the cross-limit breakout watch's
    break, `T ≤ M`) — a changed `P` moves both. Canonical rules: CROSS_CYCLE_FIB_SPEC §3; PLAN_I §1.2 / §1.4. Was NEXT (user 2026-10-06, PLAN_H §6 F2b–F2e; it replaces the open decision below): "instead of deciding on this, I will

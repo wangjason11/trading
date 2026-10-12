@@ -1,0 +1,66 @@
+=== C:/Users/wangj/AppData/Local/Temp/pm/r0/run.log
+    [census_run] window 2025-11-15 00:00:00+00:00 -> 2026-01-20 00:00:00+00:00: 1058 H1 candles
+    [census_run] done in 12.5 s
+    exit 0
+    H1: 5 cycles, 5 BOS_CONFIRMED (cycles with != 1: []), 0 BOS_THRESHOLD_UPDATED on 0 cycles []; not strictly further: []; at/after the cycle's end: []
+    sub 1 sell parent [0, 0] (reversal) life 1940..2470 (reversal) parent end 2611: P today 0.57877 reversal_bos_frozen; BOS 0.55808 -> start 0.55808; object moves 0 -> 0.55808; export (as of the end) moves 0 -> 0.55808
+    sub 3 sell parent [0, 1] (reversal) life 2829..3611 (parent_end) parent end 3611: P today 0.58156 reversal_bos_frozen; BOS 0.5736 -> start 0.5736; object moves 0 -> 0.5736; export (as of the end) moves 0 -> 0.5736
+    sub 5 buy parent [1, 2] (first_counter) life 3759..4159 (same_dir_replacement) parent end None: P today 0.58105 prev_sub_bos_threshold; BOS 0.58105 -> start 0.58105; object moves 0 -> 0.58105; export (as of the end) moves 0 -> 0.58105
+    sub 7 buy parent [1, 2] (subsequent_counter) life 4159..None (None) parent end None: P today 0.57827 prev_sub_bos_threshold; BOS 0.58105 -> start 0.58105; object moves 0 -> 0.58105; export (as of the end) moves 0 -> 0.58105
+=== C:/Users/wangj/AppData/Local/Temp/pm/r1/run.log
+    [census_run] window 2025-01-28 00:00:00+00:00 -> 2025-03-22 00:00:00+00:00: 934 H1 candles
+    [census_run] done in 10.7 s
+    exit 0
+    H1: 8 cycles, 8 BOS_CONFIRMED (cycles with != 1: []), 9 BOS_THRESHOLD_UPDATED on 2 cycles [[0, 2, 2], [1, 1, 7]]; not strictly further: []; at/after the cycle's end: []
+    sub 1 sell parent [0, 0] (reversal) life 957..1254 (reversal) parent end 1307: P today 0.5638 reversal_bos_frozen; BOS 0.55164 -> start 0.55164; object moves 0 -> 0.55164; export (as of the end) moves 0 -> 0.55164
+    sub 4 sell parent [0, 2] (first_counter) life 1923..2171 (parent_end) parent end 2171: P today 0.56936 prev_sub_bos_threshold; BOS 0.56777 -> start 0.56777; object moves 2 -> 0.56731; export (as of the end) moves 2 -> 0.56731
+        moves in life (h1, m15, price): [[532, 2131, 0.5675], [533, 2135, 0.56731]]
+    sub 6 buy parent [1, 1] (first_counter) life 2555..3307 (parent_end) parent end 3307: P today 0.57216 prev_sub_bos_threshold; BOS 0.57328 -> start 0.57328; object moves 7 -> 0.5763; export (as of the end) moves 7 -> 0.5763
+        moves in life (h1, m15, price): [[649, 2599, 0.5743], [650, 2603, 0.5746], [661, 2647, 0.57464], [663, 2655, 0.57531], [664, 2659, 0.57597], [815, 3263, 0.57629], [818, 3275, 0.5763]]
+        cycle 4 est 3297: allowed live=True start-P=False end-P=True; moves in its pre-established window [[815, 3263, 0.57629], [818, 3275, 0.5763]]
+=== C:/Users/wangj/AppData/Local/Temp/pm/r2/run.log
+    [census_run] window 2025-04-01 00:00:00+00:00 -> 2025-05-20 00:00:00+00:00: 840 H1 candles
+    [census_run] done in 6.8 s
+    exit 0
+    H1: 2 cycles, 2 BOS_CONFIRMED (cycles with != 1: []), 18 BOS_THRESHOLD_UPDATED on 1 cycles [[0, 1, 18]]; not strictly further: []; at/after the cycle's end: []
+    sub 3 sell parent [0, 1] (subsequent_counter) life 2575..None (None) parent end None: P today 0.5938 prev_sub_bos_threshold; BOS 0.59252 -> start 0.58938; object moves 9 -> 0.58466; export (as of the end) moves 9 -> 0.58466
+        moves in life (h1, m15, price): [[672, 2691, 0.58894], [673, 2695, 0.58836], [674, 2699, 0.58707], [706, 2827, 0.58624], [707, 2831, 0.58623], [711, 2847, 0.58602], [712, 2851, 0.58536], [713, 2855, 0.58485], [714, 2859, 0.58466]]
+    sub 4 sell parent [0, 1] (reversal) life 2620..None (None) parent end None: P today 0.59348 reversal_bos_frozen; BOS 0.59252 -> start 0.58938; object moves 9 -> 0.58466; export (as of the end) moves 9 -> 0.58466
+        moves in life (h1, m15, price): [[672, 2691, 0.58894], [673, 2695, 0.58836], [674, 2699, 0.58707], [706, 2827, 0.58624], [707, 2831, 0.58623], [711, 2847, 0.58602], [712, 2851, 0.58536], [713, 2855, 0.58485], [714, 2859, 0.58466]]
+=== C:/Users/wangj/AppData/Local/Temp/pm/r3/run.log
+    [census_run] window 2025-06-01 00:00:00+00:00 -> 2025-07-20 00:00:00+00:00: 840 H1 candles
+    [census_run] done in 5.3 s
+    exit 0
+    H1: 1 cycles, 1 BOS_CONFIRMED (cycles with != 1: []), 0 BOS_THRESHOLD_UPDATED on 0 cycles []; not strictly further: []; at/after the cycle's end: []
+    sub 1 sell parent [0, 0] (reversal) life 2271..3319 (reversal) parent end None: P today 0.605 reversal_bos_frozen; BOS 0.58831 -> start 0.58831; object moves 0 -> 0.58831; export (as of the end) moves 0 -> 0.58831
+=== C:/Users/wangj/AppData/Local/Temp/pm/r4/run.log
+    [census_run] window 2025-08-01 00:00:00+00:00 -> 2025-09-20 00:00:00+00:00: 861 H1 candles
+    [census_run] done in 7.4 s
+    exit 0
+    H1: 3 cycles, 3 BOS_CONFIRMED (cycles with != 1: []), 13 BOS_THRESHOLD_UPDATED on 1 cycles [[0, 2, 13]]; not strictly further: []; at/after the cycle's end: []
+    sub 3 sell parent [0, 2] (first_counter) life 3247..3259 (same_dir_replacement) parent end None: P today 0.594 prev_sub_bos_threshold; BOS 0.59149 -> start 0.59149; object moves 13 -> 0.58538; export (as of the end) moves 0 -> 0.59149
+    sub 5 sell parent [0, 2] (subsequent_counter) life 3259..None (None) parent end None: P today 0.59606 prev_sub_starting_price; BOS 0.59149 -> start 0.59149; object moves 13 -> 0.58538; export (as of the end) moves 13 -> 0.58538
+        moves in life (h1, m15, price): [[817, 3271, 0.5911], [820, 3283, 0.59108], [821, 3287, 0.59054], [822, 3291, 0.58954], [823, 3295, 0.5894], [824, 3299, 0.58929], [825, 3303, 0.58918], [829, 3319, 0.58723], [844, 3379, 0.5868], [845, 3383, 0.5867], [846, 3387, 0.58546], [855, 3423, 0.58539], [860, 3439, 0.58538]]
+=== C:/Users/wangj/AppData/Local/Temp/pm/r5/run.log
+    [census_run] window 2025-10-01 00:00:00+00:00 -> 2025-11-20 00:00:00+00:00: 863 H1 candles
+    [census_run] done in 8.7 s
+    exit 0
+    H1: 2 cycles, 2 BOS_CONFIRMED (cycles with != 1: []), 0 BOS_THRESHOLD_UPDATED on 0 cycles []; not strictly further: []; at/after the cycle's end: []
+    sub 1 buy parent [0, 0] (first_counter) life 583..734 (reversal) parent end 2339: P today 0.58019 prev_sub_bos_threshold; BOS 0.5845 -> start 0.5845; object moves 0 -> 0.5845; export (as of the end) moves 0 -> 0.5845
+    sub 3 buy parent [0, 0] (subsequent_counter) life 1983..2262 (reversal) parent end 2339: P today 0.58015 prev_sub_bos_threshold; BOS 0.5845 -> start 0.5845; object moves 0 -> 0.5845; export (as of the end) moves 0 -> 0.5845
+=== TOTAL {'windows': 6, 'subs': 36, 'counter': 14, 'counter_moved_in_life': 5, 'cycles_in_life': 15, 'cycles_before_start': 13, 'live_vs_start': 1, 'live_vs_end': 0, 'moves_in_pre_est': 2, 'bos_checks_failed': 0}
+=== PINNED (window, sub_id, P at start, object moves, object final P, export moves, export P)
+    ('2025-11-15 00', 1, 0.55808, 0, 0.55808, 0, 0.55808)
+    ('2025-11-15 00', 3, 0.5736, 0, 0.5736, 0, 0.5736)
+    ('2025-11-15 00', 5, 0.58105, 0, 0.58105, 0, 0.58105)
+    ('2025-11-15 00', 7, 0.58105, 0, 0.58105, 0, 0.58105)
+    ('2025-01-28 00', 1, 0.55164, 0, 0.55164, 0, 0.55164)
+    ('2025-01-28 00', 4, 0.56777, 2, 0.56731, 2, 0.56731)
+    ('2025-01-28 00', 6, 0.57328, 7, 0.5763, 7, 0.5763)
+    ('2025-04-01 00', 3, 0.58938, 9, 0.58466, 9, 0.58466)
+    ('2025-04-01 00', 4, 0.58938, 9, 0.58466, 9, 0.58466)
+    ('2025-06-01 00', 1, 0.58831, 0, 0.58831, 0, 0.58831)
+    ('2025-08-01 00', 3, 0.59149, 13, 0.58538, 0, 0.59149)
+    ('2025-08-01 00', 5, 0.59149, 13, 0.58538, 13, 0.58538)
+    ('2025-10-01 00', 1, 0.5845, 0, 0.5845, 0, 0.5845)
+    ('2025-10-01 00', 3, 0.5845, 0, 0.5845, 0, 0.5845)

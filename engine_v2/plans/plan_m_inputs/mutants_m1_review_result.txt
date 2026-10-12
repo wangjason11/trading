@@ -1,0 +1,6 @@
+KILLED    X01_true_fix_reread_live           2 failing: test_a_cycle_established_as_a_cross_keeps_it[-1], test_a_cycle_established_as_a_cross_keeps_it[1]
+KILLED    X02_ref_true_fix_reread_live       2 failing: test_a_cycle_established_as_a_cross_keeps_it[-1], test_a_cycle_established_as_a_cross_keeps_it[1]
+KILLED    X04_projection_skips_moves         1 failing: test_the_projection_hands_the_drawn_tracker_the_slice_local_
+KILLED    M25_refusal_over_cross_unchecked   2 failing: test_a_refusal_over_an_active_pre_established_cross_raises[-, test_a_refusal_over_an_active_pre_established_cross_raises[1
+4/4 KILLED  (results: C:\Users\wangj\AppData\Local\Temp\mm1r\results.json)
+exit 0

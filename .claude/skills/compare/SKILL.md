@@ -586,7 +586,11 @@ diff is POSITIONAL: on a header change (an added / renamed column) diff that CSV
 positional too: one inserted trace (a new POI's hover lines) shifts every later index, so every later trace reads as
 "differing" (PLAN_L L2: 233 of 282 confluence traces) — for a change that adds or removes traces, diff the traces /
 shapes as MULTISETS of their full JSON, summarised by trace name (`plan_h_inputs/cmp_l2.py` §4,
-`plan_h_inputs/l2_hover_diff.py` for the changed hover texts).
+`plan_h_inputs/l2_hover_diff.py` for the changed hover texts). A one-line FINGERPRINT per chart of that multiset
+(every trace's full JSON, hovers included, + the layout with its shapes sorted): `plan_m_inputs/fig_hash.py CHARTS_DIR
+[NAME_PREFIX]` — equal hashes = equal figures up to trace order; pass the window's prefix (e.g.
+`NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_`) on `artifacts/charts`, which holds many runs (a save folder holds
+one). PLAN_M persists a trial's hashes to predict a landing's figures exactly (`plan_m_inputs/trial_fig_hash.txt`).
 It counts changed CELLS; for a change to meta VALUES (one meta cell can hold several changed keys) use
 `review_scripts/cmp_meta_keys.py BASE CUR` — per-key counts, each delta checked to be `+slice_begin`
 (Post-E·2: 547 cells = 715 keys).

@@ -157,7 +157,9 @@ To change any visual element:
   reference window), or `IC ref: none` (no reference — the condition passes); no line on a record without the
   `cross_fib_limit_*` meta; then the structure's cross-fib LIMIT line
   (`_zone_render.fib_hover_limit_text`, PLAN_I R6-7, S2): `limit <P> · <source> [(sub <from>)] · M=<M | none>` (e.g.
-  `limit 0.57827 · prev_sub_bos_threshold (sub 6) · M=2`), or without `P` `limit: none (<why>)` — `start_trading`,
+  `limit 0.57827 · prev_sub_bos_threshold (sub 6) · M=2`); when `P` MOVED by the structure's end (the record carries
+  `cross_fib_limit_move_count`, PLAN_M CL-6) the move qualifies the price: `limit 0.57630 (moved 7× from 0.57328) ·
+  parent_bos_threshold · M=4`; or without `P` `limit: none (<why>)` — `start_trading`,
   `first_confluence on parent cycle 0`, `no previous sub`, `prev_sub_no_cts (sub <from>)`; no line on a record
   without the `cross_fib_limit_*` meta. Known limit: the reason reads the record's `started_by` / `parent_cycle_id`
   (the sub's first LIVE record) while `P` came from its CREATING trigger (R6-2 (a)); they differ only when the

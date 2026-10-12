@@ -1,0 +1,172 @@
+     A      B      d  element / (parent_sid,parent_cycle,sub_id)
+== 1. CSVs
+  DIFF    NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence_fib_lifecycle.csv
+  DIFF    NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence_ic_candidates.csv
+  DIFF    NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_confluence_poi_zones.csv
+  DIFF    NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter_fib_lifecycle.csv
+  DIFF    NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter_ic_candidates.csv
+  DIFF    NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5_M15_counter_poi_zones.csv
+== 2. fib lifecycle H1
+== 2. fib lifecycle confluence
+  - fib (3, '0', '2', '')
+  + fib (3, '0', '2', '0.0')
+  ~ fib (1, '0', '0', '')
+      ic_ref_price: 0.57882 -> 0.55808
+      ic_ref_source: 'prev_structure_bos' -> 'cross_limit_anchor'
+      ic_ref_break_pattern_anchor_idx: 1936 -> '<absent>'
+      ic_ref_break_confirmed_idx: 1940 -> '<absent>'
+      cross_fib_limit_price: 0.57877 -> 0.55808
+      cross_fib_limit_source: 'reversal_bos_frozen' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 2 -> None
+      cross_fib_limit_from_sub_id: 0 -> None
+  ~ fib (1, '0', '1', '')
+      cross_fib_limit_price: 0.57877 -> 0.55808
+      cross_fib_limit_source: 'reversal_bos_frozen' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 2 -> None
+      cross_fib_limit_from_sub_id: 0 -> None
+  ~ fib (1, '0', '2', '')
+      ic_ref_price: 0.57882 -> 0.57877
+      ic_ref_source: 'prev_structure_bos' -> 'prev_cycle_cts'
+      cross_fib_limit_price: 0.57877 -> 0.55808
+      cross_fib_limit_source: 'reversal_bos_frozen' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 2 -> None
+      cross_fib_limit_from_sub_id: 0 -> None
+  ~ fib (1, '0', '3', '')
+      via: 'cross_fib_limit' -> 'cross_failed'
+      cross_fib_limit_price: 0.57877 -> 0.55808
+      cross_fib_limit_source: 'reversal_bos_frozen' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 2 -> None
+      cross_fib_limit_from_sub_id: 0 -> None
+      (meta key ORDER differs)
+  ~ fib (1, '0', '4', '')
+      via: 'cross_fib_limit' -> 'cross_failed'
+      cross_fib_limit_price: 0.57877 -> 0.55808
+      cross_fib_limit_source: 'reversal_bos_frozen' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 2 -> None
+      cross_fib_limit_from_sub_id: 0 -> None
+      (meta key ORDER differs)
+  ~ fib (3, '0', '0', '')
+      ic_ref_price: 0.58198 -> 0.5736
+      ic_ref_source: 'prev_structure_bos' -> 'cross_limit_anchor'
+      ic_ref_break_pattern_anchor_idx: 2824 -> 3588
+      ic_ref_break_confirmed_idx: 2829 -> 3589
+      cross_fib_limit_price: 0.58156 -> 0.5736
+      cross_fib_limit_source: 'reversal_bos_frozen' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 1 -> 3
+      cross_fib_limit_from_sub_id: 2 -> None
+  ~ fib (3, '0', '1', '')
+      end_idx: 2992.0 -> 2967.0
+      ic_ref_price: 0.58198 -> 0.5818
+      ic_ref_source: 'prev_structure_bos' -> 'prev_cycle_cts'
+      cross_fib_limit_price: 0.58156 -> 0.5736
+      cross_fib_limit_source: 'reversal_bos_frozen' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 1 -> 3
+      cross_fib_limit_from_sub_id: 2 -> None
+  ~ fib (3, '0', '3', '')
+      via: 'cross_fib_limit' -> 'cross_failed'
+      cross_fib_limit_price: 0.58156 -> 0.5736
+      cross_fib_limit_source: 'reversal_bos_frozen' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 1 -> 3
+      cross_fib_limit_from_sub_id: 2 -> None
+      (meta key ORDER differs)
+  ~ fib (7, '0', '0', '')
+      ic_ref_price: 0.57806 -> 0.58105
+      ic_ref_break_pattern_anchor_idx: 4188 -> '<absent>'
+      ic_ref_break_confirmed_idx: 4189 -> '<absent>'
+      cross_fib_limit_price: 0.57827 -> 0.58105
+      cross_fib_limit_source: 'prev_sub_bos_threshold' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 2 -> None
+      cross_fib_limit_from_sub_id: 6 -> None
+  ~ fib (7, '0', '1', '0.0')
+      ic_ref_price: 0.57806 -> 0.58105
+      ic_ref_break_pattern_anchor_idx: 4188 -> '<absent>'
+      ic_ref_break_confirmed_idx: 4189 -> '<absent>'
+      cross_fib_limit_price: 0.57827 -> 0.58105
+      cross_fib_limit_source: 'prev_sub_bos_threshold' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 2 -> None
+      cross_fib_limit_from_sub_id: 6 -> None
+  ~ fib (7, '0', '2', '0.0')
+      ic_ref_price: 0.57806 -> 0.58105
+      ic_ref_break_pattern_anchor_idx: 4188 -> '<absent>'
+      ic_ref_break_confirmed_idx: 4189 -> '<absent>'
+      cross_fib_limit_price: 0.57827 -> 0.58105
+      cross_fib_limit_source: 'prev_sub_bos_threshold' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 2 -> None
+      cross_fib_limit_from_sub_id: 6 -> None
+== 2. fib lifecycle counter
+  - fib (3, '0', '2', '')
+  + fib (3, '0', '2', '0.0')
+  ~ fib (3, '0', '0', '')
+      ic_ref_price: 0.58198 -> 0.5736
+      ic_ref_source: 'prev_structure_bos' -> 'cross_limit_anchor'
+      ic_ref_break_pattern_anchor_idx: 2824 -> 3588
+      ic_ref_break_confirmed_idx: 2829 -> 3589
+      cross_fib_limit_price: 0.58156 -> 0.5736
+      cross_fib_limit_source: 'reversal_bos_frozen' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 1 -> 3
+      cross_fib_limit_from_sub_id: 2 -> None
+  ~ fib (3, '0', '1', '')
+      end_idx: 2992.0 -> 2967.0
+      ic_ref_price: 0.58198 -> 0.5818
+      ic_ref_source: 'prev_structure_bos' -> 'prev_cycle_cts'
+      cross_fib_limit_price: 0.58156 -> 0.5736
+      cross_fib_limit_source: 'reversal_bos_frozen' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 1 -> 3
+      cross_fib_limit_from_sub_id: 2 -> None
+  ~ fib (3, '0', '3', '')
+      via: 'cross_fib_limit' -> 'cross_failed'
+      cross_fib_limit_price: 0.58156 -> 0.5736
+      cross_fib_limit_source: 'reversal_bos_frozen' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 1 -> 3
+      cross_fib_limit_from_sub_id: 2 -> None
+      (meta key ORDER differs)
+  ~ fib (5, '0', '0', '')
+      cross_fib_limit_source: 'prev_sub_bos_threshold' -> 'parent_bos_threshold'
+      cross_fib_limit_from_sub_id: 4 -> None
+  ~ fib (7, '0', '0', '')
+      ic_ref_price: 0.57806 -> 0.58105
+      ic_ref_break_pattern_anchor_idx: 4188 -> '<absent>'
+      ic_ref_break_confirmed_idx: 4189 -> '<absent>'
+      cross_fib_limit_price: 0.57827 -> 0.58105
+      cross_fib_limit_source: 'prev_sub_bos_threshold' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 2 -> None
+      cross_fib_limit_from_sub_id: 6 -> None
+  ~ fib (7, '0', '1', '0.0')
+      ic_ref_price: 0.57806 -> 0.58105
+      ic_ref_break_pattern_anchor_idx: 4188 -> '<absent>'
+      ic_ref_break_confirmed_idx: 4189 -> '<absent>'
+      cross_fib_limit_price: 0.57827 -> 0.58105
+      cross_fib_limit_source: 'prev_sub_bos_threshold' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 2 -> None
+      cross_fib_limit_from_sub_id: 6 -> None
+  ~ fib (7, '0', '2', '0.0')
+      ic_ref_price: 0.57806 -> 0.58105
+      ic_ref_break_pattern_anchor_idx: 4188 -> '<absent>'
+      ic_ref_break_confirmed_idx: 4189 -> '<absent>'
+      cross_fib_limit_price: 0.57827 -> 0.58105
+      cross_fib_limit_source: 'prev_sub_bos_threshold' -> 'parent_bos_threshold'
+      cross_fib_limit_cycle: 2 -> None
+      cross_fib_limit_from_sub_id: 6 -> None
+== 3. POIs H1
+== 3. POIs confluence
+  - POI (3, '0', '2', '2969')
+  + POI (3, '0', '2', '2821')
+== 3. POIs counter
+  - POI (3, '0', '2', '2969')
+  + POI (3, '0', '2', '2821')
+== 4. IC candidates H1: rows 239 -> 239
+== 4. IC candidates confluence: rows 1319 -> 1396
+  ~ record ('3', '0', '0', '2639', '2736') (42 rows): changed {'ic_ref_reason': 1}; picked ['2704'] -> ['2704']
+  ~ record ('3', '0', '1', '2758', '2842') (34 rows): changed {'ic_ref_reason': 1, 'is_ic_candidate': 1}; picked ['2798'] -> ['2798']
+  + record ('3', '0', '2', '2758', '3047') (130 rows)
+  - record ('3', '0', '2', '2915', '3047') (53 rows)
+  ~ record ('7', '0', '2', '4027', '4222') (90 rows): changed {'ic_ref_reason': 21}; picked ['4083'] -> ['4083']
+== 4. IC candidates counter: rows 363 -> 440
+  ~ record ('3', '0', '0', '2639', '2736') (42 rows): changed {'ic_ref_reason': 1}; picked ['2704'] -> ['2704']
+  ~ record ('3', '0', '1', '2758', '2842') (34 rows): changed {'ic_ref_reason': 1, 'is_ic_candidate': 1}; picked ['2798'] -> ['2798']
+  + record ('3', '0', '2', '2758', '3047') (130 rows)
+  - record ('3', '0', '2', '2915', '3047') (53 rows)
+  ~ record ('7', '0', '2', '4027', '4222') (90 rows): changed {'ic_ref_reason': 21}; picked ['4083'] -> ['4083']
+== 5. figure rk2-5.html: traces 83 -> 83, shapes 239 -> 239; traces only in the save {}; only now {}; shapes only in the save 0, only now 0; layout beyond the shapes equal
+== 5. figure rk2-5_M15_confluence.html: traces 282 -> 282, shapes 276 -> 276; traces only in the save {'M15 fib': 8, 'M15 POI zone': 2}; only now {'M15 fib': 8, 'M15 POI zone': 2}; shapes only in the save 8, only now 8; layout beyond the shapes equal
+== 5. figure rk2-5_M15_counter.html: traces 137 -> 137, shapes 123 -> 123; traces only in the save {'M15 POI zone': 2, 'M15 fib': 6}; only now {'M15 POI zone': 2, 'M15 fib': 6}; shapes only in the save 8, only now 8; layout beyond the shapes equal

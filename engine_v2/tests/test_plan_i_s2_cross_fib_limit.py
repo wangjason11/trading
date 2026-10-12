@@ -77,7 +77,8 @@ def test_beyond_is_strict_in_both_directions():
 def test_cross_fib_limit_validates_its_source_and_price():
     assert CROSS_FIB_LIMIT_SOURCES == {
         "none", "reversal_bos_frozen", "parent_cts_threshold", "prev_sub_cts_threshold",
-        "prev_sub_bos_threshold", "prev_sub_starting_price", "prev_sub_latest_cts", "prev_sub_no_cts"}
+        "prev_sub_bos_threshold", "prev_sub_starting_price", "prev_sub_latest_cts", "prev_sub_no_cts",
+        "parent_bos_threshold"}                                     # PLAN_M CL-5: a counter sub's live source
     CrossFibLimit(None, "none")
     CrossFibLimit(None, "prev_sub_no_cts", from_pool_idx=3)
     CrossFibLimit(0.5736, "reversal_bos_frozen", started_by="reversal", ref_anchor_price=0.5731,

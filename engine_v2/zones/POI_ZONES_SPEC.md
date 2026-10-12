@@ -415,14 +415,17 @@ ONE bundled condition (RX1-B) per checked candle `i` (§3.1) of a fib record —
      `cts_threshold`. Its bound = the first candle of the pattern that ESTABLISHED cycle `a` (that `CTS_ESTABLISHED`'s
      `pattern_anchor_idx` — the pattern that broke `CTS_{a−1}`), known from that event's moment.
    - **The structure reference** (when the structure has a cross-fib limit `P` and `M` is None or `T ≤ M`, cycle 0
-     included — CROSS_CYCLE_FIB_SPEC §3; no limit entry or `P` None → none):
+     included — CROSS_CYCLE_FIB_SPEC §3; no limit entry or `P` None → none; for a MOVING `P` the gate is T's cross
+     permission, fixed at T's establishment, else read live as of the reading moment — PLAN_M CL-1):
      - **`prev_structure_bos`** (a reversal start, `P` = `reversal_bos_frozen`): the reversing structure's most recent
        `BOS_CONFIRMED` price by its reversal (`CrossFibLimit.ref_anchor_price`); its bound = the REALISED reversal
        pattern's first candle (`STATE_CHANGED(to=reversal).meta["pattern_anchor_idx"]`), known for the structure's
        whole run, like `P` (RX1-K7);
      - **`cross_limit_anchor`** (every other source with a `P`, RX1-2): the anchor behind `P` (`ref_anchor_price`,
        CROSS_CYCLE_FIB_SPEC §3's table); its bound = the cross-limit breakout watch's break of `P`
-       (CROSS_CYCLE_FIB_SPEC §3), counted once its confirmation ≤ the reading moment — none → no bound.
+       (CROSS_CYCLE_FIB_SPEC §3), counted once its confirmation ≤ the reading moment — none → no bound. A limit whose
+       `P` MOVES (PLAN_M CL-7; CROSS_CYCLE_FIB_SPEC §3 "A moving `P`") is watched at `P` as of the reading moment: a
+       break of a `P` the parent later moved past stops counting.
    - **The choice:** both → the one further opposite the structure (sd +1 the lower price, sd −1 the higher — also when
      the previous CTS already went past the BOS anchor, RX1-3); EQUAL prices → the structure reference and its bound
      (RX1-K5); neither → the condition PASSES (RX1-B / RX1-4).

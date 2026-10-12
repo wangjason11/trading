@@ -270,7 +270,9 @@ def fib_hover_limit_text(fib_st: Any) -> Optional[str]:
     `limit: none (<why>)`: the structure's start (`start_trading`, a
     `first_confluence on parent cycle 0`), `no previous sub`, or
     `prev_sub_no_cts (sub <from>)`. Example (sub 7): `limit 0.57827 ·
-    prev_sub_bos_threshold (sub 6) · M=2`."""
+    prev_sub_bos_threshold (sub 6) · M=2`. A `P` that MOVED by the structure's
+    end (`cross_fib_limit_move_count`, PLAN_M CL-6) qualifies the price:
+    `limit 0.57630 (moved 7× from 0.57328) · parent_bos_threshold · M=4`."""
     m = getattr(fib_st, "meta", None) or {}
     if "cross_fib_limit_source" not in m:
         return None
@@ -289,7 +291,11 @@ def fib_hover_limit_text(fib_st: Any) -> Optional[str]:
             why = "no previous sub"
         return f"limit: none ({why})"
     M = m["cross_fib_limit_cycle"]
-    return f"limit {float(price):.5f} · {source}{sub} · M={'none' if M is None else int(M)}"
+    moved = ""
+    if "cross_fib_limit_move_count" in m:
+        moved = (f" (moved {int(m['cross_fib_limit_move_count'])}× from "
+                 f"{float(m['cross_fib_limit_price_at_start']):.5f})")
+    return f"limit {float(price):.5f}{moved} · {source}{sub} · M={'none' if M is None else int(M)}"
 
 
 def fib_hover_ic_ref_text(fib_st: Any) -> Optional[str]:

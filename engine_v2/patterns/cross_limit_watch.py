@@ -10,11 +10,13 @@ reversal against its frozen BOS threshold, but on the BREAKOUT wave (the user, 2
 - the breakout pattern is anchored at that candle: `BreakoutPatterns.detect_best_for_anchor(A, sd, P)` — the
   reversal watch's own detector and pattern set, `P` the break threshold (RX1-W1); its latest confirmation is the
   detector's own `A + 5` (the reversal watch's window — no separate cap);
-- `P` never moves: every later close past it re-arms (RX1-W3);
+- every later close past `P` re-arms (RX1-W3); the watch takes ONE `threshold` — a counter sub's `P` moves with
+  the parent's BOS threshold (PLAN_M CL-7), so its caller (`FibTracker.ic_reference`) hands `P` as of the reading
+  moment, and a break of a `P` the parent later moved past stops counting;
 - two watches confirming → the EARLIEST CONFIRMATION wins, ties → the earlier anchor (RX1-K1);
 - detection by MS's convention (RX1-K6): the detector sees the frame up to `end_idx` (its look-ahead, `continuous`
   first), and a break COUNTS at a moment `t` iff its confirmation ≤ `known_at = t` — so the in-flight answer is the
-  final answer cut by time and the bound never moves.
+  final answer cut by time and, for one threshold, the bound never moves.
 
 Pure: no MS state, no structure event. Positional indices (MS / sub frames are RangeIndex, `loc == iloc`).
 """

@@ -1,0 +1,28 @@
+KILLED    M01_price_at_exclusive             13 failing: test_a_break_of_an_earlier_p_stops_counting_once_p_moved_pas, test_a_break_of_an_earlier_p_stops_counting_once_p_moved_pas, test_a_pre_established_cross_reads_the_limit_as_of_each_upda, test_a_pre_established_cross_reads_the_limit_as_of_each_upda
+KILLED    M02_price_at_none_reads_start      17 failing: test_a_break_of_an_earlier_p_stops_counting_once_p_moved_pas, test_a_break_of_an_earlier_p_stops_counting_once_p_moved_pas, test_m_at_a_moment[-1], test_m_at_a_moment[1]
+KILLED    M03_localized_leaves_the_moves     2 failing: test_localized_shifts_every_move_of_a_limit_without_a_break, test_the_geometry_hands_its_tracker_the_slice_local_moves
+KILLED    M04_localized_always_replaces      2 failing: test_localized_moves_only_the_break_indices, test_localized_shifts_every_move_of_a_limit_without_a_break
+KILLED    M05_moves_until_ignores_moment     3 failing: test_moves_until_counts_the_moves_known_by_the_moment, test_the_export_reads_p_as_of_the_structures_end[-1], test_the_export_reads_p_as_of_the_structures_end[1]
+KILLED    M06_cross_allowed_reads_last_p     14 failing: test_a_pre_established_cross_reads_the_limit_as_of_each_upda, test_a_pre_established_cross_reads_the_limit_as_of_each_upda, test_a_pre_established_cross_reads_the_limit_as_of_each_upda, test_a_pre_established_cross_reads_the_limit_as_of_each_upda
+KILLED    M07_cross_allowed_caches_first_read 4 failing: test_cross_allowed_reads_the_latest_anchor_strictly[-1], test_cross_allowed_reads_the_latest_anchor_strictly[1], test_a_pre_established_cross_reads_the_limit_as_of_each_upda, test_a_pre_established_cross_reads_the_limit_as_of_each_upda
+KILLED    M08_cross_allowed_ignores_the_fix  3 failing: test_a_moving_limit_read_outside_a_handler_raises_a_constant, test_the_permission_is_read_at_the_establishment_and_fixed[6, test_the_permission_is_read_at_the_establishment_and_fixed[6
+KILLED    M09_fix_never_stored               16 failing: test_a_cycle_established_as_a_cross_keeps_it[-1], test_a_cycle_established_as_a_cross_keeps_it[1], test_a_snapshot_restore_undoes_the_fix_and_a_second_fix_rais, test_a_snapshot_restore_undoes_the_fix_and_a_second_fix_rais
+KILLED    M10_second_fix_keeps_the_first     2 failing: test_a_snapshot_restore_undoes_the_fix_and_a_second_fix_rais, test_a_snapshot_restore_undoes_the_fix_and_a_second_fix_rais
+KILLED    M11_establishment_reads_without_fixing 16 failing: test_a_cycle_established_as_a_cross_keeps_it[-1], test_a_cycle_established_as_a_cross_keeps_it[1], test_a_snapshot_restore_undoes_the_fix_and_a_second_fix_rais, test_a_snapshot_restore_undoes_the_fix_and_a_second_fix_rais
+KILLED    M12_no_moment_no_raise             1 failing: test_a_moving_limit_read_outside_a_handler_raises_a_constant
+KILLED    M13_reference_ignores_the_fix      6 failing: test_the_export_reads_p_as_of_the_structures_end[-1], test_the_export_reads_p_as_of_the_structures_end[1], test_the_real_run_reads_the_move_at_cycle_1s_establishment[-, test_the_real_run_reads_the_move_at_cycle_1s_establishment[1
+KILLED    M14_ic_reference_drops_the_moment  2 failing: test_the_structure_reference_takes_the_fixed_answer_else_the, test_the_structure_reference_takes_the_fixed_answer_else_the
+KILLED    M15_watch_reads_last_p             2 failing: test_a_break_of_an_earlier_p_stops_counting_once_p_moved_pas, test_a_break_of_an_earlier_p_stops_counting_once_p_moved_pas
+KILLED    M16_export_price_is_last_p         2 failing: test_the_export_reads_p_as_of_the_structures_end[-1], test_the_export_reads_p_as_of_the_structures_end[1]
+KILLED    M17_export_m_at_last_p             2 failing: test_the_export_reads_p_as_of_the_structures_end[-1], test_the_export_reads_p_as_of_the_structures_end[1]
+KILLED    M18_export_counts_every_move       2 failing: test_the_export_reads_p_as_of_the_structures_end[-1], test_the_export_reads_p_as_of_the_structures_end[1]
+KILLED    M19_keys_always                    4 failing: test_every_fib_record_is_stamped_at_finalize_with_the_final_, test_a_pipeline_record_carries_its_reference_before_the_limi, test_the_export_reads_p_as_of_the_structures_end[-1], test_the_export_reads_p_as_of_the_structures_end[1]
+KILLED    M20_keys_never                     4 failing: test_the_export_reads_p_as_of_the_structures_end[-1], test_the_export_reads_p_as_of_the_structures_end[1], test_the_real_run_reads_the_move_at_cycle_1s_establishment[-, test_the_real_run_reads_the_move_at_cycle_1s_establishment[1
+KILLED    M21_keys_first                     2 failing: test_the_export_reads_p_as_of_the_structures_end[-1], test_the_export_reads_p_as_of_the_structures_end[1]
+KILLED    M22_start_key_holds_last_p         4 failing: test_the_export_reads_p_as_of_the_structures_end[-1], test_the_export_reads_p_as_of_the_structures_end[1], test_the_real_run_reads_the_move_at_cycle_1s_establishment[-, test_the_real_run_reads_the_move_at_cycle_1s_establishment[1
+KILLED    M23_count_ignores_the_cap          2 failing: test_the_export_reads_p_as_of_the_structures_end[-1], test_the_export_reads_p_as_of_the_structures_end[1]
+KILLED    M12a_finalize_drops_the_cap        2 failing: test_the_export_reads_p_as_of_the_structures_end[-1], test_the_export_reads_p_as_of_the_structures_end[1]
+SURVIVED  M12b_stamp_drops_the_cap           1652 passed, 1 skipped, 1 deselected, 435 warnings in 310.75s (0:05:10)
+KILLED    M24_hover_suffix_dropped           1 failing: test_the_hover_qualifies_a_moved_price
+25/26 KILLED  (results: C:\Users\wangj\AppData\Local\Temp\mm1\results.json)
+exit 1

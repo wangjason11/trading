@@ -1163,7 +1163,8 @@ def _build_geometry(
             timeframe=timeframe,
             enforce_cts0_new_extreme=(bos0_inner is not None),
             bos0_inner=bos0_inner,
-            # entity-absolute → the slice's coordinates: the limit's break indices (PLAN_K §3.5)
+            # entity-absolute → the slice's coordinates: the limit's break indices (PLAN_K §3.5) and each move's
+            # `known_at` (PLAN_M §7.1)
             cross_fib_limit=cross_fib_limit.localized(slice_begin),
         )
     except (ValueError, IndexError):
@@ -1295,7 +1296,8 @@ def render_sub_projection(
         timeframe=timeframe,
         log_prefix=f"M15_sub{sub.sub_id}_{first.trigger_type}",
         structure_path_id=first_path,
-        # entity-absolute → the slice's coordinates: the limit's break indices (PLAN_K §3.5); the fib meta's
+        # entity-absolute → the slice's coordinates: the limit's break indices (PLAN_K §3.5) and each move's
+        # `known_at` (PLAN_M §7.1); the fib meta's
         # `ic_ref_break_*_idx` return to entity-absolute through `_FIB_META_IDX_KEYS` in the mirror
         cross_fib_limits={0: lim.localized(slice_begin)},
     )

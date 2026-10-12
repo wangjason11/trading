@@ -17,14 +17,19 @@
 >
 > **The `fib_mode` meta key / fib CSV column retired since PLAN_I S6 (2026-10-09)** — it was `"cross_cycle"` on every
 > record since S4 (§6).
+>
+> **A limit whose `P` MOVES since PLAN_M landing 1 (2026-10-11; `plans/PLAN_M_counter_sub_cross_limit.md`)** — the
+> plumbing (§3 "A moving `P`"): every reader takes `P` as of its moment, a cycle's permission is fixed at its
+> establishment, the export reads `P` as of the structure's end. Its one source, a COUNTER sub's
+> `parent_bos_threshold`, is produced from landing 2 — until then no limit moves (byte-identical, S_M1).
 
 ---
 
 ## 0. One-sentence summary
 
 Cycle 0 gets a single fib; a cycle T ≥ 1 gets a CROSS fib back across its live, contiguous prior cycles when the
-structure's cross-fib LIMIT allows it (a reference price `P` fixed by the structure's starting trigger, and no earlier
-cycle's CTS anchor strictly beyond `P`), else a single — main and sub alike.
+structure's cross-fib LIMIT allows it (a reference price `P` fixed by the structure's starting trigger — one source
+moves after the start, §3 — and no earlier cycle's CTS anchor strictly beyond `P`), else a single — main and sub alike.
 
 ---
 
@@ -79,7 +84,8 @@ then end together. 0 on the reference window (0 / 27 fib cycles move); one real 
 
 ## 3. The cross-fib LIMIT
 
-- **`P` (`cross_fib_limit_price`) — fixed once, at the structure's start, by its STARTING trigger** (PLAN_I §1.2, I1:
+- **`P` (`cross_fib_limit_price`) — fixed once, at the structure's start, by its STARTING trigger (one source moves
+  after it — "A moving `P`" below)** (PLAN_I §1.2, I1:
   the variation attaches to the trigger, not to the sid number). `CrossFibLimit(price, source, from_pool_idx /
   from_sub_id, started_by)` (`zones/cross_cycle_fib.py`):
 
@@ -99,17 +105,39 @@ then end together. 0 on the reference window (0 / 27 fib cycles move); one real 
 - **`M` (`cross_fib_limit_cycle`)** = the first cycle whose LATEST CTS anchor (`_latest_anchor`: written at its
   CTS_ESTABLISHED, every CTS_UPDATED until its confirmation, and its CTS_CONFIRMED — the confirmed anchor wins) is
   beyond `P` = the LAST cycle a cross may target. `_cross_allowed(sid, T)` ⟺ `P` set and (`M` is None or T ≤ M). The
-  cycles k < T are confirmed before T exists (the S2 tripwire) and a confirmed anchor never moves, so the answer is
-  fixed for T's whole life.
+  cycles k < T are confirmed before T exists (the S2 tripwire) and a confirmed anchor never moves, so with a FIXED `P`
+  the answer is constant over T's whole life. With a MOVING `P` it is read as of the handled event's moment until T's
+  CTS_ESTABLISHED and FIXED there (below).
+- **A moving `P` (PLAN_M landing 1, 2026-10-11; decisions PLAN_M §3 CL-1 / CL-6 / CL-7).** `CrossFibLimit` carries
+  `price_at_start` and `price_moves` = `((known_at, price), …)` — set ⟺ `P` moved (only a source in `_LIVE_SOURCES`
+  = `{parent_bos_threshold}`, asserted), `known_at` strictly increasing, the candle from which the move is KNOWN in
+  the frame the limit is used on (shifted by `localized` like the break fields); `price` = the last move's price.
+  `price_at(t)` = the price of the last move with `known_at ≤ t` (inclusive), else `price_at_start`; None → `price`.
+  - **A cycle's cross permission** (`_cross_allowed`) is read LIVE — `P` as of the handled event's moment
+    (`_evaluated_at`; the three callers run inside a handler) — until the cycle's CTS_ESTABLISHED, where it is FIXED
+    for the cycle's life (`_fix_cross_permission` → `_cross_permission[(sid, T)]`, plain bools: MS's snapshot restore
+    undoes a fix with the rest of the tracker; a second fix raises `CrossFibLimitError`, and so does a refusal while
+    the cycle's pre-established cross is active — reachable only by a move NEARER, which the producer forbids). So a
+    pre-established cross can start late when a move lifts `M` (the threshold path reads live), and a cycle
+    established single never turns into a cross on a later update. An UNFIXED cycle of a moving limit read with no
+    moment raises. Since `P` only moves further, a move only gives LATER cycles more room.
+  - **The structure side of the IC reference** (`_structure_reference_limit(sid, T, at)`) takes T's fixed permission
+    when it has one, else the live test at `at` — the structure side applies exactly where a cross is allowed.
+  - **The export** — §"Exported" below — reads `P` as of the STRUCTURE'S END.
 - **REQUIRED:** a tracker consulted for a cycle ≥ 1 of a structure with no limit entry raises `CrossFibLimitError` (a
   `RuntimeError`, never swallowed by a sub geometry's `except (ValueError, IndexError)`).
 - **Exported:** every fib record's meta carries `cross_fib_limit_price` / `_source` / `_cycle` (the structure's FINAL
   `M`) / `_from_sub_id` (+ main's `started_by`), stamped at finalize; the fib hover's last line
-  (`_zone_render.fib_hover_limit_text`, CHARTING_SPEC).
+  (`_zone_render.fib_hover_limit_text`, CHARTING_SPEC). FINAL = as of the STRUCTURE'S END (`_cross_fib_limit_meta(sid,
+  at=lifecycle_cap)`, the same `at` at `_finalize_lifecycle_fields` and `stamp_ic_references`; None = main / an open
+  sub): `cross_fib_limit_price` = `price_at(cap)` — never a move after the structure ended — and `_cycle` = `M` at
+  that `P` (PLAN_M CL-6, the user 2026-10-11: (a)); when `P` moved by then, two keys right after `_from_sub_id`:
+  `cross_fib_limit_price_at_start` and `cross_fib_limit_move_count` (the moves after the start, up to the cap). A
+  cycle fixed at its establishment can disagree with that `M` (established single before a move lifted `M` past it).
 - **The IC reference's inputs (PLAN_K A8–A12, 2026-10-09; the condition itself: POI_ZONES_SPEC §3.2).** The limit also
   carries what the structure reference of a fib's IC reference needs — a cycle `T` uses it while `T ≤ M` (or `M` None),
   the same test as `_cross_allowed` but evaluated WITHOUT it (`FibTracker._structure_reference_limit`: no limit entry or
-  `P` None → no structure reference, nothing raises):
+  `P` None → no structure reference, nothing raises; T's fixed permission once established — "A moving `P`" above):
   - **`ref_anchor_price`** — the ANCHOR price behind `P` (`P` can be a threshold that moved; the IC reference never uses
     a threshold), read in the same read as `P`; None ⟺ `P` None (asserted):
 
@@ -136,10 +164,15 @@ then end together. 0 on the reference window (0 / 27 fib cycles move); one real 
     reversal against its frozen BOS, but on the breakout wave. A candle whose CLOSE is past `P` in the structure's
     direction opens a watch (W2); the breakout pattern is anchored at it — `BreakoutPatterns.detect_best_for_anchor(A,
     sd, P)`, the reversal watch's own detector and pattern set, `P` the break threshold (W1; its latest confirmation is
-    the detector's own `A + 5`); `P` never moves and every later close past it re-arms (W3); two watches confirming →
+    the detector's own `A + 5`); every later close past `P` re-arms (W3) — the watch takes ONE `P`: a moving limit's
+    caller (`FibTracker.ic_reference`) hands `price_at(t)`, so a break of a `P` the parent later moved past stops
+    counting (PLAN_M CL-7); two watches confirming →
     the EARLIEST confirmation wins, a tie → the earlier anchor (K1); detection by MS's convention — the frame up to
     `end_idx` (look-ahead, `continuous` first), a break counting at moment `t` iff its confirmation ≤ `t` (K6: the
-    as-of answer is the final one cut by time; the bound never moves). `start_idx` = the structure's BOS_0 anchor (a
+    as-of answer is the final one cut by time; for ONE `P` the bound never moves — a moving `P` is watched at
+    `price_at(t)`, so a break of the start `P` that counts at a read before a move stops counting at the reads
+    after it and at the stamp, and from a move's moment the earliest break of the NEW `P` counts, even one confirmed
+    before the move was known — PLAN_M §3 "readings"). `start_idx` = the structure's BOS_0 anchor (a
     sub's lifecycle start can lie after its break — sub 4: start 3621, break 3588); the detector always reads the
     WHOLE frame it is handed (`end_idx` None in every engine call: MS's resolver frame, or the projection's slice —
     the same rows, to the data edge); `t` = the fed event's moment in flight, the structure's lifecycle cap for the
@@ -239,7 +272,10 @@ CTS_ESTABLISHED / CTS_UPDATED. Since S5 that inner comes from THIS logic:
   pattern's IC or, with no pattern, a ranked one (POI_ZONES_SPEC §3.6, PLAN_L L2, ICR-12) — or None (no fib / no IC:
   no IC candidate, or every one a pinbar) → the BOS inner only. Every
   imbalance question of the fib decision is asked at the fed event's moment (Plan F), so the M1 divergence and the
-  fib the tracker never creates / has deactivated are gone (PLAN_I §9.2 F9).
+  fib the tracker never creates / has deactivated are gone (PLAN_I §9.2 F9). A moving `P` (§3) is read the same way
+  — the permission as of the fed event, fixed at the establishment, the watch at `P` as of the read; a move reaches
+  MS's POI inner at its NEXT refresh (a CTS_ESTABLISHED / CTS_UPDATED), as a watch break does. The fixed permissions
+  are tracker state, so a range back-fill's restore (PLAN_J J1) undoes them with the rest.
 - **The order.** The drawn fib is decided in `processing_order_key` order, MS's in EMISSION order; the two are the same
   sequence unless a fib-handled event of a structure has its stamped idx in one of its CTS_ESTABLISHED's
   [anchor, moment) (F14; F17 (i)) or a CTS is confirmed with an anchor AT OR after its confirmation candle (F16 — at

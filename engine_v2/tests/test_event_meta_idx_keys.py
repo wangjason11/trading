@@ -376,6 +376,8 @@ NON_INDEX_INT_META_KEYS = frozenset({
     "ranking_in_play_count",  # POI (PLAN_L landing 2): the candidates entering the deciding ranking rule
     # fib (PLAN_I S2): the structure's `M` (a cycle id) and the start-numbered sub that supplied `P` (a sub id)
     "cross_fib_limit_cycle", "cross_fib_limit_from_sub_id",
+    # fib (PLAN_M landing 1): how many times a counter sub's `P` moved by the structure's end (a count)
+    "cross_fib_limit_move_count",
 })
 NEVER_LISTED = NON_INDEX_INT_META_KEYS | {"triggered_by_event_idx"}
 

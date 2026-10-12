@@ -1,0 +1,24 @@
+# The counter-sub cross limit — the user's write-up (VERBATIM, 2026-10-10)
+
+Register `IDEA_PARKING_LOT.md` §D.1 item 2 (the cross-limit price debugging). Received 2026-10-10, session 1, after the
+status-quo table of every structure's `P` on S_L2 `20261010_155816_6d8cc67`. Canonical input: amend in place only as
+decisions land (cite the decision). Measurement tools: `limit_table.py <save>` (every structure's `P` / source / `M` /
+fib records / IC reference), `struct_events.py <save> H1:<sid> sub:<id> [--all-updates]` (CTS / BOS / state events).
+
+---
+
+Thank you. I’ve come to realize an issue when reviewing the charts related to our new cross cycle fib rule. I want to discuss it with you, confirm what I think is happening, and then discuss what solutions / changes make sense.
+
+To start, I’ll give my observations first, and please double check if I’m mistaken anywhere. In our dataset, H1 sid_1 lifecycle start should be 902, when reversal pattern breaks the bos_threshold and is confirmed. When we retroactively update historical candles with sid_1 structure, we allow for cross cycle fibs up to cycle_2 (905). However, this sid_1 structure was never active since in real time those candles were in the past. When those candles were actually live though, we did have a M15 sub structure (sub_3) active that effectively mimicked the retroactive post-reversal structure pretty closely (BOS/CTS at same times when higher TF mapped to the lower TF). However, the issue here is that sub_3 is itself a reversal, so it obeys its own cross-cycle limit. In this case, I believe that would be the bos_threshold of sub_2, which would mean sub_3’s cycle_0 CTS already surpasses the cross limit and cycle_0 is single and there are no cross-cycle fibs possible on this sub on other cycles as well. 
+
+That means the information from the retroactive reversed structure’s analysis differs from what was live even though the BOS / CTS structure levels were the same. The overwriting structure has a much further cross-cycle fib limit than the live structure. So the issue we have here is that the retroactive new structure is what should “have been” the real structure in the past now that we know for sure there is a reversal. However, we would not have known that during that stretch when the candles were actually live, and ultimately that’s when it really mattered for trading and decision purposes. But again, we are not far off from being able to “peek” into the future given that our live sub structure mimics the eventual overwriting structure in terms of the anchor BOS & CTS. We just need to make a few additional tweaks to get consistent structure elements. 
+
+I think the key difference here can be resolved if we also set the sub_3 cross-cycle fib limit to the same as the sid_0 cycle_1 (parent) bos_threshold, then we would more or less replicate the same results as sid_1, since sid_1’s cross limit is set to sid_0 bos_threshold anyways. The results “could” differ slightly because at sid_1 determination of cross limit, bos_threshold would be finalized while for sub_3 during live real time, bos_threshold would still be updating. 
+
+BUT, I think what this ultimately may lead to is that sub_3 simply has its cross limit removed entirely, or rather its “limitless”. The reason being that if we use the same sid_0 bos_threshold for sub_3 as sid_1 would, then sub_3’s furthest ability to have cross-cycle fibs until is inherently limited by the bos_threshold since if sid_0 reverses (by breaking that threshold), sub_3 would automatically end anyways having sid_0 as the parent, so effectively sub_3’s cross fib will almost never exceed sid_0 bos_threshold since if price did, sub_3 itself would likely end. There are likely some very few exceptions to this, like false breaks, but in those cases bos_threshold would update, and since we allow cross up to 1 CTS anchor over the limit, with the 2nd CTS cycle reverting to single fib, the bos_threshold updating will always reset the 1st CTS anchor on a live basis as long as the original sid_0 has not reversed yet, so effectively the limit increases meaning we need a new 1st CTS to be past it. 
+
+So what I’m ultimately proposing is this: for all subordinate structure, or specifically triggers (since our cross fib rules are tied to triggers, and specifically first triggers for unique subs) in the opposite direction of the first record parent (regardless of the sub trigger), their cross limit will simply be the bos_threshold (active) of the parent sid & cycle. I’m not sure if this would create some difficulties since for this, the limit or bos_threshold would become a live variable as opposed to a fixed one set once since it can update. 
+
+We don’t change anything for any other triggers. 
+
+Does this all make sense to you? Any thoughts / is this a good idea? Anything I get wrong or needs to be correct? Is this feasible? Any other things that needs clarifying or is confusing?
