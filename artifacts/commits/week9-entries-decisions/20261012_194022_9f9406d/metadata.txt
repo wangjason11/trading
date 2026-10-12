@@ -1,0 +1,4 @@
+commit_hash=9f9406d
+timestamp=20261012_194022
+branch=week9-entries-decisions
+commit_message=PLAN_N hover follow-up (option B): the H1 range hover line = the box, candle for candle; the dead hover passes deleted
