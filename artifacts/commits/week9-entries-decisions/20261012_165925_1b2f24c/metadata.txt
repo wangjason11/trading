@@ -1,0 +1,4 @@
+commit_hash=1b2f24c
+timestamp=20261012_165925
+branch=week9-entries-decisions
+commit_message=PLAN_N: the Naming-Standard audit of the never-audited index keys (one atomic rule-3 migration)
