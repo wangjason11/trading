@@ -1,6 +1,10 @@
 """PLAN_N landing review — the reviewer's three surviving mutants (LR1–LR3) + the hover pass-3 fix, re-run after the
 fold (full suite each; every one must be KILLED).
 
+SUPERSEDED on the code since `9f9406d` (the hover follow-up, option B, 2026-10-12): LR1's and H1's anchors are gone
+(re-running this file reports them BAD). Use `mutants_hover_followup.py` — LR1 re-anchored, LR2 / LR3, and B's own
+mutants; H1 (restore the all-structures snapshot) is EQUIVALENT under B. This file stays as the record of PLAN_N's run.
+
     python engine_v2/plans/plan_e_inputs/review_scripts/mutant_runner.py \
         engine_v2/plans/plan_n_inputs/mutants_n_review.py --jobs 4 --out <a short %TEMP% dir>
 """

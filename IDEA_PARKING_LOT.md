@@ -44,11 +44,6 @@ The open lines below carry over (fold in when their files are next touched); D a
   (`config.py` keeps them commented out) would get H1's pinbar floor AND the institutional pattern's H1 cap / params
   through the frame's `attrs["timeframe"]` (PLAN_H landing review, 2026-10-06). Pass `CONFIG.timeframe` (or assert H1)
   when such a window comes back. OPEN; not reachable on the current config.
-- ~~**Naming-Standard audit of never-audited index keys**~~ — **LANDED 2026-10-12 by PLAN_N** (`engine_v2/plans/
-  PLAN_N_naming_audit.md`; committed `1b2f24c`, saved S_N `20261012_165925_1b2f24c`): KL steps `base_idx` / `expanded_idx`; RANGE_STARTED
-  `range_anchor_idx` (MS's range start on every path; the H1 range box starts there) / `confirmed_at`;
-  `effective_idx` == `ev.idx` always; "collapsed parent cycle" (one test, one name). Charts byte-identical on the
-  window. Move to "Recently closed" at the next register sweep.
 
 ## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
 
@@ -389,6 +384,10 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
 
 ## Recently closed (history pointers)
 
+- **Naming-Standard audit of never-audited index keys** (§A) — CLOSED 2026-10-12 by PLAN_N
+  (`engine_v2/plans/PLAN_N_naming_audit.md`; committed `1b2f24c`, saved S_N `20261012_165925_1b2f24c`): KL steps
+  `base_idx` / `expanded_idx`; RANGE_STARTED `range_anchor_idx` (MS's range start on every path) / `confirmed_at`;
+  `effective_idx` == `ev.idx` always; "collapsed parent cycle". Charts byte-identical on the window.
 - **H1 range hover lines snapshot every structure** (§A) — CLOSED 2026-10-12, committed `9f9406d`, saved S_N_hover
   `20261012_194022_9f9406d` (save `cc3d3ff`, trunk `efd95b9`): widened by the user to option B — the hover line = the
   box, candle for candle (snapshot at each event's replay candle); it also fixed a second, same-structure symptom (a

@@ -644,20 +644,19 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-09 on S_K_B `20261009_140048_97795bd` and again on
-`09f056a`, the IP tiebreaker update — the figure diff: 81/81, 135/135, 274/274
-traces; config window 2025-12-01→2026-01-20, auto-extended to 2025-11-15.
-Window-dependent, re-baseline when the config window or chart rendering changes;
+counts are (verified 2026-10-12 on S_N_hover `20261012_194022_9f9406d`; unchanged since
+PLAN_L landing 2 (S_L2, 2026-10-10: its 7 new POIs moved them from 81/236, 135/120, 274/264)
+through S_M1, S_M2, S_N and S_N_hover; config window 2025-12-01→2026-01-20, auto-extended to
+2025-11-15. Window-dependent, re-baseline when the config window or chart rendering changes;
 older values in **History** below):
 
-- `H1` chart: traces=81, shapes=236
-- `M15.counter` chart: traces=135, shapes=120
-- `M15.confluence` chart: traces=274, shapes=264
+- `H1` chart: traces=83, shapes=239
+- `M15.counter` chart: traces=137, shapes=123
+- `M15.confluence` chart: traces=282, shapes=276
 
-(Until this re-baseline the block still listed the 2026-09-24 Plan F values — H1
-85/245, counter 151/124, confluence 294/233; landings since then moved them — not
-re-attributed per landing here — and each `/compare` checked its baseline save's
-counts, not this block.)
+(Before the 2026-10-09 re-baseline the block listed the 2026-09-24 Plan F values — H1
+85/245, counter 151/124, confluence 294/233; landings between re-baselines are not
+re-attributed here — each `/compare` checks its baseline save's counts, not this block.)
 
 **History:** on 2026-05-29 the counts were H1 125/261, counter 216/169, confluence
 359/280. Pre-Plan C (through the Plan B save 2026-09-20) they were H1
