@@ -485,7 +485,16 @@ cross-fib limit may now MOVE (CROSS_CYCLE_FIB_SPEC §3 "A moving `P`"), but no p
 so every CSV and figure is byte-identical to S_L2 (`cmp_fig_full.py` 27 / 27 md5, figures identical; `fig_hash.py`
 equal). The fib meta gains two keys ONLY on a structure whose `P` moved by its end (`cross_fib_limit_price_at_start`,
 `cross_fib_limit_move_count`, right after `cross_fib_limit_from_sub_id`) and the hover a `(moved N× from …)` suffix —
-none on this window. S_M1 `20261011_204047_86d4f7b` (source `86d4f7b`; = `LATEST_<branch>` from 2026-10-11).
+none on this window. S_M1 `20261011_204047_86d4f7b` (source `86d4f7b`; `LATEST_<branch>` until S_M2, below).
+**PLAN_M landing 2 (2026-10-12, a COUNTER sub's cross limit = its parent cycle's BOS threshold) — a BEHAVIOUR
+change:** subs 1 / 3 / 5 / 7 take `parent_bos_threshold` (0.55808 / 0.5736 / 0.58105 / 0.58105, no move on this
+window). Exactly 6 CSVs differ vs S_M1 — both M15 lenses' `fib_lifecycle`, `ic_candidates`, `poi_zones` (sub 3 cycle 2
+becomes a cross from cycle 1, pre-established at 2967, its POI's IC 2969 → 2821; `via` relabels on subs 1 / 3; the
+IC-reference moves on subs 1 / 3 / 7; the limit keys of every record of the four subs); no structure / trigger /
+sub / WVMI / H1 change; trace / shape COUNTS unchanged, the changed hovers + sub 3's fib / POI traces differ. Against
+S_M1 (or S_L2): `engine_v2/plans/plan_m_inputs/trial_diff.py BASE CUR_DEBUG CUR_CHARTS` (keyed) — S_M2's output is
+`plan_m_inputs/trial_diff_vs_S_L2.txt`; the exact outputs: `trial_md5.txt` / `trial_fig_hash.txt`. S_M2
+`20261012_023137_10e4c6f` (source `10e4c6f`; = `LATEST_<branch>` from 2026-10-12).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

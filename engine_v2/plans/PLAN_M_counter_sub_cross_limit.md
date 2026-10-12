@@ -8,7 +8,8 @@ vs S_L2, the census unchanged, suite 1657, mutants 25 / 26 + 1 equivalent + the 
 S_M1 `20261011_204047_86d4f7b` (save `8bdcc8a`, trunk `a442e91`) = `LATEST_<branch>`; LANDING 2 BUILT + LANDING-REVIEWED (§14–§15:
 = the trial's outputs exactly, the census PINNED table 14 / 14, 0 knock-on, suite 1691, mutants 25 / 25 + the
 review's 6 / 6; review 437,943 tok, 0 BLOCKER / MAJOR, all folded); the user's chart review (2026-10-12): "charts look
-good. go ahead" → COMMITTED + SAVED S_M2 (§16). PLAN_M COMPLETE; the parked follow-up: CL-8 (register §D.1 item 2).** Living document:
+good. go ahead" → COMMITTED `10e4c6f` + SAVED S_M2 `20261012_023137_10e4c6f` (§16). PLAN_M COMPLETE; the parked
+follow-up: CL-8 (register §D.1 item 2).** Living document:
 every question, answer and decision is recorded here as it happens. Register line: `IDEA_PARKING_LOT.md` §D.1 item 2
 (the cross-limit price debugging, opened by the user 2026-10-09).
 
@@ -17,7 +18,8 @@ every question, answer and decision is recorded here as it happens. Register lin
 subs this plan names; CROSS_CYCLE_FIB_SPEC §3 (the limit, its sources, the IC reference's inputs) changes with the code.
 **Baseline:** S_L2 `artifacts/commits/week9-entries-decisions/20261010_155816_6d8cc67` (source `6d8cc67`, save
 `8aa4f80`) — the design's; since landing 1 **S_M1** `20261011_204047_86d4f7b` (source `86d4f7b`, save `8bdcc8a`,
-trunk `a442e91`; = `LATEST_<branch>`; byte-identical to S_L2, §12).
+trunk `a442e91`; byte-identical to S_L2, §12); since landing 2 **S_M2** `20261012_023137_10e4c6f` (source `10e4c6f`,
+save `3ebe857`, trunk `475bbf9`; = `LATEST_<branch>`, §16).
 **Tools (`plan_m_inputs/`, read-only):** `limit_table.py <save>` (every structure's `P` / source / `M` / fib records /
 IC reference), `struct_events.py <save> H1:<sid> sub:<id> [--all-updates]` (CTS / BOS / state events with times),
 `trial_diff.py BASE CUR_DEBUG [CUR_CHARTS]` (a keyed diff of a replay vs a save), `fig_hash.py CHARTS_DIR` (full-figure
@@ -682,7 +684,7 @@ replay 47.5 s wall (multi_tf_dual 9.02 s; charts 6.38 / 7.62 / 20.72 s), FETCH G
 `20261011_204047_86d4f7b` (27 CSVs + 3 charts; `cmp_fig_full.py` vs S_L2: 27 / 27 md5-equal, the figures identical);
 save commit `8bdcc8a`, trunk `a442e91`; `LATEST_<branch>` = S_M1. Local, NOT pushed.
 
-## 14. Landing 2 — as built (2026-10-11, session 1; uncommitted until the user's go)
+## 14. Landing 2 — as built (2026-10-11, session 1; COMMITTED `10e4c6f`, saved S_M2 — §16)
 
 Built on `b5a3230` (= S_M1's engine + the pointers) after the user's go on landing 1 ("sounds good go ahead").
 
@@ -765,3 +767,13 @@ census report re-run identical. Lens B: suite 1686; 9 extra mutants, 5 killed.
 PASS, 27 / 27 md5 = `trial_md5.txt`, the three `fig_hash.py` = `trial_fig_hash.txt`, the `[sweep]` lines and "3 subs
 re-derived, 0 mismatches" unchanged (157 s wall — shared with the mutants and the census); the census re-run on the
 final code — report identical (14 / 14 MATCH, 0 knock-on, 0 tripwire mismatches, CL-7 0).
+
+## 16. Landing 2 — committed and saved (2026-10-12) — PLAN_M COMPLETE
+
+The user's chart review (2026-10-12): **"charts look good. go ahead"**. Source **`10e4c6f`**; `/commit-save` run mode —
+replay 48.2 s wall (multi_tf_dual 8.56 s; charts 6.58 / 7.80 / 20.82 s), FETCH GATE PASS (no retry); the save **S_M2
+`20261012_023137_10e4c6f`** (27 CSVs + 3 charts; its md5s = `trial_md5.txt`, its `fig_hash.py` = `trial_fig_hash.txt`);
+save commit `3ebe857`, trunk `475bbf9`; `LATEST_<branch>` = S_M2. Local, NOT pushed.
+
+**What remains of register §D.1 item 2:** the PARKED follow-up CL-8 — sub 3 cycle 2's IC (2821) vs H1 sid 1 cycle 1's
+(732), a residual of sub 3's extra cycle 0 (§4), "looked at after this plan lands" (the user, 2026-10-11).
