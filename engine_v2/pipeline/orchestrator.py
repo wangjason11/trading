@@ -1008,7 +1008,7 @@ def _run_multi_tf_dual(
                 if t.trigger_type in PREV_SUB_TYPES else None)
         return cross_fib_limit_for(
             t.trigger_type, t.cycle, int(t.direction), int(record_start),
-            h1_events=sorted_events, reversing_sub=reversing_sub, prev_sub=prev,
+            h1_events=sorted_events, parent_tables=tables, reversing_sub=reversing_sub, prev_sub=prev,
         )
 
     def _resolve_reversal(sub, R, probe_direction):
@@ -1023,7 +1023,7 @@ def _run_multi_tf_dual(
         parent_path=parent_path, sub_tf="M15",
     )
     # The R6-2 tripwire: P re-derived the §1.2 way at each sub's start (a mismatch WARNs, the stored P stays).
-    check_cross_fib_limits(sub_pool, sorted_events)
+    check_cross_fib_limits(sub_pool, sorted_events, tables)
     n_records = len(sub_pool.all_records())
     print(
         f"[pool] unique subs={len(sub_pool.all())} records={n_records} "

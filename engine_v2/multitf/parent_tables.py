@@ -19,7 +19,14 @@ end_h1[(S,C)]      = floor_h1[(S,C+1)] if it exists            # next cycle's CL
                      else rev_by_sid[S], else None             #   compute_cycle_lifecycle)
 floor_m15 / end_m15 = LOH(...)                                 # every map must succeed (assert)
 degenerate[(S,C)]  = end_m15 is not None and floor_m15 >= end_m15
+bos_threshold_steps[(S,C)] = ((h1_known_at, m15_known_at, price, event_type), ...)
+                     every BOS_CONFIRMED / BOS_THRESHOLD_UPDATED of (S,C) in PROCESSING order; h1_known_at = the
+                     event's moment (`ef.event_moment`), m15_known_at = LOH(h1_known_at) — None when that hour lies
+                     before the M15 frame (the reader asserts it on the steps it uses: PLAN_M §7.3)
 ```
+
+`bos_threshold_steps` feeds a COUNTER sub's moving cross-fib limit (`cross_fib_limit.parent_bos_limit`, PLAN_M §7.3):
+the parent cycle's BOS threshold, each move known on M15 at its hour's last candle.
 
 `LOH` = `_map_parent_idx_to_m15_hour_end` (last M15 candle of the H1 hour) —
 the mapper for every TIMING value. Never the price-extreme mapper.
@@ -33,8 +40,10 @@ LOH map returns non-None.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from engine_v2.structure import event_fields as ef
 
 from engine_v2.zones.structure_lifecycle import (
     compute_reversal_idx_by_sid,
@@ -42,6 +51,8 @@ from engine_v2.zones.structure_lifecycle import (
 )
 
 Cycle = Tuple[int, int]
+# One step of a parent cycle's BOS threshold: (h1_known_at, m15_known_at, price, event_type).
+ThresholdStep = Tuple[int, Optional[int], Optional[float], str]
 
 
 @dataclass(frozen=True)
@@ -55,6 +66,8 @@ class ParentTables:
     floor_m15: Dict[Cycle, int]
     end_m15: Dict[Cycle, Optional[int]]
     degenerate: Dict[Cycle, bool]
+    # PLAN_M §7.3 — defaulted (a direct constructor without the H1 stream keeps working).
+    bos_threshold_steps: Dict[Cycle, Tuple[ThresholdStep, ...]] = field(default_factory=dict)
 
     def floor(self, parent_sid: int, parent_cycle_id: int) -> int:
         """Entity-absolute M15 floor of the cycle (KeyError → no CTS_ESTABLISHED
@@ -102,9 +115,19 @@ def build_parent_tables(
     cts_moment: Dict[Cycle, int] = {}
     parent_sd: Dict[int, int] = {}
     bos_moment: Dict[Cycle, int] = {}
+    steps: Dict[Cycle, List[ThresholdStep]] = {}
     for ev in sorted_events:
         meta = getattr(ev, "meta", None) or {}
         et = getattr(ev, "type", None)
+        if et in ("BOS_CONFIRMED", "BOS_THRESHOLD_UPDATED"):
+            sid = meta.get("structure_id")
+            cyc = meta.get("cycle_id")
+            if sid is not None and cyc is not None:
+                h1_at = ef.event_moment(ev)
+                m15_at = loh_fn(h1_at, h1_df, m15_df)
+                steps.setdefault((int(sid), int(cyc)), []).append(
+                    (int(h1_at), None if m15_at is None else int(m15_at),
+                     None if ev.price is None else float(ev.price), et))   # unpriced: a synthetic fixture only
         if et == "CTS_ESTABLISHED":
             sid = meta.get("structure_id")
             cyc = meta.get("cycle_id")
@@ -196,4 +219,5 @@ def build_parent_tables(
         floor_m15=floor_m15,
         end_m15=end_m15,
         degenerate=degenerate,
+        bos_threshold_steps={k: tuple(v) for k, v in steps.items()},
     )

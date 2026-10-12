@@ -3117,6 +3117,10 @@ floor_h1[(S,C)]   = max(struct_start[S], cts_moment[(S,C)])      # == the cycle'
 end_h1[(S,C)]     = floor_h1[(S,C+1)] if it exists, else rev_by_sid[S], else None
 floor_m15 / end_m15 = LOH(...)                                   # every map must succeed (assert)
 degenerate[(S,C)] = end_m15 is not None and floor_m15 >= end_m15
+bos_threshold_steps[(S,C)] = ((h1_known_at, LOH(h1_known_at), price, type), ...)   # PLAN_M (2026-10-11): every
+                                                                 #   BOS_CONFIRMED / BOS_THRESHOLD_UPDATED of (S,C) in
+                                                                 #   processing order — a COUNTER sub's moving
+                                                                 #   cross-fib limit (`cross_fib_limit.parent_bos_limit`)
 ```
 
 **Cycle lifecycle-start = the CTS-established MOMENT, not the anchor

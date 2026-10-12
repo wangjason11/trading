@@ -279,6 +279,14 @@ def _rec(pool_idx, start_idx, *, zero_length=False, trigger_type="subsequent_con
     return r
 
 
+def _tables(parent_sd, steps=None, end_h1=None):
+    """A `ParentTables` stand-in for the limit rule (PLAN_M §7.3): the parent sids' directions (a sub opposite its
+    record's parent sid is COUNTER → `parent_bos_threshold`, checked FIRST) + the BOS-threshold steps it reads.
+    TRAP (PLAN_M §9): `_rec` hard-codes parent (0, 0) for both directions — give sid 0 the direction that keeps
+    the record a CONFLUENCE sub, or the test silently exercises the counter branch instead."""
+    return SimpleNamespace(parent_sd=dict(parent_sd), bos_threshold_steps=dict(steps or {}), end_h1=dict(end_h1 or {}))
+
+
 def test_prev_sub_at_fire_takes_the_latest_known_start_then_creation_index():
     a = _geo_sub(0, -1, 10, [], start_idx=100)
     b = _geo_sub(1, 1, 20, [], records=[_rec(1, 150), _rec(1, 90, zero_length=True)])   # known start 150
@@ -427,17 +435,25 @@ def test_parent_cts_limit_reads_the_parents_cts_frozen():
 
 def test_the_rule_dispatches_on_the_starting_trigger():
     h1 = [_est(902, 0.57, 1, 2, -1, cts_frozen=0.57376), _cts_conf(810, 0.574, 1, 1, anchor=761)]
-    kw = dict(h1_events=h1, reversing_sub=None, prev_sub=None)
+    # sid 0 a buy, sid 1 a sell (PLAN_M): a sub OPPOSITE its parent sid is counter — checked first
+    tables = _tables({0: 1, 1: -1}, {(1, 2): ((826, 3307, 0.58105, "BOS_CONFIRMED"),)}, {(1, 2): None})
+    kw = dict(h1_events=h1, parent_tables=tables, reversing_sub=None, prev_sub=None)
     assert cfl.cross_fib_limit_for("first_confluence", (0, 0), 1, 500, **kw) == NO_LIMIT
     assert cfl.cross_fib_limit_for("first_confluence", (1, 2), -1, 3621, **kw).source == "parent_cts_threshold"
-    for tt in ("first_counter", "subsequent_confluence", "subsequent_counter"):
-        assert cfl.cross_fib_limit_for(tt, (1, 2), 1, 3759, **kw) == NO_LIMIT       # no x−1
-    prev = _geo_sub(4, -1, 0, [_bos("BOS_CONFIRMED", 5, 0.58105, moment=10)], start_idx=1)
-    got = cfl.cross_fib_limit_for("first_counter", (1, 2), 1, 20, h1_events=h1, reversing_sub=None, prev_sub=prev)
+    # the x−1 rule now serves a CONFLUENCE `subsequent_confluence` only (the two counter types are counter subs by
+    # construction — `uc1_trigger` / `subsequent_counter_pipeline` set the sub's direction to −parent's)
+    assert cfl.cross_fib_limit_for("subsequent_confluence", (1, 2), -1, 3759, **kw) == NO_LIMIT   # no x−1
+    for tt in ("first_counter", "subsequent_counter"):
+        # PLAN_M: direction +1 under sid 1's −1 is COUNTER — the parent cycle's BOS threshold, x−1 never read
+        assert cfl.cross_fib_limit_for(tt, (1, 2), 1, 3759, **kw) == CrossFibLimit(
+            0.58105, "parent_bos_threshold", ref_anchor_price=0.58105)
+    prev = _geo_sub(4, 1, 0, [_bos("BOS_CONFIRMED", 5, 0.58105, moment=10)], start_idx=1)
+    got = cfl.cross_fib_limit_for("subsequent_confluence", (1, 2), -1, 20, h1_events=h1, parent_tables=tables,
+                                  reversing_sub=None, prev_sub=prev)
     assert got == CrossFibLimit(0.58105, "prev_sub_bos_threshold", from_pool_idx=4, ref_anchor_price=0.58105)
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="a reversal needs its reversing sub"):
         cfl.cross_fib_limit_for("reversal", (0, 0), 1, 20, **kw)
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="unknown trigger type 'nonsense'"):
         cfl.cross_fib_limit_for("nonsense", (0, 0), 1, 20, **kw)
 
 
@@ -528,7 +544,7 @@ def _numbered_pool_for_tripwire(stored):
 def test_the_r6_2_tripwire_re_derives_p_at_the_start_and_warns_on_a_mismatch():
     good = limit(0.58105, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=0)
     logs = []
-    assert cfl.check_cross_fib_limits(_numbered_pool_for_tripwire(good), [], log=logs.append) == 0
+    assert cfl.check_cross_fib_limits(_numbered_pool_for_tripwire(good), [], _tables({0: 1}), log=logs.append) == 0
     assert logs == ["[cross_fib_limit] tripwire: 1 subs re-derived at their start, 0 mismatches"]
     for bad in (limit(0.58, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=0),
                 limit(0.58105, "prev_sub_cts_threshold", from_pool_idx=0, from_sub_id=0),
@@ -536,7 +552,7 @@ def test_the_r6_2_tripwire_re_derives_p_at_the_start_and_warns_on_a_mismatch():
                 # PLAN_K A10: the tripwire compares the anchor behind P too
                 limit(0.58105, "prev_sub_bos_threshold", from_pool_idx=0, from_sub_id=0, ref_anchor_price=0.581)):
         logs = []
-        assert cfl.check_cross_fib_limits(_numbered_pool_for_tripwire(bad), [], log=logs.append) == 1
+        assert cfl.check_cross_fib_limits(_numbered_pool_for_tripwire(bad), [], _tables({0: 1}), log=logs.append) == 1
         assert logs[0].startswith("WARNING [cross_fib_limit] sub 1: stored P=")
         assert logs[1].endswith("1 mismatches")
 
@@ -764,7 +780,7 @@ def test_first_confluence_reads_the_parent_cycle_not_the_sid():
     """sid 0 cycle 2 has a P; sid 1 cycle 0 has none; another sid's (S', c) is never read."""
     h1 = [_est(500, 0.57, 0, 2, -1, cts_frozen=0.5740), _est(902, 0.57, 1, 2, -1, cts_frozen=0.57376),
           _cts_conf(470, 0.5745, 0, 1), _cts_conf(810, 0.574, 1, 1, anchor=761)]
-    kw = dict(h1_events=h1, reversing_sub=None, prev_sub=None)
+    kw = dict(h1_events=h1, parent_tables=_tables({0: -1, 1: -1}), reversing_sub=None, prev_sub=None)
     assert cfl.cross_fib_limit_for("first_confluence", (0, 2), -1, 600, **kw) == CrossFibLimit(
         0.5740, "parent_cts_threshold", ref_anchor_price=0.5745)
     assert cfl.cross_fib_limit_for("first_confluence", (1, 2), -1, 950, **kw) == CrossFibLimit(
@@ -817,7 +833,7 @@ def test_the_tripwire_re_derives_from_the_started_by_record_at_the_start():
     b.cross_fib_limit = limit(0.5815, "prev_sub_bos_threshold", from_pool_idx=1, from_sub_id=0,
                               ref_anchor_price=0.58105)
     logs = []
-    assert cfl.check_cross_fib_limits(pool, [], log=logs.append) == 0, logs
+    assert cfl.check_cross_fib_limits(pool, [], _tables({0: 1}), log=logs.append) == 0, logs
     assert logs == ["[cross_fib_limit] tripwire: 1 subs re-derived at their start, 0 mismatches"]
 
 
@@ -844,7 +860,7 @@ def test_the_tripwire_finds_the_one_opposite_live_reversing_sub():
     w_rec = _rec(2, 130, trigger_type="first_confluence", seq=2, direction=1)
     w_rec.trigger_end_idx = w_rec.end_idx = 250
     W = mk(1, 70, [w_rec], nat=300, sc_idx=300, frozen=0.62)
-    Y = mk(-1, 290, [_rec(3, 320, trigger_type="first_counter", seq=3, trigger_idx=280),
+    Y = mk(-1, 290, [_rec(3, 320, trigger_type="subsequent_confluence", seq=3, trigger_idx=280),
                      _rec(3, 300, trigger_type="reversal", seq=4, trigger_idx=300)])
     pool.number_subs_by_start()
     for s in (X, Z, W):
@@ -852,12 +868,12 @@ def test_the_tripwire_finds_the_one_opposite_live_reversing_sub():
     Y.cross_fib_limit = CrossFibLimit(0.58, "reversal_bos_frozen", from_pool_idx=X.pool_idx, from_sub_id=X.sub_id,
                                       ref_anchor_price=0.58, break_pattern_anchor_idx=297, break_confirmed_idx=300)
     logs = []
-    assert cfl.check_cross_fib_limits(pool, [], log=logs.append) == 0, logs
+    assert cfl.check_cross_fib_limits(pool, [], _tables({0: -1}), log=logs.append) == 0, logs
     assert logs[-1] == "[cross_fib_limit] tripwire: 1 subs re-derived at their start, 0 mismatches"
     # Two equally qualified reversing subs: the warn-only tripwire says so instead of stopping (lens A m3).
     W.records[0].trigger_end_idx = W.records[0].end_idx = None
     logs = []
-    assert cfl.check_cross_fib_limits(pool, [], log=logs.append) == 1
+    assert cfl.check_cross_fib_limits(pool, [], _tables({0: -1}), log=logs.append) == 1
     assert "2 candidate reversing subs at 300" in logs[0]
 
 
@@ -932,11 +948,14 @@ def test_the_driver_wires_the_fire_time_rule_and_the_tripwire(monkeypatch):
         t = SweepTrigger(lens=CONF, parent_sid=0, parent_cycle_id=1, trigger_type="subsequent_confluence",
                          trigger_idx=50, direction=+1, trigger_event_idx=12, source=None)
         got["lim"] = resolve_cross_fib_limit(t, 70, None)
+        t2 = SweepTrigger(lens=CONF, parent_sid=0, parent_cycle_id=1, trigger_type="subsequent_counter",
+                          trigger_idx=150, direction=-1, trigger_event_idx=30, source=None)
+        got["counter"] = resolve_cross_fib_limit(t2, 200, None)
         got["pool"] = pool
         return SimpleNamespace(unresolved=[], spawned=[])
 
-    def _check(pool, h1_events, **_kw):
-        got["checked"] = (pool, list(h1_events))
+    def _check(pool, h1_events, parent_tables, **_kw):
+        got["checked"] = (pool, list(h1_events), parent_tables)
         raise _Checked
 
     for mod in ("first_confluence_pipeline", "subsequent_confluence_pipeline", "subsequent_counter_pipeline"):
@@ -946,7 +965,10 @@ def test_the_driver_wires_the_fire_time_rule_and_the_tripwire(monkeypatch):
     monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
                         lambda *a, **k: pd.DataFrame({"time": [0]}))
     monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
-    monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables", lambda *a, **k: None)
+    tables = _tables({0: +1},                              # the trigger (+1) is a CONFLUENCE sub of sid 0
+                     {(0, 0): ((10, 43, 0.59, "BOS_CONFIRMED"),), (0, 1): ((30, 123, 0.58, "BOS_CONFIRMED"),)},
+                     {(0, 0): 30, (0, 1): None})
+    monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables", lambda *a, **k: tables)
     monkeypatch.setattr("engine_v2.multitf.lifecycle_sweep.run_lifecycle_sweep", _sweep)
     monkeypatch.setattr("engine_v2.multitf.cross_fib_limit.check_cross_fib_limits", _check)
     monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",
@@ -958,6 +980,9 @@ def test_the_driver_wires_the_fire_time_rule_and_the_tripwire(monkeypatch):
            subsequent_counter_triggers=[])
     assert got["lim"] == CrossFibLimit(0.58105, "prev_sub_bos_threshold", from_pool_idx=0, ref_anchor_price=0.58105)
     assert got["checked"][0] is got["pool"]
+    assert got["checked"][2] is tables                      # PLAN_M: the same tables as the fire-time rule
+    # PLAN_M: the closure hands the trigger's own parent CYCLE — a counter sub of (0, 1) reads (0, 1)'s threshold
+    assert got["counter"] == CrossFibLimit(0.58, "parent_bos_threshold", ref_anchor_price=0.58)
 
 
 def test_m_reads_only_its_own_sids_anchors():

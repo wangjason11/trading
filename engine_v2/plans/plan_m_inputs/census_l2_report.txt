@@ -1,0 +1,29 @@
+=== window 2025-11-15 00  (C:/Users/wangj/AppData/Local/Temp/pm/l2r0/run.log)
+    [cross_fib_limit] tripwire: 3 subs re-derived at their start, 0 mismatches
+    sub 1 parent_bos_threshold: engine (0.55808, 0, 0.55808, 0, 0.55808)  pinned (0.55808, 0, 0.55808, 0, 0.55808)  MATCH
+    sub 3 parent_bos_threshold: engine (0.5736, 0, 0.5736, 0, 0.5736)  pinned (0.5736, 0, 0.5736, 0, 0.5736)  MATCH
+    sub 5 parent_bos_threshold: engine (0.58105, 0, 0.58105, 0, 0.58105)  pinned (0.58105, 0, 0.58105, 0, 0.58105)  MATCH
+    sub 7 parent_bos_threshold: engine (0.58105, 0, 0.58105, 0, 0.58105)  pinned (0.58105, 0, 0.58105, 0, 0.58105)  MATCH
+=== window 2025-01-28 00  (C:/Users/wangj/AppData/Local/Temp/pm/l2r1/run.log)
+    [cross_fib_limit] tripwire: 2 subs re-derived at their start, 0 mismatches
+    sub 1 parent_bos_threshold: engine (0.55164, 0, 0.55164, 0, 0.55164)  pinned (0.55164, 0, 0.55164, 0, 0.55164)  MATCH
+    sub 4 parent_bos_threshold: engine (0.56777, 2, 0.56731, 2, 0.56731)  pinned (0.56777, 2, 0.56731, 2, 0.56731)  MATCH
+    sub 6 parent_bos_threshold: engine (0.57328, 7, 0.5763, 7, 0.5763)  pinned (0.57328, 7, 0.5763, 7, 0.5763)  MATCH
+    sub 6 cycle 4 record (confluence, vNone, cross=False): via=cross_failed
+    sub 6 cycle 4 record (counter, vNone, cross=False): via=cross_failed
+=== window 2025-04-01 00  (C:/Users/wangj/AppData/Local/Temp/pm/l2r2/run.log)
+    [cross_fib_limit] tripwire: 2 subs re-derived at their start, 0 mismatches
+    sub 3 parent_bos_threshold: engine (0.58938, 9, 0.58466, 9, 0.58466)  pinned (0.58938, 9, 0.58466, 9, 0.58466)  MATCH
+    sub 4 parent_bos_threshold: engine (0.58938, 9, 0.58466, 9, 0.58466)  pinned (0.58938, 9, 0.58466, 9, 0.58466)  MATCH
+=== window 2025-06-01 00  (C:/Users/wangj/AppData/Local/Temp/pm/l2r3/run.log)
+    [cross_fib_limit] tripwire: 0 subs re-derived at their start, 0 mismatches
+    sub 1 parent_bos_threshold: engine (0.58831, 0, 0.58831, 0, 0.58831)  pinned (0.58831, 0, 0.58831, 0, 0.58831)  MATCH
+=== window 2025-08-01 00  (C:/Users/wangj/AppData/Local/Temp/pm/l2r4/run.log)
+    [cross_fib_limit] tripwire: 3 subs re-derived at their start, 0 mismatches
+    sub 3 parent_bos_threshold: engine (0.59149, 13, 0.58538, None, None)  pinned (0.59149, 13, 0.58538, 0, 0.59149)  MATCH  (no fib record: export unseen)
+    sub 5 parent_bos_threshold: engine (0.59149, 13, 0.58538, 13, 0.58538)  pinned (0.59149, 13, 0.58538, 13, 0.58538)  MATCH
+=== window 2025-10-01 00  (C:/Users/wangj/AppData/Local/Temp/pm/l2r5/run.log)
+    [cross_fib_limit] tripwire: 4 subs re-derived at their start, 0 mismatches
+    sub 1 parent_bos_threshold: engine (0.5845, 0, 0.5845, 0, 0.5845)  pinned (0.5845, 0, 0.5845, 0, 0.5845)  MATCH
+    sub 3 parent_bos_threshold: engine (0.5845, 0, 0.5845, 0, 0.5845)  pinned (0.5845, 0, 0.5845, 0, 0.5845)  MATCH
+=== TOTAL {'windows': 6, 'counter': 14, 'match': 14, 'diff': 0, 'no_export': 1, 'tripwire_mismatches': 0, 'cl7_before_move': 0, 'knock_on_subs': 0}

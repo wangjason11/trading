@@ -448,9 +448,11 @@ class FibTracker:
         - `prev_cycle_cts` when the fib's BOS lies in cycle a ≥ 1 (a single: its cycle; a cross: `cross_start_cycle`):
           cycle a−1's CTS_CONFIRMED price (`_cts_by_cycle` — the confirmed anchor, never a threshold); its break =
           the pattern that established cycle a (`_est_pattern_anchor`, known from cycle a's establishment moment);
-        - the structure reference while `_structure_reference_limit` applies: `prev_structure_bos` (a reversal start
-          — `ref_anchor_price`, the break = the realised reversal pattern, known for the structure's WHOLE run like
-          `P`, RX1-K7) or `cross_limit_anchor` (a non-reversal start — `ref_anchor_price`, the break =
+        - the structure reference while `_structure_reference_limit` applies: `prev_structure_bos` (a
+          `reversal_bos_frozen` limit — a main or CONFLUENCE-sub reversal start; `ref_anchor_price`, the break = the
+          realised reversal pattern, known for the structure's WHOLE run like `P`, RX1-K7) or `cross_limit_anchor`
+          (every other source with a `P` — a COUNTER sub's `parent_bos_threshold` included, whatever its trigger,
+          PLAN_M; `ref_anchor_price`, the break =
           `find_cross_limit_break` on `P` as of `evaluated_at` (PLAN_M CL-7 — a moving limit's) from the structure's
           first candle, its BOS_0 anchor; RX1-2b / W1–W3 / K1 / K6 — counted once its confirmation ≤ `evaluated_at`);
         - both → the one further opposite the structure (sd +1 the lower price, sd −1 the higher; RX1-3); EQUAL →

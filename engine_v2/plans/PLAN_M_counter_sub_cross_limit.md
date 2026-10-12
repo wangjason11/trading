@@ -5,7 +5,10 @@ design + stages (§7–§10) COLD-REVIEWED (760,821 tok, 0 BLOCKER on the design
 export's "final" decided (a) = as of the structure's end (§3); LANDING 1 BUILT + LANDING-REVIEWED (§12, §13: byte-identical
 vs S_L2, the census unchanged, suite 1657, mutants 25 / 26 + 1 equivalent + the review's 4 / 4; review 451,068 tok,
 0 BLOCKER / MAJOR, every finding folded); the user's go "sounds good go ahead" → COMMITTED `86d4f7b`, SAVED
-S_M1 `20261011_204047_86d4f7b` (save `8bdcc8a`, trunk `a442e91`) = `LATEST_<branch>` — next: landing 2 (§7.3).** Living document:
+S_M1 `20261011_204047_86d4f7b` (save `8bdcc8a`, trunk `a442e91`) = `LATEST_<branch>`; LANDING 2 BUILT + LANDING-REVIEWED (§14–§15:
+= the trial's outputs exactly, the census PINNED table 14 / 14, 0 knock-on, suite 1691, mutants 25 / 25 + the
+review's 6 / 6; review 437,943 tok, 0 BLOCKER / MAJOR, all folded); the user's chart review (2026-10-12): "charts look
+good. go ahead" → COMMITTED + SAVED S_M2 (§16). PLAN_M COMPLETE; the parked follow-up: CL-8 (register §D.1 item 2).** Living document:
 every question, answer and decision is recorded here as it happens. Register line: `IDEA_PARKING_LOT.md` §D.1 item 2
 (the cross-limit price debugging, opened by the user 2026-10-09).
 
@@ -678,3 +681,87 @@ B 190,214; estimated 350–500K).
 replay 47.5 s wall (multi_tf_dual 9.02 s; charts 6.38 / 7.62 / 20.72 s), FETCH GATE PASS; the save S_M1
 `20261011_204047_86d4f7b` (27 CSVs + 3 charts; `cmp_fig_full.py` vs S_L2: 27 / 27 md5-equal, the figures identical);
 save commit `8bdcc8a`, trunk `a442e91`; `LATEST_<branch>` = S_M1. Local, NOT pushed.
+
+## 14. Landing 2 — as built (2026-10-11, session 1; uncommitted until the user's go)
+
+Built on `b5a3230` (= S_M1's engine + the pointers) after the user's go on landing 1 ("sounds good go ahead").
+
+**Code** (§7.3, as designed): `multitf/parent_tables.py` — `ParentTables.bos_threshold_steps[(S, C)]` =
+`((h1_known_at, m15_known_at, price, event_type), …)`, processing order, `ef.event_moment` + the injected LOH, a
+defaulted field; an unmapped step (its hour before the M15 frame) or an unpriced one (a synthetic fixture:
+`test_parent_tables`' BOS events carry no price — found by the suite, not in the plan) is STORED, and asserted only
+where it is read. `multitf/cross_fib_limit.py` — `parent_bos_limit(tables, S, C, direction, s)` (the asserts, the
+fold into `price_at_start`, the collapse, the anchor = the BOS price); `cross_fib_limit_for(…, parent_tables)` checks
+the counter test FIRST; `check_cross_fib_limits(pool, h1_events, parent_tables, *, log)` compares `price_at_start` +
+`price_moves` too (the set of re-derived subs unchanged — the trial's "3 subs"). The orchestrator passes the tables to
+both; the sweep's `[sweep] cross_fib_limit` line ends `moves=N` on a moving limit.
+
+**`/compare` — the prediction (§8) MET:** fetch gate PASS; all 27 CSVs' md5 = `trial_md5.txt`; the three figures'
+`fig_hash.py` = `trial_fig_hash.txt`; `trial_diff.py` S_M1 vs the replay = `trial_diff_vs_S_L2.txt` (identical but
+the CRLF of the stored copy); run.log — `[sweep] cross_fib_limit` pool#1 / #3 / #5 / #7 (= subs 1 / 3 / 5 / 7) P =
+0.55808 / 0.5736 / 0.58105 / 0.58105 `parent_bos_threshold`, no `moves=`; "3 subs re-derived at their start, 0
+mismatches". (That replay ran before the unpriced-step tweak — production BOS events are always priced; the final
+replay re-runs at the commit.)
+
+**The census on L2 — the PINNED table MET** (`census_l2_report.py` on `census_patch.py` + `census_run.py --export`,
+the engine's OWN object and exported values; `census_l2_report.txt`, `census_l2_run.txt`): 14 / 14 counter subs MATCH
+(`P` at start, the object's moves → its last `P`, the export's moves → its `P`); the tripwire 0 mismatches on every
+window (3 / 2 / 2 / 0 / 3 / 4 subs re-derived); **0 knock-on** (no sub's cycles / life / non-counter `P` changed vs the
+pre-build run; the H1 facts equal); **CL-7's other side: 0** (no exported break of a moved `P` confirmed before the
+move); 2025-02-01 sub 6 cycle 4: `via: "cross_failed"` on both lenses — cross-eligible now, as pinned, falling back
+for want of a live earlier cycle. **One pinned row's EXPORT is unseen:** 2025-08-01 sub 3 (the CL-6 case) has no fib
+record — its cycle 0 is established at 3283, after the sub ended (3247 → 3259) — so its "export stays 0.59149" is
+pinned by landing 1's unit tests only (§9 L1 2f); its object row matches.
+
+**Tests:** `tests/test_plan_m_landing_2.py` (29): `parent_bos_limit` (the fold inclusive at the start, the
+collapse, the anchor, the decoy cycles of two sids, each assert), the dispatch (counter first for every trigger
+type, the right sid, a confluence sub's rules — a real reversing sub), `bos_threshold_steps` (processing order, the
+injected LOH, an unmapped step), the sweep's `moves=` line, the tripwire's two new fields, and the reference window
+on S_L2's REAL rows (16 H1 events + the 8 subs EMBEDDED — a mutant tree has no `artifacts/`; a provenance test
+re-reads the save when present). The 7 intended edits (§9 L2 item 6), the `_rec` trap handled (`_tables` helper:
+sid 0's direction keeps the fixtures' subs confluence). Suite **1686 passed**. While writing the real-data test I
+typed sub 4's anchor from memory (0.57764 — sid 1 cycle 2's CTS_ESTABLISHED price); the extraction showed the rule
+reads cycle 1's CTS_CONFIRMED, 0.574 — corrected before the first run.
+
+**Mutants** (`plan_m_inputs/mutants_m2.py`, the full suite each, `mutants_m2_result.txt`): **25 / 25 KILLED** (the
+counter test inverted / skipped for reversal / on sid 0 / after the reversal rule; the start exclusive / = the BOS;
+no collapse / the first wins / moves from the raw steps; the anchor = `P`; the key without the cycle / the sid; each
+assert dropped or loosened; the tripwire's two fields; the table's mapper / types / key; the driver's tables; the log).
+
+**Docs (§10 L2):** CROSS_CYCLE_FIB_SPEC (status line; §3 the COUNTER row first in the source table, the formula
+paragraph + asserts + reference values, the `ref_anchor_price` row); PART4 §17.6's tables listing
+(`bos_threshold_steps`); GLOSSARY (**counter sub**, the source list, "a moving `P`"); the `CrossFibLimit` docstring's
+anchor list (lens A NOTE-3); `cross_fib_limit.py`'s module header; PLAN_I §1.2's pointer → BUILT. At the commit: the
+register, MEMORY.md, the session log, the `/compare` boundary (S_M2).
+
+## 15. Landing 2's review (2026-10-11) — two fresh read-only reviewers, no worktree (estimated 350–500K tok)
+
+**Tokens: 437,943** (A 246,123 — the producer against §7.3, the rule, the docs; B 191,820 — the tests and mutants).
+**0 BLOCKER, 0 MAJOR.** Lens A measured: an H1 scan of 29 real windows (NZD_USD 17 two-month windows 2023-01 →
+2025-11, EUR_USD / AUD_USD / GBP_USD 4 each): 99 cycles, 89 `BOS_THRESHOLD_UPDATED` (58 `probe_no_break`, 31
+`rv_anchor_failed`), `parent_bos_limit` at the floor and at infinity on all 92 non-degenerate cycles — 184 calls, 0
+asserts; its own reference replay on the final tree = the trial (27 / 27 md5, the figures, the `[sweep]` lines); the
+census report re-run identical. Lens B: suite 1686; 9 extra mutants, 5 killed.
+
+| Finding (lens, severity) | Folded into |
+|---|---|
+| A MINOR-1: "a reversal start = `prev_structure_bos`" stale (a COUNTER reversal sub has `cross_limit_anchor`) — `fib_tracker` docstring, `IC_REF_SOURCES` comments, GLOSSARY "IC reference", POI_ZONES_SPEC §3.2 | each reworded: `prev_structure_bos` = a `reversal_bos_frozen` limit (main / a confluence sub's reversal); `cross_limit_anchor` = every other source, the counter sub's included |
+| A MINOR-2: GLOSSARY `cross_fib_limit_price` (no counter-first) and `ParentTables` (no `bos_threshold_steps`) | both rows |
+| A MINOR-3: CROSS_CYCLE_FIB_SPEC's watch reference values stale after L2 | measured on the L2 replay's fib CSVs: subs 3 and 4 → 3588 (3589), subs 1 / 5 / 6 / 7 → none |
+| A NOTE-4: the x−1 rule now reachable only by `subsequent_confluence` (the two counter types are counter by construction — `uc1_trigger` / `subsequent_counter_pipeline` set `lower_sd = −parent`; B measured 10 / 10 counter-typed subs counter on the census) | the spec's x−1 row, the module header, `PREV_SUB_TYPES`' comment, the tripwire docstring; the hover example (sub 7's old `prev_sub_bos_threshold … M=2` can no longer occur) → sub 6's measured `limit 0.57112 · prev_sub_bos_threshold (sub 5) · M=none` + sub 7's `limit 0.58105 · parent_bos_threshold · M=none` (CHARTING_SPEC, `fib_hover_limit_text`) |
+| A NOTE-5 / B NOTE-2: the tripwire looked up a reversing sub before the counter test — a counter reversal sub with 0 / 2 candidates got a false "cannot be re-derived" mismatch | CODE: the counter test first (`counter = …`; no lookup for a counter sub); pin `test_a_counter_reversal_sub_is_re_derived_without_its_reversing_sub`; mutant M2R1 |
+| A NOTE-6: `census_l2_report`'s CL-7 count sees only the moves after the start, not a folded one | noted (the tool's scope; the pinned comparison is unaffected) |
+| A NOTE-7: §3's "Started by" column vs the direction-keyed COUNTER row; the formula paragraph omitted "every step mapped and priced" | both |
+| B MINOR-1: the fire-time closure's parent CYCLE unpinned (X01 `(S, 0)` survived) | the driver test drives a COUNTER trigger on parent cycle 1 with (0, 0) / (0, 1) steps at distinct prices; X01 killed |
+| B MINOR-2: neither R6-2 (a) shape pinned for counter subs (X04 the creating record's parent, X07 its start — survived) | `test_the_tripwire_reads_the_started_by_records_parent_sid` (shape i), `test_the_tripwire_re_derives_a_counter_sub_at_its_started_by_records_start` (shape ii) |
+| B MINOR-3: the collapse's M15 key untested across two H1 hours (an M15 gap maps two hours to one LOH; X05 survived — a loud crash, not a wrong value) | `test_two_hours_sharing_one_m15_moment_collapse_too` |
+| B MINOR-4: `census_l2_report` MATCH did not check the source | `src_ok` added (the object's and every exported record's `parent_bos_threshold`); the report re-run unchanged |
+| B NOTE-1: edited fixtures used impossible (type, direction) pairs (a confluence `first_counter`) | the dispatch test's x−1 path uses `subsequent_confluence`; the two creating `first_counter` records (s2 `Y`, review-pins `y`) → `subsequent_confluence` |
+| B NOTE-3: an unknown trigger type no longer raised on a counter sub; two `pytest.raises` without `match` | CODE: `assert trigger_type in _TRIGGER_TYPES` FIRST (the later, now-implied assert removed — an equivalent mutant otherwise); the raises carry `match`; pin `test_an_unknown_trigger_type_raises_on_a_counter_sub_too`; mutant M2R2 |
+| B NOTE-4 / NOTE-5: the real-data test pins the confluence subs only as "not counter"; the CL-7 "0" is a real result (two moved subs' breaks after their last move) | none |
+
+**After the fix-up (the final L2 code):** suite **1691 passed** (`test_plan_m_landing_2.py` 34); the review mutants
+`mutants_m2_review.py` **6 / 6 KILLED** (`mutants_m2_review_result.txt`); the reference replay re-run — FETCH GATE
+PASS, 27 / 27 md5 = `trial_md5.txt`, the three `fig_hash.py` = `trial_fig_hash.txt`, the `[sweep]` lines and "3 subs
+re-derived, 0 mismatches" unchanged (157 s wall — shared with the mutants and the census); the census re-run on the
+final code — report identical (14 / 14 MATCH, 0 knock-on, 0 tripwire mismatches, CL-7 0).

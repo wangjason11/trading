@@ -1,0 +1,27 @@
+KILLED    N01_counter_test_inverted          16 failing: test_first_confluence_reads_the_parent_cycle_not_the_sid, test_the_driver_wires_the_fire_time_rule_and_the_tripwire, test_the_r6_2_tripwire_re_derives_p_at_the_start_and_warns_o, test_the_rule_dispatches_on_the_starting_trigger
+KILLED    N02_counter_skipped_for_reversal   2 failing: test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_the_reference_windows_counter_subs_take_the_parent_bos_
+KILLED    N03_counter_reads_sid_0            3 failing: test_the_rule_dispatches_on_the_starting_trigger, test_the_counter_test_reads_the_records_own_parent_sid, test_the_reference_windows_counter_subs_take_the_parent_bos_
+KILLED    N04_counter_after_the_reversal_rule 2 failing: test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_the_reference_windows_counter_subs_take_the_parent_bos_
+KILLED    N05_start_exclusive                7 failing: test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i
+KILLED    N06_start_is_the_bos_price         10 failing: test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i
+KILLED    N07_no_collapse                    8 failing: test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i
+KILLED    N08_collapse_keeps_the_first       7 failing: test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i
+KILLED    N09_anchor_is_p                    10 failing: test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i
+KILLED    N10_key_ignores_the_cycle          21 failing: test_the_rule_dispatches_on_the_starting_trigger, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i
+KILLED    N11_key_ignores_the_sid            4 failing: test_the_rule_dispatches_on_the_starting_trigger, test_only_the_named_parent_cycle_is_read, test_the_counter_test_reads_the_records_own_parent_sid, test_the_reference_windows_counter_subs_take_the_parent_bos_
+KILLED    N12_moves_from_the_raw_steps       8 failing: test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i, test_a_counter_sub_takes_the_parent_bos_threshold_whatever_i
+KILLED    N13_no_bos_by_start_assert         1 failing: test_each_assert[steps5-402-None-after the record start 402]
+KILLED    N14_no_further_assert              2 failing: test_each_assert[steps7-500-None-not strictly further], test_each_assert[steps8-500-None-not strictly further]
+KILLED    N15_further_not_strict             1 failing: test_each_assert[steps8-500-None-not strictly further]
+KILLED    N16_no_end_assert                  1 failing: test_each_assert[steps6-500-139-at / after the cycle's end 1
+KILLED    N17_end_assert_inclusive           1 failing: test_each_assert[steps6-500-139-at / after the cycle's end 1
+KILLED    N18_one_bos_assert_dropped         2 failing: test_each_assert[steps1-500-None-2 BOS_CONFIRMED], test_each_assert[steps2-500-None-first step BOS_THRESHOLD_UP
+KILLED    N19_tripwire_ignores_the_moves     1 failing: test_the_tripwire_compares_the_start_price_and_the_moves
+KILLED    N20_tripwire_ignores_the_start     1 failing: test_the_tripwire_compares_the_start_price_and_the_moves
+KILLED    N21_steps_first_m15_of_the_hour    1 failing: test_the_steps_are_every_bos_and_threshold_event_per_cycle_i
+KILLED    N22_steps_bos_only                 2 failing: test_an_unmapped_step_is_stored_and_raises_only_where_it_is_, test_the_steps_are_every_bos_and_threshold_event_per_cycle_i
+KILLED    N23_steps_keyed_by_sid             3 failing: test_an_unmapped_step_is_stored_and_raises_only_where_it_is_, test_the_reference_windows_counter_subs_take_the_parent_bos_, test_the_steps_are_every_bos_and_threshold_event_per_cycle_i
+KILLED    N24_driver_no_tables_to_the_tripwire 1 failing: test_the_driver_wires_the_fire_time_rule_and_the_tripwire
+KILLED    N25_sweep_log_drops_the_moves      1 failing: test_the_sweeps_limit_line_counts_the_moves[lim0- moves=3]
+25/25 KILLED  (results: C:\Users\wangj\AppData\Local\Temp\mm2\results.json)
+exit 0

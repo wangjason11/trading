@@ -21,7 +21,8 @@
 > **A limit whose `P` MOVES since PLAN_M landing 1 (2026-10-11; `plans/PLAN_M_counter_sub_cross_limit.md`)** — the
 > plumbing (§3 "A moving `P`"): every reader takes `P` as of its moment, a cycle's permission is fixed at its
 > establishment, the export reads `P` as of the structure's end. Its one source, a COUNTER sub's
-> `parent_bos_threshold`, is produced from landing 2 — until then no limit moves (byte-identical, S_M1).
+> `parent_bos_threshold` (its first record's parent cycle's BOS threshold, read live — §3's table), is produced
+> since landing 2 (2026-10-11); on the reference window the parent's threshold never moves (PLAN_M §2).
 
 ---
 
@@ -89,18 +90,24 @@ then end together. 0 on the reference window (0 / 27 fib cycles move); one real 
   the variation attaches to the trigger, not to the sid number). `CrossFibLimit(price, source, from_pool_idx /
   from_sub_id, started_by)` (`zones/cross_cycle_fib.py`):
 
-  | Started by | `P` | `cross_fib_limit_source` |
+  | Started by (the COUNTER row: by direction) | `P` | `cross_fib_limit_source` |
   |---|---|---|
   | main, start trading (sid 0) | none | `none` |
   | main, a reversal (sid N) | the realised reversal's `bos_frozen` (`STATE_CHANGED(to=reversal)`, == the open watch's frozen barrier) | `reversal_bos_frozen` |
+  | **sub, COUNTER** — its direction opposite its first record's parent sid's (`ParentTables.parent_sd`; the sweep's `relative_dir` formula), WHATEVER its trigger (PLAN_M CL-0 / CL-4) — checked FIRST; every row below then serves the confluence subs only | the parent cycle (S, C)'s BOS threshold: `BOS_CONFIRMED(S, C)` moved by each `BOS_THRESHOLD_UPDATED(S, C)`, each known on M15 at its hour's last candle; `price_at_start` = the threshold as of the record's start (earlier moves fold in), the later steps are the moves (one M15 moment collapses, the last wins), frozen at the parent cycle's end — `cross_fib_limit.parent_bos_limit` on `ParentTables.bos_threshold_steps` ("A moving `P`" below) | `parent_bos_threshold` |
   | sub, reversal | the reversing sub's reversal `bos_frozen` | `reversal_bos_frozen` |
   | sub, first_confluence on parent cycle 0 | none | `none` |
   | sub, first_confluence on parent cycle c ≥ 1 | the parent's CTS_ESTABLISHED(c) `cts_frozen` | `parent_cts_threshold` |
-  | sub, first_counter / subsequent_* | the previous sub x−1 at the record start: same direction → its confirmed `cts_threshold`, else its latest CTS anchor; opposite → its BOS threshold, else its starting extreme; no x−1 → none | `prev_sub_cts_threshold` / `prev_sub_latest_cts` / `prev_sub_bos_threshold` / `prev_sub_starting_price` / `none`; a same-direction x−1 with no CTS → `prev_sub_no_cts` (no `P`, a WARNING) — the set: `cross_cycle_fib.CROSS_FIB_LIMIT_SOURCES` |
+  | sub, first_counter / subsequent_* (a CONFLUENCE sub: in production `subsequent_confluence` only — `first_counter` / `subsequent_counter` subs are counter by construction) | the previous sub x−1 at the record start: same direction → its confirmed `cts_threshold`, else its latest CTS anchor; opposite → its BOS threshold, else its starting extreme; no x−1 → none | `prev_sub_cts_threshold` / `prev_sub_latest_cts` / `prev_sub_bos_threshold` / `prev_sub_starting_price` / `none`; a same-direction x−1 with no CTS → `prev_sub_no_cts` (no `P`, a WARNING) — the set: `cross_cycle_fib.CROSS_FIB_LIMIT_SOURCES` |
 
-  The sub formula: `multitf/cross_fib_limit.py` (`cross_fib_limit_for`), computed at the sub's first trigger's fire
-  and re-derived at its start by the R6-2 tripwire (`check_cross_fib_limits`, warn-only). The values on the reference
-  window: PLAN_I §9.5 a.
+  The sub formula: `multitf/cross_fib_limit.py` (`cross_fib_limit_for(…, parent_tables)`), computed at the sub's
+  first trigger's fire and re-derived at its start by the R6-2 tripwire (`check_cross_fib_limits(pool, h1_events,
+  parent_tables)`, warn-only; it compares a moving limit's `price_at_start` / `price_moves` too, and looks up no
+  reversing sub for a counter sub). The counter limit asserts (raise, never degrade): exactly one `BOS_CONFIRMED(S,
+  C)`, the first step, known by the record's start; every step mapped to M15 and priced; no step at or after the
+  parent cycle's end; each threshold strictly further than the last. The values on the
+  reference window: PLAN_I §9.5 a — since PLAN_M landing 2 the counter subs 1 / 3 / 5 / 7 take 0.55808 / 0.5736 /
+  0.58105 / 0.58105 (`parent_bos_threshold`, no move; PLAN_M §4).
 - **`beyond(p, P, sd)`** — STRICT: sd = +1 `p > P`, sd = −1 `p < P`; reaching `P` is not beyond.
 - **`M` (`cross_fib_limit_cycle`)** = the first cycle whose LATEST CTS anchor (`_latest_anchor`: written at its
   CTS_ESTABLISHED, every CTS_UPDATED until its confirmation, and its CTS_CONFIRMED — the confirmed anchor wins) is
@@ -145,6 +152,7 @@ then end together. 0 on the reference window (0 / 27 fib cycles move); one real 
     |---|---|
     | `reversal_bos_frozen` (main + sub) | the reversing structure's most recent `BOS_CONFIRMED` price by its reversal moment (asserted to exist) |
     | `parent_cts_threshold` | the parent cycle c−1's `CTS_CONFIRMED` price (asserted: exactly one) |
+    | `parent_bos_threshold` (a counter sub, PLAN_M CL-3) | the parent cycle (S, C)'s `BOS_CONFIRMED` price (asserted: exactly one) — the anchor behind the threshold, however far it moved; its break: the cross-limit watch on `P` as of the reading moment |
     | `prev_sub_cts_threshold` | x−1's confirmed cycle's `CTS_CONFIRMED` price (before its `CTS_THRESHOLD_UPDATED`s) |
     | `prev_sub_bos_threshold` | x−1's latest `BOS_CONFIRMED` price — the BOS whose threshold `P` is (asserted to exist) |
     | `prev_sub_latest_cts` / `prev_sub_starting_price` | `P` itself (already an anchor price) |
@@ -178,7 +186,8 @@ then end together. 0 on the reference window (0 / 27 fib cycles move); one real 
     the same rows, to the data edge); `t` = the fed event's moment in flight, the structure's lifecycle cap for the
     final reference (the stamp and the drawn POI; None = main / an open sub). A frame CUT at the cap would be the
     rejected live view (K6) — PLAN_K §11.2 LA1, fixed in the review fix-up. Pure: no MS state, no event. On the
-    reference window: sub 4 → 3588 (confirmed 3589), sub 7 → 4188 (4189), subs 5 / 6 → none.
+    reference window (since PLAN_M landing 2): subs 3 and 4 → 3588 (confirmed 3589), subs 1 / 5 / 6 / 7 → none
+    (before it: sub 4 → 3588, sub 7 → 4188 (4189) on its old `prev_sub_bos_threshold` 0.57827).
   - **Exported** (`FibTracker.stamp_ic_references(df, lifecycle_cap)`, a finalize step after
     `_finalize_lifecycle_fields`; the FINAL reference — `evaluated_at=lifecycle_cap`, the reference as of the
     structure's end): fib meta `ic_ref_price`, `ic_ref_source`

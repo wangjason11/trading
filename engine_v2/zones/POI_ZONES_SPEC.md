@@ -417,7 +417,8 @@ ONE bundled condition (RX1-B) per checked candle `i` (§3.1) of a fib record —
    - **The structure reference** (when the structure has a cross-fib limit `P` and `M` is None or `T ≤ M`, cycle 0
      included — CROSS_CYCLE_FIB_SPEC §3; no limit entry or `P` None → none; for a MOVING `P` the gate is T's cross
      permission, fixed at T's establishment, else read live as of the reading moment — PLAN_M CL-1):
-     - **`prev_structure_bos`** (a reversal start, `P` = `reversal_bos_frozen`): the reversing structure's most recent
+     - **`prev_structure_bos`** (`P` = `reversal_bos_frozen` — a main or CONFLUENCE-sub reversal start; a COUNTER
+       sub's reversal start has `parent_bos_threshold`, below): the reversing structure's most recent
        `BOS_CONFIRMED` price by its reversal (`CrossFibLimit.ref_anchor_price`); its bound = the REALISED reversal
        pattern's first candle (`STATE_CHANGED(to=reversal).meta["pattern_anchor_idx"]`), known for the structure's
        whole run, like `P` (RX1-K7);

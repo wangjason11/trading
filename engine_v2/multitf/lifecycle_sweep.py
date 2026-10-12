@@ -332,6 +332,7 @@ class _Sweep:
                 f"[sweep] cross_fib_limit pool#{sub.pool_idx} P={limit.price} source={limit.source} "
                 f"from=" + (f"pool#{limit.from_pool_idx}" if limit.from_pool_idx is not None else "None")
                 + f" (trigger {t.trigger_type}@{t.trigger_idx}, record start {record_start})"
+                + (f" moves={len(limit.price_moves)}" if limit.price_moves else "")   # PLAN_M: a moving P
             )
         if created and sub.natural_reversal_idx is not None:
             R = int(sub.natural_reversal_idx)

@@ -93,13 +93,18 @@ CENSUS = '''
             "bos_m15": [_loh(m) for m, _p in _c_bos.get((_S, _C), [])],
             "moves": [[m, _loh(m), p] for m, p in _c_thr.get((_S, _C), [])],
             "P_now": _lim.price, "P_src": _lim.source,
+            # PLAN_M landing 2: the limit OBJECT's start + moves (entity-absolute; absent before landing 1)
+            "P_start": getattr(_lim, "price_at_start", None),
+            "P_moves": [list(mv) for mv in getattr(_lim, "price_moves", ())],
             "cycles": {str(k): v for k, v in sorted(_cyc.items())},
         }))
     # ---- end PLAN_M CENSUS ----
 '''
 
-patch("engine_v2/pipeline/orchestrator.py", [(
-    "    check_cross_fib_limits(sub_pool, sorted_events)\n",
-    "    check_cross_fib_limits(sub_pool, sorted_events)\n" + CENSUS,
-)])
+# The anchor line: before PLAN_M landing 2 `check_cross_fib_limits(sub_pool, sorted_events)`; since L2 it takes the
+# parent tables too (PLAN_M §9, "re-pointed then").
+_orc = (TREE / "engine_v2/pipeline/orchestrator.py").read_text(encoding="utf-8")
+_anchor = next(a for a in ("    check_cross_fib_limits(sub_pool, sorted_events, tables)\n",
+                           "    check_cross_fib_limits(sub_pool, sorted_events)\n") if a in _orc)
+patch("engine_v2/pipeline/orchestrator.py", [(_anchor, _anchor + CENSUS)])
 print(f"[census_patch] {TREE}: window {START} -> {END}")

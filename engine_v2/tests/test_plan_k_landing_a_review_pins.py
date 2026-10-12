@@ -105,7 +105,7 @@ def test_the_tripwire_warns_on_a_mismatched_reversal_break():
     from engine_v2.multitf import cross_fib_limit as cfl
     from engine_v2.multitf.cross_fib_limit import NO_LIMIT
     from engine_v2.multitf.sub_structure_pool import StructureKey, SubStructurePool
-    from engine_v2.tests.test_plan_i_s2_cross_fib_limit import PARENT, TF, _bos, _df400, _ev, _rec
+    from engine_v2.tests.test_plan_i_s2_cross_fib_limit import PARENT, TF, _bos, _df400, _ev, _rec, _tables
     from engine_v2.zones.cross_cycle_fib import CrossFibLimit
 
     def run(brk):
@@ -120,7 +120,7 @@ def test_the_tripwire_warns_on_a_mismatched_reversal_break():
         x.start_idx = 100
         y, _ = pool.get_or_create(StructureKey(PARENT, TF, -1, 290))
         y.geometry = (SimpleNamespace(events=[], df=_df400()), 0)
-        y.records.append(_rec(1, 320, trigger_type="first_counter", seq=1, trigger_idx=280))   # creating
+        y.records.append(_rec(1, 320, trigger_type="subsequent_confluence", seq=1, trigger_idx=280))   # creating
         y.records.append(_rec(1, 300, trigger_type="reversal", seq=2, trigger_idx=300))        # started_by
         y.start_idx = 300
         pool.number_subs_by_start()
@@ -129,7 +129,7 @@ def test_the_tripwire_warns_on_a_mismatched_reversal_break():
                                           ref_anchor_price=0.58, break_pattern_anchor_idx=brk[0],
                                           break_confirmed_idx=brk[1])
         logs = []
-        n = cfl.check_cross_fib_limits(pool, [], log=logs.append)
+        n = cfl.check_cross_fib_limits(pool, [], _tables({0: -1}), log=logs.append)   # y (sell): confluence
         assert logs[-1].startswith('[cross_fib_limit] tripwire: 1 subs re-derived'), logs
         return n
 

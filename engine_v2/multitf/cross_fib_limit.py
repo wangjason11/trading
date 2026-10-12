@@ -1,17 +1,22 @@
 """The cross-fib LIMIT reference price `P` of a unique sub (PLAN_I §1.2 / §9.3 D2) — the rule by the sub's
-STARTING trigger, computed ONCE (R2-4).
+STARTING trigger, computed ONCE (R2-4) — a COUNTER sub's `P` then MOVES with its parent's BOS threshold, every move
+in the limit object, each known from its own candle (PLAN_M; `parent_bos_limit`).
 
 `P` is computed when the sub's MS geometry is built — at its creating trigger's FIRE, from that trigger at its
 record's start (R6-2 (a)); the orchestrator re-derives it after the sweep from the sub's started_by record at the
 sub's `start_idx` with the start-numbered x−1 and WARNING-logs a mismatch (`check_cross_fib_limits`, the R6-2
 tripwire; the stored `P` stays). Both go through `cross_fib_limit_for` — one formula.
 
-The rule (§1.2):
+The rule (§1.2; PLAN_M):
+- a COUNTER sub — its direction opposite its first record's parent sid's (`ParentTables.parent_sd`, the sweep's
+  `relative_dir` formula), WHATEVER its trigger type (PLAN_M CL-0 / CL-4) → the parent cycle's BOS threshold, read
+  live (`parent_bos_limit`, source `parent_bos_threshold`); every rule below then serves the CONFLUENCE subs only;
 - `reversal` → the REVERSING sub's applied `bos_frozen` (its geometry's `STATE_CHANGED(to=reversal)`, whose idx
   + `slice_begin` is the reversing sub's `natural_reversal_idx` — asserted; never None);
 - `first_confluence` on parent cycle 0 → none; on c ≥ 1 → the parent's `CTS_ESTABLISHED` (S, c)
   `meta["cts_frozen"]` (the frozen c−1 `cts_threshold` the breakout broke; never None);
-- `first_counter` / `subsequent_confluence` / `subsequent_counter` → the PREVIOUS unique sub x−1 read at x's start
+- `first_counter` / `subsequent_confluence` / `subsequent_counter` (since PLAN_M: `subsequent_confluence` — the two
+  counter types are counter subs by construction) → the PREVIOUS unique sub x−1 read at x's start
   `s` (`read_prev_sub`); no x−1 → none.
 
 Pure: no pandas import (the geometry's `bounded.df` is read through `.iloc`), no MS / chart import.
@@ -22,10 +27,12 @@ from typing import Any, Callable, Iterable, List, Optional, Tuple
 
 from engine_v2.multitf.sub_structure_pool import PooledStructure, knowable_at_idx
 from engine_v2.structure import event_fields as ef
-from engine_v2.zones.cross_cycle_fib import CrossFibLimit
+from engine_v2.zones.cross_cycle_fib import CrossFibLimit, beyond
 
-# x−1 types (§1.2): the previous unique sub supplies P.
+# x−1 types (§1.2): the previous unique sub supplies P — since PLAN_M for a CONFLUENCE sub only, so in production
+# `subsequent_confluence` alone (a `first_counter` / `subsequent_counter` sub is counter by construction).
 PREV_SUB_TYPES = frozenset({"first_counter", "subsequent_confluence", "subsequent_counter"})
+_TRIGGER_TYPES = PREV_SUB_TYPES | {"reversal", "first_confluence"}
 
 NO_LIMIT = CrossFibLimit(price=None, source="none")
 
@@ -162,6 +169,55 @@ def parent_cts_limit(h1_events: Iterable[Any], parent_sid: int, parent_cycle_id:
     return CrossFibLimit(float(frozen), "parent_cts_threshold", ref_anchor_price=float(conf[0].price))
 
 
+def parent_bos_limit(tables: Any, parent_sid: int, parent_cycle_id: int, direction: int, s: int) -> CrossFibLimit:
+    """A COUNTER sub's limit (PLAN_M §1 items 2–3, §7.3; source `parent_bos_threshold`, CL-5): its first record's
+    parent cycle (S, C)'s BOS threshold — `BOS_CONFIRMED(S, C)` moved by each `BOS_THRESHOLD_UPDATED(S, C)`
+    (`tables.bos_threshold_steps`, processing order), each known on M15 at its hour's last candle (LOH).
+
+    - `price_at_start` = the threshold as of the record's start `s` (the last step known at or before it — CL-1:
+      every read before the start uses `P` as of the start, so earlier moves FOLD IN); `price_moves` = the steps
+      known after `s`, steps at one M15 moment COLLAPSED (the last in processing order wins); `price` = the last
+      move's, else the start's. Frozen at the parent cycle's end (CL-2): MS stamps a threshold step with the CURRENT
+      cycle, so none lies at or after `end_h1[(S, C)]` — asserted, not filtered.
+    - `ref_anchor_price` = the `BOS_CONFIRMED(S, C)` price (CL-3: the IC reference's structure side); no break
+      fields (the cross-limit watch finds the break, CL-7); no `from_pool_idx` (an H1 parent).
+
+    Asserts (raise, do not degrade — PART4 §17.7; each held on PLAN_M §6's six census windows): exactly one
+    `BOS_CONFIRMED` (S, C), the first step; every step's M15 moment mapped; the BOS known by `s`; no step at or
+    after the parent cycle's end; each threshold STRICTLY further than the one before (`beyond` in the counter
+    sub's direction — the parent's threshold only moves further, so `P` only gives later cycles more room)."""
+    key = (int(parent_sid), int(parent_cycle_id))
+    steps = tables.bos_threshold_steps.get(key, ())
+    n_bos = sum(1 for st in steps if st[3] == "BOS_CONFIRMED")
+    assert n_bos == 1 and steps[0][3] == "BOS_CONFIRMED", (
+        f"[cross_fib_limit] parent {key}: {n_bos} BOS_CONFIRMED, first step "
+        f"{steps[0][3] if steps else None} (PLAN_M §7.3)")
+    assert all(st[1] is not None and st[2] is not None for st in steps), (
+        f"[cross_fib_limit] parent {key}: a threshold step before the M15 frame, or unpriced: {steps} (PLAN_M §7.3)")
+    assert int(steps[0][1]) <= int(s), (
+        f"[cross_fib_limit] parent {key}: BOS known at M15 {steps[0][1]} after the record start {s} (PLAN_M §7.3)")
+    end_h1 = tables.end_h1[key]
+    assert end_h1 is None or all(int(st[0]) < int(end_h1) for st in steps), (
+        f"[cross_fib_limit] parent {key}: a threshold step at / after the cycle's end {end_h1}: {steps}")
+    for prev, cur in zip(steps, steps[1:]):
+        assert beyond(cur[2], prev[2], int(direction)), (
+            f"[cross_fib_limit] parent {key}: threshold {cur[2]} at H1 {cur[0]} not strictly further than "
+            f"{prev[2]} for a direction-{int(direction)} sub (PLAN_M §7.3)")
+    collapsed: List[Tuple[int, float]] = []
+    for _h1, m15, price, _et in steps:
+        if collapsed and collapsed[-1][0] == int(m15):
+            collapsed[-1] = (int(m15), float(price))
+        else:
+            collapsed.append((int(m15), float(price)))
+    start = [p for m, p in collapsed if m <= int(s)][-1]
+    moves = tuple((m, p) for m, p in collapsed if m > int(s))
+    bos_price = float(steps[0][2])
+    if not moves:
+        return CrossFibLimit(start, "parent_bos_threshold", ref_anchor_price=bos_price)
+    return CrossFibLimit(moves[-1][1], "parent_bos_threshold", ref_anchor_price=bos_price,
+                         price_at_start=start, price_moves=moves)
+
+
 def cross_fib_limit_for(
     trigger_type: str,
     parent_cycle: Tuple[int, int],
@@ -169,30 +225,40 @@ def cross_fib_limit_for(
     s: int,
     *,
     h1_events: Iterable[Any],
+    parent_tables: Any,
     reversing_sub: Optional[PooledStructure],
     prev_sub: Optional[PooledStructure],
     log: Callable[[str], None] = print,
 ) -> CrossFibLimit:
     """THE rule (§1.2) for a unique sub started by `trigger_type` at `s` (its start): the one formula behind the
     fire-time `P` (the sweep) and the post-sweep re-derivation (`check_cross_fib_limits`) — they differ only in
-    which `reversing_sub` / `prev_sub` they hand in."""
+    which `reversing_sub` / `prev_sub` they hand in. FIRST the counter test (PLAN_M CL-0, "regardless of the sub
+    trigger"): `direction` opposite the parent sid's (`parent_tables.parent_sd`) → `parent_bos_limit`. The trigger
+    type is validated first, so an unknown one raises on a counter sub too."""
+    assert trigger_type in _TRIGGER_TYPES, f"[cross_fib_limit] unknown trigger type {trigger_type!r}"
+    S, C = parent_cycle
+    if int(direction) != int(parent_tables.parent_sd[int(S)]):
+        return parent_bos_limit(parent_tables, int(S), int(C), int(direction), int(s))
     if trigger_type == "reversal":
         assert reversing_sub is not None, "[cross_fib_limit] a reversal needs its reversing sub"
         return reversal_limit(reversing_sub)
     if trigger_type == "first_confluence":
-        S, C = parent_cycle
         return NO_LIMIT if int(C) == 0 else parent_cts_limit(h1_events, int(S), int(C))
-    assert trigger_type in PREV_SUB_TYPES, f"[cross_fib_limit] unknown trigger type {trigger_type!r}"
     return NO_LIMIT if prev_sub is None else read_prev_sub(prev_sub, int(s), int(direction), log=log)
 
 
-def check_cross_fib_limits(pool: Any, h1_events: Iterable[Any], *, log: Callable[[str], None] = print) -> int:
+def check_cross_fib_limits(pool: Any, h1_events: Iterable[Any], parent_tables: Any, *,
+                           log: Callable[[str], None] = print) -> int:
     """The R6-2 tripwire (PLAN_I §9.3 D2), after the sweep has numbered the subs: for every started sub whose
     started_by record (the first live one by `(start_idx, seq)`) is not its creating record (the first by `seq`),
-    or whose type reads x−1, re-derive `P` the §1.2 way — from the started_by record, at the sub's `start_idx`,
-    x−1 = the sub numbered `sub_id − 1` (a reversal's reversing sub = THE sub whose `natural_reversal_idx` is the
-    record's `trigger_idx`, of the opposite direction, with a record live at it) — and compare `(price, source,
-    from_sub_id)` with the stored one. A mismatch is a `WARNING [cross_fib_limit]` and the stored `P` stays
+    or whose type is an x−1 type (`PREV_SUB_TYPES`; since PLAN_M only a `subsequent_confluence` sub reads x−1 — the
+    `first_counter` / `subsequent_counter` subs are counter by construction and re-derive through the counter rule),
+    re-derive `P` the §1.2 way — from the started_by record, at the sub's `start_idx`, x−1 = the sub numbered
+    `sub_id − 1` (a CONFLUENCE reversal's reversing sub = THE sub whose `natural_reversal_idx` is the record's
+    `trigger_idx`, of the opposite direction, with a record live at it; a counter sub never reads one, so none is
+    looked up — PLAN_M landing 2 review) — and compare `(price, source,
+    from_sub_id)` (+ the anchor, the break, and a moving limit's `price_at_start` / `price_moves` — PLAN_M §7.3)
+    with the stored one. A mismatch is a `WARNING [cross_fib_limit]` and the stored `P` stays
     (R6-2 (a)). Returns the mismatch count."""
     h1_events = list(h1_events)
     by_id = {s.sub_id: s for s in pool.all() if s.sub_id is not None}
@@ -205,7 +271,8 @@ def check_cross_fib_limits(pool: Any, h1_events: Iterable[Any], *, log: Callable
             continue
         checked += 1
         reversing = None
-        if first.trigger_type == "reversal":
+        counter = int(sub.direction) != int(parent_tables.parent_sd[int(first.parent_sid)])
+        if first.trigger_type == "reversal" and not counter:
             R = int(first.trigger_idx)
             cands = [o for o in pool.all()
                      if o.natural_reversal_idx is not None and int(o.natural_reversal_idx) == R
@@ -222,15 +289,16 @@ def check_cross_fib_limits(pool: Any, h1_events: Iterable[Any], *, log: Callable
         prev = by_id.get(sub_id - 1) if first.trigger_type in PREV_SUB_TYPES else None
         got = cross_fib_limit_for(
             first.trigger_type, (first.parent_sid, first.parent_cycle_id), int(sub.direction), int(sub.start_idx),
-            h1_events=h1_events, reversing_sub=reversing, prev_sub=prev,
+            h1_events=h1_events, parent_tables=parent_tables, reversing_sub=reversing, prev_sub=prev,
             log=lambda _m: None,          # a `prev_sub_no_cts` WARNING was already logged at the fire
         )
         got_from = None if got.from_pool_idx is None else pool.get_by_pool_idx(got.from_pool_idx).sub_id
         stored = sub.cross_fib_limit
         if ((got.price, got.source, got_from, got.ref_anchor_price, got.break_pattern_anchor_idx,
-             got.break_confirmed_idx)
+             got.break_confirmed_idx, got.price_at_start, got.price_moves)
                 != (stored.price, stored.source, stored.from_sub_id, stored.ref_anchor_price,
-                    stored.break_pattern_anchor_idx, stored.break_confirmed_idx)):
+                    stored.break_pattern_anchor_idx, stored.break_confirmed_idx, stored.price_at_start,
+                    stored.price_moves)):
             mismatched += 1
             log(f"WARNING [cross_fib_limit] sub {sub_id}: stored P={stored.price} {stored.source} "
                 f"from sub {stored.from_sub_id} != re-derived at its start {sub.start_idx} from its started_by "

@@ -61,6 +61,7 @@ class CrossFibLimit:
     - `ref_anchor_price` (PLAN_K A8, RX1-2): the ANCHOR price behind `P` — the IC reference's price side for the
       structure's cycles ≤ `M` (`P` is a threshold that may have moved; the IC reference never uses a threshold):
       the reversing structure's most recent `BOS_CONFIRMED` price, the parent cycle c−1's `CTS_CONFIRMED` price,
+      a counter sub's parent cycle `BOS_CONFIRMED` price (`parent_bos_threshold`, PLAN_M CL-3),
       x−1's `BOS_CONFIRMED` / confirmed `CTS_CONFIRMED` price, or `P` itself where `P` already is an anchor price
       (`prev_sub_latest_cts`, `prev_sub_starting_price`); None ⟺ `price` None;
     - `break_pattern_anchor_idx` / `break_confirmed_idx` (PLAN_K A8, RX1-1): a `reversal_bos_frozen` structure's
@@ -144,8 +145,10 @@ class CrossFibLimit:
 # The IC reference's `source` values (PLAN_K §1, the fib meta `ic_ref_source`; PLAN_H RX1).
 IC_REF_SOURCES = frozenset({
     "prev_cycle_cts",       # cycle a−1's CTS_CONFIRMED price (the fib's BOS in cycle a ≥ 1)
-    "prev_structure_bos",   # a reversal start: the reversing structure's most recent BOS_CONFIRMED price
-    "cross_limit_anchor",   # a non-reversal start with a cross limit: the anchor behind P
+    "prev_structure_bos",   # a `reversal_bos_frozen` limit (main / a confluence sub's reversal start): the reversing
+                            #   structure's most recent BOS_CONFIRMED price
+    "cross_limit_anchor",   # every other source with a P (a counter sub's `parent_bos_threshold` too, PLAN_M): the
+                            #   anchor behind P
 })
 
 

@@ -69,9 +69,10 @@ ceiling `M` (built 2026-06-17, §11b Part A, dormant on the window), §3.1 the f
    | sub: first_counter / subsequent_confluence / subsequent_counter | [R2-1, supersedes Q1] at the unique sub's `start_idx` (the moment), the PREVIOUS unique sub "x−1" (= `sub_id` − 1 — the user's (i); unique subs are numbered at their lifecycle START [R3-2, accepted R4-2], so x−1 has always started by x's start): **same direction** as x → x−1's `cts_threshold` of its most recent CONFIRMED CTS (that cycle's confirmed CTS price, moved by its `CTS_THRESHOLD_UPDATED` range syncs; a cycle only established / updated is never used); **opposite** → x−1's current `bos_threshold` (of its most recent BOS); opposite with no `bos_threshold` yet → x−1's finalized `starting_idx` price (= its BOS_0 price, §3.3) [R2-2]; same direction with no confirmed CTS yet → x−1's LATEST CTS anchor price at x's start (established / updated) [R2-b (b)]; no x−1 → no `P`. x−1 is read INCLUSIVE of x's start candle (its events whose moment ≤ x's `start_idx`) [R4-5]; an x−1 that has already ENDED is read as of its `end_idx` — its geometry runs on to the data edge, and those post-end events never count [R4-6]; it is read by MOMENT, so an x−1 ended by a reversal or a new parent cycle yields its FROZEN thresholds — the applied reversal's `bos_frozen`; a pattern or watch pending at the end → the value it holds [R5-3] |
 
    `P` is determined ONCE, at the structure's start (main: the reversal's apply; a sub: its `start_idx`), and never
-   changes [R2-4]. **Amended for COUNTER subs (decided 2026-10-10, not yet built — `PLAN_M_counter_sub_cross_limit.md`
-   §1 / §3):** a sub whose direction is opposite its first record's parent takes the parent cycle's BOS threshold,
-   read live — the rows above stay for every other sub.
+   changes [R2-4]. **Amended for COUNTER subs (decided 2026-10-10, BUILT 2026-10-11 — `PLAN_M_counter_sub_cross_limit.md`
+   §1 / §3; landing 1 the live-`P` plumbing, landing 2 the source):** a sub whose direction is opposite its first
+   record's parent takes the parent cycle's BOS threshold, read live (`parent_bos_threshold`) — the rows above stay
+   for every other sub. Canonical: `zones/CROSS_CYCLE_FIB_SPEC.md` §3.
 
 3. **The user's answers to the 8 inputs (§6 I1–I8):** variants attach to TRIGGERS, not to sid; "Scenario X" names
    retired (I1); the pre-established cross runs on main too, inside the limit (I2); post-reversal fib handling on

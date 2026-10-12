@@ -1,0 +1,8 @@
+KILLED    X01_closure_cycle_zero             1 failing: test_the_driver_wires_the_fire_time_rule_and_the_tripwire
+KILLED    X04_tripwire_creating_parent       1 failing: test_the_tripwire_reads_the_started_by_records_parent_sid
+KILLED    X05_collapse_by_h1                 1 failing: test_two_hours_sharing_one_m15_moment_collapse_too
+KILLED    X07_tripwire_at_creating_start     1 failing: test_the_tripwire_re_derives_a_counter_sub_at_its_started_by
+KILLED    M2R1_tripwire_looks_up_a_reversing_sub_for_a_counter_sub 1 failing: test_a_counter_reversal_sub_is_re_derived_without_its_revers
+KILLED    M2R2_no_trigger_type_validation    2 failing: test_the_rule_dispatches_on_the_starting_trigger, test_an_unknown_trigger_type_raises_on_a_counter_sub_too
+6/6 KILLED  (results: C:\Users\wangj\AppData\Local\Temp\mm2r\results.json)
+exit 0
