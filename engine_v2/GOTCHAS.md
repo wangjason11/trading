@@ -328,6 +328,12 @@ key = ev.idx                                                          # RANGE_RE
 
 **Why this matters:** Without correct sort order, a new range may be immediately closed by a RANGE_RESET that should have closed the *previous* range.
 
+**And record state at the SAME key you replay at** (the PLAN_N hover follow-up, 2026-10-12): the hover-line builder
+replayed in this order but snapshotted at each event's `ev.idx`, so a STARTED (replayed at its anchor) wrote its
+snapshot at its moment BEFORE the events between its anchor and its moment had applied — another structure froze as of
+the anchor, and the range's own confirm candle showed its anchor-time state (16 stale candles on the reference window).
+`_range_events_with_replay_idx` hands each event its replay candle; the hover pass snapshots there.
+
 ---
 
 ## Fib State Storage: Key by (structure_id, cycle_id) Not Just structure_id

@@ -49,17 +49,17 @@ The open lines below carry over (fold in when their files are next touched); D a
   `range_anchor_idx` (MS's range start on every path; the H1 range box starts there) / `confirmed_at`;
   `effective_idx` == `ev.idx` always; "collapsed parent cycle" (one test, one name). Charts byte-identical on the
   window. Move to "Recently closed" at the next register sweep.
-- **H1 range hover lines snapshot every structure** — the hover builder's third pass replays a `RANGE_STARTED` at its
-  anchor but snapshots EVERY structure at each event's idx, so another structure can be frozen as of that anchor
-  (pre-existing on label ranges; on the reference window sid 0's hover at H1 750 shows its 747 state, sid 1's line has a
-  point at its anchor 748; PLAN_N N5 extends the exposure to pullback / proximity ranges). Found by PLAN_N's landing
-  review. The fix is BUILT and measured (4 H1 hover traces change, nothing else):
-  `engine_v2/plans/plan_n_inputs/followup_hover_per_structure.md`. OPEN — the NEXT session lands it (the user,
-  2026-10-12; §D "SESSION ORDER" 1), as its own `/compare`.
-- **Dead code in the H1 range hover-line builder** — its first two replay passes (`export_plotly.py`, the
-  `hover_data` / `open_ranges` loops before the per-structure snapshot pass) build state nothing reads; only the third
-  pass reaches the figure (PLAN_N §10, found by its mutants). Delete when the range chart is next touched. OPEN; no
-  output effect.
+- ~~**H1 range hover lines snapshot every structure**~~ — **LANDED 2026-10-12 (commit pending the user's go), widened
+  by the user to option B: the hover line = the box, candle for candle** (each event snapshotted at its REPLAY candle —
+  a `RANGE_STARTED` at its anchor — not at its idx). The snapshot at the idx had two symptoms: another structure frozen
+  as of a STARTED's anchor (sid 0's hover at H1 750 showed its 747 state), and a label range's confirm candle (+ the
+  candles forward-filled from it) showing its anchor-time state, before its back-filled updates (16 candles on 7 label
+  ranges; e.g. sid 1 on H1 716–723: hi 0.58002 under a box drawn at 0.58108). `/compare` vs S_N = the prediction: 4 H1
+  hover traces, 28 candle points; CSVs / M15 / shapes identical; chart review: the user "looks good go ahead". Detail:
+  `engine_v2/plans/plan_n_inputs/followup_hover_per_structure.md` "The landing decision". Move to "Recently closed"
+  with the commit.
+- ~~**Dead code in the H1 range hover-line builder**~~ — **DELETED 2026-10-12 with the hover fix above** (the user: in
+  the same change); the builder is one replay pass now. No output effect.
 
 ## B. Week 8 scope — decided 2026-09-30 (the M5 layer moved to D; the syllabus extras dropped — "Recently closed")
 
@@ -86,9 +86,10 @@ very next session, I want to land the H1 range-hover follow-up first. Then the s
 to the current IC identification and cross cycle fib logic to ask some questions and make some edits. After that, the
 next session will focus on some changes & edits on zone proximity triggers, more specifically the current opposite
 direction / CTS zone proximity trigger. Finally, after that we will start zone size adjustments."
-1. **The H1 range-hover follow-up** — land it (register §A "H1 range hover lines snapshot every structure"; built +
-   measured: `engine_v2/plans/plan_n_inputs/followup_hover_per_structure.md` — the code, the pin, the mutant, the
-   prediction = exactly 4 H1 hover traces; then `/compare`, chart review, commit on the user's go).
+1. ~~**The H1 range-hover follow-up**~~ — **LANDED 2026-10-12** (session 1; commit pending the user's go): widened by
+   the user to option B (the hover line = the box, candle for candle) + the dead passes deleted; `/compare` vs S_N = the
+   prediction (4 H1 hover traces, 28 candle points). Register §A; `engine_v2/plans/plan_n_inputs/
+   followup_hover_per_structure.md` "The landing decision".
 2. **The IC identification + the cross-cycle fib logic — the user's questions and edits** (re-opens D.1 items 1 / 2 —
    both had no open work since 2026-10-12; the user brings the questions). Current logic, canonical:
    `engine_v2/zones/POI_ZONES_SPEC.md` §3 (Step 1 the IC conditions, §3.2 the IC reference, Step 2 the institutional

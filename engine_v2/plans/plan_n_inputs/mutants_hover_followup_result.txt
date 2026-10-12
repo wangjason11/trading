@@ -1,0 +1,10 @@
+# mutants_hover_followup.py on the landed option-B code, full suite each (2026-10-12)
+KILLED    HB1_snapshot_at_the_event_idx      3 failing: test_p4_a_label_ranges_hover_keeps_its_back_filled_update_on, test_p4_each_range_hover_line_runs_where_its_box_runs_across, test_p4_the_range_boxes_start_at_the_anchor_in_guarded_order
+KILLED    HB2_forward_fill_visible_candles_only 1 failing: test_p4_a_sliced_charts_hover_line_starts_at_its_first_candl
+KILLED    HB3_no_forward_fill                3 failing: test_p4_a_label_ranges_hover_keeps_its_back_filled_update_on, test_p4_a_sliced_charts_hover_line_starts_at_its_first_candl, test_p4_each_range_hover_line_runs_where_its_box_runs_across
+KILLED    HB4_helper_replay_idx_is_the_event_idx 3 failing: test_p4_a_label_ranges_hover_keeps_its_back_filled_update_on, test_p4_each_range_hover_line_runs_where_its_box_runs_across, test_p4_the_range_boxes_start_at_the_anchor_in_guarded_order
+KILLED    HB5_started_last_update_at_its_moment 1 failing: test_p4_a_label_ranges_hover_keeps_its_back_filled_update_on
+KILLED    LR1_hover_order_back_on_an_idx_sort 3 failing: test_p4_a_label_ranges_hover_keeps_its_back_filled_update_on, test_p4_each_range_hover_line_runs_where_its_box_runs_across, test_p4_the_range_boxes_start_at_the_anchor_in_guarded_order
+KILLED    LR2_guard_not_per_structure        2 failing: test_p4_each_range_hover_line_runs_where_its_box_runs_across, test_p4_the_reset_guard_is_per_structure_and_only_for_an_ear
+KILLED    LR3_guard_takes_a_later_reset      1 failing: test_p4_the_reset_guard_is_per_structure_and_only_for_an_ear
+8/8 KILLED  (results: C:\Users\wangj\AppData\Local\Temp\mhb\results.json)

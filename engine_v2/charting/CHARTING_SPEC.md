@@ -66,19 +66,26 @@ To change any visual element:
   own range start on every path: the range-label candle, or the CTS anchor on a pullback- / proximity-created range
   (PLAN_N N5, 2026-10-12; those two paths started at the event's idx until then — 0 such ranges on the H1 reference
   window)
-- Replay order (`export_plotly._range_events_chart_order`, shared by the box and hover-line builders): a
+- Replay order (`export_plotly._range_events_chart_order` — `_range_events_with_replay_idx` with each event's replay
+  candle — shared by the box and hover-line builders): a
   `RANGE_STARTED` sorts at its anchor — so the `RANGE_UPDATED`s back-filled between a label range's anchor and its
   confirm candle split its box — but never before `R`, the latest same-structure `RANGE_RESET` emitted before it,
   if `R <= ev.idx` (a pullback range's CTS anchor can precede the breakout that reset the previous range; the reset
   then closes the OLD box at `R` first, and the new box is still drawn from its anchor — so the two boxes of one
   structure OVERLAP on `[anchor, R]`, which is the data's truth: MS says the new range starts at the anchor); other
   events at their idx; ties RESET < STARTED < UPDATED. Keyed by `structure_id` (H1 only)
-- The hover line starts at the structure's first replayed event candle (a label range: its first back-filled update;
-  a pullback- / proximity-created range: its moment `ev.idx`), not at the box's left edge; its `range_start_idx=`
-  shows the anchor. **Known defect (register §A "H1 range hover lines snapshot every structure"):** the hover pass
-  snapshots EVERY structure at each event's idx while replaying a STARTED at its anchor, so another structure can be
-  frozen as of that anchor (on the reference window: sid 0's hover at H1 750 shows its 747 state, and sid 1's line has
-  a point at its anchor 748). The fix is built: `plans/plan_n_inputs/followup_hover_per_structure.md`
+- The hover lines carry the boxes' data, candle for candle (the PLAN_N hover follow-up, 2026-10-12): the hover
+  builder replays in the same order and snapshots every open range at each event's REPLAY candle (a `RANGE_STARTED` at
+  its reset-guarded anchor, the rest at their idx); a candle shows the latest snapshot at or before it. So a range's
+  line starts where its box starts — its anchor, on every path (a label range, a pullback- / proximity-created range);
+  at `R` when the reset guard moved its replay, the overlap `[anchor, R)` hovering the OLD range (one hover point per
+  structure per candle) — and a back-filled update shows from the candle it is stamped at. `range_start_idx=` shows the
+  anchor, `last_update_idx=` the latest update replayed (the anchor until the first). On a sliced chart (`idx_range` /
+  `max_points`) a range open before the slice shows from the slice's first candle, like its clamped box. (Until then the
+  snapshot was taken at the event's idx while a STARTED replayed at its anchor: another structure froze as of that
+  anchor, and a label range's confirm candle — and the candles forward-filled from it — showed its anchor-time state,
+  e.g. sid 1 on H1 716–723 hovered hi 0.58002 under a box drawn at 0.58108; detail
+  `plans/plan_n_inputs/followup_hover_per_structure.md`)
 - Segmented whenever bounds change while `range_active==1`
 - Ends on range deactivation or reversal state
 - Style key: `range.rect`

@@ -118,7 +118,7 @@ def test_p3_a_proximity_range_carries_the_cts_anchor(sd, monkeypatch):
 # N2 / N5 — the H1 range boxes and hover lines (P4) — through the chart's real call sites
 # ---------------------------------------------------------------------------------------------------------------
 
-def _render_h1(df, monkeypatch, tmp_path, *, ranges=False, kl=False):
+def _render_h1(df, monkeypatch, tmp_path, *, ranges=False, kl=False, idx_range=None):
     go = pytest.importorskip("plotly.graph_objects")
     from engine_v2.charting.export_plotly import export_chart_plotly
     from engine_v2.multitf.registry import StructureRegistry
@@ -132,7 +132,7 @@ def _render_h1(df, monkeypatch, tmp_path, *, ranges=False, kl=False):
            "zones": {"wave_candles": False, "POI": False, "KL": kl},
            "volume": {"bars": False, "ema_line": False, "spike_marker": False}}
     with contextlib.redirect_stdout(io.StringIO()):
-        export_chart_plotly(title="t", registry=reg, path_id="H1", out_dir=tmp_path, cfg=cfg)
+        export_chart_plotly(title="t", registry=reg, path_id="H1", out_dir=tmp_path, cfg=cfg, idx_range=idx_range)
     fig, = figs
     return fig
 
@@ -182,16 +182,69 @@ def test_p4_the_range_boxes_start_at_the_anchor_in_guarded_order(tmp_path, monke
         # (c) the reset at 24 closes the OLD range; the new one opens after it, drawn from its anchor 22
         (2.9, 3.0, t[19], t[24]), (3.1, 3.2, t[22], end),
     ])
-    # The hover lines (the second builder): each point's `range_start_idx=` (customdata[1]) is the open range's
-    # anchor — its third pass is the one that reaches the figure (its first two passes build state nothing reads,
-    # so their `_range_left_idx` reads are unpinnable — PLAN_N §10).
+    # The hover lines (the second builder): each point's `range_start_idx=` (customdata[1]) is the open range's anchor.
     starts = {tr.name: sorted({tuple(c)[1] for c in tr.customdata}) for tr in fig.data
               if (tr.name or "").startswith("range:top:")}
     assert starts == {"range:top:sid0": [5], "range:top:sid1": [13], "range:top:sid2": [19, 22]}
-    # ... and replays in the SAME order as the boxes (the landing review's surviving LR1: the hover builder back on a
-    # plain idx sort): sid 0's back-filled update at 6 gets a point only if the STARTED (7, anchor 5) came first.
+    # ... and replays in the SAME order as the boxes, snapshotting at the replay candle (the landing review's surviving
+    # LR1: the hover builder back on a plain idx sort): sid 0's line starts at its anchor 5, where its box starts (the
+    # PLAN_N hover follow-up, 2026-10-12; before it, at its first back-filled update 6).
     first_x = {tr.name: _ts(min(tr.x)) for tr in fig.data if (tr.name or "").startswith("range:top:")}
-    assert first_x["range:top:sid0"] == t[6]
+    assert first_x["range:top:sid0"] == t[5]
+
+
+def test_p4_each_range_hover_line_runs_where_its_box_runs_across_structures(tmp_path, monkeypatch):
+    """(The PLAN_N hover follow-up — the landing review's finding 1, its probe.) sid 0: a label range anchored at 1,
+    confirmed at 3, reset at 12; sid 1: a pullback range at 14 anchored at 8 — replayed at 8, BEFORE sid 0's reset.
+    Snapshotted at each event's idx, the snapshot at 14 froze sid 0 as still open (its line came back from 14 on) and
+    sid 1's line began at 12; snapshotted at the replay candle, each line runs where its box runs: sid 0 from its anchor
+    1 to 11 (its box closes at the reset 12), sid 1 from its anchor 8."""
+    df = _prepare_df(_make_uptrend_data(32))
+    df.attrs["structure_events"] = [
+        _rng(3, "RANGE_STARTED", 0, range_anchor_idx=1, confirmed_at=3, hi=1.0, lo=0.9),
+        _rng(12, "RANGE_RESET", 0),
+        _rng(14, "RANGE_STARTED", 1, range_anchor_idx=8, confirmed_at=14, reason="pullback_created_range",
+             hi=2.0, lo=1.9),
+    ]
+    fig = _render_h1(df, monkeypatch, tmp_path, ranges=True)
+    t = [_ts(x) for x in df["time"]]
+    span = {tr.name: (_ts(min(tr.x)), _ts(max(tr.x)), len(tr.x)) for tr in fig.data
+            if (tr.name or "").startswith("range:top:")}
+    assert span == {"range:top:sid0": (t[1], t[11], 11), "range:top:sid1": (t[8], t[-1], len(t) - 8)}
+
+
+def test_p4_a_label_ranges_hover_keeps_its_back_filled_update_on_the_confirm_candle(tmp_path, monkeypatch):
+    """(The follow-up's second symptom.) A label range anchored at 5, confirmed at 7, its back-filled update at 6
+    (emitted after it, hi 1.0 -> 1.05), none at 7. Snapshotted at its idx 7, the STARTED froze the anchor-time state
+    (hi 1.0, last update 5) on 7 and every candle forward-filled from it (on S_N: sid 1, H1 716-723, under a box drawn
+    at the update's top); at its replay candle 5 the line starts with the box and keeps the update from 6 on."""
+    df = _prepare_df(_make_uptrend_data(12))
+    df.attrs["structure_events"] = [
+        _rng(7, "RANGE_STARTED", 0, range_anchor_idx=5, confirmed_at=7, hi=1.0, lo=0.9),
+        _rng(6, "RANGE_UPDATED", 0, hi=1.05, lo=0.9),
+    ]
+    fig = _render_h1(df, monkeypatch, tmp_path, ranges=True)
+    top, = [tr for tr in fig.data if tr.name == "range:top:sid0"]
+    # customdata = (idx, range_start_idx, range_hi, range_lo, last_update_idx, structure_id)
+    assert [tuple(c)[:5] for c in top.customdata] == [(5, 5, 1.0, 0.9, 5)] + [(i, 5, 1.05, 0.9, 6) for i in range(6, 12)]
+    assert list(top.y) == [1.0] + [1.05] * 6
+
+
+def test_p4_a_sliced_charts_hover_line_starts_at_its_first_candle_like_the_clamped_box(tmp_path, monkeypatch):
+    """A range open before an `idx_range` slice (8-15) shows from the slice's first candle, like its box (clamped
+    there); the pass used to snapshot visible candles only, so the line began at the first event inside the slice."""
+    df = _prepare_df(_make_uptrend_data(20))
+    df.attrs["structure_events"] = [
+        _rng(4, "RANGE_STARTED", 0, range_anchor_idx=2, confirmed_at=4, hi=1.0, lo=0.9),
+        _rng(12, "RANGE_UPDATED", 0, hi=1.1, lo=0.9),
+    ]
+    fig = _render_h1(df, monkeypatch, tmp_path, ranges=True, idx_range=(8, 15))
+    t = [_ts(x) for x in df["time"]]
+    boxes = sorted((s.y0, s.y1, _ts(s.x0), _ts(s.x1)) for s in fig.layout.shapes if s.type == "rect")
+    assert boxes == [(0.9, 1.0, t[8], t[12]), (0.9, 1.1, t[12], t[15])]
+    top, = [tr for tr in fig.data if tr.name == "range:top:sid0"]
+    assert [_ts(x) for x in top.x] == t[8:16]
+    assert list(top.y) == [1.0] * 4 + [1.1] * 4
 
 
 def test_p4_the_reset_guard_is_per_structure_and_only_for_an_earlier_reset():

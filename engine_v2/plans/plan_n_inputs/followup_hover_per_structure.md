@@ -1,6 +1,8 @@
 # PLAN_N follow-up — the H1 range hover lines snapshot EVERY structure (found by PLAN_N's landing review, 2026-10-12)
 
-**Status: BUILT + MEASURED, NOT LANDED** — split out of PLAN_N so that landing stays one cause (byte-identical figures).
+**Status: WIDENED to option B by the user at the landing session (2026-10-12) — see "The landing decision" below;
+the per-structure fix of the next sections is the dated record of what was built first (= option A).** Split out of
+PLAN_N so that landing stays one cause (byte-identical figures).
 Register: `IDEA_PARKING_LOT.md` §A "H1 range hover lines snapshot every structure".
 
 ## The defect
@@ -109,3 +111,69 @@ snapshot — `snaps_by_sid.setdefault(sid, {})[idx] = …` → write every struc
 ## Docs at landing
 CHARTING_SPEC "Range rectangles" (drop the known-defect note; the hover line is per structure); the `export_plotly`
 comment; PLAN_N §12 finding 1; the register line closed; a `/compare` prediction = the 4 traces above.
+
+## The landing decision (2026-10-12, the landing session) — option B: the hover line = the box, candle for candle
+
+**The second symptom (found before applying the fix above).** The same mechanism — a `RANGE_STARTED` replayed at its
+anchor but snapshotted at its moment `ev.idx` — also stales a structure's OWN line: the STARTED's snapshot is written
+before the back-filled `RANGE_UPDATED`s stamped between its anchor and its moment apply, so the moment candle, and every
+candle forward-filled from it, shows the anchor-time state. The per-structure fix (A) keeps it. On S_N: **16 candles on
+7 label ranges**. Example — sid 1's label range, anchor H1 711 (2025-12-29 13:00), confirmed 716 (18:00); its
+back-filled updates raised the top to 0.58108 (candle 714's high, 16:00): the hover shows hi 0.58002 / last update 711
+on candles 716–723 (8 hours) while the box top is drawn at 0.58108. Measured by an offline replay of the pass on S_N's
+events (scratchpad `hover_sim.py`; its replay of the current pass == the S_N figure, 1114 hover points; option A
+reproduces the measured 2-point delta above).
+
+**The candidates (all change the same 4 traces only).** A — land as built (2 candle points; the 16 stale candles to a
+later `/compare`). A2 — A plus "a candle shows its structure's state after the last-replayed event stamped at or before
+it" (18 candle points; the line starts unchanged). B — snapshot at each event's chart-order (replay) candle: the hover
+line carries the box's data candle for candle, and a range's line starts where its box starts (28 candle points).
+**The user chose B** (2026-10-12), and to delete the builder's dead first two passes in the same change (register §A
+"Dead code in the H1 range hover-line builder"; no output effect).
+
+**B's code.** With every snapshot taken at the event's replay candle, snapshots are written in replay order, so the
+all-structures snapshot is correct again and the per-structure split of A is unnecessary: the change to pass 3 is the
+snapshot's key (`ev.idx` → the replay candle, from a `_range_events_with_replay_idx` helper shared with the box order),
+plus a forward-fill that also carries a snapshot from before a sliced chart's first candle (a range open before an
+`idx_range` / `max_points` slice shows from the slice's first candle, like its clamped box; the old pass snapshotted only
+visible candles — no effect on the unsliced replay chart). The mutant of A ("restore the all-structures snapshot") is
+therefore no longer a defect under B; B's mutants are listed with the landing.
+
+**The written prediction (`/compare` vs S_N), before the replay.** All 27 CSVs md5-equal; both M15 figures identical
+(`fig_hash` equal); `run.log` equal up to timings (chart code only). The H1 figure: shapes identical, layout identical,
+exactly 4 traces differ — `range:top:sid0` / `range:bottom:sid0` (773 → 780 points) and `range:top:sid1` /
+`range:bottom:sid1` (341 → 345 points); 28 (sid, candle) changes, each in both of its structure's traces' customdata
+(the y only where that line's own bound changed):
+
+| sid | candles | old → new (`range_start_idx`, hi, lo, `last_update_idx`) | why |
+|---|---|---|---|
+| 0 | 115; 173; 196, 197; 310; 431; 653 | none → the new label range from its anchor (7 points) | the line starts at the anchor, like the box |
+| 0 | 175 | (173, 0.56966, 0.56851, 173) → (…, 0.56847, 174) | confirm candle stale |
+| 0 | 313 | (310, 0.57766, 0.57732, 310) → (310, 0.57774, 0.57714, 312) | confirm candle stale |
+| 0 | 655–657 | (653, 0.58534, 0.584, 653) → (…, 0.58392, 654) | confirm candle stale + forward-filled |
+| 0 | 750 | (653, 0.58534, 0.57809, 747) → (…, 0.57764, 748) | the cross-structure instance (sid 1's STARTED) |
+| 1 | 711; 762; 903, 904 | none → the new label range from its anchor (4 points) | the line starts at the anchor |
+| 1 | 716–723 | (711, 0.58002, 0.57902, 711) → (711, 0.58108, 0.57902, 714) | confirm candle stale + forward-filled |
+| 1 | 750 | (748, 0.57835, 0.57764, 748) → (748, 0.57841, 0.57764, 749) | confirm candle stale |
+| 1 | 764–765 | (762, 0.57552, 0.574, 762) → (762, 0.57566, 0.574, 763) | confirm candle stale + forward-filled |
+
+sid 1's point at 748 (its anchor) is KEPT under B (option A removed it).
+
+**`/compare` vs S_N (2026-10-12) — = the prediction exactly.** Replay 86.1 s wall (exit 0); fetch gate PASS (4228 /
+5 chunks); grep 22 (= S_N: the collapsed-cycle / unresolved-trigger lines + FutureWarnings); counts H1 83 / 239,
+counter 137 / 123, confluence 282 / 276 (= S_N). **27 / 27 CSVs md5-equal**, no new / missing file. `fig_hash`: both
+M15 hashes EQUAL to S_N, H1 `21f98a10…` → `f89c0cba…`. The keyed H1 trace diff (scratchpad `h1_trace_diff.py`, per
+trace name, points keyed by candle): shapes IDENTICAL, layout IDENTICAL, **exactly 4 changed traces** —
+`range:top/bottom:sid0` 773 → 780, `range:top/bottom:sid1` 341 → 345 — every added / changed point = the table above.
+`run.log` 9105 lines (= PLAN_N §13's S_N log; the S_N log itself is not saved, so no line diff — chart code only).
+Tools: `h1_trace_diff.py` (output `followup_h1_diff_vs_SN.txt`), `hover_sim.py` / `hover_sim_a2.py` (the decision).
+Chart review: the user, **"looks good go ahead"** (2026-10-12) → committed + saved.
+
+**Pins + mutants (as landed).** `tests/test_plan_n_naming_audit.py` 18 → 21: the note's probe re-derived for B
+(`test_p4_each_range_hover_line_runs_where_its_box_runs_across_structures`: sid 0 (t1, t11, 11), sid 1 (t8, end)),
+`test_p4_a_label_ranges_hover_keeps_its_back_filled_update_on_the_confirm_candle`,
+`test_p4_a_sliced_charts_hover_line_starts_at_its_first_candle_like_the_clamped_box`; P4's first-point pin t[6] →
+t[5] (the anchor). All 4 fail on the pre-follow-up builder. Suite **1712** passed (HEAD collects 1709 — PLAN_N's
+"1708" was its passed count; +3 here). `mutants_hover_followup.py` (HB1 snapshot at the event's idx, HB2 forward-fill
+visible candles only, HB3 no forward-fill, HB4 the helper's replay idx = the event's idx, HB5 a STARTED's last update
+at its moment, LR1 re-anchored, LR2, LR3): **8 / 8 KILLED**, full suite each (`mutants_hover_followup_result.txt`).

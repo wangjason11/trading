@@ -83,7 +83,13 @@ def _range_left_idx(ev) -> int:
 
 
 def _range_events_chart_order(structure_events: list) -> list:
-    """The range events (`RANGE_RESET` / `_STARTED` / `_UPDATED`) in the order both range builders replay them.
+    """The range events in the order both range builders replay them (`_range_events_with_replay_idx`, events only)."""
+    return [ev for _, ev in _range_events_with_replay_idx(structure_events)]
+
+
+def _range_events_with_replay_idx(structure_events: list) -> list:
+    """The range events (`RANGE_RESET` / `_STARTED` / `_UPDATED`) in the order both range builders replay them, each
+    paired with its replay candle: `[(replay_idx, ev), ...]`. The hover-line builder snapshots at `replay_idx`.
 
     Sort key `(candle, priority)`, ties RESET 0 < STARTED 1 < UPDATED 2 (a reset at the same candle closes the
     previous range first). A `RANGE_STARTED` sorts at its anchor, so the `RANGE_UPDATED`s back-filled between a
@@ -116,7 +122,7 @@ def _range_events_chart_order(structure_events: list) -> list:
                 last_reset[sid] = idx
         keyed.append(((key, _RANGE_TYPE_PRIORITY[t]), ev))
     keyed.sort(key=lambda kv: kv[0])
-    return [ev for _, ev in keyed]
+    return [(key[0], ev) for key, ev in keyed]
 
 
 def _get_reversal_confirmed_by_sid(structure_events: list) -> dict:
@@ -909,92 +915,21 @@ def export_chart_plotly(
                 all_sids.add(int(sid))
         most_recent_sid = max(all_sids) if all_sids else 0
 
-        all_range_events = _range_events_chart_order(structure_events)   # the box builder's order
-
         # Build reversal confirmed idx per structure_id (ranges end at reversal)
         # Use events instead of df columns (df columns get overwritten by subsequent structures)
         rev_confirmed_by_sid_hover = _get_reversal_confirmed_by_sid(structure_events)
 
-        # Build hover data per structure_id
-        # hover_data[sid] = {"points": [(idx, time, hi, lo, last_update_idx)...]}
-        hover_data = {}
+        # The hover lines carry the BOXES' data, candle for candle (the PLAN_N hover follow-up, 2026-10-12): replay in
+        # the box builder's order and snapshot every open range at each event's REPLAY candle (a RANGE_STARTED's anchor,
+        # reset-guarded — the candle its box starts at; the rest at their idx); a candle takes the latest snapshot at
+        # or before it, so a range's line starts where its box starts and shows each back-filled update from the
+        # candle it is stamped at. (Until then the snapshot was taken at the event's idx while a STARTED replayed at
+        # its anchor: another structure froze as of that anchor, and a label range's confirm candle — and the candles
+        # forward-filled from it — showed its anchor-time state, before its back-filled updates.)
         open_ranges = {}
+        snaps = {}  # {replay_idx: {sid: {hi, lo, start_idx, last_update_idx, struct_direction}}}
 
-        for ev in all_range_events:
-            sid = int(ev.meta.get("structure_id", 0))
-            sd = int(ev.meta.get("struct_direction", 1))
-            idx = int(ev.idx)
-
-            if ev.type == "RANGE_STARTED":
-                start_idx = _range_left_idx(ev)
-                hi = float(ev.meta.get("hi", 0))
-                lo = float(ev.meta.get("lo", 0))
-                open_ranges[sid] = {
-                    "start_idx": start_idx,
-                    "hi": hi,
-                    "lo": lo,
-                    "last_update_idx": start_idx,
-                    "struct_direction": sd,
-                }
-                if sid not in hover_data:
-                    hover_data[sid] = {"points_hi": [], "points_lo": [], "struct_direction": sd}
-
-            elif ev.type == "RANGE_UPDATED":
-                if sid in open_ranges:
-                    open_ranges[sid]["hi"] = float(ev.meta.get("hi", open_ranges[sid]["hi"]))
-                    open_ranges[sid]["lo"] = float(ev.meta.get("lo", open_ranges[sid]["lo"]))
-                    open_ranges[sid]["last_update_idx"] = idx
-
-            elif ev.type == "RANGE_RESET":
-                if sid in open_ranges:
-                    del open_ranges[sid]
-
-        # Generate hover line points by iterating through visible candles
-        # For each active range at each candle, add a point
-        open_ranges = {}  # Reset for second pass
-
-        for ev in all_range_events:
-            sid = int(ev.meta.get("structure_id", 0))
-            sd = int(ev.meta.get("struct_direction", 1))
-            idx = int(ev.idx)
-
-            if ev.type == "RANGE_STARTED":
-                start_idx = _range_left_idx(ev)
-                hi = float(ev.meta.get("hi", 0))
-                lo = float(ev.meta.get("lo", 0))
-                open_ranges[sid] = {
-                    "start_idx": start_idx,
-                    "end_idx": None,
-                    "hi": hi,
-                    "lo": lo,
-                    "last_update_idx": start_idx,
-                    "struct_direction": sd,
-                }
-                if sid not in hover_data:
-                    hover_data[sid] = {"points_hi": [], "points_lo": [], "struct_direction": sd}
-
-            elif ev.type == "RANGE_UPDATED":
-                if sid in open_ranges:
-                    open_ranges[sid]["hi"] = float(ev.meta.get("hi", open_ranges[sid]["hi"]))
-                    open_ranges[sid]["lo"] = float(ev.meta.get("lo", open_ranges[sid]["lo"]))
-                    open_ranges[sid]["last_update_idx"] = idx
-
-            elif ev.type == "RANGE_RESET":
-                if sid in open_ranges:
-                    open_ranges[sid]["end_idx"] = idx
-                    # Finalize this range
-                    del open_ranges[sid]
-
-        # For simplicity, build hover lines per structure_id by iterating through
-        # visible candles and checking which ranges are active at each candle
-        # Reset and rebuild properly
-        # (Known defect, PLAN_N landing review: a RANGE_STARTED is replayed at its anchor, so the snapshot of EVERY
-        # structure taken at its idx can freeze another structure as of the anchor — register "H1 range hover lines
-        # snapshot every structure"; the fix is `plans/plan_n_inputs/followup_hover_per_structure.md`.)
-        open_ranges = {}
-        range_by_candle = {}  # {idx: {sid: {hi, lo, start_idx, last_update_idx, sd}}}
-
-        for ev in all_range_events:
+        for replay_idx, ev in _range_events_with_replay_idx(structure_events):
             sid = int(ev.meta.get("structure_id", 0))
             sd = int(ev.meta.get("struct_direction", 1))
             idx = int(ev.idx)
@@ -1017,19 +952,18 @@ def export_chart_plotly(
                 if sid in open_ranges:
                     del open_ranges[sid]
 
-            # Snapshot active ranges at this idx
-            if idx in idx_set:
-                range_by_candle[idx] = {s: dict(r) for s, r in open_ranges.items()}
+            # Snapshot the open ranges at this event's replay candle (a later event at the same candle overwrites)
+            snaps[replay_idx] = {s: dict(r) for s, r in open_ranges.items()}
 
-        # Also handle final state for candles after last event
-        for idx in sorted(idx_set):
-            if idx not in range_by_candle:
-                # Use last known state
-                prev_idxs = [i for i in range_by_candle.keys() if i < idx]
-                if prev_idxs:
-                    range_by_candle[idx] = range_by_candle[max(prev_idxs)]
-                else:
-                    range_by_candle[idx] = {}
+        # Per visible candle: the latest snapshot at or before it — one taken before a sliced chart's first candle
+        # included (a range open before the slice shows from its first candle, like its clamped box)
+        range_by_candle = {}  # {idx: {sid: {hi, lo, start_idx, last_update_idx, struct_direction}}}
+        cur = {}
+        for idx in sorted(idx_set | set(snaps)):
+            if idx in snaps:
+                cur = snaps[idx]
+            if idx in idx_set:
+                range_by_candle[idx] = cur
 
         # Build hover traces per structure_id
         for sid in all_sids:
