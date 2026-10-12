@@ -1,0 +1,4 @@
+commit_hash=86d4f7b
+timestamp=20261011_204047
+branch=week9-entries-decisions
+commit_message=PLAN_M landing 1: the live-P plumbing - a cross-fib limit whose P moves (S_M1)
