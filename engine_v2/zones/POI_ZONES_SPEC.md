@@ -407,13 +407,19 @@ If Fib is deactivated (neither active nor locked), there are no bounds → no ch
 > D4).
 
 ONE bundled condition (RX1-B) per checked candle `i` (§3.1) of a fib record — structure `sid`, direction `sd`, target cycle
-`T`, its BOS in cycle `a` (a single: `a = T`; a cross: `meta["cross_start_cycle"]`):
+`T` (`fib_state.cycle_id` — a single's cycle, a cross's last cycle):
 
 1. **The references** — built by ONE method, `FibTracker.ic_reference` → `ICReference(price, source,
    break_pattern_anchor_idx, break_confirmed_idx)` (`zones/cross_cycle_fib.py`; `ICReference.NONE` = no reference):
-   - **`prev_cycle_cts`** (when `a ≥ 1`): cycle `a−1`'s `CTS_CONFIRMED` price — the confirmed anchor, never a
-     `cts_threshold`. Its bound = the first candle of the pattern that ESTABLISHED cycle `a` (that `CTS_ESTABLISHED`'s
-     `pattern_anchor_idx` — the pattern that broke `CTS_{a−1}`), known from that event's moment.
+   - **`prev_cycle_cts`** (when `T ≥ 1` — a single and a cross alike, `../plans/PLAN_O_ic_reference_target_cycle.md`,
+     the user 2026-10-13: "The CTS reference will always be the max cycle-1 CTS"; until then a cross used its START
+     cycle's previous CTS): cycle `T−1`'s `CTS_CONFIRMED` price — the confirmed anchor, never a `cts_threshold`. Its
+     bound = the first candle of the pattern that ESTABLISHED cycle `T` (that `CTS_ESTABLISHED`'s `pattern_anchor_idx`
+     — the pattern that broke `CTS_{T−1}`), known from that event's moment. A cross whose target is not established
+     yet (pre-established, CROSS_CYCLE_FIB_SPEC §4) has no bound — the price side only (the user, 2026-10-13); only the
+     stamp can read one (a cross still pre-established at its structure's end / the data edge — the drawn POI gets no
+     record without a CTS_ESTABLISHED, MS reads only its established cycle; PLAN_O §2). A cross from cycle 0 therefore
+     has a `prev_cycle_cts` too.
    - **The structure reference** (when the structure has a cross-fib limit `P` and `M` is None or `T ≤ M`, cycle 0
      included — CROSS_CYCLE_FIB_SPEC §3; no limit entry or `P` None → none; for a MOVING `P` the gate is T's cross
      permission, fixed at T's establishment, else read live as of the reading moment — PLAN_M CL-1):
@@ -452,6 +458,12 @@ while 1447's (1448) filled at 1480. The only other change: sub 3 cycle 2 keeps 2
 (2988 cut); no structure event moves (PLAN_K §11.3 /
 §11.4). `ic_not_before_break` cuts no candidate on the window (the price side already cuts every one the bound
 would).
+
+Since PLAN_O (2026-10-13, vs S_N_hover; PLAN_O §6): the window's 4 cross records change, the singles do not — H1 sid 1
+cross 0→1 0.5736 `prev_structure_bos` → 0.57902 `prev_cycle_cts` (CTS_0, bound 747; pick 732 kept); sub 3 cross 1→2
+0.5818 (CTS_0) → 0.57902 (CTS_1, bound 2991; pick 2821 → 2837 1A.iv); sub 7 cross 0→1 / 0→2 0.58105
+`cross_limit_anchor` → 0.57674 (CTS_0, bound 4154) / 0.57798 (CTS_1, bound 4178; picks 4051 / 4083 kept); no
+structure event moves.
 
 ### 3.3 IC Variants — UNWIRED since PLAN_H landing B (2026-10-06)
 

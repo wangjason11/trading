@@ -253,11 +253,12 @@ def test_the_structure_reference_takes_the_fixed_answer_else_the_live_one(sd):
     assert (0, 1) not in tp._cross_permission
     assert [tp._structure_reference_limit(0, 1, at) for at in (30, 31, None)] == [None, pre, pre]
     assert tp._structure_reference_limit(0, 0, 21) is pre               # P(21) = 1.1: CTS_0 beyond -> M = 0 >= 0
-    # ... and `ic_reference` hands its reading moment on: a cross 0 -> 1 of the unfixed target (no earlier cycle,
-    # so the structure side is its only reference)
+    # ... and `ic_reference` hands its reading moment on: a cross 0 -> 1 of the unfixed target — CTS_0 (PLAN_O: its
+    # target's previous CTS, no bound while cycle 1 is not established) alone at 30 (no structure side), against the
+    # structure side from 31 (`cross_limit_anchor` 1.1, further opposite)
     probe = _probe(1, sd, start=0)
     df = _df(40, [])
-    assert tp.ic_reference(probe, df, evaluated_at=30) == ICReference.NONE
+    assert tp.ic_reference(probe, df, evaluated_at=30) == ICReference(_m(1.2, sd), "prev_cycle_cts")
     assert tp.ic_reference(probe, df, evaluated_at=31) == ICReference(_m(1.1, sd), "cross_limit_anchor")
 
 

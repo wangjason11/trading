@@ -144,7 +144,7 @@ class CrossFibLimit:
 
 # The IC reference's `source` values (PLAN_K §1, the fib meta `ic_ref_source`; PLAN_H RX1).
 IC_REF_SOURCES = frozenset({
-    "prev_cycle_cts",       # cycle a−1's CTS_CONFIRMED price (the fib's BOS in cycle a ≥ 1)
+    "prev_cycle_cts",       # cycle T−1's CTS_CONFIRMED price (the fib's target cycle T ≥ 1 — a cross too, PLAN_O)
     "prev_structure_bos",   # a `reversal_bos_frozen` limit (main / a confluence sub's reversal start): the reversing
                             #   structure's most recent BOS_CONFIRMED price
     "cross_limit_anchor",   # every other source with a P (a counter sub's `parent_bos_threshold` too, PLAN_M): the

@@ -9,8 +9,9 @@ The rule is the user's (PLAN_H §8.9 RX1 + §6 RX1-*); PLAN_K §1 reads it, §6 
   the detector's answer first): a close past `P` opens a watch, a wick does not; `P` is the break threshold; re-arm;
   the earliest confirmation wins, a tie → the earlier anchor (K-Q1); MS's detection convention (K-Q6 — the cold
   review's constructed anchor-flip case does NOT flip); the detector never reads past `end_idx`;
-- the reference (`FibTracker.ic_reference`): `prev_cycle_cts` (the start cycle's CTS_{a−1}, cycle a's establishment
-  pattern; a cross from a ≥ 1; a pre-established cross), `prev_structure_bos` (known for the whole run, K-Q7),
+- the reference (`FibTracker.ic_reference`): `prev_cycle_cts` (the TARGET cycle's CTS_{T−1}, cycle T's establishment
+  pattern — a single and a cross alike since PLAN_O, 2026-10-13; a pre-established cross: the price side only),
+  `prev_structure_bos` (known for the whole run, K-Q7),
   `cross_limit_anchor` (the watch from BOS_0, on `P`, as of the moment, to `end_idx`), the choice (further opposite;
   EQUAL → the structure reference and ITS bound, K-Q5), `T > M` drops the structure reference, no limit entry → no
   structure reference and no raise (§9 C03);
@@ -283,26 +284,34 @@ def _rev(p, anchor, sd, brk=(7, 9)):
 
 
 @pytest.mark.parametrize("sd", [1, -1])
-def test_a_fib_from_cycle_a_takes_cts_a_minus_1_and_cycle_a_s_establishment_pattern(sd):
+def test_a_fib_of_target_cycle_t_takes_cts_t_minus_1_and_cycle_t_s_establishment_pattern(sd):
     t, df = _tracker_with(NO_P, sd)
     ref = lambda f, at=None: t.ic_reference(f, df, evaluated_at=at)  # noqa: E731
     assert ref(t._fibs[(0, 0)]) == ICReference.NONE                                         # cycle 0, no P
     assert ref(t._fibs[(0, 1)]) == ICReference(_m(1.15, sd), "prev_cycle_cts", 38, 40)       # the real single
     assert ref(t._fibs[(0, 2)]) == ICReference(_m(1.35, sd), "prev_cycle_cts", 58, 60)
-    # a cross 1 -> 2: its START cycle's reference (CTS_0, cycle 1's pattern), not the target's
-    assert ref(_probe(2, sd, start=1)) == ICReference(_m(1.15, sd), "prev_cycle_cts", 38, 40)
-    # as of a moment: the break is known from cycle a's establishment moment (inclusive)
+    # a cross takes its TARGET's reference like a single (PLAN_O, the user 2026-10-13: CTS_{T−1}, cycle T's
+    # pattern) — a cross 1 -> 2, and a cross 0 -> 2 (start != T−1: tells T−1 from the start cycle); a cross from
+    # cycle 0 now HAS a previous-cycle CTS
+    assert ref(_probe(2, sd, start=1)) == ICReference(_m(1.35, sd), "prev_cycle_cts", 58, 60)
+    assert ref(_probe(2, sd, start=0)) == ICReference(_m(1.35, sd), "prev_cycle_cts", 58, 60)
+    assert ref(_probe(1, sd, start=0)) == ICReference(_m(1.15, sd), "prev_cycle_cts", 38, 40)
+    # as of a moment: the break is known from cycle T's establishment moment (inclusive)
     assert ref(_probe(2, sd), 59) == ICReference(_m(1.35, sd), "prev_cycle_cts")
     assert ref(_probe(2, sd), 60) == ICReference(_m(1.35, sd), "prev_cycle_cts", 58, 60)
 
 
 @pytest.mark.parametrize("sd", [1, -1])
-def test_a_pre_established_cross_reads_only_its_start_cycle(sd):
-    """A cross 1 -> 2 before cycle 2 is established (`a < T`, the pre-established phase): nothing of cycle 2 is read."""
+def test_a_pre_established_cross_reads_cts_t_minus_1_with_the_price_side_only(sd):
+    """A cross 1 -> 2 before cycle 2 is established (the pre-established phase — from CTS_1 CONFIRMED, so cycle 1 is
+    confirmed here): CTS_1, and no bound yet — the price side only (PLAN_O; the user 2026-10-13: "price side only until
+    the break pattern exists")."""
     t, df = _tracker_with(NO_P, sd, upto=1)
+    _q(t.on_cts_confirmed, _conf(45, 1.35, 1, sd, 40))
     assert (0, 2) not in t._est_pattern_anchor
-    assert t.ic_reference(_probe(2, sd, start=1), df, evaluated_at=47) == ICReference(
-        _m(1.15, sd), "prev_cycle_cts", 38, 40)
+    for at in (47, None):
+        assert t.ic_reference(_probe(2, sd, start=1), df, evaluated_at=at) == ICReference(
+            _m(1.35, sd), "prev_cycle_cts")
 
 
 @pytest.mark.parametrize("sd", [1, -1])
@@ -316,17 +325,17 @@ def test_a_reversal_starts_reference_and_its_bound_hold_for_the_whole_run(sd):
 
 @pytest.mark.parametrize("sd", [1, -1])
 @pytest.mark.parametrize("anchor, want", [
-    (1.10, "structure"),      # further opposite (sd +1 lower) -> the structure's
-    (1.20, "cts"),            # the previous CTS lies further opposite (RX1-3, the gap case)
-    (1.15, "structure"),      # EQUAL prices -> the STRUCTURE reference and ITS bound (K-Q5)
+    (1.30, "structure"),      # further opposite (sd +1 lower) than CTS_1 1.35 -> the structure's
+    (1.40, "cts"),            # the previous CTS lies further opposite (RX1-3, the gap case)
+    (1.35, "structure"),      # EQUAL prices -> the STRUCTURE reference and ITS bound (K-Q5)
 ])
 def test_both_references_take_the_further_opposite_and_equal_takes_the_structure(sd, anchor, want):
     t, df = _tracker_with(_rev(9.0, anchor, sd), sd)                    # P never reached: M None
-    got = t.ic_reference(_probe(2, sd, start=1), df, evaluated_at=None)
+    got = t.ic_reference(_probe(2, sd, start=1), df, evaluated_at=None)  # a cross 1 -> 2: CTS_1 (PLAN_O)
     if want == "structure":
         assert got == ICReference(_m(anchor, sd), "prev_structure_bos", 7, 9)
     else:
-        assert got == ICReference(_m(1.15, sd), "prev_cycle_cts", 38, 40)
+        assert got == ICReference(_m(1.35, sd), "prev_cycle_cts", 58, 60)
 
 
 @pytest.mark.parametrize("sd", [1, -1])
@@ -339,9 +348,10 @@ def test_the_structure_reference_applies_while_t_is_at_most_m(sd):
     assert t.ic_reference(t._fibs[(0, 2)], df, evaluated_at=None) == ICReference(
         _m(1.35, sd), "prev_cycle_cts", 58, 60)
     # `T` is the TARGET cycle, not the cross's start: a cross 1 -> 2 drops it too (unreachable in production — a cross
-    # never targets past `M`, and `M` cannot move below an existing target — pinned as the rule's definition)
+    # never targets past `M`, and `M` cannot move below an existing target — pinned as the rule's definition) and takes
+    # CTS_1 like the single (PLAN_O)
     assert t.ic_reference(_probe(2, sd, start=1), df, evaluated_at=None) == ICReference(
-        _m(1.15, sd), "prev_cycle_cts", 38, 40)
+        _m(1.35, sd), "prev_cycle_cts", 58, 60)
 
 
 @pytest.mark.parametrize("sd", [1, -1])
@@ -592,13 +602,15 @@ def test_the_h1_chart_renders_the_ic_reference_line(tmp_path, monkeypatch):
     assert cells["fib:sid0:c1"][-1].startswith("limit")
 
 
-def test_the_hover_names_the_cross_start_cycles_previous_cts():
+def test_the_hover_names_the_target_cycles_previous_cts():
     from types import SimpleNamespace
     from engine_v2.charting._zone_render import fib_hover_ic_ref_text
-    meta = {"cross_cycle": True, "cross_start_cycle": 1, "ic_ref_price": 0.6, "ic_ref_source": "prev_cycle_cts",
-            "ic_ref_break_pattern_anchor_idx": 38, "ic_ref_break_confirmed_idx": 40, "cross_fib_limit_source": "none"}
-    assert fib_hover_ic_ref_text(SimpleNamespace(meta=meta, cycle_id=2)) == (
-        "IC ref 0.60000 (prev_cycle_cts, cycle 0) · break 38")          # a cross 1 -> 2: CTS_0, not CTS_1
+    for start in (1, 0):                 # a cross 1 -> 2 and a cross 0 -> 2: CTS_1 both (PLAN_O), never the start's
+        meta = {"cross_cycle": True, "cross_start_cycle": start, "ic_ref_price": 0.6, "ic_ref_source": "prev_cycle_cts",
+                "ic_ref_break_pattern_anchor_idx": 58, "ic_ref_break_confirmed_idx": 60,
+                "cross_fib_limit_source": "none"}
+        assert fib_hover_ic_ref_text(SimpleNamespace(meta=meta, cycle_id=2)) == (
+            "IC ref 0.60000 (prev_cycle_cts, cycle 1) · break 58")
 
 
 def test_every_retrospective_reference_reads_to_the_lifecycle_cap(monkeypatch):

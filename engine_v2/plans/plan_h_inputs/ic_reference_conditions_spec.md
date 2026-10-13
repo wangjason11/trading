@@ -6,6 +6,12 @@ candidates that make it to the IP check"). They replace POI_ZONES_SPEC §3.2's p
 cross-cycle fib revamp — "we will do it a bit differently given all the changes we've made since I original wrote
 those"). This file is the user's text, unedited; the engineering reading and every decision live in PLAN_H.
 
+> **Superseded for crosses (2026-10-13, the user's change 2 — `../PLAN_O_ic_reference_target_cycle.md`, the write-up
+> `../qa_ic_crossfib_inputs/user_writeup_20261013.md`):** the cross paragraphs below ("a valid cross-cycle fib from
+> 0-2 … we cannot / do not use any prev cycle CTS"; "from 1-2, then we can use CTS_0") and the recap's "if cross-cycle
+> fibs extend to cycle 0, then we won't have a prev cycle CTS reference price" — a cross now takes its TARGET cycle's
+> previous CTS ("The CTS reference will always be the max cycle-1 CTS"). The rest stands.
+
 ---
 
 New Requirements / Conditions.

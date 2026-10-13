@@ -1,5 +1,10 @@
 """PLAN_K landing A's mutation loop (§6 "Mutation": every branch + the call sites; the full suite per mutant).
 
+SUPERSEDED for the IC reference's cross rule since PLAN_O (2026-10-13 — a cross's CTS reference = its TARGET's
+previous CTS): F01 / F02 / F04 / F05 / F06 / H2 / H3 target lines PLAN_O removed (a re-run reports them BAD; F07 was
+already BAD at `caf0f01`). Use
+`../qa_ic_crossfib_inputs/mutants_plan_o.py` for the reference builder and the hover. This file stays as PLAN_K's record.
+
 usage (repo root): python engine_v2/plans/plan_e_inputs/review_scripts/mutant_runner.py \
     engine_v2/plans/plan_h_inputs/mutants_k_landing_a.py
 Expected equivalent (noted in PLAN_K §6 / §11): W01 (the detector's own `check_break` tests the close), W11 (every

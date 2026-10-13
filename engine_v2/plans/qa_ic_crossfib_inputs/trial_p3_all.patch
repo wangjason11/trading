@@ -1,0 +1,279 @@
+diff --git a/engine_v2/charting/_zone_render.py b/engine_v2/charting/_zone_render.py
+index 14536ca..c997b71 100644
+--- a/engine_v2/charting/_zone_render.py
++++ b/engine_v2/charting/_zone_render.py
+@@ -21,6 +21,7 @@ from engine_v2.charting.style_registry import STYLE
+ from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
+ from engine_v2.zones.poi_lifecycle import active_stretches_from_history
+ from engine_v2.zones.poi_zones import (
++    IC_ZONE_FALLBACK,
+     IP_OUTCOME_NO_PATTERN,
+     IP_OUTCOME_PATTERN,
+     RANKING_EXCLUDE_PINBAR,
+@@ -187,9 +188,11 @@ def poi_ic_hover_text(meta: dict, ic_idx: int) -> str:
+     before imbalance <c2>` when a tiebreaker decided (`poi_zones.TIEBREAK_*`). Indices are the POI's own (entity-absolute on a
+     mirrored sub POI); the counts must match the leg indices (asserted — a
+     missed mirror shift would break it). A ranked IC (`ip_outcome`
+-    "no_pattern", PLAN_L L2): its ranking line instead (`_poi_ranking_hover_text`)."""
++    "no_pattern", PLAN_L L2): its ranking line instead (`_poi_ranking_hover_text`). An IC from the 80–100 fallback
++    zone adds `<br>IC zone 80-100 (fallback)` (TRIAL 2026-10-13, change 3)."""
++    band = ("<br>IC zone 80-100 (fallback)" if meta.get("ic_zone_band") == IC_ZONE_FALLBACK else "")
+     if meta["ip_outcome"] == IP_OUTCOME_NO_PATTERN:
+-        return _poi_ranking_hover_text(meta, ic_idx)
++        return _poi_ranking_hover_text(meta, ic_idx) + band
+     assert meta["ip_outcome"] == IP_OUTCOME_PATTERN, f"[chart] POI {ic_idx} ip_outcome {meta['ip_outcome']!r}"
+     assert meta["ranking_rule"] is None, f"[chart] pattern POI {ic_idx} carries ranking_rule {meta['ranking_rule']!r}"
+     n_init, n_opp, n_cont = (int(x) for x in meta["ip_leg_candle_counts"].split("-"))
+@@ -215,7 +218,7 @@ def poi_ic_hover_text(meta: dict, ic_idx: int) -> str:
+                  f"most recent before imbalance {meta['ip_tb_imbalance_first_c2_idx']}")
+     else:
+         assert tb is None, f"[chart] POI {ic} unknown ip_tiebreak {tb!r}"
+-    return text
++    return text + band
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -314,8 +317,7 @@ def fib_hover_ic_ref_text(fib_st: Any) -> Optional[str]:
+     source = m["ic_ref_source"]
+     cycle = ""
+     if source == "prev_cycle_cts":
+-        start_cycle = int(m["cross_start_cycle"]) if m.get("cross_cycle") else int(fib_st.cycle_id)
+-        cycle = f", cycle {start_cycle - 1}"
++        cycle = f", cycle {int(fib_st.cycle_id) - 1}"   # CTS_{T−1}, a cross too (TRIAL 2026-10-13, change 2)
+     brk = m.get("ic_ref_break_pattern_anchor_idx")
+     btxt = "break: none" if brk is None else f"break {int(brk)}"
+     return f"IC ref {float(m['ic_ref_price']):.5f} ({source}{cycle}) · {btxt}"
+@@ -348,6 +350,8 @@ def fib_hover_status_text(fib_st: Any, ic_row: Optional[Any]) -> str:
+         assert ic_row.ip_outcome == IP_OUTCOME_PATTERN, (
+             f"[chart] picked row {ic_row.ic_idx} ip_outcome {ic_row.ip_outcome!r}")
+         ip = f"IP {ic_row.ip_rank} · IC {int(ic_row.ic_idx)}"
++    if ic_row is not None and getattr(ic_row, "ic_zone_band", None) == IC_ZONE_FALLBACK:
++        ip += " · zone 80-100 (fallback)"          # TRIAL 2026-10-13, change 3
+     status = getattr(fib_st, "status", "active")
+     text = f"{status}{' (locked)' if fib_st.locked else ''}<br>{life}<br>{ip}"
+     ic_ref = fib_hover_ic_ref_text(fib_st)
+diff --git a/engine_v2/debug/export_zones.py b/engine_v2/debug/export_zones.py
+index b6b9548..36564d8 100644
+--- a/engine_v2/debug/export_zones.py
++++ b/engine_v2/debug/export_zones.py
+@@ -47,7 +47,7 @@ IC_CANDIDATE_COLUMNS = [
+     "structure_path_id", "sub_id", "parent_sid", "parent_cycle_id", "structure_id", "cycle_id",
+     "bos_anchor_idx", "cts_anchor_idx", "sd",
+     "ic_idx", "candle_type", "agreed_dir", "touches_zone", "ic_ref_reason", "immediate_imbalance_first_c2_idx",
+-    "has_unfilled_imbalance_after", "is_ic_candidate",
++    "has_unfilled_imbalance_after", "is_ic_candidate", "ic_zone_band",
+     "ip_outcome", "ip_rank", "reason",
+     "pattern_anchor_idx", "opp_leg_first_idx", "pattern_end_idx", "pattern_confirmed_idx", "ip_leg_candle_counts",
+     "legs",
+@@ -111,6 +111,7 @@ def export_ic_candidates(records: list, path: str | Path) -> None:
+             "immediate_imbalance_first_c2_idx": r.immediate_imbalance_first_c2_idx,
+             "has_unfilled_imbalance_after": r.has_unfilled_imbalance_after,
+             "is_ic_candidate": r.is_ic_candidate,
++            "ic_zone_band": r.ic_zone_band,
+             "ip_outcome": r.ip_outcome,
+             "ip_rank": r.ip_rank,
+             "reason": r.reason,
+diff --git a/engine_v2/zones/fib_tracker.py b/engine_v2/zones/fib_tracker.py
+index c31a229..896ca15 100644
+--- a/engine_v2/zones/fib_tracker.py
++++ b/engine_v2/zones/fib_tracker.py
+@@ -445,9 +445,11 @@ class FibTracker:
+         """The fib record's IC reference (PLAN_K §1; the ONE builder — the drawn POI and MS's in-flight read both
+         hand its value to `poi_zones.select_ic`, D2):
+ 
+-        - `prev_cycle_cts` when the fib's BOS lies in cycle a ≥ 1 (a single: its cycle; a cross: `cross_start_cycle`):
+-          cycle a−1's CTS_CONFIRMED price (`_cts_by_cycle` — the confirmed anchor, never a threshold); its break =
+-          the pattern that established cycle a (`_est_pattern_anchor`, known from cycle a's establishment moment);
++        - `prev_cycle_cts` when the fib's TARGET cycle T ≥ 1 — a single and a cross alike (TRIAL 2026-10-13, the
++          user's change 2: a cross's cycles are not unified for the CTS break): cycle T−1's CTS_CONFIRMED price
++          (`_cts_by_cycle` — the confirmed anchor, never a threshold); its break = the pattern that established cycle
++          T (`_est_pattern_anchor`, known from cycle T's establishment moment) — none yet while T is not established
++          (a pre-created cross): the price side only;
+         - the structure reference while `_structure_reference_limit` applies: `prev_structure_bos` (a
+           `reversal_bos_frozen` limit — a main or CONFLUENCE-sub reversal start; `ref_anchor_price`, the break = the
+           realised reversal pattern, known for the structure's WHOLE run like `P`, RX1-K7) or `cross_limit_anchor`
+@@ -467,16 +469,17 @@ class FibTracker:
+         sid = int(fib_state.structure_id)
+         target = int(fib_state.cycle_id)
+         sd = int(fib_state.struct_direction)
+-        start_cycle = int(fib_state.meta["cross_start_cycle"]) if fib_state.meta.get("cross_cycle") else target
+         refs = []  # (is_structure, price, source, break)
+-        if start_cycle >= 1:
+-            cts = self._cts_by_cycle.get((sid, start_cycle - 1))
++        if target >= 1:
++            cts = self._cts_by_cycle.get((sid, target - 1))
+             assert cts is not None, (
+-                f"[fib] sid={sid} cycle={start_cycle}: a fib from cycle {start_cycle} with cycle {start_cycle - 1} "
++                f"[fib] sid={sid} cycle={target}: a fib of cycle {target} with cycle {target - 1} "
+                 f"unconfirmed (the S2 order tripwire guarantees it)")
+-            anchor = self._est_pattern_anchor[(sid, start_cycle)]
+-            known = self._bos_moment_by_cycle[(sid, start_cycle)]
+-            brk = (anchor, known) if (evaluated_at is None or known <= int(evaluated_at)) else None
++            anchor = self._est_pattern_anchor.get((sid, target))
++            known = self._bos_moment_by_cycle.get((sid, target))
++            assert (anchor is None) == (known is None), (sid, target, anchor, known)
++            brk = (anchor, known) if (anchor is not None and (evaluated_at is None or known <= int(evaluated_at))) \
++                else None
+             refs.append((False, float(cts[1]), "prev_cycle_cts", brk))
+         lim = self._structure_reference_limit(sid, target, evaluated_at)
+         if lim is not None:
+diff --git a/engine_v2/zones/poi_zones.py b/engine_v2/zones/poi_zones.py
+index a124db8..5265768 100644
+--- a/engine_v2/zones/poi_zones.py
++++ b/engine_v2/zones/poi_zones.py
+@@ -89,6 +89,10 @@ class POIConfig:
+     # IC search bounds (as Fib percentages)
+     ic_fib_min: float = 61.8  # IC overlap zone starts here
+     ic_fib_max: float = 80.0  # IC overlap zone ends here
++    # The fallback zone (TRIAL 2026-10-13, the user's change 3, "Step 1A"): used ONLY when no candle passes every IC
++    # condition with the 61.8–80 zone; the other conditions unchanged.
++    ic_fallback_fib_min: float = 80.0
++    ic_fallback_fib_max: float = 100.0
+ 
+     # Variant overlap thresholds
+     v30_threshold: float = 0.30
+@@ -371,6 +375,22 @@ def ic_touches_zone(high: float, low: float, zone_lo: float, zone_hi: float) ->
+     return high >= zone_lo and low <= zone_hi
+ 
+ 
++# The zone an IC was identified in (TRIAL 2026-10-13, change 3): `ICSelection.ic_zone_band`, the POI meta, the debug
++# CSV, the hovers. The POI's activation re-checks the touch against the SAME band (the user: "POI activation check
++# should always reference the zone parameters the IC came from").
++IC_ZONE_PRIMARY = "61.8-80"
++IC_ZONE_FALLBACK = "80-100"
++
++
++def ic_zone_config(config: POIConfig, band: str) -> POIConfig:
++    """`config` with `ic_fib_min` / `ic_fib_max` set to `band` — the one place a band becomes zone parameters
++    (Step 1's touch, the activation's touch re-check)."""
++    if band == IC_ZONE_PRIMARY:
++        return config
++    assert band == IC_ZONE_FALLBACK, band
++    return replace(config, ic_fib_min=config.ic_fallback_fib_min, ic_fib_max=config.ic_fallback_fib_max)
++
++
+ def immediate_unfilled_imbalance_first_c2_idx(
+     df: pd.DataFrame, ic_idx: int, fib_state: FibState, config: POIConfig,
+ ) -> Optional[int]:
+@@ -438,8 +458,12 @@ class ICCandleCheck:
+     @property
+     def is_ic_candidate(self) -> bool:
+         """An IC CANDIDATE passes EVERY IC condition, applied TOGETHER (PLAN_H §6 RX1-F) — the ONE predicate of the
+-        pick (Steps 2 and 3 look among IC candidates only) and of the `no_ic_candidate` reason (`select_ic`)."""
+-        return bool(self.has_unfilled_imbalance_after) and self.ic_ref_reason is None and bool(self.touches_zone)
++        pick (Steps 2 and 3 look among IC candidates only) and of the `no_ic_candidate` reason (`select_ic`).
++        TRIAL 2026-10-13 (the user's change 1): condition 3 = an unfilled sd imbalance IMMEDIATELY after the candle
++        (`immediate_imbalance_first_c2_idx`, set by Step 1 on every check) — `has_unfilled_imbalance_after` is kept
++        as information only."""
++        return (self.immediate_imbalance_first_c2_idx is not None and self.ic_ref_reason is None
++                and bool(self.touches_zone))
+ 
+ 
+ def check_ic_conditions(
+@@ -469,6 +493,8 @@ def check_ic_conditions(
+             has_unfilled_imbalance_after=bool(_has_unfilled_imbalance_after(df, idx, fib_state, config)),
+             ic_ref_reason=ic_reference_reason(df, idx, ic_reference, sd),
+             touches_zone=ic_touches_zone(float(df.loc[idx, "h"]), float(df.loc[idx, "l"]), zone_lo, zone_hi),
++            # IC condition 3 since the TRIAL (2026-10-13, change 1): the immediate unfilled imbalance, every check.
++            immediate_imbalance_first_c2_idx=immediate_unfilled_imbalance_first_c2_idx(df, idx, fib_state, config),
+         ))
+     return tuple(checks)
+ 
+@@ -669,6 +695,9 @@ class ICSelection:
+     ip_outcome: Optional[str]
+     ranking: Optional[Tuple[str, Optional[int], int, Optional[int]]]
+     no_ic_reason: Optional[str]
++    # The zone of condition 4 the checks' `touches_zone` was evaluated in (TRIAL 2026-10-13, change 3): the 61.8–80
++    # zone, or the 80–100 fallback when no check passed every IC condition with 61.8–80 ("Step 1A").
++    ic_zone_band: str = IC_ZONE_PRIMARY
+ 
+     def __post_init__(self):
+         assert (self.pick is None) == (self.no_ic_reason is not None), (
+@@ -722,6 +751,17 @@ def select_ic(
+     sd = int(fib_state.struct_direction)
+     agreed = agreed_direction(df["direction"].to_numpy(), df["vol_dir"].to_numpy())
+     checks = check_ic_conditions(df, fib_state, config, ic_reference=ic_reference, agreed=agreed)
++    band = IC_ZONE_PRIMARY
++    if checks and not find_ic_candidates(checks):
++        # Step 1A (TRIAL 2026-10-13, change 3): no candidate in 61.8–80 → condition 4 in the 80–100 fallback zone,
++        # conditions 1–3 unchanged (none depends on the zone); runs ONLY here, never after Steps 2–3.
++        band = IC_ZONE_FALLBACK
++        zone_lo, zone_hi = fib_zone_bounds(fib.anchor_high, fib.anchor_low, sd, ic_zone_config(config, band))
++        checks = tuple(
++            replace(c, touches_zone=ic_touches_zone(float(df.loc[c.ic_idx, "h"]), float(df.loc[c.ic_idx, "l"]),
++                                                    zone_lo, zone_hi))
++            for c in checks
++        )
+     ic_candidates = set(find_ic_candidates(checks))          # Step 1's answer
+     to_classify = [c.ic_idx for c in checks if classify_all or c.ic_idx in ic_candidates]
+     results = {
+@@ -733,21 +773,20 @@ def select_ic(
+         )
+     }
+     checks = tuple(
+-        replace(c, pattern=results[c.ic_idx],
+-                immediate_imbalance_first_c2_idx=immediate_unfilled_imbalance_first_c2_idx(
+-                    df, c.ic_idx, fib_state, config))
+-        if c.ic_idx in results else c
++        replace(c, pattern=results[c.ic_idx]) if c.ic_idx in results else c
+         for c in checks
+     )
+     candidate_checks = tuple(c for c in checks if c.ic_idx in ic_candidates)
+     if not candidate_checks:
+-        return ICSelection(checks, None, None, ip_outcome=None, ranking=None, no_ic_reason=NO_IC_CANDIDATE)
++        return ICSelection(checks, None, None, ip_outcome=None, ranking=None, no_ic_reason=NO_IC_CANDIDATE,
++                           ic_zone_band=band)
+     pick, tiebreak = select_institutional_pattern(df, fib_state, config, candidate_checks)     # Step 2
+     if pick is not None:
+-        return ICSelection(checks, pick, tiebreak, ip_outcome=IP_OUTCOME_PATTERN, ranking=None, no_ic_reason=None)
++        return ICSelection(checks, pick, tiebreak, ip_outcome=IP_OUTCOME_PATTERN, ranking=None, no_ic_reason=None,
++                           ic_zone_band=band)
+     pick, ranking = apply_ranking_rules(df, fib_state, config, candidate_checks)               # Step 3
+     return ICSelection(checks, pick, None, ip_outcome=IP_OUTCOME_NO_PATTERN, ranking=ranking,
+-                       no_ic_reason=None if pick is not None else ALL_IC_CANDIDATES_PINBAR)
++                       no_ic_reason=None if pick is not None else ALL_IC_CANDIDATES_PINBAR, ic_zone_band=band)
+ 
+ 
+ def _poi_record_gate(fib_state: FibState) -> bool:
+@@ -1014,7 +1053,8 @@ def derive_poi_zones(
+             scan_end=scan_end,
+             bos_price=float(fib_state.bos_price),
+             cts_events=cts_events_for_fib,
+-            config=config,
++            # The touch re-check in the zone the IC was identified in (TRIAL 2026-10-13, change 3).
++            config=ic_zone_config(config, rec.selection.ic_zone_band),
+             imbalances=imbalances,
+             fill_idx_cache=fill_idx_cache,
+             lifecycle_floor_idx=struct_start_by_sid.get(int(sid)),
+@@ -1065,6 +1105,7 @@ def derive_poi_zones(
+                 # are in the mirror's `_ZONE_META_IDX_KEYS`, `ip_tied_count` /
+                 # `ranking_in_play_count` are counts.
+                 "ip_outcome": rec.selection.ip_outcome,
++                "ic_zone_band": rec.selection.ic_zone_band,    # TRIAL 2026-10-13, change 3
+                 "ip_rank": None if ranked else pick.ip_rank,
+                 "ip_leg_candle_counts": None if ranked else pick.ip_leg_candle_counts,
+                 "pattern_anchor_idx": None if ranked else int(pick.pattern_anchor_idx),
+@@ -1183,6 +1224,7 @@ class ICCandidateRecord:
+     ranking_runner_up_ic_idx: Optional[int] = None
+     ranking_in_play_count: Optional[int] = None
+     ranking_imbalance_first_c2_idx: Optional[int] = None
++    ic_zone_band: Optional[str] = None                     # TRIAL 2026-10-13 (change 3) — every row of the record
+     detail: Dict[str, Any] = field(default_factory=dict)
+     meta: Dict[str, Any] = field(default_factory=dict)
+ 
+@@ -1256,6 +1298,7 @@ def derive_ic_candidates(
+                 ranking_runner_up_ic_idx=rk[1],
+                 ranking_in_play_count=rk[2],
+                 ranking_imbalance_first_c2_idx=rk[3],
++                ic_zone_band=sel.ic_zone_band,
+                 detail=dict(r.detail),
+                 meta={"structure_path_id": structure_path_id},
+             ))
+@@ -1269,6 +1312,7 @@ def derive_ic_candidates(
+                 pattern_anchor_idx=None, opp_leg_first_idx=None, pattern_end_idx=None,
+                 pattern_confirmed_idx=None, ip_leg_candle_counts=None, picked=False,
+                 ip_outcome=sel.ip_outcome,
++                ic_zone_band=sel.ic_zone_band,
+                 meta={"structure_path_id": structure_path_id},
+             ))
+     return out

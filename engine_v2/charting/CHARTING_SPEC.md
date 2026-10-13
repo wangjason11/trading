@@ -177,8 +177,9 @@ To change any visual element:
   gate skipped it: ended before locking, or no CTS_ESTABLISHED; `IP: none (…)` / `IP: not evaluated (…)` and the
   reason `no_pattern` until PLAN_L L2); then the record's IC REFERENCE line
   (`_zone_render.fib_hover_ic_ref_text`, PLAN_K A17, 2026-10-09 — POI_ZONES_SPEC §3.2; from the fib meta `ic_ref_*`):
-  `IC ref <price> (<source>[, cycle <a−1>]) · break <idx>` (e.g. `IC ref 0.57774 (prev_cycle_cts, cycle 2) · break
-  1720`; the cycle only for `prev_cycle_cts`), `… · break: none` (a reference with no known break — subs 5 / 6 on the
+  `IC ref <price> (<source>[, cycle <T−1>]) · break <idx>` (e.g. `IC ref 0.57774 (prev_cycle_cts, cycle 2) · break
+  1720`; the cycle only for `prev_cycle_cts` — the target cycle's previous one, a cross too since PLAN_O), `… · break:
+  none` (a reference with no known break — subs 5 / 6 on the
   reference window), or `IC ref: none` (no reference — the condition passes); no line on a record without the
   `cross_fib_limit_*` meta; then the structure's cross-fib LIMIT line
   (`_zone_render.fib_hover_limit_text`, PLAN_I R6-7, S2): `limit <P> · <source> [(sub <from>)] · M=<M | none>` (e.g.

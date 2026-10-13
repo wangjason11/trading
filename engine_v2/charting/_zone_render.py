@@ -302,7 +302,7 @@ def fib_hover_limit_text(fib_st: Any) -> Optional[str]:
 
 def fib_hover_ic_ref_text(fib_st: Any) -> Optional[str]:
     """The fib hover's IC reference line (PLAN_K A17; RX1-C1 — hover + CSV only) from the record's `ic_ref_*` meta
-    (`FibTracker.stamp_ic_references`): `IC ref <price> (<source>[, cycle <a−1>]) · break <idx>`, `… · break: none`
+    (`FibTracker.stamp_ic_references`): `IC ref <price> (<source>[, cycle <T−1>]) · break <idx>`, `… · break: none`
     (a reference with no known break), or `IC ref: none` (no reference — the condition passes). None for a record
     the finalize never stamped (no `cross_fib_limit_*` keys — a fixture), like `fib_hover_limit_text`. Example
     (sub 0 cyc 3): `IC ref 0.57774 (prev_cycle_cts, cycle 2) · break 1720`."""
@@ -314,8 +314,7 @@ def fib_hover_ic_ref_text(fib_st: Any) -> Optional[str]:
     source = m["ic_ref_source"]
     cycle = ""
     if source == "prev_cycle_cts":
-        start_cycle = int(m["cross_start_cycle"]) if m.get("cross_cycle") else int(fib_st.cycle_id)
-        cycle = f", cycle {start_cycle - 1}"
+        cycle = f", cycle {int(fib_st.cycle_id) - 1}"   # CTS_{T−1}, T = the target cycle — a cross too (PLAN_O)
     brk = m.get("ic_ref_break_pattern_anchor_idx")
     btxt = "break: none" if brk is None else f"break {int(brk)}"
     return f"IC ref {float(m['ic_ref_price']):.5f} ({source}{cycle}) · {btxt}"

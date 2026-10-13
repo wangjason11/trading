@@ -22,6 +22,10 @@ landings with exact predictions, the tests, the cost. Baseline: **S_S6**
 
 ## 1. The rule, as an engineering reading (the canonical home stays PLAN_H RX1)
 
+> **Superseded for crosses (2026-10-13, the user's change 2 — `PLAN_O_ic_reference_target_cycle.md`):** a cross's
+> `prev_cycle_cts` is its TARGET cycle's previous CTS (`CTS_{T−1}`, bound = cycle `T`'s establishment pattern), like a
+> single — not the start cycle `a`'s. The text below is kept as the rule PLAN_K built; canonical now: POI_ZONES_SPEC §3.2.
+
 For a fib record (structure `sid`, direction `sd`, target cycle `T`, BOS anchor in cycle `a` — a single: `a = T`; a
 cross: `meta["cross_start_cycle"]`), every §3.1 candidate `i` must pass ONE bundled condition (RX1-B) before the touch
 and the institutional pattern:

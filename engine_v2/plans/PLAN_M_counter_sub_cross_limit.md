@@ -228,7 +228,9 @@ IC 732 (12-30 10:00, pattern 3A.iv, zone 0.58068–0.58118); sub 3's cycle-2 POI
 its cycle 0, which has no earlier cycle → its IC reference is the far structure side (0.5736, break 897). Sub 3's
 cross starts at its cycle 1 (it has one more cycle, 2639 → 2736, before sid 1's first) → the IC reference is cycle 0's
 CTS 0.5818 (the higher), bounded by the pattern that established cycle 1 (2824, 12-29 08:00) — so 732's M15 period
-(12-30 10:00, after 2824; low 0.58068 < 0.5818) is cut, and only 2821 remains.
+(12-30 10:00, after 2824; low 0.58068 < 0.5818) is cut, and only 2821 remains. [Superseded 2026-10-13 by PLAN_O (the
+user's change 2: a cross's CTS reference = its TARGET's previous CTS): sub 3's cross reads CTS_1 0.57902 (bound 2991)
+→ 2837 1A.iv; sid 1's cross reads CTS_0 0.57902 (bound 747) → 732 kept.]
 
 (Measured: the trial's IC check rows of sub 3's new cycle-2 record — 130 rows, ONE candidate, 2821; the M15 candles
 of 12-30 10:00–10:30 (2928–2930) touch the zone and have an unfilled imbalance after, and fail only the IC reference,
@@ -249,7 +251,8 @@ of 12-30 10:00–10:30 (2928–2930) touch the zone and have an unfilled imbalan
 4. **The residual IC difference** (§4: sub 3 cyc 2's IC 2821 vs sid 1 cyc 1's 732 — sub 3's extra cycle 0 makes its
    cross start one cycle later in its own numbering, so its IC reference is cycle 0's CTS): (a) park it as a new
    register item, looked at after this plan lands (one cause per `/compare`); (b) fold it into this plan.
-   Recommended (a).
+   Recommended (a). [Superseded 2026-10-13 by PLAN_O (a cross's CTS reference = its TARGET's previous CTS): sub 3's
+   cross reads CTS_1 → 2837; sid 1's reads CTS_0 → 732.]
 
 ## 6. The live-`P` census (session 1, 2026-10-11) — the parent's threshold DOES move on real data
 
@@ -801,9 +804,10 @@ candlestick trace, the H1 from `_raw.csv`; `plan_m_inputs/cl8_candles.py`). 61.8
   at cycle 1's establishment → cycle 1 `cross_failed`; the walk for cycle 2 stops at dead cycle 0) → both references:
   `prev_cycle_cts` = CTS_0 0.5818 (2736, 12-26 10:00; bound 2824, 12-29 08:00) and `cross_limit_anchor` 0.5736 (bound
   3588); a sell takes the higher → 0.5818. 130 rows, ONE candidate: **2821** (12-29 07:15, l 0.58182 > 0.5818, before
-  2824; no pattern).
+  2824; no pattern). [Since PLAN_O (2026-10-13): CTS_1 0.57902, bound 2991 → 2837 1A.iv.]
 - **The 0.5818 low exists on H1 too:** H1 684 (12-26 10:00) low 0.58180 — five hours BEFORE sid 1's BOS_0 689, so it
-  is no cycle of sid 1 (the user's write-up: a cross from cycle 0 has no previous-cycle CTS reference).
+  is no cycle of sid 1 (the user's write-up: a cross from cycle 0 has no previous-cycle CTS reference — [superseded
+  2026-10-13 by PLAN_O: a cross from cycle 0 reads its target's previous CTS; sid 1's cross 0→1 reads CTS_0 0.57902]).
 - **The reference sits INSIDE the zone:** 0.5818 ≈ the 76% retracement of the shared fib — only an IC entirely in the
   zone's top ~4 pips AND before 2824 can pass on sub 3.
 - **Shadow (not a replay) — what aligning the reference would pick:** the zone-touching rows of sub 3 cycle 2 that fail

@@ -1313,7 +1313,9 @@ structure; past M the BOS drops out.
   move-to-the-wick variant → 4195, one watch only → none).
 - **The rule as DECIDED (2026-10-09)** — ONE bundled condition per §3.1 candidate, applied before the touch / IP, in
   BOTH consumers (the drawn POI and MS's in-flight read, D2), on the fib record (BOS anchor in cycle `a`, target cycle
-  `T`, direction `sd`):
+  `T`, direction `sd`) [**superseded for crosses 2026-10-13** by the user's change 2, `PLAN_O_ic_reference_target_cycle.md`:
+  the previous cycle's CTS is cycle `T−1`'s and its bound cycle `T`'s establishment pattern — for a cross too; read
+  `a` as `T` in (i); canonical: POI_ZONES_SPEC §3.2]:
   1. **References.** (i) The previous cycle's CTS — when `a ≥ 1`: cycle `a−1`'s CTS_CONFIRMED price (the confirmed
      anchor; never a `cts_threshold`). (ii) The previous structure's BOS or its equivalent — when the structure has a
      cross limit `P` AND `T ≤ M` (or `M` None): a reversal start → the reversing structure's most recent BOS anchor

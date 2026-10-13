@@ -445,9 +445,12 @@ class FibTracker:
         """The fib record's IC reference (PLAN_K §1; the ONE builder — the drawn POI and MS's in-flight read both
         hand its value to `poi_zones.select_ic`, D2):
 
-        - `prev_cycle_cts` when the fib's BOS lies in cycle a ≥ 1 (a single: its cycle; a cross: `cross_start_cycle`):
-          cycle a−1's CTS_CONFIRMED price (`_cts_by_cycle` — the confirmed anchor, never a threshold); its break =
-          the pattern that established cycle a (`_est_pattern_anchor`, known from cycle a's establishment moment);
+        - `prev_cycle_cts` when the fib's TARGET cycle T ≥ 1 — a single and a cross alike (PLAN_O, the user
+          2026-10-13: a cross's cycles are not unified for the CTS break): cycle T−1's CTS_CONFIRMED price
+          (`_cts_by_cycle` — the confirmed anchor, never a threshold); its break = the pattern that established cycle
+          T (`_est_pattern_anchor`, known from cycle T's establishment moment) — none while T is not established
+          (a pre-established cross, read only by the stamp at a structure's end / the data edge): the price side
+          only;
         - the structure reference while `_structure_reference_limit` applies: `prev_structure_bos` (a
           `reversal_bos_frozen` limit — a main or CONFLUENCE-sub reversal start; `ref_anchor_price`, the break = the
           realised reversal pattern, known for the structure's WHOLE run like `P`, RX1-K7) or `cross_limit_anchor`
@@ -467,16 +470,20 @@ class FibTracker:
         sid = int(fib_state.structure_id)
         target = int(fib_state.cycle_id)
         sd = int(fib_state.struct_direction)
-        start_cycle = int(fib_state.meta["cross_start_cycle"]) if fib_state.meta.get("cross_cycle") else target
         refs = []  # (is_structure, price, source, break)
-        if start_cycle >= 1:
-            cts = self._cts_by_cycle.get((sid, start_cycle - 1))
+        if target >= 1:
+            cts = self._cts_by_cycle.get((sid, target - 1))
             assert cts is not None, (
-                f"[fib] sid={sid} cycle={start_cycle}: a fib from cycle {start_cycle} with cycle {start_cycle - 1} "
-                f"unconfirmed (the S2 order tripwire guarantees it)")
-            anchor = self._est_pattern_anchor[(sid, start_cycle)]
-            known = self._bos_moment_by_cycle[(sid, start_cycle)]
-            brk = (anchor, known) if (evaluated_at is None or known <= int(evaluated_at)) else None
+                f"[fib] sid={sid} cycle={target}: a fib of cycle {target} with cycle {target - 1} unconfirmed (an "
+                f"established T: the S2 order tripwire; a pre-established cross: its phase starts at CTS_{{T-1}} "
+                f"CONFIRMED — both guarantee it)")
+            # Written together by T's CTS_ESTABLISHED handler: both (T established) or neither (pre-established).
+            anchor = self._est_pattern_anchor.get((sid, target))
+            known = self._bos_moment_by_cycle.get((sid, target))
+            assert (anchor is None) == (known is None), (
+                f"[fib] sid={sid} cycle={target}: establishment pattern anchor {anchor} vs moment {known}")
+            brk = (anchor, known) if (anchor is not None and (evaluated_at is None or known <= int(evaluated_at))) \
+                else None
             refs.append((False, float(cts[1]), "prev_cycle_cts", brk))
         lim = self._structure_reference_limit(sid, target, evaluated_at)
         if lim is not None:

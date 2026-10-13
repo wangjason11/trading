@@ -79,7 +79,15 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    `engine_v2/zones/POI_ZONES_SPEC.md` §3 (Step 1 the IC conditions, §3.2 the IC reference, Step 2 the institutional
    pattern + its tiebreak rules, Step 3 the ranking rules; Step 4 deferred), `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md`
    (§3 the cross-fib limit incl. a counter sub's `parent_bos_threshold`, §8 MS's read); plans PLAN_H / K / L, PLAN_I / J /
-   M. Each edit = its own plan / `/compare`.
+   M. Each edit = its own plan / `/compare`. **In progress (session 2, 2026-10-12 → 13):** the user's three-change
+   write-up (`engine_v2/plans/qa_ic_crossfib_inputs/user_writeup_20261013.md`; Q&A + measurements `qa_findings.md`) —
+   the user's split: **change 2 LANDED 2026-10-13 = PLAN_O** (`engine_v2/plans/PLAN_O_ic_reference_target_cycle.md`: a
+   cross's IC CTS reference = its TARGET's previous CTS); **changes 1 + 3 = PLAN_P, NEXT, ONE commit** (the revert
+   unit, the user 2026-10-13): IC condition 3 = the immediate unfilled imbalance (≤ IC + 2; the immediate rule leaves
+   the Step 2 / Step 3 rule sets) + Step 1A, the 80–100 fallback zone when Step 1 finds no candidate (its POI's
+   activation re-checks 80–100); the POI activation's imbalance condition stays as today, decoupled from IC
+   identification (the user 2026-10-13). Decisions verbatim: `qa_findings.md`; the combined trial's patch
+   `trial_p3_all.patch`.
 3. **Zone proximity triggers — changes and edits to the opposite-direction (CTS-zone) trigger** (the user brings the
    details). Today: `engine_v2/zones/zone_proximity.py` — per (sid, cycle) with a `CTS_CONFIRMED`, triggers alternate
    sd (BOS / POI zone) → opp_sd (the CTS zone's inner bound) → sd …, at H1 8 / M15 5 / M5 3 pips; narrow cycles: Rules
@@ -178,7 +186,9 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    sub 3 cycle 2's IC (2821) still differs from H1 sid 1 cycle 1's (732) — sub 3 has one extra cycle before sid 1's
    first, so its cross starts at its own cycle 1 and its IC reference is cycle 0's CTS (0.5818, bound 2824), which cuts
    732's M15 period; sid 1's cross starts at cycle 0 → the far structure side. Detail: PLAN_M §4; measured on S_M2
-   (2026-10-12): PLAN_M §17 (no reference change would reproduce 732 — the M15 ranks pick 2837, 1A.iv).
+   (2026-10-12): PLAN_M §17 (no reference change would reproduce 732 — the M15 ranks pick 2837, 1A.iv). [Since
+   PLAN_O (2026-10-13, the user's change 2 — a cross's CTS reference = its target's previous CTS): sub 3's cross
+   reads CTS_1 0.57902 (bound 2991) and picks 2837; sid 1's cross reads CTS_0 0.57902 (bound 747) and keeps 732.]
    Its reach since PLAN_K: `P` sets the cross window `M` (which cycles a cross may span — the fib's anchors, so the
    61.8–80 zone) AND the IC reference's structure side (the anchor behind `P`, the cross-limit breakout watch's
    break, `T ≤ M`) — a changed `P` moves both. Canonical rules: CROSS_CYCLE_FIB_SPEC §3; PLAN_I §1.2 / §1.4. Was NEXT (user 2026-10-06, PLAN_H §6 F2b–F2e; it replaces the open decision below): "instead of deciding on this, I will

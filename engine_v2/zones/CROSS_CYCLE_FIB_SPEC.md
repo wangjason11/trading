@@ -195,6 +195,10 @@ then end together. 0 on the reference window (0 / 27 fib cycles move); one real 
     `ic_ref_break_pattern_anchor_idx`, `ic_ref_break_confirmed_idx` (absent = no known break), placed BEFORE the limit
     keys; the fib hover's line before the limit line (`_zone_render.fib_hover_ic_ref_text`: `IC ref 0.57774
     (prev_cycle_cts, cycle 2) · break 1720` / `… · break: none` / `IC ref: none`).
+  - **A cross's `prev_cycle_cts` is its TARGET's** (PLAN_O, the user 2026-10-13 — "we do not treat the cross fib cycles
+    as unified"): CTS_{T−1}, bound = cycle T's establishment pattern, like a single of T — so a cross from cycle 0 has
+    one too; a pre-established cross (T not established) → no bound, the price side only, and only the stamp can read
+    one (POI_ZONES_SPEC §3.2). The structure side above is unchanged (gated by T).
 
 ---
 

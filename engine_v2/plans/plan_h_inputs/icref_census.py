@@ -1,5 +1,9 @@
 """Census of the user's IC reference conditions (2026-10-09 write-up) on a save — a FIRST reading, not decided.
 
+SUPERSEDED for crosses since PLAN_O (2026-10-13): the reading below takes a cross's start cycle `a`; the rule is now
+its TARGET cycle T (CTS_{T-1}, cycle T's pattern) — a re-run computes a cross's reference from its start cycle, wrong
+whenever start != T-1. Kept as PLAN_K's record.
+
 Reading used here (to be confirmed with the user):
   - the fib record's start cycle a (a cross: meta cross_start_cycle; a single: its cycle_id), target cycle T;
   - refs: CTS_{a-1} = the CTS_CONFIRMED price of cycle a-1 (a >= 1);
