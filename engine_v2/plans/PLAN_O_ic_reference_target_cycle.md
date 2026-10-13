@@ -1,8 +1,9 @@
 # PLAN_O — the IC reference's CTS = cycle T−1's for every fib record (the user's change 2, 2026-10-13)
 
-**Status: BUILT 2026-10-13 (uncommitted) — plan review 2 lenses (387,076 tokens, §9); suite 1718 passed; the
-`/compare` vs S_N_hover = §6 except one hover line (§10); mutants 16 / 16 KILLED + 1 equivalent; next: the landing
-review, the user's chart look, the commit.** Baseline **S_N_hover**
+**Status: LANDED 2026-10-13** — source `ce5ac9b`, save **S_O** `20261013_151425_ce5ac9b` (save commit `b138424`, trunk
+`07f5ff6`; = `LATEST_week9-entries-decisions`, PLAN_P's baseline). Plan review 2 lenses (387,076 tokens, §9); suite
+1718; `/compare` vs S_N_hover = §6 except one H1 hover line (§10); mutants 16 / 16 KILLED + 1 equivalent; landing
+review 1 lens (218,728 tokens, §10); the user's chart look: "Charts look good". Baseline **S_N_hover**
 `artifacts/commits/week9-entries-decisions/20261012_194022_9f9406d` (= `LATEST_week9-entries-decisions`); HEAD at
 drafting `caf0f01`; suite 1712. Session order item 2 (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER"): the IC
 identification + cross-cycle fib questions and edits.

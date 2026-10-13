@@ -514,7 +514,16 @@ CSV is md5-equal and the M15 figures and the H1 shapes / layout are identical. A
 (both M15 hashes equal) + the keyed `PYTHONPATH=. python engine_v2/plans/plan_n_inputs/h1_trace_diff.py diff BASE
 CUR_H1_DIR` (a dir holding ONE H1 html; expected output `plan_n_inputs/followup_h1_diff_vs_SN.txt`) instead of reading
 those hover points as engine deltas. S_N_hover `20261012_194022_9f9406d` (source `9f9406d`, save `cc3d3ff`, trunk
-`efd95b9`; = `LATEST_<branch>` from 2026-10-12).
+`efd95b9`; `LATEST_<branch>` until S_O, below).
+**PLAN_O (2026-10-13, a cross's IC reference = its TARGET's previous CTS, the user's change 2) — a BEHAVIOUR change, no
+format change:** the window's 4 cross records' `ic_ref_*` fib meta change (H1 sid 1 0→1, sub 3 1→2, sub 7 0→1 / 0→2)
+and with them their IC CSV rows' `ic_ref_reason` / `is_ic_candidate`; ONE pick moves — sub 3 cycle 2 2821 → 2837 (1A.iv,
+both lenses; its `ip_outcome` flips on all 130 rows). Exactly 8 of 27 CSVs differ vs S_N_hover (3 fib-lifecycle, 3 IC,
+the 2 lens POI CSVs); no structure / KL / WVMI / trigger / sub change; chart counts unchanged; the H1 figure identical
+(sid 1's cross fib is on collapsed (1,1), not drawn); each lens 5 traces' customdata (sub 3's 2 POI-zone hover traces,
+the 3 cross fibs' hover) + 3 shapes (sub 3's 2 POI rectangles, its confirm line). Against S_N_hover: positional
+`cmp_save.py` + `cmp_hover.py` read correctly (no column change) — every delta = PLAN_O §10. S_O
+`20261013_151425_ce5ac9b` (source `ce5ac9b`, save `b138424`, trunk `07f5ff6`; = `LATEST_<branch>` from 2026-10-13).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -644,9 +653,9 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-12 on S_N_hover `20261012_194022_9f9406d`; unchanged since
+counts are (verified 2026-10-13 on S_O `20261013_151425_ce5ac9b`; unchanged since
 PLAN_L landing 2 (S_L2, 2026-10-10: its 7 new POIs moved them from 81/236, 135/120, 274/264)
-through S_M1, S_M2, S_N and S_N_hover; config window 2025-12-01→2026-01-20, auto-extended to
+through S_M1, S_M2, S_N, S_N_hover and S_O; config window 2025-12-01→2026-01-20, auto-extended to
 2025-11-15. Window-dependent, re-baseline when the config window or chart rendering changes;
 older values in **History** below):
 

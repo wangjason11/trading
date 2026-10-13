@@ -82,7 +82,8 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    M. Each edit = its own plan / `/compare`. **In progress (session 2, 2026-10-12 → 13):** the user's three-change
    write-up (`engine_v2/plans/qa_ic_crossfib_inputs/user_writeup_20261013.md`; Q&A + measurements `qa_findings.md`) —
    the user's split: **change 2 LANDED 2026-10-13 = PLAN_O** (`engine_v2/plans/PLAN_O_ic_reference_target_cycle.md`: a
-   cross's IC CTS reference = its TARGET's previous CTS); **changes 1 + 3 = PLAN_P, NEXT, ONE commit** (the revert
+   cross's IC CTS reference = its TARGET's previous CTS; source `ce5ac9b`, save S_O `20261013_151425_ce5ac9b` =
+   `LATEST_<branch>`, PLAN_P's baseline); **changes 1 + 3 = PLAN_P, NEXT, ONE commit** (the revert
    unit, the user 2026-10-13): IC condition 3 = the immediate unfilled imbalance (≤ IC + 2; the immediate rule leaves
    the Step 2 / Step 3 rule sets) + Step 1A, the 80–100 fallback zone when Step 1 finds no candidate (its POI's
    activation re-checks 80–100); the POI activation's imbalance condition stays as today, decoupled from IC
