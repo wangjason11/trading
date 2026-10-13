@@ -1,0 +1,4 @@
+commit_hash=ce5ac9b
+timestamp=20261013_151425
+branch=week9-entries-decisions
+commit_message=PLAN_O: the IC reference's CTS = cycle T-1's for every fib record, a cross too (the user's change 2, 2026-10-13) [reuse-replay]
