@@ -170,3 +170,38 @@ log are sub-local):
 - IC 859 (sid1 c2): gap 861..862, commit-filled 944 (01-13 06:00). Today on 902 (01-09 12:00), off 952, on 954, off
   992, on 998 (01-15 12:00) → the end; with the immediate gap: off from 944.
 - Sub 7 c0 IC 4048: its gap commit-filled 01-16 16:00, before the POI's first activation (01-19 01:45) → never active.
+
+## 2026-10-13 — handoff to PLAN_P (changes 1 + 3, ONE commit — the user's split)
+
+Baseline: S_O `20261013_151425_ce5ac9b` (PLAN_O landed — change 2). Starting code: **`trial_changes_1_3_on_S_O.patch`**
+(the combined trial minus change 2 — `git apply --check` clean on `305fbaa`; built as diff(caf0f01 + p1, caf0f01 + p3)).
+It is the trial, NOT a landing: no tests, no docs, the trial-only shape above. Since the trial included change 2, its
+outputs (§ "the combined TRIAL replay") are PLAN_P's expected outputs on S_O — re-measure them (a shadow / a variant
+replay on S_O) before writing PLAN_P's prediction; the trial's own artifacts were overwritten by PLAN_O's replay.
+
+What the trial left out — PLAN_P must decide / do:
+1. **Remove the immediate rule from both rule sets** (the user's write-up): Step 2's tiebreak branch
+   (`TIEBREAK_IMMEDIATE_UNFILLED_IMBALANCE`, `poi_zones.py` ~557) and Step 3's ranking branch
+   (`RANKING_IMMEDIATE_UNFILLED_IMBALANCE`, ~637). The tuples' 4th element (`ip_tb_imbalance_first_c2_idx` /
+   `ranking_imbalance_first_c2_idx`) STAYS — the most-recent-before-imbalance rule fills it too (~571 / ~651). Pins of
+   the immediate rule (PLAN_H §6 TBU tests, PLAN_L L2 tests) flip or go; the user's decision 1 (the last rule picks the
+   oldest candidate in play) gets a pin.
+2. **The old condition 3** (`_has_unfilled_imbalance_after`, `ICCandleCheck.has_unfilled_imbalance_after`, its IC CSV
+   column): keep as information or drop — ASK the user (the activation sweep keeps its OWN imbalance check either
+   way, decided 2026-10-13).
+3. **The activation sweep's imbalance condition stays** (decided): reword its docstring, the `derive_poi_zones`
+   comment block and POI_ZONES_SPEC §4 — the POI's own "unfilled sd imbalance after the IC" condition, not "IC
+   condition 3 re-checked". The touch re-check (condition 5) uses the IC's band (`ic_zone_config`, decision 3).
+4. **Names — confirm with the user** (Naming Standard): `ic_zone_band` ("61.8-80" / "80-100"), `IC_ZONE_PRIMARY` /
+   `IC_ZONE_FALLBACK`, `POIConfig.ic_fallback_fib_min/max`, the hovers "IC zone 80-100 (fallback)" (POI) and
+   "· zone 80-100 (fallback)" (fib status).
+5. **A save-format boundary** in the `/compare` skill (the IC CSV's `ic_zone_band` column after `is_ic_candidate`, the
+   POI meta key; + the dropped column if 2 = drop); the keyed diff `cmp_trial.py BASE CUR` reads it.
+6. **Step 1A's scope, as decided:** it runs only when Step 1 finds NO candidate (re-runs Step 1 with condition 4 on
+   80–100, conditions 1–3 kept), never after Steps 2–3 — an all-pinbar record does not trigger it (H1 sid 0 c0, H1 sid
+   1 c0, H1 sid 1 cross 0→1, sub 3 c0 stay POI-less; Step 4 is the deferred answer, register §D.2).
+7. **The cascade to re-measure:** MS reads the same IC (`poi_inner_for_fib`) — the trial moved H1 sid 1 cycle 2's
+   CTS_CONFIRMED (sd-proximity) 939 → 935 via its POI inner (IC 832 → 859), hence the counter triggers on parent (1,2)
+   (3759 → 3743, 4159 → 4143) and subs 5 / 7; 0 M15 structure-event changes. Docs: POI_ZONES_SPEC §3 (Step 1 condition
+   3, Step 1A, §3.4 tiebreaks, §3.5 CSV, §3.6 ranking) + §4, CHARTING_SPEC (hovers), GLOSSARY, PLAN_H §6 TBU / ICR
+   pointers, the register.
