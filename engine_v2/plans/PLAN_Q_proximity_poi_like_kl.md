@@ -239,8 +239,9 @@ cycle's main WVMI record exists only when its first sd trigger fires); the POI_Z
 "where" clause; the boundary test strengthened (candle AT the scan start, an empty history — the old gate fails it)
 and renamed `test_poi_counts_from_the_scan_start_candle_with_its_floor_at_it`; the hover test imports
 `_make_ip_multicycle_data` from its home; the hovers' nested helper renamed `_poi_activation_floor_idx`; this status
-line, the `patterns/` paths, the Q09 note. Left as is (optional, not this cause): `market_structure.py:1875` /
-MARKET_STRUCTURE_SPEC `:312` "active POI".
+line, the `patterns/` paths, the Q09 note. Left out of the landing (not this cause): `market_structure.py:1875` /
+MARKET_STRUCTURE_SPEC `:312` "active POI" — "active" meant the representative fib, MS reads no POI activation;
+reworded after the save in its own docs-only commit (the user, 2026-10-14: "let's go with your recommendation").
 
 ## 10. Landing record
 

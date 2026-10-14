@@ -1872,8 +1872,10 @@ class MarketStructure:
 
     def _check_proximity_at_candle(self, i: int) -> Optional[Tuple[float, str]]:
         """Check if candle i wicks within proximity threshold of the closest
-        sd-direction inner (BOS or active POI). Returns (trigger_inner,
-        zone_kind) on hit; None otherwise."""
+        sd-direction inner (BOS, or the cycle's POI inner = the IC pick of the
+        embedded tracker's representative fib — no POI activation gate,
+        `_refresh_poi_inners_for_cycle`). Returns (trigger_inner, zone_kind)
+        on hit; None otherwise."""
         st = self.state
         if st.bos_inner_for_cycle is None:
             return None

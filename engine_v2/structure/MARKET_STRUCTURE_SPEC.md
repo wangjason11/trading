@@ -309,7 +309,7 @@ When a range is active:
 
 After `CTS_ESTABLISHED`, the engine watches for both:
 1. **A valid pullback pattern** (existing path, all cycles)
-2. **First sd zone proximity hit** (uses BOS inner + active POI inners) — gated by **both**:
+2. **First sd zone proximity hit** (uses the BOS inner + the cycle's POI inner — the IC pick of the representative fib, read with no POI activation gate; see "The proximity check picks the closest…" below) — gated by **both**:
    - **Rule 1 (narrow-gap gate):** `|cts_price − bos_threshold| ≥ min_gap_threshold` (per-TF table)
    - **Cycle-0 carve-out:** `cts_cycle_id > 0` (BOS_0's "initial_prior_extreme" status makes it semantically suspect regardless of gap magnitude)
 
