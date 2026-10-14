@@ -1,0 +1,4 @@
+commit_hash=da8c15e
+timestamp=20261014_170919
+branch=week9-entries-decisions
+commit_message=PLAN_Q: the zone-proximity scan reads a POI exactly like a KL zone (the user, 2026-10-14; session order item 3, the sd side first)
