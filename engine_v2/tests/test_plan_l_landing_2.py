@@ -1,14 +1,17 @@
 """PLAN_L landing 2 — Step 3, the ranking rules (`plans/PLAN_L_ic_identification_steps.md` §4; the decisions PLAN_H §6
 ICR-*): when Step 2 finds no institutional pattern, the IC is ranked over the UNFILTERED IC candidates — (1) exclude
-pinbars, (2) the immediate unfilled imbalance (a filter), (3) maru > normal, (4) the most recent before the earliest
-unfilled imbalance after the oldest candidate STILL IN PLAY — a rule set of its own (ICR-S), sharing one helper per
-identical rule with the tiebreak rules, each given its own input list (ICR-9). Pinned: each rule deciding and passing
-through; ICR-1 / ICR-8 / ICR-10; all pinbars -> no IC; Step 3 never runs with a pattern; MS's inner from a ranked
-pick (one selector, ICR-12); the activation floor without the pattern term (ICR-2); the POI meta (`ip_outcome`, the
-`ranking_*` keys, the pattern meta nulled), its mirror shift; the CSV columns; the POI hover's ranked line.
+pinbars, (2) maru > normal, (3) the most recent before the earliest unfilled imbalance after the oldest candidate
+STILL IN PLAY (since PLAN_P: that candidate's own immediate gap → the oldest, or its neighbour sharing the gap; the
+immediate-unfilled-imbalance rule, rule 2 until PLAN_P, became IC condition 3) — a rule set of its own (ICR-S),
+sharing one helper per identical rule with the tiebreak rules, each given its own input list (ICR-9). Pinned: each
+rule deciding and passing through; ICR-1 / ICR-8 / ICR-10; all pinbars -> no IC; Step 3 never runs with a pattern;
+MS's inner from a ranked pick (one selector, ICR-12); the activation floor without the pattern term (ICR-2); the POI
+meta (`ip_outcome`, the `ranking_*` keys, the pattern meta nulled), its mirror shift; the CSV columns; the POI
+hover's ranked line.
 
 The fixtures are real classified frames (`test_institutional_pattern._frame`: 6 prefix marus, then the specs from
-index 6; `S` = a small sd spacer — a 1-pip body, a pinbar, never a candidate), every candidate touching the zone.
+index 6; `S` = a small sd spacer — a 1-pip body, a pinbar, never a candidate), every candidate touching the zone;
+an IC candidate needs its immediate gap (IC + 1 / IC + 2 — IC condition 3, PLAN_P).
 """
 from __future__ import annotations
 
@@ -32,7 +35,6 @@ from engine_v2.zones.poi_zones import (
     NO_IC_CANDIDATE,
     RANKING_EXCLUDE_PINBAR,
     RANKING_IC_CANDLE_TYPE,
-    RANKING_IMMEDIATE_UNFILLED_IMBALANCE,
     RANKING_MOST_RECENT_BEFORE_IMBALANCE,
     ICSelection,
     POIConfig,
@@ -46,37 +48,36 @@ S = ("N", U, 2)      # a small sd spacer (body 1 pip < the H1 floor: a pinbar; a
 
 # name: (specs, CTS anchor, the far (never filled) sd gaps' first c2) — BOS anchor 6 for every fixture
 FIX = {
-    # 7 pinbar, 9 maru, 11 pinbar with the only immediate gap (12) — the H1 sid 0 cyc 0 shape (177 / 180 / 183)
-    "pinbar_with_the_gap": ([("M", U, 10), ("P", D, 6), S, ("M", D, 6), S, ("P", D, 6), S], 12, [12]),
-    # 7 pinbar (gap 8 right after it), marus 9 / 13 / 17 with no immediate gap; gaps 16, 20 — the sub 0 cyc 0 shape
+    # 7 pinbar, 9 maru, 11 pinbar, each with its immediate gap (8 / 10 / 12) — rule 1 leaves the maru
+    "pinbar_with_the_gap": ([("M", U, 10), ("P", D, 6), S, ("M", D, 6), S, ("P", D, 6), S], 12, [8, 10, 12]),
+    # 7 pinbar, marus 9 / 13 / 17, each with its immediate gap (8 / 10 / 14 / 18) — the ICR-8 shape
     "oldest_in_play": ([("M", U, 10), ("P", D, 6), S, ("M", D, 6), S, S, S, ("M", D, 6), S, S, S, ("M", D, 6),
-                        S, S, S], 20, [8, 16, 20]),
-    # 7 normal with an immediate gap (8), 9 maru without one (12 = IC + 3)
+                        S, S, S], 20, [8, 10, 14, 18]),
+    # 7 normal with an immediate gap (8), 9 maru without one (12 = IC + 3) — 9 fails IC condition 3 (PLAN_P)
     "one_immediate": ([("M", U, 10), ("N", D, 6), S, ("M", D, 6), S, S, S], 12, [8, 12]),
-    # 7 normal with the only immediate gap (8); marus 9 / 11 without (14 = 11 + 3)
-    "one_immediate_of_three": ([("M", U, 10), ("N", D, 6), S, ("M", D, 6), S, ("M", D, 6), S, S, S], 14, [8, 14]),
-    # 7 normal with the only immediate gap (8), 9 maru, 11 a PINBAR (excluded by rule 1)
-    "runner_up_not_a_pinbar": ([("M", U, 10), ("N", D, 6), S, ("M", D, 6), S, ("P", D, 6), S, S, S], 14, [8, 14]),
-    # 7 maru (gap 8), 9 normal (gap 10), 11 normal without one — rule 2 leaves 7 / 9
+    # 7 normal (gap 8), 9 maru (gap 10), 11 a PINBAR (gap 12; excluded by rule 1)
+    "runner_up_not_a_pinbar": ([("M", U, 10), ("N", D, 6), S, ("M", D, 6), S, ("P", D, 6), S, S, S], 14,
+                               [8, 10, 12]),
+    # 7 maru (gap 8), 9 normal (gap 10), 11 normal without one (14 = IC + 3 — fails IC condition 3)
     "runner_up_still_in_play": ([("M", U, 10), ("M", D, 6), S, ("N", D, 6), S, ("N", D, 6), S, S, S], 14,
                                 [8, 10, 14]),
-    # 7 normal (gap 8) and 13 normal (gap 14) pass rule 2; 9 maru fails it
+    # 7 normal (gap 8) and 13 normal (gap 14) are IC candidates; 9 maru (no immediate gap) is not
     "two_immediate": ([("M", U, 10), ("N", D, 6), S, ("M", D, 6), S, S, S, ("N", D, 6), S, S], 15, [8, 14]),
-    # 7 normal, 9 maru, no immediate gap (12 = IC + 3 / + 5)
+    # 7 normal, 9 maru, no immediate gap (12 = IC + 3 / + 5): no IC candidate (PLAN_P)
     "no_immediate": ([("M", U, 10), ("N", D, 6), S, ("M", D, 6), S, S, S], 12, [12]),
-    # marus 7 and 8 share the gap 9 (8 its c1) — ICR-1
+    # marus 7 and 8 share the gap 9 (8 its c1; 9 = 7 + 2 — both immediate) — ICR-1
     "neighbours": ([("M", U, 10), ("M", D, 6), ("M", D, 6), S, S], 10, [9]),
-    # one candidate, a maru — ICR-10
+    # one candidate, a maru (gap 9 = 7 + 2) — ICR-10
     "single": ([("M", U, 10), ("M", D, 6), S, S], 9, [9]),
-    # 7 and 9 pinbars
-    "all_pinbar": ([("M", U, 10), ("P", D, 6), S, ("P", D, 6), S], 10, [10]),
-    # 7 a pinbar WITH a pattern (3A.i: the big maru 8 continues it); 9 a maru without one
-    "pattern_pinbar": ([("M", U, 10), ("P", D, 6), ("M", U, 10), ("M", D, 6), S, S], 11, [11]),
-    # normals 7 / 11 around the maru 9, no immediate gap (14)
-    "two_normals": ([("M", U, 10), ("N", D, 6), S, ("M", D, 6), S, ("N", D, 6), S, S, S], 14, [14]),
-    # 7 normal, marus 11 / 15, 19 normal; no immediate gap; gaps 10 / 14 / 18 / 22 (each IC + 3)
-    "rule_4_after_rule_3": ([("M", U, 10), ("N", D, 6), S, S, S, ("M", D, 6), S, S, S, ("M", D, 6), S, S, S,
-                             ("N", D, 6), S, S, S], 22, [10, 14, 18, 22]),
+    # 7 and 9 pinbars, each with its immediate gap (8 / 10)
+    "all_pinbar": ([("M", U, 10), ("P", D, 6), S, ("P", D, 6), S], 10, [8, 10]),
+    # 7 a pinbar WITH a pattern (3A.i: the big maru 8 continues it; gap 8); 9 a maru without one (gap 11)
+    "pattern_pinbar": ([("M", U, 10), ("P", D, 6), ("M", U, 10), ("M", D, 6), S, S], 11, [8, 11]),
+    # normals 7 / 11 around the maru 9, each with its immediate gap (8 / 10 / 12)
+    "two_normals": ([("M", U, 10), ("N", D, 6), S, ("M", D, 6), S, ("N", D, 6), S, S, S], 14, [8, 10, 12]),
+    # 7 normal, marus 11 / 15, 19 normal, each with its immediate gap (8 / 12 / 16 / 20)
+    "rule_3_after_rule_2": ([("M", U, 10), ("N", D, 6), S, S, S, ("M", D, 6), S, S, S, ("M", D, 6), S, S, S,
+                             ("N", D, 6), S, S, S], 22, [8, 12, 16, 20]),
     # 7 an IC candidate (gap 9 after it); 10 a check failing condition 3 (the CTS anchor: no gap after it)
     "with_a_non_candidate": ([("M", U, 10), ("M", D, 6), S, S, ("M", D, 6)], 10, [9]),
 }
@@ -98,32 +99,32 @@ def _outcome(sel):
 
 @pytest.mark.parametrize("classify_all", [False, True])
 @pytest.mark.parametrize("name, expected", [
-    # rule 1 decides: 7 / 11 excluded -> 9; rules 2–4 never run -> no runner-up (ICR-14); 3 entered rule 1
+    # rule 1 decides: 7 / 11 excluded -> 9; rules 2–3 never run -> no runner-up (ICR-14); 3 entered rule 1
     ("pinbar_with_the_gap", (9, "no_pattern", (RANKING_EXCLUDE_PINBAR, None, 3, None), None)),
-    # rule 2 decides: only 7 has an immediate gap -> 7 over 9 (the maru rule 3 would take); 2 entered; its gap 8
-    ("one_immediate", (7, "no_pattern", (RANKING_IMMEDIATE_UNFILLED_IMBALANCE, 9, 2, 8), None)),
-    # ... its runner-up = the MOST RECENT candidate in play failing it (11, not 9); 3 entered rule 2
-    ("one_immediate_of_three", (7, "no_pattern", (RANKING_IMMEDIATE_UNFILLED_IMBALANCE, 11, 3, 8), None)),
-    # ... the runner-up is a candidate IN PLAY (9) — never the more recent pinbar 11 that rule 1 excluded
-    ("runner_up_not_a_pinbar", (7, "no_pattern", (RANKING_IMMEDIATE_UNFILLED_IMBALANCE, 9, 2, 8), None)),
-    # rule 3's runner-up = the most recent normal STILL IN PLAY (9) — not 11, which failed rule 2
+    # IC condition 3 (PLAN_P): 9 has no immediate gap -> no IC candidate -> 7 alone, nothing ranked (until PLAN_P the
+    # retired condition 3 kept 9 and the immediate-unfilled-imbalance rule took 7 over it)
+    ("one_immediate", (7, "no_pattern", None, None)),
+    # rule 2's runner-up = the most recent normal IN PLAY (7) — never the more recent pinbar 11 rule 1 excluded
+    ("runner_up_not_a_pinbar", (9, "no_pattern", (RANKING_IC_CANDLE_TYPE, 7, 2, None), None)),
+    # rule 2's runner-up = the most recent normal IC CANDIDATE (9) — not 11, which fails IC condition 3
     ("runner_up_still_in_play", (7, "no_pattern", (RANKING_IC_CANDLE_TYPE, 9, 2, None), None)),
-    # rule 2 with two passing: only 7 / 13 go on (9 the maru out) -> rule 3 ties (both normal) -> rule 4: the
-    # reference after the oldest in play (7) = 8 -> 7; runner-up 13; 2 entered rule 4
+    # 9 (the maru) fails IC condition 3 -> 7 / 13 tie on rule 2 (both normal) -> rule 3: the reference after the
+    # oldest in play (7) = its own gap 8 -> 7 (the oldest — PLAN_P); runner-up 13; 2 entered rule 3
     ("two_immediate", (7, "no_pattern", (RANKING_MOST_RECENT_BEFORE_IMBALANCE, 13, 2, 8), None)),
-    # rule 2 with none passing: all go on -> rule 3 decides: 9 the maru over the most recent normal 7
-    ("no_immediate", (9, "no_pattern", (RANKING_IC_CANDLE_TYPE, 7, 2, None), None)),
-    # ICR-1: both pass rule 2 and are marus -> rule 4: the reference after 7 = the shared gap 9 -> 8, closer to it
+    # no immediate gap anywhere: no IC candidate, Step 2 / 3 never run (until PLAN_P: 9 by the candle type)
+    ("no_immediate", (None, None, None, NO_IC_CANDIDATE)),
+    # ICR-1: both marus -> rule 3: the reference after 7 = the shared gap 9 -> 8, the closer one
     ("neighbours", (8, "no_pattern", (RANKING_MOST_RECENT_BEFORE_IMBALANCE, 7, 2, 9), None)),
     # ICR-10: one IC candidate, not a pinbar -> nothing ranked
     ("single", (7, "no_pattern", None, None)),
     # every IC candidate a pinbar -> no IC
     ("all_pinbar", (None, "no_pattern", None, ALL_IC_CANDIDATES_PINBAR)),
-    # rule 3's runner-up = the MOST RECENT normal (11, not 7)
+    # rule 2's runner-up = the MOST RECENT normal (11, not 7)
     ("two_normals", (9, "no_pattern", (RANKING_IC_CANDLE_TYPE, 11, 3, None), None)),
-    # rule 4 runs over rule 3's survivors (11 / 15): the reference after 11 = 14 -> 11 — not after the older normal 7
-    # (gap 10 -> 7); its runner-up is a survivor (15), not the more recent normal 19; 2 entered rule 4
-    ("rule_4_after_rule_3", (11, "no_pattern", (RANKING_MOST_RECENT_BEFORE_IMBALANCE, 15, 2, 14), None)),
+    # rule 3 runs over rule 2's survivors (11 / 15): the reference after 11 = its gap 12 -> 11 — not after the older
+    # normal 7 (gap 8: before every survivor — no pick); its runner-up is a survivor (15), not the more recent normal
+    # 19; 2 entered rule 3
+    ("rule_3_after_rule_2", (11, "no_pattern", (RANKING_MOST_RECENT_BEFORE_IMBALANCE, 15, 2, 12), None)),
     # the ranking rules see only the IC candidates: 10 (no gap after it) is no candidate -> 7 alone, nothing ranked
     ("with_a_non_candidate", (7, "no_pattern", None, None)),
 ])
@@ -134,27 +135,26 @@ def test_the_ranking_rules_decide_in_order(name, expected, classify_all):
     assert _outcome(sel) == expected
 
 
-def test_rule_4_takes_its_reference_after_the_oldest_candidate_still_in_play():
-    """ICR-8 (the sub 0 cyc 0 shape): after rules 1–3 the marus 9 / 13 / 17 are in play (7 the pinbar excluded, no
-    immediate gap) -> the earliest unfilled gap after 9 is 16 -> 13. From the oldest Step 1 candidate (7) the
-    reference would be 8 — before every candidate in play, no pick."""
+def test_rule_3_takes_its_reference_after_the_oldest_candidate_still_in_play():
+    """ICR-8: after rules 1–2 the marus 9 / 13 / 17 are in play (the pinbar 7 excluded) -> the earliest unfilled gap
+    after 9 is its own immediate gap 10 -> 9 (the oldest in play — PLAN_P; the user 2026-10-13). From the oldest Step
+    1 candidate (7) the reference would be 8 — before every candidate in play, no pick."""
     sel, df = _sel("oldest_in_play")
     assert [(c.ic_idx, str(df.loc[c.ic_idx, "candle_type"]), c.immediate_imbalance_first_c2_idx)
-            for c in sel.ic_candidates] == [(7, "pinbar", 8), (9, "maru", None), (13, "maru", None), (17, "maru", None)]
-    assert _outcome(sel) == (13, "no_pattern", (RANKING_MOST_RECENT_BEFORE_IMBALANCE, 17, 3, 16), None)
+            for c in sel.ic_candidates] == [(7, "pinbar", 8), (9, "maru", 10), (13, "maru", 14), (17, "maru", 18)]
+    assert _outcome(sel) == (9, "no_pattern", (RANKING_MOST_RECENT_BEFORE_IMBALANCE, 17, 3, 10), None)
 
 
-def test_pinbars_are_excluded_before_the_immediate_imbalance():
-    """ICR-S (the H1 sid 0 cyc 0 shape — IC candidates 177 pinbar, 180 maru, 183 pinbar with the only immediate gap
-    -> 180): the ranking rules exclude the pinbar 11 first -> 9; the TIEBREAK rules' order (the immediate imbalance
-    first) over the same list would take 11 — the two rule sets are separate wholes."""
-    sel, df = _sel("pinbar_with_the_gap")
-    assert [c.immediate_imbalance_first_c2_idx for c in sel.ic_candidates] == [None, None, 12]
-    assert sel.pick.ic_idx == 9
-    fib = _fib_over(df, 6, 12, 0.5, 0.7)
-    pick, tb = apply_tiebreak_rules(df, fib, POIConfig(), [c.pattern for c in sel.ic_candidates],
-                                    {c.ic_idx: c.immediate_imbalance_first_c2_idx for c in sel.ic_candidates})
-    assert (pick.ic_idx, tb[0]) == (11, "immediate_unfilled_imbalance")
+def test_the_two_rule_sets_differ_on_an_all_pinbar_list():
+    """ICR-S — the rule sets are separate wholes: over the same two pinbar IC candidates the ranking rules exclude
+    both (no IC, `all_ic_candidates_pinbar`) while the TIEBREAK rules keep pinbars (maru > normal > pinbar) and the
+    most recent before the imbalance takes the oldest, 7. (Until PLAN_P the H1 sid 0 cyc 0 shape showed the
+    difference through the immediate-unfilled-imbalance rule — now IC condition 3, in neither set.)"""
+    sel, df = _sel("all_pinbar")
+    assert [c.ic_idx for c in sel.ic_candidates] == [7, 9] and sel.no_ic_reason == ALL_IC_CANDIDATES_PINBAR
+    fib = _fib_over(df, 6, 10, 0.5, 0.7)
+    pick, tb = apply_tiebreak_rules(df, fib, POIConfig(), [c.pattern for c in sel.ic_candidates])
+    assert (pick.ic_idx, tb) == (7, ("most_recent_before_imbalance", 9, 2, 8))         # the TIEBREAK rule's value
 
 
 def test_step_3_never_runs_when_a_pattern_exists(monkeypatch):
@@ -190,9 +190,13 @@ def test_the_selection_rejects_inconsistent_fields():
     ranked pick none — MS's read never passes `derive_poi_zones`' assert, so the object is its only guard)."""
     sel, _ = _sel("single")
     pick = sel.pick
-    ok = dict(checks=(), pick=pick, tiebreak=None, ip_outcome="no_pattern", ranking=None, no_ic_reason=None)
+    ok = dict(checks=(), pick=pick, tiebreak=None, ip_outcome="no_pattern", ranking=None, no_ic_reason=None,
+              ic_zone_band="61.8-80")
     ICSelection(**ok)
-    for bad in (dict(no_ic_reason=NO_IC_CANDIDATE), dict(pick=None), dict(tiebreak=("ic_candle_type", 1, 2, None)),
+    ICSelection(**{**ok, "ic_zone_band": "80-100", "checks": sel.checks})   # Step 1A's band (PLAN_P) — with checks
+    for bad in (dict(ic_zone_band="61.8-100"), dict(ic_zone_band=None),    # PLAN_P: the two bands only
+                dict(ic_zone_band="80-100"),                                # ... and Step 1A never runs without checks
+                dict(no_ic_reason=NO_IC_CANDIDATE), dict(pick=None), dict(tiebreak=("ic_candle_type", 1, 2, None)),
                 dict(ip_outcome="pattern", ranking=(RANKING_EXCLUDE_PINBAR, None, 2, None)),
                 dict(ip_outcome=None), dict(ip_outcome="nonsense"),
                 dict(pick=None, no_ic_reason=ALL_IC_CANDIDATES_PINBAR, ranking=(RANKING_EXCLUDE_PINBAR, None, 2, None)),
@@ -209,18 +213,18 @@ def test_the_selection_rejects_inconsistent_fields():
 # ---------------------------------------------------------------------------
 
 def test_the_shared_helpers_receive_each_rule_sets_own_list(monkeypatch):
-    """The immediate-imbalance helper: ranking rule 2 receives what ranking rule 1 left of ALL Step 1 candidates
-    (the pinbar 7 dropped); the candle-type helper runs WITHOUT pinbar there (ranking rule 3)."""
+    """The candle-type helper: ranking rule 2 receives what ranking rule 1 left of ALL Step 1 candidates (the pinbar
+    7 dropped) and runs WITHOUT pinbar; the most-recent helper receives rule 2's survivors (all three marus)."""
     seen = []
-    real_f, real_t = poi_zones.filter_immediate_unfilled_imbalance, poi_zones.prefer_candle_type
-    monkeypatch.setattr(poi_zones, "filter_immediate_unfilled_imbalance",
-                        lambda in_play, imm: seen.append(("imm", list(in_play))) or real_f(in_play, imm))
+    real_t, real_m = poi_zones.prefer_candle_type, poi_zones.most_recent_before_imbalance
     monkeypatch.setattr(poi_zones, "prefer_candle_type",
                         lambda in_play, df, *, include_pinbar: seen.append(("type", list(in_play), include_pinbar))
                         or real_t(in_play, df, include_pinbar=include_pinbar))
+    monkeypatch.setattr(poi_zones, "most_recent_before_imbalance",
+                        lambda in_play, *a: seen.append(("recent", list(in_play))) or real_m(in_play, *a))
     sel, _ = _sel("oldest_in_play")
-    assert sel.pick.ic_idx == 13
-    assert seen == [("imm", [9, 13, 17]), ("type", [9, 13, 17], False)]
+    assert sel.pick.ic_idx == 9
+    assert seen == [("type", [9, 13, 17], False), ("recent", [9, 13, 17])]
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +235,7 @@ def test_ms_reads_the_ranked_ics_inner():
     """`poi_inner_for_fib` (MS's in-flight read) returns a ranked pick's inner like a pattern pick's — the IC's high
     on a buy; all pinbars -> None (the BOS inner only)."""
     from engine_v2.tests._cross_fib_limits import NO_REF_TRACKER
-    for name, ic in (("oldest_in_play", 13), ("pinbar_with_the_gap", 9), ("all_pinbar", None)):
+    for name, ic in (("oldest_in_play", 9), ("pinbar_with_the_gap", 9), ("all_pinbar", None)):
         specs, cts, gaps = FIX[name]
         df = _frame(specs)
         df.attrs["imbalances"] = [_far_gap(g) for g in gaps]
@@ -275,7 +279,7 @@ def test_a_ranked_poi_carries_no_pattern_and_its_ranking():
     (poi,), _ = _drawn("oldest_in_play")
     m = poi.meta
     assert (poi.ic_idx, m["ranking_rule"], m["ranking_runner_up_ic_idx"], m["ranking_in_play_count"],
-            m["ranking_imbalance_first_c2_idx"]) == (13, "most_recent_before_imbalance", 17, 3, 16)
+            m["ranking_imbalance_first_c2_idx"]) == (9, "most_recent_before_imbalance", 17, 3, 10)
     assert all(type(m[k]) is int for k in ("ranking_runner_up_ic_idx", "ranking_in_play_count",
                                            "ranking_imbalance_first_c2_idx"))
 
@@ -288,8 +292,8 @@ def test_a_ranked_poi_activates_without_the_pattern_term():
     assert _hist(_sweep(pattern_confirmed_idx=11)) == [(11, True, "initial")]         # a pattern's term binds
     (poi,), df = _drawn("oldest_in_play")
     assert poi.meta["pattern_confirmed_idx"] is None
-    # first_active = max(the moment 20, the IC 13); the gap 16 formed at 17 -> live from 20
-    assert [(e["idx"], e["active"]) for e in poi.meta["activation_history"]] == [(20, True)]
+    # first_active = max(the moment 20, the IC 9); the gaps 10 / 14 / 18 formed by 19 -> live from 20
+    assert poi.ic_idx == 9 and [(e["idx"], e["active"]) for e in poi.meta["activation_history"]] == [(20, True)]
     with pytest.raises(TypeError):                                           # keyword-required: no default (A7)
         poi_zones._compute_poi_activation_history(
             df, ic_idx=13, cts_established_idx=12, sd=1, scan_end=20, bos_price=0.6, cts_events=[],
@@ -317,20 +321,20 @@ def test_the_mirror_shifts_the_two_ranking_indices():
     `ranking_imbalance_first_c2_idx` (meta keys + record fields), never `ranking_in_play_count`."""
     from engine_v2.tests.test_event_meta_idx_keys import _Poi, _synthetic_result
     meta = {"ip_outcome": "no_pattern", "ranking_rule": "most_recent_before_imbalance",
-            "ranking_runner_up_ic_idx": 17, "ranking_in_play_count": 3, "ranking_imbalance_first_c2_idx": 16,
+            "ranking_runner_up_ic_idx": 17, "ranking_in_play_count": 3, "ranking_imbalance_first_c2_idx": 10,
             "activation_history": []}
     row = dataclasses.replace(
-        derive_ic_candidates(*_ic_inputs("oldest_in_play"), structure_path_id="M15")[2], meta={})
-    assert (row.ic_idx, row.picked, row.ranking_runner_up_ic_idx, row.ranking_imbalance_first_c2_idx) == (13, True, 17, 16)
-    res = dataclasses.replace(_synthetic_result(), poi_zones=[_Poi(ic_idx=13, meta=meta)], ic_candidates=[row])
+        derive_ic_candidates(*_ic_inputs("oldest_in_play"), structure_path_id="M15")[1], meta={})
+    assert (row.ic_idx, row.picked, row.ranking_runner_up_ic_idx, row.ranking_imbalance_first_c2_idx) == (9, True, 17, 10)
+    res = dataclasses.replace(_synthetic_result(), poi_zones=[_Poi(ic_idx=9, meta=meta)], ic_candidates=[row])
     d = pd.DataFrame(index=range(100))
     edm.mirror_lower_tf_result_to_entity_df(d, res, structure_path_id="p")
     (poi,), (r,) = d.attrs["poi_zones"], d.attrs["ic_candidates"]
     sb = res.meta["slice_begin"]
     assert (poi.meta["ranking_runner_up_ic_idx"], poi.meta["ranking_imbalance_first_c2_idx"],
-            poi.meta["ranking_in_play_count"]) == (17 + sb, 16 + sb, 3)
+            poi.meta["ranking_in_play_count"]) == (17 + sb, 10 + sb, 3)
     assert (r.ranking_runner_up_ic_idx, r.ranking_imbalance_first_c2_idx, r.ranking_in_play_count) == (
-        17 + sb, 16 + sb, 3)
+        17 + sb, 10 + sb, 3)
 
 
 def _ic_inputs(name):
@@ -344,7 +348,7 @@ def test_the_csv_carries_the_outcome_on_every_row_and_the_ranking_on_the_pick(tm
     """`ip_outcome` (record-level) on every row; the `ranking_*` columns on the picked row only; the ranked pick
     keeps its pattern DIAGNOSTICS (ICR-15); all pinbars -> the no-IC row `all_ic_candidates_pinbar`."""
     i = IC_CANDIDATE_COLUMNS.index("is_ic_candidate")
-    assert IC_CANDIDATE_COLUMNS[i + 1:i + 3] == ["ip_outcome", "ip_rank"]
+    assert IC_CANDIDATE_COLUMNS[i + 1:i + 4] == ["ic_zone_band", "ip_outcome", "ip_rank"]        # PLAN_P's column
     assert IC_CANDIDATE_COLUMNS[-4:] == ["ranking_rule", "ranking_runner_up_ic_idx", "ranking_in_play_count",
                                          "ranking_imbalance_first_c2_idx"]
     recs = derive_ic_candidates(*_ic_inputs("oldest_in_play"), structure_path_id="H1.main")
@@ -353,13 +357,14 @@ def test_the_csv_carries_the_outcome_on_every_row_and_the_ranking_on_the_pick(tm
     got = pd.read_csv(path, dtype=str, keep_default_na=False)
     assert list(got.columns) == IC_CANDIDATE_COLUMNS
     assert got[["ic_idx", "ip_outcome", "picked", "ranking_rule", "ranking_runner_up_ic_idx", "ranking_in_play_count",
-                "ranking_imbalance_first_c2_idx", "reason"]].values.tolist() == [
-        ["7", "no_pattern", "False", "", "", "", "", "continuation_not_big_maru"],
-        ["9", "no_pattern", "False", "", "", "", "", "continuation_not_big_maru"],
-        ["13", "no_pattern", "True", "most_recent_before_imbalance", "17", "3", "16", "continuation_not_big_maru"],
-        ["17", "no_pattern", "False", "", "", "", "", "continuation_not_big_maru"],
+                "ranking_imbalance_first_c2_idx", "reason", "ic_zone_band"]].values.tolist() == [
+        ["7", "no_pattern", "False", "", "", "", "", "continuation_not_big_maru", "61.8-80"],
+        ["9", "no_pattern", "True", "most_recent_before_imbalance", "17", "3", "10", "continuation_not_big_maru",
+         "61.8-80"],
+        ["13", "no_pattern", "False", "", "", "", "", "continuation_not_big_maru", "61.8-80"],
+        ["17", "no_pattern", "False", "", "", "", "", "continuation_not_big_maru", "61.8-80"],
     ]
-    assert got.loc[2, "ip_leg_candle_counts"] == "3-1-3" and got.loc[2, "legs"] != ""    # the diagnostics kept
+    assert got.loc[1, "ip_leg_candle_counts"] != "" and got.loc[1, "legs"] != ""          # the diagnostics kept
     recs = derive_ic_candidates(*_ic_inputs("all_pinbar"), structure_path_id="H1.main")
     assert [(r.ic_idx, r.ip_outcome, r.picked, r.reason) for r in recs] == [
         (7, "no_pattern", False, "continuation_not_big_maru"), (9, "no_pattern", False, "continuation_not_big_maru"),
@@ -371,14 +376,13 @@ def test_the_csv_carries_the_outcome_on_every_row_and_the_ranking_on_the_pick(tm
 def _ranked_meta(rule, runner_up=None, gap=None):
     return {"ip_outcome": "no_pattern", "ip_rank": None, "ip_leg_candle_counts": None, "pattern_anchor_idx": None,
             "opp_leg_first_idx": None, "pattern_end_idx": None, "pattern_confirmed_idx": None, "ip_tiebreak": None,
-            "ranking_rule": rule, "ranking_runner_up_ic_idx": runner_up, "ranking_imbalance_first_c2_idx": gap}
+            "ranking_rule": rule, "ranking_runner_up_ic_idx": runner_up, "ranking_imbalance_first_c2_idx": gap,
+            "ic_zone_band": "61.8-80"}
 
 
 @pytest.mark.parametrize("meta, text", [
     (_ranked_meta(None), "No pattern · only IC candidate"),
     (_ranked_meta("exclude_pinbar"), "No pattern · ranking rule exclude_pinbar"),
-    (_ranked_meta("immediate_unfilled_imbalance", 2570, 2577),
-     "No pattern · ranking rule immediate_unfilled_imbalance over 2570 (gap 2577)"),
     (_ranked_meta("ic_candle_type", 7), "No pattern · ranking rule ic_candle_type over 7"),
     (_ranked_meta("most_recent_before_imbalance", 17, 16),
      "No pattern · ranking rule most_recent_before_imbalance over 17 (gap 16)"),
@@ -395,6 +399,7 @@ def test_the_poi_hover_names_the_ranking_without_the_ic_index(meta, text):
     _ranked_meta("exclude_pinbar", 7),                                      # a runner-up rule 1 never computes
     _ranked_meta(None, 7),                                                  # a value without a rule
     _ranked_meta("TB1", 7),                                                 # not a ranking rule
+    _ranked_meta("immediate_unfilled_imbalance", 2570, 2577),               # gone since PLAN_P (IC condition 3)
     {**_ranked_meta(None), "ip_outcome": None},                             # a POI without its outcome
 ])
 def test_the_poi_hover_rejects_an_inconsistent_ranking(meta):
@@ -410,20 +415,24 @@ def test_a_pattern_poi_hover_rejects_a_ranking_rule():
 
 
 def test_the_ranking_constants_are_the_decided_words():
-    """PLAN_H §6 ICR-3: the ranking rules 2–4 take the tiebreak rules' descriptive words; the outcome / reasons."""
-    assert (RANKING_EXCLUDE_PINBAR, RANKING_IMMEDIATE_UNFILLED_IMBALANCE, RANKING_IC_CANDLE_TYPE,
-            RANKING_MOST_RECENT_BEFORE_IMBALANCE) == ("exclude_pinbar", "immediate_unfilled_imbalance",
-                                                      "ic_candle_type", "most_recent_before_imbalance")
+    """PLAN_H §6 ICR-3: the ranking rules 2–3 take the tiebreak rules' descriptive words; the outcome / reasons. The
+    immediate-unfilled-imbalance rule's constants are gone from both rule sets (PLAN_P — IC condition 3)."""
+    assert (RANKING_EXCLUDE_PINBAR, RANKING_IC_CANDLE_TYPE, RANKING_MOST_RECENT_BEFORE_IMBALANCE) == (
+        "exclude_pinbar", "ic_candle_type", "most_recent_before_imbalance")
+    assert not hasattr(poi_zones, "RANKING_IMMEDIATE_UNFILLED_IMBALANCE")
+    assert not hasattr(poi_zones, "TIEBREAK_IMMEDIATE_UNFILLED_IMBALANCE")
     assert (IP_OUTCOME_PATTERN, IP_OUTCOME_NO_PATTERN, NO_IC_CANDIDATE, ALL_IC_CANDIDATES_PINBAR) == (
         "pattern", "no_pattern", "no_ic_candidate", "all_ic_candidates_pinbar")
 
 
 def test_apply_ranking_rules_reads_the_checks_it_is_handed():
-    """A9: the immediate gap comes from the CHECKS (nothing re-derived) — a check stripped of its gap changes rule 2."""
-    sel, df = _sel("one_immediate")
-    fib = _fib_over(df, 6, 12, 0.5, 0.7)
+    """A9: the ranking rules rank the CHECKS they are handed (nothing re-derived from Step 1) and return the check's
+    own pattern: over all three normals / maru of `two_normals` → the maru 9; handed only the normals 7 / 11 → rule 3:
+    the oldest, 7 (its gap 8)."""
+    sel, df = _sel("two_normals")
+    fib = _fib_over(df, 6, 14, 0.5, 0.7)
     cands = sel.ic_candidates
-    assert apply_ranking_rules(df, fib, POIConfig(), cands)[0].ic_idx == 7
-    stripped = tuple(dataclasses.replace(c, immediate_imbalance_first_c2_idx=None) for c in cands)
-    pick, ranking = apply_ranking_rules(df, fib, POIConfig(), stripped)
-    assert (pick.ic_idx, ranking[0]) == (9, "ic_candle_type")
+    pick, _ = apply_ranking_rules(df, fib, POIConfig(), cands)
+    assert pick.ic_idx == 9 and pick is next(c.pattern for c in cands if c.ic_idx == 9)
+    normals = tuple(c for c in cands if c.ic_idx in (7, 11))
+    assert apply_ranking_rules(df, fib, POIConfig(), normals)[1] == (RANKING_MOST_RECENT_BEFORE_IMBALANCE, 11, 2, 8)

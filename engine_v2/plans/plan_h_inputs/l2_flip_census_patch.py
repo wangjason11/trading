@@ -1,6 +1,9 @@
 """PLAN_L landing 2 — the flip census: the ranking rules' BEHAVIOUR (no format, no names) patched onto the L1 code,
 to re-measure which existing pins L2 flips (PLAN_L §4.4 — the trial's 9 were measured at `92b8b61`, before L1).
 
+SUPERSEDED since PLAN_P (2026-10-13): it patches code that no longer exists (the immediate-unfilled-imbalance
+rule, then ranking rule 2). Kept as PLAN_L's record.
+
     python l2_flip_census_patch.py TREE      (TREE = a `git archive` of the L1 code; each edit must match exactly once)
 
 Then `cd TREE && python -m pytest -q -p no:cacheprovider` (TREE holds a copy of oanda.cfg). The rules as decided

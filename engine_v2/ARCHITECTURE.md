@@ -297,9 +297,12 @@ POI activation conditions
      `max(inst.formed_at, first_active)` and leaves at its cached stroke-2
      candle (`_compute_fill_idx_cache`). See `IMBALANCE_FILL_SEMANTICS.md`
      ("Knowability — the c3 rule" + the predicate). Flips as imbalances
-     form / commit-fill.
-  5. The touch — the IC candle touches the 61.8-80% zone of the fib AS OF
-     t (from `bos_price` and the time-varying `cts_price_at(t)`; inclusive
+     form / commit-fill. The POI's OWN condition — ANY gap after the IC —
+     decoupled from IC identification since PLAN_P (2026-10-13), whose IC
+     condition 3 is the IMMEDIATE gap (POI_ZONES_SPEC §3.1 / §4 "Lifecycle").
+  5. The touch — the IC candle touches the zone of the fib AS OF t in the
+     band the IC was identified in (61.8-80%, or 80-100% for a Step 1A IC —
+     `ic_zone_band`, PLAN_P) (from `bos_price` and the time-varying `cts_price_at(t)`; inclusive
      edges; the selection's own `fib_zone_bounds` + `ic_touches_zone`) —
      it can be lost or gained as `cts_price` extends and the zone slides
      (reason `ic_not_touching_fib_zone`). Until PLAN_H landing B
@@ -311,7 +314,8 @@ POI activation conditions
   (a ranked IC has no pattern term — PLAN_H §6 ICR-2, PLAN_L L2).
 The IC itself is ONE per fib record since landing B: `select_ic`'s pick — the
 institutional pattern's IC (POI_ZONES_SPEC §3.4) or, with no pattern, a ranked
-IC (§3.6, PLAN_L L2, 2026-10-10) — the same selector MS's
+IC (§3.6, PLAN_L L2, 2026-10-10), among the candidates of Step 1 (the 61.8–80
+zone) or, when it finds none, Step 1A (the 80–100 zone, PLAN_P) — the same selector MS's
 in-flight sd-proximity read uses (D2), on the same fib decision since PLAN_I S5
 (MS's embedded FibTracker, CROSS_CYCLE_FIB_SPEC §8). The IC reference
 condition (IC condition 2 in POI_ZONES_SPEC §3.1's numbering; the activation

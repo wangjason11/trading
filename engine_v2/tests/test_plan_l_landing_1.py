@@ -34,7 +34,6 @@ from engine_v2.zones.poi_zones import (
     apply_tiebreak_rules,
     check_ic_conditions,
     derive_ic_candidates,
-    filter_immediate_unfilled_imbalance,
     find_ic_candidates,
     find_ic_variant_candidates,
     immediate_unfilled_imbalance_first_c2_idx,
@@ -55,25 +54,30 @@ def _checks(df, fib, ref=ICReference.NONE):
 # ---------------------------------------------------------------------------
 
 def test_each_condition_is_reported_on_its_own():
-    """`_tb2_frame` ICs 7 / 9 / 11 (highs 0.60093 / 0.60129 / 0.60165). One gap, first c2 10 → condition 3: 7 / 9
-    yes, 11 no; a zone from just above 7's high → condition 4: 7 misses; a reference 0.60150 → condition 2: 11 is
-    past it. So 7 fails ONLY the touch, 9 passes all four, 11 fails the reference AND condition 3."""
+    """`_tb2_frame` ICs 7 / 9 / 11 (highs 0.60093 / 0.60129 / 0.60165). Gaps first c2 8 and 10 → condition 3 (the
+    immediate gap, PLAN_P): 7 / 9 yes, 11 no; a zone from just above 7's high → condition 4: 7 misses; a reference
+    0.60150 → condition 2: 11 is past it. So 7 fails ONLY the touch, 9 passes all four, 11 fails the reference AND
+    condition 3."""
     df = _tb2_frame()
-    df.attrs["imbalances"] = [_far_gap(10)]
+    df.attrs["imbalances"] = [_far_gap(8), _far_gap(10)]
     h7, h9, h11 = (round(float(df.loc[i, "h"]), 5) for i in (7, 9, 11))
     assert (h7, h9, h11) == (0.60093, 0.60129, 0.60165)
     fib = _fib_over(df, 6, 12, h7 + 0.00001, 0.6100)
     checks = _checks(df, fib, ICReference(0.60150, "prev_cycle_cts"))
-    got = {c.ic_idx: (c.has_unfilled_imbalance_after, c.touches_zone, c.ic_ref_reason, c.is_ic_candidate)
+    got = {c.ic_idx: (c.immediate_imbalance_first_c2_idx, c.touches_zone, c.ic_ref_reason, c.is_ic_candidate)
            for c in checks}
-    assert got == {7: (True, False, None, False), 9: (True, True, None, True), 11: (False, True, PAST, False)}
-    # condition 3 IS `has_unfilled_imbalance` over (idx, CTS anchor], fill horizon the anchor (no knowability cut)
+    assert got == {7: (8, False, None, False), 9: (10, True, None, True), 11: (None, True, PAST, False)}
+    # condition 3 IS `immediate_unfilled_imbalance_first_c2_idx` (set on EVERY check, unclassified too — PLAN_P); the
+    # retired condition 3 is `has_unfilled_imbalance` over (idx, CTS anchor], fill horizon the anchor (information)
     for c in checks:
+        assert c.immediate_imbalance_first_c2_idx == immediate_unfilled_imbalance_first_c2_idx(df, c.ic_idx, fib,
+                                                                                               POIConfig())
         assert c.has_unfilled_imbalance_after is has_unfilled_imbalance(
             df, start_idx=c.ic_idx + 1, end_idx=12, check_to_idx=12, direction=1, fill_threshold=0.70,
             evaluated_at=None)
+    assert [c.has_unfilled_imbalance_after for c in checks] == [True, True, False]
     assert find_ic_candidates(checks) == [9]
-    assert all(c.pattern is None and c.immediate_imbalance_first_c2_idx is None for c in checks)   # unclassified
+    assert all(c.pattern is None for c in checks)                                                  # unclassified
 
 
 def test_the_checks_are_every_agreed_opposite_candle_of_the_window():
@@ -88,13 +92,6 @@ def test_the_checks_are_every_agreed_opposite_candle_of_the_window():
 # ---------------------------------------------------------------------------
 # The shared rule helpers — one function, each rule set's own input list (ICR-9)
 # ---------------------------------------------------------------------------
-
-def test_the_immediate_imbalance_filter_on_two_input_lists():
-    immediate = {3: None, 5: 7, 8: None, 11: 12}
-    assert filter_immediate_unfilled_imbalance([3, 5, 8], immediate) == [5]
-    assert filter_immediate_unfilled_imbalance([3, 8], immediate) == []
-    assert filter_immediate_unfilled_imbalance([5, 8, 11], immediate) == [5, 11]
-
 
 def test_the_candle_type_rule_with_and_without_pinbar():
     df = pd.DataFrame({"candle_type": ["maru", "normal", "pinbar", "maru"]}, index=[1, 2, 3, 4])
@@ -169,8 +166,9 @@ def test_the_csv_lists_a_candle_failing_condition_3_with_its_outcomes(tmp_path):
     cols = list(out.columns)
     assert cols == IC_CANDIDATE_COLUMNS
     k = cols.index("immediate_imbalance_first_c2_idx")
-    assert cols[k + 1: k + 3] == ["has_unfilled_imbalance_after", "is_ic_candidate"]
+    assert cols[k + 1: k + 4] == ["has_unfilled_imbalance_after", "is_ic_candidate", "ic_zone_band"]   # PLAN_P
     assert out["has_unfilled_imbalance_after"].tolist() == [True, False, False]
+    assert out["immediate_imbalance_first_c2_idx"].fillna(-1).tolist() == [8, -1, -1]    # condition 3 (PLAN_P)
     assert out["is_ic_candidate"].tolist() == [True, False, False]
 
 
@@ -187,11 +185,13 @@ def test_the_none_row_leaves_the_two_columns_empty():
 
 def test_a_cts_anchor_candle_is_checked_and_can_never_be_a_candidate():
     """The window is BOS … CTS INCLUSIVE: with the CTS anchor on IC 11 (an opposite candle), 11 is a check — its
-    condition 3 window `(11, 11]` is empty, so it fails it (mutation L05: a window ending before the anchor)."""
+    condition 3 window (IC + 1 … min(IC + 2, the anchor) — empty) finds nothing, nor does the retired one's `(11,
+    11]`, so it fails (mutation L05: a window ending before the anchor). Gaps 8 / 10: 7 and 9 pass."""
     df = _tb2_frame()
-    df.attrs["imbalances"] = [_far_gap(10)]
+    df.attrs["imbalances"] = [_far_gap(8), _far_gap(10)]
     checks = _checks(df, _fib_over(df, 6, 11, 0.5, 0.7))
-    assert [(c.ic_idx, c.has_unfilled_imbalance_after) for c in checks] == [(7, True), (9, True), (11, False)]
+    assert [(c.ic_idx, c.immediate_imbalance_first_c2_idx, c.has_unfilled_imbalance_after) for c in checks] == [
+        (7, 8, True), (9, 10, True), (11, None, False)]
     assert find_ic_candidates(checks) == [7, 9]
 
 
@@ -200,7 +200,7 @@ def test_the_candle_type_runner_up_is_the_best_losing_type():
     type — the normal 3, not the more recent pinbar 8 (mutation L20: the most recent loser)."""
     df = pd.DataFrame({"candle_type": ["normal", "maru", "pinbar"]}, index=[3, 5, 8])
     tied = [IPResult(ic_idx=3), IPResult(ic_idx=5), IPResult(ic_idx=8)]
-    pick, tb = apply_tiebreak_rules(df, None, POIConfig(), tied, {3: None, 5: None, 8: None})
+    pick, tb = apply_tiebreak_rules(df, None, POIConfig(), tied)
     assert pick.ic_idx == 5 and tb == (TIEBREAK_IC_CANDLE_TYPE, 3, 3, None)
 
 
@@ -239,14 +239,15 @@ def test_the_active_or_locked_guard_holds_for_both_consumers():
 
 
 def test_the_most_recent_rule_runner_up_is_among_the_best_type_only():
-    """Tiebreak rule 3 deciding: its runner-up = the most recent OTHER IC of the candle type's survivors (the marus 7 /
-    9), never a more recent IC of a worse type still in play (the normal 11). Reference gap 10 → 9 over 7, the count
-    2 (mutation R02 — the landing review: the runner-up over the whole rule-2 input)."""
+    """Tiebreak rule 2 (the most recent before the imbalance; rule 3 until PLAN_P) deciding: its runner-up = the most
+    recent OTHER IC of the candle type's survivors (the marus 7 / 9), never a more recent IC of a worse type still in
+    play (the normal 11). The function on its own (no Step 1 here): reference gap 10 → 9 over 7, the count 2
+    (mutation R02 — the landing review: the runner-up over the whole rule-1 input)."""
     df = _tb2_frame().copy()
     df.attrs["imbalances"] = [_far_gap(10)]
     df.loc[11, "candle_type"] = "normal"
     fib = _fib_over(df, 6, 12, 0.5, 0.7)
     tied = [IPResult(ic_idx=7), IPResult(ic_idx=9), IPResult(ic_idx=11)]
-    pick, tb = apply_tiebreak_rules(df, fib, POIConfig(), tied, {7: None, 9: None, 11: None})
+    pick, tb = apply_tiebreak_rules(df, fib, POIConfig(), tied)
     assert pick.ic_idx == 9 and tb == (TIEBREAK_MOST_RECENT_BEFORE_IMBALANCE, 7, 2, 10)
 

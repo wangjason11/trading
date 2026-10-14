@@ -1,0 +1,94 @@
+=== H1
+  IC outcome per POI record: 5 → 5 keys, 4 differ
+    ('', '0', '0', '96', '430'): 180 no pattern rank=exclude_pinbar  →  none (all_ic_candidates_pinbar)
+    ('', '1', '0', '689', '710'): 694 no pattern rank=most_recent_before_imbalance  →  none (all_ic_candidates_pinbar)
+    ('', '1', '1', '689', '761'): 732 IP 3A.iv  →  none (all_ic_candidates_pinbar)
+    ('', '1', '2', '826', '905'): 832 IP 3C.ii  →  859 no pattern rank=exclude_pinbar
+  drawn POIs: 5 → 2 keys, 5 differ
+    ('', '0', '0', '96', '430'): ic 180 [0.56684, 0.56781] status=ended confirmed=430.0  →  —
+    ('', '0', '1', '591', '652'): ic 607 [0.57676, 0.57712] status=ended confirmed=652.0  →  ic 607 [0.57676, 0.57712] status=ended confirmed=652
+    ('', '1', '0', '689', '710'): ic 694 [0.58292, 0.58325] status=inactive confirmed=  →  —
+    ('', '1', '1', '689', '761'): ic 732 [0.58068, 0.58118] status=inactive confirmed=  →  —
+    ('', '1', '2', '826', '905'): ic 832 [0.57866, 0.57979] status=active confirmed=998.0  →  ic 859 [0.57786, 0.5785] status=active confirmed=998
+  structure events: 329 → 329; removed 1, added 1
+    - ('', '1', '2', 'CTS_CONFIRMED', '939', '0.57112')
+    + ('', '1', '2', 'CTS_CONFIRMED', '935', '0.57112')
+  fib records: 5 → 5 keys, 0 differ
+  kl_zones: rows 10 → 10 (DIFFER)
+  wvmi: rows 3 → 3 (DIFFER)
+=== M15 counter
+  IC outcome per POI record: 7 → 7 keys, 6 differ
+    ('3', '0', '0', '2639', '2736'): 2704 IP 1A.i  →  none (all_ic_candidates_pinbar)
+    ('3', '0', '1', '2758', '2842'): 2798 IP 2B.iii  →  2808 IP 3B.iii
+    ('3', '0', '2', '2758', '3047'): 2837 IP 1A.iv  →  2930 IP 3C.iv
+    ('7', '0', '0', '4027', '4086'): 4035 IP 2C.iii  →  4048 IP 3C.iv
+    ('7', '0', '1', '4027', '4157'): 4051 IP 2A.iv  →  4131 IP 3B.iii
+    ('7', '0', '2', '4027', '4222'): 4083 IP 1A.iv tb=most_recent_before_imbalance  →  4131 IP 3B.iii [zone 80-100]
+  drawn POIs: 7 → 6 keys, 7 differ
+    ('3', '0', '0', '2639', '2736'): ic 2704 [0.58344, 0.58376] status=inactive confirmed=  →  —
+    ('3', '0', '1', '2758', '2842'): ic 2798 [0.58261, 0.58304] status=ended confirmed=2829.0  →  ic 2808 [0.58279, 0.58318] status=ended confirmed=2829
+    ('3', '0', '2', '2758', '3047'): ic 2837 [0.5799, 0.58038] status=ended confirmed=3047.0  →  ic 2930 [0.58096, 0.58118] status=ended confirmed=3027
+    ('5', '0', '0', '3621', '3760'): ic 3654 [0.57276, 0.57306] status=ended confirmed=3759.0  →  ic 3654 [0.57276, 0.57306] status=ended confirmed=3743
+    ('7', '0', '0', '4027', '4086'): ic 4035 [0.57395, 0.57436] status=inactive confirmed=  →  ic 4048 [0.57454, 0.57484] status=ended confirmed=4143
+    ('7', '0', '1', '4027', '4157'): ic 4051 [0.5749, 0.57512] status=ended confirmed=4159.0  →  ic 4131 [0.57422, 0.57462] status=ended confirmed=4157
+    ('7', '0', '2', '4027', '4222'): ic 4083 [0.57604, 0.57645] status=active confirmed=4222.0  →  ic 4131 [0.57422, 0.57462] status=active confirmed=4179
+  structure events: 481 → 481; removed 0, added 0
+  fib records: 5 → 5 keys, 1 differ
+    ('H1.main >> M15.counter', '0', '1', '0.0'): bos 4027 cts 4157 life [4159.0, 4177.0] new_cycle ended active=True locked=True  →  bos 4027 cts 4157 life [4143.0, 4177.0] new_cycle ended active=True locked=True
+  subs: 3 → 3 keys, 2 differ
+    5: direction=1 starting_idx=3621 start_idx=3759 end_idx=4159.0 end_reason=same_dir_replacement  →  direction=1 starting_idx=3621 start_idx=3743 end_idx=4143.0 end_reason=same_dir_replacement
+    7: direction=1 starting_idx=4027 start_idx=4159 end_idx= end_reason=  →  direction=1 starting_idx=4027 start_idx=4143 end_idx= end_reason=
+  triggers: 3 → 3 keys, 4 differ
+    ('1', '2', 'first_counter', '3743'): —  →  sub 5 start 3743 end 4143.0
+    ('1', '2', 'first_counter', '3759'): sub 5 start 3759 end 4159.0  →  —
+    ('1', '2', 'subsequent_counter', '4143'): —  →  sub 7 start 4143 end 
+    ('1', '2', 'subsequent_counter', '4159'): sub 7 start 4159 end   →  —
+  kl_zones: rows 8 → 8 (DIFFER)
+  wvmi: rows 6 → 6 (DIFFER)
+=== M15 confluence
+  IC outcome per POI record: 20 → 20 keys, 19 differ
+    ('0', '0', '0', '454', '784'): 670 no pattern rank=most_recent_before_imbalance  →  650 no pattern rank=exclude_pinbar [zone 80-100]
+    ('0', '0', '1', '917', '1020'): 929 no pattern rank=exclude_pinbar  →  923 IP 3C.iv [zone 80-100]
+    ('0', '0', '2', '1107', '1245'): 1117 IP 1A.iv  →  1216 no pattern rank=ic_candle_type
+    ('0', '0', '3', '1310', '1721'): 1660 IP 1A.iv tb=immediate_unfilled_imbalance  →  1660 IP 1A.iv
+    ('0', '0', '4', '1761', '1794'): 1772 IP 2B.iv  →  1778 no pattern (only cand)
+    ('1', '0', '0', '1797', '1816'): 1804 no pattern rank=most_recent_before_imbalance  →  none (no_ic_candidate) [zone 80-100]
+    ('1', '0', '1', '1837', '1898'): 1875 IP 3C.iv tb=most_recent_before_imbalance  →  1890 IP 3D.ii
+    ('1', '0', '2', '1934', '1945'): none (no_ic_candidate)  →  1934 no pattern rank=exclude_pinbar [zone 80-100]
+    ('1', '0', '3', '2078', '2231'): 2106 IP 1B.iii  →  none (no_ic_candidate) [zone 80-100]
+    ('2', '0', '0', '2365', '2557'): 2383 IP 3A.iv  →  none (all_ic_candidates_pinbar) [zone 80-100]
+    ('2', '0', '1', '2561', '2609'): 2575 no pattern rank=immediate_unfilled_imbalance  →  2575 no pattern rank=exclude_pinbar
+    ('3', '0', '0', '2639', '2736'): 2704 IP 1A.i  →  none (all_ic_candidates_pinbar)
+    ('3', '0', '1', '2758', '2842'): 2798 IP 2B.iii  →  2808 IP 3B.iii
+    ('3', '0', '2', '2758', '3047'): 2837 IP 1A.iv  →  2930 IP 3C.iv
+    ('4', '0', '0', '3304', '3621'): 3388 IP 1A.iii  →  3427 IP 3C.iii
+    ('6', '0', '0', '3760', '4000'): 3809 no pattern rank=immediate_unfilled_imbalance  →  3809 no pattern rank=exclude_pinbar
+    ('7', '0', '0', '4027', '4086'): 4035 IP 2C.iii  →  4048 IP 3C.iv
+    ('7', '0', '1', '4027', '4157'): 4051 IP 2A.iv  →  4131 IP 3B.iii
+    ('7', '0', '2', '4027', '4222'): 4083 IP 1A.iv tb=most_recent_before_imbalance  →  4131 IP 3B.iii [zone 80-100]
+  drawn POIs: 19 → 16 keys, 16 differ
+    ('0', '0', '0', '454', '784'): ic 670 [0.56192, 0.5622] status=inactive confirmed=  →  ic 650 [0.56075, 0.5611] status=inactive confirmed=
+    ('0', '0', '1', '917', '1020'): ic 929 [0.5719, 0.57246] status=ended confirmed=1020.0  →  ic 923 [0.57075, 0.57107] status=ended confirmed=1020.0
+    ('0', '0', '2', '1107', '1245'): ic 1117 [0.5724, 0.57264] status=ended confirmed=1224.0  →  ic 1216 [0.57346, 0.57478] status=ended confirmed=1230.0
+    ('0', '0', '4', '1761', '1794'): ic 1772 [0.57994, 0.58043] status=ended confirmed=1932.0  →  ic 1778 [0.58029, 0.58074] status=ended confirmed=1932.0
+    ('1', '0', '0', '1797', '1816'): ic 1804 [0.58178, 0.5823] status=inactive confirmed=  →  —
+    ('1', '0', '1', '1837', '1898'): ic 1875 [0.58074, 0.58118] status=inactive confirmed=  →  ic 1890 [0.58106, 0.58158] status=inactive confirmed=
+    ('1', '0', '2', '1934', '1945'): —  →  ic 1934 [0.58044, 0.58088] status=ended confirmed=2230.0
+    ('1', '0', '3', '2078', '2231'): ic 2106 [0.57868, 0.57918] status=ended confirmed=2231.0  →  —
+    ('2', '0', '0', '2365', '2557'): ic 2383 [0.57588, 0.5761] status=ended confirmed=2470.0  →  —
+    ('3', '0', '0', '2639', '2736'): ic 2704 [0.58344, 0.58376] status=inactive confirmed=  →  —
+    ('3', '0', '1', '2758', '2842'): ic 2798 [0.58261, 0.58304] status=ended confirmed=2829.0  →  ic 2808 [0.58279, 0.58318] status=ended confirmed=2829.0
+    ('3', '0', '2', '2758', '3047'): ic 2837 [0.5799, 0.58038] status=ended confirmed=3047.0  →  ic 2930 [0.58096, 0.58118] status=ended confirmed=3027.0
+    ('4', '0', '0', '3304', '3621'): ic 3388 [0.57809, 0.5785] status=ended confirmed=3621.0  →  ic 3427 [0.57885, 0.5792] status=ended confirmed=3621.0
+    ('7', '0', '0', '4027', '4086'): ic 4035 [0.57395, 0.57436] status=inactive confirmed=  →  ic 4048 [0.57454, 0.57484] status=ended confirmed=4143.0
+    ('7', '0', '1', '4027', '4157'): ic 4051 [0.5749, 0.57512] status=ended confirmed=4159.0  →  ic 4131 [0.57422, 0.57462] status=ended confirmed=4157.0
+    ('7', '0', '2', '4027', '4222'): ic 4083 [0.57604, 0.57645] status=active confirmed=4222.0  →  ic 4131 [0.57422, 0.57462] status=active confirmed=4179.0
+  structure events: 1346 → 1346; removed 0, added 0
+  fib records: 7 → 7 keys, 1 differ
+    ('H1.main >> M15.confluence', '0', '1', '0.0'): bos 4027 cts 4157 life [4159.0, 4177.0] new_cycle ended active=True locked=True  →  bos 4027 cts 4157 life [4143.0, 4177.0] new_cycle ended active=True locked=True
+  subs: 7 → 7 keys, 1 differ
+    7: direction=1 starting_idx=4027 start_idx=4159 end_idx= end_reason=  →  direction=1 starting_idx=4027 start_idx=4143 end_idx= end_reason=
+  triggers: 8 → 8 keys, 0 differ
+  kl_zones: rows 21 → 21 (DIFFER)
+  wvmi: rows 17 → 17 (DIFFER)
+unresolved triggers: 4 → 4

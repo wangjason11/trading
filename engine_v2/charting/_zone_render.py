@@ -21,14 +21,14 @@ from engine_v2.charting.style_registry import STYLE
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
 from engine_v2.zones.poi_lifecycle import active_stretches_from_history
 from engine_v2.zones.poi_zones import (
+    IC_ZONE_FALLBACK,
+    IC_ZONE_PRIMARY,
     IP_OUTCOME_NO_PATTERN,
     IP_OUTCOME_PATTERN,
     RANKING_EXCLUDE_PINBAR,
     RANKING_IC_CANDLE_TYPE,
-    RANKING_IMMEDIATE_UNFILLED_IMBALANCE,
     RANKING_MOST_RECENT_BEFORE_IMBALANCE,
     TIEBREAK_IC_CANDLE_TYPE,
-    TIEBREAK_IMMEDIATE_UNFILLED_IMBALANCE,
     TIEBREAK_MOST_RECENT_BEFORE_IMBALANCE,
 )
 
@@ -145,7 +145,6 @@ def compute_poi_active_stretches(
 # The ranking rules' runner-up / gap per deciding rule (PLAN_L §4.1, ICR-14): which values the hover line carries.
 _RANKING_HOVER_PARTS = {
     RANKING_EXCLUDE_PINBAR: (False, False),
-    RANKING_IMMEDIATE_UNFILLED_IMBALANCE: (True, True),
     RANKING_IC_CANDLE_TYPE: (True, False),
     RANKING_MOST_RECENT_BEFORE_IMBALANCE: (True, True),
 }
@@ -183,13 +182,18 @@ def poi_ic_hover_text(meta: dict, ic_idx: int) -> str:
     sites (the H1 chart, the M15 lens charts' sub POIs and their H1 overlay;
     PLAN_H HV): `IP <rank> · legs a-b-c (initial | opp | continuation)` with
     each leg as `first–last` (one candle: its index), + `<br>Tiebreak over <IC>:
-    immediate unfilled imbalance <c2>` / `…: IC candle type` / `…: most recent
-    before imbalance <c2>` when a tiebreaker decided (`poi_zones.TIEBREAK_*`). Indices are the POI's own (entity-absolute on a
+    IC candle type` / `…: most recent before imbalance <c2>` when a tiebreaker
+    decided (`poi_zones.TIEBREAK_*`; the `immediate unfilled imbalance` line
+    went with its rule, PLAN_P). Indices are the POI's own (entity-absolute on a
     mirrored sub POI); the counts must match the leg indices (asserted — a
     missed mirror shift would break it). A ranked IC (`ip_outcome`
-    "no_pattern", PLAN_L L2): its ranking line instead (`_poi_ranking_hover_text`)."""
+    "no_pattern", PLAN_L L2): its ranking line instead (`_poi_ranking_hover_text`). An IC from the 80–100 fallback
+    zone (Step 1A, `ic_zone_band`) adds `<br>IC zone 80-100 (fallback)`; the 61.8–80 band adds nothing (PLAN_P)."""
+    assert meta["ic_zone_band"] in (IC_ZONE_PRIMARY, IC_ZONE_FALLBACK), (
+        f"[chart] POI {ic_idx} ic_zone_band {meta['ic_zone_band']!r}")
+    band = "<br>IC zone 80-100 (fallback)" if meta["ic_zone_band"] == IC_ZONE_FALLBACK else ""
     if meta["ip_outcome"] == IP_OUTCOME_NO_PATTERN:
-        return _poi_ranking_hover_text(meta, ic_idx)
+        return _poi_ranking_hover_text(meta, ic_idx) + band
     assert meta["ip_outcome"] == IP_OUTCOME_PATTERN, f"[chart] POI {ic_idx} ip_outcome {meta['ip_outcome']!r}"
     assert meta["ranking_rule"] is None, f"[chart] pattern POI {ic_idx} carries ranking_rule {meta['ranking_rule']!r}"
     n_init, n_opp, n_cont = (int(x) for x in meta["ip_leg_candle_counts"].split("-"))
@@ -205,17 +209,14 @@ def poi_ic_hover_text(meta: dict, ic_idx: int) -> str:
     text = (f"IP {meta['ip_rank']} · legs {n_init}-{n_opp}-{n_cont} "
             f"({_rng(anchor, opp_first - 1)} | {_rng(opp_first, ic)} | {_rng(ic + 1, end)})")
     tb = meta["ip_tiebreak"]
-    if tb == TIEBREAK_IMMEDIATE_UNFILLED_IMBALANCE:
-        text += (f"<br>Tiebreak over {meta['ip_tb_runner_up_ic_idx']}: "
-                 f"immediate unfilled imbalance {meta['ip_tb_imbalance_first_c2_idx']}")
-    elif tb == TIEBREAK_IC_CANDLE_TYPE:
+    if tb == TIEBREAK_IC_CANDLE_TYPE:
         text += f"<br>Tiebreak over {meta['ip_tb_runner_up_ic_idx']}: IC candle type"
     elif tb == TIEBREAK_MOST_RECENT_BEFORE_IMBALANCE:
         text += (f"<br>Tiebreak over {meta['ip_tb_runner_up_ic_idx']}: "
                  f"most recent before imbalance {meta['ip_tb_imbalance_first_c2_idx']}")
     else:
         assert tb is None, f"[chart] POI {ic} unknown ip_tiebreak {tb!r}"
-    return text
+    return text + band
 
 
 # ---------------------------------------------------------------------------
@@ -330,9 +331,11 @@ def fib_hover_status_text(fib_st: Any, ic_row: Optional[Any]) -> str:
     index KEPT: the fib box's only pointer to its IC, ICR-15), `IC: none
     (<reason>)` (no IC → no POI: `no_ic_candidate` / `all_ic_candidates_pinbar`),
     or `IC: not evaluated (no POI record)` (no row: the POI record gate skipped
-    the record — ended before locking, or no CTS_ESTABLISHED), the record's IC
-    reference (`fib_hover_ic_ref_text`, PLAN_K A17), and the structure's
-    cross-fib limit (`fib_hover_limit_text`, PLAN_I R6-7)."""
+    the record — ended before locking, or no CTS_ESTABLISHED) — + ` · zone
+    80-100 (fallback)` when Step 1A ran (`ic_zone_band`, PLAN_P: on a pick, or
+    on a no-IC row = no IC in either zone) —, the record's IC reference
+    (`fib_hover_ic_ref_text`, PLAN_K A17), and the structure's cross-fib limit
+    (`fib_hover_limit_text`, PLAN_I R6-7)."""
     start = "–" if fib_st.start_idx is None else int(fib_st.start_idx)
     end = "open" if fib_st.end_idx is None else int(fib_st.end_idx)
     life = f"life=[{start}, {end}]" + (f" {fib_st.end_reason}" if fib_st.end_reason else "")
@@ -347,6 +350,11 @@ def fib_hover_status_text(fib_st: Any, ic_row: Optional[Any]) -> str:
         assert ic_row.ip_outcome == IP_OUTCOME_PATTERN, (
             f"[chart] picked row {ic_row.ic_idx} ip_outcome {ic_row.ip_outcome!r}")
         ip = f"IP {ic_row.ip_rank} · IC {int(ic_row.ic_idx)}"
+    if ic_row is not None:
+        assert ic_row.ic_zone_band in (IC_ZONE_PRIMARY, IC_ZONE_FALLBACK), (
+            f"[chart] IC row {ic_row.ic_idx} ic_zone_band {ic_row.ic_zone_band!r}")
+        if ic_row.ic_zone_band == IC_ZONE_FALLBACK:
+            ip += " · zone 80-100 (fallback)"
     status = getattr(fib_st, "status", "active")
     text = f"{status}{' (locked)' if fib_st.locked else ''}<br>{life}<br>{ip}"
     ic_ref = fib_hover_ic_ref_text(fib_st)

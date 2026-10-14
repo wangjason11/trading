@@ -2056,11 +2056,15 @@ resolver argument; `structure_engine` reads the module global at call time).
 
 ## "Why didn't the new tiebreaker move this POI?" — the tiebreakers run ONLY inside a (rank, shape) tie (IP tiebreaker update, 2026-10-09)
 
-The institutional pattern picks the best (rank, shape) first; the tiebreakers (immediate unfilled imbalance → IC
-candle type → most recent before the imbalance, POI_ZONES_SPEC §3.4) only choose among ICs TIED on it. A pick that
+The institutional pattern picks the best (rank, shape) first; the tiebreakers (IC candle type → most recent before
+the imbalance since PLAN_P — the immediate unfilled imbalance ran first until then, POI_ZONES_SPEC §3.4) only choose
+among ICs TIED on it. A pick that
 fails a tiebreaker's criterion is still the IC when it is the record's only best pattern. The user's chart review:
 H1 sid 1 cyc 2 kept 832 (3C.ii) although its immediate gap 833 filled at 858 — 832 is the record's ONLY patterned
 candidate; the expected 860 has an unfilled immediate gap but no pattern (continuation big ratio 0.63 < 0.65).
+**Since PLAN_P (2026-10-13)** that record's IC is **859**, not 860: 832 fails IC condition 3 (the immediate gap),
+the IC candidates are 859 (normal, gap 861), 860 (a PINBAR sharing that gap) and 865 (pinbar), none patterned →
+ranking rule 1 excludes the pinbars → 859.
 
 **Check, in the `*_ic_candidates.csv` rows of the record (`*_ip_candidates.csv` before PLAN_L L1):** how many IC candidates (`is_ic_candidate` True — before L1: `touches_zone` True, empty
 `ic_ref_reason`) carry the best `ip_rank` — rank + shape, e.g. "3C.ii" (one → no tie, no

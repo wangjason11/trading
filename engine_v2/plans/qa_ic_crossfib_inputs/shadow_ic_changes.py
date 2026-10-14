@@ -1,6 +1,9 @@
 """Read-only SHADOW of the user's three IC changes (2026-10-13 write-up, `user_writeup_20261013.md`) on today's
 structure — no engine edit. Per drawn POI record (every entity: the H1 main + every sub projection) the pick under:
 
+SUPERSEDED since PLAN_P (2026-10-13): its V1 / V123 ARE the engine now (V0 = the rule before PLAN_P), so a re-run
+on the PLAN_P code no longer reproduces V0 as the real pick. Kept as the record of the measurement.
+
   V0   today (asserted == the real `select_ic` pick)
   V1   change 1: IC condition 3 = an unfilled sd imbalance IMMEDIATELY after (first c2 in IC+1 … IC+2, fill through
        the CTS anchor — `immediate_unfilled_imbalance_first_c2_idx`); the tiebreak / ranking immediate rule is then a

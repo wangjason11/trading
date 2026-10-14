@@ -2,6 +2,9 @@
 PLAN_K landing-B format) == the prediction measured BEFORE the build on 2d199fd (`tb_imb_measure.py` /
 `tb_imb_dump.py`, PLAN_H §8.9 "The IP tiebreaker update").
 
+SUPERSEDED since PLAN_P (2026-10-13): it reads the tiebreak value `immediate_unfilled_imbalance`, which no save
+from S_P on holds; diff S_P-format saves with `qa_ic_crossfib_inputs/cmp_trial.py`. Kept as the record.
+
 Usage (repo root): python engine_v2/plans/plan_h_inputs/cmp_tbu.py BASE_SAVE [CUR_DEBUG]
 
 1. every CSV md5-equal, except the 3 `*_ip_candidates.csv` (the new column) and the confluence + counter

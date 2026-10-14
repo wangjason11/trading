@@ -15,6 +15,11 @@ Planning shorthand: L1 / L2 = the two landings; ICR-* = PLAN_H §6 rows (each ha
 
 ## 1. The rule as decided
 
+> **Since PLAN_P (2026-10-13):** IC condition 3 = the immediate unfilled imbalance (IC + 1 … IC + 2), the immediate
+> rule left both rule sets (tiebreak rules: candle type → most recent; ranking rules: exclude pinbars → maru > normal →
+> most recent), and Step 1A (the 80–100 fallback zone when Step 1 finds no IC candidate) was added —
+> `PLAN_P_ic_condition3_step1a.md`, POI_ZONES_SPEC §3. The text below is PLAN_L's record (§1, §3.1, §4.1).
+
 Per POI record (a gated fib record, BOS anchor `b`, CTS anchor `c`, direction `sd`), in order — each step, and each
 rule set inside it, runs sequentially (ICR-S):
 
@@ -176,6 +181,8 @@ helper's input list at its two call sites (Step 2's only, in L1), the CSV column
 ## 4. Landing 2 — the ranking rules (vs L1's save)
 
 ### 4.1 What changes
+
+> Ranking rule 2 below (the immediate unfilled imbalance) is gone since PLAN_P (2026-10-13 — IC condition 3 now; §1's note).
 
 - **`apply_ranking_rules(df, fib_state, config, ic_candidates) -> (pick | None, ranking)`** — `ic_candidates` = the
   IC candidates' CHECKS (their candle type and immediate gap read from the checks, nothing re-derived — A9) (§1 Step 3), called by

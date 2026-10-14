@@ -1,5 +1,9 @@
 # The holistic IC identification process — the user's write-up (verbatim, 2026-10-09)
 
+> **Superseded in part by PLAN_P (2026-10-13):** the immediate-unfilled-imbalance rule left Steps 2 and 3 (it is
+> IC condition 3 now) and Step 1A (the 80–100 fallback zone) was added — the user's write-up
+> `../qa_ic_crossfib_inputs/user_writeup_20261013.md`, `../PLAN_P_ic_condition3_step1a.md`. The text below stays verbatim.
+
 Item 1 (one POI per cycle), the IC identification revamp: the whole IC identification flow (Step 1 the IC
 candidates, Step 2 the institutional pattern, Step 3 the general ranking when no pattern exists, Step 4 the lower-TF
 fallback — deferred) and the two steps not yet built (3, 4). Received at `92b8b61` (baseline S_TBU

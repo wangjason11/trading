@@ -47,7 +47,7 @@ IC_CANDIDATE_COLUMNS = [
     "structure_path_id", "sub_id", "parent_sid", "parent_cycle_id", "structure_id", "cycle_id",
     "bos_anchor_idx", "cts_anchor_idx", "sd",
     "ic_idx", "candle_type", "agreed_dir", "touches_zone", "ic_ref_reason", "immediate_imbalance_first_c2_idx",
-    "has_unfilled_imbalance_after", "is_ic_candidate",
+    "has_unfilled_imbalance_after", "is_ic_candidate", "ic_zone_band",
     "ip_outcome", "ip_rank", "reason",
     "pattern_anchor_idx", "opp_leg_first_idx", "pattern_end_idx", "pattern_confirmed_idx", "ip_leg_candle_counts",
     "legs",
@@ -77,9 +77,12 @@ def export_ic_candidates(records: list, path: str | Path) -> None:
     """Export the IC selection (`poi_zones.ICCandidateRecord`; PLAN_H §8.3, PLAN_L
     L1): one row per Step 1 check of each gated fib record — every agreed-opposite
     candle of the fib's window with its condition outcomes (`touches_zone`,
-    `ic_ref_reason`, `has_unfilled_imbalance_after`, `is_ic_candidate`) and its
-    pattern (classified for every row; only an IC candidate is ever picked) and
-    `ip_outcome` (Step 2's outcome, every row of the record) — + one no-IC row
+    `ic_ref_reason`, `immediate_imbalance_first_c2_idx` = condition 3 since
+    PLAN_P, `is_ic_candidate`; `has_unfilled_imbalance_after` = the retired
+    condition 3, information only) and its pattern (classified for every row;
+    only an IC candidate is ever picked), `ic_zone_band` (the zone of condition
+    4: `61.8-80`, or `80-100` when Step 1A ran — every row of the record, PLAN_P)
+    and `ip_outcome` (Step 2's outcome, every row of the record) — + one no-IC row
     (`ic_idx` empty, `reason` `no_ic_candidate` / `all_ic_candidates_pinbar`) per
     record without a pick; the tiebreak / ranking fields on the picked row
     (PLAN_L L2). `legs` = `initial first..last|opp first..last|continuation
@@ -111,6 +114,7 @@ def export_ic_candidates(records: list, path: str | Path) -> None:
             "immediate_imbalance_first_c2_idx": r.immediate_imbalance_first_c2_idx,
             "has_unfilled_imbalance_after": r.has_unfilled_imbalance_after,
             "is_ic_candidate": r.is_ic_candidate,
+            "ic_zone_band": r.ic_zone_band,
             "ip_outcome": r.ip_outcome,
             "ip_rank": r.ip_rank,
             "reason": r.reason,

@@ -5,7 +5,7 @@ Institutional pattern (IP) — the leg classification of ONE IC candidate.
 Canonical reading: `engine_v2/plans/PLAN_H_institutional_pattern_poi.md` §1 items 2–10 (the user's spec:
 `plans/plan_h_inputs/institutional_pattern_spec.md`; every decision in PLAN_H §6). This module is the PATTERN only —
 no fib, no candidate rules: `zones.poi_zones.select_ic` applies the IC conditions (POI_ZONES_SPEC §3 Step 1 — §3.1,
-the 61.8–80 touch among them) first and this last (D4).
+the 61.8–80 touch among them, or 80–100 in Step 1A — PLAN_P) first and this last (D4).
 
 Around an IC (an agreed −sd candle), in struct direction `sd`:
 

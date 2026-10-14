@@ -118,7 +118,8 @@ Per fib (BOS anchor `b`, CTS anchor `c`, direction `sd`):
    at the junction is not an opp candle: it is placed (J1) — big_normal · ⊖ · ↓(IC) · ↑ big_maru: ⊖ → initial may
    stack to a maru and keep the opp leg single (1B / 2A / 3A), ⊖ → opp gives 3D.i; the better wins. Unlisted
    combinations → no pattern (P8).
-10. **Tiebreakers among patterns of the same rank + shape — UPDATED 2026-10-09 (§6 TBU-1 … TBU-5, §8.9 "The IP
+10. **[Superseded in part by PLAN_P, 2026-10-13: the first tiebreaker, the immediate unfilled imbalance, became IC
+   condition 3 — `PLAN_P_ic_condition3_step1a.md`, POI_ZONES_SPEC §3.1 / §3.4.]** **Tiebreakers among patterns of the same rank + shape — UPDATED 2026-10-09 (§6 TBU-1 … TBU-5, §8.9 "The IP
     tiebreaker update"): a NEW first one, the immediate unfilled imbalance (an unfilled sd imbalance whose first gap
     candle is at IC + 1 / IC + 2 — a filter: one passing → final, none → all go on), then the two below, renamed
     `ic_candle_type` (TB1) and `most_recent_before_imbalance` (TB2); canonical POI_ZONES_SPEC §3.4.** As decided
@@ -1349,6 +1350,8 @@ structure; past M the BOS drops out.
   BOS-to-bound window — sub 1 cyc 2: 1934–1935 only, already no POI) → no POI (D7); the census sees final picks only —
   MS's as-of reads can move where the final pick holds → a variant replay before the switch (as §8.4).
 
+[Superseded in part by PLAN_P, 2026-10-13: the immediate-unfilled-imbalance tiebreaker (TBU-1) became IC condition 3,
+so it left the tiebreak rules and Step 3's ranking rules (ICR-9's shared helper with it) — `PLAN_P_ic_condition3_step1a.md`.]
 **The IP tiebreaker update (2026-10-09, after RX1; decisions §6 TBU-1 … TBU-5; the spec verbatim
 `plan_h_inputs/ip_tiebreaker_update_spec.md`).** Measured on `2d199fd` (= S_K_B's code) by a read-only in-process
 pipeline run that wraps `select_ip_ic` — every tie BOTH consumers meet (`plan_h_inputs/tb_imb_measure.py`; the candle

@@ -79,16 +79,18 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    `engine_v2/zones/POI_ZONES_SPEC.md` §3 (Step 1 the IC conditions, §3.2 the IC reference, Step 2 the institutional
    pattern + its tiebreak rules, Step 3 the ranking rules; Step 4 deferred), `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md`
    (§3 the cross-fib limit incl. a counter sub's `parent_bos_threshold`, §8 MS's read); plans PLAN_H / K / L, PLAN_I / J /
-   M. Each edit = its own plan / `/compare`. **In progress (session 2, 2026-10-12 → 13):** the user's three-change
+   M. Each edit = its own plan / `/compare`. **DONE (sessions 2–3, 2026-10-12 → 13):** the user's three-change
    write-up (`engine_v2/plans/qa_ic_crossfib_inputs/user_writeup_20261013.md`; Q&A + measurements `qa_findings.md`) —
    the user's split: **change 2 LANDED 2026-10-13 = PLAN_O** (`engine_v2/plans/PLAN_O_ic_reference_target_cycle.md`: a
-   cross's IC CTS reference = its TARGET's previous CTS; source `ce5ac9b`, save S_O `20261013_151425_ce5ac9b` =
-   `LATEST_<branch>`, PLAN_P's baseline); **changes 1 + 3 = PLAN_P, NEXT, ONE commit** (the revert
-   unit, the user 2026-10-13): IC condition 3 = the immediate unfilled imbalance (≤ IC + 2; the immediate rule leaves
-   the Step 2 / Step 3 rule sets) + Step 1A, the 80–100 fallback zone when Step 1 finds no candidate (its POI's
-   activation re-checks 80–100); the POI activation's imbalance condition stays as today, decoupled from IC
-   identification (the user 2026-10-13). Decisions verbatim: `qa_findings.md`; the combined trial's patch
-   `trial_p3_all.patch`.
+   cross's IC CTS reference = its TARGET's previous CTS; source `ce5ac9b`, save S_O `20261013_151425_ce5ac9b`);
+   **changes 1 + 3 LANDED 2026-10-13 = PLAN_P, ONE commit** (the revert unit, the user 2026-10-13;
+   `engine_v2/plans/PLAN_P_ic_condition3_step1a.md`): IC condition 3 = the immediate unfilled imbalance (≤ IC + 2;
+   the immediate rule left the Step 2 / Step 3 rule sets) + Step 1A, the 80–100 fallback zone when Step 1 finds no
+   candidate (its POI's activation re-checks 80–100); the POI activation's imbalance condition stays as before,
+   decoupled from IC identification; the old condition 3 kept as information; the BOS anchor candle may be a Step 1A
+   IC (the user: "Keep it"). `/compare` vs S_O = the prediction byte-for-byte (H1 POIs 5 → 2, one H1 cascade 939 →
+   935, 4 Step 1A POIs, 0 M15 structure-event changes); mutants 27 / 27; the user's chart look: "Charts look good".
+   Its save S_P = `LATEST_<branch>` (the `/compare` skill's PLAN_P entry). Decisions verbatim: `qa_findings.md`.
 3. **Zone proximity triggers — changes and edits to the opposite-direction (CTS-zone) trigger** (the user brings the
    details). Today: `engine_v2/zones/zone_proximity.py` — per (sid, cycle) with a `CTS_CONFIRMED`, triggers alternate
    sd (BOS / POI zone) → opp_sd (the CTS zone's inner bound) → sd …, at H1 8 / M15 5 / M5 3 pips; narrow cycles: Rules
@@ -280,7 +282,8 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
 - **Step 4 of IC identification — the lower-TF fallback — DEFERRED, possibly never built** (was "No-pattern cycles —
   a fallback POI"; DECIDED by the user's IC identification write-up 2026-10-09, `engine_v2/plans/plan_h_inputs/
   ic_identification_revamp_spec.md`, PLAN_H §6 ICR-*). A no-pattern record gets its IC from Step 3, the ranking
-  rules (D.1 item 1, PLAN_L L2, 2026-10-10 — POI_ZONES_SPEC §3.6). What remains: when NO IC candidate is left — Step 1 finds none (`no_ic_candidate`)
+  rules (D.1 item 1, PLAN_L L2, 2026-10-10 — POI_ZONES_SPEC §3.6). What remains: when NO IC candidate is left — Step 1 finds none (`no_ic_candidate`;
+  since PLAN_P, 2026-10-13, after Step 1A — the 80–100 fallback zone — found none either)
   or ranking rule 1 removes every candidate as a pinbar (`all_ic_candidates_pinbar`) — run Steps 1–3 on the lower TF's
   data (the user's spec: "in future iterations we will build an additional process where we would go into a lower TF";
   why the leg cap is 3 on H1 / M15 and likely 2 on M5; PLAN_H H2). The user: "This is actually something I want to
@@ -288,7 +291,10 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
   to find an IC using Steps 1-3 … We may also ultimately choose to skip Step 4 entirely and decide that not every cycle
   MUST have an IC & POI zone." Until then: no IC → no POI. The kept V30 / V60 / V90 selection (PLAN_H X1) was the
   other fallback candidate; Step 3 takes that role (L2), the code stays unwired ("Keep it for now", PLAN_H §6 ICR-5).
-  On S_TBU: 1 record would reach Step 4 (sub 1 cyc 2, `no_ic_candidate`). DECIDE (whether to build it at all).
+  On S_TBU: 1 record would reach Step 4 (sub 1 cyc 2, `no_ic_candidate`). Since PLAN_P (IC condition 3 = the
+  immediate gap + Step 1A): 7 of the window's 26 drawn records — all-pinbar in 61.8–80 (H1 sid 0 c0, sid 1 c0, sid 1
+  cross 0→1; sub 3 c0 — Step 1A does not run after Step 3), all-pinbar in 80–100 (sub 2 c0), none in either zone
+  (sub 1 c0, c3); the user (2026-10-13): "For now it is" (no POI). DECIDE (whether to build it at all).
 - **Test the POI_ZONES_SPEC §3.2 scenario IC filters — COMPLETE 2026-10-09 (RX1 = PLAN_K landings A + B; the final save S_K_B `20261009_140048_97795bd`, `LATEST_<branch>` until S_TBU `20261009_171255_5b5c307`)** — never implemented; kept in the spec, unapplied (PLAN_H D4:
   "I still want to keep these and test into them in the future"). Any IC filter stays OUTSIDE the institutional pattern
   and is applied first. **TAKEN UP 2026-10-09 as item 1's first rule experiment, RE-SPECIFIED by the user for today's

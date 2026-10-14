@@ -319,8 +319,9 @@ def test_m1_retired_ms_reads_no_inner_where_fibtracker_creates_no_fib():
     """Re-derived (PLAN_I S5; was `test_m1_ms_inflight_keeps_the_inner_fibtracker_creates_no_fib`): the only sd gap
     of [BOS 30, CTS 40] forms one candle after the establishment (c2 40, c3 41) → FibTracker, cutting at the event,
     creates no fib → `representative_fib` is None → MS's read (`poi_inner_for_fib`) returns no inner. The retired
-    resolver returned [1.13] here (the IC 32 pick) — the same pick a fib on those anchors WOULD give (asserted
-    below, so the None is not vacuous)."""
+    resolver returned [1.13] here (the IC 32 pick) — the pick a fib on those anchors WOULD give once 32 has its
+    immediate gap (asserted on a COPY with a gap at 33 — PLAN_P's condition 3; on the test frame itself that gap
+    would form before the establishment and FibTracker WOULD create the fib), so the None is not vacuous."""
     df = _df(60, [_gap(40, top=1.30, bottom=1.20)])
     # The big-flag reference: 5 marus (.0200 bodies) before the pattern.
     for i, base in zip(range(25, 30), (1.00, 1.02, 1.04, 1.06, 1.08)):
@@ -339,7 +340,11 @@ def test_m1_retired_ms_reads_no_inner_where_fibtracker_creates_no_fib():
         structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.00, cts_idx=40, cts_price=1.35,
         active=True, locked=False,
         fib=create_fib_retracement(anchor_high=1.35, anchor_low=1.00, direction=1, levels=DEFAULT_FIB_LEVELS))
-    assert poi_zones.poi_inner_for_fib(df, would_be, 0.70, tracker=NO_REF_TRACKER, evaluated_at=40) == 1.13
+    with_immediate = df.copy()
+    with_immediate.attrs = {**df.attrs,
+                            "imbalances": [_gap(33, top=1.30, bottom=1.20)] + list(df.attrs["imbalances"])}
+    assert poi_zones.poi_inner_for_fib(with_immediate, would_be, 0.70, tracker=NO_REF_TRACKER,
+                                       evaluated_at=40) == 1.13
     tracker = _tracker()
     # Cycle 0 confirmed first: MS establishes cycle 1 only after it (the order tripwire, PLAN_I S2 / F14).
     _quiet(tracker.on_cts_confirmed, _ev("CTS_CONFIRMED", 6, 0.95, 0, 0, cts_anchor_idx=5))

@@ -1,0 +1,9 @@
+[STEP1A-READ] M15 sid0 cycle 0 fib 454..775 at 775: IC 650 (11-25 16:30) inner 0.5611
+[STEP1A-READ] M15 sid0 cycle 1 fib 917..1020 at 1020: IC 923 (11-28 12:45) inner 0.57107
+[STEP1A-READ] M15 sid0 cycle 0 fib 50..371 at 371: IC 246 (11-25 16:30) inner 0.5611
+[STEP1A-READ] M15 sid0 cycle 1 fib 513..616 at 616: IC 519 (11-28 12:45) inner 0.57107
+[STEP1A-READ] M15 sid0 cycle 2 fib 187..193 at 193: IC 187 (12-15 01:30) inner 0.58044
+[STEP1A-READ] M15 sid0 cycle 2 fib 169..419 at 419: IC 219 (12-29 04:00) inner 0.58279
+[STEP1A-READ] M15 sid0 cycle 2 fib 50..208 at 208: IC 154 (01-18 22:45) inner 0.57462
+[STATS] {'H1 reads': 56, 'H1 reads Step 1A ran': 35, 'M15 reads': 429, 'M15 reads Step 1A pick': 43, 'M15 reads Step 1A ran': 129}
+[done] 15.7 s

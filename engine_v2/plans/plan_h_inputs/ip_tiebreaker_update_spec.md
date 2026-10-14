@@ -1,5 +1,8 @@
 # The institutional-pattern tiebreakers update — the user's write-up (verbatim, 2026-10-09)
 
+> **Superseded in part by PLAN_P (2026-10-13):** the first tiebreaker below (the immediate unfilled imbalance)
+> became IC condition 3 — `../PLAN_P_ic_condition3_step1a.md`, POI_ZONES_SPEC §3.1 / §3.4. The text below stays verbatim.
+
 Item 1 (one POI per cycle), before the user's holistic IC write-up: a NEW first tiebreaker among institutional
 patterns tied on the same rank and shape; today's TB1 (the IC's candle type) and TB2 (the most recent IC before the
 earliest unfilled imbalance after the oldest tied IC) move down to TB2 / TB3. This file is the user's text, unedited;

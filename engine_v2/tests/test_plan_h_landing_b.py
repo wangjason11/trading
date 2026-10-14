@@ -135,8 +135,10 @@ def test_sweep_first_active_takes_the_pattern_confirmation_moment(pattern_confir
 
 def _m1_frame(*, extra_v_pick=True):
     """`test_imbalance_c3_knowability`'s M1 frame (IC 32 `2A.i`, inner 1.13) + a LATER bearish candle 36 fully
-    inside the zone, with no pattern (its continuation would be true dojis only) — the V30 / V60 / V90 pick."""
-    df = _df(60, [_gap(40, top=1.30, bottom=1.20)])
+    inside the zone, with no pattern (its continuation would be true dojis only) — the V30 / V60 / V90 pick. Since
+    PLAN_P each candidate has its IMMEDIATE unfilled gap (33 / 37 — IC condition 3; far below every later low, never
+    filled)."""
+    df = _df(60, [_gap(33, top=1.05, bottom=1.04), _gap(37, top=1.05, bottom=1.04), _gap(40, top=1.30, bottom=1.20)])
     for i, base in zip(range(25, 30), (1.00, 1.02, 1.04, 1.06, 1.08)):
         df.loc[i, ["o", "h", "l", "c"]] = [base, base + 0.021, base - 0.001, base + 0.02]
     df.loc[31, ["o", "h", "l", "c"]] = [1.10, 1.121, 1.099, 1.12]
@@ -173,8 +175,8 @@ def _fib(high, low):
 
 
 def _no_pattern_frame(*, pinbar_32=False, pinbar_36=False):
-    """The M1 frame with a small continuation (33 not big_maru): neither IC candidate (32, 36 — both normal, no
-    immediate gap) has a pattern; `pinbar_*` shrinks a candidate's body (same range) to a pinbar."""
+    """The M1 frame with a small continuation (33 not big_maru): neither IC candidate (32, 36 — both normal, each
+    with its immediate gap) has a pattern; `pinbar_*` shrinks a candidate's body (same range) to a pinbar."""
     df = _m1_frame()
     df.loc[33, ["o", "h", "l", "c"]] = [1.09, 1.10, 1.089, 1.095]       # a small continuation: not big_maru
     if pinbar_32:
@@ -185,13 +187,16 @@ def _no_pattern_frame(*, pinbar_32=False, pinbar_36=False):
 
 
 def test_resolver_returns_the_ranked_ic_when_no_candidate_has_a_pattern():
-    """PLAN_L L2 (ICR-12 — one selector): no pattern -> MS reads the RANKED IC's inner. 32 and 36 both normal, no
-    immediate gap -> ranking rule 4: the reference = the earliest unfilled gap after the oldest in play (32) = 40 ->
-    the most recent before it, 36 (high 1.125). (Was None until L2: no pattern -> no POI.)"""
-    assert _resolve(_no_pattern_frame()) == 1.125
-    assert _resolve(_no_pattern_frame(pinbar_36=True)) == 1.13        # ranking rule 1 excludes 36 -> 32
+    """PLAN_L L2 (ICR-12 — one selector): no pattern -> MS reads the RANKED IC's inner. 32 and 36 both normal ->
+    (PLAN_P) ranking rule 3: the reference = the earliest unfilled gap after the oldest in play (32) = its own
+    immediate gap 33 -> the oldest, 32 (high 1.13; the user 2026-10-13: the last rule picks the oldest); a pinbar 32
+    -> rule 1 excludes it -> 36 (high 1.125). (Was None until L2: no pattern -> no POI.)"""
+    assert _resolve(_no_pattern_frame()) == 1.13
+    assert _resolve(_no_pattern_frame(pinbar_32=True)) == 1.125       # ranking rule 1 excludes 32 -> 36
     fs = poi_zones.FibState(structure_id=0, cycle_id=1, struct_direction=1, bos_idx=30, bos_price=1.0, cts_idx=40,
                             cts_price=1.35, active=True, locked=False, fib=_fib(1.35, 1.0))
+    sel = poi_zones.select_ic(_no_pattern_frame(), fs, POIConfig(), ic_reference=ICReference.NONE)
+    assert (sel.pick.ic_idx, sel.ranking) == (32, ("most_recent_before_imbalance", 36, 2, 33))
     sel = poi_zones.select_ic(_no_pattern_frame(pinbar_36=True), fs, POIConfig(), ic_reference=ICReference.NONE)
     assert (sel.pick.ic_idx, sel.ranking) == (32, ("exclude_pinbar", None, 2, None))
 
@@ -345,13 +350,14 @@ def test_poi_meta_carries_the_pick_in_place_of_the_variants():
     poi, = out["poi_zones"]
     assert list(poi.meta) == [
         "structure_id", "struct_direction", "cycle_id", "confirmed_idx", "end_idx", "end_reason",
-        "ip_outcome", "ip_rank", "ip_leg_candle_counts", "pattern_anchor_idx", "opp_leg_first_idx", "pattern_end_idx",
-        "pattern_confirmed_idx", "ip_tiebreak", "ip_tb_runner_up_ic_idx", "ip_tied_count",
+        "ip_outcome", "ic_zone_band", "ip_rank", "ip_leg_candle_counts", "pattern_anchor_idx", "opp_leg_first_idx",
+        "pattern_end_idx", "pattern_confirmed_idx", "ip_tiebreak", "ip_tb_runner_up_ic_idx", "ip_tied_count",
         "ip_tb_imbalance_first_c2_idx", "ranking_rule", "ranking_runner_up_ic_idx", "ranking_in_play_count",
         "ranking_imbalance_first_c2_idx", "status", "activation_history", "bos_anchor_idx", "cts_anchor_idx",
         "cts_established_idx",
     ]
     assert poi.meta["ip_outcome"] == "pattern"                                       # PLAN_L L2
+    assert poi.meta["ic_zone_band"] == "61.8-80"                                     # PLAN_P: Step 1 found it
     assert (poi.meta["ranking_rule"], poi.meta["ranking_runner_up_ic_idx"], poi.meta["ranking_in_play_count"],
             poi.meta["ranking_imbalance_first_c2_idx"]) == (None, None, None, None)
     assert (poi.ic_idx, poi.meta["ip_rank"], poi.meta["ip_leg_candle_counts"]) == (9, "1A.iii", "1-1-3")
@@ -406,11 +412,13 @@ def _rendered(tr, k=0):
     return _CUSTOMDATA_REF.sub(lambda m: str(row[int(m.group(1))]), tr.hovertemplate)
 
 
-def _meta(rank, counts, anchor, opp_first, end, tb=None, runner=None, c2=None):
-    """A pattern IC's POI meta (the hover's keys; `ip_outcome` "pattern", no ranking — PLAN_L L2)."""
+def _meta(rank, counts, anchor, opp_first, end, tb=None, runner=None, c2=None, band="61.8-80"):
+    """A pattern IC's POI meta (the hover's keys; `ip_outcome` "pattern", no ranking — PLAN_L L2; the IC's zone band,
+    PLAN_P)."""
     return {"ip_outcome": "pattern", "ip_rank": rank, "ip_leg_candle_counts": counts, "pattern_anchor_idx": anchor,
             "opp_leg_first_idx": opp_first, "pattern_end_idx": end, "ip_tiebreak": tb,
-            "ip_tb_runner_up_ic_idx": runner, "ip_tb_imbalance_first_c2_idx": c2, "ranking_rule": None}
+            "ip_tb_runner_up_ic_idx": runner, "ip_tb_imbalance_first_c2_idx": c2, "ranking_rule": None,
+            "ic_zone_band": band}
 
 
 def test_hover_single_legs_print_one_index_each():
@@ -433,11 +441,11 @@ def test_hover_tiebreak_lines():
                                        "<br>Tiebreak over 4136: most recent before imbalance 4132")
     assert poi_ic_hover_text(_meta("2A.i", "1-1-1", 9, 10, 11, "ic_candle_type", 14), 10) == (
         "IP 2A.i · legs 1-1-1 (9 | 10 | 11)<br>Tiebreak over 14: IC candle type")
-    assert poi_ic_hover_text(_meta("1A.iv", "3-1-3", 1657, 1660, 1663, "immediate_unfilled_imbalance", 1447, 1662),
-                             1660) == ("IP 1A.iv · legs 3-1-3 (1657–1659 | 1660 | 1661–1663)"
-                                       "<br>Tiebreak over 1447: immediate unfilled imbalance 1662")
     with pytest.raises(AssertionError, match="unknown ip_tiebreak 'TB1'"):     # the pre-TBU-3 values are gone
         poi_ic_hover_text(_meta("2A.i", "1-1-1", 9, 10, 11, "TB1", 14), 10)
+    # PLAN_P: the immediate-unfilled-imbalance tiebreaker became IC condition 3 — its value is gone too
+    with pytest.raises(AssertionError, match="unknown ip_tiebreak 'immediate_unfilled_imbalance'"):
+        poi_ic_hover_text(_meta("1A.iv", "3-1-3", 1657, 1660, 1663, "immediate_unfilled_imbalance", 1447, 1662), 1660)
 
 
 def test_hover_rejects_legs_that_do_not_match_their_indices():

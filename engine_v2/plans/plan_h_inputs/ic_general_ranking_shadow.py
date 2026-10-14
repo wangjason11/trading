@@ -2,6 +2,9 @@
 select_ip_ic call of a full pipeline run — the drawn POI records AND MS's in-flight reads. Read-only: the wrapper
 returns the ORIGINAL selection (no behaviour change), exports nothing.
 
+SUPERSEDED since PLAN_P (2026-10-13): its rules include the immediate-unfilled-imbalance rule (IC condition 3
+since PLAN_P). Kept as PLAN_L's record.
+
 Run from the repo root: `PYTHONPATH=. python engine_v2/plans/plan_h_inputs/ic_general_ranking_shadow.py > log`.
 M15 indices are SUB-LOCAL (the sub's slice frame; `frame0` = its first candle): entity index = local + the slice
 offset (2026-10-09 on S_TBU's code: sub 0 +404, sub 1 +1747, sub 2 +2315, sub 6 +3710). Measured: PLAN_H §8.9

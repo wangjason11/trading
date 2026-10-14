@@ -1,6 +1,10 @@
 """PLAN_L landing 1 (the IC identification in steps — the restructure) — mutants for `mutant_runner.py` (full suite
 each).
 
+SUPERSEDED on the code since PLAN_P (2026-10-13): the immediate-unfilled-imbalance rule left both rule sets (it
+is IC condition 3 now) — the mutants anchored on it report BAD on a re-run. Use
+`qa_ic_crossfib_inputs/mutants_plan_p.py`. This file stays as the record of its landing's run.
+
     python engine_v2/plans/plan_e_inputs/review_scripts/mutant_runner.py \
         engine_v2/plans/plan_h_inputs/mutants_l1.py --jobs 14 --out <a short %TEMP% dir>
 

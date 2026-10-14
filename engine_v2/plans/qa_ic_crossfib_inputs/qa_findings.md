@@ -118,7 +118,8 @@ hovers ("IC zone 80-100 (fallback)", fib status "· zone 80-100 (fallback)"). Re
   subsequent_counter 4159 → 4143) → sub 5 [3743, 4143] (was [3759, 4159]), sub 7 starts 4143 (was 4159) — before its
   cycle 1's establishment (4157), so its cycle 0 gets a live stretch: its KL / POI (4048) now show (counter chart
   +9 traces / +12 shapes; confluence +7 / +17 also has sub 0's fallback POIs). ZERO M15 structure-event changes;
-  triggers in the confluence lens unchanged; unresolved triggers unchanged (4).
+  triggers in the confluence lens unchanged except sub 7's reversal `probe_finalize_idx` 4159 → 4143 [CORRECTED
+  2026-10-13, PLAN_P plan review A8]; unresolved triggers unchanged (4).
 - The fallback zone in use: sub 0 c0 650 + c1 923, sub 1 c2 1934, sub 7 cross 0→2 4131 — 923 / 1934 / 4131 activate
   (the band re-check works); 650 never does, and neither did its baseline POI 670: sub 0's cycle 0 ends (1020,
   next_cycle) at the candle sub 0 goes live (`start_idx` 1020), so its POI gets no live candle (CORRECTED 2026-10-13:
@@ -205,3 +206,14 @@ What the trial left out — PLAN_P must decide / do:
    (3759 → 3743, 4159 → 4143) and subs 5 / 7; 0 M15 structure-event changes. Docs: POI_ZONES_SPEC §3 (Step 1 condition
    3, Step 1A, §3.4 tiebreaks, §3.5 CSV, §3.6 ranking) + §4, CHARTING_SPEC (hovers), GLOSSARY, PLAN_H §6 TBU / ICR
    pointers, the register.
+
+**Decided 2026-10-13 (PLAN_P session, the user's answers):** item 2 — **"Keep as information"** (the field + the IC CSV
+column stay, documented as the retired condition 3 — not a condition; offered: drop (recommended) / keep as
+information / keep renamed); item 4 — **"Keep the trial names"** (`ic_zone_band` "61.8-80" / "80-100",
+`IC_ZONE_PRIMARY` / `IC_ZONE_FALLBACK`, `POIConfig.ic_fallback_fib_min/max`, the two hovers, spec "Step 1A — the
+80–100 fallback zone"; offered alternative: values "primary" / "fallback"). Re-measured on S_O with the trial patch
+applied (uncommitted replay, 48.9 s, fetch gate PASS, skip-grep 22): `cmp_trial.py` = the trial's outcome exactly
+(H1 POIs 5 → 2, the one H1 cascade 939 → 935, the 4 fallback POIs, 0 M15 structure-event changes) — PLAN_P §6.
+Plan review (2 lenses, 600,960 tokens) raised one more question — the BOS anchor candle always touches the 80–100
+zone (100 % = its extreme; confluence sub 1 cycle 2's Step 1A IC 1934 IS its BOS anchor): the user — **"Keep it"**
+(offered: keep (recommended) / exclude from Step 1A / exclude from both steps).

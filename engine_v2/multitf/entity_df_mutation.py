@@ -153,10 +153,10 @@ _ZONE_META_IDX_KEYS = (
     "pattern_end_idx",      # POI (the continuation leg's last candle)
     "pattern_confirmed_idx",  # POI (a MOMENT: the continuation leg known complete — R1)
     "ip_tb_runner_up_ic_idx",       # POI (None unless a tiebreaker decided)
-    "ip_tb_imbalance_first_c2_idx",  # POI (the immediate-imbalance / most-recent-before-imbalance tiebreakers)
+    "ip_tb_imbalance_first_c2_idx",  # POI (the most-recent-before-imbalance tiebreaker; + the immediate one < PLAN_P)
     # PLAN_L landing 2 (2026-10-10) — a ranked IC's ranking (`ranking_in_play_count` is a count):
-    "ranking_runner_up_ic_idx",       # POI (None unless a ranking rule 2–4 decided)
-    "ranking_imbalance_first_c2_idx",  # POI (the immediate-imbalance / most-recent-before-imbalance ranking rules)
+    "ranking_runner_up_ic_idx",       # POI (None unless ranking rule 2 / 3 decided — PLAN_P's numbering)
+    "ranking_imbalance_first_c2_idx",  # POI (the most-recent-before-imbalance ranking rule; + the immediate one < PLAN_P)
 )
 
 # FibState meta keys with entity-df indices (the dataclass fields bos_idx /

@@ -1,6 +1,10 @@
 """PLAN_L landing 2 (Step 3, the ranking rules) — the keyed compare vs S_L1 (PLAN_L §4.3). A positional diff breaks on
 the POI `meta` cell (5 new keys) and on the IC CSVs' new columns.
 
+SUPERSEDED since PLAN_P (2026-10-13): its `RULE_PARTS` / `NEW_POIS` carry the ranking value
+`immediate_unfilled_imbalance`, which no save from S_P on holds; diff S_P-format saves with
+`qa_ic_crossfib_inputs/cmp_trial.py`. Kept as the record.
+
     PYTHONPATH=. python engine_v2/plans/plan_h_inputs/cmp_l2.py BASE_SAVE_DIR [CUR_DEBUG] [CUR_CHARTS] [--trial DIR]
 
 Checks (prints RESULT OK / FAIL, exit 1 on FAIL):

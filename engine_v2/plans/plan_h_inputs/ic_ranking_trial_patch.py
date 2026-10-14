@@ -7,6 +7,9 @@ decided (PLAN_H §6 ICR-*):
 A Step-3 POI has no pattern term in its activation floor (ICR-2): the floor gets `ic_idx` (neutral in the max).
 The picked CSV row's `reason` = "RANKED:<rule>" (trial marker only).
 
+SUPERSEDED since PLAN_P (2026-10-13): its rules include the immediate-unfilled-imbalance rule (IC condition 3
+since PLAN_P) and it patches retired names. Kept as the record of the trial.
+
     python ic_ranking_trial_patch.py TREE      (TREE = a `git archive` of 92b8b61; each edit must match exactly once)
 
 Then (a SHORT %TEMP% dir — MAX_PATH): `cd WORK && python REPO/engine_v2/plans/plan_h_inputs/replay_variant_h.py TREE

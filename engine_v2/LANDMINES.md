@@ -1752,7 +1752,7 @@ own update.
 **Rule:** Every `has_unfilled_imbalance` call inside Fib activation,
 Scenario 2 cond1/cond2/cond3, the cross-cycle dead-cycle walks, AND
 MarketStructure's cycle-0 snapshot passes `direction=sd` (POI IC
-validation — IC condition 3, `_has_unfilled_imbalance_after` (was `find_ic_candidates` until PLAN_L L1) — is strict by design too). No production
+validation — IC condition 3, the immediate gap since PLAN_P (`immediate_unfilled_imbalance_first_c2_idx`; before it `_has_unfilled_imbalance_after`, now information, was `find_ic_candidates` until PLAN_L L1) — is strict by design too). No production
 call is permissive (the unfiltered `get_unfilled_imbalances` /
 `has_imbalance_in_range` were deleted 2026-09-30 — they had no production
 caller).
@@ -2396,7 +2396,7 @@ exists only because `c3 = B+1` was seen, and a merged run ending at `B-1` gets
 its bounds from `B+1` (`imbalance.py`). The MS consumers — since PLAN_I S5 the
 embedded FibTracker (cut at each fed event's moment `<= B`) and
 `_refresh_poi_inners_for_cycle` → `poi_inner_for_fib` → `select_ic`
-(IC cond3 in `check_ic_conditions`, the tiebreak and ranking rules' immediate imbalance and reference) — ask the pick's questions
+(IC cond3 in `check_ic_conditions` — the immediate gap since PLAN_P, + the retired any-gap test as information — and the tiebreak and ranking rules' reference) — ask the pick's questions
 with `evaluated_at=None`: as-of for *fills* (`check_to_idx <=` the fib's CTS anchor
 `<= st.cts.idx <= B`), no existence cut, by decision (MARKET_STRUCTURE_SPEC
 "Snapshot vs per-candle"). (Until S5 the retired `_update_cycle0_data` /

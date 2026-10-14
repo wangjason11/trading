@@ -1,0 +1,360 @@
+     A      B      d  element / (parent_sid,parent_cycle,sub_id)
+== rk2-5.html: 23 hover lines differ (distinct lines 366 -> 365)
+   - [POI zone] x452->0: IP 3C.ii · legs 3-2-1 (828–830 | 831–832 | 833)
+   + [POI zone] x0->398: No pattern · ranking rule exclude_pinbar
+   - [POI zone] x452->398: active
+   - [POI zone] x452->398: sell
+   - [POI zone (inactive)] x4->2: %{customdata[6]}
+   - [POI zone (inactive)] x4->2: <b>POI Zone</b>
+   - [POI zone (inactive)] x946->0: No pattern · ranking rule exclude_pinbar
+   - [POI zone (inactive)] x4->2: TF=1H
+   - [POI zone (inactive)] x4->2: bottom=%{customdata[8]:.5f}
+   - [POI zone (inactive)] x1538->592: buy
+   - [POI zone (inactive)] x4->2: confirmed_idx=%{customdata[4]}
+   - [POI zone (inactive)] x4->2: cycle_id=%{customdata[5]}
+   - [POI zone (inactive)] x1538->592: ended
+   - [POI zone (inactive)] x4->2: ic_idx=%{customdata[3]}
+   - [POI zone (inactive)] x4->2: side=%{customdata[0]}
+   - [POI zone (inactive)] x4->2: status=%{customdata[9]}<extra></extra>
+   - [POI zone (inactive)] x4->2: struct_direction=%{customdata[2]}
+   - [POI zone (inactive)] x4->2: structure_id=%{customdata[1]}
+   - [POI zone (inactive)] x4->2: top=%{customdata[7]:.5f}
+   + [fib:sid0:c0] x0->335: IC: none (all_ic_candidates_pinbar)
+   - [fib:sid0:c0] x335->0: No pattern · IC 180 · ranking rule exclude_pinbar
+   - [fib:sid1:c2] x80->0: IP 3C.ii · IC 832
+   + [fib:sid1:c2] x0->80: No pattern · IC 859 · ranking rule exclude_pinbar
+== rk2-5_M15_counter.html: 173 hover lines differ (distinct lines 584 -> 601)
+   + [] x28->33: <b>Wave Candle</b>
+   + [] x0->2: BOS zone: sub_id=7 cycle=0
+   + [] x1->2: BOS zone: sub_id=7 cycle=1
+   + [] x0->2: CTS zone: sub_id=7 cycle=0
+   + [] x9->10: Role: FB (first breakout)
+   + [] x7->8: Role: FP (first pullback)
+   + [] x7->8: Role: LB (last breakout)
+   + [] x1->2: Role: LP (last pullback of cycle 0)
+   + [] x1->2: Role: LP (pre-structure pullback)
+   + [] x17->22: TF=15M
+   + [] x0->1: Volume: 148<extra></extra>
+   + [] x0->1: Volume: 229<extra></extra>
+   + [] x0->1: Volume: 295<extra></extra>
+   + [] x0->1: Volume: 316<extra></extra>
+   + [] x0->1: Volume: 347<extra></extra>
+   + [] x8->13: first record parent_sid=1 parent_cycle=2
+   + [] x0->1: idx=4027  idx_1H=1006
+   + [] x0->1: idx=4030  idx_1H=1007
+   + [] x0->1: idx=4082  idx_1H=1020
+   + [] x0->1: idx=4083  idx_1H=1020
+   + [] x0->1: idx=4129  idx_1H=1032
+   + [] x0->3: sub window=[3743,4143] same_dir_replacement
+   - [] x3->0: sub window=[3759,4159] same_dir_replacement
+   + [] x0->10: sub window=[4143,open] open
+   - [] x5->0: sub window=[4159,open] open
+   - [H1 POI zone (overlay)] x6->4: %{customdata[6]}
+   - [H1 POI zone (overlay)] x6->4: <b>POI Zone</b>
+   - [H1 POI zone (overlay)] x1794->0: IP 3C.ii · legs 3-2-1 (828–830 | 831–832 | 833)
+   - [H1 POI zone (overlay)] x3778->1578: No pattern · ranking rule exclude_pinbar
+   - [H1 POI zone (overlay)] x6->4: TF=1H
+   - [H1 POI zone (overlay)] x1794->1578: active
+   - [H1 POI zone (overlay)] x6->4: bottom=%{customdata[8]:.5f}
+   - [H1 POI zone (overlay)] x6140->2362: buy
+   - [H1 POI zone (overlay)] x6->4: confirmed_idx=%{customdata[4]}
+   - [H1 POI zone (overlay)] x6->4: cycle_id=%{customdata[5]}
+   - [H1 POI zone (overlay)] x6140->2362: ended
+   - [H1 POI zone (overlay)] x6->4: ic_idx=%{customdata[3]}
+   - [H1 POI zone (overlay)] x1794->1578: sell
+   - [H1 POI zone (overlay)] x6->4: side=%{customdata[0]}
+   - [H1 POI zone (overlay)] x6->4: status=%{customdata[9]}<extra></extra>
+   - [H1 POI zone (overlay)] x6->4: struct_direction=%{customdata[2]}
+   - [H1 POI zone (overlay)] x6->4: structure_id=%{customdata[1]}
+   - [H1 POI zone (overlay)] x6->4: top=%{customdata[7]:.5f}
+   + [M15 BOS sub5] x0->1: [3743,4143] same_dir_replacement
+   - [M15 BOS sub5] x1->0: [3759,4159] same_dir_replacement
+   + [M15 BOS sub5] x0->1: counter(1,2) first_counter 3743→3743
+   - [M15 BOS sub5] x1->0: counter(1,2) first_counter 3759→3759
+   + [M15 BOS sub7] x0->3: [4143,open] open
+   - [M15 BOS sub7] x3->0: [4159,open] open
+   + [M15 BOS sub7] x0->3: counter(1,2) subsequent_counter 4143→4143
+   - [M15 BOS sub7] x3->0: counter(1,2) subsequent_counter 4159→4159
+   + [M15 CTS (unconf) sub7] x0->1: [4143,open] open
+   - [M15 CTS (unconf) sub7] x1->0: [4159,open] open
+   + [M15 CTS (unconf) sub7] x0->1: counter(1,2) subsequent_counter 4143→4143
+   - [M15 CTS (unconf) sub7] x1->0: counter(1,2) subsequent_counter 4159→4159
+   + [M15 CTS sub5] x0->1: [3743,4143] same_dir_replacement
+   - [M15 CTS sub5] x1->0: [3759,4159] same_dir_replacement
+   + [M15 CTS sub5] x0->1: counter(1,2) first_counter 3743→3743
+   - [M15 CTS sub5] x1->0: counter(1,2) first_counter 3759→3759
+   - [M15 CTS sub7] x2->1: -
+   + [M15 CTS sub7] x0->3: [4143,open] open
+   - [M15 CTS sub7] x3->0: [4159,open] open
+   + [M15 CTS sub7] x1->2: counter
+   + [M15 CTS sub7] x0->3: counter(1,2) subsequent_counter 4143→4143
+   - [M15 CTS sub7] x3->0: counter(1,2) subsequent_counter 4159→4159
+   - [M15 CTS sub7] x2->1: forming
+   + [M15 CTS sub7] x1->2: live
+   + [M15 KL zone] x12->14: KL Zone
+   + [M15 KL zone] x12->14: TF=15M
+   + [M15 KL zone] x0->1046: [3743,4143] same_dir_replacement
+   - [M15 KL zone] x1078->0: [3759,4159] same_dir_replacement
+   + [M15 KL zone] x0->484: [4143,open] open
+   - [M15 KL zone] x222->0: [4159,open] open
+   + [M15 KL zone] x1198->1428: base
+   + [M15 KL zone] x12->14: base_idx=%{customdata[4]}
+   + [M15 KL zone] x12->14: base_pattern=%{customdata[3]}
+   + [M15 KL zone] x12->14: bottom=%{customdata[8]:.5f}<extra></extra>
+   + [M15 KL zone] x1300->1530: buy
+   + [M15 KL zone] x12->14: confirmed_idx=%{customdata[5]}
+   + [M15 KL zone] x0->1046: counter(1,2) first_counter 3743→3743
+   - [M15 KL zone] x1078->0: counter(1,2) first_counter 3759→3759
+   + [M15 KL zone] x0->484: counter(1,2) subsequent_counter 4143→4143
+   - [M15 KL zone] x222->0: counter(1,2) subsequent_counter 4159→4159
+   + [M15 KL zone] x12->14: cycle_id=%{customdata[6]}
+   + [M15 KL zone] x12->14: records: %{customdata[12]}
+   + [M15 KL zone] x12->14: side=%{customdata[0]}
+   + [M15 KL zone] x12->14: struct_direction=%{customdata[2]}
+   + [M15 KL zone] x12->14: sub window=%{customdata[11]}
+   + [M15 KL zone] x12->14: sub_id=%{customdata[1]} | first record parent_sid=%{customdata[9]} parent_cycle_id=%{customdata[10]}
+   + [M15 KL zone] x12->14: top=%{customdata[7]:.5f}
+   + [M15 PB sub5] x0->1: [3743,4143] same_dir_replacement
+   - [M15 PB sub5] x1->0: [3759,4159] same_dir_replacement
+   + [M15 PB sub5] x0->1: counter(1,2) first_counter 3743→3743
+   - [M15 PB sub5] x1->0: counter(1,2) first_counter 3759→3759
+   + [M15 POI zone] x10->12: %{customdata[6]}
+   + [M15 POI zone] x10->12: <b>POI Zone</b>
+   + [M15 POI zone] x0->194: IC zone 80-100 (fallback)
+   - [M15 POI zone] x290->0: IP 1A.iv · legs 2-1-2 (4081–4082 | 4083 | 4084–4085)
+   - [M15 POI zone] x1506->0: IP 1A.iv · legs 3-1-3 (2834–2836 | 2837 | 2838–2840)
+   - [M15 POI zone] x258->0: IP 2A.iv · legs 2-1-3 (4049–4050 | 4051 | 4052–4054)
+   - [M15 POI zone] x390->0: IP 2B.iii · legs 1-1-3 (2797 | 2798 | 2799–2801)
+   + [M15 POI zone] x0->370: IP 3B.iii · legs 1-1-3 (2807 | 2808 | 2809–2811)
+   + [M15 POI zone] x0->292: IP 3B.iii · legs 1-1-3 (4130 | 4131 | 4132–4134)
+   + [M15 POI zone] x0->220: IP 3C.iv · legs 2-3-2 (4044–4045 | 4046–4048 | 4049–4050)
+   + [M15 POI zone] x0->1320: IP 3C.iv · legs 3-3-3 (2925–2927 | 2928–2930 | 2931–2933)
+   - [M15 POI zone] x1012->980: IP 3C.iv · legs 3-3-3 (3649–3651 | 3652–3654 | 3655–3657)
+   + [M15 POI zone] x10->12: TF=15M
+   - [M15 POI zone] x290->0: Tiebreak over 4136: most recent before imbalance 4132
+   - [M15 POI zone] x1896->1690: [2829,3611] parent_end
+   + [M15 POI zone] x0->980: [3743,4143] same_dir_replacement
+   - [M15 POI zone] x1012->0: [3759,4159] same_dir_replacement
+   + [M15 POI zone] x0->512: [4143,open] open
+   - [M15 POI zone] x548->0: [4159,open] open
+   - [M15 POI zone] x290->194: active
+   + [M15 POI zone] x10->12: bottom=%{customdata[8]:.5f}
+   - [M15 POI zone] x1560->1492: buy
+   + [M15 POI zone] x10->12: confirmed_idx=%{customdata[4]}
+   - [M15 POI zone] x1896->1690: counter(0,1) first_counter 2995→2995
+   + [M15 POI zone] x0->980: counter(1,2) first_counter 3743→3743
+   - [M15 POI zone] x1012->0: counter(1,2) first_counter 3759→3759
+   + [M15 POI zone] x0->512: counter(1,2) subsequent_counter 4143→4143
+   - [M15 POI zone] x548->0: counter(1,2) subsequent_counter 4159→4159
+   + [M15 POI zone] x10->12: cycle_id=%{customdata[5]}
+   - [M15 POI zone] x3166->2988: ended
+   + [M15 POI zone] x10->12: ic_idx=%{customdata[3]}
+   + [M15 POI zone] x10->12: records: %{customdata[13]}
+   - [M15 POI zone] x1896->1690: sell
+   + [M15 POI zone] x10->12: side=%{customdata[0]}
+   + [M15 POI zone] x10->12: status=%{customdata[9]}<extra></extra>
+   + [M15 POI zone] x10->12: struct_direction=%{customdata[2]}
+   + [M15 POI zone] x10->12: sub window=%{customdata[12]}
+   + [M15 POI zone] x10->12: sub_id=%{customdata[1]} | first record parent_sid=%{customdata[10]} parent_cycle_id=%{customdata[11]}
+   + [M15 POI zone] x10->12: top=%{customdata[7]:.5f}
+   + [M15 fib] x327->387: 0.57362
+   + [M15 fib] x0->60: 0.57424
+   + [M15 fib] x0->60: 0.57481
+   + [M15 fib] x0->60: 0.57674
+   + [M15 fib] x6->7: 61.8%=%{customdata[10]}
+   + [M15 fib] x6->7: 80%=%{customdata[11]}
+   + [M15 fib] x6->7: <b>Fib Zone</b>
+   + [M15 fib] x6->7: BOS: idx=%{customdata[6]} price=%{customdata[7]}
+   + [M15 fib] x6->7: CTS: idx=%{customdata[8]} price=%{customdata[9]}
+   + [M15 fib] x140->200: IC ref 0.58105 (cross_limit_anchor) · break: none
+   - [M15 fib] x290->0: IP 1A.iv · IC 2837
+   - [M15 fib] x196->0: IP 1A.iv · IC 4083
+   - [M15 fib] x131->0: IP 2A.iv · IC 4051
+   - [M15 fib] x85->0: IP 2B.iii · IC 2798
+   + [M15 fib] x0->85: IP 3B.iii · IC 2808
+   + [M15 fib] x0->131: IP 3B.iii · IC 4131
+   + [M15 fib] x0->196: IP 3B.iii · IC 4131 · zone 80-100 (fallback)
+   + [M15 fib] x0->290: IP 3C.iv · IC 2930
+   + [M15 fib] x0->60: IP 3C.iv · IC 4048
+   + [M15 fib] x6->7: TF=15M
+   + [M15 fib] x0->140: [3743,4143] same_dir_replacement
+   - [M15 fib] x140->0: [3759,4159] same_dir_replacement
+   + [M15 fib] x0->387: [4143,open] open
+   - [M15 fib] x327->0: [4159,open] open
+   + [M15 fib] x0->140: counter(1,2) first_counter 3743→3743
+   - [M15 fib] x140->0: counter(1,2) first_counter 3759→3759
+   + [M15 fib] x0->387: counter(1,2) subsequent_counter 4143→4143
+   - [M15 fib] x327->0: counter(1,2) subsequent_counter 4159→4159
+   + [M15 fib] x6->7: cycle_id=%{customdata[5]}
+   + [M15 fib] x0->60: inactive (locked)
+   + [M15 fib] x0->140: life=[3743, 4143] same_dir_replacement
+   - [M15 fib] x140->0: life=[3759, 4159] same_dir_replacement
+   + [M15 fib] x0->131: life=[4143, 4177] new_cycle
+   - [M15 fib] x131->0: life=[4159, 4177] new_cycle
+   + [M15 fib] x0->60: life=[–, 4140] new_cycle
+   + [M15 fib] x467->527: limit 0.58105 · parent_bos_threshold · M=none
+   + [M15 fib] x6->7: records: %{customdata[4]}
+   + [M15 fib] x6->7: status=%{customdata[12]}<extra></extra>
+   + [M15 fib] x6->7: sub window=%{customdata[3]}
+   + [M15 fib] x6->7: sub_id=%{customdata[0]} | first record parent_sid=%{customdata[1]} parent_cycle_id=%{customdata[2]}
+== rk2-5_M15_confluence.html: 160 hover lines differ (distinct lines 947 -> 961)
+   + [] x61->66: <b>Wave Candle</b>
+   + [] x0->2: BOS zone: sub_id=7 cycle=0
+   + [] x1->2: BOS zone: sub_id=7 cycle=1
+   + [] x0->2: CTS zone: sub_id=7 cycle=0
+   + [] x18->19: Role: FB (first breakout)
+   + [] x15->16: Role: FP (first pullback)
+   + [] x16->17: Role: LB (last breakout)
+   + [] x2->3: Role: LP (last pullback of cycle 0)
+   + [] x2->3: Role: LP (pre-structure pullback)
+   + [] x50->55: TF=15M
+   + [] x0->1: Volume: 148<extra></extra>
+   + [] x0->1: Volume: 229<extra></extra>
+   + [] x0->1: Volume: 295<extra></extra>
+   + [] x0->1: Volume: 316<extra></extra>
+   + [] x0->1: Volume: 347<extra></extra>
+   + [] x11->16: first record parent_sid=1 parent_cycle=2
+   + [] x0->1: idx=4027  idx_1H=1006
+   + [] x0->1: idx=4030  idx_1H=1007
+   + [] x0->1: idx=4082  idx_1H=1020
+   + [] x0->1: idx=4083  idx_1H=1020
+   + [] x0->1: idx=4129  idx_1H=1032
+   + [] x0->10: sub window=[4143,open] open
+   - [] x5->0: sub window=[4159,open] open
+   - [H1 POI zone (overlay)] x6->4: %{customdata[6]}
+   - [H1 POI zone (overlay)] x6->4: <b>POI Zone</b>
+   - [H1 POI zone (overlay)] x1794->0: IP 3C.ii · legs 3-2-1 (828–830 | 831–832 | 833)
+   - [H1 POI zone (overlay)] x3778->1578: No pattern · ranking rule exclude_pinbar
+   - [H1 POI zone (overlay)] x6->4: TF=1H
+   - [H1 POI zone (overlay)] x1794->1578: active
+   - [H1 POI zone (overlay)] x6->4: bottom=%{customdata[8]:.5f}
+   - [H1 POI zone (overlay)] x6140->2362: buy
+   - [H1 POI zone (overlay)] x6->4: confirmed_idx=%{customdata[4]}
+   - [H1 POI zone (overlay)] x6->4: cycle_id=%{customdata[5]}
+   - [H1 POI zone (overlay)] x6140->2362: ended
+   - [H1 POI zone (overlay)] x6->4: ic_idx=%{customdata[3]}
+   - [H1 POI zone (overlay)] x1794->1578: sell
+   - [H1 POI zone (overlay)] x6->4: side=%{customdata[0]}
+   - [H1 POI zone (overlay)] x6->4: status=%{customdata[9]}<extra></extra>
+   - [H1 POI zone (overlay)] x6->4: struct_direction=%{customdata[2]}
+   - [H1 POI zone (overlay)] x6->4: structure_id=%{customdata[1]}
+   - [H1 POI zone (overlay)] x6->4: top=%{customdata[7]:.5f}
+   + [M15 BOS sub7] x0->3: [4143,open] open
+   - [M15 BOS sub7] x3->0: [4159,open] open
+   + [M15 CTS (unconf) sub7] x0->1: [4143,open] open
+   - [M15 CTS (unconf) sub7] x1->0: [4159,open] open
+   - [M15 CTS sub7] x2->1: -
+   + [M15 CTS sub7] x0->3: [4143,open] open
+   - [M15 CTS sub7] x3->0: [4159,open] open
+   + [M15 CTS sub7] x1->2: counter
+   - [M15 CTS sub7] x2->1: forming
+   + [M15 CTS sub7] x1->2: live
+   + [M15 KL zone] x68->70: KL Zone
+   + [M15 KL zone] x68->70: TF=15M
+   + [M15 KL zone] x0->484: [4143,open] open
+   - [M15 KL zone] x222->0: [4159,open] open
+   + [M15 KL zone] x2484->2746: base
+   + [M15 KL zone] x68->70: base_idx=%{customdata[4]}
+   + [M15 KL zone] x68->70: base_pattern=%{customdata[3]}
+   + [M15 KL zone] x68->70: bottom=%{customdata[8]:.5f}<extra></extra>
+   + [M15 KL zone] x4426->4688: buy
+   + [M15 KL zone] x68->70: confirmed_idx=%{customdata[5]}
+   + [M15 KL zone] x222->484: confluence(1,2) reversal 4200→4200
+   + [M15 KL zone] x68->70: cycle_id=%{customdata[6]}
+   + [M15 KL zone] x68->70: records: %{customdata[12]}
+   + [M15 KL zone] x68->70: side=%{customdata[0]}
+   + [M15 KL zone] x68->70: struct_direction=%{customdata[2]}
+   + [M15 KL zone] x68->70: sub window=%{customdata[11]}
+   + [M15 KL zone] x68->70: sub_id=%{customdata[1]} | first record parent_sid=%{customdata[9]} parent_cycle_id=%{customdata[10]}
+   + [M15 KL zone] x68->70: top=%{customdata[7]:.5f}
+   + [M15 POI zone] x0->1394: IC zone 80-100 (fallback)
+   - [M15 POI zone] x864->0: IP 1A.iii · legs 1-1-2 (3387 | 3388 | 3389–3390)
+   - [M15 POI zone] x290->0: IP 1A.iv · legs 2-1-2 (4081–4082 | 4083 | 4084–4085)
+   - [M15 POI zone] x1210->0: IP 1A.iv · legs 3-1-3 (1114–1116 | 1117 | 1118–1120)
+   - [M15 POI zone] x1506->0: IP 1A.iv · legs 3-1-3 (2834–2836 | 2837 | 2838–2840)
+   - [M15 POI zone] x476->0: IP 1B.iii · legs 1-1-2 (2105 | 2106 | 2107–2108)
+   - [M15 POI zone] x258->0: IP 2A.iv · legs 2-1-3 (4049–4050 | 4051 | 4052–4054)
+   - [M15 POI zone] x390->0: IP 2B.iii · legs 1-1-3 (2797 | 2798 | 2799–2801)
+   - [M15 POI zone] x338->0: IP 2B.iv · legs 2-1-3 (1770–1771 | 1772 | 1773–1775)
+   - [M15 POI zone] x452->0: IP 3A.iv · legs 2-1-2 (2381–2382 | 2383 | 2384–2385)
+   + [M15 POI zone] x0->370: IP 3B.iii · legs 1-1-3 (2807 | 2808 | 2809–2811)
+   + [M15 POI zone] x0->292: IP 3B.iii · legs 1-1-3 (4130 | 4131 | 4132–4134)
+   + [M15 POI zone] x0->786: IP 3C.iii · legs 1-3-2 (3424 | 3425–3427 | 3428–3429)
+   + [M15 POI zone] x0->604: IP 3C.iv · legs 2-2-3 (920–921 | 922–923 | 924–926)
+   + [M15 POI zone] x0->220: IP 3C.iv · legs 2-3-2 (4044–4045 | 4046–4048 | 4049–4050)
+   + [M15 POI zone] x0->1320: IP 3C.iv · legs 3-3-3 (2925–2927 | 2928–2930 | 2931–2933)
+   + [M15 POI zone] x0->326: No pattern · only IC candidate
+   + [M15 POI zone] x592->1890: No pattern · ranking rule exclude_pinbar
+   + [M15 POI zone] x0->1012: No pattern · ranking rule ic_candle_type over 1142
+   - [M15 POI zone] x510->0: No pattern · ranking rule immediate_unfilled_imbalance over 2574 (gap 2577)
+   - [M15 POI zone] x784->0: No pattern · ranking rule immediate_unfilled_imbalance over 3806 (gap 3810)
+   - [M15 POI zone] x268->0: Tiebreak over 1447: immediate unfilled imbalance 1662
+   - [M15 POI zone] x290->0: Tiebreak over 4136: most recent before imbalance 4132
+   - [M15 POI zone] x2408->2210: [1020,1940] reversal
+   + [M15 POI zone] x778->898: [1940,2470] reversal
+   - [M15 POI zone] x962->510: [2470,2829] reversal
+   - [M15 POI zone] x1896->1690: [2829,3611] parent_end
+   - [M15 POI zone] x864->786: [3621,3819] same_dir_replacement
+   + [M15 POI zone] x0->512: [4143,open] open
+   - [M15 POI zone] x548->0: [4159,open] open
+   - [M15 POI zone] x290->194: active
+   - [M15 POI zone] x3918->3232: buy
+   - [M15 POI zone] x2408->2210: confluence(0,0) first_confluence 463→1020
+   + [M15 POI zone] x778->898: confluence(0,0) reversal 1940→1940
+   - [M15 POI zone] x962->510: confluence(0,0) reversal 2470→2470; confluence(0,1) first_confluence 2611→2611
+   - [M15 POI zone] x1896->1690: confluence(0,1) reversal 2829→2829
+   - [M15 POI zone] x864->786: confluence(1,2) first_confluence 3611→3621
+   - [M15 POI zone] x548->512: confluence(1,2) reversal 4200→4200
+   - [M15 POI zone] x7950->7196: ended
+   - [M15 POI zone] x4322->4158: sell
+   + [M15 fib] x327->387: 0.57362
+   + [M15 fib] x0->60: 0.57424
+   + [M15 fib] x0->60: 0.57481
+   + [M15 fib] x0->60: 0.57674
+   + [M15 fib] x16->17: 61.8%=%{customdata[10]}
+   + [M15 fib] x16->17: 80%=%{customdata[11]}
+   + [M15 fib] x16->17: <b>Fib Zone</b>
+   + [M15 fib] x16->17: BOS: idx=%{customdata[6]} price=%{customdata[7]}
+   + [M15 fib] x16->17: CTS: idx=%{customdata[8]} price=%{customdata[9]}
+   + [M15 fib] x0->60: IC ref 0.58105 (cross_limit_anchor) · break: none
+   + [M15 fib] x0->193: IC: none (all_ic_candidates_pinbar) · zone 80-100 (fallback)
+   - [M15 fib] x12->0: IC: none (no_ic_candidate)
+   + [M15 fib] x0->154: IC: none (no_ic_candidate) · zone 80-100 (fallback)
+   - [M15 fib] x318->0: IP 1A.iii · IC 3388
+   - [M15 fib] x139->0: IP 1A.iv · IC 1117
+   - [M15 fib] x290->0: IP 1A.iv · IC 2837
+   - [M15 fib] x196->0: IP 1A.iv · IC 4083
+   - [M15 fib] x154->0: IP 1B.iii · IC 2106
+   - [M15 fib] x131->0: IP 2A.iv · IC 4051
+   - [M15 fib] x85->0: IP 2B.iii · IC 2798
+   - [M15 fib] x34->0: IP 2B.iv · IC 1772
+   - [M15 fib] x193->0: IP 3A.iv · IC 2383
+   + [M15 fib] x0->85: IP 3B.iii · IC 2808
+   + [M15 fib] x0->131: IP 3B.iii · IC 4131
+   + [M15 fib] x0->196: IP 3B.iii · IC 4131 · zone 80-100 (fallback)
+   + [M15 fib] x0->318: IP 3C.iii · IC 3427
+   + [M15 fib] x0->290: IP 3C.iv · IC 2930
+   + [M15 fib] x0->60: IP 3C.iv · IC 4048
+   + [M15 fib] x0->104: IP 3C.iv · IC 923 · zone 80-100 (fallback)
+   + [M15 fib] x0->139: No pattern · IC 1216 · ranking rule ic_candle_type
+   + [M15 fib] x0->34: No pattern · IC 1778 · only IC candidate
+   + [M15 fib] x0->12: No pattern · IC 1934 · ranking rule exclude_pinbar · zone 80-100 (fallback)
+   + [M15 fib] x0->49: No pattern · IC 2575 · ranking rule exclude_pinbar
+   - [M15 fib] x49->0: No pattern · IC 2575 · ranking rule immediate_unfilled_imbalance
+   + [M15 fib] x0->241: No pattern · IC 3809 · ranking rule exclude_pinbar
+   - [M15 fib] x241->0: No pattern · IC 3809 · ranking rule immediate_unfilled_imbalance
+   - [M15 fib] x104->0: No pattern · IC 929 · ranking rule exclude_pinbar
+   + [M15 fib] x16->17: TF=15M
+   + [M15 fib] x0->387: [4143,open] open
+   - [M15 fib] x327->0: [4159,open] open
+   + [M15 fib] x327->387: confluence(1,2) reversal 4200→4200
+   + [M15 fib] x16->17: cycle_id=%{customdata[5]}
+   + [M15 fib] x0->60: inactive (locked)
+   + [M15 fib] x0->131: life=[4143, 4177] new_cycle
+   - [M15 fib] x131->0: life=[4159, 4177] new_cycle
+   + [M15 fib] x0->60: life=[–, 4140] new_cycle
+   + [M15 fib] x327->387: limit 0.58105 · parent_bos_threshold · M=none
+   + [M15 fib] x16->17: records: %{customdata[4]}
+   + [M15 fib] x16->17: status=%{customdata[12]}<extra></extra>
+   + [M15 fib] x16->17: sub window=%{customdata[3]}
+   + [M15 fib] x16->17: sub_id=%{customdata[0]} | first record parent_sid=%{customdata[1]} parent_cycle_id=%{customdata[2]}

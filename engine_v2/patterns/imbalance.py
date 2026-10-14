@@ -180,8 +180,9 @@ def iter_unfilled_imbalances(
     end_idx]` (its formed prefix as of `evaluated_at`), of `direction`, and not
     two-stroke-filled as of `check_to_idx`. Same arguments and filters, lazily:
     `has_unfilled_imbalance` == `any(...)`, stopping at the same instance. The
-    institutional pattern's TB2a reads its reference imbalance here, so its
-    "unfilled" IS IC condition 3's test (PLAN_H §1 item 10)."""
+    most-recent-before-imbalance rule (TB2a until 2026-10-09) reads its reference imbalance here and IC
+    condition 3 (`immediate_unfilled_imbalance_first_c2_idx`, PLAN_P) its immediate gap, so both share one
+    "unfilled" test (PLAN_H §1 item 10)."""
     for inst in df.attrs.get("imbalances", []):
         if direction is not None and inst.direction != direction:
             continue

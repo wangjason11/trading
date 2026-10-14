@@ -145,8 +145,10 @@ To change any visual element:
 - **Hover (PLAN_H HV, landing B 2026-10-06; `versions=` until then)**: the pattern line(s) from ONE builder,
   `_zone_render.poi_ic_hover_text`, on all three POI hover sites (the H1 chart, the M15 lens charts' sub POIs and
   their H1 overlay): `IP <rank> · legs a-b-c (initial | opp | continuation)` — each leg `first–last`, one candle its
-  index — + `Tiebreak over <IC>: immediate unfilled imbalance <c2>` / `…: IC candle type` / `…: most recent before
-  imbalance <c2>` when a tiebreaker decided (POI_ZONES_SPEC §3.4; `TB1 over …` / `TB2 over …` until 2026-10-09).
+  index — + `Tiebreak over <IC>: IC candle type` / `…: most recent before imbalance <c2>` when a tiebreaker decided
+  (POI_ZONES_SPEC §3.4; `TB1 over …` / `TB2 over …` until 2026-10-09; `…: immediate unfilled imbalance <c2>` from then
+  until PLAN_P, 2026-10-13 — the hover now rejects that value) — + a line `IC zone 80-100 (fallback)` on an IC from
+  Step 1A (`ic_zone_band`, PLAN_P; nothing on the 61.8–80 band; an unknown band fails loudly).
   The builder asserts the leg counts match the leg indices (a mirror that shifted one but not the other fails at render).
   A RANKED IC (`ip_outcome` `no_pattern` — POI_ZONES_SPEC §3.6, PLAN_L L2, 2026-10-10): `No pattern · ranking rule
   <rule>` + ` over <runner-up>` + ` (gap <c2>)` when the deciding rule has them (`exclude_pinbar` neither,
@@ -164,7 +166,7 @@ To change any visual element:
   locked OR condition-active, ended or not — an ended never-locked record (e.g. a sub's last cycle ended by
   `parent_end`) is drawn; `active` False (a superseded cross version, a fib invalidated by an imbalance fill) vanishes
   (FIB_LIFECYCLE_SPEC §9.1 / §9.3)
-- Per fib (`export_plotly._add_fib_box`, the one drawer): dotted horizontal lines at 0% (BOS anchor) and 100% (CTS anchor) plus dotted verticals at both ends (`fib.anchor_line.*`), and a dotted rectangle between 61.8% and 80% (`fib.zone_rect.*`), spanning the BOS → CTS candles; invisible hover points across the zone
+- Per fib (`export_plotly._add_fib_box`, the one drawer): dotted horizontal lines at 0% (BOS anchor) and 100% (CTS anchor) plus dotted verticals at both ends (`fib.anchor_line.*`), and a dotted rectangle between 61.8% and 80% (`fib.zone_rect.*`), spanning the BOS → CTS candles; invisible hover points across the zone. The rectangle and the hover's 61.8 / 80 levels stay 61.8–80 on a record whose IC came from Step 1A (the 80–100 fallback, PLAN_P) — that POI sits below the box (buy) / above it (sell); the status cell names the band
 - "Bright" = the live active version (`.active` keys; `_zone_render.fib_is_bright`); every other drawn record renders faded (`.historical` keys)
 - Hover: H1 sid + cycle (M15: `sub_id` + the first record's parent, the sub window, its records, the cycle), the BOS /
   CTS anchors + prices, the 61.8 / 80 levels, and the status cell (`_zone_render.fib_hover_status_text`, one builder):
@@ -175,7 +177,9 @@ To change any visual element:
   its IC, PLAN_H §6 ICR-15), `IC: none (<reason>)` (no IC, no POI — PLAN_H C1; the reason `no_ic_candidate` or
   `all_ic_candidates_pinbar`, POI_ZONES_SPEC §3.5), or `IC: not evaluated (no POI record)` (the POI record
   gate skipped it: ended before locking, or no CTS_ESTABLISHED; `IP: none (…)` / `IP: not evaluated (…)` and the
-  reason `no_pattern` until PLAN_L L2); then the record's IC REFERENCE line
+  reason `no_pattern` until PLAN_L L2) — + ` · zone 80-100 (fallback)` when the record's IC selection ran Step 1A
+  (`ic_zone_band` `80-100`, PLAN_P: on a pick, or on `IC: none (…)` = no IC in either zone; the row's band is
+  asserted — an unknown one fails loudly); then the record's IC REFERENCE line
   (`_zone_render.fib_hover_ic_ref_text`, PLAN_K A17, 2026-10-09 — POI_ZONES_SPEC §3.2; from the fib meta `ic_ref_*`):
   `IC ref <price> (<source>[, cycle <T−1>]) · break <idx>` (e.g. `IC ref 0.57774 (prev_cycle_cts, cycle 2) · break
   1720`; the cycle only for `prev_cycle_cts` — the target cycle's previous one, a cross too since PLAN_O), `… · break:

@@ -42,15 +42,16 @@ def _fib(sid=0, cyc=1, *, active=True, locked=False, status="active", start=None
 
 
 def _ip(sid=0, cyc=1, *, bos=10, cts=20, ic=None, rank=None, reason=None, picked=False, sub_id=None,
-        outcome=None, ranking_rule=None):
+        outcome=None, ranking_rule=None, band="61.8-80"):
     """A row of `*_ic_candidates.csv`; `outcome` = `ip_outcome` — defaults to "pattern" on a row with a rank (PLAN_L
-    L2: Step 2's outcome sits on every row of a record)."""
+    L2: Step 2's outcome sits on every row of a record); `band` = `ic_zone_band` (every row of a record, PLAN_P)."""
     return ICCandidateRecord(
         structure_id=sid, cycle_id=cyc, struct_direction=1, bos_anchor_idx=bos, cts_anchor_idx=cts,
         ic_idx=ic, candle_type=None, agreed_dir=None, touches_zone=None, ip_rank=rank, reason=reason,
         pattern_anchor_idx=None, opp_leg_first_idx=None, pattern_end_idx=None, pattern_confirmed_idx=None,
         ip_leg_candle_counts=None, picked=picked, meta={} if sub_id is None else {"sub_id": sub_id},
         ip_outcome=outcome if outcome is not None or rank is None else "pattern", ranking_rule=ranking_rule,
+        ic_zone_band=band,
     )
 
 
