@@ -1,6 +1,7 @@
 # PLAN_P — IC condition 3 = the immediate unfilled imbalance + Step 1A, the 80–100 fallback zone (the user's changes 1 + 3, 2026-10-13)
 
-**Status: LANDED 2026-10-13** (§10: `/compare` = §6 exactly, mutants 27 / 27; landing review 384,641 tokens, no
+**Status: LANDED 2026-10-13** — source `23f395d`, save **S_P** `20261013_231327_23f395d` (save commit `69ac1d7`, trunk
+`ab4c982`; = `LATEST_week9-entries-decisions`; the save replay md5- / figure-hash-equal to the variant again) (§10: `/compare` = §6 exactly, mutants 27 / 27; landing review 384,641 tokens, no
 BLOCKER / MAJOR; the user's chart look: "Charts look good, go ahead and commit once the review is done"). Plan review: 2 lenses, 600,960 tokens (§9). Baseline **S_O** `artifacts/commits/week9-entries-decisions/20261013_151425_ce5ac9b`
 (= `LATEST_week9-entries-decisions`; source `ce5ac9b`, PLAN_O). HEAD at drafting `d8f6279`; suite 1718. Session order
 item 2 (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER"). ONE commit — the revert unit (the user, 2026-10-13: "change

@@ -430,7 +430,7 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_structure_levels.csv` |
 | `*_kl_zones.csv` |
 | `*_poi_zones.csv` |
-| `*_ic_candidates.csv` — the IC selection (`*_ip_candidates.csv` until PLAN_L landing 1, 2026-10-09; PLAN_H landing A; the picked rows = the drawn POIs since landing B); + the column `ic_ref_reason` after `touches_zone` since PLAN_K landing A (2026-10-09); + `immediate_imbalance_first_c2_idx` after `ic_ref_reason` since the IP tiebreaker update (2026-10-09); + `has_unfilled_imbalance_after`, `is_ic_candidate` after it and one row per agreed-opposite candle of the window since PLAN_L landing 1; + `ip_outcome` after `is_ic_candidate` and the 4 `ranking_*` columns at the end since PLAN_L landing 2 (2026-10-10) |
+| `*_ic_candidates.csv` — the IC selection (`*_ip_candidates.csv` until PLAN_L landing 1, 2026-10-09; PLAN_H landing A; the picked rows = the drawn POIs since landing B); + the column `ic_ref_reason` after `touches_zone` since PLAN_K landing A (2026-10-09); + `immediate_imbalance_first_c2_idx` after `ic_ref_reason` since the IP tiebreaker update (2026-10-09); + `has_unfilled_imbalance_after`, `is_ic_candidate` after it and one row per agreed-opposite candle of the window since PLAN_L landing 1; + `ip_outcome` after `is_ic_candidate` and the 4 `ranking_*` columns at the end since PLAN_L landing 2 (2026-10-10); + `ic_zone_band` after `is_ic_candidate` since PLAN_P (2026-10-13 — every row; `touches_zone` is that band's touch, `immediate_imbalance_first_c2_idx` = IC condition 3, `has_unfilled_imbalance_after` information only) |
 | `*_structure_events.csv` — `STATE_CHANGED(to=reversal)` carries `meta["pattern_anchor_idx"]` since PLAN_K landing A |
 | `*_imbalance_instances.csv` |
 | `*_fib_lifecycle.csv` — no `fib_mode` column since PLAN_I S6 (2026-10-09): against an older save (S_J `20261009_013718_708a8d9` and before) diff the 3 fib CSVs with `engine_v2/plans/plan_i_inputs/cmp_s6_fib_mode.py BASE CUR` (positional `cmp_save.py` shifts the `meta` cell); the `ic_ref_*` meta keys since PLAN_K landing A |
@@ -523,7 +523,23 @@ the 2 lens POI CSVs); no structure / KL / WVMI / trigger / sub change; chart cou
 (sid 1's cross fib is on collapsed (1,1), not drawn); each lens 5 traces' customdata (sub 3's 2 POI-zone hover traces,
 the 3 cross fibs' hover) + 3 shapes (sub 3's 2 POI rectangles, its confirm line). Against S_N_hover: positional
 `cmp_save.py` + `cmp_hover.py` read correctly (no column change) — every delta = PLAN_O §10. S_O
-`20261013_151425_ce5ac9b` (source `ce5ac9b`, save `b138424`, trunk `07f5ff6`; = `LATEST_<branch>` from 2026-10-13).
+`20261013_151425_ce5ac9b` (source `ce5ac9b`, save `b138424`, trunk `07f5ff6`; `LATEST_<branch>` until S_P, below).
+**PLAN_P (2026-10-13, IC condition 3 = the immediate unfilled imbalance + Step 1A, the 80–100 fallback zone — the
+user's changes 1 + 3) — a BEHAVIOUR change AND a save-format boundary:** the IC CSVs gain the column `ic_zone_band`
+after `is_ic_candidate` (every row, the no-IC row included); the POI meta gains `ic_zone_band` (after `ip_outcome`);
+the `ip_tiebreak` / `ranking_rule` value `immediate_unfilled_imbalance` is gone (the rule became IC condition 3).
+Meaning changes of existing IC CSV columns: `touches_zone` = the touch of the record's band (80–100 on EVERY row of a
+record where Step 1A ran); `is_ic_candidate` reads the immediate gap; `immediate_imbalance_first_c2_idx` IS condition
+3 and `has_unfilled_imbalance_after` is information only — both with UNCHANGED values (the CSV always classified every
+check). Against S_O: positional `cmp_save.py` breaks on the new column (every IC row shifts) and the POI `meta` cell —
+use the keyed `engine_v2/plans/qa_ic_crossfib_inputs/cmp_trial.py BASE CUR` (IC outcome per record, the drawn POIs,
+the structure events, fibs, subs, triggers) and `qa_ic_crossfib_inputs/cmp_hover_strings.py BASE CUR` (hover lines,
+works when the trace counts differ). 22 of 27 CSVs differ; H1 POIs 5 → 2 (180, 694, 732 gone; 832 → 859); ONE
+structure event — H1 sid 1 cycle 2 CTS_CONFIRMED 939 → 935 (the counter triggers 3759 → 3743 / 4159 → 4143, sub 5
+[3743, 4143], sub 7 from 4143); 4 Step 1A POIs (650, 923, 1934, 4131); 0 M15 structure-event changes (1 meta cell:
+confluence 1902 `trigger_inner`); chart counts 81/236, 146/135, 289/293. Every delta = PLAN_P §6 (the landing
+replay is md5- / figure-hash-equal to the variant, `qa_ic_crossfib_inputs/plan_p_variant/`). S_P
+`20261013_231327_23f395d` (source `23f395d`, save `69ac1d7`, trunk `ab4c982`; = `LATEST_<branch>` from 2026-10-13).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -653,15 +669,16 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-13 on S_O `20261013_151425_ce5ac9b`; unchanged since
-PLAN_L landing 2 (S_L2, 2026-10-10: its 7 new POIs moved them from 81/236, 135/120, 274/264)
-through S_M1, S_M2, S_N, S_N_hover and S_O; config window 2025-12-01→2026-01-20, auto-extended to
+counts are (verified 2026-10-13 on S_P `20261013_231327_23f395d` — PLAN_P moved them from S_O's 83/239,
+137/123, 282/276: H1 3 POIs gone, sub 7's cycle 0 now drawn, the Step 1A POIs; those were unchanged since PLAN_L
+landing 2 (S_L2, 2026-10-10: its 7 new POIs moved them from 81/236, 135/120, 274/264) through S_M1, S_M2, S_N,
+S_N_hover and S_O; config window 2025-12-01→2026-01-20, auto-extended to
 2025-11-15. Window-dependent, re-baseline when the config window or chart rendering changes;
 older values in **History** below):
 
-- `H1` chart: traces=83, shapes=239
-- `M15.counter` chart: traces=137, shapes=123
-- `M15.confluence` chart: traces=282, shapes=276
+- `H1` chart: traces=81, shapes=236
+- `M15.counter` chart: traces=146, shapes=135
+- `M15.confluence` chart: traces=289, shapes=293
 
 (Before the 2026-10-09 re-baseline the block listed the 2026-09-24 Plan F values — H1
 85/245, counter 151/124, confluence 294/233; landings between re-baselines are not

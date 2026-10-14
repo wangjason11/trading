@@ -90,7 +90,8 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    decoupled from IC identification; the old condition 3 kept as information; the BOS anchor candle may be a Step 1A
    IC (the user: "Keep it"). `/compare` vs S_O = the prediction byte-for-byte (H1 POIs 5 → 2, one H1 cascade 939 →
    935, 4 Step 1A POIs, 0 M15 structure-event changes); mutants 27 / 27; the user's chart look: "Charts look good".
-   Its save S_P = `LATEST_<branch>` (the `/compare` skill's PLAN_P entry). Decisions verbatim: `qa_findings.md`.
+   Source `23f395d`, save S_P `20261013_231327_23f395d` = `LATEST_<branch>` (the `/compare` skill's PLAN_P entry).
+   Decisions verbatim: `qa_findings.md`. **NEXT = SESSION ORDER item 3** (the opposite-direction trigger).
 3. **Zone proximity triggers — changes and edits to the opposite-direction (CTS-zone) trigger** (the user brings the
    details). Today: `engine_v2/zones/zone_proximity.py` — per (sid, cycle) with a `CTS_CONFIRMED`, triggers alternate
    sd (BOS / POI zone) → opp_sd (the CTS zone's inner bound) → sd …, at H1 8 / M15 5 / M5 3 pips; narrow cycles: Rules
