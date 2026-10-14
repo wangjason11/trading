@@ -539,7 +539,18 @@ structure event — H1 sid 1 cycle 2 CTS_CONFIRMED 939 → 935 (the counter trig
 [3743, 4143], sub 7 from 4143); 4 Step 1A POIs (650, 923, 1934, 4131); 0 M15 structure-event changes (1 meta cell:
 confluence 1902 `trigger_inner`); chart counts 81/236, 146/135, 289/293. Every delta = PLAN_P §6 (the landing
 replay is md5- / figure-hash-equal to the variant, `qa_ic_crossfib_inputs/plan_p_variant/`). S_P
-`20261013_231327_23f395d` (source `23f395d`, save `69ac1d7`, trunk `ab4c982`; = `LATEST_<branch>` from 2026-10-13).
+`20261013_231327_23f395d` (source `23f395d`, save `69ac1d7`, trunk `ab4c982`; `LATEST_<branch>` until S_Q, below).
+**PLAN_Q (2026-10-14, the zone-proximity scan reads a POI exactly like a KL zone — by location at every candle of the
+scan, never its activation history; the user, session order item 3) — a BEHAVIOUR change, no format change:** on this
+window the outputs move only in the hovers. Vs S_P 0 / 27 CSVs differ (no trigger, sub, WVMI or event change — the
+one POI the rule would have moved, S_O's collapsed (1,1) at 820, PLAN_P had already removed); exactly 3 figure leaves:
+the `zone_proximity:trigger` marker trace's `customdata[5][8]` (the H1 sid 1 cyc 2 1035 sd:POI marker's
+`zone_confirmed_idx`) 998 → 902 on the H1 chart and both M15 lenses — a POI marker now shows its UNCLAMPED activation
+floor, not its active stretch's start (CHARTING_SPEC §12); layouts equal; chart counts unchanged. Against S_P (or
+older): `cmp_save.py` (CSVs) reads correctly; the positional `cmp_fig_full.py` or `plan_q_inputs/fig_leaf_diff.py`
+shows those 3 leaves (expected output `plan_q_inputs/variant_leaf_diff_vs_S_P.txt`) — not an engine delta. Every
+delta = PLAN_Q §6 (the save replay is md5- / figure-hash-equal to the variant, `plan_q_inputs/variant_*`). S_Q
+`20261014_170919_da8c15e` (source `da8c15e`, save `ff8d246`, trunk `ab8e3cf`; = `LATEST_<branch>` from 2026-10-14).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -669,7 +680,8 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-13 on S_P `20261013_231327_23f395d` — PLAN_P moved them from S_O's 83/239,
+counts are (verified 2026-10-14 on S_Q `20261014_170919_da8c15e`, unchanged from S_P `20261013_231327_23f395d` —
+PLAN_P moved them from S_O's 83/239,
 137/123, 282/276: H1 3 POIs gone, sub 7's cycle 0 now drawn, the Step 1A POIs; those were unchanged since PLAN_L
 landing 2 (S_L2, 2026-10-10: its 7 new POIs moved them from 81/236, 135/120, 274/264) through S_M1, S_M2, S_N,
 S_N_hover and S_O; config window 2025-12-01→2026-01-20, auto-extended to

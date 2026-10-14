@@ -252,5 +252,6 @@ leaves (`zone_proximity:trigger` customdata[5][8] 998 → 902 on each chart), la
 Mutants: run 1 (the drafted gate) 10 / 11 (Q08 survived → pinned); run 2 Q08 KILLED; run 4 (the final code)
 **14 / 14 KILLED** (`plan_q_inputs/mutants_run*_results.json`). Reviews: plan 227,056 tokens, landing 178,692.
 The user's chart look (H1 first, then both M15 lenses), 2026-10-14: "Charts look good" → committed and saved with
-`/commit-save` (the source commit, the save and its trunk copy: the `/compare` skill's PLAN_Q entry and
-`LATEST_week9-entries-decisions`).
+`/commit-save`: source `da8c15e`, save **S_Q** `20261014_170919_da8c15e` (save commit `ff8d246`, trunk `ab8e3cf`;
+= `LATEST_week9-entries-decisions`); the save replay md5- / figure-hash-equal to the variant again (27 / 27, 3 / 3;
+48.5 s wall after one OANDA 401 on the first try); suite 1743 on the commit.

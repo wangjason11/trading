@@ -107,7 +107,8 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    rule; (0,1)'s POI counted. Two asserts pin the bounds (the floor ≤ the scan start, the end past the scan).
    `/compare` vs S_P = 0 / 27 CSVs (PLAN_P had already removed that POI), 3 hover cells (the (1,2) 1035 sd:POI marker's
    `zone_confirmed_idx` 998 → 902 — now the POI's unclamped activation floor, not its active stretch's start);
-   mutants 14 / 14; the user's chart look: "Charts look good". **NEXT within item 3: the user's opposite-direction
+   mutants 14 / 14; the user's chart look: "Charts look good". Source `da8c15e`, save S_Q `20261014_170919_da8c15e` =
+   `LATEST_<branch>` (the `/compare` skill's PLAN_Q entry). **NEXT within item 3: the user's opposite-direction
    changes.**
 4. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
