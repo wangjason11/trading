@@ -1,0 +1,11 @@
+[
+ {
+  "id": "Q08_floor_drops_the_ic_term",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_poi_activation_moment.py::test_poi_activation_floor_idx_takes_the_max_of_its_terms"
+  ],
+  "tail": "1 failed, 1733 passed, 2 skipped, 1 deselected, 444 warnings in 66.99s (0:01:06)"
+ }
+]

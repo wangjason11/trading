@@ -99,7 +99,16 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    `multitf/subsequent_confluence_trigger.py` fires on (one `subsequent_confluence` per opp_sd entry preceded by an sd),
    and `multitf/subsequent_counter_trigger.py` requires it inside the [sd, opp_sd, sd] window of a `subsequent_counter`
    (var 4) — so an opp_sd change reaches BOTH lenses' subs. Re-read the code + PART4 §4.3.4 / §4.3.5 at the session
-   start.
+   start. **First landing 2026-10-14 = PLAN_Q, on the sd side** (`engine_v2/plans/PLAN_Q_proximity_poi_like_kl.md`;
+   the user: "For the purpose of proximity triggers, I would like POI to be treated exactly like a KL zone"): the scan
+   reads a POI by LOCATION at every candle of the scan, never its activation history. Before it, a collapsed cycle's
+   POI never counted (its history is floored at the structure's lifecycle start, so empty) while its equally inactive
+   BOS zone did: S_O's sid 1 cyc 1 fired 820 sd:BOS beside its POI (IC 732, the nearer inner) — sd:POI under the new
+   rule; (0,1)'s POI counted. Two asserts pin the bounds (the floor ≤ the scan start, the end past the scan).
+   `/compare` vs S_P = 0 / 27 CSVs (PLAN_P had already removed that POI), 3 hover cells (the (1,2) 1035 sd:POI marker's
+   `zone_confirmed_idx` 998 → 902 — now the POI's unclamped activation floor, not its active stretch's start);
+   mutants 14 / 14; the user's chart look: "Charts look good". **NEXT within item 3: the user's opposite-direction
+   changes.**
 4. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -381,7 +390,12 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
   ~:1700, PLAN_H §8.9 F1); the layout keeps Plotly's default "closest" hover mode, so a candle crossing that price
   inside the span shows the fib instead (H1 sid 1 cyc 2: 0.57816 over 80 candles, through the 832–866 IC area).
   Options raised: hover points only at the band's two ends (recommended), one point at the CTS end, a legend toggle.
-  Related: "Uniform 3-tier chart opacity" below; register §A's charting-audit style items.
+  Related: "Uniform 3-tier chart opacity" below; register §A's charting-audit style items. (2) **The proximity
+  markers' `zone_confirmed_idx` means two things** (PLAN_Q plan review, 2026-10-14): a KL marker shows the zone's
+  lifecycle-CLAMPED `confirmed_idx` (a collapsed cycle: the structure's lifecycle start, after the trigger — 902 at
+  the 820 / 871 markers), a POI marker the UNCLAMPED activation floor (PLAN_Q). Option: show the KL zone's unclamped
+  confirmation moment (`KLZone.source_time`'s candle) — a second cause, not done in PLAN_Q. Detail: CHARTING_SPEC
+  §12.
 - **Uniform 3-tier chart opacity** (brightest = cycle not ended, mid = sid not ended, faded = sid ended; one
   `opacity_for(sid, cycle)` helper for every element) — its own session. Detail: FIB_LIFECYCLE_SPEC §9.4 + §13.
 - **Breadcrumb header with cross-chart navigation** — "not in v1". Detail: PART4 §16.9.

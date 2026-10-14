@@ -1,0 +1,234 @@
+diff --git a/engine_v2/charting/export_m15_chart.py b/engine_v2/charting/export_m15_chart.py
+index 99aa6e7..b658922 100644
+--- a/engine_v2/charting/export_m15_chart.py
++++ b/engine_v2/charting/export_m15_chart.py
+@@ -79,7 +79,7 @@ from engine_v2.charting._zone_render import (
+     select_subordinate_tf_tier,
+ )
+ from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
+-from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
++from engine_v2.zones.zone_proximity import poi_proximity_start_idx
+ from engine_v2.zones.structure_lifecycle import (
+     compute_reversal_idx_by_sid,
+     compute_struct_start_by_sid,
+@@ -2719,7 +2719,8 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
+             continue
+         poi_zones_by_cycle.setdefault((int(sid), int(cyc)), []).append(pz)
+ 
+-    def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int, at_idx: int) -> int:
++    def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int) -> int:
++        # The candle the POI starts counting from in the proximity scan (PLAN_Q).
+         cands = poi_zones_by_cycle.get((sid, cyc), [])
+         best = None
+         best_diff = float("inf")
+@@ -2731,8 +2732,7 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
+                 best = pz
+         if best is None:
+             return -1
+-        cidx = poi_confirmed_idx_as_of(best, at_idx)
+-        return int(cidx) if cidx is not None else -1
++        return int(poi_proximity_start_idx(best))
+ 
+     # The ONE price-extreme mapper (multitf.data_bridge): the H1 trigger wick is
+     # the hour's low when the approach is from above (lowest-low M15 candle), else
+@@ -2783,7 +2783,7 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
+             if trig.zone_kind == "POI":
+                 z_conf = _poi_confirmed_idx(
+                     int(trig.structure_id), int(trig.cycle_id),
+-                    float(trig.trigger_inner), int(sd) if sd else 1, h1_idx,
++                    float(trig.trigger_inner), int(sd) if sd else 1,
+                 )
+             else:
+                 z_conf = kl_conf_idx_by_key.get(
+diff --git a/engine_v2/charting/export_plotly.py b/engine_v2/charting/export_plotly.py
+index 513f378..37ea5af 100644
+--- a/engine_v2/charting/export_plotly.py
++++ b/engine_v2/charting/export_plotly.py
+@@ -25,7 +25,7 @@ from engine_v2.charting._zone_render import (
+     poi_ic_hover_text,
+ )
+ from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
+-from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
++from engine_v2.zones.zone_proximity import poi_proximity_start_idx
+ from engine_v2.common.types import PatternStatus
+ from engine_v2.multitf.registry import StructureRegistry
+ 
+@@ -2091,10 +2091,10 @@ def export_chart_plotly(
+                 continue
+             poi_zones_by_cycle.setdefault((int(sid), int(cyc)), []).append(pz)
+ 
+-        def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int, at_idx: int) -> int:
+-            """Find the POI matching `inner`; return its confirmed idx AS OF
+-            `at_idx` (start of the active stretch containing `at_idx`), not the
+-            collapsed-scalar `confirmed_idx` which is the LAST activate."""
++        def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int) -> int:
++            """Find the POI matching `inner`; return the candle it starts
++            counting from in the proximity scan (`poi_proximity_start_idx` —
++            PLAN_Q: read like a KL zone, so no activation-history stretch)."""
+             cands = poi_zones_by_cycle.get((sid, cyc), [])
+             best = None
+             best_diff = float("inf")
+@@ -2106,8 +2106,7 @@ def export_chart_plotly(
+                     best = pz
+             if best is None:
+                 return -1
+-            cidx = poi_confirmed_idx_as_of(best, at_idx)
+-            return int(cidx) if cidx is not None else -1
++            return int(poi_proximity_start_idx(best))
+ 
+         x_vals, y_vals, customdata = [], [], []
+         for key, trig_list in zone_proximity_triggers.items():
+@@ -2151,7 +2150,7 @@ def export_chart_plotly(
+                 if trig.zone_kind == "POI":
+                     z_conf = _poi_confirmed_idx(
+                         int(trig.structure_id), int(trig.cycle_id),
+-                        float(trig.trigger_inner), int(sd) if sd else 1, idx,
++                        float(trig.trigger_inner), int(sd) if sd else 1,
+                     )
+                 else:
+                     z_conf = kl_conf_idx_by_key.get(
+diff --git a/engine_v2/zones/poi_zones.py b/engine_v2/zones/poi_zones.py
+index 2e1ee4e..8935ca7 100644
+--- a/engine_v2/zones/poi_zones.py
++++ b/engine_v2/zones/poi_zones.py
+@@ -1438,6 +1438,29 @@ def _compute_fill_idx_cache(
+     return cache
+ 
+ 
++def poi_activation_floor_idx(
++    cts_established_idx: int,
++    ic_idx: int,
++    *,
++    pattern_confirmed_idx: Optional[int],
++    lifecycle_floor_idx: Optional[int],
++) -> int:
++    """The earliest candle a POI can be active (POI_ZONES_SPEC §4 "Activation floor"): max(the cycle's established
++    moment, the IC candle, the pattern's confirmation moment, the structure lifecycle-start floor). A POI cannot
++    activate before its cycle is knowable (Plan D), before its institutional pattern is known complete (PLAN_H R1 —
++    may lie past the frame: then never active; a ranked IC has no pattern term, `None` — ICR-2), nor before its
++    structure is alive (post-reversal cycle-0 / sub case, Phase 3 Commit 2). Both optional terms keyword-required, no
++    default (PLAN_L A7). Two callers: the activation sweep (`_compute_poi_activation_history`, every term) and the
++    zone-proximity scan's location read (`zone_proximity.poi_proximity_start_idx`, `lifecycle_floor_idx=None` —
++    PLAN_Q: the moment the POI exists in its own structure's timeline)."""
++    floor = max(int(cts_established_idx), int(ic_idx))
++    if pattern_confirmed_idx is not None:
++        floor = max(floor, int(pattern_confirmed_idx))
++    if lifecycle_floor_idx is not None:
++        floor = max(floor, int(lifecycle_floor_idx))
++    return floor
++
++
+ def _compute_poi_activation_history(
+     df: pd.DataFrame,
+     *,
+@@ -1503,17 +1526,10 @@ def _compute_poi_activation_history(
+     Returns `[{"idx", "active", "reason"}, ...]`. Empty list means POI never
+     activated in the window.
+     """
+-    # First-active = max(the cycle's established moment, the IC candle, the
+-    # structure lifecycle-start floor, the pattern's confirmation moment): a POI
+-    # cannot activate before its cycle is knowable (Plan D), before its structure
+-    # is alive (post-reversal cycle-0 / sub case, Phase 3 Commit 2), nor before its
+-    # institutional pattern is known complete (PLAN_H R1 — may lie past the frame:
+-    # then never active; a ranked IC has no pattern term — ICR-2).
+-    first_active = max(cts_established_idx, ic_idx)
+-    if pattern_confirmed_idx is not None:
+-        first_active = max(first_active, int(pattern_confirmed_idx))
+-    if lifecycle_floor_idx is not None:
+-        first_active = max(first_active, int(lifecycle_floor_idx))
++    first_active = poi_activation_floor_idx(
++        cts_established_idx, ic_idx,
++        pattern_confirmed_idx=pattern_confirmed_idx, lifecycle_floor_idx=lifecycle_floor_idx,
++    )
+     if first_active > scan_end or ic_idx not in df.index:
+         return []
+ 
+diff --git a/engine_v2/zones/zone_proximity.py b/engine_v2/zones/zone_proximity.py
+index 81b60c8..5c3a7dc 100644
+--- a/engine_v2/zones/zone_proximity.py
++++ b/engine_v2/zones/zone_proximity.py
+@@ -58,8 +58,7 @@ import pandas as pd
+ from engine_v2.common.types import KLZone
+ from engine_v2.structure import event_fields as ef
+ from engine_v2.structure.market_structure import StructureEvent
+-from engine_v2.zones.poi_lifecycle import poi_active_as_of
+-from engine_v2.zones.poi_zones import POIZone
++from engine_v2.zones.poi_zones import POIZone, poi_activation_floor_idx
+ from engine_v2.zones.structure_lifecycle import compute_reversal_idx_by_sid
+ 
+ 
+@@ -154,6 +153,21 @@ class ZoneProximityTrigger:
+     meta: Dict[str, Any] = field(default_factory=dict)
+ 
+ 
++def poi_proximity_start_idx(pz: POIZone) -> int:
++    """The first candle a POI counts as an sd zone in the proximity scan (PLAN_Q): its activation floor WITHOUT the
++    structure lifecycle-start term — max(the cycle's CTS-established moment, the IC[, the pattern-confirmed moment]),
++    the moment the POI exists in its own structure's timeline (`poi_zones.poi_activation_floor_idx`, the activation
++    sweep's own floor). From it on the POI counts at EVERY candle of the scan, exactly like the BOS KL zone: its
++    activation history — the lifecycle clamp, the imbalance-filled off-stretches — is never read here (the user,
++    2026-10-14: "I would like POI to be treated exactly like a KL zone"). Also the trigger hovers' POI
++    `zone_confirmed_idx`."""
++    return poi_activation_floor_idx(
++        int(pz.meta["cts_established_idx"]), int(pz.ic_idx),
++        pattern_confirmed_idx=pz.meta["pattern_confirmed_idx"],
++        lifecycle_floor_idx=None,
++    )
++
++
+ def _find_kl_zone_for_cycle(
+     kl_zones: List[KLZone],
+     sid: int,
+@@ -343,8 +357,9 @@ def check_zone_proximity(
+         cts_zone = _find_kl_zone_for_cycle(kl_zones, sid, cycle_id, "CTS")
+         cts_inner = cts_zone.meta.get("inner") if cts_zone is not None else None
+ 
++        # Each POI with the candle it starts counting from — read like the KL zones (PLAN_Q).
+         cycle_poi_zones = [
+-            pz for pz in poi_zones
++            (pz, poi_proximity_start_idx(pz)) for pz in poi_zones
+             if pz.meta.get("structure_id") == sid
+             and pz.meta.get("cycle_id") == cycle_id
+         ]
+@@ -362,6 +377,16 @@ def check_zone_proximity(
+         if scan_start > scan_end:
+             continue
+ 
++        # A POI's end is not read (like a KL zone's): it is its cycle's lifecycle end, always past the scan's last
++        # candle (the next cycle's clamped start >= its BOS_CONFIRMED moment; the same realised reversal — PLAN_Q §3).
++        # Asserted, so a future POI end inside the scan cannot be ignored silently.
++        for pz, _ in cycle_poi_zones:
++            poi_end_idx = pz.meta["end_idx"]
++            assert poi_end_idx is None or int(poi_end_idx) > scan_end, (
++                f"[zone_proximity] POI IC {pz.ic_idx} of ({sid},{cycle_id}) ends at {poi_end_idx}, inside the scan "
++                f"[{scan_start}, {scan_end}] — the location read (PLAN_Q) would ignore that end"
++            )
++
+         # Rule 2 prerequisite: identify whether this cycle's CTS_CONFIRMED
+         # was via pullback. Under Rule 1, narrow cycles can ONLY ever have
+         # confirmation_method == "pullback" (sd-proximity is blocked
+@@ -476,7 +501,7 @@ def _try_trigger_at_candle(
+     sd: int,
+     bos_inner: float,
+     cts_inner: Optional[float],
+-    cycle_poi_zones: List[POIZone],
++    cycle_poi_zones: List[Tuple[POIZone, int]],
+     threshold: float,
+     sid: int,
+     cycle_id: int,
+@@ -489,11 +514,10 @@ def _try_trigger_at_candle(
+     """
+     if expected_dir == "sd":
+         sd_inners: List[Tuple[float, str]] = [(bos_inner, "BOS")]
+-        for pz in cycle_poi_zones:
+-            # A POI can flap active/inactive within a cycle, so its live
+-            # state is NOT the scalar `confirmed_idx` (= last activate). Ask
+-            # the activation history whether it is active AS OF this candle.
+-            if not poi_active_as_of(pz, idx):
++        for pz, poi_start_idx in cycle_poi_zones:
++            # Read like a KL zone (PLAN_Q): from the moment the POI exists
++            # (`poi_proximity_start_idx`) — never its activation history.
++            if idx < poi_start_idx:
+                 continue
+             if sd == 1:
+                 sd_inners.append((float(pz.top), "POI"))

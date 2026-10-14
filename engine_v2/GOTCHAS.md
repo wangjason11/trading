@@ -665,7 +665,7 @@ zones.
 - Next BOS_CONFIRMED for `(sid, cycle_id + 1)` — its moment `meta["confirmed_at"]` (`== .idx` since Plan E E4b), not its anchor `meta["bos_anchor_idx"]` (a location) → current cycle zones become inactive
 - the sid's REALISED reversal, the `STATE_CHANGED(to=reversal)` candle (`compute_reversal_idx_by_sid`, since 2026-09-28) → scan window ends (`zone_proximity.py`, `reversal_idx_by_sid`; the scan stops at `reversal_idx - 1`). NOT a `REVERSAL_CANDIDATE`'s `meta["apply_idx"]` (a SCHEDULED apply): the old cap took the sid's LAST candidate, so a candidate discarded by its watch expiry capped every later cycle below its own scan start (no triggers, no WVMI gate record) and a step-anchor reversal realising earlier let the scan run past it — `tests/test_zone_proximity_reversal_cap.py`
 
-**Also:** Within the scan window, only use active POI zones at each candle (check `confirmed_idx <= candle <= end_idx`). The BOS KL zone is throughout-active. The CTS KL zone (used for opp_sd triggers) is also throughout-active within this window — `CTS_(n+1)_ESTABLISHED`, which deactivates CTS_n zone, fires exactly AT `next_BOS.confirmed_at` (its moment `meta["confirmed_at"]` is the same apply candle by construction — and its `.idx` since Plan E E4a; its CTS anchor `meta["cts_anchor_idx"]` can be earlier — ARCHITECTURE.md "`ev.idx` convention"), so within `[CTS_n_conf, next_BOS.confirmed_at - 1]` the CTS_n zone is still alive.
+**Also:** Within the scan window every POI of the cycle counts at each candle, like the BOS KL zone (PLAN_Q, 2026-10-14 — the user: "I would like POI to be treated exactly like a KL zone"; before it only an ACTIVE POI counted, per its activation history, and originally `confirmed_idx <= candle <= end_idx`). The BOS KL zone is throughout-active. The CTS KL zone (used for opp_sd triggers) is also throughout-active within this window — `CTS_(n+1)_ESTABLISHED`, which deactivates CTS_n zone, fires exactly AT `next_BOS.confirmed_at` (its moment `meta["confirmed_at"]` is the same apply candle by construction — and its `.idx` since Plan E E4a; its CTS anchor `meta["cts_anchor_idx"]` can be earlier — ARCHITECTURE.md "`ev.idx` convention"), so within `[CTS_n_conf, next_BOS.confirmed_at - 1]` the CTS_n zone is still alive.
 
 ---
 
@@ -1524,13 +1524,17 @@ lesson is unchanged.)
 - `active_stretches_from_history(history, open_end_idx)` — pairs
   `active=True` with the next `active=False` into `(start,end)` stretches
   (the shared primitive; `charting/_zone_render.compute_poi_active_stretches`
-  delegates to it so chart fills and the gate can't drift apart).
+  delegates to it so chart fills and any other per-candle reader can't drift
+  apart).
 - `poi_active_as_of(zone, idx)` — True iff `idx` falls in an active stretch
-  (respects `end_idx` as a hard cap). The proximity gate calls this.
+  (respects `end_idx` as a hard cap). The proximity gate called this until
+  PLAN_Q (2026-10-14): since then it reads a POI like a KL zone — at every
+  candle of its scan, never the history (so no stretch can hide it).
 - `poi_confirmed_idx_as_of(zone, idx)` — start of the active stretch
   containing `idx` (the per-candle replacement for the scalar; the chart
-  hover `z_conf` now shows this, e.g. 905 at candle 926, not the collapsed 997
-  (998 since Plan F)).
+  hover `z_conf` showed this until PLAN_Q, e.g. 905 at candle 926, not the
+  collapsed 997 (998 since Plan F) — since PLAN_Q it shows
+  `zone_proximity.poi_unclamped_activation_floor_idx`).
 
 **Rule:** to answer "is this POI active at candle X?" (or "what is its
 confirmed idx as of X?"), ALWAYS walk `activation_history` via

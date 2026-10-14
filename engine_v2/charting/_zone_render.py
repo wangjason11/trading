@@ -131,8 +131,9 @@ def compute_poi_active_stretches(
     active candle (inclusive on both ends). Callers translate to time
     coordinates at render time.
 
-    Delegates the pairing walk to `zones.poi_lifecycle` so the chart fills,
-    the proximity gate, and the hover labels can never disagree.
+    Delegates the pairing walk to `zones.poi_lifecycle` so the chart fills
+    and any other per-candle reader can never disagree (the proximity gate
+    and its hover labels read no activation history since PLAN_Q).
     """
     history = zone.meta.get("activation_history", []) or []
     return active_stretches_from_history(history, open_end_idx=render_end_idx)

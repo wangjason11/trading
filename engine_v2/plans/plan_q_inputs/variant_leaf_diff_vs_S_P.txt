@@ -1,0 +1,6 @@
+rk2-5.html: 1 differing leaves; layout equal=True
+    (69, 'zone_proximity:trigger', '.customdata[5][8]', 998, 902)
+rk2-5_M15_confluence.html: 1 differing leaves; layout equal=True
+    (288, 'zone_proximity:trigger', '.customdata[5][8]', 998, 902)
+rk2-5_M15_counter.html: 1 differing leaves; layout equal=True
+    (145, 'zone_proximity:trigger', '.customdata[5][8]', 998, 902)

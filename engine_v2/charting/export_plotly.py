@@ -25,7 +25,7 @@ from engine_v2.charting._zone_render import (
     poi_ic_hover_text,
 )
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
-from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
+from engine_v2.zones.zone_proximity import poi_unclamped_activation_floor_idx
 from engine_v2.common.types import PatternStatus
 from engine_v2.multitf.registry import StructureRegistry
 
@@ -2091,10 +2091,10 @@ def export_chart_plotly(
                 continue
             poi_zones_by_cycle.setdefault((int(sid), int(cyc)), []).append(pz)
 
-        def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int, at_idx: int) -> int:
-            """Find the POI matching `inner`; return its confirmed idx AS OF
-            `at_idx` (start of the active stretch containing `at_idx`), not the
-            collapsed-scalar `confirmed_idx` which is the LAST activate."""
+        def _poi_activation_floor_idx(sid: int, cyc: int, inner: float, sd: int) -> int:
+            """Find the POI matching `inner`; return its unclamped activation
+            floor (`poi_unclamped_activation_floor_idx` — PLAN_Q: the scan reads
+            a POI like a KL zone, so no activation-history stretch applies)."""
             cands = poi_zones_by_cycle.get((sid, cyc), [])
             best = None
             best_diff = float("inf")
@@ -2106,8 +2106,7 @@ def export_chart_plotly(
                     best = pz
             if best is None:
                 return -1
-            cidx = poi_confirmed_idx_as_of(best, at_idx)
-            return int(cidx) if cidx is not None else -1
+            return int(poi_unclamped_activation_floor_idx(best))
 
         x_vals, y_vals, customdata = [], [], []
         for key, trig_list in zone_proximity_triggers.items():
@@ -2149,9 +2148,9 @@ def export_chart_plotly(
 
                 # Triggered zone's confirmed idx
                 if trig.zone_kind == "POI":
-                    z_conf = _poi_confirmed_idx(
+                    z_conf = _poi_activation_floor_idx(
                         int(trig.structure_id), int(trig.cycle_id),
-                        float(trig.trigger_inner), int(sd) if sd else 1, idx,
+                        float(trig.trigger_inner), int(sd) if sd else 1,
                     )
                 else:
                     z_conf = kl_conf_idx_by_key.get(

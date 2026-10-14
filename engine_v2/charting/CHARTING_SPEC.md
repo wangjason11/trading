@@ -269,6 +269,23 @@ the M15 chart read their style bases from `zone.kl.*` / `zone.poi.*`
 longer used by the rendering code — they remain in `style_registry.py`
 unreferenced.
 
+### 12) Zone-proximity trigger markers (H1 + the M15 charts' H1 overlay)
+
+One × marker per H1 zone-proximity trigger (`attrs["zone_proximity_triggers"]`, `zones/zone_proximity.py`), style
+`zone_proximity.trigger`, above a red candle / below a green one. The H1 chart draws it on the trigger candle
+(`export_plotly`); the M15 charts on the M15 candle holding the trigger's wick (`export_m15_chart.
+_render_proximity_triggers_overlay`, the price-extreme mapper `map_candle_to_lower_tf`). Every trigger is drawn — a
+collapsed cycle's included (no lifecycle filter, like the scan itself; the zones it fired against are hidden).
+Hover (`customdata`): TF, the candle index (M15: `idx_15M` + `idx_1H`), sid, struct_direction, cycle_id, `type` =
+`<sd|opp_sd>:<BOS|POI|CTS>`, `distance_pips` (the wick to the inner bound — positive = stopped short, negative =
+crossed), `zone_kind`, and `zone_confirmed_idx`, whose meaning depends on the kind:
+- **BOS / CTS:** the KL zone's `confirmed_idx` — lifecycle-CLAMPED (a collapsed cycle's shows the structure's
+  lifecycle start, AFTER its own trigger: 902 on structure 1 cycle 1's 820 / 871 markers on the reference window);
+- **POI:** `poi_unclamped_activation_floor_idx` — the POI's activation floor without the lifecycle-start term
+  (PLAN_Q, 2026-10-14; before it the start of the active stretch holding the trigger, −1 outside one).
+The two differ on a collapsed cycle (S_O's structure 1 cycle 1: the BOS zone 902, the POI 748) — register §G
+"Overall chart revamp" item (2).
+
 ---
 
 ## Zone fill semantics — Item 5 (2026-05-20)

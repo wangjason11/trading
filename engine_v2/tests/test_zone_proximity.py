@@ -15,6 +15,7 @@ from engine_v2.zones.zone_proximity import (
     DEFAULT_PROXIMITY_PIPS,
     ZoneProximityTrigger,
     check_zone_proximity,
+    poi_unclamped_activation_floor_idx,
 )
 
 
@@ -108,23 +109,32 @@ def _cts_zone(sid: int, cycle_id: int, sd: int, inner: float, outer: float) -> K
     )
 
 
-def _poi_zone(sid: int, cycle_id: int, sd: int, top: float, bottom: float,
-              confirmed_idx: int, end_idx=None, activation_history=None) -> POIZone:
-    """Build a POI zone. The proximity gate reads `activation_history` (not
-    the scalar `confirmed_idx`); a single-span POI defaults to one activate
-    at `confirmed_idx`. Pass `activation_history` explicitly to model a POI
-    that flaps active/inactive within its cycle."""
+def _poi_zone(sid: int, cycle_id: int, sd: int, top: float, bottom: float, *,
+              cts_established_idx: int, ic_idx: Optional[int] = None,
+              pattern_confirmed_idx: Optional[int] = None, end_idx=None,
+              activation_history=None) -> POIZone:
+    """Build a POI zone. The proximity scan reads it like a KL zone (PLAN_Q): at
+    every candle of the scan, asserting its unclamped activation floor —
+    max(`cts_established_idx`, the IC[, `pattern_confirmed_idx`]); the IC
+    defaults to the candle before the establishment — is at or before the scan
+    start, and NEVER reading its `activation_history` (default: one activate at
+    `cts_established_idx`; pass it explicitly to model a POI that flaps, or `[]`
+    for a collapsed cycle's) nor the scalar `confirmed_idx` (the last activate,
+    stamped like the real meta)."""
     side = "buy" if sd == 1 else "sell"
     if activation_history is None:
-        activation_history = [{"idx": confirmed_idx, "active": True, "reason": "initial"}]
+        activation_history = [{"idx": cts_established_idx, "active": True, "reason": "initial"}]
+    activates = [ev["idx"] for ev in activation_history if ev["active"]]
     return POIZone(
         start_time=pd.Timestamp("2026-01-01", tz="UTC"),
         end_time=None, side=side, top=top, bottom=bottom,
-        ic_idx=confirmed_idx - 1,
+        ic_idx=cts_established_idx - 1 if ic_idx is None else ic_idx,
         meta={
             "structure_id": sid, "cycle_id": cycle_id,
-            "confirmed_idx": confirmed_idx, "end_idx": end_idx,
-            "ip_rank": "1A.i",
+            "confirmed_idx": activates[-1] if activates else None, "end_idx": end_idx,
+            "ip_rank": "1A.i" if pattern_confirmed_idx is not None else None,
+            "pattern_confirmed_idx": pattern_confirmed_idx,
+            "cts_established_idx": cts_established_idx,
             "activation_history": activation_history,
         },
     )
@@ -192,14 +202,14 @@ def test_no_alternation_without_opp_sd_zone():
     assert triggers[(0, 0)][0].direction == "sd"
 
 
-def test_poi_included_in_sd_inners_when_active():
+def test_poi_included_in_sd_inners_nearer_than_bos():
     """POI zone closer to current price than BOS should win as trigger_inner."""
     df = _make_df(30, default_h=1.50, default_l=1.49)
     # BOS inner 1.40, POI top 1.45 (closer to current price for sd=+1).
-    # Candle low 1.4505 → within 9 pips of POI inner (1.45) but not BOS (1.40 + 0.0009 = 1.4009 too low).
+    # Candle low 1.4505 → within 8 pips of POI inner (1.45) but not BOS (1.40 + 0.0008 = 1.4008 too low).
     df.at[5, "l"] = 1.4505
     bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
-    poi = _poi_zone(sid=0, cycle_id=0, sd=1, top=1.45, bottom=1.44, confirmed_idx=3)
+    poi = _poi_zone(sid=0, cycle_id=0, sd=1, top=1.45, bottom=1.44, cts_established_idx=2)
 
     triggers = check_zone_proximity(
         df=df, sorted_events=[_cts_confirmed(2)],
@@ -210,62 +220,87 @@ def test_poi_included_in_sd_inners_when_active():
     assert triggers[(0, 0)][0].trigger_inner == 1.45
 
 
-def test_poi_not_active_yet_excluded():
-    """POI confirmed_idx > current candle → POI not included in inners."""
+def test_poi_counts_from_the_scan_start_candle_with_its_floor_at_it():
+    """PLAN_Q: a POI counts from the scan start (2) itself, like the BOS zone —
+    its unclamped activation floor AT the scan start passes the assert (the
+    pattern confirmed at 2: the `<=` boundary) and its EMPTY activation history
+    is not read. Candle 2 sits 5 pips from the POI inner (within H1's 8); the BOS
+    inner is far. Replaces `test_poi_not_active_yet_excluded`, whose candle sat
+    10 pips away — outside 8 since the 2026-05-28 tuning, so it passed whatever
+    the gate did."""
     df = _make_df(30, default_h=1.50, default_l=1.49)
-    df.at[5, "l"] = 1.451  # close to POI inner if active
+    df.at[2, "l"] = 1.4505
     bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
-    poi = _poi_zone(sid=0, cycle_id=0, sd=1, top=1.45, bottom=1.44, confirmed_idx=10)
+    poi = _poi_zone(sid=0, cycle_id=0, sd=1, top=1.45, bottom=1.44,
+                    cts_established_idx=2, ic_idx=1, pattern_confirmed_idx=2,
+                    activation_history=[])
 
     triggers = check_zone_proximity(
         df=df, sorted_events=[_cts_confirmed(2)],
         kl_zones=[bos], poi_zones=[poi],
         pip_size=0.0001, timeframe="H1",
     )
-    # Should NOT trigger off POI; should only consider BOS (1.40 + 0.002 = 1.402, low 1.451 too high)
-    # → no trigger
-    assert (0, 0) not in triggers
+    assert [(t.idx, t.zone_kind) for t in triggers[(0, 0)]] == [(2, "POI")]
+
+
+def test_poi_floor_after_the_scan_start_raises():
+    """PLAN_Q §3: a POI's unclamped activation floor is provably at or before its
+    cycle's scan start (the IC is at or before the fib's final CTS anchor, which
+    precedes the CTS_CONFIRMED moment; the pattern confirms by the anchor + 1). A POI
+    past it could not yet be active where the location read counts it — it fails
+    loudly instead of being read early (or gated by a rule nobody decided)."""
+    df = _make_df(30, default_h=1.50, default_l=1.49)
+    bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
+    poi = _poi_zone(sid=0, cycle_id=0, sd=1, top=1.45, bottom=1.44,
+                    cts_established_idx=2, ic_idx=1, pattern_confirmed_idx=3)
+    with pytest.raises(AssertionError, match="after the scan start 2"):
+        check_zone_proximity(
+            df=df, sorted_events=[_cts_confirmed(2)],
+            kl_zones=[bos], poi_zones=[poi],
+            pip_size=0.0001, timeframe="H1",
+        )
 
 
 def test_poi_fires_in_first_active_stretch_not_last_activate():
     """Regression (sid1 cyc2 / idx 926): a POI that flaps active->inactive->
-    active has its scalar `confirmed_idx` collapsed to the LAST activate. The
-    gate must use the per-candle activation history, so a candle inside the
-    FIRST active stretch still triggers — even though it is far before the
-    scalar confirmed_idx."""
+    active has its scalar `confirmed_idx` collapsed to the LAST activate (20).
+    The scan must not gate on that scalar — since PLAN_Q it reads neither the
+    scalar nor the history (the POI counts from the scan start, 2) — so candle 6
+    triggers."""
     df = _make_df(30, default_h=1.50, default_l=1.49)
-    df.at[6, "l"] = 1.4505  # within 9p of POI inner 1.45; far from BOS inner 1.40
+    df.at[6, "l"] = 1.4505  # within 8p of POI inner 1.45; far from BOS inner 1.40
     bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
     # Active [5,9], inactive [10,19], active [20,...]. Scalar confirmed_idx=20.
     poi = _poi_zone(
-        sid=0, cycle_id=0, sd=1, top=1.45, bottom=1.44, confirmed_idx=20,
+        sid=0, cycle_id=0, sd=1, top=1.45, bottom=1.44, cts_established_idx=2,
         activation_history=[
             {"idx": 5, "active": True}, {"idx": 10, "active": False},
             {"idx": 20, "active": True},
         ],
     )
+    assert poi.meta["confirmed_idx"] == 20
     triggers = check_zone_proximity(
         df=df, sorted_events=[_cts_confirmed(2)],
         kl_zones=[bos], poi_zones=[poi],
         pip_size=0.0001, timeframe="H1",
     )
-    # Old code (scalar confirmed_idx=20) would exclude the POI at idx 6 and
-    # fire nothing; the per-candle gate fires sd:POI at 6.
     assert (0, 0) in triggers
     assert triggers[(0, 0)][0].direction == "sd"
     assert triggers[(0, 0)][0].idx == 6
     assert triggers[(0, 0)][0].zone_kind == "POI"
 
 
-def test_poi_suppressed_during_inactive_stretch():
-    """A candle inside an INACTIVE stretch must not trigger off the POI, even
-    though the scalar confirmed_idx (first/only activate) precedes it."""
+def test_poi_counts_during_inactive_stretch():
+    """PLAN_Q (the user, 2026-10-14: "I would like POI to be treated exactly like
+    a KL zone"): a candle inside the POI's INACTIVE stretch (its imbalance filled,
+    never re-met) still triggers off it — the activation history is not read.
+    Replaces `test_poi_suppressed_during_inactive_stretch` (the old gate)."""
     df = _make_df(30, default_h=1.50, default_l=1.49)
-    df.at[12, "l"] = 1.4504  # would hit POI inner 1.45 IF active; BOS too far
+    df.at[12, "l"] = 1.4504  # 4 pips from POI inner 1.45; BOS too far
     bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
     # Active [5,9] then inactive from 10 onward (no reactivation).
     poi = _poi_zone(
-        sid=0, cycle_id=0, sd=1, top=1.45, bottom=1.44, confirmed_idx=5,
+        sid=0, cycle_id=0, sd=1, top=1.45, bottom=1.44, cts_established_idx=2,
         activation_history=[
             {"idx": 5, "active": True}, {"idx": 10, "active": False},
         ],
@@ -275,7 +310,70 @@ def test_poi_suppressed_during_inactive_stretch():
         kl_zones=[bos], poi_zones=[poi],
         pip_size=0.0001, timeframe="H1",
     )
-    assert (0, 0) not in triggers
+    assert [(t.idx, t.zone_kind, t.trigger_inner) for t in triggers[(0, 0)]] == [(12, "POI", 1.45)]
+
+
+def test_poi_on_collapsed_cycle_counts_like_its_bos_zone():
+    """PLAN_Q, S_O's H1 structure 1 cycle 1 (collapsed: lifecycle [902, 902)):
+    its POI — IC 732, zone [0.58068, 0.58118], `inactive`, EMPTY activation
+    history — counts exactly like the cycle's (equally inactive) BOS zone, inner
+    0.58132. The 820 candle (high 0.58064) is within 8 pips of both; the POI's
+    inner is the nearer one for a sell structure, so the trigger reads sd:POI at
+    0.58068 (the old gate ignored the POI: sd:BOS at 0.58132)."""
+    df = _make_df(30, default_h=0.5790, default_l=0.5780)
+    df.at[10, "h"] = 0.58064
+    bos = _bos_zone(sid=1, cycle_id=1, sd=-1, inner=0.58132, outer=0.58196)
+    poi = _poi_zone(sid=1, cycle_id=1, sd=-1, top=0.58118, bottom=0.58068,
+                    cts_established_idx=2, ic_idx=1, pattern_confirmed_idx=2,
+                    end_idx=40, activation_history=[])
+    assert poi.meta["confirmed_idx"] is None
+
+    triggers = check_zone_proximity(
+        df=df, sorted_events=[_cts_confirmed(2, sid=1, cycle_id=1, sd=-1)],
+        kl_zones=[bos], poi_zones=[poi],
+        pip_size=0.0001, timeframe="H1",
+    )
+    assert [(t.idx, t.zone_kind, t.trigger_inner) for t in triggers[(1, 1)]] == [(10, "POI", 0.58068)]
+
+
+def test_poi_unclamped_activation_floor_idx_is_the_floor_without_the_lifecycle_term():
+    """PLAN_Q: max(the cycle's CTS-established moment, the IC[, the pattern's
+    confirmation]) — H1 cycle (0,1)'s POI: established 652, IC 607, pattern
+    confirmed 610 → 652; a ranked IC has no pattern term; a late pattern binds;
+    an IC past the establishment binds (S_O's cycle (0,0) POI: established 115,
+    IC 180 — the fib's CTS extends until its confirmation). The activation
+    history (here empty) is never read."""
+    ranked = _poi_zone(sid=0, cycle_id=1, sd=1, top=0.57712, bottom=0.57676,
+                       cts_established_idx=652, ic_idx=607, activation_history=[])
+    pattern = _poi_zone(sid=0, cycle_id=1, sd=1, top=0.57712, bottom=0.57676,
+                        cts_established_idx=652, ic_idx=607, pattern_confirmed_idx=610)
+    late = _poi_zone(sid=0, cycle_id=1, sd=1, top=0.57712, bottom=0.57676,
+                     cts_established_idx=652, ic_idx=607, pattern_confirmed_idx=700)
+    ic_past_est = _poi_zone(sid=0, cycle_id=0, sd=1, top=0.56781, bottom=0.56684,
+                            cts_established_idx=115, ic_idx=180)
+    assert poi_unclamped_activation_floor_idx(ranked) == 652
+    assert poi_unclamped_activation_floor_idx(pattern) == 652
+    assert poi_unclamped_activation_floor_idx(late) == 700
+    assert poi_unclamped_activation_floor_idx(ic_past_est) == 180
+
+
+@pytest.mark.parametrize("end_idx, raises", [(10, True), (19, True), (20, False), (None, False)])
+def test_poi_end_inside_the_scan_raises(end_idx, raises):
+    """PLAN_Q §3: a POI's end is not read (like a KL zone's) because it is always
+    past the scan's last candle (19 here: 20 candles, no next BOS) — on real
+    data exactly the next candle, e.g. the S_P (0,1) POI ends at 902, its scan
+    at 901 — so one inside the scan, the last candle included, fails loudly."""
+    df = _make_df(20, default_h=1.50, default_l=1.49)
+    bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
+    poi = _poi_zone(sid=0, cycle_id=0, sd=1, top=1.45, bottom=1.44,
+                    cts_established_idx=2, end_idx=end_idx)
+    kwargs = dict(df=df, sorted_events=[_cts_confirmed(2)], kl_zones=[bos], poi_zones=[poi],
+                  pip_size=0.0001, timeframe="H1")
+    if raises:
+        with pytest.raises(AssertionError, match="inside the scan"):
+            check_zone_proximity(**kwargs)
+    else:
+        assert check_zone_proximity(**kwargs) == {}
 
 
 def test_threshold_default_lookup_by_timeframe():

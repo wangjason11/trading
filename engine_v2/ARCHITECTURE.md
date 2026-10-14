@@ -247,7 +247,8 @@ only `start_idx` + `end_idx`/`end_reason` + derived `status` (do NOT add an
 `active` axis just for symmetry; it would be redundant).
 
 `activation_history` (the per-flip list) is itself only **load-bearing for POI**,
-whose chart fill + proximity gate walk it per-candle. **Fib dropped it** for
+whose chart fill walks it per-candle (the proximity gate did too until PLAN_Q, 2026-10-14 — it now reads a POI like a
+KL zone, by location). **Fib dropped it** for
 scalar `start_idx` logging (`FIB_LIFECYCLE_SPEC.md §15`, 2026-05-27 — no consumer
 walked a fib history). **KL** carries a degenerate single-entry history purely as
 a chart-fill convenience. Tier-1 objects carry none.

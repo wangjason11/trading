@@ -79,7 +79,7 @@ from engine_v2.charting._zone_render import (
     select_subordinate_tf_tier,
 )
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
-from engine_v2.zones.poi_lifecycle import poi_confirmed_idx_as_of
+from engine_v2.zones.zone_proximity import poi_unclamped_activation_floor_idx
 from engine_v2.zones.structure_lifecycle import (
     compute_reversal_idx_by_sid,
     compute_struct_start_by_sid,
@@ -2719,7 +2719,8 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
             continue
         poi_zones_by_cycle.setdefault((int(sid), int(cyc)), []).append(pz)
 
-    def _poi_confirmed_idx(sid: int, cyc: int, inner: float, sd: int, at_idx: int) -> int:
+    def _poi_activation_floor_idx(sid: int, cyc: int, inner: float, sd: int) -> int:
+        # The POI's unclamped activation floor (PLAN_Q: the scan reads a POI like a KL zone).
         cands = poi_zones_by_cycle.get((sid, cyc), [])
         best = None
         best_diff = float("inf")
@@ -2731,8 +2732,7 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
                 best = pz
         if best is None:
             return -1
-        cidx = poi_confirmed_idx_as_of(best, at_idx)
-        return int(cidx) if cidx is not None else -1
+        return int(poi_unclamped_activation_floor_idx(best))
 
     # The ONE price-extreme mapper (multitf.data_bridge): the H1 trigger wick is
     # the hour's low when the approach is from above (lowest-low M15 candle), else
@@ -2781,9 +2781,9 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
             dist_pips = round(gap / float(trig.pip_size), 1)
 
             if trig.zone_kind == "POI":
-                z_conf = _poi_confirmed_idx(
+                z_conf = _poi_activation_floor_idx(
                     int(trig.structure_id), int(trig.cycle_id),
-                    float(trig.trigger_inner), int(sd) if sd else 1, h1_idx,
+                    float(trig.trigger_inner), int(sd) if sd else 1,
                 )
             else:
                 z_conf = kl_conf_idx_by_key.get(

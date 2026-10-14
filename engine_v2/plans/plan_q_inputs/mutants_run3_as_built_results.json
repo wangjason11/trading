@@ -1,0 +1,163 @@
+[
+ {
+  "id": "Q01_gate_restored_to_the_activation_history",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_zone_proximity.py::test_poi_counts_during_inactive_stretch",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_on_collapsed_cycle_counts_like_its_bos_zone"
+  ],
+  "tail": "2 failed, 1738 passed, 2 skipped, 1 deselected, 444 warnings in 131.83s (0:02:11)"
+ },
+ {
+  "id": "Q02_floor_assert_removed",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_zone_proximity.py::test_poi_floor_after_the_scan_start_raises"
+  ],
+  "tail": "1 failed, 1739 passed, 2 skipped, 1 deselected, 444 warnings in 131.75s (0:02:11)"
+ },
+ {
+  "id": "Q07_floor_assert_boundary_exclusive",
+  "verdict": "KILLED",
+  "n": 9,
+  "fails": [
+   "engine_v2/tests/test_zone_proximity.py::test_poi_counts_during_inactive_stretch",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_end_inside_the_scan_raises[10-True]",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_end_inside_the_scan_raises[19-True]",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_end_inside_the_scan_raises[20-False]",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_end_inside_the_scan_raises[None-False]",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_fires_in_first_active_stretch_not_last_activate",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_floor_at_the_scan_start_counts_from_the_scan_start",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_included_in_sd_inners_nearer_than_bos",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_on_collapsed_cycle_counts_like_its_bos_zone"
+  ],
+  "tail": "9 failed, 1731 passed, 2 skipped, 1 deselected, 444 warnings in 132.67s (0:02:12)"
+ },
+ {
+  "id": "Q05_floor_read_from_the_activation_history",
+  "verdict": "KILLED",
+  "n": 5,
+  "fails": [
+   "engine_v2/tests/test_proximity_trigger_hover.py::test_m15_overlay_poi_marker_shows_the_unclamped_activation_floor",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_counts_during_inactive_stretch",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_fires_in_first_active_stretch_not_last_activate",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_on_collapsed_cycle_counts_like_its_bos_zone",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_unclamped_activation_floor_idx_is_the_floor_without_the_lifecycle_term"
+  ],
+  "tail": "5 failed, 1735 passed, 2 skipped, 1 deselected, 444 warnings in 132.51s (0:02:12)"
+ },
+ {
+  "id": "Q10_floor_from_the_lossy_scalar",
+  "verdict": "KILLED",
+  "n": 5,
+  "fails": [
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_multicycle_data-main]",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_counts_during_inactive_stretch",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_fires_in_first_active_stretch_not_last_activate",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_unclamped_activation_floor_idx_is_the_floor_without_the_lifecycle_term"
+  ],
+  "tail": "5 failed, 1735 passed, 2 skipped, 1 deselected, 444 warnings in 132.94s (0:02:12)"
+ },
+ {
+  "id": "Q06_end_assert_removed",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_zone_proximity.py::test_poi_end_inside_the_scan_raises[10-True]",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_end_inside_the_scan_raises[19-True]"
+  ],
+  "tail": "2 failed, 1738 passed, 2 skipped, 1 deselected, 444 warnings in 131.71s (0:02:11)"
+ },
+ {
+  "id": "Q11_end_assert_boundary_inclusive",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_zone_proximity.py::test_poi_end_inside_the_scan_raises[19-True]"
+  ],
+  "tail": "1 failed, 1739 passed, 2 skipped, 1 deselected, 444 warnings in 131.59s (0:02:11)"
+ },
+ {
+  "id": "Q03_floor_drops_the_pattern_term",
+  "verdict": "KILLED",
+  "n": 8,
+  "fails": [
+   "engine_v2/tests/test_plan_h_landing_b.py::test_drawn_poi_activation_and_meta_take_the_picks_confirmation_moment",
+   "engine_v2/tests/test_plan_h_landing_b.py::test_sweep_first_active_takes_the_pattern_confirmation_moment[11-expected2]",
+   "engine_v2/tests/test_plan_h_landing_b.py::test_sweep_first_active_takes_the_pattern_confirmation_moment[16-expected3]",
+   "engine_v2/tests/test_plan_l_landing_2.py::test_a_ranked_poi_activates_without_the_pattern_term",
+   "engine_v2/tests/test_poi_activation_moment.py::test_poi_activation_floor_idx_takes_the_max_of_its_terms",
+   "engine_v2/tests/test_proximity_trigger_hover.py::test_h1_chart_poi_marker_shows_the_unclamped_activation_floor",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_floor_after_the_scan_start_raises",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_unclamped_activation_floor_idx_is_the_floor_without_the_lifecycle_term"
+  ],
+  "tail": "8 failed, 1732 passed, 2 skipped, 1 deselected, 444 warnings in 132.15s (0:02:12)"
+ },
+ {
+  "id": "Q04_floor_drops_the_lifecycle_term",
+  "verdict": "KILLED",
+  "n": 4,
+  "fails": [
+   "engine_v2/tests/test_poi_activation_moment.py::test_activation_applies_cts_events_in_moment_order",
+   "engine_v2/tests/test_poi_activation_moment.py::test_poi_activation_floor_idx_takes_the_max_of_its_terms",
+   "engine_v2/tests/test_poi_activation_moment.py::test_poi_floor_vs_moment[14-expected2]",
+   "engine_v2/tests/test_render_sub_projection.py::test_poi_floor_decides_first_activation_through_the_projection"
+  ],
+  "tail": "4 failed, 1736 passed, 2 skipped, 1 deselected, 444 warnings in 131.97s (0:02:11)"
+ },
+ {
+  "id": "Q08_floor_drops_the_ic_term",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_poi_activation_moment.py::test_poi_activation_floor_idx_takes_the_max_of_its_terms",
+   "engine_v2/tests/test_proximity_trigger_hover.py::test_m15_overlay_poi_marker_shows_the_unclamped_activation_floor",
+   "engine_v2/tests/test_zone_proximity.py::test_poi_unclamped_activation_floor_idx_is_the_floor_without_the_lifecycle_term"
+  ],
+  "tail": "3 failed, 1737 passed, 2 skipped, 1 deselected, 444 warnings in 131.45s (0:02:11)"
+ },
+ {
+  "id": "Q12_sweep_call_drops_the_lifecycle_floor",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_poi_activation_moment.py::test_activation_applies_cts_events_in_moment_order",
+   "engine_v2/tests/test_poi_activation_moment.py::test_poi_floor_vs_moment[14-expected2]",
+   "engine_v2/tests/test_render_sub_projection.py::test_poi_floor_decides_first_activation_through_the_projection"
+  ],
+  "tail": "3 failed, 1737 passed, 2 skipped, 1 deselected, 444 warnings in 131.53s (0:02:11)"
+ },
+ {
+  "id": "Q13_sweep_call_drops_the_pattern_term",
+  "verdict": "KILLED",
+  "n": 4,
+  "fails": [
+   "engine_v2/tests/test_plan_h_landing_b.py::test_drawn_poi_activation_and_meta_take_the_picks_confirmation_moment",
+   "engine_v2/tests/test_plan_h_landing_b.py::test_sweep_first_active_takes_the_pattern_confirmation_moment[11-expected2]",
+   "engine_v2/tests/test_plan_h_landing_b.py::test_sweep_first_active_takes_the_pattern_confirmation_moment[16-expected3]",
+   "engine_v2/tests/test_plan_l_landing_2.py::test_a_ranked_poi_activates_without_the_pattern_term"
+  ],
+  "tail": "4 failed, 1736 passed, 2 skipped, 1 deselected, 444 warnings in 131.96s (0:02:11)"
+ },
+ {
+  "id": "H01_h1_hover_shows_the_establishment",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_trigger_hover.py::test_h1_chart_poi_marker_shows_the_unclamped_activation_floor"
+  ],
+  "tail": "1 failed, 1739 passed, 2 skipped, 1 deselected, 444 warnings in 131.92s (0:02:11)"
+ },
+ {
+  "id": "H02_m15_hover_shows_the_establishment",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_trigger_hover.py::test_m15_overlay_poi_marker_shows_the_unclamped_activation_floor"
+  ],
+  "tail": "1 failed, 1739 passed, 2 skipped, 1 deselected, 444 warnings in 131.01s (0:02:11)"
+ }
+]

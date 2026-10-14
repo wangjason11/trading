@@ -377,8 +377,9 @@ since Plan C 2026-09-20 the unique sub's `end_idx` with `end_reason` ∈
 
 ### 8.2 KEY: `activation_history` is NOT load-bearing for fib
 
-Unlike POI (whose `activation_history` is *walked per-candle* by the proximity
-gate and chart fill-stretches), **no fib consumer walks a fib history:**
+Unlike POI (whose `activation_history` is *walked per-candle* by the chart
+fill-stretches — and by the proximity gate until PLAN_Q, 2026-10-14), **no fib
+consumer walks a fib history:**
 
 - **Chart** is a static end-of-data snapshot; it needs only the **final**
   condition value + `locked` (no stretch fills — Section 9.3). It does NOT need

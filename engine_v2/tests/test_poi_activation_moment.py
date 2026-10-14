@@ -368,3 +368,21 @@ def test_a_locked_fib_without_cts_established_fails_loudly():
     with contextlib.redirect_stdout(io.StringIO()):
         with pytest.raises(AssertionError, match=r"locked fib \(0, 1\) has no CTS_ESTABLISHED"):
             derive_poi_zones(res.df, without, fib_tracker=out["fib_tracker"], config=POIConfig())
+
+
+def test_poi_activation_floor_idx_takes_the_max_of_its_terms():
+    """PLAN_Q: the activation floor is ONE helper with two callers (the activation
+    sweep, every term; the proximity scan's location read, no lifecycle term).
+    max(CTS established, IC[, pattern confirmed][, lifecycle floor]); a None term
+    is skipped; both optional terms are keyword-required (no default)."""
+    floor = poi_zones.poi_activation_floor_idx
+    assert floor(652, 607, pattern_confirmed_idx=None, lifecycle_floor_idx=None) == 652
+    assert floor(652, 607, pattern_confirmed_idx=610, lifecycle_floor_idx=115) == 652
+    assert floor(748, 732, pattern_confirmed_idx=735, lifecycle_floor_idx=902) == 902   # S_O's collapsed (1,1)
+    assert floor(748, 732, pattern_confirmed_idx=735, lifecycle_floor_idx=None) == 748
+    assert floor(652, 607, pattern_confirmed_idx=700, lifecycle_floor_idx=None) == 700
+    # The IC term binds when the IC lies past the establishment — the fib's CTS extends until its confirmation
+    # (S_O's (1,1): established 748, final CTS anchor 761, IC candidates up to 758).
+    assert floor(748, 753, pattern_confirmed_idx=None, lifecycle_floor_idx=None) == 753
+    with pytest.raises(TypeError):
+        floor(652, 607)

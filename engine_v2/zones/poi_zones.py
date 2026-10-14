@@ -1438,6 +1438,29 @@ def _compute_fill_idx_cache(
     return cache
 
 
+def poi_activation_floor_idx(
+    cts_established_idx: int,
+    ic_idx: int,
+    *,
+    pattern_confirmed_idx: Optional[int],
+    lifecycle_floor_idx: Optional[int],
+) -> int:
+    """The earliest candle a POI can be active (POI_ZONES_SPEC §4 "Activation floor"): max(the cycle's established
+    moment, the IC candle, the pattern's confirmation moment, the structure lifecycle-start floor). A POI cannot
+    activate before its cycle is knowable (Plan D), before its institutional pattern is known complete (PLAN_H R1 —
+    may lie past the frame: then never active; a ranked IC has no pattern term, `None` — ICR-2), nor before its
+    structure is alive (post-reversal cycle-0 / sub case, Phase 3 Commit 2). Both optional terms keyword-required, no
+    default (PLAN_L A7). Two callers: the activation sweep (`_compute_poi_activation_history`, every term) and
+    `zone_proximity.poi_unclamped_activation_floor_idx` (`lifecycle_floor_idx=None` — PLAN_Q: the floor in the POI's
+    own structure's timeline, which the proximity scan asserts is at or before the cycle's scan start)."""
+    floor = max(int(cts_established_idx), int(ic_idx))
+    if pattern_confirmed_idx is not None:
+        floor = max(floor, int(pattern_confirmed_idx))
+    if lifecycle_floor_idx is not None:
+        floor = max(floor, int(lifecycle_floor_idx))
+    return floor
+
+
 def _compute_poi_activation_history(
     df: pd.DataFrame,
     *,
@@ -1503,17 +1526,10 @@ def _compute_poi_activation_history(
     Returns `[{"idx", "active", "reason"}, ...]`. Empty list means POI never
     activated in the window.
     """
-    # First-active = max(the cycle's established moment, the IC candle, the
-    # structure lifecycle-start floor, the pattern's confirmation moment): a POI
-    # cannot activate before its cycle is knowable (Plan D), before its structure
-    # is alive (post-reversal cycle-0 / sub case, Phase 3 Commit 2), nor before its
-    # institutional pattern is known complete (PLAN_H R1 — may lie past the frame:
-    # then never active; a ranked IC has no pattern term — ICR-2).
-    first_active = max(cts_established_idx, ic_idx)
-    if pattern_confirmed_idx is not None:
-        first_active = max(first_active, int(pattern_confirmed_idx))
-    if lifecycle_floor_idx is not None:
-        first_active = max(first_active, int(lifecycle_floor_idx))
+    first_active = poi_activation_floor_idx(
+        cts_established_idx, ic_idx,
+        pattern_confirmed_idx=pattern_confirmed_idx, lifecycle_floor_idx=lifecycle_floor_idx,
+    )
     if first_active > scan_end or ic_idx not in df.index:
         return []
 

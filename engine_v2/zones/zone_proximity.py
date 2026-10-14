@@ -12,6 +12,27 @@ Replaces the old `check_proximity_activation` in `wvmi.py`. The single
 "activated cycles" gate is no longer the unit of interest — instead this
 returns the full alternating list of trigger candles per cycle.
 
+Zones are read by LOCATION, never by lifecycle (PLAN_Q, 2026-10-14)
+-------------------------------------------------------------------
+The BOS and CTS KL zones are read by their `meta["inner"]` alone (no
+`confirmed_idx` / `end_idx` / `status` / `activation_history`), and each of
+the cycle's POIs the same way — the user: "I would like POI to be treated
+exactly like a KL zone" — at every candle of the scan; its activation history
+(the lifecycle clamp, the imbalance-filled off-stretches) and its `end_idx`
+are not read. Both bounds provably lie outside the scan and are asserted:
+`poi_unclamped_activation_floor_idx` (its activation floor without the
+structure lifecycle-start term) <= the scan start, its end > the scan's last
+candle (PLAN_Q §3). The scan window
+itself is in the structure's own timeline too (its CTS_CONFIRMED moment → the
+next cycle's BOS_CONFIRMED moment / its realised reversal), with no
+structure-lifecycle floor. Consequence: a COLLAPSED cycle (its lifecycle
+window empty — e.g. a post-reversal structure's early, retroactively built
+cycles) still fires triggers, drawn on the charts — reference window: H1
+structure 1 cycle 1, lifecycle `[902, 902)`, fires 820 sd:BOS and 871
+opp_sd:CTS — while the M15 subs those triggers would start are not built
+(`lifecycle_sweep`: a collapsed parent cycle's triggers are logged unresolved;
+LANDMINES "Collapsed Parent Cycles").
+
 Narrow-gap cycle restrictions (Rules 2 & 3)
 -------------------------------------------
 A cycle is "narrow" at a given candle when
@@ -58,8 +79,7 @@ import pandas as pd
 from engine_v2.common.types import KLZone
 from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
-from engine_v2.zones.poi_lifecycle import poi_active_as_of
-from engine_v2.zones.poi_zones import POIZone
+from engine_v2.zones.poi_zones import POIZone, poi_activation_floor_idx
 from engine_v2.zones.structure_lifecycle import compute_reversal_idx_by_sid
 
 
@@ -154,6 +174,20 @@ class ZoneProximityTrigger:
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
+def poi_unclamped_activation_floor_idx(pz: POIZone) -> int:
+    """A POI's activation floor WITHOUT the structure lifecycle-start term (PLAN_Q): max(the cycle's CTS-established
+    moment, the IC[, the pattern-confirmed moment]) — the earliest candle its own conditions could make it active, in
+    its own structure's timeline (`poi_zones.poi_activation_floor_idx`, the activation sweep's own floor). The scan
+    asserts it is at or before the cycle's scan start, then counts the POI from the scan start like the BOS KL zone
+    (PLAN_Q §3: the IC is at or before the fib's final CTS anchor, the pattern confirms by the anchor + 1, and the
+    anchor precedes the CTS_CONFIRMED moment). The trigger hovers show it as a POI marker's `zone_confirmed_idx`."""
+    return poi_activation_floor_idx(
+        int(pz.meta["cts_established_idx"]), int(pz.ic_idx),
+        pattern_confirmed_idx=pz.meta["pattern_confirmed_idx"],
+        lifecycle_floor_idx=None,
+    )
+
+
 def _find_kl_zone_for_cycle(
     kl_zones: List[KLZone],
     sid: int,
@@ -239,7 +273,8 @@ def check_zone_proximity(
     """Find zone proximity trigger candles per (sid, cycle_id).
 
     Per cycle, walk the scan window and log alternating sd/opp_sd triggers:
-    1. First trigger must be sd (price within threshold of BOS or active POI)
+    1. First trigger must be sd (price within threshold of BOS or any POI of
+       the cycle — read like the BOS zone, PLAN_Q)
     2. After an sd trigger, only opp_sd is eligible (CTS zone)
     3. After an opp_sd trigger, only sd again — alternating
 
@@ -280,7 +315,9 @@ def check_zone_proximity(
         Both BOS- and CTS-derived zones (sd and opp_sd respectively).
     poi_zones : list of POIZone
         All POI zones (always sd direction by construction — Fib spans
-        BOS→CTS so any POI within is in the structure direction).
+        BOS→CTS so any POI within is in the structure direction). Each counts
+        at every candle of its cycle's scan, like the BOS zone (PLAN_Q; its
+        unclamped activation floor and its end asserted outside the scan).
     pip_size : float
         Pip size for the pair (typically 0.0001 / 0.01 depending on quote).
     timeframe : str
@@ -361,6 +398,25 @@ def check_zone_proximity(
 
         if scan_start > scan_end:
             continue
+
+        # A POI is read like the KL zones (PLAN_Q): it counts at EVERY candle of the scan — neither its activation
+        # history nor its end is read. Both bounds are provably outside the scan (PLAN_Q §3) and asserted, so a POI
+        # that could not yet be active at the scan start, or ends inside it, fails loudly instead of being misread:
+        # its unclamped floor <= the scan start (IC <= the fib's final CTS anchor < the CTS_CONFIRMED moment), its end
+        # (its cycle's lifecycle end) > the scan's last candle (the next cycle's clamped start >= its BOS_CONFIRMED
+        # moment; the same realised reversal).
+        for poi in cycle_poi_zones:
+            poi_floor_idx = poi_unclamped_activation_floor_idx(poi)
+            assert poi_floor_idx <= scan_start, (
+                f"[zone_proximity] POI IC {poi.ic_idx} of ({sid},{cycle_id}): unclamped activation floor "
+                f"{poi_floor_idx} after the scan start {scan_start} — the location read (PLAN_Q) counts it from the "
+                f"scan start"
+            )
+            poi_end_idx = poi.meta["end_idx"]
+            assert poi_end_idx is None or int(poi_end_idx) > scan_end, (
+                f"[zone_proximity] POI IC {poi.ic_idx} of ({sid},{cycle_id}) ends at {poi_end_idx}, inside the scan "
+                f"[{scan_start}, {scan_end}] — the location read (PLAN_Q) would ignore that end"
+            )
 
         # Rule 2 prerequisite: identify whether this cycle's CTS_CONFIRMED
         # was via pullback. Under Rule 1, narrow cycles can ONLY ever have
@@ -490,11 +546,8 @@ def _try_trigger_at_candle(
     if expected_dir == "sd":
         sd_inners: List[Tuple[float, str]] = [(bos_inner, "BOS")]
         for pz in cycle_poi_zones:
-            # A POI can flap active/inactive within a cycle, so its live
-            # state is NOT the scalar `confirmed_idx` (= last activate). Ask
-            # the activation history whether it is active AS OF this candle.
-            if not poi_active_as_of(pz, idx):
-                continue
+            # Read like a KL zone (PLAN_Q): at every candle of the scan —
+            # never its activation history (bounds asserted in the caller).
             if sd == 1:
                 sd_inners.append((float(pz.top), "POI"))
             else:

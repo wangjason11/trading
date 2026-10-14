@@ -717,7 +717,7 @@ assumes "POI ⟹ sd direction."
 - `side`: "buy" if sd=+1, "sell" if sd=-1
 - `structure_id`, `struct_direction`, `cycle_id`
 - `ic_idx`: Index of the IC candle (rectangle start)
-- `confirmed_idx`: **LAST** activate idx (lossy scalar — `poi_zones.py` overwrites it on every activation and never clears it on deactivation). A POI can flap active/inactive within a cycle, so this scalar does NOT bound the active interval. To ask "is the POI active as of candle X?" use `zones/poi_lifecycle.py::poi_active_as_of` (walks `activation_history`), never `confirmed_idx`. See GOTCHAS "POI `confirmed_idx` Is a Lossy Scalar".
+- `confirmed_idx`: **LAST** activate idx (lossy scalar — `poi_zones.py` overwrites it on every activation and never clears it on deactivation). A POI can flap active/inactive within a cycle, so this scalar does NOT bound the active interval. To ask "is the POI active as of candle X?" use `zones/poi_lifecycle.py::poi_active_as_of` (walks `activation_history`), never `confirmed_idx`. See GOTCHAS "POI `confirmed_idx` Is a Lossy Scalar". (The zone-proximity scan asks neither since PLAN_Q, 2026-10-14: it reads a POI like a KL zone, at every candle of its scan — §4 "Activation floor".)
 - `top`, `bottom`: IC high/low
 - `ip_outcome` (PLAN_L L2, 2026-10-10): `"pattern"` (a pattern's IC, §3.4) / `"no_pattern"` (a ranked IC, §3.6) —
   the `*_poi_zones.csv` `ip_rank` column is empty on a ranked IC
@@ -831,7 +831,7 @@ produce (the planned FibState lifecycle work will produce it for
   check_to_idx=t, direction=sd, evaluated_at=t)`. Plan F (2026-09-24) moved the enter from the c2 (`inst.start_idx`,
   one candle before the gap existed) to `formed_at`: on the reference window H1 sid 1 cyc 2 IC 865 and IC 860 each
   re-activate at 954 and 998 (were 953 and 997), and M15 sub 7 IC 4048 re-activates at 4119 (was 4118)
-- `confirmed_idx` collapses to the **LAST** activate idx (NOT the first). Per-candle activation lives in `activation_history`; query it via `zones/poi_lifecycle.py` (`poi_active_as_of`, `poi_confirmed_idx_as_of`), never the scalar. Consumers that treat `[confirmed_idx, end_idx]` as one active span are blind to earlier active stretches (this caused the sid1-cyc2 proximity-trigger loss — see GOTCHAS)
+- `confirmed_idx` collapses to the **LAST** activate idx (NOT the first). Per-candle activation lives in `activation_history`; query it via `zones/poi_lifecycle.py` (`poi_active_as_of`, `poi_confirmed_idx_as_of`), never the scalar. Consumers that treat `[confirmed_idx, end_idx]` as one active span are blind to earlier active stretches (this caused the sid1-cyc2 proximity-trigger loss — see GOTCHAS; the proximity scan reads no activation since PLAN_Q)
 
 ### Activation floor — cycle lifecycle-start clamp (REVISED 2026-05-26; floor terms REVISED by Plan C 2026-09-20; cycle term moved to the MOMENT by Plan D 2026-09-23)
 
@@ -869,6 +869,17 @@ Before B1 the floor was just `max(cts_established_idx, ic_idx)`; the added
 term clamps **post-reversal cycle-0 POIs** (and sub analogues) whose
 `CTS_ESTABLISHED` precedes the structure's lifecycle-start (e.g. probe placed
 the anchor historically).
+
+**One helper, two callers (PLAN_Q, 2026-10-14):** the floor is `poi_zones.poi_activation_floor_idx(cts_established_idx,
+ic_idx, *, pattern_confirmed_idx, lifecycle_floor_idx)` (both optional terms keyword-required, `None` skipped). The
+activation sweep passes every term; `zone_proximity.poi_unclamped_activation_floor_idx` passes
+`lifecycle_floor_idx=None` — the floor in the POI's own structure's timeline. The zone-proximity scan counts a POI at
+every candle of its cycle's scan, exactly like the BOS KL zone, never reading `activation_history` (the user: "I would
+like POI to be treated exactly like a KL zone"), and asserts that unclamped floor is at or before the scan start
+(CTS_CONFIRMED) — the IC is at or before the fib's final CTS anchor, the pattern confirms by the anchor + 1, and the anchor
+precedes the confirmation — so neither the lifecycle clamp nor an off-stretch hides a POI any more: a collapsed
+cycle's POI (an empty history) now feeds the sd trigger like its BOS zone (`plans/PLAN_Q_proximity_poi_like_kl.md`).
+The trigger hovers show the floor as a POI marker's `zone_confirmed_idx`.
 
 `max(cts_established_idx, lifecycle_floor_idx)` equals the cycle's clamped lifecycle-start
 (`compute_cycle_lifecycle`); a cycle without a `CTS_ESTABLISHED` builds no POI (2026-09-29 — see the field list;

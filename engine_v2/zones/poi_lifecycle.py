@@ -8,9 +8,13 @@ state is NOT representable by the single scalar `meta["confirmed_idx"]`
 POI active AS OF candle `idx`?" must walk the history per-candle.
 
 This module is the single source of that walk. It is imported by:
-  - `zones/zone_proximity.py` (the sd:POI proximity gate)
   - `charting/_zone_render.py` (POI fill stretches)
-  - the chart hover labels (`export_plotly`, `export_m15_chart`)
+The sd:POI proximity gate and the trigger hovers' POI `zone_confirmed_idx`
+used `poi_active_as_of` / `poi_confirmed_idx_as_of` until PLAN_Q
+(2026-10-14): the proximity scan now reads a POI like a KL zone, at every
+candle of its scan, and the hovers show
+`zone_proximity.poi_unclamped_activation_floor_idx`. The two stay as the documented
+per-candle query (LANDMINES "POI Activation Is Per-Candle"), tested.
 
 It deliberately imports nothing from `zones/` or `charting/` so it stays a
 leaf with no cycle risk.
