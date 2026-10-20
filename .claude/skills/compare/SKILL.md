@@ -224,7 +224,9 @@ itself:
   one per parent cycle whose lifecycle floor ≥ its end (`PART4 §17.7`;
   expected on the reference window: (1,0) and (1,1)). `collapsed` joined the grep with PLAN_N (`degenerate` stays
   for the probe-window warnings); it also matches the informational `[chart][fib] rendered … not collapsed /
-  disappeared` line — the grep count on the reference window is 22 since PLAN_N (21 before).
+  disappeared` line — the grep count on the reference window is 24 since PLAN_R step 2 (+ the one
+  `sibling-CTS unavailable` line, 1046's subsequent_counter, + a sixth pandas FutureWarning,
+  `market_structure.py:2484`, benign; 22 since PLAN_N, 21 before), plus any OANDA RETRY lines of that run.
 
 Also read (not caught by the grep) `[probe_cache] hit|APPROX hit …` and
 `[probe_cache] REF-ZONE DIFFERS …` — a probe skipped because an earlier
@@ -550,7 +552,20 @@ floor, not its active stretch's start (CHARTING_SPEC §12); layouts equal; chart
 older): `cmp_save.py` (CSVs) reads correctly; the positional `cmp_fig_full.py` or `plan_q_inputs/fig_leaf_diff.py`
 shows those 3 leaves (expected output `plan_q_inputs/variant_leaf_diff_vs_S_P.txt`) — not an engine delta. Every
 delta = PLAN_Q §6 (the save replay is md5- / figure-hash-equal to the variant, `plan_q_inputs/variant_*`). S_Q
-`20261014_170919_da8c15e` (source `da8c15e`, save `ff8d246`, trunk `ab8e3cf`; = `LATEST_<branch>` from 2026-10-14).
+`20261014_170919_da8c15e` (source `da8c15e`, save `ff8d246`, trunk `ab8e3cf`; `LATEST_<branch>` until S_R2, below).
+**PLAN_R step 2 (2026-10-20, the proximity overlay — sub zones join the parent's proximity reference ladders, inside
+the lifecycle sweep; the user, session order item 3) — a BEHAVIOUR change, no CSV format change:** vs S_Q 16 / 27
+CSVs differ — all 16 M15 lens CSVs; the 10 H1 CSVs and the unresolved table are identical. H1 zone-proximity
+triggers 6 → 10 ((0,1) +820 opp_sd on a sub POI, +872 sd:BOS; (1,2) +1045, +1046, and 954 now names a sub source);
+subs 8 → 11, records 11 → 15, unresolved 4 (the same rows). `sub_id`s RENUMBER (start order): key subs, records and
+their lens rows by `(direction, starting_idx)`, never by `sub_id` or row position — a positional `cmp_save.py` diff
+of the lens CSVs is mostly renumbering. Figures: H1 81/236, only the `zone_proximity:trigger` marker trace differs
+(a sub-sourced marker's type line names its source, e.g. `opp_sd: sub_3 c2 POI 0.58096`, and its
+`zone_confirmed_idx` = that zone's usable moment), layout equal; M15 counter 146/135 → 164/144, confluence
+289/293 → 257/263. Skip grep 22 → 24 (above). Every delta = PLAN_R §8 "Step 2" (the save replay is md5- /
+figure-hash-equal to the validated variant; the pool table byte-identical to
+`qa_opp_sd_zones_inputs/sims/shadow_full2.log`). S_R2 `20261020_115859_817d2a9` (source `817d2a9`, save `e6c3f7a`,
+trunk `87535dd`; = `LATEST_<branch>` from 2026-10-20).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -591,8 +606,8 @@ C, 2026-09-20) replaced the per-lens `*_sids.csv` with `*_subs.csv` +
 no baseline and the old file disappeared — both were called out, and the
 new tables are validated against the plan's **predicted table**
 (`memory/reference_pool_redesign_groundtruth.md`, matched by
-`(direction, starting_idx)` — `sub_id`s are 0–7 on the reference window: start order since
-PLAN_I S1, which equals the creation order there) rather than a prior save; from the next `/commit-save` on
+`(direction, starting_idx)` — `sub_id`s are 0–10 on the reference window since PLAN_R step 2 (0–7 before): start
+order since PLAN_I S1, so a new sub renumbers every later one) rather than a prior save; from the next `/commit-save` on
 they have a baseline like any other CSV. The three pool tables are written
 **before** the chart loop, decoupled from it (`export_sub_tables` in its own
 try/except — a chart-export exception cannot lose them), so a MISSING pool
@@ -680,8 +695,9 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-14 on S_Q `20261014_170919_da8c15e`, unchanged from S_P `20261013_231327_23f395d` —
-PLAN_P moved them from S_O's 83/239,
+counts are (verified 2026-10-20 on S_R2 `20261020_115859_817d2a9` — PLAN_R step 2 moved the two M15 lenses from
+S_Q's 146/135, 289/293 (3 new subs, re-windowed records; H1 unchanged); S_Q's were unchanged from S_P
+`20261013_231327_23f395d` — PLAN_P moved them from S_O's 83/239,
 137/123, 282/276: H1 3 POIs gone, sub 7's cycle 0 now drawn, the Step 1A POIs; those were unchanged since PLAN_L
 landing 2 (S_L2, 2026-10-10: its 7 new POIs moved them from 81/236, 135/120, 274/264) through S_M1, S_M2, S_N,
 S_N_hover and S_O; config window 2025-12-01→2026-01-20, auto-extended to
@@ -689,8 +705,8 @@ S_N_hover and S_O; config window 2025-12-01→2026-01-20, auto-extended to
 older values in **History** below):
 
 - `H1` chart: traces=81, shapes=236
-- `M15.counter` chart: traces=146, shapes=135
-- `M15.confluence` chart: traces=289, shapes=293
+- `M15.counter` chart: traces=164, shapes=144
+- `M15.confluence` chart: traces=257, shapes=263
 
 (Before the 2026-10-09 re-baseline the block listed the 2026-09-24 Plan F values — H1
 85/245, counter 151/124, confluence 294/233; landings between re-baselines are not

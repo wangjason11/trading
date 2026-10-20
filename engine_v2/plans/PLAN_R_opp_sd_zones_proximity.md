@@ -580,8 +580,10 @@ The predictions below are for the decided hold (A) and Q1 = "from when usable".
     (N1–N10 + the 0a-bound R0a-1…3): 13 / 13 KILLED. Every results file saved beside its mutant file.
   - Carried to step 2 (the reviewer's heads-ups): the opp_sd unlock (Q2 / Q3) needs new state; `_kl_outer_at` is the
     parent's H1 clock — sub zones need LOH + the frozen end cap; the first-sd == WVMI-gate assert lives in step 2.
-- **Step 2 — BUILT, variant replay + `/compare` vs S_Q = §5.4's prediction; NOT committed (the landing review, then the
-  user's chart look, then commit 4 on the user's go).**
+- **Step 2 — LANDED `817d2a9` (2026-10-20, on the user's go after the chart look); save S_R2
+  `20261020_115859_817d2a9` (save `e6c3f7a`, trunk `87535dd`; the save replay = the validated variant, CSV md5 +
+  figure hashes; fetch gate PASS) = `LATEST_<branch>`. Built → variant replay + `/compare` vs S_Q = §5.4's
+  prediction → the landing review → the user's chart look → commit 4.**
   - **Code.** `multitf/proximity_overlay.py` (new): `SubZone` + `build_sub_zone_view` (each zone as of its own usable
     moment — `project_to_window` capped at its BOS_CONFIRMED / CTS_CONFIRMED event moment; a BOS zone's outer steps
     from the natural-end projection, counted by moment; inners asserted unmoved; the view's stdout captured, only
