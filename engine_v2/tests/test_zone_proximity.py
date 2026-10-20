@@ -143,9 +143,9 @@ def _poi_zone(sid: int, cycle_id: int, sd: int, top: float, bottom: float, *,
 # ---------- Tests ----------
 
 def test_first_sd_trigger_fires_on_buy_zone():
-    """sd=+1: BOS inner=1.40, H1 threshold 9 pips (0.0009). Candle low 1.4005 → triggers."""
+    """sd=+1: BOS inner=1.40, H1 threshold 8 pips (0.0008). Candle low 1.4005 → triggers."""
     df = _make_df(20, default_h=1.50, default_l=1.49)
-    df.at[5, "l"] = 1.4005  # 5 pips above inner 1.40, within 9p H1 threshold
+    df.at[5, "l"] = 1.4005  # 5 pips above inner 1.40, within 8p H1 threshold
     bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
 
     triggers = check_zone_proximity(
@@ -163,9 +163,9 @@ def test_first_sd_trigger_fires_on_buy_zone():
 def test_alternation_sd_then_opp_sd_then_sd():
     """V movement: sd → opp_sd → sd within one cycle."""
     df = _make_df(30, default_h=1.50, default_l=1.49)
-    # sd trigger at idx 5: low 1.4005 (within 9p of BOS inner 1.40)
+    # sd trigger at idx 5: low 1.4005 (within 8p of BOS inner 1.40)
     df.at[5, "l"] = 1.4005
-    # opp_sd trigger at idx 10: high 1.5995 (within 9p of CTS inner 1.60)
+    # opp_sd trigger at idx 10: high 1.5995 (within 8p of CTS inner 1.60)
     df.at[10, "h"] = 1.5995
     # second sd trigger at idx 15: low 1.4004
     df.at[15, "l"] = 1.4004
@@ -472,8 +472,8 @@ def test_narrow_cycle_caps_at_one_sd_and_one_opp_sd():
     """Narrow gap + pullback CTS_confirmed: at most 1 sd + 1 opp_sd allowed
     per cycle (Rule 3). A third candle that would otherwise trigger sd is
     rejected."""
-    # Tight price band sits between BOS inner 1.4000 + 9p and CTS inner
-    # 1.4020 - 9p — so default candles don't trigger; only the explicit
+    # Tight price band sits between BOS inner 1.4000 + 8p and CTS inner
+    # 1.4020 - 8p — so default candles don't trigger; only the explicit
     # overrides do.
     df = _make_df(30, default_h=1.4010, default_l=1.4010)
     df.at[5, "l"] = 1.4005
@@ -540,7 +540,7 @@ def test_wide_cycle_unlimited_alternation():
     # Mid-band default — no default candle reaches either zone's threshold.
     df = _make_df(30, default_h=1.4500, default_l=1.4500)
     df.at[5, "l"] = 1.4005
-    df.at[10, "h"] = 1.4995  # opp_sd within 9p of CTS inner 1.50
+    df.at[10, "h"] = 1.4995  # opp_sd within 8p of CTS inner 1.50
     df.at[15, "l"] = 1.4004
 
     bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
@@ -564,8 +564,8 @@ def test_mid_cycle_crossing_lifts_caps():
     """Cycle starts narrow, crosses to wide mid-scan via a
     CTS_THRESHOLD_UPDATED event: caps lift after crossing, alternation
     continues seamlessly."""
-    # Tight band — high under CTS zone inner 1.4020 (minus 9p), low above
-    # BOS inner 1.4000 (plus 9p). Default candles don't trigger.
+    # Tight band — high under CTS zone inner 1.4020 (minus 8p), low above
+    # BOS inner 1.4000 (plus 8p). Default candles don't trigger.
     df = _make_df(40, default_h=1.4010, default_l=1.4010)
     df.at[5, "l"] = 1.4005   # sd, idx 5 (narrow)
     df.at[10, "h"] = 1.4015  # opp_sd, idx 10 (narrow)
@@ -577,7 +577,7 @@ def test_mid_cycle_crossing_lifts_caps():
     bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
     # CTS zone object inner=1.4020 — used as opp_sd trigger level by
     # _try_trigger_at_candle. Both pre-crossing (idx 10 high 1.4015 within
-    # 9p of 1.4020) and post-crossing (idx 25 high 1.4055 ≥ 1.4020 - 9p
+    # 8p of 1.4020) and post-crossing (idx 25 high 1.4055 ≥ 1.4020 - 8p
     # trivially) opp_sd candidates reach it.
     cts = _cts_zone(sid=0, cycle_id=0, sd=1, inner=1.4020, outer=1.4030)
 
@@ -668,7 +668,7 @@ def test_bos_threshold_update_alone_can_cross_into_wide():
 def test_sell_direction_trigger():
     """sd=-1 (bearish): inverse logic — sd zone is sell-side, opp_sd is buy-side (CTS)."""
     df = _make_df(30, default_h=1.50, default_l=1.49)
-    # BOS inner 1.55 (top of sell zone); approach from below — high 1.5495 within 9p
+    # BOS inner 1.55 (top of sell zone); approach from below — high 1.5495 within 8p
     df.at[5, "h"] = 1.5495
     bos = _bos_zone(sid=0, cycle_id=0, sd=-1, inner=1.55, outer=1.56)
 

@@ -1,0 +1,71 @@
+........................................................................ [  4%]
+........................................................................ [  8%]
+........................................................................ [ 12%]
+........................................................................ [ 16%]
+........................................................................ [ 20%]
+........................................................................ [ 24%]
+........................................................................ [ 28%]
+........................................................................ [ 33%]
+........................................................................ [ 37%]
+........................................................................ [ 41%]
+........................................................................ [ 45%]
+........................................................................ [ 49%]
+........................................................................ [ 53%]
+........................................................................ [ 57%]
+........................................................................ [ 61%]
+........................................................................ [ 66%]
+........................................................................ [ 70%]
+........................................................................ [ 74%]
+........................................................................ [ 78%]
+........................................................................ [ 82%]
+........................................................................ [ 86%]
+........................................................................ [ 90%]
+........................................................................ [ 95%]
+........................................................................ [ 99%]
+...............                                                          [100%]
+============================== warnings summary ===============================
+engine_v2/tests/test_bounded_structure.py: 4 warnings
+engine_v2/tests/test_e4_simulation.py: 14 warnings
+engine_v2/tests/test_event_meta_idx_keys.py: 13 warnings
+  C:\Users\wangj\OneDrive\Documents\codingproj\Project Retire\forex_engine_v2\engine_v2\structure\market_structure.py:2482: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    prev_active = active.shift(1).fillna(False).astype(bool)
+
+engine_v2/tests/test_fib_never_established_cap.py: 1 warning
+engine_v2/tests/test_geometry_builder.py: 9 warnings
+engine_v2/tests/test_main_reversal_probe.py: 4 warnings
+engine_v2/tests/test_meta_key_renames.py: 17 warnings
+engine_v2/tests/test_ms_bounded_equals_truncated.py: 194 warnings
+engine_v2/tests/test_ms_invariant_watch_identity.py: 2 warnings
+engine_v2/tests/test_ms_new_cycle_ends_watch.py: 11 warnings
+engine_v2/tests/test_ms_reversal_on_expiry.py: 18 warnings
+engine_v2/tests/test_ms_reversal_terminal.py: 13 warnings
+engine_v2/tests/test_ms_stop_after_cts.py: 14 warnings
+engine_v2/tests/test_orchestrator_reversal_source.py: 4 warnings
+engine_v2/tests/test_plan_e_role_pins.py: 4 warnings
+engine_v2/tests/test_plan_g_wvmi.py: 5 warnings
+engine_v2/tests/test_plan_h_landing_b.py: 9 warnings
+engine_v2/tests/test_plan_i_s2_cross_fib_limit.py: 13 warnings
+engine_v2/tests/test_plan_i_s2b_dispatch_order.py: 3 warnings
+engine_v2/tests/test_plan_i_s5_landing_review_pins.py: 2 warnings
+engine_v2/tests/test_plan_i_s5_ms_reads_the_fib.py: 2 warnings
+engine_v2/tests/test_plan_k_landing_a.py: 12 warnings
+engine_v2/tests/test_plan_m_landing_1.py: 2 warnings
+engine_v2/tests/test_plan_n_naming_audit.py: 8 warnings
+engine_v2/tests/test_poi_activation_moment.py: 12 warnings
+engine_v2/tests/test_pooled_structure_build.py: 8 warnings
+engine_v2/tests/test_render_sub_projection.py: 18 warnings
+engine_v2/tests/test_reversal_resolver.py: 16 warnings
+engine_v2/tests/test_unified_probe.py: 3 warnings
+engine_v2/tests/test_wvmi_lp_bound.py: 5 warnings
+engine_v2/tests/test_zone_proximity_reversal_cap.py: 4 warnings
+  C:\Users\wangj\OneDrive\Documents\codingproj\Project Retire\forex_engine_v2\engine_v2\structure\market_structure.py:2482: FutureWarning:
+  
+  Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+[fallback=8] passed=1743 failed=0 errors=0 skipped=0
+[fallback] files constructing MS with proximity_pips=None: {'engine_v2/tests/test_e4_simulation.py': 3, 'engine_v2/tests/test_event_fields.py': 1, 'engine_v2/tests/test_ms_bos_selection_guards.py': 6, 'engine_v2/tests/test_ms_new_cycle_ends_watch.py': 3, 'engine_v2/tests/test_ms_stop_after_cts.py': 3, 'engine_v2/tests/test_plan_e_role_pins.py': 2, 'engine_v2/tests/test_plan_i_s5_ms_reads_the_fib.py': 2}
+[fallback] files constructing MS at all: 44
+1743 passed, 444 warnings in 98.34s (0:01:38)
+rc 0

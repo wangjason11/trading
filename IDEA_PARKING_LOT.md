@@ -108,8 +108,13 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    `/compare` vs S_P = 0 / 27 CSVs (PLAN_P had already removed that POI), 3 hover cells (the (1,2) 1035 sd:POI marker's
    `zone_confirmed_idx` 998 → 902 — now the POI's unclamped activation floor, not its active stretch's start);
    mutants 14 / 14; the user's chart look: "Charts look good". Source `da8c15e`, save S_Q `20261014_170919_da8c15e` =
-   `LATEST_<branch>` (the `/compare` skill's PLAN_Q entry). **NEXT within item 3: the user's opposite-direction
-   changes.**
+   `LATEST_<branch>` (the `/compare` skill's PLAN_Q entry). **Second part, UNDER WAY 2026-10-19 = PLAN_R** (the
+   user's opposite-direction changes: proximity reference ladders with sub zones, passed proximity zones, the narrow
+   proximity-reference cap 40 / 25 / 15, the proximity overlay inside the lifecycle sweep; plan
+   `engine_v2/plans/PLAN_R_opp_sd_zones_proximity.md`, Q&A rounds 1–9 `engine_v2/plans/qa_opp_sd_zones_inputs/`):
+   READY TO BUILD 2026-10-20 — every decision closed (Q&A rounds 1–12), the plan review done (3 agents, 0.84M) and
+   folded in; build order 0a → 0b → 1 → 2, 4 commits, `/commit-save` only after step 2. **BUILD UNDER WAY
+   2026-10-20** (PLAN_R §8 = the build log): step 0a LANDED `a6e71c0`, step 0b the commit after it (both zero change, as predicted).
 4. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -361,6 +366,13 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
   positional index. Detail: memory `project_is_range_pollution_fix.md` "Open follow-up".
 - **Opposite-direction POIs** — the zone-proximity logic assumes "POI ⟹ sd"; TRIGGER: any feature producing an opp_sd
   POI → revisit `check_zone_proximity`. Detail: `engine_v2/zones/POI_ZONES_SPEC.md` (~:420).
+- **The start-candle probe's market structure runs at the H1 proximity values on M15** (8 pips and the 50-pip
+  narrow-cycle gap instead of 5 / 30): `unified_probe.py`'s Phase 2 builds it through
+  `structure_engine._make_market_structure` without `timeframe` (that helper's docstring: "a deferred cleanup").
+  INERT BY DESIGN — the probe's result reads two CTS_ESTABLISHED, cycle 0's CTS_CONFIRMED and a reversal, never a
+  proximity confirmation, and cycle 0 cannot be proximity-confirmed (`unified_probe.py:549-552`, PLAN_I §9.2 F7).
+  TRIGGER: the probe ever reads a proximity-confirmed CTS → pass the sub's `timeframe`. Registered 2026-10-19 (the
+  user: "We can add it"); detail `engine_v2/plans/qa_opp_sd_zones_inputs/qa_findings.md` rounds 5–6.
 
 ## F. Week 10 — live readiness
 
@@ -404,6 +416,14 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
   `MARKET_STRUCTURE_SPEC` / `CHARTING_SPEC` / `LANDMINES`) — the drafted §13.7 plan; PARKED as optional by the user
   2026-09-30 (§13.7 was finalized in place instead: ~235 `PART4 §x` citations, no behaviour gained). Detail: PART4
   header "Canonical" + footer.
+- **Would-have-been subs for collapsed parent cycles** (the user, 2026-10-19: "OK we can go with parent zones only
+  for now and consider subs later"): the opp_sd zones proximity overlay (SESSION ORDER item 3, the coming PLAN_R)
+  reads sub zones only on parent cycles with a real-time lifecycle; a collapsed cycle (lifecycle floor ≥ end — on
+  the reference window structure 1's cycles 0 / 1, `[902, 902)`) scans its parent zones only, because the pool
+  builds no subs there (LANDMINES "Collapsed Parent Cycles"), and a live sub of the real-time parent cycle is NOT
+  borrowed (decided). The engine's would-have-been clock is the event MOMENT (`ev.idx`); subs in that clock would
+  need probes / records outside the real-time pool. Detail: `engine_v2/plans/qa_opp_sd_zones_inputs/qa_findings.md`
+  rounds 4–6.
 
 ## H. Deferred indefinitely
 

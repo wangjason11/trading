@@ -188,7 +188,8 @@ The first candle after `CTS_ESTABLISHED` then trivially fires the
 trigger even though price hasn't meaningfully retraced.
 
 **Concrete cases (NZD_USD H1, threshold 20p at the time — since
-lowered to 9p in `DEFAULT_PROXIMITY_PIPS`):**
+lowered to 8p in `DEFAULT_PROXIMITY_PIPS` — 9p from 2026-05-11, 8p since `804d19d`,
+2026-05-28):**
 - sid=0 cyc=0: POI inner 0.56004 sat 12.2 pips below CTS=0.56126;
   threshold 20p → buffer extended 7.8p *above* CTS. Trigger fired at
   idx 116 (the next candle). Cascade: spurious cycle-1 transition,

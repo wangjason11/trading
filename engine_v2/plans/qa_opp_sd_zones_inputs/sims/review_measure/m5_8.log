@@ -1,0 +1,30 @@
+........................................................................ [ 29%]
+........................................................................ [ 59%]
+........................................................................ [ 89%]
+..........................                                               [100%]
+============================== warnings summary ===============================
+engine_v2/tests/test_e4_simulation.py: 14 warnings
+engine_v2/tests/test_ms_bounded_equals_truncated.py: 194 warnings
+engine_v2/tests/test_ms_new_cycle_ends_watch.py: 11 warnings
+engine_v2/tests/test_ms_stop_after_cts.py: 14 warnings
+engine_v2/tests/test_plan_e_role_pins.py: 3 warnings
+  C:\Users\wangj\OneDrive\Documents\codingproj\Project Retire\forex_engine_v2\engine_v2\structure\market_structure.py:2482: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+    prev_active = active.shift(1).fillna(False).astype(bool)
+
+engine_v2/tests/test_plan_e_role_pins.py::test_h1_chart_unconfirmed_cts_marker_sits_at_the_cts_anchor
+engine_v2/tests/test_plan_i_s5_ms_reads_the_fib.py::test_a_tracker_error_inside_a_sub_geometry_propagates
+engine_v2/tests/test_plan_i_s5_ms_reads_the_fib.py::test_main_sid_n_gets_its_limit_from_the_sids_before_it
+engine_v2/tests/test_unified_probe.py::TestFinalizeIdxTable::test_phase2_second_cts_reached_is_the_moment_not_the_anchor
+engine_v2/tests/test_unified_probe.py::TestFinalizeIdxTable::test_phase2_reversal_in_probe_is_the_reversal_apply_idx[None]
+engine_v2/tests/test_unified_probe.py::TestFinalizeIdxTable::test_phase2_reversal_in_probe_is_the_reversal_apply_idx[12]
+  C:\Users\wangj\OneDrive\Documents\codingproj\Project Retire\forex_engine_v2\engine_v2\structure\market_structure.py:2482: FutureWarning:
+  
+  Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+[fallback=8] passed=242 failed=0 errors=0 skipped=0
+[fallback] files constructing MS with proximity_pips=None: {'engine_v2/tests/test_e4_simulation.py': 3, 'engine_v2/tests/test_event_fields.py': 1, 'engine_v2/tests/test_ms_bos_selection_guards.py': 6, 'engine_v2/tests/test_ms_new_cycle_ends_watch.py': 3, 'engine_v2/tests/test_ms_stop_after_cts.py': 3, 'engine_v2/tests/test_plan_e_role_pins.py': 2, 'engine_v2/tests/test_plan_i_s5_ms_reads_the_fib.py': 2}
+[fallback] files constructing MS at all: 9
+242 passed, 242 warnings in 45.15s
+rc 0

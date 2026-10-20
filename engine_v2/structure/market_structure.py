@@ -85,16 +85,18 @@ class EmbeddedFibTrackerError(RuntimeError):
 # Default fallback proximity threshold for direct/test callers that don't
 # pass `proximity_pips`. Real callers go through `structure/structure_engine.py`
 # wrappers which look up the TF-keyed value from `DEFAULT_PROXIMITY_PIPS`.
-# Kept in sync with `zones/zone_proximity.py::DEFAULT_PROXIMITY_PIPS["H1"]`
-# manually (a direct import would create a cycle — zone_proximity imports
-# StructureEvent from this module).
-_FALLBACK_PROXIMITY_PIPS = 9  # matches H1 default
+# Must equal `zones/zone_proximity.py::DEFAULT_PROXIMITY_PIPS["H1"]` (a direct
+# import would create a cycle — zone_proximity imports StructureEvent from this
+# module), so a test guards it: `tests/test_ms_fallback_proximity_defaults.py`
+# (PLAN_R step 0b; it was 9 — stale since the H1 default became 8 in `804d19d`).
+_FALLBACK_PROXIMITY_PIPS = 8  # == DEFAULT_PROXIMITY_PIPS["H1"] (guarded)
 
 # Default fallback narrow-cycle gap threshold for the dual CTS proximity
 # confirmation gate (Rule 1). Below this, sd-proximity cannot confirm CTS.
-# Same import-cycle reason as above — kept in sync manually with
-# `zones/zone_proximity.py::DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS["H1"]`.
-_FALLBACK_MIN_GAP_PIPS = 50  # matches H1 default
+# Same import-cycle reason as above — must equal
+# `zones/zone_proximity.py::DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS["H1"]`
+# (guarded by the same test).
+_FALLBACK_MIN_GAP_PIPS = 50  # == DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS["H1"] (guarded)
 
 
 def _check_sd_proximity_at_candle(

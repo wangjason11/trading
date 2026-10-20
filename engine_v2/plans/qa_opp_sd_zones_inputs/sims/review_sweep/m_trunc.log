@@ -1,0 +1,58 @@
+C:\Users\wangj\OneDrive\Documents\codingproj\Project Retire\forex_engine_v2\engine_v2\structure\market_structure.py:2482: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  prev_active = active.shift(1).fillna(False).astype(bool)
+C:\Users\wangj\OneDrive\Documents\codingproj\Project Retire\forex_engine_v2\engine_v2\structure\market_structure.py:2482: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  prev_active = active.shift(1).fillna(False).astype(bool)
+C:\Users\wangj\OneDrive\Documents\codingproj\Project Retire\forex_engine_v2\engine_v2\structure\market_structure.py:2482: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  prev_active = active.shift(1).fillna(False).astype(bool)
+C:\Users\wangj\OneDrive\Documents\codingproj\Project Retire\forex_engine_v2\engine_v2\structure\market_structure.py:2482: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  prev_active = active.shift(1).fillna(False).astype(bool)
+C:\Users\wangj\OneDrive\Documents\codingproj\Project Retire\forex_engine_v2\engine_v2\structure\market_structure.py:2482: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  prev_active = active.shift(1).fillna(False).astype(bool)
+[auto_extend] iter=1 too_early raw_start_idx=34 min_history=50 => extending start by 4 days 2025-12-01 00:00:00+00:00 -> 2025-11-27 00:00:00+00:00
+[auto_extend] iter=2 too_early raw_start_idx=35 min_history=50 => extending start by 4 days 2025-11-27 00:00:00+00:00 -> 2025-11-23 00:00:00+00:00
+[auto_extend] iter=3 too_early raw_start_idx=37 min_history=50 => extending start by 4 days 2025-11-23 00:00:00+00:00 -> 2025-11-19 00:00:00+00:00
+[auto_extend] iter=4 too_early raw_start_idx=46 min_history=50 => extending start by 4 days 2025-11-19 00:00:00+00:00 -> 2025-11-15 00:00:00+00:00
+[trunc] pool#0 c0 BOS@458 view=0.55942 trunc=0.55942 SAME anchor=454 base=454 pattern=base anchor+5-moment=1
+[trunc] pool#0 c0 POI@802 view=[(0.5611, 0.56075, 246)] trunc=[(0.5611, 0.56075, 246)] SAME
+[trunc] pool#0 c1 BOS@1020 view=0.57066 trunc=0.57066 SAME anchor=917 base=916 pattern=no base star anchor+5-moment=-98
+[trunc] pool#0 c1 POI@1025 view=[(0.57107, 0.57075, 519)] trunc=[(0.57107, 0.57075, 519)] SAME
+[trunc] pool#0 c2 BOS@1224 view=0.57161 trunc=0.57161 SAME anchor=1107 base=1107 pattern=base anchor+5-moment=-112
+[trunc] pool#0 c2 POI@1257 view=[(0.57478, 0.57346, 812)] trunc=[(0.57478, 0.57346, 812)] SAME
+[trunc] pool#0 c3 BOS@1721 view=0.57665 trunc=0.57665 SAME anchor=1310 base=1310 pattern=base inside bar anchor+5-moment=-406
+[trunc] pool#0 c3 POI@1748 view=[(0.57738, 0.5771, 1256)] trunc=[(0.57738, 0.5771, 1256)] SAME
+[trunc] pool#0 c4 BOS@1793 view=0.57927 trunc=0.57927 SAME anchor=1761 base=1761 pattern=no base anchor+5-moment=-27
+[trunc] pool#0 c4 POI@1795 view=[(0.58074, 0.58029, 1374)] trunc=[(0.58074, 0.58029, 1374)] SAME
+[trunc] pool#1 c0 BOS@1816 view=0.58224 trunc=0.58224 SAME anchor=1797 base=1797 pattern=base inside bar anchor+5-moment=-14
+[trunc] pool#1 c0 POI@1818 view=None trunc=None SAME
+[trunc] pool#1 c1 BOS@1894 view=0.58153 trunc=0.58153 SAME anchor=1837 base=1837 pattern=no base anchor+5-moment=-52
+[trunc] pool#1 c1 POI@1902 view=[(0.58158, 0.58106, 143)] trunc=[(0.58158, 0.58106, 143)] SAME
+[trunc] pool#1 c2 BOS@1940 view=0.58032 trunc=0.58032 SAME anchor=1934 base=1934 pattern=base anchor+5-moment=-1
+[trunc] pool#1 c2 POI@1948 view=[(0.58088, 0.58044, 187)] trunc=[(0.58088, 0.58044, 187)] SAME
+[trunc] pool#1 c3 BOS@2231 view=0.57978 trunc=0.57978 SAME anchor=2078 base=2078 pattern=base inside bar anchor+5-moment=-148
+[trunc] pool#1 c3 POI@2236 view=None trunc=None SAME
+[trunc] pool#1 c4 BOS@2343 view=0.57796 trunc=0.57796 SAME anchor=2270 base=2270 pattern=base inside bar anchor+5-moment=-68
+[trunc] pool#1 c4 POI@2367 view=[(0.57756, 0.57722, 573)] trunc=[(0.57756, 0.57722, 573)] SAME
+[trunc] pool#2 c0 BOS@2368 view=0.57414 trunc=0.57414 SAME anchor=2365 base=2364 pattern=no base anchor+5-moment=2
+[trunc] pool#2 c0 POI@2560 view=None trunc=None SAME
+[trunc] pool#2 c1 BOS@2608 view=0.58248 trunc=0.58248 SAME anchor=2561 base=2561 pattern=base anchor+5-moment=-42
+[trunc] pool#2 c1 POI@2612 view=[(0.58312, 0.58289, 260)] trunc=[(0.58312, 0.58289, 260)] SAME
+[trunc] pool#3 c0 BOS@2649 view=0.58456 trunc=0.58456 SAME anchor=2639 base=2639 pattern=base inside bar anchor+5-moment=-5
+[trunc] pool#3 c0 POI@2752 view=None trunc=None SAME
+[trunc] pool#3 c1 BOS@2829 view=0.58366 trunc=0.58366 SAME anchor=2758 base=2757 pattern=no base anchor+5-moment=-66
+[trunc] pool#3 c1 POI@2844 view=[(0.58318, 0.58279, 219)] trunc=[(0.58318, 0.58279, 219)] SAME
+[trunc] pool#3 c2 BOS@2992 view=0.58171 trunc=0.58171 SAME anchor=2915 base=2914 pattern=no base star anchor+5-moment=-72
+[trunc] pool#3 c2 POI@3086 view=[(0.58118, 0.58096, 341)] trunc=[(0.58118, 0.58096, 341)] SAME
+[trunc] pool#3 c3 BOS@3589 view=0.58055 trunc=0.58055 SAME anchor=3304 base=3304 pattern=base inside bar anchor+5-moment=-280
+[trunc] pool#3 c3 POI@3741 view=[(0.5792, 0.57885, 838)] trunc=[(0.5792, 0.57885, 838)] SAME
+[trunc] pool#4 c0 BOS@3306 view=0.58055 trunc=0.58055 SAME anchor=3304 base=3304 pattern=base inside bar anchor+5-moment=3
+[trunc] pool#4 c0 POI@3741 view=[(0.5792, 0.57885, 173)] trunc=[(0.5792, 0.57885, 173)] SAME
+[trunc] pool#5 c0 BOS@3656 view=0.57271 trunc=0.57271 SAME anchor=3621 base=3621 pattern=base anchor+5-moment=-30
+[trunc] pool#5 c0 POI@3786 view=[(0.57306, 0.57276, 83)] trunc=[(0.57306, 0.57276, 83)] SAME
+[trunc] pool#5 c1 BOS@4200 view=0.57337 trunc=0.57337 SAME anchor=4000 base=4000 pattern=base anchor+5-moment=-195
+[trunc] pool#6 c0 BOS@3786 view=0.57758 trunc=0.57758 SAME anchor=3760 base=3760 pattern=base inside bar anchor+5-moment=-21
+[trunc] pool#6 c0 POI@4157 view=[(0.57705, 0.57653, 99)] trunc=[(0.57705, 0.57653, 99)] SAME
+[trunc] pool#7 c0 BOS@4031 view=0.57384 trunc=0.57384 SAME anchor=4027 base=4027 pattern=base anchor+5-moment=1
+[trunc] pool#7 c0 POI@4103 view=[(0.57484, 0.57454, 71)] trunc=[(0.57484, 0.57454, 71)] SAME
+[trunc] pool#7 c1 BOS@4157 view=0.57455 trunc=0.57455 SAME anchor=4129 base=4129 pattern=no base 2nd big anchor+5-moment=-23
+[trunc] pool#7 c1 POI@4159 view=[(0.57462, 0.57422, 154)] trunc=[(0.57462, 0.57422, 154)] SAME
+[trunc] pool#7 c2 BOS@4179 view=0.57728 trunc=0.57728 SAME anchor=4168 base=4168 pattern=base anchor+5-moment=-6
