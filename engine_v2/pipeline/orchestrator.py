@@ -991,11 +991,12 @@ def _run_multi_tf_dual(
     sub_pool = SubStructurePool()
 
     def _resolve_start(t: SweepTrigger, hi: int):
-        # The parent floor = the one every TriggerRecord stores (PLAN_R §2): the sibling
-        # window's raw-frame fallback must not reach before the parent cycle.
+        # The sibling window's raw-frame fallback must not reach before the parent cycle (PLAN_R §2):
+        # bounded at the cycle's CTS-established MOMENT on M15 — not the real-time floor, which a
+        # retroactive cycle's triggers precede (the user, 2026-10-20).
         return _resolve_trigger_m15_start(
             t.source, h1_df, m15, pool=sub_pool, hi=hi,
-            parent_floor_idx=tables.floor(*t.cycle), parent_path=parent_path,
+            m15_parent_cts_established_idx=_loh(tables.cts_moment[t.cycle]), parent_path=parent_path,
         )
 
     def _build_geometry(key, bos0_inner, cross_fib_limit):

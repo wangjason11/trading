@@ -772,24 +772,31 @@ def _sibling_cts_idx_window(
     m15_df: pd.DataFrame,
     hi: int,
     *,
-    parent_floor_idx: int,
+    m15_parent_cts_established_idx: int,
 ) -> Tuple[int, int]:
     """Inclusive entity-absolute M15 `(lo, hi)` window the sibling CTS must
     fall in, per use_case (PART4 §4.3.3/4/5, Session 3).
 
-    - `first_counter`: `[parent_floor_idx, hi]` — the parent cycle up to the
-      first sd-prox trigger.
-    - `subsequent_confluence`: `[max(last-M15 of prior_sd_prox hour, floor), hi]`.
-    - `subsequent_counter`: `[max(last-M15 of prior_opp_sd_prox hour, floor), hi]`.
+    - `first_counter`: `[the parent cycle's CTS-established moment, hi]` — the
+      parent cycle up to the first sd-prox trigger.
+    - `subsequent_confluence`: `[max(last-M15 of prior_sd_prox hour, that moment), hi]`.
+    - `subsequent_counter`: `[max(last-M15 of prior_opp_sd_prox hour, that moment), hi]`.
 
-    `parent_floor_idx` = the parent cycle's M15 floor (`ParentTables.floor`,
-    the same value every TriggerRecord stores as `parent_floor_idx`). The two
-    readers of this window have DIFFERENT scopes (PLAN_R §2): the pool read is
-    already scoped to the parent cycle (its records start at ≥ the floor), but
-    the fallback `_window_extreme_idx` scans the RAW shared M15 frame — with
+    `m15_parent_cts_established_idx` = the LOH (last M15 of the hour) of the
+    parent cycle's CTS-established MOMENT (`ParentTables.cts_moment`) — where the
+    cycle's price structure begins, on the moment clock. The two readers of this
+    window have DIFFERENT scopes (PLAN_R §2): the pool read is already scoped to
+    the parent cycle (its records start at ≥ the real-time floor ≥ that moment),
+    but the fallback `_window_extreme_idx` scans the RAW shared M15 frame — with
     `lo = 0` it would pick the extreme since the data start. So `lo` is never
-    below the floor, for every use case; a missing prior-prox meta value
-    degrades `lo` to the floor.
+    before the parent cycle, for every use case; a missing prior-prox meta
+    value degrades `lo` to that moment. Not the real-time floor (the user,
+    2026-10-20, PLAN_R §2): a retroactively established cycle that still has a
+    real-time lifecycle fires its triggers BEFORE its floor (the scan runs on
+    the structure's own clock), and the floor would empty its window; every
+    trigger comes after its cycle's CTS_CONFIRMED, so the window is never empty
+    (asserted). On the reference window the two bounds coincide on every live
+    cycle.
 
     `hi` = the reading trigger's `trigger_idx` (the last M15 of its H1 hour) —
     the ONLY thing keeping the sibling read causal (§17.8).
@@ -801,14 +808,18 @@ def _sibling_cts_idx_window(
         prior_parent_idx = trigger.meta.get("prior_sd_trigger_idx")
     elif uc == "subsequent_counter":
         prior_parent_idx = trigger.meta.get("prior_opp_sd_prox_idx")
-    # first_counter (and any missing prior meta): lo = the parent floor.
-    lo = int(parent_floor_idx)
+    # first_counter (and any missing prior meta): lo = the parent cycle's CTS-established moment.
+    lo = int(m15_parent_cts_established_idx)
     if prior_parent_idx is not None:
         mapped = _map_parent_idx_to_m15_hour_end(
             int(prior_parent_idx), parent_df, m15_df,
         )
         if mapped is not None:
             lo = max(int(mapped), lo)
+    assert lo <= hi, (
+        f"[entity_compute] {uc} sid={trigger.parent_sid} cycle={trigger.parent_cycle_id}: sibling window "
+        f"[{lo}, {hi}] is empty — the trigger precedes its parent cycle's CTS-established moment"
+    )
     return lo, hi
 
 
@@ -827,7 +838,7 @@ def _resolve_sibling_cts_via_unified_probe(
     *,
     pool: SubStructurePool,
     hi: int,
-    parent_floor_idx: int,
+    m15_parent_cts_established_idx: int,
     parent_path: str = "H1.main",
 ):
     """Unified-probe path for the three sibling-referencing variations
@@ -837,8 +848,9 @@ def _resolve_sibling_cts_via_unified_probe(
     Both the probe `input_idx` AND the `reference_zone` are co-sourced from the
     sibling lens's most recent qualifying CTS in the trigger's M15 window
     `[lo, hi]` (`hi` = this trigger's `trigger_idx`, the last M15 of its H1
-    hour; `lo` ≥ `parent_floor_idx`, the parent cycle's M15 floor — the
-    fallback's raw-frame extreme must not reach before the cycle, PLAN_R §2).
+    hour; `lo` ≥ `m15_parent_cts_established_idx`, the parent cycle's
+    CTS-established moment on M15 — the fallback's raw-frame extreme must not
+    reach before the cycle, PLAN_R §2).
     `enable_phase2=False`. Returns a `ResolvedStart`
     (`parent_bos_anchor_idx` None — FC-only, PLAN_E Q4; the M15 candle it probes from —
     the sibling CTS anchor or the ad-hoc fallback's — is `probe_input_idx`) or a `ProbeFailure`.
@@ -852,7 +864,7 @@ def _resolve_sibling_cts_via_unified_probe(
     # 1. Sibling-CTS reference zone within the per-variation M15 window. Its
     #    `anchor_idx` IS the probe input_idx (co-sourced).
     idx_window = _sibling_cts_idx_window(
-        trigger, parent_df, m15_df, hi, parent_floor_idx=int(parent_floor_idx),
+        trigger, parent_df, m15_df, hi, m15_parent_cts_established_idx=int(m15_parent_cts_established_idx),
     )
     ref_zone = _build_sibling_cts_ref_zone_from_pool(
         pool, other_lens, int(trigger.parent_sid), int(trigger.parent_cycle_id),
@@ -921,7 +933,7 @@ def _resolve_trigger_m15_start(
     *,
     pool: Optional[SubStructurePool] = None,
     hi: Optional[int] = None,
-    parent_floor_idx: int,
+    m15_parent_cts_established_idx: int,
     parent_path: str = "H1.main",
 ):
     """Resolve a trigger's M15 `starting_idx` (entity-absolute) — dispatcher.
@@ -933,9 +945,10 @@ def _resolve_trigger_m15_start(
       `trigger_idx`) is required.
     - `reversal` never comes here (`_resolve_reversal_start`).
 
-    `parent_floor_idx` (REQUIRED, PLAN_R §2) = the parent cycle's M15 floor
-    (`ParentTables.floor(S, C)`): the sibling window's `lo` never reaches
-    below it (`_sibling_cts_idx_window`). `first_confluence` does not read it.
+    `m15_parent_cts_established_idx` (REQUIRED, PLAN_R §2) = the LOH of the
+    parent cycle's CTS-established moment (`ParentTables.cts_moment`): the
+    sibling window's `lo` never reaches below it (`_sibling_cts_idx_window`).
+    `first_confluence` does not read it.
 
     Returns a `ResolvedStart` or a `ProbeFailure`.
     """
@@ -950,7 +963,7 @@ def _resolve_trigger_m15_start(
         )
         return _resolve_sibling_cts_via_unified_probe(
             trigger, parent_df, m15_df, pool=pool, hi=int(hi),
-            parent_floor_idx=int(parent_floor_idx), parent_path=parent_path,
+            m15_parent_cts_established_idx=int(m15_parent_cts_established_idx), parent_path=parent_path,
         )
     raise ValueError(f"[entity_compute] unknown use_case {uc!r}")
 

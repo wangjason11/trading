@@ -1,0 +1,11 @@
+[
+ {
+  "id": "N7 batch dict order reversed",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_10_the_reference_window_parent_ladders_reproduce_s_q_and_the_passes_stay_invisible"
+  ],
+  "tail": "1 failed, 1781 passed, 3 skipped, 1 deselected, 444 warnings in 67.95s (0:01:07)"
+ }
+]

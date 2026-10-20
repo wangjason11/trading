@@ -6,7 +6,7 @@ a sub's records inside its projection, ungated (`test_plan_g_wvmi.py`); the mirr
 sub is on. The rule pinned here, as written in PLAN_G §4 G4 (every expected value derived from it):
 
   * per lens: the lens's WVMI-class parent trigger stream (confluence = the sd-prox class `ZONE_PROXIMITY_TRIGGER` +
-    `SUBSEQUENT_COUNTER_TRIGGER`; counter = the CTS-prox class `SUBSEQUENT_CONFLUENCE_TRIGGER` — §8.5, Q8), each entry
+    `SUBSEQUENT_COUNTER_TRIGGER`; counter = the opp_sd-prox class `SUBSEQUENT_CONFLUENCE_TRIGGER` — §8.5, Q8), each entry
     LOH-mapped once (`_map_parent_idx_to_m15_hour_end`), sorted by `(m15_idx, parent_idx)`;
   * per sub on that lens: the FIRST entry inside `[start_idx, m15_end_idx]` (inclusive; the edge for an open sub);
   * every record of the lens df, joined to its sub on `meta["sub_id"]` (never position), gets as its FIRST meta keys

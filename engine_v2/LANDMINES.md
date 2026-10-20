@@ -857,10 +857,12 @@ registry, never from `dfx.attrs["lower_tf_results"]`.
 >   events would move `subsequent_counter`(1,2)@4083's `starting_idx` 4027 —
 >   a pool key both `4027/+1` records dedup on).
 > - `hi` = the reading trigger's `trigger_idx` (`_sibling_cts_idx_window`;
->   `lo` = the parent cycle's M15 floor for `first_counter`, the LOH of the
->   prior sd-prox / opp_sd-prox candle for `subsequent_*`, never below that
->   floor — PLAN_R step 0a: the own-frame fallback scans the raw frame, so a
->   `lo` of 0 reached before the cycle). **The window is the ONLY thing keeping the
+>   `lo` = the LOH of the parent cycle's CTS-established moment for
+>   `first_counter`, the LOH of the prior sd-prox / opp_sd-prox candle for
+>   `subsequent_*`, never below that moment — PLAN_R step 0a: the own-frame
+>   fallback scans the raw frame, so a `lo` of 0 reached before the cycle; the
+>   moment, not the real-time floor, which a retroactive cycle's triggers
+>   precede, the user 2026-10-20). **The window is the ONLY thing keeping the
 >   read causal** now that geometry is not bounded per trigger — never widen
 >   it, never drop `hi`. The clip (per record) and the reference window both
 >   key every CTS type (`structure/reference_zone._CTS_EVENT_TYPES`) on its
@@ -924,7 +926,7 @@ by `build_two_entity_parent_cycle` (driven by `_run_multi_tf_dual`), advancing
 whichever `_ChainCursor` has the smaller next M15 trigger boundary. Cadence
 guarantees every sibling CTS a probe reads is strictly EARLIER than the
 reading sid's own trigger candle (`first_confluence`@BOS < `first_counter`@sd-prox
-< `subsequent_confluence`@CTS-prox < `subsequent_counter`@next-sd-prox …), so
+< `subsequent_confluence`@opp_sd-prox < `subsequent_counter`@next-sd-prox …), so
 the needed sibling sid is always already built when the probe fires. Bootstrap
 start resolution is therefore LAZY (deferred to the cursor's first `step`),
 NOT eager at cursor construction.
@@ -1062,7 +1064,7 @@ the sub is on, each with THAT lens's path in the FIELD and the meta; the orchest
 | Lens | `triggered_by_event_type` stream (§8.5's WVMI class) | `triggered_by_event_idx` |
 |---|---|---|
 | `H1.main >> M15.confluence` | sd-prox class: the main's first sd-prox per cycle (`ZONE_PROXIMITY_TRIGGER`) + each var 4 (`SUBSEQUENT_COUNTER_TRIGGER`) | the stream's FIRST entry (LOH-mapped) inside the sub's `[start_idx, m15_end_idx]`, in PARENT coords; None if none |
-| `H1.main >> M15.counter` | CTS-prox class: each var 3 (`SUBSEQUENT_CONFLUENCE_TRIGGER`) | same rule on this lens's stream |
+| `H1.main >> M15.counter` | opp_sd-prox class: each var 3 (`SUBSEQUENT_CONFLUENCE_TRIGGER`) | same rule on this lens's stream |
 
 `parent_path_id` is always `"H1.main"` (the parent entity). On a sub row `triggered_by_*` is
 **attribution, not a gate** (a declared rule-3 meaning change, "Event Contract Rules"): the record

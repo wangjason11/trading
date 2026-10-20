@@ -1,0 +1,130 @@
+[
+ {
+  "id": "N1 outward reset hard-coded to the bullish orientation (sd=-1 mirror)",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_1_bearish_outward_move_while_narrow_resets_that_side"
+  ],
+  "tail": "1 failed, 1781 passed, 3 skipped, 1 deselected, 444 warnings in 148.99s (0:02:28)"
+ },
+ {
+  "id": "N2 opp_sd side never pass-tested",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_2_an_opp_sd_pass_moves_the_reference_to_the_cts_and_locks",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_3_an_opp_sd_outward_move_while_narrow_resets_the_opp_sd_counter"
+  ],
+  "tail": "2 failed, 1780 passed, 3 skipped, 1 deselected, 444 warnings in 150.86s (0:02:30)"
+ },
+ {
+  "id": "N3 outward reset only on the sd side",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_3_an_opp_sd_outward_move_while_narrow_resets_the_opp_sd_counter"
+  ],
+  "tail": "1 failed, 1781 passed, 3 skipped, 1 deselected, 444 warnings in 150.88s (0:02:30)"
+ },
+ {
+  "id": "N4 pass test reads the outer as of the previous candle (open), not the close",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_4_the_pass_reads_the_outer_as_of_the_close_including_an_expansion_on_that_candle"
+  ],
+  "tail": "1 failed, 1781 passed, 3 skipped, 1 deselected, 444 warnings in 149.71s (0:02:29)"
+ },
+ {
+  "id": "N5 a missing reference (gap None) counts as narrow",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_5_a_cycle_without_a_cts_zone_is_wide_until_an_opp_sd_reference_exists"
+  ],
+  "tail": "1 failed, 1781 passed, 3 skipped, 1 deselected, 444 warnings in 149.75s (0:02:29)"
+ },
+ {
+  "id": "N6 Rule 2 also applied on a reference-narrow cycle",
+  "verdict": "KILLED",
+  "n": 8,
+  "fails": [
+   "engine_v2/tests/test_plan_g_wvmi.py::test_the_main_flags_its_collapsed_cycles_too[13-expected1]",
+   "engine_v2/tests/test_plan_g_wvmi.py::test_the_main_flags_its_collapsed_cycles_too[None-expected0]",
+   "engine_v2/tests/test_plan_g_wvmi.py::test_the_main_keeps_its_gate_values_and_meta_key_order",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_6_rule_2_is_not_part_of_the_cap",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_an_ended_cycle_takes_no_lp_past_its_end",
+   "engine_v2/tests/test_zone_proximity_reversal_cap.py::test_a_dead_candidate_at_the_last_cycles_confirmation_no_longer_skips_it",
+   "engine_v2/tests/test_zone_proximity_reversal_cap.py::test_a_discarded_last_candidate_no_longer_skips_the_later_cycle",
+   "engine_v2/tests/test_zone_proximity_reversal_cap.py::test_a_realised_reversal_still_caps_the_scan"
+  ],
+  "tail": "8 failed, 1774 passed, 3 skipped, 1 deselected, 443 warnings in 149.96s (0:02:29)"
+ },
+ {
+  "id": "N7 batch dict order reversed",
+  "verdict": "SURVIVED",
+  "tail": "1782 passed, 3 skipped, 1 deselected, 444 warnings in 148.33s (0:02:28)"
+ },
+ {
+  "id": "N8 sd=-1 POI rung outer = its inner (pass judged on the inner)",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_10_the_reference_window_parent_ladders_reproduce_s_q_and_the_passes_stay_invisible"
+  ],
+  "tail": "1 failed, 1781 passed, 3 skipped, 1 deselected, 444 warnings in 149.74s (0:02:29)"
+ },
+ {
+  "id": "N9 overlay rungs never pass-tested (parent rungs only)",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_2_an_opp_sd_pass_moves_the_reference_to_the_cts_and_locks",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_3_an_opp_sd_outward_move_while_narrow_resets_the_opp_sd_counter",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_7_an_overlay_rung_is_pass_tested"
+  ],
+  "tail": "3 failed, 1779 passed, 3 skipped, 1 deselected, 444 warnings in 150.41s (0:02:30)"
+ },
+ {
+  "id": "N10 a close AT the outer passes",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_2_a_close_at_the_outer_or_a_wick_beyond_it_is_not_a_pass[1.408-1.409]"
+  ],
+  "tail": "1 failed, 1781 passed, 3 skipped, 1 deselected, 444 warnings in 150.59s (0:02:30)"
+ },
+ {
+  "id": "R0a-1 the closure passes the real-time floor (the bound before the user's decision)",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_lifecycle_sweep_unit.py::test_orchestrator_resolve_start_passes_the_parent_cycles_cts_established_moment"
+  ],
+  "tail": "1 failed, 1781 passed, 3 skipped, 1 deselected, 444 warnings in 149.13s (0:02:29)"
+ },
+ {
+  "id": "R0a-2 the empty-window assert dropped",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_an_empty_window_fails_loudly"
+  ],
+  "tail": "1 failed, 1781 passed, 3 skipped, 1 deselected, 444 warnings in 149.00s (0:02:29)"
+ },
+ {
+  "id": "R0a-3 lo starts at 0 again",
+  "verdict": "KILLED",
+  "n": 6,
+  "fails": [
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_a_prior_hour_before_the_moment_is_raised_to_it[subsequent_confluence-prior_sd_trigger_idx]",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_a_prior_hour_before_the_moment_is_raised_to_it[subsequent_counter-prior_opp_sd_prox_idx]",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_an_empty_window_fails_loudly",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_first_counter_lo_is_the_parent_cycles_cts_established_moment",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_missing_prior_meta_degrades_to_the_moment",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_the_fallback_extreme_stays_inside_the_parent_cycle"
+  ],
+  "tail": "6 failed, 1776 passed, 3 skipped, 1 deselected, 444 warnings in 150.45s (0:02:30)"
+ }
+]

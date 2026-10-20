@@ -1,0 +1,20 @@
+[
+ {
+  "id": "1-14 banker's rounding",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_7_rounding_is_half_up_and_narrow_is_at_or_below"
+  ],
+  "tail": "1 failed, 1773 passed, 3 skipped, 1 deselected, 444 warnings in 145.45s (0:02:25)"
+ },
+ {
+  "id": "1-22 the half-up floor without its epsilon",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_7_rounding_is_half_up_and_narrow_is_at_or_below"
+  ],
+  "tail": "1 failed, 1773 passed, 3 skipped, 1 deselected, 444 warnings in 145.85s (0:02:25)"
+ }
+]

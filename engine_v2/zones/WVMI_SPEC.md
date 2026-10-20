@@ -91,7 +91,7 @@ confirmation candle.
    (`_wvmi_trigger_streams_by_lens` — the one place the lens -> stream mapping is made):
    - **confluence**: the sd-prox class — the main's first sd-prox per cycle (`ZONE_PROXIMITY_TRIGGER`) + each var 4
      (`SUBSEQUENT_COUNTER_TRIGGER`);
-   - **counter**: the CTS-prox class — each var 3 (`SUBSEQUENT_CONFLUENCE_TRIGGER`).
+   - **counter**: the opp_sd-prox class — each var 3 (`SUBSEQUENT_CONFLUENCE_TRIGGER`).
    Each entry is LOH-mapped once (`_map_parent_idx_to_m15_hour_end`), sorted by `(m15_idx, parent_idx)`; per sub
    on the lens, the FIRST entry inside the sub's real-time window **`[meta["start_idx"], meta["m15_end_idx"]]`**
    (`m15_end_idx` = the sub's end, or the geometry's data edge for an open sub) is the lens's trigger. Every

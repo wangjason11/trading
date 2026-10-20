@@ -429,3 +429,25 @@ Q6 / 0 / 10: asked to explain the fallback-window fix again; the order decision 
    that differs stops and explains, never absorbs; the stepped "current proximity reference" line is a chart-look
    SAMPLE for the user to judge.
 3. The build starts in a NEW session (the kickoff prompt written 2026-10-20). PLAN_R status: READY TO BUILD.
+
+### The build session — round 13 (2026-10-20; the landing review of steps 0a + 0b + 1)
+
+- **Found by the code reviewer (latent, not on this window):** step 0a's `lo = max(lo, the real-time floor)` makes the
+  sibling window EMPTY (`lo > hi`) for a trigger fired before its parent cycle's floor — possible only when a
+  retroactively established cycle still has a real-time lifecycle (e.g. had (1,2) been established at H1 910, (1,1) —
+  established 748, CTS confirmed 810, floor 902 = M15 3611 — would be live 902 → 910, and its 820 first_counter /
+  871 subsequent_confluence would get `[3611, 3283]` / `[3611, 3487]` → skipped). On S_Q every live cycle's floor ==
+  its CTS-established moment ((0,0) 115, (0,1) 652, (1,2) 902); only the collapsed (1,0) / (1,1) (703 / 748) differ.
+- The user asked: "Can you provide more details on this? What exactly is the floor you are referring to? Also what does
+  it mean that it can invert the sibling window? And how can a trigger fire before the parent cycle's real-time floor
+  (again what is the meaning of real-time floor here?)" — explained (the floor = the cycle's real-time lifecycle start,
+  max(its establishment, its structure's real-time start / reversal handoff); the window `[lo, hi]`; the scan runs on
+  the structure's own clock, so a retroactive cycle's triggers precede its floor).
+- **Decision: "Establishment moment (Recommended)"** — the fallback window's `lo` is bounded by the parent cycle's
+  CTS-established MOMENT (the moment clock; M15 LOH of `ParentTables.cts_moment`), not the real-time floor: never empty
+  (every trigger comes after its cycle's CTS_CONFIRMED ≥ that moment), identical on this window. Example: 820 →
+  `[2995, 3283]`, 871 → `[3283, 3487]`. Built as the step-0a follow-up (PLAN_R §2, §8).
+- Also from the review: the stale 9 / 6 / 3 table in `MARKET_STRUCTURE_SPEC.md` (step 0b's doc sweep missed it); the
+  "CTS-prox class" / "opp_sd-prox class" double name; 5 test gaps on step-2 paths (opp_sd / overlay passes, an
+  opp_sd outward reset while narrow, an sd = −1 cap case, the outer read at the pass site, the gap-None path) + "Rule 2
+  is not part of the cap" pinned only incidentally — fixed in the review follow-up commit.

@@ -1,0 +1,22 @@
+[
+ {
+  "id": "0b-1 the constant back to 9",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_ms_fallback_proximity_defaults.py::test_a_direct_construction_reads_the_fallbacks",
+   "engine_v2/tests/test_ms_fallback_proximity_defaults.py::test_fallback_proximity_pips_equals_the_h1_default"
+  ],
+  "tail": "2 failed, 1747 passed, 2 skipped, 1 deselected, 444 warnings in 69.13s (0:01:09)"
+ },
+ {
+  "id": "0b-2 min gap fallback off by one",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_ms_fallback_proximity_defaults.py::test_a_direct_construction_reads_the_fallbacks",
+   "engine_v2/tests/test_ms_fallback_proximity_defaults.py::test_fallback_min_gap_pips_equals_the_h1_default"
+  ],
+  "tail": "2 failed, 1747 passed, 2 skipped, 1 deselected, 444 warnings in 69.21s (0:01:09)"
+ }
+]

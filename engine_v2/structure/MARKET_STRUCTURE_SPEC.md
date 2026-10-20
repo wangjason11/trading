@@ -517,17 +517,26 @@ catches `ValueError` / `IndexError` only, LANDMINES "Lower-TF Pipeline Steps May
 ### Trigger threshold per timeframe
 
 `MarketStructure.__init__` accepts `timeframe`, `proximity_pips`, and
-`min_gap_pips` parameters. Both pip parameters fall back to per-TF
-table lookups in `zones/zone_proximity.py` when None:
+`min_gap_pips` parameters. The per-TF values are the tables in
+`zones/zone_proximity.py`, looked up by
+`structure/structure_engine.py::_make_market_structure` (every production
+build goes through it, `setdefault`):
 
 | Parameter | Source | H1 | M15 | M5 |
 |---|---|---|---|---|
-| `proximity_pips` | `DEFAULT_PROXIMITY_PIPS` | 9 | 6 | 3 |
+| `proximity_pips` | `DEFAULT_PROXIMITY_PIPS` | 8 | 5 | 3 |
 | `min_gap_pips` (Rule 1) | `DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS` | 50 | 30 | 15 |
 
-Pip size derived from `df.attrs["pair"]` (0.01 for JPY pairs, 0.0001
-otherwise). The orchestrator wires both lookups via
-`structure/structure_engine.py::_make_market_structure`.
+`MarketStructure` itself cannot import that module (it imports
+`StructureEvent` from here), so a DIRECT construction with `None` falls back to
+the H1 values whatever its `timeframe`: `_FALLBACK_PROXIMITY_PIPS` = 8 and
+`_FALLBACK_MIN_GAP_PIPS` = 50 (`tests/test_ms_fallback_proximity_defaults.py`
+guards both against the tables; the first was a stale 9 until PLAN_R step 0b,
+2026-10-20 — and this table read 9 / 6 / 3, stale since `804d19d`, until the
+PLAN_R landing review). The start-candle probe's Phase-2 run builds through the
+helper WITHOUT `timeframe`, so it runs at the H1 values on M15 (inert by design —
+register §E). Pip size derived from `df.attrs["pair"]` (0.01 for JPY pairs,
+0.0001 otherwise).
 
 The `min_gap_pips` value also feeds Rules 2 & 3 in the post-facto
 `zones/zone_proximity.py::check_zone_proximity` scan — see that

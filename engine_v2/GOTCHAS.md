@@ -1433,7 +1433,7 @@ the moment the *parent* signals confluence/counter (§8.3–8.5). A reversal-bor
 sid is therefore covered only when a *later* parent trigger falls in its window —
 exactly mirroring how the **main** entity behaves (a main reversal doesn't
 self-create a WVMI record; the new sid waits for its next proximity gate). A sub
-reversal is neither an sd-prox nor a CTS-prox parent event, so it is **not** a
+reversal is neither an sd-prox nor an opp_sd-prox parent event, so it is **not** a
 trigger.
 
 **The latent bug this replaced (pre-2026-05-26):** the old per-sid dispatch

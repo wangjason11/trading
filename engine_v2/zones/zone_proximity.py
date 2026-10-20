@@ -164,8 +164,9 @@ DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS: Dict[str, int] = {
 
 # The narrow proximity-reference cap (PLAN_R §1, the user 2026-10-19: "1H: 40 15M: 25 5M: 15") — the minimum
 # SIGNED proximity reference gap: the distance between the two zone inners a cycle triggers on, sd × (opp_sd
-# reference − sd reference) / pip, rounded half-up. At or below it (`<=`; crossed references, ≤ 0, included) the
-# cycle may fire at most one more sd and one more opp_sd trigger, per-side counters (`CycleProximityScan`). Combined
+# reference − sd reference) / pip, rounded half-up. At or below it (`<=`; crossed references, ≤ 0, included) each
+# side may fire ONE trigger per narrow spell — per-side counters that a side's own outward move resets
+# (`CycleProximityScan`). Combined
 # with Rules 1–3 (the BOS–CTS threshold gap, unchanged): a trigger fires only if BOTH allow it. Must be strictly
 # greater than DEFAULT_PROXIMITY_PIPS on the same TF (two 8-pip bands closer than that overlap — the ping-pong).
 DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS: Dict[str, int] = {
@@ -430,7 +431,7 @@ class CycleProximityScan:
         self.scan_start = int(scan_start)
         self.scan_end = int(scan_end)
         self.parent_rungs = list(parent_rungs)
-        self.proximity_pips = int(proximity_pips)
+        self.proximity_pips = proximity_pips
         self.pip_size = float(pip_size)
         self.timeframe = timeframe
         self.threshold = self.proximity_pips * self.pip_size
@@ -808,9 +809,9 @@ def check_zone_proximity(
     The references come from each side's proximity reference ladder (PLAN_R
     §1): the closest unpassed rung; a rung is passed by a close strictly beyond
     its outer (from the next candle), the last rung (BOS / CTS) never; the
-    narrow proximity-reference cap limits a cycle whose signed reference gap is
-    ≤ `min_proximity_reference_gap_pips` to one trigger per side, per-side
-    counters (`CycleProximityScan`).
+    narrow proximity-reference cap: while the signed reference gap is
+    ≤ `min_proximity_reference_gap_pips`, each side fires once, until its own
+    outward move resets its counter (`CycleProximityScan`).
 
     Narrow-gap restrictions (Rules 2 & 3, per module docstring): at each
     candle, evaluate `|cts_threshold − bos_threshold|` reconstructed

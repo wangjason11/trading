@@ -150,6 +150,15 @@ The user asked for "proximity" in every name: "since we have used the term refer
 - **Still reachable in other windows:** a first_confluence that re-finds an ALREADY-ENDED sub with a fresh probe finalizing after the handover candle gets a zero-length record. That cycle's first_counter then has no sibling.
 - **Decision:** kept as a cheap zero-change fix (round 9: "keep 0a").
 
+**The bound — REVISED 2026-10-20 at the landing review (the user: "Establishment moment"; `qa_findings.md` round 13):**
+`lo` is bounded by the parent cycle's CTS-established MOMENT on M15 (`_loh(tables.cts_moment[(S, C)])`, the parameter
+`m15_parent_cts_established_idx`), NOT the real-time floor this section first named. The code reviewer found that the
+floor empties the window (`lo > hi`) for a trigger fired before it — a retroactively established cycle that still has
+a real-time lifecycle (example: had (1,2) been established at H1 910, (1,1)'s 820 / 871 would get `[3611, 3283]` /
+`[3611, 3487]`; with the moment `[2995, 3283]` / `[3283, 3487]`). Every trigger comes after its cycle's CTS_CONFIRMED
+≥ that moment, so the window is never empty (asserted). On S_Q the two coincide on every live cycle ((0,0) 115, (0,1)
+652, (1,2) 902) → still zero change. The text below keeps the original "floor" wording as the plan record.
+
 **The code.**
 - `_resolve_trigger_m15_start` → `_resolve_sibling_cts_via_unified_probe` → `_sibling_cts_idx_window` gain a REQUIRED `parent_floor_idx` (M15). The orchestrator's `_resolve_start` closure passes `tables.floor(S, C)`, the same floor every TriggerRecord already stores.
 - Then `lo = max(lo, parent_floor_idx)` for every use case. The comment is rewritten to say the pool query and the raw-frame fallback have different scopes.
@@ -551,3 +560,23 @@ The predictions below are for the decided hold (A) and Q1 = "from when usable".
   30 from its start, nothing reaches). Suite 1778 (+26: `tests/test_proximity_reference_ladders.py` — §4's tests 1–14
   + the outer-as-of test + the protocol test; the embedded S_Q rows `tests/_plan_r_reference_window.py`). Mutants
   22 / 22 KILLED (`build/mutants_1.py`: §4's ten + 12 extra incl. the four rename sites). Replay 48.7 s.
+- **The combined landing review of 0a + 0b + 1 — DONE (2 read-only agents, 0.51M tokens: code vs plan 0.28M, tests +
+  mutants 0.24M; stated 0.4–0.6M).** Code: step 1 matches §1 / §4 and `m4_sim`'s step-1 path (a 4000-case fuzz of
+  `CycleProximityScan` + `set_overlay` vs `m4_sim`'s loop: 0 mismatches; a 3000-seed fuzz of the batch vs `bd3bf66`
+  with the cap off: every difference preceded by a POI pass). Findings and what was done (the follow-up commit after
+  `d26208e`, zero change: 0 / 27 CSVs, 3 / 3 figures, suite 1786):
+  - **0a's bound REVISED** (§2, the user: "Establishment moment"): `m15_parent_cts_established_idx` = the LOH of the
+    parent cycle's CTS-established moment, not the real-time floor (which empties the window of a trigger fired
+    before it — a retroactive cycle with a real-time lifecycle); `lo <= hi` asserted.
+  - MARKET_STRUCTURE_SPEC's "Trigger threshold per timeframe" table read 9 / 6 / 3 and claimed a per-TF fallback in
+    `MarketStructure` — fixed (8 / 5 / 3; the H1 fallbacks; the probe's H1-pips-on-M15).
+  - One class, one name: "CTS-prox class" → "opp_sd-prox class" (LANDMINES, WVMI_SPEC, PART4 §8.5, GOTCHAS, the
+    register, a test docstring); the cap's wording "one trigger per side, until its own outward reset";
+    `CycleProximityScan` keeps `proximity_pips` raw (no `int()`); the sims README notes `r5_shadow.py fix0a`'s
+    pre-0a signature.
+  - The test gaps (7 survivors of the reviewer's 9 new mutants — all on step-2 paths: the opp_sd / overlay pass test,
+    an opp_sd outward reset while narrow, the sd = −1 cap, the outer at the pass site, the gap-None path; N7 the
+    batch order): 7 tests added (`test_review_1…7`) + the batch-order assert in test 10. `build/mutants_review.py`
+    (N1–N10 + the 0a-bound R0a-1…3): 13 / 13 KILLED. Every results file saved beside its mutant file.
+  - Carried to step 2 (the reviewer's heads-ups): the opp_sd unlock (Q2 / Q3) needs new state; `_kl_outer_at` is the
+    parent's H1 clock — sub zones need LOH + the frozen end cap; the first-sd == WVMI-gate assert lives in step 2.

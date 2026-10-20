@@ -1,0 +1,82 @@
+[
+ {
+  "id": "0a-1 drop the max",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_a_prior_hour_before_the_floor_is_raised_to_the_floor[subsequent_confluence-prior_sd_trigger_idx]",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_a_prior_hour_before_the_floor_is_raised_to_the_floor[subsequent_counter-prior_cts_prox_idx]"
+  ],
+  "tail": "2 failed, 1744 passed, 2 skipped, 1 deselected, 444 warnings in 83.19s (0:01:23)"
+ },
+ {
+  "id": "0a-2 floor on first_counter only",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_a_prior_hour_before_the_floor_is_raised_to_the_floor[subsequent_confluence-prior_sd_trigger_idx]",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_a_prior_hour_before_the_floor_is_raised_to_the_floor[subsequent_counter-prior_cts_prox_idx]",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_missing_prior_meta_degrades_to_the_floor"
+  ],
+  "tail": "3 failed, 1743 passed, 2 skipped, 1 deselected, 444 warnings in 83.16s (0:01:23)"
+ },
+ {
+  "id": "0a-3a closure passes trigger_idx",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_lifecycle_sweep_unit.py::test_orchestrator_resolve_start_passes_the_parent_cycle_floor"
+  ],
+  "tail": "1 failed, 1745 passed, 2 skipped, 1 deselected, 444 warnings in 82.80s (0:01:22)"
+ },
+ {
+  "id": "0a-3b resolver passes hi as the floor",
+  "verdict": "KILLED",
+  "n": 9,
+  "fails": [
+   "engine_v2/tests/test_first_trigger_migration.py::TestFinalizeEqualsTrigger::test_cache_hit_record_is_exempt",
+   "engine_v2/tests/test_first_trigger_migration.py::TestFinalizeEqualsTrigger::test_sibling_probe_run_with_finalize_not_hi_raises",
+   "engine_v2/tests/test_first_trigger_migration.py::TestResolveSiblingCts::test_first_counter_reads_confluence_lens_record_anchor",
+   "engine_v2/tests/test_first_trigger_migration.py::TestResolveSiblingCts::test_no_candidates_returns_none_and_caller_falls_back",
+   "engine_v2/tests/test_first_trigger_migration.py::TestResolveSiblingCts::test_pending_probe_returns_probe_failure_with_m15_input",
+   "engine_v2/tests/test_first_trigger_migration.py::TestResolveSiblingCts::test_probe_end_is_the_passed_hi",
+   "engine_v2/tests/test_first_trigger_migration.py::TestResolveSiblingCts::test_replaced_record_events_clipped_to_live_window",
+   "engine_v2/tests/test_first_trigger_migration.py::TestResolveSiblingCts::test_subsequent_confluence_reads_counter_lens",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_the_fallback_extreme_stays_inside_the_parent_cycle"
+  ],
+  "tail": "9 failed, 1737 passed, 2 skipped, 1 deselected, 444 warnings in 83.58s (0:01:23)"
+ },
+ {
+  "id": "0a-4 closure passes 0",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_lifecycle_sweep_unit.py::test_orchestrator_resolve_start_passes_the_parent_cycle_floor"
+  ],
+  "tail": "1 failed, 1745 passed, 2 skipped, 1 deselected, 444 warnings in 82.72s (0:01:22)"
+ },
+ {
+  "id": "0a-5 dispatcher forwards 0",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_first_trigger_migration.py::TestDispatcher::test_sibling_variations_route_to_sibling_resolver_with_pool_and_hi[first_counter--1]",
+   "engine_v2/tests/test_first_trigger_migration.py::TestDispatcher::test_sibling_variations_route_to_sibling_resolver_with_pool_and_hi[subsequent_confluence-1]",
+   "engine_v2/tests/test_first_trigger_migration.py::TestDispatcher::test_sibling_variations_route_to_sibling_resolver_with_pool_and_hi[subsequent_counter--1]"
+  ],
+  "tail": "3 failed, 1743 passed, 2 skipped, 1 deselected, 444 warnings in 83.17s (0:01:23)"
+ },
+ {
+  "id": "0a-6 missing meta degrades to 0",
+  "verdict": "KILLED",
+  "n": 5,
+  "fails": [
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_a_prior_hour_before_the_floor_is_raised_to_the_floor[subsequent_confluence-prior_sd_trigger_idx]",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_a_prior_hour_before_the_floor_is_raised_to_the_floor[subsequent_counter-prior_cts_prox_idx]",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_first_counter_lo_is_the_parent_floor",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_missing_prior_meta_degrades_to_the_floor",
+   "engine_v2/tests/test_first_trigger_migration.py::TestSiblingCtsIdxWindow::test_the_fallback_extreme_stays_inside_the_parent_cycle"
+  ],
+  "tail": "5 failed, 1741 passed, 2 skipped, 1 deselected, 444 warnings in 83.38s (0:01:23)"
+ }
+]

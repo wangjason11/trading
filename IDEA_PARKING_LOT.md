@@ -95,7 +95,7 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
 3. **Zone proximity triggers — changes and edits to the opposite-direction (CTS-zone) trigger** (the user brings the
    details). Today: `engine_v2/zones/zone_proximity.py` — per (sid, cycle) with a `CTS_CONFIRMED`, triggers alternate
    sd (BOS / POI zone) → opp_sd (the CTS zone's inner bound) → sd …, at H1 8 / M15 5 / M5 3 pips; narrow cycles: Rules
-   1–3 (LANDMINES "Narrow-Cycle Rules 1+2+3 Are a Triple"). The opp_sd (CTS-prox, "var 3") entry is what
+   1–3 (LANDMINES "Narrow-Cycle Rules 1+2+3 Are a Triple"). The opp_sd (opp_sd-prox — "CTS-prox" before PLAN_R — "var 3") entry is what
    `multitf/subsequent_confluence_trigger.py` fires on (one `subsequent_confluence` per opp_sd entry preceded by an sd),
    and `multitf/subsequent_counter_trigger.py` requires it inside the [sd, opp_sd, sd] window of a `subsequent_counter`
    (var 4) — so an opp_sd change reaches BOTH lenses' subs. Re-read the code + PART4 §4.3.4 / §4.3.5 at the session
