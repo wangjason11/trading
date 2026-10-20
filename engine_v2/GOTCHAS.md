@@ -1016,6 +1016,12 @@ columns are NOT safe for cross-structure reads (see LANDMINES
   `CTS_CONFIRMED` itself and any same-idx `BOS_THRESHOLD_UPDATED`
   events — so the cycle starts with a defined gap.
 
+**The narrow proximity-reference cap (PLAN_R, 2026-10-20) is start-of-candle too:** `CycleProximityScan.step(i)` picks
+the two proximity references — so the signed gap, the narrow state and the per-side counter resets — from the passes
+up to `close(i − 1)`; candle `i`'s own close passes a zone only from `i + 1` (`close(i)` runs after the trigger test).
+So a candle can neither widen its own gap by passing a zone nor fire on the reference its close just exposed (its
+low/high is tested against the reference in force at its start — `test_proximity_reference_ladders.py::test_1b_…`).
+
 **The in-MarketStructure Rule 1 check does NOT need either fix:**
 sd-proximity-confirmation candles wick AWAY from CTS (sd=+1: wick
 DOWN, while `cts_threshold = range_hi` extends only on UP wicks).

@@ -1,0 +1,55 @@
+=== step 1 (parent only) ===
+  439: sd=P.BOS(0.5591) opp=P.CTS(0.58132) gap=222 cnt=None lock={'sd': False, 'opp': False}
+(0, 0) 439 651 []
+  683: sd=P.POI(0.57712) opp=P.CTS(0.58404) gap=69 cnt=None lock={'sd': False, 'opp': False}
+  748: TRIGGER sd P.POI 0.57712 (l=0.57764 h=0.57835 c=0.57818) gap=69
+  754: close 0.57657 beyond P.POI outer 0.57676 -> passed from 755
+  755: sd=P.BOS(0.57494) opp=P.CTS(0.58404) gap=91 cnt=None lock={'sd': True, 'opp': False}
+(0, 1) 683 901 [(748, 'sd', 'P.POI', 0.57712)]
+  727: sd=P.BOS(0.58348) opp=P.CTS(0.58044) gap=30 NARROW cnt={'sd': 0, 'opp': 0} lock={'sd': False, 'opp': False}
+(1, 0) 727 747 []
+  810: sd=P.BOS(0.58132) opp=P.CTS(0.57538) gap=59 cnt=None lock={'sd': False, 'opp': False}
+  820: TRIGGER sd P.BOS 0.58132 (l=0.57928 h=0.58064 c=0.5803) gap=59
+  871: TRIGGER opp P.CTS 0.57538 (l=0.57604 h=0.5765 c=0.57626) gap=59
+(1, 1) 810 901 [(820, 'sd', 'P.BOS', 0.58132), (871, 'opp', 'P.CTS', 0.57538)]
+  935: sd=P.POI(0.57786) opp=P.CTS(0.57282) gap=50 cnt=None lock={'sd': False, 'opp': False}
+  935: TRIGGER sd P.POI 0.57786 (l=0.5766 h=0.5775 c=0.5772) gap=50
+  954: TRIGGER opp P.CTS 0.57282 (l=0.57351 h=0.57496 c=0.5745) gap=50
+  1035: TRIGGER sd P.POI 0.57786 (l=0.57629 h=0.5773 c=0.57645) gap=50
+  1047: close 0.57852 beyond P.POI outer 0.5785 -> passed from 1048
+  1048: sd=P.BOS(0.57996) opp=P.CTS(0.57282) gap=71 cnt=None lock={'sd': True, 'opp': False}
+(1, 2) 935 1057 [(935, 'sd', 'P.POI', 0.57786), (954, 'opp', 'P.CTS', 0.57282), (1035, 'sd', 'P.POI', 0.57786)]
+=== overlay pass_from=usable src_qual=True ===
+  683: sd=P.POI(0.57712) opp=P.CTS(0.58404) gap=69 cnt=None lock={'sd': False, 'opp': False}
+  708: sd=P.POI(0.57712) opp=(-1, 2639)c1.BOS(0.58366) gap=65 cnt=None lock={'sd': False, 'opp': False}
+  712: sd=P.POI(0.57712) opp=(-1, 2639)c1.POI(0.58279) gap=57 cnt=None lock={'sd': False, 'opp': False}
+  748: TRIGGER sd P.POI 0.57712 (l=0.57764 h=0.57835 c=0.57818) gap=57
+  749: sd=P.POI(0.57712) opp=(-1, 2639)c2.BOS(0.58171) gap=46 cnt=None lock={'sd': False, 'opp': False}
+  754: close 0.57657 beyond P.POI outer 0.57676 -> passed from 755
+  755: sd=P.BOS(0.57494) opp=(-1, 2639)c2.BOS(0.58171) gap=68 cnt=None lock={'sd': True, 'opp': False}
+  772: sd=P.BOS(0.57494) opp=(-1, 2639)c2.POI(0.58096) gap=60 cnt=None lock={'sd': True, 'opp': False}
+  820: TRIGGER opp (-1, 2639)c2.POI 0.58096 (l=0.57928 h=0.58064 c=0.5803) gap=60
+  872: TRIGGER sd P.BOS 0.57494 (l=0.57513 h=0.57625 c=0.5758) gap=60
+  873: sd=P.BOS(0.57494) opp=(-1, 3304)c0.BOS(0.58055) gap=56 cnt=None lock={'sd': True, 'opp': False}
+  873: close 0.57526 beyond (1, 3230)c0.POI outer 0.57628 -> passed from 874
+  895: close 0.5741 beyond (1, 3230)c0.BOS outer 0.57418 -> passed from 896
+(0, 1) [(748, 'sd', 'P.POI', 0.57712), (820, 'opp', '(-1, 2639)c2.POI', 0.58096), (872, 'sd', 'P.BOS', 0.57494)]
+  935: sd=P.POI(0.57786) opp=P.CTS(0.57282) gap=50 cnt=None lock={'sd': False, 'opp': False}
+  935: TRIGGER sd P.POI 0.57786 (l=0.5766 h=0.5775 c=0.5772) gap=50
+  947: sd=P.POI(0.57786) opp=(1, 3621)c0.POI(0.57306) gap=48 cnt=None lock={'sd': False, 'opp': False}
+  954: TRIGGER opp (1, 3621)c0.POI 0.57306 (l=0.57351 h=0.57496 c=0.5745) gap=48
+  1035: TRIGGER sd P.POI 0.57786 (l=0.57629 h=0.5773 c=0.57645) gap=48
+  1036: sd=P.POI(0.57786) opp=(1, 4027)c0.POI(0.57484) gap=30 NARROW cnt={'sd': 0, 'opp': 0} lock={'sd': False, 'opp': False}
+  1040: sd=P.POI(0.57786) opp=(1, 4027)c1.POI(0.57462) gap=32 NARROW cnt={'sd': 0, 'opp': 0} lock={'sd': False, 'opp': False}
+  1045: sd=P.POI(0.57786) opp=(1, 4027)c2.BOS(0.57728) gap=6 NARROW cnt={'sd': 0, 'opp': 0} lock={'sd': False, 'opp': False}
+  1045: TRIGGER opp (1, 4027)c2.BOS 0.57728 (l=0.57798 h=0.57838 c=0.57833) gap=6
+  1046: TRIGGER sd P.POI 0.57786 (l=0.5782 h=0.57874 c=0.57842) gap=6
+  1047: close 0.57852 beyond P.POI outer 0.5785 -> passed from 1048
+  1048: sd=(-1, 3304)c0.POI(0.57885) opp=(1, 4183)c0.BOS(0.57818) gap=7 NARROW cnt={'sd': 0, 'opp': 1} lock={'sd': False, 'opp': False}
+  1048: opp BLOCKED on (1, 4183)c0.BOS cnt={'sd': 0, 'opp': 1}
+  1049: opp BLOCKED on (1, 4183)c0.BOS cnt={'sd': 0, 'opp': 1}
+  1050: opp BLOCKED on (1, 4183)c0.BOS cnt={'sd': 0, 'opp': 1}
+  1050: close 0.5794 beyond (-1, 3304)c0.POI outer 0.5792 -> passed from 1051
+  1051: sd=P.BOS(0.57996) opp=(1, 4183)c0.BOS(0.57818) gap=18 NARROW cnt={'sd': 0, 'opp': 1} lock={'sd': True, 'opp': False}
+  1054: opp BLOCKED on (1, 4183)c0.BOS cnt={'sd': 0, 'opp': 1}
+(1, 2) [(935, 'sd', 'P.POI', 0.57786), (954, 'opp', '(1, 3621)c0.POI', 0.57306), (1035, 'sd', 'P.POI', 0.57786), (1045, 'opp', '(1, 4027)c2.BOS', 0.57728), (1046, 'sd', 'P.POI', 0.57786)]

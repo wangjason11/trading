@@ -81,16 +81,16 @@ class SidRecord:
 
 @dataclass(frozen=True)
 class SubsequentConfluenceTrigger:
-    """`subsequent_confluence` (var 3) trigger — fires on parent CTS-prox
+    """`subsequent_confluence` (var 3) trigger — fires on parent opp_sd-prox
     after a parent sd-prox.
 
     Per spec §4.3.4:
-      Trigger:    parent CTS-zone proximity AND prior trigger was sd-zone
+      Trigger:    parent opp_sd zones proximity AND prior trigger was sd-zone
       Idx input:  `input_idx` = parent-TF candle in `[prior_sd_idx,
-                  this_cts_prox_idx]` with extreme toward parent BOS (lowest
+                  this_opp_sd_prox_idx]` with extreme toward parent BOS (lowest
                   low for bullish parent, highest high for bearish) — the
                   H1 `parent_input_idx`, informational since Session 3
-      Probe end:  this CTS-prox trigger candle (its LOH = the sweep's `hi`)
+      Probe end:  this opp_sd-prox trigger candle (its LOH = the sweep's `hi`)
       Probe sd:   +parent_sd (confluence)
 
     The M15 probe input AND reference zone are co-sourced from the sibling
@@ -103,14 +103,14 @@ class SubsequentConfluenceTrigger:
     parent_cycle_id: int               # parent cycle this trigger fires within
     parent_sd: int
     input_idx: int                     # parent-TF window extreme toward BOS
-    trigger_event_idx: int             # the CTS-prox trigger candle (the probe ends at its M15 `hi`)
+    trigger_event_idx: int             # the opp_sd-prox trigger candle (the probe ends at its M15 `hi`)
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class SubsequentCounterTrigger:
     """`subsequent_counter` (var 4) trigger — fires on parent sd-prox that
-    forms a Λ (bullish parent) / V (bearish parent) with the prior CTS-prox
+    forms a Λ (bullish parent) / V (bearish parent) with the prior opp_sd-prox
     and the sd-prox before that.
 
     Per spec §4.3.5:
@@ -132,8 +132,8 @@ class SubsequentCounterTrigger:
     By the alternation invariant in `zones/zone_proximity.py`, every sd
     trigger past the first one (index ≥ 2 in the cycle's list) satisfies
     the [sd, opp_sd, sd] window — its immediate predecessor is opp_sd
-    (== CTS-prox, var 3) and the one before that is sd (var 2 or an
-    earlier var 4). `meta` carries `prior_cts_prox_idx` (sets the
+    (== opp_sd-prox, var 3) and the one before that is sd (var 2 or an
+    earlier var 4). `meta` carries `prior_opp_sd_prox_idx` (sets the
     sibling-read window's `lo`) and `prior_sd_trigger_idx` (diagnostic).
     """
     parent_tf: str

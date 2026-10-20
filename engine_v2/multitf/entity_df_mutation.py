@@ -780,7 +780,7 @@ def _sibling_cts_idx_window(
     - `first_counter`: `[parent_floor_idx, hi]` — the parent cycle up to the
       first sd-prox trigger.
     - `subsequent_confluence`: `[max(last-M15 of prior_sd_prox hour, floor), hi]`.
-    - `subsequent_counter`: `[max(last-M15 of prior_cts_prox hour, floor), hi]`.
+    - `subsequent_counter`: `[max(last-M15 of prior_opp_sd_prox hour, floor), hi]`.
 
     `parent_floor_idx` = the parent cycle's M15 floor (`ParentTables.floor`,
     the same value every TriggerRecord stores as `parent_floor_idx`). The two
@@ -800,7 +800,7 @@ def _sibling_cts_idx_window(
     if uc == "subsequent_confluence":
         prior_parent_idx = trigger.meta.get("prior_sd_trigger_idx")
     elif uc == "subsequent_counter":
-        prior_parent_idx = trigger.meta.get("prior_cts_prox_idx")
+        prior_parent_idx = trigger.meta.get("prior_opp_sd_prox_idx")
     # first_counter (and any missing prior meta): lo = the parent floor.
     lo = int(parent_floor_idx)
     if prior_parent_idx is not None:

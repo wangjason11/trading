@@ -526,3 +526,28 @@ The predictions below are for the decided hold (A) and Q1 = "from when usable".
   them). Prediction met: vs S_Q 0 / 27 CSVs, 3 / 3 figures equal, counts unchanged, 0 `sibling-CTS unavailable`. Suite
   1752 (+3; no other outcome changed — the plan review's 1743 / 1743 at 8). Mutants 2 / 2 KILLED (the constant back to
   9; the min-gap fallback 50 → 49). Replay 47.7 s.
+- **Step 1 — LANDED (the commit after `c1bd05a`).** As §4. `zones/zone_proximity.py`: `DEFAULT_MIN_PROXIMITY_REFERENCE_
+  GAP_PIPS` 40 / 25 / 15 (+ the import-time assert); `ProximityRung` (key, side, kind, inner, `outer_at(i)` = the outer
+  as of candle i's close — a POI's fixed edge, a KL zone's INIT outer then each expansion from its moment
+  `expanded_idx`; `last`; `source`; `tie_rank`); `CycleProximityScan` (`step(i)` / `close(i)`, `set_overlay` = step 2's
+  entry point, `gate` = the gate that blocked candle i's trigger test: `rule2` / `rule3` / `prox_ref_cap`);
+  `build_cycle_proximity_scans` (shared by the batch and, in step 2, the sweep); `check_zone_proximity` = the scans
+  driven over their windows; `_try_trigger_at_candle` gone. The trigger meta keys `prox_ref_gap_pips` /
+  `narrow_prox_ref` / `prox_ref_source`. The rename (`prior_cts_prox_idx` → `prior_opp_sd_prox_idx`,
+  `cts_prox_zone_kind` → `opp_sd_prox_zone_kind`, `cts_prox_t` → `opp_sd_prox_t`, the docstrings' "CTS-prox" →
+  "opp_sd-prox"; the readers' `.get` degrade-to-floor kept — a test pins it). Build notes:
+  - Three existing synthetic tests isolate Rules 2 / 3 on zones 20 pips apart — narrow by the new cap too, so under
+    the default they would now fire 2, not 5 / 3 (the user's AND-ed rule working). They pass `min_proximity_reference_
+    gap_pips=_NO_REF_CAP` (documented); `test_mid_cycle_crossing_lifts_caps` also pins the default-cap outcome
+    `[5, 10]` (reference narrow + threshold wide → the cap binds).
+  - The parent BOS / CTS rungs carry their real as-of outer though the pass test never reads it — so the mutant "the
+    last rung tested" is behavioural, not a crash.
+  - Mutant 1-14 (banker's rounding) first SURVIVED: test 7's 40.5 case computes as 40.500000000001 in float, so every
+    rounding gives 41. Fixed by a pair whose half pip float lands just below .5 — `(0.57405 − 0.57) / 0.0001 =
+    40.49999999999998` → 41 (the 1e-9 is for this); banker's and a floor without the epsilon (1-22) give 40.
+  Prediction met: vs S_Q 0 / 27 CSVs, 3 / 3 figures equal (hovers included), counts 81/236, 146/135, 289/293, var3 = 2 /
+  var4 = 1, pool 8 / 11 / 4, 0 `sibling-CTS unavailable`, skip grep 22, the diag's per-cycle counts 1 / 2 / 3. The §1
+  simulator (`build/m4_run.py`, log `build/m4_run.log`) gives the same step-1 trace (passes 754 / 1047; (1,0) narrow
+  30 from its start, nothing reaches). Suite 1778 (+26: `tests/test_proximity_reference_ladders.py` — §4's tests 1–14
+  + the outer-as-of test + the protocol test; the embedded S_Q rows `tests/_plan_r_reference_window.py`). Mutants
+  22 / 22 KILLED (`build/mutants_1.py`: §4's ten + 12 extra incl. the four rename sites). Replay 48.7 s.

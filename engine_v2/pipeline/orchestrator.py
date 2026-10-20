@@ -703,7 +703,7 @@ def _counter_trigger_stream(
     var3_all_sorted: list,
 ) -> List[Tuple[int, str]]:
     """The counter lens's WVMI-class parent trigger stream for one parent
-    cycle (§8.5; Plan G Q8): the CTS-prox class — each subsequent_confluence
+    cycle (§8.5; Plan G Q8): the opp_sd-prox class — each subsequent_confluence
     (var 3) in this parent cycle. Attribution only (Plan G G4).
     """
     stream: List[Tuple[int, str]] = []
@@ -725,7 +725,7 @@ def _wvmi_trigger_streams_by_lens(
     unique sub spans cycles) — §8.5's cadence classes (Plan G Q8): the
     confluence lens reads the sd-prox class (the main's first sd-prox per
     cycle + each var 4, `ZONE_PROXIMITY_TRIGGER` / `SUBSEQUENT_COUNTER_TRIGGER`),
-    the counter lens the CTS-prox class (each var 3,
+    the counter lens the opp_sd-prox class (each var 3,
     `SUBSEQUENT_CONFLUENCE_TRIGGER`). The ONE place the lens -> stream mapping
     is made (pinned: a swap would rewrite every sub row's trigger fields)."""
     from engine_v2.multitf.sub_structure_pool import LENS_CONFLUENCE, LENS_COUNTER

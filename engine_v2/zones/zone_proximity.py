@@ -4,9 +4,10 @@ Zone proximity trigger detection.
 
 Per (sid, cycle_id) with a CTS_CONFIRMED event, walk the scan window and
 log each candle that comes within `proximity_pips` of the relevant zone
-inner bound. Triggers alternate: the first must be sd-direction (BOS/POI),
-then opp_sd (CTS zone), then sd, etc. — capturing each leg of a V/lambda
-movement within a structure cycle.
+inner bound. Triggers alternate: the first must be sd-direction (the sd
+proximity reference: a BOS / POI zone), then opp_sd (the opp_sd proximity
+reference: the CTS zone on parent zones), then sd, etc. — capturing each leg
+of a V/lambda movement within a structure cycle.
 
 Replaces the old `check_proximity_activation` in `wvmi.py`. The single
 "activated cycles" gate is no longer the unit of interest — instead this
@@ -33,6 +34,33 @@ opp_sd:CTS — while the M15 subs those triggers would start are not built
 (`lifecycle_sweep`: a collapsed parent cycle's triggers are logged unresolved;
 LANDMINES "Collapsed Parent Cycles").
 
+Proximity reference ladders (PLAN_R, the user 2026-10-19 → 20)
+---------------------------------------------------------------
+Each side triggers on its PROXIMITY REFERENCE — the closest usable, unpassed
+zone inner on its PROXIMITY REFERENCE LADDER ("the smallest gap available"):
+- sd: the cycle's POI(s) closer than its BOS inner, then the BOS (the LAST
+  rung; a POI at or beyond the BOS is unreachable — the BOS locks first);
+- opp_sd: the CTS (the last rung).
+(PLAN_R step 2 adds the PROXIMITY OVERLAY — sub zones on each side.) A rung
+is a PASSED PROXIMITY ZONE once an H1 close lies strictly beyond its outer
+edge (the outer as of that close); it stays out for the rest of the cycle,
+from the next candle; the pass test runs on EVERY candle, also one where a
+gate blocks the trigger; the last rung is never tested. A side LOCKS when its
+reference was passed and the next pick is its last rung (never by default).
+Ties (equal inners): the parent zone first, then a sub's BOS before its POI.
+
+The NARROW PROXIMITY-REFERENCE CAP: the signed PROXIMITY REFERENCE GAP
+`sd × (opp_sd ref − sd ref) / pip`, rounded half-up, `<=`
+`DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS` (40 / 25 / 15) = narrow. Per-side
+counters, evaluated at the START of each candle: wide → narrow (or narrow at
+the scan start) starts both at 0; narrow → narrow, a side whose reference
+moved OUTWARD (away from the other side, on that side's own inner) resets to
+0, an inward move does nothing; narrow → wide drops them; while narrow a side
+fires only if its counter < 1. It is AND-ed with Rules 1–3 below (their gap is
+the BOS–CTS threshold gap — a different measure; Rule 2 is not part of the
+cap). The per-cycle state machine is `CycleProximityScan` — ONE object the
+batch scan and the lifecycle sweep both drive.
+
 Narrow-gap cycle restrictions (Rules 2 & 3)
 -------------------------------------------
 A cycle is "narrow" at a given candle when
@@ -55,8 +83,8 @@ are nulled / overwritten. When a cycle is narrow:
   `CTS_CONFIRMED` is via pullback.)
 - **Rule 3:** while narrow, the cycle gets at most one sd trigger and
   at most one opp_sd trigger. Alternation rules still apply (first sd,
-  then opp_sd, then sd, …) but the caps short-circuit the scan after
-  the second narrow-mode hit.
+  then opp_sd, then sd, …); the caps block the trigger test only (the
+  pass test still runs).
 
 The gap is monotonically non-decreasing within a cycle (BOS extends in
 struct direction via probe; CTS extends via range sync — both widen the
@@ -71,8 +99,9 @@ thresholds are already wired.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple
 
 import pandas as pd
 
@@ -133,6 +162,18 @@ DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS: Dict[str, int] = {
     "M5": 15,
 }
 
+# The narrow proximity-reference cap (PLAN_R §1, the user 2026-10-19: "1H: 40 15M: 25 5M: 15") — the minimum
+# SIGNED proximity reference gap: the distance between the two zone inners a cycle triggers on, sd × (opp_sd
+# reference − sd reference) / pip, rounded half-up. At or below it (`<=`; crossed references, ≤ 0, included) the
+# cycle may fire at most one more sd and one more opp_sd trigger, per-side counters (`CycleProximityScan`). Combined
+# with Rules 1–3 (the BOS–CTS threshold gap, unchanged): a trigger fires only if BOTH allow it. Must be strictly
+# greater than DEFAULT_PROXIMITY_PIPS on the same TF (two 8-pip bands closer than that overlap — the ping-pong).
+DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS: Dict[str, int] = {
+    "H1": 40,
+    "M15": 25,
+    "M5": 15,
+}
+
 for _tf in DEFAULT_PROBE_RESET_PIPS:
     assert DEFAULT_PROXIMITY_PIPS[_tf] > DEFAULT_PROBE_RESET_PIPS[_tf], (
         f"{_tf}: probe reset {DEFAULT_PROBE_RESET_PIPS[_tf]} pips must be "
@@ -142,6 +183,12 @@ for _tf in DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS:
     assert DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS[_tf] > DEFAULT_PROXIMITY_PIPS[_tf], (
         f"{_tf}: narrow-gap threshold "
         f"{DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS[_tf]} pips must be "
+        f"strictly greater than proximity trigger {DEFAULT_PROXIMITY_PIPS[_tf]} pips"
+    )
+for _tf in DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS:
+    assert DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS[_tf] > DEFAULT_PROXIMITY_PIPS[_tf], (
+        f"{_tf}: narrow proximity-reference gap "
+        f"{DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS[_tf]} pips must be "
         f"strictly greater than proximity trigger {DEFAULT_PROXIMITY_PIPS[_tf]} pips"
     )
 for _tf in DEFAULT_PROBE_RESET_WICK:
@@ -158,9 +205,14 @@ del _tf
 class ZoneProximityTrigger:
     """One trigger candle within a cycle's scan window.
 
-    Direction "sd" = price came within threshold of an sd-direction zone
-    (BOS or POI). "opp_sd" = price came within threshold of the CTS zone
-    (the only opposite-direction zone, by definition).
+    Direction "sd" = price came within threshold of the cycle's sd proximity
+    reference (a BOS or POI zone inner); "opp_sd" = within threshold of its
+    opp_sd proximity reference (the CTS zone inner on parent zones). `zone_kind`
+    / `trigger_inner` = that reference (PLAN_R §1). `meta` (PLAN_R §4):
+    `prox_ref_gap_pips` = the signed, rounded proximity reference gap at the
+    candle's start (None when a side has no reference), `narrow_prox_ref` = it
+    is at or below `DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS`, `prox_ref_source`
+    = "parent" (a parent zone) or "sub" (a proximity-overlay zone).
     """
     structure_id: int
     cycle_id: int
@@ -260,7 +312,357 @@ def _apply_threshold_event(
     return running_cts, running_bos
 
 
-def check_zone_proximity(
+@dataclass(frozen=True)
+class ProximityRung:
+    """One zone on a side's proximity reference ladder (PLAN_R §1).
+
+    `key` = its identity in the cycle's passed set. `outer_at(i)` = its outer
+    edge as of candle `i`'s CLOSE (a POI's fixed edge; an expanding zone's
+    stepped outer). A `last` rung — the parent's BOS (sd side) / CTS (opp_sd
+    side), the bottom rung of its ladder — is never pass-tested. `tie_rank`
+    orders equal inners: the parent zone first (0), then a sub's BOS (1) before
+    its POI (2). `source` / `sub_pool_idx` / `sub_cycle_id` name where the zone
+    comes from (a sub zone: the proximity overlay, PLAN_R step 2).
+    """
+    key: Tuple[Any, ...]
+    side: Literal["sd", "opp_sd"]
+    zone_kind: Literal["BOS", "CTS", "POI"]
+    inner: float
+    last: bool = False
+    outer_at: Optional[Callable[[int], float]] = None
+    source: Literal["parent", "sub"] = "parent"
+    tie_rank: int = 0
+    sub_pool_idx: Optional[int] = None
+    sub_cycle_id: Optional[int] = None
+
+
+def _fixed_outer(outer: float) -> Callable[[int], float]:
+    return lambda _i: outer
+
+
+def _kl_outer_at(zone: KLZone) -> Callable[[int], float]:
+    """A KL zone's outer edge as of candle `i`'s close (PLAN_R §1 "Which outer"): its INIT outer, then each expansion
+    step whose moment (`expanded_idx`) is <= i — outers expand (H1 CTS zones), inners never move. A zone without
+    `bounds_steps` (a synthetic fixture) keeps `meta["outer"]`."""
+    edge = "bottom" if zone.side == "buy" else "top"
+    steps = zone.meta.get("bounds_steps") or []
+    if not steps:
+        return _fixed_outer(float(zone.meta["outer"]))
+    assert steps[0]["event"] == "INIT", f"[zone_proximity] bounds_steps[0] is {steps[0]['event']}, not INIT"
+    init = float(steps[0][edge])
+    expansions = [(int(s["expanded_idx"]), float(s[edge])) for s in steps[1:]]
+
+    def outer_at(i: int) -> float:
+        outer = init
+        for moment, value in expansions:
+            if moment <= i:
+                outer = value
+        return outer
+    return outer_at
+
+
+def proximity_reference_gap_pips(sd: int, sd_inner: float, opp_sd_inner: float, pip_size: float) -> int:
+    """The SIGNED proximity reference gap, rounded half-up (PLAN_R §1): `sd × (opp_sd reference − sd reference) /
+    pip`, so crossed references give ≤ 0 (narrow). Half-up = `floor(g + 0.5 + 1e-9)`: 40.5 → 41, 40.4 → 40."""
+    g = int(sd) * (float(opp_sd_inner) - float(sd_inner)) / float(pip_size)
+    return int(math.floor(g + 0.5 + 1e-9))
+
+
+class CycleProximityScan:
+    """The proximity scan of ONE parent cycle (PLAN_R §4): the alternating
+    sd / opp_sd trigger state machine over the cycle's two proximity reference
+    ladders, driven candle by candle — `step(i)` then `close(i)` for every
+    candle of `[scan_start, scan_end]`. The batch scan (`check_zone_proximity`)
+    drives it over the whole window; the lifecycle sweep (PLAN_R step 2) drives
+    the SAME object tick by tick, so the two can never fork.
+
+    `step(i)` — evaluated at the START of candle `i`:
+      1. advance the threshold timeline (events with moment < i; the scan
+         start's own were applied at construction);
+      2. pick each side's proximity reference: the closest unpassed rung to
+         the other side (ties: `tie_rank`); a LOCKED side keeps its last rung.
+         A side locks when its previous reference was passed and the next pick
+         is its last rung — being the reference by default never locks;
+      3. the signed proximity reference gap → narrow (≤ `min_ref_gap_pips`) /
+         wide → the per-side counters: wide → narrow (or narrow at the scan
+         start) starts both at 0; narrow → narrow resets a side whose
+         reference moved OUTWARD (away from the other side, judged on that
+         side's own inner); narrow → wide drops them;
+      4. Rules 2 + 3 (the BOS–CTS threshold gap, unchanged), 5. the narrow
+         proximity-reference cap (a side fires while narrow only if its
+         counter < 1) and alternation gate ONLY
+      6. the trigger test against the expected side's reference.
+    `close(i)` — the pass test on candle `i`'s close, effective from `i + 1`,
+    on EVERY candle (a blocked one included): each unpassed non-last rung on
+    either side whose outer (as of the close) the close is strictly beyond is
+    passed for the rest of the cycle; one close can pass several.
+
+    The proximity overlay (`set_overlay`, PLAN_R step 2) adds sub zones to a
+    side; the batch scan never sets it (parent zones only).
+    """
+
+    def __init__(
+        self,
+        *,
+        df: pd.DataFrame,
+        sid: int,
+        cycle_id: int,
+        sd: int,
+        scan_start: int,
+        scan_end: int,
+        parent_rungs: List[ProximityRung],
+        timeline: List[StructureEvent],
+        cycle_has_pullback_cts: bool,
+        proximity_pips: int,
+        pip_size: float,
+        timeframe: str,
+        min_gap_pips: int,
+        min_ref_gap_pips: int,
+    ) -> None:
+        assert int(sd) in (1, -1), f"[zone_proximity] ({sid},{cycle_id}) sd={sd}"
+        for side in ("sd", "opp_sd"):
+            lasts = [r for r in parent_rungs if r.side == side and r.last]
+            assert len(lasts) <= 1, f"[zone_proximity] ({sid},{cycle_id}) {side}: {len(lasts)} last rungs"
+        self.df = df
+        self.sid = int(sid)
+        self.cycle_id = int(cycle_id)
+        self.sd = int(sd)
+        self.scan_start = int(scan_start)
+        self.scan_end = int(scan_end)
+        self.parent_rungs = list(parent_rungs)
+        self.proximity_pips = int(proximity_pips)
+        self.pip_size = float(pip_size)
+        self.timeframe = timeframe
+        self.threshold = self.proximity_pips * self.pip_size
+        self.min_gap_pips = min_gap_pips
+        self.min_ref_gap_pips = int(min_ref_gap_pips)
+        self.cycle_has_pullback_cts = bool(cycle_has_pullback_cts)
+
+        self.overlay: Dict[str, List[ProximityRung]] = {"sd": [], "opp_sd": []}
+        self.passed: Set[Tuple[Any, ...]] = set()
+        self.locked: Dict[str, bool] = {"sd": False, "opp_sd": False}
+        self.refs: Dict[str, Optional[ProximityRung]] = {"sd": None, "opp_sd": None}
+        self.ref_gap_pips: Optional[int] = None
+        self.narrow_prox_ref: bool = False
+        self.counters: Optional[Dict[str, int]] = None
+        self.expected_dir: Literal["sd", "opp_sd"] = "sd"
+        self.triggers: List[ZoneProximityTrigger] = []
+        self.gate: Optional[str] = None     # the gate that blocked the current candle's trigger test, if any
+        # Rule 3: per-cycle caps that apply ONLY while the threshold gap is narrow.
+        self._narrow_sd_fired = False
+        self._narrow_opp_fired = False
+        self._stepped_idx: Optional[int] = None
+        self._closed_idx: Optional[int] = None
+
+        # Event-driven threshold timeline (Rules 1/2/3 use this — NOT the df
+        # cts_threshold/bos_threshold columns, which get overwritten by the next
+        # structure once it starts processing). Initial pass: apply all events
+        # with moment ≤ scan_start so the gap at idx = scan_start (the
+        # CTS_CONFIRMED candle) reflects the post-CTS-confirmation state —
+        # including same-moment BOS_THRESHOLD_UPDATED events (sort order is
+        # `(moment, type)`, alphabetical — BOS_* < CTS_*). The walk is a TIME
+        # pointer on the same MOMENT the timeline is sorted on (Plan E E3g-2).
+        self._timeline = timeline
+        self._running_cts: Optional[float] = None
+        self._running_bos: Optional[float] = None
+        self._tl_ptr = 0
+        while self._tl_ptr < len(timeline) and ef.event_moment(timeline[self._tl_ptr]) <= self.scan_start:
+            self._running_cts, self._running_bos = _apply_threshold_event(
+                timeline[self._tl_ptr], self._running_cts, self._running_bos
+            )
+            self._tl_ptr += 1
+
+    # --- the ladders ---
+    def set_overlay(self, side: Literal["sd", "opp_sd"], rungs: List[ProximityRung]) -> None:
+        """Replace `side`'s proximity-overlay rungs (sub zones, PLAN_R step 2)."""
+        assert all(r.side == side and not r.last for r in rungs), (
+            f"[zone_proximity] ({self.sid},{self.cycle_id}) overlay for {side}: wrong side or a last rung"
+        )
+        self.overlay[side] = list(rungs)
+
+    def ladder(self, side: Literal["sd", "opp_sd"]) -> List[ProximityRung]:
+        """`side`'s current candidate rungs: its parent zones, then its overlay."""
+        return [r for r in self.parent_rungs if r.side == side] + self.overlay[side]
+
+    def _toward(self, side: str) -> int:
+        # The direction from a side's zones toward the other side: the sd zones
+        # sit on the pullback side of the opp_sd zones.
+        return self.sd if side == "sd" else -self.sd
+
+    def _pick_reference(self, side: Literal["sd", "opp_sd"]) -> Optional[ProximityRung]:
+        rungs = self.ladder(side)
+        last = next((r for r in rungs if r.last), None)
+        if self.locked[side]:
+            return last
+        toward = self._toward(side)
+        best: Optional[ProximityRung] = None
+        for r in sorted((r for r in rungs if r.key not in self.passed), key=lambda r: r.tie_rank):
+            if best is None or toward * (r.inner - best.inner) > 0:
+                best = r
+        prev = self.refs[side]
+        if prev is not None and prev.key in self.passed and best is not None and best.last:
+            self.locked[side] = True        # locked by passing, never by default
+        return best
+
+    # --- per candle ---
+    def step(self, i: int) -> Optional[ZoneProximityTrigger]:
+        """Candle `i` (start-of-candle evaluation): references, gap, counters,
+        gates, then the trigger test. Returns the trigger, or None."""
+        i = int(i)
+        assert self.scan_start <= i <= self.scan_end, (
+            f"[zone_proximity] ({self.sid},{self.cycle_id}) step({i}) outside [{self.scan_start}, {self.scan_end}]"
+        )
+        assert self._stepped_idx is None or (i > self._stepped_idx and self._closed_idx == self._stepped_idx), (
+            f"[zone_proximity] ({self.sid},{self.cycle_id}) step({i}) after step({self._stepped_idx}) / "
+            f"close({self._closed_idx})"
+        )
+        self._stepped_idx = i
+        self.gate = None
+
+        # 1. For i > scan_start, advance the timeline pointer through events
+        # with moment < i (start-of-candle semantics — the current candle's own
+        # threshold events do NOT influence its own eligibility; see GOTCHAS
+        # "Narrow-Cycle Gap: Evaluate at Start-of-Candle").
+        while self._tl_ptr < len(self._timeline) and ef.event_moment(self._timeline[self._tl_ptr]) < i:
+            self._running_cts, self._running_bos = _apply_threshold_event(
+                self._timeline[self._tl_ptr], self._running_cts, self._running_bos
+            )
+            self._tl_ptr += 1
+        if self._running_cts is not None and self._running_bos is not None:
+            is_narrow = abs(self._running_cts - self._running_bos) / self.pip_size < self.min_gap_pips
+        else:
+            is_narrow = False               # can't evaluate (events missing) — default mode
+
+        # 2. The references (start of candle i; a pass at close(i - 1) applies here).
+        prev_refs = dict(self.refs)
+        prev_narrow = self.narrow_prox_ref
+        self.refs = {side: self._pick_reference(side) for side in ("sd", "opp_sd")}
+
+        # 3. The signed proximity reference gap and the per-side counters.
+        sd_ref, opp_ref = self.refs["sd"], self.refs["opp_sd"]
+        if sd_ref is not None and opp_ref is not None:
+            self.ref_gap_pips = proximity_reference_gap_pips(self.sd, sd_ref.inner, opp_ref.inner, self.pip_size)
+            self.narrow_prox_ref = self.ref_gap_pips <= self.min_ref_gap_pips
+        else:
+            self.ref_gap_pips = None
+            self.narrow_prox_ref = False
+        if self.narrow_prox_ref and not prev_narrow:
+            self.counters = {"sd": 0, "opp_sd": 0}          # wide → narrow, or narrow at the scan start
+        elif self.narrow_prox_ref:
+            for side in ("sd", "opp_sd"):
+                old, new = prev_refs[side], self.refs[side]
+                # OUTWARD = away from the other side, on THIS side's own inner (whatever the other side did).
+                if old is not None and new is not None and -self._toward(side) * (new.inner - old.inner) > 0:
+                    self.counters[side] = 0
+        else:
+            self.counters = None                            # wide: no cap
+
+        # 4-5. The gates — they block ONLY the trigger test.
+        side = self.expected_dir
+        if is_narrow and not self.cycle_has_pullback_cts:
+            self.gate = "rule2"
+        elif is_narrow and side == "sd" and self._narrow_sd_fired:
+            self.gate = "rule3"
+        elif is_narrow and side == "opp_sd" and self._narrow_opp_fired:
+            self.gate = "rule3"
+        elif self.narrow_prox_ref and self.counters[side] >= 1:
+            self.gate = "prox_ref_cap"                      # the narrow proximity-reference cap
+        if self.gate is not None:
+            return None
+
+        # 6. The trigger test against the expected side's reference.
+        ref = self.refs[side]
+        if ref is None:
+            return None
+        trigger_inner = float(ref.inner)
+        if (side == "sd") == (self.sd == 1):
+            hit = float(self.df.loc[i, "l"]) <= trigger_inner + self.threshold
+        else:
+            hit = float(self.df.loc[i, "h"]) >= trigger_inner - self.threshold
+        if not hit:
+            return None
+        trigger = ZoneProximityTrigger(
+            structure_id=self.sid, cycle_id=self.cycle_id,
+            direction=side, idx=i,
+            trigger_inner=trigger_inner, zone_kind=ref.zone_kind,
+            proximity_pips=self.proximity_pips, pip_size=self.pip_size,
+            timeframe=self.timeframe,
+            meta={
+                "prox_ref_gap_pips": self.ref_gap_pips,
+                "narrow_prox_ref": self.narrow_prox_ref,
+                "prox_ref_source": ref.source,
+            },
+        )
+        self.triggers.append(trigger)
+        if is_narrow:
+            if side == "sd":
+                self._narrow_sd_fired = True
+            else:
+                self._narrow_opp_fired = True
+        if self.narrow_prox_ref:
+            self.counters[side] += 1
+        self.expected_dir = "opp_sd" if side == "sd" else "sd"
+        return trigger
+
+    def close(self, i: int) -> List[ProximityRung]:
+        """The pass test on candle `i`'s close (after `step(i)`), effective from
+        `i + 1`. Returns the rungs passed by this close."""
+        i = int(i)
+        assert self._stepped_idx == i and self._closed_idx != i, (
+            f"[zone_proximity] ({self.sid},{self.cycle_id}) close({i}) without step({i}) first"
+        )
+        self._closed_idx = i
+        return self._pass_test(i)
+
+    def _pass_test(self, i: int) -> List[ProximityRung]:
+        c = float(self.df.loc[i, "c"])
+        out: List[ProximityRung] = []
+        for side in ("sd", "opp_sd"):
+            # Strictly beyond the outer, AWAY from the other side (a close AT the outer is not a pass).
+            beyond_below = (side == "sd") == (self.sd == 1)
+            for r in self.ladder(side):
+                if r.last or r.key in self.passed:
+                    continue
+                outer = float(r.outer_at(i))
+                if (c < outer) if beyond_below else (c > outer):
+                    self.passed.add(r.key)
+                    out.append(r)
+        return out
+
+
+def _parent_rungs(
+    sd: int,
+    bos_zone: KLZone,
+    cts_zone: Optional[KLZone],
+    cycle_poi_zones: List[POIZone],
+) -> List[ProximityRung]:
+    """A parent cycle's rungs (PLAN_R §4): sd = each POI whose inner is strictly
+    closer to the opp_sd side than the BOS inner (a POI at or beyond its BOS can
+    never be reached — the BOS locks first; today's "closer of the two"), then
+    the BOS (the last rung); opp_sd = the CTS (the last rung), when the cycle has
+    a CTS zone with an inner. The last rungs carry their as-of outer too, though
+    the pass test never reads it."""
+    bos_inner = float(bos_zone.meta["inner"])
+    cts_inner = cts_zone.meta.get("inner") if cts_zone is not None else None
+    rungs: List[ProximityRung] = []
+    for n, pz in enumerate(cycle_poi_zones):
+        # Read like a KL zone (PLAN_Q): at every candle of the scan — never its
+        # activation history (bounds asserted by the caller).
+        inner, outer = (float(pz.top), float(pz.bottom)) if sd == 1 else (float(pz.bottom), float(pz.top))
+        if sd * (inner - bos_inner) > 0:
+            rungs.append(ProximityRung(
+                key=("parent", "POI", n), side="sd", zone_kind="POI", inner=inner,
+                outer_at=_fixed_outer(outer),
+            ))
+    rungs.append(ProximityRung(key=("parent", "BOS"), side="sd", zone_kind="BOS", inner=bos_inner, last=True,
+                               outer_at=_kl_outer_at(bos_zone)))
+    if cts_inner is not None:
+        rungs.append(ProximityRung(key=("parent", "CTS"), side="opp_sd", zone_kind="CTS", inner=float(cts_inner),
+                                   last=True, outer_at=_kl_outer_at(cts_zone)))
+    return rungs
+
+
+def build_cycle_proximity_scans(
     df: pd.DataFrame,
     sorted_events: List[StructureEvent],
     kl_zones: List[KLZone],
@@ -269,81 +671,22 @@ def check_zone_proximity(
     timeframe: str,
     proximity_pips: Optional[int] = None,
     min_gap_pips: Optional[int] = None,
-) -> Dict[Tuple[int, int], List[ZoneProximityTrigger]]:
-    """Find zone proximity trigger candles per (sid, cycle_id).
-
-    Per cycle, walk the scan window and log alternating sd/opp_sd triggers:
-    1. First trigger must be sd (price within threshold of BOS or any POI of
-       the cycle — read like the BOS zone, PLAN_Q)
-    2. After an sd trigger, only opp_sd is eligible (CTS zone)
-    3. After an opp_sd trigger, only sd again — alternating
-
-    Each "first match wins" applies per slot (i.e., once an sd trigger is
-    logged, no more sd triggers fire until an opp_sd has been logged).
-
-    Narrow-gap restrictions (Rules 2 & 3, per module docstring): at each
-    candle, evaluate `|cts_threshold − bos_threshold|` reconstructed
-    from the cycle's threshold-defining events (events with `idx <
-    current_candle` applied; events at `idx == current_candle` NOT
-    applied — no self-rescue). While < `min_gap_pips`: require a
-    pullback-confirmed CTS_CONFIRMED to have already fired for this
-    cycle, and cap at most 1 sd + 1 opp_sd. After a wide-mode crossing
-    (gap ≥ `min_gap_pips`), caps lift and the existing alternation
-    continues unchanged.
-
-    Scan window per (sid, cycle_id):
-      start = CTS_CONFIRMED.meta["confirmed_at"] (the confirmation candle)
-      end   = min(next_BOS_CONFIRMED.confirmed_at - 1,
-                  reversal_idx - 1,
-                  end_of_df)
-    where `reversal_idx` = the sid's REALISED reversal, the
-    `STATE_CHANGED(to="reversal")` candle (`compute_reversal_idx_by_sid`, the
-    map KL / POI / fib / the orchestrator read) — never a
-    `REVERSAL_CANDIDATE.meta["apply_idx"]`, a SCHEDULED apply: a watch expiry
-    can discard it (a discarded LAST candidate used to cap every later cycle
-    of the sid below its own scan start: no triggers, no WVMI gate record) and
-    a step-anchor reversal can realise EARLIER than it (2026-09-28;
-    `tests/test_zone_proximity_reversal_cap.py`).
-
-    Parameters
-    ----------
-    df : DataFrame
-        OHLC data with structure columns.
-    sorted_events : list of StructureEvent
-        All structure events for the run, sorted by (idx, type).
-    kl_zones : list of KLZone
-        Both BOS- and CTS-derived zones (sd and opp_sd respectively).
-    poi_zones : list of POIZone
-        All POI zones (always sd direction by construction — Fib spans
-        BOS→CTS so any POI within is in the structure direction). Each counts
-        at every candle of its cycle's scan, like the BOS zone (PLAN_Q; its
-        unclamped activation floor and its end asserted outside the scan).
-    pip_size : float
-        Pip size for the pair (typically 0.0001 / 0.01 depending on quote).
-    timeframe : str
-        "H1", "M15", "M5", etc. — used to look up default proximity_pips
-        and min_gap_pips.
-    proximity_pips : int, optional
-        Threshold in pips. If None, looked up from DEFAULT_PROXIMITY_PIPS
-        by `timeframe` (default fallback 20 for unknown timeframes).
-    min_gap_pips : int, optional
-        Narrow-cycle threshold in pips. If None, looked up from
-        DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS by `timeframe`
-        (default fallback to H1=50).
-
-    Returns
-    -------
-    Dict[(sid, cycle_id), List[ZoneProximityTrigger]]
-        Ordered list of triggers per cycle. Empty list / missing key when
-        no triggers fired in the scan window.
-    """
+    min_proximity_reference_gap_pips: Optional[int] = None,
+) -> Dict[Tuple[int, int], CycleProximityScan]:
+    """One `CycleProximityScan` per (sid, cycle_id) with a CTS_CONFIRMED, a BOS
+    zone and a non-empty scan window, in CTS_CONFIRMED order (the window and the
+    skips: `check_zone_proximity`). Shared by the batch scan and the lifecycle
+    sweep (PLAN_R §4)."""
     if proximity_pips is None:
         proximity_pips = DEFAULT_PROXIMITY_PIPS.get(timeframe, 20)
     if min_gap_pips is None:
         min_gap_pips = DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS.get(
             timeframe, DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS["H1"]
         )
-    threshold = proximity_pips * pip_size
+    if min_proximity_reference_gap_pips is None:
+        min_proximity_reference_gap_pips = DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS.get(
+            timeframe, DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS["H1"]
+        )
 
     # Lookups
     cts_conf_by_key: Dict[tuple, StructureEvent] = {}
@@ -359,10 +702,10 @@ def check_zone_proximity(
             # confirmed_at = confirmation candle, not the BOS anchor
             bos_confirmed_idx_by_key[key] = ef.event_moment(ev)
 
-    # The realised reversal per sid, not a candidate's scheduled apply (docstring).
+    # The realised reversal per sid, not a candidate's scheduled apply (check_zone_proximity's docstring).
     reversal_idx_by_sid: Dict[int, int] = compute_reversal_idx_by_sid(sorted_events)
 
-    triggers_by_cycle: Dict[Tuple[int, int], List[ZoneProximityTrigger]] = {}
+    scans: Dict[Tuple[int, int], CycleProximityScan] = {}
 
     for key, cts_ev in cts_conf_by_key.items():
         sid, cycle_id = key
@@ -378,7 +721,6 @@ def check_zone_proximity(
             continue
 
         cts_zone = _find_kl_zone_for_cycle(kl_zones, sid, cycle_id, "CTS")
-        cts_inner = cts_zone.meta.get("inner") if cts_zone is not None else None
 
         cycle_poi_zones = [
             pz for pz in poi_zones
@@ -425,180 +767,123 @@ def check_zone_proximity(
         # pullback-confirmed CTS produces no CTS_CONFIRMED event at all
         # and won't reach this loop body.
         cts_confirmation_method = cts_ev.meta.get("confirmation_method", "pullback")
-        cycle_has_pullback_cts = (cts_confirmation_method == "pullback")
 
-        # Event-driven gap timeline (Rules 1/2/3 use this — NOT the df
-        # cts_threshold/bos_threshold columns, which get overwritten by
-        # the next structure once it starts processing).
-        timeline = _build_cycle_threshold_timeline(sorted_events, sid, cycle_id)
-        running_cts: Optional[float] = None
-        running_bos: Optional[float] = None
-        tl_ptr = 0
-        # Initial pass: apply all events with moment ≤ scan_start so the gap
-        # at idx = scan_start (the CTS_CONFIRMED candle) reflects the
-        # post-CTS-confirmation state. Includes any same-moment
-        # BOS_THRESHOLD_UPDATED events (sort order is `(moment, type)`,
-        # alphabetical — BOS_* < CTS_*).
-        # The walk is a TIME pointer: it compares the same MOMENT the timeline
-        # is sorted on (Plan E E3g-2, PLAN_E §7.1 T3).
-        while tl_ptr < len(timeline) and ef.event_moment(timeline[tl_ptr]) <= scan_start:
-            running_cts, running_bos = _apply_threshold_event(
-                timeline[tl_ptr], running_cts, running_bos
-            )
-            tl_ptr += 1
-
-        triggers: List[ZoneProximityTrigger] = []
-        expected_dir: Literal["sd", "opp_sd"] = "sd"
-        # Rule 3: per-cycle caps that apply ONLY while the cycle is in
-        # narrow mode. Once the gap crosses min_gap_pips, the caps are
-        # ignored (Q1=A); alternation state continues seamlessly.
-        narrow_sd_fired = False
-        narrow_opp_fired = False
-
-        for i in range(scan_start, scan_end + 1):
-            if i not in df.index:
-                continue
-
-            # For i > scan_start, advance the timeline pointer through
-            # events with moment < i (start-of-candle semantics — the
-            # current candle's own threshold events do NOT influence its
-            # own eligibility; see GOTCHAS "Narrow-Cycle Gap: Evaluate at
-            # Start-of-Candle"). For i == scan_start the initial pass
-            # above has already applied everything with moment ≤ scan_start.
-            while tl_ptr < len(timeline) and ef.event_moment(timeline[tl_ptr]) < i:
-                running_cts, running_bos = _apply_threshold_event(
-                    timeline[tl_ptr], running_cts, running_bos
-                )
-                tl_ptr += 1
-
-            if running_cts is not None and running_bos is not None:
-                gap_pips = abs(running_cts - running_bos) / pip_size
-                is_narrow = gap_pips < min_gap_pips
-            else:
-                # Can't evaluate (events missing) — fall back to default.
-                is_narrow = False
-
-            if is_narrow:
-                # Rule 2: narrow-mode triggers require pullback-confirmed
-                # CTS in this cycle. Without it, skip this candle.
-                if not cycle_has_pullback_cts:
-                    continue
-                # Rule 3: cap same-kind triggers while narrow.
-                if expected_dir == "sd" and narrow_sd_fired:
-                    continue
-                if expected_dir == "opp_sd" and narrow_opp_fired:
-                    continue
-
-            trigger = _try_trigger_at_candle(
-                df=df,
-                idx=i,
-                expected_dir=expected_dir,
-                sd=sd,
-                bos_inner=float(bos_inner),
-                cts_inner=cts_inner,
-                cycle_poi_zones=cycle_poi_zones,
-                threshold=threshold,
-                sid=sid,
-                cycle_id=cycle_id,
-                proximity_pips=proximity_pips,
-                pip_size=pip_size,
-                timeframe=timeframe,
-            )
-            if trigger is None:
-                # opp_sd path has no CTS inner available → no further
-                # triggers possible for this cycle.
-                if expected_dir == "opp_sd" and cts_inner is None:
-                    break
-                continue
-
-            triggers.append(trigger)
-            if is_narrow:
-                if expected_dir == "sd":
-                    narrow_sd_fired = True
-                else:
-                    narrow_opp_fired = True
-            expected_dir = "opp_sd" if expected_dir == "sd" else "sd"
-
-        if triggers:
-            triggers_by_cycle[(sid, cycle_id)] = triggers
-
-    return triggers_by_cycle
+        scans[(sid, cycle_id)] = CycleProximityScan(
+            df=df, sid=sid, cycle_id=cycle_id, sd=sd,
+            scan_start=scan_start, scan_end=scan_end,
+            parent_rungs=_parent_rungs(sd, bos_zone, cts_zone, cycle_poi_zones),
+            timeline=_build_cycle_threshold_timeline(sorted_events, sid, cycle_id),
+            cycle_has_pullback_cts=(cts_confirmation_method == "pullback"),
+            proximity_pips=proximity_pips, pip_size=pip_size, timeframe=timeframe,
+            min_gap_pips=min_gap_pips, min_ref_gap_pips=min_proximity_reference_gap_pips,
+        )
+    return scans
 
 
-def _try_trigger_at_candle(
+def check_zone_proximity(
     df: pd.DataFrame,
-    idx: int,
-    expected_dir: Literal["sd", "opp_sd"],
-    sd: int,
-    bos_inner: float,
-    cts_inner: Optional[float],
-    cycle_poi_zones: List[POIZone],
-    threshold: float,
-    sid: int,
-    cycle_id: int,
-    proximity_pips: int,
+    sorted_events: List[StructureEvent],
+    kl_zones: List[KLZone],
+    poi_zones: List[POIZone],
     pip_size: float,
     timeframe: str,
-) -> Optional[ZoneProximityTrigger]:
-    """Return a ZoneProximityTrigger if candle `idx` qualifies for the
-    expected direction, else None. Pure check — no state mutation.
+    proximity_pips: Optional[int] = None,
+    min_gap_pips: Optional[int] = None,
+    min_proximity_reference_gap_pips: Optional[int] = None,
+) -> Dict[Tuple[int, int], List[ZoneProximityTrigger]]:
+    """Find zone proximity trigger candles per (sid, cycle_id) — the BATCH scan
+    on parent zones (each cycle's `CycleProximityScan`, driven over its window).
+
+    Per cycle, walk the scan window and log alternating sd/opp_sd triggers:
+    1. First trigger must be sd (price within threshold of the sd proximity
+       reference — a POI of the cycle, read like the BOS zone (PLAN_Q), or the
+       BOS)
+    2. After an sd trigger, only opp_sd is eligible (the opp_sd proximity
+       reference — the CTS zone on parent zones)
+    3. After an opp_sd trigger, only sd again — alternating
+
+    Each "first match wins" applies per slot (i.e., once an sd trigger is
+    logged, no more sd triggers fire until an opp_sd has been logged).
+
+    The references come from each side's proximity reference ladder (PLAN_R
+    §1): the closest unpassed rung; a rung is passed by a close strictly beyond
+    its outer (from the next candle), the last rung (BOS / CTS) never; the
+    narrow proximity-reference cap limits a cycle whose signed reference gap is
+    ≤ `min_proximity_reference_gap_pips` to one trigger per side, per-side
+    counters (`CycleProximityScan`).
+
+    Narrow-gap restrictions (Rules 2 & 3, per module docstring): at each
+    candle, evaluate `|cts_threshold − bos_threshold|` reconstructed
+    from the cycle's threshold-defining events (events with `idx <
+    current_candle` applied; events at `idx == current_candle` NOT
+    applied — no self-rescue). While < `min_gap_pips`: require a
+    pullback-confirmed CTS_CONFIRMED to have already fired for this
+    cycle, and cap at most 1 sd + 1 opp_sd. After a wide-mode crossing
+    (gap ≥ `min_gap_pips`), caps lift and the existing alternation
+    continues unchanged. A trigger fires only if BOTH rule sets allow it.
+
+    Scan window per (sid, cycle_id):
+      start = CTS_CONFIRMED.meta["confirmed_at"] (the confirmation candle)
+      end   = min(next_BOS_CONFIRMED.confirmed_at - 1,
+                  reversal_idx - 1,
+                  end_of_df)
+    where `reversal_idx` = the sid's REALISED reversal, the
+    `STATE_CHANGED(to="reversal")` candle (`compute_reversal_idx_by_sid`, the
+    map KL / POI / fib / the orchestrator read) — never a
+    `REVERSAL_CANDIDATE.meta["apply_idx"]`, a SCHEDULED apply: a watch expiry
+    can discard it (a discarded LAST candidate used to cap every later cycle
+    of the sid below its own scan start: no triggers, no WVMI gate record) and
+    a step-anchor reversal can realise EARLIER than it (2026-09-28;
+    `tests/test_zone_proximity_reversal_cap.py`).
+
+    Parameters
+    ----------
+    df : DataFrame
+        OHLC data with structure columns.
+    sorted_events : list of StructureEvent
+        All structure events for the run, sorted by (idx, type).
+    kl_zones : list of KLZone
+        Both BOS- and CTS-derived zones (sd and opp_sd respectively).
+    poi_zones : list of POIZone
+        All POI zones (always sd direction by construction — Fib spans
+        BOS→CTS so any POI within is in the structure direction). Each counts
+        at every candle of its cycle's scan, like the BOS zone (PLAN_Q; its
+        unclamped activation floor and its end asserted outside the scan).
+    pip_size : float
+        Pip size for the pair (typically 0.0001 / 0.01 depending on quote).
+    timeframe : str
+        "H1", "M15", "M5", etc. — used to look up default proximity_pips,
+        min_gap_pips and min_proximity_reference_gap_pips.
+    proximity_pips : int, optional
+        Threshold in pips. If None, looked up from DEFAULT_PROXIMITY_PIPS
+        by `timeframe` (default fallback 20 for unknown timeframes).
+    min_gap_pips : int, optional
+        Narrow-cycle threshold in pips. If None, looked up from
+        DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS by `timeframe`
+        (default fallback to H1=50).
+    min_proximity_reference_gap_pips : int, optional
+        The narrow proximity-reference cap's threshold in pips. If None, looked
+        up from DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS by `timeframe`
+        (default fallback to H1=40).
+
+    Returns
+    -------
+    Dict[(sid, cycle_id), List[ZoneProximityTrigger]]
+        Ordered list of triggers per cycle. Empty list / missing key when
+        no triggers fired in the scan window.
     """
-    if expected_dir == "sd":
-        sd_inners: List[Tuple[float, str]] = [(bos_inner, "BOS")]
-        for pz in cycle_poi_zones:
-            # Read like a KL zone (PLAN_Q): at every candle of the scan —
-            # never its activation history (bounds asserted in the caller).
-            if sd == 1:
-                sd_inners.append((float(pz.top), "POI"))
-            else:
-                sd_inners.append((float(pz.bottom), "POI"))
-
-        if sd == 1:
-            trigger_inner, zone_kind = max(sd_inners, key=lambda t: t[0])
-            candle_low = float(df.loc[idx, "l"])
-            if candle_low <= trigger_inner + threshold:
-                return ZoneProximityTrigger(
-                    structure_id=sid, cycle_id=cycle_id,
-                    direction="sd", idx=idx,
-                    trigger_inner=trigger_inner, zone_kind=zone_kind,
-                    proximity_pips=proximity_pips, pip_size=pip_size,
-                    timeframe=timeframe,
-                )
-        else:
-            trigger_inner, zone_kind = min(sd_inners, key=lambda t: t[0])
-            candle_high = float(df.loc[idx, "h"])
-            if candle_high >= trigger_inner - threshold:
-                return ZoneProximityTrigger(
-                    structure_id=sid, cycle_id=cycle_id,
-                    direction="sd", idx=idx,
-                    trigger_inner=trigger_inner, zone_kind=zone_kind,
-                    proximity_pips=proximity_pips, pip_size=pip_size,
-                    timeframe=timeframe,
-                )
-        return None
-
-    # expected_dir == "opp_sd"
-    if cts_inner is None:
-        return None
-    trigger_inner = float(cts_inner)
-    if sd == 1:
-        candle_high = float(df.loc[idx, "h"])
-        if candle_high >= trigger_inner - threshold:
-            return ZoneProximityTrigger(
-                structure_id=sid, cycle_id=cycle_id,
-                direction="opp_sd", idx=idx,
-                trigger_inner=trigger_inner, zone_kind="CTS",
-                proximity_pips=proximity_pips, pip_size=pip_size,
-                timeframe=timeframe,
-            )
-    else:
-        candle_low = float(df.loc[idx, "l"])
-        if candle_low <= trigger_inner + threshold:
-            return ZoneProximityTrigger(
-                structure_id=sid, cycle_id=cycle_id,
-                direction="opp_sd", idx=idx,
-                trigger_inner=trigger_inner, zone_kind="CTS",
-                proximity_pips=proximity_pips, pip_size=pip_size,
-                timeframe=timeframe,
-            )
-    return None
+    scans = build_cycle_proximity_scans(
+        df, sorted_events, kl_zones, poi_zones, pip_size, timeframe,
+        proximity_pips=proximity_pips, min_gap_pips=min_gap_pips,
+        min_proximity_reference_gap_pips=min_proximity_reference_gap_pips,
+    )
+    triggers_by_cycle: Dict[Tuple[int, int], List[ZoneProximityTrigger]] = {}
+    for key, scan in scans.items():
+        for i in range(scan.scan_start, scan.scan_end + 1):
+            if i not in df.index:
+                continue
+            scan.step(i)
+            scan.close(i)
+        if scan.triggers:
+            triggers_by_cycle[key] = list(scan.triggers)
+    return triggers_by_cycle

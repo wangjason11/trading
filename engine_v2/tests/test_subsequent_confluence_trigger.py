@@ -72,7 +72,7 @@ def test_emits_one_per_opp_sd_after_sd():
     assert t.trigger_event_idx == 50
     assert t.meta["prior_sd_trigger_idx"] == 30
     assert t.meta["prior_sd_zone_kind"] == "BOS"
-    assert t.meta["cts_prox_zone_kind"] == "CTS"
+    assert t.meta["opp_sd_prox_zone_kind"] == "CTS"
 
 
 def test_input_idx_is_lowest_low_for_bullish_parent():

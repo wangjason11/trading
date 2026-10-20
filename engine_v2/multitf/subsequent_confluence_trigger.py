@@ -1,11 +1,11 @@
 """`subsequent_confluence` (var 3) trigger detection.
 
 Per spec §4.3.4:
-  Trigger    parent CTS-zone proximity AND prior parent proximity was sd
-  Idx input  parent-TF candle in [prior_sd_idx, cts_prox_idx] with extreme
+  Trigger    parent opp_sd zones proximity AND prior parent proximity was sd
+  Idx input  parent-TF candle in [prior_sd_idx, opp_sd_prox_idx] with extreme
              toward parent BOS (lowest low for bullish, highest high for
              bearish)
-  End idx    the CTS-prox trigger candle
+  End idx    the opp_sd-prox trigger candle
   Probe sd   +parent_sd (confluence — same direction as parent)
 
 Walks the alternating `zone_proximity_triggers[(sid, cycle_id)]` list and
@@ -111,7 +111,7 @@ def detect_subsequent_confluence_triggers(
                 meta={
                     "prior_sd_trigger_idx": prior_t.idx,
                     "prior_sd_zone_kind": prior_t.zone_kind,
-                    "cts_prox_zone_kind": this_t.zone_kind,
+                    "opp_sd_prox_zone_kind": this_t.zone_kind,
                     "trigger_inner": this_t.trigger_inner,
                     "sequence_index_in_cycle": i,
                 },

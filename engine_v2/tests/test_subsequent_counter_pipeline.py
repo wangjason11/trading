@@ -28,7 +28,7 @@ def test_to_multi_tf_trigger_bullish_parent():
         input_idx=42, trigger_event_idx=70,
         meta={
             "prior_sd_trigger_idx": 30,
-            "prior_cts_prox_idx": 50,
+            "prior_opp_sd_prox_idx": 50,
             "sequence_index_in_cycle": 2,
         },
     )
@@ -41,7 +41,7 @@ def test_to_multi_tf_trigger_bullish_parent():
     assert "probe_input_idx" not in out.meta    # renamed, no alias (PLAN_E §9.2)
     assert "probe_end_idx" not in out.meta     # unread; deleted in Plan E E1b
     assert out.meta["prior_sd_trigger_idx"] == 30
-    assert out.meta["prior_cts_prox_idx"] == 50
+    assert out.meta["prior_opp_sd_prox_idx"] == 50
 
 
 def test_to_multi_tf_trigger_bearish_parent():

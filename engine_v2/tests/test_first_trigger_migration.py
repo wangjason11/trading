@@ -201,7 +201,7 @@ def _make_trigger(
     trigger_event_idx: Optional[int] = None,
     parent_cts_anchor_idx: Optional[int] = None,
     prior_sd_trigger_idx: Optional[int] = None,
-    prior_cts_prox_idx: Optional[int] = None,
+    prior_opp_sd_prox_idx: Optional[int] = None,
 ) -> MultiTFTrigger:
     # `parent_cts_anchor_idx` is FC-ONLY (the H1 parent CTS anchor, Plan E Post-E·3):
     # default 5 on a `first_confluence` trigger, absent on every other type.
@@ -219,8 +219,8 @@ def _make_trigger(
         meta["parent_cts_anchor_idx"] = parent_cts_anchor_idx
     if prior_sd_trigger_idx is not None:
         meta["prior_sd_trigger_idx"] = prior_sd_trigger_idx
-    if prior_cts_prox_idx is not None:
-        meta["prior_cts_prox_idx"] = prior_cts_prox_idx
+    if prior_opp_sd_prox_idx is not None:
+        meta["prior_opp_sd_prox_idx"] = prior_opp_sd_prox_idx
     kwargs = dict(
         parent_tf="H1",
         parent_sid=parent_sid,
@@ -696,7 +696,7 @@ class TestResolveSiblingCts:
              trigger_idx=3819, start_idx=3819, parent_floor_idx=3611, seq=1)
 
         # subsequent_counter (1,2): parent sid 1 is -1, probe direction +1,
-        # prior_cts_prox_idx H1 926 → lo = LOH(926) = 3707 ;
+        # prior_opp_sd_prox_idx H1 926 → lo = LOH(926) = 3707 ;
         # trigger_event_idx H1 1020 → hi = LOH(1020) = 4083.
         #   A's clip: [max(3707, 3621), min(4083, 3819)] = [3707, 3819] → 3750 in, 3900 OUT
         #   B's clip: [max(3707, 3819), 4083]            = [3819, 4083] → 3850 in
@@ -704,7 +704,7 @@ class TestResolveSiblingCts:
         trig = _make_trigger(
             "subsequent_counter", parent_sid=1, parent_cycle_id=2,
             parent_sd=-1, lower_sd=1,
-            trigger_event_idx=1020, prior_cts_prox_idx=926,
+            trigger_event_idx=1020, prior_opp_sd_prox_idx=926,
         )
         hi = 4083
         fake = _fake_probe_result(starting_idx=4027, source="cts_updated", finalize_idx=hi)
@@ -760,7 +760,7 @@ class TestResolveSiblingCts:
         h1, m15 = self._fixtures()
         pool = SubStructurePool()
         # Record live [4, 9]; window lo = 11 (subsequent_counter with
-        # prior_cts_prox_idx H1 2 → LOH(2) = 11). trigger_end_idx 9 < lo 11 →
+        # prior_opp_sd_prox_idx H1 2 → LOH(2) = 11). trigger_end_idx 9 < lo 11 →
         # not live in the window. Its geometry runs on to the data edge and has
         # a CTS_UPDATED@15 inside [11, 23] — it must NOT be a candidate.
         sib = _stub_sub(pool, direction=1, starting_idx=4, slice_begin=0,
@@ -986,7 +986,7 @@ class TestSiblingCtsIdxWindow:
         m15 = _m15_from_h1(h1)
         trig = _make_trigger(
             "subsequent_counter", lower_sd=-1,
-            trigger_event_idx=4, prior_cts_prox_idx=2,
+            trigger_event_idx=4, prior_opp_sd_prox_idx=2,
         )
         lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19, parent_floor_idx=7)
         # prior_cts H1 idx 2 → last-M15-of-hour = 4*2+3 = 11 > floor 7
@@ -995,7 +995,7 @@ class TestSiblingCtsIdxWindow:
 
     @pytest.mark.parametrize("use_case,meta_key", [
         ("subsequent_confluence", "prior_sd_trigger_idx"),
-        ("subsequent_counter", "prior_cts_prox_idx"),
+        ("subsequent_counter", "prior_opp_sd_prox_idx"),
     ])
     def test_a_prior_hour_before_the_floor_is_raised_to_the_floor(self, use_case, meta_key):
         h1 = _h1_df_uptrend(n_hours=5)

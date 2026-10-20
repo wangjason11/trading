@@ -102,7 +102,7 @@ def test_emits_one_per_sd_at_index_2_or_higher():
     assert t.trigger_event_idx == 70
     assert t.trigger_event_idx == 70
     assert t.meta["prior_sd_trigger_idx"] == 30
-    assert t.meta["prior_cts_prox_idx"] == 50
+    assert t.meta["prior_opp_sd_prox_idx"] == 50
     assert t.meta["prior_sd_zone_kind"] == "BOS"
     assert t.meta["this_sd_zone_kind"] == "BOS"
     assert t.meta["sequence_index_in_cycle"] == 2
@@ -155,9 +155,9 @@ def test_multiple_sequential_var4_per_cycle():
     assert len(out) == 2
     assert [t.trigger_event_idx for t in out] == [55, 85]
     assert out[0].meta["prior_sd_trigger_idx"] == 30
-    assert out[0].meta["prior_cts_prox_idx"] == 40
+    assert out[0].meta["prior_opp_sd_prox_idx"] == 40
     assert out[1].meta["prior_sd_trigger_idx"] == 55
-    assert out[1].meta["prior_cts_prox_idx"] == 70
+    assert out[1].meta["prior_opp_sd_prox_idx"] == 70
     assert out[0].meta["sequence_index_in_cycle"] == 2
     assert out[1].meta["sequence_index_in_cycle"] == 4
 

@@ -287,8 +287,11 @@ modified together if reconsidered.
 | Rule | Where | What it does |
 |---|---|---|
 | 1 | `structure/market_structure.py::_apply_pattern_at_apply_idx` (the `cycle_gap_ok` guard) | sd-proximity cannot confirm CTS while gap < `min_gap_threshold` |
-| 2 | `zones/zone_proximity.py::check_zone_proximity` (the `cycle_has_pullback_cts` check) | In narrow mode, scan triggers only fire on/after pullback-confirmed CTS |
-| 3 | Same file, the `narrow_sd_fired` / `narrow_opp_fired` caps | In narrow mode, at most 1 sd + 1 opp_sd trigger per cycle |
+| 2 | `zones/zone_proximity.py::CycleProximityScan.step` (the `cycle_has_pullback_cts` check) | In narrow mode, scan triggers only fire on/after pullback-confirmed CTS |
+| 3 | Same method, the `_narrow_sd_fired` / `_narrow_opp_fired` caps | In narrow mode, at most 1 sd + 1 opp_sd trigger per cycle |
+
+(Since PLAN_R step 1, 2026-10-20, Rules 2 / 3 gate only the trigger test — never the pass test — and they are
+AND-ed with the narrow proximity-reference cap, a DIFFERENT gap: "Proximity Reference Ladders" below.)
 
 **Why they're a triple:**
 
@@ -353,12 +356,44 @@ against the post-Rules-1-2-3 baseline.
 
 ---
 
+## Proximity Reference Ladders (PLAN_R, 2026-10-20)
+
+**Rule:** each side of a cycle triggers on its proximity reference — the closest unpassed rung of its proximity
+reference ladder — and ONE object, `zones/zone_proximity.py::CycleProximityScan` (`step(i)` then `close(i)`), holds the
+whole per-cycle state (ladders, the passed set, locks, the gap, the counters, Rules 2 / 3, alternation). The batch scan
+and the lifecycle sweep (PLAN_R step 2) drive that same object — never re-implement a piece of it elsewhere. Full
+rules: the module docstring; decisions: `plans/PLAN_R_opp_sd_zones_proximity.md` §1.
+
+The traps, each a measured or reviewed failure mode:
+
+- **Gates block ONLY the trigger test.** Rules 2 / 3, the narrow proximity-reference cap and alternation decide whether
+  candle `i` may FIRE; the pass test (`close(i)`) runs on every candle. The pre-PLAN_R loop used `continue` for Rules
+  2 / 3 (and a `break` for a cycle without a CTS zone) — the shape that would silently skip a pass on a blocked candle.
+- **The last rung (the parent BOS / CTS) is never pass-tested.** Testing it would empty the side: on the reference
+  window closes lie beyond the (0,0) / (1,0) / (1,1) CTS outer and the (0,1) BOS outer inside their scans
+  (`plans/qa_opp_sd_zones_inputs/sims/review_rules/last_rung_pass.py`).
+- **Lock by passing, never by default.** A side locks when its passed reference gives way to its last rung. "Is the
+  reference" alone must not lock: the CTS is the opp_sd reference by default before any counter sub has a zone, so
+  lock-by-default would keep every later counter-sub zone out ((0,1) would fire only 748; (1,2)'s 954 would stay on
+  the CTS).
+- **A counter resets on its OWN side's outward move.** "Outward" is judged on that side's inner, whatever the other
+  side did on the same candle; a net-gap reading would reset both sides at (1,2) 1048 and bring 1048 / 1049 back.
+- **The pass test reads the outer as of the CLOSE and applies from `i + 1`.** The trigger test of candle `i` uses the
+  references picked at its start (passes up to `close(i − 1)`), so a candle never rescues itself; the trigger
+  candle's own close counts for the next candle.
+- **Invisible on parent zones, by alternation.** On the reference window the parent POIs are passed at 754 ((0,1))
+  and 1047 ((1,2)) and no trigger moves: after each cycle's last sd the opp_sd never fires, so the sd reference is not
+  consulted again — though 106 lows in 755–901 come within 8 pips of (0,1)'s passed POI
+  (`tests/test_proximity_reference_ladders.py::test_10_…`).
+
+---
+
 ## WVMI Constraints
 
 1. **Zero FB/FP volume blocks WVMI creation** — division by zero guard. Ensure candle features (volume) are computed before WVMI runs.
 2. **Temp LP only locks on BOS_n+1** — do not assume `lp_locked=True` until BOS of the next cycle confirms. Until then, LP and pullback_momentum can shift every candle — within `[FP+1, cycle end − 1]` on main AND on every sub projection since Plan G (the data end while the cycle is open; `WVMI_SPEC` "Temporary LP Selection"). A lock LP the tracker's frame cannot read (BOS_n+1's last wave candle past a capped sub's end, or past the data edge) is never taken: the record locks with its temp LP (Plan G Q10).
 3. **buy_momentum/sell_momentum are direction-mapped** — for buy zones: buy=breakout, sell=pullback. For sell zones: reversed. Always check `zone_side` when interpreting.
-4. **Zone proximity gate — the MAIN only** — main WVMI records are only created for cycles where the **first sd-direction zone-proximity trigger** fires (via `check_zone_proximity` in `zones/zone_proximity.py`). Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, reversal_idx - 1]` (note: scan starts AT the CTS confirmation candle, not +1; the reversal term is the sid's REALISED `STATE_CHANGED(to=reversal)` candle — `compute_reversal_idx_by_sid`, since 2026-09-28 — never a `REVERSAL_CANDIDATE`'s scheduled `apply_idx`, a prediction a watch expiry can discard; GOTCHAS "Key boundaries"). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Reads every zone by LOCATION, never by lifecycle (PLAN_Q, 2026-10-14 — the user: "I would like POI to be treated exactly like a KL zone"): the BOS / CTS KL zones by their `inner` alone, each of the cycle's POIs at every candle of the scan — its activation history (the lifecycle clamp, the imbalance-filled off-stretches) and its `end_idx` are not read; both bounds provably lie outside the scan and are asserted (`poi_unclamped_activation_floor_idx` — its activation floor WITHOUT the structure lifecycle-start term — at or before the scan start; its end after the scan's last candle; PLAN_Q §3). So a collapsed H1 cycle (lifecycle `[902, 902)` for structure 1's cycles 0 / 1 on the reference window) still fires triggers (820 sd:BOS, 871 opp_sd:CTS) — the M15 subs they would start are not built ("Collapsed Parent Cycles" below). Before PLAN_Q the POI read walked the activation history, which the lifecycle-start clamp (`e352ef8`, 2026-05-26) empties on a collapsed cycle — only the POI went dark there, a side effect never decided (PLAN_Q §2). The orchestrator extracts the first sd trigger per cycle as the WVMI gate (`_first_sd_prox_gate`; `triggered_by_event_idx` in WVMIRecord.meta — Part 4 §8.7 attribution schema). **Subs are ungated since Plan G (2026-09-30):** every CTS_CONFIRMED of a rendered sub gets a record (`_run_downstream_pipeline(wvmi="none")`), and zone proximity is never run for a sub — see "Sub WVMI Is Computed Inside the Projection" below.
+4. **Zone proximity gate — the MAIN only** — main WVMI records are only created for cycles where the **first sd-direction zone-proximity trigger** fires (via `check_zone_proximity` in `zones/zone_proximity.py`). Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, reversal_idx - 1]` (note: scan starts AT the CTS confirmation candle, not +1; the reversal term is the sid's REALISED `STATE_CHANGED(to=reversal)` candle — `compute_reversal_idx_by_sid`, since 2026-09-28 — never a `REVERSAL_CANDIDATE`'s scheduled `apply_idx`, a prediction a watch expiry can discard; GOTCHAS "Key boundaries"). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Reads every zone by LOCATION, never by lifecycle (PLAN_Q, 2026-10-14 — the user: "I would like POI to be treated exactly like a KL zone"): the BOS / CTS KL zones by their `inner` alone, each of the cycle's POIs at every candle of the scan — its activation history (the lifecycle clamp, the imbalance-filled off-stretches) and its `end_idx` are not read; both bounds provably lie outside the scan and are asserted (`poi_unclamped_activation_floor_idx` — its activation floor WITHOUT the structure lifecycle-start term — at or before the scan start; its end after the scan's last candle; PLAN_Q §3). So a collapsed H1 cycle (lifecycle `[902, 902)` for structure 1's cycles 0 / 1 on the reference window) still fires triggers (820 sd:BOS, 871 opp_sd:CTS) — the M15 subs they would start are not built ("Collapsed Parent Cycles" below). Before PLAN_Q the POI read walked the activation history, which the lifecycle-start clamp (`e352ef8`, 2026-05-26) empties on a collapsed cycle — only the POI went dark there, a side effect never decided (PLAN_Q §2). Since PLAN_R step 1 (2026-10-20) each side triggers on its proximity reference (ladders, passed zones, the narrow proximity-reference cap — "Proximity Reference Ladders" below); the first sd trigger of a cycle is always on its first sd rung, a parent zone. The orchestrator extracts the first sd trigger per cycle as the WVMI gate (`_first_sd_prox_gate`; `triggered_by_event_idx` in WVMIRecord.meta — Part 4 §8.7 attribution schema). **Subs are ungated since Plan G (2026-09-30):** every CTS_CONFIRMED of a rendered sub gets a record (`_run_downstream_pipeline(wvmi="none")`), and zone proximity is never run for a sub — see "Sub WVMI Is Computed Inside the Projection" below.
 
 ---
 
@@ -822,8 +857,10 @@ registry, never from `dfx.attrs["lower_tf_results"]`.
 >   events would move `subsequent_counter`(1,2)@4083's `starting_idx` 4027 —
 >   a pool key both `4027/+1` records dedup on).
 > - `hi` = the reading trigger's `trigger_idx` (`_sibling_cts_idx_window`;
->   `lo` = 0 for `first_counter`, the LOH of the prior sd-prox / CTS-prox
->   candle for `subsequent_*`). **The window is the ONLY thing keeping the
+>   `lo` = the parent cycle's M15 floor for `first_counter`, the LOH of the
+>   prior sd-prox / opp_sd-prox candle for `subsequent_*`, never below that
+>   floor — PLAN_R step 0a: the own-frame fallback scans the raw frame, so a
+>   `lo` of 0 reached before the cycle). **The window is the ONLY thing keeping the
 >   read causal** now that geometry is not bounded per trigger — never widen
 >   it, never drop `hi`. The clip (per record) and the reference window both
 >   key every CTS type (`structure/reference_zone._CTS_EVENT_TYPES`) on its

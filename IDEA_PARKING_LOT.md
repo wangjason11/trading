@@ -114,7 +114,7 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    `engine_v2/plans/PLAN_R_opp_sd_zones_proximity.md`, Q&A rounds 1–9 `engine_v2/plans/qa_opp_sd_zones_inputs/`):
    READY TO BUILD 2026-10-20 — every decision closed (Q&A rounds 1–12), the plan review done (3 agents, 0.84M) and
    folded in; build order 0a → 0b → 1 → 2, 4 commits, `/commit-save` only after step 2. **BUILD UNDER WAY
-   2026-10-20** (PLAN_R §8 = the build log): step 0a LANDED `a6e71c0`, step 0b the commit after it (both zero change, as predicted).
+   2026-10-20** (PLAN_R §8 = the build log): steps 0a `a6e71c0`, 0b `c1bd05a` and 1 (the ladders + the narrow proximity-reference cap on parent zones) LANDED, all zero change as predicted; step 2 (the overlay in the sweep) next.
 4. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**

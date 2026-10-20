@@ -140,6 +140,12 @@ def _poi_zone(sid: int, cycle_id: int, sd: int, top: float, bottom: float, *,
     )
 
 
+# The narrow proximity-reference cap OUT of the picture (PLAN_R §1): no rounded gap is ever <= this. For the tests
+# that isolate Rules 2 / 3 (the BOS–CTS threshold gap) on zones whose inners sit 20 pips apart — narrow by the
+# reference gap too (<= 40), so under the default cap the two rule sets would both bind.
+_NO_REF_CAP = -10 ** 6
+
+
 # ---------- Tests ----------
 
 def test_first_sd_trigger_fires_on_buy_zone():
@@ -575,10 +581,9 @@ def test_mid_cycle_crossing_lifts_caps():
     df.at[30, "l"] = 1.4003  # sd, idx 30 (wide)
 
     bos = _bos_zone(sid=0, cycle_id=0, sd=1, inner=1.40, outer=1.39)
-    # CTS zone object inner=1.4020 — used as opp_sd trigger level by
-    # _try_trigger_at_candle. Both pre-crossing (idx 10 high 1.4015 within
-    # 8p of 1.4020) and post-crossing (idx 25 high 1.4055 ≥ 1.4020 - 8p
-    # trivially) opp_sd candidates reach it.
+    # CTS zone object inner=1.4020 — the opp_sd proximity reference. Both
+    # pre-crossing (idx 10 high 1.4015 within 8p of 1.4020) and post-crossing
+    # (idx 25 high 1.4055 ≥ 1.4020 - 8p trivially) opp_sd candidates reach it.
     cts = _cts_zone(sid=0, cycle_id=0, sd=1, inner=1.4020, outer=1.4030)
 
     # Event timeline: narrow at scan_start (gap=20p), then a
@@ -597,6 +602,7 @@ def test_mid_cycle_crossing_lifts_caps():
         df=df, sorted_events=events,
         kl_zones=[bos, cts], poi_zones=[],
         pip_size=0.0001, timeframe="H1",
+        min_proximity_reference_gap_pips=_NO_REF_CAP,
     )
     # Expect 5 triggers total: 1 sd narrow (idx 5) + 1 opp_sd narrow
     # (idx 10), then wide-mode alternation continues at idx 20/25/30
@@ -606,6 +612,16 @@ def test_mid_cycle_crossing_lifts_caps():
         "sd", "opp_sd", "sd", "opp_sd", "sd"
     ]
     assert [t.idx for t in triggers[(0, 0)]] == [5, 10, 20, 25, 30]
+    # Both rule sets AND-ed (PLAN_R §1): the inners stay 20 pips apart (zone
+    # inners never move), so under the default cap (40) the reference gap stays
+    # narrow after Rules 2 / 3 lift — one sd + one opp_sd, the counters never reset.
+    with_cap = check_zone_proximity(
+        df=df, sorted_events=events,
+        kl_zones=[bos, cts], poi_zones=[],
+        pip_size=0.0001, timeframe="H1",
+    )
+    assert [t.idx for t in with_cap[(0, 0)]] == [5, 10]
+    assert all(t.meta["prox_ref_gap_pips"] == 20 and t.meta["narrow_prox_ref"] for t in with_cap[(0, 0)])
 
 
 def test_missing_bos_confirmed_falls_back_to_default():
@@ -627,6 +643,7 @@ def test_missing_bos_confirmed_falls_back_to_default():
         df=df, sorted_events=events,
         kl_zones=[bos, cts], poi_zones=[],
         pip_size=0.0001, timeframe="H1",
+        min_proximity_reference_gap_pips=_NO_REF_CAP,
     )
     # Default mode → all 3 triggers fire.
     assert len(triggers[(0, 0)]) == 3
@@ -659,6 +676,7 @@ def test_bos_threshold_update_alone_can_cross_into_wide():
         df=df, sorted_events=events,
         kl_zones=[bos, cts], poi_zones=[],
         pip_size=0.0001, timeframe="H1",
+        min_proximity_reference_gap_pips=_NO_REF_CAP,
     )
     assert len(triggers[(0, 0)]) == 3
     assert [t.direction for t in triggers[(0, 0)]] == ["sd", "opp_sd", "sd"]

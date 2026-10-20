@@ -13,7 +13,7 @@ Per spec §4.3.5:
 Walks the alternating `zone_proximity_triggers[(sid, cycle_id)]` list and
 emits one trigger per sd entry at index ≥ 2. By the alternation invariant
 in `zones/zone_proximity.py`, every such sd trigger is preceded by an
-opp_sd (CTS-prox, var 3) and that by an sd (var 2 or an earlier var 4) —
+opp_sd (opp_sd-prox, var 3) and that by an sd (var 2 or an earlier var 4) —
 the [sd, opp_sd, sd] window the spec requires.
 
 The parent-cycle end every record uses lives in `multitf/parent_tables.py`
@@ -91,10 +91,10 @@ def detect_subsequent_counter_triggers(
             this_t = trig_list[i]
             if this_t.direction != "sd":
                 continue
-            cts_prox_t = trig_list[i - 1]
+            opp_sd_prox_t = trig_list[i - 1]
             prior_sd_t = trig_list[i - 2]
             # Alternation invariant: [-1] is opp_sd, [-2] is sd.
-            if cts_prox_t.direction != "opp_sd" or prior_sd_t.direction != "sd":
+            if opp_sd_prox_t.direction != "opp_sd" or prior_sd_t.direction != "sd":
                 continue
 
             input_idx = _input_idx_window_extreme_toward_cts(
@@ -111,7 +111,7 @@ def detect_subsequent_counter_triggers(
                 meta={
                     "prior_sd_trigger_idx": prior_sd_t.idx,
                     "prior_sd_zone_kind": prior_sd_t.zone_kind,
-                    "prior_cts_prox_idx": cts_prox_t.idx,
+                    "prior_opp_sd_prox_idx": opp_sd_prox_t.idx,
                     "this_sd_zone_kind": this_t.zone_kind,
                     "trigger_inner": this_t.trigger_inner,
                     "sequence_index_in_cycle": i,

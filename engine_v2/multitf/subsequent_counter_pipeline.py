@@ -46,7 +46,7 @@ def to_multi_tf_trigger(
             "parent_input_idx": trig.input_idx,
             "trigger_event_idx": trig.trigger_event_idx,
             "prior_sd_trigger_idx": trig.meta.get("prior_sd_trigger_idx"),
-            "prior_cts_prox_idx": trig.meta.get("prior_cts_prox_idx"),
+            "prior_opp_sd_prox_idx": trig.meta.get("prior_opp_sd_prox_idx"),
             "sequence_index_in_cycle": trig.meta.get("sequence_index_in_cycle"),
         },
     )

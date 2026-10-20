@@ -431,15 +431,15 @@ conditions fire, end the previous confluence sid and create
 
 | Field | Value |
 |---|---|
-| **Trigger** | Parent CTS-zone proximity trigger AND most recent prior parent proximity trigger was to sd zones |
+| **Trigger** | Parent opp_sd zones proximity trigger ("CTS-zone proximity" until PLAN_R — the opp_sd proximity reference: the CTS zone, or from PLAN_R step 2 a counter sub's BOS / POI) AND most recent prior parent proximity trigger was to sd zones |
 | **Idx input** | Sibling **counter** lens's most recent qualifying CTS **anchor** on the sub TF (= the reference zone's `anchor_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone.** |
-| **Probe `probe_end_idx`** | Current parent CTS-zone proximity trigger candle, time-mapped to the sub TF's last-of-hour = the trigger's `trigger_idx` (`hi`) |
-| **Probe reference zone** | Sibling **counter** lens's most recent qualifying CTS, built ad hoc from the winning event (`kl_zones=[]`, §17.8), read from the pool within the sub-TF window `[max(last-M15-of prior_sd_prox hour, parent floor), last-M15-of this_cts_prox hour]` |
+| **Probe `probe_end_idx`** | Current parent opp_sd zones proximity trigger candle, time-mapped to the sub TF's last-of-hour = the trigger's `trigger_idx` (`hi`) |
+| **Probe reference zone** | Sibling **counter** lens's most recent qualifying CTS, built ad hoc from the winning event (`kl_zones=[]`, §17.8), read from the pool within the sub-TF window `[max(last-M15-of prior_sd_prox hour, parent floor), last-M15-of this_opp_sd_prox hour]` |
 | **Output** | `starting_idx` for the next confluence record's sub (a new unique sub, or an existing one if the key repeats) |
 
 **Reference zone + input resolution (Session 3 uniform rule, 2026-05-31;
 sibling source = the pool since Plan C):**
-1. Build the sub-TF idx window: `[max(_map_parent_idx_to_m15_hour_end(prior_sd_prox_idx), parent floor), _map_parent_idx_to_m15_hour_end(this_cts_prox_idx)]` (entity-absolute M15; `_sibling_cts_idx_window`; a missing prior-prox meta value degrades `lo` to the parent floor). The parent floor = `ParentTables.floor(S, C)` (REQUIRED `parent_floor_idx`, PLAN_R step 0a): every sibling record starts at ≥ it, so it never narrows the pool read — it bounds the step-4 fallback.
+1. Build the sub-TF idx window: `[max(_map_parent_idx_to_m15_hour_end(prior_sd_prox_idx), parent floor), _map_parent_idx_to_m15_hour_end(this_opp_sd_prox_idx)]` (entity-absolute M15; `_sibling_cts_idx_window`; a missing prior-prox meta value degrades `lo` to the parent floor). The parent floor = `ParentTables.floor(S, C)` (REQUIRED `parent_floor_idx`, PLAN_R step 0a): every sibling record starts at ≥ it, so it never narrows the pool read — it bounds the step-4 fallback.
 2. `_build_sibling_cts_ref_zone_from_pool(pool, other_lens="counter", S, C, probe_direction, (lo, hi), m15)`: take the **counter** lens's records for this `(parent_sid, parent_cycle_id)` with `direction == -probe_direction`, non-zero-length and live somewhere in the window; collect their subs' {CTS_CONFIRMED, CTS_UPDATED, CTS_ESTABLISHED} events (geometry shifted to entity-absolute, clipped to each record's live window ∩ `[lo, hi]`); the most recent wins via `build_reference_zone_from_cts_event`.
 3. `input_idx = ref_zone.anchor_idx`; `reference_zone = ref_zone`. Probe runs on the ONE shared M15 feature frame (Phase 1 only, `probe_end_idx = hi`), behind the probe cache.
 4. **Fallback** (sibling has zero qualifying CTS events in the window — extremely rare): input_idx = window extreme on the `-lower_sd` side computed on the shared M15 frame (`_window_extreme_idx`) over the SAME `[lo, hi]` — `lo` ≥ the parent floor, so the extreme never reaches before the parent cycle (PLAN_R §2: with `lo = 0` a first_counter fallback would pick the lowest low since the data start — on the reference window, had (1,2)'s first_counter found no sibling: M15 385 at 0.55808 instead of the in-cycle 3621 at 0.57112, 130.4 pips lower; not hit on S_Q); reference = own ad-hoc BOS_0 from that candle. Logged `[entity_compute] sibling-CTS unavailable …`.
@@ -459,10 +459,10 @@ conditions fire, end the previous counter sid and create
 
 | Field | Value |
 |---|---|
-| **Trigger** | Parent sd-zone proximity trigger AND most recent prior parent proximity trigger was to CTS zone AND the proximity trigger before *that* was to sd zones (forms Λ in bullish parent / V in bearish parent) |
+| **Trigger** | Parent sd-zone proximity trigger AND most recent prior parent proximity trigger was to the opp_sd zones (an opp_sd zones proximity trigger) AND the proximity trigger before *that* was to sd zones (forms Λ in bullish parent / V in bearish parent) |
 | **Idx input** | Sibling **confluence** lens's most recent qualifying CTS **anchor** on the sub TF (= the reference zone's `anchor_idx`; CONFIRMED → `cts_anchor_idx`, UPDATED/EST → the CTS anchor `ef.cts_anchor_idx` — the event idx on UPDATED, meta `cts_anchor_idx` on EST, whose idx is the moment since Plan E E4a). **Same candle as the reference zone.** |
 | **Probe `probe_end_idx`** | Current parent sd-zone proximity trigger candle, time-mapped to the sub TF's last-of-hour = the trigger's `trigger_idx` (`hi`) |
-| **Probe reference zone** | Sibling **confluence** lens's most recent qualifying CTS, built ad hoc from the winning event (`kl_zones=[]`, §17.8), read from the pool within the sub-TF window `[max(last-M15-of prior_cts_prox hour, parent floor), last-M15-of this_sd_prox hour]` (same pool read as §4.3.4 step 2 with `other_lens="confluence"`; same step-4 fallback) |
+| **Probe reference zone** | Sibling **confluence** lens's most recent qualifying CTS, built ad hoc from the winning event (`kl_zones=[]`, §17.8), read from the pool within the sub-TF window `[max(last-M15-of prior_opp_sd_prox hour, parent floor), last-M15-of this_sd_prox hour]` (same pool read as §4.3.4 step 2 with `other_lens="confluence"`; same step-4 fallback) |
 | **Output** | `starting_idx` for the next counter record's sub |
 
 > **Session 3 (2026-05-31)** supersedes the old "parent-TF candle closest to
@@ -490,14 +490,31 @@ each parent cycle (the parent's proximity state machine, `zone_proximity.py`,
 enforces sd/opp_sd alternation; both `subsequent_*` variations require the
 prior trigger to be the opposite kind):
 
+> **The proximity state machine (PLAN_R, 2026-10-20).** One object per parent
+> cycle, `zone_proximity.CycleProximityScan` (`step(i)` then `close(i)` per H1
+> candle), driven by the batch `check_zone_proximity`. Each side triggers on its
+> **proximity reference** — the closest unpassed rung of its **proximity reference
+> ladder** (sd: the cycle's POI(s) closer than the BOS inner, then the BOS; opp_sd:
+> the CTS; the BOS / CTS are the LAST rungs). A **passed proximity zone** = an H1
+> close strictly beyond a rung's outer (as of that close), effective from the next
+> candle, tested on every candle (also a gated one), never on a last rung; a side
+> locks when its passed reference gives way to its last rung. The **narrow
+> proximity-reference cap**: the signed, half-up **proximity reference gap**
+> `<= DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS` (40 / 25 / 15) allows one more trigger
+> per side (per-side counters, start-of-candle; an outward move of a side's own
+> reference resets that side), AND-ed with Rules 1–3. On parent zones this
+> reproduces the pre-PLAN_R triggers on the reference window (the passes at 754 /
+> 1047 stay invisible — alternation). Full rules: the module docstring and
+> `plans/PLAN_R_opp_sd_zones_proximity.md` §1.
+
 ```
 parent BOS_confirmed
     → first_confluence              (input: own ad-hoc BOS_0, probe_end_idx: parent CTS anchor, price-mapped)
 parent 1st sd-proximity (post-CTS)
     → first_counter                 (input+ref: sibling confluence CTS, probe_end_idx: this trigger candle)
-parent CTS-proximity (after sd-prox)
+parent opp_sd-proximity (after sd-prox)
     → subsequent_confluence         (input+ref: sibling counter CTS, probe_end_idx: this trigger candle)
-parent sd-proximity (after CTS-prox after sd-prox = Λ/V apex at CTS)
+parent sd-proximity (after opp_sd-prox after sd-prox = Λ/V apex at the opp_sd zones)
     → subsequent_counter            (input+ref: sibling confluence CTS, probe_end_idx: this trigger candle)
 ... alternating until parent cycle ends
 ```
@@ -555,7 +572,7 @@ at the next parent BOS_confirmed.
 |---|---|---|---|---|---|
 | `first_confluence` | Parent BOS_confirmed | Parent BOS anchor (price-mapped to M15) | Parent CTS **anchor** (`cts_anchor_idx`, price-mapped; NULL until parent CTS_confirmed fires) | **Ad-hoc BOS_0 on sub TF** (derived from input_idx candle on M15) | `+parent_sd` |
 | `first_counter` | 1st parent sd-proximity post-CTS | **Sibling confluence CTS anchor** (= ref's `anchor_idx`) | This trigger candle (`trigger_idx`) | **Sibling confluence lens's most recent same-direction CTS** (`struct_direction == +parent_sd`; ad-hoc zone from the winning event, from the pool) | `-parent_sd` |
-| `subsequent_confluence` | Parent CTS-proximity after sd-prox | **Sibling counter CTS anchor** (= ref's `anchor_idx`) | This trigger candle (`trigger_idx`) | Sibling counter lens's most recent same-direction CTS (`struct_direction == -parent_sd`; in M15 window; same rule) | `+parent_sd` |
+| `subsequent_confluence` | Parent opp_sd-proximity after sd-prox | **Sibling counter CTS anchor** (= ref's `anchor_idx`) | This trigger candle (`trigger_idx`) | Sibling counter lens's most recent same-direction CTS (`struct_direction == -parent_sd`; in M15 window; same rule) | `+parent_sd` |
 | `subsequent_counter` | Parent sd-prox forming Λ / V | **Sibling confluence CTS anchor** (= ref's `anchor_idx`) | This trigger candle (`trigger_idx`) | Sibling confluence lens's most recent same-direction CTS (`struct_direction == +parent_sd`; in M15 window; same rule) | `-parent_sd` |
 
 Output of every row: `ProbeResult.starting_idx` → the pool key
@@ -791,14 +808,14 @@ callers (`compute_structure_from_start` [no prod caller] +
 
 ### Threshold tables
 
-All four tables live in `engine_v2/zones/zone_proximity.py`. Module-load
+All five tables live in `engine_v2/zones/zone_proximity.py`. Module-load
 asserts guarantee no inversion at startup.
 
-| TF | Probe reset cond 1 (`reset_pips`) | Probe reset cond 2 (`wick_cap`) | Proximity trigger | Narrow-cycle min gap |
-|---|---|---|---|---|
-| H1 | 4 | 16 | 8 | 50 |
-| M15 | 3 | 12 | 5 | 30 |
-| M5 | 2 | 8 | 3 | 15 |
+| TF | Probe reset cond 1 (`reset_pips`) | Probe reset cond 2 (`wick_cap`) | Proximity trigger | Narrow-cycle min gap | Narrow proximity-reference gap (PLAN_R) |
+|---|---|---|---|---|---|
+| H1 | 4 | 16 | 8 | 50 | 40 |
+| M15 | 3 | 12 | 5 | 30 | 25 |
+| M5 | 2 | 8 | 3 | 15 | 15 |
 
 ### Invariants (asserted at module load)
 
@@ -812,6 +829,10 @@ assert DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS[tf] > DEFAULT_PROXIMITY_PIPS[
 # NEW — a wick cap below the proximity tolerance is self-contradictory
 # (would make condition 1 unreachable):
 assert DEFAULT_PROBE_RESET_WICK[tf] > DEFAULT_PROBE_RESET_PIPS[tf]
+
+# PLAN_R — the narrow proximity-reference cap strictly above proximity (two
+# proximity bands closer than that overlap):
+assert DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS[tf] > DEFAULT_PROXIMITY_PIPS[tf]
 ```
 
 ### Why proximity > reset matters

@@ -5,7 +5,7 @@ Per spec §4.3.4 / §4.3.7:
   Parent input:    meta `parent_input_idx` (H1) = the parent-TF window
                    extreme toward parent BOS — informational: the resolver
                    co-sources its M15 input from the sibling CTS (§4.3.4)
-  Probe end_idx:   the CTS-prox trigger candle
+  Probe end_idx:   the opp_sd-prox trigger candle
 
 Mapping (§4.3.1): none — the H1 input is never mapped; the resolver
 co-sources its M15 input from the sibling counter CTS. Only the §4.3.4
