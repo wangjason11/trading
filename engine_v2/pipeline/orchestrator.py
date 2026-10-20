@@ -991,8 +991,11 @@ def _run_multi_tf_dual(
     sub_pool = SubStructurePool()
 
     def _resolve_start(t: SweepTrigger, hi: int):
+        # The parent floor = the one every TriggerRecord stores (PLAN_R §2): the sibling
+        # window's raw-frame fallback must not reach before the parent cycle.
         return _resolve_trigger_m15_start(
-            t.source, h1_df, m15, pool=sub_pool, hi=hi, parent_path=parent_path,
+            t.source, h1_df, m15, pool=sub_pool, hi=hi,
+            parent_floor_idx=tables.floor(*t.cycle), parent_path=parent_path,
         )
 
     def _build_geometry(key, bos0_inner, cross_fib_limit):

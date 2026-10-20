@@ -1900,6 +1900,56 @@ def test_orchestrator_sweep_triggers_carry_each_types_h1_parent_input(monkeypatc
     ]
 
 
+def test_orchestrator_resolve_start_passes_the_parent_cycle_floor(monkeypatch):
+    """PLAN_R §2 (step 0a): the orchestrator's `resolve_start` closure hands
+    `_resolve_trigger_m15_start` the trigger's OWN parent cycle floor
+    (`tables.floor(S, C)`, the value every TriggerRecord stores) — never 0, never
+    another cycle's. Two cycles with distinct floors; the sweep stub calls the
+    closure once per trigger and aborts."""
+    from types import SimpleNamespace
+    from engine_v2.pipeline.orchestrator import _run_multi_tf_dual
+
+    class _Stop(Exception):
+        pass
+
+    floors = {(0, 1): 2611, (1, 2): 3611}
+    seen: List[tuple] = []
+
+    def _fake_resolve(trigger, _h1, _m15, *, pool, hi, parent_floor_idx, parent_path):
+        seen.append(((trigger.parent_sid, trigger.parent_cycle_id), hi, parent_floor_idx))
+
+    def _sweep(triggers, *, resolve_start, **_kw):
+        for t in triggers:
+            resolve_start(t, int(t.trigger_idx))
+        raise _Stop
+
+    def _mt(sid, cyc):
+        return lambda _v, _h1: SimpleNamespace(parent_sid=sid, parent_cycle_id=cyc, lower_sd=+1)
+
+    monkeypatch.setattr("engine_v2.multitf.subsequent_confluence_pipeline.to_multi_tf_trigger", _mt(0, 1))
+    monkeypatch.setattr("engine_v2.multitf.subsequent_counter_pipeline.to_multi_tf_trigger", _mt(1, 2))
+    monkeypatch.setattr("engine_v2.multitf.uc1_trigger.detect_uc1_triggers", lambda *a, **k: [])
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
+                        lambda *a, **k: pd.DataFrame({"time": [0]}))
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
+    monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables",
+                        lambda *a, **k: SimpleNamespace(floor=lambda s, c: floors[(s, c)]))
+    monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end",
+                        lambda p, _h1, _m15: 4 * int(p) + 3)
+    monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._resolve_trigger_m15_start", _fake_resolve)
+    monkeypatch.setattr("engine_v2.multitf.lifecycle_sweep.run_lifecycle_sweep", _sweep)
+
+    h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
+    v3 = SimpleNamespace(trigger_event_idx=20, input_idx=15)
+    v4 = SimpleNamespace(trigger_event_idx=30, input_idx=25)
+    with pytest.raises(_Stop):
+        _run_multi_tf_dual(
+            h1, [], [], [], [], {}, None, first_confluence_triggers=[],
+            subsequent_confluence_triggers=[v3], subsequent_counter_triggers=[v4],
+        )
+    assert seen == [((0, 1), 83, 2611), ((1, 2), 123, 3611)]
+
+
 def test_uc1_trigger_writes_the_h1_parent_input_under_its_own_name():
     """PLAN_E §9.2 (Post-E·1b): `detect_uc1_triggers` puts the first_counter trigger's H1 input — the
     cycle's CTS ANCHOR (17), not its confirmation candle (21) — in `meta["parent_input_idx"]` (the

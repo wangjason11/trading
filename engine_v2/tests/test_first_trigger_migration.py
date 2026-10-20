@@ -28,7 +28,8 @@ Covers:
     geometry): lens selection, entity-absolute shift, per-record live-window
     CLIP (§5.1 concrete 3819 handover case), record-level exclusions,
     fallback, degenerate window, `kl_zones=[]` + shared frame.
-  - `_sibling_cts_idx_window` (unchanged semantics, `hi` passed in).
+  - `_sibling_cts_idx_window` (`hi` passed in; `lo` never below the parent
+    cycle's M15 floor — PLAN_R §2).
   - dispatcher routing + pool/hi threading; legacy hatch absent.
   - probe cache hit / APPROX hit / REF-ZONE DIFFERS / convergence / determinism.
   - §5.2 `finalize_idx == hi` assert for sibling types (cache hit exempt).
@@ -608,7 +609,7 @@ class TestResolveSiblingCts:
                                   finalize_idx=hi)   # Phase 1: finalize == hi
         with _patched_cts_derivation(), _patched_probe(return_value=fake) as mock_probe:
             res = _resolve_sibling_cts_via_unified_probe(
-                trig, h1, m15, pool=pool, hi=hi,
+                trig, h1, m15, pool=pool, hi=hi, parent_floor_idx=0,
             )
         kw = _probe_kwargs(mock_probe)
         assert kw["direction"] == -1
@@ -652,7 +653,7 @@ class TestResolveSiblingCts:
         fake = _fake_probe_result(starting_idx=12, source="cts_confirmed", finalize_idx=hi)
         with _patched_cts_derivation(), _patched_probe(return_value=fake) as mock_probe:
             res = _resolve_sibling_cts_via_unified_probe(
-                trig, h1, m15, pool=pool, hi=hi,
+                trig, h1, m15, pool=pool, hi=hi, parent_floor_idx=0,
             )
         kw = _probe_kwargs(mock_probe)
         assert kw["direction"] == 1
@@ -708,8 +709,8 @@ class TestResolveSiblingCts:
         hi = 4083
         fake = _fake_probe_result(starting_idx=4027, source="cts_updated", finalize_idx=hi)
         with _patched_cts_derivation(), _patched_probe(return_value=fake) as mock_probe:
-            res = _resolve_sibling_cts_via_unified_probe(
-                trig, h1, m15, pool=pool, hi=hi,
+            res = _resolve_sibling_cts_via_unified_probe(   # floor 3611 < lo 3707: unchanged
+                trig, h1, m15, pool=pool, hi=hi, parent_floor_idx=3611,
             )
         kw = _probe_kwargs(mock_probe)
         assert kw["input_idx"] == 3850
@@ -790,7 +791,7 @@ class TestResolveSiblingCts:
         fake = _fake_probe_result(starting_idx=9, source="ad_hoc_bos_0", finalize_idx=hi)
         with _patched_fc_ref(fb_ref) as mock_fb, _patched_probe(return_value=fake) as mock_probe:
             res = _resolve_sibling_cts_via_unified_probe(
-                trig, h1, m15, pool=pool, hi=hi,
+                trig, h1, m15, pool=pool, hi=hi, parent_floor_idx=0,
             )
         mock_fb.assert_called_once()
         bound = _FC_REF_SIG.bind(*mock_fb.call_args.args, **mock_fb.call_args.kwargs).arguments
@@ -812,7 +813,7 @@ class TestResolveSiblingCts:
         trig = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, trigger_event_idx=5)
         with _patched_fc_ref(None), _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_sibling_cts_via_unified_probe(
-                trig, h1, m15, pool=pool, hi=23,
+                trig, h1, m15, pool=pool, hi=23, parent_floor_idx=0,
             )
         mock_probe.assert_not_called()
         assert isinstance(res, ProbeFailure)
@@ -833,7 +834,7 @@ class TestResolveSiblingCts:
         with _patched_cts_derivation(), \
                 _patched_probe(return_value=_fake_probe_result()) as mock_probe:
             res = _resolve_sibling_cts_via_unified_probe(
-                trig, h1, m15, pool=pool, hi=23,
+                trig, h1, m15, pool=pool, hi=23, parent_floor_idx=0,
             )
         mock_probe.assert_not_called()
         assert isinstance(res, ProbeFailure)
@@ -858,7 +859,7 @@ class TestResolveSiblingCts:
         )
         with _patched_cts_derivation(), _patched_probe(return_value=pending) as mock_probe:
             res = _resolve_sibling_cts_via_unified_probe(
-                trig, h1, m15, pool=pool, hi=23,
+                trig, h1, m15, pool=pool, hi=23, parent_floor_idx=0,
             )
         mock_probe.assert_called_once()
         assert isinstance(res, ProbeFailure)
@@ -945,26 +946,27 @@ class TestResolveSiblingCts:
         fake = _fake_probe_result(starting_idx=12, source="cts_confirmed", finalize_idx=hi)
         with _patched_cts_derivation(), _patched_probe(return_value=fake) as mock_probe:
             res = _resolve_sibling_cts_via_unified_probe(
-                trig, h1, m15, pool=pool, hi=hi,
+                trig, h1, m15, pool=pool, hi=hi, parent_floor_idx=0,
             )
         assert _probe_kwargs(mock_probe)["probe_end_idx"] == 27
         assert isinstance(res, ResolvedStart) and res.finalize_idx == 27
 
 
 # ---------------------------------------------------------------------------
-# _sibling_cts_idx_window — per-variation lower bound (unchanged semantics;
-# `hi` is now the reading trigger's trigger_idx, passed in by the sweep).
-# These four pin behaviour the contract says SURVIVES Plan C.
+# _sibling_cts_idx_window — per-variation lower bound (`hi` = the reading
+# trigger's trigger_idx, passed in by the sweep), never below the parent
+# cycle's M15 floor (PLAN_R §2: the pool read and the raw-frame fallback have
+# different scopes).
 # ---------------------------------------------------------------------------
 
 class TestSiblingCtsIdxWindow:
 
-    def test_first_counter_lo_is_zero(self):
+    def test_first_counter_lo_is_the_parent_floor(self):
         h1 = _h1_df_uptrend(n_hours=5)
         m15 = _m15_from_h1(h1)
         trig = _make_trigger("first_counter", trigger_event_idx=4)
-        lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19)
-        assert lo == 0
+        lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19, parent_floor_idx=11)
+        assert lo == 11
         assert hi == 19
 
     def test_subsequent_confluence_lo_from_prior_sd(self):
@@ -974,8 +976,8 @@ class TestSiblingCtsIdxWindow:
             "subsequent_confluence", lower_sd=1,
             trigger_event_idx=4, prior_sd_trigger_idx=1,
         )
-        lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19)
-        # prior_sd H1 idx 1 → last-M15-of-hour = 4*1+3 = 7
+        lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19, parent_floor_idx=3)
+        # prior_sd H1 idx 1 → last-M15-of-hour = 4*1+3 = 7 > floor 3
         assert lo == 7
         assert hi == 19
 
@@ -986,18 +988,57 @@ class TestSiblingCtsIdxWindow:
             "subsequent_counter", lower_sd=-1,
             trigger_event_idx=4, prior_cts_prox_idx=2,
         )
-        lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19)
-        # prior_cts H1 idx 2 → last-M15-of-hour = 4*2+3 = 11
+        lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19, parent_floor_idx=7)
+        # prior_cts H1 idx 2 → last-M15-of-hour = 4*2+3 = 11 > floor 7
         assert lo == 11
         assert hi == 19
 
-    def test_missing_prior_meta_degrades_to_zero(self):
+    @pytest.mark.parametrize("use_case,meta_key", [
+        ("subsequent_confluence", "prior_sd_trigger_idx"),
+        ("subsequent_counter", "prior_cts_prox_idx"),
+    ])
+    def test_a_prior_hour_before_the_floor_is_raised_to_the_floor(self, use_case, meta_key):
+        h1 = _h1_df_uptrend(n_hours=5)
+        m15 = _m15_from_h1(h1)
+        trig = _make_trigger(use_case, trigger_event_idx=4, **{meta_key: 1})
+        lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19, parent_floor_idx=11)
+        # prior H1 idx 1 → LOH 7 < floor 11 → lo = max(7, 11)
+        assert lo == 11
+        assert hi == 19
+
+    def test_missing_prior_meta_degrades_to_the_floor(self):
         h1 = _h1_df_uptrend(n_hours=5)
         m15 = _m15_from_h1(h1)
         trig = _make_trigger("subsequent_confluence", lower_sd=1, trigger_event_idx=4)
-        lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19)
-        assert lo == 0
+        lo, hi = _sibling_cts_idx_window(trig, h1, m15, 19, parent_floor_idx=11)
+        assert lo == 11
         assert hi == 19
+
+    def test_the_floor_is_required(self):
+        h1 = _h1_df_uptrend(n_hours=5)
+        m15 = _m15_from_h1(h1)
+        trig = _make_trigger("first_counter", trigger_event_idx=4)
+        with pytest.raises(TypeError):
+            _sibling_cts_idx_window(trig, h1, m15, 19)  # type: ignore[call-arg]
+
+    def test_the_fallback_extreme_stays_inside_the_parent_cycle(self):
+        """PLAN_R §2: the fallback `_window_extreme_idx` scans the RAW shared frame. On the uptrend
+        fixture the lowest low of [0, 23] is M15 1 (0.5995, the data start) — the in-cycle lowest low
+        of [floor 11, 23] is M15 11 (0.6078). A +1 probe (bearish parent) takes the `-lower_sd` = −1
+        side (the lowest low); the sibling lens is empty, so the fallback runs."""
+        h1 = _h1_df_uptrend(n_hours=10)
+        m15 = _m15_from_h1(h1)
+        assert edm._window_extreme_idx(m15, 0, 23, -1) == 1      # the pre-floor global extreme
+        trig = _make_trigger("first_counter", parent_sd=-1, lower_sd=1, trigger_event_idx=5)
+        fb_ref = _ref_zone("ad_hoc_bos_0", 11, inner=0.6080, outer=0.6075, side="buy")
+        fake = _fake_probe_result(starting_idx=14, source="ad_hoc_bos_0", finalize_idx=23)
+        with _patched_fc_ref(fb_ref) as mock_fb, _patched_probe(return_value=fake):
+            res = _resolve_sibling_cts_via_unified_probe(
+                trig, h1, m15, pool=SubStructurePool(), hi=23, parent_floor_idx=11,
+            )
+        bound = _FC_REF_SIG.bind(*mock_fb.call_args.args, **mock_fb.call_args.kwargs).arguments
+        assert bound["m15_input_idx"] == 11                       # NOT 1
+        assert isinstance(res, ResolvedStart) and res.probe_input_idx == 11
 
 
 # ---------------------------------------------------------------------------
@@ -1021,7 +1062,7 @@ class TestDispatcher:
         with patch.object(edm, "_resolve_first_confluence_via_unified_probe",
                           return_value=fake) as mock_conf, \
                 patch.object(edm, "_resolve_sibling_cts_via_unified_probe") as mock_sib:
-            out = _resolve_trigger_m15_start(trig, h1, m15, pool=pool, hi=19)
+            out = _resolve_trigger_m15_start(trig, h1, m15, pool=pool, hi=19, parent_floor_idx=0)
         mock_conf.assert_called_once()
         mock_sib.assert_not_called()
         assert out is fake
@@ -1050,13 +1091,25 @@ class TestDispatcher:
         with patch.object(edm, "_resolve_sibling_cts_via_unified_probe",
                           return_value=fake) as mock_sib, \
                 patch.object(edm, "_resolve_first_confluence_via_unified_probe") as mock_conf:
-            out = _resolve_trigger_m15_start(trig, h1, m15, pool=pool, hi=15)
+            out = _resolve_trigger_m15_start(trig, h1, m15, pool=pool, hi=15, parent_floor_idx=7)
         mock_conf.assert_not_called()
         mock_sib.assert_called_once()
         _, kwargs = mock_sib.call_args
         assert kwargs["pool"] is pool
         assert kwargs["hi"] == 15
+        assert kwargs["parent_floor_idx"] == 7          # PLAN_R §2: forwarded, never dropped
         assert out is fake
+
+    def test_the_parent_floor_is_required(self):
+        h1 = _h1_df_uptrend(n_hours=5)
+        m15 = _m15_from_h1(h1)
+        trig = _make_trigger("first_counter", trigger_event_idx=3)
+        with pytest.raises(TypeError):
+            _resolve_trigger_m15_start(trig, h1, m15, pool=SubStructurePool(), hi=15)  # type: ignore[call-arg]
+        with pytest.raises(TypeError):
+            _resolve_sibling_cts_via_unified_probe(  # type: ignore[call-arg]
+                trig, h1, m15, pool=SubStructurePool(), hi=15,
+            )
 
     def test_legacy_escape_hatch_is_gone(self):
         # §7: `_LEGACY_PROBE_USE_CASES` / `_resolve_via_legacy_probe` deleted,
@@ -1073,7 +1126,7 @@ class TestDispatcher:
         # PLAN-AMBIGUITY: the plan says the legacy default is retired and an
         # unknown use_case must raise, but does not name the exception type.
         with pytest.raises((ValueError, KeyError, AssertionError)):
-            _resolve_trigger_m15_start(trig, h1, m15, pool=SubStructurePool(), hi=15)
+            _resolve_trigger_m15_start(trig, h1, m15, pool=SubStructurePool(), hi=15, parent_floor_idx=0)
 
     def test_sibling_entity_df_kwarg_is_gone(self):
         h1 = _h1_df_uptrend(n_hours=5)
@@ -1081,7 +1134,7 @@ class TestDispatcher:
         trig = _make_trigger("first_counter", trigger_event_idx=3)
         with pytest.raises(TypeError):
             _resolve_trigger_m15_start(  # type: ignore[call-arg]
-                trig, h1, m15, sibling_entity_df=m15.copy(),
+                trig, h1, m15, sibling_entity_df=m15.copy(), parent_floor_idx=0,
             )
 
     def test_resolved_types_are_the_sweep_definitions(self):
@@ -1315,7 +1368,7 @@ class TestFinalizeEqualsTrigger:
         fake = _fake_probe_result(starting_idx=12, source="cts_confirmed", finalize_idx=20)
         with _patched_cts_derivation(), _patched_probe(return_value=fake):
             with pytest.raises(AssertionError):
-                _resolve_sibling_cts_via_unified_probe(trig, h1, m15, pool=pool, hi=23)
+                _resolve_sibling_cts_via_unified_probe(trig, h1, m15, pool=pool, hi=23, parent_floor_idx=0)
 
     def test_cache_hit_record_is_exempt(self):
         h1 = _h1_df_uptrend(n_hours=10)
@@ -1330,8 +1383,8 @@ class TestFinalizeEqualsTrigger:
         t2 = _make_trigger("first_counter", parent_cycle_id=2, lower_sd=-1, trigger_event_idx=6)
         fake = _fake_probe_result(starting_idx=12, source="cts_confirmed", finalize_idx=23)
         with _patched_cts_derivation(), _patched_probe(return_value=fake) as mock_probe:
-            r1 = _resolve_sibling_cts_via_unified_probe(t1, h1, m15, pool=pool, hi=23)
-            r2 = _resolve_sibling_cts_via_unified_probe(t2, h1, m15, pool=pool, hi=27)
+            r1 = _resolve_sibling_cts_via_unified_probe(t1, h1, m15, pool=pool, hi=23, parent_floor_idx=0)
+            r2 = _resolve_sibling_cts_via_unified_probe(t2, h1, m15, pool=pool, hi=27, parent_floor_idx=0)
             assert mock_probe.call_count == 1
         assert isinstance(r1, ResolvedStart) and r1.cache_hit is False and r1.finalize_idx == 23
         assert isinstance(r2, ResolvedStart)
