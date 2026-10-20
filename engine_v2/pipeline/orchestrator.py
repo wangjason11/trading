@@ -823,6 +823,93 @@ def _count_sub_wvmi(sub_results: list) -> Dict[str, Any]:
     return counts
 
 
+def _final_proximity_triggers(
+    batch: Dict[tuple, list],
+    overlay: Any,
+    pool: Any,
+) -> Dict[tuple, list]:
+    """The H1 proximity lists after the sweep (PLAN_R §5.2): each overlay-driven cycle's scan list (a sub-sourced
+    trigger gets `prox_ref_sub_id` = its source sub's FINAL id — numbered after the sweep), every other cycle's batch
+    list (collapsed: parent zones only). In the batch's cycle order, then any cycle only the overlay produced.
+
+    ASSERTED (the main WVMI gate reads only the first sd of each cycle — `_first_sd_prox_gate`): each cycle's first
+    trigger is the batch's — (idx, direction, trigger_inner, zone_kind). It is always on the first sd rung, a parent
+    zone: a POI is passed only by a close beyond its outer, so the low reached its inner first; Rule 2 could block it
+    only on a narrow cycle whose CTS was not pullback-confirmed, which Rule 1 rules out."""
+    from dataclasses import replace as _replace
+
+    def _key(t):
+        return (int(t.idx), t.direction, float(t.trigger_inner), t.zone_kind)
+
+    out: Dict[tuple, list] = {}
+    keys = list(batch) + [k for k in sorted(overlay.scans) if k not in batch]
+    for key in keys:
+        if key not in overlay.scans:
+            out[key] = list(batch[key])
+            continue
+        lst = []
+        for t in overlay.scans[key].triggers:
+            rung = overlay.used.get((key, int(t.idx)))
+            if rung is not None:
+                t = _replace(t, meta={**t.meta, "prox_ref_sub_id": pool.get_by_pool_idx(rung.sub_pool_idx).sub_id})
+            lst.append(t)
+        b = batch.get(key, [])
+        assert (not b and not lst) or (b and lst and _key(b[0]) == _key(lst[0])), (
+            f"[multi_tf:dual] {key}: the sweep's first proximity trigger "
+            f"{_key(lst[0]) if lst else None} != the batch's {_key(b[0]) if b else None} — the main WVMI gate read it"
+        )
+        if lst:
+            out[key] = lst
+    return out
+
+
+def _assert_proximity_zones_in_projection(overlay: Any, pool: Any, results: list) -> None:
+    """PLAN_R §5.2: every sub zone that was ever a proximity REFERENCE (the ones a trigger fired on included) has
+    the same inner (kind, cycle) in its sub's REAL projection, and a BOS zone the same outer at every candle it was the
+    reference (as of the close, frozen at the sub's end) — the overlay read it as of its own usable moment; a
+    difference = a zone that changed after it became usable: a design question for the user, never a silent pick."""
+    by_id = {int(r.meta["sub_id"]): r for r in results}
+    refs: Dict[tuple, list] = {}
+    for key, h, sd_ref, opp_ref, *_rest in overlay.ref_log:
+        for rung in (sd_ref, opp_ref):
+            if rung is not None and rung.source == "sub":
+                refs.setdefault(rung.key, [rung, []])[1].append((key, h))
+    for (key, h), rung in overlay.used.items():
+        refs.setdefault(rung.key, [rung, []])[1].append((key, h))
+    for rung, uses in refs.values():
+        sub = pool.get_by_pool_idx(rung.sub_pool_idx)
+        res = by_id.get(sub.sub_id)
+        key, h = min(uses)
+        assert res is not None, f"[multi_tf:dual] {key} H1 {h}: source pool#{sub.pool_idx} has no projection"
+        sb = int(res.meta["slice_begin"])
+        if rung.zone_kind == "BOS":
+            zones = [z for z in res.kl_zones if z.source_kind == "BOS" and int(z.meta["cycle_id"]) == rung.sub_cycle_id]
+            inners = [float(z.meta["inner"]) for z in zones]
+        else:
+            zones = [p for p in res.poi_zones if int(p.meta["cycle_id"]) == rung.sub_cycle_id]
+            inners = [float(p.top) if p.side == "buy" else float(p.bottom) for p in zones]
+        assert inners == [rung.inner], (
+            f"[multi_tf:dual] {key} H1 {h}: sub_{sub.sub_id} c{rung.sub_cycle_id} {rung.zone_kind} {rung.inner} "
+            f"read as of its moment, but the sub's projection has {inners}"
+        )
+        if rung.zone_kind == "BOS":
+            z = zones[0]
+            edge = "bottom" if z.side == "buy" else "top"
+            steps = z.meta["bounds_steps"]
+            for k, hh in uses:
+                t = overlay.loh(hh - 1)          # the reference at candle hh was picked knowing LOH(hh - 1)
+                if sub.end_idx is not None:
+                    t = min(t, int(sub.end_idx))
+                real = float(steps[0][edge])
+                for s in steps[1:]:
+                    if int(s["expanded_idx"]) + sb <= t:
+                        real = float(s[edge])
+                assert rung.outer_at(hh - 1) == real, (
+                    f"[multi_tf:dual] {k} H1 {hh}: sub_{sub.sub_id} c{rung.sub_cycle_id} BOS outer "
+                    f"{rung.outer_at(hh - 1)} vs the sub's projection {real}"
+                )
+
+
 def _run_multi_tf_dual(
     h1_df: pd.DataFrame,
     sorted_events: list,
@@ -886,6 +973,8 @@ def _run_multi_tf_dual(
     )
     from engine_v2.multitf.lifecycle_sweep import SweepTrigger, run_lifecycle_sweep
     from engine_v2.multitf.parent_tables import build_parent_tables
+    from engine_v2.multitf.proximity_overlay import ProximityOverlay, project_sub_as_of
+    from engine_v2.zones.zone_proximity import build_cycle_proximity_scans
     from engine_v2.multitf.sub_structure_pool import (
         LENS_CONFLUENCE, LENS_COUNTER, SubStructurePool, resolve_lens,
     )
@@ -905,13 +994,11 @@ def _run_multi_tf_dual(
     )
     var4_all = list(subsequent_counter_triggers or [])
 
-    print(
-        f"[multi_tf:dual] confluence var1 finalized="
-        f"{len(var1_finalized)}/{len(var1_all)} "
-        f"var3={len(var3_all)} | counter var2={len(var2_triggers)} "
-        f"var4={len(var4_all)}"
-    )
+    # The batch var3 / var4 (parent zones only) decide this early return: with no var1 / var2 there is no sub, so
+    # no proximity overlay, and the sweep would generate exactly the batch lists (PLAN_R §5.2) — every-empty here
+    # means every-empty after the sweep, and a collapsed cycle's batch var3 / var4 still need their unresolved rows.
     if not var1_all and not var2_triggers and not var3_all and not var4_all:
+        print(f"[multi_tf:dual] confluence var1 finalized=0/{len(var1_all)} var3=0 | counter var2=0 var4=0")
         print("[multi_tf:dual] no triggers — no subs built")
         return [], []
 
@@ -966,26 +1053,59 @@ def _run_multi_tf_dual(
             trigger_event_idx=int(tei), source=v2,
             parent_input_idx=v2.meta["parent_input_idx"],   # uc1 always writes it — a miss fails loudly
         ))
-    for v3 in var3_all:
+    def _var3_sweep_trigger(v3) -> SweepTrigger:
         mt = subsequent_confluence_to_mt(v3, h1_df)
-        sweep_triggers.append(SweepTrigger(
+        return SweepTrigger(
             lens=resolve_lens("subsequent_confluence"),
             parent_sid=int(mt.parent_sid), parent_cycle_id=int(mt.parent_cycle_id),
             trigger_type="subsequent_confluence",
             trigger_idx=_loh(v3.trigger_event_idx), direction=int(mt.lower_sd),
             trigger_event_idx=int(v3.trigger_event_idx), source=mt,
             parent_input_idx=int(v3.input_idx),
-        ))
-    for v4 in var4_all:
+        )
+
+    def _var4_sweep_trigger(v4) -> SweepTrigger:
         mt = subsequent_counter_to_mt(v4, h1_df)
-        sweep_triggers.append(SweepTrigger(
+        return SweepTrigger(
             lens=resolve_lens("subsequent_counter"),
             parent_sid=int(mt.parent_sid), parent_cycle_id=int(mt.parent_cycle_id),
             trigger_type="subsequent_counter",
             trigger_idx=_loh(v4.trigger_event_idx), direction=int(mt.lower_sd),
             trigger_event_idx=int(v4.trigger_event_idx), source=mt,
             parent_input_idx=int(v4.input_idx),
-        ))
+        )
+
+    # --- 3b. The proximity overlay (PLAN_R step 2, §5.2) ---
+    # Every NON-collapsed parent cycle's proximity scan is re-driven INSIDE the sweep (the overlay reads sub zones, and
+    # subs come from its triggers): the same `CycleProximityScan`s the batch built (`build_cycle_proximity_scans`, the
+    # batch's own inputs), stepped per H1 candle at LOH(h − 1). Its subsequent_* triggers are generated there; only a
+    # collapsed cycle's (parent zones only — no sub exists there) come from the batch lists.
+    scans = build_cycle_proximity_scans(
+        h1_df, sorted_events, kl_zones, poi_zones, _pip_size_from_pair(h1_df), "H1",
+    )
+    for key in scans:
+        assert tables.has_cycle(*key), f"[multi_tf:dual] proximity cycle {key} has no parent CTS_ESTABLISHED"
+    tick_scans = {k: sc for k, sc in scans.items() if not tables.is_collapsed(*k)}
+    var3_batch_kept = [v for v in var3_all if (v.parent_sid, v.parent_cycle_id) not in tick_scans]
+    var4_batch_kept = [v for v in var4_all if (v.parent_sid, v.parent_cycle_id) not in tick_scans]
+    for v3 in var3_batch_kept:
+        sweep_triggers.append(_var3_sweep_trigger(v3))
+    for v4 in var4_batch_kept:
+        sweep_triggers.append(_var4_sweep_trigger(v4))
+
+    def _make_proximity_triggers(key, trig_list, h: int):
+        # The detectors on the cycle's list so far (they read only list[i-1], list[i-2] and the H1 OHLC in
+        # [prior.idx, h]); the entries AT candle h are the new ones.
+        one = {key: list(trig_list)}
+        made = []
+        for v3 in detect_subsequent_confluence_triggers(sorted_events, one, h1_df, parent_tf="H1"):
+            if int(v3.trigger_event_idx) == int(h):
+                made.append((v3, _var3_sweep_trigger(v3)))
+        for v4 in detect_subsequent_counter_triggers(sorted_events, one, h1_df, parent_tf="H1"):
+            if int(v4.trigger_event_idx) == int(h):
+                made.append((v4, _var4_sweep_trigger(v4)))
+        return made
+
 
     # --- 4. The sweep (§17.6) ---
     sub_pool = SubStructurePool()
@@ -1020,14 +1140,38 @@ def _run_multi_tf_dual(
             sub_pool, sub, R, probe_direction, m15, timeframe="M15", parent_path=parent_path,
         )
 
+    overlay = ProximityOverlay(
+        scans=tick_scans, pool=sub_pool, loh=_loh, project=project_sub_as_of,
+        make_triggers=_make_proximity_triggers,
+    )
     sweep = run_lifecycle_sweep(
         sweep_triggers, pool=sub_pool, tables=tables,
         resolve_start=_resolve_start, build_geometry=_build_geometry,
         resolve_reversal=_resolve_reversal, resolve_cross_fib_limit=_resolve_cross_fib_limit,
-        parent_path=parent_path, sub_tf="M15",
+        parent_path=parent_path, sub_tf="M15", proximity=overlay,
     )
     # The R6-2 tripwire: P re-derived the §1.2 way at each sub's start (a mismatch WARNs, the stored P stays).
     check_cross_fib_limits(sub_pool, sorted_events, tables)
+
+    # --- 4b. The FINAL H1 proximity lists (PLAN_R §5.2) replace the batch's everywhere downstream ---
+    final_zpt = _final_proximity_triggers(main_zone_proximity_triggers or {}, overlay, sub_pool)
+    var3_all = sorted(var3_batch_kept + [v for v, st in overlay.generated if st.trigger_type == "subsequent_confluence"],
+                      key=lambda t: t.trigger_event_idx)
+    var4_all = sorted(var4_batch_kept + [v for v, st in overlay.generated if st.trigger_type == "subsequent_counter"],
+                      key=lambda t: t.trigger_event_idx)
+    h1_df.attrs["zone_proximity_triggers"] = final_zpt
+    h1_df.attrs["subsequent_confluence_triggers"] = var3_all
+    h1_df.attrs["subsequent_counter_triggers"] = var4_all
+    meta["zone_proximity_triggers"] = final_zpt
+    meta["subsequent_confluence_triggers"] = var3_all
+    meta["subsequent_counter_triggers"] = var4_all
+    meta["proximity_overlay"] = overlay
+    print(
+        f"[multi_tf:dual] confluence var1 finalized="
+        f"{len(var1_finalized)}/{len(var1_all)} "
+        f"var3={len(var3_all)} | counter var2={len(var2_triggers)} "
+        f"var4={len(var4_all)}"
+    )
     n_records = len(sub_pool.all_records())
     print(
         f"[pool] unique subs={len(sub_pool.all())} records={n_records} "
@@ -1066,6 +1210,7 @@ def _run_multi_tf_dual(
                 f"[pool] pool#{sub.pool_idx} key=(M15,{sub.direction},{sub.starting_idx}) "
                 f"has no live record — no sub_id, logged, not rendered"
             )
+    _assert_proximity_zones_in_projection(overlay, sub_pool, all_results)
 
     # --- 6. WVMI trigger attribution per lens (Plan G G4) ---
     # The records were computed inside each projection (step 5, ungated) and
@@ -1073,7 +1218,7 @@ def _run_multi_tf_dual(
     _stamp_sub_wvmi_trigger_meta(
         results_by_lens,
         _wvmi_trigger_streams_by_lens(
-            tables.cycles(), main_zone_proximity_triggers, var3_all, var4_all,
+            tables.cycles(), final_zpt, var3_all, var4_all,
         ),
         parent_df=h1_df, m15_df=m15, lens_dfs=lens_dfs, parent_path_id=parent_path,
     )

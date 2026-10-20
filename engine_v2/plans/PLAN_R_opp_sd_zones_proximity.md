@@ -50,7 +50,7 @@ The user asked for "proximity" in every name: "since we have used the term refer
 - **The sub = the side's proximity source sub, STICKY (the hold, round 9: "A hold").**
   - It starts empty (no sub rungs).
   - **Candidates:** a unique sub of that side's direction under this parent cycle, from either lens, with a NON-zero-length record under (S, C) whose start ≤ `LOH(h−1)`. The user: "based on unique subs".
-  - **Moving forward:** at each candle the source moves to the newest candidate that is newer than the current source and has at least one usable zone. On the sd side that zone must also QUALIFY (beyond the parent POI); otherwise a newer sub with only non-qualifying zones would displace held qualifying rungs (plan review). Explained to the user 2026-10-20 with (1,2)'s data; see §5.3.
+  - **Moving forward — REVISED 2026-10-20 at step 2's landing review (the user: "Contributed + reachable"; `qa_findings.md` round 14):** at each candle the source moves to the newest candidate that is newer than the current source and CONTRIBUTES a REACHABLE zone: in its most recent usable cycle (the strict cycle below), a zone that would be a rung (sd: QUALIFYING, beyond the parent POI) AND lies on the parent's side of the side's last rung (sd: inside the parent BOS; opp_sd: inside the parent CTS). The plan's first text ("has at least one usable zone; on the sd side it must also QUALIFY") let a newer sub take over with zones from an older cycle, or beyond the last rung, and contribute nothing reachable — dropping the side to the parent CTS / BOS, the fallback the hold exists to prevent (the rules reviewer's synthetic cases). On this window it changes only when some sources move, never a reference (§8).
   - **"Newer"** = a later unique-sub `start_idx`; ties go to the higher pool idx.
   - It never moves back, and it does not change because its sub ended or was replaced, by reversal or otherwise. Option (A)'s text: "never because their sub ended".
   - **An ended source sub is FROZEN.** It contributes only zones whose moment is ≤ its lifecycle end, and outer steps up to that end; passes still apply. Its geometry keeps forming cycles to the data edge that never existed in its real projection (plan review: pool#3 c3, pool#5 c1).
@@ -580,3 +580,100 @@ The predictions below are for the decided hold (A) and Q1 = "from when usable".
     (N1–N10 + the 0a-bound R0a-1…3): 13 / 13 KILLED. Every results file saved beside its mutant file.
   - Carried to step 2 (the reviewer's heads-ups): the opp_sd unlock (Q2 / Q3) needs new state; `_kl_outer_at` is the
     parent's H1 clock — sub zones need LOH + the frozen end cap; the first-sd == WVMI-gate assert lives in step 2.
+- **Step 2 — BUILT, variant replay + `/compare` vs S_Q = §5.4's prediction; NOT committed (the landing review, then the
+  user's chart look, then commit 4 on the user's go).**
+  - **Code.** `multitf/proximity_overlay.py` (new): `SubZone` + `build_sub_zone_view` (each zone as of its own usable
+    moment — `project_to_window` capped at its BOS_CONFIRMED / CTS_CONFIRMED event moment; a BOS zone's outer steps
+    from the natural-end projection, counted by moment; inners asserted unmoved; the view's stdout captured, only
+    grep-pattern lines re-printed `[prox_view]`) and `ProximityOverlay` (`initial_ticks` / `on_tick`: close(h − 1) →
+    the sticky source per side + the strict most-recent cycle + the sd qualifying bound + the frozen ended source →
+    `set_overlay` → the opp_sd unlock on a newer basis (pool idx, cycle) → step(h) → the detectors → SweepTriggers at
+    LOH(h); the no-M15 hour → unresolved `no_m15_hour`). `lifecycle_sweep`: phase 5 `PROXIMITY_TICK` after SUB_END,
+    the injected `proximity` driver. `zone_proximity`: the rung's `usable_idx`; meta `prox_ref_sub_id` /
+    `prox_ref_cycle` / `prox_ref_usable_idx` (None on a parent zone); `unlock`; the hover helpers
+    `proximity_trigger_type_label` / `proximity_trigger_sub_usable_idx`. `orchestrator._run_multi_tf_dual`: the scans
+    of the non-collapsed cycles → the overlay; the sweep fed only the collapsed cycles' batch var 3 / var 4; after the
+    sweep `_final_proximity_triggers` (the sub id mapped; the first-sd == batch assert) replaces
+    `attrs` / `meta["zone_proximity_triggers" | "subsequent_*_triggers"]`; the count log moved after the sweep (the
+    early return prints it too); `_assert_proximity_zones_in_projection` after the render; the sub WVMI attribution on
+    the final lists. Both charts: the type line names a sub source; `zone_confirmed_idx` branches on the source first.
+  - **Measured vs §5.4 (all as predicted):** H1 triggers 6 → 10 — (0,1) 748 / +820 `opp_sd: sub_3 c2 POI 0.58096` /
+    +872 sd:BOS; (1,2) 935 / 954 `opp_sd: sub_6 c0 POI 0.57306` / 1035 / +1045 `opp_sd: sub_8 c2 BOS 0.57728` / +1046;
+    1047–1057 blocked by the cap (counters sd 0 / opp_sd 1); the hover `zone_confirmed_idx` of the sub markers 772 /
+    947 / 1045. The pool table (`[pool]` lines) BYTE-IDENTICAL to the shadow's (`sims/shadow_full2.log`): 11 subs, 15
+    records, 4 unresolved (the same rows); the sub WVMI line identical (acted 9, records 19); exactly 1 `sibling-CTS
+    unavailable` (1046's subsequent_counter, window (4183, 4187)). CSVs: the 10 H1 ones (main WVMI included) and the
+    unresolved table identical to S_Q (11), the 16 M15 lens CSVs differ. Figures: H1 81/236 — ONE trace differs (the
+    marker trace), layout equal; M15 counter 146/135 → 164/144, confluence 289/293 → 257/263. Skip grep 22 → 24: the
+    `sibling-CTS unavailable` line + one more pandas FutureWarning (`market_structure.py:2484`, the fillna-downcasting
+    deprecation; 5 in a replay of `d26208e` this session, 6 now and in `sims/shadow_full2.log` — and 6 in
+    `shadow_fix0a.log` with 9 subs, so its count is not a function of the sub count; benign). Replay 57.4 s
+    (`multi_tf_dual` 8.6 → 14.2 s; the step-2 reviewer timed the 57 view projections at 4.0 s vs §5.2's "1–3 s").
+  - **Not in the §5.4 table, measured (all from the new pool, the shadow the same):** sub_5 (−1,3304) is now first built
+    from (0,1) → its cross-fib limit 0.57376 `parent_cts_threshold` → 0.5736 `parent_bos_threshold`, `ic_ref_price`
+    0.574 → 0.5736, 3 IC rows lose `ic_ref_reason=ic_past_reference` (its POI pick unchanged); sub_8 (1,4027) cut at
+    4187 drops its c2 POI (no CTS_CONFIRMED — never usable anyway) and that cycle's 90 IC rows; sub_3 (−1,2639)'s
+    confluence record runs to 3589 while the sub ends at 3491 (the §17.5 cross-lens end, first seen on this window);
+    the confluence `fib_lifecycle.csv` `end_idx` column turns int (no open fib left on that lens).
+  - **The firing chain vs the §1 simulator** (`build/m4_run.log`; the engine trace `build/trace_overlay.log`): the same
+    reference changes, gaps and passes candle for candle (the engine logs every gated candle — 1047–1057 — the
+    simulator only the gated candles price reached — 1048 / 1049 / 1050 / 1054; filtered by the hit test the two
+    agree), except ONE invisible pass: (0,1)'s sd rung (1,3230) c0 BOS is passed at 897 on the engine, 895 in the
+    simulator — its outer EXPANDS (0.57418 → 0.5741 @3502 → 0.57407 @3503 → 0.57376 @3521) and
+    the engine applies the decided "outer as of the close" (895's close 0.5741 is not beyond it); the simulator had
+    that zone's INIT outer only (the shadow's dump). The sd side is locked on the BOS since 755, so nothing reads it.
+    (0,0) also gets overlay rungs (counter sub (−1,1797)); its gap never < 181 → no trigger — but it holds the window's
+    first opp_sd-side passes (c4 POI at 609, c4 BOS at 616) and so the first opp_sd lock (on the CTS from 617; its
+    basis = the passed zone's own, pool#1 c4).
+  - **Tests** (suite 1814, +28): `tests/test_proximity_overlay.py` (24: the clocks, record-start gating, zero-length,
+    the rungs, the sd bound + the qualifying source switch, the hold, the frozen source, the opp_sd unlock both ways +
+    the held lock, the permanent sd lock, the no-M15 hour, the view (as of the moment, POI needs CTS_CONFIRMED, inner
+    moved → raise), the predicted table on the REAL sweep + overlay with the real rows / zones (embedded
+    `SUB_ZONES`), the final lists + the first-sd assert + view == projection, the hover in both charts, three driver
+    call-site tests); `test_lifecycle_sweep_unit` (+3: the tick after SUB_END, a tick's fire / unresolved, never in the
+    past); `test_sub_wvmi_per_sub` (+1: the attribution reads the final lists).
+  - **Mutants** `build/mutants_2.py`: 26 / 27 KILLED; 2-26 (the lock basis re-recorded every tick) EQUIVALENT — a basis
+    only moves forward and never returns to None, so "differs from the lock-time basis" and "differs from the previous
+    tick's" first hold on the same tick. First run 22 / 27: 2-12 survived because `test_the_sd_lock_never_reopens` had
+    no sd rung (its sub held a POI only — the strict cycle needs a usable BOS: the test passed for the wrong reason;
+    fixed, now asserts the rung is there); 2-14 / 2-15 / 2-16 = call-site gaps → three driver tests.
+- **The step-2 landing review — DONE (3 read-only agents, 0.82M tokens: the user's rules 0.27M, the sweep integration
+  0.28M, the measurements 0.26M; stated 0.8–1.2M).** Measurements: every §5.4 claim MATCHES (re-derived from the
+  outputs: the 10 markers and their hover values, the pool keyed by (direction, starting_idx), 16 / 16 `[pool]` lines
+  byte-identical to the shadow, every H1 CSV, the H1 figure outside the marker trace; every M15 CSV difference traced to
+  a new / renumbered / re-windowed sub; the embedded test data = the real values). Sweep integration: no causality or
+  ordering defect (0 violations over 1196 instrumented tick reads; all 21 overlay rungs ever set = the real
+  projection, outers included). Fixed in the working tree (the step-2 commit), no output change on this window (the
+  replay after the fixes = the variant replay, md5 / figure hash):
+  - **The source switch rule** — the user's decision (§1 "Moving forward", REVISED above). On this window only the
+    MOVES shift ((0,1) sd: (1,2365) never becomes the source, (1,3230) at 873 not 821; (1,2) sd: (−1,3304) at 936
+    not 935; (1,2) opp_sd: (1,3621) at 947 not 936) — every reference, pass and trigger the same.
+  - **The opp_sd lock basis** = the PASSED reference's own (sub, cycle) (it was the lock tick's overlay basis: a newer
+    cycle beyond the CTS refreshed on that same tick kept the side locked for good, against Q3; the rules reviewer's
+    synthetic case).
+  - A cycle whose BOS_CONFIRMED has no BOS zone in its capped projection now fails loudly (was a silent skip); a
+    no-M15-hour trigger stays in the final `subsequent_*` lists (not pushed); the view's captured stdout re-prints the
+    FULL post-replay grep pattern (`collapsed|retry` were missing), crash-safe (`finally`); the view projection is the
+    module function `proximity_overlay.project_sub_as_of` (was an untestable closure); the view == projection assert
+    covers every sub rung that was ever a reference (inner / kind / cycle; a BOS zone's outer at every such candle).
+  - Test gaps closed (the sweep reviewer's 7 surviving mutants: 4 real): the trigger-making closure on the real lists;
+    `project_sub_as_of` on a real geometry (a zone appears exactly at its moment; = the direct call); close(h − 1)
+    before the refresh; the var 3 attrs write. Plus the switch rule both sides and the lock basis. Docs: LANDMINES
+    (the passes are visible with the overlay; the switch rule; the lock basis; the assert's scope), GLOSSARY (the
+    opp_sd unlock; the sd zone row), the module docstrings, the sweep's grep pattern, the diag's H1-only note, PART4
+    §17.5 (its window examples predate step 2; the "not observable" line is now observable).
+  - **After the fixes:** suite 1820 (+6 for the review: the switch rule both sides, the lock basis, the tick order,
+    `project_sub_as_of` on a real geometry, the closure on the real lists, the view's loud failure + its log capture,
+    the assert's scope + BOS outers; the var 3 attrs pin); `build/mutants_2.py` re-anchored + 13 new (2-27…2-39: the
+    switch rule, the lock basis, each fix, the sweep reviewer's survivors R-A / R-B / R-E / R-G) — 39 / 40 KILLED,
+    2-26 EQUIVALENT (re-anchored; the argument above). The replay after the fixes = the variant replay (27 CSV md5 + 3
+    figure hashes); its skip grep 28 = 24 + 4 OANDA retry lines (benign). The reviewers' scratch scripts:
+    `sims/review1_tests/`, `sims/review2_rules/`, `sims/review2_sweep/`, `sims/review2_measure/`.
+  - **Next:** the user's chart look (H1 first; the stepped "current proximity reference" line is a SAMPLE —
+    `H1_proximity_reference_SAMPLE.html`, rendered from the replay + the overlay's reference log, not part of the
+    build), then commit 4 ONLY on the user's go, then `/commit-save` (a new `LATEST_<branch>`).
+  - **The user's chart look + go (2026-10-20):** "I've reviewed the charts … Assuming everything's implemented
+    correctly, I would like to now pivot slightly" — step 2 committed as built + `/commit-save`; then **step 3: the gap
+    thresholds GATE reference updates instead of capping triggers** (the user's round-15 write-up and the five
+    adopted recommendations: `qa_opp_sd_zones_inputs/qa_findings.md` round 15) — planned below in §9 with a
+    shadow-measured prediction, its own `/compare` against the step-2 save.

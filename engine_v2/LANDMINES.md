@@ -381,10 +381,33 @@ The traps, each a measured or reviewed failure mode:
 - **The pass test reads the outer as of the CLOSE and applies from `i + 1`.** The trigger test of candle `i` uses the
   references picked at its start (passes up to `close(i − 1)`), so a candle never rescues itself; the trigger
   candle's own close counts for the next candle.
-- **Invisible on parent zones, by alternation.** On the reference window the parent POIs are passed at 754 ((0,1))
-  and 1047 ((1,2)) and no trigger moves: after each cycle's last sd the opp_sd never fires, so the sd reference is not
-  consulted again — though 106 lows in 755–901 come within 8 pips of (0,1)'s passed POI
-  (`tests/test_proximity_reference_ladders.py::test_10_…`).
+- **The overlay runs INSIDE the sweep, at `LOH(h − 1)` after SUB_END** (PLAN_R step 2, `multitf/proximity_overlay.py`):
+  the tick reads only what is processed by then — records started by `LOH(h − 1)`, non-zero-length, PROCESSED
+  `end_idx` values — never the sweep's `_active` (it drops the ended records the hold needs) nor
+  `natural_reversal_idx` (known from a sub's creation, the future). Each sub zone is read AS OF ITS OWN USABLE MOMENT
+  (a projection capped at its BOS_CONFIRMED / CTS_CONFIRMED event moment — gated on the EVENTS, never a zone's clamped
+  `confirmed_idx` nor a POI's presence); the natural-end view holds cycles formed after a sub ended. A BOS zone's later
+  expansions are read from the latest projection by each step's moment, frozen at an ended source's end.
+- **The source sub is sticky (the hold) and an ended source is frozen.** A side's source moves only FORWARD, to a newer
+  candidate that CONTRIBUTES a REACHABLE zone — in its most recent usable cycle, a zone that would be a rung (sd:
+  beyond the parent POI) on the parent's side of the last rung (the user, 2026-10-20: "Contributed + reachable"; "any
+  usable zone" let a newer sub contribute nothing reachable and drop the side to the CTS / BOS — the fallback the hold
+  exists to prevent); it never changes because its sub ended or was replaced. The sd lock is
+  permanent; an opp_sd lock is lifted only by a NEWER counter-sub zone (a newer source or the source's newer cycle) —
+  compared with the PASSED reference's own (sub, cycle), never with the overlay basis of the lock's tick (that tick's
+  refresh may already hold a newer cycle beyond the CTS; landing review 2026-10-20).
+- **After the sweep the FINAL lists replace the batch's everywhere** (`attrs["zone_proximity_triggers"]`,
+  `attrs["subsequent_*_triggers"]`, the sub WVMI attribution): a reader left on the pre-sweep lists silently loses
+  the generated triggers. Two asserts guard the seam: each cycle's first trigger == the batch's (the main WVMI gate),
+  and every sub zone that was ever a reference == its sub's real projection (inner, kind, cycle; a BOS zone's outer at
+  every candle it was the reference).
+- **On parent zones alone the passes are invisible, by alternation** (step 1; today: the batch scan — H1-only runs and
+  collapsed cycles). On the reference window the parent POIs are passed at 754 ((0,1)) and 1047 ((1,2)) and no
+  PARENT-ONLY trigger moves: after each cycle's last sd the opp_sd never fires, so the sd reference is not consulted
+  again — though 106 lows in 755–901 come within 8 pips of (0,1)'s passed POI
+  (`tests/test_proximity_reference_ladders.py::test_10_…`). With the overlay (step 2) both passes ARE visible: the
+  754 pass is why (0,1)'s +872 sd fires on the BOS (not on the POI at 830–833), and the 1047 pass moves (1,2)'s sd
+  reference to sub_5 c0's POI at 1048.
 
 ---
 

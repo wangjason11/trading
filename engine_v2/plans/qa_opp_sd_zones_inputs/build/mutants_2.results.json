@@ -1,0 +1,391 @@
+[
+ {
+  "id": "2-01 the tick phase before SUB_END",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_lifecycle_sweep_unit.py::test_the_proximity_tick_runs_after_every_moment_at_its_idx_sub_end_included"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 220.98s (0:03:40)"
+ },
+ {
+  "id": "2-02 LOH(h) instead of LOH(h - 1): the tick knows its own hour",
+  "verdict": "KILLED",
+  "n": 7,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_a_newer_sub_contributing_nothing_reachable_does_not_take_over_the_opp_sd_side",
+   "engine_v2/tests/test_proximity_overlay.py::test_a_sub_is_a_candidate_only_once_its_record_has_started",
+   "engine_v2/tests/test_proximity_overlay.py::test_a_zone_confirmed_in_hour_h_counts_from_h_plus_1",
+   "engine_v2/tests/test_proximity_overlay.py::test_a_zone_is_pass_tested_only_from_the_candle_it_is_usable_the_previous_close_runs_first",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_driver_makes_each_subsequent_trigger_once_at_its_own_candle",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_hold_a_replaced_source_keeps_its_zones_until_the_newcomer_has_one_and_never_comes_back",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows_rows_and_zones"
+  ],
+  "tail": "7 failed, 1813 passed, 3 skipped, 1 deselected, 445 warnings in 219.82s (0:03:39)"
+ },
+ {
+  "id": "2-03 drop the record-start gate",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_a_newer_sd_sub_whose_latest_cycle_contributes_nothing_does_not_take_over",
+   "engine_v2/tests/test_proximity_overlay.py::test_a_sub_is_a_candidate_only_once_its_record_has_started"
+  ],
+  "tail": "2 failed, 1818 passed, 3 skipped, 1 deselected, 445 warnings in 218.78s (0:03:38)"
+ },
+ {
+  "id": "2-04 the POI usable from its cycle's establishment (activation) instead of CTS_CONFIRMED",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_view_reads_each_zone_as_of_its_own_moment_and_a_poi_needs_its_cts_confirmed"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 220.64s (0:03:40)"
+ },
+ {
+  "id": "2-07a the end-freeze off (zones)",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_an_ended_source_is_frozen_its_post_end_cycle_and_outer_steps_are_never_read"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 221.05s (0:03:41)"
+ },
+ {
+  "id": "2-07b the end-freeze off (outer steps)",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_an_ended_source_is_frozen_its_post_end_cycle_and_outer_steps_are_never_read"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 220.35s (0:03:40)"
+ },
+ {
+  "id": "2-08 the natural-end view instead of as of the moment",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_view_fails_loudly_when_an_inner_moved_after_its_moment",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_view_reads_each_zone_as_of_its_own_moment_and_a_poi_needs_its_cts_confirmed"
+  ],
+  "tail": "2 failed, 1818 passed, 3 skipped, 1 deselected, 445 warnings in 220.31s (0:03:40)"
+ },
+ {
+  "id": "2-09 the sub WVMI attribution on the step-1 lists",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_sub_wvmi_per_sub.py::test_the_driver_attributes_the_sub_wvmi_with_the_final_lists_a_sweep_generated_trigger_included"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 221.72s (0:03:41)"
+ },
+ {
+  "id": "2-10 the opp_sd unlock off",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_an_opp_sd_lock_is_lifted_by_a_newer_zone[cycle]",
+   "engine_v2/tests/test_proximity_overlay.py::test_an_opp_sd_lock_is_lifted_by_a_newer_zone[sub]",
+   "engine_v2/tests/test_proximity_overlay.py::test_an_opp_sd_lock_records_the_passed_zones_basis_not_the_refresh_of_its_tick"
+  ],
+  "tail": "3 failed, 1817 passed, 3 skipped, 1 deselected, 445 warnings in 221.25s (0:03:41)"
+ },
+ {
+  "id": "2-11 unlock only by a newer sub (the newer-cycle case dropped)",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_an_opp_sd_lock_is_lifted_by_a_newer_zone[cycle]",
+   "engine_v2/tests/test_proximity_overlay.py::test_an_opp_sd_lock_records_the_passed_zones_basis_not_the_refresh_of_its_tick"
+  ],
+  "tail": "2 failed, 1818 passed, 3 skipped, 1 deselected, 445 warnings in 222.09s (0:03:42)"
+ },
+ {
+  "id": "2-12 the unlock on the sd side too",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows_rows_and_zones",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_sd_lock_never_reopens"
+  ],
+  "tail": "2 failed, 1818 passed, 3 skipped, 1 deselected, 445 warnings in 220.56s (0:03:40)"
+ },
+ {
+  "id": "2-13 the sweep runs without the overlay",
+  "verdict": "KILLED",
+  "n": 5,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_driver_checks_every_used_sub_zone_against_its_projection",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_driver_feeds_the_sweep_only_the_collapsed_cycles_batch_subsequent_triggers",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_driver_makes_each_subsequent_trigger_once_at_its_own_candle",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_driver_replaces_the_batch_lists_with_the_final_ones",
+   "engine_v2/tests/test_sub_wvmi_per_sub.py::test_the_driver_attributes_the_sub_wvmi_with_the_final_lists_a_sweep_generated_trigger_included"
+  ],
+  "tail": "5 failed, 1815 passed, 3 skipped, 1 deselected, 445 warnings in 221.73s (0:03:41)"
+ },
+ {
+  "id": "2-14 the final lists never reach the charts (attrs keep the batch)",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_driver_replaces_the_batch_lists_with_the_final_ones"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 221.11s (0:03:41)"
+ },
+ {
+  "id": "2-15 the view == projection assert not called",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_driver_checks_every_used_sub_zone_against_its_projection"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 220.60s (0:03:40)"
+ },
+ {
+  "id": "2-16 a driven cycle's batch var3 also fed to the sweep (double)",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_driver_feeds_the_sweep_only_the_collapsed_cycles_batch_subsequent_triggers"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 220.74s (0:03:40)"
+ },
+ {
+  "id": "2-17 the H1 chart's zone_confirmed_idx skips the source branch",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_both_charts_branch_on_the_source_before_the_zone_kind"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 219.63s (0:03:39)"
+ },
+ {
+  "id": "2-18 the M15 chart's zone_confirmed_idx skips the source branch",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_both_charts_branch_on_the_source_before_the_zone_kind"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 221.32s (0:03:41)"
+ },
+ {
+  "id": "2-19 the H1 chart's type line not via the helper",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_both_charts_branch_on_the_source_before_the_zone_kind"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 220.54s (0:03:40)"
+ },
+ {
+  "id": "2-20 the M15 chart's type line not via the helper",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_both_charts_branch_on_the_source_before_the_zone_kind"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 219.87s (0:03:39)"
+ },
+ {
+  "id": "2-22 the no-M15 hour pushes its trigger anyway",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_an_h1_hour_without_an_m15_bar_steps_but_pushes_nothing"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 220.94s (0:03:40)"
+ },
+ {
+  "id": "2-23 the first-sd assert dropped",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_first_proximity_trigger_must_be_the_batchs"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 220.25s (0:03:40)"
+ },
+ {
+  "id": "2-24 the sub id never mapped",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_final_lists_map_the_source_sub_id_and_keep_the_collapsed_batch_cycles"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 220.90s (0:03:40)"
+ },
+ {
+  "id": "2-05 the sd filter off",
+  "verdict": "KILLED",
+  "n": 4,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_a_newer_sd_sub_whose_latest_cycle_contributes_nothing_does_not_take_over",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows_rows_and_zones",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_sd_overlay_takes_only_zones_beyond_the_parent_poi_and_needs_one",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_sd_source_moves_only_to_a_sub_with_a_usable_qualifying_zone"
+  ],
+  "tail": "4 failed, 1816 passed, 3 skipped, 1 deselected, 445 warnings in 222.64s (0:03:42)"
+ },
+ {
+  "id": "2-06 the hold off (the round-8 default: the newest LIVE sub with a usable zone)",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_an_ended_source_is_frozen_its_post_end_cycle_and_outer_steps_are_never_read",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_hold_a_replaced_source_keeps_its_zones_until_the_newcomer_has_one_and_never_comes_back",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows_rows_and_zones"
+  ],
+  "tail": "3 failed, 1817 passed, 3 skipped, 1 deselected, 445 warnings in 221.50s (0:03:41)"
+ },
+ {
+  "id": "2-21 the strict most recent cycle -> the oldest usable cycle",
+  "verdict": "KILLED",
+  "n": 5,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_a_newer_sd_sub_whose_latest_cycle_contributes_nothing_does_not_take_over",
+   "engine_v2/tests/test_proximity_overlay.py::test_an_opp_sd_lock_is_lifted_by_a_newer_zone[cycle]",
+   "engine_v2/tests/test_proximity_overlay.py::test_an_opp_sd_lock_records_the_passed_zones_basis_not_the_refresh_of_its_tick",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_opp_sd_rungs_are_the_newest_counter_subs_most_recent_cycle",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows_rows_and_zones"
+  ],
+  "tail": "5 failed, 1815 passed, 3 skipped, 1 deselected, 445 warnings in 220.61s (0:03:40)"
+ },
+ {
+  "id": "2-25 the source moves to any newer candidate (no zone requirement)",
+  "verdict": "KILLED",
+  "n": 5,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_a_newer_sd_sub_whose_latest_cycle_contributes_nothing_does_not_take_over",
+   "engine_v2/tests/test_proximity_overlay.py::test_a_newer_sub_contributing_nothing_reachable_does_not_take_over_the_opp_sd_side",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_hold_a_replaced_source_keeps_its_zones_until_the_newcomer_has_one_and_never_comes_back",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows_rows_and_zones",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_sd_source_moves_only_to_a_sub_with_a_usable_qualifying_zone"
+  ],
+  "tail": "5 failed, 1815 passed, 3 skipped, 1 deselected, 445 warnings in 222.09s (0:03:42)"
+ },
+ {
+  "id": "2-26 the opp_sd lock basis re-recorded on every locked tick (equivalent: bases only move forward)",
+  "verdict": "SURVIVED",
+  "tail": "1820 passed, 3 skipped, 1 deselected, 445 warnings in 219.80s (0:03:39)"
+ },
+ {
+  "id": "2-27 the switch: contributed but not necessarily reachable",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_a_newer_sub_contributing_nothing_reachable_does_not_take_over_the_opp_sd_side"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 220.95s (0:03:40)"
+ },
+ {
+  "id": "2-28 the switch: the old rule (any usable, sd-qualifying zone of any cycle)",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_a_newer_sd_sub_whose_latest_cycle_contributes_nothing_does_not_take_over",
+   "engine_v2/tests/test_proximity_overlay.py::test_a_newer_sub_contributing_nothing_reachable_does_not_take_over_the_opp_sd_side"
+  ],
+  "tail": "2 failed, 1818 passed, 3 skipped, 1 deselected, 445 warnings in 219.89s (0:03:39)"
+ },
+ {
+  "id": "2-29 the lock basis = the lock tick's overlay basis (the bug the review found)",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_an_opp_sd_lock_records_the_passed_zones_basis_not_the_refresh_of_its_tick"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 220.67s (0:03:40)"
+ },
+ {
+  "id": "2-30 a missing BOS zone skipped silently again",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_view_fails_loudly_when_a_bos_confirmed_cycle_has_no_bos_zone"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 192.94s (0:03:12)"
+ },
+ {
+  "id": "2-31 the capture misses collapsed / retry",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_view_re_prints_every_captured_line_the_post_replay_grep_flags_even_on_a_crash[False]",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_view_re_prints_every_captured_line_the_post_replay_grep_flags_even_on_a_crash[True]"
+  ],
+  "tail": "2 failed, 1818 passed, 3 skipped, 1 deselected, 445 warnings in 196.39s (0:03:16)"
+ },
+ {
+  "id": "2-32 the capture lost on a crash (no finally)",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_exception_scopes.py::test_every_broad_except_is_on_the_allowlist",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_view_re_prints_every_captured_line_the_post_replay_grep_flags_even_on_a_crash[False]",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_view_re_prints_every_captured_line_the_post_replay_grep_flags_even_on_a_crash[True]"
+  ],
+  "tail": "3 failed, 1817 passed, 3 skipped, 1 deselected, 445 warnings in 195.35s (0:03:15)"
+ },
+ {
+  "id": "2-33 the projection assert on the fired zones only",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_projection_assert_covers_every_reference_rung_and_a_bos_zones_outer"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 197.20s (0:03:17)"
+ },
+ {
+  "id": "2-34 the projection assert without the BOS outer check",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_projection_assert_covers_every_reference_rung_and_a_bos_zones_outer"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 196.11s (0:03:16)"
+ },
+ {
+  "id": "2-35 a no-M15-hour trigger left out of the final lists",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_an_h1_hour_without_an_m15_bar_steps_but_pushes_nothing"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 197.18s (0:03:17)"
+ },
+ {
+  "id": "2-36 (R-A) the view cap not localized",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_project_sub_as_of_is_the_subs_own_projection_capped_at_the_moment"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 195.77s (0:03:15)"
+ },
+ {
+  "id": "2-37 (R-B) the view without the cross-fib limit",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_project_sub_as_of_is_the_subs_own_projection_capped_at_the_moment"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 195.58s (0:03:15)"
+ },
+ {
+  "id": "2-38 (R-G) the closure re-emits earlier triggers",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_driver_makes_each_subsequent_trigger_once_at_its_own_candle"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 196.54s (0:03:16)"
+ },
+ {
+  "id": "2-39 (R-E) the refresh before close(h - 1)",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_a_zone_is_pass_tested_only_from_the_candle_it_is_usable_the_previous_close_runs_first"
+  ],
+  "tail": "1 failed, 1819 passed, 3 skipped, 1 deselected, 445 warnings in 197.11s (0:03:17)"
+ }
+]

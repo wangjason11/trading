@@ -451,3 +451,60 @@ Q6 / 0 / 10: asked to explain the fallback-window fix again; the order decision 
   "CTS-prox class" / "opp_sd-prox class" double name; 5 test gaps on step-2 paths (opp_sd / overlay passes, an
   opp_sd outward reset while narrow, an sd = −1 cap case, the outer read at the pass site, the gap-None path) + "Rule 2
   is not part of the cap" pinned only incidentally — fixed in the review follow-up commit.
+
+### The build session — round 14 (2026-10-20; step 2's landing review, 3 agents, 0.82M)
+
+- **Raised by the rules reviewer (a rule the user had never ruled on):** the source sub moved to a newer sub with "at
+  least one usable (sd: qualifying) zone" of ANY cycle (§1's literal text; `m4_sim` the same) — but a sub contributes
+  only its most recent usable cycle's zones, and a zone beyond the parent's last rung is never the reference. So a
+  newer sub could take over and contribute nothing reachable, dropping the side to the parent CTS / BOS — the
+  fallback the hold (round 9) was chosen to prevent. Synthetic cases: opp_sd — newer B's only zone a BOS at 1.4320
+  beyond the CTS 1.4300 → the reference falls from A's 1.4250 to the CTS; sd — newer S2's c0 1.4060 qualifies, its c1
+  1.4150 (inside the parent POI) does not → its most recent cycle contributes nothing → the sd side falls to the BOS.
+- **Decision: "Contributed + reachable (Recommended)"** — the source moves to a newer sub only when, in the newer
+  sub's most recent usable cycle, a zone would be a rung (sd: beyond the parent POI) AND lies on the parent's side of
+  the last rung (sd: inside the parent BOS; opp_sd: inside the parent CTS). On this window it changes only WHEN some
+  sources move ((0,1) sd: (1,2365) never, (1,3230) at 873 instead of 821; (1,2) sd: (−1,3304) at 936 instead of 935;
+  (1,2) opp_sd: (1,3621) at 947 instead of 936), never a reference, a pass, a trigger or an output.
+- Also fixed from the review (no output effect on this window): the opp_sd lock's basis = the PASSED reference's own
+  (sub, cycle) (it was the lock tick's overlay basis — a newer sub beyond the CTS refreshed on that same tick could
+  keep the lock forever, against Q3); a cycle whose BOS_CONFIRMED has no BOS zone in its capped projection now fails
+  loudly; a no-M15-hour trigger stays in the final subsequent_* lists; the view's captured stdout re-prints the full
+  post-replay grep pattern, crash-safe; the view == projection assert covers every sub rung that was ever a reference
+  (inner, kind, cycle, BOS outer steps), not only the ones a trigger fired on; the test gaps (the trigger-making
+  closure, the view projection on a real geometry, close(h − 1) before the refresh, the var 3 attrs write).
+
+### Round 15 (2026-10-20, after the step-2 chart look) — the user's pivot: the gap thresholds gate reference UPDATES
+
+The user's write-up (verbatim): `user_writeup_round15_20261020.md` — "rather than setting the gap thresholds as bounds
+where we would limit proximity triggers, we use those thresholds to limit what zones can be used as proximity
+references … If the next update (on which ever side) causes the gap to fall below the threshold … we do not make that
+update and the current reference zone remains what it was previously … The one exception … when the inner of the parent
+CTS & BOS themselves do not meet thresholds … the only place where we would limit alternations." No counters.
+
+**Measured (the real zones, `tests/_plan_r_reference_window.SUB_ZONES`; the step-2 engine trace):**
+- Parent BOS–CTS inner gaps: (0,0) 222, (0,1) 91, (1,0) **30** (the exception), (1,1) 59, (1,2) 71; POI–CTS: (0,1) 69,
+  (1,2) 50.
+- (0,1): every update the step-2 build made stays > 40 (749 sub_3 c2 BOS 46; 755 the pass → BOS 68; 772 c2 POI 60;
+  873 (−1,3304) c0 BOS 56) → 748 / 820 / 872 unchanged. Order matters: c2's POI 0.58096 is 38 from the sd POI
+  0.57712 — valid only because the POI was passed at 754 first.
+- (1,2): 947 sub_6 c0 POI 0.57306 → 48, accepted; then every sub_8 update is too narrow — c0 BOS 0.57384 = **40**
+  (exactly the threshold, `<=` → narrow) / c0 POI 30 (1036), c1 BOS 33 / POI 32 (1040), c2 BOS 6 (1045); 1048 the sd
+  side moves OUT to (−1,3304) c0 POI 0.57885 (58 vs 0.57306), sub_10's BOS 0.57818 = 7 → skipped. The opp_sd
+  reference stays sub_6's POI 0.57306; the lowest low 1036–1057 is 0.57598 (needs ≤ 0.57386) → **1045 / 1046 do not
+  fire**: H1 10 → 8, sub_9 / sub_10 never built (the (1,2) tail back to S_Q's — to be measured).
+- Open (asked): a superseded current reference when every replacement is too narrow (sub_6 was replaced as the source
+  at 1036 — keep its POI?); the closest VALID candidate vs "stay"; both sides updating on one candle (1048); the parent
+  POI as a gated candidate (the initial references) and the main WVMI gate; the exception's cap vs Rules 1–3 ((1,0):
+  inner gap 30, threshold gap 52); commit step 2 first.
+- **Decisions (the user, verbatim: "sounds good go ahead. Recomemndations sound good"):** commit step 2 as built +
+  `/commit-save` (the new baseline); the gate = PLAN_R step 3, with a shadow-measured prediction and its own `/compare`;
+  the five recommendations adopted:
+  1. a superseded current reference whose every replacement is too narrow is KEPT (still pass-testable; passed → the
+     side falls outward);
+  2. a side moves to the CLOSEST candidate that passes the gate (not "stay" when only the closest fails);
+  3. on one candle, outward moves first, then inward candidates judged against the updated other side;
+  4. the parent POI is a gated candidate too (the sd side can start at the BOS; the main WVMI gate may move on other
+     windows — not on this one: POI–CTS 69 / 50);
+  5. the exception: a parent BOS–CTS inner gap ≤ the threshold (static from CTS_CONFIRMED) → the references stay on the
+     parent BOS / CTS with at most one sd + one opp_sd trigger; Rules 1–3 unchanged.

@@ -25,7 +25,9 @@ from engine_v2.charting._zone_render import (
     poi_ic_hover_text,
 )
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
-from engine_v2.zones.zone_proximity import poi_unclamped_activation_floor_idx
+from engine_v2.zones.zone_proximity import (
+    poi_unclamped_activation_floor_idx, proximity_trigger_sub_usable_idx, proximity_trigger_type_label,
+)
 from engine_v2.common.types import PatternStatus
 from engine_v2.multitf.registry import StructureRegistry
 
@@ -2127,8 +2129,9 @@ def export_chart_plotly(
                 else:
                     y = float(row[COL_L]) - wo * offset_mult
 
-                # type label: "sd:<zone_kind>" or "opp_sd:CTS"
-                type_label = f"{trig.direction}:{trig.zone_kind}"
+                # type label: "sd:<zone_kind>" / "opp_sd:CTS" on a parent zone; a sub zone names its source
+                # ("opp_sd: sub_3 c2 POI 0.58096", PLAN_R §5.2)
+                type_label = proximity_trigger_type_label(trig)
 
                 # Actual wick-to-inner distance in pips that fired the trigger.
                 # Approach direction depends on (sd, trigger.direction):
@@ -2146,8 +2149,12 @@ def export_chart_plotly(
                     gap = float(trig.trigger_inner) - float(row[COL_H])
                 dist_pips = round(gap / float(trig.pip_size), 1)
 
-                # Triggered zone's confirmed idx
-                if trig.zone_kind == "POI":
+                # Triggered zone's confirmed idx — the SOURCE first (PLAN_R §5.2): a sub zone's is the H1 candle
+                # it counts from; the (sid, cycle, kind) lookups below are the PARENT's zones and would mislabel it
+                sub_usable_idx = proximity_trigger_sub_usable_idx(trig)
+                if sub_usable_idx is not None:
+                    z_conf = sub_usable_idx
+                elif trig.zone_kind == "POI":
                     z_conf = _poi_activation_floor_idx(
                         int(trig.structure_id), int(trig.cycle_id),
                         float(trig.trigger_inner), int(sd) if sd else 1,

@@ -1884,8 +1884,8 @@ def test_orchestrator_sweep_triggers_carry_each_types_h1_parent_input(monkeypatc
     h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
     # every H1 idx distinct, so a wrong source (trigger event / probe end) cannot pass
     v1 = SimpleNamespace(status="finalized", trigger_event_idx=10, input_idx=3, parent_cts_anchor_idx=7)
-    v3 = SimpleNamespace(trigger_event_idx=20, input_idx=15)
-    v4 = SimpleNamespace(trigger_event_idx=30, input_idx=25)
+    v3 = SimpleNamespace(parent_sid=0, parent_cycle_id=1, trigger_event_idx=20, input_idx=15)
+    v4 = SimpleNamespace(parent_sid=0, parent_cycle_id=1, trigger_event_idx=30, input_idx=25)
     with pytest.raises(_Stop):
         _run_multi_tf_dual(
             h1, [], [], [], [], {}, None,
@@ -1940,8 +1940,8 @@ def test_orchestrator_resolve_start_passes_the_parent_cycles_cts_established_mom
     monkeypatch.setattr("engine_v2.multitf.lifecycle_sweep.run_lifecycle_sweep", _sweep)
 
     h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
-    v3 = SimpleNamespace(trigger_event_idx=20, input_idx=15)
-    v4 = SimpleNamespace(trigger_event_idx=30, input_idx=25)
+    v3 = SimpleNamespace(parent_sid=0, parent_cycle_id=1, trigger_event_idx=20, input_idx=15)
+    v4 = SimpleNamespace(parent_sid=1, parent_cycle_id=2, trigger_event_idx=30, input_idx=25)
     with pytest.raises(_Stop):
         _run_multi_tf_dual(
             h1, [], [], [], [], {}, None, first_confluence_triggers=[],
@@ -2087,3 +2087,72 @@ def test_record_frozen_at_its_start_copies_ended_by_from_a_replacement_end():
     assert any("-> frozen zero-length" in l for l in logs), logs
     assert result.unresolved == []
     _assert_sweep_invariants(pool)
+
+
+# =============================================================================
+# PLAN_R step 2: the proximity tick (phase 5, after SUB_END)
+# =============================================================================
+
+class _ProbeDriver:
+    """A stub `proximity` driver: one tick at `tick_idx`; it records what the pool shows then and returns `fire`
+    (SweepTriggers to FIRE) / `unresolved` from `on_tick`."""
+
+    def __init__(self, tick_idx, fire=(), unresolved=()):
+        self.tick_idx, self.fire, self.unresolved, self.seen = tick_idx, list(fire), list(unresolved), []
+
+    def initial_ticks(self):
+        return [(self.tick_idx, (0, 1, 99), "payload")]
+
+    def on_tick(self, payload, idx):
+        self.seen.append((payload, idx, self.pool_view()))
+        return list(self.fire), list(self.unresolved)
+
+
+def test_the_proximity_tick_runs_after_every_moment_at_its_idx_sub_end_included():
+    """The tick at M15 X sorts after SUB_END (PLAN_R §5.2): a record that starts at X is already started and a sub
+    ending at X already shows its end — "every pool moment <= LOH(h - 1) is processed". The (−1, 1797) sub's
+    reversal at 2470 ends it; a tick at 2470 sees end_idx 2470 and the successor (+1, 2365) started."""
+    pool = SubStructurePool()
+    drv = _ProbeDriver(2470)
+    drv.pool_view = lambda: {(s.direction, s.starting_idx): (s.start_idx, s.end_idx) for s in pool.all()}
+    tables = _tables({(0, 0): (463, 2611)}, {0: +1})
+    triggers = [_trig(CONF, 0, 0, "first_confluence", 463, +1)]
+    resolve = _resolver({(CONF, 463): _rs(454, 1020)})
+    geom = _geom(pool, {(1, 454): 1940, (-1, 1797): 2470, (1, 2365): None})
+    rev = _rev_resolver({(1, 454): 1797, (-1, 1797): 2365})
+    run_lifecycle_sweep(triggers, pool=pool, tables=tables, resolve_start=resolve, build_geometry=geom,
+                        resolve_reversal=rev, resolve_cross_fib_limit=_no_limit, synth_reversal_trigger=_synth_stub,
+                        log=lambda *_: None, proximity=drv)
+    ((payload, idx, view),) = drv.seen
+    assert (payload, idx) == ("payload", 2470)
+    assert view[(-1, 1797)] == (1940, 2470) and view[(1, 2365)] == (2470, None)
+
+
+def test_a_tick_fires_a_trigger_in_the_future_and_logs_an_unresolved_one():
+    """What a tick returns: a SweepTrigger FIREs at its own (later) idx and builds its record; an unresolved entry
+    lands in `pool.unresolved` with its reason (the no-M15-hour path)."""
+    pool = SubStructurePool()
+    later = _trig(CONF, 0, 0, "subsequent_confluence", 1203, +1)
+    lost = _trig(CTR, 0, 0, "subsequent_counter", 1199, -1)
+    drv = _ProbeDriver(1199, fire=[later], unresolved=[(lost, "no_m15_hour", "H1 300 has no M15 bar")])
+    drv.pool_view = lambda: None
+    tables = _tables({(0, 0): (463, None)}, {0: +1})
+    res = run_lifecycle_sweep([], pool=pool, tables=tables, resolve_start=_resolver({(CONF, 1203): _rs(1100, 1203)}),
+                              build_geometry=_geom(pool, {}), resolve_reversal=_rev_resolver({}),
+                              resolve_cross_fib_limit=_no_limit, synth_reversal_trigger=_synth_stub,
+                              log=lambda *_: None, proximity=drv)
+    assert [(r.trigger_type, r.trigger_idx, r.start_idx) for r in pool.all_records()] == [
+        ("subsequent_confluence", 1203, 1203)]
+    assert [(u.trigger_type, u.trigger_idx, u.reason) for u in res.unresolved] == [
+        ("subsequent_counter", 1199, "no_m15_hour")]
+
+
+def test_a_tick_may_not_queue_a_trigger_in_the_past():
+    pool = SubStructurePool()
+    drv = _ProbeDriver(1199, fire=[_trig(CONF, 0, 0, "subsequent_confluence", 1199, +1)])
+    drv.pool_view = lambda: None
+    with pytest.raises(AssertionError, match="queued in the past"):
+        run_lifecycle_sweep([], pool=pool, tables=_tables({(0, 0): (463, None)}, {0: +1}),
+                            resolve_start=_resolver({}), build_geometry=_geom(pool, {}),
+                            resolve_reversal=_rev_resolver({}), resolve_cross_fib_limit=_no_limit,
+                            synth_reversal_trigger=_synth_stub, log=lambda *_: None, proximity=drv)

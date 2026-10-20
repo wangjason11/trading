@@ -79,7 +79,9 @@ from engine_v2.charting._zone_render import (
     select_subordinate_tf_tier,
 )
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
-from engine_v2.zones.zone_proximity import poi_unclamped_activation_floor_idx
+from engine_v2.zones.zone_proximity import (
+    poi_unclamped_activation_floor_idx, proximity_trigger_sub_usable_idx, proximity_trigger_type_label,
+)
 from engine_v2.zones.structure_lifecycle import (
     compute_reversal_idx_by_sid,
     compute_struct_start_by_sid,
@@ -2771,7 +2773,7 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
             else:
                 y = float(m15_row[COL_L]) - wo * offset_mult
 
-            type_label = f"{trig.direction}:{trig.zone_kind}"
+            type_label = proximity_trigger_type_label(trig)   # a sub zone names its source (PLAN_R §5.2)
 
             # Distance from H1 trigger wick to zone inner (parent-TF metric).
             if approach_from_above:
@@ -2780,7 +2782,12 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
                 gap = float(trig.trigger_inner) - float(h1_row[COL_H])
             dist_pips = round(gap / float(trig.pip_size), 1)
 
-            if trig.zone_kind == "POI":
+            # The SOURCE first (PLAN_R §5.2): a sub zone's is the H1 candle it counts from — the parent lookups
+            # below would mislabel it (the POI branch silently with the parent sd POI's floor).
+            sub_usable_idx = proximity_trigger_sub_usable_idx(trig)
+            if sub_usable_idx is not None:
+                z_conf = sub_usable_idx
+            elif trig.zone_kind == "POI":
                 z_conf = _poi_activation_floor_idx(
                     int(trig.structure_id), int(trig.cycle_id),
                     float(trig.trigger_inner), int(sd) if sd else 1,

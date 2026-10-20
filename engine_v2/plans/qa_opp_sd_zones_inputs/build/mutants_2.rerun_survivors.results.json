@@ -1,0 +1,43 @@
+[
+ {
+  "id": "2-12 the unlock on the sd side too",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_sd_lock_never_reopens"
+  ],
+  "tail": "1 failed, 1809 passed, 3 skipped, 1 deselected, 444 warnings in 100.12s (0:01:40)"
+ },
+ {
+  "id": "2-14 the final lists never reach the charts (attrs keep the batch)",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_driver_replaces_the_batch_lists_with_the_final_ones"
+  ],
+  "tail": "1 failed, 1809 passed, 3 skipped, 1 deselected, 444 warnings in 101.52s (0:01:41)"
+ },
+ {
+  "id": "2-15 the view == projection assert not called",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_driver_checks_every_used_sub_zone_against_its_projection"
+  ],
+  "tail": "1 failed, 1809 passed, 3 skipped, 1 deselected, 444 warnings in 99.29s (0:01:39)"
+ },
+ {
+  "id": "2-16 a driven cycle's batch var3 also fed to the sweep (double)",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_driver_feeds_the_sweep_only_the_collapsed_cycles_batch_subsequent_triggers"
+  ],
+  "tail": "1 failed, 1809 passed, 3 skipped, 1 deselected, 444 warnings in 100.28s (0:01:40)"
+ },
+ {
+  "id": "2-26 the opp_sd lock basis recorded every tick (the unlock compares with itself)",
+  "verdict": "SURVIVED",
+  "tail": "1810 passed, 3 skipped, 1 deselected, 444 warnings in 99.45s (0:01:39)"
+ }
+]

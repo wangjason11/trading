@@ -124,9 +124,9 @@ def test_1_a_pass_moves_the_sd_reference_from_the_poi_to_the_bos():
     assert trig == [(5, "sd", "POI", 1.41), (10, "opp_sd", "CTS", 1.43), (15, "sd", "BOS", 1.40)]
     assert passes == {7: [POI_KEY]}
     assert [t.meta for t in scan.triggers] == [
-        {"prox_ref_gap_pips": 200, "narrow_prox_ref": False, "prox_ref_source": "parent"},
-        {"prox_ref_gap_pips": 300, "narrow_prox_ref": False, "prox_ref_source": "parent"},
-        {"prox_ref_gap_pips": 300, "narrow_prox_ref": False, "prox_ref_source": "parent"},
+        {"prox_ref_gap_pips": 200, "narrow_prox_ref": False, "prox_ref_source": "parent", "prox_ref_sub_id": None, "prox_ref_cycle": None, "prox_ref_usable_idx": None},
+        {"prox_ref_gap_pips": 300, "narrow_prox_ref": False, "prox_ref_source": "parent", "prox_ref_sub_id": None, "prox_ref_cycle": None, "prox_ref_usable_idx": None},
+        {"prox_ref_gap_pips": 300, "narrow_prox_ref": False, "prox_ref_source": "parent", "prox_ref_sub_id": None, "prox_ref_cycle": None, "prox_ref_usable_idx": None},
     ]
 
 
@@ -245,7 +245,7 @@ def test_5b_an_outward_move_while_narrow_resets_only_that_side():
     assert trig == [(5, "sd", "POI", 1.411), (8, "opp_sd", "CTS", 1.414), (12, "sd", "POI", 1.41)]
     assert passes == {10: [POI_KEY]}
     assert scan.counters == {"sd": 1, "opp_sd": 1}
-    assert scan.triggers[2].meta == {"prox_ref_gap_pips": 40, "narrow_prox_ref": True, "prox_ref_source": "parent"}
+    assert scan.triggers[2].meta == {"prox_ref_gap_pips": 40, "narrow_prox_ref": True, "prox_ref_source": "parent", "prox_ref_sub_id": None, "prox_ref_cycle": None, "prox_ref_usable_idx": None}
 
 
 def test_5c_an_inward_move_while_narrow_does_not_reset():
@@ -621,7 +621,7 @@ def test_review_5_a_cycle_without_a_cts_zone_is_wide_until_an_opp_sd_reference_e
     kl = [_bos_zone(0, 0, 1, 1.4100, 1.4090)]
     scan = build_cycle_proximity_scans(df, events, kl, [], PIP, "H1")[(0, 0)]
     trig, _ = _drive(scan, {8: _overlay("opp_sd", _sub_rung("opp_sd", "BOS", 1.4130, 1.4140))})
-    assert scan.triggers[0].meta == {"prox_ref_gap_pips": None, "narrow_prox_ref": False, "prox_ref_source": "parent"}
+    assert scan.triggers[0].meta == {"prox_ref_gap_pips": None, "narrow_prox_ref": False, "prox_ref_source": "parent", "prox_ref_sub_id": None, "prox_ref_cycle": None, "prox_ref_usable_idx": None}
     assert [t[0] for t in trig] == [5, 10, 12]
 
 

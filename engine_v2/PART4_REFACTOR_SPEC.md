@@ -3043,12 +3043,15 @@ cases, both falling out of the evaluation order (§17.6):
   `[2470, 2829]` ending on its own reversal. Rev 1's `≥` would have ended it
   at 2611 and restarted it — and could discard a sub's own reversal.
 
-**Consequences (intended, not leaks):**
+**Consequences (intended, not leaks):** (the reference-window examples below predate PLAN_R step 2, 2026-10-20 —
+its pool table: `plans/PLAN_R_opp_sd_zones_proximity.md` §5.4)
 
 - **One lifecycle, drawn on every lens.** A same-lens replacement of a sub's
   *confluence* record ends the SUB, so the counter chart stops there too even
-  if the sub's counter record would have run longer. (Not observable on this
-  window.)
+  if the sub's counter record would have run longer. (Observable since PLAN_R
+  step 2, the mirror case: sub `2639/−1`'s COUNTER record is replaced at 3491,
+  so the sub ends at 3491 on both charts while its confluence record would run
+  to 3589.)
 - **Cross-parent continuity** is the `2365/+1` case above (records in H1 (0,0)
   and (0,1), one window). **Cross-lens, one window:** sub `2639/−1` has a
   confluence record (reversal-born from `2365/+1`) and a counter record
@@ -3098,6 +3101,15 @@ completion before the next:
 | 2 | `SUB_START` | set `sub.start_idx` if unset and a live record started here |
 | 3 | `RECORD_END` | for a record not yet ended: apply the highest-priority end entry at this idx; entries for an already-ended record are stale and dropped |
 | 4 | `SUB_END` | re-evaluate the §17.5 end rule for every sub that had a live record start or end at this idx |
+| 5 | `PROXIMITY_TICK` (PLAN_R step 2, 2026-10-20) | one per NON-collapsed parent cycle and H1 candle `h` of its proximity scan, at M15 `LOH(h − 1)`: every moment ≤ `LOH(h − 1)` is processed ("known before candle `h` opens"). The proximity overlay (`multitf/proximity_overlay.py`) runs candle `h − 1`'s pass test, refreshes each side's proximity source sub + rungs from the pool, steps the cycle's `CycleProximityScan` on candle `h`, and returns each new `subsequent_*` trigger, queued at `TRIGGER_FIRE` of `LOH(h)` (never in the past); an hour without an M15 bar pushes nothing (`UNRESOLVED reason=no_m15_hour`) |
+
+**The proximity overlay (PLAN_R step 2).** The `subsequent_*` triggers of a non-collapsed parent cycle are GENERATED
+inside the sweep (the parent's opp_sd / sd proximity references read sub zones, and subs come from triggers);
+first_confluence, first_counter and the reversals stay precomputed, and a collapsed cycle keeps its batch triggers
+(parent zones only). After the sweep the final H1 lists replace `attrs["zone_proximity_triggers"]` /
+`attrs["subsequent_*_triggers"]` everywhere downstream (the sub WVMI attribution, the charts); asserted: each cycle's
+first trigger == the batch's (the main WVMI gate read it), and every sub zone a trigger fired on has the same inner in
+its sub's real projection. Rules: `plans/PLAN_R_opp_sd_zones_proximity.md` §1 / §5; the module docstring.
 
 **Order within a phase.** `TRIGGER_FIRE`: `(lens_rank, type_rank,
 trigger_event_idx)` with confluence before counter and `first_*` before
@@ -3105,7 +3117,7 @@ trigger_event_idx)` with confluence before counter and `first_*` before
 trigger's sibling read at `hi = t` inclusive can see the first's sub (§17.8).
 `REVERSAL_SPAWN` sorts **before** `TRIGGER_FIRE` at the same idx (the successor
 must exist before an H1 trigger at that candle runs its sibling read). Every
-other moment orders by record creation sequence. Two records of the same
+other moment orders by record creation sequence; `PROXIMITY_TICK`s by `(S, C, h)`. Two records of the same
 `(lens, parent_sid, parent_cycle_id, direction)` starting at the same idx for
 different subs cannot occur outside acausal cases; if it happens the later one
 replaces the earlier and a `WARNING [sweep] same-idx start collision` is logged.

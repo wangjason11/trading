@@ -432,3 +432,69 @@ def test_the_driver_feeds_each_lens_its_stream_and_counts_each_unique_sub_once(m
     assert _triples(lens_dfs_seen[LENS_COUNTER]) == [(20, SCONF, PARENT_PATH)] * 2
     assert ("[multi_tf:dual] sub wvmi acted=1 records=2 by_started_by={'first_confluence': 2} "
             "by_lens={'confluence': 2, 'counter': 2}") in out.getvalue().splitlines()
+
+
+def test_the_driver_attributes_the_sub_wvmi_with_the_final_lists_a_sweep_generated_trigger_included(monkeypatch):
+    """PLAN_R §5.2: the subsequent_* triggers of an overlay-driven cycle are generated INSIDE the sweep, so the sub WVMI
+    attribution (step 6) must read the FINAL lists, not the batch lists it was handed. The sweep stub plays the overlay:
+    it adds one generated var 4 at H1 33 in (0,2); the confluence lens's stream must carry it after the batch's 30."""
+    from engine_v2.multitf.sub_structure_pool import StructureKey
+    from engine_v2.tests.test_render_sub_projection import _record, _set_lifecycle
+
+    class _Stop(Exception):
+        pass
+
+    mt = lambda _v, _h1: SimpleNamespace(parent_sid=0, parent_cycle_id=1, lower_sd=+1)   # noqa: E731
+    for mod in ("first_confluence_pipeline", "subsequent_confluence_pipeline", "subsequent_counter_pipeline"):
+        monkeypatch.setattr(f"engine_v2.multitf.{mod}.to_multi_tf_trigger", mt)
+    monkeypatch.setattr("engine_v2.multitf.uc1_trigger.detect_uc1_triggers", lambda *a, **k: [])
+    monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end", _REAL_LOH)
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
+                        lambda *a, **k: pd.DataFrame({"time": pd.date_range("2025-11-17", periods=200, freq="15min",
+                                                                            tz="UTC")}))
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
+    monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables",
+                        lambda *a, **k: SimpleNamespace(cycles=lambda: [(0, 1), (0, 2)]))
+
+    def _sweep(_triggers, *, pool, proximity, **_kw):
+        sub, _ = pool.get_or_create(StructureKey("H1.main", "M15", 1, 35))
+        _record(pool, sub, None, LENS_CONFLUENCE, start_idx=40, seq=0, trigger_type="first_confluence",
+                parent_sid=0, parent_cycle_id=1)
+        _set_lifecycle(sub, 40, 100, "parent_end")
+        proximity.generated.append((SimpleNamespace(parent_sid=0, parent_cycle_id=2, trigger_event_idx=33,
+                                                    input_idx=31),
+                                    SimpleNamespace(trigger_type="subsequent_counter")))
+        proximity.generated.append((SimpleNamespace(parent_sid=0, parent_cycle_id=1, trigger_event_idx=21,
+                                                    input_idx=19),
+                                    SimpleNamespace(trigger_type="subsequent_confluence")))
+        return SimpleNamespace(unresolved=[], spawned=[])
+
+    def _render(sub, _m15, *, lens_paths, lens_dfs, timeframe):
+        res = _make_sub(sub.sub_id, start_idx=sub.start_idx, m15_end_idx=sub.end_idx,
+                        lenses=tuple(sorted(sub.lenses())), n=1)
+        for lens in res.meta["lenses"]:
+            edm.mirror_lower_tf_result_to_entity_df(lens_dfs[lens], res, structure_path_id=lens_paths[lens])
+        return res
+
+    streams_seen = []
+
+    def _stamp(results_by_lens, streams_by_lens, **kw):
+        streams_seen.append(deepcopy(streams_by_lens))
+        raise _Stop
+
+    monkeypatch.setattr("engine_v2.multitf.lifecycle_sweep.run_lifecycle_sweep", _sweep)
+    monkeypatch.setattr("engine_v2.multitf.entity_df_mutation.render_sub_projection", _render)
+    monkeypatch.setattr(orch, "_stamp_sub_wvmi_trigger_meta", _stamp)
+
+    t = lambda i, d: SimpleNamespace(idx=i, direction=d, trigger_inner=0.6, zone_kind="BOS")   # noqa: E731
+    v4 = SimpleNamespace(parent_sid=0, parent_cycle_id=2, trigger_event_idx=30, input_idx=25)
+    h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
+    with contextlib.redirect_stdout(io.StringIO()), pytest.raises(_Stop):
+        orch._run_multi_tf_dual(
+            h1, [], [], [], [], {}, None, first_confluence_triggers=[],
+            subsequent_confluence_triggers=[], subsequent_counter_triggers=[v4],
+            main_zone_proximity_triggers={(0, 1): [t(11, "sd")], (0, 2): [t(15, "opp_sd"), t(16, "sd")]},
+        )
+    assert streams_seen == [{LENS_CONFLUENCE: [(11, ZPT), (30, SCT), (33, SCT)], LENS_COUNTER: [(21, SCONF)]}]
+    assert [v.trigger_event_idx for v in h1.attrs["subsequent_counter_triggers"]] == [30, 33]
+    assert [v.trigger_event_idx for v in h1.attrs["subsequent_confluence_triggers"]] == [21]

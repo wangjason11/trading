@@ -114,7 +114,7 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    `engine_v2/plans/PLAN_R_opp_sd_zones_proximity.md`, Q&A rounds 1–9 `engine_v2/plans/qa_opp_sd_zones_inputs/`):
    READY TO BUILD 2026-10-20 — every decision closed (Q&A rounds 1–12), the plan review done (3 agents, 0.84M) and
    folded in; build order 0a → 0b → 1 → 2, 4 commits, `/commit-save` only after step 2. **BUILD UNDER WAY
-   2026-10-20** (PLAN_R §8 = the build log): steps 0a `a6e71c0`, 0b `c1bd05a` and 1 (the ladders + the narrow proximity-reference cap on parent zones) LANDED, all zero change as predicted; step 2 (the overlay in the sweep) next.
+   2026-10-20** (PLAN_R §8 = the build log): steps 0a `a6e71c0`, 0b `c1bd05a` and 1 `d26208e` (the ladders + the narrow proximity-reference cap on parent zones) LANDED, all zero change as predicted (the landing-review follow-up `77f8ccf`: 0a's bound = the parent cycle's CTS-established moment); step 2 (the overlay inside the sweep) LANDED 2026-10-20 = the §5.4 prediction (H1 triggers 6 → 10, subs 8 → 11) + its landing review (the source switch: a contributed + reachable zone); **NEXT = PLAN_R step 3, the user's round-15 pivot: the gap thresholds gate reference UPDATES (no trigger counters; the only cap: a parent BOS–CTS inner gap ≤ the threshold)**.
 4. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -364,8 +364,9 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
   bites (the slice-copy drop is the safeguard). Detail: LANDMINES ("Slice Copies Inherit Mirrored Structure Cols").
 - **Audit positional-index df columns that survive the sub slice** — TRIGGER: adding any df column whose value is a
   positional index. Detail: memory `project_is_range_pollution_fix.md` "Open follow-up".
-- **Opposite-direction POIs** — the zone-proximity logic assumes "POI ⟹ sd"; TRIGGER: any feature producing an opp_sd
-  POI → revisit `check_zone_proximity`. Detail: `engine_v2/zones/POI_ZONES_SPEC.md` (~:420).
+- ~~**Opposite-direction POIs**~~ — CLOSED 2026-10-20 by PLAN_R step 2: the parent's opp_sd proximity ladder reads a
+  counter sub's POI (the sides assigned by the sub's direction relative to the parent; a structure's own POIs stay
+  sd). Detail: `engine_v2/zones/POI_ZONES_SPEC.md` "POIs are always sd-direction (invariant)".
 - **The start-candle probe's market structure runs at the H1 proximity values on M15** (8 pips and the 50-pip
   narrow-cycle gap instead of 5 / 30): `unified_probe.py`'s Phase 2 builds it through
   `structure_engine._make_market_structure` without `timeframe` (that helper's docstring: "a deferred cleanup").

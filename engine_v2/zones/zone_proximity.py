@@ -46,7 +46,9 @@ is a PASSED PROXIMITY ZONE once an H1 close lies strictly beyond its outer
 edge (the outer as of that close); it stays out for the rest of the cycle,
 from the next candle; the pass test runs on EVERY candle, also one where a
 gate blocks the trigger; the last rung is never tested. A side LOCKS when its
-reference was passed and the next pick is its last rung (never by default).
+reference was passed and the next pick is its last rung (never by default); the
+sd lock is permanent, an opp_sd lock is lifted by a NEWER counter-sub zone
+(the overlay, PLAN_R step 2).
 Ties (equal inners): the parent zone first, then a sub's BOS before its POI.
 
 The NARROW PROXIMITY-REFERENCE CAP: the signed PROXIMITY REFERENCE GAP
@@ -213,7 +215,10 @@ class ZoneProximityTrigger:
     `prox_ref_gap_pips` = the signed, rounded proximity reference gap at the
     candle's start (None when a side has no reference), `narrow_prox_ref` = it
     is at or below `DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS`, `prox_ref_source`
-    = "parent" (a parent zone) or "sub" (a proximity-overlay zone).
+    = "parent" (a parent zone) or "sub" (a proximity-overlay zone, PLAN_R step
+    2), and — None on a parent zone — `prox_ref_sub_id` (the sub's final id,
+    set after the sweep numbers the subs), `prox_ref_cycle` (the sub's cycle)
+    and `prox_ref_usable_idx` (the H1 candle the zone counts from).
     """
     structure_id: int
     cycle_id: int
@@ -323,7 +328,8 @@ class ProximityRung:
     side), the bottom rung of its ladder — is never pass-tested. `tie_rank`
     orders equal inners: the parent zone first (0), then a sub's BOS (1) before
     its POI (2). `source` / `sub_pool_idx` / `sub_cycle_id` name where the zone
-    comes from (a sub zone: the proximity overlay, PLAN_R step 2).
+    comes from (a sub zone: the proximity overlay, PLAN_R step 2); `usable_idx`
+    = the H1 candle a sub zone counts from (its hover's `zone_confirmed_idx`).
     """
     key: Tuple[Any, ...]
     side: Literal["sd", "opp_sd"]
@@ -335,6 +341,27 @@ class ProximityRung:
     tie_rank: int = 0
     sub_pool_idx: Optional[int] = None
     sub_cycle_id: Optional[int] = None
+    usable_idx: Optional[int] = None
+
+
+def proximity_trigger_type_label(trig: ZoneProximityTrigger) -> str:
+    """The trigger hover's type line (both charts): `"<direction>:<kind>"` on a parent zone (unchanged); on a
+    proximity-overlay zone it names the source (PLAN_R §5.2, round 7: "Sounds good"), e.g. "opp_sd: sub_3 c2 POI
+    0.58096"."""
+    meta = trig.meta or {}
+    if meta.get("prox_ref_source") == "sub":
+        return (f"{trig.direction}: sub_{meta['prox_ref_sub_id']} c{meta['prox_ref_cycle']} {trig.zone_kind} "
+                f"{float(trig.trigger_inner):.5f}")
+    return f"{trig.direction}:{trig.zone_kind}"
+
+
+def proximity_trigger_sub_usable_idx(trig: ZoneProximityTrigger) -> Optional[int]:
+    """A sub-sourced trigger's zone `zone_confirmed_idx` for the hover: the H1 candle its zone counts from; None on a
+    parent zone (whose KL / POI lookup by (sid, cycle, kind) would MISLABEL a sub zone — branch on this first)."""
+    meta = trig.meta or {}
+    if meta.get("prox_ref_source") == "sub":
+        return int(meta["prox_ref_usable_idx"])
+    return None
 
 
 def _fixed_outer(outer: float) -> Callable[[int], float]:
@@ -383,7 +410,9 @@ class CycleProximityScan:
       2. pick each side's proximity reference: the closest unpassed rung to
          the other side (ties: `tie_rank`); a LOCKED side keeps its last rung.
          A side locks when its previous reference was passed and the next pick
-         is its last rung — being the reference by default never locks;
+         is its last rung — being the reference by default never locks. The sd
+         lock is permanent; an opp_sd lock is lifted by the overlay when a
+         NEWER counter-sub zone becomes usable (`unlock`, PLAN_R §1 Locking);
       3. the signed proximity reference gap → narrow (≤ `min_ref_gap_pips`) /
          wide → the per-side counters: wide → narrow (or narrow at the scan
          start) starts both at 0; narrow → narrow resets a side whose
@@ -398,8 +427,9 @@ class CycleProximityScan:
     either side whose outer (as of the close) the close is strictly beyond is
     passed for the rest of the cycle; one close can pass several.
 
-    The proximity overlay (`set_overlay`, PLAN_R step 2) adds sub zones to a
-    side; the batch scan never sets it (parent zones only).
+    The proximity overlay (`set_overlay` / `unlock`, PLAN_R step 2,
+    `multitf/proximity_overlay.py`) adds sub zones to a side; the batch scan
+    never sets it (parent zones only).
     """
 
     def __init__(
@@ -480,6 +510,11 @@ class CycleProximityScan:
             f"[zone_proximity] ({self.sid},{self.cycle_id}) overlay for {side}: wrong side or a last rung"
         )
         self.overlay[side] = list(rungs)
+
+    def unlock(self, side: Literal["sd", "opp_sd"]) -> None:
+        """Lift `side`'s lock (the overlay's opp_sd unlock, PLAN_R §1 Locking: a counter-sub zone newer than the passed
+        ones became usable). The rule that only the opp_sd side unlocks lives with the caller."""
+        self.locked[side] = False
 
     def ladder(self, side: Literal["sd", "opp_sd"]) -> List[ProximityRung]:
         """`side`'s current candidate rungs: its parent zones, then its overlay."""
@@ -592,6 +627,9 @@ class CycleProximityScan:
                 "prox_ref_gap_pips": self.ref_gap_pips,
                 "narrow_prox_ref": self.narrow_prox_ref,
                 "prox_ref_source": ref.source,
+                "prox_ref_sub_id": None,            # a sub zone's: set after the sweep numbers the subs
+                "prox_ref_cycle": ref.sub_cycle_id,
+                "prox_ref_usable_idx": ref.usable_idx,
             },
         )
         self.triggers.append(trigger)

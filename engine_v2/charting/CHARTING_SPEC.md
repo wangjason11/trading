@@ -277,8 +277,12 @@ One × marker per H1 zone-proximity trigger (`attrs["zone_proximity_triggers"]`,
 _render_proximity_triggers_overlay`, the price-extreme mapper `map_candle_to_lower_tf`). Every trigger is drawn — a
 collapsed cycle's included (no lifecycle filter, like the scan itself; the zones it fired against are hidden).
 Hover (`customdata`): TF, the candle index (M15: `idx_15M` + `idx_1H`), sid, struct_direction, cycle_id, `type` =
-`<sd|opp_sd>:<BOS|POI|CTS>`, `distance_pips` (the wick to the inner bound — positive = stopped short, negative =
-crossed), `zone_kind`, and `zone_confirmed_idx`, whose meaning depends on the kind:
+`<sd|opp_sd>:<BOS|POI|CTS>` on a parent zone — on a proximity-overlay zone (PLAN_R step 2) it names the source:
+`<sd|opp_sd>: sub_<id> c<cycle> <BOS|POI> <inner>`, e.g. `opp_sd: sub_3 c2 POI 0.58096` (one helper for both charts,
+`zone_proximity.proximity_trigger_type_label`) — `distance_pips` (the wick to the inner bound — positive = stopped
+short, negative = crossed), `zone_kind`, and `zone_confirmed_idx`. It branches on the SOURCE first: a sub zone's is
+the H1 candle it counts from (`meta["prox_ref_usable_idx"]`; the parent's (sid, cycle, kind) lookups would mislabel
+it — the POI one silently, with the parent sd POI's floor). On a parent zone it depends on the kind:
 - **BOS / CTS:** the KL zone's `confirmed_idx` — lifecycle-CLAMPED (a collapsed cycle's shows the structure's
   lifecycle start, AFTER its own trigger: 902 on structure 1 cycle 1's 820 / 871 markers on the reference window);
 - **POI:** `poi_unclamped_activation_floor_idx` — the POI's activation floor without the lifecycle-start term

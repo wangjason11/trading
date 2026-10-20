@@ -26,14 +26,21 @@ filter of §17.5):
 | 3     | RECORD_END        | apply the highest-priority end entry at this idx; entries     |
 |       |                   | for an already-ended record are stale and dropped             |
 | 4     | SUB_END           | re-evaluate the §17.5 end rule for every sub touched here     |
+| 5     | PROXIMITY_TICK    | (PLAN_R step 2, when a `proximity` driver is injected) one    |
+|       |                   | per non-collapsed parent cycle and H1 candle h of its scan,   |
+|       |                   | at LOH(h − 1): every moment ≤ LOH(h − 1) is processed, so the |
+|       |                   | driver reads the pool as "known before candle h opens"; it    |
+|       |                   | steps the cycle's proximity scan and returns the new          |
+|       |                   | subsequent_* triggers, queued at FIRE of LOH(h) (the future)  |
 
 Order within a phase: TRIGGER_FIRE by `(lens_rank, type_rank,
 trigger_event_idx)` (confluence before counter, `first_*` before
 `subsequent_*` — today's cadence order; the second trigger's sibling read at
 `hi = t` inclusive can see the first's sub); REVERSAL_SPAWN sorts BEFORE
 TRIGGER_FIRE at the same idx (the successor must exist before an H1 trigger at
-that candle runs its sibling read); every other moment orders by record `seq`.
-The heap is idx-monotone: a moment is never queued in the past (asserted).
+that candle runs its sibling read); every other moment orders by record `seq`;
+PROXIMITY_TICKs by `(S, C, h)`. The heap is idx-monotone: a moment is never
+queued in the past (asserted).
 
 Ids (PLAN_I §9.3 D4): DURING the sweep a sub is keyed by its creation index
 `pool_idx` (every order key, record FK, replacement link and log line —
@@ -43,7 +50,7 @@ START (`SubStructurePool.number_subs_by_start` — `(start_idx, pool_idx)` → 0
 `SweepResult` consumer sees the final ids.
 
 Logging (stdout, greppable — the `/compare` skill greps
-`warning|skipping|unavailable|degenerate|collapsed|pending|no sid`): `[sweep] fire …`,
+`error|warning|skipping|unavailable|degenerate|collapsed|pending|no sid|retry`): `[sweep] fire …`,
 `[sweep] record …`, `[sweep] replace …`, `[sweep] spawn …`, `[sweep] sub_end …`,
 `[sweep] UNRESOLVED (skipping) reason=…`, `[sweep] number pool#k -> sub_id=…`.
 """
@@ -119,7 +126,7 @@ class SweepResult:
 
 # --- Ordering -----------------------------------------------------------------
 
-_PHASE_FIRE, _PHASE_RECORD_START, _PHASE_SUB_START, _PHASE_RECORD_END, _PHASE_SUB_END = range(5)
+_PHASE_FIRE, _PHASE_RECORD_START, _PHASE_SUB_START, _PHASE_RECORD_END, _PHASE_SUB_END, _PHASE_PROXIMITY = range(6)
 _KIND_REVERSAL_SPAWN, _KIND_TRIGGER_FIRE = 0, 1     # spawn sorts before fire at the same idx
 
 _LENS_RANK = {LENS_CONFLUENCE: 0, LENS_COUNTER: 1}
@@ -154,8 +161,10 @@ class _Sweep:
         parent_path: str,
         sub_tf: str,
         log: Callable[[str], None],
+        proximity: Any = None,
     ) -> None:
         self.pool = pool
+        self.proximity = proximity
         self.tables = tables
         self.resolve_start = resolve_start
         self.build_geometry = build_geometry
@@ -190,6 +199,9 @@ class _Sweep:
         for t in triggers:
             self._push(t.trigger_idx, _PHASE_FIRE, (_KIND_TRIGGER_FIRE,) + _fire_order_key(t),
                        ("fire", t))
+        if self.proximity is not None:
+            for idx, order, payload in self.proximity.initial_ticks():
+                self._push(idx, _PHASE_PROXIMITY, tuple(order), ("prox_tick", payload))
         last_idx: Optional[int] = None
         while self._heap:
             idx, phase, _order, _n, payload = heapq.heappop(self._heap)
@@ -222,6 +234,8 @@ class _Sweep:
                 self._phase3_record_end(rec, idx, entries)
             elif kind == "sub_end":
                 self._phase4_sub_end(payload[1], idx)
+            elif kind == "prox_tick":
+                self._phase5_proximity_tick(payload[1], idx)
             else:  # pragma: no cover
                 raise AssertionError(f"[sweep] unknown moment {kind}")
         self._after_sweep()
@@ -531,6 +545,15 @@ class _Sweep:
             f"via {r.identity} (max_start={max_start})"
         )
 
+    # --- phase 5 (PLAN_R step 2) ---
+    def _phase5_proximity_tick(self, payload: Any, t: int) -> None:
+        fired, unresolved = self.proximity.on_tick(payload, int(t))
+        for trig in fired:
+            self._push(trig.trigger_idx, _PHASE_FIRE, (_KIND_TRIGGER_FIRE,) + _fire_order_key(trig),
+                       ("fire", trig))
+        for trig, reason, detail in unresolved:
+            self._unresolved(trig, reason, detail)
+
     # --- after ---
     def _after_sweep(self) -> None:
         # The final ids FIRST (PLAN_I §9.3 D4): every SweepResult consumer sees them.
@@ -644,6 +667,7 @@ def run_lifecycle_sweep(
     parent_path: str = "H1.main",
     sub_tf: str = "M15",
     log: Callable[[str], None] = print,
+    proximity: Any = None,
 ) -> SweepResult:
     """Run the §17.6 sweep over `triggers` and populate `pool` in place.
 
@@ -660,6 +684,11 @@ def run_lifecycle_sweep(
       `sub`'s geometry, entity-absolute.
     - `synth_reversal_trigger(source_trigger, sd, R)` → the successor's
       `MultiTFTrigger`; default = `entity_df_mutation._synth_reversal_trigger`.
+    - `proximity` (PLAN_R step 2) — the proximity overlay driver
+      (`multitf/proximity_overlay.ProximityOverlay`) or None: its
+      `initial_ticks()` → `[(idx, order, payload)]` are queued at phase 5, and
+      each `on_tick(payload, idx)` → `(SweepTriggers to FIRE, [(SweepTrigger,
+      reason, detail)] to log unresolved)`.
     """
     if synth_reversal_trigger is None:
         from engine_v2.multitf.entity_df_mutation import _synth_reversal_trigger
@@ -668,7 +697,7 @@ def run_lifecycle_sweep(
         pool=pool, tables=tables, resolve_start=resolve_start, build_geometry=build_geometry,
         resolve_reversal=resolve_reversal, resolve_cross_fib_limit=resolve_cross_fib_limit,
         synth_reversal_trigger=synth_reversal_trigger,
-        parent_path=parent_path, sub_tf=sub_tf, log=log,
+        parent_path=parent_path, sub_tf=sub_tf, log=log, proximity=proximity,
     )
     sweep.run(list(triggers))
     return SweepResult(pool=pool, unresolved=pool.unresolved, spawned=sweep.spawned)

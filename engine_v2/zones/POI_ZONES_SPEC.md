@@ -698,14 +698,18 @@ A POI zone is always in the **structure direction** by construction:
 - The resulting POI zone's `side` mirrors the structure direction:
   `"buy"` if `sd == +1`, `"sell"` if `sd == -1`
 
-**Consequence:** there are no opp_sd POIs anywhere in the system. The zone
-proximity logic relies on this invariant — opp_sd zone proximity triggers
-only consider the CTS KL zone (the single opposite-direction zone per
-cycle); no POIs participate.
+**Consequence:** within ONE structure there are no opp_sd POIs — a structure's
+own POIs are always on its sd side, and the parent's own zone-proximity ladder
+(`zones/zone_proximity.py`) still reads its POIs as sd rungs only.
 
-If you ever introduce a feature that produces an opposite-direction POI,
-you'll need to revisit `check_zone_proximity` and any code that currently
-assumes "POI ⟹ sd direction."
+**But the parent's opp_sd side now reads a counter sub's POI** (PLAN_R step 2,
+2026-10-20 — the proximity overlay, `multitf/proximity_overlay.py`): a
+counter-direction sub's POI is a POI in the SUB's direction, i.e. opposite to the
+parent's, so it joins the parent's opp_sd proximity reference ladder (with the
+sub's BOS zones); a same-direction sub's zones beyond the parent POI join the sd
+side. The side is assigned explicitly by the sub's direction relative to the
+parent, never inferred from "POI ⟹ sd". The invariant above is per structure and
+still holds; the register item "Opposite-direction POIs" is closed by this.
 
 ### Zone Boundaries
 - **Top:** IC candle high

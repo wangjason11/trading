@@ -110,8 +110,9 @@ def main() -> None:
         max_extend_iters=8,
     )
     df.attrs["pair"] = CONFIG.pair
-    res = run_pipeline(df, lower_timeframes=())  # H1 only — we only care
-                                                 # about parent triggers.
+    # H1 only: the PARENT-ZONE batch lists (PLAN_R step 1). Since PLAN_R step 2 a replay's final lists also read sub
+    # zones (the proximity overlay, inside the M15 sweep) — on the reference window 10 triggers, not these 6.
+    res = run_pipeline(df, lower_timeframes=())
     h1_df = res.df
     pip_size = _pip_size_from_pair(h1_df)
     zpt: Dict[Tuple[int, int], List[Any]] = res.meta.get(
