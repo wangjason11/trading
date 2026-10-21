@@ -1,8 +1,9 @@
 # PLAN_S — the imbalance fill rule (65 % arming, separate candles) + IC Step 1B, the closest-prior-imbalance preference (the user's IC revisit, 2026-10-20 → 21)
 
-**Status: steps 1–2 LANDED 2026-10-21** — step 1 source `69c099b`, save **S_S1** `20261021_020427_69c099b` (save
+**Status: COMPLETE — steps 1–3 LANDED 2026-10-21** — step 1 source `69c099b`, save **S_S1** `20261021_020427_69c099b` (save
 `b4f040b`, trunk `138c2a7`) = §2.2 exactly; step 2 source `cbaed31`, save **S_S2** `20261021_081421_cbaed31` (save
-`780e628`, trunk `f4e83c6`) = §3.2 exactly (§6). **Step 3 BUILT 2026-10-21 (a new session):** the fresh audit +
+`780e628`, trunk `f4e83c6`) = §3.2 exactly; step 3 source `7b62a47`, save **S_S3** `20261021_130400_7b62a47` (save
+`538ecc1`, trunk `231d5c8`; = `LATEST_week9-entries-decisions`) = §4.4 exactly (§6). **Step 3 (a new session):** the fresh audit +
 the engineering reading §4.3, the variant measured (§4.4 — 97 cells, no cascade), names + hover decided (§4.3.1, rounds
 6–7), the plan cold review + the landing review (§5, §6), `/compare` vs S_S2 = §4.4 exactly; the user's chart look +
 go: "looks good go ahead" (§6). Baseline at drafting **S_R3**
@@ -537,7 +538,7 @@ and move on to step 2")
   register §D.2 (the fill check's unreachable missing-label disagreement, above); after the save, the `/compare`
   skill's "PLAN_S step 2" entry + chart counts.
 
-### Step 3 — BUILT 2026-10-21 (the user's chart look + go: "looks good go ahead")
+### Step 3 — LANDED 2026-10-21 (`7b62a47`, save S_S3 `20261021_130400_7b62a47`, save commit `538ecc1`, trunk `231d5c8`; the user's chart look: "looks good go ahead")
 
 - Code (`zones/poi_zones.py`): `closest_prior_imbalance`, `check_prior_imbalance` (`ICCandleCheck` +
   `prior_imbalance_first_c2_idx` / `prior_imbalance_unfilled`; evaluated on the IC candidates, every check with
@@ -610,3 +611,8 @@ and move on to step 2")
   outranked pattern by Step 2's tiebreak rules and only when 1B narrowed the field. The user, verbatim: **"looks good
   go ahead"** — every default accepted as built; `/commit-save` reuse mode (no source changed after the `/compare`
   replay).
+- **Saved:** source `7b62a47` → S_S3 `20261021_130400_7b62a47` (save `538ecc1`, trunk `231d5c8`), from the `/compare` replay
+  (fetch gate PASS on its log); the save's CSVs vs S_S2: 21 / 27 md5-equal, the 6 IC / POI ones differ — the
+  `/compare` result above. Docs after the save: the `/compare` skill's "PLAN_S step 3" entry + the IC-CSV column
+  history + the chart counts' baseline, the register §D item 4 (PLAN_S COMPLETE; item 4 open until the user closes
+  it), memory.

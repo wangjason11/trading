@@ -432,7 +432,7 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_structure_levels.csv` |
 | `*_kl_zones.csv` |
 | `*_poi_zones.csv` |
-| `*_ic_candidates.csv` — the IC selection (`*_ip_candidates.csv` until PLAN_L landing 1, 2026-10-09; PLAN_H landing A; the picked rows = the drawn POIs since landing B); + the column `ic_ref_reason` after `touches_zone` since PLAN_K landing A (2026-10-09); + `immediate_imbalance_first_c2_idx` after `ic_ref_reason` since the IP tiebreaker update (2026-10-09); + `has_unfilled_imbalance_after`, `is_ic_candidate` after it and one row per agreed-opposite candle of the window since PLAN_L landing 1; + `ip_outcome` after `is_ic_candidate` and the 4 `ranking_*` columns at the end since PLAN_L landing 2 (2026-10-10); + `ic_zone_band` after `is_ic_candidate` since PLAN_P (2026-10-13 — every row; `touches_zone` is that band's touch, `immediate_imbalance_first_c2_idx` = IC condition 3, `has_unfilled_imbalance_after` information only) |
+| `*_ic_candidates.csv` — the IC selection (`*_ip_candidates.csv` until PLAN_L landing 1, 2026-10-09; PLAN_H landing A; the picked rows = the drawn POIs since landing B); + the column `ic_ref_reason` after `touches_zone` since PLAN_K landing A (2026-10-09); + `immediate_imbalance_first_c2_idx` after `ic_ref_reason` since the IP tiebreaker update (2026-10-09); + `has_unfilled_imbalance_after`, `is_ic_candidate` after it and one row per agreed-opposite candle of the window since PLAN_L landing 1; + `ip_outcome` after `is_ic_candidate` and the 4 `ranking_*` columns at the end since PLAN_L landing 2 (2026-10-10); + `ic_zone_band` after `is_ic_candidate` since PLAN_P (2026-10-13 — every row; `touches_zone` is that band's touch, `immediate_imbalance_first_c2_idx` = IC condition 3, `has_unfilled_imbalance_after` information only); + Step 1B's 5 columns `prior_imbalance_first_c2_idx`, `prior_imbalance_unfilled` (per check row), `prior_imbalance_outcome`, `prior_imbalance_passer_count`, `ic_candidate_count` (per record) after `ic_zone_band` since PLAN_S step 3 (2026-10-21 — `ip_outcome` = Step 2's outcome over the list Steps 2–3 ran on, the passers when 1B applied) |
 | `*_structure_events.csv` — `STATE_CHANGED(to=reversal)` carries `meta["pattern_anchor_idx"]` since PLAN_K landing A |
 | `*_imbalance_instances.csv` |
 | `*_fib_lifecycle.csv` — no `fib_mode` column since PLAN_I S6 (2026-10-09): against an older save (S_J `20261009_013718_708a8d9` and before) diff the 3 fib CSVs with `engine_v2/plans/plan_i_inputs/cmp_s6_fib_mode.py BASE CUR` (positional `cmp_save.py` shifts the `meta` cell); the `ic_ref_*` meta keys since PLAN_K landing A |
@@ -602,7 +602,26 @@ Figures: traces unchanged and xy-equal, shapes 236 → 234, 138 → 136, 309 →
 H1 and both M15 overlays); hovers (`cmp_hover.py`): 0 templates, the customdata of 2 traces per chart (the same POI's
 confirmed candle 998 → 954). Positional `cmp_save.py` reads it correctly. Every delta = PLAN_S §3.2 (the save replay
 is md5- / figure-hash-equal to the variant `make_variant_stroke2_later.py` on step 1's). S_S2
-`20261021_081421_cbaed31` (source `cbaed31`, save `780e628`, trunk `f4e83c6`; = `LATEST_<branch>` from 2026-10-21).
+`20261021_081421_cbaed31` (source `cbaed31`, save `780e628`, trunk `f4e83c6`; = `LATEST_<branch>` until S_S3, below).
+**PLAN_S step 3 (2026-10-21, IC Step 1B — the IC candidates whose closest prior sd imbalance is unfilled through the
+candle before go to Steps 2–3 first; no IC from them, or no passer → all the candidates; the user's IC-revisit change
+C, POI_ZONES_SPEC §3.7) — a BEHAVIOUR change AND a save-format boundary:** the IC CSVs gain 5 columns after
+`ic_zone_band` (`prior_imbalance_first_c2_idx`, `prior_imbalance_unfilled` per check; `prior_imbalance_outcome`,
+`prior_imbalance_passer_count`, `ic_candidate_count` per record); the POI meta gains 6 keys (`prior_imbalance_outcome`,
+`prior_imbalance_first_c2_idx`, `prior_imbalance_passer_count`, `ic_candidate_count`, `prior_imbalance_outranked_ic_idx`,
+`prior_imbalance_outranked_ip_rank`); `ip_outcome` now = Step 2's outcome over the list Steps 2–3 ran on. Against S_S2:
+21 / 27 CSVs md5-equal; the 6 IC / POI CSVs differ (H1's by the format only) — positional `cmp_save.py` breaks on the
+new columns (every IC row shifts) and the POI `meta` cell: use the keyed `qa_ic_crossfib_inputs/cmp_trial.py BASE CUR`
+and `qa_ic_crossfib_inputs/cmp_hover_strings.py BASE CUR`; `qa_ic_revisit_inputs/cmp_landed_vs_variant.py` strips the
+step-3 columns / keys to compare with a behaviour-only tree. Exactly two picks move: confluence sub 0 cycle 2 IC
+1216 → 1142 (POI confirmed 1230 → 1224); sub 3 cycle 1, both lenses, 2808 (pattern 3B.iii) → 2821 (confirmed
+2829 → 2841); no structure-event (329 / 591 / 1388), fib, KL, trigger, sub, unresolved or WVMI change. Figures: H1
+identical; chart counts unchanged (81/234, 153/136, 301/307); the two moved POIs' traces + the new hover lines
+(`Prior imbalance <c2> unfilled · preferred <n> of <m> IC candidates [(over pattern <rank> at <IC>)]`, `… only
+preferred IC candidate` — only when 1B narrowed the field: 1142, 2821, and sub 8 cross 0→2's unmoved 4131). Skip grep
+24 = the 23 + one benign `[data_bridge] RETRY` (the fetch recovered). Every delta = PLAN_S §4.4 (the variant
+`make_variant_step1b.py` — 97 cells vs S_S2 — predicted before the build). S_S3 `20261021_130400_7b62a47` (source `7b62a47`,
+save `538ecc1`, trunk `231d5c8`; = `LATEST_<branch>` from 2026-10-21).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -732,7 +751,8 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-21 on S_S2 `20261021_081421_cbaed31` — PLAN_S step 2 moved the shapes from S_S1
+counts are (verified 2026-10-21 on S_S3 `20261021_130400_7b62a47`, unchanged from S_S2 `20261021_081421_cbaed31`
+— PLAN_S step 2 moved the shapes from S_S1
 `20261021_020427_69c099b`'s 236 / 138 / 309: the H1 POI sid 1 cycle 2's off / on pair 992 / 998 is gone, on H1 and
 both M15 overlays; S_S1's were unchanged from S_R3 `20261020_225749_d424099`
 — PLAN_R step 3 moved the two M15 lenses from
