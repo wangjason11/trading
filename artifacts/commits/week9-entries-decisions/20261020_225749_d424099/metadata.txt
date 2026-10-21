@@ -1,0 +1,4 @@
+commit_hash=d424099
+timestamp=20261020_225749
+branch=week9-entries-decisions
+commit_message=PLAN_R step 3: the proximity reference gate replaces the narrow proximity-reference cap (the user's round-15 pivot)
