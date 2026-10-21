@@ -1,0 +1,4 @@
+commit_hash=cbaed31
+timestamp=20261021_081421
+branch=week9-entries-decisions
+commit_message=PLAN_S step 2: the two imbalance fill strokes on SEPARATE candles - stroke 2 only on a candle after the arming one, a close exactly at the edge counts (the user's change B, 2026-10-21)
