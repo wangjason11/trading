@@ -1,0 +1,4 @@
+commit_hash=7b62a47
+timestamp=20261021_130400
+branch=week9-entries-decisions
+commit_message=PLAN_S step 3: IC Step 1B, the prior-imbalance preference (the user's change C, rounds 2-7); saved from the /compare replay (reuse mode)
