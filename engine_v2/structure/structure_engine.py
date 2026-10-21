@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple
 
 import pandas as pd
 
-from engine_v2.common.types import REQUIRED_CANDLE_COLS, StructureLevel
+from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD, REQUIRED_CANDLE_COLS, StructureLevel
 from engine_v2.structure.market_structure import MarketStructure, StructureEvent
 from engine_v2.structure.identify_start import identify_start_scenario_1
 from engine_v2.structure.reference_zone import (
@@ -18,7 +18,7 @@ from engine_v2.zones.kl_zones_v1 import (
 )
 from engine_v2.features.fibonacci import DEFAULT_FIB_LEVELS
 from engine_v2.zones.cross_cycle_fib import CrossFibLimit
-from engine_v2.zones.fib_tracker import FIB_FILL_THRESHOLD, FibTracker, FibTrackerConfig
+from engine_v2.zones.fib_tracker import FibTracker, FibTrackerConfig
 from engine_v2.zones.poi_zones import poi_inner_for_fib
 from engine_v2.zones.structure_lifecycle import compute_main_cross_fib_limit
 from engine_v2.zones.zone_proximity import (
@@ -58,7 +58,7 @@ def _make_market_structure(
     structure→zones import inversion stays gone.
 
     The in-flight POI read (PLAN_I S5 / D5, Q7): an EMBEDDED `FibTracker` — the
-    downstream's logic and fill threshold (`FIB_FILL_THRESHOLD`), quiet, with
+    downstream's logic and fill threshold (`IMBALANCE_FILL_THRESHOLD`), quiet, with
     `cross_fib_limit` (REQUIRED: there is no silent "no P") for this run's
     `structure_id` — and `poi_zones.poi_inner_for_fib`. The callers: main sid N
     (`compute_structure`: `compute_main_cross_fib_limit`), a sub's geometry
@@ -82,7 +82,7 @@ def _make_market_structure(
         f"[structure_engine] cross_fib_limit must be a CrossFibLimit, got {cross_fib_limit!r}")
     if "fib_tracker" not in kwargs:
         kwargs["fib_tracker"] = FibTracker(
-            FibTrackerConfig(fib_levels=list(DEFAULT_FIB_LEVELS), fill_threshold=FIB_FILL_THRESHOLD),
+            FibTrackerConfig(fib_levels=list(DEFAULT_FIB_LEVELS), fill_threshold=IMBALANCE_FILL_THRESHOLD),
             cross_fib_limits={int(kwargs.get("structure_id", 0)): cross_fib_limit},
             quiet=True,
         )

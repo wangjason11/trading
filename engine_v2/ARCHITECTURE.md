@@ -292,7 +292,7 @@ POI activation conditions
      direction=sd, evaluated_at=t)` — an sd-direction imbalance FORMED by
      t (its first c3 has closed: `inst.formed_at <= t` — Plan F) overlaps
      `(ic_idx, t]` and is not yet *committed-filled* per the two-stroke
-     state machine (stroke 1 = 70% retrace; stroke 2 = close past gap
+     state machine (stroke 1 = 65 % retrace; stroke 2 = close past gap
      outer in instance direction). The sweep evaluates it event-driven,
      not through the wrapper: an instance enters the unfilled set at
      `max(inst.formed_at, first_active)` and leaves at its cached stroke-2

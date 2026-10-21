@@ -111,9 +111,10 @@ as-ofs** (Plan F, 2026-09-24):
 
 Filled iff BOTH strokes fire by `check_to_idx`:
 
-- **Stroke 1 — armed (70% retrace).** First candle in `(end_idx, check_to_idx]`:
-  - Bullish: `low <= gap_top - gap_size * 0.70`
-  - Bearish: `high >= gap_bottom + gap_size * 0.70`
+- **Stroke 1 — armed (65 % retrace — `fill_threshold`, the one constant `IMBALANCE_FILL_THRESHOLD`; 70 % until
+  PLAN_S step 1, 2026-10-21).** First candle in `(end_idx, check_to_idx]`:
+  - Bullish: `low <= gap_top - gap_size * fill_threshold`
+  - Bearish: `high >= gap_bottom + gap_size * fill_threshold`
 - **Stroke 2 — confirmed (close past gap outer).** First candle at idx
   `>= armed_idx`:
   - Bullish: `close >= gap_top`
@@ -121,7 +122,7 @@ Filled iff BOTH strokes fire by `check_to_idx`:
 
 Both strokes latch monotonically (stroke 1 then stroke 2; neither un-latches).
 Scan starts at `end_idx + 1` — the **last c3**, which cannot arm its own gap
-(its wick IS the gap edge; stroke 1 needs 70% of the gap past it); the
+(its wick IS the gap edge; stroke 1 needs 65 % of the gap past it); the
 instance's c2s are excluded.
 
 See `engine_v2/IMBALANCE_FILL_SEMANTICS.md` for the canonical reference —
@@ -330,8 +331,8 @@ threshold until PLAN_I S4 retired the revert; the line is still drawn):
 - **Filled** requires TWO strokes within the scan range (see §1
   "Fill Check" and `IMBALANCE_FILL_SEMANTICS.md` for the canonical
   definition):
-  - Stroke 1: price retraces ≥ 70% into the gap (low past 70% for
-    bullish, high past 70% for bearish) → instance is **armed**
+  - Stroke 1: price retraces ≥ 65 % into the gap (low past 65 % for
+    bullish, high past 65 % for bearish) → instance is **armed**
   - Stroke 2: at a later candle (or the same one), close passes the
     gap outer in the imbalance's direction (≥ gap_top bullish,
     ≤ gap_bottom bearish) → instance is **confirmed-filled**

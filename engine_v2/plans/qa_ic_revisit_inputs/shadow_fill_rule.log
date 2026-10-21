@@ -1,0 +1,161 @@
+[REC] H1main H1 sid0 single 0 sd +1 bos 96 cts 430 today: IC None
+[REC] H1main H1 sid0 single 1 sd +1 bos 591 cts 652 today: IC 607
+[REC] H1main H1 sid1 single 0 sd -1 bos 689 cts 710 today: IC None
+[REC] H1main H1 sid1 cross 0->1 sd -1 bos 689 cts 761 today: IC None
+[REC] H1main H1 sid1 single 2 sd -1 bos 826 cts 905 today: IC 859
+[REC] sub0 M15 sid0 single 0 sd +1 bos 454 cts 784 today: IC 650
+[REC] sub0 M15 sid0 single 1 sd +1 bos 917 cts 1020 today: IC 923
+   thr 0.7 cand 922 pinbar gap None | E FAIL | S FAIL | B FAIL | SB FAIL | EN PASS | X FAIL | SX FAIL
+   thr 0.7 cand 923 pinbar gap None | E FAIL | S FAIL | B FAIL | SB FAIL | EN PASS | X FAIL | SX FAIL
+   thr 0.65 cand 922 pinbar gap None | E FAIL | S FAIL | B FAIL | SB FAIL | EN PASS | X FAIL | SX FAIL
+   thr 0.65 cand 923 pinbar gap None | E FAIL | S FAIL | B FAIL | SB FAIL | EN PASS | X FAIL | SX FAIL
+[REC] sub0 M15 sid0 single 2 sd +1 bos 1107 cts 1245 today: IC 1216
+   thr 0.7 cand 1138 normal gap (1133, 1133) | E FAIL a1136 c1137 | S FAIL a1136 c1137 | B PASS a1136 cNone | SB PASS a1136 cNone | EN FAIL a1136 c1137 | X FAIL a1136 c1137 | SX FAIL a1136 c1137
+   thr 0.7 F4/E: passers 1 -> IC 1142 1B ranked (only)  MOVED vs today
+   thr 0.7 F4/S: passers 1 -> IC 1142 1B ranked (only)  MOVED vs today
+   thr 0.7 F4/B: passers 2 -> IC 1138 1B ranked most_recent_before_imbalance  MOVED vs today  DIFFERS from E
+   thr 0.7 F4/SB: passers 2 -> IC 1138 1B ranked most_recent_before_imbalance  MOVED vs today  DIFFERS from E
+   thr 0.7 F4/EN: passers 1 -> IC 1142 1B ranked (only)  MOVED vs today
+   thr 0.7 F4/X: passers 1 -> IC 1142 1B ranked (only)  MOVED vs today
+   thr 0.7 F4/SX: passers 1 -> IC 1142 1B ranked (only)  MOVED vs today
+   thr 0.65 cand 1138 normal gap (1133, 1133) | E FAIL a1136 c1137 | S FAIL a1136 c1137 | B PASS a1136 cNone | SB PASS a1136 cNone | EN FAIL a1136 c1137 | X FAIL a1136 c1137 | SX FAIL a1136 c1137
+   thr 0.65 F4/E: passers 1 -> IC 1142 1B ranked (only)  MOVED vs today
+   thr 0.65 F4/S: passers 1 -> IC 1142 1B ranked (only)  MOVED vs today
+   thr 0.65 F4/B: passers 2 -> IC 1138 1B ranked most_recent_before_imbalance  MOVED vs today  DIFFERS from E
+   thr 0.65 F4/SB: passers 2 -> IC 1138 1B ranked most_recent_before_imbalance  MOVED vs today  DIFFERS from E
+   thr 0.65 F4/EN: passers 1 -> IC 1142 1B ranked (only)  MOVED vs today
+   thr 0.65 F4/X: passers 1 -> IC 1142 1B ranked (only)  MOVED vs today
+   thr 0.65 F4/SX: passers 1 -> IC 1142 1B ranked (only)  MOVED vs today
+[REC] sub0 M15 sid0 single 3 sd +1 bos 1310 cts 1721 today: IC 1660
+[REC] sub0 M15 sid0 single 4 sd +1 bos 1761 cts 1794 today: IC 1778
+[REC] sub1 M15 sid0 single 0 sd -1 bos 1797 cts 1816 today: IC None
+[REC] sub1 M15 sid0 single 1 sd -1 bos 1837 cts 1898 today: IC 1890
+[REC] sub1 M15 sid0 single 2 sd -1 bos 1934 cts 1945 today: IC 1934
+   thr 0.7 cand 1934 normal gap None | E FAIL | S FAIL | B FAIL | SB FAIL | EN PASS | X FAIL | SX FAIL
+   thr 0.7 cand 1935 pinbar gap None | E FAIL | S FAIL | B FAIL | SB FAIL | EN PASS | X FAIL | SX FAIL
+   thr 0.65 cand 1934 normal gap None | E FAIL | S FAIL | B FAIL | SB FAIL | EN PASS | X FAIL | SX FAIL
+   thr 0.65 cand 1935 pinbar gap None | E FAIL | S FAIL | B FAIL | SB FAIL | EN PASS | X FAIL | SX FAIL
+[REC] sub1 M15 sid0 single 3 sd -1 bos 2078 cts 2231 today: IC None
+[REC] sub1 M15 sid0 single 4 sd -1 bos 2270 cts 2365 today: IC 2320
+[REC] sub2 M15 sid0 single 0 sd +1 bos 2365 cts 2557 today: IC None
+   thr 0.7 cand 2406 pinbar gap (2404, 2404) | E FAIL a2406 c2406 | S PASS a2406 cNone | B FAIL a2406 c2406 | SB PASS a2406 cNone | EN FAIL a2406 c2406 | X PASS aNone cNone | SX PASS aNone cNone
+   thr 0.65 cand 2406 pinbar gap (2404, 2404) | E FAIL a2406 c2406 | S PASS a2406 cNone | B FAIL a2406 c2406 | SB PASS a2406 cNone | EN FAIL a2406 c2406 | X PASS aNone cNone | SX PASS aNone cNone
+[REC] sub2 M15 sid0 single 1 sd +1 bos 2561 cts 2609 today: IC 2575
+[REC] sub3 M15 sid0 single 0 sd -1 bos 2639 cts 2736 today: IC None
+   thr 0.65 cand 2721 pinbar gap (2709, 2709) | E FAIL a2721 c2721 | S PASS a2721 cNone | B FAIL a2721 c2721 | SB PASS a2721 cNone | EN FAIL a2721 c2721 | X PASS aNone cNone | SX PASS aNone cNone
+[REC] sub3 M15 sid0 single 1 sd -1 bos 2758 cts 2842 today: IC 2808
+   thr 0.65 F4/E: passers 1 -> IC 2821 1B ranked (only)  MOVED vs today
+   thr 0.65 F4/S: passers 1 -> IC 2821 1B ranked (only)  MOVED vs today
+   thr 0.65 F4/B: passers 1 -> IC 2821 1B ranked (only)  MOVED vs today
+   thr 0.65 F4/SB: passers 1 -> IC 2821 1B ranked (only)  MOVED vs today
+   thr 0.65 F4/EN: passers 1 -> IC 2821 1B ranked (only)  MOVED vs today
+   thr 0.65 F4/X: passers 1 -> IC 2821 1B ranked (only)  MOVED vs today
+   thr 0.65 F4/SX: passers 1 -> IC 2821 1B ranked (only)  MOVED vs today
+[REC] sub3 M15 sid0 cross 1->2 sd -1 bos 2758 cts 3047 today: IC 2930
+   thr 0.7 cand 2930 pinbar gap (2926, 2926) | E FAIL a2930 c2930 | S PASS a2930 cNone | B PASS a2930 cNone | SB PASS a2930 cNone | EN FAIL a2930 c2930 | X PASS aNone cNone | SX PASS aNone cNone
+   thr 0.7 F4/E: passers 3 -> IC 2929 1B ranked exclude_pinbar  MOVED vs today
+   thr 0.7 F4/S: passers 4 -> IC 2930 1B pattern 3C.iv  DIFFERS from E
+   thr 0.7 F4/B: passers 4 -> IC 2930 1B pattern 3C.iv  DIFFERS from E
+   thr 0.7 F4/SB: passers 4 -> IC 2930 1B pattern 3C.iv  DIFFERS from E
+   thr 0.7 F4/EN: passers 3 -> IC 2929 1B ranked exclude_pinbar  MOVED vs today
+   thr 0.7 F4/X: passers 4 -> IC 2930 1B pattern 3C.iv  DIFFERS from E
+   thr 0.7 F4/SX: passers 4 -> IC 2930 1B pattern 3C.iv  DIFFERS from E
+   thr 0.65 cand 2930 pinbar gap (2926, 2926) | E FAIL a2930 c2930 | S PASS a2930 cNone | B PASS a2930 cNone | SB PASS a2930 cNone | EN FAIL a2930 c2930 | X PASS aNone cNone | SX PASS aNone cNone
+   thr 0.65 F4/E: passers 3 -> IC 2929 1B ranked exclude_pinbar  MOVED vs today
+   thr 0.65 F4/S: passers 4 -> IC 2930 1B pattern 3C.iv  DIFFERS from E
+   thr 0.65 F4/B: passers 4 -> IC 2930 1B pattern 3C.iv  DIFFERS from E
+   thr 0.65 F4/SB: passers 4 -> IC 2930 1B pattern 3C.iv  DIFFERS from E
+   thr 0.65 F4/EN: passers 3 -> IC 2929 1B ranked exclude_pinbar  MOVED vs today
+   thr 0.65 F4/X: passers 4 -> IC 2930 1B pattern 3C.iv  DIFFERS from E
+   thr 0.65 F4/SX: passers 4 -> IC 2930 1B pattern 3C.iv  DIFFERS from E
+[REC] sub4 M15 sid0 single 0 sd +1 bos 3230 cts 3304 today: IC 3235
+[REC] sub5 M15 sid0 single 0 sd -1 bos 3304 cts 3621 today: IC 3427
+[REC] sub6 M15 sid0 single 0 sd +1 bos 3621 cts 3760 today: IC 3654
+[REC] sub7 M15 sid0 single 0 sd -1 bos 3760 cts 4000 today: IC 3809
+[REC] sub8 M15 sid0 single 0 sd +1 bos 4027 cts 4086 today: IC 4048
+[REC] sub8 M15 sid0 cross 0->1 sd +1 bos 4027 cts 4157 today: IC 4131
+[REC] sub8 M15 sid0 cross 0->2 sd +1 bos 4027 cts 4222 today: IC 4131
+   thr 0.7 cand 4027 pinbar gap None | E FAIL | S FAIL | B FAIL | SB FAIL | EN PASS | X FAIL | SX FAIL
+   thr 0.65 cand 4027 pinbar gap None | E FAIL | S FAIL | B FAIL | SB FAIL | EN PASS | X FAIL | SX FAIL
+[STATS] H1 thr0.65 commit candle moves under B: 4
+[STATS] H1 thr0.65 commit candle moves under S: 47
+[STATS] H1 thr0.65 commit candle moves under SB: 49
+[STATS] H1 thr0.65 committed (E): 152
+[STATS] H1 thr0.65 committed by a close AT the edge (E): 4
+[STATS] H1 thr0.65 committed on the arming candle (E): 47
+[STATS] H1 thr0.65 instances: 167
+[STATS] H1 thr0.65 never committed under S: 1
+[STATS] H1 thr0.65 never committed under SB: 1
+[STATS] H1 thr0.7 commit candle moves under B: 4
+[STATS] H1 thr0.7 commit candle moves under S: 48
+[STATS] H1 thr0.7 commit candle moves under SB: 50
+[STATS] H1 thr0.7 committed (E): 152
+[STATS] H1 thr0.7 committed by a close AT the edge (E): 4
+[STATS] H1 thr0.7 committed on the arming candle (E): 48
+[STATS] H1 thr0.7 instances: 167
+[STATS] H1 thr0.7 never committed under S: 1
+[STATS] H1 thr0.7 never committed under SB: 1
+[STATS] M15 thr0.65 commit candle moves under B: 35
+[STATS] M15 thr0.65 commit candle moves under S: 158
+[STATS] M15 thr0.65 commit candle moves under SB: 185
+[STATS] M15 thr0.65 committed (E): 522
+[STATS] M15 thr0.65 committed by a close AT the edge (E): 35
+[STATS] M15 thr0.65 committed on the arming candle (E): 158
+[STATS] M15 thr0.65 instances: 552
+[STATS] M15 thr0.7 commit candle moves under B: 34
+[STATS] M15 thr0.7 commit candle moves under S: 153
+[STATS] M15 thr0.7 commit candle moves under SB: 179
+[STATS] M15 thr0.7 committed (E): 522
+[STATS] M15 thr0.7 committed by a close AT the edge (E): 34
+[STATS] M15 thr0.7 committed on the arming candle (E): 153
+[STATS] M15 thr0.7 instances: 552
+[STATS] drawn records: 27
+[STATS] example H1main H1 gap c2 103..103 dir +1 [0.55954,0.55962] armed+committed 106 o 0.55971 h 0.56074 l 0.55918 c 0.56046 dir +1 normal: 1
+[STATS] example H1main H1 gap c2 11..11 dir -1 [0.56735,0.56739] armed+committed 19 o 0.56732 h 0.56752 l 0.56682 c 0.56689 dir -1 normal: 1
+[STATS] example H1main H1 gap c2 114..114 dir +1 [0.56004,0.56042] armed+committed 116 o 0.56086 h 0.56119 l 0.56014 c 0.56074 dir -1 pinbar: 1
+[STATS] example H1main H1 gap c2 177..177 dir -1 [0.56809,0.56818] armed+committed 179 o 0.56783 h 0.56826 l 0.56750 c 0.56762 dir -1 pinbar: 1
+[STATS] example H1main H1 gap c2 180..180 dir -1 [0.56730,0.56750] armed+committed 183 o 0.56716 h 0.56832 l 0.56638 c 0.56708 dir -1 pinbar: 1
+[STATS] example H1main H1 gap c2 209..209 dir +1 [0.57214,0.57230] armed+committed 211 o 0.57254 h 0.57266 l 0.57208 c 0.57235 dir -1 pinbar: 1
+[STATS] example H1main H1 gap c2 249..249 dir +1 [0.57304,0.57314] armed+committed 252 o 0.57378 h 0.57392 l 0.57284 c 0.57324 dir -1 normal: 1
+[STATS] example H1main H1 gap c2 278..279 dir +1 [0.57186,0.57281] armed+committed 903 o 0.57242 h 0.57457 l 0.57159 c 0.57356 dir +1 pinbar: 1
+[STATS] example H1main H1 gap c2 318..318 dir +1 [0.57689,0.57692] armed+committed 320 o 0.57716 h 0.57718 l 0.57654 c 0.57694 dir -1 pinbar: 1
+[STATS] example H1main H1 gap c2 40..40 dir -1 [0.56608,0.56636] armed+committed 42 o 0.56536 h 0.56635 l 0.56472 c 0.56594 dir +1 pinbar: 1
+[STATS] example H1main H1 gap c2 58..58 dir -1 [0.56347,0.56358] armed+committed 88 o 0.56262 h 0.56389 l 0.56206 c 0.56316 dir +1 pinbar: 1
+[STATS] example H1main H1 gap c2 71..71 dir +1 [0.56008,0.56017] armed+committed 76 o 0.56039 h 0.56069 l 0.55952 c 0.56056 dir +1 pinbar: 1
+[STATS] thr0.65 F4/B moved vs today: 2
+[STATS] thr0.65 F4/B no IC: 7
+[STATS] thr0.65 F4/E moved vs today: 3
+[STATS] thr0.65 F4/E no IC: 7
+[STATS] thr0.65 F4/EN moved vs today: 3
+[STATS] thr0.65 F4/EN no IC: 7
+[STATS] thr0.65 F4/S moved vs today: 2
+[STATS] thr0.65 F4/S no IC: 7
+[STATS] thr0.65 F4/SB moved vs today: 2
+[STATS] thr0.65 F4/SB no IC: 7
+[STATS] thr0.65 F4/SX moved vs today: 2
+[STATS] thr0.65 F4/SX no IC: 7
+[STATS] thr0.65 F4/X moved vs today: 2
+[STATS] thr0.65 F4/X no IC: 7
+[STATS] thr0.65 cand (drawn records): 43
+[STATS] thr0.65 cand with NO prior sd gap in the window: 5
+[STATS] thr0.65 cand: ... and armed on the IC too (E): 3
+[STATS] thr0.65 cand: closest prior gap committed ON the IC (E): 3
+[STATS] thr0.7 F4/B moved vs today: 1
+[STATS] thr0.7 F4/B no IC: 7
+[STATS] thr0.7 F4/E moved vs today: 2
+[STATS] thr0.7 F4/E no IC: 7
+[STATS] thr0.7 F4/EN moved vs today: 2
+[STATS] thr0.7 F4/EN no IC: 7
+[STATS] thr0.7 F4/S moved vs today: 1
+[STATS] thr0.7 F4/S no IC: 7
+[STATS] thr0.7 F4/SB moved vs today: 1
+[STATS] thr0.7 F4/SB no IC: 7
+[STATS] thr0.7 F4/SX moved vs today: 1
+[STATS] thr0.7 F4/SX no IC: 7
+[STATS] thr0.7 F4/X moved vs today: 1
+[STATS] thr0.7 F4/X no IC: 7
+[STATS] thr0.7 cand (drawn records): 43
+[STATS] thr0.7 cand with NO prior sd gap in the window: 5
+[STATS] thr0.7 cand: ... and armed on the IC too (E): 2
+[STATS] thr0.7 cand: closest prior gap committed ON the IC (E): 2
+[trace] done in 20.2 s

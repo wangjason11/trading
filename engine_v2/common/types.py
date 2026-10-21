@@ -103,6 +103,16 @@ class ChartRect(TypedDict, total=False):
     text: str
     meta: Dict[str, Any]
 
+
+# The ONE imbalance fill threshold — the stroke-1 (armed) retrace fraction of the two-stroke fill
+# (`ImbalanceInstance.is_filled`; IMBALANCE_FILL_SEMANTICS.md "The predicate"). Every default reads it: `is_filled`,
+# `has_unfilled_imbalance` / `iter_unfilled_imbalances`, `resolve_cross_cycle_eligibility`, `FibTrackerConfig` (the
+# downstream tracker AND MarketStructure's embedded one) and `POIConfig` (IC condition 3, the POI activation sweep,
+# MS's in-flight IC read). 0.70 until PLAN_S step 1 (the user, 2026-10-20: "from 70% to 65%" — "only on the armed
+# portion of the filled imbalance check … the scope is everywhere").
+IMBALANCE_FILL_THRESHOLD = 0.65
+
+
 @dataclass(frozen=True)
 class ImbalanceInstance:
     """One merged FVG instance: either a single imbalance candle or a run
@@ -174,7 +184,7 @@ class ImbalanceInstance:
         self,
         df: "pd.DataFrame",
         check_to_idx: int,
-        fill_threshold: float = 0.70,
+        fill_threshold: float = IMBALANCE_FILL_THRESHOLD,
     ) -> bool:
         """Check if the merged gap is committed-filled by candles in
         (end_idx, check_to_idx].

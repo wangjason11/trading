@@ -245,7 +245,8 @@ the limit; `cross_failed` for the fallback of an allowed cycle.
   CSV's column; guard `tests/test_meta_key_renames.py`). Retired with main's old logic (a rule-3 migration,
   S4): `cycle1_bos_anchor_idx` (also out of `entity_df_mutation._FIB_META_IDX_KEYS`), `scenario`, `flow`, the
   `scenario1_revert` end reason (`_INVALIDATION_END_REASONS` is empty — the `disappeared` status stays as a hook).
-- One fill constant: `fill_threshold = 0.70` (`FibTrackerConfig`).
+- One fill constant: `FibTrackerConfig.fill_threshold` = `IMBALANCE_FILL_THRESHOLD` (`common/types.py`; 0.65 since
+  PLAN_S step 1, 0.70 before).
 
 ---
 
@@ -265,7 +266,7 @@ MS's sd-zone-proximity CTS confirmation (`_maybe_confirm_cts_via_proximity`) rea
 CTS_ESTABLISHED / CTS_UPDATED. Since S5 that inner comes from THIS logic:
 
 - **The embedded tracker.** `structure_engine._make_market_structure` builds a `FibTracker` — the downstream's config
-  (`DEFAULT_FIB_LEVELS`, `FIB_FILL_THRESHOLD` = 0.70), `quiet=True` (no `[fib]` lines from every geometry / probe MS),
+  (`DEFAULT_FIB_LEVELS`, `IMBALANCE_FILL_THRESHOLD` = 0.65), `quiet=True` (no `[fib]` lines from every geometry / probe MS),
   the run's REQUIRED `cross_fib_limit` keyed by its `structure_id` — and injects it with `poi_zones.poi_inner_for_fib`
   (MS imports nothing from `zones/`). The limit: main sid N ← `compute_main_cross_fib_limit(events of sids < N, N)`
   (the helper `compute_main_cross_fib_limits` maps for the downstream — equal by construction); a sub's geometry ←

@@ -41,7 +41,7 @@ wait until 1000 although an unfilled gap exists from 998, so it is rejected.
 
 **Exactness.** For every K in `(start_idx, end_idx]` the formed prefix's only
 scanned candle is its own c3, which cannot arm its own gap (bullish: the c3 low
-IS the prefix's `gap_top`; stroke 1 needs a low `<= gap_top − 0.70·size`; needs
+IS the prefix's `gap_top`; stroke 1 needs a low `<= gap_top − fill_threshold·size`; needs
 `fill_threshold > 0`). So "prefix unfilled" == "instance unfilled", and R1 gives
 exactly a live engine's answer while still using the final merged bounds.
 **Caveat:** a prefix and its merged run can differ in degeneracy (`gap_size <= 0`,
@@ -117,8 +117,14 @@ Defined in `engine_v2/common/types.py::ImbalanceInstance.is_filled`. One
 method, one rule:
 
 ```
-is_filled(df, check_to_idx, fill_threshold=0.70) -> bool
+is_filled(df, check_to_idx, fill_threshold=IMBALANCE_FILL_THRESHOLD) -> bool
 ```
+
+**The threshold is ONE constant**, `IMBALANCE_FILL_THRESHOLD` (`common/types.py`) = **0.65** since PLAN_S step 1
+(2026-10-21; 0.70 before — the user: "from 70% to 65%", "only on the armed portion of the filled imbalance check.
+And yes the scope is everywhere"). Every default reads it — `is_filled`, `has_unfilled_imbalance` /
+`iter_unfilled_imbalances`, `resolve_cross_cycle_eligibility`, `FibTrackerConfig` (the downstream tracker and
+MarketStructure's embedded one), `POIConfig` — pinned by `test_plan_i_s5_ms_reads_the_fib.py::test_one_fill_threshold`.
 
 An instance is **filled** iff both strokes of a two-stroke state machine
 have fired by `check_to_idx`:
@@ -152,10 +158,10 @@ leaves when it fills.)
 
 ### Why two strokes
 
-A single-stroke definition (just the 70% retrace) treats every gap touch as
+A single-stroke definition (just the stroke-1 retrace) treats every gap touch as
 invalidation. Real markets often touch a gap and bounce — the touch alone
 doesn't commit the move. The two-stroke definition requires both an
-engagement (price retraces into the gap by 70%) AND a follow-through
+engagement (price retraces into the gap by the fill threshold, 65 %) AND a follow-through
 commitment (price subsequently closes past the gap's outer edge in the
 imbalance's direction). Until both happen, the gap is still "in play."
 
@@ -172,7 +178,7 @@ where stroke 2 confirms.
 
 ```
 has_unfilled_imbalance(df, start_idx, end_idx, check_to_idx,
-                       fill_threshold=0.70, *, direction=None, evaluated_at) -> bool
+                       fill_threshold=IMBALANCE_FILL_THRESHOLD, *, direction=None, evaluated_at) -> bool
 ```
 
 In `engine_v2/patterns/imbalance.py`. For each instance in
@@ -371,6 +377,14 @@ save `20260923_172626_0a4eadc`: 19/24 CSVs byte-identical.
 Post-E·2, 2026-09-26; entity-absolute = + the sub's `slice_begin`: sub 2's 54 = 2369, sub 3's 62 = 2651.)
 
 ---
+
+### Arming threshold 70 % → 65 % (2026-10-21, PLAN_S step 1)
+
+Stroke 1 fires at a 65 % retrace (was 70 %), in every consumer — one constant. Measured on the reference window
+(the variant replay vs S_R3, `plans/qa_ic_revisit_inputs/qa_findings.md`): 11 cells, every figure identical — 7 H1
+instances arm earlier (one, #92, also commits 761 → 600), sub 3 cycle 0's fib gains one deactivate / reactivate
+pair, one IC check (not a pick) loses condition 3 (its immediate gap 3488 fills); no structure, POI, trigger or sub
+change.
 
 ## When to revisit
 

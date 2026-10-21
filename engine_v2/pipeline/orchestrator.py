@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Mapping, Optional, Tuple
 
 import pandas as pd
 
-from engine_v2.common.types import PatternEvent, StructureLevel, REQUIRED_CANDLE_COLS
+from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD, PatternEvent, StructureLevel, REQUIRED_CANDLE_COLS
 from engine_v2.structure import event_fields as ef
 from engine_v2.features.candle_classifier import apply_candle_classification
 from engine_v2.patterns.pattern_engine import detect_patterns
@@ -45,7 +45,7 @@ from engine_v2.structure.structure_engine import _pip_size_from_pair
 
 # Week 7: Fib tracking
 from engine_v2.features.fibonacci import DEFAULT_FIB_LEVELS
-from engine_v2.zones.fib_tracker import FIB_FILL_THRESHOLD, FibEventOrderError, FibTracker, FibTrackerConfig
+from engine_v2.zones.fib_tracker import FibEventOrderError, FibTracker, FibTrackerConfig
 
 
 @dataclass
@@ -312,7 +312,7 @@ def _run_downstream_pipeline(
     fib_tracker = FibTracker(
         FibTrackerConfig(
             fib_levels=list(DEFAULT_FIB_LEVELS),
-            fill_threshold=FIB_FILL_THRESHOLD,     # == MarketStructure's embedded tracker's (PLAN_I D5)
+            fill_threshold=IMBALANCE_FILL_THRESHOLD,     # == MarketStructure's embedded tracker's (PLAN_I D5)
         ),
         cross_fib_limits=cross_fib_limits,
     )

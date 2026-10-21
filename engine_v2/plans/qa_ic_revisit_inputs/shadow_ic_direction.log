@@ -1,0 +1,24 @@
+   H1main sid1 c2 candidate 865 VOL0 dir +1 vol +0 pinbar
+   sub4 sid0 c0 candidate 3235 DOJI dir +0 vol -1 pinbar  PICKED
+   STRICT: sub4 sid0 c0 IC 3235 -> None band 61.8-80 -> 80-100 (all_ic_candidates_pinbar)
+   NODOJI: sub4 sid0 c0 IC 3235 -> None band 61.8-80 -> 80-100 (all_ic_candidates_pinbar)
+[STATS] IC candidates: DOJI: 1
+[STATS] IC candidates: VOL0: 1
+[STATS] IC candidates: both: 41
+[STATS] MS H1 reads: 56
+[STATS] MS H1 reads whose inner differs under STRICT: 0
+[STATS] MS M15 reads: 398
+[STATS] MS M15 reads whose inner differs under STRICT: 7
+[STATS] NODOJI: no IC: 8
+[STATS] NODOJI: picks moved: 1
+[STATS] NOVOL0: no IC: 7
+[STATS] NOVOL0: picks moved: 0
+[STATS] STRICT: no IC: 8
+[STATS] STRICT: picks moved: 1
+[STATS] Step-1 rows: DOJI: 31
+[STATS] Step-1 rows: VOL0: 32
+[STATS] Step-1 rows: both: 1651
+[STATS] drawn records: 27
+[STATS] picks: DOJI: 1
+[STATS] picks: both: 19
+[trace] done in 27.8 s

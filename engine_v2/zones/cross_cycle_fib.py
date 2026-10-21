@@ -19,6 +19,7 @@ from typing import Dict, Optional, Tuple
 
 import pandas as pd
 
+from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD
 from engine_v2.patterns.imbalance import has_unfilled_imbalance
 
 
@@ -217,7 +218,7 @@ def resolve_cross_cycle_eligibility(
     bos_by_cycle: Dict[int, tuple],
     cts_by_cycle: Dict[int, tuple],
     dead_cycles: set,
-    fill_threshold: float = 0.70,
+    fill_threshold: float = IMBALANCE_FILL_THRESHOLD,
     *,
     evaluated_at: Optional[int],
     fill_horizon_idx: int,

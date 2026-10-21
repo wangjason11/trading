@@ -189,10 +189,10 @@ def test_the_read_inner_reaches_the_proximity_check(monkeypatch):
 def test_the_downstream_tracker_uses_the_one_config():
     from engine_v2.features.fibonacci import DEFAULT_FIB_LEVELS
     from engine_v2.pipeline.orchestrator import _run_downstream_pipeline
-    from engine_v2.zones.fib_tracker import FIB_FILL_THRESHOLD
+    from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD
     res = _quiet(se.compute_bounded_structure, _prepare_df(_rows(1)), 0, 1, cross_fib_limit=NO_P)
     t = _quiet(_run_downstream_pipeline, res.df, res.events, 1, wvmi="off", cross_fib_limits={0: NO_P})["fib_tracker"]
-    assert (t.config.fill_threshold, t.config.fib_levels) == (FIB_FILL_THRESHOLD, list(DEFAULT_FIB_LEVELS))
+    assert (t.config.fill_threshold, t.config.fib_levels) == (IMBALANCE_FILL_THRESHOLD, list(DEFAULT_FIB_LEVELS))
 
 
 # --- ms_refresh_full_df / ms_feed_upd_full_df: a bounded run hands the read and the tracker the TRUNCATED frame ---

@@ -119,8 +119,12 @@ Verbatim: "For now let's consider item 3 done. We could potentially revist down 
    folded in; build order 0a → 0b → 1 → 2, 4 commits, `/commit-save` only after step 2. **BUILT (was UNDER WAY)
    2026-10-20** (PLAN_R §8 = the build log): steps 0a `a6e71c0`, 0b `c1bd05a` and 1 `d26208e` (the ladders + the narrow proximity-reference cap on parent zones) LANDED, all zero change as predicted (the landing-review follow-up `77f8ccf`: 0a's bound = the parent cycle's CTS-established moment); step 2 (the overlay inside the sweep) LANDED 2026-10-20 `817d2a9`, save S_R2 `20261020_115859_817d2a9` = `LATEST_<branch>` (the `/compare` skill's PLAN_R step 2 entry) = the §5.4 prediction (H1 triggers 6 → 10, subs 8 → 11) + its landing review (the source switch: a contributed + reachable zone); **PLAN_R step 3 = the user's round-15 pivot — LANDED 2026-10-20 `d424099`, save S_R3 `20261020_225749_d424099` = `LATEST_<branch>` (PLAN_R §9): the proximity reference gate — a reference update is made only if the gap after it stays above 40 / 25 / 15 (no trigger counters); the only cap left, the narrow parent-reference exception (a parent BOS–CTS inner gap ≤ the minimum); an sd sub zone is no candidate for the sd reference before the cycle's first sd trigger (round 16). PLAN_R COMPLETE (steps 0a–3); the user then closed item 3 (2026-10-20) — next in the SESSION ORDER: item 4, the IC identification revisit (the user's spec to come), then item 5, zone size adjustments**.
 4. **NEXT — revisit the IC identification logic** (the user, 2026-10-20: "go back and revisit some things around IC
-   identification logic. I will provide further specs for the changes in future sessions"). Waits for the user's
-   spec; nothing to start before it. Current logic, canonical: `engine_v2/zones/POI_ZONES_SPEC.md` §3 (Step 1 the IC
+   identification logic. I will provide further specs for the changes in future sessions"). **Spec received 2026-10-20
+   (`engine_v2/plans/qa_ic_revisit_inputs/user_writeup_20261020.md`), decided through Q&A round 5 2026-10-21
+   (`qa_findings.md` there): IN PROGRESS as `engine_v2/plans/PLAN_S_fill_rule_and_ic_step1b.md` — step 1 the
+   imbalance arming threshold 70 % → 65 %, step 2 the two fill strokes on separate candles (both engine-wide), step 3
+   IC Step 1B (prefer candidates whose closest prior imbalance is unfilled through the candle before the IC); IC
+   condition 1 unchanged.** Current logic, canonical: `engine_v2/zones/POI_ZONES_SPEC.md` §3 (Step 1 the IC
    conditions incl. PLAN_P's condition 3 = the immediate unfilled imbalance and Step 1A the 80–100 fallback zone,
    §3.2 the IC reference incl. PLAN_O's target-cycle CTS for a cross, Step 2 the institutional pattern + its
    tiebreak rules, Step 3 the ranking rules; Step 4 the lower-TF fallback DEFERRED — D.2 "Step 4 of IC

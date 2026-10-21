@@ -38,7 +38,7 @@ from typing import List, Optional, Dict, Any, Literal, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
-from engine_v2.common.types import ImbalanceInstance
+from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD, ImbalanceInstance
 from engine_v2.features.candle_classifier import candle_params_for_timeframe
 from engine_v2.features.candles_v2 import agreed_direction
 from engine_v2.features.fibonacci import FibRetracement, calculate_fib_price
@@ -104,7 +104,7 @@ class POIConfig:
     v90_threshold: float = 0.90
 
     # Imbalance detection
-    fill_threshold: float = 0.70  # 70% = filled
+    fill_threshold: float = IMBALANCE_FILL_THRESHOLD  # the stroke-1 retrace fraction (common/types.py)
 
     # Institutional-pattern leg cap per timeframe (PLAN_H §1 item 6: the initial leg = its run's most recent `cap`
     # candles, the continuation = its first `cap`; H1 decision; M5 2 arrives with the M5 lens). An unknown TF
@@ -958,9 +958,9 @@ def derive_poi_zones(
     for key in cts_events_by_key:
         cts_events_by_key[key].sort(key=ef.event_moment)
 
-    # Precompute each imbalance instance's fill_idx (the first candle after
-    # inst.end_idx where ≥70% retrace into the merged gap fires). One linear
-    # scan per instance — shared across every POI's activation sweep.
+    # Precompute each imbalance instance's (armed_idx, confirmed_fill_idx) — the
+    # two-stroke fill (`_compute_fill_idx_cache`). One linear scan per
+    # instance — shared across every POI's activation sweep.
     imbalances: List[ImbalanceInstance] = df.attrs.get("imbalances", [])
     fill_idx_cache = _compute_fill_idx_cache(df, imbalances, config.fill_threshold)
 
@@ -1497,7 +1497,7 @@ def _compute_poi_activation_history(
                     that the IMMEDIATE gap): an sd-direction imbalance FORMED
                     by t (its first c3 has closed: `inst.formed_at <= t` —
                     Plan F) overlaps `(ic_idx, t]` and is not yet
-                    committed-filled (two-stroke: stroke 1 = 70% retrace,
+                    committed-filled (two-stroke: stroke 1 = the fill_threshold retrace,
                     stroke 2 = close past gap outer). Flips as imbalances
                     form / commit-fill.
       Condition 5 — The touch: the IC candle touches the zone (inclusive
@@ -1718,7 +1718,7 @@ def poi_inner_for_fib(
     error of the stamp read or the pick is re-raised as `ICSelectionError` (a RuntimeError), so neither a missing
     stamp nor an IP bug can pass as "no IC", and the sub geometry's narrow `except (ValueError,
     IndexError)` (`entity_df_mutation._build_geometry`) cannot drop the sub. `fill_threshold` = the tracker's
-    (`FIB_FILL_THRESHOLD`; the drawn POI's `POIConfig` default is the same value — pinned).
+    (`IMBALANCE_FILL_THRESHOLD`; the drawn POI's `POIConfig` default is the same constant — pinned).
 
     The fib's IC reference is built HERE, inside the re-raising `try` (PLAN_K A4, §9 C01): `tracker.ic_reference(
     fib_state, df, evaluated_at=evaluated_at)` — MS's embedded tracker at the fed event's moment, the frame = MS's

@@ -30,8 +30,9 @@ from engine_v2.tests._event_factory import make_cts_updated, make_event
 from engine_v2.tests.test_ms_cts_update_no_regress import _mirror
 from engine_v2.tests.test_unified_probe import _make_ip_multicycle_data, _prepare_df
 from engine_v2.zones.cross_cycle_fib import CrossFibLimit
+from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD
 from engine_v2.zones.fib_tracker import (
-    FIB_FILL_THRESHOLD, CrossFibLimitError, FibEventOrderError, FibTracker, FibTrackerConfig,
+    CrossFibLimitError, FibEventOrderError, FibTracker, FibTrackerConfig,
 )
 from engine_v2.zones.poi_zones import POIConfig
 
@@ -96,7 +97,7 @@ def test_the_read_takes_the_representative_fib(monkeypatch, embedded, sd):
 
     def spy(df, fib, ft, **kw):
         seen.append(None if fib is None else (fib.cycle_id, fib.meta.get("cross_cycle") is not None, fib.bos_idx))
-        assert ft == FIB_FILL_THRESHOLD
+        assert ft == IMBALANCE_FILL_THRESHOLD
         return real(df, fib, ft, **kw)
 
     monkeypatch.setattr(se, "poi_inner_for_fib", spy)
@@ -311,7 +312,7 @@ def test_make_market_structure_builds_a_quiet_tracker_with_the_limit(embedded):
     t, = embedded
     assert ms._fib_tracker is t and ms._poi_inner_for_fib is se.poi_inner_for_fib
     assert t._limits == {3: lim} and t._quiet
-    assert (t.config.fill_threshold, t.config.fib_levels) == (FIB_FILL_THRESHOLD, [30.0, 50.0, 61.8, 80.0])
+    assert (t.config.fill_threshold, t.config.fib_levels) == (IMBALANCE_FILL_THRESHOLD, [30.0, 50.0, 61.8, 80.0])
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         ms.run()
@@ -329,8 +330,18 @@ def test_the_limit_is_required_and_typed():
 
 
 def test_one_fill_threshold():
-    """The embedded tracker, the downstream tracker and the drawn POI's IP pick share one value."""
-    assert FIB_FILL_THRESHOLD == FibTrackerConfig().fill_threshold == POIConfig().fill_threshold == 0.70
+    """The embedded tracker, the downstream tracker and the drawn POI's IP pick share one value — the one constant
+    `IMBALANCE_FILL_THRESHOLD`, 0.65 since PLAN_S step 1 (the user, 2026-10-20: 70 % → 65 %, the armed stroke only,
+    everywhere) — and every fill-check function defaults to it (no literal default left to drift)."""
+    import inspect
+
+    from engine_v2.common.types import ImbalanceInstance
+    from engine_v2.patterns.imbalance import has_unfilled_imbalance, iter_unfilled_imbalances
+    from engine_v2.zones.cross_cycle_fib import resolve_cross_cycle_eligibility
+    assert IMBALANCE_FILL_THRESHOLD == FibTrackerConfig().fill_threshold == POIConfig().fill_threshold == 0.65
+    for fn in (ImbalanceInstance.is_filled, has_unfilled_imbalance, iter_unfilled_imbalances,
+               resolve_cross_cycle_eligibility):
+        assert inspect.signature(fn).parameters["fill_threshold"].default == 0.65, fn.__name__
 
 
 def test_main_sid_n_gets_its_limit_from_the_sids_before_it(monkeypatch):

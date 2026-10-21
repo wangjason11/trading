@@ -19,6 +19,7 @@ from typing import List, Mapping, Optional, Dict, Any
 
 import pandas as pd
 
+from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD
 from engine_v2.features.fibonacci import (
     FibRetracement,
     create_fib_retracement,
@@ -122,18 +123,15 @@ class FibState:
     status: str = "active"
 
 
-# The ONE imbalance fill threshold of the fib decision (70 % = filled): the downstream tracker
-# (`orchestrator._run_downstream_pipeline`) and MarketStructure's embedded tracker
-# (`structure_engine._make_market_structure`, PLAN_I S5 / D5) both build their config with it, and MS's in-flight
-# IC pick reads the tracker's value (`poi_zones.poi_inner_for_fib`).
-FIB_FILL_THRESHOLD = 0.70
-
-
 @dataclass
 class FibTrackerConfig:
     """Configuration for FibTracker."""
     fib_levels: List[float] = field(default_factory=lambda: DEFAULT_FIB_LEVELS.copy())
-    fill_threshold: float = FIB_FILL_THRESHOLD  # 70% = filled
+    # The one imbalance fill threshold (`common/types.py`): the downstream tracker
+    # (`orchestrator._run_downstream_pipeline`) and MarketStructure's embedded tracker
+    # (`structure_engine._make_market_structure`, PLAN_I S5 / D5) both build their config with it, and MS's
+    # in-flight IC pick reads the tracker's value (`poi_zones.poi_inner_for_fib`).
+    fill_threshold: float = IMBALANCE_FILL_THRESHOLD
 
 
 class FibTracker:

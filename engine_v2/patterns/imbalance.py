@@ -25,7 +25,7 @@ from typing import Iterator, List, Optional
 
 import pandas as pd
 
-from engine_v2.common.types import ImbalanceInstance
+from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD, ImbalanceInstance
 
 
 def compute_imbalance(df: pd.DataFrame) -> pd.DataFrame:
@@ -120,7 +120,7 @@ def has_unfilled_imbalance(
     start_idx: int,
     end_idx: int,
     check_to_idx: int,
-    fill_threshold: float = 0.70,
+    fill_threshold: float = IMBALANCE_FILL_THRESHOLD,
     *,
     direction: Optional[int] = None,
     evaluated_at: Optional[int],
@@ -157,7 +157,7 @@ def has_unfilled_imbalance(
         Fib / scenario / POI checks are sd-direction strict since 2026-05-23 —
         IMBALANCE_FILL_SEMANTICS.md). ``None`` accepts any direction.
     fill_threshold
-        Retracement fraction (default 0.70) at which stroke 1 fires.
+        Retracement fraction (default `IMBALANCE_FILL_THRESHOLD`) at which stroke 1 fires.
     """
     return any(iter_unfilled_imbalances(
         df, start_idx, end_idx, check_to_idx, fill_threshold,
@@ -170,7 +170,7 @@ def iter_unfilled_imbalances(
     start_idx: int,
     end_idx: int,
     check_to_idx: int,
-    fill_threshold: float = 0.70,
+    fill_threshold: float = IMBALANCE_FILL_THRESHOLD,
     *,
     direction: Optional[int] = None,
     evaluated_at: Optional[int],
