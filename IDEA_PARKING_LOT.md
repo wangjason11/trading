@@ -114,7 +114,7 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    `engine_v2/plans/PLAN_R_opp_sd_zones_proximity.md`, Q&A rounds 1–9 `engine_v2/plans/qa_opp_sd_zones_inputs/`):
    READY TO BUILD 2026-10-20 — every decision closed (Q&A rounds 1–12), the plan review done (3 agents, 0.84M) and
    folded in; build order 0a → 0b → 1 → 2, 4 commits, `/commit-save` only after step 2. **BUILD UNDER WAY
-   2026-10-20** (PLAN_R §8 = the build log): steps 0a `a6e71c0`, 0b `c1bd05a` and 1 `d26208e` (the ladders + the narrow proximity-reference cap on parent zones) LANDED, all zero change as predicted (the landing-review follow-up `77f8ccf`: 0a's bound = the parent cycle's CTS-established moment); step 2 (the overlay inside the sweep) LANDED 2026-10-20 `817d2a9`, save S_R2 `20261020_115859_817d2a9` = `LATEST_<branch>` (the `/compare` skill's PLAN_R step 2 entry) = the §5.4 prediction (H1 triggers 6 → 10, subs 8 → 11) + its landing review (the source switch: a contributed + reachable zone); **NEXT = PLAN_R step 3, the user's round-15 pivot: the gap thresholds gate reference UPDATES (no trigger counters; the only cap: a parent BOS–CTS inner gap ≤ the threshold)**.
+   2026-10-20** (PLAN_R §8 = the build log): steps 0a `a6e71c0`, 0b `c1bd05a` and 1 `d26208e` (the ladders + the narrow proximity-reference cap on parent zones) LANDED, all zero change as predicted (the landing-review follow-up `77f8ccf`: 0a's bound = the parent cycle's CTS-established moment); step 2 (the overlay inside the sweep) LANDED 2026-10-20 `817d2a9`, save S_R2 `20261020_115859_817d2a9` = `LATEST_<branch>` (the `/compare` skill's PLAN_R step 2 entry) = the §5.4 prediction (H1 triggers 6 → 10, subs 8 → 11) + its landing review (the source switch: a contributed + reachable zone); **PLAN_R step 3 = the user's round-15 pivot — BUILT 2026-10-20 (PLAN_R §9; NOT committed until the user's chart look + go): the proximity reference gate — a reference update is made only if the gap after it stays above 40 / 25 / 15 (no trigger counters); the only cap left, the narrow parent-reference exception (a parent BOS–CTS inner gap ≤ the minimum)**.
 4. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -417,6 +417,11 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
   `MARKET_STRUCTURE_SPEC` / `CHARTING_SPEC` / `LANDMINES`) — the drafted §13.7 plan; PARKED as optional by the user
   2026-09-30 (§13.7 was finalized in place instead: ~235 `PART4 §x` citations, no behaviour gained). Detail: PART4
   header "Canonical" + footer.
+- **The stepped "current proximity reference" line on the H1 chart** (the user, 2026-10-20: "Decide later") — one
+  stepped trace per overlay-driven cycle and side (sd / opp_sd) showing the proximity reference in force at each
+  candle, its hover naming the zone (parent BOS / POI / CTS, or `sub_N cC KIND`) and the gap; a SAMPLE renders
+  from a replay with `engine_v2/plans/qa_opp_sd_zones_inputs/build/prox_ref_sample.py` (reads the overlay's
+  `ref_log`). Figure-only if built (PLAN_R §9.8).
 - **Would-have-been subs for collapsed parent cycles** (the user, 2026-10-19: "OK we can go with parent zones only
   for now and consider subs later"): the opp_sd zones proximity overlay (SESSION ORDER item 3, PLAN_R step 2, landed 2026-10-20)
   reads sub zones only on parent cycles with a real-time lifecycle; a collapsed cycle (lifecycle floor ≥ end — on

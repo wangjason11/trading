@@ -1,0 +1,12 @@
+[
+ {
+  "id": "3-13 phase B's order flipped (opp_sd first; test 11b pins the stated default)",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_11b_both_sides_offered_inward_rungs_on_one_candle_sd_is_judged_first_the_stated_default",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_6_a_crossed_update_is_too_narrow"
+  ],
+  "tail": "2 failed, 1825 passed, 3 skipped, 1 deselected, 445 warnings in 141.24s (0:02:21)"
+ }
+]

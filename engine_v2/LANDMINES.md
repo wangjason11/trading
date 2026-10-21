@@ -291,7 +291,8 @@ modified together if reconsidered.
 | 3 | Same method, the `_narrow_sd_fired` / `_narrow_opp_fired` caps | In narrow mode, at most 1 sd + 1 opp_sd trigger per cycle |
 
 (Since PLAN_R step 1, 2026-10-20, Rules 2 / 3 gate only the trigger test — never the pass test — and they are
-AND-ed with the narrow proximity-reference cap, a DIFFERENT gap: "Proximity Reference Ladders" below.)
+AND-ed with the proximity reference gate and its narrow parent-reference exception (step 3), which read a DIFFERENT
+gap: "Proximity Reference Ladders" below.)
 
 **Why they're a triple:**
 
@@ -358,15 +359,15 @@ against the post-Rules-1-2-3 baseline.
 
 ## Proximity Reference Ladders (PLAN_R, 2026-10-20)
 
-**Rule:** each side of a cycle triggers on its proximity reference — the closest unpassed rung of its proximity
-reference ladder — and ONE object, `zones/zone_proximity.py::CycleProximityScan` (`step(i)` then `close(i)`), holds the
-whole per-cycle state (ladders, the passed set, locks, the gap, the counters, Rules 2 / 3, alternation). The batch scan
+**Rule:** each side of a cycle triggers on its proximity reference — an unpassed rung of its proximity reference
+ladder, kept or moved through the proximity reference gate (PLAN_R §9) — and ONE object, `zones/zone_proximity.py::CycleProximityScan` (`step(i)` then `close(i)`), holds the
+whole per-cycle state (ladders, the passed set, locks, the gap and its gate, Rules 2 / 3, alternation). The batch scan
 and the lifecycle sweep (PLAN_R step 2) drive that same object — never re-implement a piece of it elsewhere. Full
-rules: the module docstring; decisions: `plans/PLAN_R_opp_sd_zones_proximity.md` §1.
+rules: the module docstring; decisions: `plans/PLAN_R_opp_sd_zones_proximity.md` §1 + §9 (the gate).
 
 The traps, each a measured or reviewed failure mode:
 
-- **Gates block ONLY the trigger test.** Rules 2 / 3, the narrow proximity-reference cap and alternation decide whether
+- **Gates block ONLY the trigger test.** Rules 2 / 3, the narrow parent-reference exception and alternation decide whether
   candle `i` may FIRE; the pass test (`close(i)`) runs on every candle. The pre-PLAN_R loop used `continue` for Rules
   2 / 3 (and a `break` for a cycle without a CTS zone) — the shape that would silently skip a pass on a blocked candle.
 - **The last rung (the parent BOS / CTS) is never pass-tested.** Testing it would empty the side: on the reference
@@ -376,8 +377,23 @@ The traps, each a measured or reviewed failure mode:
   reference" alone must not lock: the CTS is the opp_sd reference by default before any counter sub has a zone, so
   lock-by-default would keep every later counter-sub zone out ((0,1) would fire only 748; (1,2)'s 954 would stay on
   the CTS).
-- **A counter resets on its OWN side's outward move.** "Outward" is judged on that side's inner, whatever the other
-  side did on the same candle; a net-gap reading would reset both sides at (1,2) 1048 and bring 1048 / 1049 back.
+- **The gate judges an UPDATE, never the current state** (PLAN_R §9, the user 2026-10-20): a reference moves only if
+  the gap AFTER the move stays above the minimum. Outward moves first (a superseded reference whose ladder's
+  closest rung is outward, then a passed reference — they only widen), then each inward candidate against the
+  other side's UPDATED reference; reading it against the pre-candle reference
+  skips a valid zone (test 11). The step-2 counters ("one trigger per narrow spell") are gone — a narrow gap outside
+  the exception is now a bug, asserted.
+- **A superseded reference stays — never the parent CTS / BOS fallback.** When the source sub is replaced and every
+  zone of the new source is too narrow, the old reference (gone from the ladder) remains the reference and stays
+  pass-testable (round 15: at (1,2) 1036 sub_6's POI stays while all of sub_8's zones fail the gate; the CTS
+  fallback would re-open 1045 / 1046). Only a rung INSIDE it passing the gate, a pass, or an outward closest rung
+  moves it. A passed superseded opp_sd reference locks the side on the CTS — and the NEXT tick's overlay basis
+  (the newer source) lifts that lock at once (the rule: a newer counter-sub zone re-opens it); the gate then
+  decides whether a newer zone becomes the reference (step-3 landing review).
+- **The exception reads the INNER gap; Rules 1–3 the THRESHOLD gap.** The narrow parent-reference exception (parent
+  BOS–CTS inner gap `<=` 40 / 25 / 15: references fixed, one sd + one opp_sd) is static from CTS_CONFIRMED; the
+  narrow-cycle Rules 1–3 use `|cts_threshold − bos_threshold|` < 50 / 30 / 15, which widens over the cycle. On the
+  reference window (1,0) is the exception (inner 30) while Rule 3 does not bind (threshold 52).
 - **The pass test reads the outer as of the CLOSE and applies from `i + 1`.** The trigger test of candle `i` uses the
   references picked at its start (passes up to `close(i − 1)`), so a candle never rescues itself; the trigger
   candle's own close counts for the next candle.
@@ -416,7 +432,7 @@ The traps, each a measured or reviewed failure mode:
 1. **Zero FB/FP volume blocks WVMI creation** — division by zero guard. Ensure candle features (volume) are computed before WVMI runs.
 2. **Temp LP only locks on BOS_n+1** — do not assume `lp_locked=True` until BOS of the next cycle confirms. Until then, LP and pullback_momentum can shift every candle — within `[FP+1, cycle end − 1]` on main AND on every sub projection since Plan G (the data end while the cycle is open; `WVMI_SPEC` "Temporary LP Selection"). A lock LP the tracker's frame cannot read (BOS_n+1's last wave candle past a capped sub's end, or past the data edge) is never taken: the record locks with its temp LP (Plan G Q10).
 3. **buy_momentum/sell_momentum are direction-mapped** — for buy zones: buy=breakout, sell=pullback. For sell zones: reversed. Always check `zone_side` when interpreting.
-4. **Zone proximity gate — the MAIN only** — main WVMI records are only created for cycles where the **first sd-direction zone-proximity trigger** fires (via `check_zone_proximity` in `zones/zone_proximity.py`). Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, reversal_idx - 1]` (note: scan starts AT the CTS confirmation candle, not +1; the reversal term is the sid's REALISED `STATE_CHANGED(to=reversal)` candle — `compute_reversal_idx_by_sid`, since 2026-09-28 — never a `REVERSAL_CANDIDATE`'s scheduled `apply_idx`, a prediction a watch expiry can discard; GOTCHAS "Key boundaries"). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Reads every zone by LOCATION, never by lifecycle (PLAN_Q, 2026-10-14 — the user: "I would like POI to be treated exactly like a KL zone"): the BOS / CTS KL zones by their `inner` alone, each of the cycle's POIs at every candle of the scan — its activation history (the lifecycle clamp, the imbalance-filled off-stretches) and its `end_idx` are not read; both bounds provably lie outside the scan and are asserted (`poi_unclamped_activation_floor_idx` — its activation floor WITHOUT the structure lifecycle-start term — at or before the scan start; its end after the scan's last candle; PLAN_Q §3). So a collapsed H1 cycle (lifecycle `[902, 902)` for structure 1's cycles 0 / 1 on the reference window) still fires triggers (820 sd:BOS, 871 opp_sd:CTS) — the M15 subs they would start are not built ("Collapsed Parent Cycles" below). Before PLAN_Q the POI read walked the activation history, which the lifecycle-start clamp (`e352ef8`, 2026-05-26) empties on a collapsed cycle — only the POI went dark there, a side effect never decided (PLAN_Q §2). Since PLAN_R step 1 (2026-10-20) each side triggers on its proximity reference (ladders, passed zones, the narrow proximity-reference cap — "Proximity Reference Ladders" below); the first sd trigger of a cycle is always on its first sd rung, a parent zone. The orchestrator extracts the first sd trigger per cycle as the WVMI gate (`_first_sd_prox_gate`; `triggered_by_event_idx` in WVMIRecord.meta — Part 4 §8.7 attribution schema). **Subs are ungated since Plan G (2026-09-30):** every CTS_CONFIRMED of a rendered sub gets a record (`_run_downstream_pipeline(wvmi="none")`), and zone proximity is never run for a sub — see "Sub WVMI Is Computed Inside the Projection" below.
+4. **Zone proximity gate — the MAIN only** — main WVMI records are only created for cycles where the **first sd-direction zone-proximity trigger** fires (via `check_zone_proximity` in `zones/zone_proximity.py`). Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, reversal_idx - 1]` (note: scan starts AT the CTS confirmation candle, not +1; the reversal term is the sid's REALISED `STATE_CHANGED(to=reversal)` candle — `compute_reversal_idx_by_sid`, since 2026-09-28 — never a `REVERSAL_CANDIDATE`'s scheduled `apply_idx`, a prediction a watch expiry can discard; GOTCHAS "Key boundaries"). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Reads every zone by LOCATION, never by lifecycle (PLAN_Q, 2026-10-14 — the user: "I would like POI to be treated exactly like a KL zone"): the BOS / CTS KL zones by their `inner` alone, each of the cycle's POIs at every candle of the scan — its activation history (the lifecycle clamp, the imbalance-filled off-stretches) and its `end_idx` are not read; both bounds provably lie outside the scan and are asserted (`poi_unclamped_activation_floor_idx` — its activation floor WITHOUT the structure lifecycle-start term — at or before the scan start; its end after the scan's last candle; PLAN_Q §3). So a collapsed H1 cycle (lifecycle `[902, 902)` for structure 1's cycles 0 / 1 on the reference window) still fires triggers (820 sd:BOS, 871 opp_sd:CTS) — the M15 subs they would start are not built ("Collapsed Parent Cycles" below). Before PLAN_Q the POI read walked the activation history, which the lifecycle-start clamp (`e352ef8`, 2026-05-26) empties on a collapsed cycle — only the POI went dark there, a side effect never decided (PLAN_Q §2). Since PLAN_R (2026-10-20) each side triggers on its proximity reference (ladders, passed zones, the proximity reference gate — "Proximity Reference Ladders" below); the first sd trigger of a cycle is on a parent zone in the batch scan AND the sweep — the POI, or the BOS when the gate keeps the POI out — because an sd sub zone is no candidate before the cycle's first sd trigger (PLAN_R §9.2 item 7) and the scan's first candle judges the sd side first, against the CTS (`orchestrator._final_proximity_triggers` asserts batch == sweep). The orchestrator extracts the first sd trigger per cycle as the WVMI gate (`_first_sd_prox_gate`; `triggered_by_event_idx` in WVMIRecord.meta — Part 4 §8.7 attribution schema). **Subs are ungated since Plan G (2026-09-30):** every CTS_CONFIRMED of a rendered sub gets a record (`_run_downstream_pipeline(wvmi="none")`), and zone proximity is never run for a sub — see "Sub WVMI Is Computed Inside the Projection" below.
 
 ---
 

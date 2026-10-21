@@ -1,4 +1,7 @@
-"""Reviewer's sketch tests for the surviving mutants (scratch, not for the repo)."""
+"""Reviewer's sketch tests for the surviving mutants (scratch, not for the repo). Adopted as
+`tests/test_proximity_reference_ladders.py::test_review_1..7`. Renamed from `test_gap_sketches.py` at PLAN_R step 3
+(2026-10-20) so pytest no longer collects it: four sketches pin steps 1-2's narrow proximity-reference cap, which the
+proximity reference gate replaced (the step-2 suite count 1820 included these 7)."""
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.tests.test_zone_proximity import _bos_confirmed, _bos_zone, _cts_zone, _poi_zone
 from engine_v2.tests.test_proximity_reference_ladders import (

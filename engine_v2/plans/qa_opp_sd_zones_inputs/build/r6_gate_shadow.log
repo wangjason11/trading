@@ -1,0 +1,38 @@
+[shadow] (0, 1) triggers: [(748, 'sd', 'POI', 0.57712), (820, 'opp_sd', 'POI', 0.58096), (872, 'sd', 'BOS', 0.57494)]
+[shadow] (1, 2) triggers: [(935, 'sd', 'POI', 0.57786), (954, 'opp_sd', 'POI', 0.57306), (1035, 'sd', 'POI', 0.57786)]
+[data_bridge] Fetched 4228 M15 candles for NZD_USD in 5 chunks
+[pool] unique subs=9 records=14 unresolved=4 spawned_reversals=5
+[pool] sub_id=0 pool#0 key=(M15,1,454) start=1020 end=1940 reason=reversal lenses=['confluence'] nat_rev=1940 relative_dir=[(1020, 'confluence')] records=[('confluence', (0, 0), 0, 'first_confluence', 463, 1020, 1940, 'reversal', '')]
+[pool] sub_id=1 pool#1 key=(M15,-1,1797) start=1940 end=2470 reason=reversal lenses=['confluence'] nat_rev=2470 relative_dir=[(1940, 'counter')] records=[('confluence', (0, 0), 1, 'reversal', 1940, 1940, 2470, 'reversal', '')]
+[pool] sub_id=2 pool#2 key=(M15,1,2365) start=2470 end=2829 reason=reversal lenses=['confluence'] nat_rev=2829 relative_dir=[(2470, 'confluence')] records=[('confluence', (0, 0), 2, 'reversal', 2470, 2470, 2611, 'parent_end', ''), ('confluence', (0, 1), 0, 'first_confluence', 2611, 2611, 2829, 'reversal', '')]
+[pool] sub_id=3 pool#3 key=(M15,-1,2639) start=2829 end=3491 reason=same_dir_replacement lenses=['confluence', 'counter'] nat_rev=None relative_dir=[(2829, 'counter')] records=[('confluence', (0, 1), 1, 'reversal', 2829, 2829, 3589, 'same_dir_replacement', ''), ('counter', (0, 1), 0, 'first_counter', 2995, 2995, 3491, 'same_dir_replacement', '')]
+[pool] sub_id=4 pool#4 key=(M15,1,3230) start=3283 end=3589 reason=reversal lenses=['confluence'] nat_rev=3589 relative_dir=[(3283, 'confluence')] records=[('confluence', (0, 1), 2, 'subsequent_confluence', 3283, 3283, 3589, 'reversal', '')]
+[pool] sub_id=5 pool#5 key=(M15,-1,3304) start=3491 end=3819 reason=same_dir_replacement lenses=['confluence', 'counter'] nat_rev=None relative_dir=[(3491, 'counter'), (3611, 'confluence')] records=[('counter', (0, 1), 1, 'subsequent_counter', 3491, 3491, 3611, 'parent_end', ''), ('confluence', (0, 1), 3, 'reversal', 3589, 3589, 3611, 'parent_end', ''), ('confluence', (1, 2), 0, 'first_confluence', 3611, 3611, 3819, 'same_dir_replacement', '')]
+[pool] sub_id=6 pool#6 key=(M15,1,3621) start=3743 end=4143 reason=same_dir_replacement lenses=['counter'] nat_rev=None relative_dir=[(3743, 'counter')] records=[('counter', (1, 2), 0, 'first_counter', 3743, 3743, 4143, 'same_dir_replacement', '')]
+[pool] sub_id=7 pool#7 key=(M15,-1,3760) start=3819 end=4200 reason=reversal lenses=['confluence'] nat_rev=4200 relative_dir=[(3819, 'confluence')] records=[('confluence', (1, 2), 1, 'subsequent_confluence', 3819, 3819, 4200, 'reversal', '')]
+[pool] sub_id=8 pool#8 key=(M15,1,4027) start=4143 end=None reason=None lenses=['confluence', 'counter'] nat_rev=None relative_dir=[(4143, 'counter')] records=[('counter', (1, 2), 1, 'subsequent_counter', 4143, 4143, None, None, ''), ('confluence', (1, 2), 2, 'reversal', 4200, 4200, None, None, '')]
+[pool] unresolved lens=confluence parent=(1,0) type=first_confluence trigger_idx=2815 reason=collapsed_parent_cycle detail=floor 3611 >= end 3611
+[pool] unresolved lens=confluence parent=(1,1) type=first_confluence trigger_idx=2995 reason=collapsed_parent_cycle detail=floor 3611 >= end 3611
+[pool] unresolved lens=counter parent=(1,1) type=first_counter trigger_idx=3283 reason=collapsed_parent_cycle detail=floor 3611 >= end 3611
+[pool] unresolved lens=confluence parent=(1,1) type=subsequent_confluence trigger_idx=3487 reason=collapsed_parent_cycle detail=floor 3611 >= end 3611
+[multi_tf:dual] sub wvmi acted=9 records=19 by_started_by={'first_confluence': 4, 'reversal': 9, 'subsequent_confluence': 2, 'subsequent_counter': 3, 'first_counter': 1} by_lens={'confluence': 18, 'counter': 7}
+DEBUG traces: 81
+DEBUG shapes: 236
+[m15_chart] traces: 153, shapes: 138
+[m15_chart] traces: 301, shapes: 309
+=== Replay Timing ===
+data_fetch                           4.56s
+candle_features                      1.04s
+patterns                             0.07s
+imbalance                            0.02s
+market_structure                     0.71s
+downstream                           0.21s
+trigger_detectors                    0.12s
+multi_tf_dual                       19.21s
+chart_h1                            10.69s
+chart_m15_counter                   16.65s
+chart_m15_confluence                40.95s
+--------------------------------
+tracked subtotal                    94.23s
+untracked overhead                   0.37s
+total (wall clock)                  94.59s

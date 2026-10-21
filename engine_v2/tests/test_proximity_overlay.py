@@ -337,8 +337,10 @@ def test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows
     + the real `ProximityOverlay`, driving the real (0,1) / (1,2) parent scans (S_Q's zones on the real H1 rows,
     `_plan_r_reference_window`), the production `subsequent_*` detectors, and each sub's REAL zones as of their moments
     (the step-2 build's views, embedded). The probes / geometry are stubs returning the predicted starting candles,
-    finalizes and natural reversals. Must reproduce: the 10 H1 triggers (+820 / +872 on (0,1); the 954 relabel, +1045 /
-    +1046, 1048+ capped on (1,2)) and the §5.4 pool table — 11 subs, 15 records, the 4 collapsed-cycle unresolved."""
+    finalizes and natural reversals. Must reproduce, since step 3's proximity reference gate (PLAN_R §9.4): the 8 H1
+    triggers (+820 / +872 on (0,1); the 954 relabel on (1,2) — 1045 / 1046 gone: the gate skips every sub_8 zone and
+    the superseded sub_6 POI stays the opp_sd reference) and the step-3 shadow's pool table (`build/r6_gate_shadow.log`)
+    — 9 subs, 14 records, the 4 collapsed-cycle unresolved."""
     from engine_v2.multitf.lifecycle_sweep import SweepTrigger, run_lifecycle_sweep
     from engine_v2.multitf.sub_structure_pool import resolve_lens
     from engine_v2.multitf.subsequent_confluence_trigger import detect_subsequent_confluence_triggers
@@ -398,17 +400,29 @@ def test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows
         (0, 1): [(748, "sd", "POI", 0.57712, "parent"), (820, "opp_sd", "POI", 0.58096, "sub"),
                  (872, "sd", "BOS", 0.57494, "parent")],
         (1, 2): [(935, "sd", "POI", 0.57786, "parent"), (954, "opp_sd", "POI", 0.57306, "sub"),
-                 (1035, "sd", "POI", 0.57786, "parent"), (1045, "opp_sd", "BOS", 0.57728, "sub"),
-                 (1046, "sd", "POI", 0.57786, "parent")],
+                 (1035, "sd", "POI", 0.57786, "parent")],
     }
-    assert [e[6] for e in ov.ref_log if e[0] == (1, 2) and e[1] >= 1047] == ["prox_ref_cap"] * 11
+    # The (1,2) reference timeline (§9.4): from 1036 sub_8 (1,4027) is the opp_sd SOURCE but every one of its zones
+    # fails the gate, so the superseded sub_6 (1,3621) c0 POI stays the reference to the scan end; the sd side moves out
+    # after each pass — the parent POI (passed 1047) → 1048 sub_5 (−1,3304) c0 POI 0.57885 (58) → passed 1050 → 1051
+    # the parent BOS 0.57996 (69, locked). No gate blocks any candle.
+    by_key = {(s.direction, s.starting_idx): s.pool_idx for s in pool.all()}
+    log12 = {e[1]: e for e in ov.ref_log if e[0] == (1, 2)}
+    sub6_poi = ("sub", by_key[(1, 3621)], 0, "POI")
+    assert all(log12[h][3].key == sub6_poi for h in range(947, 1058))
+    assert ov._source[((1, 2), "opp_sd")] == by_key[(1, 4027)]
+    assert [(h, log12[h][2].key, log12[h][4]) for h in (1047, 1048, 1050, 1051, 1057)] == [
+        (1047, ("parent", "POI", 0), 48), (1048, ("sub", by_key[(-1, 3304)], 0, "POI"), 58),
+        (1050, ("sub", by_key[(-1, 3304)], 0, "POI"), 58), (1051, ("parent", "BOS"), 69), (1057, ("parent", "BOS"), 69)]
+    assert scans[(1, 2)].locked == {"sd": True, "opp_sd": False}
+    assert all(e[6] is None for e in ov.ref_log)
 
     table = {(s.direction, s.starting_idx): (s.sub_id, s.start_idx, s.end_idx, s.end_reason,
                                              [(r.lens, (r.parent_sid, r.parent_cycle_id), r.trigger_sub_sid,
                                                r.trigger_type, r.trigger_idx, r.start_idx, r.end_idx, r.end_reason)
                                               for r in s.records])
              for s in pool.all()}
-    assert table == {   # = the shadow run's [pool] table (PLAN_R §5.4; sims/shadow_full2.log)
+    assert table == {   # = the step-3 shadow run's [pool] table (PLAN_R §9.4; build/r6_gate_shadow.log)
         (1, 454): (0, 1020, 1940, "reversal", [(CONF, (0, 0), 0, "first_confluence", 463, 1020, 1940, "reversal")]),
         (-1, 1797): (1, 1940, 2470, "reversal", [(CONF, (0, 0), 1, "reversal", 1940, 1940, 2470, "reversal")]),
         (1, 2365): (2, 2470, 2829, "reversal", [(CONF, (0, 0), 2, "reversal", 2470, 2470, 2611, "parent_end"),
@@ -424,12 +438,11 @@ def test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows
                       (CONF, (1, 2), 0, "first_confluence", 3611, 3611, 3819, "same_dir_replacement")]),
         (1, 3621): (6, 3743, 4143, "same_dir_replacement",
                     [(CTR, (1, 2), 0, "first_counter", 3743, 3743, 4143, "same_dir_replacement")]),
-        (-1, 3760): (7, 3819, 4183, "same_dir_replacement",
-                     [(CONF, (1, 2), 1, "subsequent_confluence", 3819, 3819, 4183, "same_dir_replacement")]),
-        (1, 4027): (8, 4143, 4187, "same_dir_replacement",
-                    [(CTR, (1, 2), 1, "subsequent_counter", 4143, 4143, 4187, "same_dir_replacement")]),
-        (-1, 4179): (9, 4183, None, None, [(CONF, (1, 2), 2, "subsequent_confluence", 4183, 4183, None, None)]),
-        (1, 4183): (10, 4187, None, None, [(CTR, (1, 2), 2, "subsequent_counter", 4187, 4187, None, None)]),
+        (-1, 3760): (7, 3819, 4200, "reversal",
+                     [(CONF, (1, 2), 1, "subsequent_confluence", 3819, 3819, 4200, "reversal")]),
+        (1, 4027): (8, 4143, None, None,
+                    [(CTR, (1, 2), 1, "subsequent_counter", 4143, 4143, None, None),
+                     (CONF, (1, 2), 2, "reversal", 4200, 4200, None, None)]),
     }
     assert sorted((u.parent_sid, u.parent_cycle_id, u.trigger_type, u.trigger_idx, u.reason)
                   for u in res.unresolved) == [

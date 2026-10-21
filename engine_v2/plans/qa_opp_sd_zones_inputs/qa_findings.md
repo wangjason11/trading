@@ -508,3 +508,39 @@ CTS & BOS themselves do not meet thresholds … the only place where we would li
      windows — not on this one: POI–CTS 69 / 50);
   5. the exception: a parent BOS–CTS inner gap ≤ the threshold (static from CTS_CONFIRMED) → the references stay on the
      parent BOS / CTS with at most one sd + one opp_sd trigger; Rules 1–3 unchanged.
+
+- **The five points EXACTLY as presented** (copied from the session transcript, 2026-10-20 — the paraphrase above
+  drops two qualifiers that decide the build: point 1 rejects the parent-CTS fallback for a superseded reference,
+  and point 2's farther candidate lies "still inside the current reference"; the same message also said "Moving
+  outward always widens the gap, so a pass can always move a reference. The gate only ever blocks inward moves."):
+
+  > **Points to pin down** (my recommendation in bold):
+  > 1. **The current reference gets superseded and every replacement is too narrow.** This happens at 1036: sub_8 replaces sub_6 as the source, but all of sub_8's zones fail the gate. Keep sub_6's POI as the reference, or fall back to the parent CTS? **Keep it, as your "remains what it was" says. It stays pass-testable, and once passed it falls outward.**
+  > 2. **The closest candidate is too narrow, but a farther one (still inside the current reference) would pass.** Move to the farther one, or stay? **Move to the closest candidate that passes the gate**, matching your earlier "smallest gap available". No such case on this window.
+  > 3. **Both sides update on the same candle** (1048: sd forced out by a pass, opp_sd offered a new zone). **Apply outward moves first, then judge inward candidates against the updated other side.** Same outcome here (7 either way).
+  > 4. **The parent POI as the initial sd reference.** Should it face the gate too? If POI–CTS is within 40 but BOS–CTS is wider, the sd side would start at the BOS. **Yes, for consistency.** The cost: on other windows, a cycle's first sd trigger (and so the main WVMI gate) could land on the BOS instead of the POI. No change here (69 and 50).
+  > 5. **The exception's limit.** When the parent BOS–CTS inner gap is 40 or less (fixed at CTS confirmation, since inners never move): **references stay on the parent BOS and CTS, with at most one sd and one opp_sd trigger.** Note this isn't Rules 1–3, which use the wider threshold gap: (1,0)'s threshold gap is 52, which Rule 3 alone wouldn't cap. Rules 1–3 stay as they are.
+  > 6. **Unchanged:** passes, locks, the opp_sd unlock, the sticky source and its new reachable-zone rule.
+
+### Round 16 (2026-10-20, after the step-3 landing review) — the first-sd rule, the side order, the reference line
+
+Asked (AskUserQuestion, after the review's blocker — PLAN_R §9.7 / §9.8): the first-sd rule (5 candidates), the
+phase-B side order on later candles, the stepped "current proximity reference" line as a chart feature.
+- **The first-sd rule — verbatim:** "I think your recommendation is correct, but I want to clarify something. YOu noted that an sd sub zone can't be reference until the cycle's first sd trigger has fired. I'm not sure that is the case. The sd sub can start as soon as first confluence is triggered. First confluence trigger does not depend on a first sd trigger. The first sd firing would actually trigger first counter which triggers a counter sub and not a sd (which should mean confluence?) sub. / The language here may be a bit counter intuitive. I think we refer to CTS side as opp_sd and BOS side as sd. However, ultimately an sd side trigger would trigger a counter structure while an opp_sd sid trigger would start a subsequent confluence. The very first confluence trigger is ultimately triggered via parent CTS (which again would be toward the opp_sd, but here it would be before any CTS zone is established, and so before any reference zones are even available). / Can you double check what I just wrote is correct and reconcile with what you had?"
+  - **Checked against the code / PART4 §4.3 — all correct:** `first_confluence` is triggered by the parent's
+    BOS_CONFIRMED (= the new cycle's CTS_ESTABLISHED, the same candle) and built once the parent CTS_CONFIRMED bounds
+    its probe (the CTS anchor) — before the scan, so before any proximity reference exists, and independent of any
+    proximity trigger; the first sd-side trigger starts `first_counter` (a counter sub); each later opp_sd-side
+    trigger starts a `subsequent_confluence` sub, each later sd-side one a `subsequent_counter` sub. The sd side's
+    sub zones come from CONFLUENCE (same-direction) subs, the opp_sd side's from COUNTER subs. One nuance: the first
+    confluence trigger is the parent BOS_CONFIRMED / CTS_ESTABLISHED moment; the parent CTS (its anchor, at
+    CTS_CONFIRMED) only bounds the probe.
+  - **Reconciled:** §9.2 item 7 does NOT delay the confluence sub — its trigger, start, records, zones, pass tests and
+    its place as the sd side's proximity SOURCE all stay as they are; it only delays when one of its zones may be the
+    sd proximity REFERENCE (the zone an sd trigger is tested against): from the candle after the cycle's first sd
+    trigger. Why that trigger: it is the one the batch scan (parent zones only, before the sweep) produces and two
+    things read from the batch — the main WVMI gate (`_first_sd_prox_gate`) and, through the main WVMI records,
+    `first_counter` (`detect_uc1_triggers(..., wvmi_records, ...)`). The recommendation stands ("I think your
+    recommendation is correct").
+- **The side order — verbatim:** "sd first (Recommended)". Decided: sd first on every candle.
+- **The reference line — verbatim:** "Decide later". Parked in the register (§G).

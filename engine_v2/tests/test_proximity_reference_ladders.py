@@ -1,6 +1,7 @@
-"""PLAN_R step 1 — the proximity reference ladders and the narrow proximity-reference cap (`zones/zone_proximity.py`,
-`CycleProximityScan`), on parent zones; the proximity overlay's entry point (`set_overlay`) where a rule only shows with
-a sub zone on a side (the lock, the ties, the cap's narrowing).
+"""PLAN_R steps 1 + 3 — the proximity reference ladders and the proximity reference gate (`zones/zone_proximity.py`,
+`CycleProximityScan`; step 3 replaced steps 1–2's narrow proximity-reference cap), on parent zones; the proximity
+overlay's entry point (`set_overlay`) where a rule only shows with a sub zone on a side (the lock, the ties, the gate's
+updates, a superseded reference).
 
 Synthetic bullish cycle (sid 0, cycle 0, sd = +1) unless stated: BOS inner 1.4000 / outer 1.3990, POI inner 1.4100 /
 outer 1.4090, CTS inner 1.4300 / outer 1.4310; thresholds BOS 1.3990, CTS 1.4310 (320 pips — Rules 2 / 3 off); every
@@ -104,7 +105,7 @@ def _overlay(side: str, *rungs: ProximityRung) -> Callable:
 
 # ---------- the constant ----------
 
-def test_the_cap_constants_and_their_assert():
+def test_the_gate_minimum_constants_and_their_assert():
     assert DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS == {"H1": 40, "M15": 25, "M5": 15}
     for tf, v in DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS.items():
         assert v > DEFAULT_PROXIMITY_PIPS[tf]
@@ -209,88 +210,148 @@ def test_4_a_poi_at_or_beyond_its_bos_is_never_used():
     assert trig[0] == (5, "sd", "BOS", 1.40)
 
 
-# ---------- 5. the narrow proximity-reference cap ----------
+# ---------- 5. the proximity reference gate (PLAN_R §9) ----------
 
-def test_5a_the_counters_start_at_the_narrowing_earlier_triggers_do_not_count():
-    """Wide (POI 1.41 vs CTS 1.43, 200) through 11: 5 sd, 10 opp_sd. A counter-sub zone at 12 (inner 1.4130) makes the
-    gap 30 → narrow, counters 0 / 0: 15 sd and 18 opp_sd fire, 20's sd is capped. Candles at 1.4115 (between the
-    bands <= 1.4108 and >= 1.4122)."""
+@pytest.mark.parametrize("inner,gap,taken", [(1.4130, 30, False), (1.4140, 40, False), (1.4141, 41, True)])
+def test_5a_an_inward_update_that_would_be_too_narrow_is_skipped(inner, gap, taken):
+    """POI 1.41 vs CTS 1.43 (200): 5 sd, 10 opp_sd. A counter-sub zone at 12, `gap` pips from the sd reference: at or
+    below 40 (`<=`) the update is SKIPPED — the opp_sd reference stays the CTS, 18's high 1.4135 does not fire and 20's
+    1.4295 fires on the CTS; at 41 it is taken and 18 fires on it. No counters: alternation continues either way.
+    Candles at 1.4115 (outside every band)."""
     df = _df(mid=1.4115)
     _set(df, 5, l=1.4105)
     _set(df, 10, h=1.4295)
     _set(df, 15, l=1.4105)
-    _set(df, 18, h=1.4125)
-    _set(df, 20, l=1.4105)
+    _set(df, 18, h=1.4135)
+    _set(df, 20, h=1.4295)
     scan = _scan(df, *_cycle())
-    trig, _ = _drive(scan, {12: _overlay("opp_sd", _sub_rung("opp_sd", "BOS", 1.4130, 1.4140))})
-    assert [t[0] for t in trig] == [5, 10, 15, 18]
-    assert scan.counters == {"sd": 1, "opp_sd": 1}
-    assert [t.meta["narrow_prox_ref"] for t in scan.triggers] == [False, False, True, True]
-    assert scan.triggers[2].meta["prox_ref_gap_pips"] == 30
+    rung = _sub_rung("opp_sd", "BOS", inner, inner + 0.0010)
+    trig, _ = _drive(scan, {12: _overlay("opp_sd", rung)})
+    assert proximity_reference_gap_pips(1, 1.41, inner, PIP) == gap
+    assert [r.key for r in scan.ladder("opp_sd")] == [CTS_KEY, rung.key]          # on the ladder, skipped by the gate
+    if taken:
+        assert trig[2:] == [(15, "sd", "POI", 1.41), (18, "opp_sd", "BOS", inner)]
+        assert scan.refs["opp_sd"].key == rung.key and scan.triggers[3].meta["prox_ref_gap_pips"] == 41
+    else:
+        assert trig[2:] == [(15, "sd", "POI", 1.41), (20, "opp_sd", "CTS", 1.43)]
+        assert scan.refs["opp_sd"].key == CTS_KEY
+    assert not any(t.meta["narrow_prox_ref"] for t in scan.triggers)
 
 
-def test_5b_an_outward_move_while_narrow_resets_only_that_side():
-    """Narrow from the start: POI_a 1.4110 (outer 1.4105), POI_b 1.4100 (outer 1.4095), CTS 1.4140 → gap 30. 5 sd on
-    POI_a, 8 opp_sd on the CTS (counters 1 / 1). 10's close 1.4102 passes POI_a (on a candle the cap blocks); from 11
-    sd = POI_b — OUTWARD, gap 40 (still narrow, `<=`) → the sd counter resets: 12 fires on POI_b. The opp_sd counter
-    stays 1: 14 is capped. Candles at 1.4125 (between <= 1.4118 and >= 1.4132)."""
-    df = _df(mid=1.4125)
-    _set(df, 5, l=1.4115)
-    _set(df, 8, h=1.4135)
-    _set(df, 10, l=1.4100, c=1.4102)
-    _set(df, 12, l=1.4105)
-    _set(df, 14, h=1.4135)
-    scan = _scan(df, *_cycle(pois=((1.4110, 1.4105), (1.4100, 1.4095)), cts=(1.4140, 1.4150)))
-    trig, passes = _drive(scan)
-    assert trig == [(5, "sd", "POI", 1.411), (8, "opp_sd", "CTS", 1.414), (12, "sd", "POI", 1.41)]
-    assert passes == {10: [POI_KEY]}
-    assert scan.counters == {"sd": 1, "opp_sd": 1}
-    assert scan.triggers[2].meta == {"prox_ref_gap_pips": 40, "narrow_prox_ref": True, "prox_ref_source": "parent", "prox_ref_sub_id": None, "prox_ref_cycle": None, "prox_ref_usable_idx": None}
-
-
-def test_5c_an_inward_move_while_narrow_does_not_reset():
-    """Narrow from the start (POI 1.41, CTS 1.4130: 30). 5 sd, 8 opp_sd (counters 1 / 1). A nearer sd rung at 9 (inner
-    1.4110) moves the sd reference INWARD: no reset — 10's low 1.4115 (within 8 pips of it) is capped. Candles at
-    1.4120 (outside every band)."""
-    df = _df(mid=1.4120)
-    _set(df, 5, l=1.4105)
-    _set(df, 8, h=1.4125)
-    _set(df, 10, l=1.4115)
-    scan = _scan(df, *_cycle(cts=(1.4130, 1.4140)))
-    trig, _ = _drive(scan, {9: _overlay("sd", _sub_rung("sd", "POI", 1.4110, 1.4105))})
-    assert [t[0] for t in trig] == [5, 8]
-    assert scan.refs["sd"].inner == 1.4110 and scan.counters == {"sd": 1, "opp_sd": 1}
-
-
-def test_5d_narrow_wide_narrow_restarts_the_counters():
+def test_5b_the_closest_candidate_that_passes_the_gate_is_taken():
+    """Point 2 (round 15: "Move to the closest candidate that passes the gate"): two opp_sd rungs inside the CTS, X
+    1.4130 (30, too narrow) and Y 1.4150 (50) → the reference is Y — not X, and not "stay on the CTS". 9's high 1.4145
+    fires on Y."""
     df = _df(mid=1.4115)
     _set(df, 5, l=1.4105)
-    _set(df, 8, h=1.4125)
-    _set(df, 10, l=1.4105)                # wide again (9): no cap
-    _set(df, 13, h=1.4130)                # narrow again (11): fresh counters
-    _set(df, 15, l=1.4105)
-    _set(df, 17, h=1.4130)                # capped
+    _set(df, 9, h=1.4145)
+    x = _sub_rung("opp_sd", "BOS", 1.4130, 1.4140)
+    y = _sub_rung("opp_sd", "POI", 1.4150, 1.4160)
     scan = _scan(df, *_cycle())
-    trig, _ = _drive(scan, {
-        3: _overlay("opp_sd", _sub_rung("opp_sd", "BOS", 1.4130, 1.4140)),     # gap 30: narrow
-        9: _overlay("opp_sd"),                                                # back to the CTS: 200, wide
-        11: _overlay("opp_sd", _sub_rung("opp_sd", "BOS", 1.4135, 1.4145, cycle=1)),   # 35: narrow
-    })
-    assert [t[0] for t in trig] == [5, 8, 10, 13, 15]
-    assert [t.meta["narrow_prox_ref"] for t in scan.triggers] == [True, True, False, True, True]
+    trig, _ = _drive(scan, {6: _overlay("opp_sd", x, y)})
+    assert trig == [(5, "sd", "POI", 1.41), (9, "opp_sd", "POI", 1.415)]
+    assert scan.refs["opp_sd"].key == y.key and scan.ref_gap_pips == 50
+
+
+def test_5c_a_superseded_reference_whose_every_inward_rung_is_too_narrow_stays_never_the_cts():
+    """Point 1 (round 15, 1036's case: "Keep sub_6's POI as the reference, or fall back to the parent CTS? Keep it"):
+    sub A's rung 1.4150 (50) is the opp_sd reference from 3; at 9 sub B replaces A on the ladder with rungs 1.4130 /
+    1.4135 (30 / 35, both too narrow) → A's rung is SUPERSEDED and stays the reference (not the CTS): 12's high 1.4145
+    fires on it. It stays pass-testable: 13's close 1.4165 (sd expected) is beyond its outer 1.4160 → passed (B's
+    taller rungs, outers 1.4175 / 1.4180, are not); from 14 the side moves to the closest rung passing the gate —
+    B's still fail → the CTS, LOCKED (a pass to the last rung)."""
+    df = _df(mid=1.4115)
+    _set(df, 5, l=1.4105)
+    _set(df, 12, h=1.4145)
+    _set(df, 13, h=1.4170, l=1.4120, c=1.4165)
+    a = _sub_rung("opp_sd", "POI", 1.4150, 1.4160, pool_idx=3)
+    b1 = _sub_rung("opp_sd", "BOS", 1.4130, 1.4175, pool_idx=5)
+    b2 = _sub_rung("opp_sd", "POI", 1.4135, 1.4180, pool_idx=5)
+    scan = _scan(df, *_cycle())
+    refs, passes = {}, {}
+    acts = {3: _overlay("opp_sd", a), 9: _overlay("opp_sd", b1, b2)}
+    for i in range(scan.scan_start, scan.scan_end + 1):
+        if i in acts:
+            acts[i](scan)
+        scan.step(i)
+        refs[i] = scan.refs["opp_sd"].key
+        got = scan.close(i)
+        if got:
+            passes[i] = [r.key for r in got]
+    assert [r.key for r in scan.ladder("opp_sd")] == [CTS_KEY, b1.key, b2.key]     # A is gone from the ladder
+    assert {i: refs[i] for i in (3, 9, 12, 13, 14)} == {3: a.key, 9: a.key, 12: a.key, 13: a.key, 14: CTS_KEY}
+    assert [(t.idx, t.direction, t.trigger_inner) for t in scan.triggers] == [(5, "sd", 1.41), (12, "opp_sd", 1.415)]
+    assert passes == {13: [a.key]}
+    assert scan.locked == {"sd": False, "opp_sd": True}
+
+
+def test_5d_a_superseded_reference_moves_when_its_ladders_closest_rung_is_outward():
+    """§9.2 item 4: an outward update is never blocked. A's rung 1.4150 is the reference; at 9 sub B replaces it with a
+    rung 1.4170 — OUTWARD of A (farther from the sd side) → the reference moves to B's rung: 12's high 1.4165 fires
+    on it, while 1.4145 (A's band) at 10 did not."""
+    df = _df(mid=1.4115)
+    _set(df, 5, l=1.4105)
+    _set(df, 10, h=1.4145)
+    _set(df, 12, h=1.4165)
+    a = _sub_rung("opp_sd", "POI", 1.4150, 1.4160, pool_idx=3)
+    b = _sub_rung("opp_sd", "BOS", 1.4170, 1.4180, pool_idx=5)
+    scan = _scan(df, *_cycle())
+    trig, _ = _drive(scan, {3: _overlay("opp_sd", a), 9: _overlay("opp_sd", b)})
+    assert trig == [(5, "sd", "POI", 1.41), (12, "opp_sd", "BOS", 1.417)]
+    assert scan.refs["opp_sd"].key == b.key
+
+
+def test_5e_the_parent_poi_is_gated_too_the_sd_side_can_start_at_the_bos():
+    """Point 4: each side starts on its last rung; the POI is an inward update judged by the gate. POI 1.41 vs CTS
+    1.4140 = 40 (too narrow) → the sd side stays on the BOS 1.40 (140): 5's low 1.4105 (the POI's band) does not fire,
+    8's 1.4005 fires on the BOS. With the CTS at 1.4141 (41) the POI is taken and 5 fires on it."""
+    for cts_inner, first in ((1.4140, (8, "sd", "BOS", 1.40)), (1.4141, (5, "sd", "POI", 1.41))):
+        df = _df(mid=1.4120)
+        _set(df, 5, l=1.4105)
+        _set(df, 8, l=1.4005)
+        scan = _scan(df, *_cycle(cts=(cts_inner, cts_inner + 0.0010)))
+        trig, _ = _drive(scan)
+        assert trig[0] == first, cts_inner
+
+
+def test_5f_alternation_is_unlimited_on_a_wide_cycle():
+    """No counters (the user: "we always keep reference zones where we allow for unlimited alternations"): POI 1.41,
+    an opp_sd rung 1.4145 (45, taken at 3) → six alternating triggers."""
+    df = _df(mid=1.4125)
+    for i in (5, 11, 17):
+        _set(df, i, l=1.4105)
+    for i in (8, 14, 20):
+        _set(df, i, h=1.4140)
+    scan = _scan(df, *_cycle())
+    trig, _ = _drive(scan, {3: _overlay("opp_sd", _sub_rung("opp_sd", "BOS", 1.4145, 1.4155))})
+    assert [(t[0], t[1]) for t in trig] == [(5, "sd"), (8, "opp_sd"), (11, "sd"), (14, "opp_sd"), (17, "sd"),
+                                            (20, "opp_sd")]
+    assert {t.meta["prox_ref_gap_pips"] for t in scan.triggers} == {45}
+
+
+def test_5g_the_invariant_no_narrow_gap_outside_the_exception():
+    """The gate admits no update that leaves the gap <= the minimum, so outside the exception a narrow gap at a
+    candle's start is a bug: asserted (an update forced around the gate here)."""
+    scan = _scan(_df(), *_cycle())
+    scan.step(2)
+    scan.close(2)
+    scan._update_references = lambda first: scan.refs.update(opp_sd=_sub_rung("opp_sd", "BOS", 1.4130, 1.4140))
+    with pytest.raises(AssertionError, match="outside the narrow parent-reference exception"):
+        scan.step(3)
 
 
 # ---------- 6 / 7. the signed, half-up gap ----------
 
-def test_6_a_crossed_gap_is_narrow():
-    """An opp_sd rung 50 pips BELOW the sd reference (crossed): the signed gap is −50 → narrow (its absolute value, 50,
-    would be wide)."""
+def test_6_a_crossed_update_is_too_narrow():
+    """An opp_sd rung 50 pips BELOW the sd reference (crossed): the signed gap would be −50 → too narrow (its absolute
+    value, 50, would pass) → skipped; the opp_sd reference stays the CTS (200)."""
+    assert proximity_reference_gap_pips(1, 1.4100, 1.4050, PIP) == -50
     df = _df()
     scan = _scan(df, *_cycle())
     scan.set_overlay("opp_sd", [_sub_rung("opp_sd", "BOS", 1.4050, 1.4060)])
     scan.step(2)
-    assert scan.ref_gap_pips == -50 and scan.narrow_prox_ref is True
-    assert scan.counters == {"sd": 0, "opp_sd": 0}
+    assert scan.refs["opp_sd"].key == CTS_KEY
+    assert scan.ref_gap_pips == 200 and scan.narrow_prox_ref is False
 
 
 def test_7_rounding_is_half_up_and_narrow_is_at_or_below():
@@ -304,10 +365,12 @@ def test_7_rounding_is_half_up_and_narrow_is_at_or_below():
     assert proximity_reference_gap_pips(1, 0.57, 0.57405, PIP) == 41
     assert proximity_reference_gap_pips(-1, 0.57405, 0.57, PIP) == 41
     assert proximity_reference_gap_pips(1, 0.57001, 0.57026, PIP) == 3       # 2.4999999999997247
-    for cts_inner, gap, narrow in ((1.41405, 41, False), (1.41404, 40, True), (1.4140, 40, True)):
+    # The gate on these values (POI 1.41, BOS 1.40): POI–CTS 41 → the POI is taken; 40 (`<=`) → skipped, the sd side
+    # stays on the BOS (140).
+    for cts_inner, gap, sd_key in ((1.41405, 41, POI_KEY), (1.41404, 140, BOS_KEY), (1.4140, 140, BOS_KEY)):
         scan = _scan(_df(), *_cycle(cts=(cts_inner, cts_inner + 0.001)))
         scan.step(2)
-        assert (scan.ref_gap_pips, scan.narrow_prox_ref) == (gap, narrow), cts_inner
+        assert (scan.ref_gap_pips, scan.refs["sd"].key, scan.narrow_prox_ref) == (gap, sd_key, False), cts_inner
 
 
 # ---------- 8. both rule sets AND-ed ----------
@@ -406,26 +469,44 @@ def test_the_embedded_rows_match_the_save():
 
 # ---------- 11. both references move on one candle ----------
 
-def test_11_one_side_outward_one_inward_on_one_candle_resets_only_the_outward_side():
-    """Narrow: POI_a 1.4110 (outer 1.4105), POI_b 1.4100, the opp_sd rung X 1.4140 (gap 30). 5 sd on POI_a, 8 opp_sd on X
-    (1 / 1). Candle 11 sees BOTH moves: POI_a passed at 10 → sd = POI_b (outward), and the opp_sd rung Y 1.4135
-    replaces X (inward); gap 35, still narrow. Only sd resets: 12 fires, 14's opp_sd is capped. Judged on the net gap
-    (30 → 35, wider) both would reset and 14 would fire. Candles at 1.4125."""
+def test_11_outward_moves_first_then_inward_judged_against_the_updated_other_side():
+    """Point 3 (round 15): POI_a 1.4110 (outer 1.4105), POI_b 1.4100; the opp_sd reference the CTS. Candle 11 sees BOTH:
+    POI_a passed at 10 → the sd side is FORCED out to POI_b, and an opp_sd rung Y 1.4145 arrives — 35 from POI_a (too
+    narrow) but 45 from POI_b. Outward first → Y is judged against POI_b and taken on candle 11 itself: 11's high
+    1.4140 fires on it. Judged against the pre-candle sd reference it would be skipped at 11 (and taken a candle
+    later — so the trigger is ON the candle of both moves; mutant 3-03 first survived a draft firing at 12). Candles
+    at 1.4125."""
     df = _df(mid=1.4125)
     _set(df, 5, l=1.4115)
-    _set(df, 8, h=1.4135)
     _set(df, 10, l=1.4100, c=1.4102)
-    _set(df, 12, l=1.4105)
-    _set(df, 14, h=1.4130)
+    _set(df, 11, h=1.4140)
+    y = _sub_rung("opp_sd", "BOS", 1.4145, 1.4155)
     scan = _scan(df, *_cycle(pois=((1.4110, 1.4105), (1.4100, 1.4095))))
-    trig, passes = _drive(scan, {
-        3: _overlay("opp_sd", _sub_rung("opp_sd", "BOS", 1.4140, 1.4150)),
-        11: _overlay("opp_sd", _sub_rung("opp_sd", "BOS", 1.4135, 1.4145, cycle=1)),
-    })
+    trig, passes = _drive(scan, {11: _overlay("opp_sd", y)})
     assert passes == {10: [POI_KEY]}
-    assert trig == [(5, "sd", "POI", 1.411), (8, "opp_sd", "BOS", 1.414), (12, "sd", "POI", 1.41)]
-    assert scan.counters == {"sd": 1, "opp_sd": 1}
-    assert scan.triggers[2].meta["prox_ref_gap_pips"] == 35
+    assert proximity_reference_gap_pips(1, 1.4110, 1.4145, PIP) == 35
+    assert trig == [(5, "sd", "POI", 1.411), (11, "opp_sd", "BOS", 1.4145)]
+    assert (scan.refs["sd"].key, scan.refs["opp_sd"].key, scan.triggers[1].meta["prox_ref_gap_pips"]) == (
+        POI_B_KEY, y.key, 45)
+
+
+def test_11b_both_sides_offered_inward_rungs_on_one_candle_sd_is_judged_first_the_stated_default():
+    """PLAN_R §9.2's DEFAULT for a case the user has not decided (absent on the reference window): BOS 1.40, CTS 1.43,
+    no POI; the first sd fires on the BOS at 3 (an sd sub zone is a candidate only after it, §9.2 item 7). At 6 the sd
+    side is offered S 1.4150 (150 from the CTS) and the opp_sd side O 1.4180 (180 from the BOS, 30 from S). sd first:
+    S is taken, then O is judged against S → too narrow → the opp_sd side stays on the CTS, so 6's high 1.4175 (opp_sd
+    expected; O's band >= 1.4172) does not fire. (opp_sd first would take O and fire on it at 6.) Candles at 1.4165 —
+    BETWEEN the two rungs (outside S's band <= 1.4158 and O's >= 1.4172), so no close passes either: at 1.4200 the first
+    close would pass O and both orders would converge a candle later (the first draft passed mutant 3-13 so)."""
+    df = _df(mid=1.4165)
+    _set(df, 3, l=1.4005)
+    _set(df, 6, h=1.4175)
+    s = _sub_rung("sd", "BOS", 1.4150, 1.4140)
+    o = _sub_rung("opp_sd", "BOS", 1.4180, 1.4190, pool_idx=8)
+    scan = _scan(df, *_cycle(pois=()))
+    trig, _ = _drive(scan, {6: lambda sc: (sc.set_overlay("sd", [s]), sc.set_overlay("opp_sd", [o]))})
+    assert (scan.refs["sd"].key, scan.refs["opp_sd"].key) == (s.key, CTS_KEY)
+    assert trig == [(3, "sd", "BOS", 1.40)]
 
 
 # ---------- 12. the last rung is never passed ----------
@@ -451,22 +532,18 @@ def test_12_a_close_beyond_the_bos_or_cts_outer_leaves_it_the_reference():
 @pytest.mark.parametrize("label,thresholds,method", [
     ("rule 3", (1.4100, 1.4130), "pullback"),
     ("rule 2", (1.4100, 1.4130), "sd_zone_proximity"),
-    ("the cap", (1.3990, 1.4310), "pullback"),
 ])
 def test_13_a_pass_on_a_blocked_candle_still_counts(label, thresholds, method):
     """POI_a 1.4110 (outer 1.4105), POI_b 1.4100. The candle 10 closes 1.4102 (beyond POI_a's outer) while a gate blocks
-    the sd test — Rule 3 (5 sd and 8 opp_sd fired while the threshold gap is narrow), Rule 2 (narrow, not a pullback
-    CTS: nothing fires) or the cap (an opp_sd rung at 1.4140: narrow 30, counters 1 / 1). POI_a is passed all the same:
-    from 11 the sd reference is POI_b. Candles at 1.4125."""
+    the sd test — Rule 3 (5 sd and 8 opp_sd fired while the threshold gap is narrow) or Rule 2 (narrow, not a pullback
+    CTS: nothing fires). POI_a is passed all the same: from 11 the sd reference is POI_b. Candles at 1.4125. (The
+    exception's gate: test 14b.)"""
     df = _df(mid=1.4125)
     _set(df, 5, l=1.4115)
-    _set(df, 8, h=1.4295 if label != "the cap" else 1.4135)
+    _set(df, 8, h=1.4295)
     _set(df, 10, l=1.4100, c=1.4102)
     scan = _scan(df, *_cycle(pois=((1.4110, 1.4105), (1.4100, 1.4095)), thresholds=thresholds, method=method))
-    actions = {3: _overlay("opp_sd", _sub_rung("opp_sd", "BOS", 1.4140, 1.4150))} if label == "the cap" else None
     for i in range(2, 12):
-        if actions and i in actions:
-            actions[i](scan)
         t = scan.step(i)
         if i == 10:
             assert t is None and scan.gate is not None, label
@@ -475,23 +552,218 @@ def test_13_a_pass_on_a_blocked_candle_still_counts(label, thresholds, method):
     assert scan.refs["sd"].key == POI_B_KEY
 
 
-# ---------- 14. narrow from the scan start ----------
+# ---------- 14. the narrow parent-reference exception (PLAN_R §9.1) ----------
 
-def test_14_a_cycle_narrow_from_the_scan_start_starts_its_counters_at_0():
-    """(1,0)-like: POI 1.41 vs CTS 1.4130, 30 pips at the scan start → counters 0 / 0 at once: one sd, one opp_sd, then
-    capped. Candles at 1.4115."""
+def test_14_the_narrow_parent_reference_exception_fixes_the_references_and_allows_one_sd_one_opp_sd():
+    """(1,0)-like: BOS 1.4100 vs CTS 1.4130 — 30 pips, at or below 40 from the CTS_CONFIRMED (static) → the references
+    stay on the BOS / CTS (a POI 1.4115 between them and an opp_sd rung 1.4120 are never used), one sd (5) and one
+    opp_sd (8) fire, then the sd at 10 is blocked by the exception (`narrow_parent_refs`) — the thresholds are 320
+    apart, so Rules 2 / 3 play no part. Candles at 1.4115: inside the POI's and the opp_sd rung's 8-pip bands (every
+    candle would fire on them), outside the BOS's (<= 1.4108) and the CTS's (>= 1.4122)."""
     df = _df(mid=1.4115)
     _set(df, 5, l=1.4105)
-    _set(df, 8, h=1.4125)
+    _set(df, 8, h=1.4126)
     _set(df, 10, l=1.4105)
-    scan = _scan(df, *_cycle(cts=(1.4130, 1.4140)))
-    scan.step(2)
-    assert scan.narrow_prox_ref and scan.counters == {"sd": 0, "opp_sd": 0}
-    scan.close(2)
-    for i in range(3, scan.scan_end + 1):
+    scan = _scan(df, *_cycle(bos=(1.4100, 1.4090), cts=(1.4130, 1.4140), pois=((1.4115, 1.4112),)))
+    assert scan.narrow_parent_refs
+    gates = {}
+    acts = {3: _overlay("opp_sd", _sub_rung("opp_sd", "BOS", 1.4120, 1.4125))}
+    for i in range(scan.scan_start, scan.scan_end + 1):
+        if i in acts:
+            acts[i](scan)
         scan.step(i)
+        gates[i] = scan.gate
+        assert (scan.refs["sd"].key, scan.refs["opp_sd"].key) == (BOS_KEY, CTS_KEY), i
         scan.close(i)
-    assert [t.idx for t in scan.triggers] == [5, 8]
+    assert [(t.idx, t.direction, t.zone_kind) for t in scan.triggers] == [(5, "sd", "BOS"), (8, "opp_sd", "CTS")]
+    assert gates[10] == "narrow_parent_refs"
+    assert all(t.meta["prox_ref_gap_pips"] == 30 and t.meta["narrow_prox_ref"] for t in scan.triggers)
+
+
+def test_14b_a_pass_on_a_candle_the_exception_blocks_still_counts():
+    """The exception keeps the references on the BOS / CTS but the pass test runs on every candle (§1): POI 1.4115
+    (outer 1.4112) inside a 35-pip BOS–CTS; 10 (sd expected, blocked by the exception after 5 / 8 fired) closes 1.4110
+    → the POI is passed; the sd reference is still the BOS."""
+    df = _df(mid=1.4122)
+    _set(df, 5, l=1.4105)
+    _set(df, 8, h=1.4130)
+    _set(df, 10, l=1.4105, c=1.4110)
+    scan = _scan(df, *_cycle(bos=(1.4100, 1.4090), cts=(1.4135, 1.4145), pois=((1.4115, 1.4112),)))
+    for i in range(2, 12):
+        t = scan.step(i)
+        if i == 10:
+            assert t is None and scan.gate == "narrow_parent_refs"
+        scan.close(i)
+    assert POI_KEY in scan.passed and scan.refs["sd"].key == BOS_KEY
+
+
+def test_14c_the_exception_reads_the_inner_gap_not_the_threshold_gap():
+    """Inner gap 50 (BOS 1.4100, CTS 1.4150: not the exception) while the THRESHOLD gap is 30 (Rule 3 on): Rule 3 caps
+    (5, 8, then 10 blocked by `rule3`); and the reverse — inner gap 30 with thresholds 320 apart — is the exception
+    (test 14). The two measures are separate (point 5: "this isn't Rules 1–3, which use the wider threshold gap")."""
+    df = _df(mid=1.4125)
+    _set(df, 5, l=1.4105)
+    _set(df, 8, h=1.4145)
+    _set(df, 10, l=1.4105)
+    scan = _scan(df, *_cycle(bos=(1.4100, 1.4090), cts=(1.4150, 1.4160), pois=(), thresholds=(1.4100, 1.4130)))
+    assert not scan.narrow_parent_refs
+    gates = {}
+    for i in range(2, 12):
+        scan.step(i)
+        gates[i] = scan.gate
+        scan.close(i)
+    assert [t.idx for t in scan.triggers] == [5, 8] and gates[10] == "rule3"
+
+
+# ---------- 15–19. the step-3 landing review's cases (2026-10-20) ----------
+
+def _walk(scan, acts, upto):
+    """step / close to `upto`; {i: (sd ref key, opp_sd ref key)} as of each candle's start."""
+    refs = {}
+    for i in range(scan.scan_start, upto + 1):
+        if i in acts:
+            acts[i](scan)
+        scan.step(i)
+        refs[i] = tuple(scan.refs[s].key if scan.refs[s] is not None else None for s in ("sd", "opp_sd"))
+        scan.close(i)
+    return refs
+
+
+def test_15_an_sd_sub_zone_is_no_candidate_before_the_cycles_first_sd_trigger():
+    """§9.2 item 7 (the rules reviewer's blocker): POI 1.41 vs CTS 1.4140 = 40 → the gate keeps it out (point 4), the
+    sd side starts on the BOS. An sd sub zone S 1.4050 (beyond the POI, 90 from the CTS) would pass the gate — but
+    before the cycle's first sd trigger it is no candidate, so the first sd fires where the batch scan (no overlay)
+    fires: 5's low 1.4055 (S's band) does not, 8's 1.4005 fires on the BOS — the trigger the main WVMI gate reads,
+    asserted by `orchestrator._final_proximity_triggers`. From 9 S is a candidate and becomes the sd reference."""
+    from types import SimpleNamespace
+
+    from engine_v2.pipeline.orchestrator import _final_proximity_triggers
+    df = _df(mid=1.4120)
+    _set(df, 5, l=1.4055)
+    _set(df, 8, l=1.4005)
+    batch = _scan(df, *_cycle(cts=(1.4140, 1.4150)))
+    btrig, _ = _drive(batch)
+    sweep = _scan(df, *_cycle(cts=(1.4140, 1.4150)))
+    s = _sub_rung("sd", "BOS", 1.4050, 1.4040, pool_idx=4)
+    refs = _walk(sweep, {2: _overlay("sd", s)}, sweep.scan_end)
+    assert btrig[0] == (8, "sd", "BOS", 1.40) and sweep.triggers[0].idx == 8 and sweep.triggers[0].zone_kind == "BOS"
+    assert sweep.triggers[0].trigger_inner == 1.40 and sweep.triggers[0].meta["prox_ref_source"] == "parent"
+    assert refs[8][0] == BOS_KEY and refs[9][0] == s.key
+    overlay = SimpleNamespace(scans={(0, 0): sweep}, used={})
+    _final_proximity_triggers({(0, 0): batch.triggers}, overlay, SimpleNamespace(get_by_pool_idx=lambda i: None))
+
+
+def test_15b_the_first_candles_sd_first_order_keeps_the_first_sd_on_the_batchs_rung():
+    """§9.2: the scan's first candle judges the sd side first, against the CTS — like the batch scan, which has no
+    opp_sd overlay. POI 1.41 (50 from the CTS 1.4150) and an opp_sd sub rung O 1.4120 (20 from the POI) at the first
+    candle: sd first → the POI is taken, O (20) is skipped → 5 fires on the POI, as in the batch. (opp_sd first would
+    take O — 120 from the BOS — and keep the POI out: the first sd would leave the batch's rung.)"""
+    df = _df(mid=1.4114)
+    _set(df, 5, l=1.4105)
+    o = _sub_rung("opp_sd", "BOS", 1.4120, 1.4130)
+    batch = _scan(df, *_cycle(cts=(1.4150, 1.4160)))
+    btrig, _ = _drive(batch)
+    sweep = _scan(df, *_cycle(cts=(1.4150, 1.4160)))
+    strig, _ = _drive(sweep, {2: _overlay("opp_sd", o)})
+    assert btrig[0] == strig[0] == (5, "sd", "POI", 1.41)
+    assert sweep.refs["opp_sd"].key == CTS_KEY
+
+
+@pytest.mark.parametrize("with_x", [True, False])
+def test_16_a_side_without_a_last_rung_may_be_left_without_a_reference(with_x):
+    """A cycle without a CTS zone (no opp_sd last rung — the floor): its opp_sd reference Y 1.4145 is passed by 14's
+    close 1.4158 and no other rung passes the gate (X 1.4130 is 30 from the BOS; or there is none) → the side has NO
+    reference from 15 (step 2's outcome; was an assert — both reviewers' crash). A later rung Z 1.4150 (50) is taken."""
+    df = _df(mid=1.4115)
+    _set(df, 5, l=1.4105)
+    _set(df, 12, h=1.4140)
+    _set(df, 14, h=1.4160, c=1.4158)
+    events = [_bos_confirmed(idx=0, price=1.3990), _cts_confirmed_at(2, 1.4310)]
+    scan = build_cycle_proximity_scans(df, events, [_bos_zone(0, 0, 1, 1.4100, 1.4090)], [], PIP, "H1")[(0, 0)]
+    x = _sub_rung("opp_sd", "BOS", 1.4130, 1.4170)          # tall: 14's close 1.4158 does not pass it
+    y = _sub_rung("opp_sd", "POI", 1.4145, 1.4155)
+    z = _sub_rung("opp_sd", "POI", 1.4150, 1.4175, pool_idx=9)
+    first = [x, y] if with_x else [y]
+    refs = _walk(scan, {11: _overlay("opp_sd", *first), 18: _overlay("opp_sd", *first, z)}, 19)
+    assert refs[12][1] == y.key and refs[15][1] is None and refs[17][1] is None and refs[19][1] == z.key
+    assert [(t.idx, t.direction) for t in scan.triggers] == [(5, "sd"), (12, "opp_sd")]
+    assert not scan.locked["opp_sd"]
+
+
+def test_17_a_superseded_references_outward_move_comes_first_point_3():
+    """The rules reviewer's case: a SUPERSEDED opp_sd reference whose ladder's closest rung is OUTWARD moves in the
+    outward phase (point 3: "Apply outward moves first"), so the sd side's inward candidate is judged against it.
+    POI passed at 3 → the sd side to S 1.4050; opp_sd A 1.4110 from 4. At 8 sub B replaces A with B 1.4130 (outward)
+    and the sd side is offered S2 1.4080 — 30 from A, 50 from B → taken at 8 (judged against the moved opp_sd side) and
+    fired on at 8 (l 1.4085). Judged against A it would wait a candle."""
+    df = _df(mid=1.4095)
+    _set(df, 2, l=1.4105)
+    _set(df, 3, l=1.4085, c=1.4085)
+    _set(df, 6, h=1.4105)
+    _set(df, 8, l=1.4085)
+    s = _sub_rung("sd", "BOS", 1.4050, 1.4040, pool_idx=2)
+    s2 = _sub_rung("sd", "POI", 1.4080, 1.4075, pool_idx=2, cycle=1)
+    a = _sub_rung("opp_sd", "POI", 1.4110, 1.4120, pool_idx=3)
+    b = _sub_rung("opp_sd", "BOS", 1.4130, 1.4140, pool_idx=5)
+    scan = _scan(df, *_cycle())
+    refs = _walk(scan, {2: _overlay("sd", s), 4: _overlay("opp_sd", a),
+                        8: lambda sc: (sc.set_overlay("opp_sd", [b]), sc.set_overlay("sd", [s, s2]))}, 9)
+    assert refs[7] == (s.key, a.key) and refs[8] == (s2.key, b.key)
+    assert [(t.idx, t.direction, t.trigger_inner) for t in scan.triggers] == [
+        (2, "sd", 1.41), (6, "opp_sd", 1.411), (8, "sd", 1.408)]
+
+
+def test_18_a_forced_tie_with_the_last_rung_goes_to_the_parent_and_locks():
+    """Ties (§1, the tests reviewer's R02): an sd sub rung AT the BOS inner; the POI (fired on at 5) is passed at 7 →
+    the forced pick, among equal inners, is the parent BOS (parent first) → the side LOCKS."""
+    df = _df()
+    _set(df, 5, l=1.4105)
+    _set(df, 7, l=1.4080, c=1.4085)
+    scan = _scan(df, *_cycle())
+    tie = _sub_rung("sd", "BOS", 1.4000, 1.3990)
+    refs = _walk(scan, {2: _overlay("sd", tie)}, 9)
+    assert refs[8][0] == BOS_KEY and scan.locked["sd"]
+
+
+def test_18b_a_superseded_sd_reference_stays_pass_tested():
+    """5c's sd mirror (the tests reviewer's R07): after the first sd on the POI (3), sd sub A 1.4250 (outer 1.4240) is
+    the reference from 4; at 9 sub B replaces it (1.4265 / 1.4270: 35 / 30 from the CTS, too narrow; tall, outers
+    1.4230 / 1.4225) → A superseded, kept; 12 fires on A and closes 1.4235 beyond A's outer → passed → 13 the closest
+    rung passing the gate, the parent POI. Candles at 1.4275 (outside every band, beyond no outer)."""
+    df = _df(mid=1.4275)
+    _set(df, 3, l=1.4105)
+    _set(df, 6, h=1.4295)
+    _set(df, 12, l=1.4230, c=1.4235)
+    a = _sub_rung("sd", "POI", 1.4250, 1.4240, pool_idx=3)
+    b1 = _sub_rung("sd", "BOS", 1.4265, 1.4230, pool_idx=5)
+    b2 = _sub_rung("sd", "POI", 1.4270, 1.4225, pool_idx=5)
+    scan = _scan(df, *_cycle())
+    refs = _walk(scan, {4: _overlay("sd", a), 9: _overlay("sd", b1, b2)}, 13)
+    assert (refs[4][0], refs[9][0], refs[11][0], refs[13][0]) == (a.key, a.key, a.key, POI_KEY)
+    assert [(t.idx, t.direction, t.trigger_inner) for t in scan.triggers] == [
+        (3, "sd", 1.41), (6, "opp_sd", 1.43), (12, "sd", 1.425)]
+    assert a.key in scan.passed and not scan.locked["sd"]
+
+
+def test_19_edge_choices_pinned():
+    """§9.2's edge choices (the tests reviewer's R04 / R19 / R26; none on the reference window): (a) a side with no
+    reference yet (no CTS zone) takes the CLOSEST rung passing the gate (point 2): X 1.4145 (45) over Y 1.4160 (60);
+    (b) a superseded reference moves to a rung AT its inner (the gap is unchanged, so the update keeps it above the
+    minimum); (c) a superseded reference whose ladder's closest rung is the CTS moves there but does NOT lock (only a
+    pass locks)."""
+    df = _df(mid=1.4115)
+    events = [_bos_confirmed(idx=0, price=1.3990), _cts_confirmed_at(2, 1.4310)]
+    scan = build_cycle_proximity_scans(df, events, [_bos_zone(0, 0, 1, 1.4100, 1.4090)], [], PIP, "H1")[(0, 0)]
+    x = _sub_rung("opp_sd", "BOS", 1.4145, 1.4155)
+    y = _sub_rung("opp_sd", "POI", 1.4160, 1.4170)
+    assert _walk(scan, {8: _overlay("opp_sd", x, y)}, 9)[8][1] == x.key
+    a = _sub_rung("opp_sd", "POI", 1.4150, 1.4160, pool_idx=3)
+    for b, want in ((_sub_rung("opp_sd", "BOS", 1.4150, 1.4170, pool_idx=5), "b"),
+                    (_sub_rung("opp_sd", "BOS", 1.4350, 1.4360, pool_idx=5), CTS_KEY)):
+        scan = _scan(_df(mid=1.4115), *_cycle())
+        refs = _walk(scan, {3: _overlay("opp_sd", a), 9: _overlay("opp_sd", b)}, 10)
+        assert refs[8][1] == a.key and refs[9][1] == (b.key if want == "b" else want)
+        assert scan.locked["opp_sd"] is False
 
 
 # ---------- the per-candle protocol ----------
@@ -532,8 +804,9 @@ def test_a_kl_rungs_outer_is_its_init_outer_then_each_expansion_from_its_moment(
 
 # ---------- the landing review's test gaps (2026-10-20): paths step 2 drives ----------
 # Each pins a mutant that survived the full suite at d26208e (the opp_sd side's and an overlay rung's pass test, an
-# opp_sd outward reset while narrow, the sd = −1 cap, the outer read at the pass site, the gap-None path) or was
-# killed only incidentally ("Rule 2 is not part of the cap"). The reviewer's sketches, kept as written.
+# opp_sd outward move, the sd = −1 side, the outer read at the pass site, the gap-None path) or was killed only
+# incidentally ("Rule 2 is not part of the cap"). The reviewer's sketches; review_1 / 3 / 5 / 6 re-written for step 3's
+# gate (PLAN_R §9) on the same paths.
 
 def _bear_cycle(pois, cts=(1.4160, 1.4150), bos=(1.4300, 1.4310), thresholds=(1.4310, 1.4150), method="pullback"):
     kl = [_bos_zone(0, 0, -1, *bos), _cts_zone(0, 0, -1, *cts)]
@@ -543,21 +816,23 @@ def _bear_cycle(pois, cts=(1.4160, 1.4150), bos=(1.4300, 1.4310), thresholds=(1.
     return events, kl, pz
 
 
-def test_review_1_bearish_outward_move_while_narrow_resets_that_side():
-    """Mirror of 5b on sd=-1: POI_a 1.4190 (outer 1.4195), POI_b 1.4200, CTS 1.4160 -> gap 30. 5 sd, 8 opp_sd; 10's
-    close 1.4198 passes POI_a on a capped candle; from 11 sd = POI_b (UP = outward for a bearish cycle), gap 40 ->
-    the sd counter resets: 12 fires on POI_b; 14's opp_sd stays capped."""
-    df = _df(mid=1.4175)
-    _set(df, 5, h=1.4185)
-    _set(df, 8, l=1.4165)
-    _set(df, 10, h=1.4200, c=1.4198)
-    _set(df, 12, h=1.4195)
-    _set(df, 14, l=1.4165)
-    scan = _scan(df, *_bear_cycle(pois=((1.4190, 1.4195), (1.4200, 1.4205))))
-    trig, passes = _drive(scan)
+def test_review_1_bearish_outward_first_then_inward_against_the_updated_other_side():
+    """Test 11's mirror on sd = −1: POI_a 1.4210 (outer 1.4215), POI_b 1.4220 (outer 1.4225), CTS 1.4160 (POI_a 50).
+    5 sd on POI_a; 10's close 1.4218 passes POI_a (opp_sd expected); at 11 the sd side is forced UP (outward for a
+    bearish cycle) to POI_b, and an opp_sd rung Y 1.4175 arrives — 35 from POI_a, 45 from POI_b → taken: 11's low
+    1.4180 fires on it ON the candle of both moves (the tests reviewer: a hit at 12 let mutant 3-03 survive, as in
+    test 11's first draft). Candles at 1.4195."""
+    df = _df(mid=1.4195)
+    _set(df, 5, h=1.4205)
+    _set(df, 10, h=1.4220, c=1.4218)
+    _set(df, 11, l=1.4180)
+    y = _sub_rung("opp_sd", "BOS", 1.4175, 1.4165)
+    scan = _scan(df, *_bear_cycle(pois=((1.4210, 1.4215), (1.4220, 1.4225))))
+    trig, passes = _drive(scan, {11: _overlay("opp_sd", y)})
     assert passes == {10: [("parent", "POI", 0)]}
-    assert trig == [(5, "sd", "POI", 1.419), (8, "opp_sd", "CTS", 1.416), (12, "sd", "POI", 1.42)]
-    assert scan.triggers[2].meta["prox_ref_gap_pips"] == 40
+    assert proximity_reference_gap_pips(-1, 1.4210, 1.4175, PIP) == 35
+    assert trig == [(5, "sd", "POI", 1.421), (11, "opp_sd", "BOS", 1.4175)]
+    assert scan.triggers[1].meta["prox_ref_gap_pips"] == 45
 
 
 def test_review_2_an_opp_sd_pass_moves_the_reference_to_the_cts_and_locks():
@@ -576,29 +851,32 @@ def test_review_2_an_opp_sd_pass_moves_the_reference_to_the_cts_and_locks():
     assert scan.locked == {"sd": False, "opp_sd": True}
 
 
-def test_review_3_an_opp_sd_outward_move_while_narrow_resets_the_opp_sd_counter():
-    """Wide to 5 (sd fires); X 1.4130 / Y 1.4135 opp_sd rungs from 6 -> narrow 30, counters 0/0. 8 opp_sd on X, 10 sd
-    (1/1). 11 (opp_sd expected, capped) closes 1.4142 > X's outer 1.4140: from 12 opp_sd = Y, OUTWARD (gap 35) ->
-    the opp_sd counter resets: 13 fires on Y."""
-    df = _df(mid=1.4115)
+def test_review_3_a_passed_opp_sd_reference_moves_outward_to_the_next_rung_not_the_cts():
+    """X 1.4150 / Y 1.4160 opp_sd rungs from 6 (50 / 60 from the POI) → X. 5 sd, 8 opp_sd on X; 9 (sd expected) closes
+    1.4157 > X's outer 1.4155 → passed; from 10 the opp_sd side is forced OUTWARD to the closest rung passing the gate,
+    Y (not the CTS, no lock): 11 sd, 13 opp_sd on Y."""
+    df = _df(mid=1.4125)
     _set(df, 5, l=1.4105)
-    _set(df, 8, h=1.4125)
-    _set(df, 10, l=1.4105)
-    _set(df, 11, h=1.4150, c=1.4142)
-    _set(df, 13, h=1.4130)
-    x = _sub_rung("opp_sd", "BOS", 1.4130, 1.4140)
-    y = _sub_rung("opp_sd", "POI", 1.4135, 1.4145)
+    _set(df, 8, h=1.4145)
+    _set(df, 9, h=1.4158, l=1.4140, c=1.4157)
+    _set(df, 11, l=1.4105)
+    _set(df, 13, h=1.4155)
+    x = _sub_rung("opp_sd", "BOS", 1.4150, 1.4155)
+    y = _sub_rung("opp_sd", "POI", 1.4160, 1.4170)
     scan = _scan(df, *_cycle())
     trig, passes = _drive(scan, {6: _overlay("opp_sd", x, y)})
-    assert passes == {11: [x.key]}
-    assert [t[:3] for t in trig] == [(5, "sd", "POI"), (8, "opp_sd", "BOS"), (10, "sd", "POI"), (13, "opp_sd", "POI")]
+    assert passes == {9: [x.key]}
+    assert [t[:4] for t in trig] == [(5, "sd", "POI", 1.41), (8, "opp_sd", "BOS", 1.415), (11, "sd", "POI", 1.41),
+                                     (13, "opp_sd", "POI", 1.416)]
+    assert scan.refs["opp_sd"].key == y.key and scan.locked == {"sd": False, "opp_sd": False}
 
 
 def test_review_4_the_pass_reads_the_outer_as_of_the_close_including_an_expansion_on_that_candle():
     """An sd overlay rung whose outer expands 1.4090 -> 1.4080 at moment 7: 7's close 1.4085 is beyond the OLD outer
-    but not beyond the outer as of its close -> no pass; 12 still fires on the rung."""
+    but not beyond the outer as of its close -> no pass; 12 still fires on the rung. (The first sd fires on the BOS at
+    3 — an sd sub zone is a candidate only after it, PLAN_R §9.2 item 7 — so the rung is the reference from 4.)"""
     df = _df()
-    _set(df, 5, l=1.4105)
+    _set(df, 3, l=1.4005)
     _set(df, 7, l=1.4082, c=1.4085)
     _set(df, 10, h=1.4295)
     _set(df, 12, l=1.4105)
@@ -607,40 +885,51 @@ def test_review_4_the_pass_reads_the_outer_as_of_the_close_including_an_expansio
     scan = _scan(df, *_cycle(pois=()))
     trig, passes = _drive(scan, {2: _overlay("sd", r)})
     assert passes == {}
-    assert trig == [(5, "sd", "BOS", 1.41), (10, "opp_sd", "CTS", 1.43), (12, "sd", "BOS", 1.41)]
+    assert trig == [(3, "sd", "BOS", 1.40), (10, "opp_sd", "CTS", 1.43), (12, "sd", "BOS", 1.41)]
 
 
-def test_review_5_a_cycle_without_a_cts_zone_is_wide_until_an_opp_sd_reference_exists():
-    """No CTS zone: the gap is None -> wide (no counters). 5 sd on the BOS (meta None / False). An opp_sd overlay rung
-    at 8 makes the gap 30 -> narrow with FRESH counters: 10 opp_sd, 12 sd both fire."""
+def test_review_5_a_cycle_without_a_cts_zone_takes_its_first_opp_sd_reference_through_the_gate():
+    """No CTS zone: no opp_sd last rung, the gap is None, no exception. 5 sd on the BOS (meta None / False). An opp_sd
+    overlay rung X at 8, 30 from the BOS → too narrow: the side stays without a reference (10's high 1.4125 does not
+    fire); at 11 Y 1.4145 (45) joins → taken: 12's high 1.4140 fires on it."""
     df = _df(mid=1.4115)
     _set(df, 5, l=1.4105)
     _set(df, 10, h=1.4125)
-    _set(df, 12, l=1.4105)
+    _set(df, 12, h=1.4140)
     events = [_bos_confirmed(idx=0, price=1.3990), _cts_confirmed_at(2, 1.4310)]
     kl = [_bos_zone(0, 0, 1, 1.4100, 1.4090)]
     scan = build_cycle_proximity_scans(df, events, kl, [], PIP, "H1")[(0, 0)]
-    trig, _ = _drive(scan, {8: _overlay("opp_sd", _sub_rung("opp_sd", "BOS", 1.4130, 1.4140))})
+    x = _sub_rung("opp_sd", "BOS", 1.4130, 1.4140)
+    y = _sub_rung("opp_sd", "POI", 1.4145, 1.4155)
+    trig, _ = _drive(scan, {8: _overlay("opp_sd", x), 11: _overlay("opp_sd", x, y)})
+    assert not scan.narrow_parent_refs
     assert scan.triggers[0].meta == {"prox_ref_gap_pips": None, "narrow_prox_ref": False, "prox_ref_source": "parent", "prox_ref_sub_id": None, "prox_ref_cycle": None, "prox_ref_usable_idx": None}
-    assert [t[0] for t in trig] == [5, 10, 12]
+    assert trig == [(5, "sd", "BOS", 1.41), (12, "opp_sd", "POI", 1.4145)]
+    assert scan.triggers[1].meta["prox_ref_gap_pips"] == 45
 
 
-def test_review_6_rule_2_is_not_part_of_the_cap():
-    """Thresholds wide (320) but the CTS was confirmed by sd-proximity; the references are 30 apart (narrow by the cap):
-    Rule 2 does not apply -> one sd + one opp_sd fire (5, 8), then the cap."""
+def test_review_6_rule_2_is_not_part_of_the_exception():
+    """Thresholds wide (320) but the CTS was confirmed by sd-proximity; the parent BOS–CTS inners 30 apart (the
+    exception): Rule 2 does not apply → one sd + one opp_sd fire (5, 8), then the exception blocks 10."""
     df = _df(mid=1.4115)
     _set(df, 5, l=1.4105)
     _set(df, 8, h=1.4125)
     _set(df, 10, l=1.4105)
-    scan = _scan(df, *_cycle(cts=(1.4130, 1.4140), method="sd_zone_proximity"))
-    trig, _ = _drive(scan)
-    assert [t[0] for t in trig] == [5, 8]
+    scan = _scan(df, *_cycle(bos=(1.4100, 1.4090), cts=(1.4130, 1.4140), pois=(), method="sd_zone_proximity"))
+    gates = {}
+    for i in range(2, 12):
+        scan.step(i)
+        gates[i] = scan.gate
+        scan.close(i)
+    assert [t.idx for t in scan.triggers] == [5, 8] and gates[10] == "narrow_parent_refs"
 
 
 def test_review_7_an_overlay_rung_is_pass_tested():
-    """Test 1 with the POI as an sd overlay rung: 7's close passes it, from 8 the sd reference is the BOS (locked)."""
+    """Test 1 with the POI as an sd overlay rung (the reference from 4, after the first sd on the BOS at 3 — PLAN_R
+    §9.2 item 7): 7's close passes it, from 8 the sd reference is the BOS (locked) — 12's low 1.4105, within 8 pips of
+    the passed rung, does not fire; 15 fires on the BOS."""
     df = _df()
-    _set(df, 5, l=1.4105)
+    _set(df, 3, l=1.4005)
     _set(df, 7, l=1.4080, c=1.4085)
     _set(df, 10, h=1.4295)
     _set(df, 12, l=1.4105)
@@ -649,5 +938,5 @@ def test_review_7_an_overlay_rung_is_pass_tested():
     scan = _scan(df, *_cycle(pois=()))
     trig, passes = _drive(scan, {2: _overlay("sd", r)})
     assert passes == {7: [r.key]}
-    assert trig == [(5, "sd", "POI", 1.41), (10, "opp_sd", "CTS", 1.43), (15, "sd", "BOS", 1.40)]
+    assert trig == [(3, "sd", "BOS", 1.40), (10, "opp_sd", "CTS", 1.43), (15, "sd", "BOS", 1.40)]
     assert scan.locked["sd"]

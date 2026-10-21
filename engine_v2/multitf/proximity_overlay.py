@@ -347,7 +347,7 @@ class ProximityOverlay:
                 scan.unlock("opp_sd")
                 self.log(f"[prox_overlay] {key} H1 {h} opp_sd lock lifted: a newer counter-sub zone, pool#{basis[0]} "
                          f"c{basis[1]} (the passed one was pool#{self._opp_lock_basis[key][0]} "
-                         f"c{self._opp_lock_basis[key][1]}); the reference = the closest pick")
+                         f"c{self._opp_lock_basis[key][1]}); the reference = the gate's pick from the CTS")
                 self._opp_lock_basis[key] = None
             self._basis[(key, side)] = basis
             scan.set_overlay(side, rungs)

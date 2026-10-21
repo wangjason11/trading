@@ -1,0 +1,37 @@
+=== (0, 0) scan [439, 651] ===
+  439: sd=P.BOS(0.5591) opp=P.CTS(0.58132) gap=222
+  486: sd=P.BOS(0.5591) opp=(-1, 1797)c2.BOS(0.58032) gap=212
+  558: sd=P.BOS(0.5591) opp=(-1, 1797)c3.BOS(0.57978) gap=207
+  586: sd=P.BOS(0.5591) opp=(-1, 1797)c4.BOS(0.57796) gap=189
+  592: sd=P.BOS(0.5591) opp=(-1, 1797)c4.POI(0.57722) gap=181
+  609: close passes [('sub', 1, 4, 'POI')]
+  610: sd=P.BOS(0.5591) opp=(-1, 1797)c4.BOS(0.57796) gap=189
+  616: close passes [('sub', 1, 4, 'BOS')]
+  617: sd=P.BOS(0.5591) opp=P.CTS(0.58132) gap=222
+  final locked={'sd': False, 'opp_sd': True} narrow_parent_refs=False
+=== (0, 1) scan [683, 901] ===
+  683: sd=P.POI(0.57712) opp=P.CTS(0.58404) gap=69
+  708: sd=P.POI(0.57712) opp=(-1, 2639)c1.BOS(0.58366) gap=65
+  712: sd=P.POI(0.57712) opp=(-1, 2639)c1.POI(0.58279) gap=57
+  748: TRIGGER sd POI 0.57712 meta={'prox_ref_gap_pips': 57, 'narrow_prox_ref': False, 'prox_ref_source': 'parent', 'prox_ref_sub_id': None, 'prox_ref_cycle': None, 'prox_ref_usable_idx': None}
+  749: sd=P.POI(0.57712) opp=(-1, 2639)c2.BOS(0.58171) gap=46
+  754: close passes [('parent', 'POI', 0)]
+  755: sd=P.BOS(0.57494) opp=(-1, 2639)c2.BOS(0.58171) gap=68
+  772: sd=P.BOS(0.57494) opp=(-1, 2639)c2.POI(0.58096) gap=60
+  820: TRIGGER opp_sd POI 0.58096 meta={'prox_ref_gap_pips': 60, 'narrow_prox_ref': False, 'prox_ref_source': 'sub', 'prox_ref_sub_id': None, 'prox_ref_cycle': 2, 'prox_ref_usable_idx': 772}
+  872: TRIGGER sd BOS 0.57494 meta={'prox_ref_gap_pips': 60, 'narrow_prox_ref': False, 'prox_ref_source': 'parent', 'prox_ref_sub_id': None, 'prox_ref_cycle': None, 'prox_ref_usable_idx': None}
+  873: sd=P.BOS(0.57494) opp=(-1, 3304)c0.BOS(0.58055) gap=56
+  873: close passes [('sub', 4, 0, 'POI')]
+  897: close passes [('sub', 4, 0, 'BOS')]
+  final locked={'sd': True, 'opp_sd': False} narrow_parent_refs=False
+=== (1, 2) scan [935, 1057] ===
+  935: sd=P.POI(0.57786) opp=P.CTS(0.57282) gap=50
+  935: TRIGGER sd POI 0.57786 meta={'prox_ref_gap_pips': 50, 'narrow_prox_ref': False, 'prox_ref_source': 'parent', 'prox_ref_sub_id': None, 'prox_ref_cycle': None, 'prox_ref_usable_idx': None}
+  947: sd=P.POI(0.57786) opp=(1, 3621)c0.POI(0.57306) gap=48
+  954: TRIGGER opp_sd POI 0.57306 meta={'prox_ref_gap_pips': 48, 'narrow_prox_ref': False, 'prox_ref_source': 'sub', 'prox_ref_sub_id': None, 'prox_ref_cycle': 0, 'prox_ref_usable_idx': 947}
+  1035: TRIGGER sd POI 0.57786 meta={'prox_ref_gap_pips': 48, 'narrow_prox_ref': False, 'prox_ref_source': 'parent', 'prox_ref_sub_id': None, 'prox_ref_cycle': None, 'prox_ref_usable_idx': None}
+  1047: close passes [('parent', 'POI', 0)]
+  1048: sd=(-1, 3304)c0.POI(0.57885) opp=(1, 3621)c0.POI(0.57306) gap=58
+  1050: close passes [('sub', 5, 0, 'POI')]
+  1051: sd=P.BOS(0.57996) opp=(1, 3621)c0.POI(0.57306) gap=69
+  final locked={'sd': True, 'opp_sd': False} narrow_parent_refs=False

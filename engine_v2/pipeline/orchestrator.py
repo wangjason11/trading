@@ -833,9 +833,12 @@ def _final_proximity_triggers(
     list (collapsed: parent zones only). In the batch's cycle order, then any cycle only the overlay produced.
 
     ASSERTED (the main WVMI gate reads only the first sd of each cycle — `_first_sd_prox_gate`): each cycle's first
-    trigger is the batch's — (idx, direction, trigger_inner, zone_kind). It is always on the first sd rung, a parent
-    zone: a POI is passed only by a close beyond its outer, so the low reached its inner first; Rule 2 could block it
-    only on a narrow cycle whose CTS was not pullback-confirmed, which Rule 1 rules out."""
+    trigger is the batch's — (idx, direction, trigger_inner, zone_kind). It is on a parent zone in both: an sd sub
+    zone is no candidate before the cycle's first sd trigger (PLAN_R §9.2 item 7 — with the gate the parent POI can
+    be kept out, and a sub zone beyond it would otherwise pass), and the scan's first candle judges the sd side
+    first, against the CTS, as the batch does (opp_sd overlay rungs are judged after it). A POI is passed only by a
+    close beyond its outer, so the low reached its inner first; Rule 2 could block it only on a narrow cycle whose CTS
+    was not pullback-confirmed, which Rule 1 rules out."""
     from dataclasses import replace as _replace
 
     def _key(t):

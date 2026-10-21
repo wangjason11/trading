@@ -51,7 +51,7 @@ for key in sorted(ov.scans):
             print(f"  {h}: TRIGGER {t.direction} {t.zone_kind} {t.trigger_inner} meta={t.meta}")
         if (key, h) in passes:
             print(f"  {h}: close passes {passes[(key, h)]}")
-    print(f"  final locked={scan.locked} counters={scan.counters}")
+    print(f"  final locked={scan.locked} narrow_parent_refs={scan.narrow_parent_refs}")   # step 3: no counters
 
 views = {}
 for sub in pool.all():

@@ -89,11 +89,14 @@ def main():
     jobs = a.jobs or max(1, min(len(muts), (os.cpu_count() or 4) - 2))
     with cf.ThreadPoolExecutor(max_workers=jobs) as ex:
         res = list(ex.map(lambda km: _run_one(km[0], km[1], a.out, a.pytest_args.split(), a.keep), enumerate(muts)))
+    # results first: a cp1252 console cannot print a non-ASCII mutant id (2026-10-20: '→' crashed the table and lost
+    # the whole run's results)
+    json.dump(res, open(os.path.join(a.out, "results.json"), "w"), indent=1)
+    sys.stdout.reconfigure(errors="replace")
     for r in res:
         extra = (f"{r['n']} failing: " + ", ".join(f.split("::")[-1][:60] for f in r["fails"][:4])) if r["verdict"] == "KILLED" \
             else r.get("detail", r.get("tail", ""))
         print(f"{r['verdict']:9s} {r['id']:34s} {extra}")
-    json.dump(res, open(os.path.join(a.out, "results.json"), "w"), indent=1)
     n_bad = sum(r["verdict"] != "KILLED" for r in res)
     print(f"{len(res) - n_bad}/{len(res)} KILLED  (results: {os.path.join(a.out, 'results.json')})")
     sys.exit(1 if n_bad else 0)

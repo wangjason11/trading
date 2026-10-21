@@ -140,9 +140,10 @@ def _poi_zone(sid: int, cycle_id: int, sd: int, top: float, bottom: float, *,
     )
 
 
-# The narrow proximity-reference cap OUT of the picture (PLAN_R §1): no rounded gap is ever <= this. For the tests
-# that isolate Rules 2 / 3 (the BOS–CTS threshold gap) on zones whose inners sit 20 pips apart — narrow by the
-# reference gap too (<= 40), so under the default cap the two rule sets would both bind.
+# The proximity reference gate OUT of the picture (PLAN_R §9): no rounded gap is ever <= this — no update is skipped
+# and no cycle is the narrow parent-reference exception. For the tests that isolate Rules 2 / 3 (the BOS–CTS threshold
+# gap) on zones whose inners sit 20 pips apart — the exception under the default minimum (<= 40), so the two rule sets
+# would both bind.
 _NO_REF_CAP = -10 ** 6
 
 
@@ -612,9 +613,10 @@ def test_mid_cycle_crossing_lifts_caps():
         "sd", "opp_sd", "sd", "opp_sd", "sd"
     ]
     assert [t.idx for t in triggers[(0, 0)]] == [5, 10, 20, 25, 30]
-    # Both rule sets AND-ed (PLAN_R §1): the inners stay 20 pips apart (zone
-    # inners never move), so under the default cap (40) the reference gap stays
-    # narrow after Rules 2 / 3 lift — one sd + one opp_sd, the counters never reset.
+    # Both rule sets AND-ed (PLAN_R §9): the BOS–CTS inners sit 20 pips apart
+    # (inners never move) — the narrow parent-reference exception under the
+    # default minimum (40), so after Rules 2 / 3 lift the exception still allows
+    # one sd + one opp_sd in the whole cycle.
     with_cap = check_zone_proximity(
         df=df, sorted_events=events,
         kl_zones=[bos, cts], poi_zones=[],

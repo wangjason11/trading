@@ -1,0 +1,12 @@
+[
+ {
+  "id": "3-03 inward judged against the PRE-candle other side (point 3: not outward first)",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_11_outward_moves_first_then_inward_judged_against_the_updated_other_side",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_11b_both_sides_offered_inward_rungs_on_one_candle_sd_is_judged_first_the_stated_default"
+  ],
+  "tail": "2 failed, 1825 passed, 3 skipped, 1 deselected, 445 warnings in 136.67s (0:02:16)"
+ }
+]

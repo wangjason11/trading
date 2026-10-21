@@ -1,4 +1,4 @@
-# PLAN_R — the opp_sd zones proximity trigger: proximity reference ladders, the narrow proximity-reference cap, the proximity overlay (the user, 2026-10-14 → 19)
+# PLAN_R — the opp_sd zones proximity trigger: proximity reference ladders, the narrow proximity-reference cap (steps 1–2; replaced by the proximity reference gate, step 3), the proximity overlay (the user, 2026-10-14 → 19)
 
 **Status: BUILD UNDER WAY (2026-10-20, the build session) — §8 is the build log.** Every decision closed 2026-10-20: the user's round-9 decisions ("A hold, keep 0a, go ahead with the review"); the plan review DONE and folded in (§6); Q1 = (a), Q2 = (b), Q3 = (ii), Q4 = 4 commits (§7).
 - **Baseline:** **S_Q** `artifacts/commits/week9-entries-decisions/20261014_170919_da8c15e` (= `LATEST_week9-entries-decisions`, source `da8c15e`).
@@ -29,7 +29,7 @@ The user asked for "proximity" in every name: "since we have used the term refer
 | **proximity reference ladder** | A side's candidate zones, ordered by closeness to the other side. |
 | **passed proximity zone** | A ladder zone that price has closed beyond. |
 | **proximity reference gap** | The SIGNED distance between the two references. |
-| **narrow proximity-reference cap** | The new rule, `DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS`. |
+| **narrow proximity-reference cap** | Steps 1–2's rule, `DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS`; REPLACED in step 3 by the **proximity reference gate** + the **narrow parent-reference exception** (§9.3). |
 | **proximity overlay** | The sub zones added to a side. |
 | **opp_sd zones proximity trigger** | Was "CTS zone proximity trigger". |
 | narrow-cycle Rules 1–3 | Unchanged: the BOS–CTS threshold gap. |
@@ -64,7 +64,8 @@ The user asked for "proximity" in every name: "since we have used the term refer
 
 **Collapsed parent cycles, and runs without the M15 pass:** parent zones only. The user: "parent zones only for now and consider subs later". The register §G line has been added.
 
-**The reference.** The closest usable, unpassed rung on each side ("the smallest gap available").
+**The reference.** The closest usable, unpassed rung on each side ("the smallest gap available") — steps 1–2;
+since step 3 kept or moved through the proximity reference gate (§9.2).
 
 **Tie order** (equal inners): the parent zone first, then sub zones; within one sub, BOS before POI.
 
@@ -74,7 +75,8 @@ The user asked for "proximity" in every name: "since we have used the term refer
 - **Which outer:** the outer as of the candle's CLOSE, including expansions during the candle (M15 steps with moment ≤ `LOH(h)`). Outers expand: H1 CTS zones and M15 BOS zones. Inners never move: 0 of 39 zones in S_Q. This is causal because the pass takes effect only from `h+1`. The sweep runs candle `h`'s pass test at the start of tick `h+1` (§5.2).
 - **Effective:** from the next candle; the trigger candle's own close counts.
 - **What is tested:** every candidate except the parent's LAST rung (the BOS or the CTS), which is never tested. Literally testing it would remove the last rung (measured: closes beyond the (0,0) / (1,0) / (1,1) CTS and the (0,1) BOS inside their windows) and leave a side empty. One close can pass several zones.
-- **On every candle:** the pass test runs even on candles where Rules 2/3, the cap or alternation block the trigger.
+- **On every candle:** the pass test runs even on candles where Rules 2/3, the cap (step 3: the narrow
+  parent-reference exception) or alternation block the trigger.
 - **How long:** a passed zone stays out for the rest of the parent cycle.
 - **From when — DECIDED 2026-10-20, (a)** (the user: "ok let's go with a)"). A zone's closes are tested from the candle it becomes usable; for a parent zone, that is the scan start.
   - **Why the change:** the round-4 default ("closes count from the scan start, even for a sub zone that only becomes usable later"; the user then said "Yes") made almost every sub zone passed before it existed, because a sub's zones sit where price came from.
@@ -95,7 +97,11 @@ The user asked for "proximity" in every name: "since we have used the term refer
   - **Effect on this window:** none. There is no opp_sd-side pass in (0,1) or (1,2), so §5.4 holds.
   - **Tests:** a lock on the CTS, then a newer source sub's zone re-opens; a lock, then the source's newer cycle re-opens; the sd lock never re-opens. **Mutants:** the unlock off; unlock on the opp side only by a newer sub (drop the newer-cycle case); unlock on the sd side.
 
-### The narrow proximity-reference cap (rounds 4–7)
+### The narrow proximity-reference cap (rounds 4–7) — REPLACED by step 3's proximity reference gate (§9, round 15)
+
+> Steps 1–2 built this cap; step 3 replaces it (the user, 2026-10-20: "rather than setting the gap thresholds as
+> bounds where we would limit proximity triggers, we use those thresholds to limit what zones can be used as
+> proximity references"). The gap definition below stays; the counter state machine is gone (§9.1).
 
 **The gap.**
 - `proximity reference gap = sd × (opp_sd reference − sd reference) / pip`, where `sd` is the parent's direction.
@@ -122,7 +128,9 @@ The user asked for "proximity" in every name: "since we have used the term refer
 - The scan window.
 - Proximity pips 8 / 5 / 3 (the code value; the user's 9 / 6 / 3 came from outdated docs, fixed in step 0b).
 - The detectors (subsequent_confluence on every opp_sd past list index 0; subsequent_counter on an sd at index ≥ 2).
-- The WVMI gate. The first sd per cycle is always on the first sd rung, which is always a parent zone.
+- The WVMI gate. The first sd per cycle is always on the first sd rung, which is always a parent zone. (Step 3:
+  the gate can keep the parent POI out, and an sd sub zone beyond it would otherwise pass — so an sd sub zone is no
+  candidate before the cycle's first sd trigger, §9.2 item 7, and the first candle judges the sd side first.)
   - **Why (plan review, from the code):** the first expected direction is sd. A POI is passed only by a close beyond its outer, so the low has crossed the inner and the sd fires on the POI on that candle or earlier. Rule 3 and the new cap start at 0.
   - **The dependency:** Rule 2 could block it only on a narrow cycle whose CTS was not confirmed by a pullback, which Rule 1 rules out (`market_structure.py:1907-1917`). The assert documents that dependency.
 - MarketStructure's own sd-proximity CTS confirmation stays on parent zones. The user, round 8: "this would also ensure that CTS confirmation does not consider these subs".
@@ -679,3 +687,259 @@ The predictions below are for the decided hold (A) and Q1 = "from when usable".
     thresholds GATE reference updates instead of capping triggers** (the user's round-15 write-up and the five
     adopted recommendations: `qa_opp_sd_zones_inputs/qa_findings.md` round 15) — planned below in §9 with a
     shadow-measured prediction, its own `/compare` against the step-2 save.
+
+---
+
+## 9. Step 3 — the proximity reference gate (the user's round-15 pivot; replaces the narrow proximity-reference cap)
+
+Decided 2026-10-20 after the step-2 chart look (the user's write-up, verbatim: `qa_opp_sd_zones_inputs/user_writeup_round15_20261020.md`;
+the five adopted recommendations, as presented: `qa_findings.md` round 15). One cause, its own `/compare` against S_R2.
+
+### 9.1 The rule
+
+- **The proximity reference gate.** A side's reference is UPDATED only if the proximity reference gap after the update
+  stays ABOVE `DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS` (40 / 25 / 15, the same values; the gap = §1's signed,
+  half-up gap, `<=` = too narrow). A too-narrow update is SKIPPED: the reference stays what it was. The user: "We only
+  make updates when the updated gap remains above the given threshold for each TF." No counters, no reset: alternation
+  is unlimited. Everything else of §1 is unchanged (the ladders, the sticky source + its "Contributed + reachable"
+  switch, the strict cycle, usability, passes, locks, the opp_sd unlock, Rules 1–3, alternation).
+- **The narrow parent-reference exception** (the user: "the inner of the parent CTS & BOS themselves do not meet
+  thresholds"): a cycle whose parent BOS–CTS inner gap is `<=` the minimum — known at CTS_CONFIRMED, static (inners
+  never move) — keeps its references on the parent BOS / CTS for the whole scan and fires at most ONE sd and ONE
+  opp_sd trigger (point 5). This is the only cap left. Rules 1–3 (the BOS–CTS THRESHOLD gap) are separate and
+  unchanged (reference window: (1,0) inner gap 30 → the exception; its threshold gap 52 → Rule 3 does not bind).
+
+### 9.2 The update, per candle (`CycleProximityScan`, start of candle i)
+
+**Directions.** A rung is INSIDE a side's reference when it is strictly closer to the other side (sd zones sit on the
+pullback side of the opp_sd zones); INWARD = toward the other side (narrows the gap), OUTWARD = away (widens it).
+Candidates are ordered closest first; equal inners keep §1's tie order.
+
+1. **The start state:** each side's reference = its LAST rung (the parent BOS / CTS); every other rung — the parent POI
+   included (point 4: "the sd side can start at the BOS") — is an inward update from there, judged by the gate on the
+   scan's first candle like on any other.
+2. **Phase A — outward moves first (point 3).** A1: a SUPERSEDED reference (item 4) whose ladder's closest unpassed
+   rung is outward of it — or at its inner — moves there: never blocked (the gap only widens, or stays), and it does
+   not lock (nothing was passed), even onto the last rung. A2: a side whose reference was PASSED (at close i − 1)
+   moves to the closest unpassed rung of its ladder that passes the gate against the other side's reference as A1
+   left it. An outward rung always passes, so a pass always moves the reference; the side's last rung is the floor;
+   the pick is the last rung → the side LOCKS (§1 Locking, unchanged). A side WITHOUT a last rung (a cycle without
+   a CTS zone: no opp_sd floor) may find no rung passing the gate → it is left without a reference until one
+   passes (step 2's outcome; the landing review found the first build's assert crashing there).
+3. **Phase B — inward updates** (every side not forced and not locked), after phase A, each judged against the other
+   side's UPDATED reference (point 3): the side's unpassed rungs INSIDE its current reference, closest first; it takes
+   the first that passes the gate (point 2: "Move to the closest candidate that passes the gate" — a farther one
+   "still inside the current reference" when only the closest fails); none passes → the reference stays (the user:
+   "the current reference zone remains what it was previously").
+4. **A superseded reference** = the current reference, unpassed, no longer on its ladder (its source sub was replaced by
+   a newer one, or the source's newer cycle took over). It STAYS (point 1: at 1036 "Keep sub_6's POI as the reference,
+   or fall back to the parent CTS? Keep it") and stays pass-testable (a pass → phase A2). Phase B still applies (a
+   rung inside it that passes the gate replaces it). If the ladder's closest unpassed rung is OUTWARD of it (or at
+   its inner), the side moves there in phase A1: an outward update is never blocked (the user's rule; not on this
+   window — the simulator's flag, §9.4). A side with no reference at all takes the closest rung passing the gate.
+5. **The exception:** both references are the last rungs on every candle; a side that already fired once is blocked
+   (gate label `narrow_parent_refs`). The pass test still runs (§1), but nothing reads it.
+6. **The invariant (asserted):** outside the exception the gap at every candle's start is above the minimum (or
+   None — a side without a reference). So `narrow_prox_ref` (meta; "the gap at the candle's start ≤ the minimum")
+   is True only in the exception. (The rules reviewer: never fired in 9000 fuzz seeds; it holds by induction — each
+   move is gated against the other side as it stands, outward moves only widen, last rungs are never passed.)
+7. **An sd SUB zone is no candidate for the sd REFERENCE before the cycle's first sd trigger** (it is pass-tested
+   meanwhile). The reconciliation of point 4 with §1 "Unchanged — the WVMI gate" (the step-3 landing review's
+   blocker); ACCEPTED by the user, round 16 ("I think your recommendation is correct", with the clarification
+   below). It does NOT delay the confluence (same-direction) sub that supplies these zones: `first_confluence` fires
+   at the parent BOS_CONFIRMED (= CTS_ESTABLISHED) and is built once the parent CTS_CONFIRMED bounds its probe —
+   before the scan, independent of any proximity trigger — and its start, records, zones, pass tests and its role
+   as the sd proximity source are unchanged; only its zones' eligibility as the sd reference waits. The first sd
+   trigger is the one the batch scan produces and the main WVMI gate and `first_counter` read (via the main WVMI
+   records). Why: with the POI gated out (POI–CTS ≤ 40, BOS–CTS wider) the sd side
+   starts on the BOS, and an sd sub zone beyond the POI can pass the gate — the cycle's first sd would fire on it in
+   the sweep while the batch scan (no overlay) fires on the BOS: `_final_proximity_triggers`' assert fails, and the
+   main WVMI gate (computed from the batch, before the sweep) reads a trigger the charts do not show. Point 4's
+   stated cost was exactly "the first sd … could land on the BOS instead of the POI".
+
+**Both sides offered inward rungs on one candle (not on this window — §9.4's simulator flags none): `sd` first,
+then the opp_sd candidate against the updated sd reference** — DECIDED, the user round 16: "sd first
+(Recommended)" (pinned by `test_11b`). On the scan's first candle it is also required: sd first keeps the first
+sd on the batch's rung (the POI judged against the CTS, as the batch does; `test_15b`).
+
+### 9.3 Names
+
+| Name | Meaning |
+|---|---|
+| **proximity reference gate** | §9.1's rule; replaces the **narrow proximity-reference cap** (§1, steps 1–2) |
+| **narrow parent-reference exception** | §9.1; gate label `narrow_parent_refs` (replaces `prox_ref_cap`) |
+| **superseded reference** | §9.2 item 4 |
+| `DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS` | unchanged name and values; now the gate's minimum |
+| meta `prox_ref_gap_pips` / `narrow_prox_ref` | unchanged keys and meanings (no migration); `narrow_prox_ref` is now True only in the exception |
+
+### 9.4 Prediction (made before the build)
+
+Two independent legs, both in `qa_opp_sd_zones_inputs/build/`:
+- **The triggers — `m9_gate_sim.py`** (log `m9_gate_sim.log`): an independent re-implementation of §9.2 on m4_sim's
+  inputs (S_Q's sub zones + (1,3230)); it also carries the round-14 source switch (m4_sim predates it — its moves now
+  match the engine's step-2 moves: (1,3230) at 873, (−1,3304) at 936, (1,3621) at 947). The subs only 1045 / 1046 make
+  are left out (flagged if the sim fired those). Flags raised: NONE (no candle with inward rungs on both sides, no
+  superseded reference with an outward closest rung, no forced move into a rung inside the passed one, no opp_sd
+  reference passed). Result:
+  - parent-only cycles = S_Q's ((0,0) none, (1,0) the exception, nothing reaches it, (1,1) 820 / 871);
+  - **(0,1) unchanged**: 748 sd:POI, 820 opp_sd on sub_3 c2 POI 0.58096, 872 sd:BOS — every update above 40 (708 65,
+    712 57, 749 46, 755 68 after the POI pass at 754, 772 60, 873 56);
+  - **(1,2) = 935 sd:POI, 954 opp_sd on sub_6 c0 POI 0.57306, 1035 sd:POI; 1045 / 1046 do NOT fire.** sub_6's POI is
+    accepted at 947 (48); sub_8 becomes the opp_sd source at 1036, and the gate skips its zones on every candle
+    1036–1057 (c0 / c1 against the parent POI 0.57786, c2's BOS against the sd reference as it moves out) → the
+    superseded sub_6 POI stays the opp_sd reference to 1057, never reached again. sd: the parent POI passed at 1047 →
+    1048 sub_5 (−1,3304) c0 POI 0.57885 (58) → passed at 1050 → 1051 the parent BOS 0.57996 (69; sd locked).
+- **The pool — `r6_gate_shadow.py`** (log `r6_gate_shadow.log`): r5_shadow's method (its `full` variant reproduced step
+  2's pool byte for byte) — the full replay at `77f8ccf` (pre-overlay, the 0a bound in) with those chains injected:
+  - H1 zone-proximity triggers 10 → **8** (1045 opp_sd: sub_8 c2 BOS 0.57728 and 1046 sd:POI removed);
+  - **subs 11 → 9, records 15 → 14, unresolved 4** (the same 4 rows), spawned reversals 4 → 5: sub_9 (−1,4179) and
+    sub_10 (1,4183) are not built; sub_7 (−1,3760) runs to its own reversal at 4200 (was replaced at 4183); sub_8
+    (1,4027) is not cut at 4187 (end None) and gains a confluence (1,2) reversal record from 4200. The (1,2) tail subs
+    (1,3621), (−1,3760), (1,4027) are identical BY KEY to S_Q in every lens CSV (`kdiff_saves.py`);
+  - sub WVMI acted 9 / records 19 (by lens confluence 16 → 18, counter 7); 0 `sibling-CTS unavailable` (was 1, 1046's);
+    skip grep 24 → **23**;
+  - CSVs vs S_R2: the 16 M15 lens CSVs differ, the 10 H1 ones + the unresolved table identical; by key
+    (`kdiff_saves.py S_R2 <variant>`): only in S_R2 (−1,4179) (confluence) / (1,4183) (counter); differ (−1,3760)
+    (confluence) and (1,4027) (counter; new on confluence); every other key identical; `sub_id`s 0–8 unchanged;
+  - figures: H1 81/236, only the marker trace differs (8 markers); M15 counter 164/144 → **153/138**, confluence
+    257/263 → **301/309** — from the shadow's own render (step 2's shadow rendered no charts, so these two counts are
+    the method's first chart prediction; a mismatch is a finding to explain).
+- **The variant replay must equal the shadow** by key on every lens CSV and in the `[pool]` lines byte for byte; the
+  H1 hover differs from the shadow's only where step 2's labels name a sub source (820, 954).
+
+### 9.5 Build, tests, mutants, docs
+
+- **Code** (`zones/zone_proximity.py`): `CycleProximityScan` — the counters and the `prox_ref_cap` gate removed; the
+  start state; `_pick_reference` → `_update_references` (phases A / B, the superseded keep); the exception
+  (`narrow_parent_refs`, computed at construction from the last rungs); the pass test also covers a kept superseded
+  reference; the invariant assert. `multitf/proximity_overlay.py`: no rule change (it sets the overlay; a superseded
+  opp_sd reference passed → the lock basis = that reference's own (sub, cycle), as today).
+- **Tests** (rewrite step 1's cap tests in `tests/test_proximity_reference_ladders.py` §5 as gate tests; the
+  `test_zone_proximity.py` Rules 2 / 3 tests keep `_NO_REF_CAP`): an inward update skipped when too narrow (exactly at
+  the minimum included: `<=`); the closest PASSING candidate inside the reference taken (point 2); a superseded
+  reference kept when every inward rung fails and the parent CTS is NOT taken (point 1); kept, then passed → phase A;
+  superseded with an outward closest rung → moved; outward first, then inward against the updated other side (point
+  3: a case where the order changes the outcome); the parent POI gated at the scan start (point 4: the sd side starts
+  at the BOS); the exception (refs fixed, 1 + 1, the gate label, Rules 1–3 independent); unlimited alternation on a
+  wide cycle; the invariant; the real window ((1,2) on the real sweep + overlay: 8 triggers, the reference timeline
+  above).
+- **Mutants:** `<=` → `<`; the gate off (step 2's references); phase B before phase A; the superseded reference dropped
+  (→ the parent CTS); the CTS fallback taken for a superseded reference; "closest passing" → "stay when the closest
+  fails"; the parent POI ungated; the exception off / its 1 + 1 off / computed from the threshold gap; the kept
+  reference not pass-tested; the invariant assert dropped (equivalent-candidate: say why); phase B's order flipped
+  (killed by test 11b, which pins the stated default — point 3's test pins outward-first, a different mutant).
+- **Docs (same commit):** the module docstring + the constant's comment + the class docstring; GLOSSARY (the cap row →
+  the gate + the exception); LANDMINES ("Proximity Reference Ladders" — the cap paragraphs, the gates list); GOTCHAS
+  (the start-of-candle note); PART4 §4.3 (the cap paragraph); §1 here (the cap section → the gate, in place); the
+  register line; the `/compare` skill at the save.
+- **Order:** build → full suite → variant replay (timing shown) → `/compare` vs S_R2 (+ `kdiff_saves.py`, the shadow
+  check, the figure leaves) → mutants (run every one) → the landing review (size + tokens stated first) → the user's
+  chart look → commit on the user's go → `/commit-save`.
+
+### 9.6 Build log (2026-10-20)
+
+- **Step 3 — BUILT, variant replay + `/compare` vs S_R2 = §9.4's prediction; NOT committed (the landing review, then the
+  user's chart look, then the commit on the user's go).**
+  - **Code** (`zones/zone_proximity.py`, as §9.5): `CycleProximityScan` — `counters` and the `prox_ref_cap` gate gone;
+    `_pick_reference` → `_update_references(first)` (the start state on the last rungs; phase A, the forced moves,
+    through the gate, a last-rung pick locks; phase B, `sd` then `opp_sd`, the closest rung inside the reference that
+    passes against the updated other side, else the reference stays — a superseded one too, unless the ladder's
+    closest rung is outward of it); `_closest_first` / `_passes_gate` / `_last`; `narrow_parent_refs` (the exception,
+    from the last rungs at construction; gate label `narrow_parent_refs`, one trigger per side via `_fired`); the pass
+    test also covers a kept superseded reference; the invariant assert (a gap `<=` the minimum outside the exception
+    raises). `multitf/proximity_overlay.py` unchanged. The docstrings (module, the constant, the class, the trigger
+    meta, the batch function).
+  - **Measured vs §9.4 (all as predicted):** fetch gate PASS (0 retries); H1 triggers 10 → 8 (8 markers on each
+    chart); the `[pool]` lines BYTE-IDENTICAL to the shadow's (`build/r6_gate_shadow.log`: 9 subs, 14 records, 4
+    unresolved, spawned reversals 5); the sub WVMI line identical (acted 9, records 19, confluence 18 / counter 7); 0
+    `sibling-CTS unavailable`; skip grep 23; ALL 27 CSVs md5-identical to the shadow's (stronger than the keyed
+    prediction); vs S_R2 the 10 H1 CSVs + the unresolved table identical, the 16 M15 lens CSVs differ, keyed exactly as
+    §9.4 (`build/kdiff_step3_vs_S_R2.txt`); figures vs S_R2: H1 ONE trace (the marker trace: x / y / customdata),
+    layout equal; M15 counter 164/144 → 153/138, confluence 257/263 → 301/309 = the shadow's render (its first chart
+    prediction: met), every M15 trace before the first changed sub identical (positional; confluence sub7, counter
+    sub8); vs the shadow's figures: ONE trace per chart, the marker trace's `customdata` — exactly the 820 / 954
+    markers' type line and `zone_confirmed_idx` (step 2's sub-source labels, "opp_sd: sub_3 c2 POI 0.58096" / 772 and
+    "opp_sd: sub_6 c0 POI 0.57306" / 947, absent at `77f8ccf`). The engine's reference timeline
+    (`build/trace_overlay_step3.log`) = `m9_gate_sim.log` line for line on (0,1) / (1,2), except the one invisible
+    (1,3230) c0 BOS pass 897 vs 895 (§8's outer expansion); (0,0) unchanged (wide, the opp_sd lock from 617). Replay
+    103.2 s (machine load: the shadow took 94.6 s; step 2's 56.8 s).
+  - **Tests:** `tests/test_proximity_reference_ladders.py` — §5 rewritten as the gate (5a the skip at 30 / 40 / 41, 5b
+    the closest passing candidate, 5c the superseded reference kept then passed → the CTS locked, 5d a superseded
+    reference moves outward, 5e the parent POI gated, 5f unlimited alternation, 5g the invariant); 6 a crossed update
+    skipped; 7 `<=` on the POI; 11 outward first (point 3), 11b the phase-B order default; 14 / 14b / 14c the
+    exception (fixed references + 1 / 1, a pass on its blocked candle, the inner gap vs the threshold gap); review_1 /
+    3 / 5 / 6 re-written on the same paths; `test_proximity_overlay.py`'s real sweep + overlay table = the shadow's
+    pool + the reference timeline above. `test_zone_proximity.py` unchanged (comments). Suite 1831 in `engine_v2/tests`
+    (step 2's HEAD: 1824; +7). The step-1 reviewer's sketches `sims/review1_tests/test_gap_sketches.py` (7, collected
+    by a repo-root `pytest` — in step 2's 1820 / 1831 root counts; four pin the removed cap) renamed
+    `sketch_gap_tests.py`, no longer collected.
+  - **Mutants** `build/mutants_3.py` (§9.5's list, 18): 16 / 18 KILLED; the 2 survivors are the two marked EXPECTED
+    EQUIVALENT beforehand — 3-10 (the exception's fixed references dropped: every inward update narrows a gap already
+    `<=` the minimum, so the gate keeps the last rungs anyway; nothing lies beyond a last rung, which is never passed)
+    and 3-16 (the on-ladder refresh dropped: the overlay re-creates a rung with the same key, inner, `outer_at`
+    closure and `usable_idx`). Two KILLS were incidental on the first run and their tests were sharpened (results
+    `mutants_3.results.json` + the two reruns): 3-03 (inward judged against the pre-candle other side) was killed only
+    via 11b's invariant assert — test 11 fired a candle AFTER the moves, where the mutant had caught up — now 11 fires
+    on the candle of both moves and kills it; 3-13 (phase B's order flipped) was killed only by test 6 — 11b's
+    neutral candles (1.4200) sat above the opp_sd rung's outer, so the first close passed it and both orders converged
+    a candle later — now 11b's candles sit between the rungs and kill it. The first run's table crashed on a cp1252
+    console (`→` in a mutant id) before `results.json` was written: `mutant_runner.py` now writes the results first.
+
+### 9.7 The step-3 landing review (2026-10-20) — 2 read-only agents, 509,197 tokens (stated 0.5–0.6M)
+
+The rules lens (242,802: the code vs the user's round-15 text, the five points as presented and §9; adversarial
+scenarios; a 9000-seed fuzz of `CycleProximityScan` against its own re-implementation — 0 mismatches outside the
+point-3 ordering below; the invariant never fired, provable by induction) and the tests / measurements lens (266,395:
+every §9.6 measurement re-derived — 27 / 27 md5 = the shadow, the keyed diff vs S_R2, the counts, the figures, the
+pool lines; the prediction legs checked for after-the-fact fitting — none, by file times; 25 own mutants). Scratch:
+`%TEMP%\rv3a\`, `%TEMP%\rv3b\` (not kept). Findings and what was done (all zero change on this window — the replay
+after them = the previous variant: 27 CSV md5 + 3 figure hashes):
+- **BLOCKER — the first sd trigger could leave the batch's rung.** Point 4 gates the parent POI; with POI–CTS ≤ 40
+  and BOS–CTS wider the sd side starts on the BOS, and an sd sub zone beyond the POI (it qualifies) could pass the
+  gate — the cycle's first sd then fires on it in the sweep, on the BOS in the batch: `_final_proximity_triggers`
+  raises (the main WVMI gate reads the batch's, computed before the sweep). Reproduced synthetically; not on this
+  window (POI–CTS 69 / 50). **Built: §9.2 item 7** (an sd sub zone is no candidate before the cycle's first sd
+  trigger) — the reading that keeps point 4's stated cost ("could land on the BOS instead of the POI") and §1
+  "Unchanged — the WVMI gate" both true — **PENDING THE USER'S CONFIRMATION** (the alternatives: §9.8). The phase-B
+  order is then load-bearing on the scan's first candle (sd first = the batch's judgement; `test_15b`).
+- **SHOULD-FIX (both lenses) — a crash on a cycle without a CTS zone:** a passed opp_sd sub reference with no rung
+  passing the gate tripped phase A's assert (the rules lens: 242 / 3000 fuzz seeds at a 30% no-CTS rate). Fixed: the
+  assert holds only when the side has a last rung; otherwise the side is left without a reference (step 2's outcome)
+  until a rung passes (`test_16`, both forms).
+- **SHOULD-FIX — point 3's order for a superseded reference:** its outward move ran in phase B, after the sd side's
+  inward candidate had been judged against the old position. Fixed: phase A1 (superseded outward moves, ungated) then
+  A2 (passed references, gated) then B (`test_17`, the reviewer's scenario).
+- **SHOULD-FIX (tests) —** review_1 fired a candle after its moves (3-03 survived it) → fires on the candle; test 9's
+  parent-first tie no longer bites under the gate → `test_18` (a forced tie with the BOS goes to the parent and
+  locks); the superseded pass test was pinned on opp_sd only → `test_18b`; three edge choices pinned (`test_19`: no
+  reference yet → the closest passing rung; a superseded reference moves to an equal-inner rung; a superseded
+  reference moving onto the CTS does not lock); the test file's stale names.
+- **SHOULD-FIX (docs) —** "the closest unpassed rung" presented as current (GLOSSARY, LANDMINES, PART4, §1) and
+  LANDMINES' first-sd claim; the class / module docstrings (A1 / A2, item 7, ties against a current reference); the
+  `_final_proximity_triggers` docstring; the overlay's unlock log ("the reference = the gate's pick from the CTS").
+- **NIT — a passed superseded opp_sd reference locks the side for one candle:** the next tick's overlay basis (the newer
+  source) lifts it at once — the rule as written (a newer counter-sub zone re-opens the lock); documented in LANDMINES.
+- **NIT — ties against the current reference:** step 3 keeps the current reference against an equal-inner candidate
+  (step 2 re-picked by tie order); 27 / 3000 fuzz seeds, all equal-gap ties, no production path found; docstrings say so.
+- **The mutant list** missed §9.5's "computed from the threshold gap" — added (3-27 / 3-28), with the tests
+  reviewer's real survivors (3-24 … 3-30) and the fixes' own (3-20 … 3-23).
+- **After the review's fixes:** suite 1839 (`engine_v2/tests`; +8: `test_15`, `15b`, `16` ×2, `17`, `18`, `18b`, `19`;
+  review_4 / review_7 / 11b fire their first sd on the BOS at 3 — an sd sub zone is a candidate only after it).
+  `build/mutants_3.py` re-anchored + 11 new — **27 / 29 KILLED** (`mutants_3.results.json`); the 2 survivors are the
+  two marked EXPECTED EQUIVALENT (3-10, 3-16 — the tests lens agrees; 3-16 differs only in `usable_idx`, re-derived
+  per tick). 3-23 as built disables phase A1 (= 3-17; the A1-after-A2 reorder differs only when both sides move
+  outward on one candle, which the rules lens showed impossible while the gap > 0). The replay after the fixes = the
+  previous variant (27 CSV md5 + 3 figure hashes; fetch gate PASS; skip grep 23; 95.0 s).
+
+### 9.8 Round 16 — the user's decisions after the landing review (`qa_findings.md` round 16)
+
+- **The first-sd rule** — the candidates put to the user (a synthetic bullish example: BOS 1.4000, an sd sub zone S
+  1.4050 beyond the POI, POI 1.4100 = 40 from the CTS 1.4140, so gated out; candle 5's low in S's band, 8's in the
+  BOS's): (1) §9.2 item 7 — the first sd at 8 on the BOS = the batch, S the reference from 9 (BUILT); (2) ungate the
+  POI at the scan start (reverses point 4: the first sd on the POI at 5); (3) the first sd on S at 5 and the main WVMI
+  gate fed from the sweep (a pipeline-order change); (4) drop the assert, the gate on the batch's 8, the charts on S
+  at 5; (5) item 7 and S also not pass-tested before the first sd. **The user: (1)**, with a clarification of the
+  trigger chain — reconciled in item 7 and `qa_findings.md` round 16 (item 7 restricts the reference role only).
+- **The phase-B side order:** `sd` first (§9.2).
+- **The stepped "current proximity reference" line as a chart feature:** "Decide later" — parked (register §G); the
+  sample script stays `build/prox_ref_sample.py`.

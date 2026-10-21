@@ -1,0 +1,474 @@
+[
+ {
+  "id": "3-01 the gate's `<=` \u2192 `<` (a gap exactly at the minimum passes)",
+  "verdict": "KILLED",
+  "n": 5,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows_rows_and_zones",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_15_an_sd_sub_zone_is_no_candidate_before_the_cycles_first_sd_trigger",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5a_an_inward_update_that_would_be_too_narrow_is_skipped[1.414-40-False]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5e_the_parent_poi_is_gated_too_the_sd_side_can_start_at_the_bos",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_7_rounding_is_half_up_and_narrow_is_at_or_below"
+  ],
+  "tail": "5 failed, 1830 passed, 3 skipped, 1 deselected, 445 warnings in 220.35s (0:03:40)"
+ },
+ {
+  "id": "3-02 the gate off (every update passes: step 2's references and no counters)",
+  "verdict": "KILLED",
+  "n": 19,
+  "fails": [
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role[main]",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows_rows_and_zones",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_11b_both_sides_offered_inward_rungs_on_one_candle_sd_is_judged_first_the_stated_default",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_15_an_sd_sub_zone_is_no_candidate_before_the_cycles_first_sd_trigger",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_15b_the_first_candles_sd_first_order_keeps_the_first_sd_on_the_batchs_rung",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_16_a_side_without_a_last_rung_may_be_left_without_a_reference[True]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_18b_a_superseded_sd_reference_stays_pass_tested",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5a_an_inward_update_that_would_be_too_narrow_is_skipped[1.413-30-False]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5a_an_inward_update_that_would_be_too_narrow_is_skipped[1.414-40-False]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5b_the_closest_candidate_that_passes_the_gate_is_taken",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5c_a_superseded_reference_whose_every_inward_rung_is_too_narrow_stays_never_the_cts",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5e_the_parent_poi_is_gated_too_the_sd_side_can_start_at_the_bos",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_6_a_crossed_update_is_too_narrow",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_7_rounding_is_half_up_and_narrow_is_at_or_below",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_5_a_cycle_without_a_cts_zone_takes_its_first_opp_sd_reference_through_the_gate"
+  ],
+  "tail": "19 failed, 1816 passed, 3 skipped, 1 deselected, 445 warnings in 220.05s (0:03:40)"
+ },
+ {
+  "id": "3-03 inward judged against the PRE-candle other side (point 3: not outward first)",
+  "verdict": "KILLED",
+  "n": 4,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_11_outward_moves_first_then_inward_judged_against_the_updated_other_side",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_11b_both_sides_offered_inward_rungs_on_one_candle_sd_is_judged_first_the_stated_default",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_17_a_superseded_references_outward_move_comes_first_point_3",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_1_bearish_outward_first_then_inward_against_the_updated_other_side"
+  ],
+  "tail": "4 failed, 1831 passed, 3 skipped, 1 deselected, 445 warnings in 218.09s (0:03:38)"
+ },
+ {
+  "id": "3-04 a superseded reference always moves to the ladder's natural pick (ungated as in step 2)",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows_rows_and_zones",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_18b_a_superseded_sd_reference_stays_pass_tested",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5c_a_superseded_reference_whose_every_inward_rung_is_too_narrow_stays_never_the_cts"
+  ],
+  "tail": "3 failed, 1832 passed, 3 skipped, 1 deselected, 445 warnings in 218.26s (0:03:38)"
+ },
+ {
+  "id": "3-05 a superseded reference falls back to the closest rung passing the gate (the parent CTS: point 1 rejected)",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows_rows_and_zones",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_18b_a_superseded_sd_reference_stays_pass_tested",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5c_a_superseded_reference_whose_every_inward_rung_is_too_narrow_stays_never_the_cts"
+  ],
+  "tail": "3 failed, 1832 passed, 3 skipped, 1 deselected, 445 warnings in 219.12s (0:03:39)"
+ },
+ {
+  "id": "3-06 \"stay when the closest fails\" (not the closest PASSING candidate inside: point 2)",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_15_an_sd_sub_zone_is_no_candidate_before_the_cycles_first_sd_trigger",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5b_the_closest_candidate_that_passes_the_gate_is_taken"
+  ],
+  "tail": "2 failed, 1833 passed, 3 skipped, 1 deselected, 445 warnings in 219.46s (0:03:39)"
+ },
+ {
+  "id": "3-07 the parent POI ungated at the scan start (the start state = the natural picks: point 4)",
+  "verdict": "KILLED",
+  "n": 12,
+  "fails": [
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role[main]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_15_an_sd_sub_zone_is_no_candidate_before_the_cycles_first_sd_trigger",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_15b_the_first_candles_sd_first_order_keeps_the_first_sd_on_the_batchs_rung",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5e_the_parent_poi_is_gated_too_the_sd_side_can_start_at_the_bos",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_6_a_crossed_update_is_too_narrow",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_7_rounding_is_half_up_and_narrow_is_at_or_below",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_4_the_pass_reads_the_outer_as_of_the_close_including_an_expansion_on_that_candle",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_7_an_overlay_rung_is_pass_tested"
+  ],
+  "tail": "12 failed, 1823 passed, 3 skipped, 1 deselected, 445 warnings in 219.94s (0:03:39)"
+ },
+ {
+  "id": "3-08 the exception off",
+  "verdict": "KILLED",
+  "n": 49,
+  "fails": [
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_multicycle_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_multicycle_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_second_cts_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_second_cts_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_multicycle_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_multicycle_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_second_cts_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_second_cts_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[est-_make_ip_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[est-_make_ip_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[est-_make_second_cts_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[est-_make_second_cts_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role[main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role[sub]",
+   "engine_v2/tests/test_meta_key_renames.py::test_exporters_write_every_meta_dict_verbatim",
+   "engine_v2/tests/test_orchestrator_reversal_source.py::test_a_discarded_reversal_candidate_ends_no_fib[13]",
+   "engine_v2/tests/test_orchestrator_reversal_source.py::test_a_discarded_reversal_candidate_ends_no_fib[16]",
+   "engine_v2/tests/test_orchestrator_reversal_source.py::test_every_reader_gets_the_realised_reversal_not_the_last_candidate",
+   "engine_v2/tests/test_orchestrator_reversal_source.py::test_the_realised_reversal_still_ends_the_fib",
+   "engine_v2/tests/test_plan_e_role_pins.py::test_lagging_est_fib_lifecycle_is_timed_at_the_moment[main]",
+   "engine_v2/tests/test_plan_e_role_pins.py::test_lagging_est_fib_lifecycle_is_timed_at_the_moment[sub]",
+   "engine_v2/tests/test_plan_g_wvmi.py::test_the_main_flags_its_collapsed_cycles_too[13-expected1]",
+   "engine_v2/tests/test_plan_g_wvmi.py::test_the_main_flags_its_collapsed_cycles_too[None-expected0]",
+   "engine_v2/tests/test_plan_g_wvmi.py::test_the_main_keeps_its_gate_values_and_meta_key_order",
+   "engine_v2/tests/test_plan_i_s2b_dispatch_order.py::test_a_bos_at_or_before_the_cts_anchor_is_handled_first[10]",
+   "engine_v2/tests/test_plan_i_s2b_dispatch_order.py::test_a_bos_at_or_before_the_cts_anchor_is_handled_first[11]",
+   "engine_v2/tests/test_plan_j_j2_new_cycle_break.py::test_the_runs_are_whole_and_the_downstream_takes_them[410_230]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_14_the_narrow_parent_reference_exception_fixes_the_references_and_allows_one_sd_one_opp_sd",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_14b_a_pass_on_a_candle_the_exception_blocks_still_counts",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_6_rule_2_is_not_part_of_the_exception",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_an_ended_cycle_takes_no_lp_past_its_end",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_an_open_projection_bounds_the_temp_lp_by_the_cycle_end",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_the_main_tracker_gets_every_cycle_end_from_the_lifecycle_table",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_the_projection_passes_every_cycle_end",
+   "engine_v2/tests/test_zone_proximity.py::test_initial_pass_applies_events_known_at_scan_start",
+   "engine_v2/tests/test_zone_proximity.py::test_mid_cycle_crossing_lifts_caps",
+   "engine_v2/tests/test_zone_proximity.py::test_narrow_cycle_caps_at_one_sd_and_one_opp_sd",
+   "engine_v2/tests/test_zone_proximity.py::test_narrow_cycle_without_pullback_cts_no_triggers",
+   "engine_v2/tests/test_zone_proximity_reversal_cap.py::test_a_dead_candidate_at_the_last_cycles_confirmation_no_longer_skips_it",
+   "engine_v2/tests/test_zone_proximity_reversal_cap.py::test_a_discarded_last_candidate_no_longer_skips_the_later_cycle",
+   "engine_v2/tests/test_zone_proximity_reversal_cap.py::test_a_realised_reversal_still_caps_the_scan"
+  ],
+  "tail": "49 failed, 1786 passed, 3 skipped, 1 deselected, 443 warnings in 223.84s (0:03:43)"
+ },
+ {
+  "id": "3-09 the exception's one sd + one opp_sd off",
+  "verdict": "KILLED",
+  "n": 4,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_14_the_narrow_parent_reference_exception_fixes_the_references_and_allows_one_sd_one_opp_sd",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_14b_a_pass_on_a_candle_the_exception_blocks_still_counts",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_6_rule_2_is_not_part_of_the_exception",
+   "engine_v2/tests/test_zone_proximity.py::test_mid_cycle_crossing_lifts_caps"
+  ],
+  "tail": "4 failed, 1831 passed, 3 skipped, 1 deselected, 445 warnings in 217.74s (0:03:37)"
+ },
+ {
+  "id": "3-10 the exception's fixed references dropped (EXPECTED EQUIVALENT: every inward update narrows a gap already <= the minimum; nothing beyond a last rung; a last rung is never passed; parent rungs are never superseded)",
+  "verdict": "SURVIVED",
+  "tail": "1835 passed, 3 skipped, 1 deselected, 445 warnings in 217.94s (0:03:37)"
+ },
+ {
+  "id": "3-11 a kept superseded reference not pass-tested",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_18b_a_superseded_sd_reference_stays_pass_tested",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5c_a_superseded_reference_whose_every_inward_rung_is_too_narrow_stays_never_the_cts"
+  ],
+  "tail": "2 failed, 1833 passed, 3 skipped, 1 deselected, 445 warnings in 218.73s (0:03:38)"
+ },
+ {
+  "id": "3-12 the invariant assert dropped (killed only by test 5g which forces an update around the gate)",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5g_the_invariant_no_narrow_gap_outside_the_exception"
+  ],
+  "tail": "1 failed, 1834 passed, 3 skipped, 1 deselected, 445 warnings in 219.11s (0:03:39)"
+ },
+ {
+  "id": "3-13 phase B's order flipped (opp_sd first: tests 11b / 15b)",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_11b_both_sides_offered_inward_rungs_on_one_candle_sd_is_judged_first_the_stated_default",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_15b_the_first_candles_sd_first_order_keeps_the_first_sd_on_the_batchs_rung",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_6_a_crossed_update_is_too_narrow"
+  ],
+  "tail": "3 failed, 1832 passed, 3 skipped, 1 deselected, 445 warnings in 220.08s (0:03:40)"
+ },
+ {
+  "id": "3-14 a forced move to the last rung does not lock",
+  "verdict": "KILLED",
+  "n": 9,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows_rows_and_zones",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_sd_lock_never_reopens",
+   "engine_v2/tests/test_proximity_overlay.py::test_without_a_newer_zone_the_opp_sd_lock_holds",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_10_the_reference_window_parent_ladders_reproduce_s_q_and_the_passes_stay_invisible",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_18_a_forced_tie_with_the_last_rung_goes_to_the_parent_and_locks",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_3_after_poi_to_bos_nothing_moves_the_sd_reference_again",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5c_a_superseded_reference_whose_every_inward_rung_is_too_narrow_stays_never_the_cts",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_2_an_opp_sd_pass_moves_the_reference_to_the_cts_and_locks",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_7_an_overlay_rung_is_pass_tested"
+  ],
+  "tail": "9 failed, 1826 passed, 3 skipped, 1 deselected, 445 warnings in 218.48s (0:03:38)"
+ },
+ {
+  "id": "3-15 the forced move ungated (the closest unpassed rung)",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_16_a_side_without_a_last_rung_may_be_left_without_a_reference[True]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_18b_a_superseded_sd_reference_stays_pass_tested",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5c_a_superseded_reference_whose_every_inward_rung_is_too_narrow_stays_never_the_cts"
+  ],
+  "tail": "3 failed, 1832 passed, 3 skipped, 1 deselected, 445 warnings in 219.10s (0:03:39)"
+ },
+ {
+  "id": "3-16 the on-ladder refresh dropped (EXPECTED EQUIVALENT except usable_idx: the overlay re-creates a rung with the same key / inner / outer_at closure)",
+  "verdict": "SURVIVED",
+  "tail": "1835 passed, 3 skipped, 1 deselected, 445 warnings in 218.74s (0:03:38)"
+ },
+ {
+  "id": "3-17 a superseded reference never moves outward (stays though its ladder's closest rung is outward)",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_17_a_superseded_references_outward_move_comes_first_point_3",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_19_edge_choices_pinned",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5d_a_superseded_reference_moves_when_its_ladders_closest_rung_is_outward"
+  ],
+  "tail": "3 failed, 1832 passed, 3 skipped, 1 deselected, 445 warnings in 220.31s (0:03:40)"
+ },
+ {
+  "id": "3-18 a side without a reference takes its first rung ungated",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_16_a_side_without_a_last_rung_may_be_left_without_a_reference[True]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_5_a_cycle_without_a_cts_zone_takes_its_first_opp_sd_reference_through_the_gate"
+  ],
+  "tail": "2 failed, 1833 passed, 3 skipped, 1 deselected, 445 warnings in 219.18s (0:03:39)"
+ },
+ {
+  "id": "3-20 item 7 off (an sd sub zone is a candidate before the cycle's first sd trigger: the blocker)",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_15_an_sd_sub_zone_is_no_candidate_before_the_cycles_first_sd_trigger",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_4_the_pass_reads_the_outer_as_of_the_close_including_an_expansion_on_that_candle",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_7_an_overlay_rung_is_pass_tested"
+  ],
+  "tail": "3 failed, 1832 passed, 3 skipped, 1 deselected, 445 warnings in 219.36s (0:03:39)"
+ },
+ {
+  "id": "3-21 item 7 on BOTH sides (an opp_sd sub zone waits for the first sd too)",
+  "verdict": "KILLED",
+  "n": 11,
+  "fails": [
+   "engine_v2/tests/test_proximity_overlay.py::test_a_newer_sub_contributing_nothing_reachable_does_not_take_over_the_opp_sd_side",
+   "engine_v2/tests/test_proximity_overlay.py::test_a_sub_is_a_candidate_only_once_its_record_has_started",
+   "engine_v2/tests/test_proximity_overlay.py::test_a_zone_confirmed_in_hour_h_counts_from_h_plus_1",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_hold_a_replaced_source_keeps_its_zones_until_the_newcomer_has_one_and_never_comes_back",
+   "engine_v2/tests/test_proximity_overlay.py::test_the_opp_sd_rungs_are_the_newest_counter_subs_most_recent_cycle",
+   "engine_v2/tests/test_proximity_overlay.py::test_without_a_newer_zone_the_opp_sd_lock_holds",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_19_edge_choices_pinned",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5c_a_superseded_reference_whose_every_inward_rung_is_too_narrow_stays_never_the_cts",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5f_alternation_is_unlimited_on_a_wide_cycle",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_9_tie_order_parent_first_then_a_subs_bos_before_its_poi",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_2_an_opp_sd_pass_moves_the_reference_to_the_cts_and_locks"
+  ],
+  "tail": "11 failed, 1824 passed, 3 skipped, 1 deselected, 445 warnings in 219.07s (0:03:39)"
+ },
+ {
+  "id": "3-22 a side without a last rung crashes again when its passed reference has no replacement",
+  "verdict": "KILLED",
+  "n": 2,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_16_a_side_without_a_last_rung_may_be_left_without_a_reference[False]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_16_a_side_without_a_last_rung_may_be_left_without_a_reference[True]"
+  ],
+  "tail": "2 failed, 1833 passed, 3 skipped, 1 deselected, 445 warnings in 219.00s (0:03:39)"
+ },
+ {
+  "id": "3-23 the superseded outward move after the forced moves (A1 after A2: EXPECTED EQUIVALENT unless both sides move outward on one candle)",
+  "verdict": "KILLED",
+  "n": 3,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_17_a_superseded_references_outward_move_comes_first_point_3",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_19_edge_choices_pinned",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_5d_a_superseded_reference_moves_when_its_ladders_closest_rung_is_outward"
+  ],
+  "tail": "3 failed, 1832 passed, 3 skipped, 1 deselected, 445 warnings in 219.25s (0:03:39)"
+ },
+ {
+  "id": "3-24 (R02) ties: a sub rung before the parent rung",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_18_a_forced_tie_with_the_last_rung_goes_to_the_parent_and_locks"
+  ],
+  "tail": "1 failed, 1834 passed, 3 skipped, 1 deselected, 445 warnings in 218.99s (0:03:38)"
+ },
+ {
+  "id": "3-25 (R04) a side without a reference takes the FARTHEST passing rung",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_19_edge_choices_pinned"
+  ],
+  "tail": "1 failed, 1834 passed, 3 skipped, 1 deselected, 445 warnings in 218.85s (0:03:38)"
+ },
+ {
+  "id": "3-26 (R07) the superseded pass-test extension on the opp_sd side only",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_18b_a_superseded_sd_reference_stays_pass_tested"
+  ],
+  "tail": "1 failed, 1834 passed, 3 skipped, 1 deselected, 445 warnings in 218.60s (0:03:38)"
+ },
+ {
+  "id": "3-27 (R13) the exception from the THRESHOLD gap per candle",
+  "verdict": "KILLED",
+  "n": 49,
+  "fails": [
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_multicycle_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_multicycle_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_second_cts_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_second_cts_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_multicycle_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_multicycle_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_second_cts_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_second_cts_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[est-_make_ip_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[est-_make_ip_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[est-_make_second_cts_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[est-_make_second_cts_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role[main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role[sub]",
+   "engine_v2/tests/test_meta_key_renames.py::test_exporters_write_every_meta_dict_verbatim",
+   "engine_v2/tests/test_orchestrator_reversal_source.py::test_a_discarded_reversal_candidate_ends_no_fib[13]",
+   "engine_v2/tests/test_orchestrator_reversal_source.py::test_a_discarded_reversal_candidate_ends_no_fib[16]",
+   "engine_v2/tests/test_orchestrator_reversal_source.py::test_every_reader_gets_the_realised_reversal_not_the_last_candidate",
+   "engine_v2/tests/test_orchestrator_reversal_source.py::test_the_realised_reversal_still_ends_the_fib",
+   "engine_v2/tests/test_plan_e_role_pins.py::test_lagging_est_fib_lifecycle_is_timed_at_the_moment[main]",
+   "engine_v2/tests/test_plan_e_role_pins.py::test_lagging_est_fib_lifecycle_is_timed_at_the_moment[sub]",
+   "engine_v2/tests/test_plan_g_wvmi.py::test_the_main_flags_its_collapsed_cycles_too[13-expected1]",
+   "engine_v2/tests/test_plan_g_wvmi.py::test_the_main_flags_its_collapsed_cycles_too[None-expected0]",
+   "engine_v2/tests/test_plan_g_wvmi.py::test_the_main_keeps_its_gate_values_and_meta_key_order",
+   "engine_v2/tests/test_plan_i_s2b_dispatch_order.py::test_a_bos_at_or_before_the_cts_anchor_is_handled_first[10]",
+   "engine_v2/tests/test_plan_i_s2b_dispatch_order.py::test_a_bos_at_or_before_the_cts_anchor_is_handled_first[11]",
+   "engine_v2/tests/test_plan_j_j2_new_cycle_break.py::test_the_runs_are_whole_and_the_downstream_takes_them[410_230]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_13_a_pass_on_a_blocked_candle_still_counts[rule 2-thresholds1-sd_zone_proximity]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_13_a_pass_on_a_blocked_candle_still_counts[rule 3-thresholds0-pullback]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_14_the_narrow_parent_reference_exception_fixes_the_references_and_allows_one_sd_one_opp_sd",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_14b_a_pass_on_a_candle_the_exception_blocks_still_counts",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_8_threshold_narrow_with_a_wide_reference_gap_rule_3_still_caps",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_6_rule_2_is_not_part_of_the_exception",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_an_ended_cycle_takes_no_lp_past_its_end",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_an_open_projection_bounds_the_temp_lp_by_the_cycle_end",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_the_main_tracker_gets_every_cycle_end_from_the_lifecycle_table",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_the_projection_passes_every_cycle_end",
+   "engine_v2/tests/test_zone_proximity.py::test_mid_cycle_crossing_lifts_caps",
+   "engine_v2/tests/test_zone_proximity_reversal_cap.py::test_a_dead_candidate_at_the_last_cycles_confirmation_no_longer_skips_it",
+   "engine_v2/tests/test_zone_proximity_reversal_cap.py::test_a_discarded_last_candidate_no_longer_skips_the_later_cycle",
+   "engine_v2/tests/test_zone_proximity_reversal_cap.py::test_a_realised_reversal_still_caps_the_scan"
+  ],
+  "tail": "49 failed, 1786 passed, 3 skipped, 1 deselected, 443 warnings in 222.37s (0:03:42)"
+ },
+ {
+  "id": "3-28 (R13b) the exception from the THRESHOLD gap at construction",
+  "verdict": "KILLED",
+  "n": 49,
+  "fails": [
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_ip_multicycle_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_multicycle_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_second_cts_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[bos-_make_second_cts_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_ip_multicycle_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_multicycle_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_multicycle_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_second_cts_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[both-_make_second_cts_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[est-_make_ip_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[est-_make_ip_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[est-_make_second_cts_moment_after_anchor_data-main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_idx_role[est-_make_second_cts_moment_after_anchor_data-sub]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role[main]",
+   "engine_v2/tests/test_e4_simulation.py::test_downstream_outputs_do_not_depend_on_the_pattern_update_idx_role[sub]",
+   "engine_v2/tests/test_meta_key_renames.py::test_exporters_write_every_meta_dict_verbatim",
+   "engine_v2/tests/test_orchestrator_reversal_source.py::test_a_discarded_reversal_candidate_ends_no_fib[13]",
+   "engine_v2/tests/test_orchestrator_reversal_source.py::test_a_discarded_reversal_candidate_ends_no_fib[16]",
+   "engine_v2/tests/test_orchestrator_reversal_source.py::test_every_reader_gets_the_realised_reversal_not_the_last_candidate",
+   "engine_v2/tests/test_orchestrator_reversal_source.py::test_the_realised_reversal_still_ends_the_fib",
+   "engine_v2/tests/test_plan_e_role_pins.py::test_lagging_est_fib_lifecycle_is_timed_at_the_moment[main]",
+   "engine_v2/tests/test_plan_e_role_pins.py::test_lagging_est_fib_lifecycle_is_timed_at_the_moment[sub]",
+   "engine_v2/tests/test_plan_g_wvmi.py::test_the_main_flags_its_collapsed_cycles_too[13-expected1]",
+   "engine_v2/tests/test_plan_g_wvmi.py::test_the_main_flags_its_collapsed_cycles_too[None-expected0]",
+   "engine_v2/tests/test_plan_g_wvmi.py::test_the_main_keeps_its_gate_values_and_meta_key_order",
+   "engine_v2/tests/test_plan_i_s2b_dispatch_order.py::test_a_bos_at_or_before_the_cts_anchor_is_handled_first[10]",
+   "engine_v2/tests/test_plan_i_s2b_dispatch_order.py::test_a_bos_at_or_before_the_cts_anchor_is_handled_first[11]",
+   "engine_v2/tests/test_plan_j_j2_new_cycle_break.py::test_the_runs_are_whole_and_the_downstream_takes_them[410_230]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_13_a_pass_on_a_blocked_candle_still_counts[rule 2-thresholds1-sd_zone_proximity]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_13_a_pass_on_a_blocked_candle_still_counts[rule 3-thresholds0-pullback]",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_14_the_narrow_parent_reference_exception_fixes_the_references_and_allows_one_sd_one_opp_sd",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_14b_a_pass_on_a_candle_the_exception_blocks_still_counts",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_14c_the_exception_reads_the_inner_gap_not_the_threshold_gap",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_8_threshold_narrow_with_a_wide_reference_gap_rule_3_still_caps",
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_review_6_rule_2_is_not_part_of_the_exception",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_an_ended_cycle_takes_no_lp_past_its_end",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_an_open_projection_bounds_the_temp_lp_by_the_cycle_end",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_the_main_tracker_gets_every_cycle_end_from_the_lifecycle_table",
+   "engine_v2/tests/test_wvmi_lp_bound.py::test_the_projection_passes_every_cycle_end",
+   "engine_v2/tests/test_zone_proximity_reversal_cap.py::test_a_dead_candidate_at_the_last_cycles_confirmation_no_longer_skips_it",
+   "engine_v2/tests/test_zone_proximity_reversal_cap.py::test_a_discarded_last_candidate_no_longer_skips_the_later_cycle",
+   "engine_v2/tests/test_zone_proximity_reversal_cap.py::test_a_realised_reversal_still_caps_the_scan"
+  ],
+  "tail": "49 failed, 1786 passed, 3 skipped, 1 deselected, 443 warnings in 222.50s (0:03:42)"
+ },
+ {
+  "id": "3-29 (R19) superseded: an EQUAL-inner closest rung does not take over",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_19_edge_choices_pinned"
+  ],
+  "tail": "1 failed, 1834 passed, 3 skipped, 1 deselected, 445 warnings in 218.95s (0:03:38)"
+ },
+ {
+  "id": "3-30 (R26) a superseded reference moving outward onto the last rung LOCKS",
+  "verdict": "KILLED",
+  "n": 1,
+  "fails": [
+   "engine_v2/tests/test_proximity_reference_ladders.py::test_19_edge_choices_pinned"
+  ],
+  "tail": "1 failed, 1834 passed, 3 skipped, 1 deselected, 445 warnings in 218.02s (0:03:38)"
+ }
+]

@@ -493,19 +493,21 @@ prior trigger to be the opposite kind):
 > **The proximity state machine (PLAN_R, 2026-10-20).** One object per parent
 > cycle, `zone_proximity.CycleProximityScan` (`step(i)` then `close(i)` per H1
 > candle), driven by the batch `check_zone_proximity`. Each side triggers on its
-> **proximity reference** — the closest unpassed rung of its **proximity reference
-> ladder** (sd: the cycle's POI(s) closer than the BOS inner, then the BOS; opp_sd:
+> **proximity reference** — an unpassed rung of its **proximity reference ladder**,
+> kept or moved through the gate below (sd: the cycle's POI(s) closer than the BOS inner, then the BOS; opp_sd:
 > the CTS; the BOS / CTS are the LAST rungs). A **passed proximity zone** = an H1
 > close strictly beyond a rung's outer (as of that close), effective from the next
 > candle, tested on every candle (also a gated one), never on a last rung; a side
-> locks when its passed reference gives way to its last rung. The **narrow
-> proximity-reference cap**: the signed, half-up **proximity reference gap**
-> `<= DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS` (40 / 25 / 15) allows one more trigger
-> per side (per-side counters, start-of-candle; an outward move of a side's own
-> reference resets that side), AND-ed with Rules 1–3. On parent zones this
-> reproduces the pre-PLAN_R triggers on the reference window (the passes at 754 /
-> 1047 stay invisible — alternation). Full rules: the module docstring and
-> `plans/PLAN_R_opp_sd_zones_proximity.md` §1.
+> locks when its passed reference gives way to its last rung. The **proximity
+> reference gate** (step 3, replacing steps 1–2's narrow proximity-reference cap): a
+> reference is updated only if the signed, half-up **proximity reference gap** after
+> the update stays above `DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS` (40 / 25 / 15) —
+> start-of-candle, outward moves first; the **narrow parent-reference exception** (a
+> parent BOS–CTS inner gap at or below it) fixes the references on the BOS / CTS with
+> one sd + one opp_sd; both AND-ed with Rules 1–3. On parent zones this reproduces
+> the pre-PLAN_R triggers on the reference window (the passes at 754 / 1047 stay
+> invisible — alternation). Full rules: the module docstring and
+> `plans/PLAN_R_opp_sd_zones_proximity.md` §1 + §9.
 
 ```
 parent BOS_confirmed
@@ -830,7 +832,7 @@ assert DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS[tf] > DEFAULT_PROXIMITY_PIPS[
 # (would make condition 1 unreachable):
 assert DEFAULT_PROBE_RESET_WICK[tf] > DEFAULT_PROBE_RESET_PIPS[tf]
 
-# PLAN_R — the narrow proximity-reference cap strictly above proximity (two
+# PLAN_R — the proximity reference gate's minimum strictly above proximity (two
 # proximity bands closer than that overlap):
 assert DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS[tf] > DEFAULT_PROXIMITY_PIPS[tf]
 ```

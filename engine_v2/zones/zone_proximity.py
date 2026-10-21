@@ -36,8 +36,8 @@ LANDMINES "Collapsed Parent Cycles").
 
 Proximity reference ladders (PLAN_R, the user 2026-10-19 → 20)
 ---------------------------------------------------------------
-Each side triggers on its PROXIMITY REFERENCE — the closest usable, unpassed
-zone inner on its PROXIMITY REFERENCE LADDER ("the smallest gap available"):
+Each side triggers on its PROXIMITY REFERENCE, a usable, unpassed zone inner
+on its PROXIMITY REFERENCE LADDER:
 - sd: the cycle's POI(s) closer than its BOS inner, then the BOS (the LAST
   rung; a POI at or beyond the BOS is unreachable — the BOS locks first);
 - opp_sd: the CTS (the last rung).
@@ -49,19 +49,31 @@ gate blocks the trigger; the last rung is never tested. A side LOCKS when its
 reference was passed and the next pick is its last rung (never by default); the
 sd lock is permanent, an opp_sd lock is lifted by a NEWER counter-sub zone
 (the overlay, PLAN_R step 2).
-Ties (equal inners): the parent zone first, then a sub's BOS before its POI.
+Ties (equal inners) among candidates: the parent zone first, then a sub's BOS
+before its POI; a current reference keeps its place against an equal-inner
+candidate (only a rung strictly inside it is an inward update).
 
-The NARROW PROXIMITY-REFERENCE CAP: the signed PROXIMITY REFERENCE GAP
-`sd × (opp_sd ref − sd ref) / pip`, rounded half-up, `<=`
-`DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS` (40 / 25 / 15) = narrow. Per-side
-counters, evaluated at the START of each candle: wide → narrow (or narrow at
-the scan start) starts both at 0; narrow → narrow, a side whose reference
-moved OUTWARD (away from the other side, on that side's own inner) resets to
-0, an inward move does nothing; narrow → wide drops them; while narrow a side
-fires only if its counter < 1. It is AND-ed with Rules 1–3 below (their gap is
-the BOS–CTS threshold gap — a different measure; Rule 2 is not part of the
-cap). The per-cycle state machine is `CycleProximityScan` — ONE object the
-batch scan and the lifecycle sweep both drive.
+The PROXIMITY REFERENCE GATE (PLAN_R §9, the user 2026-10-20: "We only make
+updates when the updated gap remains above the given threshold"): the signed
+PROXIMITY REFERENCE GAP `sd × (opp_sd ref − sd ref) / pip`, rounded half-up,
+must stay ABOVE `DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS` (40 / 25 / 15) after
+every reference update; a too-narrow (`<=`) update is SKIPPED and the reference
+stays. Each side starts on its last rung; at the START of each candle the
+outward moves come first — a SUPERSEDED reference (no longer on its ladder: its
+source sub was replaced; kept, pass-testable) whose ladder's closest rung is
+outward of it moves there, a PASSED reference moves to the closest unpassed rung
+passing the gate (outward always does) — then each other side takes the closest
+rung INSIDE its reference (closer to the other side) that passes the gate
+against the updated other side, else keeps it. An sd SUB zone is no candidate
+before the cycle's first sd trigger (the first sd stays on the batch scan's
+parent rung — the main WVMI gate reads it). No counters: alternation is
+unlimited. The one cap left, the
+NARROW PARENT-REFERENCE EXCEPTION: a cycle whose parent BOS–CTS inner gap is
+`<=` the minimum keeps both references on its BOS / CTS and fires at most one
+sd + one opp_sd trigger. Both are AND-ed with Rules 1–3 below (their gap is the
+BOS–CTS threshold gap — a different measure). The per-cycle state machine is
+`CycleProximityScan` — ONE object the batch scan and the lifecycle sweep both
+drive.
 
 Narrow-gap cycle restrictions (Rules 2 & 3)
 -------------------------------------------
@@ -164,13 +176,14 @@ DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS: Dict[str, int] = {
     "M5": 15,
 }
 
-# The narrow proximity-reference cap (PLAN_R §1, the user 2026-10-19: "1H: 40 15M: 25 5M: 15") — the minimum
-# SIGNED proximity reference gap: the distance between the two zone inners a cycle triggers on, sd × (opp_sd
-# reference − sd reference) / pip, rounded half-up. At or below it (`<=`; crossed references, ≤ 0, included) each
-# side may fire ONE trigger per narrow spell — per-side counters that a side's own outward move resets
-# (`CycleProximityScan`). Combined
-# with Rules 1–3 (the BOS–CTS threshold gap, unchanged): a trigger fires only if BOTH allow it. Must be strictly
-# greater than DEFAULT_PROXIMITY_PIPS on the same TF (two 8-pip bands closer than that overlap — the ping-pong).
+# The proximity reference gate's minimum (PLAN_R §9; values the user's, 2026-10-19: "1H: 40 15M: 25 5M: 15") — the
+# minimum SIGNED proximity reference gap: the distance between the two zone inners a cycle triggers on, sd × (opp_sd
+# reference − sd reference) / pip, rounded half-up. A reference update that would leave the gap at or below it (`<=`;
+# crossed references, ≤ 0, included) is skipped (`CycleProximityScan`); a cycle whose parent BOS–CTS inner gap is
+# already at or below it is the narrow parent-reference exception (references fixed, at most one sd + one opp_sd
+# trigger). Combined with Rules 1–3 (the BOS–CTS threshold gap, unchanged): a trigger fires only if BOTH allow it.
+# Must be strictly greater than DEFAULT_PROXIMITY_PIPS on the same TF (two 8-pip bands closer than that overlap — the
+# ping-pong).
 DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS: Dict[str, int] = {
     "H1": 40,
     "M15": 25,
@@ -214,7 +227,8 @@ class ZoneProximityTrigger:
     / `trigger_inner` = that reference (PLAN_R §1). `meta` (PLAN_R §4):
     `prox_ref_gap_pips` = the signed, rounded proximity reference gap at the
     candle's start (None when a side has no reference), `narrow_prox_ref` = it
-    is at or below `DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS`, `prox_ref_source`
+    is at or below `DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS` (since the gate,
+    PLAN_R §9: only in the narrow parent-reference exception), `prox_ref_source`
     = "parent" (a parent zone) or "sub" (a proximity-overlay zone, PLAN_R step
     2), and — None on a parent zone — `prox_ref_sub_id` (the sub's final id,
     set after the sweep numbers the subs), `prox_ref_cycle` (the sub's cycle)
@@ -407,25 +421,37 @@ class CycleProximityScan:
     `step(i)` — evaluated at the START of candle `i`:
       1. advance the threshold timeline (events with moment < i; the scan
          start's own were applied at construction);
-      2. pick each side's proximity reference: the closest unpassed rung to
-         the other side (ties: `tie_rank`); a LOCKED side keeps its last rung.
-         A side locks when its previous reference was passed and the next pick
-         is its last rung — being the reference by default never locks. The sd
-         lock is permanent; an opp_sd lock is lifted by the overlay when a
-         NEWER counter-sub zone becomes usable (`unlock`, PLAN_R §1 Locking);
-      3. the signed proximity reference gap → narrow (≤ `min_ref_gap_pips`) /
-         wide → the per-side counters: wide → narrow (or narrow at the scan
-         start) starts both at 0; narrow → narrow resets a side whose
-         reference moved OUTWARD (away from the other side, judged on that
-         side's own inner); narrow → wide drops them;
-      4. Rules 2 + 3 (the BOS–CTS threshold gap, unchanged), 5. the narrow
-         proximity-reference cap (a side fires while narrow only if its
-         counter < 1) and alternation gate ONLY
+      2. update the references through the PROXIMITY REFERENCE GATE (PLAN_R
+         §9.2; `_update_references`): an update is made only if the signed
+         proximity reference gap after it stays > `min_ref_gap_pips`. Each side
+         starts on its last rung (the scan's first candle); A1. a SUPERSEDED
+         reference (gone from its ladder, unpassed — it is kept) whose ladder's
+         closest rung is outward of it (or at its inner) moves there, never
+         blocked, no lock; A2. a side whose reference was PASSED moves to the
+         closest unpassed rung that passes the gate (ties: `tie_rank`; outward
+         always passes — the last rung is the floor; picking it LOCKS the side;
+         a side without a last rung may be left without a reference); B. then
+         each side not moved or locked takes the closest unpassed rung INSIDE
+         its reference (closer to the other side) that passes the gate against
+         the other side's UPDATED reference (`sd` first — on the first candle
+         that keeps the first sd on the batch scan's rung), else keeps it. An sd
+         SUB zone is no candidate before the cycle's first sd trigger (PLAN_R
+         §9.2 item 7). The sd lock is permanent; an opp_sd lock is lifted
+         by the overlay when a NEWER counter-sub zone becomes usable (`unlock`,
+         PLAN_R §1 Locking). The NARROW PARENT-REFERENCE EXCEPTION (the parent
+         BOS–CTS inner gap ≤ `min_ref_gap_pips`, fixed at construction) keeps
+         both references on the last rungs;
+      3. the signed proximity reference gap (asserted > the minimum outside the
+         exception; `narrow_prox_ref` = ≤ it);
+      4. Rules 2 + 3 (the BOS–CTS threshold gap, unchanged), 5. the exception's
+         cap (a side that fired once is blocked, `narrow_parent_refs`) and
+         alternation gate ONLY
       6. the trigger test against the expected side's reference.
     `close(i)` — the pass test on candle `i`'s close, effective from `i + 1`,
     on EVERY candle (a blocked one included): each unpassed non-last rung on
-    either side whose outer (as of the close) the close is strictly beyond is
-    passed for the rest of the cycle; one close can pass several.
+    either side — and a kept superseded reference — whose outer (as of the
+    close) the close is strictly beyond is passed for the rest of the cycle; one
+    close can pass several.
 
     The proximity overlay (`set_overlay` / `unlock`, PLAN_R step 2,
     `multitf/proximity_overlay.py`) adds sub zones to a side; the batch scan
@@ -475,7 +501,15 @@ class CycleProximityScan:
         self.refs: Dict[str, Optional[ProximityRung]] = {"sd": None, "opp_sd": None}
         self.ref_gap_pips: Optional[int] = None
         self.narrow_prox_ref: bool = False
-        self.counters: Optional[Dict[str, int]] = None
+        # The narrow parent-reference exception (PLAN_R §9.1): the parent BOS–CTS inner gap — static, inners never
+        # move — at or below the minimum → both references stay on the last rungs, one sd + one opp_sd trigger at most.
+        bos_last, cts_last = self._last("sd"), self._last("opp_sd")
+        self.narrow_parent_refs: bool = (
+            bos_last is not None and cts_last is not None
+            and proximity_reference_gap_pips(self.sd, bos_last.inner, cts_last.inner, self.pip_size)
+            <= self.min_ref_gap_pips
+        )
+        self._fired: Dict[str, int] = {"sd": 0, "opp_sd": 0}
         self.expected_dir: Literal["sd", "opp_sd"] = "sd"
         self.triggers: List[ZoneProximityTrigger] = []
         self.gate: Optional[str] = None     # the gate that blocked the current candle's trigger test, if any
@@ -520,30 +554,107 @@ class CycleProximityScan:
         """`side`'s current candidate rungs: its parent zones, then its overlay."""
         return [r for r in self.parent_rungs if r.side == side] + self.overlay[side]
 
+    def _last(self, side: str) -> Optional[ProximityRung]:
+        return next((r for r in self.parent_rungs if r.side == side and r.last), None)
+
     def _toward(self, side: str) -> int:
         # The direction from a side's zones toward the other side: the sd zones
         # sit on the pullback side of the opp_sd zones.
         return self.sd if side == "sd" else -self.sd
 
-    def _pick_reference(self, side: Literal["sd", "opp_sd"]) -> Optional[ProximityRung]:
-        rungs = self.ladder(side)
-        last = next((r for r in rungs if r.last), None)
-        if self.locked[side]:
-            return last
+    def _closest_first(self, side: str, rungs: List[ProximityRung]) -> List[ProximityRung]:
+        """`rungs` ordered closest to the other side first; equal inners keep the tie order (`tie_rank`, then ladder
+        order — the parent zone first, then a sub's BOS before its POI)."""
         toward = self._toward(side)
-        best: Optional[ProximityRung] = None
-        for r in sorted((r for r in rungs if r.key not in self.passed), key=lambda r: r.tie_rank):
-            if best is None or toward * (r.inner - best.inner) > 0:
-                best = r
-        prev = self.refs[side]
-        if prev is not None and prev.key in self.passed and best is not None and best.last:
-            self.locked[side] = True        # locked by passing, never by default
-        return best
+        out: List[ProximityRung] = []
+        for r in sorted(rungs, key=lambda r: r.tie_rank):
+            k = 0
+            while k < len(out) and not toward * (r.inner - out[k].inner) > 0:
+                k += 1
+            out.insert(k, r)
+        return out
+
+    def _passes_gate(self, side: str, rung: ProximityRung, other: Optional[ProximityRung]) -> bool:
+        """The proximity reference gate (PLAN_R §9.1): `rung` as `side`'s reference keeps the gap above the minimum
+        against `other` (the other side's reference); no other reference → nothing to judge."""
+        if other is None:
+            return True
+        sd_inner, opp_inner = (rung.inner, other.inner) if side == "sd" else (other.inner, rung.inner)
+        return proximity_reference_gap_pips(self.sd, sd_inner, opp_inner, self.pip_size) > self.min_ref_gap_pips
+
+    def _update_references(self, first: bool) -> None:
+        """The references at the start of a candle, through the gate (PLAN_R §9.2; the class docstring, step 2)."""
+        if first or self.narrow_parent_refs:
+            refs = {side: self._last(side) for side in ("sd", "opp_sd")}       # the start state / the exception
+            if self.narrow_parent_refs:
+                self.refs = refs
+                return
+        else:
+            refs = dict(self.refs)
+
+        def other(side: str) -> Optional[ProximityRung]:
+            return refs["opp_sd" if side == "sd" else "sd"]
+
+        def unpassed(side: str) -> List[ProximityRung]:
+            # An sd SUB zone is no candidate until the cycle's first sd trigger has fired (PLAN_R §9.2 item 7): the
+            # first sd stays on a parent rung — the one the batch scan (no overlay) fires on, which the main WVMI gate
+            # reads (`orchestrator._final_proximity_triggers` asserts it). Still pass-tested meanwhile.
+            return self._closest_first(side, [r for r in self.ladder(side) if r.key not in self.passed
+                                              and not (side == "sd" and r.source == "sub" and self._fired["sd"] == 0)])
+
+        def superseded_outward(side: str) -> Optional[ProximityRung]:
+            # A SUPERSEDED reference (unpassed, gone from its ladder) whose ladder's closest rung is outward of it, or
+            # at its inner: that rung — an outward update, never blocked.
+            cur = refs[side]
+            if cur is None or cur.last or cur.key in self.passed or any(r.key == cur.key for r in self.ladder(side)):
+                return None
+            cands = unpassed(side)
+            if cands and not self._toward(side) * (cands[0].inner - cur.inner) > 0:
+                return cands[0]
+            return None
+
+        # A. OUTWARD moves first (point 3). A1: a superseded reference whose ladder's closest rung is outward moves
+        # there (ungated — it only widens; no lock: nothing was passed). A2: a PASSED reference moves to the closest
+        # unpassed rung that passes the gate against the other side as A1 left it (a last-rung pick LOCKS the side; a
+        # side without a last rung — no CTS zone — may be left without a reference).
+        forced = [side for side in ("sd", "opp_sd") if refs[side] is not None and refs[side].key in self.passed]
+        moved = list(forced)
+        for side in ("sd", "opp_sd"):
+            if side not in forced and not self.locked[side]:
+                pick = superseded_outward(side)
+                if pick is not None:
+                    refs[side] = pick
+                    moved.append(side)
+        for side in forced:
+            pick = next((r for r in unpassed(side) if self._passes_gate(side, r, other(side))), None)
+            assert pick is not None or self._last(side) is None, (
+                f"[zone_proximity] ({self.sid},{self.cycle_id}) {side}: its reference {refs[side].key} was passed "
+                f"and no rung passes the gate — an outward move always widens the gap, the last rung is the floor"
+            )
+            if pick is not None and pick.last:
+                self.locked[side] = True    # locked by passing, never by default
+            refs[side] = pick
+        # B. Inward: the closest rung INSIDE the reference that passes the gate against the UPDATED other side.
+        for side in ("sd", "opp_sd"):
+            if side in moved or self.locked[side]:
+                continue
+            cands = unpassed(side)
+            cur = refs[side]
+            if cur is None:                 # a side without a last rung (no CTS zone), no reference (yet / any more)
+                refs[side] = next((r for r in cands if self._passes_gate(side, r, other(side))), None)
+                continue
+            # the overlay re-creates its rungs every tick: the same zone (a superseded one stays as it is)
+            cur = next((r for r in self.ladder(side) if r.key == cur.key), cur)
+            toward = self._toward(side)
+            pick = next((r for r in cands
+                         if toward * (r.inner - cur.inner) > 0 and self._passes_gate(side, r, other(side))), None)
+            refs[side] = pick if pick is not None else cur      # none passes → the reference stays (a superseded too)
+        self.refs = refs
 
     # --- per candle ---
     def step(self, i: int) -> Optional[ZoneProximityTrigger]:
-        """Candle `i` (start-of-candle evaluation): references, gap, counters,
-        gates, then the trigger test. Returns the trigger, or None."""
+        """Candle `i` (start-of-candle evaluation): references through the gate,
+        gap, gates, then the trigger test. Returns the trigger, or None."""
         i = int(i)
         assert self.scan_start <= i <= self.scan_end, (
             f"[zone_proximity] ({self.sid},{self.cycle_id}) step({i}) outside [{self.scan_start}, {self.scan_end}]"
@@ -552,6 +663,7 @@ class CycleProximityScan:
             f"[zone_proximity] ({self.sid},{self.cycle_id}) step({i}) after step({self._stepped_idx}) / "
             f"close({self._closed_idx})"
         )
+        first = self._stepped_idx is None
         self._stepped_idx = i
         self.gate = None
 
@@ -569,12 +681,10 @@ class CycleProximityScan:
         else:
             is_narrow = False               # can't evaluate (events missing) — default mode
 
-        # 2. The references (start of candle i; a pass at close(i - 1) applies here).
-        prev_refs = dict(self.refs)
-        prev_narrow = self.narrow_prox_ref
-        self.refs = {side: self._pick_reference(side) for side in ("sd", "opp_sd")}
+        # 2. The references through the proximity reference gate (start of candle i; a pass at close(i - 1) applies).
+        self._update_references(first)
 
-        # 3. The signed proximity reference gap and the per-side counters.
+        # 3. The signed proximity reference gap.
         sd_ref, opp_ref = self.refs["sd"], self.refs["opp_sd"]
         if sd_ref is not None and opp_ref is not None:
             self.ref_gap_pips = proximity_reference_gap_pips(self.sd, sd_ref.inner, opp_ref.inner, self.pip_size)
@@ -582,16 +692,10 @@ class CycleProximityScan:
         else:
             self.ref_gap_pips = None
             self.narrow_prox_ref = False
-        if self.narrow_prox_ref and not prev_narrow:
-            self.counters = {"sd": 0, "opp_sd": 0}          # wide → narrow, or narrow at the scan start
-        elif self.narrow_prox_ref:
-            for side in ("sd", "opp_sd"):
-                old, new = prev_refs[side], self.refs[side]
-                # OUTWARD = away from the other side, on THIS side's own inner (whatever the other side did).
-                if old is not None and new is not None and -self._toward(side) * (new.inner - old.inner) > 0:
-                    self.counters[side] = 0
-        else:
-            self.counters = None                            # wide: no cap
+        assert self.narrow_parent_refs or not self.narrow_prox_ref, (
+            f"[zone_proximity] ({self.sid},{self.cycle_id}) H1 {i}: proximity reference gap {self.ref_gap_pips} <= "
+            f"{self.min_ref_gap_pips} outside the narrow parent-reference exception — the gate admits no such update"
+        )
 
         # 4-5. The gates — they block ONLY the trigger test.
         side = self.expected_dir
@@ -601,8 +705,8 @@ class CycleProximityScan:
             self.gate = "rule3"
         elif is_narrow and side == "opp_sd" and self._narrow_opp_fired:
             self.gate = "rule3"
-        elif self.narrow_prox_ref and self.counters[side] >= 1:
-            self.gate = "prox_ref_cap"                      # the narrow proximity-reference cap
+        elif self.narrow_parent_refs and self._fired[side] >= 1:
+            self.gate = "narrow_parent_refs"                # the exception: one sd + one opp_sd trigger at most
         if self.gate is not None:
             return None
 
@@ -638,8 +742,7 @@ class CycleProximityScan:
                 self._narrow_sd_fired = True
             else:
                 self._narrow_opp_fired = True
-        if self.narrow_prox_ref:
-            self.counters[side] += 1
+        self._fired[side] += 1
         self.expected_dir = "opp_sd" if side == "sd" else "sd"
         return trigger
 
@@ -659,7 +762,11 @@ class CycleProximityScan:
         for side in ("sd", "opp_sd"):
             # Strictly beyond the outer, AWAY from the other side (a close AT the outer is not a pass).
             beyond_below = (side == "sd") == (self.sd == 1)
-            for r in self.ladder(side):
+            rungs = self.ladder(side)
+            cur = self.refs[side]
+            if cur is not None and all(r.key != cur.key for r in rungs):
+                rungs = rungs + [cur]       # a kept SUPERSEDED reference stays pass-testable (PLAN_R §9.2)
+            for r in rungs:
                 if r.last or r.key in self.passed:
                     continue
                 outer = float(r.outer_at(i))
@@ -845,11 +952,13 @@ def check_zone_proximity(
     logged, no more sd triggers fire until an opp_sd has been logged).
 
     The references come from each side's proximity reference ladder (PLAN_R
-    §1): the closest unpassed rung; a rung is passed by a close strictly beyond
-    its outer (from the next candle), the last rung (BOS / CTS) never; the
-    narrow proximity-reference cap: while the signed reference gap is
-    ≤ `min_proximity_reference_gap_pips`, each side fires once, until its own
-    outward move resets its counter (`CycleProximityScan`).
+    §1) through the proximity reference gate (§9): starting on the last rungs,
+    a reference moves only if the signed reference gap after the move stays
+    > `min_proximity_reference_gap_pips` (a passed one always moves outward);
+    a rung is passed by a close strictly beyond its outer (from the next
+    candle), the last rung (BOS / CTS) never; a cycle whose BOS–CTS inner gap is
+    ≤ that minimum keeps its BOS / CTS references and fires at most one sd +
+    one opp_sd (`CycleProximityScan`).
 
     Narrow-gap restrictions (Rules 2 & 3, per module docstring): at each
     candle, evaluate `|cts_threshold − bos_threshold|` reconstructed
@@ -901,7 +1010,7 @@ def check_zone_proximity(
         DEFAULT_MIN_GAP_FOR_REPEATED_PROXIMITY_PIPS by `timeframe`
         (default fallback to H1=50).
     min_proximity_reference_gap_pips : int, optional
-        The narrow proximity-reference cap's threshold in pips. If None, looked
+        The proximity reference gate's minimum in pips. If None, looked
         up from DEFAULT_MIN_PROXIMITY_REFERENCE_GAP_PIPS by `timeframe`
         (default fallback to H1=40).
 
