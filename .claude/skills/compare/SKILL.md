@@ -590,7 +590,19 @@ real cells in 5 CSVs — H1 `imbalance_instances` 7 (instances arm earlier: 275 
 loses condition 3: its immediate gap 3488 fills); every figure identical (`fig_hash.py` equal to S_R3, hovers
 included); no structure, POI, trigger, sub or WVMI change. Positional `cmp_save.py` reads it correctly. Every
 delta = PLAN_S §2.2 (the save replay is md5- / figure-hash-equal to the variant `make_variant_fill65.py`). S_S1
-`20261021_020427_69c099b` (source `69c099b`, save `b4f040b`, trunk `138c2a7`; = `LATEST_<branch>` from 2026-10-21).
+`20261021_020427_69c099b` (source `69c099b`, save `b4f040b`, trunk `138c2a7`; = `LATEST_<branch>` until S_S2, below).
+**PLAN_S step 2 (2026-10-21, the two fill strokes on SEPARATE candles — stroke 2 only on a candle after the arming
+one, a close AT the edge counts; every fill reader; the user's IC-revisit change B) — a BEHAVIOUR change, no format
+change:** vs S_S1 exactly 51 real cells in 3 CSVs — H1 `imbalance_instances` 47 (every instance that armed and
+committed on ONE candle — all 47 of S_S1's, none left — now commits later: `confirmed_fill_idx` = `armed_idx` → a
+later candle, e.g. 19 → 20, 954 → 964; the one armed at 183 never commits; no `armed_idx` moves), H1 `poi_zones` 2 (sid 1 cycle 2, IC 859: `confirmed_idx` 998 → 954 —
+its 992 off / 998 on pair is gone, one continuous zone), confluence `poi_zones` 2 (one off moment a candle later:
+sub 1 cycle 2 2192 → 2193, sub 4 cycle 0 3377 → 3378); no structure, IC, fib, trigger, sub or WVMI change.
+Figures: traces unchanged and xy-equal, shapes 236 → 234, 138 → 136, 309 → 307 (that POI's off / on pair, drawn on
+H1 and both M15 overlays); hovers (`cmp_hover.py`): 0 templates, the customdata of 2 traces per chart (the same POI's
+confirmed candle 998 → 954). Positional `cmp_save.py` reads it correctly. Every delta = PLAN_S §3.2 (the save replay
+is md5- / figure-hash-equal to the variant `make_variant_stroke2_later.py` on step 1's). S_S2
+`20261021_081421_cbaed31` (source `cbaed31`, save `780e628`, trunk `f4e83c6`; = `LATEST_<branch>` from 2026-10-21).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -720,7 +732,9 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-21 on S_S1 `20261021_020427_69c099b`, unchanged from S_R3 `20261020_225749_d424099`
+counts are (verified 2026-10-21 on S_S2 `20261021_081421_cbaed31` — PLAN_S step 2 moved the shapes from S_S1
+`20261021_020427_69c099b`'s 236 / 138 / 309: the H1 POI sid 1 cycle 2's off / on pair 992 / 998 is gone, on H1 and
+both M15 overlays; S_S1's were unchanged from S_R3 `20261020_225749_d424099`
 — PLAN_R step 3 moved the two M15 lenses from
 S_R2's 164/144, 257/263 (2 subs fewer, sub_7 / sub_8 re-windowed; H1 unchanged); PLAN_R step 2 had moved them from
 S_Q's 146/135, 289/293 (3 new subs, re-windowed records); S_Q's were unchanged from S_P
@@ -731,9 +745,9 @@ S_N_hover and S_O; config window 2025-12-01→2026-01-20, auto-extended to
 2025-11-15. Window-dependent, re-baseline when the config window or chart rendering changes;
 older values in **History** below):
 
-- `H1` chart: traces=81, shapes=236
-- `M15.counter` chart: traces=153, shapes=138
-- `M15.confluence` chart: traces=301, shapes=309
+- `H1` chart: traces=81, shapes=234
+- `M15.counter` chart: traces=153, shapes=136
+- `M15.confluence` chart: traces=301, shapes=307
 
 (Before the 2026-10-09 re-baseline the block listed the 2026-09-24 Plan F values — H1
 85/245, counter 151/124, confluence 294/233; landings between re-baselines are not

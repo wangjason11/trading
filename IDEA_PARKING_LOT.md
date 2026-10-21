@@ -121,7 +121,9 @@ Verbatim: "For now let's consider item 3 done. We could potentially revist down 
 4. **NEXT — revisit the IC identification logic** (the user, 2026-10-20: "go back and revisit some things around IC
    identification logic. I will provide further specs for the changes in future sessions"). **Spec received 2026-10-20
    (`engine_v2/plans/qa_ic_revisit_inputs/user_writeup_20261020.md`), decided through Q&A round 5 2026-10-21
-   (`qa_findings.md` there): IN PROGRESS as `engine_v2/plans/PLAN_S_fill_rule_and_ic_step1b.md` — step 1 the
+   (`qa_findings.md` there): IN PROGRESS as `engine_v2/plans/PLAN_S_fill_rule_and_ic_step1b.md` (steps 1–2 LANDED
+   2026-10-21, each = its prediction exactly: `69c099b` save S_S1, `cbaed31` save S_S2 `20261021_081421_cbaed31` =
+   `LATEST_<branch>` — the `/compare` skill's PLAN_S entries; step 3 next, in a new session) — step 1 the
    imbalance arming threshold 70 % → 65 %, step 2 the two fill strokes on separate candles (both engine-wide), step 3
    IC Step 1B (prefer candidates whose closest prior imbalance is unfilled through the candle before the IC); IC
    condition 1 unchanged.** Current logic, canonical: `engine_v2/zones/POI_ZONES_SPEC.md` §3 (Step 1 the IC

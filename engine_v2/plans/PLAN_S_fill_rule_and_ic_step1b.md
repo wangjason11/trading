@@ -1,8 +1,10 @@
 # PLAN_S — the imbalance fill rule (65 % arming, separate candles) + IC Step 1B, the closest-prior-imbalance preference (the user's IC revisit, 2026-10-20 → 21)
 
-**Status: step 1 LANDED 2026-10-21** — source `69c099b`, save **S_S1** `20261021_020427_69c099b` (save `b4f040b`,
-trunk `138c2a7`; = `LATEST_week9-entries-decisions`) = §2.2 exactly (§6); steps 2–3 to build. Baseline **S_R3** `artifacts/commits/week9-entries-decisions/20261020_225749_d424099`
-(= `LATEST_week9-entries-decisions`; source `d424099`, PLAN_R step 3). HEAD at drafting `896db93`; suite 1839 (green
+**Status: steps 1–2 LANDED 2026-10-21** — step 1 source `69c099b`, save **S_S1** `20261021_020427_69c099b` (save
+`b4f040b`, trunk `138c2a7`) = §2.2 exactly; step 2 source `cbaed31`, save **S_S2** `20261021_081421_cbaed31` (save
+`780e628`, trunk `f4e83c6`; = `LATEST_week9-entries-decisions`) = §3.2 exactly (§6). **Step 3 next, in a new
+session** (the author's recommendation, 2026-10-21): a fresh code audit, then §4.3 before any build. Baseline at drafting **S_R3**
+`artifacts/commits/week9-entries-decisions/20261020_225749_d424099` (source `d424099`, PLAN_R step 3). HEAD at drafting `896db93`; suite 1839 (green
 2026-10-20, 140.7 s). Session order item 4 (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER"). THREE steps, in this
 order, each with its own prediction (measured before its build), `/compare` and chart look: §2 the 65 % arming
 threshold → §3 the separate-candles fill rule → §4 Step 1B. Commits: the user's call at each `/compare` pause (the
@@ -238,7 +240,7 @@ and move on to step 2")
   `GLOSSARY.md` "fill check", `ARCHITECTURE.md`, `CROSS_CYCLE_FIB_SPEC.md` (two lines), `poi_zones.py` comments; the
   register §D SESSION ORDER item 4 (IN PROGRESS → this plan).
 
-### Step 2 — BUILT 2026-10-21 (uncommitted; reviewed; awaiting the user's chart look + go)
+### Step 2 — LANDED 2026-10-21 (`cbaed31`, save S_S2 `20261021_081421_cbaed31`, save commit `780e628`, trunk `f4e83c6`; the user's chart look: "charts look good let's proceed")
 
 - Code: `is_filled`'s four loops (fast path bull / bear, fallback bull / bear) test stroke 2 BEFORE latching stroke 1
   on a candle, so the arming candle's own close is never tested; `_compute_fill_idx_cache` scans stroke 2 from
@@ -256,6 +258,13 @@ and move on to step 2")
   fallback / cache × bull / bear), a half-applied cache edit (the slice moved, the position offset not), and six
   "at the edge" mutants (each `>=` / `<=` of stroke 2 made strict — the user's "On edge is ok"); the bear edge
   mutants are killed ONLY by the bear-closes-at-the-edge fixture (added for that reason).
+- Replay: 53.0 s wall (data_fetch 1.56, multi_tf_dual 11.40, chart_h1 6.22, chart_m15_counter 9.78,
+  chart_m15_confluence 22.90); fetch gate PASS; skip grep 23; chart counts **81/234, 153/136, 301/307**.
+- `/compare` vs S_S1: **51 real cells = §3.2 exactly** (H1 `imbalance_instances` 47, H1 `poi_zones` 2, confluence
+  `poi_zones` 2); figures: shapes 236 → 234, 138 → 136, 309 → 307, traces xy-equal; hovers (`cmp_hover.py`): 0
+  templates, customdata of 2 traces per chart — the H1 POI sid 1 cycle 2's (IC 859) confirmed candle 998 → 954 on
+  the H1 chart and both M15 overlays (= its CSV change). All 27 CSVs md5-equal to the variant `%TEMP%/vS`, figure
+  hashes equal.
 - **Landing review** (1 read-only lens, conformance + mutation; **197,109 tokens** by the harness): no BLOCKER / MAJOR —
   the three implementations correct in both directions and on both index paths (data-edge clamps included), no fourth
   implementation or same-candle assumption anywhere in production code (landed H1 export: 162 armed, 151 confirmed, 0
@@ -273,14 +282,11 @@ and move on to step 2")
 - After the fold: suite **1868 passed** (90.9 s); mutants **19 / 19 KILLED** (the 13 + the 6 latch mutants); a fresh
   replay (84.9 s wall: data_fetch 2.80, multi_tf_dual 17.40, chart_h1 11.39, chart_m15_counter 15.62,
   chart_m15_confluence 35.32 — a slow run, machine variance; fetch gate PASS, skip grep 23) again md5- / figure-hash-
-  equal to the variant.
-- Replay: 53.0 s wall (data_fetch 1.56, multi_tf_dual 11.40, chart_h1 6.22, chart_m15_counter 9.78,
-  chart_m15_confluence 22.90); fetch gate PASS; skip grep 23; chart counts **81/234, 153/136, 301/307**.
-- `/compare` vs S_S1: **51 real cells = §3.2 exactly** (H1 `imbalance_instances` 47, H1 `poi_zones` 2, confluence
-  `poi_zones` 2); figures: shapes 236 → 234, 138 → 136, 309 → 307, traces xy-equal; hovers (`cmp_hover.py`): 0
-  templates, customdata of 2 traces per chart — the H1 POI sid 1 cycle 2's (IC 859) confirmed candle 998 → 954 on
-  the H1 chart and both M15 overlays (= its CSV change). All 27 CSVs md5-equal to the variant `%TEMP%/vS`, figure
-  hashes equal.
+  equal to the variant. Saved from that replay (`/commit-save` reuse mode — no source changed after it): the save's
+  27 CSVs md5-equal to the variant's; `cmp_save.py` vs S_S1 = the 51 cells again (all 47 instance cells are S_S1's
+  one-candle fills — none left; no `armed_idx` moves).
 - Docs: `IMBALANCE_FILL_SEMANTICS.md` (the predicate table `(armed_idx, check_to_idx]`, "The two strokes fire on
   SEPARATE candles" with the user's words, an edge-case row, "Why two strokes", the dated shift "Separate candles"),
-  `POI_ZONES_SPEC.md` (§1 stroke 2 + the activation condition), `GLOSSARY.md` "fill check", `ARCHITECTURE.md`.
+  `POI_ZONES_SPEC.md` (§1 stroke 2 + the activation condition), `GLOSSARY.md` "fill check", `ARCHITECTURE.md`; the
+  register §D.2 (the fill check's unreachable missing-label disagreement, above); after the save, the `/compare`
+  skill's "PLAN_S step 2" entry + chart counts.
