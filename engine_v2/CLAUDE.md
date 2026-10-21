@@ -31,9 +31,9 @@ main and sub); items 1 and 2 have had no open work since 2026-10-12 (PLAN_H / K 
 Naming-Standard audit landed 2026-10-12 (PLAN_N), then its H1 range-hover follow-up (the hover line = the box); the
 next sessions, in the user's order (`IDEA_PARKING_LOT.md` §D "SESSION ORDER"): the IC identification + cross-cycle fib
 questions and edits (done 2026-10-13: PLAN_O + PLAN_P), the opposite-direction (CTS-zone) proximity-trigger edits
-(under way: PLAN_Q landed 2026-10-14 on the sd side — the scan reads a POI like a KL zone; PLAN_R steps 0a–2
-landed 2026-10-20 — sub zones join the proximity reference ladders; step 3, the proximity reference gate,
-landed 2026-10-20 — PLAN_R complete), then item 3, zone size
+(done 2026-10-20: PLAN_Q landed 2026-10-14 on the sd side — the scan reads a POI like a KL zone; PLAN_R steps
+0a–3 landed 2026-10-20 — sub zones join the proximity reference ladders, the proximity reference gate), next a
+revisit of the IC identification logic (the user's spec to come, the user 2026-10-20), then item 3, zone size
 adjustments),
 Part 2 entry decisions, Part 3 other decisions.
 

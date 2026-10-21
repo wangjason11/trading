@@ -70,6 +70,8 @@ very next session, I want to land the H1 range-hover follow-up first. Then the s
 to the current IC identification and cross cycle fib logic to ask some questions and make some edits. After that, the
 next session will focus on some changes & edits on zone proximity triggers, more specifically the current opposite
 direction / CTS zone proximity trigger. Finally, after that we will start zone size adjustments."
+**UPDATED by the user 2026-10-20 (after PLAN_R landed) — item 3 DONE, a new item 4 before zone size adjustments.**
+Verbatim: "For now let's consider item 3 done. We could potentially revist down the line when I notice something else in the future. Before moving on to zone adjustments, I'd like to go back and revisit some things around IC identification logic. I will provide further specs for the changes in future sessions."
 1. ~~**The H1 range-hover follow-up**~~ — **LANDED 2026-10-12** (session 1; `9f9406d`, S_N_hover): widened by
    the user to option B (the hover line = the box, candle for candle) + the dead passes deleted; `/compare` vs S_N = the
    prediction (4 H1 hover traces, 28 candle points). Register §A; `engine_v2/plans/plan_n_inputs/
@@ -92,7 +94,8 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    935, 4 Step 1A POIs, 0 M15 structure-event changes); mutants 27 / 27; the user's chart look: "Charts look good".
    Source `23f395d`, save S_P `20261013_231327_23f395d` = `LATEST_<branch>` (the `/compare` skill's PLAN_P entry).
    Decisions verbatim: `qa_findings.md`. **NEXT = SESSION ORDER item 3** (the opposite-direction trigger).
-3. **Zone proximity triggers — changes and edits to the opposite-direction (CTS-zone) trigger** (the user brings the
+3. ~~**Zone proximity triggers — changes and edits to the opposite-direction (CTS-zone) trigger**~~ — **DONE
+   2026-10-20** (PLAN_Q + PLAN_R; the user: "consider item 3 done … could potentially revist down the line"). (the user brings the
    details). Today: `engine_v2/zones/zone_proximity.py` — per (sid, cycle) with a `CTS_CONFIRMED`, triggers alternate
    sd (BOS / POI zone) → opp_sd (the CTS zone's inner bound) → sd …, at H1 8 / M15 5 / M5 3 pips; narrow cycles: Rules
    1–3 (LANDMINES "Narrow-Cycle Rules 1+2+3 Are a Triple"). The opp_sd (opp_sd-prox — "CTS-prox" before PLAN_R — "var 3") entry is what
@@ -113,9 +116,17 @@ direction / CTS zone proximity trigger. Finally, after that we will start zone s
    proximity-reference cap 40 / 25 / 15, the proximity overlay inside the lifecycle sweep; plan
    `engine_v2/plans/PLAN_R_opp_sd_zones_proximity.md`, Q&A rounds 1–9 `engine_v2/plans/qa_opp_sd_zones_inputs/`):
    READY TO BUILD 2026-10-20 — every decision closed (Q&A rounds 1–12), the plan review done (3 agents, 0.84M) and
-   folded in; build order 0a → 0b → 1 → 2, 4 commits, `/commit-save` only after step 2. **BUILD UNDER WAY
-   2026-10-20** (PLAN_R §8 = the build log): steps 0a `a6e71c0`, 0b `c1bd05a` and 1 `d26208e` (the ladders + the narrow proximity-reference cap on parent zones) LANDED, all zero change as predicted (the landing-review follow-up `77f8ccf`: 0a's bound = the parent cycle's CTS-established moment); step 2 (the overlay inside the sweep) LANDED 2026-10-20 `817d2a9`, save S_R2 `20261020_115859_817d2a9` = `LATEST_<branch>` (the `/compare` skill's PLAN_R step 2 entry) = the §5.4 prediction (H1 triggers 6 → 10, subs 8 → 11) + its landing review (the source switch: a contributed + reachable zone); **PLAN_R step 3 = the user's round-15 pivot — LANDED 2026-10-20 `d424099`, save S_R3 `20261020_225749_d424099` = `LATEST_<branch>` (PLAN_R §9): the proximity reference gate — a reference update is made only if the gap after it stays above 40 / 25 / 15 (no trigger counters); the only cap left, the narrow parent-reference exception (a parent BOS–CTS inner gap ≤ the minimum); an sd sub zone is no candidate for the sd reference before the cycle's first sd trigger (round 16). PLAN_R COMPLETE (steps 0a–3); next in the SESSION ORDER: item 4, zone size adjustments (confirm with the user that item 3 has no further edits first)**.
-4. **Zone size adjustments** — D.1 item 3 below (the user's spec).
+   folded in; build order 0a → 0b → 1 → 2, 4 commits, `/commit-save` only after step 2. **BUILT (was UNDER WAY)
+   2026-10-20** (PLAN_R §8 = the build log): steps 0a `a6e71c0`, 0b `c1bd05a` and 1 `d26208e` (the ladders + the narrow proximity-reference cap on parent zones) LANDED, all zero change as predicted (the landing-review follow-up `77f8ccf`: 0a's bound = the parent cycle's CTS-established moment); step 2 (the overlay inside the sweep) LANDED 2026-10-20 `817d2a9`, save S_R2 `20261020_115859_817d2a9` = `LATEST_<branch>` (the `/compare` skill's PLAN_R step 2 entry) = the §5.4 prediction (H1 triggers 6 → 10, subs 8 → 11) + its landing review (the source switch: a contributed + reachable zone); **PLAN_R step 3 = the user's round-15 pivot — LANDED 2026-10-20 `d424099`, save S_R3 `20261020_225749_d424099` = `LATEST_<branch>` (PLAN_R §9): the proximity reference gate — a reference update is made only if the gap after it stays above 40 / 25 / 15 (no trigger counters); the only cap left, the narrow parent-reference exception (a parent BOS–CTS inner gap ≤ the minimum); an sd sub zone is no candidate for the sd reference before the cycle's first sd trigger (round 16). PLAN_R COMPLETE (steps 0a–3); the user then closed item 3 (2026-10-20) — next in the SESSION ORDER: item 4, the IC identification revisit (the user's spec to come), then item 5, zone size adjustments**.
+4. **NEXT — revisit the IC identification logic** (the user, 2026-10-20: "go back and revisit some things around IC
+   identification logic. I will provide further specs for the changes in future sessions"). Waits for the user's
+   spec; nothing to start before it. Current logic, canonical: `engine_v2/zones/POI_ZONES_SPEC.md` §3 (Step 1 the IC
+   conditions incl. PLAN_P's condition 3 = the immediate unfilled imbalance and Step 1A the 80–100 fallback zone,
+   §3.2 the IC reference incl. PLAN_O's target-cycle CTS for a cross, Step 2 the institutional pattern + its
+   tiebreak rules, Step 3 the ranking rules; Step 4 the lower-TF fallback DEFERRED — D.2 "Step 4 of IC
+   identification"); the decisions behind it: PLAN_H / K / L / O / P and `engine_v2/plans/qa_ic_crossfib_inputs/`.
+   Each change = its own plan, prediction and `/compare` (as PLAN_O / PLAN_P).
+5. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
