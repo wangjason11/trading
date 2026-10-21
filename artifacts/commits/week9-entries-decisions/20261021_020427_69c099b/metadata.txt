@@ -1,0 +1,4 @@
+commit_hash=69c099b
+timestamp=20261021_020427
+branch=week9-entries-decisions
+commit_message=PLAN_S step 1: the imbalance arming threshold 0.70 -> 0.65, one constant IMBALANCE_FILL_THRESHOLD (the user's change A, 2026-10-20/21)
