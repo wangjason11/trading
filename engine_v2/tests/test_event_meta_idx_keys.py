@@ -324,7 +324,9 @@ def _meta_kw_keys(module):
                                         "pattern_confirmed_idx", "ip_tb_runner_up_ic_idx",
                                         "ip_tb_imbalance_first_c2_idx",
                                         # a ranked IC's ranking (PLAN_L landing 2)
-                                        "ranking_runner_up_ic_idx", "ranking_imbalance_first_c2_idx"}),
+                                        "ranking_runner_up_ic_idx", "ranking_imbalance_first_c2_idx",
+                                        # Step 1B, the prior-imbalance preference (PLAN_S step 3)
+                                        "prior_imbalance_first_c2_idx", "prior_imbalance_outranked_ic_idx"}),
     (fib_tracker, "_FIB_META_IDX_KEYS",
      {"activated_at", "reactivated_at", "locked_at", "deactivated_at",
       # the IC reference's break (PLAN_K A15)
@@ -377,6 +379,8 @@ NON_INDEX_INT_META_KEYS = frozenset({
     "version", "scenario", "cross_start_cycle", "proximity_pips",
     "ip_tied_count",        # POI (PLAN_H landing B): the tied group's size, set only when TB1 / TB2 decided
     "ranking_in_play_count",  # POI (PLAN_L landing 2): the candidates entering the deciding ranking rule
+    # POI (PLAN_S step 3): Step 1B's passers and the IC candidates (the hover's "<passers> of <candidates>")
+    "prior_imbalance_passer_count", "ic_candidate_count",
     # fib (PLAN_I S2): the structure's `M` (a cycle id) and the start-numbered sub that supplied `P` (a sub id)
     "cross_fib_limit_cycle", "cross_fib_limit_from_sub_id",
     # fib (PLAN_M landing 1): how many times a counter sub's `P` moved by the structure's end (a count)

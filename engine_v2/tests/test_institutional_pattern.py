@@ -156,10 +156,31 @@ def _filled_gap(df, start, fill_idx):
     return inst
 
 
-def _select(df, bos, cts, imbalances, *, zone=(0.5, 0.7), **kw):
-    df.attrs["imbalances"] = imbalances
+def _bos_gap(bos):
+    """A never-filled sd gap AT the BOS anchor (PLAN_S step 3): every IC candidate after it has a prior gap that stays
+    unfilled, so Step 1B (the prior-imbalance preference) passes them all and decides nothing — the fixtures built to
+    pin Steps 1–3 stay neutral to it. It touches no other IC read: condition 3, the retired condition 3, the
+    most-recent-before-imbalance reference and the POI sweep all read gaps AFTER a candidate (≥ the BOS anchor)."""
+    return _far_gap(bos)
+
+
+# A hand-built POI meta's Step 1B keys (PLAN_S step 3) when the test is not about 1B: no candidate passed (the
+# fallback) — the hovers add nothing (`prior_imbalance_narrowed` False).
+NO_1B_META = {"prior_imbalance_outcome": "fallback_no_passer", "prior_imbalance_first_c2_idx": None,
+              "prior_imbalance_passer_count": 0, "ic_candidate_count": 1,
+              "prior_imbalance_outranked_ic_idx": None, "prior_imbalance_outranked_ip_rank": None}
+
+
+def _select(df, bos, cts, imbalances, *, zone=(0.5, 0.7), neutral_1b=True, **kw):
+    """`select_ic` on a buy fib `[bos, cts]` with `imbalances`. `neutral_1b` (PLAN_S step 3): `_bos_gap(bos)` is added
+    and the selection asserted 1B-neutral (every IC candidate passes); the Step 1B tests pass `neutral_1b=False`."""
+    df.attrs["imbalances"] = ([_bos_gap(bos)] if neutral_1b else []) + list(imbalances)
     kw.setdefault("ic_reference", ICReference.NONE)
-    return select_ic(df, _fib_over(df, bos, cts, *zone), POIConfig(), **kw)
+    sel = select_ic(df, _fib_over(df, bos, cts, *zone), POIConfig(), **kw)
+    if neutral_1b:
+        assert sel.prior_imbalance_passer_count == sel.ic_candidate_count, (
+            "[test] the fixture is not neutral to Step 1B", sel.prior_imbalance_passer_count, sel.ic_candidate_count)
+    return sel
 
 
 # ---------------------------------------------------------------------------
@@ -735,7 +756,7 @@ def _est(sid, cycle):
 
 def test_records_gate_none_rows_and_tiebreak_on_the_pick():
     df = _tb2_frame()
-    df.attrs["imbalances"] = [_far_gap(10), _far_gap(12)]
+    df.attrs["imbalances"] = [_bos_gap(6), _far_gap(10), _far_gap(12)]       # 1B-neutral (PLAN_S step 3)
     live = _fib_over(df, 6, 12, 0.5, 0.7)
     no_touch = dataclasses.replace(_fib_over(df, 6, 12, 0.70, 0.71), cycle_id=1)  # a zone above every IC
     ended = dataclasses.replace(live, cycle_id=2, end_idx=12)                    # active but ended → gated out
@@ -762,7 +783,7 @@ def test_export_header_none_row_and_legs(tmp_path):
     export_ic_candidates([], empty)
     assert list(pd.read_csv(empty).columns) == IC_CANDIDATE_COLUMNS
     df = _tb2_frame()
-    df.attrs["imbalances"] = [_far_gap(10), _far_gap(12)]
+    df.attrs["imbalances"] = [_bos_gap(6), _far_gap(10), _far_gap(12)]       # 1B-neutral (PLAN_S step 3)
     live = _fib_over(df, 6, 12, 0.5, 0.7)
     recs = derive_ic_candidates(df, [_est(0, 0), _est(0, 1)],
                                 _Tracker([live, dataclasses.replace(_fib_over(df, 6, 12, 0.70, 0.71), cycle_id=1)]),
@@ -777,6 +798,14 @@ def test_export_header_none_row_and_legs(tmp_path):
     assert bool(got.loc[1, "picked"]) and got.loc[1, "ip_tiebreak"] == MOST_RECENT
     assert got.immediate_imbalance_first_c2_idx.isna().tolist() == [True, False, False, True, False, False, True]
     assert got.immediate_imbalance_first_c2_idx.dropna().tolist() == [10, 12, 10, 12]
+    # Step 1B (PLAN_S step 3): the test on EVERY check row (classify_all — misses too), empty on the no-IC row;
+    # the outcome + counts on every row of the record (cycle 1 has no IC candidate: 1B never ran -> empty)
+    assert got.prior_imbalance_first_c2_idx.tolist()[:6] == [6, 6, 10, 6, 6, 10]
+    assert got.prior_imbalance_first_c2_idx.isna().tolist() == [False] * 6 + [True]
+    assert got.prior_imbalance_unfilled.tolist()[:6] == [True] * 6 and pd.isna(got.loc[6, "prior_imbalance_unfilled"])
+    assert got.prior_imbalance_outcome.tolist()[:3] == ["preferred"] * 3 and got.prior_imbalance_outcome[3:].isna().all()
+    assert got.prior_imbalance_passer_count.tolist()[:3] == [2] * 3 and got.ic_candidate_count.tolist()[:3] == [2] * 3
+    assert got.prior_imbalance_passer_count[3:].isna().all() and got.ic_candidate_count[3:].isna().all()
 
 
 def test_mirror_shifts_every_index_field_once_per_lens():

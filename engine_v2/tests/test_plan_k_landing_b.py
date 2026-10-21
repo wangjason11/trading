@@ -16,7 +16,9 @@ import io
 import pytest
 
 import engine_v2.structure.structure_engine as se
-from engine_v2.tests.test_institutional_pattern import _Tracker, _est, _far_gap, _fib_over, _select, _tb2_frame
+from engine_v2.tests.test_institutional_pattern import (
+    _Tracker, _bos_gap, _est, _far_gap, _fib_over, _select, _tb2_frame,
+)
 from engine_v2.zones.cross_cycle_fib import ICReference
 from engine_v2.zones.fib_tracker import FibTracker
 from engine_v2.zones.poi_zones import (
@@ -103,7 +105,7 @@ class _RefTracker(_Tracker):
 
 def _none_rows(ref):
     df = _tb2_frame()
-    df.attrs["imbalances"] = [_far_gap(g) for g in _GAPS]
+    df.attrs["imbalances"] = [_bos_gap(6)] + [_far_gap(g) for g in _GAPS]      # 1B-neutral (PLAN_S step 3)
     recs = derive_ic_candidates(df, [_est(0, 0)], _RefTracker([_fib_over(df, 6, 12, 0.5, 0.7)], ref), POIConfig(),
                                 structure_path_id="H1.main")
     return [(r.ic_idx, r.picked, r.ic_ref_reason, r.reason) for r in recs]

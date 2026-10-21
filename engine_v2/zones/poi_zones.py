@@ -13,12 +13,15 @@ user's steps (POI_ZONES_SPEC §3; PLAN_L):
    min(IC + 2, the CTS anchor) — PLAN_P), (4) the touch of the 61.8-80 zone —
    ALL together (PLAN_H
    RX1-F). Step 1A (PLAN_P): no IC candidate -> Step 1 again with condition 4 on
-   the 80-100 fallback zone (`ic_zone_band`)
-2. Step 2 — the institutional pattern among the IC candidates + its tiebreak
-   rules (`select_institutional_pattern` / `apply_tiebreak_rules`); a pattern ->
-   the IC (`ip_outcome` "pattern")
+   the 80-100 fallback zone (`ic_zone_band`). Step 1B (PLAN_S step 3) — the
+   prior-imbalance preference: the IC candidates whose closest prior sd gap is
+   unfilled through IC − 1 (`check_prior_imbalance`) go through Steps 2–3 first;
+   no IC from them, or none passing -> Steps 2–3 on all the candidates
+2. Step 2 — the institutional pattern among the candidates Steps 2–3 run on +
+   its tiebreak rules (`select_institutional_pattern` / `apply_tiebreak_rules`);
+   a pattern -> the IC (`ip_outcome` "pattern")
 3. Step 3 — no pattern (`ip_outcome` "no_pattern") -> the ranking rules over the
-   UNFILTERED IC candidates (`apply_ranking_rules`, PLAN_L L2 — a rule set of its
+   same, unfiltered list (`apply_ranking_rules`, PLAN_L L2 — a rule set of its
    own, ICR-S); every candidate a pinbar -> no IC. No IC (no IC candidate / all
    pinbars) -> no POI (Step 4, the lower-TF fallback, is deferred)
 4. The POI = the IC's high / low; it is active while the activation sweep's
@@ -80,7 +83,8 @@ class POIZone:
     # IC's zone: "61.8-80" / "80-100" — Step 1A, PLAN_P), the institutional
     # pattern — ip_rank, ip_leg_candle_counts, pattern_anchor_idx,
     # opp_leg_first_idx, pattern_end_idx, pattern_confirmed_idx (all None on a
-    # ranked IC), the ip_tb_* tiebreak —, the ranking_* fields,
+    # ranked IC), the ip_tb_* tiebreak —, the ranking_* fields, Step 1B's
+    # prior_imbalance_* fields + ic_candidate_count (PLAN_S step 3),
     # cts_established_idx = the cycle's CTS-established moment (always: a cycle
     # without CTS_ESTABLISHED builds no POI, 2026-09-29), ...) is
     # canonical in POI_ZONES_SPEC.md "Zone Data Fields".
@@ -428,6 +432,45 @@ def immediate_unfilled_imbalance_first_c2_idx(
     return int(inst.start_idx)
 
 
+def closest_prior_imbalance(df: pd.DataFrame, ic_idx: int, fib_state: FibState) -> Optional[ImbalanceInstance]:
+    """Step 1B's gap (PLAN_S step 3; the user's write-up: "only the closest imbalance prior to the IC"): the sd
+    imbalance instance whose gap-candle (c2) run starts at or after the fib's BOS anchor and ends before the IC, the one
+    ending LATEST — or None (no prior gap: the candidate fails 1B). The user's words fix the direction ("in direction of
+    structure & opposite of IC"), the window ("BOS anchor to IC"), "A gap formed by IC counts" (its c3 is the IC:
+    `end_idx = IC − 1`) and "no min size"; the author's round-1 reading P adds: a gap = an ENGINE instance
+    (consecutive sd c2s merged — `compute_imbalance`) and a run straddling the BOS anchor does not count (PLAN_S §4.3).
+    An sd run never contains the IC (a c2's candle direction is sd, a checked candle's −sd or 0), so `end_idx < IC`
+    keeps every run before it; instances never overlap, so the latest-ending one is unique. Reads no candle."""
+    sd = int(fib_state.struct_direction)
+    best: Optional[ImbalanceInstance] = None
+    for inst in df.attrs.get("imbalances", []):
+        if inst.direction != sd or inst.start_idx < fib_state.bos_idx or inst.end_idx >= ic_idx:
+            continue
+        if best is None or inst.end_idx > best.end_idx:
+            best = inst
+    return best
+
+
+def check_prior_imbalance(
+    df: pd.DataFrame, check: "ICCandleCheck", fib_state: FibState, config: POIConfig,
+) -> "ICCandleCheck":
+    """Step 1B's test of ONE check (the prior-imbalance preference — PLAN_S step 3): `check` with
+    `prior_imbalance_first_c2_idx` = its closest prior gap's first c2 (`closest_prior_imbalance`; None = no prior gap)
+    and `prior_imbalance_unfilled` = that gap is NOT two-stroke-filled through the candle right BEFORE the IC
+    (`is_filled(df, IC − 1, config.fill_threshold)` — the user, round 5: "the balance needs to be unfilled up to the
+    candle right before the IC": the IC's own candle is never read, so it cannot disqualify itself; a gap whose c3 is
+    the IC has an empty scan → unfilled, unless degenerate — `is_filled`'s safe default); no prior gap → False (the
+    author's default, round 5's final spec). Every candle read is ≤ the IC — no look-ahead in either consumer."""
+    inst = closest_prior_imbalance(df, check.ic_idx, fib_state)
+    if inst is None:
+        return replace(check, prior_imbalance_first_c2_idx=None, prior_imbalance_unfilled=False)
+    return replace(
+        check,
+        prior_imbalance_first_c2_idx=int(inst.start_idx),
+        prior_imbalance_unfilled=not inst.is_filled(df, check.ic_idx - 1, config.fill_threshold),
+    )
+
+
 # The institutional-pattern tiebreakers, in order (PLAN_H §6 TBU-1; descriptive names, TBU-3): the `ip_tiebreak`
 # value of the rule that decided a tie (POI meta, the debug CSV, the hover). PLAN_P removed the first,
 # `immediate_unfilled_imbalance` (it became IC condition 3 — every IC candidate passes it; a save before S_P can hold
@@ -452,6 +495,20 @@ IP_OUTCOME_NO_PATTERN = "no_pattern"
 NO_IC_CANDIDATE = "no_ic_candidate"
 ALL_IC_CANDIDATES_PINBAR = "all_ic_candidates_pinbar"
 
+# Step 1B — the prior-imbalance preference (PLAN_S step 3; the user's write-up 2026-10-20 + Q&A rounds 2–7): its outcome
+# (`prior_imbalance_outcome` — `ICSelection`, the POI meta, the debug CSV, the hovers; the user's names, round 6). None
+# = no IC candidate (1B never ran).
+PRIOR_IMBALANCE_PREFERRED = "preferred"                            # the IC came from the candidates passing 1B
+PRIOR_IMBALANCE_FALLBACK_PASSERS_NO_IC = "fallback_passers_no_ic"  # passers, no IC from them -> all the candidates
+PRIOR_IMBALANCE_FALLBACK_NO_PASSER = "fallback_no_passer"          # no candidate passes -> all the candidates
+
+
+def prior_imbalance_narrowed(outcome: Optional[str], passer_count: Optional[int], candidate_count: Optional[int]) -> bool:
+    """The preference NARROWED the field (PLAN_S §4.3.1, the user's round 6): the IC came from the passers and fewer
+    candidates passed than there were — the ONE test of both hovers' 1B wording (the POI hover reads the POI meta, the
+    fib hover the CSV's picked row; both carry the outcome and the two counts)."""
+    return outcome == PRIOR_IMBALANCE_PREFERRED and int(passer_count) < int(candidate_count)
+
 
 @dataclass(frozen=True)
 class ICCandleCheck:
@@ -462,13 +519,18 @@ class ICCandleCheck:
     `immediate_unfilled_imbalance_first_c2_idx`; PLAN_P), condition 4 `touches_zone` (the touch of the selection's
     `ic_zone_band`) — the retired condition 3 as information (`has_unfilled_imbalance_after`: any unfilled sd
     imbalance after it through the CTS anchor — never read by the pick, PLAN_P) and, once classified (`select_ic`),
-    its institutional pattern (`pattern`, None = not classified)."""
+    its institutional pattern (`pattern`, None = not classified) and its Step 1B test (`check_prior_imbalance`, PLAN_S
+    step 3: `prior_imbalance_first_c2_idx` — the closest prior gap's first c2, None = no prior gap —, and
+    `prior_imbalance_unfilled` — passes 1B; None = not evaluated). 1B is a PREFERENCE, never an IC condition:
+    `is_ic_candidate` does not read it."""
     ic_idx: int
     has_unfilled_imbalance_after: bool
     ic_ref_reason: Optional[str]
     touches_zone: bool
     immediate_imbalance_first_c2_idx: Optional[int]
     pattern: Optional[IPResult] = None
+    prior_imbalance_first_c2_idx: Optional[int] = None
+    prior_imbalance_unfilled: Optional[bool] = None
 
     @property
     def is_ic_candidate(self) -> bool:
@@ -598,7 +660,8 @@ def select_institutional_pattern(
     config: POIConfig,
     ic_candidates: Sequence[ICCandleCheck],
 ) -> Tuple[Optional[IPResult], Optional[Tuple[str, int, int, Optional[int]]]]:
-    """Step 2 (POI_ZONES_SPEC §3.4): the best (rank, shape) among the IC candidates' patterns; two or more tied → the
+    """Step 2 (POI_ZONES_SPEC §3.4): the best (rank, shape) among the patterns of `ic_candidates` (every IC candidate,
+    or Step 1B's passers — `select_ic`, PLAN_S step 3; also over all of them for the outranked pattern); two or more tied → the
     tiebreak rules (`apply_tiebreak_rules`). No pattern → `(None, None)`. The IC candidates carry their patterns
     (classified by `select_ic`) — nothing re-derived."""
     patterns = [c.pattern for c in ic_candidates if c.pattern.rank is not None]
@@ -618,11 +681,13 @@ def apply_ranking_rules(
     ic_candidates: Sequence[ICCandleCheck],
 ) -> Tuple[Optional[IPResult], Optional[Tuple[str, Optional[int], int, Optional[int]]]]:
     """Step 3's RANKING RULES (POI_ZONES_SPEC §3 Step 3; PLAN_L §4.1) — run by `select_ic` ONLY when Step 2 found no
-    pattern, over the UNFILTERED IC candidates (their CHECKS, nothing re-derived — A9). A rule set of its OWN (PLAN_H
+    pattern, over the same UNFILTERED list Step 2 ran on (every IC candidate, or Step 1B's passers — PLAN_S step 3;
+    their CHECKS, nothing re-derived — A9). A rule set of its OWN (PLAN_H
     §6 ICR-S), each rule over the candidates the previous one left in play, the first to leave exactly one deciding
     (its second rule until PLAN_P, the immediate unfilled imbalance, became IC condition 3):
-    1. exclude pinbars (`candle_type` "pinbar") — none left → no IC (`ALL_IC_CANDIDATES_PINBAR`); one left of two or
-       more → it (rules 2–3 never run: no runner-up, ICR-14);
+    1. exclude pinbars (`candle_type` "pinbar") — none left → no IC (`ALL_IC_CANDIDATES_PINBAR`; over Step 1B's
+       passers `select_ic` then falls back to all the candidates); one left of two or more → it (rules 2–3 never run:
+       no runner-up, ICR-14);
     2. the candle type, maru > normal (`prefer_candle_type(include_pinbar=False)`); runner-up = the most recent normal;
     3. the most recent before the imbalance (`most_recent_before_imbalance`): the reference = the earliest unfilled sd
        imbalance after the OLDEST candidate STILL IN PLAY after rules 1–2 (ICR-8) — its own immediate gap (every
@@ -632,8 +697,9 @@ def apply_ranking_rules(
     Returns `(pick, ranking)`: `pick` = the IC's check's `pattern` (an `IPResult` with no rank), or None (all
     pinbars); `ranking` = `(rule, runner_up_ic_idx, in_play_count, imbalance_first_c2_idx)` — `rule` one of the
     `RANKING_*` names, `in_play_count` = the candidates entering the deciding rule, `imbalance_first_c2_idx` = the
-    reference gap (rule 3), else None — or None when nothing was ranked: Step 1 found exactly ONE IC candidate and it
-    is not a pinbar (ICR-10). Every value an `int` / `str` (the mirror shifts only `isinstance(v, int)` — B-m9)."""
+    reference gap (rule 3), else None — or None when nothing was ranked: exactly ONE candidate entered (Step 1's /
+    Step 1A's only IC candidate, or Step 1B's only passer) and it is not a pinbar (ICR-10). Every value an `int` /
+    `str` (the mirror shifts only `isinstance(v, int)` — B-m9)."""
     by_idx = {int(c.ic_idx): c for c in ic_candidates}
     assert by_idx, "[poi_zones] the ranking rules need IC candidates"
 
@@ -672,7 +738,13 @@ class ICSelection:
     `ic_zone_band` = the zone IC condition 4 was evaluated in (PLAN_P): `IC_ZONE_PRIMARY` (61.8–80), or
     `IC_ZONE_FALLBACK` (80–100) when Step 1A ran — no check passed every IC condition with 61.8–80 (a no-IC answer
     with the fallback band = Step 1A ran and found no IC either). `ic_candidates` = the checks passing every IC
-    condition. The fields' consistency is asserted at construction."""
+    condition. `prior_imbalance_outcome` = Step 1B's outcome (PLAN_S step 3: `PRIOR_IMBALANCE_*`; None = no IC
+    candidate, 1B never ran) — `tiebreak` / `ip_outcome` / `ranking` / `no_ic_reason` are those of the Steps 2–3 run
+    that gave the answer: over the PASSERS when `preferred` (the user, round 7: `ip_outcome` = Step 2's outcome over
+    the candidates Steps 2–3 ran on), else over all the candidates; `prior_imbalance_outranked` = when the IC came
+    from the passers and the preference narrowed the field, the IC Step 2 would pick over ALL the candidates if that
+    IC fails 1B (the pattern the preference outranked — round 7); else None (a fallback never has one).
+    The two counts are derived from `checks` (properties). The fields' consistency is asserted at construction."""
     checks: Tuple[ICCandleCheck, ...]
     pick: Optional[IPResult]
     tiebreak: Optional[Tuple[str, int, int, Optional[int]]]
@@ -680,10 +752,40 @@ class ICSelection:
     ranking: Optional[Tuple[str, Optional[int], int, Optional[int]]]
     no_ic_reason: Optional[str]
     ic_zone_band: str
+    prior_imbalance_outcome: Optional[str]
+    prior_imbalance_outranked: Optional[IPResult]
 
     def __post_init__(self):
         assert (self.pick is None) == (self.no_ic_reason is not None), (
             f"[poi_zones] pick {self.pick} vs no_ic_reason {self.no_ic_reason!r}")
+        candidates = {c.ic_idx: c for c in self.ic_candidates}
+        # The IC is always an IC candidate (plan review lens B, PLAN_S step 3: a Steps-2–3 run fed the checks instead of
+        # the candidates would pick a non-candidate on the drawn path and crash on MS's — never silently).
+        assert self.pick is None or int(self.pick.ic_idx) in candidates, (
+            f"[poi_zones] pick {self.pick.ic_idx} is no IC candidate {sorted(candidates)}")
+        # Step 1B (PLAN_S step 3): it runs exactly when there are IC candidates, and evaluates every one of them.
+        assert self.prior_imbalance_outcome in (None, PRIOR_IMBALANCE_PREFERRED, PRIOR_IMBALANCE_FALLBACK_PASSERS_NO_IC,
+                                                PRIOR_IMBALANCE_FALLBACK_NO_PASSER), self.prior_imbalance_outcome
+        assert (self.prior_imbalance_outcome is None) == (self.ip_outcome is None), (
+            self.prior_imbalance_outcome, self.ip_outcome)
+        assert all(c.prior_imbalance_unfilled is not None for c in candidates.values()) or self.ip_outcome is None, (
+            "[poi_zones] an IC candidate without its Step 1B test")
+        for c in self.checks:
+            if c.prior_imbalance_unfilled:
+                assert c.prior_imbalance_first_c2_idx is not None and c.prior_imbalance_first_c2_idx < c.ic_idx, c
+        passers = {i for i, c in candidates.items() if c.prior_imbalance_unfilled}
+        if self.prior_imbalance_outcome == PRIOR_IMBALANCE_PREFERRED:
+            assert self.pick is not None and int(self.pick.ic_idx) in passers, (self.pick, sorted(passers))
+        elif self.prior_imbalance_outcome == PRIOR_IMBALANCE_FALLBACK_PASSERS_NO_IC:
+            # every passer is a no-pattern pinbar, so the fallback's IC (if any) is a non-passer
+            assert passers and (self.pick is None or int(self.pick.ic_idx) not in passers), (
+                self.pick, sorted(passers))
+        elif self.prior_imbalance_outcome == PRIOR_IMBALANCE_FALLBACK_NO_PASSER:
+            assert not passers, sorted(passers)
+        out = self.prior_imbalance_outranked
+        assert out is None or (self.prior_imbalance_outcome == PRIOR_IMBALANCE_PREFERRED and out.rank is not None
+                               and int(out.ic_idx) in candidates and int(out.ic_idx) not in passers), (
+            f"[poi_zones] outranked pattern {out} vs outcome {self.prior_imbalance_outcome!r}, passers {sorted(passers)}")
         assert self.ip_outcome in (None, IP_OUTCOME_PATTERN, IP_OUTCOME_NO_PATTERN), self.ip_outcome
         assert self.no_ic_reason in (None, NO_IC_CANDIDATE, ALL_IC_CANDIDATES_PINBAR), self.no_ic_reason
         assert self.ic_zone_band in (IC_ZONE_PRIMARY, IC_ZONE_FALLBACK), self.ic_zone_band
@@ -703,6 +805,25 @@ class ICSelection:
     def ic_candidates(self) -> Tuple[ICCandleCheck, ...]:
         return tuple(c for c in self.checks if c.is_ic_candidate)
 
+    @property
+    def ic_candidate_count(self) -> Optional[int]:
+        """The IC candidates (Step 1's or Step 1A's) — None when 1B never ran (with `prior_imbalance_outcome`)."""
+        return None if self.prior_imbalance_outcome is None else len(self.ic_candidates)
+
+    @property
+    def prior_imbalance_passer_count(self) -> Optional[int]:
+        """The IC candidates passing Step 1B — None when 1B never ran."""
+        if self.prior_imbalance_outcome is None:
+            return None
+        return sum(1 for c in self.ic_candidates if c.prior_imbalance_unfilled)
+
+    @property
+    def pick_check(self) -> Optional[ICCandleCheck]:
+        """The pick's own check (None without a pick)."""
+        if self.pick is None:
+            return None
+        return next(c for c in self.checks if c.ic_idx == int(self.pick.ic_idx))
+
 
 def select_ic(
     df: pd.DataFrame,
@@ -715,16 +836,20 @@ def select_ic(
     """ONE IC per fib, identified in the user's steps (POI_ZONES_SPEC §3; PLAN_L; PLAN_H D2: the drawn POI and MS's
     in-flight read call this same function): Step 1 the IC candidates (`check_ic_conditions` — every IC condition
     together, PLAN_H §6 RX1-F) → none: Step 1A, condition 4 on the 80–100 fallback zone, conditions 1–3 unchanged
-    (PLAN_P; `ic_zone_band`; none again → no IC, `NO_IC_CANDIDATE`) → Step 2 the institutional pattern among them +
-    its tiebreak rules (`select_institutional_pattern`) → no pattern: Step 3 the ranking rules over the same,
-    unfiltered IC candidates (`apply_ranking_rules`; every one a pinbar → no IC, `ALL_IC_CANDIDATES_PINBAR`). Step 1A
+    (PLAN_P; `ic_zone_band`; none again → no IC, `NO_IC_CANDIDATE`) → Step 1B the prior-imbalance preference
+    (PLAN_S step 3; `check_prior_imbalance`, `prior_imbalance_outcome`): the candidates passing it go through Steps
+    2–3 — no IC from them, or no passer → Steps 2–3 on ALL the candidates (1B never adds or removes an IC, it can only
+    swap it for a passer; it outranks the pattern) → Step 2 the institutional pattern among the list + its tiebreak
+    rules (`select_institutional_pattern`) → no pattern: Step 3 the ranking rules over the same, unfiltered list
+    (`apply_ranking_rules`; every one a pinbar → no IC, `ALL_IC_CANDIDATES_PINBAR`) — `_steps_2_and_3`. Step 1A
     runs ONLY when Step 1 finds no candidate — never after Steps 2–3 (an all-pinbar answer stays no IC; the user,
     2026-10-13). A fib neither active nor locked has no checks → `NO_IC_CANDIDATE` (PLAN_L A6).
 
     The candle params come from the FRAME (`df.attrs["timeframe"]` → `candle_params_for_timeframe`; a KeyError when
     unstamped — fail loudly — read BEFORE the active-or-locked guard), as does the leg cap (`config.ip_leg_cap_by_tf`,
     KeyError on an unknown TF). `classify_all` (the drawn record + the debug CSV) classifies the pattern of EVERY
-    checked candle (PLAN_H §6 ICR-11 — never picked unless an IC candidate); without it only the IC candidates.
+    checked candle (PLAN_H §6 ICR-11 — never picked unless an IC candidate) and evaluates Step 1B on every check;
+    without it only the IC candidates.
 
     `ic_reference` (REQUIRED — PLAN_K A1; built by `FibTracker.ic_reference` as of the reader's moment): IC condition
     2, evaluated per checked candle at IC selection (RX1-E)."""
@@ -734,7 +859,7 @@ def select_ic(
     fib = fib_state.fib
     if fib is None or not (fib_state.active or fib_state.locked):
         return ICSelection((), None, None, ip_outcome=None, ranking=None, no_ic_reason=NO_IC_CANDIDATE,
-                           ic_zone_band=IC_ZONE_PRIMARY)
+                           ic_zone_band=IC_ZONE_PRIMARY, prior_imbalance_outcome=None, prior_imbalance_outranked=None)
     sd = int(fib_state.struct_direction)
     agreed = agreed_direction(df["direction"].to_numpy(), df["vol_dir"].to_numpy())
     checks = check_ic_conditions(df, fib_state, config, ic_reference=ic_reference, agreed=agreed)
@@ -764,17 +889,49 @@ def select_ic(
         replace(c, pattern=results[c.ic_idx]) if c.ic_idx in results else c
         for c in checks
     )
+    # Step 1B's test (PLAN_S step 3) — on the IC candidates, and with `classify_all` on every check (the CSV), as the
+    # pattern: MS's read pays only for its candidates.
+    checks = tuple(
+        check_prior_imbalance(df, c, fib_state, config) if (classify_all or c.ic_idx in ic_candidates) else c
+        for c in checks
+    )
     candidate_checks = tuple(c for c in checks if c.ic_idx in ic_candidates)
     if not candidate_checks:
         return ICSelection(checks, None, None, ip_outcome=None, ranking=None, no_ic_reason=NO_IC_CANDIDATE,
-                           ic_zone_band=band)
-    pick, tiebreak = select_institutional_pattern(df, fib_state, config, candidate_checks)     # Step 2
+                           ic_zone_band=band, prior_imbalance_outcome=None, prior_imbalance_outranked=None)
+    # Step 1B — the prior-imbalance preference (PLAN_S step 3; the user's rounds 2 / 5 / 7): the passers (any number)
+    # go through Steps 2–3; no IC from them (every passer a no-pattern pinbar) -> Steps 2–3 on ALL the candidates of
+    # the step before (Step 1's or Step 1A's) = the pick without 1B; no passer -> all the candidates. 1B outranks the
+    # institutional pattern, never adds or removes an IC — it can only swap the IC for a passer.
+    passers = tuple(c for c in candidate_checks if c.prior_imbalance_unfilled)
+    steps = _steps_2_and_3(df, fib_state, config, passers) if passers else None
+    outranked = None
+    if steps is not None and steps[0] is not None:
+        outcome = PRIOR_IMBALANCE_PREFERRED
+        if len(passers) < len(candidate_checks):
+            # The pattern the preference outranked (round 7): Step 2's pick over ALL the candidates, if it fails 1B.
+            best, _tb = select_institutional_pattern(df, fib_state, config, candidate_checks)
+            if best is not None and best.ic_idx not in {c.ic_idx for c in passers}:
+                outranked = best
+    else:
+        outcome = PRIOR_IMBALANCE_FALLBACK_PASSERS_NO_IC if passers else PRIOR_IMBALANCE_FALLBACK_NO_PASSER
+        steps = _steps_2_and_3(df, fib_state, config, candidate_checks)
+    pick, tiebreak, ip_outcome, ranking, no_ic_reason = steps
+    return ICSelection(checks, pick, tiebreak, ip_outcome=ip_outcome, ranking=ranking, no_ic_reason=no_ic_reason,
+                       ic_zone_band=band, prior_imbalance_outcome=outcome, prior_imbalance_outranked=outranked)
+
+
+def _steps_2_and_3(
+    df: pd.DataFrame, fib_state: FibState, config: POIConfig, ic_candidates: Sequence[ICCandleCheck],
+) -> Tuple[Optional[IPResult], Optional[tuple], str, Optional[tuple], Optional[str]]:
+    """Steps 2–3 over `ic_candidates` (all of Step 1's / Step 1A's, or Step 1B's passers — `select_ic`): Step 2 the
+    institutional pattern + its tiebreak rules; no pattern -> Step 3 the ranking rules over the same list (every one a
+    pinbar -> no IC). Returns `(pick, tiebreak, ip_outcome, ranking, no_ic_reason)`."""
+    pick, tiebreak = select_institutional_pattern(df, fib_state, config, ic_candidates)     # Step 2
     if pick is not None:
-        return ICSelection(checks, pick, tiebreak, ip_outcome=IP_OUTCOME_PATTERN, ranking=None, no_ic_reason=None,
-                           ic_zone_band=band)
-    pick, ranking = apply_ranking_rules(df, fib_state, config, candidate_checks)               # Step 3
-    return ICSelection(checks, pick, None, ip_outcome=IP_OUTCOME_NO_PATTERN, ranking=ranking,
-                       no_ic_reason=None if pick is not None else ALL_IC_CANDIDATES_PINBAR, ic_zone_band=band)
+        return pick, tiebreak, IP_OUTCOME_PATTERN, None, None
+    pick, ranking = apply_ranking_rules(df, fib_state, config, ic_candidates)               # Step 3
+    return pick, None, IP_OUTCOME_NO_PATTERN, ranking, None if pick is not None else ALL_IC_CANDIDATES_PINBAR
 
 
 def _poi_record_gate(fib_state: FibState) -> bool:
@@ -1079,6 +1236,7 @@ def derive_poi_zones(
 
         tb = rec.selection.tiebreak or (None, None, None, None)
         rk = rec.selection.ranking or (None, None, None, None)
+        outranked = rec.selection.prior_imbalance_outranked
         zone = POIZone(
             start_time=ic_time,
             end_time=end_time,
@@ -1115,6 +1273,16 @@ def derive_poi_zones(
                 "ranking_runner_up_ic_idx": rk[1],
                 "ranking_in_play_count": rk[2],
                 "ranking_imbalance_first_c2_idx": rk[3],
+                # Step 1B, the prior-imbalance preference (PLAN_S step 3; the user's names, rounds 6–7): its outcome,
+                # the IC's own closest prior gap, the two counts (the hover's "<passers> of <candidates>") and the
+                # pattern the preference outranked (None unless it did) — `prior_imbalance_first_c2_idx` /
+                # `prior_imbalance_outranked_ic_idx` are in the mirror's `_ZONE_META_IDX_KEYS`.
+                "prior_imbalance_outcome": rec.selection.prior_imbalance_outcome,
+                "prior_imbalance_first_c2_idx": rec.selection.pick_check.prior_imbalance_first_c2_idx,
+                "prior_imbalance_passer_count": rec.selection.prior_imbalance_passer_count,
+                "ic_candidate_count": rec.selection.ic_candidate_count,
+                "prior_imbalance_outranked_ic_idx": None if outranked is None else int(outranked.ic_idx),
+                "prior_imbalance_outranked_ip_rank": None if outranked is None else outranked.ip_rank,
                 "status": status,
                 "activation_history": activation_history,
                 "bos_anchor_idx": fib_state.bos_idx,
@@ -1222,6 +1390,13 @@ class ICCandidateRecord:
     ranking_in_play_count: Optional[int] = None
     ranking_imbalance_first_c2_idx: Optional[int] = None
     ic_zone_band: Optional[str] = None                     # the selection's band, every row of the record (PLAN_P)
+    # Step 1B, the prior-imbalance preference (PLAN_S step 3): the check's test on every check row (empty on the no-IC
+    # row); the outcome and the two counts on every row of the record (the no-IC row too — like `ip_outcome`)
+    prior_imbalance_first_c2_idx: Optional[int] = None
+    prior_imbalance_unfilled: Optional[bool] = None
+    prior_imbalance_outcome: Optional[str] = None
+    prior_imbalance_passer_count: Optional[int] = None
+    ic_candidate_count: Optional[int] = None
     detail: Dict[str, Any] = field(default_factory=dict)
     meta: Dict[str, Any] = field(default_factory=dict)
 
@@ -1263,9 +1438,14 @@ def derive_ic_candidates(
         fib_state, sel = rec.fib_state, rec.selection
         sid, cycle_id = int(fib_state.structure_id), int(fib_state.cycle_id)
         base = (sid, cycle_id, int(fib_state.struct_direction), int(fib_state.bos_idx), int(fib_state.cts_idx))
+        prior = dict(prior_imbalance_outcome=sel.prior_imbalance_outcome,
+                     prior_imbalance_passer_count=sel.prior_imbalance_passer_count,
+                     ic_candidate_count=sel.ic_candidate_count)
         for c in sel.checks:
             r = c.pattern
             assert r is not None, f"[poi_zones] check {c.ic_idx} of fib {base} is unclassified (classify_all)"
+            assert c.prior_imbalance_unfilled is not None, (
+                f"[poi_zones] check {c.ic_idx} of fib {base} has no Step 1B test (classify_all)")
             picked = sel.pick is not None and r.ic_idx == sel.pick.ic_idx
             tb = sel.tiebreak if picked and sel.tiebreak is not None else (None, None, None, None)
             rk = sel.ranking if picked and sel.ranking is not None else (None, None, None, None)
@@ -1297,6 +1477,9 @@ def derive_ic_candidates(
                 ranking_in_play_count=rk[2],
                 ranking_imbalance_first_c2_idx=rk[3],
                 ic_zone_band=sel.ic_zone_band,
+                prior_imbalance_first_c2_idx=c.prior_imbalance_first_c2_idx,
+                prior_imbalance_unfilled=bool(c.prior_imbalance_unfilled),
+                **prior,
                 detail=dict(r.detail),
                 meta={"structure_path_id": structure_path_id},
             ))
@@ -1311,6 +1494,7 @@ def derive_ic_candidates(
                 pattern_confirmed_idx=None, ip_leg_candle_counts=None, picked=False,
                 ip_outcome=sel.ip_outcome,
                 ic_zone_band=sel.ic_zone_band,
+                **prior,
                 meta={"structure_path_id": structure_path_id},
             ))
     return out

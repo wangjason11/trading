@@ -1871,7 +1871,8 @@ forgotten moment is a `TypeError`, never a silent default; `evaluated_at=None`
 is an explicit, justified no-cut (FibTracker's decisions — the drawn fib's and,
 since PLAN_I S5, MS's in-flight one — pass the handled event's moment,
 `event_moment(ev)`, the apply candle `confirmed_at` on a pattern-path CTS_UPDATED
-since Plan E E3·0; the IC pick's IC cond3 and its tiebreak / ranking rules' imbalance reads pass `None`, MARKET_STRUCTURE_SPEC
+since Plan E E3·0; the IC pick's IC cond3 and its tiebreak / ranking rules' imbalance reads pass `None` (Step 1B's
+read, PLAN_S step 3, calls `is_filled` through the candle before the candidate — no moment: every candle ≤ it), MARKET_STRUCTURE_SPEC
 "Snapshot vs per-candle").
 Rule: IMBALANCE_FILL_SEMANTICS.md "Knowability — the c3 rule".
 
@@ -2479,7 +2480,7 @@ exists only because `c3 = B+1` was seen, and a merged run ending at `B-1` gets
 its bounds from `B+1` (`imbalance.py`). The MS consumers — since PLAN_I S5 the
 embedded FibTracker (cut at each fed event's moment `<= B`) and
 `_refresh_poi_inners_for_cycle` → `poi_inner_for_fib` → `select_ic`
-(IC cond3 in `check_ic_conditions` — the immediate gap since PLAN_P, + the retired any-gap test as information — and the tiebreak and ranking rules' reference) — ask the pick's questions
+(IC cond3 in `check_ic_conditions` — the immediate gap since PLAN_P, + the retired any-gap test as information — the tiebreak and ranking rules' reference, and since PLAN_S step 3 Step 1B's closest prior gap through IC − 1, every candle ≤ the IC) — ask the pick's questions
 with `evaluated_at=None`: as-of for *fills* (`check_to_idx <=` the fib's CTS anchor
 `<= st.cts.idx <= B`), no existence cut, by decision (MARKET_STRUCTURE_SPEC
 "Snapshot vs per-candle"). (Until S5 the retired `_update_cycle0_data` /

@@ -157,6 +157,9 @@ _ZONE_META_IDX_KEYS = (
     # PLAN_L landing 2 (2026-10-10) — a ranked IC's ranking (`ranking_in_play_count` is a count):
     "ranking_runner_up_ic_idx",       # POI (None unless ranking rule 2 / 3 decided — PLAN_P's numbering)
     "ranking_imbalance_first_c2_idx",  # POI (the most-recent-before-imbalance ranking rule; + the immediate one < PLAN_P)
+    # PLAN_S step 3 (2026-10-21) — Step 1B, the prior-imbalance preference (the two counts are counts):
+    "prior_imbalance_first_c2_idx",     # POI (the IC's closest prior sd gap's first c2; None = no prior gap)
+    "prior_imbalance_outranked_ic_idx",  # POI (the pattern the preference outranked; None unless it did)
 )
 
 # FibState meta keys with entity-df indices (the dataclass fields bos_idx /
@@ -191,6 +194,7 @@ _IC_CANDIDATE_IDX_FIELDS = (
     "immediate_imbalance_first_c2_idx",
     "ranking_runner_up_ic_idx",         # PLAN_L landing 2
     "ranking_imbalance_first_c2_idx",
+    "prior_imbalance_first_c2_idx",     # PLAN_S step 3 (Step 1B, every check row)
 )
 
 # WaveCandleResult meta keys with entity-df indices (the dataclass fields

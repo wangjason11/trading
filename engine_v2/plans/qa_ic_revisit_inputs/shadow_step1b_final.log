@@ -1,0 +1,62 @@
+[REC] H1main H1 sid0 single 0 sd +1 bos 96 cts 430 | candidates 1, passers 1 | today IC None | 1B IC None (passers gave no IC -> all: all_ic_candidates_pinbar)
+[REC] H1main H1 sid0 single 1 sd +1 bos 591 cts 652 | candidates 1, passers 1 | today IC 607 | 1B IC 607 (preferred: pattern 3A.iii)
+[REC] H1main H1 sid1 single 0 sd -1 bos 689 cts 710 | candidates 1, passers 0 | today IC None | 1B IC None (no passer -> all: all_ic_candidates_pinbar)
+[REC] H1main H1 sid1 cross 0->1 sd -1 bos 689 cts 761 | candidates 1, passers 1 | today IC None | 1B IC None (passers gave no IC -> all: all_ic_candidates_pinbar)
+[REC] H1main H1 sid1 single 2 sd -1 bos 826 cts 905 | candidates 3, passers 3 | today IC 859 | 1B IC 859 (preferred: ranked exclude_pinbar)
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 2 fib 703..819 at moment 820 (frame len 3824): today IC 734 inner 0.57301 -> 1B IC 738 inner 0.57326
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 2 fib 703..821 at moment 821 (frame len 3824): today IC 734 inner 0.57301 -> 1B IC 738 inner 0.57326
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 2 fib 703..825 at moment 825 (frame len 3824): today IC 734 inner 0.57301 -> 1B IC 738 inner 0.57326
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 2 fib 703..826 at moment 826 (frame len 3824): today IC 812 inner 0.57478 -> 1B IC 738 inner 0.57326
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 2 fib 703..828 at moment 828 (frame len 3824): today IC 812 inner 0.57478 -> 1B IC 738 inner 0.57326
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 2 fib 703..830 at moment 830 (frame len 3824): today IC 812 inner 0.57478 -> 1B IC 738 inner 0.57326
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 2 fib 703..828 at moment 828 (frame len 3824): today IC 812 inner 0.57478 -> 1B IC 738 inner 0.57326
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 2 fib 703..830 at moment 830 (frame len 3824): today IC 812 inner 0.57478 -> 1B IC 738 inner 0.57326
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 2 fib 703..831 at moment 831 (frame len 3824): today IC 812 inner 0.57478 -> 1B IC 738 inner 0.57326
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 2 fib 703..833 at moment 833 (frame len 3824): today IC 812 inner 0.57478 -> 1B IC 738 inner 0.57326
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 2 fib 703..835 at moment 835 (frame len 3824): today IC 812 inner 0.57478 -> 1B IC 738 inner 0.57326
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 2 fib 703..841 at moment 841 (frame len 3824): today IC 812 inner 0.57478 -> 1B IC 738 inner 0.57326
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 1 fib 169..252 at moment 252 (frame len 1639): today IC 219 inner 0.58279 -> 1B IC 232 inner 0.58182
+[MS] sub-geometry (slice-local idx) M15 sid0 cycle 1 fib 169..253 at moment 253 (frame len 1639): today IC 219 inner 0.58279 -> 1B IC 232 inner 0.58182
+[REC] sub0 M15 sid0 single 0 sd +1 bos 454 cts 784 | candidates 2, passers 0 | today IC 650 | 1B IC 650 (no passer -> all: ranked exclude_pinbar)
+[REC] sub0 M15 sid0 single 1 sd +1 bos 917 cts 1020 | candidates 2, passers 0 | today IC 923 | 1B IC 923 (no passer -> all: pattern 3C.iv)
+[REC] sub0 M15 sid0 single 2 sd +1 bos 1107 cts 1245 | candidates 3, passers 1 | today IC 1216 | 1B IC 1142 (preferred: ranked (only))  MOVED
+     | cand | time (UTC)       | type   |       o |       h |       l |       c | closest prior gap (c2) | bottom..top (pips) | armed | committed <= IC-1 | 1B
+     | 1138 | 2025-12-02 18:30 | normal | 0.57290 | 0.57301 | 0.57250 | 0.57258 | 1133 | 0.57270..0.57288 (1.8) | 1136 | 1137 | fail
+     | 1142 | 2025-12-02 19:30 | normal | 0.57324 | 0.57326 | 0.57301 | 0.57308 | 1140 | 0.57280..0.57315 (3.5) | - | - | PASS
+     | 1216 | 2025-12-03 14:00 | maru   | 0.57471 | 0.57478 | 0.57346 | 0.57376 | 1205 | 0.57488..0.57494 (0.6) | 1207 | 1208 | fail
+[REC] sub0 M15 sid0 single 3 sd +1 bos 1310 cts 1721 | candidates 1, passers 1 | today IC 1660 | 1B IC 1660 (preferred: pattern 1A.iv)
+[REC] sub0 M15 sid0 single 4 sd +1 bos 1761 cts 1794 | candidates 1, passers 1 | today IC 1778 | 1B IC 1778 (preferred: ranked (only))
+[REC] sub1 M15 sid0 single 0 sd -1 bos 1797 cts 1816 | candidates 0, passers 0 | today IC None | 1B IC None (no_ic_candidate)
+[REC] sub1 M15 sid0 single 1 sd -1 bos 1837 cts 1898 | candidates 1, passers 1 | today IC 1890 | 1B IC 1890 (preferred: pattern 3D.ii)
+[REC] sub1 M15 sid0 single 2 sd -1 bos 1934 cts 1945 | candidates 2, passers 0 | today IC 1934 | 1B IC 1934 (no passer -> all: ranked exclude_pinbar)
+[REC] sub1 M15 sid0 single 3 sd -1 bos 2078 cts 2231 | candidates 0, passers 0 | today IC None | 1B IC None (no_ic_candidate)
+[REC] sub1 M15 sid0 single 4 sd -1 bos 2270 cts 2365 | candidates 2, passers 2 | today IC 2320 | 1B IC 2320 (preferred: pattern 2A.iv)
+[REC] sub2 M15 sid0 single 0 sd +1 bos 2365 cts 2557 | candidates 1, passers 1 | today IC None | 1B IC None (passers gave no IC -> all: all_ic_candidates_pinbar)
+[REC] sub2 M15 sid0 single 1 sd +1 bos 2561 cts 2609 | candidates 2, passers 1 | today IC 2575 | 1B IC 2575 (passers gave no IC -> all: ranked exclude_pinbar)
+[REC] sub3 M15 sid0 single 0 sd -1 bos 2639 cts 2736 | candidates 1, passers 1 | today IC None | 1B IC None (passers gave no IC -> all: all_ic_candidates_pinbar)
+[REC] sub3 M15 sid0 single 1 sd -1 bos 2758 cts 2842 | candidates 2, passers 1 | today IC 2808 | 1B IC 2821 (preferred: ranked (only))  MOVED
+     | cand | time (UTC)       | type   |       o |       h |       l |       c | closest prior gap (c2) | bottom..top (pips) | armed | committed <= IC-1 | 1B
+     | 2808 | 2025-12-29 04:00 | pinbar | 0.58300 | 0.58318 | 0.58279 | 0.58314 | 2759..2760 | 0.58279..0.58360 (8.1) | 2794 | 2795 | fail
+     | 2821 | 2025-12-29 07:15 | maru   | 0.58190 | 0.58233 | 0.58182 | 0.58229 | 2810..2812 | 0.58227..0.58296 (6.9) | - | - | PASS
+[REC] sub3 M15 sid0 cross 1->2 sd -1 bos 2758 cts 3047 | candidates 4, passers 4 | today IC 2930 | 1B IC 2930 (preferred: pattern 3C.iv)
+[REC] sub4 M15 sid0 single 0 sd +1 bos 3230 cts 3304 | candidates 1, passers 1 | today IC 3235 | 1B IC 3235 (preferred: pattern 3A.iv)
+[REC] sub5 M15 sid0 single 0 sd -1 bos 3304 cts 3621 | candidates 3, passers 3 | today IC 3427 | 1B IC 3427 (preferred: pattern 3C.iii)
+[REC] sub6 M15 sid0 single 0 sd +1 bos 3621 cts 3760 | candidates 1, passers 1 | today IC 3654 | 1B IC 3654 (preferred: pattern 3C.iv)
+[REC] sub7 M15 sid0 single 0 sd -1 bos 3760 cts 4000 | candidates 2, passers 0 | today IC 3809 | 1B IC 3809 (no passer -> all: ranked exclude_pinbar)
+[REC] sub8 M15 sid0 single 0 sd +1 bos 4027 cts 4086 | candidates 2, passers 2 | today IC 4048 | 1B IC 4048 (preferred: pattern 3C.iv)
+[REC] sub8 M15 sid0 cross 0->1 sd +1 bos 4027 cts 4157 | candidates 1, passers 1 | today IC 4131 | 1B IC 4131 (preferred: pattern 3B.iii)
+[REC] sub8 M15 sid0 cross 0->2 sd +1 bos 4027 cts 4222 | candidates 2, passers 1 | today IC 4131 | 1B IC 4131 (preferred: pattern 3B.iii)
+[STATS] IC candidates: 43
+[STATS] IC candidates passing 1B: 29
+[STATS] MS in-flight reads: 464
+[STATS] MS in-flight reads whose inner differs (first order): 14
+[STATS] capped-view records: 105
+[STATS] capped-view records whose pick moves: 12
+[STATS] drawn picks moved: 2
+[STATS] drawn records: 27
+[STATS] drawn records with no IC: 7
+[STATS] outcome: no passer: 5
+[STATS] outcome: no_ic_candidate: 2
+[STATS] outcome: passers gave no IC: 5
+[STATS] outcome: preferred: 15
+[trace] done in 16.9 s

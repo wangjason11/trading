@@ -1,5 +1,6 @@
 """PLAN_L landing 2 — Step 3, the ranking rules (`plans/PLAN_L_ic_identification_steps.md` §4; the decisions PLAN_H §6
-ICR-*): when Step 2 finds no institutional pattern, the IC is ranked over the UNFILTERED IC candidates — (1) exclude
+ICR-*): when Step 2 finds no institutional pattern, the IC is ranked over the UNFILTERED list Step 2 ran on (every IC
+candidate, or since PLAN_S step 3 Step 1B's passers — these fixtures are 1B-neutral) — (1) exclude
 pinbars, (2) maru > normal, (3) the most recent before the earliest unfilled imbalance after the oldest candidate
 STILL IN PLAY (since PLAN_P: that candidate's own immediate gap → the oldest, or its neighbour sharing the gap; the
 immediate-unfilled-imbalance rule, rule 2 until PLAN_P, became IC condition 3) — a rule set of its own (ICR-S),
@@ -26,7 +27,9 @@ import engine_v2.zones.poi_zones as poi_zones
 from engine_v2.charting._zone_render import poi_ic_hover_text
 from engine_v2.debug.export_zones import IC_CANDIDATE_COLUMNS, export_ic_candidates
 from engine_v2.multitf import entity_df_mutation as edm
-from engine_v2.tests.test_institutional_pattern import D, U, _est, _far_gap, _fib_over, _frame, _select, _Tracker
+from engine_v2.tests.test_institutional_pattern import (
+    NO_1B_META, D, U, _bos_gap, _est, _far_gap, _fib_over, _frame, _select, _Tracker,
+)
 from engine_v2.zones.cross_cycle_fib import ICReference
 from engine_v2.zones.poi_zones import (
     ALL_IC_CANDIDATES_PINBAR,
@@ -178,7 +181,7 @@ def test_no_ic_candidate_and_the_early_return_report_no_ic_candidate():
     no_gap = _select(df, 6, cts, [])                                         # condition 3 fails for 7
     assert [c.is_ic_candidate for c in no_gap.checks] == [False]
     assert _outcome(no_gap) == (None, None, None, NO_IC_CANDIDATE)
-    df.attrs["imbalances"] = [_far_gap(g) for g in gaps]
+    df.attrs["imbalances"] = [_bos_gap(6)] + [_far_gap(g) for g in gaps]      # 1B-neutral (PLAN_S step 3)
     dead = dataclasses.replace(_fib_over(df, 6, cts, 0.5, 0.7), active=False, locked=False)
     sel = poi_zones.select_ic(df, dead, POIConfig(), ic_reference=ICReference.NONE)
     assert sel.checks == () and _outcome(sel) == (None, None, None, NO_IC_CANDIDATE)
@@ -190,21 +193,31 @@ def test_the_selection_rejects_inconsistent_fields():
     ranked pick none — MS's read never passes `derive_poi_zones`' assert, so the object is its only guard)."""
     sel, _ = _sel("single")
     pick = sel.pick
-    ok = dict(checks=(), pick=pick, tiebreak=None, ip_outcome="no_pattern", ranking=None, no_ic_reason=None,
-              ic_zone_band="61.8-80")
+    ok = dict(checks=sel.checks, pick=pick, tiebreak=None, ip_outcome="no_pattern", ranking=None, no_ic_reason=None,
+              ic_zone_band="61.8-80", prior_imbalance_outcome="preferred", prior_imbalance_outranked=None)
     ICSelection(**ok)
     ICSelection(**{**ok, "ic_zone_band": "80-100", "checks": sel.checks})   # Step 1A's band (PLAN_P) — with checks
-    for bad in (dict(ic_zone_band="61.8-100"), dict(ic_zone_band=None),    # PLAN_P: the two bands only
-                dict(ic_zone_band="80-100"),                                # ... and Step 1A never runs without checks
-                dict(no_ic_reason=NO_IC_CANDIDATE), dict(pick=None), dict(tiebreak=("ic_candle_type", 1, 2, None)),
-                dict(ip_outcome="pattern", ranking=(RANKING_EXCLUDE_PINBAR, None, 2, None)),
-                dict(ip_outcome=None), dict(ip_outcome="nonsense"),
-                dict(pick=None, no_ic_reason=ALL_IC_CANDIDATES_PINBAR, ranking=(RANKING_EXCLUDE_PINBAR, None, 2, None)),
-                dict(pick=None, no_ic_reason="no_pattern"),
-                dict(pick=None, ip_outcome="pattern", no_ic_reason=ALL_IC_CANDIDATES_PINBAR),   # all pinbars: Step 2 ran, no pattern
-                dict(pick=dataclasses.replace(pick, rank="1A", shape="i")),                   # a "ranked" pick with a rank
-                dict(ip_outcome="pattern")):                                                  # a "pattern" pick without one
-        with pytest.raises(AssertionError):
+    # Each bad case fires ITS OWN assert (`match` on its message) — Step 1B's fields (PLAN_S step 3) stated consistently
+    # with it, so no 1B assert pre-empts the one under test (landing review lens 2: two lost their pins otherwise). A
+    # no-pick case says the passers gave no IC (`fallback_passers_no_ic`: 7 passes in this 1B-neutral fixture).
+    no_pick = dict(pick=None, prior_imbalance_outcome="fallback_passers_no_ic")
+    for bad, match in (
+            (dict(ic_zone_band="61.8-100"), "61.8-100"), (dict(ic_zone_band=None), r"^None$"),   # PLAN_P: the two bands
+            (dict(ic_zone_band="80-100", checks=(), pick=None, no_ic_reason=NO_IC_CANDIDATE, ip_outcome=None,
+                  prior_imbalance_outcome=None), "Step 1A ran without checks"),
+            (dict(no_ic_reason=NO_IC_CANDIDATE), "vs no_ic_reason"), (dict(pick=None), "vs no_ic_reason"),
+            (dict(tiebreak=("ic_candle_type", 1, 2, None)), r"'ic_candle_type', 1, 2, None\), 'no_pattern'"),
+            (dict(ip_outcome="pattern", ranking=(RANKING_EXCLUDE_PINBAR, None, 2, None)),
+             r"'exclude_pinbar', None, 2, None\), 'pattern'"),
+            (dict(ip_outcome=None, prior_imbalance_outcome=None), r"^\(None, None\)$"),   # no IC candidate ⇔ no Step 2
+            (dict(ip_outcome="nonsense"), "nonsense"),
+            (dict(no_pick, no_ic_reason=ALL_IC_CANDIDATES_PINBAR, ranking=(RANKING_EXCLUDE_PINBAR, None, 2, None)),
+             r"'exclude_pinbar', None, 2, None\), 'no_pattern'"),                           # a ranking needs a pick
+            (dict(no_pick, no_ic_reason="no_pattern"), r"^no_pattern$"),
+            (dict(no_pick, ip_outcome="pattern", no_ic_reason=ALL_IC_CANDIDATES_PINBAR), r"^\('pattern', None\)$"),
+            (dict(pick=dataclasses.replace(pick, rank="1A", shape="i")), r"^\('no_pattern', IPResult"),  # ranked + a rank
+            (dict(ip_outcome="pattern"), r"^\('pattern', IPResult")):                      # a "pattern" pick without one
+        with pytest.raises(AssertionError, match=match):
             ICSelection(**{**ok, **bad})
 
 
@@ -238,7 +251,7 @@ def test_ms_reads_the_ranked_ics_inner():
     for name, ic in (("oldest_in_play", 9), ("pinbar_with_the_gap", 9), ("all_pinbar", None)):
         specs, cts, gaps = FIX[name]
         df = _frame(specs)
-        df.attrs["imbalances"] = [_far_gap(g) for g in gaps]
+        df.attrs["imbalances"] = [_bos_gap(6)] + [_far_gap(g) for g in gaps]      # 1B-neutral (PLAN_S step 3)
         fib = _fib_over(df, 6, cts, 0.5, 0.7)
         inner = poi_zones.poi_inner_for_fib(df, fib, 0.70, tracker=NO_REF_TRACKER, evaluated_at=cts)
         assert inner == (None if ic is None else float(df.loc[ic, "h"]))
@@ -250,7 +263,7 @@ def _drawn(name, *, mutate=None):
     from engine_v2.tests._event_factory import make_cts_established
     specs, cts, gaps = FIX[name]
     df = _frame(specs)
-    df.attrs["imbalances"] = [_far_gap(g) for g in gaps]
+    df.attrs["imbalances"] = [_bos_gap(6)] + [_far_gap(g) for g in gaps]      # 1B-neutral (PLAN_S step 3)
     fib = _fib_over(df, 6, cts, 0.5, 0.7)
     est = [make_cts_established(cts_anchor_idx=cts, confirmed_at=cts, price=fib.cts_price, structure_id=0,
                                 cycle_id=0)]
@@ -340,7 +353,7 @@ def test_the_mirror_shifts_the_two_ranking_indices():
 def _ic_inputs(name):
     specs, cts, gaps = FIX[name]
     df = _frame(specs)
-    df.attrs["imbalances"] = [_far_gap(g) for g in gaps]
+    df.attrs["imbalances"] = [_bos_gap(6)] + [_far_gap(g) for g in gaps]      # 1B-neutral (PLAN_S step 3)
     return df, [_est(0, 0)], _Tracker([_fib_over(df, 6, cts, 0.5, 0.7)]), POIConfig()
 
 
@@ -348,7 +361,10 @@ def test_the_csv_carries_the_outcome_on_every_row_and_the_ranking_on_the_pick(tm
     """`ip_outcome` (record-level) on every row; the `ranking_*` columns on the picked row only; the ranked pick
     keeps its pattern DIAGNOSTICS (ICR-15); all pinbars -> the no-IC row `all_ic_candidates_pinbar`."""
     i = IC_CANDIDATE_COLUMNS.index("is_ic_candidate")
-    assert IC_CANDIDATE_COLUMNS[i + 1:i + 4] == ["ic_zone_band", "ip_outcome", "ip_rank"]        # PLAN_P's column
+    assert IC_CANDIDATE_COLUMNS[i + 1:i + 4] == ["ic_zone_band", "prior_imbalance_first_c2_idx",   # PLAN_P's column,
+                                                 "prior_imbalance_unfilled"]                    # then Step 1B's
+    assert IC_CANDIDATE_COLUMNS[i + 4:i + 8] == ["prior_imbalance_outcome", "prior_imbalance_passer_count",
+                                                 "ic_candidate_count", "ip_outcome"]            # (PLAN_S step 3)
     assert IC_CANDIDATE_COLUMNS[-4:] == ["ranking_rule", "ranking_runner_up_ic_idx", "ranking_in_play_count",
                                          "ranking_imbalance_first_c2_idx"]
     recs = derive_ic_candidates(*_ic_inputs("oldest_in_play"), structure_path_id="H1.main")
@@ -377,7 +393,7 @@ def _ranked_meta(rule, runner_up=None, gap=None):
     return {"ip_outcome": "no_pattern", "ip_rank": None, "ip_leg_candle_counts": None, "pattern_anchor_idx": None,
             "opp_leg_first_idx": None, "pattern_end_idx": None, "pattern_confirmed_idx": None, "ip_tiebreak": None,
             "ranking_rule": rule, "ranking_runner_up_ic_idx": runner_up, "ranking_imbalance_first_c2_idx": gap,
-            "ic_zone_band": "61.8-80"}
+            "ic_zone_band": "61.8-80", **NO_1B_META}
 
 
 @pytest.mark.parametrize("meta, text", [

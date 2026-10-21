@@ -316,7 +316,9 @@ POI activation conditions
 The IC itself is ONE per fib record since landing B: `select_ic`'s pick — the
 institutional pattern's IC (POI_ZONES_SPEC §3.4) or, with no pattern, a ranked
 IC (§3.6, PLAN_L L2, 2026-10-10), among the candidates of Step 1 (the 61.8–80
-zone) or, when it finds none, Step 1A (the 80–100 zone, PLAN_P) — the same selector MS's
+zone) or, when it finds none, Step 1A (the 80–100 zone, PLAN_P), those passing Step 1B
+preferred (the prior-imbalance preference — §3.7, PLAN_S step 3: Steps 2–3 run over the
+passers first; it never adds or removes an IC) — the same selector MS's
 in-flight sd-proximity read uses (D2), on the same fib decision since PLAN_I S5
 (MS's embedded FibTracker, CROSS_CYCLE_FIB_SPEC §8). The IC reference
 condition (IC condition 2 in POI_ZONES_SPEC §3.1's numbering; the activation

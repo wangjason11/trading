@@ -30,6 +30,7 @@ from engine_v2.zones.poi_zones import (
     RANKING_MOST_RECENT_BEFORE_IMBALANCE,
     TIEBREAK_IC_CANDLE_TYPE,
     TIEBREAK_MOST_RECENT_BEFORE_IMBALANCE,
+    prior_imbalance_narrowed,
 )
 
 
@@ -151,11 +152,45 @@ _RANKING_HOVER_PARTS = {
 }
 
 
+def _only_candidate_text(narrowed: bool) -> str:
+    """The ranked IC that entered Step 3 alone (ICR-10: no ranking rule) — `only IC candidate`, or, when Step 1B
+    narrowed the field to it (PLAN_S step 3, the user's round 6), `only preferred IC candidate` (it was the only
+    PASSER, not the only candidate). ONE wording for the POI hover and the fib hover."""
+    return "only preferred IC candidate" if narrowed else "only IC candidate"
+
+
+def _poi_narrowed(meta: dict) -> bool:
+    """Step 1B narrowed this POI's IC candidates (PLAN_S step 3) — read from its meta (`prior_imbalance_narrowed`)."""
+    return prior_imbalance_narrowed(meta["prior_imbalance_outcome"], meta["prior_imbalance_passer_count"],
+                                    meta["ic_candidate_count"])
+
+
+def _poi_prior_imbalance_hover_text(meta: dict, ic_idx: int) -> str:
+    """Step 1B's POI hover line (PLAN_S step 3; the user's rounds 6–7): when the preference NARROWED the field —
+    `<br>Prior imbalance <c2> unfilled · preferred <passers> of <candidates> IC candidates`, + ` (over pattern <rank>
+    at <IC>)` when it outranked a pattern (the IC Step 2 would pick over all the candidates, failing 1B); else ""
+    (every candidate passed, or 1B fell back — the user: "Nothing when every candidate passed or it fell back")."""
+    outranked_ic, outranked_rank = meta["prior_imbalance_outranked_ic_idx"], meta["prior_imbalance_outranked_ip_rank"]
+    assert (outranked_ic is None) == (outranked_rank is None), (
+        f"[chart] POI {ic_idx}: outranked IC {outranked_ic} vs rank {outranked_rank!r}")
+    if not _poi_narrowed(meta):
+        assert outranked_ic is None, f"[chart] POI {ic_idx}: an outranked pattern without a narrowing preference"
+        return ""
+    c2 = meta["prior_imbalance_first_c2_idx"]
+    assert c2 is not None, f"[chart] POI {ic_idx}: a preferred IC without its prior gap"
+    text = (f"<br>Prior imbalance {int(c2)} unfilled · preferred {int(meta['prior_imbalance_passer_count'])} of "
+            f"{int(meta['ic_candidate_count'])} IC candidates")
+    if outranked_ic is not None:
+        text += f" (over pattern {outranked_rank} at {int(outranked_ic)})"
+    return text
+
+
 def _poi_ranking_hover_text(meta: dict, ic_idx: int) -> str:
     """A ranked IC's POI hover line (PLAN_L §4.1; PLAN_H §6 ICR-7 / ICR-15): `No pattern · ranking rule <rule>` +
     ` over <runner-up>` + ` (gap <c2>)` when the deciding rule has them (`exclude_pinbar` neither, `ic_candle_type`
-    no gap), or `No pattern · only IC candidate` (nothing was ranked — ICR-10). NO `IC <idx>`: the POI hover's own
-    `ic_idx=` line names the IC. The pattern meta must be all None (asserted)."""
+    no gap), or `No pattern · only IC candidate` (nothing was ranked — ICR-10; `only preferred IC candidate` when
+    Step 1B narrowed the field to it — PLAN_S step 3). NO `IC <idx>`: the POI hover's own `ic_idx=` line names the
+    IC. The pattern meta must be all None (asserted)."""
     ic = int(ic_idx)
     pattern = [meta[k] for k in ("ip_rank", "ip_leg_candle_counts", "pattern_anchor_idx", "opp_leg_first_idx",
                                  "pattern_end_idx", "pattern_confirmed_idx", "ip_tiebreak")]
@@ -164,7 +199,7 @@ def _poi_ranking_hover_text(meta: dict, ic_idx: int) -> str:
     if rule is None:
         assert meta["ranking_runner_up_ic_idx"] is None and meta["ranking_imbalance_first_c2_idx"] is None, (
             f"[chart] POI {ic}: a ranking value without a ranking rule")
-        return "No pattern · only IC candidate"
+        return f"No pattern · {_only_candidate_text(_poi_narrowed(meta))}"
     assert rule in _RANKING_HOVER_PARTS, f"[chart] POI {ic} unknown ranking_rule {rule!r}"
     has_runner_up, has_gap = _RANKING_HOVER_PARTS[rule]
     runner_up, gap = meta["ranking_runner_up_ic_idx"], meta["ranking_imbalance_first_c2_idx"]
@@ -188,13 +223,15 @@ def poi_ic_hover_text(meta: dict, ic_idx: int) -> str:
     went with its rule, PLAN_P). Indices are the POI's own (entity-absolute on a
     mirrored sub POI); the counts must match the leg indices (asserted — a
     missed mirror shift would break it). A ranked IC (`ip_outcome`
-    "no_pattern", PLAN_L L2): its ranking line instead (`_poi_ranking_hover_text`). An IC from the 80–100 fallback
+    "no_pattern", PLAN_L L2): its ranking line instead (`_poi_ranking_hover_text`). Then Step 1B's line when the
+    preference narrowed the field (`_poi_prior_imbalance_hover_text`, PLAN_S step 3). An IC from the 80–100 fallback
     zone (Step 1A, `ic_zone_band`) adds `<br>IC zone 80-100 (fallback)`; the 61.8–80 band adds nothing (PLAN_P)."""
     assert meta["ic_zone_band"] in (IC_ZONE_PRIMARY, IC_ZONE_FALLBACK), (
         f"[chart] POI {ic_idx} ic_zone_band {meta['ic_zone_band']!r}")
-    band = "<br>IC zone 80-100 (fallback)" if meta["ic_zone_band"] == IC_ZONE_FALLBACK else ""
+    tail = _poi_prior_imbalance_hover_text(meta, ic_idx)            # Step 1B's line, then the band's
+    tail += "<br>IC zone 80-100 (fallback)" if meta["ic_zone_band"] == IC_ZONE_FALLBACK else ""
     if meta["ip_outcome"] == IP_OUTCOME_NO_PATTERN:
-        return _poi_ranking_hover_text(meta, ic_idx) + band
+        return _poi_ranking_hover_text(meta, ic_idx) + tail
     assert meta["ip_outcome"] == IP_OUTCOME_PATTERN, f"[chart] POI {ic_idx} ip_outcome {meta['ip_outcome']!r}"
     assert meta["ranking_rule"] is None, f"[chart] pattern POI {ic_idx} carries ranking_rule {meta['ranking_rule']!r}"
     n_init, n_opp, n_cont = (int(x) for x in meta["ip_leg_candle_counts"].split("-"))
@@ -217,7 +254,7 @@ def poi_ic_hover_text(meta: dict, ic_idx: int) -> str:
                  f"most recent before imbalance {meta['ip_tb_imbalance_first_c2_idx']}")
     else:
         assert tb is None, f"[chart] POI {ic} unknown ip_tiebreak {tb!r}"
-    return text + band
+    return text + tail
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +365,8 @@ def fib_hover_status_text(fib_st: Any, ic_row: Optional[Any]) -> str:
     end_reason` (`–` = never started, `open` = not ended), the cycle's IC
     outcome (`ic_rows_by_fib_record`; the pick = the drawn POI): `IP <rank> ·
     IC <idx>` (a pattern's IC), `No pattern · IC <idx> · ranking rule <rule>` /
-    `No pattern · IC <idx> · only IC candidate` (a ranked IC, PLAN_L L2 — the IC
+    `No pattern · IC <idx> · only IC candidate` (`… only preferred IC candidate` when Step 1B narrowed the field —
+    PLAN_S step 3, the row's `prior_imbalance_outcome` + counts) (a ranked IC, PLAN_L L2 — the IC
     index KEPT: the fib box's only pointer to its IC, ICR-15), `IC: none
     (<reason>)` (no IC → no POI: `no_ic_candidate` / `all_ic_candidates_pinbar`),
     or `IC: not evaluated (no POI record)` (no row: the POI record gate skipped
@@ -345,7 +383,9 @@ def fib_hover_status_text(fib_st: Any, ic_row: Optional[Any]) -> str:
     elif ic_row.ic_idx is None:
         ip = f"IC: none ({ic_row.reason})"
     elif ic_row.ip_outcome == IP_OUTCOME_NO_PATTERN:
-        how = "only IC candidate" if ic_row.ranking_rule is None else f"ranking rule {ic_row.ranking_rule}"
+        narrowed = prior_imbalance_narrowed(ic_row.prior_imbalance_outcome, ic_row.prior_imbalance_passer_count,
+                                            ic_row.ic_candidate_count)
+        how = _only_candidate_text(narrowed) if ic_row.ranking_rule is None else f"ranking rule {ic_row.ranking_rule}"
         ip = f"No pattern · IC {int(ic_row.ic_idx)} · {how}"
     else:
         assert ic_row.ip_outcome == IP_OUTCOME_PATTERN, (

@@ -446,9 +446,11 @@ resolver's uncut Scenario-2 read and the M1 divergence it caused are gone. The
 IP pick's own imbalance reads inside `select_ic` — IC cond3 in
 `check_ic_conditions` (the immediate gap, IC + 1 … min(IC + 2, the fib CTS anchor), since PLAN_P; + the retired
 `(candidate, fib CTS anchor]` test as information), the tiebreak rules' imbalance read (the most-recent-before-
-imbalance reference; + the immediate unfilled imbalance until PLAN_P) and, since PLAN_L L2, the ranking rules' (the
+imbalance reference; + the immediate unfilled imbalance until PLAN_P), since PLAN_L L2 the ranking rules' (the
 SAME helper on their own list — POI_ZONES_SPEC §3.6) —
-stay uncut (`evaluated_at=None`; the drawn POI's own reads, PLAN_H). A refresh on
+stay uncut (`evaluated_at=None`; the drawn POI's own reads, PLAN_H). Since PLAN_S step 3, Step 1B's read (each
+candidate's closest prior gap, `is_filled` through the candle BEFORE it, POI_ZONES_SPEC §3.7) takes no moment at
+all — every candle it reads is ≤ the candidate. A refresh on
 `st.cts.idx` itself (a lag-0 `CTS_ESTABLISHED`, a raw `CTS_UPDATED`) can
 therefore count, in the pick, a gap whose c2 is the refresh candle — one that
 forms only at the NEXT candle. The consumer gate makes that safe:

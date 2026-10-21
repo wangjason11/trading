@@ -152,10 +152,19 @@ To change any visual element:
   The builder asserts the leg counts match the leg indices (a mirror that shifted one but not the other fails at render).
   A RANKED IC (`ip_outcome` `no_pattern` — POI_ZONES_SPEC §3.6, PLAN_L L2, 2026-10-10): `No pattern · ranking rule
   <rule>` + ` over <runner-up>` + ` (gap <c2>)` when the deciding rule has them (`exclude_pinbar` neither,
-  `ic_candle_type` no gap), or `No pattern · only IC candidate` (one IC candidate — nothing ranked) — "No pattern" in
-  the place of `IP <rank>`, and NO `IC <idx>` (the hover's own `ic_idx=` line names the IC — PLAN_H §6 ICR-15); the
-  builder asserts a ranked POI's pattern meta is all None and its ranking values match its rule. No new visual style
-  (hover + CSV only, ICR-7).
+  `ic_candle_type` no gap), or `No pattern · only IC candidate` (one candidate entered Step 3 — nothing ranked;
+  `only preferred IC candidate` when Step 1B narrowed the field to it, PLAN_S step 3) — "No pattern" in the place of
+  `IP <rank>` (since PLAN_S step 3 Step 2's outcome over the candidates Steps 2–3 ran on — POI_ZONES_SPEC §3.7), and
+  NO `IC <idx>` (the hover's own `ic_idx=` line names the IC — PLAN_H §6 ICR-15); the builder asserts a ranked POI's
+  pattern meta is all None and its ranking values match its rule. No new visual style (hover + CSV only, ICR-7).
+  **Step 1B's line** (PLAN_S step 3, 2026-10-21; the user's rounds 6–7; `_poi_prior_imbalance_hover_text`), after the
+  IP / ranking line and before the band line, ONLY when the prior-imbalance preference NARROWED the field
+  (`poi_zones.prior_imbalance_narrowed`: outcome `preferred` and fewer passers than IC candidates): `Prior imbalance
+  <c2> unfilled · preferred <passers> of <candidates> IC candidates` + ` (over pattern <rank> at <IC>)` when it
+  outranked a pattern (POI meta `prior_imbalance_*`, `ic_candidate_count`) — e.g. confluence sub 0 cycle 2's 1142:
+  `No pattern · only preferred IC candidate` / `Prior imbalance 1140 unfilled · preferred 1 of 3 IC candidates`; sub
+  3 cycle 1's 2821 adds ` (over pattern 3B.iii at 2808)`; nothing when every candidate passed or 1B fell back. The
+  builder asserts an outranked pattern only with a narrowing preference, and a preferred IC's gap.
 - Style keys: `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line`
 
 ### 8) Fibonacci box (Week 7; H1 chart — and the M15 lens charts since 2026-10-06, PLAN_H §8.9 F1)
@@ -173,7 +182,8 @@ To change any visual element:
   the status (+ ` (locked)`), `life=[start_idx, end_idx] end_reason` (`–` = never started, `open` = not ended) and the
   cycle's IC outcome from `attrs["ic_candidates"]` (`ic_rows_by_fib_record`: keyed by (sid, cycle, BOS anchor, CTS
   anchor), prefixed with `sub_id` on a lens — a sub's sid restarts at 0; since PLAN_L L2, 2026-10-10): `IP <rank> · IC <idx>` (a pattern's IC = the drawn POI), `No pattern · IC <idx> · ranking rule <rule>`
-  / `No pattern · IC <idx> · only IC candidate` (a ranked IC — the IC index KEPT here: the fib box's only pointer to
+  / `No pattern · IC <idx> · only IC candidate` (`… only preferred IC candidate` when Step 1B narrowed the field —
+  PLAN_S step 3, the picked row's `prior_imbalance_outcome` + counts) (a ranked IC — the IC index KEPT here: the fib box's only pointer to
   its IC, PLAN_H §6 ICR-15), `IC: none (<reason>)` (no IC, no POI — PLAN_H C1; the reason `no_ic_candidate` or
   `all_ic_candidates_pinbar`, POI_ZONES_SPEC §3.5), or `IC: not evaluated (no POI record)` (the POI record
   gate skipped it: ended before locking, or no CTS_ESTABLISHED; `IP: none (…)` / `IP: not evaluated (…)` and the

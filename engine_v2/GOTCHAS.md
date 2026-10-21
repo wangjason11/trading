@@ -2064,6 +2064,18 @@ the fixture pins the terminal, not the IC rule, so its MS read is stubbed to "no
 structure_engine, "poi_inner_for_fib", lambda df, fib, ft, **kw: None)` — `compute_bounded_structure` takes no
 resolver argument; `structure_engine` reads the module global at call time).
 
+## A new IC step in front of Steps 2–3 reshapes the fixtures' picks — make them neutral, test the step on its own (PLAN_S step 3, 2026-10-21)
+
+Step 1B (the prior-imbalance preference) failed 34 existing tests at once (6 files) though no Step 2 / 3 rule
+changed: the IC fixtures inject never-filled sd gaps (`_far_gap`) as each candidate's IMMEDIATE gap (IC condition
+3), and every such gap is also the NEXT candidate's closest PRIOR gap, while the oldest candidate has none — so 1B
+narrowed the candidates and moved picks the tests pin for Steps 2–3 (`two_immediate`: 7 → 13). Fix: the shared
+selection fixture `test_institutional_pattern._select` adds a never-filled gap AT the BOS anchor (`_bos_gap`) and
+asserts the selection 1B-NEUTRAL (passers == candidates) — every candidate passes, Steps 2–3 run over all, as
+designed; direct-`attrs` fixtures got the same gap; the 1B tests opt out (`neutral_1b=False`). The gap touches no
+other IC read (they all read gaps AFTER a candidate ≥ the anchor). Also: a mutant that names a merged gap by its
+LAST c2 survived until a test used a merged gap — every fixture gap was one candle.
+
 ## "Why didn't the new tiebreaker move this POI?" — the tiebreakers run ONLY inside a (rank, shape) tie (IP tiebreaker update, 2026-10-09)
 
 The institutional pattern picks the best (rank, shape) first; the tiebreakers (IC candle type → most recent before
@@ -2076,7 +2088,10 @@ candidate; the expected 860 has an unfilled immediate gap but no pattern (contin
 the IC candidates are 859 (normal, gap 861), 860 (a PINBAR sharing that gap) and 865 (pinbar), none patterned →
 ranking rule 1 excludes the pinbars → 859.
 
-**Check, in the `*_ic_candidates.csv` rows of the record (`*_ip_candidates.csv` before PLAN_L L1):** how many IC candidates (`is_ic_candidate` True — before L1: `touches_zone` True, empty
+**Check, in the `*_ic_candidates.csv` rows of the record (`*_ip_candidates.csv` before PLAN_L L1):** FIRST, since
+PLAN_S step 3, the record's `prior_imbalance_outcome` — `preferred` with `prior_imbalance_passer_count` <
+`ic_candidate_count` means Steps 2–3 ran over the PASSERS only (`prior_imbalance_unfilled` True): count among them;
+then how many IC candidates (`is_ic_candidate` True — before L1: `touches_zone` True, empty
 `ic_ref_reason`) carry the best `ip_rank` — rank + shape, e.g. "3C.ii" (one → no tie, no
 tiebreaker ran — `ip_tiebreak` empty on the picked row); a non-picked candidate with an empty `ip_rank` has no pattern
 (`reason` = the first failing rule). When reporting a tiebreak change, also list the records where its criterion

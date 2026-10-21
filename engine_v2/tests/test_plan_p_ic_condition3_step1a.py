@@ -27,7 +27,9 @@ from engine_v2.tests._event_factory import make_cts_established
 from engine_v2.tests.test_fib_chart_render import _ip
 from engine_v2.tests.test_institutional_pattern import (
     D,
+    NO_1B_META,
     U,
+    _bos_gap,
     _far_gap,
     _fib_over,
     _frame,
@@ -97,7 +99,7 @@ def _pinbars_then_a_maru():
     assert [str(df.loc[i, "candle_type"]) for i in (7, 9, 11)] == ["pinbar", "pinbar", "maru"]
     assert [_touches(df, i, _zone(fib, IC_ZONE_PRIMARY)) for i in (7, 9, 11)] == [True, True, False]
     assert _touches(df, 11, _zone(fib, IC_ZONE_FALLBACK))
-    df.attrs["imbalances"] = [_far_gap(g) for g in _GAPS]
+    df.attrs["imbalances"] = [_bos_gap(6)] + [_far_gap(g) for g in _GAPS]      # 1B-neutral (PLAN_S step 3)
     return df, fib
 
 
@@ -160,7 +162,7 @@ def test_the_band_maps_to_its_zone_parameters():
 
 def _drawn_step_1a():
     df = _tb2_frame()
-    df.attrs["imbalances"] = [_far_gap(g) for g in _GAPS]
+    df.attrs["imbalances"] = [_bos_gap(6)] + [_far_gap(g) for g in _GAPS]      # 1B-neutral (PLAN_S step 3)
     fib = _fib_over(df, 6, 12, *_ABOVE)
     est = [make_cts_established(cts_anchor_idx=12, confirmed_at=12, price=fib.cts_price, structure_id=0,
                                 cycle_id=0)]
@@ -213,7 +215,7 @@ def test_the_poi_hover_names_the_fallback_band_only():
     ranked = {"ip_outcome": "no_pattern", "ip_rank": None, "ip_leg_candle_counts": None, "pattern_anchor_idx": None,
               "opp_leg_first_idx": None, "pattern_end_idx": None, "pattern_confirmed_idx": None, "ip_tiebreak": None,
               "ranking_rule": None, "ranking_runner_up_ic_idx": None, "ranking_imbalance_first_c2_idx": None,
-              "ic_zone_band": IC_ZONE_FALLBACK}
+              "ic_zone_band": IC_ZONE_FALLBACK, **NO_1B_META}
     assert poi_ic_hover_text(ranked, 1934) == "No pattern · only IC candidate<br>IC zone 80-100 (fallback)"
     with pytest.raises(AssertionError, match="ic_zone_band"):            # a POI without a known band fails loudly
         poi_ic_hover_text({**ranked, "ic_zone_band": None}, 1934)
@@ -242,7 +244,7 @@ def test_the_fib_status_rejects_a_row_without_a_known_band():
 def test_ms_reads_a_step_1a_ics_inner():
     """One selector (PLAN_H D2): MS's in-flight read (`poi_inner_for_fib`) takes the Step 1A pick — IC 7's high."""
     df = _tb2_frame()
-    df.attrs["imbalances"] = [_far_gap(g) for g in _GAPS]
+    df.attrs["imbalances"] = [_bos_gap(6)] + [_far_gap(g) for g in _GAPS]      # 1B-neutral (PLAN_S step 3)
     fib = _fib_over(df, 6, 12, *_ABOVE)
     assert poi_zones.poi_inner_for_fib(df, fib, 0.70, tracker=NO_REF_TRACKER, evaluated_at=12) == float(
         df.loc[7, "h"])

@@ -32,6 +32,7 @@ from engine_v2.structure.event_fields import CTS_UPDATED_RAW_VIA
 from engine_v2.structure.structure_engine import compute_bounded_structure
 from engine_v2.tests._event_factory import make_cts_established, make_event
 from engine_v2.tests.test_imbalance_c3_knowability import _df, _gap, _ip_ready
+from engine_v2.tests.test_institutional_pattern import NO_1B_META
 from engine_v2.tests.test_unified_probe import (
     _make_ip_moment_after_anchor_data,
     _make_ip_multicycle_data,
@@ -137,8 +138,10 @@ def _m1_frame(*, extra_v_pick=True):
     """`test_imbalance_c3_knowability`'s M1 frame (IC 32 `2A.i`, inner 1.13) + a LATER bearish candle 36 fully
     inside the zone, with no pattern (its continuation would be true dojis only) — the V30 / V60 / V90 pick. Since
     PLAN_P each candidate has its IMMEDIATE unfilled gap (33 / 37 — IC condition 3; far below every later low, never
-    filled)."""
-    df = _df(60, [_gap(33, top=1.05, bottom=1.04), _gap(37, top=1.05, bottom=1.04), _gap(40, top=1.30, bottom=1.20)])
+    filled). Since PLAN_S step 3 a never-filled gap AT the BOS anchor (30) keeps the frame neutral to Step 1B (every
+    candidate has an unfilled prior gap — `test_institutional_pattern._bos_gap`)."""
+    df = _df(60, [_gap(30, top=1.05, bottom=1.04), _gap(33, top=1.05, bottom=1.04), _gap(37, top=1.05, bottom=1.04),
+                  _gap(40, top=1.30, bottom=1.20)])
     for i, base in zip(range(25, 30), (1.00, 1.02, 1.04, 1.06, 1.08)):
         df.loc[i, ["o", "h", "l", "c"]] = [base, base + 0.021, base - 0.001, base + 0.02]
     df.loc[31, ["o", "h", "l", "c"]] = [1.10, 1.121, 1.099, 1.12]
@@ -353,7 +356,10 @@ def test_poi_meta_carries_the_pick_in_place_of_the_variants():
         "ip_outcome", "ic_zone_band", "ip_rank", "ip_leg_candle_counts", "pattern_anchor_idx", "opp_leg_first_idx",
         "pattern_end_idx", "pattern_confirmed_idx", "ip_tiebreak", "ip_tb_runner_up_ic_idx", "ip_tied_count",
         "ip_tb_imbalance_first_c2_idx", "ranking_rule", "ranking_runner_up_ic_idx", "ranking_in_play_count",
-        "ranking_imbalance_first_c2_idx", "status", "activation_history", "bos_anchor_idx", "cts_anchor_idx",
+        "ranking_imbalance_first_c2_idx",
+        "prior_imbalance_outcome", "prior_imbalance_first_c2_idx", "prior_imbalance_passer_count", "ic_candidate_count",
+        "prior_imbalance_outranked_ic_idx", "prior_imbalance_outranked_ip_rank",            # PLAN_S step 3
+        "status", "activation_history", "bos_anchor_idx", "cts_anchor_idx",
         "cts_established_idx",
     ]
     assert poi.meta["ip_outcome"] == "pattern"                                       # PLAN_L L2
@@ -418,7 +424,7 @@ def _meta(rank, counts, anchor, opp_first, end, tb=None, runner=None, c2=None, b
     return {"ip_outcome": "pattern", "ip_rank": rank, "ip_leg_candle_counts": counts, "pattern_anchor_idx": anchor,
             "opp_leg_first_idx": opp_first, "pattern_end_idx": end, "ip_tiebreak": tb,
             "ip_tb_runner_up_ic_idx": runner, "ip_tb_imbalance_first_c2_idx": c2, "ranking_rule": None,
-            "ic_zone_band": band}
+            "ic_zone_band": band, **NO_1B_META}
 
 
 def test_hover_single_legs_print_one_index_each():

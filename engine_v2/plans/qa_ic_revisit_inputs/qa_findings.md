@@ -245,3 +245,59 @@ window); Step 4 deferred. Condition 1 unchanged.
   The closest prior gap committed ON the IC: 2930, 2406 (0.70), + 2721 (0.65) — all armed by the IC too.
 - A candidate with NO prior sd gap in the window: 5 of 43 (922, 923, 1934, 1935, 4027). Counting it as a passer (EN)
   moves no pick; default: it fails (no imbalance is not "an unfilled imbalance").
+
+## Round 6 (2026-10-21, PLAN_S step 3's session) — names + hover, the user's choices VERBATIM
+
+Asked after the audit and the variant replay (PLAN_S §4.3 / §4.4: on HEAD `1765499` the variant moves exactly the two
+predicted picks, 97 cells, no cascade). The variant exposed a wording bug: with today's hover code both moved POIs
+read `No pattern · only IC candidate` (1142 is the only PASSER of 3 candidates, 2821 of 2). Every name candidate was
+listed in text first (PLAN_S §4.3.1). The user selected:
+
+> "prior_imbalance_* (Recommended)" — `prior_imbalance_first_c2_idx` + `prior_imbalance_unfilled` per check;
+> `prior_imbalance_outcome` = preferred / fallback_passers_no_ic / fallback_no_passer.
+>
+> "Fix + narrowing line (Recommended)" — the option's text: "Fix the wording, and add a POI line only when 1B
+> narrowed the field (adds 2 count keys to the POI meta). Nothing when every candidate passed or it fell back." —
+> the preview: `No pattern · only preferred IC candidate` /
+> `Prior imbalance 1140 unfilled · preferred 1 of 3 IC candidates`; fib hover `No pattern · IC 1142 · only preferred
+> IC candidate`; a POI where all candidates passed (e.g. sub 3 cross 2930): no 1B line.
+
+Defaults stated with the question and not objected to: the two per-check values on every CSV row (computed for every
+check on the drawn record; MS's read only for its candidates); a degenerate (zero-size) merged closest gap counts as
+filled → fails 1B (the fill check's own rule; 0 on the window). Consequence recorded in PLAN_S §4.3.1: the two counts
+(`prior_imbalance_passer_count`, `ic_candidate_count`) go on the CSV rows too — the fib hover is built from the CSV's
+picked row, so both hovers read one value.
+
+## Round 7 (2026-10-21) — "No pattern" when 1B moves the IC off a PATTERN candidate, the user's choice VERBATIM
+
+Raised by the plan cold review (lens A, MAJOR): on sub 3 cycle 1 today's IC 2808 carries pattern 3B.iii but fails 1B
+(its prior gap 2759..2760 armed 2794, committed 2795); the pick 2821 has none — so `ip_outcome` pattern → no_pattern
+on all 34 rows and the hover `No pattern · …`, while today's meaning is "no pattern among the IC candidates". Shown
+to the user with the before / after hovers and the CSV. The question: "When 1B moves the IC off a candidate that HAS
+a pattern (sub 3 cycle 1: 2808 pattern 3B.iii → 2821 no pattern), how should 'No pattern' read?" The user selected:
+
+> "Name the outranked pattern" — the option's text: "As option 1, plus the 1B line names the best pattern the
+> preference outranked (2 more POI meta keys: its rank + IC). POI hover only." (option 1: "ip_outcome = Step 2's
+> outcome over the candidates Steps 2–3 ran on (the preferred ones when 1B narrowed); the 1B line already says '1 of
+> 2'. Spec + GLOSSARY get the redefinition. No new keys.") — the preview: `No pattern · only preferred IC candidate` /
+> `Prior imbalance 2810 unfilled · preferred 1 of 2 IC candidates (over pattern 3B.iii at 2808)`; fib hover
+> `No pattern · IC 2821 · only preferred IC candidate`.
+
+**Decided:** `ip_outcome` = Step 2's outcome over the candidates Steps 2–3 ran on. The outranked pattern (the
+author's reading of "the best pattern the preference outranked"): the IC Step 2 would pick over ALL the candidates
+(`select_institutional_pattern` — the best (rank, shape) + the tiebreak rules), when that IC FAILS 1B; else none (if
+it passes, the preference outranked nothing — e.g. sub 8 cross 0→2's 4131, 3B.iii, a passer). On the window: only
+sub 3 cycle 1 (2808, 3B.iii). POI meta + hover only (not the CSV, not the fib hover).
+
+## The chart look (2026-10-21) — step 3, the user's reply VERBATIM
+
+After `/compare` vs S_S2 (= the variant exactly, PLAN_S §6 Step 3) the user was shown the two moved POIs (confluence
+sub 0 cycle 2 1216 → 1142; sub 3 cycle 1, both lenses, 2808 → 2821), the new hover lines, and the author's defaults to
+confirm or change while looking: the count names `prior_imbalance_passer_count` / `ic_candidate_count`; the outranked
+names `prior_imbalance_outranked_ic_idx` / `prior_imbalance_outranked_ip_rank`; a merged run of gap candles = one gap;
+a gap straddling the BOS anchor does not count; no prior gap fails 1B; a zero-size gap counts as filled; the outranked
+pattern by Step 2's tiebreak rules, only when 1B narrowed the field. The user:
+
+> "looks good go ahead"
+
+**Decided:** every default stands as built; step 3 commits (`/commit-save`).

@@ -48,6 +48,8 @@ IC_CANDIDATE_COLUMNS = [
     "bos_anchor_idx", "cts_anchor_idx", "sd",
     "ic_idx", "candle_type", "agreed_dir", "touches_zone", "ic_ref_reason", "immediate_imbalance_first_c2_idx",
     "has_unfilled_imbalance_after", "is_ic_candidate", "ic_zone_band",
+    "prior_imbalance_first_c2_idx", "prior_imbalance_unfilled", "prior_imbalance_outcome",
+    "prior_imbalance_passer_count", "ic_candidate_count",
     "ip_outcome", "ip_rank", "reason",
     "pattern_anchor_idx", "opp_leg_first_idx", "pattern_end_idx", "pattern_confirmed_idx", "ip_leg_candle_counts",
     "legs",
@@ -81,8 +83,11 @@ def export_ic_candidates(records: list, path: str | Path) -> None:
     PLAN_P, `is_ic_candidate`; `has_unfilled_imbalance_after` = the retired
     condition 3, information only) and its pattern (classified for every row;
     only an IC candidate is ever picked), `ic_zone_band` (the zone of condition
-    4: `61.8-80`, or `80-100` when Step 1A ran — every row of the record, PLAN_P)
-    and `ip_outcome` (Step 2's outcome, every row of the record) — + one no-IC row
+    4: `61.8-80`, or `80-100` when Step 1A ran — every row of the record, PLAN_P),
+    Step 1B's test per check row (`prior_imbalance_first_c2_idx`, `prior_imbalance_unfilled`) and its
+    record values on every row (`prior_imbalance_outcome`, `prior_imbalance_passer_count`, `ic_candidate_count`
+    — PLAN_S step 3) and `ip_outcome` (Step 2's outcome over the candidates Steps 2–3 ran on, every row of the
+    record) — + one no-IC row
     (`ic_idx` empty, `reason` `no_ic_candidate` / `all_ic_candidates_pinbar`) per
     record without a pick; the tiebreak / ranking fields on the picked row
     (PLAN_L L2). `legs` = `initial first..last|opp first..last|continuation
@@ -115,6 +120,11 @@ def export_ic_candidates(records: list, path: str | Path) -> None:
             "has_unfilled_imbalance_after": r.has_unfilled_imbalance_after,
             "is_ic_candidate": r.is_ic_candidate,
             "ic_zone_band": r.ic_zone_band,
+            "prior_imbalance_first_c2_idx": r.prior_imbalance_first_c2_idx,
+            "prior_imbalance_unfilled": r.prior_imbalance_unfilled,
+            "prior_imbalance_outcome": r.prior_imbalance_outcome,
+            "prior_imbalance_passer_count": r.prior_imbalance_passer_count,
+            "ic_candidate_count": r.ic_candidate_count,
             "ip_outcome": r.ip_outcome,
             "ip_rank": r.ip_rank,
             "reason": r.reason,
