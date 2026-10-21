@@ -838,8 +838,10 @@ Two independent legs, both in `qa_opp_sd_zones_inputs/build/`:
 
 ### 9.6 Build log (2026-10-20)
 
-- **Step 3 — BUILT, variant replay + `/compare` vs S_R2 = §9.4's prediction; NOT committed (the landing review, then the
-  user's chart look, then the commit on the user's go).**
+- **Step 3 — LANDED `d424099` (2026-10-20, on the user's go: "yes go ahead"); save S_R3 `20261020_225749_d424099`
+  (save `d613dfa`, trunk `630f024`; the save replay = the validated variant, CSV md5 + figure hashes; fetch gate PASS)
+  = `LATEST_<branch>`. Built → variant replay + `/compare` vs S_R2 = §9.4's prediction → the landing review (§9.7)
+  → its fixes → the user's decisions (§9.8) → the commit. PLAN_R COMPLETE (steps 0a–3).**
   - **Code** (`zones/zone_proximity.py`, as §9.5): `CycleProximityScan` — `counters` and the `prox_ref_cap` gate gone;
     `_pick_reference` → `_update_references(first)` (the start state on the last rungs; phase A, the forced moves,
     through the gate, a last-rung pick locks; phase B, `sd` then `opp_sd`, the closest rung inside the reference that

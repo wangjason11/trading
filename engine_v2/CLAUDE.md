@@ -32,7 +32,8 @@ Naming-Standard audit landed 2026-10-12 (PLAN_N), then its H1 range-hover follow
 next sessions, in the user's order (`IDEA_PARKING_LOT.md` §D "SESSION ORDER"): the IC identification + cross-cycle fib
 questions and edits (done 2026-10-13: PLAN_O + PLAN_P), the opposite-direction (CTS-zone) proximity-trigger edits
 (under way: PLAN_Q landed 2026-10-14 on the sd side — the scan reads a POI like a KL zone; PLAN_R steps 0a–2
-landed 2026-10-20 — sub zones join the proximity reference ladders; PLAN_R step 3, the gap gate, next), then item 3, zone size
+landed 2026-10-20 — sub zones join the proximity reference ladders; step 3, the proximity reference gate,
+landed 2026-10-20 — PLAN_R complete), then item 3, zone size
 adjustments),
 Part 2 entry decisions, Part 3 other decisions.
 
