@@ -193,14 +193,19 @@ class ImbalanceInstance:
           Stroke 1 (armed): first candle retracing >= fill_threshold into the gap.
             Bullish: candle.low  <= gap_top    - gap_size * fill_threshold
             Bearish: candle.high >= gap_bottom + gap_size * fill_threshold
-          Stroke 2 (confirmed): first candle at idx >= armed_idx where the close
-          passes the gap outer in the imbalance's direction.
+          Stroke 2 (confirmed): first candle at idx > armed_idx (a SEPARATE, later
+          candle) where the close is at or past the gap outer in the imbalance's
+          direction.
             Bullish: candle.close >= gap_top
             Bearish: candle.close <= gap_bottom
 
-        Filled iff both strokes occur within (end_idx, check_to_idx]. Both can
-        fire on the same candle (rare). Each stroke latches on first occurrence;
-        the state machine is monotonic (0 -> armed -> filled, no regression).
+        Filled iff both strokes occur within (end_idx, check_to_idx], on separate
+        candles: the arming candle's own close never counts, so it cannot fill
+        the gap by itself (PLAN_S step 2 — the user, 2026-10-21: "the 2nd
+        condition for filled must be met by a different candle after the armed
+        candle"; before it a pinbar could do both, ~30 % of fills). Each stroke
+        latches on first occurrence; the state machine is monotonic (0 -> armed ->
+        filled, no regression).
 
         Degenerate gap (gap_size <= 0): returns True (safe default — treat
           invalid gap as filled).
@@ -246,10 +251,10 @@ class ImbalanceInstance:
                 stroke2_level = self.gap_top
                 armed = False
                 for pos in range(lo, hi + 1):
+                    if armed and c_arr[pos] >= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one
+                        return True
                     if not armed and l_arr[pos] <= stroke1_level:
                         armed = True
-                    if armed and c_arr[pos] >= stroke2_level:
-                        return True
             elif self.direction == -1:
                 h_arr = df["h"].to_numpy(dtype=float)
                 c_arr = df["c"].to_numpy(dtype=float)
@@ -257,14 +262,15 @@ class ImbalanceInstance:
                 stroke2_level = self.gap_bottom
                 armed = False
                 for pos in range(lo, hi + 1):
+                    if armed and c_arr[pos] <= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one
+                        return True
                     if not armed and h_arr[pos] >= stroke1_level:
                         armed = True
-                    if armed and c_arr[pos] <= stroke2_level:
-                        return True
             return False
 
         # Fallback: label-based loop for a non-contiguous index (rare/never in
-        # practice). Verbatim pre-optimization implementation.
+        # practice). The pre-optimization loop, with PLAN_S step 2's reorder (stroke 2
+        # tested before stroke 1 latches on a candle — the arming candle's close never counts).
         if self.direction == 1:
             stroke1_level = self.gap_top - self.gap_size * fill_threshold
             stroke2_level = self.gap_top
@@ -272,10 +278,10 @@ class ImbalanceInstance:
             for idx in range(self.end_idx + 1, check_to_idx + 1):
                 if idx not in df.index:
                     continue
+                if armed and float(df.loc[idx, "c"]) >= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one
+                    return True
                 if not armed and float(df.loc[idx, "l"]) <= stroke1_level:
                     armed = True
-                if armed and float(df.loc[idx, "c"]) >= stroke2_level:
-                    return True
         elif self.direction == -1:
             stroke1_level = self.gap_bottom + self.gap_size * fill_threshold
             stroke2_level = self.gap_bottom
@@ -283,10 +289,10 @@ class ImbalanceInstance:
             for idx in range(self.end_idx + 1, check_to_idx + 1):
                 if idx not in df.index:
                     continue
+                if armed and float(df.loc[idx, "c"]) <= stroke2_level:  # stroke 2 — only on a candle AFTER the arming one
+                    return True
                 if not armed and float(df.loc[idx, "h"]) >= stroke1_level:
                     armed = True
-                if armed and float(df.loc[idx, "c"]) <= stroke2_level:
-                    return True
 
         return False
 

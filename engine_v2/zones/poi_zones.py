@@ -1326,10 +1326,11 @@ def _compute_fill_idx_cache(
 
     ``armed_idx`` — first candle in ``(end_idx, end-of-df]`` reaching the
     stroke-1 retrace level (``>= fill_threshold`` into the gap).
-    ``confirmed_fill_idx`` — first candle at idx ``>= armed_idx`` where the
-    close passes the gap outer in the instance's direction (stroke 2).
-    Either or both can be ``None`` (never armed / armed but never confirmed).
-    Both can be equal (same-candle stroke 1+2 — rare but legal).
+    ``confirmed_fill_idx`` — first candle at idx ``> armed_idx`` (a separate,
+    later candle — PLAN_S step 2) where the close is at or past the gap outer
+    in the instance's direction (stroke 2). Either or both can be ``None``
+    (never armed / armed but never confirmed); when both are set,
+    ``confirmed_fill_idx > armed_idx``.
 
     Mirrors :meth:`ImbalanceInstance.is_filled` exactly: a caller that asked
     ``is_filled(check_to_idx=t)`` would get the same boolean as
@@ -1411,11 +1412,12 @@ def _compute_fill_idx_cache(
             if stroke1_hits.size:
                 armed_pos = start_pos + int(stroke1_hits[0])
                 armed_idx = _idx_from_pos(armed_pos)
-                # Stroke 2 scan starts AT armed_pos (same-candle fill is legal).
-                slice_c = c_arr[armed_pos:]
+                # Stroke 2 scan starts AFTER armed_pos — the arming candle's own
+                # close never counts (PLAN_S step 2, separate candles).
+                slice_c = c_arr[armed_pos + 1:]
                 stroke2_hits = np.where(slice_c >= stroke2_level)[0]
                 if stroke2_hits.size:
-                    confirmed_pos = armed_pos + int(stroke2_hits[0])
+                    confirmed_pos = armed_pos + 1 + int(stroke2_hits[0])
                     confirmed_fill_idx = _idx_from_pos(confirmed_pos)
         elif inst.direction == -1:
             stroke1_level = inst.gap_bottom + inst.gap_size * fill_threshold
@@ -1425,10 +1427,10 @@ def _compute_fill_idx_cache(
             if stroke1_hits.size:
                 armed_pos = start_pos + int(stroke1_hits[0])
                 armed_idx = _idx_from_pos(armed_pos)
-                slice_c = c_arr[armed_pos:]
+                slice_c = c_arr[armed_pos + 1:]
                 stroke2_hits = np.where(slice_c <= stroke2_level)[0]
                 if stroke2_hits.size:
-                    confirmed_pos = armed_pos + int(stroke2_hits[0])
+                    confirmed_pos = armed_pos + 1 + int(stroke2_hits[0])
                     confirmed_fill_idx = _idx_from_pos(confirmed_pos)
 
         cache[id(inst)] = (armed_idx, confirmed_fill_idx)
@@ -1498,7 +1500,8 @@ def _compute_poi_activation_history(
                     by t (its first c3 has closed: `inst.formed_at <= t` —
                     Plan F) overlaps `(ic_idx, t]` and is not yet
                     committed-filled (two-stroke: stroke 1 = the fill_threshold retrace,
-                    stroke 2 = close past gap outer). Flips as imbalances
+                    stroke 2 = a LATER candle's close at / past the gap outer).
+                    Flips as imbalances
                     form / commit-fill.
       Condition 5 — The touch: the IC candle touches the zone (inclusive
                     edges) of the fib AS OF t in `config`'s band — the caller

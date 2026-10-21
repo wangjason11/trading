@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from engine_v2.common.types import ImbalanceInstance
+from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD, ImbalanceInstance
 from engine_v2.patterns.imbalance import (
     compute_imbalance,
     has_unfilled_imbalance,
@@ -143,17 +143,17 @@ def test_bullish_then_bearish_adjacent_are_separate():
 # ---------- is_filled — two-stroke state machine ----------
 # Gap geometry for the bullish setup used throughout:
 #   gap_bottom = df[0].h = 1.00, gap_top = df[2].l = 1.10, gap_size = 0.10
-#   stroke 1 level (70% retrace): 1.10 - 0.10*0.70 = 1.03 (low must be <= 1.03)
-#   stroke 2 level: 1.10 (close must be >= 1.10)
+#   stroke 1 level (the default IMBALANCE_FILL_THRESHOLD, 65% retrace): 1.10 - 0.10*0.65 = 1.035 (low <= 1.035)
+#   stroke 2 level: 1.10 (close must be >= 1.10), on a candle AFTER the arming one (PLAN_S step 2)
 
 
 def test_is_filled_no_stroke1_unfilled_bullish():
-    """Neither stroke fires (low stays above 1.03) → unfilled."""
+    """Neither stroke fires (low stays above 1.035) → unfilled."""
     df = _make_df([
         (0.95, 1.00, 0.90, 0.95),   # 0
         (1.02, 1.08, 1.01, 1.07),   # 1: imbalance
         (1.10, 1.15, 1.10, 1.14),   # 2: c3
-        (1.08, 1.12, 1.05, 1.11),   # 3: low=1.05 > 1.03 → no stroke 1
+        (1.08, 1.12, 1.05, 1.11),   # 3: low=1.05 > 1.035 → no stroke 1
     ])
     out = compute_imbalance(df)
     inst = out.attrs["imbalances"][0]
@@ -192,27 +192,108 @@ def test_is_filled_stroke1_then_stroke2_filled_bullish():
     assert inst.is_filled(out, check_to_idx=4) is True
 
 
-def test_is_filled_stroke1_and_stroke2_same_candle_bullish():
-    """Same candle satisfies both strokes → filled at that idx."""
-    df = _make_df([
-        (0.95, 1.00, 0.90, 0.95),   # 0
-        (1.02, 1.08, 1.01, 1.07),   # 1: imbalance
-        (1.10, 1.15, 1.10, 1.14),   # 2: c3
-        (1.05, 1.13, 1.02, 1.12),   # 3: low=1.02 (stroke 1) AND close=1.12 (stroke 2)
-    ])
-    out = compute_imbalance(df)
-    inst = out.attrs["imbalances"][0]
-    assert inst.is_filled(out, check_to_idx=3) is True
+# The separate-candles fixtures (PLAN_S step 2, the user 2026-10-21: "the 2nd condition for filled must be met by a
+# different candle after the armed candle"): candle 3 arms the gap AND closes past its outer edge — that close does NOT
+# count; a LATER candle closing at / past the edge fills it. Candle 4 is a RED candle in the bullish case (it retraces,
+# yet closes above the gap top — stroke 2 asks where the close is, not which way the candle moved: H1 450, PLAN_S §3.1).
+# The "armed through a close inside" cases: candle 4 closes back INSIDE the gap — stroke 1 stays latched — and candle 5
+# fills it (the landing review's finding 2: every other fixture fills at armed + 1).
+_SAME_CANDLE_BULL = [
+    (0.95, 1.00, 0.90, 0.95),   # 0: c1 (gap_bottom 1.00)
+    (1.02, 1.08, 1.01, 1.07),   # 1: c2 bullish imbalance
+    (1.10, 1.15, 1.10, 1.14),   # 2: c3 (gap_top 1.10)
+    (1.05, 1.13, 1.02, 1.12),   # 3: low 1.02 arms; close 1.12 >= 1.10 on the ARMING candle — not counted
+    (1.13, 1.14, 1.09, 1.11),   # 4: red, close 1.11 >= 1.10 → stroke 2
+]
+_SAME_CANDLE_BULL_AT_EDGE = _SAME_CANDLE_BULL[:4] + [
+    (1.13, 1.14, 1.09, 1.10),   # 4: close == gap_top exactly → counts (at or past the edge)
+]
+_ARMED_THROUGH_A_CLOSE_INSIDE_BULL = _SAME_CANDLE_BULL[:4] + [
+    (1.12, 1.13, 1.06, 1.07),   # 4: close 1.07 inside the gap (low 1.06 does not re-arm: 1.06 > 1.035) — still armed
+    (1.07, 1.13, 1.06, 1.12),   # 5: close 1.12 >= 1.10 → stroke 2
+]
+_SAME_CANDLE_BEAR = [
+    (1.20, 1.25, 1.18, 1.22),   # 0: c1 (gap_top 1.18)
+    (1.10, 1.12, 1.05, 1.07),   # 1: c2 bearish imbalance
+    (1.04, 1.10, 1.02, 1.05),   # 2: c3 (gap_bottom 1.10); stroke 1: high >= 1.10 + 0.08*0.65 = 1.152
+    (1.12, 1.16, 1.05, 1.08),   # 3: high 1.16 arms; close 1.08 <= 1.10 on the ARMING candle — not counted
+    (1.06, 1.09, 1.03, 1.08),   # 4: close 1.08 <= 1.10 → stroke 2
+]
+_SAME_CANDLE_BEAR_AT_EDGE = _SAME_CANDLE_BEAR[:4] + [
+    (1.06, 1.09, 1.03, 1.10),   # 4: close == gap_bottom exactly → counts (the user: "On edge is ok")
+]
+_ARMED_THROUGH_A_CLOSE_INSIDE_BEAR = _SAME_CANDLE_BEAR[:4] + [
+    (1.08, 1.14, 1.07, 1.13),   # 4: close 1.13 inside the gap (high 1.14 does not re-arm: 1.14 < 1.152) — still armed
+    (1.13, 1.14, 1.05, 1.07),   # 5: close 1.07 <= 1.10 → stroke 2
+]
+_SEPARATE_CANDLE_CASES = [  # (rows, the candle that fills — stroke 2; candle 3 arms in every case)
+    pytest.param(_SAME_CANDLE_BULL, 4, id="bull"),
+    pytest.param(_SAME_CANDLE_BULL_AT_EDGE, 4, id="bull_close_at_edge"),
+    pytest.param(_ARMED_THROUGH_A_CLOSE_INSIDE_BULL, 5, id="bull_armed_through_a_close_inside"),
+    pytest.param(_SAME_CANDLE_BEAR, 4, id="bear"),
+    pytest.param(_SAME_CANDLE_BEAR_AT_EDGE, 4, id="bear_close_at_edge"),
+    pytest.param(_ARMED_THROUGH_A_CLOSE_INSIDE_BEAR, 5, id="bear_armed_through_a_close_inside"),
+]
+
+
+def _frame_and_instance(rows, offset):
+    """The fixture's frame and its one instance. `offset` None: the frame as built — a RangeIndex (the positional
+    fast path of `is_filled`, the cache's identity path). An int: a NON-RangeIndex int64 frame labelled
+    offset..offset+n-1 with the instance re-labelled (the label-based fallback of `is_filled`; the cache's identity
+    path at 0, its dict path otherwise)."""
+    out = compute_imbalance(_make_df(rows))
+    inst, = out.attrs["imbalances"]
+    if offset is None:
+        assert isinstance(out.index, pd.RangeIndex)
+        return out, inst
+    out.index = pd.Index([i + offset for i in range(len(out))], dtype="int64")
+    assert not isinstance(out.index, pd.RangeIndex)
+    return out, ImbalanceInstance(start_idx=inst.start_idx + offset, end_idx=inst.end_idx + offset,
+                                  direction=inst.direction, gap_top=inst.gap_top, gap_bottom=inst.gap_bottom,
+                                  gap_size=inst.gap_size)
+
+
+@pytest.mark.parametrize("rows, filled_at", _SEPARATE_CANDLE_CASES)
+def test_is_filled_the_arming_candle_cannot_also_fill(rows, filled_at):
+    """The arming candle's own close never counts (separate candles); stroke 1 stays latched until a later candle
+    closes at / past the outer edge — on the positional fast path (RangeIndex)."""
+    out, inst = _frame_and_instance(rows, None)
+    assert inst.is_filled(out, check_to_idx=filled_at - 1) is False
+    assert inst.is_filled(out, check_to_idx=filled_at) is True
+
+
+@pytest.mark.parametrize("rows, filled_at", _SEPARATE_CANDLE_CASES)
+def test_is_filled_fallback_path_separate_candles(rows, filled_at):
+    """The same rule on the label-based fallback loop (a non-RangeIndex frame)."""
+    out, inst = _frame_and_instance(rows, 100)
+    assert inst.is_filled(out, check_to_idx=100 + filled_at - 1) is False
+    assert inst.is_filled(out, check_to_idx=100 + filled_at) is True
+
+
+@pytest.mark.parametrize("offset", [None, 0, 100], ids=["range_index", "int64_index", "labelled_index"])
+@pytest.mark.parametrize("rows, filled_at", _SEPARATE_CANDLE_CASES)
+def test_fill_cache_separate_candles_and_agrees_with_is_filled(rows, filled_at, offset):
+    """`poi_zones._compute_fill_idx_cache` (the POI activation sweep's numpy scan — the third implementation of the
+    rule): armed at candle 3, confirmed at the filling candle (never the arming one); and at EVERY horizon `t` its
+    answer equals `is_filled(t)` — the documented mirror — on the fast path (range_index) and the fallback (the
+    int64 frames)."""
+    from engine_v2.zones.poi_zones import _compute_fill_idx_cache
+    k = offset or 0
+    out, inst = _frame_and_instance(rows, offset)
+    assert _compute_fill_idx_cache(out, [inst], IMBALANCE_FILL_THRESHOLD)[id(inst)] == (3 + k, filled_at + k)
+    assert (inst.meta["armed_idx"], inst.meta["confirmed_fill_idx"]) == (3 + k, filled_at + k)
+    for t in out.index:
+        assert inst.is_filled(out, check_to_idx=int(t)) == (int(t) >= filled_at + k), t
 
 
 def test_is_filled_stroke2_before_stroke1_unfilled_bullish():
-    """A candle that closes past the gap outer BEFORE any 70% retrace
-    must not count — stroke 2 only latches at idx >= armed_idx."""
+    """A candle that closes past the gap outer BEFORE any stroke-1 retrace
+    must not count — stroke 2 only latches at idx > armed_idx."""
     df = _make_df([
         (0.95, 1.00, 0.90, 0.95),   # 0
         (1.02, 1.08, 1.01, 1.07),   # 1: imbalance
         (1.10, 1.15, 1.10, 1.14),   # 2: c3
-        (1.12, 1.15, 1.11, 1.14),   # 3: close=1.14 >= 1.10 BUT low=1.11 > 1.03 (no stroke 1)
+        (1.12, 1.15, 1.11, 1.14),   # 3: close=1.14 >= 1.10 BUT low=1.11 > 1.035 (no stroke 1)
         (1.14, 1.18, 1.13, 1.17),   # 4: same — no stroke 1 ever
     ])
     out = compute_imbalance(df)
@@ -221,10 +302,10 @@ def test_is_filled_stroke2_before_stroke1_unfilled_bullish():
 
 
 def test_is_filled_stroke1_only_unfilled_bearish():
-    """Bearish variant: stroke 1 (high reaches 70%) without stroke 2
+    """Bearish variant: stroke 1 (high reaches 65%) without stroke 2
     (close below gap_bottom) → unfilled."""
     # Geometry: gap_bottom = df[2].h = 1.10, gap_top = df[0].l = 1.18,
-    #           gap_size = 0.08. Stroke 1: high >= 1.10 + 0.08*0.70 = 1.156.
+    #           gap_size = 0.08. Stroke 1: high >= 1.10 + 0.08*0.65 = 1.152.
     #           Stroke 2: close <= 1.10.
     df = _make_df([
         (1.20, 1.25, 1.18, 1.22),   # 0: c1

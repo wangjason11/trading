@@ -133,13 +133,22 @@ have fired by `check_to_idx`:
 |---|---|---|
 | **Stroke 1 — armed** | bullish | first candle in `(end_idx, check_to_idx]` with `low <= gap_top - gap_size * fill_threshold` |
 | | bearish | first candle in `(end_idx, check_to_idx]` with `high >= gap_bottom + gap_size * fill_threshold` |
-| **Stroke 2 — confirmed** | bullish | first candle in `[armed_idx, check_to_idx]` with `close >= gap_top` |
-| | bearish | first candle in `[armed_idx, check_to_idx]` with `close <= gap_bottom` |
+| **Stroke 2 — confirmed** | bullish | first candle in `(armed_idx, check_to_idx]` with `close >= gap_top` |
+| | bearish | first candle in `(armed_idx, check_to_idx]` with `close <= gap_bottom` |
 
-Both strokes can fire on the same candle (rare but legal —
-`armed_idx == confirmed_fill_idx`). Stroke 2 must be at `idx >= armed_idx`;
-a close past the gap outer **before** any stroke 1 does not count. The scan
-starts at `end_idx + 1` — the last c3, which cannot arm its own gap.
+**The two strokes fire on SEPARATE candles** (PLAN_S step 2, 2026-10-21): stroke 2 counts only on a candle
+strictly AFTER the arming candle (`confirmed_fill_idx > armed_idx`) — the arming candle's own close never
+counts, so no single candle fills a gap. The user: "whatever candle meets the armed condition, the 2nd condition
+for filled must be met by a different candle after the armed candle." A close exactly AT the outer edge counts
+(`>=` / `<=`; the user: "On edge is ok"). Stroke 2 asks WHERE the close is, not which way the candle moved: a
+red candle closing above a bullish gap's top completes it (H1 450 on gap 447, armed by 449). Before step 2 one
+candle could do both (a pinbar whose wick reaches the arming level while its body stays outside the gap) —
+~30 % of committed fills on the reference window (H1 48 / 152, M15 153 / 522 at 0.70). A close past the gap
+outer **before** any stroke 1 does not count either. The scan starts at `end_idx + 1` — the last c3, which
+cannot arm its own gap. The rule has three implementations, kept in step: `is_filled`'s positional fast path,
+its label-based fallback, and `zones/poi_zones.py::_compute_fill_idx_cache` (pinned:
+`tests/test_imbalance.py` — the separate-candle fixtures on all three, and the cache == `is_filled` at every
+horizon).
 
 The state machine is **monotonic in `check_to_idx`**: once `is_filled`
 returns True at some `check_to_idx = t`, it returns True for all larger
@@ -153,7 +162,8 @@ leaves when it fills.)
 |---|---|
 | `gap_size <= 0` (degenerate gap) | Returns **True** — safe default; treat invalid gap as filled so it doesn't pollute "unfilled" counts |
 | `end_idx >= check_to_idx` (empty scan range) | Returns **False** (unfilled). Correct for a FORMED prefix (its c3 cannot arm it). An instance that has not formed at the moment of the question is not an imbalance at all — the caller's `evaluated_at` cut excludes it before `is_filled` is asked |
-| Stroke 2 condition met before any stroke 1 | Returns **False** — stroke 2 only counts at `idx >= armed_idx` |
+| Stroke 2 condition met before any stroke 1 | Returns **False** — stroke 2 only counts at `idx > armed_idx` |
+| Both conditions met on the same candle | That candle ARMS only; filled at the first LATER candle whose close is at / past the outer edge (PLAN_S step 2) |
 | Stroke 1 fires but stroke 2 never does | Returns **False** forever — instance stays "armed but not committed" until terminal end of any containing window |
 
 ### Why two strokes
@@ -162,8 +172,9 @@ A single-stroke definition (just the stroke-1 retrace) treats every gap touch as
 invalidation. Real markets often touch a gap and bounce — the touch alone
 doesn't commit the move. The two-stroke definition requires both an
 engagement (price retraces into the gap by the fill threshold, 65 %) AND a follow-through
-commitment (price subsequently closes past the gap's outer edge in the
-imbalance's direction). Until both happen, the gap is still "in play."
+commitment (a LATER candle closes at or past the gap's outer edge in the
+imbalance's direction — never the engaging candle itself, PLAN_S step 2). Until both happen, the gap is still
+"in play."
 
 Concrete effect on POI activation: a per-candle sweep that flips
 deactivate→reactivate→deactivate on every wick into a gap (the
@@ -313,7 +324,8 @@ candidate `t`.
 The sweep's two transitions per instance: **enter** at
 `max(inst.formed_at, first_active)` (the first c3 — the knowability rule; the
 relevance filter keeps `inst.formed_at <= scan_end`) and **leave** at
-`confirmed_fill_idx` (always `>= end_idx + 2`, so after the enter).
+`confirmed_fill_idx` (always `>= end_idx + 3` since PLAN_S step 2 — the last c3 cannot arm, and the confirming
+candle comes after the arming one — so after the enter).
 
 **Equivalence invariant:** a caller of `is_filled(check_to_idx=t)` would
 get the same boolean as
@@ -385,6 +397,13 @@ Stroke 1 fires at a 65 % retrace (was 70 %), in every consumer — one constant.
 instances arm earlier (one, #92, also commits 761 → 600), sub 3 cycle 0's fib gains one deactivate / reactivate
 pair, one IC check (not a pick) loses condition 3 (its immediate gap 3488 fills); no structure, POI, trigger or sub
 change.
+
+### Separate candles (2026-10-21, PLAN_S step 2)
+
+Stroke 2 counts only on a candle after the arming one (it was `idx >= armed_idx`). Measured on the reference
+window (the variant replay vs step 1's, `plans/qa_ic_revisit_inputs/qa_findings.md` round 3): 51 cells — 47 H1
+instances commit later (one never), the H1 sid 1 cycle 2 POI (IC 859) loses its 992 deactivate / 998 reactivate
+pair, two M15 sub POIs deactivate one candle later; no structure, fib, IC, trigger or sub change.
 
 ## When to revisit
 

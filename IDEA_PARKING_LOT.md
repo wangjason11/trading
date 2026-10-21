@@ -308,6 +308,11 @@ Verbatim: "For now let's consider item 3 done. We could potentially revist down 
   carried that sub's creation id (a sub no chart draws); since S1 the cell is empty and the sweep logs `WARNING
   [sweep] record … ended by pool#k, which never started`. Candidate fix: `ended_by` = the replacer that survives.
   Pinned: `test_lifecycle_sweep_unit.py::test_a_replacer_that_never_starts_leaves_ended_by_empty_and_warns`. DECIDE.
+- **The fill check's label-based paths disagree on a frame with a missing label** (PLAN_S step 2's landing review,
+  2026-10-21; unreachable — every engine frame is a contiguous 0..n−1 index, 0 on the window): `is_filled`'s fallback
+  loop skips a missing label (`continue`; a `break` mutant there survives the suite), while
+  `poi_zones._compute_fill_idx_cache` returns `(None, None)` when the label `end_idx + 1` is missing. Fix only if a
+  non-contiguous frame ever reaches them. Detail: PLAN_S §6 step 2. DECIDE.
 - **Should subs get the DERIVED CTS KL zone as their probe reference?** (today every sub reference zone is ad-hoc).
   Unscheduled follow-up. DECIDE. Detail: PART4 §17.12, GOTCHAS (the `kl_zones=[]` pool-path note).
 - **Step 4 of IC identification — the lower-TF fallback — DEFERRED, possibly never built** (was "No-pattern cycles —

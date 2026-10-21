@@ -115,8 +115,8 @@ Filled iff BOTH strokes fire by `check_to_idx`:
   PLAN_S step 1, 2026-10-21).** First candle in `(end_idx, check_to_idx]`:
   - Bullish: `low <= gap_top - gap_size * fill_threshold`
   - Bearish: `high >= gap_bottom + gap_size * fill_threshold`
-- **Stroke 2 — confirmed (close past gap outer).** First candle at idx
-  `>= armed_idx`:
+- **Stroke 2 — confirmed (close at / past gap outer).** First candle at idx
+  `> armed_idx` — a separate, later candle; the arming candle's own close never counts (PLAN_S step 2):
   - Bullish: `close >= gap_top`
   - Bearish: `close <= gap_bottom`
 
@@ -333,7 +333,7 @@ threshold until PLAN_I S4 retired the revert; the line is still drawn):
   definition):
   - Stroke 1: price retraces ≥ 65 % into the gap (low past 65 % for
     bullish, high past 65 % for bearish) → instance is **armed**
-  - Stroke 2: at a later candle (or the same one), close passes the
+  - Stroke 2: at a LATER candle (never the arming one — PLAN_S step 2), close at / past the
     gap outer in the imbalance's direction (≥ gap_top bullish,
     ≤ gap_bottom bearish) → instance is **confirmed-filled**
 - **Unfilled:** stroke 1 hasn't fired yet, OR stroke 1 fired but stroke 2

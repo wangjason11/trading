@@ -237,3 +237,50 @@ and move on to step 2")
   strokes", the dated shift "Arming threshold 70 % → 65 %"), `POI_ZONES_SPEC.md` §1 + the activation condition,
   `GLOSSARY.md` "fill check", `ARCHITECTURE.md`, `CROSS_CYCLE_FIB_SPEC.md` (two lines), `poi_zones.py` comments; the
   register §D SESSION ORDER item 4 (IN PROGRESS → this plan).
+
+### Step 2 — BUILT 2026-10-21 (uncommitted; reviewed; awaiting the user's chart look + go)
+
+- Code: `is_filled`'s four loops (fast path bull / bear, fallback bull / bear) test stroke 2 BEFORE latching stroke 1
+  on a candle, so the arming candle's own close is never tested; `_compute_fill_idx_cache` scans stroke 2 from
+  `armed_pos + 1` (bull / bear). Docstrings of both.
+- Tests: `test_imbalance.py` — the same-candle test flipped into `test_is_filled_the_arming_candle_cannot_also_fill`
+  (4 fixtures: bull, bull closing exactly AT the edge, bear, bear at the edge; candle 3 arms + closes past the edge →
+  not filled; candle 4 — a RED candle in the bull case — closes at / past it → filled), the same on the label-based
+  fallback (a non-RangeIndex frame), and the cache's `(armed, confirmed) == (3, 4)` + cache == `is_filled` at every
+  horizon (both index paths). `test_institutional_pattern.py`: `_filled_gap` now asserts the fill lands exactly AT
+  `fill_idx`; the user's-sequence test fills imbalance2 at 16 (armed by 15) instead of 15 — candle 15 is the first
+  candle after the gap, so no earlier candle could arm it (the one suite failure the change produced; the test's
+  intent — imbalance2 filled before the CTS anchor 20 — kept).
+- Suite: **1854 passed** (68.9 s; +16 new parametrized cases − the 1 flipped).
+- Mutants (`qa_ic_revisit_inputs/mutants_plan_s_step2.py`): **13 / 13 KILLED** — the six same-candle reverts (fast /
+  fallback / cache × bull / bear), a half-applied cache edit (the slice moved, the position offset not), and six
+  "at the edge" mutants (each `>=` / `<=` of stroke 2 made strict — the user's "On edge is ok"); the bear edge
+  mutants are killed ONLY by the bear-closes-at-the-edge fixture (added for that reason).
+- **Landing review** (1 read-only lens, conformance + mutation; **197,109 tokens** by the harness): no BLOCKER / MAJOR —
+  the three implementations correct in both directions and on both index paths (data-edge clamps included), no fourth
+  implementation or same-candle assumption anywhere in production code (landed H1 export: 162 armed, 151 confirmed, 0
+  equal; min confirmed − armed = 1), the docs consistent. Folded: **(1, MINOR)** the cache-agreement test ran only the
+  label-based fallback (its "range_index" case was an int64 frame) → three index cases now (`range_index` = the fast
+  path, `int64_index`, `labelled_index`); **(2, MINOR)** stroke 1 staying latched across a candle that closes back
+  INSIDE the gap was unpinned (every fixture filled at armed + 1; a "re-evaluate armed per candle" mutant survived on
+  the fallback) → two "armed through a close inside" fixtures (bull / bear, filled at 5) on all three paths + six latch
+  mutants; NITs: the cache docstring's "never equal" (→ "when both are set, confirmed > armed"), the activation
+  docstring's stroke 2, the fallback's "Verbatim" comment, IMBALANCE_FILL_SEMANTICS' "leave >= end_idx + 2" (→ + 3),
+  the stale `1.03` test comments (step 1 leftovers), `_filled_gap` / N17's hard-coded 0.70 (→ the constant). NOT
+  folded (pre-existing, unreachable: every engine frame is a contiguous RangeIndex): a `continue` → `break` mutant on
+  the fallback's missing-label skip survives, and the cache gives `(None, None)` when the label `end_idx + 1` is
+  missing while the fallback skips it.
+- After the fold: suite **1868 passed** (90.9 s); mutants **19 / 19 KILLED** (the 13 + the 6 latch mutants); a fresh
+  replay (84.9 s wall: data_fetch 2.80, multi_tf_dual 17.40, chart_h1 11.39, chart_m15_counter 15.62,
+  chart_m15_confluence 35.32 — a slow run, machine variance; fetch gate PASS, skip grep 23) again md5- / figure-hash-
+  equal to the variant.
+- Replay: 53.0 s wall (data_fetch 1.56, multi_tf_dual 11.40, chart_h1 6.22, chart_m15_counter 9.78,
+  chart_m15_confluence 22.90); fetch gate PASS; skip grep 23; chart counts **81/234, 153/136, 301/307**.
+- `/compare` vs S_S1: **51 real cells = §3.2 exactly** (H1 `imbalance_instances` 47, H1 `poi_zones` 2, confluence
+  `poi_zones` 2); figures: shapes 236 → 234, 138 → 136, 309 → 307, traces xy-equal; hovers (`cmp_hover.py`): 0
+  templates, customdata of 2 traces per chart — the H1 POI sid 1 cycle 2's (IC 859) confirmed candle 998 → 954 on
+  the H1 chart and both M15 overlays (= its CSV change). All 27 CSVs md5-equal to the variant `%TEMP%/vS`, figure
+  hashes equal.
+- Docs: `IMBALANCE_FILL_SEMANTICS.md` (the predicate table `(armed_idx, check_to_idx]`, "The two strokes fire on
+  SEPARATE candles" with the user's words, an edge-case row, "Why two strokes", the dated shift "Separate candles"),
+  `POI_ZONES_SPEC.md` (§1 stroke 2 + the activation condition), `GLOSSARY.md` "fill check", `ARCHITECTURE.md`.

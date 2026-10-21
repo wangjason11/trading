@@ -20,7 +20,7 @@ import pytest
 
 from engine_v2.tests._cross_fib_limits import main_limits
 
-from engine_v2.common.types import ImbalanceInstance
+from engine_v2.common.types import IMBALANCE_FILL_THRESHOLD, ImbalanceInstance
 from engine_v2.features.candle_classifier import (
     apply_candle_classification,
     candle_params_for_timeframe,
@@ -144,13 +144,15 @@ def _far_gap(start, end=None):
 
 
 def _filled_gap(df, start, fill_idx):
-    """A buy instance at `start` that candle `fill_idx` two-stroke-fills (its low arms stroke 1, its close ≥ the
-    gap top is stroke 2)."""
+    """A buy instance at `start` that candle `fill_idx` two-stroke-fills: an EARLIER candle in `(start, fill_idx)`
+    arms stroke 1, `fill_idx`'s close ≥ the gap top (= that close) is stroke 2 — the strokes on separate candles
+    (PLAN_S step 2), so the gap is filled AT `fill_idx`, not before (asserted)."""
     top = float(df.loc[fill_idx, "c"])
     bottom = float(df.loc[fill_idx, "l"]) - 0.00001
     inst = ImbalanceInstance(start_idx=start, end_idx=start, direction=1, gap_top=top, gap_bottom=bottom,
                              gap_size=top - bottom)
-    assert inst.is_filled(df, fill_idx, 0.70)
+    assert (inst.is_filled(df, fill_idx, IMBALANCE_FILL_THRESHOLD)
+            and not inst.is_filled(df, fill_idx - 1, IMBALANCE_FILL_THRESHOLD))
     return inst
 
 
@@ -643,7 +645,9 @@ def test_the_users_sequence_imbalance1_ic1_ic2_imbalance2_imbalance3_ic3_imbalan
     assert [(c.ic_idx, c.pattern.ip_rank) for c in sel.ic_candidates] == [(13, "1A.iv"), (17, "1A.iv")]
     assert sel.pick.ic_idx == 13 and sel.tiebreak == (MOST_RECENT, 17, 2, 14)
     df = _wide_frame()
-    filled = _select(df, 6, 20, [_far_gap(7), _filled_gap(df, 14, 15), _far_gap(16), _far_gap(18)])
+    # imbalance2 filled at 16 (15 arms it; at 15 alone — the candle right after the gap — no earlier candle could
+    # arm it: separate candles, PLAN_S step 2); still before the CTS anchor 20, the condition-3 horizon
+    filled = _select(df, 6, 20, [_far_gap(7), _filled_gap(df, 14, 16), _far_gap(16), _far_gap(18)])
     assert [c.ic_idx for c in filled.ic_candidates] == [17]
     assert filled.pick.ic_idx == 17 and filled.tiebreak is None
 
@@ -962,7 +966,7 @@ def test_the_fill_horizon_is_the_cts_anchor():
     c11 = float(df.loc[11, "c"])
     gap = ImbalanceInstance(start_idx=10, end_idx=10, direction=1, gap_top=c11 - 5 * PIP,
                             gap_bottom=c11 - 8 * PIP, gap_size=3 * PIP)
-    assert not gap.is_filled(df, 12, 0.70) and gap.is_filled(df, 14, 0.70)
+    assert not gap.is_filled(df, 12, IMBALANCE_FILL_THRESHOLD) and gap.is_filled(df, 14, IMBALANCE_FILL_THRESHOLD)
     sel = _select(df, 6, 12, [gap, _far_gap(12)])
     assert [c.immediate_imbalance_first_c2_idx for c in sel.checks] == [None, 10, 12]
     assert [c.ic_idx for c in sel.ic_candidates] == [9, 11]
