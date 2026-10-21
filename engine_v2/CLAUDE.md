@@ -32,9 +32,10 @@ Naming-Standard audit landed 2026-10-12 (PLAN_N), then its H1 range-hover follow
 next sessions, in the user's order (`IDEA_PARKING_LOT.md` §D "SESSION ORDER"): the IC identification + cross-cycle fib
 questions and edits (done 2026-10-13: PLAN_O + PLAN_P), the opposite-direction (CTS-zone) proximity-trigger edits
 (done 2026-10-20: PLAN_Q landed 2026-10-14 on the sd side — the scan reads a POI like a KL zone; PLAN_R steps
-0a–3 landed 2026-10-20 — sub zones join the proximity reference ladders, the proximity reference gate), next a
-revisit of the IC identification logic (the user's spec to come, the user 2026-10-20), then item 3, zone size
-adjustments),
+0a–3 landed 2026-10-20 — sub zones join the proximity reference ladders, the proximity reference gate), the
+revisit of the IC identification logic (done 2026-10-21: PLAN_S — the 65 % arming threshold, the two fill strokes on
+separate candles, IC Step 1B the prior-imbalance preference), next chart updates & edits (the user's list, 2026-10-21),
+then item 3, zone size adjustments),
 Part 2 entry decisions, Part 3 other decisions.
 
 **Pre-Week 8 fix:** Exception 2 probe relaxed from CTS_CONFIRMED to CTS_ESTABLISHED (`bbb6d32`).

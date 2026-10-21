@@ -614,5 +614,5 @@ and move on to step 2")
 - **Saved:** source `7b62a47` → S_S3 `20261021_130400_7b62a47` (save `538ecc1`, trunk `231d5c8`), from the `/compare` replay
   (fetch gate PASS on its log); the save's CSVs vs S_S2: 21 / 27 md5-equal, the 6 IC / POI ones differ — the
   `/compare` result above. Docs after the save: the `/compare` skill's "PLAN_S step 3" entry + the IC-CSV column
-  history + the chart counts' baseline, the register §D item 4 (PLAN_S COMPLETE; item 4 open until the user closes
-  it), memory.
+  history + the chart counts' baseline, the register §D item 4, memory. The user then closed SESSION ORDER item 4
+  (2026-10-21, verbatim in the register): "I was simply saying that we may come back to IC if in the future I see something wrong or want to fix. BUt for now, we can consider it closed. Just don't be surprised in the future if we come back to it again."

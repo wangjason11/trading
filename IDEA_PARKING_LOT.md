@@ -72,6 +72,8 @@ next session will focus on some changes & edits on zone proximity triggers, more
 direction / CTS zone proximity trigger. Finally, after that we will start zone size adjustments."
 **UPDATED by the user 2026-10-20 (after PLAN_R landed) — item 3 DONE, a new item 4 before zone size adjustments.**
 Verbatim: "For now let's consider item 3 done. We could potentially revist down the line when I notice something else in the future. Before moving on to zone adjustments, I'd like to go back and revisit some things around IC identification logic. I will provide further specs for the changes in future sessions."
+**UPDATED by the user 2026-10-21 (after PLAN_S landed) — item 4 DONE (closed; may be revisited), a new item 5 before
+zone size adjustments.** Verbatim: "I was simply saying that we may come back to IC if in the future I see something wrong or want to fix. BUt for now, we can consider it closed. Just don't be surprised in the future if we come back to it again." And: "for the very next session, I would like to actually work on a few charge updates & edits before we move on to zone adjustments." ("charge" = chart.)
 1. ~~**The H1 range-hover follow-up**~~ — **LANDED 2026-10-12** (session 1; `9f9406d`, S_N_hover): widened by
    the user to option B (the hover line = the box, candle for candle) + the dead passes deleted; `/compare` vs S_N = the
    prediction (4 H1 hover traces, 28 candle points). Register §A; `engine_v2/plans/plan_n_inputs/
@@ -118,13 +120,14 @@ Verbatim: "For now let's consider item 3 done. We could potentially revist down 
    READY TO BUILD 2026-10-20 — every decision closed (Q&A rounds 1–12), the plan review done (3 agents, 0.84M) and
    folded in; build order 0a → 0b → 1 → 2, 4 commits, `/commit-save` only after step 2. **BUILT (was UNDER WAY)
    2026-10-20** (PLAN_R §8 = the build log): steps 0a `a6e71c0`, 0b `c1bd05a` and 1 `d26208e` (the ladders + the narrow proximity-reference cap on parent zones) LANDED, all zero change as predicted (the landing-review follow-up `77f8ccf`: 0a's bound = the parent cycle's CTS-established moment); step 2 (the overlay inside the sweep) LANDED 2026-10-20 `817d2a9`, save S_R2 `20261020_115859_817d2a9` = `LATEST_<branch>` (the `/compare` skill's PLAN_R step 2 entry) = the §5.4 prediction (H1 triggers 6 → 10, subs 8 → 11) + its landing review (the source switch: a contributed + reachable zone); **PLAN_R step 3 = the user's round-15 pivot — LANDED 2026-10-20 `d424099`, save S_R3 `20261020_225749_d424099` = `LATEST_<branch>` (PLAN_R §9): the proximity reference gate — a reference update is made only if the gap after it stays above 40 / 25 / 15 (no trigger counters); the only cap left, the narrow parent-reference exception (a parent BOS–CTS inner gap ≤ the minimum); an sd sub zone is no candidate for the sd reference before the cycle's first sd trigger (round 16). PLAN_R COMPLETE (steps 0a–3); the user then closed item 3 (2026-10-20) — next in the SESSION ORDER: item 4, the IC identification revisit (the user's spec to come), then item 5, zone size adjustments**.
-4. **IN PROGRESS — revisit the IC identification logic** (the user, 2026-10-20: "go back and revisit some things around IC
+4. ~~**Revisit the IC identification logic**~~ — **DONE 2026-10-21** (PLAN_S; the user: "for now, we can consider
+   it closed. Just don't be surprised in the future if we come back to it again") (the user, 2026-10-20: "go back and revisit some things around IC
    identification logic. I will provide further specs for the changes in future sessions"). **Spec received 2026-10-20
    (`engine_v2/plans/qa_ic_revisit_inputs/user_writeup_20261020.md`), decided through Q&A round 5 2026-10-21
    (`qa_findings.md` there, rounds 1–7): `engine_v2/plans/PLAN_S_fill_rule_and_ic_step1b.md` COMPLETE 2026-10-21
    (steps 1–3 LANDED, each = its prediction exactly: `69c099b` save S_S1, `cbaed31` save S_S2, `7b62a47` save S_S3
-   `20261021_130400_7b62a47` = `LATEST_<branch>` — the `/compare` skill's PLAN_S entries; item 4 stays open until the user
-   closes it — further IC specs may follow) — step 1 the
+   `20261021_130400_7b62a47` = `LATEST_<branch>` — the `/compare` skill's PLAN_S entries; item 4 closed by the user
+   2026-10-21, may be revisited) — step 1 the
    imbalance arming threshold 70 % → 65 %, step 2 the two fill strokes on separate candles (both engine-wide), step 3
    IC Step 1B (prefer candidates whose closest prior imbalance is unfilled through the candle before the IC); IC
    condition 1 unchanged.** Current logic, canonical: `engine_v2/zones/POI_ZONES_SPEC.md` §3 (Step 1 the IC
@@ -133,7 +136,14 @@ Verbatim: "For now let's consider item 3 done. We could potentially revist down 
    tiebreak rules, Step 3 the ranking rules; Step 4 the lower-TF fallback DEFERRED — D.2 "Step 4 of IC
    identification"); the decisions behind it: PLAN_H / K / L / O / P and `engine_v2/plans/qa_ic_crossfib_inputs/`.
    Each change = its own plan, prediction and `/compare` (as PLAN_O / PLAN_P).
-5. **Zone size adjustments** — D.1 item 3 below (the user's spec).
+5. **Chart updates & edits** — NEXT, the very next session (the user, 2026-10-21; the user brings the list). Chart
+   items already on file — background only, none in scope unless the user names it: §G "Overall chart revamp &
+   improvements" ((1) the fib hover masks candle hovers, (2) the proximity markers' `zone_confirmed_idx` means two
+   things), §G "Uniform 3-tier chart opacity", §G the stepped "current proximity reference" line on the H1 chart
+   ("Decide later"), §A the charting-audit style items #7 / #8 / #9 / #11 + 8 unused locals in
+   `charting/export_m15_chart.py`. Canonical rules: `engine_v2/charting/CHARTING_SPEC.md`, all styling in
+   `style_registry.py`.
+6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
 1. **One POI per cycle** (redefine the IC & POI zone logic) — B landed; its chart debugging PAUSED for item 2 (user
@@ -273,8 +283,9 @@ Verbatim: "For now let's consider item 3 done. We could potentially revist down 
    do need to fix, but we can do that as item 2." Detail: memory
    `project_sub_single_cycle_fib_pois.md`; `engine_v2/zones/CROSS_CYCLE_FIB_SPEC.md` (§13), `POI_ZONES_SPEC.md`
    "Cross-Cycle Mode".
-3. **Zone size adjustments** — **4th in the SESSION ORDER above (user 2026-10-12: after the hover follow-up, the IC /
-   cross-fib questions and the opp_sd proximity-trigger edits).** User 2026-09-30:
+3. **Zone size adjustments** — **last (6th) in the SESSION ORDER above (user 2026-10-12: after the hover follow-up, the IC /
+   cross-fib questions and the opp_sd proximity-trigger edits; the IC revisit (2026-10-20) and the chart updates & edits
+   (2026-10-21) went before it).** User 2026-09-30:
    "currently some KL & POI zones may be very large or small in their
    current base form. This will cover additional logic that adjust the size." The user provides a detailed spec.
    The Naming-Standard audit landed first (PLAN_N, 2026-10-12: a KL step's index is `base_idx` on INIT, `expanded_idx`
