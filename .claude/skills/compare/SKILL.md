@@ -581,7 +581,16 @@ BASE CUR` (expected output vs S_R2: `build/kdiff_step3_vs_S_R2.txt`): a textual 
 257/263 → 301/309. Skip grep 24 → 23. Every delta = PLAN_R §9.4 / §9.6 (predicted before the build; the save replay
 is md5- / figure-hash-equal to the validated variant, and all 27 CSVs md5-equal to the step-3 shadow
 `build/r6_gate_shadow.py`'s). S_R3 `20261020_225749_d424099` (source `d424099`, save `d613dfa`, trunk `630f024`; =
-`LATEST_<branch>` from 2026-10-20).
+`LATEST_<branch>` until S_S1, below).
+**PLAN_S step 1 (2026-10-21, the imbalance arming threshold 0.70 → 0.65 — one constant `IMBALANCE_FILL_THRESHOLD`,
+every fill reader; the user's IC-revisit change A) — a BEHAVIOUR change, no format change:** vs S_R3 exactly 11
+real cells in 5 CSVs — H1 `imbalance_instances` 7 (instances arm earlier: 275 → 267, 445 → 444, 494 → 493,
+510 → 509, 868 → 866, 1042 → 1041; #92 armed + committed 761 → 600), both lenses' `fib_lifecycle` 1 (sub 3 cycle
+0's last deactivate / reactivate pair 2667 / 2672 → 2722 / 2723) and `ic_candidates` 1 (an IC check, not a pick,
+loses condition 3: its immediate gap 3488 fills); every figure identical (`fig_hash.py` equal to S_R3, hovers
+included); no structure, POI, trigger, sub or WVMI change. Positional `cmp_save.py` reads it correctly. Every
+delta = PLAN_S §2.2 (the save replay is md5- / figure-hash-equal to the variant `make_variant_fill65.py`). S_S1
+`20261021_020427_69c099b` (source `69c099b`, save `b4f040b`, trunk `138c2a7`; = `LATEST_<branch>` from 2026-10-21).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -711,7 +720,8 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-20 on S_R3 `20261020_225749_d424099` — PLAN_R step 3 moved the two M15 lenses from
+counts are (verified 2026-10-21 on S_S1 `20261021_020427_69c099b`, unchanged from S_R3 `20261020_225749_d424099`
+— PLAN_R step 3 moved the two M15 lenses from
 S_R2's 164/144, 257/263 (2 subs fewer, sub_7 / sub_8 re-windowed; H1 unchanged); PLAN_R step 2 had moved them from
 S_Q's 146/135, 289/293 (3 new subs, re-windowed records); S_Q's were unchanged from S_P
 `20261013_231327_23f395d` — PLAN_P moved them from S_O's 83/239,

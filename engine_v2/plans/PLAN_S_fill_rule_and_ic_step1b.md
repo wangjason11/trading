@@ -1,6 +1,7 @@
 # PLAN_S — the imbalance fill rule (65 % arming, separate candles) + IC Step 1B, the closest-prior-imbalance preference (the user's IC revisit, 2026-10-20 → 21)
 
-**Status: PLANNED 2026-10-21.** Baseline **S_R3** `artifacts/commits/week9-entries-decisions/20261020_225749_d424099`
+**Status: step 1 LANDED 2026-10-21** — source `69c099b`, save **S_S1** `20261021_020427_69c099b` (save `b4f040b`,
+trunk `138c2a7`; = `LATEST_week9-entries-decisions`) = §2.2 exactly (§6); steps 2–3 to build. Baseline **S_R3** `artifacts/commits/week9-entries-decisions/20261020_225749_d424099`
 (= `LATEST_week9-entries-decisions`; source `d424099`, PLAN_R step 3). HEAD at drafting `896db93`; suite 1839 (green
 2026-10-20, 140.7 s). Session order item 4 (register `IDEA_PARKING_LOT.md` §D "SESSION ORDER"). THREE steps, in this
 order, each with its own prediction (measured before its build), `/compare` and chart look: §2 the 65 % arming
@@ -213,7 +214,8 @@ MS reads differed), the mutants, and a plan cold review (2–3 lenses, ≈0.6M t
 
 ## 6. Build log
 
-### Step 1 — BUILT 2026-10-21 (uncommitted; awaiting the user's chart look + go)
+### Step 1 — LANDED 2026-10-21 (`69c099b`, save S_S1 `20261021_020427_69c099b`; the user: "go ahead, commit step 1
+and move on to step 2")
 
 - Code: `IMBALANCE_FILL_THRESHOLD = 0.65` in `common/types.py`; the defaults of `is_filled`,
   `has_unfilled_imbalance`, `iter_unfilled_imbalances`, `resolve_cross_cycle_eligibility`, `FibTrackerConfig`,
