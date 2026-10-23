@@ -144,7 +144,7 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    `charting/export_m15_chart.py`. Canonical rules: `engine_v2/charting/CHARTING_SPEC.md`, all styling in
    `style_registry.py`. **IN PROGRESS (2026-10-22):** the first edit LANDED — the BOS / CTS dot hover, main + sub (the
    user's spec + decisions + what landed: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261022_dot_hover.md`;
-   figure-only). Its DEFERRED quirks (PB `cycle_id=0`, PB = pullback or replacement break, the confirmation moment /
+   figure-only; source `ab2fcc1`, save S_dot_hover `20261022_200747_ab2fcc1` = `LATEST_<branch>`). Its DEFERRED quirks (PB `cycle_id=0`, PB = pullback or replacement break, the confirmation moment /
    method not shown, …): that file's "Quirks" section (the user: "Let's come back to it later to address them in more
    detail"). NEXT: the other structure elements' hovers — the user, 2026-10-22: "On the other structure elements, I
    will provide additional details and specs on what changes to make there." (the sub KL / POI / fib hovers still

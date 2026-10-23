@@ -34,7 +34,8 @@ questions and edits (done 2026-10-13: PLAN_O + PLAN_P), the opposite-direction (
 (done 2026-10-20: PLAN_Q landed 2026-10-14 on the sd side — the scan reads a POI like a KL zone; PLAN_R steps
 0a–3 landed 2026-10-20 — sub zones join the proximity reference ladders, the proximity reference gate), the
 revisit of the IC identification logic (done 2026-10-21: PLAN_S — the 65 % arming threshold, the two fill strokes on
-separate candles, IC Step 1B the prior-imbalance preference), next chart updates & edits (the user's list, 2026-10-21),
+separate candles, IC Step 1B the prior-imbalance preference), now chart updates & edits (the user's list, 2026-10-21;
+in progress — the BOS / CTS dot hover landed 2026-10-22),
 then item 3, zone size adjustments),
 Part 2 entry decisions, Part 3 other decisions.
 

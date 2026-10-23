@@ -621,7 +621,16 @@ identical; chart counts unchanged (81/234, 153/136, 301/307); the two moved POIs
 preferred IC candidate` — only when 1B narrowed the field: 1142, 2821, and sub 8 cross 0→2's unmoved 4131). Skip grep
 24 = the 23 + one benign `[data_bridge] RETRY` (the fetch recovered). Every delta = PLAN_S §4.4 (the variant
 `make_variant_step1b.py` — 97 cells vs S_S2 — predicted before the build). S_S3 `20261021_130400_7b62a47` (source `7b62a47`,
-save `538ecc1`, trunk `231d5c8`; = `LATEST_<branch>` from 2026-10-21).
+save `538ecc1`, trunk `231d5c8`; = `LATEST_<branch>` until S_dot_hover, below).
+**The BOS / CTS dot hover (2026-10-22, SESSION ORDER item 5's first chart edit — the user's spec
+`plans/qa_chart_edits_inputs/user_spec_20261022_dot_hover.md`) — FIGURE-ONLY:** 27 / 27 CSVs md5-equal to S_S3; traces,
+shapes and layouts unchanged (81/234, 153/136, 301/307); the `customdata` / `hovertemplate` change on the dot traces
+only (H1 5, counter 14 = 11 sub + 3 H1 overlay, confluence 21 = 18 + 3). Positional `cmp_save.py` is fine across it
+(it ignores hovers); a hover diff across it (`cmp_hover.py` / `cmp_hover_strings.py`) shows every dot hover changed —
+the format, not an engine delta. Checks: `plans/qa_chart_edits_inputs/fig_scope.py BASE CUR` (the figure-only scope:
+same traces in order, layouts equal, hover changed only on the dot traces), `dot_hovers_new.py CHART_DIR` (every dot
+hover rendered; `NA (before start_idx)` ⇔ `phase=forming`). Skip grep 23. S_dot_hover `20261022_200747_ab2fcc1`
+(source `ab2fcc1`, save `2c30189`, trunk `79a43bf`; = `LATEST_<branch>` from 2026-10-22).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -751,7 +760,8 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-21 on S_S3 `20261021_130400_7b62a47`, unchanged from S_S2 `20261021_081421_cbaed31`
+counts are (verified 2026-10-22 on S_dot_hover `20261022_200747_ab2fcc1`, unchanged from S_S3 `20261021_130400_7b62a47`
+and S_S2 `20261021_081421_cbaed31`
 — PLAN_S step 2 moved the shapes from S_S1
 `20261021_020427_69c099b`'s 236 / 138 / 309: the H1 POI sid 1 cycle 2's off / on pair 992 / 998 is gone, on H1 and
 both M15 overlays; S_S1's were unchanged from S_R3 `20261020_225749_d424099`
