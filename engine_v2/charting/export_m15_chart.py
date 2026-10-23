@@ -71,7 +71,8 @@ from engine_v2.charting._zone_render import (
     compute_kl_active_stretches,
     compute_poi_active_stretches,
     is_collapsed_cycle_zone,
-    fib_hover_status_text,
+    fib_hover_customdata,
+    fib_hovertemplate,
     fib_record_drawn,
     ic_rows_by_fib_record,
     is_poi_of_collapsed_cycle,
@@ -1142,16 +1143,11 @@ def export_m15_chart_plotly(
         sub_dir = int(sid_rec.starting_sd)
         sub_records = records_by_sub.get(eid, [])
         p_sid, p_cycle = _sid_parent(sid_rec)   # informational (first record)
-        # Zone hover strings for this sub (KL / POI / fib): its window + reason and its
-        # record list `(lens, (S,C), trigger_type, trigger_idx→start_idx)` (§17.9).
+        # The wave-candle hover's sub window + reason (§17.9; the KL / POI / fib
+        # hovers dropped it for the `first record:` line — the user's specs 2026-10-23).
         _win_end = sid_rec.end_event_idx if sid_rec.end_event_idx is not None else "open"
         _records_sorted = sorted(sub_records, key=lambda r: (r.start_idx, r.seq))
         sub_window_str = f"[{sid_rec.start_idx},{_win_end}] {sid_rec.end_reason or 'open'}"
-        sub_records_str = "; ".join(
-            f"{tr.lens}({tr.parent_sid},{tr.parent_cycle_id}) {tr.trigger_type} "
-            f"{tr.trigger_idx}→{tr.start_idx}" + ("†" if tr.is_zero_length else "")
-            for tr in _records_sorted
-        ) or "-"
         # The BOS / CTS dot hover's sub lines (the user's spec 2026-10-22).
         first_record_str, fr_trigger_str, dot_window_str, dot_records_str = _sub_dot_hover_lines(
             sid_rec, _records_sorted)
@@ -1697,8 +1693,8 @@ def export_m15_chart_plotly(
                     ))
 
         # --- Fib boxes + hover (PLAN_H §8.9 F1, the user 2026-10-06) ---
-        # The H1 chart's drawer, draw gate and hover status cell (`_add_fib_box`,
-        # `fib_record_drawn`, `fib_hover_status_text`): a collapsed cycle's fib is
+        # The H1 chart's drawer, draw gate and hover (`_add_fib_box`,
+        # `fib_record_drawn`, `fib_hovertemplate` + `fib_hover_customdata`): a collapsed cycle's fib is
         # hidden like its KL / POI; an ended never-locked record (e.g. the sub's
         # last cycle ended by `parent_end`) is drawn. No owner filter — a
         # persisting element, like the zones. Every box + hover shares ONE legend
@@ -1724,31 +1720,16 @@ def export_m15_chart_plotly(
                     (eid, int(fib_st.structure_id), int(fib_st.cycle_id), bos_idx, cts_idx))
                 # `fib_st.structure_id` is the bounded sub's internal MS sid
                 # (restarts at 0 per sub) — the hover names the sub by sub_id.
-                fib_cd = [[
-                    eid, p_sid, p_cycle, sub_window_str, sub_records_str, fib_st.cycle_id,
-                    bos_idx, f"{fib_st.bos_price:.5f}", cts_idx, f"{fib_st.cts_price:.5f}",
-                    f"{price_618:.5f}", f"{price_80:.5f}",
-                    fib_hover_status_text(fib_st, ic_row),
-                ]] * len(seg_times)
+                fib_cd = [fib_hover_customdata(
+                    fib_st, ic_row, price_618, price_80,
+                    id_lines=_sub_zone_id_lines(eid, int(fib_st.cycle_id), first_record_str),
+                )] * len(seg_times)
                 fig.add_trace(go.Scatter(
                     x=seg_times, y=[(price_618 + price_80) / 2] * len(seg_times),
                     mode="lines", name="M15 fib", showlegend=False, legendgroup="m15_fib",
                     line=dict(width=6, color="rgba(0,0,0,0)"),  # invisible hover hitbox
                     line_shape="hv",
-                    hovertemplate=(
-                        "TF=15M<br>"
-                        "<b>Fib Zone</b><br>"
-                        "sub_id=%{customdata[0]} | first record parent_sid=%{customdata[1]} parent_cycle_id=%{customdata[2]}<br>"
-                        "sub window=%{customdata[3]}<br>"
-                        "records: %{customdata[4]}<br>"
-                        "cycle_id=%{customdata[5]}<br>"
-                        "BOS: idx=%{customdata[6]} price=%{customdata[7]}<br>"
-                        "CTS: idx=%{customdata[8]} price=%{customdata[9]}<br>"
-                        "61.8%=%{customdata[10]}<br>"
-                        "80%=%{customdata[11]}<br>"
-                        "status=%{customdata[12]}"
-                        "<extra></extra>"
-                    ),
+                    hovertemplate=fib_hovertemplate("15M"),
                     customdata=fib_cd,
                 ))
 

@@ -263,7 +263,7 @@ def poi_ic_hover_text(meta: dict, ic_idx: int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Fib records: the draw gate + the hover status cell (both charts)
+# Fib records: the draw gate + the hover (both charts)
 # ---------------------------------------------------------------------------
 
 def fib_record_drawn(fib_st: Any, collapsed: set) -> bool:
@@ -310,15 +310,20 @@ def ic_rows_by_fib_record(ic_candidates: Sequence[Any], *, by_sub: bool) -> dict
 
 
 def fib_hover_limit_text(fib_st: Any) -> Optional[str]:
-    """The fib hover's cross-fib LIMIT line (PLAN_I R6-7) from the record's
-    `cross_fib_limit_*` meta — None when the record carries none (a fixture).
-    `limit <P> · <source> [(sub <from>)] · M=<M | none>`, or, without `P`,
-    `limit: none (<why>)`: the structure's start (`start_trading`, a
+    """The fib hover's cross-fib LIMIT line (PLAN_I R6-7; the user's spec
+    2026-10-23, `plans/qa_chart_edits_inputs/user_spec_20261023_fib_hover.md`)
+    from the record's `cross_fib_limit_*` meta — None when the record carries
+    none (a fixture). `limit_price=<P> | <source>[ (sub <from>)] |
+    cycle_limit=<M | none>` (`M` = the last cycle a cross may target; `none` =
+    no cycle's CTS got past `P`: every cycle may cross), or, without `P`,
+    `limit_price=NA (<why>)` alone — no cycle may cross, so no `cycle_limit`
+    (the user's decision 2): the structure's start (`start_trading`, a
     `first_confluence on parent cycle 0`), `no previous sub`, or
-    `prev_sub_no_cts (sub <from>)`. Example (sub 6): `limit 0.57112 ·
-    prev_sub_bos_threshold (sub 5) · M=none`. A `P` that MOVED by the structure's
-    end (`cross_fib_limit_move_count`, PLAN_M CL-6) qualifies the price:
-    `limit 0.57630 (moved 7× from 0.57328) · parent_bos_threshold · M=4`."""
+    `prev_sub_no_cts (sub <from>)`. Example (confluence sub 7):
+    `limit_price=0.57112 | prev_sub_bos_threshold (sub 6) | cycle_limit=none`. A
+    `P` that MOVED by the structure's end (`cross_fib_limit_move_count`, PLAN_M
+    CL-6) qualifies the price: `limit_price=0.57630 (moved 7× from 0.57328) |
+    parent_bos_threshold | cycle_limit=4`."""
     m = getattr(fib_st, "meta", None) or {}
     if "cross_fib_limit_source" not in m:
         return None
@@ -335,79 +340,106 @@ def fib_hover_limit_text(fib_st: Any) -> Optional[str]:
             why = f"first_confluence on parent cycle {m.get('parent_cycle_id')}"
         else:
             why = "no previous sub"
-        return f"limit: none ({why})"
+        return f"limit_price=NA ({why})"
     M = m["cross_fib_limit_cycle"]
     moved = ""
     if "cross_fib_limit_move_count" in m:
         moved = (f" (moved {int(m['cross_fib_limit_move_count'])}× from "
                  f"{float(m['cross_fib_limit_price_at_start']):.5f})")
-    return f"limit {float(price):.5f}{moved} · {source}{sub} · M={'none' if M is None else int(M)}"
+    return (f"limit_price={float(price):.5f}{moved} | {source}{sub} | "
+            f"cycle_limit={'none' if M is None else int(M)}")
 
 
 def fib_hover_ic_ref_text(fib_st: Any) -> Optional[str]:
-    """The fib hover's IC reference line (PLAN_K A17; RX1-C1 — hover + CSV only) from the record's `ic_ref_*` meta
-    (`FibTracker.stamp_ic_references`): `IC ref <price> (<source>[, cycle <T−1>]) · break <idx>`, `… · break: none`
-    (a reference with no known break), or `IC ref: none` (no reference — the condition passes). None for a record
-    the finalize never stamped (no `cross_fib_limit_*` keys — a fixture), like `fib_hover_limit_text`. Example
-    (sub 0 cyc 3): `IC ref 0.57774 (prev_cycle_cts, cycle 2) · break 1720`."""
+    """The fib hover's IC reference line (PLAN_K A17; RX1-C1 — hover + CSV only; the user's spec 2026-10-23) from the
+    record's `ic_ref_*` meta (`FibTracker.stamp_ic_references`): `ic_ref: price=<price> (<source>[, cycle <T−1>]) |
+    before=<idx>` — an IC candidate must lie strictly before `before` (the break's pattern anchor), `before=NA (no
+    break)` when no break is known (the price side only) — or `ic_ref: NA (no reference)` (the condition passes).
+    None for a record the finalize never stamped (no `cross_fib_limit_*` keys — a fixture), like
+    `fib_hover_limit_text`. Example (H1 sid 0 cycle 1): `ic_ref: price=0.58246 (prev_cycle_cts, cycle 0) |
+    before=651`."""
     m = getattr(fib_st, "meta", None) or {}
     if "cross_fib_limit_source" not in m:
         return None
     if "ic_ref_source" not in m:
-        return "IC ref: none"
+        return "ic_ref: NA (no reference)"
     source = m["ic_ref_source"]
     cycle = ""
     if source == "prev_cycle_cts":
         cycle = f", cycle {int(fib_st.cycle_id) - 1}"   # CTS_{T−1}, T = the target cycle — a cross too (PLAN_O)
     brk = m.get("ic_ref_break_pattern_anchor_idx")
-    btxt = "break: none" if brk is None else f"break {int(brk)}"
-    return f"IC ref {float(m['ic_ref_price']):.5f} ({source}{cycle}) · {btxt}"
+    before = "NA (no break)" if brk is None else int(brk)
+    return f"ic_ref: price={float(m['ic_ref_price']):.5f} ({source}{cycle}) | before={before}"
 
 
-def fib_hover_status_text(fib_st: Any, ic_row: Optional[Any]) -> str:
-    """The fib hover's status cell — ONE builder for both charts (PLAN_H §8.9
-    F1): the lifecycle status (+ ` (locked)`), `life=[start_idx, end_idx]
-    end_reason` (`–` = never started, `open` = not ended), the cycle's IC
-    outcome (`ic_rows_by_fib_record`; the pick = the drawn POI): `IP <rank> ·
-    IC <idx>` (a pattern's IC), `No pattern · IC <idx> · ranking rule <rule>` /
-    `No pattern · IC <idx> · only IC candidate` (`… only preferred IC candidate` when Step 1B narrowed the field —
-    PLAN_S step 3, the row's `prior_imbalance_outcome` + counts) (a ranked IC, PLAN_L L2 — the IC
-    index KEPT: the fib box's only pointer to its IC, ICR-15), `IC: none
-    (<reason>)` (no IC → no POI: `no_ic_candidate` / `all_ic_candidates_pinbar`),
-    or `IC: not evaluated (no POI record)` (no row: the POI record gate skipped
-    the record — ended before locking, or no CTS_ESTABLISHED) — + ` · zone
-    80-100 (fallback)` when Step 1A ran (`ic_zone_band`, PLAN_P: on a pick, or
-    on a no-IC row = no IC in either zone) —, the record's IC reference
-    (`fib_hover_ic_ref_text`, PLAN_K A17), and the structure's cross-fib limit
-    (`fib_hover_limit_text`, PLAN_I R6-7)."""
-    start = "–" if fib_st.start_idx is None else int(fib_st.start_idx)
-    end = "open" if fib_st.end_idx is None else int(fib_st.end_idx)
-    life = f"life=[{start}, {end}]" + (f" {fib_st.end_reason}" if fib_st.end_reason else "")
+def fib_hover_lifecycle_text(fib_st: Any) -> str:
+    """The fib's own lifecycle, the zones' form (`zone_lifecycle_line`; the user's spec 2026-10-23 — `life=` until
+    then): `lifecycle=[<start>, <end | open>] | end_reason=<reason | open>`; start = `start_idx` (the first
+    activation, sticky), `HOVER_NEVER_ACTIVE` when None (never active — FibState)."""
+    start = HOVER_NEVER_ACTIVE if fib_st.start_idx is None else int(fib_st.start_idx)
+    assert (fib_st.end_idx is None) == (fib_st.end_reason is None), (
+        f"[chart] fib sid={fib_st.structure_id} cycle={fib_st.cycle_id} end {fib_st.end_idx} with end_reason "
+        f"{fib_st.end_reason!r}")
+    if fib_st.end_idx is None:
+        return f"lifecycle=[{start}, open] | end_reason=open"
+    return f"lifecycle=[{start}, {int(fib_st.end_idx)}] | end_reason={fib_st.end_reason}"
+
+
+def fib_hover_no_ic_text(ic_row: Optional[Any]) -> Optional[str]:
+    """The fib hover's IC line — ONLY on a fib with NO IC, which has no POI to carry the reason (the user's spec
+    2026-10-23, decision 1; a pick's IC is on its POI hover — the fib hover dropped `IP <rank> · IC <idx>` / `No
+    pattern · IC <idx> · …`): the cycle's no-IC row (`ic_rows_by_fib_record`) → `ic_idx=NA (<reason>)`
+    (`no_ic_candidate` / `all_ic_candidates_pinbar`, PLAN_H C1) + ` | ic_zone=80-100 (fallback)` when Step 1A searched
+    the 80–100 zone too (`ic_zone_band`, PLAN_P: no IC in either zone); no row → `ic_idx=NA (not evaluated: no POI
+    record)` (the POI record gate skipped the record — ended before locking, or no CTS_ESTABLISHED). None on a pick."""
     if ic_row is None:
-        ip = "IC: not evaluated (no POI record)"
-    elif ic_row.ic_idx is None:
-        ip = f"IC: none ({ic_row.reason})"
-    elif ic_row.ip_outcome == IP_OUTCOME_NO_PATTERN:
-        narrowed = prior_imbalance_narrowed(ic_row.prior_imbalance_outcome, ic_row.prior_imbalance_passer_count,
-                                            ic_row.ic_candidate_count)
-        how = _only_candidate_text(narrowed) if ic_row.ranking_rule is None else f"ranking rule {ic_row.ranking_rule}"
-        ip = f"No pattern · IC {int(ic_row.ic_idx)} · {how}"
-    else:
-        assert ic_row.ip_outcome == IP_OUTCOME_PATTERN, (
-            f"[chart] picked row {ic_row.ic_idx} ip_outcome {ic_row.ip_outcome!r}")
-        ip = f"IP {ic_row.ip_rank} · IC {int(ic_row.ic_idx)}"
-    if ic_row is not None:
-        assert ic_row.ic_zone_band in (IC_ZONE_PRIMARY, IC_ZONE_FALLBACK), (
-            f"[chart] IC row {ic_row.ic_idx} ic_zone_band {ic_row.ic_zone_band!r}")
-        if ic_row.ic_zone_band == IC_ZONE_FALLBACK:
-            ip += " · zone 80-100 (fallback)"
+        return "ic_idx=NA (not evaluated: no POI record)"
+    assert ic_row.ic_zone_band in (IC_ZONE_PRIMARY, IC_ZONE_FALLBACK), (
+        f"[chart] IC row {ic_row.ic_idx} ic_zone_band {ic_row.ic_zone_band!r}")
+    if ic_row.ic_idx is not None:
+        return None
+    zone = " | ic_zone=80-100 (fallback)" if ic_row.ic_zone_band == IC_ZONE_FALLBACK else ""
+    return f"ic_idx=NA ({ic_row.reason}){zone}"
+
+
+def fib_hovertemplate(tf: str) -> str:
+    """The fib hover — ONE template for the H1 chart (`tf="1H"`) and the M15 lens charts (`"15M"`) (PLAN_H §8.9 F1;
+    the user's spec 2026-10-23); customdata = `fib_hover_customdata`. Slot 0 = the identity line(s); slot 5 = the
+    `ic_ref` + limit lines, each with its own leading `<br>` (absent on an unstamped fixture record); slot 7 = the
+    lifecycle line [+ the no-IC line]."""
+    return (
+        f"TF={tf}<br>"
+        "<b>Fib Zone</b><br>"
+        "%{customdata[0]}<br>"
+        "BOS: idx=%{customdata[1]} price=%{customdata[2]}<br>"
+        "CTS: idx=%{customdata[3]} price=%{customdata[4]}"
+        "%{customdata[5]}<br>"
+        "status=%{customdata[6]}<br>"
+        "%{customdata[7]}<br>"
+        "61.8%=%{customdata[8]}<br>"
+        "80%=%{customdata[9]}<br>"
+        "struct_direction=%{customdata[10]}"
+        "<extra></extra>"
+    )
+
+
+def fib_hover_customdata(fib_st: Any, ic_row: Optional[Any], price_618: float, price_80: float,
+                         id_lines: Optional[str] = None) -> list:
+    """`fib_hovertemplate`'s customdata row (slots: 0 the identity line(s) — `id_lines`, a sub's `sub_id | cycle_id`
+    + its `first record:` line; None = the main's `sid | cycle_id` —, 1–4 the BOS / CTS anchors, 5 the IC reference
+    (`fib_hover_ic_ref_text`) + the cross-fib limit (`fib_hover_limit_text`), 6 the status (+ ` (locked)`), 7 the
+    lifecycle (`fib_hover_lifecycle_text`) + the no-IC line (`fib_hover_no_ic_text`; `ic_row` = the cycle's IC
+    outcome row, `ic_rows_by_fib_record`), 8–9 the 61.8 / 80 prices, 10 `struct_direction`)."""
+    if id_lines is None:
+        id_lines = main_zone_id_line({"structure_id": fib_st.structure_id, "cycle_id": fib_st.cycle_id})
+    ref_lines = "".join(f"<br>{line}" for line in (fib_hover_ic_ref_text(fib_st), fib_hover_limit_text(fib_st))
+                        if line is not None)
     status = getattr(fib_st, "status", "active")
-    text = f"{status}{' (locked)' if fib_st.locked else ''}<br>{life}<br>{ip}"
-    ic_ref = fib_hover_ic_ref_text(fib_st)
-    if ic_ref is not None:
-        text = f"{text}<br>{ic_ref}"
-    limit = fib_hover_limit_text(fib_st)
-    return text if limit is None else f"{text}<br>{limit}"
+    no_ic = fib_hover_no_ic_text(ic_row)
+    lifecycle = fib_hover_lifecycle_text(fib_st) + ("" if no_ic is None else f"<br>{no_ic}")
+    return [id_lines, int(fib_st.bos_idx), f"{fib_st.bos_price:.5f}", int(fib_st.cts_idx), f"{fib_st.cts_price:.5f}",
+            ref_lines, f"{status}{' (locked)' if fib_st.locked else ''}", lifecycle,
+            f"{price_618:.5f}", f"{price_80:.5f}", int(fib_st.struct_direction)]
 
 
 # ---------------------------------------------------------------------------

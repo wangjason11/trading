@@ -1,10 +1,10 @@
 """The fib layer on both charts (PLAN_H §8.9 F1, the user 2026-10-06).
 
 ONE draw gate (`_zone_render.fib_record_drawn`: not collapsed, not disappeared,
-locked OR active — ended or not), ONE hover status cell (`fib_hover_status_text`:
-the status, `life=[start, end] reason`, the cycle's IC outcome from
-`ic_rows_by_fib_record` — `IC: …` / a ranked IC's `No pattern · IC <idx> · …`
-since PLAN_L L2) and ONE box drawer (`export_plotly._add_fib_box`), used
+locked OR active — ended or not), ONE hover (`fib_hovertemplate` +
+`fib_hover_customdata` — the user's spec 2026-10-23: `lifecycle=[start, end] |
+end_reason=…`, and an `ic_idx=NA (<reason>)` line only on a fib with no IC, from
+`ic_rows_by_fib_record`) and ONE box drawer (`export_plotly._add_fib_box`), used
 by the H1 chart and the M15 lens charts. The M15 charts draw each sub's fib
 records (they were CSV-only) in one legend group, "M15 fib".
 """
@@ -18,7 +18,10 @@ import pandas as pd
 import pytest
 
 from engine_v2.charting._zone_render import (
-    fib_hover_status_text,
+    fib_hover_customdata,
+    fib_hover_lifecycle_text,
+    fib_hover_no_ic_text,
+    fib_hovertemplate,
     fib_is_bright,
     fib_record_drawn,
     ic_rows_by_fib_record,
@@ -98,7 +101,7 @@ def test_bright_only_for_the_live_version(rec, bright):
 
 
 # ---------------------------------------------------------------------------
-# The IC outcome lookup + the hover status cell
+# The IC outcome lookup + the hover's lifecycle and no-IC lines
 # ---------------------------------------------------------------------------
 
 def test_ic_rows_keep_only_the_pick_and_the_none_row_keyed_per_sub():
@@ -117,36 +120,103 @@ def test_ic_rows_keep_only_the_pick_and_the_none_row_keyed_per_sub():
         (0, 2, 10, 20): _ip(reason="no_ic_candidate", cyc=2)}
 
 
-@pytest.mark.parametrize("rec, row, text", [
+@pytest.mark.parametrize("rec, row, lifecycle, no_ic", [
+    # a pick: no IC line on the fib — its POI hover carries the IC (the user's spec 2026-10-23, decision 1)
     (_fib(locked=True, status="ended", start=652, end=902, end_reason="reversal"),
      _ip(ic=607, rank="3A.iii", picked=True),
-     "ended (locked)<br>life=[652, 902] reversal<br>IP 3A.iii · IC 607"),
-    (_fib(locked=True, status="ended", start=1020, end=1169, end_reason="new_cycle"),
-     _ip(reason="no_ic_candidate"),
-     "ended (locked)<br>life=[1020, 1169] new_cycle<br>IC: none (no_ic_candidate)"),
-    (_fib(status="ended", start=3589, end=3611, end_reason="parent_end"), None,
-     "ended<br>life=[3589, 3611] parent_end<br>IC: not evaluated (no POI record)"),
-    (_fib(status="active", start=4177), _ip(ic=4083, rank="1A.iv", picked=True),
-     "active<br>life=[4177, open]<br>IP 1A.iv · IC 4083"),
-    (_fib(locked=True, status="inactive", end=934, end_reason="new_cycle"),
-     _ip(reason="all_ic_candidates_pinbar", outcome="no_pattern"),
-     "inactive (locked)<br>life=[–, 934] new_cycle<br>IC: none (all_ic_candidates_pinbar)"),
-    # a ranked IC (PLAN_L L2; PLAN_H §6 ICR-15): the fib hover KEEPS `IC <idx>` — the fib box's only pointer to it
+     "lifecycle=[652, 902] | end_reason=reversal", None),
     (_fib(locked=True, status="ended", start=1020, end=1224, end_reason="next_cycle"),
      _ip(ic=929, picked=True, outcome="no_pattern", ranking_rule="exclude_pinbar"),
-     "ended (locked)<br>life=[1020, 1224] next_cycle<br>No pattern · IC 929 · ranking rule exclude_pinbar"),
-    (_fib(status="active", start=30), _ip(ic=36, picked=True, outcome="no_pattern"),
-     "active<br>life=[30, open]<br>No pattern · IC 36 · only IC candidate"),
+     "lifecycle=[1020, 1224] | end_reason=next_cycle", None),
+    (_fib(status="active", start=4177), _ip(ic=4083, rank="1A.iv", picked=True, band="80-100"),
+     "lifecycle=[4177, open] | end_reason=open", None),
+    # no IC → no POI: the reason stays on the fib
+    (_fib(locked=True, status="ended", start=1020, end=1169, end_reason="new_cycle"),
+     _ip(reason="no_ic_candidate"),
+     "lifecycle=[1020, 1169] | end_reason=new_cycle", "ic_idx=NA (no_ic_candidate)"),
+    (_fib(locked=True, status="ended", start=2231, end=2343, end_reason="new_cycle"),
+     _ip(reason="no_ic_candidate", band="80-100"),
+     "lifecycle=[2231, 2343] | end_reason=new_cycle", "ic_idx=NA (no_ic_candidate) | ic_zone=80-100 (fallback)"),
+    (_fib(locked=True, status="inactive", end=934, end_reason="new_cycle"),
+     _ip(reason="all_ic_candidates_pinbar", outcome="no_pattern"),
+     "lifecycle=[NA (never active), 934] | end_reason=new_cycle", "ic_idx=NA (all_ic_candidates_pinbar)"),
+    (_fib(status="ended", start=3589, end=3611, end_reason="parent_end"), None,
+     "lifecycle=[3589, 3611] | end_reason=parent_end", "ic_idx=NA (not evaluated: no POI record)"),
 ])
-def test_hover_status_cell(rec, row, text):
-    assert fib_hover_status_text(rec, row) == text
+def test_hover_lifecycle_and_no_ic_lines(rec, row, lifecycle, no_ic):
+    assert fib_hover_lifecycle_text(rec) == lifecycle
+    assert fib_hover_no_ic_text(row) == no_ic
+    cd = fib_hover_customdata(rec, row, 0.60382, 0.602)
+    assert cd[7] == lifecycle if no_ic is None else cd[7] == f"{lifecycle}<br>{no_ic}"
 
 
-def test_hover_status_cell_rejects_a_picked_row_without_its_outcome():
-    """A picked row is a pattern's IC or a ranked one — `ip_outcome` None on a pick is impossible (no IC candidate
-    → no pick) and fails loudly rather than reading as a pattern."""
-    with pytest.raises(AssertionError, match="ip_outcome None"):
-        fib_hover_status_text(_fib(), _ip(ic=18, picked=True))
+def test_hover_rejects_an_end_without_its_reason_and_an_unknown_band():
+    """`end_idx` None ⇔ `end_reason` None (FibState's terminal axis); an IC row's band is 61.8-80 or 80-100."""
+    with pytest.raises(AssertionError, match="end 9 with end_reason None"):
+        fib_hover_lifecycle_text(_fib(status="ended", start=5, end=9))
+    with pytest.raises(AssertionError, match="end None with end_reason 'new_cycle'"):
+        fib_hover_lifecycle_text(_fib(status="active", start=5, end_reason="new_cycle"))
+    with pytest.raises(AssertionError, match="ic_zone_band"):
+        fib_hover_no_ic_text(_ip(ic=18, picked=True, band="61.8-100"))
+
+
+
+def _stamped(sid, cyc, sd, bos, bos_price, cts, cts_price, *, start, end=None, end_reason=None, status="active",
+             locked=True, ref=None, limit=(None, "none", None, None)):
+    """A FibState with the finalize's stamps: `ref` = (price, source, break pattern anchor | None) or None (no
+    reference); `limit` = (P, source, M, from_sub_id) + `started_by` for a P-less main."""
+    meta = {}
+    if ref is not None:
+        meta.update(ic_ref_price=ref[0], ic_ref_source=ref[1])
+        if ref[2] is not None:
+            meta.update(ic_ref_break_pattern_anchor_idx=ref[2], ic_ref_break_confirmed_idx=ref[2] + 1)
+    meta.update(cross_fib_limit_price=limit[0], cross_fib_limit_source=limit[1], cross_fib_limit_cycle=limit[2],
+                cross_fib_limit_from_sub_id=limit[3])
+    if limit[0] is None:
+        meta["started_by"] = "start_trading"
+    return FibState(structure_id=sid, cycle_id=cyc, struct_direction=sd, bos_idx=bos, bos_price=bos_price,
+                    cts_idx=cts, cts_price=cts_price, active=status == "active", locked=locked,
+                    fib=FibRetracement(anchor_high=max(bos_price, cts_price), anchor_low=min(bos_price, cts_price),
+                                       direction=sd, levels=()),
+                    meta=meta, start_idx=start, end_idx=end, end_reason=end_reason, status=status)
+
+
+@pytest.mark.parametrize("tf, rec, row, prices, id_lines, lines", [
+    # H1 sid 1 cycle 2 (S_zone_hover): a reference with its break, a limit, an open lifecycle, a pick
+    ("1H", _stamped(1, 2, -1, 826, 0.58105, 905, 0.57112, start=902, ref=(0.574, "prev_cycle_cts", 897),
+                    limit=(0.5736, "reversal_bos_frozen", 2, None)),
+     _ip(sid=1, cyc=2, ic=859, picked=True, outcome="no_pattern", ranking_rule="exclude_pinbar"),
+     (0.57726, 0.57906), None,
+     ["sid=1 | cycle_id=2", "BOS: idx=826 price=0.58105", "CTS: idx=905 price=0.57112",
+      "ic_ref: price=0.57400 (prev_cycle_cts, cycle 1) | before=897",
+      "limit_price=0.57360 | reversal_bos_frozen | cycle_limit=2", "status=active (locked)",
+      "lifecycle=[902, open] | end_reason=open", "61.8%=0.57726", "80%=0.57906", "struct_direction=-1"]),
+    # H1 sid 0 cycle 0: no reference, no limit, no IC (so no POI)
+    ("1H", _stamped(0, 0, 1, 96, 0.55808, 430, 0.58246, start=115, end=652, end_reason="new_cycle", status="ended"),
+     _ip(cyc=0, reason="all_ic_candidates_pinbar"), (0.56739, 0.56296), None,
+     ["sid=0 | cycle_id=0", "BOS: idx=96 price=0.55808", "CTS: idx=430 price=0.58246", "ic_ref: NA (no reference)",
+      "limit_price=NA (start_trading)", "status=ended (locked)", "lifecycle=[115, 652] | end_reason=new_cycle",
+      "ic_idx=NA (all_ic_candidates_pinbar)", "61.8%=0.56739", "80%=0.56296", "struct_direction=1"]),
+    # counter sub 8 cycle 0: never active, a reference with no known break, cycle_limit none
+    ("15M", _stamped(0, 0, 1, 4027, 0.57362, 4086, 0.57674, start=None, end=4140, end_reason="new_cycle",
+                     status="inactive", ref=(0.58105, "cross_limit_anchor", None),
+                     limit=(0.58105, "parent_bos_threshold", None, None)),
+     _ip(cyc=0, ic=4048, rank="3C.iv", picked=True), (0.57481, 0.57424),
+     "sub_id=8 | cycle_id=0<br>first record: lens=counter | parent_sid=1 | parent_cycle_id=2",
+     ["sub_id=8 | cycle_id=0", "first record: lens=counter | parent_sid=1 | parent_cycle_id=2",
+      "BOS: idx=4027 price=0.57362", "CTS: idx=4086 price=0.57674",
+      "ic_ref: price=0.58105 (cross_limit_anchor) | before=NA (no break)",
+      "limit_price=0.58105 | parent_bos_threshold | cycle_limit=none", "status=inactive (locked)",
+      "lifecycle=[NA (never active), 4140] | end_reason=new_cycle", "61.8%=0.57481", "80%=0.57424",
+      "struct_direction=1"]),
+])
+def test_the_rendered_hover_in_the_users_order(tf, rec, row, prices, id_lines, lines):
+    """The user's fib-hover spec (2026-10-23, `plans/qa_chart_edits_inputs/user_spec_20261023_fib_hover.md`), on
+    three of the window's fibs (S_zone_hover values): the template + customdata render exactly these lines."""
+    from engine_v2.tests.test_plan_h_landing_b import _rendered
+    tr = SimpleNamespace(hovertemplate=fib_hovertemplate(tf),
+                         customdata=[fib_hover_customdata(rec, row, *prices, id_lines=id_lines)])
+    assert _rendered(tr) == "<br>".join([f"TF={tf}", "<b>Fib Zone</b>", *lines]) + "<extra></extra>"
 
 
 # ---------------------------------------------------------------------------
@@ -187,10 +257,18 @@ def test_h1_chart_hides_a_collapsed_cycles_fib_and_hovers_the_lifecycle_and_ip(t
     fig = _render_h1(df, monkeypatch, tmp_path)
     fib_tr = {tr.name: tr for tr in fig.data if (tr.name or "").startswith("fib:")}
     assert sorted(fib_tr) == ["fib:sid0:c0", "fib:sid0:c1", "fib:sid0:c2", "fib:sid0:c3"]
+    from engine_v2.tests.test_plan_h_landing_b import _rendered
     for (sid, cyc), rec in recs.items():
-        cell = fib_tr[f"fib:sid{sid}:c{cyc}"].customdata[0][8]
-        assert cell == fib_hover_status_text(rec, rows.get((sid, cyc, rec.bos_idx, rec.cts_idx)))
-        assert "<br>life=[" in cell
+        tr = fib_tr[f"fib:sid{sid}:c{cyc}"]
+        cd = list(tr.customdata[0])
+        row = rows.get((sid, cyc, rec.bos_idx, rec.cts_idx))
+        assert cd == fib_hover_customdata(rec, row, float(cd[8]), float(cd[9]))
+        assert cd[0] == f"sid={sid} | cycle_id={cyc}" and tr.hovertemplate == fib_hovertemplate("1H")
+        # the user's line order (spec 2026-10-23); the `ic_idx` line only on a fib with no IC (no POI)
+        labels = [ln.split("=")[0].split(":")[0] for ln in _rendered(tr).split("<br>")]
+        assert labels == ["TF", "<b>Fib Zone</b>", "sid", "BOS", "CTS", "ic_ref", "limit_price", "status",
+                          "lifecycle", *(["ic_idx"] if row is None or row.ic_idx is None else []),
+                          "61.8%", "80%", "struct_direction"]
     n_shapes = len(fig.layout.shapes)
     # (0, 1)'s POI (a ranked IC since PLAN_L L2 — its only IC candidate) and its shapes, measured by leaving it out
     assert [(z.meta["cycle_id"], z.meta["ip_outcome"]) for z in out["poi_zones"]] == [
@@ -274,22 +352,18 @@ def _render_m15(monkeypatch, tmp_path, cfg_extra=None, poi_zones=(), triggers=()
 def test_m15_chart_draws_each_subs_fibs_in_one_legend_group(tmp_path, monkeypatch):
     fig = _render_m15(monkeypatch, tmp_path)
     fib_tr = [tr for tr in fig.data if tr.name == "M15 fib"]
-    got = sorted((c[0], c[5], c[6], c[8], c[12]) for c in (tr.customdata[0] for tr in fib_tr))
-    rows = ic_rows_by_fib_record(_M15_IP, by_sub=True)
-
-    def _cell(key, sub):
-        rec = _M15_FIBS[key]
-        return fib_hover_status_text(rec, rows.get((sub, 0, rec.cycle_id, rec.bos_idx, rec.cts_idx)))
-
+    got = sorted((c[0], c[1], c[3], c[5], c[7]) for c in (tr.customdata[0] for tr in fib_tr))
+    # both subs' first record: confluence on parent (0, 1); the fixtures carry no IC reference / limit keys (slot 5)
+    fr = "first record: lens=confluence | parent_sid=0 | parent_cycle_id=1"
     assert got == [
-        (5, 1, 10, 20, _cell("s5c1", 5)),
-        (5, 2, 22, 35, _cell("s5c2", 5)),
-        (6, 1, 10, 20, _cell("s6c1", 6)),
+        (f"sub_id=5 | cycle_id=1<br>{fr}", 10, 20, "", "lifecycle=[12, 25] | end_reason=new_cycle"),
+        (f"sub_id=5 | cycle_id=2<br>{fr}", 22, 35, "",
+         "lifecycle=[25, 40] | end_reason=parent_end<br>ic_idx=NA (not evaluated: no POI record)"),
+        (f"sub_id=6 | cycle_id=1<br>{fr}", 10, 20, "",
+         "lifecycle=[30, open] | end_reason=open<br>ic_idx=NA (no_ic_candidate)"),
     ]
-    assert [g[4].rsplit("<br>", 1)[1] for g in got] == [
-        "IP 1A.iv · IC 18", "IC: not evaluated (no POI record)", "IC: none (no_ic_candidate)"]
     assert all(tr.legendgroup == "m15_fib" and tr.showlegend is False for tr in fib_tr)
-    assert all("sub_id=%{customdata[0]}" in tr.hovertemplate for tr in fib_tr)
+    assert all(tr.hovertemplate == fib_hovertemplate("15M") for tr in fib_tr)
 
     shapes = [s for s in fig.layout.shapes if s.legendgroup == "m15_fib"]
     assert len(shapes) == 5 * len(fib_tr) == len(fig.layout.shapes)
@@ -303,7 +377,7 @@ def test_m15_chart_draws_each_subs_fibs_in_one_legend_group(tmp_path, monkeypatc
     from engine_v2.tests.test_plan_h_landing_b import _rendered
     for tr in fib_tr:
         c = tr.customdata[0]
-        assert (c[1], c[2], c[10], c[11]) == (0, 1, "0.60382", "0.60200")
+        assert (c[8], c[9], c[10]) == ("0.60382", "0.60200", 1)
         assert "<br>61.8%=0.60382<br>80%=0.60200<br>" in _rendered(tr) and "%%" not in tr.hovertemplate
     rects = [s for s in shapes if s.type == "rect"]
     assert {(round(s.y0, 5), round(s.y1, 5)) for s in rects} == {(0.60382, 0.602)}

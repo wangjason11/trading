@@ -1042,15 +1042,14 @@ line labelled since 2026-10-23 (the values unchanged):
   every candidate passed or 1B fell back; + a line `ic_zone=80-100 (fallback)` on a Step 1A IC (PLAN_P; nothing on
   the 61.8–80 band) — ONE builder for the three POI hover sites (`charting/_zone_render.poi_ic_hover_text`). Until
   2026-10-23 these lines carried no labels (`Tiebreak over …`, `Prior imbalance …`, `IC zone 80-100 (fallback)`)
-- The fib hover (the H1 chart AND the M15 lens charts since PLAN_H §8.9 F1, 2026-10-06): its status cell =
-  status · `life=[start, end] reason` · the IC outcome (`IP <rank> · IC <idx>` — a pattern's IC; `No pattern · IC
-  <idx> · ranking rule <rule>` / `No pattern · IC <idx> · only IC candidate` (`… only preferred IC candidate` when
-  Step 1B narrowed the field — PLAN_S step 3; read from the CSV's picked row) — a ranked IC, the IC index KEPT: the fib
-  box's only pointer to its IC; `IC: none (<reason>)` on a record without an IC — `no_ic_candidate` /
-  `all_ic_candidates_pinbar` (§3.5), no POI, PLAN_H C1 —; or `IC: not evaluated (no POI record)`; `IP: none` / `IP: not
-  evaluated` until PLAN_L L2; + ` · zone 80-100 (fallback)` when Step 1A ran — on a pick, or on `IC: none (…)` = no
-  IC in either zone, PLAN_P; `charting/_zone_render.fib_hover_status_text`) · since PLAN_I S2 the structure's cross-fib limit line
-  (`fib_hover_limit_text`). Canonical: `charting/CHARTING_SPEC.md` §8
+- The fib hover (the H1 chart AND the M15 lens charts since PLAN_H §8.9 F1, 2026-10-06; the user's spec 2026-10-23):
+  the IC reference line `ic_ref: price=<price> (<source>[, cycle <T−1>]) | before=<idx | NA (no break)>` / `ic_ref: NA
+  (no reference)` (§3.2; `fib_hover_ic_ref_text`), the structure's cross-fib limit line (`limit_price=… | <source> |
+  cycle_limit=…`, `fib_hover_limit_text`) and — ONLY on a fib with no IC, which has no POI — `ic_idx=NA (<reason>)`
+  (`no_ic_candidate` / `all_ic_candidates_pinbar`, §3.5) + ` | ic_zone=80-100 (fallback)` when Step 1A searched
+  80–100 too, or `ic_idx=NA (not evaluated: no POI record)` (`fib_hover_no_ic_text`). A pick's IC outcome is on its
+  POI hover only (above); until 2026-10-23 the fib hover named it too (`IP <rank> · IC <idx>`, `No pattern · IC <idx>
+  · …`, the IC index kept as the fib box's only pointer to its IC). Canonical: `charting/CHARTING_SPEC.md` §8
 
 ### Style Keys (style_registry.py)
 ```python

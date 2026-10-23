@@ -349,10 +349,11 @@ def test_the_hover_qualifies_a_moved_price():
             "cross_fib_limit_cycle": 4, "cross_fib_limit_from_sub_id": None,
             "cross_fib_limit_price_at_start": 0.57328, "cross_fib_limit_move_count": 7}
     assert fib_hover_limit_text(SimpleNamespace(meta=meta)) == (
-        "limit 0.57630 (moved 7× from 0.57328) · parent_bos_threshold · M=4")
+        "limit_price=0.57630 (moved 7× from 0.57328) | parent_bos_threshold | cycle_limit=4")
     unmoved = {k: v for k, v in meta.items() if k not in ("cross_fib_limit_price_at_start",
                                                           "cross_fib_limit_move_count")}
-    assert fib_hover_limit_text(SimpleNamespace(meta=unmoved)) == "limit 0.57630 · parent_bos_threshold · M=4"
+    assert fib_hover_limit_text(SimpleNamespace(meta=unmoved)) == (
+        "limit_price=0.57630 | parent_bos_threshold | cycle_limit=4")
 
 
 # =====================================================================================================================

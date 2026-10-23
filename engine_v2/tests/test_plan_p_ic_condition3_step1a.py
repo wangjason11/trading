@@ -19,7 +19,7 @@ import pandas as pd
 import pytest
 
 import engine_v2.zones.poi_zones as poi_zones
-from engine_v2.charting._zone_render import fib_hover_status_text, poi_ic_hover_text
+from engine_v2.charting._zone_render import fib_hover_no_ic_text, poi_ic_hover_text
 from engine_v2.common.types import ImbalanceInstance
 from engine_v2.debug.export_zones import export_ic_candidates
 from engine_v2.tests._cross_fib_limits import NO_REF_TRACKER
@@ -222,23 +222,23 @@ def test_the_poi_hover_names_the_fallback_band_only():
 
 
 @pytest.mark.parametrize("row, line", [
-    (_ip(ic=4131, rank="3B.iii", picked=True, band=IC_ZONE_FALLBACK), "IP 3B.iii · IC 4131 · zone 80-100 (fallback)"),
-    (_ip(ic=1934, picked=True, outcome="no_pattern", ranking_rule="exclude_pinbar", band=IC_ZONE_FALLBACK),
-     "No pattern · IC 1934 · ranking rule exclude_pinbar · zone 80-100 (fallback)"),
+    # a pick's band is on its POI hover (`ic_zone=`) — the fib hover keeps an IC line only when it found no IC
+    # (the user's fib-hover spec 2026-10-23)
+    (_ip(ic=4131, rank="3B.iii", picked=True, band=IC_ZONE_FALLBACK), None),
+    (_ip(ic=1934, picked=True, outcome="no_pattern", ranking_rule="exclude_pinbar", band=IC_ZONE_FALLBACK), None),
     (_ip(reason="no_ic_candidate", band=IC_ZONE_FALLBACK),
-     "IC: none (no_ic_candidate) · zone 80-100 (fallback)"),        # Step 1A ran and found none
-    (_ip(ic=4131, rank="3B.iii", picked=True), "IP 3B.iii · IC 4131"),
-    (None, "IC: not evaluated (no POI record)"),
+     "ic_idx=NA (no_ic_candidate) | ic_zone=80-100 (fallback)"),     # Step 1A ran and found none
+    (_ip(reason="no_ic_candidate"), "ic_idx=NA (no_ic_candidate)"),
+    (_ip(ic=4131, rank="3B.iii", picked=True), None),
+    (None, "ic_idx=NA (not evaluated: no POI record)"),
 ])
-def test_the_fib_status_suffix_names_the_fallback_band_only(row, line):
-    from engine_v2.tests.test_fib_chart_render import _fib
-    assert fib_hover_status_text(_fib(status="active", start=30), row).split("<br>")[2] == line
+def test_the_fib_no_ic_line_names_the_fallback_band_only(row, line):
+    assert fib_hover_no_ic_text(row) == line
 
 
-def test_the_fib_status_rejects_a_row_without_a_known_band():
-    from engine_v2.tests.test_fib_chart_render import _fib
+def test_the_fib_no_ic_line_rejects_a_row_without_a_known_band():
     with pytest.raises(AssertionError, match="ic_zone_band"):
-        fib_hover_status_text(_fib(status="active", start=30), _ip(ic=4131, rank="3B.iii", picked=True, band=None))
+        fib_hover_no_ic_text(_ip(ic=4131, rank="3B.iii", picked=True, band=None))
 
 
 def test_ms_reads_a_step_1a_ics_inner():

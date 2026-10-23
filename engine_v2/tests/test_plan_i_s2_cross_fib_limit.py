@@ -20,7 +20,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from engine_v2.charting._zone_render import fib_hover_limit_text, fib_hover_status_text
+from engine_v2.charting._zone_render import fib_hover_customdata, fib_hover_limit_text
 from engine_v2.multitf import cross_fib_limit as cfl
 from engine_v2.multitf.cross_fib_limit import NO_LIMIT
 from engine_v2.multitf.sid_records import build_sid_records_for_main
@@ -663,7 +663,9 @@ def test_cycle_t_established_before_t_minus_1_confirmed_raises():
 # =============================================================================
 
 def _fib(**meta):
-    return SimpleNamespace(meta=meta, start_idx=10, end_idx=None, end_reason=None, locked=False, status="active")
+    return SimpleNamespace(meta=meta, start_idx=10, end_idx=None, end_reason=None, locked=False, status="active",
+                           structure_id=0, cycle_id=0, struct_direction=1, bos_idx=1, bos_price=0.6, cts_idx=2,
+                           cts_price=0.61)
 
 
 def _lim(price, source, cycle=None, frm=None, **extra):
@@ -672,29 +674,33 @@ def _lim(price, source, cycle=None, frm=None, **extra):
 
 
 @pytest.mark.parametrize("meta, text", [
-    (_lim(0.57827, "prev_sub_bos_threshold", 2, 6), "limit 0.57827 · prev_sub_bos_threshold (sub 6) · M=2"),
-    (_lim(0.5736, "reversal_bos_frozen", 2, started_by="reversal"), "limit 0.57360 · reversal_bos_frozen · M=2"),
-    (_lim(0.58105, "prev_sub_bos_threshold", None, 4), "limit 0.58105 · prev_sub_bos_threshold (sub 4) · M=none"),
-    (_lim(0.57926, "reversal_bos_frozen", 0, 1), "limit 0.57926 · reversal_bos_frozen (sub 1) · M=0"),
-    (_lim(None, "none", started_by="start_trading"), "limit: none (start_trading)"),
+    (_lim(0.57827, "prev_sub_bos_threshold", 2, 6),
+     "limit_price=0.57827 | prev_sub_bos_threshold (sub 6) | cycle_limit=2"),
+    (_lim(0.5736, "reversal_bos_frozen", 2, started_by="reversal"),
+     "limit_price=0.57360 | reversal_bos_frozen | cycle_limit=2"),
+    (_lim(0.58105, "prev_sub_bos_threshold", None, 4),
+     "limit_price=0.58105 | prev_sub_bos_threshold (sub 4) | cycle_limit=none"),
+    (_lim(0.57926, "reversal_bos_frozen", 0, 1), "limit_price=0.57926 | reversal_bos_frozen (sub 1) | cycle_limit=0"),
+    # no `P`: no cycle may cross — `limit_price=NA (<why>)` alone, no `cycle_limit` (the user's spec 2026-10-23)
+    (_lim(None, "none", started_by="start_trading"), "limit_price=NA (start_trading)"),
     (_lim(None, "none", started_by="first_confluence", parent_cycle_id=0),
-     "limit: none (first_confluence on parent cycle 0)"),
-    (_lim(None, "none", started_by="first_counter"), "limit: none (no previous sub)"),
+     "limit_price=NA (first_confluence on parent cycle 0)"),
+    (_lim(None, "none", started_by="first_counter"), "limit_price=NA (no previous sub)"),
     (_lim(None, "prev_sub_no_cts", frm=3, started_by="subsequent_confluence"),
-     "limit: none (prev_sub_no_cts (sub 3))"),
+     "limit_price=NA (prev_sub_no_cts (sub 3))"),
 ])
 def test_the_limit_hover_line(meta, text):
     assert fib_hover_limit_text(_fib(**meta)) == text
 
 
-def test_the_limit_line_is_the_hovers_last_line_and_absent_without_the_keys():
-    with_lim = fib_hover_status_text(_fib(**_lim(0.57827, "prev_sub_bos_threshold", 2, 6)), None)
+def test_the_limit_line_follows_the_ic_reference_and_is_absent_without_the_keys():
+    with_lim = fib_hover_customdata(_fib(**_lim(0.57827, "prev_sub_bos_threshold", 2, 6)), None, 0.6, 0.6)[5]
     assert with_lim.split("<br>") == [
-        "active", "life=[10, open]", "IC: not evaluated (no POI record)",
-        "IC ref: none",                                        # PLAN_K A17: a stamped record with no reference
-        "limit 0.57827 · prev_sub_bos_threshold (sub 6) · M=2"]
+        "",
+        "ic_ref: NA (no reference)",                           # PLAN_K A17: a stamped record with no reference
+        "limit_price=0.57827 | prev_sub_bos_threshold (sub 6) | cycle_limit=2"]
     assert fib_hover_limit_text(_fib()) is None
-    assert fib_hover_status_text(_fib(), None).count("<br>") == 2
+    assert fib_hover_customdata(_fib(), None, 0.6, 0.6)[5] == ""
 
 
 

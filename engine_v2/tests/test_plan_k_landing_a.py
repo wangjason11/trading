@@ -593,13 +593,14 @@ def test_the_h1_chart_renders_the_ic_reference_line(tmp_path, monkeypatch):
     df.attrs.update(structure_events=res.events, fib_states=out["fib_states"], poi_zones=out["poi_zones"],
                     ic_candidates=out["ic_candidates"], kl_zones=list(out["kl_zones"]))
     fig = _render_h1(df, monkeypatch, tmp_path)
-    cells = {tr.name: tr.customdata[0][8].split("<br>") for tr in fig.data if (tr.name or "").startswith("fib:")}
+    # slot 5 = `<br>`ic_ref`<br>`limit (the user's spec 2026-10-23)
+    cells = {tr.name: tr.customdata[0][5].split("<br>") for tr in fig.data if (tr.name or "").startswith("fib:")}
     conf0 = next(e for e in res.events if e.type == "CTS_CONFIRMED" and e.meta["cycle_id"] == 0)
     est1 = next(e for e in res.events if e.type == "CTS_ESTABLISHED" and e.meta["cycle_id"] == 1)
-    assert cells["fib:sid0:c0"][-2] == "IC ref: none"
-    assert cells["fib:sid0:c1"][-2] == (f"IC ref {float(conf0.price):.5f} (prev_cycle_cts, cycle 0) · "
-                                       f"break {ef.pattern_anchor_idx(est1)}")
-    assert cells["fib:sid0:c1"][-1].startswith("limit")
+    assert cells["fib:sid0:c0"][-2] == "ic_ref: NA (no reference)"
+    assert cells["fib:sid0:c1"][-2] == (f"ic_ref: price={float(conf0.price):.5f} (prev_cycle_cts, cycle 0) | "
+                                       f"before={ef.pattern_anchor_idx(est1)}")
+    assert cells["fib:sid0:c1"][-1].startswith("limit_price=")
 
 
 def test_the_hover_names_the_target_cycles_previous_cts():
@@ -610,7 +611,7 @@ def test_the_hover_names_the_target_cycles_previous_cts():
                 "ic_ref_break_pattern_anchor_idx": 58, "ic_ref_break_confirmed_idx": 60,
                 "cross_fib_limit_source": "none"}
         assert fib_hover_ic_ref_text(SimpleNamespace(meta=meta, cycle_id=2)) == (
-            "IC ref 0.60000 (prev_cycle_cts, cycle 1) · break 58")
+            "ic_ref: price=0.60000 (prev_cycle_cts, cycle 1) | before=58")
 
 
 def test_every_retrospective_reference_reads_to_the_lifecycle_cap(monkeypatch):
@@ -650,9 +651,10 @@ def test_a_lens_chart_renders_a_reference_with_no_known_break(tmp_path, monkeypa
             "cross_fib_limit_cycle": None, "cross_fib_limit_from_sub_id": 5}
     monkeypatch.setitem(FCR._M15_FIBS, "s6c1", dataclasses.replace(rec, meta=meta))
     fig = FCR._render_m15(monkeypatch, tmp_path)
-    cell, = [tr.customdata[0][12] for tr in fig.data if tr.name == "M15 fib" and tr.customdata[0][0] == 6]
-    assert cell.split("<br>")[-2:] == ["IC ref 0.60100 (cross_limit_anchor) · break: none",
-                                       "limit 0.60120 · prev_sub_bos_threshold (sub 5) · M=none"]
+    cell, = [tr.customdata[0][5] for tr in fig.data
+             if tr.name == "M15 fib" and tr.customdata[0][0].startswith("sub_id=6 |")]
+    assert cell.split("<br>")[1:] == ["ic_ref: price=0.60100 (cross_limit_anchor) | before=NA (no break)",
+                                      "limit_price=0.60120 | prev_sub_bos_threshold (sub 5) | cycle_limit=none"]
 
 
 # =====================================================================================================================

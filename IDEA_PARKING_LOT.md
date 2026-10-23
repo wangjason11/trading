@@ -149,9 +149,11 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    detail"). The second edit LANDED 2026-10-23 — the KL / POI zone hover, main + sub + the H1 overlay (the user's
    spec + decisions + what landed: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_zone_hover.md`;
    figure-only; `lifecycle=` = the zone's own active window, every IC line labelled; source `56bb20d`, save
-   S_zone_hover `20261023_153743_56bb20d` = `LATEST_<branch>`). NEXT: the user's further
-   specs — the fib and wave-candle hovers still carry the older `sub window=[s,e] reason` / `records: … a→b` /
-   `life=` strings.
+   S_zone_hover `20261023_153743_56bb20d`). The third edit LANDED 2026-10-23 — the Fib zone hover, main + sub (the
+   user's spec + decisions + what landed: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_fib_hover.md`;
+   figure-only; `ic_ref:` / `limit_price=` / `lifecycle=` relabelled, the IC outcome line kept only on a fib with no
+   IC). NEXT: the user's further specs — the wave-candle hover still carries the older `first record parent_sid=…
+   parent_cycle=…` / `sub window=[s,e] reason` strings.
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -453,6 +455,13 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
   the 820 / 871 markers), a POI marker the UNCLAMPED activation floor (PLAN_Q). Option: show the KL zone's unclamped
   confirmation moment (`KLZone.source_time`'s candle) — a second cause, not done in PLAN_Q. Detail: CHARTING_SPEC
   §12.
+- **Two names for a cycle's end at the next cycle: the fib's `new_cycle` vs the zones' `next_cycle`** (flagged to
+  the user 2026-10-23 with the fib-hover spec, not asked): the fib stream's terminal (`fib_tracker._set_terminal`) is
+  `new_cycle`, the cycle table's (`structure_lifecycle.compute_cycle_lifecycle`, which every KL / POI inherits and
+  which caps a fib when strictly earlier — CROSS_CYCLE_FIB_SPEC §2) `next_cycle`; since the zone and fib hover specs
+  both show on one chart as `end_reason=`. Exported values, so a rename is a meta-contract migration (LANDMINES
+  "Event Contract Rules" rule 3), not a hover change. Detail:
+  `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_fib_hover.md`.
 - **Uniform 3-tier chart opacity** (brightest = cycle not ended, mid = sid not ended, faded = sid ended; one
   `opacity_for(sid, cycle)` helper for every element) — its own session. Detail: FIB_LIFECYCLE_SPEC §9.4 + §13.
 - **Breadcrumb header with cross-chart navigation** — "not in v1". Detail: PART4 §16.9.

@@ -23,7 +23,7 @@ import pandas as pd
 import pytest
 
 import engine_v2.zones.poi_zones as poi_zones
-from engine_v2.charting._zone_render import fib_hover_status_text, poi_ic_hover_text
+from engine_v2.charting._zone_render import fib_hover_no_ic_text, poi_ic_hover_text
 from engine_v2.common.types import ImbalanceInstance
 from engine_v2.debug.export_zones import IC_CANDIDATE_COLUMNS, export_ic_candidates
 from engine_v2.multitf import entity_df_mutation as edm
@@ -467,15 +467,17 @@ def test_the_poi_hover_rejects_an_inconsistent_preference():
             poi_ic_hover_text({**poi.meta, **bad}, poi.ic_idx)
 
 
-@pytest.mark.parametrize("specs, cell", [
-    (FIX["runner_up_still_in_play"], "No pattern · IC 9 · only preferred IC candidate"),
-    (FIX["single"], "No pattern · IC 7 · only IC candidate"),
+@pytest.mark.parametrize("specs, ic, reason", [
+    (FIX["runner_up_still_in_play"], 9, "No pattern · only preferred IC candidate"),
+    (FIX["single"], 7, "No pattern · only IC candidate"),
 ])
-def test_the_fib_hover_names_the_preferred_ic(specs, cell):
-    """The fib hover reads the CSV's picked row — the same outcome + counts as the POI hover (one narrowing test)."""
-    df, est, tracker = _inputs(specs)
-    (row,) = [r for r in derive_ic_candidates(df, est, tracker, POIConfig(), structure_path_id="H1.main") if r.picked]
-    assert f"<br>{cell}" in fib_hover_status_text(tracker.get_fibs_for_charting()[0], row)
+def test_the_poi_hover_alone_names_the_preferred_ic(specs, ic, reason):
+    """Since the user's fib-hover spec (2026-10-23) a pick's IC is on its POI hover only (the fib hover keeps an IC line
+    only when it found none) — the POI hover names the preference (one narrowing test, `_poi_narrowed`)."""
+    poi, rows = _drawn(specs)
+    (row,) = [r for r in rows if r.picked]
+    assert row.ic_idx == ic == poi.ic_idx and fib_hover_no_ic_text(row) is None
+    assert poi_ic_hover_text(poi.meta, poi.ic_idx).split("<br>")[0] == f"ic_reason={reason}"
 
 
 @pytest.mark.parametrize("outcome, passers, candidates, narrowed", [

@@ -43,7 +43,7 @@ def test_the_hover_names_no_cycle_for_a_structure_reference():
     meta = {"ic_ref_price": 0.5736, "ic_ref_source": "prev_structure_bos", "ic_ref_break_pattern_anchor_idx": 897,
             "ic_ref_break_confirmed_idx": 902, "cross_fib_limit_source": "reversal_bos_frozen"}
     assert fib_hover_ic_ref_text(SimpleNamespace(meta=meta, cycle_id=1)) == (
-        "IC ref 0.57360 (prev_structure_bos) · break 897")
+        "ic_ref: price=0.57360 (prev_structure_bos) | before=897")
 
 
 # ---- B3 (N11): MS's read — the whole frame, at the moment (K-Q6) ----------------------------------------------------

@@ -500,15 +500,14 @@ def test_h1_chart_hovers_show_the_pattern_the_ranking_and_ic_none(tmp_path, monk
     assert poi_ic_hover_text(by_ic[7].meta, 7) == "ic_reason=No pattern · only IC candidate"
     assert poi_ic_hover_text(by_ic[14].meta, 14).startswith("ic_reason=IP 1A.iii · legs ")
     fib_tr = [tr for tr in fig.data if (tr.name or "").startswith("fib:")]
-    fib_status = {tr.name: tr.customdata[0][8] for tr in fib_tr}
-    # the IC line, then the IC reference, then S2's limit line (main's limits since PLAN_I S4: sid 0 started by
-    # start trading)
-    lines = fib_status["fib:sid0:c1"].split("<br>")
-    assert lines[2:] == ["No pattern · IC 7 · only IC candidate", lines[3], "limit: none (start_trading)"]
-    assert lines[3].startswith("IC ref ") and "(prev_cycle_cts, cycle 0)" in lines[3]   # PLAN_K A17
-    assert fib_status["fib:sid0:c2"].split("<br>")[2] == "IP 1A.iii · IC 14"
-    assert fib_status["fib:sid0:c0"].split("<br>")[2] == "IC: none (no_ic_candidate)"
-    assert not any("IP: none" in v or "IP: not evaluated" in v for v in fib_status.values())
+    fib_cd = {tr.name: tr.customdata[0] for tr in fib_tr}
+    # the IC reference, then S2's limit line (main's limits since PLAN_I S4: sid 0 started by start trading); a
+    # pick's IC is on its POI hover — the fib keeps an IC line only when it found none (the user's spec 2026-10-23)
+    ref, limit = fib_cd["fib:sid0:c1"][5].split("<br>")[1:]
+    assert ref.startswith("ic_ref: price=") and "(prev_cycle_cts, cycle 0) | before=" in ref     # PLAN_K A17
+    assert limit == "limit_price=NA (start_trading)"
+    assert "<br>" not in fib_cd["fib:sid0:c1"][7] and "<br>" not in fib_cd["fib:sid0:c2"][7]      # the picks 7 / 14
+    assert fib_cd["fib:sid0:c0"][7].split("<br>")[1] == "ic_idx=NA (no_ic_candidate)"
     # F1·1: a literal `%` (Plotly has no `%%` escape)
     assert all("<br>61.8%=" in _rendered(tr) and "<br>80%=" in _rendered(tr) and "%%" not in tr.hovertemplate
                for tr in fib_tr)

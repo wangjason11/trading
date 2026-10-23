@@ -134,7 +134,7 @@ then end together. 0 on the reference window (0 / 27 fib cycles move); one real 
 - **REQUIRED:** a tracker consulted for a cycle ≥ 1 of a structure with no limit entry raises `CrossFibLimitError` (a
   `RuntimeError`, never swallowed by a sub geometry's `except (ValueError, IndexError)`).
 - **Exported:** every fib record's meta carries `cross_fib_limit_price` / `_source` / `_cycle` (the structure's FINAL
-  `M`) / `_from_sub_id` (+ main's `started_by`), stamped at finalize; the fib hover's last line
+  `M`) / `_from_sub_id` (+ main's `started_by`), stamped at finalize; the fib hover's limit line
   (`_zone_render.fib_hover_limit_text`, CHARTING_SPEC). FINAL = as of the STRUCTURE'S END (`_cross_fib_limit_meta(sid,
   at=lifecycle_cap)`, the same `at` at `_finalize_lifecycle_fields` and `stamp_ic_references`; None = main / an open
   sub): `cross_fib_limit_price` = `price_at(cap)` — never a move after the structure ended — and `_cycle` = `M` at
@@ -193,8 +193,9 @@ then end together. 0 on the reference window (0 / 27 fib cycles move); one real 
     structure's end): fib meta `ic_ref_price`, `ic_ref_source`
     (`prev_cycle_cts` | `prev_structure_bos` | `cross_limit_anchor`; absent = no reference),
     `ic_ref_break_pattern_anchor_idx`, `ic_ref_break_confirmed_idx` (absent = no known break), placed BEFORE the limit
-    keys; the fib hover's line before the limit line (`_zone_render.fib_hover_ic_ref_text`: `IC ref 0.57774
-    (prev_cycle_cts, cycle 2) · break 1720` / `… · break: none` / `IC ref: none`).
+    keys; the fib hover's line before the limit line (`_zone_render.fib_hover_ic_ref_text`: `ic_ref: price=0.57774
+    (prev_cycle_cts, cycle 2) | before=1720` / `… | before=NA (no break)` / `ic_ref: NA (no reference)` — the user's
+    spec 2026-10-23; `IC ref … · break …` until then).
   - **A cross's `prev_cycle_cts` is its TARGET's** (PLAN_O, the user 2026-10-13 — "we do not treat the cross fib cycles
     as unified"): CTS_{T−1}, bound = cycle T's establishment pattern, like a single of T — so a cross from cycle 0 has
     one too; a pre-established cross (T not established) → no bound, the price side only, and only the stamp can read

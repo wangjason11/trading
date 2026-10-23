@@ -16,7 +16,8 @@ from engine_v2.charting._zone_render import (
     collapsed_cycles,
     compute_kl_active_stretches,
     compute_poi_active_stretches,
-    fib_hover_status_text,
+    fib_hover_customdata,
+    fib_hovertemplate,
     fib_is_bright,
     fib_record_drawn,
     ic_rows_by_fib_record,
@@ -2419,13 +2420,12 @@ def export_chart_plotly(
     fib_states = dfx.attrs.get("fib_states", [])
 
     if fib_cfg.get("lines", True) and fib_states:
-        # The draw gate, the box and the hover status cell are shared with the
-        # M15 lens charts (`_zone_render.fib_record_drawn` /
-        # `fib_hover_status_text`, `_add_fib_box`; PLAN_H §8.9 F1): a collapsed
-        # cycle's fib is hidden like its KL / POI; the hover carries the
-        # lifecycle and the cycle's IC outcome (the pick — a pattern's IC or a
-        # ranked one —, `IC: none (<reason>)` — PLAN_H C1, PLAN_L L2 —, or not
-        # evaluated).
+        # The draw gate, the box and the hover are shared with the M15 lens
+        # charts (`_zone_render.fib_record_drawn` / `fib_hovertemplate` +
+        # `fib_hover_customdata`, `_add_fib_box`; PLAN_H §8.9 F1): a collapsed
+        # cycle's fib is hidden like its KL / POI; the hover (the user's spec
+        # 2026-10-23) carries the IC reference, the cross-fib limit, the
+        # lifecycle and — on a fib with no IC, so no POI — the no-IC reason.
         _collapsed = collapsed_cycles(dfx.attrs.get("kl_zones", []))
         _ic_rows = ic_rows_by_fib_record(dfx.attrs.get("ic_candidates", []), by_sub=False)
 
@@ -2456,21 +2456,11 @@ def export_chart_plotly(
             if len(seg_times) == 0:
                 seg_times = pd.Series([x_start, x_end])
 
-            hover_row = [
-                fib_st.structure_id,
-                fib_st.cycle_id,
-                fib_st.bos_idx,
-                f"{fib_st.bos_price:.5f}",
-                fib_st.cts_idx,
-                f"{fib_st.cts_price:.5f}",
-                f"{price_618:.5f}",
-                f"{price_80:.5f}",
-                # The status cell: lifecycle status + locked axis (§11), the
-                # lifecycle, the cycle's IC outcome.
-                fib_hover_status_text(fib_st, _ic_rows.get((
-                    int(fib_st.structure_id), int(fib_st.cycle_id),
-                    int(fib_st.bos_idx), int(fib_st.cts_idx)))),
-            ]
+            hover_row = fib_hover_customdata(
+                fib_st,
+                _ic_rows.get((int(fib_st.structure_id), int(fib_st.cycle_id),
+                              int(fib_st.bos_idx), int(fib_st.cts_idx))),
+                price_618, price_80)
             hover_customdata = [hover_row] * len(seg_times)
 
             fig.add_trace(
@@ -2482,18 +2472,7 @@ def export_chart_plotly(
                     showlegend=False,
                     line=dict(width=6, color="rgba(0,0,0,0)"),  # Invisible hover hitbox
                     line_shape="hv",
-                    hovertemplate=(
-                        "TF=1H<br>"
-                        "<b>Fib Zone</b><br>"
-                        "sid=%{customdata[0]}<br>"
-                        "cycle=%{customdata[1]}<br>"
-                        "BOS: idx=%{customdata[2]} price=%{customdata[3]}<br>"
-                        "CTS: idx=%{customdata[4]} price=%{customdata[5]}<br>"
-                        "61.8%=%{customdata[6]}<br>"
-                        "80%=%{customdata[7]}<br>"
-                        "status=%{customdata[8]}"
-                        "<extra></extra>"
-                    ),
+                    hovertemplate=fib_hovertemplate("1H"),
                     customdata=hover_customdata,
                 )
             )

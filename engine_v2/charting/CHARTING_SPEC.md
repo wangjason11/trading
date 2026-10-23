@@ -252,37 +252,51 @@ To change any visual element:
   locked OR condition-active, ended or not — an ended never-locked record (e.g. a sub's last cycle ended by
   `parent_end`) is drawn; `active` False (a superseded cross version, a fib invalidated by an imbalance fill) vanishes
   (FIB_LIFECYCLE_SPEC §9.1 / §9.3)
-- Per fib (`export_plotly._add_fib_box`, the one drawer): dotted horizontal lines at 0% (BOS anchor) and 100% (CTS anchor) plus dotted verticals at both ends (`fib.anchor_line.*`), and a dotted rectangle between 61.8% and 80% (`fib.zone_rect.*`), spanning the BOS → CTS candles; invisible hover points across the zone. The rectangle and the hover's 61.8 / 80 levels stay 61.8–80 on a record whose IC came from Step 1A (the 80–100 fallback, PLAN_P) — that POI sits below the box (buy) / above it (sell); the status cell names the band
+- Per fib (`export_plotly._add_fib_box`, the one drawer): dotted horizontal lines at 0% (BOS anchor) and 100% (CTS anchor) plus dotted verticals at both ends (`fib.anchor_line.*`), and a dotted rectangle between 61.8% and 80% (`fib.zone_rect.*`), spanning the BOS → CTS candles; invisible hover points across the zone. The rectangle and the hover's 61.8 / 80 levels stay 61.8–80 on a record whose IC came from Step 1A (the 80–100 fallback, PLAN_P) — that POI sits below the box (buy) / above it (sell); its POI hover names the band (`ic_zone=80-100 (fallback)`), and the fib hover's no-IC line does on a fib with no IC
 - "Bright" = the live active version (`.active` keys; `_zone_render.fib_is_bright`); every other drawn record renders faded (`.historical` keys)
-- Hover: H1 sid + cycle (M15: `sub_id` + the first record's parent, the sub window, its records, the cycle), the BOS /
-  CTS anchors + prices, the 61.8 / 80 levels, and the status cell (`_zone_render.fib_hover_status_text`, one builder):
-  the status (+ ` (locked)`), `life=[start_idx, end_idx] end_reason` (`–` = never started, `open` = not ended) and the
-  cycle's IC outcome from `attrs["ic_candidates"]` (`ic_rows_by_fib_record`: keyed by (sid, cycle, BOS anchor, CTS
-  anchor), prefixed with `sub_id` on a lens — a sub's sid restarts at 0; since PLAN_L L2, 2026-10-10): `IP <rank> · IC <idx>` (a pattern's IC = the drawn POI), `No pattern · IC <idx> · ranking rule <rule>`
-  / `No pattern · IC <idx> · only IC candidate` (`… only preferred IC candidate` when Step 1B narrowed the field —
-  PLAN_S step 3, the picked row's `prior_imbalance_outcome` + counts) (a ranked IC — the IC index KEPT here: the fib box's only pointer to
-  its IC, PLAN_H §6 ICR-15), `IC: none (<reason>)` (no IC, no POI — PLAN_H C1; the reason `no_ic_candidate` or
-  `all_ic_candidates_pinbar`, POI_ZONES_SPEC §3.5), or `IC: not evaluated (no POI record)` (the POI record
-  gate skipped it: ended before locking, or no CTS_ESTABLISHED; `IP: none (…)` / `IP: not evaluated (…)` and the
-  reason `no_pattern` until PLAN_L L2) — + ` · zone 80-100 (fallback)` when the record's IC selection ran Step 1A
-  (`ic_zone_band` `80-100`, PLAN_P: on a pick, or on `IC: none (…)` = no IC in either zone; the row's band is
-  asserted — an unknown one fails loudly); then the record's IC REFERENCE line
-  (`_zone_render.fib_hover_ic_ref_text`, PLAN_K A17, 2026-10-09 — POI_ZONES_SPEC §3.2; from the fib meta `ic_ref_*`):
-  `IC ref <price> (<source>[, cycle <T−1>]) · break <idx>` (e.g. `IC ref 0.57774 (prev_cycle_cts, cycle 2) · break
-  1720`; the cycle only for `prev_cycle_cts` — the target cycle's previous one, a cross too since PLAN_O), `… · break:
-  none` (a reference with no known break — subs 5 / 6 on the
-  reference window), or `IC ref: none` (no reference — the condition passes); no line on a record without the
-  `cross_fib_limit_*` meta; then the structure's cross-fib LIMIT line
-  (`_zone_render.fib_hover_limit_text`, PLAN_I R6-7, S2): `limit <P> · <source> [(sub <from>)] · M=<M | none>` (e.g.
-  `limit 0.57112 · prev_sub_bos_threshold (sub 5) · M=none` — sub 6; a counter sub, PLAN_M: `limit 0.58105 ·
-  parent_bos_threshold · M=none` — sub 7); when `P` MOVED by the structure's end (the record carries
-  `cross_fib_limit_move_count`, PLAN_M CL-6) the move qualifies the price: `limit 0.57630 (moved 7× from 0.57328) ·
-  parent_bos_threshold · M=4`; or without `P` `limit: none (<why>)` — `start_trading`,
-  `first_confluence on parent cycle 0`, `no previous sub`, `prev_sub_no_cts (sub <from>)`; no line on a record
-  without the `cross_fib_limit_*` meta. Known limit: the reason reads the record's `started_by` / `parent_cycle_id`
+- Hover (the user's spec 2026-10-23 — `plans/qa_chart_edits_inputs/user_spec_20261023_fib_hover.md`; ONE template +
+  customdata for both charts, `_zone_render.fib_hovertemplate(tf)` + `fib_hover_customdata`), one line each: `TF` /
+  **Fib Zone** / `sid=<sid> | cycle_id=<cycle>` (M15: `sub_id=<id> | cycle_id=<the sub's cycle>` + the dot hover's
+  `first record: lens=… | parent_sid=… | parent_cycle_id=…` line, `_sub_zone_id_lines`) / `BOS: idx= price=` / `CTS:
+  idx= price=` (the anchors) / the IC REFERENCE / the cross-fib LIMIT / `status=<status>[ (locked)]` /
+  `lifecycle=[<start>, <end | open>] | end_reason=<reason | open>` (`fib_hover_lifecycle_text`: the fib's own
+  `start_idx` / `end_idx` — `NA (never active)` when it never activated; `end_idx` None ⇔ `end_reason` None, asserted)
+  / the no-IC line / `61.8%=` / `80%=` / `struct_direction=`. E.g. H1 sid 1 cycle 2: `sid=1 | cycle_id=2` /
+  `BOS: idx=826 price=0.58105` / `CTS: idx=905 price=0.57112` / `ic_ref: price=0.57400 (prev_cycle_cts, cycle 1) |
+  before=897` / `limit_price=0.57360 | reversal_bos_frozen | cycle_limit=2` / `status=active (locked)` /
+  `lifecycle=[902, open] | end_reason=open` / `61.8%=0.57726` / `80%=0.57906` / `struct_direction=-1`.
+  - The IC REFERENCE (`fib_hover_ic_ref_text`, PLAN_K A17 — POI_ZONES_SPEC §3.2; the fib meta `ic_ref_*`): `ic_ref:
+    price=<price> (<source>[, cycle <T−1>]) | before=<idx>` — an IC candidate must lie strictly before `before` (the
+    break's pattern anchor); the cycle only for `prev_cycle_cts` (the target cycle's previous one, a cross too since
+    PLAN_O); `before=NA (no break)` with no known break (the price side only — counter subs 6 / 8 on the window);
+    `ic_ref: NA (no reference)` (the condition passes). No line on a record without the `cross_fib_limit_*` meta.
+  - The cross-fib LIMIT (`fib_hover_limit_text`, PLAN_I R6-7 — CROSS_CYCLE_FIB_SPEC §3): `limit_price=<P> |
+    <source>[ (sub <from>)] | cycle_limit=<M | none>` (`cycle_limit` = `M`, the last cycle a cross may target;
+    `none` = no cycle's CTS got past `P`, every cycle may cross — e.g. confluence sub 7 `limit_price=0.57112 |
+    prev_sub_bos_threshold (sub 6) | cycle_limit=none`); a `P` that MOVED by the structure's end (the record carries
+    `cross_fib_limit_move_count`, PLAN_M CL-6) qualifies the price: `limit_price=0.57630 (moved 7× from 0.57328) |
+    parent_bos_threshold | cycle_limit=4`; without `P`, `limit_price=NA (<why>)` ALONE — no cycle may cross, so no
+    `cycle_limit` (the user's decision 2: `cycle_limit=none` would read the opposite) — `start_trading`,
+    `first_confluence on parent cycle 0`, `no previous sub`, `prev_sub_no_cts (sub <from>)`. No line on a record
+    without the `cross_fib_limit_*` meta. Known limit: the reason reads the record's `started_by` / `parent_cycle_id`
   (the sub's first LIVE record) while `P` came from its CREATING trigger (R6-2 (a)); they differ only when the
   creating record is zero-length, and wherever their two rules give a different `P` the R6-2 tripwire WARNs (0 on the
-  reference window)
+  reference window).
+  - The no-IC line (`fib_hover_no_ic_text`) — ONLY on a fib with NO IC, which has no POI to carry the reason (the
+    user's decision 1; a pick's IC, its pattern or ranking rule, Step 1B's preference and its band are on its POI hover,
+    §7): the cycle's row in `attrs["ic_candidates"]` (`ic_rows_by_fib_record`: keyed by (sid, cycle, BOS anchor, CTS
+    anchor), prefixed with `sub_id` on a lens — a sub's sid restarts at 0) → `ic_idx=NA (<reason>)` (`no_ic_candidate`
+    / `all_ic_candidates_pinbar`, POI_ZONES_SPEC §3.5; PLAN_H C1) + ` | ic_zone=80-100 (fallback)` when Step 1A
+    searched 80–100 too (PLAN_P: no IC in either zone; the row's band is asserted); no row → `ic_idx=NA (not
+    evaluated: no POI record)` (the POI record gate skipped it: ended before locking, or no CTS_ESTABLISHED). On the
+    window: H1 sid 0 cycle 0, confluence sub 1 cycle 3 and sub 2 cycle 0.
+  - Until 2026-10-23: `sid=` / `cycle=` on two lines (M15: `sub_id=… | first record parent_sid=… parent_cycle_id=…`,
+    `sub window=`, `records:`, `cycle_id=`), the levels before a status cell of `status` / `life=[start, end] reason`
+    (`–` = never active) / every cycle's IC outcome (`IP <rank> · IC <idx>`, `No pattern · IC <idx> · …` — PLAN_H §6
+    ICR-15 kept the index as "the fib box's only pointer to its IC"; the user dropped it: "already labeled in other
+    structure elements that are more relevant" — `IC: none (…)` / `IC: not evaluated (…)`, ` · zone 80-100
+    (fallback)`) / `IC ref <price> (<source>) · break <idx>` / `limit <P> · <source> · M=<M>` (`limit: none (<why>)`);
+    no `struct_direction`.
 - M15 lens charts: every box (its 5 shapes) and its hover share ONE legend group (`m15_fib`); the first box's rectangle
   is the legend entry "M15 fib" — one click toggles every fib on the chart. No owner filter (a persisting element, like
   the zones). Toggle `fib.lines` (default on, both charts)
@@ -709,8 +723,9 @@ TriggerRecords (`attrs["triggers"]`), one per line, in `(start_idx, seq)` order;
 (`SidRecord.relative_dir_segments`) at the dot's candle — `NA (before start_idx)` before the sub's start, exactly the
 `phase=forming` candles (`_sub_relative_dir_at`; a live candle without a segment fails loudly; `-` until 2026-10-22).
 One builder for the sub lines, `_sub_dot_hover_lines`; the sub KL / POI hovers reuse its `first record:` line
-(`_sub_zone_id_lines`, since 2026-10-23 — §5 / §7 "Hover"). The sub's fib (and wave-candle) hovers still carry the
-older `sub window=[s,e] reason` / `records: … a→b` strings (`sub_window_str` / `sub_records_str`). Known (deferred — the
+(`_sub_zone_id_lines`, since 2026-10-23 — §5 / §7 "Hover"), and so does the sub fib hover (§8, 2026-10-23). The
+wave-candle hover still carries the older `first record parent_sid=… parent_cycle=…` / `sub window=[s,e] reason`
+strings (`sub_window_str`). Known (deferred — the
 spec file's "Quirks" section): a PB dot's `cycle_id` is a placeholder 0; a PB dot is either a pullback or a
 replacement break point (same `kind=PB`).
 
