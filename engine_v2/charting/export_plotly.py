@@ -22,6 +22,9 @@ from engine_v2.charting._zone_render import (
     ic_rows_by_fib_record,
     is_collapsed_cycle_zone,
     is_poi_of_collapsed_cycle,
+    main_dot_customdata,
+    main_dot_structure_lines,
+    MAIN_DOT_HOVERTEMPLATE,
     poi_ic_hover_text,
 )
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
@@ -1061,6 +1064,8 @@ def export_chart_plotly(
     if struct_cfg.get("levels", False):
         time_by_idx = {int(ii): tt for ii, tt in zip(dfx.index.to_numpy(), dfx[COL_TIME])}
         structure_events = dfx.attrs.get("structure_events", [])
+        # Every dot's hover: its structure's trigger + real-time window (one builder with the M15 charts' H1 overlay).
+        dot_lines_by_sid = main_dot_structure_lines(structure_events)
 
         # Get CTS_CONFIRMED and BOS_CONFIRMED events
         cts_events = [ev for ev in structure_events if getattr(ev, "type", None) == "CTS_CONFIRMED"]
@@ -1328,17 +1333,8 @@ def export_chart_plotly(
                                 y=[p[2] for p in pts],
                                 mode="markers",
                                 name=f"CTS (confirmed){op_label}",
-                                customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
-                                hovertemplate=(
-                                    "TF=1H<br>"
-                                    "idx=%{customdata[0]}<br>"
-                                    "kind=%{customdata[1]}<br>"
-                                    "price=%{customdata[2]:.5f}<br>"
-                                    "sid=%{customdata[3]}<br>"
-                                    "cycle_id=%{customdata[4]}<br>"
-                                    "struct_direction=%{customdata[5]}"
-                                    "<extra></extra>"
-                                ),
+                                customdata=[main_dot_customdata(p, dot_lines_by_sid) for p in pts],
+                                hovertemplate=MAIN_DOT_HOVERTEMPLATE,
                                 **style,
                             )
                         )
@@ -1362,17 +1358,8 @@ def export_chart_plotly(
                                 y=[p[2] for p in pts],
                                 mode="markers",
                                 name=f"CTS (confirmed){op_label} [overlap]",
-                                customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
-                                hovertemplate=(
-                                    "TF=1H<br>"
-                                    "idx=%{customdata[0]}<br>"
-                                    "kind=%{customdata[1]}<br>"
-                                    "price=%{customdata[2]:.5f}<br>"
-                                    "sid=%{customdata[3]}<br>"
-                                    "cycle_id=%{customdata[4]}<br>"
-                                    "struct_direction=%{customdata[5]}"
-                                    "<extra></extra>"
-                                ),
+                                customdata=[main_dot_customdata(p, dot_lines_by_sid) for p in pts],
+                                hovertemplate=MAIN_DOT_HOVERTEMPLATE,
                                 hoverlabel=dict(xanchor=xanchor),
                                 showlegend=False,
                                 **style,
@@ -1404,17 +1391,8 @@ def export_chart_plotly(
                                 y=[p[2] for p in pts],
                                 mode="markers",
                                 name=f"BOS (confirmed){op_label}",
-                                customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
-                                hovertemplate=(
-                                    "TF=1H<br>"
-                                    "idx=%{customdata[0]}<br>"
-                                    "kind=%{customdata[1]}<br>"
-                                    "price=%{customdata[2]:.5f}<br>"
-                                    "sid=%{customdata[3]}<br>"
-                                    "cycle_id=%{customdata[4]}<br>"
-                                    "struct_direction=%{customdata[5]}"
-                                    "<extra></extra>"
-                                ),
+                                customdata=[main_dot_customdata(p, dot_lines_by_sid) for p in pts],
+                                hovertemplate=MAIN_DOT_HOVERTEMPLATE,
                                 **style,
                             )
                         )
@@ -1438,17 +1416,8 @@ def export_chart_plotly(
                                 y=[p[2] for p in pts],
                                 mode="markers",
                                 name=f"BOS (confirmed){op_label} [overlap]",
-                                customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts],
-                                hovertemplate=(
-                                    "TF=1H<br>"
-                                    "idx=%{customdata[0]}<br>"
-                                    "kind=%{customdata[1]}<br>"
-                                    "price=%{customdata[2]:.5f}<br>"
-                                    "sid=%{customdata[3]}<br>"
-                                    "cycle_id=%{customdata[4]}<br>"
-                                    "struct_direction=%{customdata[5]}"
-                                    "<extra></extra>"
-                                ),
+                                customdata=[main_dot_customdata(p, dot_lines_by_sid) for p in pts],
+                                hovertemplate=MAIN_DOT_HOVERTEMPLATE,
                                 hoverlabel=dict(xanchor=xanchor),
                                 showlegend=False,
                                 **style,
@@ -1473,16 +1442,8 @@ def export_chart_plotly(
                             y=[p[2] for p in pts_group],
                             mode="markers",
                             name=f"CTS (unconfirmed){op_label}",
-                            customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts_group],
-                            hovertemplate=(
-                                "idx=%{customdata[0]}<br>"
-                                "kind=%{customdata[1]}<br>"
-                                "price=%{customdata[2]:.5f}<br>"
-                                "sid=%{customdata[3]}<br>"
-                                "cycle_id=%{customdata[4]}<br>"
-                                "struct_direction=%{customdata[5]}"
-                                "<extra></extra>"
-                            ),
+                            customdata=[main_dot_customdata(p, dot_lines_by_sid) for p in pts_group],
+                            hovertemplate=MAIN_DOT_HOVERTEMPLATE,
                             showlegend=False,
                             **style,
                         )
@@ -1506,16 +1467,8 @@ def export_chart_plotly(
                             y=[p[2] for p in pts_group],
                             mode="markers",
                             name=f"PB (furthest){op_label}",
-                            customdata=[[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts_group],
-                            hovertemplate=(
-                                "idx=%{customdata[0]}<br>"
-                                "kind=%{customdata[1]}<br>"
-                                "price=%{customdata[2]:.5f}<br>"
-                                "sid=%{customdata[3]}<br>"
-                                "cycle_id=%{customdata[4]}<br>"
-                                "struct_direction=%{customdata[5]}"
-                                "<extra></extra>"
-                            ),
+                            customdata=[main_dot_customdata(p, dot_lines_by_sid) for p in pts_group],
+                            hovertemplate=MAIN_DOT_HOVERTEMPLATE,
                             showlegend=False,
                             **style,
                         )

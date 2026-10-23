@@ -9,6 +9,8 @@ Pure functions consumed by both `export_plotly.py` (main H1 chart) and
     zone's `bounds_steps` (so multi-step expansions render as ONE outline,
     not N separate rect outlines).
   - Per-TF tier multipliers for sub-chart zone rendering (Spec 2).
+  - The hover text builders shared by both charts (POI, fib, the main BOS / CTS
+    dots).
 
 Callers convert (x, y) coordinate lists into Plotly traces; this module
 deliberately knows nothing about Plotly so it stays unit-testable.
@@ -19,6 +21,11 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple
 
 from engine_v2.charting.style_registry import STYLE
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
+from engine_v2.zones.structure_lifecycle import (
+    compute_main_started_by,
+    compute_reversal_idx_by_sid,
+    compute_struct_start_by_sid,
+)
 from engine_v2.zones.poi_lifecycle import active_stretches_from_history
 from engine_v2.zones.poi_zones import (
     IC_ZONE_FALLBACK,
@@ -403,6 +410,60 @@ def fib_hover_status_text(fib_st: Any, ic_row: Optional[Any]) -> str:
         text = f"{text}<br>{ic_ref}"
     limit = fib_hover_limit_text(fib_st)
     return text if limit is None else f"{text}<br>{limit}"
+
+
+# ---------------------------------------------------------------------------
+# BOS / CTS dot hover — the main structures (the user's spec 2026-10-22,
+# plans/qa_chart_edits_inputs/user_spec_20261022_dot_hover.md)
+# ---------------------------------------------------------------------------
+
+#: The trigger index of a `start_trading` structure: it has no trigger candle
+#: (the backtest picks the start once from the whole window).
+HOVER_NA = "NA"
+
+#: The main BOS / CTS / PB dot hover — ONE template for the H1 chart and the
+#: M15 charts' H1 overlay; customdata = `main_dot_customdata`.
+MAIN_DOT_HOVERTEMPLATE = (
+    "TF=1H<br>"
+    "idx=%{customdata[0]}<br>"
+    "kind=%{customdata[1]}<br>"
+    "price=%{customdata[2]:.5f}<br>"
+    "sid=%{customdata[3]} | cycle_id=%{customdata[4]}<br>"
+    "%{customdata[6]}<br>"
+    "%{customdata[7]}<br>"
+    "struct_direction=%{customdata[5]}"
+    "<extra></extra>"
+)
+
+
+def main_dot_structure_lines(events: Sequence[Any]) -> dict:
+    """`{sid: (trigger_line, window_line)}` for the BOS / CTS dots of every MAIN
+    structure: `trigger=<started_by> | trigger_idx=<idx>` (`compute_main_started_by`;
+    a `reversal` structure's trigger candle = the previous sid's reversal
+    confirmation, a `start_trading` one has none → `NA`) and
+    `struct_window=[<start>, <end | open>] | end_reason=<reversal | open>` — the
+    real-time lifecycle: `compute_struct_start_by_sid` (the start the zones and
+    wave candles floor against) to the sid's own reversal."""
+    rev = compute_reversal_idx_by_sid(events)
+    start = compute_struct_start_by_sid(events, rev)
+    out = {}
+    for sid, started_by in compute_main_started_by(events).items():
+        trigger_idx = rev[sid - 1] if started_by == "reversal" else HOVER_NA
+        end = rev.get(sid)
+        out[sid] = (
+            f"trigger={started_by} | trigger_idx={trigger_idx}",
+            f"struct_window=[{start[sid]}, {'open' if end is None else end}] | "
+            f"end_reason={'open' if end is None else 'reversal'}",
+        )
+    return out
+
+
+def main_dot_customdata(p: Sequence[Any], lines_by_sid: dict) -> list:
+    """The customdata row of one main dot for `MAIN_DOT_HOVERTEMPLATE`; `p` = the
+    dot tuple `(idx, time, price, kind, sid, cycle_id, struct_direction, …)`,
+    `lines_by_sid` = `main_dot_structure_lines`."""
+    trigger_line, window_line = lines_by_sid[int(p[4])]
+    return [p[0], p[3], p[2], p[4], p[5], p[6], trigger_line, window_line]
 
 
 # ---------------------------------------------------------------------------

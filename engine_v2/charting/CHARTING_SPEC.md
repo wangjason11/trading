@@ -58,6 +58,29 @@ To change any visual element:
 - **Extra: Pullback dot after final confirmed CTS** — for non-active sids where the last confirmed level is CTS, the most recent pullback event (before the next sid's first BOS) is drawn as a dot at the candle's extreme price (low for uptrend pb, high for downtrend pb). A line connects the last confirmed CTS to this dot.
 - **Extra: Cross-structure pb→BOS line** — from the pullback dot to the first BOS_CONFIRMED of the next sid. This line and the pb dot belong to the prior sid (same opacity/styling).
 - Opacity: active sid = 1.0, prior sids = 0.5
+- **Dot hover** (every CTS / BOS / unconfirmed-CTS / PB dot; ONE template, `_zone_render.MAIN_DOT_HOVERTEMPLATE` +
+  `main_dot_customdata`, on the H1 chart AND the M15 charts' H1 overlay — the user's spec 2026-10-22,
+  `plans/qa_chart_edits_inputs/user_spec_20261022_dot_hover.md`):
+  ```
+  TF=1H
+  idx=96                                         ← the dot's ANCHOR candle (not the confirmation moment)
+  kind=BOS                                       ← CTS | BOS | CTS (established|updated) | PB
+  price=0.55808
+  sid=0 | cycle_id=0
+  trigger=start_trading | trigger_idx=NA
+  struct_window=[115, 902] | end_reason=reversal
+  struct_direction=1
+  ```
+  The two structure lines come from `_zone_render.main_dot_structure_lines(events)`: `trigger` =
+  `structure_lifecycle.compute_main_started_by` — `reversal` (`trigger_idx` = the previous sid's reversal
+  confirmation, `compute_reversal_idx_by_sid[sid − 1]`; it always equals the window's start, by the reversal handoff)
+  or `start_trading` (`trigger_idx=NA`: no trigger candle — the backtest's Scenario 1 picks sid 0's start once, from
+  the whole window; its pick is sid 0's BOS anchor, a location); `struct_window` = the REAL-TIME lifecycle,
+  `compute_struct_start_by_sid` (the first CTS_ESTABLISHED moment, or the reversal handoff — the start the zones and
+  wave candles floor against; sid 0: 115, not its 96 anchor) to the sid's reversal (`end_reason=reversal`) or
+  `open`. So a dot can sit before its own window (sid 0's BOS at 96; sid 1's collapsed cycles' dots 689–826 before
+  `[902, open]`). Known: a PB dot's `cycle_id` is a placeholder 0 (the pullback has no cycle in the dot tuple —
+  deferred: `plans/qa_chart_edits_inputs/user_spec_20261022_dot_hover.md` "Quirks")
 - Style keys: `structure.swing_line`, `structure.cts`, `structure.bos`
 
 ### 2) Range rectangles
@@ -602,15 +625,39 @@ on both charts — the counter chart draws it from the sub's `start_idx` (2829 o
 the reference window), not from its own record's `start_idx` (2843). Reverses
 Stage 3.2b's per-lens "earliest trigger of this lens" start.
 
-**Hover** (`_render_m15_dots` customdata): `sub_id` (NOT the bounded run's
-internal `structure_id`, which restarts at 0 per sub), `struct_direction`,
-`relative_dir` at that candle (the §17.3 step function read from
-`SidRecord.relative_dir_segments`), `sub window=[start_idx,end_idx|open] <end_reason|open>`,
-and `records:` the sub's record list `{lens}({parent_sid},{parent_cycle_id})
-{trigger_type} {trigger_idx}→{start_idx}` (a `†` suffix marks a zero-length
-record), plus the first record's `parent_sid` / `parent_cycle_id`
-(informational). `end_reason ∈ {reversal, same_dir_replacement, parent_end}`
-or `open`.
+**Dot hover** (`_render_m15_dots_layer`; every sub CTS / BOS / unconfirmed-CTS / PB dot — the user's spec
+2026-10-22, `plans/qa_chart_edits_inputs/user_spec_20261022_dot_hover.md`; e.g. confluence sub 5's BOS on the
+reference window):
+```
+TF=15M
+idx=3304                                      ← the dot's ANCHOR candle (not the confirmation moment)
+idx_1H=826                                    ← the H1 candle whose hour holds it
+kind=BOS
+price=0.58105
+sub_id=5 | cycle_id=0                         ← NOT the bounded run's internal structure_id (restarts at 0 per sub)
+first record: lens=counter | parent_sid=0 | parent_cycle_id=1
+fr trigger=subsequent_counter | fr trigger_idx=3491
+lens records:
+confluence(0,1) | trigger=reversal | trigger_idx=3589 | start_idx=3589
+confluence(1,2) | trigger=first_confluence | trigger_idx=3611 | start_idx=3611
+phase=forming | layer=recent
+sub_window=[3491, 3819] | end_reason=same_dir_replacement
+relative_dir=NA (before start_idx)
+struct_direction=-1
+```
+`first record` / `fr trigger` = the sub's POOL-WIDE first record (`SidRecord.meta["first_record"]`) — it can sit on the
+other lens (here the counter one), hence its `lens` (`reversal` is the one trigger type that does not name its lens);
+when it is on this lens the two lines repeat the first `lens records` entry — kept as an accepted exception to the
+no-repeat rule (different meanings; a fixed hover shape; the user 2026-10-22). `lens records` = THIS lens's
+TriggerRecords (`attrs["triggers"]`), one per line, in `(start_idx, seq)` order; a zero-length record ends
+`| zero_length`; none → `lens records: none`. `sub_window` = the real-time lifecycle `[start_idx, end_idx | open]`,
+`end_reason ∈ {reversal, same_dir_replacement, parent_end, open}`. `relative_dir` = the §17.3 step function
+(`SidRecord.relative_dir_segments`) at the dot's candle — `NA (before start_idx)` before the sub's start, exactly the
+`phase=forming` candles (`_sub_relative_dir_at`; a live candle without a segment fails loudly; `-` until 2026-10-22).
+One builder for the sub lines, `_sub_dot_hover_lines`. The sub's KL / POI / fib hovers still carry the older
+`sub window=[s,e] reason` / `records: … a→b` strings (`sub_window_str` / `sub_records_str`). Known (deferred — the
+spec file's "Quirks" section): a PB dot's `cycle_id` is a placeholder 0; a PB dot is either a pullback or a
+replacement break point (same `kind=PB`).
 
 ---
 

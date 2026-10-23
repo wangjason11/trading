@@ -57,7 +57,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import timedelta
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import Any, Iterable, Optional, Sequence, Tuple
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -75,6 +75,9 @@ from engine_v2.charting._zone_render import (
     fib_record_drawn,
     ic_rows_by_fib_record,
     is_poi_of_collapsed_cycle,
+    main_dot_customdata,
+    main_dot_structure_lines,
+    MAIN_DOT_HOVERTEMPLATE,
     poi_ic_hover_text,
     select_subordinate_tf_tier,
 )
@@ -120,6 +123,10 @@ M15_CHART_DEFAULTS = {
     "volume": {"bars": True, "ema_line": True, "spike_marker": True},
     "range_candle_marker": False,
 }
+
+#: A sub dot's `relative_dir` before the sub's `start_idx` — no record is live yet
+#: (the user's spec 2026-10-22; `-` until then).
+RELATIVE_DIR_BEFORE_START = "NA (before start_idx)"
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +240,47 @@ def _sid_parent(rec: SidRecord) -> tuple:
         int(ps) if ps is not None else None,
         int(pc) if pc is not None else None,
     )
+
+
+def _sub_dot_hover_lines(rec: SidRecord, lens_records: Sequence[Any]) -> Tuple[str, str, str, str]:
+    """The sub-level lines of a sub's BOS / CTS dot hover (the user's spec
+    2026-10-22, `plans/qa_chart_edits_inputs/user_spec_20261022_dot_hover.md`):
+    `(first_record, fr_trigger, window, records)`. The FIRST record is the sub's
+    pool-wide first (`meta["first_record"]`) — it can sit on the other lens, hence
+    its lens; `records` = THIS lens's records (`lens_records`, in order), one per
+    hover line."""
+    fr = rec.meta["first_record"]
+    p_sid, p_cycle = _sid_parent(rec)
+    end = rec.end_event_idx if rec.end_event_idx is not None else "open"
+    lines = [
+        f"{tr.lens}({tr.parent_sid},{tr.parent_cycle_id}) | trigger={tr.trigger_type} | "
+        f"trigger_idx={tr.trigger_idx} | start_idx={tr.start_idx}" + (" | zero_length" if tr.is_zero_length else "")
+        for tr in lens_records
+    ]
+    return (
+        f"first record: lens={fr['lens']} | parent_sid={p_sid} | parent_cycle_id={p_cycle}",
+        f"fr trigger={fr['trigger_type']} | fr trigger_idx={fr['trigger_idx']}",
+        f"sub_window=[{rec.start_idx}, {end}] | end_reason={rec.end_reason or 'open'}",
+        "<br>".join(["lens records:"] + lines) if lines else "lens records: none",
+    )
+
+
+def _sub_relative_dir_at(idx: int, segments: Sequence[Tuple[int, str]], start_idx: Optional[int],
+                         sub_id: int) -> str:
+    """A sub dot's `relative_dir` at `idx` — the §17.3 step function
+    (`SidRecord.relative_dir_segments`). Before the sub's `start_idx` no record is
+    live: `NA (before start_idx)` — exactly the candles that hover `phase=forming`
+    (`_make_sub_phase_fns.is_live`). A live candle without a segment fails loudly."""
+    if start_idx is None or int(idx) < int(start_idx):
+        return RELATIVE_DIR_BEFORE_START
+    cur = None
+    for from_idx, rd in segments:
+        if int(from_idx) <= int(idx):
+            cur = rd
+        else:
+            break
+    assert cur is not None, f"[m15 chart] sub {sub_id}: no relative_dir at {idx} >= start_idx {start_idx}"
+    return cur
 
 
 def _compute_forming_by_idx_dir(sid_records: Iterable[SidRecord]) -> dict:
@@ -1081,25 +1129,24 @@ def export_m15_chart_plotly(
         eid = _sid_record_identity(sid_rec)
         sub_dir = int(sid_rec.starting_sd)
         sub_records = records_by_sub.get(eid, [])
-        # Hover strings for this sub: its window + reason and its record list
-        # `(lens, (S,C), trigger_type, trigger_idx→start_idx)` (§17.9).
+        p_sid, p_cycle = _sid_parent(sid_rec)   # informational (first record)
+        # Zone hover strings for this sub (KL / POI / fib): its window + reason and its
+        # record list `(lens, (S,C), trigger_type, trigger_idx→start_idx)` (§17.9).
         _win_end = sid_rec.end_event_idx if sid_rec.end_event_idx is not None else "open"
+        _records_sorted = sorted(sub_records, key=lambda r: (r.start_idx, r.seq))
         sub_window_str = f"[{sid_rec.start_idx},{_win_end}] {sid_rec.end_reason or 'open'}"
         sub_records_str = "; ".join(
             f"{tr.lens}({tr.parent_sid},{tr.parent_cycle_id}) {tr.trigger_type} "
             f"{tr.trigger_idx}→{tr.start_idx}" + ("†" if tr.is_zero_length else "")
-            for tr in sorted(sub_records, key=lambda r: (r.start_idx, r.seq))
+            for tr in _records_sorted
         ) or "-"
-        _segs = list(sid_rec.relative_dir_segments or ())
+        # The BOS / CTS dot hover's sub lines (the user's spec 2026-10-22).
+        first_record_str, fr_trigger_str, dot_window_str, dot_records_str = _sub_dot_hover_lines(
+            sid_rec, _records_sorted)
+        _segs = tuple(sid_rec.relative_dir_segments or ())
 
-        def _relative_dir_at(idx: int, _segs=_segs) -> str:
-            cur = "-"
-            for from_idx, rd in _segs:
-                if int(from_idx) <= int(idx):
-                    cur = rd
-                else:
-                    break
-            return cur
+        def _relative_dir_at(idx: int, _segs=_segs, _start=sid_rec.start_idx, _eid=eid) -> str:
+            return _sub_relative_dir_at(idx, _segs, _start, _eid)
         sid_events = events_by_sid.get(eid, [])
         sid_kls = kls_by_sid.get(eid, [])
         sid_pois = pois_by_sid.get(eid, [])
@@ -1107,8 +1154,6 @@ def export_m15_chart_plotly(
         sid_wvmis = wvmis_by_sid.get(eid, [])
         sid_prev_bos = prev_bos_by_sid.get(eid, [])
         sid_fibs = fibs_by_sid.get(eid, [])
-
-        p_sid, p_cycle = _sid_parent(sid_rec)   # informational (first record)
 
         # §16.5 sid-tied filter (rev 2 + chart review 2026-09-20): a candle in
         # this sub's LIVE window is drawn iff this sub is its live owner for its
@@ -1197,9 +1242,9 @@ def export_m15_chart_plotly(
                     if p[3] == "CTS":
                         all_cts_pts.append(p)
             if all_cts_pts:
-                _render_m15_dots(fig, all_cts_pts, "CTS", p_sid, p_cycle, eid,
+                _render_m15_dots(fig, all_cts_pts, "CTS", first_record_str, fr_trigger_str, eid,
                                  m15_to_h1,
-                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live,
+                                 dot_window_str, dot_records_str, _relative_dir_at, _is_live,
                                  recent_pts)
 
             # --- BOS confirmed dots ---
@@ -1209,23 +1254,23 @@ def export_m15_chart_plotly(
                     if p[3] == "BOS":
                         all_bos_pts.append(p)
             if all_bos_pts:
-                _render_m15_dots(fig, all_bos_pts, "BOS", p_sid, p_cycle, eid,
+                _render_m15_dots(fig, all_bos_pts, "BOS", first_record_str, fr_trigger_str, eid,
                                  m15_to_h1,
-                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live,
+                                 dot_window_str, dot_records_str, _relative_dir_at, _is_live,
                                  recent_pts)
 
             # --- Unconfirmed CTS dots ---
             if extra_cts_pts:
-                _render_m15_dots(fig, extra_cts_pts, "CTS (unconf)", p_sid, p_cycle, eid,
+                _render_m15_dots(fig, extra_cts_pts, "CTS (unconf)", first_record_str, fr_trigger_str, eid,
                                  m15_to_h1,
-                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live,
+                                 dot_window_str, dot_records_str, _relative_dir_at, _is_live,
                                  recent_pts)
 
             # --- PB dots ---
             if extra_pb_pts:
-                _render_m15_dots(fig, extra_pb_pts, "PB", p_sid, p_cycle, eid,
+                _render_m15_dots(fig, extra_pb_pts, "PB", first_record_str, fr_trigger_str, eid,
                                  m15_to_h1,
-                                 sub_window_str, sub_records_str, _relative_dir_at, _is_live,
+                                 dot_window_str, dot_records_str, _relative_dir_at, _is_live,
                                  recent_pts)
 
         # --- KL zone rectangles + hover ---
@@ -1848,18 +1893,20 @@ def export_m15_chart_plotly(
 # ---------------------------------------------------------------------------
 
 def _render_m15_dots(
-    fig, pts, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
-    sub_window_str="", sub_records_str="", relative_dir_at=None, is_live=None,
+    fig, pts, kind_label, first_record_str, fr_trigger_str, sub_id, m15_to_h1,
+    window_str="", records_str="", relative_dir_at=None, is_live=None,
     recent_pts=None,
 ):
     """Render M15 structure dots with TF=15M hover.
 
     `sub_id` is the unique sub's identity (§17.9). The points' `p[4]` is the
     bounded sub's *internal* MS structure_id which restarts at 0 per sub —
-    useless for telling subs apart in the hover. `sub_window_str` /
-    `sub_records_str` carry the sub's lifecycle window + reason and its
-    record list; `relative_dir_at(idx)` gives the §17.3 step function at the
-    dot's candle. Dots follow their SEGMENTS (chart review 2026-09-22): a point
+    useless for telling subs apart in the hover. The hover lines (the user's
+    spec 2026-10-22): `first_record_str` / `fr_trigger_str` = the sub's first
+    record (pool-wide) and its trigger, `window_str` = the lifecycle window +
+    end reason, `records_str` = this lens's records (multi-line);
+    `relative_dir_at(idx)` gives the §17.3 step function at the dot's candle
+    (`NA (before start_idx)` before the sub's start). Dots follow their SEGMENTS (chart review 2026-09-22): a point
     in `recent_pts` (`{(internal sid, idx)}` — the endpoints of the solid
     segments, and any point no segment decides) is drawn filled in the RECENT
     style, every other point as a dimmed open PRIOR marker — two traces.
@@ -1876,26 +1923,26 @@ def _render_m15_dots(
         prior = [p for p in pts if not _styled_recent(p)]
         if prior:
             _render_m15_dots_layer(
-                fig, prior, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
-                sub_window_str, sub_records_str, relative_dir_at, layer="prior",
+                fig, prior, kind_label, first_record_str, fr_trigger_str, sub_id, m15_to_h1,
+                window_str, records_str, relative_dir_at, layer="prior",
                 phase_at=is_live,
             )
         if recent:
             _render_m15_dots_layer(
-                fig, recent, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
-                sub_window_str, sub_records_str, relative_dir_at, layer="recent",
+                fig, recent, kind_label, first_record_str, fr_trigger_str, sub_id, m15_to_h1,
+                window_str, records_str, relative_dir_at, layer="recent",
                 phase_at=is_live,
             )
         return
     _render_m15_dots_layer(
-        fig, pts, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
-        sub_window_str, sub_records_str, relative_dir_at, layer="recent",
+        fig, pts, kind_label, first_record_str, fr_trigger_str, sub_id, m15_to_h1,
+        window_str, records_str, relative_dir_at, layer="recent",
     )
 
 
 def _render_m15_dots_layer(
-    fig, pts, kind_label, p_sid, p_cycle, sub_id, m15_to_h1,
-    sub_window_str, sub_records_str, relative_dir_at, layer, phase_at=None,
+    fig, pts, kind_label, first_record_str, fr_trigger_str, sub_id, m15_to_h1,
+    window_str, records_str, relative_dir_at, layer, phase_at=None,
 ):
     """`layer` picks the marker STYLE (`recent` = filled, `prior` = dimmed open
     circle) and is reported in the hover; the hover `phase` per point is
@@ -1917,15 +1964,15 @@ def _render_m15_dots_layer(
             sub_id,  # unique sub identity (not p[4])
             p[5],  # m15 cycle_id
             p[6],  # sd
-            p_sid,  # first record parent_sid (informational)
-            p_cycle,  # first record parent_cycle_id (informational)
+            first_record_str,  # first record: lens | parent_sid | parent_cycle_id (pool-wide)
+            fr_trigger_str,    # fr trigger | fr trigger_idx
             h1_info[1] if h1_info[1] is not None else "",  # idx_1H
-            str(h1_info[0]) if h1_info[0] is not None else "",  # time_1H
+            str(h1_info[0]) if h1_info[0] is not None else "",  # time_1H (not shown)
             relative_dir_at(p[7]) if relative_dir_at is not None else "",  # relative_dir at this candle
-            sub_window_str,   # [start_idx,end_idx] reason
-            sub_records_str,  # record list
+            window_str,        # sub_window=[start_idx, end_idx] | end_reason
+            records_str,       # lens records (one per line)
             ("live" if phase_at(p[0]) else "forming") if phase_at is not None else "live",  # real-time fact
-            layer,            # recent | prior (why this style — see _prior_line_segments)
+            layer,             # recent | prior (why this style — see _prior_line_segments)
         ])
 
     fig.add_trace(go.Scatter(
@@ -1942,12 +1989,13 @@ def _render_m15_dots_layer(
             "idx_1H=%{customdata[8]}<br>"
             "kind=%{customdata[1]}<br>"
             "price=%{customdata[2]:.5f}<br>"
-            "sub_id=%{customdata[3]} | first record parent_sid=%{customdata[6]} parent_cycle_id=%{customdata[7]}<br>"
+            "sub_id=%{customdata[3]} | cycle_id=%{customdata[4]}<br>"
+            "%{customdata[6]}<br>"
+            "%{customdata[7]}<br>"
+            "%{customdata[12]}<br>"
             "phase=%{customdata[13]} | layer=%{customdata[14]}<br>"
+            "%{customdata[11]}<br>"
             "relative_dir=%{customdata[10]}<br>"
-            "sub window=%{customdata[11]}<br>"
-            "records: %{customdata[12]}<br>"
-            "cycle_id=%{customdata[4]}<br>"
             "struct_direction=%{customdata[5]}"
             "<extra></extra>"
         ),
@@ -2201,21 +2249,18 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
         all_pts = []
         for sid_pts in points_by_sid.values():
             all_pts.extend(p for p in sid_pts if (p[4], p[0]) in drawn_h1_pts)
+        dot_lines_by_sid = main_dot_structure_lines(structure_events)   # one builder with the H1 chart
         for kind_filter, style_key in [("CTS", "structure.cts"), ("BOS", "structure.bos"), ("PB", "structure.bos")]:
             pts = [p for p in all_pts if p[3] == kind_filter or (kind_filter == "CTS" and p[3].startswith("CTS"))]
             if not pts:
                 continue
             style = _style(style_key).copy()
-            cd = [[p[0], p[3], p[2], p[4], p[5], p[6]] for p in pts]
+            cd = [main_dot_customdata(p, dot_lines_by_sid) for p in pts]
             fig.add_trace(go.Scatter(
                 x=[p[1] for p in pts], y=[p[2] for p in pts],
                 mode="markers", name=f"H1 {kind_filter}",
                 showlegend=False, customdata=cd,
-                hovertemplate=(
-                    "TF=1H<br>idx=%{customdata[0]}<br>kind=%{customdata[1]}<br>"
-                    "price=%{customdata[2]:.5f}<br>sid=%{customdata[3]}<br>"
-                    "cycle_id=%{customdata[4]}<br>struct_direction=%{customdata[5]}<extra></extra>"
-                ),
+                hovertemplate=MAIN_DOT_HOVERTEMPLATE,
                 **style,
             ))
 

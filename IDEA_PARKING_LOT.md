@@ -142,7 +142,13 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    things), §G "Uniform 3-tier chart opacity", §G the stepped "current proximity reference" line on the H1 chart
    ("Decide later"), §A the charting-audit style items #7 / #8 / #9 / #11 + 8 unused locals in
    `charting/export_m15_chart.py`. Canonical rules: `engine_v2/charting/CHARTING_SPEC.md`, all styling in
-   `style_registry.py`.
+   `style_registry.py`. **IN PROGRESS (2026-10-22):** the first edit LANDED — the BOS / CTS dot hover, main + sub (the
+   user's spec + decisions + what landed: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261022_dot_hover.md`;
+   figure-only). Its DEFERRED quirks (PB `cycle_id=0`, PB = pullback or replacement break, the confirmation moment /
+   method not shown, …): that file's "Quirks" section (the user: "Let's come back to it later to address them in more
+   detail"). NEXT: the other structure elements' hovers — the user, 2026-10-22: "On the other structure elements, I
+   will provide additional details and specs on what changes to make there." (the sub KL / POI / fib hovers still
+   carry the older `sub window=[s,e] reason` / `records: … a→b` strings).
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
