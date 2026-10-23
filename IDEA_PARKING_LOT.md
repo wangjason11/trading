@@ -155,7 +155,8 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    IC; source `563f5f8`, save S_fib_hover `20261023_191547_563f5f8`). The fourth edit LANDED 2026-10-23 — the wave
    candle hover, H1 + M15 sub + the H1 overlay (the user's spec + decisions + what landed:
    `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md`; figure-only; the window +
-   `struct_direction` added, `volume=`; `debug/chart_census.py` fixed — the hover edits had broken it). NEXT: the
+   `struct_direction` added, `volume=`; `debug/chart_census.py` fixed — the hover edits had broken it; source `18711dc`, save S_wave_hover
+   `20261023_194643_18711dc` = `LATEST_<branch>`). NEXT: the
    user's further specs — the M15 Prev BOS line hover still carries the older `first record parent_sid=…
    parent_cycle=…` string; WVMI back on the chart = register §G.
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).

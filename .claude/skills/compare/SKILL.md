@@ -652,7 +652,19 @@ first, `struct_direction` added), the sub's `sub window=` / `records:` lines and
 (an `ic_idx=NA (…)` line only on a fib with no IC). Positional `cmp_save.py` is fine across it. Check: `fig_scope.py
 BASE CUR '^(fib:|M15 fib$)'` (SCOPE OK; `python -m engine_v2.plans.qa_chart_edits_inputs.fig_scope` from the repo
 root). Skip grep 23. S_fib_hover `20261023_191547_563f5f8` (source `563f5f8`, save `bf3c5a3`, trunk `023d36e`; =
-`LATEST_<branch>` from 2026-10-23).
+`LATEST_<branch>` until S_wave_hover, below).
+**The wave candle hover (2026-10-23, SESSION ORDER item 5's fourth chart edit — the user's spec
+`plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md`) — FIGURE-ONLY:** 27 / 27 CSVs md5-equal to
+S_fib_hover; traces and layouts unchanged (81, 153, 301); the hover changes on the 112 wave-candle traces only
+(UNNAMED traces, so `fig_scope.py`'s name regex cannot select them — match the hovertemplate's `<b>Wave Candle</b>`):
+H1 11, counter 22 sub + 11 H1 overlay, confluence 57 + 11. A save-format boundary for hover diffs only (`cycle_id=`
+after ` | `, the structure's window and `struct_direction` added, `volume=`, the sub's `first record:` line before
+the role). **`debug/chart_census.py` was broken across the four hover edits and is fixed here** (the dot hover keyed
+its sub dots by hover strings, the KL / POI zone hover made it crash, M15 wave candles were all `?`): it reads every
+format to one `(parent_sid, parent_cycle, sub_id)` key, so `chart_census.py <S_S3 chart> <current chart>` → 0
+deltas on both lenses — run it on every hover-format change (GOTCHAS "A hover-format change breaks the
+chart-reading debug tools silently"). Skip grep 23. S_wave_hover `20261023_194643_18711dc` (source `18711dc`, save
+`d15cb00`, trunk `293b7c7`; = `LATEST_<branch>` from 2026-10-23).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -782,7 +794,8 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-23 on S_fib_hover `20261023_191547_563f5f8`, unchanged from S_zone_hover
+counts are (verified 2026-10-23 on S_wave_hover `20261023_194643_18711dc`, unchanged from S_fib_hover
+`20261023_191547_563f5f8`, S_zone_hover
 `20261023_153743_56bb20d`, S_dot_hover
 `20261022_200747_ab2fcc1`, S_S3 `20261021_130400_7b62a47`
 and S_S2 `20261021_081421_cbaed31`
