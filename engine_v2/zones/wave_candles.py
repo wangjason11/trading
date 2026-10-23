@@ -692,7 +692,8 @@ def wave_candle_hover_lines(source_kind: str, position: str, owner: str, cycle_i
     names the cycle it belongs to (`cycle_id + offset`, see `_role_for_wave_candle`),
     and `BOS_0.last` reads "pre-structure pullback".
 
-    Example (H1 sid 0 cycle 1, idx 651): `["CTS zone: sid=0 cycle=1", "Role: LB (last breakout)"]`.
+    Example (H1 sid 0 cycle 1, idx 651): `["CTS zone: sid=0 | cycle_id=1", "Role: LB (last breakout)"]`
+    (`… sid=0 cycle=1` until the user's wave-candle hover spec, 2026-10-23).
     """
     role, cycle_offset = _role_for_wave_candle(source_kind, position)
     if role == "LP":
@@ -702,6 +703,6 @@ def wave_candle_hover_lines(source_kind: str, position: str, owner: str, cycle_i
     else:
         role_text = _ROLE_NAMES[role]
     return [
-        f"{source_kind} zone: {owner} cycle={cycle_id}",
+        f"{source_kind} zone: {owner} | cycle_id={cycle_id}",
         f"Role: {role} ({role_text})",
     ]

@@ -84,6 +84,8 @@ from engine_v2.charting._zone_render import (
     main_zone_id_line,
     poi_zone_customdata,
     poi_zone_hovertemplate,
+    struct_direction_by_sid,
+    wave_candle_hovertemplate,
     select_subordinate_tf_tier,
 )
 from engine_v2.structure.structure_engine import _pip_size_from_pair
@@ -1143,12 +1145,10 @@ def export_m15_chart_plotly(
         sub_dir = int(sid_rec.starting_sd)
         sub_records = records_by_sub.get(eid, [])
         p_sid, p_cycle = _sid_parent(sid_rec)   # informational (first record)
-        # The wave-candle hover's sub window + reason (§17.9; the KL / POI / fib
-        # hovers dropped it for the `first record:` line — the user's specs 2026-10-23).
-        _win_end = sid_rec.end_event_idx if sid_rec.end_event_idx is not None else "open"
         _records_sorted = sorted(sub_records, key=lambda r: (r.start_idx, r.seq))
-        sub_window_str = f"[{sid_rec.start_idx},{_win_end}] {sid_rec.end_reason or 'open'}"
-        # The BOS / CTS dot hover's sub lines (the user's spec 2026-10-22).
+        # The BOS / CTS dot hover's sub lines (the user's spec 2026-10-22); the KL /
+        # POI / fib / wave-candle hovers reuse its `first record:` line, the wave
+        # candle also its `sub_window=` line (the user's specs 2026-10-23).
         first_record_str, fr_trigger_str, dot_window_str, dot_records_str = _sub_dot_hover_lines(
             sid_rec, _records_sorted)
         _segs = tuple(sid_rec.relative_dir_segments or ())
@@ -1449,14 +1449,15 @@ def export_m15_chart_plotly(
         # additionally hidden when ended without lock. `BOS_0.last` (Option C):
         # render iff sub's cyc=0 is non-collapsed. Overlap kept via `_owned_here`
         # per-candle owner filter (§16.5 sid-tied filter, same as the rest of
-        # the sub block). Uniform opacity; wave-candle hover only (no WVMI
-        # momentum / weighted vol).
+        # the sub block). Uniform opacity; hover = `wave_candle_hovertemplate`
+        # (the user's spec 2026-10-23; no WVMI — register §G).
         if zone_cfg.get("wave_candles", True) and sid_waves:
             from engine_v2.zones.wave_candles import (
                 _role_for_wave_candle,
                 compute_wave_candle_visibility,
                 wave_candle_hover_lines,
             )
+            wc_sd = struct_direction_by_sid(sid_kls)
 
             # cycle_life per (internal sid, cycle) from this sub's KL BOS zones.
             # KL meta already encodes (cycle_start=confirmed_idx, end_idx,
@@ -1542,22 +1543,17 @@ def export_m15_chart_plotly(
                                   x0=wc_time, x1=wc_time, y0=0, y1=1,
                                   line=line_props, layer="below")
 
-                    # Wave-candle hover (no WVMI momentum / Weighted vol).
-                    vol = float(lt_df.iloc[idx]["volume"])
-                    full_idx = _lt_full_idx(idx)
-                    h1_info = m15_to_h1.get(wc_time, (None, None))
-                    hover_lines = [
-                        "TF=15M",
-                        "<b>Wave Candle</b>",
-                        f"idx={full_idx}  idx_1H={h1_info[1]}",
+                    # Wave-candle hover (the user's spec 2026-10-23; no WVMI).
+                    h1_idx = m15_to_h1.get(wc_time, (None, None))[1]
+                    wc_hover = wave_candle_hovertemplate(
+                        "15M",
+                        f"idx={_lt_full_idx(idx)} | idx_1H={'NA (no H1 candle)' if h1_idx is None else h1_idx}",
                         # `wc.structure_id` is the bounded sub's internal MS sid (restarts at 0
                         # per sub) — sub_id is the user-facing identity.
-                        *wave_candle_hover_lines(str(wc.source_kind), position,
-                                                 f"sub_id={eid}", wc.cycle_id),
-                        f"first record parent_sid={p_sid} parent_cycle={p_cycle}",
-                        f"sub window={sub_window_str}",
-                        f"Volume: {vol:.0f}",
-                    ]
+                        wave_candle_hover_lines(str(wc.source_kind), position,
+                                                f"sub_id={eid}", wc.cycle_id),
+                        dot_window_str, float(lt_df.iloc[idx]["volume"]), wc_sd[int(wc.structure_id)],
+                        first_record=first_record_str)
 
                     _n_pts = 12
                     _y_pts = [wc_y_min + i * (wc_y_max - wc_y_min) / (_n_pts - 1) for i in range(_n_pts)]
@@ -1565,7 +1561,7 @@ def export_m15_chart_plotly(
                         x=[wc_time] * _n_pts, y=_y_pts,
                         mode="lines", showlegend=False,
                         line=dict(width=8, color="rgba(0,0,0,0)"),
-                        hovertemplate="<br>".join(hover_lines) + "<extra></extra>",
+                        hovertemplate=wc_hover,
                     ))
 
         # --- POI zone rectangles + hover ---
@@ -2409,6 +2405,9 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 idx = max(idx, int(sfloor))
             cts_conf_h1[(s, c)] = idx
         h1_wc_visibility = compute_wave_candle_visibility(cycle_life_h1, cts_conf_h1)
+        # The hover's window line (the main dot hover's) and struct_direction.
+        h1_wc_struct_lines = main_dot_structure_lines(h1_events)
+        h1_wc_sd = struct_direction_by_sid(h1_df.attrs.get("kl_zones", []))
 
         wc_y_min = float(dfx[COL_L].min())
         wc_y_max = float(dfx[COL_H].max())
@@ -2464,23 +2463,20 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                               line=line_props,
                               layer="below")
 
-                # Wave-candle hover (no WVMI momentum / Weighted vol).
-                vol = float(h1_df.loc[idx, "volume"])
-                hover_lines = [
-                    "TF=1H",
-                    "<b>Wave Candle</b>",
-                    f"idx={idx}",
-                    *wave_candle_hover_lines(str(wc.source_kind), position,
-                                             f"sid={wc.structure_id}", wc.cycle_id),
-                    f"Volume: {vol:.0f}",
-                ]
+                # Wave-candle hover — the H1 chart's (the user's spec 2026-10-23; no WVMI).
+                wc_hover = wave_candle_hovertemplate(
+                    "1H", f"idx={idx}",
+                    wave_candle_hover_lines(str(wc.source_kind), position,
+                                            f"sid={wc.structure_id}", wc.cycle_id),
+                    h1_wc_struct_lines[int(wc.structure_id)][1], float(h1_df.loc[idx, "volume"]),
+                    h1_wc_sd[int(wc.structure_id)])
                 _n_pts = 12
                 _y_pts = [wc_y_min + i * (wc_y_max - wc_y_min) / (_n_pts - 1) for i in range(_n_pts)]
                 fig.add_trace(go.Scatter(
                     x=[wc_time] * _n_pts, y=_y_pts,
                     mode="lines", showlegend=False,
                     line=dict(width=8, color="rgba(0,0,0,0)"),
-                    hovertemplate="<br>".join(hover_lines) + "<extra></extra>",
+                    hovertemplate=wc_hover,
                 ))
 
     # --- H1 POI zones (color fill) ---

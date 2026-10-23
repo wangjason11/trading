@@ -520,6 +520,24 @@ is tz-AWARE (`'2025-11-21T15:30:00+00:00'`), so `pd.Timestamp(x)` of the two
 never compares equal. `engine_v2/debug/chart_census.py` only reads `name` /
 `customdata` so it is unaffected — any new chart-reading tool is not.
 
+## A hover-format change breaks the chart-reading debug tools silently (2026-10-23)
+
+**Problem:** `engine_v2/debug/chart_census.py` keyed its per-sub census on hover CONTENT — positional `customdata`
+slots (KL / POI / sub dots) and a regex on the wave-candle hover text. The BOS / CTS dot hover (`ab2fcc1`, 2026-10-22)
+turned the dot keys into hover strings, the KL / POI zone hover (`56bb20d`, 2026-10-23) made the census CRASH
+(`IndexError` on the new 10-slot KL customdata), and the 2026-09-30 `Role:` line had already made every M15
+wave-candle key `?`. Nothing ran the census on those figure-only saves, so it went unnoticed until the wave-candle
+hover spec touched the same regex.
+
+**Fix:** the census reads every format to one string key `(parent_sid, parent_cycle, sub_id)` — the identity lines
+`sub_id=X | cycle_id=Y` + `first record: lens=… | parent_sid=P | parent_cycle_id=C` since 2026-10-22 / 23, the
+old positional ints before. Check: `chart_census.py <S_S3 chart> <current chart>` → every delta 0 across all four
+hover edits.
+
+**Rule:** a change to a hover's text or customdata layout re-runs `chart_census.py BASE CUR` on both M15 charts as
+part of its figure-only check (a crash or a `?` key is the tool, not the engine), and grep
+`engine_v2/debug/` + `plans/*/` tools for the old strings it removes.
+
 ## Plotly Hover on Vertical Lines Requires Multiple Data Points
 
 **Problem:** `go.Scatter` with `mode="lines"` only triggers hover near actual data points, not at intermediate positions along the line segment. A vertical line with only 2 points (top and bottom) only hovers when the cursor is at the very top or bottom.

@@ -908,14 +908,14 @@ from engine_v2.zones.wave_candles import wave_candle_hover_lines  # noqa: E402
 
 @pytest.mark.parametrize("source_kind, position, cycle_id, expected", [
     # H1 sid 0 cycle 1 on the reference window: idx 591 / 651 / 653 / 590
-    ("BOS", "first", 1, ["BOS zone: sid=0 cycle=1", "Role: FB (first breakout)"]),
-    ("CTS", "last", 1, ["CTS zone: sid=0 cycle=1", "Role: LB (last breakout)"]),
-    ("CTS", "first", 1, ["CTS zone: sid=0 cycle=1", "Role: FP (first pullback)"]),
-    ("BOS", "last", 1, ["BOS zone: sid=0 cycle=1", "Role: LP (last pullback of cycle 0)"]),
+    ("BOS", "first", 1, ["BOS zone: sid=0 | cycle_id=1", "Role: FB (first breakout)"]),
+    ("CTS", "last", 1, ["CTS zone: sid=0 | cycle_id=1", "Role: LB (last breakout)"]),
+    ("CTS", "first", 1, ["CTS zone: sid=0 | cycle_id=1", "Role: FP (first pullback)"]),
+    ("BOS", "last", 1, ["BOS zone: sid=0 | cycle_id=1", "Role: LP (last pullback of cycle 0)"]),
     # the LP's owning cycle is the zone's cycle - 1 at any depth
-    ("BOS", "last", 3, ["BOS zone: sid=0 cycle=3", "Role: LP (last pullback of cycle 2)"]),
+    ("BOS", "last", 3, ["BOS zone: sid=0 | cycle_id=3", "Role: LP (last pullback of cycle 2)"]),
     # BOS_0.last: the pre-structure pullback (H1 idx 109)
-    ("BOS", "last", 0, ["BOS zone: sid=0 cycle=0", "Role: LP (pre-structure pullback)"]),
+    ("BOS", "last", 0, ["BOS zone: sid=0 | cycle_id=0", "Role: LP (pre-structure pullback)"]),
 ])
 def test_wave_candle_hover_lines_kind_and_role(source_kind, position, cycle_id, expected):
     assert wave_candle_hover_lines(source_kind, position, "sid=0", cycle_id) == expected
@@ -924,18 +924,62 @@ def test_wave_candle_hover_lines_kind_and_role(source_kind, position, cycle_id, 
 def test_wave_candle_hover_lines_owner_text_is_passed_through():
     """The M15 sub site passes `sub_id=<eid>` (the user-facing identity), not the internal sid."""
     assert wave_candle_hover_lines("CTS", "last", "sub_id=7", 0) == [
-        "CTS zone: sub_id=7 cycle=0", "Role: LB (last breakout)"]
+        "CTS zone: sub_id=7 | cycle_id=0", "Role: LB (last breakout)"]
 
 
 def test_every_wave_candle_hover_site_uses_the_label_helper():
     """Call-site pin: the three hover sites (H1 chart; M15 sub lines + the M15 chart's H1
-    overlay) build the label through `wave_candle_hover_lines`, and no site hardcodes the
-    zone kind (the old bug: "BOS zone:" on CTS lines too)."""
+    overlay) build the hover through `wave_candle_hovertemplate` and the zone + role lines
+    through `wave_candle_hover_lines`, and no site hardcodes the zone kind (the old bug:
+    "BOS zone:" on CTS lines too)."""
     from pathlib import Path
     charting = Path(__file__).resolve().parents[1] / "charting"
     counts = {}
     for name in ("export_plotly.py", "export_m15_chart.py"):
         src = (charting / name).read_text(encoding="utf-8")
         assert "BOS zone: " not in src, f"{name} hardcodes the wave-candle zone kind"
-        counts[name] = src.count("*wave_candle_hover_lines(str(wc.source_kind), position,")
-    assert counts == {"export_plotly.py": 1, "export_m15_chart.py": 2}
+        counts[name] = (src.count("wave_candle_hovertemplate("),
+                        src.count("wave_candle_hover_lines(str(wc.source_kind), position,"))
+    assert counts == {"export_plotly.py": (1, 1), "export_m15_chart.py": (2, 2)}
+
+
+# ---------------------------------------------------------------------------
+# The hover (the user's spec 2026-10-23,
+# plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md)
+# ---------------------------------------------------------------------------
+
+from engine_v2.charting._zone_render import struct_direction_by_sid, wave_candle_hovertemplate  # noqa: E402
+
+
+def test_the_main_hover_in_the_users_order():
+    """H1 idx 651 on the window (S_fib_hover): the window line = the main dot hover's (decision 2), `volume=`
+    (decision 3)."""
+    got = wave_candle_hovertemplate(
+        "1H", "idx=651", wave_candle_hover_lines("CTS", "last", "sid=0", 1),
+        "struct_window=[115, 902] | end_reason=reversal", 3032.0, 1)
+    assert got == "<br>".join([
+        "TF=1H", "<b>Wave Candle</b>", "idx=651", "CTS zone: sid=0 | cycle_id=1", "Role: LB (last breakout)",
+        "struct_window=[115, 902] | end_reason=reversal", "volume=3032", "struct_direction=1"]) + "<extra></extra>"
+
+
+def test_the_sub_hover_puts_the_first_record_between_the_zone_and_the_role():
+    """Counter sub 3's idx 2841 (S_fib_hover): its first record is on the OTHER lens, so `lens=` (decision 1)."""
+    got = wave_candle_hovertemplate(
+        "15M", "idx=2841 | idx_1H=710", wave_candle_hover_lines("CTS", "last", "sub_id=3", 1),
+        "sub_window=[2829, 3491] | end_reason=same_dir_replacement", 758.0, -1,
+        first_record="first record: lens=confluence | parent_sid=0 | parent_cycle_id=1")
+    assert got.split("<br>") == [
+        "TF=15M", "<b>Wave Candle</b>", "idx=2841 | idx_1H=710", "CTS zone: sub_id=3 | cycle_id=1",
+        "first record: lens=confluence | parent_sid=0 | parent_cycle_id=1", "Role: LB (last breakout)",
+        "sub_window=[2829, 3491] | end_reason=same_dir_replacement", "volume=758", "struct_direction=-1<extra></extra>"]
+
+
+def test_struct_direction_by_sid_reads_the_kl_zones_and_rejects_a_conflict():
+    from types import SimpleNamespace
+
+    def z(sid, sd):
+        return SimpleNamespace(meta={"structure_id": sid, "struct_direction": sd})
+
+    assert struct_direction_by_sid([z(0, 1), z(0, 1), z(1, -1)]) == {0: 1, 1: -1}
+    with pytest.raises(AssertionError, match="structure 0: KL zones with struct_direction 1 and -1"):
+        struct_direction_by_sid([z(0, 1), z(0, -1)])

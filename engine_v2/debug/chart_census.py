@@ -18,6 +18,33 @@ def load_fig(path):
     return data, layout
 
 
+# A sub hover's identity, every format to ONE key `(parent_sid, parent_cycle, sub_id)` (strings, like the trace-name
+# keys) so a census diff across a hover-format change compares equal: since the user's hover specs (dots 2026-10-22,
+# KL / POI / fib / wave candles 2026-10-23) `sub_id=X | cycle_id=Y` + `first record: lens=… | parent_sid=P |
+# parent_cycle_id=C`; before them positional customdata ints (KL / POI / dots) or the wave candle's `first record
+# parent_sid=P parent_cycle=C` line (unmatched since the 2026-09-30 `Role:` line → `?` until 2026-10-23).
+_FIRST_RECORD = re.compile(r"first record: lens=\w+ \| parent_sid=([^ |<]+) \| parent_cycle_id=([^ |<]+)")
+_SUB_ID = re.compile(r"sub_id=(\d+) \| cycle_id=")
+_OLD_WAVE = re.compile(r"sub_id=(\d+) cycle=-?\d+<br>Role: [^<]*<br>first record parent_sid=([^ <]+) "
+                       r"parent_cycle=([^ <]+)")
+
+
+def _key(p_sid, p_cycle, sub_id):
+    return (str(p_sid), str(p_cycle), str(sub_id))
+
+
+def _key_from_lines(text):
+    fr, sub = _FIRST_RECORD.search(text), _SUB_ID.search(text)
+    return _key(fr.group(1), fr.group(2), sub.group(1)) if fr and sub else "?"
+
+
+def _zone_key(r, old_p_sid_slot):
+    """KL / POI: the identity lines in slot 1 since 2026-10-23, else `(r[slot], r[slot + 1], r[1])`."""
+    if isinstance(r[1], str) and r[1].startswith("sub_id="):
+        return _key_from_lines(r[1])
+    return _key(r[old_p_sid_slot], r[old_p_sid_slot + 1], r[1])
+
+
 def census(path):
     data, layout = load_fig(path)
     c = Counter()
@@ -26,18 +53,17 @@ def census(path):
         ht = tr.get("hovertemplate") or ""
         cd = tr.get("customdata") or []
         if name == "M15 KL zone":
-            r = cd[0]
-            c[("KL_hover", (r[9], r[10], r[1]))] += 1
+            c[("KL_hover", _zone_key(cd[0], 9))] += 1
         elif name == "M15 POI zone":
-            r = cd[0]
-            c[("POI_hover", (r[10], r[11], r[1]))] += 1
+            c[("POI_hover", _zone_key(cd[0], 10))] += 1
         elif name.startswith("M15 KL outline"):
             mm = re.search(r'h1s(\S+)c(\S+)_sub(\d+)', name)
             c[("KL_outline", (mm.group(1), mm.group(2), mm.group(3)) if mm else name)] += 1
         elif re.match(r'^M15 (CTS \(unconf\)|CTS|BOS|PB) ', name):
             kind = re.match(r'^M15 (CTS \(unconf\)|CTS|BOS|PB) ', name).group(1)
             r = cd[0]
-            c[(f"dots_{kind}", (r[6], r[7], r[3]))] += 1
+            fr = _FIRST_RECORD.search(str(r[6]))           # the `first record:` line since 2026-10-22
+            c[(f"dots_{kind}", _key(fr.group(1), fr.group(2), r[3]) if fr else _key(r[6], r[7], r[3]))] += 1
         elif name.startswith("M15 swing"):
             mm = re.search(r'h1s(\S+)c(\S+)_m15s(\d+)', name)
             c[("swing", (mm.group(1), mm.group(2), mm.group(3)) if mm else name)] += 1
@@ -46,9 +72,8 @@ def census(path):
         elif name.startswith("M15 Prev BOS"):
             c[("prev_bos", name)] += 1
         elif not name and ht.startswith("TF=15M<br><b>Wave Candle"):
-            mm = re.search(r'sub_id=(\d+) cycle=(-?\d+)<br>first record parent_sid=(\S+) parent_cycle=(\S+)', ht)
-            key = (mm.group(3), mm.group(4), mm.group(1)) if mm else "?"
-            c[("wave_hover_M15", key)] += 1
+            old = _OLD_WAVE.search(ht)
+            c[("wave_hover_M15", _key(old.group(2), old.group(3), old.group(1)) if old else _key_from_lines(ht))] += 1
         elif not name and ht.startswith("TF=1H<br><b>Wave Candle"):
             c[("wave_hover_H1", "-")] += 1
         elif name.startswith("H1 ") or name in ("zone_proximity:trigger",):

@@ -152,8 +152,12 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    S_zone_hover `20261023_153743_56bb20d`). The third edit LANDED 2026-10-23 — the Fib zone hover, main + sub (the
    user's spec + decisions + what landed: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_fib_hover.md`;
    figure-only; `ic_ref:` / `limit_price=` / `lifecycle=` relabelled, the IC outcome line kept only on a fib with no
-   IC; source `563f5f8`, save S_fib_hover `20261023_191547_563f5f8` = `LATEST_<branch>`). NEXT: the user's further specs — the wave-candle hover still carries the older `first record parent_sid=…
-   parent_cycle=…` / `sub window=[s,e] reason` strings.
+   IC; source `563f5f8`, save S_fib_hover `20261023_191547_563f5f8`). The fourth edit LANDED 2026-10-23 — the wave
+   candle hover, H1 + M15 sub + the H1 overlay (the user's spec + decisions + what landed:
+   `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md`; figure-only; the window +
+   `struct_direction` added, `volume=`; `debug/chart_census.py` fixed — the hover edits had broken it). NEXT: the
+   user's further specs — the M15 Prev BOS line hover still carries the older `first record parent_sid=…
+   parent_cycle=…` string; WVMI back on the chart = register §G.
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -462,6 +466,14 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
   both show on one chart as `end_reason=`. Exported values, so a rename is a meta-contract migration (LANDMINES
   "Event Contract Rules" rule 3), not a hover change. Detail:
   `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_fib_hover.md`.
+- **WVMI back on the chart (the wave-candle hover)** — deferred 2026-05-28 (`e64556a`, WAVE_CANDLES_SPEC "Rendering
+  simplifications": "Full WVMI momentum markers deferred (revisit later)"; logged here 2026-10-23, the user asking
+  about it with the wave-candle hover spec). Until then every wave-candle hover carried `Weighted vol` and, on an LB /
+  LP line, `<Buy|Sell> momentum` + the paired weighted volumes, looked up by candle index. Open design: WVMI's `lp_idx`
+  is its own temporary last pullback, not the drawn LP line (on H1 neither live record's LP is drawn), and an
+  index-only lookup can hit another sub's or role's line; PART4 §16.5's WVMI row has the planned design (locked
+  records show final values; in-progress ones re-render as `update_temporary_lp` moves the temp LP). Detail +
+  measurements: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md`.
 - **Uniform 3-tier chart opacity** (brightest = cycle not ended, mid = sid not ended, faded = sid ended; one
   `opacity_for(sid, cycle)` helper for every element) — its own session. Detail: FIB_LIFECYCLE_SPEC §9.4 + §13.
 - **Breadcrumb header with cross-chart navigation** — "not in v1". Detail: PART4 §16.9.

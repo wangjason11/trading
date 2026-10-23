@@ -320,7 +320,7 @@ To change any visual element:
 - Drawn with `yref="paper"` (y0=0, y1=1) so lines span full chart height
 - Filtered to `selected_sids` (same filter as KL zones)
 - **Hover overlay:** Invisible `go.Scatter` trace (8px wide, `rgba(0,0,0,0)`) with 12 evenly-spaced y-points per line (Plotly only detects hover near data points, not along line segments)
-  - `idx`, the zone line `<BOS|CTS> zone: sid=S cycle=N`, the `Role:` line (FB / LB / FP / LP; the LP names its owning cycle), raw volume — built by `wave_candles.wave_candle_hover_lines` (the same builder on the M15 charts). No WVMI momentum and no weighted volume (WAVE_CANDLES_SPEC "Rendering simplifications"; WVMI is CSV-only)
+  - The user's spec 2026-10-23 (`plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md`), ONE builder for the H1 chart, the M15 sub lines and the M15 charts' H1 overlay (`_zone_render.wave_candle_hovertemplate`; the zone + role lines from `wave_candles.wave_candle_hover_lines`): `TF` / **Wave Candle** / `idx=` (M15: `idx=<i> | idx_1H=<h>`) / `<BOS|CTS> zone: sid=S | cycle_id=N` (M15: `sub_id=X | cycle_id=N`, then the dot hover's `first record: lens=… | parent_sid=… | parent_cycle_id=…` line — kept with `lens=`, the user's decision 1) / `Role: <FB|LB|FP|LP> (<name>)` (the LP names its owning cycle) / the window — main: the dot hover's `struct_window=[s, e] | end_reason=<reversal | open>` (`main_dot_structure_lines`; decision 2 added the reason), M15: `sub_window=[s, e] | end_reason=…` / `volume=<raw volume>` (decision 3: `=`, not the spec's colon) / `struct_direction=` (the structure's, from its KL zones' meta — `struct_direction_by_sid`; a `WaveCandleResult` carries none). E.g. H1 idx 651: `idx=651` / `CTS zone: sid=0 | cycle_id=1` / `Role: LB (last breakout)` / `struct_window=[115, 902] | end_reason=reversal` / `volume=3032` / `struct_direction=1`. Until 2026-10-23: `cycle=` unlabelled after a space, `Volume: <v>`, no window / direction on the main; the sub's `first record parent_sid=… parent_cycle=…` after the role and `sub window=[s,e] reason`. No WVMI momentum and no weighted volume (removed 2026-05-28, WAVE_CANDLES_SPEC "Rendering simplifications"; WVMI is CSV-only — register §G "WVMI back on the chart")
 - Style keys: `wave_candle.bullish`, `wave_candle.bearish`
 
 ### 11) Subordinate overlays on parent charts (Week 8 / Part 4)
@@ -723,9 +723,9 @@ TriggerRecords (`attrs["triggers"]`), one per line, in `(start_idx, seq)` order;
 (`SidRecord.relative_dir_segments`) at the dot's candle — `NA (before start_idx)` before the sub's start, exactly the
 `phase=forming` candles (`_sub_relative_dir_at`; a live candle without a segment fails loudly; `-` until 2026-10-22).
 One builder for the sub lines, `_sub_dot_hover_lines`; the sub KL / POI hovers reuse its `first record:` line
-(`_sub_zone_id_lines`, since 2026-10-23 — §5 / §7 "Hover"), and so does the sub fib hover (§8, 2026-10-23). The
-wave-candle hover still carries the older `first record parent_sid=… parent_cycle=…` / `sub window=[s,e] reason`
-strings (`sub_window_str`). Known (deferred — the
+(`_sub_zone_id_lines`, since 2026-10-23 — §5 / §7 "Hover"), and so do the sub fib hover (§8) and the sub wave-candle
+hover (§10, with the `sub_window=` line too; both 2026-10-23). The M15 Prev BOS line hover still carries the older
+`first record parent_sid=… parent_cycle=…` string. Known (deferred — the
 spec file's "Quirks" section): a PB dot's `cycle_id` is a placeholder 0; a PB dot is either a pullback or a
 replacement break point (same `kind=PB`).
 

@@ -497,6 +497,40 @@ def main_dot_customdata(p: Sequence[Any], lines_by_sid: dict) -> list:
 
 
 # ---------------------------------------------------------------------------
+# Wave candle hover (the user's spec 2026-10-23,
+# plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md)
+# ---------------------------------------------------------------------------
+
+def struct_direction_by_sid(kl_zones: Sequence[Any]) -> dict:
+    """`{structure_id: struct_direction}` from the KL zones' meta — every zone of a structure carries its direction
+    (asserted: one per structure). The wave-candle hover's `struct_direction`: a `WaveCandleResult` carries none, and
+    each one is derived from a KL zone of its structure. On an M15 lens pass ONE sub's zones (a sub's sid restarts
+    at 0)."""
+    out: dict = {}
+    for z in kl_zones:
+        sid, sd = int(z.meta["structure_id"]), int(z.meta["struct_direction"])
+        assert out.setdefault(sid, sd) == sd, (
+            f"[chart] structure {sid}: KL zones with struct_direction {out[sid]} and {sd}")
+    return out
+
+
+def wave_candle_hovertemplate(tf: str, idx_text: str, zone_role_lines: Sequence[str], window_line: str,
+                              volume: float, struct_direction: int, first_record: Optional[str] = None) -> str:
+    """The wave-candle hover — ONE builder for the H1 chart, the M15 sub lines and the M15 charts' H1 overlay (the
+    user's spec 2026-10-23): `TF` / **Wave Candle** / `idx_text` (`idx=<i>`; M15 `idx=<i> | idx_1H=<h>`) / the zone line
+    (`<BOS|CTS> zone: <sid=S | sub_id=X> | cycle_id=N`) / a sub's `first record: lens | parent_sid | parent_cycle_id`
+    line / the `Role:` line (`zone_role_lines` = `wave_candles.wave_candle_hover_lines`) / the window — the main dot
+    hover's `struct_window=[s, e] | end_reason=…` (`main_dot_structure_lines`), a sub's `sub_window=[s, e] |
+    end_reason=…` (`_sub_dot_hover_lines`) / `volume=<raw volume>` / `struct_direction=`. No WVMI (removed 2026-05-28;
+    register §G "WVMI back on the chart")."""
+    zone_line, role_line = zone_role_lines
+    lines = [f"TF={tf}", "<b>Wave Candle</b>", idx_text, zone_line,
+             *([] if first_record is None else [first_record]),
+             role_line, window_line, f"volume={float(volume):.0f}", f"struct_direction={int(struct_direction)}"]
+    return "<br>".join(lines) + "<extra></extra>"
+
+
+# ---------------------------------------------------------------------------
 # KL / POI zone hover — main and sub (the user's spec 2026-10-23,
 # plans/qa_chart_edits_inputs/user_spec_20261023_zone_hover.md)
 # ---------------------------------------------------------------------------

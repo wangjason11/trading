@@ -31,6 +31,8 @@ from engine_v2.charting._zone_render import (
     main_zone_id_line,
     poi_zone_customdata,
     poi_zone_hovertemplate,
+    struct_direction_by_sid,
+    wave_candle_hovertemplate,
 )
 from engine_v2.structure.structure_engine import _pip_size_from_pair
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
@@ -1851,7 +1853,8 @@ def export_chart_plotly(
     # pre-structure pullback shown for clean structure starts, hidden for
     # retroactive-Scenario-2 phantoms. Overlap kept via `selected_sids`
     # (most-recent-sid filter, same as KL). Uniform opacity; hover =
-    # wave-candle info only (no WVMI momentum / weighted vol).
+    # `wave_candle_hovertemplate` (the user's spec 2026-10-23; no WVMI —
+    # register §G "WVMI back on the chart").
     # -------------------------------------------------
     wave_candles = dfx.attrs.get("wave_candles", [])
     if zone_cfg.get("wave_candles", True) and wave_candles and zones:
@@ -1894,6 +1897,9 @@ def export_chart_plotly(
                 idx = max(idx, int(sfloor))
             cts_conf[(s, c)] = idx
         wc_visibility = compute_wave_candle_visibility(cycle_life, cts_conf)
+        # The hover's window line (the main dot hover's) and struct_direction.
+        wc_struct_lines = main_dot_structure_lines(events)
+        wc_sd = struct_direction_by_sid(dfx.attrs.get("kl_zones", []))
 
         # Price axis range for invisible hover traces
         wc_y_min = float(dfx["l"].min())
@@ -1962,16 +1968,13 @@ def export_chart_plotly(
                     layer="below",
                 )
 
-                # --- Invisible hover overlay (wave-candle info only) ---
-                vol = float(dfx.loc[idx, "volume"])
-                hover_lines = [
-                    "TF=1H",
-                    "<b>Wave Candle</b>",
-                    f"idx={idx}",
-                    *wave_candle_hover_lines(str(wc.source_kind), position,
-                                             f"sid={wc.structure_id}", wc.cycle_id),
-                    f"Volume: {vol:.0f}",
-                ]
+                # --- Invisible hover overlay (the user's spec 2026-10-23) ---
+                wc_hover = wave_candle_hovertemplate(
+                    "1H", f"idx={idx}",
+                    wave_candle_hover_lines(str(wc.source_kind), position,
+                                            f"sid={wc.structure_id}", wc.cycle_id),
+                    wc_struct_lines[int(wc.structure_id)][1], float(dfx.loc[idx, "volume"]),
+                    wc_sd[int(wc.structure_id)])
 
                 # Spread points along vertical line for hover detection
                 # (Plotly only detects hover near data points, not along line segments)
@@ -1983,7 +1986,7 @@ def export_chart_plotly(
                     mode="lines",
                     showlegend=False,
                     line=dict(width=8, color="rgba(0,0,0,0)"),
-                    hovertemplate="<br>".join(hover_lines) + "<extra></extra>",
+                    hovertemplate=wc_hover,
                 ))
                 wc_rendered += 1
 

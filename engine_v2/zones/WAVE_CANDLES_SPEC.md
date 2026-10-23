@@ -307,15 +307,19 @@ apples-to-apples. KL/POI/etc. unchanged.)
 
 ### Rendering simplifications
 
-- **Hover:** wave-candle info only — `idx`, the zone line `<BOS|CTS> zone: <owner> cycle=N`
+- **Hover:** wave-candle info only — `idx`, the zone line `<BOS|CTS> zone: <owner> | cycle_id=N`
   (the record's own `source_kind` + `cycle_id`; owner `sid=` on H1, `sub_id=` on an M15
   sub), a `Role:` line with the role from the line → role table above (FB / LB / FP /
-  LP — the WVMI CSV's `fb_idx` / `lb_idx` / `fp_idx` / `lp_idx`), raw `Volume`. The LP
-  line names the cycle it belongs to (`Role: LP (last pullback of cycle N−1)`;
-  `BOS_0.last` → `LP (pre-structure pullback)`). One builder for all three hover sites:
-  `wave_candles.wave_candle_hover_lines`. (Until 2026-09-30 every site hardcoded
-  "BOS zone:", mislabelling the CTS lines — 55 of 110 labels on the reference window.)
-  Drop the WVMI momentum block **and** `Weighted vol` (WVMI-weight-derived).
+  LP — the WVMI CSV's `fb_idx` / `lb_idx` / `fp_idx` / `lp_idx` name the ROLES; WVMI's
+  `lp_idx` is its own temporary last pullback, not necessarily a drawn LP line), the
+  structure's window, `volume=` and `struct_direction=` (the user's spec 2026-10-23 — the
+  full line list: CHARTING_SPEC §10). The LP line names the cycle it belongs to (`Role: LP
+  (last pullback of cycle N−1)`; `BOS_0.last` → `LP (pre-structure pullback)`). One builder
+  for the zone + role lines at all three hover sites: `wave_candles.wave_candle_hover_lines`
+  (the whole hover: `_zone_render.wave_candle_hovertemplate`). (Until 2026-09-30 every site
+  hardcoded "BOS zone:", mislabelling the CTS lines — 55 of 110 labels on the reference
+  window.) Drop the WVMI momentum block **and** `Weighted vol` (WVMI-weight-derived) —
+  putting them back: register §G "WVMI back on the chart"
 - **Opacity:** uniform across all charts (drop the 3-tier active / recent /
   prior).
 - **Line style:** keep **dashed = subordinate**, **solid = main overlay**.
