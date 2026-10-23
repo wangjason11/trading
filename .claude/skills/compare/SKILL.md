@@ -630,7 +630,19 @@ only (H1 5, counter 14 = 11 sub + 3 H1 overlay, confluence 21 = 18 + 3). Positio
 the format, not an engine delta. Checks: `plans/qa_chart_edits_inputs/fig_scope.py BASE CUR` (the figure-only scope:
 same traces in order, layouts equal, hover changed only on the dot traces), `dot_hovers_new.py CHART_DIR` (every dot
 hover rendered; `NA (before start_idx)` ⇔ `phase=forming`). Skip grep 23. S_dot_hover `20261022_200747_ab2fcc1`
-(source `ab2fcc1`, save `2c30189`, trunk `79a43bf`; = `LATEST_<branch>` from 2026-10-22).
+(source `ab2fcc1`, save `2c30189`, trunk `79a43bf`; = `LATEST_<branch>` until S_zone_hover, below).
+**The KL / POI zone hover (2026-10-23, SESSION ORDER item 5's second chart edit — the user's spec
+`plans/qa_chart_edits_inputs/user_spec_20261023_zone_hover.md`) — FIGURE-ONLY:** 27 / 27 CSVs md5-equal to
+S_dot_hover; traces, shapes and layouts unchanged (81/234, 153/136, 301/307); the hover changes on the zone traces only
+(two per zone / KL bounds step) — H1: KL 30, POI 4; counter: sub KL 14, sub POI 14, H1-overlay KL 30, overlay POI 4;
+confluence: sub KL 76, sub POI 30, overlay KL 30, overlay POI 4. A save-format boundary for hover diffs only: the zone
+hovers gain `lifecycle=` / `zone_size=` lines and lose `status=` / the sub `sub window=` / `records:` lines, and
+the IC lines are labelled (`ic_reason=` / `ic_tiebreak=` / `ic_prior_imbalance=` / `ic_zone=`; the S_S3 entry above
+quotes them unlabelled). Positional `cmp_save.py` is fine across it. Checks: `fig_scope.py BASE CUR '^(KL zone|POI
+zone|M15 KL zone|M15 POI zone|H1 KL zone \(overlay\)|H1 POI zone \(overlay\))'` (SCOPE OK; run it as `python -m
+engine_v2.plans.qa_chart_edits_inputs.fig_scope` from the repo root), `zone_hovers.py SAVE_DIR` (every zone hover + a
+CSV lifecycle table; `PYTHONIOENCODING=utf-8`). Skip grep 23. S_zone_hover `20261023_153743_56bb20d` (source
+`56bb20d`, save `13d7252`, trunk `8b2916e`; = `LATEST_<branch>` from 2026-10-23).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -760,7 +772,8 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-22 on S_dot_hover `20261022_200747_ab2fcc1`, unchanged from S_S3 `20261021_130400_7b62a47`
+counts are (verified 2026-10-23 on S_zone_hover `20261023_153743_56bb20d`, unchanged from S_dot_hover
+`20261022_200747_ab2fcc1`, S_S3 `20261021_130400_7b62a47`
 and S_S2 `20261021_081421_cbaed31`
 — PLAN_S step 2 moved the shapes from S_S1
 `20261021_020427_69c099b`'s 236 / 138 / 309: the H1 POI sid 1 cycle 2's off / on pair 992 / 998 is gone, on H1 and
