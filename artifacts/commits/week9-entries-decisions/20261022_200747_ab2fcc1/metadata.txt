@@ -1,0 +1,4 @@
+commit_hash=ab2fcc1
+timestamp=20261022_200747
+branch=week9-entries-decisions
+commit_message=Chart edits (SESSION ORDER item 5), the BOS / CTS dot hover - the user's spec 2026-10-22
