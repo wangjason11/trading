@@ -642,7 +642,17 @@ quotes them unlabelled). Positional `cmp_save.py` is fine across it. Checks: `fi
 zone|M15 KL zone|M15 POI zone|H1 KL zone \(overlay\)|H1 POI zone \(overlay\))'` (SCOPE OK; run it as `python -m
 engine_v2.plans.qa_chart_edits_inputs.fig_scope` from the repo root), `zone_hovers.py SAVE_DIR` (every zone hover + a
 CSV lifecycle table; `PYTHONIOENCODING=utf-8`). Skip grep 23. S_zone_hover `20261023_153743_56bb20d` (source
-`56bb20d`, save `13d7252`, trunk `8b2916e`; = `LATEST_<branch>` from 2026-10-23).
+`56bb20d`, save `13d7252`, trunk `8b2916e`; = `LATEST_<branch>` until S_fib_hover, below).
+**The Fib zone hover (2026-10-23, SESSION ORDER item 5's third chart edit — the user's spec
+`plans/qa_chart_edits_inputs/user_spec_20261023_fib_hover.md`) — FIGURE-ONLY:** 27 / 27 CSVs md5-equal to
+S_zone_hover; traces and layouts unchanged (81, 153, 301); the hover changes on the fib hover traces only — H1 3
+(`fib:sid0:c0` / `c1`, `fib:sid1:c2`), counter 7, confluence 17 (`M15 fib`). A save-format boundary for hover diffs
+only: the fib hover's lines are relabelled and reordered (`ic_ref:` / `limit_price=` / `lifecycle=`, the anchors' block
+first, `struct_direction` added), the sub's `sub window=` / `records:` lines and every pick's IC outcome line are gone
+(an `ic_idx=NA (…)` line only on a fib with no IC). Positional `cmp_save.py` is fine across it. Check: `fig_scope.py
+BASE CUR '^(fib:|M15 fib$)'` (SCOPE OK; `python -m engine_v2.plans.qa_chart_edits_inputs.fig_scope` from the repo
+root). Skip grep 23. S_fib_hover `20261023_191547_563f5f8` (source `563f5f8`, save `bf3c5a3`, trunk `023d36e`; =
+`LATEST_<branch>` from 2026-10-23).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -772,7 +782,8 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-23 on S_zone_hover `20261023_153743_56bb20d`, unchanged from S_dot_hover
+counts are (verified 2026-10-23 on S_fib_hover `20261023_191547_563f5f8`, unchanged from S_zone_hover
+`20261023_153743_56bb20d`, S_dot_hover
 `20261022_200747_ab2fcc1`, S_S3 `20261021_130400_7b62a47`
 and S_S2 `20261021_081421_cbaed31`
 — PLAN_S step 2 moved the shapes from S_S1

@@ -152,7 +152,7 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    S_zone_hover `20261023_153743_56bb20d`). The third edit LANDED 2026-10-23 — the Fib zone hover, main + sub (the
    user's spec + decisions + what landed: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_fib_hover.md`;
    figure-only; `ic_ref:` / `limit_price=` / `lifecycle=` relabelled, the IC outcome line kept only on a fib with no
-   IC). NEXT: the user's further specs — the wave-candle hover still carries the older `first record parent_sid=…
+   IC; source `563f5f8`, save S_fib_hover `20261023_191547_563f5f8` = `LATEST_<branch>`). NEXT: the user's further specs — the wave-candle hover still carries the older `first record parent_sid=…
    parent_cycle=…` / `sub window=[s,e] reason` strings.
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
