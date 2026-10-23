@@ -75,12 +75,17 @@ from engine_v2.charting._zone_render import (
     fib_record_drawn,
     ic_rows_by_fib_record,
     is_poi_of_collapsed_cycle,
+    kl_zone_customdata,
+    kl_zone_hovertemplate,
     main_dot_customdata,
     main_dot_structure_lines,
     MAIN_DOT_HOVERTEMPLATE,
-    poi_ic_hover_text,
+    main_zone_id_line,
+    poi_zone_customdata,
+    poi_zone_hovertemplate,
     select_subordinate_tf_tier,
 )
+from engine_v2.structure.structure_engine import _pip_size_from_pair
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
 from engine_v2.zones.zone_proximity import (
     poi_unclamped_activation_floor_idx, proximity_trigger_sub_usable_idx, proximity_trigger_type_label,
@@ -263,6 +268,12 @@ def _sub_dot_hover_lines(rec: SidRecord, lens_records: Sequence[Any]) -> Tuple[s
         f"sub_window=[{rec.start_idx}, {end}] | end_reason={rec.end_reason or 'open'}",
         "<br>".join(["lens records:"] + lines) if lines else "lens records: none",
     )
+
+
+def _sub_zone_id_lines(sub_id: int, cycle_id: int, first_record: str) -> str:
+    """A sub KL / POI hover's identity lines (the user's spec 2026-10-23): `sub_id=<id> | cycle_id=<the sub's own
+    cycle>` + the dot hover's `first record: lens | parent_sid | parent_cycle_id` line (`_sub_dot_hover_lines`)."""
+    return f"sub_id={sub_id} | cycle_id={cycle_id}<br>{first_record}"
 
 
 def _sub_relative_dir_at(idx: int, segments: Sequence[Tuple[int, str]], start_idx: Optional[int],
@@ -763,6 +774,7 @@ def export_m15_chart_plotly(
             f"M15 chart entity '{path_id}' has no parent in registry")
     m15_df = m15_entity.df
     h1_df = parent_entity.df
+    pip_size = _pip_size_from_pair(h1_df)   # the zone hovers' zone_size
 
     cfg = _deep_merge(M15_CHART_DEFAULTS, cfg or {})
     pat_cfg = cfg.get("patterns", {}) or {}
@@ -1382,15 +1394,9 @@ def export_m15_chart_plotly(
                     if len(seg_times) == 0:
                         seg_times = pd.Series([seg_x0, seg_x1])
 
-                    hover_cd = [[
-                        side, sub_id,
-                        int(zone.meta.get("struct_direction", 0)),
-                        str(zone.meta.get("base_pattern", "")),
-                        int(zone.meta.get("base_idx", -1)),
-                        conf_idx, cycle_id,
-                        sy1, sy0, p_sid, p_cycle,
-                        sub_window_str, sub_records_str,
-                    ]] * len(seg_times)
+                    hover_cd = [kl_zone_customdata(
+                        zone, _sub_zone_id_lines(sub_id, cycle_id, first_record_str), sy1, sy0, pip_size,
+                    )] * len(seg_times)
 
                     kl_hover_line = {"width": 6, "color": "rgba(0,0,0,0)"}
                     for yval in (sy1, sy0):
@@ -1398,22 +1404,7 @@ def export_m15_chart_plotly(
                             x=seg_times, y=[yval] * len(seg_times),
                             mode="lines", name="M15 KL zone", showlegend=False,
                             line=kl_hover_line, line_shape="hv",
-                            hovertemplate=(
-                                "TF=15M<br>"
-                                "KL Zone<br>"
-                                "side=%{customdata[0]}<br>"
-                                "sub_id=%{customdata[1]} | first record parent_sid=%{customdata[9]} parent_cycle_id=%{customdata[10]}<br>"
-                                "sub window=%{customdata[11]}<br>"
-                                "records: %{customdata[12]}<br>"
-                                "cycle_id=%{customdata[6]}<br>"
-                                "struct_direction=%{customdata[2]}<br>"
-                                "base_pattern=%{customdata[3]}<br>"
-                                "base_idx=%{customdata[4]}<br>"
-                                "confirmed_idx=%{customdata[5]}<br>"
-                                "top=%{customdata[7]:.5f}<br>"
-                                "bottom=%{customdata[8]:.5f}"
-                                "<extra></extra>"
-                            ),
+                            hovertemplate=kl_zone_hovertemplate("15M"),
                             customdata=hover_cd,
                         ))
 
@@ -1592,7 +1583,6 @@ def export_m15_chart_plotly(
                     continue
                 side = str(poi.side)
                 stz = STYLE.get(f"zone.poi.{side}", {})
-                zone_status = poi.meta.get("status", "active")
 
                 op_mult = _m15_opacity_tier_for_zone(poi)
 
@@ -1690,15 +1680,11 @@ def export_m15_chart_plotly(
                 if len(seg_times) == 0:
                     seg_times = pd.Series([x0, x1])
 
-                ip_str = poi_ic_hover_text(poi.meta, poi.ic_idx)   # PLAN_H HV
                 # `poi.meta["structure_id"]` is the bounded sub's internal MS
                 # sid (restarts at 0 per sub) — use sub_id for user-facing identity.
-                poi_cd = [[
-                    side, eid, poi.meta.get("struct_direction", 0),
-                    poi.ic_idx, conf_idx, poi.meta.get("cycle_id", 0),
-                    ip_str, y1, y0, zone_status, p_sid, p_cycle,
-                    sub_window_str, sub_records_str,
-                ]] * len(seg_times)
+                poi_cd = [poi_zone_customdata(
+                    poi, _sub_zone_id_lines(eid, int(poi.meta["cycle_id"]), first_record_str), y1, y0, pip_size,
+                )] * len(seg_times)
 
                 poi_hover_line = {"width": 6, "color": "rgba(0,0,0,0)"}
                 for yval in (y1, y0):
@@ -1706,23 +1692,7 @@ def export_m15_chart_plotly(
                         x=seg_times, y=[yval] * len(seg_times),
                         mode="lines", name="M15 POI zone", showlegend=False,
                         line=poi_hover_line, line_shape="hv",
-                        hovertemplate=(
-                            "TF=15M<br>"
-                            "<b>POI Zone</b><br>"
-                            "side=%{customdata[0]}<br>"
-                            "sub_id=%{customdata[1]} | first record parent_sid=%{customdata[10]} parent_cycle_id=%{customdata[11]}<br>"
-                            "sub window=%{customdata[12]}<br>"
-                            "records: %{customdata[13]}<br>"
-                            "cycle_id=%{customdata[5]}<br>"
-                            "struct_direction=%{customdata[2]}<br>"
-                            "ic_idx=%{customdata[3]}<br>"
-                            "confirmed_idx=%{customdata[4]}<br>"
-                            "%{customdata[6]}<br>"
-                            "top=%{customdata[7]:.5f}<br>"
-                            "bottom=%{customdata[8]:.5f}<br>"
-                            "status=%{customdata[9]}"
-                            "<extra></extra>"
-                        ),
+                        hovertemplate=poi_zone_hovertemplate("15M"),
                         customdata=poi_cd,
                     ))
 
@@ -2010,6 +1980,7 @@ def _render_m15_dots_layer(
 def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_cfg, zone_cfg):
     """Render all H1 elements as overlays on the M15 chart."""
     h1_times = pd.to_datetime(h1_df[COL_TIME], utc=True)
+    pip_size = _pip_size_from_pair(h1_df)   # the zone hovers' zone_size
     structure_events = h1_df.attrs.get("structure_events", [])
     m15_t_last = dfx[COL_TIME].iloc[-1]
     m15_t_first = dfx[COL_TIME].iloc[0]
@@ -2378,14 +2349,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                 if len(seg_times) == 0:
                     seg_times = pd.Series([seg_x0, seg_x1])
 
-                hover_cd = [[
-                    side, int(z.meta.get("structure_id", -1)),
-                    int(z.meta.get("struct_direction", 0)),
-                    str(z.meta.get("base_pattern", "")),
-                    int(z.meta.get("base_idx", -1)),
-                    conf_idx, int(z.meta.get("cycle_id", 0)),
-                    sy1, sy0,
-                ]] * len(seg_times)
+                hover_cd = [kl_zone_customdata(z, main_zone_id_line(z.meta), sy1, sy0, pip_size)] * len(seg_times)
 
                 h1_hover_line = {"width": 6, "color": "rgba(0,0,0,0)"}
                 for yval in (sy1, sy0):
@@ -2393,20 +2357,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                         x=seg_times, y=[yval] * len(seg_times),
                         mode="lines", name="H1 KL zone (overlay)", showlegend=False,
                         line=h1_hover_line, line_shape="hv",
-                        hovertemplate=(
-                            "TF=1H<br>"
-                            "KL Zone<br>"
-                            "side=%{customdata[0]}<br>"
-                            "structure_id=%{customdata[1]}<br>"
-                            "struct_direction=%{customdata[2]}<br>"
-                            "base_pattern=%{customdata[3]}<br>"
-                            "base_idx=%{customdata[4]}<br>"
-                            "confirmed_idx=%{customdata[5]}<br>"
-                            "cycle_id=%{customdata[6]}<br>"
-                            "top=%{customdata[7]:.5f}<br>"
-                            "bottom=%{customdata[8]:.5f}"
-                            "<extra></extra>"
-                        ),
+                        hovertemplate=kl_zone_hovertemplate("1H"),
                         customdata=hover_cd,
                     ))
 
@@ -2570,7 +2521,6 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             side = str(poi.side)
             # Read unified base values from zone.poi.* (Item 5).
             stz = STYLE.get(f"zone.poi.{side}", {})
-            zone_status = poi.meta.get("status", "active")
             zone_sid = int(poi.meta.get("structure_id", 0))
 
             rgb = str(stz.get("rgb", "255, 215, 0"))
@@ -2653,12 +2603,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
             if len(seg_times) == 0:
                 seg_times = pd.Series([x0, x1])
 
-            ip_str = poi_ic_hover_text(poi.meta, poi.ic_idx)   # PLAN_H HV
-            poi_cd = [[
-                side, poi.meta.get("structure_id", -1), poi.meta.get("struct_direction", 0),
-                poi.ic_idx, conf_idx, poi.meta.get("cycle_id", 0),
-                ip_str, y1, y0, zone_status,
-            ]] * len(seg_times)
+            poi_cd = [poi_zone_customdata(poi, main_zone_id_line(poi.meta), y1, y0, pip_size)] * len(seg_times)
 
             h1_hover_line = {"width": 6, "color": "rgba(0,0,0,0)"}
             for yval in (y1, y0):
@@ -2666,21 +2611,7 @@ def _render_h1_overlay(fig, dfx, h1_df, h1_to_m15, m15_to_h1, state_cfg, struct_
                     x=seg_times, y=[yval] * len(seg_times),
                     mode="lines", name="H1 POI zone (overlay)", showlegend=False,
                     line=h1_hover_line, line_shape="hv",
-                    hovertemplate=(
-                        "TF=1H<br>"
-                        "<b>POI Zone</b><br>"
-                        "side=%{customdata[0]}<br>"
-                        "structure_id=%{customdata[1]}<br>"
-                        "struct_direction=%{customdata[2]}<br>"
-                        "ic_idx=%{customdata[3]}<br>"
-                        "confirmed_idx=%{customdata[4]}<br>"
-                        "cycle_id=%{customdata[5]}<br>"
-                        "%{customdata[6]}<br>"
-                        "top=%{customdata[7]:.5f}<br>"
-                        "bottom=%{customdata[8]:.5f}<br>"
-                        "status=%{customdata[9]}"
-                        "<extra></extra>"
-                    ),
+                    hovertemplate=poi_zone_hovertemplate("1H"),
                     customdata=poi_cd,
                 ))
 

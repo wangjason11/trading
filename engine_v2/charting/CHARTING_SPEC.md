@@ -133,6 +133,30 @@ To change any visual element:
 - Stepwise bounds from `meta["bounds_steps"]` still drive per-step (top, bottom) — the fill within the active stretch is intersected with each step's x-range so each step's y-bounds apply. A step's x is `kl_zones_v1.bounds_step_draw_idx(step)`: the INIT step's `base_idx`, an expansion's `expanded_idx` (PLAN_N N1; `start_idx` on both until then).
 - Single vertical confirm line at `confirmed_idx`.
 - **Collapsed-cycle zones (2026-09-20):** a KL zone whose cycle COLLAPSED under its structure's lifecycle floor (`status == "inactive"`, known `end_idx`, clamped `confirmed_idx >= end_idx` — `_zone_render.is_collapsed_cycle_zone`) is not drawn, on the H1 chart, the M15 charts and the H1 overlay; it existed geometrically but was never active in real time (on H1: sid 1's retroactive cycles (1,0)/(1,1), the "collapsed parent cycles" of `ParentTables`; on a sub: its forming-phase cycles). The rows stay in the CSVs. A zone inactive for any other reason is still drawn as an outline.
+- **Hover** (one per bounds step; ONE template, `_zone_render.kl_zone_hovertemplate(tf)` + `kl_zone_customdata`, on
+  the H1 chart, the M15 charts' H1 overlay and the sub zones — the user's spec 2026-10-23,
+  `plans/qa_chart_edits_inputs/user_spec_20261023_zone_hover.md`; e.g. H1 sid 0 cycle 0's BOS zone):
+  ```
+  TF=1H
+  KL Zone
+  side=buy
+  sid=0 | cycle_id=0                             ← sub: sub_id=X | cycle_id=X + the dot hover's first record: line
+  base_pattern=base inside bar
+  base_idx=96
+  confirmed_idx=115
+  lifecycle=[115, 652] | end_reason=next_cycle   ← the zone's OWN active window (open: [x, open] | end_reason=open)
+  top=0.55910
+  bottom=0.55808
+  zone_size=10.2 pips                            ← this step's top − bottom
+  struct_direction=1
+  ```
+  `lifecycle` = the zone's own active window (`zone_lifecycle_line`: the first `active` entry of `activation_history`
+  → the cycle's `end_idx` / `end_reason` every zone inherits) — not its cycle's window, not its structure's (the
+  dots' `struct_window` / `sub_window`). A KL zone has ONE active stretch from `confirmed_idx` (asserted), so the
+  start repeats `confirmed_idx` — kept for one hover shape with the POI (the user 2026-10-23). `zone_size` in pips,
+  one decimal (`zone_size_text`; the pip = `structure_engine._pip_size_from_pair`). Until 2026-10-23: `structure_id=`,
+  `struct_direction` third, `cycle_id` on its own line, no lifecycle / size; the sub's `first record parent_sid=…`,
+  `sub window=`, `records:` lines.
 - Style keys: `zone.kl.buy`, `zone.kl.sell`, `zone.kl.hover_line`
 
 ### 6) Imbalance candle highlighting (Week 7)
@@ -165,29 +189,59 @@ To change any visual element:
 - **Outline (Item 5)**: single rect outline (no fill) spanning `[start_time, end_time]`. Color matches the side's confirm line (`confirm_line_rgb`: dark olive `60,90,20` buy / dark brick `120,45,15` sell since the 2026-09-21 side tints; the `101,67,33` brown in the code is only a `.get` fallback), width = `confirm_line_width` (=2). Opacity = `confirm_opacity_active × tier`.
 - **Fill (Item 5)**: ONE filled rect per active stretch in `meta["activation_history"]` — each `A` event paired with the next `D` (or `end_idx` for trailing activate). Inactive stretches render as outline only.
 - **Confirm lines (Item 5)**: ONE vertical line per `A` event in `activation_history` (replaces the prior single line at `confirmed_idx`). For zones derived before activation_history was added, falls back to a single line at `confirmed_idx`.
-- **Hover (PLAN_H HV, landing B 2026-10-06; `versions=` until then)**: the pattern line(s) from ONE builder,
-  `_zone_render.poi_ic_hover_text`, on all three POI hover sites (the H1 chart, the M15 lens charts' sub POIs and
-  their H1 overlay): `IP <rank> · legs a-b-c (initial | opp | continuation)` — each leg `first–last`, one candle its
-  index — + `Tiebreak over <IC>: IC candle type` / `…: most recent before imbalance <c2>` when a tiebreaker decided
-  (POI_ZONES_SPEC §3.4; `TB1 over …` / `TB2 over …` until 2026-10-09; `…: immediate unfilled imbalance <c2>` from then
-  until PLAN_P, 2026-10-13 — the hover now rejects that value) — + a line `IC zone 80-100 (fallback)` on an IC from
-  Step 1A (`ic_zone_band`, PLAN_P; nothing on the 61.8–80 band; an unknown band fails loudly).
+- **Hover** (ONE template, `_zone_render.poi_zone_hovertemplate(tf)` + `poi_zone_customdata`, on all three POI hover
+  sites — the H1 chart, the M15 lens charts' sub POIs and their H1 overlay; the user's spec 2026-10-23,
+  `plans/qa_chart_edits_inputs/user_spec_20261023_zone_hover.md`; e.g. sub 8 cycle 2's POI on the M15 charts):
+  ```
+  TF=15M
+  POI Zone                                        ← bold
+  side=buy
+  sub_id=8 | cycle_id=2                           ← main: sid=X | cycle_id=X (no first record line)
+  first record: lens=counter | parent_sid=1 | parent_cycle_id=2
+  ic_idx=4131
+  confirmed_idx=4179                              ← the MOST RECENT activation
+  ic_reason=IP 3B.iii · legs 1-1-3 (4130 | 4131 | 4132–4134)
+  ic_prior_imbalance=4118 unfilled · preferred 1 of 2 IC candidates
+  ic_zone=80-100 (fallback)
+  lifecycle=[4179, open] | end_reason=open        ← the zone's OWN active window: FIRST activation → end
+  top=0.57462
+  bottom=0.57422
+  zone_size=4.0 pips
+  struct_direction=1
+  ```
+  `lifecycle` as on the KL zones (`zone_lifecycle_line`); on a POI the start = its FIRST activation while
+  `confirmed_idx` = its most recent (`poi_zones`), so they differ when the POI switched off and on (4 of the 18 drawn
+  POIs on the reference window — H1 sid 1 cycle 2: `confirmed_idx=954`, `lifecycle=[902, open]`); a POI that never
+  activated shows `NA (never active)` for both. The `lifecycle` line replaced `status=` (the user: "effectively can
+  replace status since it provides entire lifecycle information"; an open POI that is currently switched off is told
+  only by the fill — none on the reference window).
+  The IC lines, every line labelled (one builder, `_zone_render.poi_ic_hover_text`; labels since 2026-10-23, the
+  values unchanged): `ic_reason=IP <rank> · legs a-b-c (initial | opp | continuation)` — each leg `first–last`, one
+  candle its index (PLAN_H HV, landing B 2026-10-06; `versions=` until then) — + `ic_tiebreak=over <IC>: IC candle
+  type` / `…: most recent before imbalance <c2>` when a tiebreaker decided (POI_ZONES_SPEC §3.4; `TB1 over …` / `TB2
+  over …` until 2026-10-09; `…: immediate unfilled imbalance <c2>` from then until PLAN_P, 2026-10-13 — the hover now
+  rejects that value) — + `ic_zone=80-100 (fallback)` on an IC from Step 1A (`ic_zone_band`, PLAN_P; nothing on the
+  61.8–80 band; an unknown band fails loudly).
   The builder asserts the leg counts match the leg indices (a mirror that shifted one but not the other fails at render).
-  A RANKED IC (`ip_outcome` `no_pattern` — POI_ZONES_SPEC §3.6, PLAN_L L2, 2026-10-10): `No pattern · ranking rule
-  <rule>` + ` over <runner-up>` + ` (gap <c2>)` when the deciding rule has them (`exclude_pinbar` neither,
-  `ic_candle_type` no gap), or `No pattern · only IC candidate` (one candidate entered Step 3 — nothing ranked;
-  `only preferred IC candidate` when Step 1B narrowed the field to it, PLAN_S step 3) — "No pattern" in the place of
-  `IP <rank>` (since PLAN_S step 3 Step 2's outcome over the candidates Steps 2–3 ran on — POI_ZONES_SPEC §3.7), and
-  NO `IC <idx>` (the hover's own `ic_idx=` line names the IC — PLAN_H §6 ICR-15); the builder asserts a ranked POI's
-  pattern meta is all None and its ranking values match its rule. No new visual style (hover + CSV only, ICR-7).
-  **Step 1B's line** (PLAN_S step 3, 2026-10-21; the user's rounds 6–7; `_poi_prior_imbalance_hover_text`), after the
-  IP / ranking line and before the band line, ONLY when the prior-imbalance preference NARROWED the field
-  (`poi_zones.prior_imbalance_narrowed`: outcome `preferred` and fewer passers than IC candidates): `Prior imbalance
-  <c2> unfilled · preferred <passers> of <candidates> IC candidates` + ` (over pattern <rank> at <IC>)` when it
-  outranked a pattern (POI meta `prior_imbalance_*`, `ic_candidate_count`) — e.g. confluence sub 0 cycle 2's 1142:
-  `No pattern · only preferred IC candidate` / `Prior imbalance 1140 unfilled · preferred 1 of 3 IC candidates`; sub
-  3 cycle 1's 2821 adds ` (over pattern 3B.iii at 2808)`; nothing when every candidate passed or 1B fell back. The
-  builder asserts an outranked pattern only with a narrowing preference, and a preferred IC's gap.
+  A RANKED IC (`ip_outcome` `no_pattern` — POI_ZONES_SPEC §3.6, PLAN_L L2, 2026-10-10): `ic_reason=No pattern ·
+  ranking rule <rule>` + ` over <runner-up>` + ` (gap <c2>)` when the deciding rule has them (`exclude_pinbar` neither,
+  `ic_candle_type` no gap), or `ic_reason=No pattern · only IC candidate` (one candidate entered Step 3 — nothing
+  ranked; `only preferred IC candidate` when Step 1B narrowed the field to it, PLAN_S step 3) — "No pattern" in the
+  place of `IP <rank>` (since PLAN_S step 3 Step 2's outcome over the candidates Steps 2–3 ran on — POI_ZONES_SPEC
+  §3.7), and NO `IC <idx>` (the hover's own `ic_idx=` line names the IC — PLAN_H §6 ICR-15); the builder asserts a
+  ranked POI's pattern meta is all None and its ranking values match its rule. No new visual style (hover + CSV only,
+  ICR-7). **Step 1B's line** (PLAN_S step 3, 2026-10-21; the user's rounds 6–7; `_poi_prior_imbalance_hover_text`),
+  after the `ic_reason` / `ic_tiebreak` lines and before the band line, ONLY when the prior-imbalance preference
+  NARROWED the field (`poi_zones.prior_imbalance_narrowed`: outcome `preferred` and fewer passers than IC
+  candidates): `ic_prior_imbalance=<c2> unfilled · preferred <passers> of <candidates> IC candidates` + ` (over
+  pattern <rank> at <IC>)` when it outranked a pattern (POI meta `prior_imbalance_*`, `ic_candidate_count`) — e.g.
+  confluence sub 0 cycle 2's 1142: `ic_reason=No pattern · only preferred IC candidate` / `ic_prior_imbalance=1140
+  unfilled · preferred 1 of 3 IC candidates`; sub 3 cycle 1's 2821 adds ` (over pattern 3B.iii at 2808)`; nothing
+  when every candidate passed or 1B fell back. The builder asserts an outranked pattern only with a narrowing
+  preference, and a preferred IC's gap. Until 2026-10-23 the IC lines carried no labels (`Tiebreak over …`, `Prior
+  imbalance …`, `IC zone 80-100 (fallback)`), the hover had `structure_id=`, `struct_direction` third, `cycle_id` on
+  its own line and a closing `status=`, and the sub POI the `first record parent_sid=…` / `sub window=` / `records:`
+  lines.
 - Style keys: `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line`
 
 ### 8) Fibonacci box (Week 7; H1 chart — and the M15 lens charts since 2026-10-06, PLAN_H §8.9 F1)
@@ -654,8 +708,9 @@ TriggerRecords (`attrs["triggers"]`), one per line, in `(start_idx, seq)` order;
 `end_reason ∈ {reversal, same_dir_replacement, parent_end, open}`. `relative_dir` = the §17.3 step function
 (`SidRecord.relative_dir_segments`) at the dot's candle — `NA (before start_idx)` before the sub's start, exactly the
 `phase=forming` candles (`_sub_relative_dir_at`; a live candle without a segment fails loudly; `-` until 2026-10-22).
-One builder for the sub lines, `_sub_dot_hover_lines`. The sub's KL / POI / fib hovers still carry the older
-`sub window=[s,e] reason` / `records: … a→b` strings (`sub_window_str` / `sub_records_str`). Known (deferred — the
+One builder for the sub lines, `_sub_dot_hover_lines`; the sub KL / POI hovers reuse its `first record:` line
+(`_sub_zone_id_lines`, since 2026-10-23 — §5 / §7 "Hover"). The sub's fib (and wave-candle) hovers still carry the
+older `sub window=[s,e] reason` / `records: … a→b` strings (`sub_window_str` / `sub_records_str`). Known (deferred — the
 spec file's "Quirks" section): a PB dot's `cycle_id` is a placeholder 0; a PB dot is either a pullback or a
 replacement break point (same `kind=PB`).
 

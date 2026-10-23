@@ -428,25 +428,25 @@ def _meta(rank, counts, anchor, opp_first, end, tb=None, runner=None, c2=None, b
 
 
 def test_hover_single_legs_print_one_index_each():
-    assert poi_ic_hover_text(_meta("1A.i", "1-1-1", 2703, 2704, 2705), 2704) == "IP 1A.i · legs 1-1-1 (2703 | 2704 | 2705)"
+    assert poi_ic_hover_text(_meta("1A.i", "1-1-1", 2703, 2704, 2705), 2704) == "ic_reason=IP 1A.i · legs 1-1-1 (2703 | 2704 | 2705)"
 
 
 def test_hover_asymmetric_legs_keep_their_order():
     """initial | opp | continuation, never reordered (landing review H01: every other case is symmetric)."""
-    assert poi_ic_hover_text(_meta("1A.iii", "1-1-3", 8, 9, 12), 9) == "IP 1A.iii · legs 1-1-3 (8 | 9 | 10–12)"
+    assert poi_ic_hover_text(_meta("1A.iii", "1-1-3", 8, 9, 12), 9) == "ic_reason=IP 1A.iii · legs 1-1-3 (8 | 9 | 10–12)"
 
 
 def test_hover_multi_legs_print_ranges():
     assert poi_ic_hover_text(_meta("3C.iv", "3-2-3", 683, 686, 690), 687) == (
-        "IP 3C.iv · legs 3-2-3 (683–685 | 686–687 | 688–690)")
+        "ic_reason=IP 3C.iv · legs 3-2-3 (683–685 | 686–687 | 688–690)")
 
 
 def test_hover_tiebreak_lines():
     assert poi_ic_hover_text(_meta("1A.iv", "2-1-2", 4081, 4083, 4085, "most_recent_before_imbalance", 4136, 4132),
-                             4083) == ("IP 1A.iv · legs 2-1-2 (4081–4082 | 4083 | 4084–4085)"
-                                       "<br>Tiebreak over 4136: most recent before imbalance 4132")
+                             4083) == ("ic_reason=IP 1A.iv · legs 2-1-2 (4081–4082 | 4083 | 4084–4085)"
+                                       "<br>ic_tiebreak=over 4136: most recent before imbalance 4132")
     assert poi_ic_hover_text(_meta("2A.i", "1-1-1", 9, 10, 11, "ic_candle_type", 14), 10) == (
-        "IP 2A.i · legs 1-1-1 (9 | 10 | 11)<br>Tiebreak over 14: IC candle type")
+        "ic_reason=IP 2A.i · legs 1-1-1 (9 | 10 | 11)<br>ic_tiebreak=over 14: IC candle type")
     with pytest.raises(AssertionError, match="unknown ip_tiebreak 'TB1'"):     # the pre-TBU-3 values are gone
         poi_ic_hover_text(_meta("2A.i", "1-1-1", 9, 10, 11, "TB1", 14), 10)
     # PLAN_P: the immediate-unfilled-imbalance tiebreaker became IC condition 3 — its value is gone too
@@ -490,15 +490,15 @@ def test_h1_chart_hovers_show_the_pattern_the_ranking_and_ic_none(tmp_path, monk
     by_ic = {z.ic_idx: z for z in out["poi_zones"]}
     assert sorted(by_ic) == [7, 14, 19]
     poi_tr = [tr for tr in fig.data if (tr.name or "").startswith("POI zone")]
-    assert len(poi_tr) == 2 * len(by_ic) and {tr.customdata[0][3] for tr in poi_tr} == set(by_ic)
+    assert len(poi_tr) == 2 * len(by_ic) and {tr.customdata[0][2] for tr in poi_tr} == set(by_ic)
     for tr in poi_tr:
-        z = by_ic[tr.customdata[0][3]]
+        z = by_ic[tr.customdata[0][2]]
         ip = poi_ic_hover_text(z.meta, z.ic_idx)
-        assert all(c[6] == ip for c in tr.customdata)
-        assert f"<br>{ip}<br>top=" in _rendered(tr)                               # the template shows it
+        assert all(c[4] == ip for c in tr.customdata)
+        assert f"<br>{ip}<br>lifecycle=" in _rendered(tr)                               # the template shows it
         assert "versions=" not in tr.hovertemplate
-    assert poi_ic_hover_text(by_ic[7].meta, 7) == "No pattern · only IC candidate"
-    assert poi_ic_hover_text(by_ic[14].meta, 14).startswith("IP 1A.iii · legs ")
+    assert poi_ic_hover_text(by_ic[7].meta, 7) == "ic_reason=No pattern · only IC candidate"
+    assert poi_ic_hover_text(by_ic[14].meta, 14).startswith("ic_reason=IP 1A.iii · legs ")
     fib_tr = [tr for tr in fig.data if (tr.name or "").startswith("fib:")]
     fib_status = {tr.name: tr.customdata[0][8] for tr in fib_tr}
     # the IC line, then the IC reference, then S2's limit line (main's limits since PLAN_I S4: sid 0 started by
@@ -556,7 +556,7 @@ def test_m15_lens_sub_poi_hover_is_rendered(tmp_path, monkeypatch):
     from engine_v2.tests import test_fib_chart_render as F
     from engine_v2.zones.poi_zones import POIZone
     meta = {"sub_id": 5, "structure_id": 0, "cycle_id": 1, "struct_direction": 1, "status": "active",
-            "confirmed_idx": 22, "end_idx": None, "activation_history": [{"idx": 22, "active": True, "reason": "initial"}],
+            "confirmed_idx": 22, "end_idx": None, "end_reason": None, "activation_history": [{"idx": 22, "active": True, "reason": "initial"}],
             **_meta("1A.iii", "1-1-3", 17, 18, 21)}
     poi = POIZone(start_time=F._ohlc(48, "15min").loc[18, "time"], end_time=None, side="buy", top=0.6010,
                   bottom=0.6000, ic_idx=18, meta=meta)
@@ -564,8 +564,8 @@ def test_m15_lens_sub_poi_hover_is_rendered(tmp_path, monkeypatch):
                         poi_zones=[poi])
     poi_tr = [tr for tr in fig.data if tr.name == "M15 POI zone"]
     ip = poi_ic_hover_text(meta, 18)
-    assert ip == "IP 1A.iii · legs 1-1-3 (17 | 18 | 19–21)"
-    assert len(poi_tr) == 2 and all(f"<br>{ip}<br>top=" in _rendered(tr) for tr in poi_tr)
+    assert ip == "ic_reason=IP 1A.iii · legs 1-1-3 (17 | 18 | 19–21)"
+    assert len(poi_tr) == 2 and all(f"<br>{ip}<br>lifecycle=" in _rendered(tr) for tr in poi_tr)
     assert all("versions" not in tr.hovertemplate for tr in poi_tr)
 
 
@@ -584,8 +584,8 @@ def test_h1_overlay_poi_hover_uses_the_builder():
     trs = [t for t in fig.data if t.name == "H1 POI zone (overlay)"]
     assert len(trs) == 2
     ip = poi_ic_hover_text(poi.meta, poi.ic_idx)
-    assert all(c[6] == ip for t in trs for c in t.customdata)
-    assert all(f"<br>{ip}<br>top=" in _rendered(t) for t in trs)
+    assert all(c[4] == ip for t in trs for c in t.customdata)
+    assert all(f"<br>{ip}<br>lifecycle=" in _rendered(t) for t in trs)
     assert all("versions=" not in t.hovertemplate for t in trs)
 
 

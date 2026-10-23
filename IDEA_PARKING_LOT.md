@@ -146,9 +146,11 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    user's spec + decisions + what landed: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261022_dot_hover.md`;
    figure-only; source `ab2fcc1`, save S_dot_hover `20261022_200747_ab2fcc1` = `LATEST_<branch>`). Its DEFERRED quirks (PB `cycle_id=0`, PB = pullback or replacement break, the confirmation moment /
    method not shown, …): that file's "Quirks" section (the user: "Let's come back to it later to address them in more
-   detail"). NEXT: the other structure elements' hovers — the user, 2026-10-22: "On the other structure elements, I
-   will provide additional details and specs on what changes to make there." (the sub KL / POI / fib hovers still
-   carry the older `sub window=[s,e] reason` / `records: … a→b` strings).
+   detail"). The second edit LANDED 2026-10-23 — the KL / POI zone hover, main + sub + the H1 overlay (the user's
+   spec + decisions + what landed: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_zone_hover.md`;
+   figure-only; `lifecycle=` = the zone's own active window, every IC line labelled). NEXT: the user's further
+   specs — the fib and wave-candle hovers still carry the older `sub window=[s,e] reason` / `records: … a→b` /
+   `life=` strings.
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**

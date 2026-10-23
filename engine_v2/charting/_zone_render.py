@@ -9,8 +9,8 @@ Pure functions consumed by both `export_plotly.py` (main H1 chart) and
     zone's `bounds_steps` (so multi-step expansions render as ONE outline,
     not N separate rect outlines).
   - Per-TF tier multipliers for sub-chart zone rendering (Spec 2).
-  - The hover text builders shared by both charts (POI, fib, the main BOS / CTS
-    dots).
+  - The hover text builders shared by both charts (the KL / POI zones, fib, the
+    main BOS / CTS dots).
 
 Callers convert (x, y) coordinate lists into Plotly traces; this module
 deliberately knows nothing about Plotly so it stays unit-testable.
@@ -174,9 +174,9 @@ def _poi_narrowed(meta: dict) -> bool:
 
 def _poi_prior_imbalance_hover_text(meta: dict, ic_idx: int) -> str:
     """Step 1B's POI hover line (PLAN_S step 3; the user's rounds 6–7): when the preference NARROWED the field —
-    `<br>Prior imbalance <c2> unfilled · preferred <passers> of <candidates> IC candidates`, + ` (over pattern <rank>
-    at <IC>)` when it outranked a pattern (the IC Step 2 would pick over all the candidates, failing 1B); else ""
-    (every candidate passed, or 1B fell back — the user: "Nothing when every candidate passed or it fell back")."""
+    `<br>ic_prior_imbalance=<c2> unfilled · preferred <passers> of <candidates> IC candidates`, + ` (over pattern
+    <rank> at <IC>)` when it outranked a pattern (the IC Step 2 would pick over all the candidates, failing 1B); else
+    "" (every candidate passed, or 1B fell back — the user: "Nothing when every candidate passed or it fell back")."""
     outranked_ic, outranked_rank = meta["prior_imbalance_outranked_ic_idx"], meta["prior_imbalance_outranked_ip_rank"]
     assert (outranked_ic is None) == (outranked_rank is None), (
         f"[chart] POI {ic_idx}: outranked IC {outranked_ic} vs rank {outranked_rank!r}")
@@ -185,7 +185,7 @@ def _poi_prior_imbalance_hover_text(meta: dict, ic_idx: int) -> str:
         return ""
     c2 = meta["prior_imbalance_first_c2_idx"]
     assert c2 is not None, f"[chart] POI {ic_idx}: a preferred IC without its prior gap"
-    text = (f"<br>Prior imbalance {int(c2)} unfilled · preferred {int(meta['prior_imbalance_passer_count'])} of "
+    text = (f"<br>ic_prior_imbalance={int(c2)} unfilled · preferred {int(meta['prior_imbalance_passer_count'])} of "
             f"{int(meta['ic_candidate_count'])} IC candidates")
     if outranked_ic is not None:
         text += f" (over pattern {outranked_rank} at {int(outranked_ic)})"
@@ -221,24 +221,22 @@ def _poi_ranking_hover_text(meta: dict, ic_idx: int) -> str:
 
 
 def poi_ic_hover_text(meta: dict, ic_idx: int) -> str:
-    """The POI hover's pattern line(s) — ONE builder for the three POI hover
-    sites (the H1 chart, the M15 lens charts' sub POIs and their H1 overlay;
-    PLAN_H HV): `IP <rank> · legs a-b-c (initial | opp | continuation)` with
-    each leg as `first–last` (one candle: its index), + `<br>Tiebreak over <IC>:
-    IC candle type` / `…: most recent before imbalance <c2>` when a tiebreaker
-    decided (`poi_zones.TIEBREAK_*`; the `immediate unfilled imbalance` line
-    went with its rule, PLAN_P). Indices are the POI's own (entity-absolute on a
-    mirrored sub POI); the counts must match the leg indices (asserted — a
-    missed mirror shift would break it). A ranked IC (`ip_outcome`
-    "no_pattern", PLAN_L L2): its ranking line instead (`_poi_ranking_hover_text`). Then Step 1B's line when the
+    """The POI hover's IC lines, every line labelled (the user's zone-hover spec 2026-10-23) — ONE builder for the
+    three POI hover sites (the H1 chart, the M15 lens charts' sub POIs and their H1 overlay; PLAN_H HV):
+    `ic_reason=IP <rank> · legs a-b-c (initial | opp | continuation)` with each leg as `first–last` (one candle: its
+    index), + `<br>ic_tiebreak=over <IC>: IC candle type` / `…: most recent before imbalance <c2>` when a tiebreaker
+    decided (`poi_zones.TIEBREAK_*`; the `immediate unfilled imbalance` line went with its rule, PLAN_P). Indices are
+    the POI's own (entity-absolute on a mirrored sub POI); the counts must match the leg indices (asserted — a missed
+    mirror shift would break it). A ranked IC (`ip_outcome` "no_pattern", PLAN_L L2): its ranking line instead,
+    `ic_reason=No pattern · …` (`_poi_ranking_hover_text`). Then Step 1B's `ic_prior_imbalance=` line when the
     preference narrowed the field (`_poi_prior_imbalance_hover_text`, PLAN_S step 3). An IC from the 80–100 fallback
-    zone (Step 1A, `ic_zone_band`) adds `<br>IC zone 80-100 (fallback)`; the 61.8–80 band adds nothing (PLAN_P)."""
+    zone (Step 1A, `ic_zone_band`) adds `<br>ic_zone=80-100 (fallback)`; the 61.8–80 band adds nothing (PLAN_P)."""
     assert meta["ic_zone_band"] in (IC_ZONE_PRIMARY, IC_ZONE_FALLBACK), (
         f"[chart] POI {ic_idx} ic_zone_band {meta['ic_zone_band']!r}")
     tail = _poi_prior_imbalance_hover_text(meta, ic_idx)            # Step 1B's line, then the band's
-    tail += "<br>IC zone 80-100 (fallback)" if meta["ic_zone_band"] == IC_ZONE_FALLBACK else ""
+    tail += "<br>ic_zone=80-100 (fallback)" if meta["ic_zone_band"] == IC_ZONE_FALLBACK else ""
     if meta["ip_outcome"] == IP_OUTCOME_NO_PATTERN:
-        return _poi_ranking_hover_text(meta, ic_idx) + tail
+        return "ic_reason=" + _poi_ranking_hover_text(meta, ic_idx) + tail
     assert meta["ip_outcome"] == IP_OUTCOME_PATTERN, f"[chart] POI {ic_idx} ip_outcome {meta['ip_outcome']!r}"
     assert meta["ranking_rule"] is None, f"[chart] pattern POI {ic_idx} carries ranking_rule {meta['ranking_rule']!r}"
     n_init, n_opp, n_cont = (int(x) for x in meta["ip_leg_candle_counts"].split("-"))
@@ -251,13 +249,13 @@ def poi_ic_hover_text(meta: dict, ic_idx: int) -> str:
     def _rng(lo: int, hi: int) -> str:
         return f"{lo}" if lo == hi else f"{lo}–{hi}"
 
-    text = (f"IP {meta['ip_rank']} · legs {n_init}-{n_opp}-{n_cont} "
+    text = (f"ic_reason=IP {meta['ip_rank']} · legs {n_init}-{n_opp}-{n_cont} "
             f"({_rng(anchor, opp_first - 1)} | {_rng(opp_first, ic)} | {_rng(ic + 1, end)})")
     tb = meta["ip_tiebreak"]
     if tb == TIEBREAK_IC_CANDLE_TYPE:
-        text += f"<br>Tiebreak over {meta['ip_tb_runner_up_ic_idx']}: IC candle type"
+        text += f"<br>ic_tiebreak=over {meta['ip_tb_runner_up_ic_idx']}: IC candle type"
     elif tb == TIEBREAK_MOST_RECENT_BEFORE_IMBALANCE:
-        text += (f"<br>Tiebreak over {meta['ip_tb_runner_up_ic_idx']}: "
+        text += (f"<br>ic_tiebreak=over {meta['ip_tb_runner_up_ic_idx']}: "
                  f"most recent before imbalance {meta['ip_tb_imbalance_first_c2_idx']}")
     else:
         assert tb is None, f"[chart] POI {ic} unknown ip_tiebreak {tb!r}"
@@ -464,6 +462,105 @@ def main_dot_customdata(p: Sequence[Any], lines_by_sid: dict) -> list:
     `lines_by_sid` = `main_dot_structure_lines`."""
     trigger_line, window_line = lines_by_sid[int(p[4])]
     return [p[0], p[3], p[2], p[4], p[5], p[6], trigger_line, window_line]
+
+
+# ---------------------------------------------------------------------------
+# KL / POI zone hover — main and sub (the user's spec 2026-10-23,
+# plans/qa_chart_edits_inputs/user_spec_20261023_zone_hover.md)
+# ---------------------------------------------------------------------------
+
+#: A zone that never activated (a POI in a live cycle that never met its activation
+#: conditions — none drawn on the reference window): its lifecycle start and its
+#: `confirmed_idx`.
+HOVER_NEVER_ACTIVE = "NA (never active)"
+
+
+def zone_lifecycle_line(meta: dict) -> str:
+    """The zone's OWN active window (the user 2026-10-23, not its cycle's nor its structure's):
+    `lifecycle=[<start>, <end | open>] | end_reason=<reason | open>` — start = the first `active` entry of
+    `activation_history` (a KL zone: its `confirmed_idx`; a POI: its FIRST activation, while its `confirmed_idx` is
+    the most recent one), end = the cycle's `end_idx` / `end_reason` every zone inherits (`compute_cycle_lifecycle`)."""
+    start = next((int(ev["idx"]) for ev in meta["activation_history"] if ev["active"]), HOVER_NEVER_ACTIVE)
+    end_idx, end_reason = meta["end_idx"], meta["end_reason"]
+    assert (end_idx is None) == (end_reason is None), f"[chart] zone end {end_idx} with end_reason {end_reason!r}"
+    if end_idx is None:
+        return f"lifecycle=[{start}, open] | end_reason=open"
+    return f"lifecycle=[{start}, {int(end_idx)}] | end_reason={end_reason}"
+
+
+def zone_size_text(top: float, bottom: float, pip_size: float) -> str:
+    """`zone_size` = the distance between top and bottom in pips, one decimal: `10.2 pips`."""
+    return f"{abs(float(top) - float(bottom)) / float(pip_size):.1f} pips"
+
+
+def main_zone_id_line(meta: dict) -> str:
+    """The main zone hover's identity line: `sid=<structure_id> | cycle_id=<cycle_id>`."""
+    return f"sid={int(meta['structure_id'])} | cycle_id={int(meta['cycle_id'])}"
+
+
+def kl_zone_hovertemplate(tf: str) -> str:
+    """The KL zone hover — ONE template for the H1 chart and the M15 charts' H1 overlay (`tf="1H"`) and the sub
+    zones (`"15M"`); customdata = `kl_zone_customdata`. Slot 1 = the identity line(s): `main_zone_id_line`, or a
+    sub's `sub_id | cycle_id` + its `first record:` line."""
+    return (
+        f"TF={tf}<br>"
+        "KL Zone<br>"
+        "side=%{customdata[0]}<br>"
+        "%{customdata[1]}<br>"
+        "base_pattern=%{customdata[2]}<br>"
+        "base_idx=%{customdata[3]}<br>"
+        "confirmed_idx=%{customdata[4]}<br>"
+        "%{customdata[5]}<br>"
+        "top=%{customdata[6]:.5f}<br>"
+        "bottom=%{customdata[7]:.5f}<br>"
+        "zone_size=%{customdata[8]}<br>"
+        "struct_direction=%{customdata[9]}"
+        "<extra></extra>"
+    )
+
+
+def kl_zone_customdata(zone: Any, id_lines: str, top: float, bottom: float, pip_size: float) -> list:
+    """The customdata row of one KL hover step (`top` / `bottom` = the step's bounds, so `zone_size` is the step's)
+    for `kl_zone_hovertemplate`. A KL zone has ONE active stretch, from its `confirmed_idx` (asserted), so its
+    lifecycle start repeats `confirmed_idx` — kept for one hover shape with the POI (the user 2026-10-23)."""
+    m = zone.meta
+    conf = int(m["confirmed_idx"])
+    first_active = [int(ev["idx"]) for ev in m["activation_history"] if ev["active"]]
+    assert first_active == [conf], f"[chart] KL zone confirmed {conf}, activations {first_active}"
+    return [str(zone.side), id_lines, str(m["base_pattern"]), int(m["base_idx"]), conf, zone_lifecycle_line(m),
+            float(top), float(bottom), zone_size_text(top, bottom, pip_size), int(m["struct_direction"])]
+
+
+def poi_zone_hovertemplate(tf: str) -> str:
+    """The POI zone hover — ONE template for the H1 chart and the M15 charts' H1 overlay (`tf="1H"`) and the sub
+    POIs (`"15M"`); customdata = `poi_zone_customdata`; slot 1 as in `kl_zone_hovertemplate`, slot 4 = the labelled
+    IC lines (`poi_ic_hover_text`)."""
+    return (
+        f"TF={tf}<br>"
+        "<b>POI Zone</b><br>"
+        "side=%{customdata[0]}<br>"
+        "%{customdata[1]}<br>"
+        "ic_idx=%{customdata[2]}<br>"
+        "confirmed_idx=%{customdata[3]}<br>"
+        "%{customdata[4]}<br>"
+        "%{customdata[5]}<br>"
+        "top=%{customdata[6]:.5f}<br>"
+        "bottom=%{customdata[7]:.5f}<br>"
+        "zone_size=%{customdata[8]}<br>"
+        "struct_direction=%{customdata[9]}"
+        "<extra></extra>"
+    )
+
+
+def poi_zone_customdata(zone: Any, id_lines: str, top: float, bottom: float, pip_size: float) -> list:
+    """The customdata row of one POI hover for `poi_zone_hovertemplate`. `confirmed_idx` = the MOST RECENT
+    activation (`poi_zones`), the lifecycle start = the first; a POI that never activated shows `HOVER_NEVER_ACTIVE`
+    for both."""
+    m = zone.meta
+    conf = HOVER_NEVER_ACTIVE if m["confirmed_idx"] is None else int(m["confirmed_idx"])
+    return [str(zone.side), id_lines, int(zone.ic_idx), conf, poi_ic_hover_text(m, zone.ic_idx),
+            zone_lifecycle_line(m), float(top), float(bottom), zone_size_text(top, bottom, pip_size),
+            int(m["struct_direction"])]
 
 
 # ---------------------------------------------------------------------------

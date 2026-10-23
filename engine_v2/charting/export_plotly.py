@@ -22,11 +22,16 @@ from engine_v2.charting._zone_render import (
     ic_rows_by_fib_record,
     is_collapsed_cycle_zone,
     is_poi_of_collapsed_cycle,
+    kl_zone_customdata,
+    kl_zone_hovertemplate,
     main_dot_customdata,
     main_dot_structure_lines,
     MAIN_DOT_HOVERTEMPLATE,
-    poi_ic_hover_text,
+    main_zone_id_line,
+    poi_zone_customdata,
+    poi_zone_hovertemplate,
 )
+from engine_v2.structure.structure_engine import _pip_size_from_pair
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
 from engine_v2.zones.zone_proximity import (
     poi_unclamped_activation_floor_idx, proximity_trigger_sub_usable_idx, proximity_trigger_type_label,
@@ -1615,6 +1620,7 @@ def export_chart_plotly(
 
         # Visible window bounds
         t_last = dfx[COL_TIME].iloc[-1]
+        pip_size = _pip_size_from_pair(dfx)   # the hover's zone_size
 
         # Deterministic draw order:
         # 1) inactive first (underneath), active last (on top)
@@ -1676,12 +1682,10 @@ def export_chart_plotly(
             hover_line = hover_st.get("line", {"width": 6, "color": "rgba(0,0,0,0)"})
             hover_showlegend = bool(hover_st.get("showlegend", False))
 
-            # Hover metadata (keep existing fields)
-            base_pattern = str(z.meta.get("base_pattern", ""))
+            # Hover metadata (the hover rows themselves: `kl_zone_customdata`)
             base_idx = int(z.meta.get("base_idx", -1))
             cycle_id = int(z.meta.get("cycle_id", 0))
             structure_id = int(z.meta.get("structure_id", -1))
-            struct_direction = int(z.meta.get("struct_direction", 0))
 
             # ------------------------------------------------------------------
             # Item 5 (2026-05-20): outline + active-stretch fill rendering.
@@ -1777,10 +1781,9 @@ def export_chart_plotly(
                 if len(seg_times) == 0:
                     seg_times = pd.Series([seg_x0, seg_x1])
 
-                hover_customdata = [[
-                    side, structure_id, struct_direction, base_pattern,
-                    base_idx, conf_idx, cycle_id, y1, y0,
-                ]] * len(seg_times)
+                hover_customdata = [
+                    kl_zone_customdata(z, main_zone_id_line(z.meta), y1, y0, pip_size)
+                ] * len(seg_times)
 
                 for y_edge in (y1, y0):
                     fig.add_trace(
@@ -1790,20 +1793,7 @@ def export_chart_plotly(
                             name="KL zone" if active else "KL zone (inactive)",
                             showlegend=hover_showlegend,
                             line=hover_line, line_shape="hv",
-                            hovertemplate=(
-                                "TF=1H<br>"
-                                "KL Zone<br>"
-                                "side=%{customdata[0]}<br>"
-                                "structure_id=%{customdata[1]}<br>"
-                                "struct_direction=%{customdata[2]}<br>"
-                                "base_pattern=%{customdata[3]}<br>"
-                                "base_idx=%{customdata[4]}<br>"
-                                "confirmed_idx=%{customdata[5]}<br>"
-                                "cycle_id=%{customdata[6]}<br>"
-                                "top=%{customdata[7]:.5f}<br>"
-                                "bottom=%{customdata[8]:.5f}"
-                                "<extra></extra>"
-                            ),
+                            hovertemplate=kl_zone_hovertemplate("1H"),
                             customdata=hover_customdata,
                         )
                     )
@@ -2244,6 +2234,7 @@ def export_chart_plotly(
 
     if zone_cfg.get("POI", False) and poi_zones:
         t_last = dfx[COL_TIME].iloc[-1]
+        pip_size = _pip_size_from_pair(dfx)   # the hover's zone_size
 
         def _poi_zone_style(side: str) -> dict:
             key = f"zone.poi.{side}"
@@ -2380,22 +2371,8 @@ def export_chart_plotly(
             if len(seg_times) == 0:
                 seg_times = pd.Series([x_zone0, x_zone1])
 
-            # The institutional pattern line(s) (PLAN_H HV; one builder for the 3 POI hover sites)
-            ip_str = poi_ic_hover_text(z.meta, z.ic_idx)
-            cycle_id = z.meta.get("cycle_id", 0)
-
-            poi_customdata = [[
-                side,
-                z.meta.get("structure_id", -1),
-                z.meta.get("struct_direction", 0),
-                z.ic_idx,
-                conf_idx,
-                cycle_id,
-                ip_str,
-                y1,
-                y0,
-                zone_status,
-            ]] * len(seg_times)
+            # The POI hover row (one builder for the 3 POI hover sites, the IC lines incl. — PLAN_H HV)
+            poi_customdata = [poi_zone_customdata(z, main_zone_id_line(z.meta), y1, y0, pip_size)] * len(seg_times)
 
             # Hover line style from registry
             poi_hover_st = STYLE.get("zone.poi.hover_line", {})
@@ -2413,21 +2390,7 @@ def export_chart_plotly(
                     showlegend=False,
                     line=poi_hover_line,
                     line_shape="hv",
-                    hovertemplate=(
-                        "TF=1H<br>"
-                        "<b>POI Zone</b><br>"
-                        "side=%{customdata[0]}<br>"
-                        "structure_id=%{customdata[1]}<br>"
-                        "struct_direction=%{customdata[2]}<br>"
-                        "ic_idx=%{customdata[3]}<br>"
-                        "confirmed_idx=%{customdata[4]}<br>"
-                        "cycle_id=%{customdata[5]}<br>"
-                        "%{customdata[6]}<br>"
-                        "top=%{customdata[7]:.5f}<br>"
-                        "bottom=%{customdata[8]:.5f}<br>"
-                        "status=%{customdata[9]}"
-                        "<extra></extra>"
-                    ),
+                    hovertemplate=poi_zone_hovertemplate("1H"),
                     customdata=poi_customdata,
                 )
             )
@@ -2442,21 +2405,7 @@ def export_chart_plotly(
                     showlegend=False,
                     line=poi_hover_line,
                     line_shape="hv",
-                    hovertemplate=(
-                        "TF=1H<br>"
-                        "<b>POI Zone</b><br>"
-                        "side=%{customdata[0]}<br>"
-                        "structure_id=%{customdata[1]}<br>"
-                        "struct_direction=%{customdata[2]}<br>"
-                        "ic_idx=%{customdata[3]}<br>"
-                        "confirmed_idx=%{customdata[4]}<br>"
-                        "cycle_id=%{customdata[5]}<br>"
-                        "%{customdata[6]}<br>"
-                        "top=%{customdata[7]:.5f}<br>"
-                        "bottom=%{customdata[8]:.5f}<br>"
-                        "status=%{customdata[9]}"
-                        "<extra></extra>"
-                    ),
+                    hovertemplate=poi_zone_hovertemplate("1H"),
                     customdata=poi_customdata,
                 )
             )

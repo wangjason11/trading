@@ -397,11 +397,11 @@ def _ranked_meta(rule, runner_up=None, gap=None):
 
 
 @pytest.mark.parametrize("meta, text", [
-    (_ranked_meta(None), "No pattern · only IC candidate"),
-    (_ranked_meta("exclude_pinbar"), "No pattern · ranking rule exclude_pinbar"),
-    (_ranked_meta("ic_candle_type", 7), "No pattern · ranking rule ic_candle_type over 7"),
+    (_ranked_meta(None), "ic_reason=No pattern · only IC candidate"),
+    (_ranked_meta("exclude_pinbar"), "ic_reason=No pattern · ranking rule exclude_pinbar"),
+    (_ranked_meta("ic_candle_type", 7), "ic_reason=No pattern · ranking rule ic_candle_type over 7"),
     (_ranked_meta("most_recent_before_imbalance", 17, 16),
-     "No pattern · ranking rule most_recent_before_imbalance over 17 (gap 16)"),
+     "ic_reason=No pattern · ranking rule most_recent_before_imbalance over 17 (gap 16)"),
 ])
 def test_the_poi_hover_names_the_ranking_without_the_ic_index(meta, text):
     """ICR-7 / ICR-15: the POI hover's ranked line — `No pattern` in the place of `IP <rank>`, the deciding rule + its

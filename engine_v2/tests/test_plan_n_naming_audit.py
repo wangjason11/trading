@@ -298,7 +298,7 @@ def _two_step_zone(times, base, exp, conf, *, end=None, **meta):
                   bottom=0.55, source_kind="BOS", source_time=times[conf], source_price=0.55,
                   meta={"structure_id": 0, "struct_direction": 1, "cycle_id": 1, "confirmed_idx": conf,
                         "anchor_idx": base, "base_idx": base, "base_pattern": "base", "bounds_steps": steps,
-                        "expanded": True, "end_idx": end, "end_reason": None,
+                        "expanded": True, "end_idx": end, "end_reason": None if end is None else "next_cycle",
                         "activation_history": [{"idx": conf, "active": True, "reason": "confirmed"}],
                         "status": "active", **meta})
 

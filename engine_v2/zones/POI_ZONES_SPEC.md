@@ -1022,23 +1022,26 @@ cfg = {
 - `disappeared` zones: NOT rendered (terminal-invalidation; filtered out — reserved, not produced by POI today)
 
 ### Hover Data
-- Side, structure_id, cycle_id
-- IC_idx, confirmed_idx
-- The institutional pattern (PLAN_H HV, landing B — `versions=` until then): `IP <rank> · legs a-b-c (initial |
-  opp | continuation)`, each leg `first–last` (one candle: its index), + `Tiebreak over <IC>: IC candle type` /
-  `…: most recent before imbalance <c2>` when a tiebreaker decided (§3.4; `…: immediate unfilled imbalance <c2>`
-  until PLAN_P); a RANKED IC (§3.6, PLAN_L L2): `No pattern · ranking rule <rule>` + ` over <runner-up>` + ` (gap
-  <c2>)` when the deciding rule has them (e.g. confluence sub 2 cycle 1's IC 2575: `No pattern · ranking rule
-  exclude_pinbar` since PLAN_P — `… immediate_unfilled_imbalance over 2574 (gap 2577)` until then), or `No pattern ·
-  only IC candidate` (`only preferred IC candidate` when Step 1B narrowed the field to it — PLAN_S step 3) — NO `IC
-  <idx>` there (the hover's own `ic_idx=` line names the IC; PLAN_H §6 ICR-15); + Step 1B's line when the preference
-  NARROWED the field (§3.7; the user's rounds 6–7): `Prior imbalance <c2> unfilled · preferred <passers> of
-  <candidates> IC candidates` + ` (over pattern <rank> at <IC>)` when it outranked one — e.g. confluence sub 3 cycle 1's
-  2821: `No pattern · only preferred IC candidate` / `Prior imbalance 2810 unfilled · preferred 1 of 2 IC candidates
-  (over pattern 3B.iii at 2808)`; nothing when every candidate passed or 1B fell back; + a
-  line `IC zone 80-100 (fallback)` on a Step 1A IC (PLAN_P; nothing on the 61.8–80 band) — ONE builder for the three
-  POI hover sites (`charting/_zone_render.poi_ic_hover_text`)
-- Top/bottom bounds
+The POI hover (the user's spec 2026-10-23 — the full template + an example: CHARTING_SPEC §7 "Hover"): TF / POI Zone /
+side / `sid | cycle_id` (a sub: `sub_id | cycle_id` + its `first record:` line) / `ic_idx` / `confirmed_idx` (the most
+recent activation) / the IC lines / `lifecycle=[<first activation>, <end | open>] | end_reason=…` (the zone's own
+active window; it replaced `status=`) / top / bottom / `zone_size` (pips) / `struct_direction`. The IC lines, every
+line labelled since 2026-10-23 (the values unchanged):
+- The institutional pattern (PLAN_H HV, landing B — `versions=` until then): `ic_reason=IP <rank> · legs a-b-c
+  (initial | opp | continuation)`, each leg `first–last` (one candle: its index), + `ic_tiebreak=over <IC>: IC candle
+  type` / `…: most recent before imbalance <c2>` when a tiebreaker decided (§3.4; `…: immediate unfilled imbalance
+  <c2>` until PLAN_P); a RANKED IC (§3.6, PLAN_L L2): `ic_reason=No pattern · ranking rule <rule>` + ` over
+  <runner-up>` + ` (gap <c2>)` when the deciding rule has them (e.g. confluence sub 2 cycle 1's IC 2575: `ic_reason=No
+  pattern · ranking rule exclude_pinbar` since PLAN_P — `… immediate_unfilled_imbalance over 2574 (gap 2577)` until
+  then), or `ic_reason=No pattern · only IC candidate` (`only preferred IC candidate` when Step 1B narrowed the field
+  to it — PLAN_S step 3) — NO `IC <idx>` there (the hover's own `ic_idx=` line names the IC; PLAN_H §6 ICR-15); +
+  Step 1B's line when the preference NARROWED the field (§3.7; the user's rounds 6–7): `ic_prior_imbalance=<c2>
+  unfilled · preferred <passers> of <candidates> IC candidates` + ` (over pattern <rank> at <IC>)` when it outranked
+  one — e.g. confluence sub 3 cycle 1's 2821: `ic_reason=No pattern · only preferred IC candidate` /
+  `ic_prior_imbalance=2810 unfilled · preferred 1 of 2 IC candidates (over pattern 3B.iii at 2808)`; nothing when
+  every candidate passed or 1B fell back; + a line `ic_zone=80-100 (fallback)` on a Step 1A IC (PLAN_P; nothing on
+  the 61.8–80 band) — ONE builder for the three POI hover sites (`charting/_zone_render.poi_ic_hover_text`). Until
+  2026-10-23 these lines carried no labels (`Tiebreak over …`, `Prior imbalance …`, `IC zone 80-100 (fallback)`)
 - The fib hover (the H1 chart AND the M15 lens charts since PLAN_H §8.9 F1, 2026-10-06): its status cell =
   status · `life=[start, end] reason` · the IC outcome (`IP <rank> · IC <idx>` — a pattern's IC; `No pattern · IC
   <idx> · ranking rule <rule>` / `No pattern · IC <idx> · only IC candidate` (`… only preferred IC candidate` when

@@ -205,18 +205,18 @@ def _no_ic_inputs():
 
 
 def test_the_poi_hover_names_the_fallback_band_only():
-    """The POI hover's extra line `IC zone 80-100 (fallback)` — after the pattern line (or a ranked IC's line); the
+    """The POI hover's extra line `ic_zone=80-100 (fallback)` — after the pattern line (or a ranked IC's line); the
     61.8–80 band adds nothing."""
     _, _, (poi,), _ = _drawn_step_1a()
-    assert poi_ic_hover_text(poi.meta, 7) == ("IP 1A.i · legs 1-1-1 (6 | 7 | 8)<br>Tiebreak over 11: most recent "
-                                              "before imbalance 8<br>IC zone 80-100 (fallback)")
+    assert poi_ic_hover_text(poi.meta, 7) == ("ic_reason=IP 1A.i · legs 1-1-1 (6 | 7 | 8)<br>ic_tiebreak=over 11: most recent "
+                                              "before imbalance 8<br>ic_zone=80-100 (fallback)")
     primary = {**poi.meta, "ic_zone_band": IC_ZONE_PRIMARY}
     assert "fallback" not in poi_ic_hover_text(primary, 7)
     ranked = {"ip_outcome": "no_pattern", "ip_rank": None, "ip_leg_candle_counts": None, "pattern_anchor_idx": None,
               "opp_leg_first_idx": None, "pattern_end_idx": None, "pattern_confirmed_idx": None, "ip_tiebreak": None,
               "ranking_rule": None, "ranking_runner_up_ic_idx": None, "ranking_imbalance_first_c2_idx": None,
               "ic_zone_band": IC_ZONE_FALLBACK, **NO_1B_META}
-    assert poi_ic_hover_text(ranked, 1934) == "No pattern · only IC candidate<br>IC zone 80-100 (fallback)"
+    assert poi_ic_hover_text(ranked, 1934) == "ic_reason=No pattern · only IC candidate<br>ic_zone=80-100 (fallback)"
     with pytest.raises(AssertionError, match="ic_zone_band"):            # a POI without a known band fails loudly
         poi_ic_hover_text({**ranked, "ic_zone_band": None}, 1934)
 

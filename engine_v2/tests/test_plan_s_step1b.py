@@ -422,21 +422,21 @@ def test_the_mirror_shifts_the_two_indices_and_never_the_counts():
 
 @pytest.mark.parametrize("specs, text", [
     # narrowed, a pattern outranked (sub 3 cycle 1's shape on the window — round 7)
-    (FIX["pattern_pinbar"], "No pattern · only preferred IC candidate<br>Prior imbalance 8 unfilled · preferred 1 of 2 "
+    (FIX["pattern_pinbar"], "ic_reason=No pattern · only preferred IC candidate<br>ic_prior_imbalance=8 unfilled · preferred 1 of 2 "
                             "IC candidates (over pattern 3A.i at 7)"),
     # narrowed, nothing outranked (sub 0 cycle 2's shape)
-    (FIX["runner_up_still_in_play"], "No pattern · only preferred IC candidate<br>Prior imbalance 8 unfilled · "
+    (FIX["runner_up_still_in_play"], "ic_reason=No pattern · only preferred IC candidate<br>ic_prior_imbalance=8 unfilled · "
                                      "preferred 1 of 2 IC candidates"),
     # a pattern pick from narrowed passers, nothing outranked (sub 8 cross 0→2's shape)
-    (_PASSER_PATTERN, "IP 2B.iii · legs 1-1-3 (8 | 9 | 10–12)<br>Prior imbalance 8 unfilled · preferred 1 of 2 IC "
+    (_PASSER_PATTERN, "ic_reason=IP 2B.iii · legs 1-1-3 (8 | 9 | 10–12)<br>ic_prior_imbalance=8 unfilled · preferred 1 of 2 IC "
                       "candidates"),
     # narrowed over a ranked list: the ranking line keeps its rule
-    (FIX["pinbar_with_the_gap"], "No pattern · ranking rule exclude_pinbar<br>Prior imbalance 8 unfilled · preferred 2 "
+    (FIX["pinbar_with_the_gap"], "ic_reason=No pattern · ranking rule exclude_pinbar<br>ic_prior_imbalance=8 unfilled · preferred 2 "
                                  "of 3 IC candidates"),
     # passers < candidates but the fallback gave the IC -> no 1B line (the user: "Nothing when … it fell back")
-    (_FALLBACK, "No pattern · ranking rule exclude_pinbar"),
+    (_FALLBACK, "ic_reason=No pattern · ranking rule exclude_pinbar"),
     # no passer -> no line; the lone candidate stays "only IC candidate"
-    (FIX["single"], "No pattern · only IC candidate"),
+    (FIX["single"], "ic_reason=No pattern · only IC candidate"),
 ])
 def test_the_poi_hover_shows_the_preference_only_when_it_narrowed(specs, text):
     poi, _ = _drawn(specs)
@@ -454,8 +454,8 @@ def test_a_pattern_poi_hover_carries_the_line_before_the_band():
     with contextlib.redirect_stdout(io.StringIO()):
         (poi,) = derive_poi_zones(df, est, fib_tracker=tracker, config=POIConfig(), ic_records=recs)
     assert poi_ic_hover_text(poi.meta, poi.ic_idx) == (
-        "IP 1A.i · legs 1-1-1 (8 | 9 | 10)<br>Tiebreak over 11: most recent before imbalance 10<br>Prior imbalance 8 "
-        "unfilled · preferred 2 of 3 IC candidates (over pattern 1A.i at 7)<br>IC zone 80-100 (fallback)")
+        "ic_reason=IP 1A.i · legs 1-1-1 (8 | 9 | 10)<br>ic_tiebreak=over 11: most recent before imbalance 10<br>ic_prior_imbalance=8 "
+        "unfilled · preferred 2 of 3 IC candidates (over pattern 1A.i at 7)<br>ic_zone=80-100 (fallback)")
 
 
 def test_the_poi_hover_rejects_an_inconsistent_preference():
