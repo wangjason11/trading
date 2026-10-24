@@ -159,7 +159,8 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    `20261023_194643_18711dc`). The fifth edit LANDED 2026-10-24 — the zone proximity trigger marker hover, H1 + the
    M15 charts' H1 overlay (the user's spec + decisions + what landed:
    `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_proximity_marker_hover.md`; figure-only;
-   `trigger_price` / `zone_inner` / `sub_trigger` added, `zone_kind` removed, the M15 copy keyed by its parent). The
+   `trigger_price` / `zone_inner` / `sub_trigger` added, `zone_kind` removed, the M15 copy keyed by its parent; source
+   `fb0189b`, save S_prox_hover `20261024_105742_fb0189b` = `LATEST_<branch>`). The
    M15 Prev BOS line hover stays as is (the user, 2026-10-24: "no changes needed for Prev BOS line hover"); WVMI back
    on the chart TABLED (register §G). NEXT: the user's further specs.
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).

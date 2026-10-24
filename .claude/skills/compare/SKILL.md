@@ -664,7 +664,17 @@ its sub dots by hover strings, the KL / POI zone hover made it crash, M15 wave c
 format to one `(parent_sid, parent_cycle, sub_id)` key, so `chart_census.py <S_S3 chart> <current chart>` → 0
 deltas on both lenses — run it on every hover-format change (GOTCHAS "A hover-format change breaks the
 chart-reading debug tools silently"). Skip grep 23. S_wave_hover `20261023_194643_18711dc` (source `18711dc`, save
-`d15cb00`, trunk `293b7c7`; = `LATEST_<branch>` from 2026-10-23).
+`d15cb00`, trunk `293b7c7`; = `LATEST_<branch>` until S_prox_hover, below).
+**The zone proximity trigger marker hover (2026-10-24, SESSION ORDER item 5's fifth chart edit — the user's spec
+`plans/qa_chart_edits_inputs/user_spec_20261023_proximity_marker_hover.md`) — FIGURE-ONLY:** 27 / 27 CSVs md5-equal
+to S_wave_hover; traces and layouts unchanged (81, 153, 301); the hover changes on the `zone_proximity:trigger`
+trace only (one per chart, 8 markers each). A save-format boundary for hover diffs only (`TF=1H`, `sid=… |
+cycle_id=…` on one line, `trigger_price=` / `zone_inner=` / `sub_trigger=` added, `zone_kind=` gone, a sub zone's
+`type` without its inner; the M15 copy `idx=` / `parent_sid=… | parent_cycle_id=…`, no `struct_direction`).
+Positional `cmp_save.py` is fine across it. Checks: `fig_scope.py BASE CUR '^zone_proximity:trigger$'` (SCOPE OK),
+`chart_census.py` vs S_S3 (0 deltas), the run log's `[uc1_trigger]` lines unchanged (3; the chart's UC1 call for
+`sub_trigger` is silenced). Skip grep 23. S_prox_hover `20261024_105742_fb0189b` (source `fb0189b`, save `b2ab158`,
+trunk `1b513ec`; = `LATEST_<branch>` from 2026-10-24).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -794,8 +804,8 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-23 on S_wave_hover `20261023_194643_18711dc`, unchanged from S_fib_hover
-`20261023_191547_563f5f8`, S_zone_hover
+counts are (verified 2026-10-24 on S_prox_hover `20261024_105742_fb0189b`, unchanged from S_wave_hover
+`20261023_194643_18711dc`, S_fib_hover `20261023_191547_563f5f8`, S_zone_hover
 `20261023_153743_56bb20d`, S_dot_hover
 `20261022_200747_ab2fcc1`, S_S3 `20261021_130400_7b62a47`
 and S_S2 `20261021_081421_cbaed31`
