@@ -1,0 +1,4 @@
+commit_hash=fb0189b
+timestamp=20261024_105742
+branch=week9-entries-decisions
+commit_message=Chart edits (SESSION ORDER item 5), the zone proximity trigger marker hover - the user's spec 2026-10-23 / 24
