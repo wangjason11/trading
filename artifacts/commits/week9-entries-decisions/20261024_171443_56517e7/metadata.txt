@@ -1,0 +1,4 @@
+commit_hash=56517e7
+timestamp=20261024_171443
+branch=week9-entries-decisions
+commit_message=Chart edit (SESSION ORDER item 5, second pass): a replaced sub's line breaks at the same point on every lens - the sub's pool-wide replacer
