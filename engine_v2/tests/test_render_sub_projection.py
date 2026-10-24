@@ -311,9 +311,10 @@ def _lens_dfs(m15_df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
 
 
 def _render(sub: PooledStructure, m15_df: pd.DataFrame,
-            lens_dfs: Dict[str, pd.DataFrame]) -> LowerTFResult:
+            lens_dfs: Dict[str, pd.DataFrame], ended_by_starting_idx=None) -> LowerTFResult:
     return edm.render_sub_projection(
         sub, m15_df, lens_paths=_LENS_PATHS, lens_dfs=lens_dfs, timeframe=_TF,
+        ended_by_starting_idx=ended_by_starting_idx,
     )
 
 
@@ -875,10 +876,14 @@ def test_later_live_wins_over_an_earlier_sub_when_mirrored_in_start_order(geomet
     _record(pool, sub_y, m15_df, LENS_CONFLUENCE, start_idx=y_start, seq=1,
             trigger_type="subsequent_confluence", parent_sid=3, parent_cycle_id=2)
     _set_lifecycle(sub_y, y_start, None, None)
+    sub_x.ended_by_sub_id = sub_y.sub_id                         # Y replaced X (the sweep's winner)
     lens_dfs = _lens_dfs(m15_df)
     conf = lens_dfs[LENS_CONFLUENCE]
 
-    _render(sub_x, m15_df, lens_dfs)
+    res_x = _render(sub_x, m15_df, lens_dfs, ended_by_starting_idx=sub_y.starting_idx)
+    # the replacer rides the meta to the chart's replacement break (2026-10-24)
+    assert (res_x.meta["ended_by_sub_id"], res_x.meta["ended_by_starting_idx"]) == (
+        sub_y.sub_id, sub_y.starting_idx)
     x_rows = conf["structure_id"].iloc[_START:y_start].tolist()
     assert not any(v == _SENTINEL_SID for v in x_rows)
     _render(sub_y, m15_df, lens_dfs)                             # later-live, mirrored second
@@ -890,6 +895,25 @@ def test_later_live_wins_over_an_earlier_sub_when_mirrored_in_start_order(geomet
     assert not (conf["structure_id"].iloc[y_start:] == _SENTINEL_SID).any()
     # Attribution tells the two apart: events from both subs, each with its own sub_id.
     assert {e.meta["sub_id"] for e in conf.attrs["events"]} == {sub_x.sub_id, sub_y.sub_id}
+
+
+def test_a_replaced_sub_needs_its_replacer_and_only_a_replaced_sub_has_one(geometry, m15_df):
+    """The projection asserts the sweep's replacer pairing (2026-10-24): a
+    `same_dir_replacement` end carries `ended_by_sub_id` and the caller hands
+    its anchor; any other end carries neither — a gap here would draw a
+    replaced sub's line straight on the chart (or break a non-replaced one)."""
+    pool, sub = geometry
+    _record(pool, sub, m15_df, LENS_CONFLUENCE, start_idx=_START, seq=0,
+            trigger_type="first_confluence", parent_sid=3, parent_cycle_id=1)
+    _set_lifecycle(sub, _START, _END, "same_dir_replacement")
+    with pytest.raises(AssertionError, match="ended_by_sub_id=None"):
+        _render(sub, m15_df, _lens_dfs(m15_df))                  # replaced, no replacer
+    sub.ended_by_sub_id = 7
+    with pytest.raises(AssertionError, match="ended_by_starting_idx=None"):
+        _render(sub, m15_df, _lens_dfs(m15_df))                  # replacer without its anchor
+    sub.end_reason = "reversal"
+    with pytest.raises(AssertionError, match="end_reason=reversal ended_by_sub_id=7"):
+        _render(sub, m15_df, _lens_dfs(m15_df), ended_by_starting_idx=50)
 
 
 # ---------------------------------------------------------------------------

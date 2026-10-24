@@ -347,6 +347,27 @@ def test_subordinate_meta_carries_provenance():
     }
 
 
+def test_subordinate_meta_carries_the_pool_wide_replacer():
+    """`ended_by_sub_id` / `ended_by_starting_idx` (2026-10-24) pass through from
+    the projection meta — the sub's replacer and its anchor, the input of the
+    chart's replacement break on every lens; None on a non-replaced sub."""
+    res = _projection_result(
+        sub_id=3, direction=-1, starting_idx=2639, start_idx=2829,
+        end_idx=3491, end_reason="same_dir_replacement", natural_reversal_idx=None,
+        lenses=("confluence", "counter"), relative_dir_segments=((2829, "counter"),),
+        first_record={
+            "lens": "confluence", "parent_sid": 0, "parent_cycle_id": 1,
+            "trigger_type": "reversal", "trigger_idx": 2829, "start_idx": 2829,
+        },
+        n_records=2,
+    )
+    res.meta.update(ended_by_sub_id=5, ended_by_starting_idx=3304)
+    (rec,) = build_sid_records_for_subordinate([res])
+    assert (rec.meta["ended_by_sub_id"], rec.meta["ended_by_starting_idx"]) == (5, 3304)
+    for r in build_sid_records_for_subordinate(_predicted_table_projections()):
+        assert (r.meta["ended_by_sub_id"], r.meta["ended_by_starting_idx"]) == (None, None)
+
+
 def test_subordinate_preserves_input_order():
     """Rows come out in the order the projections were given (the caller
     passes them in `sub_id` / creation order)."""

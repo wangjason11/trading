@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple
 
+import pytest
+
 from engine_v2.charting.export_m15_chart import (
     _compute_forming_by_idx_dir,
     _compute_owner_by_idx_dir,
@@ -437,19 +439,22 @@ def test_group_flag_runs_alternates_and_shares_boundary_points():
 # to the handover candle. Reference window: sub `3304/-1` (conf) breaks at 3760
 # (bounded by sub `3760/-1`'s anchor) and NOT at the literal high 3806; sub
 # `3621/+1` (counter) breaks at 4000 (bounded by sub `4027/+1`'s anchor 4027).
+# The replacer is the sub's, pool-wide (`SidRecord.meta`, 2026-10-24) — the same
+# break on every lens.
 
 import pandas as pd  # noqa: E402
 
 from engine_v2.common.types import COL_H, COL_L  # noqa: E402
 
 
-class _Rec:
-    """Minimal TriggerRecord stand-in (only the fields the helper reads)."""
-
-    def __init__(self, end_reason, ended_by_sub_id, end_idx):
-        self.end_reason = end_reason
-        self.ended_by_sub_id = ended_by_sub_id
-        self.end_idx = end_idx
+def _repl(sub_id: int, direction: int, ended_by_starting_idx: Optional[int],
+          end_reason: Optional[str] = "same_dir_replacement") -> SidRecord:
+    """A sub ended by `end_reason` whose pool-wide replacer is anchored at
+    `ended_by_starting_idx` (`SidRecord.meta`, set by the projection)."""
+    sub = _sub(sub_id, direction, 0, 1, 10, end_reason)
+    sub.meta["ended_by_sub_id"] = 9 if ended_by_starting_idx is not None else None
+    sub.meta["ended_by_starting_idx"] = ended_by_starting_idx
+    return sub
 
 
 def _df(highs, lows):
@@ -461,52 +466,85 @@ def _df(highs, lows):
 _HIGHS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.50, 1.45, 1.46, 1.52, 1.48, 1.47]
 _LOWS = [0.9, 0.8, 0.7, 0.6, 0.55, 0.50, 0.60, 0.58, 0.45, 0.62, 0.61]
 _DF = _df(_HIGHS, _LOWS)
-_REPL = [_Rec("same_dir_replacement", 9, 10)]
 
 
 def test_break_is_bounded_by_the_replacing_anchor_not_the_literal_extreme():
     """A `-1` sub pulls UP: the extreme is searched only to the replacement's
     anchor (5), so the break is the structural swing 5 @ 1.50 — not the higher
     high at 8 (1.52). This is the 3760-vs-3806 case."""
-    sub = _sub(4, -1, 0, 1, 10, "same_dir_replacement")
-    assert _replacement_break_point(sub, _REPL, {9: 5}, _DF, 1, 10) == (5, 1.50)
+    assert _replacement_break_point(_repl(4, -1, 5), _DF, 1, 10) == (5, 1.50)
     # unbounded (anchor past the end) would have picked the overshoot at 8
-    assert _replacement_break_point(sub, _REPL, {9: 99}, _DF, 1, 10) == (8, 1.52)
+    assert _replacement_break_point(_repl(4, -1, 99), _DF, 1, 10) == (8, 1.52)
 
 
 def test_plus_one_sub_breaks_at_the_lowest_low():
     """A `+1` sub pulls DOWN: lowest low in (1, anchor]. With anchor 5 that is
     idx 5 @ 0.50 (idx 8's 0.45 is past the anchor)."""
-    sub = _sub(5, +1, 0, 1, 10, "same_dir_replacement")
-    assert _replacement_break_point(sub, _REPL, {9: 5}, _DF, 1, 10) == (5, 0.50)
+    assert _replacement_break_point(_repl(5, +1, 5), _DF, 1, 10) == (5, 0.50)
 
 
 def test_no_break_for_other_end_reasons():
     """Reversal / parent_end / open subs already end at a structural point —
-    measured on the reference window, so the rule is replacement-only."""
+    measured on the reference window, so the rule is replacement-only (even
+    with a replacer anchor in the meta)."""
     for reason in ("reversal", "parent_end", None):
-        sub = _sub(4, -1, 0, 1, 10, reason)
-        recs = [_Rec(reason, 9, 10)]
-        assert _replacement_break_point(sub, recs, {9: 5}, _DF, 1, 10) is None
+        assert _replacement_break_point(_repl(4, -1, 5, reason), _DF, 1, 10) is None
 
 
 def test_no_break_when_the_extreme_is_an_endpoint_or_the_range_is_empty():
-    sub = _sub(4, -1, 0, 1, 10, "same_dir_replacement")
     # anchor == last point -> empty range
-    assert _replacement_break_point(sub, _REPL, {9: 1}, _DF, 1, 10) is None
+    assert _replacement_break_point(_repl(4, -1, 1), _DF, 1, 10) is None
     # the extreme lands ON the extension end -> no degenerate zero-length piece
-    assert _replacement_break_point(sub, _REPL, {9: 5}, _DF, 4, 5) is None
-    # unknown replacing sub / missing anchor
-    assert _replacement_break_point(sub, _REPL, {}, _DF, 1, 10) is None
-    assert _replacement_break_point(sub, [], {9: 5}, _DF, 1, 10) is None
+    assert _replacement_break_point(_repl(4, -1, 5), _DF, 4, 5) is None
 
 
-def test_break_uses_the_record_that_ended_this_sub():
-    """A sub with several records: the one whose `end_idx` is the sub's end
-    carries `ended_by_sub_id`."""
+def test_break_reads_the_subs_pool_wide_replacer_and_fails_loudly_without_it():
+    """The replacer is the SUB's (the sweep's winning record, on whichever lens),
+    carried on `SidRecord.meta` — no lens records are read, so the counter and
+    the confluence chart break alike (2026-10-24: confluence sub `2639/-1`, ended
+    at 3491 by its COUNTER record, drew no break while its confluence record ran
+    to 3589). A replaced sub without the meta key is a pipeline bug -> KeyError,
+    never a silent straight line."""
     sub = _sub(4, -1, 0, 1, 10, "same_dir_replacement")
-    recs = [_Rec("parent_end", None, 4), _Rec("same_dir_replacement", 9, 10)]
-    assert _replacement_break_point(sub, recs, {9: 5}, _DF, 1, 10) == (5, 1.50)
+    with pytest.raises(KeyError):
+        _replacement_break_point(sub, _DF, 1, 10)
+    # a non-replaced sub never reads the key
+    assert _replacement_break_point(_sub(4, -1, 0, 1, 10, "reversal"), _DF, 1, 10) is None
+
+
+def test_the_break_enters_the_drawn_polyline_of_a_replaced_sub():
+    """`_build_sub_polylines` runs the break on the most recent internal sid: a
+    `-1` sub (BOS anchor 2, CTS anchor 6) replaced at 18, its pool-wide replacer
+    anchored at 12 -> the line is BOS 2 -> CTS 6 -> PB 12 (the highest high in
+    (6, 12], not the overshoot at 15) -> the extension 18, and the PB is a dot;
+    the same sub ended by its reversal runs CTS 6 -> 18 straight."""
+    from engine_v2.charting.export_m15_chart import _build_sub_polylines
+    from engine_v2.common.types import COL_C, COL_TIME
+    from engine_v2.tests._event_factory import make_bos_confirmed, make_event
+
+    n = 20
+    highs = [0.6000] * n
+    highs[12], highs[15] = 0.6100, 0.6120
+    lt = pd.DataFrame({COL_TIME: pd.date_range("2025-12-01", periods=n, freq="15min", tz="UTC"),
+                       COL_H: highs, COL_L: [0.5900] * n, COL_C: [0.5950] * n})
+    events = [
+        make_bos_confirmed(bos_anchor_idx=2, confirmed_at=4, price=0.6090,
+                           structure_id=0, cycle_id=0, struct_direction=-1),
+        make_event("CTS_CONFIRMED", 7, price=0.5950, cts_anchor_idx=6,
+                   structure_id=0, cycle_id=0, struct_direction=-1),
+    ]
+
+    def lt_time(i):
+        return lt[COL_TIME].iloc[int(i)] if 0 <= int(i) < len(lt) else None
+
+    def drawn(sub):
+        poly = _build_sub_polylines(sub, events, lt, lt_time, lambda i: int(i), lambda i: True)
+        return [(p[0], p[3]) for p in poly["seq_by_sid"][0]], [(p[0], p[2]) for p in poly["extra_pb_pts"]]
+
+    replaced = _sub(4, -1, 2, 3, 18, "same_dir_replacement")
+    replaced.meta.update(ended_by_sub_id=5, ended_by_starting_idx=12)
+    assert drawn(replaced) == ([(2, "BOS"), (6, "CTS"), (12, "PB"), (18, "EXT")], [(12, 0.6100)])
+    assert drawn(_sub(4, -1, 2, 3, 18, "reversal")) == ([(2, "BOS"), (6, "CTS"), (18, "EXT")], [])
 
 
 def test_h1_overlay_window_starts_at_the_first_anchor_not_the_moment():

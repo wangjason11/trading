@@ -444,6 +444,13 @@ def test_the_predicted_table_the_real_sweep_and_overlay_on_the_reference_windows
                     [(CTR, (1, 2), 1, "subsequent_counter", 4143, 4143, None, None),
                      (CONF, (1, 2), 2, "reversal", 4200, 4200, None, None)]),
     }
+    # Each replaced sub's pool-wide replacer (the chart's replacement break, 2026-10-24): sub_3's comes from its
+    # COUNTER record (its confluence record runs to 3589); sub_5's from its (1,2) CONFLUENCE record — sub_7 is a
+    # confluence-only sub, so the counter chart breaks sub_5 at a replacer it does not draw.
+    repl = {(s.direction, s.starting_idx): (pool.get_by_id(s.ended_by_sub_id).direction,
+                                            pool.get_by_id(s.ended_by_sub_id).starting_idx)
+            for s in pool.all() if s.ended_by_sub_id is not None}
+    assert repl == {(-1, 2639): (-1, 3304), (-1, 3304): (-1, 3760), (1, 3621): (1, 4027)}
     assert sorted((u.parent_sid, u.parent_cycle_id, u.trigger_type, u.trigger_idx, u.reason)
                   for u in res.unresolved) == [
         (1, 0, "first_confluence", 2815, "collapsed_parent_cycle"),
@@ -678,7 +685,7 @@ def test_the_driver_checks_every_used_sub_zone_against_its_projection(monkeypatc
             tie_rank=2, sub_pool_idx=sub.pool_idx, sub_cycle_id=2, usable_idx=772)
         return SimpleNamespace(unresolved=[], spawned=[])
 
-    def render(sub, _m15, *, lens_paths, lens_dfs, timeframe):
+    def render(sub, _m15, *, lens_paths, lens_dfs, timeframe, ended_by_starting_idx=None):
         return _make_sub(sub.sub_id, start_idx=sub.start_idx, m15_end_idx=sub.end_idx, lenses=(CTR,), n=1)
 
     collapsed_v3 = [SimpleNamespace(parent_sid=1, parent_cycle_id=1, trigger_event_idx=871, input_idx=860)]

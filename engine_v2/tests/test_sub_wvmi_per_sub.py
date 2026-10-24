@@ -389,7 +389,7 @@ def test_the_driver_feeds_each_lens_its_stream_and_counts_each_unique_sub_once(m
         _set_lifecycle(sub, 40, 100, "parent_end")
         return SimpleNamespace(unresolved=[], spawned=[])
 
-    def _render(sub, _m15, *, lens_paths, lens_dfs, timeframe):
+    def _render(sub, _m15, *, lens_paths, lens_dfs, timeframe, ended_by_starting_idx=None):
         res = _make_sub(sub.sub_id, start_idx=sub.start_idx, m15_end_idx=sub.end_idx,
                         lenses=tuple(sorted(sub.lenses())), n=2)
         for lens in res.meta["lenses"]:
@@ -469,7 +469,7 @@ def test_the_driver_attributes_the_sub_wvmi_with_the_final_lists_a_sweep_generat
                                     SimpleNamespace(trigger_type="subsequent_confluence")))
         return SimpleNamespace(unresolved=[], spawned=[])
 
-    def _render(sub, _m15, *, lens_paths, lens_dfs, timeframe):
+    def _render(sub, _m15, *, lens_paths, lens_dfs, timeframe, ended_by_starting_idx=None):
         res = _make_sub(sub.sub_id, start_idx=sub.start_idx, m15_end_idx=sub.end_idx,
                         lenses=tuple(sorted(sub.lenses())), n=1)
         for lens in res.meta["lenses"]:
@@ -498,3 +498,69 @@ def test_the_driver_attributes_the_sub_wvmi_with_the_final_lists_a_sweep_generat
     assert streams_seen == [{LENS_CONFLUENCE: [(11, ZPT), (30, SCT), (33, SCT)], LENS_COUNTER: [(21, SCONF)]}]
     assert [v.trigger_event_idx for v in h1.attrs["subsequent_counter_triggers"]] == [30, 33]
     assert [v.trigger_event_idx for v in h1.attrs["subsequent_confluence_triggers"]] == [21]
+
+
+def test_the_driver_hands_each_replaced_sub_its_replacers_anchor(monkeypatch):
+    """The driver's step 5 (2026-10-24): a `same_dir_replacement` sub is projected with its pool-wide replacer's anchor
+    (`ended_by_starting_idx` = `pool.get_by_id(sub.ended_by_sub_id).starting_idx`) — the input of the chart's
+    replacement break on every lens; any other sub with None. The driver-test stubs of this file (here, not in
+    `test_render_sub_projection`, which never runs the driver): sub A (+1, 35) live [40, 70], replaced at 70 by sub
+    B (+1, 60) (open); the render stub records what it was handed, and step 6 is stopped."""
+    from engine_v2.multitf.sub_structure_pool import StructureKey
+    from engine_v2.tests.test_render_sub_projection import _record, _set_lifecycle
+
+    class _Stop(Exception):
+        pass
+
+    mt = lambda _v, _h1: SimpleNamespace(parent_sid=0, parent_cycle_id=1, lower_sd=+1)   # noqa: E731
+    for mod in ("first_confluence_pipeline", "subsequent_confluence_pipeline", "subsequent_counter_pipeline"):
+        monkeypatch.setattr(f"engine_v2.multitf.{mod}.to_multi_tf_trigger", mt)
+    monkeypatch.setattr("engine_v2.multitf.uc1_trigger.detect_uc1_triggers", lambda *a, **k: [])
+    monkeypatch.setattr("engine_v2.multitf.entity_df_mutation._map_parent_idx_to_m15_hour_end", _REAL_LOH)
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.fetch_lower_tf_data",
+                        lambda *a, **k: pd.DataFrame({"time": pd.date_range("2025-11-17", periods=200, freq="15min",
+                                                                            tz="UTC")}))
+    monkeypatch.setattr("engine_v2.multitf.data_bridge.prepare_lower_tf_data", lambda df: df)
+    monkeypatch.setattr("engine_v2.multitf.parent_tables.build_parent_tables",
+                        lambda *a, **k: SimpleNamespace(cycles=lambda: [(0, 1)]))
+    subs = {}
+
+    def _sweep(_triggers, *, pool, **_kw):
+        a, _ = pool.get_or_create(StructureKey("H1.main", "M15", 1, 35))
+        b, _ = pool.get_or_create(StructureKey("H1.main", "M15", 1, 60))
+        _record(pool, a, None, LENS_CONFLUENCE, start_idx=40, seq=0, trigger_type="first_confluence",
+                parent_sid=0, parent_cycle_id=1)
+        _record(pool, b, None, LENS_CONFLUENCE, start_idx=70, seq=1, trigger_type="first_confluence",
+                parent_sid=0, parent_cycle_id=1)
+        _set_lifecycle(a, 40, 70, "same_dir_replacement")
+        _set_lifecycle(b, 70, None, None)
+        a.ended_by_pool_idx = b.pool_idx                    # the sweep's phase 4
+        pool.number_subs_by_start()                         # → a.ended_by_sub_id = b.sub_id
+        subs.update(a=a, b=b)
+        return SimpleNamespace(unresolved=[], spawned=[])
+
+    handed = {}
+
+    def _render(sub, _m15, *, lens_paths, lens_dfs, timeframe, ended_by_starting_idx=None):
+        handed[sub.sub_id] = ended_by_starting_idx
+        return _make_sub(sub.sub_id, start_idx=sub.start_idx, m15_end_idx=sub.end_idx,
+                         lenses=tuple(sorted(sub.lenses())), n=1)
+
+    def _stop(*_a, **_k):
+        raise _Stop
+
+    monkeypatch.setattr("engine_v2.multitf.lifecycle_sweep.run_lifecycle_sweep", _sweep)
+    monkeypatch.setattr("engine_v2.multitf.entity_df_mutation.render_sub_projection", _render)
+    monkeypatch.setattr(orch, "_assert_proximity_zones_in_projection", lambda *a, **k: None)
+    monkeypatch.setattr(orch, "_stamp_sub_wvmi_trigger_meta", _stop)
+
+    t = lambda i, d: SimpleNamespace(idx=i, direction=d)                                              # noqa: E731
+    v3 = SimpleNamespace(parent_sid=0, parent_cycle_id=1, trigger_event_idx=20, input_idx=15)
+    h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
+    with contextlib.redirect_stdout(io.StringIO()), pytest.raises(_Stop):
+        orch._run_multi_tf_dual(
+            h1, [], [], [], [], {}, None, first_confluence_triggers=[],
+            subsequent_confluence_triggers=[v3], subsequent_counter_triggers=[],
+            main_zone_proximity_triggers={(0, 1): [t(11, "sd")]},
+        )
+    assert handed == {subs["a"].sub_id: 60, subs["b"].sub_id: None}

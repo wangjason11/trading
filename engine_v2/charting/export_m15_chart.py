@@ -37,7 +37,8 @@ hover attribution. Per spec §16.5 (rev 2):
     recency formatting at all (always solid, and they never dot anything). A sub
     ended by `same_dir_replacement` runs its final segment through one more
     structural point (`_replacement_break_point`) instead of straight to the
-    handover candle. The H1
+    handover candle — the same point on every lens (the sub's pool-wide
+    replacer). The H1
     OVERLAY's structure lines are lifecycle-FILTERED per wave instead
     (`_render_h1_overlay`: waves never live are not drawn — the H1 chart itself
     is unchanged). Forming-phase ZONES (a KL/POI whose cycle ended at/before
@@ -491,9 +492,7 @@ def _make_sub_phase_fns(eid: int, sub_dir: int, sub_start: Optional[int],
     return is_live, owned_here
 
 
-def _replacement_break_point(
-    sid_rec, sub_records, anchors_by_sub, lt_df, last_pt_idx: int, extend_to_idx: int,
-):
+def _replacement_break_point(sid_rec, lt_df, last_pt_idx: int, extend_to_idx: int):
     """The extra structural point a REPLACED sub's final segment runs through
     (chart review 2026-09-22b), or None.
 
@@ -518,29 +517,19 @@ def _replacement_break_point(
     `3304/−1`'s 3621→3760 is sub `3621/+1`'s segment, sub `3621/+1`'s 3760→4000
     is sub `3760/−1`'s.
 
-    The replacing sub comes from the record that ended this sub
-    (`TriggerRecord.ended_by_sub_id`; same lens by construction — a counter
-    record never ends a confluence one) and its anchor from `anchors_by_sub`.
+    The replacing sub is the SUB's replacer, pool-wide: `sid_rec.meta
+    ["ended_by_starting_idx"]` = its anchor (`ended_by_sub_id` = its id), set by
+    the sweep from the record that ended the sub — on whichever lens that record
+    is, and the replacer need not be drawn on this lens. So every lens breaks
+    alike, as it draws the sub's window alike. (Until 2026-10-24 the replacer was
+    read from THIS lens's records, the one ending at the sub's end: a lens whose
+    record ended later drew no break — confluence sub `2639/−1`, ended at 3491 by
+    its counter record while its confluence record ran to 3589.)
     Returns `(idx, price)` strictly inside `(last_pt_idx, extend_to_idx)`, else
     None."""
     if (getattr(sid_rec, "end_reason", None) or "") != "same_dir_replacement":
         return None
-    sub_end = sid_rec.end_event_idx
-    repl_id = None
-    for tr in sub_records or ():
-        if getattr(tr, "end_reason", None) != "same_dir_replacement":
-            continue
-        if getattr(tr, "ended_by_sub_id", None) is None:
-            continue
-        if sub_end is not None and tr.end_idx is not None and int(tr.end_idx) != int(sub_end):
-            continue
-        repl_id = int(tr.ended_by_sub_id)
-        break
-    if repl_id is None:
-        return None
-    anchor = anchors_by_sub.get(repl_id)
-    if anchor is None:
-        return None
+    anchor = sid_rec.meta["ended_by_starting_idx"]
 
     lo = int(last_pt_idx) + 1
     hi = min(int(anchor), int(extend_to_idx))
@@ -559,8 +548,7 @@ def _replacement_break_point(
     return best_idx, best_price
 
 
-def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned_here,
-                         sub_records=None, anchors_by_sub=None) -> dict:
+def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned_here) -> dict:
     """Build one sub's sid-tied POLYLINES (no drawing) so every sub's segments
     exist before any is styled (`_prior_line_segments` compares across subs).
 
@@ -693,10 +681,8 @@ def _build_sub_polylines(sid_rec, sid_events, lt_df, lt_time, lt_full_idx, owned
     # instead of straight to the handover candle — one more wave, drawn with a
     # PB dot (the same low/high convention as the pullback dots above).
     _last_seq = sorted(points_by_sid.get(most_recent_lt_sid, []), key=lambda x: x[0])
-    if _last_seq and anchors_by_sub is not None:
-        _bp = _replacement_break_point(
-            sid_rec, sub_records, anchors_by_sub, lt_df, int(_last_seq[-1][0]), int(extend_to_idx),
-        )
+    if _last_seq:
+        _bp = _replacement_break_point(sid_rec, lt_df, int(_last_seq[-1][0]), int(extend_to_idx))
         if _bp is not None:
             _b_idx, _b_price = _bp
             _b_t = lt_time(_b_idx)
@@ -1114,10 +1100,6 @@ def export_m15_chart_plotly(
     # segments of DIFFERENT subs, so all of them must exist before any is drawn.
     sub_ctx: dict = {}
     _segments_by_sub: dict = {}
-    _anchors_by_sub = {
-        _sid_record_identity(r): int(r.creation_event_idx)
-        for r in sid_records if r.creation_event_idx is not None
-    }
     for _rec in sid_records:
         if m15_df.empty:
             continue
@@ -1131,7 +1113,6 @@ def export_m15_chart_plotly(
         if struct_cfg.get("levels", False):
             _poly = _build_sub_polylines(
                 _rec, events_by_sid.get(_eid, []), lt_df, _lt_time, _lt_full_idx, _owned_fn,
-                sub_records=records_by_sub.get(_eid, []), anchors_by_sub=_anchors_by_sub,
             )
             _segments_by_sub[_eid] = (_recency_key(_rec), _segments_of(_poly))
         sub_ctx[_eid] = {"is_live": _is_live_fn, "owned_here": _owned_fn, "poly": _poly}

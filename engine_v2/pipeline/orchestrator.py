@@ -1201,8 +1201,10 @@ def _run_multi_tf_dual(
     results_by_lens: Dict[str, list] = {LENS_CONFLUENCE: [], LENS_COUNTER: []}
     all_results: list = []
     for sub in rendered:
+        replacer = sub_pool.get_by_id(sub.ended_by_sub_id) if sub.ended_by_sub_id is not None else None
         res = render_sub_projection(
             sub, m15, lens_paths=lens_paths, lens_dfs=lens_dfs, timeframe="M15",
+            ended_by_starting_idx=(int(replacer.starting_idx) if replacer is not None else None),
         )
         all_results.append(res)
         for lens in sub.lenses():

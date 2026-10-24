@@ -540,6 +540,9 @@ class _Sweep:
         e, _p, r = min(cands, key=lambda c: (c[0], c[1], c[2].seq))
         sub.end_idx = int(e)
         sub.end_reason = r.end_reason
+        # The winning record's replacer — on whichever lens it is; another lens's
+        # record may still run (and be replaced by another sub) after this end.
+        sub.ended_by_pool_idx = r.ended_by_pool_idx
         self.log(
             f"[sweep] sub_end pool#{sub.pool_idx} end_idx={sub.end_idx} reason={sub.end_reason} "
             f"via {r.identity} (max_start={max_start})"

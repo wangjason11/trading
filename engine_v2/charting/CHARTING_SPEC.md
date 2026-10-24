@@ -664,7 +664,19 @@ kept the swing at 3760). The resulting segments mirror the sibling structures
 point for point (sub `3304/−1`'s 3621→3760 IS sub `3621/+1`'s segment; sub
 `3621/+1`'s 3760→4000 IS sub `3760/−1`'s), and the break also resolves the
 partial overlap: 3621→3760 meets sub `3760/−1` only at the join candle so it
-stays solid, while 3760→3818 is prior. **Only replacement** gets this: measured
+stays solid, while 3760→3818 is prior. **The replacing structure is the SUB's,
+pool-wide — the same break on every lens** (2026-10-24, the user's decision —
+`plans/qa_chart_edits_inputs/user_spec_20261024_replacement_break.md`): the
+sweep keeps the replacer of the record that ENDS the sub (§17.5's winner, on
+whichever lens; `PooledStructure.ended_by_sub_id`) and the projection hands its
+anchor to the chart (`SidRecord.meta["ended_by_starting_idx"]`), so a lens whose
+own record ended later, or that does not draw the replacer at all, breaks alike.
+Until then the replacer came from THIS lens's record ending at the sub's end:
+confluence sub `2639/−1` (ended at 3491 by its counter record; its confluence
+record ran to 3589) ran 3047 → 3490 straight, now 3047 → 3304 (PB) → 3490 as on
+counter; and counter sub `3304/−1` (replaced by the confluence-only `3760/−1`)
+ran 3621 → 3819 straight, now 3621 → 3760 (PB) → 3819 as on confluence.
+**Only replacement** gets this: measured
 on the reference window, every reversal-ended sub's final segment already ends
 at its counter-move extreme (0–2 candles) and `parent_end` ends at the parent's
 candle — they are already one clean wave.

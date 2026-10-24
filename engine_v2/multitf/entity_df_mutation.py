@@ -1288,6 +1288,7 @@ def render_sub_projection(
     lens_paths: Dict[str, str],
     lens_dfs: Dict[str, pd.DataFrame],
     timeframe: str = "M15",
+    ended_by_starting_idx: Optional[int] = None,
 ) -> LowerTFResult:
     """§17.9: ONE projection per unique sub over the sub's `[start_idx,
     end_idx]`, mirrored into every lens df in `sub.lenses()`.
@@ -1299,12 +1300,25 @@ def render_sub_projection(
     `LowerTFResult.trigger` is the sub's FIRST live record's source trigger
     (its `use_case` / parent fields are informational only — the mirror and
     `build_sid_records_for_subordinate` read them).
+
+    `ended_by_starting_idx` = the anchor (`starting_idx`) of the sub that
+    replaced this one (`sub.ended_by_sub_id`; the caller looks it up in the
+    pool — it may sit on a lens this sub is not on). It rides the meta with
+    `ended_by_sub_id` to the chart's replacement break
+    (`export_m15_chart._replacement_break_point`), so every lens breaks alike.
     """
     from engine_v2.multitf.pooled_structure_build import project_to_window
 
     assert sub.start_idx is not None, f"[entity_compute] pool#{sub.pool_idx} has no start_idx"
     assert sub.sub_id is not None, (
         f"[entity_compute] pool#{sub.pool_idx} has no sub_id — the subs are numbered at the sweep's end"
+    )
+    assert (sub.end_reason == "same_dir_replacement") == (sub.ended_by_sub_id is not None), (
+        f"[entity_compute] sub {sub.sub_id} end_reason={sub.end_reason} ended_by_sub_id={sub.ended_by_sub_id}"
+    )
+    assert (sub.ended_by_sub_id is None) == (ended_by_starting_idx is None), (
+        f"[entity_compute] sub {sub.sub_id} ended_by_sub_id={sub.ended_by_sub_id} "
+        f"ended_by_starting_idx={ended_by_starting_idx}"
     )
     assert sub.geometry is not None, f"[entity_compute] sub {sub.sub_id} has no geometry"
     lim = sub.cross_fib_limit
@@ -1370,6 +1384,8 @@ def render_sub_projection(
             "end_idx": (int(sub.end_idx) if sub.end_idx is not None else None),
             "m15_end_idx": (int(sub.end_idx) if sub.end_idx is not None else int(edge_abs)),
             "end_reason": sub.end_reason,
+            "ended_by_sub_id": sub.ended_by_sub_id,
+            "ended_by_starting_idx": ended_by_starting_idx,
             "natural_reversal_idx": sub.natural_reversal_idx,
             "slice_begin": slice_begin,
             "lenses": tuple(lenses),

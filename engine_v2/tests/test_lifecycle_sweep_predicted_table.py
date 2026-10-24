@@ -770,6 +770,11 @@ def test_subs_full_predicted_table(sweep):
         assert got == want, f"sub {e.sub}: {got} != {want}"
         assert s.live_records() == s.records          # no zero-length record on this window
         assert s.bos0_inner == _BOS0[e.sub[1]]
+    # The two replacement ends' replacers (the rows' comments), as (direction, starting_idx).
+    repl = {(s.direction, s.starting_idx): (pool.get_by_id(s.ended_by_sub_id).direction,
+                                            pool.get_by_id(s.ended_by_sub_id).starting_idx)
+            for s in pool.all() if s.ended_by_sub_id is not None}
+    assert repl == {(-1, 3304): (-1, 3760), (1, 3621): (1, 4027)}
     # The two timelines from the groundtruth (contiguity + the intended gap).
     conf = sorted(((s.start_idx, s.end_idx) for s in pool.all() if CONF in s.lenses()),
                   key=lambda w: w[0])
@@ -914,6 +919,10 @@ def test_post_sweep_invariants_hold(sweep):
         if s.start_idx is not None:
             assert s.end_idx is None or s.end_idx > s.start_idx, s
             assert s.start_idx == min(r.start_idx for r in s.live_records())
+        # The sub's replacer (a replacement end only) = its winning record's, final id.
+        assert (s.ended_by_pool_idx is not None) == (s.end_reason == "same_dir_replacement"), s
+        assert s.ended_by_sub_id == (pool.get_by_pool_idx(s.ended_by_pool_idx).sub_id
+                                     if s.ended_by_pool_idx is not None else None), s
     # Half-open non-overlap per (lens, S, C, direction) over live records.
     groups: Dict[Tuple[str, int, int, int], List[TriggerRecord]] = {}
     for r in pool.all_records():

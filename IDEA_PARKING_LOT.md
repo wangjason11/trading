@@ -166,7 +166,12 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    marker & data hover labels in this session. Next session I would like to continue to debug the charts but now I
    will focus on other elements"); its conventions and the hovers it did not touch (background only, not in scope
    unless named): CHARTING_SPEC "Hover label conventions". NEXT: debugging the charts' other elements (the user brings
-   the list).
+   the list). **Second pass, the charts' other elements (2026-10-24 →):** the first edit — a replaced sub's line breaks
+   at the same point on every lens (the user: confluence sub_3 "go from 3047 to 3304 then down to 3490"; the cause:
+   the replacement break read the replacer from THIS lens's records, so a lens whose record ended after the sub drew
+   none; the user's decision A, one replacer per sub, pool-wide — also counter sub 5 → 3621 → 3760 → 3819; the
+   user's request + decision + what landed: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_replacement_break.md`;
+   figure-only, +1 PB dot per M15 chart; canonical CHARTING_SPEC "Replaced subs run through one more point").
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**

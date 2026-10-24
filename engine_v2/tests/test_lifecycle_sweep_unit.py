@@ -266,6 +266,13 @@ def _assert_sweep_invariants(pool: SubStructurePool) -> None:
     for r in pool.all_records():                     # ended_by = the ender's FINAL id
         assert r.ended_by_sub_id == (pool.get_by_pool_idx(r.ended_by_pool_idx).sub_id
                                      if r.ended_by_pool_idx is not None else None), r
+    for sub in pool.all():                           # the sub's replacer: a replacement end only
+        assert (sub.ended_by_pool_idx is not None) == (sub.end_reason == "same_dir_replacement"), sub
+        assert sub.ended_by_sub_id == (pool.get_by_pool_idx(sub.ended_by_pool_idx).sub_id
+                                       if sub.ended_by_pool_idx is not None else None), sub
+        if sub.end_idx is not None:                  # = a record that ends AT the sub's end
+            assert any(r.end_idx == sub.end_idx and r.end_reason == sub.end_reason
+                       and r.ended_by_pool_idx == sub.ended_by_pool_idx for r in sub.live_records()), sub
     groups: Dict[Tuple[str, int, int, int], list] = defaultdict(list)
     for r in pool.all_records():
         if not r.is_zero_length:
@@ -734,6 +741,54 @@ def test_same_lens_reversal_successor_ends_counter_incumbent():
     assert _window(K2) == (403, 500, "same_dir_replacement")
     assert [r.trigger_sub_sid for r in pool.records_for(CTR, 0, 0)] == [0, 1, 2, 3]
     assert _window(R) == (500, None, None)
+    assert K2.ended_by_sub_id == R.sub_id                   # the sub's replacer = its record's
+    assert K.ended_by_sub_id is None and C.ended_by_sub_id is None
+    assert result.unresolved == []
+    _assert_sweep_invariants(pool)
+
+
+def test_sub_replacer_is_the_ending_records_on_whichever_lens():
+    """The sub's `ended_by_sub_id` = the replacer of the record that ENDS the
+    sub (§17.5's winner), not of a record on another lens that runs on and is
+    replaced later — the chart's replacement break reads it on every lens (the
+    reference window, 2026-10-24: sub `2639/-1` ended at 3491 by its COUNTER
+    record while its confluence record ran to 3589). Parent +1, all in (0,0):
+    K=(−1,50) ctr FC t=83 → [83, 300] own reversal → C=(+1,280) born on the
+    COUNTER lens at 300; C's confluence record: FC t=323 → start 323;
+    K'=(−1,380) ctr subsequent t=403 → reverses at 500 → R=(+1,480) born on the
+    counter lens at 500 → replaces C's COUNTER record at 500 → the sub C ends
+    500 (max_start 323), ended by R; C's CONFLUENCE record runs on until
+    Q=(+1,580) conf subsequent t=603 replaces it — ended by Q, not the sub's
+    replacer.
+    """
+    pool = SubStructurePool()
+    tables = _tables({(0, 0): (63, None)}, {0: +1})
+    resolve = _resolver({
+        (CTR, 83): _rs(50, 83),
+        (CONF, 323): _rs(280, 323),
+        (CTR, 403): _rs(380, 403),
+        (CONF, 603): _rs(580, 603),
+    })
+    geom = _geom(pool, {(-1, 50): 300, (+1, 280): None, (-1, 380): 500, (+1, 480): None, (+1, 580): None})
+    rev = _rev_resolver({(-1, 50): 280, (-1, 380): 480})
+    result, _ = _run(
+        [
+            _trig(CTR, 0, 0, "first_counter", 83, -1),
+            _trig(CONF, 0, 0, "first_confluence", 323, +1),
+            _trig(CTR, 0, 0, "subsequent_counter", 403, -1),
+            _trig(CONF, 0, 0, "subsequent_confluence", 603, +1),
+        ],
+        pool=pool, tables=tables, resolve=resolve, geom=geom, resolve_rev=rev,
+    )
+    C, R, Q = _sub(pool, +1, 280), _sub(pool, +1, 480), _sub(pool, +1, 580)
+    rec_ctr = next(r for r in C.records if r.lens == CTR)
+    rec_conf = next(r for r in C.records if r.lens == CONF)
+    assert (rec_ctr.trigger_type, rec_ctr.start_idx) == ("reversal", 300)
+    assert _window(rec_ctr) == (300, 500, "same_dir_replacement") and rec_ctr.ended_by_sub_id == R.sub_id
+    assert _window(rec_conf) == (323, 603, "same_dir_replacement") and rec_conf.ended_by_sub_id == Q.sub_id
+    assert _window(C) == (300, 500, "same_dir_replacement")
+    assert C.ended_by_sub_id == R.sub_id != Q.sub_id
+    assert _window(R) == (500, None, None) and _window(Q) == (603, None, None)
     assert result.unresolved == []
     _assert_sweep_invariants(pool)
 

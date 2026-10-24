@@ -2691,7 +2691,9 @@ three refinements of the rules above; the CSVs are untouched by all three:**
    ended by `same_dir_replacement` breaks its final segment at the counter-move
    extreme over `(last drawn point, the REPLACING structure's anchor]`
    (`_replacement_break_point`, a PB dot; `−1` → highest high, `+1` → lowest
-   low). Bounding at the replacing anchor yields the STRUCTURAL swing, not a
+   low). The replacing structure is the SUB's, pool-wide (§17.5
+   `ended_by_sub_id`; since 2026-10-24 — before, a lens's own record, so a lens
+   whose record ended after the sub drew no break). Bounding at the replacing anchor yields the STRUCTURAL swing, not a
    later marginal overshoot (sub `3304/−1`: 3760 @ 0.57806, not the literal high
    3806 @ 0.57827), and the new segments mirror the sibling structures point for
    point (`3304/−1`'s 3621→3760 = `3621/+1`'s segment; `3621/+1`'s 3760→4000 =
@@ -3026,6 +3028,7 @@ window on every lens** it belongs to.
 | `start_idx` | the **first non-zero-length record's** `start_idx`. Set once. |
 | `end_idx` | at each candle `t`, over the sub's non-zero-length records that **exist at `t`** (`start_idx <= t` — a record does not exist before its `start_idx`): `max_start = max(start_idx)`; candidates = non-null record `end_idx`s **strictly `> max_start`**; `end_idx = min(candidates)`. Set once, frozen. Equal-idx ties between candidates break by the record end-reason priority. |
 | `end_reason` | the winning candidate's reason. |
+| `ended_by_sub_id` | the winning candidate's replacer (its record's `ended_by_pool_idx` → the final id at numbering) — set iff `end_reason = same_dir_replacement`, on whichever lens the winning record is; another lens's record of the sub may run on and be replaced by a different sub later. Not exported; the projection hands it and the replacer's anchor to the chart (`SidRecord.meta["ended_by_sub_id" / "ended_by_starting_idx"]` — §16.5 item 7's break, the same on every lens; 2026-10-24). |
 | `relative_dir_segments` | the step function of §17.3. |
 | lenses | union over the sub's non-zero-length records' `lens`. A sub with **no** live record has no lens: it is logged on stdout (`[pool] pool#… has no live record — no sub_id, logged, not rendered`) and **not rendered**; being on no lens, it appears in no per-lens `_subs.csv` (its zero-length records do appear in the lens `_triggers.csv`). |
 | `natural_reversal_idx`, `bos0_inner` | from the build (§17.8). |

@@ -1681,7 +1681,9 @@ out-of-bounds `start_idx`.
 > untouched and still draws every sid), and a sub ended by
 > `same_dir_replacement` breaks its final segment at
 > `_replacement_break_point` (the counter-move extreme up to the REPLACING
-> structure's anchor — the structural swing, not the literal extreme).
+> structure's anchor — the structural swing, not the literal extreme; the
+> replacer is the SUB's, pool-wide — `SidRecord.meta["ended_by_starting_idx"]`,
+> never a lens's own records, 2026-10-24).
 
 **Rule:** §13.5.c.iii implements spec §16.5's "most recent sid only per
 candle" rule for sid-tied display elements (CTS dots, BOS markers, swing

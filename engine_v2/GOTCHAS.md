@@ -536,7 +536,27 @@ hover edits.
 
 **Rule:** a change to a hover's text or customdata layout re-runs `chart_census.py BASE CUR` on both M15 charts as
 part of its figure-only check (a crash or a `?` key is the tool, not the engine), and grep
-`engine_v2/debug/` + `plans/*/` tools for the old strings it removes.
+`engine_v2/debug/` + `plans/*/` tools for the old strings it removes. Redirecting its output to a file on Windows
+needs `PYTHONIOENCODING=utf-8` (a `→` trace name, e.g. `M15 PB→BOS`, raises `UnicodeEncodeError` in cp1252 —
+the tool, not the figure).
+
+## A sub's end is pool-wide — a lens's own records can disagree with it (2026-10-24)
+
+**Problem:** a unique sub ends at the §17.5 winner over ALL its records, on any lens, but each M15 chart only
+receives its own lens's TriggerRecords (`attrs["triggers"]`). The replacement break looked up the replacer in THIS
+lens's records, the one ending at the sub's end: confluence sub `2639/−1` ended at 3491 through its COUNTER record
+(replaced by `3304/−1`), while its confluence record ran on to 3589 — no confluence record ends at 3491, so the
+confluence chart drew 3047 → 3490 straight while counter broke at 3304. The mirror case: counter sub `3304/−1` is
+replaced by the confluence-only `3760/−1` — no counter record names any replacer. Both appeared only after PLAN_R step
+2 created subs whose records end on different lenses.
+
+**Fix:** the sweep keeps the winning record's replacer on the sub (`PooledStructure.ended_by_sub_id`), the projection
+carries it and its anchor to `SidRecord.meta`, and the chart reads that (CHARTING_SPEC "Replaced subs run through one
+more point").
+
+**Rule:** a fact about the SUB (its window, end reason, replacer) is read from the sub (`SidRecord` / the pool),
+never re-derived from one lens's records — those are per-lens instances with their own ends; a lens record's
+`end_idx` equals the sub's end only on the lens that ended it.
 
 ## Plotly Hover on Vertical Lines Requires Multiple Data Points
 

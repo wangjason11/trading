@@ -294,7 +294,10 @@ class PooledStructure:
     Lifecycle (real-time, set once by the sweep): `start_idx` = the first
     non-zero-length record's `start_idx`; `end_idx` per the §17.5 rule
     (`min` of record ends strictly `> max_start` over the records that EXIST
-    at `t`); `relative_dir_segments` = the §17.3 step function.
+    at `t`); `end_reason` and `ended_by_pool_idx` (sweep-time) →
+    `ended_by_sub_id` (final) = the WINNING record's — the replacer of a
+    `same_dir_replacement` end, on whichever lens that record is (None for every
+    other reason); `relative_dir_segments` = the §17.3 step function.
     """
     key: StructureKey
     pool_idx: int
@@ -312,7 +315,9 @@ class PooledStructure:
     start_idx: Optional[int] = None
     end_idx: Optional[int] = None
     end_reason: Optional[str] = None
+    ended_by_sub_id: Optional[int] = None     # final id of the replacer (set at numbering)
     relative_dir_segments: List[Tuple[int, str]] = field(default_factory=list)
+    ended_by_pool_idx: Optional[int] = None   # the replacer's pool_idx — sweep-time
 
     # --- convenience accessors ---
     @property
@@ -418,9 +423,10 @@ class SubStructurePool:
         """Give every sub its final `sub_id` (PLAN_I R4-2 / R4-4, §9.3 D4): the
         subs that STARTED (`start_idx` set), sorted by `(start_idx, pool_idx)`,
         get 0, 1, …; a never-started sub gets None. Every record takes its sub's
-        id; `ended_by_sub_id` = the final id of the sub `ended_by_pool_idx`
-        names (None if that sub never started). Runs ONCE, after the sweep's
-        last moment. Returns `[(pool_idx, sub_id)]` in `pool_idx` order."""
+        id; `ended_by_sub_id` (on every record AND on every sub) = the final id
+        of the sub `ended_by_pool_idx` names (None if that sub never started).
+        Runs ONCE, after the sweep's last moment. Returns `[(pool_idx, sub_id)]`
+        in `pool_idx` order."""
         assert not self._numbered, "[pool] number_subs_by_start ran twice"
         started = sorted(
             (s for s in self._by_key.values() if s.start_idx is not None),
@@ -433,6 +439,8 @@ class SubStructurePool:
         for s in self._by_key.values():
             if s.start_idx is None:
                 s.sub_id = None
+            s.ended_by_sub_id = (final_by_pool_idx.get(s.ended_by_pool_idx)
+                                 if s.ended_by_pool_idx is not None else None)
             for r in s.records:
                 r.sub_id = s.sub_id
                 r.ended_by_sub_id = (final_by_pool_idx.get(r.ended_by_pool_idx)
