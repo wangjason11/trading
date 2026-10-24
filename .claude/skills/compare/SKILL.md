@@ -656,7 +656,8 @@ root). Skip grep 23. S_fib_hover `20261023_191547_563f5f8` (source `563f5f8`, sa
 **The wave candle hover (2026-10-23, SESSION ORDER item 5's fourth chart edit — the user's spec
 `plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md`) — FIGURE-ONLY:** 27 / 27 CSVs md5-equal to
 S_fib_hover; traces and layouts unchanged (81, 153, 301); the hover changes on the 112 wave-candle traces only
-(UNNAMED traces, so `fig_scope.py`'s name regex cannot select them — match the hovertemplate's `<b>Wave Candle</b>`):
+(UNNAMED traces, so `fig_scope.py`'s name regex cannot select them — match the hovertemplate's `<b>Wave Candle</b>`;
+`plans/qa_chart_edits_inputs/wc_scope.py BASE CUR` does):
 H1 11, counter 22 sub + 11 H1 overlay, confluence 57 + 11. A save-format boundary for hover diffs only (`cycle_id=`
 after ` | `, the structure's window and `struct_direction` added, `volume=`, the sub's `first record:` line before
 the role). **`debug/chart_census.py` was broken across the four hover edits and is fixed here** (the dot hover keyed

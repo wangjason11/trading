@@ -12,6 +12,30 @@ Styles: `style_registry.py`
 - Shapes don't hover, so hover interactions use transparent helper traces.
 - **All formatting centralized in `style_registry.py`** for easy adjustments.
 
+## Hover label conventions (the user's hover-label pass, SESSION ORDER item 5, 2026-10-22 → 24)
+
+Set by the user's five hover specs (dots, KL / POI zones, fibs, wave candles, proximity trigger markers — each
+element's format is its section below + its spec in `plans/qa_chart_edits_inputs/user_spec_2026102*_*.md`); the
+verbatim reasons: memory `feedback_naming_discussions.md`. A new or edited hover follows them:
+- Every value is labelled `name=value` (lowercase snake_case, e.g. `ic_reason=` although a spec wrote `IC_reason`);
+  fields sharing a line are split by ` | `; a missing value is `name=NA (<why>)` — never a bare `-` / symbol.
+- The first line is the timeframe: `TF=1H` (an H1 element, also on the M15 charts' H1 overlay), `TF=15M` (an M15
+  element); `TF=1H>>15M` on the proximity marker's M15 copy (an H1 trigger drawn on its M15 candle).
+- The candle index is `idx=` on the element's own timeframe; an M15 element adds `idx_1H=`.
+- Identity: `sid=S | cycle_id=C` (main); a sub `sub_id=X | cycle_id=Y` + `first record: lens=… | parent_sid=P |
+  parent_cycle_id=C`; a marker that IS the parent's (the proximity marker's M15 copy) `parent_sid=… |
+  parent_cycle_id=…` with no prefix.
+- Windows `[start, end] | end_reason=…` (`struct_window=`, `sub_window=`, `lifecycle=`, `open` while open);
+  `struct_direction=` on the main KL / POI / fib / wave-candle / proximity hovers.
+- A hover never repeats a value it already shows (accepted exceptions: the sub dot hover's `first record:` line, a KL
+  zone's lifecycle start = its `confirmed_idx`), and shows its OWN element's fields — unless the owning element is
+  absent (a fib with no IC keeps `ic_idx=NA (<reason>)`).
+- Not yet on these conventions (the pass did not touch them — `plans/qa_chart_edits_inputs/hover_inventory.py`):
+  the OHLC / imbalance candle, volume / Vol EMA (`Volume:` / `EMA(20):`), the range top / bottom lines, the reversal
+  candidate, the state / `bo` labels (`sid` and `struct_direction` on separate lines, no `cycle_id`), the
+  structure-pattern markers (no `TF=` on H1); the Prev BOS line kept as is (the user, 2026-10-24: "no changes needed
+  for Prev BOS line hover").
+
 ---
 
 ## Style Registry

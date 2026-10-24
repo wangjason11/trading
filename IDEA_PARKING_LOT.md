@@ -162,7 +162,11 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    `trigger_price` / `zone_inner` / `sub_trigger` added, `zone_kind` removed, the M15 copy keyed by its parent; source
    `fb0189b`, save S_prox_hover `20261024_105742_fb0189b` = `LATEST_<branch>`). The
    M15 Prev BOS line hover stays as is (the user, 2026-10-24: "no changes needed for Prev BOS line hover"); WVMI back
-   on the chart TABLED (register §G). NEXT: the user's further specs.
+   on the chart TABLED (register §G). **The hover-label pass CLOSED 2026-10-24** (the user: "We've focused mostly on
+   marker & data hover labels in this session. Next session I would like to continue to debug the charts but now I
+   will focus on other elements"); its conventions and the hovers it did not touch (background only, not in scope
+   unless named): CHARTING_SPEC "Hover label conventions". NEXT: debugging the charts' other elements (the user brings
+   the list).
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**

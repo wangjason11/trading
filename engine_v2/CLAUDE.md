@@ -35,8 +35,9 @@ questions and edits (done 2026-10-13: PLAN_O + PLAN_P), the opposite-direction (
 0a–3 landed 2026-10-20 — sub zones join the proximity reference ladders, the proximity reference gate), the
 revisit of the IC identification logic (done 2026-10-21: PLAN_S — the 65 % arming threshold, the two fill strokes on
 separate candles, IC Step 1B the prior-imbalance preference), now chart updates & edits (the user's list, 2026-10-21;
-in progress — the BOS / CTS dot hover landed 2026-10-22, the KL / POI zone, Fib zone and wave candle hovers 2026-10-23,
-the zone proximity trigger marker hover 2026-10-24),
+in progress — the hover-label pass closed 2026-10-24: the BOS / CTS dot hover landed 2026-10-22, the KL / POI zone,
+Fib zone and wave candle hovers 2026-10-23, the zone proximity trigger marker hover 2026-10-24, conventions in
+CHARTING_SPEC "Hover label conventions"; next the charts' other elements),
 then item 3, zone size adjustments),
 Part 2 entry decisions, Part 3 other decisions.
 

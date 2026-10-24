@@ -57,7 +57,7 @@ KL / POI zone hover (`user_spec_20261023_zone_hover.md`, `56bb20d`) and the Fib 
   simplifications": "Full WVMI momentum markers deferred (revisit later)"; PART4 §16.5's WVMI row: "The planned design:
   locked records show final values via hover; in-progress records re-render whenever `update_temporary_lp` shifts the
   temp LP". NOT in the register until 2026-10-23 (a line added to §G).
-- Measured on S_fib_hover (`wvmi_cover.py`, scratchpad): WVMI records exist only for proximity-triggered cycles on H1
+- Measured on S_fib_hover (`wvmi_cover.py`, this folder): WVMI records exist only for proximity-triggered cycles on H1
   (3: sid 0 c1, sid 1 c1 collapsed, sid 1 c2) and per sub cycle on M15 (counter 7, confluence 18). WVMI's `lp_idx` is
   its own TEMPORARY last pullback, not the drawn LP line: on H1 neither non-collapsed record's LP (896, 1055) is a drawn
   line, so the old idx lookup would show pullback momentum on no H1 line; on M15 some LPs coincide with a drawn line,
@@ -103,7 +103,7 @@ GOTCHAS "A hover-format change breaks the chart-reading debug tools silently"). 
 §10; WAVE_CANDLES_SPEC "Rendering simplifications". Tests `test_wave_candles.py` (the zone line re-pinned, the
 call-site pin counts both builders, the main + sub hovers in full, `struct_direction_by_sid`).
 Prediction = measured vs S_fib_hover: 27 / 27 CSVs md5-equal; traces / layouts unchanged; the hover changed on the
-112 wave-candle traces only (H1 11; counter 22 + 11; confluence 57 + 11 — `wc_scope.py`, scratchpad: WAVE SCOPE OK,
+112 wave-candle traces only (H1 11; counter 22 + 11; confluence 57 + 11 — `wc_scope.py`, this folder: WAVE SCOPE OK,
 no unchanged wave-candle hover); every hover in the spec's order; census S_S3 → this run: 0 deltas on both lenses,
 the M15 wave candles keyed per sub. Skip grep 23, fetch 4228. Suite 1966 (1963 + 3).
 The user's chart look (2026-10-23, verbatim): "charts look good".
