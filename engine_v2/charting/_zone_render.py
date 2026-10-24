@@ -17,6 +17,8 @@ deliberately knows nothing about Plotly so it stays unit-testable.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 from typing import Any, Callable, List, Optional, Sequence, Tuple
 
 from engine_v2.charting.style_registry import STYLE
@@ -528,6 +530,54 @@ def wave_candle_hovertemplate(tf: str, idx_text: str, zone_role_lines: Sequence[
              *([] if first_record is None else [first_record]),
              role_line, window_line, f"volume={float(volume):.0f}", f"struct_direction={int(struct_direction)}"]
     return "<br>".join(lines) + "<extra></extra>"
+
+
+# ---------------------------------------------------------------------------
+# Zone proximity trigger marker hover (the user's spec 2026-10-23 / 24,
+# plans/qa_chart_edits_inputs/user_spec_20261023_proximity_marker_hover.md)
+# ---------------------------------------------------------------------------
+
+#: A proximity trigger the detectors turned into no sub trigger (e.g. a cycle whose first trigger is opp_sd).
+HOVER_NO_SUB_TRIGGER = "NA (no sub trigger)"
+
+
+def proximity_sub_trigger_types(h1_df: Any) -> dict:
+    """`{(sid, cycle_id, H1 trigger candle): sub trigger type}` — the sub trigger each H1 zone-proximity trigger starts,
+    read from the detectors' FINAL output on the H1 frame's attrs (the sweep's lists replace the batch ones, PART4 §17
+    "The proximity overlay"): `subsequent_confluence` / `subsequent_counter` (`attrs["subsequent_*_triggers"]`,
+    `trigger_event_idx`) and `first_counter` (UC1 over the main WVMI records — `detect_uc1_triggers`, its
+    `meta["trigger_event_idx"]` = the record's first sd trigger). One type per trigger (asserted)."""
+    from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
+
+    attrs = h1_df.attrs
+    out: dict = {}
+
+    def put(sid: int, cyc: int, idx: int, kind: str) -> None:
+        key = (int(sid), int(cyc), int(idx))
+        assert out.setdefault(key, kind) == kind, f"[chart] proximity trigger {key}: {out[key]} and {kind}"
+
+    for kind in ("subsequent_confluence", "subsequent_counter"):
+        for t in attrs.get(f"{kind}_triggers") or []:
+            put(t.parent_sid, t.parent_cycle_id, t.trigger_event_idx, kind)
+    wvmi = attrs.get("wvmi") or []
+    if wvmi:
+        with contextlib.redirect_stdout(io.StringIO()):   # the detector logs each trigger; the replay already did
+            uc1 = detect_uc1_triggers(attrs.get("structure_events") or [], h1_df, wvmi, attrs.get("kl_zones") or [])
+        for t in uc1:
+            put(t.parent_sid, t.parent_cycle_id, t.meta["trigger_event_idx"], t.use_case)
+    return out
+
+
+def proximity_sub_trigger_text(trig: Any, types: dict, collapsed: set) -> str:
+    """The marker hover's `sub_trigger` line value (both charts): the type (`proximity_sub_trigger_types`) + ` (not
+    built: collapsed parent cycle)` when the trigger's parent cycle is COLLAPSED (`collapsed_cycles` — the pool builds
+    no sub there: the record is unresolved, `collapsed_parent_cycle`; the user's decision 3); `HOVER_NO_SUB_TRIGGER`
+    when the detectors started none."""
+    sid, cyc = int(trig.structure_id), int(trig.cycle_id)
+    kind = types.get((sid, cyc, int(trig.idx)))
+    if kind is None:
+        return HOVER_NO_SUB_TRIGGER
+    return f"{kind} (not built: collapsed parent cycle)" if (sid, cyc) in collapsed else kind
 
 
 # ---------------------------------------------------------------------------

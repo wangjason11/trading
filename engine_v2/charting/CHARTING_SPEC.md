@@ -377,19 +377,37 @@ One × marker per H1 zone-proximity trigger (`attrs["zone_proximity_triggers"]`,
 (`export_plotly`); the M15 charts on the M15 candle holding the trigger's wick (`export_m15_chart.
 _render_proximity_triggers_overlay`, the price-extreme mapper `map_candle_to_lower_tf`). Every trigger is drawn — a
 collapsed cycle's included (no lifecycle filter, like the scan itself; the zones it fired against are hidden).
-Hover (`customdata`): TF, the candle index (M15: `idx_15M` + `idx_1H`), sid, struct_direction, cycle_id, `type` =
-`<sd|opp_sd>:<BOS|POI|CTS>` on a parent zone — on a proximity-overlay zone (PLAN_R step 2) it names the source:
-`<sd|opp_sd>: sub_<id> c<cycle> <BOS|POI> <inner>`, e.g. `opp_sd: sub_3 c2 POI 0.58096` (one helper for both charts,
-`zone_proximity.proximity_trigger_type_label`) — `distance_pips` (the wick to the inner bound — positive = stopped
-short, negative = crossed), `zone_kind`, and `zone_confirmed_idx`. It branches on the SOURCE first: a sub zone's is
-the H1 candle it counts from (`meta["prox_ref_usable_idx"]`; the parent's (sid, cycle, kind) lookups would mislabel
-it — the POI one silently, with the parent sd POI's floor). On a parent zone it depends on the kind:
-- **BOS / CTS:** the KL zone's `confirmed_idx` — lifecycle-CLAMPED (a collapsed cycle's shows the structure's
-  lifecycle start, AFTER its own trigger: 902 on structure 1 cycle 1's 820 / 871 markers on the reference window);
-- **POI:** `poi_unclamped_activation_floor_idx` — the POI's activation floor without the lifecycle-start term
-  (PLAN_Q, 2026-10-14; before it the start of the active stretch holding the trigger, −1 outside one).
-The two differ on a collapsed cycle (S_O's structure 1 cycle 1: the BOS zone 902, the POI 748) — register §G
-"Overall chart revamp" item (2).
+Hover (`customdata`; the user's spec 2026-10-23 / 24 — `plans/qa_chart_edits_inputs/user_spec_20261023_proximity_
+marker_hover.md`): the H1 chart `TF=1H` / `idx` / `sid=<S> | cycle_id=<C>` / `type` / `trigger_price` / `zone_inner` /
+`distance_pips` / `zone_confirmed_idx` / `sub_trigger` / `struct_direction`; the M15 charts `TF=1H>>15M` / `idx` (the
+M15 candle) / `idx_1H` / `parent_sid=<S> | parent_cycle_id=<C>` (no `first record:` prefix — the marker IS the H1
+trigger; the user's decision 1) / `parent_direction` / the same `type` … `sub_trigger` — no `struct_direction` (decision
+2). E.g. H1 748: `sid=0 | cycle_id=1` / `type=sd:POI` / `trigger_price=0.57764` / `zone_inner=0.57712` /
+`distance_pips=5.2` / `zone_confirmed_idx=652` / `sub_trigger=first_counter` / `struct_direction=1`.
+- `type` = `<sd|opp_sd>:<BOS|POI|CTS>` on a parent zone — on a proximity-overlay zone (PLAN_R step 2) it names the
+  source: `<sd|opp_sd>: sub_<id> c<cycle> <BOS|POI>`, e.g. `opp_sd: sub_3 c2 POI` (its inner is the `zone_inner=` line;
+  `… POI 0.58096` until 2026-10-24) — one helper for both charts, `zone_proximity.proximity_trigger_type_label`.
+- `trigger_price` = the H1 trigger candle's wick — its low when the price approaches the inner from above (an sd
+  trigger of a buy structure, an opp_sd of a sell; `zone_proximity.proximity_approach_from_above`), else its high —
+  and `distance_pips` = that wick to `zone_inner` (`trigger_inner`), rounded to 0.1, signed: positive = stopped short,
+  negative = crossed into the zone (`proximity_trigger_price_and_distance`, both charts; the M15 copy shows the H1
+  values).
+- `sub_trigger` = the sub trigger the proximity trigger starts (`_zone_render.proximity_sub_trigger_types`, from the
+  detectors' final lists on the H1 frame): a cycle's first trigger, sd → `first_counter` (UC1 over the main WVMI
+  record); an opp_sd after an sd → `subsequent_confluence`; a later sd → `subsequent_counter`; + ` (not built:
+  collapsed parent cycle)` on a collapsed parent cycle (the pool builds no sub there — its record is unresolved,
+  `collapsed_parent_cycle`; decision 3), `NA (no sub trigger)` when none. Until 2026-10-24: `TF=H1`, `sid` /
+  `struct_direction` / `cycle_id` on three lines, `zone_kind`, no trigger price / inner / sub trigger (M15: `idx_15M`,
+  `parent struct_direction`).
+- `zone_confirmed_idx` branches on the SOURCE first: a sub zone's is the H1 candle it counts from
+  (`meta["prox_ref_usable_idx"]`; the parent's (sid, cycle, kind) lookups would mislabel it — the POI one silently,
+  with the parent sd POI's floor). On a parent zone it depends on the kind:
+  - **BOS / CTS:** the KL zone's `confirmed_idx` — lifecycle-CLAMPED (a collapsed cycle's shows the structure's
+    lifecycle start, AFTER its own trigger: 902 on structure 1 cycle 1's 820 / 871 markers on the reference window);
+  - **POI:** `poi_unclamped_activation_floor_idx` — the POI's activation floor without the lifecycle-start term
+    (PLAN_Q, 2026-10-14; before it the start of the active stretch holding the trigger, −1 outside one).
+  The two differ on a collapsed cycle (S_O's structure 1 cycle 1: the BOS zone 902, the POI 748) — register §G
+  "Overall chart revamp" item (2).
 
 ---
 

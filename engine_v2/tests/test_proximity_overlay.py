@@ -515,7 +515,7 @@ def test_the_hover_type_line_names_a_sub_source_and_its_zone_confirmed_idx_is_it
     from engine_v2.zones.zone_proximity import proximity_trigger_sub_usable_idx, proximity_trigger_type_label
     sub_t = _zpt(820, "opp_sd", "POI", 0.58096, source="sub", cycle=2, usable=772)
     sub_t.meta["prox_ref_sub_id"] = 3
-    assert proximity_trigger_type_label(sub_t) == "opp_sd: sub_3 c2 POI 0.58096"
+    assert proximity_trigger_type_label(sub_t) == "opp_sd: sub_3 c2 POI"      # the inner: the zone_inner= line
     assert proximity_trigger_sub_usable_idx(sub_t) == 772
     par = _zpt(748, "sd", "POI", 0.57712)
     assert proximity_trigger_type_label(par) == "sd:POI" and proximity_trigger_sub_usable_idx(par) is None
@@ -561,7 +561,7 @@ def test_both_charts_branch_on_the_source_before_the_zone_kind(tmp_path, monkeyp
         export_chart_plotly(title="t", registry=reg, path_id="H1", out_dir=tmp_path, cfg=cfg)
     fig, = figs
     row, = _marker_rows(fig)
-    assert (row[5], row[8]) == ("opp_sd: sub_3 c2 POI 0.61234", usable)
+    assert (row[3], row[5], row[7]) == ("opp_sd: sub_3 c2 POI", "0.61234", usable)     # type, zone_inner, conf
 
     m15 = pd.DataFrame({"time": pd.date_range(pd.to_datetime(df["time"].iloc[0], utc=True), periods=4 * len(df),
                                               freq="15min")})
@@ -570,7 +570,7 @@ def test_both_charts_branch_on_the_source_before_the_zone_kind(tmp_path, monkeyp
     with contextlib.redirect_stdout(io.StringIO()):
         _render_proximity_triggers_overlay(fig, m15, df, pd.Series(0.0, index=m15.index))
     row, = _marker_rows(fig)
-    assert (row[5], row[8]) == ("opp_sd: sub_3 c2 POI 0.61234", usable)
+    assert (row[5], row[7], row[9]) == ("opp_sd: sub_3 c2 POI", "0.61234", usable)
 
 
 # ---------- the driver (`_run_multi_tf_dual`) wiring: the call sites (PLAN_R §5.2) ----------

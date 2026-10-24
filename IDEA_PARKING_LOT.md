@@ -156,9 +156,12 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    candle hover, H1 + M15 sub + the H1 overlay (the user's spec + decisions + what landed:
    `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md`; figure-only; the window +
    `struct_direction` added, `volume=`; `debug/chart_census.py` fixed — the hover edits had broken it; source `18711dc`, save S_wave_hover
-   `20261023_194643_18711dc` = `LATEST_<branch>`). NEXT: the
-   user's further specs — the M15 Prev BOS line hover still carries the older `first record parent_sid=…
-   parent_cycle=…` string; WVMI back on the chart = register §G.
+   `20261023_194643_18711dc`). The fifth edit LANDED 2026-10-24 — the zone proximity trigger marker hover, H1 + the
+   M15 charts' H1 overlay (the user's spec + decisions + what landed:
+   `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_proximity_marker_hover.md`; figure-only;
+   `trigger_price` / `zone_inner` / `sub_trigger` added, `zone_kind` removed, the M15 copy keyed by its parent). The
+   M15 Prev BOS line hover stays as is (the user, 2026-10-24: "no changes needed for Prev BOS line hover"); WVMI back
+   on the chart TABLED (register §G). NEXT: the user's further specs.
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -469,7 +472,8 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
   `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_fib_hover.md`.
 - **WVMI back on the chart (the wave-candle hover)** — deferred 2026-05-28 (`e64556a`, WAVE_CANDLES_SPEC "Rendering
   simplifications": "Full WVMI momentum markers deferred (revisit later)"; logged here 2026-10-23, the user asking
-  about it with the wave-candle hover spec). Until then every wave-candle hover carried `Weighted vol` and, on an LB /
+  about it with the wave-candle hover spec; TABLED by the user the same day: "Let's table WVMI back on chart for
+  now"). Until then every wave-candle hover carried `Weighted vol` and, on an LB /
   LP line, `<Buy|Sell> momentum` + the paired weighted volumes, looked up by candle index. Open design: WVMI's `lp_idx`
   is its own temporary last pullback, not the drawn LP line (on H1 neither live record's LP is drawn), and an
   index-only lookup can hit another sub's or role's line; PART4 §16.5's WVMI row has the planned design (locked

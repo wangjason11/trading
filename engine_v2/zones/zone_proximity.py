@@ -360,13 +360,33 @@ class ProximityRung:
 
 def proximity_trigger_type_label(trig: ZoneProximityTrigger) -> str:
     """The trigger hover's type line (both charts): `"<direction>:<kind>"` on a parent zone (unchanged); on a
-    proximity-overlay zone it names the source (PLAN_R §5.2, round 7: "Sounds good"), e.g. "opp_sd: sub_3 c2 POI
-    0.58096"."""
+    proximity-overlay zone it names the source (PLAN_R §5.2, round 7: "Sounds good"), e.g. "opp_sd: sub_3 c2 POI" —
+    its inner is the hover's own `zone_inner=` line since the user's marker spec (2026-10-24; "… POI 0.58096" until
+    then)."""
     meta = trig.meta or {}
     if meta.get("prox_ref_source") == "sub":
-        return (f"{trig.direction}: sub_{meta['prox_ref_sub_id']} c{meta['prox_ref_cycle']} {trig.zone_kind} "
-                f"{float(trig.trigger_inner):.5f}")
+        return f"{trig.direction}: sub_{meta['prox_ref_sub_id']} c{meta['prox_ref_cycle']} {trig.zone_kind}"
     return f"{trig.direction}:{trig.zone_kind}"
+
+
+def proximity_approach_from_above(trig: ZoneProximityTrigger, sd: int) -> bool:
+    """The side the trigger's price came from: ABOVE the inner (the candle's LOW is the wick) on an sd trigger of a
+    buy structure or an opp_sd trigger of a sell one; else from BELOW (the HIGH). Both chart markers and the M15
+    marker's price-extreme mapping read it."""
+    return (sd == 1 and trig.direction == "sd") or (sd == -1 and trig.direction == "opp_sd")
+
+
+def proximity_trigger_price_and_distance(trig: ZoneProximityTrigger, sd: int, high: float,
+                                         low: float) -> Tuple[float, float]:
+    """The marker hover's `trigger_price` — the trigger candle's wick (`proximity_approach_from_above`: its low, else
+    its high) — and `distance_pips` = the wick to `trigger_inner` in pips, rounded to 0.1, SIGNED: positive = the wick
+    stopped short of the inner, negative = it crossed into the zone (the user's marker spec 2026-10-24: "the distance
+    between trigger_price and zone_inner")."""
+    if proximity_approach_from_above(trig, sd):
+        price, gap = float(low), float(low) - float(trig.trigger_inner)
+    else:
+        price, gap = float(high), float(trig.trigger_inner) - float(high)
+    return price, round(gap / float(trig.pip_size), 1)
 
 
 def proximity_trigger_sub_usable_idx(trig: ZoneProximityTrigger) -> Optional[int]:

@@ -31,13 +31,16 @@ from engine_v2.charting._zone_render import (
     main_zone_id_line,
     poi_zone_customdata,
     poi_zone_hovertemplate,
+    proximity_sub_trigger_text,
+    proximity_sub_trigger_types,
     struct_direction_by_sid,
     wave_candle_hovertemplate,
 )
 from engine_v2.structure.structure_engine import _pip_size_from_pair
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
 from engine_v2.zones.zone_proximity import (
-    poi_unclamped_activation_floor_idx, proximity_trigger_sub_usable_idx, proximity_trigger_type_label,
+    poi_unclamped_activation_floor_idx, proximity_trigger_price_and_distance,
+    proximity_trigger_sub_usable_idx, proximity_trigger_type_label,
 )
 from engine_v2.common.types import PatternStatus
 from engine_v2.multitf.registry import StructureRegistry
@@ -2040,6 +2043,10 @@ def export_chart_plotly(
                 continue
             poi_zones_by_cycle.setdefault((int(sid), int(cyc)), []).append(pz)
 
+        # The sub trigger each one starts + the collapsed parent cycles (no sub built there).
+        zpt_sub_types = proximity_sub_trigger_types(dfx)
+        zpt_collapsed = collapsed_cycles(dfx.attrs.get("kl_zones", []))
+
         def _poi_activation_floor_idx(sid: int, cyc: int, inner: float, sd: int) -> int:
             """Find the POI matching `inner`; return its unclamped activation
             floor (`poi_unclamped_activation_floor_idx` — PLAN_Q: the scan reads
@@ -2077,24 +2084,13 @@ def export_chart_plotly(
                     y = float(row[COL_L]) - wo * offset_mult
 
                 # type label: "sd:<zone_kind>" / "opp_sd:CTS" on a parent zone; a sub zone names its source
-                # ("opp_sd: sub_3 c2 POI 0.58096", PLAN_R §5.2)
+                # ("opp_sd: sub_3 c2 POI", PLAN_R §5.2)
                 type_label = proximity_trigger_type_label(trig)
 
-                # Actual wick-to-inner distance in pips that fired the trigger.
-                # Approach direction depends on (sd, trigger.direction):
-                #   approach from ABOVE -> wick = candle.low (sd-in-up, opp_sd-in-down)
-                #   approach from BELOW -> wick = candle.high (sd-in-down, opp_sd-in-up)
-                # Signed: positive = wick stopped short of inner (still outside
-                # zone); negative = wick crossed inner into the zone.
-                approach_from_above = (
-                    (sd == 1 and trig.direction == "sd")
-                    or (sd == -1 and trig.direction == "opp_sd")
-                )
-                if approach_from_above:
-                    gap = float(row[COL_L]) - float(trig.trigger_inner)
-                else:
-                    gap = float(trig.trigger_inner) - float(row[COL_H])
-                dist_pips = round(gap / float(trig.pip_size), 1)
+                # The wick that fired the trigger and its signed distance to the inner (positive = stopped short,
+                # negative = crossed into the zone).
+                trigger_price, dist_pips = proximity_trigger_price_and_distance(
+                    trig, sd, float(row[COL_H]), float(row[COL_L]))
 
                 # Triggered zone's confirmed idx — the SOURCE first (PLAN_R §5.2): a sub zone's is the H1 candle
                 # it counts from; the (sid, cycle, kind) lookups below are the PARENT's zones and would mislabel it
@@ -2112,18 +2108,20 @@ def export_chart_plotly(
                         -1,
                     )
 
+                assert trig.timeframe == "H1", f"[chart] an H1 proximity trigger with timeframe {trig.timeframe!r}"
                 x_vals.append(row[COL_TIME])
                 y_vals.append(y)
                 customdata.append((
-                    str(trig.timeframe),
                     idx,
                     int(trig.structure_id),
-                    int(sd),
                     int(trig.cycle_id),
                     type_label,
+                    f"{trigger_price:.5f}",
+                    f"{float(trig.trigger_inner):.5f}",
                     dist_pips,
-                    str(trig.zone_kind),
                     int(z_conf),
+                    proximity_sub_trigger_text(trig, zpt_sub_types, zpt_collapsed),
+                    int(sd),
                 ))
 
         if x_vals:
@@ -2134,16 +2132,18 @@ def export_chart_plotly(
                 name="zone_proximity:trigger",
                 marker=zpt_marker,
                 customdata=customdata,
+                # The user's spec 2026-10-23 / 24 (CHARTING_SPEC §12).
                 hovertemplate=(
-                    "TF=%{customdata[0]}<br>"
-                    "idx=%{customdata[1]}<br>"
-                    "sid=%{customdata[2]}<br>"
-                    "struct_direction=%{customdata[3]}<br>"
-                    "cycle_id=%{customdata[4]}<br>"
-                    "type=%{customdata[5]}<br>"
+                    "TF=1H<br>"
+                    "idx=%{customdata[0]}<br>"
+                    "sid=%{customdata[1]} | cycle_id=%{customdata[2]}<br>"
+                    "type=%{customdata[3]}<br>"
+                    "trigger_price=%{customdata[4]}<br>"
+                    "zone_inner=%{customdata[5]}<br>"
                     "distance_pips=%{customdata[6]}<br>"
-                    "zone_kind=%{customdata[7]}<br>"
-                    "zone_confirmed_idx=%{customdata[8]}"
+                    "zone_confirmed_idx=%{customdata[7]}<br>"
+                    "sub_trigger=%{customdata[8]}<br>"
+                    "struct_direction=%{customdata[9]}"
                     "<extra></extra>"
                 ),
             ))

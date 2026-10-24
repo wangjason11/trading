@@ -84,6 +84,8 @@ from engine_v2.charting._zone_render import (
     main_zone_id_line,
     poi_zone_customdata,
     poi_zone_hovertemplate,
+    proximity_sub_trigger_text,
+    proximity_sub_trigger_types,
     struct_direction_by_sid,
     wave_candle_hovertemplate,
     select_subordinate_tf_tier,
@@ -91,7 +93,8 @@ from engine_v2.charting._zone_render import (
 from engine_v2.structure.structure_engine import _pip_size_from_pair
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
 from engine_v2.zones.zone_proximity import (
-    poi_unclamped_activation_floor_idx, proximity_trigger_sub_usable_idx, proximity_trigger_type_label,
+    poi_unclamped_activation_floor_idx, proximity_approach_from_above, proximity_trigger_price_and_distance,
+    proximity_trigger_sub_usable_idx, proximity_trigger_type_label,
 )
 from engine_v2.zones.structure_lifecycle import (
     compute_reversal_idx_by_sid,
@@ -2674,6 +2677,10 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
             continue
         poi_zones_by_cycle.setdefault((int(sid), int(cyc)), []).append(pz)
 
+    # The sub trigger each one starts + the collapsed parent cycles (no sub built there) — the H1 chart's.
+    zpt_sub_types = proximity_sub_trigger_types(h1_df)
+    zpt_collapsed = collapsed_cycles(h1_df.attrs.get("kl_zones", []))
+
     def _poi_activation_floor_idx(sid: int, cyc: int, inner: float, sd: int) -> int:
         # The POI's unclamped activation floor (PLAN_Q: the scan reads a POI like a KL zone).
         cands = poi_zones_by_cycle.get((sid, cyc), [])
@@ -2708,10 +2715,7 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
             h1_time = pd.to_datetime(h1_df.loc[h1_idx, COL_TIME], utc=True)
             h1_row = h1_df.loc[h1_idx]
 
-            approach_from_above = (
-                (sd == 1 and trig.direction == "sd")
-                or (sd == -1 and trig.direction == "opp_sd")
-            )
+            approach_from_above = proximity_approach_from_above(trig, sd)
 
             m15_idx = map_candle_to_lower_tf(h1_time, -1 if approach_from_above else 1, dfx)
             if m15_idx is None or m15_idx not in dfx.index:
@@ -2728,12 +2732,9 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
 
             type_label = proximity_trigger_type_label(trig)   # a sub zone names its source (PLAN_R §5.2)
 
-            # Distance from H1 trigger wick to zone inner (parent-TF metric).
-            if approach_from_above:
-                gap = float(h1_row[COL_L]) - float(trig.trigger_inner)
-            else:
-                gap = float(trig.trigger_inner) - float(h1_row[COL_H])
-            dist_pips = round(gap / float(trig.pip_size), 1)
+            # The H1 wick and its distance to the zone inner (parent-TF metric — the H1 chart's values).
+            trigger_price, dist_pips = proximity_trigger_price_and_distance(
+                trig, sd, float(h1_row[COL_H]), float(h1_row[COL_L]))
 
             # The SOURCE first (PLAN_R §5.2): a sub zone's is the H1 candle it counts from — the parent lookups
             # below would mislabel it (the POI branch silently with the parent sd POI's floor).
@@ -2757,12 +2758,14 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
                 int(m15_idx),
                 h1_idx,
                 int(trig.structure_id),
-                int(sd),
                 int(trig.cycle_id),
+                int(sd),
                 type_label,
+                f"{trigger_price:.5f}",
+                f"{float(trig.trigger_inner):.5f}",
                 dist_pips,
-                str(trig.zone_kind),
                 int(z_conf),
+                proximity_sub_trigger_text(trig, zpt_sub_types, zpt_collapsed),
             ))
 
     if x_vals:
@@ -2774,17 +2777,20 @@ def _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset):
             marker=zpt_marker,
             customdata=customdata,
             hoverlabel=dict(bgcolor="black", font_color="white"),
+            # The user's spec 2026-10-23 / 24 (CHARTING_SPEC §12): the H1 trigger on its M15 candle — no
+            # struct_direction line (decision 2), the parent's identity without a `first record:` prefix (decision 1).
             hovertemplate=(
                 "TF=1H>>15M<br>"
-                "idx_15M=%{customdata[0]}<br>"
+                "idx=%{customdata[0]}<br>"
                 "idx_1H=%{customdata[1]}<br>"
-                "parent_sid=%{customdata[2]}<br>"
-                "parent struct_direction=%{customdata[3]}<br>"
-                "parent_cycle_id=%{customdata[4]}<br>"
+                "parent_sid=%{customdata[2]} | parent_cycle_id=%{customdata[3]}<br>"
+                "parent_direction=%{customdata[4]}<br>"
                 "type=%{customdata[5]}<br>"
-                "distance_pips=%{customdata[6]}<br>"
-                "zone_kind=%{customdata[7]}<br>"
-                "zone_confirmed_idx=%{customdata[8]}"
+                "trigger_price=%{customdata[6]}<br>"
+                "zone_inner=%{customdata[7]}<br>"
+                "distance_pips=%{customdata[8]}<br>"
+                "zone_confirmed_idx=%{customdata[9]}<br>"
+                "sub_trigger=%{customdata[10]}"
                 "<extra></extra>"
             ),
         ))
