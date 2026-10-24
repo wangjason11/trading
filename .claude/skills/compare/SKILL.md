@@ -675,7 +675,18 @@ cycle_id=…` on one line, `trigger_price=` / `zone_inner=` / `sub_trigger=` add
 Positional `cmp_save.py` is fine across it. Checks: `fig_scope.py BASE CUR '^zone_proximity:trigger$'` (SCOPE OK),
 `chart_census.py` vs S_S3 (0 deltas), the run log's `[uc1_trigger]` lines unchanged (3; the chart's UC1 call for
 `sub_trigger` is silenced). Skip grep 23. S_prox_hover `20261024_105742_fb0189b` (source `fb0189b`, save `b2ab158`,
-trunk `1b513ec`; = `LATEST_<branch>` from 2026-10-24).
+trunk `1b513ec`; = `LATEST_<branch>` until S_repl_break, below).
+**A replaced sub's line breaks at the same point on every lens (2026-10-24, SESSION ORDER item 5's second pass, the
+charts' other elements — the user's request + decision `plans/qa_chart_edits_inputs/user_spec_20261024_replacement_break.md`)
+— FIGURE-ONLY:** the replacement break now reads the SUB's pool-wide replacer (`SidRecord.meta
+["ended_by_starting_idx"]`), not this lens's records. 27 / 27 CSVs md5-equal to S_prox_hover; H1 81/234 unchanged;
+counter 153 → 154 traces (+ `M15 PB sub5 (prior)` at 3760; sub 5's dotted run 3621 → 3760 → 3819), confluence
+301 → 302 (+ `M15 PB sub3 (prior)` at 3304; sub 3's dotted run 3047 → 3304 → 3490); shapes and layouts unchanged; no
+other trace changed. **Positional `fig_scope.py` breaks across it** (one inserted trace per M15 chart shifts every
+later trace) — diff figures with `plans/qa_chart_edits_inputs/fig_named_diff.py BASE CUR` (name-keyed); positional
+`cmp_save.py` compares CSVs and is fine. `chart_census.py` vs S_prox_hover: `dots_PB` +1 on (0,1,5) counter and
+(0,1,3) confluence, nothing else (redirecting its output needs `PYTHONIOENCODING=utf-8`). Skip grep 23. S_repl_break
+`20261024_171443_56517e7` (source `56517e7`, save `1cfe56d`, trunk `7f6fed3`; = `LATEST_<branch>` from 2026-10-24).
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -805,7 +816,9 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-24 on S_prox_hover `20261024_105742_fb0189b`, unchanged from S_wave_hover
+counts are (verified 2026-10-24 on S_repl_break `20261024_171443_56517e7` — the replacement break on every lens
+added one PB-dot trace per M15 chart, counter 153 → 154 and confluence 301 → 302, H1 and every shape unchanged — to
+S_prox_hover `20261024_105742_fb0189b`'s counts, unchanged from S_wave_hover
 `20261023_194643_18711dc`, S_fib_hover `20261023_191547_563f5f8`, S_zone_hover
 `20261023_153743_56bb20d`, S_dot_hover
 `20261022_200747_ab2fcc1`, S_S3 `20261021_130400_7b62a47`
@@ -824,8 +837,8 @@ S_N_hover and S_O; config window 2025-12-01→2026-01-20, auto-extended to
 older values in **History** below):
 
 - `H1` chart: traces=81, shapes=234
-- `M15.counter` chart: traces=153, shapes=136
-- `M15.confluence` chart: traces=301, shapes=307
+- `M15.counter` chart: traces=154, shapes=136
+- `M15.confluence` chart: traces=302, shapes=307
 
 (Before the 2026-10-09 re-baseline the block listed the 2026-09-24 Plan F values — H1
 85/245, counter 151/124, confluence 294/233; landings between re-baselines are not

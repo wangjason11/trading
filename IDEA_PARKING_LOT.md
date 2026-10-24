@@ -160,7 +160,7 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    M15 charts' H1 overlay (the user's spec + decisions + what landed:
    `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_proximity_marker_hover.md`; figure-only;
    `trigger_price` / `zone_inner` / `sub_trigger` added, `zone_kind` removed, the M15 copy keyed by its parent; source
-   `fb0189b`, save S_prox_hover `20261024_105742_fb0189b` = `LATEST_<branch>`). The
+   `fb0189b`, save S_prox_hover `20261024_105742_fb0189b`). The
    M15 Prev BOS line hover stays as is (the user, 2026-10-24: "no changes needed for Prev BOS line hover"); WVMI back
    on the chart TABLED (register §G). **The hover-label pass CLOSED 2026-10-24** (the user: "We've focused mostly on
    marker & data hover labels in this session. Next session I would like to continue to debug the charts but now I
@@ -171,7 +171,8 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    the replacement break read the replacer from THIS lens's records, so a lens whose record ended after the sub drew
    none; the user's decision A, one replacer per sub, pool-wide — also counter sub 5 → 3621 → 3760 → 3819; the
    user's request + decision + what landed: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_replacement_break.md`;
-   figure-only, +1 PB dot per M15 chart; canonical CHARTING_SPEC "Replaced subs run through one more point").
+   figure-only, +1 PB dot per M15 chart; canonical CHARTING_SPEC "Replaced subs run through one more point"; source
+   `56517e7`, save S_repl_break `20261024_171443_56517e7` = `LATEST_<branch>`; the user: "charts look good go ahead").
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
