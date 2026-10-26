@@ -607,6 +607,75 @@ hover, the per-LP CSV and `_wvmi.csv`. The accepted hover drafts' last line read
   charts unchanged). Not a save-format boundary, but the 2 new rows sit in CTS_CONFIRMED order ((0,0) first, (1,0)
   third): diff the H1 `_wvmi.csv` keyed (`cmp_wvmi_keyed.py`). The user: "yes let's commit".
 
+## Step 3 — the new LP rule (2026-10-26)
+
+- **Design (from the code, `5a4c571`):** `zones/wvmi._find_temporary_lp` (closest close to the zone's `meta["outer"]`)
+  is replaced by `_temporary_lp_sequence` — the furthest-close sequence `[(as_of_idx, lp_idx), …]` of rounds 4–7; the
+  record's LP = its last entry (None when empty). Candidates = `wave_candles._is_qualified(df, i, pb_wave_dir)` in
+  `[FP + 1, end − 1]` on every route (the one "qualified" helper — FP is found with `direction == pb_dir`, so this is
+  today's FP-direction test exactly; it also retires the dead `fp_vol_dir` read, register §A). The tracker keeps each
+  record's CTS_CONFIRMED event for the re-scan (`update_temporary_lp(df)` — it no longer reads a zone, so its
+  `kl_zones` parameter goes). The route reads the event: `ef.event_moment` (p), `meta["confirmation_method"]`,
+  `ef.pattern_anchor_idx` (extended to a PULLBACK-confirmed CTS_CONFIRMED — the pullback pattern's first candle;
+  a proximity-confirmed one raises). MS stamps `meta["pattern_anchor_idx"] = ev.start_idx` at the pullback call site
+  (already in `_EVENT_META_IDX_KEYS` — CTS_ESTABLISHED and the reversal events carry the key — so the sub mirror
+  shifts it with no list change). `on_bos_confirmed` prints `[wvmi] WARNING <path> sid=… cycle=…` when BOS_{n+1}'s
+  last wave candle differs from the last temporary LP (slice-local indices on a sub, like every `[wvmi]` line).
+- **Measured before the build** (`wvmi_asof.py`'s new `rule_new` = rule_r4 + the fallback + candidates bounded by
+  `end − 1`; scratchpad `step3_predict.py` over S_h1_ungated's three `_wvmi.csv`, all 30 records incl. collapsed):
+  rule_new = rule_r4 on every record (no record reaches the fallback); routes — pattern 28, proximity "self" 2 (H1 sid
+  1 c2; the collapsed confluence sub 1 c1); the pattern span `[pattern_anchor_idx, moment]` = the measured
+  `[start, max(end, confirmation)]` on every pattern record; no CTS moment past `end − 1`; every locked record's lock
+  LP is in its frame.
+- **The lock warning: 1 record — confluence sub 1 c0 (collapsed), last temporary LP 1866, locked LP 1837** (as round
+  2 found under the old rule); the same whether the temporary sequence stops at the lock (`b − 1`) or at `end − 1`
+  (the engine's pre-lock search; they differ only on a collapsed cycle, whose `end` is clamped up to the structure
+  start). Slice-local `90 != 119`. The collapsed H1 sid 1 c0 (locked LP 728): no warning. **How often it prints —
+  predicted 2, measured 10 after the build** (`wvmi_asof.py` on the built code): once per tracker run that locks the
+  record — the confluence lens (`H1.main >> M15.confluence`) + 9 proximity-view projections of pool sub 1
+  (`[prox_view] pool#1 cap=None / 1894 / 1902 / 1940 / 1948 / 2231 / 2236 / 2343 / 2367`, path `H1.main >> M15`). The
+  miss: the prediction script deduplicated tracker runs by their capture's content, which merged the identical
+  proximity-view runs — count runs, never distinct contents.
+- **Predicted (vs S_h1_ungated):** the final LP + pullback momentum of 6 records — H1 sid 0 c1 896 → 901 (0.759 →
+  0.478); confluence sub 0 c4 1898 → 1938 (0.881 → 0.585), sub 1 c4 2455 → 2469 (0.356 → 1.019), sub 2 c1 2734 → 2828
+  (0.657 → 2.425), sub 4 c0 3568 → 3588 (0.817 → 1.299), sub 7 c0 4177 → 4196 (0.279 → 0.554) — `lp_idx`,
+  `pullback_momentum` and the zone side's `buy_momentum` / `sell_momentum`; `status` stays `created` (create and
+  re-scan compute the same sequence); every other `_wvmi.csv` cell unchanged. The structure-events CSVs: the meta cell
+  of every pullback CTS_CONFIRMED row gains `'pattern_anchor_idx': N` after `'via'` — H1 4, counter 7, confluence 19
+  rows (the 2 proximity rows untouched); a SAVE-FORMAT BOUNDARY for those 3 CSVs. The other 22 CSVs byte-equal (the
+  counter `_wvmi.csv` too — no counter record moves); the
+  three charts JSON-equal (no chart reads a WVMI LP); run log: the 6 records' `[wvmi] CREATED … lp_idx=` values, +10
+  `[wvmi] WARNING` lines (corrected from +2, above) → the skip grep 23 → 33 (the benign pandas FutureWarning's line
+  number moves `market_structure.py:2484` → `:2487`, 3 comment lines added above it); `[wvmi] total=5, locked=3`, the
+  3 `[uc1_trigger]` lines unchanged.
+- **Built (2026-10-26):** as the design above. Tests: suite 1980 → 1992 passed (`test_wvmi.py`: the 3 closest-to-outer
+  tests → 11 sequence tests + 3 lock-warning tests; `test_event_fields.py` +1; the guard's two `pattern_anchor_idx`
+  pins extended to the pullback CTS_CONFIRMED; the WVMI fixtures' CTS_CONFIRMED now carries `confirmation_method` +
+  `pattern_anchor_idx`, `test_wvmi.py::_cts_confirmed`). `test_wvmi_lp_bound.py`'s "lure" (candle 19, nearer the outer)
+  no longer lures under the furthest-close rule; the `end − 1` bound is still pinned — unbounded, (0,2) would take the
+  reversal candle 17 itself (close .588 < 14's .590), the round-5 case. **Mutants 18 / 18 KILLED**
+  (`mutants_wvmi_step3.py`: ties, never-FP, the `end − 1` bound ×2, the qualification, the pattern span's start, the
+  pattern's last candle, the first LP's as-of candle, the fallback's reference + its absence, the three proximity
+  steps, the warning ×2, MS's stamped value ×2, the accessor; one equivalent mutant left out, named in the file).
+  **Post-build cross-check:** `wvmi_asof.py` on the built code — the engine's final LP = the simulator's `rule_new`
+  on all 43 tracker runs.
+- **Measured (the run-mode replay vs S_h1_ungated; fetch gate PASS; 65.8 s wall):** = the prediction (with the
+  corrected warning count). 22 / 27 CSVs byte-equal; `cmp_wvmi_keyed.py`: exactly the 6 records, each with only
+  `lp_idx`, `pullback_momentum` and its side's `buy_` / `sell_momentum` changed (`status` stays `created`), the counter
+  `_wvmi.csv` unchanged; `cmp_events_pattern_anchor.py` (this folder, new): `pattern_anchor_idx` added after `'via'`
+  on H1 4 / counter 7 / confluence 19 pullback CTS_CONFIRMED rows, every other cell equal — e.g. H1 sid 0 c1 680
+  (pattern 680–681, confirmation 683), confluence sub 7 c0 4154, sub 1 c4 2365; `fig_named_diff.py`: 81 / 234,
+  154 / 136, 302 / 307, no trace added / removed / changed, layouts equal. Log: skip grep 33 (23 + the 10 WARNING
+  lines; the FutureWarning at `:2487`), `[wvmi] total=5, locked=3`, the same 3 `[uc1_trigger]` lines.
+- **The user's go (2026-10-26)** — put: (1) keep the warning as is (a log line; I said "every `[wvmi]` line already
+  repeats per tracker run"), or print it only for visible records / once per record; (2) go to commit. Verbatim:
+  "1. ok" / "2. yes". So the warning stays one line per tracker run that locks a differing record. **Correction
+  (found right after, before the commit):** my reason was wrong — the proximity view runs its projections with stdout
+  captured and re-prints ONLY the lines matching the skip-grep pattern, prefixed `[prox_view] pool#N cap=…`
+  (`multitf/proximity_overlay._quiet_project` / `_VIEW_LOG_KEEP`, so a warning inside a silenced projection is never
+  hidden); its `[wvmi] CREATED / LOCKED` lines are swallowed. The 10 lines are that design at work; the alternative was
+  re-offered to the user at the step-3 report.
+
 ## Build notes for steps 2–5 (written at the session close 2026-10-26 — read with the decisions above)
 
 Every step: predict the numbers from the mechanism → build → tests (+ mutants where a rule changes) → replay →

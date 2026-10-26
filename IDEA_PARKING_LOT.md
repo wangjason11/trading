@@ -38,7 +38,7 @@ The open lines below carry over (fold in when their files are next touched); D a
 - **Two dead reads found by the Week 9 /prepare + item-1 talk** — `_run_multi_tf_dual(poi_zones=...)` is never read
   (`pipeline/orchestrator.py` ~:837; fold into item 1's landing B, which touches the orchestrator's `POIConfig`);
   `wvmi._find_temporary_lp` computes `fp_vol_dir` and never reads it (fold into "The agreed direction for wave candles
-  + WVMI", D.2). OPEN.
+  + WVMI", D.2) — GONE 2026-10-26 with the function ("WVMI back on the chart" step 3, §D item 5). The first: OPEN.
 - **The H1-main frame is classified and stamped "H1" whatever the config timeframe** — `orchestrator.run_pipeline`
   calls `apply_candle_classification(df)` with its default (`timeframe="H1"`), so a re-enabled M15-main window
   (`config.py` keeps them commented out) would get H1's pinbar floor AND the institutional pattern's H1 cap / params
@@ -182,8 +182,13 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    S_uc1_prox `20261026_175906_257f8ba`); **2** the H1 WVMI without its
    gate (+2 H1 records, (0,0) and the collapsed (1,0); the main's `triggered_by_*` now attribution, None without a
    first sd trigger; the mode name `"first_sd_prox"` kept by the user) — LANDED 2026-10-26, = the prediction (source
-   `76b5a17`, save S_h1_ungated `20261026_183615_76b5a17` = `LATEST_<branch>`); **3** the new LP rule — NEXT (6 records' final LP + pullback momentum change); **4** the
-   per-LP rows + `*_wvmi_lps.csv`; **5** the dots + hovers on the three charts (a rendered example first).
+   `76b5a17`, save S_h1_ungated `20261026_183615_76b5a17`); **3** the new LP rule (the furthest-close sequence with
+   its first-LP routes, never FP, to the cycle's end − 1; `pattern_anchor_idx` on a pullback CTS_CONFIRMED; a
+   `[wvmi] WARNING` when the locked LP differs from the last temporary one — kept by the user) — LANDED 2026-10-26, =
+   the prediction (6 records' final LP + pullback momentum move, the structure-events CSVs gain the key — a
+   save-format boundary; the warning prints 10 times for one collapsed record, predicted 2); **4** the per-LP rows +
+   `*_wvmi_lps.csv` — NEXT (ask first: do collapsed records keep flagged per-LP rows?); **5** the dots + hovers on the
+   three charts (a rendered example first).
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -405,9 +410,10 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
 - **The agreed direction for wave candles + WVMI** (PLAN_H Q-W) — item 1 gives the IP legs the *agreed direction*
   (candle and volume direction agree; one at 0 → the other decides; both 0 = a true doji). Wave candles and WVMI keep
   GLOSSARY "qualified candle" (no volume-only-doji row) for now — user 2026-10-05: "we likely will also make the change
-  for wave candles & WVMI, but we'll come back to that later". "Qualified" is implemented twice
-  (`wave_candles._is_qualified`, inline in `wvmi._find_temporary_lp`) → one helper first; outputs change → its own
-  `/compare`. DECIDE (when).
+  for wave candles & WVMI, but we'll come back to that later". "Qualified" was implemented twice
+  (`wave_candles._is_qualified`, inline in `wvmi._find_temporary_lp`) — ONE helper since 2026-10-26 (the WVMI temp
+  LP calls `_is_qualified`, "WVMI back on the chart" step 3; no output change from the helper); the rule change
+  itself → its own `/compare`. DECIDE (when).
 
 ## E. Trigger-based (only when the trigger fires)
 

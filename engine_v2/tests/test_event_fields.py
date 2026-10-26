@@ -50,6 +50,15 @@ def test_pattern_anchor_idx():
     assert ef.pattern_anchor_idx(_ev("REVERSAL_CANDIDATE", 5, pattern_anchor_idx=5)) == 5
 
 
+def test_pattern_anchor_idx_on_a_cts_confirmed_only_by_a_pullback():
+    """"WVMI back on the chart" step 3 (2026-10-26): a CTS_CONFIRMED by a pullback pattern carries the PULLBACK
+    pattern's first candle (WVMI's first temporary LP reads it); one by sd zone proximity has no pattern — raises."""
+    pb = _ev("CTS_CONFIRMED", 14, confirmation_method="pullback", pattern_anchor_idx=12, cts_anchor_idx=8)
+    assert ef.pattern_anchor_idx(pb) == 12
+    with pytest.raises(ValueError):
+        ef.pattern_anchor_idx(_ev("CTS_CONFIRMED", 14, confirmation_method="sd_zone_proximity", cts_anchor_idx=8))
+
+
 @pytest.mark.illegal_event_contract
 def test_accessors_raise_on_a_missing_key():
     """No `.get(key, ev.idx)` fallback (LANDMINES "Event Contract Rules")."""

@@ -74,7 +74,7 @@ def _basic(n=25, *, bos2=True, fp=10, bos2_last=18):
            tw._make_wc(0, 1, "CTS", "sell", last_idx=8, first_idx=fp),
            tw._make_wc(0, 2, "BOS", "buy", last_idx=bos2_last, first_idx=19)]
     m1, m2 = {"structure_id": 0, "cycle_id": 1}, {"structure_id": 0, "cycle_id": 2}
-    events = [tw._make_event("CTS_ESTABLISHED", 9, meta=m1), tw._make_event("CTS_CONFIRMED", 14, meta=m1)]
+    events = [tw._make_event("CTS_ESTABLISHED", 9, meta=m1), tw._cts_confirmed()]
     if bos2:
         events += [tw._make_event("CTS_ESTABLISHED", 17, meta=m2), tw._make_event("BOS_CONFIRMED", 17, meta=m2)]
     return df, events, wcs, [zone]

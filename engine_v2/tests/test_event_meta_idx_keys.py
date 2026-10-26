@@ -133,6 +133,14 @@ def test_pattern_anchor_idx_is_listed_and_emitted(geometry, m15_df):
         for ev in evs:
             assert type(ev.meta["pattern_anchor_idx"]) is int
             assert "anchor_idx" not in ev.meta
+    # "WVMI back on the chart" step 3 (2026-10-26): a CTS_CONFIRMED by a pullback pattern carries it too, one by sd
+    # zone proximity never
+    conf = [ev for ev in events if ev.type == "CTS_CONFIRMED"]
+    assert any(ev.meta["confirmation_method"] == "pullback" for ev in conf)
+    for ev in conf:
+        assert ("pattern_anchor_idx" in ev.meta) == (ev.meta["confirmation_method"] == "pullback")
+        if "pattern_anchor_idx" in ev.meta:
+            assert type(ev.meta["pattern_anchor_idx"]) is int
 
 
 def test_every_zone_meta_index_key_is_shifted(geometry, m15_df):
@@ -188,6 +196,12 @@ def test_pattern_anchor_idx_values_obey_the_pattern_bound(geometry, m15_df):
     for t in ("REVERSAL_WATCH_START", "REVERSAL_CANDIDATE"):
         for ev in (e for e in events if e.type == t):
             assert ev.meta["pattern_anchor_idx"] == ev.idx
+    # a pullback CTS_CONFIRMED: the PULLBACK pattern's first candle — after the CTS anchor it confirms and strictly
+    # before its moment (every pullback pattern spans >= 2 candles; on the reference window 1-3 candles before it)
+    pb = [e for e in events if e.type == "CTS_CONFIRMED" and e.meta["confirmation_method"] == "pullback"]
+    assert pb
+    for ev in pb:
+        assert ef.cts_anchor_idx(ev) < ef.pattern_anchor_idx(ev) < ev.idx
 
 
 def test_mirrored_index_values_are_source_plus_slice_begin(geometry, m15_df):

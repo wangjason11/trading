@@ -211,10 +211,12 @@ Each rendered line maps to a `(role, cycle_offset)` for visibility lookup:
   `BOS_{N+1}.last_wave_candle` (rendered via the wave_candle_results loop with the
   cross-cycle attribution above). Lock happens at the `CTS_{N+1}` ESTABLISHED
   moment (the cycle end), only when the cycle ends via `next_cycle`.
-- **Temp** — the wave candle is *not yet locked; it can shift* to a closer-to-outer
-  qualified candle as new bars arrive. While temp, this candle still IS the LP and
-  IS the input that WVMI momentum uses (`_find_temporary_lp` is the mechanism that
-  picks which candle it currently sits on). Physical position: `WVMIRecord.lp_idx`
+- **Temp** — the wave candle is *not yet locked; it can shift* to each qualified
+  candle closing further in the pullback direction as new bars arrive (WVMI_SPEC
+  "Temporary LP Selection" — the closer-to-outer candle until 2026-10-26). While temp,
+  this candle still IS the LP and IS the input that WVMI momentum uses
+  (`wvmi._temporary_lp_sequence` is the mechanism that picks which candle it
+  currently sits on). Physical position: `WVMIRecord.lp_idx`
   for cycles that have a WVMI record (every cycle with a CTS_CONFIRMED: a sub's since
   Plan G 2026-09-30, the main's since 2026-10-26 — sd-prox-gated before). The "separate WVMI-temp-LP
   rendering pass" this spec planned is NOT implemented — no chart reads `lp_idx`

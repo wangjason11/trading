@@ -1,5 +1,5 @@
 """Round-4 report ("WVMI back on the chart", 2026-10-26): the user's first-LP rules (rule_r4) vs the furthest-close
-rule, per visible WVMI record of S_repl_break, + the records an ungated H1 would add. Reads `wvmi_asof.py`'s JSON.
+rule, per visible WVMI record of S_h1_ungated (S_repl_break until step 3, 2026-10-26), + the records an ungated H1 would add. Reads `wvmi_asof.py`'s JSON.
 
     PYTHONIOENCODING=utf-8 python engine_v2/plans/qa_chart_edits_inputs/wvmi_r4_report.py ASOF_JSON
 """
@@ -9,7 +9,7 @@ import sys
 import pandas as pd
 
 J = json.load(open(sys.argv[1]))
-S = "artifacts/commits/week9-entries-decisions/20261024_171443_56517e7/NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5"
+S = "artifacts/commits/week9-entries-decisions/20261026_183615_76b5a17/NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5"
 print("lenses in json:", sorted({c["lens"] for c in J}))
 
 

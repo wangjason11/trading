@@ -45,7 +45,9 @@ A continuation level established within the current structure direction.
   - `CTS_ESTABLISHED` when a new CTS cycle begins (level anchored at an extreme, `meta["cts_anchor_idx"]`;
     `ev.idx` = the moment, the breakout's apply candle, since Plan E E4a).
   - `CTS_CONFIRMED` when CTS is confirmed by the first of pullback / proximity.
-    `meta["confirmation_method"]` ∈ {`"pullback"`, `"sd_zone_proximity"`}.
+    `meta["confirmation_method"]` ∈ {`"pullback"`, `"sd_zone_proximity"`}; a pullback confirmation also carries
+    `meta["pattern_anchor_idx"]` = the pullback pattern's first candle (its `start_idx`; since 2026-10-26 — WVMI's
+    first temporary LP reads the pattern's candles, WVMI_SPEC "Temporary LP Selection"; `ef.pattern_anchor_idx`).
   - `CTS_UPDATED` when the CTS anchor moves to a new extreme within the appropriate stage (rules depend on cycle stage).
     Pre-confirm, BOTH sources apply ONE rule — a STRICT new extreme beyond the current CTS in the structure
     direction (`MarketStructure._is_new_cts_extreme`; a tie keeps the first occurrence): the raw path (a candle's

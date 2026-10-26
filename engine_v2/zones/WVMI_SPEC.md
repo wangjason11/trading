@@ -155,7 +155,7 @@ Triggered by `on_cts_confirmed()` for every CTS_CONFIRMED. Derives 4 wave candle
 | FB (First Breakout) | BOS_n wave candle | `first_wave_candle_idx` |
 | LB (Last Breakout) | CTS_n wave candle | `last_wave_candle_idx` |
 | FP (First Pullback) | CTS_n wave candle | `first_wave_candle_idx` |
-| LP (Last Pullback) | Temporary — qualified candle closest to outer | Shifts until locked |
+| LP (Last Pullback) | Temporary — the furthest qualified close in the pullback direction ("Temporary LP Selection") | Moves until locked |
 
 **Breakout momentum is LOCKED at creation:**
 ```
@@ -169,11 +169,13 @@ pullback_momentum = (LP_vol * LP_weight) / FP_vol   # recomputed each candle
 
 ### 2. Updated — Each Candle
 
-`update_temporary_lp()` re-scans all non-locked records:
-- Finds qualified candle (FP direction + vol_dir match) between FP and the search end
-  (see "Temporary LP Selection": the cycle's last live candle, else the data end)
-- Picks candle whose close is closest to BOS zone outer bound
-- Updates LP idx, volume, weight, and pullback_momentum
+`update_temporary_lp(df)` re-scans all non-locked records:
+- The temp LP = the last of the record's furthest-close sequence up to the search end
+  ("Temporary LP Selection": the cycle's last live candle, else the data end); the
+  tracker keeps each record's CTS_CONFIRMED for its first-LP route. No zone is read.
+- Updates LP idx, volume, weight, and pullback_momentum; `status="updated"` only when
+  the LP moved (the replay creates and re-scans on the same frame, so its unlocked
+  records stay `created`)
 
 ### 3. Locked — BOS_n+1 Confirmed
 
@@ -183,6 +185,9 @@ pullback_momentum = (LP_vol * LP_weight) / FP_vol   # recomputed each candle
   (past a capped sub's end, or past the data edge — Plan G Q10; before it the idx
   was kept with volume / pullback None), the record locks with its existing temp LP
   as final (`on_bos_confirmed`), i.e. the bounded one ("Temporary LP Selection")
+- Prints `[wvmi] WARNING <structure_path_id> sid=… cycle=…: the locked LP … != the last
+  temporary LP …` when the swap changes the LP (2026-10-26; the user, round 5: keep the
+  swap, warn on a difference) — a log line only, slice-local indices on a sub
 - Finalizes pullback_momentum
 - Sets `lp_locked=True`, `status="locked"`
 
@@ -256,9 +261,24 @@ pullback_momentum = (LP_volume * LP_weight) / FP_volume
 
 ---
 
-## Temporary LP Selection (`_find_temporary_lp`)
+## Temporary LP Selection (`_temporary_lp_sequence`) — the furthest-close rule
 
-1. Search range: `[FP_idx + 1, search_end]`, at creation AND on every update
+The temporary LP follows the pullback: a new temporary LP at each qualified candle that
+closes FURTHER in the pullback direction than the current one (lower for a buy zone's
+bearish pullback, higher for a sell zone's bullish one); an equal close does not move
+it. The record's `lp_idx` = the last one; `_temporary_lp_sequence` returns them all as
+`[(as_of_idx, lp_idx), …]`. Decided by the user 2026-10-26 ("WVMI back on the chart"
+rounds 4–7, step 3 — `plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`);
+it replaced the closest-to-outer rule (`_find_temporary_lp`: the qualified close nearest
+the BOS zone's `meta["outer"]`), which stopped following a pullback once it closed past
+the zone's outer edge — 6 records on the reference window, all ended by a reversal
+(e.g. H1 sid 0 cycle 1: LP 896 → 901, pullback momentum 0.759 → 0.478). The BOS zone is
+no longer read for the LP (a record still needs one — "Guard Rails").
+
+1. **Candidates**: a qualified candle (GLOSSARY "Qualified candle": the pullback
+   direction AND the volume direction agrees or is 0 — `wave_candles._is_qualified`,
+   the one helper every wave-candle role uses) in `[FP_idx + 1, search_end]`, at
+   creation AND on every re-scan — never FP, on every route below
    (`WVMITracker._lp_search_end`). `search_end` = the cycle's lifecycle end − 1
    (`compute_cycle_lifecycle`, half-open `[start, end)` — the table KL / POI read;
    `_compute_wvmi_records` passes it as `cycle_end_by_key`), the frame end for an
@@ -269,15 +289,41 @@ pullback_momentum = (LP_volume * LP_weight) / FP_volume
    988 (pullback_momentum 0.904) → now 896 (0.759); `tests/test_wvmi_lp_bound.py`.
    Since Plan G (Q4) on subs: before it the sub sweep passed no ends and searched
    to its frame end INCLUSIVE (the sub's end candle could be picked); the `end − 1`
-   bound changed 0 values on the reference window (18/18 records identical).
-2. Qualification: same direction AND vol_dir as FP candle (or vol_dir == 0)
-3. Selection: candle whose `close` is closest to BOS zone outer bound
+   bound changed 0 values on the reference window (18/18 records identical). The
+   candle that ENDS a cycle (a reversal's, a replacement's, the next cycle's BOS) is
+   never an LP (the user, round 5) — on the reference window every reversal-ended
+   cycle's ending candle is qualified and closes further (H1 902; confluence 1940,
+   2470, 2829, 3589, 4200), so the bound decides those records' final LP.
+2. **The first temporary LP, by how the CTS confirmed** (p = the CTS_CONFIRMED moment,
+   `ef.event_moment`):
+   - **pullback pattern** (`confirmation_method == "pullback"`): the furthest close
+     among the pattern's candles `[pattern_anchor_idx, p]` — the pullback pattern's
+     first candle (`meta["pattern_anchor_idx"]`, read by `ef.pattern_anchor_idx`)
+     through its confirmation candle, in-between candles included — as of p.
+     **Fallback** (no qualified pattern candle after FP — the pattern's only qualified
+     candle is FP): the first later candidate closing beyond **FP's close**, not the
+     confirmation candle's (the user, round 6: that candle closes away from the
+     pullback direction). Only the fallback is held to FP's close (round 7).
+   - **sd zone proximity** (`"sd_zone_proximity"`): the furthest close in
+     `[FP + 1, p − 1]` that closes beyond p's close, as of p; else p itself if it is a
+     candidate (qualified, and not FP); else the first later candidate closing beyond
+     p's close. The pattern route looks only at the pattern's own candles, the
+     proximity route back to FP + 1 — intended (round 5).
+   - Until the first LP exists (the fallback or the proximity route still waiting)
+     the record has none (`lp_idx` None, "Guard Rails").
+3. **Then** each candidate after the current LP's as-of candle that closes further
+   than the current LP is the next temporary LP, as of itself.
+4. **The lock** ("3. Locked") replaces the last temporary LP with BOS_{n+1}'s last
+   wave candle and warns when they differ. Reference window: 1 record — the collapsed
+   confluence sub 1 cycle 0, last temporary LP 1866 vs locked 1837 — printed once per
+   tracker run that locks it: 10 lines (the confluence lens + 9 proximity-view
+   projections of the pool sub, `[prox_view] pool#1 cap=…`); every visible locked
+   record's lock LP = its last temporary LP.
 
-**Outer bound:**
-- Buy zone: outer = bottom (zone sits above)
-- Sell zone: outer = top (zone sits below)
-
-"Closest to outer" means the pullback has retraced most deeply toward the zone — a stronger pullback signal.
+Reference window (2026-10-26): the pattern route on 28 of the 30 records, the
+proximity candle itself on 2 (H1 sid 1 cycle 2; the collapsed confluence sub 1 cycle
+1); no record reaches the fallback. Measured with
+`plans/qa_chart_edits_inputs/wvmi_asof.py` (`rule_new`).
 
 ---
 
@@ -288,7 +334,7 @@ pullback_momentum = (LP_volume * LP_weight) / FP_volume
 | BOS zone not found | Returns None (no record created) |
 | BOS or CTS wave candle missing required indices | Returns None |
 | FB_volume == 0 or FP_volume == 0 | Returns None (division by zero) |
-| Temp LP not found (incl. an empty bounded search: the cycle ended at or before FP + 1) | Record created with `lp_idx=None`, `pullback_momentum=None` |
+| Temp LP not found (incl. an empty bounded search: the cycle ended at or before FP + 1; a first LP still waited for) | Record created with `lp_idx=None`, `pullback_momentum=None` |
 | BOS_n+1 has no `last_wave_candle_idx`, or it lies outside the tracker's frame (Plan G Q10) | Locks with the existing (bounded) temp LP as final |
 | FB / LB / FP outside the tracker's frame (past a capped sub's end) | Returns None (no record) — the frame is `df.iloc[:cap + 1]` |
 | Momentum is None | Charting shows "N/A" in hover |

@@ -2134,3 +2134,16 @@ then how many IC candidates (`is_ic_candidate` True — before L1: `touches_zone
 tiebreaker ran — `ip_tiebreak` empty on the picked row); a non-picked candidate with an empty `ip_rank` has no pattern
 (`reason` = the first failing rule). When reporting a tiebreak change, also list the records where its criterion
 disagrees with the pick but no tie exists — the user reviews the charts by the rule's intent (PLAN_H §6 TBU-6).
+
+## A log line from a sub's downstream prints once per TRACKER RUN — the proximity view re-projects every pool sub ("WVMI back on the chart" step 3, 2026-10-26)
+
+Predicting how often a line printed inside a sub's downstream (`project_to_window` → `_run_downstream_pipeline`)
+appears in `run.log`: count the RUNS, not the distinct records. Besides the sub's lens projections, the proximity
+overlay (PLAN_R §5.2, `multitf/proximity_overlay.project_sub_as_of`) projects each pool sub AS OF every cap it reads
+(sub 1: `cap=None / 1894 / 1902 / 1940 / 1948 / 2231 / 2236 / 2343 / 2367` on the reference window). Those runs are
+silenced (`_quiet_project` captures stdout) EXCEPT the lines matching the skip-grep pattern (`_VIEW_LOG_KEEP` = the
+`/compare` grep), re-printed as `[prox_view] pool#N cap=…: <line>` — so an ordinary `[wvmi] CREATED / LOCKED` line
+appears once per sub (its one real projection, mirrored into every lens it is on: 24 CREATED lines = H1 5 + 19
+unique-sub records), but a WARNING-class line once more per proximity-view cap. Step 3's lock warning
+(one collapsed record, confluence sub 1 cycle 0) prints 10 times, predicted 2: the prediction script deduplicated its
+per-run captures by content, which merged the identical proximity-view runs. Slice-local indices in every such line.

@@ -1,4 +1,4 @@
-"""The final temporary LP of every UNLOCKED WVMI record of S_repl_break: today's engine rule (closest to the BOS zone's
+"""The final temporary LP of every UNLOCKED WVMI record of S_h1_ungated (S_repl_break until step 3, 2026-10-26): today's engine rule (closest to the BOS zone's
 outer, the saved `_wvmi.csv`) vs the new rule (rule_r4 = the furthest close + the first-LP rules, `wvmi_asof.py`),
 with the pullback momentum; CHANGE marks a record whose final LP moves (step 3's prediction, "WVMI back on the chart"
 round 5: 6 records). Written 2026-10-26.
@@ -8,7 +8,7 @@ round 5: 6 records). Written 2026-10-26.
 import json, sys
 import pandas as pd
 J = json.load(open(sys.argv[1]))
-S = "artifacts/commits/week9-entries-decisions/20261024_171443_56517e7/NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5"
+S = "artifacts/commits/week9-entries-decisions/20261026_183615_76b5a17/NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5"
 def pick(lens, row):
     out = []
     for c in J:

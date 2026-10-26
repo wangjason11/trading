@@ -17,7 +17,10 @@ records an UNGATED run would add are captured too (`extra=True`). Matched to the
 for sub_id + absolute coordinates. A record can match several captures (a sub is projected more than once): keep
 the capture whose lp_idx / lp_locked / fp_idx / cycle_collapsed equal the saved `_wvmi.csv` row. Written for "WVMI
 back on the chart" round 2, 2026-10-25; rule_r4 / extra / end_cand round 4, 2026-10-26 (runs the pipeline, ~1 min;
-writes nothing to artifacts/).
+writes nothing to artifacts/). Step 3 (2026-10-26): `new` / `new_to_bound` = `_rule_new`, the decided rule (rule_r4 +
+the fallback + candidates bounded by end - 1; as of the lock, and to end - 1), `lock_lp` = BOS_{n+1}'s last wave candle
+(the lock warning), `pat_anchor`; the `extra` branch is dead since step 2 (no `gate` kwarg — every H1 record is a
+regular capture). On step 3's code the engine's own LP (`lp_final`) = `new_to_bound`'s last on an unlocked record.
 
     PYTHONIOENCODING=utf-8 PYTHONPATH=. python engine_v2/plans/qa_chart_edits_inputs/wvmi_asof.py OUT_JSON
 """
@@ -47,6 +50,18 @@ def _emit(self, idx, meta=None, confirmation_method="pullback"):
 
 
 MarketStructure._emit_cts_confirmed_once = _emit
+
+
+def _closest_to_outer(frame, fp, zone, start, end):
+    """The engine's LP rule until step 3 (`wvmi._find_temporary_lp`, removed 2026-10-26): the qualified close nearest
+    the BOS zone's `meta["outer"]`, ties to the earlier — kept here so `ext` replays it on any code."""
+    best, best_d = None, float("inf")
+    for i in range(start, end + 1):
+        if i in frame.index and _qualified(frame, fp, i):
+            d = abs(float(frame.loc[i, "c"]) - float(zone.meta["outer"]))
+            if d < best_d:
+                best, best_d = i, d
+    return best
 
 
 def _qualified(frame, fp, i):
@@ -114,7 +129,54 @@ def _rule_r4(frame, fp, pb_dir, c, cts_meta, last_t):
     return seq, info
 
 
-def _capture(recs, df, events, sorted_events, kl_zones, kw, extra):
+def _rule_new(frame, fp, pb_dir, c, cts_meta, last_t, bound):
+    """Step 3's rule as decided (rounds 4-7): rule_r4 + the pattern route's FALLBACK (no qualified pattern candle
+    after FP -> the first later qualified candle closing beyond FP's close), the pattern span = [anchor, moment c],
+    and every candidate bounded to [FP + 1, bound] (bound = the cycle's end - 1). Written 2026-10-26 (step 3)."""
+    C = lambda i: float(frame.loc[i, "c"])
+    q = lambda i: fp + 1 <= i <= bound and _qualified(frame, fp, i)
+    further = lambda a, b: a < b if pb_dir == -1 else a > b
+
+    def deepest(idxs):
+        best = None
+        for i in idxs:
+            if best is None or further(C(i), C(best)):
+                best = i
+        return best
+
+    def wait(ref_close):
+        for t in range(c + 1, last_t + 1):
+            if q(t) and further(C(t), ref_close):
+                return (t, t)
+        return None
+
+    if cts_meta.get("confirmation_method") == "sd_zone_proximity":
+        prior = [i for i in range(fp + 1, c) if q(i) and further(C(i), C(c))]
+        if prior:
+            first, route = (c, deepest(prior)), "prior"
+        elif q(c):
+            first, route = (c, c), "self"
+        else:
+            first, route = wait(C(c)), "wait"
+    else:
+        so = int(cts_meta["_m_pat_off"].split(",")[0])
+        cands = [i for i in range(c - so, c + 1) if q(i)]
+        if cands:
+            first, route = (c, deepest(cands)), "pattern"
+        else:
+            first, route = wait(C(fp)), "fallback"
+    seq = []
+    if first is not None:
+        seq.append(first)
+        cur = first[1]
+        for t in range(first[0] + 1, last_t + 1):
+            if q(t) and further(C(t), C(cur)):
+                cur = t
+                seq.append((t, t))
+    return seq, route
+
+
+def _capture(recs, df, events, sorted_events, kl_zones, kw, extra, wave_candle_results=()):
     cap = kw.get("lifecycle_cap")
     frame = df.iloc[:cap + 1] if cap is not None else df
     life = orch.compute_cycle_lifecycle(events, orch.compute_reversal_idx_by_sid(events), kw.get("lifecycle_floor"),
@@ -134,7 +196,7 @@ def _capture(recs, df, events, sorted_events, kl_zones, kw, extra):
         ext, lat, fur = [], [], []
         prev_e = prev_l = prev_f = "unset"
         for t in range(c, last_t + 1):
-            e = wv._find_temporary_lp(frame, r.fp_idx, zone, r.fp_idx + 1, min(t, bound))
+            e = _closest_to_outer(frame, r.fp_idx, zone, r.fp_idx + 1, min(t, bound))
             q = [i for i in range(r.fp_idx + 1, min(t, bound) + 1) if _qualified(frame, r.fp_idx, i)]
             l = q[-1] if q else None
             f = None
@@ -152,6 +214,17 @@ def _capture(recs, df, events, sorted_events, kl_zones, kw, extra):
                 lat.append((t, l))
                 prev_l = l
         r4, r4_info = _rule_r4(frame, r.fp_idx, pb_dir, c, cts[0].meta, last_t)
+        # step 3: the decided rule, as of the lock (last_t) and to the cycle's end - 1 only (the engine's pre-lock
+        # search), + the lock's LP (BOS_{n+1}'s last wave candle) for the warning count
+        new, new_route = _rule_new(frame, r.fp_idx, pb_dir, c, cts[0].meta, last_t, bound)
+        new_to_bound, _ = _rule_new(frame, r.fp_idx, pb_dir, c, cts[0].meta, bound, bound)
+        lock_wc = wv._find_wave_candle(list(wave_candle_results), key[0], key[1] + 1, "BOS") if b is not None else None
+        lock_lp = None if lock_wc is None else lock_wc.last_wave_candle_idx
+        pat_anchor = None
+        if cts[0].meta.get("confirmation_method") != "sd_zone_proximity":
+            so, eo, co, _st = cts[0].meta["_m_pat_off"].split(",")
+            pat_anchor = c - int(so)
+            pat_last = max(c - int(eo), c - int(co) if co != "" else c - int(eo))
         end_cand = None
         if end is not None and int(end) <= len(frame) - 1 and r4:
             ei, li = int(end), r4[-1][1]
@@ -170,12 +243,17 @@ def _capture(recs, df, events, sorted_events, kl_zones, kw, extra):
                         ext=[(t, i, pm(i)) for t, i in ext], lat=[(t, i, pm(i)) for t, i in lat],
                         fur=[(t, i, pm(i)) for t, i in fur], r4=[(t, i, pm(i)) for t, i in r4], r4_info=r4_info,
                         end_cand=end_cand,
+                        new=[(t, i, pm(i)) for t, i in new], new_route=new_route,
+                        new_to_bound=[(t, i, pm(i)) for t, i in new_to_bound], lock_lp=lock_lp,
+                        lock_lp_in_frame=lock_lp is not None and lock_lp in frame.index,
+                        pat_anchor=pat_anchor,
+                        pat_last_is_c=None if pat_anchor is None else pat_last == c,
                         n_qual_total=len([i for i in range(r.fp_idx + 1, bound + 1) if _qualified(frame, r.fp_idx, i)])))
 
 
 def wrapped(df, events, sorted_events, wave_candle_results, kl_zones, **kw):
     recs = _orig(df, events, sorted_events, wave_candle_results, kl_zones, **kw)
-    _capture(recs, df, events, sorted_events, kl_zones, kw, extra=False)
+    _capture(recs, df, events, sorted_events, kl_zones, kw, extra=False, wave_candle_results=wave_candle_results)
     if kw.get("gate") is not None:
         have = {(r.bos_structure_id, r.bos_cycle_id) for r in recs}
         more = _orig(df, events, sorted_events, wave_candle_results, kl_zones, **{**kw, "gate": None})

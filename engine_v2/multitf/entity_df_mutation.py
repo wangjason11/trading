@@ -114,7 +114,8 @@ _MS_AUX_STRUCTURE_COLS = (
 _EVENT_META_IDX_KEYS = (
     "confirmed_at",         # CTS / BOS events; RANGE_STARTED since PLAN_N N2 (`confirm_idx` until then)
     "apply_idx",
-    "pattern_anchor_idx",
+    "pattern_anchor_idx",   # CTS_ESTABLISHED, the reversal events, STATE_CHANGED(to=reversal); a pullback
+                            # CTS_CONFIRMED since 2026-10-26 (WVMI's first temporary LP)
     "cts_anchor_idx",       # CTS events + RANGE_STARTED (the CTS anchor at the range start; pairs with cts_price —
                             # `cts_idx` until Post-E·4, 2026-09-29d)
     "bos_anchor_idx",

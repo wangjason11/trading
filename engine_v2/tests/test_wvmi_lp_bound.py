@@ -8,6 +8,10 @@ each cycle's end from `compute_cycle_lifecycle` (the table KL / POI read; half-o
 `end - 1`; an open cycle still searches to the data end. Since Plan G (Q4) a sub's WVMI is computed inside its
 projection by the same helper, so a sub record gets the same `end - 1` bound (before it, the sub sweep passed no ends
 and searched to its frame end, the sub's end candle included).
+
+Since 2026-10-26 the temp LP is the furthest close in the pullback direction ("WVMI back on the chart" step 3), so the
+lure below no longer lures: unbounded, (0,2) would take the reversal candle 17 itself (close .588, further than 14's
+.590) — the bound pins the same way, through the cycle's own ending candle.
 """
 from __future__ import annotations
 
@@ -60,9 +64,9 @@ def test_an_ended_cycle_takes_no_lp_past_its_end():
     assert life[(0, 2)][1:] == (17, "reversal")
     recs = {(r.bos_structure_id, r.bos_cycle_id): r for r in out["wvmi_records"]}
     r = recs[(0, 2)]
-    assert (r.fp_idx, r.lp_idx, r.lp_locked) == (13, 14, False)   # unbounded: 19 (the lure), momentum 0.7
+    assert (r.fp_idx, r.lp_idx, r.lp_locked) == (13, 14, False)   # unbounded: 17 (19, the lure, until 2026-10-26)
     assert r.pullback_momentum == 1.0 and r.sell_momentum == 1.0
-    # the bound applies at creation too: an update-only bound would move 19 -> 14 and mark it "updated"
+    # the bound applies at creation too: an update-only bound would move 17 -> 14 and mark it "updated"
     assert r.status == "created"
     assert (recs[(0, 1)].lp_idx, recs[(0, 1)].lp_locked) == (9, True)   # a locked record keeps the official LP
 
@@ -138,18 +142,18 @@ def _growing_frames():
 
 
 def test_an_update_on_a_grown_frame_respects_the_bound():
-    """A live-style caller: the frame grows by 3 candles after creation, the new candle 17 is nearer the outer. Past
+    """A live-style caller: the frame grows by 3 candles after creation, the new candle 17 closes further. Past
     the cycle (end 17) it is ignored — no update, LP stays 12; inside it (end 18) it wins and the labels move too."""
     df0, df1 = _growing_frames()
     zone = tw._make_zone("buy", 1.0, 0.9, "BOS", {"structure_id": 0, "cycle_id": 1, "anchor_idx": 5, "outer": 0.9})
     wcs = [tw._make_wc(0, 1, "BOS", "buy", last_idx=2, first_idx=3), tw._make_wc(0, 1, "CTS", "sell", last_idx=8, first_idx=10)]
-    ev = tw._make_event("CTS_CONFIRMED", 14, meta={"structure_id": 0, "cycle_id": 1})
+    ev = tw._cts_confirmed()
     t = WVMITracker(cycle_end_by_key={(0, 1): 17})
     t.on_cts_confirmed(ev, df0, wcs, [zone])
-    assert t.update_temporary_lp(df1, [zone]) == [] and t.get_records()[0].lp_idx == 12
+    assert t.update_temporary_lp(df1) == [] and t.get_records()[0].lp_idx == 12
     t = WVMITracker(cycle_end_by_key={(0, 1): 18})
     t.on_cts_confirmed(ev, df0, wcs, [zone])
-    (rec,) = t.update_temporary_lp(df1, [zone])
+    (rec,) = t.update_temporary_lp(df1)
     assert (rec.lp_idx, rec.status, rec.sell_momentum) == (17, "updated", round(110 * 0.7 / 150, 2))
 
 
@@ -162,9 +166,10 @@ def _project(res, floor=None, cap=None, reason=None):
 # --- Plan G Q4 (2026-09-30): a sub projection's temp LP stops at the cycle's end - 1 too ------------------------
 
 def test_an_open_projection_bounds_the_temp_lp_by_the_cycle_end():
-    """Q4 end to end: the lure (a nearer qualifying candle 19 after the reversal at 17) is inside an OPEN projection's
-    frame; the lifecycle table ends (0,2) at 17, so its temp LP stays 14 (pullback 1.0). The no-ends sub sweep before
-    Plan G took 19 (0.7). (A capped projection cannot show it: under cap 17 the frame already stops at 17.)"""
+    """Q4 end to end: the reversal candle 17 (and, under the closest-to-outer rule until 2026-10-26, the lure 19) is
+    inside an OPEN projection's frame; the lifecycle table ends (0,2) at 17, so its temp LP stays 14 (pullback 1.0).
+    The no-ends sub sweep before Plan G took 19 (0.7). (A capped projection cannot show it: under cap 17 the frame
+    already stops at 17.)"""
     res, _ = _run(_post_reversal_lure())
     recs = {(r.bos_structure_id, r.bos_cycle_id): r for r in _project(res, floor=5)["wvmi_records"]}
     r = recs[(0, 2)]

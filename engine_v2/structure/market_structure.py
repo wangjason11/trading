@@ -1513,10 +1513,13 @@ class MarketStructure:
                 # re-emit CTS_CONFIRMED. Phase stays CONFIRMED.
                 self._emit_cts_reconfirmed(apply_idx, meta={"via": ev.name})
             else:
-                # Standard pullback-based confirmation (existing behavior)
+                # Standard pullback-based confirmation (existing behavior).
+                # `pattern_anchor_idx` = the pullback pattern's first candle: the
+                # WVMI first temporary LP reads the pattern's candles (WVMI_SPEC
+                # "Temporary LP Selection", 2026-10-26).
                 self._emit_cts_confirmed_once(
                     apply_idx,
-                    meta={"via": ev.name},
+                    meta={"via": ev.name, "pattern_anchor_idx": int(ev.start_idx)},
                     confirmation_method="pullback",
                 )
                 st.cts_phase = "CONFIRMED"

@@ -196,7 +196,7 @@ def _compute_wvmi_records(
         if ev.type == "BOS_CONFIRMED":
             tracker.on_bos_confirmed(ev, frame, wave_candle_results)
 
-    tracker.update_temporary_lp(frame, kl_zones)
+    tracker.update_temporary_lp(frame)
 
     records = tracker.get_records()
     for rec in records:

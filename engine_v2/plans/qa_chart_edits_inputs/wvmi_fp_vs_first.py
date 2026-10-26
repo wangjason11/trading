@@ -1,4 +1,4 @@
-"""Per visible WVMI record of S_repl_break: FP's close vs the first temporary LP's close (rule_r4, from `wvmi_asof.py`'s
+"""Per visible WVMI record of S_h1_ungated (S_repl_break until step 3, 2026-10-26): FP's close vs the first temporary LP's close (rule_r4, from `wvmi_asof.py`'s
 JSON), and the pullback pattern's span. Written for "WVMI back on the chart" round 6, 2026-10-26.
 
     PYTHONIOENCODING=utf-8 PYTHONPATH=. python engine_v2/plans/qa_chart_edits_inputs/wvmi_fp_vs_first.py ASOF_JSON
@@ -8,8 +8,8 @@ import pandas as pd
 sys.path.insert(0, "engine_v2/plans/qa_chart_edits_inputs")
 import m15_frame
 J = json.load(open(sys.argv[1]))
-S = "artifacts/commits/week9-entries-decisions/20261024_171443_56517e7/NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5"
-H = pd.read_csv("artifacts/commits/week9-entries-decisions/20261024_171443_56517e7/NZD_USD_H1_2025-11-15_2026-01-20_final.csv")
+S = "artifacts/commits/week9-entries-decisions/20261026_183615_76b5a17/NZD_USD_H1_2025-11-15_2026-01-20_sd-1_eps0p0001_rk2-5"
+H = pd.read_csv("artifacts/commits/week9-entries-decisions/20261026_183615_76b5a17/NZD_USD_H1_2025-11-15_2026-01-20_final.csv")
 M = m15_frame.frame(S + "_M15_confluence.html")
 def close(lens, i):
     return float(H.loc[i, "c"]) if lens == "H1" else float(M.loc[i, "close"])

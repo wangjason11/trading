@@ -71,11 +71,16 @@ def pattern_anchor_idx(ev: Any) -> int:
     """The breakout pattern's FIRST candle (pattern realm):
     `meta["pattern_anchor_idx"]` on CTS_ESTABLISHED / REVERSAL_CANDIDATE /
     REVERSAL_WATCH_START, and on the `STATE_CHANGED(to=reversal)` — the
-    REALISED reversal pattern's first candle (PLAN_K A13 / A19, 2026-10-09).
-    Any other type — and any other `STATE_CHANGED` — raises."""
+    REALISED reversal pattern's first candle (PLAN_K A13 / A19, 2026-10-09);
+    on a CTS_CONFIRMED by a pullback pattern (`confirmation_method ==
+    "pullback"`), the PULLBACK pattern's first candle (WVMI's first temporary
+    LP, 2026-10-26). Any other type — a CTS_CONFIRMED by sd zone proximity, and
+    any other `STATE_CHANGED` — raises."""
     if ev.type in _PATTERN_ANCHOR_TYPES:
         return int(ev.meta["pattern_anchor_idx"])
     if ev.type == "STATE_CHANGED" and ev.meta["to"] == "reversal":
+        return int(ev.meta["pattern_anchor_idx"])
+    if ev.type == "CTS_CONFIRMED" and ev.meta["confirmation_method"] == "pullback":
         return int(ev.meta["pattern_anchor_idx"])
     raise ValueError(f"pattern_anchor_idx: no pattern anchor on {ev.type}")
 

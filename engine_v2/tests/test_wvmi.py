@@ -11,7 +11,7 @@ from engine_v2.zones.wave_candles import WaveCandleResult
 from engine_v2.zones.wvmi import (
     WVMITracker,
     _compute_last_wave_weight,
-    _find_temporary_lp,
+    _temporary_lp_sequence,
     _find_wave_candle,
     _find_bos_zone,
     _assign_direction_labels,
@@ -82,6 +82,16 @@ def _make_event(etype: str, idx: int, price: float = None, meta: dict | None = N
     )
 
 
+def _cts_confirmed(idx: int = 14, *, pattern_anchor_idx: int = 12, method: str = "pullback",
+                   sid: int = 0, cycle_id: int = 1) -> StructureEvent:
+    """A CTS_CONFIRMED as MS emits it: `confirmation_method`, and on a pullback the pattern's first candle
+    (`pattern_anchor_idx`, read by the first temporary LP). The default pattern [12, 14] holds the setups' LP 12."""
+    meta = {"structure_id": sid, "cycle_id": cycle_id, "confirmation_method": method}
+    if method == "pullback":
+        meta["pattern_anchor_idx"] = pattern_anchor_idx
+    return _make_event("CTS_CONFIRMED", idx, meta=meta)
+
+
 def _make_wc(sid: int, cycle_id: int, source_kind: str, zone_side: str,
              last_idx: int | None, first_idx: int | None) -> WaveCandleResult:
     return WaveCandleResult(
@@ -139,51 +149,91 @@ class TestComputeLastWaveWeight:
 
 
 # ---------------------------------------------------------------------------
-# _find_temporary_lp tests
+# _temporary_lp_sequence tests (the furthest-close rule, 2026-10-26)
 # ---------------------------------------------------------------------------
 
-class TestFindTemporaryLp:
-    def test_finds_closest_to_outer(self):
-        """Among qualified candles, pick closest close to outer."""
-        rows = [
-            {"direction": -1, "vol_dir": -1, "c": 0.95},  # idx=0, dist=0.05
-            {"direction": -1, "vol_dir": -1, "c": 0.92},  # idx=1, dist=0.02 (closer)
-            {"direction": -1, "vol_dir": -1, "c": 0.98},  # idx=2, dist=0.08
-        ]
-        df = _make_df(rows)
-        # FP at some external idx; set FP direction in df at a separate row
-        # FP_idx is before search range; we just need its direction
-        fp_rows = [{"direction": -1, "vol_dir": -1, "c": 1.0}] + rows
-        fp_df = _make_df(fp_rows)
-        zone = _make_zone("buy", top=1.0, bottom=0.9, meta={"outer": 0.9})
-        result = _find_temporary_lp(fp_df, 0, zone, 1, 3)
-        assert result == 2  # idx=2 in fp_df has c=0.92, closest to 0.9
+_N = (1, 0, 1.05)   # a bullish candle: never a buy zone's (bearish) pullback LP
 
-    def test_no_qualified_returns_none(self):
-        """All candles wrong direction -> None."""
-        rows = [
-            {"direction": 1, "vol_dir": 1, "c": 0.95},
-            {"direction": 1, "vol_dir": 1, "c": 0.92},
-        ]
-        df = _make_df(rows)
-        # FP at idx=0 with direction=-1 (not present in df)
-        # Create FP row + search rows
-        fp_rows = [{"direction": -1, "vol_dir": -1, "c": 1.0}] + rows
-        fp_df = _make_df(fp_rows)
-        zone = _make_zone("buy", top=1.0, bottom=0.9, meta={"outer": 0.9})
-        result = _find_temporary_lp(fp_df, 0, zone, 1, 2)
-        assert result is None
 
-    def test_vol_dir_zero_qualifies(self):
-        """Candle with vol_dir=0 qualifies regardless."""
-        rows = [
-            {"direction": -1, "vol_dir": 0, "c": 0.92},
-        ]
-        fp_rows = [{"direction": -1, "vol_dir": -1, "c": 1.0}] + rows
-        fp_df = _make_df(fp_rows)
-        zone = _make_zone("buy", top=1.0, bottom=0.9, meta={"outer": 0.9})
-        result = _find_temporary_lp(fp_df, 0, zone, 1, 1)
-        assert result == 1
+def _q(close: float, vol_dir: int = -1) -> tuple:
+    """A qualified bearish pullback candle (a buy zone's): direction -1, vol_dir -1 or 0."""
+    return (-1, vol_dir, close)
+
+
+def _seq(spec: list, fp: int, ev: StructureEvent, search_end: int, pb_wave_dir: int = -1) -> list:
+    """`_temporary_lp_sequence` on one row per candle `(direction, vol_dir, close)`."""
+    df = _make_df([{"direction": d, "vol_dir": v, "c": c} for d, v, c in spec])
+    return _temporary_lp_sequence(df, fp, pb_wave_dir, ev, search_end)
+
+
+class TestTemporaryLpSequence:
+    def test_pattern_route_takes_the_furthest_pattern_close_then_each_further_close(self):
+        """A buy zone (pullback = lower closes). The pattern [3, 5]: of its qualified candles 3 (.93) and 4 (.95) the
+        furthest is 3, as of the CTS moment 5 — not the last one, and not 1 (.90, further but BEFORE the pattern's
+        first candle). Then 6 (.93) ties 3 and does not move it; 7 (.92) and 9 (.91) do; 8 (.915 > .91) comes before
+        9 and is further than 7, so it is one too."""
+        spec = [_q(1.00), _q(0.90), _N, _q(0.93), _q(0.95), _N, _q(0.93), _q(0.92), _q(0.915), _q(0.91)]
+        ev = _cts_confirmed(5, pattern_anchor_idx=3)
+        assert _seq(spec, 0, ev, 9) == [(5, 3), (7, 7), (8, 8), (9, 9)]
+
+    def test_never_fp_even_when_the_pattern_starts_on_it(self):
+        """The pattern [1, 3] starts ON FP 1, which closes furthest (.90): the first LP is the next pattern candle 2."""
+        spec = [_N, _q(0.90), _q(0.95), _N]
+        assert _seq(spec, 1, _cts_confirmed(3, pattern_anchor_idx=1), 3) == [(3, 2)]
+
+    def test_the_fallback_waits_for_a_close_beyond_fp_not_beyond_the_confirmation_candle(self):
+        """FP 0 (.99) is the pattern's only qualified candle; the confirmation candle 1 closes away (1.05). 2 closes
+        beyond 1.05 but not beyond FP's .99, so it is not the first LP; 3 (.98) is; 4 ties; 5 (.97) moves it."""
+        spec = [_q(0.99), _N, _q(1.02), _q(0.98), _q(0.98), _q(0.97)]
+        assert _seq(spec, 0, _cts_confirmed(1, pattern_anchor_idx=0), 5) == [(3, 3), (5, 5)]
+
+    def test_the_proximity_route_takes_the_furthest_prior_close_beyond_the_proximity_candle(self):
+        """p = 5 (.98, itself qualified). Prior candidates in [FP + 1, p - 1] closing beyond .98: 1 (.97), 2 (.94),
+        4 (.96) -> 2, as of 5; FP 0 (.90) is never one. Then 6 ties, 7 (.93) moves it."""
+        spec = [_q(0.90), _q(0.97), _q(0.94), _N, _q(0.96), _q(0.98), _q(0.94), _q(0.93)]
+        ev = _cts_confirmed(5, method="sd_zone_proximity")
+        assert _seq(spec, 0, ev, 7) == [(5, 2), (7, 7)]
+
+    def test_the_proximity_candle_itself_when_no_prior_close_is_beyond_it(self):
+        """1 (.99) is qualified but not beyond p's .97: p 3 is the first LP."""
+        spec = [_q(1.00), _q(0.99), _N, _q(0.97)]
+        assert _seq(spec, 0, _cts_confirmed(3, method="sd_zone_proximity"), 3) == [(3, 3)]
+
+    def test_a_proximity_candle_on_fp_is_never_the_lp(self):
+        """p = FP 1: step 2 is skipped; step 3 waits for a close beyond p's .97 — 2 (.98) is not, 3 (.96) is."""
+        spec = [_N, _q(0.97), _q(0.98), _q(0.96)]
+        assert _seq(spec, 1, _cts_confirmed(1, method="sd_zone_proximity"), 3) == [(3, 3)]
+
+    def test_an_unqualified_proximity_candle_waits_for_a_close_beyond_its_own(self):
+        """p 1 is bullish (1.05): the first LP is the first later qualified candle closing beyond 1.05 — 2 (1.03),
+        not one beyond FP's 1.00."""
+        spec = [_q(1.00), _N, _q(1.03), _q(0.99)]
+        assert _seq(spec, 0, _cts_confirmed(1, method="sd_zone_proximity"), 3) == [(2, 2), (3, 3)]
+
+    def test_no_candidate_after_the_search_end(self):
+        """The search ends at the cycle's end - 1: 4 (.96) is an LP only when the end is past it, and a pattern
+        candidate past the end is none either (search end 0: no LP at all)."""
+        spec = [_q(1.00), _q(0.98), _N, _q(0.97), _q(0.96)]
+        ev = _cts_confirmed(2, pattern_anchor_idx=1)
+        assert _seq(spec, 0, ev, 3) == [(2, 1), (3, 3)]
+        assert _seq(spec, 0, ev, 4) == [(2, 1), (3, 3), (4, 4)]
+        assert _seq(spec, 0, ev, 0) == []
+
+    def test_a_sell_zone_pullback_moves_on_higher_closes(self):
+        """A sell zone (pullback = bullish, higher closes further): 2 (1.04) beats 1 (1.02) in the pattern; 3 (1.03)
+        is not further; 4 (1.05) is."""
+        spec = [(1, 1, 1.00), (1, 1, 1.02), (1, 0, 1.04), (1, 1, 1.03), (1, 1, 1.05)]
+        assert _seq(spec, 0, _cts_confirmed(2, pattern_anchor_idx=1), 4, pb_wave_dir=1) == [(2, 2), (4, 4)]
+
+    def test_only_qualified_candles(self):
+        """Qualified = the pullback direction AND the volume direction agrees or is 0: 2 (.80, vol_dir +1) is not a
+        candidate, 3 (.85, vol_dir 0) is; 4 is bullish."""
+        spec = [_q(1.00), _q(0.95), (-1, 1, 0.80), _q(0.85, vol_dir=0), (1, -1, 0.70)]
+        assert _seq(spec, 0, _cts_confirmed(1, pattern_anchor_idx=1), 4) == [(1, 1), (3, 3)]
+
+    def test_no_qualified_candle_no_lp(self):
+        spec = [_q(1.00), _N, _N, (1, 1, 0.95)]
+        assert _seq(spec, 0, _cts_confirmed(2, pattern_anchor_idx=1), 3) == []
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +314,7 @@ class TestOnCtsConfirmed:
             _make_wc(0, 1, "CTS", "sell", last_idx=8, first_idx=10),  # LB=8, FP=10
         ]
 
-        ev = _make_event("CTS_CONFIRMED", 14, meta={"structure_id": 0, "cycle_id": 1})
+        ev = _cts_confirmed()
         return df, zone, wave_candles, ev
 
     def test_creates_record_with_locked_breakout(self):
@@ -354,7 +404,7 @@ class TestOnCtsConfirmed:
             _make_wc(0, 1, "BOS", "buy", last_idx=2, first_idx=3),
             _make_wc(0, 1, "CTS", "sell", last_idx=8, first_idx=10),
         ]
-        ev = _make_event("CTS_CONFIRMED", 14, meta={"structure_id": 0, "cycle_id": 1})
+        ev = _cts_confirmed()
 
         tracker = WVMITracker()
         rec = tracker.on_cts_confirmed(ev, df, wcs, [zone])
@@ -370,8 +420,8 @@ class TestOnCtsConfirmed:
 # ---------------------------------------------------------------------------
 
 class TestUpdateTemporaryLp:
-    def test_shifts_lp_to_closer_candle(self):
-        """When a closer qualified candle appears in extended df, LP shifts."""
+    def test_shifts_lp_to_a_further_close(self):
+        """When a qualified candle closing further (.91 < .95) appears in the extended df, the LP shifts to it."""
         # Phase 1: create df with 15 rows (idx 0-14), initial LP at idx=12
         rows = []
         for i in range(15):
@@ -394,7 +444,7 @@ class TestUpdateTemporaryLp:
             _make_wc(0, 1, "BOS", "buy", last_idx=2, first_idx=3),
             _make_wc(0, 1, "CTS", "sell", last_idx=8, first_idx=10),
         ]
-        ev = _make_event("CTS_CONFIRMED", 14, meta={"structure_id": 0, "cycle_id": 1})
+        ev = _cts_confirmed()
 
         tracker = WVMITracker()
         tracker.on_cts_confirmed(ev, df_initial, wcs, [zone])
@@ -411,7 +461,7 @@ class TestUpdateTemporaryLp:
         ]
         df_extended = _make_df(rows_ext)
 
-        updated = tracker.update_temporary_lp(df_extended, [zone])
+        updated = tracker.update_temporary_lp(df_extended)
         assert len(updated) == 1
         rec = updated[0]
         assert rec.lp_idx == 17
@@ -441,7 +491,7 @@ class TestUpdateTemporaryLp:
         ]
 
         tracker = WVMITracker()
-        cts_ev = _make_event("CTS_CONFIRMED", 14, meta={"structure_id": 0, "cycle_id": 1})
+        cts_ev = _cts_confirmed()
         tracker.on_cts_confirmed(cts_ev, df, wcs, [zone])
 
         # Lock via BOS_n+1
@@ -454,7 +504,7 @@ class TestUpdateTemporaryLp:
         lp_before = rec_before.lp_idx
 
         # Update should not change locked record
-        updated = tracker.update_temporary_lp(df, [zone])
+        updated = tracker.update_temporary_lp(df)
         assert len(updated) == 0
         rec_after = tracker.get_records()[0]
         assert rec_after.lp_idx == lp_before
@@ -492,7 +542,7 @@ class TestOnBosConfirmed:
         ]
 
         tracker = WVMITracker()
-        cts_ev = _make_event("CTS_CONFIRMED", 14, meta={"structure_id": 0, "cycle_id": 1})
+        cts_ev = _cts_confirmed()
         tracker.on_cts_confirmed(cts_ev, df, wcs, [zone])
 
         # BOS_n+1 (cycle=2) locks cycle=1
@@ -507,6 +557,40 @@ class TestOnBosConfirmed:
         # LP should be from BOS_2's last wave candle
         assert rec.lp_idx == 18
         assert rec.lp_volume == 180
+
+    def _lock(self, capsys, bos2_last):
+        """`test_locks_previous_cycle`'s setup (temp LP 12) on a named tracker, BOS_2's last wave candle `bos2_last`
+        (12, 18 or None): the lock's printed lines."""
+        rows = [{"direction": 1, "c": 1.05, "volume": 100, "vol_dir": 0} for _ in range(25)]
+        rows[3] = {**rows[3], "volume": 200, "is_big_normal_as0": 1, "candle_type": "maru"}
+        rows[8] = {**rows[8], "volume": 300, "is_big_normal_as0": 1}
+        rows[10] = {**rows[10], "direction": -1, "volume": 150, "vol_dir": -1}
+        rows[12] = {**rows[12], "direction": -1, "volume": 120, "c": 0.92, "vol_dir": -1}
+        rows[18] = {**rows[18], "direction": -1, "volume": 180, "c": 0.93, "vol_dir": -1}
+        df = _make_df(rows)
+        zone = _make_zone("buy", 1.0, 0.9, "BOS", {"structure_id": 0, "cycle_id": 1, "anchor_idx": 5, "outer": 0.9})
+        wcs = [_make_wc(0, 1, "BOS", "buy", last_idx=2, first_idx=3), _make_wc(0, 1, "CTS", "sell", last_idx=8, first_idx=10),
+               _make_wc(0, 2, "BOS", "buy", last_idx=bos2_last, first_idx=19)]
+        tracker = WVMITracker(structure_path_id="H1.main")
+        tracker.on_cts_confirmed(_cts_confirmed(), df, wcs, [zone])
+        capsys.readouterr()
+        (rec,) = tracker.on_bos_confirmed(_make_event("BOS_CONFIRMED", 20, meta={"structure_id": 0, "cycle_id": 2}), df, wcs)
+        return rec, capsys.readouterr().out
+
+    def test_a_lock_lp_other_than_the_last_temporary_lp_prints_a_warning(self, capsys):
+        """The locked LP (BOS_2's last wave candle 18) is not the last temporary LP 12: one WARNING line, the LP swapped."""
+        rec, out = self._lock(capsys, 18)
+        assert rec.lp_idx == 18
+        assert [ln for ln in out.splitlines() if "WARNING" in ln] == [
+            "[wvmi] WARNING H1.main sid=0 cycle=1: the locked LP 18 (BOS cycle=2's last wave candle) "
+            "!= the last temporary LP 12"]
+
+    @pytest.mark.parametrize("bos2_last", [12, None], ids=["same_lp", "no_lock_lp"])
+    def test_no_warning_when_the_lock_keeps_the_last_temporary_lp(self, capsys, bos2_last):
+        """The lock's LP IS the last temporary LP, or BOS_2 has no last wave candle (the temp LP is kept): no warning."""
+        rec, out = self._lock(capsys, bos2_last)
+        assert rec.lp_idx == 12 and rec.lp_locked
+        assert "WARNING" not in out
 
     def test_bos_cycle_0_does_not_lock_negative(self):
         """BOS with cycle_id=0 should not try to lock cycle_id=-1."""
@@ -542,7 +626,7 @@ class TestOnBosConfirmed:
         ]
 
         tracker = WVMITracker()
-        cts_ev = _make_event("CTS_CONFIRMED", 14, meta={"structure_id": 0, "cycle_id": 1})
+        cts_ev = _cts_confirmed()
         tracker.on_cts_confirmed(cts_ev, df, wcs, [zone])
 
         initial_lp = tracker.get_records()[0].lp_idx
@@ -611,7 +695,7 @@ class TestSellZone:
             _make_wc(0, 1, "BOS", "sell", last_idx=2, first_idx=3),
             _make_wc(0, 1, "CTS", "buy", last_idx=8, first_idx=10),
         ]
-        ev = _make_event("CTS_CONFIRMED", 14, meta={"structure_id": 0, "cycle_id": 1})
+        ev = _cts_confirmed()
 
         tracker = WVMITracker()
         rec = tracker.on_cts_confirmed(ev, df, wcs, [zone])

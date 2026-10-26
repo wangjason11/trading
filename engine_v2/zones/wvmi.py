@@ -12,10 +12,10 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
 from engine_v2.common.types import KLZone, WVMIRecord
-from engine_v2.features.candles_v2 import agreed_direction
+from engine_v2.structure import event_fields as ef
 from engine_v2.structure.market_structure import StructureEvent
 from engine_v2.zones.poi_zones import POIZone
-from engine_v2.zones.wave_candles import WaveCandleResult
+from engine_v2.zones.wave_candles import WaveCandleResult, _is_qualified
 
 
 # ---------------------------------------------------------------------------
@@ -52,54 +52,76 @@ def _compute_last_wave_weight(df: pd.DataFrame, idx: int, wave_dir: int) -> floa
     return 0.7
 
 
-def _find_temporary_lp(
+def _temporary_lp_sequence(
     df: pd.DataFrame,
     fp_idx: int,
-    bos_zone: KLZone,
-    search_start: int,
+    pb_wave_dir: int,
+    cts_event: StructureEvent,
     search_end: int,
-) -> Optional[int]:
+) -> List[Tuple[int, int]]:
     """
-    Find qualified candle whose close is closest to BOS outer bound.
+    The record's temporary LPs in order, `[(as_of_idx, lp_idx), ...]` — WVMI_SPEC
+    "Temporary LP Selection" (the furthest-close rule; "WVMI back on the chart"
+    step 3, the user's rounds 4-7, 2026-10-26). The record's LP is the last one.
 
-    Qualified = same direction & vol_dir as FP candle (or vol_dir == 0).
-    Selection = min distance from close to zone outer.
+    A candidate is a qualified candle in the pullback direction
+    (`wave_candles._is_qualified`) in `[fp_idx + 1, search_end]`: never FP, never
+    past the cycle's `end - 1`. "Further" = closes further in the pullback
+    direction than a reference close; an equal close is not further.
+
+    The FIRST LP, by how the CTS confirmed (p = the CTS_CONFIRMED moment):
+      - pullback pattern: the furthest close among the pattern's candles
+        `[pattern_anchor_idx, p]` (as of p); none -> the first candle after p
+        closing further than FP's close (the fallback);
+      - sd zone proximity: the furthest close in `[fp_idx + 1, p - 1]` closing
+        further than p's (as of p); else p itself; else the first candle after p
+        closing further than p's close.
+    Then each candidate after the current LP's as-of candle that closes further
+    than the current LP is the next LP (as of itself).
     """
-    if fp_idx not in df.index:
+    def close(i: int) -> float:
+        return float(df.loc[i, "c"])
+
+    def further(i: int, ref_close: float) -> bool:
+        return close(i) < ref_close if pb_wave_dir == -1 else close(i) > ref_close
+
+    def candidate(i: int) -> bool:
+        return fp_idx + 1 <= i <= search_end and _is_qualified(df, i, pb_wave_dir)
+
+    def furthest(idxs) -> Optional[int]:
+        best = None
+        for i in idxs:
+            if candidate(i) and (best is None or further(i, close(best))):
+                best = i
+        return best
+
+    def first_after(p: int, ref_close: float) -> Optional[Tuple[int, int]]:
+        for i in range(p + 1, search_end + 1):
+            if candidate(i) and further(i, ref_close):
+                return (i, i)
         return None
 
-    fp_dir = int(df.loc[fp_idx, "direction"])
-    fp_vol_dir = int(df.loc[fp_idx, "vol_dir"]) if "vol_dir" in df.columns else 0
+    p = ef.event_moment(cts_event)
+    first: Optional[Tuple[int, int]]
+    if cts_event.meta["confirmation_method"] == "sd_zone_proximity":
+        prior = furthest(i for i in range(fp_idx + 1, p) if candidate(i) and further(i, close(p)))
+        if prior is not None:
+            first = (p, prior)
+        elif candidate(p):
+            first = (p, p)
+        else:
+            first = first_after(p, close(p))
+    else:
+        in_pattern = furthest(range(ef.pattern_anchor_idx(cts_event), p + 1))
+        first = (p, in_pattern) if in_pattern is not None else first_after(p, close(fp_idx))
 
-    outer = bos_zone.meta.get("outer")
-    if outer is None:
-        return None
-    outer = float(outer)
-
-    best_idx = None
-    best_dist = float("inf")
-
-    for i in range(search_start, search_end + 1):
-        if i not in df.index:
-            continue
-
-        # Must match FP direction
-        if int(df.loc[i, "direction"]) != fp_dir:
-            continue
-
-        # Must match FP vol_dir (or candle's vol_dir == 0): the agreed direction
-        # is fp_dir too (GLOSSARY "Qualified candle"; candles_v2.agreed_direction)
-        candle_vol_dir = int(df.loc[i, "vol_dir"]) if "vol_dir" in df.columns else 0
-        if int(agreed_direction(fp_dir, candle_vol_dir)) != fp_dir:
-            continue
-
-        c = float(df.loc[i, "c"])
-        d = abs(c - outer)
-        if d < best_dist:
-            best_dist = d
-            best_idx = i
-
-    return best_idx
+    if first is None:
+        return []
+    seq = [first]
+    for i in range(first[0] + 1, search_end + 1):
+        if candidate(i) and further(i, close(seq[-1][1])):
+            seq.append((i, i))
+    return seq
 
 
 def _find_wave_candle(
@@ -146,9 +168,9 @@ def _assign_direction_labels(
 
 # ---------------------------------------------------------------------------
 # (Removed `check_proximity_activation` — replaced by the more general
-#  `check_zone_proximity` in `zones/zone_proximity.py`. Orchestrator now
-#  builds the WVMI gate dict from the first sd zone-proximity trigger
-#  per cycle.)
+#  `check_zone_proximity` in `zones/zone_proximity.py`. The orchestrator
+#  attributes each main record to its cycle's first sd zone-proximity
+#  trigger — a gate until 2026-10-26.)
 # ---------------------------------------------------------------------------
 
 
@@ -162,7 +184,8 @@ class WVMITracker:
 
     Lifecycle (mirrors FibTracker):
     1. Created at CTS_n confirmation — breakout locked, pullback starts shifting
-    2. Updated as candles arrive — temporary LP may shift to closer qualified candle
+    2. Updated as candles arrive — the temporary LP moves to each qualified
+       candle closing further in the pullback direction (`_temporary_lp_sequence`)
     3. Locked at BOS_n+1 confirmation — LP finalizes from BOS_n+1 wave candles
 
     One tracker per entity (Part 4 §9). `structure_path_id` is stamped on
@@ -180,6 +203,9 @@ class WVMITracker:
         # half-open `[start, end)`): the temp-LP search stops at `end - 1`. A key
         # without an end (an open cycle) searches to the data end.
         self._cycle_end_by_key: Dict[tuple, int] = dict(cycle_end_by_key or {})
+        # (sid, cycle_id) -> the record's CTS_CONFIRMED: its moment, method and
+        # pattern pick the first temporary LP (`_temporary_lp_sequence`).
+        self._cts_event_by_key: Dict[tuple, StructureEvent] = {}
 
     def _lp_search_end(self, key: tuple, df: pd.DataFrame) -> int:
         """Last candle the temp-LP search may pick: the cycle's last live candle
@@ -251,9 +277,8 @@ class WVMITracker:
         breakout_momentum = (lb_vol * lb_weight) / fb_vol
 
         # Find temporary LP (bounded by the cycle's lifecycle end)
-        search_start = fp_idx + 1
-        search_end = self._lp_search_end((sid, cycle_id), df)
-        lp_idx = _find_temporary_lp(df, fp_idx, bos_zone, search_start, search_end)
+        lp_seq = _temporary_lp_sequence(df, fp_idx, pb_wave_dir, cts_event, self._lp_search_end((sid, cycle_id), df))
+        lp_idx = lp_seq[-1][1] if lp_seq else None
 
         # Compute pullback momentum if temp LP exists
         lp_vol = None
@@ -293,11 +318,13 @@ class WVMITracker:
 
         key = (sid, cycle_id)
         self._records[key] = record
+        self._cts_event_by_key[key] = cts_event
         print(f"[wvmi] CREATED sid={sid} cycle={cycle_id}: bo_mom={breakout_momentum:.4f} pb_mom={pullback_momentum if pullback_momentum is not None else 'N/A'} lp_idx={lp_idx}")
         return record
 
-    def update_temporary_lp(self, df: pd.DataFrame, kl_zones: List[KLZone]) -> List[WVMIRecord]:
-        """Re-scan all non-locked records, update temp LP closest to outer."""
+    def update_temporary_lp(self, df: pd.DataFrame) -> List[WVMIRecord]:
+        """Re-scan all non-locked records: the temp LP = the last of
+        `_temporary_lp_sequence` (no zone read since 2026-10-26)."""
         updated = []
         for key, rec in self._records.items():
             if rec.lp_locked:
@@ -305,17 +332,13 @@ class WVMITracker:
             if rec.fp_idx is None:
                 continue
 
-            sid, cycle_id = key
-            bos_zone = _find_bos_zone(kl_zones, sid, cycle_id)
-            if bos_zone is None:
-                continue
-
             # Determine pullback wave direction
             pb_wave_dir = -1 if rec.zone_side == "buy" else 1
 
-            search_start = rec.fp_idx + 1
-            search_end = self._lp_search_end(key, df)
-            new_lp_idx = _find_temporary_lp(df, rec.fp_idx, bos_zone, search_start, search_end)
+            lp_seq = _temporary_lp_sequence(
+                df, rec.fp_idx, pb_wave_dir, self._cts_event_by_key[key], self._lp_search_end(key, df),
+            )
+            new_lp_idx = lp_seq[-1][1] if lp_seq else None
 
             if new_lp_idx == rec.lp_idx:
                 continue
@@ -351,7 +374,8 @@ class WVMITracker:
         """
         BOS_n+1 confirmed -> lock BOS_n's WVMI pullback momentum.
 
-        Replace temp LP with official LP from BOS_n+1 wave candles (last_wave_candle_idx).
+        Replace temp LP with official LP from BOS_n+1 wave candles (last_wave_candle_idx);
+        a WARNING line when that differs from the last temporary LP.
         """
         sid = bos_event.meta.get("structure_id", 0)
         bos_cycle_id = bos_event.meta.get("cycle_id", 0)
@@ -374,6 +398,9 @@ class WVMITracker:
         bos_wc = _find_wave_candle(wave_candles, sid, bos_cycle_id, "BOS")
         lp_idx = bos_wc.last_wave_candle_idx if bos_wc is not None else None
         if lp_idx is not None and lp_idx in df.index:
+            if lp_idx != rec.lp_idx:
+                print(f"[wvmi] WARNING {self._structure_path_id} sid={sid} cycle={prev_cycle_id}: the locked LP "
+                      f"{lp_idx} (BOS cycle={bos_cycle_id}'s last wave candle) != the last temporary LP {rec.lp_idx}")
             rec.lp_idx = lp_idx
             rec.lp_volume = float(df.loc[lp_idx, "volume"])
             rec.lp_weight = _compute_last_wave_weight(df, lp_idx, pb_wave_dir)
