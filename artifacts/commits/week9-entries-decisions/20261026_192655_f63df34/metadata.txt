@@ -1,0 +1,4 @@
+commit_hash=f63df34
+timestamp=20261026_192655
+branch=week9-entries-decisions
+commit_message=Chart edit (SESSION ORDER item 5, second pass): WVMI back on the chart, step 3 - the new LP rule (the furthest close)
