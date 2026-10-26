@@ -246,6 +246,18 @@ class ZoneProximityTrigger:
     meta: Dict[str, Any] = field(default_factory=dict)
 
 
+def first_sd_proximity_triggers(
+    zone_proximity_triggers: Dict[Tuple[int, int], List[ZoneProximityTrigger]],
+) -> Dict[Tuple[int, int], ZoneProximityTrigger]:
+    """`{(sid, cycle): trigger}` for every cycle whose FIRST zone-proximity trigger is sd — the ONE reading of "a
+    cycle's first sd trigger": the main's WVMI gate (`orchestrator._first_sd_prox_gate`) and the `first_counter` sub
+    trigger (`multitf/uc1_trigger.detect_uc1_triggers`, since 2026-10-26 — it read the gated WVMI records before) both
+    take it. A cycle whose first trigger is opp_sd has none (a later sd is `subsequent_counter`'s). The sweep's final
+    lists keep each cycle's first trigger (`orchestrator._final_proximity_triggers` asserts it), so the batch and the
+    final lists give the same map."""
+    return {key: trigs[0] for key, trigs in zone_proximity_triggers.items() if trigs and trigs[0].direction == "sd"}
+
+
 def poi_unclamped_activation_floor_idx(pz: POIZone) -> int:
     """A POI's activation floor WITHOUT the structure lifecycle-start term (PLAN_Q): max(the cycle's CTS-established
     moment, the IC[, the pattern-confirmed moment]) — the earliest candle its own conditions could make it active, in

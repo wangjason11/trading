@@ -417,8 +417,8 @@ trigger; the user's decision 1) / `parent_direction` / the same `type` … `sub_
   negative = crossed into the zone (`proximity_trigger_price_and_distance`, both charts; the M15 copy shows the H1
   values).
 - `sub_trigger` = the sub trigger the proximity trigger starts (`_zone_render.proximity_sub_trigger_types`, from the
-  detectors' final lists on the H1 frame): a cycle's first trigger, sd → `first_counter` (UC1 over the main WVMI
-  record); an opp_sd after an sd → `subsequent_confluence`; a later sd → `subsequent_counter`; + ` (not built:
+  detectors' final lists on the H1 frame): a cycle's first trigger, sd → `first_counter` (UC1 over the cycle's first
+  sd trigger, `zone_proximity.first_sd_proximity_triggers`; over the main WVMI record until 2026-10-26); an opp_sd after an sd → `subsequent_confluence`; a later sd → `subsequent_counter`; + ` (not built:
   collapsed parent cycle)` on a collapsed parent cycle (the pool builds no sub there — its record is unresolved,
   `collapsed_parent_cycle`; decision 3), `NA (no sub trigger)` when none. Until 2026-10-24: `TF=H1`, `sid` /
   `struct_direction` / `cycle_id` on three lines, `zone_kind`, no trigger price / inner / sub trigger (M15: `idx_15M`,

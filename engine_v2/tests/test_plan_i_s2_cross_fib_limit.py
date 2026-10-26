@@ -981,7 +981,7 @@ def test_the_driver_wires_the_fire_time_rule_and_the_tripwire(monkeypatch):
                         lambda p, _h1, _m15: 4 * int(p) + 3)
     h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
     with pytest.raises(_Checked):
-        _q(_run_multi_tf_dual, h1, [], [], [], [], {}, None, first_confluence_triggers=[],
+        _q(_run_multi_tf_dual, h1, [], [], [], {}, None, first_confluence_triggers=[],
            subsequent_confluence_triggers=[SimpleNamespace(parent_sid=0, parent_cycle_id=1, trigger_event_idx=20, input_idx=15)],
            subsequent_counter_triggers=[])
     assert got["lim"] == CrossFibLimit(0.58105, "prev_sub_bos_threshold", from_pool_idx=0, ref_anchor_price=0.58105)

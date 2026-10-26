@@ -64,12 +64,14 @@ def test_h1_chart_poi_marker_shows_the_unclamped_activation_floor(tmp_path, monk
     fig, = figs
     row, = _marker_rows(fig)
     assert (row[0], row[3], row[7]) == (poi.ic_idx + 1, "sd:POI", late)
-    # the user's marker spec (2026-10-23 / 24): the line order; no WVMI / subsequent lists in the fixture → no sub trigger
+    # the user's marker spec (2026-10-23 / 24): the line order. The trigger is its cycle's first and sd, and the cycle's
+    # CTS is confirmed → first_counter (UC1 reads the proximity lists since 2026-10-26; it read the gated WVMI records,
+    # none in this fixture → "NA (no sub trigger)" until then)
     tr, = [t for t in fig.data if t.name == "zone_proximity:trigger"]
     assert [ln.split("=")[0] for ln in _rendered(tr).split("<br>")] == [
         "TF", "idx", "sid", "type", "trigger_price", "zone_inner", "distance_pips", "zone_confirmed_idx", "sub_trigger",
         "struct_direction"]
-    assert row[8] == "NA (no sub trigger)"
+    assert row[8] == "first_counter"
 
 
 def test_m15_overlay_poi_marker_shows_the_unclamped_activation_floor():
@@ -87,7 +89,8 @@ def test_m15_overlay_poi_marker_shows_the_unclamped_activation_floor():
                         "end_idx": None, "activation_history": [], "confirmed_idx": None})
     assert poi_unclamped_activation_floor_idx(poi) == 3
     cts = StructureEvent(idx=4, category="STRUCTURE", type="CTS_CONFIRMED", price=1.47,
-                         meta={"structure_id": 0, "cycle_id": 0, "struct_direction": 1, "confirmed_at": 4})
+                         meta={"structure_id": 0, "cycle_id": 0, "struct_direction": 1, "confirmed_at": 4,
+                               "cts_anchor_idx": 4})
     h1.attrs.update(structure_events=[cts], kl_zones=[], poi_zones=[poi],
                     zone_proximity_triggers={(0, 0): [_poi_trigger(poi, 5, sd=+1)]})
     fig = go.Figure()
@@ -136,16 +139,17 @@ def test_the_sub_trigger_text_flags_a_collapsed_parent_cycle_and_names_none():
 
 
 def test_the_sub_trigger_types_read_the_detectors_lists_and_uc1():
-    """`subsequent_*` from the H1 frame's final lists (by `trigger_event_idx`); `first_counter` = UC1 over the main WVMI
-    records (its `trigger_event_idx` = the record's first sd trigger), silenced."""
+    """`subsequent_*` from the H1 frame's final lists (by `trigger_event_idx`); `first_counter` = UC1 over the H1
+    cycles' first sd proximity triggers (`attrs["zone_proximity_triggers"]`; its `trigger_event_idx` = that trigger's
+    candle) — no WVMI record read (since 2026-10-26: none on the frame here), silenced."""
     from types import SimpleNamespace
     from engine_v2.charting._zone_render import proximity_sub_trigger_types
     h1 = pd.DataFrame({"h": [1.0] * 12}, index=range(12))
     conf = StructureEvent(idx=6, category="STRUCTURE", type="CTS_CONFIRMED", price=1.0,
                           meta={"structure_id": 0, "cycle_id": 1, "struct_direction": 1, "confirmed_at": 6,
                                 "cts_anchor_idx": 5})
-    wvmi = SimpleNamespace(bos_structure_id=0, bos_cycle_id=1, meta={"triggered_by_event_idx": 7})
-    h1.attrs.update(structure_events=[conf], wvmi=[wvmi], kl_zones=[],
+    h1.attrs.update(structure_events=[conf],
+                    zone_proximity_triggers={(0, 1): [_zpt(7, "sd", 0.5), _zpt(9, "opp_sd", 0.5), _zpt(11, "sd", 0.5)]},
                     subsequent_confluence_triggers=[SimpleNamespace(parent_sid=0, parent_cycle_id=1, trigger_event_idx=9)],
                     subsequent_counter_triggers=[SimpleNamespace(parent_sid=0, parent_cycle_id=1, trigger_event_idx=11)])
     out = io.StringIO()

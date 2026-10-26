@@ -172,7 +172,15 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    none; the user's decision A, one replacer per sub, pool-wide — also counter sub 5 → 3621 → 3760 → 3819; the
    user's request + decision + what landed: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_replacement_break.md`;
    figure-only, +1 PB dot per M15 chart; canonical CHARTING_SPEC "Replaced subs run through one more point"; source
-   `56517e7`, save S_repl_break `20261024_171443_56517e7` = `LATEST_<branch>`; the user: "charts look good go ahead").
+   `56517e7`, save S_repl_break `20261024_171443_56517e7`; the user: "charts look good go ahead"). The second edit —
+   **WVMI back on the chart** (UN-TABLED by the user 2026-10-24, §G): the design settled in nine rounds 2026-10-24 →
+   26 (the user's request, every answer verbatim, the measurements and the decisions:
+   `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`) — dots above the volume bars at each
+   temporary LP, a furthest-close LP rule with first-LP rules by how the CTS confirmed, no H1 gate, a per-LP CSV per
+   chart. Five landings in the user's order, one cause each: **1** `first_counter` reads the H1 cycles' first sd
+   proximity trigger directly, not the WVMI records — LANDED 2026-10-26 (zero change); **2** the H1 WVMI without its
+   gate (+2 H1 records) — NEXT; **3** the new LP rule (6 records' final LP + pullback momentum change); **4** the
+   per-LP rows + `*_wvmi_lps.csv`; **5** the dots + hovers on the three charts (a rendered example first).
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -484,12 +492,24 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
 - **WVMI back on the chart (the wave-candle hover)** — deferred 2026-05-28 (`e64556a`, WAVE_CANDLES_SPEC "Rendering
   simplifications": "Full WVMI momentum markers deferred (revisit later)"; logged here 2026-10-23, the user asking
   about it with the wave-candle hover spec; TABLED by the user the same day: "Let's table WVMI back on chart for
-  now"). Until then every wave-candle hover carried `Weighted vol` and, on an LB /
+  now"). **UN-TABLED by the user 2026-10-24** (SESSION ORDER item 5's second pass): "Next I'd like to work on
+  adding WVMI back" — the request + design: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`;
+  **IN PROGRESS** (the design settled 2026-10-26; five landings, status: §D SESSION ORDER item 5). Until then every wave-candle hover carried `Weighted vol` and, on an LB /
   LP line, `<Buy|Sell> momentum` + the paired weighted volumes, looked up by candle index. Open design: WVMI's `lp_idx`
   is its own temporary last pullback, not the drawn LP line (on H1 neither live record's LP is drawn), and an
   index-only lookup can hit another sub's or role's line; PART4 §16.5's WVMI row has the planned design (locked
   records show final values; in-progress ones re-render as `update_temporary_lp` moves the temp LP). Detail +
   measurements: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md`.
+- **Revisit the cycle-0 carve-out (no sd-proximity CTS confirmation on any cycle 0)** — **DECIDE**; raised by the
+  user 2026-10-26 with "WVMI back on the chart": "yes we do need to add line to revisit this. I need to better
+  understand the original carve out logic. A decision from May was also quite a long time ago and a lot of things
+  have changed since then … We can come back to it in more detail later". The rule: MARKET_STRUCTURE_SPEC "Cycle-0
+  carve-out (proximity disabled)" + LANDMINES "Dual CTS Proximity Confirmation — Cycle-0 + Rule 1 Are BOTH Required"
+  (both gates kept by the user's 2026-05-12 decision). The user's concerns: it reads as built for the main sid 0
+  cycle 0 (other cycle 0s come from the engine's own structure logic and triggers); single-cycle unique subs must
+  all confirm by a pullback pattern. Case: confluence sub 7 cycle 0 (a 57-pip gap) sat at its POI from 4071 and
+  confirmed only at 4157. Detail + facts: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`
+  rounds 6–7.
 - **Uniform 3-tier chart opacity** (brightest = cycle not ended, mid = sid not ended, faded = sid ended; one
   `opacity_for(sid, cycle)` helper for every element) — its own session. Detail: FIB_LIFECYCLE_SPEC §9.4 + §13.
 - **Breadcrumb header with cross-chart navigation** — "not in v1". Detail: PART4 §16.9.

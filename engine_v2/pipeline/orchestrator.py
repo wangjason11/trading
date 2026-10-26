@@ -40,7 +40,7 @@ from engine_v2.zones.wave_candles import identify_wave_candles, WaveCandleResult
 
 # Week 8: WVMI
 from engine_v2.zones.wvmi import WVMITracker
-from engine_v2.zones.zone_proximity import check_zone_proximity
+from engine_v2.zones.zone_proximity import check_zone_proximity, first_sd_proximity_triggers
 from engine_v2.structure.structure_engine import _pip_size_from_pair
 
 # Week 7: Fib tracking
@@ -112,19 +112,18 @@ WVMI_MODES = ("first_sd_prox", "none", "off")
 
 def _first_sd_prox_gate(zone_proximity_triggers: Dict[tuple, list], structure_path_id: str) -> Dict[tuple, dict]:
     """The main's WVMI gate: {(sid, cycle): record meta} for every cycle whose
-    FIRST zone-proximity trigger is sd (Part 4 §8.7 attribution to it)."""
-    gate: Dict[tuple, dict] = {}
-    for key, trigs in zone_proximity_triggers.items():
-        if trigs and trigs[0].direction == "sd":
-            first_sd = trigs[0]
-            gate[key] = {
-                "triggered_by_event_idx": first_sd.idx,
-                "triggered_by_event_type": "ZONE_PROXIMITY_TRIGGER",
-                "structure_path_id": structure_path_id,
-                "trigger_inner": first_sd.trigger_inner,
-                "proximity_pips": first_sd.proximity_pips,
-            }
-    return gate
+    FIRST zone-proximity trigger is sd (`zone_proximity.first_sd_proximity_triggers`;
+    Part 4 §8.7 attribution to it)."""
+    return {
+        key: {
+            "triggered_by_event_idx": first_sd.idx,
+            "triggered_by_event_type": "ZONE_PROXIMITY_TRIGGER",
+            "structure_path_id": structure_path_id,
+            "trigger_inner": first_sd.trigger_inner,
+            "proximity_pips": first_sd.proximity_pips,
+        }
+        for key, first_sd in first_sd_proximity_triggers(zone_proximity_triggers).items()
+    }
 
 
 def _compute_wvmi_records(
@@ -646,7 +645,6 @@ def run_pipeline(
         confluence_results, lower_tf_results = _run_multi_tf_dual(
             s_res.df,
             sorted_events,
-            wvmi_records,
             kl_zones,
             poi_zones,
             meta,
@@ -832,13 +830,14 @@ def _final_proximity_triggers(
     trigger gets `prox_ref_sub_id` = its source sub's FINAL id — numbered after the sweep), every other cycle's batch
     list (collapsed: parent zones only). In the batch's cycle order, then any cycle only the overlay produced.
 
-    ASSERTED (the main WVMI gate reads only the first sd of each cycle — `_first_sd_prox_gate`): each cycle's first
-    trigger is the batch's — (idx, direction, trigger_inner, zone_kind). It is on a parent zone in both: an sd sub
-    zone is no candidate before the cycle's first sd trigger (PLAN_R §9.2 item 7 — with the gate the parent POI can
-    be kept out, and a sub zone beyond it would otherwise pass), and the scan's first candle judges the sd side
-    first, against the CTS, as the batch does (opp_sd overlay rungs are judged after it). A POI is passed only by a
-    close beyond its outer, so the low reached its inner first; Rule 2 could block it only on a narrow cycle whose CTS
-    was not pullback-confirmed, which Rule 1 rules out."""
+    ASSERTED (the main WVMI gate and the `first_counter` trigger read only the first sd of each cycle —
+    `zone_proximity.first_sd_proximity_triggers` — from the batch; the chart's `first_counter` lookup from these final
+    lists): each cycle's first trigger is the batch's — (idx, direction, trigger_inner, zone_kind). It is on a parent
+    zone in both: an sd sub zone is no candidate before the cycle's first sd trigger (PLAN_R §9.2 item 7 — with the
+    gate the parent POI can be kept out, and a sub zone beyond it would otherwise pass), and the scan's first candle
+    judges the sd side first, against the CTS, as the batch does (opp_sd overlay rungs are judged after it). A POI is
+    passed only by a close beyond its outer, so the low reached its inner first; Rule 2 could block it only on a
+    narrow cycle whose CTS was not pullback-confirmed, which Rule 1 rules out."""
     from dataclasses import replace as _replace
 
     def _key(t):
@@ -859,7 +858,8 @@ def _final_proximity_triggers(
         b = batch.get(key, [])
         assert (not b and not lst) or (b and lst and _key(b[0]) == _key(lst[0])), (
             f"[multi_tf:dual] {key}: the sweep's first proximity trigger "
-            f"{_key(lst[0]) if lst else None} != the batch's {_key(b[0]) if b else None} — the main WVMI gate read it"
+            f"{_key(lst[0]) if lst else None} != the batch's {_key(b[0]) if b else None} — the main WVMI gate and "
+            f"first_counter read it"
         )
         if lst:
             out[key] = lst
@@ -916,7 +916,6 @@ def _assert_proximity_zones_in_projection(overlay: Any, pool: Any, results: list
 def _run_multi_tf_dual(
     h1_df: pd.DataFrame,
     sorted_events: list,
-    wvmi_records: list,
     kl_zones: list,
     poi_zones: list,
     meta: Dict[str, Any],
@@ -930,7 +929,8 @@ def _run_multi_tf_dual(
     """Build the M15 sub-structure pool and the two lens dfs (PART4 §17,
     Plan C — replaces the Phase-1 two-entity cadence driver):
 
-      1. detect the H1 triggers (var1 first_confluence, var2 first_counter,
+      1. detect the H1 triggers (var1 first_confluence, var2 first_counter —
+         from `main_zone_proximity_triggers`, each cycle's first sd trigger —,
          var3 subsequent_confluence, var4 subsequent_counter) and tag each
          with its lens + `trigger_idx = LOH(trigger_event_idx)`;
       2. prepare ONE shared M15 feature frame (`prepare_lower_tf_data` once)
@@ -993,7 +993,7 @@ def _run_multi_tf_dual(
     var1_finalized = [t for t in var1_all if t.status == "finalized"]
     var3_all = list(subsequent_confluence_triggers or [])
     var2_triggers = detect_uc1_triggers(
-        sorted_events, h1_df, wvmi_records, kl_zones,
+        sorted_events, h1_df, main_zone_proximity_triggers or {},
     )
     var4_all = list(subsequent_counter_triggers or [])
 

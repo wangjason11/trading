@@ -34,7 +34,10 @@ the §8.7 attribution schema:
 - `structure_path_id`
 - `trigger_inner`, `proximity_pips`
 
-Cycles without an sd trigger get no main WVMI record.
+Cycles without an sd trigger get no main WVMI record. The M15 `first_counter` sub trigger fires on the same first sd
+trigger, read from the proximity lists directly (`zone_proximity.first_sd_proximity_triggers`, shared with the gate;
+`multitf/uc1_trigger.detect_uc1_triggers`) — not from these records, since 2026-10-26 ("WVMI back on the chart"
+step 1; it looped over them before, so the gate could not change without changing the counter subs).
 
 #### Narrow-cycle implications (Rule 1/2/3)
 

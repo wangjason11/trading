@@ -24,6 +24,8 @@ Conventions
 """
 from __future__ import annotations
 
+import contextlib
+import io
 from collections import defaultdict
 from dataclasses import replace as _dc_replace
 from typing import Any, Dict, List, Optional, Tuple
@@ -1943,7 +1945,7 @@ def test_orchestrator_sweep_triggers_carry_each_types_h1_parent_input(monkeypatc
     v4 = SimpleNamespace(parent_sid=0, parent_cycle_id=1, trigger_event_idx=30, input_idx=25)
     with pytest.raises(_Stop):
         _run_multi_tf_dual(
-            h1, [], [], [], [], {}, None,
+            h1, [], [], [], {}, None,
             first_confluence_triggers=[v1], subsequent_confluence_triggers=[v3],
             subsequent_counter_triggers=[v4],
         )
@@ -1999,7 +2001,7 @@ def test_orchestrator_resolve_start_passes_the_parent_cycles_cts_established_mom
     v4 = SimpleNamespace(parent_sid=1, parent_cycle_id=2, trigger_event_idx=30, input_idx=25)
     with pytest.raises(_Stop):
         _run_multi_tf_dual(
-            h1, [], [], [], [], {}, None, first_confluence_triggers=[],
+            h1, [], [], [], {}, None, first_confluence_triggers=[],
             subsequent_confluence_triggers=[v3], subsequent_counter_triggers=[v4],
         )
     assert seen == [((0, 1), 83, 2611), ((1, 2), 123, 3611)]
@@ -2010,20 +2012,96 @@ def test_uc1_trigger_writes_the_h1_parent_input_under_its_own_name():
     cycle's CTS ANCHOR (17), not its confirmation candle (21) — in `meta["parent_input_idx"]` (the
     orchestrator indexes it directly) and never under the old `probe_input_idx` key (no alias).
     (Post-E·1b landing review: no test ran `detect_uc1_triggers`; an old-key alias survived.)"""
-    from engine_v2.common.types import WVMIRecord
     from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
     from engine_v2.tests._event_factory import make_event
 
     h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
     cts = make_event("CTS_CONFIRMED", 21, structure_id=0, cycle_id=1, struct_direction=+1,
                      cts_anchor_idx=17, confirmed_at=21)
-    rec = WVMIRecord(bos_structure_id=0, bos_cycle_id=1, zone_side="buy",
-                     meta={"triggered_by_event_idx": 24})
-    (t,) = detect_uc1_triggers([cts], h1, [rec], [])
+    (t,) = detect_uc1_triggers([cts], h1, {(0, 1): [_uc1_zpt(0, 1, "sd", 24)]})
     assert (t.use_case, t.parent_sid, t.parent_cycle_id, t.lower_sd) == ("first_counter", 0, 1, -1)
     assert t.meta["parent_input_idx"] == 17
     assert t.meta["trigger_event_idx"] == 24
     assert "probe_input_idx" not in t.meta
+
+
+def _uc1_zpt(sid, cyc, direction, idx):
+    from engine_v2.zones.zone_proximity import ZoneProximityTrigger
+    return ZoneProximityTrigger(structure_id=sid, cycle_id=cyc, direction=direction, idx=idx, trigger_inner=0.5,
+                                zone_kind="POI", proximity_pips=8, pip_size=0.0001, timeframe="H1")
+
+
+def test_uc1_reads_each_cycles_first_sd_proximity_trigger_not_the_wvmi_records():
+    """"WVMI back on the chart" step 1 (2026-10-26): `first_counter` fires on a cycle whose FIRST zone-proximity
+    trigger is sd and whose CTS is confirmed, from the proximity lists themselves — no WVMI record is read (the H1
+    WVMI gate can go). A cycle whose first trigger is opp_sd (a later sd is subsequent_counter's) or that has no
+    CTS_CONFIRMED gets none; the triggers come in CTS_CONFIRMED order, not the lists' key order."""
+    from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
+    from engine_v2.tests._event_factory import make_event
+
+    h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
+    events = [
+        make_event("CTS_CONFIRMED", 21, structure_id=0, cycle_id=1, struct_direction=+1, cts_anchor_idx=17,
+                   confirmed_at=21),
+        make_event("CTS_CONFIRMED", 28, structure_id=0, cycle_id=2, struct_direction=+1, cts_anchor_idx=26,
+                   confirmed_at=28),
+        make_event("CTS_CONFIRMED", 34, structure_id=1, cycle_id=0, struct_direction=-1, cts_anchor_idx=33,
+                   confirmed_at=34),
+    ]
+    zpt = {
+        (1, 0): [_uc1_zpt(1, 0, "sd", 36)],
+        (0, 3): [_uc1_zpt(0, 3, "sd", 38)],                                  # no CTS_CONFIRMED
+        (0, 2): [_uc1_zpt(0, 2, "opp_sd", 30), _uc1_zpt(0, 2, "sd", 31)],   # first is opp_sd
+        (0, 1): [_uc1_zpt(0, 1, "sd", 24), _uc1_zpt(0, 1, "opp_sd", 26)],
+    }
+    with contextlib.redirect_stdout(io.StringIO()):
+        got = detect_uc1_triggers(events, h1, zpt)
+    assert [(t.parent_sid, t.parent_cycle_id, t.lower_sd, t.meta["trigger_event_idx"], t.meta["parent_input_idx"])
+            for t in got] == [(0, 1, -1, 24, 17), (1, 0, 1, 36, 33)]
+
+
+def test_the_main_wvmi_gate_and_uc1_read_the_same_first_sd_trigger():
+    """ONE reading of "a cycle's first sd trigger" (`zone_proximity.first_sd_proximity_triggers`): the main WVMI gate
+    gates exactly the cycles UC1 fires on, each at the same candle."""
+    from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
+    from engine_v2.pipeline.orchestrator import _first_sd_prox_gate
+    from engine_v2.tests._event_factory import make_event
+
+    h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
+    events = [make_event("CTS_CONFIRMED", 21 + c, structure_id=0, cycle_id=c, struct_direction=+1,
+                         cts_anchor_idx=17 + c, confirmed_at=21 + c) for c in range(3)]
+    zpt = {(0, 0): [_uc1_zpt(0, 0, "sd", 24)], (0, 1): [_uc1_zpt(0, 1, "opp_sd", 25)],
+           (0, 2): [_uc1_zpt(0, 2, "sd", 27), _uc1_zpt(0, 2, "opp_sd", 29)]}
+    gate = _first_sd_prox_gate(zpt, "H1.main")
+    with contextlib.redirect_stdout(io.StringIO()):
+        uc1 = detect_uc1_triggers(events, h1, zpt)
+    assert {k: g["triggered_by_event_idx"] for k, g in gate.items()} == {(0, 0): 24, (0, 2): 27}
+    assert {(t.parent_sid, t.parent_cycle_id): t.meta["trigger_event_idx"] for t in uc1} == {(0, 0): 24, (0, 2): 27}
+
+
+def test_run_multi_tf_dual_hands_uc1_the_main_proximity_lists(monkeypatch):
+    """The call site (2026-10-26): `_run_multi_tf_dual` detects `first_counter` from the main's batch proximity lists
+    (`main_zone_proximity_triggers`) and the H1 events — it no longer takes the WVMI records."""
+    from engine_v2.pipeline.orchestrator import _run_multi_tf_dual
+
+    class _Stop(Exception):
+        pass
+
+    seen = []
+
+    def _spy(sorted_events, h1_df, zone_proximity_triggers):
+        seen.append((sorted_events, h1_df, zone_proximity_triggers))
+        raise _Stop
+
+    monkeypatch.setattr("engine_v2.multitf.uc1_trigger.detect_uc1_triggers", _spy)
+    h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
+    events = [object()]
+    zpt = {(0, 1): [_uc1_zpt(0, 1, "sd", 24)]}
+    with pytest.raises(_Stop):
+        _run_multi_tf_dual(h1, events, [], [], {}, None, first_confluence_triggers=[],
+                           main_zone_proximity_triggers=zpt)
+    (got_events, got_h1, got_zpt), = seen
+    assert got_events is events and got_h1 is h1 and got_zpt is zpt
 
 
 # =============================================================================

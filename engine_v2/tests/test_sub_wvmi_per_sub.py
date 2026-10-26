@@ -421,7 +421,7 @@ def test_the_driver_feeds_each_lens_its_stream_and_counts_each_unique_sub_once(m
     out = io.StringIO()
     with contextlib.redirect_stdout(out), pytest.raises(_Stop):
         orch._run_multi_tf_dual(
-            h1, [], [], [], [], {}, None, first_confluence_triggers=[],
+            h1, [], [], [], {}, None, first_confluence_triggers=[],
             subsequent_confluence_triggers=[v3], subsequent_counter_triggers=[v4],
             main_zone_proximity_triggers={(0, 1): [t(11, "sd")], (0, 2): [t(15, "opp_sd"), t(16, "sd")]},
         )
@@ -491,7 +491,7 @@ def test_the_driver_attributes_the_sub_wvmi_with_the_final_lists_a_sweep_generat
     h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
     with contextlib.redirect_stdout(io.StringIO()), pytest.raises(_Stop):
         orch._run_multi_tf_dual(
-            h1, [], [], [], [], {}, None, first_confluence_triggers=[],
+            h1, [], [], [], {}, None, first_confluence_triggers=[],
             subsequent_confluence_triggers=[], subsequent_counter_triggers=[v4],
             main_zone_proximity_triggers={(0, 1): [t(11, "sd")], (0, 2): [t(15, "opp_sd"), t(16, "sd")]},
         )
@@ -559,7 +559,7 @@ def test_the_driver_hands_each_replaced_sub_its_replacers_anchor(monkeypatch):
     h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
     with contextlib.redirect_stdout(io.StringIO()), pytest.raises(_Stop):
         orch._run_multi_tf_dual(
-            h1, [], [], [], [], {}, None, first_confluence_triggers=[],
+            h1, [], [], [], {}, None, first_confluence_triggers=[],
             subsequent_confluence_triggers=[v3], subsequent_counter_triggers=[],
             main_zone_proximity_triggers={(0, 1): [t(11, "sd")]},
         )

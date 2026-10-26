@@ -626,7 +626,7 @@ def _driver(monkeypatch, *, sweep, render=None, stamp=None, var3=(), var4=()):
     meta = {}
     with pytest.raises(_Stop):
         orch._run_multi_tf_dual(
-            df, events, [], kl, pz, meta, None, first_confluence_triggers=[],
+            df, events, kl, pz, meta, None, first_confluence_triggers=[],
             subsequent_confluence_triggers=list(var3), subsequent_counter_triggers=list(var4),
             main_zone_proximity_triggers={(0, 1): [_zpt(748, "sd", "POI", 0.57712)],
                                           (1, 1): [_zpt(820, "sd", "BOS", 0.58132)],

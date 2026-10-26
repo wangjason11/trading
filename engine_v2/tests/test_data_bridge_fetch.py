@@ -129,7 +129,7 @@ _H1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz
 def _run_dual(**triggers):
     kw = dict(first_confluence_triggers=[], subsequent_confluence_triggers=[], subsequent_counter_triggers=[])
     kw.update(triggers)
-    return _run_multi_tf_dual(_H1, [], [], [], [], {}, None, **kw)
+    return _run_multi_tf_dual(_H1, [], [], [], {}, None, **kw)
 
 
 def test_the_dual_driver_lets_a_fetch_failure_propagate(monkeypatch):

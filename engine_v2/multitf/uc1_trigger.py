@@ -1,38 +1,44 @@
-"""UC1 trigger detection: 15M reverse structure from 1H CTS.
+"""UC1 trigger detection (`first_counter`): a 15M reverse structure from an H1 cycle's first sd zone-proximity trigger.
 
-Scans WVMI records for activated cycles (CTS_CONFIRMED + proximity activation).
-For each activated cycle, creates a MultiTFTrigger to start a 15M reverse structure.
+A cycle whose FIRST zone-proximity trigger is sd (`zone_proximity.first_sd_proximity_triggers`) and whose CTS is
+confirmed gets one MultiTFTrigger, starting a 15M structure in the opposite direction. Until 2026-10-26 the detector
+read the main's WVMI records, which existed for exactly those cycles under the main's first-sd WVMI gate; it reads the
+trigger itself since ("WVMI back on the chart" step 1), so the H1 WVMI can drop that gate.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Tuple
 
 import pandas as pd
 
 from engine_v2.structure import event_fields as ef
-from engine_v2.common.types import KLZone, WVMIRecord
 from engine_v2.multitf.types import MultiTFTrigger
 from engine_v2.structure.market_structure import StructureEvent
+from engine_v2.zones.zone_proximity import ZoneProximityTrigger, first_sd_proximity_triggers
 
 
 def detect_uc1_triggers(
     sorted_events: List[StructureEvent],
     h1_df: pd.DataFrame,
-    wvmi_records: List[WVMIRecord],
-    kl_zones: List[KLZone],
+    zone_proximity_triggers: Dict[Tuple[int, int], List[ZoneProximityTrigger]],
 ) -> List[MultiTFTrigger]:
-    """Detect UC1 triggers from H1 WVMI records.
+    """Detect UC1 triggers from the H1 cycles' first sd zone-proximity triggers.
 
-    For each WVMI record (implying CTS_CONFIRMED + proximity activation):
-    - Look up the CTS_CONFIRMED event for (sid, cycle_id)
+    For each cycle with a first sd trigger and a CTS_CONFIRMED, in CTS_CONFIRMED order:
     - lower_sd = opposite of H1 struct_direction
     - parent input (meta `parent_input_idx`, H1) = the CTS anchor
       (`CTS_CONFIRMED.meta["cts_anchor_idx"]`) — informational: the probe
       co-sources its M15 input from the sibling confluence CTS (PART4 §4.3.3)
+    - meta `trigger_event_idx` = the first sd trigger's candle (H1)
+
+    The main's batch lists and the sweep's final lists give the same triggers: both keep each cycle's first trigger
+    (`orchestrator._final_proximity_triggers` asserts it).
 
     Returns list of MultiTFTrigger.
     """
-    # Build lookup: (sid, cycle_id) -> CTS_CONFIRMED event
+    first_sd = first_sd_proximity_triggers(zone_proximity_triggers)
+
+    # Build lookup: (sid, cycle_id) -> CTS_CONFIRMED event (iterated in first-seen order)
     cts_conf_by_key: Dict[tuple, StructureEvent] = {}
     for ev in sorted_events:
         if ev.type == "CTS_CONFIRMED":
@@ -48,14 +54,11 @@ def detect_uc1_triggers(
 
     triggers: List[MultiTFTrigger] = []
 
-    for rec in wvmi_records:
-        sid = rec.bos_structure_id
-        cycle_id = rec.bos_cycle_id
-        key = (sid, cycle_id)
-
-        cts_ev = cts_conf_by_key.get(key)
-        if cts_ev is None:
+    for key, cts_ev in cts_conf_by_key.items():
+        trig = first_sd.get(key)
+        if trig is None:
             continue
+        sid, cycle_id = key
 
         h1_sd = int(cts_ev.meta.get("struct_direction", sd_by_key.get(key, 0)))
         if h1_sd == 0:
@@ -84,8 +87,8 @@ def detect_uc1_triggers(
                 # exported on unresolved rows); the sibling-CTS probe co-sources
                 # its own M15 input and ends at the sweep's `hi`.
                 "parent_input_idx": cts_anchor_idx,
-                # Parent-TF candle where this trigger fires (sd zone-prox).
-                "trigger_event_idx": rec.meta.get("triggered_by_event_idx"),
+                # Parent-TF candle where this trigger fires (the cycle's first sd zone-prox).
+                "trigger_event_idx": trig.idx,
             },
         )
         triggers.append(trigger)

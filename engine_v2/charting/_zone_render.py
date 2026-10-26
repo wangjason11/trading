@@ -545,8 +545,9 @@ def proximity_sub_trigger_types(h1_df: Any) -> dict:
     """`{(sid, cycle_id, H1 trigger candle): sub trigger type}` — the sub trigger each H1 zone-proximity trigger starts,
     read from the detectors' FINAL output on the H1 frame's attrs (the sweep's lists replace the batch ones, PART4 §17
     "The proximity overlay"): `subsequent_confluence` / `subsequent_counter` (`attrs["subsequent_*_triggers"]`,
-    `trigger_event_idx`) and `first_counter` (UC1 over the main WVMI records — `detect_uc1_triggers`, its
-    `meta["trigger_event_idx"]` = the record's first sd trigger). One type per trigger (asserted)."""
+    `trigger_event_idx`) and `first_counter` (UC1 over the H1 cycles' first sd proximity triggers, read from
+    `attrs["zone_proximity_triggers"]` — `detect_uc1_triggers`, its `meta["trigger_event_idx"]` = that trigger's
+    candle; the final lists keep each cycle's first trigger). One type per trigger (asserted)."""
     from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
 
     attrs = h1_df.attrs
@@ -559,10 +560,10 @@ def proximity_sub_trigger_types(h1_df: Any) -> dict:
     for kind in ("subsequent_confluence", "subsequent_counter"):
         for t in attrs.get(f"{kind}_triggers") or []:
             put(t.parent_sid, t.parent_cycle_id, t.trigger_event_idx, kind)
-    wvmi = attrs.get("wvmi") or []
-    if wvmi:
+    zpt = attrs.get("zone_proximity_triggers") or {}
+    if zpt:
         with contextlib.redirect_stdout(io.StringIO()):   # the detector logs each trigger; the replay already did
-            uc1 = detect_uc1_triggers(attrs.get("structure_events") or [], h1_df, wvmi, attrs.get("kl_zones") or [])
+            uc1 = detect_uc1_triggers(attrs.get("structure_events") or [], h1_df, zpt)
         for t in uc1:
             put(t.parent_sid, t.parent_cycle_id, t.meta["trigger_event_idx"], t.use_case)
     return out
