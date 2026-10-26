@@ -602,6 +602,10 @@ hover, the per-LP CSV and `_wvmi.csv`. The accepted hover drafts' last line read
   attribution-vs-UC1 test in `test_lifecycle_sweep_unit.py`; suite 1980 passed; 9 / 9 mutants KILLED
   (`mutants_wvmi_step2.py`: the stamp skipped / on subs too, the gate restored, the unattributed stamp without keys /
   without its path, the stamp's keys last, a shared stamp dict, the key swapped, the attribution's own reading).
+- **LANDED 2026-10-26:** source `76b5a17`, save S_h1_ungated `20261026_183615_76b5a17` (save `e9a58a3`, trunk
+  `4e41902`), docs `a7d73d3` — the save replay = the compared replay (only the H1 `_wvmi.csv` differs from S_uc1_prox;
+  charts unchanged). Not a save-format boundary, but the 2 new rows sit in CTS_CONFIRMED order ((0,0) first, (1,0)
+  third): diff the H1 `_wvmi.csv` keyed (`cmp_wvmi_keyed.py`). The user: "yes let's commit".
 
 ## Build notes for steps 2–5 (written at the session close 2026-10-26 — read with the decisions above)
 
@@ -650,7 +654,11 @@ each code fact below against the code before relying on it (written from the cod
   `tests/test_event_meta_idx_keys.py`; the structure-events CSVs gain it on every pattern CTS_CONFIRMED row
   (predicted, a save-format boundary for those CSVs).
 - The locked LP: `on_bos_confirmed` keeps swapping to BOS_{n+1}'s `last_wave_candle_idx`; print a warning when it
-  differs from the last temporary LP (predicted 0 on this window).
+  differs from the last temporary LP (predicted 0 on this window's VISIBLE records — round 4. **Re-check at the step-3
+  session close (2026-10-26): COLLAPSED records can differ** — round 2 measured confluence sub 1 cycle 0, last
+  temporary 1866 vs locked 1837 (closest-to-outer rule), and step 2 added the collapsed H1 sid 1 cycle 0 (locked LP
+  728). Measure the warning count on every record under the new rule (`wvmi_asof.py` + the lock) before stating it;
+  a collapsed record is hidden, so the warning is a log line only.)
 - **Predicted** (the final LP + pullback momentum, "Measured for round 5"): H1 sid 0 c1 896 → 901 (0.759 → 0.478);
   confluence sub 0 c4 1898 → 1938, sub 1 c4 2455 → 2469, sub 2 c1 2734 → 2828, sub 4 c0 3568 → 3588, sub 7 c0
   4177 → 4196; nothing else in `_wvmi.csv`; the structure-events CSVs + `pattern_anchor_idx`. Tools:
@@ -662,7 +670,11 @@ each code fact below against the code before relying on it (written from the cod
 **Step 4 — the per-LP rows + the CSVs** (round 8). The record keeps its LP sequence (each row: `lp_idx`,
 `as_of_idx`, `lp_status` / `lp_status_reason` / `lp_status_idx`, the momenta); `debug/export_wvmi.py` + `run_replay`
 write `*_wvmi_lps.csv` (H1) and `*_M15_{counter,confluence}_wvmi_lps.csv`. Predicted rows = the dots: H1 57,
-counter 74, confluence 185. The `/compare` and `/commit-save` skills count 27 CSVs → 30 (update both + their file
+counter 74, confluence 185. **Open (noted 2026-10-26, settle with the user before step 4's build):** these counts are
+the NON-collapsed records' LPs (the dots; collapsed records are hidden — round 2 Scope "yes stay hidden"), while
+`_wvmi.csv` keeps collapsed records with `cycle_collapsed=True` (measured on S_h1_ungated: H1 sid 1 c0 / c1; sub 3 c0
+on both lenses; confluence sub 0 c0, sub 1 c0 / c1). Does the per-LP CSV keep the collapsed records' LP rows (flagged), or only the dots' rows? Round
+8 said "one row per dot". The `/compare` and `/commit-save` skills count 27 CSVs → 30 (update both + their file
 tables in the same commit).
 
 **Step 5 — the dots + hovers** (rounds 2–3, 9): small dots on the volume subchart, one fixed row per direction
