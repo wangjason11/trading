@@ -188,8 +188,8 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    the prediction (6 records' final LP + pullback momentum move, the structure-events CSVs gain the key — a
    save-format boundary; the warning prints 10 times for one collapsed record, predicted 2; source `f63df34`, save
    S_lp_furthest `20261026_192655_f63df34` = `LATEST_<branch>`); **4** the per-LP rows +
-   `*_wvmi_lps.csv` — NEXT (ask first: do collapsed records keep flagged per-LP rows?); **5** the dots + hovers on the
-   three charts (a rendered example first).
+   `*_wvmi_lps.csv` — NEXT (one row per dot: collapsed records get none — the user 2026-10-26, "I may change my mind
+   later", §G); **5** the dots + hovers on the three charts (a rendered example first).
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -520,6 +520,12 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
   all confirm by a pullback pattern. Case: confluence sub 7 cycle 0 (a 57-pip gap) sat at its POI from 4071 and
   confirmed only at 4157. Detail + facts: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`
   rounds 6–7.
+- **Per-LP WVMI rows for COLLAPSED records** — not now; the user 2026-10-26 (before "WVMI back on the chart" step 4):
+  "for now collapsed records don't need to get per-LP rows. I may change my mind later". So `*_wvmi_lps.csv` = one
+  row per dot (the non-collapsed records' temporary + locked LPs), while `_wvmi.csv` keeps collapsed records with
+  `cycle_collapsed=True` (reference window: H1 sid 1 c0 / c1; sub 3 c0 on both lenses; confluence sub 0 c0, sub 1 c0 /
+  c1). Revisit only if the user asks. Detail: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`
+  round 10.
 - **Uniform 3-tier chart opacity** (brightest = cycle not ended, mid = sid not ended, faded = sid ended; one
   `opacity_for(sid, cycle)` helper for every element) — its own session. Detail: FIB_LIFECYCLE_SPEC §9.4 + §13.
 - **Breadcrumb header with cross-chart navigation** — "not in v1". Detail: PART4 §16.9.

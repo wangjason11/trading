@@ -622,7 +622,7 @@ hover, the per-LP CSV and `_wvmi.csv`. The accepted hover drafts' last line read
   shifts it with no list change). `on_bos_confirmed` prints `[wvmi] WARNING <path> sid=… cycle=…` when BOS_{n+1}'s
   last wave candle differs from the last temporary LP (slice-local indices on a sub, like every `[wvmi]` line).
 - **Measured before the build** (`wvmi_asof.py`'s new `rule_new` = rule_r4 + the fallback + candidates bounded by
-  `end − 1`; scratchpad `step3_predict.py` over S_h1_ungated's three `_wvmi.csv`, all 30 records incl. collapsed):
+  `end − 1`; `wvmi_step3_predict.py` (this folder; was a scratchpad script) over S_h1_ungated's three `_wvmi.csv`, all 30 records incl. collapsed):
   rule_new = rule_r4 on every record (no record reaches the fallback); routes — pattern 28, proximity "self" 2 (H1 sid
   1 c2; the collapsed confluence sub 1 c1); the pattern span `[pattern_anchor_idx, moment]` = the measured
   `[start, max(end, confirmation)]` on every pattern record; no CTS moment past `end − 1`; every locked record's lock
@@ -679,6 +679,19 @@ hover, the per-LP CSV and `_wvmi.csv`. The accepted hover drafts' last line read
   `5d055ba`) = `LATEST_<branch>` — the save replay = the compared replay (27 / 27 CSVs byte-equal, the charts equal;
   fetch gate PASS, skip grep 33). A SAVE-FORMAT BOUNDARY for the 3 structure-events CSVs (`cmp_events_pattern_anchor.py`
   across it).
+
+## Round 10 — the user's answers (2026-10-26, after step 3 landed, verbatim)
+
+Put: step 4's open question — the per-LP CSV's predicted counts (H1 57, counter 74, confluence 185) are the
+NON-collapsed records' LPs (the dots); should collapsed (hidden) records get flagged per-LP rows, or one row per dot
+only (round 8: "one row per dot")? And: continue here or in a new session?
+
+> for now collapsed records don't need to get per-LP rows. I may change my mind later. Yes I'd like to start a new
+> session.
+
+Decided: `*_wvmi_lps.csv` = one row per dot — a collapsed record (`cycle_collapsed=True`) gets NO per-LP rows (it
+keeps its `_wvmi.csv` row). Parked for a possible revisit: register §G "Per-LP WVMI rows for COLLAPSED records".
+Step 4 in a new session.
 
 ## Build notes for steps 2–5 (written at the session close 2026-10-26 — read with the decisions above)
 
@@ -747,12 +760,18 @@ each code fact below against the code before relying on it (written from the cod
 **Step 4 — the per-LP rows + the CSVs** (round 8). The record keeps its LP sequence (each row: `lp_idx`,
 `as_of_idx`, `lp_status` / `lp_status_reason` / `lp_status_idx`, the momenta); `debug/export_wvmi.py` + `run_replay`
 write `*_wvmi_lps.csv` (H1) and `*_M15_{counter,confluence}_wvmi_lps.csv`. Predicted rows = the dots: H1 57,
-counter 74, confluence 185. **Open (noted 2026-10-26, settle with the user before step 4's build):** these counts are
-the NON-collapsed records' LPs (the dots; collapsed records are hidden — round 2 Scope "yes stay hidden"), while
-`_wvmi.csv` keeps collapsed records with `cycle_collapsed=True` (measured on S_h1_ungated: H1 sid 1 c0 / c1; sub 3 c0
-on both lenses; confluence sub 0 c0, sub 1 c0 / c1). Does the per-LP CSV keep the collapsed records' LP rows (flagged), or only the dots' rows? Round
-8 said "one row per dot". The `/compare` and `/commit-save` skills count 27 CSVs → 30 (update both + their file
-tables in the same commit).
+counter 74, confluence 185. **Settled (round 10, 2026-10-26): one row per dot — collapsed records get NO per-LP rows**
+(they keep their `_wvmi.csv` row with `cycle_collapsed=True`: H1 sid 1 c0 / c1; sub 3 c0 on both lenses; confluence
+sub 0 c0, sub 1 c0 / c1); the user "may change my mind later" (register §G). The `/compare` and `/commit-save` skills
+count 27 CSVs → 30 (update both + their file tables in the same commit). Re-measure the counts on S_lp_furthest
+before building (`wvmi_asof.py` → each non-collapsed record's `new_to_bound` sequence, + its locked LP when locked;
+the counts above were measured as the dots of rule_r4 on S_repl_break + the ungated H1 — re-derive them, don't copy).
+Code facts for the build (step 3's code, `f63df34`): `_temporary_lp_sequence` already returns `[(as_of_idx,
+lp_idx), …]`, but the tracker keeps only the last; the record's sequence must be stored when it is computed (create
+and re-scan), and a locked record's last row is the locked LP (`lp_status=locked`; the lock-swap case = the round-8
+reason "replaced by the locked LP"). `cycle_collapsed` is set AFTER the tracker (`_compute_wvmi_records`), so the
+row filter belongs in the export (or after it), not the tracker. A sub record is mirrored per lens (indices shifted by
+`slice_begin` — the as-of / lp indices of the rows must be shifted with them).
 
 **Step 5 — the dots + hovers** (rounds 2–3, 9): small dots on the volume subchart, one fixed row per direction
 (sell = red just above the bars, buy = green one step higher), at every temporary LP and the locked one; H1 records
