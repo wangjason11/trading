@@ -694,9 +694,25 @@ SESSION ORDER item 5's second pass — the user's design `plans/qa_chart_edits_i
 (`zone_proximity.first_sd_proximity_triggers`, shared with the main WVMI gate), not the gated H1 WVMI records. 27 /
 27 CSVs byte-equal to S_repl_break; the three charts' traces, shapes and layouts JSON-equal (81 / 154 / 302 traces,
 hovers included); the run log's `[uc1_trigger]` lines the same 3 ((0,1), (1,1), (1,2)). Not a save-format boundary.
-S_uc1_prox `20261026_175906_257f8ba` (source `257f8ba`, save `be92848`, trunk `7d4fa57`; = `LATEST_<branch>` from
-2026-10-26). Next (step 2, the H1 WVMI without its gate): predicted the H1 `_wvmi.csv` +2 rows ((0,0); (1,0)
-collapsed), blank `triggered_by_*` on them, nothing else.
+S_uc1_prox `20261026_175906_257f8ba` (source `257f8ba`, save `be92848`, trunk `7d4fa57`; = `LATEST_<branch>` until
+S_h1_ungated, below).
+**WVMI back on the chart, step 2: the H1 WVMI without its gate (2026-10-26, the same design file) — BEHAVIOUR, the H1
+`_wvmi.csv` only:** every H1 cycle with a CTS_CONFIRMED gets a record (`_compute_wvmi_records` is ungated for the main
+too); the main's `triggered_by_*` became attribution (`_stamp_main_wvmi_attribution`: the cycle's first zone-proximity
+trigger when sd, else None — a declared rule-3 meaning change). = the prediction: H1 `_wvmi.csv` 3 → 5 rows, the 3
+old rows byte-equal; + (0,0) buy, locked by cycle 1, FB 110 / LB 430 / FP 436 / LP 590, breakout 0.733, pullback
+0.521; + (1,0) sell, locked by cycle 1, `cycle_collapsed` True, FB 690 / LB 709 / FP 712 / LP 728, breakout 0.390,
+pullback 0.250; both with empty `triggered_by_*`, meta = the five keys with None + `structure_path_id`. Run log
+`[wvmi] total=3, locked=1` → `total=5, locked=3`; the same 3 `[uc1_trigger]` lines. 26 / 27 CSVs byte-equal; the
+three charts unchanged (`fig_named_diff.py`: no trace added / removed / changed, layouts equal). Not a save-format
+boundary (same columns), but the rows follow the CTS_CONFIRMED processing order, so (0,0) (439) lands first and
+(1,0) (727) third: diff the H1 `_wvmi.csv` KEYED
+(`cmp_wvmi_keyed.py`: 2 rows added, every other row unchanged) — positional `cmp_save.py` shows every row shifted.
+Skip grep 23. S_h1_ungated `20261026_183615_76b5a17` (source `76b5a17`, save `e9a58a3`, trunk `4e41902`; =
+`LATEST_<branch>` from 2026-10-26). Next (step 3, the new LP rule): predicted the final LP + pullback momentum of 6
+records (H1 sid 0 c1 896 → 901; confluence sub 0 c4 1898 → 1938, sub 1 c4 2455 → 2469, sub 2 c1 2734 → 2828, sub 4
+c0 3568 → 3588, sub 7 c0 4177 → 4196) + `pattern_anchor_idx` on every pattern CTS_CONFIRMED row of the
+structure-events CSVs.
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -826,8 +842,8 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-26 on S_uc1_prox `20261026_175906_257f8ba`, unchanged from S_repl_break
-`20261024_171443_56517e7` — the replacement break on every lens
+counts are (verified 2026-10-26 on S_h1_ungated `20261026_183615_76b5a17`, unchanged from S_uc1_prox
+`20261026_175906_257f8ba` and S_repl_break `20261024_171443_56517e7` — the replacement break on every lens
 added one PB-dot trace per M15 chart, counter 153 → 154 and confluence 301 → 302, H1 and every shape unchanged — to
 S_prox_hover `20261024_105742_fb0189b`'s counts, unchanged from S_wave_hover
 `20261023_194643_18711dc`, S_fib_hover `20261023_191547_563f5f8`, S_zone_hover

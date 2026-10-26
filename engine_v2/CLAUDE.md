@@ -40,7 +40,8 @@ Fib zone and wave candle hovers 2026-10-23, the zone proximity trigger marker ho
 CHARTING_SPEC "Hover label conventions"; now the charts' other elements — the first, 2026-10-24: a replaced sub's
 line breaks at the same point on every lens, the sub's pool-wide replacer; the second, WVMI back on the chart — the
 design settled 2026-10-26, five landings, step 1 landed 2026-10-26: `first_counter` reads the H1 cycles' first sd
-proximity trigger, not the WVMI records),
+proximity trigger, not the WVMI records; step 2 landed 2026-10-26: the H1 WVMI without its gate, every H1 cycle with a
+CTS_CONFIRMED has a record, attributed to its first sd trigger),
 then item 3, zone size adjustments),
 Part 2 entry decisions, Part 3 other decisions.
 
