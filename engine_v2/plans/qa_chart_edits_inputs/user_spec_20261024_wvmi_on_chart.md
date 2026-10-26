@@ -664,6 +664,10 @@ each code fact below against the code before relying on it (written from the cod
   4177 → 4196; nothing else in `_wvmi.csv`; the structure-events CSVs + `pattern_anchor_idx`. Tools:
   `wvmi_asof.py` (≈1 min, writes the as-of JSON; its rule_r4 = these rules except the fallback, which this window
   never reaches) → `wvmi_r4_report.py` / `wvmi_final_lp.py` (the final LP per record) / `wvmi_fp_vs_first.py`.
+  **Since step 2 (noted at its close):** `wvmi_asof.py`'s `extra` branch (keyed on `kw.get("gate")`) is dead —
+  every H1 record is a regular capture (`extra=False`), including (0,0) / (1,0); the three report scripts hard-code
+  S_repl_break's paths (`S = …/20261024_171443_56517e7/…`), whose H1 `_wvmi.csv` lacks those 2 rows — repoint `S` at
+  S_h1_ungated `20261026_183615_76b5a17` (the sub CSVs and the H1 frames are identical) before reading their H1 lines.
   Mutants: the ties, never-FP, the fallback's reference (FP's close, not the confirmation candle's), the proximity
   steps, the `end − 1` bound, the warning.
 
