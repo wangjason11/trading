@@ -180,7 +180,8 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    chart. Five landings in the user's order, one cause each: **1** `first_counter` reads the H1 cycles' first sd
    proximity trigger directly, not the WVMI records — LANDED 2026-10-26 (zero change; source `257f8ba`, save
    S_uc1_prox `20261026_175906_257f8ba` = `LATEST_<branch>`); **2** the H1 WVMI without its
-   gate (+2 H1 records) — NEXT; **3** the new LP rule (6 records' final LP + pullback momentum change); **4** the
+   gate (+2 H1 records, (0,0) and the collapsed (1,0); the main's `triggered_by_*` now attribution, None without a
+   first sd trigger; the mode name `"first_sd_prox"` kept by the user) — BUILT 2026-10-26, = the prediction; **3** the new LP rule (6 records' final LP + pullback momentum change); **4** the
    per-LP rows + `*_wvmi_lps.csv`; **5** the dots + hovers on the three charts (a rendered example first).
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 

@@ -1634,7 +1634,8 @@ applies to *the same event*, never deletes events from other sids.
 > persists one copy per lens df the sub is on, each with that lens's path; each lens copy's
 > `triggered_by_event_idx` / `_type` name the lens's first WVMI-class trigger (§8.5's classes) inside the sub's
 > window — ATTRIBUTION, None when none lands there. §8.3 / §8.4 / §8.5's "initiate a sweep at each trigger" and
-> §8.6's lock table are superseded (dated design below); the main (§8.2) keeps its first-sd gate. Plan C
+> §8.6's lock table are superseded (dated design below); the main (§8.2) kept its first-sd gate until 2026-10-26
+> ("WVMI back on the chart" step 2: ungated, its records attributed to that trigger — WVMI_SPEC). Plan C
 > (2026-09-20 → 30) had one trigger-gated sweep per unique sub, persisted into every lens with the SWEEPING lens's
 > path on the field (the counter rows' column contradicted their meta).
 
@@ -1644,7 +1645,10 @@ WVMI now exists per structure entity, keyed by
 ### 8.1 Removed: ad-hoc gate
 
 - **Not as written (2026-09-30):** the main KEPT its first-sd gate (§8.2,
-  `_first_sd_prox_gate`); what Plan G removed is any gate on SUB WVMI.
+  `_first_sd_prox_gate`); what Plan G removed is any gate on SUB WVMI. The main's
+  went 2026-10-26 ("WVMI back on the chart" step 2): every H1 CTS_CONFIRMED gets a
+  record, attributed to its cycle's first sd trigger (`_first_sd_prox_attribution`,
+  None when it has none).
   Original text: the "first sd zone-proximity trigger gates WVMI creation at parent
   CTS_CONFIRMED" pattern is removed.
 - "Cycle passed the gate" and "parent CTS_n confirmed" merge into one
@@ -1953,7 +1957,7 @@ variation, an event bus dispatches it.
 |---|---|
 | `BOS_CONFIRMED` | `first_confluence` (var 1) |
 | `CTS_CONFIRMED` | resolves var 1's NULL `parent_cts_anchor_idx` if pending |
-| First sd-zone proximity trigger after parent CTS | `first_counter` (var 2) + main WVMI (its gate) + the confluence lens's sub-WVMI trigger attribution (Plan G) |
+| First sd-zone proximity trigger after parent CTS | `first_counter` (var 2) + the main WVMI's trigger attribution (its gate until 2026-10-26) + the confluence lens's sub-WVMI trigger attribution (Plan G) |
 | Subsequent sd-zone proximity trigger forming Λ/V | `subsequent_counter` (var 4) + the confluence lens's sub-WVMI trigger attribution |
 | CTS-zone proximity trigger after sd-prox | `subsequent_confluence` (var 3) + the counter lens's sub-WVMI trigger attribution |
 | `REVERSAL_CONFIRMED` (`STATE_CHANGED→reversal`) | parent cycle ends → every child **record** in it ends `parent_end` (§6.5 / §17.4; the rev-1 `lifecycle_end` reason no longer exists); the child **sub** ends only through the §17.5 aggregation |
@@ -1972,7 +1976,8 @@ order is:
 4. Sub entities created (if first time) or have new sid appended.
 5. Sub structures process the candle (their own MarketStructure updates,
    derive zones, fibs, POIs — and WVMI, ungated, since Plan G).
-6. WVMI: the main's gated record at its trigger; a sub's per-lens trigger
+6. WVMI: the main's record at its CTS confirmation, attributed to the cycle's first sd
+   trigger (gated on it until 2026-10-26); a sub's per-lens trigger
    ATTRIBUTION is stamped onto its (already computed) records.
 7. Children of newly-emitted sub events recursively trigger their own
    grandchildren via the same bus.
@@ -3113,7 +3118,7 @@ inside the sweep (the parent's opp_sd / sd proximity references read sub zones, 
 first_confluence, first_counter and the reversals stay precomputed, and a collapsed cycle keeps its batch triggers
 (parent zones only). After the sweep the final H1 lists replace `attrs["zone_proximity_triggers"]` /
 `attrs["subsequent_*_triggers"]` everywhere downstream (the sub WVMI attribution, the charts); asserted: each cycle's
-first trigger == the batch's (the main WVMI gate read it), and every sub zone a trigger fired on has the same inner in
+first trigger == the batch's (the main WVMI attribution and first_counter read it), and every sub zone a trigger fired on has the same inner in
 its sub's real projection. Rules: `plans/PLAN_R_opp_sd_zones_proximity.md` §1 / §5; the module docstring.
 
 **Order within a phase.** `TRIGGER_FIRE`: `(lens_rank, type_rank,

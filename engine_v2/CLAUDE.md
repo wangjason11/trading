@@ -117,7 +117,7 @@ engine_v2/
 candle features → structure patterns → imbalance → market structure → KL zones → wave candles → Fib tracking → POI zones → WVMI → charting
 ```
 
-**Critical:** Base features MUST run BEFORE structure. WVMI MUST run AFTER POI zones (depends on POI zone inner bounds for activation gate). See `LANDMINES.md` for details.
+**Critical:** Base features MUST run BEFORE structure. WVMI MUST run AFTER POI zones (the main's trigger attribution reads the zone-proximity triggers, which depend on POI zone inner bounds — a gate until 2026-10-26). See `LANDMINES.md` for details.
 
 ---
 

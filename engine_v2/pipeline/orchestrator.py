@@ -105,15 +105,19 @@ def _prev_bos_lines(sorted_events: list, reversal_idx_by_new_sid: dict, pfx: str
     return prev_bos_lines
 
 
-# `_run_downstream_pipeline(wvmi=...)` (Plan G G1): the main's first-sd gate, a
-# sub's ungated projection, or no WVMI at all.
+# `_run_downstream_pipeline(wvmi=...)` (Plan G G1): the main (zone proximity
+# runs; each record attributed to its cycle's first sd trigger), a sub's
+# projection, or no WVMI at all. No mode gates a record ("WVMI back on the
+# chart" step 2, 2026-10-26: the main's first-sd gate went; the name kept).
 WVMI_MODES = ("first_sd_prox", "none", "off")
 
 
-def _first_sd_prox_gate(zone_proximity_triggers: Dict[tuple, list], structure_path_id: str) -> Dict[tuple, dict]:
-    """The main's WVMI gate: {(sid, cycle): record meta} for every cycle whose
-    FIRST zone-proximity trigger is sd (`zone_proximity.first_sd_proximity_triggers`;
-    Part 4 §8.7 attribution to it)."""
+def _first_sd_prox_attribution(zone_proximity_triggers: Dict[tuple, list], structure_path_id: str) -> Dict[tuple, dict]:
+    """The main's WVMI attribution (Part 4 §8.7): {(sid, cycle): record meta}
+    for every cycle whose FIRST zone-proximity trigger is sd
+    (`zone_proximity.first_sd_proximity_triggers`). The main's gate until
+    2026-10-26 ("WVMI back on the chart" step 2) — a cycle without one now
+    gets a record too, attributed to nothing (`_stamp_main_wvmi_attribution`)."""
     return {
         key: {
             "triggered_by_event_idx": first_sd.idx,
@@ -126,6 +130,28 @@ def _first_sd_prox_gate(zone_proximity_triggers: Dict[tuple, list], structure_pa
     }
 
 
+def _stamp_main_wvmi_attribution(
+    records: list, zone_proximity_triggers: Dict[tuple, list], structure_path_id: str,
+) -> None:
+    """The main's trigger attribution, stamped after the tracker (as a sub's
+    per lens, `_stamp_sub_wvmi_trigger_meta`): every record's meta gets, as its
+    FIRST keys, its cycle's `_first_sd_prox_attribution` dict — or the same
+    keys with None values (`structure_path_id` kept) when the cycle's first
+    zone-proximity trigger is not sd or it has none. `export_wvmi` reads
+    `triggered_by_*` strictly, so every record carries them."""
+    attribution = _first_sd_prox_attribution(zone_proximity_triggers, structure_path_id)
+    unattributed = {
+        "triggered_by_event_idx": None,
+        "triggered_by_event_type": None,
+        "structure_path_id": structure_path_id,
+        "trigger_inner": None,
+        "proximity_pips": None,
+    }
+    for rec in records:
+        stamp = attribution.get((rec.bos_structure_id, rec.bos_cycle_id), unattributed)
+        rec.meta = {**stamp, **{k: v for k, v in rec.meta.items() if k not in stamp}}
+
+
 def _compute_wvmi_records(
     df: pd.DataFrame,
     events: list,
@@ -133,7 +159,6 @@ def _compute_wvmi_records(
     wave_candle_results: list,
     kl_zones: list,
     *,
-    gate: Optional[Dict[tuple, dict]],
     structure_path_id: str,
     lifecycle_floor: Optional[int],
     lifecycle_cap: Optional[int],
@@ -141,10 +166,11 @@ def _compute_wvmi_records(
 ) -> list:
     """The ONE WVMI tracker loop (Plan G G1) — the main and every sub projection.
 
-    `gate` None = ungated (a sub: every CTS_CONFIRMED is offered to the
-    tracker; the record meta stays `{}` — trigger attribution is stamped per
-    lens after the mirror, `_stamp_sub_wvmi_trigger_meta`). Otherwise only the
-    gated cycles get a record, its meta updated with the gate's dict.
+    Ungated: every CTS_CONFIRMED is offered to the tracker; the record meta
+    stays `{}` — trigger attribution is stamped afterwards (the main's by
+    `_stamp_main_wvmi_attribution`, a sub's per lens after the mirror,
+    `_stamp_sub_wvmi_trigger_meta`). The main was gated on its first sd
+    zone-proximity trigger until 2026-10-26 ("WVMI back on the chart" step 2).
 
     Bounded by the `compute_cycle_lifecycle` table KL / POI read (the same
     events / floor / cap / reason): a temp LP never passes its cycle's
@@ -164,12 +190,7 @@ def _compute_wvmi_records(
 
     for ev in sorted_events:
         if ev.type == "CTS_CONFIRMED":
-            key = (ev.meta.get("structure_id", 0), ev.meta.get("cycle_id", 0))
-            if gate is not None and key not in gate:
-                continue
-            rec = tracker.on_cts_confirmed(ev, frame, wave_candle_results, kl_zones)
-            if rec is not None and gate is not None:
-                rec.meta.update(gate[key])
+            tracker.on_cts_confirmed(ev, frame, wave_candle_results, kl_zones)
 
     for ev in sorted_events:
         if ev.type == "BOS_CONFIRMED":
@@ -214,12 +235,15 @@ def _run_downstream_pipeline(
     poi_zones, ic_candidates, wvmi_records, prev_bos_lines, sorted_events,
     zone_proximity_triggers
 
-    `wvmi` (Plan G G1) — one of `WVMI_MODES`, anything else raises:
+    `wvmi` (Plan G G1) — one of `WVMI_MODES`, anything else raises. No mode
+    gates a record: every CTS_CONFIRMED is offered to the tracker.
       - `"first_sd_prox"` (the main): `check_zone_proximity` runs (it also
-        feeds the var3 / var4 detectors and the §8.5 trigger streams) and a
-        cycle gets a record only when its first zone-proximity trigger is sd;
-      - `"none"` (a sub — `project_to_window`): no gate, every CTS_CONFIRMED
-        is offered to the tracker; zone proximity is never run for a sub;
+        feeds `first_counter`, the var3 / var4 detectors and the §8.5 trigger
+        streams) and each record is attributed to its cycle's first
+        zone-proximity trigger when that is sd (`_stamp_main_wvmi_attribution`;
+        a gate until 2026-10-26 — "WVMI back on the chart" step 2);
+      - `"none"` (a sub — `project_to_window`): record meta `{}` (the per-lens
+        stamp comes after the mirror); zone proximity is never run for a sub;
       - `"off"`: no WVMI and no zone proximity (tests of the other stages).
 
     `cross_fib_limits` — `{sid: CrossFibLimit}` for the FibTracker (PLAN_I §9.3
@@ -409,15 +433,16 @@ def _run_downstream_pipeline(
         f"picks={sum(1 for r in ic_candidates if r.picked)}, rows={len(ic_candidates)}"
     )
 
-    # 9) WVMI (Plan G G1) — the main gates on its first sd zone-proximity
-    # trigger per cycle; a sub (`wvmi="none"`) is ungated, computed here inside
-    # its projection like KL / POI / fib. Zone proximity runs on the main only.
+    # 9) WVMI (Plan G G1) — ungated, the main and a sub (`wvmi="none"`,
+    # computed here inside its projection like KL / POI / fib); the main's
+    # records are attributed to each cycle's first sd zone-proximity trigger
+    # (its gate until 2026-10-26). Zone proximity runs on the main only.
     wvmi_records: list = []
     zone_proximity_triggers: Dict[tuple, list] = {}
 
     if wvmi == "first_sd_prox":
         # Zone proximity triggers — alternating sd/opp_sd per cycle; the WVMI
-        # gate uses only the first sd trigger per cycle.
+        # attribution reads only each cycle's first trigger, when it is sd.
         zone_proximity_triggers = check_zone_proximity(
             df=df,
             sorted_events=sorted_events,
@@ -430,15 +455,13 @@ def _run_downstream_pipeline(
     if wvmi != "off":
         wvmi_records = _compute_wvmi_records(
             df, events, sorted_events, wave_candle_results, kl_zones,
-            gate=(
-                _first_sd_prox_gate(zone_proximity_triggers, structure_path_id)
-                if wvmi == "first_sd_prox" else None
-            ),
             structure_path_id=structure_path_id,
             lifecycle_floor=lifecycle_floor,
             lifecycle_cap=lifecycle_cap,
             cap_reason=cap_reason,
         )
+        if wvmi == "first_sd_prox":
+            _stamp_main_wvmi_attribution(wvmi_records, zone_proximity_triggers, structure_path_id)
         print(f"{pfx}[wvmi] total={len(wvmi_records)}, locked={sum(1 for r in wvmi_records if r.lp_locked)}")
     else:
         print(f"{pfx}[wvmi] off")
@@ -830,7 +853,7 @@ def _final_proximity_triggers(
     trigger gets `prox_ref_sub_id` = its source sub's FINAL id — numbered after the sweep), every other cycle's batch
     list (collapsed: parent zones only). In the batch's cycle order, then any cycle only the overlay produced.
 
-    ASSERTED (the main WVMI gate and the `first_counter` trigger read only the first sd of each cycle —
+    ASSERTED (the main WVMI attribution and the `first_counter` trigger read only the first sd of each cycle —
     `zone_proximity.first_sd_proximity_triggers` — from the batch; the chart's `first_counter` lookup from these final
     lists): each cycle's first trigger is the batch's — (idx, direction, trigger_inner, zone_kind). It is on a parent
     zone in both: an sd sub zone is no candidate before the cycle's first sd trigger (PLAN_R §9.2 item 7 — with the
@@ -858,8 +881,8 @@ def _final_proximity_triggers(
         b = batch.get(key, [])
         assert (not b and not lst) or (b and lst and _key(b[0]) == _key(lst[0])), (
             f"[multi_tf:dual] {key}: the sweep's first proximity trigger "
-            f"{_key(lst[0]) if lst else None} != the batch's {_key(b[0]) if b else None} — the main WVMI gate and "
-            f"first_counter read it"
+            f"{_key(lst[0]) if lst else None} != the batch's {_key(b[0]) if b else None} — the main WVMI "
+            f"attribution and first_counter read it"
         )
         if lst:
             out[key] = lst

@@ -3,7 +3,8 @@
 A cycle whose FIRST zone-proximity trigger is sd (`zone_proximity.first_sd_proximity_triggers`) and whose CTS is
 confirmed gets one MultiTFTrigger, starting a 15M structure in the opposite direction. Until 2026-10-26 the detector
 read the main's WVMI records, which existed for exactly those cycles under the main's first-sd WVMI gate; it reads the
-trigger itself since ("WVMI back on the chart" step 1), so the H1 WVMI can drop that gate.
+trigger itself since ("WVMI back on the chart" step 1); the H1 WVMI dropped that gate in step 2 (every H1 cycle with a
+CTS_CONFIRMED has a record), so the records no longer mark these cycles.
 """
 from __future__ import annotations
 

@@ -1,7 +1,8 @@
 """Plan G — WVMI on the unique sub (`plans/PLAN_G_wvmi_unique_sub.md`, 2026-09-30).
 
-G1: ONE tracker helper (`orchestrator._compute_wvmi_records`) for the main (gated on its first sd zone-proximity
-trigger) and every sub projection (`wvmi="none"`, ungated, inside `project_to_window`); the tracker frame is
+G1: ONE tracker helper (`orchestrator._compute_wvmi_records`), ungated, for the main (its records attributed to each
+cycle's first sd zone-proximity trigger — a gate until "WVMI back on the chart" step 2, 2026-10-26) and every sub
+projection (`wvmi="none"`, inside `project_to_window`); the tracker frame is
 `df.iloc[:cap + 1]` under a cap; the temp LP stops at the cycle's `end - 1` (Q4); a lock LP outside the frame falls
 back to the temp LP (Q10). G2: `WVMIRecord.cycle_collapsed` from the same `compute_cycle_lifecycle` table (main AND
 subs). G3: the mirror persists one copy per lens (the FIELD `structure_path_id` = the lens path); the exporter writes
@@ -79,10 +80,10 @@ def _basic(n=25, *, bos2=True, fp=10, bos2_last=18):
     return df, events, wcs, [zone]
 
 
-def _helper(df, events, wcs, zones, *, gate=None, floor=None, cap=None, reason="lifecycle_end"):
+def _helper(df, events, wcs, zones, *, floor=None, cap=None, reason="lifecycle_end"):
     from engine_v2.structure import event_fields as ef
     return _q(lambda: _compute_wvmi_records(
-        df, events, sorted(events, key=ef.processing_order_key), wcs, zones, gate=gate, structure_path_id=_SUB,
+        df, events, sorted(events, key=ef.processing_order_key), wcs, zones, structure_path_id=_SUB,
         lifecycle_floor=floor, lifecycle_cap=cap, cap_reason=reason))
 
 
@@ -112,12 +113,28 @@ def test_unlocked_open_cycle_keeps_its_temp_lp_and_is_not_collapsed():
     assert rec.pullback_momentum == 120 * 0.7 / 150 and rec.cycle_collapsed is False
 
 
-def test_the_gate_keeps_only_gated_cycles_and_writes_their_meta_first():
+def test_the_main_attribution_stamps_every_record_its_keys_first():
+    """"WVMI back on the chart" step 2: the main's attribution is a post-pass, never a gate — a record whose cycle has a
+    first sd trigger gets that trigger's keys, any other the same keys with None values (`export_wvmi` reads
+    `triggered_by_*` strictly), both AHEAD of keys the record already carries; the stamps are not shared dicts."""
     df, events, wcs, zones = _basic()
-    assert _helper(df, events, wcs, zones, gate={(0, 2): {"x": 1}}) == []
-    meta = {"triggered_by_event_idx": 13, "triggered_by_event_type": "ZONE_PROXIMITY_TRIGGER"}
-    (rec,) = _helper(df, events, wcs, zones, gate={(0, 1): meta})
-    assert rec.meta == meta and rec.meta is not meta
+    trig = lambda i, d: SimpleNamespace(idx=i, direction=d, trigger_inner=0.95, proximity_pips=8)   # noqa: E731
+    for zpt, expected in (({(0, 1): [trig(13, "sd")]}, (13, "ZONE_PROXIMITY_TRIGGER", 0.95, 8)),
+                          ({(0, 1): [trig(13, "opp_sd"), trig(15, "sd")]}, (None, None, None, None)),
+                          ({(0, 2): [trig(13, "sd")]}, (None, None, None, None))):
+        (rec,) = _helper(df, events, wcs, zones)
+        assert rec.meta == {}
+        rec.meta = {"sub_id": 4}
+        orch._stamp_main_wvmi_attribution([rec], zpt, "H1.main")
+        assert list(rec.meta) == ["triggered_by_event_idx", "triggered_by_event_type", "structure_path_id",
+                                  "trigger_inner", "proximity_pips", "sub_id"]
+        assert tuple(rec.meta[k] for k in ("triggered_by_event_idx", "triggered_by_event_type", "trigger_inner",
+                                           "proximity_pips")) == expected
+        assert rec.meta["structure_path_id"] == "H1.main"
+    a, b = _helper(df, events, wcs, zones)[0], _helper(df, events, wcs, zones)[0]
+    orch._stamp_main_wvmi_attribution([a, b], {}, "H1.main")      # one call: its one unattributed stamp
+    a.meta["proximity_pips"] = 1
+    assert b.meta["proximity_pips"] is None
 
 
 # --- G1: the frame under a cap, the capped-record assert, Q10 -------------------------------------------------------
@@ -178,7 +195,7 @@ def test_the_tracker_falls_back_on_a_lock_lp_past_the_data_edge():
     assert (rec.lp_idx, rec.lp_volume, rec.pullback_momentum, rec.status) == (12, 120.0, 120 * 0.7 / 150, "locked")
 
 
-# --- G1 on real MS output: the sub projection, the main, the gate, the mode -----------------------------------------
+# --- G1 on real MS output: the sub projection, the main, its attribution, the mode ----------------------------------
 
 @pytest.fixture(scope="module")
 def dr():
@@ -199,8 +216,9 @@ _DR_VALUES = [((0, 0), (1, 1, 3, 4), "locked", 1), ((0, 1), (5, 7, 9, 9), "locke
 def test_a_sub_projection_computes_its_own_ungated_wvmi(dr, monkeypatch):
     """G1: `project_to_window` passes `wvmi="none"` — every CTS_CONFIRMED gets a record, meta `{}`, the call's path;
     zone proximity is never run for a sub (stubbed to raise). The main on the same data with proximity stubbed to
-    `{}` gets NONE (its gate): the default mode is the main's gate, not "none" (G1a), and a projection that passed
-    the main's mode would get none either (G1b)."""
+    `{}` gets the same records, each stamped unattributed (its gate until "WVMI back on the chart" step 2): the
+    default mode is the main's, not "none" (G1a — meta `{}`), and a projection that passed the main's mode would run
+    zone proximity (G1b)."""
     def _boom(**_kw):
         raise AssertionError("check_zone_proximity ran for a sub")
     monkeypatch.setattr(orch, "check_zone_proximity", _boom)
@@ -211,10 +229,13 @@ def test_a_sub_projection_computes_its_own_ungated_wvmi(dr, monkeypatch):
     assert down["zone_proximity_triggers"] == {}
     monkeypatch.setattr(orch, "check_zone_proximity", lambda **_kw: {})
     main = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, cross_fib_limits=main_limits(dr.events)))
-    assert main["wvmi_records"] == []
+    assert _vals(main["wvmi_records"]) == _DR_VALUES
+    assert [r.meta for r in main["wvmi_records"]] == [
+        {"triggered_by_event_idx": None, "triggered_by_event_type": None, "structure_path_id": "H1.main",
+         "trigger_inner": None, "proximity_pips": None}] * 3
 
 
-def test_the_main_keeps_its_gate_values_and_meta_key_order(dr):
+def test_the_main_keeps_its_attribution_values_and_meta_key_order(dr):
     out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, cross_fib_limits=main_limits(dr.events)))
     assert _vals(out["wvmi_records"]) == _DR_VALUES
     assert [list(r.meta.items()) for r in out["wvmi_records"]] == [
@@ -224,17 +245,20 @@ def test_the_main_keeps_its_gate_values_and_meta_key_order(dr):
     assert {r.structure_path_id for r in out["wvmi_records"]} == {"H1.main"}
 
 
-def test_the_main_gate_reads_only_the_first_trigger_of_a_cycle(dr, monkeypatch):
-    """A cycle whose FIRST zone-proximity trigger is opp_sd gets no main record, even with an sd trigger after it
-    (the M1 mutant "any sd trigger")."""
+def test_the_main_attribution_reads_only_the_first_trigger_of_a_cycle(dr, monkeypatch):
+    """A cycle whose FIRST zone-proximity trigger is opp_sd still gets its main record ("WVMI back on the chart"
+    step 2 — no gate), attributed to nothing, even with an sd trigger after it (the M1 mutant "any sd trigger")."""
     trig = lambda i, d: SimpleNamespace(idx=i, direction=d, trigger_inner=0.6, proximity_pips=8)   # noqa: E731
     monkeypatch.setattr(orch, "check_zone_proximity", lambda **_kw: {
         (0, 0): [trig(4, "opp_sd"), trig(6, "sd")], (0, 1): [trig(9, "sd")], (0, 2): [trig(14, "sd")]})
     out = _q(lambda: _run_downstream_pipeline(dr.df, copy.deepcopy(dr.events), 1, cross_fib_limits=main_limits(dr.events)))
-    assert [(r.bos_structure_id, r.bos_cycle_id) for r in out["wvmi_records"]] == [(0, 1), (0, 2)]
+    assert _vals(out["wvmi_records"]) == _DR_VALUES
+    assert [(r.bos_cycle_id, r.meta["triggered_by_event_idx"], r.meta["triggered_by_event_type"])
+            for r in out["wvmi_records"]] == [(0, None, None), (1, 9, "ZONE_PROXIMITY_TRIGGER"),
+                                               (2, 14, "ZONE_PROXIMITY_TRIGGER")]
 
 
-def test_the_main_gate_meta_is_the_first_triggers_even_with_a_later_sd(dr, monkeypatch):
+def test_the_main_attribution_is_the_first_triggers_even_with_a_later_sd(dr, monkeypatch):
     """(landing review N6) sd @4 (inner .61, 7 pips), opp_sd @5, sd @6 (.55, 3): the record's attribution is the
     FIRST trigger's — UC1 copies `triggered_by_event_idx` into the first_counter trigger (its sweep `trigger_idx`)."""
     trig = lambda i, d, inner, pips: SimpleNamespace(idx=i, direction=d, trigger_inner=inner,  # noqa: E731
@@ -256,7 +280,7 @@ def test_record_order_follows_the_processing_order_not_the_events_list(dr):
     events = list(down["events"])
     recs = _q(lambda: _compute_wvmi_records(
         dr.df, list(reversed(events)), sorted(events, key=ef.processing_order_key), down["wave_candles"],
-        down["kl_zones"], gate=None, structure_path_id="x", lifecycle_floor=None, lifecycle_cap=None,
+        down["kl_zones"], structure_path_id="x", lifecycle_floor=None, lifecycle_cap=None,
         cap_reason="lifecycle_end"))
     assert [(r.bos_cycle_id, r.lp_idx, r.status) for r in recs] == [(0, 4, "locked"), (1, 9, "locked"),
                                                                      (2, 14, "created")]

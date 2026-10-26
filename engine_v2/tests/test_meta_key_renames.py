@@ -281,7 +281,7 @@ def test_exporters_write_every_meta_dict_verbatim(tmp_path, geometry, m15_df):
     """The export layer (no exporter test existed — the Post-E·4 review's MINOR 4, the Post-E·5 review's X2 / X3: an
     alias built from string pieces, or `bounds_steps` dropped, in an exporter survived): each CSV row's `meta` text is
     exactly `str()` of the object's meta — KL (incl. an expansion and a reconfirm), fib and events from the fixture's
-    run, POI from a rendered sub; WVMI (Plan G) the main's gated records + a rendered sub's lens copies."""
+    run, POI from a rendered sub; WVMI (Plan G) the main's records + a rendered sub's lens copies."""
     import csv
     from engine_v2.debug.export_events import export_structure_events
     from engine_v2.debug.export_fib_lifecycle import export_fib_lifecycle

@@ -11,48 +11,50 @@ Wave Volume Momentum Indicator (WVMI) measures BOS zone strength by tracking vol
 
 ---
 
-## WVMI Gating
+## WVMI Records and Trigger Attribution (no gate)
 
-Gating differs by entity. **Main**: entity-local zone proximity (the first sd
-trigger per cycle). **Sub**: none — every CTS_CONFIRMED of a rendered unique sub
-gets a record, computed inside the sub's projection like its zones (Plan G,
-2026-09-30); the parent triggers are per-lens ATTRIBUTION, never a gate.
-`_run_downstream_pipeline(wvmi=...)` selects it: `"first_sd_prox"` (the main),
-`"none"` (a sub, `project_to_window`), `"off"` (tests); any other value raises.
+**No entity gates a record:** every CTS_CONFIRMED is offered to the tracker — a rendered unique sub's since Plan G
+(2026-09-30, computed inside the sub's projection like its zones), the main's since 2026-10-26 ("WVMI back on the
+chart" step 2; the user, round 4: "I'm leaning toward updating the gate to being CTS confirmed rather than
+proximity", decided round 5 — a record is created at its CTS_CONFIRMED, i.e. no gate; until then a main cycle got a
+record only when its first zone-proximity trigger was sd). The triggers are ATTRIBUTION, stamped after the tracker: the main's by
+`orchestrator._stamp_main_wvmi_attribution`, a sub's per lens (`_stamp_sub_wvmi_trigger_meta`, below).
+`_run_downstream_pipeline(wvmi=...)` selects the mode: `"first_sd_prox"` (the main — zone proximity runs and the
+records are attributed; the name kept by the user's choice 2026-10-26, it names what the main reads), `"none"` (a
+sub, `project_to_window`), `"off"` (tests); any other value raises.
 
 ### Main entity (`H1.main`)
 
-WVMI records are gated by `check_zone_proximity()` in
-`zones/zone_proximity.py` (alternating sd/opp_sd triggers per cycle — see
-[POI_ZONES_SPEC](POI_ZONES_SPEC.md)). The orchestrator extracts only the
-**first sd-direction trigger** per cycle as the gate. When that exists,
-the cycle's `CTS_CONFIRMED` produces a `WVMIRecord` whose meta carries
-the §8.7 attribution schema:
+`check_zone_proximity()` in `zones/zone_proximity.py` still runs on the main (alternating sd/opp_sd triggers per
+cycle — see [POI_ZONES_SPEC](POI_ZONES_SPEC.md); `first_counter`, the `subsequent_*` triggers and this attribution
+read it). Every record's meta carries the §8.7 attribution schema, as its FIRST keys, from its cycle's **first
+zone-proximity trigger when that is sd** (`zone_proximity.first_sd_proximity_triggers`, the ONE reading shared with
+`first_counter` — `multitf/uc1_trigger.detect_uc1_triggers`, which reads the proximity lists directly since
+2026-10-26, "WVMI back on the chart" step 1):
 
-- `triggered_by_event_idx` — first sd trigger candle index
+- `triggered_by_event_idx` — the first sd trigger's candle index
 - `triggered_by_event_type = "ZONE_PROXIMITY_TRIGGER"`
 - `structure_path_id`
 - `trigger_inner`, `proximity_pips`
 
-Cycles without an sd trigger get no main WVMI record. The M15 `first_counter` sub trigger fires on the same first sd
-trigger, read from the proximity lists directly (`zone_proximity.first_sd_proximity_triggers`, shared with the gate;
-`multitf/uc1_trigger.detect_uc1_triggers`) — not from these records, since 2026-10-26 ("WVMI back on the chart"
-step 1; it looped over them before, so the gate could not change without changing the counter subs).
+A cycle whose first trigger is opp_sd, or that has none, still gets its record, with the same keys and None values
+(`structure_path_id` kept): `debug/export_wvmi.py` reads `triggered_by_*` strictly (an empty cell = no trigger).
+On the reference window: 5 H1 records, 3 attributed (sid 0 c1 748, sid 1 c1 820, sid 1 c2 935) and 2 not (sid 0 c0,
+sid 1 c0 — before step 2 these two had no record).
 
 #### Narrow-cycle implications (Rule 1/2/3)
 
-Per `zones/zone_proximity.py`'s narrow-gap rules:
+Per `zones/zone_proximity.py`'s narrow-gap rules (they shape the attribution only — the record exists either way):
 
 - **Narrow cycle (gap < `min_gap_pips`) without pullback CTS_confirmed:**
-  no proximity triggers (Rule 2) → no WVMI record. Mirrors the silent
-  no-WVMI behavior of cycle 0 today.
+  no proximity triggers (Rule 2) → an unattributed record.
 - **Narrow cycle with pullback CTS_confirmed:** triggers can fire from
   the pullback idx forward, capped at ≤1 sd + ≤1 opp_sd (Rule 3). The
-  first sd trigger, if it occurs, gates a WVMI record whose
-  `triggered_by_event_idx` is the post-pullback sd wick idx (NOT the
+  first sd trigger, if it occurs, is the record's
+  `triggered_by_event_idx`: the post-pullback sd wick idx (NOT the
   pullback idx).
 - **Mid-cycle crossing (narrow → wide):** the cap lifts at the
-  crossing; alternation continues unchanged. WVMI record references
+  crossing; alternation continues unchanged. The record references
   the first sd trigger regardless of which mode it fired in.
 
 Attribution remains consistent: `triggered_by_event_idx` always points
@@ -102,8 +104,9 @@ confirmation candle.
    `triggered_by_event_idx` (**parent-df coords — never translated**) / `triggered_by_event_type` — both None when
    no entry lands in the window — and `parent_path_id` = `"H1.main"` (always: the parent entity). On a sub row
    `triggered_by_*` means **"the lens's first WVMI-class trigger inside the sub's window"** — attribution, stamped
-   retroactively (a declared meaning change, LANDMINES "Event Contract Rules" rule 3; the main's rows keep the
-   gate meaning). The exporter reads both keys strictly (`meta[...]`): a record reaching a CSV unstamped raises
+   retroactively (a declared meaning change, LANDMINES "Event Contract Rules" rule 3; the main's rows kept the
+   gate meaning until 2026-10-26, when they became attribution too — "the cycle's first zone-proximity trigger,
+   when sd"). The exporter reads both keys strictly (`meta[...]`): a record reaching a CSV unstamped raises
    instead of exporting as "no trigger"; a `sub_id` twice on one lens fails an assert (the join key).
 4. **run.log**: each projection prints `[wvmi] total=N, locked=M` in its own block; the summary
    `[multi_tf:dual] sub wvmi acted=… records=… by_started_by=… by_lens=…` counts per UNIQUE sub from the
@@ -138,14 +141,14 @@ own lens only.
 > **removed** 2026-05-27 — see "Lifecycle" below; lifecycle belongs to the cycle /
 > wave candles, not to WVMI.)
 
-### 0. Gate — see "WVMI Gating" above
+### 0. No gate — see "WVMI Records and Trigger Attribution" above
 
-The main only: only its gated cycles proceed to step 1. A sub is ungated —
-every CTS_CONFIRMED of its projection proceeds (Plan G).
+Every CTS_CONFIRMED proceeds to step 1, the main's (since 2026-10-26; gated on its first sd zone-proximity trigger
+before) and a sub projection's (Plan G).
 
 ### 1. Created — CTS_n Confirmed
 
-Triggered by `on_cts_confirmed()` for every CTS_CONFIRMED that passes step 0. Derives 4 wave candle indices from BOS_n and CTS_n:
+Triggered by `on_cts_confirmed()` for every CTS_CONFIRMED. Derives 4 wave candle indices from BOS_n and CTS_n:
 
 | Role | Source | Wave Candle Field |
 |------|--------|-------------------|
@@ -307,23 +310,24 @@ pullback_momentum = (LP_volume * LP_weight) / FP_volume
 
 ## Pipeline Integration
 
-WVMI runs **after POI zones** (the main-entity gate needs POI inner bounds), through ONE helper,
-`orchestrator._compute_wvmi_records`, for the main and every sub projection (Plan G G1):
+WVMI runs **after POI zones** (the main's attribution reads the zone-proximity triggers, which need POI inner
+bounds — a gate until 2026-10-26), through ONE helper, `orchestrator._compute_wvmi_records`, for the main and every
+sub projection (Plan G G1), ungated for both:
 
 ```
 # Main (H1.main) — _run_downstream_pipeline(wvmi="first_sd_prox"), the default
 wave_candles → Fib tracking → POI zones → WVMI:
-  0. check_zone_proximity() → first sd trigger per cycle   [gate: _first_sd_prox_gate]
-# Sub projection — project_to_window → _run_downstream_pipeline(wvmi="none"): no gate, no proximity
+  0. check_zone_proximity() → the cycles' trigger lists     [first_counter, subsequent_*, the attribution]
+# Sub projection — project_to_window → _run_downstream_pipeline(wvmi="none"): no proximity
 # Both (_compute_wvmi_records):
   life = compute_cycle_lifecycle(events, reversals, floor, cap, reason)
      cycle_end_by_key = its ends                            [temp-LP bound: end - 1]
   frame = df.iloc[:cap + 1] if cap is not None else df     [no read past a sub's end]
-  1. for CTS_CONFIRMED events (main: gated only) →
-       on_cts_confirmed(frame) + the gate's meta (main)    [create]
+  1. for CTS_CONFIRMED events → on_cts_confirmed(frame)     [create; meta {}]
   2. for BOS_CONFIRMED events → on_bos_confirmed(frame)     [lock; an LP outside the frame → the temp LP]
   3. update_temporary_lp(frame)                              [shift]
   4. rec.cycle_collapsed = end is not None and start >= end [the cycle's window is empty]
+# Main only: _stamp_main_wvmi_attribution(records, the trigger lists) [each cycle's first sd trigger, or None]
   → main: df.attrs["wvmi"]; sub: LowerTFResult.wvmi_records (slice-local)
 ```
 

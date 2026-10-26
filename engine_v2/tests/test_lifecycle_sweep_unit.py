@@ -2060,11 +2060,12 @@ def test_uc1_reads_each_cycles_first_sd_proximity_trigger_not_the_wvmi_records()
             for t in got] == [(0, 1, -1, 24, 17), (1, 0, 1, 36, 33)]
 
 
-def test_the_main_wvmi_gate_and_uc1_read_the_same_first_sd_trigger():
-    """ONE reading of "a cycle's first sd trigger" (`zone_proximity.first_sd_proximity_triggers`): the main WVMI gate
-    gates exactly the cycles UC1 fires on, each at the same candle."""
+def test_the_main_wvmi_attribution_and_uc1_read_the_same_first_sd_trigger():
+    """ONE reading of "a cycle's first sd trigger" (`zone_proximity.first_sd_proximity_triggers`): the main WVMI
+    attribution (its gate until "WVMI back on the chart" step 2) names exactly the cycles UC1 fires on, each at the
+    same candle."""
     from engine_v2.multitf.uc1_trigger import detect_uc1_triggers
-    from engine_v2.pipeline.orchestrator import _first_sd_prox_gate
+    from engine_v2.pipeline.orchestrator import _first_sd_prox_attribution
     from engine_v2.tests._event_factory import make_event
 
     h1 = pd.DataFrame({"time": pd.date_range("2025-11-17", periods=40, freq="h", tz="UTC")})
@@ -2072,10 +2073,10 @@ def test_the_main_wvmi_gate_and_uc1_read_the_same_first_sd_trigger():
                          cts_anchor_idx=17 + c, confirmed_at=21 + c) for c in range(3)]
     zpt = {(0, 0): [_uc1_zpt(0, 0, "sd", 24)], (0, 1): [_uc1_zpt(0, 1, "opp_sd", 25)],
            (0, 2): [_uc1_zpt(0, 2, "sd", 27), _uc1_zpt(0, 2, "opp_sd", 29)]}
-    gate = _first_sd_prox_gate(zpt, "H1.main")
+    attribution = _first_sd_prox_attribution(zpt, "H1.main")
     with contextlib.redirect_stdout(io.StringIO()):
         uc1 = detect_uc1_triggers(events, h1, zpt)
-    assert {k: g["triggered_by_event_idx"] for k, g in gate.items()} == {(0, 0): 24, (0, 2): 27}
+    assert {k: g["triggered_by_event_idx"] for k, g in attribution.items()} == {(0, 0): 24, (0, 2): 27}
     assert {(t.parent_sid, t.parent_cycle_id): t.meta["trigger_event_idx"] for t in uc1} == {(0, 0): 24, (0, 2): 27}
 
 

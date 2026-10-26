@@ -565,6 +565,44 @@ Decided: the dot hovers (sub and main) say `zone_side=buy|sell`, not `wvmi_dir=`
 hover, the per-LP CSV and `_wvmi.csv`. The accepted hover drafts' last line reads
 `zone_side=… | breakout_momentum=… | pullback_momentum=…`.
 
+## Step 2 — the H1 WVMI without its gate (2026-10-26)
+
+- **Design (from the code):** `_compute_wvmi_records` loses its `gate` parameter — ONE ungated tracker loop for the
+  main and every sub. The main's attribution is a post-pass like the subs' per-lens stamp: every H1 record gets the
+  five meta keys the gate wrote, in its order (`triggered_by_event_idx`, `triggered_by_event_type`,
+  `structure_path_id`, `trigger_inner`, `proximity_pips`) — the cycle's first zone-proximity trigger when it is sd
+  (the same reading as `first_counter`), else None for the four trigger values. A cycle whose first trigger is opp_sd
+  stays blank even with a later sd. Zone proximity still runs on the main. `_first_sd_prox_gate` →
+  `_first_sd_prox_attribution` (it no longer gates).
+- **The mode name — the user (2026-10-26), options put: keep `"first_sd_prox"` / `"first_sd_attribution"` / `"main"`
+  + `"sub"` / `"with_proximity"`:** "Keep first_sd_prox (Recommended)". The value still names what the main reads
+  (each cycle's first sd proximity trigger), now as attribution; only the comments / docstrings that call it a gate
+  change.
+- **Predicted (vs S_uc1_prox):** H1 `_wvmi.csv` 3 → 5 rows, the 3 existing rows byte-equal (`meta` included); (0,0)
+  buy, CTS confirmed 439, FP 436, LP 590 locked by cycle 1's BOS, breakout momentum 0.733, not collapsed; (1,0) sell,
+  727, collapsed `[902, 902)` and locked (by sid 1 cycle 1's BOS — `on_bos_confirmed` locks any existing record of
+  cycle n); both with blank `triggered_by_*`; run log `[wvmi] total=3, locked=1` → `total=5, locked=3`; the other 26
+  CSVs byte-equal, the three charts JSON-equal, the same 3 `[uc1_trigger]` lines.
+- **Measured (the run-mode replay, fetch gate PASS, skip grep 23):** = the prediction. H1 `_wvmi.csv` 3 → 5 rows,
+  the 3 old rows byte-for-byte; (0,0) buy, locked by cycle 1, FB 110 / LB 430 / FP 436 / LP 590, breakout 0.733,
+  pullback 0.521, not collapsed; (1,0) sell, locked by cycle 1, collapsed, FB 690 / LB 709 / FP 712 / LP 728, breakout
+  0.390, pullback 0.250; both `triggered_by_*` empty, meta = the five keys with None values + `structure_path_id`.
+  `[wvmi] total=5, locked=3`; the 3 `[uc1_trigger]` lines unchanged. The other 26 CSVs byte-equal; the three charts
+  81/234, 154/136, 302/307 with no added / removed / changed trace and equal layouts (`fig_named_diff.py`);
+  `cmp_wvmi_keyed.py`: 2 rows added, every other row unchanged.
+- **Docs moved (the rule-3 meaning change, one commit):** WVMI_SPEC ("WVMI Gating" → "WVMI Records and Trigger
+  Attribution (no gate)", "0. No gate", "Pipeline Integration", the sub stamp's note), LANDMINES (the WVMI-after-POI
+  reason, a second rule-3 entry for the main, the sweep-seam assert, WVMI constraint 4 retitled "Zone proximity — the
+  MAIN only; it attributes …", Rule 2's mode list + trap, the collapsed-cycle note), GLOSSARY `triggered_by_event_idx`,
+  ARCHITECTURE (WVMI lifecycle step 0 / 1), WAVE_CANDLES_SPEC (the temp-LP note + the "Active last cycle" row), PART4
+  (§8 note, §8.1, the subscriber table, step 6, the sweep assert), engine_v2/CLAUDE.md's order reason, the
+  orchestrator / zone_proximity / uc1_trigger docstrings and the `_final_proximity_triggers` assert message.
+- **Tests:** `test_plan_g_wvmi.py` (the gate test → the attribution stamp: keys first, None stamp, not shared; the
+  main on proximity `{}` gets every record unattributed; a first opp_sd → an unattributed record), the
+  attribution-vs-UC1 test in `test_lifecycle_sweep_unit.py`; suite 1980 passed; 9 / 9 mutants KILLED
+  (`mutants_wvmi_step2.py`: the stamp skipped / on subs too, the gate restored, the unattributed stamp without keys /
+  without its path, the stamp's keys last, a shared stamp dict, the key swapped, the attribution's own reading).
+
 ## Build notes for steps 2–5 (written at the session close 2026-10-26 — read with the decisions above)
 
 Every step: predict the numbers from the mechanism → build → tests (+ mutants where a rule changes) → replay →

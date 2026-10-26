@@ -21,7 +21,7 @@ candle features → structure patterns → imbalance → market structure → KL
 ```
 
 **MUST:** Base features MUST run BEFORE market structure so zone resolution is stable.
-**MUST:** WVMI MUST run AFTER POI zones — the main's gate (the first sd zone-proximity trigger from `check_zone_proximity`) depends on POI zone inner bounds (a sub's WVMI is ungated since Plan G, but it runs in the same slot: it needs the KL zones and wave candles).
+**MUST:** WVMI MUST run AFTER POI zones — the main's trigger attribution (each cycle's first sd zone-proximity trigger from `check_zone_proximity`, run in the same step) depends on POI zone inner bounds. No WVMI record is gated (a sub's since Plan G, the main's since 2026-10-26 — "WVMI back on the chart" step 2; until then that trigger was the main's gate), but the order stays: the attribution reads the proximity triggers, which read POI inners, and the tracker needs the KL zones and wave candles.
 
 **Why:** Market structure depends on candle classification and pattern detection from base features. The zone-proximity check examines both KL and POI zone inner bounds to find sd-direction triggers, so POI zones must exist first.
 
@@ -86,6 +86,12 @@ Rule 3 meaning change on a non-event record, Plan G (2026-09-30): a SUB `WVMIRec
 stamped per lens after the mirror, None when none lands there (before: the one trigger whose sweep created the records,
 never None); main rows keep the gate meaning. Proof = the keyed WVMI `/compare` == PLAN_G §5 (the counter CSV's sub 3
 710 → 871 and sub 7 1020 → None; `review_scripts/cmp_wvmi_keyed.py`).
+Rule 3 meaning change on the MAIN `WVMIRecord`s ("WVMI back on the chart" step 2, 2026-10-26): `meta["triggered_by_event_idx"]`
+/ `["triggered_by_event_type"]` (+ `trigger_inner` / `proximity_pips`) := the cycle's first zone-proximity trigger when it is
+sd — attribution, stamped after the tracker (`orchestrator._stamp_main_wvmi_attribution`), None when the cycle has none (before:
+the GATE that created the record, never None). Every main record carries the keys; `export_wvmi` reads them strictly.
+Proof = the `/compare` vs S_uc1_prox: the H1 `_wvmi.csv` 3 → 5 rows, the 3 existing rows byte-equal, the 2 new (sid 0
+cycle 0, sid 1 cycle 0) with empty `triggered_by_*`; nothing else.
 
 **Key events and their consumers:**
 | Event Type | Primary Consumer |
@@ -414,7 +420,8 @@ The traps, each a measured or reviewed failure mode:
   refresh may already hold a newer cycle beyond the CTS; landing review 2026-10-20).
 - **After the sweep the FINAL lists replace the batch's everywhere** (`attrs["zone_proximity_triggers"]`,
   `attrs["subsequent_*_triggers"]`, the sub WVMI attribution): a reader left on the pre-sweep lists silently loses
-  the generated triggers. Two asserts guard the seam: each cycle's first trigger == the batch's (the main WVMI gate),
+  the generated triggers. Two asserts guard the seam: each cycle's first trigger == the batch's (the main WVMI
+  attribution and `first_counter` read it),
   and every sub zone that was ever a reference == its sub's real projection (inner, kind, cycle; a BOS zone's outer at
   every candle it was the reference).
 - **On parent zones alone the passes are invisible, by alternation** (step 1; today: the batch scan — H1-only runs and
@@ -432,7 +439,7 @@ The traps, each a measured or reviewed failure mode:
 1. **Zero FB/FP volume blocks WVMI creation** — division by zero guard. Ensure candle features (volume) are computed before WVMI runs.
 2. **Temp LP only locks on BOS_n+1** — do not assume `lp_locked=True` until BOS of the next cycle confirms. Until then, LP and pullback_momentum can shift every candle — within `[FP+1, cycle end − 1]` on main AND on every sub projection since Plan G (the data end while the cycle is open; `WVMI_SPEC` "Temporary LP Selection"). A lock LP the tracker's frame cannot read (BOS_n+1's last wave candle past a capped sub's end, or past the data edge) is never taken: the record locks with its temp LP (Plan G Q10).
 3. **buy_momentum/sell_momentum are direction-mapped** — for buy zones: buy=breakout, sell=pullback. For sell zones: reversed. Always check `zone_side` when interpreting.
-4. **Zone proximity gate — the MAIN only** — main WVMI records are only created for cycles where the **first sd-direction zone-proximity trigger** fires (via `check_zone_proximity` in `zones/zone_proximity.py`). Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, reversal_idx - 1]` (note: scan starts AT the CTS confirmation candle, not +1; the reversal term is the sid's REALISED `STATE_CHANGED(to=reversal)` candle — `compute_reversal_idx_by_sid`, since 2026-09-28 — never a `REVERSAL_CANDIDATE`'s scheduled `apply_idx`, a prediction a watch expiry can discard; GOTCHAS "Key boundaries"). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Reads every zone by LOCATION, never by lifecycle (PLAN_Q, 2026-10-14 — the user: "I would like POI to be treated exactly like a KL zone"): the BOS / CTS KL zones by their `inner` alone, each of the cycle's POIs at every candle of the scan — its activation history (the lifecycle clamp, the imbalance-filled off-stretches) and its `end_idx` are not read; both bounds provably lie outside the scan and are asserted (`poi_unclamped_activation_floor_idx` — its activation floor WITHOUT the structure lifecycle-start term — at or before the scan start; its end after the scan's last candle; PLAN_Q §3). So a collapsed H1 cycle (lifecycle `[902, 902)` for structure 1's cycles 0 / 1 on the reference window) still fires triggers (820 sd:BOS, 871 opp_sd:CTS) — the M15 subs they would start are not built ("Collapsed Parent Cycles" below). Before PLAN_Q the POI read walked the activation history, which the lifecycle-start clamp (`e352ef8`, 2026-05-26) empties on a collapsed cycle — only the POI went dark there, a side effect never decided (PLAN_Q §2). Since PLAN_R (2026-10-20) each side triggers on its proximity reference (ladders, passed zones, the proximity reference gate — "Proximity Reference Ladders" below); the first sd trigger of a cycle is on a parent zone in the batch scan AND the sweep — the POI, or the BOS when the gate keeps the POI out — because an sd sub zone is no candidate before the cycle's first sd trigger (PLAN_R §9.2 item 7) and the scan's first candle judges the sd side first, against the CTS (`orchestrator._final_proximity_triggers` asserts batch == sweep). The orchestrator extracts the first sd trigger per cycle as the WVMI gate (`_first_sd_prox_gate`; `triggered_by_event_idx` in WVMIRecord.meta — Part 4 §8.7 attribution schema); the `first_counter` sub trigger reads the same one (`zone_proximity.first_sd_proximity_triggers`, the ONE reading both use — since 2026-10-26; it looped over the gated main WVMI records before). **Subs are ungated since Plan G (2026-09-30):** every CTS_CONFIRMED of a rendered sub gets a record (`_run_downstream_pipeline(wvmi="none")`), and zone proximity is never run for a sub — see "Sub WVMI Is Computed Inside the Projection" below.
+4. **Zone proximity — the MAIN only; it attributes the main's WVMI records (no gate since 2026-10-26)** — every main cycle with a CTS_CONFIRMED gets a WVMI record; its `triggered_by_*` = the cycle's **first zone-proximity trigger when it is sd** (via `check_zone_proximity` in `zones/zone_proximity.py`), None otherwise. Until 2026-10-26 ("WVMI back on the chart" step 2) that trigger was a GATE: only those cycles got a record. Scan window for that function: `[CTS_CONFIRMED confirmed_at, next_BOS_CONFIRMED confirmed_at - 1]` or `[CTS_CONFIRMED confirmed_at, reversal_idx - 1]` (note: scan starts AT the CTS confirmation candle, not +1; the reversal term is the sid's REALISED `STATE_CHANGED(to=reversal)` candle — `compute_reversal_idx_by_sid`, since 2026-09-28 — never a `REVERSAL_CANDIDATE`'s scheduled `apply_idx`, a prediction a watch expiry can discard; GOTCHAS "Key boundaries"). Uses `ev.meta["confirmed_at"]` for both CTS and BOS (not `ev.idx` — see GOTCHAS "BOS_CONFIRMED ev.idx" entry). Reads every zone by LOCATION, never by lifecycle (PLAN_Q, 2026-10-14 — the user: "I would like POI to be treated exactly like a KL zone"): the BOS / CTS KL zones by their `inner` alone, each of the cycle's POIs at every candle of the scan — its activation history (the lifecycle clamp, the imbalance-filled off-stretches) and its `end_idx` are not read; both bounds provably lie outside the scan and are asserted (`poi_unclamped_activation_floor_idx` — its activation floor WITHOUT the structure lifecycle-start term — at or before the scan start; its end after the scan's last candle; PLAN_Q §3). So a collapsed H1 cycle (lifecycle `[902, 902)` for structure 1's cycles 0 / 1 on the reference window) still fires triggers (820 sd:BOS, 871 opp_sd:CTS) — the M15 subs they would start are not built ("Collapsed Parent Cycles" below). Before PLAN_Q the POI read walked the activation history, which the lifecycle-start clamp (`e352ef8`, 2026-05-26) empties on a collapsed cycle — only the POI went dark there, a side effect never decided (PLAN_Q §2). Since PLAN_R (2026-10-20) each side triggers on its proximity reference (ladders, passed zones, the proximity reference gate — "Proximity Reference Ladders" below); the first sd trigger of a cycle is on a parent zone in the batch scan AND the sweep — the POI, or the BOS when the gate keeps the POI out — because an sd sub zone is no candidate before the cycle's first sd trigger (PLAN_R §9.2 item 7) and the scan's first candle judges the sd side first, against the CTS (`orchestrator._final_proximity_triggers` asserts batch == sweep). The orchestrator stamps the first sd trigger per cycle onto the WVMI records as their attribution (`_first_sd_prox_attribution` → `_stamp_main_wvmi_attribution`; `triggered_by_event_idx` in WVMIRecord.meta — Part 4 §8.7 attribution schema; the GATE until 2026-10-26); the `first_counter` sub trigger reads the same one (`zone_proximity.first_sd_proximity_triggers`, the ONE reading both use — since 2026-10-26; it looped over the gated main WVMI records before). **No WVMI record is gated:** a rendered sub's since Plan G (2026-09-30 — `_run_downstream_pipeline(wvmi="none")`, zone proximity never run for a sub; see "Sub WVMI Is Computed Inside the Projection" below), the main's since 2026-10-26 (`wvmi="first_sd_prox"`, the name kept by the user's choice: it names what the main reads).
 
 ---
 
@@ -1092,7 +1099,8 @@ downstream = _run_downstream_pipeline(
 
 `wvmi` is ONE parameter, validated (`WVMI_MODES`; an unknown value raises — a typo must not
 silently gate or drop sub WVMI): `"first_sd_prox"` (the default: the main — `check_zone_proximity`
-runs and gates, see "WVMI Constraints" #4), `"none"` (a sub), `"off"` (tests of other stages). Every
+runs and attributes the records, see "WVMI Constraints" #4; it gated them until 2026-10-26), `"none"`
+(a sub), `"off"` (tests of other stages). No mode gates a record. Every
 mode that computes WVMI goes through ONE helper, `_compute_wvmi_records`: the tracker's frame is
 `df.iloc[:cap + 1]` under a cap (the natural-end frame would let FP / LB / a lock LP read past the
 sub's end), the temp LP stops at the cycle's `end − 1` and `cycle_collapsed` = `start >= end`, both
@@ -1114,8 +1122,10 @@ counter c0: created at M15 2752, its counter trigger H1 871 = M15 3487).
 first trigger again". Both restore the Plan C behaviour the user reversed (2026-09-28: "unique subs
 are where trading decisions will be made and governed by life cycle, it would make sense WVMI lives
 here as well"): a rendered sub gets WVMI like it gets zones. Equally, don't run
-`check_zone_proximity` for a sub or unify the two paths' gates: the main keeps its first-sd gate,
-and zone proximity also feeds the var3 / var4 detectors and the §8.5 streams (main only).
+`check_zone_proximity` for a sub: zone proximity feeds the main's WVMI attribution, `first_counter`,
+the var3 / var4 detectors and the §8.5 streams (main only). (The main's first-sd gate went on
+2026-10-26, "WVMI back on the chart" step 2 — neither path gates now; the attributions differ: the
+main's = its cycle's first sd trigger, a sub's = the lens stream's first entry in its window.)
 
 **No trigger in the window is a VALUE, not a skip.** A lens with no WVMI-class trigger inside the
 sub's window writes `triggered_by_event_idx` / `_type` None (both keys present) — never "the
@@ -2550,9 +2560,10 @@ downstream.**
 of the parent's ONE continuous MS run, so its events, KL / fib / POI zones (kept
 in the CSVs, inert, not drawn) and its H1 zone-proximity triggers exist — the
 scan reads zones by location — and so does its main WVMI record (flagged
-`cycle_collapsed`) whenever its first sd trigger fires (reference window: (1,1)'s
-820 has one, (1,0) fires no trigger and has none) (PLAN_Q;
-"Zone proximity gate" above). What is skipped is only the SUB a trigger inside
+`cycle_collapsed`; since 2026-10-26 whether or not its first sd trigger fires —
+reference window: (1,1) attributed to its 820, (1,0) fires no trigger and is
+unattributed; before, the gate left (1,0) without a record) (PLAN_Q;
+"Zone proximity — the MAIN only" above). What is skipped is only the SUB a trigger inside
 it would start. The other no-build cases: a same-key re-trigger (the pool's
 `StructureKey` — parent path, sub TF, direction, starting idx — already built:
 the record links to it, no MS re-run) and the rare `UnresolvedTrigger` reasons

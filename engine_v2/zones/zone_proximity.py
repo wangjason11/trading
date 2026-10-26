@@ -66,7 +66,8 @@ passing the gate (outward always does) — then each other side takes the closes
 rung INSIDE its reference (closer to the other side) that passes the gate
 against the updated other side, else keeps it. An sd SUB zone is no candidate
 before the cycle's first sd trigger (the first sd stays on the batch scan's
-parent rung — the main WVMI gate reads it). No counters: alternation is
+parent rung — the main WVMI attribution and first_counter read it). No
+counters: alternation is
 unlimited. The one cap left, the
 NARROW PARENT-REFERENCE EXCEPTION: a cycle whose parent BOS–CTS inner gap is
 `<=` the minimum keeps both references on its BOS / CTS and fires at most one
@@ -250,9 +251,9 @@ def first_sd_proximity_triggers(
     zone_proximity_triggers: Dict[Tuple[int, int], List[ZoneProximityTrigger]],
 ) -> Dict[Tuple[int, int], ZoneProximityTrigger]:
     """`{(sid, cycle): trigger}` for every cycle whose FIRST zone-proximity trigger is sd — the ONE reading of "a
-    cycle's first sd trigger": the main's WVMI gate (`orchestrator._first_sd_prox_gate`) and the `first_counter` sub
-    trigger (`multitf/uc1_trigger.detect_uc1_triggers`, since 2026-10-26 — it read the gated WVMI records before) both
-    take it. A cycle whose first trigger is opp_sd has none (a later sd is `subsequent_counter`'s). The sweep's final
+    cycle's first sd trigger": the main's WVMI attribution (`orchestrator._first_sd_prox_attribution`; its gate until
+    2026-10-26) and the `first_counter` sub trigger (`multitf/uc1_trigger.detect_uc1_triggers`, since 2026-10-26 — it
+    read the gated WVMI records before) both take it. A cycle whose first trigger is opp_sd has none (a later sd is `subsequent_counter`'s). The sweep's final
     lists keep each cycle's first trigger (`orchestrator._final_proximity_triggers` asserts it), so the batch and the
     final lists give the same map."""
     return {key: trigs[0] for key, trigs in zone_proximity_triggers.items() if trigs and trigs[0].direction == "sd"}
@@ -629,8 +630,8 @@ class CycleProximityScan:
 
         def unpassed(side: str) -> List[ProximityRung]:
             # An sd SUB zone is no candidate until the cycle's first sd trigger has fired (PLAN_R §9.2 item 7): the
-            # first sd stays on a parent rung — the one the batch scan (no overlay) fires on, which the main WVMI gate
-            # reads (`orchestrator._final_proximity_triggers` asserts it). Still pass-tested meanwhile.
+            # first sd stays on a parent rung — the one the batch scan (no overlay) fires on, which the main WVMI
+            # attribution and first_counter read (`orchestrator._final_proximity_triggers` asserts it). Still pass-tested meanwhile.
             return self._closest_first(side, [r for r in self.ladder(side) if r.key not in self.passed
                                               and not (side == "sd" and r.source == "sub" and self._fired["sd"] == 0)])
 
