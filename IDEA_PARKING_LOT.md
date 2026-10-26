@@ -186,7 +186,8 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    its first-LP routes, never FP, to the cycle's end − 1; `pattern_anchor_idx` on a pullback CTS_CONFIRMED; a
    `[wvmi] WARNING` when the locked LP differs from the last temporary one — kept by the user) — LANDED 2026-10-26, =
    the prediction (6 records' final LP + pullback momentum move, the structure-events CSVs gain the key — a
-   save-format boundary; the warning prints 10 times for one collapsed record, predicted 2); **4** the per-LP rows +
+   save-format boundary; the warning prints 10 times for one collapsed record, predicted 2; source `f63df34`, save
+   S_lp_furthest `20261026_192655_f63df34` = `LATEST_<branch>`); **4** the per-LP rows +
    `*_wvmi_lps.csv` — NEXT (ask first: do collapsed records keep flagged per-LP rows?); **5** the dots + hovers on the
    three charts (a rendered example first).
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).

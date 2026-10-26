@@ -212,7 +212,7 @@ log of the replay being reused (the fetch gate above already requires it). See
 dropped 5 sids whose cause sat unread in the log).
 
 Since the sub-structure pool (Plan C, 2026-09-20) this grep also catches, by
-design, two line families — each is a **finding to explain**, not a bug by
+design, two line families (a third, the WVMI lock warning, since 2026-10-26) — each is a **finding to explain**, not a bug by
 itself:
 
 - `[sweep] UNRESOLVED (skipping) reason=… lens=… parent=(S,C) type=…
@@ -224,9 +224,17 @@ itself:
   one per parent cycle whose lifecycle floor ≥ its end (`PART4 §17.7`;
   expected on the reference window: (1,0) and (1,1)). `collapsed` joined the grep with PLAN_N (`degenerate` stays
   for the probe-window warnings); it also matches the informational `[chart][fib] rendered … not collapsed /
-  disappeared` line — the grep count on the reference window is 23 since PLAN_R step 3 (PLAN_N's 22 + a sixth
-  pandas FutureWarning, `market_structure.py:2484`, benign; 24 at PLAN_R step 2 with a `sibling-CTS unavailable`
+  disappeared` line — the grep count on the reference window is 33 since "WVMI back on the chart" step 3
+  (2026-10-26: + the 10 `[wvmi] WARNING` lines below); 23 since PLAN_R step 3 (PLAN_N's 22 + a sixth
+  pandas FutureWarning, `market_structure.py:2487` since step 3 — `:2484` before, the line moves with edits above
+  it — benign; 24 at PLAN_R step 2 with a `sibling-CTS unavailable`
   line for 1046's subsequent_counter, gone with 1046; 21 before PLAN_N), plus any OANDA RETRY lines of that run.
+- `[wvmi] WARNING <path> sid=S cycle=C: the locked LP L (BOS cycle=…'s last wave candle) != the last temporary LP T`
+  (since 2026-10-26, "WVMI back on the chart" step 3; WVMI_SPEC "3. Locked") — slice-local indices on a sub; printed
+  once per tracker run that locks the record, so a pool sub's line also comes back once per proximity-view cap as
+  `[prox_view] pool#N cap=…: …` (GOTCHAS "A log line from a sub's downstream prints once per TRACKER RUN"). Expected
+  on the reference window: 10 lines, all the collapsed confluence sub 1 cycle 0 (90 != 119 = 1837 != 1866) — the
+  confluence lens + `pool#1` at caps None / 1894 / 1902 / 1940 / 1948 / 2231 / 2236 / 2343 / 2367.
 
 Also read (not caught by the grep) `[probe_cache] hit|APPROX hit …` and
 `[probe_cache] REF-ZONE DIFFERS …` — a probe skipped because an earlier
@@ -433,7 +441,7 @@ Per-entity CSV outputs cover **H1.main**, **M15.counter**, and
 | `*_kl_zones.csv` |
 | `*_poi_zones.csv` |
 | `*_ic_candidates.csv` — the IC selection (`*_ip_candidates.csv` until PLAN_L landing 1, 2026-10-09; PLAN_H landing A; the picked rows = the drawn POIs since landing B); + the column `ic_ref_reason` after `touches_zone` since PLAN_K landing A (2026-10-09); + `immediate_imbalance_first_c2_idx` after `ic_ref_reason` since the IP tiebreaker update (2026-10-09); + `has_unfilled_imbalance_after`, `is_ic_candidate` after it and one row per agreed-opposite candle of the window since PLAN_L landing 1; + `ip_outcome` after `is_ic_candidate` and the 4 `ranking_*` columns at the end since PLAN_L landing 2 (2026-10-10); + `ic_zone_band` after `is_ic_candidate` since PLAN_P (2026-10-13 — every row; `touches_zone` is that band's touch, `immediate_imbalance_first_c2_idx` = IC condition 3, `has_unfilled_imbalance_after` information only); + Step 1B's 5 columns `prior_imbalance_first_c2_idx`, `prior_imbalance_unfilled` (per check row), `prior_imbalance_outcome`, `prior_imbalance_passer_count`, `ic_candidate_count` (per record) after `ic_zone_band` since PLAN_S step 3 (2026-10-21 — `ip_outcome` = Step 2's outcome over the list Steps 2–3 ran on, the passers when 1B applied) |
-| `*_structure_events.csv` — `STATE_CHANGED(to=reversal)` carries `meta["pattern_anchor_idx"]` since PLAN_K landing A |
+| `*_structure_events.csv` — `STATE_CHANGED(to=reversal)` carries `meta["pattern_anchor_idx"]` since PLAN_K landing A; a PULLBACK `CTS_CONFIRMED` carries it too (the pullback pattern's first candle, right after `'via'`) since "WVMI back on the chart" step 3 (2026-10-26, S_lp_furthest `20261026_192655_f63df34` the first save with it — a save-format boundary for all 3 structure-events CSVs: across it diff them with `engine_v2/plans/qa_chart_edits_inputs/cmp_events_pattern_anchor.py BASE CUR`, positional `cmp_save.py` reports every such meta cell) |
 | `*_imbalance_instances.csv` |
 | `*_fib_lifecycle.csv` — no `fib_mode` column since PLAN_I S6 (2026-10-09): against an older save (S_J `20261009_013718_708a8d9` and before) diff the 3 fib CSVs with `engine_v2/plans/plan_i_inputs/cmp_s6_fib_mode.py BASE CUR` (positional `cmp_save.py` shifts the `meta` cell); the `ic_ref_*` meta keys since PLAN_K landing A |
 | `*_wvmi.csv` |
@@ -709,10 +717,22 @@ boundary (same columns), but the rows follow the CTS_CONFIRMED processing order,
 (1,0) (727) third: diff the H1 `_wvmi.csv` KEYED
 (`cmp_wvmi_keyed.py`: 2 rows added, every other row unchanged) — positional `cmp_save.py` shows every row shifted.
 Skip grep 23. S_h1_ungated `20261026_183615_76b5a17` (source `76b5a17`, save `e9a58a3`, trunk `4e41902`; =
-`LATEST_<branch>` from 2026-10-26). Next (step 3, the new LP rule): predicted the final LP + pullback momentum of 6
-records (H1 sid 0 c1 896 → 901; confluence sub 0 c4 1898 → 1938, sub 1 c4 2455 → 2469, sub 2 c1 2734 → 2828, sub 4
-c0 3568 → 3588, sub 7 c0 4177 → 4196) + `pattern_anchor_idx` on every pattern CTS_CONFIRMED row of the
-structure-events CSVs.
+`LATEST_<branch>` until S_lp_furthest, below).
+**WVMI back on the chart, step 3: the new LP rule (2026-10-26, the same design file "Step 3") — BEHAVIOUR (2 `_wvmi.csv`)
++ a SAVE-FORMAT BOUNDARY (the 3 structure-events CSVs):** the WVMI temporary LP = the furthest qualified close in the
+pullback direction, its first one by how the CTS confirmed (`zones/wvmi._temporary_lp_sequence`; was the close
+nearest the BOS zone's outer); a pullback `CTS_CONFIRMED` gains `meta["pattern_anchor_idx"]`; a `[wvmi] WARNING` when
+the lock changes the LP. = the prediction: `cmp_wvmi_keyed.py` — exactly 6 records change `lp_idx`,
+`pullback_momentum` and their side's `buy_` / `sell_momentum` (`status` stays `created`): H1 sid 0 c1 896 → 901
+(0.759 → 0.478); confluence sub 0 c4 1898 → 1938 (0.881 → 0.585), sub 1 c4 2455 → 2469 (0.356 → 1.019), sub 2 c1
+2734 → 2828 (0.657 → 2.425), sub 4 c0 3568 → 3588 (0.817 → 1.299), sub 7 c0 4177 → 4196 (0.279 → 0.554); the
+counter `_wvmi.csv` unchanged. `cmp_events_pattern_anchor.py` (new, `plans/qa_chart_edits_inputs/`): the key on H1 4
+/ counter 7 / confluence 19 pullback `CTS_CONFIRMED` rows, every other cell equal. 22 / 27 CSVs byte-equal; the three
+charts unchanged (`fig_named_diff.py`: 81/234, 154/136, 302/307). Skip grep 23 → 33 (the 10 WARNING lines above —
+predicted 2: the prediction deduplicated tracker runs by content). `[wvmi] total=5, locked=3`; the same 3
+`[uc1_trigger]` lines. S_lp_furthest `20261026_192655_f63df34` (source `f63df34`, save `e8583de`, trunk `5d055ba`;
+= `LATEST_<branch>` from 2026-10-26; the save replay = the compared replay, 27 / 27 CSVs byte-equal). Next (step 4,
+the per-LP rows + `*_wvmi_lps.csv`): 27 → 30 CSVs; ask the user first whether collapsed records keep flagged rows.
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /

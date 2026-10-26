@@ -41,7 +41,9 @@ CHARTING_SPEC "Hover label conventions"; now the charts' other elements — the 
 line breaks at the same point on every lens, the sub's pool-wide replacer; the second, WVMI back on the chart — the
 design settled 2026-10-26, five landings, step 1 landed 2026-10-26: `first_counter` reads the H1 cycles' first sd
 proximity trigger, not the WVMI records; step 2 landed 2026-10-26: the H1 WVMI without its gate, every H1 cycle with a
-CTS_CONFIRMED has a record, attributed to its first sd trigger),
+CTS_CONFIRMED has a record, attributed to its first sd trigger; step 3 landed 2026-10-26: the WVMI temporary LP =
+the furthest qualified close in the pullback direction, its first one by how the CTS confirmed — a pullback
+CTS_CONFIRMED carries `pattern_anchor_idx`),
 then item 3, zone size adjustments),
 Part 2 entry decisions, Part 3 other decisions.
 

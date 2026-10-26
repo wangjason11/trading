@@ -675,6 +675,10 @@ hover, the per-LP CSV and `_wvmi.csv`. The accepted hover drafts' last line read
   (`multitf/proximity_overlay._quiet_project` / `_VIEW_LOG_KEEP`, so a warning inside a silenced projection is never
   hidden); its `[wvmi] CREATED / LOCKED` lines are swallowed. The 10 lines are that design at work; the alternative was
   re-offered to the user at the step-3 report.
+- **LANDED 2026-10-26:** source `f63df34`, save S_lp_furthest `20261026_192655_f63df34` (save `e8583de`, trunk
+  `5d055ba`) = `LATEST_<branch>` — the save replay = the compared replay (27 / 27 CSVs byte-equal, the charts equal;
+  fetch gate PASS, skip grep 33). A SAVE-FORMAT BOUNDARY for the 3 structure-events CSVs (`cmp_events_pattern_anchor.py`
+  across it).
 
 ## Build notes for steps 2–5 (written at the session close 2026-10-26 — read with the decisions above)
 
