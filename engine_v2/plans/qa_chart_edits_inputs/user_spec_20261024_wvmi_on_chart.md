@@ -553,6 +553,9 @@ Decided in this round:
 - **Tests:** the full suite 1980 passed; 9 / 9 mutants KILLED (`mutants_wvmi_step1.py`: the helper's first /
   direction reads, the detector's filter / candle / order, the gate's reading, both call sites — the driver's
   `test_run_multi_tf_dual_hands_uc1_the_main_proximity_lists`, the chart's lookup test).
+- **LANDED 2026-10-26:** source `257f8ba`, save S_uc1_prox `20261026_175906_257f8ba` (save `be92848`, trunk
+  `7d4fa57`), docs `0155bd2` — the save replay = S_repl_break byte-for-byte (27 / 27 CSVs, the three charts
+  JSON-equal). The user: "yes let's commit".
 
 ## Round 9 — the user's answer (2026-10-26, verbatim)
 
@@ -561,3 +564,74 @@ Decided in this round:
 Decided: the dot hovers (sub and main) say `zone_side=buy|sell`, not `wvmi_dir=` — one name for the value in the
 hover, the per-LP CSV and `_wvmi.csv`. The accepted hover drafts' last line reads
 `zone_side=… | breakout_momentum=… | pullback_momentum=…`.
+
+## Build notes for steps 2–5 (written at the session close 2026-10-26 — read with the decisions above)
+
+Every step: predict the numbers from the mechanism → build → tests (+ mutants where a rule changes) → replay →
+compare against the last save → (a chart change: a rendered example + the user's look) → the commit flow. Re-check
+each code fact below against the code before relying on it (written from the code as of `0155bd2`).
+
+**Step 2 — the H1 WVMI without its gate.**
+- Today `_run_downstream_pipeline(wvmi="first_sd_prox")` runs `check_zone_proximity` and gates
+  `_compute_wvmi_records` with `_first_sd_prox_gate` (orchestrator). Ungated: every H1 CTS_CONFIRMED is offered to the
+  tracker (as a sub, `gate=None`), and zone proximity must still run on the main (first_counter, `subsequent_*` and
+  the attribution read it).
+- **Every H1 record must carry the attribution keys** — `debug/export_wvmi.py` reads `meta["triggered_by_event_idx"]`
+  / `meta["triggered_by_event_type"]` STRICTLY: the cycle's first sd trigger's values (the dict the gate builds today)
+  or None / None when the cycle has none (as a sub's per-lens stamp); `structure_path_id` likewise.
+- The meaning of the H1 rows' `triggered_by_*` changes from GATE to ATTRIBUTION — a declared LANDMINES "Event Contract
+  Rules" rule-3 meaning change, as Plan G did for sub rows: the prediction in the commit message; every reader / doc
+  in ONE commit (GLOSSARY `triggered_by_event_idx` main role; WVMI_SPEC "WVMI Gating"; LANDMINES item 4 "Zone
+  proximity gate — the MAIN only" and the "WVMI MUST run AFTER POI zones" reason (LANDMINES :24, engine_v2/CLAUDE.md,
+  ARCHITECTURE :441 — the order stays: the attribution reads the proximity triggers, which read POI inners);
+  WAVE_CANDLES_SPEC's "Active last cycle" row ("For a main cycle NOT WVMI-gated, no temp LP candle is computed");
+  PART4 :1671 / :1956 ("main WVMI (its gate)"); `_final_proximity_triggers`' docstring + assert message ("the main
+  WVMI gate and first_counter read it" → the main WVMI attribution and first_counter)).
+- `WVMI_MODES` / the `"first_sd_prox"` mode name no longer describes a gate — raise the internal name with the user
+  (naming rule) or keep it and say so.
+- **Predicted:** the H1 `_wvmi.csv` 3 → 5 rows: (0,0) buy, CTS confirmed 439, FP 436, LP 590 locked, breakout
+  momentum 0.733, visible; (1,0) sell, CTS confirmed 727, collapsed `[902, 902)`; both with blank `triggered_by_*`;
+  the run log `[wvmi] total=3` → 5 (`locked=` to measure). Nothing else (no chart reads the H1 records since step 1
+  — re-grep `attrs["wvmi"]` / `meta["wvmi"]` readers first).
+
+**Step 3 — the new LP rule** (decisions: rounds 4–7; WVMI_SPEC "Temporary LP Selection" rewritten).
+- Today: `WVMITracker.update_temporary_lp` → `zones/wvmi._find_temporary_lp` (the qualified close CLOSEST to the
+  BOS zone's `meta["outer"]`, search `[FP + 1, end − 1]`). New: the furthest-close sequence — a temporary LP at each
+  qualified candle closing further in the pullback direction than the current one (ties do not move it), from the
+  first LP: **pattern route** = the furthest qualified close among the pattern's candles `[pattern_anchor_idx,
+  CTS_CONFIRMED moment]` after FP (in-between candles included), else (fallback) the first later qualified candle
+  closing beyond **FP's close**; **proximity route** (p = the CTS_CONFIRMED moment, `confirmation_method ==
+  "sd_zone_proximity"`) = the furthest qualified close beyond p's close in `[FP + 1, p − 1]`, else p if qualified and
+  p ≠ FP, else the first later qualified candle closing beyond p's close. Never FP; the record's final temp LP = the
+  last LP at or before `end − 1`; none yet → `lp_idx` None (as today's "Temp LP not found"). The LP no longer reads
+  the zone's outer (a BOS zone is still required for a record to exist — unchanged).
+- The pattern's first candle on the event: CTS_CONFIRMED carries no pattern candle today. At the pullback call site
+  (`market_structure.py`, `_emit_cts_confirmed_once(apply_idx, meta={"via": ev.name}, confirmation_method="pullback")`,
+  the PatternEvent `ev` in scope) add `pattern_anchor_idx` = `ev.start_idx` (the name CTS_ESTABLISHED uses). A new
+  `_idx` meta key: add it to `multitf/entity_df_mutation._EVENT_META_IDX_KEYS` (the sub mirror's shift) and the guard
+  `tests/test_event_meta_idx_keys.py`; the structure-events CSVs gain it on every pattern CTS_CONFIRMED row
+  (predicted, a save-format boundary for those CSVs).
+- The locked LP: `on_bos_confirmed` keeps swapping to BOS_{n+1}'s `last_wave_candle_idx`; print a warning when it
+  differs from the last temporary LP (predicted 0 on this window).
+- **Predicted** (the final LP + pullback momentum, "Measured for round 5"): H1 sid 0 c1 896 → 901 (0.759 → 0.478);
+  confluence sub 0 c4 1898 → 1938, sub 1 c4 2455 → 2469, sub 2 c1 2734 → 2828, sub 4 c0 3568 → 3588, sub 7 c0
+  4177 → 4196; nothing else in `_wvmi.csv`; the structure-events CSVs + `pattern_anchor_idx`. Tools:
+  `wvmi_asof.py` (≈1 min, writes the as-of JSON; its rule_r4 = these rules except the fallback, which this window
+  never reaches) → `wvmi_r4_report.py` / `wvmi_final_lp.py` (the final LP per record) / `wvmi_fp_vs_first.py`.
+  Mutants: the ties, never-FP, the fallback's reference (FP's close, not the confirmation candle's), the proximity
+  steps, the `end − 1` bound, the warning.
+
+**Step 4 — the per-LP rows + the CSVs** (round 8). The record keeps its LP sequence (each row: `lp_idx`,
+`as_of_idx`, `lp_status` / `lp_status_reason` / `lp_status_idx`, the momenta); `debug/export_wvmi.py` + `run_replay`
+write `*_wvmi_lps.csv` (H1) and `*_M15_{counter,confluence}_wvmi_lps.csv`. Predicted rows = the dots: H1 57,
+counter 74, confluence 185. The `/compare` and `/commit-save` skills count 27 CSVs → 30 (update both + their file
+tables in the same commit).
+
+**Step 5 — the dots + hovers** (rounds 2–3, 9): small dots on the volume subchart, one fixed row per direction
+(sell = red just above the bars, buy = green one step higher), at every temporary LP and the locked one; H1 records
+as circles (on the H1 chart; on the M15 charts at the hour's last M15 candle, `_map_parent_idx_to_m15_hour_end`,
+fitting around a sub dot); collapsed records hidden; hovers = the accepted drafts with `zone_side=`. Styling in
+`style_registry.py`; canonical rules in CHARTING_SPEC. A rendered example + the user's look before the commit;
+`fig_named_diff.py` (traces are added); check `debug/chart_census.py` still reads the charts. Docs that describe
+WVMI as not drawn: WAVE_CANDLES_SPEC "Rendering simplifications" ("Full WVMI momentum markers deferred") and its
+"Active last cycle" row ("not drawn"), PART4 §16.5's WVMI row (the planned design), register §G's entry.
