@@ -686,7 +686,17 @@ other trace changed. **Positional `fig_scope.py` breaks across it** (one inserte
 later trace) — diff figures with `plans/qa_chart_edits_inputs/fig_named_diff.py BASE CUR` (name-keyed); positional
 `cmp_save.py` compares CSVs and is fine. `chart_census.py` vs S_prox_hover: `dots_PB` +1 on (0,1,5) counter and
 (0,1,3) confluence, nothing else (redirecting its output needs `PYTHONIOENCODING=utf-8`). Skip grep 23. S_repl_break
-`20261024_171443_56517e7` (source `56517e7`, save `1cfe56d`, trunk `7f6fed3`; = `LATEST_<branch>` from 2026-10-24).
+`20261024_171443_56517e7` (source `56517e7`, save `1cfe56d`, trunk `7f6fed3`; = `LATEST_<branch>` until S_uc1_prox,
+below).
+**WVMI back on the chart, step 1: `first_counter` reads the H1 cycles' first sd proximity trigger (2026-10-26,
+SESSION ORDER item 5's second pass — the user's design `plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`)
+— ZERO CHANGE:** `multitf/uc1_trigger.detect_uc1_triggers` reads the proximity lists
+(`zone_proximity.first_sd_proximity_triggers`, shared with the main WVMI gate), not the gated H1 WVMI records. 27 /
+27 CSVs byte-equal to S_repl_break; the three charts' traces, shapes and layouts JSON-equal (81 / 154 / 302 traces,
+hovers included); the run log's `[uc1_trigger]` lines the same 3 ((0,1), (1,1), (1,2)). Not a save-format boundary.
+S_uc1_prox `20261026_175906_257f8ba` (source `257f8ba`, save `be92848`, trunk `7d4fa57`; = `LATEST_<branch>` from
+2026-10-26). Next (step 2, the H1 WVMI without its gate): predicted the H1 `_wvmi.csv` +2 rows ((0,0); (1,0)
+collapsed), blank `triggered_by_*` on them, nothing else.
 
 **M15.counter** and **M15.confluence** (8 files each — 6 per-lens debug CSVs
 with the same filename suffixes prefixed `*_M15_counter_` /
@@ -816,7 +826,8 @@ lifecycle gating) that the CSVs alone miss.
 
 After the replay run, verify the three trace/shape counts in the stdout
 match the baseline run's counts exactly. Per the latest run the standard
-counts are (verified 2026-10-24 on S_repl_break `20261024_171443_56517e7` — the replacement break on every lens
+counts are (verified 2026-10-26 on S_uc1_prox `20261026_175906_257f8ba`, unchanged from S_repl_break
+`20261024_171443_56517e7` — the replacement break on every lens
 added one PB-dot trace per M15 chart, counter 153 → 154 and confluence 301 → 302, H1 and every shape unchanged — to
 S_prox_hover `20261024_105742_fb0189b`'s counts, unchanged from S_wave_hover
 `20261023_194643_18711dc`, S_fib_hover `20261023_191547_563f5f8`, S_zone_hover

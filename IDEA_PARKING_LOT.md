@@ -178,7 +178,8 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`) — dots above the volume bars at each
    temporary LP, a furthest-close LP rule with first-LP rules by how the CTS confirmed, no H1 gate, a per-LP CSV per
    chart. Five landings in the user's order, one cause each: **1** `first_counter` reads the H1 cycles' first sd
-   proximity trigger directly, not the WVMI records — LANDED 2026-10-26 (zero change); **2** the H1 WVMI without its
+   proximity trigger directly, not the WVMI records — LANDED 2026-10-26 (zero change; source `257f8ba`, save
+   S_uc1_prox `20261026_175906_257f8ba` = `LATEST_<branch>`); **2** the H1 WVMI without its
    gate (+2 H1 records) — NEXT; **3** the new LP rule (6 records' final LP + pullback momentum change); **4** the
    per-LP rows + `*_wvmi_lps.csv`; **5** the dots + hovers on the three charts (a rendered example first).
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).

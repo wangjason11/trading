@@ -38,7 +38,9 @@ separate candles, IC Step 1B the prior-imbalance preference), now chart updates 
 in progress — the hover-label pass closed 2026-10-24: the BOS / CTS dot hover landed 2026-10-22, the KL / POI zone,
 Fib zone and wave candle hovers 2026-10-23, the zone proximity trigger marker hover 2026-10-24, conventions in
 CHARTING_SPEC "Hover label conventions"; now the charts' other elements — the first, 2026-10-24: a replaced sub's
-line breaks at the same point on every lens, the sub's pool-wide replacer),
+line breaks at the same point on every lens, the sub's pool-wide replacer; the second, WVMI back on the chart — the
+design settled 2026-10-26, five landings, step 1 landed 2026-10-26: `first_counter` reads the H1 cycles' first sd
+proximity trigger, not the WVMI records),
 then item 3, zone size adjustments),
 Part 2 entry decisions, Part 3 other decisions.
 
