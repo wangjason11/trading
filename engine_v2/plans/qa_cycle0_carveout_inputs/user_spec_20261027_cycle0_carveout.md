@@ -1,5 +1,8 @@
 # The cycle-0 carve-out revisit (SESSION ORDER item 5b) — the rule, how each cycle 0 is found, the measurements, the options
 
+**Status: DONE 2026-10-27 — PLAN_T** (`engine_v2/plans/PLAN_T_probe_parity_and_cycle0_carveout.md`): T1 `453f227`
+(S_T1), T2 `017c920` (S_T2 `20261027_140757_017c920`). The decisions: rounds 1–6 below.
+
 Register `IDEA_PARKING_LOT.md` §D SESSION ORDER item 5b. A DECIDE item; this file holds the discussion (the user's
 words verbatim, the measurements, the options, the decisions as they are made). Read with
 `plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md` rounds 6–7 (where the revisit was raised).

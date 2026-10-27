@@ -202,7 +202,8 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
    hover = the accepted drafts, the H1 circle's M15 copy `TF=1H>>15M` — the user, round 12; the volume axis 1.4 × the
    bars' max; canonical CHARTING_SPEC §13); the user's look: "the positioning looks good", the circles "a bit
    smaller" (11 → 9 → 7 → 8, "let's go with 8 as the final value"). **The second edit, "WVMI back on the chart",
-   is COMPLETE.** **PAUSED 2026-10-27 for the cycle-0 carve-out revisit (below — the user's order).** Item 5's FINAL
+   is COMPLETE.** **PAUSED 2026-10-27 for the cycle-0 carve-out revisit (5b below — DONE 2026-10-27); item 5's FINAL part
+   is NEXT (the next session — the user: "The final part we can do in the next session").** Item 5's FINAL
    part, after it (the user 2026-10-27; "We can discuss in details those things when we get to them"): **(1) a toggle to
    hide the parent (1H) overlay elements** on the M15 charts — background: PART4 §16.4 planned one legend group
    `Parent (<parent_path_id>)` toggling every parent overlay element (default ON), never built: no H1-overlay trace
@@ -498,6 +499,15 @@ First, I want to revisit the cycle-0 carve-out that we discussed recently. After
   proximity confirmation, and cycle 0 cannot be proximity-confirmed (`unified_probe.py:549-552`, PLAN_I §9.2 F7).
   TRIGGER: the probe ever reads a proximity-confirmed CTS → pass the sub's `timeframe`. Registered 2026-10-19 (the
   user: "We can add it"); detail `engine_v2/plans/qa_opp_sd_zones_inputs/qa_findings.md` rounds 5–6.
+- **An end-to-end pin: an unblocked first_confluence probe whose cycle 0 confirms by proximity reaches its 2nd CTS where
+  its sub does** (descoped from PLAN_T T2, §5): no synthetic fixture makes the probe's own cycle 0 proximity-confirm
+  (searched 2026-10-27); the agreement holds by construction (one flag evaluation → the probe and its geometry; the same
+  MS values since T1), each link is pinned, the log tripwire is unit-pinned. TRIGGER: a fixture (or a window) where it
+  happens — or the probe/sub tripwire prints → add the pin.
+- **The probe/sub consistency tripwire misses a probe confirming cycle 0 BEFORE its sub** (`no_retrace` branch,
+  `entity_df_mutation.check_probe_sub_consistency`): the finalize is the probe's cycle-0 confirmation or its probe
+  end, and the check does not know the end. TRIGGER: a reason to doubt a first_confluence sub's lifecycle start →
+  hand the check the probe's `probe_end_idx` (in the pool's `ProbeCacheEntry`) and compare exactly.
 
 ## F. Week 10 — live readiness
 

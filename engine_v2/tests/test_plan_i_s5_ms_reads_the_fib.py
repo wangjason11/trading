@@ -267,8 +267,9 @@ def test_a_tracker_runtime_error_passes_through_unchanged(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# The probe: the limit it is handed (PLAN_T T1; F7's explicit "no P" until then), and — while cycle 0 cannot
-# confirm by proximity — its result does not depend on the read (F7)
+# The probe: the limit it is handed (PLAN_T T1; F7's explicit "no P" until then), and — a BLOCKED probe, whose cycle 0
+# cannot confirm by proximity (the main sid 0 cycle 0's first_confluence, PLAN_T T2) — its result does not depend on
+# the read (F7). An unblocked probe's can, since PLAN_T T2.
 # ---------------------------------------------------------------------------
 
 def test_the_probe_passes_the_handed_limit_and_does_not_depend_on_the_read(monkeypatch):
@@ -287,7 +288,7 @@ def test_the_probe_passes_the_handed_limit_and_does_not_depend_on_the_read(monke
 
     def probe():
         return _quiet(up.unified_probe, _prepare_df(_make_multicycle_data()), 0, 1, _ref_zone_uptrend(), 14, "H1",
-                      enable_phase2=True, cross_fib_limit=handed)
+                      enable_phase2=True, cross_fib_limit=handed, cycle0_proximity_blocked=True)
 
     base = probe()
     assert limits and all(lim is handed for lim in limits)   # the SAME object, not an equal one built in the probe
