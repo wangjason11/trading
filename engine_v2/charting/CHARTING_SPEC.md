@@ -20,8 +20,10 @@ verbatim reasons: memory `feedback_naming_discussions.md`. A new or edited hover
 - Every value is labelled `name=value` (lowercase snake_case, e.g. `ic_reason=` although a spec wrote `IC_reason`);
   fields sharing a line are split by ` | `; a missing value is `name=NA (<why>)` — never a bare `-` / symbol.
 - The first line is the timeframe: `TF=1H` (an H1 element, also on the M15 charts' H1 overlay), `TF=15M` (an M15
-  element); `TF=1H>>15M` on the proximity marker's M15 copy (an H1 trigger drawn on its M15 candle).
-- The candle index is `idx=` on the element's own timeframe; an M15 element adds `idx_1H=`.
+  element); `TF=1H>>15M` on an H1 value drawn on its M15 candle — the proximity marker's M15 copy, and the H1 WVMI LP
+  circle's (§13; the user, 2026-10-26).
+- The candle index is `idx=` on the element's own timeframe; an M15 element adds `idx_1H=`. (The WVMI LP marks name
+  their candle `lp_idx=` — on the M15 charts an H1 circle `lp_idx_1H=` + its M15 `lp_idx=`, §13.)
 - Identity: `sid=S | cycle_id=C` (main); a sub `sub_id=X | cycle_id=Y` + `first record: lens=… | parent_sid=P |
   parent_cycle_id=C`; a marker that IS the parent's (the proximity marker's M15 copy) `parent_sid=… |
   parent_cycle_id=…` with no prefix.
@@ -56,7 +58,8 @@ All visual formatting (colors, opacities, line widths, marker sizes) lives in `s
 | POI Zones | `zone.poi.buy`, `zone.poi.sell`, `zone.poi.hover_line` | POI zone fills |
 | Fibonacci | `fib.anchor_line.active` / `.historical`, `fib.zone_rect.active` / `.historical` | Fib box (H1 chart + the M15 lens charts) |
 | Imbalance | `imbalance.bullish`, `imbalance.bearish` | Imbalance candle colors |
-| Volume | `volume.bar.up/down/neutral`, `volume.ema_line`, `volume.spike_marker` | Volume bars, EMA, spike markers |
+| Volume | `volume.bar.up/down/neutral`, `volume.ema_line`, `volume.spike_marker`, `volume.headroom` | Volume bars, EMA, spike markers, the axis headroom |
+| WVMI LP marks | `wvmi.lp_row`, `wvmi.lp_dot.sub.buy/sell`, `wvmi.lp_dot.main.buy/sell` | The rows above the volume bars, the sub dots, the H1 circles (§13) |
 | Wave candles | `wave_candle.bullish`, `wave_candle.bearish` | Wave candle vertical lines |
 | M15 structure | `structure.m15.swing_line`, `structure.m15.cts/bos` | M15 chart blue elements |
 | M15 zones | `zone.m15.kl.buy/sell` | M15 zones on H1 chart (dashed) |
@@ -331,6 +334,9 @@ To change any visual element:
 - Bars colored by `vol_dir`: green (+1), red (-1), gray (0)
 - Volume EMA(20) blue line
 - Orange diamond markers on candles with volume spikes (`is_vol_spike`)
+- The volume axis = `[0, the bars' max × volume.headroom]` (1.4 — the tallest bar reaches 71 % of the panel, leaving
+  the WVMI LP rows above it, §13): in the static layout (`export_plotly._volume_axis_range`, so the PNG matches) and
+  in the zoom JS (the visible bars' max; ×1.1 and the layout's autorange until 2026-10-26)
 - Dynamic y-axis auto-scaling on zoom (JavaScript callback)
 - Unified border around price + volume as single chart
 - Hover data: idx, time, volume/EMA values
@@ -344,7 +350,7 @@ To change any visual element:
 - Drawn with `yref="paper"` (y0=0, y1=1) so lines span full chart height
 - Filtered to `selected_sids` (same filter as KL zones)
 - **Hover overlay:** Invisible `go.Scatter` trace (8px wide, `rgba(0,0,0,0)`) with 12 evenly-spaced y-points per line (Plotly only detects hover near data points, not along line segments)
-  - The user's spec 2026-10-23 (`plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md`), ONE builder for the H1 chart, the M15 sub lines and the M15 charts' H1 overlay (`_zone_render.wave_candle_hovertemplate`; the zone + role lines from `wave_candles.wave_candle_hover_lines`): `TF` / **Wave Candle** / `idx=` (M15: `idx=<i> | idx_1H=<h>`) / `<BOS|CTS> zone: sid=S | cycle_id=N` (M15: `sub_id=X | cycle_id=N`, then the dot hover's `first record: lens=… | parent_sid=… | parent_cycle_id=…` line — kept with `lens=`, the user's decision 1) / `Role: <FB|LB|FP|LP> (<name>)` (the LP names its owning cycle) / the window — main: the dot hover's `struct_window=[s, e] | end_reason=<reversal | open>` (`main_dot_structure_lines`; decision 2 added the reason), M15: `sub_window=[s, e] | end_reason=…` / `volume=<raw volume>` (decision 3: `=`, not the spec's colon) / `struct_direction=` (the structure's, from its KL zones' meta — `struct_direction_by_sid`; a `WaveCandleResult` carries none). E.g. H1 idx 651: `idx=651` / `CTS zone: sid=0 | cycle_id=1` / `Role: LB (last breakout)` / `struct_window=[115, 902] | end_reason=reversal` / `volume=3032` / `struct_direction=1`. Until 2026-10-23: `cycle=` unlabelled after a space, `Volume: <v>`, no window / direction on the main; the sub's `first record parent_sid=… parent_cycle=…` after the role and `sub window=[s,e] reason`. No WVMI momentum and no weighted volume (removed 2026-05-28, WAVE_CANDLES_SPEC "Rendering simplifications"; WVMI is CSV-only — register §G "WVMI back on the chart")
+  - The user's spec 2026-10-23 (`plans/qa_chart_edits_inputs/user_spec_20261023_wave_candle_hover.md`), ONE builder for the H1 chart, the M15 sub lines and the M15 charts' H1 overlay (`_zone_render.wave_candle_hovertemplate`; the zone + role lines from `wave_candles.wave_candle_hover_lines`): `TF` / **Wave Candle** / `idx=` (M15: `idx=<i> | idx_1H=<h>`) / `<BOS|CTS> zone: sid=S | cycle_id=N` (M15: `sub_id=X | cycle_id=N`, then the dot hover's `first record: lens=… | parent_sid=… | parent_cycle_id=…` line — kept with `lens=`, the user's decision 1) / `Role: <FB|LB|FP|LP> (<name>)` (the LP names its owning cycle) / the window — main: the dot hover's `struct_window=[s, e] | end_reason=<reversal | open>` (`main_dot_structure_lines`; decision 2 added the reason), M15: `sub_window=[s, e] | end_reason=…` / `volume=<raw volume>` (decision 3: `=`, not the spec's colon) / `struct_direction=` (the structure's, from its KL zones' meta — `struct_direction_by_sid`; a `WaveCandleResult` carries none). E.g. H1 idx 651: `idx=651` / `CTS zone: sid=0 | cycle_id=1` / `Role: LB (last breakout)` / `struct_window=[115, 902] | end_reason=reversal` / `volume=3032` / `struct_direction=1`. Until 2026-10-23: `cycle=` unlabelled after a space, `Volume: <v>`, no window / direction on the main; the sub's `first record parent_sid=… parent_cycle=…` after the role and `sub window=[s,e] reason`. No WVMI momentum and no weighted volume (removed 2026-05-28, WAVE_CANDLES_SPEC "Rendering simplifications"); WVMI is drawn as its own marks above the volume bars since 2026-10-26 (§13)
 - Style keys: `wave_candle.bullish`, `wave_candle.bearish`
 
 ### 11) Subordinate overlays on parent charts (Week 8 / Part 4)
@@ -432,6 +438,57 @@ trigger; the user's decision 1) / `parent_direction` / the same `type` … `sub_
     (PLAN_Q, 2026-10-14; before it the start of the active stretch holding the trigger, −1 outside one).
   The two differ on a collapsed cycle (S_O's structure 1 cycle 1: the BOS zone 902, the POI 748) — register §G
   "Overall chart revamp" item (2).
+
+### 13) WVMI LP marks above the volume bars (H1 + the M15 charts; "WVMI back on the chart", 2026-10-26)
+
+The user's design (rounds 2–3, 9, 11, 12 — `plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`): one
+mark per per-LP row (`WVMIRecord.lp_rows`, WVMI_SPEC "Per-LP rows") — every temporary LP a record has had and the
+locked one — so the chart shows a record's WVMI as of each LP candle, the way it moves while the pullback nears the
+zones, not only its end-of-run value. No combined WVMI value (the user, round 3: WVMI = the pair, read by the four
+combinations of `breakout_momentum` / `pullback_momentum` around 1).
+- **Which rows:** every row of every NON-collapsed record (`_zone_render.wvmi_lp_marks` = the per-LP CSV's rows,
+  `export_wvmi_lps`); a collapsed record (`cycle_collapsed`) is hidden like its wave candles (round 1); an LP before
+  its sub's `start_idx` IS drawn (round 11). No other filter: no §16.5 owner filter on the sub dots (one dot per row),
+  no H1-overlay window filter and no `num_structures` filter on the H1 circles. A zoomed export (`idx_range`) draws
+  the marks of its own candles.
+- **Where:** on the volume panel, one fixed row per zone side above the bars — sell (red) just above them, buy (green)
+  one step higher (the user, round 2: "The green dot should be slightly above the red one"; round 3 "fixed row") —
+  `wvmi.lp_row` 0.80 / 0.91 of the panel, on the marks' own axis `yaxis3` (`overlaying="y2"`, range [0, 1], fixed,
+  hidden — `export_plotly._wvmi_lp_axis_layout`), so the rows hold whatever the volume zoom does; §9's headroom keeps
+  the bars below them.
+- **What:** a sub's LP = a small filled dot (`wvmi.lp_dot.sub.<side>`, size 5) at its LP candle on its lens chart
+  (`m15_df.attrs["wvmi"]`, entity-absolute). An H1 LP = an open circle (`wvmi.lp_dot.main.<side>`, size 8 — the user's final
+  value after 11 / 9 / 7, rounds 12–14): on the H1 chart at its LP candle (`H1.main`'s `attrs["wvmi"]`); on both
+  M15 charts at the LAST M15 candle of its hour (`multitf/entity_df_mutation._map_parent_idx_to_m15_hour_end`, the
+  timing mapper — the user's Q6 a), where it fits around a same-side sub dot on that candle (round 2: "the parent
+  circle should fit neatly around the sub dot"). Colour = the zone side only; the status is in the hover (round 2).
+  Traces, one per side (`export_plotly._add_wvmi_lp_traces`): the H1 chart `WVMI LP <side>`; the M15 charts
+  `M15 WVMI LP <side>` (the sub dots), then `H1 WVMI LP <side>` (the circles, drawn over the dots); each mark's hover
+  text in `customdata` (`hovertemplate="%{customdata}"`).
+- **Hover** (`_zone_render.wvmi_lp_hovertext` — the drafts the user accepted, rounds 3–4; `zone_side=`, round 9;
+  `TF=1H>>15M`, round 12):
+  - a sub dot: `TF=15M` / **Sub WVMI** / `sub_id=X | cycle_id=Y | relative_dir=<counter | confluence | NA (before
+    start_idx)>` (the sub's at the LP candle — `multitf/types.sub_relative_dir_at` over the lens's `SidRecord`, the
+    per-LP CSV's reader) / `lp_idx=… | lp_status=…` / `zone_side=… | breakout_momentum=… | pullback_momentum=…`;
+  - an H1 circle on the H1 chart: `TF=1H` / **Main WVMI** / `sid=S | cycle_id=C` / `lp_idx=… | lp_status=…` / the
+    same last line; on the M15 charts: `TF=1H>>15M`, and the LP line `lp_idx_1H=<H1> | lp_idx=<its M15 candle> |
+    lp_status=…` (the status idx stays the H1 one — the accepted draft);
+  - `as_of_idx=` (`as_of_idx_1H=` on an H1 circle's M15 copy) joins the LP line, after the LP, only when the LP became
+    the LP on a later candle (`wvmi_lp_idx_fields`); `lp_status=<status> (<reason> at <idx>)`, an `open` row
+    `open (still moving at the data end)` (`wvmi_lp_status_text`); the momenta to 3 decimals — the pullback momentum
+    is the ROW's (this LP's), `NA (not computed)` if missing (never on a drawn record: a record needs FB / FP volume).
+  - E.g. confluence 4129: `TF=15M` / `Sub WVMI` / `sub_id=8 | cycle_id=0 | relative_dir=NA (before start_idx)` /
+    `lp_idx=4129 | lp_status=locked (cycle 1's BOS confirmed at 4157)` / `zone_side=buy | breakout_momentum=1.288 |
+    pullback_momentum=0.468`; its first LP `lp_idx=4102 | as_of_idx=4103 | lp_status=temporary (replaced by a further
+    close at 4129)`.
+- **A circled dot's two hovers:** Plotly's closest-point hover subtracts each marker's radius from the cursor
+  distance (floored at `1 − 3 / radius`), so the dot (the smaller radius) wins at the centre and the circle on its
+  ring (size 8: the dot 0 vs the circle 1 − 3 / 4 = 0.25 at the centre) — derived from Plotly's scatter hover rule,
+  not checked in a browser.
+- **Reference window (S_lp_rows' records):** the H1 chart 57 circles (42 buy / 15 sell); counter 74 sub dots (27 /
+  47) + the 57 H1 circles; confluence 185 (88 / 97) + 57. A circle around a sub dot: counter 1 (3755), confluence 7
+  (2735, 3499, 3587, 3755, 4179, 4183, 4195). No candle carries both a buy and a sell mark. A zoomed look that keeps
+  the volume panel: `plans/qa_chart_edits_inputs/zoom_png_volume.py` (`zoom_png.py` flattens it).
 
 ---
 
@@ -599,8 +656,8 @@ back to the last owned candle), PB→BOS lines, prev-BOS lines (hidden if their
 start candle is not owned), wave-candle verticals (per candle, on top of the
 per-candle cycle lifecycle gate of `WAVE_CANDLES_SPEC.md`, whose `cycle_life`
 the chart reads off the sub's KL BOS-zone meta `confirmed_idx` / `end_idx` /
-`end_reason`). WVMI records are grouped by `sub_id` too but the M15 chart
-renders no WVMI hover (wave-candle hover only).
+`end_reason`). WVMI records are grouped by `sub_id` too; their LP marks
+(§13) take NO owner filter — one dot per per-LP row.
 
 **Two ownership layers (chart review 2026-09-20, option 2).** The rule as first
 landed hid everything before `start_idx`, which broke every BOS→CTS line
@@ -797,7 +854,7 @@ Chart defaults define toggles for:
 - `zones`: KL, OB, POI, wave_candles
 - `fib`: lines (both charts; the M15 renderer since 2026-10-06 — §8)
 - `imbalance`: highlight
-- `volume`: bars, ema_line, spike_marker
+- `volume`: bars, ema_line, spike_marker, wvmi_lps (the WVMI LP marks, §13 — drawn only with the bars)
 - `range_candle_marker`: False (disabled to avoid overlap with volume spike markers)
 
 ---

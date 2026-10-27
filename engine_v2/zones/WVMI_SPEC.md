@@ -329,8 +329,9 @@ proximity candle itself on 2 (H1 sid 1 cycle 2; the collapsed confluence sub 1 c
 
 ## Per-LP rows (`WVMIRecord.lp_rows`, `*_wvmi_lps.csv`)
 
-Every LP a record has had is kept — one row per temporary LP and the locked one, one dot each on the chart
-("WVMI back on the chart" step 4, 2026-10-26; the user's rounds 3 / 8 / 10 / 11 —
+Every LP a record has had is kept — one row per temporary LP and the locked one, one mark each above the chart's
+volume bars (step 5, CHARTING_SPEC §13 — a collapsed record's none) ("WVMI back on the chart" step 4, 2026-10-26;
+the user's rounds 3 / 8 / 10 / 11 —
 `plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`). A row (`common/types.WVMILPRow`): `lp_idx`,
 `as_of_idx` (the candle it became the LP: its own, or the CTS_CONFIRMED moment for a first LP picked from earlier
 candles — "Temporary LP Selection" 2 —, or the lock for a swapped-in locked LP), `lp_status` / `lp_status_reason` /

@@ -9,7 +9,7 @@ lens) as the manifest and `attrs["triggers"]` (this lens's TriggerRecords) for
 hover attribution. Per spec §16.5 (rev 2):
 
   - Sid-tied elements (CTS/BOS dots, swing lines, PB markers, prev_bos lines;
-    the M15 chart renders no WVMI hover): only render at candles the sub OWNS,
+    not the WVMI LP marks — one per per-LP row, CHARTING_SPEC §13): only render at candles the sub OWNS,
     keyed `(candle, direction)` because a +1 and a −1 sub may both be live
     (§17.5). Two layers (chart review 2026-09-20, option 2): the LIVE layer
     `_compute_owner_by_idx_dir` = the sub's real-time lifecycle window
@@ -90,6 +90,9 @@ from engine_v2.charting._zone_render import (
     struct_direction_by_sid,
     wave_candle_hovertemplate,
     select_subordinate_tf_tier,
+    wvmi_lp_hovertext,
+    wvmi_lp_idx_fields,
+    wvmi_lp_marks,
 )
 from engine_v2.structure.structure_engine import _pip_size_from_pair
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
@@ -103,6 +106,9 @@ from engine_v2.zones.structure_lifecycle import (
 )
 from engine_v2.charting.export_plotly import (
     _add_fib_box,
+    _add_wvmi_lp_traces,
+    _volume_axis_range,
+    _wvmi_lp_axis_layout,
     _rgba_from_rgb,
     _zone_style,
     _style,
@@ -133,7 +139,7 @@ M15_CHART_DEFAULTS = {
     "zones": {"KL": True, "POI": True, "wave_candles": True, "num_structures": 99},
     "fib": {"lines": True},
     "imbalance": {"highlight": True},
-    "volume": {"bars": True, "ema_line": True, "spike_marker": True},
+    "volume": {"bars": True, "ema_line": True, "spike_marker": True, "wvmi_lps": True},
     "range_candle_marker": False,
 }
 
@@ -1417,7 +1423,7 @@ def export_m15_chart_plotly(
         # render iff sub's cyc=0 is non-collapsed. Overlap kept via `_owned_here`
         # per-candle owner filter (§16.5 sid-tied filter, same as the rest of
         # the sub block). Uniform opacity; hover = `wave_candle_hovertemplate`
-        # (the user's spec 2026-10-23; no WVMI — register §G).
+        # (the user's spec 2026-10-23; no WVMI — its LP marks: `_render_wvmi_lp_marks`).
         if zone_cfg.get("wave_candles", True) and sid_waves:
             from engine_v2.zones.wave_candles import (
                 _role_for_wave_candle,
@@ -1733,6 +1739,11 @@ def export_m15_chart_plotly(
     # sub-candle. Parent-event overlay, so no §16.5 owner filter applies.
     _render_proximity_triggers_overlay(fig, dfx, h1_df, wick_offset)
 
+    # WVMI LP marks above the volume bars: this lens's sub dots, then the H1 circles.
+    wvmi_marks_drawn = 0
+    if volume_enabled and volume_cfg.get("wvmi_lps", False):
+        wvmi_marks_drawn = _render_wvmi_lp_marks(fig, dfx, m15_df, h1_df, sid_records)
+
     # ===================================================================
     # Phase D: Layout + Output
     # ===================================================================
@@ -1750,7 +1761,8 @@ def export_m15_chart_plotly(
             xaxis=dict(anchor="y2", side="bottom", title_text="Time (UTC)", showline=False),
             yaxis=dict(domain=[0.15, 1.0], showline=False),
             yaxis2=dict(domain=[0, 0.15], showgrid=False, zeroline=False,
-                        showticklabels=True, side="right", tickformat=",", showline=False),
+                        showticklabels=True, side="right", tickformat=",", showline=False,
+                        range=_volume_axis_range(dfx[COL_V].astype(float))),   # headroom for the WVMI LP rows
         )
         border_color = "rgba(0,0,0,0.4)"
         for x0, x1, y0, y1 in [(0, 1, 1, 1), (0, 1, 0, 0), (0, 0, 0, 1), (1, 1, 0, 1)]:
@@ -1761,6 +1773,8 @@ def export_m15_chart_plotly(
     fig.update_layout(**_style("chart.layout"))
     fig.update_xaxes(**_style("chart.axis"))
     fig.update_yaxes(**_style("chart.axis"))
+    if wvmi_marks_drawn:
+        fig.update_layout(yaxis3=_wvmi_lp_axis_layout())
 
     # Dynamic gap removal
     t = pd.to_datetime(dfx[COL_TIME]).sort_values().reset_index(drop=True)
@@ -1915,6 +1929,50 @@ def _render_m15_dots_layer(
         ),
         **style,
     ))
+
+
+# ---------------------------------------------------------------------------
+# WVMI LP marks ("WVMI back on the chart" step 5; CHARTING_SPEC "WVMI LP marks")
+# ---------------------------------------------------------------------------
+
+def _render_wvmi_lp_marks(fig, dfx, m15_df, h1_df, sid_records) -> int:
+    """The WVMI LP marks above an M15 chart's volume bars: a small dot per per-LP row of every non-collapsed SUB
+    record on this lens (`m15_df.attrs["wvmi"]`, entity-absolute — the lens's `*_wvmi_lps.csv` rows), at its LP candle;
+    then a circle per per-LP row of every non-collapsed H1 record (`h1_df.attrs["wvmi"]`) at the LAST M15 candle of
+    its LP's hour (`_map_parent_idx_to_m15_hour_end`, the timing mapper — the user's Q6 a), which fits around a sub
+    dot on the same candle. The collapsed filter is the only one: no §16.5 owner filter (one mark per row) and no H1
+    overlay window filter (as on the H1 chart). A sub dot's `relative_dir` = the sub's at the LP candle
+    (`sub_relative_dir_at` over THIS lens's `SidRecord`, the per-LP CSV's reader). Returns the marks drawn."""
+    from engine_v2.multitf.entity_df_mutation import _map_parent_idx_to_m15_hour_end
+
+    time_by_idx = dict(zip(map(int, dfx.index), dfx[COL_TIME]))   # an idx_range slice draws its own candles only
+    sid_by_sub_id = {int(s.sub_id): s for s in sid_records if s.sub_id is not None}
+
+    sub_marks = []
+    for rec, row in wvmi_lp_marks(m15_df.attrs.get("wvmi", [])):
+        sub_id = _sub_identity(rec.meta)
+        t = time_by_idx.get(int(row.lp_idx))
+        if sub_id is None or t is None:
+            continue
+        sid_rec = sid_by_sub_id[sub_id]
+        rel = _sub_relative_dir_at(row.lp_idx, sid_rec.relative_dir_segments or (), sid_rec.start_idx, sub_id)
+        sub_marks.append((t, rec.zone_side, wvmi_lp_hovertext(
+            "15M", "Sub", f"sub_id={sub_id} | cycle_id={rec.bos_cycle_id} | relative_dir={rel}",
+            wvmi_lp_idx_fields(row), rec, row)))
+
+    main_marks = []
+    for rec, row in wvmi_lp_marks(h1_df.attrs.get("wvmi", [])):
+        m15_idx = _map_parent_idx_to_m15_hour_end(int(row.lp_idx), h1_df, m15_df)
+        t = time_by_idx.get(m15_idx) if m15_idx is not None else None
+        if t is None:
+            continue
+        main_marks.append((t, rec.zone_side, wvmi_lp_hovertext(
+            "1H>>15M", "Main", f"sid={rec.bos_structure_id} | cycle_id={rec.bos_cycle_id}",
+            [*wvmi_lp_idx_fields(row, suffix="_1H"), f"lp_idx={m15_idx}"], rec, row)))
+
+    drawn = _add_wvmi_lp_traces(fig, sub_marks, kind="sub", name_prefix="M15 WVMI LP")
+    drawn += _add_wvmi_lp_traces(fig, main_marks, kind="main", name_prefix="H1 WVMI LP")
+    return drawn
 
 
 # ---------------------------------------------------------------------------
@@ -2799,7 +2857,7 @@ def _inject_volume_autoscale_js(html_path: Path):
             }
         }
         if (maxVol > 0) {
-            Plotly.relayout(gd, {'yaxis2.range': [0, maxVol * 1.1]});
+            Plotly.relayout(gd, {'yaxis2.range': [0, maxVol * __HEADROOM__]});
         }
     }
     gd.on('plotly_relayout', function(eventData) {
@@ -2812,6 +2870,6 @@ def _inject_volume_autoscale_js(html_path: Path):
     rescaleVolumeY();
 })();
 </script>
-"""
+""".replace("__HEADROOM__", repr(float(_style("volume.headroom")["factor"])))
     with open(html_path, "a") as f:
         f.write(js)

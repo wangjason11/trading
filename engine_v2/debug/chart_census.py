@@ -76,6 +76,8 @@ def census(path):
             c[("wave_hover_M15", _key(old.group(2), old.group(3), old.group(1)) if old else _key_from_lines(ht))] += 1
         elif not name and ht.startswith("TF=1H<br><b>Wave Candle"):
             c[("wave_hover_H1", "-")] += 1
+        elif "WVMI LP " in name:      # one trace per side, one mark per per-LP row (CHARTING_SPEC §13)
+            c[("wvmi_lp_marks", name)] += len(cd)
         elif name.startswith("H1 ") or name in ("zone_proximity:trigger",):
             c[("H1_overlay", name.split(" sid=")[0].split(" (sid")[0])] += 1
         else:

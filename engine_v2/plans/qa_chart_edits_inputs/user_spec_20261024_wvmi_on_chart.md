@@ -767,6 +767,85 @@ start_idx)` — the value the BOS / CTS dot hover gives (one helper for the CSV 
   replay (fetch gate PASS, 62.5 s wall; 27 / 27 CSVs byte-equal to S_lp_furthest, the 3 new = the prediction, the
   charts unchanged, skip grep 33). No existing CSV changes format; an older save simply lacks the 3 files.
 
+## Round 12 — the user's look at step 5's rendered example (2026-10-26, verbatim)
+
+Put (the rendered example — counter 3740–3860, confluence 4095–4215 — and the hover strings off the charts): the H1
+circle's `TF=` on the M15 charts — (a) `TF=1H>>15M`, built (the hover convention for an H1 value drawn on its M15
+candle, the proximity marker's M15 copy); (b) `TF=15M`, the accepted draft word for word; (c) `TF=1H`, the H1
+overlay's own elements. And the look.
+
+> TF=1H>>15M (Recommended)
+>
+> the positioning looks good. For the circle markers, could you make them a bit smaller?
+
+Decided: the H1 circle's hover on the M15 charts starts `TF=1H>>15M` (the draft's `TF=15M` superseded); the
+positioning (the fixed rows above the bars, the circle around the sub dot) accepted; the H1 circle smaller
+(`wvmi.lp_dot.main.*` size 11 → 9, still clear of the size-5 dot).
+
+## Round 13 — the user's look at the size-9 circles (2026-10-26, verbatim)
+
+> let's try size 7 for circles?
+
+Decided: the H1 circle size 9 → 7 (`wvmi.lp_dot.main.*`). The ring still clears the size-5 dot: radius 3.5 less half
+its 1.5 px line = 2.75 > the dot's 2.5. The hover precedence holds by Plotly's rule (the dot at the centre: 0 vs the
+circle's 1 − 3 / 3.5 = 0.14; the circle on its ring).
+
+Seen at size 7 (put to the user): around a sub dot the ring hugs it with almost no gap (its inner edge 2.75 vs the
+dot's 2.5), so a circled dot reads as a bolder dot; a lone circle still reads as a ring; size 8 leaves a visible gap.
+
+## Round 14 — the final circle size (2026-10-26, verbatim)
+
+> Thanks let's go with 8 as the final value. Then proceed with the commit flow without pushing
+
+Decided: `wvmi.lp_dot.main.*` size 8 (final). The ring's inner edge 3.25 vs the dot's 2.5; the dot still wins the
+hover at the centre (0 vs 1 − 3 / 4 = 0.25). Go to commit, no push.
+
+## Step 5 — the dots + hovers on the three charts (2026-10-26)
+
+- **Design (from the code, `2c4ccf2`; canonical CHARTING_SPEC §13):** one mark per `lp_rows` entry of every
+  non-collapsed record (`_zone_render.wvmi_lp_marks`), on the volume panel's own axis `yaxis3` (`overlaying="y2"`,
+  [0, 1], fixed, hidden): sell on the row 0.80, buy 0.91 (`wvmi.lp_row`); a sub's = a filled dot (size 5) at its LP
+  candle on its lens chart; an H1 record's = an open circle — on the H1 chart at its LP candle, on the M15 charts at
+  `_map_parent_idx_to_m15_hour_end(lp_idx)` (`_render_wvmi_lp_marks`), drawn after the sub dots. The hover builders
+  in `_zone_render` (`wvmi_lp_hovertext` / `wvmi_lp_idx_fields` / `wvmi_lp_status_text`), the traces in
+  `export_plotly._add_wvmi_lp_traces` (one per side; the hover text in `customdata`). The bars must stay below the
+  rows at every zoom: the volume axis = `[0, max × volume.headroom]` (1.4) in the static layout
+  (`_volume_axis_range`) and in both charts' zoom JS (×1.1 before). Config `volume.wvmi_lps` (default on, drawn only
+  with the bars). Measured before the build (`wvmi_step5_predict.py`, this folder; S_lp_rows): all 57 H1 rows map to an
+  M15 candle; no candle on either M15 chart has two sub dots, nor a buy and a sell mark; an H1 circle lands on a
+  same-side sub dot on counter 1 (3755) / confluence 7 (2735, 3499, 3587, 3755, 4179, 4183, 4195); only sub 8 c0's
+  first row (4102 as of 4103, both lenses) has an as-of candle ≠ its LP, no H1 row.
+- **Defaults chosen in the build (stated in the report, not asked):** no H1-overlay window filter on the circles
+  (measured: none would hide one here) and no `num_structures` filter; no §16.5 owner filter on the sub dots (one dot
+  per row, = the CSV); the H1 circle's `as_of_idx` on the M15 charts as `as_of_idx_1H=` (no H1 row has one here); a
+  missing momentum `NA (not computed)` (never on a drawn record); the circle's hover precedence (the dot at the
+  centre, the circle on its ring) from Plotly's hover rule, not checked in a browser.
+- **Predicted (vs S_lp_rows):** figure-only — 30 / 30 CSVs byte-equal, `wvmi_step4_check.py` 0 problems on a
+  regenerated PRED_JSON; traces ADDED only: H1 81 → 83 (`WVMI LP buy` 42, `sell` 15), counter 154 → 158 (`M15 WVMI
+  LP` buy 27 / sell 47, `H1 WVMI LP` 42 / 15), confluence 302 → 306 (88 / 97, 42 / 15); shapes unchanged (234 / 136 /
+  307); the layouts gain `yaxis2.range` + `yaxis3` only; the log + `[chart][wvmi] rendered 57 LP circles`, skip grep
+  33.
+- **Measured (the run-mode replay, fetch gate PASS, 64.7 s wall):** = the prediction. 30 / 30 CSVs byte-equal;
+  `wvmi_step4_check.py` 0 problems (PRED_JSON regenerated: `wvmi_asof.py` + `wvmi_step4_predict.py`);
+  `fig_named_diff.py`: only the WVMI traces added, no trace changed, the layouts differ (`wvmi_step5_check.py`, this folder:
+  only `yaxis2.range` + `yaxis3`, and every mark's x / row / hover = the one built from the per-LP CSV rows, the H1
+  rows on the M15 charts through the M15 frame decoded from the chart — 0 problems). Skip grep 33. Re-rendered after
+  rounds 12–14 (circle size 11 → 9 → 7 → 8, the final): the same counts and checks. `debug/chart_census.py` reads the new charts and
+  counts the marks (a `wvmi_lp_marks` row per trace: the counts above; every other element unchanged).
+- **Tests:** `test_wvmi_lp_marks.py` (new, 26): the pure helpers (the rows / collapsed filter, the status text, the
+  as-of field, the accepted draft, NA), the rows' order, both charts end to end on synthetic frames (the H1 → M15
+  hour-end mapping, `relative_dir` at the LP candle incl. NA before `start_idx`, the circles over the dots, the
+  as-of fields, the zoomed slice, the toggles, the axis + headroom, both zoom JS factors, an unknown side). Suite
+  2013 → 2039. **Mutants 44 / 44 KILLED** (`mutants_wvmi_step5.py`: the row → mark mapping, the collapsed filter,
+  every hover field, side → row / colour, the axis, the headroom ×4 sites, the H1 → M15 mapping, kind per layer, the
+  draw order, `relative_dir`'s candle and sub, the toggles, the slice guard, the rows' order); sketching them first
+  found three test gaps (`relative_dir` / x read at the as-of candle, an H1 as-of, the zoomed slice) — the fixture
+  was tightened before the run. The equivalent one (`mutants_wvmi_step5_equivalent.py`) run: SURVIVES as claimed.
+- **The rendered example** (`zoom_png_volume.py`, this folder — `zoom_png.py` flattens the volume panel): counter
+  3740–3860 (the circle around sub 5's sell dot at 3755), confluence 4095–4215 (sub 8 c0's 4102 as of 4103 and the
+  locked 4129, sub 7 c0's sell dots to the unlocked 4196, three circles around its dots) + the hover strings off the
+  charts. No candle has both a buy and a sell mark on this window (the fixture has one). The user: round 12.
+
 ## Build notes for steps 2–5 (written at the session close 2026-10-26 — read with the decisions above)
 
 Every step: predict the numbers from the mechanism → build → tests (+ mutants where a rule changes) → replay →

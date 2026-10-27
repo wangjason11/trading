@@ -191,8 +191,13 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
    `*_wvmi_lps.csv` — LANDED 2026-10-26, = the prediction (one row per dot: H1 57 / counter 74 / confluence 185;
    collapsed records get none — the user, "I may change my mind later", §G; an LP before its sub's `start_idx` keeps
    its row with `relative_dir = NA (before start_idx)` — the user, round 11; 27 → 30 CSVs, the 27 byte-equal, charts
-   unchanged; source `588014a`, save S_lp_rows `20261026_220225_588014a` = `LATEST_<branch>`); **5** the dots +
-   hovers on the three charts (a rendered example first) — NEXT.
+   unchanged; source `588014a`, save S_lp_rows `20261026_220225_588014a`); **5** the dots + hovers on the three
+   charts — BUILT 2026-10-26, = the prediction (figure-only: 30 / 30 CSVs byte-equal; traces added only — H1 +2,
+   each M15 chart +4; one mark per per-LP row above the volume bars, sell red just above the bars / buy green one step
+   higher, a sub's a dot, an H1 LP a circle — 57 per chart, on the M15 charts at the hour's last M15 candle; the
+   hover = the accepted drafts, the H1 circle's M15 copy `TF=1H>>15M` — the user, round 12; the volume axis 1.4 × the
+   bars' max; canonical CHARTING_SPEC §13); the user's look: "the positioning looks good", the circles "a bit
+   smaller" (11 → 9 → 7 → 8, "let's go with 8 as the final value").
 6. **Zone size adjustments** — D.1 item 3 below (the user's spec).
 
 **D.1 — Ordered (the heavy items):**
@@ -507,7 +512,8 @@ zone size adjustments.** Verbatim: "I was simply saying that we may come back to
   about it with the wave-candle hover spec; TABLED by the user the same day: "Let's table WVMI back on chart for
   now"). **UN-TABLED by the user 2026-10-24** (SESSION ORDER item 5's second pass): "Next I'd like to work on
   adding WVMI back" — the request + design: `engine_v2/plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md`;
-  **IN PROGRESS** (the design settled 2026-10-26; five landings, status: §D SESSION ORDER item 5). Until then every wave-candle hover carried `Weighted vol` and, on an LB /
+  **Steps 1–5 built 2026-10-26** (status: §D SESSION ORDER item 5): WVMI is drawn as its LP marks above the volume
+  bars (CHARTING_SPEC §13), the wave-candle hover stays without it. Until 2026-05-28 every wave-candle hover carried `Weighted vol` and, on an LB /
   LP line, `<Buy|Sell> momentum` + the paired weighted volumes, looked up by candle index. Open design: WVMI's `lp_idx`
   is its own temporary last pullback, not the drawn LP line (on H1 neither live record's LP is drawn), and an
   index-only lookup can hit another sub's or role's line; PART4 §16.5's WVMI row has the planned design (locked

@@ -288,7 +288,7 @@ Cycle N's LP is physically the `BOS_{N+1}.last_wave_candle` line, so it requires
 | Reversal / parent-end **after** `CTS_N` confirmed | ✓ locked | ✓ locked | ✓ locked | — | no `BOS_{N+1}` in same structure → LP candle physically doesn't exist (no extra gate needed) |
 | Reversal / parent-end **between** `CTS_N` est and conf | ✓ locked | — | — | — | LB/FP never activated; LP candle doesn't exist |
 | Reversal / parent-end **before** `CTS_N` established (retroactive Scenario-2, `reversal_example.png`) | — | — | — | — | collapsed; all never activated |
-| Active last cycle (no end yet) | ✓ locked | ✓ locked if `CTS_K` conf fired | ✓ locked if `CTS_K` conf fired | ✓ **temp** if `CTS_K` conf fired (every such cycle has a WVMI record: a sub's since Plan G, the main's since 2026-10-26) | LP = the **temp** wave candle `WVMIRecord.lp_idx` (the planned separate WVMI-temp-LP rendering pass is NOT implemented — not drawn); shifts each bar in live, sits at its end-of-data position in a static chart; no `BOS_{K+1}` exists yet so no locked LP. (Until 2026-10-26 a main cycle without a first sd proximity trigger had no WVMI record, so no temp LP candle.) |
+| Active last cycle (no end yet) | ✓ locked | ✓ locked if `CTS_K` conf fired | ✓ locked if `CTS_K` conf fired | ✓ **temp** if `CTS_K` conf fired (every such cycle has a WVMI record: a sub's since Plan G, the main's since 2026-10-26) | LP = the **temp** wave candle `WVMIRecord.lp_idx` (never a wave-candle line; since 2026-10-26 every temporary LP the record has had is a WVMI LP mark above the volume bars — CHARTING_SPEC §13); shifts each bar in live, sits at its end-of-data position in a static chart; no `BOS_{K+1}` exists yet so no locked LP. (Until 2026-10-26 a main cycle without a first sd proximity trigger had no WVMI record, so no temp LP candle.) |
 
 **Cross-cycle visual at structural points:** at the `CTS_{N+1}` ESTABLISHED
 moment two records hit the same idx — **LP_N locks** (rendered via `BOS_{N+1}.last`) and
@@ -320,12 +320,14 @@ apples-to-apples. KL/POI/etc. unchanged.)
   for the zone + role lines at all three hover sites: `wave_candles.wave_candle_hover_lines`
   (the whole hover: `_zone_render.wave_candle_hovertemplate`). (Until 2026-09-30 every site
   hardcoded "BOS zone:", mislabelling the CTS lines — 55 of 110 labels on the reference
-  window.) Drop the WVMI momentum block **and** `Weighted vol` (WVMI-weight-derived) —
-  putting them back: register §G "WVMI back on the chart"
+  window.) Drop the WVMI momentum block **and** `Weighted vol` (WVMI-weight-derived) — WVMI
+  came back on its own marks instead (2026-10-26, CHARTING_SPEC §13), the wave-candle hover stays without it
 - **Opacity:** uniform across all charts (drop the 3-tier active / recent /
   prior).
 - **Line style:** keep **dashed = subordinate**, **solid = main overlay**.
-- Full WVMI momentum markers deferred (revisit later).
+- WVMI momentum markers (deferred 2026-05-28): since 2026-10-26 the WVMI LP marks above the volume bars — one per
+  per-LP row (every temporary LP and the locked one), the momenta in their hover (CHARTING_SPEC §13; "WVMI back on
+  the chart", the user's design 2026-10-24 → 26).
 
 ---
 

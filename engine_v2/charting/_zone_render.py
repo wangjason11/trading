@@ -524,7 +524,7 @@ def wave_candle_hovertemplate(tf: str, idx_text: str, zone_role_lines: Sequence[
     line / the `Role:` line (`zone_role_lines` = `wave_candles.wave_candle_hover_lines`) / the window — the main dot
     hover's `struct_window=[s, e] | end_reason=…` (`main_dot_structure_lines`), a sub's `sub_window=[s, e] |
     end_reason=…` (`_sub_dot_hover_lines`) / `volume=<raw volume>` / `struct_direction=`. No WVMI (removed 2026-05-28;
-    register §G "WVMI back on the chart")."""
+    WVMI has its own LP marks since 2026-10-26 — `wvmi_lp_hovertext`, CHARTING_SPEC §13)."""
     zone_line, role_line = zone_role_lines
     lines = [f"TF={tf}", "<b>Wave Candle</b>", idx_text, zone_line,
              *([] if first_record is None else [first_record]),
@@ -579,6 +579,54 @@ def proximity_sub_trigger_text(trig: Any, types: dict, collapsed: set) -> str:
     if kind is None:
         return HOVER_NO_SUB_TRIGGER
     return f"{kind} (not built: collapsed parent cycle)" if (sid, cyc) in collapsed else kind
+
+
+# ---------------------------------------------------------------------------
+# WVMI LP marks above the volume bars — one per per-LP row (the user's design 2026-10-24 → 26, "WVMI back on the
+# chart" step 5, plans/qa_chart_edits_inputs/user_spec_20261024_wvmi_on_chart.md)
+# ---------------------------------------------------------------------------
+
+def wvmi_lp_marks(records: Sequence[Any]) -> List[Tuple[Any, Any]]:
+    """`[(record, lp_row), …]` — one mark per `WVMIRecord.lp_rows` entry of every NON-collapsed record, in record order
+    then LP order (= the per-LP CSV's rows, `export_wvmi_lps`). A collapsed record (`cycle_collapsed`) is hidden like
+    its wave candles (the user, round 1: "yes stay hidden"); an LP before its sub's `start_idx` IS drawn (round 11)."""
+    return [(r, row) for r in records if not r.cycle_collapsed for row in r.lp_rows]
+
+
+def wvmi_lp_status_text(row: Any) -> str:
+    """`<lp_status> (<lp_status_reason> at <lp_status_idx>)`, e.g. `temporary (replaced by a further close at 3118)`;
+    an `open` row has no idx → `open (still moving at the data end)` (the user's drafts, rounds 3 / 8)."""
+    if row.lp_status_idx is None:
+        return f"{row.lp_status} ({row.lp_status_reason})"
+    return f"{row.lp_status} ({row.lp_status_reason} at {int(row.lp_status_idx)})"
+
+
+def wvmi_lp_idx_fields(row: Any, suffix: str = "") -> List[str]:
+    """`lp_idx<suffix>=<i>`, + `as_of_idx<suffix>=<j>` only when the LP became the LP on a later candle (round 4 — a
+    first LP picked from earlier candles, a swapped-in locked LP). `suffix="_1H"` = an H1 row on the M15 charts."""
+    out = [f"lp_idx{suffix}={int(row.lp_idx)}"]
+    if int(row.as_of_idx) != int(row.lp_idx):
+        out.append(f"as_of_idx{suffix}={int(row.as_of_idx)}")
+    return out
+
+
+def _wvmi_momentum_text(value: Optional[float]) -> str:
+    return "NA (not computed)" if value is None else f"{float(value):.3f}"
+
+
+def wvmi_lp_hovertext(tf: str, owner: str, id_line: str, idx_fields: Sequence[str], record: Any, row: Any) -> str:
+    """The WVMI LP mark's hover — the drafts the user accepted (rounds 3 → 4; `zone_side=`, round 9; no combined `wvmi`
+    value, round 3): `TF` / **<Sub|Main> WVMI** / the identity line (a sub: `sub_id=X | cycle_id=Y | relative_dir=…`
+    at the LP candle; the main: `sid=S | cycle_id=C`) / the LP line (`idx_fields` — `wvmi_lp_idx_fields`, an H1 row on
+    the M15 charts adds its M15 `lp_idx=` — then `lp_status=…`) / `zone_side=… | breakout_momentum=… |
+    pullback_momentum=…` (3 decimals; the pullback momentum is THIS LP's, the row's)."""
+    lines = [
+        f"TF={tf}", f"<b>{owner} WVMI</b>", id_line,
+        " | ".join([*idx_fields, f"lp_status={wvmi_lp_status_text(row)}"]),
+        f"zone_side={record.zone_side} | breakout_momentum={_wvmi_momentum_text(record.breakout_momentum)} | "
+        f"pullback_momentum={_wvmi_momentum_text(row.pullback_momentum)}",
+    ]
+    return "<br>".join(lines)
 
 
 # ---------------------------------------------------------------------------

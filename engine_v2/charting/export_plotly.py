@@ -35,6 +35,9 @@ from engine_v2.charting._zone_render import (
     proximity_sub_trigger_types,
     struct_direction_by_sid,
     wave_candle_hovertemplate,
+    wvmi_lp_hovertext,
+    wvmi_lp_idx_fields,
+    wvmi_lp_marks,
 )
 from engine_v2.structure.structure_engine import _pip_size_from_pair
 from engine_v2.zones.kl_zones_v1 import bounds_step_draw_idx
@@ -180,6 +183,45 @@ def _opacity_tier(tier: str) -> float:
     return float(tiers.get(tier, defaults.get(tier, 1.0)))
 
 
+def _volume_axis_range(volume: pd.Series) -> Optional[list]:
+    """The volume axis range `[0, max x volume.headroom]` — the zoom JS applies the same factor to the visible bars,
+    so the WVMI LP rows always sit above the tallest one ("WVMI back on the chart" step 5). None without a volume."""
+    vmax = float(volume.max()) if len(volume) else float("nan")
+    if not vmax > 0:
+        return None
+    return [0, vmax * float(_style("volume.headroom")["factor"])]
+
+
+def _wvmi_lp_axis_layout() -> dict:
+    """The WVMI LP marks' own y axis `y3`: [0, 1] over the volume panel (`overlaying="y2"` — its domain), fixed, hidden,
+    so the marks keep their rows whatever the volume zoom JS does to `yaxis2`. Set AFTER the global axis style (which
+    would give it a grid)."""
+    return dict(overlaying="y2", anchor="x", range=[0, 1], fixedrange=True, visible=False,
+                showgrid=False, zeroline=False)
+
+
+def _add_wvmi_lp_traces(fig, marks: list, *, kind: str, name_prefix: str) -> int:
+    """Add the WVMI LP marks ("WVMI back on the chart" step 5 — the user's rounds 2-3): `marks` = `[(x, zone_side,
+    hover text)]`, `kind` = `"sub"` (a small dot) or `"main"` (an H1 circle, which fits around a sub dot on the same
+    candle). One trace per zone side, named `<name_prefix> <side>`, on the marks' axis `y3` at the side's fixed row
+    (`wvmi.lp_row`: sell just above the bars, buy one step higher). Returns the number of marks drawn."""
+    rows = _style("wvmi.lp_row")
+    assert all(m[1] in rows for m in marks), f"[chart] WVMI LP zone_side not in {sorted(rows)}"
+    drawn = 0
+    for side in ("sell", "buy"):
+        pts = [m for m in marks if m[1] == side]
+        if not pts:
+            continue
+        fig.add_trace(go.Scatter(
+            x=[p[0] for p in pts], y=[rows[side]] * len(pts),
+            mode="markers", name=f"{name_prefix} {side}", showlegend=False, yaxis="y3",
+            customdata=[p[2] for p in pts], hovertemplate="%{customdata}<extra></extra>",
+            **_style(f"wvmi.lp_dot.{kind}.{side}"),
+        ))
+        drawn += len(pts)
+    return drawn
+
+
 @dataclass(frozen=True)
 class ChartExportPaths:
     html_path: Path
@@ -265,6 +307,7 @@ def export_chart_plotly(
             "bars": True,       # Week 7: Volume bars in subplot
             "ema_line": True,   # Week 7: Volume EMA(20) line
             "spike_marker": True,  # Week 7: Orange diamond on candles with volume spike
+            "wvmi_lps": True,   # WVMI LP marks above the bars (2026-10-26, "WVMI back on the chart" step 5)
         },
         "range_candle_marker": False,  # Week 4: Range candle markers (orange dots) - off to avoid overlap with volume spike
     }
@@ -1857,7 +1900,7 @@ def export_chart_plotly(
     # retroactive-Scenario-2 phantoms. Overlap kept via `selected_sids`
     # (most-recent-sid filter, same as KL). Uniform opacity; hover =
     # `wave_candle_hovertemplate` (the user's spec 2026-10-23; no WVMI —
-    # register §G "WVMI back on the chart").
+    # WVMI has its own LP marks above the volume bars, CHARTING_SPEC §13).
     # -------------------------------------------------
     wave_candles = dfx.attrs.get("wave_candles", [])
     if zone_cfg.get("wave_candles", True) and wave_candles and zones:
@@ -2600,6 +2643,25 @@ def export_chart_plotly(
         print(f"[chart][volume] rendered volume bars and EMA line")
 
     # -------------------------------------------------
+    # WVMI LP marks above the volume bars ("WVMI back on the chart" step 5; CHARTING_SPEC "WVMI LP marks"): one
+    # circle per per-LP row of every non-collapsed H1 record, at its LP candle, on its zone side's fixed row.
+    # -------------------------------------------------
+    wvmi_marks_drawn = 0
+    if volume_enabled and volume_cfg.get("wvmi_lps", False):
+        wvmi_marks = []
+        for rec, row in wvmi_lp_marks(dfx.attrs.get("wvmi", [])):
+            if row.lp_idx not in dfx.index:
+                continue      # a zoomed export's slice
+            wvmi_marks.append((
+                dfx.loc[row.lp_idx, COL_TIME], rec.zone_side,
+                wvmi_lp_hovertext("1H", "Main", f"sid={rec.bos_structure_id} | cycle_id={rec.bos_cycle_id}",
+                                  wvmi_lp_idx_fields(row), rec, row),
+            ))
+        wvmi_marks_drawn = _add_wvmi_lp_traces(fig, wvmi_marks, kind="main", name_prefix="WVMI LP")
+        if wvmi_marks_drawn:
+            print(f"[chart][wvmi] rendered {wvmi_marks_drawn} LP circles")
+
+    # -------------------------------------------------
     # Layout configuration
     # -------------------------------------------------
     layout_height = 800
@@ -2635,6 +2697,7 @@ def export_chart_plotly(
                 side="right",  # Volume labels on right side
                 tickformat=",",  # Comma separator for thousands
                 showline=False,  # Hide default lines
+                range=_volume_axis_range(dfx[COL_V].astype(float)),  # headroom for the WVMI LP rows
             ),
         )
         # Draw unified border around the entire chart (price + volume as one)
@@ -2656,6 +2719,8 @@ def export_chart_plotly(
     fig.update_layout(**_style("chart.layout"))
     fig.update_xaxes(**_style("chart.axis"))
     fig.update_yaxes(**_style("chart.axis"))
+    if wvmi_marks_drawn:
+        fig.update_layout(yaxis3=_wvmi_lp_axis_layout())
 
     # fig.update_xaxes(
     #     rangebreaks=[
@@ -2767,7 +2832,7 @@ def export_chart_plotly(
         }
 
         if (maxVol > 0) {
-            Plotly.relayout(gd, {'yaxis2.range': [0, maxVol * 1.1]});
+            Plotly.relayout(gd, {'yaxis2.range': [0, maxVol * __HEADROOM__]});
         }
     }
 
@@ -2784,7 +2849,7 @@ def export_chart_plotly(
     rescaleVolumeY();
 })();
 </script>
-"""
+""".replace("__HEADROOM__", repr(float(_style("volume.headroom")["factor"])))
         # Append JavaScript to HTML file
         with open(html_path, 'a') as f:
             f.write(volume_autoscale_js)

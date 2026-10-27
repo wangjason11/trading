@@ -273,6 +273,38 @@ STYLE = {
         },
     },
 
+    # The volume axis range = the visible bars' max x `factor` (the zoom JS + the static layout): the tallest bar
+    # reaches 1 / factor of the panel, leaving the WVMI LP rows above it ("WVMI back on the chart" step 5).
+    "volume.headroom": {
+        "factor": 1.4,
+    },
+
+    # -----------------------------
+    # WVMI LP marks above the volume bars ("WVMI back on the chart" step 5, the user's rounds 2-3, 2026-10-25):
+    # one mark per per-LP row, on a fixed row per zone side — sell just above the bars, buy one step higher
+    # (`y` on the marks' own axis, [0, 1] over the volume panel). A sub's LP = a small dot; an H1 LP = a circle
+    # (on the M15 charts it fits around a sub dot on the same candle; size 8 — the user's final value after 11 / 9 / 7,
+    # 2026-10-26: "let's go with 8 as the final value"). Colour by zone side, not by status. CHARTING_SPEC §13.
+    # -----------------------------
+    "wvmi.lp_row": {
+        "sell": 0.80,
+        "buy": 0.91,
+    },
+    "wvmi.lp_dot.sub.buy": {
+        "marker": {"size": 5, "symbol": "circle", "color": "rgb(0, 150, 0)"},
+    },
+    "wvmi.lp_dot.sub.sell": {
+        "marker": {"size": 5, "symbol": "circle", "color": "rgb(210, 0, 0)"},
+    },
+    "wvmi.lp_dot.main.buy": {
+        "marker": {"size": 8, "symbol": "circle-open", "color": "rgb(0, 150, 0)",
+                   "line": {"width": 1.5, "color": "rgb(0, 150, 0)"}},
+    },
+    "wvmi.lp_dot.main.sell": {
+        "marker": {"size": 8, "symbol": "circle-open", "color": "rgb(210, 0, 0)",
+                   "line": {"width": 1.5, "color": "rgb(210, 0, 0)"}},
+    },
+
     # -----------------------------
     # Week 8: M15 KL Zones (dashed, lower opacity)
     # -----------------------------

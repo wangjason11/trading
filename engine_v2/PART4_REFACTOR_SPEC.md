@@ -2508,7 +2508,8 @@ Each sub chart renders:
 
 - Sub TF candles (own TF, no parent candles ever overlaid)
 - Sub structure elements: KL/POI zones, BOS/CTS markers, range bounds,
-  wave candle lines, WVMI hover overlays, connector lines, and the sub fibs
+  wave candle lines, the WVMI LP marks above the volume bars (since 2026-10-26 — CHARTING_SPEC §13), connector
+  lines, and the sub fibs
   (since PLAN_H §8.9 F1, 2026-10-06: one "M15 fib" legend group per lens, the
   shared draw gate `_zone_render.fib_record_drawn`; CSV-only from 2026-09-30
   until then — CHARTING_SPEC §8)
@@ -2526,8 +2527,8 @@ Element set (matches today's H1-overlay-on-M15):
 - Parent BOS / CTS markers (black)
 - Parent connector lines (solid, black)
 - Parent wave candle lines (solid)
-- Parent WVMI (carried via parent wave-candle hover overlay — automatic
-  once parent wave candle lines are rendered)
+- Parent WVMI — the H1 WVMI LP circles above the volume bars, each at the last M15 candle of its LP's hour
+  (since 2026-10-26, CHARTING_SPEC §13; the planned wave-candle hover carrier was never built)
 
 Explicitly **not** in the overlay:
 
@@ -2732,7 +2733,7 @@ replaced by 1 prior one plus 3 dot-trace merges. Intermediate value after items
 | Constants — candle patterns, OHLC, candle types | Always shown; never affected by sub changes |
 | Sid-tied — CTS dots, BOS markers, swing / PB / prev-BOS lines, range bounds, market_state regions | H1: **most recent sid only** per candle (`owner_by_idx`). M15: **the owning sub per `(candle, direction)`** over its lifecycle window (`owner_by_idx_dir`). Older / ended subs' data persists in the lens df with lifecycle end meta but is hidden where not owned |
 | Persisting events — KL zones, POI zones, imbalances | All rendered EXCEPT collapsed-cycle KL/POI zones (item 2 above — never active in real time; they stay in the CSVs). Inactive / lifecycle-ended ones use the existing opacity attenuation logic (older = more transparent); fills gated to the active window |
-| WVMI | NOT rendered on any chart (H1 or M15: wave-candle hover only, no momentum — verified 2026-09-30); the `_wvmi.csv` exports are the surface, + the per-LP rows' `*_wvmi_lps.csv` since 2026-10-26 ("WVMI back on the chart" step 4; WVMI_SPEC "Per-LP rows"). The planned design: locked records show final values via hover; in-progress records re-render whenever `update_temporary_lp` shifts the temp LP. M15 data: one record set per unique sub, present on every lens df the sub is on, each copy with its lens's path (§17.10, Plan G) |
+| WVMI | Rendered since 2026-10-26 ("WVMI back on the chart" step 5) as the WVMI LP marks above the volume bars — one per per-LP row of every non-collapsed record: a sub's dots on its lens chart, the H1 circles on the H1 chart and, at the hour's last M15 candle, on both M15 charts; the hover = the row's status (why / when) + the record's breakout and the row's pullback momentum (CHARTING_SPEC §13). The wave-candle hover still carries no momentum. Exports: `_wvmi.csv` + the per-LP `*_wvmi_lps.csv` (step 4; WVMI_SPEC "Per-LP rows"). (Until 2026-10-26 not rendered on any chart — verified 2026-09-30; the planned design was a hover with the final values on locked records, re-rendered whenever `update_temporary_lp` shifted the temp LP.) M15 data: one record set per unique sub, present on every lens df the sub is on, each copy with its lens's path (§17.10, Plan G) |
 
 ### 16.6 Pending subordinate display
 

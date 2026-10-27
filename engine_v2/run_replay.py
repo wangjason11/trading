@@ -392,8 +392,8 @@ def main() -> None:
             # Debug: export this lens's sub WVMI records (computed inside each
             # unique sub's projection, ungated; a dual-lens sub's records are on
             # both lens CSVs, each with its lens's path + trigger — WVMI_SPEC
-            # "Sub entities", Plan G). Not in any other CSV and not drawn on the
-            # chart, so this is the only inspectable surface.
+            # "Sub entities", Plan G). Not in any other CSV; the chart draws their
+            # per-LP rows as the WVMI LP marks (CHARTING_SPEC §13).
             from engine_v2.debug.export_wvmi import export_wvmi, export_wvmi_lps
             export_wvmi(
                 sub_entry.df.attrs.get("wvmi", []) or [],
